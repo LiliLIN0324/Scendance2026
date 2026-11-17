@@ -128,3 +128,102 @@ describe('geojson export (H5-c)', () => {
     expect(buildPlanGeoJsonText(samplePlan())).toBe(buildPlanGeoJsonText(samplePlan()));
   });
 });
+
+/** 测量 + 标注夹具（M3c 导出补强）：覆盖 distance/area 与五种标注。 */
+function planWithMeasurementsAndAnnotations(): SitePlanData {
+  const plan = samplePlan();
+  plan.measurements = [
+    { id: 'f6000000-0000-4000-8000-000000000001', kind: 'distance', name: '距离 1', points: [{ x: 0, y: 0 }, { x: 0, y: 30 }], notes: '门到展位' },
+    { id: 'f6000000-0000-4000-8000-000000000002', kind: 'area', name: '面积 1', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }], notes: '' },
+  ];
+  plan.annotations = [
+    { id: 'a7000000-0000-4000-8000-000000000001', kind: 'note', name: '文本', points: [{ x: 5, y: 5 }], text: '卸货口', notes: '' },
+    { id: 'a7000000-0000-4000-8000-000000000002', kind: 'circle', name: '圆', points: [{ x: 20, y: 20 }], radiusM: 3, text: '', notes: '' },
+    { id: 'a7000000-0000-4000-8000-000000000003', kind: 'rect', name: '矩形', points: [{ x: 0, y: 0 }, { x: 4, y: 2 }], text: '', notes: '' },
+    { id: 'a7000000-0000-4000-8000-000000000004', kind: 'line', name: '线', points: [{ x: 0, y: 0 }, { x: 8, y: 8 }], text: '', notes: '' },
+    { id: 'a7000000-0000-4000-8000-000000000005', kind: 'triangle', name: '三角', points: [{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 0, y: 6 }], text: '', notes: '' },
+  ];
+  return plan;
+}
+
+describe('geojson export 测量与标注（M3c 补强）', () => {
+  it('exports distance/path as LineString and area as closed Polygon with readings', () => {
+    const features = buildPlanGeoJson(planWithMeasurementsAndAnnotations()).features;
+    const distance = features.find(f => f.properties.kind === 'measurement' && f.properties.name === '距离 1')!;
+    expect(distance.geometry.type).toBe('LineString');
+    expect(distance.properties.length_m).toBeCloseTo(30, 1);
+    expect(distance.properties.notes).toBe('门到展位');
+
+    const area = features.find(f => f.properties.kind === 'measurement' && f.properties.name === '面积 1')!;
+    expect(area.geometry.type).toBe('Polygon');
+    const ring = (area.geometry.coordinates as [number, number][][])[0];
+    expect(ring).toHaveLength(5);
+    expect(ring[0]).toEqual(ring.at(-1));
+    expect(area.properties.area_m2).toBeCloseTo(100, 1);
+  });
+
+  it('maps annotations to point / line / polygon without fabricating geometry', () => {
+    const features = buildPlanGeoJson(planWithMeasurementsAndAnnotations()).features;
+    const byName = (name: string) => features.find(f => f.properties.kind === 'annotation' && f.properties.name === name)!;
+
+    expect(byName('文本').geometry.type).toBe('Point');
+    expect(byName('文本').properties.text).toBe('卸货口');
+
+    const circle = byName('圆');
+    expect(circle.geometry.type).toBe('Point');
+    expect(circle.properties.radius_m).toBe(3);
+
+    expect(byName('线').geometry.type).toBe('LineString');
+
+    const rectRing = (byName('矩形').geometry.coordinates as [number, number][][])[0];
+    expect(byName('矩形').geometry.type).toBe('Polygon');
+    expect(rectRing).toHaveLength(5);
+
+    const triRing = (byName('三角').geometry.coordinates as [number, number][][])[0];
+    expect(triRing).toHaveLength(4);
+    expect(triRing[0]).toEqual(triRing.at(-1));
+  });
+
+  it('appends measurement then annotation after vehicles, leaving legacy plans untouched', () => {
+    const kinds = buildPlanGeoJson(planWithMeasurementsAndAnnotations()).features.map(f => f.properties.kind);
+    expect(kinds.slice(0, 6)).toEqual(['boundary', 'zone', 'facility', 'route', 'node', 'worker']);
+    expect(kinds.slice(6)).toEqual([
+      'measurement', 'measurement',
+      'annotation', 'annotation', 'annotation', 'annotation', 'annotation',
+    ]);
+    expect(buildPlanGeoJsonText(samplePlan())).toBe(buildPlanGeoJsonText({ ...samplePlan(), measurements: [] }));
+  });
+});
+
+describe('geojson export 墙体（M2）', () => {
+  function planWithWalls(): SitePlanData {
+    const plan = samplePlan();
+    plan.walls = [{
+      id: 'b2000000-0000-4000-8000-000000000001',
+      points: [{ x: 0, y: 0 }, { x: 5, y: 0 }],
+      thicknessM: 0.2,
+      heightM: 3,
+      kind: 'interior',
+      status: 'confirmed',
+      zoneId: 'a1000000-0000-4000-8000-000000000001',
+    }];
+    return plan;
+  }
+
+  it('emits a LineString wall with length/thickness/height and zone', () => {
+    const wall = buildPlanGeoJson(planWithWalls()).features.find(f => f.properties.kind === 'wall')!;
+    expect(wall.geometry.type).toBe('LineString');
+    expect(wall.properties.type).toBe('内墙');
+    expect(wall.properties.zone).toBe('观众区');
+    expect(wall.properties.length_m).toBeCloseTo(5, 1);
+    expect(wall.properties.thickness_m).toBe(0.2);
+    expect(wall.properties.height_m).toBe(3);
+    expect((wall.geometry.coordinates as [number, number][]).length).toBe(2);
+  });
+
+  it('orders walls right after boundary and keeps legacy plans unchanged', () => {
+    const kinds = buildPlanGeoJson(planWithWalls()).features.map(f => f.properties.kind);
+    expect(kinds.slice(0, 3)).toEqual(['boundary', 'wall', 'zone']);
+    expect(buildPlanGeoJsonText(samplePlan())).toBe(buildPlanGeoJsonText({ ...samplePlan(), walls: [] }));
+  });
+});

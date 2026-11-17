@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  UNKNOWN_SUBMISSION_NOTICE,
   engineLabel,
   engineSupports,
   generationBlockReason,
+  generationFailureDisposition,
   modeSupports,
   pickEngine,
   plainFailure,
@@ -10,6 +12,7 @@ import {
   submitModelJob,
   uploadModelReference,
 } from './model-generation';
+import { SceneApiError } from '@/lib/backend-session';
 import type { BackendSession, GenerationCapabilities } from '@/lib/backend-session';
 
 /**
@@ -59,6 +62,26 @@ describe('模型生成规则', () => {
     const controller = fakeController();
     const uploaded = await uploadModelReference(controller, new File(['x'], '椅子.png', { type: 'image/png' }));
     expect(uploaded).toEqual({ id: 'ref-1', name: '椅子.png' });
+  });
+
+  it('回执的 requestId 由面板传入；缺省仍生成合法 UUID', async () => {
+    const controller = fakeController();
+    await submitModelJob(controller, { mode: 'text', prompt: '椅子', engine: 'hy3d', requestId: '11111111-1111-4111-8111-111111111111' });
+    const calls = (controller.createGenerationJob as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls[0]![1]).toBe('11111111-1111-4111-8111-111111111111');
+    await submitModelJob(controller, { mode: 'text', prompt: '椅子', engine: 'hy3d' });
+    expect(calls[1]![1]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  });
+
+  it('只有服务端明确拒绝才算 failed；断网/超时/5xx/坏响应都算 unknown', () => {
+    expect(generationFailureDisposition(new SceneApiError('BUDGET_EXCEEDED', 402, null))).toBe('failed');
+    expect(generationFailureDisposition(new SceneApiError('UNAUTHENTICATED', 401, null))).toBe('failed');
+    expect(generationFailureDisposition(new SceneApiError('INVALID_RESPONSE', 502, null))).toBe('unknown');
+    expect(generationFailureDisposition(new SceneApiError('HTTP_ERROR', 503, null))).toBe('unknown');
+    expect(generationFailureDisposition(new TypeError('Failed to fetch'))).toBe('unknown');
+    expect(generationFailureDisposition(Object.assign(new Error('timed out'), { name: 'TimeoutError' }))).toBe('unknown');
+    expect(UNKNOWN_SUBMISSION_NOTICE).toContain('先查任务记录与费用');
+    expect(UNKNOWN_SUBMISSION_NOTICE).toContain('不重试');
   });
 
   it('网络失败不把原文甩给用户', () => {

@@ -31,8 +31,11 @@ describe('crowd type low-poly wiring', () => {
   });
 
   it('marks walk and empty types distinctly', () => {
-    expect(crowdTypeModelStatus('performer')).toBe('walk');
-    expect(crowdTypeStatusLabel('performer')).toBe('有漫游模型');
+    // 2026-11-16：古装漫游角色归游客，演员类目暂时没有 walk 模型。
+    expect(crowdTypeModelStatus('visitor')).toBe('walk');
+    expect(crowdTypeStatusLabel('visitor')).toBe('有漫游模型');
+    expect(crowdTypeModelStatus('performer')).toBe('todo');
+    expect(crowdTypeStatusLabel('performer')).toBe('待补模型');
     expect(crowdTypeModelStatus('medical')).toBe('walk');
     expect(crowdTypeModelStatus('fire')).toBe('walk');
     expect(crowdTypeStatusLabel('fire')).toBe('有漫游模型');

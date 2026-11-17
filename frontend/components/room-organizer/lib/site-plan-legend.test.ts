@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPlanLegend, polylineHalfLengthPoint } from './site-plan-legend';
 import { PLANNING_ICONS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS, PLANNING_BOUNDARY_LINE_COLOR } from '@/lib/outdoor-plan-tokens';
 import { CARRIER_COLOR_KIND } from './route-carrier-color';
+import { WORKER_ROLE_FAMILIES } from './oneplan-stickers';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 复用演示页「平湖秋月市集」同构的迷你样例（3 分区 / 2 摊位 + 1 帐篷 / 3 动线 / 2 节点 / 2 人员 / 2 测量）。 */
@@ -196,7 +197,11 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     expect(workers.entries[0]!.count).toBe(3);
     expect(workers.entries[0]!.detail).toBe('2 个点位');
     expect(workers.entries[1]!.count).toBe(3);
-    expect(workers.entries[1]!.swatch).toBe(PLANNING_LAYER_COLORS.worker);
+    // 2026-11-16：人员图例色块跟岗位身份色系，同色系里不同身份不同档（安保 ≠ 引导员）。
+    expect(workers.entries[0]!.swatch).toBe(WORKER_ROLE_FAMILIES.staff.shades[2]);
+    expect(workers.entries[1]!.swatch).toBe(WORKER_ROLE_FAMILIES.staff.shades[5]);
+    expect(workers.entries[0]!.swatch).not.toBe(workers.entries[1]!.swatch);
+    expect(workers.entries[1]!.swatch).not.toBe(PLANNING_LAYER_COLORS.worker);
   });
 
   it('aggregates measurements by kind with formatted totals', () => {

@@ -2,9 +2,10 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BackendSession, getBackendConfig, type GenerationJob } from '@/lib/backend-session';
+import { BackendSession, SceneApiError, getBackendConfig, type GenerationJob } from '@/lib/backend-session';
 import { GenerationSheetHost } from './generation-sheet';
-import { openGenerationSheet, resetGenerationSheetForTests } from '../lib/generation-sheet';
+import { closeGenerationSheet, openGenerationSheet, resetGenerationSheetForTests } from '../lib/generation-sheet';
+import { clearGeneratedFacilityModelsForTests, consumeFacilityGenerateLink } from '../lib/facility-generated-models';
 import { clearStagedMaterialGenerateForTests, stageMaterialGenerate } from '../lib/material-generate';
 
 /**
@@ -25,6 +26,7 @@ beforeEach(() => {
   clearStagedMaterialGenerateForTests();
   sessionStorage.clear();
   localStorage.clear();
+  clearGeneratedFacilityModelsForTests();
   controller = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   vi.spyOn(controller, 'getSnapshot').mockReturnValue({
     ...controller.getSnapshot(),
@@ -123,5 +125,81 @@ describe('统一生成面板', () => {
     const primary = screen.getByTestId('generation-primary') as HTMLButtonElement;
     expect(primary.disabled).toBe(true);
     expect(primary.title).toContain('登录云项目');
+  });
+
+  it('成功提交：显示任务号，回执与链接都带 projectId，重开面板仍可核对', async () => {
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'facility', facility: { id: 'f-1', name: '沙滩椅' } }));
+    fireEvent.change(screen.getByPlaceholderText('沙滩椅（材质、颜色、尺寸都写上）'), { target: { value: '一把沙滩椅' } });
+    await waitFor(() => expect((screen.getByTestId('generation-primary') as HTMLButtonElement).title).toBe(''));
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('generation-primary'));
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('任务号 task-1'));
+    expect(screen.getByTestId('generation-receipt').textContent).toContain('task-1');
+
+    const requestId = create.mock.calls[0]![1] as string;
+    expect(JSON.parse(localStorage.getItem('scendance:generation-submissions')!)[0]).toMatchObject({
+      requestId, state: 'submitted', taskid: 'task-1', projectId: 'project', facilityId: 'f-1',
+    });
+    expect(JSON.parse(localStorage.getItem('scendance:facility-generate-links')!)[0]).toMatchObject({
+      taskid: 'task-1', projectId: 'project', facilityId: 'f-1',
+    });
+
+    // 重开面板：临时提示被清掉，但回执（taskid + requestId）仍在，刷新后同样可核对。
+    act(() => closeGenerationSheet());
+    act(() => openGenerationSheet({ task: 'model', scope: 'facility', facility: { id: 'f-1', name: '沙滩椅' } }));
+    expect(screen.getByTestId('generation-receipt').textContent).toContain('task-1');
+    expect(screen.getByTestId('generation-receipt').textContent).toContain(requestId);
+  });
+
+  it('网络中断：进入 unknown 锁，禁止二次提交，重开仍提醒先查记录', async () => {
+    create.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'facility', facility: { id: 'f-1', name: '沙滩椅' } }));
+    fireEvent.change(screen.getByPlaceholderText('沙滩椅（材质、颜色、尺寸都写上）'), { target: { value: '一把沙滩椅' } });
+    await waitFor(() => expect((screen.getByTestId('generation-primary') as HTMLButtonElement).title).toBe(''));
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('generation-primary'));
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('不重试'));
+    expect(screen.getByRole('status').textContent).toContain('先查任务记录与费用');
+    const primary = screen.getByTestId('generation-primary') as HTMLButtonElement;
+    expect(primary.disabled).toBe(true);
+    expect(primary.title).toContain('先查任务记录与费用');
+    fireEvent.click(primary);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('generation-receipt').textContent).toContain('上次提交结果未知');
+
+    // 失败清 staged：之后的生成不会被错挂到沙滩椅。
+    expect(consumeFacilityGenerateLink('later-task', 'x')).toBe(false);
+    expect(JSON.parse(localStorage.getItem('scendance:generation-submissions')!)[0]).toMatchObject({
+      state: 'unknown', projectId: 'project', facilityId: 'f-1',
+    });
+
+    // 模拟刷新：卸载重开后锁从持久化回执读回，不给人第二次点击的机会。
+    cleanup();
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'facility', facility: { id: 'f-1', name: '沙滩椅' } }));
+    expect((screen.getByTestId('generation-primary') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('generation-receipt').textContent).toContain('先查任务记录与费用');
+  });
+
+  it('服务端明确拒绝：落 failed 回执、清 staged，但不产生 unknown 锁', async () => {
+    create.mockRejectedValueOnce(new SceneApiError('BUDGET_EXCEEDED', 402, null));
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'facility', facility: { id: 'f-1', name: '沙滩椅' } }));
+    fireEvent.change(screen.getByPlaceholderText('沙滩椅（材质、颜色、尺寸都写上）'), { target: { value: '一把沙滩椅' } });
+    await waitFor(() => expect((screen.getByTestId('generation-primary') as HTMLButtonElement).title).toBe(''));
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('generation-primary'));
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('预算'));
+    expect(consumeFacilityGenerateLink('later-task', 'x')).toBe(false);
+    expect((screen.getByTestId('generation-primary') as HTMLButtonElement).disabled).toBe(false);
+    expect(JSON.parse(localStorage.getItem('scendance:generation-submissions')!)[0]).toMatchObject({
+      state: 'failed', projectId: 'project', facilityId: 'f-1',
+    });
   });
 });

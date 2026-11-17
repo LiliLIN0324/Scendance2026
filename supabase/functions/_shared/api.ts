@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { agentDispatchRequestSchema } from './agent-contract.ts';
+import { agentFingerprint } from './agent-fingerprint.ts';
+import { containsSensitiveInput } from './sensitive-input.ts';
 import { agentExecutionMode, executeAgentRun } from './agent-runner.ts';
 import { executeActivityTaskRun } from './activity-task-runner.ts';
 import { parametricAssetRequestSchema } from './parametric-contract.ts';
@@ -113,6 +115,31 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
     const permitted=!!origin&&originPermitted(origin,allowed);
     if(permitted&&origin) headers.set('Access-Control-Allow-Origin',origin);
     const respond=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
+    /**
+     * Server-sent events for the two live channels (assistant answer, run frames).
+     * Errors after the response starts cannot become a JSON status any more, so
+     * they end the stream with a categorical `error` frame instead of a body dump.
+     */
+    const streamResponse=(run:(emit:(event:string,data:unknown)=>boolean)=>Promise<void>):Response=>{
+      const encoder=new TextEncoder();
+      const body=new ReadableStream<Uint8Array>({
+        async start(controller){
+          let closed=false;
+          const emit=(event:string,data:unknown):boolean=>{
+            if(closed)return false;
+            try{controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));return true;}
+            catch{closed=true;return false;}
+          };
+          try{await run(emit);}
+          catch(error){emit('error',{code:error instanceof ApiError?error.code:'STREAM_FAILED'});}
+          finally{if(!closed){closed=true;try{controller.close();}catch{/* already closed */}}}
+        },
+      });
+      const streamHeaders=new Headers(headers);
+      streamHeaders.set('Content-Type','text/event-stream; charset=utf-8');
+      streamHeaders.set('X-Accel-Buffering','no');
+      return new Response(body,{status:200,headers:streamHeaders});
+    };
     try {
       if(origin && !permitted) throw new ApiError('ORIGIN_FORBIDDEN',403);
       if(request.method==='OPTIONS') {
@@ -144,6 +171,20 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       const token=request.headers.get('authorization')?.match(/^Bearer (\S+)$/i)?.[1];
       if(!token) throw new ApiError('UNAUTHENTICATED',401);
       const actor=await backend.user(token);
+      // 流式问答：同样的守卫与契约，只是把可见内容边生成边发。
+      // 只转发 delta.content；服务商推理 delta 在服务端丢弃，不进入事件流。
+      if(path==='/assistant/chat/stream' && method==='POST') {
+        const guardMode=env('BRIEF_REQUEST_GUARD');
+        if(guardMode!==undefined && guardMode!=='' && guardMode!=='off')throw new ApiError('BRIEF_GUARD_NOT_READY',503);
+        if(env('ASSISTANT_CHAT_ENABLED')!=='1')return streamResponse(async emit=>{emit('done',{status:'disabled',answer:null});});
+        const input=assistantChatRequestSchema.safeParse(await json());
+        if(!input.success)return streamResponse(async emit=>{emit('done',{status:'invalid',answer:null});});
+        return streamResponse(async emit=>{
+          const result=await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default',
+            onDelta:(text)=>{emit(input.data.includeThought?'thought':'delta',{text});}});
+          emit('done',{status:result.status,answer:result.answer});
+        });
+      }
       if(path==='/assistant/chat' && method==='POST') {
         // The existing guard is a draft: preserve its fail-closed configuration
         // rather than creating another unguarded route while it is enforced.
@@ -262,6 +303,33 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const input=z.strictObject({unit:z.enum(['m','ft']).optional(),showMeasurements:z.boolean().optional()}).parse(await json());
         return respond(await backend.scene(actor,'preferences.put',input));
       }
+      // 2026-11-17 户外引导卡历史：跟活动存后端，换设备/清缓存不丢。只存决策流水，不动规划。
+      if(path==='/outdoor-history' && method==='GET') {
+        const projectId=z.string().trim().min(1).max(200).parse(url.searchParams.get('projectId') ?? '');
+        return respond(await backend.scene(actor,'outdoor-history.get',{projectId}));
+      }
+      if(path==='/outdoor-history' && method==='PUT') {
+        const input=z.strictObject({projectId:z.string().trim().min(1).max(200),entries:z.array(z.unknown()).max(200)}).parse(await json());
+        return respond(await backend.scene(actor,'outdoor-history.put',input));
+      }
+      // 2026-11-17 户外活动本体：后端发号 + revision 乐观并发，换设备靠 activityId 找回。
+      if(path==='/outdoor-plans' && method==='GET') return respond(await backend.scene(actor,'outdoor-plan.list',{}));
+      if(path==='/outdoor-plans' && method==='PUT') {
+        const input=z.strictObject({
+          activityId:uuid.optional(),
+          localActivityId:z.string().trim().min(1).max(200).optional(),
+          baseRevision:z.number().int().min(0).optional(),
+          // 2026-11-17：用户在冲突提示里明确选「用我这版」才传 true。
+          force:z.boolean().optional(),
+          name:z.string().trim().min(1).max(120),
+          plan:z.unknown(),
+        }).parse(await json());
+        return respond(await backend.scene(actor,'outdoor-plan.put',input));
+      }
+      const outdoorPlan=path.match(/^\/outdoor-plans\/([^/]+)$/);
+      if(outdoorPlan && method==='GET') {
+        return respond(await backend.scene(actor,'outdoor-plan.get',{activityId:uuid.parse(outdoorPlan[1])}));
+      }
       if(path==='/studios' && method==='GET') return respond(await backend.scene(actor,'studios'));
       if(path==='/studios' && method==='POST') {
         const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());
@@ -332,6 +400,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(tail==='/agent-runs'&&method==='POST') {
           if(!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
           const input=agentDispatchRequestSchema.parse(await json()),activity='kind' in input;
+          // A pasted credential must not reach a provider or the run table. Same
+          // narrow rule as the frontend context builder: ordinary links are fine,
+          // only credential-shaped text is refused, and nothing is rewritten.
+          if([input.instruction,...('context' in input?input.context.recentMessages.map(message=>message.text):[])].some(containsSensitiveInput))
+            throw new ApiError('AI_INPUT_SENSITIVE',422);
           // Reject before storing a run or contacting a provider. An older
           // worker or legacy workflow must not silently ignore planning marks.
           if(!activity&&input.context.annotationObservation!==undefined&&
@@ -366,7 +439,9 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           }
           if(!z.strictObject({capability:z.literal('agent_steering_guard'),version:z.literal(1)}).safeParse(guard).success)
             throw new ApiError('AGENT_STEERING_GUARD_UNAVAILABLE',503);
-          const stored=await backend.agent(actor,'create',{projectId,input,fingerprint:await sha256(canonical(input)),
+          // The fingerprint covers business input only: a retry after a lease renewal
+          // must reuse the run instead of colliding on IDEMPOTENCY_CONFLICT.
+          const stored=await backend.agent(actor,'create',{projectId,input,fingerprint:await agentFingerprint(input),
             baseHash:activity?await sha256(canonical(input.activityContext)):await sceneHash(input.scene),
             executionMode:activity||miniMaxPreview||env('DEEPSEEK_AGENT_MODE')==='legacy'?'preview':agentExecutionMode(input)});
           if(!stored.reused){
@@ -382,6 +457,32 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           if(all.length>1||! /^(?:0|[1-9]\d{0,2})$/.test(all[0]??'0')||Number(all[0]??'0')>128)throw new ApiError('INVALID_AGENT_EVENT',422);
           return respond(await backend.agentEvents(actor,'list',{projectId,id:uuid.parse(agentEvents[1]),after:Number(all[0]??'0')}));
         }
+        // 运行帧流：同一个游标、同一种校验，只是把轮询改成服务器推。
+        // 每帧是一页（工具回执 + 可见自述）加新游标；运行结束或连接到期即收尾。
+        const agentEventsStream=tail.match(/^\/agent-runs\/([^/]+)\/events\/stream$/);
+        if(agentEventsStream&&method==='GET') {
+          if(!backend.agentEvents||!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
+          // Capture the narrowed RPCs: the streaming closure must not re-read a possibly
+          // undefined field after the guard.
+          const eventsRpc=backend.agentEvents,agentRpc=backend.agent;
+          const all=url.searchParams.getAll('after');
+          if(all.length>1||! /^(?:0|[1-9]\d{0,2})$/.test(all[0]??'0')||Number(all[0]??'0')>128)throw new ApiError('INVALID_AGENT_EVENT',422);
+          const runId=uuid.parse(agentEventsStream[1]);
+          return streamResponse(async emit=>{
+            let cursor=Number(all[0]??'0');
+            const deadline=Date.now()+25_000;
+            while(Date.now()<deadline&&!request.signal.aborted){
+              const page=await eventsRpc(actor,'list',{projectId,id:runId,after:cursor});
+              const state=(page&&typeof page==='object'&&'events' in page)?page as {events:unknown[];nextCursor:number}:null;
+              if(state&&state.events.length){emit('page',{events:state.events,nextCursor:state.nextCursor,mayBeIncomplete:true});cursor=state.nextCursor;}
+              const run=await agentRpc(actor,'get',{projectId,id:runId});
+              const runState=run&&typeof run==='object'&&'state' in run?String((run as {state:unknown}).state):'';
+              if(!['queued','running'].includes(runState)){emit('done',{state:runState});return;}
+              await new Promise(resolve=>setTimeout(resolve,800));
+            }
+            emit('done',{state:'stream-ended'});
+          });
+        }
         // 运行中改道：用户在这趟跑着的时候追加一句要求，工作线程在下一轮模型调用前取走。
         // 任务已结束时这里回 AGENT_RUN_STOPPED（409）——备注没有执行机会，不能假装收到。
         const agentNote=tail.match(/^\/agent-runs\/([^/]+)\/notes$/);
@@ -392,7 +493,12 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const agentRun=tail.match(/^\/agent-runs\/(by-request\/)?([^/]+)(\/cancel)?$/);
         if(agentRun&&backend.agent) {
           if(agentRun[1]&&method==='GET'&&!agentRun[3])return respond(withAgentTextNotice(await backend.agent(actor,'by_request',{projectId,requestId:uuid.parse(agentRun[2])})));
-          if(!agentRun[1]&&((method==='GET'&&!agentRun[3])||(method==='POST'&&agentRun[3])))return respond(withAgentTextNotice(await backend.agent(actor,agentRun[3]?'cancel':'get',{projectId,id:uuid.parse(agentRun[2])})));
+          if(!agentRun[1]&&((method==='GET'&&!agentRun[3])||(method==='POST'&&agentRun[3]))){
+            // 轮询期显式要摘要：运行中不回传整包候选场景，终态仍回全量（前端确认卡要用）。
+            const slim=url.searchParams.get('slim');
+            if(slim!==null&&slim!=='1')throw new ApiError('INVALID_AGENT_VIEW',422);
+            return respond(withAgentTextNotice(await backend.agent(actor,agentRun[3]?'cancel':'get',{projectId,id:uuid.parse(agentRun[2]),...(slim==='1'?{slim:true}:{})})));
+          }
         }
         if(tail==='/material-variants' && method==='POST') {
           const {reused,...proposal}=await prepareMaterialVariant(backend,actor,projectId,await json());

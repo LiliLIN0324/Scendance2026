@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { axisToScreen } from './outdoor-canvas-rotation';
 import {
   drawDesignScopeMask,
   drawScopeLockButton,
@@ -164,6 +165,25 @@ describe('设计范围：框外锁定钮（默认不锁）', () => {
 
   it('没框就不给钮', () => {
     expect(scopeLockButtonRect([], view)).toBeNull();
+  });
+
+  // 2026-11-17 罗盘拖转：bearing≠0 时锁钮中心随地图旋转，命中区放大覆盖旋转外接。
+  it('罗盘拖转后锁钮跟着转：中心绕画布中心等半径旋转，命中区放大并带角度', () => {
+    const rotated: PlanViewport = { ...view, bearing: Math.PI / 4 };
+    // 入口语义 = 带旋转的屏幕投影：轴对齐 ring 先转到真实屏幕再喂进去（与画布调用方一致）。
+    const screenRing = cornersPx.map(point => axisToScreen(point, rotated));
+    const rect = scopeLockButtonRect(screenRing, rotated)!;
+    expect(rect.angle).toBeCloseTo(-Math.PI / 4, 6);
+    expect(rect.w).toBeGreaterThan(SCOPE_LOCK_SIZE);
+    // 轴系中心（右上外贴：right=400/top=100、贴框间距 10 → (422, 78)）绕画布中心旋转，半径必须不变。
+    const axisCx = 400 + 10 + SCOPE_LOCK_SIZE / 2;
+    const axisCy = 100 - 10 - SCOPE_LOCK_SIZE / 2;
+    const cx = rect.x + rect.w / 2;
+    const cy = rect.y + rect.h / 2;
+    const r0 = Math.hypot(axisCx - view.canvasW / 2, axisCy - view.canvasH / 2);
+    const r1 = Math.hypot(cx - view.canvasW / 2, cy - view.canvasH / 2);
+    // 半径不变量（命中区取整有 ±0.5px 抖动，容差 1px）。
+    expect(Math.abs(r1 - r0)).toBeLessThan(1);
   });
 
   it('热区比视觉大一圈，点得中', () => {

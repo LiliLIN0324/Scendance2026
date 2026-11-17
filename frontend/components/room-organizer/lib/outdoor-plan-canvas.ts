@@ -22,6 +22,7 @@ import type { PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
 import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
+import { axisToScreen, screenToAxis } from './outdoor-canvas-rotation';
 import type { PlanSceneObject } from './plan-item-bridge';
 import type { PlanAnnotation, PlanFacility, PlanNode, PlanPoint, PlanRoute, PlanZone } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -44,25 +45,47 @@ export interface PlanViewport {
    */
   anchorLng?: number;
   anchorLat?: number;
+  /**
+   * 2026-11-16 用户指令「2D 的时候罗盘也要能转」：地图方位角（弧度，顺时针为正，
+   * 0 = 正北朝上）——与 3D 相机 bearing 同一口径，罗盘针屏幕转角 = -bearing。
+   * 缺省 0（正北朝上），全部旧调用方与测试行为逐像素不变。
+   * 投影把 bearing 烘进 planPointToPixel/planPixelToPoint 绕画布中心旋转，
+   * 全部业务图层绘制与命中测试自动跟随（全项目单一变换点）。
+   */
+  bearing?: number;
 }
 
-/** ENU 米制点 → 画布 CSS 像素点（含 y 轴翻转：北向上）。 */
+/** 屏幕点绕画布中心旋转 angle（弧度）。正变换（轴→屏）用 -bearing，逆变换（屏→轴）用 +bearing。 */
+function rotateScreenAroundCenter(px: { x: number; y: number }, viewport: PlanViewport, angle: number): { x: number; y: number } {
+  if (!angle) return px;
+  const cx = viewport.canvasW / 2;
+  const cy = viewport.canvasH / 2;
+  const dx = px.x - cx;
+  const dy = px.y - cy;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+}
+
+/** ENU 米制点 → 画布 CSS 像素点（含 y 轴翻转：北向上；bearing≠0 时绕画布中心旋转）。 */
 export function planPointToPixel(p: PlanPoint, viewport: PlanViewport): { x: number; y: number } {
   const metersPerPx = planMetersPerPixel(viewport);
   const originPx = planAnchorPixel(viewport);
-  return {
-    x: originPx.x + p.x / metersPerPx,
-    y: originPx.y - p.y / metersPerPx,
-  };
+  return rotateScreenAroundCenter(
+    { x: originPx.x + p.x / metersPerPx, y: originPx.y - p.y / metersPerPx },
+    viewport,
+    -(viewport.bearing ?? 0),
+  );
 }
 
 /** 画布 CSS 像素点 → ENU 米制点（planPointToPixel 的逆映射，H2-b 绘制/顶点编辑取点用）。 */
 export function planPixelToPoint(px: { x: number; y: number }, viewport: PlanViewport): PlanPoint {
   const metersPerPx = planMetersPerPixel(viewport);
   const originPx = planAnchorPixel(viewport);
+  const axis = rotateScreenAroundCenter(px, viewport, viewport.bearing ?? 0);
   return {
-    x: (px.x - originPx.x) * metersPerPx,
-    y: (originPx.y - px.y) * metersPerPx,
+    x: (axis.x - originPx.x) * metersPerPx,
+    y: (originPx.y - axis.y) * metersPerPx,
   };
 }
 
@@ -354,9 +377,12 @@ export function drawDesignScopeMask(
   }
 
   // 四角 L 形角标：只画角、不连线，范围的存在感降到最低。臂长随框大小伸缩。
-  const ring = scope.map(p => planPointToPixel(p, viewport));
-  const xs = ring.map(p => p.x);
-  const ys = ring.map(p => p.y);
+  // 2026-11-17 罗盘拖转：角标几何在「轴对齐屏幕系」按旧数学算（AABB + 横竖臂），
+  // 再把每个点绕画布中心转回真实屏幕——臂沿旋转后的框边走，不再飘在屏幕四角。
+  const axisOf = (p: PlanPoint) => planPointToPixel(p, { ...viewport, bearing: 0 });
+  const axisRing = scope.map(axisOf);
+  const xs = axisRing.map(p => p.x);
+  const ys = axisRing.map(p => p.y);
   const left = Math.min(...xs);
   const right = Math.max(...xs);
   const top = Math.min(...ys);
@@ -379,9 +405,12 @@ export function drawDesignScopeMask(
   ];
   for (const [x, y, sx, sy] of brackets) {
     ctx.beginPath();
-    ctx.moveTo(x + sx * arm, y);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x, y + sy * arm);
+    const elbow = axisToScreen({ x, y }, viewport);
+    const armH = axisToScreen({ x: x + sx * arm, y }, viewport);
+    const armV = axisToScreen({ x, y: y + sy * arm }, viewport);
+    ctx.moveTo(armH.x, armH.y);
+    ctx.lineTo(elbow.x, elbow.y);
+    ctx.lineTo(armV.x, armV.y);
     ctx.stroke();
   }
   ctx.shadowColor = 'transparent';
@@ -399,11 +428,11 @@ export function drawDesignScopeMask(
     ctx.font = '12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    const x = (left + right) / 2;
-    const y = Math.max(14, top - 8);
+    // 锚点在轴对齐系的「上边中点上方」，再转到真实屏幕（文字本身保持水平，好读）。
+    const anchor = axisToScreen({ x: (left + right) / 2, y: Math.max(14, top - 8) }, viewport);
     const width = ctx.measureText(opts.label).width;
     // 右边有锁定钮时整体左移，保证牌不压到钮上。
-    let chipLeft = x - width / 2 - 5;
+    let chipLeft = anchor.x - width / 2 - 5;
     if (opts.labelMaxRightPx !== undefined) {
       chipLeft = Math.min(chipLeft, opts.labelMaxRightPx - (width + 10));
     }
@@ -412,12 +441,12 @@ export function drawDesignScopeMask(
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 1;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
-    ctx.fillRect(chipLeft, y - 14, width + 10, 17);
+    ctx.fillRect(chipLeft, anchor.y - 14, width + 10, 17);
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
     ctx.fillStyle = DESIGN_SCOPE_INK;
-    ctx.fillText(opts.label, textX, y);
+    ctx.fillText(opts.label, textX, anchor.y);
   }
   ctx.restore();
 }
@@ -447,23 +476,40 @@ const SCOPE_LOCK_GAP = 10;
  */
 export function scopeLockButtonRect(
   ringPx: readonly { x: number; y: number }[],
-  viewport: { canvasW: number; canvasH: number },
+  viewport: { canvasW: number; canvasH: number; bearing?: number },
   opts: { placement?: 'outside' | 'inside'; gap?: number } = {},
-): { x: number; y: number; w: number; h: number } | null {
+): { x: number; y: number; w: number; h: number; angle?: number } | null {
   if (ringPx.length < 3) return null;
-  const right = Math.max(...ringPx.map(point => point.x));
-  const top = Math.min(...ringPx.map(point => point.y));
+  // 2026-11-17 罗盘拖转：入口 ringPx 允许是「已带旋转的屏幕投影」——先转回轴对齐系
+  // 按旧数学定位，再把中心绕画布中心转回真实屏幕；bearing=0 时两步都是恒等，逐字节旧行为。
+  const bearing = viewport.bearing ?? 0;
+  const axisRing = bearing ? ringPx.map(point => screenToAxis(point, viewport)) : ringPx;
+  const right = Math.max(...axisRing.map(point => point.x));
+  const top = Math.min(...axisRing.map(point => point.y));
   const size = SCOPE_LOCK_SIZE;
   const gap = opts.gap ?? SCOPE_LOCK_GAP;
+  let axisRect: { x: number; y: number; w: number; h: number };
   if (opts.placement === 'inside') {
     // 框内、贴右上角：角的左下方向，离两条边都是 gap。
     const x = Math.min(Math.max(4, right - size - gap), Math.max(4, viewport.canvasW - size - 4));
     const y = Math.min(Math.max(4, top + gap), Math.max(4, viewport.canvasH - size - 4));
-    return { x, y, w: size, h: size };
+    axisRect = { x, y, w: size, h: size };
+  } else {
+    const x = Math.min(Math.max(4, right + gap), Math.max(4, viewport.canvasW - size - 4));
+    const y = Math.min(Math.max(4, top - size - gap), Math.max(4, viewport.canvasH - size - 4));
+    axisRect = { x, y, w: size, h: size };
   }
-  const x = Math.min(Math.max(4, right + gap), Math.max(4, viewport.canvasW - size - 4));
-  const y = Math.min(Math.max(4, top - size - gap), Math.max(4, viewport.canvasH - size - 4));
-  return { x, y, w: size, h: size };
+  if (!bearing) return axisRect;
+  // 旋转态：钮中心转到真实屏幕；命中区取「旋转方块的外接正方形」（24·√2 ≈ 34，取 36 留余量）。
+  const center = axisToScreen({ x: axisRect.x + size / 2, y: axisRect.y + size / 2 }, viewport);
+  const hitSide = Math.ceil(size * 1.5);
+  return {
+    x: Math.round(center.x - hitSide / 2),
+    y: Math.round(center.y - hitSide / 2),
+    w: hitSide,
+    h: hitSide,
+    angle: -bearing,
+  };
 }
 
 /** 锁定钮矩形（px）。 */
@@ -780,16 +826,33 @@ export function hitScopeLockButton(
 /**
  * 画锁定钮：白色圆角小牌 + 一枚锁形图标；锁上后整块变墨色（与白色角标区分开关状态）。
  * 图标是画出来的（不依赖图标集）：锁体 + 锁环，开锁时锁环向右翘起。
+ * 2026-11-17 罗盘拖转：rect.angle（弧度）存在时整块钮绕自身中心旋转——视觉是旋转方块，
+ * 命中区仍是 rect 轴对齐外接矩形（scopeLockButtonRect 已放大到 1.5 倍边长覆盖旋转外接）。
  */
 export function drawScopeLockButton(
   c: PlanCanvasContext,
-  rect: { x: number; y: number; w: number; h: number },
+  rect: { x: number; y: number; w: number; h: number; angle?: number },
   locked: boolean,
 ): void {
   const { ctx } = c;
-  const { x, y, w, h } = rect;
-  const radius = 6;
+  const angle = rect.angle ?? 0;
+  const size = SCOPE_LOCK_SIZE;
   ctx.save();
+  // 旋转态：进「钮中心为原点」的本地系（测试假 ctx 没有 translate/rotate，无角度时走绝对坐标老路径）。
+  let x: number;
+  let y: number;
+  if (angle) {
+    ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
+    ctx.rotate(angle);
+    x = -size / 2;
+    y = -size / 2;
+  } else {
+    x = rect.x;
+    y = rect.y;
+  }
+  const w = size;
+  const h = size;
+  const radius = 6;
   // 与 2D 的白框同一套质感：白面 + 淡影，锁上反成墨面。
   ctx.shadowColor = 'rgba(10, 14, 20, 0.18)';
   ctx.shadowBlur = 8;
@@ -814,17 +877,17 @@ export function drawScopeLockButton(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  const cx = x + w / 2;
-  const cy = y + h / 2 + 0.5;
+  const gx = x + size / 2;
+  const gy = y + size / 2 + 0.5;
   const ink = locked ? 'rgba(255, 255, 255, 0.96)' : 'rgba(17, 19, 23, 0.78)';
   ctx.strokeStyle = ink;
   ctx.fillStyle = ink;
   ctx.lineWidth = 1.7;
   ctx.lineCap = 'round';
   // 锁体用实心：24 px 的钮上，描边方框读起来像「窗口」，实心才像锁。
-  const bodyTop = cy - 0.6;
+  const bodyTop = gy - 0.6;
   ctx.beginPath();
-  ctx.rect(cx - 4.8, bodyTop, 9.6, 7.4);
+  ctx.rect(gx - 4.8, bodyTop, 9.6, 7.4);
   ctx.fill();
   // 锁环：一个 U 形拱，两边立腿直接坐在锁体上（只画半弧会跟锁体脱节）。
   // 2026-11-16 用户「这不是锁上的图标吗」：未锁时必须看得出是「开口锁」——
@@ -833,17 +896,17 @@ export function drawScopeLockButton(
   const shackleBase = locked ? bodyTop : bodyTop - 2.2;
   ctx.beginPath();
   if (locked) {
-    ctx.moveTo(cx - shackleR, bodyTop);
-    ctx.lineTo(cx - shackleR, shackleBase - 0.01);
+    ctx.moveTo(gx - shackleR, bodyTop);
+    ctx.lineTo(gx - shackleR, shackleBase - 0.01);
     // 从 180° 顺时针画到 360°：canvas 角度向下为正，这段正好是拱顶。
-    ctx.arc(cx, shackleBase, shackleR, Math.PI, Math.PI * 2);
-    ctx.lineTo(cx + shackleR, bodyTop);
+    ctx.arc(gx, shackleBase, shackleR, Math.PI, Math.PI * 2);
+    ctx.lineTo(gx + shackleR, bodyTop);
   } else {
     // 左腿仍插在锁体上（轴），右腿抬起来悬在锁体上方 → 全球通用的“开锁”形。
-    ctx.moveTo(cx - shackleR, bodyTop);
-    ctx.lineTo(cx - shackleR, shackleBase);
-    ctx.arc(cx, shackleBase, shackleR, Math.PI, Math.PI * 2);
-    ctx.lineTo(cx + shackleR, shackleBase + 1.2);
+    ctx.moveTo(gx - shackleR, bodyTop);
+    ctx.lineTo(gx - shackleR, shackleBase);
+    ctx.arc(gx, shackleBase, shackleR, Math.PI, Math.PI * 2);
+    ctx.lineTo(gx + shackleR, shackleBase + 1.2);
   }
   ctx.stroke();
   ctx.lineCap = 'butt';
@@ -963,6 +1026,8 @@ export function drawZoneLayer(
     if (label) {
       paintPlanLabel(c, zone.name, label.x, label.y, opts.tone ?? 'light', '11px system-ui, sans-serif');
     }
+    // 2026-11-16 用户指令「室内分区上那扇自动门先关掉，只留图标库里手动放的」：
+    // 分区不再自动画门（上一条指令先做的那扇作废），门由用户在「入口和通道图标」里自己摆。
   }
 }
 
@@ -1255,44 +1320,65 @@ export function drawRouteLayer(
 /**
  * 人员：圆形点位 + 角色名与数量标注，人员色；选中画白圈（H2-d）。
  * warning 为 true 时改红描边（点位越界警示，数据本身保留）。
+ *
+ * 2026-11-16 用户：「地图上应该就直接是图标，而不是一个点、上面再一个图标，感觉是重复信息」——
+ * `chip: true` 表示调用方会在同一点位画 16 px 岗位图标芯片（画布 outdoor-plan-canvas.tsx
+ * 负责把贴纸画上去），本层于是不再画那颗圆点，只留选中/越界圈与「岗位 ×人数」文字。
+ * 缺省仍是圆点（无岗位贴纸的岗位、单测与外部调用不受影响）。
  */
 export function drawWorkerLayer(
   c: PlanCanvasContext,
-  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean; /** 2026-11-12 活动包点位：契约 planWorkerSchema.color，缺省取 tokens 人员色。 */ color?: string | undefined }[],
+  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean; /** 调用方已画岗位图标芯片：不再画圆点。 */ chip?: boolean; /** 2026-11-12 活动包点位：契约 planWorkerSchema.color，缺省取 tokens 人员色。 */ color?: string | undefined }[],
   opts: { tone?: PlanBasemapTone } = {},
 ): void {
   const { ctx, viewport } = c;
   const color = PLANNING_LAYER_COLORS.worker;
+  /** 芯片半径（px）：与画布那边的 16 px 芯片同口径，圈与文字都按它让位。 */
+  const chipRadius = 8;
   for (const w of workers) {
     const pt = planPointToPixel(w.position, viewport);
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = hexWithAlpha(w.color ?? color, 0.85);
-    ctx.fill();
-    ctx.strokeStyle = w.warning ? '#c0392b' : '#fff';
-    ctx.lineWidth = w.warning ? 1.6 : 1;
-    ctx.stroke();
+    if (!w.chip) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = hexWithAlpha(w.color ?? color, 0.85);
+      ctx.fill();
+      ctx.strokeStyle = w.warning ? '#c0392b' : '#fff';
+      ctx.lineWidth = w.warning ? 1.6 : 1;
+      ctx.stroke();
+    } else if (w.warning) {
+      // 圆点被芯片取代后，越界仍需一眼看出：红圈套在芯片外沿（芯片由画布后画，圈要让到外面）。
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, chipRadius + 1, 0, Math.PI * 2);
+      ctx.strokeStyle = '#c0392b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
     if (w.selected) {
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 8.5, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, w.chip ? chipRadius + 3.5 : 8.5, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.8;
       ctx.stroke();
     }
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    // 2026-11-16：人名也跟着底图明暗走（深色卫星图上的深字根本看不见）。
-    paintPlanLabel(
-      c,
-      w.count > 1 ? `${w.role} ×${w.count}` : w.role,
-      pt.x + 6,
-      pt.y - 2,
-      opts.tone ?? 'light',
-      '10px system-ui, sans-serif',
-      'left',
-      'top',
-    );
+    // 2026-11-16 用户：「图标细分之后就不需要在地图上显示名字了」——岗位名交给图标本身，
+    // 只有多人位才补一枚「×N」（数量是图标表达不了的）；单人位不写任何字。
+    // 颜色跟底图明暗走（深色卫星图上的深字根本看不见）。
+    if (w.count > 1) {
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      // 文字起点按芯片/圆点让位：芯片版贴右沿 3 px、竖直居中（10 px 字 → 上方 5 px）。
+      paintPlanLabel(
+        c,
+        `×${w.count}`,
+        pt.x + (w.chip ? chipRadius + 3 : 6),
+        pt.y - (w.chip ? chipRadius - 3 : 2),
+        opts.tone ?? 'light',
+        '10px system-ui, sans-serif',
+        'left',
+        'top',
+      );
+    }
   }
 }
 
@@ -1535,6 +1621,8 @@ export function drawMeasureLayer(
     kind: 'distance' | 'area' | 'path';
     points: readonly PlanPoint[];
     selected?: boolean;
+    /** 2026-11-16 读数据 DOM 贴片渲染时置 false（不再在画布上重复画一遍文字）。 */
+    showLabel?: boolean;
   }[],
 ): void {
   const { ctx } = c;
@@ -1544,37 +1632,53 @@ export function drawMeasureLayer(
     if (m.kind === 'area' && m.points.length < 3) continue;
     if (m.kind === 'area') {
       traceRing(c, m.points);
-      ctx.fillStyle = measureFill(c, 0.12);
+      ctx.fillStyle = measureFill(c, m.selected ? 0.2 : 0.12);
       ctx.fill();
+      // 选中态：先铺一圈白色宽光晕，再压回测量色——图上能一眼看出“这条被选中了”。
+      if (m.selected) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = m.selected ? 2.5 : 1.5;
       ctx.stroke();
       ctx.restore();
-      const label = zoneLabelPixel(c, m.points);
+      const label = m.showLabel === false ? null : zoneLabelPixel(c, m.points);
       if (label) drawMeasureLabel(c, formatAreaM2(measureValue(m)), label.x, label.y);
     } else {
       ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = m.selected ? 'rgba(255,255,255,0.9)' : color;
+      ctx.lineWidth = m.selected ? 5 : 2;
       tracePolyline(c, m.points);
       ctx.stroke();
       ctx.restore();
+      if (m.selected) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        tracePolyline(c, m.points);
+        ctx.stroke();
+        ctx.restore();
+      }
       // 端点白心圆环（Google 测距节点）。
       for (const p of [m.points[0]!, m.points[m.points.length - 1]!]) {
         const pt = planPointToPixel(p, c.viewport);
         drawMeasureNode(c, pt.x, pt.y);
       }
-      const label = measureLabelPixel(c, m.points);
-      if (label) drawMeasureLabel(c, formatLengthM(measureValue(m)), label.x, label.y);
+      // 2026-11-16 用户：「文字和线段平行」+「线段中间带过程标尺」——
+      // 读数不再横贴在中间，而是沿线段方向旋转；长段按自适应步长打刻度（100 m / 200 m …）。
+      if (m.showLabel !== false) drawMeasureRuler(c, m.points, { total: true });
     }
   }
 }
 
 /**
- * 测量草稿（临时测量）：已收点虚线 + 顶点方块 + 指针橡皮筋，随指针画实时读数
- * （距离=当前段长、路径=累计总长、面积=按当前点闭合的预览面积）；面积 ≥3 点时
- * 首点画闭合热区圆圈提示。
+ * 测量草稿（临时测量）：已收点实线 + 顶点圆环 + 指针橡皮筋，线段上带过程标尺
+ * （累计刻度 + 贴线旋转读数）；面积 ≥3 点时首点画闭合热区圆圈提示。
  */
 export function drawMeasureDraft(
   c: PlanCanvasContext,
@@ -1613,6 +1717,12 @@ export function drawMeasureDraft(
     const pt = planPointToPixel(p, c.viewport);
     drawMeasureNode(c, pt.x, pt.y, 3.5);
   }
+  // 2026-11-16 用户：「测量的时候线段中间带有过程标尺」——草稿阶段就把刻度/累计读数打在线上，
+  // 指针段也算在内（不然拖到一半看不到刻度）。总长读数仍由下面的 measureDraftReadout 负责。
+  if (kind !== 'area') {
+    const rulerPoints = cursorPoint ? [...draft, cursorPoint] : draft;
+    if (rulerPoints.length >= 2) drawMeasureRuler(c, rulerPoints, { total: false });
+  }
   if (kind === 'area' && draft.length >= 2 && (cursorPoint || draft.length >= 3)) {
     // 面积闭合提示：首点画圆圈（与边界/分区草稿同口径）。
     const first = planPointToPixel(draft[0]!, c.viewport);
@@ -1624,7 +1734,6 @@ export function drawMeasureDraft(
   }
   const readout = measureDraftReadout(kind, draft, cursorPoint);
   if (readout) {
-    // 读数跟指针（有指针时）或最后一个已收点，深色底衬保证在瓦片上可读。
     const anchor = cursorPoint ?? draft[draft.length - 1]!;
     const pt = planPointToPixel(anchor, c.viewport);
     drawMeasureLabel(c, readout, pt.x + 12, pt.y - 14);
@@ -2216,32 +2325,33 @@ export function ringCenterPixel(
   return best ?? centroid;
 }
 
-/** 折线标注锚点：中点顶点的像素位置（选中路线的名称标注用）。 */
-function polylineLabelPixel(
-  c: PlanCanvasContext,
-  points: readonly PlanPoint[],
+/**
+ * 2026-11-16 用户：「点击下面的×就消失了」——读数据做成图上可关的贴片，需要一个跟画布
+ * 读数完全同位置的屏幕锚点（否则贴片会和画布文字错位）。距离/路径取段中点，面积取
+ * 画布面积读数用的同一落点（首边中点）。
+ */
+export function measureReadoutAnchor(
+  viewport: PlanViewport,
+  measurement: { kind: 'distance' | 'area' | 'path'; points: readonly PlanPoint[] },
 ): { x: number; y: number } | null {
+  const points = measurement.points;
   if (points.length < 2) return null;
-  const mid = points[Math.floor(points.length / 2)]!;
-  return planPointToPixel(mid, c.viewport);
-}
-
-/** 测量标注锚点：两点取段中点，多点取中点顶点（与折线标注同口径）。 */
-function measureLabelPixel(
-  c: PlanCanvasContext,
-  points: readonly PlanPoint[],
-): { x: number; y: number } | null {
-  if (points.length === 2) {
-    const a = planPointToPixel(points[0]!, c.viewport);
-    const b = planPointToPixel(points[1]!, c.viewport);
+  if (measurement.kind === 'area') {
+    if (points.length < 3) return null;
+    const a = planPointToPixel(points[0]!, viewport);
+    const b = planPointToPixel(points[1]!, viewport);
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
-  return polylineLabelPixel(c, points);
+  if (points.length === 2) {
+    const a = planPointToPixel(points[0]!, viewport);
+    const b = planPointToPixel(points[1]!, viewport);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  return planPointToPixel(points[Math.floor(points.length / 2)]!, viewport);
 }
 
 /** 测量读数标签：深色半透明底衬 + 青色文字（宽按文本长度估算，不依赖 measureText）。 */
-function drawMeasureLabel(c: PlanCanvasContext, text: string, x: number, y: number): void {
-  const { ctx } = c;
+function drawMeasureLabel(c: PlanCanvasContext, text: string, x: number, y: number): void {  const { ctx } = c;
   ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -2252,6 +2362,120 @@ function drawMeasureLabel(c: PlanCanvasContext, text: string, x: number, y: numb
   ctx.strokeText(text, x, y);
   ctx.fillStyle = measureStroke(c);
   ctx.fillText(text, x, y);
+}
+
+/* ---------------- 2026-11-16 用户指令：过程标尺 + 贴线平行文字 ---------------- */
+
+/** 刻度步长候选（米）：挑一个「屏幕上够稀」的最小档。 */
+export const MEASURE_RULER_STEPS_M = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 20000] as const;
+/** 相邻刻度至少隔这么多 CSS px（再密就换大一档）。 */
+export const MEASURE_RULER_MIN_TICK_PX = 60;
+
+/** 当前缩放下的标尺步长（米）。 */
+export function measureRulerStepM(viewport: PlanViewport): number {
+  const want = MEASURE_RULER_MIN_TICK_PX * planMetersPerPixel(viewport);
+  return MEASURE_RULER_STEPS_M.find(step => step >= want) ?? MEASURE_RULER_STEPS_M[MEASURE_RULER_STEPS_M.length - 1]!;
+}
+
+/** 文字要顺着线读：把屏幕角度翻到 (-90°, 90°] 区间，避免倒字。 */
+export function readableSegmentAngle(dx: number, dy: number): number {
+  const angle = Math.atan2(dy, dx);
+  if (angle > Math.PI / 2) return angle - Math.PI;
+  if (angle <= -Math.PI / 2) return angle + Math.PI;
+  return angle;
+}
+
+/** 贴线旋转文字：沿线段方向排，法线方向抬起 offsetPx，带反色光晕。 */
+function drawRotatedMeasureLabel(
+  c: PlanCanvasContext,
+  text: string,
+  x: number,
+  y: number,
+  angle: number,
+  offsetPx: number,
+): void {
+  const { ctx } = c;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  const halo = c.dark ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = halo;
+  ctx.strokeText(text, 0, -offsetPx);
+  ctx.fillStyle = measureStroke(c);
+  ctx.fillText(text, 0, -offsetPx);
+  ctx.restore();
+}
+
+/**
+ * 过程标尺：沿折线按自适应步长打垂直刻度，并把**从起点算起的累计距离**贴在线上（文字与线段平行）。
+ * 段太短打不下刻度时，给该段中点一个段末累计读数；`total` 打开时末端再贴一次总长。
+ * 返回本次画上的刻度（米）与文字，便于单测直接断言“刻度打在哪儿”。
+ */
+export function drawMeasureRuler(
+  c: PlanCanvasContext,
+  points: readonly PlanPoint[],
+  options: { labels?: boolean; total?: boolean } = {},
+): { stepM: number; labels: string[]; ticksM: number[] } {
+  const labels: string[] = [];
+  const ticksM: number[] = [];
+  const stepM = measureRulerStepM(c.viewport);
+  if (points.length < 2) return { stepM, labels, ticksM };
+  const { ctx } = c;
+  const color = measureStroke(c);
+  const metersPerPx = planMetersPerPixel(c.viewport);
+  const px = points.map(point => planPointToPixel(point, c.viewport));
+  let travelledM = 0;
+  let nextMarkM = stepM;
+  for (let index = 1; index < px.length; index += 1) {
+    const a = px[index - 1]!;
+    const b = px[index]!;
+    const segPx = Math.hypot(b.x - a.x, b.y - a.y);
+    if (segPx < 0.5) continue;
+    const segM = segPx * metersPerPx;
+    const angle = readableSegmentAngle(b.x - a.x, b.y - a.y);
+    let marked = false;
+    while (nextMarkM <= travelledM + segM + 1e-9) {
+      const t = Math.min(1, Math.max(0, (nextMarkM - travelledM) / segM));
+      const x = a.x + (b.x - a.x) * t;
+      const y = a.y + (b.y - a.y) * t;
+      // 刻度：垂直于线段的短横。
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0, -4);
+      ctx.lineTo(0, 4);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+      ticksM.push(nextMarkM);
+      if (options.labels !== false) {
+        const text = formatLengthM(nextMarkM);
+        drawRotatedMeasureLabel(c, text, x, y, angle, 10);
+        labels.push(text);
+      }
+      marked = true;
+      nextMarkM += stepM;
+    }
+    // 这一整段一个刻度都没落上：给段中点一个累计读数，不留“没数字的线”。
+    if (!marked && options.labels !== false && segPx >= 34) {
+      const text = formatLengthM(travelledM + segM);
+      drawRotatedMeasureLabel(c, text, (a.x + b.x) / 2, (a.y + b.y) / 2, angle, 10);
+      labels.push(text);
+    }
+    travelledM += segM;
+  }
+  if (options.total !== false && options.labels !== false && px.length >= 2) {
+    const last = px[px.length - 1]!;
+    const prev = px[px.length - 2]!;
+    drawRotatedMeasureLabel(c, formatLengthM(travelledM), last.x, last.y, readableSegmentAngle(last.x - prev.x, last.y - prev.y), 16);
+  }
+  return { stepM, labels, ticksM };
 }
 
 function drawArrowAt(c: PlanCanvasContext, from: PlanPoint, to: PlanPoint, color: string): void {

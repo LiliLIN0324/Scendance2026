@@ -18,7 +18,7 @@ export type WalkRole = {
   walkable: boolean;
   /** 不能走时说明原因，显示在卡片下面。 */
   note?: string;
-  /** 挂到「不同人群」的哪一类；缺省为演员。 */
+  /** 挂到「不同人群」的哪一类；缺省为游客。 */
   crowdType?: CrowdTypeId;
 };
 
@@ -37,12 +37,13 @@ const LABOR_WALK_ROLES: readonly WalkRole[] = LABOR_GENDER_SLOTS
   }));
 
 export const WALK_ROLES: readonly WalkRole[] = [
-  { assetId: '7a9f1e21-8c34-4d51-a001-b00000000001', name: '唐女', image: '/assets/avatars/walk-tang-f.jpg', walkable: true },
-  { assetId: '7a9f1e21-8c34-4d51-a002-b00000000002', name: '唐男', image: '/assets/avatars/walk-tang-m.jpg', walkable: true },
-  { assetId: '7a9f1e21-8c34-4d51-a003-b00000000003', name: '宋女', image: '/assets/avatars/walk-song-f.jpg', walkable: true },
-  { assetId: '7a9f1e21-8c34-4d51-a004-b00000000004', name: '明女', image: '/assets/avatars/walk-ming-f.jpg', walkable: true },
-  { assetId: '7a9f1e21-8c34-4d51-a005-b00000000005', name: '明男', image: '/assets/avatars/walk-ming-m.jpg', walkable: true },
-  { assetId: '7a9f1e21-8c34-4d51-a006-b00000000006', name: '宋男', image: '/assets/avatars/walk-song-m.jpg', walkable: true },
+  // 古装漫游角色（汉服/唐服/宋服/明服）算游客，不算演员（2026-11-16 用户口径）。
+  { assetId: '7a9f1e21-8c34-4d51-a001-b00000000001', name: '唐女', image: '/assets/avatars/walk-tang-f.jpg', walkable: true, crowdType: 'visitor' },
+  { assetId: '7a9f1e21-8c34-4d51-a002-b00000000002', name: '唐男', image: '/assets/avatars/walk-tang-m.jpg', walkable: true, crowdType: 'visitor' },
+  { assetId: '7a9f1e21-8c34-4d51-a003-b00000000003', name: '宋女', image: '/assets/avatars/walk-song-f.jpg', walkable: true, crowdType: 'visitor' },
+  { assetId: '7a9f1e21-8c34-4d51-a004-b00000000004', name: '明女', image: '/assets/avatars/walk-ming-f.jpg', walkable: true, crowdType: 'visitor' },
+  { assetId: '7a9f1e21-8c34-4d51-a005-b00000000005', name: '明男', image: '/assets/avatars/walk-ming-m.jpg', walkable: true, crowdType: 'visitor' },
+  { assetId: '7a9f1e21-8c34-4d51-a006-b00000000006', name: '宋男', image: '/assets/avatars/walk-song-m.jpg', walkable: true, crowdType: 'visitor' },
   { assetId: '7a9f1e21-8c34-4d51-a007-b00000000007', name: '保安', image: '/assets/avatars/walk-security.jpg', walkable: true, crowdType: 'security' },
   { assetId: '7a9f1e21-8c34-4d51-a008-b00000000008', name: '警察', image: '/assets/avatars/walk-police.jpg', walkable: true, crowdType: 'police' },
   { assetId: '7a9f1e21-8c34-4d51-a009-b00000000009', name: '志愿者', image: '/assets/avatars/walk-volunteer.jpg', walkable: true, crowdType: 'volunteer' },
@@ -57,9 +58,12 @@ export function findWalkRole(assetId: string): WalkRole {
   return WALK_ROLES.find(role => assetId === role.assetId) ?? WALK_ROLES[0]!;
 }
 
-/** 角色归属的人群类型；未标注的古装角色默认归演员（performer）。 */
-export function walkRoleCrowdType(role: WalkRole): string {
-  return role.crowdType ?? 'performer';
+/**
+ * 角色归属的人群类型；未标注的角色归游客（古装漫游角色不再算演员）。
+ * 参数只用得上 `crowdType`，所以取结构化最小类型：面板里拼出来的卡片对象也能直接问。
+ */
+export function walkRoleCrowdType(role: { crowdType?: string | undefined }): string {
+  return role.crowdType ?? 'visitor';
 }
 
 /**

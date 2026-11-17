@@ -76,6 +76,33 @@
     z-index: 36;
   }
   .sc-workbench .sc-tool-column.sc-canvas-rail::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  /* 户外地图控制列例外：四角簇（分享 / Google Maps 控制列 / 隐藏工具栏）
+     需要相对整张画布定位，不能压进顶部 54px 横条，否则右下簇会被裁到屏外。 */
+  .sc-workbench .sc-tool-column.sc-canvas-rail.is-outdoor {
+    left: 0 !important; right: 0 !important; top: 0 !important; bottom: 0 !important;
+    width: 100% !important; height: auto !important; max-width: none !important; max-height: none !important;
+    display: block !important; padding: 0 !important;
+    border: 0 !important; border-radius: 0 !important;
+    background: transparent !important; box-shadow: none !important;
+    overflow: visible !important;
+  }
+  /* 手机上地图底行有「高德街道 / 比例尺 / 拍摄场地」三组浮层：
+     控制列抬到拍摄钮上方，隐藏工具栏抬到比例尺上方，互不压字。 */
+  .sc-workbench .sc-tool-column.is-outdoor .oc-cluster.oc-br.oc-gmaps {
+    right: 12px !important;
+    bottom: calc(var(--sc-mobile-dock-h) + 24px) !important;
+  }
+  .sc-workbench .sc-tool-column.is-outdoor .oc-dock {
+    bottom: calc(var(--sc-mobile-dock-h) + 24px) !important;
+  }
+  /* 手机只留一行：隐藏分隔线、收紧间距，给右侧控制列让出位置。 */
+  .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb {
+    gap: 2px; padding: 4px 0 4px 4px;
+  }
+  .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb .oc-sep { display: none; }
+  .sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close {
+    width: 24px; height: 24px; min-width: 24px; min-height: 24px;
+  }
   /* 触控区：44×44，圆钮改成 12px 圆角方钮，间距由工具条统一给 */
   .sc-workbench .sc-tool-column > button,
   .sc-workbench .sc-tool-column .sc-tool-menu > button {
@@ -215,6 +242,11 @@
     border: 0 !important; border-radius: 0 !important; width: 100% !important;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-heading { display: none !important; }
+  /* 2026-11-16：手机上左栏标题统一收起，但户外卡片那枚「收起左侧面板」就在标题栏里——
+     卡片恰好按住左轨入口，收起后变成「进得去出不来」。只给户外卡片把标题栏放回来。 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .sc-left-drawer.is-outdoor-card > .sc-left-heading {
+    display: flex !important; align-items: center; gap: 8px; padding: 6px 10px 6px 14px;
+  }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-head { padding: 10px 14px; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-feed { padding: 12px 14px 16px; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column .ap-body { flex: 1 1 auto; min-height: 0; }

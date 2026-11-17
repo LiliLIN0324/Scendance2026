@@ -15,6 +15,7 @@ import { canonical, sha256, proposalRequestSchema, sceneSchema, uuid, type Scene
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
+import {isLocalDevHostname,localAutoLoginCredentials,rememberLocalAutoLogin,shouldAttemptLocalAutoLogin} from './local-auto-login';
 import { createSupabaseBrowserClient } from "./supabase/client";
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import {commitOriginalReview,isOriginalReviewReceipt,originalReviewReceiptKey,readOriginalReviewPending,type OriginalReviewReceipt} from './original-review-commit';
@@ -182,6 +183,30 @@ export interface AccountPreferences {
   unit?: 'm' | 'ft';
   showMeasurements?: boolean;
 }
+
+/** 户外活动概览（后端发号的 activityId 是跨设备身份）。 */
+export interface OutdoorPlanSummary {
+  activityId: string;
+  name: string;
+  revision: number;
+  updatedAt: string;
+  localActivityId: string | null;
+}
+
+/** 单份户外活动；`found=false` 表示后端没有这份（或无权访问）。 */
+export interface OutdoorPlanSnapshot {
+  found: boolean;
+  activityId?: string;
+  name?: string;
+  revision?: number;
+  updatedAt?: string;
+  plan?: unknown;
+}
+
+/** 保存结果：`conflict=true` 表示服务器已有更新版本，本次未写入。 */
+export type OutdoorPlanSaveResult =
+  | { conflict: false; activityId: string; revision: number }
+  | { conflict: true; activityId: string; revision: number; updatedAt: string; name: string };
 interface AuthResponse {
   access_token: string; refresh_token: string; expires_in: number; expires_at?: number; user: BackendUser;
 }
@@ -649,6 +674,37 @@ export class BackendSession {
     }
   }
 
+  /**
+   * 本机开发免登录：只在 `next dev` 注入凭据（生产构建注入为空）+ 本机域名下生效。
+   * 候选逐个尝试，成功即落会话并在本标签页记住邮箱；全失败只记冷却，不再往 UI 报错。
+   * 返回 true 表示已经登录（调用方直接收工），false 表示按未登录处理。
+   */
+  /** 后端（Supabase）主机名：用来判断这套账号属于本机栈还是云端项目。 */
+  private backendHostname(): string {
+    try { return new URL(this.config.url).hostname; } catch { return ''; }
+  }
+
+  private async localAutoSignIn(epoch: number): Promise<boolean> {
+    if (typeof window === 'undefined' || !isLocalDevHostname(window.location.hostname)) return false;
+    const credentials = localAutoLoginCredentials({ localBackend: isLocalDevHostname(this.backendHostname()) });
+    if (!credentials.length) return false;
+    if (!shouldAttemptLocalAutoLogin()) return true;
+    for (const credential of credentials) {
+      try {
+        const result = await this.authRequest("password", { email: credential.email, password: credential.password });
+        if (epoch !== this.epoch) return true;
+        this.acceptAuth(result);
+        rememberLocalAutoLogin(credential.email, 'ok');
+        this.update({ status: "ready", error: null });
+        return true;
+      } catch {
+        if (epoch !== this.epoch) return true;
+      }
+    }
+    rememberLocalAutoLogin(null, 'failed');
+    return false;
+  }
+
   async signIn(email: string, password: string): Promise<BackendUser> {
     if (this.operationPending) throw new SceneApiError("CLOUD_OPERATION_BUSY", 409, null);
     this.stopRenewal();
@@ -711,6 +767,8 @@ export class BackendSession {
           this.update({ status: "ready", error: null });
           return;
         }
+        // 本机 dev 免登录：没有存档会话就直接代登，不再弹登录卡手填（见 local-auto-login.ts）。
+        if (!recovery && await this.localAutoSignIn(epoch)) return;
         this.tokens = null;
         this.update({ user: null, recoveryReady: false, status: "signed_out", writeBlocked: true, error: null });
         return;
@@ -865,6 +923,43 @@ export class BackendSession {
   /** 回写当前账号的界面偏好；只提交白名单字段，不触碰项目 / 租约状态。 */
   async savePreferences(prefs: AccountPreferences): Promise<AccountPreferences> {
     return this.businessRequest<AccountPreferences>("/preferences", "PATCH", prefs);
+  }
+  /**
+   * 2026-11-17：户外引导卡历史跟活动存后端（换设备 / 清缓存不丢）。
+   * 只读写决策流水；未登录或服务不可用时由调用方回退本机记录，不当成错误。
+   */
+  async getOutdoorCardHistory(projectId: string): Promise<unknown[]> {
+    return this.businessRequest<unknown[]>(
+      `/outdoor-history?projectId=${encodeURIComponent(projectId)}`,
+      "GET",
+    );
+  }
+  async saveOutdoorCardHistory(projectId: string, entries: unknown[]): Promise<unknown[]> {
+    return this.businessRequest<unknown[]>("/outdoor-history", "PUT", { projectId, entries });
+  }
+  /**
+   * 2026-11-17：户外活动本体入库。`activityId` 由后端发号，换设备靠它找回；
+   * 保存必须带 `baseRevision`，不匹配时后端返回 `conflict` 且不落库。
+   */
+  listOutdoorPlans(): Promise<OutdoorPlanSummary[]> {
+    return this.businessRequest<OutdoorPlanSummary[]>("/outdoor-plans", "GET");
+  }
+  getOutdoorPlan(activityId: string): Promise<OutdoorPlanSnapshot> {
+    return this.businessRequest<OutdoorPlanSnapshot>(
+      `/outdoor-plans/${encodeURIComponent(activityId)}`,
+      "GET",
+    );
+  }
+  saveOutdoorPlan(input: {
+    activityId?: string;
+    localActivityId?: string;
+    baseRevision?: number;
+    /** 用户在冲突提示里明确选「用我这版」时才传 true（越过版本比对覆盖）。 */
+    force?: boolean;
+    name: string;
+    plan: unknown;
+  }): Promise<OutdoorPlanSaveResult> {
+    return this.businessRequest<OutdoorPlanSaveResult>("/outdoor-plans", "PUT", input);
   }
   /** Scene processing uses a remote project without replacing the caller's local activity identity. */
   async ensureGeometryWorkbenchReady(scene: Scene, name: string, localActivityId: string): Promise<BackendProject> {
@@ -1447,10 +1542,10 @@ export class BackendSession {
     if (run.projectId !== state.projectId || run.requestId !== input.requestId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
     return run;
   }
-  async getAgentRun(runId: string): Promise<AgentRun> {
+  async getAgentRun(runId: string, options?: { slim?: boolean }): Promise<AgentRun> {
     const projectId = this.snapshot.project?.id;
     if (!projectId) throw new SceneApiError('PROJECT_REQUIRED', 409, null);
-    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}`));
+    const run = agentRunSchema.parse(await this.businessRequest(`/projects/${projectId}/agent-runs/${uuid.parse(runId)}${options?.slim?'?slim=1':''}`));
     if (run.projectId !== projectId || run.id !== runId) throw new SceneApiError('INVALID_RESPONSE', 502, null);
     return run;
   }
@@ -1469,6 +1564,29 @@ export class BackendSession {
       const value=await this.client.request(`/projects/${uuid.parse(projectId)}/agent-runs/${uuid.parse(runId)}/events?after=${after}`,'GET',undefined,false,undefined,()=>{if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);});
       if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);
       return parseAgentRunEvents(value,after);
+    }finally{stop();}
+  }
+  /**
+   * 运行帧流（SSE）：与 getAgentRunEvents 同一个游标与校验，只是改成服务器推。
+   * 返回 'done' 表示服务端已看到运行收尾；'ended' 表示这条连接到期，调用方重连即可。
+   * 旧部署没有该路由时抛 STREAM_UNAVAILABLE / 404，调用方退回轮询。
+   */
+  async streamAgentRunEvents(runId:string,after:number,onPage:(page:AgentRunEventPage)=>void,signal?:AbortSignal):Promise<'done'|'ended'> {
+    const projectId=this.snapshot.project?.id,actor=this.snapshot.user?.id;
+    if(!projectId||!actor)throw new SceneApiError('PROJECT_REQUIRED',409,null);
+    if(!Number.isSafeInteger(after)||after<0||after>128)throw new SceneApiError('INVALID_RESPONSE',502,null);
+    const epoch=this.epoch,lease=this.snapshot.lease;
+    const matches=()=>this.epoch===epoch&&this.snapshot.project?.id===projectId&&this.snapshot.user?.id===actor&&
+      this.snapshot.lease?.projectId===lease?.projectId&&this.snapshot.lease?.sessionId===lease?.sessionId&&this.snapshot.lease?.generation===lease?.generation;
+    let invalidated=false;const stop=this.subscribe(()=>{if(!matches())invalidated=true;});
+    try{
+      this.requireConfig();
+      const ending=await this.client.streamAgentRunEvents(projectId,runId,after,(value)=>{
+        if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);
+        onPage(parseAgentRunEvents(value,after));
+      },signal);
+      if(invalidated||!matches())throw new SceneApiError('SESSION_CHANGED',409,null);
+      return ending;
     }finally{stop();}
   }
   async getAgentRunByRequest(requestId: string): Promise<AgentRun> {
@@ -1556,13 +1674,36 @@ export class BackendSession {
     return result;
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
-  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null): Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}) });
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true): Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
     const result=await client.request('/assistant/chat', 'POST', input, false, signal,dispatch,true);
     dispatch();return assistantChatResponseSchema.parse(result);
+  }
+  /**
+   * 流式问答：边生成边把可见内容交给调用方，完成时返回与 assistantChat 同样的结果。
+   *
+   * 旧部署没有流式路由时（404/405/非 SSE）退回一次性请求，不把「不支持流」当成问答失败。
+   * 取消只会停掉这一条请求；不会把已生成的部分当成完整答案。
+   */
+  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1'):Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}) });
+    const client=this.conversationClient();
+    if(!client)return {status:'disabled',answer:null};
+    const dispatch=this.scopedDispatchGuard(false);
+    try{
+      const result=await client.streamAssistantChat(input,text=>{dispatch();onDelta(text);},signal,responseMode?'thought':'delta');
+      dispatch();
+      return assistantChatResponseSchema.parse(result);
+    }catch(error){
+      dispatch();
+      if(error instanceof SceneApiError&&(error.status===404||error.status===405||error.code==='STREAM_UNAVAILABLE'||error.code==='NON_JSON_RESPONSE')){
+        return this.assistantChat(message,history,signal,responseMode,provider,model,responseMode?true:undefined);
+      }
+      throw error;
+    }
   }
   async getActivityTaskRun(id: string): Promise<ActivityTaskRun> {
     const projectId = this.snapshot.project?.id;

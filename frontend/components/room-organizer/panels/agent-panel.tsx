@@ -3,6 +3,7 @@
 import { validateCandidateApply } from '../lib/candidate-apply-validation';
 import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { agentErrorView } from '@/lib/agent-error-view';
 import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
 
 /**
@@ -86,10 +87,10 @@ import { fetchRoadNetwork } from '../lib/road-network';
 import { buildRouteProposal, matchRouteCommand, roadFetchPlanForBoundary, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
 import { useOutdoorAgentWorkflow, explicitProposalApproval } from '../hooks/use-outdoor-agent-workflow';
-import { OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
+import { OutdoorThoughtRecord, OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
 import type { OutdoorAgentBridge, OutdoorBrief } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
-import { outdoorEventIssue, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
+import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
 import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
 import type { PlanAnnotation, PlanFacility, PlanLevel, PlanMeasurement, PlanWorker, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -135,7 +136,9 @@ import { stageMaterialGenerate } from '../lib/material-generate';
 import { isCompositeDesignBrief, looksLikeDesignInstruction, PLACE_FIRST_BOUNCE, placeStillPending } from '../lib/place-first';
 import { clearPendingBrief, readPendingBrief, shouldResumeBrief, writePendingBrief } from '../lib/pending-brief';
 import { describeModelFailure } from '../lib/turn-failure-diag';
-import { taskFromBrief } from '../lib/outdoor-task-brief-bridge';
+import { absorbLayeredInstruction, layeredBounceText } from '../lib/outdoor-layered-task';
+import { loginBlockedPlaceholder } from '../lib/outdoor-login-copy';
+import { ApplyOnce, applyTicketKey } from '../lib/outdoor-apply-once';
 import { BingoAuditCard } from './bingo-audit-card';
 import { failOpenLocalStep, finishLocalLayoutRun, formatDurationClock, notePriorLayoutTool, pushAgentSteerNote, pushLocalLayoutStep, removeAgentSteerNote, requestAgentStop, resetAgentRun } from './agent-chat-store';
 import { subscribeComposerPrefill } from './composer-prefill-bus';
@@ -184,7 +187,7 @@ export type { Bubble };
 /** 落盘时丢掉 action（函数不可序列化）；翻回话只回放文字与附图。 */
 function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
   // zoneApply 是闭包，落盘时丢掉；翻回话文字还在，按钮不重现。
-  return bubbles.map(({ id, role, text, meta, warn, amber, long, image, modelConversation, materialQueries, alert }) => {
+  return bubbles.map(({ id, role, text, meta, warn, amber, long, image, modelConversation, outdoorQuestion, materialQueries, alert }) => {
     return {
       id, role, text,
       ...(meta !== undefined ? { meta } : {}),
@@ -193,6 +196,7 @@ function toStoredBubbles(bubbles: readonly Bubble[]): StoredAssistantBubble[] {
       ...(long ? { long: true } : {}),
       ...(image !== undefined ? { image } : {}),
       ...(role === 'agent' && modelConversation === true ? { modelConversation: true } : {}),
+      ...(role === 'agent' && outdoorQuestion ? { outdoorQuestion: true as const } : {}),
       ...(role === 'agent' && materialQueries?.length ? { materialQueries } : {}),
       ...(role === 'agent' && alert?.stamp ? { alertStamp: alert.stamp, ...(alert.tone ? { alertTone: alert.tone } : {}) } : {}),
     } satisfies StoredAssistantBubble;
@@ -534,6 +538,8 @@ interface AgentValue {
   assertSessionWrite: () => void;
   sessionSaveFailed: boolean;
   understanding: boolean; isUnderstanding(text?:string): boolean; cancelUnderstanding(): void;
+  /** 流式问答正在生成的可见草稿；只在生成过程中非空。 */
+  streamPreview: string | null;
   /** A bridge must not clear text when the main conversation cannot accept it. */
   canForward(text:string):boolean;
   cancelledInput: {id:number;text:string}|null; retryUncertain: string|null; confirmUncertainRetry(): void; dismissUncertainRetry(): void; generationQueued:number;
@@ -743,6 +749,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const outdoorKindRef = useRef<OutdoorTaskKind | null>(null);
   const routeTicketRef = useRef<{ epoch: number; proposal: RouteProposal } | null>(null);
   const zoneTicketRef = useRef<{ epoch: number; proposal: ZoneEventProposal } | null>(null);
+  // 同一版预览只允许落一次：双击「应用」或浏览器重放同一击时，第二次直接 return。
+  const zoneApplyOnceRef = useRef(new ApplyOnce());
   const outdoorScopeRef = useRef(sessionScope);
   outdoorScopeRef.current = sessionScope;
   function beginOutdoorTask(kind: OutdoorTaskKind | null, keepVenue = false): number {
@@ -833,6 +841,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const pendingModelInputs = useRef(new Set<string>());
   const [understanding,setUnderstanding]=useState(false);
   const [briefBusy,setBriefBusy]=useState(false);
+  // 流式问答的可见草稿：边生成边上屏，完成后清掉，正式气泡接上。
+  const [streamPreview,setStreamPreview]=useState<string|null>(null);
   const [toolPending,setToolPending]=useState(false);
   const [processFailed,setProcessFailed]=useState<ProcessFailure|null>(null);
   const layoutAttempt=useRef(false);
@@ -1015,7 +1025,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }, [persistBubbles]);
 
   function searchOutdoorVenue(query:string){outdoorWorkflow.cancel();const epoch=beginOutdoorTask('venue');setVenuePick({epoch,query,candidates:[],loading:true,picking:null});setOutdoorTask({intent:`搜索“${query}”`,state:'working',action:'检索真实场地候选；未修改活动范围',steps:[]});}
-  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,provider:()=>studioRef.current?.activeProvider,model:()=>studioRef.current?.activeModel??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:(text,clarification)=>say({role:'agent',text,...(clarification?{modelConversation:true}:{})}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
+  const outdoorWorkflow=useOutdoorAgentWorkflow({scope:sessionScope,bridge:()=>routeBridgeRef.current,controller:()=>studioRef.current?.controller??null,provider:()=>studioRef.current?.activeProvider,model:()=>studioRef.current?.activeModel??null,begin:()=>beginOutdoorTask('workflow'),current:epoch=>currentOutdoorTask(epoch,'workflow'),status:setOutdoorTask,say:(text,clarification)=>say({role:'agent',text,...(clarification?{modelConversation:true,outdoorQuestion:true as const}:{})}),search:searchOutdoorVenue,simulate:active=>{if(active){if(!routeBridgeRef.current?.getPlan()?.routes.length)return false;startFlowSim();}else stopFlowSim();return true;}});
 
   useEffect(()=>subscribeActiveAssistantSession(sessionScope,(nextId)=>{
     if(onDialogueHistoryReview&&nextId!==boundSessionId.current){setReviewedHistory(null);freshSessionProof.current=null;}
@@ -1815,7 +1825,18 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     try {
       const memory = memoryRef.current;
       const issue = outdoorEventIssue(memory.event ?? null, memory.headcount ?? null);
-      if (issue) { setOutdoorTask({ intent: '按活动需求分区与放置物料', state: 'blocked', action: issue, steps: ['读取当前场地'], prompts: ['45 人讲座', '80 人市集'] }); say({ role: 'agent', amber: true, text: issue }); return; }
+      if (issue) { setOutdoorTask({ intent: '按活动需求分区与放置物料', state: 'blocked', action: issue, steps: ['读取当前场地'], prompts: ['45 人讲座', '80 人市集', '钓鱼比赛'] }); say({ role: 'agent', amber: true, text: issue }); return; }
+      // 2026-11-17 用户拍板「活动类型限制太死板」：这个入口只产讲座/市集几何模板；
+      // 未知/沿岸类型不再拦死也不再误报「未找到候选」——如实指向能走通的那条路。
+      if (!supportedOutdoorEvent(memory.event ?? null)) {
+        const event = memory.event ?? null;
+        const redirect = isShorelineEvent(event)
+          ? '沿岸类（如钓鱼比赛）沿真实水岸线排：在对话里说「就沿着水岸线」，我直接出钓位预览。'
+          : `「${event ?? '这个活动'}」这版没有现成排布模板；在对话里直接说分区和物料（例如「室外展览区加 20 个摊位」），我按需求排，不套假模板。`;
+        setOutdoorTask({ intent: `${memory.headcount ?? ''} 人${event ?? '活动'}`, state: 'blocked', action: redirect, steps: ['核对活动类型'], prompts: isShorelineEvent(event) ? ['就沿着水岸线'] : ['室外展览区加 20 个摊位'] });
+        say({ role: 'agent', amber: true, text: redirect });
+        return;
+      }
       if (!confirmedOutdoorEntrances(plan.nodes, plan.boundary).length) { setOutdoorTask({ intent: '按活动需求安排区域', state: 'blocked', action: plan.nodes.length ? '现有节点不在当前真实边界内，或只是出口/活动子口；请把真实入口放在边界上或内部，再按当前场地重试' : '先确认真实场地入口，才能安排签到、观众方向与接驳', steps: ['记录活动类型与人数'], prompts: [`按当前场地重新安排${memory.headcount ?? ''}人${memory.event ?? '活动'}`, '排一下流线'] }); return; }
       const siteSummary = outdoorEventSiteSummary({ boundary: plan.boundary, nodes: plan.nodes, existingFacilities: plan.facilities, existingRoutes: plan.routes });
       const proposal = buildZoneEventProposal({
@@ -1850,6 +1871,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (zoneProposalBaseRef.current !== JSON.stringify(routeBridgeRef.current?.getPlan())) {
       setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'blocked', action: '场地/内容已变化，旧提案已失效，请重新生成', steps: [] }); return;
     }
+    // 双击/重放只写一次：同一个 epoch + 基准版本已经有票就不再写。
+    if (!zoneApplyOnceRef.current.take(applyTicketKey(String(ticket.epoch), zoneProposalBaseRef.current))) return;
     const ok = routeBridgeRef.current?.applyZoneProposal(proposal.zones, proposal.facilities, proposal.routes, proposal.nodes) ?? false;
     if (ok) { zoneTicketRef.current = null; zoneProposalBaseRef.current = null; setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'done', action: '已应用。选设施可切模型/生成/上传；选区域可编辑事件', steps: ['区域物料预览', '用户确认', '写入同一份户外规划'], focusFacilityId: (proposal.facilities.find(f => f.name.includes('舞台')) ?? proposal.facilities[0])?.id, prompts: ['补子出入口', '开始模拟'] }); }
     if (ok) say({ role: 'agent', decision: 'approved', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料——虚线变实线了，Ctrl+Z 可整批撤销。要改某个区的事件，选中分区在属性卡里改。` });
@@ -3030,25 +3053,27 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const cancelled=new Promise<never>((_,reject)=>request.controller.signal.addEventListener('abort',()=>reject(new DOMException('已停止等待','AbortError')),{once:true}));
       const provider=studioRef.current?.activeProvider;
       const selectedModel=provider&&provider!=='default'?studioRef.current?.activeModel??null:null;
-      const result=await Promise.race([controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined,selectedModel),cancelled]);
+      // 流式优先：可见内容边到边上屏。旧后端没有该路由时，assistantChatStream 内部退回一次性请求。
+      const streamFn=typeof controller.assistantChatStream==='function'?controller.assistantChatStream.bind(controller):null;
+      const streamed=streamFn
+        ? streamFn(text,history,request.controller.signal,(delta)=>setStreamPreview(prev=>(prev??'')+delta),provider&&provider!=='default'?provider:undefined,selectedModel)
+        : controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined,selectedModel);
+      const result=await Promise.race([streamed,cancelled]);
       if(!current())return;
       if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
       else {
         const retryable = result.status==='timeout'||result.status==='provider_error';
         if(retryable)uncertainInputs.current.add(text);
         const status=result.status;
-        const message=status==='invalid'?'问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。':status==='disabled'||status==='unavailable'?'活动问答暂未启用，问题已保留。':status==='quota_exhausted'?'该模型额度已用完或欠费，请在上方切换其它模型，或联系管理员充值。':'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。';
+        const view=agentErrorView(status);
         // 按既定口径：所有错误卡都保留「重试云端理解 / 改一句再说」；重试是手动重发同一句，不会自动换到其它模型。
         const retry = () => { if (!briefRequest.current) void send(text, true); };
-        const alert = status==='invalid' ? { stamp:'输入需调整', tone:'muted' as const, retry }
-          : status==='disabled'||status==='unavailable' ? { stamp:'暂未启用', tone:'muted' as const, retry }
-          : status==='quota_exhausted' ? { stamp:'额度不足', tone:'warn' as const, retry }
-          : { stamp:'智能理解', tone:'warn' as const, retry };
-        say({role:'agent',amber:true,text:message,alert});
+        const alert = { stamp: view.stamp, tone: view.tone, retry };
+        say({role:'agent',amber:true,text:view.message,alert});
       }
     } catch {
       if(current()){uncertainInputs.current.add(text);say({role:'agent',amber:true,text:'这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text,true);}}});}
-    } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}release();}
+    } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}setStreamPreview(null);release();}
   }
 
   // 2026-11-16：地点定完、范围确认后，把退回时存下的那句接回来跑一次。
@@ -3085,9 +3110,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(!isCompositeDesignBrief(trimmed, matchVenueCommand(trimmed))){
         // 退回不是终点：把"还差什么"和"下一步就一件事"直接说在气泡里，
         // 下一步由待办模型给出（选地点/圈范围/登录），不在这里另写一套判断。
-        const bounced = taskFromBrief({ text: trimmed, at: Date.now(), stage: outdoorWorkflow.state.stage });
+        const layered = absorbLayeredInstruction({ text: trimmed, stage: outdoorWorkflow.state.stage });
         say({role:'user',text:trimmed});
-        say({role:'agent',text:`${PLACE_FIRST_BOUNCE} 下一步：${bounced.next.label}。`});
+        say({role:'agent',text: layered ? layeredBounceText(layered, PLACE_FIRST_BOUNCE) : `${PLACE_FIRST_BOUNCE} 下一步：在地图上选地点。`});
         return;
       }
     }
@@ -3782,7 +3807,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     pickFile: (accept?: string) => { const input = fileInput.current; if (!input) return; input.accept = accept ?? DEFAULT_FILE_ACCEPT; input.click(); },
     pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
     removePendingFile: () => setPendingFile(null),
-    send, say, rainOn: view.weather === 'rain',
+    send, say, rainOn: view.weather === 'rain', streamPreview,
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
     walkthrough: () => {
       setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false }));
@@ -4169,6 +4194,10 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const providerMenuRef = useRef<HTMLDivElement>(null);
   const assistantSessions = useAssistantSessions(agent.assertSessionWrite, agent.sessionScope);
   const [showHistory, setShowHistory] = useState(false);
+  // 空间卡与物料卡：第一次点到才挂，之后常驻、只切显隐。既不在打开面板时就预取，
+  // 也不会「切去空间再切回物料」时整块重建（那会让缩略图全部回到 ◇ 等加载）。
+  const visitedLanes = useRef<Set<AgentId>>(new Set([activeAgent]));
+  visitedLanes.current.add(activeAgent);
   // 「你可以做什么」的展开状态提到面板这一层：展开时顶掉上方的例句行，两处建议不并排。
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   // 渲染后再读本机选择：首帧与 SSR 一致，避免水合不一致。
@@ -4380,8 +4409,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
   const ghostVisible = !agent.outdoorBridgeReady && !loginBlocked && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
-  const composerPlaceholder = loginBlocked ? '登录后继续这次选址'
-    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
+  const composerPlaceholder = loginBlocked ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
+    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : placePending ? '先说地点：城市、场馆或地址'
     : generating ? '为下一步添加备注'
@@ -4407,10 +4436,19 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const showOutdoorSuggestion = activity && mode === 'layout' && agent.outdoorBridgeReady && !showHistory
     && !placePending
     && !draft.trim() && !agent.pendingFile && !agent.venuePick && !agent.mapPickerOpen
-    && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal && !agent.outdoorWorkflow.loginRequired
+    && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal && !agent.outdoorWorkflow.pendingPlan && !agent.outdoorWorkflow.loginRequired
     && !['working', 'confirm', 'ask', 'blocked'].includes(agent.outdoorTask?.state ?? '');
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
   const conversation = bingo || activity;
+  const waitingOutdoorReply = !bingo && agent.outdoorTask?.state === 'ask' && agent.bubbles.at(-1)?.outdoorQuestion === true;
+  // 2026-11-17 用户：Bingo 底部那张「当前任务·搜索目标地点」是错误地加了素材图，整块收掉。
+  // 活动脸的引导卡照旧；Bingo 只留审校统计与气泡，不再带任务缩略图。
+  const outdoorWorkflowCard = !bingo && agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply || agent.outdoorWorkflow.pendingPlan) && (
+    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} onSearchPlace={focusPlaceSearch} onAdjustPlan={() => inputRef.current?.focus()} onCancelPreview={() => {
+      agent.outdoorWorkflow.cancel();
+      agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。');
+    }}/>
+  );
   const showPlanHome = activity && mode === 'layout' && !agent.outdoorBridgeReady
     && isPlanHome(agent.state, layout, agent.proposal !== null);
   // 例句行占的就是输入框上方那一格；能力卡展开时同一格换成卡片，不再另占一行。
@@ -4428,10 +4466,11 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 状态头三件套：色调 + 图标 + 短文案；拿不到明确阶段就回退现有头部样式，不硬造状态。
   const headStatus: { tone: 'ask' | 'think' | 'run' | 'paused' | 'stopped'; label: string; icon: ReactNode } | null = (() => {
     if (mode !== 'layout' || !activity) return null;
+    if (agent.outdoorWorkflow.pendingPlan) return { tone: 'ask', label: '等你批准', icon: <HelpCircle size={15} aria-hidden="true" /> };
     if (agent.outdoorTask?.state === 'ask' && !agent.outdoorWorkflow.busy) return { tone: 'ask', label: '待你回复', icon: <HelpCircle size={15} aria-hidden="true" /> };
     const s = agent.state;
     if (s === 'planProposed') return { tone: 'ask', label: '等你确认', icon: <HelpCircle size={15} aria-hidden="true" /> };
-    if (agent.understanding || agent.briefBusy) return { tone: 'think', label: '正在思考', icon: <Sparkles size={15} aria-hidden="true" /> };
+    if (agent.understanding || agent.briefBusy || agent.outdoorWorkflow.awaitingThought) return { tone: 'think', label: '正在思考', icon: <Sparkles size={15} aria-hidden="true" /> };
     if (s === 'generating') return { tone: 'run', label: '施工中', icon: <Loader2 size={15} className="cr-spin" aria-hidden="true" /> };
     if (s === 'generatePaused') return { tone: 'paused', label: '已暂停', icon: <span className="ap-pause-glyph" aria-hidden="true"><i /><i /></span> };
     if (FAILED_STATES.includes(s)) return { tone: 'stopped', label: '已停止', icon: <Square size={14} aria-hidden="true" /> };
@@ -4460,9 +4499,21 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     {floatBar}
     <header className="ap-head ap-session-head" data-tone={headStatus?.tone} onPointerDown={onHeaderPointerDown}>
       <div className="ap-session-identity">
-        <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
-          <RailAvatar key={activeAgent} form={meta.form} size={36} />
-        </span>
+        {/* 2026-11-17 用户：面板标题旁的形体图标一律拿下——**只留第一格「活动（门）」那颗**。
+            Bingo / 空间 / 物料 用 display:none 的零尺寸锚点占位，头像飞行测不到盒会自动不跑。 */}
+        {activeAgent === 'door' ? (
+          <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
+            <RailAvatar key={activeAgent} form={meta.form} size={36} />
+          </span>
+        ) : (
+          <span
+            ref={headerAvatarRef}
+            className="ap-session-avatar-slot"
+            data-visible={headerAvatarVisible ? 'true' : 'false'}
+            aria-hidden="true"
+            style={{ display: 'none' }}
+          />
+        )}
         <h1 className="ap-session-title" title={activity ? sessionTitle : meta.name}>{activity ? sessionTitle : meta.name}</h1>
         {headStatus && <span className={`ap-head-status ap-head-status--${headStatus.tone}`} role="status">
           {headStatus.icon}<span>{headStatus.label}</span>
@@ -4524,7 +4575,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
-      <Bubbles bubbles={agent.bubbles} sessionKey={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}`} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onOpenMaterials={() => agent.callbacks.onOpenMaterials()} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
+      <Bubbles bubbles={agent.bubbles} sessionKey={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}`} reviewOnly={bingo} beforeLatestQuestion={waitingOutdoorReply ? outdoorWorkflowCard : undefined} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onOpenMaterials={() => agent.callbacks.onOpenMaterials()} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
       {/* 运行中排队备注上屏（对标谷地工坊）：写了还没送达的备注挂「下一步」标签，可撤回；
           送达后由运行条「已送达 N 条」接手，这里只显示未送达的。 */}
       {activity && runState.isRunning && runState.scope === 'layout' && runState.steerNotes.length > 0 && (
@@ -4538,7 +4589,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           ))}
         </div>
       )}
-      {agent.outdoorBridgeReady&&!agent.venuePick&&<OutdoorWorkflowCard flow={agent.outdoorWorkflow} onSearchPlace={() => focusPlaceSearch()} onCancelPreview={() => { agent.outdoorWorkflow.cancel(); agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。'); }}/>}
+      {!waitingOutdoorReply && outdoorWorkflowCard}
+      {!outdoorWorkflowCard && !bingo && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} request={agent.outdoorWorkflow.thoughtRequest} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}
@@ -4574,7 +4626,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         onCancelTask={() => agent.stopOutdoorTask()}
       />}
       </OutdoorTaskCard>}
-      {activity && mode === 'layout' && <ToolCallTrace line={processText} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
+      {activity && mode === 'layout' && <ToolCallTrace line={processText} draft={agent.streamPreview} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
       {/* 云端真跑时由 AgentRunPanel 接管：真步骤时间线 + 停止确认行 + 过往任务归档；
           processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。
           onRestoreStart：收尾卡「还原到本轮开始」——开跑瞬间的整盘快照一键写回。 */}
@@ -4710,10 +4762,10 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       </div>}
     </div>
-    : <div key={activeAgent} className={`ap-agent-surface is-${activeAgent}`}>
-      {activeAgent === 'space' && spaceSlot}
-      {activeAgent === 'material' && materialSlot}
-    </div>}
+    : <>
+      {visitedLanes.current.has('space') && <div className="ap-agent-surface is-space" hidden={activeAgent !== 'space'}>{spaceSlot}</div>}
+      {visitedLanes.current.has('material') && <div className="ap-agent-surface is-material" hidden={activeAgent !== 'material'}>{materialSlot}</div>}
+    </>}
     {activeAgent === 'bingo' && bingoSlot}
     {!conversation && chatSlot}
     </div>

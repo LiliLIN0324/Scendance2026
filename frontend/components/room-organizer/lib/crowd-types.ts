@@ -6,7 +6,7 @@
  * 人物模型 / 漫游演员补模型。没模型的类型先占位（后期生成或找公开模型）。
  *
  * 与户外规划的劳动力岗位对齐（lib/oneplan-catalog.ts 的 LABOR_ROLES），另外多出
- * 工作人员 / 演员 / 观众三类——规划和 3D 都常用，但不算「岗位」。
+ * 工作人员 / 演员 / 游客 / 观众几类——规划和 3D 都常用，但不算「岗位」。
  */
 import { WALK_ROLES, walkRoleCrowdType } from './walk-roles';
 
@@ -28,6 +28,7 @@ export const CROWD_TYPES: readonly CrowdType[] = [
   { id: 'executive', name: '经理', note: '活动统筹与决策' },
   { id: 'admin', name: '管理员', note: '场地管理' },
   { id: 'performer', name: '演员', note: '表演与漫游角色' },
+  { id: 'visitor', name: '游客', note: '参观、打卡与漫游（汉服/唐服/明服等古装角色）' },
   { id: 'exhibitor', name: '展商', note: '摊位值守' },
   { id: 'audience', name: '观众', note: '人流示意' },
 ] as const;
@@ -37,7 +38,9 @@ export type CrowdTypeId = (typeof CROWD_TYPES)[number]['id'];
 export type CrowdTypeModelStatus = 'walk' | 'lowpoly' | 'todo';
 
 /**
- * 有漫游模型的类型：由漫游角色登记（lib/walk-roles.ts）反推，未标注的角色归演员。
+ * 有漫游模型的类型：由漫游角色登记（lib/walk-roles.ts）反推，未标注的角色归游客。
+ * 2026-11-16 用户：「传统服饰的（汉服/唐服/明服），把他们当作游客，不要当演员」——
+ * 所以古装漫游角色归 visitor，performer 留给真正的演出人员。
  * 这样「哪些类型有 walk 模型」只有 walk-roles 一处声明，避免与这里的硬编码清单漂移。
  * 低模清单仍独立挂在 CROWD_TYPE_MODELS，两者可以同时存在。
  */

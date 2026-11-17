@@ -234,3 +234,55 @@ describe('csv plan export (H5-a)', () => {
     void CSV_EXPORT_HEADERS;
   });
 });
+
+describe('csv plan export 测量备注（M3c 补强）', () => {
+  it('writes measurement notes into the notes column, keeping 14 fields', () => {
+    const plan = samplePlan();
+    plan.measurements = [
+      { id: 'f6000000-0000-4000-8000-000000000001', kind: 'distance', name: '距离 1', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], notes: '门到摊位的直线' },
+    ];
+
+    const rows = parseCsv(buildPlanCsv(plan).replace(/^\uFEFF/, ''));
+    const row = rows.find(cells => cells[0] === '测量')!;
+
+    expect(row).toHaveLength(14);
+    expect(row[4]).toContain('10');
+    expect(row[13]).toBe('门到摊位的直线');
+  });
+});
+
+describe('csv plan export 墙体行（M2）', () => {
+  const WALL_ID = 'b2000000-0000-4000-8000-000000000001';
+
+  function planWithWalls(): SitePlanData {
+    const plan = samplePlan();
+    plan.walls = [{
+      id: WALL_ID,
+      points: [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      thicknessM: 0.2,
+      heightM: 3,
+      kind: 'interior',
+      zoneId: 'a1000000-0000-4000-8000-000000000001',
+    }];
+    return plan;
+  }
+
+  it('appends a 14-field wall row with length, thickness and zone', () => {
+    const rows = parseCsv(buildPlanCsv(planWithWalls()).replace(/^\uFEFF/, ''));
+    const wall = rows.find(cells => cells[0] === '墙体')!;
+
+    expect(wall).toHaveLength(14);
+    expect(wall[2]).toBe('内墙');
+    expect(wall[3]).toBe('观众区, 东侧');
+    expect(wall[4]).toBe('厚 0.20 m');
+    expect(wall[5]).toBe('0.00');
+    expect(wall[8]).toContain('10');
+    expect(wall[10]).toBe(WALL_ID);
+  });
+
+  it('puts wall rows after inventory rows and leaves legacy output byte-identical', () => {
+    const rows = parseCsv(buildPlanCsv(planWithWalls()).replace(/^\uFEFF/, ''));
+    expect(rows.at(-1)![0]).toBe('墙体');
+    expect(buildPlanCsv(samplePlan())).toBe(buildPlanCsv({ ...samplePlan(), walls: [] }));
+  });
+});

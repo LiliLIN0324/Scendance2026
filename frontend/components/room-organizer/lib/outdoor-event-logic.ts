@@ -1,10 +1,16 @@
-/** 可解释的户外活动 v1：小型讲座/会议与市集。不是消防/容量安全认证。 */
+/** 可解释的户外活动 v1：讲座/市集有几何模板；沿岸类（钓鱼等）走参照排布；其他类型走通用需求路径。不是消防/容量安全认证。 */
 import type { PlanFacility, PlanNode, PlanPoint, PlanRoute, PlanZone } from '../../../../supabase/functions/_shared/site-plan';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { planPointInRing, planSegmentsCrossStrict } from './site-plan-editing';
 import type { BuildZoneEventInput, ZoneEventProposal } from './zone-event-proposal';
 
 type Side = 'N' | 'S' | 'E' | 'W';
+/**
+ * 模板注册表：只回答「有没有几何模板」（讲座/市集），不是活动准入闸门。
+ * 2026-11-17 用户拍板「活动类型限制太死板」：类型只决定排布策略——
+ * 沿岸类（钓鱼/垂钓）由参照驱动（沿真实水岸线，见 outdoor-shoreline-layout.ts），
+ * 其余类型一律走「需求→分区→物料」通用路径；两者都不在这里硬套模板。
+ */
 export function supportedOutdoorEvent(event: string | null): 'lecture' | 'market' | null {
   if (!event) return null;
   if (/市集|集市|展销/u.test(event)) return 'market';
@@ -12,10 +18,17 @@ export function supportedOutdoorEvent(event: string | null): 'lecture' | 'market
   return null;
 }
 
-/** 返回缺失/不支持原因，供同一个 Agent 的渐进引导卡使用。 */
+/** 沿岸类活动（钓鱼/垂钓）：排布沿真实水岸线，人数可空；由 outdoor-shoreline-layout.ts 承接。 */
+export function isShorelineEvent(event: string | null | undefined): boolean {
+  if (!event) return false;
+  return /钓鱼|垂钓|钓位/u.test(event);
+}
+
+/** 返回模板路径缺失的前置信息；未知类型与沿岸类不再拦死（2026-11-17 用户拍板）。 */
 export function outdoorEventIssue(event: string | null, guests: number | null): string | null {
-  if (!event) return '先说活动类型，例如「45 人讲座」或「80 人市集」。';
-  if (!supportedOutdoorEvent(event)) return '目前自动排布只支持小型讲座/会议和市集；其他活动请先手动规划，不会套一个假合适的模板。';
+  if (!event) return '先说活动类型，例如「45 人讲座」「80 人市集」，或沿岸类的「钓鱼比赛」。';
+  if (isShorelineEvent(event)) return null; // 沿岸按真实岸线几何定钓位，人数可空；水岸/界外由沿岸引擎如实给下一步。
+  if (!supportedOutdoorEvent(event)) return null; // 没有现成模板 ≠ 不能做：走「需求→分区→物料」通用路径，不套假模板。
   if (!guests || !Number.isFinite(guests) || !Number.isInteger(guests) || guests < 1) return '还缺预计人数；说一句「45 人讲座」或「80 人市集」即可继续。';
   if (guests > 200) return '这版只支持 1–200 人的小型活动；更大活动需要人工核对容量、疏散和交通组织。';
   return null;
@@ -49,6 +62,62 @@ export function outdoorCorridorStrips(points: PlanPoint[], width: number): PlanP
 }
 export function outdoorRingsOverlap(a: PlanPoint[], b: PlanPoint[]): boolean {
   return pathCrossesRing([...a, a[0]!], b) || pathCrossesRing([...b, b[0]!], a);
+}
+
+/** 点是否在环的严格内部（贴边不算）。OSM 道路与建筑常共享墙角顶点，贴边不是「穿楼」。 */
+function strictlyInsideRing(pt: PlanPoint, ring: PlanPoint[]): boolean {
+  if (!planPointInRing(pt, ring)) return false;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!,
+      b = ring[(i + 1) % ring.length]!,
+      dx = b.x - a.x,
+      dy = b.y - a.y,
+      len2 = dx * dx + dy * dy;
+    if (len2 < 1e-12) continue;
+    const t = ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / len2;
+    if (t < 0 || t > 1) continue;
+    if (Math.hypot(pt.x - (a.x + t * dx), pt.y - (a.y + t * dy)) <= 1e-6)
+      return false;
+  }
+  return true;
+}
+
+/**
+ * 路线中心线真正走进足迹内部的段长（米）。
+ *
+ * 判据是「中心线进入足迹内部」，不是「离墙多近」：
+ * OSM 的道路中心线与建筑轮廓常在墙角共享顶点、互相「贴」着走，
+ * 拿中心线距离当冲突判据会把这种贴墙路线整轮否掉；
+ * 反过来，中心线从楼里穿过去（离墙远）才是真问题。
+ * 只碰边界不算进入——碰边是共顶点，不是占用。
+ * 用 1m 采样量长度：长线段只要有一截进楼，量到的就是那一截，不按整段算。
+ */
+export function outdoorRouteInsideRingLength(
+  points: PlanPoint[],
+  ring: PlanPoint[],
+): number {
+  if (ring.length < 3 || points.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!,
+      b = points[i]!,
+      length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length < 0.01) continue;
+    const steps = Math.max(1, Math.ceil(length));
+    let inside = 0;
+    for (let s = 0; s < steps; s++) {
+      const t = (s + 0.5) / steps;
+      if (
+        strictlyInsideRing(
+          { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t },
+          ring,
+        )
+      )
+        inside += 1;
+    }
+    total += (inside / steps) * length;
+  }
+  return total;
 }
 
 function distanceToRoute(point: PlanPoint, route: PlanRoute): number {
@@ -97,6 +166,8 @@ function connectionPaths(from: PlanPoint, to: PlanPoint, boundary: PlanPoint[]):
 }
 
 export function buildLogicalOutdoorEvent(input: BuildZoneEventInput, id: () => string): ZoneEventProposal | null {
+  // 模板注册表只有讲座/市集（2026-11-17 收缩）：沿岸类走 outdoor-shoreline-layout.ts，
+  // 其他类型走通用需求路径——这里对未知/沿岸类型返回 null，绝不硬套市集网格。
   const kind = supportedOutdoorEvent(input.brief.event);
   const guests = input.brief.guests;
   if (!kind || outdoorEventIssue(input.brief.event, guests) || !guests) return null;

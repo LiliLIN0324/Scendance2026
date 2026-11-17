@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildZoneEventProposal } from './zone-event-proposal';
-import { outdoorEventIssue, outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
+import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, outdoorCorridorStrips, outdoorRingsOverlap, outdoorRouteInsideRingLength } from './outdoor-event-logic';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { planPointInRing } from './site-plan-editing';
 import type { PlanPoint, PlanNode, PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
@@ -42,14 +42,25 @@ describe('户外活动逻辑/几何守卫', () => {
     expect(market!.facilities.filter(f => f.name.startsWith('市集摊位'))).toHaveLength(20);
     expect(market!.facilities.some(f => f.templateId.includes('chair') || f.templateId.includes('stage'))).toBe(false);
   });
-  it('规模随人数增长；狭长场地、超容量和不支持活动不硬套模板', () => {
+  it('规模随人数增长；狭长场地、超容量拒绝；未知活动不再拦死（2026-11-17 解耦）', () => {
     const large = build('讲座', 100); expect(large).not.toBeNull();
     expect(large!.facilities.filter(f => f.templateId.includes('chair'))).toHaveLength(100);
     const narrow = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 100 }, { x: 0, y: 100 }];
     expect(build('讲座', 45, narrow, [{ ...south, position: { x: 5, y: 0 } }])).toBeNull();
     expect(build('讲座', 250)).toBeNull();
-    expect(outdoorEventIssue('烟花燃放', 45)).toContain('只支持');
+    // 未知类型：没有现成模板 ≠ 不能做——issue 为空，走通用需求路径，不套假模板。
+    expect(outdoorEventIssue('烟花燃放', 45)).toBeNull();
     expect(outdoorEventIssue('讲座', null)).toContain('人数');
+  });
+  it('沿岸类（钓鱼）人数可空、不进模板注册表，模板生成器不硬套市集网格', () => {
+    expect(isShorelineEvent('钓鱼比赛')).toBe(true);
+    expect(isShorelineEvent('河边垂钓大赛')).toBe(true);
+    expect(isShorelineEvent('80 人市集')).toBe(false);
+    expect(outdoorEventIssue('钓鱼比赛', null)).toBeNull();
+    expect(outdoorEventIssue('垂钓大赛', 30)).toBeNull();
+    // 模板注册表不含钓鱼：防止后续有人把它加进去后落到市集网格。
+    expect(supportedOutdoorEvent('钓鱼比赛')).toBeNull();
+    expect(build('钓鱼比赛', 30)).toBeNull();
   });
   it('L形真实场地内区域、设施和入口连接都不穿凹口', () => {
     const l = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: -5 }, { x: -5, y: -5 }, { x: -5, y: 70 }, { x: -80, y: 70 }];
@@ -92,4 +103,23 @@ it('translated ENU anchors do not turn an 80x70m site into a different scale',()
  const ring=[{x:410,y:-230},{x:490,y:-230},{x:490,y:-160},{x:410,y:-160}];
  const p=build('讲座',45,ring,[{...south,position:{x:490,y:-197}}]);expect(p).not.toBeNull();
  for(const z of p!.zones)expect(facilityPlacementIssues(z.polygon,ring)).toEqual([]);
+});
+/**
+ * 2026-11-17 生产实测（杭州湖滨路）：判据从「中心线离墙多近」改成「中心线是否真的走进足迹」。
+ * OSM 道路与建筑常在墙角共享顶点，贴墙走不是穿楼；真穿楼才是要提醒的事。
+ */
+describe('outdoorRouteInsideRingLength（穿楼长度）',()=>{
+ const building: PlanPoint[]=[{x:0,y:0},{x:30,y:0},{x:30,y:20},{x:0,y:20}];
+ it('中心线从建筑里穿过：量到穿楼那一截，不按整条线段算',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:10},{x:50,y:10}],building)).toBeCloseTo(30,0);
+ });
+ it('中心线贴着外墙走（共享墙角顶点）：不算穿楼',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:0},{x:50,y:0}],building)).toBe(0);
+ });
+ it('中心线离墙一臂远：不算穿楼',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:-0.4},{x:50,y:-0.4}],building)).toBe(0);
+ });
+ it('只擦到墙角一个点：不算穿楼',()=>{
+  expect(outdoorRouteInsideRingLength([{x:-20,y:0},{x:0,y:0},{x:0,y:20}],building)).toBe(0);
+ });
 });

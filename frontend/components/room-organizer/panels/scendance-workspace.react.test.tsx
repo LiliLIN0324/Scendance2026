@@ -660,6 +660,51 @@ describe('ScendanceViewTools satellite ground', () => {
   });
 });
 
+describe('ScendanceViewTools outdoor Google Maps rail', () => {
+  function outdoorActions() {
+    return {
+      canUndo: true, canRedo: true, undo: vi.fn(), redo: vi.fn(), zoomBy: vi.fn(),
+      view: '2d' as const, onToggleView: vi.fn(), resetNorth: vi.fn(),
+    };
+  }
+
+  it('keeps the Google control order and folds our planning tools into a hideable dock', () => {
+    const values = contexts();
+    const outdoor = outdoorActions();
+    const focus = vi.fn();
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor} onFocusVenue={focus}/></Providers>);
+    const stack = screen.getByRole('group', { name: '地图控制' });
+    expect(within(stack).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
+      '罗盘：点击回正北',
+      '当前 2D 平面，点击切到 3D 场景',
+      '回到框选场地',
+      '放大',
+      '缩小',
+      '第一人称漫游',
+      '干净看图：隐藏全部浮层',
+    ]);
+    fireEvent.click(within(stack).getByRole('button', { name: '放大' }));
+    expect(outdoor.zoomBy).toHaveBeenCalledWith(1);
+    fireEvent.click(within(stack).getByRole('button', { name: '回到框选场地' }));
+    expect(focus).toHaveBeenCalledTimes(1);
+    // 底栏默认收起，只留贴底把手；展开后规划工具才出现，地图控制列始终不受影响。
+    expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
+    expect(screen.getByRole('button', { name: '展开工具条' }).getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: '展开工具条' }));
+    expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy();
+    // 展开态只有工具这一行，末尾的小 × 负责收起；Esc 只是快捷键。
+    expect(screen.queryByRole('button', { name: '展开工具条' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /收起工具条/ }));
+    expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
+    // 再开一次，验证 Esc 也能收。
+    fireEvent.click(screen.getByRole('button', { name: '展开工具条' }));
+    expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
+    expect(within(stack).getByRole('button', { name: '放大' })).toBeTruthy();
+  });
+});
+
 describe('MaterialDrawerHandle', () => {
   it('labels the bottom handle MATERIALS and toggles independently', () => {
     const onToggle = vi.fn();
@@ -715,6 +760,18 @@ describe('ScendanceViewTools 户外漫游入口', () => {
   it('漫游激活态再点一次交给同一个 toggleWalk 退出', () => {
     const { toggleWalk } = renderOutdoorWalk({ walkIn3D: true, walkActive: true });
     fireEvent.click(screen.getByRole('button', { name: '退出漫游' }));
+    expect(toggleWalk).toHaveBeenCalledWith(false);
+  });
+
+  it('漫游钮套用与其余地图控件相同的 44px 圆钮类，激活时保持黄人图标', () => {
+    const { toggleWalk } = renderOutdoorWalk({ walkIn3D: true, walkActive: true });
+    const button = screen.getByRole('button', { name: '退出漫游' });
+    expect(button.className).toContain('oc-gm-round');
+    expect(button.className).toContain('oc-gm-walk');
+    expect(button.className).toContain('is-walk');
+    expect(button.className).toContain('is-active');
+    expect(button.getAttribute('data-tip')).toBe('退出漫游');
+    fireEvent.click(button);
     expect(toggleWalk).toHaveBeenCalledWith(false);
   });
 });

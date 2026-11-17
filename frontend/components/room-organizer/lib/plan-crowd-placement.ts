@@ -33,6 +33,8 @@ const ROLE_TO_CROWD: ReadonlyArray<{ readonly role: string; readonly crowdType: 
   { role: '经理', crowdType: 'manager' },
   { role: '志愿', crowdType: 'volunteer' },
   { role: '演员', crowdType: 'performer' },
+  { role: '游客', crowdType: 'visitor' },
+  { role: '参观', crowdType: 'visitor' },
   { role: '展商', crowdType: 'exhibitor' },
   { role: '观众', crowdType: 'audience' },
   { role: '工作', crowdType: 'staff' },

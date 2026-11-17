@@ -11,6 +11,9 @@
  * 3. resolve：画布属性卡按 15s 轮询任务详情，完成后 loadAholoCatalogItem 落盘入库
  *    （幂等：物料库轮询先到也复用同一份本机资产），注册候选 + 删链接。
  *    待取回卡片（material-generate pending）的生命周期仍归物料库轮询管，这里不碰。
+ * 4. 提交回执：发请求前先落 requestId / state / projectId / facilityId，成功后补 taskid。
+ *    断网/超时等「不知道服务端收没收到」的情况落 unknown，刷新或重开面板仍能核对，
+ *    并据此禁止二次提交——这是防止重复扣费的最后一道本地闸门。
  */
 
 /** 本机导入的 GLB（缓存键 `local-glb:*`）只在本会话有效，不持久化。 */
@@ -129,6 +132,7 @@ export function clearGeneratedFacilityModelsForTests(): void {
   writeRegistry();
   emitRegistry();
   emitLinks();
+  clearGenerationSubmissionsForTests();
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +142,8 @@ export function clearGeneratedFacilityModelsForTests(): void {
 export interface StagedFacilityGenerateLink {
   facilityId: string;
   facilityName: string;
+  /** 提交时所在项目；落成正式链接时一起写，多项目同 id 设施才不会串。 */
+  projectId?: string;
   stagedAt: number;
 }
 
@@ -145,10 +151,21 @@ const LINK_FRESH_MS = 10 * 60 * 1000;
 
 let stagedLink: StagedFacilityGenerateLink | null = null;
 
-export function recordFacilityGenerateLink(input: { facilityId: string; facilityName: string }): void {
+export function recordFacilityGenerateLink(input: { facilityId: string; facilityName: string; projectId?: string }): void {
   const facilityId = input.facilityId.trim();
   if (!facilityId) return;
-  stagedLink = { facilityId, facilityName: input.facilityName.trim() || '所选设施', stagedAt: Date.now() };
+  const projectId = input.projectId?.trim();
+  stagedLink = {
+    facilityId,
+    facilityName: input.facilityName.trim() || '所选设施',
+    ...(projectId ? { projectId } : {}),
+    stagedAt: Date.now(),
+  };
+}
+
+/** 提交被明确拒绝/结果未知时清掉暂存：不能让下一次生成错挂到上一个设施。 */
+export function discardFacilityGenerateLink(): void {
+  stagedLink = null;
 }
 
 /**
@@ -161,6 +178,7 @@ export function consumeFacilityGenerateLink(taskid: string, name: string): boole
   if (!staged || !taskid || Date.now() - staged.stagedAt > LINK_FRESH_MS) return false;
   const link: FacilityGenerateLink = {
     taskid,
+    ...(staged.projectId ? { projectId: staged.projectId } : {}),
     facilityId: staged.facilityId,
     facilityName: staged.facilityName,
     name: name.trim() || staged.facilityName,
@@ -273,6 +291,174 @@ export function attachFacilityGenerateTask(input: FacilityGenerateLink): boolean
   writeLinks();
   emitLinks();
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// 提交回执：requestId / state / taskid / projectId / facilityId 落盘，刷新后可核对
+// ---------------------------------------------------------------------------
+
+/**
+ * 'submitting' = 已发请求但还没有结论（此时刷新页面也要当未知处理）；
+ * 'submitted'  = 服务端已受理，taskid 可查；
+ * 'unknown'    = 断网/超时/5xx，服务端可能已创建收费任务，**禁止重提**；
+ * 'failed'     = 服务端明确拒绝（4xx），没有新建任务。
+ */
+export type GenerationSubmissionState = 'submitting' | 'submitted' | 'unknown' | 'failed';
+
+export interface GenerationSubmissionReceipt {
+  /** 提交前生成的幂等键；也是服务端核对这次请求的唯一凭据。 */
+  requestId: string;
+  state: GenerationSubmissionState;
+  taskid?: string;
+  projectId?: string;
+  facilityId?: string;
+  facilityName?: string;
+  /** 提交时那句描述，便于和任务记录对照。 */
+  prompt: string;
+  submittedAt: number;
+  updatedAt: number;
+  message?: string;
+}
+
+/** 回执按「项目 + 设施」严格分区：缺省 projectId 与缺省 facilityId 各自成组，不互相放行。 */
+export interface GenerationSubmissionScope {
+  projectId?: string | undefined;
+  /** null/缺省 = 物料库来路（不针对任何设施）；与某个设施 id 严格区分。 */
+  facilityId?: string | null | undefined;
+}
+
+const RECEIPTS_KEY = 'scendance:generation-submissions';
+const RECEIPTS_LIMIT = 200;
+
+function isPersistedReceipt(value: unknown): value is GenerationSubmissionReceipt {
+  const receipt = value as GenerationSubmissionReceipt;
+  return Boolean(receipt)
+    && typeof receipt.requestId === 'string' && LINK_TASKID_PATTERN.test(receipt.requestId)
+    && ['submitting', 'submitted', 'unknown', 'failed'].includes(receipt.state)
+    && (receipt.taskid === undefined || (typeof receipt.taskid === 'string' && LINK_TASKID_PATTERN.test(receipt.taskid)))
+    && (receipt.projectId === undefined || typeof receipt.projectId === 'string')
+    && (receipt.facilityId === undefined || typeof receipt.facilityId === 'string')
+    && (receipt.facilityName === undefined || typeof receipt.facilityName === 'string')
+    && typeof receipt.prompt === 'string'
+    && typeof receipt.submittedAt === 'number' && Number.isFinite(receipt.submittedAt)
+    && typeof receipt.updatedAt === 'number' && Number.isFinite(receipt.updatedAt)
+    && (receipt.message === undefined || typeof receipt.message === 'string');
+}
+
+function readReceipts(): GenerationSubmissionReceipt[] {
+  const store = storage();
+  if (!store) return [];
+  try {
+    const raw: unknown = JSON.parse(store.getItem(RECEIPTS_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter(isPersistedReceipt).slice(0, RECEIPTS_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+let receipts: GenerationSubmissionReceipt[] = readReceipts();
+let receiptsRevision = 0;
+const receiptsListeners = new Set<() => void>();
+
+function writeReceipts(): void {
+  const store = storage();
+  if (!store) return;
+  try {
+    store.setItem(RECEIPTS_KEY, JSON.stringify(receipts.slice(0, RECEIPTS_LIMIT)));
+  } catch {
+    /* 存不下仍保留会话内回执；unknown 锁在本页仍生效。 */
+  }
+}
+
+function emitReceipts(): void {
+  receiptsRevision += 1;
+  for (const listener of [...receiptsListeners]) listener();
+}
+
+function putReceipt(next: GenerationSubmissionReceipt): void {
+  receipts = [next, ...receipts.filter(item => item.requestId !== next.requestId)].slice(0, RECEIPTS_LIMIT);
+  writeReceipts();
+  emitReceipts();
+}
+
+export function subscribeGenerationSubmissions(listener: () => void): () => void {
+  receiptsListeners.add(listener);
+  return () => { receiptsListeners.delete(listener); };
+}
+
+export function getGenerationSubmissionsRevision(): number {
+  return receiptsRevision;
+}
+
+/**
+ * 发请求前调用：先把 requestId 与作用域落盘。页面崩了、网断了，重开还能知道
+ * 「有一次提交已经发出去，结果没回来」。
+ */
+export function beginGenerationSubmission(
+  input: GenerationSubmissionScope & { requestId: string; prompt: string; facilityName?: string },
+): GenerationSubmissionReceipt {
+  const now = Date.now();
+  const previous = receipts.find(item => item.requestId === input.requestId);
+  const receipt: GenerationSubmissionReceipt = {
+    requestId: input.requestId,
+    state: 'submitting',
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+    ...(input.facilityId ? { facilityId: input.facilityId } : {}),
+    ...(input.facilityName ? { facilityName: input.facilityName } : {}),
+    prompt: input.prompt,
+    submittedAt: previous?.submittedAt ?? now,
+    updatedAt: now,
+  };
+  putReceipt(receipt);
+  return receipt;
+}
+
+/** 有结论后回填：成功补 taskid；unknown 保留请求号，供人工对账。 */
+export function settleGenerationSubmission(
+  requestId: string,
+  input: { state: Exclude<GenerationSubmissionState, 'submitting'>; taskid?: string; message?: string },
+): void {
+  const existing = receipts.find(item => item.requestId === requestId);
+  if (!existing) return;
+  putReceipt({
+    ...existing,
+    state: input.state,
+    ...(input.taskid ? { taskid: input.taskid } : {}),
+    ...(input.message ? { message: input.message } : {}),
+    updatedAt: Date.now(),
+  });
+}
+
+export function getGenerationSubmissionReceipt(requestId: string): GenerationSubmissionReceipt | null {
+  return receipts.find(item => item.requestId === requestId) ?? null;
+}
+
+function sameSubmissionScope(receipt: GenerationSubmissionReceipt, scope: GenerationSubmissionScope): boolean {
+  return (receipt.projectId ?? '') === (scope.projectId ?? '')
+    && (receipt.facilityId ?? '') === (scope.facilityId ?? '');
+}
+
+/** 当前项目 + 当前设施最近一次提交（提交中/已受理/未知/被拒都返回）。 */
+export function latestGenerationSubmissionReceipt(scope: GenerationSubmissionScope): GenerationSubmissionReceipt | null {
+  return receipts
+    .filter(item => sameSubmissionScope(item, scope))
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+}
+
+/**
+ * 是否还有「结果没落定」的提交（unknown，或发出后没等到结论的 submitting）。
+ * 命中就禁止再提交：先查任务记录与费用。作用域严格按项目 + 设施隔离。
+ */
+export function findUnresolvedGenerationSubmission(scope: GenerationSubmissionScope): GenerationSubmissionReceipt | null {
+  return receipts
+    .filter(item => sameSubmissionScope(item, scope) && (item.state === 'unknown' || item.state === 'submitting'))
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+}
+
+export function clearGenerationSubmissionsForTests(): void {
+  receipts = [];
+  writeReceipts();
+  emitReceipts();
 }
 
 // ---------------------------------------------------------------------------
