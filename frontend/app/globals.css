@@ -1330,15 +1330,21 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
   display: block; width: 28px; height: 28px;
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > svg.sc-rail-hall {
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > svg.sc-rail-hall,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark svg.sc-rail-hall {
   display: block; width: 28px; height: 28px;
 }
-/* 左轨形体：PNG 自带明暗体积，白眼睛单独一层，随指针轻移；整枚形体再轻微侧倾。 */
+/* 左轨形体：门厅眼洞用 --eye-x/--eye-y 平移（纸色镂空，不画瞳孔），整枚形体用 --tilt-* 轻微侧倾。
+   .sc-rail-eye 只留给 Bingo 飞入层，门厅脸不再叠白点。 */
 .sc-rail-avatar { position: relative; display: block; flex: none; }
 .sc-rail-avatar-tilt {
   display: block; width: 100%; height: 100%;
   transform: perspective(115px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
   transform-origin: 50% 55%; transition: transform .16s ease-out;
+}
+.sc-rail-hall-eyes {
+  transform: translate(var(--eye-x, 0px), var(--eye-y, 0px));
+  transition: transform .16s ease-out;
 }
 .sc-rail-avatar img { display: block; width: 100%; height: 100%; }
 .sc-rail-avatar-face {
@@ -1353,7 +1359,7 @@ body {
 }
 .sc-rail-eye.is-right { width: 9%; height: 18%; }
 @media (prefers-reduced-motion: reduce) {
-  .sc-rail-avatar-tilt, .sc-rail-avatar-face { transform: none; transition: none; }
+  .sc-rail-avatar-tilt, .sc-rail-avatar-face, .sc-rail-hall-eyes { transform: none; transition: none; }
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:hover,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc:focus-visible {
