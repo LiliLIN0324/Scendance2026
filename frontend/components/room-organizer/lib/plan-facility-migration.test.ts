@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { FurnitureItem } from './types';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { migrateFacilities } from './plan-facility-migration';
 import { makeFloor, makeItem, makeLayout, makeUnplacedItem } from './__testfixtures__/fixtures';
@@ -219,6 +220,99 @@ describe('plan-facility-migration（室内物件 → plan 设施）', () => {
 
     expect(result.facilities[0]!.name).toHaveLength(60);
     expect(result.facilities[0]!.name).toBe('甲'.repeat(60));
+  });
+
+  it('libraryEntry 注入点校准 oneplan 尺寸，builtin 不采信', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 'c1', type: 'chair', name: '折叠椅', position: { x: 2, z: 2 } }),
+          makeItem({ id: 't1', type: 'toilet', name: '洗手间', position: { x: 6, z: 6 } }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds(), [], {
+      libraryEntry: (templateId) => (templateId === 'oneplan:scale:chair' ? { width: 0.6, depth: 0.6 } : undefined),
+    });
+
+    expect(result.facilities[0]!.size).toEqual({ width: 0.6, depth: 0.6 });
+    expect(result.facilities[1]!.size).toEqual({ width: 2.4, depth: 1.2 });
+  });
+
+  it('库条目尺寸非法（0 / NaN / 超 100 m）保留 2×2 兜底，不把脏尺寸带进 plan', () => {
+    const sizes = [
+      { width: 0, depth: 1 },
+      { width: Number.NaN, depth: 1 },
+      { width: 101, depth: 2 },
+    ];
+    for (const size of sizes) {
+      const layout = makeLayout({
+        ...SHELL,
+        floors: [makeFloor({ items: [makeItem({ id: 'c1', type: 'chair', position: { x: 2, z: 2 } })] })],
+      });
+
+      const result = migrateFacilities(layout, BOUNDARY, sequentialIds(), [], { libraryEntry: () => size });
+
+      expect(result.facilities[0]!.size).toEqual({ width: 2, depth: 2 });
+    }
+  });
+
+  it('glb 物件经注入 resolver 挂 modelOverride，普通物件不询问也不落键', () => {
+    const resolver = vi.fn((item: FurnitureItem) => (item.type === 'glb-asset' ? 'lib:sofa-01' : undefined));
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 'g1', type: 'glb-asset', name: '雕塑', assetId: 'asset-123', position: { x: 2, z: 2 } }),
+          makeItem({ id: 'c1', type: 'chair', name: '折叠椅', position: { x: 6, z: 6 } }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds(), [], { modelSlug: resolver });
+
+    expect(result.facilities[0]!.modelOverride).toBe('lib:sofa-01');
+    expect('modelOverride' in result.facilities[1]!).toBe(false);
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolver 返回空串 / 超 160 字符时不落 modelOverride', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 'g1', type: 'glb-asset', assetId: 'asset-123', position: { x: 2, z: 2 } }),
+          makeItem({ id: 'g2', type: 'glb-asset', assetId: 'asset-456', position: { x: 6, z: 6 } }),
+        ],
+      })],
+    });
+
+    const slugs = ['   ', 'x'.repeat(161)];
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds(), [], {
+      modelSlug: (item) => (item.id === 'g1' ? slugs[0] : slugs[1]),
+    });
+
+    expect('modelOverride' in result.facilities[0]!).toBe(false);
+    expect('modelOverride' in result.facilities[1]!).toBe(false);
+  });
+
+  it('assetId 直通 sourceAssetId；空白与超长值不落字段', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({ id: 'g1', type: 'glb-asset', assetId: 'asset-123', position: { x: 2, z: 2 } }),
+          makeItem({ id: 'g2', type: 'glb-asset', assetId: 'x'.repeat(161), position: { x: 6, z: 6 } }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities[0]!.sourceAssetId).toBe('asset-123');
+    expect('sourceAssetId' in result.facilities[1]!).toBe(false);
   });
 
   it('空布局（无楼层）退成空设施清单，不抛错', () => {
