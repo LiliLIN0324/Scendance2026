@@ -1878,6 +1878,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    */
   const [openLibrarySections, setOpenLibrarySections] = useState<string[]>(['areas']);
   const [openLibrarySubgroups, setOpenLibrarySubgroups] = useState<string[]>(['areas:区域']);
+  /** 2026-11-18 用户要求：分区色板排布切换（false=单列行，true=一行多列网格）。 */
+  const [zonePaletteGrid, setZonePaletteGrid] = useState(false);
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
   /**
    * 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
@@ -12022,17 +12024,81 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 title: '去掉外框与蒙版（用地红线、分区、流线都不受影响）',
                                 icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.35)' }} />,
                               })}
-                              {planZoneSemantics.map(s => {
-                                const zoneActive = mode === 'zone' && zoneSemantic === s;
-                                return renderOneplanItemRow({
-                                key: `zone-${s}`,
-                                testId: `catalog-zone-${s}`,
-                                label: planZoneSemanticLabels[s],
-                                active: zoneActive,
-                                onClick: () => armOrDisarm(zoneActive, () => { setZoneSemantic(s); startAreaTool('zone'); }),
-                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: PLANNING_ZONE_COLORS[s], boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
-                              });
-                              })}
+                              {/* 2026-11-18 用户要求：分区色板加「单列/网格」切换——网格一行多列，点选更快。
+                                  testId 两种排布保持一致，行为（选中/进入绘制）完全同一套。 */}
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: 2 }}>
+                                <button
+                                  type="button"
+                                  data-testid="catalog-zone-grid-toggle"
+                                  aria-pressed={zonePaletteGrid}
+                                  title="切换分区色板排布：单列 / 一行多列"
+                                  onClick={() => setZonePaletteGrid(value => !value)}
+                                  style={{
+                                    all: 'unset',
+                                    cursor: 'pointer',
+                                    padding: '2px 8px',
+                                    borderRadius: PLANNING_RADIUS.sm,
+                                    color: PLANNING_SURFACE.panelText,
+                                    fontSize: PLANNING_TYPOGRAPHY.hint,
+                                    border: `1px solid ${zonePaletteGrid ? PLANNING_SURFACE.selectedBorder : 'transparent'}`,
+                                    background: zonePaletteGrid ? PLANNING_SURFACE.selectedBg : 'transparent',
+                                  }}
+                                >
+                                  {zonePaletteGrid ? '▦ 网格' : '☰ 单列'}
+                                </button>
+                              </div>
+                              {zonePaletteGrid ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }}>
+                                  {planZoneSemantics.map(s => {
+                                    const zoneActive = mode === 'zone' && zoneSemantic === s;
+                                    const pick = () => armOrDisarm(zoneActive, () => { setZoneSemantic(s); startAreaTool('zone'); });
+                                    return (
+                                      <div
+                                        key={`zone-${s}`}
+                                        role="button"
+                                        tabIndex={0}
+                                        data-testid={`catalog-zone-${s}`}
+                                        aria-pressed={zoneActive}
+                                        title={planZoneSemanticLabels[s]}
+                                        onClick={pick}
+                                        onKeyDown={event => {
+                                          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); }
+                                        }}
+                                        style={{
+                                          all: 'unset',
+                                          cursor: 'pointer',
+                                          boxSizing: 'border-box',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                          padding: '5px 2px',
+                                          borderRadius: PLANNING_RADIUS.sm,
+                                          border: `1px solid ${zoneActive ? PLANNING_SURFACE.selectedBorder : 'transparent'}`,
+                                          background: zoneActive ? PLANNING_SURFACE.selectedBg : 'transparent',
+                                          color: PLANNING_SURFACE.panelText,
+                                          fontSize: PLANNING_TYPOGRAPHY.hint,
+                                        }}
+                                      >
+                                        <span aria-hidden style={{ width: 18, height: 18, borderRadius: 5, background: PLANNING_ZONE_COLORS[s], boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />
+                                        <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{planZoneSemanticLabels[s]}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                planZoneSemantics.map(s => {
+                                  const zoneActive = mode === 'zone' && zoneSemantic === s;
+                                  return renderOneplanItemRow({
+                                  key: `zone-${s}`,
+                                  testId: `catalog-zone-${s}`,
+                                  label: planZoneSemanticLabels[s],
+                                  active: zoneActive,
+                                  onClick: () => armOrDisarm(zoneActive, () => { setZoneSemantic(s); startAreaTool('zone'); }),
+                                  icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: PLANNING_ZONE_COLORS[s], boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
+                                });
+                                })
+                              )}
                             </div>
                           )}
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '入口和通道图标', label: '入口和通道图标', count: libraryEntranceIcons.length + 1, icon: 'door-open' })}
