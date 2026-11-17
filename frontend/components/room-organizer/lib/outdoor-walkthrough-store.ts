@@ -16,6 +16,9 @@ import { emptyBook, isCaseId, type WalkthroughBook } from './outdoor-walkthrough
 
 export const WALKTHROUGH_KEY = 'scendance.outdoor.walkthrough.v1';
 
+/** 云端声明单独一个键：它和“看了哪几条”是两回事，不能混在一份数据里。 */
+export const CLOUD_KEY = 'scendance.outdoor.walkthrough.cloud.v1';
+
 /** 存储的最小接口：只用到 getItem / setItem，方便测试注入假的。 */
 export interface BookStorage {
   getItem: (key: string) => string | null;
@@ -91,5 +94,53 @@ export function loadBook(deps: { storage?: BookStorage } = {}): WalkthroughBook 
     return decodeBook(storage.getItem(WALKTHROUGH_KEY));
   } catch {
     return emptyBook();
+  }
+}
+
+/** 云端声明存成一串编号；不在 1..11 的丢掉，去重后升序。 */
+export function encodeCloud(ids: readonly number[]): string {
+  const clean = [...new Set(ids.filter((id) => isCaseId(id)))].sort((a, b) => a - b);
+  return JSON.stringify({ v: 1, pass: clean });
+}
+
+/** 读云端声明。任何一处不对都当“一条都没声明”——绝不默认有云端证据。 */
+export function decodeCloud(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+  const data = parsed as { v?: unknown; pass?: unknown };
+  if (data.v !== 1 || !Array.isArray(data.pass)) return [];
+  const clean = [...new Set((data.pass as unknown[]).filter((id): id is number => typeof id === 'number' && isCaseId(id)))];
+  return clean.sort((a, b) => a - b);
+}
+
+/** 存云端声明；写入失败只返回 false（刷新会丢），不抛错。 */
+export function saveCloud(
+  ids: readonly number[],
+  deps: { storage?: BookStorage } = {},
+): boolean {
+  const storage = deps.storage ?? defaultStorage();
+  if (!storage) return false;
+  try {
+    storage.setItem(CLOUD_KEY, encodeCloud(ids));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 取云端声明；读不到、读坏了一律空数组。 */
+export function loadCloud(deps: { storage?: BookStorage } = {}): number[] {
+  const storage = deps.storage ?? defaultStorage();
+  if (!storage) return [];
+  try {
+    return decodeCloud(storage.getItem(CLOUD_KEY));
+  } catch {
+    return [];
   }
 }

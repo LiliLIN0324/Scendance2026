@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { emptyBook, markSeen } from './outdoor-walkthrough-book';
 import {
+  CLOUD_KEY,
   WALKTHROUGH_KEY,
   decodeBook,
+  decodeCloud,
   encodeBook,
   loadBook,
+  loadCloud,
   saveBook,
+  saveCloud,
   type BookStorage,
 } from './outdoor-walkthrough-store';
 
@@ -87,5 +91,41 @@ describe('走查记录本落盘', () => {
     const storage = fakeStorage();
     saveBook(emptyBook(), { storage });
     expect(Object.keys(loadBook({ storage }).seen)).toHaveLength(0);
+  });
+});
+
+describe("云端声明的存取（轮次 81）", () => {
+  it("存进去再读回来：去重、升序、只留 1..11", () => {
+    const storage = fakeStorage();
+    expect(saveCloud([9, 2, 2, 0, 12, 5], { storage })).toBe(true);
+    expect(loadCloud({ storage })).toEqual([2, 5, 9]);
+    expect(storage.data[CLOUD_KEY]).toBeTruthy();
+  });
+
+  it("键不一样：走查记录本与云端声明互不覆盖", () => {
+    const storage = fakeStorage();
+    const book = markSeen(emptyBook(), 3, "pass");
+    saveBook(book, { storage });
+    saveCloud([7], { storage });
+    expect(loadBook({ storage })).toEqual(book);
+    expect(loadCloud({ storage })).toEqual([7]);
+  });
+
+  it("坏 JSON / 旧版本 / 非数组 / 元素不是数字，一律当没声明", () => {
+    for (const raw of ["{", "", null, "[2]", JSON.stringify({ v: 1, pass: "2" }), JSON.stringify({ v: 2, pass: [2] }), JSON.stringify({ v: 1, pass: ["2", null, 3.5] })]) {
+      expect(decodeCloud(raw as string | null | undefined)).toEqual([]);
+    }
+  });
+
+  it("写入抛错返回 false，读取抛错返回空数组（不炸事件处理）", () => {
+    const writeThrows: BookStorage = { getItem: () => null, setItem: () => { throw new Error("quota"); } };
+    expect(saveCloud([2], { storage: writeThrows })).toBe(false);
+    const readThrows: BookStorage = { getItem: () => { throw new Error("denied"); }, setItem: () => {} };
+    expect(loadCloud({ storage: readThrows })).toEqual([]);
+  });
+
+  it("没有可用存储时存返回 false、读取空", () => {
+    expect(saveCloud([2])).toBe(false);
+    expect(loadCloud()).toEqual([]);
   });
 });

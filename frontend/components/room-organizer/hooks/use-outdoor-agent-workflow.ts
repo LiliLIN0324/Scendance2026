@@ -40,7 +40,7 @@ import {
   markSeen,
   summarizeWalkthrough,
 } from "../lib/outdoor-walkthrough-book";
-import { loadBook, saveBook } from "../lib/outdoor-walkthrough-store";
+import { loadBook, loadCloud, saveBook, saveCloud } from "../lib/outdoor-walkthrough-store";
 import { createTurnTraceBook } from "../lib/turn-trace-log";
 import { downloadSessionReport } from "../lib/outdoor-report-download";
 import { assessAcceptance, formatAcceptanceStatement, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
@@ -484,7 +484,7 @@ export function useOutdoorAgentWorkflow(input: {
   /** 走查记录本：本轮页面里逐条标，标完直接进状态卡（同时落盘，刷新后不丢）。 */
   const walkthroughBook = useRef(loadBook());
   /** 云端真跑过的用例号：只能人显式声明，永远不从浏览器结果推。 */
-  const cloudPass = useRef<number[]>([]);
+  const cloudPass = useRef<number[]>(loadCloud());
   const liveTurn = useRef(createLiveTurn({ book: metricsBook.current, traceBook: traceBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
@@ -2663,6 +2663,8 @@ export function useOutdoorAgentWorkflow(input: {
       if (pass) next.add(id);
       else next.delete(id);
       cloudPass.current = [...next].sort((a, b) => a - b);
+      // 落盘失败（隐私模式/配额）不影响本轮继续声明；只是刷新后会丢。
+      saveCloud(cloudPass.current);
       return cloudPass.current;
     },
     /** 当前已声明的云端通过用例号（升序）。 */
