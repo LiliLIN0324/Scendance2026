@@ -943,6 +943,8 @@ export function useOutdoorAgentWorkflow(input: {
     strategy: ObjectsLayoutStrategy;
     /** 本次预览实际用的需求清单（可能是默认方案，「换一种排法」要按同一份清单重排）。 */
     brief: OutdoorBrief;
+    /** 2026-11-17 硬挤预览：换排法时继续按硬挤净空重排，不然一换就撞「放不下」。 */
+    packed?: boolean;
   } | null>(null);
   /**
    * 2026-11-17 追问预算：连续追问且画布毫无改动的次数。
@@ -970,6 +972,8 @@ export function useOutdoorAgentWorkflow(input: {
         undefined,
         {
           strategy: next,
+          // 2026-11-17 硬挤预览换排法：继续按硬挤净空重排，不然一换就撞「放不下」。
+          packed: stored.packed === true,
           // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏。
           onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
           signal: job.controller.signal,
@@ -1540,48 +1544,85 @@ export function useOutdoorAgentWorkflow(input: {
         // 2026-11-17：默认方案是算出来的，几何不一定吃得下（演出区按面积算了 200+ 个座，
         // 实际只排得进几十个）。放不下就按真实能容纳的量缩，并把缩过的数量写在卡上——
         // 既不静默失败，也不冒充“按面积算的数字都成立”。
-        let draftItems = demandBrief.items;
+        const wantedItems = demandBrief.items;
+        const proposeOpts = {
+          strategy: "rows" as const,
+          buildings: buildingsEnu.length ? buildingsEnu : undefined,
+          // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
+          onPhase: (phase: string) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
+          signal: job.controller.signal,
+        };
         let result: Awaited<ReturnType<typeof proposeInventoryObjects>> | null = null;
         let fitError: string | null = null;
-        for (let attempt = 0; result === null; attempt += 1) {
-          try {
-            result = await proposeInventoryObjects(
-              basePlan,
-              { ...demandBrief, items: draftItems },
-              library,
-              undefined,
-              {
-                strategy: "rows",
-                buildings: buildingsEnu.length ? buildingsEnu : undefined,
-                // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
-                onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
-                signal: job.controller.signal,
-              },
-            );
-          } catch (error) {
-            if (
-              !draft ||
-              attempt >= 6 ||
-              !(error instanceof Error) ||
-              !/放不下/.test(error.message)
-            )
+        let shrinkItems: OutdoorBrief["items"] | null = null;
+        let packedWarning: string | null = null;
+        try {
+          result = await proposeInventoryObjects(basePlan, demandBrief, library, undefined, proposeOpts);
+        } catch (error) {
+          if (!(error instanceof Error) || !/放不下/.test(error.message)) throw error;
+          fitError = error.message;
+          if (draft) {
+            // 设计师草案：按面积反算的量放不下，缩的是我算的数，不是用户说的数。
+            let draftItems = wantedItems;
+            for (let attempt = 0; attempt <= 8 && result === null; attempt += 1) {
+              try {
+                result = await proposeInventoryObjects(
+                  basePlan,
+                  { ...demandBrief, items: draftItems },
+                  library,
+                  undefined,
+                  proposeOpts,
+                );
+              } catch (shrinkError) {
+                if (!(shrinkError instanceof Error) || !/放不下/.test(shrinkError.message)) throw shrinkError;
+                fitError = shrinkError.message;
+                // 只缩“放不下”的那个分区：全区减半会把本来排得下的摆摊区一起砍到 3 个摊。
+                const zoneName = /“([^”]+)”放不下/u.exec(shrinkError.message)?.[1];
+                draftItems = draftItems.map((item) =>
+                  item.zone === zoneName
+                    ? { ...item, count: Math.max(1, Math.floor(item.count / 2)) }
+                    : item,
+                );
+              }
+            }
+            if (result === null) throw error;
+            shrinkItems = draftItems;
+          } else {
+            // 2026-11-17 用户拍板「就硬挤在一起，甲方就会明白放不下了」：用户亲口要的数量不替他减。
+            // 切硬挤重排——互不重叠、门口只留最小净空——塞到物理极限，让预览自己说明放不下。
+            try {
+              result = await proposeInventoryObjects(basePlan, demandBrief, library, undefined, {
+                ...proposeOpts,
+                packed: true,
+              });
+            } catch {
+              // 连硬挤都放不下第一件：回到原始红卡，如实说明。
               throw error;
-            fitError = error.message;
-            // 只缩“放不下”的那个分区：全区减半会把本来排得下的摆摊区一起砍到 3 个摊。
-            const zoneName = /“([^”]+)”放不下/u.exec(error.message)?.[1];
-            draftItems = draftItems.map((item) =>
-              item.zone === zoneName
-                ? { ...item, count: Math.max(1, Math.floor(item.count / 2)) }
-                : item,
-            );
+            }
+            const shortfall = result.capacityShortfall;
+            if (shortfall.some((s) => s.placed < 1)) throw error;
+            packedWarning =
+              `你要的「${shortfall.map((s) => `${s.zone} ${s.query}×${s.requested}`).join("、")}」` +
+              `硬挤的物理极限是 ${shortfall.map((s) => `${s.zone} ${s.query}×${s.placed}`).join("、")}：` +
+              `预览就是挤到塞不下为止的样子（物件互不重叠、门口留了净空，但物件之间已经没有通道）；` +
+              `疏散与合规要现场核验。要宽松就得扩分区、减数量或换更小的物料。`;
           }
         }
-        const finalBrief: OutdoorBrief =
-          draftItems === demandBrief.items ? demandBrief : { ...demandBrief, items: draftItems };
-        // 换一种排法要用缩过之后的数量，否则卡上一切排法又撞同一堵墙。
-        objectsLayoutRef.current = { base: basePlan, library, strategy: "rows", brief: finalBrief };
-        if (fitError) {
-          const fitted = draftItems.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、");
+        const finalBrief: OutdoorBrief = shrinkItems
+          ? { ...demandBrief, items: shrinkItems }
+          : demandBrief;
+        // 换一种排法按这份 brief 重排：草案用缩过的量；硬挤时保持用户原数并继续硬挤。
+        objectsLayoutRef.current = {
+          base: basePlan,
+          library,
+          strategy: "rows",
+          brief: finalBrief,
+          packed: Boolean(packedWarning),
+        };
+        if (packedWarning) {
+          designStep("用户要的数量放不下：按「硬挤」出预览塞到物理极限，差额写在提案卡上，没有改用户记下的数量。");
+        } else if (fitError && draft && shrinkItems) {
+          const fitted = shrinkItems.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、");
           designStep(`按面积算的清单排不下（${fitError}），已缩到实际能放的数量：${fitted}。`);
         }
         // 2026-11-17 死结 3：需求分区对不上画布的（如上一轮遗留的旧需求）跳过并如实报出，
@@ -1605,8 +1646,9 @@ export function useOutdoorAgentWorkflow(input: {
         offer(result.plan, "objects", draft ? "按分区用途出的默认方案" : "逐区复用库内真实设施", job, [
           // 默认值必须自证是默认值：用户看到的每一版都说清「这不是你说的数量」。
           ...(draft ? ["这一版是默认方案：数量按分区用途与可用面积反算，不是你说的数字；要改哪一件直接说。", ...draft.notes] : []),
-          ...(fitError
-            ? [`按面积算的数量现场排不下：已缩到实际能容纳的 ${draftItems.map((i) => `${i.query}×${i.count}`).join("、")}；要更多只能换更小的真实物料或扩分区，不硬塞。`]
+          ...(packedWarning ? [packedWarning] : []),
+          ...(fitError && draft && shrinkItems
+            ? [`按面积算的数量现场排不下：已缩到实际能容纳的 ${shrinkItems.map((i) => `${i.query}×${i.count}`).join("、")}；要更多只能换更小的真实物料或扩分区，不硬塞。`]
             : []),
           demandBrief.guests
             ? "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。"
