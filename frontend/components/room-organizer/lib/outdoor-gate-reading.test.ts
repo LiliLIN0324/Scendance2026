@@ -85,6 +85,25 @@ describe("readGates · 三项门禁读数", () => {
     expect(gate.verdict).toBe("unverified");
   });
 
+  it("带颜色的真实 vitest 汇总行也要读得出来（带 ANSI 转义）", () => {
+    const colored =
+      "\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m56 passed\u001b[39m\u001b[22m (56)\n" +
+      "\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m643 passed\u001b[39m\u001b[22m (643)\n";
+    const gate = readGates({ types: "", tests: colored, build: { exitCode: 0 } });
+    expect(gate.tests.state).toBe("pass");
+    expect(gate.tests.detail).toContain("643 条全过");
+    expect(gate.tests.detail).toContain("56 文件");
+    expect(gate.verdict).toBe("green");
+  });
+
+  it("带颜色的失败行也认得出来", () => {
+    const colored =
+      "\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[31m2 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[1m\u001b[32m641 passed\u001b[39m\u001b[22m\u001b[90m (643)\u001b[39m\n";
+    const gate = readGates({ types: "", tests: colored, build: { exitCode: 0 } });
+    expect(gate.tests.state).toBe("fail");
+    expect(gate.tests.detail).toContain("2 个用例失败");
+  });
+
   it("转给状态卡时，没跑的项不出现在对象里（不是 false）", () => {
     const facts = gateFactsFrom(readGates({ types: "", build: { exitCode: 0 } }));
     expect(facts).toEqual({ types: true, build: true });
