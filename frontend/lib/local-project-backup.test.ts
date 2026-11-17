@@ -299,9 +299,16 @@ describe('scene and activity backup', () => {
     expect(() => validateLocalProjectRestoreCandidate({ ...candidate, createdAt })).toThrow('候选格式');
   });
 
-  it.each([0, 5, 99, '1', null])('refuses an unknown candidate version without silently repackaging it: %j', backupVersion => {
+  it.each([0, 7, 99, '1', null])('refuses an unknown candidate version without silently repackaging it: %j', backupVersion => {
     const candidate = parseLocalProjectBackupJson(json(backup()));
     expect(() => validateLocalProjectRestoreCandidate({ ...candidate, backupVersion })).toThrow('备份版本');
+  });
+
+  it('refuses to relabel an older candidate as V5 or V6 without real checkin and image coverage', () => {
+    const candidate = parseLocalProjectBackupJson(json(backup()));
+    expect(candidate.materialCheckins).toEqual({ status: 'not-in-file' });
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, backupVersion: 5 })).toThrow('V5 候选');
+    expect(() => validateLocalProjectRestoreCandidate({ ...candidate, backupVersion: 6 })).toThrow('V6 候选');
   });
 
   it('rechecks malformed and non-JSON candidate values before returning a detached replacement', () => {
@@ -413,9 +420,12 @@ describe('scene and activity backup', () => {
 
   it('round-trips the real default activity layout with stable project and execution IDs', () => {
     const before = json(INITIAL_LAYOUT);
-    const initial = { ...INITIAL_LAYOUT, id: scope, eventOperations: eventOperationsSchema.parse({
+    // 2026-11-11 起 INITIAL_LAYOUT 首屏为空，任务引用需要一个显式物件。
+    const seeded = { ...INITIAL_LAYOUT, id: scope,
+      floors: [{ ...INITIAL_LAYOUT.floors[0]!, items: [makeItem({ id: 'seed-1', name: '布场物料' })] }] };
+    const initial = { ...seeded, eventOperations: eventOperationsSchema.parse({
       dataKind: 'rehearsal', tasks: [{ id: 'a1000000-0000-4000-8000-000000000003',
-        title: '布场', phase: 'setup', objectIds: [INITIAL_LAYOUT.floors[0]!.items[0]!.id] }],
+        title: '布场', phase: 'setup', objectIds: ['seed-1'] }],
     }) };
     const snapshot: BackupBriefSnapshot = { state: 'ready', scope, brief: { status: 'absent' } };
     const restored = parseLocalProjectBackupJson(serializeLocalProjectBackup(initial, snapshot, createdAt));

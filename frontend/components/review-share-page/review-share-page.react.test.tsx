@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 const LOCAL_LAYOUT_KEY = 'scendance-editor-local-v1';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
+import { makeItem } from '../room-organizer/lib/__testfixtures__/fixtures';
 import { contentFingerprintOfLayout } from '../room-organizer/lib/delivery-version';
 import { parseStoredLayout } from '../room-organizer/lib/schema';
 import { REVIEW_RETURN_STORAGE_KEY } from './review-return';
@@ -142,7 +143,8 @@ describe('review share page', () => {
   it('shows the sample plan, drops a pin on the canvas, and keeps it after remount', async () => {
     await openSample();
     expect(screen.getByText(/示例场地/)).toBeTruthy();
-    expect(screen.getByText(/共创桌/)).toBeTruthy();
+    // 2026-11-11 起示例场地不再预置桌椅，改为核对楼层壳已渲染。
+    expect(document.body.textContent).toContain(INITIAL_LAYOUT.floors[0]!.name);
     expect(document.body.textContent).not.toMatch(/Bingo|模式轨|执行页|到场清单/);
     expect(document.querySelector('.sc-mode-rail, .sc-agent-panel, #agent-panel, .sc-workbench')).toBeNull();
 
@@ -202,7 +204,7 @@ describe('review share page', () => {
       ...INITIAL_LAYOUT.floors[0]!,
       id: 'loft',
       name: '二层看台',
-      items: [{ ...INITIAL_LAYOUT.floors[0]!.items[0]!, id: 'a0100000-0000-4000-8000-000000000099', name: '看台桌' }],
+      items: [{ ...makeItem({ id: 'a0100000-0000-4000-8000-000000000099', name: '看台桌' }) }],
     };
     window.history.replaceState(null, '', `/review/${layoutHash({
       ...INITIAL_LAYOUT,
