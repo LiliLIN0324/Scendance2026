@@ -137,7 +137,7 @@ export interface OutdoorWorkflowProposal {
  * 这种句子不该再被反问清单——按分区用途与面积出默认方案就行。
  */
 function designerCue(message: string): boolean {
-  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的|搋好的/u.test(message);
+  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的/u.test(message);
 }
 
 export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
@@ -580,7 +580,7 @@ export function useOutdoorAgentWorkflow(input: {
       persist({ ...kept, pendingBoundary: undefined });
     }
     liveTurn.current.settle("cancelled");
-    status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
+    status("已取消当前预览/请求；已应用的规划与需求都保留。", "stopped");
   }
   useEffect(() => {
     setDesignSteps([]);
@@ -680,7 +680,8 @@ export function useOutdoorAgentWorkflow(input: {
       callbacks.current.bridge()?.previewBoundary?.(next.anchor, next.boundary);
     }
     if (kind === "zones" || kind === "main-routes" || kind === "objects") {
-      designStep(`已生成「${label}」预览，等待核对。`);
+      // 「等待核对」由下面 status 的提示条说，运行卡只记事实，避免同一句在两个表面重复。
+      designStep(`已生成「${label}」预览。`);
     }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
     liveTurn.current.markPreview();
@@ -964,7 +965,7 @@ export function useOutdoorAgentWorkflow(input: {
     const stored = objectsLayoutRef.current;
     const p = proposalRef.current;
     if (!stored || !p || p.kind !== "objects") {
-      status("没有可切换的物件排布预览；先说一次物件清单。", "blocked");
+      status("还没有可切换排法的物件预览；说一句想摆什么，或者说「随便摆」，我先出一版默认方案。", "blocked");
       return;
     }
     const job = start();
@@ -1449,8 +1450,8 @@ export function useOutdoorAgentWorkflow(input: {
         setSelectedLibraryId(undefined);
         status(
           found.length
-            ? "已读到真实个人库候选与尺寸；选定后告诉我对应分区和数量，仍先预览。"
-            : "个人库没有可用匹配；可改名检索或在当前卡导入GLB（本机解析真实尺寸、不上传不收费）。",
+            ? "已读到真实库候选与尺寸（个人库与内置件都查过）；选定后告诉我对应分区和数量，仍先预览。"
+            : "库里没有可用匹配（个人库与内置件都查过）；可改名检索或在当前卡导入GLB（本机解析真实尺寸、不上传不收费）。",
           "ready",
         );
         return;
