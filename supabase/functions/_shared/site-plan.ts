@@ -122,6 +122,32 @@ export const planFacilitySchema = z.strictObject({
 export type PlanFacility = z.infer<typeof planFacilitySchema>;
 
 /**
+ * 墙体（M2 walls，2026-11-17 拍板落地）：一段墙 = 一条线段 + 可选厚度/高度/类型/状态。
+ *
+ * 口径：
+ * - 折线由多段墙拼成，单条 `points` 恰 2 点；
+ * - 厚度/高度保留壳体原值（0.05–5 m / 0.5–20 m），缺失就是「未量」，读取层不虚构；
+ * - 墙体是参考几何：不参与设施越界/碰撞判定，不改变现有排布规则；
+ * - 门/窗暂无独立数据结构，迁移器不凭空拆成 node；
+ * - 旧数据不带该字段照常解析；上限 500 段。
+ */
+export const planWallKinds = ['exterior', 'interior'] as const;
+export const planWallStatuses = ['detected', 'inferred', 'confirmed'] as const;
+export const planWallSchema = z.strictObject({
+  id: z.uuid(),
+  points: z.array(planPointSchema).length(2),
+  thicknessM: z.number().min(0.05).max(5).optional(),
+  heightM: z.number().min(0.5).max(20).optional(),
+  kind: z.enum(planWallKinds).optional(),
+  status: z.enum(planWallStatuses).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase()).optional(),
+  zoneId: z.uuid().optional(),
+  /** 所属图层（可选，2026-11-17）：一期契约带上，迁移侧没有楼层映射时不写；旧数据缺省照常解析。 */
+  levelId: z.uuid().optional(),
+});
+export type PlanWall = z.infer<typeof planWallSchema>;
+
+/**
  * 场地边界：0 或 3–64 顶点。2026-11-11 用户拍板「新建项目先不要一上来就开一个场地边界」——
  * 新草稿 boundary = []（未画起步），画完闭合才写入 ≥3 点；0 点时全案不做越界判定、不渲染边界。
  * 旧数据 3–64 点照常解析（zone 的 polygon 仍用 planRingSchema 的 3–64 口径不变）。
@@ -368,9 +394,11 @@ export const sitePlanDataSchema = z.strictObject({
     .optional(),
   /** 2026-11-11 用户指令：自由标注（文本 + 形状，可选）：旧数据不带该字段照常解析。 */
   annotations: z.array(planAnnotationSchema).max(500).optional(),
+  /** 2026-11-17 M2：墙体集合（可选，单线段；旧数据不带照常解析；上限 500 段）。 */
+  walls: z.array(planWallSchema).max(500).optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
-    ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'],
+    ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'], ['walls', '墙体'],
   ];
   const seen = new Set<string>();
   for (const [key, label] of collections) {
@@ -392,6 +420,7 @@ export const sitePlanDataSchema = z.strictObject({
     ...(plan.vehicles ?? []).map(item => [`车辆 ${item.type}`, item.levelId] as [string, string | undefined]),
     ...(plan.measurements ?? []).map(item => [`测量 ${item.name}`, item.levelId] as [string, string | undefined]),
     ...(plan.annotations ?? []).map(item => [`标注 ${item.name}`, item.levelId] as [string, string | undefined]),
+    ...(plan.walls ?? []).map(item => [`墙体 ${item.id.slice(0, 8)} `, item.levelId] as [string, string | undefined]),
   ];
   for (const [label, levelId] of levelRefs) {
     if (levelId && !levelIds.has(levelId.toLowerCase())) {
@@ -429,6 +458,11 @@ export const sitePlanDataSchema = z.strictObject({
   for (const node of plan.nodes) {
     if (node.zoneId && !zoneIds.has(node.zoneId.toLowerCase())) {
       ctx.addIssue({ code: 'custom', message: `出入口 ${node.name} 的归属分区不存在` });
+    }
+  }
+  for (const wall of plan.walls ?? []) {
+    if (wall.zoneId && !zoneIds.has(wall.zoneId.toLowerCase())) {
+      ctx.addIssue({ code: 'custom', message: `墙体 ${wall.id.slice(0, 8)} 的归属分区不存在` });
     }
   }
   const nodeIds = new Set(plan.nodes.map(node => node.id.toLowerCase()));

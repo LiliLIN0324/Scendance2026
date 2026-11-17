@@ -234,3 +234,19 @@ describe('csv plan export (H5-a)', () => {
     void CSV_EXPORT_HEADERS;
   });
 });
+
+describe('csv plan export 测量备注（M3c 补强）', () => {
+  it('writes measurement notes into the notes column, keeping 14 fields', () => {
+    const plan = samplePlan();
+    plan.measurements = [
+      { id: 'f6000000-0000-4000-8000-000000000001', kind: 'distance', name: '距离 1', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], notes: '门到摊位的直线' },
+    ];
+
+    const rows = parseCsv(buildPlanCsv(plan).replace(/^\uFEFF/, ''));
+    const row = rows.find(cells => cells[0] === '测量')!;
+
+    expect(row).toHaveLength(14);
+    expect(row[4]).toContain('10');
+    expect(row[13]).toBe('门到摊位的直线');
+  });
+});
