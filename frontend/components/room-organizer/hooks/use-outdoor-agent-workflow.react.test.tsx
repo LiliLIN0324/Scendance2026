@@ -297,14 +297,14 @@ it("在地图上手画分区按钮直接进入绘制模式", async () => {
   // 2026-11-18 用户实测：没给分区用途时不挂「生成分区预览」空头按钮（点了只会撞红卡反问），
   // 改为如实引导；给过用途后按钮才出现。
   expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(false);
-  expect(host.textContent).toContain("还没说要分哪些区");
+  expect(host.textContent).toContain("说一句用途和室内外");
   const draw = buttons.find(button => button.textContent?.trim() === "在地图上手画分区");
   await act(async () => { draw!.click(); });
   expect(beginDrawing).toHaveBeenCalledWith("zone");
   expect(flow.notice).toContain("请在地图上画出分区轮廓并闭合");
   // 2026-11-18 用户实测：进手画模式后卡上不再留自相矛盾的旧引导——引导语与手画按钮都收掉，
   // 通知条是唯一指令，避免「收起」和内容脱节的观感。
-  expect(host.textContent).not.toContain("还没说要分哪些区");
+  expect(host.textContent).not.toContain("说一句用途和室内外");
   expect([...host.querySelectorAll("button")].some(button => button.textContent?.trim() === "在地图上手画分区")).toBe(false);
 });
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {

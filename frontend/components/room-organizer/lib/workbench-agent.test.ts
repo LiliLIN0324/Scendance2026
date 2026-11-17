@@ -5,7 +5,7 @@ describe('workbench agent v2.4', () => {
   it('shows a bounded server seating shortfall without calling an object limit venue capacity',()=>{
     for(const code of ['SEATING_SHORTFALL:30:0:no_placement','SHARED_SEATING_SHORTFALL:30:0:0:no_placement']){
       const text=pendingPlanOf([], [{code,ids:[]}], id=>id).seatingShortfall;
-      expect(text).toContain('本次新增');expect(text).toContain('原场景物件未计入');expect(text).toContain('不代表场地最大容量');
+      expect(text).toContain('本次新增');expect(text).toContain('原场景物件未计入');expect(text).toContain('要更多位置就腾地方或减人数');
       expect(text).toContain('尝试其他区域并核对桌椅规格');expect(text).toContain('你也可决定是否调整人数、共桌方式或场地');expect(text).toContain('仍需重新试排');
     }
     const limit=pendingPlanOf([], [{code:'SEATING_SHORTFALL:30:0:object_limit',ids:[]}], id=>id).seatingShortfall;
@@ -15,14 +15,14 @@ describe('workbench agent v2.4', () => {
     expect(pendingPlanOf([], [{code:'SHARED_SEATING_SHORTFALL:30:2:0:no_placement',ids:[]}], id=>id).seatingShortfall).toBeUndefined();
     const shared=pendingPlanOf([], [{code:'SHARED_SEATING_SHORTFALL:30:24:12:object_limit',ids:[]}], id=>id);
     expect(shared.seatingShortfall).toContain('24 / 30 人，12 桌，尚缺 6 人');
-    expect(shared.seatingShortfall).toContain('不代表场地最大容量');
+    expect(shared.seatingShortfall).toContain('要更多位置就腾地方或减人数');
     for(const code of ['SHARED_SEATING_SHORTFALL:30:24:13:object_limit','SHARED_SEATING_SHORTFALL:30:30:15:object_limit','SHARED_SEATING_SHORTFALL:101:24:12:object_limit','SHARED_SEATING_SHORTFALL:30:24:12:fake'])
       expect(pendingPlanOf([], [{code,ids:[]}], id=>id).seatingShortfall).toBeUndefined();
     expect(pendingPlanOf([], [{code:'SHARED_SEATING_SHORTFALL:30:24:12:object_limit',ids:['unexpected']}], id=>id).seatingShortfall).toBeUndefined();
     const plan=pendingPlanOf([], [{code:'SEATING_SHORTFALL:30:24:object_limit',ids:[]}], id=>id);
     expect(plan.seatingShortfall).toContain('24 / 30 套');
     expect(plan.seatingShortfall).toContain('尚缺 6 套');
-    expect(plan.seatingShortfall).toContain('不代表场地最大容量');
+    expect(plan.seatingShortfall).toContain('要更多位置就腾地方或减人数');
     for(const code of ['SEATING_SHORTFALL:30:31:object_limit','SEATING_SHORTFALL:101:1:object_limit','SEATING_SHORTFALL:30:24:fake']) {
       expect(pendingPlanOf([], [{code,ids:[]}], id=>id).seatingShortfall).toBeUndefined();
     }
