@@ -123,9 +123,24 @@ it("keeps outside guide actions working and exposes a clean map details panel", 
   fireEvent.click(layerBtn);
   fireEvent.click(screen.getByTestId("map-strip-expand"));
   expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
-  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
+  const details = screen.getByRole("dialog", { name: "地图详情" });
   expect(screen.queryByTestId("map-picker-restart-guide")).toBeNull();
-  fireEvent.click(screen.getByTestId("map-picker-close"));
+  // 标题与 X 在固定头里，滚动只发生在 body，不会把关闭按钮滚走。
+  const close = screen.getByTestId("map-picker-close");
+  expect(details.querySelector(".oc-map-details__head")?.contains(close)).toBe(true);
+  expect(details.querySelector(".oc-map-details__body .oc-map-details__section")).toBeTruthy();
+  fireEvent.click(close);
+  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+  // 关闭不只靠 X：Esc 和点画布也要能关。重新查询图层钮——面板开着时它不在 DOM 里。
+  const openDetails = () => {
+    fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
+    fireEvent.click(screen.getByTestId("map-strip-expand"));
+  };
+  openDetails();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+  openDetails();
+  fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
   expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
 });
 it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {
@@ -199,10 +214,8 @@ it("切换图源不改规划，且把同一份计划和图源偏好交给壳层3
   expect(state.canvas?.source).toBe("carto-dark");
   expect(readPlanGroundSource()).toBe("carto-dark");
   expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
-  // 点地图空白处不关；用户明确要求只走面板上的 X。
-  fireEvent.click(screen.getByTestId("merge-canvas"));
-  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
-  fireEvent.click(screen.getByTestId("map-picker-close"));
+  // 点地图空白处也能关，不再只能找面板上的 X。
+  fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
   expect(screen.queryByTestId("outdoor-map-picker-panel")).toBeNull();
   expect(screen.getByTestId("outdoor-source-cycle")).toBeTruthy();
   expect(JSON.stringify(state.bridge!.getPlan())).toBe(before);

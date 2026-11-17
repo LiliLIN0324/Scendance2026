@@ -86,6 +86,21 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+/* 没截到止帧的扫描不占一张空图卡：收成可点的索引行，名称 + 状态/尺寸。 */
+.sc-scan-plain { margin-top: 10px; }
+.sc-scan-plain-label { margin: 0 0 4px; color: var(--space-muted, #546461); font-size: 11px; }
+.sc-scan-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sc-scan-row {
+  width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center; gap: 8px; padding: 7px 8px;
+  border: 1px solid var(--space-line, #e1e8e5); border-radius: 7px;
+  background: #fff; color: var(--space-ink, #1d2b28); font: inherit; text-align: left; cursor: pointer;
+}
+.sc-scan-row:hover { background: var(--space-tint, #edf4f1); }
+.sc-scan-row.is-current { border-color: var(--space-accent); }
+.sc-scan-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.sc-scan-row small { color: var(--space-muted, #546461); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sc-scan-row-tag { padding: 0 5px; border-radius: 4px; background: var(--space-tint, #edf4f1); color: var(--space-accent); font-size: 10px; }
 .sc-space-panel.is-card :is(button, a):focus-visible { outline: 2px solid var(--space-accent); outline-offset: 2px; }
 .sc-project-gallery {
   display: grid;

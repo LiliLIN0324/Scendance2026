@@ -215,6 +215,7 @@ function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPi
           <X size={18} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
+      <div className="oc-map-details__body">
       <div className="oc-map-details__section">
         <div className="oc-map-details__label">地图类型</div>
         <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
@@ -257,6 +258,7 @@ function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPi
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -723,7 +725,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   useEffect(() => () => {
     if (pendingSaveRef.current !== null) flushSave();
   }, [flushSave]);
-  // 快捷条只在鼠标悬停/点按时展开；点外面或 Esc 收起（完整面板仍只认 X）。
+  // 快捷条只在鼠标悬停/点按时展开；点外面或 Esc 收起。完整面板同样支持 Esc / 点地图关闭。
   useEffect(() => {
     if (!layerStripOpen) return;
     const closeOnOutside = (event: PointerEvent) => {
@@ -740,6 +742,26 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [layerStripOpen]);
+  // 完整「地图详情」是模态浮层：Esc 或点画布都能关；标题与 X 固定，不随面板内容滚动。
+  useEffect(() => {
+    if (!mapPickerOpen) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (layerDockRef.current?.contains(event.target as Node)) return;
+      setMapPickerOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMapPickerOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutside, true);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside, true);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, [mapPickerOpen]);
   useEffect(() => {
     onSaveStateChange?.({ state: saveState, savedAt });
   }, [saveState, savedAt, onSaveStateChange]);
@@ -885,6 +907,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             base={geoHidden ? 'floor' : 'map'}
             onPlanChange={setPlan}
             onVenueBoundaryApplied={agent?.manualOutdoorVenueApplied}
+            onVenueBoundaryCanceled={agent?.manualOutdoorVenueCanceled}
             {...(onHistoryChange ? { onHistoryChange } : {})}
             {...(onModeChange ? { onModeChange: mode => onModeChange(mode) } : {})}
             {...(onInspectorChange ? { onInspectorChange } : {})}

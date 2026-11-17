@@ -425,6 +425,11 @@ export interface OutdoorPlanCanvasProps {
   onPlanChange?: (plan: SitePlanData) => void;
   onVenueBoundaryApplied?: ((anchor: NonNullable<SitePlanData['anchor']>) => void) | undefined;
   /**
+   * 2026-11-17 用户实测：画红线时按 Esc 只切回浏览模式，外层工作流仍停在「核对具体活动范围」
+   * 并以为已框出范围。取消也是状态变更，必须通知外层清掉这次未确认的候选。
+   */
+  onVenueBoundaryCanceled?: (() => void) | undefined;
+  /**
    * P2-c：图层栈与编辑浮窗的外挂宿主元素 id（左栏卡片）。传了则 portal 过去
    * （inline 卡片样式，宿主不存在时自动回落画布内浮窗）；缺省浮窗留在画布内。
    */
@@ -1475,6 +1480,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onViewChange,
   onPlanChange,
   onVenueBoundaryApplied,
+  onVenueBoundaryCanceled,
   panelsHostId,
   infoPanelHostId,
   libraryPanelHostId,
@@ -1579,6 +1585,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
+  // Esc 取消画线要通知外层工作流；保持最新回调，键盘监听只注册一次。
+  const onVenueBoundaryCanceledRef = useRef(onVenueBoundaryCanceled);
+  onVenueBoundaryCanceledRef.current = onVenueBoundaryCanceled;
   const draftRef = useRef<PlanPoint[]>([]);
   const previewRingRef = useRef<PlanPoint[] | null>(null);
   const dragVertexRef = useRef<number | null>(null);
@@ -3745,6 +3754,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
+      // 2026-11-17 用户实测：手画活动范围时按 Esc 只切回浏览，外层仍停在「核对具体活动范围」，
+      // 地图上又留着这次草稿，看起来像「已框出、待写进方案」。Esc 是取消这次画线：
+      // 清掉草稿、退出模式，并通知工作流撤掉未确认候选，绝不把它留在待写入状态。
+      if (modeRef.current === 'boundary') {
+        event.preventDefault();
+        event.stopPropagation();
+        const hadDraft = draftRef.current.length > 0;
+        setMode('view');
+        setEditMessage(
+          hadDraft
+            ? '已取消这次画线：未写入活动范围。需要时再点「在地图上手画活动范围」。'
+            : '已退出画线模式；活动范围未改动。',
+        );
+        onVenueBoundaryCanceledRef.current?.();
+        return;
+      }
       // 2026-11-16 用户：「点 esc 就退出物体编辑模式」——选择模式的 Esc 一步到位：
       // 清空选中（属性卡、3D 手柄随之收回）并回到浏览模式。
       if (modeRef.current === 'select') {
