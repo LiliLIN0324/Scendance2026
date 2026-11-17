@@ -39,6 +39,13 @@ export interface GateInput {
 }
 
 const TS_ERROR = /\berror TS\d+/g;
+/** vitest 默认带色：0x1B[...m 夹在 `Tests` 与数字之间，不先剥掉就永远读不到汇总行。 */
+// eslint-disable-next-line no-control-regex
+const ANSI = /\u001b\[[0-9;]*m/g;
+
+function stripAnsi(text: string): string {
+  return text.replace(ANSI, "");
+}
 
 function countMatches(text: string, re: RegExp): number {
   const found = text.match(re);
@@ -54,9 +61,10 @@ function readTypes(raw: string | undefined): GateEntry {
 
 function readTests(raw: string | undefined): GateEntry {
   if (raw === undefined) return { state: "unverified", detail: "没跑" };
-  const failed = /Tests\s+(\d+) failed/.exec(raw);
-  const passed = /Tests\s+(?:\d+ failed \| )?(\d+) passed/.exec(raw);
-  const files = /Test Files\s+(?:(\d+) failed[^|]*\| )?(\d+) passed/.exec(raw);
+  const text = stripAnsi(raw);
+  const failed = /Tests\s+(\d+) failed/.exec(text);
+  const passed = /Tests\s+(?:\d+ failed \| )?(\d+) passed/.exec(text);
+  const files = /Test Files\s+(?:(\d+) failed[^|]*\| )?(\d+) passed/.exec(text);
   if (!passed) return { state: "unverified", detail: "没读到用例汇总行" };
   const failedCount = failed ? Number(failed[1]) : 0;
   const passedCount = Number(passed[1]);
