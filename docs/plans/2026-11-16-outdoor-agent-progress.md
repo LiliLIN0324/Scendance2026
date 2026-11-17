@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：卡里云端 0 条时会并列写“要么没跑、要么还没声明”，有 1 条后括注自动消失。**本地 main = origin = `712b6331`（`div 0/0`，开工即齐、无待合）**；待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–82 十二个切片。9222 三十八轮不通。下一条：把“门禁读数+卡片+快照”三者用同一次跑结果串起来（现在钩子里得分别调），先加一个 `releaseStatusBundle()` 一次返回三者。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-cloud-ledger.test.ts`。
+- 下一条操作：新增 `outdoor-release-bundle.ts`——`releaseStatusBundle()` 只算一次台账，卡片与快照共用，并给出 `gateReady`；`gateSummaryLine(reading)` 把读数压成一行。**本地 main = origin = `3edf35a7`（`div 0/0`，开工即齐）**；但**工作区这回真的在 `main` 上**（脏文件 6）——下轮若 origin 再前进，`branch -f` 会因“已 check out”失败，需先判能否 ff。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–83 十三个切片。9222 三十九轮不通。下一条：把 `releaseStatusBundle()` 接进 hook 的 `logReleaseStatus()`（一次拿卡+快照，日志两段一起打）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-bundle.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 17:00 · 自动轮次 83 · 一次算齐（卡片与快照共用一份台账）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 17:00，自动轮次 83
+批次 / 切片 / 状态：合并（无待合）+ M7 / releaseStatusBundle / 已交付（分支待 PR）
+开工事实：HEAD = `3edf35a7`，**分支就是 `main`**（脏文件 6）；local main = origin = `3edf35a7`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `1f540d33`
+交付：`outdoor-release-bundle.ts`（`releaseStatusBundle()`：台账算一次，卡片/快照/全绿/门禁就绪同源；`gateSummaryLine()` 压一行）+ 6 条用例
+验证（固定数据）：新用例 6/6（首跑 1 挂：手撕的 `GateReading` 形状不对，改用 `readGates({})` 表示“三项都没跑”），`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十九轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；bundle 接进 hook
+```
+
+- **同一事实不要算两次**：卡片与快照各自调 `defaultLedger()`，少传一个参数就会在工单里自相矛盾；`releaseStatusBundle()` 的价值就是让这件事不可能发生。
+- **“没跑”的道具不要手撕**：`GateReading` 有 `types/tests/build/verdict/line`，手写假对象容易长得像“跑过且干净”；用 `readGates({})` 表达“三项都没跑”才是真的。
 
 ### 2026-11-18 16:00 · 自动轮次 82 · 云端列为空时的提示语（把“空”和“都行”分开）
 
