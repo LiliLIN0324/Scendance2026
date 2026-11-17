@@ -194,3 +194,36 @@ describe('geojson export 测量与标注（M3c 补强）', () => {
     expect(buildPlanGeoJsonText(samplePlan())).toBe(buildPlanGeoJsonText({ ...samplePlan(), measurements: [] }));
   });
 });
+
+describe('geojson export 墙体（M2）', () => {
+  function planWithWalls(): SitePlanData {
+    const plan = samplePlan();
+    plan.walls = [{
+      id: 'b2000000-0000-4000-8000-000000000001',
+      points: [{ x: 0, y: 0 }, { x: 5, y: 0 }],
+      thicknessM: 0.2,
+      heightM: 3,
+      kind: 'interior',
+      status: 'confirmed',
+      zoneId: 'a1000000-0000-4000-8000-000000000001',
+    }];
+    return plan;
+  }
+
+  it('emits a LineString wall with length/thickness/height and zone', () => {
+    const wall = buildPlanGeoJson(planWithWalls()).features.find(f => f.properties.kind === 'wall')!;
+    expect(wall.geometry.type).toBe('LineString');
+    expect(wall.properties.type).toBe('内墙');
+    expect(wall.properties.zone).toBe('观众区');
+    expect(wall.properties.length_m).toBeCloseTo(5, 1);
+    expect(wall.properties.thickness_m).toBe(0.2);
+    expect(wall.properties.height_m).toBe(3);
+    expect((wall.geometry.coordinates as [number, number][]).length).toBe(2);
+  });
+
+  it('orders walls right after boundary and keeps legacy plans unchanged', () => {
+    const kinds = buildPlanGeoJson(planWithWalls()).features.map(f => f.properties.kind);
+    expect(kinds.slice(0, 3)).toEqual(['boundary', 'wall', 'zone']);
+    expect(buildPlanGeoJsonText(samplePlan())).toBe(buildPlanGeoJsonText({ ...samplePlan(), walls: [] }));
+  });
+});

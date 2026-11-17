@@ -112,6 +112,30 @@ export function buildPlanGeoJson(plan: SitePlanData): GeoJsonExport {
     });
   }
 
+  // 墙体：LineString（厚度/高度进属性；无 wall.name，用短 id 标识）。
+  for (const wall of plan.walls ?? []) {
+    const zoneName = wall.zoneId ? zoneById.get(wall.zoneId)?.name ?? null : null;
+    features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: wall.points.map(p => enuToLngLat(p, anchor.lng, anchor.lat)),
+      },
+      properties: {
+        ...baseProperties({
+          kind: 'wall',
+          name: `墙体 ${wall.id.slice(0, 8)}`,
+          typeLabel: wall.kind === 'exterior' ? '外墙' : wall.kind === 'interior' ? '内墙' : '墙体',
+          zoneName,
+          hasIssue: false,
+        }),
+        length_m: Number(planRouteLengthM(wall.points).toFixed(2)),
+        thickness_m: wall.thicknessM ?? null,
+        height_m: wall.heightM ?? null,
+      },
+    });
+  }
+
   // 分区：Polygon。
   for (const zone of plan.zones) {
     const ring = zone.polygon.map(p => enuToLngLat(p, anchor.lng, anchor.lat));
