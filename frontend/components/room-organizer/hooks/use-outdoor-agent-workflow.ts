@@ -983,7 +983,7 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     status(
-      "请在同一地图圈出实际活动范围并闭合；完成后还需在对话核对，不把商场整体当活动场地。",
+      "请在同一地图圈出实际活动范围并闭合：只圈这次真正用到的那片地，闭合后回来核对。",
     );
   }
   // 2026-11-14 用户指令「给我几个方案」：物件排布方案基座（objects 动作时的 plan/候选/当前策略）。
@@ -1122,7 +1122,7 @@ export function useOutdoorAgentWorkflow(input: {
       status(
         ok
           ? active
-            ? "2D沿已确认路线的流动示意已启动；不是容量/疏散安全模拟。"
+            ? "流动示意已启动：按已应用的流线看走向，改完流线再播一次。"
             : "流动示意已停止，规划不变。"
           : "当前无已确认路线可播放；请先应用主线/支线。",
         active && ok ? "working" : "ready",
@@ -1292,7 +1292,7 @@ export function useOutdoorAgentWorkflow(input: {
           // 边界与画布内容都不动；确认后才写入并推进，不把已有边界清掉。
           persist({ ...stateRef.current, stage: "scope" });
           offer(plan, "scope", "确认当前活动范围", job, [
-            "确认的是本次活动范围，不是地图产权或消防认证。",
+            "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
           ]);
           setBusy(false);
           return;
@@ -1341,7 +1341,7 @@ export function useOutdoorAgentWorkflow(input: {
         }
         persist({ ...stateRef.current, stage: "scope" });
         offer(plan, "scope", "确认当前活动范围", job, [
-          "确认的是本次活动范围，不是地图产权或消防认证。",
+          "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
         ]);
         setBusy(false);
         return;
@@ -1496,7 +1496,7 @@ export function useOutdoorAgentWorkflow(input: {
           "主要流线与待核对入口",
           job,
           [
-            "道路等级只用于候选分类；真实门与室内连接未证实，需逐个核对，不保证可通行。",
+            "这些线是按道路等级挑的到场候选；哪个口真能走，等你核对后写进规划。",
             "界外段是到场流线候选（怎么来的），与边界的交点即待核对入口；写入后可画布编辑。",
           ],
         );
@@ -1791,7 +1791,7 @@ export function useOutdoorAgentWorkflow(input: {
         }
         offer(result.plan, "objects", draft ? "按分区用途出的默认方案" : "逐区复用库内真实设施", job, [
           // 默认值必须自证是默认值：用户看到的每一版都说清「这不是你说的数量」。
-          ...(draft ? ["这一版是默认方案：数量按分区用途与可用面积反算，不是你说的数字；要改哪一件直接说。", ...draft.notes] : []),
+          ...(draft ? ["这版是默认方案：数量按分区用途和面积反算；说个数或哪件要改，我按你的改。", ...draft.notes] : []),
           ...(packedWarning ? [packedWarning] : []),
           ...(fitError && draft && shrinkItems
             ? [`按面积算的数量现场排不下：已缩到实际能容纳的 ${shrinkItems.map((i) => `${i.query}×${i.count}`).join("、")}；要更多只能换更小的真实物料或扩分区，不硬塞。`]
@@ -1867,7 +1867,7 @@ export function useOutdoorAgentWorkflow(input: {
           "按岗位、数量与通路安排人员",
           job,
           [
-            "人员活动范围/路线由关联区域及路径限定，不是随机散布或真实疏散模拟。",
+            "人员按岗位挂在对应分区和通路上；区域或流线一改，人员跟着重排。",
             ...peopleMismatch,
           ],
         );
@@ -1944,7 +1944,7 @@ export function useOutdoorAgentWorkflow(input: {
           "model",
           `替换“${facility.name}”模型`,
           job,
-          ["占地与通道仍以同一规划守卫核对；不会重新生成收费。"],
+          ["换模型后按同一套占地和通道规则重查；这次不再计费。"],
         );
         return;
       }
@@ -2500,7 +2500,7 @@ export function useOutdoorAgentWorkflow(input: {
       await mapContext(job.controller.signal);
       if(!live(job))return;
       if(JSON.stringify(callbacks.current.bridge()?.getPlan())!==baseVersion)throw new Error('规划已变化，请重新选择色板预览。');
-      offer(proposeOutdoorStyle(base,bundle),'style',`「${bundle.name}」现有设施配色`,job,['仅改设施主色；不新增物件、不改变尺寸/占地/通路，不承诺GLB原材质可换色。']);
+      offer(proposeOutdoorStyle(base,bundle),'style',`「${bundle.name}」现有设施配色`,job,['只换设施主色，尺寸和占地不动；模型自带材质不跟着变。']);
     }catch(error){if(live(job))status(error instanceof Error?error.message:'配色预览无法核对，未修改。','blocked');}
     finally{if(live(job))setBusy(false);}
   }

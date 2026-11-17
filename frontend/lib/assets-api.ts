@@ -7,7 +7,15 @@ import type { RoomLayout } from '@/components/room-organizer/lib/types';
 export interface CloudAsset {
   id: string; name: string; source: string; format: string; byte_size: number;
   source_url?: string | null; license?: { id?: string; url?: string; attribution?: string };
-  metadata?: { sourceSize?: AssetSize }; created_at?: string;
+  metadata?: {
+    sourceSize?: AssetSize;
+    /** 物料自己的预览图。没有则界面留空方块，不画通用椅子。 */
+    previewUrl?: string;
+    preview_url?: string;
+    thumbnail?: string;
+    thumbnail_url?: string;
+    preview_image_url?: string;
+  }; created_at?: string;
 }
 export interface AuthorizedAsset { id: string; name: string; source: string; url: string }
 export interface AssetSize { width: number; depth: number; height: number }
@@ -66,6 +74,7 @@ export function assetError(error: unknown): string {
     REFERENCE_IMAGE_FORBIDDEN: '请选择当前账号上传的 PNG 或 JPEG 参考图。',
     INVALID_REFERENCE_IMAGE: '参考图尺寸不符合要求，请使用 129–4095 像素的 PNG 或 JPEG。',
     ASSET_NOT_IN_SAVED_SCENE: '云端项目尚未保存该资产，请先保存当前画布。',
+    ROUTE_NOT_FOUND: '物料接口不存在，列表没有刷新。',
   };
   return messages[code] ?? (error instanceof Error ? error.message : '请求失败，请稍后重试。');
 }

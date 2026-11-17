@@ -1731,7 +1731,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (!bridge.beginVenueBoundary(anchor)) { setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '已有规划不能直接更换地理锚点，请先新建户外活动；当前内容保持不变', steps: [] }); return; }
       manualVenueAnchorRef.current = anchor;
       setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'blocked', action: '请在地图手画并闭合边界；未写入新场地', steps: ['候选地点已确认', '自动轮廓未命中，启用手画'] });
-      say({ role: 'agent', text: '没找到可用的真实边界，已定位到候选地点。请在户外地图逐点手画并闭合边界；闭合前不写入新锚点，不虚构 300m 方块。Esc 可取消。' });
+      say({ role: 'agent', text: '没找到可用的真实边界，地图已移到候选地点。沿实际用地逐点圈出并闭合，闭合那一刻写入地点和红线；Esc 取消。' });
       return;
     }
     if(bridge.applyPlan){outdoorWorkflow.offerBoundary(anchor,boundary,place.name);say({role:'agent',text:'已取得地点候选轮廓。请先核对其中哪一片确实是本次活动场地；不会把整座商场当成已授权活动范围。'});return;}
@@ -1928,7 +1928,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     setRouteProposal(null); setZoneProposal(null);
     setFlowSimActive(true);
-    setOutdoorTask({ intent: '查看流动示意', state: 'working', stopLabel: '停止模拟', action: '2D 流动示意已开启；不写入规划，不代表容量/疏散评估', steps: ['读取已应用流线', '启动真实画布动画'] });
+    setOutdoorTask({ intent: '查看流动示意', state: 'working', stopLabel: '停止模拟', action: '流动示意已开启：只看走向，要改就回流线卡', steps: ['读取已应用流线', '启动真实画布动画'] });
     say({ role: 'agent', text: `流动模拟开始了：${plan.routes.length} 条流线上的小点就是人流/车流，线色深浅=密度。这是预览动画，不写入方案；说「停止模拟」结束。` });
   }
 

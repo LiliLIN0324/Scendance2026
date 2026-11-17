@@ -484,7 +484,7 @@ export function proposeShorelineLayout(
   const routes: PlanRoute[] = [];
   const warnings: string[] = [
     "岸线来自 OSM 瓦片几何，不是现场测量；岸线稳定、水深、落差与救生配置需现场核对。",
-    "钓位与观众区为几何示意，不含护栏、救生圈、照明与比赛规则核验；不构成安全认证。",
+    "钓位和观众区按可用面积摆位；护栏、救生、照明和赛制按现场条件定。",
   ];
   // 通道不能从既有设施里穿过去：往外一层层退，退到没冲突再用；退不动就不出这条线。
   let aislePath: PlanPoint[] | null = null;

@@ -2123,7 +2123,7 @@ it("「随便放」时模型编的清单不拦成红卡：丢弃后按两个分�
   expect(flow.noticeKind, flow.notice).not.toBe("error");
   expect(flow.state.brief.items).toHaveLength(0);
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
-  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  expect(flow.proposal?.warnings.join()).toContain("默认方案");
   // 演出区按面积算出的座位排不下，就只缩那一个区，并在卡上写明缩到了多少。
   expect(flow.proposal?.warnings.join()).toContain("排不下");
   // 预览阶段不写画布；确认后是两个分区都有东西，且按面积算（摆摊区 25 摊）而不是编的 12。
@@ -2159,7 +2159,7 @@ it("连续两次追问都没有推进时，直接出默认方案而不是问第�
   // 第二次还是追问、画布毫无改动 → 不再问，直接出一版默认方案（仍然只预览）。
   await turn("然后呢", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
-  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  expect(flow.proposal?.warnings.join()).toContain("默认方案");
   expect(plan.facilities).toHaveLength(0);
 });
 
