@@ -10,6 +10,11 @@
  */
 
 import { ACCEPTANCE_RULES } from './outdoor-acceptance-selfcheck';
+import {
+  downloadTextFile,
+  type ReportDownloadDeps,
+  type ReportDownloadResult,
+} from './outdoor-report-download';
 import type { CaseLedgerRow } from './outdoor-release-status-card';
 
 export const LEDGER_CSV_HEADER = ['编号', '用例', '固定数据', '浏览器', '云端'] as const;
@@ -45,4 +50,20 @@ export function ledgerToCsv(ledger: readonly CaseLedgerRow[]): string {
 export function ledgerCsvName(asOf: string | undefined, today: string): string {
   const stamp = (asOf?.trim() || today).replace(/[\\/:*?"<>|\s]+/g, '-');
   return `outdoor-acceptance-ledger-${stamp}.csv`;
+}
+
+/**
+ * 落成 .csv 文件。头一字节放 UTF-8 BOM：Excel 不认 BOM 就会把中文标题显示成乱码，
+ * 而本表的主要用途就是拿去填。
+ */
+export function downloadLedgerCsv(
+  ledger: readonly CaseLedgerRow[],
+  input: { asOf?: string | undefined; today: string; deps?: ReportDownloadDeps },
+): ReportDownloadResult {
+  return downloadTextFile({
+    text: `\uFEFF${ledgerToCsv(ledger)}`,
+    filename: ledgerCsvName(input.asOf, input.today),
+    mime: 'text/csv;charset=utf-8',
+    deps: input.deps,
+  });
 }
