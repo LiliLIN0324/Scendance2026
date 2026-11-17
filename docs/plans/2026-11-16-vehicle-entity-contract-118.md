@@ -242,3 +242,26 @@ for (const vehicle of plan.vehicles ?? []) {  // (3) 分区与动线引用
 3. **本批是否允许 AI 提案产车？** 默认：**不允许**；先手画（落点 + 挂线），`prepare_plan_vehicles` 与 `added.vehicleIds` 排下一步，避免 §3.4 的静默丢弃。
 4. **五种缺模型的车是否允许借用近似 GLB？** 默认：**不允许**，占位盒 + 「待补模型」标签。借用会让 12 m 级大巴按 7.5 m 箱货显示，直接影响落客区与转弯判断。
 5. **停放点算不算设施？`routeIds` 指向非车行线是否阻断保存？** 默认：**不算设施**（不进 `route-facility-collision`、不占 2000 设施上限）；**阻断保存**（`superRefine` 报错），否则出现「车在人群里走而冲突层不报」。
+
+## 9. 本批落账（2026-11-17）
+
+### 已并入的纯函数层（前端读取层，不碰 three / React / schema）
+
+- `lib/vehicle-entities.ts`（新）：车型 → 载体 / 动线类别 / 中文名；`modelSlug` **只认实体自己写的**，不回落到登记表首项（#118 §3.5 口径 —— 回落会把「待补模型」显示成有模型）；停放位槽 `vehicleEntitySlots` 确定性排布（同一台车同一 count 永远同一组偏移，刷新不跳），每车最多 24 个实例（`MAX_VEHICLE_INSTANCES`，与人群层同口径，防 `count: 99` 卡死）。未登记车型一律返回 `null`，**不猜、不回落成步行**。
+- `lib/vehicle-follower-profile.ts`（新）：四档（walk / trolley / vehicle / mixed）的预览档。速度**只有一处来源** —— `flow-sim.speedRangeForCarrier`，本模块不复制数字；车身占位与转向角速度是预览量，不参与任何核算。`mixed` 档的口径是「速度按人、占位按车」：节奏由慢的一方决定，但避碰与占位必须留够在场最大的车，否则画出来的人贴着车头穿过去。另有 `polylineTangentRad`（折线弧长处切线）、`turnTowardRad`（限速转向，走最短弧）、`vehiclePreviewSpeed`（按 unit 在区间内插值）。
+- 旧双轨已删：`vehicle-flow` / `crowd-behavior` / `crowd-wander` / `person-action-state`（提交 `165bdd5e`），由 main 侧同名实现取代。
+
+### 与额度线的关系：车流**不被**额度问题挡住
+
+车流的 3D 接线用的是**物料库里的 GLB**（`modelSlug` → `merged.json`）与占位盒，**不走 Aholo 生成通道**。所以「生产 key 挂在没额度账号上」这件事**不阻塞车流 3D 接线验收**。两者唯一的交叉点在将来：若要给某个车型生成专属 GLB，才需要先解决额度（归因与换键清单在 `docs/plans/2026-11-17-c1-generation-run.md` 第五轮）。
+
+### 下一批（按依赖排序，先不动工）
+
+1. **对齐最新基线**：`merge/people06-onto-main` 对到 `origin/main`（当前落后 106 个提交），跑 tsc + 定向套件，确认旧双轨删除后没有残留引用。
+2. **3D 接线验收**：vehicle / service 路线挂动态对象（车身平移 + 切线朝向、不播步态、无模型用车体块占位），再跑真机多帧验收。
+3. **车辆实体落盘契约复核**：`vehicle-entities` 已建，需要和 site-plan schema、远端 M4 预览口径对一遍，确认旧草稿兼容。
+4. **坐姿素材**：仍卡在云端 sit clip 回传，属外部阻塞。
+
+### 遗留
+
+- `lib/walk-collision.ts:148` 的文档注释还指向已删除的 `lib/crowd-behavior.ts`（只是注释，不是 import，不会编译报错）。随本批一起订正。
