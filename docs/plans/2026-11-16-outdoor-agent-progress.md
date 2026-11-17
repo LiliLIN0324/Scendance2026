@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：对照表顶部已有“当前状态快照（锚点）”，以后每轮只需与它 diff。main = origin = `10a54bec`；9222 二十四轮不通。下轮：把快照真正跑出来打印一遍（用 node 直接 import 分支上的 `statusCardSnapshot` + 最小 report），确认实际输出与锚点逐字一致；不一致就修锚点。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：**PR #127 已合入 `main`**（`c9706da5`），M7 的 13 轮产物（状态卡/门禁读数/同名选择/离线声明/hook 接入/快照）现已在主干；本轮在合入后的 `c9706da5` 上重跑门禁全绿。9222 二十五轮不通。下一条：本轮新分支上做“锚点与代码一致”的自检用例（读对照表 §0 的 JSON 与 `statusCardSnapshot` 输出逐字对比），让锚点以后不会默默过期。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 03:10 · 自动轮次 69 · PR #127 已合入 main；合并 19 笔后门禁复跑
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 03:10，自动轮次 69
+批次 / 切片 / 状态：收尾（合并 + 合入确认 + 门禁复跑）/ 已交付
+开工事实：HEAD = main = 10a54bec，origin/main = c9706da5（**落后 19 笔**）
+关键事实：`git log origin/main` 首行是 `c9706da5 Merge pull request #127 from LiliLIN0324/agent/outdoor-m7-consolidated` —— **M7 的 13 轮产物已全部进入主干**；`agent/outdoor-m7-consolidated` 等分支已在本地与远端删除（合并后正常清理）
+合并：19 笔入站改动的 10 个文件里，`use-outdoor-agent-workflow.ts` 与脏文件重叠 → 备份字节 → stash → `--ff-only`（10a54bec → c9706da5）→ pop（零冲突；脏文件 59 → 61，均为用户继续编辑）
+门禁（提交树 c9706da5，隔离 worktree）：tsc 0 行 / `npm test -- outdoor` 56 文件 670 条全过
+真实浏览器/云端：仍未验（9222 第二十五轮 down）——**M7 的 11 条验收仍 0 条三类全绿**
+未完成：#2 真实搜索、#5 浏览器行为（两者都要登录态）；锚点自检用例
+```
+
+- **分支被删不等于工作没了**：先看 `origin/main` 首行是不是合并提交，再判断是“丢了”还是“合了”。
 
 ### 2026-11-18 02:30 · 自动轮次 68 · 合三笔（含一个脏文件重叠）+ 对照表立快照锚点
 
