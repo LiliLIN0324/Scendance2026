@@ -162,6 +162,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   // 一张卡两种高度：收起只露一行素材，展开看完整网格；收起把高度还给下面 chat。
   const [bucket, setBucket] = useState('');
   const [visible, setVisible] = useState(PAGE_SIZE);
+  /** 2026-11-18 用户：物料库要能「一行四张」平铺看，和户外目录同一个胶囊 + 右侧排布钮。 */
+  const [libGrid, setLibGrid] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [bucketMore, setBucketMore] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -710,12 +712,34 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             </>
             : <>
             {/* 库不再挂「按风格配一套」——入口在 Bingo。这里只按类目浏览单件。 */}
-            {/* 搜索框常驻顶部，不再藏在折叠/筛选里；对齐 shelf 形态。 */}
-            <label className="sc-search-mini sc-lib-search">
-              <Search size={14} aria-hidden="true"/>
-              <input aria-label="搜索全库线上模型" placeholder="搜索库内素材" value={query} onChange={event => setQuery(event.target.value)}/>
-            </label>
-            {searching ? <>
+            {/* 2026-11-18 用户：搜索要对齐户外目录——胶囊（放大镜 + 输入 + 右侧圆钮）；
+                圆钮切「一行四张」平铺浏览，再点回分类浏览。 */}
+            <div className="sc-catalog-search sc-lib-search">
+              <Search size={15} aria-hidden="true" className="sc-catalog-search-icon"/>
+              <input
+                aria-label="搜索全库线上模型"
+                placeholder="搜索物料（中文 / English / slug）"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+              />
+              <button
+                type="button"
+                className="sc-catalog-search-toggle"
+                data-testid="material-grid-toggle"
+                aria-pressed={libGrid}
+                title={libGrid ? '切回分类浏览' : '一行四张，方便浏览'}
+                onClick={() => setLibGrid(open => !open)}
+              >
+                {libGrid ? '▦' : '☰'}
+              </button>
+            </div>
+            {libGrid ? <>
+              <ul className="sc-lib-grid sc-lib-browse" role="list" aria-label="物料平铺">
+                {libraryShown.map(model => modelRow(model))}
+              </ul>
+              {libraryFiltered.length === 0 && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>没有匹配的模型</span></p>}
+              {libraryFiltered.length > libraryShown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
+            </> : searching ? <>
               <ul className="sc-lib-list">
                 {groups.map(group => <li className="sc-lib-group" key={group.key}>
                   {group.label && <small><span>{group.label}</span></small>}
