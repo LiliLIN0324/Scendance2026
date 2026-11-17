@@ -191,7 +191,31 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
     expect(result.skipped.some(s => s.source === 'facility' && s.sourceId === 'd1')).toBe(true);
   });
 
-  it('空布局（无楼层）五类实体全空，不抛错', () => {
+  it('总入口一并迁墙体：墙段落入 walls，退化段进 wall skipped', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        interiorWalls: [
+          { id: 'iw1', x1: 0, z1: 0, x2: 4, z2: 0, thickness: 0.2, height: 3, kind: 'interior', status: 'confirmed' },
+          { id: 'iw2', x1: 2, z1: 2, x2: 2, z2: 2 },
+        ],
+      })],
+    });
+
+    const result = migrateLayoutToPlan(layout, BOUNDARY, sequentialIds());
+
+    expect(result.walls).toHaveLength(1);
+    expect(result.walls[0]).toMatchObject({
+      points: [{ x: 0, y: 8 }, { x: 2, y: 8 }],
+      thicknessM: 0.2,
+      heightM: 3,
+      kind: 'interior',
+      status: 'confirmed',
+    });
+    expect(result.skipped).toContainEqual({ source: 'wall', sourceId: 'iw2', reason: '墙体长度退化' });
+  });
+
+  it('空布局（无楼层）分区/人员/动线/物料/墙体全空，不抛错', () => {
     const layout = makeLayout({ ...SHELL, floors: [] });
 
     const result = migrateLayoutToPlan(layout, BOUNDARY, sequentialIds());
@@ -200,6 +224,7 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
     expect(result.workers).toHaveLength(0);
     expect(result.routes).toHaveLength(0);
     expect(result.facilities).toHaveLength(0);
+    expect(result.walls).toHaveLength(0);
     expect(result.skipped).toHaveLength(0);
   });
 
