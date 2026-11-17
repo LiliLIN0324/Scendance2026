@@ -11,6 +11,7 @@
 
 import {
   BoxSelect,
+  BrickWall,
   ChevronDown,
   ChevronUp,
   Circle,
@@ -59,6 +60,7 @@ export const PLANNING_ICON_COMPONENTS: Record<PlanningIconName, LucideIcon> = {
   shapes: Shapes,
   hexagon: Hexagon,
   tent: Tent,
+  'brick-wall': BrickWall,
   truck: Truck,
   ruler: Ruler,
   route: RouteIcon,
