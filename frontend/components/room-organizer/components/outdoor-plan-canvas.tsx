@@ -116,6 +116,8 @@ import {
   hexWithAlpha,
   isLayerVisible,
   lngLatToEnu,
+  placedItemsNeedsRedlineHint,
+  placedRedlineCount,
   planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
@@ -166,6 +168,7 @@ import {
   type PlanEditIssue,
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
+import { planBoundaryFromSearchArea } from '../lib/outdoor-venue-sync';
 import { findZoneBoundsOverflow, zoneOverflowReason, type ZoneBoundsOverflow } from '../lib/plan-zone-bounds';
 import {
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
@@ -424,6 +427,11 @@ export interface OutdoorPlanCanvasProps {
   /** H2-b：编辑提交回调（边界更新/顶点移动/新增分区/分区样式）。不传则只读浏览。 */
   onPlanChange?: (plan: SitePlanData) => void;
   onVenueBoundaryApplied?: ((anchor: NonNullable<SitePlanData['anchor']>) => void) | undefined;
+  /**
+   * 2026-11-17 用户实测：画红线时按 Esc 只切回浏览模式，外层工作流仍停在「核对具体活动范围」
+   * 并以为已框出范围。取消也是状态变更，必须通知外层清掉这次未确认的候选。
+   */
+  onVenueBoundaryCanceled?: (() => void) | undefined;
   /**
    * P2-c：图层栈与编辑浮窗的外挂宿主元素 id（左栏卡片）。传了则 portal 过去
    * （inline 卡片样式，宿主不存在时自动回落画布内浮窗）；缺省浮窗留在画布内。
@@ -1475,6 +1483,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onViewChange,
   onPlanChange,
   onVenueBoundaryApplied,
+  onVenueBoundaryCanceled,
   panelsHostId,
   infoPanelHostId,
   libraryPanelHostId,
@@ -1579,6 +1588,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
+  // Esc 取消画线要通知外层工作流；保持最新回调，键盘监听只注册一次。
+  const onVenueBoundaryCanceledRef = useRef(onVenueBoundaryCanceled);
+  onVenueBoundaryCanceledRef.current = onVenueBoundaryCanceled;
   const draftRef = useRef<PlanPoint[]>([]);
   const previewRingRef = useRef<PlanPoint[] | null>(null);
   const dragVertexRef = useRef<number | null>(null);
@@ -2261,6 +2273,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       lockedLayersRef.current = unlocked;
       setLockedLayers(unlocked);
       setEditMessage('已自动解除用地红线锁定（选了红线工具就是要改它）；画完可在左侧「用地红线」行再锁上。');
+    }
+    // 还没红线、但地图上有搜索选区：把这块闭合范围放进红线草稿。
+    // 点起点闭合走现有 closeDraft（写入 plan.boundary，再出确认卡）；Esc 仍是取消。
+    if (next === 'boundary' && planRef.current.boundary.length < 3) {
+      const seeded = planBoundaryFromSearchArea(searchArea ?? null, planRef.current.anchor);
+      if (seeded) {
+        draftRef.current = seeded;
+        setEditMessage('地图上的范围已放进红线草稿。点一下起点闭合，确认后写入方案；Esc 取消。');
+      }
     }
     draw();
     notifyPlanDraftChanged();
@@ -3745,6 +3766,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
+      // 2026-11-17 用户实测：手画活动范围时按 Esc 只切回浏览，外层仍停在「核对具体活动范围」，
+      // 地图上又留着这次草稿，看起来像「已框出、待写进方案」。Esc 是取消这次画线：
+      // 清掉草稿、退出模式，并通知工作流撤掉未确认候选，绝不把它留在待写入状态。
+      if (modeRef.current === 'boundary') {
+        event.preventDefault();
+        event.stopPropagation();
+        const hadDraft = draftRef.current.length > 0;
+        setMode('view');
+        setEditMessage(
+          hadDraft
+            ? '已取消这次画线：未写入活动范围。需要时再点「在地图上手画活动范围」。'
+            : '已退出画线模式；活动范围未改动。',
+        );
+        onVenueBoundaryCanceledRef.current?.();
+        return;
+      }
       // 2026-11-16 用户：「点 esc 就退出物体编辑模式」——选择模式的 Esc 一步到位：
       // 清空选中（属性卡、3D 手柄随之收回）并回到浏览模式。
       if (modeRef.current === 'select') {
@@ -11767,7 +11804,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{openFolders['boundary'] !== false ? '▾' : '▸'}</span>
                   <BoundarySwatch size={16} />
                   <span style={{ flex: 1 }}>用地红线</span>
-                  <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{plan.boundary.length}</span>
+                  <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{placedRedlineCount({
+                    boundaryCount: plan.boundary.length,
+                    searchArea,
+                    previewBoundaryCount: workflowScopePreview ? (workflowPreview?.boundary.length ?? 0) : 0,
+                  })}</span>
                 </button>
                 <input
                   type="checkbox"
@@ -11794,11 +11835,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </div>
               {openFolders['boundary'] !== false && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {plan.boundary.length === 0 ? (
+                  {placedItemsNeedsRedlineHint({
+                    boundaryCount: plan.boundary.length,
+                    searchArea,
+                    previewBoundaryCount: workflowScopePreview ? (workflowPreview?.boundary.length ?? 0) : 0,
+                  }) ? (
                     <div style={{ paddingLeft: 30, opacity: 0.7, fontSize: PLANNING_TYPOGRAPHY.hint }}>
                       还没画红线——物件库 → 区域 → 用地红线
                     </div>
-                  ) : (
+                  ) : plan.boundary.length > 0 ? (
                     renderOneplanItemRow({
                       key: 'layer-entity-boundary',
                       testId: 'layer-entity-boundary',
@@ -11810,6 +11855,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         centerViewOn({ x: cx, y: cy });
                       },
                       title: '点击定位到红线',
+                      icon: <BoundarySwatch size={16} />,
+                    })
+                  ) : (
+                    renderOneplanItemRow({
+                      key: 'layer-entity-visible-range',
+                      testId: 'layer-entity-visible-range',
+                      label: (workflowScopePreview && (workflowPreview?.boundary.length ?? 0) >= 3)
+                        ? `候选活动范围（${workflowPreview!.boundary.length} 点）`
+                        : (searchArea?.label || '地图上的活动范围'),
+                      active: false,
+                      onClick: () => {
+                        const preview = workflowScopePreview && (workflowPreview?.boundary.length ?? 0) >= 3
+                          ? workflowPreview!.boundary
+                          : null;
+                        const anchor = plan.anchor;
+                        const overlay = !preview && searchArea && searchArea.kind !== 'line' && anchor
+                          ? searchArea.polygon.map(([lng, lat]) => lngLatToEnu(lng, lat, anchor.lng, anchor.lat))
+                          : null;
+                        const pts = preview ?? overlay;
+                        if (!pts?.length) return;
+                        centerViewOn({
+                          x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+                          y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+                        });
+                      },
+                      title: '点击定位到地图上的活动范围；核对后写入用地红线',
                       icon: <BoundarySwatch size={16} />,
                     })
                   )}

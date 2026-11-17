@@ -165,18 +165,17 @@ export function SpacePanel({
     }
   };
 
-  // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」——不再分「有止帧的排大图、
-  // 没打开过的收索引行」，全部走示例场景/经典案例那套 16:10 卡形：有止帧用止帧，
-  // 没有的给一块描边占位；尺寸与日期并成一行元信息，状态交给描边和左上角标签。
+  // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」——有止帧的走示例场景/经典案例
+  // 那套 16:10 卡形；没打开过的没有画面，就收成索引行，不再用一块空白描边框假扮缩略图。
+  // 尺寸与日期并成一行元信息，状态交给描边和左上角标签。
   const scanRows = <>
     {scans.length === 0 && <p className="sc-note">还没有实景扫描。拍摄后可在这里查看。</p>}
-    {scans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="真实场地">
-      {[...framedScans, ...plainScans].map(venue => {
+    {framedScans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="有画面的真实场地">
+      {framedScans.map(venue => {
         const active = venue.assetId === currentScanId;
         const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
         const failed = !!active && preview?.status === 'error';
         const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
-        const thumb = venueThumb(venue);
         const meta = [failed ? '加载失败' : '', venueSize(venue), venueDay(venue)].filter(Boolean).join(' · ');
         return <li key={venue.assetId}>
           <button type="button" className={`sc-space-sample sc-scan-card${active ? ' is-current' : ''}`}
@@ -184,9 +183,7 @@ export function SpacePanel({
             aria-label={failed ? `重试加载真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
             aria-pressed={active} onClick={() => pickScan(venue)}>
             <span className="sc-scan-card-shot">
-              {thumb
-                ? <img src={thumb} alt="" loading="lazy"/>
-                : <Scan className="sc-scan-card-blank" size={18} aria-hidden="true"/>}
+              <img src={venueThumb(venue)} alt="" loading="lazy"/>
               {preview?.status === 'loading' && <span className="sc-scan-card-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
               {(active || inProject) && <span className="sc-scan-card-tag">{active ? '当前' : '已加入'}</span>}
             </span>
@@ -196,6 +193,27 @@ export function SpacePanel({
         </li>;
       })}
     </ul>}
+    {plainScans.length > 0 && <div className="sc-scan-plain">
+      {framedScans.length > 0 && <p className="sc-scan-plain-label">其它实景扫描 · {plainScans.length}</p>}
+      <ul className="sc-scan-rows" aria-label="其它实景扫描">
+        {plainScans.map(venue => {
+          const active = venue.assetId === currentScanId;
+          const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
+          const failed = !!active && preview?.status === 'error';
+          const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
+          const state = preview?.status === 'loading' ? '加载中…' : failed ? '加载失败' : active ? '当前' : venueSize(venue) || venueDay(venue);
+          return <li key={venue.assetId}>
+            <button type="button" className={`sc-scan-row${active ? ' is-current' : ''}`} title="打开这一场的 3D 实景"
+              aria-label={failed ? `重试加载真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
+              aria-pressed={active} onClick={() => pickScan(venue)}>
+              <strong title={venue.name}>{venue.name}</strong>
+              {inProject && !active && <span className="sc-scan-row-tag">已加入</span>}
+              <small>{state}</small>
+            </button>
+          </li>;
+        })}
+      </ul>
+    </div>}
   </>;
 
   // 2026-11-16：示例场景不再单开一栏，收进实景扫描这一段末尾——

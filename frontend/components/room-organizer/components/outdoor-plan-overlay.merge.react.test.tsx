@@ -29,6 +29,20 @@ const state = vi.hoisted(() => ({
   apply: vi.fn(() => true),
   three: null as { plan: SitePlanData; source: string } | null,
 }));
+const placeSearch = vi.hoisted(() => ({
+  props: null as null | {
+    onPickArea?: (area: {
+      id: string;
+      name: string;
+      level: string;
+      lng: number;
+      lat: number;
+      bounds: [number, number, number, number];
+      polygon: [number, number][];
+      kind?: "area" | "line";
+    }) => void;
+  },
+}));
 const agent = vi.hoisted(() => ({
   registerRouteBridge: vi.fn((bridge: OutdoorAgentBridge | null) => {
     state.bridge = bridge;
@@ -50,6 +64,8 @@ vi.mock("./outdoor-plan-canvas", async () => {
         getSelectedIds: () => [],
         applyWorkflowPlan: state.apply,
         getView: () => null,
+        focusBounds: () => {},
+        focusLngLat: () => {},
       }));
       return <div data-testid="merge-canvas" />;
     }),
@@ -61,7 +77,12 @@ vi.mock("./outdoor-plan-3d", () => ({
     return <div data-testid="merge-3d" />;
   },
 }));
-vi.mock("./plan-place-search", () => ({ default: () => null }));
+vi.mock("./plan-place-search", () => ({
+  default: (props: NonNullable<typeof placeSearch.props>) => {
+    placeSearch.props = props;
+    return null;
+  },
+}));
 vi.mock("./outdoor-delivery-panel", () => ({
   OutdoorDeliveryPanel: (props: { handlers: { onExportCsv: () => void } }) => (
     <button onClick={props.handlers.onExportCsv}>merge csv</button>
@@ -81,6 +102,7 @@ beforeEach(() => {
   state.three = null;
   state.csv.mockClear();
   state.apply.mockClear();
+  placeSearch.props = null;
   vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) =>
     window.setTimeout(() => cb(0), 0),
   );
@@ -123,10 +145,66 @@ it("keeps outside guide actions working and exposes a clean map details panel", 
   fireEvent.click(layerBtn);
   fireEvent.click(screen.getByTestId("map-strip-expand"));
   expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
-  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
+  const details = screen.getByRole("dialog", { name: "地图详情" });
   expect(screen.queryByTestId("map-picker-restart-guide")).toBeNull();
-  fireEvent.click(screen.getByTestId("map-picker-close"));
+  // 标题与 X 在固定头里，滚动只发生在 body，不会把关闭按钮滚走。
+  const close = screen.getByTestId("map-picker-close");
+  expect(details.querySelector(".oc-map-details__head")?.contains(close)).toBe(true);
+  expect(details.querySelector(".oc-map-details__body .oc-map-details__section")).toBeTruthy();
+  fireEvent.click(close);
   expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+  // 关闭不只靠 X：Esc 和点画布也要能关。重新查询图层钮——面板开着时它不在 DOM 里。
+  const openDetails = () => {
+    fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
+    fireEvent.click(screen.getByTestId("map-strip-expand"));
+  };
+  openDetails();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+  openDetails();
+  fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
+  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+});
+it("搜索选区在红线写入前留在地图上，核对桥能把它收成边界", () => {
+  const plan = createStarterOutdoorPlan();
+  render(<Overlay projectId="visible-range" seedPlan={plan} />);
+  const anchor = state.bridge!.getPlan()!.anchor!;
+  const d = 0.0008;
+  const polygon: [number, number][] = [
+    [anchor.lng, anchor.lat],
+    [anchor.lng + d, anchor.lat],
+    [anchor.lng + d, anchor.lat + d],
+    [anchor.lng, anchor.lat + d],
+  ];
+  act(() => {
+    placeSearch.props!.onPickArea!({
+      id: "yuquan",
+      name: "玉泉",
+      level: "范围",
+      lng: anchor.lng,
+      lat: anchor.lat,
+      bounds: [anchor.lng, anchor.lat, anchor.lng + d, anchor.lat + d],
+      polygon,
+    });
+  });
+  expect(state.canvas?.searchArea?.polygon).toEqual(polygon);
+  const visible = state.bridge!.visibleActivityRange!();
+  expect(visible?.name).toBe("玉泉");
+  expect(visible!.boundary.length).toBeGreaterThanOrEqual(3);
+  const before = JSON.stringify(state.bridge!.getPlan());
+  act(() => {
+    expect(state.bridge!.applyPlan!(plan, before)).toBe(true);
+  });
+  expect(state.canvas?.searchArea?.polygon).toEqual(polygon);
+  act(() => {
+    state.bridge!.previewBoundary!(anchor, visible!.boundary);
+  });
+  expect(state.canvas?.searchArea?.polygon).toEqual(polygon);
+  const withBoundary = { ...plan, boundary: visible!.boundary };
+  act(() => {
+    expect(state.bridge!.applyPlan!(withBoundary, before)).toBe(true);
+  });
+  expect(state.canvas?.searchArea ?? null).toBeNull();
 });
 it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {
   const plan = createStarterOutdoorPlan();
@@ -199,10 +277,8 @@ it("切换图源不改规划，且把同一份计划和图源偏好交给壳层3
   expect(state.canvas?.source).toBe("carto-dark");
   expect(readPlanGroundSource()).toBe("carto-dark");
   expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
-  // 点地图空白处不关；用户明确要求只走面板上的 X。
-  fireEvent.click(screen.getByTestId("merge-canvas"));
-  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
-  fireEvent.click(screen.getByTestId("map-picker-close"));
+  // 点地图空白处也能关，不再只能找面板上的 X。
+  fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
   expect(screen.queryByTestId("outdoor-map-picker-panel")).toBeNull();
   expect(screen.getByTestId("outdoor-source-cycle")).toBeTruthy();
   expect(JSON.stringify(state.bridge!.getPlan())).toBe(before);
