@@ -4190,7 +4190,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
           : `已换场地：旧草稿已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`);
       } else {
-        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。`);
+        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。`);
       }
       return true;
     },
@@ -4708,7 +4708,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       // 2026-11-17 用户指令「画好用地红线，默认就是画好了设计范围，扩 20 m，不用画两次」：
-      // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要自定义再点「重拖设计范围」。
+      // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要微调就直接拖白框的边或角。
       const initialScope = expandRect(boundary, DEFAULT_SCOPE_MARGIN_M);
       const nextBoundaryPlan: SitePlanData = {
         ...current,
@@ -4722,7 +4722,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setMode('view');
       focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。${overflowSuffix(boundaryOverflow)}`);
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
@@ -12022,20 +12022,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 title: '沿用地单击加顶点，闭合后替换旧红线',
                                 icon: <BoundarySwatch size={22} />,
                               })}
-                              {/* 2026-11-15 用户指令：先圈一块比场地大的「大陆」，框外压暗。 */}
-                              {renderOneplanItemRow({
-                                key: 'catalog-scope',
-                                testId: 'catalog-scope',
-                                label: (plan.designScope ?? []).length >= 3 ? '重拖设计范围' : '拖出设计范围',
-                                active: mode === 'scope',
-                                onClick: () => armOrDisarm(mode === 'scope', () => startAreaTool('scope')),
-                                title: '按住拖一个矩形当设计范围：框外压暗，流线可以走在场地外、范围里',
-                                icon: <ScopeSwatch size={22} />,
-                              })}
+                              {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「重拖设计范围」——
+                                  白框由红线自动送（外扩 20 m）、红线顶出去自动重置，微调直接在画布上
+                                  拖白框的边/角（可锁定）。拖矩形入口撤掉后 mode='scope' 那条路径没有
+                                  入口了，画布代码先原样留着（用户：死代码先不清理）。 */}
                               {plan.boundary.length >= 3 && renderOneplanItemRow({
                                 key: 'catalog-scope-expand',
                                 testId: 'catalog-scope-expand',
-                                label: `按场地外扩 ${DEFAULT_SCOPE_MARGIN_M} m`,
+                                label: '重置设计范围',
                                 active: false,
                                 onClick: () => {
                                   if (readOnly) return;
@@ -12046,28 +12040,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                   setMode('view');
                                   // 生成即框住：刚生成的范围如果大半在视口外，压暗区会盖满屏幕，看着像没画。
                                   focusDesignScope(next);
-                                  setEditMessage(`已按场地外接矩形外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要改就点「重拖设计范围」。`);
+                                  setEditMessage(`设计范围已恢复为红线四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要微调就直接拖白框的边或角。`);
                                 },
-                                title: '各边外扩 20 m 直接生成设计范围，不用手画顶点',
+                                title: '把框丢回默认：红线外接矩形四边各外扩 20 m；平时直接拖白框的边/角微调，可锁定',
                                 icon: <ScopeSwatch size={22} plus />,
                               })}
-                              {/* 2026-11-16 用户指令：这一行「定位到设计范围」去掉——同样的功能挪到右轨那颗
-                                  焦点钮（#tool-focus）：圈了设计范围就框到范围，没圈还是回到场地取景。
-                                  左栏不再重复摆一行只能动视图、不能改范围的条目。 */}
-                              {(plan.designScope ?? []).length >= 3 && renderOneplanItemRow({
-                                key: 'catalog-scope-clear',
-                                testId: 'catalog-scope-clear',
-                                label: '清除设计范围',
-                                active: false,
-                                onClick: () => {
-                                  if (readOnly) return;
-                                  commitPlan({ ...planRef.current, designScope: [] });
-                                  setMode('view');
-                                  setEditMessage('设计范围已清除：框外不再压暗。');
-                                },
-                                title: '去掉外框与蒙版（用地红线、分区、流线都不受影响）',
-                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.35)' }} />,
-                              })}
+                              {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「清除设计范围」——
+                                  和自动机制自相矛盾（红线一动框就回来），没有稳定用途。
+                                  框外压暗就是设计范围的唯一表达，去掉它等于回到没有取景框的状态。 */}
                               {planZoneSemantics.map(s => {
                                 const zoneActive = mode === 'zone' && zoneSemantic === s;
                                 return renderOneplanItemRow({
