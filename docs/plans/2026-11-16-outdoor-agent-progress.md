@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：新增 `outdoor-release-bundle.ts`——`releaseStatusBundle()` 只算一次台账，卡片与快照共用，并给出 `gateReady`；`gateSummaryLine(reading)` 把读数压成一行。**本地 main = origin = `3edf35a7`（`div 0/0`，开工即齐）**；但**工作区这回真的在 `main` 上**（脏文件 6）——下轮若 origin 再前进，`branch -f` 会因“已 check out”失败，需先判能否 ff。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–83 十三个切片。9222 三十九轮不通。下一条：把 `releaseStatusBundle()` 接进 hook 的 `logReleaseStatus()`（一次拿卡+快照，日志两段一起打）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-bundle.test.ts`。
+- 下一条操作：hook 的 `logReleaseStatus()` 已改用 `releaseStatusBundle()`，**返回整个 bundle**（card / snapshot / ledger / allGreen / gateReady），日志文本与 `bundle.card` 由同一份台账生成。**本地 main = origin = `d3d2bc08`（`div 0/0`，开工即齐）**；**工作区仍在 `main` 上、脏文件 10**——下轮 origin 再前进时先试 `--ff-only`，重叠就回到备份→stash→ff→pop。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–84 十四个切片（`a13762ec` 已合主干最新）。9222 四十轮不通。下一条：把返回的 `snapshot` 写进会话报告（`.txt` 导出里多一段可 diff 的 JSON）。首条命令 `cd frontend; npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 18:00 · 自动轮次 84 · 状态卡改用 bundle（返回卡+快照，日志同源）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 18:00，自动轮次 84
+批次 / 切片 / 状态：合并（无待合）+ M7 / 卡与快照同源接线 / 已交付（分支待 PR）
+开工事实：HEAD = `d3d2bc08`，分支就是 `main`，脏文件 10；local main = origin = `d3d2bc08`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `a13762ec`
+交付：hook 的 `logReleaseStatus()` 改为：`releaseStatusBundle({rows, metrics, evidence, cloudPass})` 一次算台账 → 用 `bundle.ledger` 再格式化一次打印 → **返回 `{...bundle, card}`**。hook 新增 1 条：先 0 条，标 #2 浏览器 pass + 声明 #2 云端 → 全绿 1 条，卡片与快照一致
+验证（固定数据）：hook 套件 78/78；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；snapshot 写进导出报告
+```
+
+- **“同源”要能拿同一个值验证**：测试里直接断言 `after.snapshot.allGreen === after.allGreen`、且卡片末行与 `bundle.card` 一致，不靠“应该一样”。
 
 ### 2026-11-18 17:00 · 自动轮次 83 · 一次算齐（卡片与快照共用一份台账）
 

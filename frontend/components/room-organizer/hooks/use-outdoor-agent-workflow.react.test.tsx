@@ -2213,3 +2213,20 @@ it("云端声明落盘：标完刷新也能读回来，撤掉同步写出", () =
   });
   expect(JSON.parse(window.localStorage.getItem("scendance.outdoor.walkthrough.cloud.v1")!).pass).toEqual([]);
 });
+
+it("发布状态一次算齐：卡片与快照同源，标一条云端+浏览器才涨到 1", () => {
+  const before = flow.logReleaseStatus();
+  expect(before.allGreen).toBe(0);
+  expect(before.snapshot.allGreen).toBe(before.allGreen);
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = flow.logReleaseStatus();
+  expect(after.allGreen).toBe(1);
+  expect(after.snapshot.allGreen).toBe(1);
+  // 卡片文本与 bundle.card 必须逐字一致（同一份台账）。
+  expect(after.card).toBe(after.card.trim());
+  expect(after.card).toContain("不可发布（三类全绿 1 条）");
+  expect(after.card).toContain("云端证据：1 条通过");
+});
