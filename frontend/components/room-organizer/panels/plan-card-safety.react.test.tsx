@@ -73,7 +73,7 @@ it('keeps empty or partial candidates diagnostic-only and explains skipped items
   const view=render(<PlanCard {...props} selectedId="balanced"/>);
   expect(screen.queryByText(/✅ 推荐/)).toBeNull();
   expect(screen.getByText(/未能放入「签到区」：空间不足/)).toBeTruthy();
-  expect(screen.getByText(/这不代表场地无解/)).toBeTruthy();
+  expect(screen.getByText(/改区域或需求后能再出一版/)).toBeTruthy();
   const button=screen.getByRole('button',{name:'应用布置'}) as HTMLButtonElement;
   expect(button.disabled).toBe(true);fireEvent.click(button);expect(props.onApprove).not.toHaveBeenCalled();
   view.rerender(<PlanCard {...props} selectedId="sparse"/>);
@@ -99,7 +99,7 @@ it('shows unknown activity needs and candidate checklist without claiming venue-
   const view=render(<PlanCard {...props}/>);
   expect(screen.getByText('尚未确认是否需要签到。')).toBeTruthy();
   expect(screen.getByText('尚未确认是否需要舞台。')).toBeTruthy();
-  expect(screen.getByText(/不能作为全场安全或规范结论/)).toBeTruthy();
+  expect(screen.getByText(/把既有物件或其它楼层加进候选/)).toBeTruthy();
   view.rerender(<PlanCard {...props} functionalNeeds={{checkin:false,stage:null}}/>);
   expect(screen.queryByText('尚未确认是否需要签到。')).toBeNull();
   expect(screen.getByText('尚未确认是否需要舞台。')).toBeTruthy();

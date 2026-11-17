@@ -294,11 +294,18 @@ it("在地图上手画分区按钮直接进入绘制模式", async () => {
   const beginDrawing = vi.fn(() => true);
   bridge.beginDrawing = beginDrawing;
   const buttons = [...host.querySelectorAll("button")];
-  expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(true);
+  // 2026-11-18 用户实测：没给分区用途时不挂「生成分区预览」空头按钮（点了只会撞红卡反问），
+  // 改为如实引导；给过用途后按钮才出现。
+  expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(false);
+  expect(host.textContent).toContain("还没说要分哪些区");
   const draw = buttons.find(button => button.textContent?.trim() === "在地图上手画分区");
   await act(async () => { draw!.click(); });
   expect(beginDrawing).toHaveBeenCalledWith("zone");
   expect(flow.notice).toContain("请在地图上画出分区轮廓并闭合");
+  // 2026-11-18 用户实测：进手画模式后卡上不再留自相矛盾的旧引导——引导语与手画按钮都收掉，
+  // 通知条是唯一指令，避免「收起」和内容脱节的观感。
+  expect(host.textContent).not.toContain("还没说要分哪些区");
+  expect([...host.querySelectorAll("button")].some(button => button.textContent?.trim() === "在地图上手画分区")).toBe(false);
 });
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
   await confirmScope();
@@ -361,7 +368,7 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(plan.anchor?.lng).toBe(120.1);
   expect(flow.state.stage).toBe("zones");
   expect(flow.appliedHighlight).toEqual({ kind: "scope" });
-  expect(host.textContent).toContain("拖动顶点调整后，请重新核对活动范围");
+  expect(host.textContent).toContain("不贴合就拖顶点调整，改完重新核对");
 });
 it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => {
   const anchor = { ...plan.anchor!, lng: 120.25 };
@@ -604,7 +611,7 @@ it("Esc 取消手画后撤掉未确认候选，不在核对阶段留待写入状
   expect(flow.state.stage).toBe("place");
   expect(flow.state.pendingBoundary).toBeUndefined();
   expect(flow.notice).toContain("已取消");
-  expect(host.textContent).not.toContain("核对当前实际活动范围");
+  expect(host.textContent).not.toContain("确认活动范围");
 });
 it("取消重画时已确认的边界和核对阶段保留", async () => {
   plan = { ...plan, boundary: ring };
@@ -667,7 +674,7 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
   expect(plan.zones).toHaveLength(1);
   expect(flow.state.stage).toBe("main-routes");
   expect(flow.appliedHighlight).toEqual({ kind: "zones", zoneIds: [plan.zones[0]!.id] });
-  expect(host.textContent).toContain("可以拖动分区，或拖动顶点调整轮廓");
+  expect(host.textContent).toContain("分区不合适可拖动整块或拖顶点微调");
 
   const editedZone = {
     ...plan.zones[0]!,
@@ -695,7 +702,7 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
     routeIds: plan.routes.map(route => route.id),
     nodeIds: plan.nodes.map(node => node.id),
   });
-  expect(host.textContent).toContain("拖动路线转折点绕开障碍");
+  expect(host.textContent).toContain("路线和候选入口可拖动微调");
   act(() => flow.cancel());
   expect(flow.appliedHighlight).toBeNull();
 });
@@ -2116,7 +2123,7 @@ it("「随便放」时模型编的清单不拦成红卡：丢弃后按两个分�
   expect(flow.noticeKind, flow.notice).not.toBe("error");
   expect(flow.state.brief.items).toHaveLength(0);
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
-  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  expect(flow.proposal?.warnings.join()).toContain("默认方案");
   // 演出区按面积算出的座位排不下，就只缩那一个区，并在卡上写明缩到了多少。
   expect(flow.proposal?.warnings.join()).toContain("排不下");
   // 预览阶段不写画布；确认后是两个分区都有东西，且按面积算（摆摊区 25 摊）而不是编的 12。
@@ -2152,6 +2159,6 @@ it("连续两次追问都没有推进时，直接出默认方案而不是问第�
   // 第二次还是追问、画布毫无改动 → 不再问，直接出一版默认方案（仍然只预览）。
   await turn("然后呢", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
-  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  expect(flow.proposal?.warnings.join()).toContain("默认方案");
   expect(plan.facilities).toHaveLength(0);
 });
