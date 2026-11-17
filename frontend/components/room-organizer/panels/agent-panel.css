@@ -1070,6 +1070,14 @@ button.ap-ghost {
   color: var(--wk-ink);
 }
 .ap-outdoor-plan-actions .btn-outline:disabled { opacity: .5; cursor: not-allowed; }
+/* 2026-11-18 用户：场地还没有用地红线时，卡片先教怎么画（示意 + 步骤），
+   主按钮只有一颗「在地图上手画活动范围」；画好红线后这张卡自动换成「待你核对」的确认卡。 */
+.ap-scope-guide { display: grid; gap: 8px; }
+.ap-scope-guide-art { border-radius: 10px; overflow: hidden; line-height: 0; }
+.ap-scope-guide-art svg { display: block; width: 100%; height: auto; }
+.ap-scope-guide-title { margin: 0; font-size: var(--fs-c1); font-weight: 600; color: var(--wk-ink); }
+.ap-scope-guide-text { margin: 0; font-size: var(--fs-p2); line-height: 1.55; color: var(--wk-ink-soft); }
+.ap-scope-guide .btn-primary { width: 100%; height: 36px; }
 .ap-outdoor-reply-wrap { gap: 8px; }
 .ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
 .ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }
