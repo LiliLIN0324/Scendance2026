@@ -10,6 +10,13 @@ function remove(id: string, actor = owner, revision = 0) {
   return api(new Request(`https://backend.example/projects/${id}`, { method: 'DELETE',
     headers: { Authorization: `Bearer ${actor}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: revision }) }));
 }
+function trash(actor = owner) {
+  return api(new Request('https://backend.example/projects/trash', { headers: { Authorization: `Bearer ${actor}` } }));
+}
+function restore(id: string, actor = owner, revision = 0) {
+  return api(new Request(`https://backend.example/projects/${id}/restore`, { method: 'POST',
+    headers: { Authorization: `Bearer ${actor}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: revision }) }));
+}
 it('deletes an idle project, revokes shares and preserves audit records; repeated deletion is idempotent', async () => {
   const project = await create();
   const share = await api(new Request(`https://backend.example/projects/${project.id}/publish`, { method: 'POST',
@@ -24,6 +31,21 @@ it('deletes an idle project, revokes shares and preserves audit records; repeate
   expect(read.status).toBe(404);
   expect((await f.db.query('select * from scene_private.publications where project_id=$1', [project.id])).rows).toHaveLength(1);
   expect((await remove(project.id)).status).toBe(200);
+});
+it('keeps deleted projects in the owner recycle bin and restores them within seven days', async () => {
+  const project = await create();
+  expect((await remove(project.id)).status).toBe(200);
+  const listed = await trash();
+  expect(listed.status).toBe(200);
+  expect((await listed.json() as Array<{ id: string }>).some(row => row.id === project.id)).toBe(true);
+  expect((await trash(editor).then(response => response.json()) as Array<{ id: string }>).some(row => row.id === project.id)).toBe(false);
+  expect((await restore(project.id, editor)).status).toBe(403);
+  expect((await restore(project.id, owner, 99)).status).toBe(409);
+  expect((await restore(project.id)).status).toBe(200);
+  const restored = await f.rpc(owner, 'projects.get', { projectId: project.id });
+  expect(restored.id).toBe(project.id);
+  expect(restored.revision).toBe(1);
+  expect((await trash().then(response => response.json()) as Array<{ id: string }>).some(row => row.id === project.id)).toBe(false);
 });
 it('refuses nonmembers, editors, stale revisions and active leases without removing the project', async () => {
   const project = await create();
