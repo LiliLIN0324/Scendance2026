@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：台账现在能从证据快照生成（`ledgerFromEvidence(有固定数据的用例号)`），调用方只需报“哪几条有固定数据”一个事实。main = origin = `13258414`；9222 十九轮不通。下轮：把 `pickVenueCandidate` 接到地图候选点击（只接一处），接不上就改为把 `logReleaseStatus()` 默认带上 `ledgerFromEvidence([...])`（先把已验的用例号写成一个常量）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：main 前进 9 笔（M2 walls 契约/注入/校验、M3 plan 历史与导出地基）已全部合入，consolidated 分支也追上去并在新基线上重跑三项门禁全绿（tsc 0 / 56 文件 661 条 / build exit 0）。main = origin = `0a59f7b0`；9222 二十轮不通。下轮：把 `logReleaseStatus()` 默认带上 `ledgerFromEvidence([...])`（已验用例号先写成常量），或把 `pickVenueCandidate` 接到地图候选点击。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-17 23:55 · 自动轮次 64 · 合 M2/M3 九笔 + 分支追上重跑门禁
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 23:55，自动轮次 64
+批次 / 切片 / 状态：收尾（合并 + 门禁复跑）/ 已交付
+开工事实：main = 13258414，origin/main = 0a59f7b0（落后 9 笔：M2 walls 契约/注入/校验 + M3 plan 历史/导出地基）
+合并（主工作树）：先算重叠——进来 16 个文件与 47 处脏文件**交集为空** → 直接 `git merge --ff-only origin/main` 成功，脏文件未动（仍 47）
+分支追上：consolidated 分支 `git merge --no-edit main` → `dfdfd4fd`，零冲突
+门禁（提交树 dfdfd4fd，隔离 worktree）：tsc 0 行 / `npm test -- outdoor` 56 文件 661 条全过（比上轮多 16 条，来自新 main 的 lib 用例）/ `npm run build` exit 0（62s）
+真实浏览器/云端：仍未验（9222 第二十轮 down）
+未完成：#2 真实搜索、#5 浏览器、hook 默认带台账、`pickVenueCandidate` 接线
+```
+
+- **先算交集再决定合并方式**：交集空就直接 ff，省掉备份→stash→pop 一整套。
 
 ### 2026-11-17 23:15 · 自动轮次 63 · 台账从证据快照生成（调用方只说一件事）
 
