@@ -93,6 +93,18 @@
 - CSV：墙体作为导出补充行追加在实体清单之后，仍 14 列，`名称=墙体 <短 id>`、`分类=外墙/内墙/墙体`、`数量读数=厚 <值>`、`长度` 列给线段长；面板清单不加墙体筛选维度；
 - 测试：GeoJSON +2、CSV +2（含旧 plan 字节稳定）。
 
+### 7.3 其余导出格式复核（2026-11-17）
+
+| 格式 | plan 墙体 | 说明 |
+| --- | --- | --- |
+| CSV | ✅ | `wallRows` 补充行，14 列对齐 |
+| GeoJSON | ✅ | 墙体 `LineString` + 长/厚/高/zone |
+| PNG / PDF（print） | ❌ | 快照来自 2D 画布，画布尚未消费 `plan.walls`；PDF 统计与图例也无墙体 |
+| DXF / SVG | ❌（plan 级） | `plan-export/dxf|svg` 是室内 `layout` 导出，已含 `interiorWalls`；plan 级尚无这两种导出器 |
+| download | — | 通用下载 helper，不是一种导出格式 |
+
+结论：墙体在**数据导出**（CSV/GeoJSON）已对称；图纸类缺口在画布渲染与 plan 级 DXF/SVG 导出器，属 UI/新功能，不在纯函数层收口。
+
 ## 8. 旧 layout → plan 迁移覆盖登记
 
 | 旧数据 | plan 落点 | 状态 |
