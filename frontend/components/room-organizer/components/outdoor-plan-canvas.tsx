@@ -370,6 +370,16 @@ import {
   type PlanningRouteKind,
   type PlanningZoneSemantic,
 } from '@/lib/outdoor-plan-tokens';
+// 2026-11-17：属性卡版式提成独立模块，好让回归脚本用同一份值量真实布局
+// （「文字生成点不动」的根因是卡片被候选滚动条撑到上千像素宽，冲出宿主与视口）。
+import {
+  FACILITY_MODEL_ACTION_ROW_STYLE,
+  FACILITY_MODEL_STRIP_STYLE,
+  FACILITY_MODEL_STRIP_WRAPPER_STYLE,
+  inspectorCardBodyStyle,
+  inspectorCardStyle,
+  inspectorStackStyle,
+} from './outdoor-inspector-layout';
 import {
   planAnnotationKindLabels,
   planRouteKindLabels,
@@ -10029,11 +10039,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       })()}
                       {/* 当前模型排首位，素材库的默认模型保留标记，点它清除 override。 */}
                       <div style={benchSectionTitleStyle}>模型</div>
+                      {/* 2026-11-17：候选条外面包一层 flex 行。候选条自己是横向滚动条，
+                          固有宽度 = 候选数 × 68px；不包这一层，它会把整张属性卡撑到上千像素宽，
+                          冲出宿主与视口，「文字生成 / 图片生成 / 导入 GLB」三颗按钮就落在可视区之外，
+                          真鼠标点下去命中的是底图 canvas。包一层之后滚动条自己滚，卡片宽度回到设计稿的 ~233px。 */}
+                      <div style={FACILITY_MODEL_STRIP_WRAPPER_STYLE}>
                       <div
                         role="group"
                         aria-label="3D 模型候选"
                         data-testid="facility-model-strip"
-                        style={{ display: 'flex', gap: PLANNING_SPACING.xs, overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2, scrollbarWidth: 'thin' }}
+                        style={FACILITY_MODEL_STRIP_STYLE}
                       >
                         {(() => {
                           const raw = facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId ? facilityModelCandidates.items : [];
@@ -10088,6 +10103,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           </span>
                         )}
                       </div>
+                      </div>
                       {(() => {
                         const raw = facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId ? facilityModelCandidates.items : [];
                         const builtinFirst = raw.find(candidate => candidate.slug === facilityModelCandidates?.defaultSlug);
@@ -10135,7 +10151,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           原来它是一条折叠手风琴且默认关闭——最需要入口的动作反而最不显眼。
                           改成模型条正下方三格常驻：文字生成 / 图片生成 / 导入 GLB，
                           图标在上、名称在下，与模型卡同一视觉重量；说明挤进 title，不再占两行。 */}
-                      <div role="group" aria-label="生成或导入模型" style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                      <div role="group" aria-label="生成或导入模型" style={FACILITY_MODEL_ACTION_ROW_STYLE}>
                         <button
                           type="button"
                           data-testid="facility-model-generate"
@@ -12285,16 +12301,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             onPointerMove={onInspectorPanelPointerMove}
             onPointerUp={onInspectorPanelPointerUp}
             onPointerCancel={onInspectorPanelPointerUp}
-            style={{
-              position: 'absolute', zIndex: 6,
-              ...(inspectorPanelPos
-                ? { left: inspectorPanelPos.x, top: inspectorPanelPos.y, right: 'auto', bottom: 'auto', transform: 'none' }
-                : { top: 16, right: 68, left: 'auto', bottom: 'auto', transform: 'none' }),
-              pointerEvents: 'auto',
-              display: 'flex', flexDirection: 'row', gap: 8,
-              width: 'max-content', maxWidth: 'calc(100% - 32px)',
-              maxHeight: 'calc(100% - 120px)',
-            }}
+            style={inspectorStackStyle(inspectorPanelPos)}
           >
             {visible.map(card => {
               const collapsed = inspectorCollapsed[card.key];
@@ -12308,32 +12315,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   className={`sc-outdoor-toolcard${card.key === 'annotate' ? ' sc-outdoor-toolcard--annotate' : ''}`}
                   data-anchored={card.key === 'annotate' && annotateAnchor ? 'above-tool' : undefined}
                   onWheel={stopPanelWheel}
-                  style={{
-                    flex: '0 0 auto',
-                    display: 'flex', flexDirection: 'column', minHeight: 0,
-                    background: PLANNING_SURFACE.panelBg,
-                    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                    borderRadius: 12,
-                    boxShadow: '0 10px 26px rgba(20, 24, 32, 0.10)',
-                    overflow: card.key === 'annotate' ? 'visible' : 'hidden',
-                    color: PLANNING_SURFACE.panelText,
-                    fontSize: PLANNING_TYPOGRAPHY.panel,
-                    ...(card.key === 'annotate'
-                      ? { width: ANNOTATE_CARD_WIDTH, maxWidth: 'calc(100vw - 24px)', boxSizing: 'border-box' as const }
-                      : {}),
-                    ...(card.key === 'annotate' && annotateAnchor
-                      ? {
-                        position: 'fixed' as const,
-                        left: annotateAnchor.left,
-                        bottom: annotateAnchor.bottom,
-                        top: 'auto',
-                        right: 'auto',
-                        transform: 'translateX(-50%)',
-                        zIndex: 80,
-                        maxWidth: 'calc(100vw - 24px)',
-                      }
-                      : {}),
-                  }}
+                  style={inspectorCardStyle({ key: card.key, annotateAnchor })}
                   onMouseDown={stopPanelMouse}
                   onMouseUp={stopPanelMouse}
                   onDoubleClick={stopPanelMouse}
@@ -12423,7 +12405,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   </div>
                   )}
                   {(!collapsed || card.key === 'annotate') && (
-                    <div style={{ minHeight: 0, overflowY: 'auto', maxHeight: '46vh', padding: card.key === 'annotate' ? '8px 10px' : '0 12px 12px' }}>{card.body}</div>
+                    <div style={inspectorCardBodyStyle({ key: card.key })}>{card.body}</div>
                   )}
                 </section>
               );
