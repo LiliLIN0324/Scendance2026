@@ -190,7 +190,9 @@ function cloudLine(ledger: readonly CaseLedgerRow[] | undefined): string {
   if (!ledger) return '· 云端证据：未验（本次没带台账）';
   const pass = ledger.filter((row) => row.cloud === 'pass').length;
   const rest = ledger.length - pass;
-  return `· 云端证据：${pass} 条通过 / ${rest} 条未验`;
+  // 0 条通过最容易被误读成“都行”，所以把两种真实原因并列写出来。
+  const emptyNote = pass === 0 ? '（要么没跑、要么还没声明）' : '';
+  return `· 云端证据：${pass} 条通过 / ${rest} 条未验${emptyNote}`;
 }
 
 export interface StatusSnapshot {
