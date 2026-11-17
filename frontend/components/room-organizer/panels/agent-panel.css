@@ -1050,6 +1050,26 @@ button.ap-ghost {
 .ap-outdoor-plan-steps li::marker { color: var(--wk-green); font-weight: 600; }
 .ap-outdoor-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ap-outdoor-plan-actions .btn-primary { flex: 1 1 8rem; }
+/* 2026-11-18 用户：「在地图上手画活动范围」白底无描边，看着像一行普通文字，根本不像按钮。
+   次要动作补发丝边、与主按钮同高，两颗按钮横着并排（窄栏自动换行）。 */
+.ap-outdoor-plan-actions .btn-outline {
+  flex: 1 1 8rem;
+  height: 36px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 500;
+  font-size: var(--fs-c1);
+  white-space: nowrap;
+}
+.ap-outdoor-plan-actions .btn-outline:hover:not(:disabled) {
+  background: var(--wk-plane);
+  border-color: var(--wk-ink-faint, var(--wk-muted));
+  color: var(--wk-ink);
+}
+.ap-outdoor-plan-actions .btn-outline:disabled { opacity: .5; cursor: not-allowed; }
 .ap-outdoor-reply-wrap { gap: 8px; }
 .ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
 .ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }

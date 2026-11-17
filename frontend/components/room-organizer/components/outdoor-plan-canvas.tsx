@@ -72,6 +72,7 @@ import {
   ArrowRight,
   ArrowRightLeft,
   ImageUp,
+  Search,
   Sparkles,
   Upload,
 } from 'lucide-react';
@@ -1838,7 +1839,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** 刚插完的点：紧接的松手别把它当成「点击删除」，否则插点会原地被抹掉。 */
   const justInsertedRouteVertexRef = useRef(false);
 
-  const [view, setView] = useState<View>({ ...viewRef.current });
+  // 2026-11-18：缩放角标删除后组件不再读 view（视图真值在 viewRef，绘制自持）。
+  const [, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
   const [layerState, setLayerState] = useState<LayerVisibility>(visibility ?? defaultLayerVisibility());
   /** P2-i 图层锁定（UI 状态；命中过滤读 lockedLayersRef，避免闭包过期）。 */
@@ -1881,6 +1883,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    */
   const [openLibrarySections, setOpenLibrarySections] = useState<string[]>(['areas']);
   const [openLibrarySubgroups, setOpenLibrarySubgroups] = useState<string[]>(['areas:区域']);
+  /**
+   * 2026-11-18 用户要求：物料目录**全局**排布切换（false=单列行，true=一行多列瓦片）。
+   * 一开始只切了分区，用户纠正「我要的是全局的」——所有调色板型条目（分区/入口图标/路线/
+   * 车辆/基础设施/工作人员/活动包）统一跟随；偏好记 localStorage。
+   */
+  const [oneplanGrid, setOneplanGridState] = useState<boolean>(() => {
+    try { return localStorage.getItem('scendance:oneplan-grid') === '1'; } catch { return false; }
+  });
+  const setOneplanGrid = (value: boolean) => {
+    setOneplanGridState(value);
+    try { localStorage.setItem('scendance:oneplan-grid', value ? '1' : '0'); } catch { /* 隐私模式写不进就算了 */ }
+  };
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
   /**
    * 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
@@ -2210,6 +2224,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (modeRef.current === 'measure' && next !== 'measure') dropMeasureSession();
     if (next === 'measure') measureSessionIdsRef.current = [];
     modeRef.current = next;
+    // 2026-11-18 用户实测：从对话进绘制模式时色板分组要跟着展开——不然用户不知道画什么、
+    // 也不知道有分区类型可挑。手动点目录行本来就是展开态进来的，这里只是兜底。
+    // 2026-11-18 用户澄清：用地红线只要「确认 / 重画」，分区才要那张分区类型色板；
+    // 所以进红线只摊开区域组（用地红线、重置设计范围两行），把分区色板收起来，
+    // 进分区才把色板摊开。
+    const ensureSubgroups = (add: string[], remove: string[] = []) =>
+      setOpenLibrarySubgroups(prev => {
+        const kept = prev.filter(key => !remove.includes(key));
+        for (const key of add) if (!kept.includes(key)) kept.push(key);
+        return kept;
+      });
+    if (next === 'zone') ensureSubgroups(['areas:区域', 'areas:分区类型']);
+    else if (next === 'node') ensureSubgroups(['areas:入口和通道图标']);
+    else if (next === 'route') ensureSubgroups(['areas:路线']);
+    else if (next === 'boundary') ensureSubgroups(['areas:区域'], ['areas:分区类型']);
     draftRef.current = [];
     previewRingRef.current = null;
     scopeDragRef.current = null;
@@ -4190,7 +4219,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
           : `已换场地：旧草稿已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`);
       } else {
-        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。`);
+        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。`);
       }
       return true;
     },
@@ -4708,7 +4737,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       // 2026-11-17 用户指令「画好用地红线，默认就是画好了设计范围，扩 20 m，不用画两次」：
-      // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要自定义再点「重拖设计范围」。
+      // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要微调就直接拖白框的边或角。
       const initialScope = expandRect(boundary, DEFAULT_SCOPE_MARGIN_M);
       const nextBoundaryPlan: SitePlanData = {
         ...current,
@@ -4722,7 +4751,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setMode('view');
       focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。${overflowSuffix(boundaryOverflow)}`);
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
@@ -5143,8 +5172,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onDragEnd?: (() => void) | undefined;
     /** 2026-11-11 用户指令：右键删除已放置物件。 */
     onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
+    /** 2026-11-18：调色板型条目才可瓦片化（全局网格开 + 本行声明可瓦片）；动作行（重拖范围等）永远单列。 */
+    tile?: boolean;
   }) {
     // 2026-11-13 修复嵌套按钮：行根用 div + role=button，避免 trailing 删除钮再嵌一层 <button> 触发 HTML 嵌套非法 / hydration 报错。
+    const tile = Boolean(input.tile && oneplanGrid);
     return (
       <div
         key={input.key}
@@ -5164,7 +5196,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         onDragStart={input.onDragStart}
         onDragEnd={input.onDragEnd}
         onContextMenu={input.onContextMenu}
-        style={{
+        style={tile ? {
+          all: 'unset',
+          cursor: 'pointer',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 3,
+          width: '100%',
+          padding: '5px 2px',
+          borderRadius: PLANNING_RADIUS.sm,
+          border: `1px solid ${input.active ? PLANNING_SURFACE.selectedBorder : 'transparent'}`,
+          background: input.active ? PLANNING_SURFACE.selectedBg : 'transparent',
+          color: PLANNING_SURFACE.panelText,
+          fontSize: PLANNING_TYPOGRAPHY.hint,
+        } : {
           all: 'unset',
           cursor: 'pointer',
           boxSizing: 'border-box',
@@ -5182,7 +5230,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }}
       >
         {input.icon}
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{input.label}</span>
+        {/* 2026-11-18 用户口径：瓦片标签最多 5 个字，超出省略号，全名 hover 看（title 由各行自带）。 */}
+        <span style={{ flex: 1, minWidth: 0, maxWidth: tile ? '5em' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: tile ? 'center' : undefined }}>{input.label}</span>
         {input.trailing}
       </div>
     );
@@ -5408,8 +5457,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** OnePlan 镜像：贴纸条目行（搜索、入口图标、基建类目、图元四处共用）。 */
   function renderOneplanStickerRows(items: readonly LibraryEntry[]) {
+    // 2026-11-18 全局网格：物料条目全是调色板型，跟随开关切瓦片网格。
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={oneplanGrid
+        ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+        : { display: 'flex', flexDirection: 'column', gap: 2 }}>
         {items.map(entry => {
           // 2026-11-12 搜索结果里的活动包物件：彩色 chip + pickPackEntry 语义分派。
           if (entry.packId) {
@@ -5432,6 +5484,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 : undefined,
               onDragEnd: entry.placeKind === 'facility' ? clearPlanFacilityDrag : undefined,
               icon: packChipNode(entry),
+              tile: true,
             });
           }
           const template = libraryFacilityTemplate(entry);
@@ -5451,6 +5504,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               event.dataTransfer.effectAllowed = 'copy';
             },
             onDragEnd: clearPlanFacilityDrag,
+            tile: true,
             icon: (
               <span
                 aria-hidden
@@ -11309,9 +11363,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   )}
                 </div>
               ))}
-              <div style={{ padding: '6px 8px 2px', opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.row }}>
-                图层是同一套场地的不同设计方案；用地红线与定位跨图层共享。
-              </div>
             </div>
           )}
         </div>
@@ -11646,7 +11697,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         >
           <LibraryFooterIcon size={PLANNING_ICON_SIZES.legend} aria-hidden color={PLANNING_SURFACE.panelText} />
           <span style={{ flex: 1 }}>已放置物件</span>
-          <span style={{ opacity: 0.7, fontWeight: 400, fontSize: PLANNING_TYPOGRAPHY.hint }}>({inventoryRows.length}/{libraryTotal})</span>
           <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint }}>{panelOpen ? '▾' : '▸'}</span>
         </button>
         {panelOpen && (
@@ -11719,6 +11769,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </div>
             </div>
 
+            {/* 2026-11-18 用户要求：已放置物件按图层分母分类——当前图层（图层 1）是母分类，
+                类型文件夹与用地红线都收在它下面，可整体展开/收起；多图层时每层一个母分类。 */}
+            {(() => {
+              const layerKey = 'placed-layer-current';
+              const layerOpen = openFolders[layerKey] !== false;
+              const layerCount = placedFolderRows.reduce((sum, folder) => sum + folder.rows.length, 0);
+              return (
+                <div style={{ marginTop: PLANNING_SPACING.xs }}>
+                  <button
+                    type="button"
+                    data-testid="placed-folder-layer"
+                    aria-expanded={layerOpen}
+                    title={`展开/收起${activeLevelName}`}
+                    onClick={() => setOpenFolders(prev => ({ ...prev, [layerKey]: !layerOpen }))}
+                    style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, width: '100%', padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600 }}
+                  >
+                    <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{layerOpen ? '▾' : '▸'}</span>
+                    <span aria-hidden style={{ width: 16, height: 16, flex: '0 0 auto', borderRadius: 4, background: '#5b6f7c', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />
+                    <span style={{ flex: 1 }}>{activeLevelName}</span>
+                    <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 400 }}>{layerCount}</span>
+                  </button>
+                  {layerOpen && (
+                    <>
             {/* 按类型分组的文件夹树（OnePlan folders tree）：文件夹行尾收编可见性/锁定
                 （多类型同层时读写同一层状态，自动同步）；实例行点击定位+选中。 */}
             {placedFolderRows.map(folder => {
@@ -11887,13 +11960,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 </div>
               )}
             </div>
+                    </>)}
+                </div>
+              );
+            })()}
 
             {/* H2-d 人员汇总已按 OnePlan 纯度移除（2026-11-11 用户拍板）；汇总口径仍可在规划信息卡统计里看。 */}
 
             {/* 2026-11-11 用户指令：选中物体的编辑已移到画布右上角「工具与属性」浮窗；独立工作台（无宿主）仍留在这里。 */}
             {!outdoorInspectorActive && selectionInspectorZone}
-
-            <div style={{ marginTop: PLANNING_SPACING.sm, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>缩放 z{view.zoom}{readOnly ? ' · 只读浏览' : ''}</div>
           </>
         )}
       </div>
@@ -11966,22 +12041,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </>
             ) : (
             <>
-              <input
+              {/* 2026-11-18 用户两轮实测拍板：排布开关回退为胶囊右侧圆钮（比分段导航更好），
+                  灵动岛搜索胶囊保留。 */}
+              <div className="sc-catalog-search" style={{ marginTop: PLANNING_SPACING.xs }}>
+                <Search size={15} aria-hidden className="sc-catalog-search-icon" />
+                <input
                   value={libraryQuery}
                   onChange={event => setLibraryQuery(event.target.value)}
                   placeholder="搜索物件（中文 / English / slug）"
                   aria-label="搜索物件"
-                  style={{
-                    width: '100%',
-                    marginTop: PLANNING_SPACING.xs,
-                    padding: '4px 6px',
-                    borderRadius: PLANNING_RADIUS.sm,
-                    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                    background: PLANNING_SURFACE.fieldBg,
-                    color: 'inherit',
-                    fontSize: PLANNING_TYPOGRAPHY.hint,
-                  }}
                 />
+                <button
+                  type="button"
+                  className="sc-catalog-search-toggle"
+                  data-testid="catalog-grid-toggle"
+                  aria-pressed={oneplanGrid}
+                  title="切换目录排布：单列 / 一行多列（全目录生效）"
+                  onClick={() => setOneplanGrid(!oneplanGrid)}
+                >
+                  {oneplanGrid ? '▦' : '☰'}
+                </button>
+              </div>
                 <div style={{ marginTop: PLANNING_SPACING.xs, overflowY: 'auto', overflowX: 'hidden', paddingRight: 2, ...(panelInline ? { flex: 1, minHeight: 0 } : { maxHeight: 430 }) }}>
                   {libraryQuery.trim() !== '' ? (
                     /* 搜索态：跨三段的结果，按用户目录分组（不再走 17 类折叠）。 */
@@ -12009,7 +12089,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       })}
                       {openLibrarySections.includes('areas') && (
                         <>
-                          {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '区域', label: '区域', count: planZoneSemantics.length + 1, icon: 'hexagon' })}
+                          {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '区域', label: '区域', count: 2, icon: 'hexagon' })}
                           {openLibrarySubgroups.includes('areas:区域') && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                               {/* 2026-11-11：边界重画入口回归（起步矩形是自动送的，用户可以整体重画）。 */}
@@ -12022,20 +12102,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 title: '沿用地单击加顶点，闭合后替换旧红线',
                                 icon: <BoundarySwatch size={22} />,
                               })}
-                              {/* 2026-11-15 用户指令：先圈一块比场地大的「大陆」，框外压暗。 */}
-                              {renderOneplanItemRow({
-                                key: 'catalog-scope',
-                                testId: 'catalog-scope',
-                                label: (plan.designScope ?? []).length >= 3 ? '重拖设计范围' : '拖出设计范围',
-                                active: mode === 'scope',
-                                onClick: () => armOrDisarm(mode === 'scope', () => startAreaTool('scope')),
-                                title: '按住拖一个矩形当设计范围：框外压暗，流线可以走在场地外、范围里',
-                                icon: <ScopeSwatch size={22} />,
-                              })}
+                              {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「重拖设计范围」——
+                                  白框由红线自动送（外扩 20 m）、红线顶出去自动重置，微调直接在画布上
+                                  拖白框的边/角（可锁定）。拖矩形入口撤掉后 mode='scope' 那条路径没有
+                                  入口了，画布代码先原样留着（用户：死代码先不清理）。 */}
                               {plan.boundary.length >= 3 && renderOneplanItemRow({
                                 key: 'catalog-scope-expand',
                                 testId: 'catalog-scope-expand',
-                                label: `按场地外扩 ${DEFAULT_SCOPE_MARGIN_M} m`,
+                                label: '重置设计范围',
                                 active: false,
                                 onClick: () => {
                                   if (readOnly) return;
@@ -12046,45 +12120,44 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                   setMode('view');
                                   // 生成即框住：刚生成的范围如果大半在视口外，压暗区会盖满屏幕，看着像没画。
                                   focusDesignScope(next);
-                                  setEditMessage(`已按场地外接矩形外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要改就点「重拖设计范围」。`);
+                                  setEditMessage(`设计范围已恢复为红线四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要微调就直接拖白框的边或角。`);
                                 },
-                                title: '各边外扩 20 m 直接生成设计范围，不用手画顶点',
+                                title: '把框丢回默认：红线外接矩形四边各外扩 20 m；平时直接拖白框的边/角微调，可锁定',
                                 icon: <ScopeSwatch size={22} plus />,
                               })}
-                              {/* 2026-11-16 用户指令：这一行「定位到设计范围」去掉——同样的功能挪到右轨那颗
-                                  焦点钮（#tool-focus）：圈了设计范围就框到范围，没圈还是回到场地取景。
-                                  左栏不再重复摆一行只能动视图、不能改范围的条目。 */}
-                              {(plan.designScope ?? []).length >= 3 && renderOneplanItemRow({
-                                key: 'catalog-scope-clear',
-                                testId: 'catalog-scope-clear',
-                                label: '清除设计范围',
-                                active: false,
-                                onClick: () => {
-                                  if (readOnly) return;
-                                  commitPlan({ ...planRef.current, designScope: [] });
-                                  setMode('view');
-                                  setEditMessage('设计范围已清除：框外不再压暗。');
-                                },
-                                title: '去掉外框与蒙版（用地红线、分区、流线都不受影响）',
-                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.35)' }} />,
-                              })}
-                              {planZoneSemantics.map(s => {
-                                const zoneActive = mode === 'zone' && zoneSemantic === s;
-                                return renderOneplanItemRow({
-                                key: `zone-${s}`,
-                                testId: `catalog-zone-${s}`,
-                                label: planZoneSemanticLabels[s],
-                                active: zoneActive,
-                                onClick: () => armOrDisarm(zoneActive, () => { setZoneSemantic(s); startAreaTool('zone'); }),
-                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: PLANNING_ZONE_COLORS[s], boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
-                              });
-                              })}
+                              {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「清除设计范围」——
+                                  和自动机制自相矛盾（红线一动框就回来），没有稳定用途。
+                                  框外压暗就是设计范围的唯一表达，去掉它等于回到没有取景框的状态。 */}
+                              {/* 2026-11-18 用户澄清：分区类型色板是「画分区」才要的东西；
+                                  用地红线只要确认或重画，不该一点开卡片就摊一屏舞台区/观众区…。
+                                  所以色板折进自己的子组，默认收起，进 zone 模式才自动展开。 */}
+                              {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '分区类型', label: '分区类型', count: planZoneSemantics.length, icon: 'hexagon' })}
+                              {openLibrarySubgroups.includes('areas:分区类型') && (
+                              <div style={oneplanGrid
+                                ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                                : { display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                {planZoneSemantics.map(s => {
+                                  const zoneActive = mode === 'zone' && zoneSemantic === s;
+                                  return renderOneplanItemRow({
+                                  key: `zone-${s}`,
+                                  testId: `catalog-zone-${s}`,
+                                  label: planZoneSemanticLabels[s],
+                                  active: zoneActive,
+                                  onClick: () => armOrDisarm(zoneActive, () => { setZoneSemantic(s); startAreaTool('zone'); }),
+                                  tile: true,
+                                  icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: PLANNING_ZONE_COLORS[s], boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />,
+                                });
+                                })}
+                              </div>
+                              )}
                             </div>
                           )}
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '入口和通道图标', label: '入口和通道图标', count: libraryEntranceIcons.length + 1, icon: 'door-open' })}
                           {openLibrarySubgroups.includes('areas:入口和通道图标') && (
                             <>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <div style={oneplanGrid
+                                ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                                : { display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 {NODE_KIND_OPTIONS.map(option => {
                                   const nodeActive = mode === 'node' && nodeKind === option.kind;
                                   return renderOneplanItemRow({
@@ -12093,7 +12166,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                     label: option.label,
                                     active: nodeActive,
                                     onClick: () => armOrDisarm(nodeActive, () => { nodeKindRef.current = option.kind; setNodeKind(option.kind); draw(); startAreaTool('node'); }),
+                                    title: option.label,
                                     icon: nodeKindToolIcon(option.kind),
+                                    tile: true,
                                   });
                                 })}
                               </div>
@@ -12102,7 +12177,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           )}
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '路线', label: '路线', count: planRouteKinds.length, icon: 'route' })}
                           {openLibrarySubgroups.includes('areas:路线') && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <div style={oneplanGrid
+                              ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                              : { display: 'flex', flexDirection: 'column', gap: 2 }}>
                               {planRouteKinds.map(k => {
                                 const routeActive = mode === 'route' && routeKind === k && !routePresetRef.current;
                                 return renderOneplanItemRow({
@@ -12111,6 +12188,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 label: planRouteKindLabels[k],
                                 active: routeActive,
                                 onClick: () => armOrDisarm(routeActive, () => { routeKindRef.current = k; setRouteKind(k); draw(); startAreaTool('route'); }),
+                                title: planRouteKindLabels[k],
+                                tile: true,
                                 icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 16, height: 5, borderRadius: 3, background: PLANNING_ROUTE_KIND_COLORS[k] }} /></span>,
                               });
                               })}
@@ -12126,13 +12205,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {/* 2026-11-17 #118 补录入 UI：规划车辆（落进 plan.vehicles，挂得上动线就巡游）。 */}
                           {renderOneplanSubgroupHeader({ sectionId: 'vehicles', key: 'plan-vehicles', label: PLAN_VEHICLE_ROW_LABEL, count: VEHICLE_TYPES.length })}
                           {openLibrarySubgroups.includes('vehicles:plan-vehicles') && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <div style={oneplanGrid
+                              ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                              : { display: 'flex', flexDirection: 'column', gap: 2 }}>
                               {VEHICLE_TYPES.map(type => renderOneplanItemRow({
                                 key: `plan-vehicle-${type.id}`,
                                 testId: `catalog-plan-vehicle-${type.id}`,
                                 label: type.name,
                                 active: mode === 'vehicle' && vehicleType === type.id,
                                 onClick: () => armOrDisarm(mode === 'vehicle' && vehicleType === type.id, () => startVehicleType(type.id as PlanVehicle['type'])),
+                                tile: true,
                                 icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 16, height: 8, borderRadius: 3, background: PLANNING_ROUTE_KIND_COLORS.vehicle }} /></span>,
                               }))}
                             </div>
