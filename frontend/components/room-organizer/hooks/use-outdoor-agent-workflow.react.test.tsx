@@ -2230,3 +2230,15 @@ it("发布状态一次算齐：卡片与快照同源，标一条云端+浏览器
   expect(after.card).toContain("不可发布（三类全绿 1 条）");
   expect(after.card).toContain("云端证据：1 条通过");
 });
+
+it("会话报告带上发布快照：两轮导出能按行 diff", () => {
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const report = flow.sessionReport();
+  expect(report.release).toBeDefined();
+  expect(report.release?.snapshot).toMatchObject({ allGreen: 1 });
+  expect(report.text).toContain("[发布状态快照]");
+  expect(report.text).toContain("不可发布（三类全绿 1 条）");
+});
