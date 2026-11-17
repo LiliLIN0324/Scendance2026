@@ -197,8 +197,8 @@ import {
   type PlanRect,
 } from '../lib/site-plan-facilities';
 import { resolveFacilityTemplate } from '../lib/plan-facility-catalog';
-import { clearPlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from '../lib/plan-facility-drag';
-import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, type PlanCatalogDrag } from '../lib/plan-catalog-drag';
+import { clearPlanFacilityDrag, consumePlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from '../lib/plan-facility-drag';
+import { consumePlanCatalogDrag, getPlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, PLAN_CATALOG_TEXT_PREFIX, readPlanCatalogDrag, type PlanCatalogDrag } from '../lib/plan-catalog-drag';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import {
   FACILITY_GENERATE_POLL_MS,
@@ -1603,6 +1603,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const facilityTemplateRef = useRef<string | null>(null);
   const facilityTemplateObjRef = useRef<PlanFacilityTemplate | null>(null);
   const ghostPointRef = useRef<PlanPoint | null>(null);
+  /** Enter 落位走窗口监听，监听只装一次，真正落位始终读最新的 placeFacilityAt。 */
+  const placeArmedFacilityRef = useRef<(point: PlanPoint) => void>(() => {});
   /** 2026-11-16 门的贴边吸附：悬停算出的落点 / 法线，高亮与落位共用这一份。 */
   const doorSnapRef = useRef<{ point: PlanPoint; rotationDeg: number; zoneId: string; edge: readonly [PlanPoint, PlanPoint] } | null>(null);
   /** 2026-11-16 落位前旋转：R / Shift+R 每次 ±15°，2D 与 3D draft 共用同一个角度。 */
@@ -3763,6 +3765,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         rotatePendingFacility(event.shiftKey ? -15 : 15);
         return;
       }
+      // 待放设施：Enter 按当前幽灵位置落下。单击、拖动松手同一条路；以前 Enter 不提交，幽灵一直停着。
+      if (
+        event.key === 'Enter'
+        && modeRef.current === 'facility'
+        && !inField
+        && !target?.isContentEditable
+        && !event.ctrlKey && !event.metaKey && !event.altKey
+      ) {
+        const point = ghostPointRef.current;
+        if (!point || !onPlanChange) return;
+        event.preventDefault();
+        placeArmedFacilityRef.current(point);
+        return;
+      }
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
@@ -5689,6 +5705,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     draw();
     notifyPlanDraftChanged();
   }
+  placeArmedFacilityRef.current = (point) => { placeFacilityAt(point); };
 
   /**
    * P2-i：设施改名/备注之外，接旋转（度）与尺寸（宽×深，米）——面板输入与画布手柄共用，
@@ -8840,6 +8857,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
     }
+    // 放设施：单击或拖动松手都落在抬起点。
+    // 以前只有几乎没移动的抬起才算单击，拖着幽灵松手被丢掉，物件一直停在幽灵上。
+    if (modeRef.current === 'facility' && event.button === 0) {
+      const release = eventPlanPoint(event);
+      downPxRef.current = null;
+      if (release) handleDrawClick(release.px, release.pt);
+      else if (ghostPointRef.current) placeFacilityAt(ghostPointRef.current);
+      return;
+    }
     // 绘制模式：位移小于阈值的抬起才算单击加顶点。
     const hit = eventPlanPoint(event);
     const down = downPxRef.current;
@@ -10910,16 +10936,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       onDragOver={event => {
         // 2026-11-16 物料卡直接拖进 2D：按卡片左下角图标对应的设施落位，
         // dragover 读不到 dataTransfer，用拖起时记下的模型宽深先出幽灵。
+        // 自定义 MIME 在部分浏览器的 dragover.types 里不出现，有模块级记录就允许落下。
         const catalogDrag = getPlanCatalogDrag();
         const dragTypes = Array.from(event.dataTransfer.types);
-        if (dragTypes.includes(PLAN_CATALOG_DRAG_MIME)) {
-          if (!catalogDrag) return;
+        if (catalogDrag) {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'copy';
           const hit = eventPlanPoint(event);
           if (hit) previewCatalogDrop(catalogDrag, hit.pt);
           return;
         }
+        if (dragTypes.includes(PLAN_CATALOG_DRAG_MIME)) return;
         // 物料卡没带户外载荷（旧代码/禁用态）时不要退化成上一次的设施模板，否则会落成别的物件。
         if (dragTypes.includes(CATALOG_DRAG_MIME)) return;
         // 2026-11-16 直接从物件库拖进来：dragover 读不到 dataTransfer，
@@ -10939,17 +10966,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // H2-c：拖放提交（与单击提交同一入口）。
         event.preventDefault();
         const types = Array.from(event.dataTransfer.types);
-        if (types.includes(PLAN_CATALOG_DRAG_MIME)) {
-          const catalogDrag = parsePlanCatalogDrag(event.dataTransfer.getData(PLAN_CATALOG_DRAG_MIME)) ?? getPlanCatalogDrag();
-          clearPlanCatalogDrag();
-          if (!catalogDrag) return;
+        const text = event.dataTransfer.getData('text/plain');
+        const catalogDrag = readPlanCatalogDrag(event.dataTransfer.getData(PLAN_CATALOG_DRAG_MIME), text);
+        if (catalogDrag || types.includes(PLAN_CATALOG_DRAG_MIME) || text.startsWith(PLAN_CATALOG_TEXT_PREFIX)) {
+          consumePlanCatalogDrag();
           const hit = eventPlanPoint(event);
-          if (hit) dropCatalogAt(catalogDrag, hit.pt);
+          if (catalogDrag && hit) dropCatalogAt(catalogDrag, hit.pt);
           return;
         }
         if (types.includes(CATALOG_DRAG_MIME)) return;
-        const dragged = event.dataTransfer.getData('text/plain') || getPlanFacilityDrag();
-        clearPlanFacilityDrag();
+        const dragged = text || getPlanFacilityDrag();
+        consumePlanFacilityDrag();
         const hit = eventPlanPoint(event);
         if (!dragged || !hit) return;
         dropFacilityAtPoint(dragged, hit.pt);
