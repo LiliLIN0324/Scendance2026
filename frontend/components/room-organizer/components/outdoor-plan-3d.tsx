@@ -77,6 +77,7 @@ import { createSplatPreview, type SplatPreview } from '@/components/room-organiz
 import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
+import { createPlanVehicleEntitiesLayer } from '@/components/room-organizer/three/plan-vehicle-entities';
 import type { WalkViewMode } from '@/components/room-organizer/lib/walk-view-modes';
 import {
   facilityProp,
@@ -412,6 +413,7 @@ export default function OutdoorPlan3D({
   const compassRef = useRef<HTMLDivElement | null>(null);
   const scaleBarRef = useRef<HTMLDivElement | null>(null);
   const scaleLabelRef = useRef<HTMLSpanElement | null>(null);
+  /** 3D 框外毛玻璃层（backdrop-filter + clip-path 挖洞）。 */
   /** 3D 框外毛玻璃层：叠在 WebGL 上面的透明 canvas（只在框外糊底图）。 */
   const frostRef = useRef<HTMLCanvasElement | null>(null);
   /** 设计范围环的最新点位：镜头每帧动，环只在 plan 变时换。 */
@@ -887,6 +889,10 @@ export default function OutdoorPlan3D({
     const trafficLayer = createPlanTrafficLayer(PLAN_LAYER_BASE_Y);
     scene.add(trafficLayer.group);
     trafficLayer.sync(plan);
+    // 独立车辆实体层（plan.vehicles）：与 2D vehicle-markers 同源口径，挂动线的巡游、缺线的停放。
+    const vehicleEntitiesLayer = createPlanVehicleEntitiesLayer(PLAN_LAYER_BASE_Y);
+    scene.add(vehicleEntitiesLayer.group);
+    vehicleEntitiesLayer.sync(plan);
     const hideAnimatedVehiclePlaceholders = (group: THREE.Group) => {
       for (const child of group.children) {
         const id = child.userData.planPropId;
@@ -1029,11 +1035,11 @@ export default function OutdoorPlan3D({
         },
         'outdoor',
       );
-      setPersonSeatContext({ seats: planSeatAnchors(facilitiesForWalk, nextPlan.boundary, nextMetrics) }, 'outdoor');
+      setPersonSeatContext({ seats: planSeatAnchors(facilitiesForWalk, nextPlan.boundary, nextMetrics) });
       // 分区漫游（B2）：流线从区外穿进区内时，人有概率拐进去走一段再回线。
       // 分区太窝（< 4 m²）直接丢弃：进去也只能原地转身。
       const zonesForWalk = Array.isArray(nextPlan.zones) ? nextPlan.zones : [];
-      setPersonZoneContext({ zones: planZoneRings(zonesForWalk, nextPlan.boundary, nextMetrics) }, 'outdoor');
+      setPersonZoneContext({ zones: planZoneRings(zonesForWalk, nextPlan.boundary, nextMetrics) });
       const totals = new Map<string, number>();
       const ordinals = new Map<string, number>();
       const colors = new Map(nextPlan.workers.map(worker => [worker.id, worker.color]));
@@ -1362,6 +1368,7 @@ export default function OutdoorPlan3D({
       if (!nextFrame) return;
       const nextMetrics = { width: nextFrame.width, depth: nextFrame.depth };
       trafficLayer.sync(nextPlan);
+      vehicleEntitiesLayer.sync(nextPlan);
       const previous = scene.children.find(
         (child) => child instanceof THREE.Group && child.userData.type === ROOM_OBJECT_TAGS.PlanFootprint,
       );
@@ -2152,6 +2159,7 @@ export default function OutdoorPlan3D({
       advancePeopleAnimations(deltaSeconds, scene, 'outdoor');
       advanceGlbAnimations(deltaSeconds);
       trafficLayer.advance(deltaSeconds);
+      vehicleEntitiesLayer.advance(deltaSeconds);
       // 漫游占位 avatar：第三人称 / 过肩档按帧姿态摆位；第一人称、鸟瞰或退出漫游时隐藏。
       const walkAvatar = avatarGroupRef.current;
       const walkFrame = walkFrameRef.current;
@@ -2240,6 +2248,12 @@ export default function OutdoorPlan3D({
               }
             : null,
           traffic: trafficLayer.group.children.map(root => ({ name: root.name, position: root.position.toArray() })),
+          vehicles: vehicleEntitiesLayer.group.children.map(root => ({
+            name: root.name,
+            slotIndex: root.userData.slotIndex,
+            modelMissing: root.userData.modelMissing,
+            position: root.position.toArray(),
+          })),
           /** 本机验收桥：把轨道镜头拉近到第 index 个 crowd 实体（近景目检用，生产不调用）。 */
           focusCrowd: (index = 0, distance = 3) => {
             const target = crowdLayer.children[index];
@@ -2270,8 +2284,8 @@ export default function OutdoorPlan3D({
       if (releaseControlledActor()) onWalkExitRef.current?.();
       // 场景拆掉：别把旧场地的围栏与座位留给下一份户外方案。
       setPersonWalkContext(null, 'outdoor');
-      setPersonSeatContext(null, 'outdoor');
-      setPersonZoneContext(null, 'outdoor');
+      setPersonSeatContext(null);
+      setPersonZoneContext(null);
       layerApiRef.current = null;
       modelRunRef.current += 1;
       window.cancelAnimationFrame(frame);
@@ -2317,6 +2331,7 @@ export default function OutdoorPlan3D({
       // 设施 GLB 模型层（共享 builder 自管 run guard 与 dispose；场景物件模型在 modelRoots 里）。
       planModelLayer.dispose();
       trafficLayer.dispose();
+      vehicleEntitiesLayer.dispose();
       releaseCrowdChildren();
       roleLabels.dispose();
       modelRoots.forEach((root) => {

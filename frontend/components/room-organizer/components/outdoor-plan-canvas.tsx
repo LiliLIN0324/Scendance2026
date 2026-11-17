@@ -3,7 +3,8 @@ import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from '../lib/outdoor-plan-protection';
-import { CAR_ROW_LABEL } from '../lib/vehicle-types';
+import { CAR_ROW_LABEL, PLAN_VEHICLE_ROW_LABEL, VEHICLE_TYPES } from '../lib/vehicle-types';
+import { vehicleLabelOf } from '../lib/vehicle-entities';
 
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -221,6 +222,7 @@ import {
   PLAN_ROUTE_MAX_VERTICES,
   buildNode,
   buildRoute,
+  buildVehicle,
   buildWorker,
   detachNodeFromRoutes,
   insertRouteVertex,
@@ -240,6 +242,8 @@ import {
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
 import { clampRingMoveToBoundary, nearestMergeTarget, nearestPolylineEdge, nearestRingEdge, nearestRouteSnapPoint, planGridStepM, snapPointToGrid, stickPointToBoundary } from '../lib/site-plan-snap';
+// 2026-11-17 #118 补漏：属性卡「选中数」口径（车也算一件；漏算 → 车辆属性卡弹不出来）。
+import { planSelectionCount } from '../lib/site-plan-selection';
 // 2026-11-16 用户指令：门放到室内区域边线 10px 内要贴边、朝向垂直墙面。
 import { snapDoorToIndoorEdge } from '../lib/plan-door-snap';
 import { autoNodeName, renamedNodeName } from '../lib/site-plan-node-names';
@@ -296,6 +300,7 @@ import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
 import { useAnnotateDrawShortcuts } from '../hooks/use-annotate-draw-shortcuts';
 import { annotateDrawSelectionLabel, resolveAnnotateDrawToolClick } from '../lib/annotate-draw-shortcuts';
+import { applyOutdoorInspectorPanel, type OutdoorInspectorPanel } from '../lib/outdoor-inspector-panels';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
 import { ZoneEventInput } from './zone-event-input';
 import { MaterialSymbol } from '../panels/material-symbol';
@@ -365,6 +370,16 @@ import {
   type PlanningRouteKind,
   type PlanningZoneSemantic,
 } from '@/lib/outdoor-plan-tokens';
+// 2026-11-17：属性卡版式提成独立模块，好让回归脚本用同一份值量真实布局
+// （「文字生成点不动」的根因是卡片被候选滚动条撑到上千像素宽，冲出宿主与视口）。
+import {
+  FACILITY_MODEL_ACTION_ROW_STYLE,
+  FACILITY_MODEL_STRIP_STYLE,
+  FACILITY_MODEL_STRIP_WRAPPER_STYLE,
+  inspectorCardBodyStyle,
+  inspectorCardStyle,
+  inspectorStackStyle,
+} from './outdoor-inspector-layout';
 import {
   planAnnotationKindLabels,
   planRouteKindLabels,
@@ -379,6 +394,7 @@ import {
   type PlanNode,
   type PlanPoint,
   type PlanRoute,
+  type PlanVehicle,
   type PlanWorker,
   type PlanZone,
   type SitePlanData,
@@ -708,6 +724,9 @@ function paintFloorGrid(
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const isTdt = (s: CanvasBasemapSource): s is TdtProbeLayer => s === 'vec' || s === 'img';
 
+/** 标注浮卡固定宽度：切工具/切颜色时不做横向跳，底部锚定下也不会因文案长度改变视觉重心。 */
+const ANNOTATE_CARD_WIDTH = 286;
+
 const LAYER_ORDER: readonly ['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure', 'annotate'] = ['boundary', 'zone', 'facility', 'route', 'worker', 'access', 'measure', 'annotate'];
 
 /** 图层行键（node 不单列，节点挂 access 组）——别用含 node 的 PlanningLayerKind 当行键。 */
@@ -768,6 +787,8 @@ const BRANCH_DOUBLECLICK_GUARD_MS = 400;
 const NODE_HIT_PX = 11;
 /** 人员点位命中半径（CSS px）。 */
 const WORKER_HIT_PX = 9;
+/** 2026-11-17 #118 补录入 UI：车辆命中半径（CSS px），与人员同款。 */
+const VEHICLE_HIT_PX = 9;
 /** 2026-11-11 用户指令：自由标注命中半径（CSS px）：点选文本 pill 与形状边缘共用。 */
 const ANNOTATION_HIT_PX = 8;
 /** 2026-11-16 固定测量标注的点选半径（点到折线/闭合环的像素距离）。 */
@@ -1609,9 +1630,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const routePresetRef = useRef<{ id?: string; kind: PlanningRouteKind; color?: string; name?: string; carrier?: 'walk' | 'trolley' | 'vehicle' | 'mixed' } | null>(null);
   const zonePresetRef = useRef<{ color?: string; name?: string } | null>(null);
   const workerPresetColorRef = useRef<string | null>(null);
+  // 2026-11-17 #118 补录入 UI：布车模式的待放车型与台数（面板值 → 落点时读取）。
+  const vehicleTypeRef = useRef<PlanVehicle['type']>('business');
+  const vehicleCountRef = useRef(1);
   const selectedRouteRef = useRef<string | null>(null);
   const selectedNodeRef = useRef<string | null>(null);
   const selectedWorkerRef = useRef<string | null>(null);
+  const selectedVehicleRef = useRef<string | null>(null);
   const nodeIssuesRef = useRef<PlanNodeIssue[]>([]);
   const workerIssuesRef = useRef<PlanWorkerIssue[]>([]);
   const dragNodeRef = useRef<{ id: string; moved: boolean } | null>(null);
@@ -1884,9 +1909,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [nodeKind, setNodeKind] = useState<PlanNode['kind']>('both');
   const [, setRouteDraftCount] = useState(0);
   const [workerRole, setWorkerRole] = useState('安保');
+  /** 2026-11-17 #118 补录入 UI：布车模式当前车型（面板高亮用，与 vehicleTypeRef 同值）。 */
+  const [vehicleType, setVehicleType] = useState<PlanVehicle['type']>('business');
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  /** 2026-11-17 #118 补录入 UI：车辆选中（独立集合，与设施/人员/节点互斥）。 */
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   /** 2026-11-11 OnePlan Repeat 阵列：沿物件自身旋转轴复制 cols×rows（含原件），间距可调。 */
   const [repeatCols, setRepeatCols] = useState(2);
   const [repeatRows, setRepeatRows] = useState(1);
@@ -2070,7 +2099,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
   // H3-c 规划信息面板：页签、开关、筛选与提示消息（面板自带 status 行，只读也可用）。
   const [infoOpen, setInfoOpen] = useState(true);
-  // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起，可并存。
+  // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起。
+  // 2026-11-17 用户：测量与标注不能同时用，就不该同时打开；开一张自动收另一张，属性卡保持独立。
   const [inspectorPanels, setInspectorPanels] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
   // 2026-11-16 用户指令：标注卡不要再和属性卡一起挤在右上角；作为「标注」钮的
   // 上浮面板锚定到底条按钮上方，像地图工具栏的 popover 一样有明确的来处。
@@ -2091,8 +2121,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const snapPoint = useCallback((pt: PlanPoint, viewport: PlanViewport): PlanPoint => (
     snapOnRef.current ? snapPointToGrid(pt, viewport) : pt
   ), []);
-  const setInspectorPanel = useCallback((tab: 'measure' | 'annotate' | 'selection', open: boolean) => {
-    setInspectorPanels(current => (current[tab] === open ? current : { ...current, [tab]: open }));
+  const setInspectorPanel = useCallback((tab: OutdoorInspectorPanel, open: boolean) => {
+    setInspectorPanels(current => applyOutdoorInspectorPanel(current, tab, open));
   }, []);
   // 2026-11-12 「好用一点的交互」：卡头可折叠（只收内容、不关卡片），三张卡同时开着也不挤。
   const [inspectorCollapsed, setInspectorCollapsed] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
@@ -2216,6 +2246,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     groupDragRef.current = null;
     marqueeRectRef.current = null;
     if (next !== 'select' && next !== 'view') clearMultiSelection(false);
+    // 2026-11-17：测量/标注真正互斥——进入任一种绘制工具就收起另一张工具卡，避免“卡开着但不是当前工具”。
+    if (next === 'measure') setInspectorPanel('annotate', false);
+    if (next === 'note' || next === 'shape') setInspectorPanel('measure', false);
     setModeState(next);
     setEditMessage(null);
     setAnnotateNotice(null);
@@ -2487,6 +2520,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onInspectorChange?.({ openTabs: inspectorPanels });
   }, [inspectorPanels, onInspectorChange]);
 
+  // 标注卡关闭后不再保留上一次退出提示；下次开卡从默认提示开始。
+  useEffect(() => {
+    if (!inspectorPanels.annotate) setAnnotateNotice(null);
+  }, [inspectorPanels.annotate]);
+
   // 标注面板锚点跟随底条工具钮；窗口变化时重算，保证弹出层始终在按钮正上方。
   // 用 layout effect 在绘制前落位，避免先闪一下右上角再跳到底条上方。
   useLayoutEffect(() => {
@@ -2506,7 +2544,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setAnnotateAnchor(null);
         return;
       }
-      const halfPanel = 78;
+      const panelWidth = Math.min(ANNOTATE_CARD_WIDTH, window.innerWidth - 24);
+      const halfPanel = panelWidth / 2;
       const margin = 12;
       const left = Math.min(
         Math.max(rect.left + rect.width / 2, margin + halfPanel),
@@ -2514,12 +2553,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       );
       setAnnotateAnchor({ left, bottom: window.innerHeight - rect.top + 10 });
     };
+    // 先在 layout effect 里同步落位，避免首帧按右上角渲染后再跳到底条上方；
+    // 再排一帧兜底底条刚挂上、按钮尺寸尚未稳定的情况。
+    place();
     raf = window.requestAnimationFrame(place);
+    const onDockOpened = (): void => {
+      place();
+      window.requestAnimationFrame(place);
+    };
     window.addEventListener('resize', place);
+    window.addEventListener('scendance:outdoor-dock-opened', onDockOpened);
     document.addEventListener('scroll', place, true);
     return () => {
       window.cancelAnimationFrame(raf);
       window.removeEventListener('resize', place);
+      window.removeEventListener('scendance:outdoor-dock-opened', onDockOpened);
       document.removeEventListener('scroll', place, true);
     };
   }, [inspectorPanels.annotate]);
@@ -2567,6 +2615,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (selectedWorkerRef.current && !plan.workers.some(w => w.id === selectedWorkerRef.current)) {
       selectedWorkerRef.current = null;
       setSelectedWorkerId(null);
+    }
+    // 2026-11-17 #118 补录入 UI：车辆被删后自动清选中，避免面板悬挂引用。
+    if (selectedVehicleRef.current && !(plan.vehicles ?? []).some(v => v.id === selectedVehicleRef.current)) {
+      selectedVehicleRef.current = null;
+      setSelectedVehicleId(null);
     }
     draw();
   }, [plan]);
@@ -3819,6 +3872,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           deleteWorker(workerId);
           return;
         }
+        // 2026-11-17 #118 补录入 UI：选中的车辆同样一条 Delete 就删。
+        const vehicleId = selectedVehicleRef.current;
+        if (vehicleId) {
+          event.preventDefault();
+          deleteVehicle(vehicleId);
+          return;
+        }
         // 2026-11-11：分区选中（Placed Objects 树点行）也支持 Delete/Backspace 删除。
         const zoneId = selectedZoneRef.current;
         if (zoneId) {
@@ -3865,7 +3925,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     enabled: Boolean(onPlanChange),
     getMode: () => modeRef.current,
     getShape: () => annotateShapeRef.current,
-    onReveal: () => setInspectorPanel('annotate', true),
+    onReveal: () => {
+      // 底条收起时按 T/R/O/Y/L：先把底条展开，标注浮卡才有锚点，不会闪到右上角。
+      window.dispatchEvent(new CustomEvent('scendance:open-outdoor-dock'));
+      setInspectorPanel('annotate', true);
+    },
     onNote: () => setMode('note'),
     onShape: kind => {
       annotateShapeRef.current = kind;
@@ -4208,14 +4272,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     getMeasureKind: () => measureKindRef.current,
     setSnapOn: (on: boolean) => setSnapOn(on),
     setInspector: (open: boolean, tab?: 'measure' | 'annotate' | 'selection') => {
-      // 2026-11-12 三张卡拆开：每张卡独立展开/收起，互不影响。
+      // 2026-11-17 用户：测量/标注不能同时用，就不该同时开；属性卡只读，保持独立。
       if (!tab) {
-        setInspectorPanels(open ? { measure: true, annotate: true, selection: true } : { measure: false, annotate: false, selection: false });
+        setInspectorPanels(open ? { measure: true, annotate: false, selection: true } : { measure: false, annotate: false, selection: false });
         setSelectionPanelEnabled(open);
         return;
       }
       // 属性卡是总开关：关闭后点选物件不再弹属性卡。
       if (tab === 'selection') { setSelectionPanelEnabled(open); return; }
+      // 打开一张工具卡时，先退出另一张卡对应的绘制模式，避免卡和画布工具各说各话。
+      if (open && tab === 'measure' && (modeRef.current === 'note' || modeRef.current === 'shape')) setMode('view');
+      if (open && tab === 'annotate') {
+        // 键盘 T/R/O/Y/L 会直接开卡；底条可能还收着，先展开底条让浮卡有锚点，再落卡。
+        window.dispatchEvent(new CustomEvent('scendance:open-outdoor-dock'));
+        if (modeRef.current === 'measure') setMode('view');
+        // 重新开卡时清掉上次退出留下的轻提示，避免一开卡就显示旧消息。
+        setAnnotateNotice(null);
+      }
+      // 关闭标注卡等于收起标注工具；否则画布还在画、工具条却没了。
+      if (!open && tab === 'annotate') {
+        if (modeRef.current === 'note' || modeRef.current === 'shape') setMode('view');
+        setAnnotateNotice(null);
+      }
       setInspectorPanel(tab, open);
       // 从右轨重新打开时顺手展开卡身，避免「点了按钮但看不到内容」。
       if (open) setInspectorCollapsed(current => (current[tab] ? { ...current, [tab]: false } : current));
@@ -4523,6 +4601,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       placeWorkerAt(pt);
       return;
     }
+    // 2026-11-17 #118 补录入 UI：布车模式单击落一台车（连续放置）。
+    if (modeRef.current === 'vehicle') {
+      placeVehicleAt(pt);
+      return;
+    }
     // H3-a：测量收点（距离第 2 点自动提交；面积近首点闭合）。
     if (modeRef.current === 'measure') {
       addMeasurePoint(px, pt);
@@ -4663,6 +4746,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       selectRoute(null);
       selectNode(null);
       selectWorker(null);
+      selectVehicle(null);
       selectMeasurement(null);
       clearMultiSelection(false);
     }
@@ -4981,6 +5065,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setWorkerRole(role);
     setMode('worker');
     setEditMessage(`布「${role}」：单击地图落一个点位，可连续放；Esc 结束。`);
+  }
+
+  /**
+   * 2026-11-17 #118 补录入 UI：车辆按钮 → 直接进「布车」模式，点地图落一台车。
+   *
+   * 与岗位同款（不进表单，车型名就是按钮名），台数默认 1、落位后可在属性卡改。
+   * 车型取自 `VEHICLE_TYPES` 登记表（与契约 planVehicleTypes 一一对应）。
+   */
+  function startVehicleType(type: PlanVehicle['type']) {
+    if (!onPlanChange) return;
+    // 再点当前车型 = 取消选择回浏览（允许一辆都不放）。
+    if (modeRef.current === 'vehicle' && vehicleTypeRef.current === type) {
+      setMode('view');
+      return;
+    }
+    vehicleTypeRef.current = type;
+    vehicleCountRef.current = 1;
+    setVehicleType(type);
+    setMode('vehicle');
+    const entry = VEHICLE_TYPES.find(item => item.id === type);
+    setEditMessage(`布「${entry?.name ?? type}」：单击地图落一台车，可连续放；Esc 结束。`);
   }
 
   /**
@@ -5955,7 +6060,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedRouteRef.current = id;
     setSelectedRouteId(id);
     if (id !== null) {
-      selectFacility(null); selectZone(null); selectNode(null); selectWorker(null); selectMeasurement(null);
+      selectFacility(null); selectZone(null); selectNode(null); selectWorker(null); selectVehicle(null); selectMeasurement(null);
       clearMultiSelection(false);
     }
     draw();
@@ -5965,7 +6070,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedNodeRef.current = id;
     setSelectedNodeId(id);
     if (id !== null) {
-      selectFacility(null); selectRoute(null); selectWorker(null); selectMeasurement(null);
+      selectFacility(null); selectRoute(null); selectWorker(null); selectVehicle(null); selectMeasurement(null);
       clearMultiSelection(false);
     }
     draw();
@@ -5975,7 +6080,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedWorkerRef.current = id;
     setSelectedWorkerId(id);
     if (id !== null) {
-      selectFacility(null); selectRoute(null); selectNode(null); selectMeasurement(null);
+      selectFacility(null); selectRoute(null); selectNode(null); selectMeasurement(null); selectVehicle(null);
+    }
+    draw();
+  }
+
+  /**
+   * 2026-11-17 #118 补录入 UI：选中车辆（独立集合，与设施/分区/动线/节点/人员互斥）。
+   * 与 selectWorker 同款：id 为 null 时只清状态，不反向清别人（避免互斥递归）。
+   */
+  function selectVehicle(id: string | null) {
+    selectedVehicleRef.current = id;
+    setSelectedVehicleId(id);
+    if (id !== null) {
+      selectFacility(null); selectRoute(null); selectNode(null); selectWorker(null); selectMeasurement(null);
     }
     draw();
   }
@@ -6008,6 +6126,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const pt = planPointToPixel(w.position, currentViewport());
       const d = Math.hypot(pt.x - px.x, pt.y - px.y);
       if (d <= WORKER_HIT_PX && (best === null || d < best.d)) best = { id: w.id, d };
+    }
+    return best?.id ?? null;
+  }
+
+  /** 命中检测：最近的车辆（VEHICLE_HIT_PX 内），无则 null。只命中当前层。 */
+  function nearestVehicleIdAt(px: { x: number; y: number }): string | null {
+    let best: { id: string; d: number } | null = null;
+    for (const v of viewPlan().vehicles ?? []) {
+      const pt = planPointToPixel(v.position, currentViewport());
+      const d = Math.hypot(pt.x - px.x, pt.y - px.y);
+      if (d <= VEHICLE_HIT_PX && (best === null || d < best.d)) best = { id: v.id, d };
     }
     return best?.id ?? null;
   }
@@ -6255,6 +6384,34 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(`已布「${result.value.role} ×${result.value.count}」${hint}；继续单击放置或 Esc 结束。`);
   }
 
+  /**
+   * 2026-11-17 #118 补录入 UI：布车模式单击落一台车。
+   *
+   * 车型/台数取面板值，落点自动归属分区（当前层分区），连续放置。
+   * **不自动挂模型**：契约里 `modelSlug` 缺省就是「库内没有该车型 GLB」，
+   * 回落登记表首项会把「待补模型」显示成有车模（#118 §3.5）——要挂模型在属性卡里显式选。
+   */
+  function placeVehicleAt(pt: PlanPoint) {
+    const current = planRef.current;
+    const view = viewPlan();
+    const result = buildVehicle(
+      { type: vehicleTypeRef.current, count: vehicleCountRef.current, position: pt },
+      view.boundary,
+      view.zones,
+    );
+    if (!result.ok) {
+      setEditMessage(result.issue.message);
+      return;
+    }
+    commitPlan({
+      ...current,
+      vehicles: [...(current.vehicles ?? []), { ...result.value, ...activeLevelStamp() }],
+    });
+    selectVehicle(result.value.id);
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
+    setEditMessage(`已布「${vehicleLabelOf(result.value)} ×${result.value.count}」${hint}；继续单击放置或 Esc 结束。`);
+  }
+
   function updateRoute(id: string, patch: Partial<Pick<PlanRoute, 'name' | 'kind' | 'oneWay' | 'carrier'>>) {
     const current = planRef.current;
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
@@ -6353,6 +6510,42 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan({ ...current, workers: current.workers.filter(w => w.id !== id) });
     selectWorker(null);
     setEditMessage('人员点位已删除。');
+  }
+
+  /**
+   * 2026-11-17 #118 补录入 UI：改车辆（车型/台数/归属分区/模型）。
+   *
+   * 模型 slug 只能取**该车型登记表里那几条**——不借近似车型（12m 大巴按 7.5m 箱货
+   * 会算小落客区与转弯半径）。台数按契约上限 99 收。
+   */
+  function updateVehicle(id: string, patch: Partial<Pick<PlanVehicle, 'type' | 'count' | 'zoneId' | 'modelSlug'>>) {
+    const current = planRef.current;
+    if (patch.count !== undefined && (!Number.isInteger(patch.count) || patch.count < 1 || patch.count > 99)) return;
+    const vehicle = (current.vehicles ?? []).find(v => v.id === id);
+    if (!vehicle) return;
+    if (patch.modelSlug !== undefined && patch.modelSlug) {
+      const allowed = VEHICLE_TYPES.find(item => item.id === vehicle.type)?.modelSlugs ?? [];
+      if (!allowed.includes(patch.modelSlug)) return;
+    }
+    // 换车型时，原来那台车的模型多半不适用于新车型（不许借近似车型）：一并摘掉，退回「待补模型」。
+    const nextType = patch.type ?? vehicle.type;
+    const allowedForNext = VEHICLE_TYPES.find(item => item.id === nextType)?.modelSlugs ?? [];
+    const modelSlug = patch.modelSlug !== undefined
+      ? patch.modelSlug
+      : (vehicle.modelSlug && allowedForNext.includes(vehicle.modelSlug) ? vehicle.modelSlug : undefined);
+    commitPlan({
+      ...current,
+      vehicles: (current.vehicles ?? []).map(v => (v.id === id
+        ? { ...v, ...patch, ...(modelSlug ? { modelSlug } : { modelSlug: undefined }) }
+        : v)),
+    });
+  }
+
+  function deleteVehicle(id: string) {
+    const current = planRef.current;
+    commitPlan({ ...current, vehicles: (current.vehicles ?? []).filter(v => v.id !== id) });
+    selectVehicle(null);
+    setEditMessage('车辆已删除。');
   }
 
   /* ---------------- H3-a 测量（临时读数 + 固定测量） ---------------- */
@@ -6489,7 +6682,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedMeasurementRef.current = id;
     setSelectedMeasurementId(id);
     if (id) {
-      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectAnnotation(null);
+      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectVehicle(null); selectAnnotation(null);
       clearMultiSelection(false);
       const measurement = (planRef.current.measurements ?? []).find(m => m.id === id);
       if (measurement) {
@@ -6776,6 +6969,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     else if (row.kind === 'route') deleteRoute(row.id);
     else if (row.kind === 'node') deleteNode(row.id);
     else if (row.kind === 'worker') deleteWorker(row.id);
+    // 2026-11-17 #118 补录入 UI：车辆行的删除也要真删（此前这一行是静默无动作）。
+    else if (row.kind === 'vehicle') deleteVehicle(row.id);
     else if (row.kind === 'measurement') deleteMeasurement(row.id);
     // 2026-11-11 用户指令：树行右键删除自由标注。
     else if (row.kind === 'annotation') deleteAnnotation(row.id);
@@ -6797,6 +6992,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       selectNode(row.id);
     } else if (row.kind === 'worker') {
       selectWorker(row.id);
+    } else if (row.kind === 'vehicle') {
+      // 2026-11-17 #118 补录入 UI：车辆行点击 = 选中 + 居中。
+      selectVehicle(row.id);
     } else if (row.kind === 'annotation') {
       // 2026-11-11 用户指令：标注行点击 = 选中（白描边高亮）+ 居中，Delete 可删。
       selectAnnotation(row.id);
@@ -6828,6 +7026,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (!layerLocked('node') && nearestNodeIdAt(hit.px)) return true;
     if (!layerLocked('worker') && nearestWorkerIdAt(hit.px)) return true;
     if (!layerLocked('route') && nearestRouteIdAt(hit.px)) return true;
+    // 2026-11-17 #118 补录入 UI：车辆可点选（独立集合，未做图层开关，暂不参与 layerLocked）。
+    if (nearestVehicleIdAt(hit.px)) return true;
     if (!layerLocked('annotate') && nearestAnnotationIdAt(hit.pt)) return true;
     if (!layerLocked('facility') && viewPlan().facilities.some((facility) => facilityContainsPoint(hit.pt, facility))) return true;
     if (!layerLocked('zone') && viewPlan().zones.some((zone) => planPointInRing(hit.pt, zone.polygon))) return true;
@@ -8488,6 +8688,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           if (hitNode) { selectNode(hitNode); setInfoTab('inventory'); return; }
           const hitWorker = layerLocked('worker') ? null : nearestWorkerIdAt(hit.px);
           if (hitWorker) { selectWorker(hitWorker); setInfoTab('inventory'); return; }
+          // 2026-11-17 #118 补录入 UI：车辆点选（独立集合）。
+          const hitVehicle = nearestVehicleIdAt(hit.px);
+          if (hitVehicle) { selectVehicle(hitVehicle); setInfoTab('inventory'); return; }
           const hitRoute = layerLocked('route') ? null : nearestRouteIdAt(hit.px);
           if (hitRoute) { selectRoute(hitRoute); setInfoTab('inventory'); return; }
           // 2026-11-11 用户指令：标注画在业务层之上，点选先于设施/分区（锁定标注层不响应）。
@@ -8767,6 +8970,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const selectedRoute = selectedRouteId ? plan.routes.find(r => r.id === selectedRouteId) ?? null : null;
   const selectedNode = selectedNodeId ? plan.nodes.find(n => n.id === selectedNodeId) ?? null : null;
   const selectedWorker = selectedWorkerId ? plan.workers.find(w => w.id === selectedWorkerId) ?? null : null;
+  /** 2026-11-17 #118 补录入 UI：当前选中的车辆（独立集合）。 */
+  const selectedVehicle = selectedVehicleId ? (plan.vehicles ?? []).find(v => v.id === selectedVehicleId) ?? null : null;
+  /** 该车型在物料库里登记的模型（只有登记过的才能选；没有就是「待补模型」）。 */
+  const selectedVehicleModelSlugs = selectedVehicle ? (VEHICLE_TYPES.find(item => item.id === selectedVehicle.type)?.modelSlugs ?? []) : [];
   // 固定角色选项：可走漫游角色；与当前岗位同类的排前，其余在后。
   const selectedWorkerCrowdType = selectedWorker ? crowdTypeForRole(selectedWorker.role) : null;
   const workerRoleOptions = (() => {
@@ -8778,7 +8985,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     ];
   })();
   // 2026-11-11 用户指令：右上角浮窗「属性」页签的角标 = 当前同时选中的物件数（点选后自动切过来）。
-  const selectionInspectorCount = (selectedZoneId ? 1 : 0) + (selectedFacility ? 1 : 0) + (selectedRoute ? 1 : 0) + (selectedNodeId ? 1 : 0) + (selectedWorkerId ? 1 : 0) + multiSelectedRouteIds.length + multiSelectedNodeIds.length + (multiSelectedFacilityIds.length >= 2 ? 1 : 0);
+  // 2026-11-17 #118 补漏：车辆也必须算进去——角标为 0 时整张「属性」卡会被空状态顶掉，
+  // 车辆属性卡（车型/台数/分区/车型模型/删除）在编辑器里就永远够不着。
+  const selectionInspectorCount = planSelectionCount({
+    zone: !!selectedZoneId,
+    facility: !!selectedFacility,
+    route: !!selectedRoute,
+    node: !!selectedNodeId,
+    worker: !!selectedWorkerId,
+    vehicle: !!selectedVehicle,
+    multiRoute: multiSelectedRouteIds.length,
+    multiNode: multiSelectedNodeIds.length,
+    multiFacility: multiSelectedFacilityIds.length,
+  });
   useEffect(() => {
     if (selectionInspectorCount === 0 || !selectionPanelOnRef.current) return;
     // 选中物件 → 只把「属性」卡展开（测量/标注卡的开合不受影响）。
@@ -8814,6 +9033,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     route: layerState.route ? levelView.routes.length : 0,
     node: layerState.access ? levelView.nodes.length : 0,
     worker: layerState.worker ? levelView.workers.length : 0,
+    // 2026-11-17 #118 补录入 UI：车辆暂不设独立图层开关（跟随「车」组），按当前层实体数计。
+    vehicle: (levelView.vehicles ?? []).length,
     measurement: layerState.measure ? (levelView.measurements ?? []).length : 0,
     annotation: layerState.annotate ? (levelView.annotations ?? []).length : 0,
   };
@@ -8829,7 +9050,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const counts = new Map<string, number>();
     let unassigned = 0;
     for (const row of filterPlanInventory(inventoryRows, { kind: invKind, issuesOnly: invIssuesOnly })) {
-      if (row.kind !== 'facility' && row.kind !== 'worker') continue;
+      // 2026-11-17 #118：车辆也能归属分区（落位时自动归属），按区筛选时一并计入。
+      if (row.kind !== 'facility' && row.kind !== 'worker' && row.kind !== 'vehicle') continue;
       if (row.zoneId) counts.set(row.zoneId, (counts.get(row.zoneId) ?? 0) + 1);
       else unassigned += 1;
     }
@@ -9117,6 +9339,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     </div>
   ) : null;
 
+  /** 提示行永远占位（含未选工具），底部锚定的卡片不会因切工具/提示消息而改高度。 */
+  const annotateHint = mode === 'note'
+    ? '文本 · 点一下输入，Enter 提交'
+    : mode === 'shape'
+      ? (annotateDraftCount > 0
+        ? `${planAnnotationKindLabels[annotateShape]} · 已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
+        : `${planAnnotationKindLabels[annotateShape]} · ${annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖或点两个点'}`)
+      : '选一个工具，在图上绘制';
+
   /* 2026-11-11 用户指令：标注区独立成块（测量区下方）——文本 T + 形状（形状态出四类型选项），
      有 annotatePanelHost 时 portal 过去（两页签下常驻）；无宿主回落「已放置物件」面板内。 */
   const annotateZone = !readOnly ? (
@@ -9161,17 +9392,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         onColor={value => { annotateColorRef.current = value; setAnnotateColor(value); draw(); }}
         onStrokeWidth={value => { annotateStrokeWidthRef.current = value; setAnnotateStrokeWidth(value); draw(); }}
       />
-      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.78, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-        {mode === 'note' && '文本 · 点一下输入，Enter 提交'}
-        {mode === 'shape' && (annotateDraftCount > 0
-          ? `${planAnnotationKindLabels[annotateShape]} · 已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
-          : `${planAnnotationKindLabels[annotateShape]} · ${annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖或点两个点'}`)}
+      <div
+        data-testid="annotate-hint"
+        role={annotateNotice ? 'status' : undefined}
+        aria-live={annotateNotice ? 'polite' : undefined}
+        title={annotateNotice ?? annotateHint}
+        style={{
+          marginTop: PLANNING_SPACING.xs,
+          height: 16,
+          lineHeight: '16px',
+          fontSize: PLANNING_TYPOGRAPHY.hint,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          color: annotateNotice ? PLANNING_SURFACE.warnText : undefined,
+          opacity: annotateNotice ? 1 : 0.78,
+        }}
+      >
+        {annotateNotice ?? annotateHint}
       </div>
-      {annotateNotice && (
-        <div role="status" aria-live="polite" style={{ marginTop: 4, fontSize: PLANNING_TYPOGRAPHY.hint, lineHeight: '15px', color: PLANNING_SURFACE.warnText }}>
-          {annotateNotice}
-        </div>
-      )}
       {(levelView.annotations?.length ?? 0) > 0 && levelView.annotations!.map(a => renderOneplanItemRow({
         key: `annotate-${a.id}`,
         testId: `layer-entity-annotation-${a.id}`,
@@ -9800,11 +10039,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       })()}
                       {/* 当前模型排首位，素材库的默认模型保留标记，点它清除 override。 */}
                       <div style={benchSectionTitleStyle}>模型</div>
+                      {/* 2026-11-17：候选条外面包一层 flex 行。候选条自己是横向滚动条，
+                          固有宽度 = 候选数 × 68px；不包这一层，它会把整张属性卡撑到上千像素宽，
+                          冲出宿主与视口，「文字生成 / 图片生成 / 导入 GLB」三颗按钮就落在可视区之外，
+                          真鼠标点下去命中的是底图 canvas。包一层之后滚动条自己滚，卡片宽度回到设计稿的 ~233px。 */}
+                      <div style={FACILITY_MODEL_STRIP_WRAPPER_STYLE}>
                       <div
                         role="group"
                         aria-label="3D 模型候选"
                         data-testid="facility-model-strip"
-                        style={{ display: 'flex', gap: PLANNING_SPACING.xs, overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2, scrollbarWidth: 'thin' }}
+                        style={FACILITY_MODEL_STRIP_STYLE}
                       >
                         {(() => {
                           const raw = facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId ? facilityModelCandidates.items : [];
@@ -9859,6 +10103,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           </span>
                         )}
                       </div>
+                      </div>
                       {(() => {
                         const raw = facilityModelCandidates && facilityModelCandidates.templateId === selectedFacility.templateId ? facilityModelCandidates.items : [];
                         const builtinFirst = raw.find(candidate => candidate.slug === facilityModelCandidates?.defaultSlug);
@@ -9906,7 +10151,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           原来它是一条折叠手风琴且默认关闭——最需要入口的动作反而最不显眼。
                           改成模型条正下方三格常驻：文字生成 / 图片生成 / 导入 GLB，
                           图标在上、名称在下，与模型卡同一视觉重量；说明挤进 title，不再占两行。 */}
-                      <div role="group" aria-label="生成或导入模型" style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                      <div role="group" aria-label="生成或导入模型" style={FACILITY_MODEL_ACTION_ROW_STYLE}>
                         <button
                           type="button"
                           data-testid="facility-model-generate"
@@ -10405,6 +10650,72 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         删除点位
                       </button>
                       <button type="button" style={modeButtonStyle(false)} onClick={() => selectWorker(null)}>
+                        取消选择
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/*
+                  2026-11-17 #118 补录入 UI：车辆属性卡（车型 / 台数 / 归属分区 / 车型模型 / 删除）。
+                  模型下拉只列该车型在物料库里登记过的 slug——没有就是「待补模型」，不许借近似车型。
+                */}
+                {selectedVehicle && (
+                  <>
+                    <div style={sectionTitle}>已选中车辆</div>
+                    <div style={zoneRowStyle}>
+                      <select
+                        aria-label="选中车辆车型"
+                        value={selectedVehicle.type}
+                        onChange={event => updateVehicle(selectedVehicle.id, { type: event.target.value as PlanVehicle['type'] })}
+                        style={{ ...selectStyle, flex: 1, minWidth: 0 }}
+                      >
+                        {VEHICLE_TYPES.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select>
+                      <input
+                        aria-label="选中车辆台数"
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={selectedVehicle.count}
+                        onChange={event => updateVehicle(selectedVehicle.id, { count: Math.max(1, Math.min(99, Math.floor(Number(event.target.value) || 1))) })}
+                        style={{ width: 56, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: PLANNING_RADIUS.sm, fontSize: PLANNING_TYPOGRAPHY.row, padding: '2px 4px' }}
+                      />
+                    </div>
+                    <label style={zoneRowStyle}>
+                      归属分区
+                      <select
+                        aria-label="选中车辆归属分区"
+                        value={selectedVehicle.zoneId ?? ''}
+                        onChange={event => updateVehicle(selectedVehicle.id, { zoneId: event.target.value || undefined })}
+                        style={{ ...selectStyle, flex: 1, minWidth: 0 }}
+                      >
+                        <option value="">（自动 / 无）</option>
+                        {levelView.zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+                      </select>
+                    </label>
+                    <label style={zoneRowStyle}>
+                      车型模型
+                      <select
+                        aria-label="选中车辆模型"
+                        value={selectedVehicle.modelSlug ?? ''}
+                        onChange={event => updateVehicle(selectedVehicle.id, { modelSlug: event.target.value || undefined })}
+                        style={{ ...selectStyle, flex: 1, minWidth: 0 }}
+                      >
+                        <option value="">（待补模型）</option>
+                        {selectedVehicleModelSlugs.map(slug => <option key={slug} value={slug}>{slug}</option>)}
+                      </select>
+                    </label>
+                    <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
+                      <button
+                        type="button"
+                        data-testid="vehicle-delete"
+                        style={modeButtonStyle(false)}
+                        onClick={() => deleteVehicle(selectedVehicle.id)}
+                      >
+                        删除车辆
+                      </button>
+                      <button type="button" style={modeButtonStyle(false)} onClick={() => selectVehicle(null)}>
                         取消选择
                       </button>
                     </div>
@@ -11134,13 +11445,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   <div style={{ opacity: 0.85 }}>
                     人行 {formatLengthM(overviewStats.routeLengthMByKind.pedestrian)} · 车辆 {formatLengthM(overviewStats.routeLengthMByKind.vehicle)} · 后勤 {formatLengthM(overviewStats.routeLengthMByKind.service)}
                   </div>
-                  <div>出入口 {overviewStats.nodeCount} · 人员 {overviewStats.workerTotalCount} 人 / {overviewStats.workerPostCount} 点</div>
+                  <div>出入口 {overviewStats.nodeCount} · 人员 {overviewStats.workerTotalCount} 人 / {overviewStats.workerPostCount} 点 · 车辆 {overviewStats.vehicleTotalCount} 台 / {overviewStats.vehicleCount} 处</div>
                   <div>固定测量 {overviewStats.measurementCount}</div>
                   <div data-testid="info-issue-count">待处理问题 {overviewStats.issueCount + overviewStats.conflictCount}（冲突/缺失 {overviewStats.conflictCount}）</div>
                 </div>
                 <div style={sectionTitle}>当前可见（隐藏不改全案数字）</div>
                 <div data-testid="info-visible-stats" style={{ opacity: 0.85 }}>
-                  分区 {visibleCounts.zone} · 设施 {visibleCounts.facility} · 动线 {visibleCounts.route} · 出入口 {visibleCounts.node} · 人员 {visibleCounts.worker} · 测量 {visibleCounts.measurement} · 标注 {visibleCounts.annotation}
+                  分区 {visibleCounts.zone} · 设施 {visibleCounts.facility} · 动线 {visibleCounts.route} · 出入口 {visibleCounts.node} · 人员 {visibleCounts.worker} · 车辆 {visibleCounts.vehicle} · 测量 {visibleCounts.measurement} · 标注 {visibleCounts.annotation}
                 </div>
               </div>
             )}
@@ -11155,7 +11466,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     style={selectStyle}
                   >
                     <option value="all">全部类型</option>
-                    {(['zone', 'facility', 'route', 'node', 'worker', 'measurement', 'annotation'] as PlanInventoryKind[]).map(kind => (
+                    {(['zone', 'facility', 'route', 'node', 'worker', 'vehicle', 'measurement', 'annotation'] as PlanInventoryKind[]).map(kind => (
                       <option key={kind} value={kind}>{planInventoryKindLabel(kind)}</option>
                     ))}
                   </select>
@@ -11738,8 +12049,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       )}
 
                       {/* 2026-11-16 用户：车与「基础设施」同级、单独一行；行内是图标素材 */}
-                      {renderOneplanGroupHeader({ id: 'vehicles', label: CAR_ROW_LABEL, count: libraryVehicleIcons.length, icon: 'truck' })}
-                      {openLibrarySections.includes('vehicles') && libraryVehicleIcons.length > 0 && renderOneplanStickerRows(libraryVehicleIcons)}
+                      {renderOneplanGroupHeader({ id: 'vehicles', label: CAR_ROW_LABEL, count: VEHICLE_TYPES.length + libraryVehicleIcons.length, icon: 'truck' })}
+                      {openLibrarySections.includes('vehicles') && (
+                        <>
+                          {/* 2026-11-17 #118 补录入 UI：规划车辆（落进 plan.vehicles，挂得上动线就巡游）。 */}
+                          {renderOneplanSubgroupHeader({ sectionId: 'vehicles', key: 'plan-vehicles', label: PLAN_VEHICLE_ROW_LABEL, count: VEHICLE_TYPES.length })}
+                          {openLibrarySubgroups.includes('vehicles:plan-vehicles') && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              {VEHICLE_TYPES.map(type => renderOneplanItemRow({
+                                key: `plan-vehicle-${type.id}`,
+                                testId: `catalog-plan-vehicle-${type.id}`,
+                                label: type.name,
+                                active: mode === 'vehicle' && vehicleType === type.id,
+                                onClick: () => armOrDisarm(mode === 'vehicle' && vehicleType === type.id, () => startVehicleType(type.id as PlanVehicle['type'])),
+                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 16, height: 8, borderRadius: 3, background: PLANNING_ROUTE_KIND_COLORS.vehicle }} /></span>,
+                              }))}
+                            </div>
+                          )}
+                          {/* 车素材：物料库物件（落成 facility），与上面的规划车辆不是一回事。 */}
+                          {libraryVehicleIcons.length > 0 && renderOneplanStickerRows(libraryVehicleIcons)}
+                        </>
+                      )}
 
                       {/* 2. 基础设施 → 17 个子组（OnePlan Infrastructure 镜像） */}
                       {renderOneplanGroupHeader({
@@ -11971,16 +12301,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             onPointerMove={onInspectorPanelPointerMove}
             onPointerUp={onInspectorPanelPointerUp}
             onPointerCancel={onInspectorPanelPointerUp}
-            style={{
-              position: 'absolute', zIndex: 6,
-              ...(inspectorPanelPos
-                ? { left: inspectorPanelPos.x, top: inspectorPanelPos.y, right: 'auto', bottom: 'auto', transform: 'none' }
-                : { top: 16, right: 68, left: 'auto', bottom: 'auto', transform: 'none' }),
-              pointerEvents: 'auto',
-              display: 'flex', flexDirection: 'row', gap: 8,
-              width: 'max-content', maxWidth: 'calc(100% - 32px)',
-              maxHeight: 'calc(100% - 120px)',
-            }}
+            style={inspectorStackStyle(inspectorPanelPos)}
           >
             {visible.map(card => {
               const collapsed = inspectorCollapsed[card.key];
@@ -11994,33 +12315,43 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   className={`sc-outdoor-toolcard${card.key === 'annotate' ? ' sc-outdoor-toolcard--annotate' : ''}`}
                   data-anchored={card.key === 'annotate' && annotateAnchor ? 'above-tool' : undefined}
                   onWheel={stopPanelWheel}
-                  style={{
-                    flex: '0 0 auto',
-                    display: 'flex', flexDirection: 'column', minHeight: 0,
-                    background: PLANNING_SURFACE.panelBg,
-                    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                    borderRadius: 12,
-                    boxShadow: '0 10px 26px rgba(20, 24, 32, 0.10)',
-                    overflow: card.key === 'annotate' ? 'visible' : 'hidden',
-                    color: PLANNING_SURFACE.panelText,
-                    fontSize: PLANNING_TYPOGRAPHY.panel,
-                    ...(card.key === 'annotate' && annotateAnchor
-                      ? {
-                        position: 'fixed' as const,
-                        left: annotateAnchor.left,
-                        bottom: annotateAnchor.bottom,
-                        top: 'auto',
-                        right: 'auto',
-                        transform: 'translateX(-50%)',
-                        zIndex: 80,
-                        maxWidth: 'calc(100vw - 24px)',
-                      }
-                      : {}),
-                  }}
+                  style={inspectorCardStyle({ key: card.key, annotateAnchor })}
                   onMouseDown={stopPanelMouse}
                   onMouseUp={stopPanelMouse}
                   onDoubleClick={stopPanelMouse}
                 >
+                  {card.key === 'annotate' && (
+                    <div
+                      data-testid="outdoor-inspector-card-annotate-head"
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 2px 10px' }}
+                    >
+                      <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: card.accent }} />
+                      <span style={{ fontWeight: 600, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{card.label}</span>
+                      {card.count > 0 && (
+                        <span
+                          aria-hidden
+                          style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: withAlphaHex(card.accent, 0.14), color: card.accent, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600, lineHeight: '18px', textAlign: 'center' }}
+                        >
+                          {card.count}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        data-testid="outdoor-inspector-card-annotate-close"
+                        aria-label="关闭标注卡片"
+                        title="关闭标注"
+                        onClick={() => {
+                          setInspectorPanel('annotate', false);
+                          if (mode === 'note' || mode === 'shape') setMode('view');
+                          setAnnotateNotice(null);
+                        }}
+                        className="sc-outdoor-toolcard-btn"
+                        style={{ marginLeft: 'auto', cursor: 'pointer', width: 24, height: 24, flex: '0 0 auto', borderRadius: 7, display: 'grid', placeItems: 'center', color: '#3f4448' }}
+                      >
+                        <MaterialSymbol name="close" size={16} />
+                      </button>
+                    </div>
+                  )}
                   {card.key !== 'annotate' && (
                   <div data-inspector-header="" onClickCapture={onInspectorPanelHeaderClickCapture} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 8px', cursor: 'grab' }}>
                     <button
@@ -12074,7 +12405,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   </div>
                   )}
                   {(!collapsed || card.key === 'annotate') && (
-                    <div style={{ minHeight: 0, overflowY: 'auto', maxHeight: '46vh', padding: card.key === 'annotate' ? '8px 10px' : '0 12px 12px' }}>{card.body}</div>
+                    <div style={inspectorCardBodyStyle({ key: card.key })}>{card.body}</div>
                   )}
                 </section>
               );

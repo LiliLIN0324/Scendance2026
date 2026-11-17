@@ -73,6 +73,22 @@ it('换场地：锚点真挪了就清空旧草稿，只留新锚点与新用地�
   expect(plan.nodes).toHaveLength(1);
 });
 
+it('换场地：车辆跟旧内容一起清掉，不把旧坐标系的活车留在新场地上', () => {
+  const plan = createStarterOutdoorPlan();
+  plan.vehicles = [
+    { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', type: 'business', count: 2, position: { x: 6, y: 8 }, notes: '' },
+  ];
+  const nextAnchor = { lng: plan.anchor!.lng + 0.1, lat: plan.anchor!.lat, crs: 'gcj-02' as const, source: 'picker' as const };
+  const boundary = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 10 }, { x: 0, y: 10 }];
+  const result = planForPickedVenue(plan, nextAnchor, boundary);
+  expect(result.replaced).toBe(true);
+  // 清空计数要含车：否则提示条说「没清掉任何东西」，实际车没了。
+  expect(result.cleared).toBe(1);
+  expect(result.plan.vehicles).toEqual([]);
+  // 原对象不被就地改动（撤销与历史快照还靠它）。
+  expect(plan.vehicles).toHaveLength(1);
+});
+
 it('同一锚点原地重画边界：内容原样保留，只换 boundary', () => {
   const plan = createStarterOutdoorPlan();
   plan.nodes.push({ id: 'entry', name: '入口', kind: 'both', notes: '', position: { x: 0, y: 0 } });
@@ -84,8 +100,7 @@ it('同一锚点原地重画边界：内容原样保留，只换 boundary', () =
   expect(result.plan.boundary).toEqual(boundary);
 });
 
-it('空草稿换场：不报清空项，锚点与红线照样跟着新场地走', () => {
-  const plan = createStarterOutdoorPlan();
+it('空草稿换场：不报清空项，锚点与红线照样跟着新场地走', () => {  const plan = createStarterOutdoorPlan();
   const nextAnchor = { lng: 120.5, lat: 30.4, crs: 'gcj-02' as const, source: 'picker' as const };
   const boundary = [{ x: 0, y: 0 }, { x: 12, y: 0 }, { x: 12, y: 8 }, { x: 0, y: 8 }];
   const result = planForPickedVenue(plan, nextAnchor, boundary);

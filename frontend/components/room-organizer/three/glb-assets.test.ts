@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearGlbAssetCache, cloneOwnedGlb, createCachedGlbModel, createGlbCatalogItem, disposeOwnedModel,
-  ensureGlbAsset, getGlbAssetState, inPlaceWalkClip, normalizeGlbInstance, repairGlbBufferViews, sanitizeGlbJsonPadding, validateGlbBuffer } from './glb-assets';
+  ensureGlbAsset, getGlbAssetState, glbDownloadLimit, inPlaceWalkClip, normalizeGlbInstance, repairGlbBufferViews, sanitizeGlbJsonPadding, validateGlbBuffer } from './glb-assets';
+import { GLB_MAX_CLOUD_FILE_BYTES, GLB_MAX_FILE_BYTES } from '../lib/glb-limits';
 import { advancePeopleAnimations, personOdometer } from './people-anim';
 
 function realGlb(): ArrayBuffer {
@@ -139,6 +140,17 @@ describe('owned GLB model instances', () => {
     view.setUint32(12, json.length, true); view.setUint32(16, 0x4e4f534a, true);
     new Uint8Array(buffer, 20).set(json);
     expect(() => validateGlbBuffer(buffer)).toThrow('外部文件');
+  });
+
+  it('云端下载档放宽到 32 MB，本机导入仍守 10 MB', () => {
+    // 2026-11-17 生产 C1 实跑：Lux3D G1 的 textured.glb 实测 10.06 MiB，比 10 MB 多 59 KB。
+    // 服务端已经把它存进资产库，前端却按 10 MB 拒收 —— 额度花了、模型生成了，用户却拿不到。
+    expect(glbDownloadLimit('https://assets.example.test/model.glb')).toBe(GLB_MAX_CLOUD_FILE_BYTES);
+    expect(GLB_MAX_CLOUD_FILE_BYTES).toBe(32 * 1024 * 1024);
+    expect(GLB_MAX_FILE_BYTES).toBe(10 * 1024 * 1024);
+    expect(() => validateGlbBuffer(new ArrayBuffer(GLB_MAX_FILE_BYTES + 1))).toThrow('10 MB');
+    // 同一份数据走云端档：体积这一关不该再拦（后面报「不是有效的 GLB」是内容问题，与体积无关）。
+    expect(() => validateGlbBuffer(new ArrayBuffer(GLB_MAX_FILE_BYTES + 1), GLB_MAX_CLOUD_FILE_BYTES)).not.toThrow('超过');
   });
 
   it('accepts a JSON chunk padded with NUL instead of spaces', () => {

@@ -736,6 +736,7 @@ body {
 .sc-generated-body { display: grid; gap: 2px; min-width: 0; }
 .sc-generated-body > span { font-size: var(--fs-cap); color: var(--sc-muted); line-height: 1.4; }
 .sc-generated-meta { font-size: var(--fs-cap); color: var(--wk-muted); line-height: 1.4; }
+.sc-generated-reason { font-size: var(--fs-cap); color: var(--warn); line-height: 1.4; overflow-wrap: anywhere; }
 .sc-generated-tasks strong { overflow-wrap: anywhere; }
 .sc-material-card { display: grid; grid-template-rows: auto 40px 34px 18px; gap: var(--sc-space-sm); align-content: start; text-align: left; border: 1px solid var(--wk-hair-soft); background: var(--paper); border-radius: var(--r-md); padding: var(--sc-space-sm); min-width: 0; transition: transform var(--sc-fast) var(--sc-ease), border-color var(--sc-fast) var(--sc-ease), background-color var(--sc-fast) var(--sc-ease) !important; }
 .sc-material-preview { position: relative; aspect-ratio: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: var(--wk-plane-deep, #ececef); border-radius: var(--r-sm); overflow: hidden; }
@@ -1820,6 +1821,9 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column [data-tip]:hover::after,
 .sc-workbench .sc-tool-column [data-tip]:focus-visible::after { opacity: 1; }
+/* 罗盘提示挂在不旋转的 .gm-rose 上，避免跟着针一起转。 */
+.sc-workbench .sc-tool-column .gm-rose[data-tip]:focus-within::after { opacity: 1; }
+.sc-workbench .sc-tool-column .gm-rose.is-dragging[data-tip]::after { opacity: 0; }
 /* 底部工具条是横向排列：提示必须放到钮上方，不能沿用右轨的左侧浮层，
    否则会盖住旁边的撤销/重做等图标（用户实测反馈）。 */
 .sc-workbench .sc-tool-column .oc-dock [data-tip]::after {
@@ -2037,6 +2041,8 @@ body.sc-panel-dragging * {
 .sc-canvas-stage.is-chrome-hidden [data-testid="outdoor-map-picker-panel"] { display: none !important; }
 .sc-workspace.is-chrome-hidden .sc-plan-place-search { display: none !important; }
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br button:not(#tool-opacity) { display: none; }
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-compass-wrap,
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .gm-rose { display: none !important; }
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-zoom,
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-zoom,
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-divider { display: none !important; }
@@ -2199,6 +2205,99 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass .oc-gm-compass-canvas {
   display: block; width: var(--oc-gm-compass); height: var(--oc-gm-compass);
 }
+
+/* 圆形罗盘盖住原来的指北针按钮：针和两侧弯箭头在同一层里随方位旋转。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap.is-gm-rose > #tool-compass {
+  position: absolute; width: 1px; height: 1px; min-width: 0; min-height: 0;
+  margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); opacity: 0;
+  pointer-events: none; border: 0; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose {
+  position: absolute; inset: 0; z-index: 2; border-radius: 50%; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(20, 20, 22, .28), 0 2px 8px rgba(20, 20, 22, .18);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-spin {
+  position: absolute; inset: 0; transform-origin: 50% 50%;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-art {
+  display: block; width: 100%; height: 100%; pointer-events: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face {
+  position: absolute; width: auto; height: auto; min-width: 0; min-height: 0;
+  padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: transparent;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face:hover {
+  background: transparent; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn {
+  top: 8px; bottom: 0; width: 16px; z-index: 2; cursor: pointer;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-left { left: 0; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-right { right: 0; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face {
+  inset: 0; z-index: 1; border-radius: 50%; cursor: grab; touch-action: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose.is-dragging button.gm-rose-face { cursor: grabbing; }
+
+/* 罗盘悬停触感：整盘略提亮，箭头 / 指针分区变亮。160ms，不放大整盘。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose {
+  transition: box-shadow 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:hover {
+  box-shadow: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-disc {
+  transition: fill 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:hover .gm-rose-disc {
+  fill: #2A2A2A;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left polygon,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right polygon {
+  fill: #B8B8B8;
+  transition: fill 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:hover) .gm-rose-arrow-left path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:hover) .gm-rose-arrow-left polygon {
+  fill: #F1F3F4;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:hover) .gm-rose-arrow-right path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:hover) .gm-rose-arrow-right polygon {
+  fill: #F1F3F4;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:active) .gm-rose-arrow-left path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:active) .gm-rose-arrow-left polygon,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:active) .gm-rose-arrow-right path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:active) .gm-rose-arrow-right polygon {
+  fill: #E4E4E4;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-n,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-s {
+  transition: fill 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-face:hover) .gm-rose-needle-n {
+  fill: #F04A4A;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-face:hover) .gm-rose-needle-s {
+  fill: #F1F3F4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-disc,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left path,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left polygon,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right path,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right polygon,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-n,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-s {
+    transition: none;
+  }
+}
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass:hover {
   background: #2b2c2f;
   box-shadow: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);
@@ -2292,8 +2391,8 @@ body.sc-panel-dragging * {
   z-index: 35; display: flex; flex-direction: column; align-items: center; gap: 0;
   pointer-events: none;
 }
-/* 展开态：只保留工具这一行（图2）；关闭用点外部 / Esc，
-   不再加一条“工具”标题栏或另挂一颗收起胶囊。 */
+/* 展开态：只保留工具这一行（图2）；关闭只认末尾 × / Esc，
+   点画布或点卡内按钮不收起——用户可连续操作，不会把上浮的标注卡变成无锚点空卡。 */
 .sc-workbench .sc-tool-column .oc-dock.is-open {
   align-items: center;
   width: max-content;

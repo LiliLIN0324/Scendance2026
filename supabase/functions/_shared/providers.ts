@@ -78,7 +78,9 @@ export function aholoLux3d(env: Env, fetcher: Fetcher = fetch) {
     },
     async query(id: string):Promise<z.infer<typeof querySchema>> {
       const d=lux3dQuerySchema.parse(await call(`/lux3d/v1/generate/task/get?taskid=${encodeURIComponent(id)}`,{method:'GET'}));
-      const Status=({0:'WAIT',1:'RUN',3:'DONE',4:'FAIL',6:'FAIL'} as const)[d.status]??'FAIL';
+      // 未知 status 一律当“仍在跑”，不要默认 FAIL：FAIL 是终态，会把仍在生成、
+      // credits 已扣的任务直接判死，产物丢失。宁可继续轮询到 23 小时兜底。
+      const Status=({0:'WAIT',1:'RUN',3:'DONE',4:'FAIL',6:'FAIL'} as const)[d.status]??'RUN';
       return {
         Status,ErrorCode:d.status===6?'PROVIDER_TASK_CANCELLED':d.status===4?'PROVIDER_FAILED':undefined,
         ResultFile3Ds:(d.outputs??[]).flatMap(o=>{

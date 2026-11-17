@@ -110,7 +110,7 @@ describe('useAnnotateDrawShortcuts', () => {
     const hookAt = src.indexOf('useAnnotateDrawShortcuts(');
     const handAt = src.indexOf("event.key === 'h' || event.key === 'H'");
     expect(hookAt).toBeGreaterThan(handAt);
-    const call = src.slice(hookAt, hookAt + 500);
+    const call = src.slice(hookAt, hookAt + 1000);
     expect(call).toContain("setMode('note')");
     expect(call).toContain("setMode('shape')");
     expect(call).toContain('setAnnotateShape(kind)');

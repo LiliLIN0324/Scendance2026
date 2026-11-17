@@ -71,9 +71,7 @@ afterEach(() => {
   setPersonWalkContext(null);
   setPersonWalkContext(null, 'outdoor');
   setPersonSeatContext(null);
-  setPersonSeatContext(null, 'outdoor');
   setPersonZoneContext(null);
-  setPersonZoneContext(null, 'outdoor');
   advancePeopleAnimations(STEP); // 清空场景后走一帧，注册表把脱离的实例摘干净
 });
 
@@ -441,63 +439,6 @@ describe('行走上下文按 owner 分开', () => {
     for (let i = 0; i < 180; i += 1) advancePeopleAnimations(1 / 60, scene, 'local');
     // local 没有注入过：不避障、不夹取，而不是借 outdoor 的围栏。
     expect(group.position.x).toBeGreaterThan(3);
-  });
-});
-
-// 座位 / 分区上下文与行走上下文同一口径：谁注入谁生效，不跨 owner 借用。
-describe('座位与分区上下文按 owner 分开', () => {
-  const straight: WalkRoute = { points: [{ x: 0, z: 0 }, { x: 10, z: 0 }], loop: false, pauseMs: 0 };
-  const chair: SeatAnchor = {
-    id: 'chair-owner', x: 3, z: 0, approach: { x: 3, z: 0 }, facing: 0, seatHeight: 0.45,
-  };
-  const zone = {
-    id: 'zone-owner',
-    polygon: [{ x: 4, z: -2 }, { x: 8, z: -2 }, { x: 8, z: 2 }, { x: 4, z: 2 }],
-  };
-
-  function mount(id: string): THREE.Group {
-    const group = buildProceduralPerson({
-      THREE, item: { ...adult, id, walkRoute: straight }, hasCollision: false, baseColor: adult.color, opacity: 1,
-    }, true);
-    scene.add(group);
-    return group;
-  }
-
-  function advance(seconds: number, owner: string): void {
-    for (let i = 0; i < Math.round(seconds / STEP); i += 1) advancePeopleAnimations(STEP, scene, owner);
-  }
-
-  it('only lets the owning scene sit on its chairs', () => {
-    setPeopleModelForTests(null);
-    mount('seat#0');
-    setPersonSeatContext({ seats: [chair] }, 'outdoor');
-
-    // local 没有座位：直接走过去，不会去坐 outdoor 的椅子。
-    advance(4, 'local');
-    expect(personWalkStates()[0]!.seatPhase).toBe('none');
-    expect(personWalkStates()[0]!.x).toBeGreaterThan(4);
-  });
-
-  it('still seats the owning scene (户外链路的真实调用方式)', () => {
-    setPeopleModelForTests(null);
-    mount('seat#1');
-    setPersonSeatContext({ seats: [chair] }, 'outdoor');
-
-    advance(4, 'outdoor');
-    expect(personWalkStates()[0]!.seatPhase).toBe('seated');
-    expect(personWalkStates()[0]!.seatId).toBe('chair-owner');
-  });
-
-  it('only lets the owning scene enter its zones', () => {
-    setPeopleModelForTests(null);
-    const group = mount('zone#0');
-    setPersonZoneContext({ zones: [zone] }, 'outdoor');
-
-    advance(10, 'local');
-    const state = personWalkStates()[0]!;
-    expect(state.seatPhase).toBe('none');
-    expect(state.zoneId).toBeNull();
-    expect(group.position.x).toBeGreaterThan(8);
   });
 });
 

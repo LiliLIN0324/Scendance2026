@@ -19,6 +19,7 @@ describe('AnnotateColorBar', () => {
       />,
     );
     const bar = screen.getByTestId('annotate-color-bar');
+    expect(bar.style.height).toBe('34px');
     expect(bar.getAttribute('aria-haspopup')).toBeNull();
     expect(bar.querySelector('[aria-haspopup]')).toBeNull();
     expect(bar.querySelector('[role="menu"]')).toBeNull();
@@ -52,6 +53,7 @@ describe('AnnotateColorBar', () => {
       />,
     );
     const bar = screen.getByTestId('annotate-color-bar');
+    expect(bar.style.height).toBe('34px');
     expect(bar.getAttribute('aria-label')).toBe('标注颜色');
     for (const swatch of ANNOTATE_COLOR_SWATCHES) {
       expect(bar.contains(screen.getByTestId(`annotate-color-${swatch.value.replace('#', '')}`))).toBe(true);

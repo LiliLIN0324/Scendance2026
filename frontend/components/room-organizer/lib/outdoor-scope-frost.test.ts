@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import {
   SCOPE_FROST_BLUR_PX,
   SCOPE_FROST_VEIL,
