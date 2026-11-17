@@ -344,7 +344,7 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(plan.anchor?.lng).toBe(120.1);
   expect(flow.state.stage).toBe("zones");
   expect(flow.appliedHighlight).toEqual({ kind: "scope" });
-  expect(host.textContent).toContain("拖动顶点调整后，请重新核对活动范围");
+  expect(host.textContent).toContain("不贴合就拖顶点调整，改完重新核对");
 });
 it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => {
   const anchor = { ...plan.anchor!, lng: 120.25 };
@@ -532,7 +532,7 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
   expect(plan.zones).toHaveLength(1);
   expect(flow.state.stage).toBe("main-routes");
   expect(flow.appliedHighlight).toEqual({ kind: "zones", zoneIds: [plan.zones[0]!.id] });
-  expect(host.textContent).toContain("可以拖动分区，或拖动顶点调整轮廓");
+  expect(host.textContent).toContain("分区不合适可拖动整块或拖顶点微调");
 
   const editedZone = {
     ...plan.zones[0]!,
@@ -560,7 +560,7 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
     routeIds: plan.routes.map(route => route.id),
     nodeIds: plan.nodes.map(node => node.id),
   });
-  expect(host.textContent).toContain("拖动路线转折点绕开障碍");
+  expect(host.textContent).toContain("路线和候选入口可拖动微调");
   act(() => flow.cancel());
   expect(flow.appliedHighlight).toBeNull();
 });
