@@ -30,7 +30,12 @@ export interface ReleaseStatusInput {
   gate?: GateFacts;
   /** 门禁读数（`readGates` 的结果）：给了就用它算门禁行，并把读数行附在下面。 */
   reading?: GateReading;
-  /** 三类全绿的用例数（由人填；缺省 0）。 */
+  /**
+   * 逐条证据台账：给了就以它算出三类全绿条数，`allGreen` 手填值不再生效
+   * （避免“表里 0 条、卡里写 3 条”这种漂移）。
+   */
+  ledger?: readonly CaseLedgerRow[];
+  /** 三类全绿的用例数（由人填；缺省 0）。给了 ledger 时以 ledger 为准。 */
   allGreen?: number;
 }
 
@@ -76,6 +81,31 @@ function gateCell(value: boolean | undefined): string {
   return value ? '通过' : '未过';
 }
 
+export interface CaseLedgerRow {
+  id: number;
+  /** 固定数据（确定性用例）有没有覆盖；false 表示连固定数据都缺。 */
+  fixedData: boolean;
+  /** 真实浏览器那一列的状态。 */
+  browser: 'pass' | 'partial' | 'none';
+  /** 真实云端那一列的状态。 */
+  cloud: 'pass' | 'partial' | 'none';
+}
+
+/** 三类全绿只有一种算法：固定数据有、浏览器过、云端过。partial 一律不算。 */
+export function summarizeLedger(rows: readonly CaseLedgerRow[]): {
+  allGreen: number;
+  fixedOnly: number;
+  total: number;
+} {
+  const allGreen = rows.filter(
+    (row) => row.fixedData && row.browser === 'pass' && row.cloud === 'pass',
+  ).length;
+  const fixedOnly = rows.filter(
+    (row) => row.fixedData && (row.browser !== 'pass' || row.cloud !== 'pass'),
+  ).length;
+  return { allGreen, fixedOnly, total: rows.length };
+}
+
 /** 证据清单：空列表就只写「0 条」，不留一个空括号。 */
 function listWithIds(ids: readonly number[]): string {
   if (ids.length === 0) return '0 条';
@@ -85,7 +115,7 @@ function listWithIds(ids: readonly number[]): string {
 export function formatReleaseStatusCard(input: ReleaseStatusInput): string {
   const totals = summarizeAssessment(input.rows);
   const gate = input.reading ? gateFactsForCard(input.reading) : (input.gate ?? {});
-  const allGreen = input.allGreen ?? 0;
+  const allGreen = input.ledger ? summarizeLedger(input.ledger).allGreen : (input.allGreen ?? 0);
   const gateReady = gate.typecheck === true && gate.tests === true && gate.build === true;
   const ids = input.rows.map((row) => row.id);
   const withEvidence = ids.filter((id) => BROWSER_EVIDENCE[id] === 'partial');
