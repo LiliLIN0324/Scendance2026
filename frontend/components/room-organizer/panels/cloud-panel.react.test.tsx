@@ -996,6 +996,26 @@ it('keeps local activity controls available for a scene connection and does not 
   expect(local.id).toBe(localId);
 });
 
+it('puts local draft actions in the card menu and keeps the basemap note muted', async () => {
+  queue([]);
+  queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+  const layout = { ...backendSceneToLayout(scene), floorPlanImage: 'data:image/png;base64,abc' };
+  render(<CloudPanel controller={controller} layout={layout} onLoadLayout={vi.fn()} />);
+  openAccount();
+  const note = await screen.findByText(/底图只保留在本机/);
+  expect(note.className).toContain('sc-account-footnote');
+  expect(note.className).not.toContain('sc-cloud-message');
+  expect(screen.queryByText('ROUTE_NOT_FOUND')).toBeNull();
+  expect(document.querySelector('.sc-file-draft-save')).toBeNull();
+  const save = screen.getByRole('button', { name: '存为方案' });
+  const discard = screen.getByRole('button', { name: '删除本机' });
+  expect(save.closest('.sc-file-more-menu')).toBeTruthy();
+  expect(discard.closest('.sc-file-more-menu')).toBeTruthy();
+  const menu = save.closest('details');
+  fireEvent.click(menu?.querySelector('summary') as HTMLElement);
+  expect(menu?.open).toBe(true);
+});
+
 describe('CloudPanel preferences section', () => {
   it('shows the active unit and measurement switch, forwarding changes', () => {
     const onPreferenceChange = vi.fn();
@@ -1005,6 +1025,9 @@ describe('CloudPanel preferences section', () => {
       onPreferenceChange={onPreferenceChange} />);
     fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    expect(screen.getByRole('button', { name: '画布' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '快捷键' })).toBeTruthy();
+    expect(screen.queryByText('换算示例')).toBeNull();
     expect(screen.getByRole('button', { name: /英尺/ }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: /米/ }).getAttribute('aria-pressed')).toBe('false');
     const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
@@ -1013,6 +1036,9 @@ describe('CloudPanel preferences section', () => {
     expect(onPreferenceChange).toHaveBeenLastCalledWith({ lengthUnit: 'm' });
     fireEvent.click(checkbox);
     expect(onPreferenceChange).toHaveBeenLastCalledWith({ showMeasurements: true });
+    fireEvent.click(screen.getByRole('button', { name: '快捷键' }));
+    expect(screen.queryByRole('group', { name: '显示单位' })).toBeNull();
+    expect(screen.getByText('快捷键还在整理，这里先空着。')).toBeTruthy();
   });
 });
 

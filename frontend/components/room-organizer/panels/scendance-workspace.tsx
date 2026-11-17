@@ -53,6 +53,7 @@ import { materialCount } from '../lib/structural-layout';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import { LocalGlbImport } from './local-glb-import';
 import { MaterialSymbol } from './material-symbol';
+import { WalkFigureIcon } from './walk-figure';
 import { OUTDOOR_TOOL_ICONS } from '../components/outdoor-tool-icons';
 import { OnlineModelLibrary } from './online-model-library';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
@@ -482,21 +483,6 @@ function CompassDial({ size = 44, rotationDeg = 0, showTurns = false }: { size?:
       height={size * 4}
       aria-hidden="true"
     />
-  );
-}
-// 第一人称漫游：复刻 Google Maps Pegman——黄圆头、橙领巾、直立小人；悬停时由 CSS 上浮微倾。
-function PegmanIcon({ size = 22 }: { size?: number }): JSX.Element {
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <g fill="#FBBF0A">
-        <circle cx="12" cy="5" r="2.6" />
-        <rect x="9" y="8.4" width="6" height="5.4" rx="2.2" />
-        <rect x="6.6" y="9.4" width="1.8" height="4.8" rx="0.9" transform="rotate(12 7.5 9.4)" />
-        <rect x="15.6" y="9.4" width="1.8" height="4.8" rx="0.9" transform="rotate(-12 16.5 9.4)" />
-        <rect x="9.7" y="13.6" width="1.9" height="6.6" rx="0.95" />
-        <rect x="12.4" y="13.6" width="1.9" height="6.6" rx="0.95" />
-      </g>
-    </svg>
   );
 }
 // 定位钮：Google 网页版的准星——细圆环 + 实心点 + 四向短刻线，
@@ -1091,7 +1077,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           两扇分隔线一并下线；environmentView / onEnvironmentViewChange 接口保留，后续要恢复再加回。 */}
       {/* 室内第一人称漫游；户外漫游钮在右下工具簇（#tool-walk）。 */}
       {!outdoorEditing && (<button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
-        <PegmanIcon size={20} />
+        <WalkFigureIcon size={20} active={walkPressed} />
         <span className="sc-walk-label" aria-hidden="true">{walkPressed ? '退出漫游' : '第一人称漫游'}</span>
       </button>)}
       {/* 2026-11-13 M1：户外画布放置时由纯函数按网格自动吸附，没有独立吸附开关；户外态禁用该钮。 */}
@@ -1266,7 +1252,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           <div className="oc-share"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/></div>
         </div>
         {/* 2026-11-16 用户指令：右下角一比一复刻 Google Maps 竖向控制列——
-            罗盘 → 2D/3D → 定位 → 连体缩放 → Pegman，最后隔一条发丝线放宽图眼睛。
+            罗盘 → 2D/3D → 定位 → 连体缩放 → 漫游小人，最后隔一条发丝线放宽图眼睛。
             视觉口径：44px 控件、64px 罗盘、44×88 连体缩放；漫游钮与其余控件同轴同尺寸。 */}
         <div className="oc-cluster oc-br oc-gmaps" role="group" aria-label="地图控制">
           <div className="oc-gm-compass-wrap" role="group" aria-label="罗盘与转向">
@@ -1318,7 +1304,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             </button>
           </div>
           <button type="button" id="tool-walk" data-tip={walkPressed ? '退出漫游' : '第一人称漫游'} aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={`oc-gm-round oc-gm-walk is-walk${walkPressed ? ' is-active' : ''}`} onClick={() => outdoor?.toggleWalk?.(!outdoorWalkOn)}>
-            <PegmanIcon size={20} />
+            <WalkFigureIcon size={20} active={walkPressed} />
           </button>
           <span className="oc-gm-divider" aria-hidden="true" />
           <button type="button" id="tool-opacity" className={`oc-gm-round oc-gm-eye${chromeHidden ? ' is-active' : ''}`} data-tip={chromeHidden ? '退出干净看图' : '干净看图'} aria-label={chromeHidden ? '退出干净看图' : '干净看图：隐藏全部浮层'} aria-pressed={chromeHidden} onClick={() => onToggleChrome?.()}>

@@ -348,6 +348,7 @@ function failure(error: unknown): BackendFailure {
     AI_BUSY: "已有方案正在生成，请等待本次请求完成。",
     GENERATION_BUSY: "已有模型生成任务正在处理，请先查看任务状态。",
     IDEMPOTENCY_CONFLICT: "同一请求编号不能用于不同需求，请创建新的请求。",
+    ROUTE_NOT_FOUND: "请求的接口不存在，这次操作没有发出。",
   };
   const status = error instanceof SceneApiError ? error.status : 0;
   const mapped = messages[code];
