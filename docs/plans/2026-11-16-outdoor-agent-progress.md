@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：状态卡多了一个可对比版 `statusCardSnapshot()`（同样输入 → 同样对象，数组升序、键序固定，可直接塞进 diff）。main = origin = `d2ffb4e8`；9222 二十三轮不通。下轮：把快照真正用起来——把本轮快照原文贴在对照表顶部作为“当前状态”锚点，以后每轮 diff 它。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：对照表顶部已有“当前状态快照（锚点）”，以后每轮只需与它 diff。main = origin = `10a54bec`；9222 二十四轮不通。下轮：把快照真正跑出来打印一遍（用 node 直接 import 分支上的 `statusCardSnapshot` + 最小 report），确认实际输出与锚点逐字一致；不一致就修锚点。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 02:30 · 自动轮次 68 · 合三笔（含一个脏文件重叠）+ 对照表立快照锚点
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 02:30，自动轮次 68
+批次 / 切片 / 状态：M7 / 对照表锚点 / 已交付（分支待 PR）
+开工事实：main = d2ffb4e8，origin/main = 10a54bec（落后 3 笔：标注工具条五工具、图例墙体分组、台账锁 vitest 4.1.12）；脏文件 47 → 50
+重叠：15 个入站文件里 `outdoor-plan-canvas.tsx` 与脏文件重叠 → 备份字节 → `git stash push -- <1 文件>`（50→49）→ `git merge --ff-only origin/main` → `git stash pop`（零冲突；pop 后 diff 78 行、无冲突标记）
+分支追上：consolidated `git merge main` → `83937a92`，零冲突
+交付（docs）：证据对照表顶部新增「§0 当前状态快照（锚点，轮次 68）」，贴 `statusCardSnapshot()` 默认台账输出的原样 JSON，并写明复跑命令与读法（`allGreen: 0` 是算出来的；`gate: {}` 不代表没跑）
+验证：status-card 38/38（锚点 JSON 就是被断言的那份）；wt-r68 合并后 tsc 0 行
+真实浏览器/云端：仍未验（9222 第二十四轮 down）
+未完成：#2 真实搜索、#5 浏览器、快照实际打印对照、`pickVenueCandidate` 接线
+```
+
+- **锚点要贴在证据表顶部，不是埋在轮次记录里**：以后每轮 diff 它，比翻历史快。
 
 ### 2026-11-18 01:50 · 自动轮次 67 · 状态卡可对比快照
 
