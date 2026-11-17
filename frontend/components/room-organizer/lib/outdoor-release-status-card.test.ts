@@ -185,6 +185,31 @@ describe('门禁读数接进状态卡', () => {
   });
 });
 
+describe('空会话下的状态卡（不出现空括号/光秃标签）', () => {
+  it('用例 0 条时说清楚下一步，而不是报三个 0', () => {
+    const card = formatReleaseStatusCard({ rows: [], metrics: { text: '' } as never });
+    expect(card).toContain('· 验收用例 0 条：还没有可判的用例（先跑一次会话再用）');
+    expect(card).not.toContain('可判 0 / 缺料 0');
+  });
+
+  it('没有指标时写“没有指标记录”，不留下光秃的冒号', () => {
+    const card = formatReleaseStatusCard({ rows: [], metrics: { text: '   ' } as never });
+    expect(card).toContain('· 指标：本次会话没有指标记录');
+    expect(card).not.toMatch(/· 指标：\s*\n/);
+  });
+
+  it('证据清单为空时不留空括号', () => {
+    const card = formatReleaseStatusCard({ rows: [], metrics: { text: 'turn=0' } as never });
+    expect(card).toContain('有部分 0 条 / 无证据 0 条');
+    expect(card).not.toContain('（）');
+  });
+
+  it('空会话也照旧写不可发布', () => {
+    const card = formatReleaseStatusCard({ rows: [], metrics: { text: '' } as never });
+    expect(card.trimEnd().endsWith('· 结论：不可发布（三类全绿 0 条）')).toBe(true);
+  });
+});
+
 describe('logReleaseStatus', () => {
   it('打一次，首行前缀固定、正文就是整张卡', () => {
     const lines: string[] = [];
