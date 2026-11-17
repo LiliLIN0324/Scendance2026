@@ -180,6 +180,9 @@ export interface PlanOverviewStats {
   /** 人员点位数（posts）与人数合计（count 求和）。 */
   workerPostCount: number;
   workerTotalCount: number;
+  /** 2026-11-17 #118 补录入 UI：车辆实体数与台数合计（台 ≠ 人，绝不并进人数口径）。 */
+  vehicleCount: number;
+  vehicleTotalCount: number;
   /** 固定测量标注数。 */
   measurementCount: number;
   /** 2026-11-11 用户指令：自由标注（文本/形状）数。 */
@@ -215,6 +218,9 @@ export function planOverviewStats(plan: SitePlanData): PlanOverviewStats {
     nodeCount: plan.nodes.length,
     workerPostCount: plan.workers.length,
     workerTotalCount: plan.workers.reduce((sum, w) => sum + w.count, 0),
+    // 2026-11-17 #118 补录入 UI：车辆是独立集合——台数单独成列，绝不加进人的人数口径。
+    vehicleCount: (plan.vehicles ?? []).length,
+    vehicleTotalCount: (plan.vehicles ?? []).reduce((sum, v) => sum + v.count, 0),
     measurementCount: measurements.length,
     annotationCount: (plan.annotations ?? []).length,
     issueCount,

@@ -304,6 +304,8 @@ export const PLANNING_EDIT_MODE_LABELS = {
   route: '画动线',
   node: '放节点',
   worker: '布人员',
+  // 2026-11-17 #118 补录入 UI：车辆是独立集合（plan.vehicles），与人员/设施并列。
+  vehicle: '布车',
   measure: '测量',
   // 2026-11-11 用户指令：自由标注两模式（OnePlan 工具栏 T / 形状同款）。
   note: '放文本',
@@ -345,6 +347,8 @@ export const PLANNING_EDIT_MODE_ICONS: Record<PlanningEditMode, PlanningIconName
   route: 'route',
   node: 'door-open',
   worker: 'user-plus',
+  // 2026-11-17 #118 补录入 UI：布车模式用车图标（已登记的 truck，与「车」组同源）。
+  vehicle: 'truck',
   measure: 'ruler',
   // 2026-11-11 用户指令：自由标注（文本=便签图标、形状=shapes 组合图标）。
   note: 'sticky-note',

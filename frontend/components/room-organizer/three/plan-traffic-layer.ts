@@ -43,7 +43,7 @@ export interface PlanTrafficLayer {
   dispose(): void;
 }
 
-interface RoutePath {
+export interface RoutePath {
   points: THREE.Vector3[];
   segmentLengths: number[];
   total: number;
