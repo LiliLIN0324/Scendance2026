@@ -526,18 +526,28 @@ export function OutdoorWorkflowCard({
           </div>
         </div>
       ) : flow.state.stage !== "place" ? (
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={flow.busy}
-          onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
-        >
-          {flow.state.stage === "scope"
-            ? "核对当前实际活动范围"
-            : flow.state.stage === "zones"
-              ? "生成分区预览"
-            : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
-        </button>
+        flow.state.stage === "zones" &&
+        (!flow.state.brief.zones.length ||
+          flow.state.brief.zones.some((zone) => zone.environment === "unknown")) ? (
+          // 2026-11-18 用户实测：这颗按钮承诺「点了就出分区预览」，但没用途时点了只会撞红卡
+          // 反问「要分哪些用途」。没给指令就不挂空头按钮，如实引导去说用途或手画。
+          <p className="ap-task-caption">
+            还没说要分哪些区：先在下面说一句用途和室内外（例如「室外展览区和表演区」），或在地图上手画分区；用途没说清楚前不会替你猜。
+          </p>
+        ) : (
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={flow.busy}
+            onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+          >
+            {flow.state.stage === "scope"
+              ? "核对当前实际活动范围"
+              : flow.state.stage === "zones"
+                ? "生成分区预览"
+              : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
+          </button>
+        )
       ) : null}
       {!flow.proposal &&
         !flow.busy &&
