@@ -679,3 +679,89 @@ body: [{ "name": "LUX3D_API_KEY", "value": "<本机 .env.local 那把>" }]
 worker 与 cron 读的就是这一个 Edge Secret，函数读新密钥立即生效（第三轮换 `GENERATION_MAX_TASK_CENTS` 时已验证过同一机制），**不需要重新部署**——所以换绑这一步已经完整生效。
 
 剩下唯一的验证是**真机跑一单真实的文生 3D**：它会真实消耗你 Aholo 账号的额度、并建出一个任务，这一步本轮没做（额度是实打实的，要你点头）。跑完看那条任务的 `provider_usage.vendorError`：不再是 `no credits` 就是闭环。
+
+## 第七轮：真机跑单闭环 + 产物入库上限分档（2026-11-17 15:36 北京时间）
+
+### 跑的是什么
+
+正式站 → 项目「周末共创工作坊」→ 左栏「场地」→ 统一生成面板 →「生成模型」（scope=material）→ 描述沿用 C1 同一条折叠椅 prompt → 勾「消耗额度」→ 点一次「生成」。
+
+属性卡那条入口在正式站旧构建里**点不动**（整张卡被候选模型列表撑到 1597px 宽，三颗按钮不在可视区里——正是 PR #126 待部署的缺陷），所以这一单改走左栏的生成面板：功能等价，同样走 `createGenerationJob(..., {provider:'aholo'})`，不绕开预算与账本。
+
+### 提交与回执
+
+| 项 | 值 |
+| --- | --- |
+| 接口 | `POST https://wkhfvnzgopjdzxlmycks.supabase.co/functions/v1/scene-api/jobs` → **202** |
+| taskId | `f621b2f6-1c3c-4649-adbe-23b3bdb5f9e4` |
+| requestId | `13d23986-8990-43c3-8f54-438d39f4ad21` |
+| 回执状态 | 「已提交」（**不是** unknown） |
+| 供应商任务号 | `8217433`（落进 `provider_job_id`） |
+
+### 终态（生产库逐字段）
+
+| 字段 | 值 |
+| --- | --- |
+| state | `rejected` |
+| error_code | `FILE_TOO_LARGE` |
+| provider_mode / provider_model | `aholo` / `lux3d` |
+| provider_job_id | `8217433`（**不再是 null**） |
+| asset_id | `null` |
+| attempts | 7 |
+| created / updated | `2026-11-17 07:36:43Z` / `07:43:05Z` |
+
+### 结论一：换绑生效，`no credits` 消失
+
+前两轮 C1（`9b35ebc5-…` / `a002dac2-…`）都是 `PROVIDER_REJECTED` + `provider_job_id=null`；这一轮供应商受理了任务、给了任务号、跑完了。**额度归因到此闭环。**
+
+供应商侧只读复核（`probe-task.mjs`，只 GET `task/get`，不建任务、不扣费）：`c=0`、`status=3`(DONE)、产物 `zip` + `glb`，**content-length = 10,546,592 字节 = 10.06 MiB**。
+
+### 结论二：账本闭合
+
+| 项 | 值 |
+| --- | --- |
+| requests.reserved_cents | 100 |
+| requests.actual_cents | 100（已派发 → 保守记实付，不记 0） |
+| requests.state | `failed` |
+| budgets.generation.committed_cents | 100 → **0**（预留已释放） |
+| budgets.text.committed_cents | 0 |
+
+### 新根因：10 MiB 上限，差了 59 KB
+
+供应商给的是 `textured.glb`，**10,546,592 字节**，比我们自己的上限多 **59 KB（0.58%）**。闸门有三道，原值全是 10 MiB：
+
+| 闸门 | 位置 | 原值 |
+| --- | --- | --- |
+| Edge Function 模型校验 | `supabase/functions/_shared/models.ts` 的 `MAX_GLB_BYTES` | 10 MiB |
+| 数据库登记 | `scene_private.assets.byte_size` 的 CHECK | `between 1 and 10485760` |
+| 对象存储直传 | `storage.buckets.file_size_limit`（`scene-assets`） | `10485760` |
+
+worker 归档时 `download(...)` 抛 `FILE_TOO_LARGE`(413) → job `rejected` → **额度已经花掉、模型没入库**，用户只看到一句「失败」。
+
+**不是只有代码里那个常量。** 回归第一版就卡在这：代码把上限放宽了，`assets.register` 仍被 DB 的 CHECK 拒，任务反而卡在 `archiving` + `GENERATION_POLL_FAILED`（错误码比原来更难懂）。三道闸门必须一起开，否则只是把失败点往后挪。
+
+### 修法：分两档，不是统一放宽
+
+- **供应商产物 / 云端资产：32 MiB** —— `MAX_PROVIDER_GLB_BYTES`（Edge Function）、`GLB_MAX_CLOUD_FILE_BYTES`（前端下载）、DB 的 CHECK、Storage 桶上限，四处一致。
+- **用户本机导入：仍 10 MiB** —— 前端「≤10 MB」文案不变、`backend-session.ts` 的上传校验不变、`api.ts` 的 `readBounded` 不变。所以放宽供应商这一档，不会让用户上传超大文件。
+
+为什么是 32 MiB：Lux3D G1 实测 10.06 MiB，32 MiB 留三倍余量；再往上会撑破浏览器解析与对象存储的成本。
+
+为什么不降面数：产物是 `textured.glb`，体积主要由贴图决定，30000 面不是主因；降面数等于改模型质量档。
+
+### 回归（本轮新增）
+
+| 用例 | 钉住什么 |
+| --- | --- |
+| `tests/models.test.ts` | 略高于 10 MiB 的产物：默认档仍拒（`INVALID_GLB_SIZE`）、供应商档放行；超过 32 MiB 仍拒；`download` 在 10 MiB 档抛 `FILE_TOO_LARGE`、供应商档放行 |
+| `tests/worker-http.test.ts` | 整条链路：建任务 → 供应商受理 → 轮询 DONE → 下载 10.06 MiB 产物 → 归档 → **资产入库 → 任务 `ready`** |
+| `frontend/.../generation-failure.test.ts` | `FILE_TOO_LARGE` 的文案要说得出「入库上限 / 模型库」，不能是笼统的「生成失败」 |
+| `frontend/.../glb-assets.test.ts` | 云端下载档 32 MiB，本机导入仍 10 MiB |
+
+worker 那条回归**第一版是红的**（只改代码、没补迁移 → 任务卡 `archiving` + `GENERATION_POLL_FAILED`），补了迁移才转绿。这就是「三道闸门」那句话的证据。
+
+### 本轮做了什么 / 没做什么
+
+**做了**：真机跑一单、供应商侧只读复核、账本逐项核对、三道闸门定位、分档修复（含新迁移）、四条回归、CHANGELOG。
+
+**没做（等人工）**：**迁移未上生产、worker 未重新部署、前端未发布**，所以**这一单在正式站上仍然不会入库**。合并 PR #126 之后的顺序是：应用迁移 `20261118160000_provider_asset_size_ceiling.sql` → 重新部署 `generation-worker` → 重新部署前端 → **再跑一单**才算真正闭环。

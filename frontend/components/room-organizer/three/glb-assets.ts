@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { cloudPeopleUrl } from '../lib/cloud-assets';
-import { GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
+import { GLB_MAX_CLOUD_FILE_BYTES, GLB_MAX_FILE_BYTES, LOCAL_WALK_ASSET_IDS, LOCAL_WALK_MAX_FILE_BYTES } from '../lib/glb-limits';
 import { normalizeGlbRoot } from '../lib/glb-normalize';
 import { isGlbUrl } from '../lib/glb-url';
 import { createGlbLoader } from './glb-loader';
@@ -184,12 +184,23 @@ export function validateGlbBuffer(buffer: ArrayBuffer, maxBytes = GLB_MAX_FILE_B
   }
 }
 
-async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffer> {
-  if (!isGlbUrl(url)) throw new Error('模型地址无效。');
+/**
+ * 下载档位：试走角色走单独上限，其余（云端模型库里的物件、生成服务商的产物）走 32 MB。
+ *
+ * 2026-11-17 生产实跑踩到的：Lux3D G1 的 textured.glb 实测 10.06 MiB，比 10 MB 多 59 KB，
+ * 服务端已经把它存进资产库，前端却按 10 MB 拒收，用户只看到「GLB 超过 10 MB，未载入」——
+ * 额度花了、模型生成了，用户却拿不到。所以下载这一档放宽；本机导入仍守 10 MB。
+ */
+export function glbDownloadLimit(url: string): number {
   const localTrial = process.env.NODE_ENV === 'development'
     && LOCAL_WALK_ASSET_IDS.some(assetId => url === `http://127.0.0.1:3199/asset/${assetId}.glb`);
   const cloudTrial = LOCAL_WALK_ASSET_IDS.some(assetId => url === cloudPeopleUrl(assetId));
-  const maxBytes = localTrial || cloudTrial ? LOCAL_WALK_MAX_FILE_BYTES : GLB_MAX_FILE_BYTES;
+  return localTrial || cloudTrial ? LOCAL_WALK_MAX_FILE_BYTES : GLB_MAX_CLOUD_FILE_BYTES;
+}
+
+async function downloadGlb(url: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  if (!isGlbUrl(url)) throw new Error('模型地址无效。');
+  const maxBytes = glbDownloadLimit(url);
   const tooLarge = () => new Error(`GLB 超过 ${maxBytes / (1024 * 1024)} MB，未载入。`);
 
   const readOnce = async (): Promise<Uint8Array> => {

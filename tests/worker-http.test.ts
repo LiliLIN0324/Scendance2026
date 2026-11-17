@@ -1,6 +1,8 @@
 import { beforeAll,afterAll,beforeEach,describe,it,expect } from 'vitest';
 import { database,owner } from './fixtures.ts';
 import { createWorker } from '../supabase/functions/_shared/worker-handler.ts';
+import { packGltf } from '../supabase/functions/_shared/models.ts';
+import { inflateGlb,tetrahedron } from './model-fixture.ts';
 import type { Env,Fetcher } from '../supabase/functions/_shared/http.ts';
 
 const settings={GENERATION_WORKER_SECRET:'worker-test-secret',HUNYUAN_API_KEY:'provider-test-key',HUNYUAN_TERMS_URL:'https://example.test/terms',HUNYUAN_TERMS_REVIEWED_AT:'2026-10-02'};
@@ -64,5 +66,27 @@ describe('generation worker HTTP boundary',()=>{
     expect(after.state).toBe('failed');
     expect(after.error_code).toBe('PROVIDER_REJECTED');
     expect(after.provider_usage).toMatchObject({vendorError:{vendorCode:'-1',vendorMessage:'vendor said no'}});
+  });
+  it('archives a provider product that is larger than the 10 MiB import ceiling',async()=>{
+    // 2026-11-17 生产 C1 实跑：供应商已经出了模型（textured.glb 实测 10.06 MiB），我们自己 10 MiB 的入库上限
+    // 把它挡在门外，任务落到 rejected + FILE_TOO_LARGE——额度花了、模型没入库，用户只看到一句「失败」。
+    // 这里钉住整条链路：供应商产物这一档放行 → 归档 → 资产入库 → 任务 ready。
+    const job=await f.jobs(owner,'jobs.create',{requestId:crypto.randomUUID(),fingerprint:'prop',prompt:'Prop',reserveCents:100,kind:'text',providerMode:'aholo',providerModel:'lux3d'});
+    const aholoEnv=env({LUX3D_API_KEY:'lux-test-key',LUX3D_TERMS_URL:'https://example.test/lux3d-terms',LUX3D_TERMS_REVIEWED_AT:'2026-11-17'});
+    const create:Fetcher=async()=>new Response(JSON.stringify({c:'0',d:8217433,m:null}),{headers:{'Content-Type':'application/json'}});
+    await createWorker(f.backend,aholoEnv,create)(request());
+    expect(await f.jobs(owner,'jobs.get',{id:job.id})).toMatchObject({state:'submitted',provider_job_id:'8217433'});
+    await f.db.exec("update scene_private.generation_jobs set next_poll_at=clock_timestamp()"); // 跳过 30 秒轮询间隔
+    const {json,resources}=tetrahedron();
+    const glb=inflateGlb(packGltf(json,resources),10*1024*1024+59*1024);
+    const poll:Fetcher=async url=>{
+      if(String(url).includes('/task/get'))return new Response(JSON.stringify({c:'0',d:{status:3,outputs:[{content:'https://qhsmodel.kujiale.com/lux3dPbrEmbedResult/f53aa48b4393405fa412a00b1a268b6f/textured.glb'}]},m:null}),{headers:{'Content-Type':'application/json'}});
+      return new Response(glb);
+    };
+    await createWorker(f.backend,aholoEnv,poll)(request());
+    const after=await f.jobs(owner,'jobs.get',{id:job.id}) as {state:string;asset_id:string|null;error_code:string|null};
+    expect(after.error_code).toBeNull(); // 先断错误码：失败时能直接看到是谁在挡
+    expect(after.state).toBe('ready');
+    expect(after.asset_id).toBeTruthy();
   });
 });
