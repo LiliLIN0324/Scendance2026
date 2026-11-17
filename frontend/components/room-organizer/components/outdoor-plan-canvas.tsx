@@ -11707,6 +11707,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </div>
             </div>
 
+            {/* 2026-11-18 用户要求：已放置物件按图层分母分类——当前图层（图层 1）是母分类，
+                类型文件夹与用地红线都收在它下面，可整体展开/收起；多图层时每层一个母分类。 */}
+            {(() => {
+              const layerKey = 'placed-layer-current';
+              const layerOpen = openFolders[layerKey] !== false;
+              const layerCount = placedFolderRows.reduce((sum, folder) => sum + folder.rows.length, 0);
+              return (
+                <div style={{ marginTop: PLANNING_SPACING.xs }}>
+                  <button
+                    type="button"
+                    data-testid="placed-folder-layer"
+                    aria-expanded={layerOpen}
+                    title={`展开/收起${activeLevelName}`}
+                    onClick={() => setOpenFolders(prev => ({ ...prev, [layerKey]: !layerOpen }))}
+                    style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, width: '100%', padding: '3px 4px', borderRadius: PLANNING_RADIUS.sm, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600 }}
+                  >
+                    <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{layerOpen ? '▾' : '▸'}</span>
+                    <span aria-hidden style={{ width: 16, height: 16, flex: '0 0 auto', borderRadius: 4, background: '#5b6f7c', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.55)' }} />
+                    <span style={{ flex: 1 }}>{activeLevelName}</span>
+                    <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 400 }}>{layerCount}</span>
+                  </button>
+                  {layerOpen && (
+                    <>
             {/* 按类型分组的文件夹树（OnePlan folders tree）：文件夹行尾收编可见性/锁定
                 （多类型同层时读写同一层状态，自动同步）；实例行点击定位+选中。 */}
             {placedFolderRows.map(folder => {
@@ -11841,6 +11864,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 </div>
               )}
             </div>
+                    </>)}
+                </div>
+              );
+            })()}
 
             {/* H2-d 人员汇总已按 OnePlan 纯度移除（2026-11-11 用户拍板）；汇总口径仍可在规划信息卡统计里看。 */}
 
