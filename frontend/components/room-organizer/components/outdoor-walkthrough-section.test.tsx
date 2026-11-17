@@ -81,3 +81,25 @@ describe("导出 CSV 按钮（轮次 89）", () => {
     expect(screen.queryByRole("button", { name: "收起走查记录" })).toBeNull();
   });
 });
+
+describe("待补清单显示（轮次 90）", () => {
+  it("传了 gapsLine 就原样显示，保留换行", () => {
+    const gapsLine = "#2 两个同名地点 —— 缺：云端\n共 1 条待补 · 台账 11 条 · 三类全绿 0 条";
+    render(
+      <OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} defaultOpen gapsLine={gapsLine} />,
+    );
+    const block = screen.getByLabelText("待补清单");
+    expect(block.textContent).toBe(gapsLine);
+    expect(block.className).toContain("whitespace-pre-line");
+  });
+
+  it("不传就不显示这一块（不渲染空壳）", () => {
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} defaultOpen />);
+    expect(screen.queryByLabelText("待补清单")).toBeNull();
+  });
+
+  it("收起时不显示待补清单（面板本身都看不见）", () => {
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} gapsLine="#1 缺：云端" />);
+    expect(screen.queryByLabelText("待补清单")).toBeNull();
+  });
+});

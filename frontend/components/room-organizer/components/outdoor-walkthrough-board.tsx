@@ -51,6 +51,12 @@ export function OutdoorWalkthroughBoard({
         <h3 className="text-[13px] font-semibold text-neutral-800">走查记录</h3>
         <p className="text-neutral-500">{summary.line}</p>
       </header>
+      {/* 日期要么写出来，要么明说没填——不拿今天冒充走查日。 */}
+      <p className="mb-2 text-[11px] text-neutral-500">
+        {book.asOf?.trim()
+          ? `走查日期：${book.asOf.trim()}`
+          : "走查日期：未填（卡片会沿用对照表上的日期）"}
+      </p>
       <ol className="space-y-1">
         {CASE_IDS.map((id) => {
           const state = book.seen[id] ?? "none";

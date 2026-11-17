@@ -101,3 +101,17 @@ describe("云端声明键（轮次 80）", () => {
     expect(onCloud).toHaveBeenCalledWith(3, false);
   });
 });
+
+describe("走查日期（轮次 90）", () => {
+  it("填了日期就原样写出来，不改写、不本地化", () => {
+    render(<OutdoorWalkthroughBoard book={emptyBook("2026-11-18 第三轮")} onMark={() => {}} />);
+    expect(screen.getByText("走查日期：2026-11-18 第三轮")).toBeTruthy();
+  });
+
+  it("没填就明说未填，不拿今天冒充", () => {
+    render(<OutdoorWalkthroughBoard book={emptyBook()} onMark={() => {}} />);
+    const line = screen.getByText(/走查日期：/);
+    expect(line.textContent).toContain("未填");
+    expect(line.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+});
