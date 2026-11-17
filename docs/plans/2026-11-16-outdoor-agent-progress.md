@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：“三类全绿 N 条”不再靠人填（卡里给 `ledger` 就由 `summarizeLedger` 算，手填值失效）。main = origin = `13258414`；9222 十八轮不通。下轮：把 `pickVenueCandidate` 接到地图候选点击（只接一处），接不上就改为把台账从 `BROWSER_EVIDENCE` + 固定数据计数自动生成（`ledgerFromEvidence()`），让卡只需传入固定数据计数。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：台账现在能从证据快照生成（`ledgerFromEvidence(有固定数据的用例号)`），调用方只需报“哪几条有固定数据”一个事实。main = origin = `13258414`；9222 十九轮不通。下轮：把 `pickVenueCandidate` 接到地图候选点击（只接一处），接不上就改为把 `logReleaseStatus()` 默认带上 `ledgerFromEvidence([...])`（先把已验的用例号写成一个常量）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,23 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-17 23:15 · 自动轮次 63 · 台账从证据快照生成（调用方只说一件事）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 23:15，自动轮次 63
+批次 / 切片 / 状态：M7 / 台账自动生成 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 13258414（div 0/0）→ 无合并；9222 第十九轮 down
+交付：`CASE_IDS`（1..11）+ `ledgerFromEvidence(fixedDataIds)`
+  · 11 行整行铺开，缺行就等于在隐瞒缺口（不按“已知几条”缩短）
+  · 浏览器列只认 `BROWSER_EVIDENCE` 快照（#2/#5 仍为 none）；云端列一条实证也没有 → 整列 none
+  · 调用方只需说“哪几条有固定数据”，其余不再由人填
+验证：status-card 25 → 29 条全过（含“11 条全给固定数据也算不出全绿”“卡里用生成台账时手填 5 也拦不住 0 条”）；另三个文件 24 条全过；wt-r63 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、`pickVenueCandidate` 接线、hook 默认带台账
+```
+
+- **能推出的事实就不要让人再报一遍**：调用方只报“有固定数据的用例号”，其余从快照推。
 
 ### 2026-11-17 22:40 · 自动轮次 62 · “三类全绿”改成算出来的（台账入参）
 

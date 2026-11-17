@@ -3,6 +3,7 @@ import {
   BROWSER_EVIDENCE,
   EVIDENCE_AS_OF,
   formatReleaseStatusCard,
+  ledgerFromEvidence,
   logReleaseStatus,
   RELEASE_STATUS_PREFIX,
   summarizeLedger,
@@ -184,6 +185,38 @@ describe('门禁读数接进状态卡', () => {
       gate: gateFactsForCard(reading),
     });
     expect(card).toContain('类型 未验 / 用例 通过 / 构建 未验（门禁未齐）');
+  });
+});
+
+describe('台账直接从证据快照生成', () => {
+  it('11 行都铺出来，浏览器列只认快照，云端列一条实证也没有', () => {
+    const ledger = ledgerFromEvidence([]);
+    expect(ledger.map((r) => r.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(ledger.every((r) => r.cloud === 'none')).toBe(true);
+    expect(ledger.find((r) => r.id === 2)!.browser).toBe('none');
+    expect(ledger.find((r) => r.id === 5)!.browser).toBe('none');
+    expect(ledger.find((r) => r.id === 1)!.browser).toBe('partial');
+    expect(summarizeLedger(ledger)).toEqual({ allGreen: 0, fixedOnly: 0, total: 11 });
+  });
+
+  it('报了几条有固定数据，就只算那几条 fixedOnly', () => {
+    const ledger = ledgerFromEvidence([1, 3, 4, 5, 6]);
+    expect(summarizeLedger(ledger)).toEqual({ allGreen: 0, fixedOnly: 5, total: 11 });
+  });
+
+  it('快照里没有任何一条是 pass，所以生成出来的台账永远算不出全绿', () => {
+    const ledger = ledgerFromEvidence([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(summarizeLedger(ledger).allGreen).toBe(0);
+  });
+
+  it('卡里用生成台账时，手填 allGreen 也拦不住 0 条', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: ledgerFromEvidence([1, 3]),
+      allGreen: 5,
+    });
+    expect(card).toContain('· 结论：不可发布（三类全绿 0 条）');
   });
 });
 
