@@ -497,6 +497,8 @@ text 刚建/刚未知    -> 不动
 
 **它真正的问题不是「限 1」，而是「一行卡住，全站都卡住」**：这条 C1 任务在 `queued` 期间，平台上**任何**人再发生成都会被 `GENERATION_BUSY` 挡掉（同一个 owner 也一样）。改成 `(owner_id)` 之后就是「每人同时一个」，供应商并发会从 1 变成 N —— 这会动到 Aholo 侧的并发额度，是产品/成本决定，所以**这一轮没有动生产**，只把口径与备选改法写在这里。
 
+> **更新（2026-11-17 深夜，#123）**：已拍板收口到「按 `owner_id` 每人 1 个活跃生成」（N=1 最小档）。本地备迁移 `20261118170000_per_owner_active_generation.sql`：drop 全站唯一索引 `generation_single_active_idx`，建 `generation_active_per_owner_idx(owner_id)` 部分唯一索引；v1 状态机 BUSY 判据经 `pg_get_functiondef` 取体后收窄到 `owner_id=p_actor`，其余分支与既有 numeric 补丁原样保留。PGlite 回归 jobs/worker-http/models 36 绿、aholo/input/providers 43 绿，根 tsc 0 错。**尚未上生产**：迁移需远端执行；worker 逻辑未改，不强制重部署。全局预算整池、worker `skip locked` 串行领单、submit_unknown 解围与幂等键均不变；Aholo 账号级并发仍由供应商侧决定。
+
 ### 这一轮没有做的
 
 - 没有改 `generation_single_active_idx`：如上，等你拍板。
