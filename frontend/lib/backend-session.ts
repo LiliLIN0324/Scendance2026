@@ -1120,6 +1120,24 @@ export class BackendSession {
         this.stopRenewal();
         this.update({ project: null, lease: null, revision: null, writeBlocked: true, status: "ready", error: null });
       }
+      void import('./project-cache').then(cache => cache.moveProjectCacheToTrash(projectId)).catch(() => {});
+    } finally { this.operationPending = false; }
+  }
+  /** 最近删除：服务端软删保留 7 天，这里只负责取回摘要。 */
+  async listTrash(): Promise<Array<{ id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string }>> {
+    const rows = await this.businessRequest<unknown>('/projects/trash', 'GET');
+    if (!Array.isArray(rows)) return [];
+    return rows.filter((row): row is { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string } =>
+      !!row && typeof row === 'object' && typeof (row as Record<string, unknown>).id === 'string' &&
+      typeof (row as Record<string, unknown>).studio_id === 'string' && typeof (row as Record<string, unknown>).deleted_at === 'string') as Array<{ id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string }>;
+  }
+  async restoreProject(projectId: string, expectedRevision: number): Promise<void> {
+    this.ensureCanSwitch();
+    this.operationPending = true;
+    try {
+      const result = await this.businessRequest<{ restored: boolean }>(`/projects/${uuid.parse(projectId)}/restore`, 'POST', { expectedRevision });
+      if (result.restored !== true) throw new Error('项目恢复结果无效，请刷新列表核对。');
+      void import('./project-cache').then(cache => cache.restoreProjectCache(projectId)).catch(() => {});
     } finally { this.operationPending = false; }
   }
   async renameProject(name: string): Promise<BackendProject> {
@@ -1185,12 +1203,12 @@ export class BackendSession {
       geometryBinding: geometryBinding ?? null,
       localRevision: this.snapshot.localRevision + 1, lease: null, writeBlocked: true, status: "ready", error: null });
   }
-  async createProject(studioId: string, name: string, scene: Scene): Promise<BackendProject> {
+  async createProject(studioId: string, name: string, scene: Scene, localId?: string): Promise<BackendProject> {
     this.ensureCanSwitch();
     this.cancelGeometryPreparation();
-    return this.createProjectInSession(studioId, name, scene);
+    return this.createProjectInSession(studioId, name, scene, undefined, localId);
   }
-  private async createProjectInSession(studioId: string, name: string, scene: Scene, geometry?: GeometryPreparation): Promise<BackendProject> {
+  private async createProjectInSession(studioId: string, name: string, scene: Scene, geometry?: GeometryPreparation, localId?: string): Promise<BackendProject> {
     this.ensureCanSwitch();
     this.operationPending = true;
     try {
@@ -1198,6 +1216,7 @@ export class BackendSession {
       const binding = geometry?.bindingFor(project);
       this.assertGeometryCurrent(geometry);
       this.selectProject(project, binding);
+      rememberProjectCache({ projectId: project.id, studioId: project.studio_id, name: project.name ?? name, revision: project.revision, scene: project.scene, localId });
       return project;
     } finally { this.operationPending = false; }
   }
@@ -1358,6 +1377,7 @@ export class BackendSession {
       // The renderer can reject unsupported geometry before changing the active project.
       validate?.(project);
       this.selectProject(project, geometry?.bindingFor(project));
+      rememberProjectCache({ projectId: project.id, studioId: project.studio_id, name: project.name, revision: project.revision, scene: project.scene });
       return project;
     } catch (error) {
       if (!geometry || geometry.current()) this.block(error);
@@ -2005,6 +2025,7 @@ export class BackendSession {
       const saved = sceneSchema.parse(result.scene);
       const unchanged = this.snapshot.localRevision === localRevision;
       this.update({ revision: result.revision, lease: { ...(this.snapshot.lease ?? lease), revision: result.revision }, project: { ...this.snapshot.project!, scene: saved, revision: result.revision }, ...(unchanged ? { draft: saved, dirty: false } : {}), ...(!this.snapshot.writeBlocked ? { status: "editing", error: null } : {}) });
+      rememberProjectCache({ projectId: lease.projectId, studioId: this.snapshot.project?.studio_id, name: this.snapshot.project?.name ?? '', revision: result.revision, scene: saved });
       return { ...result, scene: saved };
     } catch (error) {
       this.block(error);
@@ -2023,6 +2044,14 @@ export class BackendSession {
     this.update({ user: null, recoveryReady: false, lease: null, writeBlocked: true, status: this.config.configured ? "signed_out" : "unconfigured" });
     this.listeners.clear();
   }
+}
+
+/** 每个项目一份本机缓存：写失败不影响保存/打开，缓存只是首选读路径。 */
+function rememberProjectCache(input: { projectId: string; studioId?: string | undefined; name: string; revision: number | null; scene: unknown; localId?: string | undefined }): void {
+  const payload = { projectId: input.projectId, name: input.name, revision: input.revision, scene: input.scene, updatedAt: Date.now(), ...(input.studioId ? { studioId: input.studioId } : {}), ...(input.localId && input.localId !== input.projectId ? { localId: input.localId } : {}) };
+  void import('./project-cache')
+    .then(cache => cache.putProjectCache(payload))
+    .catch(() => {});
 }
 
 export function createBackendSession(config?: BackendConfig): BackendSession {
