@@ -106,6 +106,28 @@ export function summarizeLedger(rows: readonly CaseLedgerRow[]): {
   return { allGreen, fixedOnly, total: rows.length };
 }
 
+/** 验收用例编号（对照表 11 行）；台账按它整行铺开，缺行就等于在隐瞒缺口。 */
+export const CASE_IDS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+/**
+ * 从证据快照 + 固定数据清单直接生出台账。
+ *
+ * 浏览器那列只认 `BROWSER_EVIDENCE`（没有一条被标成 pass，这是实情）；
+ * 云端那列目前一条实证也没有，所以整列写 `none`。
+ * 调用方只需告诉“哪几条有固定数据”，剩下的不再由人填。
+ */
+export function ledgerFromEvidence(
+  fixedDataIds: readonly number[],
+): CaseLedgerRow[] {
+  const fixed = new Set(fixedDataIds);
+  return CASE_IDS.map((id) => ({
+    id,
+    fixedData: fixed.has(id),
+    browser: BROWSER_EVIDENCE[id] === 'partial' ? 'partial' : 'none',
+    cloud: 'none',
+  }));
+}
+
 /** 证据清单：空列表就只写「0 条」，不留一个空括号。 */
 function listWithIds(ids: readonly number[]): string {
   if (ids.length === 0) return '0 条';
