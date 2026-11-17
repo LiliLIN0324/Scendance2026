@@ -196,38 +196,6 @@
 .sc-project-gallery-settings .sc-project-gallery-upload { display: grid; gap: 4px; }
 .sc-project-gallery-upload input { width: 155px; font-size: 11px; }
 
-/* 场景库对话：真输入框 + 回话记录，不是几个按钮。 */
-.sc-scene-chat { display: grid; gap: 8px; }
-.sc-scene-chat-feed {
-  display: flex; flex-direction: column; gap: 8px;
-  max-height: 188px; overflow-y: auto; padding-right: 2px;
-}
-.sc-scene-chat-lead { margin: 0; font-size: 12px; color: var(--space-muted, var(--wk-ink-soft)); }
-.sc-scene-chat-feed .ap-user, .sc-scene-chat-feed .ap-turn { font-size: 12px; }
-.sc-scene-chat-composer { display: flex; gap: 6px; align-items: flex-end; }
-.sc-scene-chat-composer textarea {
-  flex: 1; min-width: 0; min-height: 38px; max-height: 88px; resize: vertical;
-  padding: 9px 10px; border: 1px solid var(--space-line, var(--wk-hair)); border-radius: 8px;
-  background: var(--wk-paper); color: var(--space-ink, var(--wk-ink));
-  font: inherit; font-size: 13px; line-height: 1.45;
-}
-.sc-scene-chat-composer textarea:focus-visible { outline: 2px solid var(--space-accent, #245c4a); outline-offset: -1px; }
-.sc-scene-chat-send {
-  flex: 0 0 auto; width: 30px; height: 30px; padding: 0;
-  border: 1px solid transparent; border-radius: 50%;
-  background: var(--space-accent, #245c4a); color: #fff;
-  display: grid; place-items: center; cursor: pointer;
-}
-.sc-scene-chat-send:disabled { background: var(--wk-plane); color: var(--wk-ink-faint); cursor: default; }
-.sc-scene-chat-quick { display: flex; flex-wrap: wrap; gap: 6px; }
-.sc-scene-chat-quick > :is(button, a) {
-  display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px;
-  border: 1px solid var(--space-line, var(--wk-hair)); border-radius: 6px;
-  background: var(--wk-paper); color: var(--space-ink, var(--wk-ink));
-  font: inherit; font-size: 12px; cursor: pointer; text-decoration: none;
-}
-.sc-scene-chat-quick > :is(button, a):hover { background: var(--space-tint, var(--wk-plane)); }
-
 /* 2026-11-17 场景库分类行：读法对齐户外规划物料库的一级段——箭头 + 图标 + 名称 + 右侧计数。 */
 .sc-scene-group { display: block; border-top: 1px solid var(--space-line, var(--wk-hair)); }
 .sc-scene-group > summary {
