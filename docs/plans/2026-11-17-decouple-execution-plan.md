@@ -145,6 +145,7 @@
 - **现状**：主体放置/占用已用 `outdoorCorridorStrips(points, width)` 生成占带 + `outdoorRingsOverlap(ring, strip)` 多边形相交（`outdoor-agent-planning.ts` 多处）。残留旧口径两处（`outdoor-event-logic.ts`）：
   1. 入口打分软启发：`distanceToRoute(node.position, route) > (route.widthM ?? 3)/2 + 1`（非硬拦）；
   2. 车行线 BBox 外扩：`pad = (route.widthM ?? 4)/2 + 1`，`pathCrossesRing` 粗判。
+- **样本现状（2026-11-17）**：仓库未找到真实 plan 导出 JSON；`docs/evidence` 只有资产/地图证据，plan 相关测试均为合成夹具。先用真实项目导出一份 GeoJSON 量分布，禁止拿合成夹具定阈值。
 - **步骤**：① 先量真实间距——用导出几何测中心线/占带边缘到足迹距离分布，对照已验证可行解定阈值；② 再把两处从「半宽+1 距离 / BBox pad」改为复用 strips/ringsOverlap 的占带相交判据。
 - **验收**：既有可行解不被误拦；新增占带相交定向测试；计时/距离口径注释更新。
 
