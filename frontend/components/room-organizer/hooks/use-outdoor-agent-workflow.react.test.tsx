@@ -611,7 +611,7 @@ it("Esc 取消手画后撤掉未确认候选，不在核对阶段留待写入状
   expect(flow.state.stage).toBe("place");
   expect(flow.state.pendingBoundary).toBeUndefined();
   expect(flow.notice).toContain("已取消");
-  expect(host.textContent).not.toContain("核对当前实际活动范围");
+  expect(host.textContent).not.toContain("确认活动范围");
 });
 it("取消重画时已确认的边界和核对阶段保留", async () => {
   plan = { ...plan, boundary: ring };
