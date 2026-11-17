@@ -1282,7 +1282,7 @@ export function useOutdoorAgentWorkflow(input: {
           // 边界与画布内容都不动；确认后才写入并推进，不把已有边界清掉。
           persist({ ...stateRef.current, stage: "scope" });
           offer(plan, "scope", "确认当前活动范围", job, [
-            "这里核对的是活动范围；红线只用于布场，不代表产权或审批。",
+            "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
           ]);
           setBusy(false);
           return;
@@ -1331,7 +1331,7 @@ export function useOutdoorAgentWorkflow(input: {
         }
         persist({ ...stateRef.current, stage: "scope" });
         offer(plan, "scope", "确认当前活动范围", job, [
-          "这里核对的是活动范围；红线只用于布场，不代表产权或审批。",
+          "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
         ]);
         setBusy(false);
         return;
