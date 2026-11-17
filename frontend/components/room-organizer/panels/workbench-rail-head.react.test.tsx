@@ -83,7 +83,9 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(css).toMatch(/button\.sc-rail-disc\s*\{[^}]*width:\s*40px[^}]*border:\s*0/);
     expect(css).toMatch(/button\.sc-rail-disc > span\.sc-rail-avatar\s*\{[^}]*width:\s*28px[^}]*height:\s*28px/);
     expect(css).toMatch(/\.sc-rail-avatar-tilt\s*\{[^}]*rotateX\(var\(--tilt-x/);
+    expect(css).toMatch(/\.sc-rail-hall-eyes\s*\{[^}]*translate\(var\(--eye-x/);
     expect(css).toMatch(/\.sc-rail-eye\s*\{[^}]*background:\s*#fff/);
+    expect(brandSource).toContain('useEyeFollow');
     expect(css).toMatch(/button\.sc-rail-disc\.is-active::before\s*\{[^}]*left:\s*-4px[^}]*top:\s*7px[^}]*bottom:\s*7px[^}]*width:\s*3px/);
     expect(css).not.toMatch(/button\.is-active::before\s*\{/);
     expect(css).not.toContain('sc-rail-agent-brand-slot');
