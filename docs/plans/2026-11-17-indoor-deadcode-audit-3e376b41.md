@@ -5,7 +5,7 @@
 
 ## 0. 一句话结论
 
-室内残留**没有可独立删除项**：最薄的模块也有 1 个生产引用，链最终都收在 `room-organizer.tsx` 壳体或 `agent-panel.tsx` 提案链上。全树真正零引用的只有 13 个文件，其中 4 个通用 UI 原语通过白名单并已删除，其余 9 个各有明确保留依据。
+室内残留**没有可独立删除项**：最薄的模块也有 1 个生产引用，链最终都收在 `room-organizer.tsx` 壳体或 `agent-panel.tsx` 提案链上。全树真正零引用的只有 13 个文件：第一轮删 4 个通用 UI 原语；第二轮按 owner「无源码消费者且不影响现状」口径再删 5 个休眠/未挂载组件及其孤儿样式，并摘掉 2 个无消费者的 npm 依赖；剩余 4 个有「按名引用」或「测试读源码」的硬依赖，保留。
 
 ## 1. 基线与分支
 
@@ -35,11 +35,11 @@
 | `components/ui/input.tsx` | 0 | 0 | 无 | **已删** | 全仓 0 命中 |
 | `components/ui/label.tsx` | 0 | 0 | 无 | **已删** | 全仓 0 命中 |
 | `components/ui/select.tsx` | 0 | 0 | 无 | **已删** | 全仓 0 命中 |
-| `components/room-organizer/components/outdoor-view-switch.tsx` | 0 | 0 | 无 | 保留 | `room-organizer.tsx:4898` 注释：「组件文件保留待后续整体清理」；属户外 UI，非室内残留 |
-| `components/room-organizer/panels/library-chat.tsx` | 0 | 0 | 无 | 保留 | `space-panel.tsx:271` 注释 + HANDOFF 2026-11-17：组件与 `.sc-library-chat*` 样式休眠保留 |
-| `components/room-organizer/panels/scene-chat.tsx` | 0 | 0 | 无 | 保留 | 同批记录「`SceneChat` 不再挂载」，owner 有意休眠 |
-| `components/room-organizer/panels/plan-candidate-list.tsx` | 0 | 0 | 无 | 保留 | 户外平面候选清单 #46-1b，M5 提案确认卡链待接线 |
-| `components/room-organizer/panels/plan-candidate-card.tsx` | 1（仅 `plan-candidate-list.tsx`） | 0 | 无 | 保留 | 死簇内，随上项待 M5 接线 |
+| `components/room-organizer/components/outdoor-view-switch.tsx` | 0 | 0 | 无 | **已删（第二轮）** | 从未挂载；原注释「保留待后续整体清理」经 owner 确认后清除 |
+| `components/room-organizer/panels/library-chat.tsx` | 0 | 0 | 无 | **已删（第二轮）** | 休眠组件；`.sc-library-chat*` 样式删除，仅 `.sc-library-chat-choices` 因 `material-create-cell` 仍在用而保留 |
+| `components/room-organizer/panels/scene-chat.tsx` | 0 | 0 | 无 | **已删（第二轮）** | 已不挂载；`.sc-scene-chat*` 样式一并删除 |
+| `components/room-organizer/panels/plan-candidate-list.tsx` | 0 | 0 | 无 | **已删（第二轮）** | 面板未接线；纯函数层 `plan-candidate-preview` / `-apply` 有测试覆盖，保留待 M5 |
+| `components/room-organizer/panels/plan-candidate-card.tsx` | 1（仅 `plan-candidate-list.tsx`） | 0 | 无 | **已删（第二轮）** | 同上，随 list 一并删除 |
 | `evals/brief/run.ts` | 0 | 0 | **按名引用** | 保留 | `evals/brief/README.md:8/17`：`node scripts/run-ts.mjs frontend/evals/brief/run.ts` |
 | `evals/brief/run-coverage.ts` | 0 | 0 | **按名引用** | 保留 | 同 README:32 |
 | `lib/investor-report.ts` | 0 | **有（读源码）** | 无 | 保留 | `lib/brand-tokens.test.ts:63` `read('lib/investor-report.ts')`；且 D 层业务事实保留口径 |
@@ -74,14 +74,19 @@
 
 ## 6. 本轮删除与门禁
 
-**删除（提交 `74b6494d`，4 文件 / −169 行）**：
+**第一轮删除（提交 `74b6494d`，4 文件 / −169 行）**：
 `frontend/components/ui/card.tsx`、`input.tsx`、`label.tsx`、`select.tsx`。
 
-| 门禁 | 结果 |
-| --- | --- |
-| `npm run typecheck`（`tsc --noEmit`） | **exit 0**，0 错误 |
-| `npm run test`（`vitest run`，654 文件） | 删除后 111 失败 / 543 通过；同 worktree 还原 4 文件后的基线 109 失败 / 545 通过 |
-| `npm run build`（package-pages + `next build` + oneplan 校验） | **exit 0** |
+**第二轮删除（owner 口径：无源码消费者、不影响现状）**：
+- 5 个未挂载组件：`components/room-organizer/components/outdoor-view-switch.tsx`、`panels/library-chat.tsx`、`panels/scene-chat.tsx`、`panels/plan-candidate-list.tsx`、`panels/plan-candidate-card.tsx`。
+- 孤儿样式：`workbench-shelf.css` 的 `.sc-library-chat*`（保留 `.sc-library-chat-choices`，`material-create-cell` 仍在用）、`space-browser.css` 的 `.sc-scene-chat*`；两处引用这些组件的陈旧注释同步改写。
+- 无消费者依赖：`frontend/package.json` 去掉 `@radix-ui/react-label`、`@radix-ui/react-select`，`package-lock.json` 由 `npm install --package-lock-only` 重新生成（−675 行）；`@radix-ui/react-slot` 仍被 `ui/button.tsx` 使用，保留。
+
+| 门禁 | 第一轮 | 第二轮 |
+| --- | --- | --- |
+| `npm run typecheck`（`tsc --noEmit`） | exit 0 | exit 0 |
+| `npm run test`（`vitest run`，654 文件） | 111 失败 / 543 通过（基线 109 / 545） | **109 失败 / 545 通过**（与基线一致，1706 vs 1707 用例为抖动） |
+| `npm run build`（package-pages + `next build` + oneplan 校验） | exit 0 | exit 0 |
 
 **测试差异归因（既有抖动，非本轮引入）**：
 - 仅删除后失败：`share.test.ts`、`agent-preset-flow.test.ts`、`structure-satellite.test.ts`；仅基线失败：`plan-traffic-layer.test.ts`。
@@ -91,10 +96,9 @@
 ## 7. 未决与后续
 
 1. `components/ui/button.tsx` 仍被休眠面板 `recovery-entry.tsx` 引用，**不随本批成组删除**；待该面板退役时一并评估。
-2. 删除 `label.tsx` / `select.tsx` 后，`@radix-ui/react-label`、`@radix-ui/react-select` 已无源码消费者，但仍留在 `package.json`。按「最小删除、不动锁文件」口径**本轮不摘依赖**，建议单独一轮清理（需重装/重锁并跑全量门禁）。
-3. `outdoor-view-switch`、`library-chat`、`scene-chat` 三件建议随 R1（场景库）/R2（视图胶囊）落地时删除，避免现在删了又重建。
-4. `plan-candidate-list/card` 建议登记到 M5 待办，不作为死代码处理。
-5. 室内残留全部留待 `M3 → R2 → R3 → R4`；`schema.ts` 类型最后删。
+2. `scene-chat-intent.ts`、`plan-candidate-preview.ts`、`plan-candidate-apply.ts` 现在只剩测试引用；它们是有测试覆盖的纯函数层，按「测试也是消费者」口径保留，等 M5 接线或场景库退役时再定去留。
+3. 其余室内残留（three 场景簇、状态/schema 主干、座位/提案链、室内 hooks、立壳面板）全部留待 `M3 → R2 → R3 → R4`；`schema.ts` 类型最后删。
+4. 若确认 `scene-chat-intent` / `plan-candidate-preview` 也不再用，可连同各自测试一起删，属下一轮候选。
 
 ## 8. 复现命令
 

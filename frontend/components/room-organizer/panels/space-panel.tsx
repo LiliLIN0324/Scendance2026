@@ -269,8 +269,8 @@ export function SpacePanel({
           </section>}
           {/* 2026-11-17 用户：「这个场景库三个字是不是要删掉啊」——删。卡片外壳已有「空间」标题，
               这行场景库是多余的一级标题，而且 .sc-library-chat-title 当时是绝对定位、不占高度，
-              直接把下面「经典案例」压在自己身上（那条定位已改回流式，见 workbench-shelf.css）。LibraryChat 组件与 .sc-library-chat* 样式休眠保留，
-              与场地信息记录、对话面板同例。 */}
+              直接把下面「经典案例」压在自己身上（那条定位已改回流式，见 workbench-shelf.css）。LibraryChat 组件与 .sc-library-chat* 样式已于 2026-11-17 零引用清理删除；
+              .sc-library-chat-choices 因 material-create-cell 仍在用而单独保留。 */}
           {card
             ? <>
                 {/* 2026-11-17 用户：「是不是上面的应该放在下面」「项目中的场景这玩意根本就不重要啊」——
