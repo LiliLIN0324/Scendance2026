@@ -1116,7 +1116,12 @@ export function useOutdoorAgentWorkflow(input: {
     // 2026-11-17 正式站实测：用户回一句「随便放」，模型却编了一份清单，校验发现这句原文里没有依据
     // → 整轮抛错 → 红卡 +「重试」，而重试只会把同一句再撞一次。
     // 用户没给清单时，任何清单都是模型编的：这里直接丢掉，改按分区用途与面积出默认方案。
+    // 2026-11-17：撤除语不算「模糊指令」——「摊位都撤了」没有数字也没量词，但它点名了已有物料并要求撤掉，
+    // 模型给的 count=0 清单是正当的；若按 vagueDemand 丢掉，用户看到的就是「说了撤，什么都没变」。
+    const clearOut =
+      /(撤|拆掉|拆了|拿掉|去掉|清空|不要了|不留|别放|全清)/u.test(message);
     const vagueDemand =
+      !clearOut &&
       !/\d/.test(message) &&
       !/[个张把套顶组排座条件台块只面根副]/u.test(message);
     const fabricated =
