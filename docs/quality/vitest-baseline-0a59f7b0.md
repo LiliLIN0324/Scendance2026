@@ -9,9 +9,9 @@
 | --- | --- |
 | 提交 | `0a59f7b0`（origin/main） |
 | 命令 | `cd frontend && npx vitest run` |
-| 环境 | Windows · Node v26.2.0 · npm 11.13.0 · vitest ^4.1.10 |
+| 环境 | Windows · Node v26.2.0 · npm 11.13.0 · vitest 4.1.12（package spec `^4.1.10`，lock 已解析 4.1.12） |
 | 采集时间 | 2026-11-17 |
-| 复跑要求 | Node 必须与台账同版本档（本台账 v26.2.0）；engines 要求 `>=24.15 <25 \|\| >=26`，Node 22 不满足、禁止用于全量/build；24 与 26 混跑会让失败集漂移，结果不可比 |
+| 复跑要求 | Node 必须与台账同版本档（本台账 v26.2.0）；vitest 4.1.12；engines 要求 `>=24.15 <25 \|\| >=26`，Node 22 不满足、禁止用于全量/build；24 与 26 混跑会让失败集漂移，结果不可比 |
 | 原始日志 | 本机 `%TEMP%\scendance-vitest-merged.log`（UTF-16LE，不入库） |
 
 ## 2. 汇总
