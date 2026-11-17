@@ -13,7 +13,14 @@ import {
   vehiclePreviewSpeed,
   type VehicleFollowerProfile,
 } from '../lib/vehicle-follower-profile';
+import {
+  createCachedGlbModel,
+  disposeOwnedModel,
+  ensureGlbAsset,
+} from './glb-assets';
 import { planFrameOf, routePathOf, sampleRoute, type RoutePath } from './plan-traffic-layer';
+import { loadFacilityModelOverride, type FacilityModelCandidate } from '../lib/plan-facility-models';
+import type { FurnitureItem } from '../lib/types';
 import type {
   PlanRoute,
   PlanVehicle,
@@ -109,13 +116,21 @@ function buildEntityVehicleMesh(profile: VehicleFollowerProfile, color: string):
 }
 
 function disposeInstance(root: THREE.Object3D): void {
+  // 异步换上的 GLB 由缓存克隆而来，几何/材质不能按占位盒的方式直接 dispose；
+  // 先收集模型 holder，跳过其子树，再交给 disposeOwnedModel 统一收口。
+  const modelRoots = new Set<THREE.Object3D>();
+  root.traverse(object => { if (object.userData.vehicleModel === true) modelRoots.add(object); });
   root.traverse(object => {
+    for (let parent: THREE.Object3D | null = object; parent; parent = parent.parent) {
+      if (modelRoots.has(parent)) return;
+    }
     const mesh = object as THREE.Mesh;
     if (mesh.geometry) mesh.geometry.dispose();
     const material = mesh.material;
     if (Array.isArray(material)) material.forEach(entry => entry.dispose());
     else if (material) material.dispose();
   });
+  for (const modelRoot of modelRoots) disposeOwnedModel(modelRoot);
 }
 
 export function createPlanVehicleEntitiesLayer(baseY: number): PlanVehicleEntitiesLayer {
@@ -124,8 +139,12 @@ export function createPlanVehicleEntitiesLayer(baseY: number): PlanVehicleEntiti
 
   let instances: VehicleInstance[] = [];
   let disposed = false;
+  /** 每次 sync 递增：异步 GLB 回来时用它判断这批实例是否已经被清掉。 */
+  let run = 0;
+  const candidateCache = new Map<string, Promise<FacilityModelCandidate | null>>();
 
   const clear = () => {
+    run += 1;
     for (const instance of instances) {
       group.remove(instance.root);
       disposeInstance(instance.root);
@@ -133,9 +152,82 @@ export function createPlanVehicleEntitiesLayer(baseY: number): PlanVehicleEntiti
     instances = [];
   };
 
+  /** 同一 slug 只解析一次候选；多个实例共用，失败也不反复重试。 */
+  const candidateFor = (slug: string): Promise<FacilityModelCandidate | null> => {
+    let pending = candidateCache.get(slug);
+    if (!pending) {
+      pending = loadFacilityModelOverride(slug).catch(() => null);
+      candidateCache.set(slug, pending);
+    }
+    return pending;
+  };
+
+  /**
+   * 占位盒 → 真实车辆 GLB。
+   * 失败时不动占位盒（宁可显示“模型未加载”，也不凭空消失或换成别的车型）。
+   */
+  const attachModel = async (
+    root: THREE.Group,
+    slug: string,
+    profile: VehicleFollowerProfile,
+    token: number,
+  ): Promise<void> => {
+    const candidate = await candidateFor(slug);
+    if (!candidate || disposed || token !== run || root.parent !== group) return;
+    try {
+      await ensureGlbAsset(candidate.glbUrl, candidate.glbUrl);
+    } catch {
+      return;
+    }
+    if (disposed || token !== run || root.parent !== group) return;
+
+    const item = {
+      id: `vehicle-model-${slug}`,
+      type: 'glb-asset',
+      name: candidate.name,
+      width: candidate.width,
+      depth: candidate.depth,
+      height: candidate.height,
+      color: '#ffffff',
+      icon: '◇',
+      price: 0,
+      category: 'vehicle',
+      glbUrl: candidate.glbUrl,
+      source: 'public_library',
+      materialId: 'asset',
+      notes: '',
+    } as unknown as FurnitureItem;
+    const model = createCachedGlbModel(item, false);
+    if (!model) return;
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    if (!(size.x > 0 && size.z > 0)) return;
+
+    const holder = new THREE.Group();
+    holder.userData.vehicleModel = true;
+    holder.add(model);
+    // 把模型水平居中、底面落在 y=0，再按占位长/宽等比缩到车位尺寸。
+    model.position.set(-center.x, -box.min.y, -center.z);
+    const longest = Math.max(size.x, size.z);
+    const shortest = Math.min(size.x, size.z);
+    const scale = Math.min(profile.bodyLengthM / longest, profile.bodyWidthM / shortest);
+    if (!(scale > 0) || !Number.isFinite(scale)) return;
+    holder.scale.setScalar(scale);
+    // 模型长边对齐组内 z 轴（与巡游切线朝向同一口径）。
+    if (size.x > size.z) holder.rotation.y = Math.PI / 2;
+
+    for (const child of root.children) child.visible = false;
+    root.add(holder);
+    root.userData.modelLoaded = true;
+    root.userData.modelMissing = false;
+  };
+
   const sync = (plan: SitePlanData) => {
     if (disposed) return;
     clear();
+    const token = run;
 
     const boundary = Array.isArray(plan.boundary) ? plan.boundary : [];
     const frame = planFrameOf(boundary);
@@ -197,6 +289,10 @@ export function createPlanVehicleEntitiesLayer(baseY: number): PlanVehicleEntiti
           label: slotIndex === 0 ? `${vehicleLabelOf(vehicle)} · ${vehicle.count} 台` : null,
         };
         group.add(root);
+
+        // 2026-11-17 P0：有模型 slug 时异步换成真实 GLB；加载失败/超时保留占位盒，不改数据。
+        const slug = vehicleModelSlugOf(vehicle);
+        if (slug) void attachModel(root, slug, profile, token).catch(() => {});
 
         // 同一车型台与台的速度略错档，避免车队像机械同步。
         const unit = 0.55 + (slotIndex % 3) * 0.1;

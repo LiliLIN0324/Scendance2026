@@ -155,7 +155,8 @@ export const NATIONAL_CHERRY_FESTIVAL: ReplicaCaseSpec = {
   region: 'North America',
   refImage: 'national-cherry-festival.png',
   refLink: LINK('national-cherry-festival'),
-  anchor: { lng: -85.619, lat: 44.7595 },
+  anchor: { lng: -85.623882, lat: 44.766579 },
+  rotationDeg: 349,
   locationNote: '镇级锚点：Traverse City Open Space Park（Bayfront）',
   zones: [
     { name: 'Pier Lawn 突堤草坪', semantic: 'audience', color: '#e07b30', opacity: 0.15, polygon: [[-15, 55], [40, 58], [45, 15], [10, 8], [-20, 20]] },
@@ -194,7 +195,8 @@ export const ASHFIELD_DAY: ReplicaCaseSpec = {
   region: 'Europe',
   refImage: 'ashfield-day.png',
   refLink: LINK('ashfield-day'),
-  anchor: { lng: -1.263, lat: 53.124 },
+  anchor: { lng: -1.248605, lat: 53.124678 },
+  rotationDeg: 6,
   locationNote: '镇级锚点：Sutton Lawn, Sutton-in-Ashfield (UK)',
   zones: [
     { name: 'Fun For All Zone 全龄游乐区', semantic: 'audience', color: '#f2d024', opacity: 0.25, polygon: [[-95, 25], [-30, 35], [-25, -40], [-90, -45]] },

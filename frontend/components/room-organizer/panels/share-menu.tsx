@@ -1,29 +1,27 @@
 'use client';
 
 /**
- * 画布工具轨右上角的「分享」。
- * 2026-11-17 重排（用户拍板 A+B）：一张卡只回答两个问题——这一版发了吗、发出去的在哪。
- *  - 主区两态：未分享 = 预览 + 唯一绿色主动作；已分享 = 二维码 + 链接 + 复制/打开，
- *    再生成退为次级整行。删掉原三条状态行、虚线空二维码框和项目大纲折叠（大纲压成预览下一行元信息）。
- *  - 「分享记录」走 GET /projects/:id/shares（版本/时间/撤回以服务端为准，URL 只在本机有），
- *    没接 actions 时退化为本机日志；旧键 scendance.publishedLink.v1.* 读时迁移。撤回走 DELETE。
- *  - 3D 漫游 / 发评审链接 / 交付物（导出·资料·清单）全部降级为次级入口。
- * 二维码算法用 qrcode（MIT），图标与卡片样式是自写的。
+ * 画布右上角的「分享」。
+ * 2026-11-17 锁定稿：一枚 32×32 线稿箭头，弹出三页（分享 / 发布 / 导出）。
+ * 发布走既有 POST /projects/:id/publish，复制的是那次返回的只读页地址；
+ * 二维码只在已发布、且点开小键之后出现。评审链接与 Bingo 标记仍走 onIssueReviewLink。
+ * 导出只挂已经接到工作台的回调，不新造下载。
  */
 import QRCode from 'qrcode';
-import { ClipboardCheck, Copy, ExternalLink, FileDown, Info, Link2, PackageOpen, QrCode, Upload } from '@/components/solid-icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { describeUnshareableAssets } from '../../../lib/share-snapshot';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { readBingoSnapshot } from '../lib/bingo-status';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
-import { appendShareRecord, mergeShareRows, readShareRecords, type ServerShare, type ShareRow } from '../lib/share-records';
-import { PlanPreview } from './plan-preview';
-import { isStructuralMarker } from '../lib/structural-layout';
-import type { DisplayUnit, RoomLayout } from '../lib/types';
 import { convertMetres } from '../lib/display-units';
-import { MaterialSymbol } from './material-symbol';
+import { REVIEW_MARK_CHANGED_EVENT } from '../lib/review-share';
+import { appendShareRecord, type ServerShare } from '../lib/share-records';
+import { isStructuralMarker } from '../lib/structural-layout';
+import { SHARE_READ_ONLY_LINE, SharePanel, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
+import type { DisplayUnit, RoomLayout } from '../lib/types';
+
+export { SHARE_READ_ONLY_LINE };
 
 export interface PublishedLink {
-  /** 手机扫码即可打开的只读方案页。 */
+  /** 手机打开即可看的只读方案页。 */
   url: string;
   revision: number;
 }
@@ -55,6 +53,46 @@ export interface ShareMenuActions {
   onRevokeShare?(shareId: string): Promise<void>;
   /** 抓当前画布真实一帧当预览（户外 2D/3D、室内各走各的抓帧句柄）；抓不到时卡片退回示意图。 */
   onCapturePreview?(): Promise<string | null>;
+  /**
+   * 已登录、方案已挂上项目、但没有编辑权。
+   * 未发布页不给绿色「发布并复制链接」，只留只读说明。
+   */
+  readOnly?: boolean;
+}
+
+/**
+ * 发布按钮要不要收成只读说明。
+ * 跟发布动作的判断同一条：没连上、没登录、方案还没挂项目时仍走各自的提示，不算这条只读。
+ */
+export function sharePublishReadOnly(snapshot: {
+  configured: boolean;
+  user: { is_anonymous?: boolean } | null;
+  project: { id?: string | null } | null;
+  writeBlocked: boolean;
+}, layoutId?: string): boolean {
+  if (!snapshot.configured || !snapshot.user || snapshot.user.is_anonymous) return false;
+  const projectId = snapshot.project?.id || layoutId;
+  if (!projectId) return false;
+  return snapshot.writeBlocked;
+}
+
+/** Bingo 行右侧用产品已有的三态，不另起「已送」。 */
+export function shareBingoStatus(
+  projectId: string | undefined,
+  sentNow: boolean,
+  storage: { getItem(key: string): string | null } | null,
+): ShareBingoStatus {
+  let returned = false;
+  let waiting = false;
+  try {
+    const snap = readBingoSnapshot(storage);
+    const mine = projectId ? snap.plans.filter(plan => plan.projectKey === projectId) : [];
+    returned = mine.some(plan => plan.returned);
+    waiting = mine.length > 0;
+  } catch { /* 读不到记录时只看这一次有没有送出 */ }
+  if (returned) return '已回执';
+  if (waiting || sentNow) return '待评';
+  return '待发';
 }
 
 export interface PlanOutline {
@@ -91,41 +129,58 @@ export function planOutline(layout: RoomLayout, unit: DisplayUnit = 'm'): PlanOu
   };
 }
 
-export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, closeSignal = 0, variant = 'rail' }: {
+/** 分享钮两态：白底线稿。打开只换绿描边和同色箭头，不铺绿底。 */
+export function shareTriggerChrome(open: boolean): CSSProperties {
+  return {
+    width: 32,
+    height: 32,
+    minWidth: 32,
+    minHeight: 32,
+    boxSizing: 'border-box',
+    padding: 0,
+    borderRadius: 8,
+    borderStyle: 'solid',
+    borderWidth: open ? 1.2 : 0.6,
+    borderColor: open ? '#4A7C59' : '#E4E4E7',
+    backgroundColor: '#FFFFFF',
+    color: open ? '#4A7C59' : '#55585F',
+    boxShadow: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+}
+
+export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', openRequest = 0, closeSignal = 0, variant = 'rail' }: {
   actions?: ShareMenuActions;
-  /** 画布当前方案，用来画预览和大纲。 */
+  /** 画布当前方案，用来取标题。 */
   layout?: RoomLayout;
-  /** 大纲尺寸读数跟随的显示单位；底稿仍存米。 */
+  /** 保留给调用方；大纲不再画进这张卡。 */
   lengthUnit?: DisplayUnit;
   /** 旧「评审」入口改道时递增，用来把菜单打开。 */
   openRequest?: number;
   /** 别的工具菜单打开时递增，用来把发布收起。 */
   closeSignal?: number;
   /**
-   * P4-c：同一份发布卡片在两种位置复用——工具轨（图标钮）与户外画布右上交付簇（文字胶囊）。
-   * 只改触发钮外观与 id，卡片本体与动作完全一致。
+   * 同一份卡片的两种触发位。外观都是锁定的 32×32 线稿箭头。
    */
   variant?: 'rail' | 'canvas';
 }): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<ShareTab>('share');
   const [published, setPublished] = useState<PublishedLink | null>(null);
   const [qrSvg, setQrSvg] = useState('');
-  const [reviewUrl, setReviewUrl] = useState('');
-  const reviewGuard=useRef<(()=>boolean)|null>(null);
-  const reviewCurrent=()=>{try{return reviewGuard.current?.()===true;}catch{return false;}};
-  const [viewerLink, setViewerLink] = useState<{ url: string; name: string; objects: number; droppedAssets: number } | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [rows, setRows] = useState<ShareRow[]>([]);
-  const [recordsOpen, setRecordsOpen] = useState(false);
-  const [deliverOpen, setDeliverOpen] = useState(false);
-  const [confirmRevoking, setConfirmRevoking] = useState<string | null>(null);
-  const [shot, setShot] = useState<string | null>(null);
+  const [bingoSent, setBingoSent] = useState(false);
+  const [bingoRev, setBingoRev] = useState(0);
   const seenOpen = useRef(openRequest);
   const seenClose = useRef(closeSignal);
   const projectId = layout?.id;
-  const outline = useMemo(() => layout ? planOutline(layout, lengthUnit) : null, [layout, lengthUnit]);
+  const listSharesRef = useRef(actions?.onListShares);
+  listSharesRef.current = actions?.onListShares;
 
   useEffect(() => {
     if (openRequest === seenOpen.current) return;
@@ -137,17 +192,30 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
     if (closeSignal === seenClose.current) return;
     seenClose.current = closeSignal;
     setOpen(false);
+    setQrOpen(false);
   }, [closeSignal]);
 
   useEffect(() => {
     setPublished(readPublishedLink(projectId));
-    setReviewUrl('');
-    reviewGuard.current=null;
-    setRows(mergeShareRows(readShareRecords(projectId), null));
-    setRecordsOpen(false);
-    setDeliverOpen(false);
-    setConfirmRevoking(null);
+    setNotice('');
+    setQrOpen(false);
+    setTab('share');
   }, [projectId]);
+
+  useEffect(() => {
+    setBingoSent(false);
+    setBingoRev(value => value + 1);
+    const sync = () => setBingoRev(value => value + 1);
+    window.addEventListener(REVIEW_MARK_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(REVIEW_MARK_CHANGED_EVENT, sync);
+  }, [projectId]);
+
+  // 首屏与服务端都先待发，挂上后再读本机记录，避免注水时状态对不上。
+  const bingoStatus = shareBingoStatus(
+    projectId,
+    bingoSent,
+    bingoRev > 0 && typeof localStorage !== 'undefined' ? localStorage : null,
+  );
 
   useEffect(() => {
     if (!open) return undefined;
@@ -155,7 +223,7 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') { setOpen(false); setQrOpen(false); }
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
@@ -163,50 +231,49 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open, projectId]);
+  }, [open]);
 
   useEffect(() => {
-    if (!published) { setQrSvg(''); return undefined; }
+    if (!published) { setQrSvg(''); setQrOpen(false); return undefined; }
     let live = true;
-    void QRCode.toString(published.url, { type: 'svg', margin: 1, width: 168, errorCorrectionLevel: 'M' })
-      .then(svg => { if (live) setQrSvg(svg); })
-      .catch(() => { if (live) setQrSvg(''); });
+    void QRCode.toString(published.url, {
+      type: 'svg', margin: 0, width: 112, errorCorrectionLevel: 'M',
+      color: { dark: '#141416', light: '#FFFFFF' },
+    }).then(svg => { if (live) setQrSvg(svg.replace('<svg ', '<svg aria-hidden="true" focusable="false" ')); }).catch(() => { if (live) setQrSvg(''); });
     return () => { live = false; };
   }, [published]);
 
-  // 预览：打开卡片时抓当前画布真实一帧（旧方案是拿布局数据重画的示意图，户外方案画出来是空网格）。
-  // 只在 open/published 变化时抓一次；动作对象每次渲染都重建，经 ref 取，避免反复抓帧。
-  const capturePreviewRef = useRef(actions?.onCapturePreview);
-  capturePreviewRef.current = actions?.onCapturePreview;
+  // 本机记下的链接如果已被服务端撤回，回到未发布，不再把失效地址当成可复制链接。
   useEffect(() => {
-    if (!open) { setShot(null); setRecordsOpen(false); setDeliverOpen(false); setConfirmRevoking(null); return undefined; }
-    if (published) return undefined;
-    const capture = capturePreviewRef.current;
-    if (!capture) return undefined;
+    if (!open || !published) return undefined;
+    const stored = readPublishedLink(projectId);
+    if (!stored || stored.url !== published.url || stored.revision !== published.revision) return undefined;
+    const list = listSharesRef.current;
+    if (!list) return undefined;
     let live = true;
-    void capture().then(data => { if (live && data) setShot(data); }).catch(() => { /* 抓不到就保留示意图 */ });
+    void list().then(rows => {
+      if (!live) return;
+      const match = rows.find(row => row.revision === published.revision);
+      if (match?.revokedAt) {
+        clearPublishedLink(projectId);
+        setPublished(null);
+        setQrOpen(false);
+        setNotice('这条链接已撤回。');
+      }
+    }).catch(() => { /* 清单暂时读不到时，仍用本机记下的链接 */ });
     return () => { live = false; };
-  }, [open, published]);
+  }, [open, published, projectId]);
 
-  /** 分享记录：本机日志打底，接了服务端清单就以服务端为准；拉取失败静默退回本机。 */
-  const refreshRows = useCallback(async () => {
-    const local = readShareRecords(projectId);
-    if (!actions?.onListShares) { setRows(mergeShareRows(local, null)); return; }
-    try {
-      setRows(mergeShareRows(local, await actions.onListShares()));
-    } catch {
-      setRows(mergeShareRows(local, null));
-    }
-  }, [actions, projectId]);
-
-  const toggleRecords = () => {
-    const next = !recordsOpen;
-    setRecordsOpen(next);
-    setConfirmRevoking(null);
-    if (next) void refreshRows();
+  const selectTab = (next: ShareTab) => {
+    setTab(next);
+    if (next !== 'publish') setQrOpen(false);
   };
 
   const publish = async () => {
+    if (actions?.readOnly) {
+      setNotice(SHARE_READ_ONLY_LINE);
+      return;
+    }
     if (!actions || busy) {
       setNotice(actions ? '' : '分享还没接到工作台。');
       return;
@@ -218,8 +285,9 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
       setPublished(result);
       writePublishedLink(projectId, result);
       appendShareRecord(projectId, { kind: 'web', url: result.url, revision: result.revision, at: Date.now() });
-      await refreshRows();
-      setNotice(`已生成 v${result.revision} · 手机扫码打开同一版。`);
+      const copied = await copyText(result.url);
+      setNotice(copied ? '' : '链接已发布。复制没成功，请点「复制」。');
+      setQrOpen(false);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '链接没有生成。');
     } finally {
@@ -236,10 +304,11 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
     setNotice('');
     try {
       const result = await actions.onIssueReviewLink();
-      if(!result.isCurrent())throw new Error('活动、楼层或方案已变化，旧链接未复制。');
-      reviewGuard.current=result.isCurrent;
-      setReviewUrl(result.url);
-      setNotice('评审链接已生成；请确认当前活动和方案后复制。');
+      if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
+      const copied = await copyText(result.url);
+      setBingoSent(true);
+      setBingoRev(value => value + 1);
+      setNotice(copied ? '评审链接已复制。' : '评审链接已生成，复制没成功，请再试一次。');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
@@ -247,227 +316,77 @@ export function ShareMenu({ actions, layout, lengthUnit = 'm', openRequest = 0, 
     }
   };
 
-  const generateViewer = async () => {
-    if (!actions?.onGenerateShareLink || busy) {
-      setNotice('3D 分享还没接到工作台。');
-      return;
-    }
-    const blocked = layout ? describeUnshareableAssets(layout) : null;
-    if (blocked && blocked.count > 0) {
-      setNotice(blocked.message);
-      return;
-    }
-    setBusy(true);
-    setNotice('');
-    try {
-      const result = await actions.onGenerateShareLink();
-      if (!result) return;
-      if (result.droppedAssets > 0) {
-        setNotice(`有 ${result.droppedAssets} 件资产没有随链接带走，这次链接未采用。请替换为公开素材后再生成。`);
-        return;
-      }
-      setViewerLink(result);
-      appendShareRecord(projectId, { kind: 'viewer', url: result.url, revision: null, at: Date.now() });
-      void refreshRows();
-      setNotice(`${result.name} · ${result.objects} 件 · 只读 3D 链接已复制，打开即可转角度查看。`);
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : '只读 3D 链接没有生成。');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const copyViewer = async () => {
-    if (!viewerLink) return;
-    const copied = await copyText(viewerLink.url);
-    setNotice(copied ? '3D 链接已复制。' : '复制没成功，请从地址栏手动复制。');
-  };
-
   const copyPublished = async () => {
     if (!published) return;
     const copied = await copyText(published.url);
-    setNotice(copied ? '链接已复制。' : '复制没成功，请从框里手动复制。');
+    setNotice(copied ? '' : '复制没成功，请再试一次。');
   };
 
-  const copyReview = async () => {
-    if (!reviewUrl) return;
-    if(!reviewCurrent()){setReviewUrl('');setNotice('活动、楼层或方案已变化，旧链接未复制。');return;}
-    const copied = await copyText(reviewUrl);
-    setNotice(copied ? '链接已复制。' : '复制没成功，请从框里手动复制。');
-  };
-
-  const copyRow = async (row: ShareRow) => {
-    if (!row.url) return;
-    const copied = await copyText(row.url);
-    setNotice(copied ? '链接已复制。' : '复制没成功，请从地址栏手动复制。');
-  };
-
-  /** 两段式撤回：第一下变「确认撤回」，再点才真正作废；刷新记录以服务端状态为准。 */
-  const revokeRow = async (row: ShareRow) => {
-    if (!actions?.onRevokeShare || !row.shareId) return;
-    if (confirmRevoking !== row.key) { setConfirmRevoking(row.key); return; }
-    setConfirmRevoking(null);
-    try {
-      await actions.onRevokeShare(row.shareId);
-      setNotice('链接已撤回，对方打开会提示失效。');
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : '撤回没有成功，请稍后再试。');
-    }
-    await refreshRows();
-  };
+  const exports = exportEntries(actions, () => setOpen(false));
 
   return <div className="sc-tool-menu" ref={rootRef}>
-    {variant === 'canvas' ? (
-      <button
-        type="button"
-        id="tool-outdoor-publish"
-        data-testid="outdoor-publish"
-        data-tour="publish"
-        data-tip="分享这版方案"
-        aria-label="分享这版方案"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls="tool-share-menu"
-        className={open ? 'is-active' : ''}
-        onClick={() => setOpen(current => !current)}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          height: 34,
-          padding: '0 16px',
-          borderRadius: 999,
-          border: '1px solid rgba(20, 20, 22, 0.16)',
-          background: '#ffffff',
-          color: '#141416',
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-        }}
-      >
-        分享
-      </button>
-    ) : (
-      <button type="button" id="tool-share" data-tour="publish" data-tip="分享" aria-label="分享" aria-haspopup="dialog" aria-expanded={open} aria-controls="tool-share-menu" className={open ? 'is-active' : ''} onClick={() => setOpen(current => !current)}>
-        <MaterialSymbol name="upload" size={15} />
-      </button>
-    )}
-    {open && <div id="tool-share-menu" className="sc-tool-pop sc-publish-card" role="dialog" aria-label="分享">
-      <header className="sc-publish-head">
-        <span className="sc-publish-name">{titleOf(layout)}</span>
-        <span className={`sc-publish-chip${published ? ' is-live' : ''}`}>{published ? `已分享 v${published.revision}` : '未分享'}</span>
-        <details className="sc-publish-tip">
-          <summary aria-label="分享说明"><Info size={13} aria-hidden="true"/></summary>
-          <p>分享不会通知对方，链接由你自己发。后续编辑不改已生成的版本；评审评论写在打开页面的浏览器里。</p>
-        </details>
-      </header>
-
-      {published ? <section className="sc-publish-live" aria-label="手机看方案">
-        {qrSvg
-          ? <div className="sc-publish-qr-frame" role="img" aria-label="只读方案二维码" dangerouslySetInnerHTML={{ __html: qrSvg }}/>
-          : <div className="sc-publish-qr-frame is-pending" aria-hidden="true"><QrCode size={26}/></div>}
-        <div className="sc-publish-live-side">
-          <strong className="sc-publish-live-title">版本 {published.revision} · 只读</strong>
-          <p>手机扫码打开同一版；之后的编辑不影响这一版。</p>
-          <div className="sc-publish-live-actions">
-            <button type="button" aria-label="复制链接" data-tip="复制链接" onClick={() => { void copyPublished(); }}><Copy size={15} aria-hidden="true"/></button>
-            <a href={published.url} target="_blank" rel="noopener noreferrer" aria-label="打开只读页" data-tip="打开只读页"><ExternalLink size={15} aria-hidden="true"/></a>
-          </div>
-        </div>
-      </section> : <section className="sc-publish-shot" aria-label="方案预览">
-        {shot
-          ? <img className="sc-publish-shot-img" src={shot} alt={`${titleOf(layout)} 的当前画布截图`}/>
-          : layout ? <PlanPreview layout={layout} ariaLabel={`${titleOf(layout)} 的平面预览`}/> : <p className="sc-publish-note">画布还没就绪。</p>}
-        <span className="sc-publish-shot-kicker">方案预览</span>
-      </section>}
-
-      {outline && !published && <p className="sc-publish-meta">
-        {outline.size} · {outline.itemCount} 件
-        {outline.floors.length ? ` · ${outline.floors.join('、')}` : ''}
-        {outline.categories.length ? ` · ${outline.categories.map(entry => `${entry.label} ${entry.count}`).join('、')}` : ''}
-      </p>}
-
-      {published
-        ? <div className="sc-publish-regen">
-          <button type="button" disabled={busy} onClick={() => { void publish(); }}>
-            {busy ? '正在生成…' : `再生成一个 v${published.revision + 1} 链接`}
-          </button>
-        </div>
-        : <div className="sc-publish-actions">
-          <button type="button" className="sc-publish-primary" disabled={busy} onClick={() => { void publish(); }}>
-            <Upload size={15} aria-hidden="true"/><span>{busy ? '正在生成…' : '生成分享链接'}</span>
-          </button>
-        </div>}
-      {notice && <p className="sc-publish-note" role="status">{notice}</p>}
-
-      <section className="sc-publish-records" aria-label="分享记录">
-        <button type="button" className="sc-publish-disclosure" aria-expanded={recordsOpen} onClick={toggleRecords}>
-          <span>分享记录</span><small>{rows.length ? `${rows.length} 条` : '还没有'}</small>
-        </button>
-        {recordsOpen && (rows.length
-          ? <ul className="sc-publish-record-list">
-            {rows.map(row => <li key={row.key} className={`sc-publish-record${row.revoked ? ' is-dead' : ''}`}>
-              <span className="sc-publish-record-label">{row.kind === 'viewer' ? '3D' : row.revision != null ? `v${row.revision}` : '网页'}</span>
-              <span className="sc-publish-record-time">{stampOf(row.at)}</span>
-              <span className="sc-publish-record-actions">
-                {row.revoked ? <span className="sc-publish-record-dead">已失效</span> : <>
-                  {row.url && <button type="button" aria-label="复制" data-tip="复制这条链接" onClick={() => { void copyRow(row); }}><Copy size={12} aria-hidden="true"/></button>}
-                  {row.url && <a href={row.url} target="_blank" rel="noopener noreferrer" aria-label="打开" data-tip="打开这条链接"><ExternalLink size={12} aria-hidden="true"/></a>}
-                  {row.shareId && actions?.onRevokeShare && <button
-                    type="button"
-                    className={confirmRevoking === row.key ? 'is-confirm' : ''}
-                    disabled={busy}
-                    onClick={() => { void revokeRow(row); }}
-                  >{confirmRevoking === row.key ? '确认撤回' : '撤回'}</button>}
-                  {!row.url && <span className="sc-publish-record-hint">链接只在生成设备上</span>}
-                </>}
-              </span>
-            </li>)}
-          </ul>
-          : <p className="sc-publish-records-empty">这个项目还没有生成过链接。</p>)}
-      </section>
-
-      <section className="sc-publish-alt" aria-label="其他分享方式">
-        {viewerLink ? <div className="sc-publish-alt-active" role="group" aria-label="3D 漫游链接">
-          <span className="sc-publish-alt-title">3D 漫游</span>
-          <div className="sc-publish-row">
-            <button type="button" aria-label="复制 3D 链接" onClick={() => { void copyViewer(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
-            <a href={viewerLink.url} target="_blank" rel="noopener noreferrer" aria-label="打开只读 3D 方案"><ExternalLink size={14} aria-hidden="true"/><span>打开</span></a>
-            <button type="button" aria-label="重新生成 3D 链接" disabled={busy} onClick={() => { void generateViewer(); }}><MaterialSymbol name="refresh"/><span>重新生成</span></button>
-          </div>
-        </div> : <button type="button" className="sc-publish-alt-entry" aria-label="3D 漫游" disabled={busy} onClick={() => { void generateViewer(); }}>
-          <MaterialSymbol name="view_in_ar"/><span>{busy ? '正在生成…' : '3D 漫游'}</span><small>可转视角的只读链接</small>
-        </button>}
-        <button type="button" className="sc-publish-alt-entry" aria-label="发评审链接" disabled={busy} onClick={() => { void issue(); }}>
-          <Link2 size={15} aria-hidden="true"/><span>发评审链接</span><small>对方能在网页上留言</small>
-        </button>
-        {reviewUrl && reviewCurrent() && <section className="sc-publish-review">
-          <label>可留言的方案页
-            <input readOnly value={reviewUrl} aria-label="评审链接" onFocus={event => event.currentTarget.select()}/>
-          </label>
-          <div className="sc-publish-row">
-            <button type="button" aria-label="复制评审链接" onClick={() => { void copyReview(); }}><Copy size={14} aria-hidden="true"/><span>复制</span></button>
-            <a href={reviewUrl} target="_blank" rel="noopener noreferrer" onClick={event=>{if(!reviewCurrent()){event.preventDefault();setReviewUrl('');setNotice('活动、楼层或方案已变化，旧链接未打开。');}}}><ExternalLink size={14} aria-hidden="true"/><span>打开对方所见</span></a>
-          </div>
-        </section>}
-      </section>
-
-      <section className="sc-publish-deliver" aria-label="交付物">
-        <button type="button" className="sc-publish-disclosure" aria-expanded={deliverOpen} onClick={() => setDeliverOpen(current => !current)}>
-          <span>交付物</span><small>导出与资料</small>
-        </button>
-        {deliverOpen && <div className="sc-publish-more">
-          {actions?.onExportImage && <button type="button" onClick={() => { void actions.onExportImage?.(); setOpen(false); }}><MaterialSymbol name="image" size={15} /><span>导出效果图</span></button>}
-          {actions?.onExportCsv && <button type="button" onClick={() => { actions?.onExportCsv?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出物料清单 CSV</span></button>}
-          {actions?.onExportGeoJson && <button type="button" onClick={() => { actions?.onExportGeoJson?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出场地几何 GeoJSON</span></button>}
-          {actions?.onPrintDeck && <button type="button" onClick={() => { actions?.onPrintDeck?.(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出演示稿 PDF</span></button>}
-          <button type="button" onClick={() => { actions?.onExportHandoff(); setOpen(false); }}><FileDown size={15} aria-hidden="true"/><span>导出交接</span></button>
-          <button type="button" onClick={() => { actions?.onOpenMaterials(); setOpen(false); }}><PackageOpen size={15} aria-hidden="true"/><span>打开资料</span></button>
-          <button type="button" onClick={() => { actions?.onOpenChecklist(); setOpen(false); }}><ClipboardCheck size={15} aria-hidden="true"/><span>到场清单</span></button>
-        </div>}
-      </section>
-    </div>}
+    <button
+      type="button"
+      id={variant === 'canvas' ? 'tool-outdoor-publish' : 'tool-share'}
+      {...(variant === 'canvas' ? { 'data-testid': 'outdoor-publish' } : {})}
+      data-tour="publish"
+      data-tip="分享"
+      data-share-chrome={open ? 'open' : 'closed'}
+      aria-label="分享"
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      aria-controls="tool-share-menu"
+      className={`sc-share-trigger${open ? ' is-active' : ''}`}
+      style={shareTriggerChrome(open)}
+      onClick={() => setOpen(current => !current)}
+    >
+      <ShareArrow />
+    </button>
+    {open && <SharePanel
+      tab={tab}
+      onTab={selectTab}
+      title={titleOf(layout)}
+      published={published}
+      busy={busy}
+      notice={notice}
+      bingoStatus={bingoStatus}
+      readOnly={Boolean(actions?.readOnly)}
+      qrOpen={qrOpen}
+      qrSvg={qrSvg}
+      exports={exports}
+      onIssueAudience={() => { void issue(); }}
+      onSendBingo={() => { void issue(); }}
+      onPublish={() => { void publish(); }}
+      onCopy={() => { void copyPublished(); }}
+      onToggleQr={() => setQrOpen(current => !current)}
+    />}
   </div>;
+}
+
+function exportEntries(actions: ShareMenuActions | undefined, close: () => void): ShareExportEntry[] {
+  if (!actions) return [];
+  const entries: ShareExportEntry[] = [];
+  if (actions.onExportImage) {
+    const run = actions.onExportImage;
+    entries.push({ id: 'render', label: '效果图', icon: 'image', onSelect: () => { void run(); close(); } });
+  }
+  if (actions.onExportCsv) {
+    const run = actions.onExportCsv;
+    entries.push({ id: 'materials', label: '物料清单', icon: 'list', onSelect: () => { run(); close(); } });
+  }
+  if (actions.onExportGeoJson) {
+    const run = actions.onExportGeoJson;
+    entries.push({ id: 'site', label: '场地范围文件', icon: 'site', onSelect: () => { run(); close(); } });
+  }
+  return entries;
+}
+
+function ShareArrow(): JSX.Element {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M8 10.4V3.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M5.15 5.85 8 3l2.85 2.85" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M3.4 8.2v3.3a1.1 1.1 0 0 0 1.1 1.1h7a1.1 1.1 0 0 0 1.1-1.1V8.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
 }
 
 const LINK_KEY = 'scendance.publishedLink.v1.';
@@ -484,10 +403,15 @@ function readPublishedLink(projectId?: string): PublishedLink | null {
   } catch { return null; }
 }
 
-/** 发布链接只在发布时返回一次，记下这一次的链接，重开卡片还能看到二维码。 */
+/** 发布链接只在发布时返回一次，记下这一次的链接，重开卡片还能复制。 */
 function writePublishedLink(projectId: string | undefined, link: PublishedLink): void {
   if (!projectId) return;
   try { localStorage.setItem(LINK_KEY + projectId, JSON.stringify(link)); } catch { /* 存不下就只保证这一次可复制 */ }
+}
+
+function clearPublishedLink(projectId: string | undefined): void {
+  if (!projectId) return;
+  try { localStorage.removeItem(LINK_KEY + projectId); } catch { /* 清不掉就只在这一次把卡片退回未发布 */ }
 }
 
 function titleOf(layout?: RoomLayout): string {
@@ -502,23 +426,12 @@ function feet(metres: number): string {
   return Number.isFinite(metres) && metres > 0 ? convertMetres(metres, 'ft').toFixed(1) : '—';
 }
 
-/** 记录时间：今天只给时分，跨天给「月-日 时:分」，未知给「—」。 */
-function stampOf(at: number): string {
-  if (!at || !Number.isFinite(at)) return '—';
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return '—';
-  const pad = (value: number) => String(value).padStart(2, '0');
-  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  if (date.toDateString() === new Date().toDateString()) return time;
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
-}
-
 async function copyText(value: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(value);
       return true;
     }
-  } catch { /* 选中输入框，让人自己复制 */ }
+  } catch { /* 剪贴板被拦住时，链接行仍可再点复制 */ }
   return false;
 }
