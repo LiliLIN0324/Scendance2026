@@ -144,3 +144,22 @@ export function poseWalk(rig: HumanFigureRig, phase: number, amount = 1): void {
   rig.leftShoulder.rotation.x = -s * 0.35;
   rig.rightShoulder.rotation.x = s * 0.35;
 }
+
+/**
+ * 坐姿：大腿向前放平、膝弯回落到小腿竖直，肩略前倾。
+ *
+ * 旋转符号与 `poseWalk` 同一套：髋 `rotation.x` 取负 → 大腿向 +Z（模型正面）抬起；
+ * 膝取正 → 小腿收回向下。两段都取到 83° 而不是硬 90°，膝盖不会穿帮。
+ * 只摆关节，不抬人：髋部落到座面由 `people-anim.ts` 按实测髋高反算。
+ * 程序化小人没有 `Sit_Idle_Loop` 时的兜底姿态（绑骨资产走 clip）。
+ */
+export function poseSit(rig: HumanFigureRig): void {
+  const thigh = -1.45;
+  const shin = 1.45;
+  rig.leftHip.rotation.x = thigh;
+  rig.rightHip.rotation.x = thigh;
+  rig.leftKnee.rotation.x = shin;
+  rig.rightKnee.rotation.x = shin;
+  rig.leftShoulder.rotation.x = -0.14;
+  rig.rightShoulder.rotation.x = -0.14;
+}

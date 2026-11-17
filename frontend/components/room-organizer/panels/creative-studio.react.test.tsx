@@ -3727,7 +3727,7 @@ describe('complete local backup transactions', () => {
   });
   it.skipIf(!localRestoreAvailable())('refuses local restore while a real controller project is bound without calling cloud APIs', async () => {
     connected(); await mount();
-    await expect(actions.restoreBackup(file())).rejects.toThrow('云项目'); expect(commit).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled();
+    await expect(actions.restoreBackup(file())).rejects.toThrow('团队项目'); expect(commit).not.toHaveBeenCalled(); expect(controller.applySceneProposal).not.toHaveBeenCalled();
   });
 });
 
