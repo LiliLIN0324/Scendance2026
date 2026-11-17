@@ -7,6 +7,8 @@
  * - 厚度/高度只在合法区间（0.05–5 m / 0.5–20 m）内透传，缺失或超界不虚构；
  * - 归属分区按线段中点命中（与 worker/node 同口径），都不含则留空；
  * - 门/窗暂无独立数据结构，不凭空拆成 node；上限 500 段，超出进 skipped。
+ * - 图层归属：一期契约带可选 `levelId`，但迁移侧还没有楼层 → plan 图层映射，
+ *   由调用方经 `levelIdForFloor` 注入；缺省不写（不造假图层）。
  */
 
 import type { PlanPoint, PlanWall } from '../../../../supabase/functions/_shared/site-plan';
@@ -33,6 +35,17 @@ export interface WallMigrationResult {
   skipped: WallMigrationSkip[];
 }
 
+export interface WallMigrationOptions {
+  /** 楼层序号 → plan 图层 id（`levels[].id`）；缺省不写 `levelId`。 */
+  levelIdForFloor?: (floorIndex: number) => string | undefined;
+}
+
+/** 图层 id 只接受非空、≤64 字符的字符串；拿不到合法值就不写。 */
+function boundedLevelId(value: string | undefined): string | undefined {
+  const trimmed = (value ?? '').trim();
+  return trimmed.length >= 1 && trimmed.length <= 64 ? trimmed : undefined;
+}
+
 /** 区间内才采信；超界按「未量」处理，不截断成边界值。 */
 function boundedOrUndefined(value: number | undefined, min: number, max: number): number | undefined {
   if (value === undefined || !Number.isFinite(value)) return undefined;
@@ -44,12 +57,15 @@ export function migrateWalls(
   boundary: readonly PlanPoint[],
   gen: MigrationUuidGen = () => crypto.randomUUID(),
   zones: readonly { id: string; polygon: readonly PlanPoint[] }[] = [],
+  options: WallMigrationOptions = {},
 ): WallMigrationResult {
   const frame = makeFrame(boundary, layout.width, layout.height);
   const walls: PlanWall[] = [];
   const skipped: WallMigrationSkip[] = [];
 
-  for (const floor of layout.floors) {
+  for (let floorIndex = 0; floorIndex < layout.floors.length; floorIndex += 1) {
+    const floor = layout.floors[floorIndex]!;
+    const levelId = boundedLevelId(options.levelIdForFloor?.(floorIndex));
     for (const wall of floor.interiorWalls ?? []) {
       if (walls.length >= MAX_WALLS) {
         skipped.push({ sourceId: wall.id, reason: `墙体超过 ${MAX_WALLS} 段上限` });
@@ -82,6 +98,7 @@ export function migrateWalls(
         ...(wall.status ? { status: wall.status } : {}),
         ...(color ? { color } : {}),
         ...(zoneId ? { zoneId } : {}),
+        ...(levelId ? { levelId } : {}),
       });
     }
   }

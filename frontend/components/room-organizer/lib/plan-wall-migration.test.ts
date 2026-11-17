@@ -102,4 +102,25 @@ describe('plan-wall-migration（室内墙体 → plan walls）', () => {
     const result = migrateWalls(makeLayout({ width: 8, height: 8 }), BOUNDARY, sequentialIds());
     expect(result).toEqual({ walls: [], skipped: [] });
   });
+
+  it('可注入楼层 → 图层映射：合法值写 levelId，缺省/空值不写', () => {
+    const wall = makeWall({ id: 'w1', x1: 0, z1: 0, x2: 4, z2: 0 });
+    const layout = makeLayout({
+      width: 8,
+      height: 8,
+      floors: [
+        makeFloor({ interiorWalls: [wall] }),
+        makeFloor({ id: 'upper', interiorWalls: [wall] }),
+      ],
+    });
+
+    const withLevels = migrateWalls(layout, BOUNDARY, sequentialIds(), [], {
+      levelIdForFloor: index => (index === 0 ? 'level-ground' : '   '),
+    });
+    expect(withLevels.walls[0]?.levelId).toBe('level-ground');
+    expect(withLevels.walls[1]).not.toHaveProperty('levelId');
+
+    const without = migrateWalls(layout, BOUNDARY, sequentialIds());
+    expect(without.walls[0]).not.toHaveProperty('levelId');
+  });
 });
