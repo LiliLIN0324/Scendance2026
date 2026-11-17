@@ -2,7 +2,12 @@ import type { SitePlanData } from '../../../supabase/functions/_shared/site-plan
 export type Point = { x: number; y: number };
 export type Geometry = { type: 'point' | 'line' | 'polygon'; points: Point[] };
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
-export type FeatureKind = 'building' | 'road' | 'open-space' | 'entrance' | 'barrier' | 'boundary' | 'zone' | 'facility' | 'route' | 'worker';
+/**
+ * water（2026-11-17 用户实测「就沿着水岸线」卡死）：湖面/河道/岸线必须是一等要素。
+ * 没有它，地图上看得见的河在数据里不存在，任何「沿岸/沿水」排布都只能反问用户。
+ * 面状水按 polygon 出（湖、河面），线状水按 line 出（河道中心线、岸线折线）。
+ */
+export type FeatureKind = 'building' | 'road' | 'water' | 'open-space' | 'entrance' | 'barrier' | 'boundary' | 'zone' | 'facility' | 'route' | 'worker';
 export type Certainty = 'mapped' | 'user-confirmed' | 'inferred' | 'unknown';
 export interface Evidence { source: 'osm' | 'legacy-road-proxy' | 'user-plan'; sourceId: string; certainty: Certainty; note: string; observedAt?: string }
 export interface MapFeature { id: string; kind: FeatureKind; name: string; geometry: Geometry; evidence: Evidence; tags: Record<string, string>; nodeIds?: string[] }

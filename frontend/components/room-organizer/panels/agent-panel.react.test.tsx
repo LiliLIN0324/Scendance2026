@@ -4760,7 +4760,7 @@ describe('outdoor V1–V5 progressive Agent integration', () => {
     act(() => oldConfirm()); expect(apply).toHaveBeenCalledTimes(1); expect(current.outdoorTask?.state).toBe('done');
     expect(current.zoneProposal).toBeNull();
   });
-  it('没有真实入口只追问下一步；不支持活动不走旧生成器', async () => {
+  it('没有真实入口只追问下一步；无模板活动如实指路，不走旧生成器', async () => {
     const plan = createStarterOutdoorPlan();
     plan.boundary = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: 70 }, { x: -80, y: 70 }];
     let current!: NonNullable<ReturnType<typeof useAgent>>;
@@ -4768,7 +4768,8 @@ describe('outdoor V1–V5 progressive Agent integration', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
     send('45人讲座'); await waitFor(() => expect(current.outdoorTask?.action).toContain('入口'));
     expect(current.zoneProposal).toBeNull();
-    send('改办100人音乐节'); await waitFor(() => expect(current.outdoorTask?.action).toContain('只支持'));
+    send('改办100人音乐节'); await waitFor(() => expect(current.outdoorTask?.action).toContain('没有现成排布模板'));
+    expect(current.outdoorTask?.action).not.toContain('只支持');
     expect(current.zoneProposal).toBeNull(); expect(studioMock.generate).not.toHaveBeenCalled();
   });
 });

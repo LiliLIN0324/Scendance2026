@@ -90,7 +90,7 @@ import { useOutdoorAgentWorkflow, explicitProposalApproval } from '../hooks/use-
 import { OutdoorThoughtRecord, OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
 import type { OutdoorAgentBridge, OutdoorBrief } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
-import { outdoorEventIssue, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
+import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
 import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
 import type { PlanAnnotation, PlanFacility, PlanLevel, PlanMeasurement, PlanWorker, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -1825,7 +1825,18 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     try {
       const memory = memoryRef.current;
       const issue = outdoorEventIssue(memory.event ?? null, memory.headcount ?? null);
-      if (issue) { setOutdoorTask({ intent: '按活动需求分区与放置物料', state: 'blocked', action: issue, steps: ['读取当前场地'], prompts: ['45 人讲座', '80 人市集'] }); say({ role: 'agent', amber: true, text: issue }); return; }
+      if (issue) { setOutdoorTask({ intent: '按活动需求分区与放置物料', state: 'blocked', action: issue, steps: ['读取当前场地'], prompts: ['45 人讲座', '80 人市集', '钓鱼比赛'] }); say({ role: 'agent', amber: true, text: issue }); return; }
+      // 2026-11-17 用户拍板「活动类型限制太死板」：这个入口只产讲座/市集几何模板；
+      // 未知/沿岸类型不再拦死也不再误报「未找到候选」——如实指向能走通的那条路。
+      if (!supportedOutdoorEvent(memory.event ?? null)) {
+        const event = memory.event ?? null;
+        const redirect = isShorelineEvent(event)
+          ? '沿岸类（如钓鱼比赛）沿真实水岸线排：在对话里说「就沿着水岸线」，我直接出钓位预览。'
+          : `「${event ?? '这个活动'}」这版没有现成排布模板；在对话里直接说分区和物料（例如「室外展览区加 20 个摊位」），我按需求排，不套假模板。`;
+        setOutdoorTask({ intent: `${memory.headcount ?? ''} 人${event ?? '活动'}`, state: 'blocked', action: redirect, steps: ['核对活动类型'], prompts: isShorelineEvent(event) ? ['就沿着水岸线'] : ['室外展览区加 20 个摊位'] });
+        say({ role: 'agent', amber: true, text: redirect });
+        return;
+      }
       if (!confirmedOutdoorEntrances(plan.nodes, plan.boundary).length) { setOutdoorTask({ intent: '按活动需求安排区域', state: 'blocked', action: plan.nodes.length ? '现有节点不在当前真实边界内，或只是出口/活动子口；请把真实入口放在边界上或内部，再按当前场地重试' : '先确认真实场地入口，才能安排签到、观众方向与接驳', steps: ['记录活动类型与人数'], prompts: [`按当前场地重新安排${memory.headcount ?? ''}人${memory.event ?? '活动'}`, '排一下流线'] }); return; }
       const siteSummary = outdoorEventSiteSummary({ boundary: plan.boundary, nodes: plan.nodes, existingFacilities: plan.facilities, existingRoutes: plan.routes });
       const proposal = buildZoneEventProposal({
@@ -4430,7 +4441,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
   const conversation = bingo || activity;
   const waitingOutdoorReply = !bingo && agent.outdoorTask?.state === 'ask' && agent.bubbles.at(-1)?.outdoorQuestion === true;
-  const outdoorWorkflowCard = agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply || agent.outdoorWorkflow.pendingPlan) && (
+  // 2026-11-17 用户：Bingo 底部那张「当前任务·搜索目标地点」是错误地加了素材图，整块收掉。
+  // 活动脸的引导卡照旧；Bingo 只留审校统计与气泡，不再带任务缩略图。
+  const outdoorWorkflowCard = !bingo && agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply || agent.outdoorWorkflow.pendingPlan) && (
     <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} onSearchPlace={focusPlaceSearch} onAdjustPlan={() => inputRef.current?.focus()} onCancelPreview={() => {
       agent.outdoorWorkflow.cancel();
       agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。');
@@ -4577,7 +4590,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       )}
       {!waitingOutdoorReply && outdoorWorkflowCard}
-      {!outdoorWorkflowCard && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} request={agent.outdoorWorkflow.thoughtRequest} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
+      {!outdoorWorkflowCard && !bingo && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} request={agent.outdoorWorkflow.thoughtRequest} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}

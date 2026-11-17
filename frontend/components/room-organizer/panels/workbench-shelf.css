@@ -1029,12 +1029,20 @@
   height: 2px; border-radius: 1px; background: var(--wk-green);
 }
 .sc-library-tabs-equal > button:focus-visible { outline: 2px solid var(--wk-green); outline-offset: -2px; border-radius: 4px; }
-.sc-library-chat { position: relative; margin-bottom: 6px; }
+/* 2026-11-17 用户：「顺手把 workbench-shelf.css:1033 那个 position: absolute 改成普通流式标题」——
+   标题曾是绝对定位、不参与文档流，容器高度为 0，谁再复用就把下一段压在自己身上
+   （space-panel 的「场景库」正是这么压住「经典案例」的）。改成 flex 一行：标题在左、
+   对话钮靠 margin-inline-start:auto 顶到右，两边都占真实高度。
+   align-items 必须 flex-start：对话展开后行高被内容擑大，居中会把标题拉到垂直中间。 */
+.sc-library-chat { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
 .sc-library-chat-title {
-  position: absolute; top: 0; left: 0; min-height: 34px;
+  min-height: 34px;
   display: flex; align-items: center; gap: 6px;
 }
 .sc-library-chat-title h3 { margin: 0; font-size: 16px; font-weight: 650; color: var(--wk-ink); }
+/* 靠右的自动外边距必须挂在 details 上：它是 flex 项，summary 只是它内部的块级子元素，
+   挂在 summary 上时 details 已缩到内容宽度，没有多余空间可推。 */
+.sc-library-chat-disclosure { margin-inline-start: auto; }
 .sc-library-chat-disclosure > summary {
   box-sizing: border-box; width: max-content; min-height: 34px; margin-inline-start: auto; padding: 4px 8px;
   display: flex; align-items: center; justify-content: center; gap: 4px;

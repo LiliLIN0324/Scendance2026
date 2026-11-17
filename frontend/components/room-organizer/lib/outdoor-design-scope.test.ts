@@ -13,6 +13,7 @@ import {
   scopeContainsPoint,
   scopeEdgeIsHorizontal,
   scopeEdgeLabel,
+  scopeForAppliedPlan,
   syncScopeForBoundary,
 } from './outdoor-design-scope';
 
@@ -227,5 +228,36 @@ describe('syncScopeForBoundary（2026-11-17 用户拍板：红线拖拽后白框
   });
   it('红线不足 3 点 → 不动白框也不生成', () => {
     expect(syncScopeForBoundary(scope, [{ x: 0, y: 0 }], DEFAULT_SCOPE_MARGIN_M)).toBeNull();
+  });
+});
+
+describe('应用别人送来的方案（Agent 提案）时白框怎么跟', () => {
+  const scope = expandRect(square, DEFAULT_SCOPE_MARGIN_M);
+  const bigger = [{ x: -40, y: -40 }, { x: 90, y: -40 }, { x: 90, y: 80 }, { x: -40, y: 80 }];
+
+  it('来件自己带了白框 → 听它的，不覆盖', () => {
+    expect(scopeForAppliedPlan({ currentBoundary: square, nextBoundary: bigger, nextScope: scope })).toBeNull();
+  });
+
+  it('红线没变（同样是那四个顶点）→ 保留现场那只框（可能是用户拖过的）', () => {
+    expect(scopeForAppliedPlan({
+      currentBoundary: square,
+      nextBoundary: square.map(p => ({ ...p })),
+      nextScope: undefined,
+    })).toBeNull();
+  });
+
+  it('换了红线却没带框 → 按新红线外扩默认 20 m', () => {
+    expect(scopeForAppliedPlan({ currentBoundary: square, nextBoundary: bigger, nextScope: undefined }))
+      .toEqual(expandRect(bigger, DEFAULT_SCOPE_MARGIN_M));
+  });
+
+  it('exchange 红线为空数组（清场）→ 不凭空造框', () => {
+    expect(scopeForAppliedPlan({ currentBoundary: square, nextBoundary: [], nextScope: undefined })).toBeNull();
+  });
+
+  it('margin 可指定，用于以后改口径', () => {
+    expect(scopeForAppliedPlan({ currentBoundary: square, nextBoundary: bigger, nextScope: undefined, marginM: 5 }))
+      .toEqual(expandRect(bigger, 5));
   });
 });

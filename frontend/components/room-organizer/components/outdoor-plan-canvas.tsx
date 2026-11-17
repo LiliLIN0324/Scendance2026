@@ -20,8 +20,8 @@ import type { BackendSession } from '@/lib/backend-session';
  * （outdoor-plan-canvas 纯函数）+ 内嵌图层栈开关与编辑面板。独立组件，不动 `room-organizer.tsx`。
  *
  * H3-a 米制测量与派生统计（规则在 site-plan-measure 纯函数层）：
- * - 测量模式三类型：距离（单击两点、或按住拖线自动固定）/ 面积（单击描点近首点闭合、
- *   或按住对角拖矩形，Shift 正方形）/ 路径（单击加点双击提交、或按住自由手绘采样）；
+ * - 测量模式两类型：距离（单击两点、或按住拖线自动固定；可继续加点成多段折线）/ 面积（单击描点近首点闭合、
+ *   或按住对角拖矩形，Shift 正方形）；2026-11-17 用户「距离和路径一样，把路径删掉」后路径入口已下线。
  *   草稿期实时读数跟指针（临时测量，Esc 丢弃）；
  * - 固定测量进 plan.measurements（契约可选字段），面板列出读数与删除；
  *   读数一律从米制 ENU 几何现算，缩放不影响数值；
@@ -133,6 +133,7 @@ import {
   scopeContainsPoint,
   scopeEdgeIsHorizontal,
   scopeEdgeLabel,
+  scopeForAppliedPlan,
   syncScopeForBoundary,
   type ScopeEdge,
 } from '../lib/outdoor-design-scope';
@@ -249,9 +250,11 @@ import {
   formatAreaM2,
   formatLengthM,
   measureDraftReadout,
+  measureKindLabel,
   measureValue,
   planOverviewStats,
   type PlanMeasureKind,
+  type PlanMeasureToolKind,
 } from '../lib/site-plan-measure';
 import {
   annotationDistanceM,
@@ -359,7 +362,6 @@ import {
 } from '@/lib/outdoor-plan-tokens';
 import {
   planAnnotationKindLabels,
-  planMeasurementKindLabels,
   planRouteKindLabels,
   planRouteKinds,
   routeCarrier,
@@ -770,8 +772,6 @@ const BOUNDARY_INSERT_GRACE_MS = 500;
  * 刚用 Alt 分叉起线后的这段窗口内，浏览/选择态的双击一律不删点。
  */
 const BRANCH_DOUBLECLICK_GUARD_MS = 400;
-/** 2026-11-11 拖拽式测量：路径自由手绘的采样间距（CSS px，约每 8px 收一个点）。 */
-const MEASURE_FREEHAND_SAMPLE_PX = 8;
 /** 出入口节点命中/吸附半径（CSS px）：点选与动线端点吸附共用。 */
 const NODE_HIT_PX = 11;
 /** 人员点位命中半径（CSS px）。 */
@@ -1343,10 +1343,10 @@ export interface OutdoorPlanCanvasHandle {
   getMode(): string;
   /** 2026-11-12 B1 选择工具：切绘制/浏览模式（右栏工具排「选择」钮转发）。 */
   setMode(mode: string): void;
-  /** 2026-11-15 测量直进：切距离/面积/路径（工具条小标转发），不清当前绘制模式。 */
-  setMeasureKind(kind: PlanMeasureKind): void;
+  /** 2026-11-15 测量直进：切距离/面积（工具条小标转发），不清当前绘制模式。 */
+  setMeasureKind(kind: PlanMeasureToolKind): void;
   /** 读取当前测量模式（工具条小标回显图标用）。 */
-  getMeasureKind(): PlanMeasureKind;
+  getMeasureKind(): PlanMeasureToolKind;
   /** 2026-11-15 户外网格吸附开关：开=对齐网格，关=自由摆放。 */
   setSnapOn(on: boolean): void;
   /** 2026-11-12 测量/标注收进右轨圆钮：开/关「工具与属性」浮窗并切页签。 */
@@ -1646,7 +1646,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /** P2-g 重做栈：撤销时把当前快照推进来，任何新编辑清空（与 historyRef 对称，同样 30 步）。 */
   const redoRef = useRef<SitePlanData[]>([]);
   // H3-a 测量：类型、草稿、指针（临时读数）。
-  const measureKindRef = useRef<PlanMeasureKind>('distance');
+  const measureKindRef = useRef<PlanMeasureToolKind>('distance');
   const measureDraftRef = useRef<PlanPoint[]>([]);
   const measureCursorRef = useRef<PlanPoint | null>(null);
   /** 2026-11-11 拖拽式测量：左键按下起点 + 是否已越过点击阈值（进入拖拽）。 */
@@ -2048,7 +2048,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [historyCount, setHistoryCount] = useState(0);
   /** P2-g 重做栈深度（state 供工具排 disabled，ref 供命令句柄即时查询）。 */
   const [redoCount, setRedoCount] = useState(0);
-  const [measureKind, setMeasureKind] = useState<PlanMeasureKind>('distance');
+  const [measureKind, setMeasureKind] = useState<PlanMeasureToolKind>('distance');
   const [measureDraftCount, setMeasureDraftCount] = useState(0);
   // 2026-11-11 用户指令：自由标注 UI 态（形状类型/草稿计数/选中/文本就地输入框）。
   const [annotateShape, setAnnotateShape] = useState<PlanShapeKind>('rect');
@@ -2268,8 +2268,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return true;
   }
 
-  // 2026-11-15 测量直进：只切换距离/面积/路径，清空当前草稿，不强切绘制模式；是否进入收点由调用方 setMode('measure') 决定。
-  function applyMeasureKind(kind: PlanMeasureKind) {
+  // 2026-11-15 测量直进：只切换距离/面积，清空当前草稿，不强切绘制模式；是否进入收点由调用方 setMode('measure') 决定。
+  function applyMeasureKind(kind: PlanMeasureToolKind) {
     measureKindRef.current = kind;
     setMeasureKind(kind);
     measureDraftRef.current = [];
@@ -3604,6 +3604,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     const boundary = planRef.current.boundary;
     if (boundary.length < 3) return undefined;
+    // 2026-11-17 用户「案例库画完了红线，外面没有白色框」：有设计范围时按**范围**取景。
+    // 只框边界的话，外扩 20 m 的白框正好落在视口外——框其实在数据里，却看着像没生成。
+    const scope = planRef.current.designScope ?? [];
+    const viewRing = scope.length >= 3 ? scope : boundary;
     let raf = 0;
     let tries = 0;
     const fit = () => {
@@ -3619,7 +3623,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       let minY = Infinity;
       let maxX = -Infinity;
       let maxY = -Infinity;
-      boundary.forEach(p => {
+      viewRing.forEach(p => {
         minX = Math.min(minX, p.x);
         minY = Math.min(minY, p.y);
         maxX = Math.max(maxX, p.x);
@@ -3628,7 +3632,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
       const anchor = planRef.current.anchor;
       const geo = enuToLngLat((minX + maxX) / 2, (minY + maxY) / 2, anchor?.lng ?? DEFAULT_ANCHOR_LNG, anchor?.lat ?? DEFAULT_ANCHOR_LAT);
-      // 边界外留 35% 余量：矮墙/标签不至于贴边。
+      // 边界（或设计范围）外留 35% 余量：矮墙/标签不至于贴边。
       const span = Math.max(8, maxX - minX, maxY - minY) * 1.35;
       const mPerPx = span / Math.max(80, Math.min(width, height));
       const zoom = Math.log2((40075016.686 * Math.cos(geo.lat * Math.PI / 180)) / (mPerPx * 256));
@@ -4043,7 +4047,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const frameBound=[next.zones,next.routes,next.nodes,next.facilities,next.workers,next.annotations,next.measurements].some(items=>items?.length);
       if(frameBound&&!canReanchorOutdoorPlan(current,next.anchor))return false;
       try{validateWorkflowPlan(current,next);}catch{return false;}
-      commitPlan(next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
+      // 2026-11-17 「同一标准」兜底：提议自己换了红线却没带白框（旧提案 / 别的产出路径），
+      // 落地时按新红线外扩 20 m 补一只；来件带框就听它的，红线未变则保留现场那只（可能是用户拖过的）。
+      const scope = scopeForAppliedPlan({
+        currentBoundary: current.boundary,
+        nextBoundary: next.boundary,
+        nextScope: next.designScope,
+      });
+      commitPlan(scope ? { ...next, designScope: scope } : next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
     },
     openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);if(selectionPanelOnRef.current)setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
@@ -4174,7 +4185,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     getView: () => currentViewport(),
     getMode: () => modeRef.current,
     setMode: (next: string) => setMode(next as PlanningEditMode),
-    setMeasureKind: (kind: PlanMeasureKind) => applyMeasureKind(kind),
+    setMeasureKind: (kind: PlanMeasureToolKind) => applyMeasureKind(kind),
     getMeasureKind: () => measureKindRef.current,
     setSnapOn: (on: boolean) => setSnapOn(on),
     setInspector: (open: boolean, tab?: 'measure' | 'annotate' | 'selection') => {
@@ -6411,18 +6422,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (draft.length < (kind === 'area' ? 3 : 2)) {
       setEditMessage(kind === 'area'
         ? '面积测量：按住对角拖出矩形（Shift 正方形），或单击描顶点、点回起点闭合。'
-        : kind === 'distance'
-          ? '距离测量：按住拖一条线，或单击起点和终点。'
-          : '路径测量：按住自由手绘，或单击加路径点、双击提交。');
+        : '距离测量：按住拖一条线，或单击起点和终点；继续单击可接成多段。');
       return;
     }
     const current = planRef.current;
     const existing = current.measurements ?? [];
-    // 契约：distance 恰好 2 点；多段距离按 path 提交（读数同为折线总长）。
+    // 契约：distance 恰好 2 点；多段距离按 path 口径提交（读数同为折线总长），展示仍叫距离。
     const commitKind: PlanMeasureKind = kind === 'distance' && draft.length > 2 ? 'path' : kind;
     const result = buildMeasurement({
       kind: commitKind,
-      name: `${planMeasurementKindLabels[commitKind]} ${(viewPlan().measurements ?? []).length + 1}`,
+      name: `${measureKindLabel(kind)} ${(viewPlan().measurements ?? []).length + 1}`,
       points: draft,
     });
     if (!result.ok) {
@@ -6467,7 +6476,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const valueText = measurement.kind === 'area'
           ? formatAreaM2(measureValue(measurement))
           : formatLengthM(measureValue(measurement));
-        setEditMessage(`已选中${planMeasurementKindLabels[measurement.kind]}测量「${measurement.name}」= ${valueText}：按住拖动可移位，Delete 删除。`);
+        setEditMessage(`已选中${measureKindLabel(measurement.kind)}测量「${measurement.name}」= ${valueText}：按住拖动可移位，Delete 删除。`);
       }
     }
     draw();
@@ -7849,7 +7858,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       draw();
       return;
     }
-    // H3-a：测量临时读数跟指针；2026-11-11 拖拽式测量（距离拉线 / 面积矩形 / 路径手绘）。
+    // 2026-11-11 拖拽式测量（距离拉线 / 面积矩形）；2026-11-17 路径手绘随路径入口一起下线。
     if (activeMode === 'measure') {
       const hit = eventPlanPoint(event);
       if (!hit) return;
@@ -7866,12 +7875,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const prevCount = measureDraftRef.current.length;
           if (kind === 'area') {
             measureDraftRef.current = measureRectPoints(drag.startPt, hit.pt, event.shiftKey);
-          } else if (kind === 'path') {
-            const draft = measureDraftRef.current;
-            const lastPx = planPointToPixel(draft[draft.length - 1]!, currentViewport());
-            if (Math.hypot(hit.px.x - lastPx.x, hit.px.y - lastPx.y) >= MEASURE_FREEHAND_SAMPLE_PX && draft.length < PLAN_MEASURE_MAX_VERTICES) {
-              measureDraftRef.current = [...draft, { x: hit.pt.x, y: hit.pt.y }];
-            }
           }
           // 面积拖拽：指针不进读数（预览环就是矩形本身，跟指针会多算一个点）。
           measureCursorRef.current = kind === 'area' ? null : hit.pt;
@@ -8405,7 +8408,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const valueText = measureMove.kind === 'area'
             ? formatAreaM2(measureValue({ kind: measureMove.kind, points: preview.points }))
             : formatLengthM(measureValue({ kind: measureMove.kind, points: preview.points }));
-          setEditMessage(`${planMeasurementKindLabels[measureMove.kind]}测量已移动 = ${valueText}（原位已释放）。`);
+          setEditMessage(`${measureKindLabel(measureMove.kind)}测量已移动 = ${valueText}（原位已释放）。`);
           draw();
           return;
         }
@@ -8512,7 +8515,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setPreviewRing(null);
       return;
     }
-    // 2026-11-11 拖拽式测量松手：距离拉线 / 面积矩形 / 路径手绘直接固定；太短的拖拽提示并丢弃。
+    // 2026-11-11 拖拽式测量松手：距离拉线 / 面积矩形直接固定（路径手绘已随路径入口下线）；太短的拖拽提示并丢弃。
     if (activeMode === 'measure') {
       const drag = measureDragRef.current;
       measureDragRef.current = null;
@@ -8544,16 +8547,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             return;
           }
           measureDraftRef.current = measureRectPoints(drag.startPt, hit.pt, event.shiftKey);
-        } else {
-          const draft = measureDraftRef.current;
-          const last = draft[draft.length - 1];
-          if (last && planPointDistanceM(last, hit.pt) >= PLAN_MIN_VERTEX_GAP_M && draft.length < PLAN_MEASURE_MAX_VERTICES) {
-            measureDraftRef.current = [...draft, { x: hit.pt.x, y: hit.pt.y }];
-          }
-          if (measureDraftRef.current.length < 2) {
-            discard('拖出的路径太短，按住拖长一点再松手。');
-            return;
-          }
         }
         finishMeasure();
         return;
@@ -8612,7 +8605,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           else setEditMessage(`至少要 3 个节点才能闭合（当前 ${draftRef.current.length} 个）。`);
           return;
         }
-        // H2-d：画动线模式下双击提交；H3-a：测量模式下双击提交（面积/路径）。
+        // H2-d：画动线模式下双击提交；H3-a：测量模式下双击提交（距离/面积）。
         if (modeRef.current === 'route') {
           pointerConsumedRef.current = true;
           event.preventDefault();
@@ -9049,7 +9042,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
         {measureKind === 'distance' && '点起点，连续单击加段；双击 /「完成」结束'}
         {measureKind === 'area' && '拖矩形（Shift 正方形），或点选闭合'}
-        {measureKind === 'path' && '按住手绘，或逐点单击、双击结束'}
       </div>
       {mode === 'measure' && (
         <button
@@ -10509,7 +10501,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /* 2026-11-16 用户指令（量距手感，四条一起落地）：
      ① 文字与线段平行、② 线段中间带过程标尺 → lib 的 drawMeasureRuler 直接画在线上；
-     ③ 可多段线测量 → 距离/路径都按折线累计；
+     ③ 可多段线测量 → 距离按折线累计（路径入口 2026-11-17 下线）；
      ④ 退出自动删线 → setMode 离开 measure 时 dropMeasureSession()。
      这条底部卡片是“当前标尺”的总览与关闭口（× = 退出并清除）。 */
   const measureSessionIds = measureSessionIdsRef.current;
@@ -10522,7 +10514,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (item.kind === 'area') sessionAreaM2 += measureValue(item);
       else sessionLengthM += measureValue(item);
     }
-    const title = measureKind === 'area' ? '测量面积' : measureKind === 'path' ? '测量路径' : '测量距离';
+    const title = measureKind === 'area' ? '测量面积' : '测量距离';
     const value = measureKind === 'area'
       ? (measureDraftText ?? (sessionAreaM2 > 0 ? formatAreaM2(sessionAreaM2) : '拖出矩形或点选闭合'))
       : (measureDraftText ?? (sessionLengthM > 0 ? formatLengthM(sessionLengthM) : '点起点开始，可连续加段'));

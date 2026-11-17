@@ -38,7 +38,15 @@ export function outdoorClarificationQuestion(
     : "你想挪动哪个设施、挪到哪个位置？可以说设施名、方向和距离，例如「把签到台往东挪两米」。";
 }
 
-export type OutdoorClarification = { request: string; question: string };
+export type OutdoorClarification = {
+  request: string;
+  question: string;
+  /**
+   * 2026-11-17：用户在回答上一轮的二选一（“第一个方案”之类）。本地已解出选中的是第几项，
+   * 结构化带给理解层，不再让模型从一句序号里重新猜动作。
+   */
+  choice?: { index: number; text: string };
+};
 
 export async function understandOutdoorTurn(input: {
   message: string;
