@@ -51,6 +51,11 @@ export type ReplicaCaseSpec = {
   anchor: { lng: number; lat: number };
   /** 地点口径备注（镇级/概念案等，如实标注）。 */
   locationNote?: string;
+  /**
+   * 平面图相对正北的旋转角（度，顺时针为正）。参考图是斜视角截的，图面上方不等于正北，
+   * 用这个角度把局部米制坐标整体旋到真实方位上。0 / 省略 = 图面正上方就是正北。
+   */
+  rotationDeg?: number;
   zones: ReplicaZoneSpec[];
   facilities: ReplicaFacilitySpec[];
   routes: ReplicaRouteSpec[];
@@ -257,11 +262,23 @@ function uid(slug: string, seq: number): string {
 
 /** 规格展开成合法 SitePlanData（出口 schema 自检）。 */
 export function expandReplicaSpec(spec: ReplicaCaseSpec): SitePlanData {
+  const planRot = spec.rotationDeg ?? 0;
+  const rad = (-planRot * Math.PI) / 180;
+  const cosR = Math.cos(rad);
+  const sinR = Math.sin(rad);
+  const rotXY = (x: number, y: number): [number, number] =>
+    planRot % 360 === 0
+      ? [x, y]
+      : [Math.round((x * cosR - y * sinR) * 1000) / 1000, Math.round((x * sinR + y * cosR) * 1000) / 1000];
+  const rotPt = (p: PlanPoint): PlanPoint => {
+    const [x, y] = rotXY(p.x, p.y);
+    return x === p.x && y === p.y ? p : { ...p, x, y };
+  };
   const zones: PlanZone[] = spec.zones.map((zone, i) => ({
     id: uid(spec.slug, i + 1),
     semantic: zone.semantic,
     name: zone.name,
-    polygon: zonePolygonOf(zone),
+    polygon: zonePolygonOf(zone).map(rotPt),
     color: zone.color,
     notes: '',
     ...(zone.opacity != null ? { opacity: zone.opacity } : {}),
@@ -272,12 +289,13 @@ export function expandReplicaSpec(spec: ReplicaCaseSpec): SitePlanData {
     const size = f.size ?? REPLICA_FACILITY_SIZES[f.templateId];
     if (!size) throw new Error(`facility ${f.name}（${f.templateId}）没有默认占地，须显式给 size`);
     for (const inst of facilityInstancesOf(f)) {
+      const [fx, fy] = rotXY(inst.x, inst.y);
       facilities.push({
         id: uid(spec.slug, seq++),
         templateId: f.templateId,
         name: inst.label,
-        position: point(inst.x, inst.y),
-        rotationDeg: inst.rot,
+        position: point(fx, fy),
+        rotationDeg: (inst.rot - planRot + 360) % 360,
         size,
         notes: '',
         ...(f.zoneIndex != null ? { zoneId: zones[f.zoneIndex].id } : {}),
@@ -285,18 +303,21 @@ export function expandReplicaSpec(spec: ReplicaCaseSpec): SitePlanData {
       });
     }
   }
-  const nodes: PlanNode[] = spec.nodes.map((node, i) => ({
-    id: uid(spec.slug, 500 + i),
-    kind: node.kind,
-    name: node.name,
-    position: point(node.x, node.y),
-    notes: '',
-  }));
+  const nodes: PlanNode[] = spec.nodes.map((node, i) => {
+    const [nx, ny] = rotXY(node.x, node.y);
+    return {
+      id: uid(spec.slug, 500 + i),
+      kind: node.kind,
+      name: node.name,
+      position: point(nx, ny),
+      notes: '',
+    };
+  });
   const routes: PlanRoute[] = spec.routes.map((route, i) => ({
     id: uid(spec.slug, 600 + i),
     kind: route.kind,
     name: route.name,
-    points: route.points.map(([x, y]) => point(x, y)),
+    points: route.points.map(([x, y]) => point(...rotXY(x, y))),
     oneWay: route.oneWay ?? false,
     notes: '',
     ...(route.carrier ? { carrier: route.carrier } : {}),
