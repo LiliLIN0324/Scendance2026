@@ -525,19 +525,31 @@ export function OutdoorWorkflowCard({
             </div>
           </div>
         </div>
-      ) : flow.state.stage !== "place" ? (
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={flow.busy}
-          onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
-        >
-          {flow.state.stage === "scope"
-            ? "核对当前实际活动范围"
-            : flow.state.stage === "zones"
-              ? "生成分区预览"
-            : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
-        </button>
+      ) : flow.state.stage !== "place" && !flow.drawingMode ? (
+        flow.state.stage === "zones" &&
+        (!flow.state.brief.zones.length ||
+          flow.state.brief.zones.some((zone) => zone.environment === "unknown")) ? (
+          // 2026-11-18 用户实测：这颗按钮承诺「点了就出分区预览」，但没用途时点了只会撞红卡
+          // 反问「要分哪些用途」。没给指令就不挂空头按钮，如实引导去说用途或手画。
+          // 引导语用醒目的问题式样式，和「手画分区」按钮构成同一组动作；进手画模式后整块收掉
+          // （通知条「已进入手画模式…」是唯一指令），不再留自相矛盾的残留。
+          <p className="ap-access-question">
+            还没说要分哪些区：先在下面说一句用途和室内外（例如「室外展览区和表演区」），或在地图上手画分区；用途没说清楚前不会替你猜。
+          </p>
+        ) : (
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={flow.busy}
+            onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+          >
+            {flow.state.stage === "scope"
+              ? "核对当前实际活动范围"
+              : flow.state.stage === "zones"
+                ? "生成分区预览"
+              : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
+          </button>
+        )
       ) : null}
       {!flow.proposal &&
         !flow.busy &&
@@ -718,7 +730,7 @@ export function OutdoorWorkflowCard({
           </button>
         </div>
       )}
-      {!flow.proposal && flow.state.stage === "zones" && (
+      {!flow.proposal && flow.state.stage === "zones" && flow.drawingMode !== "zone" && (
         <button
           type="button"
           disabled={flow.busy}
@@ -727,7 +739,7 @@ export function OutdoorWorkflowCard({
           在地图上手画分区
         </button>
       )}
-      {!flow.proposal && flow.state.stage === "main-routes" && (
+      {!flow.proposal && flow.state.stage === "main-routes" && !flow.drawingMode && (
         <div>
           <button
             type="button"
