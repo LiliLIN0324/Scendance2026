@@ -265,3 +265,55 @@ for (const vehicle of plan.vehicles ?? []) {  // (3) 分区与动线引用
 ### 遗留
 
 - `lib/walk-collision.ts:148` 的文档注释还指向已删除的 `lib/crowd-behavior.ts`（只是注释，不是 import，不会编译报错）。随本批一起订正。
+
+## 10. #117 车辆 / 后勤 3D 动态对象接线（2026-11-17）
+
+### 落地了什么
+
+- 新增 `three/plan-vehicle-entities.ts`（216 行）：接管独立集合 `plan.vehicles`，与 2D `vehicle-markers` 同源口径。
+  - 未登记车型**跳过、不回落**（沿用 `lib/vehicle-entities.ts` 的口径：`modelSlug` 只认实体自己写的）；
+  - 停放位槽位确定性排布（同一台车同一 count 永远同一组偏移，刷新不跳），每车最多 24 个实例；
+  - 占位长宽 / 转向 / 速度档取 `lib/vehicle-follower-profile.ts`，**速度仍只有一处来源** `flow-sim.speedRangeForCarrier`；
+  - `modelMissing` 按实体自身的 slug 判定（没登记车型不是「待补模型」，是「没这型车」）；
+  - 挂得上车行流线的沿弧长巡游、朝向取路线切线；缺线的静态停放、朝向 0；
+  - `advance` 的 delta 封顶 0.25s，切标签页回来不瞬移。
+- `outdoor-plan-3d.tsx` 六处接线：import / 创建 + add+sync / 刷新段同步 / 渲染循环 advance / dispose / 验收桥 `vehicles` 探针。与旧设施巡游层**并存、互不接管**。
+- `plan-traffic-layer.ts` 只补一个 `RoutePath` 导出供复用。
+- 顺带订正 `lib/walk-collision.ts` 里指向已删模块的注释（§9 遗留项，纯注释）。
+
+### 真机验收（上一轮 Playwright 独立通道：桩后端 54329 + dev 3212；bu 后端僵死未用）
+
+| 观察项 | 结果 |
+| --- | --- |
+| 巡游商务车 | 沿 y=7 东西道往返，xSpan 16.56m，z 恒定 −7，东端越总长回绕，`modelMissing=false` |
+| 两台大巴 | 并排停在 y=−7，槽位间距 2.5m，跨帧静止，`modelMissing=true` |
+| 实例数 | 3（1 巡游 + 2 停放） |
+| console / pageerror | 零报错 |
+| 落位 / 朝向 / 颜色 | 正确（车类紫 `#8a6fa8`） |
+
+示范方案里的临时验收样例已全部回退，不入库；本机测试草稿残留不影响仓库。
+
+### 回归（本轮复跑）
+
+- 新层 16 例：朝向换算（东 / 北 / 西 / 南）、旧 plan 无 vehicles 时空组不合成车、无边界场地不虚构落点、静态停放落槽位、多台并排且标签只挂第一台、24 台截断、有 `modelSlug` 时不标待补、未登记车型跳过、巡游位移、切线朝向、sync 幂等、delta 上限、dispose 清理。
+- 车流 7 个定向文件（`plan-vehicle-entities` / `plan-traffic-layer` / `vehicle-entities` / `vehicle-follower-profile` / `vehicle-types` / `flow-sim` / `walk-collision`）全绿。
+- 根 `tsc --noEmit` 与前端 `tsc --noEmit` 均 0 错（合完最新 main 之后复跑）。
+
+### #118 车辆实体落盘契约核对：已闭合
+
+`planVehicleSchema`、图层往返、2D 标记 / 图例 / 清单 / CSV / GeoJSON / PNG 包络均已接。**唯一缺口：暂无专属车辆录入表单** —— 车辆目前只能经导入 / 草稿写入，录入 UI 另立任务。
+
+### §9「下一批」四项的实际状态
+
+| 项 | 状态 |
+| --- | --- |
+| 1. 对齐最新基线 | ✅ 已对到 `origin/main`（合并 24 笔，与本批改动文件**零重叠**），tsc 0 错 |
+| 2. 3D 接线验收 | ✅ 本轮 |
+| 3. 落盘契约复核 | ✅ 本轮 |
+| 4. 坐姿素材 | ⬜ 仍卡在云端 sit clip 回传（外部阻塞，未动） |
+
+### 下一批（按依赖排序，先不动工）
+
+1. **车辆录入 UI**：现在没有入口，用户产生不了车辆实体 → 3D 再准也用不上。做完才是「录入 → 2D 标记 → 3D 巡游 / 停放」完整闭环。这是 #118 唯一剩下的缺口。
+2. **正式站发布**：本批只进分支与 PR，合了 PR 并部署之后正式站才变。
+3. **与生成线的交汇点只有一个**：车流 3D 用的是物料库里的 GLB 与占位盒，不走 Aholo 生成通道；但若要给某个车型**生成专属 GLB**，就要走那条通道 —— 那时模型库会多一个来源（aholo 产物走 assetId，plan 侧只认 slug / modelOverride），命名空间口径要按 G1 收口清单的 C1 一并拍板。
