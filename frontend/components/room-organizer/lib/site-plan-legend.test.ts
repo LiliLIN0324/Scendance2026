@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlanLegend, polylineHalfLengthPoint } from './site-plan-legend';
-import { PLANNING_ICONS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS, PLANNING_BOUNDARY_LINE_COLOR } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_ICONS, PLANNING_LAYER_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_WALL_COLOR, PLANNING_WALL_KIND_COLORS, PLANNING_ZONE_COLORS, PLANNING_BOUNDARY_LINE_COLOR } from '@/lib/outdoor-plan-tokens';
 import { CARRIER_COLOR_KIND } from './route-carrier-color';
 import { WORKER_ROLE_FAMILIES } from './oneplan-stickers';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -152,10 +152,26 @@ function samplePlan(): SitePlanData {
   };
 }
 
+/** 墙体夹具（M2 walls）：2 段外墙 + 1 段内墙（带显式色）+ 1 段未标类型。 */
+function planWithWalls(): SitePlanData {
+  const plan = samplePlan();
+  plan.walls = [
+    { id: 'c7000000-0000-4000-8000-000000000001', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], kind: 'exterior', thicknessM: 0.24, heightM: 3 },
+    { id: 'c7000000-0000-4000-8000-000000000002', points: [{ x: 10, y: 0 }, { x: 10, y: 20 }], kind: 'exterior' },
+    { id: 'c7000000-0000-4000-8000-000000000003', points: [{ x: 0, y: 5 }, { x: 10, y: 5 }], kind: 'interior', color: '#123456' },
+    { id: 'c7000000-0000-4000-8000-000000000004', points: [{ x: 0, y: 10 }, { x: 5, y: 10 }] },
+  ];
+  return plan;
+}
+
 describe('buildPlanLegend (H3-c 图例生成器)', () => {
   it('emits the stable group order: 边界 → 分区 → 设施 → 动线 → 出入口 → 人员 → 测量', () => {
     const groups = buildPlanLegend(samplePlan());
     expect(groups.map(g => g.title)).toEqual(['用地红线', '功能分区', '设施', '动线', '出入口', '人员', '测量']);
+  });
+
+  it('inserts the walls group right after the boundary when walls exist', () => {
+    expect(buildPlanLegend(planWithWalls()).map(g => g.title)).toEqual(['用地红线', '墙体', '功能分区', '设施', '动线', '出入口', '人员', '测量']);
   });
 
   it('aggregates zones by semantic with default semantic colors and area totals', () => {
@@ -227,6 +243,22 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     expect(groups[0]!.title).toBe('用地红线');
     expect(groups[0]!.entries[0]!.detail).toBe('共 10000 m²');
     expect(groups[0]!.entries[0]!.swatch).toBe(PLANNING_BOUNDARY_LINE_COLOR);
+  });
+
+  it('omits the walls group when the plan has no walls', () => {
+    expect(buildPlanLegend(samplePlan()).some(g => g.title === '墙体')).toBe(false);
+  });
+
+  it('aggregates walls by kind with segment counts and length totals', () => {
+    const walls = buildPlanLegend(planWithWalls()).find(g => g.title === '墙体')!;
+    expect(walls.entries.map(e => e.label)).toEqual(['外墙', '内墙', '墙体']);
+    expect(walls.entries.map(e => e.count)).toEqual([2, 1, 1]);
+    expect(walls.entries.map(e => e.detail)).toEqual(['共 30 m', '共 10 m', '共 5 m']);
+    expect(walls.entries[0]!.swatch).toBe(PLANNING_WALL_KIND_COLORS.exterior);
+    // 内墙带显式色时优先于类型默认色。
+    expect(walls.entries[1]!.swatch).toBe('#123456');
+    expect(walls.entries[2]!.swatch).toBe(PLANNING_WALL_COLOR);
+    expect(walls.entries.map(e => e.icon)).toEqual(['brick-wall', 'brick-wall', 'brick-wall']);
   });
 
   it('keeps zone explicit color as swatch when provided', () => {
