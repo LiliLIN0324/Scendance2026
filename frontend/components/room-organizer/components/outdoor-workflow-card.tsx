@@ -534,7 +534,7 @@ export function OutdoorWorkflowCard({
           // 引导语用醒目的问题式样式，和「手画分区」按钮构成同一组动作；进手画模式后整块收掉
           // （通知条「已进入手画模式…」是唯一指令），不再留自相矛盾的残留。
           <p className="ap-access-question">
-            还没说要分哪些区：先在下面说一句用途和室内外（例如「室外展览区和表演区」），或在地图上手画分区；用途没说清楚前不会替你猜。
+            还没说要分哪些区：说一句用途和室内外（例如「室外展览区和表演区」）我按这句出预览，也可以在地图上手画。
           </p>
         ) : (
           <div className="ap-outdoor-plan-actions">
@@ -574,7 +574,6 @@ export function OutdoorWorkflowCard({
           <div key={n.id} className="ap-access-check">
             <p className="ap-access-question">
               “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
-              入口不自动等于出口，也不代表安全认证。
             </p>
             {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
                 而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
