@@ -242,6 +242,8 @@ import {
   type PlanWorkerIssue,
 } from '../lib/site-plan-routes';
 import { clampRingMoveToBoundary, nearestMergeTarget, nearestPolylineEdge, nearestRingEdge, nearestRouteSnapPoint, planGridStepM, snapPointToGrid, stickPointToBoundary } from '../lib/site-plan-snap';
+// 2026-11-17 #118 补漏：属性卡「选中数」口径（车也算一件；漏算 → 车辆属性卡弹不出来）。
+import { planSelectionCount } from '../lib/site-plan-selection';
 // 2026-11-16 用户指令：门放到室内区域边线 10px 内要贴边、朝向垂直墙面。
 import { snapDoorToIndoorEdge } from '../lib/plan-door-snap';
 import { autoNodeName, renamedNodeName } from '../lib/site-plan-node-names';
@@ -8932,7 +8934,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     ];
   })();
   // 2026-11-11 用户指令：右上角浮窗「属性」页签的角标 = 当前同时选中的物件数（点选后自动切过来）。
-  const selectionInspectorCount = (selectedZoneId ? 1 : 0) + (selectedFacility ? 1 : 0) + (selectedRoute ? 1 : 0) + (selectedNodeId ? 1 : 0) + (selectedWorkerId ? 1 : 0) + multiSelectedRouteIds.length + multiSelectedNodeIds.length + (multiSelectedFacilityIds.length >= 2 ? 1 : 0);
+  // 2026-11-17 #118 补漏：车辆也必须算进去——角标为 0 时整张「属性」卡会被空状态顶掉，
+  // 车辆属性卡（车型/台数/分区/车型模型/删除）在编辑器里就永远够不着。
+  const selectionInspectorCount = planSelectionCount({
+    zone: !!selectedZoneId,
+    facility: !!selectedFacility,
+    route: !!selectedRoute,
+    node: !!selectedNodeId,
+    worker: !!selectedWorkerId,
+    vehicle: !!selectedVehicle,
+    multiRoute: multiSelectedRouteIds.length,
+    multiNode: multiSelectedNodeIds.length,
+    multiFacility: multiSelectedFacilityIds.length,
+  });
   useEffect(() => {
     if (selectionInspectorCount === 0 || !selectionPanelOnRef.current) return;
     // 选中物件 → 只把「属性」卡展开（测量/标注卡的开合不受影响）。
