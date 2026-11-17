@@ -2501,6 +2501,8 @@ export function useOutdoorAgentWorkflow(input: {
     },
     /** 走查进度一行话（只报“看了几条”，不下“可发布”结论）。 */
     walkthroughLine: () => summarizeWalkthrough(walkthroughBook.current).line,
+    /** 当前记录本（受控面板需要它才能渲染按压态）。 */
+    walkthroughBook: () => walkthroughBook.current,
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
