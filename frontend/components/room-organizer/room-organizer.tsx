@@ -632,11 +632,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>(null);
   // 2026-11-16 用户拍板「属性卡只留一句点选提示 + 打开物件库」：
   // 画布（右侧）不持有左栅状态，所以发事件，这里把户外卡切到「添加物件」页签。
+  // 2026-11-18 提升到组件级：agent 面板（LayoutAgentProvider）也要这个入口，effect 内局部定义够不着。
+  const openOutdoorLibrary = useCallback(() => setOutdoorPanel('library'), []);
   useEffect(() => {
-    const openOutdoorLibrary = () => setOutdoorPanel('library');
     window.addEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
     return () => window.removeEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
-  }, []);
+  }, [openOutdoorLibrary]);
   // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
   // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
   useEffect(() => {

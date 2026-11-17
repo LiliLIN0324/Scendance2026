@@ -14,7 +14,8 @@ export const BUFFALO_MARATHON_WEEKEND: ReplicaCaseSpec = {
   region: 'North America',
   refImage: 'buffalo-marathon-weekend.png',
   refLink: LINK('buffalo-marathon-weekend'),
-  anchor: { lng: -78.8784, lat: 42.8864 },
+  anchor: { lng: -78.892616, lat: 42.945626 },
+  rotationDeg: 94,
   locationNote: '镇级锚点：Buffalo downtown（全城路线案）',
   zones: [
     { name: 'Start / Finish 起终点', semantic: 'stage', color: '#c0392b', opacity: 0.35, rect: { cx: -55, cy: -10, w: 26, h: 14 } },
@@ -87,7 +88,8 @@ export const USA_TRIATHLON_NATIONALS_PTO: ReplicaCaseSpec = {
   // 所以之前铺到底图上「范围偏小」）。参考图中心落在 z19 瓦片 (1114, 1196)，mosaic 中心 (1152,1152)，
   // 即中心在旧锚点西 8.3 m、南 9.6 m 处，反算得下面这组经纬度。残差米级。
   // 改锚点或比例都要重跑 .tmp/geo 下的 prep → stitch → fit4 → geo-overlay，不要凭目测手改。
-  anchor: { lng: -87.8974818, lat: 43.0362332 },
+  anchor: { lng: -87.897354, lat: 43.036482 },
+  rotationDeg: 0,
   locationNote: '影像配准锚点：Milwaukee Veterans Park 湖滨（四参数配准：θ=0°，0.145 m/px）',
   zones: [
     // 2026-11-17 用户：「直接描啊」，并在本地接了全球底图后要求「完全在地图上复刻」。
@@ -134,7 +136,8 @@ export const FRANKLINS_GARDENS_NORTHAMPTON_SAINTS: ReplicaCaseSpec = {
   region: 'Europe',
   refImage: 'franklins-gardens-northampton-saints-stadium.jpg',
   refLink: LINK('franklins-gardens-northampton-saints-stadium'),
-  anchor: { lng: -0.9046, lat: 52.2386 },
+  anchor: { lng: -0.918841, lat: 52.239044 },
+  rotationDeg: 309,
   locationNote: '精确锚点：Franklin\'s Gardens 球场',
   zones: [
     { name: 'Pitch 球场', semantic: 'stage', color: '#3fb544', opacity: 0.3, rect: { cx: -40, cy: 0, w: 55, h: 90 } },

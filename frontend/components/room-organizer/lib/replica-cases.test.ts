@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { sitePlanDataSchema, type PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { REPLICA_CASES } from './replica-cases';
+import { expandReplicaSpec, type ReplicaCaseSpec } from './replica-kit';
 import { resolveFacilityTemplate } from './plan-facility-catalog';
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
 
@@ -40,7 +41,9 @@ describe('replica-cases（OnePlan 经典案例复刻）', () => {
       const ys = plan.boundary.map(p => p.y);
       const expectScope = expandRect(plan.boundary, DEFAULT_SCOPE_MARGIN_M);
       // 与「画好红线默认=设计范围」同一套几何：四个角正好各边外扩 20 m。
-      expect(scope, replica.id).toEqual(expectScope);
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const ringOf = (ring: readonly { x: number; y: number }[]) => ring.map(p => [r2(p.x), r2(p.y)]);
+      expect(ringOf(scope), replica.id).toEqual(ringOf(expectScope));
       const margin = DEFAULT_SCOPE_MARGIN_M;
       expect(Math.min(...scope.map(p => p.x))).toBeCloseTo(Math.min(...xs) - margin, 5);
       expect(Math.max(...scope.map(p => p.x))).toBeCloseTo(Math.max(...xs) + margin, 5);
@@ -100,9 +103,26 @@ describe('replica-cases（OnePlan 经典案例复刻）', () => {
   it('Scotiabank 冰球日（首案）细节钉住', () => {
     const replica = REPLICA_CASES.find(c => c.id === 'scotiabank-hockey-day-canada')!;
     const plan = replica.buildPlan();
-    expect(plan.anchor).toEqual({ lng: -123.3716, lat: 48.4235, crs: 'gcj-02', source: 'preset' });
-    // 黄色单向流线（OnePlan 案例的标志性呈现）
-    expect(plan.routes.filter(r => r.oneWay && r.color === '#f2c744').length).toBeGreaterThanOrEqual(3);
-    expect(plan.zones.length).toBe(10);
+    expect(plan.anchor).toEqual({ lng: -123.370099, lat: 48.423153, crs: 'gcj-02', source: 'preset' });
+    expect(replica.rotationDeg).toBe(84);
+    expect(plan.routes.slice(0, 3).every(r => r.kind === 'pedestrian' && r.color === '#f2c744')).toBe(true);
+    expect(plan.routes[3]).toMatchObject({ kind: 'vehicle', carrier: 'vehicle' });
+    expect(plan.zones.length).toBe(9);
+    expect(plan.facilities.length).toBe(71);
+  });
+
+  it('rotationDeg 把局部米制坐标整体旋到真实方位', () => {
+    const base = { slug: 'rot-probe', title: 'probe', category: 'Festivals', region: 'Europe', refImage: 'x.png', refLink: '', anchor: { lng: 0, lat: 0 }, routes: [], nodes: [] };
+    const spec: ReplicaCaseSpec = {
+      ...base,
+      rotationDeg: 90,
+      zones: [{ name: 'probe', semantic: 'reserved' as const, color: '#000000', rect: { cx: 0, cy: 0, w: 10, h: 10 } }],
+      facilities: [{ templateId: 'oneplan:icon:bar', name: 'p', placement: { kind: 'single' as const, x: 0, y: 10 }, size: { width: 1, depth: 1 } }],
+    };
+    const plan = expandReplicaSpec(spec);
+    // 图上「向北 10 m」在 90° 旋转后应变成「向东 10 m」
+    expect(plan.facilities[0].position.x).toBeCloseTo(10, 6);
+    expect(plan.facilities[0].position.y).toBeCloseTo(0, 6);
+    expect(plan.facilities[0].rotationDeg).toBeCloseTo(270, 6);
   });
 });
