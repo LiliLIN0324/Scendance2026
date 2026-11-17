@@ -7,6 +7,8 @@
  * - 转义规则：含逗号/引号/换行的值用双引号包裹，内部双引号翻倍；
  * - 行序与图例/清单一致：类型契约枚举序，同类型内按名称稳定排序（不按 UUID，
  *   保证同一份 plan 两次导出字节一致，可对账）。
+ * - 墙体（2026-11-17）是导出补充行：追加在实体清单之后、按 id 稳定排序；
+ *   面板清单不加墙体筛选维度，表头/列数不变。
  */
 
 import {
@@ -137,6 +139,36 @@ function enuAnchorToLngLat(p: { x: number; y: number }, anchorLng: number, ancho
   };
 }
 
+/** 墙体导出补充行：14 列对齐实体行；按 id 稳定排序，不计入面板清单。 */
+function wallRows(plan: SitePlanData, unit: DisplayUnit): string[][] {
+  return [...(plan.walls ?? [])]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(wall => {
+      const start = wall.points[0]!;
+      const anchorLngLat = plan.anchor
+        ? enuAnchorToLngLat(start, plan.anchor.lng, plan.anchor.lat)
+        : { lng: '', lat: '' };
+      const zoneName = wall.zoneId ? plan.zones.find(z => z.id === wall.zoneId)?.name ?? '' : '';
+      const typeLabel = wall.kind === 'exterior' ? '外墙' : wall.kind === 'interior' ? '内墙' : '墙体';
+      return [
+        csvEscape('墙体'),
+        csvEscape(`墙体 ${wall.id.slice(0, 8)}`),
+        csvEscape(typeLabel),
+        csvEscape(zoneName),
+        csvEscape(wall.thicknessM !== undefined ? `厚 ${formatLength(wall.thicknessM, unit)}` : ''),
+        start.x.toFixed(2),
+        start.y.toFixed(2),
+        '',
+        formatLength(planRouteLengthM(wall.points), unit),
+        '',
+        wall.id,
+        anchorLngLat.lng,
+        anchorLngLat.lat,
+        '',
+      ];
+    });
+}
+
 /** 导出完整 CSV 文本（BOM + 表头 + 数据行，`\r\n` 行尾对齐 Excel）。读数跟随显示单位，坐标与底稿仍存米。 */
 export function buildPlanCsv(plan: SitePlanData, unit: DisplayUnit = 'm'): string {
   const rows = buildPlanInventory(plan)
@@ -145,6 +177,7 @@ export function buildPlanCsv(plan: SitePlanData, unit: DisplayUnit = 'm'): strin
   const lines = [
     headersFor(unit).map(h => csvEscape(h)).join(','),
     ...rows.map(row => rowToCells(row, plan, unit).join(',')),
+    ...wallRows(plan, unit).map(cells => cells.join(',')),
   ];
   return '\uFEFF' + lines.join('\r\n') + '\r\n';
 }
