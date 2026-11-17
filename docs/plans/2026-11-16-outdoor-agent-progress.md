@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：走查记录本已就位（`outdoor-walkthrough-book.ts`：`emptyBook/markSeen/bookToRecord/summarizeWalkthrough`，不可变、非法编号拒收、永不下结论）。**分支叠在 `agent/outdoor-m7-browser-evidence`（`16fde421`）上**，两者要按顺序合。**本地 main 卡在 `c9706da5`，落后 13 笔推不进来**：75 个入站文件里 59 个与脏文件重叠（脏文件连续三轮停在 62）。**需要人做**：提交/另存工作区 WIP，再 `git merge --ff-only origin/main`。9222 二十八轮不通。下一条：把记录本接进 hook（`recordWalkthrough()` 存最近一次走查，`logReleaseStatus()` 自动带上）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-walkthrough-book.test.ts`。
+- 下一条操作：hook 已接上记录本（`recordWalkthrough(id, state)` / `walkthroughLine()`），`logReleaseStatus()` 自动带证据与台账。**三个切片已合成一条待 PR 分支** `agent/outdoor-m7-walkthrough-hook`：从 `origin/main` 起，merge 了 `agent/outdoor-m7-browser-evidence` 与 `agent/outdoor-m7-walkthrough-book`（两次 merge、零冲突），**只需合这一条**。**本地 main 卡在 `c9706da5`，落后 14 笔推不进来**：75 个入站文件里 59 个与脏文件重叠（脏文件连续四轮停在 62）。**需要人做**：提交/另存工作区 WIP，再 `git merge --ff-only origin/main`。9222 二十九轮不通。下一条：把记录本落盘（`localStorage` 一个键，刷新后不丢；仍不写“通过”结论）+ 面板加三个按钮。首条命令 `cd frontend; npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,23 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 07:05 · 自动轮次 73 · 记录本接进 hook + 三个切片合成一条待 PR 分支
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 07:05，自动轮次 73
+批次 / 切片 / 状态：M7 / hook 接线与分支合并 / 已交付（分支待 PR）
+开工事实：HEAD = main = `c9706da5`，origin/main = `dbc874c2`（落后 14 笔），脏文件 62（连续四轮不变）
+合并（本地 main）：**第四次被同一批 WIP 挡住** —— 75 个入站文件里 59 个与脏文件重叠，`--ff-only` 报覆盖；不代人为用户 WIP 做取舍
+合并（分支）：新开 `agent/outdoor-m7-walkthrough-hook`（自 `origin/main dbc874c2`），依次 `merge --no-edit` 了 `agent/outdoor-m7-browser-evidence` 与 `agent/outdoor-m7-walkthrough-book`，**两次 merge 零冲突**，树干净（`head=7fdb4ffa`）——三个切片现在只差一次 PR
+交付：hook 新增 `walkthroughBook` ref 与 `recordWalkthrough(id, state)`（非法编号返回 `null`、不生效）/`walkthroughLine()`；`logReleaseStatus()` 改为带 `evidence: bookToRecord(...)` 与 `ledger: defaultLedger(record)`。hook 测试新增 1 条（标一条才算看过、非法编号不生效、行里不出现“可发布（”）
+验证（固定数据）：hook 套件 61/61（含新 1 条）；`tsc` 余 1 行，仍是已归基线的 `gm-compass-host.test.tsx` 缺 `focusVenue`（行号 48→64 随主干变化，同一错误）
+真实浏览器/云端：仍未验（9222 第二十九轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；记录本落盘；本地 main 追上 origin
+```
+
+- **碎片分支要及时合拢**：三个切片各自可 PR，但叠了三个分支就要合三次；merge（非 cherry-pick）成一条待 PR 分支，人只需点一次。
+- **接线也要有断言**：只“能编译”不算接线完成，至少断言“标一条 → 进度行变化、非法编号不变”。
 
 ### 2026-11-18 06:10 · 自动轮次 72 · 走查记录本（只能往上标，不能下结论）
 

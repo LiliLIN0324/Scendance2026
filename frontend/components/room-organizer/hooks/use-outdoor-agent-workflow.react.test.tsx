@@ -1756,3 +1756,18 @@ it("画布上已有的巡游线可直接作沿线参照，不重复加赛道线"
   const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("补给站")) ?? [];
   expect(stations.length).toBeGreaterThanOrEqual(2);
 });
+
+it("走查记录本：标一条才算看过，非法编号这一标不生效", () => {
+  // 开场没有任何证据：11 条全算没看。
+  expect(flow.walkthroughLine()).toContain("已看 0/11");
+  act(() => {
+    flow.recordWalkthrough(3, "pass");
+  });
+  expect(flow.walkthroughLine()).toContain("已看 1/11");
+  expect(flow.walkthroughLine()).toContain("通过 1");
+  // 编号不在 1..11：返回 null，且记录本不变。
+  expect(flow.recordWalkthrough(99, "pass")).toBeNull();
+  expect(flow.walkthroughLine()).toContain("已看 1/11");
+  // 记录本永远不下结论。
+  expect(flow.walkthroughLine()).not.toContain("可发布（");
+});

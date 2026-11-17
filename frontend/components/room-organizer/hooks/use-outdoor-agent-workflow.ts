@@ -33,7 +33,13 @@ import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
-import { defaultLedger, logReleaseStatus } from "../lib/outdoor-release-status-card";
+import { defaultLedger, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
+import {
+  bookToRecord,
+  emptyBook,
+  markSeen,
+  summarizeWalkthrough,
+} from "../lib/outdoor-walkthrough-book";
 import { createTurnTraceBook } from "../lib/turn-trace-log";
 import { downloadSessionReport } from "../lib/outdoor-report-download";
 import { assessAcceptance, formatAcceptanceStatement, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
@@ -462,6 +468,8 @@ export function useOutdoorAgentWorkflow(input: {
   // M7.1：一轮对话的轨迹与指标（只打日志与记簿，不影响界面与请求）。
   const metricsBook = useRef(createMetricsBook());
   const traceBook = useRef(createTurnTraceBook());
+  /** 走查记录本：本轮页面里逐条标，标完直接进状态卡（不落盘，刷新即清）。 */
+  const walkthroughBook = useRef(emptyBook());
   const liveTurn = useRef(createLiveTurn({ book: metricsBook.current, traceBook: traceBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
@@ -2350,7 +2358,24 @@ export function useOutdoorAgentWorkflow(input: {
     /** 一行可粘进 PR 的验收声明（固定收尾“三类全绿 0 条，未验部分不作通过”）。 */
     acceptanceStatement: () => formatAcceptanceStatement(assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }))),
     /** 把整张发布前状态卡打到控制台（前缀 [outdoor-release]，只读，不产生结论）。 */
-    logReleaseStatus: () => logReleaseStatus({ rows: assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })), metrics: summarizeMetrics(metricsBook.current), ledger: defaultLedger() }),
+    logReleaseStatus: () => {
+      const record = bookToRecord(walkthroughBook.current);
+      return logReleaseStatus({
+        rows: assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
+        metrics: summarizeMetrics(metricsBook.current),
+        ledger: defaultLedger(record),
+        evidence: record,
+      });
+    },
+    /** 逐条标一次走查：返回 null 表示编号不合法（这一标没生效）。 */
+    recordWalkthrough: (id: number, state: BrowserEvidence) => {
+      const next = markSeen(walkthroughBook.current, id, state);
+      if (next === walkthroughBook.current) return null;
+      walkthroughBook.current = next;
+      return next;
+    },
+    /** 走查进度一行话（只报“看了几条”，不下“可发布”结论）。 */
+    walkthroughLine: () => summarizeWalkthrough(walkthroughBook.current).line,
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
