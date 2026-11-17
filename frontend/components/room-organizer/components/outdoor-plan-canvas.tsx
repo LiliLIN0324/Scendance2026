@@ -2207,6 +2207,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (modeRef.current === 'measure' && next !== 'measure') dropMeasureSession();
     if (next === 'measure') measureSessionIdsRef.current = [];
     modeRef.current = next;
+    // 2026-11-18 用户实测：从对话进绘制模式时色板分组要跟着展开——不然用户不知道画什么、
+    // 也不知道有分区类型可挑。手动点目录行本来就是展开态进来的，这里只是兜底。
+    const drawingSubgroup = next === 'zone' ? 'areas:区域' : next === 'node' ? 'areas:入口和通道图标' : next === 'route' ? 'areas:路线' : null;
+    if (drawingSubgroup) setOpenLibrarySubgroups(prev => (prev.includes(drawingSubgroup) ? prev : [...prev, drawingSubgroup]));
     draftRef.current = [];
     previewRingRef.current = null;
     scopeDragRef.current = null;
