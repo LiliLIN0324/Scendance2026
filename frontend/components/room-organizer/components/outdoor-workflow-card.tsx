@@ -537,7 +537,7 @@ export function OutdoorWorkflowCard({
             还没说要分哪些区：先在下面说一句用途和室内外（例如「室外展览区和表演区」），或在地图上手画分区；用途没说清楚前不会替你猜。
           </p>
         ) : (
-          <>
+          <div className="ap-outdoor-plan-actions">
           <button
             type="button"
             className="btn-primary"
@@ -550,16 +550,19 @@ export function OutdoorWorkflowCard({
                 ? "生成分区预览"
                 : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
           </button>
+          {/* 2026-11-18 用户：这颗是白底无描边的次要动作，渲染出来跟一行普通文字一样，
+              看着根本不像能点。补上发丝边（btn-outline）并与主按钮同高、同一行并排。 */}
           {flow.state.stage === "scope" && (
             <button
               type="button"
+              className="btn-outline"
               disabled={flow.busy}
               onClick={() => flow.manualBoundary()}
             >
               在地图上手画活动范围
             </button>
           )}
-        </>
+          </div>
         )
       ) : null}
       {!flow.proposal &&
