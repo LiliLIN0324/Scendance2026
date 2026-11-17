@@ -1820,6 +1820,9 @@ body.sc-panel-dragging * {
 }
 .sc-workbench .sc-tool-column [data-tip]:hover::after,
 .sc-workbench .sc-tool-column [data-tip]:focus-visible::after { opacity: 1; }
+/* 罗盘提示挂在不旋转的 .gm-rose 上，避免跟着针一起转。 */
+.sc-workbench .sc-tool-column .gm-rose[data-tip]:focus-within::after { opacity: 1; }
+.sc-workbench .sc-tool-column .gm-rose.is-dragging[data-tip]::after { opacity: 0; }
 /* 底部工具条是横向排列：提示必须放到钮上方，不能沿用右轨的左侧浮层，
    否则会盖住旁边的撤销/重做等图标（用户实测反馈）。 */
 .sc-workbench .sc-tool-column .oc-dock [data-tip]::after {
@@ -2037,6 +2040,8 @@ body.sc-panel-dragging * {
 .sc-canvas-stage.is-chrome-hidden [data-testid="outdoor-map-picker-panel"] { display: none !important; }
 .sc-workspace.is-chrome-hidden .sc-plan-place-search { display: none !important; }
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br button:not(#tool-opacity) { display: none; }
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-compass-wrap,
+.sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .gm-rose { display: none !important; }
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-zoom,
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-zoom,
 .sc-canvas-stage.is-chrome-hidden .oc-cluster.oc-br .oc-gm-divider { display: none !important; }
@@ -2199,6 +2204,42 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass .oc-gm-compass-canvas {
   display: block; width: var(--oc-gm-compass); height: var(--oc-gm-compass);
 }
+
+/* 圆形罗盘盖住原来的指北针按钮：针和两侧弯箭头在同一层里随方位旋转。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-compass-wrap.is-gm-rose > #tool-compass {
+  position: absolute; width: 1px; height: 1px; min-width: 0; min-height: 0;
+  margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); opacity: 0;
+  pointer-events: none; border: 0; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose {
+  position: absolute; inset: 0; z-index: 2; border-radius: 50%; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(20, 20, 22, .28), 0 2px 8px rgba(20, 20, 22, .18);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-spin {
+  position: absolute; inset: 0; transform-origin: 50% 50%;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-art {
+  display: block; width: 100%; height: 100%; pointer-events: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face {
+  position: absolute; width: auto; height: auto; min-width: 0; min-height: 0;
+  padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: transparent;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face:hover {
+  background: transparent; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn {
+  top: 8px; bottom: 0; width: 16px; z-index: 2; cursor: pointer;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-left { left: 0; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-right { right: 0; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face {
+  inset: 0; z-index: 1; border-radius: 50%; cursor: pointer; touch-action: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose.is-dragging button.gm-rose-face { cursor: grabbing; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass:hover {
   background: #2b2c2f;
   box-shadow: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);
