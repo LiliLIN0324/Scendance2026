@@ -111,6 +111,12 @@ function entityDetail(row: PlanInventoryRow, plan: SitePlanData): { areaM2?: num
       if (!vehicle) return {};
       return { notes: vehicle.notes };
     }
+    // 测量行：数值走 metric 列（距离/面积），备注列带原始备注（此前被漏掉）。
+    case 'measurement': {
+      const measurement = (plan.measurements ?? []).find(m => m.id === row.id);
+      if (!measurement) return {};
+      return { notes: measurement.notes };
+    }
     // 2026-11-11 用户指令：标注行导出备注列带文本内容（形状行只有 notes）。
     case 'annotation': {
       const annotation = (plan.annotations ?? []).find(a => a.id === row.id);
