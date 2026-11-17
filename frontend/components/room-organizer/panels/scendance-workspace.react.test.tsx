@@ -12,6 +12,8 @@ import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { loadScenePreset } from '../three/scene-presets';
 import { createVenueFromPick } from '../lib/amap-venue';
+import { readPlanGroundMode, readPlanGroundSource, writePlanGroundMode, writePlanGroundSource } from '../lib/plan-basemap-source';
+import { pinMapSource, readMapSlots, resetMapSlotsCacheForTest } from '../lib/map-source-slots';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
 import type { OnlineModel } from '../lib/online-models';
 import type { CatalogItem } from '../lib/types';
@@ -657,6 +659,59 @@ describe('ScendanceViewTools satellite ground', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /这一层暂时拉不到/ })).toBeTruthy());
     const images = values.actions.applyLayout.mock.calls.map(call => (call[0] as typeof layout).floorPlanImage);
     expect(images.every(url => url === image)).toBe(true);
+  });
+});
+
+describe('ScendanceViewTools 地图切换四槽位', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetMapSlotsCacheForTest();
+    writePlanGroundSource('amap-streets');
+    writePlanGroundMode('map');
+  });
+
+  it('四个快捷位与 2D 面板共用 map-source-slots：2D 置顶后 3D 菜单立刻同步', () => {
+    render(<Providers values={contexts()}><ScendanceViewTools onZoom={vi.fn()} geoGroundActive /></Providers>);
+    fireEvent.click(document.getElementById('tool-ground-source')!);
+
+    const list = screen.getByRole('listbox', { name: '地理瓦片图源' });
+    expect(within(list).getAllByRole('option')).toHaveLength(4);
+    expect(screen.getByTestId('ground-slot-satellite').textContent).toContain('高德卫星');
+    expect(screen.getByTestId('ground-slot-streets').textContent).toContain('高德街道');
+    expect(screen.getByTestId('ground-slot-tone').textContent).toContain('Carto 浅色');
+    expect(screen.getByTestId('ground-slot-none').textContent).toContain('无');
+
+    // 2D 面板那边置顶 Carto 深色（同一个 store）→ 三维「单色」行当场换成深色。
+    act(() => {
+      pinMapSource('carto-dark');
+    });
+    expect(readMapSlots().tone).toBe('carto-dark');
+    expect(screen.getByTestId('ground-slot-tone').textContent).toContain('Carto 深色');
+
+    // 点格子真正换底面：写图源 + 地图形态（从纸面回来也认）。
+    fireEvent.click(screen.getByTestId('ground-slot-tone'));
+    expect(readPlanGroundSource()).toBe('carto-dark');
+    expect(readPlanGroundMode()).toBe('map');
+
+    // 「无」= 纸面：不铺瓦片，与 2D 面板的「无」同一份偏好。
+    fireEvent.click(document.getElementById('tool-ground-source')!);
+    fireEvent.click(screen.getByTestId('ground-slot-none'));
+    expect(readPlanGroundMode()).toBe('paper');
+    // 纸面态下触发钮标题改成「纸面（无底图）」，不再冒充某个图源。
+    expect(document.getElementById('tool-ground-source')!.getAttribute('aria-label')).toContain('纸面（无底图）');
+  });
+
+  it('槽位里置顶了天地图（2D 专用）时，三维回落到该格缺省并明说', () => {
+    act(() => {
+      pinMapSource('img');
+    });
+    render(<Providers values={contexts()}><ScendanceViewTools onZoom={vi.fn()} geoGroundActive /></Providers>);
+    fireEvent.click(document.getElementById('tool-ground-source')!);
+    const row = screen.getByTestId('ground-slot-satellite');
+    expect(row.textContent).toContain('高德卫星');
+    expect(row.textContent).toContain('三维用缺省');
+    fireEvent.click(row);
+    expect(readPlanGroundSource()).toBe('amap-satellite');
   });
 });
 

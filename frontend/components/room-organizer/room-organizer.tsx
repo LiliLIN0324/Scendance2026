@@ -187,6 +187,7 @@ import {
   type MapGroundFrame,
 } from './lib/amap-venue';
 import { capturePlanGround, type PlanGroundSource } from './lib/plan-ground-capture';
+import { sourceForLocation } from './lib/basemap-alignment';
 import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, subscribePlanGroundSource } from './lib/plan-basemap-source';
 import { planCatalogDragFor, planCatalogDragForScenePreset } from './lib/plan-catalog-drag';
 import type { ScenePresetKey } from './lib/scene-presets';
@@ -1734,8 +1735,9 @@ useEffect(() => {
     const boundary = plan.boundary;
     if (!anchor || boundary.length < 3) return;
     if (typeof document === 'undefined') return;
-    // 三维贴地只支持公开源（OSM/Carto）——与 2D 画布同源、与 plan-ground-capture 的口径一致。
-    const source = readPlanGroundSource();
+    // 三维贴地只支持公开源（OSM/Carto/高德/全球卫星）——与 2D 画布同源、与 plan-ground-capture 的口径一致。
+    // 境外场地：高德档只会拼出一张灰图/白底，这里按锚点换全球卫星源（境内原样）。
+    const source = sourceForLocation(readPlanGroundSource(), anchor.lng, anchor.lat);
     const urlFor = (src: PlanGroundSource, z: number, x: number, y: number) => publicSourceTileUrl(src, z, x, y);
     // 边界是 ENU 局部米（x 东、y 北，原点在锚点）。换算回经纬度多边形定贴地帧。
     const mLng = metersPerDegreeLng(anchor.lat);
@@ -1849,7 +1851,13 @@ useEffect(() => {
     return () => window.clearTimeout(timer);
   }, [outdoorPlan, outdoor3dWarm]);
   // GeoGround 瓦片地面（2026-11-12）与户外 2D 同一份图源偏好；署名随源切换。
-  const geoGroundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
+  const geoGroundSourceRaw = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
+  // 2026-11-17：署名/图源必须报「实际用的那张图」。境外场地高德换全球卫星，
+  // 否则右下角会挂着 © 高德地图 的错名（署名写错比不写更糟）。
+  const geoGroundAnchor = outdoorPlan?.anchor ?? layout.sceneAnchor ?? null;
+  const geoGroundSource = geoGroundAnchor
+    ? sourceForLocation(geoGroundSourceRaw, geoGroundAnchor.lng, geoGroundAnchor.lat)
+    : geoGroundSourceRaw;
   // docs/46 V-P1：地面形态（纸面=虚拟场地）也走同一族偏好，接管态 3D 据此落纸面地面。
   const groundMode = useSyncExternalStore(subscribePlanGroundMode, readPlanGroundMode, () => 'map' as const);
   // 左下「比例尺+指北针+署名」簇的 DOM refs（与户外 3D 同款组件，下方 effect 驱动更新）。

@@ -3,6 +3,8 @@ import type { RoomLayout, SceneAnchor } from './types';
 import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from './amap-script';
 import { capturePlanGround, type PlanGroundSource } from './plan-ground-capture';
+import { GLOBAL_SATELLITE_SOURCE } from './basemap-alignment';
+import { isInGcjOffsetRegion } from './geo-coords';
 import { publicSourceTileUrl } from './tdt-probe';
 import { RECON_MATERIAL_BAN } from './site-recon-mock';
 
@@ -616,10 +618,24 @@ export function isPlaceholderSatellite(url: string | undefined | null): boolean 
   return !!url && url.startsWith('data:image/svg') && isMapReferenceImage(url);
 }
 
-/** 已经有可贴地的地图图（代理或位图），占位 SVG 不算。生产上的 127.0.0.1 地址不算，否则会一直纯色。 */
+/**
+ * 高德静态代理图（/api/amap-static 或本机 3199 同径），且范围中心在境外。
+ * 境外高德只会回同一张「此区域无卫星图」灰图（2026-11-17 实测四地同 MD5），
+ * 这张图不能算「已拉到的真图」——否则永不重拉，地面一直灰着。补图时上层会改走全球卫星源。
+ */
+export function isOverseasAmapStaticUrl(url: string | undefined | null): boolean {
+  if (!url || !/\/amap-static\?/.test(url)) return false;
+  const bounds = parseSatelliteImageBounds(url);
+  if (!bounds) return false;
+  return !isInGcjOffsetRegion((bounds.west + bounds.east) / 2, (bounds.south + bounds.north) / 2);
+}
+
+/** 已经有可贴地的地图图（代理或位图），占位 SVG 不算。生产上的 127.0.0.1 地址不算，否则会一直纯色。
+ *  境外的高德静态灰图也不算（见 isOverseasAmapStaticUrl）。 */
 export function hasFetchedSatellite(url: string | undefined | null): boolean {
   if (!isMapReferenceImage(url) || isPlaceholderSatellite(url)) return false;
   if (!usesLocalAmapProxy() && !!url && (url.includes('127.0.0.1:3199') || url.includes('localhost:3199'))) return false;
+  if (isOverseasAmapStaticUrl(url)) return false;
   return true;
 }
 
@@ -726,6 +742,13 @@ export interface SatelliteGroundPatch {
 export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 8): Promise<SatelliteGroundPatch | null> {
   const polygon = await resolveSatellitePolygon(layout);
   const located = polygon && polygon.length >= 3 ? polygon : null;
+  // 2026-11-17 境外场地：高德静态图在境外只会拼出「此区域无卫星图」灰图（巴黎/伦敦/洛杉矶/
+  // Victoria 四地同一张 4235 B 占位图），这里直接改走全球卫星源（Esri World Imagery）的自绘拼图；
+  // 拼不到再落到底下的占位 SVG，不要把灰图当成功贴上去。
+  if (located && !isInGcjOffsetRegion(centroid(located).lng, centroid(located).lat)) {
+    const global = await ensurePlanGround(layout, GLOBAL_SATELLITE_SOURCE);
+    if (global) return global;
+  }
   if (located) {
     const registration = groundRegistration(located);
     const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;

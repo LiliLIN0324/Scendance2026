@@ -16,15 +16,15 @@
  */
 
 import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
+import { axisToScreen, screenToAxis } from './outdoor-canvas-rotation';
+import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { planZoneFillAlpha, defaultZoneColor } from './site-plan-editing';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
-import type { PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
-import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
-import { axisToScreen, screenToAxis } from './outdoor-canvas-rotation';
 import type { PlanSceneObject } from './plan-item-bridge';
 import type { PlanAnnotation, PlanFacility, PlanNode, PlanPoint, PlanRoute, PlanZone } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
 
 /** 图层栈从底到顶的绘制顺序（底图由画布组件先铺，业务层依此序叠加；测量/自由标注在最上层）。 */
 export const PLAN_LAYER_STACK: readonly PlanningLayerKind[] = [
@@ -1318,6 +1318,12 @@ export function drawRouteLayer(
 }
 
 /**
+ * 漫游态环色（B3）：已进区 = 青，已落座 = 琥珀。与岗位色分开：岗位色说「他是谁」，
+ * 环说「他此刻在干什么」，两者不能抢同一个通道。浅图/深图都看得见。
+ */
+export const WORKER_ROAM_COLORS = { zone: '#1f9d8f', seated: '#d0872a' } as const;
+
+/**
  * 人员：圆形点位 + 角色名与数量标注，人员色；选中画白圈（H2-d）。
  * warning 为 true 时改红描边（点位越界警示，数据本身保留）。
  *
@@ -1328,7 +1334,7 @@ export function drawRouteLayer(
  */
 export function drawWorkerLayer(
   c: PlanCanvasContext,
-  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean; /** 调用方已画岗位图标芯片：不再画圆点。 */ chip?: boolean; /** 2026-11-12 活动包点位：契约 planWorkerSchema.color，缺省取 tokens 人员色。 */ color?: string | undefined }[],
+  workers: readonly { id?: string; position: PlanPoint; count: number; role: string; selected?: boolean; warning?: boolean; /** 调用方已画岗位图标芯片：不再画圆点。 */ chip?: boolean; /** 2026-11-12 活动包点位：契约 planWorkerSchema.color，缺省取 tokens 人员色。 */ color?: string | undefined; /** B3：3D 漫游态（进区 / 落座），walking 与缺省都不画状态环。 */ state?: 'walking' | 'zone' | 'seated' | undefined }[],
   opts: { tone?: PlanBasemapTone } = {},
 ): void {
   const { ctx, viewport } = c;
@@ -1358,6 +1364,14 @@ export function drawWorkerLayer(
       ctx.arc(pt.x, pt.y, w.chip ? chipRadius + 3.5 : 8.5, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+    // B3：漫游态环画在最外圈（比选中白圈再外 1 px），三个环不互相遮。
+    if (w.state === 'zone' || w.state === 'seated') {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, w.chip ? chipRadius + 4.5 : 10, 0, Math.PI * 2);
+      ctx.strokeStyle = WORKER_ROAM_COLORS[w.state];
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
     // 2026-11-16 用户：「图标细分之后就不需要在地图上显示名字了」——岗位名交给图标本身，
@@ -1487,7 +1501,14 @@ export function drawAccessLayer(
 
 /**
  * 顶点收集草稿：虚线折线 + 顶点方块；≥3 点时首点画闭合热区圆圈提示。
- * draftInvalid 为 true 时整条草稿画红色（当前形状自交/重合，用户能立刻看到）。
+ *
+ * 2026-11-17 用户「画红线时草稿是绿的，压在卫星图上看不清，应该改成红色虚线」：
+ * 草稿颜色一律由调用方给，画用地红线时直接用地界红（`PLANNING_BOUNDARY_LINE_COLOR`）——
+ * 绿线在影像上和植被、分区同族，永远争不到层级；虚线只承担「还没落笔」这一层语义。
+ *
+ * 随之而来的坑：草稿本来就红了，`draftInvalid` 再“转红”等于没信号。
+ * 所以非法形状（自交/重合）改成**加重一档 + 收密虚线**：线比正常草稿粗一圈、节奏更急，
+ * 压在正常红虚线上也一眼分得出这圈圈不成。
  */
 export function drawDraftLayer(
   c: PlanCanvasContext,
@@ -1497,12 +1518,15 @@ export function drawDraftLayer(
 ): void {
   if (draft.length === 0) return;
   const { ctx, viewport } = c;
-  const stroke = opts.draftInvalid ? '#c0392b' : color;
+  const invalid = opts.draftInvalid === true;
+  const stroke = invalid ? PLANNING_CONFLICT_COLORS.conflict : color;
+  const lineWidth = invalid ? 3.4 : 2;
+  const dash: [number, number] = invalid ? [5, 4] : [8, 5];
   if (draft.length >= 2) {
     ctx.save();
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 5]);
+    ctx.lineWidth = lineWidth;
+    ctx.setLineDash(dash);
     tracePolyline(c, draft);
     if (draft.length >= 3) ctx.closePath();
     ctx.stroke();

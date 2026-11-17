@@ -108,7 +108,12 @@ import {
   proposeShorelineLayout,
   shorelineIntent,
 } from "../lib/outdoor-shoreline-layout";
-import { isShorelineEvent } from "../lib/outdoor-event-logic";
+import {
+  parseRouteLineDemand,
+  proposeRouteLineLayout,
+  referenceKindFor,
+  routeLineIntent,
+} from "../lib/outdoor-route-line-layout";
 import { facilityFootprintRing } from "../lib/site-plan-facilities";
 import { renamedNodeName } from "../lib/site-plan-node-names";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
@@ -1093,9 +1098,14 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       // 2026-11-17 用户实测「就沿着水岸线」→ 被反問「北/东/南/西」，而画布上河就在那儿。
-      // 水体/水道已进快照（openfreemap-water），沿岸意图的追问不再问方位：
-      // 沿真实岸线直接出预览；真没有水系/界外才给可执行的下一步。ask 与非 ask 共用 shorelineTurn。
-      if (shorelineIntent(message) && (await shorelineTurn(message, continueDesign, null))) return;
+      // 水体/水道与道路折线都已进快照，沿岸/沿线措辞的追问不再问方位：
+      // 沿真实参照直接出预览；真没有参照/界外才给可执行的下一步。ask 与非 ask 共用 referencePreview。
+      const askReference = shorelineIntent(message)
+        ? "shoreline"
+        : routeLineIntent(message)
+          ? "route-line"
+          : null;
+      if (askReference && (await referencePreview(askReference, message, continueDesign, null))) return;
       // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
       // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
       askForDetails(turn.reply || "请补充当前活动需求；没有修改规划。");
@@ -1707,12 +1717,80 @@ export function useOutdoorAgentWorkflow(input: {
     } as OutdoorTurn;
   }
 
+  type ReferencePreviewResult =
+    | { ok: true; next: SitePlanData; label: string; warnings: string[]; designStepText: string }
+    | { ok: false; message: string };
+
+  /** 沿岸（水岸线参照）预览构建：钓位贴岸、观众区退让、签到裁判席。 */
+  function shorelinePreviewBuild(plan: SitePlanData, message: string): ReferencePreviewResult {
+    const proposal = proposeShorelineLayout(
+      {
+        shorelines: mapRef.current.water?.() ?? [],
+        boundary: plan.boundary,
+        demand: parseShorelineDemand(message),
+        obstacles: plan.facilities.map(facilityFootprintRing),
+        exclusions: plan.zones.map(zone => zone.polygon),
+      },
+      () => crypto.randomUUID(),
+    );
+    if (!proposal.ok) return { ok: false, message: proposal.message };
+    const { layout } = proposal;
+    return {
+      ok: true,
+      next: {
+        ...plan,
+        zones: [...plan.zones, ...layout.zones],
+        facilities: [...plan.facilities, ...layout.facilities],
+        routes: [...plan.routes, ...layout.routes],
+        nodes: [...plan.nodes, ...layout.nodes],
+      },
+      label: `沿岸排布·${layout.summary.waterName}（${layout.summary.stations} 个钓位）`,
+      warnings: layout.summary.warnings,
+      designStepText: `沿真实岸线 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个钓位；本版只出预览，未写入画布。`,
+    };
+  }
+
+  /** 沿线（巡游/赛道线参照）预览构建：补给站贴线、起终点区、拱门节点；地图参照补赛事中心线。 */
+  function routeLinePreviewBuild(plan: SitePlanData, message: string): ReferencePreviewResult {
+    const proposal = proposeRouteLineLayout(
+      {
+        lines: [
+          ...(mapRef.current.roadLines?.() ?? []),
+          ...plan.routes
+            .filter(route => route.kind === "pedestrian")
+            .map(route => ({ id: route.id, name: route.name, points: route.points, widthM: route.widthM ?? 3 })),
+        ],
+        boundary: plan.boundary,
+        demand: parseRouteLineDemand(message),
+        obstacles: plan.facilities.map(facilityFootprintRing),
+        exclusions: plan.zones.map(zone => zone.polygon),
+      },
+      () => crypto.randomUUID(),
+    );
+    if (!proposal.ok) return { ok: false, message: proposal.message };
+    const { layout } = proposal;
+    return {
+      ok: true,
+      next: {
+        ...plan,
+        zones: [...plan.zones, ...layout.zones],
+        facilities: [...plan.facilities, ...layout.facilities],
+        routes: [...plan.routes, ...layout.routes],
+        nodes: [...plan.nodes, ...layout.nodes],
+      },
+      label: `沿线排布·${layout.summary.lineName}（${layout.summary.stations} 个补给站）`,
+      warnings: layout.summary.warnings,
+      designStepText: `沿线路 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个补给站；本版只出预览，未写入画布。`,
+    };
+  }
+
   /**
-   * 2026-11-17：沿岸排布的确定性接管——ask 与 zones/objects/revise 共用一条路径。
-   * 返回 true = 本轮已按沿岸处理（出预览/给下一步/亮失败），调用方直接 return；
+   * 2026-11-17：参照排布（沿岸/沿线）的确定性接管——ask 与 zones/objects/revise 共用一条路径。
+   * 返回 true = 本轮已按参照排布处理（出预览/给下一步/亮失败），调用方直接 return；
    * 返回 false = 没接管（画布未就绪），调用方落回原路径。
    */
-  async function shorelineTurn(
+  async function referencePreview(
+    kind: "shoreline" | "route-line",
     message: string,
     continueDesign: boolean,
     existingJob?: { epoch: number; controller: AbortController; scope: string } | null,
@@ -1721,43 +1799,23 @@ export function useOutdoorAgentWorkflow(input: {
     const before = JSON.stringify(callbacks.current.bridge()?.getPlan());
     try {
       await mapContext(job.controller.signal);
-      const shorePlan = callbacks.current.bridge()?.getPlan();
+      const referencePlan = callbacks.current.bridge()?.getPlan();
       if (!live(job)) return true;
-      if (!shorePlan) return false;
-      if (JSON.stringify(shorePlan) !== before) {
+      if (!referencePlan) return false;
+      if (JSON.stringify(referencePlan) !== before) {
         status("读取期间画布已变化，请基于当前规划重新预览。", "blocked");
         return true;
       }
-      const shoreline = proposeShorelineLayout(
-        {
-          shorelines: mapRef.current.water?.() ?? [],
-          boundary: shorePlan.boundary,
-          demand: parseShorelineDemand(message),
-          obstacles: shorePlan.facilities.map(facilityFootprintRing),
-          exclusions: shorePlan.zones.map(zone => zone.polygon),
-        },
-        () => crypto.randomUUID(),
-      );
-      if (shoreline.ok) {
-        const { layout } = shoreline;
-        designStep(
-          `沿真实岸线 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个钓位；本版只出预览，未写入画布。`,
-        );
-        offer(
-          {
-            ...shorePlan,
-            zones: [...shorePlan.zones, ...layout.zones],
-            facilities: [...shorePlan.facilities, ...layout.facilities],
-            routes: [...shorePlan.routes, ...layout.routes],
-          },
-          "objects",
-          `沿岸排布·${layout.summary.waterName}（${layout.summary.stations} 个钓位）`,
-          job,
-          layout.summary.warnings,
-        );
+      const result =
+        kind === "shoreline"
+          ? shorelinePreviewBuild(referencePlan, message)
+          : routeLinePreviewBuild(referencePlan, message);
+      if (result.ok) {
+        designStep(result.designStepText);
+        offer(result.next, "objects", result.label, job, result.warnings);
         return true;
       }
-      askForDetails(shoreline.message);
+      askForDetails(result.message);
       return true;
     } catch (error) {
       // 取消就静默结束；真失败（如校验拦截）如实亮出原因，不回退到「问方位」。
@@ -1765,7 +1823,7 @@ export function useOutdoorAgentWorkflow(input: {
       status(
         error instanceof Error
           ? error.message
-          : "沿岸排布未完成；请在地图上确认水岸位置后重试。",
+          : "参照排布未完成；请在地图上确认参照位置后重试。",
         "blocked",
       );
       return true;
@@ -1958,16 +2016,16 @@ export function useOutdoorAgentWorkflow(input: {
         await confirm();
         return true;
       }
-      // 2026-11-17 用户拍板：沿岸活动（钓鱼比赛等）模型不回 ask、直接给设计动作时，
-      // 跳过通用计划批准闸门直接沿岸出预览（预览本身就是确认环节）；范围未确认则落回通用流程先确认范围。
+      // 2026-11-17 用户拍板：沿岸（钓鱼）与沿线（巡游、马拉松）参照类活动，模型不回 ask、
+      // 直接给设计动作时跳过通用计划批准闸门直接出参照预览（预览本身就是确认环节）；
+      // 范围未确认则落回通用流程先确认范围。
+      const referenceKind = referenceKindFor(message, stateRef.current.brief.event);
       if (
+        referenceKind &&
         (turn.action === "zones" || turn.action === "objects" || turn.action === "revise") &&
-        stateRef.current.confirmedBoundary === boundaryKey(plan) &&
-        (shorelineIntent(message) ||
-          isShorelineEvent(message) ||
-          isShorelineEvent(stateRef.current.brief.event))
+        stateRef.current.confirmedBoundary === boundaryKey(plan)
       ) {
-        if (await shorelineTurn(message, true, job)) return true;
+        if (await referencePreview(referenceKind, message, true, job)) return true;
       }
       const steps = outdoorPlanSteps[turn.action];
       if (steps) {
