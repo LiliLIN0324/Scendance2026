@@ -12,6 +12,7 @@
 
 import type { CaseAssessment } from './outdoor-acceptance-selfcheck';
 import { summarizeAssessment } from './outdoor-acceptance-selfcheck';
+import { gateFactsForCard, type GateReading } from './outdoor-gate-reading';
 import type { MetricsSummary } from './outdoor-metrics-book';
 
 export interface GateFacts {
@@ -27,6 +28,8 @@ export interface ReleaseStatusInput {
   rows: readonly CaseAssessment[];
   metrics: MetricsSummary;
   gate?: GateFacts;
+  /** 门禁读数（`readGates` 的结果）：给了就用它算门禁行，并把读数行附在下面。 */
+  reading?: GateReading;
   /** 三类全绿的用例数（由人填；缺省 0）。 */
   allGreen?: number;
 }
@@ -75,7 +78,7 @@ function gateCell(value: boolean | undefined): string {
 
 export function formatReleaseStatusCard(input: ReleaseStatusInput): string {
   const totals = summarizeAssessment(input.rows);
-  const gate = input.gate ?? {};
+  const gate = input.reading ? gateFactsForCard(input.reading) : (input.gate ?? {});
   const allGreen = input.allGreen ?? 0;
   const gateReady = gate.typecheck === true && gate.tests === true && gate.build === true;
   const ids = input.rows.map((row) => row.id);
@@ -87,6 +90,7 @@ export function formatReleaseStatusCard(input: ReleaseStatusInput): string {
     `· 浏览器证据（${EVIDENCE_AS_OF}）：有部分 ${withEvidence.length} 条（${withEvidence.map((id) => `#${id}`).join(' ')}）/ 无证据 ${withoutEvidence.length} 条（${withoutEvidence.map((id) => `#${id}`).join(' ')}）`,
     `· 指标：${input.metrics.text}`,
     `· 门禁：类型 ${gateCell(gate.typecheck)} / 用例 ${gateCell(gate.tests)} / 构建 ${gateCell(gate.build)}（${gateReady ? '门禁就绪' : '门禁未齐'}）`,
+    ...(input.reading ? [`· 读数：${input.reading.line}`] : []),
     `· 结论：不可发布（三类全绿 ${allGreen} 条）`,
   ].join('\n');
 }

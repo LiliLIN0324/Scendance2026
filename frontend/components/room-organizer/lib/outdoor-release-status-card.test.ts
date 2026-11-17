@@ -122,6 +122,41 @@ describe('formatReleaseStatusCard', () => {
 });
 
 describe('门禁读数接进状态卡', () => {
+  const realTests = '\n Test Files  56 passed (56)\n      Tests  645 passed (645)\n';
+
+  it('直接给 reading：门禁行由它算，并多一行读数原文', () => {
+    const reading = readGates({ types: '', tests: realTests, build: { exitCode: 0 } });
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      reading,
+    });
+    expect(card).toContain('· 门禁：类型 通过 / 用例 通过 / 构建 通过（门禁就绪）');
+    expect(card).toContain(
+      '· 读数：门禁：类型 过 / 用例 过 / 构建 过（三项门禁都绿，不等于可发布）',
+    );
+    expect(card).toContain('· 结论：不可发布');
+  });
+
+  it('reading 与手填 gate 同时给时，以 reading 为准', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      gate: { typecheck: true, tests: true, build: true },
+      reading: readGates({ tests: realTests }),
+    });
+    expect(card).toContain('类型 未验 / 用例 通过 / 构建 未验（门禁未齐）');
+  });
+
+  it('不给 reading 时不多出读数行（旧调用方式不变）', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+    });
+    expect(card).not.toContain('· 读数：');
+    expect(card).toContain('门禁未齐');
+  });
+
   it('三项读数都过：卡里写“门禁就绪”，但结论仍是不可发布', () => {
     const reading = readGates({
       types: '',
