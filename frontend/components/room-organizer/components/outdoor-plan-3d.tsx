@@ -114,7 +114,7 @@ import type { FurnitureItem } from '@/components/room-organizer/lib/types';
 import { OUTDOOR_WALK_CANVAS_ID } from '@/components/room-organizer/lib/walk-engage';
 import { clearPlanFacilityDrag, getPlanFacilityDrag } from '@/components/room-organizer/lib/plan-facility-drag';
 import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/plan-catalog-drag';
-import { SCOPE_FROST_BLUR_PX, SCOPE_FROST_VEIL, scopeFrostClipPath } from '@/components/room-organizer/lib/outdoor-scope-frost';
+import { SCOPE_FROST_BLUR_PX, SCOPE_FROST_VEIL, drawScopeFrost } from '@/components/room-organizer/lib/outdoor-scope-frost';
 
 /** 没锚点的场地（纯纸面规划）用的地面底色。 */
 const PAPER_GROUND = '#efece4';
@@ -414,7 +414,8 @@ export default function OutdoorPlan3D({
   const scaleBarRef = useRef<HTMLDivElement | null>(null);
   const scaleLabelRef = useRef<HTMLSpanElement | null>(null);
   /** 3D 框外毛玻璃层（backdrop-filter + clip-path 挖洞）。 */
-  const frostRef = useRef<HTMLDivElement | null>(null);
+  /** 3D 框外毛玻璃层：叠在 WebGL 上面的透明 canvas（只在框外糊底图）。 */
+  const frostRef = useRef<HTMLCanvasElement | null>(null);
   /** 设计范围环的最新点位：镜头每帧动，环只在 plan 变时换。 */
   const scopeRingRef = useRef<readonly PlanPoint[]>([]);
   const lineMaterialsRef = useRef<{ resolution: THREE.Vector2 }[]>([]);
@@ -2004,42 +2005,83 @@ export default function OutdoorPlan3D({
     renderer.domElement.addEventListener('dblclick', onDblClick);
 
     /**
-     * 2026-11-17 用户「3D 白框外没有模糊」：把设计范围环投影成 CSS clip-path，
-     * 框外那圈就能吃到 `backdrop-filter: blur()`——与 2D `drawDesignScopeMask` 的
-     * blur(7px) + 白纱同一套语义（都是屏幕空间，所以两个视图看起来是一回事）。
-     * 环在镜头后面时投影会翻面，宁可整层藏掉，也不要把框内糊掉。
+     * 2026-11-17 用户「3D 白框外没有模糊」→（同日回修）「为什么给我设计场地里面都加模糊了」。
+     *
+     * 第一版是「`backdrop-filter: blur()` 面 + `clip-path` 挖洞」：实测 Chromium 157 的
+     * `backdrop-filter` 根本不认 `clip-path`（连只裁一个三角形都不生效），模糊直接铺满整层，
+     * 设计范围里面也一起糊了。现在与 2D `drawDesignScopeMask` 同一套：这一帧渲染完，
+     * 把画面按 evenodd 只在框外重画一遍（`ctx.filter = blur(7px)`）再压薄白纱，
+     * 画进叠在 WebGL 上的透明 canvas——框内像素完全没被碰过。
+     *
+     * 环在镜头后面时投影会翻面：宁可整层藏掉，也不要把框内糊掉。
      */
     const frostProbe = new THREE.Vector3();
-    let lastFrostClip = '';
+    let lastFrostKey = Number.NaN;
+    let lastFrostAt = 0;
+
+    /** 相机 / 尺寸 / 范围都没变就别重画：毛玻璃是纯屏幕空间复算，每帧糊一遍太贵。 */
+    function frostSignature(ring: readonly PlanPoint[], width: number, height: number): number {
+      let hash = (ring.length * 131 + width * 7 + height * 3) | 0;
+      // 逐元素哈希，不展开成临时数组：这个函数每帧都要跑，别给 GC 添活。
+      const world = camera.matrixWorld.elements;
+      const projection = camera.projectionMatrix.elements;
+      for (let index = 0; index < 16; index += 1) hash = (hash * 31 + Math.round(world[index]! * 1e4)) | 0;
+      for (let index = 0; index < 16; index += 1) hash = (hash * 31 + Math.round(projection[index]! * 1e4)) | 0;
+      for (const point of ring) hash = (hash * 31 + Math.round(point.x * 100) + Math.round(point.y * 100)) | 0;
+      return hash;
+    }
+
+    function hideScopeFrost(element: HTMLCanvasElement): void {
+      if (element.style.display !== 'none') element.style.display = 'none';
+      // 下次要露出来时无条件重画，别拿旧快照顶。
+      lastFrostKey = Number.NaN;
+    }
+
     function updateScopeFrost(): void {
       const element = frostRef.current;
-      if (!element) return;
+      const activeRenderer = renderer;
       const ring = scopeRingRef.current;
       const width = stage?.clientWidth ?? 0;
       const height = stage?.clientHeight ?? 0;
-      let clip: string | null = null;
-      if (camera && ring.length >= 3 && width > 0 && height > 0) {
-        const screen: { x: number; y: number }[] = [];
-        let inFront = true;
-        for (const point of ring) {
-          // 世界坐标与 footprint 同一口径：three.x = plan.x、three.z = -plan.y。
-          frostProbe.set(point.x, 0.05, -point.y).applyMatrix4(camera.matrixWorldInverse);
-          if (frostProbe.z > -0.4) {
-            inFront = false;
-            break;
-          }
-          const ndc = frostProbe.applyMatrix4(camera.projectionMatrix);
-          screen.push({ x: (ndc.x * 0.5 + 0.5) * 100, y: (-ndc.y * 0.5 + 0.5) * 100 });
-        }
-        clip = inFront ? scopeFrostClipPath(screen) : null;
+      if (!element) return;
+      if (!activeRenderer || ring.length < 3 || width <= 0 || height <= 0) return hideScopeFrost(element);
+
+      // 变化时按 ~25 fps 追（糊过的画面看不出帧差），静止时 4 Hz 兜底——
+      // 瓦片后到、人物走动都会改底图，框外不能永远停在旧快照上。
+      const now = performance.now();
+      const key = frostSignature(ring, width, height);
+      const changed = key !== lastFrostKey;
+      if (now - lastFrostAt < (changed ? 40 : 250)) return;
+
+      const screen: { x: number; y: number }[] = [];
+      for (const point of ring) {
+        // 世界坐标与 footprint 同一口径：three.x = plan.x、three.z = -plan.y。
+        frostProbe.set(point.x, 0.05, -point.y).applyMatrix4(camera.matrixWorldInverse);
+        if (frostProbe.z > -0.4) return hideScopeFrost(element);
+        const ndc = frostProbe.applyMatrix4(camera.projectionMatrix);
+        screen.push({ x: (ndc.x * 0.5 + 0.5) * width, y: (-ndc.y * 0.5 + 0.5) * height });
       }
-      const display = clip ? 'block' : 'none';
-      if (element.style.display !== display) element.style.display = display;
-      if (clip && clip !== lastFrostClip) {
-        lastFrostClip = clip;
-        element.style.clipPath = clip;
-        element.style.setProperty('-webkit-clip-path', clip);
-      }
+
+      const ratio = Math.min(2, window.devicePixelRatio || 1);
+      const pixelWidth = Math.max(1, Math.round(width * ratio));
+      const pixelHeight = Math.max(1, Math.round(height * ratio));
+      if (element.width !== pixelWidth) element.width = pixelWidth;
+      if (element.height !== pixelHeight) element.height = pixelHeight;
+      const frostCtx = element.getContext('2d');
+      if (!frostCtx) return hideScopeFrost(element);
+      frostCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const painted = drawScopeFrost(frostCtx, {
+        width,
+        height,
+        ring: screen,
+        source: activeRenderer.domElement,
+        blurPx: SCOPE_FROST_BLUR_PX,
+        veil: SCOPE_FROST_VEIL,
+      });
+      if (!painted) return hideScopeFrost(element);
+      if (element.style.display !== 'block') element.style.display = 'block';
+      lastFrostKey = key;
+      lastFrostAt = now;
     }
 
     let idleTick = 0;
@@ -2226,12 +2268,14 @@ export default function OutdoorPlan3D({
         };
       }
       // 点云在场时走预览器的分层绘制（点云当背景层，主场景再叠上去）。
-      updateScopeFrost();
+      // 毛玻璃取的是「这一帧已经画好的画面」，所以必须排在渲染之后。
       if (splatPreview && splatPreview.shownId && renderer) {
         splatPreview.renderFrame(renderer, scene, camera);
+        updateScopeFrost();
         return;
       }
       renderer?.render(scene, camera);
+      updateScopeFrost();
     }
     loop();
 
@@ -2390,10 +2434,12 @@ export default function OutdoorPlan3D({
           还没有用地红线：切回 2D 画一圈，这里就会立起你的场地
         </div>
       )}
-      {/* 2026-11-17 用户「3D 的时候设计白框外并没有添加蒙版」「就是没有模糊」：
-          框外盖一层 backdrop-filter 毛玻璃（7 px，与 2D 同一档），
-          clip-path 逐帧按设计范围投影挖洞，框内保持清晰。 */}
-      <div
+      {/* 2026-11-17 用户「3D 的时候设计白框外并没有添加蒙版」「就是没有模糊」，
+          回修「为什么给我设计场地里面都加模糊了」：
+          这层是叠在 WebGL 上的透明 canvas，逐帧只把框外那块画面糊一遍（7 px，与 2D 同档）
+          再压薄白纱；框内不画任何像素。不用 `backdrop-filter`——Chromium 里它不认
+          `clip-path`，会把整屏一起糊（见 lib/outdoor-scope-frost.ts）。 */}
+      <canvas
         ref={frostRef}
         data-testid="outdoor-scope-frost"
         aria-hidden="true"
@@ -2401,11 +2447,10 @@ export default function OutdoorPlan3D({
           position: 'absolute',
           inset: 0,
           zIndex: 1,
+          width: '100%',
+          height: '100%',
           display: 'none',
           pointerEvents: 'none',
-          backdropFilter: `blur(${SCOPE_FROST_BLUR_PX}px)`,
-          WebkitBackdropFilter: `blur(${SCOPE_FROST_BLUR_PX}px)`,
-          background: SCOPE_FROST_VEIL,
         }}
       />
       <dialog
