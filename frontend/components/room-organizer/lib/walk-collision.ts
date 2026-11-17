@@ -145,7 +145,7 @@ export function buildWalkColliders(
 
 /**
  * Build one rotated-box collider in the OBB convention. Exported so outdoor
- * facility objects can reuse the same footprint math (see `lib/crowd-behavior.ts`)
+ * facility objects can reuse the same footprint math (see `lib/vehicle-follower-profile.ts`)
  * without duplicating the half-extent / axis derivation.
  */
 export function boxCollider(
