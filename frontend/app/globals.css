@@ -2237,9 +2237,66 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-left { left: 0; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-turn.is-right { right: 0; }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose button.gm-rose-face {
-  inset: 0; z-index: 1; border-radius: 50%; cursor: pointer; touch-action: none;
+  inset: 0; z-index: 1; border-radius: 50%; cursor: grab; touch-action: none;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose.is-dragging button.gm-rose-face { cursor: grabbing; }
+
+/* 罗盘悬停触感：整盘略提亮，箭头 / 指针分区变亮。160ms，不放大整盘。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose {
+  transition: box-shadow 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:hover {
+  box-shadow: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-disc {
+  transition: fill 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:hover .gm-rose-disc {
+  fill: #2A2A2A;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left polygon,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right polygon {
+  fill: #B8B8B8;
+  transition: fill 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:hover) .gm-rose-arrow-left path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:hover) .gm-rose-arrow-left polygon {
+  fill: #F1F3F4;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:hover) .gm-rose-arrow-right path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:hover) .gm-rose-arrow-right polygon {
+  fill: #F1F3F4;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:active) .gm-rose-arrow-left path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-left:active) .gm-rose-arrow-left polygon,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:active) .gm-rose-arrow-right path,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-turn.is-right:active) .gm-rose-arrow-right polygon {
+  fill: #E4E4E4;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-n,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-s {
+  transition: fill 160ms ease;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-face:hover) .gm-rose-needle-n {
+  fill: #F04A4A;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose:has(.gm-rose-face:hover) .gm-rose-needle-s {
+  fill: #F1F3F4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-disc,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left path,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-left polygon,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right path,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-arrow-right polygon,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-n,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .gm-rose-needle-s {
+    transition: none;
+  }
+}
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-compass:hover {
   background: #2b2c2f;
   box-shadow: 0 1px 4px rgba(20, 20, 22, .34), 0 3px 10px rgba(20, 20, 22, .22);

@@ -161,3 +161,34 @@ export function installUprightText(ctx: CanvasRenderingContext2D, bearingOf: () 
   ctx.strokeText = wrap(stroke);
   tagged.__gmOn = true;
 }
+
+
+/** 从 from 转到 to，应传给 `orbitByDelta` 的最短增量，范围 (-π, π]。 */
+export function shortestOrbitDelta(from: number, to: number): number {
+  return normalizeBearing(from - to);
+}
+
+/** 转向缓动：先快后慢。 */
+export function easeOutCubic(t: number): number {
+  const x = t <= 0 ? 0 : t >= 1 ? 1 : t;
+  return 1 - (1 - x) ** 3;
+}
+
+export const ROSE_SPIN_MS_MIN = 180;
+export const ROSE_SPIN_MS_MAX = 420;
+export const ROSE_SPIN_MS_90 = 320;
+
+/** 转动动画时长：90° 约 320ms，更小更短，180° 不超过上限。 */
+export function roseSpinDurationMs(deltaRad: number): number {
+  if (!Number.isFinite(deltaRad) || !deltaRad) return 0;
+  const ratio = Math.abs(deltaRad) / (Math.PI / 2);
+  return Math.round(Math.min(
+    ROSE_SPIN_MS_MAX,
+    Math.max(ROSE_SPIN_MS_MIN, ROSE_SPIN_MS_90 * Math.sqrt(ratio)),
+  ));
+}
+
+export function prefersReducedRoseMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}

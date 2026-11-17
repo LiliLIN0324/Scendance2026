@@ -8,9 +8,15 @@ import {
   bearingFromLook,
   bearingSeparation,
   coalesceAnimationFrame,
+  easeOutCubic,
   roseRotationDeg,
+  roseSpinDurationMs,
+  ROSE_SPIN_MS_90,
+  ROSE_SPIN_MS_MAX,
+  ROSE_SPIN_MS_MIN,
   shouldPublishBearing,
   shouldSampleBearing,
+  shortestOrbitDelta,
   tileOverflowPad,
   uprightDelta,
 } from './gm-compass-bearing';
@@ -80,4 +86,19 @@ it('coalesces repeated bearing frames into one callback', () => {
   expect(queued).toHaveLength(1);
   queued[0]!();
   expect(draws).toBe(1);
+});
+
+
+it('picks the short orbit path and eases a quarter turn in about 320ms', () => {
+  expect(shortestOrbitDelta(Math.PI / 2, 0)).toBeCloseTo(Math.PI / 2);
+  expect(shortestOrbitDelta(-Math.PI / 2, 0)).toBeCloseTo(-Math.PI / 2);
+  expect(shortestOrbitDelta(0, 0)).toBeCloseTo(0);
+  expect(Math.abs(shortestOrbitDelta(Math.PI - 0.1, -Math.PI + 0.1))).toBeLessThan(0.3);
+  expect(easeOutCubic(0)).toBe(0);
+  expect(easeOutCubic(1)).toBe(1);
+  expect(easeOutCubic(0.25)).toBeCloseTo(1 - 0.75 ** 3);
+  expect(roseSpinDurationMs(0)).toBe(0);
+  expect(roseSpinDurationMs(COMPASS_STEP)).toBe(ROSE_SPIN_MS_90);
+  expect(roseSpinDurationMs(Math.PI)).toBeLessThanOrEqual(ROSE_SPIN_MS_MAX);
+  expect(roseSpinDurationMs(COMPASS_STEP / 8)).toBe(ROSE_SPIN_MS_MIN);
 });

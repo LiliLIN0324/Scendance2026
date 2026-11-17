@@ -125,13 +125,15 @@ const RoseArt = memo(function RoseArt({
   return (
     <>
       <svg className="gm-rose-art" viewBox="0 0 44 44" aria-hidden="true">
-        <circle cx="22" cy="22" r="21" fill="#1C1C1C" />
-        <TurnArrow />
-        <g transform="translate(44 0) scale(-1 1)">
+        <circle className="gm-rose-disc" cx="22" cy="22" r="21" fill="#1C1C1C" />
+        <g className="gm-rose-arrow-left">
           <TurnArrow />
         </g>
-        <polygon points="22,9.45 26,22 18,22" fill="#DE3B3B" />
-        <polygon points="22,34.55 26,22 18,22" fill="#CCCCCC" />
+        <g className="gm-rose-arrow-right" transform="translate(44 0) scale(-1 1)">
+          <TurnArrow />
+        </g>
+        <polygon className="gm-rose-needle-n" points="22,9.45 26,22 18,22" fill="#DE3B3B" />
+        <polygon className="gm-rose-needle-s" points="22,34.55 26,22 18,22" fill="#CCCCCC" />
       </svg>
       <button
         type="button"
