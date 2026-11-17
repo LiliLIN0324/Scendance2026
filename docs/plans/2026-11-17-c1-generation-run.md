@@ -2,16 +2,27 @@
 
 ## 一句话结论
 
-C1 判定 **BLOCKED**：提交请求被服务端在「建任务之前」的预检挡下（HTTP 503），**没有创建任务、没有 taskid、没有扣费**。
-本轮「提交回执 + unknown 锁 + 不重提」的安全切片在正式站**线上实证通过**：回执落盘、按钮被锁、提示不重试、且只提交了一次。
+**两轮实跑，结论从 BLOCKED 翻到 PASS（任务侧）**：
+
+- 第一轮：提交被服务端预检挡下（HTTP 503），**没有创建任务、没有 taskid、没有扣费** → 判定 BLOCKED。
+- 第二轮（补齐 `GENERATION_MAX_TASK_CENTS=100` 后）：**任务创建成功**，`POST /jobs` → 202，
+  taskid `9b35ebc5-11ab-4e65-81fa-db1633d5e701`、requestId `5e13bdec-c1fd-4d7f-b710-707afcdd8642`，
+  管理端 `requests.reserved_cents = 100`、`budgets.committed_cents = 100`（预留已入账）。
+- **仍未闭合的是「任务推进」**：生产库没装 `pg_cron` / `pg_net`，Vault 里 0 个 secret，
+  `generation-worker` 没有触发器，任务停在 `queued`，`actual_cents` 仍为 NULL —— **实际消耗金额尚不可核对**。
+
+按 C1 口径（任务创建 + taskid 可查 + 扣费可核对）判 **PASS（任务与预留账本）**，
+按「实际扣费金额可核对」判 **BLOCKED（worker 链路）**。两句话都要说清楚，不能只报一半。
+
+本轮「提交回执 + unknown 锁 + 不重提」的安全切片在正式站**线上实证通过**：回执落盘、按钮被锁、提示不重试、且全程只提交了一次（每轮各一次）。
 
 ## 结论分类依据
 
-| 判定 | 条件 | 本次是否满足 |
-| --- | --- | --- |
-| PASS | 任务创建 + taskid 可查 + 扣费可核对 | 否（任务未创建） |
-| BLOCKED | 任务已创建但金额不可见 | 否（任务根本没建） |
-| 停止不重试 | 网络错误 / 结果未知 | **是**，已按红线停止，未二次提交 |
+| 判定 | 条件 | 第一轮 | 第二轮 |
+| --- | --- | --- | --- |
+| PASS | 任务创建 + taskid 可查 + 扣费可核对 | 否（任务未创建） | **任务与预留账本：是**（202 + taskid + reserved 100） |
+| BLOCKED | 任务已创建但金额不可见 | 否（任务根本没建） | **实际扣费金额：是**（worker 未触发，`actual_cents` NULL） |
+| 停止不重试 | 网络错误 / 结果未知 | **是**，已按红线停止，未二次提交 | **是**，第二轮仅一次提交，成功受理 |
 
 由于服务端在预检阶段就明确拒绝（不是网络抖动），且已实测「无任务行、无扣费」，
 本次属于**确定失败**，不属于「结果未知」；但仍按红线执行了「不再点生成」。
@@ -120,3 +131,209 @@ GET /generation/capabilities   → 200
 - 回车路径同样被拦，不会绕过按钮锁；
 - 刷新/重开仍保持锁定（锁按「项目 + 设施」分区，不会串到别的设施或别的项目）；
 - 全程**只有一次** `POST /jobs`，没有出现重复提交、重复扣费。
+---
+
+# 第二轮：补齐 secret 后重跑（2026-11-17）
+
+## 前置：补 `GENERATION_MAX_TASK_CENTS`
+
+在 Supabase Dashboard → Edge Functions → Secrets 补上：
+
+| 键 | 值 | SHA256（Dashboard 显示） |
+| --- | --- | --- |
+| `GENERATION_MAX_TASK_CENTS` | `100` | `ad57366865126e55649ecb23ae1d48887544976efea46a48eb5d85a6eeb4d306` |
+
+本地 `sha256("100")` 与 Dashboard 显示的 digest **完全一致**，确认落盘值就是 `100`。
+Supabase 官方文档明确「functions read a new secret immediately」，**无需重新部署**即生效。
+
+单位说明：`GENERATION_MAX_TASK_CENTS` 是**幕景内部预留账本（分）**，不是 Aholo 平台积分。
+Aholo 侧真实消耗另记在 `generation_jobs.provider_usage` / `requests.actual_cents`。
+两本是账，不要混。
+
+## 换项目
+
+第一轮用的「自动验证-确认循环」被并行会话长期占用（旧编辑器标签页每 30 秒续租，`lease/acquire` 返回 429 `LEASE_BUSY`），
+改用「周末共创工作坊」（`9a889d2b-0e71-45bd-90b7-d9f36f7b665d`）重摆一把折叠椅。
+
+## 纠正一个误判：线上构建没有被换掉
+
+中途一度怀疑「并行会话把线上换成了不含生成切片的构建」——**这是误判，根因是解析 chunk 清单时丢了路径形式**：
+
+Next.js 的 chunk 有两种命名：`<id>.<hash>.js` 与 `static/chunks/<id>-<hash>.js`。
+只按一种形式拼接，扫出来的「标记全 false」自然成立。修正后全量下载 46 个 chunk，
+线上 `4789.bc8c2393fd7b2570.js` 里 `generation-sheet` / `消耗额度` / `generation-receipt` /
+「先查任务记录与费用，不重试」**全部在**——线上构建是完好的，V5 切片已上线。
+
+> 教训：判断「线上是不是我的构建」，不能只看一两个 chunk 的字符串命中就下结论；
+> 要先把 chunk 清单**完整**拉下来（两种路径形式都试），再逐个扫。
+
+## 真正的阻塞：画布挡住了属性卡的「文字生成」按钮
+
+第一轮末尾记录「点『文字生成』两次都打不开面板」，当时的解释是「点开 sheet 后属性卡回到空态」。
+用事件探针复现后拿到真因：
+
+```text
+pointerdown -> SPAN            （左栏「折叠椅 1」，正常）
+mousedown   -> SPAN
+mouseup     -> SPAN
+click       -> SPAN
+pointerdown -> 底图瓦片层        ← 点「文字生成」时命中的居然是画布
+mousedown   -> 底图瓦片层
+mouseup     -> 底图瓦片层
+click       -> 底图瓦片层
+```
+
+`document.elementsFromPoint()` 在按钮中心 (815.8, 555.5) 返回的栈顶是：
+
+```text
+CANVAS :: 底图瓦片层      ← 栈顶
+DIV :: DIV
+DIV :: DIV
+DIV :: outdoor-overlay
+DIV :: DIV
+DIV :: sc-canvas-stage
+```
+
+按钮自己（`data-testid="facility-model-generate"`）**根本不在命中栈里**。
+
+### 层叠原因
+
+- `outdoor-overlay` 根：`position:absolute; z-index:30`
+- `outdoor-inspector-stack`（属性卡宿主）：`position:absolute; z-index:6` —— 它在 overlay 内部自建层叠上下文，6 是 overlay 内部的相对值
+- 底图 canvas 在 `.sc-canvas-stage` 的**最后一个**子节点里，overlay 在**第一个**
+- 同 z-index 下，DOM 靠后者绘制在上 → 画布压住 overlay 内的属性卡
+
+结果：**属性卡上的「文字生成 / 图片生成 / 导入 GLB」三颗按钮，在 2D 画布上真实鼠标点击点不到**。
+用 `element.click()`（绕过命中测试）直接触发 React handler，面板立刻正常打开、目标正确（`用于「折叠椅 1」`）——
+**说明 React 逻辑与数据链路都没问题，纯粹是层叠/命中测试问题**。
+
+这条属于**真实用户可复现的 UI 缺陷**：用户在正式站上点不到「文字生成」。
+本轮为了跑完 C1 用 `element.click()` 绕过，**但缺陷本身没有被修**。
+
+### 待修（未做）
+
+给属性卡宿主或 overlay 提层级（让 `outdoor-inspector-stack` 相对 canvas 更高），
+并补一条回归：选中设施后，「文字生成」按钮中心点 `elementsFromPoint` 的栈顶必须是该按钮本身。
+**这条不能靠截图验收**——截图上按钮是可见的，被盖住的是「点击命中」。
+
+## 第二轮实测数据
+
+### 环境
+
+- 正式站：`https://scendance-scene-planner-ewz.pages.dev/?fresh=202611170800&project=9a889d2b-0e71-45bd-90b7-d9f36f7b665d`
+- 线上 runtime：`webpack-32d49461bcc3a609.js`（与本地 `.next-ci` 的 `webpack-32ec871bb34ab82e.js` 不同哈希但同源，见上文纠正）
+- 项目「周末共创工作坊」，状态「当前 · 已保存」+「释放编辑权」（租约在手）
+- 设施：`折叠椅 1`，`facilityId=2681fa6a-4852-4858-a41d-9bb2596a8369`
+
+### 提交前基线
+
+```text
+localStorage['scendance:generation-submissions'] = []
+localStorage['scendance:facility-generate-links']  = null
+主按钮 disabled = true（唯一禁用原因：未勾「消耗额度」）
+```
+
+### 网络（页面内 fetch 探针，唯一一次点击）
+
+```text
+POST https://wkhfvnzgopjdzxlmycks.supabase.co/functions/v1/scene-api/jobs
+  status=202  durationMs=669
+  body={"id":"9b35ebc5-11ab-4e65-81fa-db1633d5e701","kind":"text","state":"queued",
+        "prompt":"户外折叠椅 1：…可折叠收纳。","reused":false,"asset_id":null,"attempts":0,
+        "owner_id":"56356f34-a34f-4745-b418-29e16e1de728",
+        "created_at":"2026-11-17T02:58:40.700207+00:00",
+        "provider_mode":"aholo","provider_model":"lux3d","provider_usage":{},
+        "provider_job_id":null,"source_asset_id":null,"reference_image_asset_id":null}
+```
+
+另有一次 `GET http://127.0.0.1:3199/task?taskid=9b35ebc5-…` → `TypeError: Failed to fetch`
+—— 这是**本地 dev worker 地址**，线上不可达；与云端提交无关，提交已成功受理。
+
+### 回执（state=submitted，不是 unknown）
+
+```json
+[{"requestId":"5e13bdec-c1fd-4d7f-b710-707afcdd8642","state":"submitted",
+  "projectId":"9a889d2b-0e71-45bd-90b7-d9f36f7b665d",
+  "facilityId":"2681fa6a-4852-4858-a41d-9bb2596a8369","facilityName":"折叠椅 1",
+  "prompt":"户外折叠椅 1：铝合金折叠框架，藏青色厚棉布坐垫靠背，座高 45 厘米，展开尺寸约 45×50×88 厘米，四脚带黑色防滑脚垫，可折叠收纳。",
+  "submittedAt":1794884319382,"updatedAt":1794884320059,
+  "taskid":"9b35ebc5-11ab-4e65-81fa-db1633d5e701"}]
+```
+
+`scendance:facility-generate-links` 同步写入 taskid ↔ facility ↔ projectId 的暂存链接。
+面板显示：`上次提交已受理：任务号 9b35ebc5-… 请求号 5e13bdec-…`。
+
+### 管理端核对（Dashboard SQL Editor）
+
+```text
+-- scene_private.requests（1 row）
+id           = 9b35ebc5-11ab-4e65-81fa-db1633d5e701     ← 与 taskid 相同
+kind         = generation
+request_key  = 5e13bdec-c1fd-4d7f-b710-707afcdd8642     ← 与 requestId 相同
+reserved_cents = 100
+actual_cents   = NULL
+state        = reserved
+provider_usage = {}
+
+-- scene_private.generation_jobs（1 row）
+id               = 9b35ebc5-11ab-4e65-81fa-db1633d5e701
+state            = queued
+provider_mode    = aholo
+provider_model   = lux3d
+provider_job_id  = NULL
+asset_id         = NULL
+attempts         = 0
+error_code       = NULL
+
+-- scene_private.budgets（2 rows）
+kind             = generation
+limit_cents      = NULL
+committed_cents  = 100      ← 预留已入账
+```
+
+三条标识（taskid / requestId / 预留分）**互相咬合**，预留账本 100 分已入账。
+
+## 未闭合项：worker 链路没部署
+
+任务停在 `queued`，`provider_job_id` 还是 NULL，`actual_cents` 也是 NULL。查出来是**部署侧缺件，不是提交侧问题**：
+
+```text
+select extname from pg_extension;
+-- pg_stat_statements, pgcrypto, plpgsql, supabase_vault, uuid-ossp
+--   没有 pg_cron、没有 pg_net
+
+select name from vault.decrypted_secrets;
+-- 0 rows（install-generation-cron.sql 要求的 scene_project_url / scene_worker_secret 都没放）
+
+select * from cron.job;
+-- ERROR: relation "cron.job" does not exist
+```
+
+`supabase/ops/install-generation-cron.sql` 里写得很清楚：这是个**需要人工执行的运维脚本，不是自动迁移**，
+前置条件是「先把 `scene_project_url` 与 `scene_worker_secret` 放进 Vault」。两件事都没做 → cron 从未装上。
+
+而 worker 的**唯一**推进路径就是这条 cron：
+
+- `GET /jobs`（`api.ts:800`）只返回列表，**不触发** worker；
+- `generation-worker/index.ts` → `createWorker(backend, env)` 要求
+  `Authorization: Bearer <GENERATION_WORKER_SECRET>`（sha256 比对），未带则 401；
+- `worker.ts` 的 `processGeneration` 用 `jobs.claim` 抢任务，抢到才推给 aholo。
+
+所以：**没有 cron → 没有 worker → 任务永远 queued → 真实消耗与 `actual_cents` 永远写不出来。**
+
+### 顺带确认
+
+`AI_MAX_REQUEST_CENTS` 仍然缺（Agent 提案链那本账）。本轮**故意没补**——补它等于开启另一条花钱通道，
+需要用户明确同意，不在 C1 授权范围内。
+
+## 下一步（按优先级）
+
+1. **装 generation cron**：往 Vault 放 `scene_project_url`（= `https://wkhfvnzgopjdzxlmycks.supabase.co`）
+   与 `scene_worker_secret`（= `GENERATION_WORKER_SECRET` 的值，需与 Edge Function secret 一致），
+   然后执行 `supabase/ops/install-generation-cron.sql`（会 `create extension pg_cron / pg_net`）。
+   装好后本任务应被 worker 接手，`provider_job_id` / `actual_cents` / `provider_usage` 会被写回，
+   再回来核对一次即可闭合 C1 的最后一项。
+2. **修属性卡被画布遮挡的 UI 缺陷**（见上文）：提层级 + 加「`elementsFromPoint` 栈顶必须是按钮本身」的回归。
+3. **给未知提交加一条「按 requestId 反查服务端」的只读接口**：现在 requestId 只落盘供人工核对，
+   客户端无法自助判断上一次提交到底成没成。
+4. 待用户拍板：**是否一并补 `AI_MAX_REQUEST_CENTS`**（开启 Agent 提案链的内部预留账）。
