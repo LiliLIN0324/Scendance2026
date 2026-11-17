@@ -165,9 +165,11 @@ class OutdoorStepBlocked extends Error {
   }
 }
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
-  scope: "请在地图上检查边界是否贴合实际可用范围。拖动顶点调整后，请重新核对活动范围。",
-  zones: "请核对地图上蓝色描边的分区。选中后可以拖动分区，或拖动顶点调整轮廓。",
-  "main-routes": "请核对地图上蓝色标记的主通道和候选入口。选中路线后可拖动路线转折点绕开障碍（在线段上点一下就加点，点中已有折点即删掉，拖到相邻折点上就合并），也可把候选入口移到实际门口。",
+  // 2026-11-18 用户反馈「为什么要写这么多」：应用提示只保留一句真正要紧的动作话；
+  // 「边界就在眼前」「下一步是什么」分别由画布和任务卡标题承担，聊天里不重复。
+  scope: "不贴合就拖顶点调整，改完重新核对。",
+  zones: "分区不合适可拖动整块或拖顶点微调。",
+  "main-routes": "路线和候选入口可拖动微调。",
 };
 
 function changedIds<T extends { id: string }>(before: readonly T[], after: readonly T[]): string[] {
@@ -857,7 +859,7 @@ export function useOutdoorAgentWorkflow(input: {
         : "";
     status(
       mapEditHint
-        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。${packedNote}`
+        ? `已应用「${p.label}」。${mapEditHint}`
         : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。${packedNote}`,
       "done",
     );
