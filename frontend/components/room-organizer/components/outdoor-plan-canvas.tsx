@@ -72,6 +72,7 @@ import {
   ArrowRight,
   ArrowRightLeft,
   ImageUp,
+  Search,
   Sparkles,
   Upload,
 } from 'lucide-react';
@@ -11957,41 +11958,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </>
             ) : (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: PLANNING_SPACING.xs }}>
+              {/* 2026-11-18 用户反馈「这里的搜索很土」：对齐画布搜地点的灵动岛视觉语言
+                  （胶囊 999 圆角、浮起双层阴影、focus 光环），排布开关收进胶囊右侧圆钮。 */}
+              <div className="sc-catalog-search" style={{ marginTop: PLANNING_SPACING.xs }}>
+                <Search size={15} aria-hidden className="sc-catalog-search-icon" />
                 <input
                   value={libraryQuery}
                   onChange={event => setLibraryQuery(event.target.value)}
                   placeholder="搜索物件（中文 / English / slug）"
                   aria-label="搜索物件"
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    padding: '4px 6px',
-                    borderRadius: PLANNING_RADIUS.sm,
-                    border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-                    background: PLANNING_SURFACE.fieldBg,
-                    color: 'inherit',
-                    fontSize: PLANNING_TYPOGRAPHY.hint,
-                  }}
                 />
-                {/* 2026-11-18 用户要求：全局「单列/瓦片」排布开关（搜索框旁），整个物料目录统一跟随，偏好记 localStorage。 */}
                 <button
                   type="button"
+                  className="sc-catalog-search-toggle"
                   data-testid="catalog-grid-toggle"
                   aria-pressed={oneplanGrid}
                   title="切换目录排布：单列 / 一行多列（全目录生效）"
                   onClick={() => setOneplanGrid(!oneplanGrid)}
-                  style={{
-                    all: 'unset',
-                    cursor: 'pointer',
-                    flex: '0 0 auto',
-                    padding: '4px 8px',
-                    borderRadius: PLANNING_RADIUS.sm,
-                    border: `1px solid ${oneplanGrid ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelBorder}`,
-                    background: oneplanGrid ? PLANNING_SURFACE.selectedBg : PLANNING_SURFACE.fieldBg,
-                    color: 'inherit',
-                    fontSize: PLANNING_TYPOGRAPHY.hint,
-                  }}
                 >
                   {oneplanGrid ? '▦' : '☰'}
                 </button>
