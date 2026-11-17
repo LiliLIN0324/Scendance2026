@@ -766,8 +766,8 @@ export function seatingShortfallText(warning:{code:string;ids:readonly string[]}
     const requested=Number(shared[1]),placed=Number(shared[2]),tables=Number(shared[3]);
     if(requested>=1&&requested<=100&&placed>=0&&placed<requested&&tables>=0&&tables<=25&&tables===Math.ceil(placed/2)){
       const reason=shared[4]==='object_limit'?'已触及云场景物件数量上限':shared[4]==='scan_limit'?'本次搜索达到计算上限':shared[4]==='preset_unverified'?'场地预设尚未核验':'本次排布未找到更多可用位置';
-      if(placed===0)return `本次新增课桌椅组团可安排 0 / ${requested} 人，新增 0 桌；原场景物件未计入。${reason}，不代表场地最大容量；实际座席和现场条件仍需核验。${zeroPlacementSuggestions(shared[4]!)}`;
-      return `本版排了 ${placed} / ${requested} 人，${tables} 桌，尚缺 ${requested-placed} 人。${reason}，不代表场地最大容量。`;
+      if(placed===0)return `本次新增课桌椅组团可安排 0 / ${requested} 人，新增 0 桌；原场景物件未计入。${reason}，要更多位置就腾地方或减人数；实际座席和现场条件仍需核验。${zeroPlacementSuggestions(shared[4]!)}`;
+      return `本版排了 ${placed} / ${requested} 人，${tables} 桌，尚缺 ${requested-placed} 人。${reason}，要更多位置就腾地方或减人数。`;
     }
     return null;
   }
@@ -775,12 +775,12 @@ export function seatingShortfallText(warning:{code:string;ids:readonly string[]}
   if(!match||warning.ids.length)return null;
   const requested=Number(match[1]),placed=Number(match[2]);
   if(requested<1||requested>100||placed<0||placed>=requested)return null;
-  const reason=match[3]==='object_limit'?'已触及云场景物件数量上限，不代表场地最大容量。'
-    :match[3]==='scan_limit'?'本次搜索达到计算上限，不代表场地最大容量。'
-    :match[3]==='preset_unverified'?'场地预设尚未核验，不代表场地最大容量。'
-    :'本次排布未找到更多可用位置，不代表场地最大容量。';
-  if(placed===0)return `本次新增课桌椅组团 0 / ${requested} 套；原场景物件未计入。${reason}实际座席和现场条件仍需核验。${zeroPlacementSuggestions(match[3]!)}`;
-  return `本版排了 ${placed} / ${requested} 套，尚缺 ${requested-placed} 套。${reason}`;
+  const reason=match[3]==='object_limit'?'已触及云场景物件数量上限。'
+    :match[3]==='scan_limit'?'本次搜索达到计算上限。'
+    :match[3]==='preset_unverified'?'场地预设尚未核验。'
+    :'本次排布未找到更多可用位置。';
+  if(placed===0)return `本次新增课桌椅组团 0 / ${requested} 套；原场景物件未计入。${reason}要更多位置就腾地方或减人数。${zeroPlacementSuggestions(match[3]!)}`;
+  return `本版排了 ${placed} / ${requested} 套，尚缺 ${requested-placed} 套。${reason}要更多位置就腾地方或减人数。`;
 }
 /** Unrecognized backend codes never appear as internal labels in the UI. */
 export function proposalWarningText(warning:{code:string;ids:readonly string[]},nameOf:(id:string)=>string):string {
