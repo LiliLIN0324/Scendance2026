@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：对照表顶部已有“当前状态快照（锚点）”，以后每轮只需与它 diff。main = origin = `10a54bec`；9222 二十四轮不通。下轮：把快照真正跑出来打印一遍（用 node 直接 import 分支上的 `statusCardSnapshot` + 最小 report），确认实际输出与锚点逐字一致；不一致就修锚点。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：锚点已经被测试钉住了（`outdoor-matrix-anchor.test.ts`），以后锚点过期会自动缸。**本地 main 停在 `c9706da5`，落后的 7 笔推不进来**：61 个入站文件里 59 个与用户脏文件重叠，`merge --ff-only` 直说会覆盖本地改动；本轮不动这 59 个文件的 stash（量级太大，冲突出不可收拾），分支直接从 `origin/main` `37c01178` 开。**需要人做**：先把工作区那批 WIP 提交/另存，再 `git merge --ff-only origin/main`。9222 二十六轮不通。下一条：把 `BROWSER_EVIDENCE` 的取数链路改成可注入（传一份真实走查记录就自动算 cases 三档，不再手写 `partial` 数组）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-matrix-anchor.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 04:05 · 自动轮次 70 · 锚点自检（文档 JSON 与代码对不上就红）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 04:05，自动轮次 70
+批次 / 切片 / 状态：M7 / 对照表锚点自检 / 已交付（分支待 PR）
+开工事实：HEAD = main = `c9706da5`，origin/main = `37c01178`（落后 7 笔），脏文件 62
+合并：**本轮未合** —— `git merge --ff-only origin/main` 直接报 `Your local changes to the following files would be overwritten by merge`，61 个入站文件里 **59 个与脏文件重叠**（用户正在改地图多源/漫游行为层）。前几轮 1–3 个文件的重叠可以用 stash/ff/pop，59 个不是同一个量级：pop 一旦冲突就是几十个文件带标记，比不合同危害大，所以不动。分支从 `origin/main` 开。
+交付：`frontend/components/room-organizer/lib/outdoor-matrix-anchor.test.ts`（2 条）——读 `docs/plans/2026-11-16-outdoor-evidence-matrix.md` §0 的 ```json 代码块，与 `statusCardSnapshot({rows: assessAcceptance(report()), metrics, ledger: defaultLedger()})` 逐字比；另一条钉住 `allGreen === 0`。对照表 §0 同步加了一句“这条锚点由测试看住”。
+验证（固定数据）：新用例 2/2；`tsc --noEmit` 0 行（先报了 2 个错：`SessionReport.exportedAt` 是 number、顶层缺 `text`，已修）
+真实浏览器/云端：仍未验（9222 第二十六轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；本地 main 追上 origin（等人提交 WIP）
+```
+
+- **锚点要么被测试钉住，要么会腐烂**：写在文档里的“当前状态”不会自己维持正确，得让它和代码算出来的东西对不上就报错。
+- **重叠文件数量决定合并策略**：1–3 个可以 stash/ff/pop；几十个时正确动作是“不碰工作区，分支从 origin/main 开”，并根据仓库规则把这件事写给人。
 
 ### 2026-11-18 02:30 · 自动轮次 68 · 合三笔（含一个脏文件重叠）+ 对照表立快照锚点
 
