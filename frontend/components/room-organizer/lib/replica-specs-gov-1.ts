@@ -14,7 +14,8 @@ export const BANBURY_TOWN_COUNCIL_CORONATION: ReplicaCaseSpec = {
   region: 'Europe',
   refImage: 'banbury-town-council-coronation-events.png',
   refLink: LINK('banbury-town-council-coronation-events'),
-  anchor: { lng: -1.337, lat: 52.06 },
+  anchor: { lng: -1.33412, lat: 52.067057 },
+  rotationDeg: 63,
   locationNote: '镇级锚点：People\'s Park, Banbury',
   zones: [
     { name: 'Event Field 活动场', semantic: 'reserved', color: '#3fb544', opacity: 0.2, rect: { cx: -10, cy: -10, w: 60, h: 45 } },
@@ -54,7 +55,8 @@ export const ROTHERHAM_CHRISTMAS_LIGHT_SWITCH_ON: ReplicaCaseSpec = {
   region: 'Europe',
   refImage: 'rotherham-christmas-light-switch-on.png',
   refLink: LINK('rotherham-christmas-light-switch-on'),
-  anchor: { lng: -1.3568, lat: 53.4302 },
+  anchor: { lng: -1.35549, lat: 53.432193 },
+  rotationDeg: 78,
   locationNote: '镇级锚点：Rotherham 镇中心（All Saints Square 一带）',
   zones: [
     { name: 'Main Stage Square 主舞台广场', semantic: 'stage', color: '#ec5fa8', opacity: 0.35, rect: { cx: -45, cy: 15, w: 40, h: 28 } },
@@ -129,7 +131,8 @@ export const VICTORIA_PARK_BRISBANE_EASTER_EGG_HUNT: ReplicaCaseSpec = {
   region: 'Australia & NZ',
   refImage: 'victoria-park-brisbane-easter-egg-hunt.png',
   refLink: LINK('victoria-park-brisbane-easter-egg-hunt'),
-  anchor: { lng: 153.022, lat: -27.449 },
+  anchor: { lng: 152.976409, lat: -27.386431 },
+  rotationDeg: 35,
   locationNote: '镇级锚点：Victoria Park, Brisbane',
   zones: [
     { name: 'Purple Field 紫田', semantic: 'reserved', color: '#b362c9', opacity: 0.3, polygon: [[-90, 60], [10, 55], [25, 25], [-70, 18]] },

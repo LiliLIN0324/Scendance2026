@@ -32,6 +32,11 @@ function rpc(client: SupabaseClient,name:string): Rpc {
       const code=error.message;
       if (/^[A-Z_]+$/.test(code)) {
         const status=code.endsWith('NOT_FOUND')?404:code==='UNAUTHENTICATED'?401:/FORBIDDEN/.test(code)?403:/BUDGET|BUSY/.test(code)?429:/LEASE|CONFLICT|STALE|CLAIM/.test(code)?409:422;
+        // 2026-11-17 P1 可观测：BUSY 只记标识与动作，不记 prompt/请求体；
+        // 每人 1 单上线后靠这条日志区分「闸门拒绝」与「供应商限流」。
+        if (code==='GENERATION_BUSY') {
+          console.warn(JSON.stringify({ event:'generation_busy', actor, action, status, at:new Date().toISOString() }));
+        }
         throw new ApiError(code,status);
       }
       throw new ApiError('DATABASE_ERROR',500);

@@ -18,10 +18,16 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     await expect(f.jobs(editor,'jobs.get',{id:j.id})).rejects.toThrow('JOB_NOT_FOUND');
     await expect(f.jobs(outsider,'jobs.create',input())).rejects.toThrow('FORBIDDEN');
   });
-  it('allows only one active generation across all members',async()=>{
-    const results=await Promise.allSettled([f.jobs(owner,'jobs.create',input()),f.jobs(editor,'jobs.create',input())]);
-    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
-    expect((await f.db.query('select * from scene_private.requests')).rows).toHaveLength(1);
+  it('allows one active generation per owner, independent across members',async()=>{
+    const a=await f.jobs(owner,'jobs.create',input());
+    const b=await f.jobs(editor,'jobs.create',input());
+    expect(a.owner_id).toBe(owner);
+    expect(b.owner_id).toBe(editor);
+    // 同一 owner 的第二单仍被挡；其他 owner 的活跃任务不连坐。
+    await expect(f.jobs(owner,'jobs.create',input())).rejects.toThrow('GENERATION_BUSY');
+    const rows=(await f.db.query<{owner_id:string}>("select owner_id from scene_private.requests where kind='generation'")).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.map(r=>r.owner_id).sort()).toEqual([editor,owner].sort());
   });
   it('allows spending beyond former category ceilings while requiring accounting',async()=>{
     await f.db.exec("update scene_private.budgets set committed_cents=2147483647");

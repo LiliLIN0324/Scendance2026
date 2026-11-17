@@ -19,7 +19,7 @@ const FORMS: Record<RailForm, { src: string; eyes: [number, number][] }> = {
 };
 
 /** 眼睛跟着鼠标走：只写 CSS 变量，不触发 React 重渲染。 */
-function useEyeFollow(ref: React.RefObject<HTMLSpanElement>) {
+export function useEyeFollow(ref: React.RefObject<HTMLSpanElement>) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
