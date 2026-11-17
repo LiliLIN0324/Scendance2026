@@ -230,6 +230,7 @@ import { PlacementHint } from './panels/placement-hint';
 import { WorkbenchBrandToggle } from './panels/workbench-brand-toggle';
 import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
+import { GmCompassHost } from './components/gm-compass-host';
 import { SpacePanel } from './panels/space-panel';
 import { type ShareMenuActions } from './panels/share-menu';
 import { type ServerShare } from './lib/share-records';
@@ -5260,6 +5261,12 @@ useEffect(() => {
             )}
           </div>
             <div className="sc-editor-dock">
+            <GmCompassHost
+              active={outdoorActions != null}
+              mode={outdoor3dTakeoverActive && !outdoor2DOpen ? '3d' : '2d'}
+              plan3dRef={outdoorPlan3DRef}
+              overlayRef={outdoorOverlayRef}
+            />
             <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
