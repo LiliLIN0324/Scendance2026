@@ -632,6 +632,18 @@ export function useOutdoorAgentWorkflow(input: {
     });
     return false;
   }
+  /**
+   * 2026-11-18 用户实测：画布上已有画好的红线（甚至已确认），进页任务卡却默认停在
+   * 「搜索目标地点」——流程草稿里没有这份事实，阶段就和画布脱节了。这里对账：
+   * 画布上有合法闭合边界时，阶段不退回 place，未确认的推到 scope 等确认卡。
+   * 只对账，不发言不发请求；在画布 bridge 注册时调用（进页/切活动都会重新注册）。
+   */
+  function reconcileCanvasStage() {
+    const plan = callbacks.current.bridge()?.getPlan();
+    if (!plan || !checkBoundaryRing(plan.boundary).ok) return;
+    if (stateRef.current.stage !== "place") return;
+    persist({ ...stateRef.current, stage: "scope" });
+  }
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
     const map = bridge?.mapContext
@@ -1063,10 +1075,18 @@ export function useOutdoorAgentWorkflow(input: {
       // 静默清掉 confirmedBoundary——候选照常列出，但换场必须走候选确认卡显式换锚；
       // 用户不理候选直接继续说需求，仍能按已确认范围推进布局。
       const confirmed = Boolean(stateRef.current.confirmedBoundary);
+      // 2026-11-18 用户实测：画布上已有合法闭合边界（画了红线甚至已确认）时，一句带地名的话
+      // 不该把任务卡拍回「搜索目标地点」——已确认的原地保留阶段；画了红线还没确认的也保留，
+      // 等确认卡走完。都没有才回到 place 重新找场地。
+      const ringOk = (() => {
+        const current = callbacks.current.bridge()?.getPlan();
+        return Boolean(current && checkBoundaryRing(current.boundary).ok);
+      })();
       persist({
         ...stateRef.current,
-        stage: "place",
-        ...(confirmed ? {} : { confirmedBoundary: null, completed: [] }),
+        ...(confirmed || ringOk
+          ? {}
+          : { stage: "place" as const, confirmedBoundary: null, completed: [] }),
       });
       callbacks.current.search(turn.query);
       return;
@@ -2545,6 +2565,7 @@ export function useOutdoorAgentWorkflow(input: {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
     },
+    reconcileCanvasStage,
     proposal,
     pendingPlan: state.scope === input.scope ? pendingPlan : null,
     approvePlan,

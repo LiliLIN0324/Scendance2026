@@ -3800,7 +3800,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     startFlowSim,
     stopFlowSim,
     outdoorWorkflow,outdoorBridgeReady,searchOutdoorVenue,
-    registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after); },
+    registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after);outdoorWorkflow.reconcileCanvasStage(); },
     exportPreview, previewExport: proposeExport, confirmExport, confirmCloudMaterialDraft, dismissExport, reviewNow, issueReviewLink,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); },
     // 浮窗里「图片 / 文件」各自限定 accept；不传时回到全量白名单（老入口行为不变）。

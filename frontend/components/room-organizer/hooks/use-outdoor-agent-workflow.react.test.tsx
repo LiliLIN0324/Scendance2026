@@ -704,7 +704,10 @@ it("已确认场地后一次 search 不再静默丢场地：继续说需求仍�
   await confirmScope();
   const before = JSON.stringify(plan);
   await turn("看看别的地点", response("search", {}, { query: "别的地点" }));
-  expect(flow.state.stage).toBe("place");
+  // 2026-11-18 用户实测：任务卡不该退回「搜索目标地点」——已确认场地时阶段原地保留，
+  // 候选照常列出，换场仍走候选确认卡。
+  expect(flow.state.stage).toBe("zones");
+  expect(flow.state.confirmedBoundary).toBeTruthy();
   expect(JSON.stringify(plan)).toBe(before);
   await turn(
     "户外市集45人，展览区在室外",
