@@ -18,6 +18,13 @@ import type { PlanRouteCarrier } from '../../../../supabase/functions/_shared/si
 
 /** 第一段之外、与「基础设施」同级的一行（2026-11-16 用户）：车。 */
 export const CAR_ROW_LABEL = '车';
+/**
+ * 「车」那一行里的**规划车辆**子组（2026-11-17 #118 补录入 UI）。
+ *
+ * 与同组的「车素材」不是一回事：素材是物料库物件（落成 facility），
+ * 规划车辆是独立集合 plan.vehicles 的实体（能挂动线巡游、能按车型出占位盒）。
+ */
+export const PLAN_VEHICLE_ROW_LABEL = '规划车辆';
 
 export interface VehicleType {
   id: string;

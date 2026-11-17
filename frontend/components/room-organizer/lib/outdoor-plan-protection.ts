@@ -32,7 +32,7 @@ export function planForPickedVenue(
   if (canReanchorOutdoorPlan(current, anchor)) {
     return { plan: { ...current, anchor, boundary }, replaced: false, cleared: 0 };
   }
-  const cleared = [current.zones, current.routes, current.nodes, current.facilities, current.workers, current.annotations, current.measurements]
+  const cleared = [current.zones, current.routes, current.nodes, current.facilities, current.workers, current.vehicles, current.annotations, current.measurements]
     .reduce<number>((sum, items) => sum + (items?.length ?? 0), 0);
   return {
     plan: {
@@ -44,6 +44,9 @@ export function planForPickedVenue(
       routes: [],
       nodes: [],
       workers: [],
+      // 2026-11-17 #118：车辆也是旧坐标系的活内容——换场地必须一起清掉，
+      // 否则旧场地坐标系里的车会留在新场地上（画布上像"凭空多了一台车"）。
+      vehicles: [],
     },
     replaced: true,
     cleared,

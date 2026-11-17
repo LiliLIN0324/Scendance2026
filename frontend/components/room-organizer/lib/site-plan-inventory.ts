@@ -236,7 +236,7 @@ function ringAnchor(ring: readonly PlanPoint[]): PlanPoint {
 /**
  * 筛选清单行（评审稿「按区、类型、未归属和问题」）：
  * - kind：单一类型或全部；
- * - zone：具体分区 → 只留归属该分区的设施/人员；'unassigned' → 只留无归属的设施/人员；
+ * - zone：具体分区 → 只留归属该分区的设施/人员/车辆；'unassigned' → 只留无归属的设施/人员/车辆；
  *   其余类型行在按区筛选时整体排除（分区/动线/出入口/测量不参与归属概念）；
  * - issuesOnly：只留 hasIssue 行。
  */
@@ -246,7 +246,8 @@ export function filterPlanInventory(rows: readonly PlanInventoryRow[], filter: P
   return rows.filter(row => {
     if (kind !== 'all' && row.kind !== kind) return false;
     if (zone !== undefined) {
-      if (row.kind !== 'facility' && row.kind !== 'worker') return false;
+      // 2026-11-17 #118：车辆落位时自动归属分区，所以和设施/人员一样能按区筛。
+      if (row.kind !== 'facility' && row.kind !== 'worker' && row.kind !== 'vehicle') return false;
       if (zone === 'unassigned') {
         if (row.zoneId !== null) return false;
       } else if (row.zoneId !== zone) {
