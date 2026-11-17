@@ -353,6 +353,24 @@ export function createOutdoorMapContext() {
           : [],
       };
     },
+    water() {
+      // 2026-11-17：水岸排布的输入。快照坐标已经是 plan 同基准的 ENU 米，直接交给排布层。
+      return (snapshot?.features ?? [])
+        .filter(
+          (f) =>
+            f.kind === "water" &&
+            f.geometry.points.length >= 2 &&
+            f.geometry.points.every(
+              (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
+            ),
+        )
+        .map((f) => ({
+          id: f.id,
+          name: f.name,
+          points: f.geometry.points.map((p) => ({ x: p.x, y: p.y })),
+          closed: f.geometry.type === "polygon",
+        }));
+    },
     spatial(turn: OutdoorTurn, plan: SitePlanData): SitePlanData {
       if (!snapshot || !turn.operation)
         throw new Error(

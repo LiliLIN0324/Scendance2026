@@ -297,10 +297,10 @@ interface ViewToolsProps {
     /** 2026-11-12 B1 选择工具：2D 画布浏览/选择模式（「选择」钮按下态与切换；S/H 快捷键同源）。 */
     canvasMode?: 'view' | 'select';
     setCanvasMode?(mode: 'view' | 'select'): void;
-    /** 2026-11-15 测量直进：measure 绘制激活态、当前模式、进入/退出与切模式。 */
+    /** 2026-11-15 测量直进：measure 绘制激活态、当前模式、进入/退出与切模式（2026-11-17 路径入口下线）。 */
     measureActive?: boolean;
-    measureKind?: 'distance' | 'area' | 'path';
-    setMeasureKind?(kind: 'distance' | 'area' | 'path'): void;
+    measureKind?: 'distance' | 'area';
+    setMeasureKind?(kind: 'distance' | 'area'): void;
     enterMeasure?(): void;
     exitMeasure?(): void;
     snapOn?: boolean;
@@ -1271,13 +1271,13 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
               <button type="button" id="tool-measure" className="sc-measure-main" data-tip={outdoor.measureActive ? '测量中 · 点按退出' : '测量：点按开始测距'} aria-label="测量" aria-pressed={!!outdoor.measureActive} onClick={() => { if (outdoor.measureActive) outdoor.exitMeasure?.(); else outdoor.enterMeasure?.(); }}>
                 <MaterialSymbol name={OUTDOOR_TOOL_ICONS.measure} />
               </button>
-              <button type="button" className="sc-measure-caret" aria-label="测量模式：距离 / 面积 / 路径" aria-haspopup="menu" aria-expanded={measureMenuOpen} onClick={(event) => { event.stopPropagation(); setMeasureMenuOpen(open => !open); }}>
+              <button type="button" className="sc-measure-caret" aria-label="测量模式：距离 / 面积" aria-haspopup="menu" aria-expanded={measureMenuOpen} onClick={(event) => { event.stopPropagation(); setMeasureMenuOpen(open => !open); }}>
                 <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" /></svg>
               </button>
             </div>
               {measureMenuOpen && (
                 <div id="tool-measure-panel" className="sc-tool-pop sc-measure-pop" role="menu" aria-label="测量模式">
-                  {([['distance', '距离', 'straighten'], ['area', '面积', 'crop_square'], ['path', '路径', 'progress_activity']] as const).map(([kind, label, icon]) => {
+                  {([['distance', '距离', 'straighten'], ['area', '面积', 'crop_square']] as const).map(([kind, label, icon]) => {
                     const active = outdoor.measureKind === kind;
                     return (
                       <button key={kind} type="button" role="menuitemradio" aria-checked={active} className={`sc-canvas-tool-row${active ? ' is-active' : ''}`} onClick={() => { outdoor.setMeasureKind?.(kind); if (!outdoor.measureActive) outdoor.enterMeasure?.(); setMeasureMenuOpen(false); }}>

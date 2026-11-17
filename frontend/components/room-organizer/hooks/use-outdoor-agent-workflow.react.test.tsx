@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { beforeEach, afterEach, it, expect, vi } from "vitest";
+import { beforeEach, afterEach, it, expect, vi, type Mock } from "vitest";
 import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
@@ -74,6 +74,7 @@ const response = (
   }),
 });
 let cardHistorySession: Record<string, unknown> = {};
+let saySpy: Mock<(text: string, clarification?: boolean) => void>;
 function Harness() {
   flow = useOutdoorAgentWorkflow({
     scope,
@@ -101,7 +102,7 @@ function Harness() {
     begin: () => ++epoch,
     current: (e) => e === epoch,
     status: vi.fn(),
-    say: vi.fn(),
+    say: saySpy,
     search: vi.fn(),
   });
   return (
@@ -155,6 +156,7 @@ beforeEach(() => {
   modelOverride = undefined;
   streamUnderstand = undefined;
   understand = vi.fn<(...args: unknown[]) => Promise<unknown>>();
+  saySpy = vi.fn();
   apply = vi.fn((next: SitePlanData, expected: string) => {
     if (JSON.stringify(plan) !== expected) return false;
     plan = next;
@@ -198,10 +200,14 @@ it("「你在做」在地图和模型响应完成前显示实际工作步骤与�
   });
   let pending!: Promise<boolean>;
   await act(async () => { pending = flow.handle("你在做"); });
-  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("核对活动范围和地图依据");
+  // 画布规模并进摘要，不再单独占一行步骤。
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("已读画布");
   expect(streamUnderstand).not.toHaveBeenCalled();
   await act(async () => { mapReady({ version: "map:unavailable", status: "unavailable", text: "地图不可用", featureIds: [], unknowns: [] }); });
-  expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("将本轮输入和场地资料交给模型判断");
+  // 「将本轮输入和场地资料交给模型判断」是恒真过程句，已从步骤里删除。
+  expect(host.querySelector("details.ap-run-thoughts")?.textContent).not.toContain("交给模型判断");
+  // 地图依据取不全属于真异常：这一轮自动展开。
+  expect(host.querySelector("details.ap-run-thoughts")?.hasAttribute("open")).toBe(true);
   act(() => { streamThought("我在核对当前活动的分区用途，"); });
   expect(host.querySelector("details.ap-run-thoughts")?.textContent).toContain("我在核对当前活动的分区用途，");
   expect(host.querySelector("details.ap-run-thoughts")?.getAttribute("aria-busy")).toBe("true");
@@ -214,13 +220,35 @@ it("「你在做」在地图和模型响应完成前显示实际工作步骤与�
   const record = host.querySelector("details.ap-run-thoughts");
   expect(streamUnderstand).toHaveBeenCalledOnce();
   expect(understand).not.toHaveBeenCalled();
-  expect(record?.hasAttribute("open")).toBe(true);
+  // 跑完之后是记录态：默认收起，用户想看再点开。
+  expect(record?.hasAttribute("open")).toBe(false);
   expect(record?.textContent).toContain("思考记录 · 1 条");
   expect(record?.textContent).toContain(thought);
   expect(apply).not.toHaveBeenCalled();
   scope = "project-b";
   mount();
   expect(host.querySelector("details.ap-run-thoughts")).toBeNull();
+});
+it("地图依据取全、无异常时思考卡默认收起，画布规模只在摘要里出现", async () => {
+  bridge.mapContext = vi.fn(async (): Promise<OutdoorMapContext> => ({
+    version: "map:ready",
+    status: "ready",
+    text: "已取到结构化地图依据",
+    featureIds: [],
+    unknowns: [],
+  }));
+  let complete!: (value: ReturnType<typeof response>) => void;
+  streamUnderstand = vi.fn<BackendSession["assistantChatStream"]>(() => new Promise<ReturnType<typeof response>>(resolve => { complete = resolve; }));
+  let pending!: Promise<boolean>;
+  await act(async () => { pending = flow.handle("整理一下分区"); });
+  const record = host.querySelector("details.ap-run-thoughts");
+  expect(record?.getAttribute("aria-busy")).toBe("true");
+  expect(record?.hasAttribute("open")).toBe(false);
+  expect(record?.textContent).toContain("已读画布");
+  await act(async () => {
+    complete(response("ask", {}));
+    await pending;
+  });
 });
 it("模型提出分区计划后，批准计划才生成预览，再确认才写入画布", async () => {
   await confirmScope();
@@ -434,6 +462,11 @@ it("刷新后重新预览未确认候选，仍需显式确认才写入", async (
   expect(flow.proposal).toBeNull();
   await action("scope");
   expect(flow.proposal?.next.boundary).toEqual(ring);
+  // 2026-11-17 「同一标准」：范围提案自己就带白框（外扩 20 m），预览与落地一致，
+  // 不再靠画布那条事后兜底去补——兜底只留给旧提案。
+  expect(flow.proposal?.next.designScope).toHaveLength(4);
+  expect(Math.min(...flow.proposal!.next.designScope!.map(p => p.x)))
+    .toBeCloseTo(Math.min(...ring.map(p => p.x)) - 20, 5);
   expect(apply).not.toHaveBeenCalled();
   await action("confirm");
   expect(plan.boundary).toEqual(ring);
@@ -879,6 +912,172 @@ it("物料数量自然改口是原设施增减，不重复铺一版", async () =
   await action("confirm");
   expect(plan.facilities).toHaveLength(2);
   expect(plan.facilities[0]!.id).toBe(first);
+});
+// 2026-11-17 正式站卡点：用户没说过人数（很常见——先布场、人数活动定了才知道），
+// 点「预览按用途复用我的物料」拿到的是一张红卡「预计同时在场多少人？」+ 重试；
+// 而重试只是原样重跑 objects，人数不变就永远撞同一堵墙，任务卡标题也被永久改成物件阶段。
+// 规划层（validateWorkflowDemand）本来就允许没有人数，这个 throw 是唯一拦住的地方。
+it("人数还没定也能排物料：不拦成红卡、阶段照样前进，并如实说明没做容量粗筛", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        {
+          name: "展览区",
+          purpose: "exhibition",
+          environment: "outdoor",
+          evidence: "展览区",
+        },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  plan = {
+    ...plan,
+    nodes: [
+      {
+        id: crypto.randomUUID(),
+        name: "已核对活动双向主出入口",
+        kind: "both",
+        verification: "user-confirmed",
+        position: { x: 5, y: 5 },
+        notes: "",
+      },
+    ],
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        kind: "pedestrian",
+        name: "已核对人行主线",
+        points: [
+          { x: 5, y: 5 },
+          { x: 5, y: 65 },
+        ],
+        widthM: 3,
+        oneWay: false,
+        notes: "",
+      },
+    ],
+  };
+  bridge.readLibrary = vi.fn(async () => [
+    {
+      id: "my-display",
+      name: "展板",
+      source: "personal" as const,
+      width: 2,
+      depth: 1,
+      height: 2,
+      modelSlug: "generated:library-my-display",
+      available: true,
+    },
+  ]);
+  // 全程没人说过人数：不编、也不拿物件数量去凑。
+  expect(flow.state.brief.guests).toBeUndefined();
+  await action("objects");
+  expect(flow.notice).not.toContain("预计同时在场多少人");
+  expect(flow.noticeKind).not.toBe("error");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.warnings.join()).toContain("人数还没定");
+  expect(flow.proposal?.warnings.join()).not.toContain("仅按2㎡/人");
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(1);
+});
+it("缺主入口时失败不把任务卡改名成物件阶段", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        {
+          name: "展览区",
+          purpose: "exhibition",
+          environment: "outdoor",
+          evidence: "展览区",
+        },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  // 未核对主入口时，分区确认后下一站就是主通道阶段。
+  expect(flow.state.stage).toBe("main-routes");
+  await action("objects");
+  expect(flow.notice).toContain("请先核对主入口和主要通道");
+  // 阶段落盘挪到前置校验之后：失败一次不该把标题永久改成「按用途复用我的物料」。
+  expect(flow.state.stage).toBe("main-routes");
+});
+// 2026-11-17 用户拍「都做」之一：红卡上的「重试」= 原样重放当前阶段动作，缺前置条件时点了还是同一句话。
+// 这类拦阻改成给一个真能改变状态的动作。
+it("缺前置条件时红卡给的是能推进的动作，不是把同一动作再放一遍", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        { name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "展览区" },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  await action("objects");
+  expect(flow.notice).toContain("请先核对主入口和主要通道");
+  expect(flow.noticeFix).toEqual({ action: "main-routes", label: "去核对主要入口与通道" });
+  const labels = [...host.querySelectorAll("button")].map(button => button.textContent?.trim());
+  expect(labels).toContain("去核对主要入口与通道");
+  // 不再同时给一个只会重放 objects 的「重试」。
+  expect(labels).not.toContain("重试");
+  const fix = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "去核对主要入口与通道");
+  await act(async () => { (fix as HTMLButtonElement).click(); });
+  // 真的去跑了主通道：本机拉不到路网，会落到一个明确的下一步，而不是同一句重复提示。
+  expect(flow.notice).not.toContain("请先核对主入口和主要通道");
+  expect(flow.notice).toContain("未取得可核对路网");
+});
+// 2026-11-17 用户拍「都做」之二：答「第一个方案」后模型又把同一句追问端回来，
+// 旧行为就是「我明明选了，却什么都没发生」。现在本地按原请求接着走。
+const SCREENSHOT_QUESTION =
+  "重新分区会覆盖现有 8 个户外分区，想先和你确认一下：你是想（1）保留全部功能但压缩成 3-4 个复合区，还是（2）完全按一套新分区清单来重排？如果是新清单，请把分区名、用途和环境（室内/室外）逐条列出；现有分区我会原样保留直到你确认。";
+it("答「第一个方案」后模型再反问同一句，本地按原请求接着走，不再重复追问", async () => {
+  await confirmScope();
+  await turn(
+    "室外市集，展览区1个展板",
+    response("zones", {
+      zones: [
+        { name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "展览区" },
+      ],
+      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
+    }),
+  );
+  await action("confirm");
+  // 模型对这一轮仍然只反问（就是截图那一屏的形态）。
+  understand.mockResolvedValueOnce(response("ask", {}, { reply: SCREENSHOT_QUESTION }));
+  await act(async () => {
+    await flow.handle("第一个方案", {
+      request: "我希望你把我的分区重新做一遍",
+      question: SCREENSHOT_QUESTION,
+    });
+  });
+  expect(flow.proposal?.kind, flow.notice).toBe("zones");
+  expect(flow.state.stage).toBe("zones");
+  // 卡上能看见这一版是按哪一项走的（提示条留给「预览已就绪」，这句进设计过程）。
+  expect(flow.designSteps.join()).toContain("按你选的「保留全部功能但压缩成 3-4 个复合区」继续原请求");
+  // 仍然是预览，没写画布。
+  expect(plan.zones).toHaveLength(1);
+});
+it("选项里夹带别的要求时不本地强制推进，仍走追问", async () => {
+  await confirmScope();
+  understand.mockResolvedValueOnce(response("ask", {}, { reply: "你想怎么调整？" }));
+  await act(async () => {
+    await flow.handle("第一个方案，但保留舞台区", {
+      request: "我希望你把我的分区重新做一遍",
+      question: SCREENSHOT_QUESTION,
+    });
+  });
+  expect(flow.proposal).toBeNull();
+  expect(flow.notice).toContain("补充对话里的信息后可以继续");
 });
 it("模型不可用/格式错误明确阻断，不用关键词假装理解或落固定模板", async () => {
   understand.mockResolvedValueOnce({ status: "disabled" });
@@ -1330,4 +1529,159 @@ it("地图依据没取全时，place 卡不再承诺自动框选", async () => {
   expect(host.textContent).toContain("没有取到可核对的真实地图/轮廓");
   expect(host.textContent).toContain("在地图上手画活动范围");
   expect(host.textContent).not.toContain("自动为你框选项目区域");
+});
+
+// 2026-11-17 用户实测：说「就沿着水岸线」，智能体回「工作台里没有可识别的水岸线……请告诉我哪一侧」。
+// 水岸进快照之后，这句必须变成沿岸预览，而不是又一个方位追问。
+it("说「就沿着水岸线」时沿真实岸线出预览，不再反问北/东/南/西", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/1",
+    name: "南侧河",
+    closed: false,
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(
+    response("ask", {}, {
+      reply:
+        "我理解你想让比赛沿水岸线排布。但当前工作台里没有可识别的真实水岸线/水域对象。请先告诉我哪一侧。",
+    }),
+  );
+  await act(async () => {
+    await flow.handle("就沿着水岸线");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("钓位")) ?? [];
+  expect(stations.length).toBeGreaterThan(5);
+  expect(host.textContent).not.toContain("没有可识别的真实水岸线");
+});
+
+it("地图上没有水系时，沿岸请求给可执行下一步（画一条岸线），不说「请告诉我方位」", async () => {
+  await confirmScope();
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:dry",
+      status: "partial",
+      text: "{}",
+      featureIds: [],
+      unknowns: [],
+      water: () => [],
+    }),
+  });
+  understand.mockResolvedValueOnce(
+    response("ask", {}, { reply: "请告诉我水岸在哪一侧。" }),
+  );
+  await act(async () => {
+    await flow.handle("就沿着水岸线");
+  });
+  expect(flow.proposal).toBeNull();
+  const said = saySpy.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
+  expect(said).toContain("没有水系");
+  expect(said).toContain("标注");
+});
+
+// 2026-11-17 用户拍板：沿岸活动不依赖模型回 ask——模型直接给设计动作时同样落沿岸排布。
+it("模型不回 ask 也能沿岸：钓鱼比赛 + zones 动作直接出预览，不落「只支持讲座/市集」", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/2",
+    name: "南侧河",
+    closed: false,
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water2",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("zones"));
+  await act(async () => {
+    await flow.handle("这里要办一个钓鱼比赛，就沿着水岸线");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("钓位")) ?? [];
+  expect(stations.length).toBeGreaterThan(5);
+});
+
+it("objects 动作同样沿岸，不被主入口核对拦住", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/3",
+    name: "湖岸",
+    closed: false,
+    points: [
+      { x: 0, y: 40 },
+      { x: 80, y: 40 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water3",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("objects"));
+  await act(async () => {
+    await flow.handle("这里要办一个钓鱼比赛");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
+});
+
+it("brief 记下钓鱼比赛后，后续一句 zones 也走沿岸", async () => {
+  await confirmScope();
+  const shore = {
+    id: "ofm:water/4",
+    name: "河岸",
+    closed: false,
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:water4",
+      status: "partial",
+      text: "{}",
+      featureIds: [shore.id],
+      unknowns: [],
+      water: () => [shore],
+    }),
+  });
+  understand.mockResolvedValueOnce(
+    response("ask", { event: { value: "钓鱼比赛", evidence: "这里要办一个钓鱼比赛" } }),
+  );
+  await act(async () => {
+    await flow.handle("这里要办一个钓鱼比赛");
+  });
+  understand.mockResolvedValueOnce(response("zones"));
+  await act(async () => {
+    await flow.handle("先排吧");
+  });
+  expect(flow.proposal?.label).toContain("沿岸排布");
 });

@@ -93,8 +93,12 @@ export function hasOutdoorPlanDraft(projectId: string, storage?: KeyValueStorage
 /**
  * 写整份记录：plan 严格过 sitePlanDataSchema（最后防线——上层 plan 来自画布
  * 编辑层本就合法）。名字/时间戳由调用方给；createdAt 想保留请传旧值。
+ *
+ * 活动级规划（2026-11-17）用 `trackLastProject=false`：那条 key 属于某个活动，
+ * 不是工作台要续开的项目，不能顶掉「最近项目」指针。
  */
-export function saveOutdoorProjectRecord(record: OutdoorProjectRecord, storage?: KeyValueStorage | null): void {
+export function saveOutdoorProjectRecord(record: OutdoorProjectRecord, storage?: KeyValueStorage | null,
+  trackLastProject = true): void {
   if (record.plan != null) {
     const verified = sitePlanDataSchema.parse(record.plan);
     record = { ...record, plan: verified };
@@ -104,7 +108,7 @@ export function saveOutdoorProjectRecord(record: OutdoorProjectRecord, storage?:
   try {
     store.setItem(outdoorPlanStorageKey(record.projectId), JSON.stringify(record));
     // 「最近活动」指针：`/` 无参数时续上次用（见 latestOutdoorProjectId）。
-    store.setItem(OUTDOOR_LAST_PROJECT_KEY, record.projectId);
+    if (trackLastProject) store.setItem(OUTDOOR_LAST_PROJECT_KEY, record.projectId);
   } catch {
     // 配额满/隐私模式：静默降级，不阻断编辑。
   }
@@ -174,6 +178,35 @@ export function latestOutdoorProjectId(storage?: KeyValueStorage | null): string
  * 里起新的云端项目并把它重命名。
  */
 export const DEFAULT_OUTDOOR_PROJECT_ID = 'default-outdoor';
+
+/**
+ * 活动级规划的接管标记（2026-11-17）：升级前所有本机活动共用 `default-outdoor` 这一份规划。
+ * 新版按活动存规划，第一次挂载时把这份旧规划交给当时打开的那个活动，之后不再重复接管——
+ * 否则以后每建一个空活动都会“继承”上一份规划，看起来就像复制了当前项目。
+ */
+export const OUTDOOR_PLAN_ACTIVITY_ADOPTED_KEY = 'scendance-outdoor-plan-activity-adopted-v1';
+
+/**
+ * 把一个旧版共用的规划记录一次性交给指定活动。
+ * 只在该活动还没有自己的记录、且本机从未接管过时执行；返回是否接管。
+ */
+export function adoptLegacyOutdoorPlanForActivity(activityId: string, legacyProjectId: string,
+  storage?: KeyValueStorage | null): boolean {
+  const store = storage ?? safeDefaultStorage();
+  const activity = activityId.trim(), legacy = legacyProjectId.trim();
+  if (!store || !activity || !legacy || activity === legacy) return false;
+  try {
+    if (store.getItem(OUTDOOR_PLAN_ACTIVITY_ADOPTED_KEY)) return false;
+    if (store.getItem(outdoorPlanStorageKey(activity))) return false;
+    const source = readOutdoorProjectRecord(legacy, store);
+    if (!source) return false;
+    saveOutdoorProjectRecord({ ...source, projectId: activity, updatedAt: new Date().toISOString() }, store, false);
+    store.setItem(OUTDOOR_PLAN_ACTIVITY_ADOPTED_KEY, activity);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** 确保默认户外工作台的本机草稿存在；返回它的 id。 */
 export function ensureDefaultOutdoorProject(storage?: KeyValueStorage | null): string {

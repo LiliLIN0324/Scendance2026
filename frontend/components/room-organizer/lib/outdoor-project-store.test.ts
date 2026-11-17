@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  adoptLegacyOutdoorPlanForActivity,
   clearOutdoorProjectRecord,
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
@@ -221,5 +222,46 @@ describe('outdoor-project-store', () => {
       saveOutdoorProjectRecord(record(createStarterOutdoorPlan()), storage);
       expect(readOutdoorProjectRecord(PID, storage)!.plan).toEqual(createStarterOutdoorPlan());
     });
+  });
+
+  describe('活动级规划（2026-11-17 新建活动不再继承上一份场地）', () => {
+    it('活动记录落盘时不动「最近项目」指针', () => {
+      const storage = memoryStorage();
+      saveOutdoorProjectRecord(record(samplePlan()), storage);
+      expect(storage.getItem(OUTDOOR_LAST_PROJECT_KEY)).toBe(PID);
+      saveOutdoorProjectRecord({ ...record(createStarterOutdoorPlan()), projectId: 'house-activity-b' }, storage, false);
+      expect(storage.getItem(OUTDOOR_LAST_PROJECT_KEY)).toBe(PID);
+      expect(readOutdoorProjectRecord('house-activity-b', storage)!.plan).toEqual(createStarterOutdoorPlan());
+    });
+
+    it('旧版共用的一份规划只交给第一个挂载的活动，之后的新活动仍是空白', () => {
+      const storage = memoryStorage();
+      saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'default-outdoor' }, storage);
+      expect(adoptLegacyOutdoorPlanForActivity('house-activity-a', 'default-outdoor', storage)).toBe(true);
+      expect(readOutdoorProjectRecord('house-activity-a', storage)!.plan).toEqual(samplePlan());
+      // 第二个活动（新建的空活动）不再接管旧规划。
+      expect(adoptLegacyOutdoorPlanForActivity('house-activity-b', 'default-outdoor', storage)).toBe(false);
+      expect(readOutdoorProjectRecord('house-activity-b', storage)).toBeNull();
+      // 旧记录本身保留，不销毁。
+      expect(readOutdoorProjectRecord('default-outdoor', storage)!.plan).toEqual(samplePlan());
+    });
+
+    it('已经处理过迁移时不覆盖活动自己的规划', () => {
+      const storage = memoryStorage();
+      saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'default-outdoor' }, storage);
+      saveOutdoorProjectRecord({ ...record(createStarterOutdoorPlan()), projectId: 'house-activity-a' }, storage, false);
+      expect(adoptLegacyOutdoorPlanForActivity('house-activity-a', 'default-outdoor', storage)).toBe(false);
+      expect(readOutdoorProjectRecord('house-activity-a', storage)!.plan).toEqual(createStarterOutdoorPlan());
+    });
+  });
+});
+
+// 2026-11-17：「有红线就带白框」不等于「无红线也造框」。起步规划是零边界起步，
+// 没画红线时凭空长出一只白框，就违反 schema 里「读取层不得把没设渲染成设了」。
+describe('起步规划不造白框', () => {
+  it('createStarterOutdoorPlan：边界为空，也不带 designScope', () => {
+    const plan = createStarterOutdoorPlan();
+    expect(plan.boundary).toEqual([]);
+    expect(plan.designScope).toBeUndefined();
   });
 });

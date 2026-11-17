@@ -5,6 +5,7 @@ import {
   type LegacyPlanInput,
 } from './site-plan-migrate';
 import { sitePlanDataSchema, sitePlanSnapshotSchema } from '../../../../supabase/functions/_shared/site-plan';
+import { DEFAULT_SCOPE_MARGIN_M } from './outdoor-design-scope';
 
 /** 确定性 UUID 生成器（测试断言用）。 */
 function uuidSeq(): () => string {
@@ -134,5 +135,33 @@ describe('site plan legacy migration (H1-c)', () => {
     // 复制产物可被契约层直接读写。
     expect(sitePlanSnapshotSchema.safeParse(snapshot).success).toBe(true);
     expect(sitePlanDataSchema.safeParse(snapshot.data).success).toBe(true);
+  });
+});
+
+// 2026-11-17 同一标准：旧项目搬进 2D 后也是一条可编辑的红线，配一只白框；
+// 边界本身没解析出来时不造框（没线就没框）。
+describe('迁移产物带设计范围', () => {
+  const margin = DEFAULT_SCOPE_MARGIN_M;
+
+  it('边界解析成功时补白框，四边各外扩 20 m', () => {
+    const { data } = previewLegacyMigration(validRect());
+    const scope = data.designScope;
+    expect(scope).toHaveLength(4);
+    const xs = data.boundary.map(p => p.x);
+    const ys = data.boundary.map(p => p.y);
+    const sx = scope!.map(p => p.x);
+    const sy = scope!.map(p => p.y);
+    expect(Math.min(...sx)).toBeCloseTo(Math.min(...xs) - margin, 2);
+    expect(Math.max(...sx)).toBeCloseTo(Math.max(...xs) + margin, 2);
+    expect(Math.min(...sy)).toBeCloseTo(Math.min(...ys) - margin, 2);
+    expect(Math.max(...sy)).toBeCloseTo(Math.max(...ys) + margin, 2);
+  });
+
+  it('边界解析失败时不造框', () => {
+    const input = validRect();
+    input.boundary = [{ x: 0, z: 0 }, { x: 1, z: 0 }];
+    const { data } = previewLegacyMigration(input);
+    expect(data.boundary).toEqual([]);
+    expect(data.designScope).toBeUndefined();
   });
 });

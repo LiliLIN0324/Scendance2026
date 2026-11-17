@@ -8,6 +8,7 @@ import { createCachedGlbModel, disposeOwnedModel, ensureGlbAsset } from '../room
 import { applyRendererLook, DEFAULT_EVENT_LIGHTING, makeBackdropTexture, resolveLook } from '../room-organizer/three/render-look';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Scene, SceneObject } from '../../../supabase/functions/_shared/domain';
+import { acquireWebGLSurface } from '../room-organizer/lib/webgl-context';
 import '@/app/share.css';
 
 const EMPTY: Record<string, string> = {};
@@ -78,7 +79,10 @@ export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
     if (!element) return;
     setProblem(''); setFailedAssets([]); setPendingAssets(0);
     let renderer: THREE.WebGLRenderer;
-    try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+    // 2026-11-17：先自己拿上下文；重试也不成时 three 不会先打一条 console.error。
+    const surface = acquireWebGLSurface({ antialias: true });
+    if (!surface) { setProblem('此设备暂时无法显示三维预览，仍可查看下方物料清单。'); return; }
+    try { renderer = new THREE.WebGLRenderer({ canvas: surface.canvas, context: surface.context, antialias: true }); }
     catch { setProblem('此设备暂时无法显示三维预览，仍可查看下方物料清单。'); return; }
     let disposed = false;
     const look = resolveLook(scene.lighting ?? DEFAULT_EVENT_LIGHTING);

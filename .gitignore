@@ -143,3 +143,7 @@ scope-out/
 
 # OnePlan 图标普查用一次性探针脚本
 /frontend/public/.tmp-*.js
+frontend/public/_internal-learning/
+
+# OnePlan 版权参考图母本（仅本地学习，不入仓；报告页拷贝件见 frontend/public/_internal-learning/）
+/learning-library/

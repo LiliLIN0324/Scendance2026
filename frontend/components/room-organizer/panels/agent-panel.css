@@ -1016,6 +1016,9 @@ button.ap-ghost {
 .ap-outdoor-thought-card { gap: 8px; }
 .ap-outdoor-thought-heading { color: var(--wk-ink); font-size: var(--fs-p2); font-weight: 700; overflow-wrap: anywhere; }
 .ap-outdoor-thought-card > .ap-run-thoughts { border: 0; padding: 0; background: transparent; }
+/* 2026-11-17：标题不得小于正文（.ap-run-thought-text 是 12px），否则层级倒挂。 */
+.ap-outdoor-thought-card > .ap-run-thoughts > summary { font-size: 12.5px; font-weight: 600; color: var(--wk-ink); flex-wrap: wrap; }
+.ap-outdoor-thought-canvas { font-weight: 400; color: var(--wk-muted); }
 .ap-outdoor-model-note > p { max-block-size: 11rem; overflow: auto; padding: 8px; border-radius: 8px; background: var(--wk-plane); }
 .ap-outdoor-thought-more, .ap-outdoor-plan-cancel { align-self: flex-start; padding: 0; border: 0; background: transparent; color: var(--wk-ink-soft); cursor: pointer; font-size: var(--fs-cap); }
 .ap-outdoor-thought-more { margin-top: 6px; }

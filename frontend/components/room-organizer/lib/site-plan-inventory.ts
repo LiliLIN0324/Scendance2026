@@ -13,7 +13,6 @@
 
 import {
   planAnnotationKindLabels,
-  planMeasurementKindLabels,
   planRingAreaM2,
   planRouteKindLabels,
   planRouteLengthM,
@@ -22,7 +21,7 @@ import {
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
 import { facilityTypeLabel } from './plan-facility-catalog';
-import { formatAreaM2, formatLengthM, measureValue } from './site-plan-measure';
+import { formatAreaM2, formatLengthM, measureKindLabel, measureValue } from './site-plan-measure';
 import { routeAnchorPoint, planVehicleDisplayLabel } from './site-plan-legend';
 import { planConflictIssues } from './site-plan-conflicts';
 import { planFacilityIssues } from './site-plan-facilities';
@@ -195,7 +194,7 @@ export function buildPlanInventory(plan: SitePlanData): PlanInventoryRow[] {
       id: measurement.id,
       kind: 'measurement',
       name: measurement.name,
-      typeLabel: planMeasurementKindLabels[measurement.kind],
+      typeLabel: measureKindLabel(measurement.kind),
       zoneName: null,
       zoneId: null,
       metric: measurement.kind === 'area' ? formatAreaM2(value) : formatLengthM(value),
