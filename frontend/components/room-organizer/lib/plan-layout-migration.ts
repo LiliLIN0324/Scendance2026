@@ -1,9 +1,9 @@
 /**
  * M2：旧室内布局（`RoomLayout`）→ 户外 plan 实体的一次性迁移纯函数层。
  *
- * 范围（2026-11-13 拍板）：本模块总入口迁出**分区 / 人员 / 动线 / 物料**四类实体；
+ * 范围：本模块总入口迁出**分区 / 人员 / 动线 / 物料 / 墙体**五类实体；
  * - 物料 `FurnitureItem` → facility：执行器见 `plan-facility-migration.ts`（消费 `plan-facility-mapping` 四档）；
- * - 墙体 `InteriorWall`：契约独立 `walls` 集合，扩字段评审后再接。
+ * - 墙体 `InteriorWall` → `walls`：执行器见 `plan-wall-migration.ts`（单线段 + 可选厚度/高度/图层）。
  *
  * 口径：
  * - 坐标复用 `plan-item-bridge` 的壳体 → 平面逆变换（z 南翻成 y 北，边界外接框两轴缩放）；
@@ -11,7 +11,7 @@
  * - 本模块不读写 localStorage、不接壳体调用、不拆旧链；id 由入参 `gen` 生成，便于对照快照。
  */
 
-import type { PlanFacility, PlanPoint, PlanRoute, PlanWorker, PlanZone } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanFacility, PlanPoint, PlanRoute, PlanWall, PlanWorker, PlanZone } from '../../../../supabase/functions/_shared/site-plan';
 import type { FurnitureItem, RoomLayout, RoomZone, WalkRoute } from './types';
 import type { ZoneSemanticType } from '../../../lib/plan-annotation';
 import type { PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
@@ -25,6 +25,7 @@ import {
 import { buildZone } from './site-plan-editing';
 import { buildRoute, buildWorker } from './site-plan-routes';
 import { migrateFacilities } from './plan-facility-migration';
+import { migrateWalls } from './plan-wall-migration';
 
 export type { MigrationUuidGen } from './plan-migration-frame';
 
@@ -47,7 +48,7 @@ const ZONE_SEMANTIC_MAP: Record<ZoneSemanticType, PlanningZoneSemantic> = {
 };
 
 export interface LayoutMigrationSkip {
-  source: 'zone' | 'worker' | 'route' | 'facility';
+  source: 'zone' | 'worker' | 'route' | 'facility' | 'wall';
   sourceId: string;
   reason: string;
 }
@@ -57,6 +58,7 @@ export interface LayoutMigrationResult {
   workers: PlanWorker[];
   routes: PlanRoute[];
   facilities: PlanFacility[];
+  walls: PlanWall[];
   skipped: LayoutMigrationSkip[];
 }
 
@@ -99,7 +101,7 @@ function migrateRoute(
  * 把旧布局里的分区、人员点位、行走动线迁成 plan 契约实体。
  *
  * 失败实体进 `skipped`（不抛异常、不留半成品）；其余已构建实体照常返回。
- * 墙体本轮不迁，见模块头注。
+ * 墙体随总入口一并迁移，`skipped` 统一带 `source: 'wall'`。
  */
 export function migrateLayoutToPlan(
   layout: Pick<RoomLayout, 'width' | 'height' | 'floors'>,
@@ -171,5 +173,17 @@ export function migrateLayoutToPlan(
     skipped.push({ source: 'facility', sourceId: skip.sourceId, reason: skip.reason });
   }
 
-  return { zones, workers, routes, facilities: facilityResult.facilities, skipped };
+  const wallResult = migrateWalls(layout, boundary, gen, zones);
+  for (const skip of wallResult.skipped) {
+    skipped.push({ source: 'wall', sourceId: skip.sourceId, reason: skip.reason });
+  }
+
+  return {
+    zones,
+    workers,
+    routes,
+    facilities: facilityResult.facilities,
+    walls: wallResult.walls,
+    skipped,
+  };
 }
