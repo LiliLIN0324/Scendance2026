@@ -277,11 +277,18 @@ it("在地图上手画分区按钮直接进入绘制模式", async () => {
   const beginDrawing = vi.fn(() => true);
   bridge.beginDrawing = beginDrawing;
   const buttons = [...host.querySelectorAll("button")];
-  expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(true);
+  // 2026-11-18 用户实测：没给分区用途时不挂「生成分区预览」空头按钮（点了只会撞红卡反问），
+  // 改为如实引导；给过用途后按钮才出现。
+  expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(false);
+  expect(host.textContent).toContain("还没说要分哪些区");
   const draw = buttons.find(button => button.textContent?.trim() === "在地图上手画分区");
   await act(async () => { draw!.click(); });
   expect(beginDrawing).toHaveBeenCalledWith("zone");
   expect(flow.notice).toContain("请在地图上画出分区轮廓并闭合");
+  // 2026-11-18 用户实测：进手画模式后卡上不再留自相矛盾的旧引导——引导语与手画按钮都收掉，
+  // 通知条是唯一指令，避免「收起」和内容脱节的观感。
+  expect(host.textContent).not.toContain("还没说要分哪些区");
+  expect([...host.querySelectorAll("button")].some(button => button.textContent?.trim() === "在地图上手画分区")).toBe(false);
 });
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
   await confirmScope();
@@ -344,7 +351,7 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(plan.anchor?.lng).toBe(120.1);
   expect(flow.state.stage).toBe("zones");
   expect(flow.appliedHighlight).toEqual({ kind: "scope" });
-  expect(host.textContent).toContain("拖动顶点调整后，请重新核对活动范围");
+  expect(host.textContent).toContain("不贴合就拖顶点调整，改完重新核对");
 });
 it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => {
   const anchor = { ...plan.anchor!, lng: 120.25 };
@@ -532,7 +539,7 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
   expect(plan.zones).toHaveLength(1);
   expect(flow.state.stage).toBe("main-routes");
   expect(flow.appliedHighlight).toEqual({ kind: "zones", zoneIds: [plan.zones[0]!.id] });
-  expect(host.textContent).toContain("可以拖动分区，或拖动顶点调整轮廓");
+  expect(host.textContent).toContain("分区不合适可拖动整块或拖顶点微调");
 
   const editedZone = {
     ...plan.zones[0]!,
@@ -560,7 +567,7 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
     routeIds: plan.routes.map(route => route.id),
     nodeIds: plan.nodes.map(node => node.id),
   });
-  expect(host.textContent).toContain("拖动路线转折点绕开障碍");
+  expect(host.textContent).toContain("路线和候选入口可拖动微调");
   act(() => flow.cancel());
   expect(flow.appliedHighlight).toBeNull();
 });
@@ -704,7 +711,10 @@ it("已确认场地后一次 search 不再静默丢场地：继续说需求仍�
   await confirmScope();
   const before = JSON.stringify(plan);
   await turn("看看别的地点", response("search", {}, { query: "别的地点" }));
-  expect(flow.state.stage).toBe("place");
+  // 2026-11-18 用户实测：任务卡不该退回「搜索目标地点」——已确认场地时阶段原地保留，
+  // 候选照常列出，换场仍走候选确认卡。
+  expect(flow.state.stage).toBe("zones");
+  expect(flow.state.confirmedBoundary).toBeTruthy();
   expect(JSON.stringify(plan)).toBe(before);
   await turn(
     "户外市集45人，展览区在室外",

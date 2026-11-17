@@ -97,6 +97,7 @@ import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-
 import { findAholoAsset } from './lib/aholo-assets';
 import { sceneAnchorFromOutdoorPlan } from './lib/outdoor-venue-sync';
 import { DEFAULT_OUTDOOR_PROJECT_ID } from './lib/outdoor-project-store';
+import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { findCatalogEntry } from './lib/catalog-drag';
 import { suggestDropPoint } from './lib/drop-zone';
@@ -348,6 +349,22 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const outdoorPlanSlotId = explicitOutdoorProject
     ? outdoorProjectIdProp
     : (layout.id ?? outdoorProjectIdProp ?? null);
+  // 2026-11-17 对齐：经典案例打开后，当前活动就「是」那个案例——id 与名字跟本机记录走
+  // （同一 id 复用，重复打开仍是那一案），不再把案例内容装进「新活动 HH:MM」，也不再让
+  // 自动保存用活动名把记录名「经典案例 · xxx」冲掉（flushSave 以 activityName 优先）。
+  // 例外：画布正绑着云项目时不动身份，避免拆掉云端编辑绑定。口径见 case-activity-alignment。
+  const layoutIdRef = useRef(layout.id);
+  layoutIdRef.current = layout.id;
+  useEffect(() => {
+    if (!explicitOutdoorProject) return;
+    const aligned = caseActivityAlignment({
+      projectId: outdoorProjectIdProp,
+      current: layoutStore.getState().layout,
+      boundCloudProjectId: controller.getSnapshot().project?.id,
+    });
+    if (aligned) actions.applyLayout(aligned);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explicitOutdoorProject, outdoorProjectIdProp, layout.id]);
   // 2026-11-13 用户指令：聊天历史要「服从于不同的项目」——会话槽跟当前活动走
   // （活动身份 = 当前布局 id，切换/新建活动即变），外壳 projectId 只在外壳还没注水时兜底。
   // 旧版本用 projectSessionScope(outdoorProjectIdProp)，一个 id 全活动共享，历史才会全摊在一起。
@@ -615,11 +632,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>(null);
   // 2026-11-16 用户拍板「属性卡只留一句点选提示 + 打开物件库」：
   // 画布（右侧）不持有左栅状态，所以发事件，这里把户外卡切到「添加物件」页签。
+  // 2026-11-18 提升到组件级：agent 面板（LayoutAgentProvider）也要这个入口，effect 内局部定义够不着。
+  const openOutdoorLibrary = useCallback(() => setOutdoorPanel('library'), []);
   useEffect(() => {
-    const openOutdoorLibrary = () => setOutdoorPanel('library');
     window.addEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
     return () => window.removeEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
-  }, []);
+  }, [openOutdoorLibrary]);
   // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
   // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
   useEffect(() => {

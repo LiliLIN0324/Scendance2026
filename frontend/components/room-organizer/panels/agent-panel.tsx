@@ -3800,7 +3800,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     startFlowSim,
     stopFlowSim,
     outdoorWorkflow,outdoorBridgeReady,searchOutdoorVenue,
-    registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after); },
+    registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after);outdoorWorkflow.reconcileCanvasStage(); },
     exportPreview, previewExport: proposeExport, confirmExport, confirmCloudMaterialDraft, dismissExport, reviewNow, issueReviewLink,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); },
     // 浮窗里「图片 / 文件」各自限定 accept；不传时回到全量白名单（老入口行为不变）。
@@ -4367,6 +4367,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 卸载时别把麦克风挂在后台。
   useEffect(() => () => { recognitionRef.current?.abort(); recognitionRef.current = null; }, []);
   const feed = useRef<HTMLDivElement>(null);
+  /** 对话流挂载重试计数：feed 晚于本 effect 挂载（conversation 后切过来）时触发重连观察器。 */
+  const [feedPinnedTick, setFeedPinnedTick] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // 树外入口（选中物件弹层）经预填总线把指令送进既有 composer：
   // 并入现有草稿（空格追加、不覆盖），聚焦输入框；不自动发送，仍走原提案审批链。
@@ -4397,6 +4399,38 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     if (agent.bubbles.length === 0 && mode === 'layout') return;
     feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
   }, [agent.bubbles.length, agent.state, mode]);
+  // 2026-11-18 用户实测：分屏拖比例、卡片展开、步骤追加之后，对话区停在旧位置，要从头翻。
+  // 会话永远锚定最新消息：容器或内容高度一变就钉回底部（气泡变化那条 effect 之外的兜底）。
+  // feed 只在 conversation 态挂载，这里用 ref 是否挂上做门，不必引 conversation 本身。
+  useEffect(() => {
+    let ro: ResizeObserver | null = null;
+    let mo: MutationObserver | null = null;
+    const attach = () => {
+      const el = feed.current;
+      if (!el) return false;
+      const pin = () => { el.scrollTo({ top: el.scrollHeight }); };
+      pin();
+      const resize = new ResizeObserver(pin);
+      resize.observe(el);
+      for (const child of Array.from(el.children)) resize.observe(child);
+      // 子节点增删（卡片/气泡挂载卸载）后重新跟踪新的内容元素。
+      const mutation = new MutationObserver(() => {
+        resize.disconnect();
+        resize.observe(el);
+        for (const child of Array.from(el.children)) resize.observe(child);
+      });
+      mutation.observe(el, { childList: true });
+      ro = resize;
+      mo = mutation;
+      return true;
+    };
+    if (!attach()) {
+      // 挂载早于 feed 渲染（conversation 还没切过来）：下一帧再试一次。
+      const raf = requestAnimationFrame(() => { if (!attach()) setFeedPinnedTick(value => value + 1); });
+      return () => cancelAnimationFrame(raf);
+    }
+    return () => { ro?.disconnect(); mo?.disconnect(); };
+  }, [mode, feedPinnedTick]);
   const generating = agent.state === 'generating';
   const localStageLine = runState.scope === 'layout'
     ? runState.stepLog.find(step => step.outcome === 'running')?.thought ?? null
