@@ -1078,6 +1078,32 @@ button.ap-ghost {
 .ap-scope-guide-title { margin: 0; font-size: var(--fs-c1); font-weight: 600; color: var(--wk-ink); }
 .ap-scope-guide-text { margin: 0; font-size: var(--fs-p2); line-height: 1.55; color: var(--wk-ink-soft); }
 .ap-scope-guide .btn-primary { width: 100%; height: 36px; }
+
+/* 2026-11-18 用户：卡底就是一组动作——同高（36px）、都有边、横排，窄栏自动换行；
+   引导句在上面，按钮紧跟在下。避免再出现「居中裸文字按钮」。 */
+.ap-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-card-actions > .btn-primary,
+.ap-card-actions > .btn-outline,
+.ap-card-actions > .ap-quiet-action {
+  flex: 1 1 8rem;
+  height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--fs-c1);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap-card-actions > .btn-outline { border: 1px solid var(--wk-hair); background: var(--wk-paper); color: var(--wk-ink-soft); }
+.ap-card-actions > .btn-outline:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane); color: var(--wk-ink); }
+.ap-card-actions > .ap-quiet-action { color: var(--wk-ink-soft); }
+.ap-card-actions > .btn-primary:disabled,
+.ap-card-actions > .btn-outline:disabled,
+.ap-card-actions > .ap-quiet-action:disabled { opacity: .55; cursor: not-allowed; }
+.ap-card-guide { display: grid; gap: 8px; }
+.ap-card-guide .ap-access-question { font-size: var(--fs-p2); line-height: 1.55; }
 .ap-outdoor-reply-wrap { gap: 8px; }
 .ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
 .ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }
