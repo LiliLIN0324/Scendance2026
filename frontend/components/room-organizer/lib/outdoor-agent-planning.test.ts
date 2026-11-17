@@ -10,6 +10,7 @@ import {
   clearForObject,
 } from "./outdoor-agent-planning";
 import { sitePlanDataSchema } from "../../../../supabase/functions/_shared/site-plan";
+import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import { buildSubEntranceProposal } from "./sub-entrance";
 import type { OutdoorBrief } from "./outdoor-agent-contract";
 const square = (w = 80, h = 70) => [
@@ -702,5 +703,106 @@ describe("需求分区对不上画布时不再整轮卡死", () => {
         ],
       }),
     ).toThrow(/餐饮区/);
+  });
+});
+
+describe("岗位通道缺失时按需补驳线（2026-11-17 死结 4）", () => {
+  /**
+   * 正式站实测的形状：签到台贴邻区、邻区子口就在共边旁 4m；
+   * 现有动线里没有一条服务「服务人员」——旧口径整轮报错，且报错让用户去做的补救并不成立。
+   */
+  function serviceZoneFixture(): { plan: SitePlanData; zoneId: string; portalId: string } {
+    const zoneId = crypto.randomUUID();
+    const portalId = crypto.randomUUID();
+    const plan: SitePlanData = {
+      ...base(),
+      boundary: [
+        { x: 0, y: 0 },
+        { x: 400, y: 0 },
+        { x: 400, y: 500 },
+        { x: 0, y: 500 },
+      ],
+      zones: [
+        {
+          id: zoneId,
+          name: "签到台",
+          semantic: "reserved",
+          purpose: "service",
+          environment: "outdoor",
+          polygon: [
+            { x: 60, y: 10 },
+            { x: 100, y: 10 },
+            { x: 100, y: 400 },
+            { x: 60, y: 400 },
+          ],
+          notes: "",
+        },
+      ],
+      routes: [
+        {
+          id: crypto.randomUUID(),
+          name: "观众区驳线",
+          kind: "pedestrian",
+          audiences: ["visitors", "staff", "security"],
+          points: [
+            { x: 56, y: 205 },
+            { x: -40, y: 205 },
+          ],
+          widthM: 2,
+          oneWay: false,
+          notes: "",
+        },
+      ],
+      nodes: [
+        {
+          id: portalId,
+          name: "观众区口",
+          kind: "both",
+          verification: "user-confirmed",
+          position: { x: 56, y: 205 },
+          notes: "",
+        },
+      ],
+    };
+    return { plan, zoneId, portalId };
+  }
+
+  const serviceNeed = {
+    role: "服务人员",
+    zone: "签到台",
+    count: 2,
+    audience: "service" as const,
+    evidence: "签到台安排 2 名服务人员",
+  };
+
+  it("该分区没有这类岗位能走的通道时，先补一条专用驳线再排岗位", () => {
+    const { plan, zoneId } = serviceZoneFixture();
+    const next = proposeRoleWorkers(plan, { ...brief, people: [serviceNeed] });
+    const spur = next.routes.find((r) => r.name.includes("签到台"));
+    expect(spur).toBeTruthy();
+    expect(spur!.audiences).toContain("service");
+    expect(next.workers).toHaveLength(1);
+    expect(next.workers[0]).toMatchObject({
+      role: "服务人员",
+      count: 2,
+      audience: "service",
+      activityZoneIds: [zoneId],
+    });
+    expect(next.workers[0]!.routeIds).toContain(spur!.id);
+  });
+
+  it("补不出通道时仍然硬拦，并写清缺什么、能改做什么", () => {
+    const { plan } = serviceZoneFixture();
+    let message = "";
+    try {
+      proposeRoleWorkers({ ...plan, routes: [] }, { ...brief, people: [serviceNeed] });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain("签到台");
+    expect(message).toMatch(/接驳|通道/);
+    // 旧文案让用户「先安排子流线/子入口」——那条补救路径实际不成立，不能再这么写。
+    expect(message).not.toContain("请先安排子流线/子入口");
+    expect(message).toMatch(/补一条接驳线|改到已有通道/);
   });
 });
