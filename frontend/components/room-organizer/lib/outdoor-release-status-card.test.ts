@@ -202,7 +202,7 @@ describe('可对比快照（两轮直接 diff）', () => {
     expect(snap).toEqual({
       evidenceAsOf: EVIDENCE_AS_OF,
       cases: { total: 11, ready: 0, missing: 5, browserOnly: 6 },
-      browser: { partial: [1, 3, 4, 6, 7, 8, 9, 10, 11], none: [2, 5] },
+      browser: { pass: [], partial: [1, 3, 4, 6, 7, 8, 9, 10, 11], none: [2, 5] },
       cloud: { pass: 0, unverified: 11 },
       gate: {},
       allGreen: 0,
