@@ -7,6 +7,7 @@ import { DEFAULT_FLOOR_PLAN_OPACITY } from '../lib/constants';
 import { floorKeepOut, type KeepOutBuilding } from '../lib/floor-keep-out';
 import { isMapReferenceImage } from '../lib/amap-venue';
 import { hasCollisions } from '../lib/geometry';
+import { sourceForLocation } from '../lib/basemap-alignment';
 import { mountBand } from '../lib/mount-band';
 import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, subscribePlanGroundSource } from '../lib/plan-basemap-source';
 import { planFootprintShapes } from '../lib/plan-footprint-geometry';
@@ -521,7 +522,9 @@ export function useSceneEffects({
     if (!THREE || !scene || !anchor || !plan || !showBasemapRef.current || view2DRef.current) return;
     const siteFrame = ringFrame(plan.boundary);
     if (siteFrame.width < 4 || siteFrame.depth < 4) return;
-    const source = geoBasemapSource;
+    // 境外场地：高德/天地图两档在境外没图，换全球卫星源（境内原样）。
+    // 这里的 `source` 同时决定瓦片上限与下游 paintTilePyramid 的取图。
+    const source = sourceForLocation(geoBasemapSource, anchor.lng, anchor.lat);
     // ENU → 壳体世界仿射：world.x=(p.x-minX)*scaleX-width/2、world.z=(maxY-p.y)*scaleZ-depth/2。
     // 与 plan-footprint-builder 的 shapePoint 完全同一把尺（含边界 >100m 的整体压缩）。
     const minX = siteFrame.cx - siteFrame.width / 2;

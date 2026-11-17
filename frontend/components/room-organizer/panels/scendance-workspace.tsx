@@ -22,12 +22,25 @@ import {
   satelliteMissReason,
 } from '../lib/amap-venue';
 import {
-  PLAN_GROUND_SOURCES,
+  isPlanGroundSource,
+  readPlanGroundMode,
   readPlanGroundSource,
+  subscribePlanGroundMode,
   subscribePlanGroundSource,
+  writePlanGroundMode,
   writePlanGroundSource,
 } from '../lib/plan-basemap-source';
+import type { PlanGroundSource } from '../lib/plan-ground-capture';
+import {
+  DEFAULT_MAP_SLOTS,
+  MAP_SLOT_LABELS,
+  MAP_SLOT_ROLES,
+  readMapSlots,
+  subscribeMapSlots,
+  type MapSlotRole,
+} from '../lib/map-source-slots';
 import { basemapSourceAttribution, PUBLIC_SOURCE_SPECS } from '../lib/tdt-probe';
+import { RealSourceThumb } from '../components/map-source-thumb';
 import {
   GROUND_BASEMAP_LAYERS,
   activeGroundBasemap,
@@ -528,6 +541,18 @@ const EXPORT_SCALES: ReadonlyArray<{ scale: number; label: string; hint: string 
   { scale: 3, label: '6K', hint: '5760×3240' },
 ];
 
+/** 场地多边形形心（GCJ-02）：三维菜单缩略图跟着场地取景；没有多边形返回 null（回落手绘示意）。 */
+function groundThumbAnchor(polygon: readonly { lng: number; lat: number }[] | undefined): { lng: number; lat: number } | null {
+  if (!polygon?.length) return null;
+  let lng = 0;
+  let lat = 0;
+  for (const point of polygon) {
+    lng += point.lng;
+    lat += point.lat;
+  }
+  return { lng: lng / polygon.length, lat: lat / polygon.length };
+}
+
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
 export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
@@ -836,7 +861,22 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const atmosphereMenuRef = useRef<HTMLDivElement>(null);
   const mapTypeMenuRef = useRef<HTMLDivElement>(null);
   // 2026-11-12 用户指令：GeoGround 态补回「地图切换」——主 3D 瓦片图源与户外 2D 同一份偏好联动。
-  const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as (typeof PLAN_GROUND_SOURCES)[number]);
+  const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as PlanGroundSource);
+  const groundMode = useSyncExternalStore(subscribePlanGroundMode, readPlanGroundMode, () => 'map' as const);
+  // 2026-11-17 用户指令：三维「地图切换」与户外 2D 面板共用同一组置顶槽位（map-source-slots），
+  // 两边看到的是同一组快捷位：卫星 / 街道 / 单色 / 无。
+  const mapSlots = useSyncExternalStore(subscribeMapSlots, readMapSlots, readMapSlots);
+  /**
+   * 三维只认能直接铺的 7 个源；若槽位里置顶了天地图两档（只走 /api 且在 2D 直连），
+   * 三维回落到该格缺省，并在行里说明，不静默给错图。
+   */
+  const groundSlotSource = (role: MapSlotRole): PlanGroundSource => {
+    const pinned = mapSlots[role];
+    return isPlanGroundSource(pinned) ? pinned : DEFAULT_MAP_SLOTS[role];
+  };
+  const groundLabel = groundMode === 'paper' ? '纸面（无底图）' : PUBLIC_SOURCE_SPECS[groundSource].label;
+  // 2026-11-17 用户指令：四行带上和 2D 地图详情同一套缩略图（oc-map-details__thumb）。
+  const thumbLngLat = groundThumbAnchor(layout.mapGroundPolygon);
   const [groundSourceOpen, setGroundSourceOpen] = useState(false);
   const groundSourceMenuRef = useRef<HTMLDivElement>(null);
   const selectMenuRef = useRef<HTMLDivElement>(null);
@@ -1059,8 +1099,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         <button
           type="button"
           id="tool-ground-source"
-          data-tip={`地图切换 · ${PUBLIC_SOURCE_SPECS[groundSource].label}`}
-          aria-label={`地图切换，当前 ${PUBLIC_SOURCE_SPECS[groundSource].label}，点选图源`}
+          data-tip={`地图切换 · ${groundLabel}`}
+          aria-label={`地图切换，当前 ${groundLabel}，点选图源`}
           aria-haspopup="dialog"
           aria-expanded={groundSourceOpen}
           aria-controls="tool-ground-source-panel"
@@ -1072,28 +1112,50 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         {groundSourceOpen && <div id="tool-ground-source-panel" className="sc-tool-pop sc-map-type-pop" role="dialog" aria-label="地图切换">
           <span className="sc-map-type-title">地图切换</span>
           <div role="listbox" aria-label="地理瓦片图源">
-            {PLAN_GROUND_SOURCES.map(src => {
-              const selected = src === groundSource;
+            {MAP_SLOT_ROLES.map(role => {
+              const src = groundSlotSource(role);
+              const selected = groundMode === 'map' && src === groundSource;
               const spec = PUBLIC_SOURCE_SPECS[src];
+              const fallbackNote = src === mapSlots[role] ? '' : '（二维置顶了天地图，三维用缺省）';
               return (
                 <button
                   type="button"
-                  key={src}
+                  key={role}
                   role="option"
                   aria-selected={selected}
+                  data-testid={`ground-slot-${role}`}
                   className={`sc-map-type-row${selected ? ' is-active' : ''}`}
-                  onClick={() => { writePlanGroundSource(src); setGroundSourceOpen(false); }}
+                  onClick={() => { writePlanGroundSource(src); writePlanGroundMode('map'); setGroundSourceOpen(false); }}
                 >
+                  <span className="oc-map-details__thumb" aria-hidden="true">
+                    <RealSourceThumb id={src} lngLat={thumbLngLat} />
+                  </span>
                   <span className="sc-map-type-copy">
-                    <strong>{spec.label}</strong>
-                    <small>与户外 2D 底图联动</small>
+                    <strong>{MAP_SLOT_LABELS[role]}</strong>
+                    <small>{spec.label}{fallbackNote}</small>
                   </span>
                   <span className="sc-map-type-provider">{spec.attribution}</span>
                 </button>
               );
             })}
+            {/* 第四格「无」= 纸面（虚拟场地）：不铺瓦片，与 2D 面板的「无」同一份 ground-mode 偏好。 */}
+            <button
+              type="button"
+              role="option"
+              aria-selected={groundMode === 'paper'}
+              data-testid="ground-slot-none"
+              className={`sc-map-type-row${groundMode === 'paper' ? ' is-active' : ''}`}
+              onClick={() => { writePlanGroundMode('paper'); setGroundSourceOpen(false); }}
+            >
+              <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
+              <span className="sc-map-type-copy">
+                <strong>无</strong>
+                <small>纸面（虚拟场地，不铺瓦片）</small>
+              </span>
+              <span className="sc-map-type-provider">与户外 2D 同源</span>
+            </button>
           </div>
-          <span className="sc-map-type-note">{basemapSourceAttribution(groundSource)} · 3D 地面与户外 2D 底图同源联动</span>
+          <span className="sc-map-type-note">{groundMode === 'paper' ? '纸面 · 不铺瓦片（与户外 2D 的「无」同步）' : `${basemapSourceAttribution(groundSource)} · 3D 地面与户外 2D 底图同源联动`}</span>
         </div>}
       </div>}
       {satelliteVenue && !outdoorEditing && !geoGroundActive && <div className="sc-tool-menu" ref={mapTypeMenuRef}>

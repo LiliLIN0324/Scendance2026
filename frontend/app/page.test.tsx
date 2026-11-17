@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { usePathname } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendSceneToLayout } from '@/components/room-organizer/lib/backend-adapter';
+import { requestOutdoorProjectSwitch } from '@/components/room-organizer/lib/outdoor-project-switch';
 import { WorkspaceShell } from '@/components/workspace-shell';
 import { AuthProvider } from '@/lib/auth-provider';
 import { BackendSession, getBackendConfig, type Scene, type SceneProposal } from '@/lib/backend-session';
@@ -79,8 +80,8 @@ vi.mock('@/components/room-organizer', async () => {
   const { SelectionProvider } = await import('@/components/room-organizer/contexts');
   const { CreativeStudioProvider, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
-    RoomOrganizer: ({ controller, startOutdoor }: EditorProps & { startOutdoor?: boolean }) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
-      <div data-testid="workspace-shell" data-start-outdoor={startOutdoor ? '1' : '0'} />
+    RoomOrganizer: ({ controller, startOutdoor, outdoorProjectId }: EditorProps & { startOutdoor?: boolean; outdoorProjectId?: string | null }) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
+      <div data-testid="workspace-shell" data-start-outdoor={startOutdoor ? '1' : '0'} data-outdoor-project={outdoorProjectId ?? ''} />
       <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
         <button onClick={() => navigation.push('/auth')}>返回登录页</button>
         <CreativeAssistant />
@@ -279,3 +280,17 @@ it('opens the current workspace at the editor alias after session restoration', 
   await screen.findByRole('button', { name: '打开 Bingo Agent' });
   expect(navigation.replace).not.toHaveBeenCalled();
 });
+
+// 2026-11-17 用户：「切换经典案例不要直接白屏刷新重置……就按不换页改」。
+it('切换活动不重载文档：只换工作台当前项目与 URL', async () => {
+  window.history.replaceState(null, '', '/editor/?project=draft-a&mode=outdoor');
+  render(<App />);
+  await screen.findByRole('button', { name: '打开 Bingo Agent' });
+  expect(screen.getByTestId('workspace-shell').getAttribute('data-outdoor-project')).toBe('draft-a');
+  act(() => { expect(requestOutdoorProjectSwitch('replica-abc')).toBe(true); });
+  await waitFor(() => {
+    expect(screen.getByTestId('workspace-shell').getAttribute('data-outdoor-project')).toBe('replica-abc');
+  });
+  expect(window.location.search).toBe('?project=replica-abc&mode=outdoor');
+  expect(navigation.replace).not.toHaveBeenCalled();
+}, 15000);

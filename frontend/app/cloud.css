@@ -43,6 +43,8 @@
 .sc-file-thumb img,.sc-file-thumb>div{position:absolute;inset:0;width:100%;height:100%}
 .sc-file-thumb img{object-fit:cover;transition:transform var(--sc-slow) var(--sc-ease)}
 .sc-file-card:hover .sc-file-thumb img{transform:scale(1.02)}
+/* 没有画布快照时用名字首字色块占位：同一个占位图形会让所有方案看起来一模一样 */
+.sc-file-thumb-mark{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(140deg,color-mix(in srgb,var(--wk-plane) 55%,var(--wk-green-pale)),var(--wk-plane));color:color-mix(in srgb,var(--sc-muted) 78%,var(--wk-ink-faint));font-size:28px;font-weight:600;line-height:1;letter-spacing:.02em}
 .sc-file-state{position:absolute;left:8px;bottom:8px;z-index:1;padding:3px 8px;border:1px solid var(--wk-hair);border-radius:999px;background:#fffdf8e6;color:var(--sc-muted);font-size:10px;line-height:1.4;backdrop-filter:blur(4px)}
 .sc-file-card.is-current .sc-file-state{border-color:var(--wk-green);background:var(--wk-green-pale);color:var(--wk-green-deep)}
 .sc-file-info{display:block;padding:10px 12px 12px;min-width:0}

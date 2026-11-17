@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { rememberAholoAsset } from '../lib/aholo-assets';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
+import { readOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { onOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { REPLICA_CASES } from '../lib/replica-cases';
 import { SpacePanel } from './space-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
@@ -49,6 +51,10 @@ describe('SpacePanel', () => {
     expect(screen.queryByText('还没有已扫描的真实场地')).toBeNull();
     const item = screen.getByLabelText('应用真实场地 午后咖啡馆');
     expect(screen.getByText(/12\.4 × 8\.6 m/)).toBeTruthy();
+    // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」——扫描也是 16:10 卡，不再是一行索引。
+    expect(item.classList.contains('sc-space-sample')).toBe(true);
+    expect(item.querySelector('.sc-scan-card-shot')).toBeTruthy();
+    expect(item.querySelector('.sc-scan-card-meta')?.textContent).toContain('12.4 × 8.6 m');
     fireEvent.click(item);
     expect(onPickScan).toHaveBeenCalledWith(expect.objectContaining({
       assetId: '00000000-0000-4000-8000-000000000000',
@@ -74,12 +80,20 @@ describe('SpacePanel', () => {
   // 2026-11-17 用户：「是不是上面的应该放在下面」「项目中的场景这玩意根本就不重要啊」
   // ＋「经典案例我要的也是和其他的视觉一样的卡片预览图」。
   it('card：案例与模板库在前、实景扫描在后，项目中的场景不再占位', () => {
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} onAddSampleScene={vi.fn()} variant="card"/>);
     const labels = [...document.querySelectorAll('details.sc-scene-group')]
       .map(group => group.querySelector('.sc-scene-group-label')?.textContent);
     expect(labels[0]).toBe('经典案例');
     expect(labels).not.toContain('项目中的场景');
     expect(labels[labels.length - 1]).toBe('我的实景扫描');
+    // 2026-11-17 用户：「每次打开都默认打开了示例场景和我的实景扫描……默认都不要打开」——
+    // 这两段从收起起步；展开与否交给用户点。
+    for (const label of ['示例场景', '我的实景扫描']) {
+      const group = [...document.querySelectorAll('details.sc-scene-group')]
+        .find(node => node.querySelector('.sc-scene-group-label')?.textContent === label) as HTMLDetailsElement | undefined;
+      expect(group, `${label} 分类行应该在`).toBeTruthy();
+      expect(group!.open).toBe(false);
+    }
     // 收起时不建卡（44 案各自要算一遍方案，懒挂载）。
     expect(document.querySelectorAll('.sc-space-cases .sc-space-sample').length).toBe(0);
     const group = document.querySelector('[data-testid="space-group-cases"]') as HTMLDetailsElement;
@@ -89,5 +103,25 @@ describe('SpacePanel', () => {
     expect(cards.length).toBe(REPLICA_CASES.length);
     expect(cards[0].querySelector('svg.sc-case-thumb')).toBeTruthy();
     expect(cards[0].textContent).toContain(REPLICA_CASES[0].title);
+  });
+
+  // 2026-11-17 用户：「切换经典案例不要直接白屏刷新重置……就按不换页改」——
+  // 打开案例 = 写本机记录 + 请工作台就地换 project id；不再交给整页跳。
+  it('card：打开经典案例先写本机记录，再请工作台同页切换', () => {
+    const switched: string[] = [];
+    const off = onOutdoorProjectSwitch(id => { switched.push(id); return true; });
+    try {
+      render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+      const group = document.querySelector('[data-testid="space-group-cases"]') as HTMLDetailsElement;
+      group.open = true;
+      fireEvent(group, new Event('toggle'));
+      const card = document.querySelector('[data-testid="space-group-cases"] .sc-space-sample') as HTMLElement;
+      fireEvent.click(card);
+      const expected = `replica-${REPLICA_CASES[0].id}`;
+      expect(switched).toEqual([expected]);
+      expect(readOutdoorProjectRecord(expected)?.name).toBe(`经典案例 · ${REPLICA_CASES[0].title}`);
+    } finally {
+      off();
+    }
   });
 });

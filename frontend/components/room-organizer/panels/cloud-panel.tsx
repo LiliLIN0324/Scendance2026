@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { AuthCard } from '@/components/intro/auth-card';
-import { DoorOpen, FolderOpen, Images, MoreHorizontal, RefreshCw, Settings, UserRound, UsersRound, X } from '@/components/solid-icons';
+import { DoorOpen, Images, MoreHorizontal, RefreshCw, Settings, UserRound, UsersRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
@@ -64,6 +64,14 @@ function updatedLabel(value: string | undefined): string {
   const days = Math.round(hours / 24);
   if (days < 8) return `${days} 天前更新`;
   return `${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(timestamp)} 更新`;
+}
+
+/** 没有画布快照的项目卡用名字首字区分，不让所有卡长成同一个占位图形。 */
+function thumbMark(name: string | undefined): string {
+  const text = (name ?? '').trim();
+  if (!text) return '·';
+  const first = Array.from(text)[0] ?? '·';
+  return /[a-z0-9]/i.test(first) ? first.toUpperCase() : first;
 }
 
 export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp }: Props): JSX.Element {
@@ -686,7 +694,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
           {showDraftCard && <li className="sc-file-card is-current is-draft">
             <button type="button" className="sc-file-hit" disabled aria-current="true" aria-label={`当前草稿 ${draftCardName}`}>
               <span className={`sc-file-thumb${draftScene ? ' has-preview' : ''}`} aria-hidden="true">
-                {draftScene ? <SceneThumb scene={draftScene} eager/> : <FolderOpen size={26}/>}
+                {draftScene ? <SceneThumb scene={draftScene} eager/> : <span className="sc-file-thumb-mark">{thumbMark(draftCardName)}</span>}
                 <span className="sc-file-state">当前 · 草稿</span>
               </span>
               <span className="sc-file-info"><strong>{draftCardName}</strong><small>仅本机 · 未存为云端方案</small></span>
@@ -715,7 +723,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 }}
               >
                 <span className={`sc-file-thumb${previewScene ? ' has-preview' : ''}`} aria-hidden="true">
-                  {previewScene ? <SceneThumb scene={previewScene}/> : <FolderOpen size={26}/>}
+                  {previewScene ? <SceneThumb scene={previewScene}/> : <span className="sc-file-thumb-mark">{thumbMark(project.name)}</span>}
                   {status && <span className="sc-file-state">{status}</span>}
                 </span>
                 <span className="sc-file-info"><strong>{project.name}</strong><small>{updatedLabel(project.updated_at)}</small></span>
