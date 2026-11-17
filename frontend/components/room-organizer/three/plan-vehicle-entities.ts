@@ -18,6 +18,7 @@ import {
   disposeOwnedModel,
   ensureGlbAsset,
 } from './glb-assets';
+import { planFrameOf, routePathOf, sampleRoute, type RoutePath } from './plan-traffic-layer';
 import { loadFacilityModelOverride, type FacilityModelCandidate } from '../lib/plan-facility-models';
 import type { FurnitureItem } from '../lib/types';
 import type {
@@ -195,7 +196,7 @@ export function createPlanVehicleEntitiesLayer(baseY: number): PlanVehicleEntiti
       source: 'public_library',
       materialId: 'asset',
       notes: '',
-    } as FurnitureItem;
+    } as unknown as FurnitureItem;
     const model = createCachedGlbModel(item, false);
     if (!model) return;
 
