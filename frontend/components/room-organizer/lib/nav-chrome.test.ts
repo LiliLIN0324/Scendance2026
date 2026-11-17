@@ -50,6 +50,21 @@ describe('nav chrome state', () => {
     expect(css).not.toMatch(/sc-nav-brand[^}]{0,240}188px/);
   });
 
+  it('keeps the canvas share above the outdoor 3D takeover and under the map overlays', () => {
+    const css = readFileSync(join(here, '../../../app/globals.css'), 'utf8');
+    const panel = readFileSync(join(here, '../panels/agent-panel.css'), 'utf8');
+    const zIndex = (source: string, selector: string) => {
+      const pattern = new RegExp(`${selector.replaceAll('.', '\\.')}\\s*\\{[^}]*z-index:\\s*(\\d+)`);
+      const match = source.match(pattern);
+      expect(match, selector).toBeTruthy();
+      return Number(match?.[1]);
+    };
+    const share = zIndex(css, '.sc-canvas-share');
+    expect(share).toBeGreaterThan(zIndex(css, '.sc-outdoor-takeover'));
+    expect(share).toBeLessThan(zIndex(panel, '.sc-map-overlay'));
+    expect(share).toBeLessThan(zIndex(panel, '.sc-venue-overlay'));
+  });
+
   it('does not store a separate navExpanded flag beside the two doors', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).not.toMatch(/navExpanded\s*=\s*useState|const \[navExpanded/);
