@@ -34,7 +34,7 @@ import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
-import { defaultLedger, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
+import { CASE_IDS, defaultLedger, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
 import {
   bookToRecord,
   markSeen,
@@ -483,6 +483,8 @@ export function useOutdoorAgentWorkflow(input: {
   const traceBook = useRef(createTurnTraceBook());
   /** 走查记录本：本轮页面里逐条标，标完直接进状态卡（同时落盘，刷新后不丢）。 */
   const walkthroughBook = useRef(loadBook());
+  /** 云端真跑过的用例号：只能人显式声明，永远不从浏览器结果推。 */
+  const cloudPass = useRef<number[]>([]);
   const liveTurn = useRef(createLiveTurn({ book: metricsBook.current, traceBook: traceBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
@@ -2553,7 +2555,7 @@ export function useOutdoorAgentWorkflow(input: {
       return logReleaseStatus({
         rows: assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
         metrics: summarizeMetrics(metricsBook.current),
-        ledger: defaultLedger(record),
+        ledger: defaultLedger(record, cloudPass.current),
         evidence: record,
       });
     },
@@ -2570,6 +2572,17 @@ export function useOutdoorAgentWorkflow(input: {
     walkthroughLine: () => summarizeWalkthrough(walkthroughBook.current).line,
     /** 当前记录本（受控面板需要它才能渲染按压态）。 */
     walkthroughBook: () => walkthroughBook.current,
+    /** 声明某条用例的云端证据是否真跑过；编号不合法返回 null（不生效）。 */
+    declareCloud: (id: number, pass: boolean) => {
+      if (!CASE_IDS.includes(id)) return null;
+      const next = new Set(cloudPass.current);
+      if (pass) next.add(id);
+      else next.delete(id);
+      cloudPass.current = [...next].sort((a, b) => a - b);
+      return cloudPass.current;
+    },
+    /** 当前已声明的云端通过用例号（升序）。 */
+    cloudPass: () => cloudPass.current,
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);

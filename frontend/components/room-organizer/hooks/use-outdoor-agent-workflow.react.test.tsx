@@ -2038,3 +2038,20 @@ it("走查记录本：标一条才算看过，非法编号这一标不生效", (
   // 记录本永远不下结论。
   expect(flow.walkthroughLine()).not.toContain("可发布（");
 });
+
+it("云端声明：只能显式给号，编号不合法这一标不生效", () => {
+  // 没声明就是“云端一条都没验”，不从浏览器结果推。
+  expect(flow.cloudPass()).toEqual([]);
+  act(() => {
+    flow.declareCloud(2, true);
+  });
+  expect(flow.cloudPass()).toEqual([2]);
+  // 编号不在 1..11：返回 null，声明不变。
+  expect(flow.declareCloud(99, true)).toBeNull();
+  expect(flow.cloudPass()).toEqual([2]);
+  // 撤回声明。
+  act(() => {
+    flow.declareCloud(2, false);
+  });
+  expect(flow.cloudPass()).toEqual([]);
+});
