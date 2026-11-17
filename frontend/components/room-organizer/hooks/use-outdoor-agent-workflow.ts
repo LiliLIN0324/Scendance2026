@@ -442,6 +442,10 @@ export function useOutdoorAgentWorkflow(input: {
    * 让通知条成为唯一指令。任意新回合、取消、切活动都会清掉。
    */
   const [drawingMode, setDrawingMode] = useState<"zone" | "route" | "node" | null>(null);
+  /** 2026-11-18：scope 阶段画布上是否已有合法用地红线——卡片据此决定「直接给核对卡」还是「教怎么画」。 */
+  const [boundaryReady, setBoundaryReady] = useState(false);
+  /** 已经自动签发过确认预览的那份边界；同一份边界撤回后不再自动弹回。 */
+  const autoScopeSig = useRef<string | null>(null);
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
   /** 2026-11-17：画布规模并进思考卡摘要（一行），不再作为一条步骤占一行。 */
@@ -588,6 +592,9 @@ export function useOutdoorAgentWorkflow(input: {
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
     abort.current?.abort();
+    // 2026-11-18：撤回预览 / 改手画后，同一份红线不再自动弹回确认卡（重画边界才会重新签）。
+    const livePlan = callbacks.current.bridge()?.getPlan();
+    autoScopeSig.current = livePlan ? JSON.stringify(livePlan.boundary) : null;
     callbacks.current.begin(); // Invalidate the shared outer task epoch as well as this hook.
     token.current = null;
     proposalRef.current = null;
@@ -665,6 +672,42 @@ export function useOutdoorAgentWorkflow(input: {
     if (stateRef.current.stage !== "place") return;
     persist({ ...stateRef.current, stage: "scope" });
   }
+  /**
+   * 2026-11-18 用户拍板：场地已经有用地红线时，任务卡就该直接是「待你核对」这张，
+   * 不该让人先点一次「确认活动范围」才看到它；只有场地还没有红线时，才给画红线的引导卡。
+   * 画布不对外发变更事件，所以 scope 阶段低频读一次 bridge 快照：红线一闭合就签发确认预览。
+   * 同一份边界只自动签一次——用户点了「撤回预览」不会立刻又被弹回来；重画边界才会重新签。
+   */
+  useEffect(() => {
+    if (state.stage !== "scope" || proposal || busy || drawingMode) {
+      setBoundaryReady(false);
+      return undefined;
+    }
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
+      const ready = !!planNow && checkBoundaryRing(planNow.boundary).ok;
+      setBoundaryReady(ready);
+      if (!ready || !planNow) return;
+      const sig = JSON.stringify(planNow.boundary);
+      if (autoScopeSig.current === sig) return;
+      autoScopeSig.current = sig;
+      const job = start();
+      persist({ ...stateRef.current, stage: "scope" });
+      offer(planNow, "scope", "确认当前活动范围", job, [
+        "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
+      ]);
+      setBusy(false);
+    };
+    tick();
+    const timer = setInterval(tick, 800);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [state.stage, proposal, busy, drawingMode]);
+
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
     const map = bridge?.mapContext
@@ -2739,6 +2782,8 @@ export function useOutdoorAgentWorkflow(input: {
     appliedHighlight: state.scope === input.scope ? appliedHighlight : null,
     models,
     busy,
+    /** scope 阶段画布上已有合法用地红线（卡片据此直接给核对卡，没红线才教怎么画）。 */
+    boundaryReady,
     simulating,
     libraryChoices,
     selectedLibraryId,

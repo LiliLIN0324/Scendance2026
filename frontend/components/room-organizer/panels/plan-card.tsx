@@ -114,17 +114,21 @@ const zoneBadgeStyle: CSSProperties = {
 
 const buttonRowStyle: CSSProperties = {
   display: 'flex',
+  alignItems: 'stretch',
   gap: 8,
   marginTop: 4,
 };
 
+// 2026-11-18 用户：卡底按钮统一 36px 同高、都有边（取消不能是一行裸文字）。
 const primaryButtonStyle: CSSProperties = {
   flex: 1,
+  height: 36,
+  boxSizing: 'border-box',
   background: '#4A7C59',
   color: '#fff',
-  border: 'none',
+  border: '1px solid #4A7C59',
   borderRadius: 8,
-  padding: '8px 10px',
+  padding: '0 10px',
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
@@ -132,22 +136,26 @@ const primaryButtonStyle: CSSProperties = {
 
 const secondaryButtonStyle: CSSProperties = {
   flex: 1,
-  background: '#F4F5F7',
+  height: 36,
+  boxSizing: 'border-box',
+  background: '#fff',
   color: '#374151',
   border: '1px solid #e5e7eb',
   borderRadius: 8,
-  padding: '8px 10px',
+  padding: '0 10px',
   fontSize: 13,
   cursor: 'pointer',
 };
 
 const cancelButtonStyle: CSSProperties = {
   flex: 1,
-  background: 'transparent',
+  height: 36,
+  boxSizing: 'border-box',
+  background: '#fff',
   color: '#b45309',
-  border: 'none',
+  border: '1px solid #e5e7eb',
   borderRadius: 8,
-  padding: '8px 10px',
+  padding: '0 10px',
   fontSize: 13,
   cursor: 'pointer',
 };
