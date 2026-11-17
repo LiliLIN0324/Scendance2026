@@ -53,14 +53,16 @@
 - `thicknessM` 0.05–5、`heightM` 0.5–20，缺失/超界不写（不虚构）；
 - `kind` exterior/interior、`status` detected/inferred/confirmed 直通；
 - `color`、`zoneId` 可选；上限 500 段；旧数据不带照常解析。
+- `levelId` 可选（一期契约带上）：迁移侧无楼层映射时经 `levelIdForFloor` 注入，缺省不写。
+- 纳入 `superRefine`：跨集合 id 去重、`zoneId` 悬空、`levelId` 悬空（levels 缺省时不得携带）。
 
 `migrateWalls(layout, boundary, gen, zones?)`：
 - 两端经 `framePoint` 逆变换并夹进边界；端点非有限数/两端重合进 skipped；
 - 厚度/高度超界只丢字段、保留墙段；
-- 归属分区按线段中点命中；门/窗无独立结构，不凭空转 node；
+- 归属分区按线段中点命中；楼层 → 图层经 `levelIdForFloor` 注入，缺省不写；门/窗无独立结构，不凭空转 node；
 - 超过 500 段的墙进 skipped，保留前 500 段。
 
-测试：`plan-wall-migration.test.ts` 7 条。
+测试：`plan-wall-migration.test.ts` 8 条 + `site-plan-walls-schema.test.ts` 6 条（重复 id / 悬空 zoneId / 悬空 levelId / 合法通过 / 阈值）。
 
 ## 5. A1-5 物料库反查已落
 

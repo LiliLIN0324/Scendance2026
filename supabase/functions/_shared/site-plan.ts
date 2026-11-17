@@ -142,6 +142,8 @@ export const planWallSchema = z.strictObject({
   status: z.enum(planWallStatuses).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase()).optional(),
   zoneId: z.uuid().optional(),
+  /** 所属图层（可选，2026-11-17）：一期契约带上，迁移侧没有楼层映射时不写；旧数据缺省照常解析。 */
+  levelId: z.uuid().optional(),
 });
 export type PlanWall = z.infer<typeof planWallSchema>;
 
@@ -396,7 +398,7 @@ export const sitePlanDataSchema = z.strictObject({
   walls: z.array(planWallSchema).max(500).optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
-    ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'],
+    ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'], ['walls', '墙体'],
   ];
   const seen = new Set<string>();
   for (const [key, label] of collections) {
@@ -418,6 +420,7 @@ export const sitePlanDataSchema = z.strictObject({
     ...(plan.vehicles ?? []).map(item => [`车辆 ${item.type}`, item.levelId] as [string, string | undefined]),
     ...(plan.measurements ?? []).map(item => [`测量 ${item.name}`, item.levelId] as [string, string | undefined]),
     ...(plan.annotations ?? []).map(item => [`标注 ${item.name}`, item.levelId] as [string, string | undefined]),
+    ...(plan.walls ?? []).map(item => [`墙体 ${item.id.slice(0, 8)} `, item.levelId] as [string, string | undefined]),
   ];
   for (const [label, levelId] of levelRefs) {
     if (levelId && !levelIds.has(levelId.toLowerCase())) {
@@ -455,6 +458,11 @@ export const sitePlanDataSchema = z.strictObject({
   for (const node of plan.nodes) {
     if (node.zoneId && !zoneIds.has(node.zoneId.toLowerCase())) {
       ctx.addIssue({ code: 'custom', message: `出入口 ${node.name} 的归属分区不存在` });
+    }
+  }
+  for (const wall of plan.walls ?? []) {
+    if (wall.zoneId && !zoneIds.has(wall.zoneId.toLowerCase())) {
+      ctx.addIssue({ code: 'custom', message: `墙体 ${wall.id.slice(0, 8)} 的归属分区不存在` });
     }
   }
   const nodeIds = new Set(plan.nodes.map(node => node.id.toLowerCase()));
