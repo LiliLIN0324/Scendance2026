@@ -444,4 +444,61 @@ text 刚建/刚未知    -> 不动
 
 审计也确认了几件关键的事：不存在向 Aholo 的自动重复提交；`assets.register` 与 `jobs.complete` 同事务；上传是内容寻址 + 409 容忍，重试不产生重复资产。
 
+## 第三轮：生产闭合与供应商原话（2026-11-17）
 
+这一轮把「剩下的都做完」在生产上跑完了：账本闭合、cron 装上、worker 接手、预留释放，全部有原文可核。
+
+### 生产执行顺序（实际执行的就是这四步）
+
+| 步骤 | 做了什么 | 怎么验的 |
+| --- | --- | --- |
+| 1 | 执行迁移 `20261118100000_generation_ledger_close.sql` | 生产 `public.job_rpc` 的函数体指纹变成 `dab85d6e…`，与本地桩库实测通过的那一份**逐字节一致** |
+| 2 | 执行 `supabase/ops/backfill-generation-ledger.sql` | 返回 `unsettled=0`（历史没有待结算的终态行），`generation_committed=100`（C1 那笔仍在途） |
+| 3 | 轮换 `GENERATION_WORKER_SECRET`，往 Vault 放 `scene_project_url` / `scene_worker_secret` | Vault 里正好两条（长度 40 / 64）；Edge Secrets 的摘要从 `9fe760a5…` 变成 `56ac2dcb…`，与本地生成的随机值 sha256 相同 |
+| 4 | 执行 `supabase/ops/install-generation-cron.sql` | `cron.job` 里一条 `scene-generation-poll`，`* * * * *`，`active=t` |
+
+> 为什么第 3 步是轮换：Dashboard 只显示 secrets 的 SHA256 摘要，明文拿不到，
+> 而 cron 必须用**和 Edge Function 完全一致**的那把明文。没别的路 —— 轮换是唯一的办法。
+> 这把密钥只有 generation-worker 与这条 cron 两个使用者，前端从不持有它。
+
+### 闭合证据（两笔任务，各自完整走完）
+
+| 任务 | 终态 | actual_cents | committed 释放 | 供应商原话 |
+| --- | --- | --- | --- | --- |
+| `9b35ebc5-…`（C1） | failed / PROVIDER_REJECTED | 0 | 100 → 0 | 当时被丢掉，未记录 |
+| `a002dac2-…`（同 prompt 重排） | failed / PROVIDER_REJECTED | 0 | 100 → 0 | `vendorCode=-1`，`vendorMessage=no credits` |
+
+`budgets` 现在两行都是 `committed_cents = 0`，`actual_cents` 不再是 NULL。**账本闭合这件事本身是验证过的。**
+
+### 供应商到底为什么拒
+
+第二轮 worker 把供应商自己的拒绝码与文案落库之后，答案直接读出来了：**`no credits`** —— 生产那把 Aholo 账号没额度了。
+
+排除掉的其他可能（都查过，都不是）：
+
+- 不是网关错：生产 `LUX3D_TERMS_URL` 的 sha256 摘要与 `https://www.aholo.ai/agreement/termsofuse` 逐字节相同，说明配的就是全球站，worker 默认打的 `https://api.aholo.ai/global` 正是对的。
+- 不是请求体错：用同一份请求体（`prompt / version:G1 / faceCount:30000 / outputFormat:[zip,glb]`，**不带** `style`）打全球站，本地那把 key 直接建出任务 `8206363`（`c:"0"`）。
+- 不是 key 格式错：本地那把 key 在同一个接口上工作正常，而生产那把被拒 —— 差别在账号，不在格式。
+
+所以：**代码是对的，账号是没额度的**。要真的出一张模型，得先给 Aholo 账号充值。
+
+> 顺带记一笔：上面那次探测本意是「缺 style 会被拒」，结果它直接建出了任务 `8206363`，
+> 会消耗那把本地 key 的一点额度。这是我自己造成的，如实记在这里。
+
+### 关于 `generation_single_active_idx`（全站同时只能跑一个生成）的结论
+
+**它是刻意的，不是 bug；但它的自愈能力比看起来弱。**
+
+- 证据：`20261003120000_submit_unknown_recovery.sql` 的注释里写「the **global** active-generation fence does not stay taken for a whole day」—— 作者是知道它是全局闸门并据此设计恢复窗口的。
+- 业务规则在 `job_rpc_generation_v1` 里也是全局判据：`exists(select 1 from generation_jobs where state in ('queued','submitting','submitted','processing','archiving','submit_unknown'))` → 抛 `GENERATION_BUSY`。
+- 索引 `generation_single_active_idx` 是 `create unique index ... ((true)) where state in (...)`，即「这些状态里全表最多一行」。
+
+自愈路径有三条，都存在：`submitting` 超过租约会转 `submit_unknown`；`submit_unknown` 超过 10 分钟会被 `jobs.claim` 清扫成 `failed`；`jobs.claim` 用 `for update skip locked` + 4 分钟租约，重叠触发不会重复提交给供应商。
+
+**它真正的问题不是「限 1」，而是「一行卡住，全站都卡住」**：这条 C1 任务在 `queued` 期间，平台上**任何**人再发生成都会被 `GENERATION_BUSY` 挡掉（同一个 owner 也一样）。改成 `(owner_id)` 之后就是「每人同时一个」，供应商并发会从 1 变成 N —— 这会动到 Aholo 侧的并发额度，是产品/成本决定，所以**这一轮没有动生产**，只把口径与备选改法写在这里。
+
+### 这一轮没有做的
+
+- 没有改 `generation_single_active_idx`：如上，等你拍板。
+- 没有动前端部署：并行会话正在推 Cloudflare 正式站，本轮的 UI 修复只进分支与 PR，不抢别名。
+- 没有补 `AI_MAX_REQUEST_CENTS`：那是 Agent 提案链的另一本账，补上等于开启另一条花钱通道。
