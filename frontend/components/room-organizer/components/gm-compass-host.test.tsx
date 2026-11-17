@@ -44,6 +44,22 @@ function flushOldest(now: number): void {
   act(() => { callback(now); });
 }
 
+function flushAll(now: number): void {
+  const queued = [...frames.values()];
+  frames.clear();
+  act(() => {
+    for (const callback of queued) callback(now);
+  });
+}
+
+function playThrough(end = 400, step = 16): void {
+  for (let now = 0; now <= end; now += step) flushAll(now);
+}
+
+function orbitSum(orbitByDelta: ReturnType<typeof vi.fn>): number {
+  return orbitByDelta.mock.calls.reduce((sum: number, call: unknown[]) => sum + Number(call[0] ?? 0), 0);
+}
+
 function planApi(getBearing: () => number, orbitByDelta = vi.fn(), resetNorth = vi.fn()): OutdoorPlan3DApi {
   return {
     zoomBy: vi.fn(),
@@ -147,10 +163,13 @@ it('applies every drag delta immediately and publishes the rose once per frame',
   expect(gmRoseArtRenders.count).toBe(paints);
 });
 
-it('turns immediately from the arrow and does not follow unrelated parent renders', () => {
+it('animates a 90° arrow turn and does not follow unrelated parent renders', () => {
   installFrames();
-  const orbitByDelta = vi.fn();
-  const plan3dRef = { current: planApi(() => 0, orbitByDelta) };
+  let camera = 0;
+  const orbitByDelta = vi.fn((delta: number) => {
+    camera = bearingAfterOrbit(camera, delta);
+  });
+  const plan3dRef = { current: planApi(() => camera, orbitByDelta) };
   const overlayRef = { current: null };
   function Harness(): JSX.Element {
     const [n, setN] = useState(0);
@@ -174,7 +193,9 @@ it('turns immediately from the arrow and does not follow unrelated parent render
   expect(gmCompassHostRenders.count).toBe(hosts);
   expect(gmRoseArtRenders.count).toBe(paints);
   act(() => { document.querySelector<HTMLButtonElement>('[aria-label="向左旋转 90 度"]')!.click(); });
-  expect(orbitByDelta).toHaveBeenCalledWith(Math.PI / 2);
+  expect(orbitByDelta).not.toHaveBeenCalled();
+  playThrough();
+  expect(orbitSum(orbitByDelta)).toBeCloseTo(Math.PI / 2);
   expect(spin().style.transform).toBe('rotate(90deg)');
   expect(gmRoseArtRenders.count).toBe(paints);
 });
@@ -221,7 +242,8 @@ it('turns the 2D plan from the arrows using the live bearing, not the stale samp
   bearing = Math.PI / 2;
 
   act(() => { document.querySelector<HTMLButtonElement>('[aria-label="向左旋转 90 度"]')!.click(); });
-  expect(orbitByDelta).toHaveBeenCalledWith(Math.PI / 2);
+  playThrough();
+  expect(orbitSum(orbitByDelta)).toBeCloseTo(Math.PI / 2);
   expect(bearing).toBeCloseTo(0);
   expect(spin().style.transform).toBe('rotate(0deg)');
   expect(spin().querySelectorAll('[data-testid="gm-rose-arrow"]')).toHaveLength(2);
@@ -229,11 +251,13 @@ it('turns the 2D plan from the arrows using the live bearing, not the stale samp
   expect(spin().contains(document.querySelector('[aria-label="向右旋转 90 度"]'))).toBe(true);
 
   act(() => { document.querySelector<HTMLButtonElement>('[aria-label="向右旋转 90 度"]')!.click(); });
-  expect(orbitByDelta).toHaveBeenLastCalledWith(-Math.PI / 2);
+  playThrough();
+  expect(orbitSum(orbitByDelta)).toBeCloseTo(0);
   expect(bearing).toBeCloseTo(Math.PI / 2);
   expect(spin().style.transform).toBe('rotate(-90deg)');
 
   act(() => { document.querySelector<HTMLButtonElement>('[aria-label="回正北"]')!.click(); });
+  playThrough();
   expect(resetNorth).toHaveBeenCalledTimes(1);
   expect(bearing).toBeCloseTo(0);
   expect(spin().style.transform).toBe('rotate(0deg)');
@@ -253,8 +277,9 @@ it('turns the 3D camera from the arrow using the live heading, not the stale sam
   camera = Math.PI / 2;
 
   act(() => { document.querySelector<HTMLButtonElement>('[aria-label="向左旋转 90 度"]')!.click(); });
+  playThrough();
   expect(overlayOrbit).not.toHaveBeenCalled();
-  expect(orbitByDelta).toHaveBeenCalledWith(Math.PI / 2);
+  expect(orbitSum(orbitByDelta)).toBeCloseTo(Math.PI / 2);
   expect(camera).toBeCloseTo(0);
   expect(spin().style.transform).toBe('rotate(0deg)');
   expect(spin().querySelectorAll('[data-testid="gm-rose-arrow"]')).toHaveLength(2);
@@ -280,4 +305,47 @@ it('points the rose at the active view as soon as 2D and 3D switch', () => {
   });
   expect(spin().style.transform).toBe('rotate(-90deg)');
   expect(planBearing).toBe(0.4);
+});
+
+it('moves the camera part way before a 90° turn finishes', () => {
+  installFrames();
+  let camera = 0;
+  const orbitByDelta = vi.fn((delta: number) => {
+    camera = bearingAfterOrbit(camera, delta);
+  });
+  const plan3dRef = { current: planApi(() => camera, orbitByDelta) };
+  const overlayRef = { current: null };
+  renderHost('3d', plan3dRef, overlayRef);
+  flushOldest(0);
+  act(() => { document.querySelector<HTMLButtonElement>('[aria-label="向左旋转 90 度"]')!.click(); });
+  flushAll(0);
+  flushAll(80);
+  expect(Math.abs(camera)).toBeGreaterThan(0.2);
+  expect(Math.abs(camera)).toBeLessThan(Math.PI / 2 - 0.05);
+  playThrough(400);
+  expect(camera).toBeCloseTo(-Math.PI / 2);
+  expect(spin().style.transform).toBe('rotate(90deg)');
+});
+
+it('turns immediately when the user prefers reduced motion', () => {
+  installFrames();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('prefers-reduced-motion'),
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    onchange: null,
+  }));
+  const orbitByDelta = vi.fn();
+  const plan3dRef = { current: planApi(() => 0, orbitByDelta) };
+  const overlayRef = { current: null };
+  renderHost('3d', plan3dRef, overlayRef);
+  flushOldest(0);
+  act(() => { document.querySelector<HTMLButtonElement>('[aria-label="向左旋转 90 度"]')!.click(); });
+  expect(orbitByDelta).toHaveBeenCalledTimes(1);
+  expect(orbitByDelta).toHaveBeenCalledWith(Math.PI / 2);
+  expect(spin().style.transform).toBe('rotate(90deg)');
 });
