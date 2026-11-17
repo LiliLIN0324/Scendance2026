@@ -433,6 +433,12 @@ export async function proposeInventoryObjects(
         throw new Error(
           `你的库里有${matches.length}个“${need.query}”候选：${[...nameGroups.keys()].join("、")}。请给具体名称或ID，不替你随便选第一个。`,
         );
+      // 2026-11-17 设计师模式：同名候选里 icon: 与 scale: 并存时（如「市集摊位」「舞台」），
+      // 优先真实占地物件——图标尺寸不是摊位的真实占地，拿它排会得到一个“看着能看、实际放不下”的方案。
+      if (nameGroups.size === 1) {
+        const scaled = [...nameGroups.values()][0]!.filter((m) => m.id.startsWith("scale:"));
+        if (scaled.length) matches = scaled;
+      }
     }
     const material = matches[0]!;
     used.push(material);
