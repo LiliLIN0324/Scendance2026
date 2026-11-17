@@ -13,6 +13,8 @@
 import {
   planRingAreaM2,
   planRouteLengthM,
+  type PlanAnnotation,
+  type PlanPoint,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
 import { buildPlanInventory } from './site-plan-inventory';
@@ -49,7 +51,44 @@ function baseProperties(row: { kind: string; name: string; typeLabel: string; zo
   };
 }
 
-/** 导出全量几何 GeoJSON。无锚点（无法换算地理坐标）时返回空 FeatureCollection 并在元数据注明。 */
+/** RFC 7946 要求闭合环：首尾同点只补一次。 */
+function closeRing(points: [number, number][]): [number, number][] {
+  if (points.length === 0) return points;
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  if (first[0] === last[0] && first[1] === last[1]) return points;
+  return [...points, first];
+}
+
+/**
+ * 标注几何：note/circle → Point（GeoJSON 无圆，半径进 radius_m）；line → LineString；
+ * rect/triangle → Polygon。矩形在 ENU 里按对角两点还原四角再投影，避免经纬度轴不对齐。
+ */
+function annotationGeometry(
+  annotation: PlanAnnotation,
+  anchor: { lng: number; lat: number },
+): { type: string; coordinates: unknown } | undefined {
+  const project = (p: PlanPoint) => enuToLngLat(p, anchor.lng, anchor.lat);
+  const points = annotation.points;
+  switch (annotation.kind) {
+    case 'note':
+    case 'circle':
+      return { type: 'Point', coordinates: project(points[0]!) };
+    case 'line':
+      return points.length >= 2 ? { type: 'LineString', coordinates: points.slice(0, 2).map(project) } : undefined;
+    case 'triangle':
+      return points.length >= 3 ? { type: 'Polygon', coordinates: [closeRing(points.slice(0, 3).map(project))] } : undefined;
+    case 'rect': {
+      if (points.length < 2) return undefined;
+      const [a, b] = points as [PlanPoint, PlanPoint];
+      const corners: PlanPoint[] = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
+      return { type: 'Polygon', coordinates: [closeRing(corners.map(project))] };
+    }
+    default:
+      return undefined;
+  }
+}
+
 export function buildPlanGeoJson(plan: SitePlanData): GeoJsonExport {
   const anchor = plan.anchor;
   if (!anchor) {
@@ -169,6 +208,44 @@ export function buildPlanGeoJson(plan: SitePlanData): GeoJsonExport {
         model_slug: modelSlug,
         model_pending: modelSlug === null,
         notes: vehicle.notes,
+      },
+    });
+  }
+
+  // 测量：distance/path → LineString；area → Polygon。读数进属性，不在导出时改口径。
+  for (const measurement of plan.measurements ?? []) {
+    const row = inventory.find(r => r.id === measurement.id);
+    const coords = measurement.points.map(p => enuToLngLat(p, anchor.lng, anchor.lat));
+    const geometry = measurement.kind === 'area'
+      ? { type: 'Polygon', coordinates: [closeRing(coords)] }
+      : { type: 'LineString', coordinates: coords };
+    features.push({
+      type: 'Feature',
+      geometry,
+      properties: {
+        ...baseProperties({ kind: 'measurement', name: measurement.name, typeLabel: row?.typeLabel ?? '测量', zoneName: null, hasIssue: false }),
+        ...(measurement.kind === 'area'
+          ? { area_m2: Number(planRingAreaM2(measurement.points).toFixed(2)) }
+          : { length_m: Number(planRouteLengthM(measurement.points).toFixed(2)) }),
+        notes: measurement.notes,
+      },
+    });
+  }
+
+  // 自由标注：几何按标注类型还原；文本内容、半径、颜色进属性，便于 GIS 里直接读。
+  for (const annotation of plan.annotations ?? []) {
+    const row = inventory.find(r => r.id === annotation.id);
+    const geometry = annotationGeometry(annotation, anchor);
+    if (!geometry) continue;
+    features.push({
+      type: 'Feature',
+      geometry,
+      properties: {
+        ...baseProperties({ kind: 'annotation', name: annotation.name, typeLabel: row?.typeLabel ?? '标注', zoneName: null, hasIssue: false }),
+        ...(annotation.kind === 'note' ? { text: annotation.text } : {}),
+        ...(annotation.kind === 'circle' ? { radius_m: annotation.radiusM ?? null } : {}),
+        ...(annotation.color ? { color: annotation.color } : {}),
+        notes: annotation.notes,
       },
     });
   }
