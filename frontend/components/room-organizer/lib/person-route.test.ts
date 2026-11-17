@@ -6,6 +6,7 @@ import {
   type RouteFollowerState,
   type RouteStepContext,
   createRouteFollower,
+  rebaseRouteFollower,
   normalizeRoutePause,
   normalizeRouteSpeed,
   routeIsLoop,
@@ -149,6 +150,45 @@ describe('pingpong walking (loop: false)', () => {
     expect(state.x).toBeLessThanOrEqual(5 + 1e-6);
     expect(state.z).toBeGreaterThanOrEqual(1 - 1e-6);
     expect(state.z).toBeLessThanOrEqual(5 + 1e-6);
+  });
+});
+
+describe('rebaseRouteFollower', () => {
+  const route: WalkRoute = { points: [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }], loop: false, pauseMs: 0 };
+
+  it('moves the follower onto the given arc length without touching the odometer', () => {
+    const state = createRouteFollower(route);
+    walkSeconds(state, route, 4); // 先走一段，里程/圈数不再是初值
+    const travelled = state.travelled;
+    const laps = state.laps;
+
+    rebaseRouteFollower(state, route, 12);
+
+    expect(state.travelled).toBe(travelled);
+    expect(state.laps).toBe(laps);
+    expect(state.x).toBeCloseTo(10, 5);
+    expect(state.z).toBeCloseTo(2, 5);
+    expect(state.dir).toBe(1);
+    expect(state.remainingPause).toBe(0);
+    expect(state.blockedFor).toBe(0);
+  });
+
+  it('continues forward from the merge point instead of walking backwards', () => {
+    const state = createRouteFollower(route);
+    rebaseRouteFollower(state, route, 5);
+    walkSeconds(state, route, 1);
+    expect(state.x).toBeGreaterThan(5.5);
+    expect(state.z).toBeCloseTo(0, 5);
+  });
+
+  it('clamps out-of-range arc lengths to the route ends', () => {
+    const state = createRouteFollower(route);
+    rebaseRouteFollower(state, route, -3);
+    expect(state.x).toBeCloseTo(0, 5);
+    expect(state.z).toBeCloseTo(0, 5);
+    rebaseRouteFollower(state, route, 999);
+    expect(state.x).toBeCloseTo(10, 5);
+    expect(state.z).toBeCloseTo(10, 5);
   });
 });
 

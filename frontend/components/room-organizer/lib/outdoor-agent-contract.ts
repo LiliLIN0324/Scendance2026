@@ -222,6 +222,11 @@ export interface OutdoorMapContext {
    * 没有就回空数组——岸线缺失要如实说，不能拿底图像素冒充。
    */
   water?: () => import("./outdoor-shoreline-layout").Shoreline[];
+  /**
+   * 2026-11-17「沿线摆补给站」：地图道路折线（局部 ENU 米，与 plan 同基准），供沿线参照排布。
+   * 没有就回空数组——线路缺失要如实说，不拿底图像素冒充。
+   */
+  roadLines?: () => import("./outdoor-route-line-layout").RouteLine[];
 }
 export interface OutdoorLibraryItem {
   id: string;

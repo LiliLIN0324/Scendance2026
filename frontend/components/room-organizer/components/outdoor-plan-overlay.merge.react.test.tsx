@@ -18,6 +18,7 @@ import {
   readPlanGroundSource,
   writePlanGroundSource,
 } from "../lib/plan-basemap-source";
+import { readMapSlots, resetMapSlotsCacheForTest } from "../lib/map-source-slots";
 type CanvasProps = ComponentProps<
   typeof import("./outdoor-plan-canvas").default
 >;
@@ -69,6 +70,8 @@ vi.mock("./outdoor-delivery-panel", () => ({
 vi.mock("../lib/site-plan-csv", () => ({ downloadPlanCsv: state.csv }));
 beforeEach(() => {
   localStorage.clear();
+  // 槽位 store 同样有模块级缓存（面板用 useSyncExternalStore 消费），用例间手动复位。
+  resetMapSlotsCacheForTest();
   // 模块级图源缓存不随 localStorage 清，复位回缺省街道，避免上一条用例写入跨用例残留。
   writePlanGroundSource("amap-streets");
   agent.outdoorWorkflow.proposal = null;
@@ -293,6 +296,36 @@ it("冲突时选「用服务器那版」：本机换成服务器版本并记住�
     expect(stored?.plan?.anchor?.lng).toBeCloseTo(120.99);
   });
   expect(saveOutdoorPlan.mock.calls.every((call) => call[0].force !== true)).toBe(true);
+});
+
+it("地图详情是「上排四格 + 下方分组清单」：下方图源能置顶进同类槽位", () => {
+  render(<Overlay projectId="map-slots" seedPlan={createStarterOutdoorPlan()} />);
+  fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
+  fireEvent.click(screen.getByTestId("map-strip-expand"));
+
+  // 上排四格：卫星 / 街道 / 单色 / 无，缺省按用户点名的顺序填好。
+  expect(screen.getByTestId("map-slot-satellite").textContent).toContain("高德卫星");
+  expect(screen.getByTestId("map-slot-streets").textContent).toContain("高德街道");
+  expect(screen.getByTestId("map-slot-tone").textContent).toContain("Carto 浅色");
+  expect(screen.getByTestId("map-picker-toggle-geo").textContent).toContain("无");
+
+  // 下排按类型分组，三组都在。
+  expect(screen.getByRole("radiogroup", { name: "街道类" })).toBeTruthy();
+  expect(screen.getByRole("radiogroup", { name: "卫星类" })).toBeTruthy();
+  expect(screen.getByRole("radiogroup", { name: "视觉类" })).toBeTruthy();
+
+  // 置顶 Carto 深色 → 单色格换成它；当前底图不变（置顶只改上面那格）。
+  const before = state.canvas?.source;
+  fireEvent.click(screen.getByTestId("map-pin-carto-dark"));
+  expect(readMapSlots().tone).toBe("carto-dark");
+  expect(screen.getByTestId("map-slot-tone").textContent).toContain("Carto 深色");
+  expect((screen.getByTestId("map-pin-carto-dark") as HTMLButtonElement).disabled).toBe(true);
+  expect(state.canvas?.source).toBe(before);
+
+  // 点格子才真正换底图，并同步给三维地面。
+  fireEvent.click(screen.getByTestId("map-slot-tone"));
+  expect(state.canvas?.source).toBe("carto-dark");
+  expect(readPlanGroundSource()).toBe("carto-dark");
 });
 
 it("云端副本传不上去时不出任何提示（本机照常保存）", async () => {

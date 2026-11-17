@@ -1685,3 +1685,74 @@ it("brief 记下钓鱼比赛后，后续一句 zones 也走沿岸", async () => 
   });
   expect(flow.proposal?.label).toContain("沿岸排布");
 });
+
+// 2026-11-17 用户拍板「沿线/巡游和沿岸一起进第一批」：巡游补给沿线排布，模型不回 ask 也能直达。
+it("模型不回 ask 也能沿线：巡游补给 + zones 动作直接出沿线预览", async () => {
+  await confirmScope();
+  const road = {
+    id: "ofm:road/9",
+    name: "滨河路",
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:road",
+      status: "partial",
+      text: "{}",
+      featureIds: [road.id],
+      unknowns: [],
+      roadLines: () => [road],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("zones"));
+  await act(async () => {
+    await flow.handle("这里要办一场巡游，沿线摆补给站");
+  });
+  expect(flow.proposal?.label).toContain("沿线排布");
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("补给站")) ?? [];
+  expect(stations.length).toBeGreaterThanOrEqual(2);
+  // 地图参照：补一条赛事中心线（示意）。
+  expect(flow.proposal?.next.routes.some((r) => r.name.includes("赛事线"))).toBe(true);
+});
+
+it("画布上已有的巡游线可直接作沿线参照，不重复加赛道线", async () => {
+  await confirmScope();
+  plan = {
+    ...plan,
+    routes: [
+      {
+        id: "11111111-1111-4111-8111-000000000009",
+        kind: "pedestrian",
+        name: "巡游线",
+        points: [
+          { x: 10, y: 30 },
+          { x: 90, y: 30 },
+        ],
+        widthM: 3,
+        oneWay: false,
+        notes: "",
+      },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:dry2",
+      status: "partial",
+      text: "{}",
+      featureIds: [],
+      unknowns: [],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("objects"));
+  await act(async () => {
+    await flow.handle("这里要办一场巡游，沿线摆补给站");
+  });
+  expect(flow.proposal?.label).toContain("沿线排布·巡游线");
+  // 画布线路自身就是赛道，不再重复补赛事中心线。
+  expect(flow.proposal?.next.routes).toHaveLength(1);
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("补给站")) ?? [];
+  expect(stations.length).toBeGreaterThanOrEqual(2);
+});

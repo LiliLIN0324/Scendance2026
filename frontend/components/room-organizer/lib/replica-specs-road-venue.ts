@@ -81,34 +81,49 @@ export const USA_TRIATHLON_NATIONALS_PTO: ReplicaCaseSpec = {
   region: 'North America',
   refImage: '2023-usa-triathlon-nationals-pto-us-open.png',
   refLink: LINK('2023-usa-triathlon-nationals-pto-us-open'),
-  anchor: { lng: -87.907, lat: 43.034 },
-  locationNote: '镇级锚点：Milwaukee Veterans Park 湖滨',
+  // 2026-11-17：锚点不再是「镇级」。做法是拿官方参考图（它本身就是一张卫星截图）
+  // 与 Esri World Imagery 瓦片做四参数配准：比例(mpp) + 旋转 θ + 平移，灰度与 Sobel 边缘两套指标互相印证。
+  // 实测结论：θ = 0°（这张参考图本来就是正北向上）；比例 **0.145 m/px**（原按比例尺读的 0.1367 小了 6%，
+  // 所以之前铺到底图上「范围偏小」）。参考图中心落在 z19 瓦片 (1114, 1196)，mosaic 中心 (1152,1152)，
+  // 即中心在旧锚点西 8.3 m、南 9.6 m 处，反算得下面这组经纬度。残差米级。
+  // 改锚点或比例都要重跑 .tmp/geo 下的 prep → stitch → fit4 → geo-overlay，不要凭目测手改。
+  anchor: { lng: -87.8974818, lat: 43.0362332 },
+  locationNote: '影像配准锚点：Milwaukee Veterans Park 湖滨（四参数配准：θ=0°，0.145 m/px）',
   zones: [
-    { name: 'Transition / Finish Field 转换终点场', semantic: 'stage', color: '#3fb544', opacity: 0.3, polygon: [[-60, 20], [40, 25], [55, -30], [20, -60], [-50, -50], [-70, -10]] },
-    { name: 'Swim Start 下水区', semantic: 'reserved', color: '#f2d024', opacity: 0.4, rect: { cx: 95, cy: -35, w: 35, h: 25 } },
-    { name: 'Run Lane 跑道带（红）', semantic: 'reserved', color: '#c0392b', opacity: 0.35, rect: { cx: -110, cy: -5, w: 12, h: 70 } },
-    { name: 'Parking 停车场', semantic: 'parking', color: '#a06a3a', opacity: 0.35, polygon: [[-135, 45], [-85, 55], [-75, 30], [-125, 25]] },
-    { name: 'Tent Village 帐篷村', semantic: 'reserved', color: '#f2d024', opacity: 0.3, rect: { cx: 15, cy: 55, w: 55, h: 14 } },
-    { name: 'Finish Chute 终点道（紫）', semantic: 'reserved', color: '#b3628c', opacity: 0.35, rect: { cx: 0, cy: -70, w: 80, h: 8 } },
+    // 2026-11-17 用户：「直接描啊」，并在本地接了全球底图后要求「完全在地图上复刻」。
+    // 全部按原图逐块描点：比例尺实测 **0.145 m/px**（四参数配准得出，1 px ≈ 14.5 cm）。
+    // 坐标口径 = SitePlanData 的 ENU：x 向东、y 向北，原点 (0,0) 是参考图正中的那条地面点
+    // （即上面 anchor 的经纬度）。描图时像素 y 向下，所以写进来时已取反；本图 θ=0° 无需旋转。
+    // 区块名改用原图上的英文标签，不再自造「跑道带/帐篷村」。
+    { name: 'Tent Village TT11–TT26 帐篷阵', semantic: 'reserved', color: '#f2d024', opacity: 0.3, polygon: [[-96.4, 90.9], [-42, 90.9], [-42, 61.9], [-96.4, 61.9]] },
+    { name: 'Trike Transport 铁三转运', semantic: 'loading', color: '#a06a3a', opacity: 0.35, polygon: [[-133.3, 91.6], [-95.7, 90.5], [-95.7, 60.5], [-119.6, 59.4], [-132.7, 69.9]] },
+    { name: 'Transition Field 转换场', semantic: 'stage', color: '#3fb544', opacity: 0.3, polygon: [[-95.7, 36.6], [1.5, 36.6], [1.5, -60.6], [-84.1, -62.1], [-95.7, -38.8]] },
+    { name: 'LAS Compound 器材区', semantic: 'reserved', color: '#c0392b', opacity: 0.35, polygon: [[-147.7, 19.8], [-120.4, 16.2], [-120.1, -53.4], [-142.1, -53.4], [-147.7, -12.7]] },
+    { name: 'Swim Start 下水区', semantic: 'reserved', color: '#f2d024', opacity: 0.4, polygon: [[34.8, 27.9], [69.6, 27.2], [68.8, -1.2], [35.5, -0.4]] },
+    { name: 'Bay Check Tent 检录棚', semantic: 'checkin', color: '#8a8f96', opacity: 0.3, polygon: [[-49.3, 52.5], [-19.6, 52.5], [-19.6, 43.1], [-49.3, 43.1]] },
   ],
   facilities: [
-    { templateId: 'oneplan:scale:pop-up-tent', name: '黄帐篷', color: '#f2d024', placement: { kind: 'grid', x: -8, y: 50, cols: 8, rows: 2, dx: 6, dy: 5 }, zoneIndex: 4 },
-    { templateId: 'oneplan:scale:tent', name: ' registration 棚', color: '#f2f2f2', placement: { kind: 'scatter', at: [[-78, 18], [-58, 14]] } },
-    { templateId: 'oneplan:scale:bike-rack', name: '转换区车架', color: '#3fb544', placement: { kind: 'grid', x: -45, y: -20, cols: 2, rows: 8, dx: 30, dy: 5 } },
-    { templateId: 'oneplan:icon:first-aid-point', name: '医疗点', color: '#2b5fd9', placement: { kind: 'scatter', at: [[10, -55], [-55, 5]] } },
-    { templateId: 'oneplan:scale:portable-toilet', name: '移动洗手间', color: '#2b5fd9', placement: { kind: 'row', x: 48, y: -40, count: 4, dy: 2.6, rot: 90 } },
-    { templateId: 'oneplan:scale:gantry', name: '终点拱门', color: '#111111', placement: { kind: 'single', x: 0, y: -66 }, zoneIndex: 5 },
-    { templateId: 'oneplan:icon:timing-point', name: '计时点', color: '#111111', placement: { kind: 'scatter', at: [[-8, -62], [55, -20]] } },
+    // 原图 TT11–TT26 是 4 行黄帐篷，行距/列距按图量（约 8.5 × 7.5 m），从北往南排。
+    { templateId: 'oneplan:scale:pop-up-tent', name: 'TT 帐篷', color: '#f2d024', placement: { kind: 'grid', x: -92.8, y: 88, cols: 5, rows: 4, dx: 9, dy: -8 }, zoneIndex: 0 },
+    // 转换场里那些绿色横线是车架位，按图铺成多排。
+    { templateId: 'oneplan:scale:bike-rack', name: '转换车架', color: '#3fb544', placement: { kind: 'grid', x: -89.1, y: 29.7, cols: 2, rows: 9, dx: 65.8, dy: -9.5 }, zoneIndex: 2 },
+    { templateId: 'oneplan:scale:stretch-tent', name: 'Bay Check 检录棚', color: '#f2f2f2', placement: { kind: 'single', x: -34.5, y: 47.7 }, zoneIndex: 5 },
+    { templateId: 'oneplan:scale:portable-toilet', name: 'Bike TA 厕位', color: '#7fd0e8', placement: { kind: 'row', x: -90.2, y: -9.5, count: 3, dy: -3.4, rot: 90 } },
+    { templateId: 'oneplan:icon:first-aid-point', name: '医疗点（Bike TA）', color: '#2b5fd9', placement: { kind: 'scatter', at: [[-87, 21.2], [-83.8, -31.8]] } },
+    { templateId: 'oneplan:icon:camera-fixed', name: 'Broadcast Tower 1', color: '#111111', placement: { kind: 'single', x: -149.3, y: -74.4 } },
+    { templateId: 'oneplan:scale:generator', name: '发电机', color: '#8a8f96', placement: { kind: 'single', x: -102.9, y: 42.4 } },
   ],
   routes: [
-    { name: 'Bike · 骑行出环线（粉）', kind: 'vehicle', carrier: 'vehicle', oneWay: true, widthM: 4, color: '#e87ab8', startNode: 0, points: [[50, 10], [75, 0], [70, -25], [95, -45], [40, -75], [-20, -80], [-80, -70], [-110, -40], [-115, 5], [-70, 18], [0, 22]] },
-    { name: 'Run · 跑步进环线（紫）', kind: 'pedestrian', carrier: 'walk', oneWay: true, widthM: 3, color: '#b3628c', startNode: 1, points: [[-40, -78], [-20, -70], [10, -68], [40, -68], [70, -62], [30, -55], [-10, -50], [-40, -45]] },
-    { name: '人流 · 停车场→转换区', kind: 'pedestrian', carrier: 'walk', oneWay: true, widthM: 3, color: REPLICA_FLOW_COLOR, startNode: 2, points: [[-105, 28], [-85, 15], [-60, 0]] },
+    // 粉线：转换场沿场西侧向北出场的骑行通道（按图描折点）。
+    { name: 'Bike Out 骑行出场（粉）', kind: 'vehicle', carrier: 'vehicle', oneWay: true, widthM: 4, color: '#e87ab8', startNode: 0, points: [[-87, 29.3], [-85.5, 62.7], [-89.8, 82.9], [-100.8, 89.1]] },
+    // 紫线：场底跑道带，按图沿南边界向东。
+    { name: 'Run Lane 跑道（紫）', kind: 'pedestrian', carrier: 'walk', oneWay: true, widthM: 5, color: '#7a4fd8', points: [[-95.7, -76.6], [-53, -78], [0, -79.4], [35, -78.5]] },
+    { name: '人流 · 检录棚→转换场', kind: 'pedestrian', carrier: 'walk', oneWay: true, widthM: 3, color: REPLICA_FLOW_COLOR, points: [[-35, 46.7], [-47.7, 38.2], [-74.3, 31.8]] },
   ],
   nodes: [
-    { name: '骑行出口', kind: 'exit', x: 52, y: 12 },
-    { name: '跑步进口', kind: 'entry', x: -42, y: -80 },
-    { name: '停车场口', kind: 'both', x: -108, y: 30 },
+    { name: '转换区入口', kind: 'both', x: -87, y: 29.3 },
+    { name: '跑道起端', kind: 'entry', x: -95.7, y: -77.3 },
+    { name: '下水区岸', kind: 'entry', x: 35, y: 26.5 },
   ],
 };
 
