@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { avoidLockOverlap, boundaryHaloStyle, boundaryHaloToneFor, drawBoundaryEditHints, drawBoundaryLayer, planPointToPixel, scopeLockButtonRect, SCOPE_LOCK_SIZE, type PlanCanvasContext, type PlanViewport } from './outdoor-plan-canvas';
+import { avoidLockOverlap, boundaryHaloStyle, boundaryHaloToneFor, drawBoundaryEditHints, drawBoundaryLayer, placedItemsNeedsRedlineHint, placedRedlineCount, planPointToPixel, scopeLockButtonRect, SCOPE_LOCK_SIZE, type PlanCanvasContext, type PlanViewport } from './outdoor-plan-canvas';
 
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 const ring = [
@@ -273,6 +273,34 @@ describe('两枚锁定钮：一枚在白框外右上角（设计范围）、一�
     expect(300 - (rect.x + rect.w)).toBeCloseTo(10, 5);
     expect(rect.y - 100).toBeCloseTo(10, 5);
     expect(rect.w).toBe(SCOPE_LOCK_SIZE);
+  });
+});
+
+describe('已放置物件：有红线或可见闭合范围时不提示还没画红线', () => {
+  const area = { polygon: [[0, 0], [1, 0], [1, 1], [0, 1]] as [number, number][] };
+
+  it('空红线且没有选区：仍提示去画', () => {
+    expect(placedItemsNeedsRedlineHint({ boundaryCount: 0, searchArea: null })).toBe(true);
+    expect(placedRedlineCount({ boundaryCount: 0 })).toBe(0);
+  });
+
+  it('红线已写入：不提示', () => {
+    expect(placedItemsNeedsRedlineHint({ boundaryCount: 4, searchArea: null })).toBe(false);
+    expect(placedRedlineCount({ boundaryCount: 4 })).toBe(4);
+  });
+
+  it('只有搜索选区或核对预览：面板按可见范围算，不说还没画', () => {
+    expect(placedItemsNeedsRedlineHint({ boundaryCount: 0, searchArea: area })).toBe(false);
+    expect(placedRedlineCount({ boundaryCount: 0, searchArea: area })).toBe(4);
+    expect(placedItemsNeedsRedlineHint({ boundaryCount: 0, previewBoundaryCount: 5 })).toBe(false);
+    expect(placedRedlineCount({ boundaryCount: 0, searchArea: area, previewBoundaryCount: 5 })).toBe(5);
+  });
+
+  it('道路折线不是闭合用地，仍然提示去画红线', () => {
+    expect(placedItemsNeedsRedlineHint({
+      boundaryCount: 0,
+      searchArea: { ...area, kind: 'line' },
+    })).toBe(true);
   });
 });
 

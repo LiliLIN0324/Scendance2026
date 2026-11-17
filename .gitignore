@@ -147,3 +147,10 @@ frontend/public/_internal-learning/
 
 # OnePlan 版权参考图母本（仅本地学习，不入仓；报告页拷贝件见 frontend/public/_internal-learning/）
 /learning-library/
+
+# 内嵌 OnePlan 版权图 dataURL 的对比报告页（同上口径，仅本地看，不入仓；2026-11-18）
+/deliverables/replica-report-*.html
+/deliverables/oneplan-replica-geo-report-*.html
+
+# 会话临时目录（日志、一次性脚本；2026-11-18）
+/.tmp/

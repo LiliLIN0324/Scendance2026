@@ -2114,9 +2114,22 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-br .oc-zoom button {
   width: 38px; height: 38px; min-width: 38px; min-height: 38px;
 }
-/* 漫游 Pegman：常态直立；悬停像被拎起一样上浮并微倾，离开平滑复位。 */
-.sc-workbench .sc-tool-column button.is-walk > svg { transition: transform .18s ease; }
-.sc-workbench .sc-tool-column button.is-walk:hover > svg { transform: translateY(-2px) rotate(-9deg); }
+/* 漫游钮：小人保持直立。悬停抬起的是按钮。 */
+.sc-workbench .sc-tool-column button.is-walk {
+  transition: transform .18s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.sc-workbench .sc-tool-column button.is-walk:hover,
+.sc-workbench .sc-tool-column button.is-walk:focus-visible {
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column button.is-walk,
+  .sc-workbench .sc-tool-column button.is-walk:hover,
+  .sc-workbench .sc-tool-column button.is-walk:focus-visible {
+    transition: none;
+    transform: none;
+  }
+}
 .sc-workbench .sc-tool-column .oc-cluster .sc-tool-menu { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
 /* 2026-11-15 测量变体小标：对齐 Figma 工具栏——一颗合体钮，图标 + 右侧小 V 箭头水平同排，不另起圆钮。 */
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-menu { flex-direction: row; }
@@ -2358,7 +2371,7 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-divider {
   display: none;
 }
-/* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，留 4px 间距，不冒充网页版控件。 */
+/* 眼睛是我们自己的隐藏工具栏入口：贴在漫游钮下方，留 4px 间距，不冒充网页版控件。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye {
   margin-top: 3px;
   background: #e6f1f2; color: #5f6c70;
@@ -2377,10 +2390,39 @@ body.sc-panel-dragging * {
   background: rgba(255, 255, 255, .64);
   opacity: .9;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk {
-  border-radius: 50%; color: #fbbc04;
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk {
+  border-radius: 50%;
+  background: #fff;
+  color: #35624A;
+  box-shadow: 0 0 0 1px #E4E4E7, 0 1px 2px rgba(60, 64, 67, .30), 0 1px 4px rgba(60, 64, 67, .15);
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk.is-active { color: #fbbc04; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:focus-visible {
+  background: #fff;
+  color: #35624A;
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px #E4E4E7, 0 2px 6px rgba(60, 64, 67, .22), 0 1px 3px rgba(60, 64, 67, .30);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:hover {
+  background: #fff;
+  color: #35624A;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk > svg.walk-figure {
+  width: 22px;
+  height: 22px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column button.is-walk,
+  .sc-workbench .sc-tool-column button.is-walk:hover,
+  .sc-workbench .sc-tool-column button.is-walk:focus-visible,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:hover,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:focus-visible {
+    transition: none;
+    transform: none;
+  }
+}
 /* 户外第一人称漫游时只留这颗漫游钮：再点一次即退出，不让整条控制列挡住走查。 */
 .sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools { display: block !important; }
 .sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-cluster.oc-tr,
@@ -2494,33 +2536,53 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   50% { opacity: 1; }
 }
 /* 2026-11-13 户外左栏页签 = OnePlan 分段式页签（Add Objects/Placed Objects 同款）：
-   与画布左下 2D/3D 胶囊同属 B 墨黑分段范式（尺度走 outdoor-plan-tokens PLANNING_SEGMENTED）：
-   白纸面 + 发丝线容器；激活近黑墨实底白字、非激活次级墨字。 */
+   2026-11-18 用户拍板：从墨黑分段改为下划线页签——物料卡 sc-library-tabs-equal 同款
+   视觉语言（workbench-shelf.css 同源参数）：透明底、hairline 下边线、激活墨字 + 2px 绿色下划线。 */
 .sc-left-context.is-oneplan-tabs {
-  display: flex;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
   margin: 0 10px 8px;
-  padding: 3px;
-  border: 1px solid var(--wk-hair, #e4e4e7);
-  border-radius: var(--r-sm, 10px);
-  background: var(--wk-paper, #ffffff);
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--wk-hair, #e4e4e7);
+  border-radius: 0;
+  background: transparent;
 }
 .sc-left-context.is-oneplan-tabs button {
+  position: relative;
   flex: 1;
-  height: 34px;
+  height: 36px;
+  min-width: 0;
+  padding: 6px 2px 9px;
   border: 0;
-  border-radius: var(--r-sm, 10px);
+  border-radius: 0;
   background: transparent;
-  color: var(--wk-ink-soft, #55585f);
+  color: var(--wk-muted, #71767e);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
   cursor: pointer;
 }
+.sc-left-context.is-oneplan-tabs button:hover {
+  color: var(--wk-ink, #141416);
+}
 .sc-left-context.is-oneplan-tabs button[aria-pressed="true"] {
-  background: var(--wk-ink, #141416);
-  color: #ffffff;
+  background: transparent;
+  color: var(--wk-ink, #141416);
   font-weight: 600;
+}
+.sc-left-context.is-oneplan-tabs button[aria-pressed="true"]::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--wk-green, #35624a);
 }
 .sc-left-heading.is-oneplan-head {
   justify-content: flex-end;
@@ -3040,6 +3102,83 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 @keyframes sc-plan-place-search-spin {
   to { transform: rotate(360deg); }
+}
+/* ── 户外规划目录搜索（components/outdoor-plan-canvas.tsx）───────────────
+   2026-11-18 用户反馈「这里的搜索很土，我的 map 搜索有很前卫的灵动岛设计」：
+   目录搜索对齐同一套视觉语言——胶囊 999 圆角、白底浮起双层阴影、
+   focus 描边加深 + 淡环、图标灰→墨。排布开关收进胶囊右侧的圆形小钮。 */
+.sc-catalog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 5px 0 12px;
+  border: 1px solid rgba(20, 20, 22, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--sc-ink, #141416);
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.04), 0 8px 24px rgba(20, 20, 22, 0.1);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.sc-catalog-search:hover {
+  border-color: rgba(20, 20, 22, 0.18);
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.05), 0 10px 28px rgba(20, 20, 22, 0.12);
+}
+.sc-catalog-search:focus-within {
+  border-color: rgba(20, 20, 22, 0.34);
+  box-shadow: 0 0 0 3px rgba(20, 20, 22, 0.07), 0 10px 28px rgba(20, 20, 22, 0.12);
+}
+.sc-catalog-search-icon {
+  flex: 0 0 auto;
+  color: var(--sc-muted, #71767e);
+  transition: color 0.16s ease;
+}
+.sc-catalog-search:focus-within .sc-catalog-search-icon {
+  color: var(--sc-ink, #141416);
+}
+.sc-catalog-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+.sc-catalog-search input::placeholder {
+  color: var(--sc-muted, #71767e);
+  opacity: 1;
+}
+.sc-catalog-search input:focus,
+.sc-catalog-search input:focus-visible {
+  outline: 0;
+}
+/* 排布开关：胶囊右侧圆形小钮（用户两轮实测拍板回退——比分段导航更合手）。 */
+.sc-catalog-search-toggle {
+  all: unset;
+  cursor: pointer;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: var(--sc-muted, #71767e);
+  font-size: 13px;
+  line-height: 1;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.sc-catalog-search-toggle:hover {
+  background: rgba(20, 20, 22, 0.06);
+  color: var(--sc-ink, #141416);
+}
+.sc-catalog-search-toggle[aria-pressed='true'] {
+  background: var(--sc-ink, #141416);
+  color: #ffffff;
 }
 .sc-plan-place-search-options {
   list-style: none;
