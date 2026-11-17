@@ -556,7 +556,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     agent?.registerRouteBridge?.({
       projectId:()=>slotId,
       exportPlanDraft:(expected,context)=>{const current=canvasApiRef.current?.getEditVisuals().plan??planRef.current;if(!current||JSON.stringify(current)!==expected)return false;downloadOutdoorPlanDraft(current,slotId,context);return true;},
-      beginDrawing:kind=>{if(!canvasApiRef.current)return false;canvasApiRef.current.setMode(kind);return true;},
+      // 2026-11-18 用户实测：对话进绘制模式时同步打开左栏目录色板（分区/入口/路线类型都在里面），
+      // 不然用户不知道画什么。走 room-organizer 既有的事件通道切 outdoorPanel 到「添加物件」。
+      beginDrawing:kind=>{if(!canvasApiRef.current)return false;canvasApiRef.current.setMode(kind);if(kind==='zone'||kind==='route'||kind==='node')window.dispatchEvent(new CustomEvent('scendance:open-outdoor-library'));return true;},
       applyPlan:(next,expected)=>{const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;if(ok){setPlacePin(null);setPlaceArea(null);}return ok;},
       selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
       previewBoundary: (anchor, boundary) => {
