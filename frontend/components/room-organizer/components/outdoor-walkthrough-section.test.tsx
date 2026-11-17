@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CASE_IDS } from "../lib/outdoor-release-status-card";
@@ -54,5 +54,30 @@ describe("走查区", () => {
     render(<OutdoorWalkthroughSection initialBook={book} onMark={vi.fn()} defaultOpen />);
     expect(pressedOf(4)).toEqual(["不构成通过"]);
     expect(pressedOf(0)).toEqual(["未看"]);
+  });
+});
+
+
+describe("导出 CSV 按钮（轮次 89）", () => {
+  it("不传 onExportCsv 就整块不渲染（与云端列同一个规矩）", () => {
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "导出台账 CSV" })).toBeNull();
+    expect(screen.queryByText("导出 CSV")).toBeNull();
+  });
+
+  it("传了就渲染，点一次回调一次", () => {
+    const onExportCsv = vi.fn();
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} onExportCsv={onExportCsv} />);
+    fireEvent.click(screen.getByRole("button", { name: "导出台账 CSV" }));
+    expect(onExportCsv).toHaveBeenCalledTimes(1);
+  });
+
+  it("导出不改变展开状态：收起时点导出，仍旧是收起的", () => {
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} onExportCsv={vi.fn()} />);
+    const toggle = screen.getByRole("button", { expanded: false });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "导出台账 CSV" }));
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "收起走查记录" })).toBeNull();
   });
 });
