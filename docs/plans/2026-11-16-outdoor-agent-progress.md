@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：两条旧基线已校正（IN77 文件不存在、hook 套件 47/47），以后只认当轮实测。9222 四轮不通；别人的 `agent/outdoor-notice-and-choice-fix` 已推 origin 等 PR。下轮先看 `main` 是否已包含那笔（人合了 PR 就基于新的 main），否则做纯离线收尾：把证据对照表 §5/§6 的结论与 `acceptanceStatement()` 实际输出对一遍（在 wt-main 里跑一次并贴出原文），让声明句与表里数字逐字一致。首条命令 `cd .temp/wt-main/frontend; npm test -- components/room-organizer/lib/outdoor-acceptance-selfcheck.test.ts`（若该 worktree 已删，先 `git worktree add .temp/wt-main main`）。
+- 下一条操作：四条切片已在**一条分支**上合完（`agent/outdoor-m7-consolidated`：状态卡 + 用例 #5 + 门禁读数 + 同名选择，35 条用例全过、tsc 0），以后只需看一个 PR。main 仍为 `3e376b41`；9222 十二轮不通。下轮：把 `gateFactsForCard` 与 `logReleaseStatus` 接到 hook（只接两条返回值，不改其它行为），或把 `pickVenueCandidate` 接到地图候选点击。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,26 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-17 18:45 · 自动轮次 56 · 四条切片合成一条分支（降低待 PR 碎片）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 18:45，自动轮次 56
+批次 / 切片 / 状态：M7 / 分支合并整理 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 3e376b41（div 0/0）→ 无合并；前四条分支（status-card / case5-offline / gate-reading / venue-same-name）自主推送以来一直未被合
+做法：新建 `agent/outdoor-m7-consolidated`，从四个分支只 `git checkout <分支> -- <我自己的文件>` 搬代码（不 cherry-pick 别人改动、不动 hook），保留一个可评审 PR
+内容（全在 `frontend/components/room-organizer/lib/`）：
+  · outdoor-release-status-card.ts/.test.ts（状态卡 + 日志入口）
+  · outdoor-gate-reading.ts/.test.ts（三项原始输出 → 一行结论；新增 gateFactsForCard 适配卡里字段名 typecheck）
+  · outdoor-venue-candidates.ts/.test.ts（同名地点不猜着选）
+  · outdoor-case5-offline.test.ts（离线/无路网固定数据）
+  · 两处接起来：readGates → gateFactsForCard → 状态卡“门禁”行由真实读数决定
+验证：四个文件 35/35 全过；wt-r56 的 tsc 0 行；真实浏览器/云端仍无（9222 第十二轮 down）
+两次自损（同一种错，第二次才认出来）：改锚点时又把函数头（`function cell(...)`）当替换点换掉，造成函数体悬空；两次都是读文件后补回声明。教训：**锚点不要选函数声明行**。
+未完成：#2 真实搜索、#5 浏览器、hook 接入、面板按钮；四条旧分支可关闭（内容已在本分支）
+```
+
+- **碎片分支不等于交付**：四个 PR 等人逐个合，不如一条自包含分支；但要只搬自己的文件，别把别人的改动带进来。
 
 ### 2026-11-17 15:00–16:10 · 正式站登录态走查第二轮（V2/V4/V5 复验；死结 3 与死结 4 已修并上线）
 
