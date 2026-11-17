@@ -545,7 +545,7 @@ export function OutdoorWorkflowCard({
             onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
           >
             {flow.state.stage === "scope"
-              ? "核对当前实际活动范围"
+              ? "确认活动范围"
               : flow.state.stage === "zones"
                 ? "生成分区预览"
                 : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
