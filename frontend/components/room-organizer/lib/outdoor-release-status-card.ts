@@ -149,6 +149,48 @@ function cloudLine(ledger: readonly CaseLedgerRow[] | undefined): string {
   return `· 云端证据：${pass} 条通过 / ${rest} 条未验`;
 }
 
+export interface StatusSnapshot {
+  evidenceAsOf: string;
+  cases: { total: number; ready: number; missing: number; browserOnly: number };
+  browser: { partial: number[]; none: number[] };
+  /** 没带台账时为 null（而不是写一串 0 冒充“都没过”）。 */
+  cloud: { pass: number; unverified: number } | null;
+  gate: { typecheck?: boolean; tests?: boolean; build?: boolean };
+  allGreen: number;
+}
+
+/**
+ * 卡的可对比版：同样的输入得到同样的对象，可以拿两轮结果直接 diff。
+ * 数组一律升序，键顺序固定，避免“内容没变却 diff 一片”。
+ */
+export function statusCardSnapshot(input: ReleaseStatusInput): StatusSnapshot {
+  const totals = summarizeAssessment(input.rows);
+  const ids = input.rows.map((row) => row.id);
+  const gate = input.reading ? gateFactsForCard(input.reading) : (input.gate ?? {});
+  const ledger = input.ledger;
+  return {
+    evidenceAsOf: EVIDENCE_AS_OF,
+    cases: {
+      total: input.rows.length,
+      ready: totals.ready,
+      missing: totals.missing,
+      browserOnly: totals.browserOnly,
+    },
+    browser: {
+      partial: ids.filter((id) => BROWSER_EVIDENCE[id] === 'partial').sort((a, b) => a - b),
+      none: ids.filter((id) => BROWSER_EVIDENCE[id] === 'none').sort((a, b) => a - b),
+    },
+    cloud: ledger
+      ? {
+          pass: ledger.filter((row) => row.cloud === 'pass').length,
+          unverified: ledger.filter((row) => row.cloud !== 'pass').length,
+        }
+      : null,
+    gate: { ...gate },
+    allGreen: ledger ? summarizeLedger(ledger).allGreen : (input.allGreen ?? 0),
+  };
+}
+
 /** 证据清单：空列表就只写「0 条」，不留一个空括号。 */
 function listWithIds(ids: readonly number[]): string {
   if (ids.length === 0) return '0 条';

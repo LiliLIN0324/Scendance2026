@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：卡里补上了“云端证据”行（有台账才算；默认台账下为 `0 条通过 / 11 条未验`），三类里的第三类不再被静默省掉。main = origin = `d2ffb4e8`；9222 二十二轮不通。下轮：把 `pickVenueCandidate` 接到地图候选点击（只接一处）；接不上就改为把 hook 的 `logReleaseStatus()` 返回值改成卡文，让面板可以直接显示。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：状态卡多了一个可对比版 `statusCardSnapshot()`（同样输入 → 同样对象，数组升序、键序固定，可直接塞进 diff）。main = origin = `d2ffb4e8`；9222 二十三轮不通。下轮：把快照真正用起来——把本轮快照原文贴在对照表顶部作为“当前状态”锚点，以后每轮 diff 它。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,23 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 01:50 · 自动轮次 67 · 状态卡可对比快照
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 01:50，自动轮次 67
+批次 / 切片 / 状态：M7 / 状态快照 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = d2ffb4e8（div 0/0）→ 无合并；9222 第二十三轮 down
+问题：卡是给人看的一行行文本，两轮之间“到底变了什么”只能肉眼对
+交付：`statusCardSnapshot(input)` —— 同样输入得到同样对象（数组升序、键序固定）
+  · `cloud` 没台账时为 `null`，不写一串 0 冒充“都没过”
+  · `gate` 没跑时是空对象 `{}`，不是三个 `false`
+验证：status-card 34 → 38 条全过（含“同输入两次序列化逐字相同”）；另三个文件 24 条全过；wt-r67 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、快照入对照表、`pickVenueCandidate` 接线
+```
+
+- **把“没数据”写成 `null` 而不是 0**：0 是一个事实（真的没过），null 是“没测”——混了就会把未验当成结论。
 
 ### 2026-11-18 01:10 · 自动轮次 66 · 合成文档一笔 + 卡补“云端证据”行
 
