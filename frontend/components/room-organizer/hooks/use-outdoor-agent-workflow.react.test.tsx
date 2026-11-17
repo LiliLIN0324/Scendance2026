@@ -6,7 +6,7 @@ import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
-import { useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
+import { OUTDOOR_STAGE_LABELS, useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import type {
   OutdoorMapContext,
@@ -113,6 +113,23 @@ function Harness() {
 }
 function mount() {
   act(() => root.render(<Harness />));
+}
+/** 以已落盘的流程状态重挂载（模拟刷新后回到「核对具体活动范围」）。 */
+function mountAtFlowState(patch: Record<string, unknown>) {
+  act(() => root.unmount());
+  localStorage.setItem(
+    `scendance:outdoor-flow:${scope}`,
+    JSON.stringify({
+      scope,
+      stage: "place",
+      brief: { zones: [], items: [], people: [] },
+      confirmedBoundary: null,
+      completed: [],
+      ...patch,
+    }),
+  );
+  root = createRoot(host);
+  mount();
 }
 async function turn(text: string, reply: ReturnType<typeof response>) {
   understand.mockResolvedValueOnce(reply);
@@ -472,12 +489,68 @@ it("刷新后重新预览未确认候选，仍需显式确认才写入", async (
   expect(plan.boundary).toEqual(ring);
   expect(flow.state.pendingBoundary).toBeUndefined();
 });
-it("旧记录没有候选和边界时回到场地搜索", async () => {
+it("旧记录没有候选和边界时留在核对阶段并提示手画，不退回搜索", async () => {
   plan = { ...plan, boundary: [] };
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
   await action("scope");
-  expect(flow.state.stage).toBe("place");
-  expect(host.textContent).toContain("重新搜索地点");
+  expect(flow.state.stage).toBe("scope");
+  expect(host.textContent).toContain("在地图上手画活动范围");
+  expect(flow.notice).toContain("重新搜索地点");
+  expect(flow.busy).toBe(false);
   expect(apply).not.toHaveBeenCalled();
+});
+it("候选边界遇到画布基座变化仍恢复核对，不把任务打回搜索", async () => {
+  plan = { ...plan, boundary: [] };
+  const anchor = { ...plan.anchor!, lng: 120.1 };
+  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  // 画布随后自动补了设计范围（非实体字段），候选签发时的 base 已不一致。
+  plan = { ...plan, designScope: ring.map(point => ({ ...point })) };
+  await action("scope");
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.state.pendingBoundary?.boundary).toEqual(ring);
+  expect(flow.proposal?.next.boundary).toEqual(ring);
+  expect(flow.notice).not.toContain("没有可核对");
+  expect(flow.busy).toBe(false);
+  expect(apply).not.toHaveBeenCalled();
+});
+it("地图已有有效边界时核对重新预览并在确认后写入，边界不被清掉", async () => {
+  plan = { ...plan, boundary: ring };
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
+  apply.mockClear();
+  await action("scope");
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.proposal?.next.boundary).toEqual(ring);
+  expect(apply).not.toHaveBeenCalled();
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.busy).toBe(false);
+  await action("confirm");
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.state.stage).toBe("zones");
+  expect(flow.state.pendingBoundary).toBeUndefined();
+  expect(flow.state.confirmedBoundary).not.toBeNull();
+});
+it("Esc 取消手画后撤掉未确认候选，不在核对阶段留待写入状态", async () => {
+  plan = { ...plan, boundary: [] };
+  mountAtFlowState({
+    stage: "scope",
+    completed: ["place"],
+    pendingBoundary: { anchor: plan.anchor!, boundary: ring, name: "IN77", base: JSON.stringify(plan) },
+  });
+  expect(flow.state.stage).toBe("scope");
+  act(() => flow.manualCanceled());
+  expect(flow.state.stage).toBe("place");
+  expect(flow.state.pendingBoundary).toBeUndefined();
+  expect(flow.notice).toContain("已取消");
+  expect(host.textContent).not.toContain("核对当前实际活动范围");
+});
+it("取消重画时已确认的边界和核对阶段保留", async () => {
+  plan = { ...plan, boundary: ring };
+  mountAtFlowState({ stage: "scope", completed: ["place", "scope"], confirmedBoundary: "existing-boundary" });
+  act(() => flow.manualCanceled());
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.state.confirmedBoundary).toBe("existing-boundary");
+  expect(plan.boundary).toEqual(ring);
 });
 it("未确认活动边界先出范围确认卡而不是死路，保留本句自然补充", async () => {
   await turn(
@@ -842,7 +915,7 @@ it("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单�
   await action("generate");
   expect(bridge.openGenerate).toHaveBeenCalledWith(facility.id, "text");
   expect(flow.notice).toContain("没有提交收费任务");
-});
+}, 20000);
 it("物料数量自然改口是原设施增减，不重复铺一版", async () => {
   await confirmScope();
   await turn(
@@ -913,6 +986,91 @@ it("物料数量自然改口是原设施增减，不重复铺一版", async () =
   expect(plan.facilities).toHaveLength(2);
   expect(plan.facilities[0]!.id).toBe(first);
 });
+// 2026-11-17 闭环验收：物品摆放不是一次性动作——确认后还要能反复改口，每一轮都是
+// 「预览 → 确认」，画布与需求始终一致，不重复铺。
+it("摆好之后能连续两轮改口：每轮都出预览、确认后画布与需求一致", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "摆摊区放20个摊位",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 20, evidence: "20个摊位" }] }),
+  );
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(20);
+  await turn(
+    "改成22个",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 22, evidence: "22个" }] }),
+  );
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(22);
+  await turn(
+    "改成25个",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 25, evidence: "25个" }] }),
+  );
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(25);
+  // 需求始终跟着用户最后一句话走，没有被偷偷改成缩过的数。
+  expect(flow.state.brief.items).toEqual([
+    { zone: "摆摊区", query: "市集摊位", count: 25, evidence: "25个" },
+  ]);
+}, 20000);
+// 2026-11-17 用户拍板「就硬挤在一起，甲方就会明白放不下了」：要的数量放不下时不缩数量、不红卡，
+// 切「硬挤」重排塞到物理极限——预览自己说明放不下，卡上只报差额与极限。
+it("要的数量放不下：按「硬挤」出预览塞到物理极限，需求原文不动", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "摆摊区放120个摊位",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 120, evidence: "120个摊位" }] }),
+  );
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  // 卡上说的是「硬挤的物理极限」，不是替用户缩过的数。
+  expect(flow.proposal?.warnings.join()).toContain("硬挤");
+  expect(flow.proposal?.warnings.join()).toContain("120");
+  // 预览里塞进去的比正常间距（25）多得多，但远到不了 120——这就是可视化的「放不下」。
+  const placed = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("市集摊位")) ?? [];
+  expect(placed.length).toBeGreaterThan(25);
+  expect(placed.length).toBeLessThan(120);
+  // 用户记下的需求保持原话；画布仍然只在确认后才写。
+  expect(flow.state.brief.items).toEqual([
+    { zone: "摆摊区", query: "市集摊位", count: 120, evidence: "120个摊位" },
+  ]);
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities.length).toBe(placed.length);
+  // 确认后的回话说清「需求没变、画布已到物理上限」。
+  expect(flow.notice).toContain("硬挤");
+}, 20000);
+// 2026-11-17 断点修复完成：用户 review 批准共享契约 items count min(1)→min(0)，
+// 「摊位都撤了」count=0 清空全链打通（schema→合并→落位回收→预览→确认）。
+it("「摊位都撤了」：整区清空出预览，确认后画布同步清空", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "摆摊区放8个摊位",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 8, evidence: "8个摊位" }] }),
+  );
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(8);
+  await turn(
+    "摊位都撤了",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 0, evidence: "都撤了" }] }),
+  );
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  // 中间校验：合并层必须已经把需求改成 count=0，否则问题在合并层而非落位层。
+  expect(flow.state.brief.items[0]?.count, flow.notice).toBe(0);
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.next.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(0);
+  expect(flow.state.brief.items[0]).toMatchObject({ query: "市集摊位", count: 0 });
+}, 30000);
 // 2026-11-17 正式站卡点：用户没说过人数（很常见——先布场、人数活动定了才知道），
 // 点「预览按用途复用我的物料」拿到的是一张红卡「预计同时在场多少人？」+ 重试；
 // 而重试只是原样重跑 objects，人数不变就永远撞同一堵墙，任务卡标题也被永久改成物件阶段。
@@ -1425,6 +1583,17 @@ it("入口核对不能推断出口；卡片显式核对双向出入口经预览�
     }),
   );
   expect(flow.state.stage).toBe("people");
+  // 2026-11-17：三颗按钮原来都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
+  // 后两颗还默认把门当出口，等于替用户做了判断。现在必须是三个互斥的方向选择。
+  const cardButtons = Array.from(host.querySelectorAll("button")).map((b) => b.textContent ?? "");
+  expect(cardButtons.some((t) => t.includes("只能进"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("只能出"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("双向"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("我已核对"))).toBe(false);
+  // 三个选项是一个成组的选择（有 role=group），不是三行普通文字。
+  expect(host.querySelector('[role="group"]')).not.toBeNull();
+  // 提示条不再 8 秒自己消失（那条提示就是这一步的状态）。
+  expect(host.textContent).not.toContain("后收起");
   await act(async () => {
     await flow.action(
       "verify-access",
@@ -1440,6 +1609,12 @@ it("入口核对不能推断出口；卡片显式核对双向出入口经预览�
   expect(plan.nodes[0]!.kind).toBe("both");
   expect(plan.nodes[0]!.verification).toBe("user-confirmed");
   expect(flow.state.stage).toBe("people");
+  // 失败时标题直说「这一步没做成」，不再顶着一个阶段名冒充正常任务卡。
+  await act(async () => {
+    await flow.action("verify-access");
+  });
+  expect(flow.noticeKind).toBe("error");
+  expect(host.textContent).toContain("这一步没做成");
 });
 
 it.each(["没问题", "同意这版方案", "就按它落下去吧"])(
@@ -1755,4 +1930,164 @@ it("画布上已有的巡游线可直接作沿线参照，不重复加赛道线"
   expect(flow.proposal?.next.routes).toHaveLength(1);
   const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("补给站")) ?? [];
   expect(stations.length).toBeGreaterThanOrEqual(2);
+});
+// 2026-11-17 用户拍板「用户是讲不清楚需要什么的，AI 就是设计师，先出一版他看看」：
+// 没有物料清单时不再追问「各区需要哪些物件、各多少」，而是按分区用途 + 真实面积出一版默认方案。
+function seedMarketPlan(): void {
+  // 画布上已经有一块摆摊区（20×10m = 200㎡）和一扇已核实的入口 + 一条人行主线。
+  plan = {
+    ...plan,
+    zones: [
+      {
+        id: crypto.randomUUID(),
+        name: "摆摊区",
+        notes: "",
+        semantic: "reserved",
+        purpose: "market",
+        environment: "outdoor",
+        polygon: [
+          { x: 20, y: 20 },
+          { x: 40, y: 20 },
+          { x: 40, y: 30 },
+          { x: 20, y: 30 },
+        ],
+      },
+    ],
+    nodes: [
+      {
+        id: crypto.randomUUID(),
+        name: "已核对活动双向主出入口",
+        kind: "both",
+        verification: "user-confirmed",
+        position: { x: 5, y: 5 },
+        notes: "",
+      },
+    ],
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        kind: "pedestrian",
+        name: "已核对人行主线",
+        points: [
+          { x: 5, y: 5 },
+          { x: 5, y: 65 },
+        ],
+        widthM: 3,
+        oneWay: false,
+        notes: "",
+      },
+    ],
+  };
+}
+function stubLibraryByQuery(): void {
+  bridge.readLibrary = vi.fn(async (queries: string[]) =>
+    queries.map((query) => ({
+      id: `lib-${query}`,
+      name: query,
+      source: "built-in" as const,
+      width: 2,
+      depth: 2,
+      height: 2.5,
+      modelSlug: `model-${query}`,
+      available: true,
+    })),
+  );
+}
+it("没有物料清单也出方案：按分区用途与面积走默认设计，不再追问各区需要哪些物件", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  // 用户从头到尾没给过清单。
+  expect(flow.state.brief.items).toHaveLength(0);
+  await action("objects");
+  expect(flow.notice).not.toContain("各区需要哪些物件");
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.label).toBe("按分区用途出的默认方案");
+  expect(flow.proposal?.warnings.join()).toContain("默认方案");
+  // 预览阶段不写画布。
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  // 200㎡ / 8㎡（含通道）= 25 摊。
+  expect(plan.facilities).toHaveLength(25);
+  // 默认值是草案，不写回用户需求：用户下一句亲口说的数量仍然优先。
+  expect(flow.state.brief.items).toHaveLength(0);
+  // 阶段名也不能再说「按用途复用我的物料」——用户根本没给清单，用的不是他的库。
+  expect(OUTDOOR_STAGE_LABELS.objects).toBe("按分区摆放物料");
+});
+// 2026-11-17 正式站截图原句：追问「各分区各放什么物件」→ 用户「随便放」→ 模型编了一份清单，
+// 校验按「本句无依据」整轮抛错 → 红卡「模型提取缺少本句原文依据」+ 重试（重试还是同一堵墙）。
+// 用户没给清单时，任何清单都是模型编的：丢掉它，按分区用途与面积出默认方案。
+it("「随便放」时模型编的清单不拦成红卡：丢弃后按两个分区出默认方案", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  plan = {
+    ...plan,
+    zones: [
+      ...plan.zones,
+      {
+        id: crypto.randomUUID(),
+        name: "演出区",
+        notes: "",
+        semantic: "reserved",
+        purpose: "performance",
+        environment: "outdoor",
+        polygon: [
+          { x: 45, y: 20 },
+          { x: 65, y: 20 },
+          { x: 65, y: 40 },
+          { x: 45, y: 40 },
+        ],
+      },
+    ],
+  };
+  stubLibraryByQuery();
+  await turn(
+    "随便放",
+    response("objects", {
+      items: [{ zone: "摆摊区", query: "市集摊位", count: 12, evidence: "摊位若干" }],
+    }),
+  );
+  // 不进红卡，也不把编的 12 写进需求。
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  expect(flow.state.brief.items).toHaveLength(0);
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  // 演出区按面积算出的座位排不下，就只缩那一个区，并在卡上写明缩到了多少。
+  expect(flow.proposal?.warnings.join()).toContain("排不下");
+  // 预览阶段不写画布；确认后是两个分区都有东西，且按面积算（摆摊区 25 摊）而不是编的 12。
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities.length).toBeGreaterThan(25);
+  expect(plan.facilities.filter((f) => f.name.includes("市集摊位"))).toHaveLength(25);
+  expect(plan.facilities.some((f) => f.name.includes("舞台"))).toBe(true);
+}, 20000);
+// 第一句就把设计交回来（只有「随便放」、模型还回了 ask）也不该再追问一遍清单。
+it("第一句「随便放」就不再追问清单，直接出默认方案", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "随便放",
+    response("ask", {}, { reply: "请告诉我每个分区各要放什么物件。" }),
+  );
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  const said = saySpy.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
+  expect(said).not.toContain("各要放什么物件");
+}, 20000);
+it("连续两次追问都没有推进时，直接出默认方案而不是问第三句", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  // 第一次追问：照旧问，但开始记账（这两句都不是「随便/看着办」，不确定是授权我直接做）。
+  await turn("嗯", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
+  expect(flow.proposal).toBeNull();
+  expect(saySpy).toHaveBeenCalled();
+  // 2026-11-17 断点修复：反问时标题不再是「当前任务 · 主通道」——说的和卡上写的是一回事。
+  expect(host.textContent).toContain("等你补充");
+  // 第二次还是追问、画布毫无改动 → 不再问，直接出一版默认方案（仍然只预览）。
+  await turn("然后呢", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  expect(plan.facilities).toHaveLength(0);
 });

@@ -274,8 +274,12 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-design-process ol { display: grid; gap: 6px; margin: 8px 0 0; padding-inline-start: 24px; color: var(--wk-ink-soft); font-size: var(--fs-cap); line-height: 1.5; }
 .ap-design-process li { padding-inline-start: 4px; }
 .ap-design-process li::marker { color: var(--wk-green); }
-/* 低风险提示条的倒计时后缀：跟着 caption 走，纯提示不动任务状态。 */
-.ap-task-countdown { color: var(--wk-muted); white-space: nowrap; }
+/* 提示行自带的「收起」：提示不再自己消失，收不收由用户决定。 */
+.ap-task-dismiss {
+  flex: none; margin-inline-start: auto; padding: 0 2px; border: 0; background: transparent;
+  color: var(--wk-muted); font: inherit; font-size: var(--fs-cap); cursor: pointer;
+}
+.ap-task-dismiss:hover { color: var(--wk-ink); text-decoration: underline; }
 
 .ap-stage-suggestion {
   display: flex;
@@ -348,6 +352,22 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
    文字行高 ≈18px，两者都补 3px 顶距才能与首行文字光学居中。 */
 .ap-task-caption svg,
 .ap-task-caption .sc-material-symbol { flex: none; margin-top: 3px; color: var(--wk-muted); }
+/* 2026-11-17：入口方向核对原来是三颗裸 button，渲染出来是三行左对齐长句。
+   改成三个等宽选项：大字说方向，小字说记成什么。 */
+.ap-access-check { display: grid; gap: 8px; margin-top: 10px; }
+.ap-access-question { margin: 0; color: var(--wk-ink-soft); font-size: var(--fs-p2); line-height: 1.5; }
+.ap-access-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ap-access-choice {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 9px 6px; border: 1px solid var(--wk-hair); border-radius: 10px;
+  background: #fff; color: var(--wk-ink); font: inherit; font-size: var(--fs-p2);
+  font-weight: 600; line-height: 1.3; cursor: pointer; text-align: center;
+}
+.ap-access-choice span { color: var(--wk-muted); font-size: var(--fs-cap); font-weight: 400; }
+.ap-access-choice:hover { border-color: var(--wk-green); }
+.ap-access-choice:active { transform: translateY(1px); }
+.ap-access-choice:focus-visible { outline: 2px solid var(--wk-green); outline-offset: 2px; }
+@media (max-width: 380px) { .ap-access-choices { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .ap-task-progress::before { animation: none; } }
 .ap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-bottom: 1px solid var(--wk-hair-soft); padding-bottom: 10px; }
 .ap-field { display: flex; flex-direction: column; gap: 3px; position: relative; }

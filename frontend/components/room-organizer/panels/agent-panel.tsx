@@ -518,6 +518,7 @@ interface AgentValue {
   /** M5：单条设施属性改；不存在或未接上回 false。 */
   updateOutdoorFacility(id: string, patch: Partial<Pick<PlanFacility, 'name'|'notes'|'rotationDeg'|'color'|'opacity'|'strokeStyle'|'modelOverride'|'vendorName'|'vendorZone'|'inDate'|'inTime'|'outDate'|'outTime'|'electricKw'>> & { size?: { width: number; depth: number } }): boolean;
   manualOutdoorVenueApplied(anchor: NonNullable<SitePlanData['anchor']>): void;
+  manualOutdoorVenueCanceled(): void;
   sessionScope: string;
   isSessionCurrent(): boolean;
   historyReviewRequired: boolean;
@@ -3774,6 +3775,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       manualVenueAnchorRef.current = undefined;
       setOutdoorTask({ intent: '手动确认真实场地', state: 'done', action: '手画边界已闭合并写入同一份规划；2D/3D 同步，可撤销', steps: ['地点已确认', '手画闭合并通过边界校验', '提交锚点与边界'], prompts: ['排一下流线'] });
     },
+    manualOutdoorVenueCanceled: () => {
+      manualVenueAnchorRef.current = undefined;
+      if(routeBridgeRef.current?.applyPlan){outdoorWorkflow.manualCanceled();return;}
+      setOutdoorTask({ intent: '确认场地', state: 'ready', action: '已取消这次画线；未写入活动范围。', steps: [] });
+    },
     inspectOutdoorFacility: id => { if (!routeBridgeRef.current?.inspectFacility?.(id)) setOutdoorTask(current => current ? { ...current, state: 'blocked', action: '该设施已不在当前户外方案，请重新选择画布中的设施', focusFacilityId: undefined } : null); },
     applyOutdoorWorkers: workers => routeBridgeRef.current?.applyWorkers?.(workers) ?? false,
     sayDecisionBadge: (decision, text) => { say({ role: 'agent', decision, text }); },
@@ -4041,6 +4047,20 @@ export function VenuePickerOverlay(): JSX.Element | null {
   const agent = useAgent();
   const panel = useRef<HTMLDivElement>(null);
   useDialogFocus(agent.venuePickerOpen, panel, { trap: true, onEscape: agent.closeVenuePicker });
+  // 项目面板的「新方案」从这里接管：cancelable 事件被 preventDefault 表示工作台有场地入口。
+  useEffect(() => {
+    const start = (event: Event) => { event.preventDefault(); agent.startVenuePicker(); };
+    window.addEventListener('scendance:start-new-project', start);
+    return () => window.removeEventListener('scendance:start-new-project', start);
+  }, [agent]);
+  // /projects 管理页的「新建项目」用 ?new=1 回到画布并直接开场地选择。
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === null) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('new');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    agent.startVenuePicker();
+  }, [agent]);
   if (!agent.venuePickerOpen) return null;
   return <div className="sc-venue-overlay" ref={panel} role="dialog" aria-modal="true" aria-label="换场地 / 新建" tabIndex={-1}>
     <div className="sc-map-head">

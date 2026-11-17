@@ -387,6 +387,8 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       }
       if(path==='/catalog' && method==='GET') return respond(catalog);
       if(path==='/projects' && method==='GET') return respond(await backend.scene(actor,'projects.list'));
+      // 回收站：仅在 7 天窗口内、只对 owner 返回；放在项目 id 路由前面，避免 'trash' 被当成 uuid。
+      if(path==='/projects/trash' && method==='GET') return respond(await backend.scene(actor,'projects.trash'));
       if(path==='/projects' && method==='POST') {
         const input=z.strictObject({studioId:uuid,name,scene:sceneSchema}).parse(await json());
         requireOriginalSceneWritable(input.scene);
@@ -397,6 +399,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       const project=path.match(/^\/projects\/([^/]+)(.*)$/);
       if(project) {
         const projectId=uuid.parse(project[1]), tail=project[2];
+        if(tail==='/restore'&&method==='POST') {
+          const input=z.strictObject({expectedRevision:z.number().int().nonnegative()}).parse(await json());
+          return respond(await backend.scene(actor,'projects.restore',{...input,projectId}));
+        }
         if(tail==='/agent-runs'&&method==='POST') {
           if(!backend.agent)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
           const input=agentDispatchRequestSchema.parse(await json()),activity='kind' in input;

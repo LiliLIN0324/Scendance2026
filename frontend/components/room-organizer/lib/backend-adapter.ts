@@ -161,9 +161,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
 export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAdapterOptions,'assetIdMap'|'localAssetIds'> = {}): Scene {
   if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '当前云端版暂不支持保存多层方案。这份方案和修改会保留在本机；请勿删除本地方案。');
   assertCloudZoneSupport(layout);
-  if (!layout.backendSceneV2 && (layout.floorPlanImage || layout.backendVenue?.floorplanAssetId)) {
-    throw new SceneAdapterError('FLOORPLAN_NOT_SUPPORTED', '平面图尚未接入云保存，不能忽略底图后保存。');
-  }
+  // 底图是纯本机资料：云端场景结构里没有它。允许保存，但由工作台明说它不会上传。
   if (!layout.backendSceneV2 && layout.backendVenue?.shape === 'polygon') {
     throw new SceneAdapterError('POLYGON_NOT_SUPPORTED', '多边形场地尚未接入此版编辑器，不能改存为矩形。');
   }

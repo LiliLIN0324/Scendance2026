@@ -16,6 +16,7 @@ import {
   type OutdoorLibraryItem,
   type OutdoorStage,
   type OutdoorTurn,
+  type OutdoorBrief,
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
@@ -50,6 +51,8 @@ import {
   type ObjectsLayoutStrategy,
 } from "../lib/outdoor-agent-planning";
 import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/outdoor-personal-library";
+// 2026-11-17 用户拍板「AI 先当设计师，先出一版他看看」：没有清单时按分区用途出默认方案。
+import { draftDemand } from "../lib/outdoor-draft-design";
 // docs/46 V-P2：虚拟场地意图切纸面（ground-mode store，2D/3D 同步跟随）。
 import { writePlanGroundMode } from "../lib/plan-basemap-source";
 // 2026-11-14：直引纯函数库（原从组件模块引入，会把 three.js 级别的依赖链拖进 hook 且有循环风险）。
@@ -129,12 +132,22 @@ export interface OutdoorWorkflowProposal {
   references: OutdoorTurn["references"];
   afterConfirm?: "main-routes" | "objects";
 }
+/**
+ * 2026-11-17：用户把设计交回来的口头禅。「随便放」「你看着办」不是新需求，是授权我先做一版。
+ * 这种句子不该再被反问清单——按分区用途与面积出默认方案就行。
+ */
+function designerCue(message: string): boolean {
+  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的|搋好的/u.test(message);
+}
+
 export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
   place: "搜索目标地点",
   scope: "核对具体活动范围",
   zones: "分区用途与室内外依据",
   "main-routes": "主要入口与通道",
-  objects: "按用途复用我的物料",
+  // 2026-11-17：原来叫「按用途复用我的物料」——用户根本没给清单时这句是假的（用的是内置库默认件），
+  // 也把阶段名说成了承诺。这里直接说这一步在做的事：按分区摆放物料。
+  objects: "按分区摆放物料",
   "sub-routes": "物件间隙的子入口与支线",
   people: "岗位、人数与活动路径",
   "refine-3d": "同规划3D深化",
@@ -636,6 +649,8 @@ export function useOutdoorAgentWorkflow(input: {
     warnings: string[] = [],
     afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
   ) {
+    // 有了一版可看的预览就不再记账：追问预算只数“毫无进展”的那几轮。
+    askStreakRef.current = 0;
     const base = callbacks.current.bridge()?.getPlan();
     if (!base || !live(job)) return;
     validateWorkflowPlan(base, next);
@@ -833,10 +848,16 @@ export function useOutdoorAgentWorkflow(input: {
     } else nextStage(p.kind);
     const mapEditHint = MAP_EDIT_HINTS[p.kind];
     const nextStep = OUTDOOR_STAGE_LABELS[stateRef.current.stage];
+    // 2026-11-17 断点修复：硬挤预览确认后，回话必须把「需求没变、画布已到物理上限」说清，
+    // 不然下一轮用户看着 50 个摊以为自己要的 120 被悄悄改了。
+    const packedNote =
+      p.kind === "objects" && objectsLayoutRef.current?.packed
+        ? "注意：这版是「硬挤」物理极限；你记的需求数量没变，画布已塞到上限，要宽松就减数量或扩分区。"
+        : "";
     status(
       mapEditHint
-        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。`
-        : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。`,
+        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。${packedNote}`
+        : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。${packedNote}`,
       "done",
     );
     if (p.kind === "zones" || p.kind === "main-routes" || p.kind === "objects") {
@@ -926,7 +947,18 @@ export function useOutdoorAgentWorkflow(input: {
     base: SitePlanData;
     library: OutdoorLibraryItem[];
     strategy: ObjectsLayoutStrategy;
+    /** 本次预览实际用的需求清单（可能是默认方案，「换一种排法」要按同一份清单重排）。 */
+    brief: OutdoorBrief;
+    /** 2026-11-17 硬挤预览：换排法时继续按硬挤净空重排，不然一换就撞「放不下」。 */
+    packed?: boolean;
   } | null>(null);
+  /**
+   * 2026-11-17 追问预算：连续追问且画布毫无改动的次数。
+   * 到 2 就停止提问、直接出默认方案——用户的原话是「随便」「你看着办」，不是要一份问卷。
+   */
+  const askStreakRef = useRef(0);
+  /** 上一轮用户原话：补答上一问时（「1000 张摊位」→「放在摆摊区」）数字仍是用户亲口说的。 */
+  const priorUserTextRef = useRef("");
   /** 提案卡「换一种排法」：同一基座换下一策略重排，重新出预览（不写盘，确认才应用）。 */
   async function cycleObjectsLayout() {
     const stored = objectsLayoutRef.current;
@@ -941,11 +973,13 @@ export function useOutdoorAgentWorkflow(input: {
     try {
       const result = await proposeInventoryObjects(
         stored.base,
-        stateRef.current.brief,
+        stored.brief,
         stored.library,
         undefined,
         {
           strategy: next,
+          // 2026-11-17 硬挤预览换排法：继续按硬挤净空重排，不然一换就撞「放不下」。
+          packed: stored.packed === true,
           // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏。
           onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
           signal: job.controller.signal,
@@ -996,7 +1030,39 @@ export function useOutdoorAgentWorkflow(input: {
     ]);
     setBusy(false);
   }
+  /**
+   * 2026-11-17 用户实测：手画边界时按 Esc 退出后，任务仍停在「核对具体活动范围」并提示
+   * 「已框出项目区域、确认后写进方案」，可实际什么都没写入；再点核对就会把任务打回搜索。
+   * Esc 是显式取消：清掉这次未确认的候选，回到进入画线前的阶段；已经确认过的边界不动。
+   */
+  function manualCanceled() {
+    abort.current?.abort();
+    proposalRef.current = null;
+    setProposal(null);
+    setModels(null);
+    setBusy(false);
+    setAppliedHighlight(null);
+    setDesignSteps([]);
+    const confirmed = stateRef.current.confirmedBoundary;
+    persist({
+      ...stateRef.current,
+      stage: confirmed ? "scope" : "place",
+      confirmedBoundary: confirmed ?? null,
+      completed: stateRef.current.completed.filter(
+        (s) => s === "place" || (!!confirmed && s === "scope"),
+      ),
+      pendingBoundary: undefined,
+    });
+    status(
+      confirmed
+        ? "已取消这次画线；原有活动范围保留。需要时可重新手画。"
+        : "已取消这次画线；未写入活动范围。需要时可重新手画或搜索地点。",
+      "ready",
+    );
+  }
   async function act(turn: OutdoorTurn, message: string, continueDesign = false) {
+    const priorUserText = priorUserTextRef.current;
+    priorUserTextRef.current = message;
     if (turn.action === "cancel") {
       cancel();
       return;
@@ -1077,7 +1143,34 @@ export function useOutdoorAgentWorkflow(input: {
           : {}),
       },
     };
-    persist(mergeOutdoorFacts(stateRef.current, normalized, message));
+    // 2026-11-17 正式站实测：用户回一句「随便放」，模型却编了一份清单，校验发现这句原文里没有依据
+    // → 整轮抛错 → 红卡 +「重试」，而重试只会把同一句再撞一次。
+    // 用户没给清单时，任何清单都是模型编的：这里直接丢掉，改按分区用途与面积出默认方案。
+    // 2026-11-17：撤除语不算「模糊指令」——「摊位都撤了」没有数字也没量词，但它点名了已有物料并要求撤掉，
+    // 模型给的 count=0 清单是正当的；若按 vagueDemand 丢掉，用户看到的就是「说了撤，什么都没变」。
+    const clearOut =
+      /(撤|拆掉|拆了|拿掉|去掉|清空|不要了|不留|别放|全清)/u.test(message);
+    const vagueDemand =
+      !clearOut &&
+      !/\d/.test(message) &&
+      !/[个张把套顶组排座条件台块只面根副]/u.test(message);
+    const fabricated =
+      vagueDemand &&
+      ((turn.facts.items?.length ?? 0) > 0 || Boolean(turn.facts.guests));
+    const candidates = fabricated
+      ? { ...normalized, facts: { ...normalized.facts, items: undefined, guests: undefined } }
+      : normalized;
+    persist(mergeOutdoorFacts(stateRef.current, candidates, message, priorUserText));
+    if (fabricated) {
+      const what = (turn.facts.items ?? [])
+        .map((item) => item.query)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join("、");
+      designStep(
+        `模型这一轮给的清单（${what || "未具名"}）在你这句话里找不到依据，我没有采用；改按分区用途与面积出默认方案。`,
+      );
+    }
     if (turn.action === "ask") {
       // 2026-11-17 用户拍「都做」的第二个卡点：用户已经明确选了上一轮二选一里的第 N 项，
       // 模型却又把同一件事反问一遍——原样端回去，用户看到的就是「我选了第一个方案，什么都没发生」。
@@ -1106,6 +1199,21 @@ export function useOutdoorAgentWorkflow(input: {
           ? "route-line"
           : null;
       if (askReference && (await referencePreview(askReference, message, continueDesign, null))) return;
+      // 2026-11-17 用户拍板「AI 先当设计师，先出一版他看看」：追问预算是硬的。
+      // 连续第二次追问、画布毫无改动、用户这句又不是在提问（「你能做什么」这种不算）时，
+      // 不再问第三句，直接按当前分区出默认方案（只出预览）。
+      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
+      const questionish = /[?？]|怎么|如何|能不能|可不可以|可以吗|是不是|为什么/u.test(message);
+      const canDraft = !!planNow && planNow.zones.length > 0
+        && stateRef.current.confirmedBoundary === boundaryKey(planNow)
+        && !stateRef.current.brief.items.length;
+      if (!questionish && canDraft && (askStreakRef.current >= 1 || designerCue(message))) {
+        askStreakRef.current = 0;
+        designStep("用户把设计交给我（随便/你看着办）：不再追问清单，直接按分区用途与面积出一版默认方案（只出预览，未写入画布）。");
+        await act({ ...turn, action: "objects", reply: "", references: [], facts: {} }, message, continueDesign);
+        return;
+      }
+      askStreakRef.current += 1;
       // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
       // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
       askForDetails(turn.reply || "请补充当前活动需求；没有修改规划。");
@@ -1119,33 +1227,61 @@ export function useOutdoorAgentWorkflow(input: {
     try {
       if (turn.action === "scope") {
         const candidate = stateRef.current.pendingBoundary;
-        if (candidate && candidate.base === JSON.stringify(plan)) {
+        // 2026-11-17 用户实测：候选轮廓还在，只因为画布基座有了一点点变化（自动补设计范围、
+        // 新增实体等），旧的「base 完全一致」门就把候选判死，顺手把 pendingBoundary 也清掉，
+        // 任务退回搜索。候选来自用户刚看过的那张图，这里按当前画布重新签发一次候选，不清状态。
+        if (candidate && checkBoundaryRing(candidate.boundary).ok) {
           offerBoundary(candidate.anchor, candidate.boundary, candidate.name);
           return;
         }
-        if (!checkBoundaryRing(plan.boundary).ok) {
-          persist({ ...stateRef.current, stage: "place", pendingBoundary: undefined, completed: [] });
-          status("当前没有可核对的活动边界，请重新搜索地点并选择候选，或在地图圈出实际范围。");
+        if (checkBoundaryRing(plan.boundary).ok) {
+          // 地图上已经有有效用地红线（手画闭合或刷新后仍在）：重新签发一份核对预览，
+          // 边界与画布内容都不动；确认后才写入并推进，不把已有边界清掉。
+          persist({ ...stateRef.current, stage: "scope" });
+          offer(plan, "scope", "确认当前活动范围", job, [
+            "确认的是本次活动范围，不是地图产权或消防认证。",
+          ]);
+          setBusy(false);
           return;
         }
-        persist({ ...stateRef.current, stage: "scope" });
-        offer(plan, "scope", "确认当前活动范围", job, [
-          "确认只代表活动范围，不代表产权/消防认证。",
-        ]);
+        // 没有候选也没有有效边界时，不把任务打回搜索、不清任何已画几何——
+        // 留在核对阶段并直接告诉用户下一步：手画或重新搜索。
+        persist({
+          ...stateRef.current,
+          stage: "scope",
+          confirmedBoundary: null,
+          completed: stateRef.current.completed.filter((s) => s === "place"),
+        });
+        status(
+          "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+          "blocked",
+        );
+        setBusy(false);
         return;
       }
       if (!requireScope(plan)) {
         // 2026-11-17 玉泉鱼跃实测卡点：范围未确认不硬抛死路（原文案把用户引回重新搜索地点，
         // 对检索不到轮廓的 POI 就是 85 秒白等）。画布上已有合法闭合边界时直接出确认卡，
-        // 一键回到主流程；没有边界才走重新搜索/手画的提示。
+        // 一键回到主流程；没有边界也留在核对阶段，给手画/重搜两条路，不把任务打回搜索。
         if (!checkBoundaryRing(plan.boundary).ok) {
-          persist({ ...stateRef.current, stage: "place", pendingBoundary: undefined, completed: [] });
-          status("当前没有可核对的活动边界，请重新搜索地点并选择候选，或在地图圈出实际范围。");
+          persist({
+            ...stateRef.current,
+            stage: "scope",
+            confirmedBoundary: null,
+            completed: stateRef.current.completed.filter((s) => s === "place"),
+          });
+          status(
+            "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+            "blocked",
+          );
+          setBusy(false);
           return;
         }
+        persist({ ...stateRef.current, stage: "scope" });
         offer(plan, "scope", "确认当前活动范围", job, [
-          "确认只代表活动范围，不代表产权/消防认证。",
+          "确认的是本次活动范围，不是地图产权或消防认证。",
         ]);
+        setBusy(false);
         return;
       }
       const designingRoutes = turn.action === "main-routes";
@@ -1343,7 +1479,9 @@ export function useOutdoorAgentWorkflow(input: {
             }),
           },
           "verify-access",
-          "用户核对入口可用",
+          // 2026-11-17：原来叫「用户核对入口可用」——界面是在对用户说话，不该用第三人称叫「用户」，
+          // 也没说清核对的是「什么」。这里真正要确认的是这扇门能不能走、是进还是出。
+          "入口方向与可通行性",
           job,
         );
         return;
@@ -1394,7 +1532,28 @@ export function useOutdoorAgentWorkflow(input: {
           { stopLabel: "停止查找" },
         );
         designStep("按分区用途、物料的真实尺寸和已核对的通道试排。");
-        const queries = stateRef.current.brief.items.map((i) => i.query);
+        // 2026-11-17 用户拍板「用户是讲不清楚需要什么的，AI 就是设计师，先出一版」：
+        // 没有清单不再回头问「各区需要哪些物件、各多少」——按分区用途 + 真实面积 + 人数
+        // 直接出一份默认清单，走同一套真实物料库和几何落位。只出预览，不写画布；
+        // 默认值也不写回 state.brief，用户下一句亲口说的数量仍然优先。
+        const draft = stateRef.current.brief.items.length
+          ? null
+          : draftDemand(plan, stateRef.current.brief);
+        if (draft && !draft.items.length) {
+          status(
+            draft.notes.join(" ") || "画布上的分区还没有可用用途，先补分区用途或直接说要放什么。",
+            "blocked",
+          );
+          return;
+        }
+        const demandBrief: OutdoorBrief = draft
+          ? { ...stateRef.current.brief, items: draft.items }
+          : stateRef.current.brief;
+        if (draft)
+          designStep(
+            `没有清单：按分区用途与面积出默认方案（${draft.items.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、")}）；只出预览，未写入画布。`,
+          );
+        const queries = demandBrief.items.map((i) => i.query);
         const library = bridge.readLibrary
           ? await bridge.readLibrary(queries, job.controller.signal)
           : (await Promise.allSettled([
@@ -1451,21 +1610,104 @@ export function useOutdoorAgentWorkflow(input: {
           : undefined;
         const basePlan: SitePlanData = buildingsForPlan ? { ...plan, buildings: buildingsForPlan } : plan;
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
-        // 2026-11-14 用户指令「给我几个方案」：物件排布带策略（行列/居中/沿边），提案卡可「换一种排法」循环预览。
-        objectsLayoutRef.current = { base: basePlan, library, strategy: "rows" };
-        const result = await proposeInventoryObjects(
-          basePlan,
-          stateRef.current.brief,
+        // 2026-11-17：默认方案是算出来的，几何不一定吃得下（演出区按面积算了 200+ 个座，
+        // 实际只排得进几十个）。放不下就按真实能容纳的量缩，并把缩过的数量写在卡上——
+        // 既不静默失败，也不冒充“按面积算的数字都成立”。
+        const wantedItems = demandBrief.items;
+        const proposeOpts = {
+          strategy: "rows" as const,
+          buildings: buildingsEnu.length ? buildingsEnu : undefined,
+          // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
+          onPhase: (phase: string) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
+          signal: job.controller.signal,
+        };
+        let result: Awaited<ReturnType<typeof proposeInventoryObjects>> | null = null;
+        let fitError: string | null = null;
+        let shrinkItems: OutdoorBrief["items"] | null = null;
+        let packedWarning: string | null = null;
+        try {
+          result = await proposeInventoryObjects(basePlan, demandBrief, library, undefined, proposeOpts);
+        } catch (error) {
+          if (!(error instanceof Error)) throw error;
+          // 2026-11-17 断点修复：人数粗筛类拦截（表演区无观众区/缺来宾区/面积不足）不是重放能解的，
+          // 转成带「出分区预览」下一步的红卡，别给一个只会撞墙的重试。
+          if (/观众区域|来宾活动区域|2㎡\/人/.test(error.message))
+            throw new OutdoorStepBlocked(error.message, {
+              action: "zones",
+              label: "出分区预览（补观众区/调分区）",
+            });
+          if (!/放不下/.test(error.message)) throw error;
+          fitError = error.message;
+          if (draft) {
+            // 设计师草案：按面积反算的量放不下，缩的是我算的数，不是用户说的数。
+            let draftItems = wantedItems;
+            for (let attempt = 0; attempt <= 8 && result === null; attempt += 1) {
+              try {
+                result = await proposeInventoryObjects(
+                  basePlan,
+                  { ...demandBrief, items: draftItems },
+                  library,
+                  undefined,
+                  proposeOpts,
+                );
+              } catch (shrinkError) {
+                if (!(shrinkError instanceof Error)) throw shrinkError;
+                if (/观众区域|来宾活动区域|2㎡\/人/.test(shrinkError.message))
+                  throw new OutdoorStepBlocked(shrinkError.message, {
+                    action: "zones",
+                    label: "出分区预览（补观众区/调分区）",
+                  });
+                if (!/放不下/.test(shrinkError.message)) throw shrinkError;
+                fitError = shrinkError.message;
+                // 只缩“放不下”的那个分区：全区减半会把本来排得下的摆摊区一起砍到 3 个摊。
+                const zoneName = /“([^”]+)”放不下/u.exec(shrinkError.message)?.[1];
+                draftItems = draftItems.map((item) =>
+                  item.zone === zoneName
+                    ? { ...item, count: Math.max(1, Math.floor(item.count / 2)) }
+                    : item,
+                );
+              }
+            }
+            if (result === null) throw error;
+            shrinkItems = draftItems;
+          } else {
+            // 2026-11-17 用户拍板「就硬挤在一起，甲方就会明白放不下了」：用户亲口要的数量不替他减。
+            // 切硬挤重排——互不重叠、门口只留最小净空——塞到物理极限，让预览自己说明放不下。
+            try {
+              result = await proposeInventoryObjects(basePlan, demandBrief, library, undefined, {
+                ...proposeOpts,
+                packed: true,
+              });
+            } catch {
+              // 连硬挤都放不下第一件：回到原始红卡，如实说明。
+              throw error;
+            }
+            const shortfall = result.capacityShortfall;
+            if (shortfall.some((s) => s.placed < 1)) throw error;
+            packedWarning =
+              `你要的「${shortfall.map((s) => `${s.zone} ${s.query}×${s.requested}`).join("、")}」` +
+              `硬挤的物理极限是 ${shortfall.map((s) => `${s.zone} ${s.query}×${s.placed}`).join("、")}：` +
+              `预览就是挤到塞不下为止的样子（物件互不重叠、门口留了净空，但物件之间已经没有通道）；` +
+              `疏散与合规要现场核验。要宽松就得扩分区、减数量或换更小的物料。`;
+          }
+        }
+        const finalBrief: OutdoorBrief = shrinkItems
+          ? { ...demandBrief, items: shrinkItems }
+          : demandBrief;
+        // 换一种排法按这份 brief 重排：草案用缩过的量；硬挤时保持用户原数并继续硬挤。
+        objectsLayoutRef.current = {
+          base: basePlan,
           library,
-          undefined,
-          {
-            strategy: "rows",
-            buildings: buildingsEnu.length ? buildingsEnu : undefined,
-            // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
-            onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
-            signal: job.controller.signal,
-          },
-        );
+          strategy: "rows",
+          brief: finalBrief,
+          packed: Boolean(packedWarning),
+        };
+        if (packedWarning) {
+          designStep("用户要的数量放不下：按「硬挤」出预览塞到物理极限，差额写在提案卡上，没有改用户记下的数量。");
+        } else if (fitError && draft && shrinkItems) {
+          const fitted = shrinkItems.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、");
+          designStep(`按面积算的清单排不下（${fitError}），已缩到实际能放的数量：${fitted}。`);
+        }
         // 2026-11-17 死结 3：需求分区对不上画布的（如上一轮遗留的旧需求）跳过并如实报出，
         // 同时从需求清单里摘掉——留着的话每一轮都会重复报同一批，物件阶段永远走不下去。
         const mismatchNotice: string[] = [];
@@ -1484,8 +1726,14 @@ export function useOutdoorAgentWorkflow(input: {
           });
           mismatchNotice.push(describeZoneMismatch(result.mismatched, plan, { removed: true }));
         }
-        offer(result.plan, "objects", "逐区复用库内真实设施", job, [
-          stateRef.current.brief.guests
+        offer(result.plan, "objects", draft ? "按分区用途出的默认方案" : "逐区复用库内真实设施", job, [
+          // 默认值必须自证是默认值：用户看到的每一版都说清「这不是你说的数量」。
+          ...(draft ? ["这一版是默认方案：数量按分区用途与可用面积反算，不是你说的数字；要改哪一件直接说。", ...draft.notes] : []),
+          ...(packedWarning ? [packedWarning] : []),
+          ...(fitError && draft && shrinkItems
+            ? [`按面积算的数量现场排不下：已缩到实际能容纳的 ${shrinkItems.map((i) => `${i.query}×${i.count}`).join("、")}；要更多只能换更小的真实物料或扩分区，不硬塞。`]
+            : []),
+          demandBrief.guests
             ? "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。"
             : "人数还没定：本版只按分区用途和库内物料的真实尺寸排布，没有做 2㎡/人 容量粗筛，也没有从物件数量反猜人数；补一句「预计多少人在场」可以再核一遍容量。",
           `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
@@ -2420,6 +2668,7 @@ export function useOutdoorAgentWorkflow(input: {
     previewStyle,
     offerBoundary,
     manualBoundary,
+    manualCanceled,
     manualApplied,
     cycleObjectsLayout,
     active: token.current !== null && callbacks.current.current(token.current),

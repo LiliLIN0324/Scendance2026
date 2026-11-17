@@ -1321,43 +1321,17 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
-/* Bingo 圆徽标：28px 与其他图标槽同尺寸；三态——待发空圆 / 待评数字 / 已回执勾形。 */
+/* Bingo D4：28px 槽里放开口环。环身保持墨色，不铺 warn/err 大圆，也不再叠角标。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
   display: grid; place-items: center; width: 28px; height: 28px; flex: none;
-  box-sizing: border-box; border-radius: 50%; position: relative;
-  border: 1.5px solid var(--wk-hair); background: var(--wk-paper);
-  color: var(--wk-ink-soft); font-size: 11px; font-weight: 600; line-height: 1;
-  font-variant-numeric: tabular-nums;
+  box-sizing: border-box; position: relative;
+  border: 0; background: none; color: var(--ink-soft, #55585F);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
-  display: block; width: 13px; height: 13px;
+  display: block; width: 28px; height: 28px;
 }
-/* 角标：对齐成员未读圆 `.sc-rail-member-badge`，15px 圆、err 底白字 10px、右上角落位。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge > .sc-bingo-corner {
-  position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px;
-  padding: 0 3px; box-sizing: border-box; border-radius: 999px;
-  background: var(--err, #B4443C); color: #fff;
-  font-size: 10px; font-weight: 600; line-height: 1;
-  display: grid; place-items: center; text-align: center;
-  border: 2px solid var(--wk-paper, #F7F5F0); font-variant-numeric: tabular-nums;
-}
-/* Bingo 实心方案（B）：待评 / 回执两态整圆填状态色，圆内数字 / 勾形用 paper 白负形；空态仍描边空圆。状态色必须带与基础规则相同的前缀链，否则特异性被基础规则压过、底色 / 字色退回中性。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="awaiting"] {
-  border-color: var(--warn); background: var(--warn); color: var(--wk-paper);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="returned"] {
-  border-color: var(--err); background: var(--err); color: var(--wk-paper);
-}
-/* 空态：28 占位盒内收一枚 21px 中性深灰描边空心圆，外径对齐家族工具图形（实测 20.1–21.5px）；描边 3px 对齐线条基准；paper 底、不填色、不另加符号，静息态不用品牌绿。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"] {
-  background: transparent;
-  border-color: transparent;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"]::before {
-  content: "";
-  width: 21px; height: 21px; border-radius: 50%;
-  border: 3px solid var(--wk-ink-soft);
-  background: var(--wk-paper);
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > svg.sc-rail-hall {
+  display: block; width: 28px; height: 28px;
 }
 /* 左轨形体：PNG 自带明暗体积，白眼睛单独一层，随指针轻移；整枚形体再轻微侧倾。 */
 .sc-rail-avatar { position: relative; display: block; flex: none; }
@@ -1959,15 +1933,17 @@ body.sc-panel-dragging * {
 .oc-map-details {
   /* Google 地图「地图详情」的实测尺寸：268 宽、12 内边距、8 圆角、底部与图层钮齐平。 */
   width: min(268px, calc(100vw - 48px));
-  /* 面板从图层钮往上长；限制在视口内，矮屏改为内部滚动，别把标题和 X 顶出屏幕。 */
+  /* 面板从图层钮往上长；限制在视口内，矮屏只滚内容，别把标题和 X 顶出屏幕。 */
   max-height: min(560px, calc(100vh - 210px));
-  overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
-  padding: 12px; border: 0; border-radius: 8px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-sizing: border-box;
+  padding: 0; border: 0; border-radius: 8px;
   background: #fff; color: #202124;
   box-shadow: 0 1px 3px rgba(60, 64, 67, .3), 0 4px 8px 3px rgba(60, 64, 67, .15);
   font-family: inherit;
 }
-.oc-map-details__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.oc-map-details__head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px; background: #fff; position: relative; z-index: 1; }
+.oc-map-details__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 12px; }
 .oc-map-details__title { font-size: 14px; font-weight: 500; line-height: 20px; }
 .oc-map-details__close {
   display: grid; place-items: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px;
@@ -2083,22 +2059,46 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button {
   width: 30px; height: 30px; min-width: 30px; min-height: 30px;
 }
-/* 2026-11-16 用户反馈：分享钮本体比搜索钮显大。收到 30px，内层图标 15px，
-   与搜索图标同尺寸；桌面与窄屏都保持 30×30。 */
-.sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button#tool-share {
-  width: 30px; height: 30px; min-width: 30px; min-height: 30px;
-  border-radius: 8px;
+/* 2026-11-17 锁定稿：分享钮 32×32、圆角 8。关上是发丝线 + 墨灰线稿箭头；
+   打开仍是白底，只把描边加到 1.2 并换成草绿，箭头跟着变色，不铺绿底。
+   !important 用来压过右轨圆钮、右上簇 30px 和窄屏 44px 触控区。 */
+.sc-workbench .sc-tool-column button#tool-share,
+.sc-workbench .sc-tool-column button#tool-outdoor-publish,
+.sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share,
+.sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share {
+  flex: 0 0 32px !important;
+  width: 32px !important; height: 32px !important;
+  min-width: 32px !important; min-height: 32px !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  border-style: solid !important;
+  border-width: 0.6px !important;
+  border-color: var(--hair, #E4E4E7) !important;
+  background: var(--paper, #FFFFFF) !important;
+  color: var(--ink-soft, #55585F) !important;
+  box-shadow: none !important;
 }
-/* 窄屏的触控规则 `.sc-tool-menu > button` 会把分享钮的 flex-basis 拉到 44px，
-   宽度仍是 30，结果变成 30×44 的竖长块（用户截图的“放大”）。这里把包裹层、
-   sc-tool-menu 和按钮一起锁回 30×30，保持与搜索条同心。 */
-@media (max-width: 768px) {
-  .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share,
-  .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share .sc-tool-menu,
-  .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share .sc-tool-menu > button#tool-share {
-    flex: 0 0 30px;
-    width: 30px; height: 30px; min-width: 30px; min-height: 30px;
-  }
+.sc-workbench .sc-tool-column button#tool-share.is-active,
+.sc-workbench .sc-tool-column button#tool-outdoor-publish.is-active,
+.sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share.is-active,
+.sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share.is-active {
+  background: var(--paper, #FFFFFF) !important;
+  border-width: 1.2px !important;
+  border-color: var(--green, #4A7C59) !important;
+  color: var(--green, #4A7C59) !important;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button#tool-share > svg,
+.sc-workbench .sc-tool-column button#tool-share > svg,
+.sc-workbench .sc-tool-column button#tool-outdoor-publish > svg {
+  width: 16px !important; height: 16px !important;
+}
+.sc-workbench .sc-tool-column .oc-host > .sc-tool-menu,
+.sc-workbench .sc-tool-column .oc-share,
+.sc-workbench .sc-tool-column .oc-share > .sc-tool-menu {
+  flex: 0 0 32px !important;
+  width: 32px !important; height: 32px !important;
+  min-width: 32px !important; min-height: 32px !important;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr button > svg,
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr button > span,
@@ -2595,153 +2595,125 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-map-type-note { padding: 6px 4px 0; font-size: 10px; line-height: 1.4; color: var(--wk-muted); }
 .sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair); }
-/* 发布卡片：一张卡回答两件事——这一版发了吗、发出去的在哪。主区两态，记录与交付物折叠。 */
-.sc-workbench .sc-publish-card {
-  width: 328px; min-width: 328px; max-width: 328px; max-height: min(72vh, 520px);
-  padding: 10px; gap: 8px; align-items: stretch;
-  box-sizing: border-box; overflow-x: hidden; overflow-y: auto;
+/* 分享 / 发布 / 导出：宽约 400、内边距 20、圆角 12。选中页签是白胶囊墨字。
+   字段用规范 plane #F4F5F7（全局 --plane 目前写成纸白，这里按锁定稿填实底）。
+   绿只出现在未发布的「发布并复制链接」。工具弹层按钮有 !important 重置，这里用更高优先级盖回去。 */
+.sc-workbench .sc-tool-pop.sc-share-panel {
+  width: min(400px, calc(100vw - 56px));
+  min-width: min(400px, calc(100vw - 56px));
+  max-width: min(400px, calc(100vw - 56px));
+  padding: 20px;
+  gap: 14px;
+  border-radius: 12px;
+  box-sizing: border-box;
+  overflow: visible;
+  background: var(--paper, #FFFFFF);
+  border: 1px solid var(--hair, #E4E4E7);
+  box-shadow: var(--e1);
+  color: var(--ink, #141416);
+  font-family: var(--font-sans);
 }
-.sc-workbench .sc-publish-card > * { flex: 0 0 auto; max-width: 100%; }
-.sc-workbench .sc-publish-card p,
-.sc-workbench .sc-publish-card label {
-  margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--wk-muted);
+.sc-workbench .sc-share-tabs {
+  display: flex; align-items: center; gap: 2px;
+  height: 32px; padding: 2px; box-sizing: border-box;
+  border-radius: 16px; background: #EEF0F2;
 }
-.sc-workbench .sc-publish-card section { display: grid; gap: 5px; }
-.sc-workbench .sc-publish-head { display: flex; align-items: center; gap: 6px; }
-.sc-workbench .sc-publish-name {
-  flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; color: var(--wk-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab {
+  flex: 1 1 0; width: auto !important; height: 28px !important; min-height: 0 !important;
+  padding: 0 8px !important; border: 0 !important; border-radius: 14px !important;
+  background: transparent !important; box-shadow: none !important;
+  color: var(--ink-soft, #55585F) !important;
+  font-family: inherit; font-size: 13px; font-weight: 500; line-height: 28px;
+  text-align: center !important; cursor: pointer;
 }
-.sc-workbench .sc-publish-chip {
-  flex: 0 0 auto; padding: 2px 7px; border-radius: 999px; font-size: 10.5px;
-  border: 1px solid var(--wk-hair); color: var(--wk-muted); background: var(--wk-plane);
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab.is-selected,
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab[aria-selected="true"] {
+  background: var(--paper, #FFFFFF) !important;
+  color: var(--ink, #141416) !important;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.06) !important;
 }
-.sc-workbench .sc-publish-chip.is-live {
-  border-color: transparent; color: var(--wk-green-deep); background: var(--wk-green-pale);
+.sc-workbench .sc-share-body { display: grid; gap: 10px; min-width: 0; }
+.sc-workbench .sc-share-heading {
+  display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink, #141416);
 }
-.sc-workbench .sc-publish-tip { position: relative; flex: 0 0 auto; display: flex; }
-.sc-workbench .sc-publish-tip > summary {
-  list-style: none; display: grid; place-items: center; width: 20px; height: 20px;
-  border-radius: 50%; color: var(--wk-muted); cursor: pointer;
+.sc-workbench .sc-share-heading h2 {
+  margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 15px; line-height: 22px; font-weight: 650;
 }
-.sc-workbench .sc-publish-tip > summary::-webkit-details-marker { display: none; }
-.sc-workbench .sc-publish-tip[open] > summary { background: var(--wk-plane); color: var(--wk-ink); }
-.sc-workbench .sc-publish-tip p {
-  position: absolute; right: 0; top: 24px; z-index: 2; width: 232px;
-  padding: 8px 9px; border-radius: 8px; background: var(--wk-paper);
-  border: 1px solid var(--wk-hair); box-shadow: var(--e1);
+.sc-workbench .sc-share-glyph { flex: none; color: var(--ink, #141416); }
+.sc-workbench .sc-share-desc,
+.sc-workbench .sc-share-note {
+  margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
 }
-/* 预览只在未分享时出现，压到 88px；大纲压成下一行元信息，超长省略。 */
-.sc-workbench .sc-publish-shot {
-  position: relative; border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--wk-hair); background: #F7F5F0;
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-audience {
+  display: flex !important; align-items: center; gap: 8px;
+  width: 100% !important; height: 32px !important; min-height: 0 !important;
+  padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
+  background: #F4F5F7 !important; box-shadow: none !important;
+  color: var(--ink, #141416) !important;
+  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-audience:disabled { opacity: .55; cursor: default; }
+.sc-workbench .sc-share-audience-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-workbench .sc-share-chevron,
+.sc-workbench .sc-share-bingo-status { flex: none; margin-left: auto; color: var(--ink-soft, #55585F); font-size: 12px; font-weight: 500; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta {
+  width: 100% !important; height: 32px !important; min-height: 0 !important;
+  padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
+  background: var(--green, #4A7C59) !important; box-shadow: none !important;
+  color: #FFFFFF !important;
+  font-family: inherit; font-size: 13px; font-weight: 600; text-align: center !important; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:hover:not(:disabled) { background: var(--green-deep, #35624A) !important; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:disabled { opacity: .55; cursor: default; }
+.sc-workbench .sc-share-link {
+  position: relative; display: flex; align-items: center; gap: 6px;
+  height: 32px; min-width: 0; padding: 0 3px 0 12px; box-sizing: border-box;
+  border-radius: 16px; background: #F4F5F7;
+}
+.sc-workbench .sc-share-link-text {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; line-height: 20px; color: var(--ink, #141416);
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-key {
+  flex: none; display: inline-flex !important; align-items: center; justify-content: center;
+  box-sizing: border-box !important;
+  height: 24px !important; min-height: 0 !important; padding: 0 !important;
+  border-radius: 6px !important; border: 0.6px solid var(--hair, #E4E4E7) !important;
+  background: var(--paper, #FFFFFF) !important; box-shadow: none !important;
+  color: var(--ink, #141416) !important;
+  font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-copy {
+  width: 48px !important; min-width: 48px !important; padding: 0 !important; text-align: center !important;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-qr {
+  width: 24px !important; min-width: 24px !important; height: 24px !important;
+}
+.sc-workbench .sc-share-qrpop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 3;
+  width: 128px; padding: 8px; box-sizing: border-box;
+  border-radius: 12px; border: 1px solid var(--hair, #E4E4E7);
+  background: var(--paper, #FFFFFF); box-shadow: var(--e1);
+}
+.sc-workbench .sc-share-qrpop-code svg { display: block; width: 112px; height: 112px; }
+.sc-workbench .sc-share-exports { list-style: none; margin: 0; padding: 0; }
+.sc-workbench .sc-share-exports li + li { border-top: 1px solid var(--hair, #E4E4E7); }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export {
+  display: flex !important; align-items: center; gap: 8px;
+  width: 100% !important; height: 36px !important; min-height: 0 !important;
+  padding: 0 2px !important; border: 0 !important; border-radius: 0 !important;
+  background: transparent !important; box-shadow: none !important;
+  color: var(--ink, #141416) !important;
+  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export:hover { background: #F4F5F7 !important; }
+.sc-workbench .sc-tool-pop.sc-share-panel button:focus-visible {
+  outline: 2px solid var(--ink-soft, #55585F); outline-offset: 2px;
 }
 .sc-workbench .sc-publish-plan { display: block; width: 100%; height: 88px; }
 .sc-workbench .sc-publish-plan-ground { fill: #F7F5F0; }
-.sc-workbench .sc-publish-shot-img { display: block; width: 100%; height: 88px; object-fit: cover; }
-.sc-workbench .sc-publish-shot-kicker {
-  position: absolute; left: 7px; top: 6px; padding: 2px 6px; border-radius: 5px; font-size: 10.5px;
-  background: rgba(255, 255, 255, .86); color: #4E544E; letter-spacing: .06em;
-}
-.sc-workbench .sc-publish-meta {
-  margin: -2px 2px 0; font-size: 11px; color: var(--wk-muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.sc-workbench .sc-publish-actions { display: flex; gap: 5px; }
-.sc-workbench .sc-tool-pop .sc-publish-actions > button,
-.sc-workbench .sc-tool-pop .sc-publish-actions > a {
-  flex: 0 0 auto !important; width: auto !important; min-width: 0;
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  padding: 6px 9px !important; border: 1px solid var(--wk-hair) !important;
-  border-radius: 8px !important; background: var(--wk-paper) !important;
-  color: var(--wk-ink) !important; font-size: 11.5px; text-decoration: none; white-space: nowrap;
-}
-.sc-workbench .sc-tool-pop button.sc-publish-primary {
-  flex: 1 1 auto !important; background: var(--wk-green) !important;
-  border-color: transparent !important; color: #FFFFFF !important; font-weight: 600;
-}
-.sc-workbench .sc-tool-pop button.sc-publish-primary:disabled { opacity: .55; }
-/* 已分享主区：二维码 96 + 版本、说明与复制/打开；再生成退为次级整行。 */
-.sc-workbench .sc-publish-live { display: flex; gap: 10px; align-items: stretch; min-width: 0; }
-.sc-workbench .sc-publish-live-side { flex: 1 1 auto; min-width: 0; display: grid; gap: 4px; align-content: start; }
-.sc-workbench .sc-publish-live-title { font-size: 12px; font-weight: 600; color: var(--wk-ink); }
-.sc-workbench .sc-publish-live-actions { display: flex; gap: 5px; }
-.sc-workbench .sc-publish-live-actions > button,
-.sc-workbench .sc-publish-live-actions > a {
-  display: flex; align-items: center; justify-content: center; width: 34px; height: 30px;
-  border: 1px solid var(--wk-hair); border-radius: 8px; background: var(--wk-paper);
-  color: var(--wk-ink); text-decoration: none; cursor: pointer;
-}
-.sc-workbench .sc-publish-regen > button {
-  display: block; width: 100%; height: 30px; border: 1px solid var(--wk-hair); border-radius: 8px;
-  background: var(--wk-paper); color: var(--wk-ink); font-size: 11.5px; cursor: pointer; font-family: inherit;
-}
-.sc-workbench .sc-publish-regen > button:disabled { opacity: .55; }
-.sc-workbench .sc-publish-qr-frame {
-  flex: 0 0 96px; width: 96px; height: 96px; padding: 5px; border-radius: 8px;
-  border: 1px solid var(--wk-hair); background: #FFFFFF; box-sizing: border-box;
-}
-.sc-workbench .sc-publish-qr-frame svg { display: block; width: 100%; height: 100%; }
-.sc-workbench .sc-publish-qr-frame.is-pending {
-  display: grid; place-items: center; border-style: dashed; color: var(--wk-muted);
-  background: var(--wk-plane);
-}
-/* 分享记录：版本/时间/撤回以服务端为准，URL 只在本机有；两段式撤回防误触。 */
-.sc-workbench .sc-publish-records,
-.sc-workbench .sc-publish-deliver {
-  border-top: 1px solid var(--wk-hair); padding-top: 4px;
-}
-.sc-workbench .sc-publish-disclosure {
-  display: flex; align-items: center; gap: 6px; width: 100%;
-  padding: 3px 2px; border: 0; background: none; cursor: pointer; font-family: inherit;
-  font-size: 11.5px; color: var(--wk-ink); text-align: left;
-}
-.sc-workbench .sc-publish-disclosure small { margin-left: auto; font-size: 10.5px; color: var(--wk-muted); }
-.sc-workbench .sc-publish-record-list { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; }
-.sc-workbench .sc-publish-record {
-  display: flex; align-items: center; gap: 7px; padding: 3px 4px; border-radius: 6px;
-  font-size: 11px; color: var(--wk-ink);
-}
-.sc-workbench .sc-publish-record:hover { background: var(--wk-plane); }
-.sc-workbench .sc-publish-record.is-dead { opacity: .55; }
-.sc-workbench .sc-publish-record-label { flex: 0 0 auto; min-width: 26px; font-weight: 600; }
-.sc-workbench .sc-publish-record-time { flex: 1 1 auto; min-width: 0; color: var(--wk-muted); }
-.sc-workbench .sc-publish-record-actions { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
-.sc-workbench .sc-publish-record-actions > button,
-.sc-workbench .sc-publish-record-actions > a {
-  display: flex; align-items: center; justify-content: center; min-width: 24px; height: 22px;
-  padding: 0 4px; border: 1px solid var(--wk-hair); border-radius: 6px; background: var(--wk-paper);
-  color: var(--wk-ink); text-decoration: none; cursor: pointer; font-family: inherit; font-size: 10.5px;
-}
-.sc-workbench .sc-publish-record-actions > button.is-confirm { border-color: #C97A4A; color: #A65A2E; }
-.sc-workbench .sc-publish-record-dead,
-.sc-workbench .sc-publish-record-hint { font-size: 10.5px; color: var(--wk-muted); }
-.sc-workbench .sc-publish-records-empty { margin: 2px 2px 0; font-size: 11px; color: var(--wk-muted); }
-/* 3D 漫游 / 评审：次级入口行，生成后变紧凑动作行。 */
-.sc-workbench .sc-publish-alt { display: grid; gap: 4px; border-top: 1px solid var(--wk-hair); padding-top: 6px; }
-.sc-workbench .sc-publish-alt-entry {
-  display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 6px;
-  border: 0; background: none; cursor: pointer; font-family: inherit; font-size: 11.5px; color: var(--wk-ink); text-align: left;
-}
-.sc-workbench .sc-publish-alt-entry small { margin-left: auto; font-size: 10.5px; color: var(--wk-muted); }
-.sc-workbench .sc-publish-alt-entry:disabled { opacity: .55; }
-.sc-workbench .sc-publish-alt-title { font-size: 11.5px; font-weight: 600; color: var(--wk-ink); }
-.sc-workbench .sc-publish-card .sc-publish-row { display: flex; gap: 5px; }
-.sc-workbench .sc-publish-card .sc-publish-row > button,
-.sc-workbench .sc-publish-card .sc-publish-row > a {
-  flex: 1 1 0; min-width: 0; width: auto !important; text-align: center; font-size: 11.5px; padding: 5px 6px;
-  border: 1px solid var(--wk-hair); border-radius: 7px; box-sizing: border-box; white-space: nowrap;
-  color: var(--wk-ink); text-decoration: none; background: var(--wk-paper);
-  display: flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;
-}
-.sc-workbench .sc-publish-card label { display: grid; gap: 3px; }
-.sc-workbench .sc-publish-card .sc-publish-more {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding-top: 2px;
-}
-.sc-workbench .sc-tool-pop .sc-publish-more > button {
-  display: flex; align-items: center; justify-content: flex-start; gap: 6px;
-  padding: 5px 6px !important; font-size: 11.5px;
-}
 
 /* 左下「设置」小弹层：新手指引 / GitHub / 隐私政策，链接样式对齐工具弹层按钮。 */
 .sc-workbench .sc-rail-settings-wrap { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; }
@@ -2756,11 +2728,6 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 /* 窄屏左栏是 z-index 55 的浮层，会压住整条导轨；弹层打开时把导轨抬到它上面。 */
 @media (max-width: 1080px) {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail:has(.sc-settings-pop) { z-index: 56; }
-}
-.sc-workbench .sc-publish-card input {
-  width: 100%; box-sizing: border-box; padding: 6px 8px;
-  border: 1px solid var(--wk-hair); border-radius: 6px;
-  background: var(--wk-paper); color: var(--wk-ink); font-size: 12px;
 }
 .sc-workbench .sc-checklist-drawer {
   position: absolute; z-index: 34; top: 12px; left: 12px;
