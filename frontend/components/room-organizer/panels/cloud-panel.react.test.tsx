@@ -686,7 +686,7 @@ describe('CloudPanel delayed project replacement', () => {
     const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
     render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
     openAccount();
-    expect(await screen.findByText('当前 · 草稿')).toBeTruthy();
+    expect(await screen.findByText('当前 · 本机')).toBeTruthy();
     expect(screen.queryByText(/已保存/)).toBeNull();
     await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
     expect(controller.getSnapshot().draft).not.toEqual(layout);
