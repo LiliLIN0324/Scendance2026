@@ -361,7 +361,9 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
       <div className="gs-body">
         {state.task === 'choose' ? (
           <>
-            <p className="gs-question">你想做什么？</p>
+            {/* 2026-11-18 用户：「场地的视觉层次很奇怪，应该和空间和其他面板的字号布局类似」——
+                去掉单独一句加粗问句，入口直接是发丝分隔的行（图标 + 13px 名称 + 11px 说明 + 右侧箭头），
+                和「空间」的分组行同一套读法。 */}
             <div className="gs-tasks">
               {tasks.map(task => {
                 const copy = GENERATION_TASK_COPY[task];
