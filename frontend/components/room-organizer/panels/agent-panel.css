@@ -274,8 +274,12 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-design-process ol { display: grid; gap: 6px; margin: 8px 0 0; padding-inline-start: 24px; color: var(--wk-ink-soft); font-size: var(--fs-cap); line-height: 1.5; }
 .ap-design-process li { padding-inline-start: 4px; }
 .ap-design-process li::marker { color: var(--wk-green); }
-/* 低风险提示条的倒计时后缀：跟着 caption 走，纯提示不动任务状态。 */
-.ap-task-countdown { color: var(--wk-muted); white-space: nowrap; }
+/* 提示行自带的「收起」：提示不再自己消失，收不收由用户决定。 */
+.ap-task-dismiss {
+  flex: none; margin-inline-start: auto; padding: 0 2px; border: 0; background: transparent;
+  color: var(--wk-muted); font: inherit; font-size: var(--fs-cap); cursor: pointer;
+}
+.ap-task-dismiss:hover { color: var(--wk-ink); text-decoration: underline; }
 
 .ap-stage-suggestion {
   display: flex;
