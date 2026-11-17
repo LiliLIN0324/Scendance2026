@@ -639,3 +639,43 @@ text 刚建/刚未知    -> 不动
 ### 本轮遗留（交给别的批次，不在这里单推）
 
 - `.env.example:20` 的注释原来写着旧来源 `labs.aholo.ai/api-keys`，按 2026-11-17 的核对应为 `labs.aholo.cn/api-keys`——**已在本轮一并订正**（纯注释，键名与取值一个字没动）。
+
+## 第六轮：生产 key 已换绑（2026-11-17 15:01 北京时间）
+
+第五轮把归因钉死后，生产那把 `LUX3D_API_KEY` 已经换成你自己 898 积分账号那把。
+
+### 执行
+
+```
+POST https://api.supabase.com/v1/projects/wkhfvnzgopjdzxlmycks/secrets
+body: [{ "name": "LUX3D_API_KEY", "value": "<本机 .env.local 那把>" }]
+```
+
+只 POST 这一条；Management API 按名 upsert，其余 31 条不受影响。
+
+### 复核（逐项）
+
+| 项 | 结果 |
+| --- | --- |
+| secret 总数 | 32 → 32（无丢失、无新增） |
+| 摘要变化的键 | 只有 `LUX3D_API_KEY` 一条 |
+| `LUX3D_API_KEY` 摘要 | `4dd1d95a87b3…` → **`4b3ad825fb8f…`** |
+| 新摘要是否等于本机那把的 sha256 | **是** |
+| 幂等复跑一次 | 摘要不变、无任何条目变化 |
+| `updated_at` | `LUX3D_API_KEY` = `2026-11-17T07:01:21Z`；terms 两把仍是 `2026-10-27`；worker secret 仍是第三轮那次 |
+
+### 这一轮踩到的两件事（都记下来）
+
+1. **Management API 的 `GET /secrets` 返回的是 sha256 摘要，不是明文。**
+   证据：`LUX3D_TERMS_URL` 的 `ca7c3c80c48f…` 正是 `sha256("https://www.aholo.ai/agreement/termsofuse")`；`GENERATION_WORKER_SECRET` 的 `56ac2dcb…` 正是第三轮那把随机值的 sha256。明文**只写不可取**。
+   - 好处：平台侧核对凭据不必碰明文，比摘要就够；
+   - 代价：**旧 key 的明文无法从平台取回**。要回滚得回 Aholo 控制台重新取那把 key。
+2. **我自己的复核脚本一度把摘要又哈希了一遍（双哈希），把「已经换成功」判成了「没换成」。**
+   第一版复核打印「等于本机那把 = false」，看着像换失败——真相比那更基础：GET 给的已经是摘要，再算一次 sha256 就是拿「摘要的摘要」去比「明文的摘要」。修掉之后复核是 `true`，并且幂等复跑一次摘要纹丝不动。
+   *教训*：**一个自造的布尔值说「不对」时，先确认这个布尔值本身算对了**，再去动生产。宁可多跑一次幂等写入，也不要凭一个算错的指标去「回滚」一个可能已经成功的操作。
+
+### 还剩最后一件事
+
+worker 与 cron 读的就是这一个 Edge Secret，函数读新密钥立即生效（第三轮换 `GENERATION_MAX_TASK_CENTS` 时已验证过同一机制），**不需要重新部署**——所以换绑这一步已经完整生效。
+
+剩下唯一的验证是**真机跑一单真实的文生 3D**：它会真实消耗你 Aholo 账号的额度、并建出一个任务，这一步本轮没做（额度是实打实的，要你点头）。跑完看那条任务的 `provider_usage.vendorError`：不再是 `no credits` 就是闭环。
