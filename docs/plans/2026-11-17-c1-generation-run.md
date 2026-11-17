@@ -578,3 +578,64 @@ text 刚建/刚未知    -> 不动
 - **前端没有部署**：并行会话正在推 Cloudflare 正式站，本轮的界面改动只进分支与 PR，不抢别名。
 - 只接了生成这一条路：Agent 提案与场地重建那两条链的失败仍然只看各自的错误码表。
 - 没有做多语言：现在只按关键词翻成中文，遇到没见过的说法就原样显示英文。
+
+## 第五轮：额度归因定性 + 换键清单（2026-11-17）
+
+第四轮把供应商原话接到了用户面前，但根子还在环境侧。上一轮记的排除清单（「代码是对的，账号是没额度的」）方向没错，却没回答「到底哪把 key、哪个账号」。这一轮把归因钉死，并把换键清单写成能照着做的。
+
+### 归因：生产挂的是**另一把 key**，不是你那把 898 积分的
+
+用 Supabase Management API 只读列举生产 Edge Secrets（`GET /v1/projects/wkhfvnzgopjdzxlmycks/secrets`），平台对每个 secret 返回 SHA256 摘要。把本机 `.env.local` 的 `LUX3D_API_KEY` 在内存里算一次 sha256，与生产摘要对比：
+
+| | 摘要（前 12 位） |
+| --- | --- |
+| 生产 `LUX3D_API_KEY` | `4dd1d95a87b3…` |
+| 本机 `.env.local` `LUX3D_API_KEY` | `4b3ad825fb8f…` |
+
+**两者不是同一把 key。** 这与「本机这把直接建出任务、生产那把被 `no credits` 拒」的实测互相对上：**代码、网关、请求体都不用改**，问题在生产环境挂的那把 key 属于一个没有额度的账号。
+
+配套的一条（终树在 Aholo 控制台侧核对）：账单类型「…– API」证实**开放平台调用与网页消费共用同一本积分**，所以不存在「网页有 898、API 另算一本」的池子口径问题 —— 换成你自己账号那把 key，这 898 就能被生成任务用上。
+
+> 明文全程没有落盘、没进日志、没进仓库：核对脚本只输出摘要前缀。
+> Management API 本身会返回明文，那把钥匙这次刻意没读。
+
+### 生产 secrets 现状（32 条里相关的几条）
+
+| 键 | 生产状态 | 摘要 / 说明 |
+| --- | --- | --- |
+| `LUX3D_API_KEY` | 在 | `4dd1d95a87b3…` ← **要换的就是这把** |
+| `LUX3D_TERMS_URL` | 在 | `ca7c3c80c48f…` |
+| `LUX3D_TERMS_REVIEWED_AT` | 在 | `58beca76ab87…` |
+| `LUX3D_BASE_URL` | **不在** | 走默认 `https://api.aholo.ai/global`，与生产打的是全球站吻合 |
+| `AHOLO_SCAN_KEY` | **不在** | 实景重建的独立日配额，与生成通道无关；生产本来就没有，别去动 |
+| `GENERATION_WORKER_SECRET` | 在 | `56ac2dcb…`（第三轮轮换的那把） |
+| `GENERATION_MAX_TASK_CENTS` | 在 | `ad573668…` = sha256("100") |
+
+### 就绪判定：三个键齐全才算 aholo 通道开通
+
+`LUX3D_API_KEY` + `LUX3D_TERMS_URL` + `LUX3D_TERMS_REVIEWED_AT` —— **三个都在，通道已开通**。缺任意一个 terms 键，前端会判定 `aholoTextToModel=false`（不报错，但进不去那条通道）。所以换 key 时只动 `LUX3D_API_KEY` 一条，另外两个原样留着。
+
+### 换键清单
+
+**worker 与生成 cron 读的是同一个 Edge Secret**，所以换一把就够 —— 不需要分别改两处。上一版清单里「worker 和 cron 必须用同一把明文」这句话是对的，但原因不是「两处各配一次」，而是**本来就只有一处**。
+
+| 键 | 动作 |
+| --- | --- |
+| `LUX3D_API_KEY` | 换成你自己 898 积分账号签发的那把（本机 `.env.local` 里那把） |
+| `LUX3D_TERMS_URL` | 沿用，别删 |
+| `LUX3D_TERMS_REVIEWED_AT` | 沿用，别删 |
+| `LUX3D_BASE_URL` | 先留空走默认全球站；换完仍报鉴权/账号类错误，才切 `https://api.aholo3d.cn` |
+| `AHOLO_SCAN_KEY` | 别动（生产本来就没有） |
+
+**怎么执行**：Dashboard → 项目 `wkhfvnzgopjdzxlmycks` → Edge Functions → Secrets。
+（其实本地也能代劳：Management API 的令牌在 Windows 凭据管理器里，`POST /v1/projects/{ref}/secrets` 一次调用即可，写完还能立刻用摘要比对复核 —— 比手点 Dashboard 少一层「复制错」的风险；但这是改生产凭据，要人点头才动。）
+
+### 换完怎么验
+
+1. 重新提交一单**文生 3D**；
+2. 看这条生成记录的 `provider_usage.vendorError`：不再是 `no credits` 就说明 key 已切到自己账号；
+3. 若仍失败，看原话区分：鉴权类 → key 抄错或所属账号不对；额度类 → 那个账号本身也没额度（这时该充值的是账号，不是换 key）。
+
+### 本轮遗留（交给别的批次，不在这里单推）
+
+- `.env.example:20` 的注释还写着旧来源 `labs.aholo.ai/api-keys`，按 2026-11-17 的核对应为 `labs.aholo.cn/api-keys`。一行注释订正，按纪律跟人物/车流那批一起攒着，不单独推。
