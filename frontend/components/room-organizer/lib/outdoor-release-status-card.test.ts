@@ -7,6 +7,7 @@ import {
   ledgerFromEvidence,
   logReleaseStatus,
   RELEASE_STATUS_PREFIX,
+  statusCardSnapshot,
   summarizeLedger,
   type CaseLedgerRow,
 } from './outdoor-release-status-card';
@@ -188,6 +189,53 @@ describe('门禁读数接进状态卡', () => {
       gate: gateFactsForCard(reading),
     });
     expect(card).toContain('类型 未验 / 用例 通过 / 构建 未验（门禁未齐）');
+  });
+});
+
+describe('可对比快照（两轮直接 diff）', () => {
+  it('默认台账下的快照一字段不多一字段不少', () => {
+    const snap = statusCardSnapshot({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: defaultLedger(),
+    });
+    expect(snap).toEqual({
+      evidenceAsOf: EVIDENCE_AS_OF,
+      cases: { total: 11, ready: 0, missing: 5, browserOnly: 6 },
+      browser: { partial: [1, 3, 4, 6, 7, 8, 9, 10, 11], none: [2, 5] },
+      cloud: { pass: 0, unverified: 11 },
+      gate: {},
+      allGreen: 0,
+    });
+  });
+
+  it('没台账时云端写 null，不写一串 0 冒充“都没过”', () => {
+    const snap = statusCardSnapshot({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+    });
+    expect(snap.cloud).toBeNull();
+    expect(snap.allGreen).toBe(0);
+  });
+
+  it('门禁读数为空时 gate 是空对象，不是三个 false', () => {
+    const snap = statusCardSnapshot({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      reading: readGates({ tests: '\n      Tests  645 passed (645)\n' }),
+    });
+    expect(snap.gate).toEqual({ tests: true });
+  });
+
+  it('同一输入两次序列化完全一致（可放进 diff）', () => {
+    const input = {
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: defaultLedger(),
+    };
+    expect(JSON.stringify(statusCardSnapshot(input))).toBe(
+      JSON.stringify(statusCardSnapshot(input)),
+    );
   });
 });
 
