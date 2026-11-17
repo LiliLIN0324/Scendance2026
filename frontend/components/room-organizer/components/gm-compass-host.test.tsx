@@ -64,6 +64,10 @@ function planApi(getBearing: () => number, orbitByDelta = vi.fn(), resetNorth = 
   return {
     zoomBy: vi.fn(),
     focusLngLat: vi.fn(),
+    // 2026-11-17：main 的 1e2e010e 给 OutdoorPlan3DApi 加了 focusVenue（回到框选场地），
+    // 68d6a888 改这个 mock 时漏了它 —— main 的前端 tsc 从那时起就是红的（next build 会因此失败）。
+    // 本分支顺手补齐，别让合并把红带到正式站构建里。
+    focusVenue: vi.fn(),
     resetNorth,
     getBearing,
     orbitByDelta,

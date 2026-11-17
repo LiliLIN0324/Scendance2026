@@ -276,8 +276,23 @@ describe('filterPlanInventory (H3-c 清单筛选)', () => {
     ]);
   });
 
-  it('filters issues-only rows', () => {
-    const issues = filterPlanInventory(rows, { issuesOnly: true });
+  // 2026-11-17 #118 补录入 UI：车辆落位时自动归属分区，所以和设施/人员一样能按区筛。
+  it('filters vehicles by zone like facilities and workers', () => {
+    const rows = buildPlanInventory(planWithVehicles());
+    const inZoneA = filterPlanInventory(rows, { zone: ZONE_A });
+    expect(inZoneA.map(r => r.id)).toEqual([
+      'b2000000-0000-4000-8000-000000000001',
+      'aa000000-0000-4000-8000-000000000002',
+    ]);
+    // 未归属：车辆也在内（落车时没落进任何分区的那台大巴）。
+    const unassigned = filterPlanInventory(rows, { zone: 'unassigned' });
+    expect(unassigned.map(r => r.id)).toContain('aa000000-0000-4000-8000-000000000001');
+    // 类型筛选同时生效：只选车辆时按区筛只回车辆行。
+    const vehiclesOnly = filterPlanInventory(rows, { kind: 'vehicle', zone: ZONE_A });
+    expect(vehiclesOnly.map(r => r.id)).toEqual(['aa000000-0000-4000-8000-000000000002']);
+  });
+
+  it('filters issues-only rows', () => {    const issues = filterPlanInventory(rows, { issuesOnly: true });
     expect(issues.map(r => r.id).sort()).toEqual([
       'c3000000-0000-4000-8000-000000000001',
       'c3000000-0000-4000-8000-000000000002',

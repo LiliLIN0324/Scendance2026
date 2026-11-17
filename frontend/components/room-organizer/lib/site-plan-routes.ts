@@ -18,8 +18,11 @@ import {
   type PlanNode,
   type PlanPoint,
   type PlanRoute,
+  type PlanVehicle,
+  type PlanVehicleType,
   type PlanWorker,
   type SitePlanData,
+  planVehicleTypes,
 } from '../../../../supabase/functions/_shared/site-plan';
 import {
   planPointDistanceM,
@@ -718,6 +721,77 @@ export function buildWorker(
     notes: input.notes ?? '',
   };
   return issues.length > 0 ? { ok: true, value: worker, issues } : { ok: true, value: worker };
+}
+
+/* ---------------- 车辆 ---------------- */
+
+/** 按落点自动推断车辆归属分区（与人员同口径：第一个包含落点的分区；都不含返回 undefined）。 */
+export function inferVehicleZoneId(pt: PlanPoint, zones: readonly { id: string; polygon: readonly PlanPoint[] }[]): string | undefined {
+  return inferZoneIdAt(pt, zones);
+}
+
+export interface BuildVehicleInput {
+  /** 车型：必须已登记（契约 planVehicleTypes 枚举）。 */
+  type: PlanVehicleType;
+  /** 台数：1–99（契约上限；3D 每实体最多摆 MAX_VEHICLE_INSTANCES 台，超出部分只在清单里计数）。 */
+  count: number;
+  position: PlanPoint;
+  /** 不传时按落点自动归属分区（inferVehicleZoneId）。 */
+  zoneId?: string | undefined;
+  /** 物料库模型 slug：缺省 = 库内没有该车型 GLB，界面标「待补模型」，不借近似车型。 */
+  modelSlug?: string | undefined;
+  /** 挂载的动线 id（最多 20 条，契约上限）。 */
+  routeIds?: readonly string[] | undefined;
+  color?: string;
+  notes?: string;
+  id?: string;
+}
+
+/**
+ * 落一台车（2026-11-17 #118 补录入 UI）。
+ *
+ * 与 `buildWorker` 同策略：车型/台数/落点合法才提交；落点在边界外放行但随结果返回提示；
+ * 自动归属按落点所在分区（显式 zoneId 优先且必须存在）。
+ *
+ * 两处口径与人员**故意不同**：
+ * - `modelSlug` 缺省就是「没有模型」，不回落登记表首项（#118 §3.5：回落会把待补显示成有模型）；
+ * - 台数上限按契约的 99（人员是 9999）——车是有泊位/队列属性的实体，不是人头。
+ */
+export function buildVehicle(
+  input: BuildVehicleInput,
+  boundary: readonly PlanPoint[],
+  zones: readonly { id: string; name: string; polygon: readonly PlanPoint[] }[] = [],
+): PlanRouteEditResult<PlanVehicle> {
+  if (!planVehicleTypes.includes(input.type)) {
+    return { ok: false, issue: { code: 'unknown-zone', message: '车型未登记。' } };
+  }
+  if (!Number.isInteger(input.count) || input.count < 1 || input.count > 99) {
+    return { ok: false, issue: { code: 'out-of-range', message: '台数要 1–99 的整数。' } };
+  }
+  if (!pointInRange(input.position)) {
+    return { ok: false, issue: { code: 'out-of-range', message: '车辆落点超出场地坐标系 ±5000 m 范围。', at: input.position } };
+  }
+  const zoneId = input.zoneId ?? inferVehicleZoneId(input.position, zones);
+  if (zoneId && !zones.some(zone => zone.id === zoneId)) {
+    return { ok: false, issue: { code: 'unknown-zone', message: '归属分区不存在。' } };
+  }
+  const issues: PlanEditIssue[] = [];
+  if (boundary.length >= 3 && !planPointInRing(input.position, boundary)) {
+    issues.push({ code: 'out-of-boundary', message: '车辆落在用地红线之外。', at: input.position });
+  }
+  const routeIds = (input.routeIds ?? []).slice(0, 20);
+  const vehicle: PlanVehicle = {
+    id: input.id ?? crypto.randomUUID(),
+    type: input.type,
+    count: input.count,
+    position: { x: input.position.x, y: input.position.y },
+    ...(zoneId !== undefined ? { zoneId } : {}),
+    ...(input.modelSlug ? { modelSlug: input.modelSlug } : {}),
+    ...(routeIds.length > 0 ? { routeIds: [...routeIds] } : {}),
+    ...(input.color !== undefined ? { color: input.color } : {}),
+    notes: input.notes ?? '',
+  };
+  return issues.length > 0 ? { ok: true, value: vehicle, issues } : { ok: true, value: vehicle };
 }
 
 /* ---------------- 派生统计（现算，不落盘） ---------------- */
