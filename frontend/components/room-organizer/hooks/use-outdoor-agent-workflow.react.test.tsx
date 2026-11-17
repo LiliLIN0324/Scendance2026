@@ -2192,3 +2192,17 @@ it("云端声明：只能显式给号，编号不合法这一标不生效", () =
   });
   expect(flow.cloudPass()).toEqual([]);
 });
+
+it("云端声明落盘：标完刷新也能读回来，撤掉同步写出", () => {
+  expect(flow.cloudPass()).toEqual([]);
+  act(() => {
+    flow.declareCloud(4, true);
+  });
+  const stored = window.localStorage.getItem("scendance.outdoor.walkthrough.cloud.v1");
+  expect(stored).toBeTruthy();
+  expect(JSON.parse(stored!).pass).toEqual([4]);
+  act(() => {
+    flow.declareCloud(4, false);
+  });
+  expect(JSON.parse(window.localStorage.getItem("scendance.outdoor.walkthrough.cloud.v1")!).pass).toEqual([]);
+});
