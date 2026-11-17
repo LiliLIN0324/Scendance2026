@@ -2677,7 +2677,13 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   overflow: visible;
   background: var(--paper, #FFFFFF);
   border: 1px solid var(--hair, #E4E4E7);
-  box-shadow: var(--e1);
+  /* 深色地图上 --e1（单层 alpha .10）几乎看不见。仍是 v17 的两族：
+     贴边实影 + 底下软抬升（中间一层衔接）。颜色停在墨色 rgb(20,20,22)，不改成黑糊。
+     纸面上测过的约 .15 / .11 / .22 在地图上不够，这里把浓度和轻微扩散加大。 */
+  box-shadow:
+    0 1.2px 2px 0.4px rgba(20, 20, 22, 0.62),
+    0 6px 10px 0.5px rgba(20, 20, 22, 0.36),
+    0 18px 36px 2px rgba(20, 20, 22, 0.48);
   color: var(--ink, #141416);
   font-family: var(--font-sans);
 }
@@ -2701,31 +2707,51 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(20, 20, 22, 0.06) !important;
 }
-.sc-workbench .sc-share-body { display: grid; gap: 10px; min-width: 0; }
+.sc-workbench .sc-share-body { display: grid; gap: 10px; min-width: 0; justify-items: stretch; }
+/* 分享页 .sc-share-heading 是 space-between。这里强制整组靠左，图标贴住标题。 */
 .sc-workbench .sc-share-heading {
-  display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink, #141416);
+  display: flex; align-items: center; justify-content: flex-start; gap: 0;
+  width: 100%; min-width: 0; color: var(--ink, #141416);
 }
-.sc-workbench .sc-share-heading h2 {
+.sc-workbench .sc-share-titlelock {
+  display: inline-flex; align-items: center; justify-content: flex-start; gap: 4px;
+  min-width: 0; max-width: 100%;
+}
+.sc-workbench .sc-share-heading h2,
+.sc-workbench .sc-share-titlelock h2 {
   margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 15px; line-height: 22px; font-weight: 650;
 }
-.sc-workbench .sc-share-glyph { flex: none; color: var(--ink, #141416); }
+.sc-workbench .sc-tool-pop.sc-share-panel .sc-share-glyph,
+.sc-workbench .sc-tool-column .oc-cluster .sc-share-panel .sc-share-glyph {
+  flex: none; width: 16px !important; height: 16px !important; color: #141416;
+}
 .sc-workbench .sc-share-desc,
 .sc-workbench .sc-share-note {
   margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
 }
-.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-audience {
-  display: flex !important; align-items: center; gap: 8px;
+/* 右上簇把 button 居中、把 button > span 收成 22px。分享行必须盖回去，否则文字挤在中间。 */
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-row,
+.sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-row {
+  display: flex !important; align-items: center; justify-content: flex-start !important; gap: 4px;
   width: 100% !important; height: 32px !important; min-height: 0 !important;
   padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
   background: #F4F5F7 !important; box-shadow: none !important;
   color: var(--ink, #141416) !important;
   font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
 }
-.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-audience:disabled { opacity: .55; cursor: default; }
-.sc-workbench .sc-share-audience-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-workbench .sc-share-chevron,
-.sc-workbench .sc-share-bingo-status { flex: none; margin-left: auto; color: var(--ink-soft, #55585F); font-size: 12px; font-weight: 500; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-row:disabled { opacity: .55; cursor: default; }
+.sc-workbench .sc-share-row-label {
+  flex: 1 1 auto; width: auto !important; height: auto !important; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+}
+.sc-workbench .sc-share-row-status {
+  flex: none; width: auto !important; height: auto !important; margin-left: auto;
+  color: var(--ink-soft, #55585F); font-size: 12px; font-weight: 500;
+}
+.sc-workbench .sc-share-readonly {
+  margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
+}
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta {
   width: 100% !important; height: 32px !important; min-height: 0 !important;
   padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
@@ -2766,15 +2792,23 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   background: var(--paper, #FFFFFF); box-shadow: var(--e1);
 }
 .sc-workbench .sc-share-qrpop-code svg { display: block; width: 112px; height: 112px; }
-.sc-workbench .sc-share-exports { list-style: none; margin: 0; padding: 0; }
+.sc-workbench .sc-share-exports {
+  list-style: none; margin: 0; padding: 0; width: 100%; justify-self: stretch; align-self: stretch;
+}
 .sc-workbench .sc-share-exports li + li { border-top: 1px solid var(--hair, #E4E4E7); }
-.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export {
-  display: flex !important; align-items: center; gap: 8px;
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export,
+.sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-export {
+  display: flex !important; align-items: center; justify-content: flex-start !important; gap: 6px;
   width: 100% !important; height: 36px !important; min-height: 0 !important;
-  padding: 0 2px !important; border: 0 !important; border-radius: 0 !important;
+  padding: 0 !important; border: 0 !important; border-radius: 0 !important;
   background: transparent !important; box-shadow: none !important;
-  color: var(--ink, #141416) !important;
+  color: #141416 !important;
   font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export > span,
+.sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-export > span {
+  flex: 1 1 auto; width: auto !important; height: auto !important; min-width: 0;
+  text-align: left; color: #141416;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export:hover { background: #F4F5F7 !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button:focus-visible {
