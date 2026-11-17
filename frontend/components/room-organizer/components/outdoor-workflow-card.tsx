@@ -750,6 +750,10 @@ export function OutdoorWorkflowCard({
       <OutdoorWalkthroughSection
         initialBook={flow.walkthroughBook()}
         onMark={(id, state) => flow.recordWalkthrough(id, state)}
+        cloudPass={flow.cloudPass()}
+        onCloud={(id, pass) => {
+          flow.declareCloud(id, pass);
+        }}
       />
     </section>
       {flow.loginRequired && !flow.loginSatisfied && (

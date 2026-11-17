@@ -70,3 +70,34 @@ describe("走查记录面板", () => {
     expect(container.textContent).toContain("真实云端");
   });
 });
+
+describe("云端声明键（轮次 80）", () => {
+  it("不给 onCloud 就没有第四个键（默认界面不变）", () => {
+    render(<OutdoorWalkthroughBoard book={emptyBook()} onMark={vi.fn()} />);
+    expect(within(screen.getAllByRole("group")[0]!).getAllByRole("button")).toHaveLength(3);
+  });
+
+  it("给了 onCloud 每行多一个「云端」键，已声明的才是按下态", () => {
+    render(
+      <OutdoorWalkthroughBoard book={emptyBook()} onMark={vi.fn()} cloudPass={[2]} onCloud={vi.fn()} />,
+    );
+    const groups = screen.getAllByRole("group");
+    expect(within(groups[0]!).getAllByRole("button")).toHaveLength(4);
+    const cloudButton = (index: number) =>
+      within(groups[index]!).getByLabelText(/云端是否已跑/) as HTMLButtonElement;
+    expect(cloudButton(1).getAttribute("aria-pressed")).toBe("true");
+    expect(cloudButton(0).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("点一下是声明、再点一下是撤回", () => {
+    const onCloud = vi.fn();
+    render(
+      <OutdoorWalkthroughBoard book={emptyBook()} onMark={vi.fn()} cloudPass={[3]} onCloud={onCloud} />,
+    );
+    const groups = screen.getAllByRole("group");
+    fireEvent.click(within(groups[1]!).getByLabelText(/云端是否已跑/));
+    expect(onCloud).toHaveBeenCalledWith(2, true);
+    fireEvent.click(within(groups[2]!).getByLabelText(/云端是否已跑/));
+    expect(onCloud).toHaveBeenCalledWith(3, false);
+  });
+});

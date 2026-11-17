@@ -30,11 +30,18 @@ const TONE: Record<BrowserEvidence, string> = {
 export function OutdoorWalkthroughBoard({
   book,
   onMark,
+  cloudPass,
+  onCloud,
 }: {
   book: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => void;
+  /** 已声明“云端真跑过”的用例号；不传就整列不渲染。 */
+  cloudPass?: readonly number[];
+  /** 给就渲染第四个键；点击切换该条的云端声明。 */
+  onCloud?: (id: number, pass: boolean) => void;
 }): JSX.Element {
   const summary = summarizeWalkthrough(book);
+  const cloud = new Set(cloudPass ?? []);
   return (
     <section
       aria-label="走查记录"
@@ -68,6 +75,22 @@ export function OutdoorWalkthroughBoard({
                     {option.label}
                   </button>
                 ))}
+                {onCloud && (
+                  <button
+                    type="button"
+                    aria-pressed={cloud.has(id)}
+                    aria-label={`用例 ${id} 云端是否已跑`}
+                    title="云端真跑过才点；只有它不会让全绿变成 1"
+                    onClick={() => onCloud(id, !cloud.has(id))}
+                    className={`rounded-md border px-1.5 py-0.5 transition-colors ${
+                      cloud.has(id)
+                        ? TONE.pass
+                        : "border-dashed border-neutral-300 text-neutral-400 hover:bg-neutral-100"
+                    }`}
+                  >
+                    云端
+                  </button>
+                )}
               </span>
             </li>
           );

@@ -18,10 +18,14 @@ export function OutdoorWalkthroughSection({
   initialBook,
   onMark,
   defaultOpen = false,
+  cloudPass,
+  onCloud,
 }: {
   initialBook: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => WalkthroughBook | null;
   defaultOpen?: boolean;
+  cloudPass?: readonly number[];
+  onCloud?: (id: number, pass: boolean) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [book, setBook] = useState(initialBook);
@@ -37,6 +41,8 @@ export function OutdoorWalkthroughSection({
             const next = onMark(id, state);
             if (next) setBook(next);
           }}
+          {...(cloudPass ? { cloudPass } : {})}
+          {...(onCloud ? { onCloud } : {})}
         />
       )}
     </div>
