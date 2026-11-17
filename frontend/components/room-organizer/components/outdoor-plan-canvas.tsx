@@ -260,7 +260,6 @@ import {
   annotationDistanceM,
   buildAnnotation,
   planShapeDraftTarget,
-  PLAN_SHAPE_KINDS,
   type PlanAnnotationStrokeWidth,
   type PlanShapeKind,
 } from '../lib/site-plan-annotate';
@@ -291,6 +290,10 @@ import {
 import { alignedTileCenter } from '../lib/basemap-alignment';
 import { basemapNativeMaxZoom } from '../lib/basemap-zoom-caps';
 import { planningIcon } from './outdoor-plan-icons';
+import { AnnotateColorBar } from './annotate-color-bar';
+import { AnnotateDrawTools } from './annotate-draw-tools';
+import { useAnnotateDrawShortcuts } from '../hooks/use-annotate-draw-shortcuts';
+import { annotateDrawSelectionLabel, resolveAnnotateDrawToolClick } from '../lib/annotate-draw-shortcuts';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
 import { ZoneEventInput } from './zone-event-input';
 import { MaterialSymbol } from '../panels/material-symbol';
@@ -719,19 +722,6 @@ const PLACED_KIND_COLORS: Record<PlanInventoryKind, string> = {
   measurement: PLANNING_LAYER_COLORS.measure,
   annotation: PLANNING_LAYER_COLORS.annotate,
 };
-
-/**
- * 2026-11-13 自由标注色板：全部取自既有图层/表面 token，不另造 hex；第一项为缺省标注紫。
- * 文本/形状共用取色；旧快照不带 color 时渲染层回退标注紫。
- */
-const ANNOTATE_COLOR_SWATCHES: readonly { value: string; label: string }[] = [
-  { value: PLANNING_LAYER_COLORS.annotate, label: '紫' },
-  { value: PLANNING_SURFACE.panelText, label: '墨' },
-  { value: PLANNING_LAYER_COLORS.boundary, label: '绿' },
-  { value: PLANNING_LAYER_COLORS.route, label: '蓝' },
-  { value: PLANNING_LAYER_COLORS.facility, label: '橙' },
-  { value: PLANNING_LAYER_COLORS.worker, label: '粉' },
-];
 
 /** 2026-11-11 图层卡 OnePlan 镜像：清单 kind → 图层（文件夹行尾的可见性/锁定按层读写）。 */
 const LAYER_OF_INVENTORY_KIND: Record<PlanInventoryKind, PlanLayerRow> = {
@@ -1194,21 +1184,6 @@ const INVENTORY_KIND_COLORS: Record<PlanInventoryKind, string> = {
   vehicle: PLANNING_ROUTE_KIND_COLORS.vehicle,
   measurement: PLANNING_LAYER_COLORS.measure,
   annotation: PLANNING_LAYER_COLORS.annotate,
-};
-
-/** 标注形状四类型图标：矩形/圆形/三角形/线段；与 Lucide 注册表编译期闭环。 */
-const ANNOTATE_SHAPE_ICONS: Record<PlanShapeKind, PlanningIconName> = {
-  rect: 'square',
-  circle: 'circle',
-  triangle: 'triangle-shape',
-  line: 'minus',
-};
-/** 形状菜单右侧点数短标：rect/circle/line 2 点、triangle 3 点。 */
-const ANNOTATE_SHAPE_META: Record<PlanShapeKind, string> = {
-  rect: '2 点',
-  circle: '2 点',
-  triangle: '3 点',
-  line: '2 点',
 };
 
 /** M4：出入口三型前置直选（工具箱目录分列，对齐动线三类），标签与放置命名同源。 */const NODE_KIND_OPTIONS: { kind: PlanNode['kind']; label: string }[] = [
@@ -2055,7 +2030,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [annotateDraftCount, setAnnotateDraftCount] = useState(0);
   const [annotateColor, setAnnotateColor] = useState<string>(PLANNING_LAYER_COLORS.annotate);
   const [annotateStrokeWidth, setAnnotateStrokeWidth] = useState<PlanAnnotationStrokeWidth>('thin');
-  const [annotateMenuOpen, setAnnotateMenuOpen] = useState(false);
+  /** 再点当前工具退出时的轻提示（只在这一处展示，避免依赖选中实体卡的状态位）。 */
+  const [annotateNotice, setAnnotateNotice] = useState<string | null>(null);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [selectedMeasurementId, setSelectedMeasurementId] = useState<string | null>(null);
   /** 拖动测量时不再需要额外的 DOM 贴片，画布 draw() 自己会重画读数。 */
@@ -2240,6 +2216,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (next !== 'select' && next !== 'view') clearMultiSelection(false);
     setModeState(next);
     setEditMessage(null);
+    setAnnotateNotice(null);
     onModeChange?.(next);
     // 2026-11-16 用户「我现在好像画不了场地边界了啊？」：
     // 锁只该挡「没选工具时的误触」。点了「画边界 / 编辑边界」就是明摆着要改几何，
@@ -3854,6 +3831,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // 2026-11-16 绘图五工具（Figma）：T 文本 / R 矩形 / O 圆形 / Y 三角形 / L 线段。
+  // 再按当前工具不重进，避免清掉半成品；落位旋转仍独占 facility 下的 R。
+  useAnnotateDrawShortcuts({
+    enabled: Boolean(onPlanChange),
+    getMode: () => modeRef.current,
+    getShape: () => annotateShapeRef.current,
+    onReveal: () => setInspectorPanel('annotate', true),
+    onNote: () => setMode('note'),
+    onShape: kind => {
+      annotateShapeRef.current = kind;
+      setAnnotateShape(kind);
+      setMode('shape');
+    },
+  });
 
   const viewportOverrideRef = useRef<PlanViewport | null>(null);
 
@@ -6535,6 +6527,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return true;
   }
 
+  /**
+   * 2026-11-17 用户：再点当前工具 = 退出回浏览。
+   * 未提交的草稿/文字直接取消，只给一条轻提示，不弹确认框。
+   */
+  function exitAnnotateDraw() {
+    const hadDraft = Boolean(noteInputRef.current?.value.trim()) || annotateDraftRef.current.length > 0;
+    setMode('view');
+    if (hadDraft) setAnnotateNotice('已退出标注，未提交的内容已取消。');
+  }
+
   /** 形状单击收点：近已有点（<0.5 m）忽略；rect/circle/line 收满 2 点、triangle 收满 3 点自动提交。 */
   function addShapePoint(pt: PlanPoint) {
     const kind = annotateShapeRef.current;
@@ -9103,155 +9105,45 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{levelView.annotations?.length ?? 0}</span>
         </div>
       )}
-      {/* 2026-11-13 A2 唤出式工具条：文本 T 常驻；形状四类收进父钮白色下拉菜单；去掉两层 tab 与长说明段。 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>
-        <button
-          type="button"
-          aria-pressed={mode === 'note'}
-          data-testid="annotate-type-note"
-          title="文本备注"
-          style={{ ...modeButtonStyle(mode === 'note'), width: 32, justifyContent: 'center', fontWeight: 700, fontSize: PLANNING_TYPOGRAPHY.row }}
-          onClick={() => { setMode('note'); setAnnotateMenuOpen(false); }}
-        >
-          T
-        </button>
-        {(() => {
-          const ShapeIcon = planningIcon(ANNOTATE_SHAPE_ICONS[annotateShape]);
-          return (
-            <button
-              type="button"
-              aria-haspopup="listbox"
-              aria-expanded={annotateMenuOpen}
-              aria-pressed={mode === 'shape'}
-              data-testid="annotate-type-shape"
-              style={{ ...modeButtonStyle(mode === 'shape'), flex: 1, justifyContent: 'center', gap: 6 }}
-              onClick={() => {
-                setMode('shape');
-                setAnnotateMenuOpen(open => !open);
-              }}
-            >
-              <ShapeIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-              <span>{planAnnotationKindLabels[annotateShape]}</span>
-              <span aria-hidden style={{ opacity: 0.55, fontSize: PLANNING_TYPOGRAPHY.hint, display: 'inline-flex' }}>{annotateMenuOpen ? '▾' : '▸'}</span>
-            </button>
-          );
-        })()}
+      {/* 2026-11-16 绘图工具条：T / 矩形 / 圆形 / 三角形 / 线段平铺，颜色条另常驻。 */}
+      <AnnotateDrawTools
+        active={mode === 'note' ? 'note' : mode === 'shape' ? annotateShape : null}
+        onNote={() => {
+          if (resolveAnnotateDrawToolClick({ tool: 'note', mode, shape: annotateShape }) === 'exit') {
+            exitAnnotateDraw();
+            return;
+          }
+          setMode('note');
+        }}
+        onShape={kind => {
+          if (resolveAnnotateDrawToolClick({ tool: kind, mode, shape: annotateShape }) === 'exit') {
+            exitAnnotateDraw();
+            return;
+          }
+          annotateShapeRef.current = kind;
+          setAnnotateShape(kind);
+          setMode('shape');
+        }}
+      />
+      {/* 2026-11-16 颜色点与线宽常驻（Figma 颜色条），不收进形状下拉。文本/形状共用取色。 */}
+      <AnnotateColorBar
+        color={annotateColor}
+        strokeWidth={annotateStrokeWidth}
+        showStrokeWidth={mode !== 'note'}
+        onColor={value => { annotateColorRef.current = value; setAnnotateColor(value); draw(); }}
+        onStrokeWidth={value => { annotateStrokeWidthRef.current = value; setAnnotateStrokeWidth(value); draw(); }}
+      />
+      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.78, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+        {mode === 'note' && '文本 · 点一下输入，Enter 提交'}
+        {mode === 'shape' && (annotateDraftCount > 0
+          ? `${planAnnotationKindLabels[annotateShape]} · 已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
+          : `${planAnnotationKindLabels[annotateShape]} · ${annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖或点两个点'}`)}
       </div>
-      {annotateMenuOpen && mode === 'shape' && (
-        <div
-          role="listbox"
-          aria-label="标注形状"
-          data-testid="annotate-shape-menu"
-          onWheel={stopPanelWheel}
-          style={{
-            marginTop: 6, padding: 4, borderRadius: PLANNING_RADIUS.md,
-            background: PLANNING_SURFACE.panelBg,
-            border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-            boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
-            display: 'grid', gap: 2,
-          }}
-        >
-          {PLAN_SHAPE_KINDS.map(k => {
-            const KindIcon = planningIcon(ANNOTATE_SHAPE_ICONS[k]);
-            const active = annotateShape === k;
-            return (
-              <button
-                key={k}
-                type="button"
-                role="option"
-                aria-selected={active}
-                data-testid={`annotate-shape-${k}`}
-                onClick={() => {
-                  annotateShapeRef.current = k;
-                  setAnnotateShape(k);
-                  annotateDraftRef.current = [];
-                  annotateCursorRef.current = null;
-                  annotateDragRef.current = null;
-                  setAnnotateDraftCount(0);
-                  setEditMessage(null);
-                  setAnnotateMenuOpen(false);
-                  setMode('shape');
-                  draw();
-                }}
-                style={{
-                  all: 'unset', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 8px', borderRadius: PLANNING_RADIUS.sm,
-                  background: active ? PLANNING_SURFACE.activeBg : 'transparent',
-                  color: active ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText,
-                  fontWeight: active ? 600 : 400,
-                  fontSize: PLANNING_TYPOGRAPHY.row, cursor: 'pointer',
-                }}
-              >
-                <span aria-hidden style={{ width: 14, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center' }}>
-                  {active ? (
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                  ) : null}
-                </span>
-                <KindIcon size={PLANNING_ICON_SIZES.tool} aria-hidden />
-                <span>{planAnnotationKindLabels[k]}</span>
-                <span aria-hidden style={{ marginLeft: 'auto', color: PLANNING_TEXT.muted, fontSize: PLANNING_TYPOGRAPHY.hint }}>{ANNOTATE_SHAPE_META[k]}</span>
-              </button>
-            );
-          })}
+      {annotateNotice && (
+        <div role="status" aria-live="polite" style={{ marginTop: 4, fontSize: PLANNING_TYPOGRAPHY.hint, lineHeight: '15px', color: PLANNING_SURFACE.warnText }}>
+          {annotateNotice}
         </div>
       )}
-      {/* 属性行：取色对文本/形状生效；描边档位仅形状显示。 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.sm }}>
-        <div role="radiogroup" aria-label="标注颜色" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {ANNOTATE_COLOR_SWATCHES.map(sw => {
-            const active = annotateColor === sw.value;
-            return (
-              <button
-                key={sw.value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                aria-label={`标注颜色 ${sw.label}`}
-                data-testid={`annotate-color-${sw.value.replace('#', '')}`}
-                title={sw.label}
-                onClick={() => { annotateColorRef.current = sw.value; setAnnotateColor(sw.value); draw(); }}
-                style={{
-                  all: 'unset', width: 16, height: 16, borderRadius: 999, cursor: 'pointer',
-                  background: sw.value,
-                  boxShadow: active ? `inset 0 0 0 2px ${PLANNING_SURFACE.panelBg}, 0 0 0 1.5px ${sw.value}` : 'inset 0 0 0 1px rgba(20, 20, 22, 0.12)',
-                }}
-              />
-            );
-          })}
-        </div>
-        {mode === 'shape' && (
-          <div role="radiogroup" aria-label="描边粗细" style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-            {(['thin', 'thick'] as const).map(w => {
-              const active = annotateStrokeWidth === w;
-              return (
-                <button
-                  key={w}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  aria-label={w === 'thin' ? '细线' : '粗线'}
-                  data-testid={`annotate-stroke-${w}`}
-                  title={w === 'thin' ? '细线' : '粗线'}
-                  onClick={() => { annotateStrokeWidthRef.current = w; setAnnotateStrokeWidth(w); draw(); }}
-                  style={{
-                    ...modeButtonStyle(active), width: 28, justifyContent: 'center',
-                  }}
-                >
-                  <svg viewBox="0 0 20 10" width="16" height="8" fill="none" stroke="currentColor" strokeLinecap="round">
-                    <line x1="2" y1="5" x2="18" y2="5" strokeWidth={w === 'thin' ? 1.5 : 3.5} />
-                  </svg>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-        {mode === 'note' && '点一下放置，就地输入（Enter 提交 / Esc 取消）'}
-        {mode === 'shape' && (annotateDraftCount > 0
-          ? `已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
-          : (annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖，或点两个点'))}
-      </div>
       {(levelView.annotations?.length ?? 0) > 0 && levelView.annotations!.map(a => renderOneplanItemRow({
         key: `annotate-${a.id}`,
         testId: `layer-entity-annotation-${a.id}`,
@@ -11164,7 +11056,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             boxShadow: '0 2px 8px rgba(20, 20, 22, 0.08)',
           }}
         >
-          当前：{PLANNING_EDIT_MODE_LABELS[mode]} · Esc 返回浏览
+          {annotateDrawSelectionLabel(mode, annotateShape)
+            ? `当前：${annotateDrawSelectionLabel(mode, annotateShape)} · 再点一次或 Esc 退出`
+            : `当前：${PLANNING_EDIT_MODE_LABELS[mode]} · Esc 返回浏览`}
         </button>
       )}
 
