@@ -77,3 +77,32 @@
 3. 室内特化字段（WiFi/CCTV/锥角/elevation/structural 引用/price/handoff）：落 `notes` 还是留 3D 层。
 4. 旧云项目读旧室内 schema：只读提示 vs 一次性投影（决定 R3 是否留降级通路）。
 5. plan 写权限断言需要 plan lease 语义（G2）。
+
+## 7. 第二轮补强（本轮）
+
+### 7.1 walls 并入迁移总入口
+
+- `migrateLayoutToPlan` 现在返回 `walls`，`LayoutMigrationSkip.source` 增加 `'wall'`；
+- 执行顺序：zones → workers/routes → facilities → walls；墙体分区归属复用已构建的 zones；
+- 退化墙段与端点非法继续进 `skipped`，与 facility skipped 合并；
+- 测试：总入口新增 1 条（墙段落入 + 退化 skipped），空布局断言补 `walls: []`。
+
+### 7.2 导出面补墙体
+
+- GeoJSON：墙体输出 `LineString`，属性 `kind=wall`、`type`（外墙/内墙/墙体）、`length_m`、`thickness_m`、`height_m`、`zone`；顺序紧跟 boundary，旧 plan 字节不变；
+- CSV：墙体作为导出补充行追加在实体清单之后，仍 14 列，`名称=墙体 <短 id>`、`分类=外墙/内墙/墙体`、`数量读数=厚 <值>`、`长度` 列给线段长；面板清单不加墙体筛选维度；
+- 测试：GeoJSON +2、CSV +2（含旧 plan 字节稳定）。
+
+## 8. 旧 layout → plan 迁移覆盖登记
+
+| 旧数据 | plan 落点 | 状态 |
+| --- | --- | --- |
+| `FloorLayout.zones` | `zones` | ✅ 已迁（矩形四角 → 闭合环） |
+| `person` 物件 | `workers` | ✅ 已迁（count=1） |
+| `walkRoute` | `routes` | ✅ 已迁（步行线） |
+| 其余 `items` | `facilities` | ✅ 已迁（builtin/oneplan/misc/skip 四档） |
+| `interiorWalls` | `walls` | ✅ 本轮并入总入口 |
+| `FloorLayout` 楼层 | `levels` | ❌ 未迁：多层平铺为同一批实体，不生成 plan 图层；墙体可经 `levelIdForFloor` 注入，但总入口尚未传 |
+| 旧测量 | `measurements` | — 不适用：旧 layout 无对应实体 |
+| 旧标注 | `annotations` | — 不适用：旧 layout 无对应实体 |
+| 室内特化字段 | — | ❌ 未迁：WiFi/CCTV/锥角/elevation/structural 引用等仍留 3D 层或 notes（待产品口径） |
