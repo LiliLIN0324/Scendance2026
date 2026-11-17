@@ -970,7 +970,12 @@ it("要的数量放不下：按「硬挤」出预览塞到物理极限，需求�
   expect(plan.facilities).toHaveLength(0);
   await action("confirm");
   expect(plan.facilities.length).toBe(placed.length);
+  // 确认后的回话说清「需求没变、画布已到物理上限」。
+  expect(flow.notice).toContain("硬挤");
 }, 20000);
+// 2026-11-17 断点遗留：「摊位都撤了」（count=0 清空）的合并逻辑已在契约层备好并测过
+// （outdoor-agent-contract.test.ts d4），但模型响应契约 count min(1) 拦在门外——
+// 共享契约（supabase/functions/_shared/outdoor-agent-response-contract.ts）改动需要人 review，等点头。
 // 2026-11-17 正式站卡点：用户没说过人数（很常见——先布场、人数活动定了才知道），
 // 点「预览按用途复用我的物料」拿到的是一张红卡「预计同时在场多少人？」+ 重试；
 // 而重试只是原样重跑 objects，人数不变就永远撞同一堵墙，任务卡标题也被永久改成物件阶段。
@@ -1983,6 +1988,8 @@ it("连续两次追问都没有推进时，直接出默认方案而不是问第�
   await turn("嗯", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
   expect(flow.proposal).toBeNull();
   expect(saySpy).toHaveBeenCalled();
+  // 2026-11-17 断点修复：反问时标题不再是「当前任务 · 主通道」——说的和卡上写的是一回事。
+  expect(host.textContent).toContain("等你补充");
   // 第二次还是追问、画布毫无改动 → 不再问，直接出一版默认方案（仍然只预览）。
   await turn("然后呢", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
