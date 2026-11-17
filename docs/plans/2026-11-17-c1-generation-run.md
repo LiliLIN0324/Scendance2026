@@ -638,4 +638,4 @@ text 刚建/刚未知    -> 不动
 
 ### 本轮遗留（交给别的批次，不在这里单推）
 
-- `.env.example:20` 的注释还写着旧来源 `labs.aholo.ai/api-keys`，按 2026-11-17 的核对应为 `labs.aholo.cn/api-keys`。一行注释订正，按纪律跟人物/车流那批一起攒着，不单独推。
+- `.env.example:20` 的注释原来写着旧来源 `labs.aholo.ai/api-keys`，按 2026-11-17 的核对应为 `labs.aholo.cn/api-keys`——**已在本轮一并订正**（纯注释，键名与取值一个字没动）。
