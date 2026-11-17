@@ -3,8 +3,10 @@
 -- 现状（20261002060307_scene_jobs.sql 起）：
 --   * requests.actual_cents 只有建表声明，全库没有任何一处写入；
 --   * budgets.committed_cents 只在创建请求时 +reserved，完成/失败/unknown 都不释放。
--- 后果不是“看不到金额”这么轻：每建一个任务就永久占掉 reserve 分，15000/100 = 150 次之后
--- 该 kind 永久 BUDGET_EXCEEDED，而实际可能一分都没花。worker 装不装都一样，因为结算根本不存在。
+-- 后果不是“看不到金额”这么轻：committed_cents 是无界累加，永远对不上 actual_cents；
+-- 一旦该 kind 设了 limit_cents（历史默认 15000/预留 100），就会在 150 次后永久 BUDGET_EXCEEDED，
+-- 而实际可能一分都没花。生产当前 limit_cents 为 NULL（不限量），所以眼下不报错，只是账永远对不上。
+-- worker 装不装都一样，因为结算根本不存在。
 --
 -- 本迁移只做一件事：在状态机落终态的同一个事务里结算一次，且天然幂等。
 --   ready / complete                 -> actual_cents = reserved_cents（内部账本按预留上限记账）
@@ -61,6 +63,10 @@ end $$;
 
 comment on function public.scene_settle_requests() is
   'Settle terminal scene_private.requests exactly once: fill actual_cents and release the matching budgets.committed_cents hold. Idempotent.';
+
+-- 无参、会改全库账本，绝不能暴露给登录用户（PostgREST 默认会把 public 函数挂成 RPC）。
+revoke all on function public.scene_settle_requests() from public, anon, authenticated;
+grant execute on function public.scene_settle_requests() to service_role;
 
 -- 在 job_rpc 外面套一层，只负责“落终态后结算”，不改任何状态机语义。
 alter function public.job_rpc(uuid, text, jsonb) rename to job_rpc_generation_v3;

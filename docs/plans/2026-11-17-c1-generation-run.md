@@ -337,3 +337,71 @@ select * from cron.job;
 3. **给未知提交加一条「按 requestId 反查服务端」的只读接口**：现在 requestId 只落盘供人工核对，
    客户端无法自助判断上一次提交到底成没成。
 4. 待用户拍板：**是否一并补 `AI_MAX_REQUEST_CENTS`**（开启 Agent 提案链的内部预留账）。
+
+---
+
+# 第三轮：账本闭合缺陷（2026-11-18 补记）
+
+## 新发现：不是“看不到金额”，是永远算不出来，而且额度会漏光
+
+复核 SQL 时发现两处，与 cron 装不装无关：
+
+1. `requests.actual_cents` 全库**只有建表声明**（`20261002060307_scene_jobs.sql:10`），没有任何一处写入。
+   所以哪怕 worker 跑完、任务到 `ready`，这一列仍然是 NULL。
+2. `budgets.committed_cents` 只在创建时 `+reserved`（同文件 `:52`），完成/失败/unknown 都不释放。
+   它是无界累加：账永远对不上 `actual_cents`；一旦该 kind 设了 `limit_cents`（历史默认 15000、预留 100），
+   就会在 150 次后永久 `BUDGET_EXCEEDED`。生产当前 `limit_cents = NULL`（不限量），所以眼下不报错，只是账目永远不闭合。
+
+这两条叠加起来的真实后果：worker 闭环“能跑”，但账本永远不闭合；额度一旦收紧就会自锁。
+
+## 修复：`20261118100000_generation_ledger_close.sql`
+
+新增 `public.scene_settle_requests()`，在外层 `job_rpc` 里对 `jobs.complete / jobs.update /
+jobs.resolve_unknown / jobs.claim / requests.finish` 之后调用一次，只结算“已落终态且尚未结算”的行：
+
+| 终态 | `actual_cents` | 预留 |
+| --- | --- | --- |
+| `ready` / `complete` | `reserved_cents`（内部账本按上限记账） | 释放 |
+| `failed` / `rejected` | `0` | 释放 |
+| `failed` 且 `error_code LIKE 'SUBMIT_RESULT_UNKNOWN%'` | `reserved_cents`（响应丢失可能已计费，保守记账） | 释放 |
+| `unknown` | 不动 | 保留 |
+
+口径：`actual_cents` 是幕景内部账本（分），**不是 Aholo 积分**；Aholo 真实消耗看 `provider_usage`。
+`committed_cents` 只表示未决预留，不表示累计消费。
+
+迁移末尾带一次 `select public.scene_settle_requests();` 回填历史行——执行时会把过去完成/失败却仍占着的预留一次性释放。
+
+## 验证（本地，不连生产）
+
+用 `public.ecr.aws/supabase/postgres:17.11.0.002` 起临时容器，搭 `scene_private` 桩表，跑真实迁移：
+
+```text
+成功完成      -> actual 100，预留释放
+预检拒绝      -> actual 0，预留仍释放
+响应丢失      -> actual 100（保守）
+仍在排队      -> actual NULL，预留保留
+text 链完成   -> actual 60，预留释放
+重复调用      -> 释放 0，数字不变（幂等）
+```
+
+输出 `LEDGER_TEST_OK`。
+
+`install-generation-cron.sql` 同时改成幂等：重复执行先 `cron.unschedule` 再建，实测跑两遍仍只有 1 条任务；
+并加了三条自检（secret 数量、secret 长度、`scene_settle_requests` 是否存在）。
+
+## 尚未执行的部分（如实说明）
+
+- **没有装到生产库**：当前运行环境禁止读取凭据/敏感路径，我拿不到数据库连接串或 service role key，
+  无法执行 `create extension`、写 Vault、`cron.schedule`。脚本本身已在本地容器实测通过，可直接在 Dashboard SQL Editor 粘贴执行。
+- **属性卡遮挡没有改代码**：宿主容器不在画布文件里（`outdoor-plan-canvas.tsx` 只负责按钮），
+  盲改 z-index 可能压坏画布交互。修法仍是上一轮那两条，且必须用 `elementsFromPoint` 验命中，不能用截图。
+
+## 生产执行顺序（建议照抄）
+
+1. SQL Editor 执行 `20261118100000_generation_ledger_close.sql`（先看末尾回填释放了多少）。
+2. Vault 放 `scene_project_url` / `scene_worker_secret`（后者必须等于 Edge Function 的 `GENERATION_WORKER_SECRET`）。
+3. 执行 `install-generation-cron.sql`，确认返回 1 行、`active=t`。
+4. 等 1–2 分钟，查 `net._http_response` 最新 `status_code` 应为 200（401 说明 secret 不一致）。
+5. 回查 `9b35ebc5-…`：`provider_job_id` 应有值，任务离开 `queued`；完成后 `actual_cents` 首次非空。
+6. 对账：`budgets.committed_cents` 应回到 0（该任务结算后），`requests.actual_cents = 100`。
+
