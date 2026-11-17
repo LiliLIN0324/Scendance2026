@@ -302,11 +302,12 @@ export function OutdoorWorkflowCard({
         <ol className="ap-outdoor-plan-steps">
           {pendingPlan.steps.map(step => <li key={step}>{step}</li>)}
         </ol>
-        <div className="ap-outdoor-plan-actions">
+        {/* 2026-11-18 用户：卡底就是一组动作，同一行、同高、都有边；取消不再单挂一行裸文字。 */}
+        <div className="ap-card-actions">
           <button className="btn-primary" type="button" onClick={() => void flow.approvePlan(pendingPlan)}>批准并执行</button>
-          {onAdjustPlan && <button className="chip" type="button" onClick={onAdjustPlan}>调整计划</button>}
+          {onAdjustPlan && <button className="btn-outline" type="button" onClick={onAdjustPlan}>调整计划</button>}
+          <button className="btn-outline" type="button" onClick={() => flow.cancel()}>取消计划</button>
         </div>
-        <button className="ap-outdoor-plan-cancel" type="button" onClick={() => flow.cancel()}>取消计划</button>
       </section>
     </>
   );
@@ -527,6 +528,39 @@ export function OutdoorWorkflowCard({
             </div>
           </div>
         </div>
+      ) : flow.state.stage === "scope" && !flow.boundaryReady ? (
+        // 2026-11-18 用户拍板：场地没有用地红线时，卡片先教怎么画，
+        // 不再挂一颗点了也只会撞红卡的「确认活动范围」。
+        <div className="ap-scope-guide">
+          <div className="ap-scope-guide-art" aria-hidden="true">
+            <svg viewBox="0 0 220 108" role="presentation" focusable="false">
+              <rect width="220" height="108" rx="10" fill="#e8f0df" />
+              <path d="M0 92c26-6 44 6 68 2s36-10 62-6 52 8 90 2v18H0z" fill="#cfe3f3" />
+              <rect x="12" y="16" width="44" height="10" rx="2" fill="#efe6d2" />
+              <rect x="122" y="14" width="58" height="9" rx="2" fill="#efe6d2" />
+              <rect x="30" y="74" width="64" height="8" rx="2" fill="#efe6d2" />
+              <rect x="56" y="27" width="96" height="52" fill="#f7f9f5" stroke="#2f7d4f" strokeWidth="2" />
+              <g fill="#fff" stroke="#2f7d4f" strokeWidth="2">
+                <rect x="51" y="22" width="10" height="10" rx="1" />
+                <rect x="147" y="22" width="10" height="10" rx="1" />
+                <rect x="51" y="74" width="10" height="10" rx="1" />
+                <rect x="147" y="74" width="10" height="10" rx="1" />
+              </g>
+            </svg>
+          </div>
+          <p className="ap-scope-guide-title">先在图上圈出这次活动用的地</p>
+          <p className="ap-scope-guide-text">
+            沿场地边缘逐点单击，点回起点就闭合；闭合后红线就是设计范围，分区、流线、物件都按它排。
+          </p>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={flow.busy}
+            onClick={() => flow.manualBoundary()}
+          >
+            在地图上手画活动范围
+          </button>
+        </div>
       ) : flow.state.stage !== "place" && !flow.drawingMode ? (
         flow.state.stage === "zones" &&
         (!flow.state.brief.zones.length ||
@@ -535,11 +569,23 @@ export function OutdoorWorkflowCard({
           // 反问「要分哪些用途」。没给指令就不挂空头按钮，如实引导去说用途或手画。
           // 引导语用醒目的问题式样式，和「手画分区」按钮构成同一组动作；进手画模式后整块收掉
           // （通知条「已进入手画模式…」是唯一指令），不再留自相矛盾的残留。
-          <p className="ap-access-question">
-            还没说要分哪些区：说一句用途和室内外（例如「室外展览区和表演区」）我按这句出预览，也可以在地图上手画。
-          </p>
+          <div className="ap-card-guide">
+            <p className="ap-access-question">
+              说一句用途和室内外（例如「室外展览区和表演区」），我按这句出分区预览。
+            </p>
+            <div className="ap-card-actions">
+              <button
+                type="button"
+                className="btn-outline"
+                disabled={flow.busy}
+                onClick={() => void flow.action("draw-zone")}
+              >
+                在地图上手画分区
+              </button>
+            </div>
+          </div>
         ) : (
-          <div className="ap-outdoor-plan-actions">
+          <div className="ap-card-actions">
           <button
             type="button"
             className="btn-primary"
@@ -562,6 +608,16 @@ export function OutdoorWorkflowCard({
               onClick={() => flow.manualBoundary()}
             >
               在地图上手画活动范围
+            </button>
+          )}
+          {flow.state.stage === "zones" && (
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={flow.busy}
+              onClick={() => void flow.action("draw-zone")}
+            >
+              在地图上手画分区
             </button>
           )}
           </div>
@@ -637,6 +693,7 @@ export function OutdoorWorkflowCard({
               </label>
               <button
                 type="submit"
+                className="btn-outline"
                 disabled={flow.busy || !libraryQuery.trim()}
               >
                 检索真实库
@@ -646,6 +703,7 @@ export function OutdoorWorkflowCard({
               <button
                 type="button"
                 key={item.id}
+                className="ap-quiet-action"
                 disabled={flow.busy}
                 aria-pressed={flow.selectedLibraryId === item.id}
                 onClick={() => flow.chooseLibrary(item.id)}
@@ -688,6 +746,7 @@ export function OutdoorWorkflowCard({
             <button
               key={m.slug}
               type="button"
+              className="ap-quiet-action"
               disabled={flow.busy}
               onClick={() =>
                 void flow.action("choose-model", index, flow.models!.facilityId)
@@ -699,25 +758,24 @@ export function OutdoorWorkflowCard({
         </div>
       )}
       {flow.state.stage === "refine-3d" && !flow.proposal && (
-        <div>
-          <button type="button" onClick={() => void flow.action("models")}>
+        <div className="ap-card-actions">
+          <button type="button" className="btn-outline" onClick={() => void flow.action("models")}>
             比较所选设施模型
           </button>
-          <button type="button" onClick={() => void flow.action("upload")}>
+          <button type="button" className="btn-outline" onClick={() => void flow.action("upload")}>
             给所选设施上传GLB
           </button>
-          <button type="button" onClick={() => void flow.action("generate")}>
+          <button type="button" className="btn-outline" onClick={() => void flow.action("generate")}>
             准备原位生成（另行确认费用）
           </button>
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => void flow.action("generate-image")}
+          >
+            上传图片准备生成（另行确认费用）
+          </button>
         </div>
-      )}
-      {flow.state.stage === "refine-3d" && !flow.proposal && (
-        <button
-          type="button"
-          onClick={() => void flow.action("generate-image")}
-        >
-          上传图片准备生成（另行确认费用）
-        </button>
       )}
       {/* 2026-11-16 用户拍板：模型说「轮廓取不到，请手画」时，place 阶段卡上就得能点进去手画，
           不用让人自己到工具栏里翻。实现在 manualBoundary 的既有守卫里（无锚点/不可换场原位报错，不乱改）。 */}
@@ -745,19 +803,11 @@ export function OutdoorWorkflowCard({
           </button>
         </div>
       )}
-      {!flow.proposal && flow.state.stage === "zones" && flow.drawingMode !== "zone" && (
-        <button
-          type="button"
-          disabled={flow.busy}
-          onClick={() => void flow.action("draw-zone")}
-        >
-          在地图上手画分区
-        </button>
-      )}
       {!flow.proposal && flow.state.stage === "main-routes" && !flow.drawingMode && (
-        <div>
+        <div className="ap-card-actions">
           <button
             type="button"
+            className="btn-outline"
             disabled={flow.busy}
             onClick={() => void flow.action("draw-route")}
           >
@@ -765,6 +815,7 @@ export function OutdoorWorkflowCard({
           </button>
           <button
             type="button"
+            className="btn-outline"
             disabled={flow.busy}
             onClick={() => void flow.action("draw-entrance")}
           >
@@ -798,15 +849,17 @@ export function OutdoorWorkflowCard({
         </p>
         {/* 2026-11-16 用户指令：登录完成后不再留「已登录 · 可以继续」再点一次——
             登录一到位就由 useOutdoorAgentWorkflow 自动续上，这张卡只在真的没登录时出现。 */}
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={() =>
-            window.dispatchEvent(new Event("scendance:request-account-login"))
-          }
-        >
-          前往登录
-        </button>
+        <div className="ap-card-actions">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() =>
+              window.dispatchEvent(new Event("scendance:request-account-login"))
+            }
+          >
+            前往登录
+          </button>
+        </div>
       </section>
     )}
     </>
