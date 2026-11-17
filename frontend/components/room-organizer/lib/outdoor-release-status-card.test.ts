@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   BROWSER_EVIDENCE,
+  defaultLedger,
   EVIDENCE_AS_OF,
   formatReleaseStatusCard,
   ledgerFromEvidence,
@@ -185,6 +186,23 @@ describe('门禁读数接进状态卡', () => {
       gate: gateFactsForCard(reading),
     });
     expect(card).toContain('类型 未验 / 用例 通过 / 构建 未验（门禁未齐）');
+  });
+});
+
+describe('默认台账（FIXED_DATA_CASES）', () => {
+  it('只把能点到测试文件的两条算作有固定数据', () => {
+    const ledger = defaultLedger();
+    expect(summarizeLedger(ledger)).toEqual({ allGreen: 0, fixedOnly: 2, total: 11 });
+    expect(ledger.filter((r) => r.fixedData).map((r) => r.id)).toEqual([2, 5]);
+  });
+
+  it('默认台账下卡永远写 0 条全绿', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: defaultLedger(),
+    });
+    expect(card).toContain('· 结论：不可发布（三类全绿 0 条）');
   });
 });
 
