@@ -12,7 +12,7 @@ import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
@@ -31,8 +31,17 @@ import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-g
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { usePlaceShapeLookup } from '../hooks/use-place-shape-lookup';
-import { alignedTileCenter } from '../lib/basemap-alignment';
-import { lngLatToTileXY, publicSourceTileUrl, tdtProbeTileUrl } from '../lib/tdt-probe';
+import { isOverseasLocation } from '../lib/basemap-alignment';
+import {
+  MAP_SLOT_GROUP_LABELS,
+  MAP_SLOT_LABELS,
+  MAP_SLOT_ROLES,
+  pinMapSource,
+  readMapSlots,
+  slotRoleForSource,
+  subscribeMapSlots,
+  type MapSlotRole,
+} from '../lib/map-source-slots';
 import type { BackendSession } from '@/lib/backend-session';
 import { createOutdoorMapContext,type OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
@@ -52,6 +61,7 @@ import {
   type OutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import { pushOutdoorPlan, forcePushOutdoorPlan, pullOutdoorPlan } from '@/components/room-organizer/lib/outdoor-plan-sync';
+import { RealSourceThumb } from './map-source-thumb';
 import { OutdoorSyncBanner, type OutdoorSyncConflict } from './outdoor-sync-banner';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { DisplayUnit } from '../lib/types';
@@ -65,109 +75,41 @@ const SOURCE_CYCLE: { id: CanvasBasemapSource; label: string; featured?: boolean
   { id: 'amap-satellite', label: '高德卫星', featured: true },
   { id: 'amap-streets', label: '高德街道', featured: true },
   { id: 'amap-streets-labels', label: '高德街道注记' },
+  { id: 'esri-satellite', label: '全球卫星' },
   { id: 'vec', label: '天地图矢量' },
   { id: 'img', label: '天地图影像' },
 ];
 
-/** 每枚底图缩略方格的示意画面：街道路网 / 卫星碎拼 / 深色路网 / 矢量蓝灰 四种模板配色。 */
-function SourceThumb({ id }: { id: CanvasBasemapSource }) {
-  const palette: Record<CanvasBasemapSource, { bg: string; road: string; block: string; mode: 'street' | 'satellite' | 'dark' | 'vector' }> = {
-    'amap-streets': { bg: '#E9F1E6', road: '#FFFFFF', block: '#CFE3C8', mode: 'street' },
-    'amap-satellite': { bg: '#5E7A52', road: '#E8E4D6', block: '#4A6247', mode: 'satellite' },
-    'carto-dark': { bg: '#2B2F36', road: '#6A707C', block: '#363B45', mode: 'dark' },
-    osm: { bg: '#EAF3E4', road: '#FFFFFF', block: '#D8E8D0', mode: 'street' },
-    'carto-light': { bg: '#F3F1EC', road: '#FFFFFF', block: '#E3DFD5', mode: 'street' },
-    'amap-streets-labels': { bg: '#EDF3EE', road: '#FFFFFF', block: '#DCEAE6', mode: 'street' },
-    vec: { bg: '#EAF0F6', road: '#D4DCE6', block: '#DDE7F0', mode: 'vector' },
-    img: { bg: '#4E6B55', road: '#6B805E', block: '#3E5A46', mode: 'satellite' },
-  };
-  const p = palette[id];
-  return (
-    <svg viewBox="0 0 48 48" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <rect width="48" height="48" fill={p.bg} />
-      {p.mode === 'street' || p.mode === 'vector' ? (
-        <>
-          <path d="M0 30 L20 26 L48 32" stroke={p.road} strokeWidth="4" fill="none" />
-          <path d="M18 0 L22 48" stroke={p.road} strokeWidth="3" fill="none" />
-          <rect x="4" y="4" width="12" height="9" rx="2" fill={p.block} />
-          <rect x="30" y="30" width="14" height="10" rx="2" fill={p.block} />
-          <rect x="32" y="6" width="9" height="7" rx="2" fill={p.block} opacity=".7" />
-        </>
-      ) : p.mode === 'dark' ? (
-        <>
-          <path d="M0 28 L24 22 L48 28" stroke={p.road} strokeWidth="3" fill="none" />
-          <path d="M20 0 L26 48" stroke={p.road} strokeWidth="2.5" fill="none" />
-          <rect x="5" y="5" width="13" height="10" rx="2" fill={p.block} />
-          <rect x="30" y="30" width="13" height="10" rx="2" fill={p.block} />
-        </>
-      ) : (
-        <>
-          <path d="M6 0 L18 18 L12 34 L22 48" stroke={p.block} strokeWidth="7" fill="none" opacity=".7" />
-          <path d="M28 4 L40 16 L34 32 L44 46" stroke={p.road} strokeWidth="2.5" fill="none" opacity=".8" />
-          <circle cx="14" cy="12" r="4" fill={p.block} />
-          <circle cx="34" cy="38" r="5" fill={p.block} />
-        </>
-      )}
-    </svg>
-  );
+/** 面板清单短名：268px 宽、一格约 72px，长名会被省略号截断，这里统一给短名。 */
+const LIST_SOURCE_LABELS: Record<string, string> = {
+  osm: 'OSM 街道',
+  'carto-light': 'Carto 浅色',
+  'carto-dark': 'Carto 深色',
+  'amap-satellite': '高德卫星',
+  'amap-streets': '高德街道',
+  'amap-streets-labels': '高德注记',
+  'esri-satellite': '全球卫星',
+  vec: '天地图矢量',
+  img: '天地图影像',
+};
+
+/** 面板里图源的人话名（短名优先；查不到退循环表的名字，再不行用 id）。 */
+function sourceDisplayName(id: CanvasBasemapSource): string {
+  return LIST_SOURCE_LABELS[id] ?? SOURCE_CYCLE.find(option => option.id === id)?.label ?? id;
 }
 
 /**
- * 2026-11-16 用户指令「成熟的地图产品是怎么做的」：真瓦片缩略图——拿当前锚点那一块
- * 真实地图渲染成小图（Google Maps / Apple Maps 范式），不再用手绘示意图糊弄。
- * URL 与画布底图同源（publicSourceTileUrl / tdtProbeTileUrl + alignedTileCenter 处理
- * GCJ/WGS 口径），画布已拉过的瓦片缩略图直接命中缓存；加载失败回落手绘示意图，
- * 网络断也不开天窗。天地图只取底图瓦片（注记在缩略图尺寸下看不清，不值得多一次请求）。
+ * 2026-11-17 用户指令：下方清单按用途分组（街道类 / 卫星类 / 视觉类），与上排四个槽位一一对应。
+ * 分组直接由 map-source-slots 的用途表推出，新增图源只需在那边表态，这里自动归位。
  */
-function RealSourceThumb({ id, lngLat }: { id: CanvasBasemapSource; lngLat: { lng: number; lat: number } | null }) {
-  const [state, setState] = useState<'pending' | 'ok' | 'failed'>('pending');
-  const url = useMemo(() => {
-    if (!lngLat) return null;
-    // z16（低纬约 600 m 视野）：比 z15 更贴近场地尺度，像 Google 选底图缩略的取景密度。
-    const zoom = 16;
-    const center = alignedTileCenter(lngLat.lng, lngLat.lat, id);
-    const { x, y } = lngLatToTileXY(center.lng, center.lat, zoom);
-    // CanvasBasemapSource 里排除天地图两档后恰好就是 6 个公开源（ProbePublicSource）。
-    if (id === 'vec' || id === 'img') return tdtProbeTileUrl(id, zoom, x, y).base;
-    return publicSourceTileUrl(id, zoom, x, y);
-  }, [id, lngLat?.lng, lngLat?.lat]);
-  // 2026-11-16 用户实测：境外源（OSM 直连 / Carto 代理）在网络坏窗口会挂几十秒，
-  // 缩略图一直空着像坏了——6s 没加载出来就回落手绘示意，不让用户盯着空格等浏览器超时。
-  useEffect(() => {
-    if (!url) return;
-    const timer = window.setTimeout(() => setState(value => (value === 'pending' ? 'failed' : value)), 6000);
-    return () => window.clearTimeout(timer);
-  }, [url, state]);
-  if (!url || state === 'failed') return <SourceThumb id={id} />;
-  return (
-    <img
-      src={url}
-      alt=""
-      aria-hidden="true"
-      decoding="async"
-      onLoad={() => setState('ok')}
-      onError={() => setState('failed')}
-      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-    />
-  );
-}
-
-/** 地图详情面板的第一组：对应 Google Maps 的「默认 / 卫星 / 深色」。 */
-const PRIMARY_MAP_SOURCES: { id: CanvasBasemapSource; label: string }[] = [
-  { id: 'amap-streets', label: '默认' },
-  { id: 'amap-satellite', label: '卫星' },
-  { id: 'carto-dark', label: '深色' },
-];
-
-/** 268px 宽的面板一列只有 72px；长名保留原意但改用更短的标签，避免被省略号截断。 */
-const MORE_MAP_LABELS: Record<string, string> = {
-  'amap-streets-labels': '高德注记',
-};
-
-/** 其余可用图源放在「更多底图」组里，避免把 8 种图源平铺成一整面墙。 */
-const MORE_MAP_SOURCES = SOURCE_CYCLE
-  .filter(option => !PRIMARY_MAP_SOURCES.some(primary => primary.id === option.id))
-  .map(option => ({ id: option.id, label: MORE_MAP_LABELS[option.id] ?? option.label }));
+const SOURCE_GROUPS = MAP_SLOT_ROLES.map(role => ({
+  role,
+  label: MAP_SLOT_GROUP_LABELS[role],
+  items: SOURCE_CYCLE.filter(option => slotRoleForSource(option.id) === role).map(option => ({
+    id: option.id,
+    label: LIST_SOURCE_LABELS[option.id] ?? option.label,
+  })),
+}));
 
 /** 悬停竖列里的高频底图（上一版结构）：地图 / 卫星 / 深色，其余走「展开」。 */
 const FEATURED_SOURCES: { id: CanvasBasemapSource; label: string }[] = [
@@ -187,24 +129,69 @@ function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPi
   onTogglePaper: () => void;
   onClose: () => void;
 }) {
-  const sourceTile = ({ id, label }: { id: CanvasBasemapSource; label: string }) => {
-    const active = !geoHidden && id === source;
+  // 2026-11-17 用户指令「上面留四个、下面的可以置顶」：上排四格读槽位 store，
+  // 置顶写入后立刻重绘（模块级 store + useSyncExternalStore）。
+  const slots = useSyncExternalStore(subscribeMapSlots, readMapSlots, readMapSlots);
+  const overseas = isOverseasLocation(lngLat?.lng, lngLat?.lat);
+
+  /** 上排格：标题是用途（卫星/街道/单色），底下小字是置顶进来的具体图源。 */
+  const slotTile = (role: MapSlotRole) => {
+    const pinned = slots[role] as CanvasBasemapSource;
+    const active = !geoHidden && pinned === source;
     return (
       <button
-        key={id}
+        key={role}
         type="button"
         role="radio"
         aria-checked={active}
-        aria-label={`底图：${label}`}
-        data-testid={`map-source-${id}`}
-        onClick={() => onPickSource(id)}
+        aria-label={`底图：${MAP_SLOT_LABELS[role]}（${sourceDisplayName(pinned)}）`}
+        data-testid={`map-slot-${role}`}
+        onClick={() => onPickSource(pinned)}
         className="oc-map-details__source"
       >
         <span className="oc-map-details__thumb" aria-hidden="true">
-          <RealSourceThumb id={id} lngLat={lngLat} />
+          <RealSourceThumb id={pinned} lngLat={lngLat} />
         </span>
-        <span className="oc-map-details__name">{label}</span>
+        <span className="oc-map-details__name">{MAP_SLOT_LABELS[role]}</span>
+        <span className="oc-map-details__sub">{sourceDisplayName(pinned)}</span>
       </button>
+    );
+  };
+
+  /** 下排清单项：点方格选图源；「置顶」只换上面同类槽位，不改当前底图（可预期）。 */
+  const sourceItem = ({ id, label }: { id: CanvasBasemapSource; label: string }) => {
+    const active = !geoHidden && id === source;
+    const role = slotRoleForSource(id);
+    const pinnedHere = slots[role] === id;
+    const slotName = MAP_SLOT_LABELS[role];
+    return (
+      <div key={id} className="oc-map-details__item">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={active}
+          aria-label={`底图：${label}`}
+          data-testid={`map-source-${id}`}
+          onClick={() => onPickSource(id)}
+          className="oc-map-details__source"
+        >
+          <span className="oc-map-details__thumb" aria-hidden="true">
+            <RealSourceThumb id={id} lngLat={lngLat} />
+          </span>
+          <span className="oc-map-details__name">{label}</span>
+        </button>
+        <button
+          type="button"
+          className="oc-map-details__pin"
+          data-testid={`map-pin-${id}`}
+          aria-label={pinnedHere ? `${label}已在${slotName}槽位` : `把${label}置顶到${slotName}`}
+          title={pinnedHere ? `已在${slotName}槽位` : `置顶到${slotName}`}
+          disabled={pinnedHere}
+          onClick={() => pinMapSource(id)}
+        >
+          {pinnedHere ? '已置顶' : '置顶'}
+        </button>
+      </div>
     );
   };
 
@@ -231,31 +218,45 @@ function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPi
       <div className="oc-map-details__section">
         <div className="oc-map-details__label">地图类型</div>
         <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
-          {PRIMARY_MAP_SOURCES.map(sourceTile)}
-          {/* 2026-11-17 用户指令：纸面模式升为默认组一等选项（虚拟场地主形态）。
-              docs/46 V-P1 落地后 3D 地面也认纸面（ground-mode store），接管态照常出镜。 */}
+          {MAP_SLOT_ROLES.map(slotTile)}
+          {/* 第四格「无」= 纸面（虚拟场地）：走 ground-mode store，不铺瓦片。 */}
           {showPaperMode && (
             <button
               type="button"
               role="radio"
               aria-checked={geoHidden}
-              aria-label="纸面模式"
+              aria-label="底图：无（纸面）"
               data-testid="map-picker-toggle-geo"
               onClick={onTogglePaper}
               className="oc-map-details__source"
             >
               <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
-              <span className="oc-map-details__name">纸面</span>
+              <span className="oc-map-details__name">无</span>
+              <span className="oc-map-details__sub">纸面</span>
             </button>
           )}
         </div>
+        <div className="oc-map-details__hint">下面任一图源可「置顶」到上面同类型的格子。</div>
+        {/* 2026-11-17 用户反馈「海外的地图怎么全改了」：境外换源不再一刀切，按类别映射
+            （街道类→OSM、卫星类→全球卫星），并在面板里明说。 */}
+        {overseas && (
+          <div
+            data-testid="map-details-overseas-hint"
+            style={{ margin: '6px 4px 0', fontSize: 11, lineHeight: 1.5, color: 'var(--sc-ink-muted, #8a8f98)' }}
+          >
+            海外场地：高德/天地图在境外无瓦片，街道类已用 OSM、卫星类已用全球卫星替代。
+          </div>
+        )}
       </div>
-      <div className="oc-map-details__section">
-        <div className="oc-map-details__label">更多底图</div>
-        <div className="oc-map-details__grid" role="radiogroup" aria-label="更多底图">
-          {MORE_MAP_SOURCES.map(sourceTile)}
+      {/* 2026-11-17 用户指令：下排按类型分组（街道 / 卫星 / 视觉），每项可置顶。 */}
+      {SOURCE_GROUPS.map(group => (
+        <div className="oc-map-details__section" key={group.role}>
+          <div className="oc-map-details__label">{group.label}</div>
+          <div className="oc-map-details__grid" role="radiogroup" aria-label={group.label}>
+            {group.items.map(sourceItem)}
+          </div>
         </div>
-      </div>
+      ))}
     </div>
   );
 }

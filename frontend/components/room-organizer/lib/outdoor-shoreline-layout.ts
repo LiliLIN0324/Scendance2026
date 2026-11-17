@@ -109,7 +109,7 @@ function polylineOf(shore: Shoreline): PlanPoint[] {
   return [...shore.points, first];
 }
 
-function densify(points: PlanPoint[], step = SAMPLE_STEP_M): Sample[] {
+export function densify(points: PlanPoint[], step = SAMPLE_STEP_M): Sample[] {
   const samples: Sample[] = [];
   if (!points.length) return samples;
   samples.push({ p: points[0]!, s: 0 });
@@ -134,7 +134,7 @@ function densify(points: PlanPoint[], step = SAMPLE_STEP_M): Sample[] {
 }
 
 /** 只保留真正落在活动边界内、且不在既有分区/建筑里的连续段：地图上的水常常一半在界外。 */
-function runsInsideBoundary(
+export function runsInsideBoundary(
   samples: Sample[],
   boundary: PlanPoint[],
   exclusions: PlanPoint[][],
@@ -155,7 +155,7 @@ function runsInsideBoundary(
   return runs.filter(run => run.length >= 2);
 }
 
-function runLength(run: Sample[]): number {
+export function runLength(run: Sample[]): number {
   return run[run.length - 1]!.s - run[0]!.s;
 }
 
@@ -166,7 +166,7 @@ function runLength(run: Sample[]): number {
  * 不切开的话，钓位会被摆到垂直支段上、末端还会压到边界。按走向突变 > 45° 切段，只留最长的一段；
  * 真实缓弯岸线（每步转向远小于 45°）不会被误切。
  */
-function longestStraightRun(run: Sample[], maxTurnDeg = 45): Sample[] {
+export function longestStraightRun(run: Sample[], maxTurnDeg = 45): Sample[] {
   if (run.length < 3) return run;
   const limit = (maxTurnDeg * Math.PI) / 180;
   const chunks: Sample[][] = [];
@@ -193,7 +193,7 @@ function longestStraightRun(run: Sample[], maxTurnDeg = 45): Sample[] {
   return best;
 }
 
-function pointAt(run: Sample[], s: number): PlanPoint {
+export function pointAt(run: Sample[], s: number): PlanPoint {
   const first = run[0]!;
   if (s <= first.s) return first.p;
   for (let i = 1; i < run.length; i++) {
@@ -209,7 +209,7 @@ function pointAt(run: Sample[], s: number): PlanPoint {
 }
 
 /** 岸线法线：指向落水一侧的反面（陆地侧）。用整段中点判定，避免逐点翻面抖动。 */
-function inlandNormal(run: Sample[], boundary: PlanPoint[], water?: PlanPoint[]): PlanPoint {
+export function inlandNormal(run: Sample[], boundary: PlanPoint[], water?: PlanPoint[]): PlanPoint {
   const mid = run[Math.floor(run.length / 2)]!;
   const prev = run[Math.max(0, Math.floor(run.length / 2) - 1)]!;
   const next = run[Math.min(run.length - 1, Math.floor(run.length / 2) + 1)]!;
@@ -226,7 +226,7 @@ function inlandNormal(run: Sample[], boundary: PlanPoint[], water?: PlanPoint[])
   return probe(1) >= probe(-1) ? normal : { x: -normal.x, y: -normal.y };
 }
 
-function translate(run: Sample[], normal: PlanPoint, distance: number, from: number, to: number, maxPoints = 6): PlanPoint[] {
+export function translate(run: Sample[], normal: PlanPoint, distance: number, from: number, to: number, maxPoints = 6): PlanPoint[] {
   const out: PlanPoint[] = [];
   const span = Math.max(1e-6, to - from);
   const count = Math.max(2, Math.min(maxPoints, Math.ceil(span / 12) + 1));
