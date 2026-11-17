@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, Sparkles, Star } from '@/components/solid-icons';
+import { Star } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { addAssetToLayout, assetError, assetPreviewScene, validAssetSize,
   type AssetSize, type AuthorizedAsset, type CloudAsset } from '@/lib/assets-api';
@@ -14,6 +14,22 @@ interface Props { controller: BackendSession; layout: RoomLayout; onApplyLayout(
 interface Preview { asset: AuthorizedAsset }
 interface RequestContext { userId: string; projectId: string | undefined; generation: number | undefined; version: number }
 type AssetPane = 'mine' | 'saved' | 'library';
+
+/** 只用物料自己带的预览地址。没有就留空，不画通用椅子，也不请求不存在的缩略图路由。 */
+function storedPreview(asset: CloudAsset): string | undefined {
+  const meta = asset.metadata;
+  if (!meta) return undefined;
+  for (const value of [meta.previewUrl, meta.preview_url, meta.thumbnail, meta.thumbnail_url, meta.preview_image_url]) {
+    if (typeof value === 'string' && /^https?:\/\//.test(value)) return value;
+  }
+  return undefined;
+}
+
+function assetMeta(asset: CloudAsset): string {
+  const author = asset.source === 'polyhaven' ? 'Poly Haven' : asset.source;
+  const sizeMb = (asset.byte_size / 1024 / 1024).toFixed(1);
+  return `${author} · ${asset.format.toUpperCase()} · ${sizeMb} MB`;
+}
 
 export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
@@ -125,20 +141,14 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
     <div>
       {!userId ? <p>登录后查看物料。</p> : <>
         <div className="sc-assets-panes" role="tablist" aria-label="物料分类">
-          <button type="button" role="tab" className="sc-assets-pane" aria-selected={pane === 'mine'} onClick={() => setPane('mine')}><Sparkles size={15} aria-hidden="true"/><span>我的生成</span><small>{mineCount || '空'}</small></button>
-          <button type="button" role="tab" className="sc-assets-pane" aria-selected={pane === 'saved'} onClick={() => setPane('saved')}><Star size={15} aria-hidden="true"/><span>收藏</span><small>{savedCount || '空'}</small></button>
-          <button type="button" role="tab" className="sc-assets-pane" aria-selected={pane === 'library'} onClick={() => setPane('library')}><Boxes size={15} aria-hidden="true"/><span>库</span><small>{assets.length || '空'}</small></button>
+          <button type="button" role="tab" className="sc-assets-pane" aria-selected={pane === 'mine'} onClick={() => setPane('mine')}><span>我的生成</span><small>{mineCount || '空'}</small></button>
+          <button type="button" role="tab" className="sc-assets-pane" aria-selected={pane === 'saved'} onClick={() => setPane('saved')}><span>收藏</span><small>{savedCount || '空'}</small></button>
+          <button type="button" role="tab" className="sc-assets-pane" aria-selected={pane === 'library'} onClick={() => setPane('library')}><span>库</span><small>{assets.length || '空'}</small></button>
         </div>
         <div className="sc-assets-section-heading"><h4>{paneCopy}</h4><button type="button" disabled={!!pending || busy} onClick={() => void run('刷新物料', refreshAssets)}>刷新</button></div>
         {loading && <p role="status">正在更新物料…</p>}
         {!loading && !visibleAssets.length && <p>{pane === 'saved' ? '还没有收藏。点条目右侧的星标收藏。' : pane === 'mine' ? '还没有生成物料。' : '还没有物料。'}</p>}
-        <ul className="sc-assets-list">{visibleAssets.map(asset => <li key={asset.id}>
-          <div><strong>{asset.name}</strong><small>{asset.source === 'polyhaven' ? 'Poly Haven' : asset.source} · {asset.format.toUpperCase()} · {(asset.byte_size / 1024 / 1024).toFixed(1)} MB</small></div>
-          <div className="sc-assets-row-actions">
-            <button type="button" className="sc-assets-star" aria-label={`${favorites.includes(asset.id) ? '取消收藏' : '收藏'} ${asset.name}`} aria-pressed={favorites.includes(asset.id)} title={favorites.includes(asset.id) ? '取消收藏' : '收藏'} onClick={() => toggleFavorite(asset.id)}><Star size={14} fill={favorites.includes(asset.id) ? 'currentColor' : 'none'} aria-hidden="true"/></button>
-            {asset.format === 'glb' ? <button type="button" disabled={!!pending || busy} onClick={() => void run('加载模型预览', account => loadPreview(asset.id, account))}>预览 {asset.name}</button> : <span>场地底图</span>}
-          </div>
-        </li>)}</ul>
+        <ul className="sc-assets-list">{visibleAssets.map(asset => <AssetRow key={asset.id} asset={asset} favorite={favorites.includes(asset.id)} pending={!!pending || busy} onToggleFavorite={() => toggleFavorite(asset.id)} onPreview={asset.format === 'glb' ? () => void run('加载模型预览', account => loadPreview(asset.id, account)) : undefined} />)}</ul>
         {preview && <section className="sc-assets-preview" aria-label="三维素材预览">
           <div className="sc-assets-section-heading"><h4>{preview.asset.name}</h4><button type="button" onClick={() => setPreview(null)}>关闭预览</button></div>
           {previewProps && <ScenePreview {...previewProps}/>}
@@ -150,7 +160,32 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
         </section>}
       </>}
       {pending && <p role="status">正在{pending}…</p>}
-      {notice && <p className="sc-assets-message" role="status">{notice}</p>}
+      {notice && <p className="sc-assets-message" role="alert">{notice}</p>}
     </div>
   </section>;
+}
+
+function AssetRow({ asset, favorite, pending, onToggleFavorite, onPreview }: {
+  asset: CloudAsset;
+  favorite: boolean;
+  pending: boolean;
+  onToggleFavorite(): void;
+  onPreview?: () => void;
+}): JSX.Element {
+  const [broken, setBroken] = useState(false);
+  const preview = broken ? undefined : storedPreview(asset);
+  const thumb = preview
+    ? (
+      // 预览地址来自物料记录，可能是签名外链，不走 next/image。
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={preview} alt="" onError={() => setBroken(true)} />
+    )
+    : <span className="sc-assets-thumb-empty" aria-hidden="true" />;
+  return <li>
+    {onPreview
+      ? <button type="button" className="sc-assets-thumb" aria-label={`预览 ${asset.name}`} disabled={pending} onClick={onPreview}>{thumb}</button>
+      : <span className="sc-assets-thumb" aria-hidden="true">{thumb}</span>}
+    <div className="sc-assets-copy"><strong>{asset.name}</strong><small>{assetMeta(asset)}</small></div>
+    <button type="button" className="sc-assets-star" aria-label={`${favorite ? '取消收藏' : '收藏'} ${asset.name}`} aria-pressed={favorite} title={favorite ? '取消收藏' : '收藏'} onClick={onToggleFavorite}><Star size={14} fill={favorite ? 'currentColor' : 'none'} aria-hidden="true"/></button>
+  </li>;
 }
