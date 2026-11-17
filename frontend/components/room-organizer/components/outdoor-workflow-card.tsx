@@ -537,6 +537,7 @@ export function OutdoorWorkflowCard({
             还没说要分哪些区：先在下面说一句用途和室内外（例如「室外展览区和表演区」），或在地图上手画分区；用途没说清楚前不会替你猜。
           </p>
         ) : (
+          <>
           <button
             type="button"
             className="btn-primary"
@@ -547,8 +548,18 @@ export function OutdoorWorkflowCard({
               ? "核对当前实际活动范围"
               : flow.state.stage === "zones"
                 ? "生成分区预览"
-              : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
+                : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
           </button>
+          {flow.state.stage === "scope" && (
+            <button
+              type="button"
+              disabled={flow.busy}
+              onClick={() => flow.manualBoundary()}
+            >
+              在地图上手画活动范围
+            </button>
+          )}
+        </>
         )
       ) : null}
       {!flow.proposal &&

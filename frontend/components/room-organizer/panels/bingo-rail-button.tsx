@@ -9,6 +9,43 @@ import {
   type BingoSnapshot,
 } from '../lib/bingo-status';
 
+/**
+ * Bingo D4（2026-11-17 锁定）。
+ * 环与四枚工具标同一条墨线：1.65、圆端、`--ink-soft`。环在东北约 315° 开口，缺口约 58°。
+ * 环身不改涂赭色或红色。语义色只做缺口里的一颗珠。
+ * 角度：0° 在东，顺时针；315° 即东北。
+ */
+export const BINGO_D4 = {
+  stroke: 1.65,
+  cx: 12,
+  cy: 12,
+  r: 9.05,
+  gapCenterDeg: 315,
+  gapDeg: 58,
+  beadR: 2.55,
+} as const;
+
+function ringPoint(deg: number): { x: number; y: number } {
+  const rad = (deg * Math.PI) / 180;
+  return {
+    x: BINGO_D4.cx + BINGO_D4.r * Math.cos(rad),
+    y: BINGO_D4.cy + BINGO_D4.r * Math.sin(rad),
+  };
+}
+
+/** 从缺口顺时针终点画到缺口起点，绕开东北那一截。 */
+export function bingoRingPath(): string {
+  const start = ringPoint(BINGO_D4.gapCenterDeg + BINGO_D4.gapDeg / 2);
+  const end = ringPoint(BINGO_D4.gapCenterDeg - BINGO_D4.gapDeg / 2);
+  const fmt = (n: number) => n.toFixed(2);
+  return `M ${fmt(start.x)} ${fmt(start.y)} A ${BINGO_D4.r} ${BINGO_D4.r} 0 1 1 ${fmt(end.x)} ${fmt(end.y)}`;
+}
+
+export function bingoBeadCenter(): { cx: number; cy: number } {
+  const at = ringPoint(BINGO_D4.gapCenterDeg);
+  return { cx: Number(at.x.toFixed(2)), cy: Number(at.y.toFixed(2)) };
+}
+
 /** 圆内计数：0 不画；超过 9 收束为 9+。 */
 function badgeCount(count: number): string {
   if (count <= 0) return '';
@@ -17,8 +54,9 @@ function badgeCount(count: number): string {
 
 /**
  * 左轨第二格：Bingo / 评审收藏。
- * 圆徽标三态——待发空圆、待评主圆出未读钉 P + 角标出未回执链接 L、已回执勾形 + 角标未读钉 P；
- * 圆体 28px，与其他轨钮图标槽同尺寸。状态与计数写进 aria-label / data-tip，不只靠颜色。
+ * 三态只改环内与珠：待发只有开口环；待评环内写未回执链接数，缺口一颗 warn 珠；
+ * 已回执环内墨色勾，缺口一颗 err 珠。不再用实心大圆和角标把计数说两遍。
+ * 未读钉仍写进 aria-label / data-tip。圆体 28px。
  */
 export function BingoRailButton({ open, onOpen, buttonRef }: {
   open: boolean;
@@ -53,12 +91,9 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
   );
 
   const phase = snapshot.phase;
-  const mainCount = phase === 'awaiting' ? badgeCount(pinCount) : '';
-  const cornerCount = phase === 'awaiting'
-    ? badgeCount(linkCount)
-    : phase === 'returned'
-      ? badgeCount(pinCount)
-      : '';
+  // 环内只留一个数：待评的未回执链接。未读钉不再画成第二枚角标。
+  const shownCount = phase === 'awaiting' ? badgeCount(linkCount) : '';
+  const bead = phase === 'awaiting' || phase === 'returned' ? bingoBeadCenter() : null;
 
   const labelParts = [bingoPhaseLabel(phase)];
   if (linkCount > 0) labelParts.push(`${linkCount} 份链接`);
@@ -83,27 +118,50 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
       <span
         className="sc-bingo-badge"
         data-status={phase}
-        {...(mainCount ? { 'data-count': mainCount } : {})}
+        {...(bead ? { 'data-bead': phase === 'awaiting' ? 'warn' : 'err' } : {})}
+        {...(shownCount ? { 'data-count': shownCount } : {})}
         aria-hidden="true"
       >
-        {phase === 'returned' ? (
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.6"
+        <svg className="sc-bingo-mark" viewBox="0 0 24 24" width="28" height="28" fill="none" aria-hidden="true" focusable="false">
+          <path
+            d={bingoRingPath()}
+            stroke="var(--ink-soft, #55585F)"
+            strokeWidth={BINGO_D4.stroke}
             strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M5 12.5 10 17.5 19 7.5" />
-          </svg>
-        ) : (
-          mainCount
-        )}
-        {cornerCount && (
-          <span className="sc-bingo-corner" data-count={cornerCount}>{cornerCount}</span>
-        )}
+          />
+          {bead && (
+            <circle
+              cx={bead.cx}
+              cy={bead.cy}
+              r={BINGO_D4.beadR}
+              fill={phase === 'awaiting' ? 'var(--warn, #96651F)' : 'var(--err, #B4443C)'}
+            />
+          )}
+          {phase === 'returned' && (
+            <path
+              data-mark="check"
+              d="M9.2 12.35 11.25 14.5 15.05 9.9"
+              stroke="var(--ink, #141416)"
+              strokeWidth={BINGO_D4.stroke}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+          {shownCount && (
+            <text
+              x="12"
+              y="12"
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="var(--ink, #141416)"
+              fontSize="8"
+              fontWeight="600"
+              fontFamily="inherit"
+            >
+              {shownCount}
+            </text>
+          )}
+        </svg>
       </span>
       <span className="sc-rail-label" aria-hidden="true">Bingo</span>
     </button>
