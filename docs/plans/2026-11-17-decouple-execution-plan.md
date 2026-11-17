@@ -1,6 +1,7 @@
-# 去室内化后续执行计划（main @ `8446b33f`，2026-11-17）
+# 去室内化后续执行计划（成文锚点 main @ `8446b33f`，2026-11-17）
 
 > 用途：分派给执行 agent 的可落地切片计划。依据 `outdoor-map-decommission-2026-11-13.md` 退役框架与 `2026-11-17-g1-closure-status.md` 收口现状。
+> 锚点：成文时 main `8446b33f`；代码现状以开工时 `origin/main` 为准，文中行号/路径仅作参考。
 > 本计划只排切片、前置、验收门禁与禁止事项；§C 六项口径**待用户拍板**，执行 agent 不得替定。
 
 ## 0. 所有执行 agent 必读纪律
@@ -71,6 +72,7 @@
 ## 3. 关卡 B：G2 壳体解耦（前置：#79 flow 稳定；B3 依赖 C5）
 
 ### B1 · 3a 会话 scope 残留收尾（task #48）
+- **前置核对**：#128（`8446b33f..956afdc7`）已改 `room-organizer.tsx` / `creative-studio.tsx` / `space-panel.tsx` / `scendance-workspace.tsx` / `workspace-shell.tsx`；开工前先重对 scope 拼接点、空间面板与 tracker 注入点，行号以届时 `origin/main` 为准。
 - **范围**：主 `sessionScope` 去掉 `layout.id` 回退，纯走 `projectSessionScope(projectId)`；`activityScopeSource` 已注入 project 源，核对全链路；floor/venue tracker 订阅源从 layoutStore 重绑到 plan.levels / 边界几何。
 - **遗留 `activity:` 键按域归位**：`creative-studio.tsx` 内部 chatScope、`bingo-audit-card.tsx` scopeKey、`venue-facts-panel.tsx`/`space-panel.tsx` venueFactScope、`floor-session-epoch.ts` scope、`scene-delivery-panel.tsx` note scope、环境偏好键分桶、评审链接 identity scope。
 - **成套边界**：activity tracker scope 源、壳体 scope 拼接、agent-panel 比对须同批改，不可拆两半（否则 `isCurrent` 与 scope 比对失败，提案/导出/拖拽全灭）。
@@ -78,7 +80,7 @@
 - **回滚**：layoutStore 影子双写保留；地图侧异常可回退读 layout 投影。
 
 ### B2 · 3b 历史快照换 plan（task #49）
-- **范围**：壳体 `useHistory(layout, actions.applyLayout)`（`room-organizer.tsx:1700`）快照对象从 RoomLayout 换 `SitePlanData`；`commitHistoryNow` 散布的物料增删/选中/墙操作改挂 plan 历史；apply 回写 plan（经 overlay/commitPlan 通路），不再 `actions.applyLayout`。
+- **范围**：壳体 `useHistory(layout, actions.applyLayout)`（约 `room-organizer.tsx:1701`，参考值）快照对象从 RoomLayout 换 `SitePlanData`；`commitHistoryNow` 散布的物料增删/选中/墙操作改挂 plan 历史；apply 回写 plan（经 overlay/commitPlan 通路），不再 `actions.applyLayout`。
 - **复用地基**：`lib/plan-history.ts`（栈/上限 30/规范化序列化去重，不含 React/时钟/存储）；`useHistory` 已是泛型 `<T>`，换类型只在调用点。
 - **验收**：撤销/重做定向测试；历史回滚只动 plan；可 Undo/Redo 状态上报不回归。
 
@@ -131,6 +133,7 @@
 - **成套评估**：后端 preset-manifest/domain/scene-resources/backend-adapter 预设分支随前端面板成套处置。
 - **验收**：tsc 无未用符号（`noUnusedLocals`）；全量测试绿；物料/墙体/分区在地图闭环。
 - **注意**：`types.ts` RoomLayout 被 170+ 文件借用，类型最后删；D 层业务字段（`indoorOutdoor`/`venueIO`）保留。
+- **保留（#128 在途人物/漫游线）**：`person-behavior.ts`、`idle-crowd-pacer.ts`、`zone-walk.ts`、`people-anim.ts`、`person-route.ts`、`plan-walk-context.ts`、`outdoor-route-line-layout.ts`、`human-figure.ts` 及 `docs/plans/2026-11-17-roam-behavior-layer.md` 不得随 R3 误删；与室内 `use-npcs`/`use-walkthrough` 的退役分开处理。
 
 ### E4 · R4 删二分概念与回写链路（task #33，依赖 E3）
 - **删除**：`isOutdoorProject` 恒真分支、`outdoorPlanState` 的 layout.id 匹配回退、false 侧室内镜像回写、`seededPlanFromLayout` 投影适配器。
