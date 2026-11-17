@@ -1577,9 +1577,11 @@ body.sc-panel-dragging * {
 @media (max-width: 760px) {
   .sc-left-stack-splitter { display: none; }
 }
-/* 方案会话不再常驻左栏；History overlay 在Bingo面板内（session-history-panel + agent-panel.css）。 */
+/* 方案会话不再常驻左栏；History overlay 在Bingo面板内（session-history-panel + agent-panel.css）。
+   执行资料浮在画布上，但新活动通常正处在户外 3D 接管（.sc-outdoor-takeover 为 29，整层接收点击）。
+   资料卡要盖住那一层才能看见、才能点；仍低于地图选址与场地浮层（agent-panel.css 里为 45）。 */
 .sc-canvas-share {
-  position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 28;
+  position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 32;
   width: min(380px, calc(100% - 80px));
   display: flex; flex-direction: column; min-height: 0; overflow: auto;
   height: auto; max-height: none;
