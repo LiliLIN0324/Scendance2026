@@ -496,7 +496,7 @@ export function PlanCard({
       {hasPlans && (
         <div style={variantsBlockStyle}>
           <div style={variantsTitleStyle}>三版布置打分</div>
-          <p style={rationaleStyle}>当前为待核验草案：入口、门扇与现场通行条件仍需确认，分数不代表安全或合规。</p>
+          <p style={rationaleStyle}>分数按容量、动线、人体尺度给三版排序；选一版应用到画布，入口和门扇还能在图上改。</p>
           {functionalNeeds?.checkin == null && <p style={rationaleStyle}>尚未确认是否需要签到。</p>}
           {functionalNeeds?.stage == null && <p style={rationaleStyle}>尚未确认是否需要舞台。</p>}
           {selectedPlan && <details><summary>本次候选检查范围与待核验项</summary>
