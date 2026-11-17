@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：四条切片已在**一条分支**上合完（`agent/outdoor-m7-consolidated`：状态卡 + 用例 #5 + 门禁读数 + 同名选择，35 条用例全过、tsc 0），以后只需看一个 PR。main 仍为 `3e376b41`；9222 十二轮不通。下轮：把 `gateFactsForCard` 与 `logReleaseStatus` 接到 hook（只接两条返回值，不改其它行为），或把 `pickVenueCandidate` 接到地图候选点击。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：状态卡已经能从 hook 里按一下就打到控制台（`logReleaseStatus()`，前缀 `[outdoor-release]`）。main 仍为 `3e376b41`；9222 十三轮不通。下轮：把 `pickVenueCandidate` 接到地图候选点击那条路径（只接一处，不改其余）；接入面太大就改为给状态卡补一条“指标为空时怎么写”的确定性用例。首条命令 `cd frontend; npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-17 19:20 · 自动轮次 57 · 状态卡接进 hook（一键打控制台）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 19:20，自动轮次 57
+批次 / 切片 / 状态：M7 / hook 接入 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 3e376b41（div 0/0）；consolidated = f875ac62；9222 第十三轮 down
+改动（只动 1 个文件 3 行）：hook 新增 `logReleaseStatus: () => logReleaseStatus({ rows: assessAcceptance(buildSessionReport(...)), metrics })` + 一行 import
+验证：hook 套件 58/58；wt-r57 的 tsc 0 行；lint 只有别人 `app/error.test.ts` 的 import/order 旧告警（未动）
+没做：没给 hook 加新用例（该文件是用户常改的热文件，改为靠现有 58 条 + tsc 兑现）
+两次自损：① oldText 用了弯引号导致匹配不上（整批 abort，文件未变）；② 去掉末尾换行做替换，把两行并成了一行，读回发现后补回换行
+未完成：#2 真实搜索、#5 浏览器、指定候选接线、面板按钮
+```
+
+- **替换行的 oldText 必须贴原文**：全角/弯引号、行尾换行都算字节；去掉一个换行就会把两行粘成一行。
 
 ### 2026-11-17 18:45 · 自动轮次 56 · 四条切片合成一条分支（降低待 PR 碎片）
 
