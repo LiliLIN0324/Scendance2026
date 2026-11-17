@@ -28,7 +28,6 @@ import {OriginalSceneReviewPanel,type OriginalMoveConfirmation} from './original
 import type {LocalWriteCapability} from '@/lib/local-write-lease';
 import type {ActivitySessionToken} from '../lib/activity-session-epoch';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
-import { formatLength } from '../lib/display-units';
 
 interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: { lengthUnit: DisplayUnit; showMeasurements: boolean }; onPreferenceChange?: (patch: { lengthUnit?: DisplayUnit; showMeasurements?: boolean }) => void }
 
@@ -67,12 +66,9 @@ function updatedLabel(value: string | undefined): string {
   return `${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(timestamp)} 更新`;
 }
 
-/** 没有画布快照的项目卡用名字首字区分，不让所有卡长成同一个占位图形。 */
-function thumbMark(name: string | undefined): string {
-  const text = (name ?? '').trim();
-  if (!text) return '·';
-  const first = Array.from(text)[0] ?? '·';
-  return /[a-z0-9]/i.test(first) ? first.toUpperCase() : first;
+/** 没有画布快照时用一枚安静的菱形封面，不写字、不铺绿底。 */
+function coverMark(): JSX.Element {
+  return <span className="sc-file-thumb-mark" aria-hidden="true"><i /></span>;
 }
 
 type TrashProjectSummary = { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string };
@@ -105,6 +101,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const actionPending = useRef(false);
   const projectedCreation=useRef<{base:RoomLayout;projectId:string}|null>(null);
   const [section, setSection] = useState<AccountSection>('projects');
+  const [settingsPane, setSettingsPane] = useState<'canvas' | 'shortcuts'>('canvas');
+  const [noticeError, setNoticeError] = useState(false);
   // 成员页要取云端团队数据：第一次点开才挂载，之后一直留着，避免反复打列表。
   const [teamMounted, setTeamMounted] = useState(false);
   const [query, setQuery] = useState('');
@@ -207,7 +205,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     setProjects([]); setTrash([]); setTrashOpen(false); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setTeamMounted(false);
     setScenePreviews({});setReadOnlyProjects({});setCachedProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
     if (!userId) {
-      openedRequest.current = ''; setNotice(''); setLoadingProjects(false);
+      openedRequest.current = ''; showNotice(''); setLoadingProjects(false);
       // 会话从「未恢复」变成「匿名」也会走这里；?login=1 要求开着登录浮窗，别把它关掉。
       if (!loginRequested.current) { setAccountOpen(false); dialog.current?.close(); }
       return;
@@ -220,7 +218,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       setProjects(nextProjects); setStudios(nextStudios); setStudioId(initialStudio); setProjectsLoaded(true);
       // 面板初始展示的工作室也写入「最近使用」：无感挂云与「新方案」建项目时落在同一个工作室，不再各猜各的。
       rememberStudio(userId, initialStudio);
-    }).catch(() => { if (!cancelled) setNotice('项目加载失败，请点击刷新重试。'); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
+    }).catch(() => { if (!cancelled) showNotice('项目加载失败，请点击刷新重试。', true); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
   // 左轨成员位、分区直达都用 openRequest 指定落在哪一格（projects / assets / team）。
@@ -238,13 +236,17 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }
   }, [controller, fingerprint, localHandoff]);
 
+  function showNotice(text: string, isError = false): void {
+    setNoticeError(isError);
+    setNotice(text);
+  }
   async function run(action: () => Promise<void>): Promise<void> {
     if (actionPending.current) return;
-    actionPending.current = true; setBusy(true); setNotice('');
+    actionPending.current = true; setBusy(true); showNotice('');
     try { await action(); }
     catch (error) {
       const code=error instanceof Error&&'code' in error?error.code:undefined;
-      setNotice(code==='ORIGINAL_SCENE_REVIEW_REQUIRED'?'此项目含未核验原始记录，目前仅可只读核对；本机草稿未替换。':code?backendFailureText(error):error instanceof Error ? error.message : controller.getSnapshot().error?.message ?? '操作失败，请重试。');
+      showNotice(code==='ORIGINAL_SCENE_REVIEW_REQUIRED'?'此项目含未核验原始记录，目前仅可只读核对；本机草稿未替换。':code?backendFailureText(error):error instanceof Error ? error.message : controller.getSnapshot().error?.message ?? '操作失败，请重试。', true);
     } finally { actionPending.current = false; setBusy(false); }
   }
   // 一次性：/auth 跳过来时把浮窗打开，后续交给账户中心自己管开关。
@@ -267,7 +269,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       const search = params.toString();
       window.history.replaceState(null, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`);
     }
-    setNotice('已登录。');
+    showNotice('已登录。');
   }
   async function refreshProjects(): Promise<void> {
     const [nextProjects, nextStudios] = await Promise.all([controller.listProjects(), controller.listStudios()]);
@@ -363,7 +365,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   /** 深链 / 后台加载：画布轻提示，不自动弹出账户面板。手动点头像仍进项目页。 */
   function softProjectNotice(message: string, tone: 'info' | 'error' = 'info'): void {
     setSection('projects');
-    setNotice(message);
+    showNotice(message, tone === 'error');
     notify(message, tone);
   }
   openRequested.current = id => run(async () => {
@@ -403,7 +405,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         return;
       }
       await acceptScene(project.scene, project.id, project.name, openingFrom,checkSwitch);
-      setNotice('已打开项目。获取编辑权后可以保存修改。');
+      showNotice('已打开项目。获取编辑权后可以保存修改。');
     } catch (error) {
       if(controller.getSnapshot().project?.id===id&&layoutRef.current.id!==id){
         suspendFailedReplacement(id);
@@ -443,7 +445,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     await assertCloudTransition(currentLayout);
     await assertCloudTransition(layoutRef.current);
     setSavedFingerprint(submitted);
-    if (saved.warnings.length) setNotice('已自动保存，请留意场地重叠提示。');
+    if (saved.warnings.length) showNotice('已自动保存，请留意场地重叠提示。');
   }
   // 持有编辑权时云端自动保存，卡片上不再放「保存」。
   useEffect(() => {
@@ -453,7 +455,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     const timer = window.setTimeout(() => {
       autosavePending.current = true;
       void saveBoundSceneQuiet()
-        .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '自动保存失败，请重试。'); })
+        .catch((error: unknown) => { showNotice(error instanceof Error ? error.message : '自动保存失败，请重试。', true); })
         .finally(() => { autosavePending.current = false; });
     }, 1200);
     return () => window.clearTimeout(timer);
@@ -489,7 +491,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       return;
     }
     if (!cloud.writeBlocked) {
-      setNotice('请先释放当前项目的编辑权，再打开其他项目。');
+      showNotice('请先释放当前项目的编辑权，再打开其他项目。');
       return;
     }
     if (!confirmReplace()) return;
@@ -538,14 +540,14 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     if(original.projection?.requiresOriginalSceneForWrite||projectUnverifiedScene(scene).projection.requiresOriginalSceneForWrite)throw new Error('此项目的普通视图省略了未核验的原始记录，不能直接复制；请先通过授权原始场景核对。');
     await controller.businessRequest('/projects', 'POST', { studioId, name: `${project.name} 副本`, scene });
     await refreshProjects();
-    setNotice(`已复制「${project.name}」。`);
+    showNotice(`已复制「${project.name}」。`);
   }
   async function shareProject(project: ProjectSummary): Promise<void> {
     const url = new URL(window.location.href);
     url.searchParams.set('project', project.id);
     const link = `${url.origin}${url.pathname}${url.search}`;
     await navigator.clipboard.writeText(link);
-    setNotice('项目链接已复制。');
+    showNotice('项目链接已复制。');
   }
   async function removeProject(project: ProjectSummary): Promise<void> {
     if (!window.confirm(`删除「${project.name}」？\n\n影响：\n· 云端项目移入「最近删除」，7 天内可恢复\n· 所有分享链接立即失效，恢复后需要重新分享\n· 本机缓存一并移入回收站`)) return;
@@ -567,31 +569,31 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       url.searchParams.delete('project');
       window.history.replaceState(null, '', `${url.pathname}${url.search}`);
     }
-    setNotice(`已删除「${project.name}」，7 天内可在「最近删除」恢复。`);
+    showNotice(`已删除「${project.name}」，7 天内可在「最近删除」恢复。`);
     if (typeof controller.listTrash === 'function' && trashOpen) void controller.listTrash().then(setTrash).catch(() => {});
   }
   async function restoreProject(project: TrashProjectSummary): Promise<void> {
     await controller.restoreProject(project.id, project.revision);
     setTrash(current => current.filter(item => item.id !== project.id));
     await refreshProjects().catch(() => {});
-    setNotice(`已恢复「${project.name}」。原有分享链接不会自动恢复，需要重新分享。`);
+    showNotice(`已恢复「${project.name}」。原有分享链接不会自动恢复，需要重新分享。`);
   }
   /** 断网/云端失败时的只读打开：用本机缓存替换画布，不建立云端绑定。 */
   async function openCachedProject(project: ProjectSummary): Promise<void> {
     const cached = await readProjectCache(project.id);
-    if (!cached) { setNotice('本机缓存已不可用，请联网后重试。'); return; }
+    if (!cached) { showNotice('本机缓存已不可用，请联网后重试。', true); return; }
     if (dirty && !window.confirm('当前画布有未保存改动。打开本机缓存会替换画布，继续吗？')) return;
     onBeforeActivitySwitch?.(layoutRef.current)?.();
     const next = backendSceneToLayout(cached.scene as Scene, { projectId: project.id, name: project.name });
     onLoadLayout(next);
     setBoundLayout(undefined);
     setSavedFingerprint(null);
-    setNotice(`已打开「${project.name}」的本机缓存副本，仅供离线查看；联网后可重新打开云端版本。`);
+    showNotice(`已打开「${project.name}」的本机缓存副本，仅供离线查看；联网后可重新打开云端版本。`);
   }
   /** 把当前本机画布另存为一个云端方案（草稿卡的主操作，不再和“场地出发”混在一起）。 */
   async function saveDraftAsProject(): Promise<void> {
     const current = layoutRef.current;
-    if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){setNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
+    if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){showNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
     assertCloudZoneSupport(current);assertNoLocalHandoffCloudTransition(current);
     const checkSwitch=onBeforeActivitySwitch?.(current)??(()=>{if(layoutRef.current!==current)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');});
     checkSwitch();
@@ -608,7 +610,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       projectedCreation.current={base:structuredClone(current),projectId:created.id};
       suspendFailedReplacement(created.id);
       await refreshProjects().catch(()=>{});
-      setNotice(`云端项目已创建（编号 ${created.id}），但含未核验原始记录，目前仅供只读核对；本机草稿未绑定、未替换，云端写入已暂停。`);return;
+      showNotice(`云端项目已创建（编号 ${created.id}），但含未核验原始记录，目前仅供只读核对；本机草稿未绑定、未替换，云端写入已暂停。`);return;
     }
     let sourceNotice = '';
     try {
@@ -626,7 +628,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       if(controller.getSnapshot().project?.id===created.id)suspendFailedReplacement(created.id);
       throw new Error(`云端创建请求已返回，结果待核对；当前画布未替换。${error instanceof Error ? error.message : '请保留原草稿并核对资料。'}`);
     }
-    await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
+    await refreshProjects(); showNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
   }
   /** 丢弃本机草稿：换一个新的空白本机活动，不触碰任何云端项目。 */
   function discardLocalDraft(): void {
@@ -642,7 +644,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       url.searchParams.delete('project');
       window.history.replaceState(null, '', `${url.pathname}${url.search}`);
     }
-    setNotice('本机草稿已删除，画布已换成新的空白活动。');
+    showNotice('本机草稿已删除，画布已换成新的空白活动。');
   }
   function downloadContract(): void {
     try {
@@ -650,8 +652,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       const url = URL.createObjectURL(new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }));
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = `scendance-scene-v${scene.schemaVersion}.json`;
       anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setNotice(`已导出通过后端 v${scene.schemaVersion} 校验的场景文件。${hasLocalHandoff(layoutRef.current) ? ' 本地执行信息请在“场景交付”导出交付包。' : ''}`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : '场景校验失败。'); }
+      showNotice(`已导出通过后端 v${scene.schemaVersion} 校验的场景文件。${hasLocalHandoff(layoutRef.current) ? ' 本地执行信息请在“场景交付”导出交付包。' : ''}`);
+    } catch (error) { showNotice(error instanceof Error ? error.message : '场景校验失败。', true); }
   }
 
   const filteredProjects = useMemo(() => {
@@ -772,7 +774,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       {sceneConnection && <section className="sc-cloud-current" aria-label="当前活动的场景连接">
         <h3>场景助手已连接</h3>
         <p>只用于助手处理当前场景。</p>
-        <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.disconnectGeometryWorkbench(); setNotice('场景服务已断开。下次使用助手时会重新连接。'); })}>断开场景服务</button>
+        <button type="button" disabled={busy} onClick={() => void run(async () => { await controller.disconnectGeometryWorkbench(); showNotice('场景服务已断开。下次使用助手时会重新连接。'); })}>断开场景服务</button>
       </section>}
       {!cloud.configured ? <div className="sc-cloud-offline">
         <span className="sc-cloud-badge">离线</span>
@@ -789,7 +791,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
               const next = !trashOpen;
               setTrashOpen(next);
               if (next && typeof controller.listTrash === 'function') {
-                void controller.listTrash().then(setTrash).catch(() => setNotice('回收站加载失败，请稍后重试。'));
+                void controller.listTrash().then(setTrash).catch(() => showNotice('回收站加载失败，请稍后重试。', true));
               }
             }}><Trash2 size={15}/></button>}
           </div>
@@ -803,13 +805,24 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
           {showDraftCard && <li className="sc-file-card is-current is-draft">
             <button type="button" className="sc-file-hit" disabled aria-current="true" aria-label={`当前草稿 ${draftCardName}`}>
               <span className={`sc-file-thumb${draftScene ? ' has-preview' : ''}`} aria-hidden="true">
-                {draftScene ? <SceneThumb scene={draftScene} eager/> : <span className="sc-file-thumb-mark">{thumbMark(draftCardName)}</span>}
+                {draftScene ? <SceneThumb scene={draftScene} eager/> : coverMark()}
                 <span className="sc-file-state">当前 · 本机</span>
               </span>
-              <span className="sc-file-info"><strong>{draftCardName}</strong><small>本机项目 · 未上传</small></span>
+              <span className="sc-file-info"><strong>{draftCardName}</strong><small>本机 · 未上传</small></span>
             </button>
-            <button type="button" className="sc-file-draft-save" disabled={busy || !studioId || !!conversionError} onClick={() => { void run(saveDraftAsProject); }}>存为方案</button>
-            <button type="button" className="sc-file-draft-discard" disabled={busy} onClick={discardLocalDraft}>删除本机</button>
+            <details className="sc-file-more">
+              <summary aria-label={`${draftCardName} 更多操作`} title="更多"><MoreHorizontal size={16} aria-hidden="true"/></summary>
+              <div className="sc-file-more-menu" role="group" aria-label={`${draftCardName} 操作`}>
+                <button type="button" disabled={busy || !studioId || !!conversionError} onClick={event => {
+                  (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                  void run(saveDraftAsProject);
+                }}>存为方案</button>
+                <button type="button" disabled={busy} onClick={event => {
+                  (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                  discardLocalDraft();
+                }}>删除本机</button>
+              </div>
+            </details>
           </li>}
           {filteredProjects.map(project => {
             const current = project.id === cloud.project?.id;
@@ -834,7 +847,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 }}
               >
                 <span className={`sc-file-thumb${previewScene ? ' has-preview' : ''}`} aria-hidden="true">
-                  {previewScene ? <SceneThumb scene={previewScene}/> : <span className="sc-file-thumb-mark">{thumbMark(project.name)}</span>}
+                  {previewScene ? <SceneThumb scene={previewScene}/> : coverMark()}
                   {status && <span className="sc-file-state">{status}</span>}
                 </span>
                 <span className="sc-file-info"><strong>{project.name}</strong><small>{updatedLabel(project.updated_at)}</small></span>
@@ -848,7 +861,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                     void run(async () => {
                       if (dirty) await saveBoundSceneQuiet();
                       await controller.releaseLease();
-                      setNotice('编辑权已释放，队友可以接手。');
+                      showNotice('编辑权已释放，队友可以接手。');
                     });
                   }}>释放编辑权</button>}
                   <button type="button" disabled={busy || !studioId} onClick={event => {
@@ -885,7 +898,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
               if (!window.dispatchEvent(request)) { setAccountOpen(false); dialog.current?.close(); return; }
               void run(async () => {
               const current = layoutRef.current;
-              if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){setNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
+              if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){showNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
               assertCloudZoneSupport(current);assertNoLocalHandoffCloudTransition(current);
               const checkSwitch=onBeforeActivitySwitch?.(current)??(()=>{if(layoutRef.current!==current)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');});
               checkSwitch();
@@ -902,7 +915,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 projectedCreation.current={base:structuredClone(current),projectId:created.id};
                 suspendFailedReplacement(created.id);
                 await refreshProjects().catch(()=>{});
-                setNotice(`云端项目已创建（编号 ${created.id}），但含未核验原始记录，目前仅供只读核对；本机草稿未绑定、未替换，云端写入已暂停。`);return;
+                showNotice(`云端项目已创建（编号 ${created.id}），但含未核验原始记录，目前仅供只读核对；本机草稿未绑定、未替换，云端写入已暂停。`);return;
               }
               let sourceNotice = '';
               try {
@@ -920,7 +933,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 if(controller.getSnapshot().project?.id===created.id)suspendFailedReplacement(created.id);
                 throw new Error(`云端创建请求已返回，结果待核对；当前画布未替换。${error instanceof Error ? error.message : '请保留原草稿并核对资料。'}`);
               }
-              await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
+              await refreshProjects(); showNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
             }); }}>
               <span className="sc-file-new-mark" aria-hidden="true">＋</span>
               <span>新方案</span>
@@ -947,42 +960,50 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         {teamMounted && <AccountTeamPanel key={`team-${userId ?? 'local'}`} controller={controller}/>}
       </section>
       <section hidden={section !== 'settings'} aria-label="设置">
-        <div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>设置</h3></div></div>
-        <div className="sc-settings-prefs">
-          <div className="sc-settings-group">
-            <div className="sc-settings-row">
-              <div className="sc-settings-row-main"><strong>显示单位</strong><small>标注、属性面板与导出清单的尺寸读数跟随；场景数据仍按米存储。</small></div>
-              <div className="sc-settings-row-actions">
-                <div className="sc-unit-seg" role="group" aria-label="显示单位">
-                  <button type="button" aria-pressed={preferences.lengthUnit === 'm'} onClick={() => onPreferenceChange({ lengthUnit: 'm' })}>米 · m</button>
-                  <button type="button" aria-pressed={preferences.lengthUnit === 'ft'} onClick={() => onPreferenceChange({ lengthUnit: 'ft' })}>英尺 · ft</button>
+        <div className="sc-account-prefs">
+          <nav className="sc-account-prefs-nav" aria-label="设置分区">
+            <button type="button" aria-pressed={settingsPane === 'canvas'} onClick={() => setSettingsPane('canvas')}>画布</button>
+            <button type="button" aria-pressed={settingsPane === 'shortcuts'} onClick={() => setSettingsPane('shortcuts')}>快捷键</button>
+          </nav>
+          {settingsPane === 'canvas' ? <div className="sc-account-prefs-main">
+            <h3>画布</h3>
+            <div className="sc-settings-prefs">
+              <div className="sc-settings-group">
+                <div className="sc-settings-row">
+                  <div className="sc-settings-row-main"><strong>显示单位</strong><small>标注、属性面板与导出清单的尺寸读数跟随；场景数据仍按米存储。</small></div>
+                  <div className="sc-settings-row-actions">
+                    <div className="sc-unit-seg" role="group" aria-label="显示单位">
+                      <button type="button" aria-pressed={preferences.lengthUnit === 'm'} onClick={() => onPreferenceChange({ lengthUnit: 'm' })}>米 · m</button>
+                      <button type="button" aria-pressed={preferences.lengthUnit === 'ft'} onClick={() => onPreferenceChange({ lengthUnit: 'ft' })}>英尺 · ft</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="sc-settings-group">
+                <div className="sc-settings-row">
+                  <div className="sc-settings-row-main"><strong>尺寸标注</strong><small>在画布上显示场地与物件的尺寸读数。</small></div>
+                  <div className="sc-settings-row-actions">
+                    <label className="sc-switch">
+                      <input type="checkbox" checked={preferences.showMeasurements} onChange={event => onPreferenceChange({ showMeasurements: event.target.checked })} />
+                      <i />
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="sc-settings-row">
-              <div className="sc-settings-row-main"><strong>换算示例</strong><small>{formatLength(12, 'm')} ≈ {formatLength(12, 'ft')}（英尺保留一位小数）。</small></div>
-            </div>
-          </div>
-          <div className="sc-settings-group">
-            <div className="sc-settings-row">
-              <div className="sc-settings-row-main"><strong>尺寸标注</strong><small>在画布上显示场地与物件的尺寸读数。</small></div>
-              <div className="sc-settings-row-actions">
-                <label className="sc-switch">
-                  <input type="checkbox" checked={preferences.showMeasurements} onChange={event => onPreferenceChange({ showMeasurements: event.target.checked })} />
-                  <i></i>
-                </label>
-              </div>
-            </div>
-          </div>
+          </div> : <div className="sc-account-prefs-main">
+            <h3>快捷键</h3>
+            <p className="sc-account-footnote">快捷键还在整理，这里先空着。</p>
+          </div>}
         </div>
       </section>
       {/* 项目相关提示只挂在项目页，别跟到团队 / 物料里吵。 */}
-      {section === 'projects' && conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
-      {section === 'projects' && floorplanOnlyLocal && <p className="sc-cloud-message" role="status">底图只保留在本机，云端方案不包含底图；本机草稿仍保留原图。</p>}
-      {section === 'projects' && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-cloud-message" role="status">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
-      {section === 'projects' && (notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}
-      {section === 'projects' && cloud.error?.code==='CANVAS_PROJECT_MISMATCH' && notice!==cloud.error.message && <p className="sc-cloud-message" role="alert">{cloud.error.message}</p>}
-      {section === 'projects' && cloud.error?.code==='CANVAS_PROJECT_MISMATCH' && cloud.lease && <button type="button" disabled={busy} onClick={()=>void run(async()=>{await controller.releaseLeaseAfterCanvasMismatch(cloud.lease!.projectId);setNotice('原编辑权已释放；请保留当前草稿，重新打开活动核对。');})}>重试释放原编辑权</button>}
+      {section === 'projects' && conversionError && <p className="sc-account-error" role="alert">{conversionError}</p>}
+      {section === 'projects' && floorplanOnlyLocal && <p className="sc-account-footnote">底图只保留在本机，云端方案不包含底图；本机草稿仍保留原图。</p>}
+      {section === 'projects' && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-account-error" role="alert">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
+      {section === 'projects' && notice && <p className={noticeError ? 'sc-account-error' : 'sc-account-footnote'} role={noticeError ? 'alert' : 'status'}>{notice}</p>}
+      {section === 'projects' && cloud.error && cloud.error.code !== 'ROUTE_NOT_FOUND' && notice !== cloud.error.message && <p className="sc-account-error" role="alert">{cloud.error.message}</p>}
+      {section === 'projects' && cloud.error?.code==='CANVAS_PROJECT_MISMATCH' && cloud.lease && <button type="button" disabled={busy} onClick={()=>void run(async()=>{await controller.releaseLeaseAfterCanvasMismatch(cloud.lease!.projectId);showNotice('原编辑权已释放；请保留当前草稿，重新打开活动核对。');})}>重试释放原编辑权</button>}
       </div>
       </div>
       </div>

@@ -2226,8 +2226,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     modeRef.current = next;
     // 2026-11-18 用户实测：从对话进绘制模式时色板分组要跟着展开——不然用户不知道画什么、
     // 也不知道有分区类型可挑。手动点目录行本来就是展开态进来的，这里只是兜底。
-    const drawingSubgroup = next === 'zone' ? 'areas:区域' : next === 'node' ? 'areas:入口和通道图标' : next === 'route' ? 'areas:路线' : null;
-    if (drawingSubgroup) setOpenLibrarySubgroups(prev => (prev.includes(drawingSubgroup) ? prev : [...prev, drawingSubgroup]));
+    // 2026-11-18 用户澄清：用地红线只要「确认 / 重画」，分区才要那张分区类型色板；
+    // 所以进红线只摊开区域组（用地红线、重置设计范围两行），把分区色板收起来，
+    // 进分区才把色板摊开。
+    const ensureSubgroups = (add: string[], remove: string[] = []) =>
+      setOpenLibrarySubgroups(prev => {
+        const kept = prev.filter(key => !remove.includes(key));
+        for (const key of add) if (!kept.includes(key)) kept.push(key);
+        return kept;
+      });
+    if (next === 'zone') ensureSubgroups(['areas:区域', 'areas:分区类型']);
+    else if (next === 'node') ensureSubgroups(['areas:入口和通道图标']);
+    else if (next === 'route') ensureSubgroups(['areas:路线']);
+    else if (next === 'boundary') ensureSubgroups(['areas:区域'], ['areas:分区类型']);
     draftRef.current = [];
     previewRingRef.current = null;
     scopeDragRef.current = null;
@@ -11604,7 +11615,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 {/* 2026-11-16：图上默认只画真冲突（红）；缺宽度/容量待核实属于提示，这里给一个口子放出来。 */}
                 <label
                   style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: PLANNING_SPACING.xs, opacity: 0.8, cursor: 'pointer' }}
-                  title="缺宽度 = 通行带没评估；容量是按面积估算的规划假设，不是法规口径；两者都是提示，不是冲突"
+                  title="缺宽度：补上宽度会一起算通行带；容量按面积估，改分区跟着变"
                 >
                   <input
                     type="checkbox"
@@ -12078,7 +12089,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       })}
                       {openLibrarySections.includes('areas') && (
                         <>
-                          {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '区域', label: '区域', count: planZoneSemantics.length + 1, icon: 'hexagon' })}
+                          {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '区域', label: '区域', count: 2, icon: 'hexagon' })}
                           {openLibrarySubgroups.includes('areas:区域') && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                               {/* 2026-11-11：边界重画入口回归（起步矩形是自动送的，用户可以整体重画）。 */}
@@ -12117,7 +12128,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                               {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「清除设计范围」——
                                   和自动机制自相矛盾（红线一动框就回来），没有稳定用途。
                                   框外压暗就是设计范围的唯一表达，去掉它等于回到没有取景框的状态。 */}
-                              {/* 2026-11-18 全局网格：分区色板跟随 oneplanGrid 开关（开关在搜索框旁），不再单独设钮。 */}
+                              {/* 2026-11-18 用户澄清：分区类型色板是「画分区」才要的东西；
+                                  用地红线只要确认或重画，不该一点开卡片就摊一屏舞台区/观众区…。
+                                  所以色板折进自己的子组，默认收起，进 zone 模式才自动展开。 */}
+                              {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '分区类型', label: '分区类型', count: planZoneSemantics.length, icon: 'hexagon' })}
+                              {openLibrarySubgroups.includes('areas:分区类型') && (
                               <div style={oneplanGrid
                                 ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
                                 : { display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -12134,6 +12149,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 });
                                 })}
                               </div>
+                              )}
                             </div>
                           )}
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '入口和通道图标', label: '入口和通道图标', count: libraryEntranceIcons.length + 1, icon: 'door-open' })}

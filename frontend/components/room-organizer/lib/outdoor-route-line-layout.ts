@@ -249,7 +249,7 @@ export function proposeRouteLineLayout(
   const obstacles = input.obstacles ?? [];
   const warnings: string[] = [
     "线路参照来自地图道路/画布线路，不是实测赛道；封路、计时、医疗与安保需与主办方和交管核对。",
-    "补给站与起终点区为几何示意，不含水电接驳与人流容量核验；不构成安全认证。",
+    "补给站和起终点按可用面积摆位；水电接驳和容量按现场条件调。",
   ];
   const zones: PlanZone[] = [];
   const facilities: PlanFacility[] = [];
