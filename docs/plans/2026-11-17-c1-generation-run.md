@@ -530,6 +530,47 @@ text 刚建/刚未知    -> 不动
 
 - 新增 `frontend/components/room-organizer/lib/generation-failure.test.ts`：额度不足、密钥不对、内容被拦、请求过多、模型不认、超长截断、形状不认识、非失败态不出文案、submit_unknown 固定文案 —— 9 条。
 - `tsc --noEmit`（Node 24）无输出。
+### 验证
+
+- 新增 `frontend/components/room-organizer/lib/generation-failure.test.ts`：额度不足、密钥不对、内容被拦、请求过多、模型不认、超长截断、形状不认识、非失败态不出文案、submit_unknown 固定文案 —— 9 条。
+- 定向回归（Node 24）：`generation-failure` / `model-generation` / `generated-model-library` / `facility-generated-models` / `outdoor-facility-generate` 五个文件一起跑，**78 例全过**。
+- `tsc --noEmit`（Node 24）无输出。
+
+#### 前端全量套件（Node 24，655 个文件）
+
+```
+ Test Files  27 failed | 628 passed (655)
+      Tests  236 failed | 8549 passed | 73 skipped (8858)
+   Duration  1111.29s
+```
+
+#### 基线 A/B：这 236 例是不是我带来的
+
+把我改的 5 个文件回退到 `bbe0747e`，用**同一批 27 个失败文件**在同一台机器上重跑：
+
+```
+ Test Files  25 failed | 2 passed (27)
+      Tests  234 failed | 796 passed | 47 skipped (1077)
+```
+
+逐文件比对两次的失败用例集合：**653 / 655 个文件完全一致**，只有 2 个文件不同，而这 2 条都是**5 秒超时**：
+
+| 文件 | 单独跑（带本轮改动） | 判定 |
+| --- | --- | --- |
+| `lib/__tests__/repo/design-eval-boundary.test.ts` | 3 例通过，102ms | 这条测试要读遍 `components/lib/app` 的 752 个文件（7.9MB）；同跑时超时，单独跑 102ms 就过 |
+| `panels/creative-studio.react.test.tsx` | 320 例全过 | 与上一个文件同跑时超时，单独跑通过 |
+
+把扫描逻辑单独拿出来量：752 个文件、7.9MB，**耗时 118ms、违规 0 条**。也就是说它本身离 5 秒超时差得远，只是机器被占满时会被挤过去 —— 本轮那 2 条差异是**负载型超时，不是回归**。
+
+#### 顺带确认：`agent-panel` 的 176 例失败是 main 带来的
+
+`agent-panel.react.test.tsx` 一次挂 176 例。相关提交 `85eb9a30`（活动类型闸门）、`7f47b0d0`（岸线布局）、`63463d8f`（错误卡）**全部已在 `origin/main` 里**（`git merge-base --is-ancestor` 三条皆真），与本分支无关，是既有问题。
+
+#### 跑法上踩到的两个坑（留给下一个跑这套件的人）
+
+- `frontend/vitest.config.ts` 里 `execArgv: ['--require', './polyfill-mark-as-uncloneable.cjs']` 的相对路径按**进程 cwd** 解析。`--root` 不会改 cwd，直接 `vitest run --root …` 会让每个 worker 起手就 `MODULE_NOT_FOUND`。要么把 cwd 设成 `frontend`，要么用 `.temp/fe-vitest/run-frontend-tests.mjs` 那个包装器（先 `process.chdir` 再动态 import vitest CLI）。
+- Windows 路径有 260 字符上限：日志文件名由参数拼出来时，参数一长就存不下来，表现为「文件明明存在却读不出来」。用短标签（如 `FE_TAG=one`）覆盖。
+
 
 ### 这一轮没有做的
 
