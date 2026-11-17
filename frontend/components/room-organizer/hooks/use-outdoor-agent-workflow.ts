@@ -34,7 +34,8 @@ import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
-import { CASE_IDS, defaultLedger, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
+import { CASE_IDS, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
+import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
 import {
   bookToRecord,
   markSeen,
@@ -2661,15 +2662,24 @@ export function useOutdoorAgentWorkflow(input: {
     },
     /** 一行可粘进 PR 的验收声明（固定收尾“三类全绿 0 条，未验部分不作通过”）。 */
     acceptanceStatement: () => formatAcceptanceStatement(assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }))),
-    /** 把整张发布前状态卡打到控制台（前缀 [outdoor-release]，只读，不产生结论）。 */
+    /** 把整张发布前状态卡打到控制台（前缀 [outdoor-release]，只读，不产生结论）。
+     *  台账只算一次：`bundle.ledger` 同时用于打日志与返回快照，
+     *  所以不会出现“卡片说 1 条、快照说 0 条”。
+     */
     logReleaseStatus: () => {
-      const record = bookToRecord(walkthroughBook.current);
-      return logReleaseStatus({
-        rows: assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
-        metrics: summarizeMetrics(metricsBook.current),
-        ledger: defaultLedger(record, cloudPass.current),
-        evidence: record,
+      const metrics = summarizeMetrics(metricsBook.current);
+      const rows = assessAcceptance(
+        buildSessionReport({ turns: traceBook.current.list(), metrics }),
+      );
+      const bundle = releaseStatusBundle({
+        rows,
+        metrics,
+        evidence: bookToRecord(walkthroughBook.current),
+        cloudPass: cloudPass.current,
       });
+      // 用同一份台账再格式一次：日志里那段文本与 `bundle.card` 逐字相同。
+      const card = logReleaseStatus({ rows, metrics, ledger: bundle.ledger });
+      return { ...bundle, card };
     },
     /** 逐条标一次走查：返回 null 表示编号不合法（这一标没生效）。 */
     recordWalkthrough: (id: number, state: BrowserEvidence) => {
