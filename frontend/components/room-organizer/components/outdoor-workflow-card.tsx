@@ -831,6 +831,7 @@ export function OutdoorWorkflowCard({
           flow.declareCloud(id, pass);
         }}
         onExportCsv={() => flow.downloadLedgerCsv()}
+        gapsLine={flow.releaseGaps()}
       />
     </section>
       {flow.loginRequired && !flow.loginSatisfied && (

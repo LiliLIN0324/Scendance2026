@@ -21,6 +21,7 @@ export function OutdoorWalkthroughSection({
   cloudPass,
   onCloud,
   onExportCsv,
+  gapsLine,
 }: {
   initialBook: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => WalkthroughBook | null;
@@ -29,6 +30,8 @@ export function OutdoorWalkthroughSection({
   onCloud?: (id: number, pass: boolean) => void;
   /** 给就渲染「导出 CSV」；不传就整块不出现（与云端那列同一个规矩）。 */
   onExportCsv?: () => void;
+  /** 待补清单原文（`formatGapList()` 的返回值）；不传就不显示这一块。 */
+  gapsLine?: string;
 }): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [book, setBook] = useState(initialBook);
@@ -50,15 +53,25 @@ export function OutdoorWalkthroughSection({
         )}
       </div>
       {open && (
-        <OutdoorWalkthroughBoard
-          book={book}
-          onMark={(id, state) => {
-            const next = onMark(id, state);
-            if (next) setBook(next);
-          }}
-          {...(cloudPass ? { cloudPass } : {})}
-          {...(onCloud ? { onCloud } : {})}
-        />
+        <>
+          <OutdoorWalkthroughBoard
+            book={book}
+            onMark={(id, state) => {
+              const next = onMark(id, state);
+              if (next) setBook(next);
+            }}
+            {...(cloudPass ? { cloudPass } : {})}
+            {...(onCloud ? { onCloud } : {})}
+          />
+          {gapsLine && (
+            <p
+              aria-label="待补清单"
+              className="mt-2 whitespace-pre-line rounded-lg bg-neutral-50 p-2 text-[11px] leading-relaxed text-neutral-600"
+            >
+              {gapsLine}
+            </p>
+          )}
+        </>
       )}
     </div>
   );
