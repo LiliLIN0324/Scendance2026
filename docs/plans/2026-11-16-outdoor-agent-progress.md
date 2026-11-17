@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：走查区已抽成 `outdoor-walkthrough-section.tsx`（开关 + 面板一体，带回传才刷新），工作流卡只留一行挂载。**本地 main = origin = `139f42c4`（`div 0/0`）**；待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–77 七个切片。9222 三十三轮不通。下一条：把证据台账从常量改成与记录本联动（卡片 `ledger` 不再由 `FIXED_DATA_CASES` 硬算）。首条命令 `cd frontend; npm test -- components/room-organizer/components/outdoor-walkthrough-section.test.tsx`。
+- 下一条操作：台账的云端那列已可“声明”（`ledgerFromEvidence(ids, evidence?, cloudPassIds?)`，未声明一律 `none`，且**只声明云端通过不够**——浏览器没 pass 仍不计全绿）。**本地 main = origin = `139f42c4`（`div 0/0`，本轮开工就齐了，无可合）**；待 PR 分支仍是 `agent/outdoor-m7-walkthrough-wire`，已含 71–78 八个切片。9222 三十四轮不通。下一条：hook 与面板补一条“云端声明”入口（默认空，人点了才算），先把 `defaultLedger` 的声明参数暴露到 API。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-cloud-ledger.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 12:00 · 自动轮次 78 · 云端那一列可以声明了（但不许自己变绿）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 12:00，自动轮次 78
+批次 / 切片 / 状态：M7 / 云端列可声明 / 已交付（分支待 PR）
+开工事实：HEAD = `60d6871d`（`agent/outdoor-objects-packed`），脏文件 35；**local main = origin = `139f42c4`（`div 0/0`）——本轮无需合并**
+交付：`ledgerFromEvidence(fixedDataIds, evidence?, cloudPassIds?)` / `defaultLedger(evidence?, cloudPassIds?)`：云端只接“显式给的号”，不在 1..11 的丢掉；未声明整列 `none`。新增 `outdoor-release-cloud-ledger.test.ts` 5 条，钉住三种情形：只声明云端 → `allGreen` 仍 0；云端 + 浏览器 pass + 固定数据 → 计 1 条（卡末行也写 1）；夹带 0/12 → 不凭空长行
+验证（固定数据）：云端台账 5/5 + 状态卡 38/38 = 43/43；`tsc --noEmit` 0 行
+过程中两次红：① 写盘时首行引号坏了（`from "vitest';`），vitest 直接报 `[PARSE_ERROR] Unterminated string`；② 断言默认常量里 #2 是 `partial`，实际是 `none`（`BROWSER_EVIDENCE` 里 #2、#5 都是无证据）——改断言不改常量
+真实浏览器/云端：仍未验（9222 第三十四轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；云端声明入口接到 hook/面板
+```
+
+- **“可声明”与“可推出”要分开**：云端那一列只能人来声明；只声明云端、浏览器没 pass 时全绿仍为 0，这样卡就不可能被参数“凑绿”。
+- **默认常量不是凭印象**：`BROWSER_EVIDENCE` 里 #2/#5 是 `none`（无任何证据），#2 的固定数据来自 `outdoor-venue-candidates`，两者不是一回事。
 
 ### 2026-11-18 11:00 · 自动轮次 77 · 走查区抽件（能单测的开关 + 面板）
 

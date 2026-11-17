@@ -155,14 +155,17 @@ export const CASE_IDS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 export function ledgerFromEvidence(
   fixedDataIds: readonly number[],
   evidence?: WalkthroughRecord,
+  cloudPassIds: readonly number[] = [],
 ): CaseLedgerRow[] {
   const fixed = new Set(fixedDataIds);
   const browser = browserEvidenceFrom(evidence);
+  // 云端那列只能“声明”，绝不能从浏览器结果推出来：没声明的号一律 none。
+  const cloud = new Set(cloudPassIds.filter((id) => CASE_IDS.includes(id)));
   return CASE_IDS.map((id) => ({
     id,
     fixedData: fixed.has(id),
     browser: browser[id] ?? 'none',
-    cloud: 'none',
+    cloud: cloud.has(id) ? 'pass' : 'none',
   }));
 }
 
@@ -175,8 +178,11 @@ export function ledgerFromEvidence(
 export const FIXED_DATA_CASES: readonly number[] = [2, 5];
 
 /** 卡默认用的台账：直接由上面的常量生成，不给人填的余地。 */
-export function defaultLedger(evidence?: WalkthroughRecord): CaseLedgerRow[] {
-  return ledgerFromEvidence(FIXED_DATA_CASES, evidence);
+export function defaultLedger(
+  evidence?: WalkthroughRecord,
+  cloudPassIds: readonly number[] = [],
+): CaseLedgerRow[] {
+  return ledgerFromEvidence(FIXED_DATA_CASES, evidence, cloudPassIds);
 }
 
 /** 云端那列：有台账才算得出来，没台账就明说没报。 */
