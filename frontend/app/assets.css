@@ -1,8 +1,10 @@
 .sc-assets{border-top:0;padding-top:0;margin-top:0;text-align:left}
-.sc-assets .sc-assets-panes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 2px}
-.sc-assets .sc-assets-panes .sc-assets-pane{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px;max-width:none;padding:10px 11px;border:1px solid var(--sc-line);border-radius:10px;background:var(--wk-paper);color:var(--sc-muted);font-size:12px;text-align:left}
-.sc-assets .sc-assets-panes .sc-assets-pane[aria-selected=true]{border-color:var(--sc-ink);color:var(--sc-ink);font-weight:500}
-.sc-assets .sc-assets-pane small{font-size:10px;color:var(--sc-muted);font-variant-numeric:tabular-nums}
+/* 与分享面板同一条轨道：plane 底，选中是白药丸 + 墨字，未选中灰字。不要给选中项加草绿描边。 */
+.sc-assets .sc-assets-panes{display:flex;gap:2px;margin:0 0 16px;padding:3px;border-radius:10px;background:var(--plane,#F4F5F7)}
+.sc-assets .sc-assets-panes .sc-assets-pane{display:flex;flex:1;align-items:center;justify-content:center;gap:6px;max-width:none;margin:0;padding:7px 10px;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--ink-soft,#55585F);font-size:13px;font-weight:500;text-align:center}
+.sc-assets .sc-assets-panes .sc-assets-pane[aria-selected=true]{border-color:transparent;background:var(--paper,#fff);box-shadow:none;color:var(--ink,#141416);font-weight:600}
+.sc-assets .sc-assets-panes .sc-assets-pane:hover:not([aria-selected=true]){color:var(--ink,#141416)}
+.sc-assets .sc-assets-pane small{font-size:12px;color:inherit;font-variant-numeric:tabular-nums;font-weight:500}
 .sc-assets .sc-assets-row-actions{display:flex;flex:none;align-items:center;gap:4px}
 .sc-assets .sc-assets-list .sc-assets-row-actions .sc-assets-star{display:grid;place-items:center;width:30px;min-width:30px;height:30px;max-width:none;padding:0;border:0;background:transparent;box-shadow:none;color:var(--sc-muted)}
 .sc-assets .sc-assets-list .sc-assets-star[aria-pressed=true]{color:var(--sc-ink)}
@@ -23,14 +25,19 @@
 .sc-assets strong{font-size:13px;font-weight:600}
 .sc-assets h4{font-size:13px;font-weight:600;margin:0}
 .sc-assets .sc-assets-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0}
-.sc-assets .sc-assets-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--sc-line)}
+.sc-assets .sc-assets-list li{display:grid;grid-template-columns:56px minmax(0,1fr) auto;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--sc-line)}
 .sc-assets .sc-assets-list li>div{min-width:0;overflow-wrap:anywhere}
-.sc-assets .sc-assets-list button{flex-shrink:0;max-width:46%;overflow-wrap:anywhere}
+.sc-assets .sc-assets-thumb{display:grid;place-items:center;width:56px;height:56px;margin:0;padding:0;overflow:hidden;border:0;border-radius:10px;background:var(--plane,#F4F5F7);box-shadow:none}
+.sc-assets button.sc-assets-thumb{width:56px;height:56px;padding:0;border:0;border-radius:10px;background:var(--plane,#F4F5F7);box-shadow:none}
+.sc-assets .sc-assets-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.sc-assets .sc-assets-thumb-empty{display:block;width:100%;height:100%}
+.sc-assets .sc-assets-copy strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-assets .sc-assets-copy small{margin-top:2px}
 .sc-assets a{color:var(--sc-ink);font-size:11px;text-decoration:underline;text-underline-offset:3px}
 .sc-assets .sc-assets-jobs li{border-bottom:1px solid var(--sc-line);padding:12px 0}
 .sc-assets .sc-assets-jobs li p{white-space:pre-wrap}
 .sc-assets .sc-assets-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
-.sc-assets .sc-assets-message{background:var(--wk-plane);border-left:2px solid #8b7861;padding:12px;color:#514636}
+.sc-assets .sc-assets-message{margin:8px 0 0;padding:0;background:none;border:0;color:var(--err,#B4443C);font-size:12px;line-height:1.6}
 .sc-assets .sc-assets-preview{margin-top:20px;padding:16px;background:var(--wk-plane);border-radius:12px}
 .sc-assets .sc-assets-dimensions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .sc-assets .sc-assets-dimensions input{font-variant-numeric:tabular-nums;padding:9px}

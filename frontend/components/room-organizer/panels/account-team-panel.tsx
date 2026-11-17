@@ -1,8 +1,8 @@
 'use client';
 
-import { Crown, RefreshCw, Trash2, UserPlus } from '@/components/solid-icons';
+import { KeyRound, RefreshCw, Trash2, UserPlus } from '@/components/solid-icons';
 import { useState, type ReactNode } from 'react';
-import type { BackendSession } from '@/lib/backend-session';
+import { backendFailureText, type BackendSession } from '@/lib/backend-session';
 import { notifyTeamChanged, useTeam } from '../lib/team-data';
 import { avatarToneStyle, avatarTonesFor, useAvatarPresetsFor } from './account-avatars';
 import { InfoTip } from './info-tip';
@@ -13,6 +13,8 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [noticeError, setNoticeError] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [removing, setRemoving] = useState('');
 
   const isOwner = team.members.some(member => member.userId === team.userId && member.role === 'owner');
@@ -20,31 +22,31 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
   const presets = useAvatarPresetsFor(team.members, team.userId);
   const studioPath = (suffix = '') => `/studios/${encodeURIComponent(team.studioId)}${suffix}`;
 
+  function say(text: string, isError = false): void {
+    setNoticeError(isError);
+    setNotice(text);
+  }
   async function run(action: () => Promise<void>, done: string): Promise<void> {
-    setBusy(true); setNotice('');
+    setBusy(true); say('');
     try {
       await action();
       notifyTeamChanged();
-      setNotice(done);
+      say(done);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '操作没成功，请重试。');
+      const coded = error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string';
+      say(coded ? backendFailureText(error) : error instanceof Error ? error.message : '操作没成功，请重试。', true);
     } finally {
       setBusy(false);
     }
   }
 
   if (!team.userId) return <TeamFrame notice="登录后才能看到团队成员。" busy={false}><p className="sc-account-empty">在账户中心登录后，这里会显示你所在团队的成员。</p></TeamFrame>;
-  if (team.error) return <TeamFrame notice={team.error} busy={busy} onRefresh={team.refresh}><p className="sc-account-empty">{team.error}</p></TeamFrame>;
+  if (team.error) return <TeamFrame notice={team.error} alert busy={busy} onRefresh={team.refresh}><p className="sc-account-empty">{team.error}</p></TeamFrame>;
   if (team.loading && !team.members.length) return <TeamFrame notice="" busy><p className="sc-account-empty" role="status">正在加载成员…</p></TeamFrame>;
   if (!team.studioId) return <TeamFrame notice="" busy><p className="sc-account-empty">你还没有团队。在「所有文件」里新建一个工作室，成员就会出现在这里和左轨上。</p></TeamFrame>;
 
-  return <TeamFrame notice={notice} busy={busy} onRefresh={team.refresh}>
-    <label className="sc-settings-row sc-settings-studio-row">
-      <span className="sc-settings-row-main"><strong>团队名称</strong></span>
-      {isOwner
-        ? <span className="sc-settings-invite-actions"><input className="sc-settings-input" aria-label="团队名称" maxLength={120} defaultValue={team.teamName} onBlur={event => { const next = event.target.value.trim(); if (!next || next === team.teamName) { event.target.value = team.teamName; return; } void run(async () => { await controller.businessRequest(studioPath(), 'PATCH', { name: next }); }, '团队名称已更新。'); }} /></span>
-        : <span className="sc-settings-muted">{team.teamName}</span>}
-    </label>
+  return <TeamFrame notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} onInvite={() => { if (!isOwner) { say('只有负责人可以邀请成员。', true); return; } setInviteOpen(open => !open); }} inviteOpen={inviteOpen}>
+    <div className="sc-settings-columns" aria-hidden="true"><span>团队名称</span><span>角色</span></div>
     {team.members.map(member => { const tone = tones.get(member.userId); const preset = presets.get(member.userId); return <div className="sc-settings-row" key={member.userId}>
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">
         {preset ? <img src={preset.src} alt=""/> : member.displayName.slice(0, 1)}
@@ -57,7 +59,7 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
       </div>
       <div className="sc-settings-row-actions">
         {member.role === 'owner'
-          ? <span className="sc-settings-owner-mark" title="负责人" aria-label="负责人"><Crown size={14} aria-hidden="true"/></span>
+          ? <span className="sc-settings-owner-mark" title="负责人" aria-label="负责人"><KeyRound size={14} aria-hidden="true"/></span>
           : isOwner ? <>
             {removing !== member.userId
               ? <button className="sc-settings-icon-button" type="button" aria-label={`移除成员${member.displayName}`} title="移除" disabled={busy} onClick={() => setRemoving(member.userId)}><Trash2 size={15} aria-hidden="true"/></button>
@@ -65,10 +67,10 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
           </> : null}
       </div>
     </div>; })}
-    {isOwner && <form className="sc-settings-invite is-email" onSubmit={event => {
+    {isOwner && inviteOpen && <form className="sc-settings-invite is-email" onSubmit={event => {
       event.preventDefault();
       const inviteEmail = email.trim().toLowerCase();
-      if (!inviteEmail || !inviteEmail.includes('@')) { setNotice('请填写对方注册用的邮箱。'); return; }
+      if (!inviteEmail || !inviteEmail.includes('@')) { say('请填写对方注册用的邮箱。', true); return; }
       void run(async () => {
         await controller.businessRequest(`${studioPath()}/members`, 'POST', { email: inviteEmail });
         setEmail('');
@@ -81,15 +83,18 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
   </TeamFrame>;
 }
 
-function TeamFrame({ notice, busy, onRefresh, children }: {
-  notice: string; busy: boolean; onRefresh?(): void; children: ReactNode;
+function TeamFrame({ notice, alert = false, busy, onRefresh, onInvite, inviteOpen, children }: {
+  notice: string; alert?: boolean; busy: boolean; onRefresh?(): void; onInvite?(): void; inviteOpen?: boolean; children: ReactNode;
 }): JSX.Element {
   return <section className="sc-settings" aria-label="团队">
     <header className="sc-settings-head">
       <div className="sc-settings-title"><h3>成员</h3><InfoTip key="team" label="成员说明"><strong>用邮箱加人</strong><span>填写对方已注册的登录邮箱即可；对方需先有账号。左轨头像与这份名单同源。</span></InfoTip></div>
-      <div className="sc-settings-tools">{onRefresh && <button className="sc-settings-icon-button" type="button" aria-label="刷新成员" title="刷新" disabled={busy} onClick={onRefresh}><RefreshCw size={15} aria-hidden="true"/></button>}</div>
+      <div className="sc-settings-tools">
+        {onRefresh && <button className="sc-settings-icon-button" type="button" aria-label="刷新成员" title="刷新" disabled={busy} onClick={onRefresh}><RefreshCw size={15} aria-hidden="true"/></button>}
+        {onInvite && <button className="sc-settings-outline" type="button" aria-expanded={inviteOpen} onClick={onInvite}>邀请</button>}
+      </div>
     </header>
     <div className="sc-settings-group">{children}</div>
-    {notice && <p className="sc-cloud-message" role="status">{notice}</p>}
+    {notice && <p className={alert ? 'sc-account-error' : 'sc-account-footnote'} role={alert ? 'alert' : 'status'}>{notice}</p>}
   </section>;
 }

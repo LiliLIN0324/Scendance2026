@@ -49,6 +49,17 @@ function setup(bound = false) {
   return { ...view, props, onApplyLayout };
 }
 describe('personal cloud assets', () => {
+  it('uses a stored preview image and leaves an empty square when the item has none', async () => {
+    setup();
+    const empty = await screen.findByRole('button', { name: '预览 木椅' });
+    expect(empty.querySelector('img')).toBeNull();
+    expect(empty.querySelector('.sc-assets-thumb-empty')).toBeTruthy();
+    expect(empty.textContent ?? '').not.toMatch(/预览/);
+    requests.mockResolvedValueOnce([{ ...asset, name: '有图的椅', metadata: { previewUrl: 'https://cdn.example/chair.webp' } }]);
+    fireEvent.click(screen.getByRole('button', { name: '刷新' }));
+    const pictured = await screen.findByRole('button', { name: '预览 有图的椅' });
+    expect(pictured.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example/chair.webp');
+  });
   it('only lists personal assets without another AI generation entry or requests', async () => {
     setup(); await screen.findByRole('button', { name: '预览 木椅' });
     expect(screen.getByRole('tab', { name: /^我的生成/ }).getAttribute('aria-selected')).toBe('true');

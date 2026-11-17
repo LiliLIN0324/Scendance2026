@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BackendSession } from '@/lib/backend-session';
+import { backendFailureText, type BackendSession } from '@/lib/backend-session';
 import { useBackendSession } from '@/lib/backend-session';
 import { listMembers, preferredStudio, type StudioMember } from '@/lib/workspace-api';
 
@@ -16,6 +16,14 @@ export interface TeamSnapshot {
 }
 
 const EMPTY: TeamSnapshot = { userId: '', studioId: '', teamName: '', members: [], loading: false, error: '' };
+
+/** SceneApiError 的 message 就是错误码。路由不存在时不要把 ROUTE_NOT_FOUND 原样贴进面板。 */
+function teamLoadError(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string') {
+    return backendFailureText(error);
+  }
+  return error instanceof Error && error.message ? error.message : '团队加载失败，点击重试。';
+}
 
 const listeners = new Set<() => void>();
 
@@ -59,7 +67,7 @@ export function useTeam(controller: BackendSession): TeamSnapshot & { refresh():
         setTeam({ userId, studioId, teamName: studio?.name ?? '', members, loading: false, error: '' });
       } catch (error) {
         if (request !== requestRef.current) return;
-        setTeam({ ...EMPTY, userId, error: error instanceof Error ? error.message : '团队加载失败，点击重试。' });
+        setTeam({ ...EMPTY, userId, error: teamLoadError(error) });
       }
     })();
   }, [controller, userId, projectStudioId, revision]);
