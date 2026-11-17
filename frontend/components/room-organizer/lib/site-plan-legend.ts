@@ -7,14 +7,14 @@
  * - 配色与图标消费 `outdoor-plan-tokens`（图层色/三类动线色/分区语义默认色），
  *   与画布渲染同一来源，保证「图例即所见」。
  *
- * 结构：分组（边界/分区/设施/动线/出入口/人员/车辆/测量），组内按出现语义聚合，
+ * 结构：分组（边界/墙体/分区/设施/动线/出入口/人员/车辆/测量），组内按出现语义聚合，
  * 每条 = { icon, swatch, label, count, detail }。顺序稳定（契约枚举序 / 首次出现序），
  * 空组不输出（只画了边界的全案只有边界一组）。
  */
 
 import type { PlanningIconName } from '@/lib/outdoor-plan-tokens';
 import { PLANNING_ICONS } from '@/lib/outdoor-plan-tokens';
-import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_ZONE_COLORS } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_LAYER_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, PLANNING_WALL_COLOR, PLANNING_WALL_KIND_COLORS, PLANNING_ZONE_COLORS } from '@/lib/outdoor-plan-tokens';
 import {
   planRingAreaM2,
   planRouteCarriers,
@@ -115,7 +115,7 @@ export function polylineHalfLengthPoint(points: readonly PlanPoint[]): PlanPoint
 
 /**
  * 全案图例（同一 SitePlan 快照来源，顺序稳定）：
- * 边界 → 分区（按语义） → 设施（按模板） → 动线（按三类） → 出入口（按类型） → 人员（按岗位）
+ * 边界 → 墙体（按类型） → 分区（按语义） → 设施（按模板） → 动线（按三类） → 出入口（按类型） → 人员（按岗位）
  * → 车辆（按车型，2026-11-16 #122 独立成组，不并进人员） → 测量（按三类）。
  * 空组不输出；设施/人员/测量的聚合键按首次出现序（无契约枚举序可用）。
  */
@@ -135,7 +135,25 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     }],
   });
 
-  // 2) 功能分区：按语义聚合（契约枚举序），色取分区显式色否则语义默认色。
+  // 2) 墙体（M2 walls，2026-11-17）：按 kind 分外/内墙两桶，缺 kind 归「墙体」。
+  //    count = 段数，detail = 总长；实体显式 color 优先，否则用墙体两型色。
+  //    无墙不出组；图面墙线仍由画布后续消费，本组只保证图例/统计同口径。
+  const wallEntries: PlanLegendEntry[] = [];
+  for (const [kind, label] of [['exterior', '外墙'], ['interior', '内墙'], [undefined, '墙体']] as const) {
+    const walls = (plan.walls ?? []).filter(w => w.kind === kind);
+    if (walls.length === 0) continue;
+    const lengthM = walls.reduce((sum, w) => sum + planRouteLengthM(w.points), 0);
+    wallEntries.push({
+      icon: iconOf('brick-wall'),
+      swatch: walls[0]!.color ?? (kind ? PLANNING_WALL_KIND_COLORS[kind] : PLANNING_WALL_COLOR),
+      label,
+      count: walls.length,
+      detail: `共 ${formatLengthM(lengthM)}`,
+    });
+  }
+  if (wallEntries.length > 0) groups.push({ title: '墙体', entries: wallEntries });
+
+  // 3) 功能分区：按语义聚合（契约枚举序），色取分区显式色否则语义默认色。
   const zoneEntries: PlanLegendEntry[] = [];
   for (const semantic of planZoneSemantics) {
     const zones = plan.zones.filter(z => z.semantic === semantic);
@@ -152,7 +170,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
   }
   if (zoneEntries.length > 0) groups.push({ title: '功能分区', entries: zoneEntries });
 
-  // 3) 设施：按模板聚合（首次出现序）；显式 color 优先，否则设施图层色。
+  // 4) 设施：按模板聚合（首次出现序）；显式 color 优先，否则设施图层色。
   const facilityKeys: string[] = [];
   const facilityMap = new Map<string, { count: number; color: string | undefined; sizes: Set<string> }>();
   for (const facility of plan.facilities) {
@@ -184,7 +202,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     });
   }
 
-  // 4) 动线：按载体聚合（2026-11-16 用户：图例判 carrier 不判 kind）。
+  // 5) 动线：按载体聚合（2026-11-16 用户：图例判 carrier 不判 kind）。
   //    色与画布同源：直接取 `route-carrier-color` 的映射，不再自己维护一份。
   const routeEntries: PlanLegendEntry[] = [];
   for (const carrier of planRouteCarriers) {
@@ -203,7 +221,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
   }
   if (routeEntries.length > 0) groups.push({ title: '动线', entries: routeEntries });
 
-  // 5) 出入口：按类型聚合（入口/出口/两用）。三条各用自己的 kind 色，
+  // 6) 出入口：按类型聚合（入口/出口/两用）。三条各用自己的 kind 色，
   // 与画布芯片/工具箱一致——图例里三行不再共用同一个灰色块。
   const nodeEntries: PlanLegendEntry[] = [];
   for (const [kind, label] of [['entry', '入口'], ['exit', '出口'], ['both', '出入口']] as const) {
@@ -222,7 +240,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
   }
   if (nodeEntries.length > 0) groups.push({ title: '出入口', entries: nodeEntries });
 
-  // 6) 人员：按岗位聚合（首次出现序），count 是人数合计，detail 点位数。
+  // 7) 人员：按岗位聚合（首次出现序），count 是人数合计，detail 点位数。
   const roleKeys: string[] = [];
   const roleMap = new Map<string, { people: number; posts: number }>();
   for (const worker of plan.workers) {
@@ -253,7 +271,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     });
   }
 
-  // 7) 车辆：独立一组（2026-11-16 #122），**不并进人员**。
+  // 8) 车辆：独立一组（2026-11-16 #122），**不并进人员**。
   //    按车型聚合（首现序），count = 台数合计，detail = 点位数；颜色与动线图例同源
   //    （CARRIER_COLOR_KIND.vehicle → PLANNING_ROUTE_KIND_COLORS.vehicle）。
   //    同一车型里只要有一处实体没写 modelSlug，这一行就标「待补模型」——
@@ -287,7 +305,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     });
   }
 
-  // 8) 测量：距离（含多段折线，历史 kind='path' 同口径）汇总长度、面积汇总面积；
+  // 9) 测量：距离（含多段折线，历史 kind='path' 同口径）汇总长度、面积汇总面积；
   // 2026-11-17 路径入口下线后，折线一律读作距离，不再单出「路径」一栏。
   const measureEntries: PlanLegendEntry[] = [];
   for (const kind of ['distance', 'area'] as const) {
