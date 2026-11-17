@@ -914,6 +914,17 @@ export function useOutdoorAgentWorkflow(input: {
     }
     setBusy(false);
   }
+  /**
+   * 搜索选区画在地图上，但不是 plan.boundary。核对（以及范围未确认时的下一步）
+   * 把它送进现有的范围确认卡：确认后才写入红线，取消则选区还在。
+   */
+  function promoteVisibleRange(): boolean {
+    const visible = callbacks.current.bridge()?.visibleActivityRange?.() ?? null;
+    if (!visible || !checkBoundaryRing(visible.boundary).ok) return false;
+    if (!callbacks.current.bridge()?.getPlan()) return false;
+    offerBoundary(visible.anchor, visible.boundary, visible.name.trim() || "当前地图范围");
+    return true;
+  }
   function manualBoundary(expected?: OutdoorWorkflowProposal) {
     if (expected && proposalRef.current !== expected) {
       status("这张确认卡已过期，未应用其他任务的提案。", "blocked");
@@ -1092,11 +1103,17 @@ export function useOutdoorAgentWorkflow(input: {
       // 2026-11-17 玉泉鱼跃实测卡点：已确认场地后，一次 search（哪怕只是模型误判）不再
       // 静默清掉 confirmedBoundary——候选照常列出，但换场必须走候选确认卡显式换锚；
       // 用户不理候选直接继续说需求，仍能按已确认范围推进布局。
-      const confirmed = Boolean(stateRef.current.confirmedBoundary);
+      // 同一天补：画布上已有红线、待确认候选或可见选区时，不要把任务卡打回「搜索目标地点」。
+      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
+      const pending = stateRef.current.pendingBoundary;
+      const hasRange = Boolean(stateRef.current.confirmedBoundary)
+        || Boolean(planNow && checkBoundaryRing(planNow.boundary).ok)
+        || Boolean(pending && checkBoundaryRing(pending.boundary).ok)
+        || Boolean(callbacks.current.bridge()?.visibleActivityRange?.());
       persist({
         ...stateRef.current,
-        stage: "place",
-        ...(confirmed ? {} : { confirmedBoundary: null, completed: [] }),
+        stage: hasRange ? stateRef.current.stage : "place",
+        ...(hasRange ? {} : { confirmedBoundary: null, completed: [] }),
       });
       callbacks.current.search(turn.query);
       return;
@@ -1244,6 +1261,11 @@ export function useOutdoorAgentWorkflow(input: {
           setBusy(false);
           return;
         }
+        // 红线还没落盘，但地图上有搜索选区：用同一张确认卡把它写进 plan.boundary。
+        if (promoteVisibleRange()) {
+          setBusy(false);
+          return;
+        }
         // 没有候选也没有有效边界时，不把任务打回搜索、不清任何已画几何——
         // 留在核对阶段并直接告诉用户下一步：手画或重新搜索。
         persist({
@@ -1264,6 +1286,10 @@ export function useOutdoorAgentWorkflow(input: {
         // 对检索不到轮廓的 POI 就是 85 秒白等）。画布上已有合法闭合边界时直接出确认卡，
         // 一键回到主流程；没有边界也留在核对阶段，给手画/重搜两条路，不把任务打回搜索。
         if (!checkBoundaryRing(plan.boundary).ok) {
+          if (promoteVisibleRange()) {
+            setBusy(false);
+            return;
+          }
           persist({
             ...stateRef.current,
             stage: "scope",

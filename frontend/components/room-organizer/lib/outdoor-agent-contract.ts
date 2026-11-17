@@ -310,6 +310,15 @@ export interface OutdoorAgentBridge {
     anchor: NonNullable<SitePlanData["anchor"]>,
     boundary: SitePlanData["boundary"],
   ): void;
+  /**
+   * 地图上看得见、但还没写进 `plan.boundary` 的闭合活动范围（搜索选区）。
+   * 没有、或只是道路折线时返回 null。核对用它走现有确认卡，不另起一套写入。
+   */
+  visibleActivityRange?(): {
+    anchor: NonNullable<SitePlanData["anchor"]>;
+    boundary: SitePlanData["boundary"];
+    name: string;
+  } | null;
   applyVenue(
     anchor: NonNullable<SitePlanData["anchor"]>,
     boundary: SitePlanData["boundary"],
