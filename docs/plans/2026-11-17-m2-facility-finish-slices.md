@@ -99,11 +99,19 @@
 | --- | --- | --- |
 | CSV | ✅ | `wallRows` 补充行，14 列对齐 |
 | GeoJSON | ✅ | 墙体 `LineString` + 长/厚/高/zone |
-| PNG / PDF（print） | ❌ | 快照来自 2D 画布，画布尚未消费 `plan.walls`；PDF 统计与图例也无墙体 |
+| PNG / PDF（print） | ⚠️ 图面墙线缺 | 快照来自 2D 画布，画布尚未消费 `plan.walls`；图例清单自 `buildPlanLegend` 起已带墙体组（§7.4） |
 | DXF / SVG | ❌（plan 级） | `plan-export/dxf|svg` 是室内 `layout` 导出，已含 `interiorWalls`；plan 级尚无这两种导出器 |
 | download | — | 通用下载 helper，不是一种导出格式 |
 
 结论：墙体在**数据导出**（CSV/GeoJSON）已对称；图纸类缺口在画布渲染与 plan 级 DXF/SVG 导出器，属 UI/新功能，不在纯函数层收口。
+
+### 7.4 图例墙体组（2026-11-17）
+
+`buildPlanLegend` 增「墙体」组：按 `kind` 分外墙/内墙两桶，缺类型归「墙体」；`count` = 段数、`detail` = 总长，实体显式 `color` 优先，否则用 `PLANNING_WALL_KIND_COLORS`。无墙不出组。
+
+PDF 导出、PNG 图例、plan-share 页、画布图例共用该函数，一处补齐四处生效；`site-plan-legend.test.ts` +3（出组/无墙空组/分桶与段数长度、显式色）。
+
+残留：图面墙线仍未画（画布快照不含 `plan.walls`），plan 级 DXF/SVG 仍未建。
 
 ## 8. 旧 layout → plan 迁移覆盖登记
 
