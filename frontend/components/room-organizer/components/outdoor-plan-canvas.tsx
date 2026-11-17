@@ -5201,7 +5201,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }}
       >
         {input.icon}
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: tile ? 'center' : undefined }}>{input.label}</span>
+        {/* 2026-11-18 用户口径：瓦片标签最多 5 个字，超出省略号，全名 hover 看（title 由各行自带）。 */}
+        <span style={{ flex: 1, minWidth: 0, maxWidth: tile ? '5em' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: tile ? 'center' : undefined }}>{input.label}</span>
         {input.trailing}
       </div>
     );
@@ -5430,7 +5431,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 2026-11-18 全局网格：物料条目全是调色板型，跟随开关切瓦片网格。
     return (
       <div style={oneplanGrid
-        ? { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+        ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
         : { display: 'flex', flexDirection: 'column', gap: 2 }}>
         {items.map(entry => {
           // 2026-11-12 搜索结果里的活动包物件：彩色 chip + pickPackEntry 语义分派。
@@ -12083,7 +12084,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                               })}
                               {/* 2026-11-18 全局网格：分区色板跟随 oneplanGrid 开关（开关在搜索框旁），不再单独设钮。 */}
                               <div style={oneplanGrid
-                                ? { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                                ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
                                 : { display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 {planZoneSemantics.map(s => {
                                   const zoneActive = mode === 'zone' && zoneSemantic === s;
@@ -12104,7 +12105,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {openLibrarySubgroups.includes('areas:入口和通道图标') && (
                             <>
                               <div style={oneplanGrid
-                                ? { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                                ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
                                 : { display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 {NODE_KIND_OPTIONS.map(option => {
                                   const nodeActive = mode === 'node' && nodeKind === option.kind;
@@ -12114,6 +12115,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                     label: option.label,
                                     active: nodeActive,
                                     onClick: () => armOrDisarm(nodeActive, () => { nodeKindRef.current = option.kind; setNodeKind(option.kind); draw(); startAreaTool('node'); }),
+                                    title: option.label,
                                     icon: nodeKindToolIcon(option.kind),
                                     tile: true,
                                   });
@@ -12125,7 +12127,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '路线', label: '路线', count: planRouteKinds.length, icon: 'route' })}
                           {openLibrarySubgroups.includes('areas:路线') && (
                             <div style={oneplanGrid
-                              ? { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                              ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
                               : { display: 'flex', flexDirection: 'column', gap: 2 }}>
                               {planRouteKinds.map(k => {
                                 const routeActive = mode === 'route' && routeKind === k && !routePresetRef.current;
@@ -12135,6 +12137,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 label: planRouteKindLabels[k],
                                 active: routeActive,
                                 onClick: () => armOrDisarm(routeActive, () => { routeKindRef.current = k; setRouteKind(k); draw(); startAreaTool('route'); }),
+                                title: planRouteKindLabels[k],
                                 tile: true,
                                 icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 16, height: 5, borderRadius: 3, background: PLANNING_ROUTE_KIND_COLORS[k] }} /></span>,
                               });
@@ -12152,7 +12155,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {renderOneplanSubgroupHeader({ sectionId: 'vehicles', key: 'plan-vehicles', label: PLAN_VEHICLE_ROW_LABEL, count: VEHICLE_TYPES.length })}
                           {openLibrarySubgroups.includes('vehicles:plan-vehicles') && (
                             <div style={oneplanGrid
-                              ? { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
+                              ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
                               : { display: 'flex', flexDirection: 'column', gap: 2 }}>
                               {VEHICLE_TYPES.map(type => renderOneplanItemRow({
                                 key: `plan-vehicle-${type.id}`,
