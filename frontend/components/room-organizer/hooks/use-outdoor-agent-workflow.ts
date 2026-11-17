@@ -37,6 +37,7 @@ import { buildSessionReport } from "../lib/outdoor-session-report";
 import { CASE_IDS, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
 import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
 import { formatGapList } from "../lib/outdoor-release-gaps";
+import { ledgerToCsv } from "../lib/outdoor-release-csv";
 import {
   bookToRecord,
   markSeen,
@@ -2748,6 +2749,8 @@ export function useOutdoorAgentWorkflow(input: {
     },
     /** 待补清单：哪几条还差什么，一条一行（空台账写“没有台账”，不写“无缺口”）。 */
     releaseGaps: () => formatGapList(currentRelease().bundle.ledger),
+    /** 台账 CSV：表头 + 11 行，五列无“结论”（结论只由状态卡算）。 */
+    releaseCsv: () => ledgerToCsv(currentRelease().bundle.ledger),
     /** 逐条标一次走查：返回 null 表示编号不合法（这一标没生效）。 */
     recordWalkthrough: (id: number, state: BrowserEvidence) => {
       const next = markSeen(walkthroughBook.current, id, state);

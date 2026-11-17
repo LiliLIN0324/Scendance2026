@@ -2256,3 +2256,17 @@ it("待补清单：标一条并声明云端后，清单就少一条，末行只�
   expect(after).toContain("三类全绿 1 条");
   expect(after).not.toContain("可发布（");
 });
+
+it("台账 CSV：表头五列 + 11 行，标了浏览器与云端就分别落列", () => {
+  const before = flow.releaseCsv().split("\n");
+  expect(before).toHaveLength(12);
+  expect(before[0]).toBe("编号,用例,固定数据,浏览器,云端");
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = flow.releaseCsv().split("\n");
+  const case2 = after.find((line: string) => line.startsWith("2,")) as string;
+  expect(case2.endsWith(",有,pass,pass")).toBe(true);
+  expect(after.join("\n")).not.toContain("可发布");
+});
