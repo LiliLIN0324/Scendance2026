@@ -116,6 +116,8 @@ import {
   hexWithAlpha,
   isLayerVisible,
   lngLatToEnu,
+  placedItemsNeedsRedlineHint,
+  placedRedlineCount,
   planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
@@ -166,6 +168,7 @@ import {
   type PlanEditIssue,
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
+import { planBoundaryFromSearchArea } from '../lib/outdoor-venue-sync';
 import { findZoneBoundsOverflow, zoneOverflowReason, type ZoneBoundsOverflow } from '../lib/plan-zone-bounds';
 import {
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
@@ -2270,6 +2273,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       lockedLayersRef.current = unlocked;
       setLockedLayers(unlocked);
       setEditMessage('已自动解除用地红线锁定（选了红线工具就是要改它）；画完可在左侧「用地红线」行再锁上。');
+    }
+    // 还没红线、但地图上有搜索选区：把这块闭合范围放进红线草稿。
+    // 点起点闭合走现有 closeDraft（写入 plan.boundary，再出确认卡）；Esc 仍是取消。
+    if (next === 'boundary' && planRef.current.boundary.length < 3) {
+      const seeded = planBoundaryFromSearchArea(searchArea ?? null, planRef.current.anchor);
+      if (seeded) {
+        draftRef.current = seeded;
+        setEditMessage('地图上的范围已放进红线草稿。点一下起点闭合，确认后写入方案；Esc 取消。');
+      }
     }
     draw();
     notifyPlanDraftChanged();
@@ -11792,7 +11804,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{openFolders['boundary'] !== false ? '▾' : '▸'}</span>
                   <BoundarySwatch size={16} />
                   <span style={{ flex: 1 }}>用地红线</span>
-                  <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{plan.boundary.length}</span>
+                  <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{placedRedlineCount({
+                    boundaryCount: plan.boundary.length,
+                    searchArea,
+                    previewBoundaryCount: workflowScopePreview ? (workflowPreview?.boundary.length ?? 0) : 0,
+                  })}</span>
                 </button>
                 <input
                   type="checkbox"
@@ -11819,11 +11835,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </div>
               {openFolders['boundary'] !== false && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {plan.boundary.length === 0 ? (
+                  {placedItemsNeedsRedlineHint({
+                    boundaryCount: plan.boundary.length,
+                    searchArea,
+                    previewBoundaryCount: workflowScopePreview ? (workflowPreview?.boundary.length ?? 0) : 0,
+                  }) ? (
                     <div style={{ paddingLeft: 30, opacity: 0.7, fontSize: PLANNING_TYPOGRAPHY.hint }}>
                       还没画红线——物件库 → 区域 → 用地红线
                     </div>
-                  ) : (
+                  ) : plan.boundary.length > 0 ? (
                     renderOneplanItemRow({
                       key: 'layer-entity-boundary',
                       testId: 'layer-entity-boundary',
@@ -11835,6 +11855,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         centerViewOn({ x: cx, y: cy });
                       },
                       title: '点击定位到红线',
+                      icon: <BoundarySwatch size={16} />,
+                    })
+                  ) : (
+                    renderOneplanItemRow({
+                      key: 'layer-entity-visible-range',
+                      testId: 'layer-entity-visible-range',
+                      label: (workflowScopePreview && (workflowPreview?.boundary.length ?? 0) >= 3)
+                        ? `候选活动范围（${workflowPreview!.boundary.length} 点）`
+                        : (searchArea?.label || '地图上的活动范围'),
+                      active: false,
+                      onClick: () => {
+                        const preview = workflowScopePreview && (workflowPreview?.boundary.length ?? 0) >= 3
+                          ? workflowPreview!.boundary
+                          : null;
+                        const anchor = plan.anchor;
+                        const overlay = !preview && searchArea && searchArea.kind !== 'line' && anchor
+                          ? searchArea.polygon.map(([lng, lat]) => lngLatToEnu(lng, lat, anchor.lng, anchor.lat))
+                          : null;
+                        const pts = preview ?? overlay;
+                        if (!pts?.length) return;
+                        centerViewOn({
+                          x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+                          y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+                        });
+                      },
+                      title: '点击定位到地图上的活动范围；核对后写入用地红线',
                       icon: <BoundarySwatch size={16} />,
                     })
                   )}

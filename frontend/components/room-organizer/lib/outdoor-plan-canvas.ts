@@ -129,6 +129,33 @@ export function lngLatToEnu(lng: number, lat: number, anchorLng: number, anchorL
   };
 }
 
+/**
+ * 已放置物件面板的红线计数。
+ * `plan.boundary` 仍是红线正源；它为空时，地图上已经看得见的闭合范围
+ *（核对预览，或搜索选区）也算「有范围」，面板不要再写「还没画红线」。
+ * 道路折线（kind = line）不是闭合用地，不计入。
+ */
+export function placedRedlineCount(input: {
+  boundaryCount: number;
+  searchArea?: { polygon: readonly unknown[]; kind?: 'area' | 'line' } | null | undefined;
+  previewBoundaryCount?: number | undefined;
+}): number {
+  if (input.boundaryCount > 0) return input.boundaryCount;
+  if ((input.previewBoundaryCount ?? 0) >= 3) return input.previewBoundaryCount ?? 0;
+  const area = input.searchArea;
+  if (area && area.kind !== 'line' && area.polygon.length >= 3) return area.polygon.length;
+  return 0;
+}
+
+/** 没有任何红线、也没有可核对的可见闭合范围时，才提示去画红线。 */
+export function placedItemsNeedsRedlineHint(input: {
+  boundaryCount: number;
+  searchArea?: { polygon: readonly unknown[]; kind?: 'area' | 'line' } | null | undefined;
+  previewBoundaryCount?: number | undefined;
+}): boolean {
+  return placedRedlineCount(input) === 0;
+}
+
 /** 图层可见性：隐藏的层整层跳过，不影响全案统计（评审稿 §4 口径）。 */
 export type LayerVisibility = Record<PlanningLayerKind, boolean>;
 
