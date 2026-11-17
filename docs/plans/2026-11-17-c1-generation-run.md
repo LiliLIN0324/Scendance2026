@@ -415,7 +415,11 @@ text 刚建/刚未知    -> 不动
 - **没有装到生产库**：当前运行环境禁止读取凭据/敏感路径，我拿不到数据库连接串或 service role key，
   无法执行 `create extension`、写 Vault、`cron.schedule`。脚本本身已在本地容器实测通过，可直接在 Dashboard SQL Editor 粘贴执行。
 - **属性卡遮挡没有改代码**：宿主容器不在画布文件里（`outdoor-plan-canvas.tsx` 只负责按钮），
-  盲改 z-index 可能压坏画布交互。修法仍是上一轮那两条，且必须用 `elementsFromPoint` 验命中，不能用截图。
+  盲改 z-index 可能压坏画布交互。
+  子智能体静态排查给出的结论自相矛盾：它一边说按钮与底图 canvas 同在 overlay 子树内（那样 `zIndex:6` 应该已经压在 auto 之上），
+  一边又建议把 6 提到 33。两者不能同时成立，说明真实父节点还没确认——很可能是 `PanelPortal` 把卡挂到了
+  `#outdoor-inspector-host`，命中栈里的 canvas 只是把它盖住了。
+  所以本轮不动代码：先用 `elementsFromPoint` 在真实浏览器里确认"按钮的 offsetParent 到底是谁"，再决定改哪一层。
 
 ## 生产执行顺序（建议照抄）
 
