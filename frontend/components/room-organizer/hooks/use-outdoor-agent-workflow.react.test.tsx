@@ -277,7 +277,10 @@ it("在地图上手画分区按钮直接进入绘制模式", async () => {
   const beginDrawing = vi.fn(() => true);
   bridge.beginDrawing = beginDrawing;
   const buttons = [...host.querySelectorAll("button")];
-  expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(true);
+  // 2026-11-18 用户实测：没给分区用途时不挂「生成分区预览」空头按钮（点了只会撞红卡反问），
+  // 改为如实引导；给过用途后按钮才出现。
+  expect(buttons.some(button => button.textContent?.trim() === "生成分区预览")).toBe(false);
+  expect(host.textContent).toContain("还没说要分哪些区");
   const draw = buttons.find(button => button.textContent?.trim() === "在地图上手画分区");
   await act(async () => { draw!.click(); });
   expect(beginDrawing).toHaveBeenCalledWith("zone");
