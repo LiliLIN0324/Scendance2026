@@ -7,6 +7,7 @@ import { useBackendSession, type BackendSession, type GenerationCapabilities, ty
 import { AholoGuideCard } from './aholo-guide-card';
 import { createGlbCatalogItem, ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { engineLabel, engineSupports, modeSupports, plainFailure, submitModelJob, uploadModelReference, type GenerationEngine, type GenerationMode } from '../lib/model-generation';
+import { generationFailureText } from '../lib/generation-failure';
 import type { CatalogItem } from '../lib/types';
 
 const labels: Record<GenerationJob['state'], string> = {
@@ -282,14 +283,18 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
           <label className="sc-field" key={key}>{['宽度 / m', '进深 / m', '高度 / m'][index]}<input aria-label={`生成模型${['宽度', '进深', '高度'][index]}`} type="number" min={0.1} max={50} step={0.1}
             value={Number.isFinite(dimensions[key]) ? dimensions[key] : ''} onChange={event => setDimensions(current => ({ ...current, [key]: event.target.valueAsNumber }))}/></label>)}</div>
         <p className="sc-note">尺寸为你设定的场地摆放尺寸，请按实际物料核对。加入后使用云端保存。</p>
-        <ul className="sc-generated-tasks">{jobs.map(job => <li className="sc-generated-card" key={job.id}>
+        <ul className="sc-generated-tasks">{jobs.map(job => {
+          // 失败原因单独一行：供应商的原话（额度不足、内容被拦）比「生成失败」有用得多。
+          const failure = generationFailureText(job);
+          return <li className="sc-generated-card" key={job.id}>
           <span className="sc-generated-thumb" aria-hidden="true"><Box size={18}/></span>
           <span className="sc-generated-body"><strong>{job.prompt}</strong><span role="status">{labels[job.state]}</span>
+            {failure && <span className="sc-generated-reason">{failure}</span>}
             <span className="sc-generated-meta">{jobEngineLabel(job)} · {jobTime(job.updated_at)}</span></span>
           {['ready','added'].includes(job.state)&&job.kind==='texture'&&<button type="button" className="sc-button" disabled={!projectId||cloud.writeBlocked||!onVariantReady} onClick={()=>previewVariant(job)}>预览纹理版本</button>}
           {['ready', 'added'].includes(job.state) && job.kind!=='texture' && <button type="button" className="sc-button" disabled={!projectId || cloud.writeBlocked || disabled || adding !== null || !validSize}
             onClick={() => void add(job)}>{adding === job.id ? '正在加载…' : '加入场地预览'}</button>}
-        </li>)}</ul>
+        </li>;})}</ul>
       </>}
       {!jobs.length&&<p className="sc-note">暂无历史生成任务。</p>}
     </>}

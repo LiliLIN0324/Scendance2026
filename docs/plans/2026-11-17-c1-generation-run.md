@@ -502,3 +502,38 @@ text 刚建/刚未知    -> 不动
 - 没有改 `generation_single_active_idx`：如上，等你拍板。
 - 没有动前端部署：并行会话正在推 Cloudflare 正式站，本轮的 UI 修复只进分支与 PR，不抢别名。
 - 没有补 `AI_MAX_REQUEST_CENTS`：那是 Agent 提案链的另一本账，补上等于开启另一条花钱通道。
+## 第四轮：把供应商原话交给用户（2026-11-17）
+
+第三轮把 `no credits` 查出来并落进了 `provider_usage.vendorError`，但那一行字仍然只有查库的人看得见：界面上失败任务只显示「生成失败」或「云任务未成功」。这一轮把那句话接到用户面前。
+
+### 改了什么
+
+新增 `frontend/components/room-organizer/lib/generation-failure.ts`：只读 `provider_usage.vendorError`，把供应商原话翻成一句能照着做的中文。
+
+- 认识的几种：`no credits` → 额度不足，需要先给那个服务商账号充值；密钥类（`invalid api key` / `unauthorized` 等）→ 检查设置里的服务商密钥；内容审核类（`content policy` / `sensitive` 等）→ 换个描述再试；限流类（`rate limit` / `too many` 等）→ 稍后再试；模型不认（`no such model` 等）→ 检查设置里的模型名。
+- 不认识的：带上供应商自己的拒绝码原样显示（截断到 200 字，避免后端塞进一整段内容把版式撑坏）。
+- 形状不认识时（`provider_usage` 是字符串、`vendorError` 不是对象、字段类型不对）：一律当作「没有原话」，退回按 `error_code` 的通用说法。**宁可少说，不可猜** —— 猜出来的原因会把人引到错的操作上去。
+
+接了三个显示点：
+
+1. `frontend/components/room-organizer/panels/generated-model-library.tsx`：历史模型列表里每条失败任务多一行原因（新增 `.sc-generated-reason`，用告警色与状态字区分，不会被当成普通备注一带而过）。
+2. `frontend/components/room-organizer/lib/facility-generated-models.ts`：户外属性卡轮询到失败时的文案。原来固定是「云任务未成功，请核对生成记录与费用；不会自动重发。」，现在把原因放在前面，**「不会自动重发」与「请核对生成记录与费用」两句原样保留** —— 那两句是防重复扣费的闸门，不能被替换掉。
+3. `frontend/components/room-organizer/components/outdoor-facility-generate.tsx`：刷新页面后重新核对原任务时走的那条路，同一套说法。
+
+另外，`UNKNOWN_SUBMISSION_NOTICE`（提交结果未知的那句提示）从 `model-generation.ts` 搬到新模块再转出，两处引用同一条，避免它在两个界面上长成两句不一样的话。
+
+### 为什么这次不动服务端
+
+`provider_usage` 本来就在客户端拿到的 job 行里（`frontend/lib/backend-session.ts` 的 `generationJobSchema`），服务端这次一个字没改，因此不需要重新部署函数，也不存在「新字段读不到」的风险。改动范围只有前端。
+
+### 验证
+
+- 新增 `frontend/components/room-organizer/lib/generation-failure.test.ts`：额度不足、密钥不对、内容被拦、请求过多、模型不认、超长截断、形状不认识、非失败态不出文案、submit_unknown 固定文案 —— 9 条。
+- `tsc --noEmit`（Node 24）无输出。
+
+### 这一轮没有做的
+
+- **模型还是没有生成出来**：这一轮只解决「看得见原因」；账号没额度得自己充值，充完重新点一次生成才会真的出模型。
+- **前端没有部署**：并行会话正在推 Cloudflare 正式站，本轮的界面改动只进分支与 PR，不抢别名。
+- 只接了生成这一条路：Agent 提案与场地重建那两条链的失败仍然只看各自的错误码表。
+- 没有做多语言：现在只按关键词翻成中文，遇到没见过的说法就原样显示英文。
