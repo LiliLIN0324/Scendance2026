@@ -24,8 +24,8 @@ vi.mock('../contexts', () => ({
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
-function environment(preview: SplatPreviewState = { status: 'idle', assetId: '', name: '' }, current: StoredEnvironment | null = null) {
-  return { preview, current, environments: current ? [current] : [], floors: [{ id: 'ground', name: '活动场地' }], onSelect: vi.fn(), onRemove: vi.fn(), onSetFloor: vi.fn(), onClear: vi.fn() };
+function environment(preview: SplatPreviewState = { status: 'idle', assetId: '', name: '' }, current: StoredEnvironment | null = null, thumbnails?: Readonly<Record<string, string>>) {
+  return { preview, current, environments: current ? [current] : [], floors: [{ id: 'ground', name: '活动场地' }], onSelect: vi.fn(), onRemove: vi.fn(), onSetFloor: vi.fn(), onClear: vi.fn(), ...(thumbnails ? { thumbnails } : {}) };
 }
 
 describe('SpacePanel', () => {
@@ -51,10 +51,11 @@ describe('SpacePanel', () => {
     expect(screen.queryByText('还没有已扫描的真实场地')).toBeNull();
     const item = screen.getByLabelText('应用真实场地 午后咖啡馆');
     expect(screen.getByText(/12\.4 × 8\.6 m/)).toBeTruthy();
-    // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」——扫描也是 16:10 卡，不再是一行索引。
-    expect(item.classList.contains('sc-space-sample')).toBe(true);
-    expect(item.querySelector('.sc-scan-card-shot')).toBeTruthy();
-    expect(item.querySelector('.sc-scan-card-meta')?.textContent).toContain('12.4 × 8.6 m');
+    // 没有截到止帧就不假扮缩略图：收成可点的索引行，名称与尺寸照常可见。
+    expect(item.classList.contains('sc-scan-row')).toBe(true);
+    expect(item.querySelector('img')).toBeNull();
+    expect(document.querySelector('.sc-scan-card-shot')).toBeNull();
+    expect(item.textContent).toContain('12.4 × 8.6 m');
     fireEvent.click(item);
     expect(onPickScan).toHaveBeenCalledWith(expect.objectContaining({
       assetId: '00000000-0000-4000-8000-000000000000',
@@ -63,6 +64,16 @@ describe('SpacePanel', () => {
     }));
     // 演示场景仍留在环境切换里，不混进真实场地列表。
     expect(screen.queryByLabelText(/应用真实场地 .*宴会厅 A/)).toBeNull();
+  });
+
+  it('shows the captured cover as a large frame when one exists', () => {
+    const assetId = '00000000-0000-4000-8000-000000000002';
+    const cover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==';
+    rememberAholoAsset({ assetId, kind: 'spz', name: '有封面的场地', bytes: 20_000_000, savedAt: 1 });
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={environment(undefined, null, { [assetId]: cover })} onPickScan={vi.fn()}/>);
+    const frame = screen.getByLabelText('应用真实场地 有封面的场地');
+    expect(frame.classList.contains('sc-scan-card')).toBe(true);
+    expect(frame.querySelector('img')?.getAttribute('src')).toBe(cover);
   });
 
   it('marks the remembered environment as current and can remove it', () => {

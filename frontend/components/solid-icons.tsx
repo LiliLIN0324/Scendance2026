@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from 'react';
+import { forwardRef, useId, type HTMLAttributes } from 'react';
 import { MaterialSymbol } from '@/components/room-organizer/panels/material-symbol';
 
 export interface SolidIconProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
@@ -114,82 +114,201 @@ export const UsersRound = makeSolidIcon('groups');
 export const Video = makeSolidIcon('videocam');
 export const X = makeSolidIcon('close');
 
-/** 自绘左轨工具图标：不走 Material 字形，24 网格、currentColor、paper 镂空。 */
+/**
+ * 左轨自绘标记（2026-11-18 补救）。
+ * 四枚工具标与 Bingo 环同为 24 网格。未选中：单线 1.65、圆端、`--ink-soft`，形状完整。
+ * 选中：图标填 `#141416`，细节留纸色 `#FFFFFF`。轨钮左缘 3px `--green` 仍由按钮承担。
+ * 门厅不参与反黑，始终实心 `--green-deep`。
+ */
+export const RAIL_STROKE = 1.65;
+export const RAIL_SELECTED = '#141416';
+export const RAIL_PAPER = '#FFFFFF';
+
+const RAIL_INK = 'var(--ink-soft, #55585F)';
+
+/**
+ * 户外：完整外环。左上小、右下大，适中缝 2.0。
+ * d = r_s + r_l + gap。沿 45°（u = √0.5）按面积配重：
+ * t_s = d · r_l² / (r_s² + r_l²)，t_l = d − t_s。
+ * 小圆在 (12 − t_s·u, 12 − t_s·u)，大圆在 (12 + t_l·u, 12 + t_l·u)。
+ * 大圆更靠近环心。外环不开口。
+ */
+const RAIL_OUTDOOR_SMALL_R = 2.05;
+const RAIL_OUTDOOR_LARGE_R = 3.45;
+const RAIL_OUTDOOR_GAP = 2;
+const RAIL_OUTDOOR_DISTANCE = RAIL_OUTDOOR_SMALL_R + RAIL_OUTDOOR_LARGE_R + RAIL_OUTDOOR_GAP;
+const RAIL_OUTDOOR_SMALL_TRAVEL = RAIL_OUTDOOR_DISTANCE * (RAIL_OUTDOOR_LARGE_R ** 2)
+  / (RAIL_OUTDOOR_SMALL_R ** 2 + RAIL_OUTDOOR_LARGE_R ** 2);
+const RAIL_OUTDOOR_LARGE_TRAVEL = RAIL_OUTDOOR_DISTANCE - RAIL_OUTDOOR_SMALL_TRAVEL;
+const RAIL_OUTDOOR_UNIT = Math.SQRT1_2;
+
+export const RAIL_OUTDOOR = {
+  ring: { cx: 12, cy: 12, r: 9.2 },
+  small: {
+    cx: 12 - RAIL_OUTDOOR_SMALL_TRAVEL * RAIL_OUTDOOR_UNIT,
+    cy: 12 - RAIL_OUTDOOR_SMALL_TRAVEL * RAIL_OUTDOOR_UNIT,
+    r: RAIL_OUTDOOR_SMALL_R,
+  },
+  large: {
+    cx: 12 + RAIL_OUTDOOR_LARGE_TRAVEL * RAIL_OUTDOOR_UNIT,
+    cy: 12 + RAIL_OUTDOOR_LARGE_TRAVEL * RAIL_OUTDOOR_UNIT,
+    r: RAIL_OUTDOOR_LARGE_R,
+  },
+  gap: RAIL_OUTDOOR_GAP,
+} as const;
+
+/**
+ * 门厅脸：与 `door.png` 同一张脸，收成 28 网格以便在 28px 上清晰。
+ * 右眼略高、略长；眼睛与底部门洞都是纸色镂空，不是另画的瞳孔。
+ * 眼洞单独成组，以便 `--eye-x` / `--eye-y` 平移；整张脸用 `--tilt-*` 侧倾。
+ * 始终实心 `--green-deep`，选中不改线框、不把门洞闭上。
+ */
+export const RAIL_HALL = {
+  fill: 'var(--green-deep, #35624A)',
+  eyes: {
+    left: { cx: 11.98, cy: 10.14, rx: 1.19, ry: 2.31 },
+    right: { cx: 17.25, cy: 9.58, rx: 1.26, ry: 2.52 },
+  },
+} as const;
+
+/** 圆角方块轮廓把底部门洞让开。门洞是轮廓缺口，不是另挖的洞。 */
+const RAIL_HALL_BODY = [
+  'M 9.15 1.75 H 18.63',
+  'A 7.4 7.4 0 0 1 26.03 9.15 V 18.63',
+  'A 7.4 7.4 0 0 1 18.63 26.03 H 17.28 V 19.58',
+  'C 17.28 17.71 15.76 16.19 13.89 16.19',
+  'C 12.02 16.19 10.5 17.71 10.5 19.58',
+  'V 26.03 H 9.15',
+  'A 7.4 7.4 0 0 1 1.75 18.63 V 9.15',
+  'A 7.4 7.4 0 0 1 9.15 1.75 Z',
+].join(' ');
+
+const RAIL_HALL_EYE_LEFT = [
+  'M 13.16 10.30 C 12.98 11.56 12.31 12.51 11.66 12.42',
+  'C 11.01 12.33 10.63 11.23 10.81 9.97',
+  'C 10.98 8.71 11.65 7.76 12.31 7.85',
+  'C 12.96 7.94 13.34 9.04 13.16 10.30 Z',
+].join(' ');
+
+const RAIL_HALL_EYE_RIGHT = [
+  'M 18.50 9.75 C 18.30 11.13 17.59 12.17 16.90 12.07',
+  'C 16.21 11.97 15.81 10.78 16.00 9.40',
+  'C 16.19 8.02 16.91 6.98 17.60 7.08',
+  'C 18.29 7.18 18.69 8.37 18.50 9.75 Z',
+].join(' ');
+
+/** 静息时与原先 evenodd 脸同一张：身体 + 两只眼洞。眼洞拆出以便跟着指针走。 */
+export const RAIL_HALL_FACE = [RAIL_HALL_BODY, RAIL_HALL_EYE_LEFT, RAIL_HALL_EYE_RIGHT].join(' ');
+
+export const RailHall = forwardRef<HTMLSpanElement, { size?: number }>(function RailHall({ size = 28 }, ref) {
+  const maskId = `sc-rail-hall-${useId().replace(/:/g, '')}`;
+  return (
+    <span ref={ref} className="sc-rail-avatar is-door" style={{ width: size, height: size }}>
+      <span className="sc-rail-avatar-tilt">
+        <svg className="sc-rail-hall" width={size} height={size} viewBox="0 0 28 28" aria-hidden="true" focusable="false" style={{ display: 'block' }}>
+          <defs>
+            <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="28" height="28">
+              <rect width="28" height="28" fill="#fff" />
+              <g className="sc-rail-hall-eyes">
+                <path d={RAIL_HALL_EYE_LEFT} fill="#000" />
+                <path d={RAIL_HALL_EYE_RIGHT} fill="#000" />
+              </g>
+            </mask>
+          </defs>
+          <path fill={RAIL_HALL.fill} d={RAIL_HALL_BODY} mask={`url(#${maskId})`} />
+        </svg>
+      </span>
+    </span>
+  );
+});
+
 function makeCustomIcon(render: (size: number, active: boolean) => JSX.Element): SolidIconComponent {
   return function CustomIcon({ size = 20, active = false, color, style, ...props }: SolidIconProps): JSX.Element {
     return (
-      <span style={{ display: 'inline-flex', flex: 'none', ...(color ? { color } : {}), ...(active ? { color: '#141416' } : {}), ...style }} {...props}>
+      <span
+        data-rail-active={active ? 'true' : 'false'}
+        style={{ display: 'inline-flex', flex: 'none', color: active ? RAIL_SELECTED : (color ?? RAIL_INK), ...style }}
+        {...props}
+      >
         {render(size, active)}
       </span>
     );
   };
 }
 
-/** 空间（S01）：四块独立圆角矩形 2×2，块间留缝，表达分区/房间。常态描边，激活实心。 */
+const railPen = {
+  fill: 'none' as const,
+  stroke: 'currentColor',
+  strokeWidth: RAIL_STROKE,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+
+function filledShape(active: boolean) {
+  return active
+    ? { fill: RAIL_SELECTED, stroke: 'none' }
+    : railPen;
+}
+
+/** 空间：2×2 四间完整圆角房间。选中填墨，不另加描边，也不在房间之间开装饰缝。 */
+const RAIL_SPACE_ROOMS = [
+  { x: 4, y: 4 },
+  { x: 13, y: 4 },
+  { x: 4, y: 13 },
+  { x: 13, y: 13 },
+] as const;
+
 export const RailSpace = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round">
-    <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5"/>
-    <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5"/>
-    <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5"/>
-    <rect x="13" y="13" width="7.5" height="7.5" rx="1.5"/>
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {RAIL_SPACE_ROOMS.map(room => (
+      <rect key={`${room.x}-${room.y}`} x={room.x} y={room.y} width={7} height={7} rx={2} {...filledShape(active)} />
+    ))}
   </svg>
 ));
 
-/** 物料（M11d）：箱体 + 顶部拱形提手。常态描边，激活实心、提手以白负形弧留在最上层。 */
+/** 物料：盖贴在盒身上的收纳箱。选中两块都填墨，接缝留一条纸色发丝线。 */
+export const RAIL_CRATE_LID = 'M4.6 9.35 L5.35 6.55 Q5.5 5.9 6.2 5.9 H17.8 Q18.5 5.9 18.65 6.55 L19.4 9.35 Z';
+export const RAIL_CRATE_SEAM = 'M5.1 9.35 H18.9';
+
 export const RailCrate = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
-    {active
-      ? <>
-          <rect x="3.4" y="7.0" width="17.2" height="12.6" rx="2.4"/>
-          <path d="M8.8 7.5 a3.2 3.2 0 0 1 6.4 0" stroke="#FFFFFF" strokeWidth="1.7" fill="none"/>
-        </>
-      : <>
-          <path d="M8.8 7.5 a3.2 3.2 0 0 1 6.4 0"/>
-          <rect x="3.5" y="7.5" width="17" height="12.5" rx="2.2"/>
-        </>}
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d={RAIL_CRATE_LID} {...filledShape(active)} />
+    <rect x={5.1} y={9.35} width={13.8} height={10.15} rx={2} {...filledShape(active)} />
+    {active ? <path d={RAIL_CRATE_SEAM} fill="none" stroke={RAIL_PAPER} strokeWidth={1.55} /> : null}
   </svg>
 ));
 
-/** 场地（新建/生成功能区）：圆形容器包裹居中加号，表达新建一块可布置场地；24 网格、round 端点，圆径与户外星球同口径。常态圆与加号描边，激活圆实心、加号反白负形。 */
+/** 场地：圆角方块加完整加号。选中方块填墨，加号留纸色。 */
+export const RAIL_PLUS_MARK = 'M12 8.15 V15.85 M8.15 12 H15.85';
+
 export const RailPlus = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
-    {active
-      ? <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <path d="M8.0 12.0 h8.0 M12.0 8.0 v8.0" stroke="#FFFFFF" strokeWidth="1.8" fill="none"/>
-        </>
-      : <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <path d="M8.0 12.0 h8.0 M12.0 8.0 v8.0"/>
-        </>}
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <rect x={3.9} y={3.9} width={16.2} height={16.2} rx={3.6} {...filledShape(active)} />
+    <path
+      d={RAIL_PLUS_MARK}
+      fill="none"
+      stroke={active ? RAIL_PAPER : 'currentColor'}
+      strokeWidth={active ? 1.7 : RAIL_STROKE}
+      strokeLinecap="round"
+    />
   </svg>
 ));
 
-/** 户外规划（O01）：星球圆 + 两块对角正圆大陆。常态描边，激活实心、大陆镂空。 */
+/** 户外：完整外环，左上小、右下大，适中缝 2.0。选中外环填墨，两枚大陆留纸色。外环不开口。 */
 export const RailMap = makeCustomIcon((size, active) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-    fill={active ? 'currentColor' : 'none'}
-    stroke={active ? 'none' : 'currentColor'}
-    strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
-    {active
-      ? <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <circle cx="9.1" cy="9.1" r="2.7" fill="#FFFFFF"/>
-          <circle cx="14.9" cy="14.9" r="2.7" fill="#FFFFFF"/>
-        </>
-      : <>
-          <circle cx="12" cy="12" r="9.2"/>
-          <circle cx="9.1" cy="9.1" r="2.7"/>
-          <circle cx="14.9" cy="14.9" r="2.7"/>
-        </>}
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx={RAIL_OUTDOOR.ring.cx} cy={RAIL_OUTDOOR.ring.cy} r={RAIL_OUTDOOR.ring.r} {...filledShape(active)} />
+    <circle
+      cx={RAIL_OUTDOOR.small.cx}
+      cy={RAIL_OUTDOOR.small.cy}
+      r={RAIL_OUTDOOR.small.r}
+      {...(active ? { fill: RAIL_PAPER, stroke: 'none' } : railPen)}
+    />
+    <circle
+      cx={RAIL_OUTDOOR.large.cx}
+      cy={RAIL_OUTDOOR.large.cy}
+      r={RAIL_OUTDOOR.large.r}
+      {...(active ? { fill: RAIL_PAPER, stroke: 'none' } : railPen)}
+    />
   </svg>
 ));

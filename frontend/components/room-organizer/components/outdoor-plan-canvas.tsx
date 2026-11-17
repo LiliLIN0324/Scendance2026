@@ -117,6 +117,8 @@ import {
   hexWithAlpha,
   isLayerVisible,
   lngLatToEnu,
+  placedItemsNeedsRedlineHint,
+  placedRedlineCount,
   planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
@@ -167,6 +169,7 @@ import {
   type PlanEditIssue,
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
+import { planBoundaryFromSearchArea } from '../lib/outdoor-venue-sync';
 import { findZoneBoundsOverflow, zoneOverflowReason, type ZoneBoundsOverflow } from '../lib/plan-zone-bounds';
 import {
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
@@ -425,6 +428,11 @@ export interface OutdoorPlanCanvasProps {
   /** H2-b：编辑提交回调（边界更新/顶点移动/新增分区/分区样式）。不传则只读浏览。 */
   onPlanChange?: (plan: SitePlanData) => void;
   onVenueBoundaryApplied?: ((anchor: NonNullable<SitePlanData['anchor']>) => void) | undefined;
+  /**
+   * 2026-11-17 用户实测：画红线时按 Esc 只切回浏览模式，外层工作流仍停在「核对具体活动范围」
+   * 并以为已框出范围。取消也是状态变更，必须通知外层清掉这次未确认的候选。
+   */
+  onVenueBoundaryCanceled?: (() => void) | undefined;
   /**
    * P2-c：图层栈与编辑浮窗的外挂宿主元素 id（左栏卡片）。传了则 portal 过去
    * （inline 卡片样式，宿主不存在时自动回落画布内浮窗）；缺省浮窗留在画布内。
@@ -1476,6 +1484,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onViewChange,
   onPlanChange,
   onVenueBoundaryApplied,
+  onVenueBoundaryCanceled,
   panelsHostId,
   infoPanelHostId,
   libraryPanelHostId,
@@ -1580,6 +1589,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   // H2-b 编辑状态（state 供渲染面板，ref 供稳定 draw() 读取）。
   const modeRef = useRef<PlanningEditMode>('view');
+  // Esc 取消画线要通知外层工作流；保持最新回调，键盘监听只注册一次。
+  const onVenueBoundaryCanceledRef = useRef(onVenueBoundaryCanceled);
+  onVenueBoundaryCanceledRef.current = onVenueBoundaryCanceled;
   const draftRef = useRef<PlanPoint[]>([]);
   const previewRingRef = useRef<PlanPoint[] | null>(null);
   const dragVertexRef = useRef<number | null>(null);
@@ -1828,7 +1840,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const justInsertedRouteVertexRef = useRef(false);
 
   // 2026-11-18：缩放角标删除后组件不再读 view（视图真值在 viewRef，绘制自持）。
-const [, setView] = useState<View>({ ...viewRef.current });
+  const [, setView] = useState<View>({ ...viewRef.current });
   const [dragging, setDragging] = useState(false);
   const [layerState, setLayerState] = useState<LayerVisibility>(visibility ?? defaultLayerVisibility());
   /** P2-i 图层锁定（UI 状态；命中过滤读 lockedLayersRef，避免闭包过期）。 */
@@ -2279,6 +2291,15 @@ const [, setView] = useState<View>({ ...viewRef.current });
       lockedLayersRef.current = unlocked;
       setLockedLayers(unlocked);
       setEditMessage('已自动解除用地红线锁定（选了红线工具就是要改它）；画完可在左侧「用地红线」行再锁上。');
+    }
+    // 还没红线、但地图上有搜索选区：把这块闭合范围放进红线草稿。
+    // 点起点闭合走现有 closeDraft（写入 plan.boundary，再出确认卡）；Esc 仍是取消。
+    if (next === 'boundary' && planRef.current.boundary.length < 3) {
+      const seeded = planBoundaryFromSearchArea(searchArea ?? null, planRef.current.anchor);
+      if (seeded) {
+        draftRef.current = seeded;
+        setEditMessage('地图上的范围已放进红线草稿。点一下起点闭合，确认后写入方案；Esc 取消。');
+      }
     }
     draw();
     notifyPlanDraftChanged();
@@ -3763,6 +3784,22 @@ const [, setView] = useState<View>({ ...viewRef.current });
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
+      // 2026-11-17 用户实测：手画活动范围时按 Esc 只切回浏览，外层仍停在「核对具体活动范围」，
+      // 地图上又留着这次草稿，看起来像「已框出、待写进方案」。Esc 是取消这次画线：
+      // 清掉草稿、退出模式，并通知工作流撤掉未确认候选，绝不把它留在待写入状态。
+      if (modeRef.current === 'boundary') {
+        event.preventDefault();
+        event.stopPropagation();
+        const hadDraft = draftRef.current.length > 0;
+        setMode('view');
+        setEditMessage(
+          hadDraft
+            ? '已取消这次画线：未写入活动范围。需要时再点「在地图上手画活动范围」。'
+            : '已退出画线模式；活动范围未改动。',
+        );
+        onVenueBoundaryCanceledRef.current?.();
+        return;
+      }
       // 2026-11-16 用户：「点 esc 就退出物体编辑模式」——选择模式的 Esc 一步到位：
       // 清空选中（属性卡、3D 手柄随之收回）并回到浏览模式。
       if (modeRef.current === 'select') {
@@ -4171,7 +4208,7 @@ const [, setView] = useState<View>({ ...viewRef.current });
           ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
           : `已换场地：旧草稿已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`);
       } else {
-        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。`);
+        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。`);
       }
       return true;
     },
@@ -4689,7 +4726,7 @@ const [, setView] = useState<View>({ ...viewRef.current });
         return;
       }
       // 2026-11-17 用户指令「画好用地红线，默认就是画好了设计范围，扩 20 m，不用画两次」：
-      // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要自定义再点「重拖设计范围」。
+      // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要微调就直接拖白框的边或角。
       const initialScope = expandRect(boundary, DEFAULT_SCOPE_MARGIN_M);
       const nextBoundaryPlan: SitePlanData = {
         ...current,
@@ -4703,7 +4740,7 @@ const [, setView] = useState<View>({ ...viewRef.current });
       setMode('view');
       focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要自定义就点「重拖设计范围」。${overflowSuffix(boundaryOverflow)}`);
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
@@ -11829,7 +11866,11 @@ const [, setView] = useState<View>({ ...viewRef.current });
                   <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.hint, width: 10 }}>{openFolders['boundary'] !== false ? '▾' : '▸'}</span>
                   <BoundarySwatch size={16} />
                   <span style={{ flex: 1 }}>用地红线</span>
-                  <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{plan.boundary.length}</span>
+                  <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{placedRedlineCount({
+                    boundaryCount: plan.boundary.length,
+                    searchArea,
+                    previewBoundaryCount: workflowScopePreview ? (workflowPreview?.boundary.length ?? 0) : 0,
+                  })}</span>
                 </button>
                 <input
                   type="checkbox"
@@ -11856,11 +11897,15 @@ const [, setView] = useState<View>({ ...viewRef.current });
               </div>
               {openFolders['boundary'] !== false && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {plan.boundary.length === 0 ? (
+                  {placedItemsNeedsRedlineHint({
+                    boundaryCount: plan.boundary.length,
+                    searchArea,
+                    previewBoundaryCount: workflowScopePreview ? (workflowPreview?.boundary.length ?? 0) : 0,
+                  }) ? (
                     <div style={{ paddingLeft: 30, opacity: 0.7, fontSize: PLANNING_TYPOGRAPHY.hint }}>
                       还没画红线——物件库 → 区域 → 用地红线
                     </div>
-                  ) : (
+                  ) : plan.boundary.length > 0 ? (
                     renderOneplanItemRow({
                       key: 'layer-entity-boundary',
                       testId: 'layer-entity-boundary',
@@ -11872,6 +11917,32 @@ const [, setView] = useState<View>({ ...viewRef.current });
                         centerViewOn({ x: cx, y: cy });
                       },
                       title: '点击定位到红线',
+                      icon: <BoundarySwatch size={16} />,
+                    })
+                  ) : (
+                    renderOneplanItemRow({
+                      key: 'layer-entity-visible-range',
+                      testId: 'layer-entity-visible-range',
+                      label: (workflowScopePreview && (workflowPreview?.boundary.length ?? 0) >= 3)
+                        ? `候选活动范围（${workflowPreview!.boundary.length} 点）`
+                        : (searchArea?.label || '地图上的活动范围'),
+                      active: false,
+                      onClick: () => {
+                        const preview = workflowScopePreview && (workflowPreview?.boundary.length ?? 0) >= 3
+                          ? workflowPreview!.boundary
+                          : null;
+                        const anchor = plan.anchor;
+                        const overlay = !preview && searchArea && searchArea.kind !== 'line' && anchor
+                          ? searchArea.polygon.map(([lng, lat]) => lngLatToEnu(lng, lat, anchor.lng, anchor.lat))
+                          : null;
+                        const pts = preview ?? overlay;
+                        if (!pts?.length) return;
+                        centerViewOn({
+                          x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+                          y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+                        });
+                      },
+                      title: '点击定位到地图上的活动范围；核对后写入用地红线',
                       icon: <BoundarySwatch size={16} />,
                     })
                   )}
@@ -12020,20 +12091,14 @@ const [, setView] = useState<View>({ ...viewRef.current });
                                 title: '沿用地单击加顶点，闭合后替换旧红线',
                                 icon: <BoundarySwatch size={22} />,
                               })}
-                              {/* 2026-11-15 用户指令：先圈一块比场地大的「大陆」，框外压暗。 */}
-                              {renderOneplanItemRow({
-                                key: 'catalog-scope',
-                                testId: 'catalog-scope',
-                                label: (plan.designScope ?? []).length >= 3 ? '重拖设计范围' : '拖出设计范围',
-                                active: mode === 'scope',
-                                onClick: () => armOrDisarm(mode === 'scope', () => startAreaTool('scope')),
-                                title: '按住拖一个矩形当设计范围：框外压暗，流线可以走在场地外、范围里',
-                                icon: <ScopeSwatch size={22} />,
-                              })}
+                              {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「重拖设计范围」——
+                                  白框由红线自动送（外扩 20 m）、红线顶出去自动重置，微调直接在画布上
+                                  拖白框的边/角（可锁定）。拖矩形入口撤掉后 mode='scope' 那条路径没有
+                                  入口了，画布代码先原样留着（用户：死代码先不清理）。 */}
                               {plan.boundary.length >= 3 && renderOneplanItemRow({
                                 key: 'catalog-scope-expand',
                                 testId: 'catalog-scope-expand',
-                                label: `按场地外扩 ${DEFAULT_SCOPE_MARGIN_M} m`,
+                                label: '重置设计范围',
                                 active: false,
                                 onClick: () => {
                                   if (readOnly) return;
@@ -12044,28 +12109,14 @@ const [, setView] = useState<View>({ ...viewRef.current });
                                   setMode('view');
                                   // 生成即框住：刚生成的范围如果大半在视口外，压暗区会盖满屏幕，看着像没画。
                                   focusDesignScope(next);
-                                  setEditMessage(`已按场地外接矩形外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要改就点「重拖设计范围」。`);
+                                  setEditMessage(`设计范围已恢复为红线四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要微调就直接拖白框的边或角。`);
                                 },
-                                title: '各边外扩 20 m 直接生成设计范围，不用手画顶点',
+                                title: '把框丢回默认：红线外接矩形四边各外扩 20 m；平时直接拖白框的边/角微调，可锁定',
                                 icon: <ScopeSwatch size={22} plus />,
                               })}
-                              {/* 2026-11-16 用户指令：这一行「定位到设计范围」去掉——同样的功能挪到右轨那颗
-                                  焦点钮（#tool-focus）：圈了设计范围就框到范围，没圈还是回到场地取景。
-                                  左栏不再重复摆一行只能动视图、不能改范围的条目。 */}
-                              {(plan.designScope ?? []).length >= 3 && renderOneplanItemRow({
-                                key: 'catalog-scope-clear',
-                                testId: 'catalog-scope-clear',
-                                label: '清除设计范围',
-                                active: false,
-                                onClick: () => {
-                                  if (readOnly) return;
-                                  commitPlan({ ...planRef.current, designScope: [] });
-                                  setMode('view');
-                                  setEditMessage('设计范围已清除：框外不再压暗。');
-                                },
-                                title: '去掉外框与蒙版（用地红线、分区、流线都不受影响）',
-                                icon: <span aria-hidden style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 6, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.35)' }} />,
-                              })}
+                              {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「清除设计范围」——
+                                  和自动机制自相矛盾（红线一动框就回来），没有稳定用途。
+                                  框外压暗就是设计范围的唯一表达，去掉它等于回到没有取景框的状态。 */}
                               {/* 2026-11-18 全局网格：分区色板跟随 oneplanGrid 开关（开关在搜索框旁），不再单独设钮。 */}
                               <div style={oneplanGrid
                                 ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
