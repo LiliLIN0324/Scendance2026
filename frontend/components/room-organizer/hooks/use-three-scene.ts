@@ -236,7 +236,8 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         // 有实例动画在播时必须每帧推进，并主动置脏——否则下面的早退会让它一帧都不动。
         if (advanceGlbAnimations(deltaSeconds) > 0) dirtyRef.current = true;
         // 人物动画（people-anim 注册表）：路线行走 + mixer 推进，同上置脏。
-        if (advancePeopleAnimations(deltaSeconds, scene) > 0) dirtyRef.current = true;
+        // owner 固定 'local'：室内用自己的碰撞盒与围栏，不借户外那套。
+        if (advancePeopleAnimations(deltaSeconds, scene, 'local') > 0) dirtyRef.current = true;
         // PEOPLE-04 近景跟拍：人物推进后把镜头平移到新位置（漫游期间冻结），
         // 返回 true 表示相机动过——不置脏的话 render-on-demand 会跳帧。
         if (advancePersonFollow(camera, controls, handlersRef.current.walkthroughActive === true)) dirtyRef.current = true;

@@ -61,6 +61,8 @@ const SOURCES = [
   { id: 'amap-satellite', label: '高德卫星', kind: 'direct', url: (z, x, y) => `https://webst01.is.autonavi.com/appmaptile?style=6&x=${x}&y=${y}&z=${z}` },
   { id: 'amap-streets', label: '高德街道', kind: 'direct', url: (z, x, y) => `https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=${x}&y=${y}&z=${z}` },
   { id: 'amap-streets-labels', label: '高德街道注记', kind: 'direct', url: (z, x, y) => `https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=${x}&y=${y}&z=${z}` },
+  // 全球卫星（境外场地的卫星源）。注意路径是 /{z}/{y}/{x}（行在前、列在后）。
+  { id: 'esri-satellite', label: 'Esri 全球卫星', kind: 'direct', url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}` },
   { id: 'vec', label: '天地图矢量', kind: 'tdt', layer: 'vec_w' },
   { id: 'img', label: '天地图影像', kind: 'tdt', layer: 'img_w' },
 ];

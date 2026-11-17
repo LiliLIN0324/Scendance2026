@@ -75,6 +75,8 @@ import {
   Upload,
 } from 'lucide-react';
 import { BasemapTileCache, paintBasemapTiles } from '@/components/room-organizer/lib/plan-tile-cache';
+// B3：2D 人位按 3D 漫游态换色（进区青 / 落座琥珀）。只读注册表，不反向驱动 3D。
+import { subscribePersonRoam, workerRoamState } from '@/components/room-organizer/three/people-anim';
 import {
   defaultLayerVisibility,
   drawAccessLayer,
@@ -287,7 +289,7 @@ import {
   type ProbePublicSource,
   type TdtProbeLayer,
 } from '../lib/tdt-probe';
-import { alignedTileCenter } from '../lib/basemap-alignment';
+import { alignedTileCenter, sourceForLocation } from '../lib/basemap-alignment';
 import { basemapNativeMaxZoom } from '../lib/basemap-zoom-caps';
 import { planningIcon } from './outdoor-plan-icons';
 import { AnnotateColorBar } from './annotate-color-bar';
@@ -2636,11 +2638,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     planCtx.clearRect(0, 0, cssW, cssH);
 
     const v = viewRef.current;
-    const activeSource = sourceRef.current;
-    // 测量中性线在卫星/深色底图上转白；室内纸面模式按浅底处理。
-    const darkBasemap = baseModeRef.current !== 'floor' && (activeSource === 'carto-dark' || activeSource === 'amap-satellite' || activeSource === 'img');
-    // 2026-11-11 图层：画布只画当前活动层的实体（边界/锚点跨层共享，过滤视图原样保留）。
+    // 2026-11-17：境外案例用高德/天地图只会是灰图或白底——按场地中心换全球卫星源，
+    // 境内原样返回。当帧的瓦片、上限、文字明暗、署名全跟这个 `activeSource` 走。
     const current = viewPlan();
+    const requestedSource = sourceRef.current;
+    const activeSource = sourceForLocation(
+      requestedSource,
+      current.anchor?.lng ?? v.lng,
+      current.anchor?.lat ?? v.lat,
+    );
+    // 测量中性线在卫星/深色底图上转白；室内纸面模式按浅底处理。
+    const darkBasemap = baseModeRef.current !== 'floor'
+      && (activeSource === 'carto-dark' || activeSource === 'amap-satellite' || activeSource === 'esri-satellite' || activeSource === 'img');
+    // 2026-11-11 图层：画布只画当前活动层的实体（边界/锚点跨层共享，过滤视图原样保留）。
     const vis = layerStateRef.current;
 
     // 1) 底图（baseCanvas）：公开源单层 / 天地图双层，异步瓦片只画在底图 canvas 上，
@@ -2753,7 +2763,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 室内纸面/关掉底图时不采（那两种底本身是浅色）。
     const labelTone = detectCanvasTone(
       basemapVisibleRef.current && baseModeRef.current !== 'floor' ? baseCanvas : null,
-      sourceRef.current === 'img' || sourceRef.current === 'amap-satellite' ? 'dark' : 'light',
+      activeSource === 'img' || activeSource === 'amap-satellite' || activeSource === 'esri-satellite' ? 'dark' : 'light',
     );
 
     // 2) 业务图层（planCanvas，叠在底图之上）：按图层栈顺序叠加，
@@ -3136,6 +3146,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           // 2026-11-16 用户：「地图上直接就是图标，不要一个点、上面再一个图标」——
           // 有岗位贴纸的人位只留图标（圆点交给贴纸自己当底），无贴纸的岗位仍画圆点。
           chip: workerSticker(w.role) !== null,
+          // B3：有人在区内/坐着时给人位加状态色环；未在 3D 注册（无人群）就不画。
+          state: workerRoamState(w.id, w.count) ?? undefined,
         })),
         { tone: labelTone },
       );
@@ -3234,9 +3246,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           // 2026-11-12 活动包区预设：草稿直接用物件主题色。
           ? (zonePresetRef.current?.color ?? defaultZoneColor(zoneSemanticRef.current))
           : activeMode === 'scope' || draftingScope
-            // 设计范围用琥珀色，与边界绿区分（一眼看出这是外框，不是场地边界）。
+            // 设计范围用琥珀色，与边界红区分（一眼看出这是外框，不是场地红线）。
             ? '#F2A33C'
-            : PLANNING_LAYER_COLORS.boundary;
+            // 2026-11-17 用户「画红线时是绿的，看不清，应该改成红色虚线」：
+            // 草稿和落笔后的红线同一色（虚线只表示还没闭合），不再用品牌绿。
+            : PLANNING_BOUNDARY_LINE_COLOR;
         const draftInvalid = draftPoints.length >= 4 && planRingSelfIntersects(draftPoints);
         drawDraftLayer({ ctx: planCtx, viewport }, draftPoints, draftColor, { draftInvalid });
       }
@@ -3292,7 +3306,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 6) P2-i：常驻比例尺 + 署名（右下角，避让右侧竖控件簇；2026-11-16 用户指令归位）。
     //    指北针/取景/缩放/漫游等控件在右侧竖列（DOM，outdoor-plan-overlay），画布角标只画比例尺与署名。
     //    纸面模式无图源不画署名。
-    drawScaleAttribution(planCtx, viewport, cssW, cssH, baseModeRef.current !== 'floor' ? sourceRef.current : null);
+    drawScaleAttribution(planCtx, viewport, cssW, cssH, baseModeRef.current !== 'floor' ? activeSource : null);
 
     // 7) P2-k：搜地点落钉（纯视图辅助，不进 plan、不参与统计与冲突）。
     // 7a) 先画选区面（行政区边界），再画钉——钉压在上面不会被浅填充吞掉。
@@ -3404,6 +3418,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   useEffect(() => {
     drawRef.current = draw;
   }, [draw]);
+
+  // B3：3D 漫游态跳档（进区 / 坐下 / 起身 / 回线）时重绘 2D 人位状态环。
+  // 与流场模拟同一款合并重绘：一帧最多一次，draw 本身读当前注册表。
+  useEffect(() => {
+    let raf = 0;
+    return subscribePersonRoam(() => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        drawRef.current();
+      });
+    });
+  }, []);
 
   // 2026-11-11 统一视图：落位投影层变了（物料/实景扫描增删改）就重画一次。
   useEffect(() => {
@@ -4329,7 +4356,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           ringColor: mode === "zone"
             // 2026-11-12 活动包区预设：草稿直接用物件主题色。
             ? (zonePresetRef.current?.color ?? defaultZoneColor(zoneSemanticRef.current))
-            : PLANNING_LAYER_COLORS.boundary,
+            // 用地红线草稿与 2D 同一色（2026-11-17 用户：画的时候绿色看不清，改红）。
+            : PLANNING_BOUNDARY_LINE_COLOR,
           fill: mode === "zone" && ring.length >= 3,
           route: mode === "route" ? route : [],
           routeColor: routePresetRef.current?.color ?? PLANNING_ROUTE_KIND_COLORS[routeKindRef.current],

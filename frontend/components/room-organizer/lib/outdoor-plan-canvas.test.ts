@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 import {
   PLAN_LAYER_STACK,
+  WORKER_ROAM_COLORS,
   defaultLayerVisibility,
   drawAccessLayer,
   accessRingRadiusPx,
   drawConflictMarkers,
+  drawDraftLayer,
   drawFacilityGhost,
   drawFacilityLayer,
   drawMapEditHighlight,
@@ -32,7 +35,6 @@ import {
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
-import { PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS } from '@/lib/outdoor-plan-tokens';
 import { formatLengthM } from './site-plan-measure';
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 
@@ -190,10 +192,12 @@ interface CtxCapture {
   fills: string[];
   /** 圆弧（`arc:x,y,r`）：用来锁「人员点位到底画的是圆点还是只有芯片」。 */
   arcs: string[];
+  /** 每次 `lineWidth` 赋值：用来锁「非法草稿只是加重，不是只换了个相近的红」。 */
+  widths: number[];
 }
 
 function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
-  const cap: CtxCapture = { rects: [], dash: [], texts: [], haloTexts: [], strokes: [], fills: [], arcs: [] };
+  const cap: CtxCapture = { rects: [], dash: [], texts: [], haloTexts: [], strokes: [], fills: [], arcs: [], widths: [] };
   const ctx = {
     save: () => {},
     restore: () => {},
@@ -214,7 +218,7 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
   } as unknown as CanvasRenderingContext2D;
   Object.defineProperty(ctx, 'strokeStyle', { set: (v: string) => cap.strokes.push(v), get: () => '' });
   Object.defineProperty(ctx, 'fillStyle', { set: (v: string) => cap.fills.push(v), get: () => '' });
-  Object.defineProperty(ctx, 'lineWidth', { set: () => {}, get: () => 1 });
+  Object.defineProperty(ctx, 'lineWidth', { set: (v: number) => cap.widths.push(v), get: () => 1 });
   Object.defineProperty(ctx, 'font', { set: () => {}, get: () => '' });
   Object.defineProperty(ctx, 'textAlign', { set: () => {}, get: () => 'left' });
   Object.defineProperty(ctx, 'textBaseline', { set: () => {}, get: () => 'top' });
@@ -458,6 +462,25 @@ describe('route / node / worker drawing (H2-d)', () => {
     const warned = makeCtx();
     drawWorkerLayer({ ctx: warned.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, warning: true }]);
     expect(warned.cap.strokes).toContain('#c0392b');
+  });
+
+  it('rings the worker marker with the roam state colour (B3)', () => {
+    const worker = { id: 'w1', role: '安保', count: 2, position: { x: 3, y: 57 } };
+    const inZone = makeCtx();
+    drawWorkerLayer({ ctx: inZone.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, state: 'zone' }]);
+    expect(inZone.cap.strokes).toContain(WORKER_ROAM_COLORS.zone);
+
+    const seated = makeCtx();
+    drawWorkerLayer({ ctx: seated.ctx, viewport: view } as PlanCanvasContext, [{ ...worker, state: 'seated' }]);
+    expect(seated.cap.strokes).toContain(WORKER_ROAM_COLORS.seated);
+    // 两种状态不同色，不能只靠一个环的形状区分。
+    expect(WORKER_ROAM_COLORS.zone).not.toBe(WORKER_ROAM_COLORS.seated);
+
+    // 无状态（未在 3D 注册）不加环，不能拿岗位色冒充状态色。
+    const plain = makeCtx();
+    drawWorkerLayer({ ctx: plain.ctx, viewport: view } as PlanCanvasContext, [worker]);
+    expect(plain.cap.strokes).not.toContain(WORKER_ROAM_COLORS.zone);
+    expect(plain.cap.strokes).not.toContain(WORKER_ROAM_COLORS.seated);
   });
 
   it('draws the role icon chip instead of a dot when the caller supplies one (2026-11-16)', () => {
@@ -766,5 +789,42 @@ describe('conflict marker drawing (H3-b)', () => {
       [{ key: 'route:r-svc', status: 'conflict' as const, at: { x: 0, y: 0 }, count: 1 }],
     );
     expect(single.cap.texts).toEqual(['!']);
+  });
+});
+
+/* ---------------- 用地红线草稿配色（2026-11-17 用户实拍） ---------------- */
+
+describe('用地红线草稿：红虚线，不再用品牌绿', () => {
+  const draft = [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 30 }];
+
+  it('画红线时草稿就是地界红 + 虚线（绿线压在卫星图上读不出来）', () => {
+    const { ctx, cap } = makeCtx();
+    drawDraftLayer({ ctx, viewport: view } as PlanCanvasContext, draft, PLANNING_BOUNDARY_LINE_COLOR);
+    expect(cap.strokes).toContain(PLANNING_BOUNDARY_LINE_COLOR);
+    expect(cap.strokes).not.toContain(PLANNING_LAYER_COLORS.boundary);
+    expect(cap.dash).toContainEqual([8, 5]);
+    expect(cap.widths).toContain(2);
+    // 顶点方块也跟线同色：草稿不能出现「红线绿点」。
+    expect(cap.fills).toEqual(Array(draft.length).fill(PLANNING_BOUNDARY_LINE_COLOR));
+  });
+
+  it('形状非法（自交）不再“转红”，改成加重一档 + 收密虚线（红线本来就红）', () => {
+    const ok = makeCtx();
+    drawDraftLayer({ ctx: ok.ctx, viewport: view } as PlanCanvasContext, draft, PLANNING_BOUNDARY_LINE_COLOR);
+    const bad = makeCtx();
+    drawDraftLayer({ ctx: bad.ctx, viewport: view } as PlanCanvasContext, draft, PLANNING_BOUNDARY_LINE_COLOR, { draftInvalid: true });
+    expect(bad.cap.strokes).toContain(PLANNING_CONFLICT_COLORS.conflict);
+    // 加粗：比正常草稿粗一档，压在同色红线上也能看出“这圈圈不成”。
+    expect(Math.max(...bad.cap.widths)).toBeGreaterThan(Math.max(...ok.cap.widths));
+    // 线型也换节奏：正常 [8,5]、非法 [5,4]。
+    expect(bad.cap.dash).toContainEqual([5, 4]);
+    expect(bad.cap.dash).not.toContainEqual([8, 5]);
+  });
+
+  it('分区草稿不变：仍用分区自己的色，非法时才转警示红', () => {
+    const { ctx, cap } = makeCtx();
+    drawDraftLayer({ ctx, viewport: view } as PlanCanvasContext, draft, PLANNING_LAYER_COLORS.zone);
+    expect(cap.strokes).toContain(PLANNING_LAYER_COLORS.zone);
+    expect(cap.dash).toContainEqual([8, 5]);
   });
 });

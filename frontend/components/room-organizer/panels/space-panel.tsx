@@ -6,6 +6,7 @@ import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
 import { registerCloudScans, registerLocalScans } from '../lib/local-scans';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
 import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { CaseCards } from './case-cards';
@@ -138,7 +139,9 @@ export function SpacePanel({
     else environment?.onSelect(venue.assetId, venue.name);
   };
   // 2026-11-17：经典案例不是“模板替换”，点开就在本机落一个独立活动（同一 id 复用，
-  // 重复打开仍是那一案），再整页进 2D 规划——当前场地一个字都不动。
+  // 重复打开仍是那一案），当前场地一个字都不动。
+  // 2026-11-17 用户拍板「按不换页改」：先写本机记录，再请工作台外壳就地换 project id
+  // （重挂画布、replaceState 跟 URL），文档不重载、不白屏；没有宿主接住才退回整页跳。
   const [caseNotice, setCaseNotice] = useState('');
   const openReplicaCase = (replica: ReplicaCase): void => {
     setCaseNotice('');
@@ -154,59 +157,45 @@ export function SpacePanel({
         updatedAt: now,
         plan: replica.buildPlan(),
       });
-      window.location.assign(`/editor/?project=${encodeURIComponent(projectId)}&mode=outdoor`);
+      if (!requestOutdoorProjectSwitch(projectId)) {
+        window.location.assign(`/editor/?project=${encodeURIComponent(projectId)}&mode=outdoor`);
+      }
     } catch (error) {
       setCaseNotice(error instanceof Error ? error.message : '这个案例没能打开，请重试。');
     }
   };
 
+  // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」——不再分「有止帧的排大图、
+  // 没打开过的收索引行」，全部走示例场景/经典案例那套 16:10 卡形：有止帧用止帧，
+  // 没有的给一块描边占位；尺寸与日期并成一行元信息，状态交给描边和左上角标签。
   const scanRows = <>
     {scans.length === 0 && <p className="sc-note">还没有实景扫描。拍摄后可在这里查看。</p>}
-    {/* 画面优先：截过止帧的排成大图，还没打开过的收成一行行索引，不拿同一句话填满每张卡。 */}
-    {framedScans.length > 0 && <ul className="sc-scan-frames" aria-label="有画面的真实场地">
-      {framedScans.map(venue => {
+    {scans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="真实场地">
+      {[...framedScans, ...plainScans].map(venue => {
         const active = venue.assetId === currentScanId;
         const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
         const failed = !!active && preview?.status === 'error';
         const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
+        const thumb = venueThumb(venue);
+        const meta = [failed ? '加载失败' : '', venueSize(venue), venueDay(venue)].filter(Boolean).join(' · ');
         return <li key={venue.assetId}>
-          <button type="button" className={`sc-scan-frame${active ? ' is-current' : ''}`}
+          <button type="button" className={`sc-space-sample sc-scan-card${active ? ' is-current' : ''}`}
             title="打开这一场的 3D 实景"
             aria-label={failed ? `重试加载真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
             aria-pressed={active} onClick={() => pickScan(venue)}>
-            <span className="sc-scan-frame-shot">
-              <img src={venueThumb(venue)} alt="" loading="lazy"/>
-              {preview?.status === 'loading' && <span className="sc-scan-frame-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
-              {(active || inProject) && <span className="sc-scan-frame-tag">{active ? '当前' : '已加入'}</span>}
-              <span className="sc-scan-frame-open">{failed ? '重试' : '打开 3D'}</span>
+            <span className="sc-scan-card-shot">
+              {thumb
+                ? <img src={thumb} alt="" loading="lazy"/>
+                : <Scan className="sc-scan-card-blank" size={18} aria-hidden="true"/>}
+              {preview?.status === 'loading' && <span className="sc-scan-card-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
+              {(active || inProject) && <span className="sc-scan-card-tag">{active ? '当前' : '已加入'}</span>}
             </span>
             <strong title={venue.name}>{venue.name}</strong>
-            {venueSize(venue) && <small>{venueSize(venue)}</small>}
+            {meta && <span className="sc-scan-card-meta">{meta}</span>}
           </button>
         </li>;
       })}
     </ul>}
-    {plainScans.length > 0 && <div className="sc-scan-plain">
-      {framedScans.length > 0 && <p className="sc-scan-plain-label">其它实景扫描 · {plainScans.length}</p>}
-      <ul aria-label="其它实景扫描">
-        {plainScans.map(venue => {
-          const active = venue.assetId === currentScanId;
-          const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
-          const failed = !!active && preview?.status === 'error';
-          const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
-          const state = preview?.status === 'loading' ? '加载中…' : failed ? '加载失败' : active ? '当前' : venueSize(venue) || venueDay(venue);
-          return <li key={venue.assetId}>
-            <button type="button" className="sc-scan-row" title="打开这一场的 3D 实景"
-              aria-label={failed ? `重试加载真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
-              aria-pressed={active} onClick={() => pickScan(venue)}>
-              <strong title={venue.name}>{venue.name}</strong>
-              {inProject && !active && <span className="sc-scan-row-tag">已加入</span>}
-              <small>{state}</small>
-            </button>
-          </li>;
-        })}
-      </ul>
-    </div>}
   </>;
 
   // 2026-11-16：示例场景不再单开一栏，收进实景扫描这一段末尾——
@@ -223,7 +212,6 @@ export function SpacePanel({
   </ul> : null;
 
   const cases = <SceneGroup label="经典案例" icon={<Crown size={15} aria-hidden="true" />} count={REPLICA_CASES.length} testId="space-group-cases" lazy>
-    <p className="sc-note">OnePlan 经典案例复刻 · 点开在本机新建一个活动，当前场地不动。</p>
     <CaseCards onOpen={openReplicaCase}/>
     {caseNotice && <p className="sc-note" role="status">{caseNotice}</p>}
   </SceneGroup>;
@@ -278,10 +266,12 @@ export function SpacePanel({
                     （shelf 版仍在「更多场地选项」里挂着，环境切换没丢）。 */}
                 {cases}
                 {templates}
-                {sampleTiles && <SceneGroup label="示例场景" icon={<Images size={15} aria-hidden="true" />} count={samples.length} open>
+                {/* 2026-11-17 用户：「每次打开都默认打开了示例场景和我的实景扫描……默认都不要打开」——
+                    两段一律收起起步，要看再点开；展开态此后由 details 自己管。 */}
+                {sampleTiles && <SceneGroup label="示例场景" icon={<Images size={15} aria-hidden="true" />} count={samples.length}>
                   {sampleTiles}
                 </SceneGroup>}
-                <SceneGroup label="我的实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length} open={scans.length > 0}>
+                <SceneGroup label="我的实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length}>
                   {scanRows}
                 </SceneGroup>
               </>

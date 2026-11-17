@@ -12,6 +12,7 @@ import {
   latestOutdoorProjectId,
   resolveOutdoorProjectId,
 } from '@/components/room-organizer/lib/outdoor-project-store';
+import { onOutdoorProjectSwitch } from '@/components/room-organizer/lib/outdoor-project-switch';
 import {
   adoptOutdoorActivity,
   listAdoptableActivities,
@@ -150,6 +151,20 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
       setProjectEpoch(epoch => epoch + 1);
     });
   };
+
+  // 2026-11-17 用户拍板「按不换页改」：面板里换经典案例只换工作台当前项目——
+  // 写本机记录由面板负责，这里只换 outdoorProjectId + 重挂画布（与「换设备找回」同一条路径），
+  // URL 用 replaceState 跟着走，文档不重载，没有白屏，也不用再走一遍入场骨架。
+  useEffect(() => onOutdoorProjectSwitch(projectId => {
+    if (!editorStarted) return false; // 工作台还没起来：不接，让调用方整页跳
+    const url = new URL(window.location.href);
+    url.searchParams.set('project', projectId);
+    url.searchParams.set('mode', 'outdoor');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    setOutdoorProjectId(projectId);
+    setProjectEpoch(epoch => epoch + 1);
+    return true;
+  }), [editorStarted]);
 
   useEffect(() => {
     if (entered) window.dispatchEvent(new Event('resize'));
