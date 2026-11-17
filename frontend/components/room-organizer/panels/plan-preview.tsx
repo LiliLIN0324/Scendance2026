@@ -1,7 +1,7 @@
 /**
  * 按米缩放的平面缩略图，和画布同一套 1.5m 剖面：切到的高家具填灰，
  * 矮家具只留浅色底和线，开洞不填。结构标记不画。
- * 从 share-menu 抽出为共享组件：候选卡（图文并茂）与发布面板共用。
+ * 从 share-menu 抽出为共享组件：候选卡缩略图仍用它。分享面板不再放预览图。
  */
 import { planDrawOrder } from '../lib/plan-order';
 import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
