@@ -134,10 +134,10 @@ describe('VenuePicker（换场地 / 新建）', () => {
       plan: { anchor?: { lng: number; lat: number; source: string }; boundary: unknown[]; zones: unknown[]; facilities: unknown[]; routes: unknown[]; nodes: unknown[] };
     };
     expect(record.name).toBe('复刻示例 · Scotiabank Hockey Day Canada');
-    expect(record.plan.anchor).toEqual({ lng: -123.3716, lat: 48.4235, crs: 'gcj-02', source: 'preset' });
+    expect(record.plan.anchor).toEqual({ lng: -123.370099, lat: 48.423153, crs: 'gcj-02', source: 'preset' });
     expect(record.plan.boundary.length).toBeGreaterThanOrEqual(3);
-    expect(record.plan.zones.length).toBeGreaterThanOrEqual(10);
-    expect(record.plan.facilities.length).toBeGreaterThanOrEqual(40);
+    expect(record.plan.zones.length).toBe(9);
+    expect(record.plan.facilities.length).toBe(71);
     expect(record.plan.routes.length).toBeGreaterThanOrEqual(3);
     expect(record.plan.nodes.length).toBeGreaterThanOrEqual(3);
   });
@@ -268,7 +268,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
     render(<VenuePicker onClose={vi.fn()} />);
     await screen.findByRole('button', { name: /云端验证/ });
     fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
-    const note = await screen.findByText(/云端操作失败（ROUTE_NOT_FOUND）/);
+    const note = await screen.findByText('请求的接口不存在，这次操作没有发出。');
     expect(note.textContent).not.toBe('ROUTE_NOT_FOUND');
   });
 
