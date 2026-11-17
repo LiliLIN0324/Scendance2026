@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：hook 已能声明云端证据（`declareCloud(id, pass)` / `cloudPass()`），`logReleaseStatus()` 用 `defaultLedger(record, cloudPass.current)`，**未声明仍整列未验**。**本地 main = origin = `a3bff73b`（`div 0/0`）**；待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–79 九个切片。9222 三十五轮不通。下一条：把云端声明接到面板（每行多一个“云已跑”键），点击后不用刷新即变、且仍不自己凑绿。首条命令 `cd frontend; npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx`。
+- 下一条操作：面板每行已有第四个「云端」键（声明/撤回切换，只有 `onCloud` 传入才渲染），工作流卡已接 `flow.cloudPass()` / `flow.declareCloud()`。**本地 main = origin = `d52fefde`（`div 0/0`）**；待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–80 十个切片。9222 三十六轮不通。下一条：云端声明也要落盘（现在刷新就丢，与走查记录本不一致）。首条命令 `cd frontend; npm test -- components/room-organizer/components/outdoor-walkthrough-board.test.tsx`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 14:00 · 自动轮次 80 · 面板第四个键：云端（声明/撤回）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 14:00，自动轮次 80
+批次 / 切片 / 状态：合并 + M7 / 云端声明入面板 / 已交付（分支待 PR）
+开工事实：HEAD = `fb7e8dc8`（`agent/outdoor-copy-pass-1`），脏文件 23；local main = `a3bff73b`，origin/main = `d52fefde`（落后 8 笔）；`.temp` 目录再次不存在
+合并：`git branch -f main origin/main` → `main = origin = d52fefde div 0/0`；分支 `merge --no-edit main` 零冲突 → `22c62cfc`
+交付：`outdoor-walkthrough-board.tsx` 可选 `cloudPass` / `onCloud`——不传 `onCloud` 就还是三键（默认界面一字不变），传了每行多一个“云端”键（`aria-label="用例 N 云端是否已跑"`，点击切换）；`outdoor-walkthrough-section.tsx` 透传（用条件展开避开 `exactOptionalPropertyTypes`）；工作流卡把 `flow.cloudPass()` / `flow.declareCloud()` 接上。新增 3 条用例：没传就三键、已声明才是按下态、点一下声明再点撤回
+验证（固定数据）：面板 8 + 走查区 5 + hook 69 = 82/82；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十六轮 down）——**键有了，声明仍是空的**
+未完成：#2 真实搜索、#5 浏览器行为；云端声明落盘
+```
+
+- **新键必须“不传就不渲染”**：默认三键的旧断言一条都没改，说明这个扩展真的向后兼容。
+- **安全键与事实键并排但不等价**：“云端”键只记“跑过”，能不能发布仍由三类全绿算；提示语直接写“只有它不会让全绿变成 1”。
 
 ### 2026-11-18 13:00 · 自动轮次 79 · 云端声明接到 hook（人点才算，仍不自己凑绿）
 
