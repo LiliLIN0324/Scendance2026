@@ -53,4 +53,16 @@ describe('generation worker HTTP boundary',()=>{
     expect(response.status).toBe(500);expect(response.headers.get('cache-control')).toBe('no-store');
     expect(await response.json()).toEqual({error:'WORKER_FAILED'});
   });
+  it('keeps the vendor rejection code and message on the failed job',async()=>{
+    // 2026-11-17 生产 C1 实跑：任务 failed、error_code=PROVIDER_REJECTED，但供应商到底说了什么被丢了，
+    // 于是「key 不认 / 额度不够 / 内容被拦」三件事在库里长得一模一样。这里钉住：供应商原话必须落库。
+    const job=await f.jobs(owner,'jobs.create',{requestId:crypto.randomUUID(),fingerprint:'prop',prompt:'Prop',reserveCents:100,kind:'text',providerMode:'aholo',providerModel:'lux3d'});
+    const fetcher:Fetcher=async()=>new Response(JSON.stringify({c:'-1',m:'vendor said no',d:null}),{headers:{'Content-Type':'application/json'}});
+    const response=await createWorker(f.backend,env({LUX3D_API_KEY:'lux-test-key'}),fetcher)(request());
+    expect(response.status).toBe(200);
+    const after=await f.jobs(owner,'jobs.get',{id:job.id}) as {state:string;error_code:string;provider_usage:unknown};
+    expect(after.state).toBe('failed');
+    expect(after.error_code).toBe('PROVIDER_REJECTED');
+    expect(after.provider_usage).toMatchObject({vendorError:{vendorCode:'-1',vendorMessage:'vendor said no'}});
+  });
 });

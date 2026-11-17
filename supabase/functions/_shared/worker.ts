@@ -41,7 +41,18 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
       await update('submitted',{providerJobId:submitted.JobId,usage:{requestId:submitted.RequestId}});
     } catch(error) {
       // HTTP 5xx, invalid response, network timeout, or lost DB acknowledgement may all follow a charged submission.
-      await update(!dispatched||error instanceof ApiError && error.code==='PROVIDER_REJECTED'?'failed':'submit_unknown',{errorCode:error instanceof ApiError?error.code:'SUBMIT_RESULT_UNKNOWN'});
+      const rejected=error instanceof ApiError&&error.code==='PROVIDER_REJECTED';
+      // 2026-11-17：供应商自己的拒绝码与文案要落库。之前它被整个丢掉，
+      // 于是「供应商明确拒了」和「供应商自己挂了」在库里长得一模一样，只能靠猜——
+      // 生产 C1 实跑就卡在这里：任务 failed、error_code=PROVIDER_REJECTED，
+      // 但没人说得清是 key 不认、额度不够还是内容被拦。
+      const vendorError=rejected&&error.details
+        ? {vendorCode:String((error.details as {code?:unknown}).code??''),vendorMessage:String((error.details as {message?:unknown}).message??'')}
+        : undefined;
+      await update(!dispatched||rejected?'failed':'submit_unknown',{
+        errorCode:error instanceof ApiError?error.code:'SUBMIT_RESULT_UNKNOWN',
+        ...(vendorError?{usage:{vendorError}}:{}),
+      });
     }
     return {processed:1};
   }
