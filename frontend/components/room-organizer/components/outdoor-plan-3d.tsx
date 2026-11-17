@@ -20,10 +20,25 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { enuToLngLat, lngLatToEnu, planMetersPerPixel, planPointToPixel, type PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
-import { basemapSourceAttribution } from '@/components/room-organizer/lib/tdt-probe';
-import { BasemapTileCache } from '@/components/room-organizer/lib/plan-tile-cache';
 import { GeoScaleCompass } from '@/components/room-organizer/components/geo-scale-compass';
+import { useOutdoorWalk, type SeatWalkState } from '@/components/room-organizer/hooks/use-outdoor-walk';
+import {
+  findAholoAsset,
+  resolveAholoAssetUrl,
+} from '@/components/room-organizer/lib/aholo-assets';
+import { CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/catalog-drag';
+import { createCrowdIdlePacer } from '@/components/room-organizer/lib/idle-crowd-pacer';
+import {
+  InteractRegistry,
+  nearestNearbyEntry,
+  type InteractableEntry,
+} from '@/components/room-organizer/lib/interact-registry';
+import { libraryEntryColor } from '@/components/room-organizer/lib/oneplan-library';
+import { workerRoleColor, workerSticker } from '@/components/room-organizer/lib/oneplan-stickers';
+import { facilityInteractables, interactHintLabel, seatInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
+import { enuToLngLat, lngLatToEnu, planMetersPerPixel, planPointToPixel, type PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import { BasemapTileCache } from '@/components/room-organizer/lib/plan-tile-cache';
+import { basemapSourceAttribution } from '@/components/room-organizer/lib/tdt-probe';
 import { buildPlanFootprint } from '@/components/room-organizer/three/plan-footprint-builder';
 import {
   collectPlaceholdersByPropId,
@@ -45,6 +60,8 @@ import {
   unionFrames,
   zoomFromSpan,
 } from '@/components/room-organizer/three/plan-basemap-tiles';
+import { createPlanRoleLabels } from '@/components/room-organizer/three/plan-role-labels';
+import { createPlanTrafficLayer } from '@/components/room-organizer/three/plan-traffic-layer';
 import { ROOM_OBJECT_TAGS } from '@/components/room-organizer/three/room-builder';
 import {
   advanceGlbAnimations,
@@ -53,27 +70,20 @@ import {
   disposeOwnedModel,
   ensureGlbAsset,
 } from '@/components/room-organizer/three/glb-assets';
-import { advancePeopleAnimations, registerPersonAnim, takePersonControl } from '@/components/room-organizer/three/people-anim';
+import { advancePeopleAnimations, registerPersonAnim, setPersonSeatContext, setPersonWalkContext, setPersonZoneContext, takePersonControl } from '@/components/room-organizer/three/people-anim';
 import { buildProceduralPerson } from '@/components/room-organizer/three/builders/builders-people';
 import { findWalkRole } from '@/components/room-organizer/lib/walk-roles';
-import { createPlanTrafficLayer } from '@/components/room-organizer/three/plan-traffic-layer';
-import { createPlanRoleLabels } from '@/components/room-organizer/three/plan-role-labels';
-import { libraryEntryColor } from '@/components/room-organizer/lib/oneplan-library';
-import { workerRoleColor, workerSticker } from '@/components/room-organizer/lib/oneplan-stickers';
+import { createSplatPreview, type SplatPreview } from '@/components/room-organizer/three/splat-preview';
+import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
+import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
 import type { WalkViewMode } from '@/components/room-organizer/lib/walk-view-modes';
-import {
-  InteractRegistry,
-  nearestNearbyEntry,
-  type InteractableEntry,
-} from '@/components/room-organizer/lib/interact-registry';
-import { facilityInteractables, interactHintLabel, seatInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
 import {
   facilityProp,
   planFootprintShapes,
   planShellFrame,
   type PlanPropShape,
 } from '@/components/room-organizer/lib/plan-footprint-geometry';
-import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
 import { acquireWebGLSurface } from '@/components/room-organizer/lib/webgl-context';
 import {
   planCrowdShellPlacements,
@@ -81,12 +91,12 @@ import {
   type SceneObjectPlacement,
 } from '@/components/room-organizer/lib/plan-scene-placement';
 import { assignCrowdWalkRoutes } from '@/components/room-organizer/lib/plan-crowd-routes';
+import { planFacilityColliders, planSeatAnchors, planWalkBounds, planZoneRings } from '@/components/room-organizer/lib/plan-walk-context';
 import {
   splatPlacementOffset,
   splatVenueSpan,
   splatWorldPosition,
 } from '@/components/room-organizer/lib/plan-splat-placement';
-import { createSplatPreview, type SplatPreview } from '@/components/room-organizer/three/splat-preview';
 import { RESEARCH_BASEMAP_TAG } from '@/components/room-organizer/three/research-basemap';
 import {
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
@@ -96,10 +106,6 @@ import {
   facilityContainsPoint,
 } from '@/components/room-organizer/lib/site-plan-facilities';
 import {
-  findAholoAsset,
-  resolveAholoAssetUrl,
-} from '@/components/room-organizer/lib/aholo-assets';
-import {
   defaultSiteCalibration,
   readSiteCalibration,
 } from '@/components/room-organizer/lib/site-capture';
@@ -107,10 +113,7 @@ import type { FurnitureItem } from '@/components/room-organizer/lib/types';
 import { OUTDOOR_WALK_CANVAS_ID } from '@/components/room-organizer/lib/walk-engage';
 import { clearPlanFacilityDrag, getPlanFacilityDrag } from '@/components/room-organizer/lib/plan-facility-drag';
 import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/plan-catalog-drag';
-import { CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/catalog-drag';
-import { useOutdoorWalk, type SeatWalkState } from '@/components/room-organizer/hooks/use-outdoor-walk';
-import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
-import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import { SCOPE_FROST_BLUR_PX, SCOPE_FROST_VEIL, drawScopeFrost } from '@/components/room-organizer/lib/outdoor-scope-frost';
 
 /** 没锚点的场地（纯纸面规划）用的地面底色。 */
 const PAPER_GROUND = '#efece4';
@@ -409,6 +412,10 @@ export default function OutdoorPlan3D({
   const compassRef = useRef<HTMLDivElement | null>(null);
   const scaleBarRef = useRef<HTMLDivElement | null>(null);
   const scaleLabelRef = useRef<HTMLSpanElement | null>(null);
+  /** 3D 框外毛玻璃层：叠在 WebGL 上面的透明 canvas（只在框外糊底图）。 */
+  const frostRef = useRef<HTMLCanvasElement | null>(null);
+  /** 设计范围环的最新点位：镜头每帧动，环只在 plan 变时换。 */
+  const scopeRingRef = useRef<readonly PlanPoint[]>([]);
   const lineMaterialsRef = useRef<{ resolution: THREE.Vector2 }[]>([]);
   // 漫游占位 avatar：第三人称 / 过肩档显示；帧姿态由 useOutdoorWalk 每帧写 ref，主 loop 摆位。
   const avatarGroupRef = useRef<THREE.Group | null>(null);
@@ -981,6 +988,17 @@ export default function OutdoorPlan3D({
         boundary: nextPlan.boundary,
         metrics: nextMetrics,
         routes: nextPlan.routes.map(({ kind, points, carrier, oneWay }) => ({ kind, points, carrier, oneWay })),
+        // 设施只取影响几何 / 可坐判定的字段：vendor、日期这些改了不必重建人群。
+        facilities: (nextPlan.facilities ?? []).map((facility) => ({
+          id: facility.id,
+          name: facility.name,
+          templateId: facility.templateId,
+          position: facility.position,
+          size: facility.size,
+          rotationDeg: facility.rotationDeg,
+        })),
+        // 分区轮廓变了就要重算「从哪儿进区」（B2）。
+        zones: (nextPlan.zones ?? []).map((zone) => ({ id: zone.id, polygon: zone.polygon })),
       });
       if (signature === crowdSignature) return;
       crowdSignature = signature;
@@ -999,6 +1017,23 @@ export default function OutdoorPlan3D({
         nextPlan.boundary,
         nextMetrics,
       );
+      // 行走上下文（B1）：碰撞盒 + 可走矩形 + 座位锚点。此前户外从未注入—
+      // 人群是「无碰撞、无围栏、只沿折线」在走。座椅自身不进碰撞盒：人要走到椅子
+      // 后面才坐得下，椅子当障碍会永远到不了（见 lib/plan-walk-context.ts 注释）。
+      const facilitiesForWalk = Array.isArray(nextPlan.facilities) ? nextPlan.facilities : [];
+      const localRoutes = [...walkRouteMap.values()].map((route) => route.points);
+      setPersonWalkContext(
+        {
+          colliders: planFacilityColliders(facilitiesForWalk, nextPlan.boundary, nextMetrics, localRoutes),
+          bounds: planWalkBounds(nextMetrics),
+        },
+        'outdoor',
+      );
+      setPersonSeatContext({ seats: planSeatAnchors(facilitiesForWalk, nextPlan.boundary, nextMetrics) }, 'outdoor');
+      // 分区漫游（B2）：流线从区外穿进区内时，人有概率拐进去走一段再回线。
+      // 分区太窝（< 4 m²）直接丢弃：进去也只能原地转身。
+      const zonesForWalk = Array.isArray(nextPlan.zones) ? nextPlan.zones : [];
+      setPersonZoneContext({ zones: planZoneRings(zonesForWalk, nextPlan.boundary, nextMetrics) }, 'outdoor');
       const totals = new Map<string, number>();
       const ordinals = new Map<string, number>();
       const colors = new Map(nextPlan.workers.map(worker => [worker.id, worker.color]));
@@ -1962,7 +1997,94 @@ export default function OutdoorPlan3D({
     renderer.domElement.addEventListener('pointercancel', onPointerUp);
     renderer.domElement.addEventListener('dblclick', onDblClick);
 
+    /**
+     * 2026-11-17 用户「3D 白框外没有模糊」→（同日回修）「为什么给我设计场地里面都加模糊了」。
+     *
+     * 第一版是「`backdrop-filter: blur()` 面 + `clip-path` 挖洞」：实测 Chromium 157 的
+     * `backdrop-filter` 根本不认 `clip-path`（连只裁一个三角形都不生效），模糊直接铺满整层，
+     * 设计范围里面也一起糊了。现在与 2D `drawDesignScopeMask` 同一套：这一帧渲染完，
+     * 把画面按 evenodd 只在框外重画一遍（`ctx.filter = blur(7px)`）再压薄白纱，
+     * 画进叠在 WebGL 上的透明 canvas——框内像素完全没被碰过。
+     *
+     * 环在镜头后面时投影会翻面：宁可整层藏掉，也不要把框内糊掉。
+     */
+    const frostProbe = new THREE.Vector3();
+    let lastFrostKey = Number.NaN;
+    let lastFrostAt = 0;
+
+    /** 相机 / 尺寸 / 范围都没变就别重画：毛玻璃是纯屏幕空间复算，每帧糊一遍太贵。 */
+    function frostSignature(ring: readonly PlanPoint[], width: number, height: number): number {
+      let hash = (ring.length * 131 + width * 7 + height * 3) | 0;
+      // 逐元素哈希，不展开成临时数组：这个函数每帧都要跑，别给 GC 添活。
+      const world = camera.matrixWorld.elements;
+      const projection = camera.projectionMatrix.elements;
+      for (let index = 0; index < 16; index += 1) hash = (hash * 31 + Math.round(world[index]! * 1e4)) | 0;
+      for (let index = 0; index < 16; index += 1) hash = (hash * 31 + Math.round(projection[index]! * 1e4)) | 0;
+      for (const point of ring) hash = (hash * 31 + Math.round(point.x * 100) + Math.round(point.y * 100)) | 0;
+      return hash;
+    }
+
+    function hideScopeFrost(element: HTMLCanvasElement): void {
+      if (element.style.display !== 'none') element.style.display = 'none';
+      // 下次要露出来时无条件重画，别拿旧快照顶。
+      lastFrostKey = Number.NaN;
+    }
+
+    function updateScopeFrost(): void {
+      const element = frostRef.current;
+      const activeRenderer = renderer;
+      const ring = scopeRingRef.current;
+      const width = stage?.clientWidth ?? 0;
+      const height = stage?.clientHeight ?? 0;
+      if (!element) return;
+      if (!activeRenderer || ring.length < 3 || width <= 0 || height <= 0) return hideScopeFrost(element);
+
+      // 变化时按 ~25 fps 追（糊过的画面看不出帧差），静止时 4 Hz 兜底——
+      // 瓦片后到、人物走动都会改底图，框外不能永远停在旧快照上。
+      const now = performance.now();
+      const key = frostSignature(ring, width, height);
+      const changed = key !== lastFrostKey;
+      if (now - lastFrostAt < (changed ? 40 : 250)) return;
+
+      const screen: { x: number; y: number }[] = [];
+      for (const point of ring) {
+        // 世界坐标与 footprint 同一口径：three.x = plan.x、three.z = -plan.y。
+        frostProbe.set(point.x, 0.05, -point.y).applyMatrix4(camera.matrixWorldInverse);
+        if (frostProbe.z > -0.4) return hideScopeFrost(element);
+        const ndc = frostProbe.applyMatrix4(camera.projectionMatrix);
+        screen.push({ x: (ndc.x * 0.5 + 0.5) * width, y: (-ndc.y * 0.5 + 0.5) * height });
+      }
+
+      const ratio = Math.min(2, window.devicePixelRatio || 1);
+      const pixelWidth = Math.max(1, Math.round(width * ratio));
+      const pixelHeight = Math.max(1, Math.round(height * ratio));
+      if (element.width !== pixelWidth) element.width = pixelWidth;
+      if (element.height !== pixelHeight) element.height = pixelHeight;
+      const frostCtx = element.getContext('2d');
+      if (!frostCtx) return hideScopeFrost(element);
+      frostCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const painted = drawScopeFrost(frostCtx, {
+        width,
+        height,
+        ring: screen,
+        source: activeRenderer.domElement,
+        blurPx: SCOPE_FROST_BLUR_PX,
+        veil: SCOPE_FROST_VEIL,
+      });
+      if (!painted) return hideScopeFrost(element);
+      if (element.style.display !== 'block') element.style.display = 'block';
+      lastFrostKey = key;
+      lastFrostAt = now;
+    }
+
     let idleTick = 0;
+    /**
+     * 2D 地图态（保活隐藏）的人物低频推进（B3 补丁）：不推进的话切回 2D 时人位
+     * 状态环会定格在切走那一刻。节拍器按「每一帧的真实耗时」累计，每 0.25 s
+     * 交出一段 dt 给人物，速度与 3D 态一致，只是采样稀。
+     */
+    const IDLE_PEOPLE_STEP_S = 0.25;
+    const idleCrowd = createCrowdIdlePacer(IDLE_PEOPLE_STEP_S);
     let lastFrameAt = performance.now();
     function loop(): void {
       frame = window.requestAnimationFrame(loop);
@@ -1974,6 +2096,8 @@ export default function OutdoorPlan3D({
       // 不需要再从低清瓦片重新抓一遍。
       if (!activeRef.current) {
         idleTick = (idleTick + 1) % 6;
+        // 每帧都记（不只是 1/6 帧），否则人物只有真实速度的 1/6。
+        idleCrowd.tick(deltaSeconds);
         if (idleTick !== 0) return;
       }
       const walking = walkEnabledRef.current;
@@ -2011,12 +2135,21 @@ export default function OutdoorPlan3D({
         scaleLabelRef.current.textContent = meters >= 1000 ? `${meters / 1000} km` : `${meters} m`;
       }
       loadCloserTiles();
-      if (!activeRef.current) return;
+      if (!activeRef.current) {
+        // 隐藏态也按低频把人物推下去（约 4 Hz）：2D 人位的进区/落座色环要跟着变，
+        // 否则只能看到「切走那一刻」的定格。不渲染、不碰相机与手柄，开销只有这一步。
+        const step = idleCrowd.take();
+        if (step !== null) advancePeopleAnimations(step, scene, 'outdoor');
+        return;
+      }
+      // 回到 3D：丢掉未用完的累计，避免切回来那一下补步。
+      idleCrowd.reset();
       // 2026-11-12 P2-i 3D 版：选中设施编辑手柄逐帧跟随镜头与拖拽预览（位置 + 恒定屏幕尺寸）。
       updateFacilityHandles();
       updateZoneVertexHandles();
       // 户外人物动画：注册表推进待机/步态 + 自动播放的非人物 GLB 实例。
-      advancePeopleAnimations(deltaSeconds, scene);
+      // owner 固定 'outdoor'：两套 3D 同挂时各用自己那套碰撞盒与围栏。
+      advancePeopleAnimations(deltaSeconds, scene, 'outdoor');
       advanceGlbAnimations(deltaSeconds);
       trafficLayer.advance(deltaSeconds);
       // 漫游占位 avatar：第三人称 / 过肩档按帧姿态摆位；第一人称、鸟瞰或退出漫游时隐藏。
@@ -2121,17 +2254,24 @@ export default function OutdoorPlan3D({
         };
       }
       // 点云在场时走预览器的分层绘制（点云当背景层，主场景再叠上去）。
+      // 毛玻璃取的是「这一帧已经画好的画面」，所以必须排在渲染之后。
       if (splatPreview && splatPreview.shownId && renderer) {
         splatPreview.renderFrame(renderer, scene, camera);
+        updateScopeFrost();
         return;
       }
       renderer?.render(scene, camera);
+      updateScopeFrost();
     }
     loop();
 
     return () => {
       disposed = true;
       if (releaseControlledActor()) onWalkExitRef.current?.();
+      // 场景拆掉：别把旧场地的围栏与座位留给下一份户外方案。
+      setPersonWalkContext(null, 'outdoor');
+      setPersonSeatContext(null, 'outdoor');
+      setPersonZoneContext(null, 'outdoor');
       layerApiRef.current = null;
       modelRunRef.current += 1;
       window.cancelAnimationFrame(frame);
@@ -2217,6 +2357,13 @@ export default function OutdoorPlan3D({
     else layerApiRef.current?.syncFootprint(plan);
   }, [plan]);
 
+  // 2026-11-17 用户「3D 的时候设计白框外并没有添加蒙版 / 就是没有模糊」：
+  // 2D 是屏幕空间 blur(7px) + 白纱；3D 用一层 backdrop-filter 面按设计范围投影挖洞，
+  // 两边才是同一个观感。环只在 plan 变时换，投影逐帧算。
+  useEffect(() => {
+    scopeRingRef.current = plan.designScope && plan.designScope.length >= 3 ? plan.designScope : [];
+  }, [plan.designScope]);
+
   // 2026-11-12 P2-i 3D 版：接管/覆盖层激活时重读一次编辑视觉——2D 里最后的状态变化
   // （选中设施、退回浏览模式）不一定伴随 plan 变化，不补这次同步手柄会拿旧快照。
   useEffect(() => {
@@ -2272,6 +2419,25 @@ export default function OutdoorPlan3D({
           还没有用地红线：切回 2D 画一圈，这里就会立起你的场地
         </div>
       )}
+      {/* 2026-11-17 用户「3D 的时候设计白框外并没有添加蒙版」「就是没有模糊」，
+          回修「为什么给我设计场地里面都加模糊了」：
+          这层是叠在 WebGL 上的透明 canvas，逐帧只把框外那块画面糊一遍（7 px，与 2D 同档）
+          再压薄白纱；框内不画任何像素。不用 `backdrop-filter`——Chromium 里它不认
+          `clip-path`，会把整屏一起糊（见 lib/outdoor-scope-frost.ts）。 */}
+      <canvas
+        ref={frostRef}
+        data-testid="outdoor-scope-frost"
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 1,
+          width: '100%',
+          height: '100%',
+          display: 'none',
+          pointerEvents: 'none',
+        }}
+      />
       <dialog
         ref={walkChooserRef}
         aria-labelledby="outdoor-walk-chooser-title"

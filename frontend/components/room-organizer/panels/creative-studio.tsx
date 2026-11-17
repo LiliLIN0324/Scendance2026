@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
-import { useBackendSession, SceneApiError, type BackendSession, type SceneProposal, type AgentRun, type AgentRunInput, type ChatCapabilities, type ChatProviderId } from '@/lib/backend-session';
+import { useBackendSession, SceneApiError, type BackendSession, type Studio, type SceneProposal, type AgentRun, type AgentRunInput, type ChatCapabilities, type ChatProviderId } from '@/lib/backend-session';
 import { humanRecipeId } from '@/lib/recipe-display';
 import { deriveSeededVariants, recipeHash as promptRecipeHash } from '@/lib/recipe-proposal';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { preferredStudio, rememberStudio } from '@/lib/workspace-api';
+import { defaultAttachName } from '../hooks/use-silent-cloud-attach';
 import {localWriteCapabilityGuard,type LocalWriteCapability} from '@/lib/local-write-lease';
 import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
 import { readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from '@/lib/material-checkin-storage';
@@ -863,7 +865,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   }
   function assertLocalRestore():void {
     if(requestPending.current)throw new Error('助手仍在处理，请先等待或取消当前任务，再恢复或切换活动。');
-    if(!isLocalActivityWorkspace(controller))throw new Error('当前工作台连接了云项目，请先切换到本地项目再恢复备份。');
+    if(!isLocalActivityWorkspace(controller))throw new Error('当前活动已是团队项目，本机备份恢复只在草稿上可用。请先在「项目」里新建项目，再恢复备份。');
     if(!prepareRestoreLayout||!commitRestoredLayout)throw new Error('此工作台尚未开放完整备份恢复。');
   }
   async function disconnectSceneForRestore(purpose:'restore'|'fresh'='restore'):Promise<void> {
@@ -934,17 +936,42 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     await held?.lease.release();
     if(held&&editorLeases.current.get(held.scope)===held.lease)editorLeases.current.delete(held.scope);
   }
+  /**
+   * 团队项目里「新建活动」的出口：照无感挂云的同一套调用建一个空白项目，再整页进入它。
+   * 为什么不在原地切：原地切要求活动编号与所绑云项目一致，绕过那个守卫会把空白画布写回旧项目。
+   * 换页后按 /editor/?project=… 加载，旧项目、旧活动、旧编辑权都不被动。
+   */
+  async function openNewProjectForActivity(startLayout:RoomLayout):Promise<void> {
+    const user=controller.getSnapshot().user;
+    if(!user)throw new Error('登录后才能新建项目；当前活动未改动。');
+    const scene=layoutToBackendScene(startLayout);
+    let studios=await controller.listStudios();
+    if(!studios.length)studios=[await controller.businessRequest<Studio>('/studios','POST',{requestId:crypto.randomUUID(),name:'个人工作室',displayName:'负责人'})];
+    const studioId=preferredStudio(user.id,studios);
+    rememberStudio(user.id,studioId);
+    try{await controller.releaseLease();}catch{/* 交不出去也继续：要建的是另一个项目 */}
+    const project=await controller.createProject(studioId,startLayout.name?.trim()||defaultAttachName(),scene);
+    try{await controller.acquireLease(project.id);}catch{/* 拿不到编辑权就按只读进入，账户面板里可再取 */}
+    if(typeof window==='undefined')throw new Error('当前环境无法打开新项目。');
+    window.location.assign(`/editor/?project=${encodeURIComponent(project.id)}`);
+  }
   async function createFreshActivity(candidate:LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void):Promise<void> {
     assertSwitchCurrent?.();
     if(requestPending.current)throw new Error('助手仍在处理，请先等待或取消当前任务，再新建活动。');
-    if(!isLocalActivityWorkspace(controller))throw new Error('当前工作台连接了云项目，请先切换到本地项目再新建活动。');
-    if(!commitFreshActivityLayout)throw new Error('此工作台尚未开放新建活动。');
     const checked=validateLocalProjectRestoreCandidate(candidate);
     if(checked.source!=='backup'||checked.backupVersion!==3||checked.brief.status!=='absent'||checked.materialCheckins.status!=='absent'||checked.sourceDocuments.status!=='not-in-file')throw new Error('新建活动不能用来恢复旧备份。');
     const proposed=checked.layout;
     if(proposed.eventOperations||proposed.productionPlan||proposed.designBook||proposed.floorPlanImage||proposed.itemLayers)throw new Error('新建活动不能带入旧的执行资料或方案历史。');
     const proposedId=proposed.id;
     if(!isFreshActivityId(proposedId)||proposedId===scopeRef.current)throw new Error('新活动编号无效或与当前活动重复，未切换。');
+    if(!isLocalActivityWorkspace(controller)){
+      // 团队项目里没有“本机活动”这一层：新建活动先建一个空白项目，再进它的画布。
+      // 当前项目一个字不改，也不会留下同名副本。
+      assertSwitchCurrent?.();
+      await openNewProjectForActivity(proposed);
+      return;
+    }
+    if(!commitFreshActivityLayout)throw new Error('此工作台尚未开放新建活动。');
     assertSwitchCurrent?.();
     const lease=writeCapability?localWriteCapabilityGuard(writeCapability):undefined;
     lease?.assertStillHeld();

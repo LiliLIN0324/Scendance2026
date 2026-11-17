@@ -147,7 +147,8 @@ export type ProbePublicSource =
   | 'carto-dark'
   | 'amap-satellite'
   | 'amap-streets'
-  | 'amap-streets-labels';
+  | 'amap-streets-labels'
+  | 'esri-satellite';
 
 export const PROBE_PUBLIC_SOURCES: readonly ProbePublicSource[] = [
   'osm',
@@ -156,6 +157,7 @@ export const PROBE_PUBLIC_SOURCES: readonly ProbePublicSource[] = [
   'amap-satellite',
   'amap-streets',
   'amap-streets-labels',
+  'esri-satellite',
 ];
 
 /**
@@ -220,6 +222,19 @@ export const PUBLIC_SOURCE_SPECS: Record<ProbePublicSource, PublicSourceSpec> = 
     urlTemplate: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
     attribution: '© 高德地图',
   },
+  // 2026-11-17 用户报「海外的地图没有卫星图，看海外案例就看不到底图」：
+  // 高德卫星在境外一律回同一张 4235 B「此区域无卫星图」灰图（巴黎/伦敦/洛杉矶/Victoria 四地
+  // MD5 相同），街道档更只是 124 B 空白瓦片。所以海外场地必须换一个全球图源。
+  // Esri World Imagery 实测：巴黎 z16 真影像、Victoria 内港 z18 真航拍，z15–z19 逐级出图，
+  // 响应带 `Access-Control-Allow-Origin: *`（能直接进 canvas 拼 3D 贴地纹理），无需 key。
+  // 使用边界：公开免费层，需保留署名并遵守 Esri 用量政策；商用重负载另议（规划稿 §5.4）。
+  'esri-satellite': {
+    id: 'esri-satellite',
+    label: '全球卫星',
+    // 注意：World_Imagery 的路径是 /{z}/{y}/{x}（行在前、列在后），与常见 {z}/{x}/{y} 相反。
+    urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '© Esri · Maxar · Earthstar Geographics',
+  },
 };
 
 /** 公开源单层瓦片地址（自带注记，无需叠加层）。 */
@@ -251,6 +266,8 @@ export function basemapSourceAttribution(source: ProbePublicSource | TdtProbeLay
     case 'amap-streets':
     case 'amap-streets-labels':
       return '© 高德地图';
+    case 'esri-satellite':
+      return '© Esri · World Imagery 卫星影像';
     case 'img':
       return '© 天地图影像 · 国家地理信息公共服务平台';
     default:

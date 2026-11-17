@@ -1685,3 +1685,170 @@ it("brief 记下钓鱼比赛后，后续一句 zones 也走沿岸", async () => 
   });
   expect(flow.proposal?.label).toContain("沿岸排布");
 });
+
+// 2026-11-17 用户拍板「沿线/巡游和沿岸一起进第一批」：巡游补给沿线排布，模型不回 ask 也能直达。
+it("模型不回 ask 也能沿线：巡游补给 + zones 动作直接出沿线预览", async () => {
+  await confirmScope();
+  const road = {
+    id: "ofm:road/9",
+    name: "滨河路",
+    points: [
+      { x: 0, y: 30 },
+      { x: 80, y: 30 },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:road",
+      status: "partial",
+      text: "{}",
+      featureIds: [road.id],
+      unknowns: [],
+      roadLines: () => [road],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("zones"));
+  await act(async () => {
+    await flow.handle("这里要办一场巡游，沿线摆补给站");
+  });
+  expect(flow.proposal?.label).toContain("沿线排布");
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("补给站")) ?? [];
+  expect(stations.length).toBeGreaterThanOrEqual(2);
+  // 地图参照：补一条赛事中心线（示意）。
+  expect(flow.proposal?.next.routes.some((r) => r.name.includes("赛事线"))).toBe(true);
+});
+
+it("画布上已有的巡游线可直接作沿线参照，不重复加赛道线", async () => {
+  await confirmScope();
+  plan = {
+    ...plan,
+    routes: [
+      {
+        id: "11111111-1111-4111-8111-000000000009",
+        kind: "pedestrian",
+        name: "巡游线",
+        points: [
+          { x: 10, y: 30 },
+          { x: 90, y: 30 },
+        ],
+        widthM: 3,
+        oneWay: false,
+        notes: "",
+      },
+    ],
+  };
+  Object.assign(bridge, {
+    mapContext: async (): Promise<OutdoorMapContext> => ({
+      version: "map:dry2",
+      status: "partial",
+      text: "{}",
+      featureIds: [],
+      unknowns: [],
+    }),
+  });
+  understand.mockResolvedValueOnce(response("objects"));
+  await act(async () => {
+    await flow.handle("这里要办一场巡游，沿线摆补给站");
+  });
+  expect(flow.proposal?.label).toContain("沿线排布·巡游线");
+  // 画布线路自身就是赛道，不再重复补赛事中心线。
+  expect(flow.proposal?.next.routes).toHaveLength(1);
+  const stations = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("补给站")) ?? [];
+  expect(stations.length).toBeGreaterThanOrEqual(2);
+});
+// 2026-11-17 用户拍板「用户是讲不清楚需要什么的，AI 就是设计师，先出一版他看看」：
+// 没有物料清单时不再追问「各区需要哪些物件、各多少」，而是按分区用途 + 真实面积出一版默认方案。
+function seedMarketPlan(): void {
+  // 画布上已经有一块摆摊区（20×10m = 200㎡）和一扇已核实的入口 + 一条人行主线。
+  plan = {
+    ...plan,
+    zones: [
+      {
+        id: crypto.randomUUID(),
+        name: "摆摊区",
+        notes: "",
+        semantic: "reserved",
+        purpose: "market",
+        environment: "outdoor",
+        polygon: [
+          { x: 20, y: 20 },
+          { x: 40, y: 20 },
+          { x: 40, y: 30 },
+          { x: 20, y: 30 },
+        ],
+      },
+    ],
+    nodes: [
+      {
+        id: crypto.randomUUID(),
+        name: "已核对活动双向主出入口",
+        kind: "both",
+        verification: "user-confirmed",
+        position: { x: 5, y: 5 },
+        notes: "",
+      },
+    ],
+    routes: [
+      {
+        id: crypto.randomUUID(),
+        kind: "pedestrian",
+        name: "已核对人行主线",
+        points: [
+          { x: 5, y: 5 },
+          { x: 5, y: 65 },
+        ],
+        widthM: 3,
+        oneWay: false,
+        notes: "",
+      },
+    ],
+  };
+}
+function stubLibraryByQuery(): void {
+  bridge.readLibrary = vi.fn(async (queries: string[]) =>
+    queries.map((query) => ({
+      id: `lib-${query}`,
+      name: query,
+      source: "built-in" as const,
+      width: 2,
+      depth: 2,
+      height: 2.5,
+      modelSlug: `model-${query}`,
+      available: true,
+    })),
+  );
+}
+it("没有物料清单也出方案：按分区用途与面积走默认设计，不再追问各区需要哪些物件", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  // 用户从头到尾没给过清单。
+  expect(flow.state.brief.items).toHaveLength(0);
+  await action("objects");
+  expect(flow.notice).not.toContain("各区需要哪些物件");
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.label).toBe("按分区用途出的默认方案");
+  expect(flow.proposal?.warnings.join()).toContain("默认方案");
+  // 预览阶段不写画布。
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  // 200㎡ / 8㎡（含通道）= 25 摊。
+  expect(plan.facilities).toHaveLength(25);
+  // 默认值是草案，不写回用户需求：用户下一句亲口说的数量仍然优先。
+  expect(flow.state.brief.items).toHaveLength(0);
+});
+it("连续两次追问都没有推进时，直接出默认方案而不是问第三句", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  // 第一次追问：照旧问，但开始记账。
+  await turn("你看着办", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
+  expect(flow.proposal).toBeNull();
+  expect(saySpy).toHaveBeenCalled();
+  // 第二次还是追问、画布毫无改动 → 不再问，直接出一版默认方案（仍然只预览）。
+  await turn("随便", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  expect(plan.facilities).toHaveLength(0);
+});

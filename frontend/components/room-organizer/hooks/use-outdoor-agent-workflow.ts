@@ -16,6 +16,7 @@ import {
   type OutdoorLibraryItem,
   type OutdoorStage,
   type OutdoorTurn,
+  type OutdoorBrief,
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
@@ -50,6 +51,8 @@ import {
   type ObjectsLayoutStrategy,
 } from "../lib/outdoor-agent-planning";
 import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/outdoor-personal-library";
+// 2026-11-17 用户拍板「AI 先当设计师，先出一版他看看」：没有清单时按分区用途出默认方案。
+import { draftDemand } from "../lib/outdoor-draft-design";
 // docs/46 V-P2：虚拟场地意图切纸面（ground-mode store，2D/3D 同步跟随）。
 import { writePlanGroundMode } from "../lib/plan-basemap-source";
 // 2026-11-14：直引纯函数库（原从组件模块引入，会把 three.js 级别的依赖链拖进 hook 且有循环风险）。
@@ -108,7 +111,12 @@ import {
   proposeShorelineLayout,
   shorelineIntent,
 } from "../lib/outdoor-shoreline-layout";
-import { isShorelineEvent } from "../lib/outdoor-event-logic";
+import {
+  parseRouteLineDemand,
+  proposeRouteLineLayout,
+  referenceKindFor,
+  routeLineIntent,
+} from "../lib/outdoor-route-line-layout";
 import { facilityFootprintRing } from "../lib/site-plan-facilities";
 import { renamedNodeName } from "../lib/site-plan-node-names";
 import type { OutdoorTaskProgress } from "../components/outdoor-task-card";
@@ -631,6 +639,8 @@ export function useOutdoorAgentWorkflow(input: {
     warnings: string[] = [],
     afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
   ) {
+    // 有了一版可看的预览就不再记账：追问预算只数“毫无进展”的那几轮。
+    askStreakRef.current = 0;
     const base = callbacks.current.bridge()?.getPlan();
     if (!base || !live(job)) return;
     validateWorkflowPlan(base, next);
@@ -921,7 +931,16 @@ export function useOutdoorAgentWorkflow(input: {
     base: SitePlanData;
     library: OutdoorLibraryItem[];
     strategy: ObjectsLayoutStrategy;
+    /** 本次预览实际用的需求清单（可能是默认方案，「换一种排法」要按同一份清单重排）。 */
+    brief: OutdoorBrief;
   } | null>(null);
+  /**
+   * 2026-11-17 追问预算：连续追问且画布毫无改动的次数。
+   * 到 2 就停止提问、直接出默认方案——用户的原话是「随便」「你看着办」，不是要一份问卷。
+   */
+  const askStreakRef = useRef(0);
+  /** 上一轮用户原话：补答上一问时（「1000 张摊位」→「放在摆摊区」）数字仍是用户亲口说的。 */
+  const priorUserTextRef = useRef("");
   /** 提案卡「换一种排法」：同一基座换下一策略重排，重新出预览（不写盘，确认才应用）。 */
   async function cycleObjectsLayout() {
     const stored = objectsLayoutRef.current;
@@ -936,7 +955,7 @@ export function useOutdoorAgentWorkflow(input: {
     try {
       const result = await proposeInventoryObjects(
         stored.base,
-        stateRef.current.brief,
+        stored.brief,
         stored.library,
         undefined,
         {
@@ -992,6 +1011,8 @@ export function useOutdoorAgentWorkflow(input: {
     setBusy(false);
   }
   async function act(turn: OutdoorTurn, message: string, continueDesign = false) {
+    const priorUserText = priorUserTextRef.current;
+    priorUserTextRef.current = message;
     if (turn.action === "cancel") {
       cancel();
       return;
@@ -1072,7 +1093,7 @@ export function useOutdoorAgentWorkflow(input: {
           : {}),
       },
     };
-    persist(mergeOutdoorFacts(stateRef.current, normalized, message));
+    persist(mergeOutdoorFacts(stateRef.current, normalized, message, priorUserText));
     if (turn.action === "ask") {
       // 2026-11-17 用户拍「都做」的第二个卡点：用户已经明确选了上一轮二选一里的第 N 项，
       // 模型却又把同一件事反问一遍——原样端回去，用户看到的就是「我选了第一个方案，什么都没发生」。
@@ -1093,9 +1114,29 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       // 2026-11-17 用户实测「就沿着水岸线」→ 被反問「北/东/南/西」，而画布上河就在那儿。
-      // 水体/水道已进快照（openfreemap-water），沿岸意图的追问不再问方位：
-      // 沿真实岸线直接出预览；真没有水系/界外才给可执行的下一步。ask 与非 ask 共用 shorelineTurn。
-      if (shorelineIntent(message) && (await shorelineTurn(message, continueDesign, null))) return;
+      // 水体/水道与道路折线都已进快照，沿岸/沿线措辞的追问不再问方位：
+      // 沿真实参照直接出预览；真没有参照/界外才给可执行的下一步。ask 与非 ask 共用 referencePreview。
+      const askReference = shorelineIntent(message)
+        ? "shoreline"
+        : routeLineIntent(message)
+          ? "route-line"
+          : null;
+      if (askReference && (await referencePreview(askReference, message, continueDesign, null))) return;
+      // 2026-11-17 用户拍板「AI 先当设计师，先出一版他看看」：追问预算是硬的。
+      // 连续第二次追问、画布毫无改动、用户这句又不是在提问（「你能做什么」这种不算）时，
+      // 不再问第三句，直接按当前分区出默认方案（只出预览）。
+      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
+      const questionish = /[?？]|怎么|如何|能不能|可不可以|可以吗|是不是|为什么/u.test(message);
+      const canDraft = !!planNow && planNow.zones.length > 0
+        && stateRef.current.confirmedBoundary === boundaryKey(planNow)
+        && !stateRef.current.brief.items.length;
+      if (!questionish && canDraft && askStreakRef.current >= 1) {
+        askStreakRef.current = 0;
+        designStep("连续追问两次都没有推进：按设计师模式直接出一版默认方案（只出预览，未写入画布）。");
+        await act({ ...turn, action: "objects", reply: "", references: [], facts: {} }, message, continueDesign);
+        return;
+      }
+      askStreakRef.current += 1;
       // 2026-11-15 用户拍板：反问不是错误——reply 走普通对话气泡（谷地工坊同款），
       // 任务卡只留一条中性提示；不进红卡、不给「重试」（重试对反问无意义）。
       askForDetails(turn.reply || "请补充当前活动需求；没有修改规划。");
@@ -1384,7 +1425,28 @@ export function useOutdoorAgentWorkflow(input: {
           { stopLabel: "停止查找" },
         );
         designStep("按分区用途、物料的真实尺寸和已核对的通道试排。");
-        const queries = stateRef.current.brief.items.map((i) => i.query);
+        // 2026-11-17 用户拍板「用户是讲不清楚需要什么的，AI 就是设计师，先出一版」：
+        // 没有清单不再回头问「各区需要哪些物件、各多少」——按分区用途 + 真实面积 + 人数
+        // 直接出一份默认清单，走同一套真实物料库和几何落位。只出预览，不写画布；
+        // 默认值也不写回 state.brief，用户下一句亲口说的数量仍然优先。
+        const draft = stateRef.current.brief.items.length
+          ? null
+          : draftDemand(plan, stateRef.current.brief);
+        if (draft && !draft.items.length) {
+          status(
+            draft.notes.join(" ") || "画布上的分区还没有可用用途，先补分区用途或直接说要放什么。",
+            "blocked",
+          );
+          return;
+        }
+        const demandBrief: OutdoorBrief = draft
+          ? { ...stateRef.current.brief, items: draft.items }
+          : stateRef.current.brief;
+        if (draft)
+          designStep(
+            `没有清单：按分区用途与面积出默认方案（${draft.items.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、")}）；只出预览，未写入画布。`,
+          );
+        const queries = demandBrief.items.map((i) => i.query);
         const library = bridge.readLibrary
           ? await bridge.readLibrary(queries, job.controller.signal)
           : (await Promise.allSettled([
@@ -1442,10 +1504,10 @@ export function useOutdoorAgentWorkflow(input: {
         const basePlan: SitePlanData = buildingsForPlan ? { ...plan, buildings: buildingsForPlan } : plan;
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
         // 2026-11-14 用户指令「给我几个方案」：物件排布带策略（行列/居中/沿边），提案卡可「换一种排法」循环预览。
-        objectsLayoutRef.current = { base: basePlan, library, strategy: "rows" };
+        objectsLayoutRef.current = { base: basePlan, library, strategy: "rows", brief: demandBrief };
         const result = await proposeInventoryObjects(
           basePlan,
-          stateRef.current.brief,
+          demandBrief,
           library,
           undefined,
           {
@@ -1474,8 +1536,10 @@ export function useOutdoorAgentWorkflow(input: {
           });
           mismatchNotice.push(describeZoneMismatch(result.mismatched, plan, { removed: true }));
         }
-        offer(result.plan, "objects", "逐区复用库内真实设施", job, [
-          stateRef.current.brief.guests
+        offer(result.plan, "objects", draft ? "按分区用途出的默认方案" : "逐区复用库内真实设施", job, [
+          // 默认值必须自证是默认值：用户看到的每一版都说清「这不是你说的数量」。
+          ...(draft ? ["这一版是默认方案：数量按分区用途与可用面积反算，不是你说的数字；要改哪一件直接说。", ...draft.notes] : []),
+          demandBrief.guests
             ? "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。"
             : "人数还没定：本版只按分区用途和库内物料的真实尺寸排布，没有做 2㎡/人 容量粗筛，也没有从物件数量反猜人数；补一句「预计多少人在场」可以再核一遍容量。",
           `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
@@ -1707,12 +1771,80 @@ export function useOutdoorAgentWorkflow(input: {
     } as OutdoorTurn;
   }
 
+  type ReferencePreviewResult =
+    | { ok: true; next: SitePlanData; label: string; warnings: string[]; designStepText: string }
+    | { ok: false; message: string };
+
+  /** 沿岸（水岸线参照）预览构建：钓位贴岸、观众区退让、签到裁判席。 */
+  function shorelinePreviewBuild(plan: SitePlanData, message: string): ReferencePreviewResult {
+    const proposal = proposeShorelineLayout(
+      {
+        shorelines: mapRef.current.water?.() ?? [],
+        boundary: plan.boundary,
+        demand: parseShorelineDemand(message),
+        obstacles: plan.facilities.map(facilityFootprintRing),
+        exclusions: plan.zones.map(zone => zone.polygon),
+      },
+      () => crypto.randomUUID(),
+    );
+    if (!proposal.ok) return { ok: false, message: proposal.message };
+    const { layout } = proposal;
+    return {
+      ok: true,
+      next: {
+        ...plan,
+        zones: [...plan.zones, ...layout.zones],
+        facilities: [...plan.facilities, ...layout.facilities],
+        routes: [...plan.routes, ...layout.routes],
+        nodes: [...plan.nodes, ...layout.nodes],
+      },
+      label: `沿岸排布·${layout.summary.waterName}（${layout.summary.stations} 个钓位）`,
+      warnings: layout.summary.warnings,
+      designStepText: `沿真实岸线 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个钓位；本版只出预览，未写入画布。`,
+    };
+  }
+
+  /** 沿线（巡游/赛道线参照）预览构建：补给站贴线、起终点区、拱门节点；地图参照补赛事中心线。 */
+  function routeLinePreviewBuild(plan: SitePlanData, message: string): ReferencePreviewResult {
+    const proposal = proposeRouteLineLayout(
+      {
+        lines: [
+          ...(mapRef.current.roadLines?.() ?? []),
+          ...plan.routes
+            .filter(route => route.kind === "pedestrian")
+            .map(route => ({ id: route.id, name: route.name, points: route.points, widthM: route.widthM ?? 3 })),
+        ],
+        boundary: plan.boundary,
+        demand: parseRouteLineDemand(message),
+        obstacles: plan.facilities.map(facilityFootprintRing),
+        exclusions: plan.zones.map(zone => zone.polygon),
+      },
+      () => crypto.randomUUID(),
+    );
+    if (!proposal.ok) return { ok: false, message: proposal.message };
+    const { layout } = proposal;
+    return {
+      ok: true,
+      next: {
+        ...plan,
+        zones: [...plan.zones, ...layout.zones],
+        facilities: [...plan.facilities, ...layout.facilities],
+        routes: [...plan.routes, ...layout.routes],
+        nodes: [...plan.nodes, ...layout.nodes],
+      },
+      label: `沿线排布·${layout.summary.lineName}（${layout.summary.stations} 个补给站）`,
+      warnings: layout.summary.warnings,
+      designStepText: `沿线路 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个补给站；本版只出预览，未写入画布。`,
+    };
+  }
+
   /**
-   * 2026-11-17：沿岸排布的确定性接管——ask 与 zones/objects/revise 共用一条路径。
-   * 返回 true = 本轮已按沿岸处理（出预览/给下一步/亮失败），调用方直接 return；
+   * 2026-11-17：参照排布（沿岸/沿线）的确定性接管——ask 与 zones/objects/revise 共用一条路径。
+   * 返回 true = 本轮已按参照排布处理（出预览/给下一步/亮失败），调用方直接 return；
    * 返回 false = 没接管（画布未就绪），调用方落回原路径。
    */
-  async function shorelineTurn(
+  async function referencePreview(
+    kind: "shoreline" | "route-line",
     message: string,
     continueDesign: boolean,
     existingJob?: { epoch: number; controller: AbortController; scope: string } | null,
@@ -1721,43 +1853,23 @@ export function useOutdoorAgentWorkflow(input: {
     const before = JSON.stringify(callbacks.current.bridge()?.getPlan());
     try {
       await mapContext(job.controller.signal);
-      const shorePlan = callbacks.current.bridge()?.getPlan();
+      const referencePlan = callbacks.current.bridge()?.getPlan();
       if (!live(job)) return true;
-      if (!shorePlan) return false;
-      if (JSON.stringify(shorePlan) !== before) {
+      if (!referencePlan) return false;
+      if (JSON.stringify(referencePlan) !== before) {
         status("读取期间画布已变化，请基于当前规划重新预览。", "blocked");
         return true;
       }
-      const shoreline = proposeShorelineLayout(
-        {
-          shorelines: mapRef.current.water?.() ?? [],
-          boundary: shorePlan.boundary,
-          demand: parseShorelineDemand(message),
-          obstacles: shorePlan.facilities.map(facilityFootprintRing),
-          exclusions: shorePlan.zones.map(zone => zone.polygon),
-        },
-        () => crypto.randomUUID(),
-      );
-      if (shoreline.ok) {
-        const { layout } = shoreline;
-        designStep(
-          `沿真实岸线 ${layout.summary.runLengthM} m、间距 ${layout.summary.spacingM} m 排出 ${layout.summary.stations} 个钓位；本版只出预览，未写入画布。`,
-        );
-        offer(
-          {
-            ...shorePlan,
-            zones: [...shorePlan.zones, ...layout.zones],
-            facilities: [...shorePlan.facilities, ...layout.facilities],
-            routes: [...shorePlan.routes, ...layout.routes],
-          },
-          "objects",
-          `沿岸排布·${layout.summary.waterName}（${layout.summary.stations} 个钓位）`,
-          job,
-          layout.summary.warnings,
-        );
+      const result =
+        kind === "shoreline"
+          ? shorelinePreviewBuild(referencePlan, message)
+          : routeLinePreviewBuild(referencePlan, message);
+      if (result.ok) {
+        designStep(result.designStepText);
+        offer(result.next, "objects", result.label, job, result.warnings);
         return true;
       }
-      askForDetails(shoreline.message);
+      askForDetails(result.message);
       return true;
     } catch (error) {
       // 取消就静默结束；真失败（如校验拦截）如实亮出原因，不回退到「问方位」。
@@ -1765,7 +1877,7 @@ export function useOutdoorAgentWorkflow(input: {
       status(
         error instanceof Error
           ? error.message
-          : "沿岸排布未完成；请在地图上确认水岸位置后重试。",
+          : "参照排布未完成；请在地图上确认参照位置后重试。",
         "blocked",
       );
       return true;
@@ -1958,16 +2070,16 @@ export function useOutdoorAgentWorkflow(input: {
         await confirm();
         return true;
       }
-      // 2026-11-17 用户拍板：沿岸活动（钓鱼比赛等）模型不回 ask、直接给设计动作时，
-      // 跳过通用计划批准闸门直接沿岸出预览（预览本身就是确认环节）；范围未确认则落回通用流程先确认范围。
+      // 2026-11-17 用户拍板：沿岸（钓鱼）与沿线（巡游、马拉松）参照类活动，模型不回 ask、
+      // 直接给设计动作时跳过通用计划批准闸门直接出参照预览（预览本身就是确认环节）；
+      // 范围未确认则落回通用流程先确认范围。
+      const referenceKind = referenceKindFor(message, stateRef.current.brief.event);
       if (
+        referenceKind &&
         (turn.action === "zones" || turn.action === "objects" || turn.action === "revise") &&
-        stateRef.current.confirmedBoundary === boundaryKey(plan) &&
-        (shorelineIntent(message) ||
-          isShorelineEvent(message) ||
-          isShorelineEvent(stateRef.current.brief.event))
+        stateRef.current.confirmedBoundary === boundaryKey(plan)
       ) {
-        if (await shorelineTurn(message, true, job)) return true;
+        if (await referencePreview(referenceKind, message, true, job)) return true;
       }
       const steps = outdoorPlanSteps[turn.action];
       if (steps) {
