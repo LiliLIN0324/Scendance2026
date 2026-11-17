@@ -20,8 +20,18 @@ it('下载当天执行包：文件名带活动与日期，内容是完整 HTML',
   const [name, text] = save.mock.calls[0]!;
   expect(name).toBe('冬季-试营业-当天执行包-2026-11-18.html');
   expect(text).toContain('<!doctype html>');
+  expect(text).toContain('生成于 2026-11-18 18:00（Asia/Shanghai）');
   expect(text).toContain('签到');
   expect(screen.getByRole('status').textContent).toContain('已生成当天执行包');
+});
+
+it('北京时间已过午夜时，文件名用上海的日历日，不取 UTC 日期', () => {
+  const save = vi.fn();
+  render(<DaySheetExport layout={layout} save={save} now="2026-11-17T23:30:00.000Z" />);
+  fireEvent.click(screen.getByRole('button', { name: '下载当天执行包' }));
+  const [name, text] = save.mock.calls[0]!;
+  expect(name).toBe('冬季-试营业-当天执行包-2026-11-18.html');
+  expect(text).toContain('生成于 2026-11-18 07:30（Asia/Shanghai）');
 });
 
 it('生成失败只提示，不抛到界面之外', () => {

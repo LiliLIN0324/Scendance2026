@@ -11,6 +11,31 @@ import { latestDeclaration, type SupplierLedger } from './supplier-declarations'
 const escape = (value: string): string => value.replace(/[&<>"']/g, char =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 
+const SHANGHAI = 'Asia/Shanghai';
+
+function shanghaiParts(iso: string, withClock: boolean): Intl.DateTimeFormatPart[] {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: SHANGHAI, year: 'numeric', month: '2-digit', day: '2-digit',
+    ...(withClock ? { hour: '2-digit' as const, minute: '2-digit' as const, hourCycle: 'h23' as const } : {}),
+  }).formatToParts(new Date(iso));
+}
+
+function shanghaiPart(parts: Intl.DateTimeFormatPart[], type: string): string {
+  return parts.find(part => part.type === type)?.value ?? '';
+}
+
+/** 日历日按北京时间，不用 UTC 的日期前缀。凌晨仍属于上海的下一天。 */
+export function shanghaiCalendarDate(iso: string): string {
+  const parts = shanghaiParts(iso, false);
+  return `${shanghaiPart(parts, 'year')}-${shanghaiPart(parts, 'month')}-${shanghaiPart(parts, 'day')}`;
+}
+
+function shanghaiGeneratedAt(iso: string): string {
+  const parts = shanghaiParts(iso, true);
+  const hour = shanghaiPart(parts, 'hour') === '24' ? '00' : shanghaiPart(parts, 'hour');
+  return `${shanghaiCalendarDate(iso)} ${hour}:${shanghaiPart(parts, 'minute')}（Asia/Shanghai）`;
+}
+
 const clock = (iso: string | null): string => iso === null ? '待安排'
   : new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -88,6 +113,6 @@ export function renderDaySheet(input: DaySheetInput): string {
     'h1{font-size:20px}h2{font-size:16px;margin-top:24px;border-bottom:1px solid #ddd;padding-bottom:4px}',
     'table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #ddd;padding:6px;text-align:left}',
     'ul{padding-left:20px}@media print{body{margin:0}}</style></head><body>',
-    `<h1>${escape(kind)}</h1><p>${escape(layout.name || '未命名活动')} · 生成于 ${escape(input.generatedAt)}</p>`,
+    `<h1>${escape(kind)}</h1><p>${escape(layout.name || '未命名活动')} · 生成于 ${escape(shanghaiGeneratedAt(input.generatedAt))}</p>`,
     ...sections, '</body></html>'].join('');
 }
