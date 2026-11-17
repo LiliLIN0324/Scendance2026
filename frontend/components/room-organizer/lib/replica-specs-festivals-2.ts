@@ -88,7 +88,8 @@ export const PARKENFESTIVALEN: ReplicaCaseSpec = {
   region: 'Europe',
   refImage: 'parkenfestivalen-2023.png',
   refLink: LINK('parkenfestivalen-2023'),
-  anchor: { lng: 14.405, lat: 67.28 },
+  anchor: { lng: 14.402003, lat: 67.283828 },
+  rotationDeg: 33,
   locationNote: '镇级锚点：Bodø 城市公园',
   zones: [
     { name: 'Festival Field 节庆场', semantic: 'audience', color: '#3fb544', opacity: 0.3, polygon: [[-35, 30], [40, 42], [55, 5], [20, -25], [-30, -15]] },
@@ -124,7 +125,8 @@ export const RIVERBEND_MUSIC_FESTIVAL: ReplicaCaseSpec = {
   region: 'North America',
   refImage: 'riverbend-music-festival.png',
   refLink: LINK('riverbend-music-festival'),
-  anchor: { lng: -85.309, lat: 35.056 },
+  anchor: { lng: -85.313888, lat: 35.056311 },
+  rotationDeg: 0,
   locationNote: '镇级锚点：Chattanooga 河滨公园（Coolidge Park 一带）',
   zones: [
     { name: 'Site Park 场地园', semantic: 'audience', color: '#e07b30', opacity: 0.12, polygon: [[-120, -20], [-30, -45], [60, -40], [140, -30], [175, 5], [150, 45], [40, 55], [-60, 40], [-135, 20]] },

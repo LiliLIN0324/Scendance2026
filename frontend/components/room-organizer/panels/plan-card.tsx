@@ -496,16 +496,16 @@ export function PlanCard({
       {hasPlans && (
         <div style={variantsBlockStyle}>
           <div style={variantsTitleStyle}>三版布置打分</div>
-          <p style={rationaleStyle}>当前为待核验草案：入口、门扇与现场通行条件仍需确认，分数不代表安全或合规。</p>
+          <p style={rationaleStyle}>分数按容量、动线、人体尺度给三版排序；选一版应用到画布，入口和门扇还能在图上改。</p>
           {functionalNeeds?.checkin == null && <p style={rationaleStyle}>尚未确认是否需要签到。</p>}
           {functionalNeeds?.stage == null && <p style={rationaleStyle}>尚未确认是否需要舞台。</p>}
           {selectedPlan && <details><summary>本次候选检查范围与待核验项</summary>
-            <p>仅检查本次候选及其区域标注，不覆盖既有物件或全部楼层；不能作为全场安全或规范结论。</p>
+            <p>只检查本次候选和它的区域标注；把既有物件或其它楼层加进候选，就会一起检查。</p>
             {buildPlanChecklist({placements:selectedPlan.placements,annotations:draft.annotations,...(checklistRoomSize ? {roomSize:checklistRoomSize} : {}),...(functionalNeeds?.checkin != null?{checkinRequired:functionalNeeds.checkin}:{})}).map(check => <div key={check.id} style={metaStyle}>
               <strong>{check.status === 'violated' ? '发现冲突' : check.status === 'not_applicable' ? '本项不适用' : check.status === 'pass' ? '已核对' : '待核验'}</strong>：{check.applicability} {check.evidence.map(checklistEvidence).join('；')}（{check.ruleScope}）
             </div>)}
           </details>}
-          {!plans!.some(isScoredPlanApplicable) && <p style={rationaleStyle}>本次没有找到可应用的完整候选，可调整区域或需求后重试；这不代表场地无解。</p>}
+          {!plans!.some(isScoredPlanApplicable) && <p style={rationaleStyle}>这次没有可应用的完整候选：改区域或需求后能再出一版。</p>}
           {noRecommendedPlan && (
             <div style={noRecommendBannerStyle} data-testid="plan-card-no-recommendation">
               各候选均有硬冲突，没有可推荐方案：

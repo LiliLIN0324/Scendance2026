@@ -2,6 +2,7 @@ import type { PlanPoint, SitePlanData } from '../../../../supabase/functions/_sh
 import type { RoomLayout } from './types';
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
+import { checkBoundaryRing } from './site-plan-editing';
 
 /**
  * 户外 2D 规划 ↔ 3D 场地壳体联动（P2-g 数据打通）。
@@ -346,6 +347,25 @@ export function trueFootprintBoundary(
   for (let i = 0; i < points.length; i += stride) out.push(points[i]!);
   return out.length >= 3 ? out : null;
 }
+
+/**
+ * 地图搜索选区（经纬度闭合面）→ 可写入 `plan.boundary` 的 ENU 环。
+ * 搜索叠层和用地红线不是同一份数据：道路折线、不够三点、或几何过不了红线校验时返回 null，
+ * 调用方继续只把它当视图辅助。
+ */
+export function planBoundaryFromSearchArea(
+  area: { polygon: readonly [number, number][]; kind?: 'area' | 'line' } | null | undefined,
+  anchor: { lng: number; lat: number } | null | undefined,
+): PlanPoint[] | null {
+  if (!area || area.kind === 'line' || area.polygon.length < 3 || !anchor) return null;
+  const boundary = trueFootprintBoundary(
+    area.polygon.map(([lng, lat]) => ({ lng, lat })),
+    anchor,
+  );
+  if (!boundary || !checkBoundaryRing(boundary).ok) return null;
+  return boundary;
+}
+
 /** 户外规划锚点/真实边界 → 旧场景镜像的西北角原点；不改变 SitePlan 正源。 */
 export function sceneAnchorFromOutdoorPlan(plan: Pick<SitePlanData, 'anchor' | 'boundary'>): RoomLayout['sceneAnchor'] | null {
   if (!plan.anchor || plan.boundary.length < 3) return null;

@@ -77,7 +77,11 @@ describe('rail members and the team page share one source', () => {
     expect(screen.getByText('zhongshu@example.com')).toBeTruthy();
     expect(screen.queryByText(/账号 ID/)).toBeNull();
     expect(screen.getByRole('button', { name: '移除成员终树' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '邀请' })).toBeTruthy();
+    expect(screen.queryByLabelText('成员邮箱')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '邀请' }));
     expect(screen.getByLabelText('成员邮箱')).toBeTruthy();
+    expect(screen.getByTitle('负责人')).toBeTruthy();
     expect(screen.queryByText('林雨舟')).toBeNull();
     expect(screen.queryByText('许知夏')).toBeNull();
   });

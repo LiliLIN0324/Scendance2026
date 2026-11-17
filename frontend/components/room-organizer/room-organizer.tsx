@@ -233,7 +233,7 @@ import { ReferenceImageControls } from './panels/reference-image-controls';
 import { ScendanceLibrary, ScendanceViewTools } from './panels/scendance-workspace';
 import { GmCompassHost } from './components/gm-compass-host';
 import { SpacePanel } from './panels/space-panel';
-import { type ShareMenuActions } from './panels/share-menu';
+import { SHARE_READ_ONLY_LINE, sharePublishReadOnly, type ShareMenuActions } from './panels/share-menu';
 import { type ServerShare } from './lib/share-records';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
@@ -632,11 +632,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [outdoorPanel, setOutdoorPanel] = useState<OutdoorPanelKind | null>(null);
   // 2026-11-16 用户拍板「属性卡只留一句点选提示 + 打开物件库」：
   // 画布（右侧）不持有左栅状态，所以发事件，这里把户外卡切到「添加物件」页签。
+  // 2026-11-18 提升到组件级：agent 面板（LayoutAgentProvider）也要这个入口，effect 内局部定义够不着。
+  const openOutdoorLibrary = useCallback(() => setOutdoorPanel('library'), []);
   useEffect(() => {
-    const openOutdoorLibrary = () => setOutdoorPanel('library');
     window.addEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
     return () => window.removeEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
-  }, []);
+  }, [openOutdoorLibrary]);
   // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
   // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
   useEffect(() => {
@@ -1026,7 +1027,7 @@ useEffect(() => {
     if (!snapshot.user || snapshot.user.is_anonymous) throw new Error('登录后再发布。');
     const projectId = snapshot.project?.id ?? layoutStore.getState().layout.id;
     if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
-    if (snapshot.writeBlocked) throw new Error('这个项目现在是只读，取回编辑权后再发布。');
+    if (snapshot.writeBlocked) throw new Error(SHARE_READ_ONLY_LINE);
     if (!Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再发布。');
     if (snapshot.dirty) {
       const pendingLocal = [...localAssetIdsInLayout(layoutStore.getState().layout)]
@@ -4468,6 +4469,7 @@ useEffect(() => {
     onExportCsv: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportCsv() : undefined,
     onExportGeoJson: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportGeoJson() : undefined,
     onPrintDeck: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportPdf() : undefined,
+    readOnly: sharePublishReadOnly(controller.getSnapshot(), layoutStore.getState().layout.id),
   };
 
   return (
