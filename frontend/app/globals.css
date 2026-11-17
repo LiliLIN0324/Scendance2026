@@ -2114,9 +2114,22 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-br .oc-zoom button {
   width: 38px; height: 38px; min-width: 38px; min-height: 38px;
 }
-/* 漫游 Pegman：常态直立；悬停像被拎起一样上浮并微倾，离开平滑复位。 */
-.sc-workbench .sc-tool-column button.is-walk > svg { transition: transform .18s ease; }
-.sc-workbench .sc-tool-column button.is-walk:hover > svg { transform: translateY(-2px) rotate(-9deg); }
+/* 漫游钮：小人保持直立。悬停抬起的是按钮。 */
+.sc-workbench .sc-tool-column button.is-walk {
+  transition: transform .18s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.sc-workbench .sc-tool-column button.is-walk:hover,
+.sc-workbench .sc-tool-column button.is-walk:focus-visible {
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column button.is-walk,
+  .sc-workbench .sc-tool-column button.is-walk:hover,
+  .sc-workbench .sc-tool-column button.is-walk:focus-visible {
+    transition: none;
+    transform: none;
+  }
+}
 .sc-workbench .sc-tool-column .oc-cluster .sc-tool-menu { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
 /* 2026-11-15 测量变体小标：对齐 Figma 工具栏——一颗合体钮，图标 + 右侧小 V 箭头水平同排，不另起圆钮。 */
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-menu { flex-direction: row; }
@@ -2358,7 +2371,7 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-divider {
   display: none;
 }
-/* 眼睛是我们自己的隐藏工具栏入口：贴在 Pegman 下方，留 4px 间距，不冒充网页版控件。 */
+/* 眼睛是我们自己的隐藏工具栏入口：贴在漫游钮下方，留 4px 间距，不冒充网页版控件。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye {
   margin-top: 3px;
   background: #e6f1f2; color: #5f6c70;
@@ -2377,10 +2390,39 @@ body.sc-panel-dragging * {
   background: rgba(255, 255, 255, .64);
   opacity: .9;
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk {
-  border-radius: 50%; color: #fbbc04;
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk {
+  border-radius: 50%;
+  background: #fff;
+  color: #35624A;
+  box-shadow: 0 0 0 1px #E4E4E7, 0 1px 2px rgba(60, 64, 67, .30), 0 1px 4px rgba(60, 64, 67, .15);
 }
-.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk.is-active { color: #fbbc04; }
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:hover,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:focus-visible {
+  background: #fff;
+  color: #35624A;
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px #E4E4E7, 0 2px 6px rgba(60, 64, 67, .22), 0 1px 3px rgba(60, 64, 67, .30);
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active,
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk.is-active:hover {
+  background: #fff;
+  color: #35624A;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk > svg.walk-figure {
+  width: 22px;
+  height: 22px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-workbench .sc-tool-column button.is-walk,
+  .sc-workbench .sc-tool-column button.is-walk:hover,
+  .sc-workbench .sc-tool-column button.is-walk:focus-visible,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:hover,
+  .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.oc-gm-walk:focus-visible {
+    transition: none;
+    transform: none;
+  }
+}
 /* 户外第一人称漫游时只留这颗漫游钮：再点一次即退出，不让整条控制列挡住走查。 */
 .sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools { display: block !important; }
 .sc-workbench.is-walkthrough.is-outdoor-walk .sc-view-tools .oc-cluster.oc-tr,

@@ -841,7 +841,7 @@ describe('ScendanceViewTools 户外漫游入口', () => {
     expect(toggleWalk).toHaveBeenCalledWith(false);
   });
 
-  it('漫游钮套用与其余地图控件相同的 44px 圆钮类，激活时保持黄人图标', () => {
+  it('漫游钮套用与其余地图控件相同的圆钮类，激活时仍是同一颗钮', () => {
     const { toggleWalk } = renderOutdoorWalk({ walkIn3D: true, walkActive: true });
     const button = screen.getByRole('button', { name: '退出漫游' });
     expect(button.className).toContain('oc-gm-round');
