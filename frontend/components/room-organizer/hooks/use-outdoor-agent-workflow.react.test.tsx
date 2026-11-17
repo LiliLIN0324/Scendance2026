@@ -6,7 +6,7 @@ import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
-import { useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
+import { OUTDOOR_STAGE_LABELS, useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import type {
   OutdoorMapContext,
@@ -1425,6 +1425,15 @@ it("入口核对不能推断出口；卡片显式核对双向出入口经预览�
     }),
   );
   expect(flow.state.stage).toBe("people");
+  // 2026-11-17：三颗按钮原来都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
+  // 后两颗还默认把门当出口，等于替用户做了判断。现在必须是三个互斥的方向选择。
+  const cardButtons = Array.from(host.querySelectorAll("button")).map((b) => b.textContent ?? "");
+  expect(cardButtons.some((t) => t.includes("只能进：作为入口"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("只能出：作为出口"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("能进也能出：双向出入口"))).toBe(true);
+  expect(cardButtons.some((t) => t.includes("我已核对"))).toBe(false);
+  // 提示条不再 8 秒自己消失（那条提示就是这一步的状态）。
+  expect(host.textContent).not.toContain("后收起");
   await act(async () => {
     await flow.action(
       "verify-access",
@@ -1440,6 +1449,12 @@ it("入口核对不能推断出口；卡片显式核对双向出入口经预览�
   expect(plan.nodes[0]!.kind).toBe("both");
   expect(plan.nodes[0]!.verification).toBe("user-confirmed");
   expect(flow.state.stage).toBe("people");
+  // 失败时标题直说「这一步没做成」，不再顶着一个阶段名冒充正常任务卡。
+  await act(async () => {
+    await flow.action("verify-access");
+  });
+  expect(flow.noticeKind).toBe("error");
+  expect(host.textContent).toContain("这一步没做成");
 });
 
 it.each(["没问题", "同意这版方案", "就按它落下去吧"])(
@@ -1837,17 +1852,79 @@ it("没有物料清单也出方案：按分区用途与面积走默认设计，�
   expect(plan.facilities).toHaveLength(25);
   // 默认值是草案，不写回用户需求：用户下一句亲口说的数量仍然优先。
   expect(flow.state.brief.items).toHaveLength(0);
+  // 阶段名也不能再说「按用途复用我的物料」——用户根本没给清单，用的不是他的库。
+  expect(OUTDOOR_STAGE_LABELS.objects).toBe("按分区摆放物料");
 });
+// 2026-11-17 正式站截图原句：追问「各分区各放什么物件」→ 用户「随便放」→ 模型编了一份清单，
+// 校验按「本句无依据」整轮抛错 → 红卡「模型提取缺少本句原文依据」+ 重试（重试还是同一堵墙）。
+// 用户没给清单时，任何清单都是模型编的：丢掉它，按分区用途与面积出默认方案。
+it("「随便放」时模型编的清单不拦成红卡：丢弃后按两个分区出默认方案", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  plan = {
+    ...plan,
+    zones: [
+      ...plan.zones,
+      {
+        id: crypto.randomUUID(),
+        name: "演出区",
+        notes: "",
+        semantic: "reserved",
+        purpose: "performance",
+        environment: "outdoor",
+        polygon: [
+          { x: 45, y: 20 },
+          { x: 65, y: 20 },
+          { x: 65, y: 40 },
+          { x: 45, y: 40 },
+        ],
+      },
+    ],
+  };
+  stubLibraryByQuery();
+  await turn(
+    "随便放",
+    response("objects", {
+      items: [{ zone: "摆摊区", query: "市集摊位", count: 12, evidence: "摊位若干" }],
+    }),
+  );
+  // 不进红卡，也不把编的 12 写进需求。
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  expect(flow.state.brief.items).toHaveLength(0);
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
+  // 演出区按面积算出的座位排不下，就只缩那一个区，并在卡上写明缩到了多少。
+  expect(flow.proposal?.warnings.join()).toContain("排不下");
+  // 预览阶段不写画布；确认后是两个分区都有东西，且按面积算（摆摊区 25 摊）而不是编的 12。
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities.length).toBeGreaterThan(25);
+  expect(plan.facilities.filter((f) => f.name.includes("市集摊位"))).toHaveLength(25);
+  expect(plan.facilities.some((f) => f.name.includes("舞台"))).toBe(true);
+}, 20000);
+// 第一句就把设计交回来（只有「随便放」、模型还回了 ask）也不该再追问一遍清单。
+it("第一句「随便放」就不再追问清单，直接出默认方案", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "随便放",
+    response("ask", {}, { reply: "请告诉我每个分区各要放什么物件。" }),
+  );
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  const said = saySpy.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
+  expect(said).not.toContain("各要放什么物件");
+}, 20000);
 it("连续两次追问都没有推进时，直接出默认方案而不是问第三句", async () => {
   await confirmScope();
   seedMarketPlan();
   stubLibraryByQuery();
-  // 第一次追问：照旧问，但开始记账。
-  await turn("你看着办", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
+  // 第一次追问：照旧问，但开始记账（这两句都不是「随便/看着办」，不确定是授权我直接做）。
+  await turn("嗯", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
   expect(flow.proposal).toBeNull();
   expect(saySpy).toHaveBeenCalled();
   // 第二次还是追问、画布毫无改动 → 不再问，直接出一版默认方案（仍然只预览）。
-  await turn("随便", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
+  await turn("然后呢", response("ask", {}, { reply: "请告诉我各区要放什么物料、各多少。" }));
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
   expect(flow.proposal?.warnings.join()).toContain("这一版是默认方案");
   expect(plan.facilities).toHaveLength(0);

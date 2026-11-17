@@ -132,12 +132,22 @@ export interface OutdoorWorkflowProposal {
   references: OutdoorTurn["references"];
   afterConfirm?: "main-routes" | "objects";
 }
+/**
+ * 2026-11-17：用户把设计交回来的口头禅。「随便放」「你看着办」不是新需求，是授权我先做一版。
+ * 这种句子不该再被反问清单——按分区用途与面积出默认方案就行。
+ */
+function designerCue(message: string): boolean {
+  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的|搋好的/u.test(message);
+}
+
 export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
   place: "搜索目标地点",
   scope: "核对具体活动范围",
   zones: "分区用途与室内外依据",
   "main-routes": "主要入口与通道",
-  objects: "按用途复用我的物料",
+  // 2026-11-17：原来叫「按用途复用我的物料」——用户根本没给清单时这句是假的（用的是内置库默认件），
+  // 也把阶段名说成了承诺。这里直接说这一步在做的事：按分区摆放物料。
+  objects: "按分区摆放物料",
   "sub-routes": "物件间隙的子入口与支线",
   people: "岗位、人数与活动路径",
   "refine-3d": "同规划3D深化",
@@ -1093,7 +1103,29 @@ export function useOutdoorAgentWorkflow(input: {
           : {}),
       },
     };
-    persist(mergeOutdoorFacts(stateRef.current, normalized, message, priorUserText));
+    // 2026-11-17 正式站实测：用户回一句「随便放」，模型却编了一份清单，校验发现这句原文里没有依据
+    // → 整轮抛错 → 红卡 +「重试」，而重试只会把同一句再撞一次。
+    // 用户没给清单时，任何清单都是模型编的：这里直接丢掉，改按分区用途与面积出默认方案。
+    const vagueDemand =
+      !/\d/.test(message) &&
+      !/[个张把套顶组排座条件台块只面根副]/u.test(message);
+    const fabricated =
+      vagueDemand &&
+      ((turn.facts.items?.length ?? 0) > 0 || Boolean(turn.facts.guests));
+    const candidates = fabricated
+      ? { ...normalized, facts: { ...normalized.facts, items: undefined, guests: undefined } }
+      : normalized;
+    persist(mergeOutdoorFacts(stateRef.current, candidates, message, priorUserText));
+    if (fabricated) {
+      const what = (turn.facts.items ?? [])
+        .map((item) => item.query)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join("、");
+      designStep(
+        `模型这一轮给的清单（${what || "未具名"}）在你这句话里找不到依据，我没有采用；改按分区用途与面积出默认方案。`,
+      );
+    }
     if (turn.action === "ask") {
       // 2026-11-17 用户拍「都做」的第二个卡点：用户已经明确选了上一轮二选一里的第 N 项，
       // 模型却又把同一件事反问一遍——原样端回去，用户看到的就是「我选了第一个方案，什么都没发生」。
@@ -1130,9 +1162,9 @@ export function useOutdoorAgentWorkflow(input: {
       const canDraft = !!planNow && planNow.zones.length > 0
         && stateRef.current.confirmedBoundary === boundaryKey(planNow)
         && !stateRef.current.brief.items.length;
-      if (!questionish && canDraft && askStreakRef.current >= 1) {
+      if (!questionish && canDraft && (askStreakRef.current >= 1 || designerCue(message))) {
         askStreakRef.current = 0;
-        designStep("连续追问两次都没有推进：按设计师模式直接出一版默认方案（只出预览，未写入画布）。");
+        designStep("用户把设计交给我（随便/你看着办）：不再追问清单，直接按分区用途与面积出一版默认方案（只出预览，未写入画布）。");
         await act({ ...turn, action: "objects", reply: "", references: [], facts: {} }, message, continueDesign);
         return;
       }
@@ -1374,7 +1406,9 @@ export function useOutdoorAgentWorkflow(input: {
             }),
           },
           "verify-access",
-          "用户核对入口可用",
+          // 2026-11-17：原来叫「用户核对入口可用」——界面是在对用户说话，不该用第三人称叫「用户」，
+          // 也没说清核对的是「什么」。这里真正要确认的是这扇门能不能走、是进还是出。
+          "入口方向与可通行性",
           job,
         );
         return;
@@ -1503,21 +1537,53 @@ export function useOutdoorAgentWorkflow(input: {
           : undefined;
         const basePlan: SitePlanData = buildingsForPlan ? { ...plan, buildings: buildingsForPlan } : plan;
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
-        // 2026-11-14 用户指令「给我几个方案」：物件排布带策略（行列/居中/沿边），提案卡可「换一种排法」循环预览。
-        objectsLayoutRef.current = { base: basePlan, library, strategy: "rows", brief: demandBrief };
-        const result = await proposeInventoryObjects(
-          basePlan,
-          demandBrief,
-          library,
-          undefined,
-          {
-            strategy: "rows",
-            buildings: buildingsEnu.length ? buildingsEnu : undefined,
-            // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
-            onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
-            signal: job.controller.signal,
-          },
-        );
+        // 2026-11-17：默认方案是算出来的，几何不一定吃得下（演出区按面积算了 200+ 个座，
+        // 实际只排得进几十个）。放不下就按真实能容纳的量缩，并把缩过的数量写在卡上——
+        // 既不静默失败，也不冒充“按面积算的数字都成立”。
+        let draftItems = demandBrief.items;
+        let result: Awaited<ReturnType<typeof proposeInventoryObjects>> | null = null;
+        let fitError: string | null = null;
+        for (let attempt = 0; result === null; attempt += 1) {
+          try {
+            result = await proposeInventoryObjects(
+              basePlan,
+              { ...demandBrief, items: draftItems },
+              library,
+              undefined,
+              {
+                strategy: "rows",
+                buildings: buildingsEnu.length ? buildingsEnu : undefined,
+                // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
+                onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
+                signal: job.controller.signal,
+              },
+            );
+          } catch (error) {
+            if (
+              !draft ||
+              attempt >= 6 ||
+              !(error instanceof Error) ||
+              !/放不下/.test(error.message)
+            )
+              throw error;
+            fitError = error.message;
+            // 只缩“放不下”的那个分区：全区减半会把本来排得下的摆摊区一起砍到 3 个摊。
+            const zoneName = /“([^”]+)”放不下/u.exec(error.message)?.[1];
+            draftItems = draftItems.map((item) =>
+              item.zone === zoneName
+                ? { ...item, count: Math.max(1, Math.floor(item.count / 2)) }
+                : item,
+            );
+          }
+        }
+        const finalBrief: OutdoorBrief =
+          draftItems === demandBrief.items ? demandBrief : { ...demandBrief, items: draftItems };
+        // 换一种排法要用缩过之后的数量，否则卡上一切排法又撞同一堵墙。
+        objectsLayoutRef.current = { base: basePlan, library, strategy: "rows", brief: finalBrief };
+        if (fitError) {
+          const fitted = draftItems.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、");
+          designStep(`按面积算的清单排不下（${fitError}），已缩到实际能放的数量：${fitted}。`);
+        }
         // 2026-11-17 死结 3：需求分区对不上画布的（如上一轮遗留的旧需求）跳过并如实报出，
         // 同时从需求清单里摘掉——留着的话每一轮都会重复报同一批，物件阶段永远走不下去。
         const mismatchNotice: string[] = [];
@@ -1539,6 +1605,9 @@ export function useOutdoorAgentWorkflow(input: {
         offer(result.plan, "objects", draft ? "按分区用途出的默认方案" : "逐区复用库内真实设施", job, [
           // 默认值必须自证是默认值：用户看到的每一版都说清「这不是你说的数量」。
           ...(draft ? ["这一版是默认方案：数量按分区用途与可用面积反算，不是你说的数字；要改哪一件直接说。", ...draft.notes] : []),
+          ...(fitError
+            ? [`按面积算的数量现场排不下：已缩到实际能容纳的 ${draftItems.map((i) => `${i.query}×${i.count}`).join("、")}；要更多只能换更小的真实物料或扩分区，不硬塞。`]
+            : []),
           demandBrief.guests
             ? "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。"
             : "人数还没定：本版只按分区用途和库内物料的真实尺寸排布，没有做 2㎡/人 容量粗筛，也没有从物件数量反猜人数；补一句「预计多少人在场」可以再核一遍容量。",
