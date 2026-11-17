@@ -525,13 +525,15 @@ export function OutdoorWorkflowCard({
             </div>
           </div>
         </div>
-      ) : flow.state.stage !== "place" ? (
+      ) : flow.state.stage !== "place" && !flow.drawingMode ? (
         flow.state.stage === "zones" &&
         (!flow.state.brief.zones.length ||
           flow.state.brief.zones.some((zone) => zone.environment === "unknown")) ? (
           // 2026-11-18 用户实测：这颗按钮承诺「点了就出分区预览」，但没用途时点了只会撞红卡
           // 反问「要分哪些用途」。没给指令就不挂空头按钮，如实引导去说用途或手画。
-          <p className="ap-task-caption">
+          // 引导语用醒目的问题式样式；进手画模式后整块收掉（通知条是唯一指令），
+          // 不再留「都已经在画了还说先手画」的自相矛盾残留。
+          <p className="ap-access-question">
             还没说要分哪些区：先在下面说一句用途和室内外（例如「室外展览区和表演区」），或在地图上手画分区；用途没说清楚前不会替你猜。
           </p>
         ) : (
@@ -728,7 +730,7 @@ export function OutdoorWorkflowCard({
           </button>
         </div>
       )}
-      {!flow.proposal && flow.state.stage === "zones" && (
+      {!flow.proposal && flow.state.stage === "zones" && flow.drawingMode !== "zone" && (
         <button
           type="button"
           disabled={flow.busy}
@@ -737,7 +739,7 @@ export function OutdoorWorkflowCard({
           在地图上手画分区
         </button>
       )}
-      {!flow.proposal && flow.state.stage === "main-routes" && (
+      {!flow.proposal && flow.state.stage === "main-routes" && !flow.drawingMode && (
         <div>
           <button
             type="button"
