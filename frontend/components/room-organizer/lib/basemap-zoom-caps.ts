@@ -9,7 +9,12 @@
  *   Carto z16 14.9 KB / z17 10.5 KB / z18 6.5 KB 是真图，z19/z20 一律 403；
  *   OSM z19 真图、z20 直接 400（且无 CORS 头）；
  *   高德卫星 z19/z20 是 4235 B 灰底「此区域无卫星图」占位，矢量 z19 起是 100 多字节空瓦片；
- *   天地图影像/矢量 z18 真图，z19/z20 同一张占位图。
+ *   天地图影像/矢量 z18 真图，z19/z20 同一张占位图；
+ *   Esri World Imagery（全球卫星，境外场地的卫星源）2026-11-17 复测：Victoria 内港 z15–z19
+ *   逐级都是不同字节的真航拍（8060/4608/6946/9757 B），按 z19 封顶。
+ *
+ * 注意：高德三档的 18 是「境内」上限；境外根本没图，由 `sourceForLocation` 换成
+ * `esri-satellite`，不要靠这张表去兼顾境外。
  *
  * 换 key 或又出现「放大变空」时，跑一条命令让实测结果和这张表对一遍：
  *   node scripts/probe-basemap-zoom.mjs          # 逐级探测 + 比对，不一致退出码 1
@@ -22,6 +27,7 @@ export const BASEMAP_NATIVE_MAX_ZOOM = {
   'amap-satellite': 18,
   'amap-streets': 18,
   'amap-streets-labels': 18,
+  'esri-satellite': 19,
   vec: 18,
   img: 18,
 } as const;

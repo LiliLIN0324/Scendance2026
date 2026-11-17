@@ -26,7 +26,7 @@ import {
   type PlanGroundBounds,
 } from '@/components/room-organizer/lib/plan-ground-capture';
 import { publicSourceTileUrl, tdtDirectTileUrl } from '@/components/room-organizer/lib/tdt-probe';
-import { alignedTileBounds, needsWgs84Alignment } from '@/components/room-organizer/lib/basemap-alignment';
+import { alignedTileBounds, needsWgs84Alignment, sourceForLocation } from '@/components/room-organizer/lib/basemap-alignment';
 import { ancestorTileCrop, BasemapTileCache } from '@/components/room-organizer/lib/plan-tile-cache';
 import { basemapNativeMaxZoom } from '@/components/room-organizer/lib/basemap-zoom-caps';
 import { wgs84ToGcj02 } from '@/components/room-organizer/lib/geo-coords';
@@ -309,8 +309,11 @@ export async function paintTiledGround(options: {
   tag?: string | undefined;
 }): Promise<number> {
   if (typeof document === 'undefined') return 0;
-  const tileBounds = alignedTileBounds(options.bounds, options.source);
-  const maxZoom = maxZoomForSource(options.source);
+  // 境外场地：高德/天地图在境外只回占位灰图（第四处见 basemap-alignment.sourceForLocation），
+  // 瓦片管线统一在这里换源，2D 画布 / 户外 3D / 主舞台 GeoGround 三处一起生效。
+  const source = sourceForLocation(options.source, options.anchor.lng, options.anchor.lat);
+  const tileBounds = alignedTileBounds(options.bounds, source);
+  const maxZoom = maxZoomForSource(source);
   const zoom = options.fixedZoom
     ? Math.max(4, Math.min(maxZoom, Math.round(options.preferredZoom)))
     : chooseTileZoom(tileBounds, options.preferredZoom, maxZoom, options.maxTiles);
@@ -328,7 +331,7 @@ export async function paintTiledGround(options: {
       const east = ((tx + 1) / world) * 360 - 180;
       const north = tileNorthLat(ty, zoom);
       const south = tileNorthLat(ty + 1, zoom);
-      const mid = tileCornerLngLat((west + east) / 2, (north + south) / 2, options.source);
+      const mid = tileCornerLngLat((west + east) / 2, (north + south) / 2, source);
       const enu = lngLatToEnu(mid.lng, mid.lat, options.anchor.lng, options.anchor.lat);
       tiles.push({ tx, ty, wrappedX, cx: enu.x, cy: enu.y });
     }
@@ -374,15 +377,15 @@ export async function paintTiledGround(options: {
     const east = ((tile.tx + 1) / world) * 360 - 180;
     const north = tileNorthLat(tile.ty, zoom);
     const south = tileNorthLat(tile.ty + 1, zoom);
-    const swLL = tileCornerLngLat(west, south, options.source);
-    const seLL = tileCornerLngLat(east, south, options.source);
-    const neLL = tileCornerLngLat(east, north, options.source);
-    const nwLL = tileCornerLngLat(west, north, options.source);
+    const swLL = tileCornerLngLat(west, south, source);
+    const seLL = tileCornerLngLat(east, south, source);
+    const neLL = tileCornerLngLat(east, north, source);
+    const nwLL = tileCornerLngLat(west, north, source);
     const sw = lngLatToEnu(swLL.lng, swLL.lat, options.anchor.lng, options.anchor.lat);
     const se = lngLatToEnu(seLL.lng, seLL.lat, options.anchor.lng, options.anchor.lat);
     const ne = lngLatToEnu(neLL.lng, neLL.lat, options.anchor.lng, options.anchor.lat);
     const nw = lngLatToEnu(nwLL.lng, nwLL.lat, options.anchor.lng, options.anchor.lat);
-    const url = tileUrlFor(options.source, zoom, tile.wrappedX, tile.ty);
+    const url = tileUrlFor(source, zoom, tile.wrappedX, tile.ty);
     const { imageCache, textures, fallbackMeshes, readyKeys } = options.cache;
     const dropFallback = (): void => {
       const fb = fallbackMeshes.get(key);
@@ -412,7 +415,7 @@ export async function paintTiledGround(options: {
       if (options.isDisposed() || readyKeys.has(key) || fallbackMeshes.has(key)) return;
       for (let d = 1; d <= depth; d += 1) {
         const crop = ancestorTileCrop(zoom, tile.wrappedX, tile.ty, d, TILE_PIXELS);
-        const ancestorUrl = tileUrlFor(options.source, crop.zoom, crop.x, crop.y);
+        const ancestorUrl = tileUrlFor(source, crop.zoom, crop.x, crop.y);
         const tex = getSharedTexture(imageCache, textures, ancestorUrl, false);
         if (!tex) continue;
         const uv = ancestorUv(crop.sx, crop.sy, crop.size, TILE_PIXELS);
@@ -423,7 +426,7 @@ export async function paintTiledGround(options: {
     };
     for (let d = 1; d <= depth; d += 1) {
       const crop = ancestorTileCrop(zoom, tile.wrappedX, tile.ty, d, TILE_PIXELS);
-      const ancestorUrl = tileUrlFor(options.source, crop.zoom, crop.x, crop.y);
+      const ancestorUrl = tileUrlFor(source, crop.zoom, crop.x, crop.y);
       imageCache.load(ancestorUrl, tryFallback);
     }
     tryFallback();
@@ -462,7 +465,7 @@ export async function paintTilePyramid(options: {
   parent: THREE.Object3D;
   tag?: string | undefined;
 }): Promise<number> {
-  const cap = maxZoomForSource(options.source);
+  const cap = maxZoomForSource(sourceForLocation(options.source, options.anchor.lng, options.anchor.lat));
   const top = Math.max(4, Math.min(cap, Math.round(options.topZoom)));
   const jobs: Promise<number>[] = [];
   for (let d = 0; d <= TILE_PYRAMID_DEPTH; d += 1) {
