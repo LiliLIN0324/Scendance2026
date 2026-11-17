@@ -63,6 +63,9 @@ describe('nav chrome state', () => {
     expect(share).toBeGreaterThan(zIndex(css, '.sc-outdoor-takeover'));
     expect(share).toBeLessThan(zIndex(panel, '.sc-map-overlay'));
     expect(share).toBeLessThan(zIndex(panel, '.sc-venue-overlay'));
+    const shareRule = css.match(/\.sc-canvas-share\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(shareRule).toMatch(/visibility:\s*visible/);
+    expect(shareRule).toMatch(/pointer-events:\s*auto/);
   });
 
   it('does not store a separate navExpanded flag beside the two doors', () => {
