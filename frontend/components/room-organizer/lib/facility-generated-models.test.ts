@@ -1,15 +1,20 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  beginGenerationSubmission,
   clearGeneratedFacilityModelsForTests,
   attachFacilityGenerateTask,
   consumeFacilityGenerateLink,
+  discardFacilityGenerateLink,
   findGeneratedFacilityModel,
+  findUnresolvedGenerationSubmission,
+  latestGenerationSubmissionReceipt,
   listFacilityGenerateLinks,
   listGeneratedFacilityModels,
   recordFacilityGenerateLink,
   registerGeneratedFacilityModel,
   resolveFacilityGenerateLink,
+  settleGenerationSubmission,
   type GeneratedFacilityModel,
 } from './facility-generated-models';
 import { loadAholoCatalogItem } from './aholo-model-placement';
@@ -129,6 +134,59 @@ describe('staged 链接（生成框消费）', () => {
     recordFacilityGenerateLink({ facilityId: 'facility-1', facilityName: '主舞台' });
     expect(consumeFacilityGenerateLink('', '舞台')).toBe(false);
     expect(listFacilityGenerateLinks()).toHaveLength(0);
+  });
+
+  it('落链接时写入 projectId：多项目同设施 id 不串', () => {
+    recordFacilityGenerateLink({ facilityId: 'facility-1', facilityName: '主舞台', projectId: 'project-a' });
+    expect(consumeFacilityGenerateLink('4475964', '舞台')).toBe(true);
+    expect(listFacilityGenerateLinks('facility-1', 'project-a').map(link => link.taskid)).toEqual(['4475964']);
+    expect(listFacilityGenerateLinks('facility-1', 'project-b')).toHaveLength(0);
+    expect(JSON.parse(localStorage.getItem('scendance:facility-generate-links')!)[0]).toMatchObject({ projectId: 'project-a', facilityId: 'facility-1' });
+  });
+
+  it('失败后 discard 清 staged：下一次提交不会错挂到上一个设施', () => {
+    recordFacilityGenerateLink({ facilityId: 'facility-1', facilityName: '主舞台', projectId: 'project-a' });
+    discardFacilityGenerateLink();
+    expect(consumeFacilityGenerateLink('4475964', '舞台')).toBe(false);
+    expect(listFacilityGenerateLinks()).toHaveLength(0);
+  });
+});
+
+describe('提交回执与 unknown 锁', () => {
+  const requestId = '11111111-1111-4111-8111-111111111111';
+
+  it('成功回执持久化 requestId/state/taskid/projectId/facilityId，重载后仍可核对', async () => {
+    beginGenerationSubmission({ requestId, projectId: 'project-a', facilityId: 'facility-1', facilityName: '主舞台', prompt: '舞台' });
+    settleGenerationSubmission(requestId, { state: 'submitted', taskid: 'task-1' });
+    expect(latestGenerationSubmissionReceipt({ projectId: 'project-a', facilityId: 'facility-1' })).toMatchObject({
+      requestId, state: 'submitted', taskid: 'task-1', projectId: 'project-a', facilityId: 'facility-1', prompt: '舞台',
+    });
+    vi.resetModules();
+    const fresh = await import('./facility-generated-models');
+    expect(fresh.latestGenerationSubmissionReceipt({ projectId: 'project-a', facilityId: 'facility-1' })).toMatchObject({
+      requestId, state: 'submitted', taskid: 'task-1', projectId: 'project-a', facilityId: 'facility-1',
+    });
+  });
+
+  it('unknown 锁按项目 + 设施隔离，不串到别的项目或设施', () => {
+    beginGenerationSubmission({ requestId, projectId: 'project-a', facilityId: 'facility-1', facilityName: '主舞台', prompt: '舞台' });
+    settleGenerationSubmission(requestId, { state: 'unknown', message: '结果未知' });
+    expect(findUnresolvedGenerationSubmission({ projectId: 'project-a', facilityId: 'facility-1' })).toMatchObject({ requestId, state: 'unknown' });
+    expect(findUnresolvedGenerationSubmission({ projectId: 'project-b', facilityId: 'facility-1' })).toBeNull();
+    expect(findUnresolvedGenerationSubmission({ projectId: 'project-a', facilityId: 'facility-2' })).toBeNull();
+    expect(findUnresolvedGenerationSubmission({ projectId: 'project-a', facilityId: null })).toBeNull();
+  });
+
+  it('请求发出后没等到结论（刷新留下的 submitting）也按未知锁处理', () => {
+    beginGenerationSubmission({ requestId, projectId: 'project-a', facilityId: 'facility-1', prompt: '舞台' });
+    expect(findUnresolvedGenerationSubmission({ projectId: 'project-a', facilityId: 'facility-1' })).toMatchObject({ requestId, state: 'submitting' });
+  });
+
+  it('服务端明确拒绝落 failed，不产生未知锁', () => {
+    beginGenerationSubmission({ requestId, projectId: 'project-a', facilityId: 'facility-1', prompt: '舞台' });
+    settleGenerationSubmission(requestId, { state: 'failed', message: '生成预算已用完。' });
+    expect(findUnresolvedGenerationSubmission({ projectId: 'project-a', facilityId: 'facility-1' })).toBeNull();
+    expect(latestGenerationSubmissionReceipt({ projectId: 'project-a', facilityId: 'facility-1' })).toMatchObject({ state: 'failed', message: '生成预算已用完。' });
   });
 });
 
