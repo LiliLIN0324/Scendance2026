@@ -16,6 +16,8 @@
  *    并据此禁止二次提交——这是防止重复扣费的最后一道本地闸门。
  */
 
+import { generationFailureText } from './generation-failure';
+
 /** 本机导入的 GLB（缓存键 `local-glb:*`）只在本会话有效，不持久化。 */
 export interface GeneratedFacilityModel {
   projectId?: string;
@@ -499,8 +501,13 @@ export async function resolveFacilityGenerateLink(
       const job = await options.cloud.getGenerationJob(taskid);
       if (job.state === 'submit_unknown') return { state: 'pending', message: '提交结果未知，请先核对任务记录与费用，不要重复生成。' };
       if (['failed', 'rejected'].includes(job.state)) {
-        markFacilityGenerateTerminal(taskid, job.state, '云任务未成功，请核对生成记录与费用；不会自动重发。');
-        return { state: 'failed', message: '云任务未成功，请核对生成记录与费用；不会自动重发。' };
+        // 带上供应商自己的原话（额度不足、内容被拦…）：只说「云任务未成功」，用户没法行动。
+        const reason = generationFailureText(job);
+        const message = reason
+          ? `${reason}不会自动重发；请核对生成记录与费用。`
+          : '云任务未成功，请核对生成记录与费用；不会自动重发。';
+        markFacilityGenerateTerminal(taskid, job.state, message);
+        return { state: 'failed', message };
       }
       if (!['ready', 'added'].includes(job.state) || !job.asset_id) return { state: 'pending', message: `云端生成中 · ${job.state}` };
       const asset = await options.cloud.authorizeAsset(job.asset_id);

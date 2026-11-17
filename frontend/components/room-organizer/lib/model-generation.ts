@@ -77,8 +77,11 @@ export async function uploadModelReference(controller: BackendSession, file: Fil
 /**
  * 提交结果未知时的统一文案。断网/超时/5xx/响应读不懂都可能已经创建了收费任务，
  * 这时唯一的正确动作是去查任务记录与费用，而不是再点一次。
+ *
+ * 2026-11-17：这句话现在住在 {@link ./generation-failure} —— 那里还有「供应商原话 → 人话」的映射，
+ * 两边必须同源，否则「未知」在两个界面会长成两句话。
  */
-export const UNKNOWN_SUBMISSION_NOTICE = '结果未知：可能已经创建任务并计费。先查任务记录与费用，不重试。';
+export { UNKNOWN_SUBMISSION_NOTICE } from './generation-failure';
 
 export type GenerationFailureDisposition = 'unknown' | 'failed';
 

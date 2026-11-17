@@ -4,8 +4,16 @@ import { validateBytes } from 'gltf-validator';
 import { ApiError } from './domain.ts';
 
 export const MAX_GLB_BYTES = 10 * 1024 * 1024;
-function glbJson(bytes: Uint8Array) {
-  if (bytes.byteLength < 28 || bytes.byteLength > MAX_GLB_BYTES) throw new ApiError('INVALID_GLB_SIZE', 422);
+/**
+ * 供应商产物的入库上限（生成服务商给我们的模型，不是用户本机挑的文件）。
+ *
+ * 2026-11-17 生产实跑踩到的：Lux3D G1 的 textured.glb 实测 10.06 MiB，比 10 MiB 的通用上限多 59 KB，
+ * 于是供应商已经生成好的模型被我们自己抛的 FILE_TOO_LARGE 挡在门外——额度花了、模型没入库，
+ * 账本还按「已派发」记了实付。所以「供应商产物」单独一档上限，用户本机导入仍守 10 MB。
+ */
+export const MAX_PROVIDER_GLB_BYTES = 32 * 1024 * 1024;
+function glbJson(bytes: Uint8Array, maxBytes = MAX_GLB_BYTES) {
+  if (bytes.byteLength < 28 || bytes.byteLength > maxBytes) throw new ApiError('INVALID_GLB_SIZE', 422);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint32(0,true)!==0x46546c67 || view.getUint32(4,true)!==2 || view.getUint32(8,true)!==bytes.byteLength || view.getUint32(16,true)!==0x4e4f534a || 20+view.getUint32(12,true)>bytes.byteLength) throw new ApiError('INVALID_GLB', 422);
   try { return JSON.parse(new TextDecoder().decode(bytes.slice(20,20+view.getUint32(12,true)))) as GLTF.IGLTF; }
@@ -13,8 +21,8 @@ function glbJson(bytes: Uint8Array) {
 }
 /** 修复 Aholo Lux3D 产物的两类瑕疵：bufferView 缺 target、法线含零向量（Khronos 校验按 Error 计）。
  *  字节层操作：法线归一化等长写回 BIN chunk，target 写进 JSON chunk 后重打包容器；几何与 UV 不动。 */
-export function repairGlb(bytes: Uint8Array): Uint8Array {
-  const json = glbJson(bytes);
+export function repairGlb(bytes: Uint8Array, maxBytes = MAX_GLB_BYTES): Uint8Array {
+  const json = glbJson(bytes, maxBytes);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const jsonLength = view.getUint32(12, true);
   const binOffset = 20 + jsonLength + 8;
@@ -85,8 +93,8 @@ export function repairGlb(bytes: Uint8Array): Uint8Array {
   return out;
 }
 
-export async function validateModel(bytes: Uint8Array) {
-  const json = glbJson(bytes);
+export async function validateModel(bytes: Uint8Array, maxBytes = MAX_GLB_BYTES) {
+  const json = glbJson(bytes, maxBytes);
   if (json.buffers?.some(b => b.uri) || json.images?.some(i => i.uri)) throw new ApiError('EXTERNAL_MODEL_RESOURCES',422);
   if (json.extensionsRequired?.length || json.skins?.length || json.animations?.length) throw new ApiError('UNSUPPORTED_MODEL_FEATURE',422);
   if ((json.nodes?.length ?? 0)>500 || (json.materials?.length ?? 0)>64 || (json.images?.length ?? 0)>32) throw new ApiError('MODEL_TOO_COMPLEX',422);
