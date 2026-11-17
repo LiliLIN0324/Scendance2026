@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isNavExpanded, toggleNavColumns, type NavColumns } from '../lib/nav-chrome';
@@ -30,6 +30,48 @@ describe('workbench brand toggle', () => {
     expect(close.className).toContain('is-mark');
     expect(close.textContent).not.toContain('幕景');
     expect(close.querySelector('.sc-brand-dot')).toBeNull();
+  });
+
+  it('moves the hall eye holes toward the pointer and does not paint pupils', async () => {
+    const { container } = render(<WorkbenchBrandToggle expanded={false} onToggle={vi.fn()} />);
+    const face = container.querySelector('.sc-rail-avatar') as HTMLElement;
+    expect(face).toBeTruthy();
+    expect(container.querySelector('svg.sc-rail-hall')).toBeTruthy();
+    expect(container.querySelector('.sc-rail-hall-eyes')?.parentElement?.tagName.toLowerCase()).toBe('mask');
+    expect(container.querySelector('.sc-rail-eye')).toBeNull();
+    expect(container.querySelector('svg.sc-rail-hall > path')?.getAttribute('fill')).toContain('35624A');
+    face.getBoundingClientRect = () => ({
+      x: 0, y: 0, left: 0, top: 0, right: 28, bottom: 28, width: 28, height: 28, toJSON() { return {}; },
+    });
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 80, clientY: 14 }));
+      await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
+    });
+    expect(Number.parseFloat(face.style.getPropertyValue('--eye-x'))).toBeGreaterThan(0);
+    expect(Number.parseFloat(face.style.getPropertyValue('--eye-y'))).toBe(0);
+    expect(face.style.getPropertyValue('--tilt-y')).toBe('-15.00deg');
+    expect(face.style.getPropertyValue('--tilt-x')).toBe('0.00deg');
+  });
+
+  it('leaves the hall face still when reduced motion is requested', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('reduce'),
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    try {
+      const { container } = render(<WorkbenchBrandToggle expanded={false} onToggle={vi.fn()} />);
+      const face = container.querySelector('.sc-rail-avatar') as HTMLElement;
+      await act(async () => {
+        window.dispatchEvent(new MouseEvent('pointermove', { clientX: 80, clientY: 14 }));
+        await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
+      });
+      expect(face.style.getPropertyValue('--eye-x')).toBe('');
+      expect(face.style.getPropertyValue('--tilt-y')).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

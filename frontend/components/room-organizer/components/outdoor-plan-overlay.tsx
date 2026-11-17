@@ -18,6 +18,7 @@ import OutdoorPlanCanvas, {
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import { planBoundaryFromSearchArea } from '@/components/room-organizer/lib/outdoor-venue-sync';
 import { GuideBubble, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
 import { OutdoorDeliveryPanel } from '@/components/room-organizer/components/outdoor-delivery-panel';
@@ -215,6 +216,7 @@ function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPi
           <X size={18} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
+      <div className="oc-map-details__body">
       <div className="oc-map-details__section">
         <div className="oc-map-details__label">地图类型</div>
         <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
@@ -257,6 +259,7 @@ function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPi
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -466,6 +469,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
   const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(null);
+  // 桥在 effect 里注册一次；核对要读到最新选区，不能闭上注册那一帧的 state。
+  const placeAreaRef = useRef(placeArea);
+  placeAreaRef.current = placeArea;
   const { loading: shapeLoading, start: lookupPlaceShape, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
     const [west, south, east, north] = shape.bounds;
     setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: name });
@@ -555,11 +561,25 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       projectId:()=>slotId,
       exportPlanDraft:(expected,context)=>{const current=canvasApiRef.current?.getEditVisuals().plan??planRef.current;if(!current||JSON.stringify(current)!==expected)return false;downloadOutdoorPlanDraft(current,slotId,context);return true;},
       beginDrawing:kind=>{if(!canvasApiRef.current)return false;canvasApiRef.current.setMode(kind);return true;},
-      applyPlan:(next,expected)=>{const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;if(ok){setPlacePin(null);setPlaceArea(null);}return ok;},
+      applyPlan:(next,expected)=>{
+        const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;
+        // 摆物件等提案常常不带红线。只有这份方案自己写下了闭合红线，才撤掉搜索选区；
+        // 否则地图上的可见范围会被抹掉，已放置面板却仍写「还没画红线」。
+        if(ok && next.boundary.length>=3){setPlacePin(null);setPlaceArea(null);}
+        return ok;
+      },
       selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
+      visibleActivityRange: () => {
+        const current = canvasApiRef.current?.getEditVisuals().plan ?? planRef.current;
+        const boundary = planBoundaryFromSearchArea(placeAreaRef.current, current?.anchor);
+        if (!boundary || !current?.anchor) return null;
+        const name = placeAreaRef.current?.label.split('·')[0]?.trim() || '当前地图范围';
+        return { anchor: current.anchor, boundary, name };
+      },
       previewBoundary: (anchor, boundary) => {
+        // 不在这里清搜索选区：核对预览画的是候选环，选区要留到红线真正写入后再撤。
+        // 用户取消确认卡时，地图上的范围还在。
         setPlacePin(null);
-        setPlaceArea(null);
         if (!boundary.length) return;
         const points = boundary.map(point => enuToLngLat(point.x, point.y, anchor.lng, anchor.lat));
         const lngs = points.map(point => point.lng);
@@ -723,7 +743,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   useEffect(() => () => {
     if (pendingSaveRef.current !== null) flushSave();
   }, [flushSave]);
-  // 快捷条只在鼠标悬停/点按时展开；点外面或 Esc 收起（完整面板仍只认 X）。
+  // 快捷条只在鼠标悬停/点按时展开；点外面或 Esc 收起。完整面板同样支持 Esc / 点地图关闭。
   useEffect(() => {
     if (!layerStripOpen) return;
     const closeOnOutside = (event: PointerEvent) => {
@@ -740,6 +760,26 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [layerStripOpen]);
+  // 完整「地图详情」是模态浮层：Esc 或点画布都能关；标题与 X 固定，不随面板内容滚动。
+  useEffect(() => {
+    if (!mapPickerOpen) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (layerDockRef.current?.contains(event.target as Node)) return;
+      setMapPickerOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMapPickerOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutside, true);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside, true);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
+  }, [mapPickerOpen]);
   useEffect(() => {
     onSaveStateChange?.({ state: saveState, savedAt });
   }, [saveState, savedAt, onSaveStateChange]);
@@ -885,6 +925,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             base={geoHidden ? 'floor' : 'map'}
             onPlanChange={setPlan}
             onVenueBoundaryApplied={agent?.manualOutdoorVenueApplied}
+            onVenueBoundaryCanceled={agent?.manualOutdoorVenueCanceled}
             {...(onHistoryChange ? { onHistoryChange } : {})}
             {...(onModeChange ? { onModeChange: mode => onModeChange(mode) } : {})}
             {...(onInspectorChange ? { onInspectorChange } : {})}

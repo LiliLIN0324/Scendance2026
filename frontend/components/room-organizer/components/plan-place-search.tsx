@@ -16,7 +16,7 @@
  * 不改 plan / anchor。组件只负责输入与建议条，落钉、画框由调用方交给画布。
  */
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Search, X } from 'lucide-react';
 import {
   matchRecentPlaces,
@@ -214,12 +214,35 @@ export default function PlanPlaceSearch({
     onClear?.();
   }
 
+  /** Esc / 点地图同口径：收下拉与灵动岛，但保留已输入/已选地名，不改检索结果。 */
+  const dismiss = useCallback(() => {
+    setOpen(false);
+    setActive(-1);
+    // 关键：鼠标还停在岛上时 hover=true 会把 expanded 撑住，Esc 看起来没反应；
+    // 不用等 blur 事件回写 focused，这里直接把两态都收掉。
+    setHover(false);
+    setFocused(false);
+    inputRef.current?.blur();
+  }, []);
+
+  useEffect(() => {
+    // 焦点可能已经离开 input（清除按钮、候选按钮、同步候选自动展开），
+    // 只靠 input 的 onKeyDown 会漏掉 Esc；在窗口层兜底。
+    if (!open && !expanded) return undefined;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
+      event.preventDefault();
+      dismiss();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [open, expanded, dismiss]);
+
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Escape') {
+      event.preventDefault();
       event.stopPropagation();
-      setOpen(false);
-      // 灵动岛：Esc 除了收下拉，也把整个岛收回（失焦后缩成胶囊/圆点）。
-      inputRef.current?.blur();
+      dismiss();
       return;
     }
     if (options.length === 0) return;

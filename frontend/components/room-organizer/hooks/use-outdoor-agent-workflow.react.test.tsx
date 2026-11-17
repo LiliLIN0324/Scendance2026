@@ -114,6 +114,23 @@ function Harness() {
 function mount() {
   act(() => root.render(<Harness />));
 }
+/** 以已落盘的流程状态重挂载（模拟刷新后回到「核对具体活动范围」）。 */
+function mountAtFlowState(patch: Record<string, unknown>) {
+  act(() => root.unmount());
+  localStorage.setItem(
+    `scendance:outdoor-flow:${scope}`,
+    JSON.stringify({
+      scope,
+      stage: "place",
+      brief: { zones: [], items: [], people: [] },
+      confirmedBoundary: null,
+      completed: [],
+      ...patch,
+    }),
+  );
+  root = createRoot(host);
+  mount();
+}
 async function turn(text: string, reply: ReturnType<typeof response>) {
   understand.mockResolvedValueOnce(reply);
   await act(async () => {
@@ -472,12 +489,130 @@ it("刷新后重新预览未确认候选，仍需显式确认才写入", async (
   expect(plan.boundary).toEqual(ring);
   expect(flow.state.pendingBoundary).toBeUndefined();
 });
-it("旧记录没有候选和边界时回到场地搜索", async () => {
+it("旧记录没有候选和边界时留在核对阶段并提示手画，不退回搜索", async () => {
   plan = { ...plan, boundary: [] };
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
   await action("scope");
-  expect(flow.state.stage).toBe("place");
-  expect(host.textContent).toContain("重新搜索地点");
+  expect(flow.state.stage).toBe("scope");
+  expect(host.textContent).toContain("在地图上手画活动范围");
+  expect(flow.notice).toContain("重新搜索地点");
+  expect(flow.busy).toBe(false);
   expect(apply).not.toHaveBeenCalled();
+});
+it("候选边界遇到画布基座变化仍恢复核对，不把任务打回搜索", async () => {
+  plan = { ...plan, boundary: [] };
+  const anchor = { ...plan.anchor!, lng: 120.1 };
+  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  // 画布随后自动补了设计范围（非实体字段），候选签发时的 base 已不一致。
+  plan = { ...plan, designScope: ring.map(point => ({ ...point })) };
+  await action("scope");
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.state.pendingBoundary?.boundary).toEqual(ring);
+  expect(flow.proposal?.next.boundary).toEqual(ring);
+  expect(flow.notice).not.toContain("没有可核对");
+  expect(flow.busy).toBe(false);
+  expect(apply).not.toHaveBeenCalled();
+});
+it("没有红线时核对把地图上的可见范围送进确认卡，确认后写入且不退回搜索", async () => {
+  plan = { ...plan, boundary: [] };
+  bridge.visibleActivityRange = () => ({
+    anchor: plan.anchor!,
+    boundary: ring,
+    name: "玉泉",
+  });
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
+  await action("scope");
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.proposal?.kind).toBe("scope");
+  expect(flow.proposal?.label).toContain("玉泉");
+  expect(flow.proposal?.next.boundary).toEqual(ring);
+  expect(host.textContent).not.toContain("搜索目标地点");
+  expect(apply).not.toHaveBeenCalled();
+  await action("confirm");
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.state.stage).toBe("zones");
+  expect(host.textContent).not.toContain("搜索目标地点");
+});
+it("只有搜索选区时继续设计会先核对这块可见范围，不退回搜索", async () => {
+  plan = { ...plan, boundary: [] };
+  bridge.visibleActivityRange = () => ({
+    anchor: plan.anchor!,
+    boundary: ring,
+    name: "玉泉",
+  });
+  mountAtFlowState({ stage: "zones", completed: ["place"] });
+  await turn(
+    "室外展览区",
+    response("zones", {
+      zones: [{
+        name: "展览区",
+        purpose: "exhibition",
+        environment: "outdoor",
+        evidence: "室外展览区",
+      }],
+    }),
+  );
+  expect(flow.proposal?.kind).toBe("scope");
+  expect(flow.proposal?.next.boundary).toEqual(ring);
+  expect(flow.state.stage).not.toBe("place");
+  expect(host.textContent).not.toContain("搜索目标地点");
+  expect(plan.boundary).toEqual([]);
+});
+it("已有可见范围时 search 不把任务卡打回搜索目标地点；没有任何范围时仍回去", async () => {
+  plan = { ...plan, boundary: [] };
+  bridge.visibleActivityRange = () => ({
+    anchor: plan.anchor!,
+    boundary: ring,
+    name: "玉泉",
+  });
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
+  await turn("再搜一个地点", response("search", {}, { query: "玉泉" }));
+  expect(flow.state.stage).toBe("scope");
+  expect(host.textContent).not.toContain("搜索目标地点");
+  bridge.visibleActivityRange = () => null;
+  plan = { ...plan, boundary: [] };
+  await turn("换个地方", response("search", {}, { query: "西湖" }));
+  expect(flow.state.stage).toBe("place");
+  expect(host.textContent).toContain("搜索目标地点");
+});
+it("地图已有有效边界时核对重新预览并在确认后写入，边界不被清掉", async () => {
+  plan = { ...plan, boundary: ring };
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
+  apply.mockClear();
+  await action("scope");
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.proposal?.next.boundary).toEqual(ring);
+  expect(apply).not.toHaveBeenCalled();
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.busy).toBe(false);
+  await action("confirm");
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.state.stage).toBe("zones");
+  expect(flow.state.pendingBoundary).toBeUndefined();
+  expect(flow.state.confirmedBoundary).not.toBeNull();
+});
+it("Esc 取消手画后撤掉未确认候选，不在核对阶段留待写入状态", async () => {
+  plan = { ...plan, boundary: [] };
+  mountAtFlowState({
+    stage: "scope",
+    completed: ["place"],
+    pendingBoundary: { anchor: plan.anchor!, boundary: ring, name: "IN77", base: JSON.stringify(plan) },
+  });
+  expect(flow.state.stage).toBe("scope");
+  act(() => flow.manualCanceled());
+  expect(flow.state.stage).toBe("place");
+  expect(flow.state.pendingBoundary).toBeUndefined();
+  expect(flow.notice).toContain("已取消");
+  expect(host.textContent).not.toContain("核对当前实际活动范围");
+});
+it("取消重画时已确认的边界和核对阶段保留", async () => {
+  plan = { ...plan, boundary: ring };
+  mountAtFlowState({ stage: "scope", completed: ["place", "scope"], confirmedBoundary: "existing-boundary" });
+  act(() => flow.manualCanceled());
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.state.confirmedBoundary).toBe("existing-boundary");
+  expect(plan.boundary).toEqual(ring);
 });
 it("未确认活动边界先出范围确认卡而不是死路，保留本句自然补充", async () => {
   await turn(
@@ -700,11 +835,13 @@ it("范围确认卡在预览期间被画布改动（如一键收进红线）不�
   expect(plan.nodes.map((n) => n.id)).toContain(nodeId);
   expect(flow.scopeConfirmed()).toBe(true);
 });
-it("已确认场地后一次 search 不再静默丢场地：继续说需求仍按已确认范围推进", async () => {
+it("已确认场地后一次 search 不再静默丢场地，任务卡也不退回搜索", async () => {
   await confirmScope();
   const before = JSON.stringify(plan);
   await turn("看看别的地点", response("search", {}, { query: "别的地点" }));
-  expect(flow.state.stage).toBe("place");
+  expect(flow.state.stage).toBe("zones");
+  expect(flow.state.confirmedBoundary).not.toBeNull();
+  expect(host.textContent).not.toContain("搜索目标地点");
   expect(JSON.stringify(plan)).toBe(before);
   await turn(
     "户外市集45人，展览区在室外",
