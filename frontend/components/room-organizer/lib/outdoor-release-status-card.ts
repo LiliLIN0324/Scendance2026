@@ -128,6 +128,19 @@ export function ledgerFromEvidence(
   }));
 }
 
+/**
+ * 本仓当前有「固定数据」证据的用例号（只写我能指到测试文件的）：
+ *   #2 同名地点 —— `outdoor-venue-candidates.test.ts`（选择语义；真实搜索仍未跑）
+ *   #5 离线/无路网 —— `outdoor-case5-offline.test.ts`（无证据时如实声明；浏览器仍未跑）
+ * 其它 9 条没有我能点名的确定性用例，就不写进来。
+ */
+export const FIXED_DATA_CASES: readonly number[] = [2, 5];
+
+/** 卡默认用的台账：直接由上面的常量生成，不给人填的余地。 */
+export function defaultLedger(): CaseLedgerRow[] {
+  return ledgerFromEvidence(FIXED_DATA_CASES);
+}
+
 /** 证据清单：空列表就只写「0 条」，不留一个空括号。 */
 function listWithIds(ids: readonly number[]): string {
   if (ids.length === 0) return '0 条';
