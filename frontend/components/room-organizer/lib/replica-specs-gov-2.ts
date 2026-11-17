@@ -46,7 +46,8 @@ export const WINTERSKOL_ASPEN: ReplicaCaseSpec = {
   region: 'North America',
   refImage: 'winterskol.png',
   refLink: LINK('winterskol'),
-  anchor: { lng: -106.819, lat: 39.1917 },
+  anchor: { lng: -106.820285, lat: 39.188242 },
+  rotationDeg: 347,
   locationNote: '镇级锚点：Aspen Wagner Park',
   zones: [
     { name: 'Event Field 活动场', semantic: 'reserved', color: '#e07b30', opacity: 0.15, rect: { cx: -15, cy: 0, w: 75, h: 85 } },
@@ -154,7 +155,8 @@ export const NATIONAL_NIGHT_OUT_OLNEY: ReplicaCaseSpec = {
   region: 'North America',
   refImage: 'olney-maryland-national-night-out.png',
   refLink: LINK('olney-maryland-national-night-out'),
-  anchor: { lng: -77.065, lat: 39.1551 },
+  anchor: { lng: -77.062425, lat: 39.152416 },
+  rotationDeg: 312,
   locationNote: '镇级锚点：Olney, MD 停车场市集',
   zones: [
     { name: 'HT Drive Thru 绿带', semantic: 'reserved', color: '#3fb544', opacity: 0.3, rect: { cx: -55, cy: 55, w: 70, h: 10, rot: -8 } },

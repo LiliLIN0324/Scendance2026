@@ -19,6 +19,11 @@
 .sc-cloud-dialog label{display:grid;gap:6px;font-size:12px}
 .sc-cloud-dialog input,.sc-cloud-dialog select{font:inherit;background:var(--wk-paper);border:1px solid var(--sc-line);border-radius:var(--r-sm);padding:11px;color:var(--sc-ink);width:100%;transition:border-color var(--sc-fast) var(--sc-ease),background var(--sc-fast) var(--sc-ease)}
 .sc-cloud-message{padding:12px;background:var(--sc-accent-soft);color:var(--sc-accent-ink);border:1px solid var(--wk-hair);border-radius:var(--r-sm);overflow-wrap:anywhere}
+.sc-account-footnote{margin:12px 0 0;padding:0;background:none;border:0;color:var(--muted,#71767E);font-size:12px;line-height:1.6}
+.sc-account-error{margin:12px 0 0;padding:0;background:none;border:0;color:var(--err,#B4443C);font-size:12px;line-height:1.6}
+.sc-cloud-dialog p.sc-account-footnote,.sc-cloud-dialog p.sc-account-error{margin:12px 0 0;padding:0;background:none;border:0;font-size:12px;line-height:1.6}
+.sc-cloud-dialog p.sc-account-footnote{color:var(--muted,#71767E)}
+.sc-cloud-dialog p.sc-account-error{color:var(--err,#B4443C)}
 .sc-cloud-footer{border-top:1px solid var(--sc-line);margin-top:24px;padding-top:16px;font-size:11px;color:var(--sc-muted);line-height:1.7}
 .sc-cloud-account{display:flex;gap:12px;justify-content:space-between;align-items:center;font-size:12px;overflow-wrap:anywhere}
 .sc-cloud-current{background:var(--wk-plane);border:1px solid var(--sc-line);padding:16px;border-radius:12px;margin:18px 0}
@@ -33,8 +38,8 @@
 .sc-file-grid{list-style:none;padding:0;margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:14px}
 .sc-file-card{position:relative;display:flex;flex-direction:column;min-width:0;border:1px solid var(--sc-line);border-radius:12px;background:var(--wk-paper);overflow:visible;transition:border-color var(--sc-fast) var(--sc-ease),box-shadow var(--sc-fast) var(--sc-ease)}
 .sc-file-card:hover{border-color:var(--sc-ink)}
-.sc-file-card.is-current{border-color:var(--wk-green);box-shadow:inset 0 0 0 1px var(--wk-green)}
-.sc-file-card.is-draft .sc-file-thumb{background:color-mix(in srgb,var(--wk-plane) 70%,var(--wk-green-pale))}
+.sc-file-card.is-current{border-color:var(--hair,var(--wk-hair));box-shadow:none}
+.sc-file-card.is-draft .sc-file-thumb{background:var(--plane,var(--wk-plane))}
 .sc-file-card.is-new{border-style:dashed;background:transparent}
 .sc-cloud-dialog button.sc-file-hit{display:grid;grid-template-rows:auto 1fr;align-items:stretch;width:100%;min-width:0;margin:0;padding:0;border:0;border-radius:12px;background:transparent;box-shadow:none;text-align:left;color:inherit;cursor:pointer;overflow:hidden}
 .sc-cloud-dialog button.sc-file-hit:disabled{opacity:1;cursor:default;background:transparent;color:inherit}
@@ -44,9 +49,10 @@
 .sc-file-thumb img{object-fit:cover;transition:transform var(--sc-slow) var(--sc-ease)}
 .sc-file-card:hover .sc-file-thumb img{transform:scale(1.02)}
 /* 没有画布快照时用名字首字色块占位：同一个占位图形会让所有方案看起来一模一样 */
-.sc-file-thumb-mark{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(140deg,color-mix(in srgb,var(--wk-plane) 55%,var(--wk-green-pale)),var(--wk-plane));color:color-mix(in srgb,var(--sc-muted) 78%,var(--wk-ink-faint));font-size:28px;font-weight:600;line-height:1;letter-spacing:.02em}
-.sc-file-state{position:absolute;left:8px;bottom:8px;z-index:1;padding:3px 8px;border:1px solid var(--wk-hair);border-radius:999px;background:#fffdf8e6;color:var(--sc-muted);font-size:10px;line-height:1.4;backdrop-filter:blur(4px)}
-.sc-file-card.is-current .sc-file-state{border-color:var(--wk-green);background:var(--wk-green-pale);color:var(--wk-green-deep)}
+.sc-file-thumb-mark{position:absolute;inset:0;display:grid;place-items:center;background:var(--plane,#F4F5F7)}
+.sc-file-thumb-mark i{width:34px;height:34px;border:1.5px solid var(--hair,#E4E4E7);border-radius:4px;transform:rotate(45deg)}
+.sc-file-state{position:absolute;left:8px;bottom:8px;z-index:1;padding:3px 8px;border:1px solid var(--hair,var(--wk-hair));border-radius:999px;background:color-mix(in srgb,var(--paper,#fff) 92%,transparent);color:var(--ink-soft,#55585F);font-size:10px;line-height:1.4}
+.sc-file-card.is-current .sc-file-state{border-color:var(--hair,var(--wk-hair));background:var(--paper,#fff);color:var(--ink-soft,#55585F)}
 .sc-file-info{display:block;padding:10px 12px 12px;min-width:0}
 .sc-file-info strong{display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sc-file-info small{display:block;margin-top:4px;font-size:11px;color:var(--sc-muted)}
@@ -112,7 +118,8 @@
 .sc-account-trigger-avatar img{display:block;width:100%;height:100%;object-fit:cover}
 .sc-cloud-trigger{justify-content:center;width:34px;height:34px;padding:0;border:1px solid var(--sc-line);background:transparent;flex-shrink:0;box-shadow:none}
 .sc-account-trigger-avatar{width:28px;height:28px}
-.sc-account-dialog{width:min(1040px,calc(100vw - 48px));height:min(720px,calc(100dvh - 48px));max-height:calc(100dvh - 48px);padding:0;background:var(--wk-paper);overflow:hidden}
+.sc-account-dialog{width:min(1557px,calc(100vw - 48px));height:min(1077px,calc(100dvh - 48px));max-height:calc(100dvh - 48px);padding:0;background:var(--wk-paper);overflow:hidden;border-radius:24px}
+.sc-account-dialog::backdrop{background:rgba(20,20,22,.28);backdrop-filter:none;-webkit-backdrop-filter:none}
 .sc-account-dialog[open]{display:flex;flex-direction:column}
 .sc-account-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-radius:inherit;display:flex;flex-direction:column}
 .sc-account-scroll::-webkit-scrollbar{width:10px;height:10px}
@@ -134,7 +141,7 @@
 .sc-account-title{display:flex;align-items:center;gap:6px;min-width:0}
 .sc-account-title h2{min-width:0}
 /* 两栏：左栏只说"现在是谁、在哪个团队"，右栏放项目与素材。分隔线绝对定位画满两栏高度。 */
-.sc-account-shell{--acct-side:clamp(196px,21vw,248px);position:relative;flex:1;min-height:0;display:grid;grid-template-columns:var(--acct-side) minmax(0,1fr);align-items:stretch;border-top:1px solid var(--sc-line)}
+.sc-account-shell{--acct-side:clamp(220px,24vw,372px);position:relative;flex:1;min-height:0;display:grid;grid-template-columns:var(--acct-side) minmax(0,1fr);align-items:stretch;border-top:1px solid var(--sc-line)}
 .sc-account-shell::before{content:"";position:absolute;top:0;bottom:0;left:var(--acct-side);width:1px;background:var(--sc-line)}
 .sc-account-side{align-self:stretch;display:flex;flex-direction:column;gap:22px;min-width:0;min-height:0;padding:20px 18px 24px 24px}
 .sc-account-side-links{display:grid;gap:2px;margin-top:auto;padding-top:12px}
@@ -242,6 +249,13 @@
 .sc-settings-row-main small{font-size:11px;line-height:1.5;color:var(--sc-muted);overflow-wrap:anywhere}
 .sc-settings-row-actions{display:flex;align-items:center;gap:6px;flex:none}
 .sc-settings-prefs{display:grid;gap:16px;align-content:start}
+.sc-account-prefs{display:grid;grid-template-columns:168px minmax(0,1fr);gap:28px;align-items:start}
+.sc-account-prefs-nav{display:grid;gap:2px;align-content:start}
+.sc-cloud-dialog .sc-account-prefs-nav button{display:flex;width:100%;margin:0;padding:7px 10px;border:0;border-radius:8px;background:none;box-shadow:none;color:var(--ink-soft,#55585F);font-size:13px;font-weight:500;text-align:left}
+.sc-cloud-dialog .sc-account-prefs-nav button[aria-pressed=true]{background:var(--plane,#F4F5F7);color:var(--ink,#141416);font-weight:600}
+.sc-account-prefs-main h3{margin:0 0 16px;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.sc-settings-columns{display:flex;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid var(--hair,var(--wk-hair));color:var(--muted,#71767E);font-size:12px}
+.sc-cloud-dialog button.sc-settings-outline{height:30px;padding:0 12px;border:1px solid var(--hair,var(--wk-hair));border-radius:8px;background:var(--paper,#fff);box-shadow:none;color:var(--ink,#141416);font-size:12px;font-weight:500}
 .sc-unit-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-plane)}
 .sc-unit-seg button{display:inline-flex;align-items:center;gap:4px;margin:0;padding:5px 10px;border:0;border-radius:6px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:500;white-space:nowrap}
 .sc-unit-seg button[aria-pressed=true]{background:var(--wk-paper);color:var(--wk-ink);font-weight:600}

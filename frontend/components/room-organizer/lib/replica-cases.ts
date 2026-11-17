@@ -128,6 +128,8 @@ export type ReplicaCase = {
   refImage: string;
   refLink: string;
   locationNote?: string;
+  /** 平面图相对正北的旋转角（度）——界面上用于回显用户确认的角度。 */
+  rotationDeg?: number;
   buildPlan: () => SitePlanData;
 };
 
@@ -139,6 +141,7 @@ export const REPLICA_CASES: ReplicaCase[] = SPECS.map(spec => ({
   refImage: spec.refImage,
   refLink: spec.refLink,
   ...(spec.locationNote ? { locationNote: spec.locationNote } : {}),
+  ...(spec.rotationDeg != null ? { rotationDeg: spec.rotationDeg } : {}),
   buildPlan: () => expandReplicaSpec(spec),
 }));
 

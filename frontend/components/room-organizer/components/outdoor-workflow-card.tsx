@@ -525,8 +525,19 @@ export function OutdoorWorkflowCard({
             </div>
           </div>
         </div>
-      ) : flow.state.stage !== "place" ? (
-        <>
+      ) : flow.state.stage !== "place" && !flow.drawingMode ? (
+        flow.state.stage === "zones" &&
+        (!flow.state.brief.zones.length ||
+          flow.state.brief.zones.some((zone) => zone.environment === "unknown")) ? (
+          // 2026-11-18 用户实测：这颗按钮承诺「点了就出分区预览」，但没用途时点了只会撞红卡
+          // 反问「要分哪些用途」。没给指令就不挂空头按钮，如实引导去说用途或手画。
+          // 引导语用醒目的问题式样式，和「手画分区」按钮构成同一组动作；进手画模式后整块收掉
+          // （通知条「已进入手画模式…」是唯一指令），不再留自相矛盾的残留。
+          <p className="ap-access-question">
+            还没说要分哪些区：说一句用途和室内外（例如「室外展览区和表演区」）我按这句出预览，也可以在地图上手画。
+          </p>
+        ) : (
+          <div className="ap-outdoor-plan-actions">
           <button
             type="button"
             className="btn-primary"
@@ -534,21 +545,25 @@ export function OutdoorWorkflowCard({
             onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
           >
             {flow.state.stage === "scope"
-              ? "核对当前实际活动范围"
+              ? "确认活动范围"
               : flow.state.stage === "zones"
                 ? "生成分区预览"
                 : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
           </button>
+          {/* 2026-11-18 用户：这颗是白底无描边的次要动作，渲染出来跟一行普通文字一样，
+              看着根本不像能点。补上发丝边（btn-outline）并与主按钮同高、同一行并排。 */}
           {flow.state.stage === "scope" && (
             <button
               type="button"
+              className="btn-outline"
               disabled={flow.busy}
               onClick={() => flow.manualBoundary()}
             >
               在地图上手画活动范围
             </button>
           )}
-        </>
+          </div>
+        )
       ) : null}
       {!flow.proposal &&
         !flow.busy &&
@@ -559,7 +574,6 @@ export function OutdoorWorkflowCard({
           <div key={n.id} className="ap-access-check">
             <p className="ap-access-question">
               “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
-              入口不自动等于出口，也不代表安全认证。
             </p>
             {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
                 而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
@@ -729,7 +743,7 @@ export function OutdoorWorkflowCard({
           </button>
         </div>
       )}
-      {!flow.proposal && flow.state.stage === "zones" && (
+      {!flow.proposal && flow.state.stage === "zones" && flow.drawingMode !== "zone" && (
         <button
           type="button"
           disabled={flow.busy}
@@ -738,7 +752,7 @@ export function OutdoorWorkflowCard({
           在地图上手画分区
         </button>
       )}
-      {!flow.proposal && flow.state.stage === "main-routes" && (
+      {!flow.proposal && flow.state.stage === "main-routes" && !flow.drawingMode && (
         <div>
           <button
             type="button"

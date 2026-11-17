@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { planOutline, ShareMenu, shareTriggerChrome, type ShareMenuActions } from './share-menu';
-import { displayShareUrl } from './share-panel';
+import { planOutline, ShareMenu, shareBingoStatus, sharePublishReadOnly, shareTriggerChrome, type ShareMenuActions } from './share-menu';
+import { displayShareUrl, SHARE_READ_ONLY_LINE, SharePanel, type ShareExportEntry } from './share-panel';
 import type { ServerShare } from '../lib/share-records';
 import type { RoomLayout } from '../lib/types';
 
@@ -63,9 +66,16 @@ describe('分享页签', () => {
     expect(screen.getByRole('tab', { name: '发布' }).getAttribute('data-tone')).toBe('quiet');
     expect(dialog.textContent).toContain('发布会');
     expect(dialog.textContent).toContain('打开即可查看场地、分区和尺度，页里可看 3D。');
-    expect(screen.getByRole('button', { name: '发给谁' }).textContent).toContain('送评审方 · 可批注');
-    expect(screen.getByText('送到 Bingo')).toBeTruthy();
-    expect(screen.getByText('待发')).toBeTruthy();
+    const audience = screen.getByRole('button', { name: '发给谁' });
+    const bingo = screen.getByRole('button', { name: /送到 Bingo/ });
+    expect(audience.className).toContain('sc-share-row');
+    expect(bingo.className).toContain('sc-share-row');
+    expect(audience.textContent).toContain('送评审方');
+    expect(audience.querySelector('.sc-share-row-status')?.textContent).toBe('可批注');
+    expect(bingo.querySelector('.sc-share-row-label')?.textContent).toBe('送到 Bingo');
+    expect(bingo.querySelector('.sc-share-row-status')?.textContent).toBe('待发');
+    expect(audience.getAttribute('data-align')).toBe('start');
+    expect(bingo.getAttribute('data-align')).toBe('start');
     expect(dialog.querySelector('img, .sc-publish-plan')).toBeNull();
     expect(dialog.textContent).not.toMatch(/方案预览|生成分享链接|3D 漫游|分享记录|密码|过期/);
   });
@@ -80,7 +90,7 @@ describe('分享页签', () => {
     fireEvent.click(screen.getByRole('button', { name: '发给谁' }));
     expect((await screen.findByRole('status')).textContent).toContain('评审链接已复制');
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/review/issued');
-    expect(screen.getByText('已送')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /送到 Bingo/ }).querySelector('.sc-share-row-status')?.textContent).toBe('待评');
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(share.onIssueReviewLink).toHaveBeenCalledOnce();
   });
@@ -266,6 +276,219 @@ describe('项目大纲', () => {
     expect(outline.size).toBe('41.0 × 19.7 ft');
   });
 });
+
+describe('发布页只读', () => {
+  it('hides the green publish CTA and keeps the read-only line', () => {
+    localStorage.clear();
+    render(<ShareMenu actions={actions({ readOnly: true })} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    expect(screen.getByTestId('share-readonly').textContent).toBe(SHARE_READ_ONLY_LINE);
+    expect(screen.queryByRole('button', { name: '发布并复制链接' })).toBeNull();
+    expect(document.querySelector('.sc-share-cta')).toBeNull();
+    expect(document.querySelector('[data-tone="green"]')).toBeNull();
+  });
+
+  it('drops the enabled green CTA once publish reports the read-only line', async () => {
+    localStorage.clear();
+    const share = actions();
+    vi.mocked(share.onPublish).mockRejectedValueOnce(new Error(SHARE_READ_ONLY_LINE));
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(screen.getByRole('button', { name: '发布并复制链接' }));
+    expect((await screen.findByTestId('share-readonly')).textContent).toBe(SHARE_READ_ONLY_LINE);
+    expect(screen.queryByRole('button', { name: '发布并复制链接' })).toBeNull();
+    const cta = document.querySelector('.sc-share-cta');
+    expect(cta).toBeNull();
+  });
+
+  it('treats a signed-in project without edit rights as read-only, and not a signed-out canvas', () => {
+    const user = { is_anonymous: false };
+    expect(sharePublishReadOnly({ configured: true, user, project: { id: 'project-1' }, writeBlocked: true }, 'project-1')).toBe(true);
+    expect(sharePublishReadOnly({ configured: true, user: null, project: null, writeBlocked: true }, 'project-1')).toBe(false);
+    expect(sharePublishReadOnly({ configured: false, user, project: { id: 'project-1' }, writeBlocked: true })).toBe(false);
+    expect(sharePublishReadOnly({ configured: true, user: { is_anonymous: true }, project: { id: 'project-1' }, writeBlocked: true })).toBe(false);
+    expect(sharePublishReadOnly({ configured: true, user, project: null, writeBlocked: true })).toBe(false);
+  });
+});
+
+describe('Bingo 状态', () => {
+  it('uses 待评 and 已回执 from the project record instead of a separate 已送 chip', () => {
+    const shareId = '11111111-1111-4111-8111-111111111111';
+    const storage = bucket();
+    expect(shareBingoStatus('project-1', false, storage)).toBe('待发');
+    expect(shareBingoStatus('project-1', true, storage)).toBe('待评');
+    storage.set('scendance.reviewMark.v1', [mark(shareId, { projectKey: 'project-1' })]);
+    expect(shareBingoStatus('project-1', false, storage)).toBe('待评');
+    storage.set('scendance-review-share-return-v1', { version: 1, planKey: shareId, at: '2026-10-31T08:00:00.000Z' });
+    expect(shareBingoStatus('project-1', true, storage)).toBe('已回执');
+    expect(shareBingoStatus('other-project', false, storage)).toBe('待发');
+  });
+});
+
+describe('弹层对齐与阴影', () => {
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../app/globals.css'), 'utf8');
+  const panelStart = css.indexOf('/* 分享 / 发布 / 导出：宽约 400');
+  const panelEnd = css.indexOf('/* 左下「设置」小弹层');
+  const panelCss = css.slice(panelStart, panelEnd);
+
+  it('groups the globe with 发布到网页 on the left, not space-between', () => {
+    localStorage.clear();
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    const heading = document.querySelector('#share-panel-publish .sc-share-heading');
+    const lock = heading?.querySelector('.sc-share-titlelock');
+    expect(heading?.getAttribute('data-layout')).toBe('grouped');
+    expect(heading?.children).toHaveLength(1);
+    expect(lock?.querySelector('svg')).toBeTruthy();
+    expect(lock?.querySelector('h2')?.textContent).toBe('发布到网页');
+    expect(panelCss).toMatch(/\.sc-share-heading\s*\{[^}]*justify-content:\s*flex-start/);
+    expect(panelCss).toMatch(/\.sc-share-titlelock\s*\{[^}]*justify-content:\s*flex-start[^}]*gap:\s*4px/);
+    expect(panelCss).not.toMatch(/\.sc-share-heading\s*\{[^}]*space-between/);
+    expect(panelCss).not.toMatch(/\.sc-share-titlelock\s*\{[^}]*space-between/);
+  });
+
+  it('left-aligns export rows with the tab bar', () => {
+    const entries: ShareExportEntry[] = [
+      { id: 'render', label: '效果图', icon: 'image', onSelect: vi.fn() },
+      { id: 'materials', label: '物料清单', icon: 'list', onSelect: vi.fn() },
+      { id: 'site', label: '场地范围文件', icon: 'site', onSelect: vi.fn() },
+    ];
+    render(<div className="sc-workbench"><div className="sc-tool-column"><div className="oc-cluster oc-tr">
+      <SharePanel {...panelProps({ tab: 'export', exports: entries })} />
+    </div></div></div>);
+    const list = document.querySelector('.sc-share-exports');
+    expect(list?.getAttribute('data-align')).toBe('start');
+    const rows = screen.getAllByRole('button', { name: /效果图|物料清单|场地范围文件/ });
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.className).toContain('sc-share-export');
+      expect(row.getAttribute('data-align')).toBe('start');
+      expect(row.querySelector('svg')).toBeTruthy();
+    }
+    expect(panelCss).toMatch(/button\.sc-share-export\s*\{[^}]*justify-content:\s*flex-start/);
+    expect(panelCss).toMatch(/button\.sc-share-export\s*\{[^}]*height:\s*36px/);
+    expect(panelCss).toMatch(/\.sc-share-exports li \+ li\s*\{[^}]*border-top:\s*1px solid/);
+  });
+
+  it('keeps a two-family ink shadow clearly stronger than a 0.08 single layer', () => {
+    const shadow = panelCss.match(/box-shadow:\s*([\s\S]*?);/)?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+    const layers = shadowLayers(shadow);
+    expect(layers.length).toBeGreaterThanOrEqual(2);
+    const alphas = layers.map(layerAlpha);
+    expect(Math.max(...alphas)).toBeGreaterThan(0.4);
+    expect(alphas.every(alpha => alpha > 0.2)).toBe(true);
+    expect(shadow).not.toMatch(/var\(--e1\)|rgba\(0,\s*0,\s*0|rgba\(20,\s*20,\s*22,\s*0?\.0*8\)/);
+    for (const layer of layers) expect(layer).toMatch(/rgba\(20,\s*20,\s*22,/);
+    const contact = layers.find(layer => /1\.2px/.test(layer));
+    const lift = layers.find(layer => /18px/.test(layer));
+    expect(contact).toBeTruthy();
+    expect(lift).toBeTruthy();
+    expect(layerAlpha(contact ?? '')).toBeGreaterThanOrEqual(0.55);
+    expect(layerAlpha(lift ?? '')).toBeGreaterThanOrEqual(0.4);
+  });
+
+  it('still left-aligns the title and export rows when cluster CSS centers buttons', () => {
+    const hostile = document.createElement('style');
+    hostile.textContent = `
+      .sc-share-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .sc-workbench .sc-tool-column .oc-cluster button { display: inline-flex; align-items: center; justify-content: center; }
+      .sc-workbench .sc-tool-column .oc-cluster.oc-tr button > span { width: 22px; height: 22px; }
+      .sc-workbench .sc-tool-pop { box-shadow: 0 6px 18px rgba(20, 20, 22, 0.08); }
+      ${panelCss}
+    `;
+    document.head.appendChild(hostile);
+    try {
+      const entries: ShareExportEntry[] = [
+        { id: 'render', label: '效果图', icon: 'image', onSelect: vi.fn() },
+      ];
+      render(<div className="sc-workbench"><div className="sc-tool-column"><div className="oc-cluster oc-tr">
+        <SharePanel {...panelProps({ tab: 'publish' })} />
+        <SharePanel {...panelProps({ tab: 'export', exports: entries })} />
+      </div></div></div>);
+      const heading = document.querySelector('#share-panel-publish .sc-share-heading') as HTMLElement;
+      const panel = document.querySelector('#share-panel-publish')?.closest('[data-testid="share-panel"]') as HTMLElement;
+      expect(getComputedStyle(heading).justifyContent).toMatch(/flex-start|start/);
+      const painted = getComputedStyle(panel).boxShadow;
+      expect(painted.length).toBeGreaterThan(8);
+      expect(painted).toMatch(/20,\s*20,\s*22|20 20 22/);
+      expect(painted).not.toMatch(/0\.08/);
+      const row = screen.getByRole('button', { name: '效果图' });
+      const label = row.querySelector('span') as HTMLElement;
+      expect(getComputedStyle(row).justifyContent).toMatch(/flex-start|start/);
+      expect(getComputedStyle(label).width).not.toBe('22px');
+    } finally {
+      hostile.remove();
+    }
+  });
+});
+
+function shadowLayers(value: string): string[] {
+  const layers: string[] = [];
+  let current = '';
+  let depth = 0;
+  for (const char of value) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      if (current.trim()) layers.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) layers.push(current.trim());
+  return layers;
+}
+
+function layerAlpha(layer: string): number {
+  const match = layer.match(/rgba\(\s*20\s*,\s*20\s*,\s*22\s*,\s*([0-9.]+)\s*\)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function bucket() {
+  const map = new Map<string, string>();
+  return {
+    getItem(key: string) { return map.get(key) ?? null; },
+    set(key: string, value: unknown) { map.set(key, JSON.stringify(value)); },
+  };
+}
+
+function mark(shareId: string, extra: Record<string, unknown> = {}) {
+  return {
+    saved: true,
+    status: 'needs-review',
+    projectKey: 'local-draft',
+    title: '发布会',
+    shareId,
+    reviewPlanKey: shareId,
+    markedAt: '2026-10-31T00:00:00.000Z',
+    ...extra,
+  };
+}
+
+function panelProps(extra: Partial<Parameters<typeof SharePanel>[0]> = {}): Parameters<typeof SharePanel>[0] {
+  return {
+    tab: 'publish',
+    onTab: () => undefined,
+    title: '发布会',
+    published: null,
+    busy: false,
+    notice: '',
+    bingoStatus: '待发',
+    qrOpen: false,
+    qrSvg: '',
+    exports: [],
+    onIssueAudience: () => undefined,
+    onSendBingo: () => undefined,
+    onPublish: () => undefined,
+    onCopy: () => undefined,
+    onToggleQr: () => undefined,
+    ...extra,
+  };
+}
 
 function expectChrome(trigger: HTMLElement, open: boolean): void {
   expect(trigger.style.width).toBe('32px');
