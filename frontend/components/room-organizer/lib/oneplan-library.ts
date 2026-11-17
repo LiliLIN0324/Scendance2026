@@ -513,6 +513,32 @@ export function parseLibraryTemplateId(
   return { kind, slug };
 }
 
+/**
+ * 按 templateId 在给定条目集合里反查条目（`oneplan:` 规范前缀 + `library:` 存量兼容）。
+ * 纯函数层拿不到全局 manifest，条目由调用方注入；找不到返回 null。
+ */
+export function findLibraryEntryByTemplateId(
+  entries: readonly LibraryEntry[],
+  templateId: string,
+): LibraryEntry | null {
+  const parsed = parseLibraryTemplateId(templateId);
+  if (!parsed) return null;
+  return entries.find(entry => entry.kind === parsed.kind && entry.slug === parsed.slug) ?? null;
+}
+
+/**
+ * 迁移器 `libraryEntry` 注入点适配：按 templateId 取默认占地。
+ * 查不到返回 undefined，由 `migrateFacilities` 保持 2×2 兜底（不虚构尺寸）。
+ */
+export function facilityLibrarySizeResolver(
+  entries: readonly LibraryEntry[],
+): (templateId: string) => { width: number; depth: number } | undefined {
+  return templateId => {
+    const entry = findLibraryEntryByTemplateId(entries, templateId);
+    return entry ? { width: entry.width, depth: entry.depth } : undefined;
+  };
+}
+
 /** 物件库设施在 2D 画布上用的贴纸描述；内置模板返回 null。 */
 export function libraryStickerFor(templateId: string): OneplanStickerDescriptor | null {
   const parsed = parseLibraryTemplateId(templateId);
