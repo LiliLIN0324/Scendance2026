@@ -92,6 +92,7 @@ import {
   type SceneObjectPlacement,
 } from '@/components/room-organizer/lib/plan-scene-placement';
 import { assignCrowdWalkRoutes } from '@/components/room-organizer/lib/plan-crowd-routes';
+import { DERIVED_CROWD_NOTE, deriveCrowdFromRoutes, mergeDerivedCrowd, shouldDeriveCrowd } from '@/components/room-organizer/lib/plan-crowd-derived';
 import { planFacilityColliders, planSeatAnchors, planWalkBounds, planZoneRings } from '@/components/room-organizer/lib/plan-walk-context';
 import {
   splatPlacementOffset,
@@ -354,6 +355,8 @@ export default function OutdoorPlan3D({
   const [walkCanvas, setWalkCanvas] = useState<HTMLCanvasElement | null>(null);
   const walkChooserRef = useRef<HTMLDialogElement>(null);
   const [walkActors, setWalkActors] = useState<WalkActor[]>([]);
+  /** 接管面板只列用户自己放的人：派生路人（`plan-crowd-route:`）是示意用的，不能拿来当化身。 */
+  const pickableWalkActors = walkActors.filter(actor => !actor.id.includes('plan-crowd-route:'));
   const controlledActorRef = useRef<{
     actor: WalkActor;
     control: NonNullable<ReturnType<typeof takePersonControl>>;
@@ -464,6 +467,9 @@ export default function OutdoorPlan3D({
   // 2026-11-17：多一个 unavailable——设备根本给不出 WebGL 时，3D 画不出来是事实，
   // 别再假称“正在取底图”或“先用纸面网格”，那两句话会把人引到错的地方。
   const [groundState, setGroundState] = useState<'loading' | 'satellite' | 'paper' | 'unavailable'>('loading');
+  /** 2026-11-18：当前 3D 场景里派生出来的示意路人数（0 = 没派生，不显示说明）。 */
+  const [derivedCrowdCount, setDerivedCrowdCount] = useState(0);
+  const derivedCrowdCountRef = useRef(0);
 
   const zoomBy = useCallback((factor: number) => {
     const camera = cameraRef.current;
@@ -1005,6 +1011,8 @@ export default function OutdoorPlan3D({
         })),
         // 分区轮廓变了就要重算「从哪儿进区」（B2）。
         zones: (nextPlan.zones ?? []).map((zone) => ({ id: zone.id, polygon: zone.polygon })),
+        // 出入口位置变了，派生人群的穿场/折返判定也要重算。
+        nodes: (nextPlan.nodes ?? []).map((node) => ({ id: node.id, kind: node.kind, position: node.position })),
       });
       if (signature === crowdSignature) return;
       crowdSignature = signature;
@@ -1017,12 +1025,30 @@ export default function OutdoorPlan3D({
         nextMetrics,
       );
       // 可走人物从最近的兼容动线接入。
-      const walkRouteMap = assignCrowdWalkRoutes(
+      const pointRouteMap = assignCrowdWalkRoutes(
         crowdPlacements,
         Array.isArray(nextPlan.routes) ? nextPlan.routes : [],
         nextPlan.boundary,
         nextMetrics,
       );
+      // 2026-11-18 用户：「不是所有用户都有放很多人的意识，能不能给人的流线就直接加人在走」。
+      // 没放观众/游客类点位时，按人行流线补一批派生路人：不写 plan、不进人员统计与容量，
+      // 只让 3D 里看得出人沿哪条线走。放了点位就以点位为准，派生退场。
+      const derivedCrowd = shouldDeriveCrowd(Array.isArray(nextPlan.workers) ? nextPlan.workers : [])
+        ? deriveCrowdFromRoutes({
+            routes: Array.isArray(nextPlan.routes) ? nextPlan.routes : [],
+            nodes: Array.isArray(nextPlan.nodes) ? nextPlan.nodes : [],
+            boundary: nextPlan.boundary,
+            metrics: nextMetrics,
+          })
+        : null;
+      const { roster: crowdRoster, routeMap: walkRouteMap, derivedCount } = mergeDerivedCrowd({
+        placements: crowdPlacements,
+        routeMap: pointRouteMap,
+        derived: derivedCrowd,
+      });
+      derivedCrowdCountRef.current = derivedCount;
+      setDerivedCrowdCount(derivedCount);
       // 行走上下文（B1）：碰撞盒 + 可走矩形 + 座位锚点。此前户外从未注入—
       // 人群是「无碰撞、无围栏、只沿折线」在走。座椅自身不进碰撞盒：人要走到椅子
       // 后面才坐得下，椅子当障碍会永远到不了（见 lib/plan-walk-context.ts 注释）。
@@ -1043,10 +1069,10 @@ export default function OutdoorPlan3D({
       const totals = new Map<string, number>();
       const ordinals = new Map<string, number>();
       const colors = new Map(nextPlan.workers.map(worker => [worker.id, worker.color]));
-      for (const { role } of crowdPlacements) {
+      for (const { role } of crowdRoster) {
         totals.set(role, (totals.get(role) ?? 0) + 1);
       }
-      const actors = crowdPlacements.map((placement): WalkActor => {
+      const actors = crowdRoster.map((placement): WalkActor => {
         const { assetId, glbUrl, role, shell } = placement;
         const customColor = colors.get(placement.workerId);
         // 主题色（2026-11-16）：点位自带色 > 岗位表写死的九岗色 > slug 调色板。
@@ -2247,6 +2273,12 @@ export default function OutdoorPlan3D({
                 near: nearEntryRef.current?.id ?? null,
               }
             : null,
+          /** 2026-11-18：派生路人（按流线示意）的在场情况；渲染侧按它显示「非实测人数」说明。 */
+          crowdDerived: {
+            active: derivedCrowdCountRef.current > 0,
+            count: derivedCrowdCountRef.current,
+            note: DERIVED_CROWD_NOTE,
+          },
           traffic: trafficLayer.group.children.map(root => ({ name: root.name, position: root.position.toArray() })),
           vehicles: vehicleEntitiesLayer.group.children.map(root => ({
             name: root.name,
@@ -2463,9 +2495,9 @@ export default function OutdoorPlan3D({
           <h2 id="outdoor-walk-chooser-title" className="text-lg font-semibold">选择漫游角色</h2>
           <button type="button" className="rounded-lg px-2 py-1 text-sm hover:bg-neutral-100" onClick={onCloseWalkChooser}>取消</button>
         </div>
-        {walkActors.length > 0 ? (
+        {pickableWalkActors.length > 0 ? (
           <div className="grid grid-cols-2 gap-2">
-            {walkActors.map(actor => (
+            {pickableWalkActors.map(actor => (
               <button
                 key={actor.id}
                 type="button"
@@ -2610,6 +2642,26 @@ export default function OutdoorPlan3D({
           {groundMode === 'paper'
             ? '纸面模式 · 虚拟场地（不关联真实地图）'
             : '地图底图未取到，先用纸面网格（低模草图）'}
+        </div>
+      )}
+      {/* 2026-11-18：派生路人在场时说明这是按流线示意，不是实测人数。 */}
+      {derivedCrowdCount > 0 && groundState !== 'unavailable' && (
+        <div
+          data-testid="outdoor-3d-crowd-note"
+          style={{
+            position: 'absolute',
+            left: 16,
+            bottom: groundState === 'paper' ? 52 : 16,
+            zIndex: 2,
+            padding: '4px 10px',
+            borderRadius: 8,
+            background: 'rgba(18, 20, 26, 0.62)',
+            color: '#fff',
+            fontSize: 12,
+            lineHeight: '18px',
+          }}
+        >
+          {DERIVED_CROWD_NOTE} · {derivedCrowdCount} 人
         </div>
       )}
       <GeoScaleCompass
