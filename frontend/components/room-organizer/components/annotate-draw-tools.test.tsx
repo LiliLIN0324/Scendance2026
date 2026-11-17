@@ -20,6 +20,7 @@ describe('AnnotateDrawTools', () => {
   it('lays out text and every shape at once, with no dropdown', () => {
     renderTools('triangle');
     const bar = screen.getByTestId('annotate-draw-tools');
+    expect(bar.style.flexWrap).toBe('nowrap');
     const buttons = TOOL_NAMES.map(name => screen.getByRole('button', { name }));
     const order = [...bar.querySelectorAll('button')];
     const indexes = buttons.map(button => order.indexOf(button as HTMLButtonElement));
@@ -84,5 +85,19 @@ describe('AnnotateDrawTools', () => {
     expect(between).not.toContain('annotate-type-shape');
     expect(src.slice(zoneAt)).not.toContain('annotateMenuOpen');
     expect(src.slice(barAt, barAt + 400)).not.toContain("mode === 'shape'");
+  });
+
+  it('keeps the annotation popover a fixed footprint while tools change', () => {
+    const src = readFileSync(join(process.cwd(), 'components/room-organizer/components/outdoor-plan-canvas.tsx'), 'utf8');
+    // 未选工具也有占位提示；notice 复用同一行，不再追加新行把底部锚定的卡片顶高。
+    expect(src).toContain('const annotateHint =');
+    expect(src).toContain('选一个工具，在图上绘制');
+    expect(src).toContain('data-testid="annotate-hint"');
+    expect(src).toContain('{annotateNotice ?? annotateHint}');
+    expect(src).not.toContain('{annotateNotice && (');
+    // 固定宽度 + 固定提示行；有明确关闭口，不靠点外部收起。
+    expect(src).toContain('const ANNOTATE_CARD_WIDTH = 286');
+    expect(src).toContain('data-testid="outdoor-inspector-card-annotate-close"');
+    expect(src).toContain('const halfPanel = panelWidth / 2');
   });
 });

@@ -96,7 +96,7 @@ export default function PlanSharePage() {
           {isDemo && ' · 演示快照'}
         </small>
         <span style={{ color: '#55585f', fontSize: 12 }}>
-          场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人
+          场地 {Math.round(stats.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 {stats.zoneCount} · 设施 {stats.facilityCount} · 动线 {formatLengthM(stats.routeLengthTotalM)} · 人员 {stats.workerTotalCount} 人 · 车辆 {stats.vehicleTotalCount} 台
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <select

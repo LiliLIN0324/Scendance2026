@@ -125,11 +125,8 @@ const walkContexts = new Map<string, RouteStepContext>();
 let steppingContext: RouteStepContext = {};
 let shadowRefresher: (() => void) | null = null;
 
-/**
- * 自主落座（B1）的座位上下文，与 `steppingContext` 同一坐标系（路线局部，场地中心为原点）。
- * 与行走上下文一样按 owner 分开：户外 `outdoor`、室内将来 `local`，谁注入谁生效。
- */
-const seatContexts = new Map<string, readonly SeatAnchor[]>();
+/** 自主落座（B1）的座位上下文：与 `steppingContext` 同一坐标系（路线局部，场地中心为原点）。 */
+let seatContext: { seats: readonly SeatAnchor[] } | null = null;
 const seatRegistry = createSeatRegistry();
 /** 走到离接近点这么近就算到了（米）；比 follower 的路点判定宽松一点，免得差一帧。 */
 const SEAT_ARRIVE_M = 0.35;
@@ -142,48 +139,24 @@ const ZONE_ARRIVE_M = 0.6;
 /** 漫游相位。`seatPhase` 字段名沿用 B1，语义已扩到整段漫游。 */
 type RoamPhase = 'none' | 'toZone' | 'zone' | 'going' | 'seated' | 'returning' | 'rejoin';
 
-/** 分区上下文（B2）：与行走上下文同一坐标系，同样按 owner 分开。 */
-const zoneContexts = new Map<string, readonly ZoneRing[]>();
-/** 每条基准流线的进区点缓存：不缓存的话每人每帧都要沿线采样。按 owner 分开。 */
-const crossingCaches = new Map<string, WeakMap<WalkRoute, ZoneCrossing[]>>();
-/** 当前这一遍推进用的座位 / 分区上下文（由 owner 取，供各相位助手读取）。 */
-let steppingSeats: readonly SeatAnchor[] | null = null;
-let steppingZones: readonly ZoneRing[] | null = null;
-let steppingCrossings: WeakMap<WalkRoute, ZoneCrossing[]> = new WeakMap();
+/** 分区上下文（B2）：与行走上下文同一坐标系。 */
+let zoneContext: { zones: readonly ZoneRing[] } | null = null;
+/** 每条基准流线的进区点缓存：不缓存的话每人每帧都要沿线采样。 */
+let crossingCache = new WeakMap<WalkRoute, ZoneCrossing[]>();
 
-/** 分区上下文。传 null 关掉该 owner 的进区行为，不影响其他 owner。 */
-export function setPersonZoneContext(
-  ctx: { zones: readonly ZoneRing[] } | null,
-  owner = 'local'
-): void {
-  if (ctx && ctx.zones.length > 0) zoneContexts.set(owner, ctx.zones);
-  else zoneContexts.delete(owner);
-  // 只作废这个 owner 的进区点缓存：别人的分区没变，没必要重算。
-  crossingCaches.delete(owner);
-}
-
-/** 取（必要时建）某个 owner 的进区点缓存。 */
-function crossingCacheFor(owner: string): WeakMap<WalkRoute, ZoneCrossing[]> {
-  let cache = crossingCaches.get(owner);
-  if (!cache) {
-    cache = new WeakMap();
-    crossingCaches.set(owner, cache);
-  }
-  return cache;
+/** 分区上下文。传 null 关掉进区行为——室内链路不注入，B1 行为保持不变。 */
+export function setPersonZoneContext(ctx: { zones: readonly ZoneRing[] } | null): void {
+  zoneContext = ctx && ctx.zones.length > 0 ? { zones: ctx.zones } : null;
+  crossingCache = new WeakMap();
 }
 
 /**
- * 座位上下文。传 null 关掉该 owner 的自主落座，不影响其他 owner。
+ * 座位上下文。传 null 关掉自主落座——室内那条链路不注入，行为与现状逐字段一致。
  * 与 `setPersonWalkContext` 分开两个入口：没有可坐物件的场景不必凭空造一份空数组。
  */
-export function setPersonSeatContext(
-  ctx: { seats: readonly SeatAnchor[] } | null,
-  owner = 'local'
-): void {
-  if (ctx && ctx.seats.length > 0) seatContexts.set(owner, ctx.seats);
-  else seatContexts.delete(owner);
-  // 全部 owner 都没座了才清占用表；否则会把另一套场景里正坐着的人踢起来。
-  if (seatContexts.size === 0) seatRegistry.clear();
+export function setPersonSeatContext(ctx: { seats: readonly SeatAnchor[] } | null): void {
+  seatContext = ctx && ctx.seats.length > 0 ? { seats: ctx.seats } : null;
+  if (!seatContext) seatRegistry.clear();
 }
 
 /**
@@ -311,14 +284,14 @@ function advanceZonePhase(entry: PersonAnimEntry, deltaSeconds: number): void {
  * 出区后至少再走一圈才允许再进（`zoneCooldownLaps`），以及按人+圈数的确定性概率。
  */
 function tryEnterZone(entry: PersonAnimEntry, x: number, z: number): boolean {
-  if (!steppingZones || !entry.route) return false;
+  if (!zoneContext || !entry.route) return false;
   const laps = entry.follower?.laps ?? 0;
   if (laps < entry.zoneCooldownLaps) return false;
 
-  let crossings = steppingCrossings.get(entry.route);
+  let crossings = crossingCache.get(entry.route);
   if (!crossings) {
-    crossings = zoneCrossingsAlong(entry.route.points, steppingZones);
-    steppingCrossings.set(entry.route, crossings);
+    crossings = zoneCrossingsAlong(entry.route.points, zoneContext.zones);
+    crossingCache.set(entry.route, crossings);
   }
 
   const forwardX = Math.sin(entry.group.rotation.y);
@@ -339,7 +312,7 @@ function tryEnterZone(entry: PersonAnimEntry, x: number, z: number): boolean {
 
   if (!shouldEnterZone(entry.id, laps)) return false;
   const crossing = best;
-  const zone = steppingZones.find((ring) => ring.id === crossing.zoneId);
+  const zone = zoneContext.zones.find((ring) => ring.id === crossing.zoneId);
   if (!zone) return false;
   const entryPoint = zoneEntryPoint(crossing, zone.polygon);
   if (!seatReachable({ x, z }, entryPoint)) return false;
@@ -354,7 +327,7 @@ function tryEnterZone(entry: PersonAnimEntry, x: number, z: number): boolean {
 
 /** 区内路线：从当前位置走格到远端再原路回来；格不够就回线。 */
 function beginZoneWalk(entry: PersonAnimEntry, x: number, z: number): void {
-  const zone = steppingZones?.find((ring) => ring.id === entry.zoneId);
+  const zone = zoneContext?.zones.find((ring) => ring.id === entry.zoneId);
   if (!zone) {
     beginRejoin(entry, x, z);
     return;
@@ -437,20 +410,19 @@ function advanceSeat(entry: PersonAnimEntry, deltaSeconds: number): void {
     return;
   }
   if (entry.seatPhase === 'toZone' || entry.seatPhase === 'rejoin') return;
-  if (!steppingSeats || !entry.route) return;
-  const seatsForOwner = steppingSeats;
+  if (!seatContext || !entry.route) return;
 
   const target = entry.seatTarget;
   const arrived = target
     ? Math.hypot(x - target.approach.x, z - target.approach.z) <= SEAT_ARRIVE_M
     : false;
   const zone = entry.seatPhase === 'zone'
-    ? steppingZones?.find((ring) => ring.id === entry.zoneId)
+    ? zoneContext?.zones.find((ring) => ring.id === entry.zoneId)
     : undefined;
   // 在区内只坐本区的椅子：不要让人员为了坐椅穿出分区。
   const seats = zone
-    ? seatsForOwner.filter((seat) => pointInPolygon(seat, zone.polygon))
-    : seatsForOwner;
+    ? seatContext.seats.filter((seat) => pointInPolygon(seat, zone.polygon))
+    : seatContext.seats;
   const events = stepSeatBehavior(
     entry.seatBehavior,
     {
@@ -799,9 +771,6 @@ export function advancePeopleAnimations(
   advanceCalls += 1;
   if (entries.size === 0 || !(deltaSeconds > 0)) return 0;
   steppingContext = walkContexts.get(owner) ?? {};
-  steppingSeats = seatContexts.get(owner) ?? null;
-  steppingZones = zoneContexts.get(owner) ?? null;
-  steppingCrossings = crossingCacheFor(owner);
   let active = 0;
   let anyMoving = false;
   // 漫游态跳档（B3）：只在真的换挡时通知一次，不每帧发。

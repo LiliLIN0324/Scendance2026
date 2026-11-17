@@ -60,17 +60,38 @@ export interface TurnTrace {
 const CODE_TOKEN = /^[A-Za-z][A-Za-z0-9_.-]*$/;
 const MAX_CODE_LENGTH = 48;
 
-function randomSuffix(): string {
-  // 不用 crypto 也能跑（老浏览器/测试桩）；只要不与同一毫秒内的另一轮撞车即可。
-  return Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
+/**
+ * 同一毫秒内的编号必须各不相同——这是这套编号的约定，单测也按这条约定钉着。
+ *
+ * 2026-11-17 修的坑：原来后缀是纯随机 16 位（65536 种）。按生日问题算，同一毫秒里
+ * 取 200 次大约有 26% 的概率撞车（实测 26.11%），于是「同一毫秒也不会重复」这条断言
+ * 会随机变红，把全量套件打成看运气的结果——同一份代码连跑三次就有一次是红的。
+ *
+ * 现在把 16 位拆成「12 位毫秒内序号 + 4 位随机」：
+ * - 序号在同一个毫秒内递增，同毫秒的第 n 个编号不可能和第 n+1 个相同；
+ * - 毫秒一变，序号归零，但编号前缀里已经带着毫秒本身，跨毫秒天然不撞；
+ * - 保留 4 位随机，编号不会一眼看出是计数器出来的。
+ * 同一毫秒最多支持 4096 个编号，序号用满才回绕（回绕后仍带随机位）。
+ */
+let lastStamp = -1;
+let stampSeq = 0;
+
+function uniqueSuffix(now: number): string {
+  if (now !== lastStamp) {
+    lastStamp = now;
+    stampSeq = 0;
+  }
+  stampSeq = (stampSeq + 1) & 0xfff;
+  const random = Math.floor(Math.random() * 0x10);
+  return (((stampSeq << 4) | random) & 0xffff).toString(16).padStart(4, '0');
 }
 
 export function newTurnId(now: number = Date.now()): string {
-  return `t-${now.toString(36)}-${randomSuffix()}`;
+  return `t-${now.toString(36)}-${uniqueSuffix(now)}`;
 }
 
 export function newAttemptId(now: number = Date.now()): string {
-  return `a-${now.toString(36)}-${randomSuffix()}`;
+  return `a-${now.toString(36)}-${uniqueSuffix(now)}`;
 }
 
 /**

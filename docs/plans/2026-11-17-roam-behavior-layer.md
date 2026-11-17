@@ -270,16 +270,12 @@ setPersonBehaviorContext({
   - **行走上下文已按 owner 分开**（本节末的遗留已补）：`advancePeopleAnimations(dt, scene, owner)`
     取 `walkContexts.get(owner)` 那套，没注入过就用空上下文（不借别处的围栏）。户外传 `'outdoor'`、
     主舞台传 `'local'`；`setPersonWalkContext(ctx, owner)` 只管存，不再维护「当前活动上下文」。
-  - **座位与分区上下文也已按 owner 分开**（与行走上下文同一口径）：`setPersonSeatContext(ctx, owner)`、
-    `setPersonZoneContext(ctx, owner)` 各存一份，推进时取 `advancePeopleAnimations` 当前 owner 那套；
-    进区点缓存也是每 owner 一份（只作废自己那份，不牵连别人）。
-    清座位时只在「所有 owner 都没座」才清占用表，免得把另一套场景里正坐着的人踢起来。
-  - 室内将来接管漫游：直接 `setPersonWalkContext(..., 'local')` / `setPersonSeatContext(..., 'local')` /
-    `setPersonZoneContext(..., 'local')` 即可，不用改 people-anim；不注入就是「不避障、不落座、不进区」。
+  - 仍为全局的：座位上下文（`setPersonSeatContext`）与分区上下文（`setPersonZoneContext`）。
+    两者只由户外链路注入，室内不注入即不生效；若以后室内也要落座/进区，得同样按 owner 拆。
 - 单向流线 + 出口：`rejoin` 仍走 `projectOnPolyline` 投影，单向线不会把远端当出口（未新增旁路）。
 
-验证：`npx tsc --noEmit` 0；`npx eslint` 改动文件 0 error；`vitest` 7 个文件 / 136 用例通过
-（新增 `people-anim.test.ts` 漫游态 2 例 + owner 隔离 5 例、`outdoor-plan-canvas.test.ts` 状态环 1 例、
+验证：`npx tsc --noEmit` 0；`npx eslint` 改动文件 0 error；`vitest` 7 个文件 / 133 用例通过
+（新增 `people-anim.test.ts` 漫游态 2 例 + owner 隔离 2 例、`outdoor-plan-canvas.test.ts` 状态环 1 例、
 `idle-crowd-pacer.test.ts` 节拍器 5 例）。
 
 ---

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { BackendSession } from '@/lib/backend-session';
 import { submitMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
 import { attachFacilityGenerateTask, listFacilityGenerateLinks, findGeneratedFacilityModel, markFacilityGenerateTerminal, subscribeFacilityGenerateLinks, getFacilityGenerateLinksRevision } from '../lib/facility-generated-models';
+import { generationFailureText } from '../lib/generation-failure';
 
 interface Submission {
   requestId: string; projectId: string; facilityId: string; facilityName: string;
@@ -90,7 +91,7 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
           if (!controller) return;
           const job = await controller.getGenerationJob(original.taskid!);
           if (job.id !== original.taskid) throw new Error('TASK_ID_MISMATCH');
-          if (['failed', 'rejected'].includes(job.state)) { terminal(job.state, '云任务未成功'); return; }
+          if (['failed', 'rejected'].includes(job.state)) { terminal(job.state, generationFailureText(job) || '云任务未成功'); return; }
         } else {
           const { fetchLux3dTask, glbOutputOf } = await import('../lib/lux3d-import');
           const job = await fetchLux3dTask(original.taskid!);
