@@ -141,6 +141,14 @@ export function defaultLedger(): CaseLedgerRow[] {
   return ledgerFromEvidence(FIXED_DATA_CASES);
 }
 
+/** 云端那列：有台账才算得出来，没台账就明说没报。 */
+function cloudLine(ledger: readonly CaseLedgerRow[] | undefined): string {
+  if (!ledger) return '· 云端证据：未验（本次没带台账）';
+  const pass = ledger.filter((row) => row.cloud === 'pass').length;
+  const rest = ledger.length - pass;
+  return `· 云端证据：${pass} 条通过 / ${rest} 条未验`;
+}
+
 /** 证据清单：空列表就只写「0 条」，不留一个空括号。 */
 function listWithIds(ids: readonly number[]): string {
   if (ids.length === 0) return '0 条';
@@ -161,6 +169,7 @@ export function formatReleaseStatusCard(input: ReleaseStatusInput): string {
       ? '· 验收用例 0 条：还没有可判的用例（先跑一次会话再用）'
       : `· 验收用例 ${input.rows.length} 条：可判 ${totals.ready} / 缺料 ${totals.missing} / 只能浏览器 ${totals.browserOnly}`,
     `· 浏览器证据（${EVIDENCE_AS_OF}）：有部分 ${listWithIds(withEvidence)} / 无证据 ${listWithIds(withoutEvidence)}`,
+    cloudLine(input.ledger),
     `· 指标：${input.metrics.text.trim() || '本次会话没有指标记录'}`,
     `· 门禁：类型 ${gateCell(gate.typecheck)} / 用例 ${gateCell(gate.tests)} / 构建 ${gateCell(gate.build)}（${gateReady ? '门禁就绪' : '门禁未齐'}）`,
     ...(input.reading ? [`· 读数：${input.reading.line}`] : []),

@@ -55,17 +55,19 @@ function report(rows: TraceExportRow[] = [], mapCalls = 0): SessionReport {
 }
 
 describe('formatReleaseStatusCard', () => {
-  it('五行固定结构：标题、用例三档、浏览器证据、指标、门禁、结论', () => {
+  it('固定行结构：标题、用例三档、浏览器证据、云端证据、指标、门禁、结论', () => {
     const lines = formatReleaseStatusCard({
       rows: assessAcceptance(report()),
       metrics: report().metrics,
     }).split('\n');
+    expect(lines).toHaveLength(7);
     expect(lines[0]).toBe('发布前状态卡');
     expect(lines[1]).toContain('验收用例 11 条：可判 0 / 缺料 5 / 只能浏览器 6');
     expect(lines[2]).toContain(`· 浏览器证据（${EVIDENCE_AS_OF}）`);
-    expect(lines[3]).toContain('· 指标：turns=0');
-    expect(lines[4]).toContain('类型 未验 / 用例 未验 / 构建 未验');
-    expect(lines[5]).toBe('· 结论：不可发布（三类全绿 0 条）');
+    expect(lines[3]).toContain('· 云端证据：未验（本次没带台账）');
+    expect(lines[4]).toContain('· 指标：turns=0');
+    expect(lines[5]).toContain('类型 未验 / 用例 未验 / 构建 未验');
+    expect(lines[6]).toBe('· 结论：不可发布（三类全绿 0 条）');
   });
 
   it('证据行按对照表分“有部分 9 条 / 无证据 2 条”，且无证据的正好是 #2 #5', () => {
@@ -186,6 +188,39 @@ describe('门禁读数接进状态卡', () => {
       gate: gateFactsForCard(reading),
     });
     expect(card).toContain('类型 未验 / 用例 通过 / 构建 未验（门禁未齐）');
+  });
+});
+
+describe('云端那列（以前卡里根本没写）', () => {
+  it('默认台账：11 条全部未验，一条也不冒充通过', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: defaultLedger(),
+    });
+    expect(card).toContain('· 云端证据：0 条通过 / 11 条未验');
+  });
+
+  it('台账里真有一条云端通过，就如实写 1 条', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+      ledger: [
+        { id: 1, fixedData: true, browser: 'pass', cloud: 'pass' },
+        { id: 2, fixedData: true, browser: 'none', cloud: 'none' },
+        { id: 3, fixedData: false, browser: 'partial', cloud: 'none' },
+      ],
+    });
+    expect(card).toContain('· 云端证据：1 条通过 / 2 条未验');
+    expect(card).toContain('· 结论：不可发布（三类全绿 1 条）');
+  });
+
+  it('没带台账就明说未验，不默默省掉这一行', () => {
+    const card = formatReleaseStatusCard({
+      rows: assessAcceptance(report()),
+      metrics: report().metrics,
+    });
+    expect(card).toContain('· 云端证据：未验（本次没带台账）');
   });
 });
 
