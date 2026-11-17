@@ -152,6 +152,8 @@ export function clearForObject(
   facility: PlanFacility,
   plan: SitePlanData,
   zone: PlanZone,
+  /** 2026-11-17 硬挤模式：物件间不重叠是硬约束；通道/门口净空收到最小，塞到物理极限。 */
+  packed = false,
 ): boolean {
   const ring = facilityFootprintRing(facility);
   if (
@@ -167,7 +169,7 @@ export function clearForObject(
     return false;
   if (
     plan.routes.some((r) =>
-      outdoorCorridorStrips(r.points, (r.widthM ?? 3) + 1).some((strip) =>
+      outdoorCorridorStrips(r.points, (r.widthM ?? 3) + (packed ? 0.2 : 1)).some((strip) =>
         outdoorRingsOverlap(ring, strip),
       ),
     )
@@ -180,7 +182,7 @@ export function clearForObject(
           n.position.x - facility.position.x,
           n.position.y - facility.position.y,
         ) <
-        Math.hypot(facility.size.width, facility.size.depth) / 2 + 2,
+        Math.hypot(facility.size.width, facility.size.depth) / 2 + (packed ? 0.5 : 2),
     )
   )
     return false;
@@ -371,12 +373,18 @@ export async function proposeInventoryObjects(
     /** 2026-11-14 用户指令「进度条要显示在干嘛」：逐区落位的真实进度回调（async 化让出主线程刷新 UI）。 */
     onPhase?: ((phase: string) => void) | undefined;
     signal?: AbortSignal | undefined;
+    /** 2026-11-17 用户拍板「就硬挤在一起，甲方就会明白放不下了」：硬挤模式——物件互不重叠、
+     *  通道/门口只留最小净空，塞到物理极限为止；塞不下的差额如实返回 capacityShortfall，
+     *  让预览自己说明「放不下」，不替用户把数量改小。 */
+    packed?: boolean;
   },
 ): Promise<{
   plan: SitePlanData;
   used: OutdoorLibraryItem[];
   /** 2026-11-17：需求分区对不上画布的那些条（跳过了，没有摆放）。 */
   mismatched: OutdoorZoneMismatch<OutdoorBrief["items"][number]>[];
+  /** 2026-11-17 硬挤模式：物理上限放不满时的差额，预览据此说清「放不下」。 */
+  capacityShortfall: { zone: string; query: string; requested: number; placed: number }[];
 }> {
   if (!brief.items.length)
     throw new Error(
@@ -392,6 +400,7 @@ export async function proposeInventoryObjects(
   const indoorZoneBBoxes = indoorZones.map(zone => ({ zone, bbox: bboxLoose(zone.polygon) }));
   let next = { ...plan, facilities: [...plan.facilities] };
   const used: OutdoorLibraryItem[] = [];
+  const capacityShortfall: { zone: string; query: string; requested: number; placed: number }[] = [];
   // 2026-11-17 死结 3：需求分区对不上画布的先分出来——对不上的跳过（并如实报出），
   // 其余分区照常排布；一条都对不上时仍然报错（没有可排的东西，不能出空提案）。
   const { matched: matchedNeeds, mismatched } = splitNeedsByZone(plan, brief.items);
@@ -416,10 +425,18 @@ export async function proposeInventoryObjects(
     // 2026-11-14 消歧：子串撞上一组相近物件（指示牌/指示牌架·双面/…）时，精确同名优先收窄。
     const exact = matches.filter((m) => m.name === need.query);
     if (exact.length) matches = exact;
-    if (!matches.length)
+    if (!matches.length) {
+      // 2026-11-17 断点修复：口径差一个字（「摊位」vs「市集摊位」）就红卡，卡上却不说库里有什么。
+      // 把库里现有名称带上，用户照着说就能过，不用猜。
+      const known = [...new Set(library.filter((m) => m.available).map((m) => m.name))]
+        .slice(0, 6)
+        .join("、");
       throw new Error(
-        `你的真实物料库中尚未找到尺寸与模型可用的“${need.query}”。可改名称检索/选真实候选或上传；未自动创建收费生成。`,
+        `你的真实物料库中尚未找到尺寸与模型可用的“${need.query}”。${
+          known ? `库里现有：${known}。` : ""
+        }可改名称检索/选真实候选或上传；未自动创建收费生成。`,
       );
+    }
     if (matches.length > 1) {
       // 同名多候选（如 manifest 里 icon/scale 两条「市集摊位」）按名称归组：组内同一物件不追问；
       // 只有出现「不同名」真歧义时才要求用户给具体名称。
@@ -433,6 +450,12 @@ export async function proposeInventoryObjects(
         throw new Error(
           `你的库里有${matches.length}个“${need.query}”候选：${[...nameGroups.keys()].join("、")}。请给具体名称或ID，不替你随便选第一个。`,
         );
+      // 2026-11-17 设计师模式：同名候选里 icon: 与 scale: 并存时（如「市集摊位」「舞台」），
+      // 优先真实占地物件——图标尺寸不是摊位的真实占地，拿它排会得到一个“看着能看、实际放不下”的方案。
+      if (nameGroups.size === 1) {
+        const scaled = [...nameGroups.values()][0]!.filter((m) => m.id.startsWith("scale:"));
+        if (scaled.length) matches = scaled;
+      }
     }
     const material = matches[0]!;
     used.push(material);
@@ -489,7 +512,7 @@ export async function proposeInventoryObjects(
             allocationKey,
             notes: "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
           };
-          if (clearForObject(facility, next, zone)) {
+          if (clearForObject(facility, next, zone, options?.packed === true)) {
             // 建筑禁区 + 室内区域：包围盒预筛后仅对相交者做环运算（性能，见 bboxLoose）。
             const footprint = facilityFootprintRing(facility);
             const footprintBBox = bboxLoose(footprint);
@@ -501,15 +524,27 @@ export async function proposeInventoryObjects(
           }
         }
       }
-      if (!found)
+      if (!found) {
+        // 2026-11-17 用户拍板「就硬挤在一起，甲方就会明白放不下了」：硬挤模式下塞到物理极限就停，
+        // 差额如实返回；非硬挤（正常间距）仍然整版报错，不静默出半版。
+        if (options?.packed) {
+          capacityShortfall.push({
+            zone: zone.name,
+            query: need.query,
+            requested: need.count,
+            placed: n,
+          });
+          break;
+        }
         throw new Error(
           `“${zone.name}”放不下第${n + 1}件“${material.name}”并保留通道与门口；可减数量、选择较小真实物料或调整分区。整版未写入。`,
         );
+      }
       next = { ...next, facilities: [...next.facilities, found] };
     }
   }
   validateWorkflowDemand(next, brief);
-  return { plan: next, used, mismatched };
+  return { plan: next, used, mismatched, capacityShortfall };
 }
 export function reachablePedestrianRoutes(
   plan: SitePlanData,

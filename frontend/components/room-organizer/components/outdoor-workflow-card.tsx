@@ -272,26 +272,9 @@ export function OutdoorWorkflowCard({
       </li>
     );
   };
-  const [noticeCountdown, setNoticeCountdown] = useState<number | null>(null);
-  useEffect(() => {
-    // 2026-11-16 用户拍板：要你动手的提示（noticeSticky）不倒计时——8s 自动收起后卡片回落成
-    // 「自动为你框选」，线上实测就是让人以为一点没动。
-    if (!flow.notice || flow.noticeKind === "error" || flow.busy || flow.proposal || flow.noticeSticky) {
-      setNoticeCountdown(null);
-      return;
-    }
-    setNoticeCountdown(8);
-    const timer = window.setInterval(() => {
-      setNoticeCountdown((value) => (value === null ? null : value - 1));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [flow.notice, flow.noticeKind, flow.busy, flow.proposal, flow.noticeSticky]);
-  useEffect(() => {
-    if (noticeCountdown !== null && noticeCountdown <= 0) {
-      setNoticeCountdown(null);
-      flow.dismissNotice();
-    }
-  }, [noticeCountdown, flow.dismissNotice]);
+  // 2026-11-17：低风险提示原来 8 秒自动收起，线上看到的就是「刚做完一步，提示没了，卡片回到
+  // 当前任务」，像什么都没发生。这行提示本来就是这一步的状态：留到下一句状态覆盖它，
+  // 或者用户自己按「收起」。
   const actions: Partial<
     Record<typeof flow.state.stage, OutdoorTurn["action"]>
   > = {
@@ -343,7 +326,15 @@ export function OutdoorWorkflowCard({
             ? `正在处理 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`
             : flow.proposal
               ? "待你核对"
-              : `当前任务 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
+              // 2026-11-17：失败时标题还是「当前任务 · …」，看上去跟正常步骤一样，
+              // 用户不知道刚才那一下已经失败。直接把结论写在标题上，阶段留后面做定位。
+              : flow.noticeKind === "error"
+                ? `这一步没做成 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`
+                : flow.noticeSticky
+                  ? // 2026-11-17 断点修复：反问补充时标题还是「当前任务 · 主通道」，对话在问物件、
+                    // 卡在说通道，用户不知道自己卡在哪一步。标题直接说「等你补充」。
+                    `等你补充 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`
+                  : `当前任务 · ${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
         </strong>
       </header>
       {flow.busy && (
@@ -438,8 +429,15 @@ export function OutdoorWorkflowCard({
               (flow.state.stage === "place" && flow.mapGap
                 ? "没有取到可核对的真实地图/轮廓（地图服务本轮不可用）：请在地图上手画活动范围，或上传边界文件"
                 : STAGE_CAPTIONS[flow.state.stage])}
-          {noticeCountdown !== null && noticeCountdown > 0 && (
-            <span className="ap-task-countdown" aria-hidden="true"> · {noticeCountdown}s 后收起</span>
+          {flow.notice && !flow.loginRequired && (
+            <button
+              type="button"
+              className="ap-task-dismiss"
+              aria-label="收起这条提示"
+              onClick={() => flow.dismissNotice()}
+            >
+              收起
+            </button>
           )}
         </p>
       )}
@@ -528,18 +526,29 @@ export function OutdoorWorkflowCard({
           </div>
         </div>
       ) : flow.state.stage !== "place" ? (
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={flow.busy}
-          onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
-        >
-          {flow.state.stage === "scope"
-            ? "核对当前实际活动范围"
-            : flow.state.stage === "zones"
-              ? "生成分区预览"
-            : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
-        </button>
+        <>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={flow.busy}
+            onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+          >
+            {flow.state.stage === "scope"
+              ? "核对当前实际活动范围"
+              : flow.state.stage === "zones"
+                ? "生成分区预览"
+                : `预览${OUTDOOR_STAGE_LABELS[flow.state.stage]}`}
+          </button>
+          {flow.state.stage === "scope" && (
+            <button
+              type="button"
+              disabled={flow.busy}
+              onClick={() => flow.manualBoundary()}
+            >
+              在地图上手画活动范围
+            </button>
+          )}
+        </>
       ) : null}
       {!flow.proposal &&
         !flow.busy &&
@@ -547,45 +556,43 @@ export function OutdoorWorkflowCard({
           flow.state.stage,
         ) &&
         flow.unverifiedEntrances.slice(0, 1).map((n) => (
-          <div key={n.id}>
-            <p>
-              “{n.name}
-              ”需核对真实通行及进出方向：入口不自动等于出口，不代表安全认证。
+          <div key={n.id} className="ap-access-check">
+            <p className="ap-access-question">
+              “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
+              入口不自动等于出口，也不代表安全认证。
             </p>
-            <button
-              type="button"
-              onClick={() => void flow.action("verify-access", undefined, n.id)}
-            >
-              我已核对“{n.name}”可供本活动通行，预览标记
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void flow.action(
-                  "verify-access",
-                  undefined,
-                  n.id,
-                  undefined,
-                  "exit",
-                )
-              }
-            >
-              我已核对为仅出口，预览标记
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void flow.action(
-                  "verify-access",
-                  undefined,
-                  n.id,
-                  undefined,
-                  "both",
-                )
-              }
-            >
-              我已核对为双向出入口，预览标记
-            </button>
+            {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
+                而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
+                改成三个等宽选项：大字号说方向，小字说记成什么。 */}
+            <div className="ap-access-choices" role="group" aria-label={`“${n.name}”的进出方向`}>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "entry")
+                }
+              >
+                只能进<span>入口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "exit")
+                }
+              >
+                只能出<span>出口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "both")
+                }
+              >
+                双向<span>入口 + 出口</span>
+              </button>
+            </div>
           </div>
         ))}
       {(flow.state.stage === "objects" || flow.libraryChoices.length > 0) &&

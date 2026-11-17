@@ -5,13 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { AuthCard } from '@/components/intro/auth-card';
-import { DoorOpen, Images, MoreHorizontal, RefreshCw, Settings, UserRound, UsersRound, X } from '@/components/solid-icons';
+import { DoorOpen, Images, MoreHorizontal, RefreshCw, Settings, Trash2, UserRound, UsersRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
-import { consumeSelfAttachedProject, preferredStudio, rememberStudio } from '@/lib/workspace-api';
+import { readProjectCache } from '@/lib/project-cache';
+import { emptyProjectScene, consumeSelfAttachedProject, preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 import {projectUnverifiedScene} from '../../../../supabase/functions/_shared/scene-text-projection';
 import { assetCloudLabel, cloudAssetIdMap, prepareLayoutAssetsForCloud, useAssetCloudRecords } from '../lib/asset-cloud';
@@ -74,6 +75,8 @@ function thumbMark(name: string | undefined): string {
   return /[a-z0-9]/i.test(first) ? first.toUpperCase() : first;
 }
 
+type TrashProjectSummary = { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string };
+
 export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
@@ -86,6 +89,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [trash, setTrash] = useState<TrashProjectSummary[]>([]);
+  const [cachedProjects, setCachedProjects] = useState<Record<string, boolean>>({});
+  const [trashOpen, setTrashOpen] = useState(false);
   const [studios, setStudios] = useState<Studio[]>([]);
   const [studioId, setStudioId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -169,6 +175,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     if (!userId || busy) return;
     const id = requestedProjectId;
     if (!id || openedRequest.current === `${userId}:${id}`) return;
+    // 经典案例是本机户外项目（space-panel 用 replica- 伪 id 占住 ?project=，刷新靠本机记录复原），
+    // 云端没有它：静默跳过云端绑定，不报「项目链接无效」。
+    if (id.startsWith('replica-')) { openedRequest.current = `${userId}:${id}`; return; }
     // 无感挂云自己同步的 ?project=：项目刚建好、画布已是内容本体，重开会清掉撤销历史，凭标记跳过。
     if (consumeSelfAttachedProject(userId, id)) { openedRequest.current = `${userId}:${id}`; return; }
     if (!cloud.writeBlocked && cloud.project?.id !== id) {
@@ -195,8 +204,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   useEffect(()=>{const openLogin=()=>{loginRequested.current=true;setSection('projects');setAccountOpen(true);if(!dialog.current?.open)dialog.current?.showModal();focusAuthEmail();};window.addEventListener('scendance:request-account-login',openLogin);return()=>window.removeEventListener('scendance:request-account-login',openLogin);},[]);
 
   useEffect(() => {
-    setProjects([]); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setTeamMounted(false);
-    setScenePreviews({});setReadOnlyProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
+    setProjects([]); setTrash([]); setTrashOpen(false); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setTeamMounted(false);
+    setScenePreviews({});setReadOnlyProjects({});setCachedProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
     if (!userId) {
       openedRequest.current = ''; setNotice(''); setLoadingProjects(false);
       // 会话从「未恢复」变成「匿名」也会走这里；?login=1 要求开着登录浮窗，别把它关掉。
@@ -539,17 +548,101 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     setNotice('项目链接已复制。');
   }
   async function removeProject(project: ProjectSummary): Promise<void> {
-    if (!window.confirm(`删除「${project.name}」？删除后无法恢复，相关分享也会失效。`)) return;
+    if (!window.confirm(`删除「${project.name}」？\n\n影响：\n· 云端项目移入「最近删除」，7 天内可恢复\n· 所有分享链接立即失效，恢复后需要重新分享\n· 本机缓存一并移入回收站`)) return;
     const isCurrent = cloud.project?.id === project.id;
     if (isCurrent && !cloud.writeBlocked) {
       if (dirty) await saveBoundSceneQuiet().catch(() => undefined);
       await controller.releaseLease();
     }
     if (isCurrent) await controller.deleteProject(project.id, project.revision);
-    else await controller.businessRequest(`/projects/${encodeURIComponent(project.id)}`, 'DELETE', { expectedRevision: project.revision });
+    else {
+      await controller.businessRequest(`/projects/${encodeURIComponent(project.id)}`, 'DELETE', { expectedRevision: project.revision });
+      void import('@/lib/project-cache').then(cache => cache.moveProjectCacheToTrash(project.id)).catch(() => {});
+    }
     setProjects(current => current.filter(item => item.id !== project.id));
     if (layoutRef.current.id === project.id) { setBoundLayout(undefined); setSavedFingerprint(null); }
-    setNotice(`已删除「${project.name}」。`);
+    // 深链不再指向已删项目：刷新/分享都不会反复报“项目不存在”。
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('project') === project.id) {
+      url.searchParams.delete('project');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}`);
+    }
+    setNotice(`已删除「${project.name}」，7 天内可在「最近删除」恢复。`);
+    if (typeof controller.listTrash === 'function' && trashOpen) void controller.listTrash().then(setTrash).catch(() => {});
+  }
+  async function restoreProject(project: TrashProjectSummary): Promise<void> {
+    await controller.restoreProject(project.id, project.revision);
+    setTrash(current => current.filter(item => item.id !== project.id));
+    await refreshProjects().catch(() => {});
+    setNotice(`已恢复「${project.name}」。原有分享链接不会自动恢复，需要重新分享。`);
+  }
+  /** 断网/云端失败时的只读打开：用本机缓存替换画布，不建立云端绑定。 */
+  async function openCachedProject(project: ProjectSummary): Promise<void> {
+    const cached = await readProjectCache(project.id);
+    if (!cached) { setNotice('本机缓存已不可用，请联网后重试。'); return; }
+    if (dirty && !window.confirm('当前画布有未保存改动。打开本机缓存会替换画布，继续吗？')) return;
+    onBeforeActivitySwitch?.(layoutRef.current)?.();
+    const next = backendSceneToLayout(cached.scene as Scene, { projectId: project.id, name: project.name });
+    onLoadLayout(next);
+    setBoundLayout(undefined);
+    setSavedFingerprint(null);
+    setNotice(`已打开「${project.name}」的本机缓存副本，仅供离线查看；联网后可重新打开云端版本。`);
+  }
+  /** 把当前本机画布另存为一个云端方案（草稿卡的主操作，不再和“场地出发”混在一起）。 */
+  async function saveDraftAsProject(): Promise<void> {
+    const current = layoutRef.current;
+    if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){setNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
+    assertCloudZoneSupport(current);assertNoLocalHandoffCloudTransition(current);
+    const checkSwitch=onBeforeActivitySwitch?.(current)??(()=>{if(layoutRef.current!==current)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');});
+    checkSwitch();
+    await assertCloudTransition(current);
+    checkSwitch();
+    await flushSourceScope(current.id ?? 'local');
+    checkSwitch();
+    await assertCloudTransition(layoutRef.current);
+    checkSwitch();
+    if (layoutRef.current !== current) throw new Error('保存资料期间场景有新改动，原草稿已保留，请重新创建。');
+    setBoundLayout(undefined);
+    const created = await controller.createProject(studioId, current.name, layoutToBackendScene(current), current.id);
+    if(created.projection?.requiresOriginalSceneForWrite){
+      projectedCreation.current={base:structuredClone(current),projectId:created.id};
+      suspendFailedReplacement(created.id);
+      await refreshProjects().catch(()=>{});
+      setNotice(`云端项目已创建（编号 ${created.id}），但含未核验原始记录，目前仅供只读核对；本机草稿未绑定、未替换，云端写入已暂停。`);return;
+    }
+    let sourceNotice = '';
+    try {
+      await assertCloudTransition(current);
+      await assertCloudTransition(backendSceneToLayout(created.scene, { projectId: created.id, name: created.name }));
+      await assertCloudTransition(layoutRef.current);
+      checkSwitch();
+      if (layoutRef.current !== current) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
+      try { await copySourceScope(current.id ?? 'local', created.id); }
+      catch { sourceNotice = ' 资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
+      let nextScene = created.scene;
+      try { nextScene = (await controller.acquireLease(created.id)).scene; } catch { /* 建完仍可只读打开，不阻断创建回执 */ }
+      await acceptScene(nextScene, created.id, created.name, current,checkSwitch);
+    } catch (error) {
+      if(controller.getSnapshot().project?.id===created.id)suspendFailedReplacement(created.id);
+      throw new Error(`云端创建请求已返回，结果待核对；当前画布未替换。${error instanceof Error ? error.message : '请保留原草稿并核对资料。'}`);
+    }
+    await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
+  }
+  /** 丢弃本机草稿：换一个新的空白本机活动，不触碰任何云端项目。 */
+  function discardLocalDraft(): void {
+    if (!window.confirm('删除本机草稿？云端项目不受影响；当前画布会换成一个新的空白活动。')) return;
+    onBeforeActivitySwitch?.(layoutRef.current)?.();
+    const fresh = backendSceneToLayout(emptyProjectScene(), { projectId: crypto.randomUUID(), name: '未命名活动' });
+    onLoadLayout(fresh);
+    setBoundLayout(undefined);
+    setSavedFingerprint(null);
+    // 深链不再指向旧草稿，刷新后不会又把它拉回来。
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('project') === layoutRef.current.id) {
+      url.searchParams.delete('project');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}`);
+    }
+    setNotice('本机草稿已删除，画布已换成新的空白活动。');
   }
   function downloadContract(): void {
     try {
@@ -567,6 +660,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }, [studioProjects, query]);
   // 画布尚未对应某个已打开的云端项目时，用「草稿」卡占位（类似 Figma Drafts）。
   const draftOnCanvas = !sceneConnection && (!cloud.project || layout.id !== cloud.project.id);
+  const floorplanOnlyLocal = !layout.backendSceneV2 && !!(layout.floorPlanImage || layout.backendVenue?.floorplanAssetId);
   const draftCardName = (layout.name || '').trim() || '未命名草稿';
   const showDraftCard = draftOnCanvas && (!query.trim() || draftCardName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const draftScene = useMemo(() => {
@@ -588,15 +682,23 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     for (const project of filteredProjects.slice(0, PREVIEW_LIMIT)) {
       if (previewRequested.current.has(project.id)) continue;
       previewRequested.current.add(project.id);
+      // 先给缓存里的场景，云端回来再覆盖：慢网/断网也能看到自己的项目。
+      void readProjectCache(project.id).then(cached => {
+        if (!active || !cached) return;
+        setScenePreviews(prev => prev[project.id] ? prev : { ...prev, [project.id]: cached.scene as Scene });
+        setCachedProjects(prev => prev[project.id] ? prev : { ...prev, [project.id]: true });
+      }).catch(() => {});
       void controller.peekProject(project.id)
         .then(full => {
           if (!active) { previewRequested.current.delete(project.id); return; }
           setScenePreviews(prev => ({ ...prev, [project.id]: full.scene }));
+          setCachedProjects(prev => { const next = { ...prev }; delete next[project.id]; return next; });
           if(full.projection?.requiresOriginalSceneForWrite||projectUnverifiedScene(full.scene).projection.requiresOriginalSceneForWrite)setReadOnlyProjects(prev=>({...prev,[project.id]:true}));
         })
         .catch(() => {
           if (!active) { previewRequested.current.delete(project.id); return; }
-          setScenePreviews(prev => ({ ...prev, [project.id]: 'failed' }));
+          // 云端拉不到时保留缓存缩略图；没有缓存才显示失败占位。
+          setScenePreviews(prev => prev[project.id] && prev[project.id] !== 'failed' ? prev : { ...prev, [project.id]: 'failed' });
         });
     }
     return () => { active = false; };
@@ -683,6 +785,13 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
           <div className="sc-account-section-title">
             <h3>项目</h3>
             <button type="button" className="sc-account-icon-btn" disabled={busy || loadingProjects} aria-label="刷新" title="刷新" onClick={() => void run(refreshProjects)}><RefreshCw size={15}/></button>
+            {activeStudio?.role === 'owner' && <button type="button" className="sc-account-icon-btn" disabled={busy} aria-label="最近删除" title="最近删除（保留 7 天）" aria-pressed={trashOpen} onClick={() => {
+              const next = !trashOpen;
+              setTrashOpen(next);
+              if (next && typeof controller.listTrash === 'function') {
+                void controller.listTrash().then(setTrash).catch(() => setNotice('回收站加载失败，请稍后重试。'));
+              }
+            }}><Trash2 size={15}/></button>}
           </div>
         </div>
         {/* 草稿保存失败才在列表上方提醒；日常「草稿 / 已保存到本机」看项目卡状态，别跟关闭按钮挤在一起。 */}
@@ -695,17 +804,19 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             <button type="button" className="sc-file-hit" disabled aria-current="true" aria-label={`当前草稿 ${draftCardName}`}>
               <span className={`sc-file-thumb${draftScene ? ' has-preview' : ''}`} aria-hidden="true">
                 {draftScene ? <SceneThumb scene={draftScene} eager/> : <span className="sc-file-thumb-mark">{thumbMark(draftCardName)}</span>}
-                <span className="sc-file-state">当前 · 草稿</span>
+                <span className="sc-file-state">当前 · 本机</span>
               </span>
-              <span className="sc-file-info"><strong>{draftCardName}</strong><small>仅本机 · 未存为云端方案</small></span>
+              <span className="sc-file-info"><strong>{draftCardName}</strong><small>本机项目 · 未上传</small></span>
             </button>
+            <button type="button" className="sc-file-draft-save" disabled={busy || !studioId || !!conversionError} onClick={() => { void run(saveDraftAsProject); }}>存为方案</button>
+            <button type="button" className="sc-file-draft-discard" disabled={busy} onClick={discardLocalDraft}>删除本机</button>
           </li>}
           {filteredProjects.map(project => {
             const current = project.id === cloud.project?.id;
             const editingElsewhere = !current && project.current_editor && project.lease_expires && Date.parse(project.lease_expires) > Date.now();
             const status = current
               ? `当前 · ${saveStatus}`
-              : readOnlyStudio ? '只读' : editingElsewhere ? '他人编辑中' : '';
+              : cachedProjects[project.id] ? '本机缓存' : readOnlyStudio ? '只读' : editingElsewhere ? '他人编辑中' : '';
             const preview = scenePreviews[project.id];
             const previewScene = preview && preview !== 'failed' ? preview : null;
             const canEnter = !busy && !readOnlyStudio && !editingBlocked(project, current);
@@ -754,16 +865,25 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                     (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
                     void run(async () => { await shareProject(project); });
                   }}>分享</button>
-                  <button type="button" disabled={busy} onClick={event => {
+                  {cachedProjects[project.id] && <button type="button" disabled={busy} onClick={event => {
+                    (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                    void run(async () => { await openCachedProject(project); });
+                  }}>打开本机缓存</button>}
+                  {activeStudio?.role === 'owner' && <button type="button" disabled={busy} onClick={event => {
                     (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
                     void run(async () => { await removeProject(project); });
-                  }}>删除</button>
+                  }}>删除</button>}
                 </div>
               </details>}
             </li>;
           })}
           {!readOnlyStudio && <li className="sc-file-card is-new">
-            <button type="button" className="sc-file-new" aria-label="新方案" disabled={busy || sceneConnection || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => void run(async () => {
+            <button type="button" className="sc-file-new" aria-label="新方案" disabled={busy || sceneConnection || !studioId || !cloud.writeBlocked || !!conversionError} onClick={() => {
+              // 场地出发：由工作台的 VenuePicker 统一接管（空白 / 地图 / 复刻 / 现有项目）。
+              // 独立渲染（无 VenuePicker 监听）时保留旧的“当前画布另存”兜底。
+              const request = new CustomEvent('scendance:start-new-project', { cancelable: true });
+              if (!window.dispatchEvent(request)) { setAccountOpen(false); dialog.current?.close(); return; }
+              void run(async () => {
               const current = layoutRef.current;
               if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){setNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
               assertCloudZoneSupport(current);assertNoLocalHandoffCloudTransition(current);
@@ -777,7 +897,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
               checkSwitch();
               if (layoutRef.current !== current) throw new Error('保存资料期间场景有新改动，原草稿已保留，请重新创建。');
               setBoundLayout(undefined);
-              const created = await controller.createProject(studioId, current.name, layoutToBackendScene(current));
+              const created = await controller.createProject(studioId, current.name, layoutToBackendScene(current), current.id);
               if(created.projection?.requiresOriginalSceneForWrite){
                 projectedCreation.current={base:structuredClone(current),projectId:created.id};
                 suspendFailedReplacement(created.id);
@@ -793,18 +913,30 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 if (layoutRef.current !== current) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
                 try { await copySourceScope(current.id ?? 'local', created.id); }
                 catch { sourceNotice = ' 资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
-                await acceptScene(created.scene, created.id, created.name, current,checkSwitch);
+                let nextScene = created.scene;
+                try { nextScene = (await controller.acquireLease(created.id)).scene; } catch { /* 建完仍可只读打开，不阻断创建回执 */ }
+                await acceptScene(nextScene, created.id, created.name, current,checkSwitch);
               } catch (error) {
                 if(controller.getSnapshot().project?.id===created.id)suspendFailedReplacement(created.id);
                 throw new Error(`云端创建请求已返回，结果待核对；当前画布未替换。${error instanceof Error ? error.message : '请保留原草稿并核对资料。'}`);
               }
               await refreshProjects(); setNotice(`新项目已保存，获取编辑权后可继续云端编辑。${sourceNotice}`);
-            })}>
+            }); }}>
               <span className="sc-file-new-mark" aria-hidden="true">＋</span>
               <span>新方案</span>
             </button>
           </li>}
         </ul>
+        {trashOpen && activeStudio?.role === 'owner' && <section aria-label="最近删除" className="sc-account-trash">
+          <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>最近删除</h4></div><span className="sc-note">保留 7 天 · 只恢复项目本体，分享需重新发布</span></div>
+          {!trash.length && <p className="sc-account-empty">回收站是空的。删除的项目会在这里保留 7 天。</p>}
+          <ul className="sc-trash-list">
+            {trash.map(item => <li key={item.id} className="sc-trash-item">
+              <span><strong>{item.name}</strong><small>删除于 {new Date(item.deleted_at).toLocaleString()}</small></span>
+              <button type="button" className="sc-button" disabled={busy} onClick={() => { void run(async () => { await restoreProject(item); }); }}>恢复</button>
+            </li>)}
+          </ul>
+        </section>}
         {originalReview&&originalReviewCurrent()&&<OriginalSceneReviewPanel key={`${originalReview.projectId}:${originalReview.token.epoch}`} scopeKey={`${originalReview.projectId}:${originalReview.token.epoch}`} isCurrent={originalReviewCurrent} loadOriginal={loadOriginal} enableLocalPreview allowLocalConfirm={ORIGINAL_SCENE_SUBMISSION_ENABLED&&!!localWriteCapability} onConfirmLocal={confirmOriginal}/>}
         {!loadingProjects && !!studioProjects.length && !filteredProjects.length && !showDraftCard && <div className="sc-account-empty"><p>没有匹配的项目</p>{query && <button type="button" onClick={() => { setQuery(''); }}>清除筛选</button>}</div>}
         </section>
@@ -846,6 +978,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       </section>
       {/* 项目相关提示只挂在项目页，别跟到团队 / 物料里吵。 */}
       {section === 'projects' && conversionError && <p className="sc-cloud-message" role="status">{conversionError}</p>}
+      {section === 'projects' && floorplanOnlyLocal && <p className="sc-cloud-message" role="status">底图只保留在本机，云端方案不包含底图；本机草稿仍保留原图。</p>}
       {section === 'projects' && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-cloud-message" role="status">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
       {section === 'projects' && (notice || cloud.error) && <p className="sc-cloud-message" role="status">{notice || cloud.error?.message}</p>}
       {section === 'projects' && cloud.error?.code==='CANVAS_PROJECT_MISMATCH' && notice!==cloud.error.message && <p className="sc-cloud-message" role="alert">{cloud.error.message}</p>}
