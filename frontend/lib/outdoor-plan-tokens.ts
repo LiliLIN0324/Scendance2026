@@ -48,6 +48,18 @@ export const PLANNING_LAYER_COLORS = {
 export const PLANNING_BOUNDARY_LINE_COLOR = '#c8362c';
 
 /**
+ * 墙体两型配色（2026-11-17，M2 walls）：外墙深、内墙浅；实体自带 `color` 时优先。
+ * 图例先用这份；2D 画布尚未消费 `plan.walls`，图面墙线等渲染线解锁后再共用。
+ */
+export const PLANNING_WALL_KIND_COLORS = {
+  exterior: '#4b5563',
+  interior: '#9ca3af',
+} as const;
+
+/** 墙体缺省类型（旧数据/迁移未判内外）时的中性色。 */
+export const PLANNING_WALL_COLOR = '#6b7280';
+
+/**
  * 出入口三型专属色（2026-11-15 用户：「入口 / 出口 / 出入口」要有各自的样子）：
  * 绿进、红出、青双向。贴纸芯片、放置幽灵、图例色块、工具箱选项四处共用这一份，
  * 同时就是 `plan-footprint-geometry` 里三维点位的配色来源——2D 与 3D 不会各说各话。
@@ -223,6 +235,7 @@ export const PLANNING_ICONS = [
   'shapes', // 分区 / 区域（分区图例与胶囊）
   'hexagon', // 场地边界（边界图层图标）
   'tent', // 设施（设施图例 / 胶囊 / 放置工具）
+  'brick-wall', // 墙体（图例，2026-11-17 M2 walls）
   'truck', // 车辆 / 后勤（车辆语境备用，H5 导出沿用）
   'ruler', // 测量
   'route', // 动线
