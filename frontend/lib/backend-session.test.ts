@@ -147,6 +147,8 @@ beforeEach(() => {
   bindingStore.values.clear();
   bindingStore.read.mockReset().mockImplementation(async key => bindingStore.values.get(JSON.stringify(key)));
   bindingStore.update.mockReset().mockImplementation(async (key, update) => {
+    // 项目缓存也复用 source-storage；这里只持久化几何绑定键，避免测试互相污染。
+    if (!Array.isArray(key) || key[0] !== 'geometry-workbench-binding') return update(undefined);
     const storedKey = JSON.stringify(key), value = structuredClone(update(bindingStore.values.get(storedKey)));
     bindingStore.values.set(storedKey, value); return value;
   });
@@ -599,6 +601,16 @@ describe("backend session contract", () => {
     queue({ error: { code: 'PROJECT_BUSY' } }, 429);
     await expect(controller.deleteProject(projectId, 4)).rejects.toMatchObject({ code: 'PROJECT_BUSY' });
     expect(controller.getSnapshot().project?.id).toBe(projectId);
+  });
+  it("lists and restores a soft-deleted project", async () => {
+    const controller = session(); queue(auth); await controller.signIn('test@example.com', 'test');
+    queue([{ id: projectId, name: '已删除方案', studio_id: project.studio_id, revision: 4, updated_at: new Date().toISOString(), deleted_at: new Date().toISOString() }]);
+    await expect(controller.listTrash()).resolves.toMatchObject([{ id: projectId, name: '已删除方案', revision: 4 }]);
+    expect(String(mockFetch.mock.calls[1]![0])).toContain('/projects/trash');
+    queue({ restored: true });
+    await controller.restoreProject(projectId, 4);
+    expect(String(mockFetch.mock.calls[2]![0])).toContain(`/projects/${projectId}/restore`);
+    expect(mockFetch.mock.calls[2]![1]).toMatchObject({ method: 'POST', body: JSON.stringify({ expectedRevision: 4 }) });
   });
   it("requires public configuration and rejects secrets before any request", async () => {
     expect(getBackendConfig({ url: "", anonKey: "" }).configured).toBe(false);

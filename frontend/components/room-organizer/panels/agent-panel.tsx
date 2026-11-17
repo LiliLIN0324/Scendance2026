@@ -4041,6 +4041,20 @@ export function VenuePickerOverlay(): JSX.Element | null {
   const agent = useAgent();
   const panel = useRef<HTMLDivElement>(null);
   useDialogFocus(agent.venuePickerOpen, panel, { trap: true, onEscape: agent.closeVenuePicker });
+  // 项目面板的「新方案」从这里接管：cancelable 事件被 preventDefault 表示工作台有场地入口。
+  useEffect(() => {
+    const start = (event: Event) => { event.preventDefault(); agent.startVenuePicker(); };
+    window.addEventListener('scendance:start-new-project', start);
+    return () => window.removeEventListener('scendance:start-new-project', start);
+  }, [agent]);
+  // /projects 管理页的「新建项目」用 ?new=1 回到画布并直接开场地选择。
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === null) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('new');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    agent.startVenuePicker();
+  }, [agent]);
   if (!agent.venuePickerOpen) return null;
   return <div className="sc-venue-overlay" ref={panel} role="dialog" aria-modal="true" aria-label="换场地 / 新建" tabIndex={-1}>
     <div className="sc-map-head">
