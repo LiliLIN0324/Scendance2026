@@ -285,6 +285,10 @@ it("在地图上手画分区按钮直接进入绘制模式", async () => {
   await act(async () => { draw!.click(); });
   expect(beginDrawing).toHaveBeenCalledWith("zone");
   expect(flow.notice).toContain("请在地图上画出分区轮廓并闭合");
+  // 2026-11-18 用户实测：进手画模式后卡上不再留自相矛盾的旧引导——引导语与手画按钮都收掉，
+  // 通知条是唯一指令，避免「收起」和内容脱节的观感。
+  expect(host.textContent).not.toContain("还没说要分哪些区");
+  expect([...host.querySelectorAll("button")].some(button => button.textContent?.trim() === "在地图上手画分区")).toBe(false);
 });
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
   await confirmScope();

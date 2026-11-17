@@ -427,6 +427,12 @@ export function useOutdoorAgentWorkflow(input: {
   >();
   const [busy, setBusy] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  /**
+   * 2026-11-18 用户实测：进入手画模式后任务卡还挂着旧引导（「先说用途或手画」+手画按钮），
+   * 与通知条自相矛盾，「收起」也和内容脱节。这里记录当前绘制模式，卡上据此收掉旧内容，
+   * 让通知条成为唯一指令。任意新回合、取消、切活动都会清掉。
+   */
+  const [drawingMode, setDrawingMode] = useState<"zone" | "route" | "node" | null>(null);
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
   /** 2026-11-17：画布规模并进思考卡摘要（一行），不再作为一条步骤占一行。 */
@@ -560,6 +566,7 @@ export function useOutdoorAgentWorkflow(input: {
   function cancel(options?: { preservePendingLogin?: boolean }) {
     const withdrawnCard = proposalRef.current;
     setDesignSteps([]);
+    setDrawingMode(null);
     setCanvasNote(null);
     updatePendingPlan(null);
     setAwaitingThought(false);
@@ -584,6 +591,7 @@ export function useOutdoorAgentWorkflow(input: {
   }
   useEffect(() => {
     setDesignSteps([]);
+    setDrawingMode(null);
     setThought(null);
     setThoughtMs(null);
     setThoughtRequest(null);
@@ -1031,6 +1039,9 @@ export function useOutdoorAgentWorkflow(input: {
     setBusy(false);
   }
   async function act(turn: OutdoorTurn, message: string, continueDesign = false) {
+    // 新回合开始即视为离开「纯手画」状态：卡上旧内容恢复，或按新意图重排。
+    if (turn.action !== "draw-zone" && turn.action !== "draw-route" && turn.action !== "draw-entrance")
+      setDrawingMode(null);
     const priorUserText = priorUserTextRef.current;
     priorUserTextRef.current = message;
     if (turn.action === "cancel") {
@@ -1246,6 +1257,7 @@ export function useOutdoorAgentWorkflow(input: {
               : "node";
         if (!bridge.beginDrawing?.(mode))
           throw new Error("当前画布尚未准备好，原规划保留。");
+        setDrawingMode(mode);
         status(
           mode === "zone"
             ? "已进入手画模式。请在地图上画出分区轮廓并闭合，再补充分区名称、用途和室内外属性。"
@@ -2522,6 +2534,7 @@ export function useOutdoorAgentWorkflow(input: {
     awaitingThought: state.scope === input.scope && busy && awaitingThought,
     thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
+    drawingMode,
     cardRecords: state.scope === input.scope ? cardRecords : [],
     mapGap,
     /** M7.1：只读导出——最近几轮指标（不发请求、不落盘，只拿走数字）。 */
