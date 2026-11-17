@@ -1933,15 +1933,17 @@ body.sc-panel-dragging * {
 .oc-map-details {
   /* Google 地图「地图详情」的实测尺寸：268 宽、12 内边距、8 圆角、底部与图层钮齐平。 */
   width: min(268px, calc(100vw - 48px));
-  /* 面板从图层钮往上长；限制在视口内，矮屏改为内部滚动，别把标题和 X 顶出屏幕。 */
+  /* 面板从图层钮往上长；限制在视口内，矮屏只滚内容，别把标题和 X 顶出屏幕。 */
   max-height: min(560px, calc(100vh - 210px));
-  overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
-  padding: 12px; border: 0; border-radius: 8px;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-sizing: border-box;
+  padding: 0; border: 0; border-radius: 8px;
   background: #fff; color: #202124;
   box-shadow: 0 1px 3px rgba(60, 64, 67, .3), 0 4px 8px 3px rgba(60, 64, 67, .15);
   font-family: inherit;
 }
-.oc-map-details__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.oc-map-details__head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px; background: #fff; position: relative; z-index: 1; }
+.oc-map-details__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 12px; }
 .oc-map-details__title { font-size: 14px; font-weight: 500; line-height: 20px; }
 .oc-map-details__close {
   display: grid; place-items: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px;
