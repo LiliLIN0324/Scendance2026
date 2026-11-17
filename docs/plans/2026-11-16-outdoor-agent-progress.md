@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：两条旧基线已校正（IN77 文件不存在、hook 套件 47/47），以后只认当轮实测。9222 四轮不通；别人的 `agent/outdoor-notice-and-choice-fix` 已推 origin 等 PR。下轮先看 `main` 是否已包含那笔（人合了 PR 就基于新的 main），否则做纯离线收尾：把证据对照表 §5/§6 的结论与 `acceptanceStatement()` 实际输出对一遍（在 wt-main 里跑一次并贴出原文），让声明句与表里数字逐字一致。首条命令 `cd .temp/wt-main/frontend; npm test -- components/room-organizer/lib/outdoor-acceptance-selfcheck.test.ts`（若该 worktree 已删，先 `git worktree add .temp/wt-main main`）。
+- 下一条操作：对照表顶部已有“当前状态快照（锚点）”，以后每轮只需与它 diff。main = origin = `10a54bec`；9222 二十四轮不通。下轮：把快照真正跑出来打印一遍（用 node 直接 import 分支上的 `statusCardSnapshot` + 最小 report），确认实际输出与锚点逐字一致；不一致就修锚点。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,228 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-18 02:30 · 自动轮次 68 · 合三笔（含一个脏文件重叠）+ 对照表立快照锚点
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 02:30，自动轮次 68
+批次 / 切片 / 状态：M7 / 对照表锚点 / 已交付（分支待 PR）
+开工事实：main = d2ffb4e8，origin/main = 10a54bec（落后 3 笔：标注工具条五工具、图例墙体分组、台账锁 vitest 4.1.12）；脏文件 47 → 50
+重叠：15 个入站文件里 `outdoor-plan-canvas.tsx` 与脏文件重叠 → 备份字节 → `git stash push -- <1 文件>`（50→49）→ `git merge --ff-only origin/main` → `git stash pop`（零冲突；pop 后 diff 78 行、无冲突标记）
+分支追上：consolidated `git merge main` → `83937a92`，零冲突
+交付（docs）：证据对照表顶部新增「§0 当前状态快照（锚点，轮次 68）」，贴 `statusCardSnapshot()` 默认台账输出的原样 JSON，并写明复跑命令与读法（`allGreen: 0` 是算出来的；`gate: {}` 不代表没跑）
+验证：status-card 38/38（锚点 JSON 就是被断言的那份）；wt-r68 合并后 tsc 0 行
+真实浏览器/云端：仍未验（9222 第二十四轮 down）
+未完成：#2 真实搜索、#5 浏览器、快照实际打印对照、`pickVenueCandidate` 接线
+```
+
+- **锚点要贴在证据表顶部，不是埋在轮次记录里**：以后每轮 diff 它，比翻历史快。
+
+### 2026-11-18 01:50 · 自动轮次 67 · 状态卡可对比快照
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 01:50，自动轮次 67
+批次 / 切片 / 状态：M7 / 状态快照 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = d2ffb4e8（div 0/0）→ 无合并；9222 第二十三轮 down
+问题：卡是给人看的一行行文本，两轮之间“到底变了什么”只能肉眼对
+交付：`statusCardSnapshot(input)` —— 同样输入得到同样对象（数组升序、键序固定）
+  · `cloud` 没台账时为 `null`，不写一串 0 冒充“都没过”
+  · `gate` 没跑时是空对象 `{}`，不是三个 `false`
+验证：status-card 34 → 38 条全过（含“同输入两次序列化逐字相同”）；另三个文件 24 条全过；wt-r67 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、快照入对照表、`pickVenueCandidate` 接线
+```
+
+- **把“没数据”写成 `null` 而不是 0**：0 是一个事实（真的没过），null 是“没测”——混了就会把未验当成结论。
+
+### 2026-11-18 01:10 · 自动轮次 66 · 合成文档一笔 + 卡补“云端证据”行
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 01:10，自动轮次 66
+批次 / 切片 / 状态：M7 / 卡补云端证据行 / 已交付（分支待 PR）
+开工事实：main = 9e3bb54d，origin/main = d2ffb4e8（落后 1 笔：台账复跑版本与锚点刷新规则）；重叠：2 个文件（均 docs）与 47 处脏文件零交集 → ff 成功；分支 merge main → 2bea56b2
+问题：三类证据里“真实云端”一类在卡里**一个字都没有**，只写浏览器——等于默认那一类不存在
+交付：新增 `cloudLine()`，卡里在浏览器证据行后插一行
+  · 有台账：`· 云端证据：N 条通过 / M 条未验`（默认台账下为 0 / 11）
+  · 没台账：`· 云端证据：未验（本次没带台账）`，不默默省行
+验证：status-card 31 → 34 条全过；另三个文件 24 条全过；wt-r66 的 tsc 0 行
+顺带修正：原有“五行固定结构”用例已名不副实（本来就 6 行），改为按行断言 7 行结构
+真实浏览器/云端：仍未验（9222 第二十二轮 down）
+拌了一下：wt-r66 又遇到 vitest 自建真 `node_modules`（只含 `.vite`），`mklink /J` 报已存在；改为逐文件删 → 逐目录 rmdir → 再 junction
+未完成：#2 真实搜索、#5 浏览器、`pickVenueCandidate` 接线
+```
+
+- **三类里少写一类，等于默认它不存在**：卡不写云端，读卡的人就会以为只差浏览器。
+
+### 2026-11-18 00:30 · 自动轮次 65 · 合四笔 + hook 默认带台账
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 00:30，自动轮次 65
+批次 / 切片 / 状态：M7 / hook 默认台账 / 已交付（分支待 PR）
+开工事实：main = 0a59f7b0，origin/main = 9e3bb54d（落后 4 笔：walls 并入迁移总入口、GeoJSON/CSV 墙体导出、全量 vitest 基线台账）。重叠检查：9 个文件与 47 处脏文件零交集 → 直接 ff
+合并：主工作树 `--ff-only` 成功；consolidated 分支 `git merge main` → `46ea97e8`，零冲突
+交付：`FIXED_DATA_CASES = [2, 5]`（只写能点到测试文件的两条：#2 同名选择、#5 离线声明）+ `defaultLedger()`；hook 的 `logReleaseStatus()` 默认 `ledger: defaultLedger()`
+验证：status-card 29 → 31 条全过；hook 套件 58/58；wt-r65 的 tsc 0 行
+真实浏览器/云端：仍未验（9222 第二十一轮 down）
+拌了一下：wt-r65 里没建 node_modules junction，测试报 `Cannot find package '@supabase/ssr'`；而 vitest 自己先在 worktree 建了个真目录（只含 `.vite` 缓存），导致 `mklink /J` 报“已存在”。按守卫要求逐文件删掉缓存目录后才建上 junction
+未完成：#2 真实搜索、#5 浏览器、`pickVenueCandidate` 接线
+```
+
+- **worktree 里先删 vitest 自建的 `node_modules` 再 junction**：否则报“已存在”，而里面的包一个也没有。
+
+### 2026-11-17 23:55 · 自动轮次 64 · 合 M2/M3 九笔 + 分支追上重跑门禁
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 23:55，自动轮次 64
+批次 / 切片 / 状态：收尾（合并 + 门禁复跑）/ 已交付
+开工事实：main = 13258414，origin/main = 0a59f7b0（落后 9 笔：M2 walls 契约/注入/校验 + M3 plan 历史/导出地基）
+合并（主工作树）：先算重叠——进来 16 个文件与 47 处脏文件**交集为空** → 直接 `git merge --ff-only origin/main` 成功，脏文件未动（仍 47）
+分支追上：consolidated 分支 `git merge --no-edit main` → `dfdfd4fd`，零冲突
+门禁（提交树 dfdfd4fd，隔离 worktree）：tsc 0 行 / `npm test -- outdoor` 56 文件 661 条全过（比上轮多 16 条，来自新 main 的 lib 用例）/ `npm run build` exit 0（62s）
+真实浏览器/云端：仍未验（9222 第二十轮 down）
+未完成：#2 真实搜索、#5 浏览器、hook 默认带台账、`pickVenueCandidate` 接线
+```
+
+- **先算交集再决定合并方式**：交集空就直接 ff，省掉备份→stash→pop 一整套。
+
+### 2026-11-17 23:15 · 自动轮次 63 · 台账从证据快照生成（调用方只说一件事）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 23:15，自动轮次 63
+批次 / 切片 / 状态：M7 / 台账自动生成 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 13258414（div 0/0）→ 无合并；9222 第十九轮 down
+交付：`CASE_IDS`（1..11）+ `ledgerFromEvidence(fixedDataIds)`
+  · 11 行整行铺开，缺行就等于在隐瞒缺口（不按“已知几条”缩短）
+  · 浏览器列只认 `BROWSER_EVIDENCE` 快照（#2/#5 仍为 none）；云端列一条实证也没有 → 整列 none
+  · 调用方只需说“哪几条有固定数据”，其余不再由人填
+验证：status-card 25 → 29 条全过（含“11 条全给固定数据也算不出全绿”“卡里用生成台账时手填 5 也拦不住 0 条”）；另三个文件 24 条全过；wt-r63 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、`pickVenueCandidate` 接线、hook 默认带台账
+```
+
+- **能推出的事实就不要让人再报一遍**：调用方只报“有固定数据的用例号”，其余从快照推。
+
+### 2026-11-17 22:40 · 自动轮次 62 · “三类全绿”改成算出来的（台账入参）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 22:40，自动轮次 62
+批次 / 切片 / 状态：M7 / 全绿计数 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 13258414（div 0/0）→ 无合并；9222 第十八轮 down
+问题：末行“三类全绿 N 条”一直是人填的 `allGreen`，和对照表完全可各写一数
+交付：`CaseLedgerRow` + `summarizeLedger()`（固定数据有 + 浏览器 pass + 云端 pass 才算一条；partial 一律不算）
+  · 卡新增 `ledger?: readonly CaseLedgerRow[]`；给了 ledger 就以它算，手填 `allGreen` 失效
+  · 返回值同时给 `fixedOnly`（已有固定数据但没上过浏览器/云端）与 `total`
+验证：status-card 20 → 25 条全过（含“11 条全 partial → 0 条全绿”“台账在手时忽略手填 9”）；另三个文件 24 条全过；wt-r62 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、台账自动生成、`pickVenueCandidate` 接线
+```
+
+- **数字要么算，要么写来源**：人填的“N 条”与表里的行数没有任何强制关系，早晚漂。
+
+### 2026-11-17 22:00 · 自动轮次 61 · 空会话下的状态卡（空括号/光秃标签）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 22:00，自动轮次 61
+批次 / 切片 / 状态：M7 / 状态卡空态 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 13258414（div 0/0）→ 无合并；9222 第十七轮 down
+发现的问题（都是“没人填就直接拼字符串”留下的）：
+  · 用例 0 条时仍写“可判 0 / 缺料 0 / 只能浏览器 0”，看不出下一步
+  · 证据清单为空时留下一个空括号（）
+  · 指标 text 为空时留下光秃的“· 指标：”
+修法：新增 `listWithIds()`（空则只写“0 条”）；用例 0 条换成“还没有可判的用例（先跑一次会话再用）”；指标空则写“本次会话没有指标记录”
+验证：status-card 16 → 20 条全过；另外三个自建文件 24 条全过；wt-r61 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、`pickVenueCandidate` 接线、三类全绿改计算
+```
+
+- **空态也是一种输出**：没人填的时候，卡片说的是“我还缺什么”，而不是一串 0 和一个空括号。
+
+### 2026-11-17 21:25 · 自动轮次 60 · 状态卡直接吃门禁读数（少一道手抄）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 21:25，自动轮次 60
+批次 / 切片 / 状态：M7 / 状态卡×读数合流 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 13258414（div 0/0）→ 无合并；9222 第十六轮 down
+交付：`ReleaseStatusInput.reading?: GateReading`
+  · 给了 reading 就用 `gateFactsForCard` 算门禁三项（不再靠手填布尔）
+  · 并在门禁行下多一行 `· 读数：<readGates 的 line>`，把人话结论一起留下
+  · 同时给 gate 与 reading 时以 reading 为准；不给 reading 时输出与以前一字不差
+验证：status-card 13 → 16 条全过；gate-reading + venue + case5 共 24 条全过；wt-r60 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、hook 带读数、指标/零用例两条用例
+```
+
+- **两处真相不能各写一坑**：门禁行与读数行出自同一个 `readGates`，就不会出现卡说“通过”、读数说“未验”。
+
+### 2026-11-17 20:50 · 自动轮次 59 · 合新 main（死代码清理）+ 分支追上去重跑门禁
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 20:50，自动轮次 59
+批次 / 切片 / 状态：收尾（合并 + 分支追上）/ 已交付并已推分支
+开工事实：main = 3e376b41，origin/main = 13258414（落后 3 笔：死代码审计 + 删零引用 shadcn 原语 + 删未挂载组件）
+合并（主工作树）：3 笔改动里有 3 个文件与我的 47 处脏文件重叠（space-browser.css / space-panel.tsx / room-organizer.tsx）
+  → 先把这 3 个文件字节备份到 `.temp/r59-user-backup/` → `git stash push -- <3 文件>`（脏文件 47→44）→ `git merge --ff-only origin/main`（HEAD 13258414）→ `git stash pop`（无冲突，脏文件回到 47）
+  → 验证用户 WIP 未丢：三文件 diff 仍是用户的改动（例：`sourceForLocation(readPlanGroundSource(), anchor.lng, anchor.lat)`），无冲突标记
+分支追上：consolidated 分支 `git merge --no-edit main` → `48a3bffe`，零冲突
+门禁（提交树 48a3bffe，隔离 worktree）：tsc 0 行 / `npm test -- outdoor` 56 文件 645 条全过 / `npm run build` exit 0（98s）
+真实浏览器/云端：仍未验（9222 第十五轮 down）
+未完成：#2 真实搜索、#5 浏览器、指定候选接线、面板按钮
+```
+
+- **脏文件与入站改动有重叠时，顺序不能省**：备份 → stash → ff → pop；pop 后不只看“有没有冲突”，还要抽一段 diff 确认用户写的东西还在。
+
+### 2026-11-17 20:05 · 自动轮次 58 · 门禁读数自吞吐（真跑三项，顺手修掉带色输出读不到汇总行）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 20:05，自动轮次 58
+批次 / 切片 / 状态：M7 / 门禁自吞吐 + 缺陷修复 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 3e376b41（div 0/0）；consolidated = fe94ab88；9222 第十四轮 down
+做法：在 consolidated 分支的隔离 worktree 上跑三项门禁，把**原始输出真的喂给 readGates**，而不是手抄数字
+三项结果（提交树 fe94ab88）：tsc 0 行 / `npm test -- outdoor` 56 文件 645 条全过 / `npm run build` exit 0（65s）；修完 ANSI 后再跑一遍：tsc 0 / build exit 0（44s）
+自吞吐产出（原文）：`门禁：类型 过 / 用例 过 / 构建 过（三项门禁都绿，不等于可发布）`
+发现的真缺陷：vitest 带 ANSI 颜色时 `Tests` 与数字之间夹转义码，原正则永远读不到汇总行 → 报“未验”。已加 stripAnsi 修复，并补 2 条带色用例（全绿与带失败两种）
+另发现：用 `Tee-Object` 抓带色输出会把字符写坏（'e' 变 ESC），改成 `cmd /c "... > file 2>&1"` 直接重定向才保真
+验证：gate-reading 10 → 12 条全过；三项门禁数字见上
+未完成：#2 真实搜索、#5 浏览器、指定候选接线、面板按钮
+```
+
+- **门禁读数要先拿真输出喂自己**：一喂就暴露“带色输出读不到汇总行”，手抄数字永远不会发现。
+- **抓带色输出别用 Tee-Object**：它会把字节写坏；用 `cmd /c "... > file"` 保真。
+
+### 2026-11-17 19:20 · 自动轮次 57 · 状态卡接进 hook（一键打控制台）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 19:20，自动轮次 57
+批次 / 切片 / 状态：M7 / hook 接入 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 3e376b41（div 0/0）；consolidated = f875ac62；9222 第十三轮 down
+改动（只动 1 个文件 3 行）：hook 新增 `logReleaseStatus: () => logReleaseStatus({ rows: assessAcceptance(buildSessionReport(...)), metrics })` + 一行 import
+验证：hook 套件 58/58；wt-r57 的 tsc 0 行；lint 只有别人 `app/error.test.ts` 的 import/order 旧告警（未动）
+没做：没给 hook 加新用例（该文件是用户常改的热文件，改为靠现有 58 条 + tsc 兑现）
+两次自损：① oldText 用了弯引号导致匹配不上（整批 abort，文件未变）；② 去掉末尾换行做替换，把两行并成了一行，读回发现后补回换行
+未完成：#2 真实搜索、#5 浏览器、指定候选接线、面板按钮
+```
+
+- **替换行的 oldText 必须贴原文**：全角/弯引号、行尾换行都算字节；去掉一个换行就会把两行粘成一行。
+
+### 2026-11-17 18:45 · 自动轮次 56 · 四条切片合成一条分支（降低待 PR 碎片）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 18:45，自动轮次 56
+批次 / 切片 / 状态：M7 / 分支合并整理 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 3e376b41（div 0/0）→ 无合并；前四条分支（status-card / case5-offline / gate-reading / venue-same-name）自主推送以来一直未被合
+做法：新建 `agent/outdoor-m7-consolidated`，从四个分支只 `git checkout <分支> -- <我自己的文件>` 搬代码（不 cherry-pick 别人改动、不动 hook），保留一个可评审 PR
+内容（全在 `frontend/components/room-organizer/lib/`）：
+  · outdoor-release-status-card.ts/.test.ts（状态卡 + 日志入口）
+  · outdoor-gate-reading.ts/.test.ts（三项原始输出 → 一行结论；新增 gateFactsForCard 适配卡里字段名 typecheck）
+  · outdoor-venue-candidates.ts/.test.ts（同名地点不猜着选）
+  · outdoor-case5-offline.test.ts（离线/无路网固定数据）
+  · 两处接起来：readGates → gateFactsForCard → 状态卡“门禁”行由真实读数决定
+验证：四个文件 35/35 全过；wt-r56 的 tsc 0 行；真实浏览器/云端仍无（9222 第十二轮 down）
+两次自损（同一种错，第二次才认出来）：改锚点时又把函数头（`function cell(...)`）当替换点换掉，造成函数体悬空；两次都是读文件后补回声明。教训：**锚点不要选函数声明行**。
+未完成：#2 真实搜索、#5 浏览器、hook 接入、面板按钮；四条旧分支可关闭（内容已在本分支）
+```
+
+- **碎片分支不等于交付**：四个 PR 等人逐个合，不如一条自包含分支；但要只搬自己的文件，别把别人的改动带进来。
 
 ### 2026-11-17 15:00–16:10 · 正式站登录态走查第二轮（V2/V4/V5 复验；死结 3 与死结 4 已修并上线）
 
