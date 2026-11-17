@@ -913,6 +913,64 @@ it("物料数量自然改口是原设施增减，不重复铺一版", async () =
   expect(plan.facilities).toHaveLength(2);
   expect(plan.facilities[0]!.id).toBe(first);
 });
+// 2026-11-17 闭环验收：物品摆放不是一次性动作——确认后还要能反复改口，每一轮都是
+// 「预览 → 确认」，画布与需求始终一致，不重复铺。
+it("摆好之后能连续两轮改口：每轮都出预览、确认后画布与需求一致", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "摆摊区放20个摊位",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 20, evidence: "20个摊位" }] }),
+  );
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(20);
+  await turn(
+    "改成22个",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 22, evidence: "22个" }] }),
+  );
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(22);
+  await turn(
+    "改成25个",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 25, evidence: "25个" }] }),
+  );
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(25);
+  // 需求始终跟着用户最后一句话走，没有被偷偷改成缩过的数。
+  expect(flow.state.brief.items).toEqual([
+    { zone: "摆摊区", query: "市集摊位", count: 25, evidence: "25个" },
+  ]);
+}, 20000);
+// 2026-11-17 用户拍板「就硬挤在一起，甲方就会明白放不下了」：要的数量放不下时不缩数量、不红卡，
+// 切「硬挤」重排塞到物理极限——预览自己说明放不下，卡上只报差额与极限。
+it("要的数量放不下：按「硬挤」出预览塞到物理极限，需求原文不动", async () => {
+  await confirmScope();
+  seedMarketPlan();
+  stubLibraryByQuery();
+  await turn(
+    "摆摊区放120个摊位",
+    response("objects", { items: [{ zone: "摆摊区", query: "市集摊位", count: 120, evidence: "120个摊位" }] }),
+  );
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  // 卡上说的是「硬挤的物理极限」，不是替用户缩过的数。
+  expect(flow.proposal?.warnings.join()).toContain("硬挤");
+  expect(flow.proposal?.warnings.join()).toContain("120");
+  // 预览里塞进去的比正常间距（25）多得多，但远到不了 120——这就是可视化的「放不下」。
+  const placed = flow.proposal?.next.facilities.filter((f) => f.name.startsWith("市集摊位")) ?? [];
+  expect(placed.length).toBeGreaterThan(25);
+  expect(placed.length).toBeLessThan(120);
+  // 用户记下的需求保持原话；画布仍然只在确认后才写。
+  expect(flow.state.brief.items).toEqual([
+    { zone: "摆摊区", query: "市集摊位", count: 120, evidence: "120个摊位" },
+  ]);
+  expect(plan.facilities).toHaveLength(0);
+  await action("confirm");
+  expect(plan.facilities.length).toBe(placed.length);
+}, 20000);
 // 2026-11-17 正式站卡点：用户没说过人数（很常见——先布场、人数活动定了才知道），
 // 点「预览按用途复用我的物料」拿到的是一张红卡「预计同时在场多少人？」+ 重试；
 // 而重试只是原样重跑 objects，人数不变就永远撞同一堵墙，任务卡标题也被永久改成物件阶段。
