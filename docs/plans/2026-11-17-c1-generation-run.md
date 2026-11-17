@@ -357,31 +357,52 @@ select * from cron.job;
 ## 修复：`20261118100000_generation_ledger_close.sql`
 
 新增 `public.scene_settle_requests()`，在外层 `job_rpc` 里对 `jobs.complete / jobs.update /
-jobs.resolve_unknown / jobs.claim / requests.finish` 之后调用一次，只结算“已落终态且尚未结算”的行：
+jobs.resolve_unknown / jobs.claim / requests.finish / reserve` 之后调用一次，只结算“已落终态且尚未结算”的行：
 
 | 终态 | `actual_cents` | 预留 |
 | --- | --- | --- |
-| `ready` / `complete` | `reserved_cents`（内部账本按上限记账） | 释放 |
-| `failed` / `rejected` | `0` | 释放 |
-| `failed` 且 `error_code LIKE 'SUBMIT_RESULT_UNKNOWN%'` | `reserved_cents`（响应丢失可能已计费，保守记账） | 释放 |
+| `ready` / `complete` | `reserved_cents` | 释放 |
+| `failed` 但 `provider_job_id` 非空（已派发） | `reserved_cents` | 释放 |
+| `failed` 且 `error_code LIKE 'SUBMIT_RESULT_UNKNOWN%'` | `reserved_cents`（响应丢失，保守） | 释放 |
+| `failed` / `rejected` 且从未派发 | `0` | 释放 |
 | `unknown` | 不动 | 保留 |
+
+`text` 链单独处理：`complete` 记预留额；`failed` 记 0；停在 `reserved` 超过 60 分钟视为 Edge 崩溃，置 `failed` 并结算（`AI_BUSY` 只拦 2 分钟，不扫就无上限泄漏）；
+`unknown` 超过 24 小时仍未核对，按上限记账并释放，行本身留作审计。
 
 口径：`actual_cents` 是幕景内部账本（分），**不是 Aholo 积分**；Aholo 真实消耗看 `provider_usage`。
 `committed_cents` 只表示未决预留，不表示累计消费。
 
-迁移末尾带一次 `select public.scene_settle_requests();` 回填历史行——执行时会把过去完成/失败却仍占着的预留一次性释放。
+迁移本身**不再做全表回填**（避免长事务锁住 worker 的 `jobs.update/complete`）。回填拆到
+`supabase/ops/backfill-generation-ledger.sql`，可反复执行，执行后会打印未结算行数与两个 kind 的 committed。
+
+## 独立复核发现并已修掉的三条
+
+按对抗式评审改了：
+
+1. **已派发后失败不能记 0**：`failed` 时若 `provider_job_id` 非空，vendor 可能已计费，改记 `reserved_cents`；
+   只有“从未派发”的拒绝才记 0。
+2. **`text` 链两条无出口泄漏**：卡在 `reserved` 的请求和长期 `unknown` 的请求，现在都有 TTL 出口。
+3. **回填会锁表**：从迁移里移出，改成单独 ops 脚本。
+
+另外补了 `requests(kind) where actual_cents is null` 部分索引（`jobs.claim` 每轮都会跑这条扫描），
+`scene_settle_requests()` 改成 `security definer` 并收回 `anon/authenticated` 执行权。
 
 ## 验证（本地，不连生产）
 
 用 `public.ecr.aws/supabase/postgres:17.11.0.002` 起临时容器，搭 `scene_private` 桩表，跑真实迁移：
 
 ```text
-成功完成      -> actual 100，预留释放
-预检拒绝      -> actual 0，预留仍释放
-响应丢失      -> actual 100（保守）
-仍在排队      -> actual NULL，预留保留
-text 链完成   -> actual 60，预留释放
-重复调用      -> 释放 0，数字不变（幂等）
+成功完成            -> actual 100，预留释放
+预检拒绝（未派发）  -> actual 0，预留释放
+响应丢失            -> actual 100（保守）
+已派发后失败        -> actual 100（不是 0）
+仍在排队            -> actual NULL，预留保留
+text 链完成         -> actual 60，预留释放
+text 卡住 90 分钟   -> 置 failed，actual 0
+text unknown 25 小时 -> actual 30，预留释放
+text 刚建/刚未知    -> 不动
+重复调用            -> 释放 0，数字不变（幂等）
 ```
 
 输出 `LEDGER_TEST_OK`。
@@ -404,4 +425,19 @@ text 链完成   -> actual 60，预留释放
 4. 等 1–2 分钟，查 `net._http_response` 最新 `status_code` 应为 200（401 说明 secret 不一致）。
 5. 回查 `9b35ebc5-…`：`provider_job_id` 应有值，任务离开 `queued`；完成后 `actual_cents` 首次非空。
 6. 对账：`budgets.committed_cents` 应回到 0（该任务结算后），`requests.actual_cents = 100`。
+
+## worker 闭环审计（只读，未改状态机）
+
+另派一个只读审计过了一遍 worker，除账本外发现的问题按风险排序：
+
+| 严重度 | 位置 | 后果 | 本轮处置 |
+| --- | --- | --- | --- |
+| P0 | `scene_jobs.sql:27` 全局唯一活跃索引 | 全站同时只能跑 1 个 3D 生成，别人一律 429 | 未改（产品决策：改 `(owner_id)` 会放开供应商并发，需你拍板） |
+| P1 | `providers.ts:81` 未知 status 默认 `FAIL` | 供应商仍在跑、已扣费，却被判终态失败 | **已改为 `RUN`**，继续轮询，宁可等到 23 小时兜底 |
+| P1 | `worker.ts:25,39` claim 后未 submit 就崩溃 | 零调用被当成“可能已付费” | 未改（需新增 dispatch 标记，改动面大） |
+| P1 | `worker.ts:51-58` 进入 archiving 后重新 query | 供应商任务过期会把已下载好的 GLB 判失败 | 未改（需持久化 result URL） |
+| P2 | 租约 4 分钟 / 无退避 / attempts 无上限 | 长归档会丢租约，失败会 30 秒一次刷到 23 小时 | 未改，已记录 |
+
+审计也确认了几件关键的事：不存在向 Aholo 的自动重复提交；`assets.register` 与 `jobs.complete` 同事务；上传是内容寻址 + 409 容忍，重试不产生重复资产。
+
 
