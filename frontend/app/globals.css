@@ -1321,43 +1321,17 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
-/* Bingo 圆徽标：28px 与其他图标槽同尺寸；三态——待发空圆 / 待评数字 / 已回执勾形。 */
+/* Bingo D4：28px 槽里放开口环。环身保持墨色，不铺 warn/err 大圆，也不再叠角标。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
   display: grid; place-items: center; width: 28px; height: 28px; flex: none;
-  box-sizing: border-box; border-radius: 50%; position: relative;
-  border: 1.5px solid var(--wk-hair); background: var(--wk-paper);
-  color: var(--wk-ink-soft); font-size: 11px; font-weight: 600; line-height: 1;
-  font-variant-numeric: tabular-nums;
+  box-sizing: border-box; position: relative;
+  border: 0; background: none; color: var(--ink-soft, #55585F);
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
-  display: block; width: 13px; height: 13px;
+  display: block; width: 28px; height: 28px;
 }
-/* 角标：对齐成员未读圆 `.sc-rail-member-badge`，15px 圆、err 底白字 10px、右上角落位。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge > .sc-bingo-corner {
-  position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px;
-  padding: 0 3px; box-sizing: border-box; border-radius: 999px;
-  background: var(--err, #B4443C); color: #fff;
-  font-size: 10px; font-weight: 600; line-height: 1;
-  display: grid; place-items: center; text-align: center;
-  border: 2px solid var(--wk-paper, #F7F5F0); font-variant-numeric: tabular-nums;
-}
-/* Bingo 实心方案（B）：待评 / 回执两态整圆填状态色，圆内数字 / 勾形用 paper 白负形；空态仍描边空圆。状态色必须带与基础规则相同的前缀链，否则特异性被基础规则压过、底色 / 字色退回中性。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="awaiting"] {
-  border-color: var(--warn); background: var(--warn); color: var(--wk-paper);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="returned"] {
-  border-color: var(--err); background: var(--err); color: var(--wk-paper);
-}
-/* 空态：28 占位盒内收一枚 21px 中性深灰描边空心圆，外径对齐家族工具图形（实测 20.1–21.5px）；描边 3px 对齐线条基准；paper 底、不填色、不另加符号，静息态不用品牌绿。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"] {
-  background: transparent;
-  border-color: transparent;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge[data-status="to-send"]::before {
-  content: "";
-  width: 21px; height: 21px; border-radius: 50%;
-  border: 3px solid var(--wk-ink-soft);
-  background: var(--wk-paper);
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > svg.sc-rail-hall {
+  display: block; width: 28px; height: 28px;
 }
 /* 左轨形体：PNG 自带明暗体积，白眼睛单独一层，随指针轻移；整枚形体再轻微侧倾。 */
 .sc-rail-avatar { position: relative; display: block; flex: none; }

@@ -71,7 +71,10 @@ describe('左轨四形与共用 Agent 面板', () => {
     const brandSource = readFileSync(join(here, 'workbench-brand-toggle.tsx'), 'utf8');
     expect(bingoSource).toContain('sc-rail-disc');
     expect(bingoSource).toContain('sc-bingo-badge');
-    expect(brandSource).toContain('<RailAvatar form="door"');
+    expect(bingoSource).toContain('bingoRingPath');
+    expect(bingoSource).not.toContain('sc-bingo-corner');
+    expect(brandSource).toContain('<RailHall size={28}');
+    expect(brandSource).not.toContain('<RailAvatar');
     for (const icon of ['door', 'ball', 'pyramid', 'cube']) {
       expect(existsSync(join(here, '../../../public/assets/rail', `${icon}.png`))).toBe(true);
     }

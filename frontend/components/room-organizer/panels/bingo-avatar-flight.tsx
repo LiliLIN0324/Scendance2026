@@ -43,10 +43,10 @@ export function BingoAvatarFlight({
     prevOpen.current = open;
     if (wasOpen === open) return;
 
-    const railImg = railRef.current?.querySelector('img');
+    const railMark = railRef.current?.querySelector('img, svg.sc-rail-hall');
     const head = headerAvatarRef.current;
-    const from = open ? rectOf(railImg) : rectOf(head);
-    const to = open ? rectOf(head) : rectOf(railImg);
+    const from = open ? rectOf(railMark) : rectOf(head);
+    const to = open ? rectOf(head) : rectOf(railMark);
     if (!from || !to) {
       setFrame(null);
       setTarget(null);

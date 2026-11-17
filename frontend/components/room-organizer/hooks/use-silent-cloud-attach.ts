@@ -104,7 +104,7 @@ export function useSilentCloudAttach({ controller, layout, onBindProject, enable
         const current = layoutRef.current;
         const scene = layoutToBackendScene(current);
         submittedLayout = current;
-        const project = await controller.createProject(studioId, current.name?.trim() || defaultAttachName(), scene);
+        const project = await controller.createProject(studioId, current.name?.trim() || defaultAttachName(), scene, previousScope);
         projectId = project.id;
         // 项目已在云端存在：此后任何失败都不再重建，只补续接。
         state.done = true;

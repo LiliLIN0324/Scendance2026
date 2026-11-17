@@ -646,6 +646,24 @@ describe('CloudPanel delayed project replacement', () => {
     expect(controller.getSnapshot()).toMatchObject({ draft, dirty: true, writeBlocked: false });
   });
 
+  it('skips cloud binding for a classic-case (replica-) deep link without an invalid-link notice', async () => {
+    // 经典案例在本机是合法项目（space-panel 用 replica- 伪 id 占住 ?project=），
+    // 深链到这里只跳过云端绑定：不报「项目链接无效」，也不发任何打开项目的请求。
+    window.history.replaceState(null, '', '/editor/?project=replica-banbury-town-council-coronation-events&mode=outdoor');
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const getProject = vi.spyOn(controller, 'getProject');
+    const onLoadLayout = vi.fn();
+    const seen: string[] = [];
+    const stop = subscribeNotices(notice => seen.push(notice.message));
+    render(<CloudPanel layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+    stop();
+    expect(seen.some(message => message.includes('项目链接无效'))).toBe(false);
+    expect(getProject).not.toHaveBeenCalled();
+    expect(onLoadLayout).not.toHaveBeenCalled();
+  });
+
   it('reauthorizes restored private models without replacing unsaved placements', async () => {
     const assetId = '30000000-0000-4000-8000-000000000001';
     const draft: Scene = { ...scene, lighting: 'warm', objects: [{ id: '40000000-0000-4000-8000-000000000001', materialId: 'asset', assetId, position: { x: 2, z: 3 }, size: { width: 1, depth: 1, height: 1 }, rotation: 0, color: '#ffffff', locked: false, notes: '本地备注' }] };
@@ -686,7 +704,7 @@ describe('CloudPanel delayed project replacement', () => {
     const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
     render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
     openAccount();
-    expect(await screen.findByText('当前 · 草稿')).toBeTruthy();
+    expect(await screen.findByText('当前 · 本机')).toBeTruthy();
     expect(screen.queryByText(/已保存/)).toBeNull();
     await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
     expect(controller.getSnapshot().draft).not.toEqual(layout);
