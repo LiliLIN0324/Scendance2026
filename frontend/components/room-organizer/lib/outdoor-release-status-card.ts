@@ -76,6 +76,12 @@ function gateCell(value: boolean | undefined): string {
   return value ? '通过' : '未过';
 }
 
+/** 证据清单：空列表就只写「0 条」，不留一个空括号。 */
+function listWithIds(ids: readonly number[]): string {
+  if (ids.length === 0) return '0 条';
+  return `${ids.length} 条（${ids.map((id) => `#${id}`).join(' ')}）`;
+}
+
 export function formatReleaseStatusCard(input: ReleaseStatusInput): string {
   const totals = summarizeAssessment(input.rows);
   const gate = input.reading ? gateFactsForCard(input.reading) : (input.gate ?? {});
@@ -86,9 +92,11 @@ export function formatReleaseStatusCard(input: ReleaseStatusInput): string {
   const withoutEvidence = ids.filter((id) => BROWSER_EVIDENCE[id] === 'none');
   return [
     '发布前状态卡',
-    `· 验收用例 ${input.rows.length} 条：可判 ${totals.ready} / 缺料 ${totals.missing} / 只能浏览器 ${totals.browserOnly}`,
-    `· 浏览器证据（${EVIDENCE_AS_OF}）：有部分 ${withEvidence.length} 条（${withEvidence.map((id) => `#${id}`).join(' ')}）/ 无证据 ${withoutEvidence.length} 条（${withoutEvidence.map((id) => `#${id}`).join(' ')}）`,
-    `· 指标：${input.metrics.text}`,
+    input.rows.length === 0
+      ? '· 验收用例 0 条：还没有可判的用例（先跑一次会话再用）'
+      : `· 验收用例 ${input.rows.length} 条：可判 ${totals.ready} / 缺料 ${totals.missing} / 只能浏览器 ${totals.browserOnly}`,
+    `· 浏览器证据（${EVIDENCE_AS_OF}）：有部分 ${listWithIds(withEvidence)} / 无证据 ${listWithIds(withoutEvidence)}`,
+    `· 指标：${input.metrics.text.trim() || '本次会话没有指标记录'}`,
     `· 门禁：类型 ${gateCell(gate.typecheck)} / 用例 ${gateCell(gate.tests)} / 构建 ${gateCell(gate.build)}（${gateReady ? '门禁就绪' : '门禁未齐'}）`,
     ...(input.reading ? [`· 读数：${input.reading.line}`] : []),
     `· 结论：不可发布（三类全绿 ${allGreen} 条）`,

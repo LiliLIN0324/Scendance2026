@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：状态卡现在能直接吃 `readGates` 的读数（`reading` 入参：门禁行由它算，另多一行读数原文；同时给 `gate` 时以读数为准）。main = origin = `13258414`；9222 十六轮不通。下轮：把 hook 的 `logReleaseStatus()` 改成“若本次会话里跑过门禁就带上读数”（否则不带），接入面若太大就改为给状态卡补“指标为空时怎么写”与“用例 0 条时怎么写”两条确定性用例。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：状态卡在空会话下不再出现空括号/光秃标签（用例 0 条、指标为空都有话可说）。main = origin = `13258414`；9222 十七轮不通。下轮：把 `pickVenueCandidate` 接到地图候选点击（只接一处），若接入面太大就改为把“三类全绿”从手填改成一个只读的计数函数（输入对照表 11 行状态，输出 N 条），避免手填数字漂移。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,24 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-17 22:00 · 自动轮次 61 · 空会话下的状态卡（空括号/光秃标签）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-17 22:00，自动轮次 61
+批次 / 切片 / 状态：M7 / 状态卡空态 / 已交付（分支待 PR）
+开工事实：HEAD = main = origin = 13258414（div 0/0）→ 无合并；9222 第十七轮 down
+发现的问题（都是“没人填就直接拼字符串”留下的）：
+  · 用例 0 条时仍写“可判 0 / 缺料 0 / 只能浏览器 0”，看不出下一步
+  · 证据清单为空时留下一个空括号（）
+  · 指标 text 为空时留下光秃的“· 指标：”
+修法：新增 `listWithIds()`（空则只写“0 条”）；用例 0 条换成“还没有可判的用例（先跑一次会话再用）”；指标空则写“本次会话没有指标记录”
+验证：status-card 16 → 20 条全过；另外三个自建文件 24 条全过；wt-r61 的 tsc 0 行
+真实浏览器/云端：仍未验
+未完成：#2 真实搜索、#5 浏览器、`pickVenueCandidate` 接线、三类全绿改计算
+```
+
+- **空态也是一种输出**：没人填的时候，卡片说的是“我还缺什么”，而不是一串 0 和一个空括号。
 
 ### 2026-11-17 21:25 · 自动轮次 60 · 状态卡直接吃门禁读数（少一道手抄）
 
