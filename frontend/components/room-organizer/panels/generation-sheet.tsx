@@ -526,6 +526,11 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
 
             {notice ? <p className="gs-notice" role="status">{notice}</p> : null}
 
+            {/* 2026-11-18：Chrome 里禁用按钮常常不弹出 title，拦下「生成」的原因必须写在按钮旁边。 */}
+            {state.task === 'model' && source !== 'import' && blocked ? (
+              <p className="gs-hint gs-hint--warn" data-testid="generation-block-reason">{blocked}</p>
+            ) : null}
+
             <div className="gs-actions">
               <button type="button" className="gs-cancel" onClick={closeGenerationSheet}>取消</button>
               <button
