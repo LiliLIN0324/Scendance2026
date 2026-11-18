@@ -4196,11 +4196,11 @@ describe('S2 Bingo 审校台：单一分享主入口', () => {
     expect(screen.queryByText(/评审链接已准备好/)).toBeNull();expect(screen.queryByText(/链接未复制/)).toBeNull();
   });
 
-  it('点「发送钉评链接」只指路到甲方评审记录卡，聊天不打链接', async () => {
+  it('点「发送钉评链接」打开分享面板，并说明钉评会自动回流', async () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '发送钉评链接' }));
     await waitFor(() => expect(callbacks.onIssueReviewLink).toHaveBeenCalled());
-    expect(screen.getByText(/对方的意见仅保存在对方浏览器，不会自动回到这里/)).toBeTruthy();
+    expect(screen.getByText(/对方的钉评会自动回到 Bingo/)).toBeTruthy();
     // 长链接不进聊天框；复制动作住在审计卡上（复用既有「复制甲方链接」钮）。
     expect(screen.queryByRole('button', { name: '复制评审链接' })).toBeNull();
   });

@@ -1,6 +1,6 @@
 {
   "name": "scene-planner-backend",
-  "version": "4.17.12",
+  "version": "4.17.13",
   "private": true,
   "type": "module",
   "scripts": {

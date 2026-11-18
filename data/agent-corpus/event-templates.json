@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "norms": "docs/plans/activity-space-norms-2026-11-05.md §1–§7",
+    "code": "frontend/components/room-organizer/lib/outdoor-event-logic.ts",
+    "note": "capacity 与 layoutDefaults 全部有出处；status=spec-only 表示只有规范、代码尚未支持，Agent 不得宣称能排。"
+  },
+  "templates": [
+    {
+      "id": "MKT",
+      "zh": "户外市集 / 快闪集市",
+      "en": "outdoor market",
+      "aliases": ["市集", "集市", "展销", "夜市", "快闪", "摊位"],
+      "aliasesImplemented": ["市集", "集市", "展销"],
+      "status": "implemented",
+      "codeRef": "outdoor-event-logic.ts:16",
+      "capacity": {
+        "unit": "stalls",
+        "peoplePerStall": 4,
+        "standardStallM2": 9,
+        "maxFootprintRatio": 0.35,
+        "assertions": ["MKT-01", "MKT-10"]
+      },
+      "layoutDefaults": {
+        "zoneWidthM": 19,
+        "stallColumns": 2,
+        "depthFormula": "rows*4+13",
+        "rowsFormula": "ceil(stalls/2)",
+        "codeRef": "outdoor-event-logic.ts:189-192"
+      },
+      "requiredMaterials": ["booth-2x2", "trash-point-1.2x1.2", "fire-extinguisher", "stanchion"],
+      "keyAssertions": ["GEN-03", "GEN-04", "GEN-05", "MKT-02", "MKT-03", "MKT-04", "MKT-06", "MKT-07", "MKT-09", "MKT-11", "MKT-12"],
+      "conflictGroups": ["CF-01", "CF-02", "CF-03", "CF-09", "CF-11"],
+      "notes": "现状摊位按 2×2 m 生成，规范 MKT-01 给的是 3×3 m 标准摊；下单前必须显式选一个，不得混用。"
+    },
+    {
+      "id": "LEC",
+      "zh": "讲座 / 会议 / 发布会",
+      "en": "lecture or conference",
+      "aliases": ["讲座", "会议", "论坛", "发布会"],
+      "aliasesImplemented": ["讲座", "会议", "论坛", "发布会"],
+      "status": "implemented",
+      "codeRef": "outdoor-event-logic.ts:17,33",
+      "capacity": {
+        "unit": "people",
+        "min": 1,
+        "max": 200,
+        "seatWidthM": 0.95,
+        "rowDepthM": 1.2,
+        "assertions": ["STG-01", "GEN-01", "GEN-03", "GEN-04", "GEN-06"]
+      },
+      "layoutDefaults": {
+        "columnsFormula": "clamp(ceil(sqrt(guests)),4,16)",
+        "widthFormula": "max(22, cols*0.95+7)",
+        "depthFormula": "rows*1.2+23",
+        "stageSizeM": [10, 8],
+        "codeRef": "outdoor-event-logic.ts:189-192,226"
+      },
+      "requiredMaterials": ["stage-platform-8x6", "folding-chair", "pa-speakers", "toilet-2.4x1.2"],
+      "keyAssertions": ["GEN-01", "GEN-03", "GEN-04", "GEN-06", "STG-01", "STG-07"],
+      "conflictGroups": ["CF-06"],
+      "notes": "上限 200 人是现状硬限制，不是规范值；超过必须人工核对容量、疏散与交通组织。"
+    },
+    {
+      "id": "STG",
+      "zh": "小型户外演出 / 音乐节",
+      "en": "outdoor stage",
+      "aliases": ["演出", "音乐会", "音乐节", "舞台", "乐队"],
+      "aliasesImplemented": [],
+      "status": "spec-only",
+      "codeRef": null,
+      "capacity": {
+        "unit": "people",
+        "standingM2PerPerson": 1.0,
+        "comfortM2PerPerson": 2.0,
+        "seatedM2PerPerson": 0.75,
+        "assertions": ["STG-01"]
+      },
+      "layoutDefaults": null,
+      "requiredMaterials": ["stage-platform-8x6", "stanchion", "sight-screen", "pa-speakers", "generator", "toilet-2.4x1.2", "medical-tent-4x3"],
+      "keyAssertions": ["GEN-03", "GEN-04", "STG-01", "STG-02", "STG-03", "STG-05", "STG-06", "STG-07", "STG-10", "STG-12"],
+      "conflictGroups": ["CF-02", "CF-06"],
+      "notes": "首排退距与容量互相耦合：容量分母必须扣掉退距、通道、调音位后的有效面积（CF-06）。"
+    },
+    {
+      "id": "CMP",
+      "zh": "户外露营 / 营地",
+      "en": "campsite",
+      "aliases": ["露营", "营地", "帐篷区", "营位"],
+      "aliasesImplemented": [],
+      "status": "spec-only",
+      "codeRef": null,
+      "capacity": {
+        "unit": "pitches",
+        "minPitchM2": 20,
+        "assertions": ["CMP-01", "CMP-02", "CMP-03"]
+      },
+      "layoutDefaults": null,
+      "requiredMaterials": ["tent-3x3", "trash-point-1.2x1.2", "toilet-2.4x1.2"],
+      "keyAssertions": ["CMP-01", "CMP-02", "CMP-03", "CMP-04", "CMP-05", "CMP-08", "CMP-09", "CMP-11"],
+      "conflictGroups": ["CF-07", "CF-08"],
+      "notes": "坡度与无障碍营位冲突（CF-08）：无障碍营位必须单独选 ≤5% 平台。"
+    },
+    {
+      "id": "EXH",
+      "zh": "户外展览 / 打卡游线",
+      "en": "outdoor exhibition",
+      "aliases": ["展览", "展会", "打卡", "展陈", "装置"],
+      "aliasesImplemented": [],
+      "status": "spec-only",
+      "codeRef": null,
+      "capacity": {
+        "unit": "people",
+        "densityPersonPerM2": 0.75,
+        "assertions": ["EXH-06"]
+      },
+      "layoutDefaults": null,
+      "requiredMaterials": ["booth-2x2", "sight-screen", "trash-point-1.2x1.2"],
+      "keyAssertions": ["EXH-01", "EXH-02", "EXH-03", "EXH-05", "EXH-06", "EXH-09", "EXH-11", "EXH-12"],
+      "conflictGroups": ["CF-05", "CF-10"],
+      "notes": "通道宽度与能否双侧设展绑死：<8 m 只可单侧，≤3 m 不得设展。"
+    },
+    {
+      "id": "KID",
+      "zh": "亲子活动区",
+      "en": "kids zone",
+      "aliases": ["亲子", "儿童", "游乐", "小朋友"],
+      "aliasesImplemented": [],
+      "status": "spec-only",
+      "codeRef": null,
+      "capacity": {
+        "unit": "devices",
+        "assertions": ["KID-01", "KID-02"]
+      },
+      "layoutDefaults": null,
+      "requiredMaterials": ["ferris-wheel", "carousel", "bench"],
+      "keyAssertions": ["KID-01", "KID-03", "KID-04", "KID-08", "KID-09", "KID-10", "KID-11"],
+      "conflictGroups": ["CF-01", "CF-04", "CF-12"],
+      "notes": "跌落空间是设备外扩环，不是设备本体；近岸 2 m 水深 >0.7 m 必须设护栏。"
+    },
+    {
+      "id": "ELD",
+      "zh": "适老休憩区",
+      "en": "elderly rest zone",
+      "aliases": ["适老", "老人", "休憩", "无障碍"],
+      "aliasesImplemented": [],
+      "status": "spec-only",
+      "codeRef": null,
+      "capacity": {
+        "unit": "seats",
+        "wheelchairPerSeats": 0.1,
+        "assertions": ["ELD-08"]
+      },
+      "layoutDefaults": null,
+      "requiredMaterials": ["bench", "toilet-2.4x1.2"],
+      "keyAssertions": ["ELD-01", "ELD-02", "ELD-04", "ELD-06", "ELD-08", "ELD-10", "ELD-11"],
+      "conflictGroups": ["CF-03", "CF-11"],
+      "notes": "ELD 是子区规范，可叠加在任何模板内；回转空间只要求节点与端头有，不要求每个摊间都有（CF-11）。"
+    }
+  ]
+}

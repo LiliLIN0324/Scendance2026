@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "archivedAt": "2026-11-18T15:15:00+08:00",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "profile": "bu product browser (Chrome 147.0.7727.149)",
+  "note": "本文件是走查记录本的归档快照，不是发布结论。记录本按 origin 存在 localStorage；本 profile 的本地记录本为空（见 localBook）。每条 pass 仍需 docs/evidence/79/<case>/ 下原始证据支撑；门禁解除只能由人签字。",
+  "localBook": {
+    "seen": null,
+    "cloud": null,
+    "reason": "本浏览器 profile 为新建，未继承另一 profile 的 scendance.outdoor.walkthrough.v1 / .cloud.v1（按 origin 隔离）"
+  },
+  "ledger": [
+    {
+      "case": 1,
+      "label": "空白项目输入组合需求，地图确认地点及范围",
+      "browser": "partial",
+      "cloud": "none",
+      "conclusion": "partial",
+      "evidence": "docs/plans/2026-11-16-outdoor-evidence-matrix.md §1 行 1（2026-11-17 两轮），本轮未重跑"
+    },
+    {
+      "case": 2,
+      "label": "两个同名地点，地图选中其中一个",
+      "browser": "pass",
+      "cloud": "pass",
+      "conclusion": "pass",
+      "evidence": "docs/evidence/79/02/2026-11-18-case02-same-name-poi.md；本轮补证 2026-11-18-case02-selection-readback.md（选中路径无 project 读取、零写）"
+    },
+    {
+      "case": 3,
+      "label": "有范围、已选设施，发明确小改",
+      "browser": "blocked",
+      "cloud": "none",
+      "conclusion": "blocked",
+      "evidence": "docs/evidence/79/03/2026-11-18-case03-blocked.md；场地边界未确认，未生成布置提案，改口采纳无从对照"
+    },
+    {
+      "case": 4,
+      "label": "无范围先发设计句，再改预算或人数",
+      "browser": "partial",
+      "cloud": "none",
+      "conclusion": "partial",
+      "evidence": "矩阵 §1 行 4；本轮未补「再改预算或人数」浏览器实证"
+    },
+    {
+      "case": 5,
+      "label": "地图部分、离线或无路网",
+      "browser": "partial",
+      "cloud": "unclaimed",
+      "conclusion": "partial",
+      "evidence": "docs/evidence/79/05/2026-11-18-case05-offline.md + 2026-11-18-case05-cdp-offline-supplement.md；云端 revision 前后对照仍缺，云端键不点"
+    },
+    {
+      "case": 6,
+      "label": "未登录、功能关闭、额度不足、网络超时",
+      "browser": "blocked",
+      "cloud": "none",
+      "conclusion": "blocked",
+      "evidence": "docs/evidence/79/06/2026-11-18-case06-blocked.md；四类本轮均未分别触发"
+    },
+    {
+      "case": 7,
+      "label": "待预览时说「等等」或过时的「确认」",
+      "browser": "blocked",
+      "cloud": "none",
+      "conclusion": "blocked",
+      "evidence": "docs/evidence/79/07/2026-11-18-case07-blocked-no-proposal.md；会话内无待确认提案卡"
+    },
+    {
+      "case": 8,
+      "label": "应用中刷新、双点确认、切项目",
+      "browser": "blocked",
+      "cloud": "none",
+      "conclusion": "blocked",
+      "evidence": "docs/evidence/79/08/2026-11-18-case08-blocked.md；8a/8b/8c 均无应用写可对账"
+    },
+    {
+      "case": 9,
+      "label": "确认后撤销，重开旧草稿",
+      "browser": "blocked",
+      "cloud": "none",
+      "conclusion": "blocked",
+      "evidence": "docs/evidence/79/09/2026-11-18-case09-blocked.md；没有已应用批次"
+    },
+    {
+      "case": 10,
+      "label": "一条真实模型失败，一条纯本地成功",
+      "browser": "partial",
+      "cloud": "none",
+      "conclusion": "partial",
+      "evidence": "矩阵 §1 行 10；诊断编号与服务端日志关联仍缺，本轮未补"
+    },
+    {
+      "case": 11,
+      "label": "普通聊天、室内布局、导出与旧云 Agent Run",
+      "browser": "partial",
+      "cloud": "n/a",
+      "conclusion": "partial",
+      "evidence": "docs/evidence/79/11/2026-11-18-case11-exports.md；CSV/JSON/GLB/DXF/HTML 计数与画布一致；PDF、效果图、旧云 Run blocked"
+    }
+  ],
+  "counts": {
+    "pass": 1,
+    "partial": 5,
+    "blocked": 5,
+    "fail": 0,
+    "na": 0,
+    "note": "blocked 不计入全绿，也不计失败；partial 不计入全绿"
+  }
+}

@@ -33,8 +33,3 @@ export function readSnapshotFromHash(hash: string): SitePlanSnapshot | null {
   if (!match) return null;
   return decodeSnapshot(match[1]);
 }
-
-/** 生成本地分享链接（当前 origin + 路径 + hash）。 */
-export function buildShareLink(snapshot: SitePlanSnapshot, origin = '', pathname = '/plan-share'): string {
-  return `${origin}${pathname}#snapshot=${encodeSnapshot(snapshot)}`;
-}

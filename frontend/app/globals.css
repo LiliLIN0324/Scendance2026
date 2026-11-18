@@ -2724,6 +2724,16 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:hover:not(:disabled) { background: var(--green-deep, #35624A) !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:disabled { opacity: .55; cursor: default; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew {
+  width: 100% !important; height: 28px !important; min-height: 0 !important; margin-top: 6px;
+  padding: 0 12px !important; box-sizing: border-box;
+  border: 1px solid var(--hair, #E4E4E7) !important; border-radius: 14px !important;
+  background: transparent !important; box-shadow: none !important;
+  color: var(--ink-soft, #55585F) !important;
+  font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:hover:not(:disabled) { background: #F4F5F7 !important; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:disabled { opacity: .55; cursor: default; }
 .sc-workbench .sc-share-link {
   position: relative; display: flex; align-items: center; gap: 6px;
   height: 32px; min-width: 0; padding: 0 3px 0 12px; box-sizing: border-box;
