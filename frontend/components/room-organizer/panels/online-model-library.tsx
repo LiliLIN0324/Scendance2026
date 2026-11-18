@@ -21,7 +21,7 @@ import {
   type MaterialLibraryMeta,
 } from '../lib/material-library-meta';
 import { loadOnlineCatalogItem } from '../lib/online-model-placement';
-import { clearPlanCatalogDrag, planCatalogDragFor, setPlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, serializePlanCatalogDrag } from '../lib/plan-catalog-drag';
+import { attachPlanCatalogDrag, clearPlanCatalogDrag, planCatalogDragFor } from '../lib/plan-catalog-drag';
 import { usePendingMaterials } from '../lib/material-generate';
 import { importLatestPendingMaterials, importPendingMaterial, LUX3D_TASK_POLL_MS } from '../lib/lux3d-import';
 import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
@@ -583,8 +583,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           onDragStart={event => {
             if (disabled || busy !== null) { event.preventDefault(); return; }
             const payload = planCatalogDragFor({ slug: model.slug, name, width: model.width, depth: model.depth, ...(sticker ? { stickerSlug: sticker.slug } : {}) });
-            setPlanCatalogDrag(payload);
-            event.dataTransfer.setData(PLAN_CATALOG_DRAG_MIME, serializePlanCatalogDrag(payload));
+            attachPlanCatalogDrag(event.dataTransfer, payload);
             event.dataTransfer.setData(CATALOG_DRAG_MIME, `online:${model.slug}`);
             event.dataTransfer.effectAllowed = 'copy';
           }}
@@ -860,8 +859,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               if (disabled || busy !== null) { event.preventDefault(); return; }
               event.dataTransfer.setData(CATALOG_DRAG_MIME, `online:${model.slug}`);
               const payload = planCatalogDragFor({ slug: model.slug, name, width: model.width, depth: model.depth, ...(sticker ? { stickerSlug: sticker.slug } : {}) });
-              setPlanCatalogDrag(payload);
-              event.dataTransfer.setData(PLAN_CATALOG_DRAG_MIME, serializePlanCatalogDrag(payload));
+              attachPlanCatalogDrag(event.dataTransfer, payload);
               event.dataTransfer.effectAllowed = 'copy';
               const thumb = event.currentTarget.querySelector('.sc-lib-tile-photo img');
               if (thumb) event.dataTransfer.setDragImage(thumb, thumb.clientWidth / 2, thumb.clientHeight / 2);

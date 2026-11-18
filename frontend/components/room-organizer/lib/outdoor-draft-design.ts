@@ -95,7 +95,12 @@ const PEOPLE_PER_STALL = 4;
 export function draftDemand(
   plan: SitePlanData,
   brief: Pick<OutdoorBrief, "guests">,
-  options?: { maxLine?: number; maxItems?: number },
+  options?: {
+    maxLine?: number;
+    maxItems?: number;
+    /** 调用方已知库里有某件物料时用它改默认选品（如展览区有「展板」就不推摊位）；不知道就不传。 */
+    hasMaterial?: (name: string) => boolean;
+  },
 ): OutdoorDraftDesign {
   const maxLine = Math.min(OUTDOOR_DRAFT_MAX_LINE, options?.maxLine ?? OUTDOOR_DRAFT_MAX_LINE);
   const maxItems = Math.max(1, options?.maxItems ?? OUTDOOR_DRAFT_MAX_ITEMS);
@@ -134,7 +139,11 @@ export function draftDemand(
         notes.push(`「${zone.name}」约 ${Math.round(area)}㎡，按每件 ${envelope}㎡（含通道）放不下 1 件，未排。`);
         continue;
       }
-      push(zone, "市集摊位", capacity, `「${zone.name}」约 ${Math.round(area)}㎡，按每摊 ${envelope}㎡（含摊间与主通道）`);
+      // 展览区优先用库里真实存在的「展板」；没有就退回 2×2 展位模块（同一套真实尺寸，不编新物料）。
+      const exhibitionBoard = purpose === "exhibition" && options?.hasMaterial?.("展板") === true;
+      const query = exhibitionBoard ? "展板" : "市集摊位";
+      const unit = purpose === "market" ? "摊" : "个展位";
+      push(zone, query, capacity, `「${zone.name}」约 ${Math.round(area)}㎡，按每${unit} ${envelope}㎡（含间隙与主通道）`);
       zones.push({ zone: zone.name, purpose, areaM2: Math.round(area), capacity, drawn: Math.min(capacity, maxLine) });
       if (capacity > maxLine)
         notes.push(`「${zone.name}」最多可放约 ${capacity} 件；单次清单上限 ${maxLine} 件，本版按 ${maxLine} 件出草案，可再要一版继续补。`);
@@ -149,7 +158,7 @@ export function draftDemand(
 
     if (purpose === "performance") {
       if (area >= STAGE_FOOTPRINT_M2) {
-        push(zone, "舞台", 1, `「${zone.name}」约 ${Math.round(area)}㎡，舞台按 8×6m 居中`);
+        push(zone, "舞台", 1, `「${zone.name}」约 ${Math.round(area)}㎡，舞台按 8×6m 落在面向观众区的一侧（没有观众区才按区心落台）`);
         zones.push({ zone: zone.name, purpose, areaM2: Math.round(area), capacity: 1, drawn: 1 });
       } else {
         notes.push(`「${zone.name}」约 ${Math.round(area)}㎡，放不下 8×6m 舞台；本版不塞舞台，可换小舞台或扩区。`);

@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { clearPlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from './plan-facility-drag';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clearPlanFacilityDrag, consumePlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from './plan-facility-drag';
 
 describe('plan facility drag store', () => {
-  afterEach(() => clearPlanFacilityDrag());
+  afterEach(() => {
+    consumePlanFacilityDrag();
+    vi.useRealTimers();
+  });
 
   it('keeps the dragged template id available during dragover', () => {
     expect(getPlanFacilityDrag()).toBeNull();
@@ -10,9 +13,12 @@ describe('plan facility drag store', () => {
     expect(getPlanFacilityDrag()).toBe('oneplan:icon:tent');
   });
 
-  it('clears on dragend/drop so the next pointer move has no stale ghost', () => {
+  it('keeps the id until the dragend timer so a drop in the same turn can still read it', () => {
+    vi.useFakeTimers();
     setPlanFacilityDrag('pack:market:stall');
     clearPlanFacilityDrag();
+    expect(getPlanFacilityDrag()).toBe('pack:market:stall');
+    vi.runAllTimers();
     expect(getPlanFacilityDrag()).toBeNull();
   });
 });

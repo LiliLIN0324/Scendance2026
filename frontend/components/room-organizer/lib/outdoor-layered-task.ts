@@ -70,9 +70,18 @@ function assembleLayeredTask(
 }
 
 /**
- * 退回气泡的文案：一句为什么停、一句现在做哪件、（有的话）一句后面还留着什么。
- * 不出现问号——退回不是提问，用户已经说清楚了，只是条件没到。
+ * 退回文案的规矩，不替调用方定“下一步是什么”。
+ *
+ * 轮次 105：拦阻现场（如“还没定地点”）原本只报一句缺什么，用户上一句里说的
+ *「最后再调通道」就算被吞了。这里只负责把“后面还有…”补上；没有后置从句、
+ * 或句子本身就是空的时候，一个字不多写。
  */
+export function deferredNote(userText: string): string {
+  const layered = absorbLayeredInstruction({ text: userText ?? '', stage: 'place' });
+  if (!layered || layered.deferred.length === 0) return '';
+  return ` 后面还有：${layered.deferred.join('、')}；这一步做完再接着做，现在不用决定。`;
+}
+
 export function layeredBounceText(layered: LayeredTask, bounce: string): string {
   const parts = [`${bounce} 下一步：${layered.task.next.label}。`];
   if (layered.deferred.length > 0) {

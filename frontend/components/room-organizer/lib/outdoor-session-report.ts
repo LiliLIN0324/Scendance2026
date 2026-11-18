@@ -19,23 +19,111 @@ export interface SessionReport {
   exportedAt: number;
   traces: TraceExport;
   metrics: MetricsSummary;
-  /** 可直接粘进工单的一段文本：轨迹在上，指标在下。 */
+  /** 发布状态快照（没算过就没有这个字段，不填空对象冒充）。 */
+  release?: NonNullable<SessionReportInput['release']>;
+  /** 可直接粘进工单的一段文本：轨迹在上，指标在中，发布快照在下。 */
   text: string;
 }
 
-export function buildSessionReport(input: {
+/** 报告里可携带的发布状态块（与状态卡同源，两轮报告可直接 diff）。 */
+export interface SessionReportRelease {
+  snapshot: unknown;
+  card?: string;
+  /** 走查记录本原件：人对着报告就能复核“哪条标了什么”。 */
+  walkthrough?: { asOf?: string; seen: Readonly<Record<number, string>> };
+  /** 已声明“云端真跑过”的用例号（去重升序）。 */
+  cloud?: readonly number[];
+  /** 逐条全绿判断：由台账算（调用方传 `isAllGreen(row)` 的结果），不从标记推。 */
+  verdicts?: readonly { id: number; allGreen: boolean }[];
+  /** 待补清单的行（`missingEvidence()` 的 `line`）；空数组 = 台账无缺口。 */
+  gaps?: readonly string[];
+  /** 报告自身的底：固定数据覆盖哪几条、走查日期填了什么——两轮报告混用时先看这行。 */
+  sources?: { fixedDataIds: readonly number[]; walkthroughAsOf?: string | undefined };
+}
+
+export interface SessionReportInput {
   turns: readonly TurnTrace[];
   metrics: MetricsSummary;
   now?: number;
-}): SessionReport {
+  /**
+   * 顺手带上的发布状态。不给就不出现——本层不自己造快照，
+   * 也不把“没算”写成 `{}` 或 0 条全绿。
+   */
+  release?: SessionReportRelease;
+}
+
+/** 把标记簿摊成一行：只列标过的号（`none` 不算标过），按编号升序。 */
+function formatMarks(walkthrough: SessionReportRelease['walkthrough']): string[] {
+  if (!walkthrough) return [];
+  const marks = Object.entries(walkthrough.seen)
+    .map(([id, state]) => ({ id: Number(id), state }))
+    .filter((row) => Number.isInteger(row.id) && row.state !== 'none')
+    .sort((a, b) => a.id - b.id)
+    .map((row) => `#${row.id} ${row.state}`);
+  return marks;
+}
+
+export function buildSessionReport(input: SessionReportInput): SessionReport {
   const now = input.now ?? Date.now();
   const traces = exportTraceBundle(input.turns, now);
   const metricsLine = `${METRICS_EXPORT_PREFIX} ${input.metrics.text}`;
+  const lines = [traces.text, '', metricsLine];
+  if (input.release) {
+    if (input.release.sources) {
+      const sources = input.release.sources;
+      const ids = [...sources.fixedDataIds].sort((a, b) => a - b);
+      const asOf = sources.walkthroughAsOf?.trim();
+      lines.push(
+        '',
+        `[报告来源] 固定数据用例：${ids.length > 0 ? ids.map((id) => `#${id}`).join(' ') : '无'} · 走查日期：${asOf ?? '未填（卡片会沿用对照表日期）'} · 生成：${new Date(now).toISOString()}`,
+      );
+    }
+    // 单行 JSON：两轮报告贴在一起时能按行 diff，不会被格式化噪声搅乱。
+    lines.push('', '[发布状态快照]（与状态卡同源；单行 JSON，可直接两轮比对）', JSON.stringify(input.release.snapshot));
+    if (input.release.card) lines.push('', input.release.card);
+    if (input.release.walkthrough) {
+      const marks = formatMarks(input.release.walkthrough);
+      const asOf = input.release.walkthrough.asOf?.trim();
+      lines.push(
+        '',
+        '[走查标记]（只列标过的号；与面板同源）',
+        marks.length > 0 ? marks.join(' · ') : '（一条都没标）',
+      );
+      if (asOf) lines.push(`走查日期：${asOf}`);
+    }
+    if (input.release.cloud) {
+      const cloud = [...new Set(input.release.cloud)].sort((a, b) => a - b);
+      lines.push(
+        '',
+        '[云端声明]（人声明的“真跑过”，不是自动探测）',
+        cloud.length > 0 ? cloud.map((id) => `#${id}`).join(' · ') : '（一条都没声明）',
+      );
+    }
+    if (input.release.verdicts) {
+      const verdicts = [...input.release.verdicts].sort((a, b) => a.id - b.id);
+      lines.push(
+        '',
+        '[逐条判断]（由台账算；不从标记推）',
+        verdicts.length > 0
+          ? verdicts.map((row) => `#${row.id} ${row.allGreen ? '全绿' : '未全绿'}`).join(' · ')
+          : '（没有台账）',
+      );
+    }
+    if (input.release.gaps) {
+      // 空数组是“台账里没缺口”，不是“没算”——没算的调用方应根本不传这个字段。
+      lines.push('', '[待补清单]（缺口未补前不可发布）');
+      if (input.release.gaps.length > 0) lines.push(...input.release.gaps);
+      else lines.push('（台账里没有缺口）');
+    }
+    // 固定收尾：报告只报事实，不构成发布结论。
+    lines.push('', '（本报告只报事实，不构成发布结论；可发布仍需三类全绿）');
+  }
   return {
     version: 1,
     exportedAt: now,
     traces,
     metrics: { totals: input.metrics.totals, rows: input.metrics.rows, text: input.metrics.text },
-    text: [traces.text, '', metricsLine].join('\n'),
+    ...(input.release ? { release: input.release } : {}),
+    text: lines.join('\n'),
   };
 }

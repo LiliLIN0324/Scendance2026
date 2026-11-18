@@ -350,7 +350,15 @@ function failure(error: unknown): BackendFailure {
     IDEMPOTENCY_CONFLICT: "同一请求编号不能用于不同需求，请创建新的请求。",
     ROUTE_NOT_FOUND: "请求的接口不存在，这次操作没有发出。",
   };
-  return { code, status: error instanceof SceneApiError ? error.status : 0, message: messages[code] ?? (localCode && error instanceof Error ? error.message : `云端操作失败（${code}），草稿已保留。`) };
+  const status = error instanceof SceneApiError ? error.status : 0;
+  const mapped = messages[code];
+  if (mapped) return { code, status, message: mapped };
+  // SceneApiError.message 就是线路 code，不是给人看的句子。有 code 的本地 Error
+  // 若 message 与 code 不同，才沿用那句人话；否则一律落到同一句兜底，避免面板只剩 ROUTE_NOT_FOUND。
+  if (localCode && error instanceof Error && error.message && error.message !== code && !(error instanceof SceneApiError)) {
+    return { code, status, message: error.message };
+  }
+  return { code, status, message: `云端操作失败（${code}），草稿已保留。` };
 }
 
 /** 面板/浮窗直接 catch 到的 SceneApiError 只有原始 code；用同一张文案表转成用户可读文本。 */

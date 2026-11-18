@@ -18,6 +18,7 @@ import OutdoorPlanCanvas, {
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import { REPLICA_CASES } from '../lib/replica-cases';
 import { planBoundaryFromSearchArea } from '@/components/room-organizer/lib/outdoor-venue-sync';
 import { GuideBubble, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
@@ -409,6 +410,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   }, [agent?.venuePick?.query, agent?.venuePick?.candidates, agent?.venuePick?.loading]);
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
+  const confirmedCaseView = useMemo(() => REPLICA_CASES.find(c => `replica-${c.id}` === slotId)?.confirmedView, [slotId]);
   // 本机活动：规划按活动存（草稿归属就是 layout.id），写入时不动「最近项目」指针。
   const activityScopedPlan = slotId !== LOCAL_DRAFT_SLOT && slotId !== legacyPlanProjectId;
   // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
@@ -517,9 +519,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     if (legacyPlanProjectId && activityScopedPlan) adoptLegacyOutdoorPlanForActivity(slotId, legacyPlanProjectId);
     const record = readOutdoorProjectRecord(slotId);
     // #51 方案甲：载入即吸附设施权威宽高比（幂等），anchor 缺省分支在规整结果上继续。
-    const loaded = normalizePlanFacilityFootprints(
-      record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan(),
-    );
+    const storedPlan = record?.plan ?? seedPlanRef.current ?? createStarterOutdoorPlan();
+    // 经典案例的占地来自参考图（同一模板可代表不同规格），载入时不能再按图标默认比例改尺寸。
+    const loaded = slotId.startsWith('replica-')
+      ? storedPlan
+      : normalizePlanFacilityFootprints(storedPlan);
     if (!loaded.anchor && !anchorRef.current) {
       // docs/46 V-P2：虚拟场地（纸面形态）不回填预置锚点——无锚点是虚拟场地的合法态；
       // 等用户画完红线再决定要不要定位。切回真地图（store='map'）时下次载入照常回填。
@@ -950,7 +954,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
             {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
             generationController={controller}
-            {...(anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
+            {...(confirmedCaseView ? { initialView: { lng: confirmedCaseView.lng, lat: confirmedCaseView.lat, zoom: confirmedCaseView.zoom, bearing: -confirmedCaseView.rotationDeg * Math.PI / 180 } } : anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
           />
         </div>
       )}
