@@ -33,6 +33,8 @@ import {
 } from '../lib/street';
 import { layoutGeometryIsAcceptable, isEvidenceProtectedWall, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
 import { MAX_ZONES, clampZoneRect, isValidZoneType, sameZone } from '../lib/zones';
+import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
+import { sanitizePlanEditor } from '../../../../supabase/functions/_shared/plan-editor';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type {
@@ -62,6 +64,7 @@ import type {
 export type LayoutAction =
   | { type: 'setProductionPlan'; value: ProductionPlan | undefined }
   | { type: 'setEventOperations'; value: EventOperations | undefined }
+  | { type: 'setPlanSettings'; value: PlanEditorSettings | undefined }
   | { type: 'setName'; name: string }
   | { type: 'setWidth'; width: number }
   | { type: 'setHeight'; height: number }
@@ -252,6 +255,14 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
     case 'setEventOperations': {
       const layout = parseLayoutEventOperations({ ...state.layout, eventOperations: action.value });
       if (!layout || JSON.stringify(layout.eventOperations) === JSON.stringify(state.layout.eventOperations)) return state;
+      return { ...state, layout };
+    }
+    case 'setPlanSettings': {
+      const sanitized = sanitizePlanEditor(action.value);
+      if (JSON.stringify(sanitized ?? null) === JSON.stringify(state.layout.planSettings ?? null)) return state;
+      const layout: RoomLayout = { ...state.layout };
+      if (sanitized) layout.planSettings = sanitized;
+      else delete layout.planSettings;
       return { ...state, layout };
     }
     case 'setName':

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
 import { makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { emptyEventProfile, updateEventProfile } from './event-profile';
-import { renderDaySheet } from './event-day-sheet';
+import { planTimeZone, renderDaySheet, zoneCalendarDate } from './event-day-sheet';
 import { rosterSchema } from './event-roster';
 import { declareSupplier, supplierLedgerSchema } from './supplier-declarations';
 
@@ -70,5 +70,21 @@ describe('当天执行包（P1-4）', () => {
     expect(html).toContain('演练执行包');
     expect(html).toContain('&lt;script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
+  });
+
+  it('生成于和日历日跟随方案时区，不按 UTC 截断', () => {
+    const at = '2026-11-18T10:00:00.000Z';
+    const shanghai = makeLayout({ id: 'sheet-zone', name: '发布会' });
+    expect(renderDaySheet({ layout: shanghai, generatedAt: at })).toContain('生成于 2026-11-18 18:00（Asia/Shanghai）');
+    const kiritimati = makeLayout({
+      id: 'sheet-zone-kir',
+      planSettings: { timeZone: 'Pacific/Kiritimati' },
+    });
+    expect(planTimeZone(kiritimati)).toBe('Pacific/Kiritimati');
+    expect(zoneCalendarDate(at, 'Pacific/Kiritimati')).toBe('2026-11-19');
+    expect(renderDaySheet({ layout: kiritimati, generatedAt: at })).toContain('生成于 2026-11-19 00:00（Pacific/Kiritimati）');
+    const invalid = makeLayout({ id: 'sheet-zone-bad', planSettings: { timeZone: 'Mars/Olympus' } });
+    expect(planTimeZone(invalid)).toBe('Asia/Shanghai');
+    expect(renderDaySheet({ layout: invalid, generatedAt: at })).toContain('（Asia/Shanghai）');
   });
 });

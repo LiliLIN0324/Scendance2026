@@ -5,6 +5,7 @@ import {
   convertSquareMetres,
   formatArea,
   formatLength,
+  formatReading,
   parseDisplayUnit,
   unitLabel,
 } from './display-units';
@@ -28,6 +29,13 @@ describe('display-units（米制存储 → 界面展示单位）', () => {
 
     it('precision 覆盖默认小数位', () => {
       expect(formatLength(1.23456, 'm', 0)).toBe('1 m');
+    });
+
+    it('读数精度先按米取整，切英尺只改展示', () => {
+      expect(formatReading(1.264, 'm', 0.1)).toBe('1.3 m');
+      expect(formatReading(1.264, 'm', 1)).toBe('1 m');
+      expect(formatReading(1.264, 'ft', 0.1)).toBe(`${(1.3 * FEET_PER_METRE).toFixed(1)} ft`);
+      expect(formatReading(1.264, 'm', 0.01)).toBe('1.26 m');
     });
 
     it('非有限值给占位符', () => {

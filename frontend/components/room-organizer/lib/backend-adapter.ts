@@ -2,6 +2,7 @@ import libraryAssetIds from '../../../../assets/library/asset-ids.json';
 import libraryAssetLabels from '../../../../assets/library/asset-labels.zh.json';
 /** The backend domain is the single wire-format authority. No parallel API schema. */
 import { catalog, presetManifest, sceneSchema, type Scene, type SceneObject } from '../../../../supabase/functions/_shared/domain';
+import { sanitizePlanEditor } from '../../../../supabase/functions/_shared/plan-editor';
 import { dimensionConflicts } from '../../../../supabase/functions/_shared/structural-geometry';
 import { MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { mergeProposalPresentation } from './creative-brief';
@@ -140,7 +141,9 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
       position: { x: column.position.x - scene.venue.width / 2, z: column.position.z - scene.venue.depth / 2 },
       rotation: backendDegreesToEditorRadians(column.rotation), color: '#d1cdc5', locked: true });
   } else items.push(...scene.venue.entrances.map(e => entranceItem(e, scene.venue)));
+  const planSettings = sanitizePlanEditor(scene.editor);
   return {
+    ...(planSettings ? { planSettings } : {}),
     ...(options.projectId ? { id: options.projectId } : {}),
     ...(scene.scenePreset ? { scenePreset: scene.scenePreset } : {}),
     name: options.name ?? '活动场景', width: scene.venue.width, height: scene.venue.depth,
@@ -260,8 +263,12 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
     ...(floor.floorPattern ? { floorPattern: floor.floorPattern } : {}),
     ...(originalFinishes?.wallColors !== undefined || Object.keys(wallColors).length ? { wallColors } : {}),
   };
+  const storedScene = layout.backendSceneV2;
+  const { editor: _storedEditor, ...sceneBody } = storedScene ?? {};
+  const editor = sanitizePlanEditor(layout.planSettings);
   const candidate = {
-    ...(layout.backendSceneV2 ?? {}),
+    ...(storedScene ? sceneBody : {}),
+    ...(editor ? { editor } : {}),
     schemaVersion: layout.backendSceneV2 ? 2 : 1,
     ...(layout.scenePreset ? { scenePreset: layout.scenePreset } : {}),
     venue: { ...(layout.backendVenue ? { ...layout.backendVenue, ...(site ? { site } : { site: undefined }) } : {}), width: layout.width, depth: layout.height, height: floor.height ?? 3, shape: layout.backendVenue?.shape ?? 'rectangle', entrances },

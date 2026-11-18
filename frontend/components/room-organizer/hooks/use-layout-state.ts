@@ -44,6 +44,7 @@ export { INITIAL_LAYOUT };
 export interface LayoutActions {
   setProductionPlan(value: ProductionPlan | undefined): void;
   setEventOperations(value: EventOperations | undefined): void;
+  setPlanSettings(value: import('../../../../supabase/functions/_shared/plan-editor').PlanEditorSettings | undefined): void;
   setName(name: string): void;
   setWidth(width: number): void;
   setHeight(height: number): void;
