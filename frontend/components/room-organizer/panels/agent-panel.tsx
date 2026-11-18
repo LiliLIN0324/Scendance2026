@@ -23,14 +23,14 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AgentTaskExamples } from '@/components/agent-task-examples';
-import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCcw, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
+import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
 import { toolTraceRows } from '../lib/tool-trace';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
-import { Bubbles, GenProgress, ToolCallTrace, type Bubble } from './agent-bubbles';
+import { Bubbles, ToolCallTrace, type Bubble } from './agent-bubbles';
 import { ProposalCard, type ProposalDecision } from './agent-proposal-card';
 import { RouteConfirmCard, VenueConfirmCard, ZoneConfirmCard } from './agent-confirm-cards';
 // 决策留痕：确认卡上点「批准 / 放弃」都记一行，运行卡里读得到（对标谷地工坊的「你拒绝了」）。
@@ -573,6 +573,8 @@ interface AgentValue {
   venuePick: { query: string; candidates: PlaceSuggestion[]; loading: boolean; picking: string | null } | null;
   /** V-1c 锚定链：POI 轮廓 → 行政区 → 起步矩形兜底，走 applyMapVenuePick 落壳。 */
   handleVenuePick(place: PlaceSuggestion): void;
+  /** 2026-11-19 用户指令：候选点选只做地图预览（钉点+飞过去，不写方案），确认才走锚定链。 */
+  previewVenueCandidate(place: PlaceSuggestion): void;
   dismissVenuePick(): void;
   /** V-2d 流线提案（预览态）：虚线画在画布上，确认才 applyRoutes 写入（可撤销）。 */
   routeProposal: RouteProposal | null;
@@ -3784,6 +3786,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     applyMapVenuePick: applyVenuePick,
     venuePick,
     handleVenuePick: place => { void handleVenuePick(place); },
+    previewVenueCandidate: place => { routeBridgeRef.current?.previewVenuePoint?.(place); },
     dismissVenuePick: stopOutdoorTask,
     outdoorTask,
     manualOutdoorVenueApplied: anchor => {
@@ -4687,6 +4690,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {agent.venuePick && <VenueConfirmCard
         state={agent.venuePick}
         onPick={place => agent.handleVenuePick(place)}
+        onPreview={place => agent.previewVenueCandidate(place)}
         onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '场地候选' }); agent.dismissVenuePick(); }}
       />}
       {/* V-2d 流线提案确认卡：虚线预览在画布，应用才写入（可撤销）。 */}
@@ -4712,17 +4716,20 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。
           onRestoreStart：收尾卡「还原到本轮开始」——开跑瞬间的整盘快照一键写回。 */}
       {activity && mode === 'layout' && <AgentRunPanel scope="layout" controls steerInputId="ap-input" onRestoreStart={runStartLayoutRef.current ? () => { const snapshot = runStartLayoutRef.current; if (!snapshot) return false; layoutActions.applyLayout(snapshot); return true; } : undefined}/>}
-      {activity && agent.historyReviewRequired && <section className="ap-card ap-status-card ap-blocked-card" aria-label="历史需求待核对">
-        <span className="ap-blocked-stamp"><Lock size={12} aria-hidden="true"/>待核对</span>
-        <p className="ap-blocked-note">当前记录还未核对。</p>
-        <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
-      </section>}
-      {activity && agent.retainedOtherSessionProposal && <section className="ap-card ap-blocked-card" aria-label="其他会话的旧方案">
-        <span className="ap-blocked-stamp"><RotateCcw size={12} aria-hidden="true"/>旧方案</span>
-        <p className="ap-blocked-note">其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
-        <div className="ap-blocked-actions">
-          <button type="button" className="chip" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
-        </div>
+      {/* 2026-11-19 体检：历史待核对与旧方案两张拦截卡合进一张「开始前要先处理」，
+          每行保留自己的 region 名（测试与读屏锚点不变），同屏时不再像两张待办。 */}
+      {activity && (agent.historyReviewRequired || agent.retainedOtherSessionProposal) && <section className="ap-card ap-status-card ap-blocked-card" aria-label="开始前要先处理">
+        <span className="ap-blocked-stamp"><Lock size={12} aria-hidden="true"/>开始前要先处理</span>
+        {agent.historyReviewRequired && <section className="ap-intercept-row" aria-label="历史需求待核对">
+          <p className="ap-blocked-note">当前记录还未核对。</p>
+          <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
+        </section>}
+        {agent.retainedOtherSessionProposal && <section className="ap-intercept-row" aria-label="其他会话的旧方案">
+          <p className="ap-blocked-note">其他会话有未确认的旧方案，当前会话不能应用；撤回后可以继续生成或导出。</p>
+          <div className="ap-blocked-actions">
+            <button type="button" className="chip" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
+          </div>
+        </section>}
       </section>}
       {activity && agent.unresolvedDialogue.length>0 && <section className="ap-card ap-pending-card" aria-label="尚未处理的要求">
         <span className="ap-blocked-stamp">待处理 · {agent.unresolvedDialogue.length}</span>
@@ -4764,8 +4771,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </section>}
         {preStates && agent.issue && <div className="ap-chips">{agent.issue.kind === 'readFailed' ? <><button type="button" className="chip is-on" onClick={agent.retryFile}>重试</button><button type="button" className="chip" onClick={() => agent.pickFile()}>换个文件</button></> : <button type="button" className="chip is-on" onClick={() => agent.pickFile()}>重新选文件</button>}</div>}
         {/* 第 8 批：云端真跑时用真实步骤时间线（真实进度句 + 真实模型轮数 + 真实耗时），
-            没有真实运行（本机规则模式）才回退到那套写死的步骤条。 */}
-        {(generating || paused) && <GenProgress paused={paused} hidden={runState.scope === 'layout' && runState.eventLog.length > 0} onResume={agent.resume} onWithdraw={agent.withdrawProposal} onStop={agent.stop}/>}
+            没有真实运行（本机规则模式）才回退到那套写死的步骤条。
+            2026-11-19 用户指令：生成中/已暂停卡砍掉——输入框下方已有暂停/播放钮，点播放直接续，
+            卡上的「停一下/接着摆/不要了」成了重复入口。 */}
         {agent.state === 'generateFailed' && <section id="inline-error" className="ap-card ap-error-card" role="alert">
           <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>未完成</span>
           <p className="ap-error-summary">这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
@@ -4786,7 +4794,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </section>}
         {proposed && <ProposalCard
           plan={agent.proposal}
-          decision={proposalDecision}
           cloudBusy={agent.cloudBusy}
           recovering={agent.recovering}
           inventoryBlocked={agent.inventoryBlocked}
