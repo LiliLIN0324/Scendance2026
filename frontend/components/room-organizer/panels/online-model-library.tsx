@@ -710,6 +710,10 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               </ul>}
             </>
             : <>
+            {importSlot ? <section className="sc-my-materials" aria-label="我的物料">
+              <p className="sc-my-materials-label">我的物料</p>
+              {importSlot}
+            </section> : null}
             {/* 库不再挂「按风格配一套」——入口在 Bingo。这里只按类目浏览单件。 */}
             {/* 2026-11-18 用户：搜索要对齐户外目录——胶囊（放大镜 + 输入 + 右侧圆钮）；
                 圆钮切「一行四张」平铺浏览，再点回分类浏览。 */}

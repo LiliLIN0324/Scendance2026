@@ -1,35 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Camera, FileImage, Globe, Sparkles, Upload, X } from '@/components/solid-icons';
+import { Camera, FileImage, Sparkles, X } from '@/components/solid-icons';
 import { type BackendSession, type BackendSnapshot, type GenerationCapabilities } from '@/lib/backend-session';
-import type { CatalogItem } from '../lib/types';
-import {
-  GENERATION_TASK_COPY,
-  backToGenerationChooser,
-  chooseGenerationTask,
-  closeGenerationSheet,
-  generationNeedsCredit,
-  generationPrimaryLabel,
-  generationSheetTitle,
-  generationTargetLabel,
-  generationTaskList,
-  getGenerationSheetState,
-  openGenerationSheet,
-  subscribeGenerationSheet,
-  type GenerationModelSource,
-  type GenerationTask,
-} from '../lib/generation-sheet';
-import {
-  UNKNOWN_SUBMISSION_NOTICE,
-  generationBlockReason,
-  generationFailureDisposition,
-  modeSupports,
-  pickEngine,
-  plainFailure,
-  submitModelJob,
-  uploadModelReference,
-} from '../lib/model-generation';
 import {
   beginGenerationSubmission,
   consumeFacilityGenerateLink,
@@ -42,22 +15,48 @@ import {
   settleGenerationSubmission,
   subscribeGenerationSubmissions,
 } from '../lib/facility-generated-models';
+import {
+  GENERATION_TASK_COPY,
+  backToGenerationChooser,
+  chooseGenerationTask,
+  closeGenerationSheet,
+  generationNeedsCredit,
+  generationPrimaryLabel,
+  generationSheetTitle,
+  generationTargetLabel,
+  generationTaskList,
+  getGenerationSheetState,
+  openGenerationSheet,
+  setGenerationModelSource,
+  subscribeGenerationSheet,
+  type GenerationModelSource,
+  type GenerationTask,
+} from '../lib/generation-sheet';
 import { importDisplayName, newLocalGlbKey, validateLocalGlbPick } from '../lib/glb-import';
 import { subscribeStagedMaterialGenerate } from '../lib/material-generate';
+import {
+  UNKNOWN_SUBMISSION_NOTICE,
+  generationBlockReason,
+  generationFailureDisposition,
+  modeSupports,
+  pickEngine,
+  plainFailure,
+  submitModelJob,
+  uploadModelReference,
+} from '../lib/model-generation';
 import { addMyItem } from '../lib/my-items';
+import type { CatalogItem } from '../lib/types';
 import './generation-sheet.css';
 
 /**
- * 统一生成面板（2026-11-15）：左栏卡片，不是弹窗。
+ * 统一生成面板。
  *
- * 生成入口只剩这一张（轨道「场地」、物料栏的星、画布属性卡三处进来），标题与首层选项按来路走：
- *  - venue   ：重建真实场地 / 生成新场景；
- *  - material：直接进模型表单，结果进模型库；
- *  - facility：直接进模型表单，结果回填那件设施。
+ * 场地来路（2026-11-19）：左栏先给文生 3D / 图生 3D 两张卡片，点一下进现成的模型表单
+ * （source: 'text' | 'image'）。重建真实场地只占位。导入 GLB 不在这张卡片上。
+ * 物料 / 设施来路仍直接进模型表单，导入仍是那张表单里的一种输入。
  *
- * 模型这条已经接真提交：描述/图片走 generated-model-library 同一套 createGenerationJob
- * （lib/model-generation），导入 GLB 走本机导入（会话内有效）。
- * 额度确认只在会真扣额度的操作前出现；导入是本地文件，不勾也不扣。
+ * 模型这条接真提交：描述/图片走 generated-model-library 同一套 createGenerationJob
+ * （lib/model-generation）。额度确认只在会真扣额度的操作前出现，且不会自动勾上。
  */
 const OFFLINE_SNAPSHOT = { user: null, project: null, writeBlocked: false, dirty: false } as unknown as BackendSnapshot;
 const offlineSnapshot = () => OFFLINE_SNAPSHOT;
@@ -72,7 +71,8 @@ function useOptionalCloud(controller?: BackendSession): BackendSnapshot {
   );
 }
 
-export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }: {
+export function GenerationSheetHost({ controller, onAddLocalGlb }: {
+  /** 保留给拍摄向导接线。重建这一轮是占位，面板不会调用它。 */
   onOpenCapture?: (() => void) | undefined;
   /** 云项目会话：模型生成走它的队列。缺省时模型表单只解释为什么不能提交。 */
   controller?: BackendSession | undefined;
@@ -83,12 +83,11 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
   const cardRef = useRef<HTMLElement>(null);
   const cloud = useOptionalCloud(controller);
   const [source, setSource] = useState<GenerationModelSource>('text');
-  const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [credit, setCredit] = useState(false);
   const [photoName, setPhotoName] = useState('');
   const [reference, setReference] = useState<{ id: string; name: string } | null>(null);
-  const [reconInput, setReconInput] = useState<'shoot' | 'upload'>('shoot');
+  const [reconNote, setReconNote] = useState(false);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<GenerationCapabilities | null>(null);
@@ -112,21 +111,21 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
   );
 
   const signedIn = Boolean(cloud.user?.id);
-  const engine = useMemo(() => pickEngine(capabilities, source === 'image' ? 'image' : 'text'), [capabilities, source]);
+  const formSource: GenerationModelSource = state.scope === 'venue' && source === 'import' ? 'text' : source;
+  const engine = useMemo(() => pickEngine(capabilities, formSource === 'image' ? 'image' : 'text'), [capabilities, formSource]);
 
   // 每次换面板/换任务都把表单清干净，免得把上一次的内容带进另一个任务；
-  // 但对话里带进来的那句原话（state.prompt）要落在描述框里。
+  // 但对话里带进来的那句原话（state.prompt）要落在描述框里。额度确认每次都从空开始。
   useEffect(() => {
-    setSource(state.source);
-    setName('');
+    setSource(state.scope === 'venue' && state.source === 'import' ? 'text' : state.source);
     setPrompt(state.prompt);
     setPhotoName('');
     setReference(null);
     setCredit(false);
-    setReconInput('shoot');
+    setReconNote(false);
     setNotice('');
     setBusy(false);
-  }, [state.open, state.task, state.source, state.prompt, state.facility?.id]);
+  }, [state.open, state.task, state.source, state.prompt, state.facility?.id, state.scope]);
 
   // 活动对话里点名「生成物件」：不再弹旧的物料星菜单，直接把原话带进这张面板。
   useEffect(() => subscribeStagedMaterialGenerate(request => {
@@ -164,10 +163,10 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
   if (!state.open) return null;
 
   const tasks: GenerationTask[] = generationTaskList(state.scope);
-  const title = generationSheetTitle(state);
-  const needsCredit = generationNeedsCredit(state.task, source);
-  const primary = generationPrimaryLabel(state.task, source);
-  const sceneSkeleton = '场景生成还没接提交：这一步不会创建任务、也不会扣额度。';
+  const title = generationSheetTitle(state.task === 'model' ? { ...state, source: formSource } : state);
+  const needsCredit = generationNeedsCredit(state.task, formSource);
+  const primary = generationPrimaryLabel(state.task, formSource);
+  const allowImport = state.scope !== 'venue';
   const anyConfigured = Boolean(capabilities && (capabilities.textToModel || capabilities.imageToModel
     || capabilities.aholoTextToModel || capabilities.aholoImageToModel));
   const blocked = generationBlockReason({
@@ -177,7 +176,7 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
     disabled: busy,
     writeBlocked: cloud.writeBlocked,
   });
-  const modeReady = modeSupports(capabilities, source === 'image' ? 'image' : 'text');
+  const modeReady = modeSupports(capabilities, formSource === 'image' ? 'image' : 'text');
   // 正在提交时不要显示「上次结果未知」：那一条 submitting 回执就是本次请求。
   const lockForUi = busy ? null : unknownLock;
   const receiptShown = busy ? null : (unknownLock ?? receipt);
@@ -190,12 +189,15 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
           ? `上次提交未被受理：${receiptShown.message ?? '服务端已拒绝'}。请求号 ${receiptShown.requestId}。`
           : `上次提交尚未核对：请求号 ${receiptShown.requestId}。`
     : '';
+  // 已结束（成功或被明确拒绝）才能再次生成。未知锁可能已经计费，不提供重试入口。
+  const againReady = !busy && state.task === 'model' && formSource !== 'import' && !lockForUi
+    && (receipt?.state === 'submitted' || receipt?.state === 'failed');
 
   /** 模型这条：真提交。额度确认是提交前的闸门，不是提交后的道歉。 */
   const submitModel = async (): Promise<void> => {
     if (!controller) { setNotice('登录云项目后才能生成模型。'); return; }
-    if (!prompt.trim()) { setNotice(source === 'image' ? '先写一句补充描述。' : '先写一句描述。'); return; }
-    if (source === 'image' && !reference) { setNotice('先选一张参考图。'); return; }
+    if (!prompt.trim()) { setNotice(formSource === 'image' ? '先写一句补充描述。' : '先写一句描述。'); return; }
+    if (formSource === 'image' && !reference) { setNotice('先选一张参考图。'); return; }
     if (blocked) { setNotice(blocked); return; }
     if (!modeReady) { setNotice('当前没有开通这种生成方式。'); return; }
     // 上一次结果未知：按钮已经灰了，回车也不能绕过；先查任务记录与费用。
@@ -223,11 +225,11 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
     });
     try {
       const job = await submitModelJob(controller, {
-        mode: source === 'image' ? 'image' : 'text',
+        mode: formSource === 'image' ? 'image' : 'text',
         prompt,
         engine,
         requestId,
-        ...(source === 'image' && reference ? { referenceImageAssetId: reference.id } : {}),
+        ...(formSource === 'image' && reference ? { referenceImageAssetId: reference.id } : {}),
       });
       // 属性卡来路：把 staged 链接落成 taskid↔facility，画布轮询到 ready 就回填模型条首位。
       if (facility) consumeFacilityGenerateLink(job.id, job.prompt || prompt);
@@ -239,10 +241,8 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
       settleGenerationSubmission(requestId, { state: 'submitted', taskid: job.id });
       setNotice(`已提交：任务号 ${job.id}「${job.prompt || prompt}」。${facility
         ? `生成完会回填到「${facility.name}」的模型条。`
-        : '生成完会出现在模型库。'}`);
-      setPrompt('');
-      setReference(null);
-      setPhotoName('');
+        : '生成完会出现在「我的生成」。'}`);
+      // 同一张表单留着，方便不满意时再生成；额度必须重新勾，不会自动再扣。
       setCredit(false);
     } catch (failure) {
       // 无论哪种失败都先清 staged：残留会把下一次生成错挂到这件设施。
@@ -254,6 +254,7 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
         const message = plainFailure(failure);
         settleGenerationSubmission(requestId, { state: 'failed', message });
         setNotice(message);
+        setCredit(false);
       }
     } finally {
       setBusy(false);
@@ -277,7 +278,7 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
 
   /** 导入 GLB：本机文件，不进生成队列、不扣额度。带设施就回填那件设施，否则落进物料库。 */
   const importGlb = async (file: File | undefined): Promise<void> => {
-    if (!file) return;
+    if (!file || !allowImport) return;
     const invalid = validateLocalGlbPick(file);
     if (invalid) { setNotice(invalid); return; }
     setBusy(true);
@@ -321,28 +322,38 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
   };
 
   const primaryAction = (): void => {
-    if (state.task === 'scene-recon' && reconInput === 'shoot') {
-      onOpenCapture?.();
-      closeGenerationSheet();
+    if (state.task !== 'model') return;
+    if (formSource === 'import') {
+      document.getElementById('gs-import-glb-input')?.click();
       return;
     }
-    if (state.task === 'model') {
-      if (source === 'import') {
-        // 主按钮在导入时只是「选文件」：真正读文件走下面那个 input。
-        document.getElementById('gs-import-glb-input')?.click();
-        return;
-      }
-      void submitModel();
-      return;
-    }
-    setNotice(sceneSkeleton);
+    void submitModel();
   };
+
+  /** 再次生成：回到同一张表单。表单还在就沿用当前内容；关掉再开时把上次的描述填回来。不提交、不勾额度。 */
+  const regenerate = (): void => {
+    setCredit(false);
+    setBusy(false);
+    if (!prompt.trim() && receipt?.prompt) setPrompt(receipt.prompt);
+    const field = cardRef.current?.querySelector<HTMLTextAreaElement>('textarea')
+      ?? cardRef.current?.querySelector<HTMLInputElement>('input:not([type="checkbox"]):not([type="file"])');
+    field?.focus();
+  };
+
+  const openVenueModel = (next: 'text' | 'image'): void => {
+    setGenerationModelSource(next);
+    chooseGenerationTask('model');
+  };
+
+  const venueLead = state.source === 'image'
+    ? '上传一张参考图，生成可放进场地的 3D 模型。主体清楚、背景干净即可。'
+    : '用文字描述想要的物件，生成可放进场地的 3D 模型。不需要参考图，也不需要建模经验。';
 
   return (
     <aside
       ref={cardRef}
       id="generation-sheet"
-      className="sc-generation-card"
+      className={`sc-generation-card${state.scope === 'venue' ? ' is-venue' : ''}`}
       aria-label={title}
       data-testid="generation-sheet"
       tabIndex={-1}
@@ -359,75 +370,102 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
       </div>
 
       <div className="gs-body">
-        {state.task === 'choose' ? (
-          <>
-            {/* 2026-11-18 用户：「场地的视觉层次很奇怪，应该和空间和其他面板的字号布局类似」——
-                去掉单独一句加粗问句，入口直接是发丝分隔的行（图标 + 13px 名称 + 11px 说明 + 右侧箭头），
-                和「空间」的分组行同一套读法。 */}
-            <div className="gs-tasks">
-              {tasks.map(task => {
-                const copy = GENERATION_TASK_COPY[task];
-                return (
-                  <button
-                    key={task}
-                    type="button"
-                    className="gs-task"
-                    data-testid={`generation-task-${task}`}
-                    onClick={() => chooseGenerationTask(task)}
-                  >
-                    <span className="gs-task-icon" aria-hidden>
-                      {/* 重建真实场地＝现场拍摄/上传照片视频，主图标用相机；不再用文档扫描框。 */}
-                      {task === 'scene-recon' ? <Camera size={15} /> : task === 'scene-new' ? <Globe size={15} /> : <Sparkles size={15} />}
-                    </span>
-                    <span className="gs-task-text">
-                      <strong>{copy.title}</strong>
-                      <small>{copy.hint}</small>
-                    </span>
-                  </button>
-                );
-              })}
+        {state.task === 'choose' && state.scope === 'venue' ? (
+          <div className="gs-venue">
+            <div className="gs-seg" role="group" aria-label="生成方式">
+              <button type="button" aria-pressed={state.source !== 'image'} onClick={() => setGenerationModelSource('text')}>文生 3D</button>
+              <button type="button" aria-pressed={state.source === 'image'} onClick={() => setGenerationModelSource('image')}>图生 3D</button>
             </div>
-          </>
+            <article className="gs-venue-card">
+              <h2>{state.source === 'image' ? '图片生成 3D 模型' : '文字生成 3D 模型'}</h2>
+              <p className="gs-venue-lead">{venueLead}</p>
+              <div className="gs-venue-stage" aria-hidden="true">
+                {state.source === 'image' ? (
+                  <span className="gs-venue-drop"><FileImage size={16} aria-hidden />参考图在下一步选择</span>
+                ) : (
+                  <span className="gs-venue-prompt">一座带檐的小亭，暖白墙面</span>
+                )}
+              </div>
+              <button type="button" className="gs-venue-go" data-testid="generation-venue-start" onClick={() => openVenueModel(state.source === 'image' ? 'image' : 'text')}>
+                开始创作
+              </button>
+              <p className="gs-hint">完成后出现在物料库「我的生成」。不会自动勾选消耗额度。</p>
+            </article>
+            <button
+              type="button"
+              className="gs-venue-card is-placeholder"
+              data-testid="generation-task-scene-recon"
+              onClick={() => setReconNote(true)}
+            >
+              <span className="gs-venue-placeholder-icon" aria-hidden><Camera size={15} /></span>
+              <span className="gs-venue-placeholder-text">
+                <strong>重建真实场地</strong>
+                <small>现场拍摄，或上传已有的照片、视频。以后会进空间。</small>
+              </span>
+              <em>暂未开放</em>
+            </button>
+            {reconNote ? <p className="gs-notice" role="status" data-testid="generation-recon-closed">暂未开放</p> : null}
+          </div>
+        ) : state.task === 'choose' ? (
+          <div className="gs-tasks">
+            {tasks.map(task => {
+              const copy = GENERATION_TASK_COPY[task];
+              return (
+                <button
+                  key={task}
+                  type="button"
+                  className="gs-task"
+                  data-testid={`generation-task-${task}`}
+                  onClick={() => chooseGenerationTask(task)}
+                >
+                  <span className="gs-task-icon" aria-hidden>
+                    {task === 'scene-recon' ? <Camera size={15} /> : <Sparkles size={15} />}
+                  </span>
+                  <span className="gs-task-text">
+                    <strong>{copy.title}</strong>
+                    <small>{copy.hint}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : state.task === 'scene-recon' ? (
+          <div className="gs-venue-card is-placeholder" data-testid="generation-task-scene-recon">
+            <span className="gs-venue-placeholder-text">
+              <strong>重建真实场地</strong>
+              <small>暂未开放。这一轮不能拍摄，也不能上传。以后重建结果会进空间。</small>
+            </span>
+            <p className="gs-notice" role="status" data-testid="generation-recon-closed">暂未开放</p>
+            <button type="button" className="gs-link" onClick={backToGenerationChooser}>← 返回</button>
+          </div>
         ) : (
           <>
-            <div className="gs-crumb">
-              <button type="button" className="gs-link" onClick={backToGenerationChooser}>← 换任务</button>
-            </div>
+            {state.scope === 'venue' ? (
+              <div className="gs-crumb">
+                <button type="button" className="gs-link" onClick={backToGenerationChooser}>← 返回</button>
+              </div>
+            ) : null}
 
-            {state.task === 'scene-recon' && (
-              <>
-                <div className="gs-seg" role="group" aria-label="重建素材来源">
-                  <button type="button" aria-pressed={reconInput === 'shoot'} onClick={() => setReconInput('shoot')}>
-                    <Camera size={13} aria-hidden /> 现场拍摄
-                  </button>
-                  <button type="button" aria-pressed={reconInput === 'upload'} onClick={() => setReconInput('upload')}>
-                    <Upload size={13} aria-hidden /> 上传
-                  </button>
-                </div>
-                {reconInput === 'shoot' ? (
-                  <p className="gs-hint">用手机绕真实场地拍一段视频（或 Insta360 全景）。卫星图、地图瓦片不能当重建素材。</p>
-                ) : (
-                  <p className="gs-hint">照片至少 20 张、多角度覆盖；视频一条绕场即可。</p>
-                )}
-              </>
-            )}
-
-            {state.task === 'scene-new' && (
-              <>
-                <label className="gs-field">
-                  场景名称
-                  <input value={name} maxLength={60} placeholder="老厂房三层展厅" onChange={event => setName(event.target.value)} />
-                </label>
+            <div className={state.scope === 'venue' ? 'gs-window' : undefined}>
+              <p className="gs-target" data-testid="generation-target">{generationTargetLabel(state.facility)}</p>
+              {receiptText ? (
+                <p className={receiptShown && unknownLock ? 'gs-notice' : 'gs-hint'} data-testid="generation-receipt">{receiptText}</p>
+              ) : null}
+              <div className="gs-seg" role="group" aria-label="模型输入方式">
+                <button type="button" aria-pressed={formSource === 'text'} onClick={() => setSource('text')}>{state.scope === 'venue' ? '文生 3D' : '描述'}</button>
+                <button type="button" aria-pressed={formSource === 'image'} onClick={() => setSource('image')}>{state.scope === 'venue' ? '图生 3D' : '图片'}</button>
+                {allowImport ? <button type="button" aria-pressed={formSource === 'import'} onClick={() => setSource('import')}>导入</button> : null}
+              </div>
+              {formSource === 'text' ? (
                 <div className="gs-composer">
                   <textarea
                     rows={2}
-                    maxLength={400}
-                    aria-label="场地描述"
+                    maxLength={200}
+                    aria-label="描述"
                     value={prompt}
-                    placeholder="一句话描述场地，如：80 人发布会，户外广场"
+                    placeholder={state.facility ? `${state.facility.name}（材质、颜色、尺寸都写上）` : '一句话描述物件，如：一把户外折叠椅'}
                     onChange={event => setPrompt(event.target.value)}
                     onKeyDown={event => {
-                      // 和原来那条输入栏一样：回车就提交，Shift+Enter 换行。
                       if (event.nativeEvent.isComposing || event.key !== 'Enter' || event.shiftKey) return;
                       event.preventDefault();
                       primaryAction();
@@ -438,113 +476,77 @@ export function GenerationSheetHost({ onOpenCapture, controller, onAddLocalGlb }
                     <kbd className="gs-kbd">Enter</kbd>
                   </div>
                 </div>
-                <p className="gs-hint gs-hint--warn">室外场景仍处于 Beta，质量可能不稳定；演示建议用室内文案。</p>
-              </>
-            )}
-
-            {state.task === 'model' && (
-              <>
-                <p className="gs-target" data-testid="generation-target">{generationTargetLabel(state.facility)}</p>
-                {receiptText ? (
-                  <p className={receiptShown && unknownLock ? 'gs-notice' : 'gs-hint'} data-testid="generation-receipt">{receiptText}</p>
-                ) : null}
-                <div className="gs-seg" role="group" aria-label="模型输入方式">
-                  <button type="button" aria-pressed={source === 'text'} onClick={() => setSource('text')}>描述</button>
-                  <button type="button" aria-pressed={source === 'image'} onClick={() => setSource('image')}>图片</button>
-                  <button type="button" aria-pressed={source === 'import'} onClick={() => setSource('import')}>导入</button>
-                </div>
-                {source === 'text' ? (
-                  <div className="gs-composer">
-                    <textarea
-                      rows={2}
-                      maxLength={200}
-                      aria-label="描述"
-                      value={prompt}
-                      placeholder={state.facility ? `${state.facility.name}（材质、颜色、尺寸都写上）` : '一句话描述物件，如：一把户外折叠椅'}
-                      onChange={event => setPrompt(event.target.value)}
-                      onKeyDown={event => {
-                        // 原来那条物料输入栏的回车提交行为保留在这张卡里。
-                        if (event.nativeEvent.isComposing || event.key !== 'Enter' || event.shiftKey) return;
-                        event.preventDefault();
-                        primaryAction();
-                      }}
-                    />
-                    <div className="gs-composer-foot">
-                      <span className="gs-composer-hint">回车生成，Shift+Enter 换行</span>
-                      <kbd className="gs-kbd">Enter</kbd>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* 旧的 <input type=file> 直曝浏览器样式（“选择文件 / 未选择任何文件”），
-                        与卡片其余控件不是一套；换成可点可拖的投放区，真 input 只做隐藏承接。 */}
-                    <label
-                      className={`gs-drop${photoName ? ' has-file' : ''}`}
-                      onDragOver={event => { event.preventDefault(); }}
-                      onDrop={event => { event.preventDefault(); void pickReference(event.dataTransfer.files?.[0]); }}
-                    >
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg"
-                        className="gs-file-input"
-                        disabled={busy}
-                        onChange={event => { void pickReference(event.target.files?.[0]); event.target.value = ''; }}
-                      />
-                      <FileImage size={16} aria-hidden />
-                      <span className="gs-drop-text">
-                        <strong>{photoName || '选一张照片，或拖进来'}</strong>
-                        <small>{photoName ? (reference ? '已上传' : '正在上传…') : 'PNG / JPG，主体清楚、背景干净'}</small>
-                      </span>
-                    </label>
-                    <label className="gs-field">
-                      补充描述
-                      <input value={prompt} maxLength={200} placeholder="按照片做同款，哑光白桌面" onChange={event => setPrompt(event.target.value)} />
-                    </label>
-                  </>
-                )}
-                {source === 'import' ? (
-                  <>
+              ) : null}
+              {formSource === 'image' ? (
+                <>
+                  <label
+                    className={`gs-drop${photoName ? ' has-file' : ''}`}
+                    onDragOver={event => { event.preventDefault(); }}
+                    onDrop={event => { event.preventDefault(); void pickReference(event.dataTransfer.files?.[0]); }}
+                  >
                     <input
-                      id="gs-import-glb-input"
                       type="file"
-                      accept=".glb,model/gltf-binary"
+                      accept="image/png,image/jpeg"
                       className="gs-file-input"
-                      onChange={event => { void importGlb(event.target.files?.[0]); event.target.value = ''; }}
+                      disabled={busy}
+                      onChange={event => { void pickReference(event.target.files?.[0]); event.target.value = ''; }}
                     />
-                    <p className="gs-hint">单文件 .glb，≤10 MB；仅本次编辑有效，刷新后需重新导入。</p>
-                  </>
+                    <FileImage size={16} aria-hidden />
+                    <span className="gs-drop-text">
+                      <strong>{photoName || '选一张参考图，或拖进来'}</strong>
+                      <small>{photoName ? (reference ? '已上传' : '正在上传…') : 'PNG / JPG，主体清楚、背景干净'}</small>
+                    </span>
+                  </label>
+                  <label className="gs-field">
+                    补充描述
+                    <input value={prompt} maxLength={200} placeholder="按照片做同款，哑光白桌面" onChange={event => setPrompt(event.target.value)} />
+                  </label>
+                </>
+              ) : null}
+              {formSource === 'import' ? (
+                <>
+                  <input
+                    id="gs-import-glb-input"
+                    type="file"
+                    accept=".glb,model/gltf-binary"
+                    className="gs-file-input"
+                    onChange={event => { void importGlb(event.target.files?.[0]); event.target.value = ''; }}
+                  />
+                  <p className="gs-hint">单文件 .glb，≤10 MB；仅本次编辑有效，刷新后需重新导入。</p>
+                </>
+              ) : null}
+
+              {needsCredit ? (
+                <label className="gs-credit">
+                  <input type="checkbox" checked={credit} disabled={busy} onChange={event => setCredit(event.target.checked)} />
+                  消耗额度
+                </label>
+              ) : null}
+
+              {notice ? <p className="gs-notice" role="status">{notice}</p> : null}
+
+              {/* 禁用按钮在部分浏览器里不弹出 title，拦下「生成」的原因必须写在按钮旁边。 */}
+              {formSource !== 'import' && blocked ? (
+                <p className="gs-hint gs-hint--warn" data-testid="generation-block-reason">{blocked}</p>
+              ) : null}
+
+              <div className="gs-actions">
+                <button type="button" className="gs-cancel" onClick={closeGenerationSheet}>取消</button>
+                {againReady ? (
+                  <button type="button" className="gs-again" data-testid="generation-again" onClick={regenerate}>再次生成</button>
                 ) : null}
-              </>
-            )}
-
-            {needsCredit ? (
-              <label className="gs-credit">
-                <input type="checkbox" checked={credit} disabled={busy} onChange={event => setCredit(event.target.checked)} />
-                消耗额度
-              </label>
-            ) : null}
-
-            {notice ? <p className="gs-notice" role="status">{notice}</p> : null}
-
-            {/* 2026-11-18：Chrome 里禁用按钮常常不弹出 title，拦下「生成」的原因必须写在按钮旁边。 */}
-            {state.task === 'model' && source !== 'import' && blocked ? (
-              <p className="gs-hint gs-hint--warn" data-testid="generation-block-reason">{blocked}</p>
-            ) : null}
-
-            <div className="gs-actions">
-              <button type="button" className="gs-cancel" onClick={closeGenerationSheet}>取消</button>
-              <button
-                type="button"
-                className="gs-primary"
-                data-testid="generation-primary"
-                disabled={busy || Boolean(lockForUi) || (needsCredit && !credit) || (state.task === 'model' && source !== 'import' && Boolean(blocked))}
-                title={(lockForUi ? UNKNOWN_SUBMISSION_NOTICE : blocked) || undefined}
-                onClick={primaryAction}
-              >
-                {busy ? '提交中…' : primary}
-              </button>
+                <button
+                  type="button"
+                  className="gs-primary"
+                  data-testid="generation-primary"
+                  disabled={busy || Boolean(lockForUi) || (needsCredit && !credit) || (formSource !== 'import' && Boolean(blocked))}
+                  title={(lockForUi ? UNKNOWN_SUBMISSION_NOTICE : blocked) || undefined}
+                  onClick={primaryAction}
+                >
+                  {busy ? '提交中…' : primary}
+                </button>
+              </div>
             </div>
-            {state.task !== 'model' ? <p className="gs-foot">{sceneSkeleton}</p> : null}
           </>
         )}
       </div>

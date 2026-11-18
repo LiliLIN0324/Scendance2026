@@ -4780,12 +4780,11 @@ useEffect(() => {
                 </button>
                 <button type="button"
                   className={`sc-rail-tool sc-rail-disc sc-rail-capture${captureOpen || generationOpen ? ' is-active' : ''}`}
-                  /* 2026-11-15 用户拍板：这颗钮同时承接「重建真实场地」与「生成新场景」，
-                     所以叫「场地」，点开先并列问做哪件；现场拍摄/上传照片都从重建设支进去。 */
+                  /* 2026-11-19：场地钮打开文生 / 图生卡片。重建真实场地只占位，不再从这里进拍摄。 */
                   aria-pressed={captureOpen || generationOpen}
                   aria-expanded={captureOpen || generationOpen}
                   aria-controls="generation-sheet workbench-capture-card"
-                  aria-label="场地：重建真实场地，或生成新场景"
+                  aria-label="场地：文生 3D、图生 3D，或重建真实场地"
                   data-tip="场地"
                   onClick={() => {
                     // 再点一次收起，和拍摄卡/户外卡同一种手感。
