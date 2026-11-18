@@ -1,0 +1,152 @@
+{
+  "ranAt": "2026-11-18T22:53:23.340Z",
+  "account": "walkthrough-79@scendance.test",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "setup": {
+    "candidates": [
+      "1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米)",
+      "2 杭州湖滨银泰in77 A区 东坡路7号",
+      "3 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+      "4 杭州湖滨银泰in77 C1区 延安路258号(龙翔桥地铁站D口旁)",
+      "5 杭州湖滨in77地下停车场 东坡路7号in77杭州湖滨银泰A区B1",
+      "6 IN77购物中心 延安路258号杭州湖滨银泰in77"
+    ],
+    "venueButton": "就定这个场地（杭州湖滨银泰in77）",
+    "rangeButton": " 确认并应用这一版",
+    "plan": {
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-18T22:53:26.208Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-7jblibyk": {
+        "projectId": "house-7jblibyk",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-18T22:54:03.561Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 574
+      },
+      "scendance-outdoor-last-v1": "default-outdoor"
+    }
+  },
+  "apply1": {
+    "drive": {
+      "ok": true,
+      "trace": [
+        {
+          "round": 0,
+          "action": "approve-plan",
+          "button": "批准并执行"
+        },
+        {
+          "round": 1,
+          "action": "proposal-ready",
+          "button": " 确认分区并预览物料排布"
+        }
+      ]
+    },
+    "button": " 确认分区并预览物料排布",
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-7jblibyk",
+      "counts": {
+        "zones": 2,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 1438
+    },
+    "writes": [
+      "POST 200 /functions/v1/conversation-api/assistant/chat/stream",
+      "PUT 200 /functions/v1/scene-api/outdoor-history",
+      "PUT 404 /functions/v1/scene-api/outdoor-plans"
+    ]
+  },
+  "undo": {
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-7jblibyk",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 574
+    },
+    "writes": []
+  },
+  "reapply": {
+    "drive": {
+      "ok": true,
+      "trace": [
+        {
+          "round": 0,
+          "action": "approve-plan",
+          "button": "批准并执行"
+        },
+        {
+          "round": 1,
+          "action": "proposal-ready",
+          "button": " 确认分区并预览物料排布"
+        }
+      ]
+    },
+    "button": " 确认分区并预览物料排布",
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-7jblibyk",
+      "counts": {
+        "zones": 2,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 1438
+    },
+    "writes": [
+      "POST 200 /functions/v1/conversation-api/assistant/chat/stream",
+      "PUT 200 /functions/v1/scene-api/outdoor-history",
+      "PUT 404 /functions/v1/scene-api/outdoor-plans"
+    ]
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()"
+  ]
+}

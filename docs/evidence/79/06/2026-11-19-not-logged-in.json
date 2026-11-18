@@ -1,0 +1,127 @@
+{
+  "scenario": "未登录（无会话）",
+  "at": "2026-11-18T22:37:08.553Z",
+  "cookieKeys": [],
+  "authRequests": [],
+  "venueConfirm": "not-found",
+  "textareaDisabled": false,
+  "textareaPlaceholder": "例如：先找杭州 IN77，核对其中本次可用的活动范围",
+  "taskCardText": "需要补充 没有候选，请补充城市或地址 在「杭州湖滨银泰in77」做设计 已完成 2 步 · 查看最近步骤 我理解为「杭州湖滨银泰in77」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 没搜到候选场地。换个说法再说一句，或点右栏「地图选址」手动圈。 在杭州杭州湖滨银泰in77做设计 可在下面继续补充要求；预览不等于已写入方案。",
+  "bodySnippet": "当前物料 0 件 · 场地容量待核验\n·\n再加两个摊位区\n执行资料\n\n\n\n周末共创工作坊\n1 个\n\n再加两个摊位区\n\n\n还没定在哪。先在地图上定地点、圈出可用范围，或直接说出城市/场馆/地址；地点定了再谈布置、动线和分区。这句我先留着。 下一步：在地图上选地点。\n\n需要补充\n没有候选，请补充城市或地址\n\n在「杭州湖滨银泰in77」做设计\n\n已完成 2 步 · 查看最近步骤\n\n我理解为「杭州湖滨银泰in77」，设为场地？\n\n点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。\n\n没搜到候选场地。换个说法再说一句，或点右栏「地图选址」手动圈。\n\n在杭州杭州湖滨银泰in77做设计\n\n可在下面继续补充要求；预览不等于已写入方案。\n\n告诉 Agent 要改的\n默认（按服务端配置）\n\n杭州湖滨银泰in77\n1\n杭州湖滨银泰in77\n有轮廓\n延安路258号(龙翔桥地铁站C口步行200米)\n2\n杭州湖滨银泰in77 A区\n东坡路7号\n3\n杭州湖滨银泰in77 E区\n延安路与邮电路交叉口西南100米\n4\n杭州湖滨银泰in77 C3区\n延安路258号银泰百货(龙翔桥地铁站D口步行330米)\n5\n杭州湖滨银泰广场\n延安路245号杭州湖滨银泰in77B区F3层\n6\n杭州湖滨in77B区\n延安路245号\n图层\n2D\n\n\n\n工具",
+  "summary": {
+    "cards": [
+      "需要补充 没有候选，请补充城市或地址 在「杭州湖滨银泰in77」做设计 已完成 2 步 · 查看最近步骤 我理解为「杭州湖滨银泰in77」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的",
+      "我理解为「杭州湖滨银泰in77」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 没搜到候选场地。换个说法再说一句，或点右栏「地图选址」手动圈。"
+    ],
+    "buttons": [
+      {
+        "t": "执行资料",
+        "d": false,
+        "cls": "ap-delivery-entry"
+      },
+      {
+        "t": "周末共创工作坊",
+        "d": false,
+        "cls": "sc-activity-island-main"
+      },
+      {
+        "t": "1 个 ",
+        "d": false,
+        "cls": "sc-activity-island-toggle"
+      },
+      {
+        "t": "在杭州杭州湖滨银泰in77做设计",
+        "d": false,
+        "cls": "ap-option-row"
+      },
+      {
+        "t": "默认（按服务端配置）",
+        "d": false,
+        "cls": "ap-provider-summary"
+      },
+      {
+        "t": "1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米)",
+        "d": false,
+        "cls": "sc-plan-place-search-option "
+      },
+      {
+        "t": "2 杭州湖滨银泰in77 A区 东坡路7号",
+        "d": false,
+        "cls": "sc-plan-place-search-option"
+      },
+      {
+        "t": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+        "d": false,
+        "cls": "sc-plan-place-search-option"
+      },
+      {
+        "t": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行3",
+        "d": false,
+        "cls": "sc-plan-place-search-option"
+      },
+      {
+        "t": "5 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层",
+        "d": false,
+        "cls": "sc-plan-place-search-option"
+      },
+      {
+        "t": "6 杭州湖滨in77B区 延安路245号",
+        "d": false,
+        "cls": "sc-plan-place-search-option"
+      },
+      {
+        "t": "图层",
+        "d": false,
+        "cls": "oc-layer-entry"
+      },
+      {
+        "t": "2D",
+        "d": false,
+        "cls": "oc-gm-round oc-gm-mode"
+      }
+    ]
+  },
+  "planState": {
+    "scendance-outdoor-plan-v1:house-xw4v9ikc": {
+      "projectId": "house-xw4v9ikc",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:37:04.898Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:36:58.369Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-last-v1": "default-outdoor"
+  },
+  "chatRequests": [],
+  "allApiRequests": [
+    "GET 200 /api/amap-place?keywords=%E6%9D%AD%E5%B7%9E+IN77&limit=6&center=120.085000%2C30.215000",
+    "GET 200 /api/tdt-area?keywords=%E6%9D%AD%E5%B7%9E+IN77&limit=3&near=120.085000%2C30.215000",
+    "GET 200 /api/place-shape?name=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77&near=120.163749%2C3",
+    "GET 200 /api/place-shape-hints?q=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77",
+    "GET 200 /api/amap-place?keywords=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77&limit=6&center=1",
+    "GET 200 /api/tdt-area?keywords=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77&limit=3&near=120.0"
+  ],
+  "consoleErrors": []
+}

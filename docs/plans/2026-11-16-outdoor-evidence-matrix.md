@@ -261,3 +261,33 @@ replica-specs-gov-1.ts(29,78): 同上
 | #11 导出入口 | **partial** | partial | n/a | 在活动 A 登记交付面板启用/禁用矩阵；PDF、效果图、旧云 Run 仍 blocked | `11/2026-11-18-case11-round5-button-matrix.md` |
 
 本轮计数：**pass 1 / partial 8 / blocked 2 / fail 0**（#3、#6 维持 blocked）。架构事实订正：`outdoor-history` 是卡片历史副本；规划本体有独立 `outdoor-plans` 表与版本保护（`baseRevision` / conflict / force），户外链路不走室内 `/proposals/apply` 契约。门禁仍关，签字只能由人。
+
+### 8.8 第六轮：真实登录态 + 真实云端打通，浏览器一栏补齐，云端一栏被部署缺口挡住（2026-11-19）
+
+环境：正式站 `https://scendance-scence-planner-ewz.pages.dev/`；账号 `walkthrough-79@scendance.test`（本轮新建的走查专用账号）；真实云端 `wkhfvnzgopjdzxlmycks`。台架 `docs/evidence/79/tools/`（Playwright + HAR + CDP 级离线 + Supabase 管理 API 只读 SQL）。台账 `docs/evidence/79/walkthrough.json`（schemaVersion 2）。
+
+**本轮先解决的三个前提**（此前五轮都缺）：
+
+1. **登录态**：会话存在 **cookie** 里（`sb-wkhfvnzgopjdzxlmycks-auth-token = "base64-" + base64url(JSON(session))`），不是 localStorage——注 localStorage 无效，这正是前几轮走不通模型路的原因之一；会话本身用管理 API `admin/generate_link` → `verify` → `refresh_token` 换。
+2. **模型通道已恢复**：第五轮的 `provider_error` 本轮不复现，`conversation-api/assistant/chat/stream` 返回 200 与真实思考流。
+3. **台架可复跑**：HAR 全程录制；离线改用 CDP 级 `context.setOffline`（比页面级注入更接近真断网）。
+
+| 用例 | 本轮结论 | 浏览器 | 云端 | 关键读数 | 证据 |
+| --- | --- | --- | --- | --- | --- |
+| #1 空白项目+组合需求+地点范围 | **partial** | **pass** | blocked | 空白项目真建成（新活动 11-19 06:47，全 0）；6 条候选 → 就定这个场地 → 红线 12 点入画布；账号物料库已非空（种入 1 条真实 Aholo 素材，sha256 逐字一致） | `01/2026-11-19-case01-round6.md` |
+| #2 同名地点 | **pass** | pass | pass | 沿用第三轮证据，本轮未重跑 | `02/2026-11-18-case02-*.md` |
+| #3 改口采纳 | **partial** | partial | blocked | 模型通道 200 恢复；小改前后候选对照未取到 | `03/2026-11-19-case03.json` |
+| #4 无范围先发设计句 | **partial** | partial | blocked | 前半段复现：零 `/assistant/chat`、只给唯一下一步（「这句我先留着。下一步：在地图上选地点。」）；后半段未跑 | `07/2026-11-19-case07-08-round6.md` |
+| #5 离线 | **partial** | partial | unclaimed | CDP 级离线：检索无候选、本机方案零变化、无写请求；恢复后无静默重放 | `05/2026-11-19-offline-readings.json` |
+| #6 四类阻塞 | **partial** | partial | n/a | 「未登录」已单独触发：零认证调用、零模型请求、如实退回；另三类需改云端环境变量 | `06/2026-11-19-case06-not-logged-in.md` |
+| #7 说等等 | **partial** | **pass** | blocked | 待预览说「等等」→ 旧提案按钮消失、本机零变化、云端零写；重发拿到新提案 | `07/2026-11-19-case07-08-round6.md` |
+| #8 刷新/双点/切项目 | **partial** | partial | blocked | 8b 双点（<300ms）第二次点击时按钮已消失，画布分区 0→2 只应用一次；8a/8c 未跑 | `08/2026-11-19-v2-double-click-apply.png` |
+| #9 撤销回读 | **partial** | **pass** | blocked | 应用(分区2/1438B) → Ctrl+Z 撤销(分区0/574B，红线保留，**撤销期间零云端写**) → 重发再应用(分区2/1438B，逐项一致) | `09/2026-11-19-case09-round6.md` |
+| #10 失败+本地成功 | **partial** | partial | unclaimed | 真实失败：物料摆放「整批未写入」；纯本地成功：待续需求退回（零模型零写）；仍缺服务端日志关联 | `07/2026-11-19-case07-08-round6.md` §7 |
+| #11 导出与旧 Run | **partial** | partial | n/a | 户外导出实测落盘 csv(157B) + geojson(1444B)；云端确有 4 条历史 run（2026-11-11，3 complete + 1 failed/AGENT_DEADLINE），其项目在「所有方案」里可见 | `11/2026-11-19-exports.json`、`11/2026-11-19-old-agent-run.json` |
+
+本轮计数：**pass 1 / partial 10 / blocked 0 / fail 0**。浏览器一栏从"只有 #2"增到 **#1 / #2 / #7 / #9**。
+
+**云端一栏为什么集体 blocked**：正式站前端已调用 `PUT /outdoor-plans`，但线上 `scene-api`（2026-11-16 16:49Z 部署）**没有该端点**（函数体里 `outdoor-plans` 子串不存在，只有 `outdoor-history`），DB 侧 `20261117180000` / `20261117190000` 两条迁移未应用 → `scene_private.outdoor_plans` 表不存在 → `revision` 前后对照与 `undoGroup` 读数取不到。这是**部署错配**，不是代码缺陷（main 里前端与后端都在）。证据与复跑命令见 `docs/evidence/79/00/2026-11-19-deploy-gap.md`。
+
+门禁仍关（11 条里 1 条三类全绿），签字只能由人。

@@ -1,0 +1,180 @@
+{
+  "ranAt": "2026-11-18T22:58:27.996Z",
+  "account": "walkthrough-79@scendance.test",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "setup": {
+    "candidates": [
+      "1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米)",
+      "2 杭州湖滨银泰in77 A区 东坡路7号",
+      "3 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+      "4 杭州湖滨银泰in77 C1区 延安路258号(龙翔桥地铁站D口旁)",
+      "5 杭州湖滨in77地下停车场 东坡路7号in77杭州湖滨银泰A区B1",
+      "6 IN77购物中心 延安路258号杭州湖滨银泰in77"
+    ],
+    "venueButton": "就定这个场地（杭州湖滨银泰in77）",
+    "rangeButton": " 确认并应用这一版",
+    "plan": {
+      "scendance-outdoor-plan-v1:house-oo4l1v72": {
+        "projectId": "house-oo4l1v72",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-18T22:59:10.980Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 574
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-18T22:58:30.241Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-last-v1": "default-outdoor"
+    }
+  },
+  "beforeProposal": {
+    "scendance-outdoor-plan-v1:house-oo4l1v72": {
+      "projectId": "house-oo4l1v72",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:59:10.980Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 574
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:58:30.241Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-last-v1": "default-outdoor"
+  },
+  "applyHit": null,
+  "afterApply": {
+    "scendance-outdoor-plan-v1:house-oo4l1v72": {
+      "projectId": "house-oo4l1v72",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:59:10.980Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 574
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:58:30.241Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-last-v1": "default-outdoor"
+  },
+  "afterChange": {
+    "scendance-outdoor-plan-v1:house-oo4l1v72": {
+      "projectId": "house-oo4l1v72",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:59:10.980Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 574
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-18T22:58:30.241Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-last-v1": "default-outdoor"
+  },
+  "taskText": "",
+  "calls": [
+    "POST 200"
+  ],
+  "sseTail": [
+    "\"改\"}\n\nevent: thought\ndata: {\"text\":\"走\"}\n\nevent: thought\ndata: {\"text\":\"场地\"}\n\nevent: thought\ndata: {\"text\":\"北\"}\n\nevent: thought\ndata: {\"text\":\"侧的\"}\n\nevent: thought\ndata: {\"text\":\"仁\"}\n\nevent: thought\ndata: {\"text\":\"和\"}\n\nevent: thought\ndata: {\"text\":\"路\"}\n\nevent: thought\ndata: {\"text\":\"、\"}\n\nevent: thought\ndata: {\"text\":\"避开\"}\n\nevent: thought\ndata: {\"text\":\"湖\"}\n\nevent: thought\ndata: {\"text\":\"滨\"}\n\nevent: thought\ndata: {\"text\":\"路\"}\n\nevent: thought\ndata: {\"text\":\"，\"}\n\nevent: thought\ndata: {\"text\":\"但\"}\n\nevent: thought\ndata: {\"text\":\"本轮\"}\n\nevent: thought\ndata: {\"text\":\"上下\"}\n\nevent: thought\ndata: {\"text\":\"文中\"}\n\nevent: thought\ndata: {\"text\":\"没有\"}\n\nevent: thought\ndata: {\"text\":\"「\"}\n\nevent: thought\ndata: {\"text\":\"仁\"}\n\nevent: thought\ndata: {\"text\":\"和\"}\n\nevent: thought\ndata: {\"text\":\"路\"}\n\nevent: thought\ndata: {\"text\":\"」\"}\n\nevent: thought\ndata: {\"text\":\"的真实\"}\n\nevent: thought\ndata: {\"text\":\"对象\"}\n\nevent: thought\ndata: {\"text\":\"ID\"}\n\nevent: thought\ndata: {\"text\":\"，\"}\n\nevent: thought\ndata: {\"text\":\"需要\"}\n\nevent: thought\ndata: {\"text\":\"先\"}\n\nevent: thought\ndata: {\"text\":\"搜\"}\n\nevent: thought\ndata: {\"text\":\"地点\"}\n\nevent: thought\ndata: {\"text\":\"。\"}\n\nevent: done\ndata: {\"status\":\"provider_error\",\"answer\":null}\n\n"
+  ],
+  "writes": [
+    "POST 200 /functions/v1/conversation-api/assistant/chat/stream"
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()"
+  ],
+  "cloud": {
+    "status": 201,
+    "rows": [
+      {
+        "tbl": null
+      }
+    ]
+  }
+}
