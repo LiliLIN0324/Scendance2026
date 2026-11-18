@@ -29,6 +29,10 @@ export interface BingoFeedbackPin {
   source: BingoFeedbackSource;
   pinStatus?: 'open' | 'resolved';
   placement?: string;
+  /** 户外钉的 ENU 锚点；楼层钉也有，供列表定位用。 */
+  x?: number;
+  z?: number;
+  floorId?: string;
 }
 
 export interface BingoPlanFeedback {
@@ -117,8 +121,11 @@ export function feedbackSummaryLabel(feedback: BingoPlanFeedback, returned: bool
   return '还没有甲方钉评';
 }
 
-function mapSharePin(pin: ReviewPin & { author?: string | undefined; createdAt?: string | undefined }): BingoFeedbackPin {
-  const placement = pin.itemId ? `物件 ${pin.itemId}` : `地面 (${Math.round(pin.x * 10) / 10}, ${Math.round(pin.z * 10) / 10})`;
+function mapSharePin(pin: ReviewPin & { author?: string | undefined; createdAt?: string | undefined; floorId?: string | undefined }): BingoFeedbackPin {
+  const outdoor = pin.floorId === 'outdoor';
+  const placement = outdoor
+    ? `户外 (${Math.round(pin.x * 10) / 10}, ${Math.round(pin.z * 10) / 10}) 米`
+    : pin.itemId ? `物件 ${pin.itemId}` : `地面 (${Math.round(pin.x * 10) / 10}, ${Math.round(pin.z * 10) / 10})`;
   return {
     id: pin.id,
     author: pin.author?.trim() || '甲方钉评',
@@ -128,6 +135,9 @@ function mapSharePin(pin: ReviewPin & { author?: string | undefined; createdAt?:
     source: 'share-pin',
     pinStatus: pin.status,
     placement,
+    x: pin.x,
+    z: pin.z,
+    ...(pin.floorId ? { floorId: pin.floorId } : {}),
   };
 }
 
