@@ -165,8 +165,8 @@
 
 ## 9. 本轮执行结果（2026-11-18 第三轮 · #2 与 #5）
 
-正式站 `https://scendance-scence-planner-ewz.pages.dev/`（main `4fc210aa`，登录态有效），会话内置 Browser，真实鼠标事件。
-（走查全程用旧拼写别名，规范域名是 `scendance-scene-planner-ewz.pages.dev`；该别名 origin 下的 API 全部 200。）
+正式站 `https://scendance-scene-planner-ewz.pages.dev/`（main `4fc210aa`，登录态有效），会话内置 Browser，真实鼠标事件。
+（规范域名。2026-11-18 订正：早期文档把这里写成 `scendance-scence-...`，该域名 DNS NXDOMAIN；检索载荷已在规范域名上复核，5 条 id/坐标一致。）
 证据原始文件在 `docs/evidence/79/02/` 与 `docs/evidence/79/05/`；矩阵那一侧改在 `docs/plans/2026-11-16-outdoor-evidence-matrix.md` §1 / §8。
 
 | 用例 | 本轮结论 | 记录本 | 云端键 | 证据目录 |

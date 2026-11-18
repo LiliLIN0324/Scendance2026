@@ -8,7 +8,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 正式站 | `https://scendance-scence-planner-ewz.pages.dev/`（**旧拼写别名**；规范域名是 `scendance-scene-planner-ewz.pages.dev`）。本轮浏览器全程走这个旧拼写别名，该 origin 下的 API 全部 200；本机 curl 对它仍是 TLS 握手失败，与 2026-11-17 记录一致 |
+| 正式站 | `https://scendance-scene-planner-ewz.pages.dev/`（**规范域名**）。**2026-11-18 订正**：早期版本此处写作 `scendance-scence-planner-ewz.pages.dev`，该域名在本地 DNS、8.8.8.8、1.1.1.1 均为 NXDOMAIN，无法解析；检索载荷已在规范域名上复核，5 条 id/坐标一致。原会话的 20 个 GET 计数与零写结论不变，host 以本行为准 |
 | 部署 | main `4fc210aa`（Pages check-run `completed / success`；runtime `webpack-3f9947c905c7cfde.js`；chunk 内命中本轮三处修复标记） |
 | 账号 | 已登录（工作室 `8b033463-3511-4ac4-96d3-e558e49f507f`，成员列表 200） |
 | 补充跑 | 本机 dev 实例 `http://localhost:3211/`（`main@4fc210aa` 的 `next dev`，复用已在本机运行的 3199 天地图/高德代理；**未登录**，所以云端列只在正式站取证） |
@@ -57,6 +57,7 @@
 - 地图确实飞到所选坐标（截图 `2026-11-18-2105-case02-local3211-picked-liuliuhe.png`：画面已是北京房山琉璃河一带，
   同时下拉里 4 条同名候选并存、左侧对话卡弹出「我理解为「街心公园」，设为场地?」并给出 **1./2./3. 街心公园** 三个同名按钮 +「都不是，换个说法」）。
 - `plan.anchor` **未变**（120.1460368, 30.2521924）→ 定位钉是纯视图辅助，不写 plan/anchor，与代码注释一致。
+- **2026-11-18 复核（规范域名）**：`GET /api/amap-place?keywords=街心公园&limit=10` → 200，5 条候选，id/坐标与 §2 第 4 步完全一致。
 
 ### ③ 真实云端
 

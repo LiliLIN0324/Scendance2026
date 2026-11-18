@@ -6,6 +6,7 @@ import {
   BROWSER_EVIDENCE,
   CASE_IDS,
   EVIDENCE_AS_OF,
+  UNSET_ROUND_AS_OF,
   browserEvidenceFrom,
   defaultLedger,
   evidenceAsOf,
@@ -118,10 +119,19 @@ describe('浏览器证据可注入', () => {
     expect(ledger.some((row) => row.id === 12)).toBe(false);
   });
 
-  it('走查日期跟着记录走；写成空白就回落到常量', () => {
-    expect(evidenceAsOf({ asOf: '2026-11-18 走查第三轮', seen: {} })).toBe('2026-11-18 走查第三轮');
+  it('日期不跨轮：标过证据没填日期就明说未填，不拿上一轮顶替', () => {
+    expect(evidenceAsOf({ seen: { 2: 'pass' }, asOf: '2026-11-18 走查第三轮' })).toBe('2026-11-18 走查第三轮');
+    expect(evidenceAsOf({ seen: { 2: 'pass' } })).toBe(UNSET_ROUND_AS_OF);
+    // 只填了日期、一条都没标：浏览器列仍是快照，日期也必须跟快照一致。
+    expect(evidenceAsOf({ seen: {}, asOf: '2026-11-18 走查第三轮' })).toBe(EVIDENCE_AS_OF);
     expect(evidenceAsOf({ asOf: '   ', seen: {} })).toBe(EVIDENCE_AS_OF);
     expect(evidenceAsOf()).toBe(EVIDENCE_AS_OF);
+  });
+
+  it('标了证据却没填日期时，卡片不再写上一轮的日期', () => {
+    const text = card({ seen: { 2: 'pass' } });
+    expect(text).toContain(UNSET_ROUND_AS_OF);
+    expect(text).not.toContain(EVIDENCE_AS_OF);
   });
 
   it('快照的浏览器三档升序、合起来正好覆盖 11 条（不重不漏）', () => {

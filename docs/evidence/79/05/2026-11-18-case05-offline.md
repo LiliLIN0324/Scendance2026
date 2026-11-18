@@ -23,7 +23,7 @@
   所以「地图部分（瓦片）」这一维度的降级**本轮没验到**。
 - **不覆盖**：应用自带的超时（`AbortSignal.timeout`）与真实网络抖动的区别 —— 注入是立即 reject，比真实超时更硬。
 
-## 2. 步骤与读数（正式站 `scendance-scence-planner-ewz.pages.dev`，登录态）
+## 2. 步骤与读数（正式站 `scendance-scene-planner-ewz.pages.dev`，登录态）
 
 ### ① 切离线 → ② 进选址/搜索
 
