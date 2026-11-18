@@ -1137,6 +1137,39 @@ button.ap-ghost {
 .ap-card-actions > .btn-primary:disabled,
 .ap-card-actions > .btn-outline:disabled,
 .ap-card-actions > .ap-quiet-action:disabled { opacity: .55; cursor: not-allowed; }
+/* 2026-11-19 用户实测：分区用途反问卡（2026-11-18 拆出的独立小卡）只有结构没有样式，
+   落进页面就是「无框输入框 + 灰字按钮 + 一枚缩水小胶囊」，和走查稿第 14 项不是一回事。
+   这里把这卡自己的排版补齐，不依赖 .sc-agent-panel 前缀（换容器也不塌）：
+   标题 → 一行说明 → 整行输入框 → 两颗同高按钮。 */
+.ap-zones-ask { gap: 10px; }
+.ap-zones-ask > .ap-card-head { margin: 0; }
+.ap-zones-ask > .ap-card-head strong { font-size: var(--fs-c1); font-weight: 600; line-height: var(--lh-c1); color: var(--wk-ink); }
+.ap-zones-ask-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ap-zones-ask-form > input {
+  grid-column: 1 / -1; min-width: 0; height: 36px; padding: 0 12px; margin: 0;
+  border: 1px solid var(--wk-hair); border-radius: var(--r-sm);
+  background: var(--wk-paper); color: var(--wk-ink);
+  font-family: inherit; font-size: var(--fs-p1); line-height: 1;
+  -webkit-appearance: none; appearance: none;
+}
+.ap-zones-ask-form > input::placeholder { color: var(--faint); }
+.ap-zones-ask-form > input:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; border-color: var(--wk-ink-soft); }
+.ap-zones-ask-form > .btn-primary,
+.ap-zones-ask-form > .btn-outline {
+  height: 36px; min-width: 0; padding: 0 10px; margin: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm); font-family: inherit; font-size: var(--fs-p2); font-weight: 500;
+  white-space: nowrap; cursor: pointer; -webkit-appearance: none; appearance: none;
+  transition: background var(--dur-1) var(--ease-spec), border-color var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec);
+}
+.ap-zones-ask-form > .btn-primary { border: 1px solid var(--ink); background: var(--ink); color: #fff; }
+.ap-zones-ask-form > .btn-primary:hover:not(:disabled) { border-color: #2A2C31; background: #2A2C31; }
+/* 空输入时主按钮是「灰面 + 淡字」，仍是一颗 36px 的按钮，不是一行灰字。
+   --plane 就是 #FFF（白），拿它当禁用底色等于没底色，用 plane-deep。 */
+.ap-zones-ask-form > .btn-primary:disabled { border-color: var(--wk-hair); background: var(--plane-deep); color: var(--faint); cursor: not-allowed; }
+.ap-zones-ask-form > .btn-outline { border: 1px solid var(--wk-hair); background: var(--wk-paper); color: var(--wk-ink-soft); }
+.ap-zones-ask-form > .btn-outline:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane); color: var(--wk-ink); }
+.ap-zones-ask-form > .btn-outline:disabled { opacity: .55; cursor: not-allowed; }
 /* 2026-11-18 用户指令「随画随出卡」：手画分区时任务卡下方出分区清单卡，每分区一张子卡；
    名称/用途输入框 + 室内外两个 chip + 删除。原内嵌引导 .ap-card-guide 随 S3 拆卡退役删除。 */
 .ap-zones-list .ap-card-head span { color: var(--wk-muted); font-size: var(--fs-cap); }
@@ -1426,11 +1459,19 @@ button.ap-ghost {
 .ap-panel-info { width: 26px; height: 26px; padding: 0; align-items: center; justify-content: center; border-radius: 999px; color: var(--wk-muted); transition: background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec); }
 .ap-panel-info:hover { background: var(--plane-deep); color: var(--wk-ink-soft); }
 .ap-panel-info[aria-expanded="true"] { background: var(--plane-deep); color: var(--wk-ink); }
-/* 附件条 / 排队提示 / 告警 / 存盘失败：全部浮层盖在输入区上方，出现消失不撑高 composer、不顶歪圆钮与 ⓘ 基线。 */
-/* 待发截图：最多 10 张排成一行横滚，仍盖在输入区上方，不撑高 composer。 */
-.ap-file-chips { position: absolute; top: 8px; left: 8px; right: 48px; z-index: 3; display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
-.ap-file-chips::-webkit-scrollbar { height: 0; }
-.ap-file-chip { flex: none; max-width: 200px; }
+/* 排队提示 / 告警 / 存盘失败仍是浮层：出现消失不撑高 composer、不顶歪圆钮与 ⓘ 基线。 */
+/* 待发截图：2026-11-19 用户指令：不再浮层盖住打字区，改走正常流贴在打字区上方，
+   加图就把输入卡往上顶一行、删图自动收回；每张是「缩略图在上、文件名在下」的竖卡，
+   一行横滚不换行（滚动条常驻可见，鼠标滚轮/拖动都能使），不会把面板吃掉。 */
+.ap-file-chips { flex: none; display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 10px 12px 2px; scrollbar-width: thin; scrollbar-color: var(--wk-hair) transparent; }
+.ap-file-chips::-webkit-scrollbar { height: 4px; }
+.ap-file-chips::-webkit-scrollbar-thumb { background: var(--wk-hair); border-radius: 999px; }
+.ap-file-chips::-webkit-scrollbar-track { background: transparent; }
+/* 竖卡：缩略图占满上半宽高，文件名走下一行；叉号浮在缩略图右上角，不占文字行。 */
+.ap-file-chip { position: relative; flex: none; width: 88px; max-width: 88px; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px; }
+.ap-file-chip .sc-chat-file-thumb { width: 100%; height: 62px; border-radius: 8px; }
+.ap-file-chip .sc-chat-file-name { min-width: 0; padding: 0 2px 1px; font-size: var(--fs-cap); line-height: 1.35; text-align: center; }
+.ap-file-chip .sc-chat-file-remove { position: absolute; top: 0; right: 0; margin: 0; width: 18px; height: 18px; background: color-mix(in srgb, var(--wk-paper) 90%, transparent); box-shadow: 0 0 0 1px var(--wk-hair); }
 .ap-field-note { position: absolute; top: 8px; left: 12px; right: 48px; z-index: 3; margin: 0; font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-muted); }
 .ap-field-alert { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3; padding: 6px 8px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); box-shadow: var(--e1); font-size: var(--fs-cap); line-height: 1.4; color: var(--wk-ink-soft); }
 .ap-field-alert p { margin: 0 0 6px; }
