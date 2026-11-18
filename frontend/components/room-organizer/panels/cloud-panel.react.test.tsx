@@ -1160,15 +1160,29 @@ describe('CloudPanel section entry points', () => {
     expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
   });
 
-  it('keeps support to four items and puts the site and repository on 关于', () => {
+  it('lists the site and repository in support and keeps them on 关于', () => {
     queue([]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: '终树' }]);
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
     openAvatarMenu();
     expect(screen.queryByRole('menuitem', { name: '退出登录' })).toBeTruthy();
+    const account = screen.getByRole('menu', { name: '账户菜单' });
+    expect(within(account).queryByRole('menuitem', { name: '产品官网' })).toBeNull();
+    expect(within(account).queryByRole('menuitem', { name: 'GitHub 仓库' })).toBeNull();
     fireEvent.click(screen.getByRole('menuitem', { name: '支持' }));
     const support = screen.getByRole('menu', { name: '支持' });
+    const labels = within(support).getAllByRole('menuitem').map(item =>
+      Array.from(item.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent ?? '').join('').trim(),
+    );
+    expect(labels).toEqual(['新手指引', '产品官网', 'GitHub 仓库', '键盘快捷键', '发送反馈', '关于']);
     expect(within(support).getByRole('menuitem', { name: '新手指引' }).getAttribute('href')).toBe('/guide');
+    const home = within(support).getByRole('menuitem', { name: '产品官网' });
+    expect(home.getAttribute('href')).toBe('/introduction');
+    expect(home.getAttribute('target')).toBeNull();
+    const repo = within(support).getByRole('menuitem', { name: 'GitHub 仓库' });
+    expect(repo.getAttribute('href')).toBe('https://github.com/LiliLIN0324/Scendance2026');
+    expect(repo.getAttribute('target')).toBe('_blank');
+    expect(repo.getAttribute('rel')).toBe('noopener noreferrer');
     expect(within(support).getByRole('menuitem', { name: '键盘快捷键' })).toBeTruthy();
     expect(within(support).getByRole('menuitem', { name: '发送反馈' })).toBeTruthy();
     expect(within(support).getByRole('menuitem', { name: '关于' })).toBeTruthy();
