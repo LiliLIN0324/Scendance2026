@@ -4,6 +4,8 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { ROOM_OBJECT_TAGS } from './room-builder';
 import { planFootprintShapes, type PlanFootprintStrokeShape, type ShellPoint } from '../lib/plan-footprint-geometry';
 import { buildGroundLabel, buildPlanGroundSticker, buildPlanPropObject } from './plan-props-builder';
+import { addIndoorWalls } from './plan-indoor-walls';
+import { isDoorTemplateId } from '../lib/plan-indoor-walls';
 import { workerRoleColor, workerSticker } from '../lib/oneplan-stickers';
 import { libraryEntryColor } from '../lib/oneplan-library';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -300,6 +302,27 @@ export function buildPlanFootprint(
     const zoneBorder = borderLine(THREE, zone.points, metrics, zone.color, Math.min(0.9, zone.opacity + 0.35), ELEVATION.zone, lineMaterials, 2);
     if (zoneBorder) group.add(zoneBorder);
   }
+
+  // 2026-11-18 用户口径：3D 里室内分区边线向上挤出 3.5 m 墙；吸附在边上的门在墙上开 2 m 洞。
+  // 靠 2D 那套「贴边吸附」判门在不在墙上——没吸到边的门不开洞（用户：「就在场地上出现一个莫名其妙的门」）。
+  // 色块/物件都是「壳体坐标再减半个场地」落到 group 内的，墙必须用同一把尺子，否则整层墙会偏半个场地。
+  const toLocal = (point: ShellPoint): ShellPoint => ({
+    x: point.x - metrics.width / 2,
+    z: point.z - metrics.depth / 2,
+  });
+  const zoneEnvironment = new Map(plan.zones.map(zone => [zone.id, zone.environment] as const));
+  addIndoorWalls(
+    THREE,
+    group,
+    shapes.zones.map(zone => ({
+      id: zone.id,
+      environment: zoneEnvironment.get(zone.id),
+      points: zone.points.map(toLocal),
+    })),
+    shapes.props
+      .filter(prop => isDoorTemplateId(prop.templateId))
+      .map(prop => ({ id: prop.id, center: toLocal(prop.center), widthM: prop.width })),
+  );
 
   // 设施：按平面上的占地矩形 + 朝向铺一块地贴（"物料在哪儿"先落在个真实占位上）。
   for (const facility of shapes.facilities) {
