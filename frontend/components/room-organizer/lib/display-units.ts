@@ -1,3 +1,4 @@
+import type { LengthPrecisionM } from '../../../../supabase/functions/_shared/plan-editor';
 import type { DisplayUnit } from './types';
 
 /**
@@ -22,6 +23,15 @@ export function formatLength(metres: number, unit: DisplayUnit, precision?: numb
   const value = convertMetres(metres, unit);
   const digits = precision ?? (unit === 'ft' ? 1 : 2);
   return `${value.toFixed(digits)} ${unit === 'ft' ? 'ft' : 'm'}`;
+}
+
+/** 先按米制步长取整，再换成当前显示单位。切英尺只改读数。 */
+export function formatReading(metres: number, unit: DisplayUnit, stepM: LengthPrecisionM = 0.01): string {
+  if (!Number.isFinite(metres)) return '—';
+  const step = stepM > 0 ? stepM : 0.01;
+  const rounded = Math.round(metres / step) * step;
+  const digits = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+  return formatLength(rounded, unit, unit === 'ft' && step >= 1 ? 0 : digits);
 }
 
 /** 面积读数（m² / ft²），一位小数。 */

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CURRENCIES, isLogoUrl, planEditorSchema } from './plan-editor.ts';
 import { canonical, sha256 } from './domain.ts';
 
 /**
@@ -142,6 +143,10 @@ export const planQuoteSchema = z.strictObject({
   client: z.string().min(1).max(120).optional(),
   validUntil: z.string().min(1).max(40).optional(),
   preparedBy: z.string().min(1).max(120).optional(),
+  /** 本方案对公司名的覆盖；缺省跟随团队。 */
+  companyName: z.string().min(1).max(120).optional(),
+  currency: z.enum(CURRENCIES).optional(),
+  logoUrl: z.string().min(1).max(80_000).refine(isLogoUrl, 'logo').optional(),
 });
 export type PlanQuote = z.infer<typeof planQuoteSchema>;
 
@@ -427,6 +432,11 @@ export const sitePlanDataSchema = z.strictObject({
   priceBook: z.record(z.string().min(1).max(160), z.number().min(0).max(1_000_000)).optional(),
   /** 2026-11-17 报价单抬头。旧数据不带照常解析；空对象也不必落盘。 */
   quote: planQuoteSchema.optional(),
+  /**
+   * 本方案编辑设置（网格、吸附步进、微移、时区、通道与摊位）。
+   * 旧数据不带照常解析；内部尺寸仍是米。
+   */
+  editor: planEditorSchema.optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
     ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'], ['walls', '墙体'],

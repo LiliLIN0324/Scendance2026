@@ -10,7 +10,8 @@ type ThreeModule = typeof import('three');
 export function buildGridPlane(
   THREE: ThreeModule,
   width: number,
-  depth: number
+  depth: number,
+  gridSize = GRID_SIZE_METERS,
 ): import('three').Mesh<import('three').PlaneGeometry, import('three').MeshBasicMaterial> {
   // 约 96 px/m，边长截到 512–2048，避免小房间糊成一片、大房间吃显存。
   const longSide = Math.min(2048, Math.max(512, Math.round(Math.max(width, depth) * 96)));
@@ -24,13 +25,13 @@ export function buildGridPlane(
     ctx.strokeStyle = '#ddd';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let k = Math.ceil(-width / 2 / GRID_SIZE_METERS); k * GRID_SIZE_METERS <= width / 2; k += 1) {
-      const p = Math.round((k * GRID_SIZE_METERS + width / 2) / width * pxW) + 0.5;
+    for (let k = Math.ceil(-width / 2 / gridSize); k * gridSize <= width / 2; k += 1) {
+      const p = Math.round((k * gridSize + width / 2) / width * pxW) + 0.5;
       ctx.moveTo(p, 0);
       ctx.lineTo(p, pxH);
     }
-    for (let k = Math.ceil(-depth / 2 / GRID_SIZE_METERS); k * GRID_SIZE_METERS <= depth / 2; k += 1) {
-      const p = Math.round((k * GRID_SIZE_METERS + depth / 2) / depth * pxH) + 0.5;
+    for (let k = Math.ceil(-depth / 2 / gridSize); k * gridSize <= depth / 2; k += 1) {
+      const p = Math.round((k * gridSize + depth / 2) / depth * pxH) + 0.5;
       ctx.moveTo(0, p);
       ctx.lineTo(pxW, p);
     }

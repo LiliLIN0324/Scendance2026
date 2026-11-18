@@ -178,10 +178,25 @@ export interface BackendSnapshot {
   error: BackendFailure | null;
 }
 
-/** 用户级界面偏好（云端账号维度）。缺失字段由前端补本地默认值；工程底稿始终存米。 */
+/** 用户级界面偏好（云端账号维度）。缺失字段回退本机，不回退产品默认；工程底稿始终存米。 */
 export interface AccountPreferences {
   unit?: 'm' | 'ft';
   showMeasurements?: boolean;
+  lengthPrecisionM?: 0.01 | 0.1 | 1;
+  snapToGrid?: boolean;
+  snapToWall?: boolean;
+  snapToItems?: boolean;
+}
+
+/** 工作室级默认。只影响新报价的抬头，以及之后新建的方案。 */
+export interface StudioSettings {
+  companyName?: string;
+  quoteContact?: string;
+  logoUrl?: string;
+  currency?: 'CNY' | 'USD' | 'EUR' | 'GBP' | 'JPY';
+  defaultUnit?: 'm' | 'ft';
+  defaultAisleClearM?: number;
+  defaultBoothSpacingM?: number;
 }
 
 /** 户外活动概览（后端发号的 activityId 是跨设备身份）。 */
@@ -932,6 +947,21 @@ export class BackendSession {
   /** 回写当前账号的界面偏好；只提交白名单字段，不触碰项目 / 租约状态。 */
   async savePreferences(prefs: AccountPreferences): Promise<AccountPreferences> {
     return this.businessRequest<AccountPreferences>("/preferences", "PATCH", prefs);
+  }
+  /** 工作室默认（报价抬头、新建方案的单位和通道）。未登录时由调用方停在本机个人偏好。 */
+  async getStudioSettings(studioId: string): Promise<StudioSettings> {
+    return this.businessRequest<StudioSettings>(`/studios/${encodeURIComponent(studioId)}/settings`, "GET");
+  }
+  async saveStudioSettings(studioId: string, patch: {
+    companyName?: string | null | undefined;
+    quoteContact?: string | null | undefined;
+    logoUrl?: string | null | undefined;
+    currency?: 'CNY' | 'USD' | 'EUR' | 'GBP' | 'JPY' | null | undefined;
+    defaultUnit?: 'm' | 'ft' | null | undefined;
+    defaultAisleClearM?: number | null | undefined;
+    defaultBoothSpacingM?: number | null | undefined;
+  }): Promise<StudioSettings> {
+    return this.businessRequest<StudioSettings>(`/studios/${encodeURIComponent(studioId)}/settings`, "PATCH", patch);
   }
   /**
    * 2026-11-17：户外引导卡历史跟活动存后端（换设备 / 清缓存不丢）。

@@ -2,6 +2,7 @@ import { handoffSchema } from '../../../../supabase/functions/_shared/delivery-c
 import { materialIds, uuid, venueSchema, sceneSchema } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, type EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import { sanitizePlanEditor } from '../../../../supabase/functions/_shared/plan-editor';
 import { eventProfileSchema } from '../../../lib/event-profile';
 import { orientMapShellNorthUp } from './amap-venue';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
@@ -377,6 +378,7 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
   if (!isPlainObject(value)) return false;
   const v = value;
 
+  if (v.planSettings !== undefined && !isPlainObject(v.planSettings)) return false;
   if (v.eventOperations !== undefined && !eventOperationsSchema.safeParse(v.eventOperations).success) return false;
   if (v.productionPlan !== undefined && !productionPlanSchema.safeParse(v.productionPlan).success) return false;
   if (v.eventProfile !== undefined && !eventProfileSchema.safeParse(v.eventProfile).success) return false;
@@ -589,6 +591,7 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
 }
 
 const LAYOUT_KEYS = keysOf<RoomLayout>({
+  planSettings: true,
   eventProfile: true,
   productionPlan: true,
   eventOperations: true,
@@ -907,7 +910,15 @@ function repairLayout(layout: RoomLayout): RoomLayout {
   if (layout.roof) patch.roof = repairRoof(layout.roof);
   if (layout.terrain) patch.terrain = pick(layout.terrain, TERRAIN_KEYS);
   if (layout.entrance) patch.entrance = pick(layout.entrance, ENTRANCE_KEYS);
-  return rebuild(layout, LAYOUT_KEYS, patch);
+  const editor = sanitizePlanEditor(layout.planSettings);
+  if (editor) patch.planSettings = editor;
+  const rebuilt = rebuild(layout, LAYOUT_KEYS, patch);
+  if (layout.planSettings !== undefined && !editor) {
+    const cleaned = { ...rebuilt };
+    delete cleaned.planSettings;
+    return cleaned;
+  }
+  return rebuilt;
 }
 
 /**

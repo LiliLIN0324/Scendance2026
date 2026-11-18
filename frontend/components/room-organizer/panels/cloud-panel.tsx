@@ -5,8 +5,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { AuthCard } from '@/components/intro/auth-card';
-import { ShortcutReference } from '@/components/room-organizer/panels/shortcut-reference';
-import { DoorOpen, Images, MoreHorizontal, RefreshCw, Settings, Trash2, UserRound, UsersRound, X } from '@/components/solid-icons';
+import { SettingsPage, type SettingsPane, type SettingsPreferences } from '@/components/room-organizer/panels/settings-page';
+import { AccountMenu, openShortcutCoach } from '@/components/room-organizer/panels/account-menu';
+import type { FeedbackPlanContext } from '@/components/room-organizer/panels/feedback-dialog';
+import { useDialogFocus } from '../hooks/use-dialog-focus';
+import { rememberStudioSettings } from '../lib/studio-settings-cache';
+import { sanitizeStudioSettings, type StudioSettings, type StudioSettingsPatch } from '../../../../supabase/functions/_shared/plan-editor';
+import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
+import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
+import { MoreHorizontal, RefreshCw, Trash2, UserRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
@@ -32,7 +39,7 @@ import type {LocalWriteCapability} from '@/lib/local-write-lease';
 import type {ActivitySessionToken} from '../lib/activity-session-epoch';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: { lengthUnit: DisplayUnit; showMeasurements: boolean }; onPreferenceChange?: (patch: { lengthUnit?: DisplayUnit; showMeasurements?: boolean }) => void }
+interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: SettingsPreferences; onPreferenceChange?: (patch: Partial<SettingsPreferences>) => void; onPlanSettingsChange?: (next: PlanEditorSettings | undefined) => void; siteQuote?: PlanQuote | undefined; planContext?: FeedbackPlanContext; onCapturePlan?: () => Promise<string | null> | string | null }
 
 /** 点在对话框边框外（背后遮罩）才关。面板里的点击、按钮都不关。 */
 export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): void {
@@ -42,7 +49,7 @@ export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): voi
   if (!inside) event.currentTarget.close();
 }
 
-type AccountSection = 'projects' | 'assets' | 'team' | 'settings';
+type AccountSection = 'projects' | 'assets';
 
 const PREVIEW_LIMIT = 12;
 const ORIGINAL_SCENE_SUBMISSION_ENABLED:boolean=false;
@@ -76,10 +83,10 @@ function coverMark(): JSX.Element {
 
 type TrashProjectSummary = { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string };
 
-export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp }: Props): JSX.Element {
+export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp, onPlanSettingsChange, siteQuote, planContext, onCapturePlan }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
-  const preferences = preferencesProp ?? { lengthUnit: 'm' as DisplayUnit, showMeasurements: true };
+  const preferences = preferencesProp ?? { lengthUnit: 'm' as DisplayUnit, showMeasurements: true, lengthPrecisionM: 0.01 as const, snapToGrid: false, snapToWall: false, snapToItems: false };
   const onPreferenceChange = onPreferenceChangeProp ?? (() => undefined);
   const cloud = useBackendSession(controller);
   const requestedProjectId = useSearchParams()?.get('project');
@@ -104,10 +111,39 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const actionPending = useRef(false);
   const projectedCreation=useRef<{base:RoomLayout;projectId:string}|null>(null);
   const [section, setSection] = useState<AccountSection>('projects');
-  const [settingsPane, setSettingsPane] = useState<'personal' | 'shortcuts'>('personal');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPaneRequest, setSettingsPaneRequest] = useState<{ serial: number; pane: SettingsPane }>({ serial: 0, pane: 'personal' });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const settingsDialogRef = useRef<HTMLDivElement>(null);
+  const settingsCloseRef = useRef<HTMLButtonElement>(null);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+  const [studioSettings, setStudioSettings] = useState<StudioSettings | null>(null);
+  const [studioSettingsStatus, setStudioSettingsStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'signed-out'>('idle');
+  const [studioSettingsError, setStudioSettingsError] = useState('');
+  useEffect(() => {
+    if (!settingsOpen) return undefined;
+    if (!cloud.user || cloud.user.is_anonymous) {
+      setStudioSettingsStatus('signed-out');
+      return undefined;
+    }
+    if (!studioId) return undefined;
+    let cancel = false;
+    setStudioSettingsStatus('loading');
+    controller.getStudioSettings(studioId).then(value => {
+      if (cancel) return;
+      const next = sanitizeStudioSettings(value);
+      setStudioSettings(next);
+      rememberStudioSettings(studioId, next);
+      setStudioSettingsStatus('ready');
+      setStudioSettingsError('');
+    }).catch(error => {
+      if (cancel) return;
+      setStudioSettingsStatus('error');
+      setStudioSettingsError(error instanceof Error ? error.message : '团队默认没有读到。');
+    });
+    return () => { cancel = true; };
+  }, [settingsOpen, cloud.user, controller, studioId]);
   const [noticeError, setNoticeError] = useState(false);
-  // 成员页要取云端团队数据：第一次点开才挂载，之后一直留着，避免反复打列表。
-  const [teamMounted, setTeamMounted] = useState(false);
   const [query, setQuery] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
@@ -196,8 +232,6 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }, 0);
     return () => window.clearTimeout(timer);
   }, [userId, requestedProjectId, busy, cloud.writeBlocked, cloud.project?.id]);
-  useEffect(() => { if (section === 'team') setTeamMounted(true); }, [section]);
-
   // /auth 已改成「进工作台 + 自动弹登录浮窗」；标记只在 ?login=1 时置位。
   const loginRequested = useRef(false);
   // 2026-11-14 修复：原生 dialog.showModal() 会把焦点给第一个可聚焦元素（右上关闭钮），
@@ -209,7 +243,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   useEffect(()=>{const openLogin=()=>{loginRequested.current=true;setSection('projects');setAccountOpen(true);if(!dialog.current?.open)dialog.current?.showModal();focusAuthEmail();};window.addEventListener('scendance:request-account-login',openLogin);return()=>window.removeEventListener('scendance:request-account-login',openLogin);},[]);
 
   useEffect(() => {
-    setProjects([]); setTrash([]); setTrashOpen(false); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setTeamMounted(false);
+    setProjects([]); setTrash([]); setTrashOpen(false); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setSettingsOpen(false); setMenuOpen(false);
     setReadOnlyProjects({});setCachedProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
     if (!userId) {
       openedRequest.current = ''; showNotice(''); setLoadingProjects(false);
@@ -228,14 +262,28 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }).catch(() => { if (!cancelled) showNotice('项目加载失败，请点击刷新重试。', true); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
-  // 左轨成员位、分区直达都用 openRequest 指定落在哪一格（projects / assets / team）。
+  // 左轨成员位打开「团队」时进设置的团队页；项目和物料仍打开原来的账户窗。
   const openedOpenRequest = useRef(0);
   useEffect(() => {
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
     openedOpenRequest.current = openRequest.serial;
-    setSection(openRequest.section as AccountSection);
+    if (openRequest.section === 'team' || openRequest.section === 'settings') {
+      if (!controller.getSnapshot().user) {
+        setSection('projects');
+        setAccountOpen(true);
+        if (!dialog.current?.open) dialog.current?.showModal();
+        focusAuthEmail();
+        return;
+      }
+      setMenuOpen(false);
+      setSettingsPaneRequest(current => ({ serial: current.serial + 1, pane: openRequest.section === 'team' ? 'team' : 'personal' }));
+      setSettingsOpen(true);
+      return;
+    }
+    setSection(openRequest.section === 'assets' ? 'assets' : 'projects');
+    setMenuOpen(false);
     if (!dialog.current?.open) { setAccountOpen(true); dialog.current?.showModal(); focusAuthEmail(); }
-  }, [openRequest]);
+  }, [openRequest, controller]);
   useEffect(() => {
     if (!localHandoff && fingerprint && fingerprint !== lastObserved.current) {
       lastObserved.current = fingerprint;
@@ -742,11 +790,19 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }, [accountOpen, cloud.user, section, sceneConnection, canvasCoverId]);
   // §二.4 默认在云上：状态只说结果，不解释文件存在哪。
   const saveStatus = conversionError ? '本机草稿' : sceneConnection ? '场景已连接' : !cloud.user || !bound ? '草稿' : cloud.writeBlocked ? '只读' : dirty ? '有改动' : '已保存';
+  useDialogFocus(settingsOpen, settingsDialogRef, {
+    initialFocusRef: settingsCloseRef,
+    onEscape: () => setSettingsOpen(false),
+    trap: true,
+  });
   const activeStudio = studios.find(studio => studio.id === studioId) ?? studios[0];
   // 左上角只认身份：有邮箱就写邮箱，没有再用显示名 / 访客。角色和团队名在下面列表里已有。
-  const accountIdentity = cloud.user?.email?.trim()
-    || activeStudio?.displayName?.trim()
-    || (cloud.user?.is_anonymous ? '访客' : cloud.user ? '我的账户' : '访客');
+  const signedInAccount = !!cloud.user && !cloud.user.is_anonymous;
+  const menuName = !signedInAccount
+    ? '访客'
+    : (activeStudio?.displayName?.trim() || cloud.user?.email?.trim() || '我的账户');
+  const menuStudio = cloud.user ? (activeStudio?.name?.trim() || '') : '';
+  const accountIdentity = menuName;
   const readOnlyStudio = (activeStudio?.role as string | undefined) === 'viewer';
   // Figma 式团队切换：记住的默认工作室由 preferredStudio 给出，左栏只负责把它摆出来并允许换一个。
   // 左栏点团队：切换工作室并回到项目列表（物料 / 团队页不必先点「← 项目」）。
@@ -825,10 +881,82 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     {activeStudio?.role === 'owner' && <button type="button" className="sc-account-team-remove" aria-label={`删除团队${activeStudio.name}`} title={activeStudio.name} disabled={busy} onClick={() => { if (!window.confirm(`删除团队「${activeStudio.name}」？\n\n· 团队里还有项目时会拦下，先把项目移入「最近删除」\n· 删除后成员立即失去访问权，需要重新邀请`)) return; void run(async () => { await removeStudio(activeStudio); }); }}>删除团队</button>}
   </nav>;
 
+  function openAccountSection(next: AccountSection): void {
+    setMenuOpen(false);
+    setSection(next);
+    setAccountOpen(true);
+    if (!dialog.current?.open) dialog.current?.showModal();
+    focusAuthEmail();
+  }
+  function openSettings(pane: SettingsPane): void {
+    setMenuOpen(false);
+    setSettingsPaneRequest(current => ({ serial: current.serial + 1, pane }));
+    setSettingsOpen(true);
+  }
+  function signOutFromMenu(): void {
+    void run(async () => {
+      await flushSourceScope(layoutRef.current.id ?? 'local');
+      await controller.signOut();
+      setProjects([]);
+      setStudios([]);
+      setBoundLayout(undefined);
+      setSavedFingerprint(null);
+      setMenuOpen(false);
+      setSettingsOpen(false);
+      dialog.current?.close();
+    });
+  }
+
   return <>
-    <button ref={triggerRef} className="sc-cloud-trigger" type="button" aria-label="账户中心" title="账户中心 · 身份、团队与项目" aria-haspopup="dialog" onClick={() => { setSection('projects'); setAccountOpen(true); dialog.current?.showModal(); focusAuthEmail(); }}>
+    <button ref={triggerRef ?? avatarButtonRef} className="sc-cloud-trigger" type="button" aria-label="账户菜单" title="账户" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}>
       <span className="sc-account-trigger-avatar" aria-hidden="true"><img src={avatar.src} alt=""/></span>
     </button>
+    <AccountMenu
+      open={menuOpen}
+      onClose={() => setMenuOpen(false)}
+      anchorRef={triggerRef ?? avatarButtonRef}
+      displayName={menuName}
+      studioName={menuStudio}
+      showSignOut={!!cloud.user}
+      busy={busy}
+      onOpenProjects={() => openAccountSection('projects')}
+      onOpenAssets={() => openAccountSection('assets')}
+      onOpenSettings={() => openSettings('personal')}
+      onSignOut={signOutFromMenu}
+      {...(planContext ? { plan: planContext } : {})}
+      {...(onCapturePlan ? { onCapturePlan } : {})}
+    />
+    {settingsOpen && typeof document !== 'undefined' ? createPortal(
+      <div className="sc-settings-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
+        <div ref={settingsDialogRef} className="sc-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="sc-settings-title" tabIndex={-1}>
+          <button ref={settingsCloseRef} type="button" className="sc-settings-close" aria-label="关闭设置" onClick={() => setSettingsOpen(false)}>×</button>
+          <SettingsPage
+            preferences={preferences}
+            onPreferenceChange={onPreferenceChange}
+            preferenceStatus={cloud.user && !cloud.user.is_anonymous ? '已登录：本机先记下，再同步到账号。云端失败不挡画布。' : '未登录：只存在这台设备。'}
+            layout={layout}
+            {...(onPlanSettingsChange ? { onPlanSettingsChange } : {})}
+            {...(siteQuote ? { siteQuote } : {})}
+            signedIn={!!cloud.user && !cloud.user.is_anonymous}
+            studioRole={studios.find(item => item.id === studioId)?.role ?? null}
+            studioSettings={studioSettings}
+            studioStatus={cloud.user && !cloud.user.is_anonymous ? studioSettingsStatus : 'signed-out'}
+            {...(studioSettingsError ? { studioError: studioSettingsError } : {})}
+            onSaveStudioSettings={async (patch: StudioSettingsPatch) => {
+              if (!studioId) throw new Error('还没有团队。');
+              const saved = sanitizeStudioSettings(await controller.saveStudioSettings(studioId, patch));
+              setStudioSettings(saved);
+              rememberStudioSettings(studioId, saved);
+              setStudioSettingsStatus('ready');
+            }}
+            paneRequest={settingsPaneRequest}
+            teamPanel={<AccountTeamPanel key={`team-${userId ?? 'local'}`} controller={controller} onStudioRenamed={(targetId, name) => setStudios(current => current.map(item => item.id === targetId ? { ...item, name } : item))} />}
+            onOpenShortcuts={openShortcutCoach}
+          />
+        </div>
+      </div>,
+      document.body,
+    ) : null}
     {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className={`sc-cloud-dialog sc-account-dialog${cloud.user ? '' : ' is-auth'}`} aria-labelledby="cloud-title" onClose={() => { setAccountOpen(false); onClose?.(); }} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>
       {cloud.user ? <div className="sc-account-scroll">
       <h2 id="cloud-title" className="sc-account-title-hidden">账户中心</h2>
@@ -843,13 +971,6 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
           <strong title={accountIdentity}>{accountIdentity}</strong>
           {!cloud.user && <span>登录后同步项目与团队</span>}
         </div>
-        {/* 退出收在三点；物料 / 团队管理落在左栏团队列表下方。 */}
-        {cloud.user && <details className="sc-account-more sc-account-profile-more">
-          <summary aria-label="更多" title="更多"><MoreHorizontal size={16} aria-hidden="true"/></summary>
-          <div className="sc-account-more-menu" role="group" aria-label="更多账户操作">
-            <button type="button" aria-label="退出登录" disabled={busy} onClick={event => { (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open'); void run(async () => { await flushSourceScope(layoutRef.current.id ?? 'local'); await controller.signOut(); setProjects([]); setStudios([]); setBoundLayout(undefined); setSavedFingerprint(null); }); }}><DoorOpen size={14} aria-hidden="true"/>退出登录</button>
-          </div>
-        </details>}
         {avatarPickerOpen && cloud.user && <div className="sc-account-avatar-picker" role="group" aria-label="预设头像">
           <span className="sc-account-avatar-picker-title">选择头像</span>
           {AVATAR_PRESETS.map(item => <button key={item.id} type="button" title={item.name} aria-label={item.name} aria-pressed={avatar.id === item.id} onClick={() => { setAvatar(item); saveAvatar(userId, item.id); setAvatarPickerOpen(false); }}><img src={item.src} alt=""/></button>)}
@@ -857,16 +978,11 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         {/* 未登录时浮窗整块是 AuthCard，这里不再放第二套登录入口。 */}
       </div>
       {teamNav}
-      {cloud.user && <nav className="sc-account-side-links" aria-label="账户分区">
-        <button type="button" aria-label="设置" aria-pressed={section === 'settings'} onClick={() => setSection('settings')}><Settings size={14} aria-hidden="true"/>设置</button>
-        <button type="button" aria-label="物料" aria-pressed={section === 'assets'} onClick={() => setSection('assets')}><Images size={14} aria-hidden="true"/>物料</button>
-        <button type="button" aria-label="团队与权限" aria-pressed={section === 'team'} onClick={() => setSection('team')}><UsersRound size={14} aria-hidden="true"/>团队与权限</button>
-      </nav>}
       </aside>
       <div className="sc-account-main">
       {section !== 'projects' && <nav className="sc-account-subnav" aria-label="账户导航">
         <button type="button" aria-label="我的项目" onClick={() => setSection('projects')}>← 项目</button>
-        <span className="sc-account-subnav-current">{section === 'assets' ? '物料' : section === 'team' ? '团队与权限' : section === 'settings' ? '设置' : ''}</span>
+        <span className="sc-account-subnav-current">物料</span>
       </nav>}
       <div className="sc-account-body">
       <section hidden={section !== 'projects'} aria-label="我的项目">
@@ -1059,53 +1175,6 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       </div>}
       </section>
       <section hidden={section !== 'assets'} aria-label="账户物料"><div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>物料</h3><InfoTip label="物料说明"><strong>与物料面板同一套分类</strong><span>我的生成 / 收藏 / 库，和画布里的物料面板保持一致。</span></InfoTip></div></div>{cloud.user ? <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} /> : <p className="sc-account-empty">登录后查看物料。</p>}</section>
-      <section hidden={section !== 'team'} aria-label="团队与权限">
-        {teamMounted && <AccountTeamPanel key={`team-${userId ?? 'local'}`} controller={controller} onStudioRenamed={(targetId, name) => setStudios(current => current.map(item => item.id === targetId ? { ...item, name } : item))}/>}
-      </section>
-      <section hidden={section !== 'settings'} aria-label="设置">
-        <div className="sc-account-prefs">
-          <nav className="sc-account-prefs-nav" aria-label="设置分区">
-            <button type="button" aria-pressed={settingsPane === 'personal'} onClick={() => setSettingsPane('personal')}>个人偏好</button>
-            <button type="button" aria-pressed={settingsPane === 'shortcuts'} onClick={() => setSettingsPane('shortcuts')}>快捷键</button>
-          </nav>
-          {settingsPane === 'personal' ? <div className="sc-account-prefs-main">
-            <div className="sc-account-prefs-head">
-              <h3>个人偏好</h3>
-              <p>跟账号走；未登录或离线时按账号留在本机。场景数据仍按米存储。</p>
-            </div>
-            <div className="sc-settings-prefs">
-              <div className="sc-settings-group">
-                <div className="sc-settings-row">
-                  <div className="sc-settings-row-main"><strong>显示单位</strong><small>标注、属性面板与导出清单的尺寸读数跟随；场景数据仍按米存储。</small></div>
-                  <div className="sc-settings-row-actions">
-                    <div className="sc-unit-seg" role="group" aria-label="显示单位">
-                      <button type="button" aria-pressed={preferences.lengthUnit === 'm'} onClick={() => onPreferenceChange({ lengthUnit: 'm' })}>米 · m</button>
-                      <button type="button" aria-pressed={preferences.lengthUnit === 'ft'} onClick={() => onPreferenceChange({ lengthUnit: 'ft' })}>英尺 · ft</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="sc-settings-group">
-                <div className="sc-settings-row">
-                  <div className="sc-settings-row-main"><strong>尺寸标注</strong><small>在画布上显示场地与物件的尺寸读数。</small></div>
-                  <div className="sc-settings-row-actions">
-                    <label className="sc-switch">
-                      <input type="checkbox" checked={preferences.showMeasurements} onChange={event => onPreferenceChange({ showMeasurements: event.target.checked })} />
-                      <i />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div> : <div className="sc-account-prefs-main">
-            <div className="sc-account-prefs-head">
-              <h3>快捷键</h3>
-              <p>按模式列出当前绑定；同名键在不同模式下含义不同。</p>
-            </div>
-            <ShortcutReference />
-          </div>}
-        </div>
-      </section>
       {/* 项目相关提示只挂在项目页，别跟到团队 / 物料里吵。 */}
       {section === 'projects' && conversionError && <p className="sc-account-error" role="alert">{conversionError}</p>}
       {section === 'projects' && floorplanOnlyLocal && <p className="sc-account-footnote">底图只保留在本机，云端方案不包含底图；本机草稿仍保留原图。</p>}

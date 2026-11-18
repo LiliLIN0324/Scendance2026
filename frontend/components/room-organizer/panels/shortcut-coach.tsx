@@ -62,11 +62,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * 画布里的快捷键学习浮层：没有常驻入口。按 ? 或 Shift+/ 打开只读速查。
+ * 画布里的快捷键学习浮层：没有常驻入口。
+ * 按 ? 或 Shift+/ 打开只读速查；头像菜单和设置里的「查看速查」派发同一事件。
  * 不写存储、不改键位；Esc / 点击遮罩关闭，焦点交给 useDialogFocus。
  * 输入框与已有 aria-modal 弹层里让路，避免抢走正在打的字。
  */
-export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX.Element {
+export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
@@ -74,6 +75,12 @@ export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX
 
   const close = useCallback(() => setOpen(false), []);
   useDialogFocus(open, panelRef, { initialFocusRef: closeRef, onEscape: close, trap: true });
+
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener('scendance:open-shortcut-coach', onOpen);
+    return () => window.removeEventListener('scendance:open-shortcut-coach', onOpen);
+  }, []);
 
   useEffect(() => {
     if (!enabled || open) return undefined;
@@ -90,49 +97,47 @@ export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [enabled, open]);
 
-  return (
-    <>
-      {open && createPortal(
-        <div
-          className="sc-shortcut-coach-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) close();
-          }}
-        >
-          <div
-            className="sc-shortcut-coach"
-            ref={panelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="sc-shortcut-coach-title"
-            tabIndex={-1}
-          >
-            <div className="sc-shortcut-coach-head">
-              <div>
-                <p className="sc-shortcut-coach-kicker">键盘速查 · 只读</p>
-                <h2 id="sc-shortcut-coach-title">快捷键</h2>
-                <p className="sc-shortcut-coach-current">
-                  <span>{meta.label}</span>
-                  {meta.hint}
-                </p>
-              </div>
-              <button
-                ref={closeRef}
-                type="button"
-                className="sc-shortcut-coach-close"
-                aria-label="关闭快捷键速查"
-                onClick={close}
-              >
-                ×
-              </button>
-            </div>
-            <ShortcutReference initialMode={meta.initialMode} />
-            <p className="sc-shortcut-coach-foot">按 ? 打开 · Esc 关闭 · 这里只读，不会改动你的键位</p>
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      className="sc-shortcut-coach-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <div
+        className="sc-shortcut-coach"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sc-shortcut-coach-title"
+        tabIndex={-1}
+      >
+        <div className="sc-shortcut-coach-head">
+          <div>
+            <p className="sc-shortcut-coach-kicker">键盘速查 · 只读</p>
+            <h2 id="sc-shortcut-coach-title">快捷键</h2>
+            <p className="sc-shortcut-coach-current">
+              <span>{meta.label}</span>
+              {meta.hint}
+            </p>
           </div>
-        </div>,
-        document.body,
-      )}
-    </>
+          <button
+            ref={closeRef}
+            type="button"
+            className="sc-shortcut-coach-close"
+            aria-label="关闭快捷键速查"
+            onClick={close}
+          >
+            ×
+          </button>
+        </div>
+        <ShortcutReference initialMode={meta.initialMode} />
+        <p className="sc-shortcut-coach-foot">按 ? 或 Shift + / 打开 · Esc 关闭 · 这里只读，不会改动你的键位</p>
+      </div>
+    </div>,
+    document.body,
   );
 }

@@ -428,6 +428,7 @@ export function useSceneEffects({
         wallOpenings,
         ...(floor.hiddenWalls ? { hiddenWalls: floor.hiddenWalls } : {}),
         floorOpenings,
+        ...(layout.planSettings?.gridSizeM ? { gridSizeM: layout.planSettings.gridSizeM } : {}),
         ...(index === 0 && skipGroundFloor ? { skipFloor: true, skipWalls: true } : {}),
         floorPlanImage: index === 0 && !legacyGroundMap && !skipGroundFloor ? layout.floorPlanImage ?? null : null,
           satelliteGroundRef: index === 0 && !legacyGroundMap && !skipGroundFloor ? !!layout.satelliteGroundRef : false,
@@ -1338,7 +1339,7 @@ export function useSceneEffects({
       clearRoomDimensions(scene);
       return;
     }
-    renderRoomDimensions(THREE, scene, layout.width, layout.height, view.lengthUnit, activeFloorY);
+    renderRoomDimensions(THREE, scene, layout.width, layout.height, layout.planSettings?.displayUnit ?? view.lengthUnit, activeFloorY, view.lengthPrecisionM ?? 0.01);
   }, [isReady, invalidate, threeModuleRef, sceneRef, view.showMeasurements, view.lengthUnit, layout.width, layout.height, activeFloorY]);
 
   // Item labels
@@ -1438,7 +1439,9 @@ export function useSceneEffects({
         selectedItemId,
         extraSelectedIds,
         showMeasurements: view.showMeasurements,
-        lengthUnit: view.lengthUnit,
+        lengthUnit: layout.planSettings?.displayUnit ?? view.lengthUnit,
+        lengthPrecisionM: view.lengthPrecisionM ?? 0.01,
+        gridSizeM: layout.planSettings?.gridSizeM,
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
         ...(referenceImage ? { referenceImage } : {}),

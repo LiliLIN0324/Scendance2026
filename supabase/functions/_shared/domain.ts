@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { planEditorSchema } from './plan-editor.ts';
 import { structuralViolations } from './structural-geometry.ts';
 import presetManifest from './preset-manifest.json' with { type: 'json' };
 
@@ -126,7 +127,7 @@ export const designSchema=z.strictObject({
 const sceneObjectsSchema=z.array(objectSchema).max(500).superRefine((objects,ctx)=>{
   if(duplicateUuidIds(objects.map(object=>object.id)))ctx.addIssue({code:'custom',message:'实例 ID 不能重复'});
 });
-const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool'])};
+const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool']),editor:planEditorSchema.optional()};
 export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon}).superRefine((s,ctx)=>{
   if(overlappingUuidIds(s.objects.map(object=>object.id),s.venue.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'物件与出入口 ID 不能互相重复'});
   // V1 has no structure layer, so a site block here could only dangle; keep the

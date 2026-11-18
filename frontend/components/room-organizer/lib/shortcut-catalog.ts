@@ -95,7 +95,7 @@ export const SHORTCUT_CATALOG: readonly ShortcutGroup[] = [
       {
         action: '微旋',
         keys: { win: 'Shift+R', mac: '⇧R' },
-        note: '有选中；15°',
+        note: '有选中；角度见本方案设置，默认 15°',
       },
       {
         action: '移动工具',
@@ -120,7 +120,7 @@ export const SHORTCUT_CATALOG: readonly ShortcutGroup[] = [
       {
         action: '微移',
         keys: { win: '方向键', mac: '方向键' },
-        note: '0.1 m；按住 Shift 为 1.0 m；选中未锁定',
+        note: '步长见本方案设置，默认 0.1 m；按住 Shift 为 10 倍；选中未锁定',
       },
       {
         action: '2D 切换',
