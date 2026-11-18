@@ -288,6 +288,21 @@ describe('户外云生成取件与未知结果保护', () => {
     expect(result).toEqual({ state: 'pending', message: expect.stringContaining('不要重复生成') });
     expect(listFacilityGenerateLinks('unknown-stage')).toHaveLength(1); expect(cloud.authorizeAsset).not.toHaveBeenCalled();
   });
+  it('排队卡住时把「后台没接单」带到设施面板，且不落终态、不再扣费', async () => {
+    // 2026-11-17 生产实跑：任务停在 queued，面板只写「云端生成中 · queued」。
+    attachFacilityGenerateTask({ taskid: 'cloud-queued-check', lane: 'cloud', facilityId: 'queued-stage', facilityName: '舞台', name: '排队', submittedAt: Date.now() });
+    const cloud = {
+      getGenerationJob: vi.fn(async () => ({ state: 'queued', asset_id: null, created_at: new Date(Date.now() - 8 * 60_000).toISOString() })),
+      authorizeAsset: vi.fn(),
+    };
+    const result = await resolveFacilityGenerateLink('cloud-queued-check', { cloud });
+    if (result.state !== 'pending') throw new Error(`应当是 pending，实际 ${result.state}`);
+    expect(result.message).toContain('queued');
+    expect(result.message).toContain('没有接单');
+    expect(result.message).toContain('不要重复提交');
+    expect(listFacilityGenerateLinks('queued-stage')[0]?.terminal).toBeUndefined();
+    expect(cloud.authorizeAsset).not.toHaveBeenCalled();
+  });
 });
 
 it('新任务与候选按原项目隔离，即使复制计划沿用设施ID也不轮询/显示另一项目', () => {

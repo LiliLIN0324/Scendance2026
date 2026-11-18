@@ -41,6 +41,9 @@ const VENDOR_HINTS: { match: RegExp; text: string }[] = [
   { match: /content\s*(policy|filter)|sensitive|moderation|违规|审核/i, text: '生成服务商判定这次内容不让过，换个描述再试。' },
   { match: /rate\s*limit|too\s*many|busy|限流|繁忙/i, text: '生成服务商当前请求太多，等一会儿再试。' },
   { match: /no\s*such\s*model|unknown\s*model|model[_ ]?not[_ ]?found|invalid\s*model|模型/i, text: '生成服务商不认这个模型版本，检查设置里的模型名。' },
+  // 2026-11-18：Aholo 国内/国际两个网关，同一把国内 key 打到国际网关会回 BIZ_14001。
+  // 以前这条落到兜底文案，看起来像「钥匙无效」，实际是网关配错——换网关比换 key 便宜。
+  { match: /BIZ_14001|gateway|region|网关/i, text: '密钥与网关不匹配：国内密钥要配 https://api.aholo.cn（国际网关会回 BIZ_14001）。' },
 ];
 
 /** 没有供应商原话时，按服务端错误码给通用说法。 */
@@ -94,4 +97,44 @@ export function generationFailureText(job: GenerationFailureSource): string {
   const code = job.error_code ?? '';
   if (code) return ERROR_CODE_TEXT[code] ?? `生成未完成（${code}）。`;
   return '这次生成没有完成，可以重新生成一次。';
+}
+
+/** 排队/跑单阶段需要的最小信息：状态 + 创建时间（服务端 ISO 字符串）。 */
+export interface GenerationProgressSource extends GenerationFailureSource {
+  created_at?: string | null;
+}
+
+/**
+ * 排队多久算「没人接单」。
+ *
+ * 生产触发器是每分钟一次 cron；正常任务 1~2 分钟内必被 claim 走。
+ * 3 分钟还没动，基本只剩一种解释：worker 没被触发（缺 cron / 缺 Vault / 未部署）。
+ * 这条判断刻意不猜别的原因——猜错了会让人去改描述、反复提交，而真实成本是额度。
+ */
+const QUEUED_STALL_MS = 3 * 60 * 1000;
+/** 供应商跑单的兜底上限：超过这么久还停在处理态，值得提示一次。 */
+const RUNNING_STALL_MS = 40 * 60 * 1000;
+
+/**
+ * 非终态任务「卡住了」时的人话；正常进度返回空串。
+ *
+ * 为什么要有这个模块：2026-11-17 生产实跑的任务停在 `queued`，前端只显示
+ * 「云端生成中 · queued」——用户看不出这是运维没装触发器，只会以为描述写错了，再点一次。
+ * 这里把「排队太久」翻译成「后台没接单，别重复提交」，并明说这不是描述问题。
+ *
+ * 不读时钟以外的任何东西：`now` 可注入，测试里不依赖真实时间。
+ */
+export function generationProgressText(job: GenerationProgressSource, now: number = Date.now()): string {
+  if (!['queued', 'submitting', 'submitted', 'processing', 'archiving'].includes(job.state)) return '';
+  const createdAt = job.created_at ? Date.parse(job.created_at) : Number.NaN;
+  if (!Number.isFinite(createdAt)) return '';
+  const waited = now - createdAt;
+  const minutes = Math.max(1, Math.floor(waited / 60000));
+  if (job.state === 'queued') {
+    if (waited < QUEUED_STALL_MS) return '';
+    return `已排队 ${minutes} 分钟仍未开始：后台生成服务没有接单（生产环境缺触发器或 worker 未部署）。`
+      + '这是服务端运维问题，不是描述写错；先不要重复提交。';
+  }
+  if (waited < RUNNING_STALL_MS) return '';
+  return `服务商已经跑了 ${minutes} 分钟还没交付。任务保留着，稍后再看；不要重复提交。`;
 }
