@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "archivedAt": "2026-11-18T15:15:00+08:00",
+  "archivedAt": "2026-11-18T16:30:00+08:00",
   "site": "https://scendance-scene-planner-ewz.pages.dev/",
   "profile": "bu product browser (Chrome 147.0.7727.149)",
   "note": "本文件是走查记录本的归档快照，不是发布结论。记录本按 origin 存在 localStorage；本 profile 的本地记录本为空（见 localBook）。每条 pass 仍需 docs/evidence/79/<case>/ 下原始证据支撑；门禁解除只能由人签字。",
@@ -24,7 +24,7 @@
       "browser": "pass",
       "cloud": "pass",
       "conclusion": "pass",
-      "evidence": "docs/evidence/79/02/2026-11-18-case02-same-name-poi.md；本轮补证 2026-11-18-case02-selection-readback.md（选中路径无 project 读取、零写）"
+      "evidence": "docs/evidence/79/02/2026-11-18-case02-same-name-poi.md；2026-11-18-case02-selection-readback.md（选中路径无 project 读取、零写）"
     },
     {
       "case": 3,
@@ -32,7 +32,7 @@
       "browser": "blocked",
       "cloud": "none",
       "conclusion": "blocked",
-      "evidence": "docs/evidence/79/03/2026-11-18-case03-blocked.md；场地边界未确认，未生成布置提案，改口采纳无从对照"
+      "evidence": "docs/evidence/79/03/2026-11-18-case03-blocked.md + 2026-11-18-case03-round5-supplement.md；第五轮改口指令进会话但模型通道 provider_error，未生成可对照路线候选"
     },
     {
       "case": 4,
@@ -61,26 +61,26 @@
     {
       "case": 7,
       "label": "待预览时说「等等」或过时的「确认」",
-      "browser": "blocked",
+      "browser": "partial",
       "cloud": "none",
-      "conclusion": "blocked",
-      "evidence": "docs/evidence/79/07/2026-11-18-case07-blocked-no-proposal.md；会话内无待确认提案卡"
+      "conclusion": "partial",
+      "evidence": "docs/evidence/79/07/2026-11-18-case07-round5-supplement.md；旧票被新回合顶掉且零场景写，新提案单次应用 0→255 件；旧确认失效 DOM、提案身份 digest、云端 revision 响应体未取到"
     },
     {
       "case": 8,
       "label": "应用中刷新、双点确认、切项目",
-      "browser": "blocked",
+      "browser": "partial",
       "cloud": "none",
-      "conclusion": "blocked",
-      "evidence": "docs/evidence/79/08/2026-11-18-case08-blocked.md；8a/8b/8c 均无应用写可对账"
+      "conclusion": "partial",
+      "evidence": "docs/evidence/79/08/2026-11-18-case08-round5-supplement.md；8a 撤销后刷新终态一致零写（非 in-flight 刷新）；8b 仅单次点击未翻倍旁证；8c A 未被改写、会话按活动隔离，B 为室内活动未载入户外画布"
     },
     {
       "case": 9,
       "label": "确认后撤销，重开旧草稿",
-      "browser": "blocked",
+      "browser": "partial",
       "cloud": "none",
-      "conclusion": "blocked",
-      "evidence": "docs/evidence/79/09/2026-11-18-case09-blocked.md；没有已应用批次"
+      "conclusion": "partial",
+      "evidence": "docs/evidence/79/09/2026-11-18-case09-round5-supplement.md；Ctrl+Z 整批撤销 255→0、长度回 10726 并刷新保留；revision/undoGroup 响应体缺，撤销后未再走通一次重新应用"
     },
     {
       "case": 10,
@@ -96,13 +96,13 @@
       "browser": "partial",
       "cloud": "n/a",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/11/2026-11-18-case11-exports.md；CSV/JSON/GLB/DXF/HTML 计数与画布一致；PDF、效果图、旧云 Run blocked"
+      "evidence": "docs/evidence/79/11/2026-11-18-case11-exports.md + 2026-11-18-case11-round5-button-matrix.md；PDF、效果图、旧云 Run 仍 blocked"
     }
   ],
   "counts": {
     "pass": 1,
-    "partial": 5,
-    "blocked": 5,
+    "partial": 8,
+    "blocked": 2,
     "fail": 0,
     "na": 0,
     "note": "blocked 不计入全绿，也不计失败；partial 不计入全绿"
