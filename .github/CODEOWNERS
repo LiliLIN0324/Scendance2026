@@ -1,8 +1,9 @@
 # 默认：所有改动都需要仓库所有者 review。
-# 配合 main 的分支保护（必须 PR + 1 次 review + 状态检查）使用。
+# 改动直接提交到 main；以下路径的改动除所有者外谁都不该自作主张。
 *       @LiliLIN0324
 
-# 自动化工具（Renovate / superagent / 其他 agent）只允许开 PR，不得直推 main。
+# 自动化工具（superagent / 其他 agent）直接提交推送 main，不逐小改开 PR；
+# Renovate 仍以 PR 形式提依赖升级，由人决定是否合并。
 # 这些路径尤其需要人过目：
 /.github/       @LiliLIN0324
 /docs/          @LiliLIN0324

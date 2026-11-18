@@ -645,6 +645,29 @@ it("未确认活动边界先出范围确认卡而不是死路，保留本句自�
 });
 it("多轮事实延续、改口人数，分区预览及自然非暗号确认推进同规划", async () => {
   await confirmScope();
+  // 2026-11-18 用户口径「先设计」：分区确认后直接接物件预览，测试给一份真实库反应。
+  bridge.readLibrary = vi.fn(async () => [
+    {
+      id: "my-display",
+      name: "展板",
+      source: "personal" as const,
+      width: 2,
+      depth: 1,
+      height: 2,
+      modelSlug: "generated:library-my-display",
+      available: true,
+    },
+    {
+      id: "my-stall",
+      name: "市集摊位",
+      source: "personal" as const,
+      width: 3,
+      depth: 3,
+      height: 2.5,
+      modelSlug: "generated:library-my-stall",
+      available: true,
+    },
+  ]);
   await turn(
     "做户外市集60人",
     response("ask", {
@@ -672,9 +695,12 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
     await flow.handle("这个安排没问题，就按它落下去吧");
   });
   expect(plan.zones).toHaveLength(1);
-  expect(flow.state.stage).toBe("main-routes");
-  expect(flow.appliedHighlight).toEqual({ kind: "zones", zoneIds: [plan.zones[0]!.id] });
-  expect(host.textContent).toContain("分区不合适可拖动整块或拖顶点微调");
+  // 确认分区后不再停在「主通道」，直接给一版按分区排的物件预览。
+  expect(flow.state.stage).toBe("objects");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  // 分区已应用；随后接的物件版是未确认的预览，画布高亮让给新一版。
+  expect(flow.appliedHighlight).toBeNull();
+  expect(host.textContent).toContain("这版是默认方案");
 
   const editedZone = {
     ...plan.zones[0]!,
@@ -1214,8 +1240,20 @@ it("人数还没定也能排物料：不拦成红卡、阶段照样前进，并�
   await action("confirm");
   expect(plan.facilities).toHaveLength(1);
 });
-it("缺主入口时失败不把任务卡改名成物件阶段", async () => {
+it("没核实入口也先出设计：分区确认后直接给物件预览，缺口写在卡上", async () => {
   await confirmScope();
+  bridge.readLibrary = vi.fn(async () => [
+    {
+      id: "my-display",
+      name: "展板",
+      source: "personal" as const,
+      width: 2,
+      depth: 1,
+      height: 2,
+      modelSlug: "generated:library-my-display",
+      available: true,
+    },
+  ]);
   await turn(
     "室外市集，展览区1个展板",
     response("zones", {
@@ -1231,39 +1269,30 @@ it("缺主入口时失败不把任务卡改名成物件阶段", async () => {
     }),
   );
   await action("confirm");
-  // 未核对主入口时，分区确认后下一站就是主通道阶段。
-  expect(flow.state.stage).toBe("main-routes");
-  await action("objects");
-  expect(flow.notice).toContain("请先核对主入口和主要通道");
-  // 阶段落盘挪到前置校验之后：失败一次不该把标题永久改成「按用途复用我的物料」。
-  expect(flow.state.stage).toBe("main-routes");
+  // 2026-11-18 用户口径「先设计，用户会告诉你他的想法」：不再先拦到主通道阶段，
+  // 确认分区就直接排一版预览；入口没用核实的只写在卡上，不挡人。
+  expect(flow.state.stage).toBe("objects");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.noticeKind).not.toBe("error");
+  expect(flow.proposal?.warnings.join()).toContain("入口还没核对");
+  expect([...host.querySelectorAll("button")].map(button => button.textContent?.trim()))
+    .not.toContain("去核对主要入口与通道");
 });
 // 2026-11-17 用户拍「都做」之一：红卡上的「重试」= 原样重放当前阶段动作，缺前置条件时点了还是同一句话。
 // 这类拦阻改成给一个真能改变状态的动作。
-it("缺前置条件时红卡给的是能推进的动作，不是把同一动作再放一遍", async () => {
+it("缺分区时红卡给的是能推进的动作，不是把同一动作再放一遍", async () => {
   await confirmScope();
-  await turn(
-    "室外市集，展览区1个展板",
-    response("zones", {
-      zones: [
-        { name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "展览区" },
-      ],
-      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
-    }),
-  );
-  await action("confirm");
-  await action("objects");
-  expect(flow.notice).toContain("请先核对主入口和主要通道");
-  expect(flow.noticeFix).toEqual({ action: "main-routes", label: "去核对主要入口与通道" });
+  await action("sub-routes");
+  expect(flow.notice).toContain("先明确并确认区域用途和边界");
+  expect(flow.noticeFix).toEqual({ action: "zones", label: "先生成分区预览" });
   const labels = [...host.querySelectorAll("button")].map(button => button.textContent?.trim());
-  expect(labels).toContain("去核对主要入口与通道");
+  expect(labels).toContain("先生成分区预览");
   // 不再同时给一个只会重放 objects 的「重试」。
   expect(labels).not.toContain("重试");
-  const fix = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "去核对主要入口与通道");
+  const fix = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "先生成分区预览");
   await act(async () => { (fix as HTMLButtonElement).click(); });
-  // 真的去跑了主通道：本机拉不到路网，会落到一个明确的下一步，而不是同一句重复提示。
-  expect(flow.notice).not.toContain("请先核对主入口和主要通道");
-  expect(flow.notice).toContain("未取得可核对路网");
+  // 真的去跑了分区：不会停在同一句重复提示上。
+  expect(flow.notice).not.toContain("先明确并确认区域用途和边界");
 });
 // 2026-11-17 用户拍「都做」之二：答「第一个方案」后模型又把同一句追问端回来，
 // 旧行为就是「我明明选了，却什么都没发生」。现在本地按原请求接着走。

@@ -143,3 +143,21 @@ describe("draftDemand —— 用户说「随便」时的默认方案", () => {
     }
   });
 });
+
+describe("draftDemand —— 默认选品与文案跟落位口径一致（2026-11-18）", () => {
+  it("展览区库里有展板就推展板，不知道库内容才退回市集摊位", () => {
+    const plan = planWith(zone("展览区", "exhibition", 30, 20));
+    const withBoard = draftDemand(plan, {}, { hasMaterial: (name) => name === "展板" });
+    expect(withBoard.items[0]!.query).toBe("展板");
+    const fallback = draftDemand(plan, {});
+    expect(fallback.items[0]!.query).toBe("市集摊位");
+    expect(withBoard.items[0]!.evidence).toContain("展位");
+  });
+
+  it("演出区不再写「舞台居中」，改成跟着观众区落位", () => {
+    const draft = draftDemand(planWith(zone("演出区", "performance", 40, 20)), {});
+    const stage = draft.items.find((i) => i.query === "舞台")!;
+    expect(stage.evidence).toContain("面向观众区");
+    expect(stage.evidence).not.toContain("居中");
+  });
+});
