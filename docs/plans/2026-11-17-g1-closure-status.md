@@ -43,7 +43,7 @@
 | 3d 回写镜像 | — | 未做 | false 侧 `shellVenuePatchFromPlanBoundary` 回写镜像保留，待真侧正源稳定后退役 |
 
 ### 1.6 质量基线台账 ✅
-- `docs/quality/vitest-baseline-0a59f7b0.md/.csv`：111 失败文件，列 `file,failed,total,skipped`；已知 flaky 单列。
+- `docs/quality/vitest-baseline-63b11ae1.md/.csv`：116 失败文件，列 `file,failed,total,skipped`；已知 flaky 单列。旧 `0a59f7b0` 版保留为历史快照，不再用于对照。
 - 规则：台账外新失败文件、或台账内 failed 数上涨，先单独复跑仍失败才算回归；复跑须与台账同 Node 版本档（台账 v26.2.0；engines `>=24.15 <25 || >=26`，Node22 禁跑，24/26 不混跑）；里程碑后重采新锚点台账，旧台账只判增量不对照绝对数。
 - 提交：`20d5c5f7`（台账）、`d2ffb4e8`（版本档 + 锚点刷新）、`e1e50cbe`（锁定 vitest 4.1.12）。
 

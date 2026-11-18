@@ -19,11 +19,11 @@
 ### 0.3 环境与门禁
 - Node 版本档固定：台账锚定 v26.2.0；engines `>=24.15 <25 || >=26`。**Node22 禁跑全量/build**；24 与 26 不混跑（失败集会漂移）。
 - 每切片提交前：`tsc --noEmit` exit 0；定向 vitest 跑相关文件；`npm run build` exit 0。
-- 全量对照基线台账 `docs/quality/vitest-baseline-0a59f7b0.md/.csv`：台账外新失败文件、或台账内 failed 数上涨，先单独 `npx vitest run <file>` 复跑，仍失败才算回归。
+- 全量对照基线台账 `docs/quality/vitest-baseline-63b11ae1.md/.csv`：台账外新失败文件、或台账内 failed 数上涨，先单独 `npx vitest run <file>` 复跑，仍失败才算回归。旧台账 `vitest-baseline-0a59f7b0.*` 保留为历史债务快照，**不再用于对照**。
 - 不引入新红；既有 jsdom/localStorage 债与计时 flaky 归 #12，不计入本切片回归。
 
 ### 0.4 提交纪律
-- 本地攒好 tsc + 定向测试 +（涉及交互的）真机验收后一次性推 main；不为小改动开 PR。
+- 本地攒好 tsc + 定向测试 +（涉及交互的）真机验收后，**按 `AGENTS.md §六` 开 PR 到 main**，由人评审合并；不直推 main，不为小改动拆多个 PR。
 - 提交前 `git diff --cached --name-only` 与 `git show --stat HEAD` 双核对；不夹带他人在途文件。
 - 不主动 push main；不触发付费生成。
 - 文档先行：代码切片对应的口径/现状先写进 `docs/plans/`，再落码。
