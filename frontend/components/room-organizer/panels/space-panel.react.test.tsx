@@ -4,9 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { rememberAholoAsset } from '../lib/aholo-assets';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
-import { readOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { onOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
-import { REPLICA_CASES } from '../lib/replica-cases';
+import { CN_REPLICA_CASES, REPLICA_CASES } from '../lib/replica-cases';
 import { SpacePanel } from './space-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
@@ -94,7 +94,8 @@ describe('SpacePanel', () => {
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} onAddSampleScene={vi.fn()} variant="card"/>);
     const labels = [...document.querySelectorAll('details.sc-scene-group')]
       .map(group => group.querySelector('.sc-scene-group-label')?.textContent);
-    expect(labels[0]).toBe('经典案例');
+    expect(labels[0]).toBe('国内案例');
+    expect(labels[1]).toBe('经典案例');
     expect(labels).not.toContain('项目中的场景');
     expect(labels[labels.length - 1]).toBe('我的实景扫描');
     // 2026-11-17 用户：「每次打开都默认打开了示例场景和我的实景扫描……默认都不要打开」——
@@ -114,6 +115,15 @@ describe('SpacePanel', () => {
     expect(cards.length).toBe(REPLICA_CASES.length);
     expect(cards[0].querySelector('svg.sc-case-thumb')).toBeTruthy();
     expect(cards[0].textContent).toContain(REPLICA_CASES[0].title);
+    // 官网中国案例单独一段，排在 OnePlan 经典案例之前，卡形一致。
+    expect(CN_REPLICA_CASES.length).toBeGreaterThan(0);
+    const cnGroup = document.querySelector('[data-testid="space-group-cn-cases"]') as HTMLDetailsElement;
+    cnGroup.open = true;
+    fireEvent(cnGroup, new Event('toggle'));
+    const cnCards = document.querySelectorAll('[data-testid="space-group-cn-cases"] .sc-space-sample');
+    expect(cnCards.length).toBe(CN_REPLICA_CASES.length);
+    expect(cnCards[0].textContent).toContain(CN_REPLICA_CASES[0].title);
+    expect(cnCards[0].querySelector('svg.sc-case-thumb')).toBeTruthy();
   });
 
   // 2026-11-17 用户：「切换经典案例不要直接白屏刷新重置……就按不换页改」——
@@ -122,15 +132,20 @@ describe('SpacePanel', () => {
     const switched: string[] = [];
     const off = onOutdoorProjectSwitch(id => { switched.push(id); return true; });
     try {
+      const expected = `replica-${REPLICA_CASES[0].id}`;
+      const current = REPLICA_CASES[0].buildPlan();
+      // 已打开过的旧案例也应在再次点击卡片时读取新版，不续用旧描图。
+      saveOutdoorProjectRecord({ v: 1, projectId: expected, name: '旧案例', createdAt: '2026-11-17T00:00:00.000Z', updatedAt: '2026-11-17T00:00:00.000Z', plan: { ...current, zones: current.zones.slice(0, 2), facilities: [] } });
       render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
       const group = document.querySelector('[data-testid="space-group-cases"]') as HTMLDetailsElement;
       group.open = true;
       fireEvent(group, new Event('toggle'));
       const card = document.querySelector('[data-testid="space-group-cases"] .sc-space-sample') as HTMLElement;
       fireEvent.click(card);
-      const expected = `replica-${REPLICA_CASES[0].id}`;
       expect(switched).toEqual([expected]);
       expect(readOutdoorProjectRecord(expected)?.name).toBe(`经典案例 · ${REPLICA_CASES[0].title}`);
+      expect(readOutdoorProjectRecord(expected)?.plan).toEqual(current);
+      expect(readOutdoorProjectRecord(expected)?.createdAt).toBe('2026-11-17T00:00:00.000Z');
     } finally {
       off();
     }

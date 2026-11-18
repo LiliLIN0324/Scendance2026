@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>户外 Agent 交互流程图：从你说一句话开始 · 2026-11-17</title>
+<style>
+  :root{
+    --ink:#1e2a24; --ink-soft:#4b5852; --muted:#7d8a84;
+    --hair:#e0e7e2; --hair-soft:#eff3f0;
+    --green:#3f6f4f; --green-soft:#eaf2ec; --green-line:#bfd6c6;
+    --amber:#8a6a1f; --amber-soft:#fdf6e6; --amber-line:#e8d9ac;
+    --grey:#5c6663; --grey-soft:#f3f5f4; --grey-line:#dfe4e1;
+    --user:#f3f6f4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:36px 40px 60px;background:#fcfdfc;color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  header,main,footer{max-width:1180px;margin:0 auto}
+  h1{margin:0 0 8px;font-size:25px}
+  .sub{margin:0;color:var(--ink-soft);font-size:13.5px;line-height:1.75}
+  .sub code{background:var(--green-soft);border:1px solid var(--green-line);border-radius:4px;padding:0 4px;font-size:12px}
+
+  .track{display:flex;align-items:stretch;gap:0;margin:22px 0 8px;flex-wrap:wrap}
+  .step{flex:1 1 0;min-width:132px;background:#fff;border:1px solid var(--hair);border-radius:10px;padding:9px 10px;font-size:12px;line-height:1.5;color:var(--ink-soft);position:relative}
+  .step b{display:block;color:var(--ink);font-size:12.5px;margin-bottom:2px}
+  .step + .step{margin-left:26px}
+  .step + .step:before{content:"→";position:absolute;left:-21px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px}
+  .step.you{background:var(--green-soft);border-color:var(--green-line)}
+  .step.you b{color:var(--green)}
+
+  h2.sec{margin:30px 0 6px;font-size:16px}
+  .note{color:var(--muted);font-size:12px;margin:0 0 14px;line-height:1.7}
+
+  .row{display:grid;grid-template-columns:290px 1fr 300px;gap:0;border-top:1px solid var(--hair);padding:16px 0}
+  .row:first-of-type{border-top:0}
+  .q{font-size:13px;line-height:1.6;padding-right:22px}
+  .q .who{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+  .say{background:var(--user);border:1px solid var(--hair);border-radius:12px 12px 12px 4px;padding:9px 11px;color:var(--ink)}
+  .say + .say{margin-top:6px}
+  .q .kind{display:inline-block;margin-top:7px;font-size:10.5px;padding:2px 7px;border-radius:999px;border:1px solid var(--green-line);background:var(--green-soft);color:var(--green)}
+  .q .kind.new{border-color:var(--amber-line);background:var(--amber-soft);color:var(--amber)}
+  .q .kind.quiet{border-color:var(--grey-line);background:var(--grey-soft);color:var(--grey)}
+
+  .mid{font-size:12.5px;line-height:1.72;color:var(--ink-soft);padding-right:22px}
+  .mid ul{margin:0;padding-left:17px}
+  .mid li{margin:0 0 3px}
+  .mid b{color:var(--ink)}
+  .mid .why{display:block;margin-top:6px;color:var(--muted);font-size:11.5px}
+
+  .see{font-size:12px;line-height:1.6;border-left:2px solid var(--green-line);padding-left:14px}
+  .see .lbl{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+  .card{border:1px solid var(--hair);background:#fff;border-radius:10px;padding:8px 10px;margin-bottom:6px}
+  .card .title{font-weight:600;font-size:12px;display:block;margin-bottom:3px}
+  .card .mini{color:var(--ink-soft);font-size:11.5px}
+  .card.bubble{border-style:dashed;background:#fcfdfc}
+  .never{color:#8a3b3b;font-size:11.5px;margin-top:6px;line-height:1.55}
+
+  footer{margin-top:26px;color:var(--muted);font-size:11.5px;line-height:1.8;border-top:1px solid var(--hair);padding-top:12px}
+  @media (max-width:900px){
+    .row{grid-template-columns:1fr;gap:10px}
+    .q,.mid{padding-right:0}
+    .see{border-left:0;border-top:2px solid var(--green-line);padding:10px 0 0}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>户外 Agent 交互流程图 — 从你说的一句话开始</h1>
+  <p class="sub">
+    这是一张流程图，不按代码分层：每行左边是你的原话，中间是系统确定性地做什么，
+    右边是你在屏幕上实际看到的卡片/预览，以及<b>不会发生</b>的事。带「本轮」的是这几轮刚改的。
+  </p>
+  <div class="track">
+    <div class="step"><b>1 你说话</b>主输入框，一句话就够</div>
+    <div class="step"><b>2 判断你说了什么</b>模型只做分类，不编数量</div>
+    <div class="step"><b>3 按规则算</b>分区用途 + 真实面积 + 库内真实尺寸</div>
+    <div class="step you"><b>4 只出预览</b>画布不写，等你点头</div>
+    <div class="step you"><b>5 你确认</b>才写进画布</div>
+  </div>
+</header>
+
+<main>
+  <h2 class="sec">A. 说不清的时候（最常发生）</h2>
+  <p class="note">原来这里会反复追问「各区放什么、各多少」，现在改成先给你一版看。</p>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说</span>
+      <div class="say">随便放 / 你看着办 / 做一版，我还没想好</div>
+      <span class="kind new">本轮：设计师模式</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li><b>不再追问清单</b>——这句话不是需求，是授权我先做。</li>
+        <li>按每个分区的<b>用途 + 真实面积</b>反算：市集 8㎡/摊、展览 9㎡/位、舞台 48㎡。</li>
+        <li>只从<b>真实库</b>取件；单行 ≤200 件、≤20 行，超了就说明容量。</li>
+        <li>算出来的量排不下（演出区座位）→ <b>只缩那一个区</b>，其余照旧。</li>
+        <span class="why">默认值只在内存里用，不会写进你的需求；你下一句说的数仍然优先。</span>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">待你核对 · 按分区用途出的默认方案</span><span class="mini">摆摊区 市集摊位×25、演出区 舞台×1 + 椅子×33…</span></div>
+      <div class="card bubble"><span class="mini">首条说明固定是「这一版是默认方案：数量按分区用途与可用面积反算，不是你说的数字」</span></div>
+      <div class="never">不会发生：直接写画布、假装你说过这些数、把「排下了」当安全通过。</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说（第二次）</span>
+      <div class="say">嗯…（还是没给清单）</div>
+      <span class="kind new">本轮：追问预算</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>第一次追问照常问；<b>第二次还问不出来</b>、画布又没动 → 不再问第三句。</li>
+        <li>直接按当前分区出默认方案（同上一行）。</li>
+        <li>你问的是「你能做什么 / 为什么这么排」这类<b>真提问</b>时不抢话，正常回答。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">待你核对 · 按分区用途出的默认方案</span><span class="mini">设计过程里写明「连续追问没有推进」</span></div>
+      <div class="never">不会发生：第三、第四句追问；也不会「沉默地把阶段跳过去」。</div>
+    </div>
+  </div>
+
+  <h2 class="sec">B. 你给了清单或场地</h2>
+  <p class="note">你说得越具体，系统越只做核对和落位，不改你的数字。</p>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说</span>
+      <div class="say">室外市集，摆摊区放 20 个摊位</div>
+      <span class="kind">明确清单</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>先把数字<b>对上你这句话的原文</b>（没有依据的提取会被退回，不会默默用）。</li>
+        <li>去真实库找件、按分区落位、让开通道/建筑/已核对入口。</li>
+        <li>只出预览；确认后才写画布。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">待你核对 · 逐区复用库内真实设施</span><span class="mini">20 件市集摊位；可「换一种排法」看行列/居中/沿边</span></div>
+      <div class="never">不会发生：把你的 20 改成它算出来的 25；不会不确认就落盘。</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说</span>
+      <div class="say">户外集市，做两个分区：摆摊区和演出区</div>
+      <span class="kind">只有分区</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>先出<b>分区预览</b>：每个区的用途、室内外属性。</li>
+        <li>确认后才知道「能摆什么」——没分区不排物料。</li>
+        <li>分区确认后按「有没有已核实的出入口」决定下一站。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">待你核对 · 分区用途与室内外属性</span><span class="mini">摆摊区（室外·市集）、演出区（室外·表演）</span></div>
+      <div class="never">不会发生：跳过分区直接摆物料。</div>
+    </div>
+  </div>
+
+  <h2 class="sec">C. 你在改主意或回答问题</h2>
+  <p class="note">改口、二选一、核对入口，这三类是线上最容易「答了却像没答」的地方。</p>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说</span>
+      <div class="say">把摊位改成 30 个</div>
+      <span class="kind">改口</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>认成<b>同一批设施的增减</b>，不是又铺一版。</li>
+        <li>数量必须对上这句原文；对不上就退回，不猜。</li>
+        <li>仍然只出预览，等你确认。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">待你核对 · 30 件市集摊位</span><span class="mini">位置按新数量重排，不叠加成 50 件</span></div>
+      <div class="never">不会发生：重复铺一版；把旧数量一起算进去。</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说（回答上一轮二选一）</span>
+      <div class="say">第一个方案</div>
+      <span class="kind">选选项</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>先认出「这是在回答刚才那个（1）/（2）」，按选项<b>确定性推进</b>到原请求的预览。</li>
+        <li>设计过程里留一句「按你选的『…』继续」。</li>
+        <li>认不出就清空，不让上一轮的选项污染这一句。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">待你核对 · 对应阶段预览</span><span class="mini">不会再问一遍同一道单选题</span></div>
+      <div class="never">不会发生：把你选的答案再丢给模型猜一次。</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说（对着某个入口）</span>
+      <div class="say">这个门能用</div>
+      <span class="kind new">本轮：三选一</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>入口不自动等于出口——问你是 <b>只能进 / 只能出 / 双向</b>。</li>
+        <li>选完出预览，确认后才标记「已核实」。</li>
+        <li>核对≠消防/疏散/合法容量的通过。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">“海滩门”能不能走？</span><span class="mini">[ 只能进｜入口 ] [ 只能出｜出口 ] [ 双向｜入口+出口 ]</span></div>
+      <div class="never">不会发生：只凭「能用」就替你认定双向；替你宣布安全合规。</div>
+    </div>
+  </div>
+
+  <h2 class="sec">D. 点头、回头、收手</h2>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说</span>
+      <div class="say">就按这版 / 没问题</div>
+      <span class="kind">确认</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>先核对<b>你确认的是不是当前这一版</b>（画布变过就作废重算）。</li>
+        <li>写画布用「期望版本」兜住并发，不会覆盖别人的改动。</li>
+        <li>写完告诉你下一步是什么，或者可以直接说下一句。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">已应用「…」</span><span class="mini">下一步：物件间隙的子入口与支线；也可直接补要求或回退</span></div>
+      <div class="never">不会发生：确认到一半、画布已经变了还照写。</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说</span>
+      <div class="say">不要这版 / 撤回</div>
+      <span class="kind quiet">撤回</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>丢弃预览，规划保持原样。</li>
+        <li>在卡片历史里留一条「已撤回」，点开能看到当时问过什么。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">已撤回</span><span class="mini">这条记录保留在「更早的引导」里</span></div>
+      <div class="never">不会发生：撤回还悄悄留了半版在画布上。</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="q">
+      <span class="who">你说</span>
+      <div class="say">停下来 / 取消</div>
+      <span class="kind quiet">取消</span>
+    </div>
+    <div class="mid">
+      <ul>
+        <li>静默结束在跑的请求，不动规划。</li>
+        <li>真失败（例如缺前置条件）才亮原因，并给一个<b>能改变状态</b>的下一步。</li>
+      </ul>
+    </div>
+    <div class="see">
+      <span class="lbl">你会看到</span>
+      <div class="card"><span class="title">这一步没做成 · &lt;阶段&gt;</span><span class="mini">红卡上写清原因，下一步是真能推进的那个动作</span></div>
+      <div class="never">不会发生：一个点了还是同一句话的「重试」。</div>
+    </div>
+  </div>
+
+  <h2 class="sec">E. 任何一句都不会越过的线</h2>
+  <p class="note">下表对上面每一行都成立。</p>
+  <div class="row" style="grid-template-columns:1fr">
+    <div class="mid" style="padding-right:0">
+      <ul>
+        <li><b>不编数</b>：数量、价格、库存、云端资产 ID 一律不猜；模型提取必须能对上你的原话。</li>
+        <li><b>不冒充</b>：预览 ≠ 已确认；本地保存、mock、云端验证分开说。</li>
+        <li><b>不背书</b>：排得下不等于合法容量，无障碍与疏散要现场核验。</li>
+        <li><b>可回溯</b>：每次预览、撤回、替换都留在卡片历史里，刷新还在。</li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<footer>
+  依据：<code>hooks/use-outdoor-agent-workflow.ts</code>（意图分支、追问预算、预览/确认）、<code>lib/outdoor-draft-design.ts</code>（默认方案）、
+  <code>lib/outdoor-agent-contract.ts</code>（本句溯源）、<code>lib/outdoor-agent-planning.ts</code>（落位与放不下）、
+  <code>components/outdoor-workflow-card.tsx</code>（卡片文案与三选一）。
+  「本轮」= PR #135（<code>2b895cc</code>、<code>2cc029d</code>）。生成于 2026-11-17。
+</footer>
+</body>
+</html>

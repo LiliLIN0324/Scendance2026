@@ -5,7 +5,8 @@ import { createElement, StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canonical, sha256 } from "../../supabase/functions/_shared/domain";
 import { backendSceneToLayout } from "../components/room-organizer/lib/backend-adapter";
-import { BackendSession, getBackendConfig, useBackendSession, type BackendSnapshot, type Scene } from "./backend-session";
+import { BackendSession, backendFailureText, getBackendConfig, useBackendSession, type BackendSnapshot, type Scene } from "./backend-session";
+import { SceneApiError } from "../../client/scene-client";
 import { geometryWorkbenchBindingKey, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
 import type { ActivityTaskContext, ActivityTaskRun } from "../../supabase/functions/_shared/activity-task-contract";
 
@@ -1082,5 +1083,23 @@ describe('canvas and cloud project mismatch',()=>{
     queue({error:{code:'LEASE_LOST'}},409);
     await controller.releaseLeaseAfterCanvasMismatch(projectId);
     expect(controller.getSnapshot()).toMatchObject({lease:null,writeBlocked:true,project:{id:projectId}});
+  });
+});
+
+describe('backendFailureText', () => {
+  it('turns an unmapped SceneApiError into a sentence instead of the raw code', () => {
+    const text = backendFailureText(new SceneApiError('ROUTE_NOT_FOUND', 404, null));
+    expect(text).toBe('请求的接口不存在，这次操作没有发出。');
+    expect(text).not.toBe('ROUTE_NOT_FOUND');
+    const unmapped = backendFailureText(new SceneApiError('NOT_A_REAL_CODE', 404, null));
+    expect(unmapped).toBe('云端操作失败（NOT_A_REAL_CODE），草稿已保留。');
+    expect(unmapped).not.toBe('NOT_A_REAL_CODE');
+  });
+
+  it('keeps a mapped code and a local error sentence', () => {
+    expect(backendFailureText(new SceneApiError('FORBIDDEN', 403, null))).toContain('没有执行此操作的权限');
+    const local = new Error('请先打开活动');
+    (local as Error & { code: string }).code = 'LOCAL_ONLY';
+    expect(backendFailureText(local)).toBe('请先打开活动');
   });
 });
