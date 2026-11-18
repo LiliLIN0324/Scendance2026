@@ -62,7 +62,7 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
   it('待发且选中：仍是东北开口环，实心圆盘不盖住缺口', () => {
     const onOpen = vi.fn();
     render(<BingoRailButton open onOpen={onOpen} />);
-    const button = screen.getByRole('button', { name: '收反馈，待发' });
+    const button = screen.getByRole('button', { name: 'Bingo，待发' });
     expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(button.className).toContain('sc-rail-disc');
     expect(button.className).toContain('is-active');
@@ -83,7 +83,7 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
     expect(button.querySelector('[data-ring] .sc-rail-label')).toBeNull();
     expect(button.querySelector('img')).toBeNull();
     expect(badge?.textContent ?? '').toBe('');
-    expect(button.getAttribute('data-tip')).toMatch(/待发/);
+    expect(button.getAttribute('data-tip')).toBe('Bingo');
     expect(button.querySelector('.sc-rail-label')?.textContent).toBe('Bingo');
 
     fireEvent.click(button);
@@ -177,7 +177,7 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
       href: '/review/',
     }));
     render(<BingoRailButton open onOpen={vi.fn()} />);
-    const button = screen.getByRole('button', { name: '收反馈，已回执' });
+    const button = screen.getByRole('button', { name: 'Bingo，已回执' });
     const badge = button.querySelector('.sc-bingo-badge');
     expect(button.className).toContain('is-active');
     expect(badge?.getAttribute('data-count')).toBeNull();
@@ -191,7 +191,7 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
 
   it('收起态不挂 is-active', () => {
     render(<BingoRailButton open={false} onOpen={vi.fn()} />);
-    const button = screen.getByRole('button', { name: '收反馈，待发' });
+    const button = screen.getByRole('button', { name: 'Bingo，待发' });
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(button.className).not.toContain('is-active');
   });
@@ -218,7 +218,7 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
     expect(clearance).toBeGreaterThan(0.5);
 
     render(<BingoRailButton open={false} onOpen={vi.fn()} />);
-    const idle = screen.getByRole('button', { name: '收反馈，待发' }).querySelector('path');
+    const idle = screen.getByRole('button', { name: 'Bingo，待发' }).querySelector('path');
     expect(idle?.getAttribute('d')).toBe(path);
     expect(idle?.getAttribute('stroke')).toContain('55585F');
     expect(idle?.getAttribute('stroke')).not.toMatch(/96651F|B4443C/);
@@ -324,7 +324,7 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
       removeEventListener: () => undefined,
     }));
     const { unmount } = render(<BingoRailButton open={false} onOpen={vi.fn()} />);
-    const idle = screen.getByRole('button', { name: '收反馈，待发' });
+    const idle = screen.getByRole('button', { name: 'Bingo，待发' });
     expect(idle.querySelector('.sc-bingo-badge')?.getAttribute('data-reduced')).toBe('true');
     expect(idle.querySelector('[data-part="ring"]')?.getAttribute('d')).toBe(bingoRingPath());
     expect(idle.querySelector('[data-part="bead"]')).toBeNull();

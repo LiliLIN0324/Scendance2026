@@ -4853,8 +4853,8 @@ useEffect(() => {
                   type="button"
                   className={`sc-rail-tool sc-rail-disc${outdoorPanel !== null ? ' is-active' : ''}`}
                   aria-pressed={outdoorPanel !== null}
-                  aria-label="户外规划：在地图上画边界分区动线"
-                  data-tip="户外规划 · 地图上画边界分区动线"
+                  aria-label="户外规划"
+                  data-tip="户外规划"
                   onClick={() => {
                     // 2026-11-13 用户拍板：右侧地图是唯一常驻画面，这个钮只控制左栏户外物料面板的
                     // 展开/收起，不收回地图。面板开 → 再点只收左栏面板（地图保留）；面板收 → 展开。
