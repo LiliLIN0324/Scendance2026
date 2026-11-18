@@ -49,7 +49,8 @@ describe('BingoAuditCard', () => {
     }]));
     render(<BingoAuditCard/>);
     expect(screen.getByText('本机评审记录')).toBeTruthy();
-    expect(screen.getByText(/对方的意见不会自动同步/)).toBeTruthy();
+    expect(screen.getByText('我的完成与对方的修改')).toBeTruthy();
+    expect(screen.getByText('还没有对方的修改')).toBeTruthy();
     expect(screen.getByText('记录 1')).toBeTruthy();
     expect(screen.getByText('发布会')).toBeTruthy();
     expect(screen.getByLabelText('打开评审页').getAttribute('href')).toBe(`/review/${SHARE}`);
@@ -65,15 +66,15 @@ describe('BingoAuditCard', () => {
     render(<BingoAuditCard score={SCORE}/>);
     expect(screen.getByText('系统体检结果')).toBeTruthy();
     expect(screen.queryByText('本机评审记录')).toBeNull();
-    expect(screen.getByText(/现场净宽、出入口、消防和规范验收均未核验/)).toBeTruthy();
-    expect(screen.getByText(/修改场景后请重新体检/)).toBeTruthy();
+    expect(screen.getByText(/只核对已建模几何；消防、无障碍与现场条件需另行核验/)).toBeTruthy();
   });
 
   it('does not show a perfect score for an empty layout or unchecked exits',()=>{
     render(<BingoAuditCard score={{...SCORE,total:100,itemCount:0,failedCount:0,breakdown:{spacing:100,aisle:100,bounds:100,wall:100}}}/>);
     expect(screen.queryByText('100')).toBeNull();
-    for(const label of ['椅子分布','画布中线附近','矩形画布边界','已建模内墙'])expect(screen.getByText(`${label}：待核验`)).toBeTruthy();
-    expect(screen.getByText(/现场净宽、出入口、消防和规范验收均未核验/)).toBeTruthy();
+    for(const label of ['椅子分布','画布中线附近','矩形画布边界','已建模内墙'])expect(screen.queryByText(`${label}：待核验`)).toBeNull();
+    expect(screen.getByText('几何检查：还没有可检查的已建模物件')).toBeTruthy();
+    expect(screen.getByText(/只核对已建模几何/)).toBeTruthy();
   });
 
   it('corrects legacy removed entries and excludes structure markers from the card',()=>{
@@ -91,7 +92,7 @@ describe('BingoAuditCard', () => {
     render(<BingoAuditCard/>);expect(screen.getByText('本次结果：')).toBeTruthy();
     expect(screen.getByText(/放了 1 件、移除 1 件/)).toBeTruthy();expect(screen.queryByText(/体检 100 分/)).toBeNull();
     act(()=>layoutStore.setState({layout:{...current.layout,name:'另一版'},revision:current.revision+1}));
-    expect(screen.getByText(/历史操作结果/)).toBeTruthy();expect(screen.getByText('历史系统体检记录')).toBeTruthy();
+    expect(screen.getByText(/历史操作结果/)).toBeTruthy();expect(screen.getByText('系统体检结果')).toBeTruthy();
     act(()=>layoutStore.setState({layout:current.layout,revision:current.revision+2}));
     expect(screen.getByText(/历史操作结果/)).toBeTruthy();
     act(()=>layoutStore.setState({layout:current.layout,revision:current.revision+3}));
@@ -165,7 +166,7 @@ describe('BingoAuditCard', () => {
 
     // 体检分分区
     expect(screen.getByTestId('bingo-score')).toBeTruthy();
-    expect(screen.getByText(/几何检查：待核验/)).toBeTruthy();
+    expect(screen.getByText('几何检查：2 件待处理')).toBeTruthy();
     expect(screen.queryByText('88')).toBeNull();
     // 完成卡 Z8
     expect(screen.getByTestId('bingo-z8')).toBeTruthy();
@@ -230,6 +231,6 @@ describe('BingoAuditCard', () => {
     });
 
     expect(screen.getByTestId('bingo-score')).toBeTruthy();
-    expect(screen.getByText(/几何检查：待核验/)).toBeTruthy();
+    expect(screen.getByText('几何检查：2 件待处理')).toBeTruthy();
     expect(screen.getByText(/历史操作结果/)).toBeTruthy();
   });});
