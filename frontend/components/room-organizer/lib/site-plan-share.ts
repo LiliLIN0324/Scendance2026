@@ -33,4 +33,3 @@ export function readSnapshotFromHash(hash: string): SitePlanSnapshot | null {
   if (!match) return null;
   return decodeSnapshot(match[1]);
 }
-
