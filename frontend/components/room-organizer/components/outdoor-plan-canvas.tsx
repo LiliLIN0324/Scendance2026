@@ -30,7 +30,8 @@ import type { BackendSession } from '@/lib/backend-session';
  *   读数一律从米制 ENU 几何现算，缩放不影响数值；
  * - 测量为图层栈最上层（可隐藏），选中动线面板显示全长。
  *
- * H3-c 规划信息面板（左栏常驻，规则在 site-plan-legend / site-plan-inventory 纯函数层）：
+ * H3-c 规划信息面板（底条「规划信息」钮开合，默认收起；开了就浮在画布右上角，
+ * 规则在 site-plan-legend / site-plan-inventory 纯函数层）：
  * - 四页签：总览（全案派生统计 + 当前可见统计分开显示）/ 清单（六类实体，
  *   支持类型 × 所属区 × 只看问题筛选）/ 问题（可定位问题清单）/ 图例（生成器输出）；
  * - 双向定位：点清单行/问题条 → 选中实体并平移视图居中；点地图对象 →
@@ -482,6 +483,11 @@ export interface OutdoorPlanCanvasProps {
   panelsHostId?: string;
   /** P2-d：规划信息浮窗的独立宿主 id（两张卡分属左栏两个容器、显隐独立）。缺省跟随 panelsHostId。 */
   infoPanelHostId?: string;
+  /**
+   * 2026-11-19 用户指令：规划信息改由底条「规划信息」钮开合、浮在画布右上角。
+   * 宿主显隐由父级控制；卡头这枚 × 只是同一个收口（关掉后底条钮可再次打开）。
+   */
+  onInfoPanelClose?: (() => void) | undefined;
   /**
    * P2-h：物件库面板的宿主 id（左栏第三个页签）。549 件 OnePlan 贴纸在这里被看见、
    * 被搜索、被点选后进入放置模式；缺省时物件库面板留在画布内浮窗。
@@ -1538,6 +1544,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onVenueBoundaryCanceled,
   panelsHostId,
   infoPanelHostId,
+  onInfoPanelClose,
   libraryPanelHostId,
   levelsHostId,
   measureHostId,
@@ -2264,6 +2271,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
   // H3-c 规划信息面板：页签、开关、筛选与提示消息（面板自带 status 行，只读也可用）。
   const [infoOpen, setInfoOpen] = useState(true);
+  // 2026-11-19：底条「规划信息」钮每次重新打开都会重挂宿主；重挂 = 新开一次，
+  // 所以卡体回到展开态，不延续上一次的折叠壳。
+  useEffect(() => {
+    if (infoPanelHost) setInfoOpen(true);
+  }, [infoPanelHost]);
   // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起。
   // 2026-11-17 用户：测量与标注不能同时用，就不该同时打开；开一张自动收另一张，属性卡保持独立。
   const [inspectorPanels, setInspectorPanels] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
@@ -12709,18 +12721,33 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         </div>
       )}
 
-      {/* H3-c 规划信息面板：宿主在 Bingo 面板里；Bingo 收起时整块不渲染（不再在画布顶部拉成横条）。 */}
+      {/* H3-c 规划信息面板：宿主由 room-organizer 挂在画布右上角，只有底条钮点开才存在；
+          宿主缺席（默认收起）时整块不渲染。 */}
       {!(infoPanelHostId && !infoPanelHost) && <PanelPortal host={infoPanelHost}>
       <div ref={infoPanelRef} style={infoPanelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} onWheel={stopPanelWheel}>
-        <button
-          type="button"
-          data-testid="info-panel-toggle"
-          onClick={() => setInfoOpen(open => !open)}
-          style={{ all: 'unset', cursor: 'pointer', fontWeight: 600, display: 'block', width: '100%' }}
-          aria-expanded={infoOpen}
-        >
-          规划信息 {infoOpen ? '▾' : '▸'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs }}>
+          <button
+            type="button"
+            data-testid="info-panel-toggle"
+            onClick={() => setInfoOpen(open => !open)}
+            style={{ all: 'unset', cursor: 'pointer', fontWeight: 600, flex: '1 1 auto' }}
+            aria-expanded={infoOpen}
+          >
+            规划信息 {infoOpen ? '▾' : '▸'}
+          </button>
+          {onInfoPanelClose && (
+            <button
+              type="button"
+              data-testid="info-panel-close"
+              aria-label="关闭规划信息"
+              title="关闭（底条「规划信息」可再次打开）"
+              onClick={onInfoPanelClose}
+              style={{ all: 'unset', cursor: 'pointer', color: PLANNING_SURFACE.panelText, opacity: 0.55, fontSize: 13, lineHeight: 1, padding: '0 2px' }}
+            >
+              ×
+            </button>
+          )}
+        </div>
         {infoOpen && (
           <>
             <div role="tablist" aria-label="规划信息页签" style={{ display: 'flex', flexWrap: 'wrap', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>

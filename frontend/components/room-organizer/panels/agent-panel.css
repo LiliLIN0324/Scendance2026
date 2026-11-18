@@ -1129,25 +1129,10 @@ button.ap-ghost {
 .ap-outdoor-reply-body { display: grid; gap: 6px; font-size: var(--fs-p2); line-height: 1.5; }
 .ap-outdoor-reply-body p { margin: 0; }
 
-/* ===== AgentRunPanel：停止确认行 + 过往任务归档折叠区（任务 1/2）===== */
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 6px 3px 10px;
-  border: 1px solid #c0392b;
-  border-radius: 999px;
-  background: var(--wk-paper);
-}
-  font-size: 11.5px;
-  color: #c0392b;
-  font-weight: 600;
-}
-  padding: 3px 9px;
-  font-size: 11.5px;
-}
-  background: #c0392b;
-  color: #fff;
-}
+/* ===== AgentRunPanel：过往任务归档折叠区（任务 1/2）=====
+   2026-11-19 修复：这里原本还留着「停止确认行」的三段声明，但它们的选择器在停止收敛那次
+   提交里随组件一起删了，只剩裸声明 → PostCSS 报 Unexpected }，整个编辑器编不出来。
+   确认行与紧急停止钮都已下线（现役停止钮走 .ap-run-pill[data-stop]），故按声明删除。 */
 .ap-archive {
   border: 1px solid var(--wk-hair);
   border-radius: 14px;
@@ -1189,7 +1174,7 @@ button.ap-ghost {
   margin: 2px 0;
 }
 
-/* ===== AgentRunPanel 对标补充：结果标记 / 数量胶囊 / 紧急停止钮 / 聚合回折条 / 停止收尾 ===== */
+/* ===== AgentRunPanel 对标补充：结果标记 / 数量胶囊 / 聚合回折条 / 停止收尾 ===== */
 .ap-run-tick[data-result="success"] { background: rgba(74, 124, 89, .14); color: var(--wk-green); }
 .ap-run-tick[data-result="failed"] { background: color-mix(in srgb, var(--err) 14%, var(--wk-paper)); color: var(--err); }
 .ap-run-tick[data-result="neutral"] { background: var(--wk-plane); color: var(--wk-ink-faint); }
@@ -1204,18 +1189,6 @@ button.ap-ghost {
   color: var(--wk-green);
   font-size: var(--fs-cap);
   font-weight: 500;
-}
-
-  flex: none;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  display: inline-grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--err) 12%, var(--wk-paper));
-  cursor: pointer;
 }
 
 .ap-run-aggregate {

@@ -5,8 +5,8 @@ import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
  * 户外 2D 规划覆盖层（P2-e · 融进 3D 页面框架）：**本组件只负责画布本体**——
  * 满幅 OutdoorPlanCanvas + 引导 + 分享弹窗，再无任何自造按钮/顶条/侧栏。
  * 其余功能全部 portal 进主产品 3D 页面**现有的框架锚点**（由 room-organizer 渲染）：
- * - `#outdoor-panel-host-layers` / `#outdoor-panel-host-info`：主产品左栏卡片里的两个
- *   卡片宿主（图层栈与编辑 / 规划信息，画布浮窗经 PanelPortal 进去）；
+ * - `#outdoor-panel-host-layers` / `#outdoor-panel-host-info`：主产品里的两个卡片宿主
+ *   （图层栈与编辑在左栏；规划信息在画布右上角、底条钮开合，画布浮窗经 PanelPortal 进去）；
  * - `#outdoor-tools-dock`：主产品右侧工具排位置（sc-editor-dock 内，同款
  *   sc-view-tools/sc-canvas-rail 框架），挂图源循环 / 导出 / 引导三枚钮。
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
@@ -319,6 +319,8 @@ export interface OutdoorPlanOverlayProps {
    * 接管态由 room-organizer 提供（透传给画布，portal 出隐藏覆盖层）；2D 态不传。
    */
   inspectorHostId?: string;
+  /** 2026-11-19 用户指令：规划信息浮在画布右上角、默认收起，底条「规划信息」钮开合；这里的 × 是同一收口。 */
+  onInfoPanelClose?: (() => void) | undefined;
   /** 清单/读数显示单位；工程底稿仍存米。缺省米。 */
   lengthUnit?: DisplayUnit;
   /**
@@ -392,6 +394,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   sceneObjects,
   dormant = false,
   inspectorHostId,
+  onInfoPanelClose,
   lengthUnit = 'm',
   controller,
   onViewChange,
@@ -912,6 +915,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(inspectorHostId ? { inspectorHostId } : {})}
             panelsHostId="outdoor-panel-host-layers"
             infoPanelHostId="outdoor-panel-host-info"
+            {...(onInfoPanelClose ? { onInfoPanelClose } : {})}
             libraryPanelHostId="outdoor-panel-host-library"
             levelsHostId="outdoor-panel-host-levels"
             measureHostId="outdoor-panel-host-measure"
