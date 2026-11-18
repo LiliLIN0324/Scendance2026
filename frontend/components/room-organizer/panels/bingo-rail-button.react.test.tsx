@@ -58,7 +58,7 @@ afterEach(cleanup);
 beforeEach(() => localStorage.clear());
 
 describe('Bingo 左轨入口 · D4 开口环', () => {
-  it('待发：开口墨环，无数字无勾无珠无角标，状态写进 aria-label', () => {
+  it('待发且选中：实心圆盘加纸色孔，无开口环、无数字无勾无珠无角标', () => {
     const onOpen = vi.fn();
     render(<BingoRailButton open onOpen={onOpen} />);
     const button = screen.getByRole('button', { name: '收反馈，待发' });
@@ -72,7 +72,12 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
     expect(badge?.getAttribute('data-count')).toBeNull();
     expect(badge?.getAttribute('data-bead')).toBeNull();
     expect(badge?.querySelector('svg')).toBeTruthy();
-    expect(badge?.querySelector('circle')).toBeNull();
+    const circles = [...(badge?.querySelectorAll('circle') ?? [])];
+    expect(circles.map(node => node.getAttribute('fill'))).toEqual(['#141416', '#FFFFFF']);
+    expect(circles[1]?.getAttribute('data-mark')).toBe('hole');
+    expect(Number(circles[0]?.getAttribute('r'))).toBe(BINGO_D4.r);
+    expect(Number(circles[1]?.getAttribute('r'))).toBe(BINGO_D4.holeR);
+    expect(badge?.querySelector('path')).toBeNull();
     expect(badge?.querySelector('text')).toBeNull();
     expect(badge?.querySelector('[data-mark="check"]')).toBeNull();
     expect(badge?.querySelector('.sc-bingo-corner')).toBeNull();
@@ -169,7 +174,7 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
     expect(button.className).not.toContain('is-active');
   });
 
-  it('D4 环在东北开口，珠坐在缺口里，三态共用同一条墨色环', () => {
+  it('未选中的 D4 环在东北开口，珠坐在缺口里，三态共用同一条墨色环', () => {
     const path = bingoRingPath();
     const nums = [...path.matchAll(/-?\d+(?:\.\d+)?/g)].map(match => Number(match[0]));
     const start = { x: nums[0] ?? 0, y: nums[1] ?? 0 };

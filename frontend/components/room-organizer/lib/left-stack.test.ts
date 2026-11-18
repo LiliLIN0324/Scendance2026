@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { NAV_RAIL_WIDTH_PX } from './nav-chrome';
 import {
   LEFT_STACK_CASCADE_OFFSET,
   LEFT_STACK_FLOAT_MARGIN,
@@ -190,10 +191,10 @@ describe('停靠吸附带 dockBandFromRect / pointInDockBand', () => {
     expect(band.bottom).toBe(800);
   });
 
-  it('拿不到列元素时回退到轨左缘 64px 起的兜底带', () => {
+  it('拿不到列元素时回退到轨右缘起的兜底带', () => {
     const band = dockBandFromRect(null, 240, 720);
-    expect(band.left).toBe(64);
-    expect(band.right).toBe(64 + Math.max(240, 220));
+    expect(band.left).toBe(NAV_RAIL_WIDTH_PX);
+    expect(band.right).toBe(NAV_RAIL_WIDTH_PX + Math.max(240, 220));
     expect(band.bottom).toBe(720);
   });
 

@@ -154,7 +154,7 @@
     width: 48px; height: 48px; padding: 0;
     border: 1px solid var(--wk-hair); border-radius: 50%;
     background: var(--wk-paper); color: var(--wk-ink);
-    box-shadow: 0 6px 18px rgb(20 20 22 / 14%);
+    box-shadow: var(--e1);
     cursor: pointer; z-index: 77;
     will-change: transform;
   }
@@ -206,8 +206,7 @@
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-capture > span.sc-rail-label {
     display: block; flex: none; color: var(--wk-ink-soft); font-size: 12px; line-height: 16px; white-space: nowrap;
   }
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active > span.sc-rail-label { color: var(--wk-green-deep); }
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active::before { display: none; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.is-active > span.sc-rail-label { color: var(--wk-ink); font-weight: 600; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after { display: none !important; }
   /* 工具行：设置与账号只留 44×44 图标钮，靠右对齐，不与四格分隔 */
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
@@ -312,7 +311,7 @@
     border: 1px solid var(--wk-hair); border-radius: 22px;
     background: var(--wk-paper); color: var(--wk-green-deep);
     font: inherit; font-size: 13px; text-decoration: none;
-    box-shadow: 0 6px 18px rgb(20 20 22 / 14%);
+    box-shadow: var(--e1);
     z-index: 77;
   }
   .sc-mobile-capture-entry span { white-space: nowrap; }

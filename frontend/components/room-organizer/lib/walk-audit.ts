@@ -114,6 +114,8 @@ interface Grid {
   minZ: number;
   /** 1 = 障碍 / 红线外。 */
   blocked: Uint8Array;
+  /** 1 = 只有设施占的格（不含红线外），窄通道只按这个算。 */
+  obstacle: Uint8Array;
   reachable: Uint8Array;
   /** 到最近障碍的格数（0 = 自身是障碍）。 */
   clearance: Float32Array;
@@ -156,6 +158,7 @@ function buildGrid(boundary: readonly PlanPoint[], cell: number): Grid {
     minX: originX,
     minZ: originZ,
     blocked: new Uint8Array(cols * rows),
+    obstacle: new Uint8Array(cols * rows),
     reachable: new Uint8Array(cols * rows),
     clearance: new Float32Array(cols * rows),
   };
@@ -228,14 +231,15 @@ function nearestFree(grid: Grid, start: number): number {
   return -1;
 }
 
-/** 多源 BFS：每个格子到最近障碍的格数，用来估"这里能过多宽"。 */
+/** 多源 BFS：每个格子到最近设施障碍的格数，用来估"这里能过多宽"。
+ *  只从设施格出发：流线贴着红线走时，场外不该被当成"窄通道"。 */
 function computeClearance(grid: Grid): void {
   const total = grid.cols * grid.rows;
   const queue = new Int32Array(total);
   let head = 0;
   let tail = 0;
   for (let i = 0; i < total; i++) {
-    if (grid.blocked[i]) {
+    if (grid.obstacle[i]) {
       grid.clearance[i] = 0;
       queue[tail++] = i;
     } else {
@@ -361,6 +365,7 @@ export function auditWalkability(options: WalkAuditOptions): WalkAuditReport {
     for (const collider of colliders) {
       if (colliderBlocks(collider, x, z, walkRadius)) {
         grid.blocked[i] = 1;
+        grid.obstacle[i] = 1;
         break;
       }
     }
