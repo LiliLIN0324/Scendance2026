@@ -619,8 +619,12 @@ export function useOutdoorAgentWorkflow(input: {
     setSimulating(false);
     abort.current?.abort();
     // 2026-11-18：撤回预览 / 改手画后，同一份红线不再自动弹回确认卡（重画边界才会重新签）。
-    const livePlan = callbacks.current.bridge()?.getPlan();
-    autoScopeSig.current = livePlan ? JSON.stringify(livePlan.boundary) : null;
+    const liveBridge = callbacks.current.bridge();
+    const livePlan = liveBridge?.getPlan();
+    const visible = liveBridge?.visibleActivityRange?.();
+    autoScopeSig.current = visible && checkBoundaryRing(visible.boundary).ok
+      ? JSON.stringify({ anchor: visible.anchor, boundary: visible.boundary })
+      : livePlan ? JSON.stringify({ anchor: livePlan.anchor, boundary: livePlan.boundary }) : null;
     callbacks.current.begin(); // Invalidate the shared outer task epoch as well as this hook.
     token.current = null;
     proposalRef.current = null;
@@ -705,20 +709,29 @@ export function useOutdoorAgentWorkflow(input: {
    * 同一份边界只自动签一次——用户点了「撤回预览」不会立刻又被弹回来；重画边界才会重新签。
    */
   useEffect(() => {
-    if (state.stage !== "scope" || proposal || busy || drawingMode) {
+    if ((state.stage !== "scope" && state.stage !== "place") || proposal || busy || drawingMode) {
       setBoundaryReady(false);
       return undefined;
     }
     let stopped = false;
     const tick = () => {
       if (stopped) return;
-      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
-      const ready = !!planNow && checkBoundaryRing(planNow.boundary).ok;
+      const bridge = callbacks.current.bridge();
+      const planNow = bridge?.getPlan() ?? null;
+      const visible = bridge?.visibleActivityRange?.() ?? null;
+      const visibleReady = !!visible && checkBoundaryRing(visible.boundary).ok;
+      const ready = !!planNow && (visibleReady || (stateRef.current.stage === "scope" && checkBoundaryRing(planNow.boundary).ok));
       setBoundaryReady(ready);
       if (!ready || !planNow) return;
-      const sig = JSON.stringify(planNow.boundary);
+      const sig = JSON.stringify({ anchor: visibleReady ? visible.anchor : planNow.anchor,
+        boundary: visibleReady ? visible.boundary : planNow.boundary });
       if (autoScopeSig.current === sig) return;
       autoScopeSig.current = sig;
+      // 搜索范围只是候选：进入同一份确认卡，用户确认前不写入 plan.boundary。
+      if (visibleReady) {
+        offerBoundary(visible.anchor, visible.boundary, visible.name.trim() || "当前地图范围");
+        return;
+      }
       const job = start();
       persist({ ...stateRef.current, stage: "scope" });
       offer(planNow, "scope", "确认当前活动范围", job, [
@@ -1053,7 +1066,7 @@ export function useOutdoorAgentWorkflow(input: {
         `确认“${name}”的活动范围`,
         job,
         [
-          "商场轮廓只是候选；只用到一部分就重画。",
+          "地点轮廓只是候选；只用到一部分就重画。",
           ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
           ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],

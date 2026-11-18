@@ -516,6 +516,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
    */
   const handOverPlaceToChat = (name: string) =>
     answersPlaceRequest(agent?.outdoorWorkflow.state.stage, name, query => agent?.searchOutdoorVenue(query));
+  const clearPlaceRangePreview = () => {
+    const flow = agent?.outdoorWorkflow;
+    if (flow?.proposal?.kind === 'scope') flow.cancel();
+  };
 
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {
@@ -976,6 +980,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           {...(venueSearchSync ? { sync: venueSearchSync } : {})}
           near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
           onPickArea={area => {
+            clearPlaceRangePreview();
             // 选区：只换视图（框住这片地），定位钉让位给边界，避免两种标记叠在一起。
             cancelPlaceShape(); // Includes the pending retry and in-flight request.
             setPlacePin(null);
@@ -984,6 +989,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             handOverPlaceToChat(area.name);
           }}
           onPick={place => {
+            clearPlaceRangePreview();
             setPlaceArea(null);
             setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
             canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
@@ -991,7 +997,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
             handOverPlaceToChat(place.name);
           }}
-          onClear={() => { cancelPlaceShape(); setPlacePin(null); setPlaceArea(null); }}
+          onClear={() => { cancelPlaceShape(); clearPlaceRangePreview(); setPlacePin(null); setPlaceArea(null); }}
         />
         </PlaceSearchSlot>
       )}

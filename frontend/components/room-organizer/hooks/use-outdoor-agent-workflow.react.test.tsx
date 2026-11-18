@@ -360,7 +360,7 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   act(() => flow.offerBoundary(anchor, ring, "IN77"));
   expect(apply).not.toHaveBeenCalled();
   expect(flow.appliedHighlight).toBeNull();
-  expect(host.textContent).toContain("商场轮廓只是候选");
+  expect(host.textContent).toContain("地点轮廓只是候选");
   const confirm = [...host.querySelectorAll("button")].find(
     (b) => b.textContent?.includes("确认并应用这一版"),
   )!;
@@ -394,7 +394,7 @@ it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => 
   const row = host.querySelector<HTMLButtonElement>(".ap-card-history-row")!;
   act(() => row.click());
   const detail = host.querySelector(".ap-card-history-detail");
-  expect(detail?.textContent).toContain("商场轮廓只是候选");
+  expect(detail?.textContent).toContain("地点轮廓只是候选");
   expect(detail?.textContent).toContain("确认并应用这一版");
   expect(detail?.textContent).toContain("在地图上重画实际活动范围");
   expect(detail?.textContent).toContain("撤回预览");
@@ -523,6 +523,30 @@ it("候选边界遇到画布基座变化仍恢复核对，不把任务打回搜�
   expect(flow.busy).toBe(false);
   expect(apply).not.toHaveBeenCalled();
 });
+it.each(["place", "scope"])("%s 阶段搜索轮廓到达后自动出现确认按钮，确认前不写入，撤回不反复弹出", async stage => {
+  vi.useFakeTimers();
+  try {
+    plan = { ...plan, boundary: [] };
+    let visible: ReturnType<NonNullable<OutdoorAgentBridge["visibleActivityRange"]>> = null;
+    bridge.visibleActivityRange = () => visible;
+    mountAtFlowState({ stage, completed: stage === "scope" ? ["place"] : [] });
+    expect(flow.proposal).toBeNull();
+    visible = { anchor: plan.anchor!, boundary: ring, name: "杭州植物园" };
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(flow.proposal?.label).toContain("杭州植物园");
+    expect(host.textContent).toContain("确认并应用这一版");
+    expect(host.textContent).not.toContain("先在图上圈出这次活动用的地");
+    expect(plan.boundary).toEqual([]);expect(apply).not.toHaveBeenCalled();
+    act(() => flow.cancel());
+    await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
+    expect(flow.proposal).toBeNull();
+    visible = { ...visible, boundary: ring.map(p => ({ x: p.x * 2, y: p.y * 2 })) };
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(flow.proposal?.kind).toBe("scope");
+    await action("confirm");
+    expect(plan.boundary).toEqual(visible.boundary);expect(flow.state.stage).toBe("zones");
+  } finally { vi.useRealTimers(); }
+});
 it("没有红线时核对把地图上的可见范围送进确认卡，确认后写入且不退回搜索", async () => {
   plan = { ...plan, boundary: [] };
   bridge.visibleActivityRange = () => ({
@@ -579,6 +603,8 @@ it("已有可见范围时 search 不把任务卡打回搜索目标地点；没�
   await turn("再搜一个地点", response("search", {}, { query: "玉泉" }));
   expect(flow.state.stage).toBe("scope");
   expect(host.textContent).not.toContain("搜索目标地点");
+  // 搜索轮廓现在会自动成为待确认候选；清除地点时一并撤回这份候选。
+  act(() => flow.cancel());
   bridge.visibleActivityRange = () => null;
   plan = { ...plan, boundary: [] };
   await turn("换个地方", response("search", {}, { query: "西湖" }));
