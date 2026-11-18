@@ -21,6 +21,7 @@ import {
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
 import { facilityTypeLabel } from './plan-facility-catalog';
+import { formatPlanObjectSize } from './plan-size-format';
 import { formatAreaM2, formatLengthM, measureKindLabel, measureValue } from './site-plan-measure';
 import { routeAnchorPoint, planVehicleDisplayLabel } from './site-plan-legend';
 import { planConflictIssues } from './site-plan-conflicts';
@@ -120,7 +121,7 @@ export function buildPlanInventory(plan: SitePlanData): PlanInventoryRow[] {
       typeLabel: facilityTypeLabel(facility.templateId),
       zoneName: facility.zoneId ? zoneNameById.get(facility.zoneId) ?? null : null,
       zoneId: facility.zoneId ?? null,
-      metric: `${facility.size.width}×${facility.size.depth} m`,
+      metric: formatPlanObjectSize(facility.size.width, facility.size.depth),
       anchor: { x: facility.position.x, y: facility.position.y },
       hasIssue: facilityIssueIds.has(facility.id),
     });

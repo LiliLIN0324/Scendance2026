@@ -253,7 +253,7 @@ describe('facility ghost & selection drawing (H2-c)', () => {
     expect(cap.dash).toContainEqual([6, 4]);
     expect(cap.rects.some(r => r.startsWith('stroke:'))).toBe(true);
     expect(cap.rects.some(r => r.startsWith('fill:'))).toBe(true);
-    expect(cap.texts.some(t => t.includes('市集摊位') && t.includes('2×2m'))).toBe(true);
+    expect(cap.texts.some(t => t.includes('市集摊位') && t.includes('2 × 2 m'))).toBe(true);
     expect(cap.strokes).toContain(PLANNING_LAYER_COLORS.facility);
   });
 
@@ -269,6 +269,24 @@ describe('facility ghost & selection drawing (H2-c)', () => {
     expect(cap.rects.filter(rect => rect.startsWith('stroke:'))).toHaveLength(2);
     expect(cap.rects.filter(rect => rect.startsWith('fill:'))).toHaveLength(2);
     expect(cap.texts).toHaveLength(0);
+  });
+
+  it('keeps generated long names and raw bounding-box floats out of the ghost label', () => {
+    const { ctx, cap } = makeCtx();
+    drawFacilityGhost(
+      { ctx, viewport: view } as PlanCanvasContext,
+      {
+        name: '1: 铝合金折叠框架，藏青色厚棉布坐垫靠背，座高 45 厘米，展开尺寸约 45×50×88 厘米，四脚带黑色防滑脚垫，可折叠收纳。',
+        width: 0.5201502442359924,
+        depth: 0.5390734076499993,
+      },
+      { x: 0, y: 0 },
+    );
+    expect(cap.texts.some(t => t.includes('52 × 54 cm'))).toBe(true);
+    expect(cap.texts.some(t => t.includes('…'))).toBe(true);
+    expect(cap.texts.some(t => t === '点击落位 · Esc/右键取消')).toBe(true);
+    expect(cap.texts.every(t => !t.includes('0.5201502442359924'))).toBe(true);
+    expect(cap.texts.every(t => !t.includes('可折叠收纳'))).toBe(true);
   });
 
   it('paints an invalid ghost in warning red', () => {

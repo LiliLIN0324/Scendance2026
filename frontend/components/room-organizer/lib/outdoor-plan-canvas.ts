@@ -1146,11 +1146,14 @@ export function drawZoneLayer(
  * opts.selectedId 命中的设施画白色外圈 + 名称标注（H2-c「放置即选中」可视反馈）。
  */
 /** 画布标签硬上限：长名字只留一段，不许把画布拉成一行。 */
-function planCanvasLabel(name: string, max = 12): string {
+export function planCanvasLabel(name: string, max = 12): string {
   const text = name.trim();
   const chars = Array.from(text);
   return chars.length > max ? `${chars.slice(0, max).join('')}…` : text;
 }
+
+export { formatPlanObjectSize } from './plan-size-format';
+import { formatPlanObjectSize } from './plan-size-format';
 
 export function drawFacilityLayer(
   c: PlanCanvasContext,
@@ -1375,8 +1378,27 @@ export function drawFacilityGhost(
   ctx.font = '10px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillStyle = 'rgba(15,22,32,0.9)';
-  ctx.fillText(`${template.name} ${template.width}×${template.depth}m`, center.x, center.y + Math.max(h / 2, 6) + 3);
+  // 2026-11-19 用户口径：「很多提示都不对」——生成物料的名称可能是一整段商品说明，
+  // 尺寸又是模型包围盒的原始浮点。幽灵标签只留短名 + 人类可读尺寸，并给出退出方式；
+  // 完整名称留给放置浮条/属性卡的 title，不再把画布压成一行字。
+  const label = `${planCanvasLabel(template.name, 14)} · ${formatPlanObjectSize(template.width, template.depth)}`;
+  const hint = opts.invalid ? '落点越界 · 换一处' : '点击落位 · Esc/右键取消';
+  const maxX = Number.isFinite(viewport.canvasW) && viewport.canvasW > 0 ? viewport.canvasW - 96 : center.x;
+  const maxY = Number.isFinite(viewport.canvasH) && viewport.canvasH > 0 ? viewport.canvasH - 32 : Infinity;
+  const labelX = Math.max(96, Math.min(maxX, center.x));
+  const labelY = Math.min(center.y + Math.max(h / 2, 6) + 4, maxY);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = '600 11px system-ui, sans-serif';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.strokeText(label, labelX, labelY);
+  ctx.fillStyle = 'rgba(15,22,32,0.92)';
+  ctx.fillText(label, labelX, labelY);
+  ctx.font = '9px system-ui, sans-serif';
+  ctx.strokeText(hint, labelX, labelY + 14);
+  ctx.fillStyle = opts.invalid ? 'rgba(192,57,43,0.95)' : 'rgba(60,70,80,0.82)';
+  ctx.fillText(hint, labelX, labelY + 14);
 }
 
 /** 一句话布置的落位预览：半透明虚线占地，不写 plan、不进 undo。朝向与设施层同一套（屏幕 y 向下，故取负角）。 */
