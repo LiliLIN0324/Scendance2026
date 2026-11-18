@@ -4906,12 +4906,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {showOutdoorSuggestion && <OutdoorStageSuggestion key={agent.outdoorWorkflow.state.stage} stage={agent.outdoorWorkflow.state.stage} onPick={pickTaskExample} />}
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <div className="ap-composer-field ap-panel-field">
-        {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} disabled={!composerEnabled} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === 'Tab' && !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
-          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
-        }}/>
+        {/* 2026-11-19 用户指令：有图时附件条向上展开——它占正常流，贴在打字区上方，
+            输入卡随附件往上长、删空自动收回，不再绝对定位压住占位句。 */}
         {agent.pendingFiles.length>0 && <div className="ap-file-chips" role="list" aria-label="待发截图">
           {agent.pendingFiles.map((item, index) => <div key={item.url.slice(-24)+String(index)} role="listitem" className="sc-chat-file ap-file-chip">
             <img className="sc-chat-file-thumb" src={item.url} alt=""/>
@@ -4919,6 +4915,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             <button type="button" className="sc-chat-file-remove" aria-label={`移除附件 ${index+1}`} onClick={() => agent.removePendingImage(index)}><X size={14} aria-hidden="true"/></button>
           </div>)}
         </div>}
+        {/* 引导句是绝对定位的整句打字机：有附件时收掉，免得和上方的附件条叠在一起。 */}
+        {ghostVisible && !agent.pendingFiles.length && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
+        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} disabled={!composerEnabled} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === 'Tab' && !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
+        }}/>
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         {agent.sessionSaveFailed && <p role="status" className="ap-field-note">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
