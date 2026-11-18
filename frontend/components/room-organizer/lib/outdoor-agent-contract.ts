@@ -281,6 +281,12 @@ export interface OutdoorMapContext {
    * 没有就回空数组——线路缺失要如实说，不拿底图像素冒充。
    */
   roadLines?: () => import("./outdoor-route-line-layout").RouteLine[];
+  /**
+   * 2026-11-19 docs/47 A2：证据分级明细（hard-block 禁区 / soft-avoid 可摆但有代价 /
+   * info 利好）。一行式摘要已随 issued 上下文发给模型；明细供排布引擎（A3）按档消费。
+   * 没有就回空档——没有证据就如实说没有，不拿底图像素冒充。
+   */
+  layoutEvidence?: () => import("./outdoor-layout-weights").LayoutEvidence;
 }
 export interface OutdoorLibraryItem {
   id: string;
