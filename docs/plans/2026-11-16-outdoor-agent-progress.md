@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：新增 `outdoor-fixed-data-evidence.test.ts`，用 `node:fs` 把 `FIXED_DATA_EVIDENCE` 里每一个文件名钉成“磁盘上真有这个 `*.test.ts`”（并验用例号在 11 条之内、导出表与证据表一致）。**变异验证**：往 #1 里塞一个 `no-such-file` 后测试真会红（`#1 → no-such-file.test.ts`），改回即绿——不是只靠“碰巧过”。本轮 70 文件 **764/764** 全过，`tsc` 0 行。**TLS 握手连续第十二轮失败**，推送不通。待 PR 分支本地 `a68f4d1a`+本轮（领先 main 50 笔）。9222 五十九轮不通。下一条：给 `BROWSER_EVIDENCE` / `FIXED_DATA_EVIDENCE` 写一层一致性自检（不让某条用例在两个表里自相矛盾）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-fixed-data-evidence.test.ts`。
+- 下一条操作：新增 **M0–M7 验收结论汇** `docs/plans/2026-11-19-outdoor-acceptance-rollup.md`（每批一行：结论 / 可复跑证据 / 缺口与归属；11 条用例逐条一行；总判断与最短路径；复跑命令）。数字均从代码常量与三份计划文件取，不手抄；本轮复跑 3 文件 **52/52**。**TLS 握手连续第十三轮失败**，推送不通。待 PR 分支本地 `e8c234a8`+本轮（领先 main 51 笔）。9222 六十轮不通。下一条：把汇表里“M3 接线”（解析层 → brief）做成真切片（这是唯一个不靠登录态、能把批次往前推的）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/instruction-layers.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 14:00 · 自动轮次 104 · M0–M7 验收结论汇
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 14:00，自动轮次 104
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ 汇总 / 验收结论汇 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `e8c234a8`、领先 main 50 笔
+交付：`docs/plans/2026-11-19-outdoor-acceptance-rollup.md`——每批一行（结论 / 可复跑证据 / 缺口与归属）+ 11 条用例逐条一行 + 总判断与最短路径 + 复跑命令
+验证（固定数据）：抽验 3 文件（固定数据证据、状态卡、待补清单）**52/52**；本批整体 70 文件/764 测试（轮次 103 实测）
+真实浏览器/云端：仍未验（9222 第六十轮 down）
+未完成：#2/#5 真实浏览器；#3/#6/#11 已观测未通过；云端 11 条全未验；推送仍被网络拦住
+```
+
+- **把“每批到底验了没有”集中到一页**：以前结论散在进度表、对照表、PR 草稿三处；现在一页齐，且每条都指向可复跑的命令。
+- **汇表里写清“谁去补”**：批次表加一列“缺口与归属”，区分“需 9222 / 需云端授权 / 我可做”——不把球停在自己脚下，也不把球往外一直丢。
+- **不许汇表自动变绿**：本页只汇总已有证据，不产生新结论；总判断仍是“不能发”，并写明“无网络下我能推的只会是打磨”。
 
 ### 2026-11-19 13:00 · 自动轮次 103 · 证据文件存在性自检
 
