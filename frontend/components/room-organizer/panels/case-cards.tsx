@@ -11,13 +11,16 @@ import { CaseThumb } from './case-thumb';
  * 方案在挂载时算一次（buildPlan 会过一遍 schema，44 案不值得每次渲染重算）；
  * 整段由外层 details 懒挂载——收着的时候一张都不建。
  */
-export function CaseCards({ onOpen }: { onOpen(replica: ReplicaCase): void }): JSX.Element {
-  const cards = useMemo(() => REPLICA_CASES.map(replica => ({ replica, plan: replica.buildPlan() })), []);
+export function CaseCards({ cases = REPLICA_CASES, onOpen }: {
+  cases?: readonly ReplicaCase[];
+  onOpen(replica: ReplicaCase): void;
+}): JSX.Element {
+  const cards = useMemo(() => cases.map(replica => ({ replica, plan: replica.buildPlan() })), [cases]);
 
   return <ul className="sc-space-samples sc-space-cases">
     {cards.map(({ replica, plan }) => <li key={replica.id}>
       <button type="button" className="sc-space-sample" onClick={() => onOpen(replica)}
-        title={replica.locationNote ? `${replica.title} · ${replica.locationNote}` : replica.title}
+        title={[replica.title, replica.titleEn, replica.locationNote].filter(Boolean).join(' · ')}
         aria-label={`打开经典案例 ${replica.title}`}>
         <CaseThumb plan={plan}/>
         <strong>{replica.title}</strong>

@@ -90,6 +90,7 @@ import { useOutdoorAgentWorkflow, explicitProposalApproval } from '../hooks/use-
 import { OutdoorThoughtRecord, OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
 import type { OutdoorAgentBridge, OutdoorBrief } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
+import { matchesLocalOutdoorCommand } from '../lib/outdoor-local-commands';
 import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
 import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
@@ -3150,6 +3151,23 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         else await proposeRoutePlan();
         return;
       }
+      // 2026-11-18 M4 离线切片：「帮我分区」「200 人市集，签到靠近入口，留出通道」这类句子的
+      // 意图识别与分区/物料/流线生成本来就是本地确定性规则（与上方排流线同口径，见
+      // lib/outdoor-local-commands）。已确认未登录时不再落登录卡，直接出预览；已登录仍走
+      // 同 Agent 模型路径，不偷跑旧模板（见 outdoor contextual workflow 生产用例）。
+      if (outdoorWorkflow.viewerKnownAnonymous && routeBridgeRef.current?.getPlan()
+          && matchesLocalOutdoorCommand(trimmed, memoryRef.current.event ?? null)) {
+        const localEventTurn = parseOutdoorEventTurn(trimmed, memoryRef.current.event ?? null, outdoorKindRef.current === 'zone' && outdoorTask?.state === 'blocked');
+        if (localEventTurn) saveMemory({ ...memoryRef.current,
+          ...(localEventTurn.event ? { event: localEventTurn.event } : {}),
+          ...(localEventTurn.headcount != null ? { headcount: localEventTurn.headcount } : {}) });
+        else {
+          const statedLocal = parseBriefSentence(trimmed);
+          saveMemory({ ...memoryRef.current, ...(statedLocal.event ? { event: statedLocal.event } : {}), ...(statedLocal.headcount ? { headcount: statedLocal.headcount } : {}) });
+        }
+        await proposeZonePlan();
+        return;
+      }
       if(venuePick&&!venuePick.loading&&!venuePick.picking){
         const ordinal=trimmed.match(/(?:第|选|用|就)([一二三四五12345])(?:个|项)?/u)?.[1];
         const index=ordinal?('一二三四五'.includes(ordinal)?'一二三四五'.indexOf(ordinal):Number(ordinal)-1):-1;
@@ -4293,7 +4311,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 同一次事件里 send 仍会落到旧会话——所以先记账，等 canForward 为真（绑定完成）再补发。
   const pendingFreshSendRef = useRef<{ text: string } | null>(null);
   const submitComposer = (): void => {
-    if (loginBlocked) return;
+    // 2026-11-18：登录卡只拦模型类需求；白名单内的确定性本地命令照发（与 composerEnabled 同口径）。
+    // composer 作用域拿不到原始 memory，priorEvent 传 null：锁定态下要求句子自带活动类型+人数。
+    if (loginBlocked && !matchesLocalOutdoorCommand(draft.trim(), null)) return;
     if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return;
     // 云端布局运行中：Enter 不是新指令，是「为下一步添加备注」——塞进运行账本，
     // 由工作线程在下一轮思考前取走（creative-studio deliverSteerNotes）。可撤回。
@@ -4454,7 +4474,11 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 地图优先：地址没定就只给选址句，不给无地点的设计句；定完地点再回到活动/布置句。
   const placePending = placeStillPending({ hasOutdoorPlan: agent.outdoorBridgeReady, stage: agent.outdoorWorkflow.state.stage, venueUp: agent.venueUp });
   // 登录卡已经说明原因时，输入框不再收消息：避免发出去被吞、卡片停在「正在处理」。
+  // 2026-11-18 M4 离线切片：白名单内的确定性本地命令（分区/活动句/流线，零模型零云端写入）
+  // 不再被登录门锁死——未登录也能发、也能出预览；非白名单句子仍保持锁定。
   const loginBlocked = agent.outdoorWorkflow.loginRequired && !agent.outdoorWorkflow.loginSatisfied;
+  const loginLocalCommand = loginBlocked && matchesLocalOutdoorCommand(draft.trim(), null);
+  const composerEnabled = !loginBlocked || loginLocalCommand;
   const suggestion = useSuggestion(placePending ? PLACE_INPUT_SUGGESTIONS : activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
   // 待确认 / 暂停 / 圈选态让位给状态专属 placeholder，不再打例句。
@@ -4463,7 +4487,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const planShown = agent.state === 'planReady' || agent.state === 'planEdited';
   const ghostVisible = !agent.outdoorBridgeReady && !loginBlocked && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
-  const composerPlaceholder = loginBlocked ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
+  const composerPlaceholder = loginBlocked && !loginLocalCommand ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
     : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : placePending ? '先说地点：城市、场馆或地址'
@@ -4477,7 +4501,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     : '说一句，比如「45 人讲座，入口在东侧」';
   // 发送键双态：空且无附件 → 麦克风；有字（或带附件）→ 箭头。理解中禁用，既有闸门不动。
   const hasDraft = draft.trim().length > 0;
-  const canSend = !loginBlocked && !agent.isUnderstanding(draft) && (hasDraft || !!agent.pendingFile);
+  const canSend = composerEnabled && !agent.isUnderstanding(draft) && (hasDraft || !!agent.pendingFile);
   const showMic = !hasDraft && !agent.pendingFile;
   const preStates = !generating && !proposed && !paused && !planShown && agent.state !== 'generateFailed';
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
@@ -4840,7 +4864,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <div className="ap-composer-field ap-panel-field">
         {ghostVisible && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} disabled={loginBlocked} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} disabled={!composerEnabled} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }

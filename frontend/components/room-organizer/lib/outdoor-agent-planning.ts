@@ -52,6 +52,126 @@ function clipX(ring: PlanPoint[], x: number, keepRight: boolean): PlanPoint[] {
       !i || Math.hypot(p.x - result[i - 1]!.x, p.y - result[i - 1]!.y) > 0.001,
   );
 }
+/* 2026-11-18 用户指令「agent 能不能智能根据分区摆放物件」：分区先要落在用户说的方位上。
+ * 之前这里是「沿 X 均分 N 条 + 上下各收 3m」，所以六条竖条贯穿南北、每块都是整场高度；
+ * 用户说的方位（西北角办婚礼、南侧烧烤）在协议里一路传到 brief，却没有任何消费者。
+ * 现在按九方位取格位、按用途/人数/清单算面积，落成互不重叠、留出通道余量的小块，没提的区域留空。 */
+const ZONE_SLOTS = {
+  "north-west": { col: 0, row: 0 },
+  north: { col: 1, row: 0 },
+  "north-east": { col: 2, row: 0 },
+  west: { col: 0, row: 1 },
+  center: { col: 1, row: 1 },
+  east: { col: 2, row: 1 },
+  "south-west": { col: 0, row: 2 },
+  south: { col: 1, row: 2 },
+  "south-east": { col: 2, row: 2 },
+} as const;
+type ZoneSlotName = keyof typeof ZONE_SLOTS;
+/** 用户没说方位时按用途给的默认方位：舞台在北、观众在中，舞台自然对着观众区。 */
+const ZONE_DEFAULT_SLOT: Record<NonNullable<PlanZone["purpose"]>, ZoneSlotName> = {
+  performance: "north",
+  audience: "center",
+  exhibition: "west",
+  market: "east",
+  service: "south-east",
+};
+/** 分区面积下限（㎡）：小于这个连一件主物件加净空都排不开。 */
+const ZONE_AREA_FLOOR: Record<NonNullable<PlanZone["purpose"]>, number> = {
+  performance: 120,
+  audience: 80,
+  exhibition: 90,
+  market: 90,
+  service: 45,
+};
+/** 每件物件连同摊间/通道的包络（㎡）：只用于算分区要多大，真实尺寸仍取物料库。 */
+const ZONE_M2_PER_OBJECT: Record<NonNullable<PlanZone["purpose"]>, number> = {
+  performance: 0,
+  audience: 2,
+  exhibition: 14,
+  market: 12,
+  service: 0,
+};
+type ZoneRect = { w: number; e: number; s: number; n: number };
+
+function zoneRectArea(rect: ZoneRect): number {
+  return Math.max(0, rect.e - rect.w) * Math.max(0, rect.n - rect.s);
+}
+
+/** 按用途/人数/已给清单算这个分区需要多大；观众类按 2㎡/人再留 25% 通行余量。 */
+function zoneAreaNeed(
+  need: OutdoorBrief["zones"][number],
+  brief: OutdoorBrief,
+): number {
+  const floor = ZONE_AREA_FLOOR[need.purpose];
+  const byGuest = brief.guests ? brief.guests * 2 : 0;
+  if (need.purpose === "audience") return Math.max(floor, byGuest * 1.25);
+  if (need.purpose === "performance") return floor;
+  const count = brief.items
+    .filter((item) => item.zone === need.name)
+    .reduce((n, item) => n + item.count, 0);
+  return Math.max(floor, byGuest * 1.25, count * ZONE_M2_PER_OBJECT[need.purpose] * 1.25);
+}
+
+/** 矩形与用地轮廓求交：四个半平面依次裁，凹口跨接的结果由后续校验拒掉。 */
+function clipRectToRing(ring: PlanPoint[], rect: ZoneRect): PlanPoint[] {
+  const x = clipX(clipX(ring, rect.w, true), rect.e, false);
+  const flip = (points: PlanPoint[]) => points.map((p) => ({ x: p.y, y: p.x }));
+  return flip(clipX(clipX(flip(x), rect.s, true), rect.n, false));
+}
+
+function ringAreaM2(ring: readonly PlanPoint[]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % ring.length]!;
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+/** 按需要的面积在格位里取一块矩形：先按格位长宽比定形，再夹回格位与可用范围。 */
+function fitZoneRect(
+  area: number,
+  usable: ZoneRect,
+  slotW: number,
+  slotH: number,
+  slot: ZoneSlotName,
+  gutter: number,
+  purpose: NonNullable<PlanZone["purpose"]>,
+): ZoneRect {
+  const { col, row } = ZONE_SLOTS[slot];
+  const maxW = Math.max(1, slotW - gutter);
+  const maxH = Math.max(1, slotH - gutter);
+  const aspect = maxW / maxH;
+  let width = Math.min(maxW, Math.sqrt(Math.max(area, 1) * aspect));
+  let height = Math.min(maxH, Math.max(area, 1) / Math.max(width, 0.5));
+  // 舞台要放宽到 8m 台面；其它用途至少留 5m 短边，避免切成细条。
+  const minSide = purpose === "performance" ? 10 : 5;
+  if (width < minSide) width = Math.min(maxW, minSide);
+  if (height < minSide) height = Math.min(maxH, minSide);
+  width = Math.min(width, maxW);
+  height = Math.min(height, maxH);
+  const cx = usable.w + (col + 0.5) * slotW;
+  const cy = usable.n - (row + 0.5) * slotH;
+  let w = cx - width / 2;
+  let s = cy - height / 2;
+  // 夹回可用范围（靠边格位不越出用地内缩线）。
+  w = Math.min(Math.max(w, usable.w), usable.e - width);
+  s = Math.min(Math.max(s, usable.s), usable.n - height);
+  return { w, e: w + width, s, n: s + height };
+}
+
+/** 目标格位优先，其余按距离由近到远——方位被占了就贴着它落，不跨到场地另一头。 */
+function zoneSlotOrder(wanted: ZoneSlotName): ZoneSlotName[] {
+  const target = ZONE_SLOTS[wanted];
+  return (Object.keys(ZONE_SLOTS) as ZoneSlotName[])
+    .map((name) => ({ name, d: Math.hypot(ZONE_SLOTS[name].col - target.col, ZONE_SLOTS[name].row - target.row) }))
+    .sort((a, b) => a.d - b.d)
+    .map((slot) => slot.name);
+}
+
+/** 分区现在按用户方位与用途面积落位；已有同名分区仍沿用它的轮廓（不擅自挪用户画过的区）。 */
 export function proposeUseZones(
   plan: SitePlanData,
   brief: OutdoorBrief,
@@ -81,30 +201,68 @@ export function proposeUseZones(
     throw new Error(
       "已有分区与新用途不完全对应。请先选中要修改的分区并明确名称，不会新增重叠区域或清旧分区。",
     );
-  const b = box(plan.boundary),
-    width = (b.e - b.w) / brief.zones.length;
-  const zones: PlanZone[] = brief.zones.map((need, i) => {
-    const old = existing[i];
-    const sliced = clipX(
-      clipX(plan.boundary, b.w + i * width + 2, true),
-      b.w + (i + 1) * width - 2,
-      false,
-    );
-    const trimY = (ring: PlanPoint[], y: number, right: boolean) =>
-      clipX(
-        ring.map((p) => ({ x: p.y, y: p.x })),
-        y,
-        right,
-      ).map((p) => ({ x: p.y, y: p.x }));
-    const polygon =
-      old?.polygon ?? trimY(trimY(sliced, b.s + 3, true), b.n - 3, false);
-    if (
-      !checkBoundaryRing(polygon).ok ||
-      facilityPlacementIssues(polygon, plan.boundary).length
-    )
+  const b = box(plan.boundary);
+  const spanW = Math.max(1, b.e - b.w);
+  const spanH = Math.max(1, b.n - b.s);
+  // 内缩留边：常规场地留 3m 退界，窄条场地按比例缩，不能因为 3m 直接判死。
+  const margin = Math.min(3, Math.min(spanW, spanH) * 0.08);
+  const gutter = Math.min(2, Math.min(spanW, spanH) * 0.03);
+  const usable: ZoneRect = {
+    w: b.w + margin,
+    e: Math.max(b.w + margin + 1, b.e - margin),
+    s: b.s + margin,
+    n: Math.max(b.s + margin + 1, b.n - margin),
+  };
+  const slotW = (usable.e - usable.w) / 3;
+  const slotH = (usable.n - usable.s) / 3;
+  // 已有分区（不是这一轮要替换的）算障碍：新块不能压到别的区上。
+  const keeps = plan.zones.filter((z) => !existing.some((old) => old?.id === z.id));
+  const drafted: { need: OutdoorBrief["zones"][number]; index: number; area: number }[] =
+    brief.zones.map((need, index) => ({ need, index, area: zoneAreaNeed(need, brief) }));
+  // 面积大的先落：小块去填大块剩下的空档，比反过来成功率高。
+  const order = [...drafted].sort((a, b2) => b2.area - a.area);
+  const polygons = new Map<number, PlanPoint[]>();
+  for (const item of order) {
+    const old = existing[item.index];
+    if (old) {
+      polygons.set(item.index, old.polygon);
+      continue;
+    }
+    const wanted = item.need.position ?? ZONE_DEFAULT_SLOT[item.need.purpose];
+    let found: PlanPoint[] | null = null;
+    // 面积一次不够就缩一档再试（0.85/0.7），仍放不下才判这块场地划不出来。
+    for (const scale of [1, 0.85, 0.7]) {
+      if (found) break;
+      for (const slot of zoneSlotOrder(wanted)) {
+        const rect = fitZoneRect(
+          Math.min(item.area * scale, zoneRectArea(usable) * 0.45),
+          usable,
+          slotW,
+          slotH,
+          slot,
+          gutter,
+          item.need.purpose,
+        );
+        const polygon = clipRectToRing(plan.boundary, rect);
+        if (polygon.length < 3) continue;
+        if (!checkBoundaryRing(polygon).ok) continue;
+        if (facilityPlacementIssues(polygon, plan.boundary).length) continue;
+        if (ringAreaM2(polygon) < 4) continue;
+        const obstacles = [...keeps.map((z) => z.polygon), ...polygons.values()];
+        if (obstacles.some((ring) => planRingsOverlap(polygon, ring))) continue;
+        found = polygon;
+        break;
+      }
+    }
+    if (!found)
       throw new Error(
         "当前不规则边界无法可靠自动划分这版区域，请先画出分区或调整用途/范围；没有用bbox跨越凹口。",
       );
+    polygons.set(item.index, found);
+  }
+  const zones: PlanZone[] = brief.zones.map((need, index) => {
+    const old = existing[index];
+    const polygon = polygons.get(index)!;
     return {
       ...(old ?? {}),
       id: old?.id ?? id(),
@@ -133,7 +291,7 @@ export function proposeUseZones(
         old?.notes ??
         (need.environment === "indoor"
           ? "室内分区占位几何：先按用地轮廓划出，墙体与洞口在造墙阶段确认；非物件布局或容量/疏散认证。"
-          : "用途分区几何草案：保留外围与区间通道余量，非物件布局或容量/疏散认证。"),
+          : `用途分区几何草案：按${need.position ? "你给的方位" : "用途默认方位"}与用途/人数估算面积，保留区间通道余量；非物件布局或容量/疏散认证。`),
     };
   });
   for (let i = 0; i < zones.length; i++)
@@ -257,10 +415,273 @@ function bBoxesIntersect(a: { minX: number; minY: number; maxX: number; maxY: nu
 function pointInBBox(p: PlanPoint, b: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
   return p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY;
 }
-function zonePlacementCandidates(
+type PlacementCandidate = { position: PlanPoint; rotationDeg: number };
+type MaterialRole = "stage" | "speaker" | "board" | "stall" | "seat" | "other";
+
+/** 物件名 → 用途大类：只按名字判定，判不出来的仍走网格兜底；不猜尺寸、不猜用途。 */
+function materialRole(name: string): MaterialRole {
+  if (/舞台|主台|演出台|stage/i.test(name)) return "stage";
+  if (/音响|音箱|扬声|喇叭|speaker|line\s*array/i.test(name)) return "speaker";
+  if (/展板|背板|指示|导视|导览|招牌|牌|board|sign/i.test(name)) return "board";
+  if (/摊位|帐篷|展位|商铺|棚|booth|stall|tent/i.test(name)) return "stall";
+  if (/椅|坐席|观众席|座|seat|chair|bench/i.test(name)) return "seat";
+  return "other";
+}
+
+const ringCenter = (ring: readonly PlanPoint[]): PlanPoint => {
+  const b = box(ring);
+  return { x: (b.w + b.e) / 2, y: (b.s + b.n) / 2 };
+};
+
+function unitVector(from: PlanPoint, to: PlanPoint): PlanPoint {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  return len < 0.001 ? { x: 0, y: -1 } : { x: dx / len, y: dy / len };
+}
+
+/** 朝向哪个「看客」区：观众区优先，其次市集/展览；都没有就返回 null（不编观众方向）。 */
+function viewpointZoneFor(zone: PlanZone, plan: SitePlanData): PlanZone | null {
+  const others = plan.zones.filter(
+    (z) =>
+      z.id !== zone.id &&
+      (z.purpose === "audience" || z.purpose === "market" || z.purpose === "exhibition"),
+  );
+  if (!others.length) return null;
+  const center = ringCenter(zone.polygon);
+  return [...others].sort((a, b) => {
+    const rank = (z: PlanZone) => (z.purpose === "audience" ? 0 : 1);
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    const ca = ringCenter(a.polygon);
+    const cb = ringCenter(b.polygon);
+    return (
+      Math.hypot(ca.x - center.x, ca.y - center.y) -
+      Math.hypot(cb.x - center.x, cb.y - center.y)
+    );
+  })[0]!;
+}
+
+/** 面向 dir 的那条边（区心→目标方向最对齐的边中点）。 */
+function facingEdge(ring: readonly PlanPoint[], dir: PlanPoint): { mid: PlanPoint } {
+  const center = ringCenter(ring);
+  let best = { mid: center, score: -Infinity };
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % ring.length]!;
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const offset = { x: mid.x - center.x, y: mid.y - center.y };
+    const len = Math.hypot(offset.x, offset.y) || 1;
+    const score = (offset.x * dir.x + offset.y * dir.y) / len;
+    if (score > best.score) best = { mid, score };
+  }
+  return { mid: best.mid };
+}
+
+/** 主通道方向：最靠近本区的人行动线；区里没动线就用入口指向区心。 */
+function aisleDirection(plan: SitePlanData, zone: PlanZone): PlanPoint | null {
+  const center = ringCenter(zone.polygon);
+  let best: { dir: PlanPoint; score: number } | null = null;
+  for (const route of plan.routes) {
+    if (route.kind !== "pedestrian") continue;
+    for (let i = 0; i < route.points.length - 1; i += 1) {
+      const a = route.points[i]!;
+      const b = route.points[i + 1]!;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const score = -Math.hypot(mid.x - center.x, mid.y - center.y);
+      if (!best || score > best.score) best = { dir: unitVector(a, b), score };
+    }
+  }
+  if (best) return best.dir;
+  const entry = plan.nodes.find((n) => n.kind === "entry" || n.kind === "both");
+  return entry ? unitVector(entry.position, center) : null;
+}
+
+/** 舞台：贴着面向观众区的那条边，台宽垂直于观众方向；没观众区就居中。 */
+function stageCandidates(
   zone: PlanZone,
-  strategy: ObjectsLayoutStrategy,
-): PlanPoint[] {
+  plan: SitePlanData,
+  material: OutdoorLibraryItem,
+): PlacementCandidate[] {
+  const out: PlacementCandidate[] = [];
+  const target = viewpointZoneFor(zone, plan);
+  if (target) {
+    const center = ringCenter(zone.polygon);
+    const dir = unitVector(center, ringCenter(target.polygon));
+    const edge = facingEdge(zone.polygon, dir);
+    const rotationDeg = Math.abs(dir.x) >= Math.abs(dir.y) ? 90 : 0;
+    const inset = material.depth / 2 + 0.8;
+    const tangent = { x: -dir.y, y: dir.x };
+    const base = { x: edge.mid.x - dir.x * inset, y: edge.mid.y - dir.y * inset };
+    for (const along of [0, 0.3, -0.3, 0.6, -0.6])
+      for (const back of [0, 1, 2])
+        out.push({
+          position: {
+            x: base.x + tangent.x * along * material.width - dir.x * back,
+            y: base.y + tangent.y * along * material.width - dir.y * back,
+          },
+          rotationDeg,
+        });
+  }
+  out.push({ position: ringCenter(zone.polygon), rotationDeg: 0 });
+  return out;
+}
+
+/** 音响：夹在舞台前场两侧、左右对称；没有舞台就按分区朝向摆一对。 */
+function speakerCandidates(
+  zone: PlanZone,
+  plan: SitePlanData,
+  material: OutdoorLibraryItem,
+): PlacementCandidate[] {
+  const target = viewpointZoneFor(zone, plan);
+  const stage = plan.facilities.find(
+    (f) => f.zoneId === zone.id && materialRole(f.name) === "stage",
+  );
+  const half = Math.max(material.width, material.depth) / 2;
+  if (!stage) {
+    if (!target) return [];
+    const center = ringCenter(zone.polygon);
+    const dir = unitVector(center, ringCenter(target.polygon));
+    const edge = facingEdge(zone.polygon, dir);
+    const tangent = { x: -dir.y, y: dir.x };
+    const inset = half + 0.6;
+    const zoneBoxSize = box(zone.polygon);
+    const extentAlong = Math.abs(tangent.x) > 0.5 ? zoneBoxSize.e - zoneBoxSize.w : zoneBoxSize.n - zoneBoxSize.s;
+    const spread = Math.max(0, Math.min(3, extentAlong / 2 - half - 0.7));
+    const base = { x: edge.mid.x - dir.x * inset, y: edge.mid.y - dir.y * inset };
+    return [1, -1].map((sign) => ({
+      position: { x: base.x + tangent.x * sign * spread, y: base.y + tangent.y * sign * spread },
+      rotationDeg: Math.abs(dir.x) >= Math.abs(dir.y) ? 90 : 0,
+    }));
+  }
+  const dir = target
+    ? unitVector(stage.position, ringCenter(target.polygon))
+    : { x: 0, y: -1 };
+  const tangent = { x: -dir.y, y: dir.x };
+  const zoneBoxSize = box(zone.polygon);
+  const extentAlong = Math.abs(tangent.x) > 0.5 ? zoneBoxSize.e - zoneBoxSize.w : zoneBoxSize.n - zoneBoxSize.s;
+  // 左右对称是硬口径：理想位超出分区就两边同时收到区边内，不让一侧靠网格兜底乱落。
+  const offset = Math.max(
+    0,
+    Math.min(
+      stage.size.width / 2 + half + 0.6,
+      extentAlong / 2 - half - 0.7,
+    ),
+  );
+  const front = { x: stage.position.x, y: stage.position.y };
+  return [1, -1].map((sign) => ({
+    position: { x: front.x + tangent.x * sign * offset, y: front.y + tangent.y * sign * offset },
+    rotationDeg: Math.abs(dir.x) >= Math.abs(dir.y) ? 90 : 0,
+  }));
+}
+
+/** 展板：沿分区周界等距排，先南边（正对入口）再东西两侧、最后北边；板面顺着边。 */
+function boardCandidates(
+  zone: PlanZone,
+  material: OutdoorLibraryItem,
+): PlacementCandidate[] {
+  const b = box(zone.polygon);
+  const inset = Math.max(0.9, material.depth / 2 + 0.6);
+  const west = b.w + inset;
+  const east = Math.max(west + 1, b.e - inset);
+  const south = b.s + inset;
+  const north = Math.max(south + 1, b.n - inset);
+  const step = Math.max(material.width + 2.4, 4);
+  const out: PlacementCandidate[] = [];
+  const pushEdge = (from: PlanPoint, to: PlanPoint, rotationDeg: number) => {
+    const len = Math.hypot(to.x - from.x, to.y - from.y);
+    if (len < 0.5) return;
+    const count = Math.max(1, Math.floor(len / step) + 1);
+    for (let i = 0; i < count; i += 1) {
+      const t = count === 1 ? 0.5 : i / (count - 1);
+      out.push({
+        position: { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t },
+        rotationDeg,
+      });
+    }
+  };
+  pushEdge({ x: west, y: south }, { x: east, y: south }, 0);
+  pushEdge({ x: west, y: south }, { x: west, y: north }, 90);
+  pushEdge({ x: east, y: south }, { x: east, y: north }, 90);
+  pushEdge({ x: west, y: north }, { x: east, y: north }, 0);
+  return out;
+}
+
+/** 摊位：沿主通道排，摊宽顺通道、正面朝通道，摊间留 2.4m、排间留 3.2m。 */
+function stallCandidates(
+  zone: PlanZone,
+  plan: SitePlanData,
+  material: OutdoorLibraryItem,
+): PlacementCandidate[] {
+  const b = box(zone.polygon);
+  const aisle = aisleDirection(plan, zone);
+  const along = aisle && Math.abs(aisle.x) > Math.abs(aisle.y) ? { x: 1, y: 0 } : { x: 0, y: 1 };
+  const across = { x: along.y, y: along.x };
+  const rotationDeg = along.x !== 0 ? 0 : 90;
+  const center = ringCenter(zone.polygon);
+  const halfAlong = Math.max(
+    0,
+    (along.x !== 0 ? (b.e - b.w) / 2 : (b.n - b.s) / 2) - material.width / 2 - 0.6,
+  );
+  const halfAcross = Math.max(
+    0,
+    (along.x !== 0 ? (b.n - b.s) / 2 : (b.e - b.w) / 2) - material.depth / 2 - 0.6,
+  );
+  const stepAlong = material.width + 2.4;
+  const stepAcross = material.depth + 3.2;
+  const cols = Math.max(1, Math.floor((halfAlong * 2) / stepAlong) + 1);
+  const rows = Math.max(1, Math.floor((halfAcross * 2) / stepAcross) + 1);
+  const out: PlacementCandidate[] = [];
+  for (let r = 0; r < rows; r += 1)
+    for (let c = 0; c < cols; c += 1) {
+      const u = cols === 1 ? 0 : (c / (cols - 1) - 0.5) * 2 * halfAlong;
+      const v = rows === 1 ? 0 : (r / (rows - 1) - 0.5) * 2 * halfAcross;
+      out.push({
+        position: {
+          x: center.x + along.x * u + across.x * v,
+          y: center.y + along.y * u + across.y * v,
+        },
+        rotationDeg,
+      });
+    }
+  return out;
+}
+
+/** 座椅：按朝向舞台/观众区成排铺，排距 0.8m；没有舞台就朝最近入口。 */
+function seatCandidates(
+  zone: PlanZone,
+  plan: SitePlanData,
+  material: OutdoorLibraryItem,
+): PlacementCandidate[] {
+  const b = box(zone.polygon);
+  const stage = plan.facilities.find(
+    (f) => f.zoneId === zone.id && materialRole(f.name) === "stage",
+  );
+  const target = viewpointZoneFor(zone, plan);
+  const focus = stage?.position ?? (target ? ringCenter(target.polygon) : null);
+  const center = ringCenter(zone.polygon);
+  const dir = focus ? unitVector(center, focus) : { x: 0, y: 1 };
+  const perpendicular = Math.abs(dir.x) >= Math.abs(dir.y);
+  const rowWidth = perpendicular ? b.n - b.s : b.e - b.w;
+  const rowDepth = perpendicular ? b.e - b.w : b.n - b.s;
+  const cols = Math.max(1, Math.floor(rowWidth / Math.max(0.6, material.width + 0.45)));
+  const rows = Math.max(1, Math.floor(rowDepth / Math.max(0.7, material.depth + 0.8)));
+  const out: PlacementCandidate[] = [];
+  for (let r = 0; r < rows; r += 1)
+    for (let c = 0; c < cols; c += 1) {
+      const u = (c - (cols - 1) / 2) * Math.max(0.6, material.width + 0.45);
+      const v = (r - (rows - 1) / 2) * Math.max(0.7, material.depth + 0.8);
+      out.push({
+        position: {
+          x: center.x + (perpendicular ? v : u),
+          y: center.y + (perpendicular ? u : v),
+        },
+        rotationDeg: perpendicular ? 90 : 0,
+      });
+    }
+  return out;
+}
+
+function gridCandidates(zone: PlanZone): PlanPoint[] {
   const b = box(zone.polygon);
   const grid: PlanPoint[] = [];
   for (let iy = 0; iy < 30; iy++)
@@ -269,34 +690,70 @@ function zonePlacementCandidates(
         x: b.w + ((ix + 0.5) * (b.e - b.w)) / 30,
         y: b.s + ((iy + 0.5) * (b.n - b.s)) / 30,
       });
+  return grid;
+}
+
+function perimeterCandidates(zone: PlanZone): PlanPoint[] {
+  const b = box(zone.polygon);
   const cx = (b.w + b.e) / 2;
   const cy = (b.s + b.n) / 2;
-  if (strategy === "center")
-    return [...grid].sort(
-      (p, q) =>
-        Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy),
-    );
-  if (strategy === "perimeter") {
-    const ring: PlanPoint[] = [];
-    for (let i = 0; i < zone.polygon.length; i++) {
-      const a = zone.polygon[i]!;
-      const b2 = zone.polygon[(i + 1) % zone.polygon.length]!;
-      const len = Math.hypot(b2.x - a.x, b2.y - a.y);
-      const steps = Math.max(1, Math.round(len / 2.5));
-      for (let s = 0; s < steps; s++) {
-        const t = s / steps;
-        const px = a.x + (b2.x - a.x) * t;
-        const py = a.y + (b2.y - a.y) * t;
-        const d = Math.max(1, Math.hypot(cx - px, cy - py));
-        ring.push({
-          x: px + ((cx - px) / d) * 1.5,
-          y: py + ((cy - py) / d) * 1.5,
-        });
-      }
+  const ring: PlanPoint[] = [];
+  for (let i = 0; i < zone.polygon.length; i++) {
+    const a = zone.polygon[i]!;
+    const b2 = zone.polygon[(i + 1) % zone.polygon.length]!;
+    const len = Math.hypot(b2.x - a.x, b2.y - a.y);
+    const steps = Math.max(1, Math.round(len / 2.5));
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      const px = a.x + (b2.x - a.x) * t;
+      const py = a.y + (b2.y - a.y) * t;
+      const d = Math.max(1, Math.hypot(cx - px, cy - py));
+      ring.push({
+        x: px + ((cx - px) / d) * 1.5,
+        y: py + ((cy - py) / d) * 1.5,
+      });
     }
-    return [...ring, ...grid];
   }
-  return grid;
+  return ring;
+}
+
+/**
+ * 候选落位：先按用途给语义锚点（舞台贴观众区、音响夹台、展板沿边、摊位顺通道），
+ * 再拼上原来的网格兜底——用途认不出的物件与「实在塞不下」的情形行为不变。
+ */
+function zonePlacementCandidates(
+  zone: PlanZone,
+  strategy: ObjectsLayoutStrategy,
+  context: { plan: SitePlanData; material: OutdoorLibraryItem },
+): PlacementCandidate[] {
+  const role = materialRole(context.material.name);
+  const semantic =
+    role === "stage"
+      ? stageCandidates(zone, context.plan, context.material)
+      : role === "speaker"
+        ? speakerCandidates(zone, context.plan, context.material)
+        : role === "board"
+          ? boardCandidates(zone, context.material)
+          : role === "stall"
+            ? stallCandidates(zone, context.plan, context.material)
+            : role === "seat"
+              ? seatCandidates(zone, context.plan, context.material)
+              : [];
+  const grid = gridCandidates(zone);
+  const cx = ringCenter(zone.polygon).x;
+  const cy = ringCenter(zone.polygon).y;
+  const fallback: PlacementCandidate[] =
+    strategy === "center"
+      ? [...grid]
+          .sort((p, q) => Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy))
+          .map((position) => ({ position, rotationDeg: 0 }))
+      : strategy === "perimeter"
+        ? [
+            ...perimeterCandidates(zone).map((position) => ({ position, rotationDeg: 0 })),
+            ...grid.map((position) => ({ position, rotationDeg: 0 })),
+          ]
+        : grid.map((position) => ({ position, rotationDeg: 0 }));
+  return [...semantic, ...fallback];
 }
 
 /**
@@ -377,6 +834,9 @@ export async function proposeInventoryObjects(
      *  通道/门口只留最小净空，塞到物理极限为止；塞不下的差额如实返回 capacityShortfall，
      *  让预览自己说明「放不下」，不替用户把数量改小。 */
     packed?: boolean;
+    /** 2026-11-18 用户口径「先设计，用户会告诉你他的想法」：人数/面积粗筛不拦整版，
+     *  改由 demandNote 带回卡上，预览照出。 */
+    softDemand?: boolean;
   },
 ): Promise<{
   plan: SitePlanData;
@@ -385,6 +845,8 @@ export async function proposeInventoryObjects(
   mismatched: OutdoorZoneMismatch<OutdoorBrief["items"][number]>[];
   /** 2026-11-17 硬挤模式：物理上限放不满时的差额，预览据此说清「放不下」。 */
   capacityShortfall: { zone: string; query: string; requested: number; placed: number }[];
+  /** 2026-11-18 softDemand：人数/面积粗筛没过的原话，带到卡上而不是拦下预览。 */
+  demandNote?: string | null;
 }> {
   if (!brief.items.length)
     throw new Error(
@@ -491,37 +953,42 @@ export async function proposeInventoryObjects(
     }
     for (let n = Math.min(allocated.length, need.count); n < need.count; n++) {
       let found: PlanFacility | null = null;
-      // 2026-11-14 用户指令「给我几个方案」：候选落位顺序随策略变化（行列/居中/沿边），换策略=换方案。
-      const candidates = zonePlacementCandidates(zone, strategy);
-      for (const rotationDeg of [0, 90]) {
+      // 2026-11-18 用户指令「agent 能不能智能根据分区摆放物件」：先按用途给语义锚点与朝向，
+      // 网格仍作兜底（用途认不出、或语义位置放不下时行为不变）。
+      const candidates = zonePlacementCandidates(zone, strategy, { plan: next, material });
+      // 排不下时仍允许转 90 度再试一次（沿用旧口径，不改容量上限）。
+      const attempts = [
+        ...candidates,
+        ...candidates.map((c) => ({ ...c, rotationDeg: (c.rotationDeg + 90) % 180 })),
+      ];
+      for (const attempt of attempts) {
         if (found) break;
-        for (const position of candidates) {
-          if (found) break;
-          const facility: PlanFacility = {
-            id: id(),
-            // 2026-11-14 修复：用规范的 oneplan: 前缀（原 library: 前缀贴纸/取色查找都认不出，
-            // Agent 摆的物件在画布上全是裸矩形）。
-            templateId: `oneplan:${material.id}`.slice(0, 64),
-            name: `${material.name} ${n + 1}`.slice(0, 60),
-            zoneId: zone.id,
-            position,
-            rotationDeg,
-            size: { width: material.width, depth: material.depth },
-            modelOverride: material.modelSlug,
-            sourceAssetId: material.id,
-            allocationKey,
-            notes: "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
-          };
-          if (clearForObject(facility, next, zone, options?.packed === true)) {
-            // 建筑禁区 + 室内区域：包围盒预筛后仅对相交者做环运算（性能，见 bboxLoose）。
-            const footprint = facilityFootprintRing(facility);
-            const footprintBBox = bboxLoose(footprint);
-            if (buildingBBoxes.some(b => pointInBBox(position, b.bbox) && planPointInRing(position, b.ring))) continue;
-            if (indoorZoneBBoxes.some(z => pointInBBox(position, z.bbox) && planPointInRing(position, z.zone.polygon))) continue;
-            if (buildingBBoxes.some(b => bBoxesIntersect(footprintBBox, b.bbox) && outdoorRingsOverlap(footprint, b.ring))) continue;
-            if (indoorZoneBBoxes.some(z => bBoxesIntersect(footprintBBox, z.bbox) && outdoorRingsOverlap(footprint, z.zone.polygon))) continue;
-            found = facility;
-          }
+        const position = attempt.position;
+        const rotationDeg = attempt.rotationDeg;
+        const facility: PlanFacility = {
+          id: id(),
+          // 2026-11-14 修复：用规范的 oneplan: 前缀（原 library: 前缀贴纸/取色查找都认不出，
+          // Agent 摆的物件在画布上全是裸矩形）。
+          templateId: `oneplan:${material.id}`.slice(0, 64),
+          name: `${material.name} ${n + 1}`.slice(0, 60),
+          zoneId: zone.id,
+          position,
+          rotationDeg,
+          size: { width: material.width, depth: material.depth },
+          modelOverride: material.modelSlug,
+          sourceAssetId: material.id,
+          allocationKey,
+          notes: "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
+        };
+        if (clearForObject(facility, next, zone, options?.packed === true)) {
+          // 建筑禁区 + 室内区域：包围盒预筛后仅对相交者做环运算（性能，见 bboxLoose）。
+          const footprint = facilityFootprintRing(facility);
+          const footprintBBox = bboxLoose(footprint);
+          if (buildingBBoxes.some(b => pointInBBox(position, b.bbox) && planPointInRing(position, b.ring))) continue;
+          if (indoorZoneBBoxes.some(z => pointInBBox(position, z.bbox) && planPointInRing(position, z.zone.polygon))) continue;
+          if (buildingBBoxes.some(b => bBoxesIntersect(footprintBBox, b.bbox) && outdoorRingsOverlap(footprint, b.ring))) continue;
+          if (indoorZoneBBoxes.some(z => bBoxesIntersect(footprintBBox, z.bbox) && outdoorRingsOverlap(footprint, z.zone.polygon))) continue;
+          found = facility;
         }
       }
       if (!found) {
@@ -543,8 +1010,16 @@ export async function proposeInventoryObjects(
       next = { ...next, facilities: [...next.facilities, found] };
     }
   }
-  validateWorkflowDemand(next, brief);
-  return { plan: next, used, mismatched, capacityShortfall };
+  let demandNote: string | null = null;
+  if (options?.softDemand === true) {
+    try {
+      validateWorkflowDemand(next, brief);
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      demandNote = error.message;
+    }
+  } else validateWorkflowDemand(next, brief);
+  return { plan: next, used, mismatched, capacityShortfall, demandNote };
 }
 export function reachablePedestrianRoutes(
   plan: SitePlanData,

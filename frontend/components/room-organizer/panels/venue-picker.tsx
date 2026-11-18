@@ -15,7 +15,7 @@ import { useAuth } from '../../../lib/auth-provider';
 import { useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
 import { emptyProjectScene, listStudioProjects, preferredStudio, rememberStudio } from '../../../lib/workspace-api';
 import { createStarterOutdoorPlan, ensureDefaultOutdoorProject, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
-import { REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
+import { ALL_REPLICA_CASES, CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
 import { matchRecentPlaces, mergePlaceSuggestions, rememberPlace, searchPlaces, type PlaceSuggestion } from '../lib/place-search';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 
@@ -82,7 +82,7 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
   const userId = user?.id ?? '';
   const [selection, setSelection] = useState<Selection>({ kind: initialSelection ?? 'blank' });
   // 复刻示例选中的案例（默认首案 = Scotiabank 冰球日）。
-  const [replicaCaseId, setReplicaCaseId] = useState<string>(REPLICA_CASES[0]?.id ?? '');
+  const [replicaCaseId, setReplicaCaseId] = useState<string>(ALL_REPLICA_CASES[0]?.id ?? '');
   const [cloud, setCloud] = useState<CloudState>({ status: 'loading' });
   const [previews, setPreviews] = useState<Record<string, Scene | 'failed'>>({});
   const [name, setName] = useState(NEW_PROJECT_DEFAULT);
@@ -219,10 +219,10 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
   function confirm(): void {
     if (!canStart) return;
     if (selection.kind === 'project') { router.push(`/editor/?project=${encodeURIComponent(selection.id)}`); return; }
-    // 复刻示例（OnePlan 经典案例，学习库首件）：整套区块/设施/流线预先摆好，进 2D 规划即得。
+    // 复刻示例（官网国内案例 + OnePlan 海外经典案例）：整套区块/设施/流线预先摆好，进 2D 规划即得。
     // 登录态同 map/new 主路径建云项目；访客落专用本机草稿（不动 default-outdoor）。
     if (selection.kind === 'replica') {
-      const replica: ReplicaCase = REPLICA_CASES.find(item => item.id === replicaCaseId) ?? REPLICA_CASES[0];
+      const replica: ReplicaCase = ALL_REPLICA_CASES.find(item => item.id === replicaCaseId) ?? ALL_REPLICA_CASES[0];
       const replicaName = `复刻示例 · ${replica.title}`.slice(0, 60);
       if (cloud.status !== 'ready') {
         const now = new Date().toISOString();
@@ -293,7 +293,7 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
           visual={<Globe size={32} />} title="从地图开始" meta="户外活动 · 选地点后直接进 2D 规划" />
       )}
       <Card selected={selection.kind === 'replica'} onSelect={() => setSelection({ kind: 'replica' })}
-        visual={<Crown size={32} />} title="复刻示例" meta="OnePlan 经典案例 44 案 · 选一个整套摆好" />
+        visual={<Crown size={32} />} title="复刻示例" meta={`国内 ${CN_REPLICA_CASES.length} 案 + 海外经典 ${REPLICA_CASES.length} 案 · 选一个整套摆好`} />
       {projects.map(project => {
         const scene = previews[project.id];
         const loaded = scene && scene !== 'failed' ? scene : null;
@@ -359,16 +359,17 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
     </>)}
     {selection.kind === 'replica' && (
       <div className="sc-venue-place-list" role="listbox" aria-label="复刻案例清单">
-        {REPLICA_CASES.map(replica => (
+        {ALL_REPLICA_CASES.map(replica => (
           <button key={replica.id} type="button" role="option"
             aria-selected={replicaCaseId === replica.id}
+            title={replica.locationNote ?? replica.title}
             className={`sc-venue-place${replicaCaseId === replica.id ? ' is-active' : ''}`}
             onClick={() => setReplicaCaseId(replica.id)}>
             <span className="sc-venue-place-title">
               <strong>{replica.title}</strong>
               <small className="sc-venue-place-tag">{replica.category}</small>
             </span>
-            <small>{replica.region}{replica.locationNote ? ` · ${replica.locationNote}` : ''}</small>
+            <small>{replica.region}{replica.titleEn ? ` · ${replica.titleEn}` : ''}</small>
           </button>
         ))}
       </div>
