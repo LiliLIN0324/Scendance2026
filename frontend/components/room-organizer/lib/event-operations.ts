@@ -69,7 +69,7 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
       plannedStartAt: task.plannedStartAt, plannedEndAt: task.plannedEndAt,
       ownerName: task.ownerName.trim(), contractorName: task.contractorName.trim(), acceptance: task.acceptance.trim(),
       objectIds: [...task.objectIds].sort() },
-    venue: { width: layout.width, depth: layout.height, scenePreset: layout.scenePreset ?? null,
+    venue: { width: layout.width, depth: layout.height,
       venueScan: layout.venueScan ?? null, sceneAnchor: layout.sceneAnchor ?? null, mapGroundPolygon: layout.mapGroundPolygon ?? null,
       floorPlanImage: layout.floorPlanImage ?? null, sources: layout.backendSceneV2?.sources ?? null, dimensions: layout.backendSceneV2?.dimensions ?? null,
       backendVenue: layout.backendVenue ?? null, storedStructure: layout.backendSceneV2?.structure ?? null,

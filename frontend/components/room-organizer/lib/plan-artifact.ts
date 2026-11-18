@@ -84,7 +84,6 @@ function planContent(layout: RoomLayout): unknown {
     width: layout.width,
     height: layout.height,
     roof: layout.roof,
-    scenePreset: layout.scenePreset,
     backendVenue: layout.backendVenue,
     backendSceneV2: layout.backendSceneV2,
     floors: layout.floors.map(floor => ({

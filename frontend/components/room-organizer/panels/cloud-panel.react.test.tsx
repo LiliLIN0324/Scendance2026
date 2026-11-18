@@ -780,11 +780,11 @@ describe('CloudPanel delayed project replacement', () => {
     expect(screen.getByTitle('当前团队').textContent).toBe('幕景工作室');
   });
 
-  it('never labels a local scene preset as saved to the cloud', async () => {
+  it('never labels a local-only layout as saved to the cloud', async () => {
     queue([other]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     queue(other); // 卡片预览
-    const layout = { ...backendSceneToLayout(scene), scenePreset: 'popup' as const };
+    const layout = { ...backendSceneToLayout(scene), floorPlanImage: 'data:image/png;base64,AA==' };
     render(<CloudPanel layout={layout} onLoadLayout={vi.fn()} />);
     openAccount();
     expect(await screen.findByText('当前 · 本机')).toBeTruthy();

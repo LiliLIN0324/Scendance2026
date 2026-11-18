@@ -160,8 +160,10 @@ describe('delivery package acceptance fixtures (10/10)', () => {
     expect(result.manifest.files).toHaveLength(5);
   });
 
-  it('F04 complete-scene preset: scene-derived artifacts fail, heroes and link still ship', async () => {
-    const result = await build(furnishedLayout({ scenePreset: 'gym' }));
+  it('F04 template-node scene: scene-derived artifacts fail, heroes and link still ship', async () => {
+    const layout = furnishedLayout();
+    layout.floors[0]!.items[0]!.glbNode = 'Preset_Object_0';
+    const result = await build(layout);
     expect(missingKey(result).sort()).toEqual(['floor:preset-unsupported', 'materials:preset-unsupported']);
     expect(result.manifest.status).toBe('incomplete');
     expect(zipPaths(result)).toEqual(expect.arrayContaining([...HERO_PATHS, '04-分享/分享链接.txt']));

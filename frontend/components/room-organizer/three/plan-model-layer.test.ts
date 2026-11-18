@@ -99,28 +99,6 @@ describe('plan model layer pure math', () => {
     expect(shrinkFactorFor(prop('p1'), FITTED, { width: 0, depth: 0, height: 0 })).toBe(1);
   });
 
-  it('fits a whole-venue GLB by its 2D footprint instead of its declared height', () => {
-    const scene = {
-      slug: 'scene-preset:gym',
-      name: '体育馆',
-      glbUrl: '/scene-presets/gym/gym.glb',
-      width: 70,
-      depth: 76,
-      height: 6,
-      scale: 1,
-      swap: false,
-    };
-    const actual = { width: 65.1, depth: 64.3, height: 10.725 };
-    const gymProp = { ...prop('scene'), width: 70, depth: 76 };
-    const item = candidateItemFor(gymProp, scene, actual);
-    const fit = Math.min(70 / actual.width, 76 / actual.depth);
-    expect(item.height).toBeCloseTo(actual.height * fit, 5);
-    expect(item.width).toBe(70);
-    expect(item.depth).toBe(76);
-    expect(item.uniformScale).toBe(false);
-    expect(shrinkFactorFor(gymProp, scene, actual)).toBe(1);
-  });
-
   it('builds the uniform-scaled glb item the cache factory expects', () => {
     const item = candidateItemFor(prop('p1'), FITTED);
     expect(item.id).toBe('plan-model-p1');

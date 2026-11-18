@@ -1,7 +1,6 @@
-import { cp, readdir, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { cp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { packageScenePresets, stripGlbExtras } from './package-scene-presets.mjs';
 
 // The standalone 幕景 官网 and its 新手指引 live at the repository root, not
 // inside the Next app. Mirror them into frontend/public/ so one output serves
@@ -10,7 +9,6 @@ import { packageScenePresets, stripGlbExtras } from './package-scene-presets.mjs
 //   next build (export) → public/ is copied into frontend/out/
 // Run from the frontend npm scripts (`predev` / `prebuild`), never by hand.
 const root = new URL('../', import.meta.url);
-await packageScenePresets(root);
 const publicDir = new URL('frontend/public/', root);
 const showcase = new URL('showcase/', publicDir);
 const library = JSON.parse(await readFile(new URL('assets/library/merged.json', root), 'utf8'));
@@ -27,23 +25,12 @@ for (const path of ['assets', 'vendor', 'renderer-webgl.js']) {
     filter: source => !blockedFiles.has(resolve(source)),
   });
 }
-// The showcase scene library only loads `<key>/<key>.glb`. Archive manifests,
-// previews and asset notes stay in the repository for provenance, not in the
-// shipped copy. 复制时就地剥离 authoring extras，源 GLB 本身不动。
-const templateSource = new URL('scene/templates/', root);
-const templateDest = new URL('scene/templates/', showcase);
-await mkdir(templateDest, { recursive: true });
-for (const entry of await readdir(templateSource, { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue;
-  const key = entry.name;
-  await mkdir(new URL(`${key}/`, templateDest), { recursive: true });
-  await writeFile(new URL(`${key}/${key}.glb`, templateDest), stripGlbExtras(await readFile(new URL(`${key}/${key}.glb`, templateSource))));
-}
+// 场景模板库已独立到 scendance-scene-library，本仓不再打包 10 套整馆 GLB；
+// introduction.html 直接指向该仓库的公开站点取模板資產。
 const introduction = (await readFile(new URL('introduction.html', root), 'utf8'))
   .replaceAll('http://localhost:3000/', '/auth')
   .replaceAll('./assets/', '/showcase/assets/')
   .replaceAll('./vendor/', '/showcase/vendor/')
-  .replaceAll('./scene/templates/', '/showcase/scene/templates/')
   .replaceAll('./renderer-webgl.js', '/showcase/renderer-webgl.js')
   .replaceAll('./${a.localPath}', '/showcase/${a.localPath}');
 await writeFile(new URL('introduction.html', publicDir), introduction);

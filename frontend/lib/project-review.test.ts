@@ -152,10 +152,10 @@ describe('project review snapshot', () => {
   });
 
   it('remains readable when the actual Scene JSON gate rejects a full venue or an unarchived model', () => {
-    const full = layout(); full.scenePreset = 'gym';
-    expect(() => deliveryScene(full)).toThrow('完整场景预设');
+    const full = layout(); full.floors[0].items[0].glbNode = 'Preset_Object_0';
+    expect(() => deliveryScene(full)).toThrow('模板模型节点');
     const fullReview = createProjectReviewSnapshot(input({ layout: full }));
-    expect(projectReviewHtml(fullReview)).toContain('完整场馆或模板模型节点');
+    expect(projectReviewHtml(fullReview)).toContain('模板模型节点');
     expect(projectReviewHtml(fullReview)).not.toContain('<svg');
     const model = layout(); model.floors[0].items[0] = makeItem({ id: objectId, type: 'glb-asset',
       glbUrl: '/assets/unarchived.glb', source: 'local_sample' });
@@ -226,8 +226,8 @@ describe('project review snapshot', () => {
     expect(() => createProjectReviewSnapshot(input({ layout: ambiguous }))).toThrow('重复物件');
   });
 
-  it('does not classify a movable preset chair node as fixed structure', () => {
-    const preset = layout(); preset.scenePreset = 'gym';
+  it('does not classify a movable template chair node as fixed structure', () => {
+    const preset = layout();
     preset.floors[0].items[0].glbNode = 'Preset_Object_0';
     const review = createProjectReviewSnapshot(input({ layout: preset }));
     expect(review.current.layout.floors[0].items[0].role).toBe('material');

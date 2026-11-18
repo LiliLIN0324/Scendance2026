@@ -405,8 +405,6 @@ export interface NeighbourSpec {
   seed?: number;
 }
 
-export type ScenePresetKey = 'gym' | 'popup' | 'bar' | 'cafe' | 'conference' | 'lawn' | 'market' | 'museum' | 'office' | 'studio';
-
 /**
  * 场景锚点（docs/19）：场景世界坐标 ↔ 地理坐标的唯一变换参数。
  * lng/lat 是世界原点 (0, 0) 对应的地理坐标；
@@ -449,8 +447,6 @@ export interface RoomLayout {
   designBook?: { activeId: string; variants: { id: string; name: string; layout: Omit<RoomLayout, 'designBook'> }[] };
   /** Authoritative v2 provenance and design, retained through local save and undo. */
   backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
-  /** Local complete-scene preset; its architecture is separate from editable items. */
-  scenePreset?: ScenePresetKey;
   /**
    * 当前场地对应的实景扫描。只为「撤销一次回上一套场地」与刷新后认回同一场；
    * 本地编辑元数据，不进云端场景、不进分享。

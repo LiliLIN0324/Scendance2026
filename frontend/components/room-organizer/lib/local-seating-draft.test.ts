@@ -48,10 +48,9 @@ describe('local editable desk-chair draft',()=>{
   const result=planLocalDeskChairDraft(original,input,ids());expect(result).toMatchObject({placed:0,shortfall:30,limitReason:'object_limit'});
   expect(result.layout.floors[0]!.items).toEqual(items);
  });
- it('refuses unknown unplaced obstacles or preset geometry rather than guessing',()=>{
+ it('refuses unknown unplaced obstacles rather than guessing',()=>{
   const unknown=makeLayout({floors:[makeFloor({items:[makeUnplacedItem()]})]});
   expect(planLocalDeskChairDraft(unknown,input,ids()).limitReason).toBe('incomplete_geometry');
-  expect(planLocalDeskChairDraft(makeLayout({scenePreset:'conference'}),input,ids()).limitReason).toBe('preset_unverified');
  });
  it('reports invalid map or polygon geometry as unknown without a candidate',()=>{
   const map=makeLayout({mapGroundPolygon:[{lng:120,lat:30},{lng:121,lat:30},{lng:120,lat:31}]});

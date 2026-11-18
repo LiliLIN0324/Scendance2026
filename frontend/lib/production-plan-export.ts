@@ -234,7 +234,7 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
         `现场核对说明：${handoff?.evidenceNote || '未记录'}\n证据文本：${handoff?.evidenceUrls.join('\n') || '未记录'}`];
     }), 'handoff-objects') : para('当前没有场景物件，逐件分工与摆位待确认。')}</section>` : '';
 
-  const simplePlan = !sourceAmbiguities && isRoomLayout(layout) && !layout.scenePreset && !layout.backendSceneV2?.structure &&
+  const simplePlan = !sourceAmbiguities && isRoomLayout(layout) && !layout.backendSceneV2?.structure &&
     (layout.backendVenue?.shape ?? 'rectangle') === 'rectangle' && !layout.entrance &&
     (!layout.roof || layout.roof.style === 'none') && (!layout.terrain || layout.terrain.frontY === 0 && layout.terrain.backY === 0) &&
     !layout.floors.some(floor => floor.items.some(item => !!item.glbNode || item.mirrored && (item.type === 'door' || item.type === 'window')));
