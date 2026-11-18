@@ -2249,15 +2249,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }, [layout, planShownPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** 第 1 步的壳体播报：尺寸、墙与门、层高来源，一句一句照实说。 */
-  /** 模板是固定 GLB 外壳：改尺寸时明说已经离开模板，别让人以为只是把体育馆拉长了。 */
-  function presetShellNote(venue: VenuePlan): string {
-    const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
-    return `已离开模板，按新尺寸 ${size} 立了矩形场地。`;
-  }
-
   /** 纯改尺寸只动壳：一句短的，不拉着人再确认一遍布置。 */
-  function sizeOnlyNote(venue: VenuePlan, leavingPreset: boolean): string {
-    if (leavingPreset) return presetShellNote(venue);
+  function sizeOnlyNote(venue: VenuePlan): string {
     const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
     return `场地改成 ${size}。`;
   }
@@ -2384,7 +2377,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     if (sessionScope !== 'legacy' && (memoryRef.current.lengthM !== null || memoryRef.current.areaM2 !== null)) saveMemory({...memoryRef.current,venueScaleBasis:venueScaleBasis(venue.layout),venueFactToken:venueFacts.capture() ?? undefined,scaleNeedsReconfirmation:false});
     if (was2D) setView(current => ({ ...current, view2D: true }));
-    say({ role: 'agent', text: sizeOnlyNote(venue, false) });
+    say({ role: 'agent', text: sizeOnlyNote(venue) });
   }
 
   /** 左栏简报的「空白场地」文字链：和模板轨首卡同一块 12×8 空壳，不用先开物料库。 */
@@ -2559,9 +2552,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const before = live.current;
     const floorToken=captureFloor(activeFloorIndex);if(!floorToken){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
     const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
-    // 模板是固定 GLB 外壳，拉伸它只会看起来「什么都没变」：尺寸一变就卸模板、按新尺寸立矩形空壳。
     const resized = Math.abs(before.width - scale.length) > 1e-6 || Math.abs(before.height - scale.width) > 1e-6;
-    const leavingPreset = false;
     let venue: VenuePlan | null;
     try { venue = (resized ? replaceVenueWithShell(input) : null) ?? raiseVenue(input); }
     catch (error) {
@@ -2579,8 +2570,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(venue && hasInvalidRetainedZones(venue.layout)){revertScaleToCanvas();failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'现有区域超出新场地范围或坐标不完整，请先调整区域再生成。'});setPhase('failed');return;}
     const candidateBase = venue?.layout ?? before;
     if (venue) {
-      const shellSummary = leavingPreset ? '将离开模板，改用矩形场地。' : '场地按这个尺寸准备好了。';
-      say({ role: 'agent', text: `${shellSummary}确认后才写入。` });
+      say({ role: 'agent', text: '场地按这个尺寸准备好了。确认后才写入。' });
       await wait(STEP_DELAY_MS); if (token !== runToken.current || !sessionScopeIsCurrent()) return;
       if (!floorStillCurrent(floorToken)) {failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
       if (!sameLayoutContent(before, live.current)) {
