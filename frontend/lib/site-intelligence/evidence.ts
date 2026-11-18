@@ -1,7 +1,7 @@
 import { toLocal, isValidGeometry } from './geometry';
 import type { MapEvidenceResult, MapFeature } from './types';
 const MAX_FEATURES = 300, MAX_POINTS = 256;
-const TAGS = ['name', 'building', 'highway', 'leisure', 'landuse', 'place', 'entrance', 'access', 'foot', 'vehicle', 'barrier', 'layer', 'level', 'bridge', 'tunnel', 'indoor', 'area', 'natural', 'waterway', 'water', 'intermittent'];
+const TAGS = ['name', 'building', 'highway', 'leisure', 'landuse', 'place', 'amenity', 'entrance', 'access', 'foot', 'vehicle', 'barrier', 'layer', 'level', 'bridge', 'tunnel', 'indoor', 'area', 'natural', 'waterway', 'water', 'intermittent'];
 const record = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export function boundedRadius(radiusM: number): number { if (!Number.isFinite(radiusM) || radiusM < 1) throw new Error('Invalid radius'); return Math.min(750, Math.max(50, radiusM)); }
 function inRange(feature: MapFeature, radius: number): boolean {
@@ -40,7 +40,8 @@ export function parseOverpassEvidence(body: unknown, anchor: { lng: number; lat:
     else if (tags.building && tags.building !== 'no') kind = 'building';
     else if (waterArea || waterLine) kind = 'water';
     else if (tags.highway) kind = tags.area === 'yes' ? 'open-space' : 'road';
-    else if (tags.leisure === 'park' || tags.leisure === 'garden' || tags.landuse === 'grass' || tags.place === 'square') kind = 'open-space';
+    // amenity=parking（docs/47 A1）：停车场按铺装开放空间出证据，A2 分级再定权重；标签必须存活。
+    else if (tags.leisure === 'park' || tags.leisure === 'garden' || tags.landuse === 'grass' || tags.place === 'square' || tags.amenity === 'parking') kind = 'open-space';
     if (!kind) continue;
     const rawPoints = el.type === 'node' ? [{ lon: el.lon, lat: el.lat }] : el.geometry;
     if (!Array.isArray(rawPoints) || rawPoints.length > MAX_POINTS) { omitted++; continue; }
