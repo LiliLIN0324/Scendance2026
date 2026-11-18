@@ -620,7 +620,7 @@ describe('物料卡三栏互斥', () => {
       status: 'ready', dimensions: { width: 0.5, depth: 0.5, height: 0.88 },
     });
     try {
-      const onAdd = vi.fn(() => ({ status: 'placed' as const, id: 'placed-1' }));
+      const onAdd = vi.fn((_item: CatalogItem) => ({ status: 'placed' as const, id: 'placed-1' }));
       render(<OnlineModelLibrary cardMode controller={controller} onAdd={onAdd} />);
       fireEvent.click(await screen.findByRole('button', { name: '我的生成' }));
       expect(await screen.findByRole('button', { name: '添加户外折叠椅 1' })).toBeTruthy();
