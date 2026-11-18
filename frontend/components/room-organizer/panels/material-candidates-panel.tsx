@@ -1,8 +1,8 @@
 'use client';
 
 import {useEffect,useState} from 'react';
-import {Info} from '@/components/solid-icons';
-import {searchMaterialCandidates,type MaterialCandidateResult} from '../lib/material-candidates';
+import {Box,Info} from '@/components/solid-icons';
+import {searchMaterialCandidates,type MaterialCandidate,type MaterialCandidateResult} from '../lib/material-candidates';
 
 type View={query:string;state:'loading'}|{query:string;state:'result';result:MaterialCandidateResult};
 
@@ -27,7 +27,9 @@ export function MaterialCandidatesPanel({query,onOpenLibrary}:{query:string;onOp
   {!clean?<p className="ap-blocked-note">先告诉我想找什么物料。</p>:!current||current.state==='loading'?<p className="ap-blocked-note" role="status">正在查找物料…</p>:null}
   {result?.status==='ok'&&(result.items.length===0?<p className="ap-blocked-note">没有找到“{clean}”，试试其他名称。</p>:<>
    <p className="ap-blocked-note">找到 {result.total} 个模型，先看这 {result.items.length} 个：</p>
-   <ul className="ap-material-list">{result.items.map(item=><li key={item.slug}><strong>{item.name}</strong><span>{item.dimensions.width} × {item.dimensions.depth} × {item.dimensions.height} 米（宽 × 深 × 高）</span></li>)}</ul>
+   {/* 2026-11-19 用户指令：候选不再用文字行——直接铺 3D 模型缩略图（目录 CDN 的 thumb.webp）；
+       名称和尺寸挪进 title 悬停提示，加载失败或没有缩略图回退到通用占位图标。 */}
+   <ul className="ap-material-grid">{result.items.map(item=><MaterialTile key={item.slug} item={item}/>)}</ul>
   </>)}
   {result?.status==='unavailable'&&<p className="ap-blocked-note" role="alert">暂时无法读取物料，请重试。</p>}
   {result?.status==='invalid'&&<p className="ap-blocked-note" role="alert">物料名称无法识别，请换个简短名称。</p>}
@@ -37,4 +39,15 @@ export function MaterialCandidatesPanel({query,onOpenLibrary}:{query:string;onOp
    <button type="button" className="chip btn-outline" onClick={()=>onOpenLibrary(clean)}>打开物料库</button>
   </div>
  </section>;
+}
+
+/** 一格候选：3D 模型缩略图直铺，名称/尺寸进悬停提示；缩略图缺省或加载失败回退占位图标。 */
+function MaterialTile({item}:{item:MaterialCandidate}){
+ const [failed,setFailed]=useState(false);
+ const dims=`${item.dimensions.width} × ${item.dimensions.depth} × ${item.dimensions.height} 米（宽 × 深 × 高）`;
+ return <li className="ap-material-tile" title={`${item.name} · ${dims}`} aria-label={`${item.name}，${dims}`}>
+  {item.thumb&&!failed
+   ?<img src={item.thumb} alt={item.name} loading="lazy" decoding="async" onError={()=>setFailed(true)}/>
+   :<Box size={26} aria-hidden="true"/>}
+ </li>;
 }

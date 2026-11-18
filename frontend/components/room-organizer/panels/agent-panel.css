@@ -1,5 +1,4 @@
-/* v2.6 右栏 Agent。全部色彩/字号/圆角取自 docs/05-设计规范.md（冷石画廊白 v2.2）。
-   绿只出现在：选中 chip、发送键、成功状态点；警告/错误走语义 token。 */
+/* 2026-11-19 用户指令：停止收敛成一个（直接停止，不弹确认行）；紧急停止/跑完这步停/确认行样式随之删除。 *//* v2.6 右栏 Agent。全部色彩/字号/圆角取自 docs/05-设计规范.md（冷石画廊白 v2.2）。   绿只出现在：选中 chip、发送键、成功状态点；警告/错误走语义 token。 */
 .sc-workbench .sc-agent-panel {
   --ap-green: var(--green);
   --ap-deep: var(--green-deep);
@@ -193,12 +192,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* ── 信息卡 ── */
 .ap-card { border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .ap-status-card { gap: 8px; padding: 8px 10px; }
-/* 进度/暂停卡：状态标 + 说明 + 动作行，对照 petitmaker ResumeCard。 */
-.ap-progress-card { gap: 8px; }
-.ap-progress-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: var(--wk-plane); color: var(--sc-muted); font-size: var(--fs-cap); font-weight: 500; }
-.ap-progress-card.is-paused .ap-progress-stamp { background: color-mix(in srgb, var(--warn) 12%, var(--wk-paper)); color: var(--warn); }
-.ap-progress-note { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
-.ap-progress-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 2026-11-19 用户指令：进度/暂停卡（GenProgress）砍掉——输入框下方已有暂停/播放钮。 */
 .ap-text-action { border: 0; background: transparent; padding: 0; color: var(--wk-ink-soft); font-size: var(--fs-p2); cursor: pointer; }
 .ap-text-action:hover, .ap-text-action:focus-visible { color: var(--wk-ink); }
 .ap-pending-card { gap: 8px; }
@@ -432,9 +426,10 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-stat b { font-size: 15px; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
 .ap-stat span { font-size: 12px; color: var(--wk-ink-soft); }
 .ap-material-card { gap: 8px; }
-.ap-material-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.ap-material-list li { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: var(--wk-plane); border-radius: var(--r-sm); }
-.ap-material-list span { font-size: var(--fs-p2); color: var(--wk-ink-soft); }
+/* 2026-11-19 用户指令：物料候选不用文字行——直接铺 3D 模型缩略图网格，名称/尺寸进悬停提示。 */
+.ap-material-grid { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-material-tile { width: 64px; height: 64px; border: 1px solid var(--wk-hair); border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--wk-ink-soft); }
+.ap-material-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ap-blocked-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-cap); font-weight: 500; }
 .ap-blocked-note { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
 .ap-blocked-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -1115,9 +1110,19 @@ button.ap-ghost {
 .ap-zone-card-env button { border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font: inherit; font-size: var(--fs-cap); height: 30px; padding: 0 10px; cursor: pointer; }
 .ap-zone-card-env button.is-on { background: var(--wk-green); border-color: var(--wk-green); color: #fff; }
 .ap-zone-card-env button:disabled { opacity: .55; cursor: not-allowed; }
+/* 2026-11-19 体检：拦截项合卡——每行保留自己的 region 名，行间发丝线分隔。 */
+.ap-intercept-row { display: grid; gap: 8px; padding: 10px 0 2px; }
+.ap-intercept-row + .ap-intercept-row { border-top: 1px solid var(--wk-hair); margin-top: 10px; padding-top: 14px; }
 /* 2026-11-18 用户指令：缺物料的导入/生成两条路挪成可叉掉的独立卡。 */
 .ap-materials-aux .ap-task-dismiss { font-size: var(--fs-p2); }
 .ap-glb-import { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; opacity: .8; font-size: var(--fs-cap); color: var(--wk-ink-soft); position: relative; }
+/* 2026-11-19 用户指令：确认卡（流线/区域提案）的三个决定横排、图标+短词，不再三行全句。 */
+.ap-confirm-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ap-confirm-choice { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font: inherit; font-size: var(--fs-p2); font-weight: 500; white-space: nowrap; cursor: pointer; }
+.ap-confirm-choice:hover:not(:disabled) { color: var(--wk-ink); border-color: var(--faint); }
+.ap-confirm-choice.is-primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+.ap-confirm-choice.is-primary:hover:not(:disabled) { background: #2A2C31; color: #fff; }
+.ap-confirm-choice:disabled { opacity: .55; cursor: default; }
 .ap-outdoor-reply-wrap { gap: 8px; }
 .ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
 .ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }
@@ -1125,7 +1130,6 @@ button.ap-ghost {
 .ap-outdoor-reply-body p { margin: 0; }
 
 /* ===== AgentRunPanel：停止确认行 + 过往任务归档折叠区（任务 1/2）===== */
-.ap-stop-confirm {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1134,16 +1138,13 @@ button.ap-ghost {
   border-radius: 999px;
   background: var(--wk-paper);
 }
-.ap-stop-confirm-text {
   font-size: 11.5px;
   color: #c0392b;
   font-weight: 600;
 }
-.ap-stop-confirm .ap-run-pill {
   padding: 3px 9px;
   font-size: 11.5px;
 }
-.ap-stop-confirm .ap-run-pill[data-stop="true"] {
   background: #c0392b;
   color: #fff;
 }
@@ -1205,7 +1206,6 @@ button.ap-ghost {
   font-weight: 500;
 }
 
-.ap-run-emergency-stop {
   flex: none;
   width: 30px;
   height: 30px;
@@ -1217,9 +1217,6 @@ button.ap-ghost {
   background: color-mix(in srgb, var(--err) 12%, var(--wk-paper));
   cursor: pointer;
 }
-.ap-run-emergency-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 20%, var(--wk-paper)); }
-.ap-run-emergency-stop:disabled { opacity: .5; cursor: default; }
-.ap-run-emergency-stop-square { width: 11px; height: 11px; border-radius: 2px; background: var(--err); }
 
 .ap-run-aggregate {
   display: flex;

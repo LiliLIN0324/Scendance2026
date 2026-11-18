@@ -1,4 +1,4 @@
-import {filterOnlineModels,loadOnlineModels,type OnlineModelIndex} from './online-models';
+import {filterOnlineModels,loadOnlineModels,onlineModelThumb,type OnlineModelIndex} from './online-models';
 
 /** A model in the shipped catalogue, not a physical item or an inventory record. */
 export interface MaterialCandidate {
@@ -7,6 +7,8 @@ export interface MaterialCandidate {
   name:string;
   /** Catalogue dimensions in metres, normalized by the existing library loader. */
   dimensions:{width:number;depth:number;height:number};
+  /** 目录直出的 3D 模型缩略图（thumb.webp）；空串=该行没有可用缩略图，调用方回退到通用占位图标。 */
+  thumb:string;
 }
 export type MaterialCandidateResult =
   | {status:'ok';query:string;total:number;items:MaterialCandidate[]}
@@ -31,7 +33,7 @@ export async function searchMaterialCandidates(query:string,options:{limit?:numb
       const fields=[model.name,model.originalName??'',model.slug].join(' ').toLowerCase();
       return words.every(word=>fields.includes(word));
     });
-    const items=matches.slice(0,limit).map(model=>({slug:model.slug,...(model.assetId?{assetId:model.assetId}:{}),name:model.name,dimensions:{width:model.width,depth:model.depth,height:model.height}}));
+    const items=matches.slice(0,limit).map(model=>({slug:model.slug,...(model.assetId?{assetId:model.assetId}:{}),name:model.name,dimensions:{width:model.width,depth:model.depth,height:model.height},thumb:onlineModelThumb(model.glb,model.assetId)}));
     return {status:'ok',query:text,total:matches.length,items};
   }catch{return {status:'unavailable',items:[]};}
 }
