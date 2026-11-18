@@ -577,8 +577,8 @@ const SHORTCUT_ROWS: Array<[string, string]> = [
   ['缩放', '拖动放大缩小 · 属性面板输入尺寸'],
   ['多选', 'Shift/Ctrl 点选 · 空白处框选'],
   ['复制 / 删除', 'Ctrl+D · Ctrl+C/V · Delete'],
-  ['撤销 / 重做', 'Ctrl+Z · Ctrl+Y'],
-  ['吸附', '网格与物件边缘 · G 切换'],
+  ['撤销 / 重做', 'Ctrl+Z · Ctrl+Shift+Z / Ctrl+Y'],
+  ['吸附', 'G 只切网格 · 墙/物件独立'],
 ];
 
 function TransformChip({ mode, onChange }: { mode: GizmoMode; onChange(mode: GizmoMode): void }): JSX.Element {
