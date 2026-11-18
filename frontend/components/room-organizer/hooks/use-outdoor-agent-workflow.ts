@@ -21,6 +21,7 @@ import {
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
+import { deferredNote } from "../lib/outdoor-layered-task";
 import { readOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from "../lib/outdoor-design-scope";
 import {
@@ -1184,7 +1185,9 @@ export function useOutdoorAgentWorkflow(input: {
     }
     if (turn.action === "search") {
       if (!turn.query?.trim())
-        throw new Error("想在哪个地点做？请给地点名或地址。");
+        throw new Error(
+          "想在哪个地点做？请给地点名或地址。" + deferredNote(priorUserTextRef.current),
+        );
       // 2026-11-17 玉泉鱼跃实测卡点：已确认场地后，一次 search（哪怕只是模型误判）不再
       // 静默清掉 confirmedBoundary——候选照常列出，但换场必须走候选确认卡显式换锚；
       // 用户不理候选直接继续说需求，仍能按已确认范围推进布局。
