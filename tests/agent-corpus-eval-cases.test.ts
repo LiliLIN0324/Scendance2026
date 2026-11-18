@@ -48,17 +48,17 @@ const mutationSamples = failureSamples.filter(
 const incidentSamples = failureSamples.filter((sample) => sample.derivedFrom.startsWith('INC-'));
 
 describe('评测集：形态', () => {
-  it('26 条样本，10 条 layout + 16 条 failure，id 唯一', () => {
-    expect(suite.samples).toHaveLength(26);
+  it('27 条样本，10 条 layout + 17 条 failure，id 唯一', () => {
+    expect(suite.samples).toHaveLength(27);
     expect(layoutSamples).toHaveLength(10);
-    expect(failureSamples).toHaveLength(16);
+    expect(failureSamples).toHaveLength(17);
     const ids = suite.samples.map((sample) => sample.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('failure 由 1 条对照 + 12 条单点变异 + 3 条事故组成', () => {
+  it('failure 由 1 条对照 + 13 条单点变异 + 3 条事故组成', () => {
     expect(controlSamples).toHaveLength(1);
-    expect(mutationSamples).toHaveLength(12);
+    expect(mutationSamples).toHaveLength(13);
     expect(incidentSamples).toHaveLength(3);
   });
 
