@@ -213,8 +213,8 @@ import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/
 import OutdoorPlan3D, { type OutdoorPlan3DApi } from './components/outdoor-plan-3d';
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
-/** 户外左栏卡片只剩两个页签：图层栈 / 物件库（物件库合入图层卡，规划信息改挂 Bingo 面板）。 */
-type OutdoorPanelKind = 'layers' | 'library';
+/** 户外左栏一张卡三个页签：添加物件 / 已放置物件 / 清单。Bingo 不再挂规划信息。 */
+type OutdoorPanelKind = 'layers' | 'library' | 'inventory';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
@@ -641,10 +641,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 画布（右侧）不持有左栅状态，所以发事件，这里把户外卡切到「添加物件」页签。
   // 2026-11-18 提升到组件级：agent 面板（LayoutAgentProvider）也要这个入口，effect 内局部定义够不着。
   const openOutdoorLibrary = useCallback(() => setOutdoorPanel('library'), []);
+  const openOutdoorInventory = useCallback(() => setOutdoorPanel('inventory'), []);
   useEffect(() => {
     window.addEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
-    return () => window.removeEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
-  }, [openOutdoorLibrary]);
+    window.addEventListener('scendance:open-outdoor-inventory', openOutdoorInventory);
+    return () => {
+      window.removeEventListener('scendance:open-outdoor-library', openOutdoorLibrary);
+      window.removeEventListener('scendance:open-outdoor-inventory', openOutdoorInventory);
+    };
+  }, [openOutdoorLibrary, openOutdoorInventory]);
   // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
   // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
   useEffect(() => {
@@ -4820,7 +4825,7 @@ useEffect(() => {
               onHeaderPointerDown: event => beginLeftStackPull('chat', event),
             })} />}
           {/* 2026-11-13 用户指令：这张户外卡片默认收起，只有点左轨「户外规划」才展开。
-              DOM 仍常驻（hidden 只做视觉隐藏）：画布的图层/物件库浮窗宿主挂在这里，
+              DOM 仍常驻（hidden 只做视觉隐藏）：画布的图层/物件库/清单浮窗宿主挂在这里，
               卸载会让这些面板回落到画布内浮窗，等于又「自动打开」了。 */}
           {(outdoor2DOpen || outdoor3dTakeover) && (
             <aside
@@ -4870,11 +4875,13 @@ useEffect(() => {
               <nav className="sc-left-context is-oneplan-tabs" aria-label="户外规划面板">
                 <button type="button" aria-pressed={outdoorPanel === 'library'} onClick={() => setOutdoorPanel('library')}>添加物件</button>
                 <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>已放置物件</button>
+                <button type="button" aria-pressed={outdoorPanel === 'inventory'} onClick={() => setOutdoorPanel('inventory')}>清单</button>
               </nav>
               <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
                 <div id="outdoor-panel-host-layers" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: 10, display: outdoorPanel === 'layers' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
 
                 <div id="outdoor-panel-host-library" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: 10, display: outdoorPanel === 'library' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
+                <div id="outdoor-panel-host-inventory" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 12px 12px', display: outdoorPanel === 'inventory' ? 'block' : 'none' }} />
               </div>
               {isLeftStackDetached(leftStack, 'outdoor') && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'outdoor', event)} />}
             </aside>
@@ -4925,8 +4932,8 @@ useEffect(() => {
             if (id) selectOnly(id, { keepPanel: true });
           }}>
           <ShortcutCoach mode={shortcutCoachMode} enabled={isActive} />
-          {/* 规划信息从 Bingo 迁回画布：Bingo 只留「我的完成 / 对方的修改」，四页签不再占用审校台。 */}
-          {(outdoor2DOpen || outdoor3dTakeover) ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 12, left: 12, width: 320, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 40 }} /> : null}
+          {/* 搜地点独占左上。覆盖层整层 z-index 是 30，搜索槽抬到 33，避免被地图盖住。 */}
+          {outdoor2DOpen ? <div id="outdoor-place-search-slot" style={{ position: 'absolute', inset: 0, zIndex: 33, pointerEvents: 'none' }} /> : null}
           {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
               供全屏 OutdoorPlan3D 的左键物件手势用（canvasApiRef → pointerFromPlan 管线）。
               2026-11-12 统一右轨（用户拍板）：「发布」2D/3D 都固定在右轨顶部（tool-share），

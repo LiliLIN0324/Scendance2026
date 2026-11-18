@@ -62,8 +62,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * 画布里的快捷键学习入口：左下角一枚“当前模式 + ?”胶囊，按 ? 打开只读速查。
+ * 画布里的快捷键学习浮层：没有常驻入口。按 ? 或 Shift+/ 打开只读速查。
  * 不写存储、不改键位；Esc / 点击遮罩关闭，焦点交给 useDialogFocus。
+ * 输入框与已有 aria-modal 弹层里让路，避免抢走正在打的字。
  */
 export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -91,19 +92,6 @@ export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX
 
   return (
     <>
-      <button
-        type="button"
-        className="sc-shortcut-coach-trigger"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label={`快捷键速查（当前：${meta.label}）`}
-        title="快捷键速查 (?)"
-        onClick={() => setOpen(true)}
-      >
-        <kbd aria-hidden="true">?</kbd>
-        <span className="sc-shortcut-coach-mode">{meta.label}</span>
-        <span className="sc-shortcut-coach-hint">速查</span>
-      </button>
       {open && createPortal(
         <div
           className="sc-shortcut-coach-backdrop"
