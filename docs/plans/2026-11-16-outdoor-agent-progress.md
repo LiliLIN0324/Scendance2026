@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：会话报告里多了两段——`[走查标记]`（只列标过的号，按编号升序，`none` 不算）与 `[云端声明]`（去重升序）；hook 新增 `releaseBlock()` 把快照/卡片/走查原件/云端声明四处收拢成一份。**本地 main = origin = `b9266188`（`div 0/0`）**；但**本轮 `git fetch origin` 连续 3 次失败**，远端是否有新改动未知，下轮先验网络再判定合并。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–92 二十二个切片。9222 四十八轮不通。下一条：给 `[走查标记]` 再加一列“该条当前是否三类全绿”（由台账算，不从标记推），让报告自己能对上卡片。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-session-report.test.ts`。
+- 下一条操作：会话报告里多了两段——`[走查标记]`（只列标过的号，按编号升序，`none` 不算）与 `[云端声明]`（去重升序）；hook 新增 `releaseBlock()` 把快照/卡片/走查原件/云端声明四处收拢成一份。**本地 main = origin = `b9266188`（`div 0/0`）**；**本机与 github.com 的 TLS 握手本轮全面失败**（`git fetch` 3 次、`push` 3 次、`ls-remote` 均报 `schannel: failed to receive handshake`）——远端是否有新改动未知，切片已本地提交但**未推上远端**。下轮开工第一件事：重试 `git push origin agent/outdoor-m7-walkthrough-wire`（本地 HEAD 已含 92），仍失败就继续做无网依赖的切片。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–92 二十二个切片（本地）。9222 四十八轮不通。下一条：给 `[走查标记]` 再加一列“该条当前是否三类全绿”（由台账算，不从标记推）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-session-report.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -115,6 +115,7 @@ scripts/probe-basemap-zoom.mjs
 验证（固定数据）：报告+hook 97/97（新增 5 条：只列标过/一条没标/云端去重/旧格式不变/hook 端到端）；`tsc --noEmit` 0 行
 真实浏览器/云端：仍未验（9222 第四十八轮 down）
 未完成：#2/#5 真实浏览器；报告里的标记行还没接“该条当前全绿”
+推送：**失败**——`git push` 3 次均 `schannel: failed to receive handshake, SSL/TLS connection failed`；提交已在本地 `928c1808`，远端仍是 `286600da`
 ```
 
 - **报告要能自证，不靠信任**：卡片说“全绿 0 条”，人得能对着报告看到“#2 标了 pass、#7 根本没标”；所以报告里带原件（走查簿 + 云端声明），而不是只带结论。
