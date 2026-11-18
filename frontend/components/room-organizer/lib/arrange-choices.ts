@@ -51,6 +51,14 @@ export type ArrangeChoicePageResult =
   | { ok: true; choices: ArrangeChoice[]; message: string }
   | { ok: false; message: string; keepCurrent: boolean; reason: ArrangeChoiceFailure };
 
+/** 当前选中的设施。大块红线上，格子会靠到它旁边，而不是贴在整条红线的南缘。 */
+export interface ArrangeClusterFocus {
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+}
+
 export interface ArrangeChoicePageInput {
   text: string;
   boundary: readonly { x: number; y: number }[];
@@ -58,6 +66,7 @@ export interface ArrangeChoicePageInput {
   /** 0 是第一页。换一批传下一页。 */
   page?: number;
   ids?: () => string;
+  focus?: ArrangeClusterFocus | null;
 }
 
 function clipName(name: string, fallback: string): string {
@@ -69,6 +78,110 @@ function templateIdFor(capability: NonNullable<ArrangeDemand['capability']>): st
   if (capability === 'seat') return 'chair';
   if (capability === 'talk') return 'booth';
   return 'kiosk';
+}
+
+const CLUSTER_GAP_M = 1;
+
+function pointInRing(x: number, y: number, ring: readonly { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const a = ring[i]!;
+    const b = ring[j]!;
+    const crosses = (a.y > y) !== (b.y > y);
+    if (!crosses) continue;
+    const xAtY = ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x;
+    if (x < xAtY) inside = !inside;
+  }
+  return inside;
+}
+
+function clusterBox(
+  placements: readonly { x: number; y: number }[],
+  width: number,
+  depth: number,
+) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of placements) {
+    minX = Math.min(minX, point.x - width / 2);
+    maxX = Math.max(maxX, point.x + width / 2);
+    minY = Math.min(minY, point.y - depth / 2);
+    maxY = Math.max(maxY, point.y + depth / 2);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+function footprintsInside(
+  placements: readonly { x: number; y: number }[],
+  width: number,
+  depth: number,
+  boundary: readonly { x: number; y: number }[],
+): boolean {
+  for (const point of placements) {
+    const corners = [
+      [point.x - width / 2, point.y - depth / 2],
+      [point.x + width / 2, point.y - depth / 2],
+      [point.x + width / 2, point.y + depth / 2],
+      [point.x - width / 2, point.y + depth / 2],
+    ];
+    for (const [x, y] of corners) {
+      if (!pointInRing(x!, y!, boundary)) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * 大块红线上，`layoutGrid` 会把少数几件贴在南缘（整行槽位的开头）。
+ * 选中了设施就挪到它旁边；没有选中、格子又远小于红线时改放到红线中部。
+ * 小场地里格子已经铺满可用宽度，位置保持原样。挪完必须整组仍在红线内。
+ */
+export function relocateArrangeCluster(
+  placements: readonly { x: number; y: number; rotationDeg: number }[],
+  size: { width: number; depth: number },
+  boundary: readonly { x: number; y: number }[],
+  focus: ArrangeClusterFocus | null,
+): { x: number; y: number; rotationDeg: number }[] {
+  if (placements.length === 0 || boundary.length < 3) return [...placements];
+  const box = clusterBox(placements, size.width, size.depth);
+  const cx = (box.minX + box.maxX) / 2;
+  const cy = (box.minY + box.maxY) / 2;
+  const halfW = (box.maxX - box.minX) / 2;
+  const halfD = (box.maxY - box.minY) / 2;
+  const shiftTo = (x: number, y: number) => {
+    const dx = x - cx;
+    const dy = y - cy;
+    const next = placements.map(point => ({
+      x: point.x + dx,
+      y: point.y + dy,
+      rotationDeg: point.rotationDeg,
+    }));
+    return footprintsInside(next, size.width, size.depth, boundary) ? next : null;
+  };
+  if (focus) {
+    const targets = [
+      { x: focus.x, y: focus.y + focus.depth / 2 + CLUSTER_GAP_M + halfD },
+      { x: focus.x, y: focus.y - focus.depth / 2 - CLUSTER_GAP_M - halfD },
+      { x: focus.x + focus.width / 2 + CLUSTER_GAP_M + halfW, y: focus.y },
+      { x: focus.x - focus.width / 2 - CLUSTER_GAP_M - halfW, y: focus.y },
+    ];
+    for (const target of targets) {
+      const moved = shiftTo(target.x, target.y);
+      if (moved) return moved;
+    }
+  }
+  const site = clusterBox(boundary.map(point => ({ x: point.x, y: point.y })), 0, 0);
+  const siteW = site.maxX - site.minX;
+  const siteD = site.maxY - site.minY;
+  const clusterW = box.maxX - box.minX;
+  const clusterD = box.maxY - box.minY;
+  if (clusterW < siteW * 0.45 && clusterD < siteD * 0.45) {
+    const moved = shiftTo((site.minX + site.maxX) / 2, (site.minY + site.maxY) / 2);
+    if (moved) return moved;
+  }
+  return [...placements];
 }
 
 /**
@@ -114,13 +227,18 @@ export function buildArrangeChoicePage(input: ArrangeChoicePageInput): ArrangeCh
   const templateId = templateIdFor(demand.capability);
   const choices: ArrangeChoice[] = [];
   for (const entry of ranked) {
-    const positions = layoutGrid({
-      boundary: input.boundary,
-      count: demand.count,
-      width: entry.item.width,
-      depth: entry.item.depth,
-      ...(demand.aisleM !== null ? { aisleM: demand.aisleM } : {}),
-    });
+    const positions = relocateArrangeCluster(
+      layoutGrid({
+        boundary: input.boundary,
+        count: demand.count,
+        width: entry.item.width,
+        depth: entry.item.depth,
+        ...(demand.aisleM !== null ? { aisleM: demand.aisleM } : {}),
+      }),
+      { width: entry.item.width, depth: entry.item.depth },
+      input.boundary,
+      input.focus ?? null,
+    );
     if (positions.length < demand.count) continue;
     const facilities: PlanFacility[] = [];
     let dropped = false;

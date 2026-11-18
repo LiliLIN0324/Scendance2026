@@ -2554,10 +2554,33 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     notifyPlanDraftChanged();
   }
 
+  function focusArrangeFacilities(facilities: readonly PlanFacility[]) {
+    if (facilities.length === 0) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const facility of facilities) {
+      minX = Math.min(minX, facility.position.x - facility.size.width / 2);
+      maxX = Math.max(maxX, facility.position.x + facility.size.width / 2);
+      minY = Math.min(minY, facility.position.y - facility.size.depth / 2);
+      maxY = Math.max(maxY, facility.position.y + facility.size.depth / 2);
+    }
+    if (![minX, minY, maxX, maxY].every(Number.isFinite)) return;
+    const pad = 2;
+    focusDesignScope([
+      { x: minX - pad, y: minY - pad },
+      { x: maxX + pad, y: minY - pad },
+      { x: maxX + pad, y: maxY + pad },
+      { x: minX - pad, y: maxY + pad },
+    ]);
+  }
+
   function pickArrangeChoice(slug: string) {
     const choice = arrangeChoices?.find(item => item.slug === slug);
     if (!choice) return;
     previewArrangeFacilities(choice.facilities, choice.name);
+    focusArrangeFacilities(choice.facilities);
     setEditMessage(`预览：${choice.name} · ${choice.count} 件，确认后落库。`);
   }
 
@@ -2579,9 +2602,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setOneLineBusy(true);
     try {
       const { models } = await loadShippedOnlineModels();
+      const selectedId = selectedFacilityRef.current;
+      const selected = selectedId
+        ? planRef.current.facilities.find(facility => facility.id === selectedId) ?? null
+        : null;
       const result = buildArrangeChoicePage({
         text,
         boundary,
+        ...(selected ? {
+          focus: {
+            x: selected.position.x,
+            y: selected.position.y,
+            width: selected.size.width,
+            depth: selected.size.depth,
+          },
+        } : {}),
         models: models.map(model => ({
           slug: model.slug,
           name: model.name,
