@@ -52,6 +52,43 @@ describe('readBingoPlanFeedback', () => {
     expect(feedbackSummaryLabel(feedback, false)).toBe('甲方 1 条画内钉评');
   });
 
+  it('reads versioned v2 pins written by the current review page', () => {
+    const storage = bucket();
+    const planKey = `review-v2:${'a'.repeat(64)}`;
+    const pinned = appendReviewSharePin(storage, {
+      planKey,
+      text: '主舞台再往左',
+      draft: pinDraft,
+      floorId: 'ground',
+    });
+    expect(pinned.ok).toBe(true);
+    const feedback = readBingoPlanFeedback({
+      projectKey: 'spring',
+      shareId: 'spring-1',
+      reviewPlanKey: planKey,
+      clientHref: `http://localhost/review/#layout=${'b'.repeat(64)}`,
+    }, storage);
+    expect(feedback.sharePinCount).toBe(1);
+    expect(feedback.pins[0]?.body).toBe('主舞台再往左');
+    expect(feedback.pins[0]?.source).toBe('share-pin');
+  });
+
+  it('keeps v1 pins readable when both stores exist', () => {
+    const storage = bucket();
+    const v2Key = `review-v2:${'c'.repeat(64)}`;
+    const v1Key = 'spring';
+    expect(appendReviewSharePin(storage, { planKey: v2Key, text: 'v2 的钉', draft: pinDraft, floorId: 'ground' }).ok).toBe(true);
+    expect(appendReviewSharePin(storage, { planKey: v1Key, text: 'v1 的钉', draft: pinDraft }).ok).toBe(true);
+    const feedback = readBingoPlanFeedback({
+      projectKey: 'spring',
+      shareId: 'spring-2',
+      reviewPlanKey: v2Key,
+      clientHref: `http://localhost/review/#layout=${'d'.repeat(64)}`,
+    }, storage);
+    const bodies = feedback.pins.map(pin => pin.body).sort();
+    expect(bodies).toEqual(['v1 的钉', 'v2 的钉']);
+  });
+
   it('reads legacy comments stored under a distinct reviewPlanKey', () => {
     const storage = bucket();
     appendReviewComment(storage, {
