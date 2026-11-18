@@ -230,3 +230,20 @@ replica-specs-gov-1.ts(29,78): 同上
 ### 8.5 线上包核对与剩余交接（2026-11-18 晚）
 
 线上 c778 构建主包 `9150.98974b54efc4f8c2.js` 已核对：#3 原话选路四分支、#6 超时单列档、日期不跨轮三态都在包内（证据 `docs/evidence/79/00/2026-11-18-live-build-review.md`）。包内含代码不等于真机验收通过；#3 / #6 仍按清单 §2 走真机复核。剩余待办（真机用例、#5 手段与口径、#2 project 读取补证、记录本落盘、门禁签字）逐项交接待见 `docs/plans/2026-11-18-79-handoff-next-agent.md`。
+
+### 8.6 第四轮：#2 零写补证、#5 CDP 离线补证、#11 部分导出；#3/#6/#7/#8/#9 blocked（2026-11-18）
+
+环境：同一正式站，会话内置产品浏览器（Chrome 147.0.7727.149），登录态有效；CDP 经浏览器后端可达。归档记录本快照 `docs/evidence/79/walkthrough.json`（本 profile 本地记录本为空，按 origin 隔离未继承另一 profile 的标记）。
+
+| 用例 | 本轮结论 | 浏览器 | 云端 | 证据 |
+| --- | --- | --- | --- | --- |
+| #2 同名地点 | 维持 **pass**；补选中路径零写 | pass | pass（选中路径写请求 0、无 project 读） | `02/2026-11-18-case02-selection-readback.md` |
+| #5 离线 | 维持 **partial**；CDP 网络栈离线补证，缺陷①再次复现 | partial | 仍未声明（revision 前后对照缺） | `05/2026-11-18-case05-cdp-offline-supplement.md` |
+| #3 改口采纳 | **blocked**：场地边界未确认，提案未出 | 未取得 | 无 | `03/2026-11-18-case03-blocked.md` |
+| #6 四类阻塞 | **blocked**：四档本轮均未分别触发 | 未取得 | 无 | `06/2026-11-18-case06-blocked.md` |
+| #7 说等等 | **blocked**：会话内无待确认提案卡 | 未取得 | 无 | `07/2026-11-18-case07-blocked-no-proposal.md` |
+| #8 刷新/双点/切项目 | **blocked**：无应用写可对账 | 未取得 | 无 | `08/2026-11-18-case08-blocked.md` |
+| #9 撤销回读 | **blocked**：无已应用批次 | 未取得 | 无 | `09/2026-11-18-case09-blocked.md` |
+| #11 导出 | **partial**：CSV/JSON/GLB/DXF/HTML 落盘且计数与画布一致（5 件 / 3 类）；PDF、效果图、旧云 Run blocked | partial | n/a（导出本机产物，零写） | `11/2026-11-18-case11-exports.md` |
+
+本轮计数：**pass 1 / partial 5 / blocked 5 / fail 0**。门禁仍关；blocked 不计入全绿也不计失败。下一轮最短路径：先在一个项目里定地点、圈出边界 → 出待确认提案 → 按 #7 → #8b → #9 → #8a → #8c 连跑。
