@@ -3,6 +3,7 @@ import {
   encodeSiteSnapshot,
   readSiteSnapshotHash,
   siteArea,
+  siteShareLink,
   siteSnapshotErrorMessage,
   SITE_SNAPSHOT_HASH_PREFIX,
 } from './site-share';
@@ -92,5 +93,26 @@ describe('site share snapshot', () => {
 
   it('computes the boundary area in square metres', () => {
     expect(siteArea(plan.boundary)).toBe(240 * 180);
+  });
+
+  describe('siteShareLink（发布链路）', () => {
+    it('returns a /site link when the plan is a real site', async () => {
+      const url = await siteShareLink(plan, '台州国际博览中心', 'https://studio.example/site');
+      expect(url?.startsWith('https://studio.example/site#s2=1.')).toBe(true);
+      const result = await readSiteSnapshotHash(`#${url!.split('#')[1]}`);
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns null instead of failing the publish when there is no site', async () => {
+      expect(await siteShareLink(null, '空项目', 'https://studio.example/site')).toBeNull();
+      expect(await siteShareLink(undefined, '空项目', 'https://studio.example/site')).toBeNull();
+    });
+
+    it('returns null when the boundary is not a polygon or the anchor is missing', async () => {
+      const noBoundary = { ...plan, boundary: [{ x: 0, y: 0 }, { x: 10, y: 0 }] } as unknown as SitePlanData;
+      expect(await siteShareLink(noBoundary, '两点', 'https://studio.example/site')).toBeNull();
+      const noAnchor = { ...plan, anchor: undefined } as unknown as SitePlanData;
+      expect(await siteShareLink(noAnchor, '缺锚点', 'https://studio.example/site')).toBeNull();
+    });
   });
 });

@@ -16,6 +16,8 @@ export interface ShareExportEntry {
 }
 
 const OPEN_LINE = '打开即可查看场地、分区和尺度，页里可看 3D。';
+/** 有场地页时客户打开的是它：只读、自带快照，没有 3D。 */
+const SITE_OPEN_LINE = '打开即可查看场地轮廓、分区和尺度，只读、无需登录。';
 const PUBLISH_LINE = '发布后即可查看场地、分区和尺度，页里可看 3D。';
 /** 未发布且项目只读时的页脚。有这句就不再给可点的绿色发布按钮。 */
 export const SHARE_READ_ONLY_LINE = '这个项目现在是只读，取回编辑权后再发布。';
@@ -54,7 +56,7 @@ export function SharePanel({
   tab: ShareTab;
   onTab(tab: ShareTab): void;
   title: string;
-  published: { url: string; revision: number } | null;
+  published: { url: string; revision: number; siteUrl?: string } | null;
   busy: boolean;
   notice: string;
   bingoStatus: ShareBingoStatus;
@@ -70,6 +72,9 @@ export function SharePanel({
   onToggleQr(): void;
 }): JSX.Element {
   const publishBlocked = !published && (readOnly || notice === SHARE_READ_ONLY_LINE);
+  /** 交给客户的那条：有场地页就用场地页。 */
+  const handedUrl = published?.siteUrl ?? published?.url ?? '';
+  const handedIsSite = Boolean(published?.siteUrl);
   return <div id="tool-share-menu" className="sc-tool-pop sc-share-panel" role="dialog" aria-label="分享、发布与导出" data-testid="share-panel">
     <div className="sc-share-tabs" role="tablist" aria-label="分享、发布、导出">
       <Tab id="share" selected={tab === 'share'} onSelect={onTab}>分享</Tab>
@@ -86,9 +91,9 @@ export function SharePanel({
 
     {tab === 'publish' && <section className="sc-share-body" role="tabpanel" aria-label="发布" id="share-panel-publish" data-published={published ? 'true' : 'false'} data-readonly={publishBlocked ? 'true' : 'false'}>
       <ShareHeading icon={<GlobeIcon />} title="发布到网页" />
-      <p className="sc-share-desc">{published ? OPEN_LINE : PUBLISH_LINE}</p>
+      <p className="sc-share-desc">{published ? (handedIsSite ? SITE_OPEN_LINE : OPEN_LINE) : PUBLISH_LINE}</p>
       {published ? <div className="sc-share-link" data-testid="share-link-row">
-        <span className="sc-share-link-text" title={published.url}>{displayShareUrl(published.url)}</span>
+        <span className="sc-share-link-text" title={handedUrl}>{displayShareUrl(handedUrl)}</span>
         <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={onCopy}>复制</button>
         <button
           type="button"
