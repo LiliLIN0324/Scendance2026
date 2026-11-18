@@ -3,7 +3,7 @@
  *
  * 问题清单原本只活在 `outdoor-plan-canvas.tsx` 的「规划信息」四页签里；
  * 创作者 Bingo 要变成审校台，就必须拿到同一份问题，并能请求画布飞过去。
- * 这里只做两件事：发布快照（供 Bingo 订阅）与转发单条定位请求（供画布执行），
+ * 这里发布问题快照和已落实的场地层计数（供 Bingo 订阅），并转发单条定位请求（供画布执行）。
  * 不重新计算问题，也不另存第二份真相。
  */
 
@@ -20,8 +20,17 @@ export interface OutdoorPlanIssue {
 
 export type OutdoorPlanIssueSnapshot = readonly OutdoorPlanIssue[];
 
+/** 已画上的场地层。Bingo「已落实」只读这一份，不另算红线、分区和动线。 */
+export interface OutdoorPlanSettled {
+  boundaryClosed: boolean;
+  zoneCount: number;
+  routeCount: number;
+}
+
 const EMPTY: OutdoorPlanIssueSnapshot = Object.freeze([]);
+const EMPTY_SETTLED: OutdoorPlanSettled = Object.freeze({ boundaryClosed: false, zoneCount: 0, routeCount: 0 });
 let snapshot: OutdoorPlanIssueSnapshot = EMPTY;
+let settled: OutdoorPlanSettled = EMPTY_SETTLED;
 const listeners = new Set<() => void>();
 
 /** 发布当前问题快照；内容没变就不通知，避免 Bingo 每次重渲染。 */
@@ -40,9 +49,28 @@ export function publishOutdoorPlanIssues(next: OutdoorPlanIssueSnapshot): void {
   for (const listener of listeners) listener();
 }
 
+export function publishOutdoorPlanSettled(next: OutdoorPlanSettled): void {
+  if (
+    settled.boundaryClosed === next.boundaryClosed
+    && settled.zoneCount === next.zoneCount
+    && settled.routeCount === next.routeCount
+  ) return;
+  settled = Object.freeze({
+    boundaryClosed: next.boundaryClosed,
+    zoneCount: next.zoneCount,
+    routeCount: next.routeCount,
+  });
+  for (const listener of listeners) listener();
+}
+
+export function getOutdoorPlanSettled(): OutdoorPlanSettled {
+  return settled;
+}
+
 export function clearOutdoorPlanIssues(): void {
-  if (snapshot.length === 0) return;
+  if (snapshot.length === 0 && settled === EMPTY_SETTLED) return;
   snapshot = EMPTY;
+  settled = EMPTY_SETTLED;
   for (const listener of listeners) listener();
 }
 
