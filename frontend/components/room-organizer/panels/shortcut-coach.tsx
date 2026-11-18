@@ -63,7 +63,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 /**
  * 画布里的快捷键学习入口：地图上不新增常驻控件。
- * 按 ? 或 Shift+/ 打开只读速查；完整参考在设置页「快捷键」。
+ * 按 ? 或 Shift+/ 打开只读速查；头像菜单和设置里的「查看速查」派发同一事件。
  * 不写存储、不改键位；Esc / 点击遮罩关闭，焦点交给 useDialogFocus。
  */
 export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX.Element | null {
@@ -74,6 +74,12 @@ export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX
 
   const close = useCallback(() => setOpen(false), []);
   useDialogFocus(open, panelRef, { initialFocusRef: closeRef, onEscape: close, trap: true });
+
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener('scendance:open-shortcut-coach', onOpen);
+    return () => window.removeEventListener('scendance:open-shortcut-coach', onOpen);
+  }, []);
 
   useEffect(() => {
     if (!enabled || open) return undefined;
@@ -128,7 +134,7 @@ export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX
           </button>
         </div>
         <ShortcutReference initialMode={meta.initialMode} />
-        <p className="sc-shortcut-coach-foot">按 ? 打开 · Esc 关闭 · 完整参考在设置 → 快捷键 · 这里只读，不会改动你的键位</p>
+        <p className="sc-shortcut-coach-foot">按 ? 或 Shift + / 打开 · Esc 关闭 · 这里只读，不会改动你的键位</p>
       </div>
     </div>,
     document.body,

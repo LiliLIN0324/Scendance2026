@@ -6,7 +6,7 @@ import { avatarToneStyle, avatarTonesFor, useAvatarPresetsFor } from './account-
 import type { BackendSession } from '@/lib/backend-session';
 
 /**
- * 左轨 bot 形体下面的成员位：与「团队与权限」读同一份成员，头像用同一个样式类、同一套分色，
+ * 左轨 bot 形体下面的成员位：与设置里的团队页读同一份成员，头像用同一个样式类、同一套分色，
  * 所以两处的人、名字、圆片和颜色必然对得上；自己那颗跟着选过的头像走。
  * 窄轨不放名字，悬停或聚焦才出右侧黑胶囊。
  * 点谁的头就是给谁发消息（自己的那颗是留话），红数字只在真有未读时出现。

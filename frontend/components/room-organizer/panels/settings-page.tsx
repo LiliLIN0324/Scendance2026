@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Ruler, UserRound, UsersRound } from '@/components/solid-icons';
 import {
   DEFAULT_AISLE_CLEAR_M,
   DEFAULT_ANGLE_SNAP_DEG,
@@ -21,7 +22,6 @@ import {
   type StudioSettingsPatch,
 } from '../../../../supabase/functions/_shared/plan-editor';
 import { isValidTimeZone } from '../../../lib/event-profile';
-import { ShortcutReference } from './shortcut-reference';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -34,7 +34,7 @@ export interface SettingsPreferences {
   snapToItems?: boolean;
 }
 
-export type SettingsPane = 'personal' | 'shortcuts' | 'plan-display' | 'plan-time' | 'plan-aisle' | 'team';
+export type SettingsPane = 'personal' | 'plan' | 'team';
 
 const SOURCE_LABEL: Record<SettingSource, string> = {
   plan: '本方案',
@@ -109,7 +109,9 @@ export function SettingsPage({
   studioStatus,
   studioError,
   onSaveStudioSettings,
-  onOpenTeam,
+  paneRequest,
+  teamPanel,
+  onOpenShortcuts,
 }: {
   preferences: SettingsPreferences;
   onPreferenceChange: (patch: Partial<SettingsPreferences>) => void;
@@ -123,10 +125,18 @@ export function SettingsPage({
   studioStatus: 'idle' | 'loading' | 'ready' | 'error' | 'signed-out';
   studioError?: string;
   onSaveStudioSettings?: (patch: StudioSettingsPatch) => Promise<void>;
-  onOpenTeam?: () => void;
+  paneRequest?: { serial: number; pane: SettingsPane };
+  teamPanel?: ReactNode;
+  onOpenShortcuts?: () => void;
 }): JSX.Element {
   const hasPlan = !!layout && !!onPlanSettingsChange;
-  const [pane, setPane] = useState<SettingsPane>('personal');
+  const [pane, setPane] = useState<SettingsPane>(paneRequest?.pane ?? 'personal');
+  const seenPane = useRef(paneRequest?.serial ?? 0);
+  useEffect(() => {
+    if (!paneRequest || paneRequest.serial === seenPane.current) return;
+    seenPane.current = paneRequest.serial;
+    setPane(paneRequest.pane);
+  }, [paneRequest]);
   const [teamDraft, setTeamDraft] = useState<StudioSettingsPatch>({});
   const [teamMessage, setTeamMessage] = useState('');
   const plan = sanitizePlanEditor(layout?.planSettings) ?? {};
@@ -188,41 +198,31 @@ export function SettingsPage({
     }
   };
 
-  const navButton = (id: SettingsPane, label: string) => (
-    <button type="button" role="tab" aria-selected={pane === id} aria-pressed={pane === id} onClick={() => setPane(id)}>{label}</button>
+  const navButton = (id: SettingsPane, label: string, icon: ReactNode) => (
+    <button type="button" aria-pressed={pane === id} onClick={() => setPane(id)}>{icon}{label}</button>
   );
 
   return (
-    <div className="sc-account-prefs">
-      <nav className="sc-account-prefs-nav" aria-label="设置分区" role="tablist">
-        <p className="sc-settings-scope">个人</p>
-        {navButton('personal', '偏好')}
-        {navButton('shortcuts', '快捷键')}
-        {hasPlan ? (
-          <>
-            <p className="sc-settings-scope">本方案</p>
-            {navButton('plan-display', '显示与网格')}
-            {navButton('plan-time', '时区')}
-            {navButton('plan-aisle', '通道与摊位')}
-          </>
-        ) : null}
-        <p className="sc-settings-scope">团队</p>
-        {navButton('team', '报价抬头与新项目默认')}
-        <button type="button" className="sc-settings-linkout" onClick={onOpenTeam}>团队与权限 ↗</button>
+    <div className="sc-settings-shell">
+      <nav className="sc-settings-nav" aria-label="设置分区">
+        {navButton('personal', '个人', <UserRound size={15} aria-hidden="true" />)}
+        {navButton('plan', '本方案', <Ruler size={15} aria-hidden="true" />)}
+        {navButton('team', '团队', <UsersRound size={15} aria-hidden="true" />)}
       </nav>
 
       {pane === 'personal' ? (
-        <div className="sc-account-prefs-main" role="tabpanel">
-          <div className="sc-account-prefs-head">
-            <h3>个人偏好</h3>
-            <p>跟账号走，换一份方案还在。{preferenceStatus}</p>
+        <div className="sc-settings-main">
+          <div className="sc-settings-main-head">
+            <h2 id="sc-settings-title">个人</h2>
+            <p>{preferenceStatus}</p>
           </div>
           <div className="sc-settings-prefs">
+            <p className="sc-settings-kicker">读数与标注</p>
             <div className="sc-settings-group">
-              <Row title="显示单位" source={preferences.lengthUnit === 'm' ? 'builtin' : 'personal'} detail="标注、属性面板和清单的读数。场景数据仍按米存储。">
+              <Row title="显示单位" source={preferences.lengthUnit === 'm' ? 'builtin' : 'personal'} detail="标注、画布和导出用同一读数。方案数据仍按米存储。">
                 <div className="sc-unit-seg" role="group" aria-label="显示单位">
-                  <button type="button" aria-pressed={preferences.lengthUnit === 'm'} onClick={() => onPreferenceChange({ lengthUnit: 'm' })}>米 · m</button>
-                  <button type="button" aria-pressed={preferences.lengthUnit === 'ft'} onClick={() => onPreferenceChange({ lengthUnit: 'ft' })}>英尺 · ft</button>
+                  <button type="button" aria-pressed={preferences.lengthUnit === 'm'} onClick={() => onPreferenceChange({ lengthUnit: 'm' })}>米</button>
+                  <button type="button" aria-pressed={preferences.lengthUnit === 'ft'} onClick={() => onPreferenceChange({ lengthUnit: 'ft' })}>英尺</button>
                 </div>
               </Row>
               <Row title="尺寸标注" source={preferences.showMeasurements ? 'builtin' : 'personal'} detail="在画布上显示场地与物件的尺寸读数。">
@@ -231,7 +231,7 @@ export function SettingsPage({
                   <i />
                 </label>
               </Row>
-              <Row title="读数精度" source={precision === 0.01 ? 'builtin' : 'personal'} detail="先按这个米制步长取整，再换成当前单位。切英尺只改读数。" action={precision === 0.01 ? null : <button type="button" className="sc-settings-outline" onClick={() => onPreferenceChange({ lengthPrecisionM: 0.01 })}>恢复默认</button>}>
+              <Row title="读数精度" source={precision === 0.01 ? 'builtin' : 'personal'} detail="先圆到这个步长再显示，可随时改。" action={precision === 0.01 ? null : <button type="button" className="sc-settings-outline" onClick={() => onPreferenceChange({ lengthPrecisionM: 0.01 })}>恢复默认</button>}>
                 <div className="sc-unit-seg" role="group" aria-label="读数精度">
                   {LENGTH_PRECISIONS_M.map(step => (
                     <button key={step} type="button" aria-pressed={precision === step} onClick={() => onPreferenceChange({ lengthPrecisionM: step })}>{step} m</button>
@@ -239,37 +239,37 @@ export function SettingsPage({
                 </div>
               </Row>
             </div>
+            <p className="sc-settings-kicker">吸附</p>
             <div className="sc-settings-group">
-              <Row title="网格吸附" source={preferences.snapToGrid ? 'personal' : 'builtin'} detail="建造画布。G 只切换这一项。">
+              <Row title="网格吸附" source={preferences.snapToGrid ? 'personal' : 'builtin'} detail="建筑点布局时，只对准这一层。">
                 <label className="sc-switch"><input aria-label="网格吸附" type="checkbox" checked={!!preferences.snapToGrid} onChange={event => onPreferenceChange({ snapToGrid: event.target.checked })} /><i /></label>
               </Row>
-              <Row title="墙吸附" source={preferences.snapToWall ? 'personal' : 'builtin'} detail="靠近墙时贴齐。和 G 无关。">
+              <Row title="墙吸附" source={preferences.snapToWall ? 'personal' : 'builtin'} detail="靠近墙时贴齐，和 G 无关。">
                 <label className="sc-switch"><input aria-label="墙吸附" type="checkbox" checked={!!preferences.snapToWall} onChange={event => onPreferenceChange({ snapToWall: event.target.checked })} /><i /></label>
               </Row>
-              <Row title="物件吸附" source={preferences.snapToItems ? 'personal' : 'builtin'} detail="靠近其他物件时对齐。和 G 无关。">
+              <Row title="物件吸附" source={preferences.snapToItems ? 'personal' : 'builtin'} detail="靠近其他物件时对齐，和 G 无关。">
                 <label className="sc-switch"><input aria-label="物件吸附" type="checkbox" checked={!!preferences.snapToItems} onChange={event => onPreferenceChange({ snapToItems: event.target.checked })} /><i /></label>
+              </Row>
+            </div>
+            <p className="sc-settings-kicker">快捷键</p>
+            <div className="sc-settings-group">
+              <Row title="键盘快捷键" detail="按 ? 或 Shift + / 打开只读速查。户外先显示户外分组。">
+                <button type="button" className="sc-settings-outline" onClick={onOpenShortcuts}>查看速查</button>
               </Row>
             </div>
           </div>
         </div>
       ) : null}
 
-      {pane === 'shortcuts' ? (
-        <div className="sc-account-prefs-main" role="tabpanel">
-          <div className="sc-account-prefs-head">
-            <h3>快捷键</h3>
-            <p>按模式列出当前绑定。这里只读，不改键位。画布上按 ? 看当前模式。</p>
-          </div>
-          <ShortcutReference />
-        </div>
-      ) : null}
-
-      {pane === 'plan-display' && hasPlan ? (
-        <div className="sc-account-prefs-main" role="tabpanel">
-          <div className="sc-account-prefs-head">
-            <h3>显示与网格</h3>
+      {pane === 'plan' ? (
+        <div className="sc-settings-main">
+          <div className="sc-settings-main-head">
+            <h2 id="sc-settings-title">本方案</h2>
             <p>只影响这一份方案，会跟着方案保存。内部仍按米存储。</p>
           </div>
+          {!hasPlan ? <p className="sc-account-footnote">打开一份方案后，可以改这一份的单位、网格、时区和通道。</p> : null}
+          {hasPlan ? <>
+          <p className="sc-settings-kicker">显示与网格</p>
           <div className="sc-settings-group">
             <Row
               title="显示单位"
@@ -288,15 +288,7 @@ export function SettingsPage({
             <NumberRow title="角度吸附" source={plan.angleSnapDeg !== undefined ? 'plan' : 'builtin'} detail="Shift+R，以及场地里待放置物件的 R。" value={plan.angleSnapDeg ?? DEFAULT_ANGLE_SNAP_DEG} min={1} max={90} step={1} suffix="°" onChange={value => patchPlan({ angleSnapDeg: value })} onReset={plan.angleSnapDeg !== undefined ? () => clearPlan('angleSnapDeg') : undefined} />
             <NumberRow title="微移步长" source={plan.nudgeStepM !== undefined ? 'plan' : 'builtin'} detail="方向键每次移动的米数。按住 Shift 为 10 倍。" value={plan.nudgeStepM ?? DEFAULT_NUDGE_STEP_M} min={0.001} max={1} step={0.01} onChange={value => patchPlan({ nudgeStepM: value })} onReset={plan.nudgeStepM !== undefined ? () => clearPlan('nudgeStepM') : undefined} />
           </div>
-        </div>
-      ) : null}
-
-      {pane === 'plan-time' && hasPlan ? (
-        <div className="sc-account-prefs-main" role="tabpanel">
-          <div className="sc-account-prefs-head">
-            <h3>时区</h3>
-            <p>当天执行包的文件名和「生成于」用这个时区，不再写死上海，也不按 UTC 截日期。</p>
-          </div>
+          <p className="sc-settings-kicker">时区</p>
           <div className="sc-settings-group">
             <Row title="方案时区" source={timeZone.source === 'plan' ? 'plan' : 'builtin'} detail="非法时区会回到 Asia/Shanghai。" action={plan.timeZone ? <button type="button" className="sc-settings-outline" onClick={() => clearPlan('timeZone')}>恢复默认</button> : null}>
               <select aria-label="方案时区" value={timeZone.value} onChange={event => {
@@ -307,28 +299,23 @@ export function SettingsPage({
               </select>
             </Row>
           </div>
-        </div>
-      ) : null}
-
-      {pane === 'plan-aisle' && hasPlan ? (
-        <div className="sc-account-prefs-main" role="tabpanel">
-          <div className="sc-account-prefs-head">
-            <h3>通道与摊位</h3>
-            <p>一句话布置摊位带时，句子没写通道就用这个净宽；沿通道的摊位间距用这个值。预览和落库是同一套数。</p>
-          </div>
+          <p className="sc-settings-kicker">通道与摊位</p>
           <div className="sc-settings-group">
             <NumberRow title="通道净宽" source={plan.aisleClearM !== undefined ? 'plan' : 'builtin'} detail="米。句子里写了「留 N 米通道」时，以句子为准。" value={plan.aisleClearM ?? DEFAULT_AISLE_CLEAR_M} min={0.6} max={12} step={0.1} onChange={value => patchPlan({ aisleClearM: value })} onReset={plan.aisleClearM !== undefined ? () => clearPlan('aisleClearM') : undefined} />
             <NumberRow title="摊位间距" source={plan.boothSpacingM !== undefined ? 'plan' : 'builtin'} detail="米。沿通道方向，相邻摊位之间的空隙。" value={plan.boothSpacingM ?? DEFAULT_BOOTH_SPACING_M} min={0} max={5} step={0.1} onChange={value => patchPlan({ boothSpacingM: value })} onReset={plan.boothSpacingM !== undefined ? () => clearPlan('boothSpacingM') : undefined} />
           </div>
+          </> : null}
         </div>
       ) : null}
 
       {pane === 'team' ? (
-        <div className="sc-account-prefs-main" role="tabpanel">
-          <div className="sc-account-prefs-head">
-            <h3>报价抬头与新项目默认</h3>
-            <p>抬头给新报价单；本方案仍可覆盖。单位、通道和摊位间距只在之后新建方案时写入，不改已经打开的方案。</p>
+        <div className="sc-settings-main">
+          <div className="sc-settings-main-head">
+            <h2 id="sc-settings-title">团队</h2>
+            <p>成员、报价抬头和新项目默认都在这里。抬头给新报价单，本方案仍可覆盖。单位、通道和摊位间距只写入之后新建的方案。</p>
           </div>
+          {teamPanel}
+          <p className="sc-settings-kicker">报价抬头</p>
           {!signedIn ? <p className="sc-account-footnote">登录后才能读写团队默认。个人偏好仍留在本机。</p> : null}
           {studioStatus === 'loading' ? <p className="sc-account-footnote">正在读取团队默认…</p> : null}
           {studioStatus === 'error' ? <p className="sc-account-error" role="alert">{studioError || '团队默认没有读到。画布不受影响。'}</p> : null}

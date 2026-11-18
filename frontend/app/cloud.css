@@ -406,3 +406,63 @@
 @media(max-width:800px){.sc-settings-permissions{grid-template-columns:1fr}.sc-settings-group .sc-settings-input{width:220px}.sc-settings-invite{grid-template-columns:minmax(0,1fr) auto}.sc-settings-invite-icon{display:none}.sc-account-dialog{width:calc(100vw - 24px)}.sc-account-body{padding:20px}.sc-account-dialog .sc-cloud-heading{padding:24px 20px 0}.sc-account-side{padding:14px 20px 16px}.sc-account-subnav{margin-inline:20px}.sc-account-dialog .sc-cloud-footer{padding:15px 20px}}
 @media(max-width:700px){.sc-account-prefs{grid-template-columns:1fr;gap:16px}.sc-account-prefs-nav{display:flex;flex-wrap:wrap;gap:6px}.sc-cloud-dialog .sc-account-prefs-nav button{width:auto;padding:6px 10px;border:1px solid var(--wk-hair);border-radius:999px}.sc-shortcut-row{grid-template-columns:1fr;gap:3px;padding:9px 12px}.sc-shortcut-group-head{padding:10px 12px}.sc-shortcut-notes{padding-inline:12px}}
 @media(max-width:480px){.sc-account-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:14px}.sc-account-profile{gap:10px}.sc-account-profile-actions>button,.sc-account-profile-actions>a.sc-cloud-primary{height:30px;padding:0 12px}.sc-account-avatar{width:34px;height:34px;font-size:15px}.sc-account-section-heading{align-items:flex-start}.sc-settings-row{flex-wrap:wrap;padding:12px}.sc-settings-row-actions{flex:1 0 100%;justify-content:flex-end}.sc-settings-studio-row .sc-settings-input{width:100%}.sc-settings-group .sc-settings-select{width:104px}.sc-settings-invite{grid-template-columns:1fr;padding:12px}.sc-settings-invite-icon{display:none}.sc-settings-add{justify-self:stretch}.sc-settings-contact{white-space:normal;overflow-wrap:anywhere}.sc-settings-perms{grid-template-columns:1fr}.sc-settings-role{padding:12px}.sc-settings-preview{padding:12px}}
+
+/* 头像短菜单：浅色卡片，从左轨向右展开。支持在桌面悬停、触控点开。 */
+.sc-account-menu{position:fixed;z-index:80;display:grid;gap:2px;width:220px;padding:6px;border:1px solid var(--wk-hair);border-radius:14px;background:var(--wk-paper);box-shadow:0 12px 32px rgba(20,20,22,.14);color:var(--wk-ink)}
+.sc-account-menu-id{display:grid;gap:2px;padding:8px 10px 10px}
+.sc-account-menu-id strong{font-size:14px;font-weight:650;letter-spacing:-.01em}
+.sc-account-menu-id span{font-size:12px;color:var(--sc-muted)}
+.sc-account-menu button,.sc-account-menu a{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:8px;background:none;box-shadow:none;color:var(--wk-ink);font:inherit;font-size:13px;line-height:1.3;text-align:left;text-decoration:none;cursor:pointer}
+.sc-account-menu button:hover,.sc-account-menu a:hover,.sc-account-menu button:focus-visible,.sc-account-menu a:focus-visible{background:var(--wk-plane)}
+.sc-account-menu button:disabled{opacity:.5;cursor:default}
+.sc-account-menu-signout{margin-top:4px;border-top:1px solid var(--wk-hair);border-radius:0 0 8px 8px}
+.sc-account-menu-support{position:relative}
+.sc-account-menu-caret{margin-left:auto;color:var(--sc-muted)}
+.sc-account-menu-flyout{position:absolute;left:calc(100% + 6px);top:0;display:grid;gap:2px;width:176px;padding:6px;border:1px solid var(--wk-hair);border-radius:12px;background:var(--wk-paper);box-shadow:0 12px 32px rgba(20,20,22,.14)}
+.sc-account-menu-kbd{display:grid;place-items:center;width:15px;height:15px;border:1px solid var(--wk-hair);border-radius:4px;font-size:11px}
+.sc-account-menu .sc-account-error,.sc-account-menu .sc-account-footnote{margin:4px 6px 2px}
+
+/* 设置：按内容收高度的居中浅色窗。 */
+.sc-settings-backdrop{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;padding:24px;background:rgba(20,20,22,.28)}
+.sc-settings-dialog{position:relative;display:flex;width:min(720px,calc(100vw - 48px));max-height:calc(100dvh - 48px);border-radius:16px;background:var(--wk-paper);box-shadow:0 18px 50px rgba(20,20,22,.16);overflow:hidden}
+.sc-settings-close{position:absolute;top:12px;right:12px;z-index:2;width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:var(--sc-muted);font-size:18px;line-height:1;cursor:pointer}
+.sc-settings-close:hover{background:var(--wk-plane);color:var(--wk-ink)}
+.sc-settings-shell{display:flex;min-width:0;min-height:0;width:100%;max-height:calc(100dvh - 48px)}
+.sc-settings-nav{display:grid;align-content:start;gap:2px;flex:none;width:148px;padding:14px 10px;border-right:1px solid var(--wk-hair);background:color-mix(in srgb,var(--wk-plane) 55%,var(--wk-paper))}
+.sc-settings-nav button{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:8px;background:none;box-shadow:none;color:var(--ink-soft,#55585F);font-size:13px;font-weight:500;text-align:left;cursor:pointer}
+.sc-settings-nav button[aria-pressed=true]{background:var(--wk-paper);color:var(--wk-ink);font-weight:600;box-shadow:0 0 0 1px var(--wk-hair)}
+.sc-settings-main{flex:1;min-width:0;min-height:0;overflow:auto;padding:18px 22px 20px}
+.sc-settings-main-head{display:grid;gap:4px;margin:0 28px 14px 0}
+.sc-settings-main-head h2{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em}
+.sc-settings-main-head p{margin:0;color:var(--sc-muted);font-size:12px;line-height:1.55}
+.sc-settings-kicker{margin:14px 2px 6px;color:var(--sc-muted);font-size:11px;font-weight:600}
+.sc-settings-kicker:first-of-type{margin-top:0}
+.sc-settings-dialog .sc-settings-outline{height:30px;padding:0 12px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-paper);color:var(--wk-ink);font-size:12px;font-weight:500;cursor:pointer}
+.sc-settings-dialog .sc-settings-group{background:var(--wk-paper)}
+@media(max-width:680px){.sc-settings-dialog{flex-direction:column;width:calc(100vw - 24px)}.sc-settings-nav{display:flex;width:auto;gap:6px;padding:12px;border-right:0;border-bottom:1px solid var(--wk-hair);overflow:auto}.sc-settings-nav button{width:auto}}
+
+/* 反馈与关于：比设置更小的浅色窗。 */
+.sc-mini-backdrop{position:fixed;inset:0;z-index:1150;display:grid;place-items:center;padding:24px;background:rgba(20,20,22,.28)}
+.sc-mini-dialog{position:relative;width:min(440px,calc(100vw - 48px));padding:18px 18px 16px;border-radius:16px;background:var(--wk-paper);box-shadow:0 18px 50px rgba(20,20,22,.16);color:var(--wk-ink)}
+.sc-mini-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sc-mini-head h2,.sc-about-dialog h2{margin:0;font-size:16px;font-weight:650;letter-spacing:-.02em}
+.sc-mini-close{width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:var(--sc-muted);font-size:18px;cursor:pointer}
+.sc-mini-close:hover{background:var(--wk-plane);color:var(--wk-ink)}
+.sc-mini-copy{margin:8px 0 12px;color:var(--sc-muted);font-size:12px;line-height:1.6}
+.sc-feedback-dialog textarea{display:block;width:100%;min-height:96px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--wk-hair);border-radius:10px;background:var(--wk-plane);color:var(--wk-ink);font:inherit;font-size:13px;line-height:1.5;resize:vertical}
+.sc-mini-check{display:flex;gap:8px;align-items:flex-start;margin:0 0 8px;font-size:13px}
+.sc-mini-check input{margin-top:3px}
+.sc-mini-check span{display:grid;gap:2px}
+.sc-mini-check small{color:var(--sc-muted);font-size:11px;line-height:1.45}
+.sc-mini-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.sc-mini-actions button{height:32px;padding:0 14px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-paper);color:var(--wk-ink);font:inherit;font-size:13px;cursor:pointer}
+.sc-mini-primary{background:var(--wk-ink)!important;border-color:var(--wk-ink)!important;color:var(--wk-paper)!important}
+.sc-about-dialog{width:min(320px,calc(100vw - 48px));text-align:center;padding-top:28px}
+.sc-about-dialog .sc-mini-close{position:absolute;top:10px;right:10px}
+.sc-about-line{margin:6px 0 0;font-size:13px}
+.sc-about-brand{margin:4px 0 14px;color:var(--sc-muted);font-size:12px}
+.sc-about-links{display:grid;gap:6px;margin-bottom:14px}
+.sc-about-links a{color:var(--wk-ink);font-size:13px;text-decoration:none}
+.sc-about-links a:hover{text-decoration:underline}
+.sc-about-copy{display:grid;gap:2px;width:100%;padding:8px 12px;border:1px solid var(--wk-hair);border-radius:10px;background:var(--wk-paper);color:var(--wk-ink);font:inherit;font-size:13px;cursor:pointer}
+.sc-about-copy small{color:var(--sc-muted);font-size:11px}
