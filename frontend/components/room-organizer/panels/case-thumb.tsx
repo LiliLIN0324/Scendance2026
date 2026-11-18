@@ -23,7 +23,12 @@ function toPoints(points: readonly PlanPoint[]): string {
   return points.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
 }
 
-export function CaseThumb({ plan }: { plan: SitePlanData }): JSX.Element {
+export function CaseThumb({ plan, className = 'sc-case-thumb', basemap = true }: {
+  plan: SitePlanData;
+  /** 2026-11-18 项目卡预览：卡片墙一开就是十几张，瓦片太重时不取底图，只画线稿。 */
+  basemap?: boolean;
+  className?: string;
+}): JSX.Element {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -40,7 +45,7 @@ export function CaseThumb({ plan }: { plan: SitePlanData }): JSX.Element {
   for (const facility of plan.facilities) grow(facility.position.x, facility.position.y);
 
   if (!Number.isFinite(minX) || !Number.isFinite(maxX)) {
-    return <svg className="sc-case-thumb" viewBox="0 0 160 100" aria-hidden="true" focusable="false"/>;
+    return <svg className={className} viewBox="0 0 160 100" aria-hidden="true" focusable="false"/>;
   }
 
   const width = Math.max(maxX - minX, 1);
@@ -54,12 +59,12 @@ export function CaseThumb({ plan }: { plan: SitePlanData }): JSX.Element {
   // 线宽/点大小跟着视口走，缩到 200px 宽也不会变成一根头发丝或一块黑。
   const stroke = Math.max(width, height) / 240;
   // 底图按真实锚点取瓦片；SVG 里 y 向下、ENU 的 y 向北，图片单独放在未翻转的坐标里画。
-  const basemap = caseBasemapTiles({ anchor: plan.anchor ?? null, bounds: { minX, minY, maxX, maxY } });
+  const basemapTiles = basemap ? caseBasemapTiles({ anchor: plan.anchor ?? null, bounds: { minX, minY, maxX, maxY } }) : null;
   const creditSize = Math.max(width, height) * 0.05;
 
-  return <svg className="sc-case-thumb" viewBox={viewBox} preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
-    {basemap && <g className="sc-case-thumb-ground">
-      {basemap.tiles.map(tile => <image key={tile.url} href={tile.url}
+  return <svg className={className} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+    {basemapTiles && <g className="sc-case-thumb-ground">
+      {basemapTiles.tiles.map(tile => <image key={tile.url} href={tile.url}
         x={tile.rect.x} y={-(tile.rect.y + tile.rect.height)}
         width={tile.rect.width} height={tile.rect.height} preserveAspectRatio="none"/>)}
       {/* 压一层淡墨：线稿的浅色分区压得住影像，又不把地面糊死。 */}
@@ -67,13 +72,13 @@ export function CaseThumb({ plan }: { plan: SitePlanData }): JSX.Element {
       <text className="sc-case-thumb-credit" x={vbX + vbW - stroke * 2} y={vbY + vbH - stroke * 2}
         textAnchor="end" fontSize={creditSize} fill="#ffffff" fillOpacity={0.72}
         stroke="#0c1a14" strokeOpacity={0.5} strokeWidth={creditSize * 0.18}
-        paintOrder="stroke" letterSpacing={creditSize * 0.04}>{basemap.credit}</text>
+        paintOrder="stroke" letterSpacing={creditSize * 0.04}>{basemapTiles.credit}</text>
     </g>}
     {/* ENU 的 +Y 为北，SVG 的 +Y 向下；与编辑器北向一致，不能把案例上下镜像。 */}
     <g transform="scale(1 -1)">
     {plan.boundary.length >= 3 && <polygon points={toPoints(plan.boundary)}
-      fill="var(--space-tint, #eef2ef)" fillOpacity={basemap ? 0.06 : 1}
-      stroke={basemap ? '#ffffff' : 'var(--space-line, #c8d3cd)'} strokeOpacity={basemap ? 0.9 : 1} strokeWidth={stroke}/>}
+      fill="var(--space-tint, #eef2ef)" fillOpacity={basemapTiles ? 0.06 : 1}
+      stroke={basemapTiles ? '#ffffff' : 'var(--space-line, #c8d3cd)'} strokeOpacity={basemapTiles ? 0.9 : 1} strokeWidth={stroke}/>}
     {plan.zones.map(zone => <polygon key={zone.id} points={toPoints(zone.polygon)}
       fill={zone.color ?? '#9fb3aa'} fillOpacity={zone.opacity ?? 0.28}
       stroke={zone.color ?? '#9fb3aa'} strokeOpacity={0.5} strokeWidth={stroke * 0.6}/>)}
@@ -85,7 +90,7 @@ export function CaseThumb({ plan }: { plan: SitePlanData }): JSX.Element {
       y={facility.position.y - facility.size.depth / 2}
       width={facility.size.width} height={facility.size.depth}
       fill={facility.color ?? 'var(--space-ink, #3d4b45)'} fillOpacity={0.8}
-      stroke={basemap ? '#ffffff' : 'none'} strokeOpacity={0.45} strokeWidth={stroke * 0.22} rx={stroke * 0.5}
+      stroke={basemapTiles ? '#ffffff' : 'none'} strokeOpacity={0.45} strokeWidth={stroke * 0.22} rx={stroke * 0.5}
       transform={`rotate(${facility.rotationDeg} ${facility.position.x} ${facility.position.y})`}/>)}
     </g>
   </svg>;

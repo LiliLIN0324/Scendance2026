@@ -22,8 +22,11 @@ describe('ShortcutCoach', () => {
     expect(screen.queryByRole('dialog', { name: '快捷键' })).toBeNull();
   });
 
-  it('opens the filter that matches the current canvas mode', () => {
+  it('opens the outdoor filter from Shift+/ and has no persistent capsule', () => {
     render(<ShortcutCoach mode="outdoor" />);
+
+    expect(screen.queryByRole('button', { name: /快捷键速查/ })).toBeNull();
+    expect(document.querySelector('.sc-shortcut-coach-trigger')).toBeNull();
 
     fireEvent.keyDown(window, { key: '/', shiftKey: true });
     expect(screen.getByRole('heading', { name: '户外规划' })).toBeTruthy();

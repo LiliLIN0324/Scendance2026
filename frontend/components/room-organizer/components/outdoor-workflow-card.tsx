@@ -5,10 +5,9 @@ import {
   type OutdoorCardRecord,
   type useOutdoorAgentWorkflow,
 } from "../hooks/use-outdoor-agent-workflow";
-import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
-import { OutdoorWalkthroughSection } from "./outdoor-walkthrough-section";
 import { loginResumeCaption, loginResumeHeadline } from "../lib/outdoor-login-copy";
 import { formatDurationClock } from "../panels/agent-chat-store";
+import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
 
 /** 每阶段一句图注；进行中的真实进度文案会临时顶替它，报错走红卡。 */
 const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
@@ -219,6 +218,33 @@ export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft
   );
 }
 
+/** 分区卡里的输入框：跟画布 ZoneEventInput 同一套口径——保留输入空格，失焦/回车才提交一次。 */
+function ZoneCardField({ label, value, placeholder, maxLength, onCommit }: {
+  label: string;
+  value: string;
+  placeholder: string;
+  maxLength: number;
+  onCommit(text: string): void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+  return <input
+    aria-label={label}
+    value={draft}
+    placeholder={placeholder}
+    maxLength={maxLength}
+    onChange={(event) => setDraft(event.target.value)}
+    onBlur={() => onCommit(draft)}
+    onKeyDown={(event) => {
+      if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+        event.preventDefault();
+        onCommit(draft);
+        event.currentTarget.blur();
+      }
+    }}
+  />;
+}
+
 export function OutdoorWorkflowCard({
   flow,
   onCancelPreview,
@@ -237,7 +263,10 @@ export function OutdoorWorkflowCard({
   onCancelPreview?: (() => void) | undefined;
 }) {
   const [libraryQuery, setLibraryQuery] = useState("");
-  // 走查面板默认收起：验收标记是阶段岖峡的事，不该挡主流程；开关与副本都在 `OutdoorWalkthroughSection` 里。
+  // 2026-11-18 用户指令：分区用途反问拆到任务卡下方的独立小卡；输入框内容只留在本卡。
+  const [zonesAsk, setZonesAsk] = useState("");
+  // 2026-11-18 用户指令：「缺物料？导入或生成」卡可叉掉；叉掉是面板内存态，换阶段自动回来。
+  const [materialsAuxDismissed, setMaterialsAuxDismissed] = useState(false);
   // 2026-11-16：历史行可点开——展开当时的说明与按钮，看回这张卡当时到底问了什么。
   const [openRecordAt, setOpenRecordAt] = useState<number | null>(null);
   // 低风险提示条倒计时收场（对标谷地工坊「8 秒后自动按下」）：非错误提示、空闲且无待确认
@@ -289,6 +318,22 @@ export function OutdoorWorkflowCard({
     "refine-3d": "refine-3d",
   };
   const thoughtRecord = <OutdoorThoughtRecord key={flow.thoughtRequest} thought={flow.thought} request={flow.thoughtRequest} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} canvasNote={flow.canvasNote} attention={flow.mapGap} />;
+  // 2026-11-18 用户指令：分区还没给用途时，反问不再内嵌在任务卡里，而是任务卡下方的独立小卡。
+  // 手画的分区在下方分区卡里补齐室内外后（全部不是 unknown），同样视为「用途已给」：
+  // 反问小卡收掉，任务卡给出「生成分区预览」主按钮，不再让人必须说一句话才能推进。
+  useEffect(() => {
+    setMaterialsAuxDismissed(false);
+  }, [flow.state.stage]);
+  const planZonesReady =
+    flow.drawnZones.length > 0 &&
+    flow.drawnZones.every((zone) => !!zone.environment && zone.environment !== "unknown");
+  const zonesNeedsPurpose =
+    !flow.proposal &&
+    !flow.drawingMode &&
+    !planZonesReady &&
+    flow.state.stage === "zones" &&
+    (!flow.state.brief.zones.length ||
+      flow.state.brief.zones.some((zone) => zone.environment === "unknown"));
   const pendingPlan = flow.pendingPlan;
   if (pendingPlan) return (
     <>
@@ -444,12 +489,8 @@ export function OutdoorWorkflowCard({
           )}
         </p>
       )}
-      {flow.state.brief.event && (
-        <p>
-          {flow.state.brief.event}
-          {flow.state.brief.guests ? ` · 同时${flow.state.brief.guests}人` : ""}
-        </p>
-      )}
+      {/* 2026-11-18 用户指令：卡上不再显示「{活动名} · 同时N人」——brief 仍参与流程判断，
+          只是这行信息不关键，撤掉展示。 */}
       {!flow.awaitingThought && !flow.thought && flow.designSteps.length > 0 && (
         <details className="ap-design-process" open>
           <summary>设计过程 <span>{flow.designSteps.length} 步</span></summary>
@@ -563,27 +604,14 @@ export function OutdoorWorkflowCard({
         </div>
       ) : flow.state.stage !== "place" && !flow.drawingMode ? (
         flow.state.stage === "zones" &&
+        !planZonesReady &&
         (!flow.state.brief.zones.length ||
           flow.state.brief.zones.some((zone) => zone.environment === "unknown")) ? (
           // 2026-11-18 用户实测：这颗按钮承诺「点了就出分区预览」，但没用途时点了只会撞红卡
           // 反问「要分哪些用途」。没给指令就不挂空头按钮，如实引导去说用途或手画。
-          // 引导语用醒目的问题式样式，和「手画分区」按钮构成同一组动作；进手画模式后整块收掉
-          // （通知条「已进入手画模式…」是唯一指令），不再留自相矛盾的残留。
-          <div className="ap-card-guide">
-            <p className="ap-access-question">
-              说一句用途和室内外（例如「室外展览区和表演区」），我按这句出分区预览。
-            </p>
-            <div className="ap-card-actions">
-              <button
-                type="button"
-                className="btn-outline"
-                disabled={flow.busy}
-                onClick={() => void flow.action("draw-zone")}
-              >
-                在地图上手画分区
-              </button>
-            </div>
-          </div>
+          // 2026-11-18 用户指令：反问与「手画分区」入口拆到任务卡下方的独立小卡（见 zonesNeedsPurpose），
+          // 卡里带输入框可直填，提交走 handle() 与聊天输入同一条理解管线；这里不再重复渲染。
+          null
         ) : (
           <div className="ap-card-actions">
           <button
@@ -623,50 +651,6 @@ export function OutdoorWorkflowCard({
           </div>
         )
       ) : null}
-      {!flow.proposal &&
-        !flow.busy &&
-        ["main-routes", "objects", "sub-routes", "people"].includes(
-          flow.state.stage,
-        ) &&
-        flow.unverifiedEntrances.slice(0, 1).map((n) => (
-          <div key={n.id} className="ap-access-check">
-            <p className="ap-access-question">
-              “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
-            </p>
-            {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
-                而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
-                改成三个等宽选项：大字号说方向，小字说记成什么。 */}
-            <div className="ap-access-choices" role="group" aria-label={`“${n.name}”的进出方向`}>
-              <button
-                type="button"
-                className="ap-access-choice"
-                onClick={() =>
-                  void flow.action("verify-access", undefined, n.id, undefined, "entry")
-                }
-              >
-                只能进<span>入口</span>
-              </button>
-              <button
-                type="button"
-                className="ap-access-choice"
-                onClick={() =>
-                  void flow.action("verify-access", undefined, n.id, undefined, "exit")
-                }
-              >
-                只能出<span>出口</span>
-              </button>
-              <button
-                type="button"
-                className="ap-access-choice"
-                onClick={() =>
-                  void flow.action("verify-access", undefined, n.id, undefined, "both")
-                }
-              >
-                双向<span>入口 + 出口</span>
-              </button>
-            </div>
-          </div>
-        ))}
       {(flow.state.stage === "objects" || flow.libraryChoices.length > 0) &&
         !flow.proposal && (
           <div aria-label="当前分区物料候选">
@@ -714,51 +698,9 @@ export function OutdoorWorkflowCard({
                   : "我的库"}
               </button>
             ))}
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.75, fontSize: 12 }}>
-              缺物料？原位导入GLB（≤10MB，仅本会话，不上传不收费）
-              {/* 2026-11-14 用户反馈：原生文件选择器裸露在流程卡里不合适——视觉隐藏（点击 label 仍弹文件框）。 */}
-              <input
-                type="file"
-                aria-label="当前活动导入GLB物料"
-                accept=".glb,model/gltf-binary"
-                disabled={flow.busy}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) void flow.importLibraryGlb(file);
-                }}
-                style={{
-                  position: "absolute",
-                  width: 1,
-                  height: 1,
-                  opacity: 0,
-                  overflow: "hidden",
-                  clip: "rect(0 0 0 0)",
-                  whiteSpace: "nowrap",
-                }}
-              />
-            </label>
+            {/* 2026-11-18 用户指令：GLB 导入与 Lux3D 生成入口挪到任务卡下方的独立卡（可叉掉），见 ap-materials-aux。 */}
           </div>
         )}
-      {/* 2026-11-18：生成链已经有了（额度确认/回执锁都在 generation-sheet），缺的是对话主路径的入口。
-          物件阶段给一颗明确动作；和上面「一句话布置 / 目录落位预览」分开写，不混成同一颗按钮。 */}
-      {!flow.proposal && flow.state.stage === "objects" && (
-        <div className="ap-card-actions ap-lux3d-entry" data-testid="outdoor-lux3d-entry">
-          <button
-            type="button"
-            className="btn-outline"
-            disabled={flow.busy}
-            data-testid="outdoor-lux3d-generate"
-            onClick={() => flow.startLux3dGeneration()}
-          >
-            <Sparkles size={13} aria-hidden="true" />
-            用 Aholo Lux3D 生成道具
-          </button>
-          <p className="ap-task-caption">
-            由 Aholo Lux3D 生成三维模型：区别于上面的「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。
-          </p>
-        </div>
-      )}
       {flow.models && (
         <div aria-label="当前设施真实模型候选">
           {flow.models.choices.map((m, index) => (
@@ -797,13 +739,15 @@ export function OutdoorWorkflowCard({
         </div>
       )}
       {/* 2026-11-16 用户拍板：模型说「轮廓取不到，请手画」时，place 阶段卡上就得能点进去手画，
-          不用让人自己到工具栏里翻。实现在 manualBoundary 的既有守卫里（无锚点/不可换场原位报错，不乱改）。 */}
+          不用让人自己到工具栏里翻。实现在 manualBoundary 的既有守卫里（无锚点/不可换场原位报错，不乱改）。
+          2026-11-18 用户指令：place 两颗入口与 scope 阶段视觉一致——并入 ap-card-actions
+          的 btn-primary/btn-outline 一排，不再用独立的紧凑胶囊样式。 */}
       {!flow.proposal && flow.state.stage === "place" && (
-        <div className="ap-place-actions">
+        <div className="ap-card-actions">
           {onSearchPlace && (
             <button
               type="button"
-              className="ap-place-action is-search"
+              className="btn-primary"
               disabled={flow.busy}
               onClick={onSearchPlace}
             >
@@ -813,7 +757,7 @@ export function OutdoorWorkflowCard({
           )}
           <button
             type="button"
-            className="ap-place-action is-draw"
+            className="btn-outline"
             disabled={flow.busy}
             onClick={() => flow.manualBoundary()}
           >
@@ -838,24 +782,266 @@ export function OutdoorWorkflowCard({
             disabled={flow.busy}
             onClick={() => void flow.action("draw-entrance")}
           >
-            标出待核对入口
+            {/* 2026-11-18 用户反馈：原「标出待核对入口」是系统视角的词，看不懂；改成用户视角。
+                标完的位置以「未核对」状态进方案，紧接着的入口通行核对卡会问这个口能不能走。 */}
+            在地图上标一个入口
           </button>
         </div>
       )}
-      <OutdoorWalkthroughSection
-        initialBook={flow.walkthroughBook()}
-        onMark={(id, state) => flow.recordWalkthrough(id, state)}
-        cloudPass={flow.cloudPass()}
-        onCloud={(id, pass) => {
-          flow.declareCloud(id, pass);
-        }}
-        onExportCsv={() => flow.downloadLedgerCsv()}
-        gapsLine={flow.releaseGaps()}
-        onAsOf={(value) => flow.setWalkthroughAsOf(value)}
-        reportLine={flow.reportSections()}
-        nextLine={flow.nextGap()}
-      />
     </section>
+      {/* 2026-11-18 用户指令：分区用途反问是任务卡下方的一张独立小卡，带输入框可直填。
+          提交走 handle()——和在聊天框里说这句话走同一条理解管线；手画入口同卡保留。 */}
+      {zonesNeedsPurpose && (
+        <section
+          className="ap-card ap-zones-ask"
+          role="group"
+          aria-label="说分区用途和室内外"
+        >
+          <header className="ap-card-head">
+            <strong>说一句用途和室内外</strong>
+          </header>
+          <p className="ap-task-caption">
+            例如「室外展览区和表演区」，我按这句出分区预览。
+          </p>
+          <form
+            className="ap-zones-ask-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const text = zonesAsk.trim();
+              if (!text || flow.busy) return;
+              setZonesAsk("");
+              void flow.handle(text);
+            }}
+          >
+            <input
+              aria-label="分区用途和室内外"
+              value={zonesAsk}
+              placeholder="室外展览区和表演区"
+              onChange={(event) => setZonesAsk(event.target.value)}
+            />
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={flow.busy || !zonesAsk.trim()}
+            >
+              出分区预览
+            </button>
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={flow.busy}
+              onClick={() => void flow.action("draw-zone")}
+            >
+              在地图上手画分区
+            </button>
+          </form>
+        </section>
+      )}
+      {/* 2026-11-18 用户指令：入口通行核对从任务卡内部挪出，做成任务卡下方的独立卡。
+          只取第一个未核实入口；核对动作与口径不变。 */}
+      {!flow.proposal &&
+        !flow.busy &&
+        ["main-routes", "objects", "sub-routes", "people"].includes(
+          flow.state.stage,
+        ) &&
+        flow.unverifiedEntrances.slice(0, 1).map((n) => (
+          <section
+            key={n.id}
+            className="ap-card ap-access-check"
+            role="group"
+            aria-label={`入口通行核对：「${n.name}」`}
+          >
+            <header className="ap-card-head">
+              <strong>核对入口通行</strong>
+              <span>核完这一版就按你的判断排</span>
+            </header>
+            <p className="ap-access-question">
+              “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
+            </p>
+            {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
+                而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
+                改成三个等宽选项：大字号说方向，小字说记成什么。 */}
+            <div className="ap-access-choices" role="group" aria-label={`“${n.name}”的进出方向`}>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "entry")
+                }
+              >
+                只能进<span>入口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "exit")
+                }
+              >
+                只能出<span>出口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "both")
+                }
+              >
+                双向<span>入口 + 出口</span>
+              </button>
+            </div>
+          </section>
+        ))}
+      {/* 2026-11-18 用户指令「随画随出卡」：手画模式下每闭合一个分区轮廓，下方清单就多一张
+          分区卡；名称/用途/室内外可直改、可删，走画布同一条 commitPlan（可撤销）。
+          zones 阶段画布上已有分区时同样列出，编辑不限于手画中。 */}
+      {flow.state.stage === "zones" &&
+      !flow.proposal &&
+      !flow.busy &&
+      (flow.drawingMode === "zone" || flow.drawnZones.length > 0) ? (
+        <section className="ap-card ap-zones-list" role="group" aria-label="已画分区">
+          <header className="ap-card-head">
+            <strong>已画分区 · {flow.drawnZones.length}</strong>
+            <span>
+              {flow.drawingMode === "zone"
+                ? "在地图上闭合一个轮廓，这里就多一张卡"
+                : "改完直接生效，画布同步；预览按这里的用途和室内外排"}
+            </span>
+          </header>
+          {flow.drawnZones.map((zone) => (
+            <div className="ap-zone-card" key={zone.id}>
+              <div className="ap-zone-card-row">
+                <ZoneCardField
+                  label={`分区「${zone.name}」名称`}
+                  value={zone.name}
+                  placeholder="分区名称"
+                  maxLength={60}
+                  onCommit={(text) => {
+                    if (text.trim() && text.trim() !== zone.name)
+                      flow.zoneEdits.renameZone(zone.id, text);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="ap-zone-card-delete"
+                  aria-label={`删除分区「${zone.name}」`}
+                  disabled={flow.busy}
+                  onClick={() => flow.zoneEdits.deleteZone(zone.id)}
+                >
+                  删除
+                </button>
+              </div>
+              <div className="ap-zone-card-row">
+                <ZoneCardField
+                  label={`分区「${zone.name}」用途`}
+                  value={zone.event ?? ""}
+                  placeholder="用途（如 展览、演出）"
+                  maxLength={120}
+                  onCommit={(text) => {
+                    if (text.trim() !== (zone.event ?? ""))
+                      flow.zoneEdits.setZoneEvent(zone.id, text);
+                  }}
+                />
+                <div className="ap-zone-card-env" role="group" aria-label={`分区「${zone.name}」室内外`}>
+                  <button
+                    type="button"
+                    className={zone.environment === "outdoor" ? "is-on" : ""}
+                    disabled={flow.busy}
+                    aria-pressed={zone.environment === "outdoor"}
+                    onClick={() =>
+                      flow.zoneEdits.setZoneEnvironment(
+                        zone.id,
+                        zone.environment === "outdoor" ? "unknown" : "outdoor",
+                      )
+                    }
+                  >
+                    室外
+                  </button>
+                  <button
+                    type="button"
+                    className={zone.environment === "indoor" ? "is-on" : ""}
+                    disabled={flow.busy}
+                    aria-pressed={zone.environment === "indoor"}
+                    onClick={() =>
+                      flow.zoneEdits.setZoneEnvironment(
+                        zone.id,
+                        zone.environment === "indoor" ? "unknown" : "indoor",
+                      )
+                    }
+                  >
+                    室内
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : null}
+      {/* 2026-11-18 用户指令：缺物料的两条路（导入 GLB / Lux3D 生成）从任务卡挪出，做成
+          可叉掉的独立卡；叉掉只在面板内存里生效，换阶段自动恢复。 */}
+      {!flow.proposal &&
+      !flow.busy &&
+      !materialsAuxDismissed &&
+      flow.state.stage === "objects" ? (
+        <section
+          className="ap-card ap-materials-aux"
+          role="group"
+          aria-label="缺物料：导入或生成"
+        >
+          <header className="ap-card-head">
+            <strong>缺物料？导入或生成</strong>
+            <button
+              type="button"
+              className="ap-task-dismiss"
+              aria-label="收起这张卡"
+              onClick={() => setMaterialsAuxDismissed(true)}
+            >
+              × 收起
+            </button>
+          </header>
+          <label className="ap-glb-import" data-testid="outdoor-glb-import">
+            原位导入 GLB（≤10MB，仅本会话，不上传不收费）
+            {/* 2026-11-14 用户反馈：原生文件选择器裸露在流程卡里不合适——视觉隐藏（点击 label 仍弹文件框）。 */}
+            <input
+              type="file"
+              aria-label="当前活动导入GLB物料"
+              accept=".glb,model/gltf-binary"
+              disabled={flow.busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void flow.importLibraryGlb(file);
+              }}
+              style={{
+                position: "absolute",
+                width: 1,
+                height: 1,
+                opacity: 0,
+                overflow: "hidden",
+                clip: "rect(0 0 0 0)",
+                whiteSpace: "nowrap",
+              }}
+            />
+          </label>
+          {/* 2026-11-18：生成链已经有了（额度确认/回执锁都在 generation-sheet），缺的是对话主路径的入口。
+              物件阶段给一颗明确动作；和上面「一句话布置 / 目录落位预览」分开写，不混成同一颗按钮。 */}
+          <div className="ap-card-actions ap-lux3d-entry" data-testid="outdoor-lux3d-entry">
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={flow.busy}
+              data-testid="outdoor-lux3d-generate"
+              onClick={() => flow.startLux3dGeneration()}
+            >
+              <Sparkles size={13} aria-hidden="true" />
+              ✨ 用 Aholo Lux3D 生成道具
+            </button>
+            <p className="ap-task-caption">
+              由 Aholo Lux3D 生成三维模型：区别于「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。
+            </p>
+          </div>
+        </section>
+      ) : null}
       {flow.loginRequired && !flow.loginSatisfied && (
       <section
         className="ap-card ap-status-card"

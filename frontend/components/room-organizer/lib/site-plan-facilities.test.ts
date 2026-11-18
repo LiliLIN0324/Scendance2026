@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import {
   FACILITY_ROTATE_GAP_PX,
   PLAN_FACILITY_TEMPLATES,
@@ -18,6 +18,7 @@ import {
   facilityPlacementIssues,
   facilitiesFootprintsIntersect,
   facilitySideResize,
+  facilitySymmetricWidthResize,
   facilityUniformCornerResize,
   facilityTemplatesValid,
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
@@ -574,5 +575,36 @@ describe('facility group selection (2026-11-12 OnePlan Selection tool)', () => {
     expect(centers[0]).toBeCloseTo(0, 6);
     expect(centers[1]).toBeCloseTo(5, 6); // (0+10)/2
     expect(centers[2]).toBeCloseTo(10, 6);
+  });
+});
+
+
+describe('facilitySymmetricWidthResize（窗拉宽：只改宽度、中心不动）', () => {
+  const win = { rotationDeg: 0, size: { width: 1.2, depth: 0.12 } };
+
+  it('沿宽向拖 0.5 m：宽度加 1 m，深度不变', () => {
+    const next = facilitySymmetricWidthResize(win, { x: 2, y: 2 }, { x: 2.5, y: 2 }, { minM: 0.3, maxM: 6 });
+    expect(next.size.width).toBeCloseTo(2.2, 10);
+    expect(next.size.depth).toBe(0.12);
+  });
+
+  it('垂直于宽向拖不改宽度：只在宽轴上量增量', () => {
+    const next = facilitySymmetricWidthResize(win, { x: 2, y: 2 }, { x: 2, y: 8 }, { minM: 0.3, maxM: 6 });
+    expect(next.size.width).toBeCloseTo(1.2, 10);
+  });
+
+  it('旋转 90° 后宽向是 y 轴', () => {
+    const next = facilitySymmetricWidthResize(
+      { ...win, rotationDeg: 90 },
+      { x: 2, y: 2 },
+      { x: 9, y: 2.5 },
+      { minM: 0.3, maxM: 6 },
+    );
+    expect(next.size.width).toBeCloseTo(2.2, 10);
+  });
+
+  it('上下限都夹住，不会拉成负宽', () => {
+    expect(facilitySymmetricWidthResize(win, { x: 0, y: 0 }, { x: -5, y: 0 }, { minM: 0.3, maxM: 6 }).size.width).toBe(0.3);
+    expect(facilitySymmetricWidthResize(win, { x: 0, y: 0 }, { x: 50, y: 0 }, { minM: 0.3, maxM: 6 }).size.width).toBe(6);
   });
 });

@@ -124,6 +124,13 @@ export const planFacilitySchema = z.strictObject({
    * 缺省 = 未定价，清单不按 0 元计；旧数据缺字段照常解析。
    */
   unitPrice: z.number().min(0).max(1_000_000).optional(),
+  /**
+   * 2026-11-18 窗的竖向尺寸：窗台高 / 洞口高（米）。
+   * 缺省走 plan-indoor-walls 的 0.9 / 1.2；只对窗有意义，其他物件不写。
+   * 与 opacity/color 同口径不写 default，旧数据缺字段照常解析（无需迁移）。
+   */
+  windowSillM: z.number().min(0).max(3).optional(),
+  windowHeightM: z.number().min(0.2).max(3).optional(),
 });
 export type PlanFacility = z.infer<typeof planFacilitySchema>;
 

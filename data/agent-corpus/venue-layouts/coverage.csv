@@ -1,0 +1,6 @@
+id,source_type,facilities,zones,boundary_vertices,labels,pass,violation,skipped,unsupported
+NINGBO-FUWUQU,dxf,9,0,4,19,0,0,11,69
+HANGZHOU2-FIRST,dxf,5,0,4,11,0,0,11,69
+YANGUAN-BEFORE,geojson,1,1,4,1,0,0,11,69
+YANGUAN-AFTER,geojson,1,1,4,1,0,0,11,69
+WUZHEN-AB,draft-json,7,0,4,0,0,0,11,69

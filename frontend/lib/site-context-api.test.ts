@@ -46,6 +46,47 @@ it("GCJ中心有界反变换到WGS，查询建筑/道路/门/障碍与multipolyg
   expect(query).toContain('relation["type"="multipolygon"]');
   expect(query).toContain("out geom 301");
 });
+// docs/47 A1：证据集扩展——水系/绿地/停车场/广场要素必须进入结构化证据。
+// 修前红：Overpass 查询缺 way["natural"]、way["waterway"]、way["amenity"="parking"]、way["place"="square"]。
+it("A1 查询扩展：natural/waterway/parking/square 选择器进 query，水域绿地要素原样透传", async () => {
+  const center = { lng: 120.163, lat: 30.249 };
+  let query = "";
+  const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    query = decodeURIComponent(String(init?.body).slice(5));
+    return new Response(
+      JSON.stringify({
+        elements: [
+          {
+            type: "way",
+            id: 7,
+            tags: { natural: "water", name: "西湖" },
+            geometry: [
+              { lon: 120.16, lat: 30.24 },
+              { lon: 120.17, lat: 30.24 },
+              { lon: 120.17, lat: 30.25 },
+              { lon: 120.16, lat: 30.24 },
+            ],
+          },
+        ],
+      }),
+    );
+  });
+  const res = await handleSiteContext(
+    new Request(
+      `https://example.test/api/site-context?lng=${center.lng}&lat=${center.lat}&radius=350`,
+    ),
+    fetcher as typeof fetch,
+  );
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(query).toContain('way["natural"]');
+  expect(query).toContain('way["waterway"]');
+  expect(query).toContain('way["amenity"="parking"]');
+  expect(query).toContain('way["place"="square"]');
+  expect(query).toContain('way["leisure"]');
+  expect(body.complete).toBe(true);
+  expect(body.elements[0].tags.natural).toBe("water");
+});
 it("拒绝无效坐标/超750m范围，不向上游发送无界查询", async () => {
   const fetcher = vi.fn();
   for (const query of [

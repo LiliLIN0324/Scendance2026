@@ -2122,6 +2122,7 @@ export type BusinessToolsApi = {
   openTemplates():void;
   openModelTools():void;
   openCommercial():void;
+  closeWorkspace():void;
 };
 
 export function CreativeAssistant({ generationPanel, commercialPanel, referenceImagePanel, activityTaskPanel, onOpenTemplates, hideCategorySelect=false, workspaceOpenRequest=0, workspaceEntryRef, toolsOpenRequest=0, toolsEntryRef, deliveryOpenRequest = 0, backupOpenRequest = 0, deliveryEntryRef, referenceOpenRequest=0, referenceEntryRef, docked=false, suppressAgentLauncher=false, businessHostRef, onConversationVisibilityChange, onWorkspaceVisibilityChange, conversationCloseRequest=0, reviewOpenRequest=0, reviewEntryRef, captureReview, localSaveError=false, conversationOpenRequest=0, conversationEntryRef, assistantEntryHostRef, workbenchMode = 'layout', workbenchModeSerial = 0, autoOpen = true, toolsApiRef }: {
@@ -2540,7 +2541,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
     focusCommercial.current=true;setCommercialOpened(true);setBusinessMode('commercial');setTemplatesOpen(false);resizeWorkspace(true);if(!docked)setExpanded(true);
   }
   // 左栏工具栏出口：room-organizer 直接调用这些入口，不必把 handler 提升到上层。
-  if(toolsApiRef)toolsApiRef.current={openBrief,openReference,openRebuild,openDelivery,openReview,openTemplates,openModelTools,openCommercial};
+  if(toolsApiRef)toolsApiRef.current={openBrief,openReference,openRebuild,openDelivery,openReview,openTemplates,openModelTools,openCommercial,closeWorkspace:()=>resizeWorkspace(false)};
   const businessCategory=templatesOpen?'templates':businessMode==='plan'?planCategory:businessMode;
   const primaryCategoryValue = businessCategory === 'commercial' ? 'more' : businessCategory;
   const hasConversation=studio.messages.some(message=>message.id!=='welcome');

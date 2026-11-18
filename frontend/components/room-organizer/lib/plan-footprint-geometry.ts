@@ -115,6 +115,12 @@ export interface PlanFootprintZonesShape {
   opacity: number;
 }
 
+/** 手画的墙：一条线段（两点），已换算到壳体系。 */
+export interface PlanFootprintWallShape {
+  id: string;
+  points: ShellPoint[];
+}
+
 export interface PlanFootprintFacilityShape {
   id: string;
   points: ShellPoint[];
@@ -180,6 +186,9 @@ export interface PlanPropShape {
    * 缺省走 plan-facility-models 的自动挑选；plan-model-layer 落位时优先消费。
    */
   modelOverride?: string;
+  /** 2026-11-18 窗的竖向尺寸（米）：窗台高 / 洞口高，属性面板可改，缺省走室内部件的 0.9 / 1.2。 */
+  windowSillM?: number;
+  windowHeightM?: number;
 }
 
 /**
@@ -243,6 +252,11 @@ export interface PlanFootprintShapes {
    */
   scope: ShellPoint[];
   zones: PlanFootprintZonesShape[];
+  /**
+   * 手画的墙（plan.walls）：一条线 + 两端点，已经是壳体系。
+   * 与分区边线一起交给 `addIndoorWalls` 立墙、由门开洞。
+   */
+  walls: PlanFootprintWallShape[];
   facilities: PlanFootprintFacilityShape[];
   /** 需要真正立起来的 3D 物件（与 facilities 一一对应，尺寸/朝向已换算到壳体）。 */
   props: PlanPropShape[];
@@ -294,7 +308,7 @@ export function facilityFootprint(
  * 没有任何信息量，不如按「最小可辨认物件」画。
  */
 export function facilityProp(
-  facility: Pick<PlanFacility, 'id' | 'templateId' | 'name' | 'position' | 'rotationDeg' | 'size' | 'modelOverride'> & { color?: string | undefined },
+  facility: Pick<PlanFacility, 'id' | 'templateId' | 'name' | 'position' | 'rotationDeg' | 'size' | 'modelOverride' | 'windowSillM' | 'windowHeightM'> & { color?: string | undefined },
   frame: PlanShellFrame,
 ): PlanPropShape {
   return {
@@ -309,6 +323,9 @@ export function facilityProp(
     ...(facility.color ? { color: facility.color } : {}),
     // V-5a：手动模型 override 原样透传给 plan-model-layer（undefined 不落键）。
     ...(facility.modelOverride !== undefined ? { modelOverride: facility.modelOverride } : {}),
+    // 2026-11-18 窗的窗台/窗高：原样带到 3D，未改过就不落键（走缺省）。
+    ...(facility.windowSillM !== undefined ? { windowSillM: facility.windowSillM } : {}),
+    ...(facility.windowHeightM !== undefined ? { windowHeightM: facility.windowHeightM } : {}),
   };
 }
 
@@ -373,7 +390,7 @@ function annotationShape(annotation: PlanAnnotation, frame: PlanShellFrame): Pla
 }
 
 export function planFootprintShapes(
-  plan: Pick<SitePlanData, 'boundary' | 'designScope' | 'zones' | 'facilities' | 'routes' | 'nodes' | 'workers' | 'measurements' | 'annotations'>,
+  plan: Pick<SitePlanData, 'boundary' | 'designScope' | 'zones' | 'walls' | 'facilities' | 'routes' | 'nodes' | 'workers' | 'measurements' | 'annotations'>,
   target: { width: number; depth: number },
   options?: { clampPoints?: boolean },
 ): PlanFootprintShapes | null {
@@ -393,6 +410,10 @@ export function planFootprintShapes(
       points: zone.polygon.map(point => frame.toShell(point)),
       color: zoneColor(zone),
       opacity: clamp(zone.opacity ?? defaultOpacity, PLANNING_ZONE_OPACITY.min, PLANNING_ZONE_OPACITY.max),
+    })),
+    walls: (plan.walls ?? []).map(wall => ({
+      id: wall.id,
+      points: wall.points.map(point => frame.toShell(point)),
     })),
     facilities: plan.facilities.map(facility => ({
       id: facility.id,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createStarterOutdoorPlan } from "./outdoor-project-store";
+import { sitePlanDataSchema } from "../../../../supabase/functions/_shared/site-plan";
 import {
   proposeUseZones,
   proposeInventoryObjects,
@@ -9,10 +9,12 @@ import {
   describeZoneMismatch,
   clearForObject,
 } from "./outdoor-agent-planning";
-import { sitePlanDataSchema } from "../../../../supabase/functions/_shared/site-plan";
-import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
+import { outdoorRingsOverlap } from "./outdoor-event-logic";
+import { createStarterOutdoorPlan } from "./outdoor-project-store";
+import { planPointInRing } from "./site-plan-editing";
 import { buildSubEntranceProposal } from "./sub-entrance";
 import type { OutdoorBrief } from "./outdoor-agent-contract";
+import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 const square = (w = 80, h = 70) => [
   { x: 0, y: 0 },
   { x: w, y: 0 },
@@ -1013,5 +1015,112 @@ describe("智能按分区摆放（2026-11-18）", () => {
     await expect(
       proposeInventoryObjects(crossing, smartBrief, smartLibrary as never),
     ).rejects.toThrow(/放不下/);
+  });
+});
+
+/**
+ * docs/47 A3 排布引擎吃证据（2026-11-19）。
+ * 修前红的口径：60×60 场地、西半场（x≤29.5）是水域/绿地，网格首格 (1,1) 落在禁区/绿地里——
+ * 旧引擎没有 hard 块检查、也没有代价评分，首-fit 直接把物件排进去。
+ */
+describe("docs/47 A3 排布引擎吃证据", () => {
+  const a3Plan = () => ({
+    ...base(),
+    boundary: square(60, 60),
+    zones: [
+      {
+        id: crypto.randomUUID(),
+        name: "市集区",
+        semantic: "reserved" as const,
+        environment: "outdoor" as const,
+        purpose: "market" as const,
+        geometrySource: "user-confirmed" as const,
+        polygon: square(60, 60),
+        notes: "",
+      },
+    ],
+  });
+  const a3Brief: OutdoorBrief = {
+    zones: [
+      {
+        name: "市集区",
+        purpose: "market",
+        environment: "outdoor",
+        evidence: "市集区室外",
+      },
+    ],
+    items: [{ zone: "市集区", query: "货箱", count: 3, evidence: "货箱" }],
+    people: [],
+  };
+  const a3Library = [
+    {
+      id: "box",
+      name: "货箱",
+      source: "personal" as const,
+      width: 2,
+      depth: 2,
+      height: 2,
+      modelSlug: "generated:box",
+      available: true,
+    },
+  ];
+  // 西半场 x∈[0,29.5]（避开与 2m 网格对齐的退化边界）：网格首格 (1,1) 的占地
+  // [0,2]² 整体在水里/绿地里；修后首个零代价格 (31,1) 与边界留 0.5m 实隙。
+  const westBand = () => [
+    { x: 0, y: 0 },
+    { x: 29.5, y: 0 },
+    { x: 29.5, y: 60 },
+    { x: 0, y: 60 },
+  ];
+
+  it("带水域的场地排布不进水域（hard 块作禁区，修前红：首格排进湖里）", async () => {
+    const out = await proposeInventoryObjects(a3Plan(), a3Brief, a3Library, undefined, {
+      hardBlocks: [westBand()],
+    });
+    expect(out.plan.facilities).toHaveLength(3);
+    for (const f of out.plan.facilities) {
+      const ring = [
+        { x: f.position.x - f.size.width / 2, y: f.position.y - f.size.depth / 2 },
+        { x: f.position.x + f.size.width / 2, y: f.position.y - f.size.depth / 2 },
+        { x: f.position.x + f.size.width / 2, y: f.position.y + f.size.depth / 2 },
+        { x: f.position.x - f.size.width / 2, y: f.position.y + f.size.depth / 2 },
+      ];
+      expect(planPointInRing(f.position, westBand())).toBe(false);
+      expect(outdoorRingsOverlap(ring, westBand())).toBe(false);
+    }
+    // 禁区占掉西半场后仍有落位：全在东半场。
+    expect(out.plan.facilities.every((f) => f.position.x > 30)).toBe(true);
+  });
+
+  it("绿地代价使布局偏移（soft 评分，修前红：压绿地也照排）", async () => {
+    const out = await proposeInventoryObjects(a3Plan(), a3Brief, a3Library, undefined, {
+      softAreas: [westBand()],
+    });
+    expect(out.plan.facilities).toHaveLength(3);
+    for (const f of out.plan.facilities) {
+      // 零代价落位：不与绿地相交（贴边不算相交）。
+      const ring = [
+        { x: f.position.x - f.size.width / 2, y: f.position.y - f.size.depth / 2 },
+        { x: f.position.x + f.size.width / 2, y: f.position.y - f.size.depth / 2 },
+        { x: f.position.x + f.size.width / 2, y: f.position.y + f.size.depth / 2 },
+        { x: f.position.x - f.size.width / 2, y: f.position.y + f.size.depth / 2 },
+      ];
+      expect(outdoorRingsOverlap(ring, westBand())).toBe(false);
+    }
+    expect(out.plan.facilities.every((f) => f.position.x > 30)).toBe(true);
+  });
+
+  it("没有绿地证据时行为与旧首-fit一致：不评分、不偏移", async () => {
+    const withSoft = await proposeInventoryObjects(
+      a3Plan(),
+      a3Brief,
+      a3Library,
+      undefined,
+      { softAreas: [] },
+    );
+    const without = await proposeInventoryObjects(a3Plan(), a3Brief, a3Library);
+    expect(
+      withSoft.plan.facilities.map((f) => [f.position.x, f.position.y]),
+    ).toEqual(without.plan.facilities.map((f) => [f.position.x, f.position.y]));
   });
 });

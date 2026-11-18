@@ -1,5 +1,8 @@
 'use client';
 
+import { BingoStatusMark } from './bingo-status-mark';
+import type { BingoPhase } from '../lib/bingo-status';
+
 /**
  * 分享钮弹出的三页：分享 / 发布 / 导出。
  * 版式按 2026-11-17 锁定稿：白底卡片、墨色选中页签、绿只留给未发布的主按钮。
@@ -16,11 +19,13 @@ export interface ShareExportEntry {
 }
 
 const OPEN_LINE = '打开即可查看场地、分区和尺度，页里可看 3D。';
+/** 有场地页时客户打开的是它：只读、自带快照，没有 3D。 */
+const SITE_OPEN_LINE = '打开即可查看场地轮廓、分区和尺度，只读、无需登录。';
 const PUBLISH_LINE = '发布后即可查看场地、分区和尺度，页里可看 3D。';
 /** 未发布且项目只读时的页脚。有这句就不再给可点的绿色发布按钮。 */
 export const SHARE_READ_ONLY_LINE = '这个项目现在是只读，取回编辑权后再发布。';
 
-export type ShareBingoStatus = '待发' | '待评' | '已回执';
+export type ShareBingoStatus = '待发' | '送出中' | '待评' | '已回执';
 
 /** 链接行里给人看的地址：去掉协议，超长截断。复制仍用完整 URL。 */
 export function displayShareUrl(url: string, max = 32): string {
@@ -41,6 +46,8 @@ export function SharePanel({
   busy,
   notice,
   bingoStatus,
+  bingoCount = '',
+  bingoLive = true,
   readOnly = false,
   qrOpen,
   qrSvg,
@@ -57,10 +64,14 @@ export function SharePanel({
   tab: ShareTab;
   onTab(tab: ShareTab): void;
   title: string;
-  published: { url: string; revision: number } | null;
+  published: { url: string; revision: number; siteUrl?: string } | null;
   busy: boolean;
   notice: string;
   bingoStatus: ShareBingoStatus;
+  /** 待评时环内的未回执份数。送出中和已回执不画这个数。 */
+  bingoCount?: string;
+  /** 本机记录读完之后才播放收口。首屏对上已有回执时直接停在满环。 */
+  bingoLive?: boolean;
   /** 已登录但没有编辑权。未发布页只留只读说明，不放绿色发布按钮。 */
   readOnly?: boolean;
   qrOpen: boolean;
@@ -77,6 +88,9 @@ export function SharePanel({
   onToggleQr(): void;
 }): JSX.Element {
   const publishBlocked = !published && (readOnly || notice === SHARE_READ_ONLY_LINE);
+  /** 交给客户的那条：有场地页就用场地页。 */
+  const handedUrl = published?.siteUrl ?? published?.url ?? '';
+  const handedIsSite = Boolean(published?.siteUrl);
   return <div id="tool-share-menu" className="sc-tool-pop sc-share-panel" role="dialog" aria-label="分享、发布与导出" data-testid="share-panel">
     <div className="sc-share-tabs" role="tablist" aria-label="分享、发布、导出">
       <Tab id="share" selected={tab === 'share'} onSelect={onTab}>分享</Tab>
@@ -115,14 +129,21 @@ export function SharePanel({
       </> : <button type="button" className="sc-share-cta" data-tone="green" disabled={busy} onClick={onIssueAudience}>
         {busy ? '正在生成…' : '生成并复制评审链接'}
       </button>}
-      <ShareActionRow label="送到 Bingo" status={bingoStatus} icon={<RingIcon />} ariaLabel={`送到 Bingo，${bingoStatus}`} disabled={busy} onClick={onSendBingo} />
+      <ShareActionRow
+        label="送到 Bingo"
+        status={bingoStatus}
+        icon={<BingoStatusMark phase={bingoPhaseOf(bingoStatus)} sending={bingoStatus === '送出中'} count={bingoStatus === '待评' ? bingoCount : ''} size={16} armed={bingoLive} />}
+        ariaLabel={`送到 Bingo，${bingoStatus}`}
+        disabled={busy}
+        onClick={onSendBingo}
+      />
     </section>}
 
     {tab === 'publish' && <section className="sc-share-body" role="tabpanel" aria-label="发布" id="share-panel-publish" data-published={published ? 'true' : 'false'} data-readonly={publishBlocked ? 'true' : 'false'}>
       <ShareHeading icon={<GlobeIcon />} title="发布到网页" />
-      <p className="sc-share-desc">{published ? OPEN_LINE : PUBLISH_LINE}</p>
+      <p className="sc-share-desc">{published ? (handedIsSite ? SITE_OPEN_LINE : OPEN_LINE) : PUBLISH_LINE}</p>
       {published ? <div className="sc-share-link" data-testid="share-link-row">
-        <span className="sc-share-link-text" title={published.url}>{displayShareUrl(published.url)}</span>
+        <span className="sc-share-link-text" title={handedUrl}>{displayShareUrl(handedUrl)}</span>
         <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={onCopy}>复制</button>
         <button
           type="button"
@@ -221,10 +242,10 @@ function GlobeIcon(): JSX.Element {
   </svg>;
 }
 
-function RingIcon(): JSX.Element {
-  return <svg className="sc-share-glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <circle cx="8" cy="8" r="4.2" stroke="currentColor" strokeWidth="1.3" />
-  </svg>;
+function bingoPhaseOf(status: ShareBingoStatus): BingoPhase {
+  if (status === '已回执') return 'returned';
+  if (status === '待评') return 'awaiting';
+  return 'to-send';
 }
 
 function QrKeyIcon(): JSX.Element {

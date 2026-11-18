@@ -1,0 +1,1170 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-18",
+  "generator": "scripts/extract-venue-layouts.mjs",
+  "policy": "只抽文件里真有的几何：DXF 取墙线与家具轮廓，GeoJSON 做 WGS84→米投影，草稿 JSON 直取坐标。抽取不到的人数、分区语义、物料清单留空并写进 caveats，不补不猜。",
+  "rulesTotal": 80,
+  "layouts": [
+    {
+      "id": "NINGBO-FUWUQU",
+      "name": "宁波货博会 · 服务区平面",
+      "sourceType": "dxf",
+      "source": {
+        "path": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练/幕景宁波货博会_匿名服务区平面.dxf",
+        "bytes": 3906,
+        "sha256": "0c80b3cbde9da3e794e4b2177027ea35baf87f3398b50515e805b73a12f54a34"
+      },
+      "boundarySource": "walls-polyline（图层 WALLS 的闭合多段线，不是用地红线）",
+      "coordinateTransform": {
+        "kind": "local-meters",
+        "origin": "file"
+      },
+      "layout": {
+        "facilities": [
+          {
+            "id": "F-01",
+            "templateId": "table-1.2x0.6",
+            "name": "共创桌",
+            "position": {
+              "x": 3.6,
+              "y": 4
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.2,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@3.6,4"
+            }
+          },
+          {
+            "id": "F-02",
+            "templateId": "table-1.2x0.6",
+            "name": "共创桌",
+            "position": {
+              "x": 6.4,
+              "y": 4
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.2,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@6.4,4"
+            }
+          },
+          {
+            "id": "F-03",
+            "templateId": "chair-0.5x0.5",
+            "name": "活动座椅",
+            "position": {
+              "x": 3.6,
+              "y": 3
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.5,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@3.6,3"
+            }
+          },
+          {
+            "id": "F-04",
+            "templateId": "chair-0.5x0.5",
+            "name": "活动座椅",
+            "position": {
+              "x": 6.4,
+              "y": 3
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.5,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@6.4,3"
+            }
+          },
+          {
+            "id": "F-05",
+            "templateId": "table-1.2x0.6",
+            "name": "签到台",
+            "position": {
+              "x": 2.89,
+              "y": 6.38
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.4,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@2.89,6.38"
+            }
+          },
+          {
+            "id": "F-06",
+            "templateId": "chair-0.5x0.5",
+            "name": "工作椅",
+            "position": {
+              "x": 2.89,
+              "y": 5.63
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.45,
+              "depth": 0.45
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@2.89,5.63"
+            }
+          },
+          {
+            "id": "F-07",
+            "templateId": "chair-0.5x0.5",
+            "name": "长椅",
+            "position": {
+              "x": 5.69,
+              "y": 6.85
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.8,
+              "depth": 0.45
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@5.69,6.85"
+            }
+          },
+          {
+            "id": "F-08",
+            "templateId": "chair-0.5x0.5",
+            "name": "长椅",
+            "position": {
+              "x": 5.69,
+              "y": 5.35
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.8,
+              "depth": 0.45
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@5.69,5.35"
+            }
+          },
+          {
+            "id": "F-09",
+            "templateId": "plant-0.4x0.4",
+            "name": "空间绿植",
+            "position": {
+              "x": 1.2,
+              "y": 6.7
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.4,
+              "depth": 0.4
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@1.2,6.7"
+            }
+          }
+        ],
+        "zones": [],
+        "boundary": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 8
+          },
+          {
+            "x": 0,
+            "y": 8
+          }
+        ]
+      },
+      "labels": [
+        {
+          "name": "共创桌",
+          "point": {
+            "x": 3.6,
+            "y": 4
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "共创桌",
+          "point": {
+            "x": 6.4,
+            "y": 4
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "活动座椅",
+          "point": {
+            "x": 3.6,
+            "y": 3
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "活动座椅",
+          "point": {
+            "x": 6.4,
+            "y": 3
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "签到台",
+          "point": {
+            "x": 2.89,
+            "y": 6.38
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "工作椅",
+          "point": {
+            "x": 2.89,
+            "y": 5.63
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "长椅",
+          "point": {
+            "x": 5.69,
+            "y": 6.85
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "长椅",
+          "point": {
+            "x": 5.69,
+            "y": 5.35
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "空间绿植",
+          "point": {
+            "x": 1.2,
+            "y": 6.7
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "签到区",
+          "point": {
+            "x": 2.888,
+            "y": 6.68
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "4.8 m²",
+          "point": {
+            "x": 2.888,
+            "y": 6.43
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "休息区",
+          "point": {
+            "x": 5.694,
+            "y": 7.016
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "6.0 m²",
+          "point": {
+            "x": 5.694,
+            "y": 6.766
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "10 m",
+          "point": {
+            "x": 5,
+            "y": 8.35
+          },
+          "layer": "DIMENSIONS"
+        },
+        {
+          "name": "8 m",
+          "point": {
+            "x": -0.35,
+            "y": 4
+          },
+          "layer": "DIMENSIONS"
+        },
+        {
+          "name": "周末共创工作坊 - 活动场地",
+          "point": {
+            "x": 0,
+            "y": 8.5
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "门洞位置、尺寸及开向待核验",
+          "point": {
+            "x": 0,
+            "y": 8.1
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "待核验草案：出口、门洞与场地尺度未核验。",
+          "point": {
+            "x": 0,
+            "y": 8.8
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "通行、疏散、消防、无障碍及核定人数未核验。",
+          "point": {
+            "x": 0,
+            "y": 9
+          },
+          "layer": "ROOMS"
+        }
+      ],
+      "routes": [],
+      "counts": {
+        "facilities": 9,
+        "zones": 0,
+        "boundaryVertices": 4,
+        "labels": 19,
+        "routes": 0
+      },
+      "evaluation": {
+        "totals": {
+          "pass": 0,
+          "violation": 0,
+          "skipped": 11,
+          "unsupported": 69
+        },
+        "computed": [],
+        "skippedReasons": {
+          "no-entrance-nodes": 1,
+          "no-building-evidence": 1,
+          "not-enough-stalls": 4,
+          "no-flame-stall": 1,
+          "no-audience-zone": 2,
+          "not-enough-tents": 2
+        }
+      },
+      "caveats": [
+        "DXF 只有墙线与家具轮廓，没有物料类型、数量与朝向语义；类型按名称关键字推断。",
+        "DXF 没有人数、分区语义与出入口；观众密度、首排退距这类判据无法在此场地计算。"
+      ]
+    },
+    {
+      "id": "HANGZHOU2-FIRST",
+      "name": "杭博二期 · 首层示意",
+      "sourceType": "dxf",
+      "source": {
+        "path": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练/幕景杭博二期_匿名首层示意.dxf",
+        "bytes": 2654,
+        "sha256": "db57ab14fb28245d8f95445d5f0ddd991e50f9aea50a19726012af8eccfefd4a"
+      },
+      "boundarySource": "walls-polyline（图层 WALLS 的闭合多段线，不是用地红线）",
+      "coordinateTransform": {
+        "kind": "local-meters",
+        "origin": "file"
+      },
+      "layout": {
+        "facilities": [
+          {
+            "id": "F-01",
+            "templateId": "table-1.2x0.6",
+            "name": "共创桌",
+            "position": {
+              "x": 3.6,
+              "y": 4
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.2,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@3.6,4"
+            }
+          },
+          {
+            "id": "F-02",
+            "templateId": "table-1.2x0.6",
+            "name": "共创桌",
+            "position": {
+              "x": 6.4,
+              "y": 4
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.2,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@6.4,4"
+            }
+          },
+          {
+            "id": "F-03",
+            "templateId": "chair-0.5x0.5",
+            "name": "活动座椅",
+            "position": {
+              "x": 3.6,
+              "y": 3
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.5,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@3.6,3"
+            }
+          },
+          {
+            "id": "F-04",
+            "templateId": "chair-0.5x0.5",
+            "name": "活动座椅",
+            "position": {
+              "x": 6.4,
+              "y": 3
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.5,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@6.4,3"
+            }
+          },
+          {
+            "id": "F-05",
+            "templateId": "plant-0.4x0.4",
+            "name": "空间绿植",
+            "position": {
+              "x": 1.2,
+              "y": 6.7
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.4,
+              "depth": 0.4
+            },
+            "provenance": {
+              "source": "dxf-polyline",
+              "layer": "FURNITURE",
+              "nameFrom": "TEXT@1.2,6.7"
+            }
+          }
+        ],
+        "zones": [],
+        "boundary": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 8
+          },
+          {
+            "x": 0,
+            "y": 8
+          }
+        ]
+      },
+      "labels": [
+        {
+          "name": "共创桌",
+          "point": {
+            "x": 3.6,
+            "y": 4
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "共创桌",
+          "point": {
+            "x": 6.4,
+            "y": 4
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "活动座椅",
+          "point": {
+            "x": 3.6,
+            "y": 3
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "活动座椅",
+          "point": {
+            "x": 6.4,
+            "y": 3
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "空间绿植",
+          "point": {
+            "x": 1.2,
+            "y": 6.7
+          },
+          "layer": "FURNITURE"
+        },
+        {
+          "name": "10 m",
+          "point": {
+            "x": 5,
+            "y": 8.35
+          },
+          "layer": "DIMENSIONS"
+        },
+        {
+          "name": "8 m",
+          "point": {
+            "x": -0.35,
+            "y": 4
+          },
+          "layer": "DIMENSIONS"
+        },
+        {
+          "name": "周末共创工作坊 - 活动场地",
+          "point": {
+            "x": 0,
+            "y": 8.5
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "门洞位置、尺寸及开向待核验",
+          "point": {
+            "x": 0,
+            "y": 8.1
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "待核验草案：出口、门洞与场地尺度未核验。",
+          "point": {
+            "x": 0,
+            "y": 8.8
+          },
+          "layer": "ROOMS"
+        },
+        {
+          "name": "通行、疏散、消防、无障碍及核定人数未核验。",
+          "point": {
+            "x": 0,
+            "y": 9
+          },
+          "layer": "ROOMS"
+        }
+      ],
+      "routes": [],
+      "counts": {
+        "facilities": 5,
+        "zones": 0,
+        "boundaryVertices": 4,
+        "labels": 11,
+        "routes": 0
+      },
+      "evaluation": {
+        "totals": {
+          "pass": 0,
+          "violation": 0,
+          "skipped": 11,
+          "unsupported": 69
+        },
+        "computed": [],
+        "skippedReasons": {
+          "no-entrance-nodes": 1,
+          "no-building-evidence": 1,
+          "not-enough-stalls": 4,
+          "no-flame-stall": 1,
+          "no-audience-zone": 2,
+          "not-enough-tents": 2
+        }
+      },
+      "caveats": [
+        "DXF 只有墙线与家具轮廓，没有物料类型、数量与朝向语义；类型按名称关键字推断。",
+        "DXF 没有人数、分区语义与出入口；观众密度、首排退距这类判据无法在此场地计算。"
+      ]
+    },
+    {
+      "id": "YANGUAN-BEFORE",
+      "name": "盐官潮乐之城 · 布置前",
+      "sourceType": "geojson",
+      "source": {
+        "path": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练/盐官潮乐之城_设计资料包/salt-layout-before.geojson",
+        "bytes": 2339,
+        "sha256": "993d9066554abcb4092a1b5f3f4dd4f09dc18d45813b01767d9917f4bca7f554"
+      },
+      "boundarySource": "bbox-of-features（所有要素外接框）",
+      "coordinateTransform": {
+        "kind": "equirectangular",
+        "origin": {
+          "lng": 120.53692135214615,
+          "lat": 30.412310389730326
+        },
+        "metersPerDegLat": 110540,
+        "metersPerDegLng": 96002.9
+      },
+      "layout": {
+        "facilities": [
+          {
+            "id": "F-01",
+            "templateId": "signage-board",
+            "name": "拟放 · 导视牌",
+            "position": {
+              "x": -7.92,
+              "y": -0.44
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.7,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "geojson-point",
+              "featureId": "80e3d3a2-af41-4538-bc57-a2dd342c7f28",
+              "status": "策划演示"
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "Z-01",
+            "semantic": "unknown",
+            "name": "拟设 · 签到等候区",
+            "polygon": [
+              {
+                "x": -3.04,
+                "y": -6.04
+              },
+              {
+                "x": 16.5,
+                "y": -6.04
+              },
+              {
+                "x": 16.5,
+                "y": -16.48
+              },
+              {
+                "x": -3.04,
+                "y": -16.48
+              },
+              {
+                "x": -3.04,
+                "y": -6.04
+              }
+            ],
+            "provenance": {
+              "source": "geojson-polygon",
+              "featureId": "63e48669-48a6-45a1-941e-5a4937c51dc9",
+              "kind": "area"
+            }
+          }
+        ],
+        "boundary": [
+          {
+            "x": -16.94,
+            "y": -16.48
+          },
+          {
+            "x": 19.13,
+            "y": -16.48
+          },
+          {
+            "x": 19.13,
+            "y": 43.58
+          },
+          {
+            "x": -16.94,
+            "y": 43.58
+          }
+        ]
+      },
+      "labels": [
+        {
+          "name": "待核 · 入口与接驳点",
+          "point": {
+            "x": 19.13,
+            "y": -16.48
+          },
+          "status": "策划演示"
+        }
+      ],
+      "routes": [
+        {
+          "name": "拟设 · 接驳步行引导",
+          "points": [
+            {
+              "x": -6.8,
+              "y": 43.58
+            },
+            {
+              "x": -6.05,
+              "y": 25.67
+            },
+            {
+              "x": -5.29,
+              "y": 4.41
+            },
+            {
+              "x": -16.94,
+              "y": -5.66
+            }
+          ],
+          "featureId": "683f2d0b-e1c1-46fe-abe9-9083bbbefa90"
+        }
+      ],
+      "counts": {
+        "facilities": 1,
+        "zones": 1,
+        "boundaryVertices": 4,
+        "labels": 1,
+        "routes": 1
+      },
+      "evaluation": {
+        "totals": {
+          "pass": 0,
+          "violation": 0,
+          "skipped": 11,
+          "unsupported": 69
+        },
+        "computed": [],
+        "skippedReasons": {
+          "no-entrance-nodes": 1,
+          "no-building-evidence": 1,
+          "not-enough-stalls": 4,
+          "no-flame-stall": 1,
+          "no-audience-zone": 2,
+          "not-enough-tents": 2
+        }
+      },
+      "caveats": [
+        "GeoJSON 是「策划演示」状态的布置，不是竣工图；边界由所有要素外接框推出，不是场地红线。",
+        "区域语义保持 unknown：签到等候区不等于观众区，硬映射会让密度判据算错。",
+        "没有人数、没有物料数量清单，判断不了容量；导视牌只有 0.7×0.5 m。"
+      ]
+    },
+    {
+      "id": "YANGUAN-AFTER",
+      "name": "盐官潮乐之城 · 布置后",
+      "sourceType": "geojson",
+      "source": {
+        "path": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练/盐官潮乐之城_设计资料包/salt-layout-after.geojson",
+        "bytes": 2338,
+        "sha256": "b508ce3e4e8c2355744d13ab7a7a4b87cf49ed0706651c1cca9325ce8976f7af"
+      },
+      "boundarySource": "bbox-of-features（所有要素外接框）",
+      "coordinateTransform": {
+        "kind": "equirectangular",
+        "origin": {
+          "lng": 120.53691316952109,
+          "lat": 30.41230517388013
+        },
+        "metersPerDegLat": 110540,
+        "metersPerDegLng": 96002.9
+      },
+      "layout": {
+        "facilities": [
+          {
+            "id": "F-01",
+            "templateId": "signage-board",
+            "name": "拟放 · 导视牌",
+            "position": {
+              "x": -15.78,
+              "y": -6.21
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.7,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "geojson-point",
+              "featureId": "80e3d3a2-af41-4538-bc57-a2dd342c7f28",
+              "status": "策划演示"
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "Z-01",
+            "semantic": "unknown",
+            "name": "拟设 · 签到等候区",
+            "polygon": [
+              {
+                "x": -2.25,
+                "y": -5.46
+              },
+              {
+                "x": 17.28,
+                "y": -5.46
+              },
+              {
+                "x": 17.28,
+                "y": -15.91
+              },
+              {
+                "x": -2.25,
+                "y": -15.91
+              },
+              {
+                "x": -2.25,
+                "y": -5.46
+              }
+            ],
+            "provenance": {
+              "source": "geojson-polygon",
+              "featureId": "63e48669-48a6-45a1-941e-5a4937c51dc9",
+              "kind": "area"
+            }
+          }
+        ],
+        "boundary": [
+          {
+            "x": -16.16,
+            "y": -15.91
+          },
+          {
+            "x": 19.91,
+            "y": -15.91
+          },
+          {
+            "x": 19.91,
+            "y": 44.16
+          },
+          {
+            "x": -16.16,
+            "y": 44.16
+          }
+        ]
+      },
+      "labels": [
+        {
+          "name": "待核 · 入口与接驳点",
+          "point": {
+            "x": 19.91,
+            "y": -15.91
+          },
+          "status": "策划演示"
+        }
+      ],
+      "routes": [
+        {
+          "name": "拟设 · 接驳步行引导",
+          "points": [
+            {
+              "x": -6.01,
+              "y": 44.16
+            },
+            {
+              "x": -5.26,
+              "y": 26.25
+            },
+            {
+              "x": -4.51,
+              "y": 4.99
+            },
+            {
+              "x": -16.16,
+              "y": -5.09
+            }
+          ],
+          "featureId": "683f2d0b-e1c1-46fe-abe9-9083bbbefa90"
+        }
+      ],
+      "counts": {
+        "facilities": 1,
+        "zones": 1,
+        "boundaryVertices": 4,
+        "labels": 1,
+        "routes": 1
+      },
+      "evaluation": {
+        "totals": {
+          "pass": 0,
+          "violation": 0,
+          "skipped": 11,
+          "unsupported": 69
+        },
+        "computed": [],
+        "skippedReasons": {
+          "no-entrance-nodes": 1,
+          "no-building-evidence": 1,
+          "not-enough-stalls": 4,
+          "no-flame-stall": 1,
+          "no-audience-zone": 2,
+          "not-enough-tents": 2
+        }
+      },
+      "caveats": [
+        "GeoJSON 是「策划演示」状态的布置，不是竣工图；边界由所有要素外接框推出，不是场地红线。",
+        "区域语义保持 unknown：签到等候区不等于观众区，硬映射会让密度判据算错。",
+        "没有人数、没有物料数量清单，判断不了容量；导视牌只有 0.7×0.5 m。"
+      ]
+    },
+    {
+      "id": "WUZHEN-AB",
+      "name": "乌镇 AB 馆 · 双空间布置",
+      "sourceType": "draft-json",
+      "source": {
+        "path": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练/幕景乌镇AB馆_匿名双空间布置.json",
+        "bytes": 17037,
+        "sha256": "03b6186e0699fd19cdf2abce1e1a35b1faa58e516887818dd7df7b50a0b3f4ea"
+      },
+      "boundarySource": "layout-envelope（草稿的 width×height 范围）",
+      "coordinateTransform": {
+        "kind": "local-meters",
+        "origin": "file"
+      },
+      "layout": {
+        "facilities": [
+          {
+            "id": "a0100000-0000-4000-8000-000000000001",
+            "templateId": "draft:table",
+            "name": "共创桌",
+            "position": {
+              "x": -1.4,
+              "y": 0
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.2,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "draft-json-item",
+              "type": "table",
+              "category": null
+            }
+          },
+          {
+            "id": "a0100000-0000-4000-8000-000000000002",
+            "templateId": "draft:table",
+            "name": "共创桌",
+            "position": {
+              "x": 1.4,
+              "y": 0
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.2,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "draft-json-item",
+              "type": "table",
+              "category": null
+            }
+          },
+          {
+            "id": "a0100000-0000-4000-8000-000000000003",
+            "templateId": "draft:chair",
+            "name": "活动座椅",
+            "position": {
+              "x": -1.4,
+              "y": 1
+            },
+            "rotationDeg": 180,
+            "size": {
+              "width": 0.5,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "draft-json-item",
+              "type": "chair",
+              "category": null
+            }
+          },
+          {
+            "id": "a0100000-0000-4000-8000-000000000004",
+            "templateId": "draft:chair",
+            "name": "活动座椅",
+            "position": {
+              "x": 1.4,
+              "y": 1
+            },
+            "rotationDeg": 180,
+            "size": {
+              "width": 0.5,
+              "depth": 0.5
+            },
+            "provenance": {
+              "source": "draft-json-item",
+              "type": "chair",
+              "category": null
+            }
+          },
+          {
+            "id": "a0100000-0000-4000-8000-000000000005",
+            "templateId": "draft:plant",
+            "name": "空间绿植",
+            "position": {
+              "x": -3.8,
+              "y": -2.7
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 0.4,
+              "depth": 0.4
+            },
+            "provenance": {
+              "source": "draft-json-item",
+              "type": "plant",
+              "category": null
+            }
+          },
+          {
+            "id": "zone-plan:plan-mwbx95j3-1:balanced:0b49d963c5d85455:0",
+            "templateId": "draft:table",
+            "name": "签到台",
+            "position": {
+              "x": -2.07,
+              "y": -2.43
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1.4,
+              "depth": 0.6
+            },
+            "provenance": {
+              "source": "draft-json-item",
+              "type": "table",
+              "category": "desk"
+            }
+          },
+          {
+            "id": "zone-plan:plan-mwbx95j3-1:balanced:0b49d963c5d85455:1",
+            "templateId": "draft:dining-chair",
+            "name": "工作椅",
+            "position": {
+              "x": -2.07,
+              "y": -1.68
+            },
+            "rotationDeg": 180,
+            "size": {
+              "width": 0.45,
+              "depth": 0.45
+            },
+            "provenance": {
+              "source": "draft-json-item",
+              "type": "dining-chair",
+              "category": "chair"
+            }
+          }
+        ],
+        "zones": [],
+        "boundary": [
+          {
+            "x": -5,
+            "y": -4
+          },
+          {
+            "x": 5,
+            "y": -4
+          },
+          {
+            "x": 5,
+            "y": 4
+          },
+          {
+            "x": -5,
+            "y": 4
+          }
+        ]
+      },
+      "labels": [],
+      "routes": [],
+      "counts": {
+        "facilities": 7,
+        "zones": 0,
+        "boundaryVertices": 4,
+        "labels": 0,
+        "routes": 0
+      },
+      "evaluation": {
+        "totals": {
+          "pass": 0,
+          "violation": 0,
+          "skipped": 11,
+          "unsupported": 69
+        },
+        "computed": [],
+        "skippedReasons": {
+          "no-entrance-nodes": 1,
+          "no-building-evidence": 1,
+          "not-enough-stalls": 4,
+          "no-flame-stall": 1,
+          "no-audience-zone": 2,
+          "not-enough-tents": 2
+        }
+      },
+      "caveats": [
+        "这是本地草稿（state=draft_unverified），不是已核方案；场地 10×8 m 属室内工作坊量级。",
+        "草稿格式只记录物料与坐标，没有人数、分区语义与出入口。"
+      ]
+    }
+  ]
+}

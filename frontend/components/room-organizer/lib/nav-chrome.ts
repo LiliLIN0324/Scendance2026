@@ -8,7 +8,7 @@ import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_MAX, LEFT_CARD_WIDTH_MIN } fro
  * - `sidebarCollapsed`：工具抽屉（选中物料 / 观感）
  * - `sidePanel`：场地面板（与 Bingo 列互斥，但同样撑开左卡）
  *
- * 两扇都关着且没有 sidePanel = 导航收起（64px 轨，只剩四枚图形）。
+ * 两扇都关着且没有 sidePanel = 导航收起（56px 轨，只剩图形）。
  * 任一扇或 sidePanel 开着 = 导航展开（左卡在，顶上是 Bingo 对话头，不再重复幕景品牌条）。
  *
  * 门厅标只写这两扇门：收起时两扇都关；展开时只开 Bingo，工具抽屉保持关着。
@@ -25,7 +25,7 @@ export interface NavColumns {
 }
 
 /** 收起后的模式轨。与工作台 grid 第一列 `--sc-nav-rail-width` 一致。 */
-export const NAV_RAIL_WIDTH_PX = 64;
+export const NAV_RAIL_WIDTH_PX = 56;
 
 /**
  * 展开后的短品牌条不另设一列固定宽度。

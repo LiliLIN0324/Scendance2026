@@ -106,7 +106,9 @@ function evaluateGen04(rule: CorpusRule, layout: Layout): Receipt {
   if (!layout.nodes) return skipped(rule, 'no-entrance-nodes', '没有入口/出口节点，无法数出口；请先在地图上标出入口。');
   const exits = layout.nodes.filter((node) => node.kind === 'exit' || node.kind === 'both');
   const people = layout.people;
-  const required = people !== undefined && people >= 10000 ? 4 : 2;
+  // 基础下限读判据表；万人以上的 4 个来自 formula 文字，暂仍写死（台账标 partial）。
+  const baseRequired = rule.thresholds.find((item) => item.label.includes('出口数'))?.count ?? 2;
+  const required = people !== undefined && people >= 10000 ? Math.max(baseRequired, 4) : baseRequired;
   const ok = exits.length >= required;
   return receipt(rule, ok ? 'pass' : 'violation', {
     actual: `${exits.length} 个出口${people !== undefined ? `（${people} 人）` : ''}`,
@@ -141,6 +143,8 @@ function evaluateGen07(rule: CorpusRule, layout: Layout): Receipt {
 function evaluateMkt02(rule: CorpusRule, layout: Layout): Receipt {
   const stalls = layout.facilities.filter(isStall);
   if (stalls.length < 2) return skipped(rule, 'not-enough-stalls', `只有 ${stalls.length} 个摊位，间距判据不适用。`);
+  const lateral = rule.thresholds.find((item) => item.label.includes('横向'))?.m ?? 1.5;
+  const longitudinal = rule.thresholds.find((item) => item.label.includes('纵向'))?.m ?? 2;
   let worst = Number.POSITIVE_INFINITY;
   let worstPair: [LayoutFacility, LayoutFacility] | null = null;
   let worstLimit = 0;
@@ -150,8 +154,8 @@ function evaluateMkt02(rule: CorpusRule, layout: Layout): Receipt {
       const b = stalls[j];
       const rectA = facilityRect(a);
       const rectB = facilityRect(b);
-      // 左右相邻看横向 1.5 m，上下相邻看纵向 2.0 m；斜向按严的 2.0 m。
-      const limit = overlapY(rectA, rectB) ? 1.5 : 2;
+      // 左右相邻看横向，上下相邻看纵向；斜向按严的纵向。
+      const limit = overlapY(rectA, rectB) ? lateral : longitudinal;
       const gap = rectGap(rectA, rectB);
       if (gap < worst) { worst = gap; worstPair = [a, b]; worstLimit = limit; }
     }
@@ -159,7 +163,7 @@ function evaluateMkt02(rule: CorpusRule, layout: Layout): Receipt {
   const ok = worst >= worstLimit;
   return receipt(rule, ok ? 'pass' : 'violation', {
     actual: `最小间距 ${round1(worst)} m`,
-    expected: `纵向 ≥2 m / 横向 ≥1.5 m`,
+    expected: `纵向 ≥${longitudinal} m / 横向 ≥${lateral} m`,
     detail: ok ? '摊位间距满足。' : `「${worstPair?.[0].name}」与「${worstPair?.[1].name}」仅 ${round1(worst)} m，低于 ${worstLimit} m。`,
     objectIds: worstPair ? [worstPair[0].id, worstPair[1].id] : [],
   });
@@ -193,11 +197,12 @@ function evaluateMkt07(rule: CorpusRule, layout: Layout): Receipt {
   const stalls = layout.facilities.filter(isStall).length;
   if (stalls === 0) return skipped(rule, 'not-enough-stalls', '没有摊位，灭火器配比不适用。');
   const extinguishers = layout.facilities.filter((facility) => extinguisherPattern.test(facility.templateId));
-  const required = 2 * Math.ceil(stalls / 10);
+  const perTen = rule.thresholds.find((item) => item.label.includes('每 10 摊'))?.count ?? 2;
+  const required = perTen * Math.ceil(stalls / 10);
   const ok = extinguishers.length >= required;
   return receipt(rule, ok ? 'pass' : 'violation', {
     actual: `${extinguishers.length} 具灭火器 / ${stalls} 摊`,
-    expected: `≥${required} 具（每 10 摊 2 具）`,
+    expected: `≥${required} 具（每 10 摊 ${perTen} 具）`,
     detail: ok ? '灭火器数量满足。' : `灭火器不足：需 ${required} 具，现 ${extinguishers.length} 具。`,
     objectIds: extinguishers.map((facility) => facility.id),
   });
@@ -207,7 +212,10 @@ function evaluateMkt10(rule: CorpusRule, layout: Layout): Receipt {
   if (!layout.boundary) return skipped(rule, 'no-boundary', '没有场地边界，无法算占地率。');
   const siteArea = ringArea(layout.boundary);
   if (siteArea <= 0) return skipped(rule, 'no-boundary', '场地边界面积为 0。');
-  const stallArea = layout.facilities.filter(isStall).reduce((sum, facility) => {
+  // 没有摊位时不算 0% 合规：空布局不该因为「什么都没摆」拿到 pass。
+  const stalls = layout.facilities.filter(isStall);
+  if (stalls.length === 0) return skipped(rule, 'not-enough-stalls', '没有摊位，占地率不适用；空布局不视为合规。');
+  const stallArea = stalls.reduce((sum, facility) => {
     const rect = facilityRect(facility);
     return sum + rectArea(rect);
   }, 0);
@@ -272,7 +280,9 @@ function evaluateStg02(rule: CorpusRule, layout: Layout): Receipt {
   const stageRect = stagePolygon ? ringRect(stagePolygon) : facilityRect(stageFacility as LayoutFacility);
   const gap = rectGap(stageRect, ringRect(audience.polygon));
   const height = layout.stageHeightM ?? 0;
-  const limit = 5 + 4 * Math.max(0, height - 1.5);
+  // 基础 5 m 读判据表；1.5 m 分界与 4 m/米 来自 formula 文字，暂仍写死（台账标 partial）。
+  const baseGap = rule.thresholds.find((item) => item.label.includes('台高'))?.m ?? 5;
+  const limit = baseGap + 4 * Math.max(0, height - 1.5);
   const ok = gap >= limit;
   return receipt(rule, ok ? 'pass' : 'violation', {
     actual: `首排退距 ${round1(gap)} m（台高 ${round1(height)} m）`,
