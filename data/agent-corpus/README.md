@@ -15,6 +15,7 @@
 | `cases/eval-cases.json` | 27 条评测样本（10 layout + 17 failure，含 1 条对照），failure 自带可执行夹具 | 案例库 + `docs/59` |
 | `threshold-sensitivity.json` + `threshold-ledger.csv` | 15 条阈值的绑定审计与安全区间；实测哪些阈值执行器真读 | 判据表 + 17 份夹具（见 `docs/60`） |
 | `venue-layouts/layouts.json` + `coverage.csv` | 5 份自有档案抽成布局（DXF/GeoJSON/草稿），含 sha256 与 caveats；实测 0 条判据可算 | `04_场地档案与演练/`（见 `docs/61`） |
+| `sites/yanguan.json` + `yanguan-check.json` | OSM 真实建筑轮廓（ODbL）与一次真实数据回执：GEN-07 退距 9.8 m | `sites/raw/` 的 Overpass 导出（见 `docs/62`） |
 | `materials.csv` | 物料尺寸与部署参数；尺寸取自代码，重量/风载等未有的标 `待核` | `site-plan-facilities.ts`、`oneplan-library-size.ts` || `frontend/lib/agent-corpus/` | 执行器：11 条可算判据 + 69 条 `unsupported` 原因码；提示词摘要生成器（21 条 / 1600 字符预算） | `layout-assertions.json` |
 
 ## 三条硬规矩

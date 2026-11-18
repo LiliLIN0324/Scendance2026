@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-18",
+  "generator": "scripts/build-osm-sites.mjs",
+  "siteId": "yanguan",
+  "layoutRef": {
+    "file": "data/agent-corpus/venue-layouts/layouts.json",
+    "id": "YANGUAN-AFTER"
+  },
+  "inputs": {
+    "facilities": 1,
+    "zones": 1,
+    "buildings": 8,
+    "coordinateSystem": "local-meters（与 venue-layouts 同一原点）",
+    "facilityProvenance": "来自盐官 GeoJSON 的真实经纬（策划演示状态）",
+    "obstacleProvenance": "来自 OSM 建筑轮廓（ODbL）"
+  },
+  "counts": {
+    "pass": 1,
+    "violation": 0,
+    "skipped": 10,
+    "unsupported": 69
+  },
+  "computed": [
+    {
+      "ruleId": "GEN-07",
+      "status": "pass",
+      "actual": "最小退距 9.8 m",
+      "expected": "≥3 m",
+      "objectIds": [
+        "F-01",
+        "osm-way-1018929137"
+      ]
+    }
+  ],
+  "note": "首次有判据在真实数据上算出结果；这是判据可执行性的证据，不是对场地的合规认定。"
+}
