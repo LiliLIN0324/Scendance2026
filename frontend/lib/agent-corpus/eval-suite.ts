@@ -41,9 +41,13 @@ export type FailureEvalSample = {
   id: string;
   kind: 'failure';
   derivedFrom: string;
+  /** 变异对应的判据；事故样本为 null。 */
+  derivedFromRule?: string | null;
   prompt: string;
   expect: { violations: string[]; contextRefs: string[] };
   fixture: Layout;
+  /** 受控变异说明：改了哪一处、是否单点。 */
+  mutation?: { change: string; isolated: boolean };
   failureMode: string;
   note?: string;
 };
@@ -107,15 +111,23 @@ export function scoreFailureSample(sample: FailureEvalSample, rules: CorpusRule[
   const stillUnsupported = sample.expect.violations.filter((id) =>
     evaluation.unsupported.some((item) => item.ruleId === id),
   );
-  const failures = missed.map((id) => `应报未报：${id}`);
+  // 对照样本（期望 violations 为空）：报了任何硬违规都是误报，不能因为「没漏报」就算过。
+  const isControl = sample.expect.violations.length === 0;
+  const failures = isControl
+    ? reported.map((id) => `误报：${id}（对照样本应报 0 条硬违规）`)
+    : missed.map((id) => `应报未报：${id}`);
   const notes: string[] = [];
-  if (unexpected.length > 0) notes.push(`额外报出：${unexpected.join(', ')}（不算错，但要人工看是否误报）`);
+  if (isControl) {
+    notes.push('对照样本：考的是不误报，不是漏报。');
+  } else if (unexpected.length > 0) {
+    notes.push(`额外报出：${unexpected.join(', ')}（不算错，但要人工看是否误报）`);
+  }
   if (stillUnsupported.length > 0) notes.push(`期望违规中有未实现判据：${stillUnsupported.join(', ')}（夹具或期望写错了）`);
   if (evaluation.unsupported.length > 0) notes.push(`本次共 ${evaluation.unsupported.length} 条判据未实现，未计入得分`);
   return {
     id: sample.id,
     kind: 'failure',
-    pass: missed.length === 0 && stillUnsupported.length === 0,
+    pass: failures.length === 0 && stillUnsupported.length === 0,
     failures,
     notes,
   };

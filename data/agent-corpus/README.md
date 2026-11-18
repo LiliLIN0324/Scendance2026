@@ -12,7 +12,7 @@
 | `site-evidence.example.json` | 按上述 schema 手写的一个最小样例（合成场地，非真实项目） | —— |
 | `cases/cases.json` | 成熟案例：43 案底图核对 + 20 个自有场地 / 30 个档案 + 3 条事故复盘（只记布局失效模式） | `deliverables/…/06_卫星图活动试验/`、`04_场地档案与演练/` |
 | `material-references.csv` | 物料外部参考值（商家页面），逐行带 URL、取数日期、置信度；**不写回规范表** | 公开商家页面（未核） |
-| `cases/eval-cases.json` | 13 条评测样本（10 layout + 3 failure），failure 样本自带可执行夹具 | 案例库 + `docs/59` |
+| `cases/eval-cases.json` | 26 条评测样本（10 layout + 16 failure，含 1 条对照），failure 自带可执行夹具 | 案例库 + `docs/59` |
 | `materials.csv` | 物料尺寸与部署参数；尺寸取自代码，重量/风载等未有的标 `待核` | `site-plan-facilities.ts`、`oneplan-library-size.ts` || `frontend/lib/agent-corpus/` | 执行器：11 条可算判据 + 69 条 `unsupported` 原因码；提示词摘要生成器（21 条 / 1600 字符预算） | `layout-assertions.json` |
 
 ## 三条硬规矩
