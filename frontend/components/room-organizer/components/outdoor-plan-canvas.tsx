@@ -1569,6 +1569,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     lng: initialView?.lng ?? (plan.anchor?.lng ?? 120.141306),
     lat: initialView?.lat ?? (plan.anchor?.lat ?? 30.2545),
     zoom: initialView?.zoom ?? (base === 'floor' ? 20 : 16),
+    bearing: initialView?.bearing ?? 0,
   });
   const sourceRef = useRef<CanvasBasemapSource>(source);
   const planRef = useRef<SitePlanData>(plan);
@@ -3317,7 +3318,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           // 最小 12px 保证贴纸可辨（与 drawFacilityLayer 的 4px 下限同思路，只为视觉兜底）。
           drawOneplanScaleSticker(
             planCtx, sticker.slug, pt.x, pt.y,
-            Math.max(fw, 12), Math.max(fh, 12), facility.rotationDeg,
+            Math.max(fw, 12), Math.max(fh, 12), facility.rotationDeg + (viewport.bearing ?? 0) * 180 / Math.PI,
             { alpha: 0.9, ...(itemColor ? { color: itemColor } : {}) },
           );
         } else {

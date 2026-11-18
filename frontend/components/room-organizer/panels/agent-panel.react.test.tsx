@@ -1508,6 +1508,10 @@ beforeEach(() => {
   localStorage.clear();
   resetAssistantSessionsStoreForTests();
   resetVolatileAssistantMemoriesForTests();
+  // 2026-11-18：钉底滚动 effect（agent-panel attach）用 el.scrollTo + ResizeObserver，jsdom 都没有——
+  // 不补桩整套面板套件在挂载时就抛 TypeError（先于任何断言），与业务断言无关。
+  Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
 });
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); clearStagedMaterialGenerateForTests(); });
@@ -4910,6 +4914,89 @@ describe('outdoor V1–V5 public-site continuation regression',()=>{
  });
 });
 
+
+describe('outdoor M4 offline slice: 未登录确定性分区预览', () => {
+  // 轮次 28 实测口径：真实未登录会话（controller 有 getSnapshot、user 匿名）。
+  // 与「模型不可用」用例（无 getSnapshot → 会话未知 → 维持模型路径）互斥。
+  function becomeAnonymousViewer(): void {
+    const controller = studioMock.controller as typeof studioMock.controller & { getSnapshot?: () => unknown };
+    controller.getSnapshot = () => ({ user: { id: 'anon-device', is_anonymous: true } });
+  }
+  afterEach(() => {
+    const controller = studioMock.controller as typeof studioMock.controller & { getSnapshot?: () => unknown };
+    delete controller.getSnapshot;
+  });
+  function mountOutdoorProduction() {
+    let plan = createStarterOutdoorPlan();
+    plan.boundary = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: 70 }, { x: -80, y: 70 }];
+    // hook 的 scope 卡会走 sitePlanDataSchema.parse：节点 id 必须是合法 UUID。
+    plan.nodes = [{ id: '92222222-2222-4222-8222-222222222221', kind: 'both', name: '南入口', notes: '已人工确认', position: { x: 0, y: -70 } }];
+    let current!: NonNullable<ReturnType<typeof useAgent>>;
+    const applyZone = vi.fn(() => true);
+    const applyPlan = vi.fn(() => true);
+    function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyPlan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: applyZone }); return null; }
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe /><AgentPanel /></LayoutAgentProvider>);
+    return { current: () => current, applyZone, applyPlan };
+  }
+  const composer = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: '告诉 Agent 要改的' }) as HTMLTextAreaElement;
+
+  it('未登录发「200 人市集，签到靠近入口，留出通道」：零模型请求直接出分区+物料+流线预览，确认才写入', async () => {
+    becomeAnonymousViewer();
+    const app = mountOutdoorProduction();
+    send('200 人市集，签到靠近入口，留出通道');
+    await waitFor(() => expect(app.current().zoneProposal).not.toBeNull());
+    const proposal = app.current().zoneProposal!;
+    expect(proposal.zones.length).toBeGreaterThanOrEqual(3);
+    expect(proposal.zones.some(z => z.semantic === 'checkin')).toBe(true);
+    expect(proposal.facilities.filter(f => f.name.startsWith('市集摊位'))).toHaveLength(50);
+    expect(proposal.routes?.some(r => r.name === '活动中央人行通道' && (r.widthM ?? 0) >= 3)).toBe(true);
+    expect(proposal.routes?.some(r => r.name.includes('签到接驳'))).toBe(true);
+    expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(app.applyPlan).not.toHaveBeenCalled();
+    expect(app.current().outdoorWorkflow.notice).not.toContain('登录后即可');
+    act(() => { app.current().confirmZoneProposal(); });
+    expect(app.applyZone).toHaveBeenCalledTimes(1);
+  });
+
+  it('未登录先撞模型需求落登录卡锁输入；「帮我分区」仍可发——缺活动类型给下一步，补上就出预览（轮次 28 序列）', async () => {
+    becomeAnonymousViewer();
+    const app = mountOutdoorProduction();
+    // 轮次 28 的前提是「范围已确认」：action('scope') 走本地 offer（零模型），点卡片确认。
+    await act(async () => { await app.current().outdoorWorkflow.action('scope'); });
+    await waitFor(() => expect(screen.getAllByTestId('outdoor-workflow-card')).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: '确认并应用这一版' }));
+    await waitFor(() => expect(app.current().outdoorWorkflow.scopeConfirmed()).toBe(true));
+    send('把海报做得好看点');
+    await waitFor(() => expect(composer().disabled).toBe(true));
+    expect(composer().getAttribute('placeholder')).toContain('登录后继续');
+    fireEvent.change(composer(), { target: { value: '帮我分区' } });
+    await waitFor(() => expect(composer().disabled).toBe(false));
+    expect(composer().getAttribute('placeholder')).not.toContain('登录后继续');
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(app.current().outdoorTask?.state).toBe('blocked'));
+    expect(app.current().outdoorTask?.action).toContain('活动类型');
+    expect(app.current().zoneProposal).toBeNull();
+    expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+    fireEvent.change(composer(), { target: { value: '80 人市集' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(app.current().zoneProposal).not.toBeNull());
+    expect(app.current().zoneProposal!.facilities.filter(f => f.name.startsWith('市集摊位'))).toHaveLength(20);
+    expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+  });
+
+  it('登录卡对白名单外的句子仍锁输入和发送键，不扩大误放行', async () => {
+    becomeAnonymousViewer();
+    const app = mountOutdoorProduction();
+    send('把海报做得好看点');
+    await waitFor(() => expect(composer().disabled).toBe(true));
+    fireEvent.change(composer(), { target: { value: '再好看一点' } });
+    expect(composer().disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '发送' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(app.current().zoneProposal).toBeNull();
+    expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+  });
+});
 
 describe('outdoor contextual workflow production Provider dispatch',()=>{
  it('唯一户外入口先走同Agent模型与逐步范围确认，不落旧关键词固定模板',async()=>{

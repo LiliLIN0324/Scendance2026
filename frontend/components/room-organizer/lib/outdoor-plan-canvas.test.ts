@@ -321,6 +321,17 @@ describe('facility ghost & selection drawing (H2-c)', () => {
     expect(cap.strokes).toContain('#c0392b');
     expect(cap.dash).toContainEqual([6, 4]);
   });
+
+  it('rotating the confirmed map view also rotates facility footprints and selected halos', () => {
+    const { ctx } = makeCtx();
+    const rotate = vi.spyOn(ctx, 'rotate');
+    const facility = { id: 'long-tent', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 12, depth: 3 } };
+    drawFacilityLayer({ ctx, viewport: { ...view, bearing: Math.PI / 2 } }, [facility], { selectedId: facility.id });
+    // A quarter turn of the map must turn an east-west 12 m footprint north-south, including its halo.
+    expect(rotate.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const [angle] of rotate.mock.calls) expect(angle).toBeCloseTo(-Math.PI / 2, 8);
+    expect(facility.size).toEqual({ width: 12, depth: 3 });
+  });
 });
 
 /* ---------------- H2-d 动线 / 节点 / 人员绘制 ---------------- */
