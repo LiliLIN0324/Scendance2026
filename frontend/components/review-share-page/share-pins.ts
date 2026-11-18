@@ -50,6 +50,48 @@ export function readReviewSharePins(
   return file.byPlan[planKey] ?? [];
 }
 
+/**
+ * 创作者 Bingo 的汇总读：v2 优先、v1 兜底。
+ *
+ * 评审页从 2026-11 起把链接钉写在 `review-v2:<sha256>` 下（v2 存储），
+ * 旧链接仍可能留在 v1；两边按钉 id 合并，避免「评审页有钉、Bingo 永远为零」。
+ * 与 readExactReviewSharePins 的分工：导出与评审页要严格校验（缺 floorId 即报错），
+ * 汇总列表要容错——单条坏数据只跳过，不让整份评审看起来是空的。
+ */
+export function readReviewSharePinsForPlan(
+  planKey: string,
+  storage: Pick<Storage, 'getItem'> | null,
+): ReviewPin[] {
+  if (!planKey || !storage) return [];
+  const merged = new Map<string, ReviewPin>();
+  for (const pin of readTolerantV2Pins(planKey, storage)) merged.set(pin.id, pin);
+  for (const pin of readReviewSharePins(planKey, storage)) {
+    if (!merged.has(pin.id)) merged.set(pin.id, pin);
+  }
+  return [...merged.values()];
+}
+
+function readTolerantV2Pins(planKey: string, storage: Pick<Storage, 'getItem'>): ReviewPin[] {
+  let raw: string | null = null;
+  try { raw = storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2); } catch { return []; }
+  if (raw === null) return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return []; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+  const file = parsed as { version?: unknown; byPlan?: unknown };
+  if (file.version !== 1 || !file.byPlan || typeof file.byPlan !== 'object' || Array.isArray(file.byPlan)) return [];
+  const rows = (file.byPlan as Record<string, unknown>)[planKey];
+  if (!Array.isArray(rows)) return [];
+  const seen = new Set<string>();
+  const pins: ReviewPin[] = [];
+  for (const row of rows) {
+    if (!isPin(row) || seen.has(row.id)) continue;
+    seen.add(row.id);
+    pins.push(row);
+  }
+  return pins.slice(0, REVIEW_SHARE_PINS_PER_PLAN);
+}
+
 /** Strong-version records must never silently drop malformed pins before export. */
 export function readExactReviewSharePins(planKey:string,storage:Pick<Storage,'getItem'>):ReviewPin[] {
   const raw=storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2);if(raw===null)return [];

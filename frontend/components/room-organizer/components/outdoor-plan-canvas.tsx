@@ -1,6 +1,7 @@
 ﻿'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import { onOutdoorPlanIssueFocus, publishOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
+import { firstModelSlug } from '../lib/asset-namespace';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from '../lib/outdoor-plan-protection';
@@ -407,7 +408,14 @@ import {
   type PlanZone,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
-import { buildArrangeChoicePage, type ArrangeChoice } from '../lib/arrange-choices';
+import {
+  arrangeAholoSheet,
+  buildArrangeChoicePage,
+  buildGeneratedArrangeChoice,
+  offerGeneratedArrangeChoice,
+  type ArrangeChoice,
+  type ArrangeChoiceModel,
+} from '../lib/arrange-choices';
 import { arrangePreviewKind, buildArrangePreview } from '../lib/arrange-preview';
 import { loadShippedOnlineModels } from '../lib/online-models';
 import { applyModelPrice } from '../lib/plan-bom';
@@ -1926,6 +1934,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [arrangeChoices, setArrangeChoices] = useState<ArrangeChoice[] | null>(null);
   const arrangeChoicePageRef = useRef(0);
   const arrangeChoiceTextRef = useRef('');
+  /** 本句布置里刚生成的一款。换一批时仍排在最前。 */
+  const arrangePinnedRef = useRef<ArrangeChoiceModel | null>(null);
   /**
    * 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
    * - 画布设施（浏览/选择模式点中实体）= 复制 + 层级四项 + 删除；
@@ -2059,7 +2069,39 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           if (!alive) return;
           if (result.state === 'imported') {
             if (link.facilityId === selectedFacilityId) setFacilityGenerateStatus(null);
-            setEditMessage(`「${result.model.name}」已回填「${result.model.facilityName}」候选；选候选才更换模型。`);
+            const arrangeText = arrangeChoiceTextRef.current;
+            let offered = false;
+            if (arrangeText && link.facilityId === selectedFacilityId) {
+              const host = planRef.current.facilities.find(item => item.id === link.facilityId) ?? null;
+              const generated: ArrangeChoiceModel = {
+                slug: result.model.slug,
+                name: result.model.name,
+                width: result.model.width,
+                depth: result.model.depth,
+                kind: 'none',
+              };
+              const choice = buildGeneratedArrangeChoice({
+                text: arrangeText,
+                boundary: planRef.current.boundary,
+                model: generated,
+                ...(host ? {
+                  focus: {
+                    x: host.position.x,
+                    y: host.position.y,
+                    width: host.size.width,
+                    depth: host.size.depth,
+                  },
+                } : {}),
+              });
+              if (choice) {
+                arrangePinnedRef.current = generated;
+                setArrangeChoices(current => offerGeneratedArrangeChoice(current, choice));
+                offered = true;
+              }
+            }
+            setEditMessage(offered
+              ? `「${result.model.name}」已回到三选一最前，点它即可预览；也已回填当前设施的模型候选。`
+              : `「${result.model.name}」已回填「${result.model.facilityName}」候选；选候选才更换模型。`);
           } else if (result.state === 'failed') {
             if (link.facilityId === selectedFacilityId) setFacilityGenerateStatus(null);
             setEditMessage(`「${link.name}」${result.message}`);
@@ -2536,6 +2578,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function clearArrangeChoices() {
     arrangeChoicePageRef.current = 0;
     arrangeChoiceTextRef.current = '';
+    arrangePinnedRef.current = null;
     setArrangeChoices(null);
   }
 
@@ -2625,8 +2668,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           width: model.width,
           depth: model.depth,
           kind: capabilityForSlug(model.slug)?.kind ?? 'none',
+          ...(model.thumb ? { thumb: model.thumb } : {}),
         })),
         page,
+        ...(arrangePinnedRef.current ? { pinned: arrangePinnedRef.current } : {}),
       });
       if (!result.ok) {
         if (!result.keepCurrent) {
@@ -5926,7 +5971,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     const view = viewPlan();
     const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
-    const modelOverride = explicitModelSlug ?? (catalog && catalog.templateId === templateId ? catalog.slug : undefined);
+    // C1：物料卡只把合法 slug 写进 modelOverride，UUID 一律不落（不把后端 id 伪装成模型）。
+    const modelOverride = firstModelSlug(
+      explicitModelSlug,
+      catalog && catalog.templateId === templateId ? catalog.slug : undefined,
+    );
     // 物料卡落在已有设施上：把它当作「换这个物件的模型」，不叠第二件。
     // 用户从库里拖卡到 3D 已有物件上时，期望看到的就是这一件跟着变；旧数据缺 modelOverride 也在这里补上。
     if (modelOverride) {
@@ -10262,6 +10311,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             onCancel={() => {
                               clearArrangeChoices();
                               setEditMessage(null);
+                            }}
+                            onGenerate={() => {
+                              const text = arrangeChoiceTextRef.current;
+                              if (!text || oneLineBusy) return;
+                              openGenerationSheet(arrangeAholoSheet(text, {
+                                id: selectedFacility.id,
+                                name: selectedFacility.name,
+                              }));
                             }}
                           />
                         </div>

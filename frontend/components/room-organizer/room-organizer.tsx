@@ -48,7 +48,7 @@ import { useItemDrag } from './hooks/use-item-drag';
 import { useItemPlacement } from './hooks/use-item-placement';
 import { useKeyboardPlacement } from './hooks/use-keyboard-placement';
 import { useSilentCloudAttach } from './hooks/use-silent-cloud-attach';
-import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts';
+import { useKeyboardShortcuts, type KeyboardBlockReason } from './hooks/use-keyboard-shortcuts';
 import { useLayoutPersistence } from './hooks/use-layout-persistence';
 import { applyGuardedWorkspaceReplacement, useWorkspaceWriteGuards } from './lib/workspace-write-guards';
 import {
@@ -219,6 +219,7 @@ import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
 import { SettingsMenu } from './panels/settings-menu';
+import { ShortcutCoach, type ShortcutCoachMode } from './panels/shortcut-coach';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
 import { GeneratedModelLibrary } from './panels/generated-model-library';
@@ -3709,6 +3710,30 @@ useEffect(() => {
     ]
   );
 
+  const shortcutCoachMode: ShortcutCoachMode = walkthroughActive
+    ? 'walk'
+    : workbenchMode !== 'layout'
+      ? workbenchMode
+      : planAnnot.drawMode !== 'off'
+        ? 'annotate'
+        : outdoor2DOpen || outdoor3dTakeover || isOutdoorProject
+          ? 'outdoor'
+          : 'build';
+  const lastShortcutBlockedAtRef = useRef(0);
+  const handleShortcutBlocked = useCallback((reason: KeyboardBlockReason) => {
+    const now = Date.now();
+    if (now - lastShortcutBlockedAtRef.current < 1600) return;
+    lastShortcutBlockedAtRef.current = now;
+    const message: Record<KeyboardBlockReason, string> = {
+      locked: '评审 / 执行模式只看不改；切回「布置」再编辑。',
+      drag: '拖动中先松手；视图类按键仍然可用。',
+      walkthrough: '漫游中裸键归相机；按 Esc 退出漫游后再编辑。',
+      'needs-selection': '先选中一个物件或墙，再用这个快捷键。',
+      'no-signal-items': '当前场景没有可显示的信号物件。',
+    };
+    notify(message[reason], 'info');
+  }, []);
+
   useKeyboardShortcuts({
     enabled: isActive,
     selectedItem,
@@ -3717,6 +3742,7 @@ useEffect(() => {
     walkthroughActive,
     layoutLocked: workbenchMode !== 'layout',
     isDragActive,
+    onBlocked: handleShortcutBlocked,
     handlers: shortcutHandlers,
   });
 
@@ -4876,6 +4902,7 @@ useEffect(() => {
             const id = placeDiscrete(pendingCatalog,point);
             if (id) selectOnly(id, { keepPanel: true });
           }}>
+          <ShortcutCoach mode={shortcutCoachMode} enabled={isActive} />
           {/* 规划信息从 Bingo 迁回画布：Bingo 只留「我的完成 / 对方的修改」，四页签不再占用审校台。 */}
           {(outdoor2DOpen || outdoor3dTakeover) ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 12, left: 12, width: 320, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 40 }} /> : null}
           {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
