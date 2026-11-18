@@ -23,7 +23,6 @@ import {
   appendReviewSharePin,
   readReviewSharePins,
   readExactReviewSharePins,
-  REVIEW_SHARE_PIN_STORAGE_KEY,
 } from './share-pins';
 import type { FurnitureItem } from '../room-organizer/lib/types';
 import { createReviewFeedbackReceipt, inspectReviewFeedbackReceipt, reviewVersionForHash, type ReceiptPin } from './review-feedback-receipt';
@@ -61,7 +60,7 @@ export function ReviewSharePage(): JSX.Element {
   const [planVersion,setPlanVersion]=useState<string|null>(null);
   const [exportNote,setExportNote]=useState('');
   const [pinsUsable,setPinsUsable]=useState(true);
-  const linkHashRef=useRef<string|null>(null),pinWritePending=useRef(false);
+  const linkHashRef=useRef<string|null>(null),canonicalHashRef=useRef<string|null>(null),pinWritePending=useRef(false);
 
   useEffect(() => {
     const readViewOnly = () => setViewOnly(new URLSearchParams(window.location.search).get('view') === '1');
@@ -75,7 +74,7 @@ export function ReviewSharePage(): JSX.Element {
     let ticket = 0;
     const load = () => {
       const current = ++ticket;
-      linkHashRef.current=null;
+      linkHashRef.current=null;canonicalHashRef.current=null;
       setPhase({ kind: 'loading' });
       setPlanVersion(null);setExportNote('');setPinsUsable(true);
       const shareHash=window.location.hash;
@@ -105,9 +104,12 @@ export function ReviewSharePage(): JSX.Element {
           setPins([]);setReturned(false);setReturnNote('');setPhase({kind:'ready',plan:currentPlan});return;
         }
         if(currentPlan.source==='link'){
-          try {const version=await reviewVersionForHash(shareHash);if(!active||current!==ticket)return;
-            currentPlan={...currentPlan,planKey:`review-v2:${version.slice(7)}`};linkHashRef.current=shareHash;setPlanVersion(version);
-          } catch {if(!active||current!==ticket)return;setExportNote('无法核对分享版本，暂不能保存或导出反馈。');}
+          const canonical=currentPlan.shareHash;
+          if(canonical){
+            try {const version=await reviewVersionForHash(canonical);if(!active||current!==ticket)return;
+              currentPlan={...currentPlan,planKey:`review-v2:${version.slice(7)}`};linkHashRef.current=shareHash;canonicalHashRef.current=canonical;setPlanVersion(version);
+            } catch {if(!active||current!==ticket)return;setExportNote('无法核对分享版本，暂不能保存或导出反馈。');}
+          }else if(active&&current===ticket)setExportNote('无法核对分享版本，暂不能保存或导出反馈。');
         }
         if(currentPlan.source==='link'&&currentPlan.planKey.startsWith('review-v2:')){
           try {const storage=safeStorage();if(!storage)throw new Error();setPins(readExactReviewSharePins(currentPlan.planKey,storage));}
@@ -132,7 +134,7 @@ export function ReviewSharePage(): JSX.Element {
     return () => {
       active = false;
       ticket += 1;
-      linkHashRef.current=null;
+      linkHashRef.current=null;canonicalHashRef.current=null;
       window.removeEventListener('hashchange', load);
     };
   }, []);
@@ -270,9 +272,9 @@ export function ReviewSharePage(): JSX.Element {
       const storage=safeStorage();if(!storage||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins))throw new Error('反馈已变化');
       if((readReviewReturn(versionedReturnStorage(storage,plan.planKey))?.planKey===plan.planKey)!==returned)throw new Error('评审完成状态已变化');
       const json=createReviewFeedbackReceipt(planVersion,pins as ReceiptPin[],returned);
-      const hash=window.location.hash;
-      await inspectReviewFeedbackReceipt(json,hash);
-      if(window.location.hash!==hash||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins)||
+      const canonical=canonicalHashRef.current;if(!canonical)throw new Error('缺少规范分享版本');
+      await inspectReviewFeedbackReceipt(json,canonical);
+      if(canonicalHashRef.current!==canonical||window.location.hash!==linkHashRef.current||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins)||
         (readReviewReturn(versionedReturnStorage(storage,plan.planKey))?.planKey===plan.planKey)!==returned)throw new Error('反馈已变化');
       const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
       try {const link=document.createElement('a');link.href=url;link.download='方案评审反馈.json';link.click();}
@@ -285,48 +287,53 @@ export function ReviewSharePage(): JSX.Element {
     <main className="rsp" data-review-share-page="true" data-review-source={plan?.source ?? phase.kind}>
       <header className="rsp-mast">
         <p className="rsp-brand"><span>幕景</span><small className="sc-brand-en">Scendance</small></p>
-        <p className="rsp-mast-status">{exampleOnly?'示例预览 · 只读':'可评论方案 · 只读 · 画内落钉'}</p>
+        <p className="rsp-mast-status">{exampleOnly?'示例预览 · 只读':'客户评审 · 只读'}</p>
       </header>
       {phase.kind === 'loading' ? (
         <section className="rsp-state" role="status"><h1>正在打开方案</h1><p>正在读取平面。</p></section>
       ) : phase.kind === 'error' ? (
         <section className="rsp-state" role="alert"><h1>评审链接没有打开</h1><p>{phase.message}</p></section>
       ) : plan && floor ? (
-        <div className="rsp-main">
-          <section className="rsp-plan" aria-labelledby="rsp-plan-title">
-            <p className="rsp-kicker">平面预览</p>
-            <h1 id="rsp-plan-title">{plan.layout.name}</h1>
-            <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · 平面上 {placedCount(floor.items)} 件</p>
-            {plan.identity && (
-              <p className="rsp-version" data-delivery-version={plan.identity.deliveryVersion} data-snapshot-id={plan.identity.snapshotId}>
-                <b>{plan.identity.deliveryVersion}</b>
-                <span>{plan.identity.status === 'confirmed' ? '已确认的交付版' : '草案版，分享者尚未确认'}</span>
-                <small>
-                  快照 {plan.identity.snapshotId} · {plan.identity.verified
-                    ? '内容与快照一致，旧链接一直指着这一版'
-                    : '内容与快照对不上，请让分享者重新生成链接'}
-                </small>
-              </p>
-            )}
-            <p className="rsp-notice">{plan.notice}</p>
-            {!exampleOnly && <label className="rsp-author" style={{display:'flex',gap:8,alignItems:'center'}}>
-              <span>你的称呼</span>
-              <input value={author} maxLength={24} placeholder="选填，方便对方知道是谁" onChange={event => { const value = event.currentTarget.value; setAuthor(value); try { window.localStorage.setItem('scendance-review-author', value); } catch { /* 忽略 */ } }} style={{flex:1,minWidth:0}} />
-            </label>}
-            {plan.planKey==='sample:hall-d5' && <p><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
-            {!exampleOnly && !outdoorMode && !pinDraft && pins.length === 0 && (
-              <p className="rsp-review-hint" role="status">点物件或地面，钉一条意见</p>
-            )}
-            {plan.layout.floors.length > 1 && (
-              <div className="rsp-floors" role="group" aria-label="楼层">
-                {plan.layout.floors.map((entry, index) => (
-                  <button key={entry.id} type="button" aria-pressed={entry.id === floor.id} onClick={() => { setFloorIndex(index); setPinDraft(null); }}>{entry.name}</button>
-                ))}
+        <div className="rsp-shell">
+          <section className="rsp-intro" aria-labelledby="rsp-plan-title">
+            <div className="rsp-intro-main">
+              <p className="rsp-kicker">方案评审</p>
+              <h1 id="rsp-plan-title">{plan.layout.name}</h1>
+              <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · 平面上 {placedCount(floor.items)} 件</p>
+            </div>
+            <div className="rsp-intro-side">
+              {plan.identity && (
+                <p className="rsp-version" data-delivery-version={plan.identity.deliveryVersion} data-snapshot-id={plan.identity.snapshotId}>
+                  <b>{plan.identity.deliveryVersion}</b>
+                  <span>{plan.identity.status === 'confirmed' ? '已确认的交付版' : '草案版'}</span>
+                  <small>
+                    快照 {plan.identity.snapshotId} · {plan.identity.verified
+                      ? '内容与快照一致，旧链接一直指着这一版'
+                      : '内容与快照对不上，请让分享者重新生成链接'}
+                  </small>
+                </p>
+              )}
+              <p className="rsp-notice">{plan.notice}</p>
+            </div>
+          </section>
+          <div className="rsp-workspace">
+            <section className="rsp-stage" aria-label="方案平面">
+              <div className="rsp-stage-bar">
+                {plan.layout.floors.length > 1 && (
+                  <div className="rsp-floors" role="group" aria-label="楼层">
+                    {plan.layout.floors.map((entry, index) => (
+                      <button key={entry.id} type="button" aria-pressed={entry.id === floor.id} onClick={() => { setFloorIndex(index); setPinDraft(null); }}>{entry.name}</button>
+                    ))}
+                  </div>
+                )}
+                {!exampleOnly && !outdoorMode && (
+                  <p className="rsp-stage-tip" role="status">{pins.length === 0 ? '点平面任意位置，落一条意见' : '点钉查看意见'}</p>
+                )}
               </div>
-            )}
+              {plan.planKey==='sample:hall-d5' && <p className="rsp-source"><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
             {plan.outdoorPlan && (
-              <section aria-label="户外方案">
-                <p className="rsp-review-hint" role="status">这是分享链接携带的户外方案：点平面任意位置，钉一条意见。</p>
+              <section className="rsp-outdoor" aria-label="户外方案">
+                <p className="rsp-review-hint" role="status">户外方案：点平面任意位置，钉一条意见。</p>
                 <ReviewOutdoorSheet
                   plan={plan.outdoorPlan}
                   pins={outdoorPins}
@@ -335,33 +342,12 @@ export function ReviewSharePage(): JSX.Element {
                   onFocusPin={setActivePinId}
                 />
                 {outdoorDraft && (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-                    <span>钉在 ({outdoorDraft.x.toFixed(1)}, {outdoorDraft.y.toFixed(1)})</span>
-                    <span style={{ fontSize: 12, color: '#5d6b60', whiteSpace: 'nowrap' }}>{outdoorDraft.x.toFixed(1)}, {outdoorDraft.y.toFixed(1)} m</span>
-                    <input autoFocus value={outdoorText} maxLength={80} aria-label="户外钉评内容" placeholder="这里要改什么？" onChange={event => setOutdoorText(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void commitOutdoorPin(outdoorText); } else if (event.key === 'Escape') { setOutdoorDraft(null); } }} style={{ flex: 1, minWidth: 160 }} />
+                  <div className="rsp-draft">
+                    <span className="rsp-draft-point">钉在 {outdoorDraft.x.toFixed(1)}, {outdoorDraft.y.toFixed(1)} m</span>
+                    <input autoFocus value={outdoorText} maxLength={80} aria-label="户外钉评内容" placeholder="这里要改什么？" onChange={event => setOutdoorText(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void commitOutdoorPin(outdoorText); } else if (event.key === 'Escape') { setOutdoorDraft(null); } }} />
                     <button type="button" disabled={!outdoorText.trim()} onClick={() => { void commitOutdoorPin(outdoorText); }}>钉下</button>
                     <button type="button" onClick={() => setOutdoorDraft(null)}>取消</button>
                   </div>
-                )}
-                {outdoorPins.length > 0 && (
-                  <ol aria-label="户外钉评" style={{ listStyle: 'none', padding: 0, margin: '10px 0 0', display: 'grid', gap: 6 }}>
-                    {outdoorPins.map((pin, index) => (
-                      <li key={pin.id}>
-                        <button
-                          type="button"
-                          aria-pressed={pin.id === activePinId}
-                          onClick={() => setActivePinId(pin.id)}
-                          style={{ width: '100%', textAlign: 'left', display: 'flex', gap: 8, alignItems: 'baseline', padding: '6px 8px', background: pin.id === activePinId ? '#e4efe6' : 'transparent', border: '1px solid #d6ded7', borderRadius: 8, cursor: 'pointer' }}
-                        >
-                          <strong>{index + 1}</strong>
-                          <span style={{ flex: 1 }}>{pin.text}</span>
-                          <small style={{ color: '#5d6b60' }}>
-                            {(pin as ReviewPin & { author?: string }).author || '访客'}{pin.status === 'resolved' ? ' · 已处理' : ''}
-                          </small>
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
                 )}
               </section>
             )}
@@ -397,12 +383,18 @@ export function ReviewSharePage(): JSX.Element {
               )}
             </div>
           </section>
-          {!exampleOnly && <section className="rsp-comments" aria-labelledby="rsp-comments-title">
-            <div className="rsp-comments-scroll">
-              <h2 id="rsp-comments-title">钉汇总</h2>
-              <p className="rsp-persist">意见保存在这台浏览器，不会自动同步到其他设备。完成后请导出并发给方案创建者。</p>
+          {!exampleOnly && <aside className="rsp-rail" aria-labelledby="rsp-comments-title">
+            <div className="rsp-rail-head">
+              <div className="rsp-rail-title"><h2 id="rsp-comments-title">意见</h2><span>{pins.length}</span></div>
+              <label className="rsp-author">
+                <span>你的称呼</span>
+                <input value={author} maxLength={24} placeholder="选填，方便对方知道是谁" onChange={event => { const value = event.currentTarget.value; setAuthor(value); try { window.localStorage.setItem('scendance-review-author', value); } catch { /* 忽略 */ } }} />
+              </label>
+              <p className="rsp-persist">只存在这台浏览器；完成后导出交给方案创建者。</p>
+            </div>
+            <div className="rsp-rail-list">
               {pins.length === 0 ? (
-                <p className="rsp-empty">还没有钉。在左侧平面上点选位置即可落钉。</p>
+                <p className="rsp-empty">还没有意见。在左侧平面上点一下，写下要改的地方。</p>
               ) : (
                 <ol className="rsp-pin-list">
                   {pins.map((pin) => {
@@ -428,20 +420,17 @@ export function ReviewSharePage(): JSX.Element {
               )}
               {viewOnly && <p className="rsp-form-note" role="status">这是只看链接：可以查看方案与已有意见，不能新增或回复。</p>}
               {pinError && <p className="rsp-form-error" role="alert">{pinError}</p>}
-              <details className="rsp-entry">
-                <summary>分享链接怎么进这一页</summary>
-                <p>评审链接是 <code>/review/#layout=…</code>。井号后的片段与编辑器里的方案哈希相同，路径用 /review/。对方打开后就是这一页：平面和画内钉。</p>
-                <p>新版链接还带着交付版本身份，会在标题下显示「v1.0 已确认」和快照号；分享者改了草案重新确认，旧链接仍打开原来那一版。早期链接没有这段，只显示平面。</p>
-                <p>钉写在 localStorage，键名 <code>{REVIEW_SHARE_PIN_STORAGE_KEY}</code>。这是演示存储，不进 Supabase。</p>
-              </details>
             </div>
-            <div className="rsp-finish">
-              <button type="button" onClick={onComplete}>{returned ? '已完成评审' : '完成评审'}</button>
-              <button type="button" onClick={exportFeedback} disabled={!planVersion||!pinsUsable}>导出评审反馈</button>
-              <p role="status">{exportNote || '导出后请把文件交给方案创建者，反馈不会自动同步。'}</p>
-              <p role="status">{returnNote || (plan.source==='link'?'完成后可导出反馈；评审状态只记录在这台浏览器。':'完成状态只记录在这台浏览器。')}</p>
+            <div className="rsp-rail-foot">
+              <div className="rsp-actions">
+                <button type="button" className="rsp-primary" onClick={onComplete}>{returned ? '已完成评审' : '完成评审'}</button>
+                <button type="button" className="rsp-secondary" onClick={exportFeedback} disabled={!planVersion||!pinsUsable}>导出评审反馈</button>
+              </div>
+              <p className="rsp-status" role="status">{exportNote || '导出后请把文件交给方案创建者，反馈不会自动同步。'}</p>
+              <p className="rsp-status" role="status">{returnNote || (plan.source==='link'?'完成后可导出反馈；评审状态只记录在这台浏览器。':'完成状态只记录在这台浏览器。')}</p>
             </div>
-          </section>}
+          </aside>}
+          </div>
         </div>
       ) : (
         <section className="rsp-state" role="alert"><h1>方案没有可看的楼层</h1><p>这份快照里没有楼层，平面没有展开。</p></section>

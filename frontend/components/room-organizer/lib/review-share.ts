@@ -231,6 +231,8 @@ export async function rememberReviewLinkMark(input: {
   shareId: string;
   clientUrl: string;
   reviewPlanKey: string;
+  /** 短链对应的规范长哈希；长链不用传，直接取 clientUrl.hash。 */
+  longHash?: string;
   markedAt?: string;
 },options?:{isCurrent?:()=>boolean}): Promise<void> {
   const check=()=>{if(options?.isCurrent&&options.isCurrent()!==true)throw new Error('活动、楼层或方案已变化；旧评审记录如已写入会保留，链接未复制。');};
@@ -239,10 +241,14 @@ export async function rememberReviewLinkMark(input: {
   const shareId = clip(input.shareId, 80);
   if (!projectKey || projectKey!==input.projectKey || !shareId || shareId!==input.shareId || typeof input.clientUrl!=='string' || input.clientUrl.length>MAX_SHARE_HASH_LENGTH+2048)throw new Error('评审链接信息无效，未记录。');
   let url:URL;try{url=new URL(input.clientUrl);}catch{throw new Error('评审链接无效，未记录。');}
-  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||!['/review','/review/'].includes(url.pathname)||!isShareHash(url.hash)||url.hash.length>MAX_SHARE_HASH_LENGTH)throw new Error('评审链接无效，未记录。');
-  if(!(await readShareHash(url.hash)).ok)throw new Error('评审链接无法完整读取，未记录。');
+  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||!['/review','/review/'].includes(url.pathname))throw new Error('评审链接无效，未记录。');
+  // 短链自己不含快照；版本仍按创建时的规范长哈希算，长短链共享同一组钉。
+  const short=/^#review=[a-z0-9]{12,24}$/.test(url.hash);
+  const hash=short?input.longHash:url.hash;
+  if(!hash||!isShareHash(hash)||hash.length>MAX_SHARE_HASH_LENGTH)throw new Error('评审链接无效，未记录。');
+  if(!(await readShareHash(hash)).ok)throw new Error('评审链接无法完整读取，未记录。');
   check();
-  const reviewPlanKey=`review-v2:${(await reviewVersionForHash(url.hash)).slice(7)}`;
+  const reviewPlanKey=`review-v2:${(await reviewVersionForHash(hash)).slice(7)}`;
   check();
   const mark={
     saved: true,

@@ -37,6 +37,7 @@ import { planPointToCanvas } from './lib/review-pins';
 import { get2DViewTransform } from './canvas-2d/render';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
+import { publishReviewLink } from '../review-share-page/review-link-cloud';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
@@ -1065,16 +1066,22 @@ useEffect(() => {
     // 户外优先：评审链接同时携带当前户外规划，评审页不再只拿到室内楼层。
     const encoded = await encodeShareUrl(layout, window.location.origin, outdoorFullPlanRef.current);
     check();
-    const url = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
-    if (!url) throw new Error('评审链接没有生成。');
+    const longHash = new URL(encoded.url).hash;
     const projectKey = (layout.id ?? '').trim() || 'local-draft';
-    const reviewPlanKey = reviewPlanKeyForClientUrl(url) ?? localPlanKey(layout);
+    // 评审键永远按规范长哈希算，这样长短链打开的是同一版钉与回执。
+    const reviewPlanKey = reviewPlanKeyForClientUrl(encoded.url) ?? localPlanKey(layout);
+    // 短链只是载体：未登录或后端不可用时保留长链，评审不会因此发不出去。
+    const short = await publishReviewLink({ longHash, payload: encoded.payload });
+    check();
+    const url = reviewShareHref(window.location.origin, longHash, short.ok ? short.code : null);
+    if (!url) throw new Error('评审链接没有生成。');
     await rememberReviewLinkMark({
       projectKey,
       title: layout.name?.trim() || '未命名活动',
       shareId: projectKey,
       clientUrl: url,
       reviewPlanKey,
+      longHash,
     },{isCurrent});
     check();
     return { url,isCurrent };

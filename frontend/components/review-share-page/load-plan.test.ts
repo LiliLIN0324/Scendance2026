@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { STORAGE_KEY } from '../room-organizer/lib/constants';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
 import { collectViolations } from '../../lib/placement-rules';
 import { encodeShareUrl } from '../room-organizer/lib/share';
 import { createStarterOutdoorPlan } from '../room-organizer/lib/outdoor-project-store';
+import { readReviewLink } from './review-link-cloud';
 import {
   loadReviewPlan,
   localPlanKey,
@@ -13,6 +14,11 @@ import {
   reviewShareHref,
 } from './load-plan';
 import type { RoomLayout } from '../room-organizer/lib/types';
+
+vi.mock('./review-link-cloud', async importOriginal => {
+  const actual = await importOriginal<typeof import('./review-link-cloud')>();
+  return { ...actual, readReviewLink: vi.fn() };
+});
 
 function memory(): Storage {
   const data = new Map<string, string>();
@@ -57,6 +63,8 @@ describe('review share plan loading', () => {
     const hash = new URL(encoded.url).hash;
     const href = reviewShareHref('https://app.example/editor?local=1', hash);
     expect(href).toBe(`https://app.example${REVIEW_SHARE_PATH}${hash}`);
+    expect(reviewShareHref('https://app.example/editor?local=1', hash, 'abcdef123456'))
+      .toBe(`https://app.example${REVIEW_SHARE_PATH}#review=abcdef123456`);
     const loaded = await loadReviewPlan({ hash, search: '?demo=1', localLayout: { ...INITIAL_LAYOUT, name: '本机另一份' } });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
@@ -68,6 +76,26 @@ describe('review share plan loading', () => {
     const again = await loadReviewPlan({ hash, search: '', localLayout: null });
     expect(again.ok && again.plan.planKey).toBe(loaded.plan.planKey);
   });
+  it('opens a short link and keeps the canonical long hash for pins and receipts', async () => {
+    const encoded = await encodeShareUrl({ ...INITIAL_LAYOUT, name: '短链方案' }, 'https://app.example/editor');
+    const longHash = new URL(encoded.url).hash;
+    vi.mocked(readReviewLink).mockResolvedValueOnce({ ok: true, value: { longHash, payload: encoded.payload } });
+
+    const short = await loadReviewPlan({ hash: '#review=abcdef123456', search: '', localLayout: null });
+    const long = await loadReviewPlan({ hash: longHash, search: '', localLayout: null });
+    expect(short.ok).toBe(true);
+    expect(long.ok).toBe(true);
+    if (!short.ok || !long.ok) return;
+    expect(short.plan.layout.name).toBe('短链方案');
+    expect(short.plan.shareHash).toBe(longHash);
+    expect(short.plan.planKey).toBe(long.plan.planKey);
+    expect(short.plan.identity).toEqual(long.plan.identity);
+
+    vi.mocked(readReviewLink).mockResolvedValueOnce({ ok: false, reason: 'not-found' });
+    await expect(loadReviewPlan({ hash: '#review=abcdef123456', search: '', localLayout: null }))
+      .resolves.toEqual({ ok: false, reason: 'not-found' });
+  });
+
   it('carries the outdoor site plan in the review link', async () => {
     const outdoor = createStarterOutdoorPlan();
     const encoded = await encodeShareUrl(INITIAL_LAYOUT, 'https://app.example/editor', outdoor);

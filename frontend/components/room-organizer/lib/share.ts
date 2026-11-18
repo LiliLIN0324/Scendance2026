@@ -50,12 +50,21 @@ export interface ReadPlanShareIdentity extends PlanShareIdentity {
 /** 载荷外壳标记：`{ kind, identity, layout }`；没有这个标记就是旧链接的裸布局。 */
 export const PLAN_SHARE_KIND = 'scendance-plan-share';
 
+export interface PlanSharePayload {
+  kind: typeof PLAN_SHARE_KIND;
+  identity: PlanShareIdentity;
+  layout: RoomLayout;
+  outdoor?: SitePlanData;
+}
+
 export interface EncodeShareUrlResult {
   url: string;
   /** True when the layout had a floor-plan image that was stripped to keep the URL compact. */
   strippedFloorPlan: boolean;
   /** 这条链接绑定的版本身份；内容未确认时为草案身份。 */
   identity: PlanShareIdentity;
+  /** 与 URL 载荷同源的 JSON 外壳；短链服务按这份内容落库。 */
+  payload: PlanSharePayload;
 }
 
 export async function encodeShareUrl(
@@ -72,15 +81,15 @@ export async function encodeShareUrl(
   // 户外方案是可选的同一份规划数据；带了就随快照走，评审页先看户外。
   const outdoorChecked = outdoor ? sitePlanDataSchema.safeParse(outdoor) : null;
   if (outdoorChecked && !outdoorChecked.success) throw new Error('户外方案无法核对，未生成评审链接。');
-  const json = JSON.stringify({
+  const payload: PlanSharePayload = {
     kind: PLAN_SHARE_KIND,
     identity,
     layout: shareable,
     ...(outdoorChecked?.success ? { outdoor: outdoorChecked.data } : {}),
-  });
-  const compressed = await deflateRaw(new TextEncoder().encode(json));
+  };
+  const compressed = await deflateRaw(new TextEncoder().encode(JSON.stringify(payload)));
   const encoded = `${V2_PREFIX}${bytesToBase64Url(compressed)}`;
-  return { url: `${origin}${HASH_PREFIX}${encoded}`, strippedFloorPlan: stripped, identity };
+  return { url: `${origin}${HASH_PREFIX}${encoded}`, strippedFloorPlan: stripped, identity, payload };
 }
 
 /**
@@ -122,12 +131,29 @@ export async function readShareHash(hash: string): Promise<ShareDecodeResult> {
     // instead of silently decoding to replacement characters.
     const json = new TextDecoder('utf-8', { fatal: true }).decode(jsonBytes);
     const parsed: unknown = JSON.parse(json);
-    const envelope = readPlanShareEnvelope(parsed);
-    const layout = parseStoredLayout(envelope ? envelope.layout : parsed);
+    // 新链接带外壳；更老的链接是裸布局，继续兼容。
+    if (readPlanShareEnvelope(parsed)) return readSharePayload(parsed);
+    const layout = parseStoredLayout(parsed);
+    if (!layout) return { ok: false, reason: 'unreadable' };
+    return { ok: true, layout: layoutForExport(layout, true), identity: null, outdoor: null };
+  } catch {
+    return { ok: false, reason: 'unreadable' };
+  }
+}
+
+/**
+ * 短链服务返回的 JSON 外壳走与 `#layout=` 完全相同的校验：
+ * 不信任服务端字段，布局、版本身份、户外方案都重算一遍。
+ */
+export async function readSharePayload(value: unknown): Promise<ShareDecodeResult> {
+  try {
+    const envelope = readPlanShareEnvelope(value);
+    if (!envelope) return { ok: false, reason: 'unreadable' };
+    const layout = parseStoredLayout(envelope.layout);
     if (!layout) return { ok: false, reason: 'unreadable' };
     const exported = layoutForExport(layout, true);
-    const identity = envelope?.identity ? await verifyPlanShareIdentity(envelope.identity, exported) : null;
-    const outdoorChecked = envelope?.outdoor ? sitePlanDataSchema.safeParse(envelope.outdoor) : null;
+    const identity = envelope.identity ? await verifyPlanShareIdentity(envelope.identity, exported) : null;
+    const outdoorChecked = envelope.outdoor ? sitePlanDataSchema.safeParse(envelope.outdoor) : null;
     return { ok: true, layout: exported, identity, outdoor: outdoorChecked?.success ? outdoorChecked.data : null };
   } catch {
     return { ok: false, reason: 'unreadable' };
