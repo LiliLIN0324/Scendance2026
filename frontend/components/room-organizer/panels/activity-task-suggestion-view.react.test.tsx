@@ -44,6 +44,11 @@ describe('ActivityTaskSuggestionView', () => {
   it('starts collapsed, explains empty sources and does not offer generation without a reviewed summary', () => {
     const view = render(<ActivityTaskSuggestionView {...props({ layout: { ...layout, floors: [], eventOperations: undefined } })}/>);
     expect(view.container.querySelector('details')?.open).toBe(false);
+    expect(screen.queryByText('选资料 → 核对摘要 → 勾选保存')).toBeNull();
+    const suggestion = screen.getByText('任务建议').closest('details') as HTMLDetailsElement;
+    suggestion.open = true;
+    fireEvent(suggestion, new Event('toggle', { bubbles: true }));
+    expect(screen.getByText('选资料 → 核对摘要 → 勾选保存')).toBeTruthy();
     expect(screen.getByText('当前没有活动任务，可以只选需求或物件。')).toBeTruthy();
     expect(screen.getByText('当前没有场景物件，可以只选需求或任务。')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '确认发送' })).toBeNull();
