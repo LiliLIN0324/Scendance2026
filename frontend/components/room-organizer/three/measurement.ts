@@ -1,5 +1,6 @@
 import { removeAndDispose } from './builder-utils';
-import { formatLength } from '../lib/display-units';
+import type { LengthPrecisionM } from '../../../../supabase/functions/_shared/plan-editor';
+import { formatReading } from '../lib/display-units';
 import type { DisplayUnit, Vec2 } from '../lib/types';
 import type * as ThreeNS from 'three';
 
@@ -39,12 +40,13 @@ export function renderRoomDimensions(
   width: number,
   depth: number,
   unit: DisplayUnit,
-  yOffset = 0
+  yOffset = 0,
+  precisionM: LengthPrecisionM = 0.01,
 ): void {
   clearRoomDimensions(scene);
   const gap = 0.35;
-  addDimensionSprite(THREE, scene, formatLength(width, unit), 0, yOffset + 0.4, -depth / 2 - gap);
-  addDimensionSprite(THREE, scene, formatLength(depth, unit), -width / 2 - gap, yOffset + 0.4, 0);
+  addDimensionSprite(THREE, scene, formatReading(width, unit, precisionM), 0, yOffset + 0.4, -depth / 2 - gap);
+  addDimensionSprite(THREE, scene, formatReading(depth, unit, precisionM), -width / 2 - gap, yOffset + 0.4, 0);
 }
 
 function measureTextWidth(text: string): number {

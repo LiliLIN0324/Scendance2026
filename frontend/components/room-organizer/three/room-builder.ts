@@ -193,6 +193,8 @@ export interface RoomBuilderOptions {
    * （docs/42），GeoGround 瓦片在场时矩形外墙/网格只剩室内壳残留。
    */
   skipWalls?: boolean;
+  /** 地面网格间距（米）。缺省 0.5。 */
+  gridSizeM?: number;
   onTextureLoaded?: () => void;
 }
 
@@ -264,7 +266,8 @@ export function buildRoom(THREE: ThreeModule, options: RoomBuilderOptions): void
       isGhost ? options.ghostOpacity : undefined,
       options.wallOpenings,
       options.hiddenWalls,
-      options.wallHeight
+      options.wallHeight,
+      options.gridSizeM,
     );
   }
 }
@@ -506,7 +509,8 @@ function buildWalls(
   ghostOpacity?: number,
   openings?: ReadonlyMap<WallId, WallOpening[]>,
   hiddenWalls?: readonly WallId[],
-  wallHeight = FLOOR_HEIGHT_METERS
+  wallHeight = FLOOR_HEIGHT_METERS,
+  gridSizeM?: number,
 ): void {
   const centerY = yOffset + wallHeight / 2;
 
@@ -568,7 +572,7 @@ function buildWalls(
     // 与 2D 平面图共用一套网格语言：0.5 m 单元、#ddd 发丝线，单元对齐世界原点
     // （snapToGrid 也按 0.5 m 取整），只铺房间范围，不分中心线/次线两档灰度。
     // 用贴图平面而不是 GridHelper：线宽在透视下自然衰减，也不会和地板发生深度竞争。
-    const grid = buildGridPlane(THREE, width, depth);
+    const grid = buildGridPlane(THREE, width, depth, gridSizeM);
     grid.userData.type = ROOM_OBJECT_TAGS.Wall;
     grid.position.y = yOffset + 0.01;
     scene.add(grid);

@@ -218,7 +218,6 @@ type OutdoorPanelKind = 'layers' | 'library' | 'inventory';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
-import { SettingsMenu } from './panels/settings-menu';
 import { ShortcutCoach, type ShortcutCoachMode } from './panels/shortcut-coach';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
@@ -262,8 +261,10 @@ import { generateSuggestions, type ActivitySuggestion } from '@/lib/suggestions'
 
 const WorkbenchCaptureGuide = dynamic(() => import('@/components/capture-guide/capture-guide').then(module => module.CaptureGuide));
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
-import type { CatalogItem, DisplayUnit, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
-import { readLocalPreferences, writeLocalPreferences, type LocalPreferences } from './lib/account-preferences';
+import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import { mergeRemotePreferences, readLocalPreferences, writeLocalPreferences, type LocalPreferences } from './lib/account-preferences';
+import { readStudioSettingsCache, rememberStudioSettings } from './lib/studio-settings-cache';
+import { sanitizeStudioSettings, seedPlanEditor } from '../../../supabase/functions/_shared/plan-editor';
 import type { SplatPaint } from './three/splat-preview';
 
 function zoomCamera(
@@ -464,7 +465,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const { recent: recentColors, pushColor } = useRecentColors();
   const [view, setView] = useState<ViewSettings>(() => {
     const local = readLocalPreferences(undefined);
-    return { ...INITIAL_VIEW_SETTINGS, lengthUnit: local.unit, showMeasurements: local.showMeasurements };
+    return {
+      ...INITIAL_VIEW_SETTINGS,
+      lengthUnit: local.unit,
+      showMeasurements: local.showMeasurements,
+      lengthPrecisionM: local.lengthPrecisionM,
+      snapToGrid: local.snapToGrid,
+      snapToWall: local.snapToWall,
+      snapToItems: local.snapToItems,
+    };
   });
   const referenceImage = useReferenceImage(layout);
   const [referenceOpenRequest, setReferenceOpenRequest] = useState(0);
@@ -566,7 +575,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const reviewEntryRef = useRef<HTMLButtonElement>(null);
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
-  // 左轨成员位与「团队与权限」读同一份团队。
+  // 左轨成员位与设置里的团队页读同一份成员。
   const team = useTeam(controller);
   const [teamOpenRequest, setTeamOpenRequest] = useState<{ serial: number; section: string } | undefined>();
   // 左轨点头像，左栏整栏换成那个人的私信；再点同一颗收起。换成员或换团队时窗子跟着换/关。
@@ -2166,6 +2175,7 @@ useEffect(() => {
     buildingCost,
     actions,
     view,
+    gridSizeM: layout.planSettings?.lengthSnapM ?? layout.planSettings?.gridSizeM,
     allSelectedIds,
     frontGap,
   });
@@ -3552,17 +3562,34 @@ useEffect(() => {
   }, []);
 
   // 偏好变更：先落本机兜底，登录态再异步回写账号；回写失败不挡画布。
-  const updatePreference = useCallback((patch: { lengthUnit?: DisplayUnit; showMeasurements?: boolean }) => {
-    const next: ViewSettings = { ...view, ...patch };
-    setView(next);
+  const preferenceTimer = useRef<number | null>(null);
+  const persistPreferences = useCallback((next: ViewSettings) => {
+    const prefs: LocalPreferences = {
+      unit: next.lengthUnit,
+      showMeasurements: next.showMeasurements,
+      lengthPrecisionM: next.lengthPrecisionM ?? 0.01,
+      snapToGrid: next.snapToGrid,
+      snapToWall: next.snapToWall,
+      snapToItems: next.snapToItems,
+    };
     const snapshot = controller.getSnapshot();
-    writeLocalPreferences(snapshot.user?.id ?? null, { unit: next.lengthUnit, showMeasurements: next.showMeasurements });
-    if (snapshot.user && !snapshot.user.is_anonymous) {
-      controller.savePreferences({ unit: next.lengthUnit, showMeasurements: next.showMeasurements }).catch(() => {
+    const userId = snapshot.user?.id ?? null;
+    writeLocalPreferences(userId, prefs);
+    if (!snapshot.user || snapshot.user.is_anonymous) return;
+    if (preferenceTimer.current) window.clearTimeout(preferenceTimer.current);
+    preferenceTimer.current = window.setTimeout(() => {
+      controller.savePreferences(prefs).catch(() => {
         /* 云端回写失败时保留本机兜底，不打断画布操作。 */
       });
-    }
-  }, [view, controller]);
+    }, 400);
+  }, [controller]);
+  const updatePreference = useCallback((patch: Partial<Pick<ViewSettings, 'lengthUnit' | 'showMeasurements' | 'lengthPrecisionM' | 'snapToGrid' | 'snapToWall' | 'snapToItems'>>) => {
+    setView(previous => {
+      const next = { ...previous, ...patch };
+      persistPreferences(next);
+      return next;
+    });
+  }, [persistPreferences]);
 
   // 登录态拉取账号偏好并合并回本机；登出回到本机兜底。
   const preferencesSyncedFor = useRef<string | null>(null);
@@ -3574,17 +3601,30 @@ useEffect(() => {
       preferencesSyncedFor.current = userId;
       if (!snapshot.user || snapshot.user.is_anonymous) {
         const local = readLocalPreferences(userId);
-        setView(previous => ({ ...previous, lengthUnit: local.unit, showMeasurements: local.showMeasurements }));
+        setView(previous => ({
+          ...previous,
+          lengthUnit: local.unit,
+          showMeasurements: local.showMeasurements,
+          lengthPrecisionM: local.lengthPrecisionM,
+          snapToGrid: local.snapToGrid,
+          snapToWall: local.snapToWall,
+          snapToItems: local.snapToItems,
+        }));
         return;
       }
       try {
         const remote = await controller.getPreferences();
-        const local: LocalPreferences = {
-          unit: remote.unit === 'ft' ? 'ft' : 'm',
-          showMeasurements: typeof remote.showMeasurements === 'boolean' ? remote.showMeasurements : true,
-        };
-        writeLocalPreferences(userId, local);
-        setView(previous => ({ ...previous, lengthUnit: local.unit, showMeasurements: local.showMeasurements }));
+        const merged = mergeRemotePreferences(readLocalPreferences(userId), remote);
+        writeLocalPreferences(userId, merged);
+        setView(previous => ({
+          ...previous,
+          lengthUnit: merged.unit,
+          showMeasurements: merged.showMeasurements,
+          lengthPrecisionM: merged.lengthPrecisionM,
+          snapToGrid: merged.snapToGrid,
+          snapToWall: merged.snapToWall,
+          snapToItems: merged.snapToItems,
+        }));
       } catch {
         /* 云端不可用，保留本机兜底。 */
       }
@@ -3592,6 +3632,26 @@ useEffect(() => {
     const stop = controller.subscribe(() => { void syncFromRemote(); });
     void syncFromRemote();
     return () => { stop(); };
+  }, [controller]);
+
+  useEffect(() => {
+    let cancel = false;
+    const loadTeamDefaults = async () => {
+      const snapshot = controller.getSnapshot();
+      if (!snapshot.user || snapshot.user.is_anonymous) return;
+      try {
+        const studios = await controller.listStudios();
+        const id = studios.find(item => item.role === 'owner')?.id ?? studios[0]?.id;
+        if (!id || cancel) return;
+        const settings = sanitizeStudioSettings(await controller.getStudioSettings(id));
+        if (!cancel) rememberStudioSettings(id, settings);
+      } catch {
+        /* 团队默认读不到不影响画布，也不挡住新建活动。 */
+      }
+    };
+    const stop = controller.subscribe(() => { void loadTeamDefaults(); });
+    void loadTeamDefaults();
+    return () => { cancel = true; stop(); };
   }, [controller]);
 
   // Furniture clipboard (#153): copy normalizes the selection around its
@@ -3674,8 +3734,8 @@ useEffect(() => {
         else actions.moveItem(id, x, z);
       },
       toggle2D: () => toggle('view2D'),
-      toggleMeasurements: () => toggle('showMeasurements'),
-      toggleSnap: () => toggle('snapToGrid'),
+      toggleMeasurements: () => updatePreference({ showMeasurements: !view.showMeasurements }),
+      toggleSnap: () => updatePreference({ snapToGrid: !view.snapToGrid }),
       toggleSignals: () => toggle('showWiFiSignals'),
       undo: history.undo,
       redo: history.redo,
@@ -3748,6 +3808,9 @@ useEffect(() => {
       layout.height,
       unlockedSelectedIds,
       toggle,
+      updatePreference,
+      view.showMeasurements,
+      view.snapToGrid,
       history.undo,
       history.redo,
       selectedItem,
@@ -3794,6 +3857,8 @@ useEffect(() => {
     layoutLocked: workbenchMode !== 'layout',
     isDragActive,
     onBlocked: handleShortcutBlocked,
+    nudgeStepM: layout.planSettings?.nudgeStepM ?? 0.1,
+    angleSnapDeg: layout.planSettings?.angleSnapDeg ?? 15,
     handlers: shortcutHandlers,
   });
 
@@ -3908,9 +3973,11 @@ useEffect(() => {
       throw new Error('当前页面已连接或正在打开云项目，请在本地工作台新建活动。');
     }
     const before = layoutStore.getState().layout;
-    if ((before.id ?? null) !== (candidate.id ?? null)) flushPendingBeforeSwitch();
+    const seeded = candidate.planSettings ? undefined : seedPlanEditor(readStudioSettingsCache());
+    const createdLayout = seeded ? { ...candidate, planSettings: seeded } : candidate;
+    if ((before.id ?? null) !== (createdLayout.id ?? null)) flushPendingBeforeSwitch();
     if (layoutStore.getState().layout !== before) throw new Error('保存期间活动已变化，未新建活动。');
-    const json = commitFreshLocalActivityLayout(candidate, {
+    const json = commitFreshLocalActivityLayout(createdLayout, {
       current: () => layoutStore.getState().layout,
       apply: value => actions.applyLayout(value),
       beforeReplace: () => { workspaceWriteGuards?.assertLayoutWrite(); commitHistoryNow(); snapshotBeforeReplace(before, workspaceWriteGuards?.assertLayoutWrite); workspaceWriteGuards?.assertLayoutWrite(); },
@@ -4513,6 +4580,18 @@ useEffect(() => {
     return captureRenderImage({ view: 'current', scale: 1 });
   }, [outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
   if (!activitySession.isCurrent(sessionToken)) return <div role="status">正在核对活动会话，请稍候。</div>;
+  const feedbackPlan = {
+    name: (layout.name || '').trim() || '未命名方案',
+    place: (isOutdoorProject || outdoor2DOpen || outdoor3dTakeover) ? '户外' as const : '室内' as const,
+    boundary: !outdoorPlan
+      ? '当前没有户外用地红线'
+      : outdoorPlan.boundary.length >= 3
+        ? `用地红线已闭合，${outdoorPlan.boundary.length} 个点`
+        : outdoorPlan.boundary.length === 0
+          ? '用地红线未画'
+          : `用地红线未闭合，${outdoorPlan.boundary.length} 个点`,
+    canvas: outdoor3dTakeover ? '户外三维' : outdoor2DOpen ? '户外地图' : view.view2D ? '室内平面' : '室内三维',
+  };
 
   // P4-c：发布卡片只实现一次；3D 工具轨与 2D 画布右上交付簇各自挂一份触发钮，
   // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
@@ -4764,9 +4843,7 @@ useEffect(() => {
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               {/* 2026-11-13 用户指令：左轨底部「标注」开关移除；手动绘制入口收掉后，
                   绘制态只能由流程内部进入，Esc 仍是统一退出。 */}
-              <SettingsMenu buttonRef={workspaceEntryRef} />
-              
-              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements }} onPreferenceChange={updatePreference} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements, lengthPrecisionM: view.lengthPrecisionM ?? 0.01, snapToGrid: view.snapToGrid, snapToWall: view.snapToWall, snapToItems: view.snapToItems }} onPreferenceChange={updatePreference} onPlanSettingsChange={actions.setPlanSettings} {...(outdoorPlanState?.plan.quote ? { siteQuote: outdoorPlanState.plan.quote } : {})} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} planContext={feedbackPlan} onCapturePlan={captureSharePreview} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           {/* 手机端左轨唯一入口；桌面由 CSS 隐藏，不影响三栏。 */}
@@ -4984,7 +5061,8 @@ useEffect(() => {
               seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
               onViewChange={handleOutdoorViewSwitch}
-              lengthUnit={view.lengthUnit}
+              lengthUnit={layout.planSettings?.displayUnit ?? view.lengthUnit}
+              {...(layout.planSettings ? { planEditor: layout.planSettings } : {})}
               // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。
               dormant={!outdoor2DOpen}
               // 2026-11-12「3D 的时候也要可编辑」：接管态把右轨三张工具卡的出镜宿主交给画布，
@@ -5026,6 +5104,8 @@ useEffect(() => {
         onAlignSelection={alignSelected}
         onDistributeSelection={distributeSelected}
         showMeasurements={view.showMeasurements}
+        lengthUnit={layout.planSettings?.displayUnit ?? view.lengthUnit}
+        lengthPrecisionM={view.lengthPrecisionM ?? 0.01}
         showMinimap={view.showMinimap}
         walkthroughActive={walkthroughActive}
         walkthroughPhase={walkthroughPhase}

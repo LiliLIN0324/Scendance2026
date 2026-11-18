@@ -323,6 +323,7 @@ export interface OutdoorPlanOverlayProps {
   inspectorHostId?: string;
   /** 清单/读数显示单位；工程底稿仍存米。缺省米。 */
   lengthUnit?: DisplayUnit;
+  planEditor?: import('../../../../supabase/functions/_shared/plan-editor').PlanEditorSettings;
   /**
    * V-5b/c（2026-11-13）：属性卡「模型」区的生成/上传入口外发（透传给 OutdoorPlanCanvas）。
    * room-organizer 侧接线：记 facility 链接 + 预填左栏物料生成框（仍须确认额度）；
@@ -414,6 +415,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   dormant = false,
   inspectorHostId,
   lengthUnit = 'm',
+  planEditor,
   controller,
   onViewChange,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
@@ -925,6 +927,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             // 业务图层在两种形态下照常叠加。
             base={geoHidden ? 'floor' : 'map'}
             onPlanChange={setPlan}
+            {...(planEditor ? { planEditor } : {})}
             onVenueBoundaryApplied={agent?.manualOutdoorVenueApplied}
             onVenueBoundaryCanceled={agent?.manualOutdoorVenueCanceled}
             {...(onHistoryChange ? { onHistoryChange } : {})}

@@ -469,6 +469,8 @@ export interface OutdoorPlanCanvasProps {
   onViewChange?: (next: View) => void;
   /** H2-b：编辑提交回调（边界更新/顶点移动/新增分区/分区样式）。不传则只读浏览。 */
   onPlanChange?: (plan: SitePlanData) => void;
+  /** 本方案的网格、吸附、通道。写入 plan.editor，不单留在组件状态。 */
+  planEditor?: import('../../../../supabase/functions/_shared/plan-editor').PlanEditorSettings;
   onVenueBoundaryApplied?: ((anchor: NonNullable<SitePlanData['anchor']>) => void) | undefined;
   /**
    * 2026-11-17 用户实测：画红线时按 Esc 只切回浏览模式，外层工作流仍停在「核对具体活动范围」
@@ -1526,6 +1528,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onVisibilityChange,
   onViewChange,
   onPlanChange,
+  planEditor,
   onVenueBoundaryApplied,
   onVenueBoundaryCanceled,
   panelsHostId,
@@ -2273,9 +2276,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const setSnapOn = useCallback((on: boolean) => {
     snapOnRef.current = on;
   }, []);
-  const snapPoint = useCallback((pt: PlanPoint, viewport: PlanViewport): PlanPoint => (
-    snapOnRef.current ? snapPointToGrid(pt, viewport) : pt
-  ), []);
+  const snapPoint = useCallback((pt: PlanPoint, viewport: PlanViewport): PlanPoint => {
+    if (!snapOnRef.current) return pt;
+    const preferred = planEditor?.lengthSnapM;
+    const mpp = planMetersPerPixel(viewport);
+    const step = preferred && mpp > 0 && preferred / mpp >= 4 ? preferred : undefined;
+    return snapPointToGrid(pt, viewport, step);
+  }, [planEditor?.lengthSnapM]);
   const setInspectorPanel = useCallback((tab: OutdoorInspectorPanel, open: boolean) => {
     setInspectorPanels(current => applyOutdoorInspectorPanel(current, tab, open));
   }, []);
@@ -2582,6 +2589,35 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage('图层连同其中的内容已删除；撤销可找回。');
   }
 
+  /** 设置页写入：不进撤销栈。几何编辑仍走 commitPlan。 */
+  function adoptPlan(next: SitePlanData) {
+    if (next === planRef.current) return;
+    planRef.current = next;
+    onPlanChange?.(next);
+  }
+
+  function planWithEditor(current: SitePlanData, editor: OutdoorPlanCanvasProps['planEditor']): SitePlanData {
+    const sanitized = editor && Object.keys(editor).length > 0 ? editor : undefined;
+    const next: SitePlanData = { ...current };
+    if (sanitized) next.editor = sanitized;
+    else delete next.editor;
+    if (sanitized?.quoteTouched) {
+      const quote = { ...(current.quote ?? {}) };
+      const header = sanitized.quote;
+      if (header?.companyName) quote.companyName = header.companyName;
+      else delete quote.companyName;
+      if (header?.currency) quote.currency = header.currency;
+      else delete quote.currency;
+      if (header?.logoUrl) quote.logoUrl = header.logoUrl;
+      else delete quote.logoUrl;
+      if (header?.contact) quote.preparedBy = header.contact;
+      else delete quote.preparedBy;
+      if (Object.keys(quote).length > 0) next.quote = quote;
+      else delete next.quote;
+    }
+    return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+  }
+
   /** 编辑提交：undo 栈推入旧快照（上限 UNDO_LIMIT），再同步 ref 与父级。 */
   function commitPlan(next: SitePlanData) {
     historyRef.current.push(planRef.current);
@@ -2595,6 +2631,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     planRef.current = next;
     onPlanChangeRef.current?.(next);
   }
+
+  const editorKey = JSON.stringify(planEditor ?? null);
+  useEffect(() => {
+    const next = planWithEditor(planRef.current, planEditor);
+    if (next !== planRef.current) adoptPlan(next);
+    // editorKey 是这份设置的内容；planEditor 对象每次渲染可能是新引用。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorKey]);
 
   /** 撤销（Ctrl+Z / 面板按钮）：弹出栈顶恢复；选中实体可能随撤销消失，全清选中。 */
   function undoPlan() {
@@ -2793,7 +2837,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         width: model.width,
         depth: model.depth,
         bucket: model.bucket,
-      })));
+      })), () => crypto.randomUUID(), {
+        ...(planEditor?.aisleClearM !== undefined ? { aisleClearM: planEditor.aisleClearM } : {}),
+        ...(planEditor?.boothSpacingM !== undefined ? { boothSpacingM: planEditor.boothSpacingM } : {}),
+      });
       if (!result.ok) {
         clearArrangePreview();
         setEditMessage(result.message);
@@ -4150,7 +4197,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         && (event.key === 'r' || event.key === 'R')
       ) {
         event.preventDefault();
-        rotatePendingFacility(event.shiftKey ? -15 : 15);
+        const stepDeg = planEditor?.angleSnapDeg && planEditor.angleSnapDeg > 0 ? planEditor.angleSnapDeg : 15;
+        rotatePendingFacility(event.shiftKey ? -stepDeg : stepDeg);
         return;
       }
       // 待放设施：Enter 按当前幽灵位置落下。单击、拖动松手同一条路；以前 Enter 不提交，幽灵一直停着。
