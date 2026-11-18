@@ -91,7 +91,7 @@ import { OutdoorThoughtRecord, OutdoorWorkflowCard } from '../components/outdoor
 import type { OutdoorAgentBridge, OutdoorBrief } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
 import { matchesLocalOutdoorCommand } from '../lib/outdoor-local-commands';
-import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, confirmedOutdoorEntrances, outdoorEventSiteSummary } from '../lib/outdoor-event-logic';
+import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, confirmedOutdoorEntrances, outdoorEventSiteSummary, outdoorEventTemplatesSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
 import { buildSubEntranceProposal, matchSubEntranceCommand } from '../lib/sub-entrance';
 import type { PlanAnnotation, PlanFacility, PlanLevel, PlanMeasurement, PlanWorker, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -1836,7 +1836,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         const event = memory.event ?? null;
         const redirect = isShorelineEvent(event)
           ? '沿岸类（如钓鱼比赛）沿真实水岸线排：在对话里说「就沿着水岸线」，我直接出钓位预览。'
-          : `「${event ?? '这个活动'}」这版没有现成排布模板；在对话里直接说分区和物料（例如「室外展览区加 20 个摊位」），我按需求排，不套假模板。`;
+          : `「${event ?? '这个活动'}」这版没有现成排布模板（${outdoorEventTemplatesSummary()}）；在对话里直接说分区和物料（例如「室外展览区加 20 个摊位」），我按需求排，不套假模板。`;
         setOutdoorTask({ intent: `${memory.headcount ?? ''} 人${event ?? '活动'}`, state: 'blocked', action: redirect, steps: ['核对活动类型'], prompts: isShorelineEvent(event) ? ['就沿着水岸线'] : ['室外展览区加 20 个摊位'] });
         say({ role: 'agent', amber: true, text: redirect });
         return;

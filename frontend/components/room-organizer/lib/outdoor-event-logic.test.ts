@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildZoneEventProposal } from './zone-event-proposal';
-import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, outdoorCorridorStrips, outdoorRingsOverlap, outdoorRouteInsideRingLength } from './outdoor-event-logic';
+import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, outdoorCorridorStrips, outdoorRingsOverlap, outdoorRouteInsideRingLength, outdoorEventTemplates, outdoorEventTemplatesSummary } from './outdoor-event-logic';
+import type { OutdoorEventTemplate } from './outdoor-event-logic';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { planPointInRing } from './site-plan-editing';
 import type { PlanPoint, PlanNode, PlanRoute } from '../../../../supabase/functions/_shared/site-plan';
@@ -105,6 +106,50 @@ it('translated ENU anchors do not turn an 80x70m site into a different scale',()
  const ring=[{x:410,y:-230},{x:490,y:-230},{x:490,y:-160},{x:410,y:-160}];
  const p=build('讲座',45,ring,[{...south,position:{x:490,y:-197}}]);expect(p).not.toBeNull();
  for(const z of p!.zones)expect(facilityPlacementIssues(z.polygon,ring)).toEqual([]);
+});
+
+/**
+ * D1 模板注册表：识别正则/参数表/摆法以注册表条目为唯一来源，
+ * 「目前支持」话术与示例说法从注册表动态生成；注册新模板接线自动跟上，空注册表给统一话术。
+ */
+describe('D1 模板注册表',()=>{
+ /** 测试注入的最小模板：只验证注册表接线（识别/话术/派发），不承载真实几何。 */
+ function weddingTemplate(): OutdoorEventTemplate {
+  return {
+   id:'wedding', label:'婚礼', match:/婚礼/u, example:'30 人婚礼', note:'婚礼', aisleWidth:3,
+   measure:()=>({ width:22, depth:40, mainHeight:20, aisleEndY:30 }),
+   zones:ctx=>({ main:ctx.zone('reserved','婚礼区',1,7,ctx.width-2,ctx.layout.mainHeight), stage:null }),
+   fill:ctx=>(ctx.place('booth-2x2','仪式亭',4,10,2,2,ctx.main)?1:null),
+  };
+ }
+ it('注册新模板：识别、「目前支持」话术、提案派发都自动跟上；撤掉即回退',()=>{
+  const template=weddingTemplate();
+  outdoorEventTemplates.push(template);
+  try{
+   expect(supportedOutdoorEvent('户外婚礼')?.id).toBe('wedding');
+   expect(supportedOutdoorEvent('80 人市集')?.id).toBe('market');
+   expect(supportedOutdoorEvent('45 人讲座')?.id).toBe('lecture');
+   expect(outdoorEventIssue('婚礼',30)).toBeNull();
+   expect(outdoorEventIssue(null,null)).toContain('婚礼');
+   expect(outdoorEventTemplatesSummary()).toContain('婚礼');
+   const p=build('婚礼',30);
+   expect(p).not.toBeNull();
+   expect(p!.facilities.some(f=>f.name==='仪式亭')).toBe(true);
+  }finally{
+   outdoorEventTemplates.splice(outdoorEventTemplates.indexOf(template),1);
+  }
+  expect(supportedOutdoorEvent('户外婚礼')).toBeNull();
+ });
+ it('注册表空跑：统一话术，不虚构类型',()=>{
+  const saved=outdoorEventTemplates.splice(0,outdoorEventTemplates.length);
+  try{
+   expect(supportedOutdoorEvent('80 人市集')).toBeNull();
+   expect(outdoorEventTemplatesSummary()).not.toContain('市集');
+   expect(outdoorEventIssue(null,null)).toBe('先说活动类型，或沿岸类的「钓鱼比赛」。');
+  }finally{
+   outdoorEventTemplates.push(...saved);
+  }
+ });
 });
 /**
  * 2026-11-17 生产实测（杭州湖滨路）：判据从「中心线离墙多近」改成「中心线是否真的走进足迹」。
