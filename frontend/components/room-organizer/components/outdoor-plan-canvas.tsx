@@ -251,6 +251,7 @@ import { clampRingMoveToBoundary, nearestMergeTarget, nearestPolylineEdge, neare
 import { planSelectionCount } from '../lib/site-plan-selection';
 // 2026-11-16 用户指令：门放到室内区域边线 10px 内要贴边、朝向垂直墙面。
 import { snapDoorToIndoorEdge } from '../lib/plan-door-snap';
+import { isDoorTemplateId } from '../lib/plan-indoor-walls';
 import { autoNodeName, renamedNodeName } from '../lib/site-plan-node-names';
 import { WALK_ROLES, walkRoleCrowdType } from '../lib/walk-roles';
 import { crowdTypeForRole } from '../lib/plan-crowd-placement';
@@ -787,11 +788,8 @@ const CLICK_MAX_MOVE_PX = 4;
 /**
  * 2026-11-16 用户指令：门的六种图标（单开/双开/推拉/旋转/卷帘/折叠）。
  * 只有它们走「贴室内分区边线」的吸附；其它物件仍按原样自由摆放。
+ * 2026-11-18：判定搬到 `lib/plan-indoor-walls`，3D 立墙按同一份口径决定哪扇门开洞。
  */
-const DOOR_TEMPLATE_ID = /(^|:)(door|double-door|sliding-door|revolving-door|roller-shutter|folding-door)$/;
-function isDoorTemplateId(templateId: string): boolean {
-  return DOOR_TEMPLATE_ID.test(templateId);
-}
 /** 「再点一下会删」琥珀框的保留时长（ms）：手离开后不挂太久。 */
 const BOUNDARY_DELETE_ARM_MS = 2400;
 /** 刚插入顶点的宽限期（ms）：双击边线加点时，紧接着的那一下不该被当成“双击顶点删点”。 */
