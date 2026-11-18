@@ -74,7 +74,8 @@
   /* 圆角：大方，宁大勿小 */
   --r-sm: 10px; --r-md: 14px; --r-lg: 18px;
   /* 阴影：E0 默认无阴影，分区靠 1px hair */
-  --e1: 0 6px 18px rgba(20, 20, 22, .10);  /* 菜单/popover/tooltip/toast */
+  /* 浮层只此一层：左轨+侧栏一组、菜单、发布卡。图标、列表行、内部分隔线不用它。 */
+  --e1: 0 8px 24px rgba(20, 20, 22, 0.12), 0 2px 6px rgba(20, 20, 22, 0.06);
   --e2: 0 16px 48px rgba(20, 20, 22, .18); /* 模态/抽屉 */
   --e3: 0 1px 2px rgba(20, 20, 22, .06);   /* 唯一例外：左轨激活卡片 */
   /* 动效：120/200/300ms，统一缓动 */
@@ -1032,14 +1033,14 @@ body {
   }
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
-  /* 左栏 → 画布上的浮层卡。左缘让开 64px 图标轨，右缘留出地图。 */
+  /* 左栏 → 画布上的浮层卡。左缘让开图标轨，右缘留出地图。 */
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column {
     position: absolute; left: calc(var(--sc-nav-rail-width) + 12px); top: 12px;
     right: auto; bottom: auto; grid-column: auto; grid-row: auto;
     width: var(--sc-medium-card-w); height: min(62%, 640px); max-height: calc(100% - 24px);
     border: 1px solid var(--wk-hair); border-radius: 16px;
     background: var(--paper);
-    box-shadow: 0 12px 32px rgb(20 20 22 / 14%), 0 2px 6px rgb(20 20 22 / 6%);
+    box-shadow: var(--e1);
     z-index: 31;
   }
   /* 画布左上角的抬头/胶囊让到卡片右侧：卡片左缘离画布 12px，再留 24px 间距。
@@ -1079,7 +1080,7 @@ body {
 .sc-workbench {
   /* 色彩全部继承 :root 规范 token（docs/05-设计规范.md）；此处只留工作台字号映射。 */
   /* 收起后的模式轨。展开的短品牌条不另起一列，铺满左卡（--sc-left-card-width，240–480，默认 320）。 */
-  --sc-nav-rail-width: 64px;
+  --sc-nav-rail-width: 56px;
   --wk-muted: #71767E;
   --sc-ink: var(--wk-ink);
   --sc-muted: var(--wk-ink-soft);
@@ -1154,7 +1155,7 @@ body {
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--paper); border-right: 1px solid var(--wk-hair);
 }
-/* 卡片是这一列的内容，不能再 absolute 到工作台左缘盖住 64px 图标轨。 */
+/* 卡片是这一列的内容，不能再 absolute 到工作台左缘盖住图标轨。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel {
   position: relative !important; inset: auto !important; left: auto !important; right: auto !important;
@@ -1165,7 +1166,8 @@ body {
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
   display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 40;
-  flex: 0 0 var(--sc-nav-rail-width); width: var(--sc-nav-rail-width); padding: 10px 4px; box-sizing: border-box;
+  flex: 0 0 var(--sc-nav-rail-width); width: var(--sc-nav-rail-width); padding: 10px 0; box-sizing: border-box;
+  align-items: center;
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
   overflow: visible;
 }
@@ -1185,13 +1187,9 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand:hover {
   background: var(--wk-plane); color: var(--wk-ink);
 }
-/* 门洞也是四个 agent 之一：切到活动时跟其他三格一样，左侧一条绿。 */
+/* 门厅不参与反黑：选中不画左缘绿条，脸保持实心 --green-deep。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active {
   position: relative; color: var(--wk-ink);
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active::before {
-  content: ""; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px;
-  border-radius: 0 2px 2px 0; background: var(--wk-green);
 }
 /* 成员位：四个 bot 形体下面，圆片与「团队与权限」里的成员行同一个类，两处必然长得一样。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-team {
@@ -1293,26 +1291,15 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button:disabled { background: var(--plane); color: var(--faint); opacity: 1; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-tool:disabled:hover { background: transparent; color: var(--wk-ink-faint); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-rail-tool-group { display: flex; flex-direction: column; gap: 1px; flex: none; }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; gap: 1px; flex: none; }
-/* 左轨四格的状态点：活动一直在线，下面三格有事才醒、没事休眠，出错爆红。它是左轨唯一允许的点缀。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-head { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; width: 100%; }
+/* 左轨不再挂角点。绿点没有说明，产品里也不用它表示未读。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo {
   position: relative;
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot {
-  display: block; position: absolute; right: 3px; bottom: 3px; z-index: 1; width: 9px; height: 9px;
-  border-radius: 50%; box-sizing: border-box; background: var(--wk-ink-faint, #a8aba2);
-  border: 2px solid var(--wk-paper, #fff); pointer-events: none;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot.is-ok { background: var(--green, #4A7C59); }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot.is-warn { background: var(--err, #B4443C); }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot.is-ask { background: var(--warn, #96651F); }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-dot.is-busy { background: #0668e5; }
-/* 活动那格是门厅标：点位跟着形体走，不贴着轨边。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > span.sc-rail-dot { right: -3px; bottom: -3px; }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-primary {
-  display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; width: 100%;
 }
-/* 左轨图形钮：只给 40px 触达区，不套圆罩；悬停淡底，选中左侧绿条。 */
+/* 左轨图形钮：40px 触达区，图标在 56px 轨里居中。选中只靠图标反黑，不画左缘绿条。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc {
   width: 40px; height: 40px; min-height: 40px; padding: 0; flex: none; gap: 0;
   border: 0; border-radius: 12px; background: transparent; box-shadow: none;
@@ -1321,7 +1308,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
-/* Bingo D4：28px 槽里放开口环。环身保持墨色，不铺 warn/err 大圆，也不再叠角标。 */
+/* Bingo D4：28px 槽。未选中是开口环；选中是实心圆盘加纸色孔。不铺 warn/err 大圆，也不再叠角标。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
   display: grid; place-items: center; width: 28px; height: 28px; flex: none;
   box-sizing: border-box; position: relative;
@@ -1368,9 +1355,42 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active {
   background: transparent; color: var(--wk-ink); font-weight: 400;
 }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active::before {
-  content: ""; position: absolute; left: -4px; top: 7px; bottom: 7px; width: 3px;
-  border-radius: 0 2px 2px 0; background: var(--wk-green);
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active::before,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active::before {
+  content: none;
+}
+/* 桌面：左轨和旁边的侧栏是同一张浮起的纸。阴影只打在这一组外缘，中间仍是发丝线。
+   工作台 overflow:hidden，所以组要缩进，影子才不会被切掉。 */
+@media (min-width: 1081px) {
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
+    padding: 10px 8px 10px 10px;
+    box-sizing: border-box;
+  }
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail > .sc-mode-rail {
+    border-radius: 16px 0 0 16px;
+  }
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column:not(.is-empty-dock):not(.is-chrome-hidden)::before {
+    content: "";
+    position: absolute;
+    z-index: 30;
+    pointer-events: none;
+    top: 10px;
+    left: 10px;
+    bottom: 10px;
+    width: calc(var(--sc-nav-rail-width) + var(--sc-left-card-width, 320px));
+    border-radius: 16px;
+    box-shadow: var(--e1);
+  }
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column:not(.is-empty-dock) > .sc-left-column {
+    border-right: 0;
+    border-radius: 0 16px 16px 0;
+  }
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail:not(.has-left-column) > .sc-mode-rail,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-empty-dock > .sc-mode-rail {
+    border-radius: 16px;
+    border-right: 0;
+    box-shadow: var(--e1);
+  }
 }
 .sc-lux-direct { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
 .sc-lux-direct .sc-field { margin-bottom: 0; }
@@ -1379,7 +1399,7 @@ body {
 .sc-lux-direct input[type='file'] { width: 100%; min-width: 0; font: inherit; font-size: var(--sc-type-meta); }
 .sc-lux-direct-results { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--sc-type-meta); color: var(--sc-ink); overflow-wrap: anywhere; }
 /* 选址输入联想：挂在搜索行（position:relative）下方的浮层，打字时不把地图挤下去。 */
-.sc-amap-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; margin: 0; padding: 4px; list-style: none; display: flex; flex-direction: column; gap: 2px; background: var(--paper); border: 1px solid var(--sc-line); border-radius: var(--r-md); box-shadow: 0 12px 30px rgba(20, 20, 22, 0.14); max-height: 240px; overflow-y: auto; }
+.sc-amap-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; margin: 0; padding: 4px; list-style: none; display: flex; flex-direction: column; gap: 2px; background: var(--paper); border: 1px solid var(--sc-line); border-radius: var(--r-md); box-shadow: var(--e1); max-height: 240px; overflow-y: auto; }
 .sc-amap-suggest button { display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--r-sm); background: none; font: inherit; color: var(--sc-ink); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .sc-amap-suggest button .sc-note { color: var(--sc-muted); }
 .sc-amap-suggest button[aria-selected='true'], .sc-amap-suggest button:hover { background: var(--sc-accent-soft, var(--plane)); }
@@ -2640,13 +2660,7 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   overflow: visible;
   background: var(--paper, #FFFFFF);
   border: 1px solid var(--hair, #E4E4E7);
-  /* 深色地图上 --e1（单层 alpha .10）几乎看不见。仍是 v17 的两族：
-     贴边实影 + 底下软抬升（中间一层衔接）。颜色停在墨色 rgb(20,20,22)，不改成黑糊。
-     纸面上测过的约 .15 / .11 / .22 在地图上不够，这里把浓度和轻微扩散加大。 */
-  box-shadow:
-    0 1.2px 2px 0.4px rgba(20, 20, 22, 0.62),
-    0 6px 10px 0.5px rgba(20, 20, 22, 0.36),
-    0 18px 36px 2px rgba(20, 20, 22, 0.48);
+  box-shadow: var(--e1);
   color: var(--ink, #141416);
   font-family: var(--font-sans);
 }

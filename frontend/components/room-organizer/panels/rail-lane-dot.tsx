@@ -16,9 +16,9 @@ export function railTone(lane: LaneId, activity: LaneActivity, open: boolean): R
 }
 
 /**
- * 左轨那枚 9px 状态点。它是左轨唯一允许的点缀（design-spec §一.4）。
- * tone 显式给的时候用它（比如 Bingo 直接读 agent 的状态），否则按这条线的活儿算。
- * 休眠不画点：没被点到又没活儿的那几格挂一圈灰点，只会让人以为那是个开关。
+ * 左轨状态点已从轨上撤下（2026-11-18）。
+ * 绿点没有产品说明，也不表示未读条数，所以工作台不再挂这枚 9px 圆点。
+ * 车道忙闲仍记在 lane-status 里，供面板自己用；这里不要再画回角标。
  */
 export function RailLaneDot({ lane, open = false, tone }: {
   lane: LaneId;
