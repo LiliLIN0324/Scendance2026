@@ -24,6 +24,7 @@ export function OutdoorWalkthroughSection({
   gapsLine,
   onAsOf,
   reportLine,
+  nextLine,
 }: {
   initialBook: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => WalkthroughBook | null;
@@ -38,6 +39,8 @@ export function OutdoorWalkthroughSection({
   onAsOf?: (value: string) => WalkthroughBook | null;
   /** 报告段落自检的一行话（`formatSectionCheck()` 返回值）；不传就不显示。 */
   reportLine?: string;
+  /** 下一步干哪条（`formatNextGap()` 返回值）；不传就不显示。 */
+  nextLine?: string;
 }): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [book, setBook] = useState(initialBook);
@@ -83,6 +86,14 @@ export function OutdoorWalkthroughSection({
               className="mt-2 whitespace-pre-line rounded-lg bg-neutral-50 p-2 text-[11px] leading-relaxed text-neutral-600"
             >
               {gapsLine}
+            </p>
+          )}
+          {nextLine && (
+            <p
+              aria-label="下一步"
+              className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-relaxed text-amber-800"
+            >
+              {nextLine}
             </p>
           )}
           {reportLine && (

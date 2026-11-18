@@ -2341,3 +2341,10 @@ it("报告段落自检：六段全在也只说“齐”，不说合格", () => {
   expect(line).not.toContain("可发布");
   expect(line).not.toContain("合格");
 });
+
+it("下一步提示与待补清单同源，且不含发布结论", () => {
+  const line = flow.nextGap();
+  expect(line.startsWith("下一步：#")).toBe(true);
+  expect(line).toContain("先");
+  expect(line).not.toContain("可发布");
+});

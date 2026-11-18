@@ -36,7 +36,7 @@ import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
 import { CASE_IDS, FIXED_DATA_CASES, isAllGreen, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
 import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
-import { formatGapList, missingEvidence } from "../lib/outdoor-release-gaps";
+import { formatGapList, formatNextGap, missingEvidence } from "../lib/outdoor-release-gaps";
 import { ledgerToCsv } from "../lib/outdoor-release-csv";
 import { downloadLedgerCsv as saveLedgerCsv } from "../lib/outdoor-release-csv";
 import { formatSectionCheck } from "../lib/outdoor-report-sections";
@@ -2774,6 +2774,8 @@ export function useOutdoorAgentWorkflow(input: {
     },
     /** 待补清单：哪几条还差什么，一条一行（空台账写“没有台账”，不写“无缺口”）。 */
     releaseGaps: () => formatGapList(currentRelease().bundle.ledger),
+    /** 下一步干哪条：号最小的待补用例 + 先补哪个信号（不下发布结论）。 */
+    nextGap: () => formatNextGap(currentRelease().bundle.ledger),
     /** 台账 CSV：表头 + 11 行，五列无“结论”（结论只由状态卡算）。 */
     releaseCsv: () => ledgerToCsv(currentRelease().bundle.ledger),
     /** 把台账存成本地 .csv（带 BOM）；导不出时只返回 ok:false，不抛。 */

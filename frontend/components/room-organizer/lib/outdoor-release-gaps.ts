@@ -84,3 +84,35 @@ export function missingRows(ledger: readonly CaseLedgerRow[]): number[] {
   const present = new Set(ledger.map((row) => row.id));
   return CASE_IDS.filter((id) => !present.has(id));
 }
+
+/**
+ * “下一步干哪条”（轮次 99）。
+ *
+ * 待补清单是一整张表，人站在现场只需要一句：**这一条先补哪个信号**。
+ * 取最小的试用例号——号小的先验收，顺序与验收标准一致，不按“好补的先补”。
+ * 不产生任何“补完就能发”的暗示：末句只说目标是什么。
+ */
+export function nextGap(
+  ledger: readonly CaseLedgerRow[],
+): { id: number; title: string; missing: readonly GapKind[] } | null {
+  const [first] = missingEvidence(ledger);
+  if (!first) return null;
+  return { id: first.id, title: first.title, missing: first.missing };
+}
+
+export function formatNextGap(ledger: readonly CaseLedgerRow[]): string {
+  if (ledger.length === 0) {
+    return '下一步：没有台账（未算，不等于没活儿）';
+  }
+  const next = nextGap(ledger);
+  if (!next) {
+    const { allGreen, total } = summarizeLedger(ledger);
+    return `下一步：台账 ${total} 条都补齐了（三类全绿 ${allGreen} 条）—— 能不能发仍以状态卡为准`;
+  }
+  const where: Record<GapKind, string> = {
+    fixed: '去补固定数据用例',
+    browser: '去真实浏览器里跑一遍',
+    cloud: '去云端核实一次',
+  };
+  return `下一步：#${next.id} ${next.title} —— 先${where[next.missing[0]!]}`;
+}
