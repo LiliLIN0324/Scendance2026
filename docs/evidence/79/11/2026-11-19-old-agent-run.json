@@ -1,0 +1,168 @@
+{
+  "ranAt": "2026-11-18T22:59:54.052Z",
+  "account": "2487238628@qq.com",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "projects": {
+    "status": 200,
+    "body": [
+      {
+        "id": "583dbff1-a3f0-47a4-bdea-d7598e7aa76b",
+        "name": "新活动 11-18 07:46",
+        "revision": 0,
+        "studio_id": "8b033463-3511-4ac4-96d3-e558e49f507f",
+        "updated_at": "2026-11-17T23:46:26.524336+00:00",
+        "lease_expires": "2026-11-17T23:47:57.096163+00:00",
+        "current_editor": null
+      },
+      {
+        "id": "99acd050-6b07-47a6-bec8-0b1f14aafe39",
+        "name": "自动验证-确认循环",
+        "revision": 0,
+        "studio_id": "8b033463-3511-4ac4-96d3-e558e49f507f",
+        "updated_at": "2026-11-10T19:36:34.095481+00:00",
+        "lease_expires": "2026-11-18T11:19:33.289759+00:00",
+        "current_editor": null
+      },
+      {
+        "id": "9a889d2b-0e71-45bd-90b7-d9f36f7b665d",
+        "name": "周末共创工作坊",
+        "revision": 0,
+        "studio_id": "8b033463-3511-4ac4-96d3-e558e49f507f",
+        "updated_at": "2026-11-10T04:00:54.653155+00:00",
+        "lease_expires": "2026-11-18T20:21:05.370606+00:00",
+        "current_editor": null
+      },
+      {
+        "id": "73b1a823-1faf-4bb9-96bc-13a1332a8726",
+        "name": "Flow C 直径测试",
+        "revision": 0,
+        "studio_id": "8b033463-3511-4ac4-96d3-e558e49f507f",
+        "updated_at": "2026-11-10T03:21:44.616675+00:00",
+        "lease_expires": "2026-11-10T03:39:12.055759+00:00",
+        "current_editor": null
+      }
+    ]
+  },
+  "projectList": [
+    {
+      "id": "583dbff1-a3f0-47a4-bdea-d7598e7aa76b",
+      "name": "新活动 11-18 07:46",
+      "revision": 0
+    },
+    {
+      "id": "99acd050-6b07-47a6-bec8-0b1f14aafe39",
+      "name": "自动验证-确认循环",
+      "revision": 0
+    },
+    {
+      "id": "9a889d2b-0e71-45bd-90b7-d9f36f7b665d",
+      "name": "周末共创工作坊",
+      "revision": 0
+    },
+    {
+      "id": "73b1a823-1faf-4bb9-96bc-13a1332a8726",
+      "name": "Flow C 直径测试",
+      "revision": 0
+    }
+  ],
+  "agentRuns_583dbff1-a3f0-47a4-bdea-d7598e7aa76b": {
+    "status": 404,
+    "body": "{\"error\":{\"code\":\"ROUTE_NOT_FOUND\"}}"
+  },
+  "agentRuns_99acd050-6b07-47a6-bec8-0b1f14aafe39": {
+    "status": 404,
+    "body": "{\"error\":{\"code\":\"ROUTE_NOT_FOUND\"}}"
+  },
+  "agentRuns_9a889d2b-0e71-45bd-90b7-d9f36f7b665d": {
+    "status": 404,
+    "body": "{\"error\":{\"code\":\"ROUTE_NOT_FOUND\"}}"
+  },
+  "menuText": "当前物料 0 件 · 场地容量待核验 新会话 执行资料    周末共创工作坊 1 个  当前任务 · 搜索目标地点 请核对活动实际范围，自动为你框选项目区域 搜索地点  在地图上手画活动范围 80 人发布会·户外广场 30×20 告诉 Agent 要改的 默认（按服务端配置） 图层 2D    工具 endTree endTree的工作室  所有方案  物料  设置  支持 › 退出登录",
+  "menuButtons": [
+    {
+      "t": "▸活动包与图元341",
+      "a": null
+    },
+    {
+      "t": "",
+      "a": "收起 活动"
+    },
+    {
+      "t": "周末共创工作坊",
+      "a": "重命名当前活动「周末共创工作坊」"
+    },
+    {
+      "t": "1 个 ",
+      "a": "本机活动，当前「周末共创工作坊」，共 1 个，点按展开"
+    },
+    {
+      "t": " 在地图上手画活动范围",
+      "a": null
+    },
+    {
+      "t": "80 人发布会·户外广场 30×20",
+      "a": "试试这样描述你的活动：80 人发布会，户外广场 30×20"
+    },
+    {
+      "t": "所有方案",
+      "a": null
+    },
+    {
+      "t": "存为方案",
+      "a": null
+    },
+    {
+      "t": "删除活动",
+      "a": null
+    },
+    {
+      "t": "新活动 11-18 07:4623 小时前更新",
+      "a": "打开 新活动 11-18 07:46，双击进入"
+    },
+    {
+      "t": "自动验证-确认循环11/11 更新",
+      "a": "打开 自动验证-确认循环，双击进入"
+    },
+    {
+      "t": "周末共创工作坊11/10 更新",
+      "a": "打开 周末共创工作坊，双击进入"
+    },
+    {
+      "t": "Flow C 直径测试11/10 更新",
+      "a": "打开 Flow C 直径测试，双击进入"
+    },
+    {
+      "t": "＋新方案",
+      "a": "新方案"
+    },
+    {
+      "t": "刷新",
+      "a": null
+    },
+    {
+      "t": "本方案",
+      "a": null
+    },
+    {
+      "t": " 所有方案",
+      "a": null
+    }
+  ],
+  "openedProject": null,
+  "afterOpenText": "当前物料 0 件 · 场地容量待核验 新会话 执行资料    周末共创工作坊 1 个  当前任务 · 搜索目标地点 请核对活动实际范围，自动为你框选项目区域 搜索地点  在地图上手画活动范围 30 人圆桌晚宴·户外露台 15×10 告诉 Agent 要改的 默认（按服务端配置） 图层 2D    工具 endTree endTree的工作室  所有方案  物料  设置  支持 › 退出登录",
+  "apiCalls": [
+    "GET 200 /functions/v1/scene-api/projects"
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: the server responded with a status of 404 ()"
+  ]
+}
