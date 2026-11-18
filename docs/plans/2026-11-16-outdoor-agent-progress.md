@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：面板三行提示（下一步 / 待补清单 / 报告段落自检）合成一个**默认收起的 `details` 折叠块**「开跑前检查（下一步 · 待补 · 报告几段）」，三行都没时不渲染空块；区 19/19、hook 88/88。**TLS 握手连续第九轮失败**，推送不通。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–100 切片（本地）。9222 五十六轮不通。下一条：给折叠块加“展开时把三行拼成一段文本”的复制按钮（现场贴到群里用）。首条命令 `cd frontend; npm test -- components/room-organizer/components/outdoor-walkthrough-section.test.tsx`。
+- 下一条操作：写了**PR 逐字草稿** `docs/plans/2026-11-19-outdoor-m7-pr-draft.md`（标题、为什么、六组切片、验证命令与原始输出、刻意没做、拆分评审建议、合并后仍需人做的事），并提供本批完整证据：`outdoor-*`/`*walkthrough*` 测试 **69 文件 / 760 测试全过**，`tsc --noEmit` 0 行。**TLS 握手连续第十轮失败**，推送仍不通。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 本地 `388a87a5`，领先 main 47 笔（28 文件 +3322/−32）。9222 五十七轮不通。下一条：网络恢复后直接按草稿开 PR；在恢复前，把 #2/#5 的固定数据覆盖缺口画成一张对照表（哪条已有固定数据用例、哪条只有离线用例）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-gaps.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 11:00 · 自动轮次 101 · PR 草稿与可粘贴证据
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 11:00，自动轮次 101
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / PR 草稿 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `388a87a5`、领先 main 47 笔
+交付：`docs/plans/2026-11-19-outdoor-m7-pr-draft.md`（可整段粘贴的 PR 正文）
+验证（固定数据）：本批 outdoor/walkthrough 测试 **69 文件 / 760 测试全过**；`tsc --noEmit` 0 行；对比 main：28 文件 +3322/−32、47 笔
+真实浏览器/云端：仍未验（9222 第五十七轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **推不上去就把“要推什么”写死**：网络是我解不了的，但 PR 正文、验证输出、刻意没做的事都能先写清；等网一通就是复制粘贴，不再现场回忆。
+- **草稿里写清“这不是证据”**：顶部就注明“不要把本文件当作已合并的证据”，避免以后被人当成 PR 已开。
 
 ### 2026-11-19 10:00 · 自动轮次 100 · 开跑前检查折叠（三行变一块）
 
