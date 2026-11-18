@@ -22,6 +22,10 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     include: ['app/**/*.test.{ts,tsx}', 'components/**/*.test.{ts,tsx}', 'lib/**/*.test.{ts,tsx}'],
+    // 真实 GLB 解码 / GLTF 重载与卫星贴图用例单跑就要 3–8 秒；并行 worker
+    // 下 5 秒默认值会产生假超时。放宽上限，不改任何断言。
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
     // Node 20: undici 8 (via jsdom 30) needs worker_threads.markAsUncloneable.
     execArgv: ['--require', './polyfill-mark-as-uncloneable.cjs'],
   },
