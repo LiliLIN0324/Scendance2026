@@ -19,6 +19,7 @@ import {
   writePlanGroundSource,
 } from "../lib/plan-basemap-source";
 import { readMapSlots, resetMapSlotsCacheForTest } from "../lib/map-source-slots";
+import { buildScotiabankReplicaPlan } from "../lib/replica-cases";
 type CanvasProps = ComponentProps<
   typeof import("./outdoor-plan-canvas").default
 >;
@@ -113,6 +114,18 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+it("经典案例载入、显示与本机保存保持核验过的设施占地", async () => {
+  const projectId = "replica-scotiabank-hockey-day-canada";
+  const plan = buildScotiabankReplicaPlan();
+  saveOutdoorProjectRecord({ v: 1, projectId, name: "经典案例 · Scotiabank", createdAt: "2026-11-18T00:00:00.000Z", updatedAt: "2026-11-18T00:00:00.000Z", plan });
+  const saveState = vi.fn();
+  render(<Overlay projectId={projectId} onSaveStateChange={saveState} />);
+  expect(state.canvas?.plan).toEqual(plan);
+  expect(state.canvas?.initialView).toEqual({ lng: -123.370099, lat: 48.423153, zoom: 18, bearing: -285 * Math.PI / 180 });
+  expect(state.canvas?.plan.facilities.find(f => f.name === "40×50 公共帐篷")?.size).toEqual({ width: 12.192, depth: 15.24 });
+  await waitFor(() => expect(saveState).toHaveBeenCalledWith(expect.objectContaining({ state: "saved" })), { timeout: 2000 });
+  expect(readOutdoorProjectRecord(projectId)?.plan).toEqual(plan);
 });
 it("keeps outside guide actions working and exposes a clean map details panel", () => {
   render(<Overlay projectId="guide-outside-action" seedPlan={createStarterOutdoorPlan()} />);

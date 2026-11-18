@@ -247,7 +247,7 @@ ${sections}
     {rows.map(row => <section key={row.replica.id} style={{ marginBottom: 28 }}>
       <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>
         {row.replica.title}
-        <small style={{ color: '#6b7280', fontWeight: 400 }}>（{row.replica.category} · {row.replica.region}）</small>
+        <small style={{ color: '#6b7280', fontWeight: 400 }}>（{row.replica.category} · {row.replica.region}{row.replica.titleEn ? ` · ${row.replica.titleEn}` : ''}）</small>
       </h2>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <figure style={figureStyle}>

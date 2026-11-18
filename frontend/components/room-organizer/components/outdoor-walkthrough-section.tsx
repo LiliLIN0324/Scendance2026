@@ -1,0 +1,115 @@
+"use client";
+
+import { useState } from "react";
+import type { BrowserEvidence } from "../lib/outdoor-release-status-card";
+import type { WalkthroughBook } from "../lib/outdoor-walkthrough-book";
+import { OutdoorWalkthroughBoard } from "./outdoor-walkthrough-board";
+
+/**
+ * 走查区（M7.1，轮次 77）。
+ *
+ * 工作流卡底部那一块：一个「展开/收起」按钮 + 面板。抽出来是为了能单测——
+ * 不然只能靠把整张 800 行的卡连同 flow 桩一起渲染。
+ *
+ * 状态归属：**外层（hook）才持记录本**，这里只留一份显示用的副本；
+ * `onMark` 返回非空才更新副本（非法编号返回 null，界面不动）。
+ */
+export function OutdoorWalkthroughSection({
+  initialBook,
+  onMark,
+  defaultOpen = false,
+  cloudPass,
+  onCloud,
+  onExportCsv,
+  gapsLine,
+  onAsOf,
+  reportLine,
+  nextLine,
+}: {
+  initialBook: WalkthroughBook;
+  onMark: (id: number, state: BrowserEvidence) => WalkthroughBook | null;
+  defaultOpen?: boolean;
+  cloudPass?: readonly number[];
+  onCloud?: (id: number, pass: boolean) => void;
+  /** 给就渲染「导出 CSV」；不传就整块不出现（与云端那列同一个规矩）。 */
+  onExportCsv?: () => void;
+  /** 待补清单原文（`formatGapList()` 的返回值）；不传就不显示这一块。 */
+  gapsLine?: string;
+  /** 给就渲染日期输入框；返回非空才更新副本（与 `onMark` 同一规矩）。 */
+  onAsOf?: (value: string) => WalkthroughBook | null;
+  /** 报告段落自检的一行话（`formatSectionCheck()` 返回值）；不传就不显示。 */
+  reportLine?: string;
+  /** 下一步干哪条（`formatNextGap()` 返回值）；不传就不显示。 */
+  nextLine?: string;
+}): JSX.Element {
+  const [open, setOpen] = useState(defaultOpen);
+  const [book, setBook] = useState(initialBook);
+  return (
+    <div className="ap-card-walkthrough">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          {open ? "收起走查记录" : "走查记录（验收时逐条标记）"}
+        </button>
+        {onExportCsv && (
+          <button
+            type="button"
+            aria-label="导出台账 CSV"
+            title="五列：编号 / 用例 / 固定数据 / 浏览器 / 云端；没有结论列"
+            onClick={() => onExportCsv()}
+          >
+            导出 CSV
+          </button>
+        )}
+      </div>
+      {open && (
+        <>
+          <OutdoorWalkthroughBoard
+            book={book}
+            onMark={(id, state) => {
+              const next = onMark(id, state);
+              if (next) setBook(next);
+            }}
+            {...(cloudPass ? { cloudPass } : {})}
+            {...(onCloud ? { onCloud } : {})}
+            {...(onAsOf
+              ? {
+                  onAsOf: (value: string) => {
+                    const next = onAsOf(value);
+                    if (next) setBook(next);
+                  },
+                }
+              : {})}
+          />
+          {(nextLine || gapsLine || reportLine) && (
+            <details className="mt-2 rounded-lg bg-neutral-50 p-2" aria-label="开跑前检查">
+              <summary className="cursor-pointer text-[11px] text-neutral-600">
+                开跑前检查（下一步 · 待补 · 报告几段）
+              </summary>
+              {nextLine && (
+                <p
+                  aria-label="下一步"
+                  className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-relaxed text-amber-800"
+                >
+                  {nextLine}
+                </p>
+              )}
+              {gapsLine && (
+                <p
+                  aria-label="待补清单"
+                  className="mt-2 whitespace-pre-line text-[11px] leading-relaxed text-neutral-600"
+                >
+                  {gapsLine}
+                </p>
+              )}
+              {reportLine && (
+                <p aria-label="报告段落自检" className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+                  {reportLine}
+                </p>
+              )}
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
