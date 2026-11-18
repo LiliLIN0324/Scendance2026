@@ -62,6 +62,7 @@ async function readState(page) {
       view: text('[data-testid="outdoor-walk-view"]'),
       retry: document.querySelector('[data-testid="outdoor-walk-avatar-retry"]') !== null,
       cam: dbg?.rig?.camPos ?? null,
+      auditDebug: dbg?.audit ?? null,
     };
   });
 }
