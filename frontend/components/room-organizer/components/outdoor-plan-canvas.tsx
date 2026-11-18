@@ -4,7 +4,7 @@ import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIss
 import { firstModelSlug } from '../lib/asset-namespace';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
-import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from '../lib/outdoor-plan-protection';
+import { boundaryAtNewAnchor, canReanchorOutdoorPlan, clearPlanBoundary, planForPickedVenue } from '../lib/outdoor-plan-protection';
 import { CAR_ROW_LABEL, PLAN_VEHICLE_ROW_LABEL, VEHICLE_TYPES } from '../lib/vehicle-types';
 import { vehicleLabelOf } from '../lib/vehicle-entities';
 
@@ -540,6 +540,11 @@ export interface OutdoorPlanCanvasProps {
    * 名称标签；换地点/清空即重画，不参与统计、交付或冲突判定。
    */
   searchPin?: { lng: number; lat: number; label: string } | null;
+  /**
+   * 2026-11-19 用户：「点了还是没有落在场地上」——实景扫描的落位钉（plan ENU）。
+   * 与搜地点钉同一支笔，但它是「这套点云落在哪」的只读标记：不写进 plan、不参与命中测试。
+   */
+  scanPin?: { point: PlanPoint; label: string } | null;
   /**
    * 2026-11-12 搜地点「选区」：行政区边界环（经纬度），画成浅填充 + 虚线描边。
    * 与定位钉同性质——纯视图辅助，不写进 plan，不参与统计与冲突判定。
@@ -1435,6 +1440,11 @@ export interface OutdoorPlanCanvasHandle {
   dropCatalogAt(payload: PlanCatalogDrag, point: PlanPoint): boolean;
   /** 2026-11-16 点物料卡：进入待放置，随后点画布/地面落位。 */
   armCatalogFacility(payload: PlanCatalogDrag): boolean;
+  /**
+   * 2026-11-19 实景扫描「点地图落位」：客户端坐标 → plan ENU（米）。
+   * 舞台还没建好时返回 null，调用方据此不改落点，不猜坐标。
+   */
+  planPointAt(clientX: number, clientY: number): PlanPoint | null;
 }
 
 /**
@@ -1546,6 +1556,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onInspectorChange,
   onModeChange,
   searchPin,
+  scanPin,
   searchArea,
   routeProposal,
   zoneProposal,
@@ -1613,6 +1624,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [renamingLevelId, setRenamingLevelId] = useState<string | null>(null);
   const [levelNameDraft, setLevelNameDraft] = useState('');
   const [deleteArmLevelId, setDeleteArmLevelId] = useState<string | null>(null);
+  // 2026-11-19：整条删红线也走两段式（第一次点亮、第二次确认），与删图层同一手感，不弹窗打断画布。
+  const [boundaryDeleteArmed, setBoundaryDeleteArmed] = useState(false);
   const panRef = useRef<{ x: number; y: number }>();
   const layerStateRef = useRef<LayerVisibility>(visibility ?? defaultLayerVisibility());
   // 底图瓦片缓存：同一 URL 只加载一次，缺当前层级时用上一级兜底 —— 缩放不再一闪一闪。
@@ -1623,6 +1636,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const drawRef = useRef<() => void>(() => {});
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
+  // 2026-11-19：实景扫描落位钉（plan ENU），与搜钉同一条 props → ref → 重绘的路。
+  const scanPinRef = useRef<{ point: PlanPoint; label: string } | null>(scanPin ?? null);
   const searchAreaRef = useRef<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(searchArea ?? null);
   // V-2d：流线提案预览（同一路数；应用走 handle.applyRoutes，预览本身不进 plan）。
   const routeProposalRef = useRef<{ routes: PlanRoute[]; nodes: PlanNode[] } | null>(routeProposal ?? null);
@@ -3852,6 +3867,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       );
       drawSearchPin({ ctx: planCtx, viewport }, { point: pinPoint, label: pin.label });
     }
+    // 2026-11-19 实景扫描落位钉：钉在「这套点云落在哪」，跟搜地点钉分开画，互不顶掉。
+    const scanPinNow = scanPinRef.current;
+    if (scanPinNow) {
+      drawSearchPin({ ctx: planCtx, viewport }, { point: scanPinNow.point, label: scanPinNow.label });
+    }
 
     // 7b) V-2d：流线提案预览（虚线 + 出入口圆点）——画在搜钉之上，应用前不进 plan。
     if (routeProposalRef.current) {
@@ -3958,6 +3978,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     searchPinRef.current = searchPin ?? null;
     drawRef.current();
   }, [searchPin]);
+  // 2026-11-19：实景扫描落位钉变化（含落位/清空）同样立即重绘。
+  useEffect(() => {
+    scanPinRef.current = scanPin ?? null;
+    drawRef.current();
+  }, [scanPin]);
   // 选区：同一定位钉的同步路数（props → ref → 重绘）。
   useEffect(() => {
     searchAreaRef.current = searchArea ?? null;
@@ -4810,6 +4835,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return true;
     },
     getView: () => currentViewport(),
+    planPointAt: (clientX: number, clientY: number) => eventPlanPoint({ clientX, clientY })?.pt ?? null,
     getMode: () => modeRef.current,
     setMode: (next: string) => setMode(next as PlanningEditMode),
     setMeasureKind: (kind: PlanMeasureToolKind) => applyMeasureKind(kind),
@@ -5751,6 +5777,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setMode(tool);
     if (tool === 'boundary') {
       // 2026-11-11：边界重画入口回归（OnePlan 化时曾随顶部工具条丢失）——画完闭合即替换起步矩形。
+      setBoundaryDeleteArmed(false);
       setEditMessage(boundaryWasLocked
         ? '重画用地红线：用地原为锁定，已自动解锁；沿用地单击加顶点，双击或点回起点闭合替换旧红线，Esc 取消。'
         : '重画用地红线：沿用地单击加顶点，双击或点回起点闭合替换旧红线；Esc 取消。');
@@ -13373,6 +13400,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                   白框由红线自动送（外扩 20 m）、红线顶出去自动重置，微调直接在画布上
                                   拖白框的边/角（可锁定）。拖矩形入口撤掉后 mode='scope' 那条路径没有
                                   入口了，画布代码先原样留着（用户：死代码先不清理）。 */}
+                              {/* 2026-11-19 用户实测：「用地红线不能整个删掉」——重画只能替换，缺一个整条清空。
+                                  两段式（点一次点亮、第二次确认）与删图层同一手感；只清场地壳与设计范围，
+                                  已摆的分区/物料/流线保留，锚点不动，整批可 Ctrl+Z 撤销。 */}
+                              {plan.boundary.length >= 3 && !readOnly && renderOneplanItemRow({
+                                key: 'catalog-boundary-delete',
+                                testId: 'catalog-boundary-delete',
+                                label: boundaryDeleteArmed ? '确认删除红线' : '删除用地红线',
+                                active: boundaryDeleteArmed,
+                                onClick: () => {
+                                  if (!boundaryDeleteArmed) {
+                                    setBoundaryDeleteArmed(true);
+                                    setEditMessage('再点一次「删除用地红线」：整条红线与设计范围会清空，分区、物料、流线保留，锚点不动。Ctrl+Z 可撤销。');
+                                    return;
+                                  }
+                                  setBoundaryDeleteArmed(false);
+                                  if (mode === 'boundary') setMode('view');
+                                  commitPlan(clearPlanBoundary(planRef.current));
+                                  setEditMessage('用地红线已整条删除（分区与物料保留，锚点不动）。按 Ctrl+Z 可以恢复，或点「用地红线」重新画一圈。');
+                                },
+                                title: '整条清空用地红线（连同设计范围）；已摆内容保留，可撤销',
+                                icon: <BoundarySwatch size={22} />,
+                              })}
                               {plan.boundary.length >= 3 && renderOneplanItemRow({
                                 key: 'catalog-scope-expand',
                                 testId: 'catalog-scope-expand',
