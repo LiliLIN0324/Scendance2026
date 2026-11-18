@@ -1031,6 +1031,19 @@ useEffect(() => {
     check();
     return { url,isCurrent };
   }, [activitySession.isCurrent,sessionToken,floorSession.isCurrent,floorToken]);
+  // G3：右上角分享弹窗的「允许钉评」链接与 Bingo 用同一个生成器，不再各造一套。
+  const [reviewLink, setReviewLink] = useState('');
+  const requestReviewLink = useCallback(() => {
+    void issueReviewLink().then(result => setReviewLink(result.url)).catch(() => { /* 失败原因由既有气泡/状态行说明 */ });
+  }, [issueReviewLink]);
+  // G3：Bingo 的「发给客户评审」不另发一套链接，只打开右上角同一个弹窗；弹窗默认允许钉评。
+  const openReviewShare = useCallback(async () => {
+    setOutdoor2DOpen(true);
+    const result = await issueReviewLink();
+    setReviewLink(result.url);
+    window.setTimeout(() => outdoorOverlayRef.current?.openReviewShare(), 80);
+    return result;
+  }, [issueReviewLink]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
   const publishVersion = useCallback(async () => {
     const snapshot = controller.getSnapshot();
@@ -4651,7 +4664,7 @@ useEffect(() => {
         onSelectMode: selectWorkbenchMode,
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
-        onIssueReviewLink: issueReviewLink,
+        onIssueReviewLink: openReviewShare,
         onFit: fitToRoom,
         onOpenReference: () => businessToolsRef.current?.openReference(),
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
@@ -4957,7 +4970,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})} {...(outdoor2DOpen || outdoor3dTakeover ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} onApply={scopedApply} onPlaceScene={placeScenePreset} workflow={spaceWorkflow} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} onApply={scopedApply} onPlaceScene={placeScenePreset} workflow={spaceWorkflow} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -4971,6 +4984,8 @@ useEffect(() => {
             if (id) selectOnly(id, { keepPanel: true });
           }}>
           <ShortcutCoach mode={shortcutCoachMode} enabled={isActive} />
+          {/* 规划信息从 Bingo 迁回画布：Bingo 只留「我的完成 / 对方的修改」，四页签不再占用审校台。 */}
+          {(outdoor2DOpen || outdoor3dTakeover) ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 12, left: 12, width: 320, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 40 }} /> : null}
           {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
               供全屏 OutdoorPlan3D 的左键物件手势用（canvasApiRef → pointerFromPlan 管线）。
               2026-11-12 统一右轨（用户拍板）：「发布」2D/3D 都固定在右轨顶部（tool-share），
@@ -4989,6 +5004,8 @@ useEffect(() => {
               legacyPlanProjectId={legacyOutdoorPlanProjectId}
               anchor={isOutdoorProject ? null : (layout.sceneAnchor ?? layout.mapLngLat ?? null)}
               activityName={isOutdoorProject ? null : layout.name}
+              reviewLink={reviewLink}
+              onRequestReviewLink={requestReviewLink}
               onSaveStateChange={handleOutdoorSaveState}
               onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}
               onModeChange={handleOutdoorCanvasMode}

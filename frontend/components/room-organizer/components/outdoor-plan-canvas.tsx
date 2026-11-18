@@ -1,5 +1,6 @@
 ﻿'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
+import { onOutdoorPlanIssueFocus, publishOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
 import { firstModelSlug } from '../lib/asset-namespace';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
@@ -7448,6 +7449,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setInfoMessage(`已在地图上定位「${row.name}」。`);
   }
 
+  // 创作者 Bingo 的问题条目不直接持有画布状态：它发一个键，这里按同一份清单定位。
+  const infoIssuesRef = useRef<PlanLocatableIssue[]>([]);
+  const locateIssueRef = useRef(locateIssue);
+  locateIssueRef.current = locateIssue;
+  useEffect(() => onOutdoorPlanIssueFocus(key => {
+    const entry = infoIssuesRef.current.find(item => item.key === key);
+    if (entry) locateIssueRef.current(entry);
+  }), []);
+
   /** 问题条目 → 地图：居中锚点，关联实体可选中。 */
   function locateIssue(entry: PlanLocatableIssue) {
     centerViewOn(entry.anchor);
@@ -9550,6 +9560,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       workerId: item.workerId,
     })),
   ];
+  // 同一份问题清单发布给 Bingo 审校台；内容没变时总线自己会去重。
+  infoIssuesRef.current = infoIssues;
+  const infoIssuesSignature = infoIssues.map(item => `${item.key}\u0000${item.text}`).join('\u0001');
+  useEffect(() => {
+    publishOutdoorPlanIssues(infoIssuesRef.current.map(item => ({
+      key: item.key,
+      text: item.text,
+      anchor: item.anchor,
+      ...(item.color ? { color: item.color } : {}),
+      ...(item.facilityId ? { facilityId: item.facilityId } : {}),
+    })));
+  }, [infoIssuesSignature]);
   const inventoryRowSelected = (row: PlanInventoryRow): boolean =>
     (row.kind === 'zone' && row.id === selectedZoneId)
     || (row.kind === 'facility' && row.id === selectedFacilityId)

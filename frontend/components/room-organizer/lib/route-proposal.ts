@@ -126,10 +126,129 @@ function routeWidth(routeClass: RouteClass): number {
   return routeClass === 'vehicle' ? 6 : routeClass === 'service' ? 4 : 2;
 }
 
+/**
+ * 用户这一轮原话里的「路」意图（#3 改口生效，2026-11-18）。
+ *
+ * 根因：选路一直是纯几何的——同类里按「落在范围内的长度」排序，所以「主通道改走
+ * 仁和路、别沿湖滨路走」这种明确改口，无论模型听懂没有，提案都会照旧挑湖滨路，
+ * 入口候选也就永远只有那条路上的口。这里把原话接进选路口径。
+ *
+ * 三条硬规矩：
+ *   1) **路名必须在路网里存在**才算数——不猜、不按方位硬选；
+ *   2) **否定只覆盖否定词到本小句结束**（或到下一个「改走/换成」为止），
+ *      所以「别沿湖滨路走，改走仁和路」不会把仁和路一起排除；
+ *   3) 同一路既说要又要说不要 → 以「不要」为准（用户最后一句通常是否定）。
+ */
+
+/** 否定词：别/不要/不用/避开/绕开/不走… */
+const NEGATION = /(?:别|不要|不用|勿|避开|绕开|不走|不沿|不经过|不靠|不再)/u;
+/** 否定句里的转折点：到这里为止，后面的路名不再算被否定。 */
+const SWITCH = /(?:改走|换成|改成|改用|换到|另走|再改|但改|或者改|而是)/u;
+/** 肯定语气：这一句确实在谈走哪条路。 */
+const AFFIRM = /(?:走|沿|用|经过|按|排|接|改)/u;
+/** 「从 X 改到 Y」这种明确的两头：X 不要，Y 要。 */
+const FROM_TO = /(?:从|由)([^，,。；;、]{1,12}?)(?:改到|改走|换到|换成|移到|走到|挪到|挪进|到)([^，,。；;、]{1,12})/u;
+/** 句子里出现了「像路名的词」。 */
+const ROAD_WORD = /(?:大道|路|街|巷|弄|胡同)/u;
+
+export interface RoadIntent {
+  /** 点名要走：同类里排在前面。 */
+  prefer: ReadonlySet<string>;
+  /** 明确不要：不选。 */
+  avoid: ReadonlySet<string>;
+  /** 原话点了路，但这一带路网里没有同名路。 */
+  notFound: boolean;
+}
+
+/**
+ * 从一句原话里读出「点名要走」与「明确不要」的路。
+ *
+ * 按小句（逗号/句号/分号）切分：每个小句单独判极性，否定小句里的路名进 avoid，
+ * 否定之后的转折部分（「改走仁和路」）重新算肯定。
+ */
+export function roadIntentFromRequest(
+  request: string | undefined,
+  roadNames: readonly string[],
+): RoadIntent {
+  const prefer = new Set<string>();
+  const avoid = new Set<string>();
+  const usable = roadNames.filter((name) => name.length >= 2);
+  if (!request || !usable.length) return { prefer, avoid, notFound: false };
+  const mentioned = usable.filter((name) => request.includes(name));
+  for (const clause of request.split(/[，,。；;、\n]/u)) {
+    const text = clause.trim();
+    if (!text) continue;
+    // 「从 X 改到 Y」两头都点名了：X 明确不要，Y 明确要走。
+    const fromTo = FROM_TO.exec(text);
+    if (fromTo) {
+      const from = fromTo[1] ?? '';
+      const to = fromTo[2] ?? '';
+      for (const name of mentioned) {
+        if (from.includes(name)) avoid.add(name);
+        else if (to.includes(name)) prefer.add(name);
+      }
+      continue;
+    }
+    const negated = NEGATION.exec(text);
+    if (!negated) {
+      if (AFFIRM.test(text)) for (const name of mentioned) if (text.includes(name)) prefer.add(name);
+      continue;
+    }
+    const start = negated.index;
+    const rest = text.slice(start + negated[0].length);
+    const switched = SWITCH.exec(rest);
+    const end = switched ? start + negated[0].length + switched.index : text.length;
+    for (const name of mentioned) {
+      if (text.slice(start, end).includes(name)) avoid.add(name);
+      else if (AFFIRM.test(text.slice(end)) && text.slice(end).includes(name)) prefer.add(name);
+    }
+  }
+  // 又要又不要 → 以「不要」为准。
+  for (const name of avoid) prefer.delete(name);
+  return {
+    prefer,
+    avoid,
+    // 原话里像是在说某条路，但路网里一条同名路都没有 → 如实说「没找到」，不装作听懂了。
+    notFound: ROAD_WORD.test(request) && mentioned.length === 0,
+  };
+}
+
+/** 这一轮按原话改了选路口径时，写下改了什么（给卡片如实说明用）。 */
+export interface RouteIntentReport {
+  /** 点名要走、且真的选上的路。 */
+  preferred: string[];
+  /** 明确不要、且真的没选的路。 */
+  excluded: string[];
+  /** 想排除、但这一带路网里只有它，只好先留着（如实说明）。 */
+  keptExcluded: string[];
+  /** 原话点了路，但这一带路网里没有同名路。 */
+  notFound: boolean;
+}
+
+/**
+ * 卡片上那句「按你点名的路排的」（#3）。
+ * 没按原话改过就返回 null——调用方那句老口径（「按道路等级挑」）才不算说谎。
+ */
+export function routeIntentNote(intent: RouteIntentReport | undefined): string | null {
+  if (!intent) return null;
+  const parts: string[] = [];
+  if (intent.preferred.length) parts.push(`按你点名的「${intent.preferred.join('、')}」排的到场候选。`);
+  if (intent.excluded.length) parts.push(`按你说的没有用「${intent.excluded.join('、')}」。`);
+  if (intent.keptExcluded.length)
+    parts.push(
+      `「${intent.keptExcluded.join('、')}」你想排除，但这一带路网里只有它，先留着候选，核对时可以在画布上改。`,
+    );
+  if (intent.notFound)
+    parts.push("你点名的路这一带路网里没找到，仍按道路等级挑了到场候选；也可以自己在画布上画一条。");
+  return parts.length ? parts.join("") : null;
+}
+
 export interface RouteProposal {
   routes: PlanRoute[];
   nodes: PlanNode[];
   summary: { pedestrian: number; vehicle: number; service: number; entrances: number };
+  /** 有按原话改选路口径时才在（没改就不给，免得卡片多话）。 */
+  intent?: RouteIntentReport;
 }
 
 /** 2026-11-14 测试修正：路网请求以「边界的真实地理位置」为基准取 bbox——
@@ -157,6 +276,11 @@ export interface BuildRouteProposalInput {
   boundary: PlanPoint[];
   anchor: { lng: number; lat: number };
   roads: RoadSegment[];
+  /**
+   * 用户这一轮的原话（可选）：用来把「点名要走」与「明确不要」的路挑出来。
+   * 不给就退回旧口径（同类按长度），行为与以前一字不差。
+   */
+  request?: string;
 }
 
 /**
@@ -186,10 +310,36 @@ export function buildRouteProposal(
     byClass[routeClass].push({ road, enu, lengthM });
   }
   const picked: { road: RoadSegment; enu: PlanPoint[]; routeClass: RouteClass }[] = [];
+  // 2026-11-18（#3）：先按用户原话定「点名要走 / 明确不要」，再按长度兜底。
+  const intent = roadIntentFromRequest(
+    input.request,
+    [...new Set(roads.map((road) => road.name).filter(Boolean))],
+  );
+  const avoided = intent.avoid;
   for (const routeClass of ['vehicle', 'service', 'pedestrian'] as RouteClass[]) {
-    byClass[routeClass].sort((a, b) => b.lengthM - a.lengthM);
-    for (const entry of byClass[routeClass].slice(0, CLASS_CAP[routeClass])) {
+    // 类内按「落在范围内的折线总长」降序；点名的路排最前，明确不要的直接不选。
+    byClass[routeClass].sort((a, b) => {
+      const rank = (entry: { road: RoadSegment }) =>
+        intent.prefer.has(entry.road.name) ? 0 : 1;
+      const diff = rank(a) - rank(b);
+      return diff !== 0 ? diff : b.lengthM - a.lengthM;
+    });
+    for (const entry of byClass[routeClass]) {
+      if (avoided.has(entry.road.name)) continue;
+      if (picked.filter((item) => item.routeClass === routeClass).length >= CLASS_CAP[routeClass]) break;
       picked.push({ road: entry.road, enu: entry.enu, routeClass });
+    }
+  }
+  // 明确不要的路被全部排除后一条都不剩 → 这一带真的只有它：先留着候选，如实说明，
+  // 不静默把用户排除掉的路塞回去，也不让整轮直接空掉。
+  const keptExcluded: string[] = [];
+  if (picked.length === 0 && intent.avoid.size > 0) {
+    for (const routeClass of ['vehicle', 'service', 'pedestrian'] as RouteClass[]) {
+      byClass[routeClass].sort((a, b) => b.lengthM - a.lengthM);
+      for (const entry of byClass[routeClass].slice(0, CLASS_CAP[routeClass])) {
+        picked.push({ road: entry.road, enu: entry.enu, routeClass });
+        if (!keptExcluded.includes(entry.road.name)) keptExcluded.push(entry.road.name);
+      }
     }
   }
   if (picked.length === 0) return null;
@@ -275,6 +425,21 @@ export function buildRouteProposal(
   }
 
   if (routes.length === 0) return null;
+  const pickedNames = new Set(picked.map((entry) => entry.road.name));
+  const preferred = [...intent.prefer].filter((name) => pickedNames.has(name));
+  const report: RouteIntentReport = {
+    preferred,
+    excluded: [...intent.avoid].filter((name) => !pickedNames.has(name)),
+    keptExcluded,
+    // 点名的路一条都没选上（多在界外、界内太短、或被同类上限挤掉）也按「没找到」如实说，
+    // 不能让用户以为改口被采纳了。
+    notFound: intent.notFound || (intent.prefer.size > 0 && preferred.length === 0),
+  };
+  const hasIntent =
+    report.preferred.length > 0 ||
+    report.excluded.length > 0 ||
+    report.keptExcluded.length > 0 ||
+    report.notFound;
   return {
     routes,
     nodes,
@@ -284,5 +449,6 @@ export function buildRouteProposal(
       service: routes.filter(route => route.kind === 'service').length,
       entrances: nodes.length,
     },
+    ...(hasIntent ? { intent: report } : {}),
   };
 }
