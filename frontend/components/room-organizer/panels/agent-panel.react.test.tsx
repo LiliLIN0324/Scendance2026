@@ -4093,12 +4093,13 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     // T2：composer 已从 Bingo 脸摘除——输入框、布置空态话术都不在。
     expect(screen.queryByLabelText('告诉 Agent 要改的')).toBeNull();
     expect(screen.queryByText('先说一句就行')).toBeNull();
-    expect(screen.getByText('这边只管审校')).toBeTruthy();
-    expect(screen.getByText(/对方的意见保存在对方浏览器，不会自动回到这里/)).toBeTruthy();
+    expect(screen.queryByText('这边只管审校')).toBeNull();
+    expect(screen.queryByText(/对方的意见保存在对方浏览器/)).toBeNull();
     expect(document.getElementById('gen-progress')).toBeNull();
     expect(document.getElementById('plan-proposal')).toBeNull();
-    // 审校状态台三钮在位。
-    expect(screen.getByRole('button', { name: '立即体检' })).toBeTruthy();
+    // 主入口只留分享；体检与旧钉评链接收进「更多」。
+    expect(screen.getByRole('button', { name: '发给客户评审' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
   });
 
   it('Bingo 脸只回放审校气泡：体检回执出现在审校台', async () => {
@@ -4131,18 +4132,19 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
   });
 });
 
-describe('S2 Bingo 审校台：三钮状态台直达', () => {
-  it('Bingo 脸渲染三钮状态台', () => {
+describe('S2 Bingo 审校台：单一分享主入口', () => {
+  it('Bingo 脸只留「发给客户评审」，其余动作收进更多', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
+    expect(screen.getByRole('button', { name: '发给客户评审' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
     expect(screen.getByRole('button', { name: '立即体检' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '准备客户评审' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '发送钉评链接' })).toBeTruthy();
   });
 
-  it('活动脸不挂审校状态台三钮', () => {
+  it('活动脸不挂审校动作', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    expect(screen.queryByRole('button', { name: '发给客户评审' })).toBeNull();
     expect(screen.queryByRole('button', { name: '立即体检' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
     expect(screen.queryByRole('button', { name: '发送钉评链接' })).toBeNull();
   });
 
@@ -4155,7 +4157,7 @@ describe('S2 Bingo 审校台：三钮状态台直达', () => {
 
   it('点「准备客户评审」直接回调，不落气泡', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button', { name: '准备客户评审' }));
+    fireEvent.click(screen.getByRole('button', { name: '发给客户评审' }));
     expect(callbacks.onOpenReview).toHaveBeenCalledOnce();
   });
 
