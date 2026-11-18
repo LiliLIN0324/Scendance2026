@@ -2660,7 +2660,12 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   overflow: visible;
   background: var(--paper, #FFFFFF);
   border: 1px solid var(--hair, #E4E4E7);
-  box-shadow: var(--e1);
+  /* 分享弹层常压在深色地图上，--e1 在这里不够。保留 v17 两族墨影：
+     贴边实影 + 中间衔接 + 底下软抬升；颜色停在 rgb(20,20,22)，不用纯黑。 */
+  box-shadow:
+    0 1.2px 2px 0.4px rgba(20, 20, 22, 0.62),
+    0 6px 10px 0.5px rgba(20, 20, 22, 0.36),
+    0 18px 36px 2px rgba(20, 20, 22, 0.48);
   color: var(--ink, #141416);
   font-family: var(--font-sans);
 }
