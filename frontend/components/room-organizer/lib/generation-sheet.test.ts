@@ -18,7 +18,7 @@ import {
 
 /**
  * 统一生成面板的状态契约：面板只有一个，入口只差「来路（scope）」与「带不带设施」。
- * 创作首层是三张卡片，不再列「生成新场景」；导入也不从创作进来。
+ * 创作首层是两张卡片，不再列「生成新场景」；导入也不从创作进来。
  */
 describe('generation-sheet 状态', () => {
   beforeEach(() => { resetGenerationSheetForTests(); });
@@ -38,7 +38,7 @@ describe('generation-sheet 状态', () => {
     expect(generationTaskList('venue')).not.toContain('model');
   });
 
-  it('场地卡片切到图生后再进入模型表单，来路仍是场地，返回还是卡片', () => {
+  it('场地来路的状态可以记下图生，返回后仍是场地', () => {
     openGenerationSheet({ scope: 'venue' });
     setGenerationModelSource('image');
     expect(getGenerationSheetState().task).toBe('choose');

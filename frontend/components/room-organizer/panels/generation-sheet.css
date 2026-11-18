@@ -255,7 +255,7 @@
 .sc-generation-card .gs-drop-text small { font-size: 10px; line-height: 14px; color: #8b9098; }
 .sc-generation-card .gs-primary[disabled] { opacity: .55; cursor: default; }
 
-/* 创作入口：冷石画廊。三张纸白卡片铺在浅底上，第一张略高。草绿不进这些按钮。 */
+/* 创作入口：冷石画廊。两张纸白卡片铺在浅底上，第一张略高。草绿不进这些按钮。 */
 .sc-generation-card.is-entry { background: #F4F5F7; }
 .sc-generation-card.is-entry .gs-head {
   background: transparent;
@@ -296,23 +296,27 @@
   color: #141416;
   box-shadow: 0 6px 18px rgba(20, 20, 22, 0.10);
 }
-.sc-generation-card .gs-create-card.is-recon { flex: 36 1 0; }
-.sc-generation-card .gs-create-card:not(.is-recon) { flex: 32 1 0; }
+.sc-generation-card .gs-create-card.is-recon { flex: 1.18 1 0; }
+.sc-generation-card .gs-create-card.is-model { flex: 1 1 0; }
 .sc-generation-card .gs-create-kicker {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   color: #71767E;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
   font-weight: 600;
 }
-.sc-generation-card .gs-create-aa {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
+.sc-generation-card .gs-create-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #F4F5F7;
+  color: #55585F;
 }
 .sc-generation-card .gs-create-card h2 {
   margin: 0;
@@ -322,42 +326,50 @@
   color: #141416;
 }
 .sc-generation-card .gs-create-lead {
-  margin: 0;
+  margin: 2px 0 0;
   font-size: 12px;
   line-height: 16px;
   color: #55585F;
 }
+.sc-generation-card .gs-create-chip {
+  align-self: flex-start;
+  margin: 6px 0 0;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #F4F5F7;
+  color: #71767E;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
 .sc-generation-card .gs-create-stage {
   position: relative;
   flex: 1 1 auto;
-  min-height: 52px;
+  min-height: 128px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  margin-top: 6px;
+  margin-top: 8px;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #F4F5F7;
   box-shadow: inset 0 1px 3px rgba(20, 20, 22, 0.06), inset 0 0 0 1px rgba(20, 20, 22, 0.04);
 }
 .sc-generation-card .gs-create-stage.has-media { background: #ECEEF1; }
-.sc-generation-card .gs-create-figure {
-  display: block;
-  width: auto;
-  height: 64px;
-  max-width: 86%;
-  flex: none;
-}
-.sc-generation-card .gs-create-caption {
-  flex: none;
-  margin: 0 0 6px;
-  color: #C5C8CE;
-  font-size: 10px;
-  line-height: 14px;
+.sc-generation-card .gs-create-floor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 74%;
+  pointer-events: none;
 }
 .sc-generation-card .gs-create-empty {
+  position: relative;
+  z-index: 1;
   margin: 0;
   padding: 8px;
   text-align: center;
@@ -443,15 +455,111 @@
   white-space: nowrap;
   border: 0;
 }
-.sc-generation-card .gs-create-go {
-  align-self: flex-start;
+.sc-generation-card .gs-create-switch {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  margin-top: 8px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #F4F5F7;
+}
+.sc-generation-card .gs-create-switch button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 32px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #71767E;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-generation-card .gs-create-switch button[aria-pressed='true'] {
+  background: #fff;
+  color: #141416;
+  box-shadow: 0 2px 6px rgba(20, 20, 22, 0.10);
+}
+.sc-generation-card .gs-create-t {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.sc-generation-card .gs-create-prompt {
+  flex: 1 1 auto;
+  min-height: 84px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #E4E4E7;
+  border-radius: 14px;
+  background: #fff;
+  color: #141416;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  resize: none;
+}
+.sc-generation-card .gs-create-prompt::placeholder { color: #A6AAB2; }
+.sc-generation-card .gs-create-prompt:focus {
+  outline: none;
+  border-color: #C8C9CE;
+  box-shadow: 0 0 0 3px rgba(20, 20, 22, 0.06);
+}
+.sc-generation-card .gs-create-drop {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 88px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  border: 1px dashed #D5D7DC;
+  border-radius: 14px;
+  background: #fff;
+  color: #71767E;
+  text-align: center;
+  cursor: pointer;
+}
+.sc-generation-card .gs-create-drop:hover,
+.sc-generation-card .gs-create-drop.is-over { border-color: #C8C9CE; background: #F4F5F7; }
+.sc-generation-card .gs-create-drop.has-file {
+  border-style: solid;
+  border-color: #E4E4E7;
+  background: #F4F5F7;
+  color: #141416;
+}
+.sc-generation-card .gs-create-drop-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-generation-card .gs-create-drop-text strong {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: #55585F;
+  overflow-wrap: anywhere;
+}
+.sc-generation-card .gs-create-drop-text small { font-size: 11px; line-height: 16px; color: #A6AAB2; }
+.sc-generation-card .gs-create-submit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  margin-top: 8px;
+}
+.sc-generation-card .gs-create-go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   height: 36px;
-  margin-top: 8px;
-  padding: 0 14px;
+  padding: 0 16px;
   border: 0;
   border-radius: 10px;
   background: #141416;
@@ -461,8 +569,25 @@
   cursor: pointer;
 }
 .sc-generation-card .gs-create-go:hover { background: #2a2a2d; }
+.sc-generation-card .gs-create-go[disabled],
+.sc-generation-card .gs-create-go[disabled]:hover {
+  opacity: 1;
+  background: #141416;
+  color: #fff;
+  cursor: default;
+}
+.sc-generation-card .gs-create-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #55585F;
+  font-size: 12px;
+  line-height: 16px;
+}
+.sc-generation-card .gs-create-credit input { accent-color: #141416; }
 .sc-generation-card .gs-create-btn:focus-visible,
-.sc-generation-card .gs-create-go:focus-visible {
+.sc-generation-card .gs-create-go:focus-visible,
+.sc-generation-card .gs-create-switch button:focus-visible {
   outline: 2px solid #141416;
   outline-offset: 2px;
 }
@@ -473,6 +598,7 @@
   font-size: 11px;
   line-height: 15px;
 }
+.sc-generation-card .gs-create-note--warn { color: #a8641a; }
 .sc-generation-card.is-venue .gs-primary {
   border-color: #141416;
   background: #141416;

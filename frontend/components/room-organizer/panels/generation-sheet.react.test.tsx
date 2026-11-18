@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, SceneApiError, getBackendConfig, type GenerationJob } from '@/lib/backend-session';
@@ -10,7 +13,7 @@ import { clearStagedMaterialGenerateForTests, stageMaterialGenerate } from '../l
 
 /**
  * 面板的两件事：① 来路决定标题与首层；② 模型这条是真提交（额度确认是提交前的闸门）。
- * 场景那条仍是骨架，点主按钮只说明「还没接提交」。
+ * 创作来路在同一页两张卡片上提交文生 / 图生，不再打开第二层窗口。重建只做本地预览。
  */
 const job: GenerationJob = {
   id: 'task-1', owner_id: 'member', prompt: '一把沙滩椅', state: 'queued', asset_id: null,
@@ -49,7 +52,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); controller.dispose(); vi.restoreAllMocks(); });
 
 describe('统一生成面板', () => {
-  it('创作入口：同一页三张卡片，开始创作打开原来的生成窗口，没有分页和暂未开放', () => {
+  it('创作入口：同一页两张卡片，文生和图生在卡片上切换，不打开第二层窗口', () => {
     const onOpenCapture = vi.fn();
     render(<GenerationSheetHost controller={controller} onOpenCapture={onOpenCapture} />);
     expect(screen.queryByTestId('generation-sheet')).toBeNull();
@@ -60,39 +63,88 @@ describe('统一生成面板', () => {
     expect(screen.queryByText('暂未开放')).toBeNull();
     expect(screen.queryByText('一座带檐的小亭，暖白墙面')).toBeNull();
     expect(screen.queryByRole('button', { name: '导入' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '文生 3D' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '图生 3D' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '开始创作' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /返回/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: '取消' })).toBeNull();
+    expect(screen.queryByTestId('generation-primary')).toBeNull();
+    expect(screen.queryByText('保存到「我的生成」')).toBeNull();
+    expect(screen.queryByText('文字生成 3D 模型')).toBeNull();
+    expect(screen.queryByText('图片生成 3D 模型')).toBeNull();
     expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: '重建真实场地' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '文字生成 3D 模型' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '图片生成 3D 模型' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '生成 3D 模型' })).toBeTruthy();
     expect(screen.getByText('实地重建')).toBeTruthy();
+    expect(screen.getByText('生成 3D')).toBeTruthy();
     expect(screen.getByText('拍摄现场，或上传已有的照片、视频。')).toBeTruthy();
     expect(screen.getByText('描述一件要放进场地的物件。')).toBeTruthy();
-    expect(screen.getByText('上传一张参考图，生成可布置的模型。')).toBeTruthy();
+    expect(screen.queryByText('上传一张参考图，生成可布置的模型。')).toBeNull();
+    expect(screen.getByText('完成后进入空间')).toBeTruthy();
+    expect(screen.getByText('完成后放进物料')).toBeTruthy();
     expect(screen.getByText('重建后在这里预览')).toBeTruthy();
-    expect(screen.getAllByText('三维示意，不是生成结果')).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: '开始创作' })).toHaveLength(2);
-    expect(screen.queryByRole('checkbox', { name: /消耗额度/ })).toBeNull();
+    expect(screen.getByText('现场照片或视频都可以')).toBeTruthy();
+    const textMode = screen.getByRole('button', { name: '文生 3D' });
+    const imageMode = screen.getByRole('button', { name: '图生 3D' });
+    expect(textMode.getAttribute('aria-pressed')).toBe('true');
+    expect(textMode.textContent?.replace(/\s/g, '')).toBe('T文生3D');
+    expect(imageMode.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('textbox', { name: '描述' })).toBeTruthy();
+    expect(screen.getByPlaceholderText('一句话描述物件，如：一把户外折叠椅')).toBeTruthy();
+    expect(screen.queryByTestId('creation-image-drop')).toBeNull();
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('creation-generate') as HTMLButtonElement).disabled).toBe(true);
     expect(onOpenCapture).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByTestId('generation-venue-start-image'));
-    expect(screen.getByRole('complementary', { name: '图生 3D' })).toBeTruthy();
-    expect(screen.getByText('选一张参考图，或拖进来')).toBeTruthy();
-    expect(screen.getByTestId('generation-target').textContent).toContain('我的生成');
-    expect(screen.queryByRole('button', { name: '导入' })).toBeNull();
-    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
-
-    fireEvent.click(screen.getByRole('button', { name: '文生 3D' }));
-    expect(screen.getByRole('complementary', { name: '文生 3D' })).toBeTruthy();
-    expect(screen.getByRole('textbox', { name: '描述' })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /返回/ }));
+    fireEvent.click(imageMode);
     expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '图片生成 3D 模型' })).toBeTruthy();
+    expect(screen.getByText('上传一张参考图，生成可布置的模型。')).toBeTruthy();
+    expect(screen.queryByText('描述一件要放进场地的物件。')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: '描述' })).toBeNull();
+    expect(screen.getByTestId('creation-image-drop').textContent).toContain('选一张参考图，或拖进来');
+    expect(screen.getByTestId('creation-image-drop').textContent).toContain('照片即可，主体清楚');
+    expect(screen.queryByText('补充描述')).toBeNull();
+    expect(screen.queryByRole('button', { name: /返回/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: '取消' })).toBeNull();
+    expect(screen.queryByTestId('generation-primary')).toBeNull();
+    expect(imageMode.getAttribute('aria-pressed')).toBe('true');
+    expect(textMode.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(textMode);
+    expect(screen.getByRole('textbox', { name: '描述' })).toBeTruthy();
+    expect(screen.queryByTestId('creation-image-drop')).toBeNull();
+    expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '关闭生成面板' }));
     expect(screen.queryByTestId('generation-sheet')).toBeNull();
+  });
+
+  it('创作来路即使被标成模型任务，也不打开第二层窗口', () => {
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'venue', source: 'image' }));
+    expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '生成 3D 模型' })).toBeTruthy();
+    expect(screen.getByTestId('creation-image-drop')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /返回/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: '取消' })).toBeNull();
+    expect(screen.queryByTestId('generation-primary')).toBeNull();
+    expect(screen.queryByText('保存到「我的生成」')).toBeNull();
+  });
+
+  it('文生在卡片上提交，结果去我的生成，不离开创作面板', async () => {
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ scope: 'venue' }));
+    await waitFor(() => expect(screen.queryByText(/正在读取可用的生成模型/)).toBeNull());
+    fireEvent.change(screen.getByRole('textbox', { name: '描述' }), { target: { value: '一把户外折叠椅' } });
+    expect((screen.getByTestId('creation-generate') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('creation-generate'));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]![0]).toBe('一把户外折叠椅');
+    expect(create.mock.calls[0]![2]).toEqual({ kind: 'text' });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('我的生成'));
+    expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /返回/ })).toBeNull();
+    expect(screen.queryByTestId('generation-primary')).toBeNull();
+    expect(screen.getByText('完成后放进物料')).toBeTruthy();
   });
 
   it('重建卡：拍摄和上传是同一个口，选中后在预览台显出', () => {
@@ -122,6 +174,7 @@ describe('统一生成面板', () => {
       for (const token of ['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.m4v', '.mov', '.qt', '.insv', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime']) {
         expect(shoot.accept).toContain(token);
       }
+      expect(screen.getByText('完成后进入空间')).toBeTruthy();
       expect(screen.getByTestId('creation-entry').textContent).not.toMatch(/Insta360|insta360|云盘|至少 ?20/);
 
       const png = new File(['png'], 'hall.png', { type: 'image/png' });
@@ -347,21 +400,59 @@ describe('统一生成面板', () => {
   it('图生没有参考图时不提交；文生没有描述时也不提交', async () => {
     render(<GenerationSheetHost controller={controller} />);
     act(() => openGenerationSheet({ scope: 'venue' }));
-    fireEvent.click(screen.getByTestId('generation-venue-start-image'));
+    fireEvent.click(screen.getByRole('button', { name: '图生 3D' }));
     await waitFor(() => expect(screen.queryByText(/正在读取可用的生成模型/)).toBeNull());
-    fireEvent.change(screen.getByPlaceholderText('按照片做同款，哑光白桌面'), { target: { value: '按照片做同款' } });
     fireEvent.click(screen.getByLabelText(/消耗额度/));
-    fireEvent.click(screen.getByTestId('generation-primary'));
+    fireEvent.click(screen.getByTestId('creation-generate'));
     expect(screen.getByRole('status').textContent).toContain('先选一张参考图');
     expect(create).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /返回/ })).toBeNull();
+    expect(screen.queryByTestId('generation-primary')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '文生 3D' }));
     fireEvent.change(screen.getByRole('textbox', { name: '描述' }), { target: { value: '' } });
     const credit = screen.getByLabelText(/消耗额度/) as HTMLInputElement;
     if (!credit.checked) fireEvent.click(credit);
-    fireEvent.click(screen.getByTestId('generation-primary'));
+    fireEvent.click(screen.getByTestId('creation-generate'));
     expect(screen.getByRole('status').textContent).toContain('先写一句描述');
     expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
+  });
+
+  it('图生把参考图拖进卡片后，用原有图片任务提交到我的生成', async () => {
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ scope: 'venue' }));
+    fireEvent.click(screen.getByRole('button', { name: '图生 3D' }));
+    await waitFor(() => expect(screen.queryByText(/正在读取可用的生成模型/)).toBeNull());
+    const file = new File(['img'], 'folding-chair.png', { type: 'image/png' });
+    fireEvent.drop(screen.getByTestId('creation-image-drop'), { dataTransfer: { files: [file] } });
+    await waitFor(() => expect(screen.getByTestId('creation-image-drop').textContent).toContain('已上传'));
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('creation-generate'));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]![0]).toBe('folding-chair');
+    expect(create.mock.calls[0]![2]).toEqual({ kind: 'image', referenceImageAssetId: 'ref-1' });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('我的生成'));
+    expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
+    expect(screen.queryByTestId('generation-primary')).toBeNull();
+  });
+
+  it('创作去向标签是浅底，选中分段是纸白，近黑只留给生成和拍摄', () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'generation-sheet.css'), 'utf8');
+    const chip = css.slice(css.indexOf('.sc-generation-card .gs-create-chip {'), css.indexOf('.sc-generation-card .gs-create-stage {'));
+    expect(chip).toContain('background: #F4F5F7');
+    expect(chip).not.toMatch(/#4a7c59|#35624a|#eef3ef|#3c6a4d/i);
+    const selected = css.slice(css.indexOf(".gs-create-switch button[aria-pressed='true']"), css.indexOf('.gs-create-t'));
+    expect(selected).toContain('background: #fff');
+    expect(selected).not.toContain('background: #141416');
+    expect(selected).not.toMatch(/#4a7c59|#35624a/i);
+    const go = css.slice(css.indexOf('.sc-generation-card .gs-create-go {'), css.indexOf('.gs-create-go:hover'));
+    expect(go).toContain('background: #141416');
+    const disabled = css.slice(css.indexOf('.gs-create-go[disabled]'), css.indexOf('.gs-create-credit'));
+    expect(disabled).toContain('opacity: 1');
+    expect(disabled).toContain('background: #141416');
+    const shoot = css.slice(css.indexOf('.sc-generation-card .gs-create-shoot {'), css.indexOf('.gs-create-shoot:hover'));
+    expect(shoot).toContain('background: #141416');
   });
 
   it('配了 Aholo 时文字生成走 Lux3D，没配才回 HY-3D', async () => {
