@@ -756,11 +756,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               </ul>}
             </>
             : <>
-            {importSlot ? <section className="sc-my-materials" aria-label="我的物料">
-              <p className="sc-my-materials-label">我的物料</p>
-              {importSlot}
-            </section> : null}
-            {/* 库不再挂「按风格配一套」——入口在 Bingo。这里只按类目浏览单件。 */}
+            {/* 库不再挂「按风格配一套」——入口在 Bingo。这里只按类目浏览单件。导入入口在卡片底栏。 */}
             {/* 2026-11-18 用户：搜索要对齐户外目录——胶囊（放大镜 + 输入 + 右侧圆钮）；
                 圆钮切「一行四张」平铺浏览，再点回分类浏览。 */}
             <div className="sc-catalog-search sc-lib-search">
@@ -844,6 +840,10 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         {queuedCount>0 && <p className="sc-material-note" role="status">还有 {queuedCount} 件等待添加。</p>}
         {limitMessage && <p className="sc-warning sc-material-note" role="status">{limitMessage}</p>}
       </div>
+      <footer className="sc-lib-dock-foot">
+        <span>拖到地图上放置</span>
+        {pane === 'lib' && importSlot ? <section className="sc-my-materials" aria-label="我的物料">{importSlot}</section> : null}
+      </footer>
     </div>;
   }
 

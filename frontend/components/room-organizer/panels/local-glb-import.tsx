@@ -148,7 +148,7 @@ export function LocalGlbImport({ onAdd, disabled = false, variant = 'tile' }: Lo
       <div className="sc-glb-bar-main">
         <button type="button" className="sc-glb-bar-btn" disabled={disabled || busy} onClick={() => inputRef.current?.click()}>
           {busy ? <Loader2 className="cr-spin" size={14} aria-hidden="true"/> : <Upload size={14} aria-hidden="true"/>}
-          <span>{busy ? '归一化中…' : '导入本机模型（GLB）'}</span>
+          <span>{busy ? '归一化中…' : '导入模型'}</span>
         </button>
         <InfoTip label="关于本机模型导入">本机 GLB 导入说明：{HELP}</InfoTip>
       </div>

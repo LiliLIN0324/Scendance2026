@@ -770,6 +770,18 @@ button.ap-ghost {
   display: block; height: auto; min-height: 0; overflow: visible;
   border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 0;
 }
+.sc-agent-panel[data-state="material"] .ap-head { min-height: 44px; padding: 8px 10px 8px 14px; }
+.sc-agent-panel[data-state="material"] .ap-body { display: flex; flex-direction: column; min-height: 0; }
+.sc-agent-panel[data-state="material"] .ap-agent-surface.is-material {
+  display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 8px 12px 10px;
+}
+.sc-agent-panel[data-state="material"] .ap-agent-surface .sc-library.is-card,
+.sc-agent-panel[data-state="material"] .ap-agent-surface .sc-library.is-card .sc-library-body,
+.sc-agent-panel[data-state="material"] .ap-agent-surface .sc-library.is-card .sc-library-content,
+.sc-agent-panel[data-state="material"] .ap-agent-surface .sc-library.is-card .sc-library-materials {
+  display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-height: 0; overflow: hidden;
+}
+.sc-agent-panel[data-state="material"] .sc-lib-shell.is-browse { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 8px; }
 .sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-library-body,
 .sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-library-content,
 .sc-agent-panel .ap-agent-surface .sc-library.is-card .sc-library-materials {
