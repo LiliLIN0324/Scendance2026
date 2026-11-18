@@ -1299,7 +1299,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(typeof result==='string'||typeof result.url!=='string'||!result.url.trim()||!stillCurrent()||typeof result.isCurrent!=='function'||!result.isCurrent()){
         say({role:'agent',review:true,amber:true,text:'活动或方案已变化，或当前版本无法核对；旧评审记录如已写入会保留，链接未复制。'});return;
       }
-      say({ role: 'agent', review: true, text: '评审链接已准备好。请在下方「本机评审记录」复制链接发给对方；对方的意见仅保存在对方浏览器，不会自动回到这里，请另行收集。' });
+      say({ role: 'agent', review: true, text: '已打开右上角分享面板；在「送评审方」生成并复制链接。对方的钉评会自动回到 Bingo，不需要另行收集。' });
     } catch { if(sessionScopeIsCurrent())say({role:'agent',review:true,amber:true,text:'评审链接结果暂时无法核对；旧评审记录如已写入会保留，链接未复制。'}); }
     finally{reviewLinkPending.current=false;}
   }
