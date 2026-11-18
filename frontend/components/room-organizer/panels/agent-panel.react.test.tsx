@@ -2867,7 +2867,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     send('200 人，室内 12×9，圆桌，需要签到');
     const fix = await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 });
     fireEvent.click(fix);
-    expect(await screen.findByText(/^这次排到 \d+ 座，仍缺 \d+ 座；可尝试调整物料规格、功能区或场地，再核对方案。$/, undefined, { timeout: 15000 })).toBeTruthy();
+    expect(await screen.findByText(/^座位还不够；可尝试调整物料规格、功能区或场地，再核对方案。$/, undefined, { timeout: 15000 })).toBeTruthy();
     expect(screen.queryByText(/就是头|按站立留空/)).toBeNull();
   }, 20000);
 

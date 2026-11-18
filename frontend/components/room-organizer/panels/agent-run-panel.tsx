@@ -33,7 +33,6 @@ import {
   getAgentRun,
   isWriteTool,
   requestAgentStop,
-  setAgentPauseAfterStep,
   subscribeAgentRun,
   type AgentRunScope,
   type AgentRunState,
@@ -305,9 +304,6 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
   const [expandedAll, setExpandedAll] = useState(false);
   const [showProcess, setShowProcess] = useState(true);
 
-  // —— 任务 1：停止确认就地替换 ——
-  const [confirmingStop, setConfirmingStop] = useState(false);
-
   // —— 任务 2：过往任务归档折叠区（仅组件内存）——
   const [archive, setArchive] = useState<ArchivedRun[]>([]);
   const [currentArchived, setCurrentArchived] = useState(false);
@@ -316,9 +312,6 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
 
   // —— 任务 3：已送达备注 / 未完成步骤的聚合回折条 ——
   const [aggregateOpen, setAggregateOpen] = useState(false);
-
-  // —— 任务 5：停止确认行打开时焦点落在「取消」（安全项）——
-  const cancelRef = useRef<HTMLButtonElement | null>(null);
 
   // 跑结束的瞬间把当前 run 快照进归档列表，并把当前卡标成「已归档」。
   // 新一轮开始时清掉这个标记（新 run 自然展开在折叠区之上）。
@@ -344,29 +337,6 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
       setCurrentArchived(false);
     }
   }, [run.isRunning, run.startedAt, run.phase, run.thoughtCount, run.thoughts, run.stepLog, run.eventLog]);
-
-  // 跑停了或已请求收尾，确认行自动收起，别留半截。
-  useEffect(() => {
-    if (!run.isRunning || run.stopRequested) setConfirmingStop(false);
-  }, [run.isRunning, run.stopRequested]);
-
-  // 确认态按 Escape 取消。
-  useEffect(() => {
-    if (!confirmingStop) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setConfirmingStop(false);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [confirmingStop]);
-
-  // 确认行一打开就把焦点给「取消」：回车/空格都不会误触停止。
-  useEffect(() => {
-    if (confirmingStop) cancelRef.current?.focus();
-  }, [confirmingStop]);
 
   const visibleSteps = useMemo(() => {
     if (expandedAll) return run.stepLog;
@@ -403,12 +373,6 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
   const focusSteerInput = (): void => {
     if (!steerInputId) return;
     document.getElementById(steerInputId)?.focus();
-  };
-
-  const confirmCancel = (): void => setConfirmingStop(false);
-  const confirmStop = (): void => {
-    setConfirmingStop(false);
-    requestAgentStop();
   };
 
   return (
@@ -539,8 +503,8 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
               {unresolvedCount > 0 && (
                 <p className="ap-run-wrapup-line" data-tone="warn">有 {unresolvedCount} 步未能完成，列表里用 × 标出；已完成的部分不受影响。</p>
               )}
-              <p className="ap-run-wrapup-line">停止时未完成的部分不会继续执行，可以接着补充说明。</p>
-              <p className="ap-run-wrapup-line"><kbd className="ap-kbd">Ctrl+Z</kbd> 是逐步撤销{onRestoreStart && retainedCount > 0 ? '，也能撤掉这次还原' : ''}。</p>
+              {/* 2026-11-19 用户指令「太罗嗦」：常设的说教行撤掉——「停止时未完成的部分不会继续执行」
+                  与「Ctrl+Z 是逐步撤销」是每次都一样的课文，只留事实行和还原动作。 */}
               {onRestoreStart && retainedCount > 0 && (
                 <div className="ap-run-wrapup-actions">
                   <button type="button" className="ap-run-pill" onClick={onRestoreStart}>还原到本轮开始</button>
@@ -582,59 +546,20 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
         </div>
       )}
 
-      {/* 常驻运行条三控件（Y7/Y8/Y9）。 */}
+      {/* 2026-11-19 用户指令：停止收敛成一个——「停止」点了直接 requestAgentStop，
+          不再弹「要停止这项工作吗？」确认行；紧急停止方块与「跑完这步停」一并撤掉。 */}
       {run.isRunning && controls && (
         <div role="group" aria-label="运行中控制" className="ap-run-controls">
-          {/* 紧急停止钮：只在运行中出现；点击同样进「要停止这项工作吗？」确认行，
-              不绕开确认直接 requestAgentStop。确认行打开后收起，避免两套停止入口并存。 */}
-          {!confirmingStop && (
-            <button
-              type="button"
-              aria-label="紧急停止"
-              title="停止这项工作"
-              className="ap-run-emergency-stop"
-              disabled={run.stopRequested}
-              onClick={() => setConfirmingStop(true)}
-            >
-              <span aria-hidden="true" className="ap-run-emergency-stop-square" />
-            </button>
-          )}
           <button
             type="button"
-            onClick={() => setAgentPauseAfterStep(true)}
-            disabled={run.shouldPauseAfterStep}
+            onClick={() => requestAgentStop()}
+            disabled={run.stopRequested}
             className="ap-run-pill"
-            data-active={run.shouldPauseAfterStep ? 'false' : 'true'}
+            data-stop="true"
+            data-active={run.stopRequested ? 'false' : 'true'}
           >
-            {run.shouldPauseAfterStep ? '将在这步后停' : '跑完这步停'}
+            {run.stopRequested ? '正在收尾' : '停止'}
           </button>
-          {!confirmingStop ? (
-            <button
-              type="button"
-              onClick={() => setConfirmingStop(true)}
-              disabled={run.stopRequested}
-              className="ap-run-pill"
-              data-stop="true"
-              data-active={run.stopRequested ? 'false' : 'true'}
-            >
-              {run.stopRequested ? '正在收尾' : '停止'}
-            </button>
-          ) : (
-            <div
-              className="ap-stop-confirm"
-              role="alertdialog"
-              aria-label="确认停止"
-              tabIndex={-1}
-              onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) confirmCancel();
-              }}
-            >
-              <span className="ap-stop-confirm-text">要停止这项工作吗？</span>
-              <button type="button" ref={cancelRef} autoFocus className="ap-run-pill" onClick={confirmCancel}>取消</button>
-              <kbd className="ap-kbd" title="按 Esc 取消">Esc</kbd>
-              <button type="button" className="ap-run-pill" data-stop="true" onClick={confirmStop}>停止</button>
-            </div>
-          )}
         </div>
       )}
     </>

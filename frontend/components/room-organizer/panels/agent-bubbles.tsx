@@ -5,7 +5,7 @@
  * 会话、写保护、提案确认仍留在 LayoutAgentProvider 与面板主体。
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { Check, Clock, Copy, FileImage, HelpCircle, Pencil, RotateCw, SquareDashed, TriangleAlert } from '@/components/solid-icons';
+import { Check, Copy, FileImage, HelpCircle, Pencil, RotateCw, SquareDashed, TriangleAlert } from '@/components/solid-icons';
 import { parseFollowUpOptions, segmentBubbleBlocks } from '../lib/bubble-text';
 import { toolChipStatus, toolStatusWord, toolTraceRows } from '../lib/tool-trace';
 import { MaterialCandidatesPanel } from './material-candidates-panel';
@@ -227,26 +227,5 @@ export function Bubbles({ bubbles, sessionKey, reviewOnly = false, beforeLatestQ
     </div>;
   })}</>;
 }
-
-export function GenProgress({ paused, hidden, onResume, onWithdraw, onStop }: {
-  paused?: boolean;
-  hidden?: boolean;
-  onResume(): void;
-  onWithdraw(): void;
-  onStop(): void;
-}): JSX.Element | null {
-  // 真实步骤时间线在场时，这套写死的步骤条让位——不同时摆两套进度。
-  if (hidden) return null;
-  return <div className={`ap-card ap-progress-card${paused ? ' is-paused' : ''}`} id="gen-progress">
-    <span className="ap-progress-stamp"><Clock size={12} aria-hidden="true"/>{paused ? '已暂停' : '生成中'}</span>
-    <p className="ap-progress-note">{paused ? '布置预览已暂停' : '正在准备布置预览'}</p>
-    <div className="ap-progress-actions">
-      {paused
-        ? <>
-            <button type="button" className="chip" onClick={onResume}>接着摆</button>
-            <button type="button" className="chip btn-outline" onClick={onWithdraw}>不要了</button>
-          </>
-        : <button type="button" className="ap-link" onClick={onStop}>停一下</button>}
-    </div>
-  </div>;
-}
+/* 2026-11-19 用户指令：生成中/已暂停卡（GenProgress）砍掉——输入框下方已有暂停/播放钮，
+   点播放直接续，卡上的「停一下/接着摆/不要了」是重复入口。 */

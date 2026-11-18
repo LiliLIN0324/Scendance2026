@@ -230,15 +230,13 @@ describe('AgentRunPanel', () => {
     expect(screen.queryByText(/件/)).toBeNull();
   });
 
-  it('紧急停止钮同样进确认行，焦点落在「取消」，不绕过确认直接停', () => {
+  it('停止点了直接停，不再弹确认行（2026-11-19 用户指令）', () => {
     render(<AgentRunPanel scope="layout"/>);
-    fireEvent.click(screen.getByRole('button',{name:'紧急停止'}));
-    expect(screen.getByText('要停止这项工作吗？')).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole('button',{name:'取消'}));
-    expect(getAgentRun().stopRequested).toBe(false);
-    // 确认行真实绑定 Esc 取消：只有取消侧挂 kbd 小标，停止钮没有快捷键。
-    expect(screen.getByText('Esc', {selector: '.ap-kbd'})).toBeTruthy();
-    expect(screen.getByRole('button',{name:'停止'}).querySelector('.ap-kbd')).toBeNull();
+    expect(screen.queryByText('要停止这项工作吗？')).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'停止'}));
+    expect(getAgentRun().stopRequested).toBe(true);
+    expect(screen.getByRole('button',{name:'正在收尾'})).toBeTruthy();
+    expect(screen.queryByText('要停止这项工作吗？')).toBeNull();
   });
 
   it('已送达备注收成聚合条；含未完成时走粉调，可展开明细', () => {
@@ -252,21 +250,21 @@ describe('AgentRunPanel', () => {
     expect(screen.getByText(/未完成步骤 1 条/)).toBeTruthy();
   });
 
-  it('结束后收尾卡说清保留改动数与两档撤销语义', () => {
+  it('结束后收尾卡只说事实行，不挂常设说教（2026-11-19 用户指令）', () => {
     appendAgentStep({toolName:'layBanquet',durationMs:600,isReadonly:false,itemCount:3,startedAt:Date.now()-600});
     endAgentRun();
     render(<AgentRunPanel scope="layout"/>);
     expect(screen.getByText('地图上保留了 3 处改动。')).toBeTruthy();
-    expect(screen.getByText('Ctrl+Z', {selector: '.ap-kbd'})).toBeTruthy();
-    expect(screen.getByText(/是逐步撤销/)).toBeTruthy();
+    expect(screen.queryByText(/Ctrl\+Z/)).toBeNull();
+    expect(screen.queryByText(/逐步撤销/)).toBeNull();
+    expect(screen.queryByText(/停止时未完成的部分/)).toBeNull();
   });
 
-  it('没有真实快捷键绑定的控件不挂 kbd 小标（紧急停止 / 跑完这步停 / 聚合条；确认行未开不出 Esc）', () => {
+  it('没有真实快捷键绑定的控件不挂 kbd 小标（停止 / 聚合条）', () => {
     setAgentSteerDelivered(2);
     appendAgentRunEvents([{seq:1,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null}]);
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByRole('button',{name:'紧急停止'}).querySelector('.ap-kbd')).toBeNull();
-    expect(screen.getByRole('button',{name:/跑完这步停/}).querySelector('.ap-kbd')).toBeNull();
+    expect(screen.getByRole('button',{name:'停止'}).querySelector('.ap-kbd')).toBeNull();
     const aggregate = screen.getByText(/备注已送达/).closest('.ap-run-aggregate');
     expect(aggregate).toBeTruthy();
     expect(within(aggregate! as HTMLElement).getByRole('button').querySelector('.ap-kbd')).toBeNull();

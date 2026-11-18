@@ -2,23 +2,21 @@
  * 提案确认卡（预览态）与改动分组清单：从 agent-panel 抽出的展示层第二批。
  *
  * 决策留痕（decision）是面板内存态，由 props 传入；确认 / 撤回 / 换一版 / 加座
- * 只收回调，组件不再接触 AgentValue。PlanPreview 与选择定位走编辑器上下文。
+ * 只收回调，组件不再接触 AgentValue。清单与选择定位走编辑器上下文。
  * ProposalView 仍是面板侧的视图契约，这里做 type-only 反向导入（运行时擦除）。
  */
 import { type ReactNode } from 'react';
-import { Check, X } from '@/components/solid-icons';
 import { useRoomEditor, useSelectionOptional } from '../contexts';
 import { formatArea } from '../lib/workbench-agent';
 import { venueArea } from '../lib/structural-layout';
-import { PlanPreview } from './plan-preview';
 import { BoundaryLineNote, FollowupChips, type BoundaryContext } from './proposal-followup-chips';
 import { groupChangeItems, type ProposalChangeItem, type ProposalChangeKind, type ProposalChangeSummary } from '../lib/proposal-change-groups';
 import { formatDurationClock } from './agent-chat-store';
 import { ModelTextDisclosure } from './model-text-disclosure';
-import { REFERENCE_SOURCE_UNVERIFIED } from '../lib/reference-source-status';
 import type { ProposalView } from './agent-panel';
 
-/** 这一轮候选卡上的决策留痕：批准 / 拒绝，只活在当前面板内存里，不落后端。 */
+/** 这一轮候选卡上的决策留痕：批准 / 拒绝，只活在当前面板内存里，不落后端。
+ *  （卡片本身已不接 decision——留痕在对话流徽章；面板的独立「你拒绝了」卡仍用它。） */
 export type ProposalDecision = 'approved' | 'rejected';
 
 /**
@@ -64,10 +62,10 @@ export function ProposalChangeList({ items, summary, onLocate }: {
   );
 }
 
-/** 预览态：主钮「确认布置」，次钮「不用」；决策后原地留成徽章，一屏只留一个深主钮。 */
-export function ProposalCard({ plan, decision, cloudBusy, recovering, inventoryBlocked, inventoryInvalid, exportPreview, inventoryWorkspace, onAddSeats, onConfirm, onWithdraw, onRegenerate, onPrefill, onApprove, onReject }: {
+/** 预览态：主钮「确认布置」，次钮「不用」；决策留痕由对话流徽章负责，卡不重复挂。
+ *  （2026-11-19 体检：卡上的瞬态决策徽章分支删除；`decision` 入参随之移除。） */
+export function ProposalCard({ plan, cloudBusy, recovering, inventoryBlocked, inventoryInvalid, exportPreview, inventoryWorkspace, onAddSeats, onConfirm, onWithdraw, onRegenerate, onPrefill, onApprove, onReject }: {
   plan: ProposalView | null;
-  decision?: ProposalDecision | null;
   cloudBusy: boolean;
   recovering: boolean;
   inventoryBlocked: boolean;
@@ -114,7 +112,15 @@ export function ProposalCard({ plan, decision, cloudBusy, recovering, inventoryB
   const pillRow = pills.slice(0, 5);
   return <div className="ap-card ap-plan" id="plan-proposal" data-tour="proposal-card">
     <strong>{plan.comparisonOnly ? '原场景对照' : review ? '改法预览' : '这版还在预览'}</strong>
-    {layout && !plan.comparisonOnly && <div className="ap-plan-thumb" aria-hidden="true"><PlanPreview layout={layout}/></div>}
+    {/* 2026-11-19 用户指令：卡顶不再放规划缩略图，直接列这版的物料清单
+        （新增/挪动/撤掉 分组，点条目在画布上定位）；清单数据缺省时就不展示，不画示意图。 */}
+    {plan.changeItems && plan.changeItems.length > 0 && plan.changeSummary && (
+      <ProposalChangeList
+        items={plan.changeItems}
+        summary={plan.changeSummary}
+        onLocate={id => selection?.selectOnly(id, { keepPanel: true })}
+      />
+    )}
     {guests > 0 && !banquet && <div className="ap-seats-meter" aria-hidden="true"><div className="ap-seats-meter-fill" style={{ width: `${Math.min(100, Math.round((seats / Math.max(guests, 1)) * 100))}%` }} data-short={short ? 'true' : undefined}/></div>}
     <div className="ap-stats ap-plan-stats">
       {banquet && <div className="ap-stat"><b>{plan.placedTables ?? 0}</b><span>桌</span></div>}
@@ -131,13 +137,6 @@ export function ProposalCard({ plan, decision, cloudBusy, recovering, inventoryB
     {pillRow.length > 0 && <div className="ap-pills" role="status">
       {pillRow.map(pill => <span key={pill.label} className={`ap-pill ap-pill-${pill.tone}`}>{pill.label}</span>)}
     </div>}
-    {plan.changeItems && plan.changeItems.length > 0 && plan.changeSummary && (
-      <ProposalChangeList
-        items={plan.changeItems}
-        summary={plan.changeSummary}
-        onLocate={id => selection?.selectOnly(id, { keepPanel: true })}
-      />
-    )}
     <BoundaryLineNote plan={plan} ctx={followupCtx}/>
     {plan.venueChange && <p className="ap-warn-line">{plan.venueChange}；确认前不会修改场地。</p>}
     {!!plan.removedZones && <p className="ap-warn-line">这版将移除 {plan.removedZones} 个已有区域标注。</p>}
@@ -146,15 +145,9 @@ export function ProposalCard({ plan, decision, cloudBusy, recovering, inventoryB
     {inventoryBlocked && <p role="alert">{inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
       ? <p className="ap-small" id="plan-busy" role="status">{recovering && !cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
-      : decision === 'approved'
-        ? <div className="ap-decision-row" aria-label="本版已批准">
-            <span className="ap-decision-badge is-approved"><Check size={14} aria-hidden="true"/>已批准</span>
-          </div>
-        : decision === 'rejected'
-          ? <div className="ap-decision-row" aria-label="本版已拒绝">
-              <span className="ap-decision-badge is-rejected"><X size={14} aria-hidden="true"/>你拒绝了</span>
-            </div>
-          : <>
+      : <>
+          {/* 2026-11-19 体检：卡上的「已批准/你拒绝了」瞬态徽章分支删掉——确认/不用都会撤卡卸载，
+              持久的决策留痕由对话流徽章负责（agent-panel 的 ap-decision-badge 气泡）。 */}
           {!plan.blocked && !inventoryBlocked && !exportPreview && <button id="step-cta" type="button" className="btn-primary" data-tour="confirm-plan" onClick={() => { onApprove?.(); onConfirm(); }}>确认布置</button>}
           <div id="cta-hint" className="ap-error-actions">
             <button type="button" className="chip btn-outline" onClick={() => { onReject?.(); onWithdraw(); }}>不用</button>
@@ -170,7 +163,8 @@ export function ProposalCard({ plan, decision, cloudBusy, recovering, inventoryB
       {plan.scalePreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
       {plan.movementPreview?.map(line => <p className="ap-note" key={line}>{line}</p>)}
       {plan.restPreview?.map(line => <p className="ap-note" key={line}>{line}；通行和消防条件待核验。</p>)}
-      {short && !plan.localDraftDetails && plan.seatPriority && <p className="ap-note" id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
+      {/* 2026-11-19 用户指令：座位缺口已在徽章「座位还差 N」说过，注记不重复报数，只给建议。 */}
+      {short && !plan.localDraftDetails && plan.seatPriority && <p className="ap-note" id="plan-seat-cap">座位还不够；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
       {plan.overlapCount > 0 && <p className="ap-warn-line"><span aria-hidden="true">!</span>{review ? '改完还剩 ' : ''}{plan.overlapCount} 件挤在一起或压到墙：{names}{plan.overlapNames.length > 3 ? ' 等' : ''}。</p>}
       {plan.seatingReview?.status==='broken' && <p className="ap-note" role="status">原生成的桌椅配套有 {plan.seatingReview.brokenGroups} 组缺少物件；仍保留原配套关系的椅子有 {plan.seatingReview.intactChairs} 把，实际座位及现场条件仍需核验。</p>}
       {plan.seatingReview?.status==='unknown' && <p className="ap-note" role="status">桌椅配套关系尚未核验，不能只按椅子数量认定座位充足；请检查桌椅对应关系。</p>}
@@ -184,9 +178,8 @@ export function ProposalCard({ plan, decision, cloudBusy, recovering, inventoryB
         <p>确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
         <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
       </details>}
-      <p className="ap-note">{REFERENCE_SOURCE_UNVERIFIED}</p>
     </div>}
-    {banquet && short && !plan.localDraftDetails && plan.seatPriority && !/加不进更多/.test(plan.blocked ?? '') && <p id="plan-seat-cap">这次排到 {seats} 座，仍缺 {guests - seats} 座；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
+    {banquet && short && !plan.localDraftDetails && plan.seatPriority && !/加不进更多/.test(plan.blocked ?? '') && <p id="plan-seat-cap">座位还不够；可尝试调整物料规格、功能区或场地，再核对方案。</p>}
     {plan.modelExplanation && <ModelTextDisclosure><p>{plan.modelExplanation}</p></ModelTextDisclosure>}
     {!banquet && inventoryWorkspace}
   </div>;
