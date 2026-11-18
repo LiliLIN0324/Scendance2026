@@ -3,7 +3,7 @@
   "capturedAt": "2026-11-18T21:10:40+08:00",
   "note": "全部为真实上游返回的原始载荷（未加工）。生产站与本机 3211 用的是同一把高德 key，两边 id/坐标一致。",
   "production": {
-    "site": "https://scendance-scence-planner-ewz.pages.dev/",
+    "site": "https://scendance-scene-planner-ewz.pages.dev/",
     "source": "GET /api/amap-place（Pages Function 代理高德 restapi.amap.com/v3/place/text）",
     "request": "/api/amap-place?keywords=%E8%A1%97%E5%BF%83%E5%85%AC%E5%9B%AD&limit=10",
     "responseStatus": 200,
@@ -72,10 +72,10 @@
     "productionMethods": ["GET"],
     "cloudReads": [
       { "method": "GET", "url": "https://wkhfvnzgopjdzxlmycks.supabase.co/functions/v1/scene-api/studios/8b033463-3511-4ac4-96d3-e558e49f507f/messages/unread", "status": 200, "count": 5 },
-      { "method": "GET", "url": "https://scendance-scence-planner-ewz.pages.dev/api/amap-place", "status": 200 },
-      { "method": "GET", "url": "https://scendance-scence-planner-ewz.pages.dev/api/place-shape", "status": 200 },
-      { "method": "GET", "url": "https://scendance-scence-planner-ewz.pages.dev/api/place-shape-hints", "status": 200 },
-      { "method": "GET", "url": "https://scendance-scence-planner-ewz.pages.dev/api/tdt-area", "status": 200 }
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/amap-place", "status": 200 },
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/place-shape", "status": 200 },
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/place-shape-hints", "status": 200 },
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/tdt-area", "status": 200 }
     ],
     "localDevTotalFetchXhr": 22,
     "localDevWriteRequests": 0,

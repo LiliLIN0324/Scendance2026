@@ -185,8 +185,8 @@ replica-specs-gov-1.ts(29,78): 同上
 
 ## 8. 第三轮走查：#2 全绿、#5 部分通过 + 两个缺陷（2026-11-18）
 
-环境：正式站 `https://scendance-scence-planner-ewz.pages.dev/`（main `4fc210aa`，登录态有效），会话内置 Browser（Electron FilePanel）。
-（走查全程用旧拼写别名，规范域名是 `scendance-scene-planner-ewz.pages.dev`；该别名 origin 下的 API 全部 200。）
+环境：正式站 `https://scendance-scene-planner-ewz.pages.dev/`（main `4fc210aa`，登录态有效），会话内置 Browser（Electron FilePanel）。
+（规范域名。2026-11-18 订正：早期文档把这里写成 `scendance-scence-...`，该域名 DNS NXDOMAIN；检索载荷已在规范域名上复核，5 条 id/坐标一致。）
 本轮按 `docs/plans/2026-11-18-79-walkthrough-checklist.md` 跑了 #2 与 #5 两条，证据落 `docs/evidence/79/02/` 与 `docs/evidence/79/05/`。
 
 ### 8.1 结果

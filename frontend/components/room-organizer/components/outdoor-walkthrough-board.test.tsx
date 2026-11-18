@@ -132,7 +132,7 @@ describe("填走查日期（轮次 91）", () => {
     );
     expect((screen.getByLabelText("走查日期") as HTMLInputElement).value).toBe("2026-11-19");
     rerender(<OutdoorWalkthroughBoard book={emptyBook()} onMark={() => {}} onAsOf={() => {}} />);
-    expect(screen.getByText(/未填：卡片会沿用对照表上的日期/)).toBeTruthy();
+    expect(screen.getByText(/未填：本轮证据会标注「日期未填」/)).toBeTruthy();
   });
 
   it("不给 onAsOf 就没有输入框，只显示一行文字", () => {
