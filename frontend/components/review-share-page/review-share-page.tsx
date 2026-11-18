@@ -337,10 +337,31 @@ export function ReviewSharePage(): JSX.Element {
                 {outdoorDraft && (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
                     <span>钉在 ({outdoorDraft.x.toFixed(1)}, {outdoorDraft.y.toFixed(1)})</span>
-                    <input value={outdoorText} maxLength={80} aria-label="户外钉评内容" placeholder="这里要改什么？" onChange={event => setOutdoorText(event.currentTarget.value)} style={{ flex: 1, minWidth: 160 }} />
-                    <button type="button" onClick={() => { void commitOutdoorPin(outdoorText); }}>钉下</button>
+                    <span style={{ fontSize: 12, color: '#5d6b60', whiteSpace: 'nowrap' }}>{outdoorDraft.x.toFixed(1)}, {outdoorDraft.y.toFixed(1)} m</span>
+                    <input autoFocus value={outdoorText} maxLength={80} aria-label="户外钉评内容" placeholder="这里要改什么？" onChange={event => setOutdoorText(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void commitOutdoorPin(outdoorText); } else if (event.key === 'Escape') { setOutdoorDraft(null); } }} style={{ flex: 1, minWidth: 160 }} />
+                    <button type="button" disabled={!outdoorText.trim()} onClick={() => { void commitOutdoorPin(outdoorText); }}>钉下</button>
                     <button type="button" onClick={() => setOutdoorDraft(null)}>取消</button>
                   </div>
+                )}
+                {outdoorPins.length > 0 && (
+                  <ol aria-label="户外钉评" style={{ listStyle: 'none', padding: 0, margin: '10px 0 0', display: 'grid', gap: 6 }}>
+                    {outdoorPins.map((pin, index) => (
+                      <li key={pin.id}>
+                        <button
+                          type="button"
+                          aria-pressed={pin.id === activePinId}
+                          onClick={() => setActivePinId(pin.id)}
+                          style={{ width: '100%', textAlign: 'left', display: 'flex', gap: 8, alignItems: 'baseline', padding: '6px 8px', background: pin.id === activePinId ? '#e4efe6' : 'transparent', border: '1px solid #d6ded7', borderRadius: 8, cursor: 'pointer' }}
+                        >
+                          <strong>{index + 1}</strong>
+                          <span style={{ flex: 1 }}>{pin.text}</span>
+                          <small style={{ color: '#5d6b60' }}>
+                            {(pin as ReviewPin & { author?: string }).author || '访客'}{pin.status === 'resolved' ? ' · 已处理' : ''}
+                          </small>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
                 )}
               </section>
             )}
