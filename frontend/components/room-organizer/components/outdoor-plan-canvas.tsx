@@ -303,6 +303,7 @@ import { basemapNativeMaxZoom } from '../lib/basemap-zoom-caps';
 import { planningIcon } from './outdoor-plan-icons';
 import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
+import { ArrangeChoiceList } from './arrange-choice-list';
 import { useAnnotateDrawShortcuts } from '../hooks/use-annotate-draw-shortcuts';
 import { annotateDrawSelectionLabel, resolveAnnotateDrawToolClick } from '../lib/annotate-draw-shortcuts';
 import { applyOutdoorInspectorPanel, type OutdoorInspectorPanel } from '../lib/outdoor-inspector-panels';
@@ -404,8 +405,10 @@ import {
   type PlanZone,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { buildArrangeChoicePage, type ArrangeChoice } from '../lib/arrange-choices';
 import { arrangePreviewKind, buildArrangePreview } from '../lib/arrange-preview';
 import { loadShippedOnlineModels } from '../lib/online-models';
+import { capabilityForSlug } from '../lib/prop-capabilities';
 import type { PlanSceneObject } from '../lib/plan-item-bridge';
 
 export type CanvasBasemapSource = TdtProbeLayer | ProbePublicSource;
@@ -1914,6 +1917,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [oneLineBusy, setOneLineBusy] = useState(false);
   const [arrangePreview, setArrangePreview] = useState<{ label: string; count: number } | null>(null);
   const arrangePreviewRef = useRef<PlanFacility[] | null>(null);
+  /** 语义三选一：当前页的型号。点一款才写入预览，换一批沿用同一句。 */
+  const [arrangeChoices, setArrangeChoices] = useState<ArrangeChoice[] | null>(null);
+  const arrangeChoicePageRef = useRef(0);
+  const arrangeChoiceTextRef = useRef('');
   /**
    * 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
    * - 画布设施（浏览/选择模式点中实体）= 复制 + 层级四项 + 删除；
@@ -2521,28 +2528,92 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     notifyPlanDraftChanged();
   }
 
+  function clearArrangeChoices() {
+    arrangeChoicePageRef.current = 0;
+    arrangeChoiceTextRef.current = '';
+    setArrangeChoices(null);
+  }
+
   function confirmArrangePreview() {
     const facilities = arrangePreviewRef.current;
     if (!facilities?.length) return;
     commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, ...facilities] });
     arrangePreviewRef.current = null;
     setArrangePreview(null);
+    clearArrangeChoices();
     setOneLine('');
     setEditMessage(`已落库 ${facilities.length} 件，可一步撤销。`);
     draw();
     notifyPlanDraftChanged();
   }
 
-  /** 一句话布置：观礼区 / 摊位带 / 宴会套装先出预览，落库才写 plan。 */
+  function pickArrangeChoice(slug: string) {
+    const choice = arrangeChoices?.find(item => item.slug === slug);
+    if (!choice) return;
+    previewArrangeFacilities(choice.facilities, choice.name);
+    setEditMessage(`预览：${choice.name} · ${choice.count} 件，确认后落库。`);
+  }
+
+  /**
+   * 能力三选一：观礼 / 摊位 / 宴会套装没接住的句子。
+   * 第一页失败就清掉旧候选；换一批已经到底时保留当前页。
+   */
+  async function runArrangeChoiceCommand(text: string, page: number) {
+    const boundary = planRef.current.boundary;
+    if (page === 0) {
+      const early = buildArrangeChoicePage({ text, boundary, models: [], page: 0 });
+      if (!early.ok && early.reason !== 'empty') {
+        clearArrangePreview();
+        clearArrangeChoices();
+        setEditMessage(early.message);
+        return;
+      }
+    }
+    setOneLineBusy(true);
+    try {
+      const { models } = await loadShippedOnlineModels();
+      const result = buildArrangeChoicePage({
+        text,
+        boundary,
+        models: models.map(model => ({
+          slug: model.slug,
+          name: model.name,
+          width: model.width,
+          depth: model.depth,
+          kind: capabilityForSlug(model.slug)?.kind ?? 'none',
+        })),
+        page,
+      });
+      if (!result.ok) {
+        if (!result.keepCurrent) {
+          clearArrangePreview();
+          clearArrangeChoices();
+        }
+        setEditMessage(result.message);
+        return;
+      }
+      clearArrangePreview();
+      arrangeChoicePageRef.current = page;
+      arrangeChoiceTextRef.current = text;
+      setArrangeChoices(result.choices);
+      setEditMessage(result.message);
+    } catch {
+      setEditMessage('物料库读取失败，稍后再试。');
+    } finally {
+      setOneLineBusy(false);
+    }
+  }
+
+  /** 一句话布置：观礼区 / 摊位带 / 宴会套装先出预览；其余能力句给三选一。落库才写 plan。 */
   async function runOneLineCommand(raw: string) {
     const text = raw.trim();
     if (!text || oneLineBusy) return;
     const kind = arrangePreviewKind(text);
     if (!kind) {
-      clearArrangePreview();
-      setEditMessage('没听出要排什么：可以说「8 个摊位，留 2.4 米通道」，或「30 人观礼，留 2 米通道」。');
+      await runArrangeChoiceCommand(text, 0);
       return;
     }
+    clearArrangeChoices();
     if (planRef.current.boundary.length < 3) {
       clearArrangePreview();
       setEditMessage(kind === 'suite' ? '先画场地边界，再成套排桌。' : '先画场地边界，再排场景。');
@@ -10060,6 +10131,24 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {oneLineBusy ? '排布中…' : '执行'}
                         </button>
                       </div>
+                      {arrangeChoices && (
+                        <div style={{ marginTop: 6 }}>
+                          <ArrangeChoiceList
+                            choices={arrangeChoices}
+                            busy={oneLineBusy}
+                            onPick={pickArrangeChoice}
+                            onRefresh={() => {
+                              const text = arrangeChoiceTextRef.current;
+                              if (!text || oneLineBusy) return;
+                              void runArrangeChoiceCommand(text, arrangeChoicePageRef.current + 1);
+                            }}
+                            onCancel={() => {
+                              clearArrangeChoices();
+                              setEditMessage(null);
+                            }}
+                          />
+                        </div>
+                      )}
                       {arrangePreview && (
                         <div role="group" aria-label="落位预览" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
