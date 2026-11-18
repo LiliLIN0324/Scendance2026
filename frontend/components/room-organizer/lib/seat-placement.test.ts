@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   isSeatFacility,
   seatFacilityTargets,
+  seatFacingRad,
   seatSurfaceHeight,
   seatTargetOf,
+  seatWalkAnchor,
   type SeatFacilityInput,
 } from './seat-placement';
 
@@ -58,6 +60,36 @@ describe('seatTargetOf（落点 / 坐面 / 眼高）', () => {
 
   it('不可坐返回 null', () => {
     expect(seatTargetOf(facility({ id: 't1', name: '长桌', ref: 'x-table-y' }))).toBeNull();
+  });
+});
+
+describe('seatWalkAnchor（落座 / 起身落点）', () => {
+  it('default chair facing north puts the sitter south of the seat', () => {
+    // 朝向 π = 面朝北（−z）：髂部向南退 0.12 m，起身落点再退 0.45 m。
+    const anchor = seatWalkAnchor({ x: 0, y: 0, rotationDeg: 0 });
+    expect(anchor.yaw).toBeCloseTo(Math.PI, 6);
+    expect(anchor.x).toBeCloseTo(0, 6);
+    expect(anchor.z).toBeCloseTo(0.12, 6);
+    expect(anchor.standX).toBeCloseTo(0, 6);
+    expect(anchor.standZ).toBeCloseTo(0.57, 6);
+  });
+
+  it('follows the chair rotation and stays outside the seat on stand-up', () => {
+    // 朝向转到 90°（面朝东）：人退到椅子西侧，起身点再往西。
+    const anchor = seatWalkAnchor({ x: 4, y: -2, rotationDeg: 90 });
+    expect(seatFacingRad(90)).toBeCloseTo(Math.PI / 2, 6);
+    expect(anchor.x).toBeCloseTo(4 - 0.12, 6);
+    expect(anchor.z).toBeCloseTo(2, 6);
+    expect(anchor.standX).toBeCloseTo(4 - 0.57, 6);
+    // 起身落点始终比坐姿锚点离座面更远：站起来不会站在椅子里。
+    const hipToSeat = Math.hypot(4 - anchor.x, 2 - anchor.z);
+    const standToSeat = Math.hypot(4 - anchor.standX, 2 - anchor.standZ);
+    expect(standToSeat).toBeGreaterThan(hipToSeat + 0.4);
+  });
+
+  it('keeps the ENU north flip: y north maps to −z', () => {
+    const anchor = seatWalkAnchor({ x: 0, y: 5, rotationDeg: 0 });
+    expect(anchor.z).toBeCloseTo(-5 + 0.12, 6);
   });
 });
 
