@@ -32,12 +32,16 @@ const fakeController = (overrides: Partial<BackendSession> = {}): BackendSession
 } as unknown as BackendSession);
 
 describe('模型生成规则', () => {
-  it('引擎能力按方式判断；HY-3D 优先，未开通时自动落到 Aholo', () => {
+  it('计量文字/图片优先 Aholo Lux3D，没配再回 HY-3D', () => {
     const onlyAholo = caps({ aholoTextToModel: true });
+    const both = caps({ textToModel: true, imageToModel: true, aholoTextToModel: true, aholoImageToModel: true });
     expect(engineSupports(onlyAholo, 'hy3d', 'text')).toBe(false);
     expect(modeSupports(onlyAholo, 'text')).toBe(true);
     expect(pickEngine(onlyAholo, 'text')).toBe('aholo');
+    expect(pickEngine(both, 'text')).toBe('aholo');
+    expect(pickEngine(both, 'image')).toBe('aholo');
     expect(pickEngine(caps({ textToModel: true }), 'text')).toBe('hy3d');
+    expect(pickEngine(caps({ imageToModel: true, aholoTextToModel: true }), 'image')).toBe('hy3d');
     expect(engineLabel('aholo')).toBe('Aholo Lux3D');
   });
 
