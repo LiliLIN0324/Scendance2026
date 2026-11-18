@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { countOpenFeedbackPins, readBingoPlanFeedback } from '../lib/bingo-feedback';
 import {
-  bingoPhaseLabel,
   emptyBingoSnapshot,
   readBingoSnapshot,
   type BingoSnapshot,
@@ -74,11 +73,8 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
   const labelParts = [bingoVisualLabel(visual)];
   if (linkCount > 0) labelParts.push(`${linkCount} 份链接`);
   if (pinCount > 0) labelParts.push(`${pinCount} 条未读钉`);
-  const label = `收反馈，${labelParts.join('，')}`;
-  const tipParts = ['Bingo', sending ? '送出中' : bingoPhaseLabel(phase)];
-  if (pinCount > 0) tipParts.push(`${pinCount} 条未读钉`);
-  if (linkCount > 0) tipParts.push(`${linkCount} 份链接`);
-  const tip = tipParts.join(' · ');
+  // 2026-11-19 用户口径：左轨名字保持「Bingo」，气泡里只留名字，不再加待评/份数。
+  const label = `Bingo，${labelParts.join('，')}`;
 
   return (
     <button
@@ -88,7 +84,7 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
       aria-pressed={open}
       aria-expanded={open}
       aria-label={label}
-      data-tip={tip}
+      data-tip="Bingo"
       onClick={onOpen}
     >
       <BingoStatusMark phase={phase} sending={sending} count={shownCount} size={28} armed={armed} />
