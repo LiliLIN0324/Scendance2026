@@ -1,0 +1,217 @@
+<svg width="1600" height="1040" viewBox="0 0 1600 1040" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">画布内 ? 快捷键浮层草图</title>
+  <desc id="desc">画布上的 ? 胶囊按当前模式打开只读速查：带搜索、平台强调、模式筛选和拆分键帽；右侧标注入口、打开条件、关闭方式与失效提示。</desc>
+  <defs>
+    <filter id="shadow" x="-12%" y="-12%" width="124%" height="136%">
+      <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#121214" flood-opacity="0.20"/>
+    </filter>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#121214" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .ink { fill: #1F2933; }
+      .muted { fill: #6B7280; }
+      .faint { fill: #9CA3AF; }
+      .teal { fill: #0F766E; }
+      .orange { fill: #B45309; }
+      .red { fill: #B42318; }
+      .label { font: 600 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; letter-spacing: .04em; }
+      .h1 { font: 700 34px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .h2 { font: 700 20px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .h3 { font: 700 17px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .body { font: 400 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .small { font: 400 12px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .tiny { font: 400 11px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .strong { font: 600 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .kbd { font: 600 12px "Cascadia Mono", "SFMono-Regular", Consolas, monospace; }
+      .key { font: 600 12px "Cascadia Mono", "SFMono-Regular", Consolas, monospace; fill: #1F2933; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1040" fill="#F7F5EF"/>
+  <text x="1552" y="50" class="tiny muted" text-anchor="end">讨论稿 · 2026-11-18</text>
+  <text x="48" y="60" class="h1 ink">画布内 ? 快捷键浮层</text>
+  <text x="48" y="92" class="body muted">入口不藏在菜单里：当前模式 + ? 常驻画布，打开后先落到这个模式；搜索、平台与例外都在同一层。</text>
+
+  <!-- Canvas frame -->
+  <rect x="48" y="140" width="1000" height="840" rx="18" fill="#E7EDE8" stroke="#D8D4CA"/>
+  <g opacity="0.55">
+    <rect x="82" y="198" width="910" height="650" rx="10" fill="#EDF2ED" stroke="#CDD8CF"/>
+    <path d="M82 420 H992 M420 198 V848 M680 420 V848" stroke="#D5DED7" stroke-width="1"/>
+    <rect x="120" y="260" width="220" height="120" rx="6" fill="#DFE8E1" stroke="#C7D4C9"/>
+    <rect x="470" y="470" width="170" height="110" rx="6" fill="#DFE8E1" stroke="#C7D4C9"/>
+    <rect x="720" y="540" width="210" height="160" rx="6" fill="#DFE8E1" stroke="#C7D4C9"/>
+    <circle cx="570" cy="310" r="54" fill="#D9E5DB" stroke="#C7D4C9"/>
+    <path d="M120 760 C 260 700, 360 800, 500 730 S 760 690, 900 760" fill="none" stroke="#B9CBBE" stroke-width="2" stroke-dasharray="6 5"/>
+  </g>
+
+  <!-- Canvas chrome: agent orb, rail, bottom bar -->
+  <g opacity="0.55">
+    <circle cx="76" cy="168" r="20" fill="#FFFFFF" stroke="#C9D4CB"/>
+    <circle cx="76" cy="168" r="8" fill="#0F766E"/>
+    <text x="104" y="173" class="tiny muted">Agent</text>
+    <g transform="translate(1002 250)">
+      <circle cx="18" cy="0" r="17" fill="#FFFFFF" stroke="#C9D4CB"/><text x="18" y="5" text-anchor="middle" class="tiny muted">＋</text>
+      <circle cx="18" cy="48" r="17" fill="#FFFFFF" stroke="#C9D4CB"/><text x="18" y="53" text-anchor="middle" class="tiny muted">⌖</text>
+      <circle cx="18" cy="96" r="17" fill="#FFFFFF" stroke="#C9D4CB"/><text x="18" y="101" text-anchor="middle" class="tiny muted">◫</text>
+      <circle cx="18" cy="144" r="17" fill="#FFFFFF" stroke="#C9D4CB"/><text x="18" y="149" text-anchor="middle" class="tiny muted">⌂</text>
+      <circle cx="18" cy="192" r="17" fill="#FFFFFF" stroke="#C9D4CB"/><text x="18" y="197" text-anchor="middle" class="tiny muted">↗</text>
+    </g>
+    <rect x="76" y="882" width="940" height="52" rx="12" fill="#FFFFFF" stroke="#C9D4CB"/>
+    <rect x="92" y="894" width="48" height="28" rx="5" fill="#DDE7DF"/>
+    <rect x="150" y="894" width="48" height="28" rx="5" fill="#DDE7DF"/>
+    <rect x="208" y="894" width="48" height="28" rx="5" fill="#DDE7DF"/>
+    <text x="286" y="913" class="tiny faint">场地底图 · 图层</text>
+  </g>
+
+  <!-- Dim overlay -->
+  <rect x="48" y="140" width="1000" height="840" rx="18" fill="#121214" opacity="0.34"/>
+
+  <!-- Trigger chip above overlay for explanation -->
+  <g filter="url(#soft)">
+    <rect x="72" y="154" width="150" height="36" rx="18" fill="#FFFFFF" stroke="#D8D4CA"/>
+    <rect x="82" y="162" width="20" height="20" rx="5" fill="#F3F1EA" stroke="#D8D4CA"/>
+    <text x="92" y="176" text-anchor="middle" class="kbd">?</text>
+    <text x="112" y="177" class="small ink">户外</text>
+    <text x="154" y="177" class="tiny faint">速查</text>
+  </g>
+  <circle cx="236" cy="160" r="11" fill="#B45309"/>
+  <text x="236" y="164" text-anchor="middle" class="tiny" fill="#FFFFFF">1</text>
+
+  <!-- Modal -->
+  <g filter="url(#shadow)">
+    <rect x="175" y="210" width="760" height="600" rx="16" fill="#FFFDF8" stroke="#D8D4CA"/>
+  </g>
+  <g>
+    <text x="200" y="242" class="tiny muted">键盘速查 · 只读</text>
+    <text x="200" y="270" class="h2 ink">快捷键</text>
+    <rect x="200" y="282" width="58" height="22" rx="11" fill="#FFF3E8" stroke="#F0C7A6"/>
+    <text x="229" y="297" text-anchor="middle" class="tiny orange">户外</text>
+    <text x="268" y="297" class="tiny muted">H 抓手 · S 选择；标注键先给工具</text>
+    <circle cx="894" cy="238" r="14" fill="#FFFFFF" stroke="#D8D4CA"/>
+    <text x="894" y="244" text-anchor="middle" class="small muted">×</text>
+    <line x1="200" y1="316" x2="910" y2="316" stroke="#ECE8DF"/>
+
+    <rect x="200" y="330" width="500" height="38" rx="8" fill="#F3F4F1" stroke="#E5E1D8"/>
+    <text x="214" y="354" class="tiny faint">⌕  搜索操作、按键或备注，例如：吸附 / G</text>
+    <rect x="712" y="330" width="198" height="38" rx="8" fill="#F3F4F1" stroke="#E5E1D8"/>
+    <rect x="714" y="332" width="100" height="34" rx="6" fill="#FFFFFF" stroke="#D8D4CA"/>
+    <text x="764" y="354" text-anchor="middle" class="tiny ink">Windows / Linux</text>
+    <text x="858" y="354" text-anchor="middle" class="tiny faint">macOS</text>
+    <circle cx="724" cy="324" r="10" fill="#B45309"/><text x="724" y="328" text-anchor="middle" class="tiny" fill="#FFFFFF">2</text>
+
+    <text x="200" y="392" class="tiny faint">按键：左为 Windows / Linux，右为 macOS · 切平台只强化，不隐藏另一列</text>
+    <text x="910" y="392" text-anchor="end" class="tiny muted">共 8 条操作 · 4 条例外</text>
+
+    <g transform="translate(200 408)">
+      <rect x="0" y="0" width="46" height="26" rx="13" fill="#FFFDF8" stroke="#D8D4CA"/><text x="23" y="17" text-anchor="middle" class="tiny muted">全部</text>
+      <rect x="52" y="0" width="46" height="26" rx="13" fill="#FFFDF8" stroke="#D8D4CA"/><text x="75" y="17" text-anchor="middle" class="tiny muted">编辑</text>
+      <rect x="104" y="0" width="46" height="26" rx="13" fill="#FFFDF8" stroke="#D8D4CA"/><text x="127" y="17" text-anchor="middle" class="tiny muted">变换</text>
+      <rect x="156" y="0" width="46" height="26" rx="13" fill="#FFFDF8" stroke="#D8D4CA"/><text x="179" y="17" text-anchor="middle" class="tiny muted">视图</text>
+      <rect x="208" y="0" width="46" height="26" rx="13" fill="#1F2933"/><text x="231" y="17" text-anchor="middle" class="tiny" fill="#FFFFFF">户外</text>
+      <rect x="260" y="0" width="46" height="26" rx="13" fill="#FFFDF8" stroke="#D8D4CA"/><text x="283" y="17" text-anchor="middle" class="tiny muted">标注</text>
+      <rect x="312" y="0" width="46" height="26" rx="13" fill="#FFFDF8" stroke="#D8D4CA"/><text x="335" y="17" text-anchor="middle" class="tiny muted">例外</text>
+    </g>
+    <circle cx="714" cy="421" r="10" fill="#B45309"/><text x="714" y="425" text-anchor="middle" class="tiny" fill="#FFFFFF">3</text>
+
+    <rect x="200" y="450" width="710" height="286" rx="10" fill="#FFFFFF" stroke="#E5E1D8"/>
+    <text x="216" y="474" class="strong ink">户外规划</text>
+    <text x="216" y="490" class="tiny muted">户外画布的裸单键先给模式，再轮到工具。</text>
+    <line x1="216" y1="500" x2="894" y2="500" stroke="#ECE8DF"/>
+
+    <!-- rows -->
+    <text x="216" y="526" class="small ink">抓手工具</text>
+    <rect x="640" y="512" width="28" height="24" rx="5" fill="#FFFFFF" stroke="#1F2933"/><text x="654" y="529" text-anchor="middle" class="kbd">H</text>
+    <text x="684" y="529" class="tiny faint">/</text>
+    <rect x="700" y="512" width="28" height="24" rx="5" fill="#F7F5EF" stroke="#D8D4CA"/><text x="714" y="529" text-anchor="middle" class="kbd muted">H</text>
+    <text x="740" y="526" class="tiny muted">浏览模式</text>
+
+    <text x="216" y="566" class="small ink">选择工具</text>
+    <rect x="640" y="552" width="28" height="24" rx="5" fill="#FFFFFF" stroke="#1F2933"/><text x="654" y="569" text-anchor="middle" class="kbd">S</text>
+    <text x="684" y="569" class="tiny faint">/</text>
+    <rect x="700" y="552" width="28" height="24" rx="5" fill="#F7F5EF" stroke="#D8D4CA"/><text x="714" y="569" text-anchor="middle" class="kbd muted">S</text>
+    <text x="740" y="566" class="tiny muted">建造画布的 S 是缩放</text>
+
+    <text x="216" y="606" class="small ink">文本标注</text>
+    <rect x="640" y="592" width="28" height="24" rx="5" fill="#FFFFFF" stroke="#1F2933"/><text x="654" y="609" text-anchor="middle" class="kbd">T</text>
+    <text x="684" y="609" class="tiny faint">/</text>
+    <rect x="700" y="592" width="28" height="24" rx="5" fill="#F7F5EF" stroke="#D8D4CA"/><text x="714" y="609" text-anchor="middle" class="kbd muted">T</text>
+    <text x="740" y="606" class="tiny muted">标注模式</text>
+
+    <text x="216" y="646" class="small ink">矩形标注</text>
+    <rect x="640" y="632" width="28" height="24" rx="5" fill="#FFFFFF" stroke="#1F2933"/><text x="654" y="649" text-anchor="middle" class="kbd">R</text>
+    <text x="684" y="649" class="tiny faint">/</text>
+    <rect x="700" y="632" width="28" height="24" rx="5" fill="#F7F5EF" stroke="#D8D4CA"/><text x="714" y="649" text-anchor="middle" class="kbd muted">R</text>
+    <text x="740" y="646" class="tiny muted">设施落位时让给旋转</text>
+
+    <text x="216" y="686" class="small ink">退出当前工具</text>
+    <rect x="640" y="672" width="36" height="24" rx="5" fill="#FFFFFF" stroke="#1F2933"/><text x="658" y="689" text-anchor="middle" class="kbd">Esc</text>
+    <text x="684" y="689" class="tiny faint">/</text>
+    <rect x="700" y="672" width="36" height="24" rx="5" fill="#F7F5EF" stroke="#D8D4CA"/><text x="718" y="689" text-anchor="middle" class="kbd muted">Esc</text>
+    <circle cx="636" cy="532" r="10" fill="#B45309"/><text x="636" y="536" text-anchor="middle" class="tiny" fill="#FFFFFF">4</text>
+
+    <line x1="200" y1="756" x2="910" y2="756" stroke="#ECE8DF"/>
+    <text x="200" y="780" class="tiny muted">按 ? 打开 · Esc 关闭 · 这里只读，不会改动你的键位</text>
+    <circle cx="200" cy="792" r="10" fill="#B45309"/><text x="200" y="796" text-anchor="middle" class="tiny" fill="#FFFFFF">5</text>
+  </g>
+
+  <!-- Right annotations -->
+  <rect x="1080" y="140" width="472" height="840" rx="18" fill="#FFFDF8" stroke="#D8D4CA"/>
+  <text x="1104" y="174" class="label teal">A · 交互说明</text>
+  <text x="1104" y="200" class="h2 ink">入口、上下文、只读</text>
+  <text x="1104" y="222" class="small muted">参考 Linear / GitHub 的 ? 浮层，不抄全局命令面板。</text>
+
+  <g>
+    <circle cx="1116" cy="250" r="10" fill="#B45309"/><text x="1116" y="254" text-anchor="middle" class="tiny" fill="#FFFFFF">1</text>
+    <text x="1136" y="248" class="strong ink">入口带当前模式</text>
+    <text x="1136" y="266" class="small muted">? 户外 常驻画布；不是孤立问号。</text>
+  </g>
+  <g>
+    <circle cx="1116" cy="302" r="10" fill="#B45309"/><text x="1116" y="306" text-anchor="middle" class="tiny" fill="#FFFFFF">2</text>
+    <text x="1136" y="300" class="strong ink">? 直接打开</text>
+    <text x="1136" y="318" class="small muted">输入框内不拦截；已有 modal 不叠加。</text>
+  </g>
+  <g>
+    <circle cx="1116" cy="354" r="10" fill="#B45309"/><text x="1116" y="358" text-anchor="middle" class="tiny" fill="#FFFFFF">3</text>
+    <text x="1136" y="352" class="strong ink">搜索 / 平台 / 模式</text>
+    <text x="1136" y="370" class="small muted">搜索认 cmd / option / del；平台只强化不隐藏。</text>
+  </g>
+  <g>
+    <circle cx="1116" cy="406" r="10" fill="#B45309"/><text x="1116" y="410" text-anchor="middle" class="tiny" fill="#FFFFFF">4</text>
+    <text x="1136" y="404" class="strong ink">键帽拆开</text>
+    <text x="1136" y="422" class="small muted">Ctrl+Shift+Z 三枚；⌘⇧Z 三枚；条件行内。</text>
+  </g>
+  <g>
+    <circle cx="1116" cy="458" r="10" fill="#B45309"/><text x="1116" y="462" text-anchor="middle" class="tiny" fill="#FFFFFF">5</text>
+    <text x="1136" y="456" class="strong ink">关闭与只读</text>
+    <text x="1136" y="474" class="small muted">Esc / 点遮罩；不写存储，不改键位。</text>
+  </g>
+
+  <line x1="1104" y1="498" x2="1528" y2="498" stroke="#ECE8DF"/>
+  <text x="1104" y="524" class="strong ink">失效时说什么</text>
+  <text x="1104" y="542" class="small muted">拦截不静默；同一原因 1.6s 内只提示一次。</text>
+  <g filter="url(#soft)">
+    <rect x="1104" y="556" width="424" height="54" rx="10" fill="#1F2933"/>
+    <circle cx="1124" cy="583" r="8" fill="#B45309"/>
+    <text x="1140" y="578" class="tiny" fill="#FFFFFF">评审模式只看不改；切回「布置」再编辑。</text>
+    <text x="1140" y="594" class="tiny" fill="#9CA3AF">键被拦住了，但用户知道下一步。</text>
+  </g>
+
+  <line x1="1104" y1="630" x2="1528" y2="630" stroke="#ECE8DF"/>
+  <text x="1104" y="654" class="strong ink">成熟案例只借结构</text>
+  <text x="1104" y="676" class="tiny muted">VS Code：搜索是入口，命令与键位分列。</text>
+  <text x="1104" y="696" class="tiny muted">Blender：按上下文分组，不按键盘位置。</text>
+  <text x="1104" y="716" class="tiny muted">Linear / GitHub：? 浮层先给当前上下文。</text>
+  <text x="1104" y="736" class="tiny muted">Figma：快捷操作贴着当前选择出现。</text>
+
+  <rect x="1104" y="764" width="424" height="82" rx="10" fill="#F4F9F7" stroke="#BFE1D9"/>
+  <text x="1120" y="786" class="strong teal">不做什么</text>
+  <text x="1120" y="804" class="tiny muted">不做自定义改键、冲突检测、整键盘主界面；</text>
+  <text x="1120" y="822" class="tiny muted">不把搜索放进入口之前，也不把模式藏进 tooltip。</text>
+
+  <rect x="1104" y="858" width="424" height="96" rx="10" fill="#FFFFFF" stroke="#E5E1D8"/>
+  <text x="1120" y="880" class="strong ink">画布内的位置</text>
+  <text x="1120" y="898" class="tiny muted">桌面：左上 Agent 球右侧，避开模式胶囊。</text>
+  <text x="1120" y="916" class="tiny muted">移动：只留 ? 圆钮；进入沉浸模式自动隐藏。</text>
+  <text x="1120" y="934" class="tiny muted">入口层级低于右轨，高于画布底图。</text>
+</svg>

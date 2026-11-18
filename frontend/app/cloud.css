@@ -260,6 +260,88 @@
 .sc-unit-seg button{display:inline-flex;align-items:center;gap:4px;margin:0;padding:5px 10px;border:0;border-radius:6px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:500;white-space:nowrap}
 .sc-unit-seg button[aria-pressed=true]{background:var(--wk-paper);color:var(--wk-ink);font-weight:600}
 .sc-unit-seg button:hover:not([aria-pressed=true]){color:var(--wk-ink)}
+.sc-account-prefs-head{display:grid;gap:3px;margin:0 0 16px}
+.sc-account-prefs-head h3{margin:0}
+.sc-account-prefs-head p{margin:0;color:var(--sc-muted);font-size:12px;line-height:1.55}
+.sc-shortcut-reference{display:grid;gap:12px}
+.sc-shortcut-legend{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;margin:0;color:var(--sc-muted);font-size:11px;line-height:1.5}
+.sc-shortcut-groups{display:grid;gap:12px}
+.sc-shortcut-group{overflow:hidden;border:1px solid var(--wk-hair);border-radius:10px;background:var(--wk-paper)}
+.sc-shortcut-group-head{display:grid;gap:2px;padding:11px 16px;border-bottom:1px solid var(--wk-hair)}
+.sc-shortcut-group-head h4{margin:0;font-size:13px;font-weight:600}
+.sc-shortcut-group-head p{margin:0;color:var(--sc-muted);font-size:11px;line-height:1.5}
+.sc-shortcut-list{margin:0;padding:0}
+.sc-shortcut-row{display:grid;grid-template-columns:minmax(108px,.75fr) minmax(0,1.25fr);gap:12px;align-items:start;padding:9px 16px}
+.sc-shortcut-row+.sc-shortcut-row{border-top:1px solid var(--wk-hair)}
+.sc-shortcut-row dt{color:var(--wk-ink);font-size:12px;font-weight:500;line-height:1.55}
+.sc-shortcut-row dd{display:grid;gap:3px;min-width:0;margin:0}
+.sc-shortcut-keys{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0}
+.sc-shortcut-chord,.sc-shortcut-key{display:inline-flex;align-items:center;gap:3px}
+.sc-shortcut-plus{color:var(--sc-muted);font-size:9px;line-height:1}
+.sc-shortcut-or{margin:0 1px;color:var(--sc-muted);font-size:10px;line-height:1}
+.sc-shortcut-keys kbd{display:inline-flex;align-items:center;justify-content:center;min-width:20px;min-height:20px;padding:1px 6px;border:1px solid var(--wk-hair);border-bottom-width:2px;border-radius:5px;background:var(--wk-plane);color:var(--wk-ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.5;white-space:nowrap}
+.sc-shortcut-sep{color:var(--sc-muted);font-size:10px}
+.sc-shortcut-row small{color:var(--sc-muted);font-size:11px;line-height:1.5}
+.sc-shortcut-notes{display:grid;gap:4px;margin:0;padding:10px 16px 12px;border-top:1px solid var(--wk-hair);list-style:none;color:var(--sc-muted);font-size:11px;line-height:1.55}
+.sc-shortcut-notes li{position:relative;padding-left:10px}
+.sc-shortcut-notes li::before{content:"";position:absolute;top:.65em;left:0;width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.55}
+.sc-shortcut-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sc-shortcut-search{position:relative;display:flex;align-items:center;flex:1 1 240px;min-width:0}
+.sc-shortcut-search input{width:100%;height:34px;padding:0 32px 0 30px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-paper);color:var(--wk-ink);font:inherit;font-size:12px}
+.sc-shortcut-search input:focus-visible{outline:2px solid var(--ink-soft);outline-offset:1px}
+.sc-shortcut-search input::-webkit-search-cancel-button{display:none}
+.sc-shortcut-search-icon{position:absolute;left:10px;color:var(--sc-muted);font-size:15px;line-height:1;pointer-events:none}
+.sc-shortcut-search-clear{position:absolute;right:5px;display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:50%;background:transparent;color:var(--sc-muted);font-size:16px;line-height:1;cursor:pointer}
+.sc-shortcut-search-clear:hover{background:var(--wk-plane);color:var(--wk-ink)}
+.sc-shortcut-platform-switch{display:inline-flex;flex:none;padding:2px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-plane)}
+.sc-shortcut-platform-switch button{height:28px;padding:0 9px;border:0;border-radius:6px;background:transparent;color:var(--sc-muted);font:inherit;font-size:11px;cursor:pointer}
+.sc-shortcut-platform-switch button[aria-pressed="true"]{background:var(--wk-paper);color:var(--wk-ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.sc-shortcut-meta{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px}
+.sc-shortcut-count{margin:0;color:var(--sc-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.sc-shortcut-filters{display:flex;flex-wrap:wrap;gap:6px}
+.sc-shortcut-filters button{height:28px;padding:0 10px;border:1px solid var(--wk-hair);border-radius:999px;background:var(--wk-paper);color:var(--sc-muted);font:inherit;font-size:11px;cursor:pointer}
+.sc-shortcut-filters button[aria-pressed="true"]{border-color:var(--wk-ink);background:var(--wk-ink);color:var(--wk-paper)}
+.sc-shortcut-platform{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;transition:opacity .15s ease}
+.sc-shortcut-platform:not(.is-primary){opacity:.64}
+.sc-shortcut-platform.is-primary kbd{border-color:var(--wk-ink);background:var(--wk-paper)}
+.sc-shortcut-empty{display:grid;gap:6px;justify-items:start;padding:18px 16px;border:1px dashed var(--wk-hair);border-radius:10px;background:var(--wk-paper)}
+.sc-shortcut-empty strong{font-size:13px}
+.sc-shortcut-empty span{color:var(--sc-muted);font-size:11px}
+
+/* 画布快捷键教练：当前模式胶囊 + 只读速查浮层 */
+.sc-shortcut-coach-trigger{position:absolute;top:14px;left:76px;z-index:34;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 7px;border:1px solid var(--wk-hair);border-radius:999px;background:color-mix(in srgb,var(--wk-paper) 93%,transparent);color:var(--sc-muted);font:inherit;font-size:11px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.06);backdrop-filter:blur(8px);cursor:pointer}
+.sc-shortcut-coach-trigger:hover{color:var(--wk-ink);border-color:var(--wk-ink-faint)}
+.sc-shortcut-coach-trigger:focus-visible{outline:2px solid var(--wk-ink);outline-offset:2px}
+.sc-shortcut-coach-trigger kbd{display:grid;place-items:center;width:18px;height:18px;border:1px solid var(--wk-hair);border-bottom-width:2px;border-radius:5px;background:var(--wk-plane);color:var(--wk-ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10px;line-height:1}
+.sc-shortcut-coach-mode{white-space:nowrap}
+.sc-shortcut-coach-hint{color:var(--sc-muted);font-size:10px;white-space:nowrap}
+.sc-canvas-stage.is-chrome-hidden .sc-shortcut-coach-trigger{display:none}
+
+.sc-shortcut-coach-backdrop{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:18px;background:rgba(18,18,20,.36);backdrop-filter:blur(2px)}
+.sc-shortcut-coach{width:min(780px,calc(100vw - 32px));max-height:min(84dvh,820px);overflow:auto;border:1px solid var(--wk-hair);border-radius:14px;background:var(--wk-paper);box-shadow:0 24px 72px rgba(18,18,20,.24);padding:18px 20px 14px}
+.sc-shortcut-coach:focus{outline:none}
+.sc-shortcut-coach-head{position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:0 0 12px;background:var(--wk-paper)}
+.sc-shortcut-coach-head>div{min-width:0}
+.sc-shortcut-coach-kicker{margin:0 0 3px;color:var(--sc-muted);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.sc-shortcut-coach-head h2{margin:0;color:var(--wk-ink);font-size:17px;font-weight:600;line-height:1.3}
+.sc-shortcut-coach-current{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin:5px 0 0;color:var(--sc-muted);font-size:11px;line-height:1.5}
+.sc-shortcut-coach-current span{display:inline-flex;align-items:center;height:20px;padding:0 7px;border:1px solid var(--wk-hair);border-radius:999px;background:var(--wk-plane);color:var(--wk-ink);font-weight:600}
+.sc-shortcut-coach-close{display:grid;place-items:center;flex:none;width:30px;height:30px;border:1px solid var(--wk-hair);border-radius:50%;background:var(--wk-paper);color:var(--sc-muted);font:inherit;font-size:18px;line-height:1;cursor:pointer}
+.sc-shortcut-coach-close:hover{color:var(--wk-ink);background:var(--wk-plane)}
+.sc-shortcut-coach-close:focus-visible{outline:2px solid var(--wk-ink);outline-offset:2px}
+.sc-shortcut-coach-foot{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--wk-hair);color:var(--sc-muted);font-size:11px;line-height:1.5}
+.sc-shortcut-coach .sc-shortcut-reference{padding-top:2px}
+.sc-shortcut-coach .sc-shortcut-group{overflow:hidden;border:1px solid var(--wk-hair);border-radius:10px;background:var(--wk-paper)}
+.sc-shortcut-coach .sc-shortcut-groups{gap:8px}
+
+@media(max-width:680px){
+  .sc-shortcut-coach-trigger{left:12px;top:12px;padding:0 7px}
+  .sc-shortcut-coach-mode,.sc-shortcut-coach-hint{display:none}
+  .sc-shortcut-coach-backdrop{padding:8px}
+  .sc-shortcut-coach{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);padding:14px 12px 10px;border-radius:12px}
+  .sc-shortcut-coach-head{padding-bottom:10px}
+}
+.sc-shortcut-empty button{height:28px;padding:0 10px;border:1px solid var(--wk-hair);border-radius:7px;background:var(--wk-plane);color:var(--wk-ink);font:inherit;font-size:11px;cursor:pointer}
 /* 首字母圆片：每人一档颜色，由账号 ID 分出来，取色见 AVATAR_TONES；没分到色就还是灰片。 */
 .sc-settings-avatar{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;background:var(--sc-avatar-bg, var(--wk-plane-deep));font-size:12px;font-weight:600;color:var(--sc-avatar-ink, var(--wk-ink))}
 /* 左轨成员位用同一颗圆片，只按窄轨的尺度收一档。 */
@@ -312,4 +394,5 @@
 .sc-settings-preview>small{font-size:11px;color:var(--sc-muted);padding-top:2px}
 @media(max-width:880px){.sc-account-shell{grid-template-columns:minmax(0,1fr);border-top:0}.sc-account-shell::before{display:none}.sc-account-side{position:static;display:block;padding:16px 32px 18px;border-bottom:1px solid var(--sc-line)}.sc-account-profile{max-width:460px}.sc-account-teams{margin-top:16px}.sc-account-teams ul{display:flex;flex-wrap:wrap;gap:6px}.sc-account-team-role{display:none}.sc-cloud-dialog button.sc-account-team{width:auto;padding:4px 10px;border-color:var(--sc-line);border-radius:999px}.sc-cloud-dialog button.sc-account-team[aria-pressed=true]{box-shadow:none;border-color:var(--wk-green-pale)}}
 @media(max-width:800px){.sc-settings-permissions{grid-template-columns:1fr}.sc-settings-group .sc-settings-input{width:220px}.sc-settings-invite{grid-template-columns:minmax(0,1fr) auto}.sc-settings-invite-icon{display:none}.sc-account-dialog{width:calc(100vw - 24px)}.sc-account-body{padding:20px}.sc-account-dialog .sc-cloud-heading{padding:24px 20px 0}.sc-account-side{padding:14px 20px 16px}.sc-account-subnav{margin-inline:20px}.sc-account-dialog .sc-cloud-footer{padding:15px 20px}}
+@media(max-width:700px){.sc-account-prefs{grid-template-columns:1fr;gap:16px}.sc-account-prefs-nav{display:flex;flex-wrap:wrap;gap:6px}.sc-cloud-dialog .sc-account-prefs-nav button{width:auto;padding:6px 10px;border:1px solid var(--wk-hair);border-radius:999px}.sc-shortcut-row{grid-template-columns:1fr;gap:3px;padding:9px 12px}.sc-shortcut-group-head{padding:10px 12px}.sc-shortcut-notes{padding-inline:12px}}
 @media(max-width:480px){.sc-account-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:14px}.sc-account-profile{gap:10px}.sc-account-profile-actions>button,.sc-account-profile-actions>a.sc-cloud-primary{height:30px;padding:0 12px}.sc-account-avatar{width:34px;height:34px;font-size:15px}.sc-account-section-heading{align-items:flex-start}.sc-settings-row{flex-wrap:wrap;padding:12px}.sc-settings-row-actions{flex:1 0 100%;justify-content:flex-end}.sc-settings-studio-row .sc-settings-input{width:100%}.sc-settings-group .sc-settings-select{width:104px}.sc-settings-invite{grid-template-columns:1fr;padding:12px}.sc-settings-invite-icon{display:none}.sc-settings-add{justify-self:stretch}.sc-settings-contact{white-space:normal;overflow-wrap:anywhere}.sc-settings-perms{grid-template-columns:1fr}.sc-settings-role{padding:12px}.sc-settings-preview{padding:12px}}
