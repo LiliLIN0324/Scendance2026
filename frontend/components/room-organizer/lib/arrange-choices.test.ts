@@ -89,6 +89,39 @@ describe('语义三选一', () => {
     expect(result).toEqual({ ok: false, message: '物料库里没有满足这个能力的模型。', keepCurrent: false, reason: 'empty' });
   });
 
+  it('大块红线上，选中的设施旁边才放这 12 把，不贴在南缘', () => {
+    const wide = [
+      { x: 0, y: 0 },
+      { x: 80, y: 0 },
+      { x: 80, y: 80 },
+      { x: 0, y: 80 },
+    ];
+    const focus = { x: 40, y: 40, width: 2.3, depth: 2.2 };
+    const result = buildArrangeChoicePage({
+      text: '要能坐 12 把',
+      boundary: wide,
+      models,
+      focus,
+      ids,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const chairs = result.choices[0]!.facilities;
+    expect(chairs).toHaveLength(12);
+    const ys = chairs.map(item => item.position.y);
+    expect(Math.min(...ys)).toBeGreaterThan(20);
+    const nearest = Math.min(...chairs.map(item => Math.hypot(item.position.x - focus.x, item.position.y - focus.y)));
+    expect(nearest).toBeLessThan(12);
+    const xs = [...chairs.map(item => item.position.x)].sort((a, b) => a - b);
+    expect(xs[1]! - xs[0]!).toBeCloseTo(0.62 + 0.6);
+    for (const chair of chairs) {
+      expect(chair.position.x).toBeGreaterThan(0);
+      expect(chair.position.x).toBeLessThan(80);
+      expect(chair.position.y).toBeGreaterThan(0);
+      expect(chair.position.y).toBeLessThan(80);
+    }
+  });
+
   it('能力表里的纹身凳是可坐，观礼时排在礼堂椅后面', () => {
     const stool = capabilityForSlug('tattoo-and-piercing-studio-artists-stool-4b12a1fb');
     expect(stool?.kind).toBe('seat');
