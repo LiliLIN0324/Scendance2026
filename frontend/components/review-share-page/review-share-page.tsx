@@ -17,6 +17,7 @@ import {
 } from './load-plan';
 import { itemNames, ReviewPlanSheet } from './review-plan-sheet';
 import { markReviewReturned, readReviewReturn, REVIEW_RETURN_STORAGE_KEY } from './review-return';
+import { appendReviewPinCloud, listReviewPinsCloud } from './review-pins-cloud';
 import {
   appendReviewSharePin,
   readReviewSharePins,
@@ -103,6 +104,12 @@ export function ReviewSharePage(): JSX.Element {
           try {const storage=safeStorage();if(!storage)throw new Error();setPins(readExactReviewSharePins(currentPlan.planKey,storage));}
           catch {setPins([]);setPinsUsable(false);setPinError('本机反馈无法完整读取，请保留原记录，暂不能修改或导出。');}
         }else setPins(currentPlan.source==='link'||currentPlan.planKey==='sample:sharing'||currentPlan.planKey==='sample:hall-d5'?[]:readReviewSharePins(currentPlan.planKey,safeStorage()));
+        if(currentPlan.source==='link'&&currentPlan.planKey.startsWith('review-v2:')){
+          void listReviewPinsCloud(currentPlan.planKey).then(remote=>{
+            if(!active||current!==ticket||!remote.ok||!remote.value.length)return;
+            setPins(prev=>{const seen=new Set(prev.map(pin=>pin.id));return [...prev,...remote.value.filter(pin=>!seen.has(pin.id))];});
+          });
+        }
         const storage=safeStorage();
         const receipt = readReviewReturn(storage&&currentPlan.source==='link'?versionedReturnStorage(storage,currentPlan.planKey):storage);
         const already = receipt?.planKey === currentPlan.planKey;
@@ -175,6 +182,9 @@ export function ReviewSharePage(): JSX.Element {
       return;
     }
     setPins(result.pins);
+    if(plan.source==='link'&&plan.planKey.startsWith('review-v2:')){
+      void appendReviewPinCloud({shareKey:plan.planKey,pin:result.pin,floorId:floor.id});
+    }
     setActivePinId(result.pin.id);
     setPinDraft(null);
     setPinError('');
