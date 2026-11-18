@@ -351,7 +351,6 @@
 #agent-panel-delivery .sc-field { font-size:var(--fs-cap); }
 #agent-panel-delivery .sc-field :is(input,select,textarea) { min-height:28px; padding:4px 8px; font-size:var(--fs-p2); }
 #agent-panel-delivery .sc-operation-add-actions { gap:8px; }
-#agent-panel-delivery .sc-operation-example { margin:6px 0; }
 #agent-panel-review .sc-note { margin:0 0 6px; font-size:var(--fs-cap); line-height:1.5; }
 #agent-panel-review .sc-project-review h3 { margin:0 0 4px; font-size:var(--fs-p1); }
 #agent-panel-review .sc-project-review-fields { margin:8px 0; padding:8px 10px; gap:6px; }
