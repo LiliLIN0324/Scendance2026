@@ -121,3 +121,30 @@ describe("日期输入接线（轮次 91）", () => {
     expect((screen.getByLabelText("走查日期") as HTMLInputElement).value).toBe("2026-11-19 A");
   });
 });
+
+describe("报告段落自检显示（轮次 97）", () => {
+  it("传了 reportLine 就原样显示在待补清单下面", () => {
+    render(
+      <OutdoorWalkthroughSection
+        initialBook={emptyBook()}
+        onMark={vi.fn()}
+        defaultOpen
+        gapsLine="#2 —— 缺：云端"
+        reportLine="报告段落：6/6 段齐（内容对不对仍要人看）"
+      />,
+    );
+    expect(screen.getByLabelText("报告段落自检").textContent).toContain("6/6 段齐");
+  });
+
+  it("不传就不渲染空壳", () => {
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} defaultOpen />);
+    expect(screen.queryByLabelText("报告段落自检")).toBeNull();
+  });
+
+  it("收起时不显示（面板本身看不见）", () => {
+    render(
+      <OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} reportLine="报告段落：2/6 段" />,
+    );
+    expect(screen.queryByLabelText("报告段落自检")).toBeNull();
+  });
+});
