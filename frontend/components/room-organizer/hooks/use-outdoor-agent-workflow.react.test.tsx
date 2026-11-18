@@ -2352,3 +2352,9 @@ it("下一步提示与待补清单同源，且不含发布结论", () => {
   expect(line).toContain("先");
   expect(line).not.toContain("可发布");
 });
+
+it("定地点拦阻时，把上一句里的后置活说出来（不再等于没说）", async () => {
+  await turn("先摆摊位，最后再调通道", response("search", {}, {}));
+  expect(flow.notice).toContain("想在哪个地点做");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
+});
