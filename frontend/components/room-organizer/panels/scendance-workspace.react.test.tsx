@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, type ComponentProps, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -841,7 +843,7 @@ describe('ScendanceViewTools 户外漫游入口', () => {
     expect(toggleWalk).toHaveBeenCalledWith(false);
   });
 
-  it('漫游钮套用与其余地图控件相同的圆钮类，激活时仍是同一颗钮', () => {
+  it('漫游钮套用与其余地图控件相同的 44px 圆钮类，激活时保持黄人图标', () => {
     const { toggleWalk } = renderOutdoorWalk({ walkIn3D: true, walkActive: true });
     const button = screen.getByRole('button', { name: '退出漫游' });
     expect(button.className).toContain('oc-gm-round');
@@ -849,7 +851,23 @@ describe('ScendanceViewTools 户外漫游入口', () => {
     expect(button.className).toContain('is-walk');
     expect(button.className).toContain('is-active');
     expect(button.getAttribute('data-tip')).toBe('退出漫游');
+    const figure = button.querySelector('svg');
+    expect(figure?.getAttribute('width')).toBe('20');
+    expect(figure?.querySelector('g')?.getAttribute('fill')).toBe('#FBBF0A');
+    expect(figure?.querySelector('circle')?.getAttribute('r')).toBe('2.6');
+    expect(button.querySelector('.walk-figure')).toBeNull();
     fireEvent.click(button);
     expect(toggleWalk).toHaveBeenCalledWith(false);
+  });
+
+  it('漫游悬停只拎起图标，按钮色保持 #fbbc04，没有 walk-v7 光和踏步', () => {
+    const globals = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
+    expect(globals).toContain('button.is-walk > svg { transition: transform .18s ease; }');
+    expect(globals).toContain('button.is-walk:hover > svg { transform: translateY(-2px) rotate(-9deg); }');
+    expect(globals).toContain('button.oc-gm-walk {\n  border-radius: 50%; color: #fbbc04;\n}');
+    expect(globals).toContain('button.oc-gm-walk.is-active { color: #fbbc04; }');
+    expect(globals).not.toContain('walk-figure');
+    expect(globals).not.toContain('button.oc-gm-round.oc-gm-walk');
+    expect(globals).not.toMatch(/button\.is-walk:hover,\s*\n[^}]*translateY\(-2px\);/);
   });
 });
