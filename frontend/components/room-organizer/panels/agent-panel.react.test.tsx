@@ -4155,10 +4155,10 @@ describe('S2 Bingo 审校台：单一分享主入口', () => {
     expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
   });
 
-  it('点「准备客户评审」直接回调，不落气泡', () => {
+  it('点「发给客户评审」走现有评审链接能力，不落气泡', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '发给客户评审' }));
-    expect(callbacks.onOpenReview).toHaveBeenCalledOnce();
+    expect(callbacks.onIssueReviewLink).toHaveBeenCalledOnce();
   });
 
   it.each(['floor','floor-aba','layout','layout-aba'])('does not claim an old link is ready after same-batch %s changes',async mode=>{
