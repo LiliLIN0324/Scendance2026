@@ -4734,7 +4734,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>
       </section>}
       {bingo && <div className="ap-card ap-status-panel" aria-label="审校动作">
-        <button type="button" className="chip" onClick={agent.callbacks.onOpenReview}>发给客户评审</button>
+        <button type="button" className="chip" onClick={() => agent.issueReviewLink()}>发给客户评审</button>
         {/* 体检与旧钉评链接收进次级动作：主路径只留分享，避免三颗平级按钮。 */}
         <details className="ap-audit-more-actions">
           <summary>更多审校动作</summary>
