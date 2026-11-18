@@ -19,6 +19,7 @@ large-waste-container,大型垃圾箱,环卫,3.5,1.9,待核,6.7,仅0/90,MKT-08;C
 generator,发电机,电力,2.4,1.2,待核,2.9,仅0/90,STG-10;GEN-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:generator,须围挡并远离观众区；噪声按 STG-10 控制
 stanchion,隔离柱,隔离,0.4,0.4,1,0.16,不限,STG-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:stanchion,立杆间距 ≤2 m
 sight-screen,视线遮挡屏,隔离,4,0.8,待核,3.2,仅0/90,STG-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:sight-screen,高 2.4 m 为常见规格但代码无高度数据
+water-barrier-1.25,注水围挡（水马）,隔离,1.25,0.45,待核,0.56,不限,MKT-03;MKT-04;STG-05;GEN-03,待核,待核,待核,待核,待核,待核,商家页面（未核）；data/agent-corpus/material-references.csv,尺寸与注水重量见 material-references.csv；未注水不可当硬隔离
 concrete-block,混凝土隔离墩,隔离,0.8,0.8,待核,0.64,不限,STG-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:concrete-block,配重与吊装须厂家数据
 fire-extinguisher,灭火器,消防,0.4,0.4,待核,0.16,不限,MKT-07;GEN-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:fire-extinguisher,每 10 摊 ≥2 具 4 kg ABC
 pa-speakers,扩声音箱,音响,0.7,0.7,待核,0.49,不限,STG-10,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:pa-speakers,噪声限值按场界 60/50 dB(A)

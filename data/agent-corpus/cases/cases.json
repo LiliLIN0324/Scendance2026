@@ -1,0 +1,2204 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-18",
+  "note": "三类案例：平台底图核对（读数）、自有场地档案（演练件）、公开事故复盘（只记布局失效模式，不引伤亡数字）。案例不是验收证据，也不能替代审批。",
+  "counts": {
+    "basemap": 43,
+    "recommended": 10,
+    "venues": 20,
+    "venueFiles": 30,
+    "incidents": 3
+  },
+  "basemap": [
+    {
+      "id": "BM-01",
+      "source": "basemap-audit",
+      "name": "Scotiabank Hockey Day Canada",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 48.42315,
+        "lng": -123.3701,
+        "raw": "-123.3701, 48.42315",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 173.3,
+        "height": 223.8
+      },
+      "counts": {
+        "zones": 9,
+        "objects": 60,
+        "routes": 4,
+        "entrances": 3
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": 77.930692,
+        "metersPerPixel": 0.099,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": true,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-02",
+      "source": "basemap-audit",
+      "name": "North Australia Festival of the Arts",
+      "typeRaw": "Festivals",
+      "region": "Australia & NZ",
+      "anchor": {
+        "lat": -19.24628,
+        "lng": 146.81086,
+        "raw": "146.81086, -19.24628",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 175,
+        "height": 195.1
+      },
+      "counts": {
+        "zones": 8,
+        "objects": 21,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": true,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-03",
+      "source": "basemap-audit",
+      "name": "USA Triathlon Nationals & PTO US Open",
+      "typeRaw": "Road Events",
+      "region": "North America",
+      "anchor": {
+        "lat": 43.03635,
+        "lng": -87.89732,
+        "raw": "-87.89732, 43.03635",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 236.1,
+        "height": 201.7
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 50,
+        "routes": 3,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "路跑与封控：按路线与路口点试验，跨度大，适合视图缩放验证",
+      "recommended": true,
+      "templateHints": [
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-04",
+      "source": "basemap-audit",
+      "name": "The Newport Show",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 52.77972,
+        "lng": -2.38699,
+        "raw": "-2.38699, 52.77972",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 399.5,
+        "height": 419.6
+      },
+      "counts": {
+        "zones": 5,
+        "objects": 72,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": true,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-05",
+      "source": "basemap-audit",
+      "name": "Northern Nevada Pride",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 39.52448,
+        "lng": -119.81654,
+        "raw": "-119.81654, 39.52448",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 425.5,
+        "height": 184.7
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 57,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": 1.29,
+        "imageryPoints": 3
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": true,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-06",
+      "source": "basemap-audit",
+      "name": "Franklin's Gardens – Northampton Saints Stadium",
+      "typeRaw": "Venues",
+      "region": "Europe",
+      "anchor": {
+        "lat": 52.23949,
+        "lng": -0.91958,
+        "raw": "-0.91958, 52.23949",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 306.6,
+        "height": 261.3
+      },
+      "counts": {
+        "zones": 7,
+        "objects": 23,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "场馆：馆体+外围服务区，适合入口与通道试验",
+      "recommended": true,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-07",
+      "source": "basemap-audit",
+      "name": "Banbury Town Council – Coronation Events",
+      "typeRaw": "Local Governments",
+      "region": "Europe",
+      "anchor": {
+        "lat": 52.0662,
+        "lng": -1.3325,
+        "raw": "-1.3325, 52.0662",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 230.9,
+        "height": 627.8
+      },
+      "counts": {
+        "zones": 7,
+        "objects": 38,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": 1.04,
+        "imageryPoints": 22
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-08",
+      "source": "basemap-audit",
+      "name": "New Forest Folk Festival",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 50.97687,
+        "lng": -1.60345,
+        "raw": "-1.60345, 50.97687",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 412.1,
+        "height": 761.2
+      },
+      "counts": {
+        "zones": 7,
+        "objects": 15,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-09",
+      "source": "basemap-audit",
+      "name": "National Night Out (Olney, Maryland)",
+      "typeRaw": "Local Governments",
+      "region": "North America",
+      "anchor": {
+        "lat": 39.15245,
+        "lng": -77.06254,
+        "raw": "-77.06254, 39.15245",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 123.9,
+        "height": 145.4
+      },
+      "counts": {
+        "zones": 10,
+        "objects": 73,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": 0.37,
+        "imageryPoints": 22
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": true,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-10",
+      "source": "basemap-audit",
+      "name": "Basildon Pride",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 51.57358,
+        "lng": 0.45467,
+        "raw": "0.45467, 51.57358",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 1462.5,
+        "height": 1489.1
+      },
+      "counts": {
+        "zones": 4,
+        "objects": 22,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": 2.29,
+        "imageryPoints": 349
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-11",
+      "source": "basemap-audit",
+      "name": "Fire in the Mountain",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 52.35307,
+        "lng": -3.93918,
+        "raw": "-3.93918, 52.35307",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 441.3,
+        "height": 317.4
+      },
+      "counts": {
+        "zones": 9,
+        "objects": 19,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": 0.89,
+        "imageryPoints": 26
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-12",
+      "source": "basemap-audit",
+      "name": "Buffalo Marathon Weekend",
+      "typeRaw": "Road Events",
+      "region": "North America",
+      "anchor": {
+        "lat": 42.91025,
+        "lng": -78.87737,
+        "raw": "-78.87737, 42.91025",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 4454.9,
+        "height": 8075.4
+      },
+      "counts": {
+        "zones": 0,
+        "objects": 0,
+        "routes": 3,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "路跑与封控：按路线与路口点试验，跨度大，适合视图缩放验证",
+      "recommended": false,
+      "templateHints": [
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-13",
+      "source": "basemap-audit",
+      "name": "Rotherham Christmas Light Switch On",
+      "typeRaw": "Local Governments",
+      "region": "Europe",
+      "anchor": {
+        "lat": 53.43228,
+        "lng": -1.35589,
+        "raw": "-1.35589, 53.43228",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 245.8,
+        "height": 396.3
+      },
+      "counts": {
+        "zones": 8,
+        "objects": 6,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-14",
+      "source": "basemap-audit",
+      "name": "Fareham West Scouts – Camp24",
+      "typeRaw": "Local Governments",
+      "region": "Europe",
+      "anchor": {
+        "lat": 50.92474,
+        "lng": -1.22058,
+        "raw": "-1.22058, 50.92474",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 385.9,
+        "height": 367.1
+      },
+      "counts": {
+        "zones": 7,
+        "objects": 20,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-15",
+      "source": "basemap-audit",
+      "name": "Victoria Park Brisbane – Easter Egg Hunt",
+      "typeRaw": "Local Governments",
+      "region": "Australia & NZ",
+      "anchor": {
+        "lat": -27.45315,
+        "lng": 153.02228,
+        "raw": "153.02228, -27.45315",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 328.8,
+        "height": 522.7
+      },
+      "counts": {
+        "zones": 9,
+        "objects": 7,
+        "routes": 1,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-16",
+      "source": "basemap-audit",
+      "name": "Trunk or Treat",
+      "typeRaw": "Local Governments",
+      "region": "North America",
+      "anchor": {
+        "lat": 43.49065,
+        "lng": -116.42121,
+        "raw": "-116.42121, 43.49065",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 342,
+        "height": 281.7
+      },
+      "counts": {
+        "zones": 4,
+        "objects": 44,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": 0.68,
+        "imageryPoints": 60
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-17",
+      "source": "basemap-audit",
+      "name": "Parkenfestivalen",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 67.28378,
+        "lng": 14.40168,
+        "raw": "14.40168, 67.28378",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 267.2,
+        "height": 336.2
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 15,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-18",
+      "source": "basemap-audit",
+      "name": "Wintersköl",
+      "typeRaw": "Local Governments",
+      "region": "North America",
+      "anchor": {
+        "lat": 39.18815,
+        "lng": -106.81983,
+        "raw": "-106.81983, 39.18815",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 156,
+        "height": 204.9
+      },
+      "counts": {
+        "zones": 5,
+        "objects": 40,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "已配准 · 已描图",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": 0.36,
+        "imageryPoints": 8
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-19",
+      "source": "basemap-audit",
+      "name": "High Chaparral Park（日全食观测营地）",
+      "typeRaw": "未分类",
+      "region": "",
+      "anchor": {
+        "lat": 31.11177,
+        "lng": -97.92133,
+        "raw": "-97.92133, 31.11177",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 185.5,
+        "height": 216.8
+      },
+      "counts": {
+        "zones": 5,
+        "objects": 363,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "待按场地判断",
+      "recommended": true,
+      "templateHints": [],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-20",
+      "source": "basemap-audit",
+      "name": "Halloween Carnival",
+      "typeRaw": "Local Governments",
+      "region": "North America",
+      "anchor": {
+        "lat": 40.08214,
+        "lng": -76.31559,
+        "raw": "-76.31559, 40.08214",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 418.8,
+        "height": 319.7
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 14,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-21",
+      "source": "basemap-audit",
+      "name": "Outfield Music, Food & Arts Festival",
+      "typeRaw": "Festivals",
+      "region": "Australia & NZ",
+      "anchor": {
+        "lat": -39.64232,
+        "lng": 176.96732,
+        "raw": "176.96732, -39.64232",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 761.9,
+        "height": 657.6
+      },
+      "counts": {
+        "zones": 5,
+        "objects": 11,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-22",
+      "source": "basemap-audit",
+      "name": "Carols in the Park",
+      "typeRaw": "Local Governments",
+      "region": "Australia & NZ",
+      "anchor": {
+        "lat": -32.53377,
+        "lng": 115.71498,
+        "raw": "115.71498, -32.53377",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 171.1,
+        "height": 360.9
+      },
+      "counts": {
+        "zones": 5,
+        "objects": 26,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-23",
+      "source": "basemap-audit",
+      "name": "Mandurah Christmas Pageant",
+      "typeRaw": "Local Governments",
+      "region": "Australia & NZ",
+      "anchor": {
+        "lat": -32.53199,
+        "lng": 115.72037,
+        "raw": "115.72037, -32.53199",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 455,
+        "height": 604.7
+      },
+      "counts": {
+        "zones": 3,
+        "objects": 24,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-24",
+      "source": "basemap-audit",
+      "name": "Halloween Firework Spooktacular",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 53.95156,
+        "lng": -1.18192,
+        "raw": "-1.18192, 53.95156",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 919.7,
+        "height": 459.5
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 22,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-25",
+      "source": "basemap-audit",
+      "name": "Trafalgar Square 'Event Planning for Crowded Space' Course",
+      "typeRaw": "Education",
+      "region": "Europe",
+      "anchor": {
+        "lat": 51.50793,
+        "lng": -0.12776,
+        "raw": "-0.12776, 51.50793",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 218.1,
+        "height": 183.4
+      },
+      "counts": {
+        "zones": 10,
+        "objects": 19,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "密集空间课程/校园：适合人群密度与疏散提示试验",
+      "recommended": false,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-26",
+      "source": "basemap-audit",
+      "name": "National Cherry Festival",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 44.7664,
+        "lng": -85.62385,
+        "raw": "-85.62385, 44.7664",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 402.2,
+        "height": 240.7
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 53,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-27",
+      "source": "basemap-audit",
+      "name": "Halloween Town",
+      "typeRaw": "Local Governments",
+      "region": "North America",
+      "anchor": {
+        "lat": 40.33053,
+        "lng": -112.01573,
+        "raw": "-112.01573, 40.33053",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 257.6,
+        "height": 213.7
+      },
+      "counts": {
+        "zones": 8,
+        "objects": 54,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-28",
+      "source": "basemap-audit",
+      "name": "Rocket City Fair",
+      "typeRaw": "未分类",
+      "region": "",
+      "anchor": {
+        "lat": 34.69696,
+        "lng": -86.58885,
+        "raw": "-86.58885, 34.69696",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 297.5,
+        "height": 818.9
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 24,
+        "routes": 3,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "待按场地判断",
+      "recommended": false,
+      "templateHints": [],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-29",
+      "source": "basemap-audit",
+      "name": "The Great Fair of Shalford",
+      "typeRaw": "未分类",
+      "region": "",
+      "anchor": {
+        "lat": 51.21246,
+        "lng": -0.56644,
+        "raw": "-0.56644, 51.21246",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 305.5,
+        "height": 155.8
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 99,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "待按场地判断",
+      "recommended": false,
+      "templateHints": [],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-30",
+      "source": "basemap-audit",
+      "name": "Springvale Snow Fest",
+      "typeRaw": "Local Governments",
+      "region": "Australia & NZ",
+      "anchor": {
+        "lat": -37.95032,
+        "lng": 145.15132,
+        "raw": "145.15132, -37.95032",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 172.5,
+        "height": 426
+      },
+      "counts": {
+        "zones": 5,
+        "objects": 73,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
+      "recommended": true,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-31",
+      "source": "basemap-audit",
+      "name": "Ashfield Day",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 53.1247,
+        "lng": -1.25051,
+        "raw": "-1.25051, 53.1247",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 577.7,
+        "height": 390.2
+      },
+      "counts": {
+        "zones": 8,
+        "objects": 21,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-32",
+      "source": "basemap-audit",
+      "name": "Spiltrock Summerjam",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 33.42614,
+        "lng": -117.27386,
+        "raw": "-117.27386, 33.42614",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 351.3,
+        "height": 295.4
+      },
+      "counts": {
+        "zones": 8,
+        "objects": 18,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-33",
+      "source": "basemap-audit",
+      "name": "MugStock",
+      "typeRaw": "Festivals",
+      "region": "Europe",
+      "anchor": {
+        "lat": 56.32065,
+        "lng": -3.74505,
+        "raw": "-3.74505, 56.32065",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 700.7,
+        "height": 712.3
+      },
+      "counts": {
+        "zones": 8,
+        "objects": 19,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-34",
+      "source": "basemap-audit",
+      "name": "Riverbend Music Festival",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 35.05593,
+        "lng": -85.31383,
+        "raw": "-85.31383, 35.05593",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 615.8,
+        "height": 299.8
+      },
+      "counts": {
+        "zones": 8,
+        "objects": 25,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-35",
+      "source": "basemap-audit",
+      "name": "Masters of Motoring",
+      "typeRaw": "未分类",
+      "region": "",
+      "anchor": {
+        "lat": 51.42779,
+        "lng": -2.04378,
+        "raw": "-2.04378, 51.42779",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 1079.2,
+        "height": 606.9
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 11,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "待按场地判断",
+      "recommended": false,
+      "templateHints": [],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-36",
+      "source": "basemap-audit",
+      "name": "Desert WineFest",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 33.7327,
+        "lng": -116.37958,
+        "raw": "-116.37958, 33.7327",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 203.1,
+        "height": 140.3
+      },
+      "counts": {
+        "zones": 7,
+        "objects": 61,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-37",
+      "source": "basemap-audit",
+      "name": "Festival Foods' 11 Running Events on the Same Day",
+      "typeRaw": "Road Events",
+      "region": "North America",
+      "anchor": {
+        "lat": 44.53386,
+        "lng": -89.59232,
+        "raw": "-89.59232, 44.53386",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 1462.3,
+        "height": 1515
+      },
+      "counts": {
+        "zones": 0,
+        "objects": 0,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "路跑与封控：按路线与路口点试验，跨度大，适合视图缩放验证",
+      "recommended": false,
+      "templateHints": [
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-38",
+      "source": "basemap-audit",
+      "name": "Eurovision Song Contest – Host City Bid",
+      "typeRaw": "Education",
+      "region": "Europe",
+      "anchor": {
+        "lat": 53.80339,
+        "lng": -1.54296,
+        "raw": "-1.54296, 53.80339",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 432.2,
+        "height": 281.9
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 12,
+        "routes": 3,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "密集空间课程/校园：适合人群密度与疏散提示试验",
+      "recommended": false,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-39",
+      "source": "basemap-audit",
+      "name": "45th Spearfish Festival in the Park",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 44.48319,
+        "lng": -103.86088,
+        "raw": "-103.86088, 44.48319",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 229.2,
+        "height": 341
+      },
+      "counts": {
+        "zones": 6,
+        "objects": 102,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": true,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-40",
+      "source": "basemap-audit",
+      "name": "The Great North West Switas Truck Show",
+      "typeRaw": "未分类",
+      "region": "",
+      "anchor": {
+        "lat": 53.48019,
+        "lng": -2.62189,
+        "raw": "-2.62189, 53.48019",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 930.3,
+        "height": 508.6
+      },
+      "counts": {
+        "zones": 7,
+        "objects": 252,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "待按场地判断",
+      "recommended": false,
+      "templateHints": [],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-41",
+      "source": "basemap-audit",
+      "name": "Senior Pro Rodeo Finals",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 33.27086,
+        "lng": -111.97943,
+        "raw": "-111.97943, 33.27086",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 448.8,
+        "height": 603.5
+      },
+      "counts": {
+        "zones": 9,
+        "objects": 8,
+        "routes": 4,
+        "entrances": 3
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-42",
+      "source": "basemap-audit",
+      "name": "Riverside Festival",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 45.42898,
+        "lng": -75.70731,
+        "raw": "-75.70731, 45.42898",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 66.6,
+        "height": 89.6
+      },
+      "counts": {
+        "zones": 3,
+        "objects": 34,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": null,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    },
+    {
+      "id": "BM-43",
+      "source": "basemap-audit",
+      "name": "stART on the Street",
+      "typeRaw": "Festivals",
+      "region": "North America",
+      "anchor": {
+        "lat": 42.268872,
+        "lng": -71.817042,
+        "raw": "-71.817042, 42.268872",
+        "rawOrder": "lng,lat",
+        "matchesRaw": true
+      },
+      "spanM": {
+        "width": 103,
+        "height": 283.4
+      },
+      "counts": {
+        "zones": 4,
+        "objects": 59,
+        "routes": 2,
+        "entrances": 2
+      },
+      "registration": {
+        "badge": "精确锚点（已核对）",
+        "angleDeg": null,
+        "metersPerPixel": 0.1036,
+        "rmsM": null,
+        "imageryPoints": null
+      },
+      "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
+      "recommended": false,
+      "templateHints": [
+        "MKT",
+        "STG"
+      ],
+      "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
+      "evidence": {
+        "auditHtml": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/经典活动案例底图核对_43案.html",
+        "auditCsv": "deliverables/幕景中国研究资料包_2026-11-18/06_卫星图活动试验/卫星底图活动试验清单.csv"
+      }
+    }
+  ],
+  "venues": [
+    {
+      "id": "VN-01",
+      "source": "own-venue-archive",
+      "name": "白马湖B馆",
+      "files": [
+        "幕景白马湖B馆_匿名活动安排_撤换前.csv",
+        "幕景白马湖B馆_匿名活动安排_撤换后.csv"
+      ],
+      "fileCount": 2,
+      "templateHints": [
+        "EXH",
+        "MKT"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-02",
+      "source": "own-venue-archive",
+      "name": "杭博",
+      "files": [
+        "幕景杭博_匿名制作交接单_关联有效.html",
+        "幕景杭博_匿名制作交接单_关联缺失.html"
+      ],
+      "fileCount": 2,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-03",
+      "source": "own-venue-archive",
+      "name": "杭博二期",
+      "files": [
+        "幕景杭博二期_匿名交付清单.csv",
+        "幕景杭博二期_匿名首层示意.dxf"
+      ],
+      "fileCount": 2,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-04",
+      "source": "own-venue-archive",
+      "name": "杭州模型文化节",
+      "files": [
+        "幕景杭州模型文化节_双地点交接演练.csv"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-05",
+      "source": "own-venue-archive",
+      "name": "黄酒会客厅",
+      "files": [
+        "幕景黄酒会客厅_匿名评审反馈.json"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-06",
+      "source": "own-venue-archive",
+      "name": "嘉兴会展",
+      "files": [
+        "幕景嘉兴会展_匿名卸货核对任务.csv",
+        "幕景嘉兴会展_匿名货运导视制作交接.html",
+        "幕景嘉兴会展_货运图与卫星图对照.html"
+      ],
+      "fileCount": 3,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-07",
+      "source": "own-venue-archive",
+      "name": "进博会浙江展台",
+      "files": [
+        "幕景进博会浙江展台_匿名评审反馈.json"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-08",
+      "source": "own-venue-archive",
+      "name": "宁波国展",
+      "files": [
+        "幕景宁波国展_匿名分时开放.csv"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH",
+        "MKT"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-09",
+      "source": "own-venue-archive",
+      "name": "宁波货博会",
+      "files": [
+        "幕景宁波货博会_匿名服务区平面.dxf",
+        "幕景宁波货博会_服务区与动线演练.png"
+      ],
+      "fileCount": 2,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-10",
+      "source": "own-venue-archive",
+      "name": "绍兴国际会展中心",
+      "files": [
+        "幕景绍兴国际会展中心_匿名评审反馈.json"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-11",
+      "source": "own-venue-archive",
+      "name": "数贸会启动仪式",
+      "files": [
+        "幕景数贸会启动仪式_匿名待核对任务.csv"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH",
+        "STG"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-12",
+      "source": "own-venue-archive",
+      "name": "台州国际博览中心",
+      "files": [
+        "幕景台州国际博览中心_匿名到场清单回读.json"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-13",
+      "source": "own-venue-archive",
+      "name": "乌镇古镇嘉年华",
+      "files": [
+        "幕景乌镇古镇嘉年华_匿名双路线试排.png",
+        "幕景乌镇古镇嘉年华_巡游换场交接演练.csv"
+      ],
+      "fileCount": 2,
+      "templateHints": [
+        "STG"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-14",
+      "source": "own-venue-archive",
+      "name": "乌镇A馆",
+      "files": [
+        "幕景乌镇A馆_匿名签到区.png"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH",
+        "MKT"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-15",
+      "source": "own-venue-archive",
+      "name": "乌镇AB馆",
+      "files": [
+        "幕景乌镇AB馆_匿名双空间布置.json"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-16",
+      "source": "own-venue-archive",
+      "name": "乌镇B馆",
+      "files": [
+        "幕景乌镇B馆_匿名休息区.png"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH",
+        "MKT"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-17",
+      "source": "own-venue-archive",
+      "name": "盐官潮乐之城",
+      "files": [
+        "盐官潮乐之城_设计资料包"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-18",
+      "source": "own-venue-archive",
+      "name": "义博会",
+      "files": [
+        "幕景义博会_匿名展具收退点验.html"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-19",
+      "source": "own-venue-archive",
+      "name": "浙江新农都",
+      "files": [
+        "幕景浙江新农都_匿名活动安排.csv"
+      ],
+      "fileCount": 1,
+      "templateHints": [
+        "MKT"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    },
+    {
+      "id": "VN-20",
+      "source": "own-venue-archive",
+      "name": "浙江展览馆",
+      "files": [
+        "幕景浙江展览馆_匿名展架试排.png",
+        "幕景浙江展览馆_展架01示意.glb",
+        "幕景浙江展览馆_展架02示意.glb",
+        "幕景浙江展览馆_展架到场清单演练回读.json"
+      ],
+      "fileCount": 4,
+      "templateHints": [
+        "EXH"
+      ],
+      "confidence": "自有演练档案；匿名化命名，未含真实客户与报价",
+      "evidence": {
+        "dir": "deliverables/幕景中国研究资料包_2026-11-18/04_场地档案与演练"
+      }
+    }
+  ],
+  "incidents": [
+    {
+      "id": "INC-01",
+      "source": "public-incident",
+      "name": "上海外滩陈毅广场跨年踩踏（2014-12-31）",
+      "typeRaw": "public gathering",
+      "layoutFailure": "观景平台与上下台阶形成单向瓶颈，双向人流对冲；瞬时人数超出平台容量，缺少分流与限流。",
+      "failureModes": [
+        "bottleneck",
+        "counter-flow",
+        "capacity-overrun"
+      ],
+      "assertionRefs": [
+        "GEN-03",
+        "GEN-04",
+        "STG-01",
+        "EXH-05"
+      ],
+      "templateHints": [
+        "STG"
+      ],
+      "verification": "待回查官方调查报告原文；本条不引用伤亡数字与责任结论",
+      "confidence": "公开报道广泛记录的事件类型；细节以官方调查报告为准",
+      "evidence": {
+        "note": "本轮未取得调查报告原文，故不写数值"
+      }
+    },
+    {
+      "id": "INC-02",
+      "source": "public-incident",
+      "name": "德国杜伊斯堡 Love Parade 音乐节踩踏（2010-07-24）",
+      "typeRaw": "festival",
+      "layoutFailure": "场地唯一进出通道为斜坡隧道，入口宽度不足且无第二条疏散路径；人群在入口回涌时无法分流。",
+      "failureModes": [
+        "single-entry",
+        "bottleneck",
+        "no-secondary-egress"
+      ],
+      "assertionRefs": [
+        "GEN-03",
+        "GEN-04",
+        "STG-03",
+        "MKT-04"
+      ],
+      "templateHints": [
+        "STG",
+        "MKT"
+      ],
+      "verification": "待回查官方调查报告原文；本条不引用伤亡数字与责任结论",
+      "confidence": "公开报道广泛记录的事件类型；细节以官方调查报告为准",
+      "evidence": {
+        "note": "本轮未取得调查报告原文，故不写数值"
+      }
+    },
+    {
+      "id": "INC-03",
+      "source": "public-incident",
+      "name": "美国 Astroworld 音乐节人群挤压（2021-11-05）",
+      "typeRaw": "festival",
+      "layoutFailure": "站立观众区密度持续升高，观众与舞台之间缺少有效分隔与医疗通道，现场响应被拥堵阻断。",
+      "failureModes": [
+        "density-overrun",
+        "medical-access-blocked",
+        "barrier-missing"
+      ],
+      "assertionRefs": [
+        "STG-01",
+        "STG-05",
+        "GEN-04"
+      ],
+      "templateHints": [
+        "STG"
+      ],
+      "verification": "待回查官方调查报告原文；本条不引用伤亡数字与责任结论",
+      "confidence": "公开报道广泛记录的事件类型；细节以官方调查报告为准",
+      "evidence": {
+        "note": "本轮未取得调查报告原文，故不写数值"
+      }
+    }
+  ]
+}
