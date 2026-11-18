@@ -1,16 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generatedAt": "2026-11-18",
   "generator": "scripts/build-agent-eval-cases.mjs",
   "source": "data/agent-corpus/cases/cases.json",
-  "goal": "给户外 Agent 一个可复算的评测集：layout 样本考「提得对不对」，failure 样本考「该报的违规报没报出来」。",
-  "scoringNote": "layout 方案按模板命中 + 四项计数落带计分；failure 方案按「必须报出的已实现判据」召回计分，未实现的引用只记上下文、不计分。参考带来自平台读数，不是标准答案。",
+  "goal": "给户外 Agent 一个可复算的评测集：layout 样本考「提得对不对」，failure 样本考「该报的违规报没报」+「没问题的别乱报」。",
+  "scoringNote": "layout 按模板命中 + 四项计数落带计分；failure 按「必须报出的已实现判据」召回计分；violations 为空的对照样本按「误报」计分（必须报出 0 条硬违规）。参考带来自平台读数，不是标准答案。",
   "tolerances": {
     "zones": 2,
     "objects": 0.25,
     "routes": 1,
     "entrances": 1
   },
+  "fixturePolicy": "failure 夹具采用「基准布局 + 单点变异」：基准对 11 条已实现判据全部合规，每条变异只改一处；天然联动的违规（如摊位贴建筑同时踩 GEN-07 与 MKT-11）照实写全。",
   "samples": [
     {
       "id": "EV-BM-01",
@@ -463,6 +464,3767 @@
       "caveat": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据"
     },
     {
+      "id": "EV-NEG-00-CONTROL",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": null,
+      "prompt": "现场布局：120×80 m 场地，西南侧舞台与观演区之间留 6 m 退距，南侧 6 个 3×3 m 展位成排、间距 7 m，餐饮车距最近展位 15 m，东侧两顶帐篷相距 7 m、距餐饮车 28 m，东北角既有建筑距最近设施 12 m，配 2 具灭火器，设 1 个主出入口 + 1 个东侧出口。请判断这个布局能不能用。",
+      "expect": {
+        "violations": [],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "不改（合规基准）",
+        "isolated": true
+      },
+      "failureMode": "无缺陷对照：用来发现误报",
+      "note": "任何一条硬违规被报出都算误报，必须为 0。"
+    },
+    {
+      "id": "EV-NEG-01-GEN-04",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "GEN-04",
+      "prompt": "现场布局：撤掉东侧出口，只剩 1 个出入口（<2）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "GEN-04"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "撤掉东侧出口，只剩 1 个出入口（<2）",
+        "isolated": true
+      },
+      "failureMode": "撤掉东侧出口，只剩 1 个出入口（<2）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-02-GEN-07",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "GEN-07",
+      "prompt": "现场布局：把发电机贴到建筑外墙 1.5 m（<3 m）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "GEN-07"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "generator-near-building",
+            "templateId": "generator-3x2",
+            "name": "发电机（贴建筑）",
+            "position": {
+              "x": 42,
+              "y": 64
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 2
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "把发电机贴到建筑外墙 1.5 m（<3 m）",
+        "isolated": true
+      },
+      "failureMode": "把发电机贴到建筑外墙 1.5 m（<3 m）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-03-MKT-02",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "MKT-02",
+      "prompt": "现场布局：把展位 3 横移到距展位 2 只有 0.2 m 的位置（<1.5 m）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "MKT-02"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -26.8,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "把展位 3 横移到距展位 2 只有 0.2 m 的位置（<1.5 m）",
+        "isolated": true
+      },
+      "failureMode": "把展位 3 横移到距展位 2 只有 0.2 m 的位置（<1.5 m）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-04-MKT-06",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "MKT-06",
+      "prompt": "现场布局：把餐饮车挪到距最近展位 1.5 m（<6 m）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "MKT-06"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 16,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "把餐饮车挪到距最近展位 1.5 m（<6 m）",
+        "isolated": true
+      },
+      "failureMode": "把餐饮车挪到距最近展位 1.5 m（<6 m）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-05-MKT-07",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "MKT-07",
+      "prompt": "现场布局：撤掉全部灭火器（6 摊需 2 具，现 0 具）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "MKT-07"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "撤掉全部灭火器（6 摊需 2 具，现 0 具）",
+        "isolated": true
+      },
+      "failureMode": "撤掉全部灭火器（6 摊需 2 具，现 0 具）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-06-MKT-10",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "MKT-10",
+      "prompt": "现场布局：把 6 个展位挤进 12×12 m 的临时区（占地率 37.5% > 35%）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "MKT-10"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -42,
+            "y": 55
+          },
+          {
+            "x": -30,
+            "y": 55
+          },
+          {
+            "x": -30,
+            "y": 67
+          },
+          {
+            "x": -42,
+            "y": 67
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "把 6 个展位挤进 12×12 m 的临时区（占地率 37.5% > 35%）",
+        "isolated": true
+      },
+      "failureMode": "把 6 个展位挤进 12×12 m 的临时区（占地率 37.5% > 35%）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-07-MKT-11",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "MKT-11",
+      "prompt": "现场布局：把新增展位摆到距建筑 1.5 m（<3 m）；GEN-07 会同时触发。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "GEN-07",
+          "MKT-11"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "booth-near-building",
+            "templateId": "booth-3x3",
+            "name": "贴建筑展位",
+            "position": {
+              "x": 42,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "把新增展位摆到距建筑 1.5 m（<3 m）；GEN-07 会同时触发",
+        "isolated": false
+      },
+      "failureMode": "把新增展位摆到距建筑 1.5 m（<3 m）；GEN-07 会同时触发",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-08-STG-01",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "STG-01",
+      "prompt": "现场布局：观演区不变，人数从 400 提到 900（0.56 ㎡/人 <1.0）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "STG-01"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 900,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "观演区不变，人数从 400 提到 900（0.56 ㎡/人 <1.0）",
+        "isolated": true
+      },
+      "failureMode": "观演区不变，人数从 400 提到 900（0.56 ㎡/人 <1.0）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-09-STG-02",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "STG-02",
+      "prompt": "现场布局：观演区向舞台推进到只剩 2 m 退距（台高 1.5 m 需 5 m）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "STG-02"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 42
+              },
+              {
+                "x": -54,
+                "y": 42
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "观演区向舞台推进到只剩 2 m 退距（台高 1.5 m 需 5 m）",
+        "isolated": true
+      },
+      "failureMode": "观演区向舞台推进到只剩 2 m 退距（台高 1.5 m 需 5 m）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-10-CMP-02",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "CMP-02",
+      "prompt": "现场布局：两顶帐篷只隔 1 m（<2 m）；CMP-03 的 4 m 防火间距会同时触发。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "CMP-02",
+          "CMP-03"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 34,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "两顶帐篷只隔 1 m（<2 m）；CMP-03 的 4 m 防火间距会同时触发",
+        "isolated": false
+      },
+      "failureMode": "两顶帐篷只隔 1 m（<2 m）；CMP-03 的 4 m 防火间距会同时触发",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-11-CMP-03",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "CMP-03",
+      "prompt": "现场布局：两顶帐篷隔 3 m（≥2 m 但 <4 m 防火间距）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "CMP-03"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 36,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "两顶帐篷隔 3 m（≥2 m 但 <4 m 防火间距）",
+        "isolated": true
+      },
+      "failureMode": "两顶帐篷隔 3 m（≥2 m 但 <4 m 防火间距）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
+      "id": "EV-NEG-12-CMP-03",
+      "kind": "failure",
+      "derivedFrom": "baseline-layout",
+      "derivedFromRule": "CMP-03",
+      "prompt": "现场布局：餐饮车挪到距帐篷 5 m（<10 m 明火间距）。请判断这个布局能不能用，并指出违反了什么。",
+      "expect": {
+        "violations": [
+          "CMP-03"
+        ],
+        "contextRefs": []
+      },
+      "fixture": {
+        "facilities": [
+          {
+            "id": "booth-1",
+            "templateId": "booth-3x3",
+            "name": "展位 1",
+            "position": {
+              "x": -40,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-2",
+            "templateId": "booth-3x3",
+            "name": "展位 2",
+            "position": {
+              "x": -30,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-3",
+            "templateId": "booth-3x3",
+            "name": "展位 3",
+            "position": {
+              "x": -20,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-4",
+            "templateId": "booth-3x3",
+            "name": "展位 4",
+            "position": {
+              "x": -10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-5",
+            "templateId": "booth-3x3",
+            "name": "展位 5",
+            "position": {
+              "x": 0,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "booth-6",
+            "templateId": "booth-3x3",
+            "name": "展位 6",
+            "position": {
+              "x": 10,
+              "y": 61.5
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "food-truck-1",
+            "templateId": "food-truck-6x3",
+            "name": "餐饮车",
+            "position": {
+              "x": 30,
+              "y": 38
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 6,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-1",
+            "templateId": "tent-3x3",
+            "name": "帐篷 A",
+            "position": {
+              "x": 30,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "tent-2",
+            "templateId": "tent-3x3",
+            "name": "帐篷 B",
+            "position": {
+              "x": 40,
+              "y": 30
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 3,
+              "depth": 3
+            }
+          },
+          {
+            "id": "ext-1",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 1",
+            "position": {
+              "x": -45,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          },
+          {
+            "id": "ext-2",
+            "templateId": "fire-extinguisher",
+            "name": "灭火器 2",
+            "position": {
+              "x": 15,
+              "y": 55
+            },
+            "rotationDeg": 0,
+            "size": {
+              "width": 1,
+              "depth": 1
+            }
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-stage",
+            "semantic": "stage",
+            "name": "舞台区",
+            "polygon": [
+              {
+                "x": -50,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 44
+              },
+              {
+                "x": -34,
+                "y": 52
+              },
+              {
+                "x": -50,
+                "y": 52
+              }
+            ]
+          },
+          {
+            "id": "zone-audience",
+            "semantic": "audience",
+            "name": "观演区",
+            "polygon": [
+              {
+                "x": -54,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 20
+              },
+              {
+                "x": -26,
+                "y": 38
+              },
+              {
+                "x": -54,
+                "y": 38
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "gate-a",
+            "kind": "both",
+            "name": "主出入口",
+            "position": {
+              "x": -58,
+              "y": 30
+            }
+          },
+          {
+            "id": "gate-b",
+            "kind": "exit",
+            "name": "东侧出口",
+            "position": {
+              "x": 58,
+              "y": 5
+            }
+          }
+        ],
+        "obstacles": [
+          {
+            "id": "building-1",
+            "kind": "building",
+            "name": "既有建筑",
+            "polygon": [
+              {
+                "x": 45,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 60
+              },
+              {
+                "x": 60,
+                "y": 75
+              },
+              {
+                "x": 45,
+                "y": 75
+              }
+            ]
+          }
+        ],
+        "boundary": [
+          {
+            "x": -60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 0
+          },
+          {
+            "x": 60,
+            "y": 80
+          },
+          {
+            "x": -60,
+            "y": 80
+          }
+        ],
+        "people": 400,
+        "stageHeightM": 1.5
+      },
+      "mutation": {
+        "change": "餐饮车挪到距帐篷 5 m（<10 m 明火间距）",
+        "isolated": true
+      },
+      "failureMode": "餐饮车挪到距帐篷 5 m（<10 m 明火间距）",
+      "note": "基准布局 + 单点变异；违规集合由测试逐条比对，多报一条也算错。"
+    },
+    {
       "id": "EV-INC-01",
       "kind": "failure",
       "derivedFrom": "INC-01",
@@ -576,6 +4338,10 @@
         "stageHeightM": 1.5
       },
       "failureMode": "瓶颈区超容 + 单一出入口双向对冲",
+      "mutation": {
+        "change": "事故夹具（非基准）",
+        "isolated": false
+      },
       "note": "夹具是「照失效模式搭的最小复现」，不是当年现场复原图。"
     },
     {
@@ -677,6 +4443,10 @@
         "people": 250000
       },
       "failureMode": "单一入口无出口 + 通道回涌",
+      "mutation": {
+        "change": "事故夹具（非基准）",
+        "isolated": false
+      },
       "note": "25 万人 > 1 万，GEN-04 按 4 个出口要求；夹具故意给出 0 个出口。"
     },
     {
@@ -802,6 +4572,10 @@
         "stageHeightM": 2.5
       },
       "failureMode": "站立密度超限 + 舞台前无有效退距",
+      "mutation": {
+        "change": "事故夹具（非基准）",
+        "isolated": false
+      },
       "note": "800 ㎡ / 5000 人 = 0.16 ㎡/人；台高 2.5 m 需 9 m 退距，夹具只留 0 m。"
     }
   ]

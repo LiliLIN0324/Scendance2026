@@ -16,8 +16,8 @@ import type { CorpusRule } from '../frontend/lib/agent-corpus/types';
  * 评测集的守门测试（2026-11-18）。
  *
  * 这里不只是校验 JSON 形状，还真的跑执行器：
- * 三条失效样本的夹具必须被 evaluateLayout 跑出「该报的那几条违规」，
- * 夹具一旦被改坏、判据一旦被改松，测试立刻红。
+ * 16 条 failure 样本覆盖 11 条已实现判据，夹具一旦被改坏、判据一旦被改松，
+ * 违规集合就对不上，测试立刻红；对照样本则专门盯误报。
  */
 
 const root = process.cwd();
@@ -41,21 +41,35 @@ const ruleIds = new Set(rules.map((rule) => rule.id));
 
 const layoutSamples = suite.samples.filter((sample): sample is LayoutEvalSample => sample.kind === 'layout');
 const failureSamples = suite.samples.filter((sample): sample is FailureEvalSample => sample.kind === 'failure');
+const controlSamples = failureSamples.filter((sample) => sample.expect.violations.length === 0);
+const mutationSamples = failureSamples.filter(
+  (sample) => sample.derivedFrom === 'baseline-layout' && sample.expect.violations.length > 0,
+);
+const incidentSamples = failureSamples.filter((sample) => sample.derivedFrom.startsWith('INC-'));
 
 describe('评测集：形态', () => {
-  it('13 条样本，10 条 layout + 3 条 failure，id 唯一', () => {
-    expect(suite.samples).toHaveLength(13);
+  it('26 条样本，10 条 layout + 16 条 failure，id 唯一', () => {
+    expect(suite.samples).toHaveLength(26);
     expect(layoutSamples).toHaveLength(10);
-    expect(failureSamples).toHaveLength(3);
+    expect(failureSamples).toHaveLength(16);
     const ids = suite.samples.map((sample) => sample.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('每条都能追回案例库，且案例确实是推荐案', () => {
+  it('failure 由 1 条对照 + 12 条单点变异 + 3 条事故组成', () => {
+    expect(controlSamples).toHaveLength(1);
+    expect(mutationSamples).toHaveLength(12);
+    expect(incidentSamples).toHaveLength(3);
+  });
+
+  it('每条都能追回案例库或基准布局', () => {
     const recommended = new Set(cases.basemap.filter((item) => item.recommended).map((item) => item.id));
     for (const sample of layoutSamples) expect(recommended.has(sample.derivedFrom)).toBe(true);
     const caseIds = new Set(cases.basemap.map((item) => item.id));
-    for (const sample of failureSamples) expect(caseIds.has(sample.derivedFrom)).toBe(false);
+    for (const sample of failureSamples) {
+      const traced = sample.derivedFrom === 'baseline-layout' || caseIds.has(sample.derivedFrom) === false;
+      expect(traced).toBe(true);
+    }
   });
 
   it('prompt 只给场地线索，不给答案；空区域不留空括号', () => {
@@ -95,19 +109,19 @@ describe('评测集：形态', () => {
   });
 });
 
-describe('评测集：失效样本真能跑出违规', () => {
-  it('每条失效样本的期望违规都必须是已实现判据', () => {
+describe('评测集：负样本覆盖与可执行性', () => {
+  it('11 条已实现判据全部被负样本覆盖', () => {
+    const covered = new Set(failureSamples.flatMap((sample) => sample.expect.violations));
+    const missing = (IMPLEMENTED_RULE_IDS as readonly string[]).filter((id) => !covered.has(id));
+    expect(missing).toEqual([]);
+  });
+
+  it('期望违规必须是已实现判据；上下文引用不得混进违规', () => {
     for (const sample of failureSamples) {
-      expect(sample.expect.violations.length).toBeGreaterThan(0);
       for (const id of sample.expect.violations) {
         expect(ruleIds.has(id)).toBe(true);
         expect(IMPLEMENTED_RULE_IDS as readonly string[]).toContain(id);
       }
-    }
-  });
-
-  it('上下文引用都在判据集里，且不与期望违规重复', () => {
-    for (const sample of failureSamples) {
       for (const id of sample.expect.contextRefs) {
         expect(ruleIds.has(id)).toBe(true);
         expect(sample.expect.violations).not.toContain(id);
@@ -115,15 +129,37 @@ describe('评测集：失效样本真能跑出违规', () => {
     }
   });
 
-  it('执行器跑夹具：该报的全报出来，也没有多报硬违规', () => {
+  it('单点变异写清改了哪一处，且与期望违规对得上', () => {
+    for (const sample of mutationSamples) {
+      expect(sample.mutation?.change.length).toBeGreaterThan(8);
+      expect(ruleIds.has(sample.derivedFromRule as string)).toBe(true);
+      expect(sample.expect.violations).toContain(sample.derivedFromRule);
+      // 多数单点；天然联动（摊位贴建筑、帐篷贴帐篷）允许两条，但不超过两条。
+      expect(sample.expect.violations.length).toBeLessThanOrEqual(2);
+      expect(sample.mutation?.isolated).toBe(sample.expect.violations.length === 1);
+      expect(sample.derivedFrom).toBe('baseline-layout');
+    }
+  });
+
+  it('执行器跑每份夹具：违规集合与期望完全相等（多报少报都算错）', () => {
     for (const sample of failureSamples) {
-      const result = scoreFailureSample(sample, rules);
-      expect(result.failures).toEqual([]);
-      expect(result.pass).toBe(true);
       const evaluation = evaluateLayout(sample.fixture, rules);
       const reported = evaluation.receipts.filter((item) => item.status === 'violation').map((item) => item.ruleId);
-      expect(reported.sort()).toEqual([...sample.expect.violations].sort());
+      expect({ id: sample.id, reported: reported.sort() }).toEqual({
+        id: sample.id,
+        reported: [...sample.expect.violations].sort(),
+      });
     }
+  });
+
+  it('对照样本：基准布局对 11 条判据确实全部合规', () => {
+    const control = controlSamples[0];
+    const evaluation = evaluateLayout(control.fixture, rules);
+    expect(evaluation.receipts.filter((item) => item.status === 'violation')).toHaveLength(0);
+    // 11 条判据都必须真的算了，不许靠 skipped 混过去。
+    const computed = evaluation.receipts.filter((item) => item.status === 'pass').map((item) => item.ruleId);
+    expect(computed.sort()).toEqual([...(IMPLEMENTED_RULE_IDS as readonly string[])].sort());
+    expect(scoreFailureSample(control, rules).pass).toBe(true);
   });
 
   it('把缺陷修好之后，打分必须变红（防止样本空转）', () => {
@@ -144,6 +180,16 @@ describe('评测集：失效样本真能跑出违规', () => {
     const result = scoreFailureSample(repaired, rules);
     expect(result.pass).toBe(false);
     expect(result.failures.join(' ')).toContain('GEN-04');
+  });
+
+  it('对照样本被塞进带缺陷的布局时，必须按误报判错', () => {
+    const control = controlSamples[0];
+    const broken = failureSamples.find((item) => item.id === 'EV-NEG-01-GEN-04')!;
+    const result = scoreFailureSample({ ...control, fixture: broken.fixture }, rules);
+    expect(result.pass).toBe(false);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toContain('误报：GEN-04');
+    expect(result.notes.join(' ')).toContain('不误报');
   });
 
   it('夹具不写伤亡数字，只写布局失效模式', () => {
