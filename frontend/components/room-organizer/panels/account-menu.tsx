@@ -1,7 +1,7 @@
 'use client';
 
 import { BookOpen, FolderOpen, HelpCircle, Images, Info, MessageSquare, Settings, UserRound } from '@/components/solid-icons';
-import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AboutDialog } from './about-dialog';
 import { FeedbackDialog, type FeedbackPlanContext } from './feedback-dialog';
@@ -14,6 +14,34 @@ export function openShortcutCoach(): void {
 
 function hoverFine(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+}
+
+export interface FlyoutBox {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/** 支持子列表从锚点向上展开，并收进视口，避免贴着窗口底边被裁掉。 */
+export function placeSupportFlyout(
+  anchor: FlyoutBox,
+  size: { width: number; height: number },
+  viewport: { width: number; height: number },
+  margin = 8,
+  gap = 6,
+): { top: number; left: number; maxHeight: number } {
+  const maxHeight = Math.max(0, viewport.height - margin * 2);
+  const height = Math.min(Math.max(size.height, 0), maxHeight);
+  let top = anchor.bottom - height;
+  const minTop = margin;
+  const maxTop = Math.max(margin, viewport.height - margin - height);
+  if (top < minTop) top = minTop;
+  if (top > maxTop) top = maxTop;
+  let left = anchor.right + gap;
+  if (left + size.width > viewport.width - margin) left = anchor.left - gap - size.width;
+  if (left < margin) left = margin;
+  return { top, left, maxHeight };
 }
 
 export function AccountMenu({
@@ -51,6 +79,8 @@ export function AccountMenu({
 }): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement>(null);
   const supportRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const supportButtonRef = useRef<HTMLButtonElement>(null);
   const supportId = useId();
   const [supportOpen, setSupportOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -92,6 +122,29 @@ export function AccountMenu({
     };
   }, [open, onClose, anchorRef, supportOpen]);
 
+  useLayoutEffect(() => {
+    if (!open || !supportOpen) return undefined;
+    const flyout = flyoutRef.current;
+    const row = supportRef.current;
+    if (!flyout || !row) return undefined;
+    const place = () => {
+      const next = placeSupportFlyout(
+        row.getBoundingClientRect(),
+        { width: flyout.offsetWidth, height: flyout.scrollHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      );
+      flyout.style.position = 'fixed';
+      flyout.style.top = `${next.top}px`;
+      flyout.style.left = `${next.left}px`;
+      flyout.style.right = 'auto';
+      flyout.style.bottom = 'auto';
+      flyout.style.maxHeight = `${next.maxHeight}px`;
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open, supportOpen]);
+
   function openSupportItem(action: () => void): void {
     setSupportOpen(false);
     onClose();
@@ -120,6 +173,7 @@ export function AccountMenu({
         onMouseLeave={() => { if (hoverFine()) setSupportOpen(false); }}
       >
         <button
+          ref={supportButtonRef}
           type="button"
           role="menuitem"
           aria-haspopup="menu"
@@ -139,7 +193,29 @@ export function AccountMenu({
           <span className="sc-account-menu-caret" aria-hidden="true">›</span>
         </button>
         {supportOpen && (
-          <div id={supportId} className="sc-account-menu-flyout" role="menu" aria-label="支持">
+          <div
+            id={supportId}
+            ref={flyoutRef}
+            className="sc-account-menu-flyout"
+            role="menu"
+            aria-label="支持"
+            onKeyDown={event => {
+              const items = Array.from(flyoutRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+              const index = items.indexOf(document.activeElement as HTMLElement);
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const next = items[index + delta];
+                (next ?? items[index] ?? items[0])?.focus();
+                return;
+              }
+              if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                setSupportOpen(false);
+                supportButtonRef.current?.focus();
+              }
+            }}
+          >
             <a role="menuitem" href={GUIDE_URL} target="_blank" rel="noopener noreferrer" onClick={() => { setSupportOpen(false); onClose(); }}>
               <BookOpen size={15} aria-hidden="true"/>新手指引
             </a>
