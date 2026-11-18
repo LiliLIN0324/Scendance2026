@@ -32,6 +32,7 @@ import {
 import { vehicleLabelOf, vehicleModelSlugOf } from './vehicle-entities';
 import { CARRIER_COLOR_KIND } from './route-carrier-color';
 import { facilityTypeLabel } from './plan-facility-catalog';
+import { formatPlanObjectSize } from './plan-size-format';
 import {
   facilitySticker,
   nodeSticker,
@@ -180,7 +181,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
     }
     const bucket = facilityMap.get(facility.templateId)!;
     bucket.count += 1;
-    bucket.sizes.add(`${facility.size.width}×${facility.size.depth}`);
+    bucket.sizes.add(formatPlanObjectSize(facility.size.width, facility.size.depth));
     if (!bucket.color && facility.color) bucket.color = facility.color;
   }
   if (facilityKeys.length > 0) {

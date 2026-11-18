@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIssues, publishOutdoorPlanSettled } from '../lib/outdoor-plan-issues';
 import { firstModelSlug } from '../lib/asset-namespace';
@@ -127,11 +127,14 @@ import {
   planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
+  formatPlanObjectSize,
+  planCanvasLabel,
   hitScopeLockButton,
   scopeLockButtonRect,
   type LayerVisibility,
   type PlanViewport,
 } from '../lib/outdoor-plan-canvas';
+import { planRightClickAction } from '../lib/plan-right-click';
 import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
 import {
   DEFAULT_SCOPE_MARGIN_M,
@@ -2465,6 +2468,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /**
+   * 2026-11-19 放置取消的唯一收口：Esc / 右键 / 浮条按钮共用。
+   * setMode('view') 负责清模板、幽灵、旋转和物料卡载荷；取消不写 plan，也不进历史。
+   * 单独留一句反馈：Esc 以前只静默回浏览，用户不确定这次放置是否已经写进方案。
+   */
+  function cancelPlacement() {
+    setMode('view');
+    setEditMessage('已取消放置，未写入方案。');
+  }
+
+  /**
    * 2026-11-16 落位前旋转（2D/3D 同一键）：R +15°，Shift+R −15°，Esc 取消。
    * 只改“还没放下的那一个”的角度；已落位的设施仍走选中手柄。
    */
@@ -4262,6 +4275,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setMode('view');
         return;
       }
+      // 2026-11-19 用户：「或者右键取消呢」——Esc 是丽丽定的主入口，和右键/浮条按钮
+      // 走同一个 cancelPlacement：取消这次放置，给一句「未写入方案」，不落半件、不进历史。
+      if (modeRef.current === 'facility') {
+        event.preventDefault();
+        event.stopPropagation();
+        cancelPlacement();
+        return;
+      }
       // 2026-11-18：角柄缩放拖到一半按 Esc = 放弃这一次缩放（预览清掉，已提交的形状一点没动）。
       if (zoneScaleRef.current || boundaryScaleRef.current) {
         event.preventDefault();
@@ -5650,7 +5671,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     facilityTemplateRef.current = template.templateId;
     facilityTemplateObjRef.current = template;
     setFacilityTemplateId(template.templateId);
-    setEditMessage(`已选「${entry.nameZh}」（${template.width}×${template.depth} m），在地图上单击放置；Esc 结束。`);
+    setEditMessage(`正在放置「${planCanvasLabel(entry.nameZh, 14)}」（${formatPlanObjectSize(template.width, template.depth)}）：点击地图落位；R 旋转，Esc 或右键取消。`);
     draw();
   }
 
@@ -5704,7 +5725,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     facilityTemplateRef.current = template.templateId;
     facilityTemplateObjRef.current = template;
     setFacilityTemplateId(template.templateId);
-    setEditMessage(`已选「${entry.nameZh}」（${template.width}×${template.depth} m），在地图上单击放置；Esc 结束。`);
+    setEditMessage(`正在放置「${planCanvasLabel(entry.nameZh, 14)}」（${formatPlanObjectSize(template.width, template.depth)}）：点击地图落位；R 旋转，Esc 或右键取消。`);
     draw();
   }
 
@@ -6305,7 +6326,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     facilityCatalogRef.current = payload;
     armedCatalogRef.current = payload;
     setFacilityTemplateId(payload.templateId);
-    setEditMessage(`已选「${payload.name}」（${payload.width}×${payload.depth} m），在地图/地面上单击放置；Esc 结束。`);
+    setEditMessage(`正在放置「${planCanvasLabel(payload.name, 14)}」（${formatPlanObjectSize(payload.width, payload.depth)}）：点击地图/地面落位；R 旋转，Esc 或右键取消。`);
     draw();
     notifyPlanDraftChanged();
     return true;
@@ -12077,6 +12098,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     );
   })() : null;
 
+  /**
+   * 2026-11-19 放置模式浮条（用户反馈「没看到取消放置」）：
+   * 户外点物料卡后原先只有一句「Esc 结束」文案，没有任何可点的取消入口；生成物料的名称
+   * 又是一整段商品描述，幽灵标签直接把画布压成一行。浮条把「正在放置」做成常驻状态：
+   * 短名、真实尺寸、当前角度和「取消放置」都在，和 Esc / 右键同走 cancelPlacement()。
+   */
+  const placementBar = !readOnly && mode === 'facility' && facilityTemplateId
+    ? (() => {
+        const payload = armedCatalogRef.current;
+        const template = facilityTemplateObjRef.current ?? resolveFacilityTemplate(facilityTemplateId);
+        if (!template) return null;
+        return {
+          name: (payload?.name || template.name || '物料').trim(),
+          width: payload?.width ?? template.width,
+          depth: payload?.depth ?? template.depth,
+          rotationDeg: Math.round(facilityRotationRef.current),
+        };
+      })()
+    : null;
+
   return (
     <div
       ref={stageRef}
@@ -12108,11 +12149,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 目标不在舞台子树内直接忽略，避免在面板里右键误退画布草稿或弹出层级菜单。
         const stageGate = stageRef.current;
         if (!stageGate || !stageGate.contains(event.target as Node)) return;
-        // P2-l（用户 m05374）：画区域/边界/流线时右键 = 移除上一个节点；
-        // 浏览/选择模式右键点中设施 = 统一菜单（复制/层级/删除，2026-11-14）。
-        if (modeRef.current === 'zone' || modeRef.current === 'boundary' || modeRef.current === 'route') {
+        // 2026-11-19 用户：「或者右键取消呢」——按成熟编辑器惯例（Blender/Unity/Unreal/AutoCAD），
+        // 待放置物料时右键 = 放弃这次放置，不弹菜单、不落位。
+        // 其他模式保持原行为：画区域/边界/流线右键撤上一点，浏览/选择右键开设施菜单。
+        const action = planRightClickAction({
+          mode: modeRef.current,
+          placing: Boolean(facilityTemplateRef.current || armedCatalogRef.current),
+          draftCount: draftRef.current.length,
+        });
+        if (action === 'cancel-placement') {
+          event.preventDefault();
+          event.stopPropagation();
+          cancelPlacement();
+          return;
+        }
+        if (action === 'remove-draft-vertex') {
+          // P2-l（用户 m05374）：画区域/边界/流线时右键 = 移除上一个节点。
           const draft = draftRef.current;
-          if (draft.length === 0) return;
           event.preventDefault();
           const next = draft.slice(0, -1);
           setDraft(next);
@@ -12123,7 +12176,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           );
           return;
         }
-        if (modeRef.current !== 'view' && modeRef.current !== 'select') return;
+        if (action !== 'context-menu') return;
         const hit = eventPlanPoint(event);
         if (!hit) {
           setContextMenu(null);
@@ -12676,9 +12729,75 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         );
       })()}
 
+      {/* 放置态常驻浮条：名称/尺寸/角度 + 可点的「取消放置」（Esc 同源）。 */}
+      {placementBar && (
+        <div
+          data-testid="plan-placement-bar"
+          role="group"
+          aria-label={`正在放置：${placementBar.name}`}
+          onPointerDown={event => event.stopPropagation()}
+          onPointerUp={event => event.stopPropagation()}
+          onPointerMove={event => event.stopPropagation()}
+          onMouseDown={event => event.stopPropagation()}
+          onMouseUp={event => event.stopPropagation()}
+          onClick={event => event.stopPropagation()}
+          onDoubleClick={event => event.stopPropagation()}
+          onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}
+          style={{
+            position: 'absolute', top: 64, right: 84,
+            zIndex: 5, display: 'flex', flexDirection: 'column', gap: 3,
+            width: 'min(560px, 46vw)', maxWidth: 'calc(100% - 24px)',
+            padding: '8px 10px 8px 12px', pointerEvents: 'auto',
+            background: 'rgba(255,255,255,0.97)', border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+            borderRadius: PLANNING_RADIUS.md, color: PLANNING_SURFACE.panelText,
+            boxShadow: '0 10px 28px rgba(20,20,22,0.18)', backdropFilter: 'blur(8px)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, flex: '0 0 auto',
+              padding: '2px 7px', borderRadius: 999, background: 'rgba(31,107,58,0.10)',
+              color: '#1F6B3A', fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 700, letterSpacing: 0.2,
+            }}>放置中</span>
+            <strong title={placementBar.name} style={{ flex: 1, minWidth: 0, fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {planCanvasLabel(placementBar.name, 20)}
+            </strong>
+            <button
+              type="button"
+              data-testid="plan-placement-cancel"
+              aria-keyshortcuts="Escape"
+              aria-label="取消放置，返回浏览"
+              title="取消这次放置（Esc / 右键同效）"
+              onClick={cancelPlacement}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, flex: '0 0 auto', padding: '5px 10px',
+                borderRadius: PLANNING_RADIUS.sm, border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
+                background: PLANNING_SURFACE.panelBg, color: PLANNING_SURFACE.panelText,
+                fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              取消放置
+              <kbd style={{ font: 'inherit', opacity: 0.55, padding: '0 3px', border: `1px solid ${PLANNING_SURFACE.panelBorder}`, borderRadius: 3 }}>Esc</kbd>
+            </button>
+          </div>
+          {/* 第二行单独放操作提示：窄画布上让提示换行，不再把名称和按钮挤出浮条。 */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', columnGap: 6, rowGap: 2, paddingLeft: 2,
+            fontSize: PLANNING_TYPOGRAPHY.hint, opacity: 0.66, lineHeight: 1.5,
+          }}>
+            <span>{formatPlanObjectSize(placementBar.width, placementBar.depth)}</span>
+            <span aria-hidden>·</span>
+            <span>当前 {placementBar.rotationDeg}°</span>
+            <span aria-hidden>·</span>
+            <span>点击地图落位</span>
+            <span aria-hidden>·</span>
+            <span>Esc / 右键取消</span>
+          </div>
+        </div>
+      )}
       {/* 2026-11-11 顶部工具条并入左栏图层卡（OnePlan 手风琴分组，用户拍板）。
           卡片收起或切到物件库页签时用这枚小 chip 提示当前模式，点击或 Esc 回浏览。 */}
-      {!readOnly && mode !== 'view' && (
+      {!readOnly && mode !== 'view' && !placementBar && (
         <button
           type="button"
           data-testid="outdoor-mode-chip"
