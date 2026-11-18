@@ -15,6 +15,7 @@
 import type { PlanFacility, PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import type { FurnitureItem, RoomLayout } from './types';
 import { resolveFacilityTarget } from './plan-facility-mapping';
+import { firstModelSlug } from './asset-namespace';
 import { buildFacility, type PlanFacilityTemplate } from './site-plan-facilities';
 import { inferWorkerZoneId } from './site-plan-routes';
 import {
@@ -32,7 +33,6 @@ const FALLBACK_NAME = '通用物件';
 /** 契约上限（`site-plan` 的 `planFacilitySchema`）。 */
 const MAX_SIZE_M = 100;
 const MAX_SOURCE_ASSET_ID = 160;
-const MAX_MODEL_SLUG = 160;
 
 /** 物料库条目在纯函数层只需尺寸；图标由渲染层按 templateId 反查，不进 plan 契约。 */
 export interface FacilityLibraryEntry {
@@ -106,10 +106,12 @@ function withModelReference(
   options: FacilityMigrationOptions,
 ): PlanFacility {
   const next: PlanFacility = { ...facility };
+  // C1：sourceAssetId 只从 item.assetId 直通，绝不从 resolver 的 slug 反推。
   const sourceAssetId = boundedId(item.assetId, MAX_SOURCE_ASSET_ID);
   if (sourceAssetId) next.sourceAssetId = sourceAssetId;
   const hasModelRef = Boolean(item.assetId || item.glbUrl);
-  const slug = hasModelRef ? boundedId(options.modelSlug?.(item), MAX_MODEL_SLUG) : undefined;
+  // C1：modelOverride 只收物料库 slug；resolver 误返回 UUID 时丢弃，不硬写。
+  const slug = hasModelRef ? firstModelSlug(options.modelSlug?.(item)) : undefined;
   if (slug) next.modelOverride = slug;
   return next;
 }

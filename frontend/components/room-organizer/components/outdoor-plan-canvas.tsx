@@ -1,5 +1,6 @@
 ﻿'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
+import { firstModelSlug } from '../lib/asset-namespace';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from '../lib/outdoor-plan-protection';
@@ -5925,7 +5926,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     const view = viewPlan();
     const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
-    const modelOverride = explicitModelSlug ?? (catalog && catalog.templateId === templateId ? catalog.slug : undefined);
+    // C1：物料卡只把合法 slug 写进 modelOverride，UUID 一律不落（不把后端 id 伪装成模型）。
+    const modelOverride = firstModelSlug(
+      explicitModelSlug,
+      catalog && catalog.templateId === templateId ? catalog.slug : undefined,
+    );
     // 物料卡落在已有设施上：把它当作「换这个物件的模型」，不叠第二件。
     // 用户从库里拖卡到 3D 已有物件上时，期望看到的就是这一件跟着变；旧数据缺 modelOverride 也在这里补上。
     if (modelOverride) {
