@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, RotateCw, Search, TriangleAlert } from "@/components/solid-icons";
+import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, RotateCw, Search, Sparkles, TriangleAlert } from "@/components/solid-icons";
 import {
   OUTDOOR_STAGE_LABELS,
   type OutdoorCardRecord,
@@ -738,6 +738,25 @@ export function OutdoorWorkflowCard({
             </label>
           </div>
         )}
+      {/* 2026-11-18：生成链已经有了（额度确认/回执锁都在 generation-sheet），缺的是对话主路径的入口。
+          物件阶段给一颗明确动作；和上面「一句话布置 / 目录落位预览」分开写，不混成同一颗按钮。 */}
+      {!flow.proposal && flow.state.stage === "objects" && (
+        <div className="ap-card-actions ap-lux3d-entry" data-testid="outdoor-lux3d-entry">
+          <button
+            type="button"
+            className="btn-outline"
+            disabled={flow.busy}
+            data-testid="outdoor-lux3d-generate"
+            onClick={() => flow.startLux3dGeneration()}
+          >
+            <Sparkles size={13} aria-hidden="true" />
+            用 Aholo Lux3D 生成道具
+          </button>
+          <p className="ap-task-caption">
+            由 Aholo Lux3D 生成三维模型：区别于上面的「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。
+          </p>
+        </div>
+      )}
       {flow.models && (
         <div aria-label="当前设施真实模型候选">
           {flow.models.choices.map((m, index) => (
