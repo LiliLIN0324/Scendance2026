@@ -5,11 +5,11 @@
  * 入口的差别只剩下「打开时预选哪个任务 / 哪种输入 / 带不带当前设施」。
  *
  * 任务：
- *  - scene-recon：重建真实场地。这一轮只是占位，点开说明「暂未开放」，不拍摄、不上传、不提交；
+ *  - scene-recon：重建真实场地。创作页第一张卡已开放拍摄/上传并本地预览，这一轮不提交重建；
  *  - model      ：生成模型。描述或图片生成一件可复用物料；带 facility 时表示给这件设施生成。
  *
- * 「生成新场景」已从首层拿掉：场地入口不再提供虚构空间这条任务。
- * 导入 GLB 仍是模型表单里的一个来路（物料 / 设施），不是场地卡片上的并列项。
+ * 「生成新场景」已从首层拿掉：创作入口不再提供虚构空间这条任务。
+ * 导入 GLB 仍是模型表单里的一个来路（物料 / 设施），不是创作卡片上的并列项。
  *
  * 刻意不做的事：这里不提交、不扣费、不碰 localStorage——它只是「面板开没开、开着哪个任务」。
  */
@@ -19,7 +19,7 @@ export type GenerationTask = 'scene-recon' | 'model';
 
 /**
  * 入口来路。面板只有一个，标题与首层跟着来路变：
- *  - venue   ：轨道「场地」——文生 / 图生卡片，外加重建占位；
+ *  - venue   ：轨道「创作」——同一页三张卡片，点开始创作才进模型表单；
  *  - material：物料栏——直接进模型表单，结果进「我的生成」；
  *  - facility：画布属性卡——直接进模型表单，结果回填那件设施。
  */
@@ -119,7 +119,7 @@ export function getGenerationSheetState(): GenerationSheetState {
 export const GENERATION_TASK_COPY: Record<GenerationTask, { title: string; hint: string }> = {
   'scene-recon': {
     title: '重建真实场地',
-    hint: '暂未开放。以后重建结果会进空间',
+    hint: '拍摄现场，或上传已有的照片、视频。',
   },
   model: {
     title: '生成模型',
@@ -127,24 +127,25 @@ export const GENERATION_TASK_COPY: Record<GenerationTask, { title: string; hint:
   },
 };
 
-/** 卡片标题随来路变：场地 / 生成物料 / 生成模型。 */
+/** 卡片标题随来路变：创作 / 生成物料 / 生成模型。 */
 export function generationScopeTitle(scope: GenerationScope): string {
   if (scope === 'material') return '生成物料';
   if (scope === 'facility') return '生成模型';
-  return '场地';
+  return '创作';
 }
 
 /**
  * 首层任务行。
- * 场地来路用卡片，不在这里再列「生成模型」或已删除的「生成新场景」，只留重建占位。
+ * 创作来路用三张卡片，不在这里再列「生成模型」或已删除的「生成新场景」。
  * 物料 / 设施换任务时只留模型，不再把场景任务排回第一层。
  */
 export function generationTaskList(scope: GenerationScope): GenerationTask[] {
   return scope === 'venue' ? ['scene-recon'] : ['model'];
 }
 
-/** 卡片标题：选任务前说来路；场地里的模型表单按当前输入方式叫文生 / 图生。 */
+/** 卡片标题：选任务前说来路；创作里的模型表单按当前输入方式叫文生 / 图生。 */
 export function generationSheetTitle(sheet: GenerationSheetState): string {
+  if (sheet.scope === 'venue' && (sheet.task === 'choose' || sheet.task === 'scene-recon')) return '创作';
   if (sheet.task === 'choose') return generationScopeTitle(sheet.scope);
   if (sheet.task === 'model') {
     if (sheet.facility) return '生成模型';
@@ -154,14 +155,14 @@ export function generationSheetTitle(sheet: GenerationSheetState): string {
   return GENERATION_TASK_COPY[sheet.task].title;
 }
 
-/** 主按钮文案随操作变：生成 / 导入。重建这一轮没有可提交的动作。 */
+/** 主按钮文案随操作变：生成 / 导入。重建入口没有单独的提交钮。 */
 export function generationPrimaryLabel(task: GenerationTask | 'choose', source: GenerationModelSource = 'text'): string {
-  if (task === 'scene-recon') return '暂未开放';
+  if (task === 'scene-recon') return '拍摄现场';
   if (task === 'model' && source === 'import') return '导入';
   return '生成';
 }
 
-/** 只有真的会创建收费任务的操作才显示扣额度确认：导入 GLB 是本地文件，重建占位也不扣费。 */
+/** 只有真的会创建收费任务的操作才显示扣额度确认：导入 GLB 是本地文件，重建入口也不扣费。 */
 export function generationNeedsCredit(task: GenerationTask | 'choose', source: GenerationModelSource = 'text'): boolean {
   if (task === 'choose' || task === 'scene-recon') return false;
   if (task === 'model' && source === 'import') return false;
