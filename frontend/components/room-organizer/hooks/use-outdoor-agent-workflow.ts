@@ -34,7 +34,7 @@ import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
-import { CASE_IDS, isAllGreen, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
+import { CASE_IDS, FIXED_DATA_CASES, isAllGreen, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
 import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
 import { formatGapList, missingEvidence } from "../lib/outdoor-release-gaps";
 import { ledgerToCsv } from "../lib/outdoor-release-csv";
@@ -2709,6 +2709,7 @@ export function useOutdoorAgentWorkflow(input: {
       verdicts: bundle.ledger.map((row) => ({ id: row.id, allGreen: isAllGreen(row) })),
       // 待补清单与面板上那块同源：都是 `missingEvidence()` 的行。
       gaps: missingEvidence(bundle.ledger).map((gap) => gap.line),
+      sources: { fixedDataIds: FIXED_DATA_CASES, walkthroughAsOf: book.asOf },
     };
   };
   return {

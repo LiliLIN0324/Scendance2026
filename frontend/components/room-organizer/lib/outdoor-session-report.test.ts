@@ -128,7 +128,9 @@ describe("报告携带发布快照（轮次 85）", () => {
   it("带卡片时卡片原文附在快照之后，不重排、不截断", () => {
     const card = "· 发布状态（只报事实）\n· 结论：不可发布（三类全绿 0 条）";
     const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: { allGreen: 0 }, card } });
-    expect(report.text.endsWith(card)).toBe(true);
+    // 卡片后面还会跟一行固定收尾（轮次 95），所以不再用 endsWith，而是把字面原文和先后顺序一起盯住。
+    expect(report.text).toContain(card);
+    expect(report.text.indexOf(card)).toBeLessThan(report.text.indexOf("（本报告只报事实"));
   });
 });
 
@@ -282,5 +284,61 @@ describe("报告带待补清单（轮次 94）", () => {
   it("不给 gaps 就不出现这一段（“没算”与“没缺口”分开）", () => {
     const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: {} } });
     expect(report.text).not.toContain("[待补清单]");
+  });
+});
+
+describe("报告来源与收尾（轮次 95）", () => {
+  const base = () => ({
+    turns: [],
+    metrics: {
+      totals: {
+        turns: 0,
+        modelCalls: 0,
+        mapCalls: 0,
+        confirmations: 0,
+        appliedCount: 0,
+        firstUsefulFeedbackAvgMs: null,
+        previewAvgMs: null,
+        applyAvgMs: null,
+      },
+      rows: [],
+      text: "turns=0 model=0 map=0 confirm=0 applied=0",
+    },
+  });
+
+  it("来源行写清固定数据覆盖、走查日期与生成时刻", () => {
+    const report = buildSessionReport({
+      ...base(),
+      now: Date.parse("2026-11-19T04:00:00.000Z"),
+      release: {
+        snapshot: {},
+        sources: { fixedDataIds: [5, 2], walkthroughAsOf: "2026-11-19 第三轮" },
+      },
+    });
+    expect(report.text).toContain(
+      "[报告来源] 固定数据用例：#2 #5 · 走查日期：2026-11-19 第三轮 · 生成：2026-11-19T04:00:00.000Z",
+    );
+  });
+
+  it("走查日期没填就明说未填；没有固定数据写“无”", () => {
+    const report = buildSessionReport({
+      ...base(),
+      now: 1,
+      release: { snapshot: {}, sources: { fixedDataIds: [] } },
+    });
+    expect(report.text).toContain("固定数据用例：无");
+    expect(report.text).toContain("走查日期：未填");
+    expect(report.text).not.toContain("可发布（");
+  });
+
+  it("带发布块时末行固定“不构成发布结论”", () => {
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: {} } });
+    expect(report.text.trimEnd().endsWith("（本报告只报事实，不构成发布结论；可发布仍需三类全绿）")).toBe(true);
+  });
+
+  it("不带发布块时不多出收尾行（旧格式不被动）", () => {
+    const report = buildSessionReport({ ...base(), now: 1 });
+    expect(report.text).not.toContain("不构成发布结论");
+    expect(report.text).not.toContain("[报告来源]");
   });
 });
