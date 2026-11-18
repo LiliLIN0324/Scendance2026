@@ -80,6 +80,7 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
       }
       dispatch({ type: 'setEventOperations', value });
     },
+    setPlanSettings: (value) => dispatch({ type: 'setPlanSettings', value }),
     setName: (name) => dispatch({ type: 'setName', name }),
     setWidth: (width) => dispatch({ type: 'setWidth', width }),
     setHeight: (height) => dispatch({ type: 'setHeight', height }),

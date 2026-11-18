@@ -103,10 +103,11 @@ export function openingAxes(item: PlacedItem): {
  * cells line up with `snapToGrid` — duplicated from canvas-2d/render.ts
  * `drawGrid` (corner-anchoring drifts by `(width/2 mod GRID_SIZE_METERS)`).
  */
-export function gridLinePositions(extent: number): number[] {
+export function gridLinePositions(extent: number, gridSize = GRID_SIZE_METERS): number[] {
+  const step = gridSize > 0 ? gridSize : GRID_SIZE_METERS;
   const half = extent / 2;
   const positions: number[] = [];
-  for (let w = Math.ceil(-half / GRID_SIZE_METERS) * GRID_SIZE_METERS; w <= half; w += GRID_SIZE_METERS) {
+  for (let w = Math.ceil(-half / step) * step; w <= half; w += step) {
     positions.push(w);
   }
   return positions;

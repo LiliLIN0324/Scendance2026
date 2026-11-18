@@ -37,5 +37,15 @@ export function layoutForExport(layout: RoomLayout, stripHandoffs = false): Room
   if (stripHandoffs) delete exported.productionPlan;
   // 活动档案是内部记录：客户投影与分享载荷一律不携带日期/预算/分工。
   if (stripHandoffs) delete exported.eventProfile;
+  if (stripHandoffs && exported.planSettings) {
+    const displayUnit = exported.planSettings.displayUnit;
+    const timeZone = exported.planSettings.timeZone;
+    if (displayUnit || timeZone) {
+      exported.planSettings = {
+        ...(displayUnit ? { displayUnit } : {}),
+        ...(timeZone ? { timeZone } : {}),
+      };
+    } else delete exported.planSettings;
+  }
   return exported;
 }

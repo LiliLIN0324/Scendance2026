@@ -47,8 +47,8 @@ export function planGridStepM(viewport: PlanViewport): number {
  * 把点吸到网格上：x、y 各自判定（允许只吸一个方向）。
  * 只在离网格线 ≤ SNAP_GRID_TOL_PX 时吸，否则保持原值。
  */
-export function snapPointToGrid(pt: PlanPoint, viewport: PlanViewport): PlanPoint {
-  const step = planGridStepM(viewport);
+export function snapPointToGrid(pt: PlanPoint, viewport: PlanViewport, stepM?: number): PlanPoint {
+  const step = stepM && stepM > 0 ? stepM : planGridStepM(viewport);
   const mpp = planMetersPerPixel(viewport);
   if (!Number.isFinite(mpp) || mpp <= 0) return pt;
   const gx = Math.round(pt.x / step) * step;
