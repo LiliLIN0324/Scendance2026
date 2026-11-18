@@ -1,0 +1,31 @@
+id,名称,类别,宽_m,深_m,高_m,占地_m2,可旋转,最小间距判据,部署人数,重量_kg,风载,地面要求,电力_kw,运输,来源,备注
+booth-2x2,市集摊位,摊位,2,2,待核,4,仅0/90,MKT-02;MKT-05;MKT-11;GEN-07,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:49,与 MKT-01 的 3×3 标准摊位不一致；现状按 2×2 生成
+market-stall,市集摊位（OnePlan）,摊位,2,2,待核,4,仅0/90,MKT-02;MKT-05;MKT-11;GEN-07,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:market-stall,同上；长边 2 m 由 SIZE_RULES 给出
+tent-3x3,后勤帐篷,帐篷,3,3,待核,9,仅0/90,CMP-02;CMP-03;KID-01,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:50,规范只约束帐篷间距 2 m / 防火 4 m
+bell-tent,小帐篷,帐篷,3,3,待核,9,仅0/90,CMP-02;CMP-03,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:bell-tent,SIZE_RULES 长边 3 m
+stretch-tent,长条帐篷,帐篷,6,4,待核,24,仅0/90,CMP-02;CMP-03,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:stretch-tent,长边 6 m × 短边 4 m
+food-truck-6x2.5,餐车,餐饮,6,2.5,待核,15,仅0/90,MKT-06;GEN-05;MKT-11,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:51,明火类须与其他摊位 ≥6 m 并置于下风向
+food-trailer,餐饮拖车,餐饮,6,2.5,待核,15,仅0/90,MKT-06;GEN-05;MKT-11,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:food-trailer,与餐车同量级
+stage-platform-8x6,舞台台面,舞台,8,6,待核,48,仅0/90,STG-02;STG-05;STG-08;GEN-06,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:52,首排退距按 5+4×(H−1.5) 计算
+stage,舞台（OnePlan）,舞台,8,6,待核,48,仅0/90,STG-02;STG-05;STG-08,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:stage,与内置 8×6 一致
+cn-opera-stage,中式戏台,舞台,8,6,待核,48,仅0/90,STG-02;STG-05;STG-08,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:cn-opera-stage,与内置 8×6 一致
+toilet-2.4x1.2,移动洗手间,卫生,2.4,1.2,待核,2.9,仅0/90,ELD-10;CMP-09,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:53,单体内含 1 个厕位
+portable-toilet,移动厕所（OnePlan）,卫生,1.2,1.2,1.4,1.4,仅0/90,ELD-10;CMP-09,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:portable-toilet,与内置 2.4×1.2 不一致；下单前须按厂家型号核
+medical-tent-4x3,医疗帐篷,医疗,4,3,待核,12,仅0/90,GEN-03;GEN-05,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:54,急救点须可达且不压疏散通道
+security-post-1.5x1.5,安保岗亭,安防,1.5,1.5,待核,2.25,仅0/90,GEN-03,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:55,固定岗
+trash-point-1.2x1.2,垃圾收集点,环卫,1.2,1.2,待核,1.44,仅0/90,MKT-08;CMP-08,待核,待核,待核,待核,待核,待核,site-plan-facilities.ts:56,集中收集点按每 50 摊 1 处
+waste-container,垃圾桶,环卫,1.2,1.2,待核,1.44,仅0/90,MKT-08;CMP-08,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:recycling-bin,分类桶
+large-waste-container,大型垃圾箱,环卫,3.5,1.9,待核,6.7,仅0/90,MKT-08;CMP-08,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:large-waste-container,集中站须位于下风向
+generator,发电机,电力,2.4,1.2,待核,2.9,仅0/90,STG-10;GEN-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:generator,须围挡并远离观众区；噪声按 STG-10 控制
+stanchion,隔离柱,隔离,0.4,0.4,1,0.16,不限,STG-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:stanchion,立杆间距 ≤2 m
+sight-screen,视线遮挡屏,隔离,4,0.8,待核,3.2,仅0/90,STG-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:sight-screen,高 2.4 m 为常见规格但代码无高度数据
+concrete-block,混凝土隔离墩,隔离,0.8,0.8,待核,0.64,不限,STG-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:concrete-block,配重与吊装须厂家数据
+fire-extinguisher,灭火器,消防,0.4,0.4,待核,0.16,不限,MKT-07;GEN-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:fire-extinguisher,每 10 摊 ≥2 具 4 kg ABC
+pa-speakers,扩声音箱,音响,0.7,0.7,待核,0.49,不限,STG-10,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:pa-speakers,噪声限值按场界 60/50 dB(A)
+folding-chair,折叠椅,座椅,0.5,0.5,待核,0.25,不限,STG-01;ELD-07,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:folding-chair,座席密度按 0.75 ㎡/人
+bench,长椅,座椅,1.8,0.7,待核,1.3,仅0/90,ELD-06;ELD-07,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:bench,适老路径每 15 m 一处可坐点
+picnic-table,野餐桌,桌台,2.2,1.5,待核,3.4,仅0/90,STG-01,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:picnic-table,—
+water-refill-station,加水点,服务,4,2.4,待核,9.6,仅0/90,GEN-03,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:water-refill,服务半径须与补水需求匹配
+aid-station,补给站,服务,4,2.4,待核,9.6,仅0/90,GEN-03;GEN-05,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:aid-station,—
+ferris-wheel,摩天轮,游乐,16,16,待核,256,仅0/90,KID-01;KID-03,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:ferris-wheel,大型设备须单独做结构与疏散核
+carousel,旋转木马,游乐,12,12,待核,144,仅0/90,KID-01;KID-03,待核,待核,待核,待核,待核,待核,oneplan-library-size.ts:carousel,同上

@@ -1,0 +1,879 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "doc": "docs/plans/activity-space-norms-2026-11-05.md",
+    "docDate": "2026-11-05",
+    "note": "本文件的数值、来源等级、优先级逐条对应该文档 §1–§7。改数值先改文档，再同步这里；tests/agent-corpus.test.ts 会核对 id 与格数换算。"
+  },
+  "grid": {
+    "cellM": 1,
+    "origin": "sw",
+    "axes": "x 向东、y 向北",
+    "rotationDeg": [0, 90, 180, 270],
+    "rounding": { "min": "ceil", "max": "floor", "area": "ceil", "density": "floor", "ratio": "1 位小数" }
+  },
+  "severityMeaning": {
+    "hard": "触发即拒绝落笔，必须改方案",
+    "warn": "允许落笔，回执列警告与理由",
+    "ideal": "只进评分，不影响执行"
+  },
+  "sourceLevelMeaning": {
+    "A": "国标 / 强制规范，有条文号",
+    "B": "地方、公安、行业口径，地域性适用",
+    "C": "经验值，无强制标准，只能称建议值"
+  },
+  "codeCoverage": {
+    "implemented": ["BBOX_OVERLAP", "OUT_OF_BOUNDS"],
+    "ref": "frontend/components/room-organizer/lib/agent-proposal.ts:884-888",
+    "note": "80 条判据目前均未接进户外校验器；已落码的只有包围盒重叠与越界两条通用检查。不要对外宣称已按本表校验。"
+  },
+  "promptCore": ["GEN-01", "GEN-03", "GEN-04", "GEN-06", "KID-01", "KID-02", "KID-03", "KID-09", "KID-11", "ELD-01", "ELD-06", "ELD-09", "STG-01", "STG-02", "MKT-02", "MKT-06", "CMP-01", "CMP-02", "CMP-03", "EXH-01", "EXH-02"],
+  "rules": [
+    {
+      "id": "GEN-01", "scope": "GEN", "zh": "无障碍通行净宽", "en": "accessible clear width",
+      "thresholds": [
+        { "label": "室外净宽", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" },
+        { "label": "室内净宽", "m": 1.2, "cells": 2, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "free_width(any_path) < 1 格 或 室外 < 2 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.5.1；GB 55019-2021 §2.2.2",
+      "conflictWith": [], "promptCore": true,
+      "note": "§3.5.1-2 不同印次有 1.50/1.80 两种表述；本表 1.50 为硬底线，1.80 见 GEN-02。"
+    },
+    {
+      "id": "GEN-02", "scope": "GEN", "zh": "主要人流通道", "en": "main circulation width",
+      "thresholds": [{ "label": "人流集中处", "m": 1.8, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "check": "free_width(main_path) < 2 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.5.1-1",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "GEN-03", "scope": "GEN", "zh": "疏散主通道", "en": "egress main aisle",
+      "thresholds": [
+        { "label": "小型场地底线", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" },
+        { "label": "5000 人以上主通道", "m": 6, "cells": 6, "rounding": "ceil", "unit": "m" },
+        { "label": "5000 人以上辅通道", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }
+      ],
+      "formula": "按人数 3.5–6 m 取值；15000 人以上 8/5 m",
+      "check": "free_width(egress) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "地方公安口径（郑州、无锡、荆州）；GB 50016-2014 §5.5.18",
+      "conflictWith": ["EXH-08", "KID-11"], "promptCore": true,
+      "note": "地方口径按项目所在城市替换；B 级不得称国标。"
+    },
+    {
+      "id": "GEN-04", "scope": "GEN", "zh": "安全出口数量", "en": "exit count",
+      "thresholds": [{ "label": "出口数下限", "count": 2, "unit": "count" }],
+      "formula": "N≥10000 人时 ≥4 个，且直通场外",
+      "check": "count(exit) < 2 或 (N≥10000 且 count(exit)<4) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "地方公安口径；《大型群众性活动安全管理条例》§11",
+      "conflictWith": [], "promptCore": true
+    },
+    {
+      "id": "GEN-05", "scope": "GEN", "zh": "消防设施净空", "en": "hydrant clearance",
+      "thresholds": [{ "label": "净空", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "check": "gap(any_object, hydrant) < 2 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50016-2014 §8.1；常规消防检查口径",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "GEN-06", "scope": "GEN", "zh": "垂直净空", "en": "clear height",
+      "thresholds": [{ "label": "通道及悬挂物底边", "m": 2.2, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "check": "clear_height(path) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 36731-2018 §6.2.6.1；GB 50763-2012 §3.5.2-4",
+      "conflictWith": [], "promptCore": true,
+      "note": "标识底边允许 2.00 m；其余按 2.20 m。"
+    },
+    {
+      "id": "GEN-07", "scope": "GEN", "zh": "临时设施退距", "en": "temporary setback",
+      "thresholds": [{ "label": "距建筑外墙", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "check": "gap(temp, building) < 3 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）+ 消防车道禁占",
+      "conflictWith": [], "promptCore": false,
+      "note": "C 级，对外只能表述为建议值。"
+    },
+    {
+      "id": "GEN-08", "scope": "GEN", "zh": "人员密度换算", "en": "occupancy factor",
+      "thresholds": [
+        { "label": "展览厅", "value": 0.75, "unit": "person_per_m2" },
+        { "label": "无座活动人均面积", "value": 1.0, "unit": "m2_per_person" }
+      ],
+      "check": "density(zone) > 0.75（展览）或 area/capacity < 1.0（活动）→ 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50016-2014 表 5.5.21-2；地方公安口径（深圳、无锡）",
+      "conflictWith": [], "promptCore": false
+    },
+
+    {
+      "id": "KID-01", "scope": "KID", "zh": "跌落空间", "en": "fall space",
+      "thresholds": [{ "label": "外扩", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "formula": "max(1.5, 2/3*H+0.5)，H=跌落高度",
+      "check": "gap(device, any_object) < max(1.5, 2/3*H+0.5) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 34272-2017 §5.10.2.3、图 16",
+      "conflictWith": ["MKT-03"], "promptCore": true
+    },
+    {
+      "id": "KID-02", "scope": "KID", "zh": "缓冲铺装临界跌落高度", "en": "critical fall height",
+      "thresholds": [],
+      "spec": "25 mm 橡塑 ≤0.8 m；50 mm ≤1.5 m；200 mm 砂/树皮 ≤2.0 m",
+      "check": "critical_fall_height(surface) < H_device → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 34272-2017 表 6",
+      "conflictWith": [], "promptCore": true
+    },
+    {
+      "id": "KID-03", "scope": "KID", "zh": "自由空间上方净空", "en": "free space headroom",
+      "thresholds": [{ "label": "净高", "m": 2.13, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "check": "clear_height(device_zone) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 34272-2017 §4.11.3.1",
+      "conflictWith": ["KID-11"], "promptCore": true
+    },
+    {
+      "id": "KID-04", "scope": "KID", "zh": "自由空间不重叠", "en": "non-overlap",
+      "thresholds": [],
+      "check": "overlap(free_space_a, free_space_b) 或 overlap(free_space, path) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 34272-2017 §4.11.3.2–3",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "KID-05", "scope": "KID", "zh": "低龄/大龄分区", "en": "age zoning",
+      "thresholds": [{ "label": "区界缓冲", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "check": "gap(zone_low, zone_high) < 3 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），参照儿童友好城市分区原则",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "KID-06", "scope": "KID", "zh": "看护视距", "en": "supervision sightline",
+      "thresholds": [{ "label": "座椅至最近设备", "m": 8, "cells": 8, "rounding": "floor", "unit": "m" }],
+      "spec": "视廊内无高度 ≥1.2 m 遮挡",
+      "check": "dist(seat, nearest_device) > 8 格 或 遮挡高度 ≥1.2 m → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），无强制标准",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "KID-07", "scope": "KID", "zh": "看护座椅朝向", "en": "seat orientation",
+      "thresholds": [{ "label": "偏角", "value": 45, "unit": "deg" }],
+      "check": "angle(seat_front, zone_center) > 45° → 警告",
+      "severity": "ideal", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "KID-08", "scope": "KID", "zh": "车行隔离", "en": "traffic separation",
+      "thresholds": [{ "label": "距车行道", "m": 5, "cells": 5, "rounding": "ceil", "unit": "m" }],
+      "spec": "且设连续物理隔离",
+      "check": "gap(kid_zone, road) < 5 格 或 not continuous(barrier) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）+ 场地安全通行做法",
+      "conflictWith": [], "promptCore": false,
+      "note": "数值为 C 级，但缺隔离属实质安全风险，故按硬性处理。"
+    },
+    {
+      "id": "KID-09", "scope": "KID", "zh": "近岸水深", "en": "waterfront depth",
+      "thresholds": [{ "label": "近岸范围", "m": 2, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "spec": "近岸 2 m 内水深 ≤0.70 m，否则设护栏",
+      "check": "water_depth(0..2 m from shore) > 0.7 且无护栏 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 51192-2016（原 CJJ 48-92 §4.3.2）",
+      "conflictWith": [], "promptCore": true,
+      "note": "缺水深数据时必须报 noWaterDepth，不得默认浅水。"
+    },
+    {
+      "id": "KID-10", "scope": "KID", "zh": "出入口", "en": "entrance",
+      "thresholds": [{ "label": "净宽", "m": 1.2, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "spec": "≥2 个，不得直对车行流线",
+      "check": "count(entrance) < 2 或 free_width(entrance) < 2 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.5.1",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "KID-11", "scope": "KID", "zh": "遮荫率", "en": "shade ratio",
+      "thresholds": [{ "label": "活动区投影遮荫", "value": 0.4, "unit": "ratio" }],
+      "check": "cover_ratio(zone, shade) < 0.4 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）；儿童友好城市导则仅定性要求",
+      "conflictWith": ["KID-03", "GEN-03"], "promptCore": true,
+      "note": "树冠底 ≥2.13 m 才计入遮荫（CF-04）。"
+    },
+    {
+      "id": "KID-12", "scope": "KID", "zh": "铺装安全", "en": "safe surfacing",
+      "thresholds": [],
+      "spec": "无锐利路缘石、无裸露硬质边角；柔性透水铺装",
+      "check": "has_type(zone, sharp_kerb) → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 51192-2016 §8.5.4",
+      "conflictWith": [], "promptCore": false
+    },
+
+    {
+      "id": "ELD-01", "scope": "ELD", "zh": "轮椅回转空间", "en": "turning circle",
+      "thresholds": [{ "label": "直径", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "spec": "2×2 格完整空区",
+      "check": "free_square(any_node) < 2×2 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.11.2；GB 55019-2021",
+      "conflictWith": ["MKT-02"], "promptCore": true
+    },
+    {
+      "id": "ELD-02", "scope": "ELD", "zh": "通行净宽", "en": "clear width",
+      "thresholds": [
+        { "label": "室外", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" },
+        { "label": "主园路", "m": 1.8, "cells": 2, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "free_width(path) < 2 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.5.1",
+      "conflictWith": ["MKT-02"], "promptCore": false
+    },
+    {
+      "id": "ELD-03", "scope": "ELD", "zh": "轮椅错车", "en": "passing bay",
+      "thresholds": [
+        { "label": "错车段净宽", "m": 1.8, "cells": 2, "rounding": "ceil", "unit": "m" },
+        { "label": "错车间距", "m": 15, "cells": 15, "rounding": "floor", "unit": "m" }
+      ],
+      "check": "free_width(seg) < 2 格 且 interval(bay) > 15 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "JGJ 450-2018 §5.6.3（室外借用）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "ELD-04", "scope": "ELD", "zh": "坡道", "en": "ramp",
+      "thresholds": [
+        { "label": "单段提升", "m": 0.75, "unit": "m" },
+        { "label": "平台深度", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" }
+      ],
+      "spec": "纵坡 ≤1:12；起点/终点/中间平台 ≥1.50 m",
+      "check": "slope(ramp) > 1/12 或 rise > 0.75 或 platform_depth < 2 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.4.4、§3.4.6",
+      "conflictWith": ["CMP-04"], "promptCore": false
+    },
+    {
+      "id": "ELD-05", "scope": "ELD", "zh": "连续扶手", "en": "continuous handrail",
+      "thresholds": [{ "label": "单层高度上限", "m": 0.9, "unit": "m" }],
+      "spec": "单层 0.85–0.90 m；双层下层 0.65–0.70 m；内侧距墙 40 mm；全程连续",
+      "check": "not continuous(handrail) 或 height ∉ [0.85,0.90] → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 55019-2021 §2.8.1、§2.8.4",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "ELD-06", "scope": "ELD", "zh": "座椅间距", "en": "seat interval",
+      "thresholds": [{ "label": "可坐点最大间距", "m": 15, "cells": 15, "rounding": "floor", "unit": "m" }],
+      "check": "max_interval(seat) > 15 格 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）；WHO 仅要求规律分布",
+      "conflictWith": [], "promptCore": true
+    },
+    {
+      "id": "ELD-07", "scope": "ELD", "zh": "座椅人体工学", "en": "seat ergonomics",
+      "thresholds": [{ "label": "座高上限", "m": 0.45, "unit": "m" }],
+      "spec": "座高 0.40–0.45 m；座深 0.38–0.45 m；靠背 ≥0.35 m；设扶手",
+      "check": "seat_h ∉ [0.40,0.45] 或 back_h < 0.35 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），人体工学通用值",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "ELD-08", "scope": "ELD", "zh": "轮椅停留位", "en": "wheelchair space",
+      "thresholds": [{ "label": "停留位边长", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "spec": "每 10 个座椅 ≥1 个轮椅位",
+      "check": "count(wheelchair_space) < ceil(seats/10) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 51192-2016 §3.5.4-3（≥10%）；GB 50763-2012",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "ELD-09", "scope": "ELD", "zh": "遮荫率", "en": "shade ratio",
+      "thresholds": [{ "label": "休憩区遮荫", "value": 0.5, "unit": "ratio" }],
+      "check": "cover_ratio(zone, shade) < 0.5 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）；WHO 仅要求有遮荫",
+      "conflictWith": [], "promptCore": true
+    },
+    {
+      "id": "ELD-10", "scope": "ELD", "zh": "至卫生间距离", "en": "toilet distance",
+      "thresholds": [{ "label": "服务半径", "m": 250, "cells": 250, "rounding": "floor", "unit": "m" }],
+      "check": "dist(zone, toilet) > 250 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 51192-2016 §3.5.3-2",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "ELD-11", "scope": "ELD", "zh": "高差处理", "en": "level change",
+      "thresholds": [{ "label": "需设坡道的高差", "m": 0.3, "unit": "m" }],
+      "check": "level_diff > 0.3 且无坡道 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.4.3",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "ELD-12", "scope": "ELD", "zh": "冬季日照", "en": "winter sun",
+      "thresholds": [{ "label": "冬至日有效日照", "value": 2, "unit": "hour" }],
+      "spec": "避开建筑风口与穿堂风",
+      "check": "sun_hours(zone, winter_solstice) < 2 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "GB 50180-2018 §4.0.9（老年居住建筑）；场地部分为经验值",
+      "conflictWith": [], "promptCore": false,
+      "note": "国标条款针对老年居住建筑，场地日照为类比；按 C 级处理，不称合规。"
+    },
+
+    {
+      "id": "MKT-01", "scope": "MKT", "zh": "标准摊位", "en": "standard stall",
+      "thresholds": [{ "label": "摊位面积", "m2": 9, "cells": 3, "unit": "m2" }],
+      "spec": "3×3 m；地方允许 2–5 ㎡/摊",
+      "check": "area(stall) < 4 或 > 9 ㎡ → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "展览标摊行业惯例；东营市摊点群导则；重庆北碚",
+      "conflictWith": ["STG-01"], "promptCore": false,
+      "note": "代码现状 booth-2x2 为 2×2 m（4 ㎡），与本条 3×3 m 冲突，必须显式选一个。"
+    },
+    {
+      "id": "MKT-02", "scope": "MKT", "zh": "摊位间距", "en": "stall spacing",
+      "thresholds": [
+        { "label": "纵向", "m": 2, "cells": 2, "rounding": "ceil", "unit": "m" },
+        { "label": "横向", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "gap(stall, stall) < 2 格（纵）或 < 2 格（横，取整后）→ 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "东营市城市便民摊点群设置管理导则",
+      "conflictWith": ["ELD-02", "ELD-01"], "promptCore": true
+    },
+    {
+      "id": "MKT-03", "scope": "MKT", "zh": "主/次通道", "en": "primary & secondary aisle",
+      "thresholds": [
+        { "label": "主通道", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" },
+        { "label": "次通道", "m": 2, "cells": 2, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "free_width(main) < 3 格 或 free_width(secondary) < 2 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "东营导则；荆州市夜市示范街方案",
+      "conflictWith": ["KID-01"], "promptCore": false
+    },
+    {
+      "id": "MKT-04", "scope": "MKT", "zh": "应急通道", "en": "emergency lane",
+      "thresholds": [{ "label": "净宽", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "spec": "直通场地外，全程不得被摊位占用",
+      "check": "not reachable(emergency_lane, exit) 或 free_width < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "重庆北碚区临时占道经营点设置规划",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "MKT-05", "scope": "MKT", "zh": "背靠背间距", "en": "back-to-back gap",
+      "thresholds": [{ "label": "背板之间", "m": 1, "cells": 1, "rounding": "ceil", "unit": "m" }],
+      "check": "gap(back, back) < 1 格 且非共用背板 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "MKT-06", "scope": "MKT", "zh": "明火分区", "en": "open-flame separation",
+      "thresholds": [{ "label": "与其他摊位", "m": 6, "cells": 6, "rounding": "ceil", "unit": "m" }],
+      "spec": "集中分区并置于下风向",
+      "check": "gap(flame_stall, other_stall) < 6 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "荆州市夜市示范街建设实施方案",
+      "conflictWith": ["MKT-12"], "promptCore": true
+    },
+    {
+      "id": "MKT-07", "scope": "MKT", "zh": "灭火器配置", "en": "extinguisher",
+      "thresholds": [{ "label": "每 10 摊", "count": 2, "unit": "count" }],
+      "spec": "4 kg ABC 干粉；取用步行 ≤15 m",
+      "check": "count(extinguisher) < 2*ceil(stalls/10) 或 dist > 15 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "重庆北碚规定；GB 50140-2005 中危险级",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "MKT-08", "scope": "MKT", "zh": "垃圾点", "en": "waste point",
+      "thresholds": [{ "label": "每摊", "count": 1, "unit": "count" }],
+      "spec": "每摊 1 个分类桶；每 50 摊 1 个集中收集点",
+      "check": "count(bin) < stalls → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "B",
+      "source": "重庆北碚规定；GB 51192-2016 §3.5.5",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "MKT-09", "scope": "MKT", "zh": "遮阳棚净高", "en": "canopy height",
+      "thresholds": [{ "label": "棚底净高", "m": 2.5, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "spec": "材料阻燃",
+      "check": "clear_height(stall) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "东营导则（遮阳棚 ≥2.5 m）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "MKT-10", "scope": "MKT", "zh": "摊位占地率", "en": "stall footprint ratio",
+      "thresholds": [{ "label": "摊位投影占场地", "value": 0.35, "unit": "ratio" }],
+      "check": "area(stalls)/area(site) > 0.35 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "MKT-11", "scope": "MKT", "zh": "建筑退距", "en": "building setback",
+      "thresholds": [{ "label": "距建筑外墙", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "spec": "消火栓 1.5 m 内禁占",
+      "check": "gap(stall, building) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）+ 消防检查口径",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "MKT-12", "scope": "MKT", "zh": "排长断口", "en": "row break",
+      "thresholds": [
+        { "label": "连续排长", "m": 40, "cells": 40, "rounding": "ceil", "unit": "m" },
+        { "label": "横向断口", "m": 2, "cells": 2, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "row_length > 40 格 且无 gap ≥ 2 格 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": ["MKT-06"], "promptCore": false
+    },
+
+    {
+      "id": "STG-01", "scope": "STG", "zh": "观众密度", "en": "audience density",
+      "thresholds": [
+        { "label": "站立硬底线", "value": 1.0, "unit": "m2_per_person" },
+        { "label": "舒适", "value": 2.0, "unit": "m2_per_person" },
+        { "label": "临时座席", "value": 0.75, "unit": "m2_per_person" }
+      ],
+      "check": "area(audience)/capacity < 1.0（站席）或 < 0.75（座席）→ 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "地方公安口径（深圳、无锡、江西、郑州）",
+      "conflictWith": ["MKT-01", "STG-02"], "promptCore": true
+    },
+    {
+      "id": "STG-02", "scope": "STG", "zh": "首排距舞台", "en": "first-row setback",
+      "thresholds": [{ "label": "台高 <1.5 m", "m": 5, "cells": 5, "rounding": "ceil", "unit": "m" }],
+      "formula": "台高 ≥1.5 m 时 = 5 + 4×(H−1.5) m",
+      "check": "dist(first_row, stage) < 5 + 4*max(0,H-1.5) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "郑州市公安局大型活动安全管理规范 §34（无锡 6 m、江西 10 m，取较宽）",
+      "conflictWith": ["STG-01"], "promptCore": true
+    },
+    {
+      "id": "STG-03", "scope": "STG", "zh": "主/辅通道", "en": "main & secondary aisle",
+      "thresholds": [
+        { "label": "<5000 人", "m": 3.5, "cells": 4, "rounding": "ceil", "unit": "m" },
+        { "label": "5000–15000 人主", "m": 6, "cells": 6, "rounding": "ceil", "unit": "m" },
+        { "label": "5000–15000 人辅", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" },
+        { "label": ">15000 人主", "m": 8, "cells": 8, "rounding": "ceil", "unit": "m" },
+        { "label": ">15000 人辅", "m": 5, "cells": 5, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "free_width(main) < 阈值 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "无锡市大型群众性活动安全管理办法 §38；郑州同口径",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-04", "scope": "STG", "zh": "安全出口", "en": "exits",
+      "thresholds": [{ "label": "出口数下限", "count": 2, "unit": "count" }],
+      "formula": "≥10000 人 ≥4 个，直通场外",
+      "check": "count(exit) < 2 或 (N≥10000 且 count(exit)<4) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "郑州 §34-6；无锡 §38-6",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-05", "scope": "STG", "zh": "隔离护栏", "en": "barrier",
+      "thresholds": [
+        { "label": "护栏高", "m": 1.2, "unit": "m" },
+        { "label": "立杆间距", "m": 2, "cells": 2, "rounding": "ceil", "unit": "m" }
+      ],
+      "spec": "横杆 ≥3 道；观众区与舞台、设备区之间必设",
+      "check": "not exists(barrier, between(audience, stage)) 或 height ≤ 1.2 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 36731-2018 §6.2.5.3、§6.2.5.6",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-06", "scope": "STG", "zh": "高差护栏", "en": "level-change guard",
+      "thresholds": [{ "label": "需设护栏的高差", "m": 0.6, "unit": "m" }],
+      "check": "height_diff ≥ 0.6 且无护栏 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 36731-2018 §6.2.5.1",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-07", "scope": "STG", "zh": "通道尺寸", "en": "walkway",
+      "thresholds": [
+        { "label": "净宽", "m": 1.5, "cells": 2, "rounding": "ceil", "unit": "m" },
+        { "label": "净高", "m": 2.2, "cells": 3, "rounding": "ceil", "unit": "m" }
+      ],
+      "spec": "落差处用坡不用踏步",
+      "check": "free_width < 2 格 或 clear_height < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 36731-2018 §6.2.6.1",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-08", "scope": "STG", "zh": "后台与缓冲区", "en": "backstage buffer",
+      "thresholds": [
+        { "label": "舞台后", "m": 6, "cells": 6, "rounding": "ceil", "unit": "m" },
+        { "label": "侧台", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }
+      ],
+      "spec": "与观众区物理隔离",
+      "check": "gap(stage_back, audience) < 6 格 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-09", "scope": "STG", "zh": "调音位", "en": "FOH position",
+      "thresholds": [{ "label": "距舞台", "m": 15, "unit": "m" }],
+      "spec": "15–25 m，位于观众区中轴，独立围栏",
+      "check": "dist(foh, stage) ∉ [15,25] → 警告",
+      "severity": "ideal", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），扩声工程惯例",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-10", "scope": "STG", "zh": "场界噪声", "en": "boundary noise",
+      "thresholds": [
+        { "label": "昼间", "value": 60, "unit": "db" },
+        { "label": "夜间", "value": 50, "unit": "db" }
+      ],
+      "check": "运行时 LAeq(boundary) > 60（昼）/50（夜）→ 违规",
+      "severity": "hard", "runtime": "runtime", "sourceLevel": "A",
+      "source": "GB 22337-2008；GB 3096-2008",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-11", "scope": "STG", "zh": "最大视距", "en": "maximum sight distance",
+      "thresholds": [
+        { "label": "歌舞综合类", "m": 30, "cells": 30, "rounding": "floor", "unit": "m" },
+        { "label": "语言类", "m": 20, "cells": 20, "rounding": "floor", "unit": "m" }
+      ],
+      "check": "dist(last_row, stage) > 30 格 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），参照剧场视距设计原则，未查到条文号",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "STG-12", "scope": "STG", "zh": "气象阈值", "en": "weather threshold",
+      "thresholds": [
+        { "label": "停高空吊装", "value": 10.8, "unit": "m_per_s" },
+        { "label": "停演疏散", "value": 17.2, "unit": "m_per_s" }
+      ],
+      "check": "运行时 wind_speed ≥ 17.2 且未停演 → 违规",
+      "severity": "hard", "runtime": "runtime", "sourceLevel": "A",
+      "source": "GB/T 36731-2018；地方活动安全管理口径",
+      "conflictWith": [], "promptCore": false
+    },
+
+    {
+      "id": "CMP-01", "scope": "CMP", "zh": "营位面积", "en": "pitch area",
+      "thresholds": [{ "label": "营位面积", "m2": 20, "cells": 20, "unit": "m2" }],
+      "check": "area(pitch) < 20 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.2.6",
+      "conflictWith": [], "promptCore": true
+    },
+    {
+      "id": "CMP-02", "scope": "CMP", "zh": "营位间距", "en": "pitch spacing",
+      "thresholds": [{ "label": "营位间距", "m": 2, "cells": 2, "rounding": "ceil", "unit": "m" }],
+      "check": "gap(pitch, pitch) < 2 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.2.9",
+      "conflictWith": ["CMP-03"], "promptCore": true
+    },
+    {
+      "id": "CMP-03", "scope": "CMP", "zh": "防火间距", "en": "fire separation",
+      "thresholds": [
+        { "label": "帐篷之间", "m": 4, "cells": 4, "rounding": "ceil", "unit": "m" },
+        { "label": "明火距帐篷", "m": 10, "cells": 10, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "gap(tent, tent) < 4 格 或 gap(flame, tent) < 10 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）；标准仅规定 2 m 服务间距，消防口径更严",
+      "conflictWith": ["CMP-02"], "promptCore": true,
+      "note": "GB/T 31710.3 未规定 4 m；按消防/林区口径取严，对外称建议值。"
+    },
+    {
+      "id": "CMP-04", "scope": "CMP", "zh": "场地坡度", "en": "site slope",
+      "thresholds": [{ "label": "营位坡度", "value": 15, "unit": "deg" }],
+      "check": "slope(pitch) > 15° → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §5.1.6",
+      "conflictWith": ["ELD-04"], "promptCore": false,
+      "note": "缺高程数据时报 noSlope，不得假定平地。"
+    },
+    {
+      "id": "CMP-05", "scope": "CMP", "zh": "枝下净空", "en": "branch clearance",
+      "thresholds": [{ "label": "乔木枝下净空", "m": 2.2, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "check": "clear_height(pitch) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.2.2",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "CMP-06", "scope": "CMP", "zh": "绿地率", "en": "green ratio",
+      "thresholds": [{ "label": "营地绿地率", "value": 0.5, "unit": "ratio" }],
+      "check": "green_ratio(site) < 0.5 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §5.2.5",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "CMP-07", "scope": "CMP", "zh": "营位地面", "en": "pitch surface",
+      "thresholds": [
+        { "label": "高于周边地面", "m": 0.15, "unit": "m" },
+        { "label": "位内任意两点高差", "m": 0.06, "unit": "m" }
+      ],
+      "check": "height(pitch) - height(around) < 0.15 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.2.5、§6.2.8",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "CMP-08", "scope": "CMP", "zh": "垃圾点", "en": "waste",
+      "thresholds": [{ "label": "集中站距功能区", "m": 50, "cells": 50, "rounding": "ceil", "unit": "m" }],
+      "spec": "每 4 个相邻营位 1 个垃圾箱；集中站位于下风向",
+      "check": "dist(waste_station, pitch) < 50 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.5.2、§6.5.3",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "CMP-09", "scope": "CMP", "zh": "卫生间服务半径", "en": "toilet radius",
+      "thresholds": [{ "label": "服务半径", "m": 250, "cells": 250, "rounding": "floor", "unit": "m" }],
+      "spec": "服务中心与露营区各 ≥1 处",
+      "check": "dist(pitch, toilet) > 250 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.4.2 + GB 51192-2016 §3.5.3",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "CMP-10", "scope": "CMP", "zh": "卫浴配比", "en": "sanitation ratio",
+      "thresholds": [
+        { "label": "男 1 淋浴位/人", "count": 15, "unit": "count" },
+        { "label": "女 1 淋浴位/人", "count": 10, "unit": "count" }
+      ],
+      "spec": "用水 ≥30 L/人·日",
+      "check": "count(shower_m) < ceil(men/15) → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.3.2、§6.3.4",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "CMP-11", "scope": "CMP", "zh": "车行隔离", "en": "vehicle separation",
+      "thresholds": [{ "label": "停车区距最近营位", "m": 30, "cells": 30, "rounding": "floor", "unit": "m" }],
+      "spec": "机动车不得进入露营区",
+      "check": "dist(parking, pitch) < 30 格 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "GB/T 31710.3-2015 §5.2.6 + 经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "CMP-12", "scope": "CMP", "zh": "无障碍营位", "en": "accessible pitch",
+      "thresholds": [{ "label": "营位占比", "value": 0.02, "unit": "ratio" }],
+      "spec": "坡度 ≤1:12 且连续可达",
+      "check": "count(accessible_pitch) < ceil(pitches*0.02) → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "GB 50763-2012 §3.4；配比数为经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+
+    {
+      "id": "EXH-01", "scope": "EXH", "zh": "展位通道", "en": "exhibition aisle",
+      "thresholds": [
+        { "label": "主要通道", "m": 5, "cells": 5, "rounding": "ceil", "unit": "m" },
+        { "label": "次要通道", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }
+      ],
+      "check": "free_width(main) < 5 格 或 free_width(secondary) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "JGJ 218-2010 §4.2.7",
+      "conflictWith": ["EXH-02"], "promptCore": true
+    },
+    {
+      "id": "EXH-02", "scope": "EXH", "zh": "通道设展规则", "en": "booth-on-aisle rule",
+      "thresholds": [
+        { "label": "可双侧设展", "m": 8, "cells": 8, "rounding": "ceil", "unit": "m" },
+        { "label": "禁止设展", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }
+      ],
+      "spec": "3–8 m 只可单侧",
+      "check": "both_sides(booth) 且 free_width < 8 格 → 违规；free_width ≤ 3 格 且 count(booth) > 0 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "郑州市公安局大型活动规范 §35（广场展览口径）",
+      "conflictWith": ["EXH-01"], "promptCore": true
+    },
+    {
+      "id": "EXH-03", "scope": "EXH", "zh": "单件展品占位", "en": "exhibit envelope",
+      "thresholds": [{ "label": "观展净距", "m": 0.9, "cells": 1, "rounding": "ceil", "unit": "m" }],
+      "spec": "大型雕塑/装置 ≥1.5 m",
+      "check": "gap(exhibit, any_object) < 1 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），展陈设计惯例",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-04", "scope": "EXH", "zh": "观展视距", "en": "viewing distance",
+      "thresholds": [],
+      "formula": "≥1.5×展品高度",
+      "check": "dist(viewpoint, exhibit) < 1.5*H → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），无强制标准",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-05", "scope": "EXH", "zh": "瓶颈断面", "en": "bottleneck",
+      "thresholds": [{ "label": "游线断面", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "spec": "且不小于上游通道 0.8 倍",
+      "check": "free_width(bottleneck) < 3 格 → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C），人流工程口径",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-06", "scope": "EXH", "zh": "展厅人员密度", "en": "hall density",
+      "thresholds": [{ "label": "密度上限", "value": 0.75, "unit": "person_per_m2" }],
+      "check": "density(hall) > 0.75 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50016-2014 表 5.5.21-2",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-07", "scope": "EXH", "zh": "遮阳避雨点", "en": "shelter interval",
+      "thresholds": [{ "label": "游线间距", "m": 50, "cells": 50, "rounding": "floor", "unit": "m" }],
+      "spec": "单处覆盖 ≥4 ㎡",
+      "check": "max_interval(shelter) > 50 格 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-08", "scope": "EXH", "zh": "打卡拍摄位", "en": "photo spot",
+      "thresholds": [{ "label": "前方净空", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "spec": "3×3 m，不得占用主通道",
+      "check": "free_square(spot) < 3×3 或 overlap(spot, main_path) → 违规",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": ["GEN-03"], "promptCore": false
+    },
+    {
+      "id": "EXH-09", "scope": "EXH", "zh": "悬挂净高", "en": "hanging clearance",
+      "thresholds": [{ "label": "底边净高", "m": 2.2, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "check": "clear_height(path) < 3 格 → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "A",
+      "source": "GB 50763-2012 §3.5.2-4；GB/T 36731-2018 §6.2.6.1",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-10", "scope": "EXH", "zh": "游线组织", "en": "route topology",
+      "thresholds": [
+        { "label": "回头率上限", "value": 0.3, "unit": "ratio" },
+        { "label": "入口至最远展品", "m": 250, "cells": 250, "rounding": "floor", "unit": "m" }
+      ],
+      "spec": "单向环线",
+      "check": "backtrack_ratio > 0.3 → 警告",
+      "severity": "ideal", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-11", "scope": "EXH", "zh": "出入口缓冲", "en": "entry buffer",
+      "thresholds": [{ "label": "展位距出入口", "m": 3, "cells": 3, "rounding": "ceil", "unit": "m" }],
+      "check": "gap(exhibit, entrance) < 3 格 → 警告",
+      "severity": "warn", "runtime": "static", "sourceLevel": "C",
+      "source": "经验值（C）",
+      "conflictWith": [], "promptCore": false
+    },
+    {
+      "id": "EXH-12", "scope": "EXH", "zh": "通道红线", "en": "aisle envelope",
+      "thresholds": [],
+      "spec": "展品投影与地台均不得侵入通道净宽线",
+      "check": "overlap(exhibit_footprint, aisle_envelope) → 违规",
+      "severity": "hard", "runtime": "static", "sourceLevel": "B",
+      "source": "由 EXH-01/02 派生",
+      "conflictWith": [], "promptCore": false
+    }
+  ],
+  "conflicts": [
+    {
+      "id": "CF-01", "rules": ["MKT-03", "KID-01"], "theme": "市集次通道 vs 儿童跌落空间",
+      "gap": "2 m 通道被 1.5 m 缓冲环吃掉 75%",
+      "resolution": "儿童设施点位周边通道宽 = 2+1.5 m；或儿童区与摊位区不共边，中间设 ≥3 m 绿带",
+      "priority": "保安全，牺牲摊位密度"
+    },
+    {
+      "id": "CF-02", "rules": ["STG-01", "MKT-01"], "theme": "演出容量 vs 市集摊位",
+      "gap": "同一 100 ㎡：演出 100 人 vs 市集 4–5 摊，承载力差约 20 倍",
+      "resolution": "场景互斥，切换需清场重排；分区则按容量比分配面积",
+      "priority": "不得同址同时段"
+    },
+    {
+      "id": "CF-03", "rules": ["ELD-02", "MKT-02"], "theme": "适老通道 vs 摊位横向间距",
+      "gap": "1.5 m 无法双轮椅错车",
+      "resolution": "适老通道独立成环 ≥2 格，不穿摊区；1.5 m 仅用于非主通道",
+      "priority": "无障碍优先"
+    },
+    {
+      "id": "CF-04", "rules": ["KID-11", "KID-03"], "theme": "遮荫 vs 自由空间净空",
+      "gap": "树冠要遮荫，但不能进入 2.13 m 自由空间",
+      "resolution": "树冠底 ≥2.13 m 才计入遮荫；低分枝乔木不得进入跌落空间环",
+      "priority": "净空优先，遮荫让步"
+    },
+    {
+      "id": "CF-05", "rules": ["GEN-03", "EXH-08"], "theme": "消防主通道 vs 打卡拍摄位",
+      "gap": "打卡位 9 ㎡ 正好等于 3 m 通道整幅",
+      "resolution": "打卡位外挂于通道侧，不得落在通道包络内；主通道两侧各留 ≥1 m 站立带",
+      "priority": "消防优先"
+    },
+    {
+      "id": "CF-06", "rules": ["STG-02", "STG-01"], "theme": "首排退距 vs 容量计算",
+      "gap": "前排 5 m 不计容量，损失约 5×台宽 的面积",
+      "resolution": "容量分母必须扣除退距、通道、FOH 后的有效面积，不得用场地毛面积",
+      "priority": "容量口径服从安全退距"
+    },
+    {
+      "id": "CF-07", "rules": ["CMP-02", "CMP-03"], "theme": "营位服务间距 vs 防火间距",
+      "gap": "2 m 与 4 m 相差一倍",
+      "resolution": "常规营地按 4 m 排；2 m 仅用于同一运营单元内的连排营位，且需消防认可",
+      "priority": "取严"
+    },
+    {
+      "id": "CF-08", "rules": ["CMP-04", "ELD-04"], "theme": "营地坡度 vs 无障碍坡道",
+      "gap": "15° 远超轮椅能力（1:12≈4.8°）",
+      "resolution": "无障碍营位单独选 ≤5% 平台，不与山地营位混排",
+      "priority": "无障碍营位独立选址"
+    },
+    {
+      "id": "CF-09", "rules": ["MKT-06", "MKT-12"], "theme": "明火分区 vs 连续排布",
+      "gap": "6 m 断口使一排损失 2–3 个摊位",
+      "resolution": "明火区独立成组置于下风向边界，不计入连续排长；断口兼作横向疏散口",
+      "priority": "消防优先"
+    },
+    {
+      "id": "CF-10", "rules": ["EXH-02", "EXH-01"], "theme": "双侧设展 vs 主通道宽度",
+      "gap": "5 m 主通道只能单侧设展",
+      "resolution": "主通道做到 8 m 换双侧，或改「尽端式组团 + 3 m 次通道」网络",
+      "priority": "通道宽度优先，展位数让步"
+    },
+    {
+      "id": "CF-11", "rules": ["ELD-01", "MKT-02"], "theme": "轮椅回转 vs 摊间 1.5 m",
+      "gap": "1.5 m 够通行不够回转",
+      "resolution": "回转点只设在通道节点与端头，不要求每个摊间都能回转",
+      "priority": "节点达标即可"
+    },
+    {
+      "id": "CF-12", "rules": ["KID-11", "GEN-03"], "theme": "遮荫乔木 vs 消防车道净空",
+      "gap": "乔木冠幅与消防净空冲突",
+      "resolution": "消防车道上方净空 ≥4 m；乔木布置在车道外侧，冠幅可外溢但不入车道断面",
+      "priority": "消防净空优先"
+    }
+  ]
+}
