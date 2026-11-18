@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mergeCloudGeneratedCards, type GeneratedMaterialCard } from './generated-material-cards';
+import { firstModelSlug } from './asset-namespace';
+import {
+  GENERATED_DRAG_FALLBACK, generatedCardFootprint, generatedPlacementSlug, mergeCloudGeneratedCards,
+  type GeneratedMaterialCard,
+} from './generated-material-cards';
 import type { CloudAsset } from '@/lib/assets-api';
 
 const local: GeneratedMaterialCard[] = [
@@ -35,5 +39,35 @@ describe('mergeCloudGeneratedCards', () => {
     expect(merged.filter(card => card.id === 'shipped-chinese-wood-armchair')).toHaveLength(1);
     expect(merged.find(card => card.id === 'shipped-chinese-wood-armchair')?.cloud).toBeUndefined();
     expect(merged.at(-1)).toMatchObject({ name: '户外折叠椅 1', cloud: true });
+  });
+
+  it('没有预览图也保留名字，并带上云端记下的占地', () => {
+    const chair = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const merged = mergeCloudGeneratedCards([], [
+      asset({
+        id: chair, name: '折叠椅', source: 'hunyuan', format: 'glb',
+        metadata: { sourceSize: { width: 0.55, depth: 0.48, height: 0.9 } },
+      }),
+    ]);
+    expect(merged).toEqual([{
+      id: chair, name: '折叠椅', shipped: false, cloud: true, width: 0.55, depth: 0.48,
+    }]);
+    expect(merged[0]?.image).toBeUndefined();
+  });
+});
+
+describe('generatedPlacementSlug', () => {
+  const chair = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  it('云端 UUID 换成 generated:library-，随包 id 保持原样', () => {
+    expect(generatedPlacementSlug(chair)).toBe(`generated:library-${chair}`);
+    expect(firstModelSlug(generatedPlacementSlug(chair))).toBe(`generated:library-${chair}`);
+    expect(firstModelSlug(chair)).toBeUndefined();
+    expect(generatedPlacementSlug('shipped-chinese-wood-armchair')).toBe('shipped-chinese-wood-armchair');
+  });
+
+  it('没有占地时拖放用 0.5 米占位，有记录就用记录', () => {
+    expect(generatedCardFootprint({})).toEqual(GENERATED_DRAG_FALLBACK);
+    expect(generatedCardFootprint({ width: 0.55, depth: 0.48 })).toEqual({ width: 0.55, depth: 0.48 });
   });
 });
