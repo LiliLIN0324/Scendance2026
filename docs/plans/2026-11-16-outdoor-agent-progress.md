@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：面板上多了一行「走查日期」（没填就明说未填，不拿今天冒充），展开时在下方显示待补清单原文（`gapsLine` 不传就不渲染）；卡里接 `flow.releaseGaps()`。**本地 main = origin = `fd725edd`（`div 0/0`，连续四轮无待合）**。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–90 二十个切片。9222 四十六轮不通。下一条：给走查面板加「填走查日期」入口（`onAsOf` 可注入，空串还原为未填），把 `asOf` 从“只能代码写”变成“人能填”。首条命令 `cd frontend; npm test -- components/room-organizer/components/outdoor-walkthrough-board.test.tsx`。
+- 下一条操作：走查日期现在能在面板里填了——`setAsOf(book, value)`（空白即删字段，不存空串）、面板 `onAsOf` 输入框、区里“返回非空才更新副本”、hook `setWalkthroughAsOf()` 并即时落盘。**本地 main = origin = `b9266188`（`div 0/0`，本轮 main 被人的 PR #165 推进 1 笔，分支已 `merge` 吸收）**。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–91 二十一个切片（`75f3808b` 已合主干最新）。9222 四十七轮不通。下一条：把走查记录与云端声明也接进会话报告（报告里目前只有快照，没有“哪条标过什么”的原始记录，人无法对着报告复核卡片）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-walkthrough-book.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 01:00 · 自动轮次 91 · 走查日期能填了
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 01:00，自动轮次 91
+批次 / 切片 / 状态：合并（main 被 PR #165 推进 1 笔，分支已吸收）+ M7 / 日期输入 / 已交付（分支待 PR）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 31；local main = origin = `b9266188`（`div 0/0`）
+合并：`merge --no-edit main` 零冲突 → `75f3808b`（分支由 `94daaec7` 前进；此前 35 领先 1 落后 → 现 0 落后）
+交付：`setAsOf(book,value)`（trim；空白删字段而非存空串）；面板 `onAsOf` 输入框（不给就仍是一行文字）；区里返回非空才更新副本；hook `setWalkthroughAsOf()` 即时 `saveBook()`；卡接线
+验证（固定数据）：book+board+section+hook 118/118（新增 7 条）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十七轮 down）
+未完成：#2/#5 真实浏览器；报告还没有“逐条标了什么”的原始记录
+```
+
+- **空串不是“没填”的等价物**：`asOf: ""` 会让 `bookToRecord` 与 `evidenceAsOf` 的判断分叉，所以 `setAsOf` 直接删字段，并有用例盯 `"asOf" in book === false`。
+- **输入框不在组件里裁剪**：面板把原始 `value` 回调给外层，裁剪与落盘只在一处（`setAsOf`），避免两处规则不一致。
 
 ### 2026-11-19 00:00 · 自动轮次 90 · 走查日期与待补清单上屏
 

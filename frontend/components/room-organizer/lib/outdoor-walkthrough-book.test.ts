@@ -3,6 +3,8 @@ import { assessAcceptance } from './outdoor-acceptance-selfcheck';
 import type { SessionReport } from './outdoor-session-report';
 import {
   CASE_IDS,
+  EVIDENCE_AS_OF,
+  evidenceAsOf,
   formatReleaseStatusCard,
   statusCardSnapshot,
 } from './outdoor-release-status-card';
@@ -12,6 +14,7 @@ import {
   isCaseId,
   lookedCount,
   markSeen,
+  setAsOf,
   summarizeWalkthrough,
 } from './outdoor-walkthrough-book';
 import type { TraceExportRow } from './turn-trace-log';
@@ -117,5 +120,28 @@ describe('走查记录本', () => {
     });
     expect(snap.browser.pass).toEqual([2]);
     expect(snap.browser.partial).toEqual([9]);
+  });
+});
+
+describe("改走查日期（轮次 91）", () => {
+  it("写日期会去掉首尾空白，其余字段不动", () => {
+    const book = markSeen(emptyBook(), 2, "pass");
+    const next = setAsOf(book, "  2026-11-19 第三轮  ");
+    expect(next.asOf).toBe("2026-11-19 第三轮");
+    expect(next.seen).toEqual(book.seen);
+    expect(next).not.toBe(book);
+  });
+
+  it("清空日期就是真的删字段，不留空串", () => {
+    const book = setAsOf(emptyBook("2026-11-19"), "");
+    expect("asOf" in book).toBe(false);
+    const blank = setAsOf(emptyBook("2026-11-19"), "   ");
+    expect("asOf" in blank).toBe(false);
+  });
+
+  it("清空后 bookToRecord 回到“没写”，让卡片回落常量", () => {
+    const record = bookToRecord(setAsOf(emptyBook("2026-11-19"), ""));
+    expect("asOf" in record).toBe(false);
+    expect(evidenceAsOf(record)).toBe(EVIDENCE_AS_OF);
   });
 });

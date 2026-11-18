@@ -54,6 +54,19 @@ export function markSeen(
   return { ...book, seen: { ...book.seen, [id]: state } };
 }
 
+/**
+ * 改走查日期（轮次 91）：空白就真的是“没填”——删掉字段，而不是存一个空串。
+ * 非法输入不在这里校验（日期由人写，卡片只负责原样显示）；不可变，总是返回新对象。
+ */
+export function setAsOf(book: WalkthroughBook, value: string): WalkthroughBook {
+  const next = value.trim();
+  if (!next) {
+    const { asOf: _dropped, ...rest } = book;
+    return rest;
+  }
+  return { ...book, asOf: next };
+}
+
 /** 已看条数：显式标成 `none` 也算没看。 */
 export function lookedCount(book: WalkthroughBook): number {
   return CASE_IDS.filter((id) => {

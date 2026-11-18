@@ -103,3 +103,21 @@ describe("待补清单显示（轮次 90）", () => {
     expect(screen.queryByLabelText("待补清单")).toBeNull();
   });
 });
+
+describe("日期输入接线（轮次 91）", () => {
+  it("外层返回新记录本才更新显示副本；返回 null 则输入框不动", () => {
+    let next: ReturnType<typeof emptyBook> | null = emptyBook("2026-11-19 A");
+    const onAsOf = vi.fn(() => next);
+    render(
+      <OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} defaultOpen onAsOf={onAsOf} />,
+    );
+    const input = screen.getByLabelText("走查日期") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "2026-11-19 A" } });
+    expect(onAsOf).toHaveBeenCalledWith("2026-11-19 A");
+    expect((screen.getByLabelText("走查日期") as HTMLInputElement).value).toBe("2026-11-19 A");
+
+    next = null;
+    fireEvent.change(screen.getByLabelText("走查日期"), { target: { value: "被拒的值" } });
+    expect((screen.getByLabelText("走查日期") as HTMLInputElement).value).toBe("2026-11-19 A");
+  });
+});

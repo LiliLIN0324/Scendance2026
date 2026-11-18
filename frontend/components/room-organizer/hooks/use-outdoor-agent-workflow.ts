@@ -42,6 +42,7 @@ import { downloadLedgerCsv as saveLedgerCsv } from "../lib/outdoor-release-csv";
 import {
   bookToRecord,
   markSeen,
+  setAsOf,
   summarizeWalkthrough,
 } from "../lib/outdoor-walkthrough-book";
 import { loadBook, loadCloud, saveBook, saveCloud } from "../lib/outdoor-walkthrough-store";
@@ -2769,6 +2770,13 @@ export function useOutdoorAgentWorkflow(input: {
     },
     /** 走查进度一行话（只报“看了几条”，不下“可发布”结论）。 */
     walkthroughLine: () => summarizeWalkthrough(walkthroughBook.current).line,
+    /** 改走查日期：空串就是“没填”（删字段，不存空串）。 */
+    setWalkthroughAsOf: (value: string) => {
+      const next = setAsOf(walkthroughBook.current, value);
+      walkthroughBook.current = next;
+      saveBook(next);
+      return next;
+    },
     /** 当前记录本（受控面板需要它才能渲染按压态）。 */
     walkthroughBook: () => walkthroughBook.current,
     /** 声明某条用例的云端证据是否真跑过；编号不合法返回 null（不生效）。 */

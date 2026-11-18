@@ -22,6 +22,7 @@ export function OutdoorWalkthroughSection({
   onCloud,
   onExportCsv,
   gapsLine,
+  onAsOf,
 }: {
   initialBook: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => WalkthroughBook | null;
@@ -32,6 +33,8 @@ export function OutdoorWalkthroughSection({
   onExportCsv?: () => void;
   /** 待补清单原文（`formatGapList()` 的返回值）；不传就不显示这一块。 */
   gapsLine?: string;
+  /** 给就渲染日期输入框；返回非空才更新副本（与 `onMark` 同一规矩）。 */
+  onAsOf?: (value: string) => WalkthroughBook | null;
 }): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [book, setBook] = useState(initialBook);
@@ -62,6 +65,14 @@ export function OutdoorWalkthroughSection({
             }}
             {...(cloudPass ? { cloudPass } : {})}
             {...(onCloud ? { onCloud } : {})}
+            {...(onAsOf
+              ? {
+                  onAsOf: (value: string) => {
+                    const next = onAsOf(value);
+                    if (next) setBook(next);
+                  },
+                }
+              : {})}
           />
           {gapsLine && (
             <p
