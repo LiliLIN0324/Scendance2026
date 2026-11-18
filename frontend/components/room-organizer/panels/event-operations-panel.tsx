@@ -27,6 +27,8 @@ interface Props {
   onLocate?: ((id: string) => void) | undefined;
   briefState?: { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean } | null | undefined;
   onOpenBrief?: (() => void) | undefined;
+  /** 执行资料门面：档案、需求、当天执行包、任务默认折起。空档案只留一句。 */
+  compact?: boolean;
 }
 type ReviewStatus = EventOperationTask['status'] | 'needs_review' | 'checking';
 const emptyOperations: EventOperations = { schemaVersion: 1, dataKind: 'unspecified', tasks: [] };
@@ -198,7 +200,7 @@ function saveHtmlFile(fileName: string, text: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins, suggestionsPanel }: Props): JSX.Element {
+export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins, suggestionsPanel, compact = false }: Props): JSX.Element {
   const operations = layout.eventOperations ?? emptyOperations;
   const [title, setTitle] = useState(''), [phase, setPhase] = useState<EventOperationTask['phase']>('preparation');
   const [openedTask, setOpenedTask] = useState<string | null>(null), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -262,16 +264,14 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
   const currentReviews = reviewsCurrent ? operations.tasks.map(task => reviews.statuses[task.id]) : [];
   const needsReview = currentReviews.filter(review => review?.status === 'needs_review' && !review.failed).length;
   const failedReviews = currentReviews.filter(review => review?.failed).length;
-  return <section className="sc-event-operations" aria-label="活动安排">
-    <EventProfileTopBar profile={layout.eventProfile} />
-    {checkinsUnavailable&&<p className="sc-handoff-review">{checkins?.error??'点验资料尚未就绪，暂不能确认活动任务。'}<button className="sc-button" type="button" onClick={checkins?.retry}>重新读取点验</button></p>}
-    <div className="sc-operation-brief">
+  const checkinAlert = checkinsUnavailable ? <p className="sc-handoff-review">{checkins?.error??'点验资料尚未就绪，暂不能确认活动任务。'}<button className="sc-button" type="button" onClick={checkins?.retry}>重新读取点验</button></p> : null;
+  const briefBlock = <div className="sc-operation-brief">
       <div className="sc-operation-brief-heading"><div className="sc-operation-project"><small>当前项目</small><h3>{layout.name || '未命名项目'}</h3></div><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
       {brief ? <><p className="sc-note">已保存需求草稿 · {brief.eventConfirmed === true ? brief.event : '活动类型待确认'} · {brief.guestsConfirmed === true ? `预计 ${brief.guests} 人` : '人数待确认'}</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
-    </div>
-    <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>
-    <EventProfileCard profile={layout.eventProfile} />
-    <DaySheetExport layout={layout} save={saveHtmlFile} />
+    </div>;
+  const taskBlock = <>
+    {compact && checkinAlert}
+    {compact && <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>}
     <MaterialIntakePanel operations={operations} projectId={layout.id ?? 'local'} disabled={disabled}
       onAccept={next => onUpdate(next)} />
     {suggestionsPanel}
@@ -319,5 +319,18 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
     <p className="sc-note">活动安排随场景保存在此浏览器。人员、时间和完成条件未定时可先保存草稿。</p>
     {error && <p className="sc-handoff-error" role="alert">{error}</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}
+  </>;
+  return <section className="sc-event-operations" aria-label="活动安排">
+    {compact && !layout.eventProfile
+      ? <details className="sc-operation-fold"><summary>活动档案 · 尚未创建</summary><p className="sc-note">尚未创建。</p></details>
+      : compact
+        ? <details className="sc-operation-fold"><summary>{`活动档案 · v${layout.eventProfile?.revision ?? 0}`}</summary><EventProfileTopBar profile={layout.eventProfile} /><EventProfileCard profile={layout.eventProfile} /></details>
+        : <EventProfileTopBar profile={layout.eventProfile} />}
+    {!compact && checkinAlert}
+    {compact ? <details className="sc-operation-fold"><summary>活动需求</summary>{briefBlock}</details> : briefBlock}
+    {!compact && <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>}
+    {!compact && <EventProfileCard profile={layout.eventProfile} />}
+    {compact ? <details className="sc-operation-fold"><summary>当天执行包</summary><DaySheetExport layout={layout} save={saveHtmlFile} /></details> : <DaySheetExport layout={layout} save={saveHtmlFile} />}
+    {compact ? <details className="sc-operation-fold"><summary>{`活动任务 · ${operations.tasks.length} 项`}</summary>{taskBlock}</details> : taskBlock}
   </section>;
 }
