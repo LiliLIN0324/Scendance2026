@@ -3960,17 +3960,37 @@ describe('T-ATTACH 图纸照片先进输入框', () => {
       set src(_value: string) { queueMicrotask(() => this.onload?.()); }
     });
     render(<LocalHarness initial={makeLayout({ width: 12, height: 8 })} onApply={vi.fn()}/>);
-    const sendButton = screen.getByRole('button', { name: '发送' }) as HTMLButtonElement;
-    expect(sendButton.disabled).toBe(true);
+    // 空态发送位是麦克风；有附件才换成箭头（双态见 panel 的 showMic）。
+    expect(screen.queryByRole('button', { name: '发送' })).toBeNull();
     fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     expect(await screen.findByText('plan.png')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '移除附件' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /移除附件/ })).toBeTruthy();
+    const sendButton = screen.getByRole('button', { name: '发送' }) as HTMLButtonElement;
     expect(sendButton.disabled).toBe(false);
     expect(screen.queryByRole('button', { name: /按图纸估一版/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '移除附件' }));
+    fireEvent.click(screen.getByRole('button', { name: /移除附件/ }));
     expect(screen.queryByText('plan.png')).toBeNull();
-    expect(screen.queryByRole('button', { name: '移除附件' })).toBeNull();
-    expect(sendButton.disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /移除附件/ })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('button', { name: '发送' })).toBeNull());
+    vi.unstubAllGlobals();
+  }, 25000);
+
+  it('最多 10 张：第 11 张不加进来，并说清原因', async () => {
+    vi.stubGlobal('Image', class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      naturalWidth = 900;
+      naturalHeight = 600;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ fillRect: () => {}, drawImage: () => {} } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,AAAA');
+    render(<LocalHarness initial={makeLayout({ width: 12, height: 8 })} onApply={vi.fn()}/>);
+    const files = Array.from({ length: 11 }, (_, index) => new File(['x'], `shot-${index}.png`, { type: 'image/png' }));
+    fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files } });
+    expect(await screen.findByText(/最多 10 张/)).toBeTruthy();
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: /移除附件/ })).toHaveLength(10));
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }, 25000);
 });

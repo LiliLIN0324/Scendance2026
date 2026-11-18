@@ -167,6 +167,18 @@ describe('request contract compatibility', () => {
     expect(briefExtractRequestSchema.safeParse({ message: '布置一下', provider: 'tokendance', model: '  deepseek-v4.1-flash  ' }).success).toBe(true);
     expect(assistantChatRequestSchema.safeParse({ message: '你好', history: [], model: '' }).success).toBe(false);
   });
+
+  it('carries up to 10 site screenshots and only on outdoor_v1', () => {
+    const shot = 'data:image/jpeg;base64,AAAA';
+    const ten = Array.from({ length: 10 }, () => shot);
+    expect(assistantChatRequestSchema.safeParse({ message: '看这张', history: [], responseMode: 'outdoor_v1', images: ten }).success).toBe(true);
+    // 上限 10：第 11 张整条请求被拒，不做静默截断。
+    expect(assistantChatRequestSchema.safeParse({ message: '看这张', history: [], responseMode: 'outdoor_v1', images: [...ten, shot] }).success).toBe(false);
+    // 非 outdoor_v1 不带图。
+    expect(assistantChatRequestSchema.safeParse({ message: '看这张', history: [], images: [shot] }).success).toBe(false);
+    // 只收 png/jpeg 的 data URL。
+    expect(assistantChatRequestSchema.safeParse({ message: '看这张', history: [], responseMode: 'outdoor_v1', images: ['data:image/gif;base64,AAAA'] }).success).toBe(false);
+  });
 });
 
 describe('model list parsing', () => {

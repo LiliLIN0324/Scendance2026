@@ -76,6 +76,8 @@ export async function understandOutdoorTurn(input: {
   onThought?: (text: string) => void;
   provider?: ChatProviderId | undefined;
   model?: string | null | undefined;
+  /** 2026-11-19 试点：用户附的现场截图（data URL），随理解请求发给 deepseek-flash 多模态。 */
+  images?: string[] | undefined;
 }): Promise<OutdoorTurn> {
   if (!input.controller)
     throw new Error(
@@ -342,8 +344,8 @@ export async function understandOutdoorTurn(input: {
   const model = input.model ?? null;
   input.onRequest?.();
   const response = input.onThought && input.controller.assistantChatStream
-    ? await input.controller.assistantChatStream(input.message, chosen.history, input.signal, input.onThought, provider, model, "outdoor_v1")
-    : await input.controller.assistantChat(input.message, chosen.history, input.signal, "outdoor_v1", provider, model, true);
+    ? await input.controller.assistantChatStream(input.message, chosen.history, input.signal, input.onThought, provider, model, "outdoor_v1", input.images)
+    : await input.controller.assistantChat(input.message, chosen.history, input.signal, "outdoor_v1", provider, model, true, input.images);
   if (response.status !== "ok") {
     const error = new Error(
       response.status === "disabled"
