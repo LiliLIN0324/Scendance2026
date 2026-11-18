@@ -1,6 +1,6 @@
 ﻿'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
-import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
+import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIssues, publishOutdoorPlanSettled } from '../lib/outdoor-plan-issues';
 import { firstModelSlug } from '../lib/asset-namespace';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
@@ -10273,7 +10273,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       ...(item.color ? { color: item.color } : {}),
       ...(item.facilityId ? { facilityId: item.facilityId } : {}),
     })));
-  }, [infoIssuesSignature]);
+    publishOutdoorPlanSettled({
+      boundaryClosed: hasClosedBoundary,
+      zoneCount: overviewStats.zoneCount,
+      routeCount: overviewStats.routeCount,
+    });
+  }, [infoIssuesSignature, hasClosedBoundary, overviewStats.zoneCount, overviewStats.routeCount]);
   const inventoryRowSelected = (row: PlanInventoryRow): boolean =>
     (row.kind === 'zone' && row.id === selectedZoneId)
     || (row.kind === 'facility' && row.id === selectedFacilityId)

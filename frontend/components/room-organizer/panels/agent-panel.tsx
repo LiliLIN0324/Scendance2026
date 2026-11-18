@@ -4775,16 +4775,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
         </div>
       </section>}
-      {bingo && <div className="ap-card ap-status-panel" aria-label="审校动作">
-        <button type="button" className="chip" onClick={() => agent.issueReviewLink()}>发给客户评审</button>
-        {/* 体检与旧钉评链接收进次级动作：主路径只留分享，避免三颗平级按钮。 */}
-        <details className="ap-audit-more-actions">
-          <summary>更多审校动作</summary>
-          <button type="button" className="chip btn-outline" onClick={() => agent.reviewNow()}>立即体检</button>
-          <button type="button" className="chip btn-outline" onClick={() => agent.issueReviewLink()}>发送钉评链接</button>
-        </details>
-      </div>}
-      {bingo && <BingoAuditCard scopeKey={agent.sessionScope} isCurrent={agent.isSessionCurrent}/>}
+      {bingo && <BingoAuditCard
+        scopeKey={agent.sessionScope}
+        isCurrent={agent.isSessionCurrent}
+        reviewActions={{
+          onRecheck: () => agent.reviewNow(),
+          onSendReview: () => { void agent.issueReviewLink(); },
+        }}
+      />}
       {/* 布置生成态只属于活动脸；Bingo 脸 S2 再接审校工作台，中间态不挂生成卡片。 */}
       {activity && mode === 'layout' && <>
         {studio?.applyRecovery && <section className="ap-card ap-error-card" role="alert">

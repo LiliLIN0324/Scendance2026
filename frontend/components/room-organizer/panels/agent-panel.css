@@ -952,6 +952,35 @@ button.ap-ghost {
 .ap-audit-refused-reason { color: #C0392B; font-size: var(--fs-cap); }
 .ap-audit-disclaimer { margin: 4px 0 0; padding-top: 6px; border-top: 1px solid var(--wk-hair); font-size: var(--fs-cap); color: var(--ap-grey); line-height: 1.5; }
 
+/* Bingo 审校层次：分组 36px 满宽淡底，问题行 45px 无分割线，工具栏 28px。绿只留给「发给客户评审」。 */
+.ap-review { display: flex; flex-direction: column; margin: 0 -16px; min-width: 0; }
+.ap-review-status { display: flex; align-items: center; gap: 8px; margin: 0; padding: 2px 16px 0; color: var(--ink); font-size: 13px; line-height: 20px; }
+.ap-review-status > span { min-width: 0; }
+.ap-review-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 8px 16px 4px; }
+.ap-review-tool { display: inline-flex; align-items: center; gap: 4px; height: 28px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--hair); border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; font-size: 13px; font-weight: 500; line-height: 1; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.ap-review-tool:hover { background: var(--hair-soft); }
+.ap-review-tool.is-send { border-color: var(--green); background: var(--green); color: #fff; }
+.ap-review-tool.is-send:hover { background: var(--green-deep); border-color: var(--green-deep); color: #fff; }
+.ap-review-kicker { margin: 12px 16px 4px; color: var(--ink-soft); font-size: 12px; font-weight: 500; line-height: 16px; }
+.ap-review-group, .ap-review-row { display: flex; align-items: center; width: 100%; margin: 0; border: 0; color: var(--ink); text-align: left; font: inherit; background: transparent; }
+.ap-review-group { height: 36px; padding: 0 12px 0 0; background: var(--hair-soft); cursor: pointer; }
+.ap-review-row { height: 45px; padding: 0 12px 0 42px; cursor: pointer; }
+.ap-review-row:not(button) { cursor: default; }
+.ap-review-group:hover, .ap-review-row:hover { background: color-mix(in srgb, var(--ink) 5%, var(--paper)); }
+.ap-review-chevron { flex: 0 0 42px; display: flex; align-items: center; padding-left: 12px; color: var(--ink-soft); }
+.ap-review-mark { flex: 0 0 14px; width: 14px; height: 14px; display: grid; place-items: center; color: var(--ink-soft); }
+.ap-review-mark > .sc-bingo-badge { width: 14px; height: 14px; }
+.ap-review-icons { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--ink-soft); }
+.ap-review-priority { display: block; color: var(--warn); }
+.ap-review-title { margin-left: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 500; line-height: 22px; }
+.ap-review-row .ap-review-title { font-size: 13px; font-weight: 400; line-height: 20px; }
+.ap-review-count { margin-left: 8px; flex: none; color: var(--ink-soft); font-size: 13px; font-weight: 400; }
+.ap-review-aside { margin-left: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wk-muted, #71767E); font-size: 12px; font-weight: 400; }
+.ap-review-empty { display: flex; align-items: center; gap: 10px; min-height: 32px; margin: 0; padding: 4px 16px 4px 42px; color: var(--wk-muted, #71767E); font-size: 13px; }
+.ap-review-more { margin: 0; padding: 0 16px 8px 66px; color: var(--wk-muted, #71767E); font-size: 12px; line-height: 18px; }
+.ap-review-detail { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 10px 42px; }
+.ap-review .ap-audit-disclaimer, .ap-review .ap-audit-records { margin: 8px 16px 0; }
+
 /* 空间 / 物料对话：与 Bingo 同一条输入条，不再压内边距做“紧凑版”。 */
 .ap-chat .ap-composer-tool { display:grid; place-items:center; width:26px; height:26px; padding:0; border:none; border-radius:var(--r-sm); background:transparent; color:var(--wk-muted); }
 .ap-chat .ap-composer-tool:hover { background:var(--wk-plane); color:var(--wk-ink); }
