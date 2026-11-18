@@ -1290,6 +1290,34 @@ export function drawFacilityGhost(
   ctx.fillText(`${template.name} ${template.width}×${template.depth}m`, center.x, center.y + Math.max(h / 2, 6) + 3);
 }
 
+/** 一句话布置的落位预览：半透明虚线占地，不写 plan、不进 undo。朝向与设施层同一套（屏幕 y 向下，故取负角）。 */
+export function drawArrangePreview(
+  ctx: CanvasRenderingContext2D,
+  facilities: readonly { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } }[],
+  viewport: PlanViewport,
+): void {
+  if (facilities.length === 0) return;
+  const metersPerPx = planMetersPerPixel(viewport);
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  for (const facility of facilities) {
+    const point = planPointToPixel(facility.position, viewport);
+    const w = Math.max(3, facility.size.width / metersPerPx);
+    const h = Math.max(3, facility.size.depth / metersPerPx);
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.rotate((-facility.rotationDeg * Math.PI) / 180);
+    ctx.fillStyle = 'rgba(74, 124, 89, 0.22)';
+    ctx.strokeStyle = 'rgba(74, 124, 89, 0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 /**
  * 路线：折线 + 方向箭头；三类动线各有专属色（人行蓝/车辆紫/后勤金）与线型
  * （实线/长划/点划）。oneWay 沿线逐段画箭头表达方向；选中路线画白描边高亮（H2-d）。

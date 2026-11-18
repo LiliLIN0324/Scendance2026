@@ -8,6 +8,7 @@ import {
   accessRingRadiusPx,
   drawConflictMarkers,
   drawDraftLayer,
+  drawArrangePreview,
   drawFacilityGhost,
   drawFacilityLayer,
   drawMapEditHighlight,
@@ -254,6 +255,20 @@ describe('facility ghost & selection drawing (H2-c)', () => {
     expect(cap.rects.some(r => r.startsWith('fill:'))).toBe(true);
     expect(cap.texts.some(t => t.includes('市集摊位') && t.includes('2×2m'))).toBe(true);
     expect(cap.strokes).toContain(PLANNING_LAYER_COLORS.facility);
+  });
+
+  it('draws one dashed footprint per arrange preview and skips an empty list', () => {
+    const { ctx, cap } = makeCtx();
+    drawArrangePreview(ctx, [], view);
+    expect(cap.dash).toHaveLength(0);
+    drawArrangePreview(ctx, [
+      { position: { x: 4, y: 6 }, rotationDeg: 90, size: { width: 2, depth: 2 } },
+      { position: { x: 12, y: 6 }, rotationDeg: 270, size: { width: 2, depth: 2 } },
+    ], view);
+    expect(cap.dash).toContainEqual([6, 4]);
+    expect(cap.rects.filter(rect => rect.startsWith('stroke:'))).toHaveLength(2);
+    expect(cap.rects.filter(rect => rect.startsWith('fill:'))).toHaveLength(2);
+    expect(cap.texts).toHaveLength(0);
   });
 
   it('paints an invalid ghost in warning red', () => {
