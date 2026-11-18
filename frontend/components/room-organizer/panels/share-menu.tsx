@@ -15,6 +15,7 @@ import { convertMetres } from '../lib/display-units';
 import { REVIEW_MARK_CHANGED_EVENT, readReviewMarks } from '../lib/review-share';
 import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import { isStructuralMarker } from '../lib/structural-layout';
+import { bingoBadgeCount, setBingoSending, useBingoSending } from './bingo-status-mark';
 import { SHARE_READ_ONLY_LINE, SharePanel, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 
@@ -99,6 +100,20 @@ export function shareBingoStatus(
   return '待发';
 }
 
+/** 这一份方案还没回执的链接数。0 不画进环里。 */
+export function shareBingoCount(
+  projectId: string | undefined,
+  storage: { getItem(key: string): string | null } | null,
+): string {
+  try {
+    const snap = readBingoSnapshot(storage);
+    const mine = projectId ? snap.plans.filter(plan => plan.projectKey === projectId && !plan.returned) : [];
+    return bingoBadgeCount(mine.length);
+  } catch {
+    return '';
+  }
+}
+
 export interface PlanOutline {
   size: string;
   floors: string[];
@@ -181,6 +196,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const [busy, setBusy] = useState(false);
   const [bingoSent, setBingoSent] = useState(false);
   const [bingoRev, setBingoRev] = useState(0);
+  const bingoSending = useBingoSending();
   const seenOpen = useRef(openRequest);
   const seenClose = useRef(closeSignal);
   const projectId = layout?.id;
@@ -219,6 +235,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
 
   useEffect(() => {
     setBingoSent(false);
+    setBingoSending(false);
     setBingoRev(value => value + 1);
     const sync = () => setBingoRev(value => value + 1);
     window.addEventListener(REVIEW_MARK_CHANGED_EVENT, sync);
@@ -226,11 +243,10 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   }, [projectId]);
 
   // 首屏与服务端都先待发，挂上后再读本机记录，避免注水时状态对不上。
-  const bingoStatus = shareBingoStatus(
-    projectId,
-    bingoSent,
-    bingoRev > 0 && typeof localStorage !== 'undefined' ? localStorage : null,
-  );
+  const bingoStorage = bingoRev > 0 && typeof localStorage !== 'undefined' ? localStorage : null;
+  const storedBingoStatus = shareBingoStatus(projectId, bingoSent, bingoStorage);
+  const bingoStatus = bingoSending && storedBingoStatus !== '已回执' ? '送出中' : storedBingoStatus;
+  const bingoCount = shareBingoCount(projectId, bingoStorage);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -323,6 +339,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     }
     setBusy(true);
     setNotice('');
+    setBingoSending(true);
     try {
       const result = await actions.onIssueReviewLink();
       if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
@@ -334,6 +351,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
+      setBingoSending(false);
       setBusy(false);
     }
   };
@@ -393,6 +411,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       busy={busy}
       notice={notice}
       bingoStatus={bingoStatus}
+      bingoCount={bingoCount}
+      bingoLive={bingoRev > 0}
       readOnly={Boolean(actions?.readOnly)}
       qrOpen={qrOpen}
       qrSvg={qrSvg}
