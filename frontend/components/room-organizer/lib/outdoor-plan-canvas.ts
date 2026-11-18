@@ -1097,7 +1097,7 @@ export function drawFacilityLayer(
     ctx.translate(center.x, center.y);
     // 屏幕系 y 向下故取负角；地面语义与 facilityFootprintRing 同一套矩阵：
     // rotationDeg 以东为零、逆时针为正（+90° 时宽边从东转向北）。
-    ctx.rotate(-f.rotationDeg * Math.PI / 180);
+    ctx.rotate(-f.rotationDeg * Math.PI / 180 - (viewport.bearing ?? 0));
     ctx.fillStyle = hexWithAlpha(own, fillAlpha);
     ctx.fillRect(-w / 2, -h / 2, w, h);
     if (f.warning) {
@@ -1127,7 +1127,7 @@ export function drawFacilityLayer(
     if (opts.selectedId && f.id === opts.selectedId) {
       ctx.save();
       ctx.translate(center.x, center.y);
-      ctx.rotate(-f.rotationDeg * Math.PI / 180);
+      ctx.rotate(-f.rotationDeg * Math.PI / 180 - (viewport.bearing ?? 0));
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2.5;
       ctx.strokeRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6);
@@ -1143,7 +1143,7 @@ export function drawFacilityLayer(
       // 2026-11-12 B3 组选：白圈同款（无名称标签，多选时不糊一地字）。
       ctx.save();
       ctx.translate(center.x, center.y);
-      ctx.rotate(-f.rotationDeg * Math.PI / 180);
+      ctx.rotate(-f.rotationDeg * Math.PI / 180 - (viewport.bearing ?? 0));
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2.5;
       ctx.strokeRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6);

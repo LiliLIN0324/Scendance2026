@@ -118,10 +118,10 @@ describe('VenuePicker（换场地 / 新建）', () => {
   it('复刻示例：选中案例卡→一键建项目写入整套复刻案（锚点/区块/设施/流线/出入口齐全）', async () => {
     render(<VenuePicker onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: /复刻示例/ }));
-    // 默认选中首案（Scotiabank 冰球日）；确认选单里有它
-    expect(await screen.findByRole('option', { name: /Scotiabank Hockey Day Canada/ })).toBeTruthy();
+    // 选单把国内案例排在前面，默认选首案 = 杭州植物园菊花展。
+    expect(await screen.findByRole('option', { name: /杭州植物园菊花展/ })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
-    await waitFor(() => expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '复刻示例 · Scotiabank Hockey Day Canada', expect.objectContaining({ schemaVersion: 1 })));
+    await waitFor(() => expect(mocks.createProject).toHaveBeenCalledWith('studio-1', '复刻示例 · 杭州植物园菊花展', expect.objectContaining({ schemaVersion: 1 })));
     expect(mocks.push).not.toHaveBeenCalled();
     const raw = localStorage.getItem('scendance-outdoor-plan-v1:p-new');
     expect(raw).toBeTruthy();
@@ -129,13 +129,12 @@ describe('VenuePicker（换场地 / 新建）', () => {
       name: string;
       plan: { anchor?: { lng: number; lat: number; source: string }; boundary: unknown[]; zones: unknown[]; facilities: unknown[]; routes: unknown[]; nodes: unknown[] };
     };
-    expect(record.name).toBe('复刻示例 · Scotiabank Hockey Day Canada');
-    expect(record.plan.anchor).toEqual({ lng: -123.3716, lat: 48.4235, crs: 'gcj-02', source: 'preset' });
+    expect(record.name).toBe('复刻示例 · 杭州植物园菊花展');
+    expect(record.plan.anchor).toEqual({ lng: 120.120866, lat: 30.254952, crs: 'gcj-02', source: 'preset' });
     expect(record.plan.boundary.length).toBeGreaterThanOrEqual(3);
-    expect(record.plan.zones.length).toBeGreaterThanOrEqual(10);
-    expect(record.plan.facilities.length).toBeGreaterThanOrEqual(40);
-    expect(record.plan.routes.length).toBeGreaterThanOrEqual(3);
-    expect(record.plan.nodes.length).toBeGreaterThanOrEqual(3);
+    expect(record.plan.zones.length).toBe(3);
+    expect(record.plan.facilities.length).toBe(7);
+    expect(record.plan.routes.length).toBe(2);
   });
 
   it('从地图开始：选活动地点（天地图检索）→ 建云项目 → 本机户外标记带锚点', async () => {

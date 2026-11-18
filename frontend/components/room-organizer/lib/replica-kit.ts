@@ -40,6 +40,8 @@ const replicaScopeOf = (boundary: readonly PlanPoint[]): PlanPoint[] => expandRe
 
 export type ReplicaCaseSpec = {
   slug: string;
+  /** 'cn' = 官网中国案例；缺省 = OnePlan 海外复刻。 */
+  origin?: 'overseas' | 'cn';
   /** 英文原案名（项目名用「复刻示例 · title」）。 */
   title: string;
   category: string;
@@ -56,10 +58,31 @@ export type ReplicaCaseSpec = {
    * 用这个角度把局部米制坐标整体旋到真实方位上。0 / 省略 = 图面正上方就是正北。
    */
   rotationDeg?: number;
+  /** 用户在底图核对页确认的观察视图；与几何旋转分开保存。 */
+  confirmedView?: { lng: number; lat: number; zoom: number; rotationDeg: number };
+  /** 原图像素到地理坐标的描图依据；独立于用户确认的观察视角。残差不是现场测量精度。 */
+  sourceRegistration?: {
+    imageAnchorPx: [number, number];
+    metersPerPixel: number;
+    geometryRotationDeg: number;
+    method: 'image-correspondences' | 'manual-road-centres';
+    matchedPointCount: number;
+    fitRmseM: number;
+    controlPoints: { imagePx: [number, number]; lng: number; lat: number; residualM: number }[];
+  };
   zones: ReplicaZoneSpec[];
   facilities: ReplicaFacilitySpec[];
   routes: ReplicaRouteSpec[];
   nodes: ReplicaNodeSpec[];
+  /** 官网案例图（只看官网自己的描图与拟设，用于对比报告左幅）。仅国内案有。 */
+  officialPlan?: ReplicaOfficialPlan;
+};
+
+/** 官网侧平面数据（案源自带，不是我们的方案）。 */
+export type ReplicaOfficialPlan = {
+  caption: string;
+  areas: { name: string; polygon: [number, number][] }[];
+  seeds: { name: string; kind: 'area' | 'line' | 'item' | 'label'; points: [number, number][] }[];
 };
 
 export type ReplicaZoneSpec = {
@@ -330,6 +353,7 @@ export function expandReplicaSpec(spec: ReplicaCaseSpec): SitePlanData {
     ...zones.flatMap(z => z.polygon),
     ...facilities.map(f => f.position),
     ...nodes.map(n => n.position),
+    ...routes.flatMap(route => route.points),
   ];
   if (!all.length) throw new Error(`复刻案 ${spec.slug} 没有任何实体`);
   const minX = Math.min(...all.map(p => p.x)) - REPLICA_MARGIN;

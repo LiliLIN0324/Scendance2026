@@ -1446,9 +1446,9 @@ export function useOutdoorAgentWorkflow(input: {
       }
       if (turn.action === "zones" || turn.action === "revise" || needsZones) {
         persist({ ...stateRef.current, stage: "zones" });
-        const afterConfirm = needsZones
-          ? designingRoutes || !hasVerifiedMainAccess(plan) ? "main-routes" : "objects"
-          : undefined;
+        // 2026-11-18 用户口径「先设计，用户会告诉你他的想法」：分区确认后直接接一版物件预览，
+        // 不再先停到「核对主通道」；只有用户自己点名要主通道时才接主通道。
+        const afterConfirm = designingRoutes ? "main-routes" : "objects";
         designStep(needsZones
           ? `先按已知用途划分区域，让${designingRoutes ? "主通道" : "物料"}有明确的服务范围。`
           : "根据已知用途和室内外条件，在活动边界内安排分区。");
@@ -1610,11 +1610,10 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       if (turn.action === "objects") {
-        if (!hasVerifiedMainAccess(plan))
-          throw new OutdoorStepBlocked(
-            "请先核对主入口和主要通道；道路交点不当作已经核实的门。",
-            { action: "main-routes", label: "去核对主要入口与通道" },
-          );
+        // 2026-11-18 用户定口径：「不要有太多负面反馈，先设计，用户会告诉你他的想法」。
+        // 入口/主通道没核实不再拦下整轮排版：先按分区和用途出一版预览，缺口写在卡上；
+        // 门口仍按 2m 净空预留（clearForObject），补上通道后再按通道重排一版。
+        const accessKnown = hasVerifiedMainAccess(plan);
         // 2026-11-17 用户口径：「人数也不确定吧，有的时候先搞活动也有」。人数是活动定下来才知道的事，
         // 先布场、后补人数是常态，所以这里不再把「没有人数」当错误拦下——规划层的 validateWorkflowDemand
         // 本来就按人数可空设计（没有人数就跳过 2㎡/人 粗筛），本分支的 throw 与它自相矛盾，
@@ -1712,6 +1711,9 @@ export function useOutdoorAgentWorkflow(input: {
         const wantedItems = demandBrief.items;
         const proposeOpts = {
           strategy: "rows" as const,
+          // 2026-11-18 用户口径「先设计」：人数/面积粗筛不再拦下一整版，
+          // 结论由 result.demandNote 带回卡上；用户看到设计后自己决定要不要调。
+          softDemand: true,
           buildings: buildingsEnu.length ? buildingsEnu : undefined,
           // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
           onPhase: (phase: string) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
@@ -1832,8 +1834,10 @@ export function useOutdoorAgentWorkflow(input: {
           demandBrief.guests
             ? "物件来自真实个人库；扣占地后仅按2㎡/人作保守草案粗筛，非合法容量；无障碍与疏散需现场核验，不以排下物件当安全通过。"
             : "人数还没定：本版只按分区用途和库内物料的真实尺寸排布，没有做 2㎡/人 容量粗筛，也没有从物件数量反猜人数；补一句「预计多少人在场」可以再核一遍容量。",
+          ...(result.demandNote ? [`人数/面积粗筛没过：${result.demandNote}`] : []),
           `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
           `已识别边界内建筑 ${buildingsForPlan?.length ?? 0} 栋${buildingsForPlan?.length ? "：标为室内禁区，排物件自动避开（灰色块 2D/3D 同步）。" : "（地图服务暂未提供建筑数据，稍后重试或用物件库「室内区域」手画）。"}`,
+          ...(accessKnown ? [] : ["入口还没核对：这版先按分区和用途排，门口留了 2m 净空；补上主通道后我再按通道排一版。"]),
           ...mismatchNotice,
         ]);
         return;
@@ -2741,6 +2745,15 @@ export function useOutdoorAgentWorkflow(input: {
         const user = callbacks.current.controller()?.getSnapshot?.().user;
         return Boolean(user && !user.is_anonymous);
       })(),
+    // 2026-11-18 M4 离线切片：面板用它区分「确认没登录」与「会话快照拿不到」。只有前者才允许
+    // 把分区/活动句拦截到本地确定性模板（见 agent-panel layout 分支）；快照未知时维持模型路径，
+    // 「模型不可用显式报暂未启用、不偷跑旧模板」的生产口径不变。
+    viewerKnownAnonymous: (() => {
+      const session = callbacks.current.controller();
+      if (!session?.getSnapshot) return false;
+      const viewer = session.getSnapshot().user;
+      return !viewer || Boolean(viewer.is_anonymous);
+    })(),
     authChanged: (nextActor: string | null) => {
       setThought(null);
       setThoughtRequest(null);
