@@ -10,7 +10,19 @@
       0,
       1.6,
       0
-    ]
+    ],
+    "auditDebug": {
+      "areaM2": 194.5,
+      "ratio": 0,
+      "unreachable": 3,
+      "boundaryPoints": 4,
+      "bbox": {
+        "minX": -15,
+        "minY": -10,
+        "maxX": 15,
+        "maxY": 10
+      }
+    }
   },
   "afterEdge": {
     "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色模型较大，先用几何人代替；下载完会自动换上。重试第一人称 · F5存观景位",
@@ -22,8 +34,20 @@
     "cam": [
       -4.7801,
       1.6,
-      8.714699999999992
-    ]
+      7.142760000193113
+    ],
+    "auditDebug": {
+      "areaM2": 194.5,
+      "ratio": 0,
+      "unreachable": 3,
+      "boundaryPoints": 4,
+      "bbox": {
+        "minX": -15,
+        "minY": -10,
+        "maxX": 15,
+        "maxY": 10
+      }
+    }
   },
   "boundarySamples": [
     {
@@ -32,7 +56,7 @@
     },
     {
       "t": 1,
-      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…第一人称 · F5存观景位"
+      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色模型较大，先用几何人代替；下载完会自动换上。重试第一人称 · F5存观景位"
     },
     {
       "t": 2,
