@@ -921,9 +921,9 @@ it('returns to the project list when a sidebar team is clicked from 物料', asy
   queue([{ id: studioId, name: '一号工作室', role: 'owner', displayName: 'A' }, { id: secondStudio, name: '二号工作室', role: 'editor', displayName: 'A' }]);
   render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
   openAccount('物料');
-  expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: '所有方案' })).toBeTruthy();
   fireEvent.click(await screen.findByRole('button', { name: '二号工作室' }));
-  expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
+  expect(screen.queryByRole('region', { name: '账户物料' })).toBeNull();
   expect(await screen.findByText('另一个云项目')).toBeTruthy();
   expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
 });
@@ -1151,7 +1151,7 @@ describe('CloudPanel section entry points', () => {
     expect(screen.getByRole('navigation', { name: '团队' })).toBeTruthy();
     openAccount('物料');
     expect(screen.getByRole('region', { name: '账户物料' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '所有方案' })).toBeTruthy();
     rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'projects' }}/>);
     expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
     rerender(<CloudPanel {...props} openRequest={{ serial: 2, section: 'team' }}/>);
