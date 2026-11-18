@@ -5,9 +5,9 @@ import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
  * 户外 2D 规划覆盖层（P2-e · 融进 3D 页面框架）：**本组件只负责画布本体**——
  * 满幅 OutdoorPlanCanvas + 引导 + 分享弹窗，再无任何自造按钮/顶条/侧栏。
  * 其余功能全部 portal 进主产品 3D 页面**现有的框架锚点**（由 room-organizer 渲染）：
- * - `#outdoor-panel-host-layers`：主产品左栏图层卡宿主；
- * - `#outdoor-panel-host-info`：画布上的规划信息宿主（搜地点下方，层级低于搜索槽）；
- * - `#outdoor-place-search-slot`：画布上的搜地点槽，压在规划信息之上；
+ * - `#outdoor-panel-host-layers`：主产品左栏「已放置物件」宿主；
+ * - `#outdoor-panel-host-inventory`：左栏户外卡「清单」页宿主（统计 + 清单，不挂在地图上）；
+ * - `#outdoor-place-search-slot`：画布左上搜地点槽；
  * - `#outdoor-tools-dock`：主产品右侧工具排位置（sc-editor-dock 内，同款
  *   sc-view-tools/sc-canvas-rail 框架），挂图源循环 / 导出 / 引导三枚钮。
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
@@ -387,7 +387,7 @@ export interface OutdoorPlanOverlayHandle {
 }
 
 /**
- * 搜地点要画在规划信息卡之上。覆盖层整层是 z-index 30，卡在层外，
+ * 搜地点要画在地图覆盖层之上。覆盖层整层是 z-index 30，
  * 所以 2D 时把搜索条 portal 到 `#outdoor-place-search-slot`。
  * 槽位不在（或 3D 保活隐藏）时仍画在覆盖层里。
  */
@@ -964,7 +964,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(onInspectorChange ? { onInspectorChange } : {})}
             {...(inspectorHostId ? { inspectorHostId } : {})}
             panelsHostId="outdoor-panel-host-layers"
-            infoPanelHostId="outdoor-panel-host-info"
+            infoPanelHostId="outdoor-panel-host-inventory"
             libraryPanelHostId="outdoor-panel-host-library"
             levelsHostId="outdoor-panel-host-levels"
             measureHostId="outdoor-panel-host-measure"
@@ -987,7 +987,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       )}
       {/* 搜地点（用户 m04938 / m05472）：左上角，和地图 App 一样。
           选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。
-          2D 时 portal 到画布上的搜索槽，否则会困在覆盖层 z-index 30 里，被槽外的规划信息挡住。 */}
+          2D 时 portal 到画布上的搜索槽，否则会困在覆盖层 z-index 30 里。 */}
       {plan && (
         <PlaceSearchSlot active={!canvasHidden}>
         <PlanPlaceSearch
