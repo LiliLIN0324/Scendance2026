@@ -65,11 +65,13 @@ describe('Bingo 状态圈运动', () => {
     expect(done).toMatchObject({ gap: 0, beadOpacity: 0, check: true, step: 'check' });
   });
 
-  it('减少动态时停在开口环上，已回执不出勾', () => {
-    expect(settledBingoPose('sending', true)).toMatchObject({ angle: 0, gap: BINGO_D4.gapDeg, check: false, step: 'hold' });
-    expect(settledBingoPose('returned', true)).toMatchObject({ gap: BINGO_D4.gapDeg, beadOpacity: 0, check: false, step: 'hold' });
-    expect(settledBingoPose('returned', false).check).toBe(true);
-    expect(settledBingoPose('returned', false).gap).toBe(0);
+  it('减少动态不转、不收口，已回执直接是合环加勾，待评仍留珠', () => {
+    expect(settledBingoPose('to-send', true)).toMatchObject({ angle: 0, gap: BINGO_D4.gapDeg, beadOpacity: 0, check: false, step: 'hold' });
+    expect(settledBingoPose('sending', true)).toMatchObject({ angle: 0, gap: BINGO_D4.gapDeg, beadOpacity: 0, check: false, step: 'hold' });
+    expect(settledBingoPose('awaiting', true)).toMatchObject({ angle: 0, gap: BINGO_D4.gapDeg, beadOpacity: 1, check: false, step: 'hold' });
+    expect(settledBingoPose('returned', true)).toMatchObject({ angle: 0, gap: 0, beadOpacity: 0, check: true, step: 'check' });
+    expect(settledBingoPose('returned', false)).toMatchObject({ gap: 0, check: true, step: 'check' });
+    expect(settledBingoPose('sending', false).step).toBe('spin');
   });
 
   it('转动不是存储状态，已回执压过送出中', () => {

@@ -157,9 +157,7 @@ export function bingoReceiptPose(elapsedMs: number): BingoReceiptPose {
 }
 
 export function settledBingoPose(visual: BingoVisual, reduced: boolean): BingoPose {
-  if (visual === 'returned' && reduced) {
-    return { angle: 0, gap: BINGO_D4.gapDeg, beadOpacity: 0, check: false, step: 'hold' };
-  }
+  // 减少动态不播收口，但已回执的定稿仍是合环加勾，不能停成和待发一样的空开口环。
   if (visual === 'returned') {
     return { angle: 0, gap: 0, beadOpacity: 0, check: true, step: 'check' };
   }

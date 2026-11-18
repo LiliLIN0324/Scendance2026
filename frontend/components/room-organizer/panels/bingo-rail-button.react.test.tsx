@@ -317,28 +317,63 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
     vi.unstubAllGlobals();
   });
 
-  it('减少动态：不转，已回执停在开口环上，状态留在文案里', () => {
+  it('减少动态：不转不收口，待评留珠和数字，已回执直接是合环加勾', () => {
     vi.stubGlobal('matchMedia', () => ({
       matches: true,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }));
+    const { unmount } = render(<BingoRailButton open={false} onOpen={vi.fn()} />);
+    const idle = screen.getByRole('button', { name: '收反馈，待发' });
+    expect(idle.querySelector('.sc-bingo-badge')?.getAttribute('data-reduced')).toBe('true');
+    expect(idle.querySelector('[data-part="ring"]')?.getAttribute('d')).toBe(bingoRingPath());
+    expect(idle.querySelector('[data-part="bead"]')).toBeNull();
+    expect(idle.querySelector('[data-mark="check"]')).toBeNull();
+    expect(idle.querySelector('.sc-bingo-badge')?.getAttribute('data-spin-ms')).toBeNull();
+    unmount();
+
     localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([mark()]));
+    render(<BingoRailButton open={false} onOpen={vi.fn()} />);
+    const waiting = screen.getByRole('button', { name: /待评，1 份链接/ });
+    const waitingBadge = waiting.querySelector('.sc-bingo-badge');
+    expect(waitingBadge?.getAttribute('data-step')).toBe('hold');
+    expect(waitingBadge?.querySelector('[data-part="ring"]')?.getAttribute('d')).toBe(bingoRingPath());
+    expect(waitingBadge?.querySelector('[data-part="bead"]')?.getAttribute('fill')).toContain('96651F');
+    expect(waitingBadge?.querySelector('text')?.textContent).toBe('1');
+    expect(waitingBadge?.querySelector('[data-mark="check"]')).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(BINGO_SENDING_EVENT, { detail: true }));
+    });
+    const sending = screen.getByRole('button', { name: /送出中/ });
+    const sendingBadge = sending.querySelector('.sc-bingo-badge');
+    expect(sendingBadge?.getAttribute('data-visual')).toBe('sending');
+    expect(sendingBadge?.getAttribute('data-step')).toBe('hold');
+    expect(sendingBadge?.getAttribute('data-spin-ms')).toBeNull();
+    expect(sendingBadge?.querySelector('[data-part="ring"]')?.getAttribute('d')).toBe(bingoRingPath());
+    expect(sendingBadge?.querySelector('[data-mark="check"]')).toBeNull();
+    act(() => {
+      window.dispatchEvent(new CustomEvent(BINGO_SENDING_EVENT, { detail: false }));
+    });
+
     localStorage.setItem(BINGO_RETURN_KEY, JSON.stringify({
       version: 1,
       planKey: 'local-draft',
       at: '2026-10-31T08:00:00.000Z',
       href: '/review/',
     }));
-    render(<BingoRailButton open={false} onOpen={vi.fn()} />);
-    const button = screen.getByRole('button', { name: /已回执/ });
-    const badge = button.querySelector('.sc-bingo-badge');
-    expect(badge?.getAttribute('data-reduced')).toBe('true');
-    expect(badge?.getAttribute('data-step')).toBe('hold');
-    expect(badge?.querySelector('[data-part="ring"]')?.getAttribute('d')).toBe(bingoRingPath());
-    expect(badge?.querySelector('[data-mark="check"]')).toBeNull();
-    expect(badge?.querySelector('[data-part="bead"]')).toBeNull();
-    expect(badge?.getAttribute('data-spin-ms')).toBeNull();
+    act(() => { window.dispatchEvent(new Event('storage')); });
+    const done = screen.getByRole('button', { name: /已回执/ });
+    const doneBadge = done.querySelector('.sc-bingo-badge');
+    const ring = doneBadge?.querySelector('[data-part="ring"]');
+    expect(doneBadge?.getAttribute('data-step')).toBe('check');
+    expect(doneBadge?.getAttribute('data-spin-ms')).toBeNull();
+    expect(ring?.tagName.toLowerCase()).toBe('circle');
+    expect(ring?.getAttribute('fill')).toBe('none');
+    expect(ring?.getAttribute('stroke')).toContain('55585F');
+    expect(doneBadge?.querySelector('[data-part="bead"]')).toBeNull();
+    expect(doneBadge?.querySelector('[data-mark="check"]')?.getAttribute('stroke')).toContain('141416');
+    expect(doneBadge?.querySelector('[data-part="ring"]')?.getAttribute('d')).toBeNull();
     vi.unstubAllGlobals();
   });
 });
