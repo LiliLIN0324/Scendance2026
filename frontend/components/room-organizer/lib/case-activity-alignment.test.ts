@@ -11,7 +11,6 @@ const recordName = '经典案例 · Banbury Town Council – Coronation Events';
 function layout(id: string, name = '新活动 11-17 23:37'): RoomLayout {
   return {
     id, name,
-    scenePreset: 'outdoor' as const,
     floors: [{ id: 'floor-1', name: '一层', width: 10, depth: 8, height: 3, items: [], zones: [] }],
   } as unknown as RoomLayout;
 }

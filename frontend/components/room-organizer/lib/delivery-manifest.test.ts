@@ -44,11 +44,15 @@ describe('delivery manifest', () => {
   });
 
   it('keeps unsupported scene types in the list and explains why', async () => {
-    const preset = { ...base, scenePreset: 'loft' } as unknown as RoomLayout;
-    const csv = await deliveryManifestCsv(preset);
+    const template = {
+      ...base,
+      floors: [{ ...base.floors[0]!, items: [{ id: 'template-seat', type: 'chair' as const, name: '模板座椅',
+        width: 0.5, depth: 0.5, height: 0.9, rotation: 0, glbNode: 'Preset_Object_0' }] }],
+    } as RoomLayout;
+    const csv = await deliveryManifestCsv(template);
     const line = csv.split('\r\n').find(row => row.includes('场景 GLB')) ?? '';
     expect(line).toContain('不支持');
-    expect(line).toContain('完整场景预设暂不支持交付导出');
+    expect(line).toContain('模板模型节点暂不支持交付导出');
     const dxf=csv.split('\r\n').find(row => row.includes('平面图 DXF')) ?? '';
     expect(dxf).toContain('待导出时检查');expect(dxf).not.toContain('可导出');
     expect(dxf).toContain('墙线未按门洞切断');expect(dxf).toContain('门洞标记、比例及现场尺寸仍需核对');

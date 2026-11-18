@@ -892,7 +892,7 @@ export function createVenueFromPick(
     scaleOrigin: 'typed' as const,
     ...(fitted.points.length >= 3 ? { polygonMeters: fitted.points } : {}),
   };
-  const plan = (before.scenePreset || before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
+  const plan = (before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
   if (!plan) throw new Error('这块场地是有内墙或图纸证据的真实结构，先在结构里清出一块空地，再来圈画。');
   const name = [pick.name, pick.location].filter(Boolean).join(' · ') + scaleNote || before.name;
   // 圈画经纬度跟着场地走，方便 3D 里后补卫星图；不进场景线、不进采集上传。

@@ -61,7 +61,6 @@ type ReviewDesign = NonNullable<NonNullable<RoomLayout['backendSceneV2']>['desig
 };
 interface ReviewLayout {
   name: string; width: number; depth: number; floors: ReviewFloor[];
-  scenePreset: RoomLayout['scenePreset'] | null;
   hasTemplateNodes: boolean;
   roof: RoomLayout['roof'] | null;
   terrain: RoomLayout['terrain'] | null;
@@ -167,8 +166,8 @@ function reviewLayout(layout: RoomLayout, discloseDesign: boolean): ReviewLayout
   const limitations: ReviewLayout['limitations'] = [];
   const add = (reason: string, objectIds: string[] = []) => { limitations.push({ reason, objectIds }); };
   // ponytail: a review must not import the Three.js delivery pipeline or depend on model/network readiness.
-  if (layout.scenePreset || layout.floors.some(f => f.items.some(i => i.glbNode))) {
-    add('完整场馆或模板模型节点不在当前独立模型交付范围内；节点不据此视为固定设施，可继续文字与静态画面评审。');
+  if (layout.floors.some(f => f.items.some(i => i.glbNode))) {
+    add('模板模型节点不在当前独立模型交付范围内；节点不据此视为固定设施，可继续文字与静态画面评审。');
   }
   if (layout.floors.length > 1) add('多层布局不在当前 Scene JSON 交付范围内。');
   if (layout.entrance || (layout.roof && layout.roof.style !== 'none') ||
@@ -188,7 +187,6 @@ function reviewLayout(layout: RoomLayout, discloseDesign: boolean): ReviewLayout
   }
   return JSON.parse(JSON.stringify({
     name: layout.name, width: layout.width, depth: layout.height, floors,
-    scenePreset: layout.scenePreset ?? null,
     hasTemplateNodes: layout.floors.some(floor => floor.items.some(item => !!item.glbNode)),
     roof: layout.roof ? { style: layout.roof.style, color: layout.roof.color,
       dormers: layout.roof.dormers?.map(d => ({ id: d.id, side: d.side, width: d.width, offset: d.offset,
@@ -433,7 +431,7 @@ function renderNote(note: ProjectReviewSnapshot['notes'][number]): string {
 
 function renderLayout(layout: ReviewLayout, heading: string, teamNotes: ProjectReviewSnapshot['notes'], images: ProjectReviewImage[]): string {
   const items = layout.floors.flatMap(f => f.items);
-  const plans = layout.scenePreset || layout.hasTemplateNodes || layout.venue.shape !== 'rectangle' || layout.structure
+  const plans = layout.hasTemplateNodes || layout.venue.shape !== 'rectangle' || layout.structure
     ? para('完整场馆或结构没有简化平面示意；可用本次记录的静态画面配合文字评审。')
     : layout.floors.map(floor => {
       const safeFloor: FloorLayout = { ...floor, floorColor: safeColor(floor.floorColor),

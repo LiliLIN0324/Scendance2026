@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,7 +32,7 @@ import {emptyVenueFacts,updateVenueFact} from '../lib/venue-facts';
 import {venueFactsStorageKey} from '../lib/venue-facts-storage';
 import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from '../lib/pending-candidate-registry';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
-import type { FurnitureItem } from '../lib/types';
+import type { FurnitureItem, RoomLayout } from '../lib/types';
 vi.mock('../lib/scene-delivery',async importOriginal=>({ ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery:vi.fn(),exportDeliveryGlb:vi.fn(),sceneDeliveryCsv:vi.fn(),sceneDeliveryJson:vi.fn(),sceneExecutionCsv:vi.fn(),eventOperationsCsv:vi.fn() }));
 // jsdom 的 Blob 没有 stream()，真实压缩在 node 环境的 delivery-package.test 里验；面板只验入口接线。
 vi.mock('../lib/share',async importOriginal=>({ ...await importOriginal<typeof import('../lib/share')>(),encodeShareUrl:vi.fn(async(layout,origin)=>{
@@ -52,6 +52,8 @@ let controller:BackendSession;
 const layout=makeLayout({roof:{style:'none'}});
 const itemId='30000000-0000-4000-8000-000000000001';
 function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor({items:[makeItem({id:itemId,name:'签到椅',materialId:'chair'})]})]}); }
+/** 模板模型节点场景：过去用 scenePreset 表达，现在由物件上的 glbNode 表达同一道交付门槛。 */
+const templateNode=(source:RoomLayout):RoomLayout=>({...source,floors:source.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,glbNode:'Preset_Object_0'}))}))});
 const checkinProject='20000000-0000-4000-8000-000000000001';
 const checkinState=(ledger?:MaterialCheckinLedger):MaterialCheckinState=>({projectId:checkinProject,ledger,ready:true,loading:false,saving:false,error:null,onSave:vi.fn().mockResolvedValue(undefined),retry:vi.fn()});
 function completeActivity() {
@@ -568,7 +570,7 @@ describe('Bingo scene delivery panel',()=>{
   });
   it('blocks production export while editing and exports applied records after cancellation independently of model delivery',async()=>{
     const productionPlan=productionPlanSchema.parse({staffing:[{id:'40000000-0000-4000-8000-000000000001',roleName:'演练布场',headcount:2}]});
-    render(<SceneDeliveryPanel layout={{...workLayout(),scenePreset:'gym',productionPlan}} controller={controller} onUpdateProductionPlan={vi.fn()}/>);
+    render(<SceneDeliveryPanel layout={{...templateNode(workLayout()),productionPlan}} controller={controller} onUpdateProductionPlan={vi.fn()}/>);
     fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
     fireEvent.click(screen.getByRole('button',{name:'编辑制作计划'}));
     fireEvent.change(screen.getByLabelText('岗位名称'),{target:{value:'未保存的新岗位'}});
@@ -587,7 +589,7 @@ describe('Bingo scene delivery panel',()=>{
     expect((screen.getByRole('button',{name:'导出制作交接单 HTML'}) as HTMLButtonElement).disabled).toBe(true);
   });
   it('edits production records in the third page through the parent update callback without the model export gate',async()=>{
-    const current={...workLayout(),scenePreset:'gym' as const},update=vi.fn();
+    const current=templateNode(workLayout()),update=vi.fn();
     function Harness():JSX.Element{const [saved,setSaved]=useState(current);return <SceneDeliveryPanel layout={saved} controller={controller} onUpdateProductionPlan={(value:ProductionPlan|undefined)=>{update(value);const {productionPlan:_previous,...base}=saved;setSaved({...base,...(value?{productionPlan:value}:{})});}}/>;}
     render(<Harness/>);expect(update).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));expect(screen.getByRole('tab',{name:'制作计划'}).getAttribute('aria-selected')).toBe('true');
@@ -608,7 +610,7 @@ describe('Bingo scene delivery panel',()=>{
   it('keeps backup in the existing delivery area and permits a full template backup without the model export gate', async () => {
     const prepareBackup=vi.fn().mockResolvedValue('{"format":"scendance-local-project-backup"}');
     const backupActions={prepareBackup,restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
-    const view=render(<SceneDeliveryPanel layout={{...layout,scenePreset:'gym'}} controller={controller} backupActions={backupActions}/>);
+    const view=render(<SceneDeliveryPanel layout={templateNode(layout)} controller={controller} backupActions={backupActions}/>);
     const summary=screen.getByText('场景与活动备份');
     expect(summary.closest('details')!.open).toBe(false);
     fireEvent.click(summary);
@@ -755,12 +757,12 @@ describe('Bingo scene delivery panel',()=>{
     fireEvent.click(screen.getByText('签到椅 · 1'));
     expect((screen.getByLabelText('负责人') as HTMLInputElement).closest('fieldset')!.disabled).toBe(true);
     fireEvent.submit(screen.getByLabelText('负责人').closest('form')!); expect(update).not.toHaveBeenCalled();
-    view.rerender(<SceneDeliveryPanel layout={{...current,scenePreset:'gym'}} controller={controller} onUpdateItem={update}/>);
-    expect(screen.getByRole('alert').textContent).toContain('完整场景预设');
+    view.rerender(<SceneDeliveryPanel layout={templateNode(current)} controller={controller} onUpdateItem={update}/>);
+    expect(screen.getByRole('alert').textContent).toContain('模板模型节点');
     openExportTab(); for(const name of ['导出场景 JSON','导出执行清单 CSV','导出物料清单 CSV','导出场景 GLB']) expect((screen.getByRole('button',{name}) as HTMLButtonElement).disabled).toBe(true);
   });
   it('reuses the same direct panel for activity tasks without requiring material and preserves the model export gate', async () => {
-    const current={...layout,scenePreset:'gym' as const,eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[createOperation('演练主持','event')]})};
+    const current={...templateNode(layout),eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[createOperation('演练主持','event')]})};
     const update=vi.fn(), openBrief=vi.fn();
     render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={update} onOpenBrief={openBrief}/>);
     expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
@@ -790,7 +792,7 @@ describe('saved execution timetable delivery',()=>{
   const exportButton=()=>{openExportTab(); return screen.getByRole('button',{name:'导出执行时间表 HTML'}) as HTMLButtonElement;};
   it('exports the actual saved V3 tasks, unknown dates, owner links and 20/18/18 ledger without model delivery',async()=>{
     const f=timetableActivity();
-    const live={...f.current,name:'尚未保存的画面名称',eventOperations:eventOperationsSchema.parse({tasks:[{id:itemId,title:'画面中的其他任务',phase:'event'}]}),scenePreset:'gym' as const};
+    const live={...templateNode(f.current),name:'尚未保存的画面名称',eventOperations:eventOperationsSchema.parse({tasks:[{id:itemId,title:'画面中的其他任务',phase:'event'}]})};
     render(<SceneDeliveryPanel layout={live} controller={controller} backupActions={f.backupActions} checkins={checkinState(f.ledger)}/>);
     expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();
     expect(exportButton().disabled).toBe(false);

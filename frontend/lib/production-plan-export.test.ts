@@ -294,7 +294,7 @@ describe('internal production-plan handoff HTML', () => {
   });
 
   it('awaits internal review and does not depend on a Scene JSON/model gate, network, browser state or downloads', async () => {
-    const source = layout(); source.scenePreset = 'gym'; source.floors[0].items[0].glbNode = 'Preset_Object_0';
+    const source = layout(); source.floors[0].items[0].glbNode = 'Preset_Object_0';
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     try { expect(typeof await productionPlanHandoffHtml(source, snapshot)).toBe('string'); expect(fetch).not.toHaveBeenCalled(); }
     finally { vi.unstubAllGlobals(); }
@@ -397,9 +397,9 @@ describe('internal production-plan handoff HTML', () => {
     expect(document.querySelectorAll('img')).toHaveLength(0);
   });
 
-  it.each(['scene preset', 'V2 structure'] as const)('keeps %s readable without a simplified SVG and asks for current drawings', async kind => {
+  it.each(['template node', 'V2 structure'] as const)('keeps %s readable without a simplified SVG and asks for current drawings', async kind => {
     const source = layout();
-    if (kind === 'scene preset') source.scenePreset = 'gym';
+    if (kind === 'template node') source.floors[0].items[0].glbNode = 'Preset_Object_0';
     else {
       const scene = sceneSchema.parse({ schemaVersion: 2,
         venue: { width: 8, depth: 8, height: 3, shape: 'rectangle', entrances: [] }, camera: 'overview', lighting: 'neutral',

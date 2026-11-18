@@ -45,7 +45,6 @@ import { LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_RECORDS
 import { ensureGlbAsset } from '../three/glb-assets';
 import * as cloudMaterialDraft from '../lib/cloud-material-draft';
 import * as sceneDelivery from '../lib/scene-delivery';
-import { loadScenePreset } from '../three/scene-presets';
 import { CreativeAssistant, CreativeBriefPanel, CreativeStudioProvider, clearUnsentMessageDraftsForTests, useCreativeBrief, useCreativeBriefState, useLocalProjectBackup, useMaterialCheckinState, useStudioAgent, withApplyLock, zeroSeatingShortfall, type BusinessToolsApi, type LocalProjectBackupActions } from './creative-studio';
 import { GeneratedModelLibrary } from './generated-model-library';
 import { LocalActivitiesPanel } from './local-activities-panel';
@@ -57,7 +56,6 @@ import type { WorkbenchMode } from '../lib/workbench-mode';
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: routerPush }) }));
-vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
 const sourceMocks = vi.hoisted(() => ({ readSourceForm: vi.fn(), readSourceRecord: vi.fn(), readSourceRecordSnapshot: vi.fn(), listSourceRecords: vi.fn().mockResolvedValue([]), updateSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn(), readSourceScopeSnapshot: vi.fn(), restoreSourceScopeIfUnchanged: vi.fn() }));
 vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), ...sourceMocks }));
@@ -1070,7 +1068,7 @@ function selectMode(value:'plan'|'model'):void {
   fireEvent.change(screen.getByRole('combobox',{name:'工作模式'}),{target:{value}});
 }
 function selectBusiness(name:string):void {
-  const destinations:Record<string,string>={'活动需求':'brief','图纸与照片':'reference','场地重建':'rebuild','执行资料':'delivery','方案评审':'review','场景模板':'templates','物料工具':'model','合同与约定':'commercial'};
+  const destinations:Record<string,string>={'活动需求':'brief','图纸与照片':'reference','场地重建':'rebuild','执行资料':'delivery','方案评审':'review','物料工具':'model','合同与约定':'commercial'};
   if(!screen.queryByRole('combobox',{name:/布置工具|资料分类/}))fireEvent.click(screen.getByRole('button',{name:'外部图纸核对'}));
   fireEvent.change(screen.getByRole('combobox',{name:/布置工具|资料分类/}),{target:{value:destinations[name]}});
 }
@@ -1687,42 +1685,6 @@ describe('creative brief and assistant interaction', () => {
     await act(async()=>finish());
     expect(prepareProposal).not.toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
-  });
-
-  it('opens complete templates separately without losing the planning draft or invoking generation', async () => {
-    connected();
-    const preset:RoomLayout={...layout,name:'办公室 · 留白',scenePreset:'office'};
-    vi.mocked(loadScenePreset).mockResolvedValueOnce(preset);
-    const create=vi.spyOn(controller,'createGenerationJob');
-    renderUI(ui());
-    fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
-    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'保留这条未发送的需求'}});
-    selectBusiness('场景模板');
-    expect(screen.getAllByRole('button',{name:/载入模板/})).toHaveLength(10);
-    fireEvent.click(screen.getByRole('button',{name:'返回当前工作区'}));
-    expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('保留这条未发送的需求');
-    selectBusiness('场景模板');
-    fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
-    await waitFor(()=>expect(onApply).toHaveBeenCalledWith({...preset,id:layout.id,name:layout.name}));
-    expect(loadScenePreset).toHaveBeenCalledWith('office');
-    expect(prepareProposal).not.toHaveBeenCalled();
-    expect(create).not.toHaveBeenCalled();
-    expect(screen.getByRole('option',{name:'物料生成'})).toBeTruthy();
-  });
-
-  it('ignores a pending template download after returning to the current workspace', async () => {
-    let finish!:(value:RoomLayout)=>void;
-    vi.mocked(loadScenePreset).mockReset().mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));selectMode('model');
-    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'仍在建模的未发送输入'}});
-    selectBusiness('场景模板');
-    fireEvent.click(screen.getByRole('button',{name:/办公室 · 留白/}));
-    expect(loadScenePreset).toHaveBeenCalledOnce();expect(onApply).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'返回当前工作区'}));
-    await act(async()=>{finish({...layout,name:'迟到的办公室模板',scenePreset:'office'});});
-    expect(onApply).not.toHaveBeenCalled();expect(controller.startAgentRun).not.toHaveBeenCalled();
-    expect((screen.getByRole('combobox',{name:'工作模式'}) as HTMLSelectElement).value).toBe('model');
-    expect((screen.getByRole('textbox',{name:'告诉助手你的想法'}) as HTMLTextAreaElement).value).toBe('仍在建模的未发送输入');
   });
 
   it('keeps text planning available alongside reconstruction for an existing v2 scene',async()=>{

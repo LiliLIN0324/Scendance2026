@@ -11,7 +11,6 @@ import { SpacePanel } from './space-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
 
-vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 // 2026-11-19：上传走本机代理，单测里只验「面板把选中的文件交给上传口、并把结果/错误写回界面」。
 const uploadScanFile = vi.hoisted(() => vi.fn());
 vi.mock('../lib/scan-upload', () => ({ uploadScanFile }));
@@ -34,26 +33,23 @@ function environment(preview: SplatPreviewState = { status: 'idle', assetId: '',
 
 describe('SpacePanel', () => {
   it('puts real venues first and folds secondary actions', () => {
-    const onApply = vi.fn();
-    render(<SpacePanel layout={INITIAL_LAYOUT} onApply={onApply}/>);
+    render(<SpacePanel layout={INITIAL_LAYOUT}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
     // 面板打开即自动登记云端扫描库（索引 8 套实景），空库提示只在真没数据时出现
     expect(screen.getByText(/\d+ 套已扫描/)).toBeTruthy();
     expect(screen.queryByText('用手机拍一段场地')).toBeNull();
-    expect(screen.getByText('场景模板').closest('details')?.open).toBe(false);
-    expect(onApply).not.toHaveBeenCalled();
   });
 
-  it('lists scanned venues as cards with size and time, and applies one on click', () => {
+  it('lists scanned venues as cards with size and time, and places one on click', () => {
     const preview = environment();
-    const onPickScan = vi.fn();
+    const onPlaceScan = vi.fn();
     rememberAholoAsset({
       assetId: '00000000-0000-4000-8000-000000000000', kind: 'spz', name: '午后咖啡馆', bytes: 20_000_000,
       savedAt: Date.UTC(2026, 10, 4), meters: { width: 12.4, depth: 8.6, height: 4.2 },
     });
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview} onPickScan={onPickScan}/>);
+    render(<SpacePanel layout={makeLayout()} environment={preview} onPlaceScan={onPlaceScan}/>);
     expect(screen.queryByText('还没有实景扫描')).toBeNull();
-    const item = screen.getByLabelText('应用真实场地 午后咖啡馆');
+    const item = screen.getByLabelText('放置真实场地 午后咖啡馆');
     expect(screen.getByText(/12\.4 × 8\.6 m/)).toBeTruthy();
     // 2026-11-19 用户：「实景扫描的卡片也做成多个卡片的形式」——没止帧也走卡片，
     // 用淡点云图标占位，不再收成索引行。
@@ -62,7 +58,7 @@ describe('SpacePanel', () => {
     expect(item.querySelector('.sc-scan-card-shot .sc-scan-card-blank')).toBeTruthy();
     expect(item.textContent).toContain('12.4 × 8.6 m');
     fireEvent.click(item);
-    expect(onPickScan).toHaveBeenCalledWith(expect.objectContaining({
+    expect(onPlaceScan).toHaveBeenCalledWith(expect.objectContaining({
       assetId: '00000000-0000-4000-8000-000000000000',
       name: '午后咖啡馆',
       meters: { width: 12.4, depth: 8.6, height: 4.2 },
@@ -81,7 +77,7 @@ describe('SpacePanel', () => {
     rememberAholoAsset({ assetId: framed, kind: 'spz', name: '有封面的一场', bytes: 20_000_000, savedAt: 3 });
     rememberAholoAsset({ assetId: plainA, kind: 'spz', name: '没打开过的一场', bytes: 20_000_000, savedAt: 2 });
     rememberAholoAsset({ assetId: plainB, kind: 'ply', name: '导出的 PLY', bytes: 20_000_000, savedAt: 1 });
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={environment(undefined, null, { [framed]: cover })} onPickScan={vi.fn()}/>);
+    render(<SpacePanel layout={makeLayout()} environment={environment(undefined, null, { [framed]: cover })}/>);
     const grid = document.querySelector('ul.sc-space-samples.sc-scan-cards') as HTMLUListElement;
     expect(grid).toBeTruthy();
     expect(grid.getAttribute('aria-label')).toBe('实景扫描');
@@ -101,11 +97,44 @@ describe('SpacePanel', () => {
     expect(document.querySelector('.sc-scan-rows')).toBeNull();
   });
 
+  // 2026-11-19 用户：「实景扫描就是点击，然后放在特定的场地位置而已」——
+  // 卡片主点击 = 放到场地上；用户随后拍板删掉卡片下沿的「只看这一场」。
+  it('places a scan on the site on card click and renders no secondary action', () => {
+    const onPlaceScan = vi.fn();
+    const assetId = '00000000-0000-4000-8000-000000000021';
+    rememberAholoAsset({
+      assetId, kind: 'spz', name: '雨后庭院', bytes: 20_000_000,
+      savedAt: Date.UTC(2026, 10, 6), meters: { width: 9.2, depth: 7.4, height: 3.1 },
+    });
+    render(<SpacePanel layout={makeLayout()} environment={environment()}
+      onPlaceScan={onPlaceScan}/>);
+    fireEvent.click(screen.getByLabelText('放置真实场地 雨后庭院'));
+    expect(onPlaceScan).toHaveBeenCalledWith(expect.objectContaining({ assetId, name: '雨后庭院' }));
+    expect(screen.queryByText('只看这一场')).toBeNull();
+    expect(document.querySelector('.sc-scan-card-only')).toBeNull();
+  });
+
+  // 2026-11-19 用户：「到底文件好没好？」——空态要能分开：「没打开过」和「加载失败」。
+  it('separates 未打开过 from 加载失败 so a broken file is visible', () => {
+    const broken = '00000000-0000-4000-8000-000000000022';
+    const fresh = '00000000-0000-4000-8000-000000000023';
+    rememberAholoAsset({ assetId: broken, kind: 'spz', name: '缺文件的场地', bytes: 20_000_000, savedAt: Date.UTC(2026, 10, 7) });
+    rememberAholoAsset({ assetId: fresh, kind: 'spz', name: '没碰过的场地', bytes: 20_000_000, savedAt: Date.UTC(2026, 10, 8) });
+    render(<SpacePanel layout={makeLayout()} environment={environment()} onPlaceScan={vi.fn()} failedScanIds={[broken]}/>);
+    const brokenCard = screen.getByLabelText('重试加载真实场地 缺文件的场地');
+    expect(brokenCard.classList.contains('is-missing')).toBe(true);
+    expect(brokenCard.textContent).toContain('加载失败');
+    expect(brokenCard.textContent).not.toContain('未打开过');
+    const freshCard = screen.getByLabelText('放置真实场地 没碰过的场地');
+    expect(freshCard.classList.contains('is-missing')).toBe(false);
+    expect(freshCard.textContent).toContain('未打开过');
+  });
+
   it('shows the captured cover as a large frame when one exists', () => {
     const assetId = '00000000-0000-4000-8000-000000000002';
     const cover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==';
     rememberAholoAsset({ assetId, kind: 'spz', name: '有封面的场地', bytes: 20_000_000, savedAt: 1 });
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={environment(undefined, null, { [assetId]: cover })} onPickScan={vi.fn()}/>);
+    render(<SpacePanel layout={makeLayout()} environment={environment(undefined, null, { [assetId]: cover })}/>);
     const frame = screen.getByLabelText('应用真实场地 有封面的场地');
     expect(frame.classList.contains('sc-scan-card')).toBe(true);
     expect(frame.querySelector('img')?.getAttribute('src')).toBe(cover);
@@ -115,7 +144,7 @@ describe('SpacePanel', () => {
     const current = { assetId: '00000000-0000-4000-8000-000000000000', name: '午后咖啡馆' };
     const preview = environment({ status: 'ready', assetId: current.assetId, name: current.name, splats: 1200 }, current);
     rememberAholoAsset({ assetId: current.assetId, kind: 'spz', name: current.name, bytes: 20_000_000, savedAt: 1 });
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview} currentScanId={current.assetId}/>);
+    render(<SpacePanel layout={makeLayout()} environment={preview} currentScanId={current.assetId}/>);
     expect(screen.getByLabelText('应用真实场地 午后咖啡馆').getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByText('更多场地选项'));
     fireEvent.click(screen.getByText('项目中的场景'));
@@ -129,7 +158,7 @@ describe('SpacePanel', () => {
       assetId: '00000000-0000-4000-8000-000000000010', kind: 'spz', name: '新空间 2026-11-9',
       bytes: 194_000_000, savedAt: Date.now(),
     });
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+    render(<SpacePanel layout={makeLayout()} variant="card"/>);
     const button = screen.getByTestId('scan-upload-button');
     expect(button.textContent).toContain('上传');
     // 分类行里的动作不能顺手把这一段收起来。
@@ -146,7 +175,7 @@ describe('SpacePanel', () => {
 
   it('card：上传失败就把原因显示出来，并自动展开这一段', async () => {
     uploadScanFile.mockRejectedValue(new Error('连不上本机资产代理。先运行 npm run dev。'));
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+    render(<SpacePanel layout={makeLayout()} variant="card"/>);
     const group = [...document.querySelectorAll('details.sc-scene-group')]
       .find(node => node.querySelector('.sc-scene-group-label')?.textContent === '实景扫描') as HTMLDetailsElement;
     expect(group.open).toBe(false);
@@ -159,7 +188,7 @@ describe('SpacePanel', () => {
   });
 
   it('shelf：列表上方也有上传入口与后缀提示', () => {
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()}/>);
+    render(<SpacePanel layout={makeLayout()}/>);
     expect(screen.getByTestId('scan-upload-button')).toBeTruthy();
     expect(screen.getByText(/从 Aholo Reality 下载的 \.spz \/ \.ply/)).toBeTruthy();
   });
@@ -167,7 +196,7 @@ describe('SpacePanel', () => {
   // 2026-11-17 用户：「是不是上面的应该放在下面」「项目中的场景这玩意根本就不重要啊」
   // ＋「经典案例我要的也是和其他的视觉一样的卡片预览图」。
   it('card：案例与模板库在前、实景扫描在后，项目中的场景不再占位', () => {
-    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} onAddSampleScene={vi.fn()} variant="card"/>);
+    render(<SpacePanel layout={makeLayout()} onAddSampleScene={vi.fn()} variant="card"/>);
     const labels = [...document.querySelectorAll('details.sc-scene-group')]
       .map(group => group.querySelector('.sc-scene-group-label')?.textContent);
     expect(labels[0]).toBe('国内案例');
@@ -213,7 +242,7 @@ describe('SpacePanel', () => {
       const current = REPLICA_CASES[0].buildPlan();
       // 已打开过的旧案例也应在再次点击卡片时读取新版，不续用旧描图。
       saveOutdoorProjectRecord({ v: 1, projectId: expected, name: '旧案例', createdAt: '2026-11-17T00:00:00.000Z', updatedAt: '2026-11-17T00:00:00.000Z', plan: { ...current, zones: current.zones.slice(0, 2), facilities: [] } });
-      render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+      render(<SpacePanel layout={makeLayout()} variant="card"/>);
       const group = document.querySelector('[data-testid="space-group-cases"]') as HTMLDetailsElement;
       group.open = true;
       fireEvent(group, new Event('toggle'));

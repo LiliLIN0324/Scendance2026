@@ -5,7 +5,7 @@ import {venueArea} from './structural-layout';
 
 /** Structural identity uses exact data, never a lossy image or geometry hash. */
 export function venueScaleBasis(layout: RoomLayout): string {
-  return JSON.stringify({id:layout.id ?? null,width:layout.width,height:layout.height,scenePreset:layout.scenePreset ?? null,
+  return JSON.stringify({id:layout.id ?? null,width:layout.width,height:layout.height,
     venueScan:layout.venueScan ?? null,backendVenue:layout.backendVenue ?? null,
     venue:layout.backendSceneV2?.venue ?? null,structure:layout.backendSceneV2?.structure ?? null,
     sources:layout.backendSceneV2?.sources ?? null,dimensions:layout.backendSceneV2?.dimensions ?? null,

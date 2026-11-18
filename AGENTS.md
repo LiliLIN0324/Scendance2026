@@ -26,7 +26,6 @@ client/scene-client.ts       前后端契约客户端
 supabase/functions/          scene-api / generation-worker / reconstruction-worker
 supabase/migrations/         数据库迁移
 assets/library/              GLB 物料库
-scene/templates/             场景模板
 scripts/                     打包、dev 代理、配置校验
 tests/                       后端测试（根 npm test）
 docs/                        文档，入口 docs/README.md

@@ -9,7 +9,6 @@ import * as localPlanModule from '../lib/local-plan';
 import { STORAGE_KEY } from '../lib/constants';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
-import { presetModelUrl } from '../lib/scene-presets';
 import { STAGE_PLATFORM_ASSET_ID } from '../lib/stage-platform-plan';
 import * as stagePlatformPlan from '../lib/stage-platform-plan';
 import * as researchArea from '../lib/research-area';
@@ -375,7 +374,7 @@ describe('research map activity scope', () => {
       expect(screen.queryByText(/底图或场景锚点已变化/)).toBeNull();
     } finally { view.unmount(); act(() => { layoutStore.setState({ layout: saved }); }); }
   });
-  it.each(['scan', 'preset', 'width', 'height', 'venue', 'scan-aba', 'preset-aba', 'width-aba'] as const)(
+  it.each(['scan', 'width', 'height', 'venue', 'scan-aba', 'width-aba', 'venue-aba'] as const)(
     'does not apply stale research after the venue changes (%s)', async change => {
       const saved = realLayoutStoreGetState().layout;
       const initial = makeLayout({ id: 'research-venue-epoch', width: 12, height: 9 });
@@ -387,7 +386,6 @@ describe('research map activity scope', () => {
         send('调研西湖');
         await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
         const next: RoomLayout = change.startsWith('scan') ? { ...initial, venueScan: { assetId:'new-scan', name:'新场地' } }
-          : change.startsWith('preset') ? { ...initial, scenePreset:'cafe' }
           : change.startsWith('width') ? { ...initial, width:20 }
           : change === 'height' ? { ...initial, height:15 }
           : { ...initial, backendVenue:{shape:'rectangle',width:12,depth:9,height:3,entrances:[]} };
@@ -3766,35 +3764,6 @@ describe('brief stays in step with the sentence', () => {
     expect(await screen.findByText(/当前有尚未应用的方案预览；导出读取的是原场景/,{},{timeout:15000})).toBeTruthy();
     expect(screen.queryByRole('button',{name:'确认导出'})).toBeNull();
     expect(studioMock.exportActivity).not.toHaveBeenCalled();
-  });
-});
-
-describe('T-VENUE 模板场馆改尺寸', () => {
-  function templateLayout(): RoomLayout {
-    return makeLayout({
-      name: '青序 · 香氛快闪', scenePreset: 'popup', width: 12, height: 8, roof: { style: 'none' },
-      floors: [makeFloor({ items: [
-        makeItem({ id: 'popup-seat', type: 'glb-asset', name: '模板座椅', glbUrl: presetModelUrl('popup'), glbNode: 'Seat' }),
-      ] })],
-    });
-  }
-
-  it('refuses a size-only change that would discard template furniture', async () => {
-    const onApply = vi.fn(), onPreview = vi.fn();
-    render(<LocalHarness initial={templateLayout()} onApply={onApply} onPreview={onPreview} brief/>);
-
-    const brief = screen.getByLabelText('活动简报');
-    expect(within(brief).getByText(/12 × 8 m/)).toBeTruthy();
-    expect(within(brief).queryByText(/尺寸还没定/)).toBeNull();
-
-    send('改成 20×12');
-    expect(await screen.findByText(/会移除 1 件已有物料，场地没有更改/)).toBeTruthy();
-    expect(within(brief).getByText(/12 × 8 m/)).toBeTruthy();
-    expect(onApply).not.toHaveBeenCalled();
-    expect(onPreview).not.toHaveBeenCalled();
-    expect(document.getElementById('gen-progress')).toBeNull();
-    expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
-    expect(document.body.textContent).not.toContain('预览先作废');
   });
 });
 

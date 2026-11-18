@@ -75,8 +75,8 @@ function planDraft(original:RoomLayout,input:LocalDeskChairInput|LocalSharedDesk
   const base:LocalDeskChairDraft={layout,requested:input.count,placed:0,shortfall:input.count,assumptions:input as LocalDeskChairInput,unknown:[...baseUnknown],limitReason:null,seatingWitness:null};
   const unknownGeometry=(message:string):LocalDeskChairDraft=>({...base,unknown:[...base.unknown,message],limitReason:'incomplete_geometry'});
   if(!floor||!Number.isFinite(layout.width)||!Number.isFinite(layout.height)||layout.width<=0||layout.height<=0)return unknownGeometry('楼层或场地尺寸未能核对');
-  // Scanned and preset architecture may contain fixed geometry outside editable objects.
-  if(layout.scenePreset||layout.venueScan)return {...base,unknown:[...base.unknown,'预设或扫描空间中的固定结构尚未完整展开'],limitReason:'preset_unverified'};
+  // Scanned architecture may contain fixed geometry outside editable objects.
+  if(layout.venueScan)return {...base,unknown:[...base.unknown,'扫描空间中的固定结构尚未完整展开'],limitReason:'preset_unverified'};
   if(layout.mapGroundPolygon?.length&&!layout.backendVenue?.polygon)return unknownGeometry('地图范围尚未转换为可核对的场地轮廓');
   if(layout.backendSceneV2&&!layout.backendVenue)return unknownGeometry('场地结构与轮廓尚未建立一致的版本');
   if(layout.backendVenue&&(layout.backendVenue.width!==layout.width||layout.backendVenue.depth!==layout.height))return unknownGeometry('当前画布与场地轮廓的尺寸不一致');
