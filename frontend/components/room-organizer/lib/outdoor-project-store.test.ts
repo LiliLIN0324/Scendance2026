@@ -79,6 +79,32 @@ describe('outdoor-project-store', () => {
     expect(hasOutdoorPlanDraft(PID, storage)).toBe(true);
   });
 
+  it('单价、价格书和报价抬头随本机草稿往返', () => {
+    const storage = memoryStorage();
+    const plan: SitePlanData = {
+      ...samplePlan(),
+      facilities: [{
+        id: '22222222-2222-4222-8222-222222222222',
+        templateId: 'chair',
+        name: '折叠椅',
+        position: { x: 10, y: 8 },
+        rotationDeg: 0,
+        size: { width: 0.55, depth: 0.53 },
+        notes: '',
+        modelOverride: 'folding-chair',
+        unitPrice: 88,
+      }],
+      priceBook: { 'folding-chair': 88 },
+      quote: { projectName: '秋季发布会', client: '星河品牌部', validUntil: '2026-12-31', preparedBy: '幕景策划' },
+    };
+    saveOutdoorProjectRecord(record(plan), storage);
+    const loaded = readOutdoorProjectRecord(PID, storage)?.plan;
+    expect(loaded?.facilities[0]?.unitPrice).toBe(88);
+    expect(loaded?.priceBook).toEqual({ 'folding-chair': 88 });
+    expect(loaded?.quote).toEqual(plan.quote);
+    expect(sitePlanDataSchema.safeParse(loaded).success).toBe(true);
+  });
+
   it('meta 有效但 plan 坏：记录仍在（判定不丢），plan 宽容回落 null', () => {
     const storage = memoryStorage();
     // 「坏」用真不合法的构造（相邻重复顶点，superRefine 拒）；boundary: [] 自 2026-11-11 起是合法起步。

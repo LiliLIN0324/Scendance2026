@@ -22,6 +22,18 @@ export interface PlanCatalogDrag {
 }
 
 let current: PlanCatalogDrag | null = null;
+let token = 0;
+let clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** text/plain 兜底：部分浏览器在 drop 里读不到自定义 MIME，dragend 还可能先于 drop 清掉模块级记录。 */
+export const PLAN_CATALOG_TEXT_PREFIX = 'sc-plan-catalog:';
+
+function cancelClearTimer(): void {
+  if (clearTimer !== null) {
+    clearTimeout(clearTimer);
+    clearTimer = null;
+  }
+}
 
 /** 户外规划专用拖放类型：值里带完整载荷，松手时不再依赖可能被上一次拖拽污染的模块级 store。 */
 export const PLAN_CATALOG_DRAG_MIME = 'application/x-sc-plan-catalog';
@@ -93,7 +105,14 @@ export function planCatalogDragFor(input: {
   };
 }
 
+export function catalogDragFromText(raw: string): PlanCatalogDrag | null {
+  if (!raw.startsWith(PLAN_CATALOG_TEXT_PREFIX)) return null;
+  return parsePlanCatalogDrag(raw.slice(PLAN_CATALOG_TEXT_PREFIX.length));
+}
+
 export function setPlanCatalogDrag(payload: PlanCatalogDrag): void {
+  cancelClearTimer();
+  token += 1;
   current = payload;
 }
 
@@ -101,6 +120,35 @@ export function getPlanCatalogDrag(): PlanCatalogDrag | null {
   return current;
 }
 
+/**
+ * 拖拽结束。drop 在有的浏览器里晚于 dragend：立刻清空会让松手读不到载荷，幽灵停在画布上。
+ * 推迟到下一拍；期间若又拖起新的一件，或 drop 已经取走，这次清空作废。
+ */
 export function clearPlanCatalogDrag(): void {
+  const seen = token;
+  cancelClearTimer();
+  clearTimer = setTimeout(() => {
+    clearTimer = null;
+    if (token === seen) current = null;
+  }, 0);
+}
+
+/** drop 读到载荷后立刻作废，避免下一拍的 dragend 清空把紧接着的新拖拽也清掉。 */
+export function consumePlanCatalogDrag(): void {
+  cancelClearTimer();
+  token += 1;
   current = null;
+}
+
+/** 自定义 MIME、text/plain 前缀、模块级记录，谁先读到用谁。 */
+export function readPlanCatalogDrag(mime: string, text: string): PlanCatalogDrag | null {
+  return parsePlanCatalogDrag(mime) ?? catalogDragFromText(text) ?? current;
+}
+
+/** 拖起时写入两份载荷：自定义 MIME，以及 drop 一定能读到的 text/plain 前缀。 */
+export function attachPlanCatalogDrag(transfer: DataTransfer, payload: PlanCatalogDrag): void {
+  setPlanCatalogDrag(payload);
+  const json = serializePlanCatalogDrag(payload);
+  transfer.setData(PLAN_CATALOG_DRAG_MIME, json);
+  transfer.setData('text/plain', `${PLAN_CATALOG_TEXT_PREFIX}${json}`);
 }

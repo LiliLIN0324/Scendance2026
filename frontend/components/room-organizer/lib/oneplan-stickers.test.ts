@@ -146,6 +146,7 @@ describe('OnePlan 贴纸映射', () => {
     expect(facilitySticker('custom-gate-4x1')).toMatchObject({ kind: 'icon', slug: 'entry-gate' });
     expect(facilitySticker('marquee-stage-10x8')).toMatchObject({ kind: 'scale', slug: 'stage' });
     expect(facilitySticker('mobile-toilet-xl')).toMatchObject({ kind: 'scale', slug: 'portable-toilet' });
+    expect(facilitySticker('chair')).toMatchObject({ kind: 'scale', slug: 'folding-chair' });
     expect(facilitySticker('mystery-object')).toBeNull();
     expect(facilitySticker('   ')).toBeNull();
   });

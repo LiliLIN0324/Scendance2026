@@ -12,7 +12,8 @@ import { Check, Crown, FolderOpen, Globe, Loader2, Plus, SquareDashed } from '@/
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from '../../../lib/auth-provider';
-import { useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
+import { SceneApiError } from '../../../../client/scene-client';
+import { backendFailureText, useBackendSession, type ProjectSummary, type Studio } from '../../../lib/backend-session';
 import { emptyProjectScene, listStudioProjects, preferredStudio, rememberStudio } from '../../../lib/workspace-api';
 import { createStarterOutdoorPlan, ensureDefaultOutdoorProject, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
@@ -28,6 +29,12 @@ type CloudState =
   | { status: 'ready'; studioId: string; projects: ProjectSummary[] };
 
 const NEW_PROJECT_DEFAULT = '我的活动方案';
+
+/** SceneApiError.message 是线路 code。列表/创建失败都走同一张文案表，普通 Error 仍用原句。 */
+function pickerFailure(error: unknown, fallback: string): string {
+  if (error instanceof SceneApiError) return backendFailureText(error);
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 const PREVIEW_LIMIT = 12;
 
 /** 最近动过的排最前；没有 updated_at 的落在后面，不打乱原序。 */
@@ -115,7 +122,7 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
         const projects = (await listStudioProjects(controller, targetStudio)).slice().sort(byRecent);
         if (active) setCloud({ status: 'ready', studioId: targetStudio, projects });
       } catch (error) {
-        if (active) setCloud({ status: 'error', message: error instanceof Error ? error.message : '方案列表加载失败，请重开弹层。' });
+        if (active) setCloud({ status: 'error', message: pickerFailure(error, '方案列表加载失败，请重开弹层。') });
       }
     })();
     return () => { active = false; };
@@ -251,7 +258,7 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
           });
           window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&mode=outdoor`);
         })
-        .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
+        .catch((error: unknown) => { setNotice(pickerFailure(error, '新建项目失败，请重试。')); setBusy(false); });
       return;
     }
     // 访客 / 云列表未就绪：不建云项目，落本机默认地图草稿整页进 2D 规划。
@@ -281,7 +288,7 @@ export function VenuePicker({ onClose, studioId, initialSelection }: {
         });
         window.location.assign(`/editor/?project=${encodeURIComponent(created.id)}&mode=outdoor`);
       })
-      .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : '新建项目失败，请重试。'); setBusy(false); });
+      .catch((error: unknown) => { setNotice(pickerFailure(error, '新建项目失败，请重试。')); setBusy(false); });
   }
 
   return <div className="sc-venue-picker">

@@ -1464,6 +1464,13 @@ async function reviewAndFix(): Promise<void> {
 }
 
 beforeEach(() => {
+  // jsdom 30 没有 Element.scrollTo / ResizeObserver；对话区钉底 effect 会在挂载时用到。
+  if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollTo !== 'function') {
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, writable: true, value() {} });
+  }
+  if (typeof globalThis.ResizeObserver !== 'function') {
+    globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  }
   useRealLayoutStore = false;
   vi.spyOn(layoutStore, 'getState').mockImplementation(() => {
     const actual = realLayoutStoreGetState();
@@ -4040,6 +4047,18 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
     expect(input.value).toBe('80 人发布会，室内 12×9，安排签到和主舞台');
     // 填满之后引导层让开，不再压在真句子上。
     expect(document.querySelector('.ap-ghost')).toBeNull();
+  });
+});
+
+describe('执行资料入口', () => {
+  it('opens delivery from a new activity header without submitting generation', () => {
+    state.layout = INITIAL_LAYOUT;
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    expect(screen.queryByText('这一版布置')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '执行资料' }));
+    expect(callbacks.onOpenDelivery).toHaveBeenCalledOnce();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(callbacks.onSelectMode).not.toHaveBeenCalled();
   });
 });
 
