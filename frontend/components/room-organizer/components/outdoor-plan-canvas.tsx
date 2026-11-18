@@ -314,7 +314,7 @@ import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
 import { ZoneEventInput } from './zone-event-input';
 import { MaterialSymbol } from '../panels/material-symbol';
 import { MapLegendCapsule, legendEntriesForMap } from './map-legend-capsule';
-import { PlanStatRows, planSheetIsEmpty } from './plan-inventory-sheet';
+import { PlanStatRows } from './plan-inventory-sheet';
 import {
   drawOneplanScaleSticker,
   drawOneplanSticker,
@@ -9479,7 +9479,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   })();
   const legendGroups = buildPlanLegend(levelView);
   const mapLegendEntries = legendEntriesForMap(legendGroups, levelView.boundary.length);
-  const sheetEmpty = planSheetIsEmpty(overviewStats, inventoryRows.length);
+  const hasClosedBoundary = levelView.boundary.length >= 3;
+  const listBlank = inventoryRows.length === 0
+    && !invIssuesOnly
+    && (invKind === 'all' || invKind === undefined)
+    && invZoneActive === undefined;
   const anchorById = new Map(inventoryRows.map(row => [row.id, row.anchor] as const));
   const infoIssues: PlanLocatableIssue[] = [
     // 2026-11-15：与画布同口径——默认只列冲突/缺宽度，「容量待核实」手动打开才出现。
@@ -11899,20 +11903,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {/* 清单在左栏户外卡。没有宿主时不在地图上留浮卡。图例单独贴在画布左下。 */}
       {infoPanelHost && <PanelPortal host={infoPanelHost}>
       <div ref={infoPanelRef} className="sc-plan-sheet" style={inventoryHostStyle} data-testid="info-inventory" onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} onWheel={stopPanelWheel}>
-        {sheetEmpty ? (
+        <PlanStatRows
+          areaM2={overviewStats.boundaryAreaM2}
+          hasClosedBoundary={hasClosedBoundary}
+          zones={overviewStats.zoneCount}
+          facilities={overviewStats.facilityCount}
+          routes={overviewStats.routeCount}
+          routeLengthM={overviewStats.routeLengthTotalM}
+          issues={overviewStats.issueCount + overviewStats.conflictCount}
+          issuesOnly={invIssuesOnly}
+          onShowIssues={() => setInvIssuesOnly(value => !value)}
+        />
+        {listBlank ? (
           <p className="sc-plan-empty" data-testid="info-empty">还没有布置</p>
         ) : (
           <>
-            <PlanStatRows
-              area={formatAreaM2(overviewStats.boundaryAreaM2)}
-              zones={overviewStats.zoneCount}
-              facilities={overviewStats.facilityCount}
-              routes={overviewStats.routeCount}
-              routeLength={formatLengthM(overviewStats.routeLengthTotalM)}
-              issues={overviewStats.issueCount + overviewStats.conflictCount}
-              issuesOnly={invIssuesOnly}
-              onShowIssues={() => setInvIssuesOnly(value => !value)}
-            />
             <label
               className="sc-plan-advisory"
               title="缺宽度：补上宽度会一起算通行带；容量按面积估，改分区跟着变"

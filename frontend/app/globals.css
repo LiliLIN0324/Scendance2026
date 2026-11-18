@@ -3249,8 +3249,9 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-plan-stats dd { margin: 0; color: #141416; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .sc-plan-stats button {
   border: 0; padding: 0; background: none; font: inherit; font-weight: 600;
-  font-variant-numeric: tabular-nums; color: #c23b2e; cursor: pointer;
+  font-variant-numeric: tabular-nums; color: inherit; cursor: pointer;
 }
+.sc-plan-stats button.is-alert { color: #c23b2e; }
 .sc-plan-stats button[aria-pressed='true'] { text-decoration: underline; }
 .sc-plan-stats-hint { margin: 6px 0 8px; color: #8a8f96; font-size: 11px; line-height: 1.45; }
 .sc-plan-empty { margin: 12px 0; color: var(--sc-muted, #71767e); font-size: 13px; }
