@@ -2358,3 +2358,11 @@ it("定地点拦阻时，把上一句里的后置活说出来（不再等于没�
   expect(flow.notice).toContain("想在哪个地点做");
   expect(flow.notice).toContain("后面还有：最后再调通道");
 });
+
+it("范围未确认时，也把上一句里的后置活说出来", async () => {
+  plan = { ...plan, boundary: [] };
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
+  await turn("先划展览区和表演区，最后再调通道", response("zones", {}));
+  expect(flow.notice).toContain("地图上还没有可核对的活动边界");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
+});

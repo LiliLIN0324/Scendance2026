@@ -1363,7 +1363,8 @@ export function useOutdoorAgentWorkflow(input: {
           completed: stateRef.current.completed.filter((s) => s === "place"),
         });
         status(
-          "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+          "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。" +
+            deferredNote(priorUserTextRef.current),
           "blocked",
         );
         setBusy(false);
@@ -1385,7 +1386,8 @@ export function useOutdoorAgentWorkflow(input: {
             completed: stateRef.current.completed.filter((s) => s === "place"),
           });
           status(
-            "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+            "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。" +
+              deferredNote(priorUserTextRef.current),
             "blocked",
           );
           setBusy(false);
