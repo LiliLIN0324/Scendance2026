@@ -35,5 +35,7 @@ export function layoutForExport(layout: RoomLayout, stripHandoffs = false): Room
   };
   if (stripHandoffs) delete exported.eventOperations;
   if (stripHandoffs) delete exported.productionPlan;
+  // 活动档案是内部记录：客户投影与分享载荷一律不携带日期/预算/分工。
+  if (stripHandoffs) delete exported.eventProfile;
   return exported;
 }

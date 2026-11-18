@@ -76,7 +76,7 @@ export function prepareLocalRestoreLayout(layout: RoomLayout): RoomLayout {
   // Reuse full V2 validation before assigning an identity or touching either storage domain.
   return withHouseId(createLocalProjectBackup(layout, {
     state: 'ready', scope: layout.id ?? 'local', brief: { status: 'absent' },
-  }).layout);
+  }, undefined, { allowEventProfile: true }).layout);
 }
 
 function matches(left: RoomLayout | null, right: RoomLayout): boolean {
@@ -94,7 +94,7 @@ function commitLocalLayout(layout: RoomLayout, access: LayoutAccess, storage: St
   const restoring = kind === 'restore';
   const candidate = createLocalProjectBackup(layout, {
     state: 'ready', scope: layout.id ?? 'local', brief: { status: 'absent' },
-  }).layout;
+  }, undefined, { allowEventProfile: true }).layout;
   const previous = access.current();
   let oldRaw: string | null;
   try { oldRaw = storage.getItem(STORAGE_KEY); }

@@ -8,8 +8,9 @@ import { productionPlanSchema } from '../../supabase/functions/_shared/productio
 import { makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { backendSceneToLayout, layoutToBackendScene } from '../components/room-organizer/lib/backend-adapter';
 import { INITIAL_BRIEF } from '../components/room-organizer/lib/creative-brief';
+import { eventProfileSchema, type EventProfile } from './event-profile';
 import { createLocalActivityBackup, archiveLocalActivity, deleteLocalActivity, listLocalActivities, readLocalActivity } from './local-activities';
-import { createLocalProjectBackup, createLocalProjectBackupV3, LOCAL_PROJECT_BACKUP_V1_COVERAGE, parseLocalProjectBackupJson, type LocalProjectBackupV3 } from './local-project-backup';
+import { createLocalProjectBackup, createLocalProjectBackupV3, createLocalProjectBackupV5WithDocuments, createLocalProjectBackupV6, LOCAL_PROJECT_BACKUP_V1_COVERAGE, parseLocalProjectBackupJson, type LocalProjectBackupV3 } from './local-project-backup';
 import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-storage';
 
 vi.mock('./source-storage', () => ({ listSourceRecords: vi.fn(), readSourceRecord: vi.fn(), updateSourceForm: vi.fn() }));
@@ -61,6 +62,13 @@ function backup(checkins: MaterialCheckinLedger | null = ledger(), timestamp = c
   return createLocalProjectBackupV3(sourceLayout(), { state: 'ready', scope: projectId, brief: { status: 'present', value: { ...INITIAL_BRIEF, description: rawText, guests: 0 } } },
     { state: 'ready', scope: projectId, materialCheckins: checkins ? { status: 'present', value: checkins } : { status: 'absent' } }, timestamp);
 }
+function profile(): EventProfile {
+  const unknown = { value: null, status: 'unknown', source: 'unavailable' } as const;
+  return eventProfileSchema.parse({ schemaVersion: 1, revision: 1, updatedBy: '演练统筹', updatedAt: createdAt,
+    date: { value: '2026-12-20', status: 'confirmed', source: 'user_statement', revision: 1, updatedBy: '演练统筹', updatedAt: createdAt },
+    timeWindow: unknown, venue: unknown, budget: unknown, expectedAttendance: unknown, goal: unknown, division: unknown });
+}
+
 function withReturn() {
   const value = ledger();
   const receipt = value.sheets[0].events[0];
@@ -94,6 +102,45 @@ describe('complete local activity archives', () => {
     expect(reopened.layout.productionPlan).toEqual(original.layout.productionPlan); expect(reopened.brief).toEqual(original.brief);
     expect(reopened.materialCheckins).toEqual(original.materialCheckins);
     if (reopened.materialCheckins.status === 'present') expect(materialCheckinSummary(reopened.materialCheckins.value.sheets[0]).notReceivedQuantity).toBe(2);
+  });
+
+  it('archives an activity carrying a local event profile as V6 and never lets an older V3 snapshot erase it', async () => {
+    const base = backup();
+    const withProfile = createLocalProjectBackupV6({ ...base.layout, eventProfile: profile() },
+      { state: 'ready', scope: projectId, brief: base.brief },
+      { state: 'ready', scope: projectId, materialCheckins: base.materialCheckins }, createdAt);
+    const archived = await archiveLocalActivity(JSON.stringify(withProfile), projectId);
+    expect(archived.version).toBe(6);
+    expect(archived.layout.eventProfile).toEqual(profile());
+    expect((await readLocalActivity(projectId)).layout.eventProfile).toEqual(profile());
+    expect((await listLocalActivities()).activities[0]?.preview?.eventProfile).toBeUndefined();
+
+    const older = await archiveLocalActivity(JSON.stringify(backup(null)), projectId);
+    expect(older.version).toBe(6);
+    expect(older.layout.eventProfile).toEqual(profile());
+    expect(older.materialCheckins.status).toBe('present');
+  });
+
+  it('archives image documents as V5 and never drops them for an older V3 snapshot', async () => {
+    const base = backup();
+    const documents = { status: 'present' as const, form: {}, sources: [{
+      id: 'source-floorplan-1', name: '演练平面图.png', kind: 'floorplan' as const, width: 1, height: 1,
+      mimeType: 'image/png' as const,
+      base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    }] };
+    const v5 = createLocalProjectBackupV5WithDocuments({ ...base.layout, eventProfile: profile() },
+      { state: 'ready', scope: projectId, brief: base.brief },
+      { state: 'ready', scope: projectId, materialCheckins: base.materialCheckins }, documents, createdAt);
+    const archived = await archiveLocalActivity(JSON.stringify(v5), projectId);
+    expect(archived.version).toBe(5);
+    const reopened = await readLocalActivity(projectId);
+    expect(reopened.sourceDocuments).toEqual(documents);
+    expect(reopened.layout.eventProfile).toEqual(profile());
+
+    const older = await archiveLocalActivity(JSON.stringify(backup(null)), projectId);
+    expect(older.version).toBe(5);
+    expect('sourceDocuments' in older ? older.sourceDocuments.sources[0]!.name : null).toBe('演练平面图.png');
+    expect(older.layout.eventProfile).toEqual(profile());
   });
 
   it('keeps tuple project identity separate from legacy strings, reserved-looking suffixes and local fallback', async () => {
