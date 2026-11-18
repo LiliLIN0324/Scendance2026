@@ -4833,7 +4833,7 @@ useEffect(() => {
                 </button>
                 <button type="button"
                   className={`sc-rail-tool sc-rail-disc sc-rail-capture${captureOpen || generationOpen ? ' is-active' : ''}`}
-                  /* 2026-11-18：创作钮打开同一页三张卡片。文生/图生的「开始创作」才进原来的生成窗口。 */
+                  /* 2026-11-18：创作钮打开同一页两张卡片。文生 / 图生在卡片上完成，不再打开第二层窗口。 */
                   aria-pressed={captureOpen || generationOpen}
                   aria-expanded={captureOpen || generationOpen}
                   aria-controls="generation-sheet workbench-capture-card"

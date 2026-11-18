@@ -17,7 +17,6 @@ import {
 } from '../lib/facility-generated-models';
 import {
   GENERATION_TASK_COPY,
-  backToGenerationChooser,
   chooseGenerationTask,
   closeGenerationSheet,
   generationNeedsCredit,
@@ -27,7 +26,6 @@ import {
   generationTaskList,
   getGenerationSheetState,
   openGenerationSheet,
-  setGenerationModelSource,
   subscribeGenerationSheet,
   type GenerationModelSource,
   type GenerationTask,
@@ -53,8 +51,8 @@ import './generation-sheet.css';
 /**
  * 统一生成面板。
  *
- * 创作来路：左栏同一页三张卡片（重建真实场地、文生 3D、图生 3D）。
- * 点「开始创作」才进入已有的模型表单（source: 'text' | 'image'）。
+ * 创作来路：左栏同一页两张卡片（重建真实场地、生成 3D 模型）。
+ * 文生 / 图生在第二张卡上切换并提交，不再打开另一层生成窗口。
  * 重建卡只收照片/视频并在本卡预览，不提交重建。导入 GLB 不在这些卡片上。
  * 物料 / 设施来路仍直接进模型表单，导入仍是那张表单里的一种输入。
  *
@@ -114,7 +112,6 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
 
   const signedIn = Boolean(cloud.user?.id);
   const formSource: GenerationModelSource = state.scope === 'venue' && source === 'import' ? 'text' : source;
-  const engine = useMemo(() => pickEngine(capabilities, formSource === 'image' ? 'image' : 'text'), [capabilities, formSource]);
 
   // 每次换面板/换任务都把表单清干净，免得把上一次的内容带进另一个任务；
   // 但对话里带进来的那句原话（state.prompt）要落在描述框里。额度确认每次都从空开始。
@@ -177,7 +174,6 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
     disabled: busy,
     writeBlocked: cloud.writeBlocked,
   });
-  const modeReady = modeSupports(capabilities, formSource === 'image' ? 'image' : 'text');
   // 正在提交时不要显示「上次结果未知」：那一条 submitting 回执就是本次请求。
   const lockForUi = busy ? null : unknownLock;
   const receiptShown = busy ? null : (unknownLock ?? receipt);
@@ -195,17 +191,21 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
     && (receipt?.state === 'submitted' || receipt?.state === 'failed');
 
   /** 模型这条：真提交。额度确认是提交前的闸门，不是提交后的道歉。 */
-  const submitModel = async (): Promise<void> => {
+  const submitModel = async (override?: { mode: 'text' | 'image'; prompt: string; referenceId?: string }): Promise<void> => {
+    const mode = override?.mode ?? (formSource === 'image' ? 'image' : 'text');
+    const spoken = (override?.prompt ?? prompt).trim();
+    const referenceId = mode === 'image' ? (override ? override.referenceId : reference?.id) : undefined;
     if (!controller) { setNotice('登录云项目后才能生成模型。'); return; }
-    if (!prompt.trim()) { setNotice(formSource === 'image' ? '先写一句补充描述。' : '先写一句描述。'); return; }
-    if (formSource === 'image' && !reference) { setNotice('先选一张参考图。'); return; }
+    if (mode === 'image' && !referenceId) { setNotice('先选一张参考图。'); return; }
+    if (!spoken) { setNotice(mode === 'image' ? '先写一句补充描述。' : '先写一句描述。'); return; }
     if (blocked) { setNotice(blocked); return; }
-    if (!modeReady) { setNotice('当前没有开通这种生成方式。'); return; }
+    if (!modeSupports(capabilities, mode)) { setNotice('当前没有开通这种生成方式。'); return; }
     // 上一次结果未知：按钮已经灰了，回车也不能绕过；先查任务记录与费用。
     if (unknownLock) { setNotice(UNKNOWN_SUBMISSION_NOTICE); return; }
     if (!credit) return; // 未勾额度时按钮本身就是灰的，不再弹提示。
     // 提交当刻捕获目标：等待期间用户换了设施/项目，链接与回执也不能跟着串。
-    const facility = state.facility;
+    // 创作卡的结果进物料，不挂到某件设施上。
+    const facility = state.scope === 'venue' ? null : state.facility;
     const requestId = crypto.randomUUID();
     setBusy(true);
     setNotice('');
@@ -220,17 +220,17 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
     // 再落提交回执：requestId 必须在发请求前写盘，断网后才查得到这次提交。
     beginGenerationSubmission({
       requestId,
-      prompt: prompt.trim(),
+      prompt: spoken,
       ...(projectId ? { projectId } : {}),
       ...(facility ? { facilityId: facility.id, facilityName: facility.name } : {}),
     });
     try {
       const job = await submitModelJob(controller, {
-        mode: formSource === 'image' ? 'image' : 'text',
-        prompt,
-        engine,
+        mode,
+        prompt: spoken,
+        engine: pickEngine(capabilities, mode),
         requestId,
-        ...(formSource === 'image' && reference ? { referenceImageAssetId: reference.id } : {}),
+        ...(mode === 'image' && referenceId ? { referenceImageAssetId: referenceId } : {}),
       });
       // 属性卡来路：把 staged 链接落成 taskid↔facility，画布轮询到 ready 就回填模型条首位。
       // 候选名取目标设施名（短名），不把整段生成提示词带进候选条。
@@ -241,7 +241,7 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
         return;
       }
       settleGenerationSubmission(requestId, { state: 'submitted', taskid: job.id });
-      setNotice(`已提交：任务号 ${job.id}「${job.prompt || prompt}」。${facility
+      setNotice(`已提交：任务号 ${job.id}「${job.prompt || spoken}」。${facility
         ? `生成完会回填到「${facility.name}」的模型条。`
         : '生成完会出现在「我的生成」。'}`);
       // 同一张表单留着，方便不满意时再生成；额度必须重新勾，不会自动再扣。
@@ -342,19 +342,47 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
     field?.focus();
   };
 
-  const openVenueModel = (next: 'text' | 'image'): void => {
-    setGenerationModelSource(next);
-    chooseGenerationTask('model');
+  /** 创作卡上的生成：图生没有补充描述框，提示词用参考图文件名，请求形状仍是图片任务。 */
+  const submitFromCard = (): void => {
+    const mode = formSource === 'image' ? 'image' : 'text';
+    const fromFile = photoName.replace(/\.[^.]+$/, '').replace(/\s+/g, ' ').trim();
+    const spoken = mode === 'image' ? (fromFile || '参考图').slice(0, 200) : prompt.trim();
+    const referenceId = reference?.id;
+    void submitModel({ mode, prompt: spoken, ...(referenceId ? { referenceId } : {}) });
   };
 
-  const venueEntry = state.scope === 'venue' && (state.task === 'choose' || state.task === 'scene-recon');
+  const showCreation = state.scope === 'venue' || state.task === 'scene-recon';
+  const panelTitle = showCreation ? '创作' : title;
+  const cardMode = formSource === 'image' ? 'image' : 'text';
+  const creation = (
+    <CreationEntry
+      mode={cardMode}
+      onMode={next => {
+        if (next !== cardMode) setCredit(false);
+        setSource(next);
+      }}
+      prompt={prompt}
+      onPrompt={setPrompt}
+      photoName={photoName}
+      referenceReady={Boolean(reference)}
+      onPickReference={file => { void pickReference(file); }}
+      onGenerate={submitFromCard}
+      busy={busy}
+      generateDisabled={busy || Boolean(lockForUi) || !credit || Boolean(blocked)}
+      {...((lockForUi ? UNKNOWN_SUBMISSION_NOTICE : blocked) ? { generateTitle: lockForUi ? UNKNOWN_SUBMISSION_NOTICE : blocked } : {})}
+      credit={credit}
+      onCredit={setCredit}
+      notice={notice}
+      blockReason={notice ? '' : blocked}
+    />
+  );
 
   return (
     <aside
       ref={cardRef}
       id="generation-sheet"
-      className={`sc-generation-card${state.scope === 'venue' ? ' is-venue' : ''}${venueEntry ? ' is-entry' : ''}`}
-      aria-label={title}
+      className={`sc-generation-card${state.scope === 'venue' ? ' is-venue' : ''}${showCreation ? ' is-entry' : ''}`}
+      aria-label={panelTitle}
       data-testid="generation-sheet"
       tabIndex={-1}
       onKeyDown={event => {
@@ -365,17 +393,14 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
       }}
     >
       <div className="gs-head">
-        <strong>{title}</strong>
+        <strong>{panelTitle}</strong>
         <button type="button" className="sc-left-close" aria-label="关闭生成面板" onClick={closeGenerationSheet}><X size={18} aria-hidden="true" /></button>
       </div>
 
       <div className="gs-body">
-        {state.scope === 'venue' ? (
-          <div className="gs-create-host" hidden={!venueEntry}>
-            <CreationEntry onStartText={() => openVenueModel('text')} onStartImage={() => openVenueModel('image')} />
-          </div>
-        ) : null}
-        {venueEntry ? null : state.task === 'choose' ? (
+        {showCreation ? (
+          <div className="gs-create-host">{creation}</div>
+        ) : state.task === 'choose' ? (
           <div className="gs-tasks">
             {tasks.map(task => {
               const copy = GENERATION_TASK_COPY[task];
@@ -398,24 +423,15 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
               );
             })}
           </div>
-        ) : state.task === 'scene-recon' ? (
-          <CreationEntry onStartText={() => openVenueModel('text')} onStartImage={() => openVenueModel('image')} />
         ) : (
           <>
-            {state.scope === 'venue' ? (
-              <div className="gs-crumb">
-                <button type="button" className="gs-link" onClick={backToGenerationChooser}>← 返回</button>
-              </div>
-            ) : null}
-
-            <div className={state.scope === 'venue' ? 'gs-window' : undefined}>
               <p className="gs-target" data-testid="generation-target">{generationTargetLabel(state.facility)}</p>
               {receiptText ? (
                 <p className={receiptShown && unknownLock ? 'gs-notice' : 'gs-hint'} data-testid="generation-receipt">{receiptText}</p>
               ) : null}
               <div className="gs-seg" role="group" aria-label="模型输入方式">
-                <button type="button" aria-pressed={formSource === 'text'} onClick={() => setSource('text')}>{state.scope === 'venue' ? '文生 3D' : '描述'}</button>
-                <button type="button" aria-pressed={formSource === 'image'} onClick={() => setSource('image')}>{state.scope === 'venue' ? '图生 3D' : '图片'}</button>
+                <button type="button" aria-pressed={formSource === 'text'} onClick={() => setSource('text')}>描述</button>
+                <button type="button" aria-pressed={formSource === 'image'} onClick={() => setSource('image')}>图片</button>
                 {allowImport ? <button type="button" aria-pressed={formSource === 'import'} onClick={() => setSource('import')}>导入</button> : null}
               </div>
               {formSource === 'text' ? (
@@ -508,7 +524,6 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
                   {busy ? '提交中…' : primary}
                 </button>
               </div>
-            </div>
           </>
         )}
       </div>

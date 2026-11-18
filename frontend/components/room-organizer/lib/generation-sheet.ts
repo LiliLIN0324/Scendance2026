@@ -19,7 +19,7 @@ export type GenerationTask = 'scene-recon' | 'model';
 
 /**
  * 入口来路。面板只有一个，标题与首层跟着来路变：
- *  - venue   ：轨道「创作」——同一页三张卡片，点开始创作才进模型表单；
+ *  - venue   ：轨道「创作」——同一页两张卡片，文生 / 图生在卡片上提交，不另开模型表单；
  *  - material：物料栏——直接进模型表单，结果进「我的生成」；
  *  - facility：画布属性卡——直接进模型表单，结果回填那件设施。
  */
@@ -83,7 +83,7 @@ export function closeGenerationSheet(): void {
   emit(INITIAL);
 }
 
-/** 首层选完任务后进入表单。场地进来的模型任务留在 venue，返回时还是那两张卡片，而不是改道去物料首层。 */
+/** 首层选完任务后进入表单。场地来路即使记下模型任务，面板仍画两张卡片，不改道去物料首层。 */
 export function chooseGenerationTask(task: GenerationTask): void {
   if (!state.open) return;
   const facility = task === 'model' ? state.facility : null;
@@ -136,7 +136,7 @@ export function generationScopeTitle(scope: GenerationScope): string {
 
 /**
  * 首层任务行。
- * 创作来路用三张卡片，不在这里再列「生成模型」或已删除的「生成新场景」。
+ * 创作来路用两张卡片，不在这里再列「生成模型」或已删除的「生成新场景」。
  * 物料 / 设施换任务时只留模型，不再把场景任务排回第一层。
  */
 export function generationTaskList(scope: GenerationScope): GenerationTask[] {
