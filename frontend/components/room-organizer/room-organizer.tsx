@@ -4923,8 +4923,11 @@ useEffect(() => {
             if (id) selectOnly(id, { keepPanel: true });
           }}>
           <ShortcutCoach mode={shortcutCoachMode} enabled={isActive} />
-          {/* 规划信息从 Bingo 迁回画布：Bingo 只留「我的完成 / 对方的修改」，四页签不再占用审校台。 */}
-          {(outdoor2DOpen || outdoor3dTakeover) ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 12, left: 12, width: 320, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 40 }} /> : null}
+          {/* 规划信息从 Bingo 迁回画布：Bingo 只留「我的完成 / 对方的修改」，四页签不再占用审校台。
+              搜地点默认 left/top 16、条高 40。本卡改到搜索条下沿再让 8px，不再占左上槽。
+              覆盖层整层 z-index 是 30，宿主必须高于它才看得见；搜地点槽是 33，压在本卡之上。 */}
+          {(outdoor2DOpen || outdoor3dTakeover) ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 64, left: 16, width: 320, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 32 }} /> : null}
+          {outdoor2DOpen ? <div id="outdoor-place-search-slot" style={{ position: 'absolute', inset: 0, zIndex: 33, pointerEvents: 'none' }} /> : null}
           {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
               供全屏 OutdoorPlan3D 的左键物件手势用（canvasApiRef → pointerFromPlan 管线）。
               2026-11-12 统一右轨（用户拍板）：「发布」2D/3D 都固定在右轨顶部（tool-share），

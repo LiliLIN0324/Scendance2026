@@ -2196,7 +2196,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setConflictDetailKey(key);
   }
   // H3-c 规划信息面板：页签、开关、筛选与提示消息（面板自带 status 行，只读也可用）。
-  const [infoOpen, setInfoOpen] = useState(true);
+  // 默认收起：左上槽位留给搜地点，四个页签仍在，点标题再展开。
+  const [infoOpen, setInfoOpen] = useState(false);
   // 2026-11-12 用户指令：三张卡拆开——测量 / 标注 / 属性各一张，各自展开/收起。
   // 2026-11-17 用户：测量与标注不能同时用，就不该同时打开；开一张自动收另一张，属性卡保持独立。
   const [inspectorPanels, setInspectorPanels] = useState<Record<'measure' | 'annotate' | 'selection', boolean>>({ measure: false, annotate: false, selection: false });
