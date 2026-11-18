@@ -3,7 +3,6 @@ import {
   DELIVERY_AUDIENCES,
   DELIVERY_EXPORT_ITEMS,
   DELIVERY_SEGMENTS,
-  EXPORT_MENU_ITEMS,
   GUIDE_STEPS,
   GUIDE_STEP_CONTENT,
   completeGuideStep,
@@ -16,7 +15,6 @@ import {
   parseGuideState,
   restartGuide,
   segmentVisible,
-  shareDialogContent,
 } from './site-plan-guide';
 
 describe('progressive first-open guide (H4-b)', () => {
@@ -87,28 +85,6 @@ describe('progressive first-open guide (H4-b)', () => {
     expect(GUIDE_STEP_CONTENT.welcome.body).toContain('滚轮');
     expect(JSON.stringify(GUIDE_STEP_CONTENT)).not.toContain('九钮');
     expect(JSON.stringify(GUIDE_STEP_CONTENT)).not.toContain('图层栈');
-  });
-});
-
-describe('export menu & share dialog form (H4-b)', () => {
-  it('lists the four export items in OnePlan-parity order', () => {
-    expect(EXPORT_MENU_ITEMS.map(item => item.id)).toEqual(['png', 'csv', 'geojson', 'share']);
-    for (const item of EXPORT_MENU_ITEMS) {
-      expect(item.label.length).toBeGreaterThan(1);
-      expect(item.hint.length).toBeGreaterThan(3);
-    }
-  });
-
-  it('builds the share dialog content from the snapshot summary', () => {
-    const dialog = shareDialogContent({
-      revision: 7,
-      updatedAt: '2026-11-10 13:30',
-      counts: { zones: 3, facilities: 5, routes: 2, workers: 4 },
-    });
-    expect(dialog.title).toBe('分享只读规划');
-    expect(dialog.lines[0]).toContain('r7');
-    expect(dialog.lines[1]).toBe('3 分区 · 5 设施 · 2 动线 · 4 人员');
-    expect(dialog.lines[2]).toContain('只读');
   });
 });
 
