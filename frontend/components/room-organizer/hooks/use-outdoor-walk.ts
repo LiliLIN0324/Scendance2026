@@ -14,9 +14,16 @@ import {
   rigOffsetForYaw,
   type WalkViewMode,
 } from '../lib/walk-view-modes';
+import { resolveWalkerStep, type WalkCollider } from '../lib/walk-collision';
 
 /** 鸟瞰档里 WASD 推人的速度（米/秒）；鸟瞰看的是全局，给得比步行快一点。 */
 const ORBIT_MOVE_SPEED_MPS = 3.2;
+
+/**
+ * 步行半径（米）：与人群 `PERSON_WALK_RADIUS` 一致，场上玩家和 NPC 对同一件物体
+ * 的“可贴到多近”才一致。室内 walkthrough 的 0.3 m 是另一套手感，不要互相借。
+ */
+const PERSON_WALK_RADIUS_M = 0.28;
 
 /** 每帧透出的玩家锚点姿态，供户外组件摆占位 avatar 与跟随相机。 */
 export interface OutdoorWalkFrame {
@@ -34,8 +41,9 @@ export interface OutdoorWalkFrame {
 }
 
 /**
- * 坐姿锁定状态：落座后锚点被钉在座位世界坐标、眼高切坐姿、忽略步行输入；
- * `active = false`（或置 null）即起身回到站立眼高与自由步行。
+ * 坐姿锁定状态：落座后锚点被钉在座位世界坐标、眼高切坐姿；`active = false`
+ * （或置 null）即起身回到站立眼高与自由步行。落座中按移动键会先起身（由
+ * `useOutdoorWalk` 把锚点摆到 `standX / standZ`），再继续走。
  */
 export interface SeatWalkState {
   active: boolean;
@@ -50,15 +58,24 @@ export interface SeatWalkState {
   seatHeight?: number;
   /** 落座朝向（弧度，可选；缺省保持当前 yaw）。 */
   yaw?: number;
+  /**
+   * 起身落点（世界系，髋部后移 + 让位后的接近点）。缺省退回座位点，
+   * 会站进椅子里，所以场景层落座时应尽量给上。
+   */
+  standX?: number;
+  standZ?: number;
 }
 
 /**
  * 户外规划 3D 的裸第一人称步行（一期）。
  *
- * 与室内 `use-walkthrough` 同一条指针锁 / WASD / RAF 骨架，但一期砍掉：
- * 设施与墙线段碰撞、座位 / findSeat / 坐姿、第三人称 avatar / 肩视角。
- * 边界只用 `plan.boundary` 多边形做点内钳制；不接室内 `FurnitureItem[]` /
- * `InteriorWall[]` 那套碰撞类型。
+ * 与室内 `use-walkthrough` 同一条指针锁 / WASD / RAF 骨架。边界仍用
+ * `plan.boundary` 多边形做点内钳制，另外接受场景层注入的**玩家世界系**设施
+ * 碰撞盒（`lib/plan-player-colliders.ts`），步进时先 `resolveWalkerStep` 推挤、
+ * 再钳回边界，所以能贴着帐篷 / 摊位侧面滑走而不会穿进去。
+ *
+ * 落座由 `seatRef` 钉住锚点；按移动键即起身（这一帧只起身、不前进），
+ * 抬眼回到站立眼高后从座位给的接近点继续走。再按 E 起身仍由场景层负责。
  *
  * 生命周期：
  *  - `enabled` 翻真：停用 OrbitControls，挂 PointerLockControls，相机落到固定眼高；
@@ -92,6 +109,15 @@ export interface UseOutdoorWalkOptions {
   onExit?: (() => void) | undefined;
   /** 坐姿锁定口：组件 E 键落座 / 起身时写入；缺省为站立自由步行。 */
   seatRef?: MutableRefObject<SeatWalkState | null>;
+  /**
+   * 玩家世界系设施碰撞盒（由 `lib/plan-player-colliders.ts` 生成）。
+   * 场景层在 plan 变化时重算一次并写 ref，这里每帧只读，不在 RAF 里建盒。
+   */
+  collidersRef?: MutableRefObject<readonly WalkCollider[] | null>;
+  /** 行人半径（米）；缺省 0.28，与人群 `PERSON_WALK_RADIUS` 同一手感。 */
+  walkRadius?: number;
+  /** 落座时按移动键自动起身：场景层据此清掉落座态与提示。 */
+  onStandUp?: () => void;
 }
 
 const MOVEMENT_KEYS = new Set([
@@ -106,6 +132,22 @@ const MOVEMENT_KEYS = new Set([
   'ShiftLeft',
   'ShiftRight',
 ]);
+
+/** 落座中能让玩家起身的键：位移动键（不含 Shift）。 */
+const SEAT_STAND_KEYS = [
+  'KeyW',
+  'KeyS',
+  'KeyA',
+  'KeyD',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+] as const;
+
+function seatMovePressed(pressed: Set<string>): boolean {
+  return SEAT_STAND_KEYS.some((code) => pressed.has(code));
+}
 
 // 与室内 PointerLockControls / 拖拽兜底一致的手感参数。
 const DRAG_LOOK_SPEED = 0.0025;
@@ -128,6 +170,9 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
     onWalkFrame,
     onExit,
     seatRef,
+    collidersRef,
+    walkRadius = PERSON_WALK_RADIUS_M,
+    onStandUp,
   } = options;
 
   const [phase, setPhase] = useState<OutdoorWalkPhase>('pending');
@@ -151,6 +196,12 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
   onExitRef.current = onExit;
   const seatRefLocal = useRef(seatRef);
   seatRefLocal.current = seatRef;
+  const collidersRefLocal = useRef(collidersRef);
+  collidersRefLocal.current = collidersRef;
+  const walkRadiusRef = useRef(walkRadius);
+  walkRadiusRef.current = walkRadius;
+  const onStandUpRef = useRef(onStandUp);
+  onStandUpRef.current = onStandUp;
 
   // 指针锁状态同步：锁落地 → locked；锁曾工作过又被 Esc 释放 → unlocked；
   // 浏览器拒绝锁 / 手势丢失 → drag（拖拽看视角兜底，不走进死胡同）。
@@ -356,6 +407,13 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
       const forward = new THREE.Vector3();
       const right = new THREE.Vector3();
       const stepTo = { x: 0, z: 0 };
+      const walkOut = { x: 0, z: 0 };
+      /** 玩家世界系设施推挤：沿面滑动，撞上不刹死；无盒时原样返回。 */
+      const resolveAgainstFacilities = (from: { x: number; z: number }, to: { x: number; z: number }) => {
+        const colliders = collidersRefLocal.current?.current ?? null;
+        if (!colliders || colliders.length === 0) return to;
+        return resolveWalkerStep(colliders, from, to, walkRadiusRef.current, walkOut);
+      };
 
       let lastTime = performance.now();
       const step = () => {
@@ -393,8 +451,9 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
             const distance = (aerialSpeed * delta) / len;
             stepTo.x = player.x + (-adz * forward.x + adx * right.x) * distance;
             stepTo.z = player.z + (-adz * forward.z + adx * right.z) * distance;
-            // 与步行同一套边界约束，鸟瞰里也不能把人推出场地。
-            const clamped = enteredBounds ? constrainWorldToBoundary(player, stepTo, boundaryRef.current) : stepTo;
+            // 与步行同一套边界约束，鸟瞰里也不能把人推出场地；设施推开后再钳。
+            const blocked = resolveAgainstFacilities(player, stepTo);
+            const clamped = enteredBounds ? constrainWorldToBoundary(player, blocked, boundaryRef.current) : blocked;
             player.x = clamped.x;
             player.z = clamped.z;
             if (!enteredBounds) enteredBounds = pointInBoundaryRing(worldToEnu(player.x, player.z), boundaryRef.current);
@@ -427,9 +486,31 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
 
         if (!controls?.isLocked && phaseRef.current !== 'drag' && phaseRef.current !== 'unlocked') return;
 
-        // 落座态：锚点钉在座位点、眼高切坐姿、忽略 WASD；起身由组件把 active 置 false。
+        // 落座态：锚点钉在座位点、眼高切坐姿。按移动键即起身：先把锚点摆到座位给的
+        // 接近点（不站进椅子里），这一帧只起身不前进，下一帧再按站立眼高走。
         const seatState = seatRefLocal.current?.current ?? null;
         if (seatState?.active) {
+          if (seatMovePressed(pressed)) {
+            player.x = typeof seatState.standX === 'number' ? seatState.standX : seatState.x;
+            player.z = typeof seatState.standZ === 'number' ? seatState.standZ : seatState.z;
+            player.y = eyeHeightRef.current;
+            onStandUpRef.current?.();
+            camera.position.set(
+              player.x + rig.x,
+              player.y + rig.heightDelta,
+              player.z + rig.z,
+            );
+            onWalkFrameRef.current?.({
+              x: player.x,
+              y: player.y,
+              z: player.z,
+              yaw,
+              moving: false,
+              thirdPerson: rig.thirdPerson,
+              delta,
+            });
+            return;
+          }
           player.x = seatState.x;
           player.z = seatState.z;
           player.y = seatState.eyeY;
@@ -474,8 +555,10 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
           const distance = (speed * delta) / len;
           stepTo.x = player.x + (-dz * forward.x + dx * right.x) * distance;
           stepTo.z = player.z + (-dz * forward.z + dx * right.z) * distance;
+          // 先推挤设施（沿面滑动），再钳回红线 / 设计范围：推挤不能把人顶出场。
+          const blocked = resolveAgainstFacilities(player, stepTo);
           // 接管场地外路段上的人物时，可以先沿线走回范围；从进入范围起再限制越界。
-          const clamped = enteredBounds ? constrainWorldToBoundary(player, stepTo, boundaryRef.current) : stepTo;
+          const clamped = enteredBounds ? constrainWorldToBoundary(player, blocked, boundaryRef.current) : blocked;
           player.x = clamped.x;
           player.z = clamped.z;
           if (!enteredBounds) enteredBounds = pointInBoundaryRing(worldToEnu(player.x, player.z), boundaryRef.current);
