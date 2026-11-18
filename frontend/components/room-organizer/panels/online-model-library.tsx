@@ -1,10 +1,10 @@
 ﻿'use client';
 
 import { ChevronDown, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
-import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
+import { loadGeneratedCatalogItem, loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlacementBatchGuard, type CatalogPlacementGuard, type CatalogPlacementResult } from '../lib/catalog-placement-guard';
 import { layoutStore } from '../hooks/use-layout-store';
@@ -25,6 +25,7 @@ import { attachPlanCatalogDrag, clearPlanCatalogDrag, planCatalogDragFor } from 
 import { usePendingMaterials } from '../lib/material-generate';
 import { importLatestPendingMaterials, importPendingMaterial, LUX3D_TASK_POLL_MS } from '../lib/lux3d-import';
 import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
+import { mergeCloudGeneratedCards, type GeneratedMaterialCard } from '../lib/generated-material-cards';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { buildStyleBundleItems, findStyleBundle, loadStyleRuns, saveStyleRun, type StyleBundle, type StyleRun } from '../lib/style-bundles';
 import { assetCloudLabel, useAssetCloudRecords } from '../lib/asset-cloud';
@@ -34,9 +35,13 @@ import { openGenerationSheet } from '../lib/generation-sheet';
 import { MaterialThumb, warmMaterialThumbs } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import type { CatalogItem, FurnitureItem, RoomLayout } from '../lib/types';
-import type { BackendSession } from '@/lib/backend-session';
+import type { CloudAsset } from '@/lib/assets-api';
+import type { BackendSession, BackendSnapshot } from '@/lib/backend-session';
 
-type GeneratedCard = { id: string; name: string; image?: string; shipped: boolean };
+type GeneratedCard = GeneratedMaterialCard;
+const OFFLINE_CLOUD = { user: null } as BackendSnapshot;
+const offlineCloudSnapshot = () => OFFLINE_CLOUD;
+const offlineCloudSubscribe = () => () => {};
 
 /**
  * 最近用过：纯本地 localStorage，不上后端、不进项目文件。
@@ -171,6 +176,14 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const [generated, setGenerated] = useState<GeneratedCard[]>([]);
   const pending = usePendingMaterials();
   const cloudRecords = useAssetCloudRecords();
+  const cloudSnapshot = useSyncExternalStore(
+    controller ? controller.subscribe : offlineCloudSubscribe,
+    controller ? controller.getSnapshot : offlineCloudSnapshot,
+    controller ? controller.getSnapshot : offlineCloudSnapshot,
+  );
+  const signedInUserId = cloudSnapshot.user?.id;
+  const [cloudAssets, setCloudAssets] = useState<CloudAsset[] | null>(null);
+  const [cloudNote, setCloudNote] = useState('');
   const [tagDraft, setTagDraft] = useState(false);
   const [tagName, setTagName] = useState('');
   const [tagError, setTagError] = useState('');
@@ -199,6 +212,30 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     setStyleRuns(loadStyleRuns(window.localStorage));
     setRecent(loadRecentSlugs(window.localStorage));
   }, []);
+  // 账户「我的生成」走 /assets。登录后并进同一格；读不到就留本机/随包，不另存一份。
+  useEffect(() => {
+    if (!controller || !signedInUserId) {
+      setCloudAssets(null);
+      setCloudNote('');
+      return undefined;
+    }
+    let cancelled = false;
+    void controller.businessRequest<CloudAsset[]>('/assets').then(rows => {
+      if (cancelled) return;
+      if (!Array.isArray(rows)) {
+        setCloudAssets(null);
+        setCloudNote('云端生成物暂时没有读到，先显示本机已有的。');
+        return;
+      }
+      setCloudAssets(rows);
+      setCloudNote('');
+    }).catch(() => {
+      if (cancelled) return;
+      setCloudAssets(null);
+      setCloudNote('云端生成物暂时没有读到，先显示本机已有的。');
+    });
+    return () => { cancelled = true; };
+  }, [controller, signedInUserId]);
   useEffect(() => {
     let cancelled = false;
     async function fetchJson<T>(path: string): Promise<T> {
@@ -315,8 +352,9 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     return filterOnlineModels(index.models, query, catalogBucket);
   }, [index, query, bucket, catalogBucket, meta.favorites, meta.assignments]);
   const shown = filtered.slice(0, visible);
+  const accountGenerated = useMemo(() => mergeCloudGeneratedCards(generated, cloudAssets), [generated, cloudAssets]);
   const generatedShown = useMemo(() => {
-    const rows = [...generated, ...pending];
+    const rows = [...accountGenerated, ...pending];
     return rows.filter(card => {
       if (!nameMatches(card.name, query)) return false;
       if (query.trim()) return true;
@@ -325,7 +363,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       if (bucket.startsWith('tag:')) return (meta.assignments[card.id] ?? []).includes(bucket.slice(4));
       return false;
     });
-  }, [generated, pending, query, bucket, meta.favorites, meta.assignments]);
+  }, [accountGenerated, pending, query, bucket, meta.favorites, meta.assignments]);
   const cards = useHorizontalRail<HTMLDivElement>();
   const reservedTags = MATERIAL_GROUP_LABELS as readonly string[];
   // 最近用过：把 slug 解析回 OnlineModel；库里已下架的条目直接丢。
@@ -340,8 +378,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     saveMaterialLibraryMeta(window.localStorage, next);
   };
   const favoriteCount = (index?.models.filter(model => meta.favorites.includes(model.slug)).length ?? 0)
-    + [...generated, ...pending].filter(card => meta.favorites.includes(card.id)).length;
-  const generatedCount = generated.length + pending.length;
+    + [...accountGenerated, ...pending].filter(card => meta.favorites.includes(card.id)).length;
+  const generatedCount = accountGenerated.length + pending.length;
 
   const waitForRenderedLayout = (target:RoomLayout):Promise<void> => {
     if(latest.current.renderedLayout===target)return Promise.resolve();
@@ -414,11 +452,18 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
     }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
   };
+  /** 本机/随包直接摆；只在云端的那一格先走现成的资产授权。 */
+  const loadGeneratedCard = (card: GeneratedCard) => {
+    if (!card.cloud) return loadStoredAholoCatalogItem(card.id);
+    const session = latest.current.controller;
+    if (!session) return Promise.reject(new Error('登录后才能取回云端生成的模型。'));
+    return loadGeneratedCatalogItem(card.id, assetId => session.authorizeAsset(assetId));
+  };
   /** 「我的生成」点选：载入后进「待放置」（同上）。 */
   const armGenerated = (card: GeneratedCard) => {
     if (latest.current.disabled || latest.current.busy || importing.current) return;
     latest.current.busy = card.id; setBusy(card.id); setPlaceError('');
-    void loadStoredAholoCatalogItem(card.id).then(item => {
+    void loadGeneratedCard(card).then(item => {
       if (!alive.current) return;
       latest.current.onArmCatalogItem?.(item, card.id);
     }).catch((error: unknown) => {
@@ -470,7 +515,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     catch {importing.current=false;latest.current.busy=null;setBusy(null);setPlaceError('当前活动无法核对，请重新选择后放置。');return;}
     const load = pending
       ? importPendingMaterial(card.id)
-      : loadStoredAholoCatalogItem(card.id).then(item => ({ state: 'imported' as const, item }));
+      : loadGeneratedCard(card).then(item => ({ state: 'imported' as const, item }));
     void load.then(result => {
       if (!alive.current) return;
       if (result.state === 'imported') {
@@ -693,7 +738,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             : <ul className="sc-lib-grid">{favoriteModels.map(model => tile(model, true))}{favoriteGenerated.map(card => generatedTile(card, true))}</ul>)
           : pane === 'mine'
             ? <>
-              {generatedShown.length === 0 && styleRuns.length === 0 && <p className="sc-lib-empty"><Sparkles size={14} aria-hidden="true"/><span>还没有生成过</span></p>}
+              {cloudNote ? <p className="sc-lib-empty" role="status">{cloudNote}</p> : null}
+              {generatedShown.length === 0 && styleRuns.length === 0 && !cloudNote && <p className="sc-lib-empty"><Sparkles size={14} aria-hidden="true"/><span>还没有生成过</span></p>}
               {generatedShown.length > 0 && <ul className="sc-lib-grid">{generatedShown.map(card => generatedTile(card, true))}</ul>}
               {/* Bingo 配过的整套记在这里：一行一套，点一下再放一次。 */}
               {styleRuns.length > 0 && <ul className="sc-lib-style-list" aria-label="配过的风格套">
@@ -710,6 +756,10 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               </ul>}
             </>
             : <>
+            {importSlot ? <section className="sc-my-materials" aria-label="我的物料">
+              <p className="sc-my-materials-label">我的物料</p>
+              {importSlot}
+            </section> : null}
             {/* 库不再挂「按风格配一套」——入口在 Bingo。这里只按类目浏览单件。 */}
             {/* 2026-11-18 用户：搜索要对齐户外目录——胶囊（放大镜 + 输入 + 右侧圆钮）；
                 圆钮切「一行四张」平铺浏览，再点回分类浏览。 */}

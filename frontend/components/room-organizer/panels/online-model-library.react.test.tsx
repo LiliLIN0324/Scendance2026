@@ -13,6 +13,7 @@ import { getGenerationSheetState, resetGenerationSheetForTests } from '../lib/ge
 import { STYLE_RUNS_KEY } from '../lib/style-bundles';
 import { listShippedAssets } from '../lib/shipped-assets';
 import { ensureGlbAsset } from '../three/glb-assets';
+import * as glbAssets from '../three/glb-assets';
 import * as aholoAssets from '../lib/aholo-assets';
 import * as aholoPlacement from '../lib/aholo-model-placement';
 import * as materialGenerate from '../lib/material-generate';
@@ -584,6 +585,59 @@ describe('物料卡三栏互斥', () => {
     fireEvent.click(tabButton('收藏'));
     expect(screen.getByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
+  });
+
+  it('导入 GLB 出现在物料库的「我的物料」，我的生成里没有这个入口', async () => {
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()} importSlot={<button type="button">导入 GLB</button>} />);
+    await screen.findByRole('button', { name: '物料库' });
+    const mine = screen.getByRole('region', { name: '我的物料' });
+    expect(mine.textContent).toContain('导入 GLB');
+    fireEvent.click(screen.getByRole('button', { name: '我的生成' }));
+    expect(screen.queryByRole('region', { name: '我的物料' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '导入 GLB' })).toBeNull();
+  });
+
+  it('登录后我的生成包含账户里的折叠椅，同一资产号不重复，点一下能摆进画布', async () => {
+    const chairId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const snapshot = { user: { id: 'member' } };
+    const authorizeAsset = vi.fn().mockResolvedValue({
+      id: chairId, url: 'https://cdn.example.test/chair.glb', name: '户外折叠椅 1',
+    });
+    const businessRequest = vi.fn().mockResolvedValue([
+      { id: chairId, name: '户外折叠椅 1', source: 'aholo', format: 'glb', byte_size: 10_380_902 },
+      { id: 'shipped-chinese-wood-armchair', name: '中式木扶手椅', source: 'aholo', format: 'glb', byte_size: 1 },
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: '公共石凳', source: 'polyhaven', format: 'glb', byte_size: 1 },
+      { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: '宴会厅点云', source: 'aholo', format: 'spz', byte_size: 1 },
+    ]);
+    const controller = {
+      config: { apiUrl: 'https://example.test' },
+      subscribe: () => () => {},
+      getSnapshot: () => snapshot,
+      businessRequest,
+      authorizeAsset,
+    } as unknown as BackendSession;
+    const dimensions = vi.spyOn(glbAssets, 'getGlbAssetState').mockReturnValue({
+      status: 'ready', dimensions: { width: 0.5, depth: 0.5, height: 0.88 },
+    });
+    try {
+      const onAdd = vi.fn(() => ({ status: 'placed' as const, id: 'placed-1' }));
+      render(<OnlineModelLibrary cardMode controller={controller} onAdd={onAdd} />);
+      fireEvent.click(await screen.findByRole('button', { name: '我的生成' }));
+      expect(await screen.findByRole('button', { name: '添加户外折叠椅 1' })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name: '添加中式木扶手椅' })).toHaveLength(1);
+      expect(screen.getByRole('button', { name: '添加白色圆桌' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: '添加公共石凳' })).toBeNull();
+      expect(screen.queryByRole('button', { name: '添加宴会厅点云' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: '添加户外折叠椅 1' }));
+      await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
+      expect(authorizeAsset).toHaveBeenCalledWith(chairId);
+      expect(onAdd.mock.calls[0]?.[0]).toMatchObject({
+        assetId: chairId, name: '户外折叠椅 1', source: 'generated', width: 0.5, depth: 0.5, height: 0.88,
+      });
+      expect(businessRequest).toHaveBeenCalledWith('/assets');
+    } finally {
+      dimensions.mockRestore();
+    }
   });
 
   it('公共物料全被收藏时，库显示空态而不是空白', async () => {

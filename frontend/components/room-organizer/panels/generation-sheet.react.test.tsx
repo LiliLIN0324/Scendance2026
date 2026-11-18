@@ -49,28 +49,43 @@ beforeEach(() => {
 afterEach(() => { cleanup(); controller.dispose(); vi.restoreAllMocks(); });
 
 describe('统一生成面板', () => {
-  it('场地入口：先问做什么，三个任务都在，选完进对应表单', () => {
-    render(<GenerationSheetHost controller={controller} />);
+  it('场地入口：文生 / 图生一张卡片点开，重建只占位，没有生成新场景', () => {
+    const onOpenCapture = vi.fn();
+    render(<GenerationSheetHost controller={controller} onOpenCapture={onOpenCapture} />);
     expect(screen.queryByTestId('generation-sheet')).toBeNull();
 
     act(() => openGenerationSheet({ scope: 'venue' }));
-    // 2026-11-18 用户：入口不再是一句加粗问句，直接给三个任务行（读法对齐「空间」）。
     expect(screen.queryByText('你想做什么？')).toBeNull();
+    expect(screen.queryByText('生成新场景')).toBeNull();
+    expect(screen.queryByRole('button', { name: '导入' })).toBeNull();
     expect(screen.getByRole('complementary', { name: '场地' })).toBeTruthy();
-    expect(screen.getByTestId('generation-task-scene-recon')).toBeTruthy();
-    expect(screen.getByTestId('generation-task-model')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '文生 3D' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '图生 3D' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '文字生成 3D 模型' })).toBeTruthy();
+    expect(screen.getByTestId('generation-task-scene-recon').textContent).toContain('暂未开放');
 
-    fireEvent.click(screen.getByTestId('generation-task-scene-new'));
-    expect(screen.getByLabelText('场景名称')).toBeTruthy();
-    expect(screen.getByText(/Beta/)).toBeTruthy();
-    expect(screen.getByTestId('generation-primary').textContent).toBe('生成');
+    fireEvent.click(screen.getByTestId('generation-task-scene-recon'));
+    expect(screen.getByTestId('generation-recon-closed').textContent).toBe('暂未开放');
+    expect(screen.queryByText('现场拍摄')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /消耗额度/ })).toBeNull();
+    expect(onOpenCapture).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
 
-    // 场景这条还是骨架：勾了额度才能点（按钮本身就不亮），点了只说明还没接提交。
-    fireEvent.click(screen.getByLabelText(/消耗额度/));
-    fireEvent.click(screen.getByTestId('generation-primary'));
-    expect(screen.getByRole('status').textContent).toContain('还没接提交');
+    fireEvent.click(screen.getByRole('button', { name: '图生 3D' }));
+    expect(screen.getByRole('heading', { name: '图片生成 3D 模型' })).toBeTruthy();
+    fireEvent.click(screen.getByTestId('generation-venue-start'));
+    expect(screen.getByRole('complementary', { name: '图生 3D' })).toBeTruthy();
+    expect(screen.getByText('选一张参考图，或拖进来')).toBeTruthy();
+    expect(screen.getByTestId('generation-target').textContent).toContain('我的生成');
+    expect(screen.queryByRole('button', { name: '导入' })).toBeNull();
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
 
-    // 收起与拍摄卡同一枚钮（sc-left-close），卡内也能关。
+    fireEvent.click(screen.getByRole('button', { name: '文生 3D' }));
+    expect(screen.getByRole('complementary', { name: '文生 3D' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: '描述' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /返回/ }));
+    expect(screen.getByRole('complementary', { name: '场地' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '关闭生成面板' }));
     expect(screen.queryByTestId('generation-sheet')).toBeNull();
   });
@@ -104,7 +119,7 @@ describe('统一生成面板', () => {
     act(() => openGenerationSheet({ task: 'model', scope: 'material' }));
 
     expect(screen.getByRole('complementary', { name: '生成物料' })).toBeTruthy();
-    expect(screen.getByTestId('generation-target').textContent).toContain('保存到模型库');
+    expect(screen.getByTestId('generation-target').textContent).toContain('保存到「我的生成」');
 
     fireEvent.click(screen.getByRole('button', { name: '导入' }));
     expect(screen.getByTestId('generation-primary').textContent).toBe('导入');
@@ -236,9 +251,106 @@ describe('统一生成面板', () => {
 
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('预算'));
     expect(consumeFacilityGenerateLink('later-task', 'x')).toBe(false);
+    // 明确拒绝后额度勾选被清掉，主按钮先灰着；不是未知锁，重新勾上仍能再提交。
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('generation-primary') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/上次提交结果未知/)).toBeNull();
+    fireEvent.click(screen.getByTestId('generation-again'));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
     expect((screen.getByTestId('generation-primary') as HTMLButtonElement).disabled).toBe(false);
     expect(JSON.parse(localStorage.getItem('scendance:generation-submissions')!)[0]).toMatchObject({
       state: 'failed', projectId: 'project', facilityId: 'f-1',
     });
+  });
+
+  it('只读项目把禁用原因写在面板里，不只挂在按钮 title 上', async () => {
+    vi.spyOn(controller, 'getSnapshot').mockReturnValue({
+      ...controller.getSnapshot(),
+      user: { id: 'member' },
+      project: { id: 'project' } as NonNullable<ReturnType<BackendSession['getSnapshot']>['project']>,
+      writeBlocked: true,
+    } as ReturnType<BackendSession['getSnapshot']>);
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'material' }));
+    fireEvent.change(screen.getByPlaceholderText('一句话描述物件，如：一把户外折叠椅'), { target: { value: '折叠椅' } });
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    const reason = await screen.findByText('当前项目是只读状态，拿到编辑权后才能生成。');
+    expect(reason).toBe(screen.getByTestId('generation-block-reason'));
+    const primary = screen.getByTestId('generation-primary') as HTMLButtonElement;
+    expect(primary.disabled).toBe(true);
+    expect(primary.title).toContain('只读');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('图生没有参考图时不提交；文生没有描述时也不提交', async () => {
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ scope: 'venue' }));
+    fireEvent.click(screen.getByRole('button', { name: '图生 3D' }));
+    fireEvent.click(screen.getByTestId('generation-venue-start'));
+    await waitFor(() => expect(screen.queryByText(/正在读取可用的生成模型/)).toBeNull());
+    fireEvent.change(screen.getByPlaceholderText('按照片做同款，哑光白桌面'), { target: { value: '按照片做同款' } });
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('generation-primary'));
+    expect(screen.getByRole('status').textContent).toContain('先选一张参考图');
+    expect(create).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '文生 3D' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '描述' }), { target: { value: '' } });
+    const credit = screen.getByLabelText(/消耗额度/) as HTMLInputElement;
+    if (!credit.checked) fireEvent.click(credit);
+    fireEvent.click(screen.getByTestId('generation-primary'));
+    expect(screen.getByRole('status').textContent).toContain('先写一句描述');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('配了 Aholo 时文字生成走 Lux3D，没配才回 HY-3D', async () => {
+    Object.assign(controller, {
+      getGenerationCapabilities: vi.fn().mockResolvedValue({
+        model: 'hy-3d-3.0', textToModel: true, imageToModel: true,
+        texture: false, textureRequiresImage: true, aholoTextToModel: true, aholoImageToModel: true,
+      }),
+    });
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'material' }));
+    fireEvent.change(screen.getByPlaceholderText('一句话描述物件，如：一把户外折叠椅'), { target: { value: '一把藤椅' } });
+    await waitFor(() => expect(screen.queryByText(/正在读取可用的生成模型/)).toBeNull());
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('generation-primary'));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]![2]).toEqual({ kind: 'text', provider: 'aholo' });
+  });
+
+  it('再次生成留在同一张表单，不自动勾额度，也不自动再提交', async () => {
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'material', prompt: '一把藤编躺椅' }));
+    await waitFor(() => expect(screen.queryByText(/正在读取可用的生成模型/)).toBeNull());
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('generation-primary'));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('generation-again')).toBeTruthy());
+    expect((screen.getByRole('textbox', { name: '描述' }) as HTMLTextAreaElement).value).toBe('一把藤编躺椅');
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('generation-primary') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('status').textContent).toContain('我的生成');
+
+    fireEvent.click(screen.getByTestId('generation-again'));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole('textbox', { name: '描述' }) as HTMLTextAreaElement).value).toBe('一把藤编躺椅');
+
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    fireEvent.click(screen.getByTestId('generation-primary'));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    expect(create.mock.calls[1]![0]).toBe('一把藤编躺椅');
+
+    act(() => closeGenerationSheet());
+    act(() => openGenerationSheet({ task: 'model', scope: 'material' }));
+    expect((screen.getByRole('textbox', { name: '描述' }) as HTMLTextAreaElement).value).toBe('');
+    fireEvent.click(screen.getByTestId('generation-again'));
+    expect(create).toHaveBeenCalledTimes(2);
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole('textbox', { name: '描述' }) as HTMLTextAreaElement).value).toBe('一把藤编躺椅');
   });
 });
