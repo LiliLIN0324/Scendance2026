@@ -64,6 +64,7 @@ docs/evidence/aholo/*
 !docs/evidence/79/
 # 户外漫游 W1/W2/W3 真机走查证据（2026-11-18，Chromium + swiftshader 本机跑）
 !docs/evidence/walk-2026-11-18/
+!docs/evidence/walk-2026-11-18-round2/
 !docs/evidence/aholo/sculpture-rig/
 !docs/evidence/aholo/sculpture-rig-local/
 !docs/evidence/aholo/sculpture-rig-tpose/
