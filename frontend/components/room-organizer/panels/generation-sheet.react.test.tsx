@@ -118,14 +118,52 @@ describe('统一生成面板', () => {
     expect((screen.getByPlaceholderText('一句话描述物件，如：一把户外折叠椅') as HTMLTextAreaElement).value).toBe('一把藤编躺椅');
   });
 
-  it('没登录云项目时主按钮禁用，原因只在 title 里', () => {
+  it('没登录云项目时主按钮禁用，原因写在面板里', () => {
     render(<GenerationSheetHost />);
     act(() => openGenerationSheet({ task: 'model', scope: 'material' }));
     fireEvent.change(screen.getByPlaceholderText('一句话描述物件，如：一把户外折叠椅'), { target: { value: '折叠椅' } });
+    expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
     fireEvent.click(screen.getByLabelText(/消耗额度/));
     const primary = screen.getByTestId('generation-primary') as HTMLButtonElement;
     expect(primary.disabled).toBe(true);
     expect(primary.title).toContain('登录云项目');
+    expect(screen.getByTestId('generation-block-reason').textContent).toContain('登录云项目后即可生成模型。');
+    expect(screen.getByText('登录云项目后即可生成模型。')).toBeTruthy();
+  });
+
+  it('能力表读失败时，禁用原因写在面板里', async () => {
+    Object.assign(controller, {
+      getGenerationCapabilities: vi.fn().mockRejectedValue(new Error('offline')),
+    });
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'material' }));
+    fireEvent.change(screen.getByPlaceholderText('一句话描述物件，如：一把户外折叠椅'), { target: { value: '折叠椅' } });
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    const reason = await screen.findByText('暂时连不上云端，没读到可用的生成模型。');
+    expect(reason).toBe(screen.getByTestId('generation-block-reason'));
+    const primary = screen.getByTestId('generation-primary') as HTMLButtonElement;
+    expect(primary.disabled).toBe(true);
+    expect(primary.title).toContain('暂时连不上云端');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('没有可用服务商时，勾了额度主按钮仍禁用，原因写在面板里', async () => {
+    Object.assign(controller, {
+      getGenerationCapabilities: vi.fn().mockResolvedValue({
+        model: '', textToModel: false, imageToModel: false,
+        texture: false, textureRequiresImage: true, aholoTextToModel: false, aholoImageToModel: false,
+      }),
+    });
+    render(<GenerationSheetHost controller={controller} />);
+    act(() => openGenerationSheet({ task: 'model', scope: 'material' }));
+    fireEvent.change(screen.getByPlaceholderText('一句话描述物件，如：一把户外折叠椅'), { target: { value: '折叠椅' } });
+    fireEvent.click(screen.getByLabelText(/消耗额度/));
+    const reason = await screen.findByText('生成能力尚未连接服务商。在设置里填入自定义服务商地址和密钥后即可开始。');
+    expect(reason).toBe(screen.getByTestId('generation-block-reason'));
+    const primary = screen.getByTestId('generation-primary') as HTMLButtonElement;
+    expect(primary.disabled).toBe(true);
+    expect(primary.title).toContain('尚未连接服务商');
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('成功提交：显示任务号，回执与链接都带 projectId，重开面板仍可核对', async () => {
