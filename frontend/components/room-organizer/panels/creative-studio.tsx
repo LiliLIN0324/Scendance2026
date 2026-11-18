@@ -9,7 +9,7 @@ import { buildAgentContext } from '@/lib/assistant-context';
 import { useBackendSession, SceneApiError, type BackendSession, type Studio, type SceneProposal, type AgentRun, type AgentRunInput, type ChatCapabilities, type ChatProviderId } from '@/lib/backend-session';
 import { humanRecipeId } from '@/lib/recipe-display';
 import { deriveSeededVariants, recipeHash as promptRecipeHash } from '@/lib/recipe-proposal';
-import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { assertGeometryActionSource, geometryProjectId, hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import { defaultAttachName } from '../hooks/use-silent-cloud-attach';
 import {localWriteCapabilityGuard,type LocalWriteCapability} from '@/lib/local-write-lease';
@@ -740,7 +740,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     await assertGeometryActionSource(currentLayout,controller);
     if(!alive.current||layoutRef.current!==currentLayout||agentScopeRef.current!==currentScope||briefRef.current!==currentBrief)throw new Error('核对资料期间项目或需求已变化，当前输入已保留，请重试。');
   }
-  const requestedCloudCheckins=typeof window!=='undefined'&&new URL(window.location.href).searchParams.has('project');
+  const requestedCloudCheckins=hasRequestedCloudProject();
   const checkinCapability=useRef<{value:LocalWriteCapability;revoked:boolean}|null>(null);
   if(!checkinCapability.current&&writeCapability)checkinCapability.current={value:writeCapability,revoked:false};
   else if(checkinCapability.current&&writeCapability!==checkinCapability.current.value)checkinCapability.current.revoked=true;

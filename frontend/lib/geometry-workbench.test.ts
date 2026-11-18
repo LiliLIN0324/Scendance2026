@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendSceneToLayout, layoutToBackendScene } from '../components/room-organizer/lib/backend-adapter';
-import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from './geometry-workbench';
+import { assertGeometryActionSource, geometryProjectId, hasRequestedCloudProject, isLocalActivityWorkspace } from './geometry-workbench';
 import { readSourceRecord } from './source-storage';
 import type { BackendSession, BackendSnapshot } from './backend-session';
 
@@ -16,6 +16,23 @@ function session(kind: 'local' | 'geometry' | 'cloud' | 'invalid' = 'local') {
 beforeEach(() => vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined));
 
 describe('local activity and remote scene boundaries', () => {
+  it('本机案例链接可新建本机活动，缺记录或真实云链接仍保留云项目守卫', () => {
+    const id = 'replica-scotiabank';
+    let record: string | null = JSON.stringify({ v: 1, projectId: id, name: '经典案例',
+      createdAt: '2026-11-19T00:00:00Z', updatedAt: '2026-11-19T00:00:00Z', plan: null });
+    const location = { href: `http://localhost/editor/?project=${id}&mode=outdoor` };
+    vi.stubGlobal('window', { location, localStorage: { getItem: () => record } });
+    try {
+      expect(hasRequestedCloudProject()).toBe(false);
+      expect(isLocalActivityWorkspace(session())).toBe(true);
+      expect(isLocalActivityWorkspace(session('cloud'))).toBe(false);
+      record = null;
+      expect(hasRequestedCloudProject()).toBe(true);
+      location.href = `http://localhost/editor/?project=${remoteId}`;
+      expect(hasRequestedCloudProject()).toBe(true);
+      expect(isLocalActivityWorkspace(session())).toBe(false);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('keeps valid scene bindings local, including before switching to another local activity, but respects cloud URLs', () => {
     expect(isLocalActivityWorkspace(session(), false)).toBe(true);
     expect(isLocalActivityWorkspace(session('geometry'), false)).toBe(true);
