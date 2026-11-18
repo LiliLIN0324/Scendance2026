@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：会话报告里多了两段——`[走查标记]`（只列标过的号，按编号升序，`none` 不算）与 `[云端声明]`（去重升序）；hook 新增 `releaseBlock()` 把快照/卡片/走查原件/云端声明四处收拢成一份。**本地 main = origin = `b9266188`（`div 0/0`）**；**本机与 github.com 的 TLS 握手本轮全面失败**（`git fetch` 3 次、`push` 3 次、`ls-remote` 均报 `schannel: failed to receive handshake`）——远端是否有新改动未知，切片已本地提交但**未推上远端**。下轮开工第一件事：重试 `git push origin agent/outdoor-m7-walkthrough-wire`（本地 HEAD 已含 92），仍失败就继续做无网依赖的切片。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–92 二十二个切片（本地）。9222 四十八轮不通。下一条：给 `[走查标记]` 再加一列“该条当前是否三类全绿”（由台账算，不从标记推）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-session-report.test.ts`。
+- 下一条操作：全绿判据收成一处——`isAllGreen(row)`（`summarizeLedger` 也改调它）；报告多一段 `[逐条判断]`（`#2 全绿 · #5 未全绿`，由台账算，不从标记推）。**本机与 github.com 的 TLS 握手仍全面失败**（fetch/push 均 `schannel: failed to receive handshake`）——远端未知，本轮切片已在本地提交、**未推上远端**。下轮开工第一件事仍是重试 `git push`；若通不了，继续做无网切片。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–93 二十三个切片（本地）。9222 四十九轮不通。下一条：把「待补清单」也写进报告（现在报告有标记、声明、逐条判断，却没有“还差什么”）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-session-report.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,23 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 03:00 · 自动轮次 93 · 逐条判断进报告（判据只留一处）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 03:00，自动轮次 93
+批次 / 切片 / 状态：合并不明（fetch/push 仍 TLS 失败）+ M7 / 逐条判断 / 已本地提交（未推送）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 45；本地 main = origin = `b9266188`（引用陈旧不可信）
+合并：无法验证；分支 `merge` 无需变更（`Already up to date`）
+交付：`isAllGreen(row)` 抽为全局唯一判据（`summarizeLedger()` 改调它）；`SessionReportRelease.verdicts`；报告多 `[逐条判断]（由台账算；不从标记推）`；hook `releaseBlock()` 带上 verdicts
+验证（固定数据）：report+hook+status-card+cloud-ledger 146/146（新增 4 条，含“只声明云端仍不是全绿”）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十九轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+推送：**失败**（`schannel: failed to receive handshake`），远端仍是 `286600da`
+```
+
+- **判据只能有一份**：全绿条件原先在 `summarizeLedger` 里手写、报告若要“逐条”很可能再拄一份；先抽 `isAllGreen()` 再让两处都调它，报告里那一列才不会和卡片打架。
+- **“没有台账”不是“都全绿”**：`verdicts: []` 只输出“（没有台账）”。
 
 ### 2026-11-19 02:00 · 自动轮次 92 · 报告带原始走查标记与云端声明
 

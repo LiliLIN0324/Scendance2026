@@ -33,6 +33,8 @@ export interface SessionReportRelease {
   walkthrough?: { asOf?: string; seen: Readonly<Record<number, string>> };
   /** 已声明“云端真跑过”的用例号（去重升序）。 */
   cloud?: readonly number[];
+  /** 逐条全绿判断：由台账算（调用方传 `isAllGreen(row)` 的结果），不从标记推。 */
+  verdicts?: readonly { id: number; allGreen: boolean }[];
 }
 
 export interface SessionReportInput {
@@ -82,6 +84,16 @@ export function buildSessionReport(input: SessionReportInput): SessionReport {
         '',
         '[云端声明]（人声明的“真跑过”，不是自动探测）',
         cloud.length > 0 ? cloud.map((id) => `#${id}`).join(' · ') : '（一条都没声明）',
+      );
+    }
+    if (input.release.verdicts) {
+      const verdicts = [...input.release.verdicts].sort((a, b) => a.id - b.id);
+      lines.push(
+        '',
+        '[逐条判断]（由台账算；不从标记推）',
+        verdicts.length > 0
+          ? verdicts.map((row) => `#${row.id} ${row.allGreen ? '全绿' : '未全绿'}`).join(' · ')
+          : '（没有台账）',
       );
     }
   }
