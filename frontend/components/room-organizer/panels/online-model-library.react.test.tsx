@@ -7,9 +7,11 @@ import { RoomEditorProvider, SelectionProvider, useRoomEditor, useSelection, typ
 import { layoutStore, useActiveFloor, useActiveFloorIndex, useLayout } from '../hooks/use-layout-store';
 import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
+import { clearGeneratedFacilityModelsForTests, findGeneratedFacilityModel } from '../lib/facility-generated-models';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { MATERIAL_LIBRARY_META_KEY } from '../lib/material-library-meta';
 import { getGenerationSheetState, resetGenerationSheetForTests } from '../lib/generation-sheet';
+import { PLAN_CATALOG_DRAG_MIME, parsePlanCatalogDrag } from '../lib/plan-catalog-drag';
 import { STYLE_RUNS_KEY } from '../lib/style-bundles';
 import { listShippedAssets } from '../lib/shipped-assets';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -637,6 +639,110 @@ describe('物料卡三栏互斥', () => {
       expect(businessRequest).toHaveBeenCalledWith('/assets');
     } finally {
       dimensions.mockRestore();
+    }
+  });
+
+  it('没有预览的云端折叠椅名字可读，拖进地图用合法 slug，点一下会登记模型', async () => {
+    const chairId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const slug = `generated:library-${chairId}`;
+    const snapshot = { user: { id: 'member' } };
+    const authorizeAsset = vi.fn().mockResolvedValue({
+      id: chairId, url: 'https://cdn.example.test/folding-chair.glb', name: '折叠椅',
+    });
+    const businessRequest = vi.fn().mockResolvedValue([
+      {
+        id: chairId, name: '折叠椅', source: 'hunyuan', format: 'glb', byte_size: 10_380_902,
+        metadata: { sourceSize: { width: 0.55, depth: 0.48, height: 0.9 } },
+      },
+    ]);
+    const controller = {
+      config: { apiUrl: 'https://example.test' },
+      subscribe: () => () => {},
+      getSnapshot: () => snapshot,
+      businessRequest,
+      authorizeAsset,
+    } as unknown as BackendSession;
+    const dimensions = vi.spyOn(glbAssets, 'getGlbAssetState').mockReturnValue({
+      status: 'ready', dimensions: { width: 0.55, depth: 0.48, height: 0.9 },
+    });
+    try {
+      const onAdd = vi.fn();
+      const onArmCatalogItem = vi.fn();
+      render(<OnlineModelLibrary cardMode controller={controller} onAdd={onAdd} onArmCatalogItem={onArmCatalogItem} />);
+      fireEvent.click(await screen.findByRole('button', { name: '我的生成' }));
+      const tile = await screen.findByRole('button', { name: '添加折叠椅' });
+      expect(tile.closest('li')?.classList.contains('is-no-preview')).toBe(true);
+      expect(tile.querySelector('.sc-lib-tile-name')?.textContent).toBe('折叠椅');
+      expect(tile.querySelector('.sc-material-thumb-empty')?.textContent).toBe('');
+      expect(tile.textContent).not.toContain('生');
+      expect(tile.hasAttribute('disabled')).toBe(false);
+      expect(tile.draggable).toBe(true);
+
+      const dataTransfer = { setData: vi.fn(), effectAllowed: '' };
+      fireEvent.dragStart(tile, { dataTransfer });
+      expect(dataTransfer.setData).toHaveBeenCalledWith(CATALOG_DRAG_MIME, `generated:${chairId}`);
+      const planPayload = dataTransfer.setData.mock.calls.find(call => call[0] === PLAN_CATALOG_DRAG_MIME)?.[1] as string;
+      expect(parsePlanCatalogDrag(planPayload)).toMatchObject({
+        slug, name: '折叠椅', width: 0.55, depth: 0.48,
+      });
+      expect(onAdd).not.toHaveBeenCalled();
+      expect(onArmCatalogItem).not.toHaveBeenCalled();
+
+      fireEvent.click(tile);
+      await waitFor(() => expect(onArmCatalogItem).toHaveBeenCalledOnce());
+      expect(onArmCatalogItem.mock.calls[0]?.[1]).toBe(slug);
+      expect(onArmCatalogItem.mock.calls[0]?.[0]).toMatchObject({
+        assetId: chairId, name: '折叠椅', source: 'generated', width: 0.55, depth: 0.48, height: 0.9,
+      });
+      expect(findGeneratedFacilityModel(slug)).toMatchObject({
+        slug, name: '折叠椅', glbUrl: 'https://cdn.example.test/folding-chair.glb', sessionOnly: true,
+      });
+      expect(onAdd).not.toHaveBeenCalled();
+    } finally {
+      dimensions.mockRestore();
+      clearGeneratedFacilityModelsForTests();
+    }
+  });
+
+  it('预览图失败时折叠椅名字仍在，卡片还能点、还能拖', async () => {
+    const chairId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const snapshot = { user: { id: 'member' } };
+    const authorizeAsset = vi.fn().mockResolvedValue({
+      id: chairId, url: 'https://cdn.example.test/folding-chair.glb', name: '折叠椅',
+    });
+    const controller = {
+      config: { apiUrl: 'https://example.test' },
+      subscribe: () => () => {},
+      getSnapshot: () => snapshot,
+      businessRequest: vi.fn().mockResolvedValue([
+        {
+          id: chairId, name: '折叠椅', source: 'hunyuan', format: 'glb', byte_size: 1024,
+          metadata: { previewUrl: 'https://cdn.example.test/missing-chair.png' },
+        },
+      ]),
+      authorizeAsset,
+    } as unknown as BackendSession;
+    const dimensions = vi.spyOn(glbAssets, 'getGlbAssetState').mockReturnValue({
+      status: 'ready', dimensions: { width: 0.5, depth: 0.5, height: 0.88 },
+    });
+    try {
+      const onArmCatalogItem = vi.fn();
+      render(<OnlineModelLibrary cardMode controller={controller} onAdd={vi.fn()} onArmCatalogItem={onArmCatalogItem} />);
+      fireEvent.click(await screen.findByRole('button', { name: '我的生成' }));
+      const tile = await screen.findByRole('button', { name: '添加折叠椅' });
+      fireEvent.error(tile.querySelector('img')!);
+      expect(tile.textContent).toContain('折叠椅');
+      expect(tile.textContent).toContain('预览未载入');
+      expect(tile.hasAttribute('disabled')).toBe(false);
+      const dataTransfer = { setData: vi.fn(), effectAllowed: '' };
+      fireEvent.dragStart(tile, { dataTransfer });
+      expect(dataTransfer.setData).toHaveBeenCalledWith(CATALOG_DRAG_MIME, `generated:${chairId}`);
+      fireEvent.click(tile);
+      await waitFor(() => expect(onArmCatalogItem).toHaveBeenCalledOnce());
+      expect(onArmCatalogItem.mock.calls[0]?.[1]).toBe(`generated:library-${chairId}`);
+    } finally {
+      dimensions.mockRestore();
+      clearGeneratedFacilityModelsForTests();
     }
   });
 
