@@ -242,3 +242,45 @@ describe("报告带逐条判断（轮次 93）", () => {
     expect(report.text).not.toContain("[逐条判断]");
   });
 });
+
+describe("报告带待补清单（轮次 94）", () => {
+  const base = () => ({
+    turns: [],
+    metrics: {
+      totals: {
+        turns: 0,
+        modelCalls: 0,
+        mapCalls: 0,
+        confirmations: 0,
+        appliedCount: 0,
+        firstUsefulFeedbackAvgMs: null,
+        previewAvgMs: null,
+        applyAvgMs: null,
+      },
+      rows: [],
+      text: "turns=0 model=0 map=0 confirm=0 applied=0",
+    },
+  });
+
+  it("有待补就一条一行照抄，标题写明缺口未补不可发布", () => {
+    const report = buildSessionReport({
+      ...base(),
+      now: 1,
+      release: { snapshot: {}, gaps: ["#2 两个同名地点 —— 缺：云端", "#5 缺：固定数据、浏览器"] },
+    });
+    expect(report.text).toContain("[待补清单]（缺口未补前不可发布）");
+    expect(report.text).toContain("#2 两个同名地点 —— 缺：云端");
+    expect(report.text).toContain("#5 缺：固定数据、浏览器");
+    expect(report.text).not.toContain("可发布（");
+  });
+
+  it("空数组=台账里没缺口，明确写成“没有缺口”而不是空白", () => {
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: {}, gaps: [] } });
+    expect(report.text).toContain("（台账里没有缺口）");
+  });
+
+  it("不给 gaps 就不出现这一段（“没算”与“没缺口”分开）", () => {
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: {} } });
+    expect(report.text).not.toContain("[待补清单]");
+  });
+});

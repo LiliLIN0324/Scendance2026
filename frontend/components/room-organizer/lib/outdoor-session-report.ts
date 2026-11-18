@@ -35,6 +35,8 @@ export interface SessionReportRelease {
   cloud?: readonly number[];
   /** 逐条全绿判断：由台账算（调用方传 `isAllGreen(row)` 的结果），不从标记推。 */
   verdicts?: readonly { id: number; allGreen: boolean }[];
+  /** 待补清单的行（`missingEvidence()` 的 `line`）；空数组 = 台账无缺口。 */
+  gaps?: readonly string[];
 }
 
 export interface SessionReportInput {
@@ -95,6 +97,12 @@ export function buildSessionReport(input: SessionReportInput): SessionReport {
           ? verdicts.map((row) => `#${row.id} ${row.allGreen ? '全绿' : '未全绿'}`).join(' · ')
           : '（没有台账）',
       );
+    }
+    if (input.release.gaps) {
+      // 空数组是“台账里没缺口”，不是“没算”——没算的调用方应根本不传这个字段。
+      lines.push('', '[待补清单]（缺口未补前不可发布）');
+      if (input.release.gaps.length > 0) lines.push(...input.release.gaps);
+      else lines.push('（台账里没有缺口）');
     }
   }
   return {
