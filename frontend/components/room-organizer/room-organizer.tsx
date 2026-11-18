@@ -1021,6 +1021,11 @@ useEffect(() => {
     check();
     return { url,isCurrent };
   }, [activitySession.isCurrent,sessionToken,floorSession.isCurrent,floorToken]);
+  // G3：右上角分享弹窗的「允许钉评」链接与 Bingo 用同一个生成器，不再各造一套。
+  const [reviewLink, setReviewLink] = useState('');
+  const requestReviewLink = useCallback(() => {
+    void issueReviewLink().then(result => setReviewLink(result.url)).catch(() => { /* 失败原因由既有气泡/状态行说明 */ });
+  }, [issueReviewLink]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
   const publishVersion = useCallback(async () => {
     const snapshot = controller.getSnapshot();
@@ -4923,6 +4928,8 @@ useEffect(() => {
               legacyPlanProjectId={legacyOutdoorPlanProjectId}
               anchor={isOutdoorProject ? null : (layout.sceneAnchor ?? layout.mapLngLat ?? null)}
               activityName={isOutdoorProject ? null : layout.name}
+              reviewLink={reviewLink}
+              onRequestReviewLink={requestReviewLink}
               onSaveStateChange={handleOutdoorSaveState}
               onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}
               onModeChange={handleOutdoorCanvasMode}
