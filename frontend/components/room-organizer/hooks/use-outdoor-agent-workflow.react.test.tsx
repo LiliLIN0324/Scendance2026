@@ -2334,3 +2334,10 @@ it("报告来源跟着走查日期走，空日期写未填", () => {
   });
   expect(flow.sessionReport().text).toContain("走查日期：2026-11-19 第四轮");
 });
+
+it("报告段落自检：六段全在也只说“齐”，不说合格", () => {
+  const line = flow.reportSections();
+  expect(line).toContain("6/6 段齐");
+  expect(line).not.toContain("可发布");
+  expect(line).not.toContain("合格");
+});

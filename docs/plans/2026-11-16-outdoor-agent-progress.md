@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：报告多了 `[报告来源]`（固定数据覆盖哪几条、走查日期、生成时刻）与固定收尾“（本报告只报事实，不构成发布结论；可发布仍需三类全绿）”。**本机与 github.com 的 TLS 握手连续第四轮失败**（fetch 仍 `schannel: failed to receive handshake`）——远端未知，本切片已本地提交、**未推上远端**。下轮开工第一件事仍是重试 `git push`。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–95 二十五个切片（本地）。9222 五十一轮不通。下一条：给面板加一条“对着报告自检”的按钮（点一下把 `sessionReport().text` 里的四段标题列成清单，缺段就标红文本）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-session-report.test.ts`。
+- 下一条操作：新增 `outdoor-report-sections.ts`（`REPORT_SECTIONS` 六段、`checkReportSections()`、`formatSectionCheck()` “齐了几段/缺哪几段”），hook 加 `reportSections()`——只数标题，缺段只说缺段，不写合格/可发布。**本机与 github.com 的 TLS 握手连续第五轮失败**（fetch 仍 `schannel: failed to receive handshake`）——远端未知，本切片已本地提交、**未推上远端**。下轮开工第一件事仍是重试 `git push`。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–96 二十六个切片（本地）。9222 五十二轮不通。下一条：把段落自检搬进界面（走查区内一行文本，数据来自 `flow.reportSections()`）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-report-sections.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 06:00 · 自动轮次 96 · 报告段落自检（只数标题，不判内容）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 06:00，自动轮次 96
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 段落自检 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（**他人分支 `agent/classic-case-basemap-audit-20261118`**），脏文件 52；本地引用陈旧不可信
+合并：无法验证；分支无需变更
+交付：`outdoor-report-sections.ts`（`REPORT_SECTIONS` 六段；`checkReportSections()`；`formatSectionCheck()` 输出“6/6 段齐（内容对不对仍要人看）”或“缺 N 段：[…]。缺段不代表出错…”）+ hook `reportSections()`
+验证（固定数据）：段检 4/4 + hook 套件 91/91；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十二轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住；段检还没上界面
+```
+
+- **“齐”不等于“对”**：段检只在六段标题都在时说“齐”，后半句固定写“内容对不对仍要人看”；缺段也绝不写成“报告有问题”。
+- **建工作目录的坑又踩了一次**：`mklink` 的路径拼接写错，建出一个指向 `...node_modules.Path` 的坏 junction（`ssr=False`）；先 `rmdir` 掉链接再重建才正常。链接目标里永远不该出现 `.Path` 字面量。
 
 ### 2026-11-19 05:00 · 自动轮次 95 · 报告来源与固定收尾
 
