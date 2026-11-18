@@ -44,7 +44,7 @@ describe('SpacePanel', () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
-  it('lists scanned venues with size and time, and applies one on click', () => {
+  it('lists scanned venues as cards with size and time, and applies one on click', () => {
     const preview = environment();
     const onPickScan = vi.fn();
     rememberAholoAsset({
@@ -52,13 +52,14 @@ describe('SpacePanel', () => {
       savedAt: Date.UTC(2026, 10, 4), meters: { width: 12.4, depth: 8.6, height: 4.2 },
     });
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={preview} onPickScan={onPickScan}/>);
-    expect(screen.queryByText('还没有已扫描的真实场地')).toBeNull();
+    expect(screen.queryByText('还没有实景扫描')).toBeNull();
     const item = screen.getByLabelText('应用真实场地 午后咖啡馆');
     expect(screen.getByText(/12\.4 × 8\.6 m/)).toBeTruthy();
-    // 没有截到止帧就不假扮缩略图：收成可点的索引行，名称与尺寸照常可见。
-    expect(item.classList.contains('sc-scan-row')).toBe(true);
+    // 2026-11-19 用户：「实景扫描的卡片也做成多个卡片的形式」——没止帧也走卡片，
+    // 用淡点云图标占位，不再收成索引行。
+    expect(item.classList.contains('sc-scan-card')).toBe(true);
     expect(item.querySelector('img')).toBeNull();
-    expect(document.querySelector('.sc-scan-card-shot')).toBeNull();
+    expect(item.querySelector('.sc-scan-card-shot .sc-scan-card-blank')).toBeTruthy();
     expect(item.textContent).toContain('12.4 × 8.6 m');
     fireEvent.click(item);
     expect(onPickScan).toHaveBeenCalledWith(expect.objectContaining({
@@ -68,6 +69,36 @@ describe('SpacePanel', () => {
     }));
     // 演示场景仍留在环境切换里，不混进真实场地列表。
     expect(screen.queryByLabelText(/应用真实场地 .*宴会厅 A/)).toBeNull();
+  });
+
+  // 2026-11-19 用户：「实景扫描的卡片也做成多个卡片的形式」——多场并排成 2 列卡网，
+  // 有止帧的用止帧、没止帧的用占位，两种卡同一尺寸，不因缺图被挤成别的形状。
+  it('packs every scanned venue into one two-column card grid', () => {
+    const cover = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==';
+    const framed = '00000000-0000-4000-8000-000000000011';
+    const plainA = '00000000-0000-4000-8000-000000000012';
+    const plainB = '00000000-0000-4000-8000-000000000013';
+    rememberAholoAsset({ assetId: framed, kind: 'spz', name: '有封面的一场', bytes: 20_000_000, savedAt: 3 });
+    rememberAholoAsset({ assetId: plainA, kind: 'spz', name: '没打开过的一场', bytes: 20_000_000, savedAt: 2 });
+    rememberAholoAsset({ assetId: plainB, kind: 'ply', name: '导出的 PLY', bytes: 20_000_000, savedAt: 1 });
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={environment(undefined, null, { [framed]: cover })} onPickScan={vi.fn()}/>);
+    const grid = document.querySelector('ul.sc-space-samples.sc-scan-cards') as HTMLUListElement;
+    expect(grid).toBeTruthy();
+    expect(grid.getAttribute('aria-label')).toBe('我的实景扫描');
+    // 面板打开会先登记扫描库里的云端副本，这里只核「同一张卡网里装下所有场」，
+    // 不把索引条数写死在用例里。
+    const cards = grid.querySelectorAll('.sc-scan-card');
+    expect(cards.length).toBeGreaterThanOrEqual(3);
+    expect(grid.querySelectorAll('.sc-scan-card').length).toBe(grid.querySelectorAll('li').length);
+    // 止帧那张是图，没打开过的两张是淡点云占位——都是同一颗卡，不再有单列行。
+    expect(screen.getByLabelText('应用真实场地 有封面的一场').querySelector('img')?.getAttribute('src')).toBe(cover);
+    for (const name of ['没打开过的一场', '导出的 PLY']) {
+      const card = screen.getByLabelText(`应用真实场地 ${name}`);
+      expect(card.classList.contains('sc-scan-card')).toBe(true);
+      expect(card.querySelector('.sc-scan-card-blank')).toBeTruthy();
+    }
+    expect(document.querySelector('.sc-scan-row')).toBeNull();
+    expect(document.querySelector('.sc-scan-rows')).toBeNull();
   });
 
   it('shows the captured cover as a large frame when one exists', () => {

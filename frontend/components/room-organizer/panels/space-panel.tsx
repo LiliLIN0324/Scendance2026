@@ -165,8 +165,6 @@ export function SpacePanel({
   const venueDay = (venue: ScannedVenue) => venue.savedAt
     ? new Date(venue.savedAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
     : '';
-  const framedScans = scans.filter(venue => !!venueThumb(venue));
-  const plainScans = scans.filter(venue => !venueThumb(venue));
   const hasBoundary = (layout.mapGroundPolygon?.length ?? 0) >= 3;
   const samples = onAddSampleScene ? listShippedAssets('spz') : [];
   const presetCount = Object.keys(SCENE_PRESETS).length;
@@ -201,13 +199,15 @@ export function SpacePanel({
     }
   };
 
-  // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」——有止帧的走示例场景/经典案例
-  // 那套 16:10 卡形；没打开过的没有画面，就收成索引行，不再用一块空白描边框假扮缩略图。
-  // 尺寸与日期并成一行元信息，状态交给描边和左上角标签。
-  const scanRows = <>
+  // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」；2026-11-19 用户又说
+  // 「实景扫描的卡片也做成多个卡片的形式」。不再按「有没有止帧」分成大图与索引行两种读法：
+  // 一律排 2 列 16:10 卡片，没打开过的用一枚安静的点云图标占位；尺寸与日期并成一行元信息，
+  // 状态交给描边和左上角那颗标签。
+  const scanCards = <>
     {scans.length === 0 && <p className="sc-note">还没有实景扫描。上传从 Aholo Reality 下载的 .spz / .ply，或用手机拍一段场地。</p>}
-    {framedScans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="有画面的真实场地">
-      {framedScans.map(venue => {
+    {scans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="我的实景扫描">
+      {scans.map(venue => {
+        const thumb = venueThumb(venue);
         const active = venue.assetId === currentScanId;
         const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
         const failed = !!active && preview?.status === 'error';
@@ -219,7 +219,9 @@ export function SpacePanel({
             aria-label={failed ? `重试加载真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
             aria-pressed={active} onClick={() => pickScan(venue)}>
             <span className="sc-scan-card-shot">
-              <img src={venueThumb(venue)} alt="" loading="lazy"/>
+              {thumb
+                ? <img src={thumb} alt="" loading="lazy"/>
+                : <Scan size={22} className="sc-scan-card-blank" aria-hidden="true"/>}
               {preview?.status === 'loading' && <span className="sc-scan-card-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
               {(active || inProject) && <span className="sc-scan-card-tag">{active ? '当前' : '已加入'}</span>}
             </span>
@@ -229,27 +231,6 @@ export function SpacePanel({
         </li>;
       })}
     </ul>}
-    {plainScans.length > 0 && <div className="sc-scan-plain">
-      {framedScans.length > 0 && <p className="sc-scan-plain-label">其它实景扫描 · {plainScans.length}</p>}
-      <ul className="sc-scan-rows" aria-label="其它实景扫描">
-        {plainScans.map(venue => {
-          const active = venue.assetId === currentScanId;
-          const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
-          const failed = !!active && preview?.status === 'error';
-          const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
-          const state = preview?.status === 'loading' ? '加载中…' : failed ? '加载失败' : active ? '当前' : venueSize(venue) || venueDay(venue);
-          return <li key={venue.assetId}>
-            <button type="button" className={`sc-scan-row${active ? ' is-current' : ''}`} title="打开这一场的 3D 实景"
-              aria-label={failed ? `重试加载真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
-              aria-pressed={active} onClick={() => pickScan(venue)}>
-              <strong title={venue.name}>{venue.name}</strong>
-              {inProject && !active && <span className="sc-scan-row-tag">已加入</span>}
-              <small>{state}</small>
-            </button>
-          </li>;
-        })}
-      </ul>
-    </div>}
   </>;
 
   // 2026-11-16：示例场景不再单开一栏，收进实景扫描这一段末尾——
@@ -339,7 +320,7 @@ export function SpacePanel({
                 </SceneGroup>}
                 <SceneGroup label="我的实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length} groupRef={scansRef} action={scanUploadButton}>
                   {scanUploadNote}
-                  {scanRows}
+                  {scanCards}
                 </SceneGroup>
               </>
             : <>
@@ -349,7 +330,7 @@ export function SpacePanel({
                     <span className="sc-scan-upload-hint">从 Aholo Reality 下载的 .spz / .ply</span>
                   </div>
                   {scanUploadNote}
-                  {scans.length > 0 && scanRows}
+                  {scans.length > 0 && scanCards}
                 </div>
                 {moreOptions}
               </>}
