@@ -265,6 +265,8 @@ export function OutdoorWorkflowCard({
   const [libraryQuery, setLibraryQuery] = useState("");
   // 2026-11-18 用户指令：分区用途反问拆到任务卡下方的独立小卡；输入框内容只留在本卡。
   const [zonesAsk, setZonesAsk] = useState("");
+  // 2026-11-18 用户指令：「缺物料？导入或生成」卡可叉掉；叉掉是面板内存态，换阶段自动回来。
+  const [materialsAuxDismissed, setMaterialsAuxDismissed] = useState(false);
   // 2026-11-16：历史行可点开——展开当时的说明与按钮，看回这张卡当时到底问了什么。
   const [openRecordAt, setOpenRecordAt] = useState<number | null>(null);
   // 低风险提示条倒计时收场（对标谷地工坊「8 秒后自动按下」）：非错误提示、空闲且无待确认
@@ -319,6 +321,9 @@ export function OutdoorWorkflowCard({
   // 2026-11-18 用户指令：分区还没给用途时，反问不再内嵌在任务卡里，而是任务卡下方的独立小卡。
   // 手画的分区在下方分区卡里补齐室内外后（全部不是 unknown），同样视为「用途已给」：
   // 反问小卡收掉，任务卡给出「生成分区预览」主按钮，不再让人必须说一句话才能推进。
+  useEffect(() => {
+    setMaterialsAuxDismissed(false);
+  }, [flow.state.stage]);
   const planZonesReady =
     flow.drawnZones.length > 0 &&
     flow.drawnZones.every((zone) => !!zone.environment && zone.environment !== "unknown");
@@ -693,51 +698,9 @@ export function OutdoorWorkflowCard({
                   : "我的库"}
               </button>
             ))}
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.75, fontSize: 12 }}>
-              缺物料？原位导入GLB（≤10MB，仅本会话，不上传不收费）
-              {/* 2026-11-14 用户反馈：原生文件选择器裸露在流程卡里不合适——视觉隐藏（点击 label 仍弹文件框）。 */}
-              <input
-                type="file"
-                aria-label="当前活动导入GLB物料"
-                accept=".glb,model/gltf-binary"
-                disabled={flow.busy}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) void flow.importLibraryGlb(file);
-                }}
-                style={{
-                  position: "absolute",
-                  width: 1,
-                  height: 1,
-                  opacity: 0,
-                  overflow: "hidden",
-                  clip: "rect(0 0 0 0)",
-                  whiteSpace: "nowrap",
-                }}
-              />
-            </label>
+            {/* 2026-11-18 用户指令：GLB 导入与 Lux3D 生成入口挪到任务卡下方的独立卡（可叉掉），见 ap-materials-aux。 */}
           </div>
         )}
-      {/* 2026-11-18：生成链已经有了（额度确认/回执锁都在 generation-sheet），缺的是对话主路径的入口。
-          物件阶段给一颗明确动作；和上面「一句话布置 / 目录落位预览」分开写，不混成同一颗按钮。 */}
-      {!flow.proposal && flow.state.stage === "objects" && (
-        <div className="ap-card-actions ap-lux3d-entry" data-testid="outdoor-lux3d-entry">
-          <button
-            type="button"
-            className="btn-outline"
-            disabled={flow.busy}
-            data-testid="outdoor-lux3d-generate"
-            onClick={() => flow.startLux3dGeneration()}
-          >
-            <Sparkles size={13} aria-hidden="true" />
-            用 Aholo Lux3D 生成道具
-          </button>
-          <p className="ap-task-caption">
-            由 Aholo Lux3D 生成三维模型：区别于上面的「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。
-          </p>
-        </div>
-      )}
       {flow.models && (
         <div aria-label="当前设施真实模型候选">
           {flow.models.choices.map((m, index) => (
@@ -1012,6 +975,71 @@ export function OutdoorWorkflowCard({
               </div>
             </div>
           ))}
+        </section>
+      ) : null}
+      {/* 2026-11-18 用户指令：缺物料的两条路（导入 GLB / Lux3D 生成）从任务卡挪出，做成
+          可叉掉的独立卡；叉掉只在面板内存里生效，换阶段自动恢复。 */}
+      {!flow.proposal &&
+      !flow.busy &&
+      !materialsAuxDismissed &&
+      flow.state.stage === "objects" ? (
+        <section
+          className="ap-card ap-materials-aux"
+          role="group"
+          aria-label="缺物料：导入或生成"
+        >
+          <header className="ap-card-head">
+            <strong>缺物料？导入或生成</strong>
+            <button
+              type="button"
+              className="ap-task-dismiss"
+              aria-label="收起这张卡"
+              onClick={() => setMaterialsAuxDismissed(true)}
+            >
+              × 收起
+            </button>
+          </header>
+          <label className="ap-glb-import" data-testid="outdoor-glb-import">
+            原位导入 GLB（≤10MB，仅本会话，不上传不收费）
+            {/* 2026-11-14 用户反馈：原生文件选择器裸露在流程卡里不合适——视觉隐藏（点击 label 仍弹文件框）。 */}
+            <input
+              type="file"
+              aria-label="当前活动导入GLB物料"
+              accept=".glb,model/gltf-binary"
+              disabled={flow.busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void flow.importLibraryGlb(file);
+              }}
+              style={{
+                position: "absolute",
+                width: 1,
+                height: 1,
+                opacity: 0,
+                overflow: "hidden",
+                clip: "rect(0 0 0 0)",
+                whiteSpace: "nowrap",
+              }}
+            />
+          </label>
+          {/* 2026-11-18：生成链已经有了（额度确认/回执锁都在 generation-sheet），缺的是对话主路径的入口。
+              物件阶段给一颗明确动作；和上面「一句话布置 / 目录落位预览」分开写，不混成同一颗按钮。 */}
+          <div className="ap-card-actions ap-lux3d-entry" data-testid="outdoor-lux3d-entry">
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={flow.busy}
+              data-testid="outdoor-lux3d-generate"
+              onClick={() => flow.startLux3dGeneration()}
+            >
+              <Sparkles size={13} aria-hidden="true" />
+              ✨ 用 Aholo Lux3D 生成道具
+            </button>
+            <p className="ap-task-caption">
+              由 Aholo Lux3D 生成三维模型：区别于「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。
+            </p>
+          </div>
         </section>
       ) : null}
       {flow.loginRequired && !flow.loginSatisfied && (

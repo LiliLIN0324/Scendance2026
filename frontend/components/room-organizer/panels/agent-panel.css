@@ -1115,6 +1115,9 @@ button.ap-ghost {
 .ap-zone-card-env button { border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font: inherit; font-size: var(--fs-cap); height: 30px; padding: 0 10px; cursor: pointer; }
 .ap-zone-card-env button.is-on { background: var(--wk-green); border-color: var(--wk-green); color: #fff; }
 .ap-zone-card-env button:disabled { opacity: .55; cursor: not-allowed; }
+/* 2026-11-18 用户指令：缺物料的导入/生成两条路挪成可叉掉的独立卡。 */
+.ap-materials-aux .ap-task-dismiss { font-size: var(--fs-p2); }
+.ap-glb-import { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; opacity: .8; font-size: var(--fs-cap); color: var(--wk-ink-soft); position: relative; }
 .ap-outdoor-reply-wrap { gap: 8px; }
 .ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
 .ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }
