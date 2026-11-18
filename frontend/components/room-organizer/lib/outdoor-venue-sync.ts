@@ -2,7 +2,7 @@ import type { PlanPoint, SitePlanData } from '../../../../supabase/functions/_sh
 import type { RoomLayout } from './types';
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
-import { checkBoundaryRing } from './site-plan-editing';
+import { checkBoundaryRing, planRingSelfIntersects } from './site-plan-editing';
 
 /**
  * 户外 2D 规划 ↔ 3D 场地壳体联动（P2-g 数据打通）。
@@ -319,7 +319,7 @@ export function seededPlanFromLayout(layout: {
 
 /**
  * V-1c：真实 GCJ 足迹 → ENU 米边界（相对锚点），顶点抽稀到 64（契约上界）。
- * 抽稀用等步长——place-shape 已经做过 Douglas-Peucker，这里只做降采样。
+ * 按最小三角形逐点简化，每次验证不自交，保留凹口与狭窄连接处。
  * 任何顶点跑出 ±4900m（±5000 契约留余量）就整体不采信，调用方退回壳体轮廓。
  */
 export function trueFootprintBoundary(
@@ -341,11 +341,23 @@ export function trueFootprintBoundary(
   }
   if (points.length > 1 && Math.hypot(points[0]!.x - points[points.length - 1]!.x, points[0]!.y - points[points.length - 1]!.y) < 0.5) points.pop();
   if (points.length < 3) return null;
-  const stride = Math.max(1, Math.ceil(points.length / maxPoints));
-  if (stride === 1) return points;
-  const out: PlanPoint[] = [];
-  for (let i = 0; i < points.length; i += stride) out.push(points[i]!);
-  return out.length >= 3 ? out : null;
+  if (planRingSelfIntersects(points)) return null;
+  while (points.length > Math.max(3, maxPoints)) {
+    const candidates = points.map((point, index) => {
+      const prev = points[(index + points.length - 1) % points.length]!;
+      const next = points[(index + 1) % points.length]!;
+      return { index, area: Math.abs((point.x - prev.x) * (next.y - prev.y) - (next.x - prev.x) * (point.y - prev.y)) };
+    }).sort((a, b) => a.area - b.area);
+    let removed = false;
+    for (const { index } of candidates) {
+      const reduced = points.filter((_, i) => i !== index);
+      if (planRingSelfIntersects(reduced)) continue;
+      if (reduced.some((p, i) => Math.hypot(p.x - reduced[(i + 1) % reduced.length]!.x, p.y - reduced[(i + 1) % reduced.length]!.y) < 0.5)) continue;
+      points.splice(index, 1); removed = true; break;
+    }
+    if (!removed) return null;
+  }
+  return points;
 }
 
 /**

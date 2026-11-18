@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import botanicalGarden from './__testfixtures__/hangzhou-botanical-garden.json';
 import { MAX_ROOM_DIMENSION } from './constants';
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
 import {
@@ -395,6 +396,15 @@ describe('播种出的方案自带设计范围（红线外扩 20 m）', () => {
 });
 
 describe('planBoundaryFromSearchArea · 搜索选区收成红线', () => {
+  it('杭州植物园真实122点轮廓缩到64点内仍可确认，不把凹口连成自交线', () => {
+    // OSM relation 13794808，2026-11-19 本机轮廓服务返回的 GCJ-02 几何。
+    // 来源：https://www.openstreetmap.org/relation/13794808
+    const shape = { ...botanicalGarden, polygon: botanicalGarden.polygon as [number, number][] };
+    const boundary = planBoundaryFromSearchArea(shape, { lng: 120.085, lat: 30.215 });
+    expect(boundary).not.toBeNull();
+    expect(boundary!.length).toBeLessThanOrEqual(64);
+    expect(boundary!.length).toBeGreaterThan(3);
+  });
   const anchor = { lng: 120.14, lat: 30.25 };
   const d = 0.0008;
   const polygon: [number, number][] = [
