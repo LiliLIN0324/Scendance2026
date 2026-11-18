@@ -105,6 +105,8 @@ import {
   drawRouteProposalLayer,
   drawDesignScopeMask,
   drawBoundaryEditHints,
+  drawRingScaleHandles,
+  ringScaleHandlePoints,
   drawScopeLockButton,
   drawFlowSimulationLayer,
   drawSearchArea,
@@ -173,6 +175,14 @@ import {
 } from '../lib/site-plan-editing';
 import { planBoundaryFromSearchArea } from '../lib/outdoor-venue-sync';
 import { findZoneBoundsOverflow, zoneOverflowReason, type ZoneBoundsOverflow } from '../lib/plan-zone-bounds';
+// 2026-11-18 用户「分区和外面的用地红线也要能缩放」：整体缩放几何（锚点=对角，Shift=等比）。
+import {
+  RING_SCALE_HANDLE_HIT_PX,
+  ringBounds,
+  ringBoundsSize,
+  scaleRingToCorner,
+  type RingBounds,
+} from '../lib/plan-ring-scale';
 import {
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
   FACILITY_HANDLE_PX,
@@ -189,6 +199,7 @@ import {
   facilityPlacementIssues,
   facilitiesFootprintsIntersect,
   facilitySideResize,
+  facilitySymmetricWidthResize,
   facilityUniformCornerResize,
   findFacilityTemplate,
   planFacilityIssues,
@@ -250,9 +261,13 @@ import {
 import { clampRingMoveToBoundary, nearestMergeTarget, nearestPolylineEdge, nearestRingEdge, nearestRouteSnapPoint, planGridStepM, snapPointToGrid, stickPointToBoundary } from '../lib/site-plan-snap';
 // 2026-11-17 #118 补漏：属性卡「选中数」口径（车也算一件；漏算 → 车辆属性卡弹不出来）。
 import { planSelectionCount } from '../lib/site-plan-selection';
-// 2026-11-16 用户指令：门放到室内区域边线 10px 内要贴边、朝向垂直墙面。
-import { snapDoorToIndoorEdge } from '../lib/plan-door-snap';
-import { isDoorTemplateId } from '../lib/plan-indoor-walls';
+// 2026-11-16 用户指令：门放到室内区域边线 10px 内要贴边。
+import { doorSnapWalls, snapDoorToIndoorEdge } from '../lib/plan-door-snap';
+import type { DoorSnap } from '../lib/plan-door-snap';
+// 2026-11-18 用户口径：墙是线（两点成段 + 吸室内分区边），3D 挤出、门吸墙已有。
+import { resolveDrawnWall, snapWallPointToIndoorEdge } from '../lib/plan-wall-draw';
+import type { SnappedWallPoint } from '../lib/plan-wall-draw';
+import { isDoorSlug, isDoorTemplateId, isWindowSlug, isWindowTemplateId, INDOOR_WALL_HEIGHT_M, INDOOR_WINDOW_HEIGHT_M, INDOOR_WINDOW_SILL_M } from '../lib/plan-indoor-walls';
 import { autoNodeName, renamedNodeName } from '../lib/site-plan-node-names';
 import { WALK_ROLES, walkRoleCrowdType } from '../lib/walk-roles';
 import { crowdTypeForRole } from '../lib/plan-crowd-placement';
@@ -353,6 +368,7 @@ import {
   vehicleIconItems,
   type PackBucket,
 } from '../lib/oneplan-catalog';
+import { INDOOR_ROW_LABEL, indoorItems, withoutIndoor } from '../lib/indoor-catalog';
 import {
   PLANNING_BOUNDARY_LINE_COLOR,
   PLANNING_CONFLICT_COLORS,
@@ -369,6 +385,7 @@ import {
   PLANNING_SURFACE,
   PLANNING_TEXT,
   PLANNING_TYPOGRAPHY,
+  PLANNING_WALL_COLOR,
   PLANNING_ZONE_COLORS,
   PLANNING_ZONE_OPACITY,
   withAlphaHex,
@@ -403,6 +420,7 @@ import {
   type PlanPoint,
   type PlanRoute,
   type PlanVehicle,
+  type PlanWall,
   type PlanWorker,
   type PlanZone,
   type SitePlanData,
@@ -792,6 +810,8 @@ const VERTEX_EDGE_HIT_PX = 14;
 const DRAFT_CLOSE_HIT_PX = 10;
 /** 区分「单击加顶点」与「拖拽平移」的位移阈值（CSS px）。 */
 const CLICK_MAX_MOVE_PX = 4;
+// 2026-11-18 画墙的吸附高亮：和门贴边高亮同色，一眼看出「这一段被吸住了」。
+const WALL_SNAP_HIGHLIGHT_COLOR = '#1f8a5b';
 
 /**
  * 2026-11-16 用户指令：门的六种图标（单开/双开/推拉/旋转/卷帘/折叠）。
@@ -1619,6 +1639,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const onVenueBoundaryCanceledRef = useRef(onVenueBoundaryCanceled);
   onVenueBoundaryCanceledRef.current = onVenueBoundaryCanceled;
   const draftRef = useRef<PlanPoint[]>([]);
+  /** 2026-11-18 画墙草稿：a = 已落的起点，b = 跟着指针走的终点（吸完分区边/已有墙后的坐标）。 */
+  const wallDraftRef = useRef<{
+    a: PlanPoint;
+    b: PlanPoint;
+    snapA: SnappedWallPoint | null;
+    snapB: SnappedWallPoint | null;
+  } | null>(null);
   const previewRingRef = useRef<PlanPoint[] | null>(null);
   const dragVertexRef = useRef<number | null>(null);
   // 2026-11-16：刚在边界线上插过点——松手时不要把“新插的顶”当成“点一下删掉”。
@@ -1627,13 +1654,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const issuesRef = useRef<PlanZoneIssue[]>([]);
   // H2-c 设施放置：待放模板、幽灵位置、选中设施。
   // P2-h：物件库里的物件不是 8 个内置模板之一，所以额外记一份模板对象（尺寸/名称来自库条目）。
+  // 父级回调的最新引用：键盘监听/接口句柄只装一次，里面的 commitPlan 不能读第一帧的闭包，
+  // 否则一次 Delete 可能只改了画布自己的 ref、没把新 plan 交给父级（重绘后门又回来了）。
+  const onPlanChangeRef = useRef(onPlanChange);
+  useEffect(() => {
+    onPlanChangeRef.current = onPlanChange;
+  }, [onPlanChange]);
   const facilityTemplateRef = useRef<string | null>(null);
   const facilityTemplateObjRef = useRef<PlanFacilityTemplate | null>(null);
   const ghostPointRef = useRef<PlanPoint | null>(null);
   /** Enter 落位走窗口监听，监听只装一次，真正落位始终读最新的 placeFacilityAt。 */
   const placeArmedFacilityRef = useRef<(point: PlanPoint) => void>(() => {});
-  /** 2026-11-16 门的贴边吸附：悬停算出的落点 / 法线，高亮与落位共用这一份。 */
-  const doorSnapRef = useRef<{ point: PlanPoint; rotationDeg: number; zoneId: string; edge: readonly [PlanPoint, PlanPoint] } | null>(null);
+  /** 2026-11-16 门的贴边吸附：悬停算出的落点 / 门角度（沿墙）/ 朝外法线，高亮与落位共用这一份。 */
+  const doorSnapRef = useRef<DoorSnap | null>(null);
   /** 2026-11-16 落位前旋转：R / Shift+R 每次 ±15°，2D 与 3D draft 共用同一个角度。 */
   const facilityRotationRef = useRef(0);
   /** 拖放刚落的 250ms 内不因 dragleave 清幽灵，否则连放第二件会丢预览。 */
@@ -1853,6 +1886,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [boundaryLockHover, setBoundaryLockHover] = useState(false);
   const boundaryLockHoverRef = useRef(false);
   const zoneDragPreviewRef = useRef<{ zoneId: string; polygon: PlanPoint[] } | null>(null);
+  /**
+   * 2026-11-18 用户：「这个里面的分区和外面的用地红线，我希望也有缩放功能，而不只是点的编辑挪动」。
+   * 角柄缩放会话（分区 / 用地红线各一条）：base 是按下那一刻的已提交形状，bounds 是它的外接矩形，
+   * 拖拽中只更新预览（zoneDragPreviewRef / previewRingRef），松手才 commitPlan（一条 undo）。
+   */
+  const zoneScaleRef = useRef<{
+    zoneId: string;
+    corner: number;
+    bounds: RingBounds;
+    base: PlanPoint[];
+    startPx: { x: number; y: number };
+    started: boolean;
+  } | null>(null);
+  const boundaryScaleRef = useRef<{
+    corner: number;
+    bounds: RingBounds;
+    base: PlanPoint[];
+    startPx: { x: number; y: number };
+    started: boolean;
+  } | null>(null);
+  /** 悬停在缩放角柄上（实心高亮 + 斜向缩放光标）；kind 区分是分区还是红线。 */
+  const ringScaleHoverRef = useRef<{ kind: 'zone' | 'boundary'; id: string | null; corner: number } | null>(null);
+  const [ringScaleHover, setRingScaleHover] = useState<{ kind: 'zone' | 'boundary'; id: string | null; corner: number } | null>(null);
   // 2026-11-14 用户指令「生成的任何东西都要可以编辑」：流线此前只能整条删除，补顶点拖拽改形。
   const dragRouteVertexRef = useRef<{ routeId: string; index: number; base: PlanPoint[]; merged: PlanRoute | null } | null>(null);
   const routeDragPreviewRef = useRef<{ routeId: string; points: PlanPoint[] } | null>(null);
@@ -2001,6 +2057,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [facilityGeoDraft, setFacilityGeoDraft] = useState<{ lat: string; lng: string } | null>(null);
   // 尺寸同理：宽/深也用草稿，否则敲「3.」时会被 1 位小数的回写吃掉小数点。
   const [facilitySizeDraft, setFacilitySizeDraft] = useState<{ width: string; depth: string } | null>(null);
+  // 2026-11-18 窗台/窗高：与宽深同一套「聚焦编辑、失焦或回车提交」。
+  const [facilityWindowDraft, setFacilityWindowDraft] = useState<{ sill: string; height: string } | null>(null);
   // V-5a 模型候选切换：选中设施的 3D 模型候选（loadFacilityModelCandidates：内置映射同步
   // + 在线物料库异步兜底，上限 5）。属性卡「模型」网格渲染；点候选写 facility.modelOverride。
   const [facilityModelCandidates, setFacilityModelCandidates] = useState<{
@@ -2311,6 +2369,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     else if (next === 'route') ensureSubgroups(['areas:路线']);
     else if (next === 'boundary') ensureSubgroups(['areas:区域'], ['areas:分区类型']);
     draftRef.current = [];
+    wallDraftRef.current = null;
     previewRingRef.current = null;
     scopeDragRef.current = null;
     scopeResizeRef.current = null;
@@ -2521,7 +2580,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setRedoCount(0);
     }
     planRef.current = next;
-    onPlanChange?.(next);
+    onPlanChangeRef.current?.(next);
   }
 
   /** 撤销（Ctrl+Z / 面板按钮）：弹出栈顶恢复；选中实体可能随撤销消失，全清选中。 */
@@ -3184,6 +3243,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           edgeHintPx: boundaryEdgeHintRef.current,
         });
       }
+      // 2026-11-18 用户「外面的用地红线也要有缩放」：外接矩形四角外侧的方柄 = 整体缩放。
+      // 锁着不画（锁上还挂可拖的柄，看着就像没锁）；浏览 / 编辑红线两态都画。
+      if (editingBoundary && boundary.length >= 3) {
+        drawRingScaleHandles(layer, boundary, {
+          color: PLANNING_LAYER_COLORS.boundary,
+          activeCorner: boundaryScaleRef.current?.corner ?? null,
+          hoverCorner: ringScaleHoverRef.current?.kind === 'boundary' ? ringScaleHoverRef.current.corner : null,
+        });
+      }
       // 2026-11-16 用户：点击第一下，白底方框的绿色描边就转琥珀——预告“再点一下会删”，
       // 而不是删完才闪。琥珀框会跟着钉子留在那个顶点上，直到交互改变或超时。
       if (review?.kind === 'scope' && !editingBoundary) drawMapEditHighlight(layer, boundary, 'area');
@@ -3215,6 +3283,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         drawnZones.map(zone => ({ ...zone, warning: warningZoneIds.has(zone.id) })),
         { tone: labelTone },
       );
+      // 2026-11-18 手画的墙：双线（墙线 ± 半个厚度）+ 草稿虚线。
+      drawDrawnWalls({ ctx: planCtx, viewport }, current.walls ?? [], wallDraftRef.current);
       // 2026-11-16 用户指令：门贴边时把那条边高亮出来，并在落点画一道法线小刻度，
       // 让人一眼看出「会被吸到这条边、门朝这边」；松手后高亮自动消失。
       const doorSnap = doorSnapRef.current;
@@ -3223,7 +3293,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const pa = planPointToPixel(edgeA, viewport);
         const pb = planPointToPixel(edgeB, viewport);
         const at = planPointToPixel(doorSnap.point, viewport);
-        const rad = (doorSnap.rotationDeg * Math.PI) / 180;
+        // 刻度画的是「门朝哪面」（朝外法线）；门的本体角度是沿墙的 rotationDeg，两者不是一回事。
+        const rad = (doorSnap.normalDeg * Math.PI) / 180;
         planCtx.save();
         planCtx.strokeStyle = '#1f8a5b';
         planCtx.lineCap = 'round';
@@ -3296,6 +3367,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           planCtx.lineTo(hp.x, hp.y + 3);
           planCtx.stroke();
         }
+        // 2026-11-18 用户「分区也想能缩放，而不只是点编辑挪动」：外接矩形四角外侧的方块柄 = 整体缩放。
+        // 画在顶点之后，盖在引线上但不挤顶点的圆点（柄心离角点 13 px）。
+        drawRingScaleHandles({ ctx: planCtx, viewport }, selectedZone.polygon, {
+          color: zoneColor,
+          activeCorner: zoneScaleRef.current?.zoneId === selectedZone.id ? zoneScaleRef.current.corner : null,
+          hoverCorner: ringScaleHoverRef.current?.kind === 'zone' && ringScaleHoverRef.current.id === selectedZone.id
+            ? ringScaleHoverRef.current.corner
+            : null,
+        });
         planCtx.restore();
       }
       // 2026-11-15 用户指令「分区里没有图标，不要任性加图标」：删掉画布上的分区语义贴纸。
@@ -3894,8 +3974,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     () => (libraryQuery.trim() ? groupCatalogResults(searchLibraryEntries([...libraryAll, ...packEntries], libraryQuery)) : []),
     [libraryAll, packEntries, libraryQuery],
   );
-  const libraryInfra = useMemo(() => infraBuckets(libraryAll), [libraryAll]);
-  const libraryEntranceIcons = useMemo(() => entranceIconItems(libraryAll), [libraryAll]);
+  // 2026-11-18 用户三轮收敛：只有楼梯/电梯/墙体/窗户/门系列留在「室内」；其余构筑物全部回
+  // 「基础设施 · 建筑物」原位；门从「入口和通道图标」挪过来，不重复出两份。
+  const libraryIndoor = useMemo(() => indoorItems(libraryAll), [libraryAll]);
+  const libraryInfra = useMemo(
+    () => infraBuckets(libraryAll)
+      .map(bucket => ({ ...bucket, items: withoutIndoor(bucket.items) }))
+      .filter(bucket => bucket.items.length > 0),
+    [libraryAll],
+  );
+  const libraryEntranceIcons = useMemo(() => withoutIndoor(entranceIconItems(libraryAll)), [libraryAll]);
   // 2026-11-16：车组＝库里点名的那几种车，一段平铺；服务类 / 服务以外靠条目配色区分（后勤金 / 车行紫）。
   const libraryVehicleIcons = useMemo(() => vehicleIconItems(libraryAll), [libraryAll]);
   const libraryExtra = useMemo(() => extraBucket(libraryAll), [libraryAll]);
@@ -4063,6 +4151,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 2026-11-17 用户实测：手画活动范围时按 Esc 只切回浏览，外层仍停在「核对具体活动范围」，
       // 地图上又留着这次草稿，看起来像「已框出、待写进方案」。Esc 是取消这次画线：
       // 清掉草稿、退出模式，并通知工作流撤掉未确认候选，绝不把它留在待写入状态。
+      if (modeRef.current === 'wall') {
+        event.preventDefault();
+        event.stopPropagation();
+        const hadDraft = wallDraftRef.current !== null;
+        setMode('view');
+        setEditMessage(hadDraft ? '已取消这段墙，未写入方案。' : '已退出画墙。');
+        return;
+      }
       if (modeRef.current === 'boundary') {
         event.preventDefault();
         event.stopPropagation();
@@ -4081,6 +4177,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (modeRef.current === 'select') {
         clearEntitySelection();
         setMode('view');
+        return;
+      }
+      // 2026-11-18：角柄缩放拖到一半按 Esc = 放弃这一次缩放（预览清掉，已提交的形状一点没动）。
+      if (zoneScaleRef.current || boundaryScaleRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        zoneScaleRef.current = null;
+        boundaryScaleRef.current = null;
+        zoneDragPreviewRef.current = null;
+        setPreviewRing(null);
+        setDragging(false);
+        setEditMessage('已取消这次缩放，原形状未改动。');
+        draw();
         return;
       }
       if (modeRef.current === 'view') {
@@ -4910,15 +5019,140 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     draw();
   }
 
+  /** 手画墙：每段画双线（墙线 ± 半个厚度），草稿画虚线 + 长度读数。 */
+  function drawDrawnWalls(
+    paint: { ctx: CanvasRenderingContext2D; viewport: PlanViewport },
+    walls: readonly PlanWall[],
+    draft: {
+      a: PlanPoint;
+      b: PlanPoint;
+      snapA: SnappedWallPoint | null;
+      snapB: SnappedWallPoint | null;
+    } | null,
+  ) {
+    const { ctx, viewport } = paint;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const wall of walls) {
+      const [a, b] = wall.points;
+      if (!a || !b) continue;
+      const lengthM = Math.hypot(b.x - a.x, b.y - a.y);
+      if (!(lengthM > 1e-6)) continue;
+      const half = Math.max(0.02, (wall.thicknessM ?? 0.16) / 2);
+      const nx = -(b.y - a.y) / lengthM;
+      const ny = (b.x - a.x) / lengthM;
+      const o1 = planPointToPixel({ x: a.x + nx * half, y: a.y + ny * half }, viewport);
+      const o2 = planPointToPixel({ x: b.x + nx * half, y: b.y + ny * half }, viewport);
+      const o3 = planPointToPixel({ x: a.x - nx * half, y: a.y - ny * half }, viewport);
+      const o4 = planPointToPixel({ x: b.x - nx * half, y: b.y - ny * half }, viewport);
+      ctx.strokeStyle = wall.color ?? PLANNING_WALL_COLOR;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(o1.x, o1.y);
+      ctx.lineTo(o2.x, o2.y);
+      ctx.moveTo(o3.x, o3.y);
+      ctx.lineTo(o4.x, o4.y);
+      ctx.stroke();
+    }
+    if (draft) {
+      const pa = planPointToPixel(draft.a, viewport);
+      const pb = planPointToPixel(draft.b, viewport);
+      // 2026-11-18 用户「吸附不够明显」：把命中的那条边线/墙线整条描粗，端点画大实心圆。
+      for (const snap of [draft.snapA, draft.snapB]) {
+        if (!snap) continue;
+        const [edgeA, edgeB] = snap.edge;
+        const qa = planPointToPixel(edgeA, viewport);
+        const qb = planPointToPixel(edgeB, viewport);
+        const qp = planPointToPixel(snap.point, viewport);
+        ctx.strokeStyle = WALL_SNAP_HIGHLIGHT_COLOR;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(qa.x, qa.y);
+        ctx.lineTo(qb.x, qb.y);
+        ctx.stroke();
+        ctx.fillStyle = WALL_SNAP_HIGHLIGHT_COLOR;
+        ctx.beginPath();
+        ctx.arc(qp.x, qp.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const snapped = draft.snapA !== null || draft.snapB !== null;
+      ctx.strokeStyle = snapped ? WALL_SNAP_HIGHLIGHT_COLOR : PLANNING_WALL_COLOR;
+      ctx.lineWidth = snapped ? 2.5 : 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = PLANNING_WALL_COLOR;
+      for (const point of [pa, pb]) {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const lengthM = Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y);
+      if (lengthM >= 0.05) {
+        ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${lengthM.toFixed(2)} m`, (pa.x + pb.x) / 2, (pa.y + pb.y) / 2 - 8);
+      }
+    }
+    ctx.restore();
+  }
+
   function handleDrawClick(px: { x: number; y: number }, pt: PlanPoint) {
     // 2026-11-15 设计范围 = 拖矩形，不吃单击收点（否则又会变回多段线）。
     if (modeRef.current === 'scope') return;
+    // 2026-11-18 画墙：第一下落起点（吸室内分区边/已有墙），第二下成段并写入 plan.walls。
+    if (modeRef.current === 'wall') {
+      const viewport = currentViewport();
+      const zones = planRef.current.zones;
+      const walls = doorSnapWalls(planRef.current.walls);
+      const snapped = snapWallPointToIndoorEdge({ pt, zones, walls, viewport });
+      const point = snapped?.point ?? pt;
+      const draft = wallDraftRef.current;
+      if (!draft) {
+        wallDraftRef.current = { a: point, b: point, snapA: snapped, snapB: null };
+        setEditMessage(
+          snapped?.source === 'wall'
+            ? '起点已吸到已有墙上（绿线）。再点一下终点；Esc 取消。'
+            : snapped
+              ? '起点已吸到室内分区边线上（绿线）。再点一下终点；Esc 取消。'
+              : '起点已落。再点一下终点；Esc 取消。',
+        );
+        draw();
+        return;
+      }
+      const result = resolveDrawnWall({
+        a: draft.a,
+        b: point,
+        id: crypto.randomUUID(),
+        zones,
+        walls,
+        viewport,
+      });
+      if (!result.ok) {
+        setEditMessage('这段墙太短（不足 0.2 m），换个更远的终点。');
+        return;
+      }
+      const current = planRef.current;
+      commitPlan({ ...current, walls: [...(current.walls ?? []), result.wall] });
+      wallDraftRef.current = null;
+      setEditMessage(`已加一段墙：${result.lengthM.toFixed(2)} m。接着点起点画下一段；Esc 结束。`);
+      draw();
+      return;
+    }
     // H2-c：放设施模式单击提交（可连续放置）。
     if (modeRef.current === 'facility') {
       // 2026-11-16 用户指令：门在室内分区边线 10px 内落位时贴边、朝向垂直墙面。
       const armed = facilityTemplateRef.current;
-      const snap = armed && isDoorTemplateId(armed)
-        ? snapDoorToIndoorEdge({ pt, zones: planRef.current.zones, viewport: currentViewport() })
+      const snap = armed && armedTemplateSnapsToWall(armed)
+        ? snapDoorToIndoorEdge({
+          pt,
+          zones: planRef.current.zones,
+          walls: doorSnapWalls(planRef.current.walls),
+          viewport: currentViewport(),
+        })
         : null;
       if (snap) {
         facilityRotationRef.current = snap.rotationDeg;
@@ -5170,6 +5404,34 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return hitIndex;
   }
 
+  /**
+   * 2026-11-18：缩放角柄命中（分区 / 用地红线共用）——柄在外接矩形四角外侧 13 px，
+   * 命中半径 12 px。顶点手柄半径 10 px、柄心离顶点 13 px，两者不抢；先认柄只保证
+   * 「点在外侧那只方块上」时一定进缩放，不会落成「拖顶点」或「边上加点」。
+   */
+  function ringScaleCornerAt(ring: readonly PlanPoint[], px: { x: number; y: number }): number | null {
+    const points = ringScaleHandlePoints(ring, currentViewport());
+    let hitIndex: number | null = null;
+    let hitDist = RING_SCALE_HANDLE_HIT_PX;
+    for (let index = 0; index < points.length; index += 1) {
+      const pt = points[index]!;
+      const distPx = Math.hypot(px.x - pt.x, px.y - pt.y);
+      if (distPx <= hitDist) {
+        hitIndex = index;
+        hitDist = distPx;
+      }
+    }
+    return hitIndex;
+  }
+
+  /** 缩放读数的「宽 × 深」一口径文案（拖动中与提交后都用它，避免两处数字对不上）。 */
+  function ringSizeText(ring: readonly PlanPoint[]): string | null {
+    const bounds = ringBounds(ring);
+    if (!bounds) return null;
+    const size = ringBoundsSize(bounds);
+    return `${size.widthM.toFixed(1)} × ${size.heightM.toFixed(1)} m`;
+  }
+
   /** 2026-11-14：流线顶点手柄命中（与分区顶点同一套命中半径）。 */
   function nearestRouteVertexIndex(route: { points: PlanPoint[] }, px: { x: number; y: number }): number | null {
     const viewport = currentViewport();
@@ -5287,6 +5549,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * 不在 8 个内置模板里，所以把「模板对象」本身记下来，放置与幽灵预览都读它。
    */
   function pickLibraryEntry(entry: LibraryEntry) {
+    // 2026-11-18 用户口径：堵体是「线」，不是占地块——点它进画墙模式，不走放设施。
+    if (entry.slug === 'wall') {
+      setMode('wall');
+      setEditMessage('画墙：在室内分区边线附近点一下起点，再点一下终点；Esc 结束。');
+      return;
+    }
     armedCatalogRef.current = null;
     const template = libraryFacilityTemplate(entry);
     // 2026-11-12 再点同一件已选设施 = 取消选择回浏览（允许「一件都不选」）。
@@ -5513,7 +5781,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** OnePlan 镜像：一级组头（chevron + 组图标 + 名称 + 计数）。多段可同时展开（用户 m00575）。 */
   function renderOneplanGroupHeader(input: {
-    id: 'areas' | 'vehicles' | 'infra' | 'labor' | 'extra';
+    id: 'areas' | 'vehicles' | 'indoor' | 'infra' | 'labor' | 'extra';
     label: string;
     count: number;
     icon: PlanningIconName;
@@ -5838,6 +6106,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /**
+   * 当前待放的模板是不是门：模板 id 末段是门，**或者**物料卡带进来的模型 slug 是门。
+   * 2026-11-18 用户报「有些门能吸、有些不行」：物料库/在线模型卡拖进来的 templateId 是
+   * `web:<len>-<hash>`（见 plan-catalog-drag），只看 templateId 会把它们当普通设施：
+   * 既不会贴边，也不会在 3D 墙上开洞。
+   */
+  function armedTemplateIsDoor(templateId: string | null | undefined): boolean {
+    if (!templateId) return false;
+    if (isDoorTemplateId(templateId)) return true;
+    const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
+    return !!catalog && catalog.templateId === templateId && isDoorSlug(catalog.slug);
+  }
+
+  /** 2026-11-18 窗：与门同一套贴墙吸附，只是 3D 里开的是不落地的窗洞。 */
+  function armedTemplateIsWindow(templateId: string | null | undefined): boolean {
+    if (!templateId) return false;
+    if (isWindowTemplateId(templateId)) return true;
+    const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
+    return !!catalog && catalog.templateId === templateId && isWindowSlug(catalog.slug);
+  }
+
+  /** 门和窗共用一条吸附逻辑。 */
+  function armedTemplateSnapsToWall(templateId: string | null | undefined): boolean {
+    return armedTemplateIsDoor(templateId) || armedTemplateIsWindow(templateId);
+  }
+
+  /**
    * 2026-11-16 设施放置幽灵的唯一来源：2D 画布与 3D draft 共用同一份 ring / 角度 / 越界判定。
    * 之前幽灵只画在 2D 画布上，3D 接管时画布被隐藏，等于盲放。
    * 尺寸取模板真实宽深（与 buildFacility 一致），不再用 footprintSpec 的占位尺寸。
@@ -5863,7 +6157,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (!position || !facilityTemplateRef.current) return null;
     const template = resolvePendingTemplate();
     if (!template) return null;
-    const rotationDeg = facilityRotationRef.current;
+    // 门贴边时幽灵也要提前摆成落位后的角度（否则预览是旧旋转、一点下去就跳一个角度）。
+    const rotationDeg = doorSnapRef.current?.rotationDeg ?? facilityRotationRef.current;
     const { ring, invalid } = facilityPlacementGhost(template, position, rotationDeg, planRef.current.boundary);
     // 2026-11-16 物料卡：3D 预览按这张卡的 slug 加载；普通设施没有 catalog 载荷，不额外挂模型。
     const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
@@ -6000,10 +6295,23 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
     }
+    // 2026-11-18 用户报「有些门能吸、有些不行」：吸附原先只装在“单击落位”那一条路上，
+    // 从物件库/物料卡拖进 2D、从 3D 地面拖放、Enter 落位都绕过了它。现在统一在这里吸一次，
+    // 各入口只负责给“原始落点”，门在哪儿都得贴边。
+    const doorSnap = armedTemplateSnapsToWall(templateId)
+      ? snapDoorToIndoorEdge({
+        pt,
+        zones: current.zones,
+        walls: doorSnapWalls(current.walls),
+        viewport: currentViewport(),
+      })
+      : null;
+    const position = doorSnap?.point ?? pt;
+    const rotationDeg = doorSnap?.rotationDeg ?? facilityRotationRef.current;
     // 2026-11-16 用户「物料要有归属意识」：落点落在哪个分区，这件物料就归那个区（与人员/出入口同口径）。
-    const zoneId = inferZoneIdAt(pt, current.zones);
+    const zoneId = inferZoneIdAt(position, current.zones);
     const result = buildFacility(
-      { templateId, template, position: pt, rotationDeg: facilityRotationRef.current, ...(zoneId ? { zoneId } : {}) },
+      { templateId, template, position, rotationDeg, ...(zoneId ? { zoneId } : {}) },
       current.boundary,
       view.facilities,
     );
@@ -6020,7 +6328,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     });
     selectFacility(result.value.id);
     const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
-    const angle = facilityRotationRef.current;
+    const angle = rotationDeg;
     setEditMessage(`已放置「${result.value.name}」${angle ? `（${Math.round(angle)}°）` : ''}，继续单击放置或 Esc 结束${hint}`);
     // 2026-11-16 落位后清掉跟随幽灵：否则 3D 预览模型会和刚落地的真模型叠在同一位置。
     ghostPointRef.current = null;
@@ -6038,6 +6346,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     patch: Partial<Pick<PlanFacility,
       'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride' | 'zoneId'
       | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
+      | 'windowSillM' | 'windowHeightM'
     >> & { size?: { width: number; depth: number } },
   ) {
     // 空名会让 plan 过不了契约校验：改名时忽略空值。
@@ -6086,9 +6395,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function deleteFacility(id: string) {
     const current = planRef.current;
+    if (!current.facilities.some(f => f.id === id)) return;
     commitPlan({ ...current, facilities: current.facilities.filter(f => f.id !== id) });
+    // 2026-11-18 用户「门删掉之后并没有从场地消失」：删除后把这些“不是 plan 但在画布上”的状态一并收掉，
+    // 并当场重绘一次——不能只等父级下一次传 plan 回来才刷。
+    if (multiSelectedFacilityIdsRef.current.includes(id)) {
+      const nextIds = multiSelectedFacilityIdsRef.current.filter(x => x !== id);
+      multiSelectedFacilityIdsRef.current = nextIds;
+      setMultiSelectedFacilityIds(nextIds);
+    }
+    if (facilityDragRef.current?.preview.id === id) facilityDragRef.current = null;
+    const groupPreview = groupDragRef.current?.preview;
+    if (groupPreview?.some(item => item.id === id)) {
+      groupDragRef.current = { ...groupDragRef.current!, preview: groupPreview.filter(item => item.id !== id) };
+    }
+    if (doorSnapRef.current) doorSnapRef.current = null;
+    if (ghostPointRef.current) ghostPointRef.current = null;
     selectFacility(null);
     setEditMessage('设施已删除。');
+    draw();
+    notifyPlanDraftChanged();
   }
 
   /**
@@ -6138,6 +6464,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       size: sizeWithMajor(selectedFacility.size, major, selectedFacility.templateId,
         { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }),
     });
+  }
+
+  /**
+   * 2026-11-18 窗台/窗高提交：夹在 3D 同一档（窗台 0–3.2，窗高 0.2–墙顶-窗台），
+   * 一次提交两个值，撤销只记一步。
+   */
+  function commitFacilityWindowDraft() {
+    const draft = facilityWindowDraft;
+    setFacilityWindowDraft(null);
+    if (!draft || !selectedFacility || !isWindowTemplateId(selectedFacility.templateId)) return;
+    const sill = Number(draft.sill);
+    const height = Number(draft.height);
+    if (!Number.isFinite(sill) || !Number.isFinite(height)) return;
+    const clampedSill = Math.max(0, Math.min(INDOOR_WALL_HEIGHT_M - 0.2, sill));
+    const clampedHeight = Math.max(0.2, Math.min(INDOOR_WALL_HEIGHT_M - clampedSill, height));
+    updateFacility(selectedFacility.id, { windowSillM: clampedSill, windowHeightM: clampedHeight });
+    setEditMessage(
+      `窗洞已改为：窗台 ${clampedSill.toFixed(2)} m、窗高 ${clampedHeight.toFixed(2)} m（窗顶 ${(clampedSill + clampedHeight).toFixed(2)} m）。3D 窗洞同步更新。`,
+    );
   }
 
   /** P2-i：方向键微调选中设施（1 m，Shift=10 m），共用一条 undo 记录。 */
@@ -6273,26 +6618,42 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (drawAfter) draw();
   }
 
-  /** 2026-11-14：跨类型多选批删（Delete 与属性面板共用）——流线整删、出入口删并解除路线引用。 */
+  /** 2026-11-14：跨类型多选批删（Delete 与属性面板共用）——流线整删、出入口删并解除路线引用。
+   *  2026-11-18 补：设施也要一起删。以前这里只跑流线/出入口，框选里同时有门（设施）和动线时，
+   *  一条 Delete 只删了动线、门留在场上——用户看到的就是「门删掉之后并没有从场地消失」。 */
   function deleteCrossMulti() {
     const multiRouteIds = multiSelectedRouteIdsRef.current;
     const multiNodeIds = multiSelectedNodeIdsRef.current;
-    if (!multiRouteIds.length && !multiNodeIds.length) return;
+    const multiFacilityIds = multiSelectedFacilityIdsRef.current;
+    if (!multiRouteIds.length && !multiNodeIds.length && !multiFacilityIds.length) return;
     const current = planRef.current;
+    const facilityIds = new Set(multiFacilityIds);
     commitPlan({
       ...current,
+      facilities: current.facilities.filter(f => !facilityIds.has(f.id)),
       routes: multiNodeIds.reduce(
         (acc, nodeId) => detachNodeFromRoutes(nodeId, acc),
         current.routes.filter(r => !multiRouteIds.includes(r.id)),
       ),
       nodes: current.nodes.filter(n => !multiNodeIds.includes(n.id)),
     });
+    multiSelectedFacilityIdsRef.current = [];
+    setMultiSelectedFacilityIds([]);
     multiSelectedRouteIdsRef.current = [];
     setMultiSelectedRouteIds([]);
     multiSelectedNodeIdsRef.current = [];
     setMultiSelectedNodeIds([]);
-    setEditMessage(`已删除 ${multiRouteIds.length} 条流线、${multiNodeIds.length} 个出入口候选；关联引用已解除。`);
+    if (doorSnapRef.current) doorSnapRef.current = null;
+    if (ghostPointRef.current) ghostPointRef.current = null;
+    setEditMessage(
+      [
+        multiFacilityIds.length ? `${multiFacilityIds.length} 件设施` : '',
+        multiRouteIds.length ? `${multiRouteIds.length} 条流线` : '',
+        multiNodeIds.length ? `${multiNodeIds.length} 个出入口候选` : '',
+      ].filter(Boolean).join('、') + '已删除' + (multiNodeIds.length ? '；关联引用已解除。' : '。'),
+    );
     draw();
+    notifyPlanDraftChanged();
   }
 
   /** 组选成立（≥2 件）：清单选/分区/标注选中，进入多选态。 */
@@ -6420,6 +6781,35 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return true;
   }
 
+  /**
+   * 窗户能被拉多宽：贴着的那面墙（手画墙或分区边）长度减两端各 8 cm 墙埛。
+   * 1 m 内没有边就不额外限——3D 端会按真实墙长拒绝，不在这里假装。
+   */
+  function openingMaxWidthM(center: PlanPoint): number {
+    let nearest = Number.POSITIVE_INFINITY;
+    let widest = FACILITY_MAX_SIZE_M;
+    const consider = (a: PlanPoint, b: PlanPoint) => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq < 0.04) return;
+      const t = Math.max(0, Math.min(1, ((center.x - a.x) * dx + (center.y - a.y) * dy) / lenSq));
+      const dist = Math.hypot(center.x - (a.x + dx * t), center.y - (a.y + dy * t));
+      if (dist > 1 || dist >= nearest) return;
+      nearest = dist;
+      widest = Math.max(FACILITY_MIN_SIZE_M, Math.sqrt(lenSq) - 2 * 0.08);
+    };
+    for (const wall of planRef.current.walls ?? []) {
+      if (wall.points.length === 2) consider(wall.points[0]!, wall.points[1]!);
+    }
+    for (const zone of planRef.current.zones) {
+      const ring = zone.polygon;
+      if (ring.length < 3) continue;
+      for (let i = 0; i < ring.length; i += 1) consider(ring[i]!, ring[(i + 1) % ring.length]!);
+    }
+    return widest;
+  }
+
   /** 拖拽预览：移动=整体平移；旋转=绕中心跟指针角度（Shift 吸附 15°）；改尺寸=对角点固定；单边=对面固定。 */
   function facilityDragPreview(drag: FacilityDragState, pt: PlanPoint, snapRotation: boolean): PlanFacility {
     const start = drag.startFacility;
@@ -6436,6 +6826,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const deg = start.rotationDeg + ((to - from) * 180) / Math.PI;
       const snapped = snapRotation ? Math.round(deg / 15) * 15 : deg;
       return { ...start, rotationDeg: ((snapped % 360) + 360) % 360 };
+    }
+    // 2026-11-18 用户「窗户要可拉动宽度」：窗的四个手柄都只拉宽，绕中心对称。
+    // 手柄在虚拟外扩盒上也无所谓：按增量算，按下瞬间宽度不跳；中心不离开墙线，3D 窗洞不会丢。
+    if (isWindowTemplateId(start.templateId)) {
+      const next = facilitySymmetricWidthResize(start, drag.startPt, pt, {
+        minM: FACILITY_MIN_SIZE_M,
+        maxM: Math.max(FACILITY_MIN_SIZE_M, openingMaxWidthM(start.position)),
+      });
+      return { ...start, size: next.size };
     }
     if (drag.kind === 'side') {
       // 2026-11-11「多个面」编辑：拖边柄单面拉伸——对面固定，宽深独立变化，中心随拉伸轴平移。
@@ -7694,6 +8093,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const zoneId = selectedZoneRef.current;
         const zone = zoneId ? planRef.current.zones.find(z => z.id === zoneId) ?? null : null;
         if (zone) {
+          // 2026-11-18 用户「不只点的编辑挪动，也要缩放」：先认四角外侧的缩放柄，再认顶点/边/整体挪。
+          // 分区的角顶点就在外接矩形角上，不先认柄的话，缩放手势永远抢不到。
+          const scaleCorner = ringScaleCornerAt(zone.polygon, hit.px);
+          const zoneBounds = scaleCorner !== null ? ringBounds(zone.polygon) : null;
+          if (scaleCorner !== null && zoneBounds) {
+            zoneScaleRef.current = {
+              zoneId: zone.id,
+              corner: scaleCorner,
+              bounds: zoneBounds,
+              base: zone.polygon,
+              startPx: { x: hit.px.x, y: hit.px.y },
+              started: false,
+            };
+            zoneDragPreviewRef.current = { zoneId: zone.id, polygon: zone.polygon };
+            pointerConsumedRef.current = true;
+            downPxRef.current = hit.px;
+            setDragging(true);
+            setEditMessage(`拖角柄缩放「${zone.name}」：对角钉住不动；Shift = 等比（不变形），Esc 取消。`);
+            draw();
+            return;
+          }
           const index = nearestZoneVertexIndex(zone, hit.px);
           if (index !== null) {
             pointerConsumedRef.current = true;
@@ -7752,6 +8172,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           clearBoundaryDeleteArm();
         }
         // 先认边线上的「+」把手（比综的边线更好点中），点一下就插点并直接进入拖动。
+        // 2026-11-18：缩放角柄排在“边上加点”之前——柄在境外 13 px，完全可能同时落在边线 14 px 热区里，
+        // 如果先认边，拖角柄就会变成「插一个顶点」。
+        const boundaryScaleCorner = ringScaleCornerAt(planRef.current.boundary, hit.px);
+        const boundaryScaleBounds = boundaryScaleCorner !== null ? ringBounds(planRef.current.boundary) : null;
+        if (boundaryScaleCorner !== null && boundaryScaleBounds) {
+          boundaryScaleRef.current = {
+            corner: boundaryScaleCorner,
+            bounds: boundaryScaleBounds,
+            base: planRef.current.boundary,
+            startPx: { x: hit.px.x, y: hit.px.y },
+            started: false,
+          };
+          pointerConsumedRef.current = true;
+          downPxRef.current = hit.px;
+          setDragging(true);
+          setPreviewRing(planRef.current.boundary);
+          setEditMessage('拖角柄缩放用地红线：对角钉住不动；Shift = 等比（不变形），Esc 取消。');
+          draw();
+          return;
+        }
         const edgeHint = boundaryEdgeHintRef.current;
         if (edgeHint && Math.hypot(hit.px.x - edgeHint.x, hit.px.y - edgeHint.y) <= 12) {
           const inserted = insertRingVertex(planRef.current.boundary, edgeHint.index, edgeHint.pt);
@@ -7941,6 +8381,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 先看锁：默认锁着，解锁后才有手柄、能加点/减点。
       if (layerLocked('boundary')) {
         setEditMessage('用地红线已锁定：在左侧「用地红线」行点锁图标解锁后就能加/减/挪顶点。');
+        return;
+      }
+      // 2026-11-18：编辑红线模式同样能拖角柄整体缩放（优先于顶点/边线命中，理同浏览模式）。
+      const scaleCorner = ringScaleCornerAt(planRef.current.boundary, hit.px);
+      const scaleBounds = scaleCorner !== null ? ringBounds(planRef.current.boundary) : null;
+      if (scaleCorner !== null && scaleBounds) {
+        boundaryScaleRef.current = {
+          corner: scaleCorner,
+          bounds: scaleBounds,
+          base: planRef.current.boundary,
+          startPx: { x: hit.px.x, y: hit.px.y },
+          started: false,
+        };
+        setPreviewRing(planRef.current.boundary);
+        setEditMessage('拖角柄缩放用地红线：对角钉住不动；Shift = 等比（不变形），Esc 取消。');
+        draw();
         return;
       }
       const vertex = nearestBoundaryVertexIndex(hit.px);
@@ -8218,6 +8674,85 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     if (activeMode === 'view') {
+      // 2026-11-18：角柄缩放预览（分区 / 用地红线各一条）；松手才提交，拖拽过程不进 undo 栈。
+      if (zoneScaleRef.current) {
+        const drag = zoneScaleRef.current;
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        if (!drag.started) {
+          if (Math.hypot(hit.px.x - drag.startPx.x, hit.px.y - drag.startPx.y) <= CLICK_MAX_MOVE_PX) return;
+          drag.started = true;
+        }
+        const zone = planRef.current.zones.find(z => z.id === drag.zoneId) ?? null;
+        if (!zone) return;
+        const next = scaleRingToCorner(
+          drag.base,
+          drag.bounds,
+          drag.corner,
+          snapPointToGrid(hit.pt, currentViewport()),
+          { uniform: event.shiftKey, minSpanM: PLAN_MIN_VERTEX_GAP_M },
+        );
+        if (!next) return;
+        zoneDragPreviewRef.current = { zoneId: drag.zoneId, polygon: next };
+        const sizeText = ringSizeText(next);
+        setEditMessage(
+          `「${zone.name}」缩放中${sizeText ? ` ${sizeText}` : ''}${event.shiftKey ? '（等比）' : '（Shift 等比）'}。`,
+        );
+        draw();
+        return;
+      }
+      if (boundaryScaleRef.current) {
+        const drag = boundaryScaleRef.current;
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        if (!drag.started) {
+          if (Math.hypot(hit.px.x - drag.startPx.x, hit.px.y - drag.startPx.y) <= CLICK_MAX_MOVE_PX) return;
+          drag.started = true;
+        }
+        const next = scaleRingToCorner(
+          drag.base,
+          drag.bounds,
+          drag.corner,
+          snapPointToGrid(hit.pt, currentViewport()),
+          { uniform: event.shiftKey, minSpanM: PLAN_MIN_VERTEX_GAP_M },
+        );
+        if (!next) return;
+        setPreviewRing(next);
+        const sizeText = ringSizeText(next);
+        setEditMessage(
+          `用地红线缩放中${sizeText ? ` ${sizeText}` : ''}${event.shiftKey ? '（等比）' : '（Shift 等比）'}。`,
+        );
+        draw();
+        return;
+      }
+      // 2026-11-18：悬停缩放角柄 → 实心高亮 + 斜向缩放光标（“这只方块能整体缩放”）。
+      // 当前选中分区优先于红线：两块手柄叠在一起时，先照顾用户刚选中的那一块。
+      if (!dragging && onPlanChange) {
+        const hoverHit = eventPlanPoint(event);
+        const nextHover = (() => {
+          if (!hoverHit) return null;
+          const zoneId = selectedZoneRef.current;
+          if (zoneId && !layerLocked('zone')) {
+            const zone = planRef.current.zones.find(z => z.id === zoneId) ?? null;
+            const corner = zone ? ringScaleCornerAt(zone.polygon, hoverHit.px) : null;
+            if (zone && corner !== null) return { kind: 'zone' as const, id: zone.id, corner };
+          }
+          if (!layerLocked('boundary')) {
+            const corner = ringScaleCornerAt(planRef.current.boundary, hoverHit.px);
+            if (corner !== null) return { kind: 'boundary' as const, id: null, corner };
+          }
+          return null;
+        })();
+        const prevHover = ringScaleHoverRef.current;
+        const hoverChanged = (prevHover === null) !== (nextHover === null)
+          || (prevHover !== null && nextHover !== null
+            && (prevHover.kind !== nextHover.kind || prevHover.id !== nextHover.id || prevHover.corner !== nextHover.corner));
+        if (hoverChanged) {
+          ringScaleHoverRef.current = nextHover;
+          setRingScaleHover(nextHover);
+          draw();
+        }
+      }
       // 2026-11-16 用户「解锁了之后还是无法编辑」：浏览模式下拖边界顶点（大号实心方点）。
       if (dragVertexRef.current !== null) {        const vertexHit = eventPlanPoint(event);
         if (!vertexHit) return;
@@ -8439,6 +8974,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       panRef.current = { x: event.clientX, y: event.clientY };
       return;
     }
+    if (activeMode === 'boundary-vertex' && boundaryScaleRef.current) {
+      // 2026-11-18：编辑红线模式下拖角柄缩放（与浏览模式同一套几何/预览）。
+      const drag = boundaryScaleRef.current;
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      if (!drag.started) {
+        if (Math.hypot(hit.px.x - drag.startPx.x, hit.px.y - drag.startPx.y) <= CLICK_MAX_MOVE_PX) return;
+        drag.started = true;
+      }
+      const next = scaleRingToCorner(
+        drag.base,
+        drag.bounds,
+        drag.corner,
+        snapPointToGrid(hit.pt, currentViewport()),
+        { uniform: event.shiftKey, minSpanM: PLAN_MIN_VERTEX_GAP_M },
+      );
+      if (!next) return;
+      setPreviewRing(next);
+      const sizeText = ringSizeText(next);
+      setEditMessage(
+        `用地红线缩放中${sizeText ? ` ${sizeText}` : ''}${event.shiftKey ? '（等比）' : '（Shift 等比）'}。`,
+      );
+      draw();
+      return;
+    }
     if (activeMode === 'boundary-vertex' && dragVertexRef.current !== null) {
       const hit = eventPlanPoint(event);
       if (!hit) return;
@@ -8458,17 +9018,45 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
       return;
     }
+    // 2026-11-18 画墙草稿：终点跟着指针走，靠近室内分区边线或已有墙时贴着吸。
+    if (activeMode === 'wall' && wallDraftRef.current) {
+      const hit = eventPlanPoint(event);
+      if (!hit) return;
+      const snapped = snapWallPointToIndoorEdge({
+        pt: hit.pt,
+        zones: planRef.current.zones,
+        walls: doorSnapWalls(planRef.current.walls),
+        viewport: currentViewport(),
+      });
+      const next = snapped?.point ?? hit.pt;
+      const draft = wallDraftRef.current;
+      if (
+        draft.b.x !== next.x
+        || draft.b.y !== next.y
+        || (draft.snapB?.source ?? null) !== (snapped?.source ?? null)
+      ) {
+        wallDraftRef.current = { ...draft, b: next, snapB: snapped };
+        draw();
+      }
+      return;
+    }
     // H2-c：放设施幽灵跟随鼠标（占地预览）。
     if (activeMode === 'facility' && facilityTemplateRef.current) {
       const hit = eventPlanPoint(event);
       if (!hit) return;
       // 2026-11-16 用户指令：门靠近室内区域边线时先吸过去，悬停就给贴边高亮。
-      const snap = isDoorTemplateId(facilityTemplateRef.current)
-        ? snapDoorToIndoorEdge({ pt: hit.pt, zones: planRef.current.zones, viewport: currentViewport() })
+      const snap = armedTemplateSnapsToWall(facilityTemplateRef.current)
+        ? snapDoorToIndoorEdge({
+          pt: hit.pt,
+          zones: planRef.current.zones,
+          walls: doorSnapWalls(planRef.current.walls),
+          viewport: currentViewport(),
+        })
         : null;
       const nextPoint = snap ? snap.point : hit.pt;
       const snapChanged =
         (doorSnapRef.current?.zoneId ?? null) !== (snap?.zoneId ?? null) ||
+        (doorSnapRef.current?.wallId ?? null) !== (snap?.wallId ?? null) ||
         (snap !== null && (Math.abs(doorSnapRef.current!.point.x - snap.point.x) > 1e-9 || Math.abs(doorSnapRef.current!.point.y - snap.point.y) > 1e-9));
       doorSnapRef.current = snap;
       const ghost = ghostPointRef.current;
@@ -8842,6 +9430,55 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       downPxRef.current = null;
       panRef.current = undefined;
       setDragging(false);
+      // 2026-11-18：角柄缩放松手——真拖过才提交（一条 undo）；只点一下角柄不改数据。
+      if (zoneScaleRef.current) {
+        const drag = zoneScaleRef.current;
+        zoneScaleRef.current = null;
+        const preview = zoneDragPreviewRef.current;
+        zoneDragPreviewRef.current = null;
+        if (drag.started && preview && onPlanChange) {
+          const current = planRef.current;
+          const zone = current.zones.find(z => z.id === drag.zoneId) ?? null;
+          if (zone) {
+            const issue = zonePolygonIssue(zone, preview.polygon, current);
+            if (issue) {
+              setEditMessage(issue.message);
+            } else {
+              commitPlan({
+                ...current,
+                zones: current.zones.map(z => (z.id === zone.id ? { ...z, polygon: preview.polygon } : z)),
+              });
+              selectZone(zone.id);
+              const sizeText = ringSizeText(preview.polygon);
+              setEditMessage(`「${zone.name}」已缩放到${sizeText ? ` ${sizeText}` : ''}；撤销可还原。`);
+            }
+            draw();
+          }
+        }
+        return;
+      }
+      if (boundaryScaleRef.current) {
+        const drag = boundaryScaleRef.current;
+        boundaryScaleRef.current = null;
+        const preview = previewRingRef.current;
+        setPreviewRing(null);
+        if (drag.started && preview && onPlanChange) {
+          const check = checkBoundaryRing(preview);
+          if (!check.ok) {
+            setEditMessage(check.issue.message);
+          } else {
+            // 2026-11-17 口径不变：缩完还在白框里就不动框，顶出去就重置为外扩 20 m。
+            const scope = syncScopeForBoundary(planRef.current.designScope, preview, DEFAULT_SCOPE_MARGIN_M);
+            commitPlan({ ...planRef.current, boundary: preview, ...(scope ? { designScope: scope } : {}) });
+            const sizeText = ringSizeText(preview);
+            setEditMessage(
+              `用地红线已缩放到${sizeText ? ` ${sizeText}` : ''}（约 ${Math.round(check.areaM2)} m²）。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`,
+            );
+          }
+          draw();
+        }
+        return;
+      }
       // 2026-11-16：浏览模式拖边界顶点松手——提交新形；落在别的顶点 12 px 内 = 合并。
       // 单击（没拖）不删点（双击才删），避免手一抖把场地少了只角。
       if (dragVertexRef.current !== null) {
@@ -9123,6 +9760,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     if (activeMode === 'boundary-vertex') {
+      // 2026-11-18：角柄缩放松手（编辑红线模式）——与浏览模式同口径：真拖过才提交。
+      if (boundaryScaleRef.current) {
+        const drag = boundaryScaleRef.current;
+        boundaryScaleRef.current = null;
+        const preview = previewRingRef.current;
+        setPreviewRing(null);
+        if (drag.started && preview && onPlanChange) {
+          const check = checkBoundaryRing(preview);
+          if (!check.ok) {
+            setEditMessage(check.issue.message);
+          } else {
+            const scope = syncScopeForBoundary(planRef.current.designScope, preview, DEFAULT_SCOPE_MARGIN_M);
+            commitPlan({ ...planRef.current, boundary: preview, ...(scope ? { designScope: scope } : {}) });
+            const sizeText = ringSizeText(preview);
+            setEditMessage(
+              `用地红线已缩放到${sizeText ? ` ${sizeText}` : ''}（约 ${Math.round(check.areaM2)} m²）。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`,
+            );
+          }
+          draw();
+        }
+        return;
+      }
       // 2026-11-16：与分区一致——点一下顶点（没拖动）= 删掉它；拖过就提交新形状。
       const upHit = eventPlanPoint(event);
       const moved = upHit !== null && downPxRef.current !== null
@@ -9353,6 +10012,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 2026-11-14：分区整体拖动同理。
     dragZoneMoveRef.current = null;
     zoneDragPreviewRef.current = null;
+    // 2026-11-18：角柄缩放中离开画布同样丢弃（预览不提交，数据不动）。
+    zoneScaleRef.current = null;
+    boundaryScaleRef.current = null;
+    if (ringScaleHoverRef.current) {
+      ringScaleHoverRef.current = null;
+      setRingScaleHover(null);
+    }
     // 2026-11-14：流线顶点拖拽同理。
     dragRouteVertexRef.current = null;
     routeDragPreviewRef.current = null;
@@ -10406,6 +11072,56 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         </label>
                           </div>
                         </div>
+                        {/* 2026-11-18 用户：窗台高/窗高不再写死 0.9/1.2，属性面板可改，3D 窗洞跟着变。 */}
+                        {isWindowTemplateId(selectedFacility.templateId) && (
+                          <div style={{ minWidth: 0 }} data-testid="facility-window-opening">
+                            <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: PLANNING_TEXT.soft, marginBottom: 4 }}>窗洞</div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="窗台高（米，失焦或回车生效）">
+                                <span style={benchUnitLabelStyle}>台</span>
+                                <input
+                                  aria-label="选中窗窗台高（米）"
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={facilityWindowDraft?.sill ?? (selectedFacility.windowSillM ?? INDOOR_WINDOW_SILL_M).toFixed(2)}
+                                  onFocus={() => setFacilityWindowDraft({
+                                    sill: (selectedFacility.windowSillM ?? INDOOR_WINDOW_SILL_M).toFixed(2),
+                                    height: (selectedFacility.windowHeightM ?? INDOOR_WINDOW_HEIGHT_M).toFixed(2),
+                                  })}
+                                  onChange={event => setFacilityWindowDraft(prev => ({
+                                    sill: event.target.value,
+                                    height: prev?.height ?? (selectedFacility.windowHeightM ?? INDOOR_WINDOW_HEIGHT_M).toFixed(2),
+                                  }))}
+                                  onBlur={commitFacilityWindowDraft}
+                                  onKeyDown={event => { if (event.key === 'Enter') commitFacilityWindowDraft(); }}
+                                  style={benchUnitInputStyle}
+                                />
+                                <span style={benchUnitSuffixStyle}>m</span>
+                              </label>
+                              <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="窗洞高（米，失焦或回车生效；窗顶不超过 3.5 m 墙顶）">
+                                <span style={benchUnitLabelStyle}>高</span>
+                                <input
+                                  aria-label="选中窗窗高（米）"
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={facilityWindowDraft?.height ?? (selectedFacility.windowHeightM ?? INDOOR_WINDOW_HEIGHT_M).toFixed(2)}
+                                  onFocus={() => setFacilityWindowDraft({
+                                    sill: (selectedFacility.windowSillM ?? INDOOR_WINDOW_SILL_M).toFixed(2),
+                                    height: (selectedFacility.windowHeightM ?? INDOOR_WINDOW_HEIGHT_M).toFixed(2),
+                                  })}
+                                  onChange={event => setFacilityWindowDraft(prev => ({
+                                    sill: prev?.sill ?? (selectedFacility.windowSillM ?? INDOOR_WINDOW_SILL_M).toFixed(2),
+                                    height: event.target.value,
+                                  }))}
+                                  onBlur={commitFacilityWindowDraft}
+                                  onKeyDown={event => { if (event.key === 'Enter') commitFacilityWindowDraft(); }}
+                                  style={benchUnitInputStyle}
+                                />
+                                <span style={benchUnitSuffixStyle}>m</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
                         {/* 2026-11-15 用户：「复制坐标没用」——删掉这颗钮（经纬度本来就能就地改，要抄走直接框选文本）。 */}
                       </div>
                       {/* 2026-11-16 用户「物料要有归属意识」：归属直接写在属性卡里——清单/CSV 的「所属分区」列、
@@ -11289,7 +12005,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           ? 'pointer'
           : altHeld && branchAnchorHint
             ? 'copy'
-            : boundaryLockedHover
+            : ringScaleHover
+              ? (ringScaleHover.corner === 0 || ringScaleHover.corner === 2 ? 'nwse-resize' : 'nesw-resize')
+              : boundaryLockedHover
             ? 'not-allowed'
             : boundaryVertexHover !== null
               ? 'grab'
@@ -12633,6 +13351,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           {/* 车素材：物料库物件（落成 facility），与上面的规划车辆不是一回事。 */}
                           {libraryVehicleIcons.length > 0 && renderOneplanStickerRows(libraryVehicleIcons)}
                         </>
+                      )}
+
+                      {/* 2026-11-18 用户：「门在这里啊，把该挪出来的挪出来」——「室内」放楼梯/电梯/墙体/窗户/门系列；
+                          入口和通道图标只留入口、出口、通道、闸门、储物柜这类通行符号；其余构筑物回「基础设施 · 建筑物」。 */}
+                      {renderOneplanGroupHeader({
+                        id: 'indoor',
+                        label: INDOOR_ROW_LABEL,
+                        count: libraryIndoor.length,
+                        icon: 'brick-wall',
+                      })}
+                      {openLibrarySections.includes('indoor') && (
+                        libraryIndoor.length > 0
+                          ? renderOneplanStickerRows(libraryIndoor)
+                          : <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.75, fontSize: PLANNING_TYPOGRAPHY.hint }}>室内这几件还没载入。</div>
                       )}
 
                       {/* 2. 基础设施 → 17 个子组（OnePlan Infrastructure 镜像） */}

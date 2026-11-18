@@ -153,6 +153,23 @@ export const CURATED_MANIFEST_ASSETS: readonly OneplanManifestAsset[] = [
     pack: null,
     viewBox: '0 0 24 24',
   })),
+  // 2026-11-18 用户：「墙 你去加规则啊」「窗户你去额外加啊」。库里没有墙和窗，按同款白描边
+  // 本地画两个图标（icon/wall.svg、icon/window.svg），登记成「室内」段的固定条目。
+  // 门不在这里：门已经在「活动区域·流线与通行 / 出入口与通行图标」那组（见上面几条）。
+  ...[
+    { slug: 'wall', name_zh: '墙体', name_en: 'Wall' },
+    { slug: 'window', name_zh: '窗户', name_en: 'Window' },
+  ].map(item => ({
+    path: `/oneplan-icons/icon/${item.slug}.svg`,
+    kind: 'icon',
+    slug: item.slug,
+    name_zh: item.name_zh,
+    name_en: item.name_en,
+    category_zh: '设施物料 / 构筑物',
+    category_en: 'Infrastructure / Structures',
+    pack: null,
+    viewBox: '0 0 24 24',
+  })),
 ];
 
 /** 物件库里一件可选物件。 */
