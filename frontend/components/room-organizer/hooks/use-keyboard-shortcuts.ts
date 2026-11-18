@@ -63,6 +63,10 @@ export interface UseKeyboardShortcutsOptions {
   isDragActive?: () => boolean;
   /** 键被模式拦住时给画布一条可解释的提示；提示文案由调用方决定。 */
   onBlocked?: (reason: KeyboardBlockReason) => void;
+  /** 方向键微移步长（米）。Shift 为 10 倍。缺省 0.1。 */
+  nudgeStepM?: number;
+  /** Shift+R 的微旋角度（度）。缺省 15。 */
+  angleSnapDeg?: number;
   handlers: KeyboardShortcutHandlers;
 }
 
@@ -115,6 +119,8 @@ export function useKeyboardShortcuts({
   layoutLocked = false,
   isDragActive,
   onBlocked,
+  nudgeStepM = 0.1,
+  angleSnapDeg = 15,
   handlers,
 }: UseKeyboardShortcutsOptions): void {
   useEffect(() => {
@@ -250,7 +256,7 @@ export function useKeyboardShortcuts({
         event.preventDefault();
         if (event.shiftKey) {
           // Fine-grained 15° rotations when Shift is held.
-          handlers.rotateItemBy(selectedItem.id, Math.PI / 12);
+          handlers.rotateItemBy(selectedItem.id, (angleSnapDeg * Math.PI) / 180);
         } else {
           handlers.rotateItem(selectedItem.id);
         }
@@ -325,7 +331,7 @@ export function useKeyboardShortcuts({
       const delta = ARROW_DELTAS[event.key];
       if (delta && selectedItem?.position && !selectedItem.locked) {
         event.preventDefault();
-        const step = event.shiftKey ? 1.0 : 0.1;
+        const step = (Number.isFinite(nudgeStepM) && nudgeStepM > 0 ? nudgeStepM : 0.1) * (event.shiftKey ? 10 : 1);
         const [dx, dz] = delta;
         handlers.moveItem(
           selectedItem.id,
@@ -337,7 +343,7 @@ export function useKeyboardShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, layoutLocked, isDragActive, onBlocked, handlers]);
+  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, layoutLocked, isDragActive, onBlocked, nudgeStepM, angleSnapDeg, handlers]);
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

@@ -22,6 +22,8 @@ export interface UseItemPlacementParams {
   buildingCost: number;
   actions: LayoutActions;
   view: Pick<ViewSettings, 'snapToGrid' | 'snapToWall' | 'snapToItems'>;
+  /** 网格吸附步长（米）。缺省仍是 0.5。 */
+  gridSizeM?: number | undefined;
   /**
    * The multi-selection. A drag on one of its items moves its unlocked
    * members together, so snap-to-items must not target their stale
@@ -51,6 +53,7 @@ export function useItemPlacement({
   roomDepth,
   actions,
   view,
+  gridSizeM = GRID_SIZE_METERS,
   allSelectedIds,
   frontGap,
 }: UseItemPlacementParams): UseItemPlacementResult {
@@ -88,9 +91,10 @@ export function useItemPlacement({
       // the nearest wall and orient into the room on release, in handleDragEnd.
 
       if (view.snapToGrid) {
+        const step = Number.isFinite(gridSizeM) && gridSizeM > 0 ? gridSizeM : GRID_SIZE_METERS;
         result = {
-          x: snapValueToGrid(result.x, GRID_SIZE_METERS),
-          z: snapValueToGrid(result.z, GRID_SIZE_METERS),
+          x: snapValueToGrid(result.x, step),
+          z: snapValueToGrid(result.z, step),
         };
       }
       if (view.snapToItems && item) {
@@ -125,6 +129,7 @@ export function useItemPlacement({
       view.snapToGrid,
       view.snapToWall,
       view.snapToItems,
+      gridSizeM,
       activeFloor.items,
       layout,
       activeFloor.interiorWalls,

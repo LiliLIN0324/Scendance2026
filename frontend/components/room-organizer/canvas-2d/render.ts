@@ -9,7 +9,8 @@ import { entrancePlanOutline, planFloorIndex } from '../lib/street';
 import { layoutGeometryScene } from '../lib/structural-layout';
 import { zoneArea, type ZoneRect } from '../lib/zones';
 import { drawStairsSymbol, drawStairwellHoles } from './stairs-symbol';
-import { formatArea, formatLength } from '../lib/display-units';
+import { formatArea, formatReading } from '../lib/display-units';
+import type { LengthPrecisionM } from '../../../../supabase/functions/_shared/plan-editor';
 import type { FloorLayout, FloorPlanFitMode, FurnitureItem, RoomLayout, WallId } from '../lib/types';
 import type { DisplayUnit } from '../lib/types';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
@@ -26,6 +27,10 @@ export interface Render2DOptions {
   showMeasurements: boolean;
   /** 读数显示单位；内部底稿仍存米，仅标注换算展示。缺省按米。 */
   lengthUnit?: DisplayUnit;
+  /** 长度读数步长（米）。缺省 0.01。 */
+  lengthPrecisionM?: LengthPrecisionM;
+  /** 网格间距（米）。缺省 0.5，并与吸附共用同一原点。 */
+  gridSizeM?: number | undefined;
   showWiFiSignals: boolean;
   showHeatmap?: boolean;
   /** Main-canvas reference display; absent preserves the legacy callers. */
@@ -182,6 +187,9 @@ export function render2DTopDown(options: Render2DOptions): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const displayUnit = options.lengthUnit ?? 'm';
+  const lengthPrecisionM = options.lengthPrecisionM ?? 0.01;
+  const gridSizeM = options.gridSizeM && options.gridSizeM > 0 ? options.gridSizeM : GRID_SIZE_METERS;
+  const readLength = (metres: number) => formatReading(metres, displayUnit, lengthPrecisionM);
 
   // The backing store is sized clientWidth/clientHeight × devicePixelRatio (by
   // the ResizeObserver in use-scene-effects), but all drawing below works in
@@ -205,7 +213,7 @@ export function render2DTopDown(options: Render2DOptions): void {
     ctx.closePath(); ctx.clip();
   }
   drawFloor(ctx, layout, floor, offsetX, offsetY, scale, options, satellitePainted);
-  drawGrid(ctx, layout, offsetX, offsetY, scale);
+  drawGrid(ctx, layout, offsetX, offsetY, scale, gridSizeM);
   ctx.restore();
   drawVenuePolygon(ctx, layout, offsetX, offsetY, scale, satellitePainted);
   // The stairwell the floor below cuts through this slab (#290), under everything placed over it.
@@ -234,20 +242,20 @@ export function render2DTopDown(options: Render2DOptions): void {
   if (options.showMeasurements) {
     ctx.save(); ctx.font = 'bold 12px Arial';
     dimensionBlockers.push(labelBounds(offsetX + layout.width * scale / 2, offsetY - 10,
-      ctx.measureText(formatLength(layout.width, displayUnit)).width + 6, 16));
+      ctx.measureText(readLength(layout.width)).width + 6, 16));
     dimensionBlockers.push(labelBounds(offsetX - 10, offsetY + layout.height * scale / 2,
-      16, ctx.measureText(formatLength(layout.height, displayUnit)).width + 6));
+      16, ctx.measureText(readLength(layout.height)).width + 6));
     ctx.restore();
   }
   drawPersonRoutes(ctx, options, offsetX, offsetY, scale);
   drawFurniture(ctx, options, offsetX, offsetY, scale, { width: viewWidth, height: viewHeight }, dimensionBlockers);
 
   if (options.showMeasurements) {
-    drawRoomDimensions(ctx, layout, offsetX, offsetY, scale, displayUnit);
+    drawRoomDimensions(ctx, layout, offsetX, offsetY, scale, displayUnit, lengthPrecisionM);
   }
 
   if (options.zoneDraft) {
-    drawZoneDraft(ctx, layout, options.zoneDraft, offsetX, offsetY, scale, displayUnit);
+    drawZoneDraft(ctx, layout, options.zoneDraft, offsetX, offsetY, scale, displayUnit, lengthPrecisionM);
   }
   if (options.marqueeDraft) {
     drawMarqueeDraft(ctx, layout, options.marqueeDraft, offsetX, offsetY, scale);
@@ -379,7 +387,8 @@ function drawZoneDraft(
   offsetX: number,
   offsetY: number,
   scale: number,
-  unit: DisplayUnit
+  unit: DisplayUnit,
+  precisionM: LengthPrecisionM = 0.01,
 ): void {
   const { x, y, w, h } = zoneCanvasRect(draft, layout, offsetX, offsetY, scale);
   ctx.save();
@@ -394,7 +403,7 @@ function drawZoneDraft(
   ctx.fillStyle = '#1d4ed8';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(`${formatLength(draft.w, unit)} × ${formatLength(draft.d, unit)}`, x + w / 2, y - 4);
+  ctx.fillText(`${formatReading(draft.w, unit, precisionM)} × ${formatReading(draft.d, unit, precisionM)}`, x + w / 2, y - 4);
   ctx.restore();
 }
 
@@ -615,27 +624,28 @@ function drawGrid(
   layout: RoomLayout,
   offsetX: number,
   offsetY: number,
-  scale: number
+  scale: number,
+  gridSize = GRID_SIZE_METERS,
 ): void {
   // LOD 门控：场地级布局（检索框选的规划区可达百米宽）缩进缩略图/缩小视图后，
-  // 0.5m 一格不足 3px——整张网格直接不画，保住边界与内容的可读性（2026-11-14）。
-  if (GRID_SIZE_METERS * scale < MIN_GRID_CELL_PX) return;
+  // 一格不足 3px——整张网格直接不画，保住边界与内容的可读性（2026-11-14）。
+  if (gridSize * scale < MIN_GRID_CELL_PX) return;
   ctx.strokeStyle = '#ddd';
   ctx.lineWidth = 1;
   // Anchor the grid to the world centre (0,0) so the drawn cells line up with
   // `snapToGrid`, which rounds world coordinates to multiples of
-  // GRID_SIZE_METERS about the origin. Corner-anchoring (0, 0.5, 1.0 …) drifts
-  // by `(width/2 mod GRID_SIZE_METERS)` and makes items look off-grid.
+  // the same grid size about the origin. Corner-anchoring drifts
+  // by `(width/2 mod gridSize)` and makes items look off-grid.
   const halfW = layout.width / 2;
   const halfD = layout.height / 2;
-  for (let wx = Math.ceil(-halfW / GRID_SIZE_METERS) * GRID_SIZE_METERS; wx <= halfW; wx += GRID_SIZE_METERS) {
+  for (let wx = Math.ceil(-halfW / gridSize) * gridSize; wx <= halfW; wx += gridSize) {
     const sx = offsetX + (wx + halfW) * scale;
     ctx.beginPath();
     ctx.moveTo(sx, offsetY);
     ctx.lineTo(sx, offsetY + layout.height * scale);
     ctx.stroke();
   }
-  for (let wz = Math.ceil(-halfD / GRID_SIZE_METERS) * GRID_SIZE_METERS; wz <= halfD; wz += GRID_SIZE_METERS) {
+  for (let wz = Math.ceil(-halfD / gridSize) * gridSize; wz <= halfD; wz += gridSize) {
     const sy = offsetY + (wz + halfD) * scale;
     ctx.beginPath();
     ctx.moveTo(offsetX, sy);
@@ -997,7 +1007,8 @@ function drawFurniture(
       if (cx + halfW * scale <= 0 || cx - halfW * scale >= viewport.width ||
           cy + halfD * scale <= 0 || cy - halfD * scale >= viewport.height) continue;
       const itemUnit = options.lengthUnit ?? 'm';
-      const text = `${formatLength(item.width, itemUnit)} × ${formatLength(item.depth, itemUnit)}`;
+      const itemPrecision = options.lengthPrecisionM ?? 0.01;
+      const text = `${formatReading(item.width, itemUnit, itemPrecision)} × ${formatReading(item.depth, itemUnit, itemPrecision)}`;
       ctx.save(); ctx.font = '10px Arial';
       const width = ctx.measureText(text).width + 6;
       ctx.restore();
@@ -1058,17 +1069,18 @@ function drawRoomDimensions(
   offsetX: number,
   offsetY: number,
   scale: number,
-  unit: DisplayUnit
+  unit: DisplayUnit,
+  precisionM: LengthPrecisionM = 0.01,
 ): void {
   ctx.fillStyle = '#333';
   ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(formatLength(layout.width, unit), offsetX + (layout.width * scale) / 2, offsetY - 10);
+  ctx.fillText(formatReading(layout.width, unit, precisionM), offsetX + (layout.width * scale) / 2, offsetY - 10);
   ctx.save();
   ctx.translate(offsetX - 10, offsetY + (layout.height * scale) / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText(formatLength(layout.height, unit), 0, 0);
+  ctx.fillText(formatReading(layout.height, unit, precisionM), 0, 0);
   ctx.restore();
 }
 

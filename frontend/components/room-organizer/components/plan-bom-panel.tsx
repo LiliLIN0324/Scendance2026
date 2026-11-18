@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { PLANNING_RADIUS, PLANNING_SURFACE, PLANNING_TYPOGRAPHY } from '@/lib/outdoor-plan-tokens';
 import {
   bomToCsv,
@@ -10,6 +10,8 @@ import {
   materialLabel,
   type BomFacility,
 } from '../lib/plan-bom';
+import { formatMoney, type CurrencyCode } from '../../../../supabase/functions/_shared/plan-editor';
+import { readStudioSettingsCache, subscribeStudioSettings } from '../lib/studio-settings-cache';
 import { buildQuoteHtml, withQuoteField, type PlanQuote } from '../lib/quote-document';
 
 const QUOTE_FIELDS = [
@@ -24,6 +26,13 @@ export interface PlanBomPanelProps {
   quote?: PlanQuote | undefined;
   onPriceModel: (slug: string, unitPrice: number | null) => void;
   onQuoteChange: (quote: PlanQuote | undefined) => void;
+  /** 团队抬头。方案字段空着时，导出用这些值。 */
+  headerFallback?: {
+    companyName?: string;
+    contact?: string;
+    currency?: CurrencyCode;
+    logoUrl?: string;
+  };
 }
 
 function downloadText(filename: string, content: string, type: string) {
@@ -50,8 +59,17 @@ const quietButtonStyle = {
  * 选中设施时的物料清单与报价。
  * 单价写回同型号设施和 plan.priceBook；抬头写回 plan.quote，不留在组件局部状态。
  */
-export function PlanBomPanel({ facilities, quote, onPriceModel, onQuoteChange }: PlanBomPanelProps) {
+export function PlanBomPanel({ facilities, quote, onPriceModel, onQuoteChange, headerFallback }: PlanBomPanelProps) {
   const [open, setOpen] = useState(false);
+  const team = useSyncExternalStore(subscribeStudioSettings, () => readStudioSettingsCache(), () => null);
+  const fallback = headerFallback ?? {
+    ...(team?.companyName ? { companyName: team.companyName } : {}),
+    ...(team?.quoteContact ? { contact: team.quoteContact } : {}),
+    ...(team?.currency ? { currency: team.currency } : {}),
+    ...(team?.logoUrl ? { logoUrl: team.logoUrl } : {}),
+  };
+  const currency = quote?.currency ?? fallback.currency ?? 'CNY';
+  const money = (amount: number) => formatMoney(amount, currency);
   const bom = useMemo(() => (open ? buildBom(facilities) : null), [open, facilities]);
   const priceRows = useMemo(() => (open ? buildPriceTable(facilities) : []), [open, facilities]);
   const markdown = bom ? bomToMarkdown(bom) : '';
@@ -105,8 +123,8 @@ export function PlanBomPanel({ facilities, quote, onPriceModel, onQuoteChange }:
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', whiteSpace: 'nowrap', color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-                  <div>×{line.count} · {line.unitPrice === null ? '未定价' : `¥${line.unitPrice}`}</div>
-                  <div style={{ opacity: 0.62, fontSize: 10 }}>{line.subtotal === null ? '未计入金额' : `小计 ¥${line.subtotal}`}</div>
+                  <div>×{line.count} · {line.unitPrice === null ? '未定价' : money(line.unitPrice)}</div>
+                  <div style={{ opacity: 0.62, fontSize: 10 }}>{line.subtotal === null ? '未计入金额' : `小计 ${money(line.subtotal)}`}</div>
                 </div>
               </div>
             ))}
@@ -115,7 +133,7 @@ export function PlanBomPanel({ facilities, quote, onPriceModel, onQuoteChange }:
                 <span>合计 {bom.total} 件</span>
                 <span>
                   {bom.unpricedCount > 0 ? `${bom.unpricedCount} 件未定价` : ''}
-                  {bom.totalAmount > 0 ? ` · ¥${bom.totalAmount.toFixed(2)}` : ''}
+                  {bom.totalAmount > 0 ? ` · ${money(bom.totalAmount)}` : ''}
                 </span>
               </div>
             )}
@@ -126,8 +144,8 @@ export function PlanBomPanel({ facilities, quote, onPriceModel, onQuoteChange }:
               : bom.unpricedCount === bom.total
                 ? '价格：尚未填写单价，本清单不含金额；未定价项不虚构单价。'
                 : bom.unpricedCount > 0
-                  ? `已定价 ¥${bom.totalAmount.toFixed(2)}；${bom.unpricedCount} 件未定价，未计入金额。`
-                  : `已定价合计 ¥${bom.totalAmount.toFixed(2)}。`}
+                  ? `已定价 ${money(bom.totalAmount)}；${bom.unpricedCount} 件未定价，未计入金额。`
+                  : `已定价合计 ${money(bom.totalAmount)}。`}
           </p>
           <div style={{ marginTop: 6, maxHeight: 180, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
             {priceRows.map(row => (
@@ -229,7 +247,10 @@ export function PlanBomPanel({ facilities, quote, onPriceModel, onQuoteChange }:
                   note: '价格为项目内定价；未定价项需补齐后出正式报价，浏览器打印可另存为 PDF。',
                   ...(quote?.client?.trim() ? { client: quote.client.trim() } : {}),
                   ...(quote?.validUntil?.trim() ? { validUntil: quote.validUntil.trim() } : {}),
-                  ...(quote?.preparedBy?.trim() ? { preparedBy: quote.preparedBy.trim() } : {}),
+                  ...(quote?.preparedBy?.trim() || fallback.contact ? { preparedBy: quote?.preparedBy?.trim() || fallback.contact || '' } : {}),
+                  ...(quote?.companyName?.trim() || fallback.companyName ? { companyName: quote?.companyName?.trim() || fallback.companyName || '' } : {}),
+                  ...(quote?.logoUrl || fallback.logoUrl ? { logoUrl: quote?.logoUrl || fallback.logoUrl || '' } : {}),
+                  currency,
                 }),
                 'text/html;charset=utf-8',
               )}

@@ -8,6 +8,7 @@
  * 抬头字段写回 plan.quote，未填的键删掉，不在本地组件状态里单独存一份。
  */
 
+import { formatMoney, type CurrencyCode } from '../../../../supabase/functions/_shared/plan-editor';
 import { bomToCsv, materialLabel, type PlanBom } from './plan-bom';
 import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -26,6 +27,11 @@ export interface QuoteInput {
   generatedAt?: string;
   /** 备注，例如「价格为暂估，最终以合同为准」。 */
   note?: string;
+  /** 公司名。本方案没写时由调用方填入团队默认。 */
+  companyName?: string;
+  /** 货币。缺省人民币，和现有报价单的 ¥ 一致。 */
+  currency?: CurrencyCode;
+  logoUrl?: string;
 }
 
 export const QUOTE_FIELD_LIMITS = {
@@ -33,6 +39,8 @@ export const QUOTE_FIELD_LIMITS = {
   client: 120,
   validUntil: 40,
   preparedBy: 120,
+  companyName: 120,
+  logoUrl: 80_000,
 } as const;
 
 /**
@@ -41,7 +49,7 @@ export const QUOTE_FIELD_LIMITS = {
  */
 export function withQuoteField(
   quote: PlanQuote | undefined,
-  key: keyof PlanQuote,
+  key: keyof typeof QUOTE_FIELD_LIMITS,
   value: string,
 ): PlanQuote | undefined {
   const next: PlanQuote = { ...(quote ?? {}) };
@@ -60,11 +68,13 @@ const escapeHtml = (value: string) =>
 
 export function buildQuoteHtml(input: QuoteInput): string {
   const { bom, projectName } = input;
+  const currency = input.currency ?? 'CNY';
+  const money = (amount: number) => formatMoney(amount, currency);
   const priced = bom.total - bom.unpricedCount;
   const rows = bom.lines
     .map((line, index) => {
-      const unit = line.unitPrice === null ? '未定价' : `¥${line.unitPrice.toFixed(2)}`;
-      const subtotal = line.subtotal === null ? '—' : `¥${line.subtotal.toFixed(2)}`;
+      const unit = line.unitPrice === null ? '未定价' : money(line.unitPrice);
+      const subtotal = line.subtotal === null ? '—' : money(line.subtotal);
       return `<tr>
       <td>${index + 1}</td>
       <td>${escapeHtml(line.name)}</td>
@@ -77,6 +87,7 @@ export function buildQuoteHtml(input: QuoteInput): string {
     })
     .join('\n');
   const metaParts = [
+    input.companyName ? `公司：${escapeHtml(input.companyName)}` : '',
     input.client ? `客户：${escapeHtml(input.client)}` : '',
     input.preparedBy ? `报价人：${escapeHtml(input.preparedBy)}` : '',
     input.validUntil ? `有效期至：${escapeHtml(input.validUntil)}` : '',
@@ -104,6 +115,7 @@ export function buildQuoteHtml(input: QuoteInput): string {
 </style>
 </head>
 <body>
+  ${input.logoUrl ? `<img alt="" src="${escapeHtml(input.logoUrl)}" style="max-height:48px;max-width:180px;object-fit:contain">` : ''}
   <h1>${escapeHtml(projectName)} · 物料报价单</h1>
   <div class="meta">${metaParts.join(' · ')}</div>
   <table>
@@ -118,7 +130,7 @@ ${rows}
         <td colspan="4">合计</td>
         <td class="num">${bom.total}</td>
         <td class="num">${bom.unpricedCount > 0 ? `${bom.unpricedCount} 件未定价` : ''}</td>
-        <td class="num">¥${bom.totalAmount.toFixed(2)}</td>
+        <td class="num">${money(bom.totalAmount)}</td>
       </tr>
     </tfoot>
   </table>

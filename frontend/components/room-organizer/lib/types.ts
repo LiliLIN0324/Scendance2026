@@ -1,6 +1,7 @@
 import type { Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/domain';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
 import type { EventProfile } from '../../../lib/event-profile';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { Provenance } from '../../../lib/rng';
@@ -432,6 +433,11 @@ export interface SceneAnchor {
  * building because they're shared across levels.
  */
 export interface RoomLayout {
+  /**
+   * 本方案的显示、网格、时区和通道。跟这份活动走，进本机保存；
+   * 云端场景用可选 editor 字段原样带回。缺省表示跟随个人或内置默认。
+   */
+  planSettings?: PlanEditorSettings | undefined;
   /** 活动档案只做本地侧车；不进云端场景、分享与客户产物。 */
   eventProfile?: EventProfile | undefined;
   /** Internal local production planning; excluded from public sharing. */
@@ -530,6 +536,8 @@ export interface ViewSettings {
   showMeasurements: boolean;
   /** 读数显示单位：内部仍按米存储，仅标注 / 属性面板 / 导出清单换算展示。 */
   lengthUnit: DisplayUnit;
+  /** 长度读数的米制步长。缺省 0.01 m（两位小数）。 */
+  lengthPrecisionM?: 0.01 | 0.1 | 1;
   showWiFiSignals: boolean;
   snapToGrid: boolean;
   snapToWall: boolean;
