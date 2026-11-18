@@ -25,7 +25,8 @@ import { attachPlanCatalogDrag, clearPlanCatalogDrag, planCatalogDragFor } from 
 import { usePendingMaterials } from '../lib/material-generate';
 import { importLatestPendingMaterials, importPendingMaterial, LUX3D_TASK_POLL_MS } from '../lib/lux3d-import';
 import { filterOnlineModels, loadOnlineModels } from '../lib/online-models';
-import { mergeCloudGeneratedCards, type GeneratedMaterialCard } from '../lib/generated-material-cards';
+import { findGeneratedFacilityModel, registerGeneratedFacilityModel } from '../lib/facility-generated-models';
+import { generatedCardFootprint, generatedPlacementSlug, mergeCloudGeneratedCards, type GeneratedMaterialCard } from '../lib/generated-material-cards';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { buildStyleBundleItems, findStyleBundle, loadStyleRuns, saveStyleRun, type StyleBundle, type StyleRun } from '../lib/style-bundles';
 import { assetCloudLabel, useAssetCloudRecords } from '../lib/asset-cloud';
@@ -459,13 +460,56 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     if (!session) return Promise.reject(new Error('登录后才能取回云端生成的模型。'));
     return loadGeneratedCatalogItem(card.id, assetId => session.authorizeAsset(assetId));
   };
-  /** 「我的生成」点选：载入后进「待放置」（同上）。 */
+  /** 量完尺寸后登记给户外 3D。签名链接只留在本会话，不写进计划。 */
+  const rememberGeneratedModel = (card: GeneratedCard, item: CatalogItem) => {
+    const url = item.glbUrl;
+    if (!url || !(item.width > 0) || !(item.depth > 0) || !(item.height > 0)) return;
+    registerGeneratedFacilityModel({
+      slug: generatedPlacementSlug(card.id),
+      name: item.name,
+      glbUrl: url,
+      width: item.width,
+      depth: item.depth,
+      height: item.height,
+      facilityId: `library-${card.id}`,
+      facilityName: item.name,
+      createdAt: Date.now(),
+      sessionOnly: true,
+    });
+  };
+  /** 拖起时先占住地图落点；GLB 授权在后台补登记，登记完成 3D 会换上真模型。 */
+  const preloadGeneratedModel = (card: GeneratedCard) => {
+    if (card.id.startsWith('pending:')) return;
+    if (findGeneratedFacilityModel(generatedPlacementSlug(card.id))) return;
+    void loadGeneratedCard(card).then(item => {
+      if (!alive.current) return;
+      rememberGeneratedModel(card, item);
+    }).catch(() => { /* 点选会再试一次，并把原因写在卡片下面。 */ });
+  };
+  const beginGeneratedDrag = (event: { preventDefault(): void; dataTransfer: DataTransfer }, card: GeneratedCard) => {
+    if (latest.current.disabled || latest.current.busy || card.id.startsWith('pending:')) {
+      event.preventDefault();
+      return;
+    }
+    const footprint = generatedCardFootprint(card);
+    attachPlanCatalogDrag(event.dataTransfer, planCatalogDragFor({
+      slug: generatedPlacementSlug(card.id),
+      name: card.name,
+      width: footprint.width,
+      depth: footprint.depth,
+    }));
+    event.dataTransfer.setData(CATALOG_DRAG_MIME, `generated:${card.id}`);
+    event.dataTransfer.effectAllowed = 'copy';
+    preloadGeneratedModel(card);
+  };
+  /** 「我的生成」点选：载入后进「待放置」（同上）。云端 UUID 换成合法 slug，地图才肯收下。 */
   const armGenerated = (card: GeneratedCard) => {
     if (latest.current.disabled || latest.current.busy || importing.current) return;
     latest.current.busy = card.id; setBusy(card.id); setPlaceError('');
     void loadGeneratedCard(card).then(item => {
       if (!alive.current) return;
-      latest.current.onArmCatalogItem?.(item, card.id);
+      rememberGeneratedModel(card, item);
+      latest.current.onArmCatalogItem?.(item, generatedPlacementSlug(card.id));
     }).catch((error: unknown) => {
       if (alive.current) setPlaceError(error instanceof Error ? error.message : '该模型未能取回。');
     }).finally(() => { if (alive.current) { latest.current.busy = null; setBusy(null); } });
@@ -646,16 +690,15 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       // 本机生成的卡显示四态；云端队列产物（shipped）本来就有 asset_id，不重复标。
       const cloudRecord = !pendingCard && !card.shipped ? cloudRecords[card.id] : undefined;
       const cloudState = cloudRecord ? assetCloudLabel(cloudRecord.state, cloudRecord.progress) : '';
-      return <li className="sc-lib-tile is-object" key={card.id}>
+      // 没有预览图时名字必须常驻。旧占位只画一个「生」，叠层名字又要悬停才出现，折叠椅看起来是空卡。
+      const noPreview = !card.image;
+      return <li className={`sc-lib-tile is-object${noPreview ? ' is-no-preview' : ''}`} key={card.id}>
         <button type="button" className="sc-lib-tile-btn" disabled={disabled || busy !== null}
-          draggable={!disabled && busy !== null ? false : !pendingCard}
-          onDragStart={event => {
-            if (disabled || busy !== null || pendingCard) { event.preventDefault(); return; }
-            event.dataTransfer.setData(CATALOG_DRAG_MIME, `generated:${card.id}`);
-            event.dataTransfer.effectAllowed = 'copy';
-          }}
+          draggable={!disabled && busy === null && !pendingCard}
+          onDragStart={event => beginGeneratedDrag(event, card)}
+          onDragEnd={() => clearPlanCatalogDrag()}
           onClick={() => clickGenerated(card)} aria-label={`${pendingCard ? `取回${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={pendingCard ? `${card.name}\n生成中，点一下立即取回` : `${card.name}\n拖到场地落下，或点一下再点场地选位${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
-          <span className="sc-lib-tile-thumb"><span className="sc-lib-tile-photo">{card.image ? <MaterialThumb src={card.image}/> : <span className="sc-material-thumb-empty">{pendingCard ? <Loader2 className="cr-spin" size={12}/> : '生'}</span>}</span></span>
+          <span className="sc-lib-tile-thumb"><span className="sc-lib-tile-photo">{card.image ? <MaterialThumb src={card.image}/> : <span className="sc-material-thumb-empty" aria-hidden="true">{pendingCard ? <Loader2 className="cr-spin" size={12}/> : null}</span>}</span></span>
           <span className="sc-lib-tile-name">{card.name}{cloudState && <small> · {cloudState}</small>}</span>
         </button>
         {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${card.name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, card.id))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
@@ -939,12 +982,9 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         const cloudState = cloudRecord ? assetCloudLabel(cloudRecord.state, cloudRecord.progress) : '';
         return <div className="sc-material-tile" key={card.id}>
           <button type="button" className="sc-material-card" disabled={disabled || busy !== null || pendingCard}
-            draggable={!disabled && busy !== null ? false : !pendingCard}
-            onDragStart={event => {
-              if (disabled || busy !== null || pendingCard) { event.preventDefault(); return; }
-              event.dataTransfer.setData(CATALOG_DRAG_MIME, `generated:${card.id}`);
-              event.dataTransfer.effectAllowed = 'copy';
-            }}
+            draggable={!disabled && busy === null && !pendingCard}
+            onDragStart={event => beginGeneratedDrag(event, card)}
+            onDragEnd={() => clearPlanCatalogDrag()}
             onClick={() => clickGenerated(card)} aria-label={`${pendingCard ? `生成中 ${card.name}` : `添加${card.name}`}${cloudState ? `（${cloudState}）` : ''}`} title={`${card.name}\n拖到空间或直接点击添加${cloudState ? `\n云端状态：${cloudState}` : ''}`}>
             <span className="sc-material-preview">
               <span className="sc-lib-tile-photo">{card.image
