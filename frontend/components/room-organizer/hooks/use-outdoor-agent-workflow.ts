@@ -177,6 +177,9 @@ class OutdoorStepBlocked extends Error {
     super(message);
   }
 }
+/** 范围未确认时的拦阻文案（两个分支共用一份，避免改一处忘一处）。 */
+const NO_BOUNDARY_NOTICE =
+  "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。";
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
   // 2026-11-18 用户反馈「为什么要写这么多」：应用提示只保留一句真正要紧的动作话；
   // 「边界就在眼前」「下一步是什么」分别由画布和任务卡标题承担，聊天里不重复。
@@ -1363,8 +1366,7 @@ export function useOutdoorAgentWorkflow(input: {
           completed: stateRef.current.completed.filter((s) => s === "place"),
         });
         status(
-          "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。" +
-            deferredNote(priorUserTextRef.current),
+          NO_BOUNDARY_NOTICE + deferredNote(priorUserTextRef.current),
           "blocked",
         );
         setBusy(false);
@@ -1386,8 +1388,7 @@ export function useOutdoorAgentWorkflow(input: {
             completed: stateRef.current.completed.filter((s) => s === "place"),
           });
           status(
-            "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。" +
-              deferredNote(priorUserTextRef.current),
+            NO_BOUNDARY_NOTICE + deferredNote(priorUserTextRef.current),
             "blocked",
           );
           setBusy(false);
