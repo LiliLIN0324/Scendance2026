@@ -15,6 +15,7 @@ import {
   type WalkViewMode,
 } from '../lib/walk-view-modes';
 import { resolveWalkerStep, type WalkCollider } from '../lib/walk-collision';
+import { clearCameraDistance } from '../lib/walk-camera-clearance';
 
 /** 鸟瞰档里 WASD 推人的速度（米/秒）；鸟瞰看的是全局，给得比步行快一点。 */
 const ORBIT_MOVE_SPEED_MPS = 3.2;
@@ -24,6 +25,9 @@ const ORBIT_MOVE_SPEED_MPS = 3.2;
  * 的“可贴到多近”才一致。室内 walkthrough 的 0.3 m 是另一套手感，不要互相借。
  */
 const PERSON_WALK_RADIUS_M = 0.28;
+
+/** 相机半径（米）：第三人称后拉时不能把镜头探进设施里，比人头略小。 */
+const CAMERA_CLEARANCE_RADIUS_M = 0.25;
 
 /** 每帧透出的玩家锚点姿态，供户外组件摆占位 avatar 与跟随相机。 */
 export interface OutdoorWalkFrame {
@@ -425,6 +429,24 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         if (controls) adoptWalkPointerLock(controls, canvas);
 
         const rig = rigOffsetForYaw(viewModeRef.current, yaw);
+        // 相机防穿：后拉方向上顶着帐篷 / 摊位时，把机位缩近而不是钻进盒子里；
+        // 朝向不动，所以缩近只是“贴到人身后”，不会把镜头甩向后脑勺。
+        let rigX = rig.x;
+        let rigZ = rig.z;
+        const rigLength = Math.hypot(rig.x, rig.z);
+        const rigColliders = collidersRefLocal.current?.current ?? null;
+        if (rigLength > 1e-3 && rigColliders && rigColliders.length > 0) {
+          const allowed = clearCameraDistance(
+            rigColliders,
+            player,
+            { x: rig.x, z: rig.z },
+            rigLength,
+            CAMERA_CLEARANCE_RADIUS_M
+          );
+          const scale = Math.max(0, Math.min(1, allowed / rigLength));
+          rigX = rig.x * scale;
+          rigZ = rig.z * scale;
+        }
 
         // #82 鸟瞰档：相机交回 OrbitControls 做高空环绕，hook 不步行、不摆位、不持指针锁；
         // 帧照常透出（avatar 按 thirdPerson=false 隐藏；近邻 E 提示由场景层在鸟瞰档跳过）。
@@ -496,9 +518,9 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
             player.y = eyeHeightRef.current;
             onStandUpRef.current?.();
             camera.position.set(
-              player.x + rig.x,
+              player.x + rigX,
               player.y + rig.heightDelta,
-              player.z + rig.z,
+              player.z + rigZ,
             );
             onWalkFrameRef.current?.({
               x: player.x,
@@ -517,9 +539,9 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
           if (typeof seatState.yaw === 'number') yaw = seatState.yaw;
           moving = false;
           camera.position.set(
-            player.x + rig.x,
+            player.x + rigX,
             player.y + rig.heightDelta,
-            player.z + rig.z,
+            player.z + rigZ,
           );
           onWalkFrameRef.current?.({
             x: player.x,
@@ -569,9 +591,9 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         moving = Math.hypot(movedX, movedZ) > 0.0001;
         if (moving) yaw = Math.atan2(movedX, movedZ);
         camera.position.set(
-          player.x + rig.x,
+          player.x + rigX,
           player.y + rig.heightDelta,
-          player.z + rig.z,
+          player.z + rigZ,
         );
         onWalkFrameRef.current?.({
           x: player.x,
