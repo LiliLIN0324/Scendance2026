@@ -63,6 +63,26 @@ export function requestOutdoorPlanIssueFocus(key: string): void {
   window.dispatchEvent(new CustomEvent(OUTDOOR_PLAN_ISSUE_FOCUS_EVENT, { detail: { key } }));
 }
 
+export const OUTDOOR_PLAN_POINT_FOCUS_EVENT = 'scendance:outdoor-plan-point-focus';
+
+/** Bingo 点一条户外钉 → 画布居中到钉的 ENU 锚点。 */
+export function requestOutdoorPlanPointFocus(x: number, y: number): void {
+  if (typeof window === 'undefined' || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  window.dispatchEvent(new CustomEvent(OUTDOOR_PLAN_POINT_FOCUS_EVENT, { detail: { x, y } }));
+}
+
+export function onOutdoorPlanPointFocus(handler: (point: { x: number; y: number }) => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const listener = (event: Event) => {
+    const detail = (event as CustomEvent<{ x?: unknown; y?: unknown }>).detail;
+    if (typeof detail?.x === 'number' && typeof detail.y === 'number' && Number.isFinite(detail.x) && Number.isFinite(detail.y)) {
+      handler({ x: detail.x, y: detail.y });
+    }
+  };
+  window.addEventListener(OUTDOOR_PLAN_POINT_FOCUS_EVENT, listener);
+  return () => window.removeEventListener(OUTDOOR_PLAN_POINT_FOCUS_EVENT, listener);
+}
+
 export function onOutdoorPlanIssueFocus(handler: (key: string) => void): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const listener = (event: Event) => {

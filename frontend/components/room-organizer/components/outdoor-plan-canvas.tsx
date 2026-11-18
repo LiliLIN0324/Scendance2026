@@ -1,6 +1,6 @@
 ﻿'use client';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
-import { onOutdoorPlanIssueFocus, publishOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
+import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
 import { firstModelSlug } from '../lib/asset-namespace';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
@@ -7408,6 +7408,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   useEffect(() => onOutdoorPlanIssueFocus(key => {
     const entry = infoIssuesRef.current.find(item => item.key === key);
     if (entry) locateIssueRef.current(entry);
+  }), []);
+
+  // 户外评审钉：按 ENU 锚点居中；与问题条目共用同一套视图定位。
+  const centerViewOnRef = useRef(centerViewOn);
+  centerViewOnRef.current = centerViewOn;
+  useEffect(() => onOutdoorPlanPointFocus(point => {
+    centerViewOnRef.current(point);
+    setInfoMessage('已在地图上定位到评审钉。');
   }), []);
 
   /** 问题条目 → 地图：居中锚点，关联实体可选中。 */

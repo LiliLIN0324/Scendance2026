@@ -613,6 +613,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 同时表达「收起」和「3D 接管」两种态，收起被派生成全屏接管。引入显式接管开关：
   // 只有它为 true（且非 2D）才全屏接管；收起＝两者都 false，回工作台。
   const [outdoor3dTakeoverActive, setOutdoor3dTakeoverActive] = useState(false);
+  // Bingo 点户外钉：先确保回到户外 2D，再让画布按锚点居中。
+  useEffect(() => {
+    const focus = () => { setOutdoor2DOpen(true); setOutdoor3dTakeoverActive(false); };
+    window.addEventListener('scendance:outdoor-plan-point-focus', focus);
+    return () => window.removeEventListener('scendance:outdoor-plan-point-focus', focus);
+  }, []);
   const applyPresetRef = useRef<(preset: 'iso') => void>(() => undefined);
   // 2026-11-12 用户反馈「2D/立体切换不丝滑」：3D 场地组件常驻保活（切回 2D 只隐藏不卸载）。
   // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
@@ -5089,6 +5095,8 @@ useEffect(() => {
                   onWalkExit={() => setOutdoorWalkActive(false)}
                   viewMode={outdoorWalkView}
                   onCycleView={cycleOutdoorWalkView}
+                  walkRoleUrl={walkRoleUrl}
+                  walkRoleName={walkRole.name}
                 />
               </div>
             )}
