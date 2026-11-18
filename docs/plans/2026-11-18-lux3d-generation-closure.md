@@ -62,7 +62,18 @@
 4. **重新部署 `generation-worker` 与前端**，然后执行 `verify-generation-closure.sql` 逐段核对。
 5. 再跑一单。判断标准：`state=ready` + `asset_id` 非空 + 户外 3D 里是这件模型而不是灰占位。
 
-## 四、本轮刻意没做
+## 四、本地验证补记（2026-11-18）
+
+| 跑什么 | 命令 | 结果 | 证明什么 |
+| --- | --- | --- | --- |
+| worker 全链 | `npx vitest run tests/worker-http.test.ts tests/models.test.ts` | **24 passed**（12 + 12） | 含「供应商产物 10.06 MiB 超过 10 MiB 导入档仍能归档 → 资产入库 → 任务 ready」与 32 MiB 档的拒收边界 |
+| 生成面板 | `npx vitest run components/room-organizer/panels/generation-sheet.react.test.tsx` | **8 passed** | `data-testid="generation-sheet"`、属性卡入口「用于「沙滩椅」」、额度确认与 unknown 锁都在 |
+| 设施取件 | `npx vitest run components/room-organizer/lib/facility-generated-models.test.ts` | **28 passed** | 含本轮新增的「排队卡住不落终态、带人话到面板」 |
+
+> 这三条在默认 `NODE_OPTIONS` 下会先报 `localStorage is undefined`：Node 26 自带 `localStorage` 全局（未带 `--localstorage-file` 时为 undefined），遮蔽了 jsdom 的实现。
+> 本地加 `NODE_OPTIONS=--localstorage-file=<临时文件>` 后全绿；这是运行环境差异，不是本轮代码问题。
+
+## 五、本轮刻意没做
 
 - 没有开新单、没有点生成：无正式站登录凭据，且触发器未装时新单只会再停 `queued` 并可能再扣一次额度。
 - 没改 #151/#167/报价/设置页，没碰室内保活容器（R2/R3），没新接 Aholo 其它能力。
