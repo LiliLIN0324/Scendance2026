@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UNKNOWN_SUBMISSION_NOTICE, generationFailureText, vendorRejectionOf } from './generation-failure';
+import { UNKNOWN_SUBMISSION_NOTICE, generationFailureText, generationProgressText, vendorRejectionOf } from './generation-failure';
 
 /**
  * 失败原因必须是「能照着做的下一步」，不是「生成失败」四个字。
@@ -84,5 +84,50 @@ describe('生成失败原因的人话', () => {
     });
     expect(text).toContain('E-7');
     expect(text.length).toBeGreaterThan(0);
+  });
+
+  it('国内密钥打到国际网关（BIZ_14001）要说网关不匹配，不能误导成钥匙无效', () => {
+    const text = generationFailureText({
+      state: 'failed',
+      provider_usage: { vendorError: { vendorCode: 'BIZ_14001', vendorMessage: 'gateway not support this key' } },
+    });
+    expect(text).toContain('api.aholo.cn');
+    expect(text).toContain('网关');
+    expect(text).not.toContain('gateway not support');
+  });
+});
+
+/**
+ * 2026-11-17 生产任务停在 `queued`：面板只显示「云端生成中 · queued」，
+ * 用户看不出是触发器没装（运维问题），只会以为描述写错，再点一次 = 再扣一次额度。
+ */
+describe('排队卡住时的人话', () => {
+  const now = Date.parse('2026-11-18T10:00:00Z');
+
+  it('刚排队不报，避免正常任务被误判成故障', () => {
+    expect(generationProgressText({ state: 'queued', created_at: '2026-11-18T09:59:30Z' }, now)).toBe('');
+  });
+
+  it('排队超过 3 分钟：明说后台没接单、是运维问题、别重复提交', () => {
+    const text = generationProgressText({ state: 'queued', created_at: '2026-11-18T09:52:00Z' }, now);
+    expect(text).toContain('8 分钟');
+    expect(text).toContain('没有接单');
+    expect(text).toContain('触发器');
+    expect(text).toContain('不是描述写错');
+    expect(text).toContain('不要重复提交');
+  });
+
+  it('处理中按 40 分钟兜底，没到就不打扰', () => {
+    expect(generationProgressText({ state: 'processing', created_at: '2026-11-18T09:50:00Z' }, now)).toBe('');
+    const late = generationProgressText({ state: 'processing', created_at: '2026-11-18T09:00:00Z' }, now);
+    expect(late).toContain('60 分钟');
+    expect(late).toContain('不要重复提交');
+  });
+
+  it('没有创建时间就不猜；终态不走进度文案', () => {
+    expect(generationProgressText({ state: 'queued' }, now)).toBe('');
+    expect(generationProgressText({ state: 'queued', created_at: '不是时间' }, now)).toBe('');
+    expect(generationProgressText({ state: 'failed', created_at: '2026-11-18T09:00:00Z' }, now)).toBe('');
+    expect(generationProgressText({ state: 'ready', created_at: '2026-11-18T09:00:00Z' }, now)).toBe('');
   });
 });
