@@ -164,7 +164,9 @@ export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
   objects: "按分区摆放物料",
   "sub-routes": "物件间隙的子入口与支线",
   people: "岗位、人数与活动路径",
-  "refine-3d": "同规划3D深化",
+  // 2026-11-19 用户反馈「同规划3D深化看不懂」：这步对布局不动，只给选中的设施换模型/上传/生成，
+  // 阶段名直接说这件事；「同一份规划」的信息由切 3D 视角时的状态句承担。
+  "refine-3d": "设施 3D 模型精修",
 };
 
 /**
@@ -458,6 +460,14 @@ export function useOutdoorAgentWorkflow(input: {
    * 「低频读一次 bridge 快照」的既有口径；内容不变时不 setState，避免轮询空转重渲染。
    */
   const [drawnZones, setDrawnZones] = useState<SitePlanData["zones"]>([]);
+  /**
+   * 2026-11-19 用户反馈「S8 无从下手」：精修卡的四颗动作全部作用于所选设施——没选中时
+   * 挂着也只能报错。这里把画布当前选中的设施同步给卡：有选中才出动作组，没选中出引导句。
+   * 画布不对外发变更事件，沿用分区清单的同款轮询口径。
+   */
+  const [selectedFacility, setSelectedFacility] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   /** 2026-11-18：scope 阶段画布上是否已有合法用地红线——卡片据此决定「直接给核对卡」还是「教怎么画」。 */
   const [boundaryReady, setBoundaryReady] = useState(false);
   /** 已经自动签发过确认预览的那份边界；同一份边界撤回后不再自动弹回。 */
@@ -746,6 +756,34 @@ export function useOutdoorAgentWorkflow(input: {
       clearInterval(timer);
     };
   }, [state.stage, drawingMode]);
+
+  // 2026-11-19 用户反馈：精修阶段的卡要知道画布上有没有选中设施——没选中就出引导句，不空挂四颗按钮。
+  useEffect(() => {
+    if (state.stage !== "refine-3d") {
+      setSelectedFacility(null);
+      return undefined;
+    }
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      const bridge = callbacks.current.bridge();
+      const plan = bridge?.getPlan();
+      const selected = bridge?.selectedIds?.() ?? [];
+      const hit = plan?.facilities.find(
+        (f) => selected.includes(f.id),
+      );
+      const next = hit ? { id: hit.id, name: hit.name } : null;
+      setSelectedFacility(current =>
+        current?.id === next?.id && current?.name === next?.name ? current : next,
+      );
+    };
+    tick();
+    const timer = setInterval(tick, 800);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [state.stage]);
 
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
@@ -1078,6 +1116,10 @@ export function useOutdoorAgentWorkflow(input: {
     brief: OutdoorBrief;
     /** 2026-11-17 硬挤预览：换排法时继续按硬挤净空重排，不然一换就撞「放不下」。 */
     packed?: boolean;
+    /** docs/47 A3：排布证据随基座走——换排法时同一套禁区/代价重排，不因切换丢证据。 */
+    buildings?: PlanPoint[][] | undefined;
+    hardBlocks?: PlanPoint[][] | undefined;
+    softAreas?: PlanPoint[][] | undefined;
   } | null>(null);
   /**
    * 2026-11-17 追问预算：连续追问且画布毫无改动的次数。
@@ -1107,6 +1149,11 @@ export function useOutdoorAgentWorkflow(input: {
           strategy: next,
           // 2026-11-17 硬挤预览换排法：继续按硬挤净空重排，不然一换就撞「放不下」。
           packed: stored.packed === true,
+          // docs/47 A3：换排法沿用同一套建筑禁区与地图证据（水域/围栏禁区 + 绿地代价），
+          // 不因切换排法把禁区丢掉。
+          buildings: stored.buildings,
+          hardBlocks: stored.hardBlocks,
+          softAreas: stored.softAreas,
           // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏。
           onPhase: (phase) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
           signal: job.controller.signal,
@@ -1768,6 +1815,20 @@ export function useOutdoorAgentWorkflow(input: {
           : undefined;
         const basePlan: SitePlanData = buildingsForPlan ? { ...plan, buildings: buildingsForPlan } : plan;
         if (!live(job) || JSON.stringify(bridge.getPlan()) !== original) return;
+        // docs/47 A3：证据分级进排布引擎——hard 块（水域/围栏）作禁区、绿地作落位代价。
+        // 一行式摘要已随 issued 上下文给模型（A2）；这里是引擎消费点。没有证据就传空数组，
+        // 引擎行为与旧首-fit完全一致；要素几何异常（<3 点 / 非有限坐标）整条丢弃，不猜。
+        const layoutEvidence = mapRef.current.layoutEvidence?.();
+        const evidenceRings = (features: ReadonlyArray<{ geometry: { points: PlanPoint[] } }>) =>
+          features
+            .map((f) => f.geometry.points)
+            .filter(
+              (pts) =>
+                pts.length >= 3 &&
+                pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)),
+            );
+        const hardBlocks = layoutEvidence ? evidenceRings(layoutEvidence.hard) : [];
+        const softAreas = layoutEvidence ? evidenceRings(layoutEvidence.soft) : [];
         // 2026-11-17：默认方案是算出来的，几何不一定吃得下（演出区按面积算了 200+ 个座，
         // 实际只排得进几十个）。放不下就按真实能容纳的量缩，并把缩过的数量写在卡上——
         // 既不静默失败，也不冒充“按面积算的数字都成立”。
@@ -1778,6 +1839,9 @@ export function useOutdoorAgentWorkflow(input: {
           // 结论由 result.demandNote 带回卡上；用户看到设计后自己决定要不要调。
           softDemand: true,
           buildings: buildingsEnu.length ? buildingsEnu : undefined,
+          // docs/47 A3：水域/围栏 hard 块作禁区，绿地 soft 块计落位代价。
+          hardBlocks,
+          softAreas,
           // 2026-11-14 用户指令「进度条要显示在干嘛」：落位进度实时上屏（逐区刷新状态文字）。
           onPhase: (phase: string) => status(`正在落位：${phase}`, "working", { stopLabel: "停止查找" }),
           signal: job.controller.signal,
@@ -1862,6 +1926,11 @@ export function useOutdoorAgentWorkflow(input: {
           strategy: "rows",
           brief: finalBrief,
           packed: Boolean(packedWarning),
+          // docs/47 A3：建筑禁区与地图证据（水域/围栏禁区 + 绿地代价）随基座存档，
+          // 换排法时同一套重排，不因切换丢证据。
+          buildings: buildingsEnu.length ? buildingsEnu : undefined,
+          hardBlocks,
+          softAreas,
         };
         if (packedWarning) {
           designStep("用户要的数量放不下：按「硬挤」出预览塞到物理极限，差额写在提案卡上，没有改用户记下的数量。");
@@ -1900,6 +1969,12 @@ export function useOutdoorAgentWorkflow(input: {
           ...(result.demandNote ? [`人数/面积粗筛没过：${result.demandNote}`] : []),
           `排布方案：${OBJECTS_LAYOUT_LABELS.rows}——卡上「换一种排法」可切换 ${OBJECTS_LAYOUT_LABELS.center}/${OBJECTS_LAYOUT_LABELS.perimeter}。`,
           `已识别边界内建筑 ${buildingsForPlan?.length ?? 0} 栋${buildingsForPlan?.length ? "：标为室内禁区，排物件自动避开（灰色块 2D/3D 同步）。" : "（地图服务暂未提供建筑数据，稍后重试或用物件库「室内区域」手画）。"}`,
+          ...(hardBlocks.length
+            ? [`地图证据里 ${hardBlocks.length} 处水域/围栏列为禁区：物件排布自动避开，不进禁区。`]
+            : []),
+          ...(softAreas.length
+            ? [`地图证据里 ${softAreas.length} 处绿地按「可摆但有代价」参与落位：优先避让，避不开时按代价最小落位并在物件备注注明。`]
+            : []),
           ...(accessKnown ? [] : ["入口还没核对：这版先按分区和用途排，门口留了 2m 净空；补上主通道后我再按通道排一版。"]),
           ...mismatchNotice,
         ]);
@@ -3041,6 +3116,8 @@ export function useOutdoorAgentWorkflow(input: {
     /** 2026-11-18 用户指令「随画随出卡」：画布分区清单（800ms 快照同步）+ 分区卡编辑动作。 */
     drawnZones,
     zoneEdits,
+    /** 2026-11-19 用户反馈：精修卡不空挂——画布上选中的设施（快照同步），没有则出引导句。 */
+    selectedFacility,
     confirmProposal: confirm,
     previewStyle,
     offerBoundary,
