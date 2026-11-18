@@ -554,12 +554,10 @@ export default function OutdoorPlan3D({
   const derivedCrowdCountRef = useRef(0);
   /** 漫游角色 GLB 的加载态：失败时退回几何占位人，并留一句不吓人的说明。 */
   const [walkRoleAvatar, setWalkRoleAvatar] = useState<{ status: 'idle' | 'loading' | 'ready' | 'error'; message?: string; hasSit?: boolean }>({ status: 'idle' });
-  /** 通行体检结论（plan 变时算一次，不进 RAF）。 */
-  const [walkAuditLine, setWalkAuditLine] = useState<string | null>(null);
-  /** 沿流线走的导航行（离流线近时才显示）。 */
-  const [routeLine, setRouteLine] = useState<string | null>(null);
   /** 这一帧是不是被红线挡住（HUD 提示用，只在变化时 setState）。 */
   const [atBoundary, setAtBoundary] = useState(false);
+  /** 沿流线走的导航行（离流线近时才显示）。 */
+  const [routeLine, setRouteLine] = useState<string | null>(null);
   const atBoundaryRef = useRef(false);
   const routeTickRef = useRef(0);
   /** 观景位保存后的短提示。 */
@@ -714,9 +712,6 @@ export default function OutdoorPlan3D({
       return null;
     }
   }, [plan.boundary, plan.facilities, plan.routes]);
-  useEffect(() => {
-    setWalkAuditLine(walkAudit ? `体检 · ${walkAudit.headline}` : null);
-  }, [walkAudit]);
 
   // 观景位深链接：#wspot1… 带进来就直接当出生点（再点漫游即到位）。
   useEffect(() => {
@@ -2950,7 +2945,7 @@ export default function OutdoorPlan3D({
           )}
         </div>
       )}
-      {walkEnabled && walkAuditLine && (
+      {walkEnabled && walkAudit && walkAudit.areaM2 >= 20 && (
         <div
           data-testid="outdoor-walk-audit"
           style={{
@@ -2967,7 +2962,7 @@ export default function OutdoorPlan3D({
             lineHeight: '16px',
           }}
         >
-          {walkAuditLine}
+          {walkAudit ? `体检 · ${walkAudit.headline}` : null}
         </div>
       )}
       {nearEntry && (
