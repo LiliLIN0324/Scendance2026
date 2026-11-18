@@ -642,6 +642,8 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
           player.y + rig.heightDelta,
           player.z + rigZ,
         );
+        // 贴地钳制：过肩档 heightDelta 为负，低头时不让机位钻到地面以下。
+        if (camera.position.y < 0.35) camera.position.y = 0.35;
         onWalkFrameRef.current?.({
           x: player.x,
           y: player.y,
