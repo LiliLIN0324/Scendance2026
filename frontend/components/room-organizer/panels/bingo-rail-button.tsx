@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type RefObject } from 'react';
+import { RAIL_PAPER, RAIL_SELECTED } from '@/components/solid-icons';
 import { countOpenFeedbackPins, readBingoPlanFeedback } from '../lib/bingo-feedback';
 import {
   bingoPhaseLabel,
@@ -10,9 +11,10 @@ import {
 } from '../lib/bingo-status';
 
 /**
- * Bingo D4（2026-11-17 锁定）。
- * 环与四枚工具标同一条墨线：1.65、圆端、`--ink-soft`。环在东北约 315° 开口，缺口约 58°。
- * 环身不改涂赭色或红色。语义色只做缺口里的一颗珠。
+ * Bingo D4（2026-11-17 锁定，2026-11-18 选中改为反黑）。
+ * 未选中：环与四枚工具标同一条墨线，1.65、圆端、`--ink-soft`。环在东北约 315° 开口，缺口约 58°。
+ * 选中：整枚填成实心圆盘，中心留一枚纸色圆孔。不再靠左缘绿条。
+ * 环身不改涂赭色或红色。语义色只做缺口里的一颗珠（未选中时珠坐在缺口里）。
  * 角度：0° 在东，顺时针；315° 即东北。
  */
 export const BINGO_D4 = {
@@ -23,6 +25,8 @@ export const BINGO_D4 = {
   gapCenterDeg: 315,
   gapDeg: 58,
   beadR: 2.55,
+  /** 选中时圆盘中心的纸色孔。 */
+  holeR: 3.6,
 } as const;
 
 function ringPoint(deg: number): { x: number; y: number } {
@@ -54,8 +58,9 @@ function badgeCount(count: number): string {
 
 /**
  * 左轨第二格：Bingo / 评审收藏。
- * 三态只改环内与珠：待发只有开口环；待评环内写未回执链接数，缺口一颗 warn 珠；
- * 已回执环内墨色勾，缺口一颗 err 珠。不再用实心大圆和角标把计数说两遍。
+ * 未选中是开口环。选中改成实心圆盘，中心留纸色孔，不再画左缘绿条。
+ * 三态只改环内与珠：待发没有数字、勾、珠；待评环内写未回执链接数，一颗 warn 珠；
+ * 已回执环内墨色勾，一颗 err 珠。不再用角标把计数说两遍。
  * 未读钉仍写进 aria-label / data-tip。圆体 28px。
  */
 export function BingoRailButton({ open, onOpen, buttonRef }: {
@@ -123,12 +128,19 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
         aria-hidden="true"
       >
         <svg className="sc-bingo-mark" viewBox="0 0 24 24" width="28" height="28" fill="none" aria-hidden="true" focusable="false">
-          <path
-            d={bingoRingPath()}
-            stroke="var(--ink-soft, #55585F)"
-            strokeWidth={BINGO_D4.stroke}
-            strokeLinecap="round"
-          />
+          {open ? (
+            <>
+              <circle cx={BINGO_D4.cx} cy={BINGO_D4.cy} r={BINGO_D4.r} fill={RAIL_SELECTED} />
+              <circle data-mark="hole" cx={BINGO_D4.cx} cy={BINGO_D4.cy} r={BINGO_D4.holeR} fill={RAIL_PAPER} />
+            </>
+          ) : (
+            <path
+              d={bingoRingPath()}
+              stroke="var(--ink-soft, #55585F)"
+              strokeWidth={BINGO_D4.stroke}
+              strokeLinecap="round"
+            />
+          )}
           {bead && (
             <circle
               cx={bead.cx}

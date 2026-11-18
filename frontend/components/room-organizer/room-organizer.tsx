@@ -207,7 +207,6 @@ import { prepareZonePlan, zonePlanCandidates } from '@/lib/zone-plan-application
 import { AgentChat } from './panels/agent-chat';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
-import { RailLaneDot } from './panels/rail-lane-dot';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
 import OutdoorPlan3D, { type OutdoorPlan3DApi } from './components/outdoor-plan-3d';
@@ -4653,7 +4652,6 @@ useEffect(() => {
                   onClick={() => toggleAgent('space')}
                 >
                   <RailSpace size={28} active={isLaneOpen('space')} aria-hidden="true" />
-                  <RailLaneDot lane="space" open={isLaneOpen('space')}/>
                   <span className="sc-rail-label" aria-hidden="true">空间</span>
                 </button>
                 <button
@@ -4669,7 +4667,6 @@ useEffect(() => {
                   onClick={() => toggleAgent('material')}
                 >
                   <RailCrate size={28} active={isLaneOpen('material')} aria-hidden="true" />
-                  <RailLaneDot lane="material" open={isLaneOpen('material')}/>
                   <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
                 <button type="button"

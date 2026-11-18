@@ -744,7 +744,7 @@ button.ap-ghost {
 .ap-menu {
   position: absolute; bottom: calc(100% + 8px); left: -4px; z-index: 40; min-width: 208px;
   padding: 6px; border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper);
-  box-shadow: 0 12px 32px rgba(20, 20, 22, .14); display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--e1); display: flex; flex-direction: column; gap: 2px;
   animation: ap-menu-in var(--dur-2) var(--ease-spec);
 }
 .ap-menu.is-down { bottom: auto; top: calc(100% + 8px); }
@@ -1386,7 +1386,7 @@ button.ap-ghost {
 .ap-panel-add:hover { background: var(--plane-deep); color: var(--wk-ink); }
 /* 加号浮窗：贴在加号上方、左对齐；只放「图片 / 文件」两项，不写解释句。 */
 .ap-add-picker { position: relative; display: flex; align-items: center; }
-.ap-add-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6; min-width: 132px; padding: 4px; border: 1px solid #DEDFE3; border-radius: 10px; background: var(--wk-paper); box-shadow: 0 6px 20px rgba(20, 20, 22, .10); }
+.ap-add-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 6; min-width: 132px; padding: 4px; border: 1px solid #DEDFE3; border-radius: 10px; background: var(--wk-paper); box-shadow: var(--e1); }
 .ap-add-item { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--wk-ink); font-size: 13px; line-height: 1.3; text-align: left; cursor: pointer; }
 .ap-add-item:hover { background: var(--plane-deep); }
 .ap-add-item svg { flex: none; color: var(--wk-muted); }
@@ -1398,7 +1398,7 @@ button.ap-ghost {
 .ap-model-trigger:hover { background: var(--plane-deep); color: var(--wk-ink); }
 .ap-model-trigger[aria-expanded="true"] { background: var(--plane-deep); color: var(--wk-ink); }
 .ap-model-trigger-name { white-space: nowrap; }
-.ap-model-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 6; min-width: 240px; max-height: min(50vh, 320px); overflow-y: auto; padding: 4px; border: 1px solid #DEDFE3; border-radius: 10px; background: var(--wk-paper); box-shadow: 0 6px 20px rgba(20, 20, 22, .10); }
+.ap-model-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 6; min-width: 240px; max-height: min(50vh, 320px); overflow-y: auto; padding: 4px; border: 1px solid #DEDFE3; border-radius: 10px; background: var(--wk-paper); box-shadow: var(--e1); }
 .ap-model-item:disabled { opacity: .5; cursor: not-allowed; }
 /* capabilities 只在登录后拉取：未登录/拉取失败时菜单给解释文案，不留一个像是「模型被删了」的空壳项。 */
 .ap-model-empty { padding: 7px 8px; font-size: 12px; line-height: 1.5; color: var(--wk-muted); }

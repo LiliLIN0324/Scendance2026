@@ -39,12 +39,12 @@ describe('nav chrome state', () => {
     expect(navToggleLabel(false)).toBe(NAV_EXPAND_LABEL);
   });
 
-  it('keeps the collapsed rail at 64px and lets the brand bar fill the 240–480 card', () => {
-    expect(NAV_RAIL_WIDTH_PX).toBe(64);
+  it('keeps the collapsed rail at 56px and lets the brand bar fill the 240–480 card', () => {
+    expect(NAV_RAIL_WIDTH_PX).toBe(56);
     expect(NAV_BRAND_BAR_WIDTH).toBe('100%');
     expect(NAV_BRAND_BAR_TRACKS).toEqual({ min: 240, default: 320, max: 480 });
     const css = readFileSync(join(here, '../../../app/globals.css'), 'utf8');
-    expect(css).toMatch(/--sc-nav-rail-width:\s*64px/);
+    expect(css).toMatch(/--sc-nav-rail-width:\s*56px/);
     expect(css).toContain('grid-template-columns: var(--sc-nav-rail-width) var(--sc-left-card-width, 320px)');
     expect(css).toMatch(/\.sc-nav-brand\.is-wordmark\s*\{[^}]*width:\s*100%/);
     expect(css).not.toMatch(/sc-nav-brand[^}]{0,240}188px/);

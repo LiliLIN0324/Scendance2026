@@ -184,7 +184,7 @@ export function ExportMenu({ onPick, enableExports = false, variant = 'default',
           borderRadius: 14,
           background: '#ffffff',
           border: '1px solid #e4e4e7',
-          boxShadow: '0 6px 18px rgba(20, 20, 22, 0.10)',
+          boxShadow: 'var(--e1)',
           padding: PLANNING_SPACING.xs,
           fontFamily: 'inherit',
         }}>
