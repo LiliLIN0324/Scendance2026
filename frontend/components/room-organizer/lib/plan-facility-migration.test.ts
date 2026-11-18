@@ -323,4 +323,40 @@ describe('plan-facility-migration（室内物件 → plan 设施）', () => {
     expect(result.facilities).toHaveLength(0);
     expect(result.skipped).toHaveLength(0);
   });
+
+  it('C3：室内特化字段不迁 plan，按条目如实标 lossy', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({
+          id: 'c3',
+          type: 'chair',
+          elevation: 2.4,
+          price: 1200,
+          isCCTV: true,
+          position: { x: 2, z: 2 },
+        })],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.lossy).toEqual([{ sourceId: 'c3', fields: ['elevation', 'price', 'isCCTV'] }]);
+    expect('elevation' in result.facilities[0]!).toBe(false);
+    expect('price' in result.facilities[0]!).toBe(false);
+    expect('isCCTV' in result.facilities[0]!).toBe(false);
+  });
+
+  it('C3：普通物件不产生 lossy 行，false 不算损失', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({ id: 'p1', type: 'chair', isCCTV: false, position: { x: 2, z: 2 } })],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.lossy).toEqual([]);
+  });
 });
