@@ -157,7 +157,7 @@ import {
   writeSessionBubbles,
   type StoredAssistantBubble,
 } from '../lib/assistant-session-bodies';
-import { ASSISTANT_SESSION_DEFAULT_TITLE } from '../lib/assistant-sessions';
+import { ASSISTANT_SESSION_DEFAULT_TITLE, assistantSessionTitleFromText } from '../lib/assistant-sessions';
 import {
   assistantSessionExists,
   subscribeActiveAssistantSession, getActiveAssistantSessionId,
@@ -828,6 +828,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const styleProposal = useRef<{ key: string; memoryRevision: number; draftRevision: number; floorIndex: number; sessionId: string | null } | null>(null);
   const shownSteps = useRef(0);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  // 2026-11-19：首条用户消息落盘后自动命名；默认「新会话」只在真正空白时存在。
+  useEffect(() => {
+    const id = assistantSessions.activeId;
+    if (!id || assistantSessions.activeSession?.title !== ASSISTANT_SESSION_DEFAULT_TITLE) return;
+    const firstUser = bubbles.find(item => item.role === 'user' && typeof item.text === 'string' && item.text.trim());
+    if (!firstUser) return;
+    assistantSessions.renameSession(id, assistantSessionTitleFromText(firstUser.text));
+  }, [assistantSessions.activeId, assistantSessions.activeSession?.title, assistantSessions.renameSession, bubbles]);
   const bubblesRef = useRef<Bubble[]>([]);
   bubblesRef.current = bubbles;
   /** 当前气泡所绑定的方案会话；切场时先把旧场正文落盘再换。 */
@@ -4681,7 +4689,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       </div>
     </header>
     <div className="ap-body">
-      {activity && <SessionHistoryOverlay open={showHistory} scope={agent.sessionScope} assertWrite={agent.assertSessionWrite} onClose={() => setShowHistory(false)} resolveStatus={resolveSessionStatus} onSelect={id => { markSessionSeen(id); /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
+      {activity && <SessionHistoryOverlay open={showHistory} scope={agent.sessionScope} headingKind={studio?.controller?.getSnapshot().project ? '项目' : '活动'} assertWrite={agent.assertSessionWrite} onClose={() => setShowHistory(false)} resolveStatus={resolveSessionStatus} onSelect={id => { markSessionSeen(id); /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
       {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
       {activity && mode === 'layout' && <ActivitiesGalleryMount/>}

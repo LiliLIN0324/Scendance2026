@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronUp, FolderOpen, Plus, RefreshCw } from '@/components/solid-icons';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ensureActivityCover, saveActivityCover } from '@/lib/activity-cover';
-import { archiveLocalActivity, createLocalActivityBackup, deleteLocalActivity, listLocalActivities, readLocalActivity, LOCAL_ACTIVITIES_NAMESPACE,
+import { archiveLocalActivity, createLocalActivityBackup, deleteLocalActivityData, listLocalActivities, readLocalActivity, LOCAL_ACTIVITIES_NAMESPACE,
   type LocalActivityList, type NewLocalActivityMode } from '@/lib/local-activities';
 import { parseLocalProjectBackupJson } from '@/lib/local-project-backup';
 import { localActivitySwitchAvailable, localRestoreAvailable } from '@/lib/local-project-restore';
@@ -220,7 +220,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
   };
 
   const galleryHeader = <header className="sc-activity-head">
-    <div className="sc-settings-title"><h3>最近活动</h3><span className="sc-settings-count is-chip">{archives.length + 1} 个</span></div>
+    <div className="sc-settings-title"><h3>本机活动</h3><span className="sc-settings-count is-chip">{archives.length + 1} 个</span></div>
     <button type="button" className="sc-activity-refresh" aria-label="刷新活动列表" title="刷新活动列表" disabled={disabled || busy || listLoading} onClick={() => void refresh()}><RefreshCw size={15} aria-hidden="true"/></button>
   </header>;
   // 读取/异常状态留在折叠区外：收起成胶囊时也必须看得见「读不到」「读失败」。
@@ -260,13 +260,13 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
       <button type="button" className="sc-activity-card-clickable" disabled={openLocked} aria-label={`打开活动「${activity.name}」`}
         onClick={() => void switchActivity(activity.projectId)}
         onContextMenu={event => {
-          // 2026-11-14 用户指令：归档卡右键删除（带确认）。只对归档卡生效——当前活动卡不在此列；
-          // 删除走「归档记录+封面一并清除」，确认文案说清不可恢复。
+          // 2026-11-19：归档卡删除不再只抹列表——规划、点验、需求和对话都按活动编号另存，
+          // 不一起清就会在历史里以「其他活动」回来，用户看到的就是「删不掉」。
           event.preventDefault();
           if (openLocked || pending.current) return;
-          if (!window.confirm(`删除本机归档的「${activity.name}」？归档与封面会一并清除，删除后无法恢复；当前活动不受影响。`)) return;
+          if (!window.confirm(`删除本机活动「${activity.name}」？\n\n· 归档与封面\n· 地图规划\n· 活动需求、点验与图纸\n· 这段对话\n都会一并清除，删除后无法恢复。`)) return;
           setListError('');
-          deleteLocalActivity(activity.projectId)
+          deleteLocalActivityData(activity.projectId)
             .then(() => { if (mounted.current) void refresh(); })
             .catch(caught => { if (mounted.current) setListError(caught instanceof Error ? caught.message : '归档删除失败，请重试。原归档已保留。'); });
         }}>
@@ -284,7 +284,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
     </li>)}
   </ul>;
 
-  return <section ref={sectionRef} className="sc-local-activities" aria-label="最近活动">
+  return <section ref={sectionRef} className="sc-local-activities" aria-label="本机活动">
     {/* 2026-11-13 用户指令：「已有活动暂不可打开 ⓘ」整条删掉——恢复保障没就绪时归档卡自己就是禁用态，不再在上面叠一行提示。 */}
     {identityMissing && <p className="sc-handoff-error" role="alert">请先保存有明确编号的当前活动，再新建或打开其他活动。</p>}
     {showCreate && <div className="sc-activity-group">
@@ -324,8 +324,8 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
             </button>
           )}
           <button type="button" className="sc-activity-island-toggle" aria-expanded={islandOpen} aria-controls="sc-activity-island-body"
-            aria-label={`最近活动，当前「${currentName}」，共 ${archives.length + 1} 个，${islandOpen ? '已展开' : '点按展开'}`}
-            title={`最近活动 · ${currentName}`} onClick={() => setIslandOpen(value => !value)}>
+            aria-label={`本机活动，当前「${currentName}」，共 ${archives.length + 1} 个，${islandOpen ? '已展开' : '点按展开'}`}
+            title={`本机活动 · 当前「${currentName}」`} onClick={() => setIslandOpen(value => !value)}>
             <span className="sc-settings-count is-chip">{archives.length + 1} 个</span>
             {islandOpen ? <ChevronUp size={15} aria-hidden="true"/> : <ChevronDown size={15} aria-hidden="true"/>}
           </button>

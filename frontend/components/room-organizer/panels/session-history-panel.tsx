@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { FolderOpen, Pencil, Pin, Plus, Search, Trash, X } from '@/components/solid-icons';
-import { listOtherAssistantHistories, useAssistantSessions } from '../hooks/use-assistant-sessions';
+import { listOtherAssistantHistories, useAssistantSessions, deleteAssistantSessionInScope } from '../hooks/use-assistant-sessions';
 import { readScopeNames, scopeDisplayName } from '../lib/assistant-scope-registry';
 import { emptyAssistantSessionBodies, readAssistantSessionBodies, readSessionBubbles } from '../lib/assistant-session-bodies';
 import { filterAssistantSessions, formatAssistantSessionStamp, readAssistantSessionIndex, sortAssistantSessions, type AssistantSession } from '../lib/assistant-sessions';
@@ -264,12 +264,13 @@ export function SessionHistoryPanel({
 }
 
 /** 只读项目分组（其他项目 / 旧会话）：文件夹行 + 纯文本行，点行展开气泡；说明收进 hover title。 */
-function ReadonlySessionGroup({ label, hint, sessions, query, readBubbles }: {
+function ReadonlySessionGroup({ label, hint, sessions, query, readBubbles, onDelete }: {
   label: string;
   hint: string;
   sessions: readonly AssistantSession[];
   query: string;
   readBubbles(sessionId: string): readonly { id: string; role: string; text: string }[];
+  onDelete?(session: AssistantSession): void;
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const rows = filterAssistantSessions(sortAssistantSessions(sessions), query);
@@ -292,6 +293,17 @@ function ReadonlySessionGroup({ label, hint, sessions, query, readBubbles }: {
                 <p key={row.id}>{row.role === 'user' ? '你' : '助手'}：{row.text}</p>
               ))}
             </details>
+            {onDelete && (
+              <button
+                type="button"
+                className="sc-session-readonly-delete"
+                aria-label={`删除 ${session.title}`}
+                title="删除这段对话"
+                onClick={() => onDelete(session)}
+              >
+                <Trash size={14} aria-hidden="true" />
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -309,6 +321,8 @@ export interface SessionHistoryOverlayProps {
   scope?: string;
   /** 当前活动的显示名；分组标题用。 */
   currentName?: string;
+  /** 2026-11-19：本机活动说「活动」，已绑云项目说「项目」，不再把草稿叫项目。 */
+  headingKind?: '项目' | '活动';
   onClose(): void;
   onSelect(id: string): void;
   assertWrite?: (() => void) | undefined;
@@ -322,19 +336,25 @@ export interface SessionHistoryOverlayProps {
  * 其他项目的记录只读展示（点开看气泡），不冒充当前项目的需求。
  * 2026-11-14 重排（用户指令「图二图三」）：文件夹式分组头；其他组说明移到 hover title，不再占行。
  */
-export function SessionHistoryOverlay({ open, onClose, onSelect, assertWrite, scope, currentName, resolveStatus }: SessionHistoryOverlayProps): JSX.Element | null {
+export function SessionHistoryOverlay({ open, onClose, onSelect, assertWrite, scope, currentName, headingKind = '活动', resolveStatus }: SessionHistoryOverlayProps): JSX.Element | null {
   const sessions = useAssistantSessions(assertWrite, scope);
+  // 删掉其他活动的一条对话后重算分组；本机存储是同步写的，直接抬版本号即可。
+  const [revision, setRevision] = useState(0);
   if (!open || !sessions.ready) return null;
   const names = readScopeNames();
   const otherHistories = scope ? listOtherAssistantHistories(scope) : [];
   // 旧室内壳体留下的未分槽会话（scope='legacy'）：仍给一个只读分组，别把旧记录藏没了。
   const legacy = scope && scope !== 'legacy' ? readAssistantSessionIndex() : null;
   const legacyBodies = legacy ? readAssistantSessionBodies() : null;
-  const currentHeading = `当前项目 · ${currentName?.trim() || scopeDisplayName(scope ?? '', names)}`;
+  const currentHeading = `当前${headingKind} · ${currentName?.trim() || scopeDisplayName(scope ?? '', names)}`;
+  const removeOther = (historyScope: string, session: AssistantSession): void => {
+    if (!window.confirm(`删除「${session.title}」这段对话？只删除本机记录，不影响活动或项目。`)) return;
+    if (deleteAssistantSessionInScope(historyScope, session.id)) setRevision(value => value + 1);
+  };
   return (
     <>
       <button type="button" className="ap-history-scrim" aria-label="关闭会话历史" onClick={onClose} />
-      <div className="ap-history-panel">
+      <div className="ap-history-panel" key={revision}>
         <SessionHistoryPanel
           variant="overlay"
           heading={currentHeading}
@@ -356,10 +376,11 @@ export function SessionHistoryOverlay({ open, onClose, onSelect, assertWrite, sc
           <ReadonlySessionGroup
             key={history.scope}
             label={scopeDisplayName(history.scope, names)}
-            hint="其他项目的记录，仅查看；打开该项目后可继续。"
+            hint="其他活动的记录，仅查看；打开该活动后可继续，也可以在这里删除不要的对话。"
             sessions={history.index.sessions}
             query={sessions.query}
             readBubbles={sessionId => readSessionBubbles(history.bodies, sessionId)}
+            onDelete={session => removeOther(history.scope, session)}
           />
         ))}
         {legacy ? (

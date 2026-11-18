@@ -4,6 +4,7 @@ import { STORAGE_KEY } from './constants';
 import {
   ASSISTANT_SESSIONS_MAX,
   ASSISTANT_SESSIONS_STORAGE_KEY,
+  assistantSessionTitleFromText,
   clampAssistantSessionTitle,
   deleteAssistantSession,
   emptyAssistantSessionIndex,
@@ -145,6 +146,12 @@ describe('assistant session index', () => {
     };
     expect(writeAssistantSessionIndex(seeded, failing)).toBe(false);
     expect(readAssistantSessionIndex(memoryStorage())).toBeNull();
+  });
+
+  it('names a session from the first user message', () => {
+    expect(assistantSessionTitleFromText('  帮我  规划一个 20 人的户外讲座  ')).toBe('帮我 规划一个 20 人的户外讲座');
+    expect(assistantSessionTitleFromText('一'.repeat(30))).toBe(`${'一'.repeat(24)}…`);
+    expect(assistantSessionTitleFromText('   ')).toBe('');
   });
 
   it('formats a same-day stamp as a clock and another day as a date', () => {

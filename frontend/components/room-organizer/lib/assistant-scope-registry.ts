@@ -75,6 +75,48 @@ export function adoptScopeHistory(fromScope: string, toScope: string): boolean {
   return true;
 }
 
+/**
+ * 2026-11-19：「存为方案」后对话要跟着新项目走。
+ * 只复制、不搬走——云端创建失败或用户回看本机草稿时，两边的记录都还在。
+ * 目标槽已有会话时不覆盖，避免把云端项目自己的开场对话冲掉。
+ */
+export function copyAssistantScope(fromScope: string, toScope: string): boolean {
+  if (!fromScope || !toScope || fromScope === toScope) return false;
+  const from = scopedStorage(fromScope);
+  const to = scopedStorage(toScope);
+  if (!from || !to) return false;
+  if (readAssistantSessionIndex(to)) return false;
+  const index = readAssistantSessionIndex(from);
+  if (!index || index.sessions.length === 0) return false;
+  const bodies = readAssistantSessionBodies(from);
+  if (!writeAssistantSessionIndex(index, to)) return false;
+  if (!writeAssistantSessionBodies(bodies, to)) return false;
+  const names = readScopeNames();
+  if (names[fromScope] && !names[toScope]) {
+    try { window.localStorage.setItem(ASSISTANT_SCOPE_NAMES_KEY, JSON.stringify({ ...names, [toScope]: names[fromScope] })); } catch { /* 名录只是显示名 */ }
+  }
+  return true;
+}
+
+/**
+ * 删除一个活动/项目时连同它的会话槽一起清掉。
+ * 调用方负责先确认这段数据不再需要；这里只做本机存储清理，不碰当前画布。
+ */
+export function forgetAssistantScope(scope: string): void {
+  if (!scope) return;
+  const storage = scopedStorage(scope);
+  if (!storage) return;
+  try {
+    storage.removeItem(ASSISTANT_SESSIONS_STORAGE_KEY);
+    storage.removeItem(ASSISTANT_SESSION_BODIES_STORAGE_KEY);
+  } catch { /* 清不掉时保留原记录，删除流程会报出来 */ }
+  const names = readScopeNames();
+  if (Object.hasOwn(names, scope)) {
+    delete names[scope];
+    try { window.localStorage.setItem(ASSISTANT_SCOPE_NAMES_KEY, JSON.stringify(names)); } catch { /* 名录只是显示名 */ }
+  }
+}
+
 /** `project:<id>` → 「活动名」；名录里没有就用 id 尾号兜底，绝不显示完整内部 id。 */
 export function scopeDisplayName(scope: string, names: Record<string, string> = readScopeNames()): string {
   const mapped = names[scope]?.trim();

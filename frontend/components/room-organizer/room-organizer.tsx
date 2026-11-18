@@ -16,7 +16,9 @@ import { GenerationSheetHost } from './panels/generation-sheet';
 import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
-import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
+import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, proveFreshActivityScopeUnused, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
+import { createLocalActivityBackup, deleteLocalActivityData } from '@/lib/local-activities';
+import { parseLocalProjectBackupJson } from '@/lib/local-project-backup';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { siteShareLink } from '@/lib/site-share';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
@@ -4010,6 +4012,28 @@ useEffect(() => {
     }
   }, [actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards, flushPendingBeforeSwitch, activitySession.isCurrent, sessionToken, controller, isOutdoorProject]);
 
+  /**
+   * 2026-11-19：本机活动的唯一删除入口。
+   * 先把画布事务性换到一张新空白活动（失败则原活动不动），再清旧活动的
+   * 归档、封面、规划、需求、点验、图纸与对话；清除不干净会把失败项报出来。
+   */
+  const deleteCurrentActivity = useCallback(async (): Promise<string> => {
+    workspaceWriteGuards?.assertLayoutWrite();
+    if (!activitySession.isCurrent(sessionToken)) throw new Error('活动已变化，请重试。');
+    if (controller.getSnapshot().project || hasRequestedCloudProject()) {
+      throw new Error('当前页面已连接云项目，请在项目卡上删除云端项目。');
+    }
+    const before = layoutStore.getState().layout;
+    if (!before.id?.trim()) throw new Error('当前活动缺少编号，未删除。');
+    const candidate = parseLocalProjectBackupJson(JSON.stringify(createLocalActivityBackup(before, '未命名活动', 'empty')));
+    const nextId = candidate.layout.id;
+    if (!nextId) throw new Error('新活动编号未能生成，未删除。');
+    const clearance = await proveFreshActivityScopeUnused(nextId, before.id);
+    commitFreshActivityLayout(candidate.layout, clearance);
+    await deleteLocalActivityData(before.id);
+    return `已删除本机活动「${before.name?.trim() || '未命名活动'}」，画布已换成新的空白活动。`;
+  }, [workspaceWriteGuards, activitySession.isCurrent, sessionToken, controller, commitFreshActivityLayout]);
+
   const onApplyCreative = useCallback((next: RoomLayout, options?: { preserveProvenance?: boolean; expectedBase?: RoomLayout; expectedFloor?: FloorSessionToken }) => {
     workspaceWriteGuards?.assertLayoutWrite();
     if(!activitySession.isCurrent(sessionToken))throw new Error('活动已变化，请重新核对方案。');
@@ -4864,7 +4888,7 @@ useEffect(() => {
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               {/* 2026-11-13 用户指令：左轨底部「标注」开关移除；手动绘制入口收掉后，
                   绘制态只能由流程内部进入，Esc 仍是统一退出。 */}
-              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements, lengthPrecisionM: view.lengthPrecisionM ?? 0.01, snapToGrid: view.snapToGrid, snapToWall: view.snapToWall, snapToItems: view.snapToItems }} onPreferenceChange={updatePreference} onPlanSettingsChange={actions.setPlanSettings} {...(outdoorPlanState?.plan.quote ? { siteQuote: outdoorPlanState.plan.quote } : {})} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} planContext={feedbackPlan} onCapturePlan={captureSharePreview} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} onDeleteCurrentActivity={deleteCurrentActivity} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements, lengthPrecisionM: view.lengthPrecisionM ?? 0.01, snapToGrid: view.snapToGrid, snapToWall: view.snapToWall, snapToItems: view.snapToItems }} onPreferenceChange={updatePreference} onPlanSettingsChange={actions.setPlanSettings} {...(outdoorPlanState?.plan.quote ? { siteQuote: outdoorPlanState.plan.quote } : {})} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} planContext={feedbackPlan} onCapturePlan={captureSharePreview} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           {/* 手机端左轨唯一入口；桌面由 CSS 隐藏，不影响三栏。 */}

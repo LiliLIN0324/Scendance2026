@@ -79,6 +79,8 @@ let snapshot: Snapshot = { ready: false, saveFailed: false, index: null, query: 
 let bodies: AssistantSessionBodies = emptyAssistantSessionBodies();
 const listeners = new Set<() => void>();
 let bootstrapped = false;
+/** 本页内由「新开会话」显式建出来的空白会话；只有这些才允许重复点击时复用。 */
+const explicitlyOpened = new Set<string>();
 
 function emit(): void {
   for (const listener of listeners) listener();
@@ -160,6 +162,7 @@ function reset(): void {
   snapshot = { ready: false, saveFailed: false, index: null, query: '' };
   bodies = emptyAssistantSessionBodies();
   bootstrapped = false;
+  explicitlyOpened.clear();
   listeners.clear();
 }
 
@@ -192,6 +195,12 @@ function useController(assertWrite?: () => void): AssistantSessionsController {
 
   const openSession = useCallback(() => {
     const index = snapshot.index ?? emptyAssistantSessionIndex();
+    // 2026-11-19：已经在一条空白会话里时，「新开会话」不再叠第二条同名「新会话」。
+    // 这和 ChatGPT / Claude 的行为一致：重复点新建只回到当前空白会话。
+    const activeId = index.activeId;
+    if (activeId && explicitlyOpened.has(activeId) && (bodies.byId[activeId]?.length ?? 0) === 0) {
+      return { id: activeId, verifiedFresh: false };
+    }
     const id=createAssistantSessionId();
     const strictBodiesMissing=():boolean=>{
       try {
@@ -214,6 +223,7 @@ function useController(assertWrite?: () => void): AssistantSessionsController {
       before=!!persisted&&persisted.activeId===index.activeId&&!index.sessions.some(session=>session.id===id)&&!persisted.sessions.some(session=>session.id===id)&&!Object.hasOwn(bodies.byId,id)&&strictBodiesMissing()&&hasNoStoredBriefForNewSession(id,target);
     } catch {before=false;}
     commitIndex(openAssistantSession(index, { id, now: Date.now() }), '', assertWrite);
+    explicitlyOpened.add(id);
     let verifiedFresh=false;
     try {
       const target=storage??(typeof window==='undefined'?undefined:window.localStorage);
@@ -291,7 +301,20 @@ function useController(assertWrite?: () => void): AssistantSessionsController {
   function peekHistory() { return bootstrapped ? {index:snapshot.index,bodies} : {index:readAssistantSessionIndex(storage),bodies:readAssistantSessionBodies(storage)}; }
   function subscribePassive(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener); }; }
   function peekActive(): string | null { return (bootstrapped ? snapshot.index : readAssistantSessionIndex(storage))?.activeId ?? null; }
-  return { reset, getBodies, replaceBodies, sessionExists, useController, peekHistory, subscribe, getSnapshot, subscribePassive, peekActive };
+  function removeSession(id: string): boolean {
+    ensureBootstrapped();
+    const index = snapshot.index;
+    if (!index) return false;
+    const next = deleteAssistantSession(index, id);
+    if (next === index) return false;
+    const nextBodies = deleteSessionBubbles(bodies, id);
+    if (!writeAssistantSessionBodies(nextBodies, storage)) return false;
+    bodies = nextBodies;
+    commitIndex(next);
+    return true;
+  }
+
+  return { reset, getBodies, replaceBodies, sessionExists, useController, peekHistory, subscribe, getSnapshot, subscribePassive, peekActive, removeSession };
 }
 const scopedStores = new Map<string, ReturnType<typeof createScopedStore>>();
 function scopedStore(scope: string) {
@@ -311,10 +334,14 @@ export function listOtherAssistantHistories(currentScope: string): Array<{scope:
     }
   } catch { /* History may be unavailable; existing in-memory drafts remain readable. */ }
   return [...scopes].filter(scope=>scope!=='legacy'&&scope!==currentScope).flatMap(scope=>{
+    // 删除活动时会清掉它的会话槽；内存里的单例也要跟着失效，不能再出现在历史里。
+    if(!scopedAssistantStorage(scope)?.getItem(ASSISTANT_SESSIONS_STORAGE_KEY)){scopedStores.delete(scope);return [];}
     const history=scopedStore(scope).peekHistory();
     return history.index?.sessions.length ? [{scope,index:history.index,bodies:history.bodies}] : [];
   });
 }
+/** 2026-11-19：其他活动的会话也允许删；只删本机记录，不改当前活动。 */
+export function deleteAssistantSessionInScope(scope:string,id:string):boolean{return scopedStore(scope).removeSession(id);}
 export function resetAssistantSessionsStoreForTests(): void { for(const store of scopedStores.values())store.reset();scopedStores.clear(); }
 export function getAssistantSessionBodies(scope='legacy'): AssistantSessionBodies { return scopedStore(scope).getBodies(); }
 export function replaceAssistantSessionBodies(next:AssistantSessionBodies, assertWrite?:()=>void, scope='legacy'):boolean { return scopedStore(scope).replaceBodies(next,assertWrite); }
