@@ -195,3 +195,50 @@ describe("报告带原始走查标记（轮次 92）", () => {
     expect(report.text).not.toContain("[云端声明]");
   });
 });
+
+describe("报告带逐条判断（轮次 93）", () => {
+  const base = () => ({
+    turns: [],
+    metrics: {
+      totals: {
+        turns: 0,
+        modelCalls: 0,
+        mapCalls: 0,
+        confirmations: 0,
+        appliedCount: 0,
+        firstUsefulFeedbackAvgMs: null,
+        previewAvgMs: null,
+        applyAvgMs: null,
+      },
+      rows: [],
+      text: "turns=0 model=0 map=0 confirm=0 applied=0",
+    },
+  });
+
+  it("逐条列全绿/未全绿，按编号升序", () => {
+    const report = buildSessionReport({
+      ...base(),
+      now: 1,
+      release: {
+        snapshot: {},
+        verdicts: [
+          { id: 5, allGreen: false },
+          { id: 2, allGreen: true },
+        ],
+      },
+    });
+    expect(report.text).toContain("[逐条判断]（由台账算；不从标记推）");
+    expect(report.text).toContain("#2 全绿 · #5 未全绿");
+  });
+
+  it("没有台账就写“没有台账”，不写成“都已全绿”", () => {
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: {}, verdicts: [] } });
+    expect(report.text).toContain("（没有台账）");
+    expect(report.text).not.toContain("全绿 0 条");
+  });
+
+  it("不给 verdicts 就不出现这一段（旧报告格式不被动）", () => {
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: {} } });
+    expect(report.text).not.toContain("[逐条判断]");
+  });
+});

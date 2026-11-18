@@ -34,7 +34,7 @@ import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
-import { CASE_IDS, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
+import { CASE_IDS, isAllGreen, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
 import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
 import { formatGapList } from "../lib/outdoor-release-gaps";
 import { ledgerToCsv } from "../lib/outdoor-release-csv";
@@ -2697,7 +2697,7 @@ export function useOutdoorAgentWorkflow(input: {
     });
     return { rows, metrics, bundle, book, cloud };
   };
-  /** 报告里带的发布块：快照 + 卡片 + 走查原件 + 云端声明，四处同源。 */
+  /** 报告里带的发布块：快照 + 卡片 + 走查原件 + 云端声明 + 逐条判断，全部同源。 */
   const releaseBlock = () => {
     const { bundle, book, cloud } = currentRelease();
     return {
@@ -2705,6 +2705,8 @@ export function useOutdoorAgentWorkflow(input: {
       card: bundle.card,
       walkthrough: bookToRecord(book),
       cloud,
+      // 判断只认台账：`isAllGreen()` 是全局唯一判据，不从标记推。
+      verdicts: bundle.ledger.map((row) => ({ id: row.id, allGreen: isAllGreen(row) })),
     };
   };
   return {

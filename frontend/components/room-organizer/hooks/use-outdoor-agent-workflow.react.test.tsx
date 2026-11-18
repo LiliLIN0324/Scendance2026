@@ -2293,3 +2293,18 @@ it("会话报告带上走查原件与云端声明，人可对着报告复核卡�
   expect(report.text).toContain("#2");
   expect(report.text).toContain("[云端声明]");
 });
+
+it("报告逐条判断只认台账：只声明云端仍不是全绿", () => {
+  act(() => {
+    flow.declareCloud(2, true);
+  });
+  const onlyCloud = flow.sessionReport();
+  expect(onlyCloud.text).toContain("#2 未全绿");
+
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+  });
+  const both = flow.sessionReport();
+  expect(both.text).toContain("#2 全绿");
+  expect(both.text).toContain("#5 未全绿");
+});

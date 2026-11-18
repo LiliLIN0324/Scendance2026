@@ -127,15 +127,21 @@ export interface CaseLedgerRow {
   cloud: 'pass' | 'partial' | 'none';
 }
 
+/**
+ * 三类全绿的**唯一**判据（轮次 93 抽出）：固定数据有、浏览器过、云端过；partial 一律不算。
+ * 卡片、台账、报告里的“逐条判断”都必须调它，免得各自写一份条件而在某天悄悄分叉。
+ */
+export function isAllGreen(row: CaseLedgerRow): boolean {
+  return row.fixedData && row.browser === 'pass' && row.cloud === 'pass';
+}
+
 /** 三类全绿只有一种算法：固定数据有、浏览器过、云端过。partial 一律不算。 */
 export function summarizeLedger(rows: readonly CaseLedgerRow[]): {
   allGreen: number;
   fixedOnly: number;
   total: number;
 } {
-  const allGreen = rows.filter(
-    (row) => row.fixedData && row.browser === 'pass' && row.cloud === 'pass',
-  ).length;
+  const allGreen = rows.filter(isAllGreen).length;
   const fixedOnly = rows.filter(
     (row) => row.fixedData && (row.browser !== 'pass' || row.cloud !== 'pass'),
   ).length;
