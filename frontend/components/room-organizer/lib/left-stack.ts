@@ -12,6 +12,8 @@
  * 这里只放纯函数与本地持久化，DOM 与指针逻辑留在 room-organizer.tsx。
  */
 
+import { NAV_RAIL_WIDTH_PX } from './nav-chrome';
+
 /** 左栏堆栈成员：户外规划卡 / Bingo 会话卡 / 拍摄场地卡 / 成员私聊卡。 */
 export type LeftStackPanelId = 'outdoor' | 'bingo' | 'capture' | 'chat';
 
@@ -67,7 +69,7 @@ export function dockBandFromRect(
   fallbackWidth: number,
   viewportHeight: number,
 ): DockBandRect {
-  const bandLeft = rect?.left ?? 64;
+  const bandLeft = rect?.left ?? NAV_RAIL_WIDTH_PX;
   const openEnough = rect != null && rect.width > 40 && rect.height > 120;
   return {
     left: bandLeft,
