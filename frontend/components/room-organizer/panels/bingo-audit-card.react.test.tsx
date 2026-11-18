@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BingoScore } from '../../../lib/bingo-score';
 import { BINGO_MARK_KEY, BINGO_RETURN_KEY } from '../lib/bingo-status';
 import { __resetGenerationOutcome, setGenerationOutcome } from '../lib/use-generation-outcome';
+import { clearOutdoorPlanIssues, onOutdoorPlanIssueFocus, publishOutdoorPlanIssues, publishOutdoorPlanSettled } from '../lib/outdoor-plan-issues';
 import { BingoAuditCard } from './bingo-audit-card';
 import {layoutStore} from '../hooks/use-layout-store';
 
@@ -29,12 +30,15 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   __resetGenerationOutcome();
+  clearOutdoorPlanIssues();
 });
 
 describe('BingoAuditCard', () => {
   it('renders nothing when no review was ever sent', () => {
-    const { container } = render(<BingoAuditCard/>);
-    expect(container.innerHTML).toBe('');
+    render(<BingoAuditCard/>);
+    expect(screen.queryByText('本机评审记录')).toBeNull();
+    expect(screen.getByText('我的完成')).toBeTruthy();
+    expect(screen.getByText('还没有对方的修改')).toBeTruthy();
   });
 
   it('shows the plan, 待评 phase and pin count from the local review record', () => {
@@ -49,7 +53,8 @@ describe('BingoAuditCard', () => {
     }]));
     render(<BingoAuditCard/>);
     expect(screen.getByText('本机评审记录')).toBeTruthy();
-    expect(screen.getByText('我的完成与对方的修改')).toBeTruthy();
+    expect(screen.getByRole('region', { name: '我的完成与对方的修改' })).toBeTruthy();
+    expect(screen.getByText('我的完成')).toBeTruthy();
     expect(screen.getByText('还没有对方的修改')).toBeTruthy();
     expect(screen.getByText('记录 1')).toBeTruthy();
     expect(screen.getByText('发布会')).toBeTruthy();
@@ -233,4 +238,44 @@ describe('BingoAuditCard', () => {
     expect(screen.getByTestId('bingo-score')).toBeTruthy();
     expect(screen.getByText('几何检查：2 件待处理')).toBeTruthy();
     expect(screen.getByText(/历史操作结果/)).toBeTruthy();
-  });});
+  });
+
+  it('groups corridor issues into flat rows and flies the camera from a row', () => {
+    const names = ['东入口灯', '餐饮车 02', '发电机组', '南侧灯架', '西侧灯', '音控台'];
+    publishOutdoorPlanSettled({ boundaryClosed: true, zoneCount: 8, routeCount: 3 });
+    publishOutdoorPlanIssues(names.map((name, index) => ({
+      key: `c-${index}`,
+      text: `⚠ 通行带压设施：「主通道」的通行带（宽 2 m）与设施「${name}」占地相交。`,
+      anchor: { x: index, y: 1 },
+    })));
+    const seen: string[] = [];
+    const off = onOutdoorPlanIssueFocus(key => seen.push(key));
+    render(<BingoAuditCard reviewActions={{ onRecheck: () => undefined, onSendReview: () => undefined }}/>);
+    expect(screen.getByText(/待发 还剩 6 件要收尾/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '发给客户评审' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重新检查' })).toBeTruthy();
+    expect(screen.getByText('红线 · 分区 8 · 动线 3')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '东入口灯 压到通行带' })).toBeTruthy();
+    expect(screen.getByText('还有 2 处，点开一条飞到地图')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '音控台 压到通行带' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '餐饮车 02 压到通行带' }));
+    expect(seen).toEqual(['c-1']);
+    off();
+  });
+
+  it('switches the send button to copy and open once a review link exists', () => {
+    localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([{
+      saved: true,
+      status: 'needs-review',
+      projectKey: 'local-draft',
+      title: '发布会',
+      shareId: SHARE,
+      markedAt: '2026-10-31T00:00:00.000Z',
+    }]));
+    render(<BingoAuditCard reviewActions={{ onRecheck: () => undefined, onSendReview: () => undefined }}/>);
+    expect(screen.queryByRole('button', { name: '发给客户评审' })).toBeNull();
+    expect(screen.getByRole('button', { name: '复制评审链接' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '查看评审页' }).getAttribute('href')).toBe(`/review/${SHARE}`);
+    expect(screen.getByText(/待评 /)).toBeTruthy();
+  });
+});

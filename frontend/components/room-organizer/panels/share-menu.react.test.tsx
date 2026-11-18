@@ -46,6 +46,18 @@ describe('分享钮', () => {
     expect(trigger.getAttribute('data-share-chrome')).toBe('closed');
   });
 
+  it('opens on the pin-review share tab when the workbench asks', () => {
+    localStorage.clear();
+    const view = render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
+    fireEvent.click(screen.getByRole('button', { name: '分享' }));
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    expect(screen.getByRole('tab', { name: '发布' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    view.rerender(<ShareMenu actions={actions()} layout={sampleLayout()} openRequest={1} />);
+    expect(screen.getByRole('tab', { name: '分享' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel', { name: '分享' })).toBeTruthy();
+  });
+
   it('describes the two chrome states without a green fill', () => {
     expect(shareTriggerChrome(false)).toMatchObject({
       width: 32, height: 32, borderRadius: 8, backgroundColor: '#FFFFFF', color: '#55585F', borderWidth: 0.6, borderColor: '#E4E4E7',

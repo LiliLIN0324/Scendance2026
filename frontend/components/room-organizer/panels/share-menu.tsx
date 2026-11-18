@@ -206,7 +206,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   useEffect(() => {
     if (openRequest === seenOpen.current) return;
     seenOpen.current = openRequest;
-    if (openRequest > 0) setOpen(true);
+    // 审校台「发给客户评审」和旧评审入口都从这里打开。分享页才是允许钉评的评审链接，不落在发布或导出。
+    if (openRequest > 0) { setOpen(true); setTab('share'); }
   }, [openRequest]);
 
   useEffect(() => {
