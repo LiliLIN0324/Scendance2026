@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：走查日期现在能在面板里填了——`setAsOf(book, value)`（空白即删字段，不存空串）、面板 `onAsOf` 输入框、区里“返回非空才更新副本”、hook `setWalkthroughAsOf()` 并即时落盘。**本地 main = origin = `b9266188`（`div 0/0`，本轮 main 被人的 PR #165 推进 1 笔，分支已 `merge` 吸收）**。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–91 二十一个切片（`75f3808b` 已合主干最新）。9222 四十七轮不通。下一条：把走查记录与云端声明也接进会话报告（报告里目前只有快照，没有“哪条标过什么”的原始记录，人无法对着报告复核卡片）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-walkthrough-book.test.ts`。
+- 下一条操作：会话报告里多了两段——`[走查标记]`（只列标过的号，按编号升序，`none` 不算）与 `[云端声明]`（去重升序）；hook 新增 `releaseBlock()` 把快照/卡片/走查原件/云端声明四处收拢成一份。**本地 main = origin = `b9266188`（`div 0/0`）**；但**本轮 `git fetch origin` 连续 3 次失败**，远端是否有新改动未知，下轮先验网络再判定合并。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–92 二十二个切片。9222 四十八轮不通。下一条：给 `[走查标记]` 再加一列“该条当前是否三类全绿”（由台账算，不从标记推），让报告自己能对上卡片。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-session-report.test.ts`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,22 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 02:00 · 自动轮次 92 · 报告带原始走查标记与云端声明
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 02:00，自动轮次 92
+批次 / 切片 / 状态：合并（`merge` 报 Already up to date；**fetch 连续 3 次失败，远端未知**）+ M7 / 报告带原件 / 已交付（分支待 PR）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 43；local main = origin = `b9266188`（`div 0/0`，但引用可能陈旧）
+合并：分支 `merge --no-edit main` → Already up to date，仍 `286600da`
+交付：`SessionReportRelease` 加 `walkthrough?` / `cloud?`；报告文本多 `[走查标记]`（只列标过的号，`none` 不算，升序）与 `[云端声明]`（去重升序，空集写“一条都没声明”）；hook 抽 `releaseBlock()` 统四份同源
+验证（固定数据）：报告+hook 97/97（新增 5 条：只列标过/一条没标/云端去重/旧格式不变/hook 端到端）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十八轮 down）
+未完成：#2/#5 真实浏览器；报告里的标记行还没接“该条当前全绿”
+```
+
+- **报告要能自证，不靠信任**：卡片说“全绿 0 条”，人得能对着报告看到“#2 标了 pass、#7 根本没标”；所以报告里带原件（走查簿 + 云端声明），而不是只带结论。
+- **`none` 不是标记**：显式点“未看”只是回到初始态，列进“标过的号”会让人以为看过。
 
 ### 2026-11-19 01:00 · 自动轮次 91 · 走查日期能填了
 
