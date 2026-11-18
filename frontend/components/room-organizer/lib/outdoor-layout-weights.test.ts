@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
+import { buildSiteSnapshot, buildModelContext } from "@/lib/site-intelligence";
+import { siteWgsCenter } from "../../../../functions/api/site-context";
+import { emptyOutdoorFlow } from "./outdoor-agent-contract";
+import { understandOutdoorTurn } from "./outdoor-agent-understanding";
 import {
   buildLayoutEvidence,
   layoutWeightForFeature,
 } from "./outdoor-layout-weights";
 import { createOutdoorMapContext } from "./outdoor-map-context";
-import { createStarterOutdoorPlan } from "./outdoor-project-store";
-import { understandOutdoorTurn } from "./outdoor-agent-understanding";
-import { emptyOutdoorFlow } from "./outdoor-agent-contract";
-import { buildSiteSnapshot, buildModelContext } from "@/lib/site-intelligence";
-import type { MapFeature } from "@/lib/site-intelligence/types";
-import { siteWgsCenter } from "../../../../functions/api/site-context";
 import { enuToLngLat } from "./outdoor-plan-canvas";
+import { createStarterOutdoorPlan } from "./outdoor-project-store";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
+import type { MapFeature } from "@/lib/site-intelligence/types";
 
 // 活动范围：80×70m 矩形，中心 (0,0)，西南角 (-40,-35)。
 const BOUNDARY = [

@@ -646,50 +646,6 @@ export function OutdoorWorkflowCard({
           </div>
         )
       ) : null}
-      {!flow.proposal &&
-        !flow.busy &&
-        ["main-routes", "objects", "sub-routes", "people"].includes(
-          flow.state.stage,
-        ) &&
-        flow.unverifiedEntrances.slice(0, 1).map((n) => (
-          <div key={n.id} className="ap-access-check">
-            <p className="ap-access-question">
-              “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
-            </p>
-            {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
-                而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
-                改成三个等宽选项：大字号说方向，小字说记成什么。 */}
-            <div className="ap-access-choices" role="group" aria-label={`“${n.name}”的进出方向`}>
-              <button
-                type="button"
-                className="ap-access-choice"
-                onClick={() =>
-                  void flow.action("verify-access", undefined, n.id, undefined, "entry")
-                }
-              >
-                只能进<span>入口</span>
-              </button>
-              <button
-                type="button"
-                className="ap-access-choice"
-                onClick={() =>
-                  void flow.action("verify-access", undefined, n.id, undefined, "exit")
-                }
-              >
-                只能出<span>出口</span>
-              </button>
-              <button
-                type="button"
-                className="ap-access-choice"
-                onClick={() =>
-                  void flow.action("verify-access", undefined, n.id, undefined, "both")
-                }
-              >
-                双向<span>入口 + 出口</span>
-              </button>
-            </div>
-          </div>
-        ))}
       {(flow.state.stage === "objects" || flow.libraryChoices.length > 0) &&
         !flow.proposal && (
           <div aria-label="当前分区物料候选">
@@ -918,6 +874,61 @@ export function OutdoorWorkflowCard({
           </form>
         </section>
       )}
+      {/* 2026-11-18 用户指令：入口通行核对从任务卡内部挪出，做成任务卡下方的独立卡。
+          只取第一个未核实入口；核对动作与口径不变。 */}
+      {!flow.proposal &&
+        !flow.busy &&
+        ["main-routes", "objects", "sub-routes", "people"].includes(
+          flow.state.stage,
+        ) &&
+        flow.unverifiedEntrances.slice(0, 1).map((n) => (
+          <section
+            key={n.id}
+            className="ap-card ap-access-check"
+            role="group"
+            aria-label={`入口通行核对：「${n.name}」`}
+          >
+            <header className="ap-card-head">
+              <strong>核对入口通行</strong>
+              <span>核完这一版就按你的判断排</span>
+            </header>
+            <p className="ap-access-question">
+              “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
+            </p>
+            {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
+                而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
+                改成三个等宽选项：大字号说方向，小字说记成什么。 */}
+            <div className="ap-access-choices" role="group" aria-label={`“${n.name}”的进出方向`}>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "entry")
+                }
+              >
+                只能进<span>入口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "exit")
+                }
+              >
+                只能出<span>出口</span>
+              </button>
+              <button
+                type="button"
+                className="ap-access-choice"
+                onClick={() =>
+                  void flow.action("verify-access", undefined, n.id, undefined, "both")
+                }
+              >
+                双向<span>入口 + 出口</span>
+              </button>
+            </div>
+          </section>
+        ))}
       {/* 2026-11-18 用户指令「随画随出卡」：手画模式下每闭合一个分区轮廓，下方清单就多一张
           分区卡；名称/用途/室内外可直改、可删，走画布同一条 commitPlan（可撤销）。
           zones 阶段画布上已有分区时同样列出，编辑不限于手画中。 */}
