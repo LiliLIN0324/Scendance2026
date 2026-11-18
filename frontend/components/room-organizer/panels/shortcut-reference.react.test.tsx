@@ -11,8 +11,10 @@ describe('ShortcutReference', () => {
     render(<ShortcutReference />);
     expect(screen.getByRole('heading', { name: '建造画布 · 编辑' })).toBeTruthy();
     expect(screen.getByText('撤销')).toBeTruthy();
-    expect(screen.getByText('Ctrl+Z')).toBeTruthy();
-    expect(screen.getByText('⌘Z')).toBeTruthy();
+    expect(screen.getAllByText('Ctrl').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('⌘').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Z').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('或').length).toBeGreaterThan(0);
     expect(screen.getByText('只切网格；墙 / 物件吸附是独立开关')).toBeTruthy();
     expect(screen.getByText('一人称漫游：WASD / 方向键归相机，裸单键关闭；撤销、重做、Esc 仍可用。')).toBeTruthy();
   });
@@ -24,6 +26,13 @@ describe('ShortcutReference', () => {
     fireEvent.change(search, { target: { value: 'Ctrl+Z' } });
     expect(screen.getByText('撤销')).toBeTruthy();
     expect(screen.queryByText('删除')).toBeNull();
+
+    fireEvent.change(search, { target: { value: 'cmd' } });
+    expect(screen.getAllByText('⌘').length).toBeGreaterThan(0);
+    expect(screen.getByText('撤销')).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'del' } });
+    expect(screen.getByText('删除')).toBeTruthy();
 
     fireEvent.change(search, { target: { value: '输入框' } });
     expect(screen.getByText('撤销')).toBeTruthy();
@@ -55,8 +64,9 @@ describe('ShortcutReference', () => {
     expect(screen.getByRole('button', { name: 'Windows / Linux' }).getAttribute('aria-pressed')).toBe('false');
     expect(document.querySelector('[data-platform="mac"]')?.classList.contains('is-primary')).toBe(true);
     expect(document.querySelector('[data-platform="win"]')?.classList.contains('is-primary')).toBe(false);
-    expect(screen.getByText('Ctrl+Z')).toBeTruthy();
-    expect(screen.getByText('⌘Z')).toBeTruthy();
+    expect(screen.getAllByText('Ctrl').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('⌘').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Z').length).toBeGreaterThan(0);
   });
 
   it('shows a recoverable empty state and resets search and mode', () => {

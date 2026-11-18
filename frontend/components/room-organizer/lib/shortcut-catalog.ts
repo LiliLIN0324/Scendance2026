@@ -98,8 +98,18 @@ export const SHORTCUT_CATALOG: readonly ShortcutGroup[] = [
         note: '有选中；15°',
       },
       {
-        action: '移动 / 旋转 / 缩放',
-        keys: { win: 'Q / E / S', mac: 'Q / E / S' },
+        action: '移动工具',
+        keys: { win: 'Q', mac: 'Q' },
+        note: '切换变换模式',
+      },
+      {
+        action: '旋转工具',
+        keys: { win: 'E', mac: 'E' },
+        note: '切换变换模式',
+      },
+      {
+        action: '缩放工具',
+        keys: { win: 'S', mac: 'S' },
         note: '切换变换模式',
       },
       {
@@ -142,12 +152,20 @@ export const SHORTCUT_CATALOG: readonly ShortcutGroup[] = [
         keys: { win: 'P', mac: 'P' },
       },
       {
-        action: '时刻 -1 / +1',
-        keys: { win: '[ / ]', mac: '[ / ]' },
+        action: '上一时刻',
+        keys: { win: '[', mac: '[' },
       },
       {
-        action: '楼层',
-        keys: { win: 'PageUp / PageDown', mac: 'PageUp / PageDown' },
+        action: '下一时刻',
+        keys: { win: ']', mac: ']' },
+      },
+      {
+        action: '上一层',
+        keys: { win: 'PageUp', mac: 'PageUp' },
+      },
+      {
+        action: '下一层',
+        keys: { win: 'PageDown', mac: 'PageDown' },
       },
     ],
   },
@@ -157,19 +175,39 @@ export const SHORTCUT_CATALOG: readonly ShortcutGroup[] = [
     description: '户外画布的裸单键先给模式，再轮到工具。',
     entries: [
       {
-        action: '抓手',
+        action: '抓手工具',
         keys: { win: 'H', mac: 'H' },
         note: '浏览模式',
       },
       {
-        action: '选择',
+        action: '选择工具',
         keys: { win: 'S', mac: 'S' },
         note: '选择模式；建造画布的 S 是缩放',
       },
       {
-        action: '文本 / 矩形 / 圆形 / 三角形 / 线段',
-        keys: { win: 'T / R / O / Y / L', mac: 'T / R / O / Y / L' },
+        action: '文本标注',
+        keys: { win: 'T', mac: 'T' },
+        note: '标注模式',
+      },
+      {
+        action: '矩形标注',
+        keys: { win: 'R', mac: 'R' },
         note: '标注模式；设施落位时 R 让给旋转',
+      },
+      {
+        action: '圆形标注',
+        keys: { win: 'O', mac: 'O' },
+        note: '标注模式',
+      },
+      {
+        action: '三角形标注',
+        keys: { win: 'Y', mac: 'Y' },
+        note: '标注模式',
+      },
+      {
+        action: '线段标注',
+        keys: { win: 'L', mac: 'L' },
+        note: '标注模式',
       },
       {
         action: '退出当前工具',

@@ -1,9 +1,17 @@
 import { useMemo, useState } from 'react';
 import { SHORTCUT_CATALOG } from '../lib/shortcut-catalog';
-import type { ShortcutEntry, ShortcutGroup } from '../lib/shortcut-catalog';
+import type { ShortcutEntry } from '../lib/shortcut-catalog';
 
 type Platform = 'win' | 'mac';
-type ModeFilter = 'all' | ShortcutGroup['id'];
+export type ShortcutReferenceMode =
+  | 'all'
+  | 'build-edit'
+  | 'build-transform'
+  | 'build-view'
+  | 'outdoor'
+  | 'annotate'
+  | 'limits';
+type ModeFilter = ShortcutReferenceMode;
 
 const MODE_FILTERS: readonly { id: ModeFilter; label: string }[] = [
   { id: 'all', label: '全部' },
@@ -15,11 +23,31 @@ const MODE_FILTERS: readonly { id: ModeFilter; label: string }[] = [
   { id: 'limits', label: '例外' },
 ];
 
-function Keys({ value }: { value: string }): JSX.Element {
+function splitAlternatives(value: string): string[] {
+  return value.split(' / ').map(part => part.trim()).filter(Boolean);
+}
+
+function splitChord(value: string, platform: Platform): string[] {
+  if (platform === 'mac') {
+    const modifierRun = value.match(/^([⌘⌥⇧⌃]+)(.+)$/);
+    if (modifierRun) return [...Array.from(modifierRun[1]!), modifierRun[2]!];
+  }
+  return value.split('+').map(part => part.trim()).filter(Boolean);
+}
+
+function Keys({ value, platform }: { value: string; platform: Platform }): JSX.Element {
   return (
     <>
-      {value.split(' / ').map((key, index) => (
-        <kbd key={`${key}-${index}`}>{key}</kbd>
+      {splitAlternatives(value).map((chord, chordIndex) => (
+        <span className="sc-shortcut-chord" key={`${chord}-${chordIndex}`}>
+          {chordIndex > 0 && <span className="sc-shortcut-or">或</span>}
+          {splitChord(chord, platform).map((key, keyIndex) => (
+            <span className="sc-shortcut-key" key={`${key}-${keyIndex}`}>
+              {keyIndex > 0 && platform === 'win' && <span className="sc-shortcut-plus" aria-hidden="true">+</span>}
+              <kbd>{key}</kbd>
+            </span>
+          ))}
+        </span>
       ))}
     </>
   );
@@ -29,27 +57,74 @@ function normalize(value: string): string {
   return value.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/** 搜索时说“cmd / option / del”也要能找到键帽上的符号。 */
+function tokenVariants(token: string): readonly string[] {
+  switch (token) {
+    case 'cmd':
+    case 'command':
+      return ['⌘'];
+    case 'ctrl':
+    case 'control':
+      return ['ctrl'];
+    case 'alt':
+    case 'option':
+    case 'opt':
+      return ['⌥'];
+    case 'shift':
+      return ['shift', '⇧'];
+    case 'del':
+    case 'delete':
+      return ['delete', '⌫'];
+    case 'esc':
+    case 'escape':
+      return ['esc'];
+    case 'return':
+      return ['return'];
+    case 'enter':
+      return ['enter'];
+    case 'pageup':
+      return ['pageup'];
+    case 'pagedown':
+      return ['pagedown'];
+    case 'backspace':
+      return ['backspace'];
+    default:
+      return [token];
+  }
+}
+
 function matchesTokens(text: string, tokens: readonly string[]): boolean {
   if (tokens.length === 0) return true;
   const haystack = normalize(text);
-  return tokens.every(token => haystack.includes(token));
+  return tokens.every(token => tokenVariants(token).some(variant => haystack.includes(variant)));
 }
 
 function entryHaystack(entry: ShortcutEntry): string {
   return [entry.action, entry.keys.win, entry.keys.mac, entry.note ?? ''].join(' ');
 }
 
+function detectPlatform(): Platform {
+  if (typeof navigator === 'undefined') return 'win';
+  return /Mac|iPhone|iPad|iPod/i.test(`${navigator.platform} ${navigator.userAgent}`) ? 'mac' : 'win';
+}
+
 /**
  * 设置页的快捷键参考。只渲染 catalog 里的真实绑定，不做可编辑键位。
  * 搜索、模式筛选与平台强调都是本地状态，不写存储。
  */
-export function ShortcutReference(): JSX.Element {
+export interface ShortcutReferenceProps {
+  /** 画布速查按当前语境先落到某一组；设置页保持「全部」。 */
+  initialMode?: ShortcutReferenceMode;
+}
+
+export function ShortcutReference({ initialMode = 'all' }: ShortcutReferenceProps = {}): JSX.Element {
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<ModeFilter>('all');
-  const [platform, setPlatform] = useState<Platform>('win');
+  const [mode, setMode] = useState<ModeFilter>(initialMode);
+  const [platform, setPlatform] = useState<Platform>(detectPlatform);
 
   const visibleGroups = useMemo(() => {
-    const tokens = normalize(query).split(' ').filter(Boolean);
+    // `Ctrl+Z` 与 `Ctrl Z` 都拆成两个 token；别名再把 cmd / del 翻成键帽符号。
+    const tokens = normalize(query).split(/[\s+]+/).filter(Boolean);
     return SHORTCUT_CATALOG
       .filter(group => mode === 'all' || group.id === mode)
       .map(group => {
@@ -143,11 +218,11 @@ export function ShortcutReference(): JSX.Element {
                       <dd>
                         <span className="sc-shortcut-keys">
                           <span className={`sc-shortcut-platform ${platform === 'win' ? 'is-primary' : ''}`} data-platform="win">
-                            <Keys value={entry.keys.win} />
+                            <Keys value={entry.keys.win} platform="win" />
                           </span>
                           <span className="sc-shortcut-sep" aria-hidden="true">/</span>
                           <span className={`sc-shortcut-platform ${platform === 'mac' ? 'is-primary' : ''}`} data-platform="mac">
-                            <Keys value={entry.keys.mac} />
+                            <Keys value={entry.keys.mac} platform="mac" />
                           </span>
                         </span>
                         {entry.note ? <small>{entry.note}</small> : null}
