@@ -53,6 +53,22 @@ export function reviewPlanKeysForBingoPlan(plan: BingoFeedbackPlan): string[] {
   return [...keys];
 }
 
+/** G4：把云端钉并进本机汇总；按钉 id 去重，不改本机已有条目。 */
+export function mergeBingoCloudPins(
+  feedback: BingoPlanFeedback,
+  pins: readonly ReviewPin[],
+): BingoPlanFeedback {
+  const seen = new Set(feedback.pins.map(pin => pin.id));
+  const extra = pins.filter(pin => !seen.has(pin.id)).map(pin => mapSharePin(pin));
+  if (extra.length === 0) return feedback;
+  return {
+    ...feedback,
+    sharePinCount: feedback.sharePinCount + extra.length,
+    pinCount: feedback.pinCount + extra.length,
+    pins: [...feedback.pins, ...extra],
+  };
+}
+
 export function readBingoPlanFeedback(
   plan: BingoFeedbackPlan,
   storage: Pick<Storage, 'getItem'> | null = typeof window !== 'undefined' ? window.localStorage : null,
