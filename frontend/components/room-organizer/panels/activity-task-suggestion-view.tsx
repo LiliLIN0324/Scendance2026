@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { catalog } from '../../../../supabase/functions/_shared/domain';
 import { OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
 import type { ActivityTaskContext, ActivityTaskSelection, ActivityTaskSuggestionProposal } from '../../../lib/activity-task-suggestions';
@@ -66,10 +67,19 @@ export function ActivityTaskSuggestionView(props: ActivityTaskSuggestionViewProp
     props.onApprovedDisclosure(false);
     props.onSelection(next);
   }
+  const forcedOpen = context !== null || phase !== 'selection' || !!props.error;
+  const [opened, setOpened] = useState(false);
+  const [seenForced, setSeenForced] = useState(forcedOpen);
+  if (seenForced !== forcedOpen) {
+    setSeenForced(forcedOpen);
+    if (forcedOpen) setOpened(true);
+  }
+  const stepVisible = forcedOpen || opened;
 
-  return <details className="ats-view" open={context !== null || phase !== 'selection' || !!props.error}>
-    <summary><strong>任务建议</strong><span>选资料 → 核对摘要 → 勾选保存</span></summary>
+  return <details className="ats-view" open={stepVisible} onToggle={event => setOpened(event.currentTarget.open)}>
+    <summary><strong>任务建议</strong></summary>
     <div className="ats-body">
+      {stepVisible && <p className="ats-step">选资料 → 核对摘要 → 勾选保存</p>}
       {availabilityReason && <p className="ats-note">{availabilityReason}</p>}
       {stale && <p className="ats-warning" role="status">活动资料已变化，本次摘要和建议不能继续确认。请重新选择资料。</p>}
       {props.error && <p className="ats-error" role="alert">{props.error}</p>}

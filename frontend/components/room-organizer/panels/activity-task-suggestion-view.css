@@ -9,6 +9,7 @@
 .ats-view > summary { padding: var(--sc-space-md, 16px); cursor: pointer; }
 .ats-view > summary strong { font-size: var(--sc-type-section, 16px); font-weight: 600; }
 .ats-view > summary > span { display: block; margin-top: var(--sc-space-sm, 8px); color: var(--sc-muted, #6f6f6f); font-size: var(--sc-type-meta, 12px); }
+.ats-step { margin: 0; color: var(--sc-muted, #71767E); font-size: var(--sc-type-meta, 12px); }
 .ats-body { display: grid; gap: var(--sc-space-md, 16px); padding: 0 var(--sc-space-md, 16px) var(--sc-space-md, 16px); }
 .ats-body p { margin: 0; }
 .ats-body h3 { margin: 0 0 var(--sc-space-sm, 8px); font-size: var(--sc-type-section, 16px); font-weight: 600; }
