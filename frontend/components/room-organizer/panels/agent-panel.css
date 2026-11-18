@@ -190,7 +190,16 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-user .ap-warn span { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, .28); color: #fff; font-size: 10px; font-weight: 700; flex: 0 0 14px; }
 
 /* ── 信息卡 ── */
-.ap-card { border: 1px solid var(--wk-hair); border-radius: 14px; background: var(--wk-paper); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
+/* 2026-11-19 用户：实际页面里所有卡片要和走查稿一致。卡框按稿收口：12px 圆角、左右 16px 内距、
+   带一层几乎看不见的投影（稿里是 0 1px 2px #00000008）。 */
+.ap-card { border: 1px solid var(--wk-hair); border-radius: 12px; background: var(--wk-paper); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, .03); }
+/* 卡头：此前全仓没有一条基础样式，只靠 <strong> 默认粗体，标题和右侧说明挤成一行裸文本。
+   这里给所有卡片同一套骨架——左边标题（可带图标）、右边说明或小操作。 */
+.ap-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.ap-card-head > strong { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-c1); font-weight: 600; line-height: var(--lh-c1); letter-spacing: -.01em; color: var(--wk-ink); }
+.ap-card-head > strong svg { flex: none; color: var(--wk-muted); }
+.ap-card-head > span { flex: none; font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-muted); }
+.ap-card-head > .ap-task-dismiss { flex: none; }
 .ap-status-card { gap: 8px; padding: 8px 10px; }
 /* 2026-11-19 用户指令：进度/暂停卡（GenProgress）砍掉——输入框下方已有暂停/播放钮。 */
 .ap-text-action { border: 0; background: transparent; padding: 0; color: var(--wk-ink-soft); font-size: var(--fs-p2); cursor: pointer; }
@@ -411,6 +420,10 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-error-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: color-mix(in srgb, var(--warn) 12%, var(--wk-paper)); color: var(--warn); font-size: var(--fs-cap); font-weight: 500; }
 .ap-error-summary { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
 .ap-error-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 2026-11-19 用户：红卡里的「怎么办」和诊断行之前是裸 <p>（跟正文同号同色），和走查稿里
+   打印体诊断不像一套。保持可选中复制，只是把字号、底色、等宽体分开。 */
+.ap-error-hint { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-muted); }
+.ap-error-diag { margin: 0; padding: 6px 8px; border-radius: var(--r-sm); background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-cap); line-height: 1.45; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 /* 失败消息转成的错误卡：正文沿用摘要字号，保留换行与列表结构。 */
 .ap-error-body { display: flex; flex-direction: column; gap: 5px; margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); white-space: pre-line; overflow-wrap: anywhere; }
 .ap-error-body.is-long { white-space: pre-line; }
@@ -1170,6 +1183,23 @@ button.ap-ghost {
 .ap-zones-ask-form > .btn-outline { border: 1px solid var(--wk-hair); background: var(--wk-paper); color: var(--wk-ink-soft); }
 .ap-zones-ask-form > .btn-outline:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane); color: var(--wk-ink); }
 .ap-zones-ask-form > .btn-outline:disabled { opacity: .55; cursor: not-allowed; }
+/* 2026-11-19 用户：卡里的折叠行（审校更多动作 / 现有物料改动）之前是裸 <details>，
+   默认黑三角 + 正文黑字，和同一张卡里的说明行不像一套。统一成一行小字 + ▸ 指示。 */
+.ap-audit-more-actions > summary,
+.ap-existing-changes > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-ink-soft); }
+.ap-audit-more-actions > summary::-webkit-details-marker,
+.ap-existing-changes > summary::-webkit-details-marker { display: none; }
+.ap-audit-more-actions > summary::before,
+.ap-existing-changes > summary::before { content: '▸'; flex: none; font-size: 9px; color: var(--wk-muted); }
+.ap-audit-more-actions[open] > summary::before,
+.ap-existing-changes[open] > summary::before { content: '▾'; }
+.ap-audit-more-actions > .chip { margin: 8px 8px 0 0; }
+.ap-existing-changes > p { margin: 8px 0 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-muted); }
+.ap-existing-changes > ul { margin: 6px 0 0; padding-left: 18px; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+/* 走查记录卡：两块裸按钮按卡内次级操作排，不再用浏览器默认控件的方框。 */
+.ap-card-walkthrough { display: grid; gap: 8px; }
+.ap-card-walkthrough > div > button { height: 30px; padding: 0 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font: inherit; font-size: var(--fs-p2); cursor: pointer; }
+.ap-card-walkthrough > div > button:hover { border-color: var(--faint); background: var(--wk-plane); color: var(--wk-ink); }
 /* 2026-11-18 用户指令「随画随出卡」：手画分区时任务卡下方出分区清单卡，每分区一张子卡；
    名称/用途输入框 + 室内外两个 chip + 删除。原内嵌引导 .ap-card-guide 随 S3 拆卡退役删除。 */
 .ap-zones-list .ap-card-head span { color: var(--wk-muted); font-size: var(--fs-cap); }
