@@ -9,7 +9,7 @@
  * - 纯函数层不加载 manifest：oneplan/misc 尺寸由调用方经 `libraryEntry` 注入，缺省回落 2×2；
  * - 实体一律经 `buildFacility` 工厂构建，失败进 skipped 不留半成品；
  * - 室内 item 无显式 zoneId，归属留空，下一轮按落点命中口径补；特化字段（WiFi/CCTV/锥角/glb 等）
- *   本轮不落 notes，归属终稿定后再接。
+ *   本轮不落 notes、不迁 plan，按条目在 `result.lossy` 如实标记。
  */
 
 import type { PlanFacility, PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
@@ -58,9 +58,42 @@ export interface FacilityMigrationSkip {
   reason: string;
 }
 
+/** C3：室内特化字段不迁 plan，按条目如实标记损失项。 */
+export interface FacilityMigrationLossy {
+  sourceId: string;
+  fields: readonly string[];
+}
+
 export interface FacilityMigrationResult {
   facilities: PlanFacility[];
   skipped: FacilityMigrationSkip[];
+  lossy: FacilityMigrationLossy[];
+}
+
+/** 只迁二维占地与通用属性；下面这些是室内 3D 语义，plan 无对应字段（C3 拍板 A）。 */
+const INDOOR_ONLY_FIELDS = [
+  'handoff',
+  'structuralOpeningId',
+  'structuralColumnId',
+  'wallId',
+  'elevation',
+  'price',
+  'isWiFiAccessPoint',
+  'isCCTV',
+  'signalRange',
+  'hasVisionCone',
+  'visionRange',
+  'visionFov',
+  'cctvModelId',
+  'wallRotation',
+] as const satisfies readonly (keyof FurnitureItem)[];
+
+/** false 不算损失；0 算（价格 0 / 标高 0 也是显式数据）。 */
+function indoorOnlyFields(item: FurnitureItem): string[] {
+  return INDOOR_ONLY_FIELDS.filter((field) => {
+    const value = item[field];
+    return value !== undefined && value !== false;
+  });
 }
 
 /** 弧度 → 平面角度：参照 `floor-reading.ts:166` 既有口径取反，钳制由工厂完成。 */
@@ -124,6 +157,7 @@ export function migrateFacilities(
   const frame = makeFrame(boundary, layout.width, layout.height);
   const facilities: PlanFacility[] = [];
   const skipped: FacilityMigrationSkip[] = [];
+  const lossy: FacilityMigrationLossy[] = [];
 
   const allItems = layout.floors.flatMap(floor => floor.items ?? []);
 
@@ -168,10 +202,12 @@ export function migrateFacilities(
 
     if (built.ok) {
       facilities.push(withModelReference(built.value, item, options));
+      const fields = indoorOnlyFields(item);
+      if (fields.length > 0) lossy.push({ sourceId: item.id, fields });
     } else {
       skipped.push({ sourceId: item.id, reason: built.issue.message });
     }
   }
 
-  return { facilities, skipped };
+  return { facilities, skipped, lossy };
 }
