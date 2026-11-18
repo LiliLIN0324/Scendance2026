@@ -3,6 +3,7 @@ import { STORAGE_KEY } from '../room-organizer/lib/constants';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
 import { collectViolations } from '../../lib/placement-rules';
 import { encodeShareUrl } from '../room-organizer/lib/share';
+import { createStarterOutdoorPlan } from '../room-organizer/lib/outdoor-project-store';
 import {
   loadReviewPlan,
   localPlanKey,
@@ -66,6 +67,16 @@ describe('review share plan loading', () => {
     expect(loaded.plan.identity?.snapshotId).toBe(encoded.identity.snapshotId);
     const again = await loadReviewPlan({ hash, search: '', localLayout: null });
     expect(again.ok && again.plan.planKey).toBe(loaded.plan.planKey);
+  });
+  it('carries the outdoor site plan in the review link', async () => {
+    const outdoor = createStarterOutdoorPlan();
+    const encoded = await encodeShareUrl(INITIAL_LAYOUT, 'https://app.example/editor', outdoor);
+    const hash = new URL(encoded.url).hash;
+    const result = await loadReviewPlan({ hash, search: '', localLayout: null });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.plan.outdoorPlan?.schemaVersion).toBe(1);
+    expect(result.plan.outdoorPlan?.anchor?.lng).toBe(outdoor.anchor?.lng);
   });
 
   it('opens an older link without a version section and keeps local/sample plans unversioned', async () => {
