@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { createStarterOutdoorPlan } from './outdoor-project-store';
 import { checkBoundaryRing } from './site-plan-editing';
 import { lngLatToEnu } from './outdoor-plan-canvas';
-import { boundaryAtNewAnchor, canReanchorOutdoorPlan, planForPickedVenue } from './outdoor-plan-protection';
+import { boundaryAtNewAnchor, canReanchorOutdoorPlan, clearPlanBoundary, planForPickedVenue } from './outdoor-plan-protection';
 import { sceneAnchorFromOutdoorPlan, trueFootprintBoundary } from './outdoor-venue-sync';
 it('空规划允许真实选址；已有入口/物料等不随新地名悄悄搬家，原对象不变', () => {
   const plan = createStarterOutdoorPlan(); const next = { ...plan.anchor!, lng: plan.anchor!.lng + 0.1 };
@@ -107,4 +107,31 @@ it('空草稿换场：不报清空项，锚点与红线照样跟着新场地走'
   expect(result.cleared).toBe(0);
   expect(result.plan.anchor).toEqual(nextAnchor);
   expect(result.plan.boundary).toEqual(boundary);
+});
+
+// 2026-11-19 用户实测「用地红线不能整个删掉」：空 boundary 是 schema 允许的起步态（0 或 3–64 点）。
+it('整条删除用地红线：只清场地壳与设计范围，已摆内容同一引用、锚点不动', () => {
+  const plan = createStarterOutdoorPlan();
+  // 起步草稿本来就是 boundary: []，这里显式给一块场地壳，才能验「整条删掉」。
+  const square = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }];
+  const withScope = { ...plan, boundary: square, designScope: square.map(point => ({ ...point })) };
+  const cleared = clearPlanBoundary(withScope);
+  expect(cleared.boundary).toEqual([]);
+  expect(cleared.designScope).toBeUndefined();
+  expect(cleared.anchor).toEqual(plan.anchor);
+  // 同一引用 = 一个分区/物料都没被复制、没被改写。
+  expect(cleared.zones).toBe(plan.zones);
+  expect(cleared.facilities).toBe(plan.facilities);
+  expect(cleared.routes).toBe(plan.routes);
+  expect(cleared.nodes).toBe(plan.nodes);
+  expect(cleared.workers).toBe(plan.workers);
+  // 纯函数：原 plan 不被改。
+  expect(withScope.boundary.length).toBeGreaterThan(0);
+  expect(withScope.designScope).toHaveLength(withScope.boundary.length);
+});
+
+it('本来就没红线：恒等返回，不产生新对象', () => {
+  const plan = createStarterOutdoorPlan();
+  const empty = { ...plan, boundary: [], designScope: undefined };
+  expect(clearPlanBoundary(empty)).toBe(empty);
 });
