@@ -732,6 +732,22 @@ scripts/probe-basemap-zoom.mjs
 - **“归为基线”要有干净树证据**：同一错误在 `origin/main` 的隔离 worktree 上单跑一遍能复现，才叫基线；否则就是自己引入的。
 - **可注入不是把常量删掉**：不传记录时行为与以前一字不差，旧调用点与旧断言才不用改。
 
+### 2026-11-18 04:05 · 自动轮次 70 · 锚点自检（文档 JSON 与代码对不上就红）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 04:05，自动轮次 70
+批次 / 切片 / 状态：M7 / 对照表锚点自检 / 已交付（分支待 PR）
+开工事实：HEAD = main = `c9706da5`，origin/main = `37c01178`（落后 7 笔），脏文件 62
+合并：**本轮未合** —— `git merge --ff-only origin/main` 直接报 `Your local changes to the following files would be overwritten by merge`，61 个入站文件里 **59 个与脏文件重叠**（用户正在改地图多源/漫游行为层）。前几轮 1–3 个文件的重叠可以用 stash/ff/pop，59 个不是同一个量级：pop 一旦冲突就是几十个文件带标记，比不合同危害大，所以不动。分支从 `origin/main` 开。
+交付：`frontend/components/room-organizer/lib/outdoor-matrix-anchor.test.ts`（2 条）——读 `docs/plans/2026-11-16-outdoor-evidence-matrix.md` §0 的 ```json 代码块，与 `statusCardSnapshot({rows: assessAcceptance(report()), metrics, ledger: defaultLedger()})` 逐字比；另一条钉住 `allGreen === 0`。对照表 §0 同步加了一句“这条锚点由测试看住”。
+验证（固定数据）：新用例 2/2；`tsc --noEmit` 0 行（先报了 2 个错：`SessionReport.exportedAt` 是 number、顶层缺 `text`，已修）
+真实浏览器/云端：仍未验（9222 第二十六轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；本地 main 追上 origin（等人提交 WIP）
+```
+
+- **锚点要么被测试钉住，要么会腐烂**：写在文档里的“当前状态”不会自己维持正确，得让它和代码算出来的东西对不上就报错。
+- **重叠文件数量决定合并策略**：1–3 个可以 stash/ff/pop；几十个时正确动作是“不碰工作区，分支从 origin/main 开”，并根据仓库规则把这件事写给人。
+
 ### 2026-11-18 10:55 · 轮次 69 · M4 离线确定性切片（未登录也能出组合分区预览）
 
 ```text

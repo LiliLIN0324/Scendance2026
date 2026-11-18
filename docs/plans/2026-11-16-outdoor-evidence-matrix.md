@@ -15,6 +15,7 @@
 - 复跑：`cd frontend && npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`，看用例「默认台账下的快照一字段不多一字段不少」。
 - 读法：`allGreen: 0` 是**算出来的**（三类全绿要固定数据 + 浏览器 pass + 云端 pass，目前没一条同时满足）；`gate: {}` 表示本次快照没带门禁读数，不代表门禁没跑过。
 - 用途：以后每轮只需把新快照与这段 diff，“哪些数字变了”不再靠肉眼对表格。
+- 这条锚点不是靠人看住的：`frontend/components/room-organizer/lib/outdoor-matrix-anchor.test.ts`（轮次 70）会读本文件 §0 的 JSON，与 `statusCardSnapshot(默认台账)` 逐字对比；锚点过期或手抄走样，测试直接红。
 - 轮次 71 起 `browser` 多了 `pass` 档：证据可以由一份 `WalkthroughRecord` 传进来（`browserEvidenceFrom()`），不传就还是照本表抄的那份常量；`pass: []` 就是“一条走查通过的都没有”，不是没这项。
 
 ## 1. 逐条对照
