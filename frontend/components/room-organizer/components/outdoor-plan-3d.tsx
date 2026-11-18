@@ -1365,6 +1365,24 @@ export default function OutdoorPlan3D({
       if (!preview) return null;
       return [...nextPlan.facilities].reverse().find(f => facilityContainsPoint(preview.position, f))?.id ?? null;
     };
+    /** 一句话布置的批量虚影：半透明体块，确认前不进 plan。 */
+    const arrangePreviewProps = (visuals: PlanEditVisuals) => {
+      const items = visuals.arrangePreview;
+      if (!items?.length) return [];
+      const frame = ringFrame(visuals.plan.boundary);
+      if (!frame) return [];
+      const shell = planShellFrame(visuals.plan.boundary, { width: frame.width, depth: frame.depth }, { clampPoints: false });
+      if (!shell) return [];
+      return items.map((item, index) => facilityProp({
+        id: `__arrange_${index}`,
+        templateId: item.templateId,
+        name: item.name,
+        position: item.position,
+        rotationDeg: item.rotationDeg,
+        size: { width: item.width, depth: item.depth },
+        ...(item.modelOverride ? { modelOverride: item.modelOverride } : {}),
+      }, shell));
+    };
     const syncEditVisuals = (): void => {
       const visuals = canvasEditApiRef.current?.current?.getEditVisuals?.();
       if (!visuals) return;
@@ -1373,6 +1391,7 @@ export default function OutdoorPlan3D({
         Date.now() < previewMutedUntil ? null : previewPropFor(visuals.plan, visuals.draft),
         previewTargetId(visuals.plan, visuals.draft),
       );
+      const arrangeGhosts = arrangePreviewProps(visuals);
       // 2026-11-12 3D 手柄目标：可编辑且有选中设施才挂柄（每帧按最新目标重摆位置）。
       handleFacilityRef.current = visuals.facilityEditable && visuals.selectedFacilityId
         ? visuals.plan.facilities.find(f => f.id === visuals.selectedFacilityId) ?? null
@@ -1383,9 +1402,13 @@ export default function OutdoorPlan3D({
         plan: visuals.plan,
         draft: visuals.draft ?? null,
       });
-      if (key === lastEditKey) return;
+      if (key === lastEditKey) {
+        planModelLayer.setBatchPreview(arrangeGhosts);
+        return;
+      }
       lastEditKey = key;
       syncFootprint(visuals.plan, visuals.selectedZoneId, visuals.draft);
+      planModelLayer.setBatchPreview(arrangeGhosts);
     };
 
     const syncFootprint = (nextPlan: SitePlanData, selectedZoneId?: string | null, draft?: PlanEditVisuals["draft"]): void => {

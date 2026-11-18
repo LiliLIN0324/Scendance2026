@@ -92,6 +92,7 @@ import {
   drawMapEditHighlight,
   drawBuildingLayer,
   drawConflictMarkers,
+  drawArrangePreview,
   drawDraftLayer,
   drawFacilityGhost,
   drawFacilityLayer,
@@ -403,6 +404,8 @@ import {
   type PlanZone,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { arrangePreviewKind, buildArrangePreview } from '../lib/arrange-preview';
+import { loadShippedOnlineModels } from '../lib/online-models';
 import type { PlanSceneObject } from '../lib/plan-item-bridge';
 
 export type CanvasBasemapSource = TdtProbeLayer | ProbePublicSource;
@@ -1417,6 +1420,16 @@ export interface PlanEditVisuals {
   selectedFacilityId: string | null;
   /** 2026-11-12 3D 手柄：设施层当前可直接编辑（浏览/选择模式 + 未锁定）；false 时 3D 不挂柄。 */
   facilityEditable: boolean;
+  /** 一句话布置的批量落位预览：3D 画半透明体块，确认前不落库。 */
+  arrangePreview: ReadonlyArray<{
+    templateId: string;
+    name: string;
+    position: PlanPoint;
+    rotationDeg: number;
+    width: number;
+    depth: number;
+    modelOverride?: string;
+  }> | null;
   draft: {
     ring: PlanPoint[];
     ringColor: string;
@@ -1896,6 +1909,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     try { localStorage.setItem('scendance:oneplan-grid', value ? '1' : '0'); } catch { /* 隐私模式写不进就算了 */ }
   };
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
+  /** 一句话布置：预览停在画布上，落库才 commitPlan（可一步撤销）。 */
+  const [oneLine, setOneLine] = useState('');
+  const [oneLineBusy, setOneLineBusy] = useState(false);
+  const [arrangePreview, setArrangePreview] = useState<{ label: string; count: number } | null>(null);
+  const arrangePreviewRef = useRef<PlanFacility[] | null>(null);
   /**
    * 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
    * - 画布设施（浏览/选择模式点中实体）= 复制 + 层级四项 + 删除；
@@ -2487,6 +2505,77 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onPlanChange?.(next);
     setEditMessage('已重做。');
     draw();
+  }
+
+  function previewArrangeFacilities(facilities: PlanFacility[], label: string) {
+    arrangePreviewRef.current = facilities;
+    setArrangePreview({ label, count: facilities.length });
+    draw();
+    notifyPlanDraftChanged();
+  }
+
+  function clearArrangePreview() {
+    arrangePreviewRef.current = null;
+    setArrangePreview(null);
+    draw();
+    notifyPlanDraftChanged();
+  }
+
+  function confirmArrangePreview() {
+    const facilities = arrangePreviewRef.current;
+    if (!facilities?.length) return;
+    commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, ...facilities] });
+    arrangePreviewRef.current = null;
+    setArrangePreview(null);
+    setOneLine('');
+    setEditMessage(`已落库 ${facilities.length} 件，可一步撤销。`);
+    draw();
+    notifyPlanDraftChanged();
+  }
+
+  /** 一句话布置：观礼区 / 摊位带 / 宴会套装先出预览，落库才写 plan。 */
+  async function runOneLineCommand(raw: string) {
+    const text = raw.trim();
+    if (!text || oneLineBusy) return;
+    const kind = arrangePreviewKind(text);
+    if (!kind) {
+      clearArrangePreview();
+      setEditMessage('没听出要排什么：可以说「8 个摊位，留 2.4 米通道」，或「30 人观礼，留 2 米通道」。');
+      return;
+    }
+    if (planRef.current.boundary.length < 3) {
+      clearArrangePreview();
+      setEditMessage(kind === 'suite' ? '先画场地边界，再成套排桌。' : '先画场地边界，再排场景。');
+      return;
+    }
+    setOneLineBusy(true);
+    try {
+      const { models } = await loadShippedOnlineModels();
+      const current = planRef.current;
+      const result = buildArrangePreview(text, {
+        boundary: current.boundary,
+        facilities: current.facilities,
+        ...(current.buildings ? { buildings: current.buildings } : {}),
+      }, models.map(model => ({
+        slug: model.slug,
+        name: model.name,
+        width: model.width,
+        depth: model.depth,
+        bucket: model.bucket,
+      })));
+      if (!result.ok) {
+        clearArrangePreview();
+        setEditMessage(result.message);
+        return;
+      }
+      previewArrangeFacilities(result.facilities, result.label);
+      setEditMessage(result.message);
+      setOneLine('');
+    } catch {
+      setEditMessage('物料库读取失败，稍后再试。');
+    } finally {
+      setOneLineBusy(false);
+    }
   }
 
   /**
@@ -3128,6 +3217,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           });
         }
       }
+      // 一句话布置的落位预览（不落库、不进 undo，确认后才写 plan）。
+      const arrangeGhost = arrangePreviewRef.current;
+      if (arrangeGhost?.length) drawArrangePreview(planCtx, arrangeGhost, viewport);
       // P2-i：选中设施的可直接拖拽手柄（四角改尺寸 + 顶部旋转）；锁定设施层或非浏览模式不画。
       // 2026-11-12 B2：选择（select）模式同样可用（OnePlan Selection tool 下也能旋转/改尺寸）。
       const selectedForHandles = selectedFacilityRef.current
@@ -4495,6 +4587,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 2026-11-12 3D 手柄：把选中设施与可编辑态透出，3D 侧只画柄不拷贝编辑逻辑。
         selectedFacilityId: selectedFacilityRef.current,
         facilityEditable: !!onPlanChange && !layerLocked('facility') && (modeRef.current === 'view' || modeRef.current === 'select'),
+        arrangePreview: arrangePreviewRef.current?.map(facility => ({
+          templateId: facility.templateId,
+          name: facility.name,
+          position: facility.position,
+          rotationDeg: facility.rotationDeg,
+          width: facility.size.width,
+          depth: facility.size.depth,
+          ...(facility.modelOverride ? { modelOverride: facility.modelOverride } : {}),
+        })) ?? null,
         draft: {
           ring,
           ringColor: mode === "zone"
@@ -9936,6 +10037,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <BenchRepeatIcon size={16} aria-hidden />
                         </button>
                       </div>
+                      {/* 一句话布置：先出虚线占地和 3D 体块，落库才写入方案。 */}
+                      <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                        <input
+                          aria-label="一句话布置或改材质"
+                          value={oneLine}
+                          onChange={event => setOneLine(event.target.value)}
+                          onKeyDown={event => {
+                            if (event.key !== 'Enter' || oneLineBusy) return;
+                            event.preventDefault();
+                            void runOneLineCommand(oneLine);
+                          }}
+                          placeholder="一句话：8 个摊位，留 2.4 米通道"
+                          style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.panel }}
+                        />
+                        <button
+                          type="button"
+                          disabled={oneLineBusy || oneLine.trim().length === 0}
+                          onClick={() => void runOneLineCommand(oneLine)}
+                          style={{ ...modeButtonStyle(false), cursor: oneLineBusy ? 'wait' : 'pointer', opacity: oneLineBusy || oneLine.trim().length === 0 ? 0.5 : 1 }}
+                        >
+                          {oneLineBusy ? '排布中…' : '执行'}
+                        </button>
+                      </div>
+                      {arrangePreview && (
+                        <div role="group" aria-label="落位预览" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                            预览：{arrangePreview.label} · {arrangePreview.count} 件
+                          </span>
+                          <button type="button" onClick={confirmArrangePreview} style={modeButtonStyle(true)}>落库</button>
+                          <button type="button" onClick={() => { clearArrangePreview(); setEditMessage(null); }} style={modeButtonStyle(false)}>取消</button>
+                        </div>
+                      )}
                       {/* 2026-11-15 用户：位置与尺寸压成一块——标题留在上面（位置 / 尺寸两栏），
                           下面一行就是具体数字；四项都直接可改：纬/经 逆映射回米，W/L 等比缩放。
                           2026-11-15 视觉修正：属性卡实际只有 ~233 CSS px 宽（截图 DPR2），
@@ -11011,6 +11144,35 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {arrangePreview && (
+        <div
+          role="group"
+          aria-label="落位预览"
+          onMouseDown={event => event.stopPropagation()}
+          style={{
+            position: 'absolute',
+            left: 16,
+            bottom: 16,
+            zIndex: 5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexWrap: 'wrap',
+            maxWidth: 'min(420px, calc(100% - 32px))',
+            padding: '8px 10px',
+            borderRadius: 8,
+            background: 'rgba(20, 24, 28, 0.88)',
+            color: '#f4f1ea',
+            pointerEvents: 'auto',
+          }}
+        >
+          <span style={{ fontSize: PLANNING_TYPOGRAPHY.hint }}>
+            预览：{arrangePreview.label} · {arrangePreview.count} 件
+          </span>
+          <button type="button" onClick={confirmArrangePreview} style={{ ...modeButtonStyle(true), color: '#f4f1ea' }}>落库</button>
+          <button type="button" onClick={() => { clearArrangePreview(); setEditMessage(null); }} style={{ ...modeButtonStyle(false), color: '#f4f1ea' }}>取消</button>
+        </div>
+      )}
       {measureRulerCard}
       {/* 2026-11-12 用户「地图加载时页面灰扑扑」：底图补瓦片期间顶部居中一枚轻提示，
           全部结算（含失败）即收；pointer-events 无、不挡任何画布交互。 */}
