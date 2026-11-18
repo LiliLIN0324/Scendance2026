@@ -7,6 +7,7 @@ import {
   snapshotIdFor,
 } from './delivery-version';
 import { MAX_LAYOUT_JSON_BYTES, parseLayoutEventOperations, parseStoredLayout } from './schema';
+import { sitePlanDataSchema, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout } from './types';
 
 const HASH_PREFIX = '#layout=';
@@ -30,7 +31,7 @@ export const MAX_SHARE_HASH_LENGTH = 64 * 1024;
 export type ShareDecodeFailure = 'too-large' | 'unreadable';
 
 export type ShareDecodeResult =
-  | { ok: true; layout: RoomLayout; identity: ReadPlanShareIdentity | null }
+  | { ok: true; layout: RoomLayout; identity: ReadPlanShareIdentity | null; outdoor: SitePlanData | null }
   | { ok: false; reason: ShareDecodeFailure };
 
 /** 链接自带的交付版本身份（SC-10）：旧链接没有这一段，读作 null。 */
@@ -59,7 +60,8 @@ export interface EncodeShareUrlResult {
 
 export async function encodeShareUrl(
   layout: RoomLayout,
-  origin: string
+  origin: string,
+  outdoor?: SitePlanData | null,
 ): Promise<EncodeShareUrlResult> {
   const stripped = layout.floorPlanImage !== undefined;
   const checked = parseLayoutEventOperations(layout);
@@ -67,7 +69,15 @@ export async function encodeShareUrl(
   const shareable = deliveryShareableLayout(checked);
 
   const identity = await planShareIdentity(shareable);
-  const json = JSON.stringify({ kind: PLAN_SHARE_KIND, identity, layout: shareable });
+  // 户外方案是可选的同一份规划数据；带了就随快照走，评审页先看户外。
+  const outdoorChecked = outdoor ? sitePlanDataSchema.safeParse(outdoor) : null;
+  if (outdoorChecked && !outdoorChecked.success) throw new Error('户外方案无法核对，未生成评审链接。');
+  const json = JSON.stringify({
+    kind: PLAN_SHARE_KIND,
+    identity,
+    layout: shareable,
+    ...(outdoorChecked?.success ? { outdoor: outdoorChecked.data } : {}),
+  });
   const compressed = await deflateRaw(new TextEncoder().encode(json));
   const encoded = `${V2_PREFIX}${bytesToBase64Url(compressed)}`;
   return { url: `${origin}${HASH_PREFIX}${encoded}`, strippedFloorPlan: stripped, identity };
@@ -117,7 +127,8 @@ export async function readShareHash(hash: string): Promise<ShareDecodeResult> {
     if (!layout) return { ok: false, reason: 'unreadable' };
     const exported = layoutForExport(layout, true);
     const identity = envelope?.identity ? await verifyPlanShareIdentity(envelope.identity, exported) : null;
-    return { ok: true, layout: exported, identity };
+    const outdoorChecked = envelope?.outdoor ? sitePlanDataSchema.safeParse(envelope.outdoor) : null;
+    return { ok: true, layout: exported, identity, outdoor: outdoorChecked?.success ? outdoorChecked.data : null };
   } catch {
     return { ok: false, reason: 'unreadable' };
   }
@@ -145,13 +156,13 @@ function shareStorage(): Storage | null {
   }
 }
 
-function readPlanShareEnvelope(value: unknown): { identity: PlanShareIdentity | null; layout: unknown } | null {
+function readPlanShareEnvelope(value: unknown): { identity: PlanShareIdentity | null; layout: unknown; outdoor: unknown } | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   if (record.kind !== PLAN_SHARE_KIND) return null;
   if (!record.layout || typeof record.layout !== 'object') return null;
   const identity = parsePlanShareIdentity(record.identity);
-  return { identity, layout: record.layout };
+  return { identity, layout: record.layout, outdoor: record.outdoor };
 }
 
 function parsePlanShareIdentity(value: unknown): PlanShareIdentity | null {
