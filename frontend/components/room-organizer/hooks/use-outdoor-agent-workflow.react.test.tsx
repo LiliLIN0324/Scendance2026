@@ -2366,3 +2366,11 @@ it("范围未确认时，也把上一句里的后置活说出来", async () => {
   expect(flow.notice).toContain("地图上还没有可核对的活动边界");
   expect(flow.notice).toContain("后面还有：最后再调通道");
 });
+
+it("反问时也把上一句里的后置活说出来", async () => {
+  await confirmScope();
+  await turn("先摆摊位，最后再调通道", response("ask", {}, { reply: "分区想怎么分？" }));
+  expect(flow.notice).toContain("补充对话里的信息后可以继续");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
+  expect(flow.notice).toContain("现在不用决定");
+});
