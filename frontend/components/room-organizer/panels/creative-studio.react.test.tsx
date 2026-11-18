@@ -1043,7 +1043,7 @@ describe('direct local delivery shortcut', () => {
     await screen.findByRole('group',{name:'执行工作单'});
     const details=view.container.querySelector<HTMLDetailsElement>('.cr-agent-brief')!;
     expect(details.open).toBe(true);
-    fireEvent.click(await screen.findByRole('button',{name:saved?'查看活动需求':'打开活动需求表单'}));
+    fireEvent.click(await screen.findByRole('button',{name:saved?'查看活动需求':'填写活动需求'}));
     const input=screen.getByRole('textbox',{name:'客户需求'});
     await waitFor(()=>expect(document.activeElement).toBe(input));
     expect(details.open).toBe(true);

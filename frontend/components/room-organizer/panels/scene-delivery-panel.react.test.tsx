@@ -1,5 +1,7 @@
 ﻿// @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +24,7 @@ import {captureOriginalPreservation} from '../lib/original-preservation';
 import {createLayoutStore} from '../hooks/use-layout-store';
 import {createActivitySessionTracker} from '../lib/activity-session-epoch';
 import {createFloorSessionTracker} from '../lib/floor-session-epoch';
+import { ActivityTaskSuggestionView } from './activity-task-suggestion-view';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
 import {captureLocalDraftIntegrityFence,verifyLocalDraft} from '../lib/local-draft-integrity';
 import {localDraftDeliveryJson} from '../lib/local-draft-delivery';
@@ -110,15 +113,88 @@ describe('Bingo scene delivery panel',()=>{
     expect(screen.getByRole('button', { name: '导出交付包' })).toBeTruthy();
     expect(screen.queryByText('未记录')).toBeNull();
     expect(screen.queryByText('日期待确认')).toBeNull();
-    const archive = screen.getByText('活动档案 · 尚未创建').closest('details') as HTMLDetailsElement;
+    const archive = screen.getByText('活动档案').closest('details') as HTMLDetailsElement;
     expect(archive.open).toBe(false);
+    expect(archive.textContent).toContain('尚未创建');
     fireEvent.click(archive.querySelector('summary')!);
-    expect(screen.getByText('尚未创建。')).toBeTruthy();
+    expect(screen.getByText('还没有活动档案。')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '创建档案' })).toBeNull();
     expect(screen.queryByText('未记录')).toBeNull();
     for (const title of ['活动需求', '当天执行包', '内部资料']) {
       expect((screen.getByText(title).closest('details') as HTMLDetailsElement).open).toBe(false);
     }
-    expect((screen.getAllByText('活动任务 · 0 项')[0].closest('details') as HTMLDetailsElement).open).toBe(false);
+    const tasks = screen.getByText('活动任务').closest('details') as HTMLDetailsElement;
+    expect(tasks.open).toBe(false);
+    expect(tasks.textContent).toContain('0 项');
+  });
+  it('matches the cold-stone empty delivery surface: header, folds, task form and hairline chips', async () => {
+    const suggestions = <ActivityTaskSuggestionView layout={workLayout()} selection={{ briefText: '', taskIds: [], objectIds: [] }} instruction=""
+      onSelection={() => undefined} onInstruction={() => undefined} context={null} proposal={null} selectedSuggestionIds={[]}
+      onSelectedSuggestionIds={() => undefined} approvedDisclosure={false} onApprovedDisclosure={() => undefined} busy={false}
+      availabilityReason={null} stale={false} phase="selection" error={null} notice={null} onPreview={() => undefined} onSend={() => undefined}
+      onRecover={() => undefined} onCancel={() => undefined} onAccept={() => undefined} onNewRequest={() => undefined} onVerifySave={() => undefined}/>;
+    render(<SceneDeliveryPanel layout={{ ...workLayout(), name: '  ' }} controller={controller} onUpdateEventOperations={vi.fn()} activityTaskPanel={suggestions}/>);
+    expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();
+    expect(screen.getByText('未确认')).toBeTruthy();
+    expect(screen.getByText('确认后，分享链接会固定在这一版；再改会排到下一版。')).toBeTruthy();
+    expect(screen.getAllByText('效果图 ×3 · 平面 DXF · 物料清单 · 分享链接').length).toBeGreaterThan(0);
+    const confirm = screen.getByRole('button', { name: '确认这一版' });
+    expect(confirm.className).toContain('dl-primary');
+    const details = screen.getByText('版本详情').closest('details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(screen.getByText(/内容指纹/).closest('details')).toBe(details);
+    expect(document.querySelector('.dl-version-head')?.textContent ?? '').not.toContain('指纹');
+    const blocked = screen.getByRole('button', { name: '导出交付包' }) as HTMLButtonElement;
+    expect(blocked.disabled).toBe(true);
+    expect(blocked.className).not.toContain('dl-primary');
+    expect(screen.getByText('确认后可导出')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '创建档案' })).toBeNull();
+    expect(screen.queryByText('当前项目')).toBeNull();
+    expect(screen.queryByRole('button', { name: '打开活动需求表单' })).toBeNull();
+    expect(screen.queryByText('载入演练任务示例')).toBeNull();
+    expect(screen.queryByText('选资料 → 核对摘要 → 勾选保存')).toBeNull();
+    for (const title of ['活动档案', '活动需求', '当天执行包', '活动任务', '内部资料']) {
+      const fold = screen.getByText(title).closest('details') as HTMLDetailsElement;
+      if (!fold.open) fireEvent.click(fold.querySelector('summary')!);
+      fold.open = true;
+    }
+    expect(screen.getByText('还没有活动档案。')).toBeTruthy();
+    expect(screen.getByText('未命名活动')).toBeTruthy();
+    expect(screen.getByText('还没有填写活动需求。')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '填写活动需求' }).className).toContain('dl-primary');
+    const download = screen.getByRole('button', { name: '下载当天执行包' });
+    expect(download.className).not.toContain('dl-primary');
+    expect(screen.queryByLabelText('新任务标题')).toBeNull();
+    expect(screen.queryByLabelText('新任务阶段')).toBeNull();
+    expect(screen.queryByRole('button', { name: '放弃新增任务' })).toBeNull();
+    expect((screen.getByLabelText('资料类型') as HTMLSelectElement).value).toBe('unspecified');
+    const title = screen.getByLabelText('标题') as HTMLInputElement;
+    expect(title.placeholder).toBe('如签到、主持或撤场交接');
+    expect((screen.getByLabelText('阶段') as HTMLSelectElement).selectedOptions[0]?.textContent).toBe('准备');
+    expect(screen.getByText('先写标题即可，其他可以后补。')).toBeTruthy();
+    expect(screen.getByText('任务保存在此浏览器。')).toBeTruthy();
+    const add = screen.getByRole('button', { name: '添加任务' });
+    expect(add.className).toContain('dl-primary');
+    const paste = screen.getByText('粘贴材料起草流程单');
+    const suggestion = screen.getByText('任务建议');
+    expect(add.compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(paste.compareDocumentPosition(suggestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('任务保存在此浏览器。').compareDocumentPosition(paste) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(title, { target: { value: '签到' } });
+    expect(screen.getByRole('button', { name: '放弃新增任务' })).toBeTruthy();
+    const suggestionFold = suggestion.closest('details') as HTMLDetailsElement;
+    suggestionFold.open = true;
+    fireEvent(suggestionFold, new Event('toggle', { bubbles: true }));
+    expect(screen.getByText('选资料 → 核对摘要 → 勾选保存')).toBeTruthy();
+    const chip = screen.getByRole('tab', { name: '活动安排' });
+    expect(chip.classList.contains('dl-chip')).toBe(true);
+    expect(chip.getAttribute('aria-selected')).toBe('true');
+    const css = readFileSync(join(process.cwd(), 'components/room-organizer/panels/scene-delivery-panel.css'), 'utf8');
+    expect(css).toMatch(/\.dl-chip\[aria-selected="true"\][^}]*border-color:\s*#141416/);
+    expect(css).toMatch(/\.dl-chip\[aria-selected="true"\][^}]*background:\s*#fff/);
+    expect(css).not.toMatch(/#efede6/);
+    const painted = getComputedStyle(chip);
+    if (painted.borderTopColor) expect(painted.borderTopColor).not.toBe('rgb(239, 237, 230)');
   });
   it('blocks direct delivery while either local or cloud candidate remains pending',async()=>{
     const registry=createPendingCandidateRegistry(),scope={},access=bindPendingCandidateRegistry(registry,scope,()=>true),local={},cloud={};
@@ -691,7 +767,7 @@ describe('Bingo scene delivery panel',()=>{
     expect(screen.getByRole('region',{name:'活动安排'})).toBeDefined();
     openExportTab(); expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole('tab',{name:'活动安排'}));
-    fireEvent.click(screen.getByRole('button',{name:'打开活动需求表单'}));expect(openBrief).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button',{name:'填写活动需求'}));expect(openBrief).toHaveBeenCalledOnce();
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));
     await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledWith(current,expect.objectContaining({id:expect.any(String)}),undefined));
     expect(downloadSceneDelivery).toHaveBeenCalledOnce(); expect(exportDeliveryGlb).not.toHaveBeenCalled();
@@ -839,9 +915,13 @@ describe('saved execution timetable delivery',()=>{
     const current=workLayout();
     const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
     expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();
+    expect(screen.getByText('未确认')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认这一版'}));
-    await waitFor(()=>expect(screen.getByRole('button',{name:'这一版已确认'})).toBeTruthy());
-    expect(screen.getByText('v1.0 已确认')).toBeTruthy();
+    await waitFor(()=>expect(screen.getByRole('button',{name:'导出交付包'})).toBeTruthy());
+    expect((screen.getByRole('button',{name:'导出交付包'}) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText('已确认')).toBeTruthy();
+    expect(screen.getByText('分享链接和导出文件名都用这一版。')).toBeTruthy();
+    expect(screen.getByText('再改草案会排到下一版，旧链接仍打开这一版。')).toBeTruthy();
     const stored=JSON.parse(localStorage.getItem('scendance.deliveryVersions.v1')!);
     expect(stored[0].deliveryVersion).toBe('v1.0');
     expect(document.querySelector(`[data-delivery-version="v1.0"][data-snapshot-id="${stored[0].snapshotId}"]`)).toBeTruthy();
@@ -853,7 +933,8 @@ describe('saved execution timetable delivery',()=>{
     const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],position:{x:2,z:1}}]}]};
     view.rerender(<SceneDeliveryPanel layout={changed} controller={controller}/>);
     expect(await screen.findByText(/v1\.1 草案 · 已确认的是 v1\.0/)).toBeTruthy();
-    expect(screen.queryByRole('button',{name:'这一版已确认'})).toBeNull();
+    expect(screen.getByRole('button',{name:'确认这一版'})).toBeTruthy();
+    expect((screen.getByRole('button',{name:'导出交付包'}) as HTMLButtonElement).disabled).toBe(true);
     localStorage.clear();
   });
   it('builds a versioned delivery package only after the version is confirmed',async()=>{
@@ -864,9 +945,10 @@ describe('saved execution timetable delivery',()=>{
     const captureImage=vi.fn(async()=>png);
     render(<SceneDeliveryPanel layout={current} controller={controller} captureImage={captureImage}/>);
     expect((await screen.findByRole('button',{name:'导出交付包'})).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('确认后可导出')).toBeTruthy();
     expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认这一版'}));
-    await waitFor(()=>expect(screen.getByRole('button',{name:'这一版已确认'})).toBeTruthy());
+    await waitFor(()=>expect((screen.getByRole('button',{name:'导出交付包'}) as HTMLButtonElement).disabled).toBe(false));
     const packageButton=screen.getByRole('button',{name:'导出交付包'});
     expect(packageButton.hasAttribute('disabled')).toBe(false);
     fireEvent.click(packageButton);

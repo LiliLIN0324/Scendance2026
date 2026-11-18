@@ -1,5 +1,6 @@
 ﻿'use client';
 
+import { ChevronRight, ClipboardList, Folder, ListChecks, Package } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { productionReferenceKey as objectKey } from '@/lib/production-plan';
 import { registerSourceFlush } from '@/lib/source-storage';
@@ -190,6 +191,20 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, checkin
   </form>;
 }
 
+function DeliveryFold({ title, status, icon, children }: {
+  title: string; status?: string; icon: ReactNode; children: ReactNode;
+}): JSX.Element {
+  return <details className="sc-operation-fold dl-row">
+    <summary>
+      <span className="dl-row-icon" aria-hidden="true">{icon}</span>
+      <span className="dl-row-title">{title}</span>
+      {status ? <span className="dl-row-status">{status}</span> : null}
+      <ChevronRight className="dl-row-chevron" size={16} aria-hidden="true" />
+    </summary>
+    <div className="dl-row-body">{children}</div>
+  </details>;
+}
+
 /** 下载当天执行包：只生成文件，不改任何记录。 */
 function saveHtmlFile(fileName: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/html;charset=utf-8' }));
@@ -265,17 +280,42 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
   const needsReview = currentReviews.filter(review => review?.status === 'needs_review' && !review.failed).length;
   const failedReviews = currentReviews.filter(review => review?.failed).length;
   const checkinAlert = checkinsUnavailable ? <p className="sc-handoff-review">{checkins?.error??'点验资料尚未就绪，暂不能确认活动任务。'}<button className="sc-button" type="button" onClick={checkins?.retry}>重新读取点验</button></p> : null;
-  const briefBlock = <div className="sc-operation-brief">
-      <div className="sc-operation-brief-heading"><div className="sc-operation-project"><small>当前项目</small><h3>{layout.name || '未命名项目'}</h3></div><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
-      {brief ? <><p className="sc-note">已保存需求草稿 · {brief.eventConfirmed === true ? brief.event : '活动类型待确认'} · {brief.guestsConfirmed === true ? `预计 ${brief.guests} 人` : '人数待确认'}</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
-    </div>;
+  const briefStatus = brief
+    ? null
+    : briefState?.error
+      ? '活动需求无法读取或尚未保存，请打开原表单核对。'
+      : briefState && !briefState.ready
+        ? '正在读取活动需求…'
+        : compact ? '还没有填写活动需求。' : '活动需求尚未填写或未保存。';
+  const briefDetails = brief ? <><p className="sc-note">已保存需求草稿 · {brief.eventConfirmed === true ? brief.event : '活动类型待确认'} · {brief.guestsConfirmed === true ? `预计 ${brief.guests} 人` : '人数待确认'}</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : compact ? 'dl-empty' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefStatus}</p>;
+  const briefBlock = compact
+    ? <div className="dl-brief">
+        <p className="dl-brief-name">{layout.name.trim() || '未命名活动'}</p>
+        {briefDetails}
+        <button className="sc-button dl-primary" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '填写活动需求'}</button>
+      </div>
+    : <div className="sc-operation-brief">
+        <div className="sc-operation-brief-heading"><div className="sc-operation-project"><small>当前项目</small><h3>{layout.name || '未命名项目'}</h3></div><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
+        {briefDetails}
+      </div>;
+  const kindSelect = <select disabled={disabled} value={operations.dataKind} onChange={event => { if (update({ ...operations, dataKind: event.target.value as EventOperations['dataKind'] })) setNotice('资料类型已更新，请留意本机保存状态。'); }}><option value="unspecified">未标注</option><option value="rehearsal">演练</option><option value="real">真实</option></select>;
+  const discardNew = <button className="sc-button" type="button" disabled={!title} onClick={() => { setTitle(''); setPhase('preparation'); setError(''); setNotice(''); }}>放弃新增任务</button>;
+  const addForm = <form className="sc-operation-add" onSubmit={add}>
+      <fieldset disabled={disabled || operations.tasks.length >= eventOperationsLimits.tasks}>
+        <label className="sc-field">{compact ? '标题' : '新任务标题'}<input value={title} maxLength={eventOperationsLimits.title} placeholder="如签到、主持或撤场交接" onChange={event => setTitle(event.target.value)}/></label>
+        <div className="sc-operation-add-actions"><label className="sc-field">{compact ? '阶段' : '新任务阶段'}<select value={phase} onChange={event => setPhase(event.target.value as EventOperationTask['phase'])}>{eventOperationPhases.map(value => <option key={value} value={value}>{OPERATION_PHASE_LABELS[value]}</option>)}</select></label><button className={compact ? 'sc-button dl-primary' : 'sc-button'} type="submit">添加任务</button></div>
+      </fieldset>
+      {compact && <p className="dl-hint">先写标题即可，其他可以后补。</p>}
+      {(compact ? title.length > 0 : true) && <div className="sc-handoff-actions">{discardNew}</div>}
+    </form>;
+  const intake = <MaterialIntakePanel operations={operations} projectId={layout.id ?? 'local'} disabled={disabled} onAccept={next => onUpdate(next)} />;
   const taskBlock = <>
     {compact && checkinAlert}
-    {compact && <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>}
-    <MaterialIntakePanel operations={operations} projectId={layout.id ?? 'local'} disabled={disabled}
-      onAccept={next => onUpdate(next)} />
-    {suggestionsPanel}
-    <div className="sc-operation-toolbar"><strong className="sc-operation-kind-label">{operations.dataKind === 'rehearsal' ? '演练安排' : operations.dataKind === 'real' ? '真实活动安排' : '活动任务'} · {operations.tasks.length} 项</strong><label className="sc-field sc-operation-kind">资料类型<select disabled={disabled} value={operations.dataKind} onChange={event => { if (update({ ...operations, dataKind: event.target.value as EventOperations['dataKind'] })) setNotice('资料类型已更新，请留意本机保存状态。'); }}><option value="unspecified">未标注</option><option value="rehearsal">演练</option><option value="real">真实</option></select></label></div>
+    {!compact && intake}
+    {!compact && suggestionsPanel}
+    {compact
+      ? <label className="sc-field dl-kind">资料类型{kindSelect}</label>
+      : <div className="sc-operation-toolbar"><strong className="sc-operation-kind-label">{operations.dataKind === 'rehearsal' ? '演练安排' : operations.dataKind === 'real' ? '真实活动安排' : '活动任务'} · {operations.tasks.length} 项</strong><label className="sc-field sc-operation-kind">资料类型{kindSelect}</label></div>}
     {(missingSummary || needsReview > 0 || failedReviews > 0) && <div className="sc-operation-overview" role="group" aria-label="任务待补与复核">
       {missingSummary && <p className="sc-note">待补 · {missingSummary}</p>}
       {needsReview > 0 && <p className="sc-handoff-review">需复核 {needsReview} 项，请展开任务重新核对。</p>}
@@ -300,37 +340,36 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
         })}</div>
       </div>;
     })}
-    <details className="sc-operation-add-details" open={!operations.tasks.length || addOpen} onToggle={event => {
+    {compact && !operations.tasks.length ? addForm : <details className="sc-operation-add-details" open={!operations.tasks.length || addOpen} onToggle={event => {
       const element = event.currentTarget;
       setAddOpen(element.open);
       if (!element.open && element.contains(document.activeElement)) element.querySelector('summary')?.focus();
-    }}><summary>新增任务</summary>{!operations.tasks.length && <p className="sc-note">先写一项任务，再补负责人、计划时间和完成条件。可以不关联物料。</p>}<form className="sc-operation-add" onSubmit={add}>
-      <fieldset disabled={disabled || operations.tasks.length >= eventOperationsLimits.tasks}>
-        <label className="sc-field">新任务标题<input value={title} maxLength={eventOperationsLimits.title} placeholder="如签到、主持或撤场交接" onChange={event => setTitle(event.target.value)}/></label>
-        <div className="sc-operation-add-actions"><label className="sc-field">新任务阶段<select value={phase} onChange={event => setPhase(event.target.value as EventOperationTask['phase'])}>{eventOperationPhases.map(value => <option key={value} value={value}>{OPERATION_PHASE_LABELS[value]}</option>)}</select></label><button className="sc-button" type="submit">添加任务</button></div>
-      </fieldset>
-      <div className="sc-handoff-actions"><button className="sc-button" type="button" disabled={!title} onClick={() => { setTitle(''); setPhase('preparation'); setError(''); setNotice(''); }}>放弃新增任务</button></div>
-    </form></details>
+    }}><summary>新增任务</summary>{!operations.tasks.length && !compact && <p className="sc-note">先写一项任务，再补负责人、计划时间和完成条件。可以不关联物料。</p>}{addForm}</details>}
     {operations.tasks.length >= eventOperationsLimits.tasks && <p className="sc-note">已达到 {eventOperationsLimits.tasks} 项任务，请整理已有安排。</p>}
     {deleted && <button type="button" className="sc-button" disabled={disabled || operations.tasks.some(task => task.id === deleted.task.id)} onClick={() => {
       const tasks = [...operations.tasks]; tasks.splice(Math.min(deleted.index, tasks.length), 0, deleted.task);
       if (update({ ...operations, tasks })) { setDeleted(null); setNotice('任务已恢复。'); }
     }}>撤销删除任务</button>}
-    <p className="sc-note">活动安排随场景保存在此浏览器。人员、时间和完成条件未定时可先保存草稿。</p>
+    <p className={compact ? 'dl-foot' : 'sc-note'}>{compact ? '任务保存在此浏览器。' : '活动安排随场景保存在此浏览器。人员、时间和完成条件未定时可先保存草稿。'}</p>
+    {compact && <div className="dl-drafts">
+      <p className="dl-draft-label">起草</p>
+      {intake}
+      {suggestionsPanel}
+    </div>}
     {error && <p className="sc-handoff-error" role="alert">{error}</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}
   </>;
   return <section className="sc-event-operations" aria-label="活动安排">
     {compact && !layout.eventProfile
-      ? <details className="sc-operation-fold"><summary>活动档案 · 尚未创建</summary><p className="sc-note">尚未创建。</p></details>
+      ? <DeliveryFold title="活动档案" status="尚未创建" icon={<Folder size={16} strokeWidth={1.75} />}><p className="dl-empty">还没有活动档案。</p></DeliveryFold>
       : compact
-        ? <details className="sc-operation-fold"><summary>{`活动档案 · v${layout.eventProfile?.revision ?? 0}`}</summary><EventProfileTopBar profile={layout.eventProfile} /><EventProfileCard profile={layout.eventProfile} /></details>
+        ? <DeliveryFold title="活动档案" status={`v${layout.eventProfile?.revision ?? 0}`} icon={<Folder size={16} strokeWidth={1.75} />}><EventProfileTopBar profile={layout.eventProfile} /><EventProfileCard profile={layout.eventProfile} /></DeliveryFold>
         : <EventProfileTopBar profile={layout.eventProfile} />}
     {!compact && checkinAlert}
-    {compact ? <details className="sc-operation-fold"><summary>活动需求</summary>{briefBlock}</details> : briefBlock}
+    {compact ? <DeliveryFold title="活动需求" icon={<ClipboardList size={16} strokeWidth={1.75} />}>{briefBlock}</DeliveryFold> : briefBlock}
     {!compact && <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>}
     {!compact && <EventProfileCard profile={layout.eventProfile} />}
-    {compact ? <details className="sc-operation-fold"><summary>当天执行包</summary><DaySheetExport layout={layout} save={saveHtmlFile} /></details> : <DaySheetExport layout={layout} save={saveHtmlFile} />}
-    {compact ? <details className="sc-operation-fold"><summary>{`活动任务 · ${operations.tasks.length} 项`}</summary>{taskBlock}</details> : taskBlock}
+    {compact ? <DeliveryFold title="当天执行包" icon={<Package size={16} strokeWidth={1.75} />}><DaySheetExport layout={layout} save={saveHtmlFile} /></DeliveryFold> : <DaySheetExport layout={layout} save={saveHtmlFile} />}
+    {compact ? <DeliveryFold title="活动任务" status={`${operations.tasks.length} 项`} icon={<ListChecks size={16} strokeWidth={1.75} />}>{taskBlock}</DeliveryFold> : taskBlock}
   </section>;
 }
