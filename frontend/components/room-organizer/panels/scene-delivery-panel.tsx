@@ -253,9 +253,14 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
   const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'>(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials'));
   useEffect(() => { setView(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials')); }, [deliveryViewRequest, layout.id, operationsAvailable]);
-  // 「从本机备份恢复」是外部递进来的目标页，折叠壳得替她掀开，否则落点在一扇关着的门后面。
-  const [toolsOpen, setToolsOpen] = useState(deliveryViewRequest?.view === 'backup');
-  useEffect(() => { if (deliveryViewRequest?.view === 'backup') setToolsOpen(true); }, [deliveryViewRequest]);
+  // 物料、备份落在「内部资料」里。外部点进来时把这扇门掀开，否则落点在关着的门后面。
+  const insideTools = deliveryViewRequest?.view === 'materials' || deliveryViewRequest?.view === 'backup';
+  const [toolsOpen, setToolsOpen] = useState(insideTools);
+  useEffect(() => { if (insideTools) setToolsOpen(true); }, [deliveryViewRequest, insideTools]);
+  function showTool(next: 'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'): void {
+    setToolsOpen(true);
+    setView(next);
+  }
   const checkinLocal=isLocalActivityWorkspace(controller);
   const localCheckins=checkinLocal?checkins:undefined;
   const checkinsUnavailable=!!localCheckins&&!localCheckins.ready;
@@ -502,22 +507,24 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
         </li>)}
       </ul>}
     </div>}
-    {/* 六页执行台留在折叠里，不当默认门面。 */}
-    <details className="dl-tools" open={toolsOpen} onToggle={event => setToolsOpen(event.currentTarget.open)}>
+    {/* 档案、需求、当天包、任务在门面上折起。六页执行台留在「内部资料」里。 */}
+    <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
+      <EventOperationsPanel compact suggestionsPanel={activityTaskPanel} layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins}/>
+    </div>
+    <details className="dl-tools" open={toolsOpen} onToggle={event => {
+      const open = event.currentTarget.open;
+      setToolsOpen(open);
+      if (!open) setView(operationsAvailable ? 'operations' : 'materials');
+    }}>
       <summary>内部资料</summary>
       <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
-      <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => setView('operations')}>活动安排</button>
-      <button type="button" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => setView('materials')}>物料工作单</button>
-      <button type="button" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => setView('production')}>制作计划</button>
-      <button type="button" role="tab" id="delivery-checkins-tab" aria-controls="delivery-checkins" aria-selected={view === 'checkins'} onClick={() => setView('checkins')}>数量点验</button>
-      <button type="button" role="tab" id="delivery-export-tab" aria-controls="delivery-export" aria-selected={view === 'export'} onClick={() => setView('export')}>导出</button>
-      {backupActions && <button type="button" role="tab" id="delivery-backup-tab" aria-controls="delivery-backup" aria-selected={view === 'backup'} onClick={() => setView('backup')}>本机备份</button>}
+      <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => showTool('operations')}>活动安排</button>
+      <button type="button" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => showTool('materials')}>物料工作单</button>
+      <button type="button" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => showTool('production')}>制作计划</button>
+      <button type="button" role="tab" id="delivery-checkins-tab" aria-controls="delivery-checkins" aria-selected={view === 'checkins'} onClick={() => showTool('checkins')}>数量点验</button>
+      <button type="button" role="tab" id="delivery-export-tab" aria-controls="delivery-export" aria-selected={view === 'export'} onClick={() => showTool('export')}>导出</button>
+      {backupActions && <button type="button" role="tab" id="delivery-backup-tab" aria-controls="delivery-backup" aria-selected={view === 'backup'} onClick={() => showTool('backup')}>本机备份</button>}
       </div>
-    </details>
-    <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
-      <p className="sc-note">{cloudBound ? '云项目可查看活动安排。本地执行资料尚未接入云端保存。' : '活动安排随当前场景保存在此浏览器。'}</p>
-      <EventOperationsPanel suggestionsPanel={activityTaskPanel} layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins}/>
-    </div>
     <div role="tabpanel" id="delivery-production" aria-labelledby="delivery-production-tab" hidden={view !== 'production'}>
       <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy||checkinsUnavailable} onExport={()=>void download('production')}/>
     </div>
@@ -591,6 +598,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
     {backupActions && <div role="tabpanel" id="delivery-backup" aria-labelledby="delivery-backup-tab" hidden={view !== 'backup'}>
       <LocalProjectBackupPanel layout={layout} actions={backupActions} briefState={briefState} onComplete={onBackupRestored}/>
     </div>}
+    </details>
     {preview.error && view === 'operations' && <p className="sc-note">当前场馆模型暂不能完整交付，文字活动安排仍可单独导出。</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}
   </section>;
