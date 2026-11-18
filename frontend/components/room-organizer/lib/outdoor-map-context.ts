@@ -39,6 +39,7 @@ import {
   type OutdoorTurn,
   type OutdoorBrief,
 } from "./outdoor-agent-contract";
+import { buildLayoutEvidence } from "./outdoor-layout-weights";
 
 export { MAP_EVIDENCE_MISSING_NOTE };
 export type OutdoorEvidenceHighlight = ReturnType<
@@ -235,12 +236,15 @@ export function createOutdoorMapContext() {
         },
       });
       const sourceSnapshot = snapshot;
+      // docs/47 A2：证据分级——摘要（一行式）随 issued 上下文给模型，明细分档留给排布引擎（A3）。
+      const layout = buildLayoutEvidence(snapshot.features, plan.boundary);
       const issue = (maxChars: number) =>
         buildModelContext(sourceSnapshot, {
           maxObjects: 8,
           maxRelations: 8,
           maxChars,
           compact: true,
+          layoutEvidence: layout.summary,
         });
       const issued = issue(3400);
       return {
@@ -266,6 +270,8 @@ export function createOutdoorMapContext() {
             .map((f) => [f.id, f.highlight.sourceId]),
         ),
         unknowns: snapshot.coverage.unknowns,
+        // docs/47 A2：分档明细随本轮 load 结果走（hook/A3 从这里读），没有证据就回空档。
+        layoutEvidence: () => layout,
       };
     },
     highlights(

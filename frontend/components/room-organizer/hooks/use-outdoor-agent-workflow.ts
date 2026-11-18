@@ -452,6 +452,12 @@ export function useOutdoorAgentWorkflow(input: {
    * 让通知条成为唯一指令。任意新回合、取消、切活动都会清掉。
    */
   const [drawingMode, setDrawingMode] = useState<"zone" | "route" | "node" | null>(null);
+  /**
+   * 2026-11-18 用户指令「随画随出卡」：zones 阶段（含手画中）把画布分区清单同步给任务卡，
+   * 每闭合一个轮廓，卡下方就多一张分区卡。画布不对外发变更事件，沿用 scope 阶段
+   * 「低频读一次 bridge 快照」的既有口径；内容不变时不 setState，避免轮询空转重渲染。
+   */
+  const [drawnZones, setDrawnZones] = useState<SitePlanData["zones"]>([]);
   /** 2026-11-18：scope 阶段画布上是否已有合法用地红线——卡片据此决定「直接给核对卡」还是「教怎么画」。 */
   const [boundaryReady, setBoundaryReady] = useState(false);
   /** 已经自动签发过确认预览的那份边界；同一份边界撤回后不再自动弹回。 */
@@ -717,6 +723,29 @@ export function useOutdoorAgentWorkflow(input: {
       clearInterval(timer);
     };
   }, [state.stage, proposal, busy, drawingMode]);
+
+  // 2026-11-18 用户指令「随画随出卡」：zones 阶段（含手画中）把画布分区清单同步给任务卡，
+  // 与上面 scope 阶段的边界轮询同口径。内容不变时不 setState，避免轮询空转重渲染。
+  useEffect(() => {
+    if (state.stage !== "zones" && drawingMode !== "zone") {
+      setDrawnZones(current => (current.length ? [] : current));
+      return undefined;
+    }
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      const zonesNow = callbacks.current.bridge()?.getPlan()?.zones ?? [];
+      setDrawnZones(current =>
+        JSON.stringify(current) === JSON.stringify(zonesNow) ? current : zonesNow,
+      );
+    };
+    tick();
+    const timer = setInterval(tick, 800);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [state.stage, drawingMode]);
 
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
@@ -2613,6 +2642,57 @@ export function useOutdoorAgentWorkflow(input: {
   }
   const renderedToken = token.current;
   const renderedScope = input.scope;
+  /**
+   * 2026-11-18 用户指令「随画随出卡」：分区卡上的改名/用途/室内外/删除，与画布编辑走
+   * 同一条 applyPlan 提交（validateWorkflowPlan + commitPlan，可整批撤销）；画布自己在
+   * 删分区时会把落单的 workers/facilities 摘出该分区，这里保持同一语义。
+   */
+  function commitZones(mutate: (plan: SitePlanData) => SitePlanData): boolean {
+    const bridge = callbacks.current.bridge();
+    const plan = bridge?.getPlan();
+    if (!plan || !bridge?.applyPlan) return false;
+    return bridge.applyPlan(mutate(plan), planVersion(plan));
+  }
+  const zoneEdits = {
+    renameZone: (id: string, name: string): boolean => {
+      const text = name.trim();
+      if (!text) return false;
+      return commitZones(plan => ({
+        ...plan,
+        zones: plan.zones.map(z => (z.id === id ? { ...z, name: text } : z)),
+      }));
+    },
+    setZoneEvent: (id: string, event: string): boolean => {
+      const text = event.trim();
+      return commitZones(plan => ({
+        ...plan,
+        zones: plan.zones.map(z => {
+          if (z.id !== id) return z;
+          if (!text) {
+            const next = { ...z };
+            delete next.event;
+            return next;
+          }
+          return { ...z, event: text };
+        }),
+      }));
+    },
+    setZoneEnvironment: (
+      id: string,
+      environment: NonNullable<SitePlanData["zones"][number]["environment"]>,
+    ): boolean =>
+      commitZones(plan => ({
+        ...plan,
+        zones: plan.zones.map(z => (z.id === id ? { ...z, environment } : z)),
+      })),
+    deleteZone: (id: string): boolean =>
+      commitZones(plan => ({
+        ...plan,
+        zones: plan.zones.filter(z => z.id !== id),
+        workers: plan.workers.map(w => (w.zoneId === id ? { ...w, zoneId: undefined } : w)),
+        facilities: plan.facilities.map(f => (f.zoneId === id ? { ...f, zoneId: undefined } : f)),
+      })),
+  };
   async function action(
     action: OutdoorTurn["action"],
     choice?: number,
@@ -2953,6 +3033,9 @@ export function useOutdoorAgentWorkflow(input: {
     handle,
     action,
     cancel,
+    /** 2026-11-18 用户指令「随画随出卡」：画布分区清单（800ms 快照同步）+ 分区卡编辑动作。 */
+    drawnZones,
+    zoneEdits,
     confirmProposal: confirm,
     previewStyle,
     offerBoundary,

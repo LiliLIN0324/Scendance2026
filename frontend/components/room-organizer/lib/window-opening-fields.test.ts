@@ -39,7 +39,13 @@ describe('窗台/窗高字段（契约 + 开洞）', () => {
     expect(parsed.windowHeightM).toBeCloseTo(1.5, 10);
 
     const { walls } = planIndoorWalls([RECT], [], {
-      windows: [{ id: parsed.id, center: { x: 5, z: 0 }, widthM: parsed.size.width, sillM: parsed.windowSillM, heightM: parsed.windowHeightM }],
+      windows: [{
+        id: parsed.id,
+        center: { x: 5, z: 0 },
+        widthM: parsed.size.width,
+        ...(parsed.windowSillM !== undefined ? { sillM: parsed.windowSillM } : {}),
+        ...(parsed.windowHeightM !== undefined ? { heightM: parsed.windowHeightM } : {}),
+      }],
     });
     const opening = walls.find(wall => wall.openings.length === 1)!.openings[0]!;
     expect(opening.bottomFromFloor).toBeCloseTo(1.05, 10);
