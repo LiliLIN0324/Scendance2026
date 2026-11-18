@@ -90,6 +90,7 @@ export function ReviewOutdoorSheet({ plan, pins, activePinId, onPick, onFocusPin
   const bounds = useMemo(() => boundsOf(plan), [plan]);
   const [view, setView] = useState<ViewState>({ scale: 1, tx: 0, ty: 0 });
   const [hover, setHover] = useState<PlanPoint | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; tx: number; ty: number; moved: boolean } | null>(null);
 
   const toSvg = (point: PlanPoint) => ({
@@ -115,6 +116,25 @@ export function ReviewOutdoorSheet({ plan, pins, activePinId, onPick, onFocusPin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePinId]);
 
+  // React 的 onWheel 可能是 passive，拦不住页面滚动；这里显式用非 passive 监听。
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const sx = ((event.clientX - rect.left) / rect.width) * bounds.width;
+      const sy = ((event.clientY - rect.top) / rect.height) * bounds.height;
+      setView(current => {
+        const scale = clamp(current.scale * (event.deltaY < 0 ? 1.15 : 1 / 1.15), MIN_SCALE, MAX_SCALE);
+        const ratio = scale / current.scale;
+        return { scale, tx: sx - (sx - current.tx) * ratio, ty: sy - (sy - current.ty) * ratio };
+      });
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, [bounds.width, bounds.height]);
+
   const zoomBy = (factor: number) => {
     setView(current => {
       const scale = clamp(current.scale * factor, MIN_SCALE, MAX_SCALE);
@@ -128,21 +148,11 @@ export function ReviewOutdoorSheet({ plan, pins, activePinId, onPick, onFocusPin
   return (
     <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#eef2ec' }}>
       <svg
+        ref={svgRef}
         role="img"
         aria-label="户外方案平面，点击落钉，滚轮缩放，拖拽平移"
         viewBox={`0 0 ${bounds.width} ${bounds.height}`}
         style={{ display: 'block', width: '100%', height: '62vh', minHeight: 420, cursor: 'crosshair', touchAction: 'none' }}
-        onWheel={(event) => {
-          event.preventDefault();
-          const rect = event.currentTarget.getBoundingClientRect();
-          const sx = ((event.clientX - rect.left) / rect.width) * bounds.width;
-          const sy = ((event.clientY - rect.top) / rect.height) * bounds.height;
-          setView(current => {
-            const scale = clamp(current.scale * (event.deltaY < 0 ? 1.15 : 1 / 1.15), MIN_SCALE, MAX_SCALE);
-            const ratio = scale / current.scale;
-            return { scale, tx: sx - (sx - current.tx) * ratio, ty: sy - (sy - current.ty) * ratio };
-          });
-        }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current = { startX: event.clientX, startY: event.clientY, tx: view.tx, ty: view.ty, moved: false };
@@ -159,7 +169,7 @@ export function ReviewOutdoorSheet({ plan, pins, activePinId, onPick, onFocusPin
         onPointerUp={(event) => {
           const drag = dragRef.current;
           dragRef.current = null;
-          event.currentTarget.releasePointerCapture?.(event.pointerId);
+          try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* 未捕获时忽略 */ }
           if (drag && !drag.moved) onPick(eventPoint(event, event.currentTarget));
         }}
         onPointerLeave={() => setHover(null)}
