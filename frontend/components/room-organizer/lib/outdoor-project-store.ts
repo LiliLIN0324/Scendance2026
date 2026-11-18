@@ -18,7 +18,6 @@ import {
   type PlanAnchor,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
-import { XIHU_LOCAL_CENTER } from './research-area';
 
 /** 最小存储面：测试用 Map mock 即可满足。 */
 export type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -147,7 +146,7 @@ export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorag
   const explicitMode = params.get('mode');
   const projectId = params.get('project')?.trim() ?? '';
   if (explicitMode === 'outdoor') {
-    // 显式地图入口——没给 project 就用默认本机草稿（起步锚点平湖秋月），
+    // 显式地图入口——没给 project 就用默认本机草稿（起步概览西湖区），
     // 不再强依赖 URL 上 project=。workspace-shell 根路径无参数时也这么走。
     return projectId || ensureDefaultOutdoorProject(storage);
   }
@@ -173,7 +172,7 @@ export function latestOutdoorProjectId(storage?: KeyValueStorage | null): string
 
 /**
  * 默认户外工作台 id（2026-11-11 用户拍板：`/` 无参数时直接进户外 2D 规划，
- * 起步锚点平湖秋月，找场地是工作台里的"搜地点"能力，不该挡在入口前面）。
+ * 起步概览西湖区，找场地是工作台里的"搜地点"能力，不该挡在入口前面）。
  * 它是纯本机草稿——不进云端，不进 projects 列表。用户正式建项目时会在 VenuePicker
  * 里起新的云端项目并把它重命名。
  */
@@ -226,20 +225,25 @@ export function ensureDefaultOutdoorProject(storage?: KeyValueStorage | null): s
 
 /**
  * 默认地理锚点（2026-11-11 用户拍板：户外规划默认有地理位置）：
- * 「西湖 · 平湖秋月」，GCJ-02，来源如实标 'preset'（产品预置，不是实测）。
+ * 「杭州市西湖区」全域概览中心，GCJ-02，source 'preset'（产品预置，不是实测）。
+ * 参考区政府规划中的区境范围，取近似中心用于浏览，不代表已选定活动地点：
+ * https://zjjcmspublic.oss-cn-hangzhou-zwynet-d01-a.internet.cloud.zj.gov.cn/jcms_files/jcms1/web1838/site/attach/0/d9db6d0699c441728895c8cedf7c7a2e.pdf
  * 用户重新选址（picker/lookup）后会被真实锚点覆盖。
  */
 export const DEFAULT_OUTDOOR_PLAN_ANCHOR: PlanAnchor = {
-  lng: XIHU_LOCAL_CENTER.lng,
-  lat: XIHU_LOCAL_CENTER.lat,
+  lng: 120.085,
+  lat: 30.215,
   crs: 'gcj-02',
   source: 'preset',
 };
 
+/** 空白项目先看西湖区全域，选址或已有布置后使用各自的场地视角。 */
+export const DEFAULT_OUTDOOR_OVERVIEW_ZOOM = 11;
+
 /**
  * 起步规划：零边界起步（2026-11-11 用户拍板「新建项目先不要一上来就开一个场地边界」——
  * 起步矩形反而制造越界误报），其余实体为空。传 anchor（创建活动时选的地点）则带上地理锚点，
- * 2D 一打开就是该地点的地图；不传则落 DEFAULT_OUTDOOR_PLAN_ANCHOR（平湖秋月预置锚点）——
+ * 2D 一打开就是该地点的地图；不传则落 DEFAULT_OUTDOOR_PLAN_ANCHOR（西湖区预置中心）——
  * 默认铺真地图。用户从物件库「场地边界（重画）」画完闭合才写入边界。
  */
 export function createStarterOutdoorPlan(anchor?: PlanAnchor): SitePlanData {

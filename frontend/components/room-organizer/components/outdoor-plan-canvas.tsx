@@ -4641,7 +4641,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     beginVenueBoundary: anchor => {
       if (!canReanchorOutdoorPlan(planRef.current, anchor)) { setEditMessage('已有规划不能直接更换地理锚点，请先新建户外活动；当前内容保持不变。'); return false; }
       pendingVenueAnchorRef.current = anchor;
-      focusLngLat(anchor.lng, anchor.lat, 17);
+      // 手画入口只切工具，保留用户当前的中心、缩放与朝向。
       setMode('boundary');
       setEditMessage('没有真实轮廓：请在地图上逐点圈出用地，闭合后才会写入新锚点与用地红线；Esc 取消。');
       return true;

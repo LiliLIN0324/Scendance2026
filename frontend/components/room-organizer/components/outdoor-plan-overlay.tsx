@@ -57,6 +57,7 @@ import {
   adoptLegacyOutdoorPlanForActivity,
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
+  DEFAULT_OUTDOOR_OVERVIEW_ZOOM,
   readOutdoorProjectRecord,
   saveOutdoorProjectRecord,
   type OutdoorProjectRecord,
@@ -436,6 +437,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 初始读已存的图源偏好；早先这里硬编码 'osm'，mount 后写回偏好时会把用户选过的源冲掉。
   const [source, setSource] = useState<CanvasBasemapSource>(() => readPlanGroundSource());
   const [plan, setPlan] = useState<SitePlanData | null>(null);
+  const [loadedSlotId, setLoadedSlotId] = useState<string | null>(null);
+  const defaultOverview = plan?.anchor?.source === 'preset'
+    && plan.anchor.lng === DEFAULT_OUTDOOR_PLAN_ANCHOR.lng
+    && plan.anchor.lat === DEFAULT_OUTDOOR_PLAN_ANCHOR.lat
+    && [plan.boundary, plan.zones, plan.facilities, plan.routes, plan.nodes, plan.workers].every(items => items.length === 0)
+    ? { lng: plan.anchor.lng, lat: plan.anchor.lat, zoom: DEFAULT_OUTDOOR_OVERVIEW_ZOOM }
+    : null;
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   // 2026-11-17：云端副本的人话状态（冲突/未上传）；空串不占位。
@@ -528,7 +536,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const seedPlanRef = useRef<SitePlanData | null | undefined>(seedPlan);
   seedPlanRef.current = seedPlan;
   // 2026-11-11 默认锚点：旧草稿没锚点、活动也从未定位过（seedPlan/anchor 都没有）时，
-  // 一次性补预置锚点（平湖秋月，source 'preset'）并经 autosave 落盘——真地图开箱即用。
+  // 一次性补预置锚点（西湖区概览，source 'preset'）并经 autosave 落盘——真地图开箱即用。
   // 活动本身有位置（seedPlan 已带 anchor / anchor prop 存在）则不动草稿，维持「不虚构」纪律。
   const anchorRef = useRef(anchor);
   anchorRef.current = anchor;
@@ -543,6 +551,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     const loaded = slotId.startsWith('replica-')
       ? storedPlan
       : normalizePlanFacilityFootprints(storedPlan);
+    setLoadedSlotId(slotId);
     if (!loaded.anchor && !anchorRef.current) {
       // docs/46 V-P2：虚拟场地（纸面形态）不回填预置锚点——无锚点是虚拟场地的合法态；
       // 等用户画完红线再决定要不要定位。切回真地图（store='map'）时下次载入照常回填。
@@ -915,9 +924,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           onDismiss={guide.dismiss}
         />
       )}
-      {plan && (
+      {plan && loadedSlotId === slotId && (
         <div style={{ position: 'absolute', inset: 0, visibility: canvasHidden ? 'hidden' : 'visible', pointerEvents: canvasHidden ? 'none' : 'auto' }}>
           <OutdoorPlanCanvas
+            key={slotId}
             generationProjectId={slotId}
             ref={canvasApiRef}
             plan={plan}
@@ -952,7 +962,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(agent?.zoneProposal ? { zoneProposal: agent.zoneProposal } : {})}
             {...(agent?.flowSimActive ? { flowSimRoutes: plan?.routes ?? null } : null)}
             generationController={controller}
-            {...(confirmedCaseView ? { initialView: { lng: confirmedCaseView.lng, lat: confirmedCaseView.lat, zoom: confirmedCaseView.zoom, bearing: -confirmedCaseView.rotationDeg * Math.PI / 180 } } : anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
+            {...(confirmedCaseView ? { initialView: { lng: confirmedCaseView.lng, lat: confirmedCaseView.lat, zoom: confirmedCaseView.zoom, bearing: -confirmedCaseView.rotationDeg * Math.PI / 180 } } : defaultOverview ? { initialView: defaultOverview } : anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
           />
         </div>
       )}

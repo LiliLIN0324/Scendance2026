@@ -15,7 +15,7 @@ import { getGenerationSheetState, subscribeGenerationSheet, closeGenerationSheet
 import { GenerationSheetHost } from './panels/generation-sheet';
 import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
-import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
 import { siteShareLink } from '@/lib/site-share';
@@ -97,7 +97,7 @@ import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
 import { sceneAnchorFromOutdoorPlan } from './lib/outdoor-venue-sync';
-import { DEFAULT_OUTDOOR_PROJECT_ID } from './lib/outdoor-project-store';
+import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, saveOutdoorProjectRecord } from './lib/outdoor-project-store';
 import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { findCatalogEntry } from './lib/catalog-drag';
@@ -308,7 +308,10 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   showCameraVision: false,
 };
 
-export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, outdoorProjectId: outdoorProjectIdProp }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; outdoorProjectId?: string | null } = {}): JSX.Element {
+export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, outdoorProjectId: initialOutdoorProjectId }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; outdoorProjectId?: string | null } = {}): JSX.Element {
+  // 本机新建后脱离入口案例；后续身份、地图槽位与会话一起切到新活动。
+  const [outdoorProjectIdProp, setOutdoorProjectId] = useState(initialOutdoorProjectId);
+  useEffect(() => setOutdoorProjectId(initialOutdoorProjectId), [initialOutdoorProjectId]);
   const workspaceWriteGuards = useWorkspaceWriteGuards(localWriteCapability);
   const dropActive = useRef(isActive);
   useEffect(() => { dropActive.current = isActive; return () => { dropActive.current = false; }; }, [isActive]);
@@ -3978,7 +3981,7 @@ useEffect(() => {
   const commitFreshActivityLayout = useCallback((candidate: RoomLayout, clearance: FreshActivityScopeClearance): void => {
     workspaceWriteGuards?.assertLayoutWrite();
     if (!activitySession.isCurrent(sessionToken)) throw new Error('活动已变化，未新建活动。');
-    if (controller.getSnapshot().project || new URL(window.location.href).searchParams.has('project')) {
+    if (controller.getSnapshot().project || hasRequestedCloudProject()) {
       throw new Error('当前页面已连接或正在打开云项目，请在本地工作台新建活动。');
     }
     const before = layoutStore.getState().layout;
@@ -3995,7 +3998,17 @@ useEffect(() => {
     acknowledgeRestoredLayout(created, json);
     clearTransientSelection(); clearHistory(created);
     initiallyFramed.current = false;
-  }, [actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards, flushPendingBeforeSwitch, activitySession.isCurrent, sessionToken, controller]);
+    if (isOutdoorProject) {
+      const now = new Date().toISOString();
+      saveOutdoorProjectRecord({ v: 1, projectId: created.id!, name: created.name || '未命名活动',
+        createdAt: now, updatedAt: now, plan: createStarterOutdoorPlan() });
+      // 本机活动保持本机入口，刷新无参数时由最近项目指针续开新草稿。
+      const url = new URL(window.location.href);
+      url.searchParams.delete('project');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+      setOutdoorProjectId(DEFAULT_OUTDOOR_PROJECT_ID);
+    }
+  }, [actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards, flushPendingBeforeSwitch, activitySession.isCurrent, sessionToken, controller, isOutdoorProject]);
 
   const onApplyCreative = useCallback((next: RoomLayout, options?: { preserveProvenance?: boolean; expectedBase?: RoomLayout; expectedFloor?: FloorSessionToken }) => {
     workspaceWriteGuards?.assertLayoutWrite();

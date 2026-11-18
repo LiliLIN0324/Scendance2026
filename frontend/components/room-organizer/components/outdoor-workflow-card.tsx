@@ -335,6 +335,8 @@ export function OutdoorWorkflowCard({
     (!flow.state.brief.zones.length ||
       flow.state.brief.zones.some((zone) => zone.environment === "unknown"));
   const pendingPlan = flow.pendingPlan;
+  // 手画范围已有完整的图示、说明和按钮，不再叠加通用阶段缩略与同义提示。
+  const showScopeGuide = !flow.proposal && flow.state.stage === "scope" && !flow.boundaryReady;
   if (pendingPlan) return (
     <>
       {thoughtRecord}
@@ -409,7 +411,7 @@ export function OutdoorWorkflowCard({
           )}
         </div>
       )}
-      {!flow.proposal && <StageThumb stage={flow.state.stage} />}
+      {!flow.proposal && !showScopeGuide && <StageThumb stage={flow.state.stage} />}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         flow.noticeView ? (
           <section
@@ -468,7 +470,7 @@ export function OutdoorWorkflowCard({
             )}
           </div>
         )
-      ) : flow.proposal ? null : (
+      ) : flow.proposal || showScopeGuide ? null : (
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
           {flow.loginRequired

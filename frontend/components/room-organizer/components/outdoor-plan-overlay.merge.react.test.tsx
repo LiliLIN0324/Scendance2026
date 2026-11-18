@@ -110,6 +110,15 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
+it("空白项目默认以西湖区全域概览起步，用户选址仍保留自己的位置", () => {
+  const view = render(<Overlay projectId="district-overview" seedPlan={createStarterOutdoorPlan()} />);
+  expect(state.canvas?.initialView).toEqual({ lng: 120.085, lat: 30.215, zoom: 11 });
+  expect(state.canvas?.plan.boundary).toEqual([]);
+  view.unmount();
+  const anchor = { lng: 121.48, lat: 31.23, crs: "gcj-02" as const, source: "preset" as const };
+  render(<Overlay projectId="chosen-venue" seedPlan={createStarterOutdoorPlan(anchor)} anchor={anchor} />);
+  expect(state.canvas?.initialView).toEqual({ lng: anchor.lng, lat: anchor.lat });
+});
 it("经典案例载入、显示与本机保存保持核验过的设施占地", async () => {
   const projectId = "replica-scotiabank-hockey-day-canada";
   const plan = buildScotiabankReplicaPlan();

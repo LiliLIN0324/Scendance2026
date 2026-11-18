@@ -3,10 +3,19 @@ import { isRoomLayout, parseLayoutEventOperations } from '../components/room-org
 import { readMaterialCheckins } from './material-checkin-storage';
 import type { BackendSession } from './backend-session';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
+import { readOutdoorProjectRecord } from '../components/room-organizer/lib/outdoor-project-store';
+
+/** 案例链接指向本机规划，并非待加载的云项目。 */
+export function hasRequestedCloudProject(): boolean {
+  if (typeof window === 'undefined') return false;
+  const id = new URL(window.location.href).searchParams.get('project');
+  if (id === null) return false;
+  return !(id.startsWith('replica-') && readOutdoorProjectRecord(id));
+}
 
 /** A scene-service binding does not turn the local activity into a full cloud project. */
 export function isLocalActivityWorkspace(controller: BackendSession,
-  requestedCloud = typeof window !== 'undefined' && new URL(window.location.href).searchParams.has('project')): boolean {
+  requestedCloud = hasRequestedCloudProject()): boolean {
   if (requestedCloud) return false;
   const current = controller.getSnapshot();
   return !current.project || !!current.geometryBinding && controller.isGeometryBound(current.geometryBinding.localActivityId);
