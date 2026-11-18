@@ -32,6 +32,7 @@ export function OutdoorWalkthroughBoard({
   onMark,
   cloudPass,
   onCloud,
+  onAsOf,
 }: {
   book: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => void;
@@ -39,6 +40,8 @@ export function OutdoorWalkthroughBoard({
   cloudPass?: readonly number[];
   /** 给就渲染第四个键；点击切换该条的云端声明。 */
   onCloud?: (id: number, pass: boolean) => void;
+  /** 给就渲染「走查日期」输入框；不给只显示当前值（或“未填”）。 */
+  onAsOf?: (value: string) => void;
 }): JSX.Element {
   const summary = summarizeWalkthrough(book);
   const cloud = new Set(cloudPass ?? []);
@@ -53,9 +56,25 @@ export function OutdoorWalkthroughBoard({
       </header>
       {/* 日期要么写出来，要么明说没填——不拿今天冒充走查日。 */}
       <p className="mb-2 text-[11px] text-neutral-500">
-        {book.asOf?.trim()
-          ? `走查日期：${book.asOf.trim()}`
-          : "走查日期：未填（卡片会沿用对照表上的日期）"}
+        {onAsOf ? (
+          <>
+            <label htmlFor="outdoor-walkthrough-asof">走查日期：</label>
+            <input
+              id="outdoor-walkthrough-asof"
+              type="text"
+              aria-label="走查日期"
+              value={book.asOf ?? ""}
+              placeholder="如 2026-11-19 第三轮"
+              onChange={(event) => onAsOf(event.target.value)}
+              className="w-44 rounded border border-black/15 px-1.5 py-0.5 text-[11px]"
+            />
+            {!book.asOf && <span className="ml-1">（未填：卡片会沿用对照表上的日期）</span>}
+          </>
+        ) : book.asOf?.trim() ? (
+          `走查日期：${book.asOf.trim()}`
+        ) : (
+          "走查日期：未填（卡片会沿用对照表上的日期）"
+        )}
       </p>
       <ol className="space-y-1">
         {CASE_IDS.map((id) => {

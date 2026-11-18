@@ -115,3 +115,29 @@ describe("走查日期（轮次 90）", () => {
     expect(line.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 });
+
+describe("填走查日期（轮次 91）", () => {
+  it("给了 onAsOf 就出现输入框，输入原样回调（不在组件里裁剪）", () => {
+    const onAsOf = vi.fn();
+    render(<OutdoorWalkthroughBoard book={emptyBook()} onMark={() => {}} onAsOf={onAsOf} />);
+    const input = screen.getByLabelText("走查日期") as HTMLInputElement;
+    expect(input.value).toBe("");
+    fireEvent.change(input, { target: { value: "2026-11-19 第三轮" } });
+    expect(onAsOf).toHaveBeenCalledWith("2026-11-19 第三轮");
+  });
+
+  it("输入框显示当前值；空值时旁边明写未填", () => {
+    const { rerender } = render(
+      <OutdoorWalkthroughBoard book={emptyBook("2026-11-19")} onMark={() => {}} onAsOf={() => {}} />,
+    );
+    expect((screen.getByLabelText("走查日期") as HTMLInputElement).value).toBe("2026-11-19");
+    rerender(<OutdoorWalkthroughBoard book={emptyBook()} onMark={() => {}} onAsOf={() => {}} />);
+    expect(screen.getByText(/未填：卡片会沿用对照表上的日期/)).toBeTruthy();
+  });
+
+  it("不给 onAsOf 就没有输入框，只显示一行文字", () => {
+    render(<OutdoorWalkthroughBoard book={emptyBook()} onMark={() => {}} />);
+    expect(screen.queryByLabelText("走查日期")).toBeNull();
+    expect(screen.getByText(/走查日期：未填/)).toBeTruthy();
+  });
+});

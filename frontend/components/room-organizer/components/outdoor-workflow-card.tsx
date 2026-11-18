@@ -832,6 +832,7 @@ export function OutdoorWorkflowCard({
         }}
         onExportCsv={() => flow.downloadLedgerCsv()}
         gapsLine={flow.releaseGaps()}
+        onAsOf={(value) => flow.setWalkthroughAsOf(value)}
       />
     </section>
       {flow.loginRequired && !flow.loginSatisfied && (
