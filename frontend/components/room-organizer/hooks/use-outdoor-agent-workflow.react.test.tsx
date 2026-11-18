@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, it, expect, vi, type Mock } from "vitest";
@@ -2307,4 +2307,20 @@ it("报告逐条判断只认台账：只声明云端仍不是全绿", () => {
   const both = flow.sessionReport();
   expect(both.text).toContain("#2 全绿");
   expect(both.text).toContain("#5 未全绿");
+});
+
+
+it("报告里的待补清单与面板同源：标一条并声明后少一条", () => {
+  // 只看待补那一段：#2 会同时出现在「逐条判断」里，全文搜索会误判。
+  const gapBlock = (text: string) => (text.split("[待补清单]")[1] ?? "").split("\n\n")[0] ?? "";
+  const before = gapBlock(flow.sessionReport().text);
+  expect(before).toContain("#2 ");
+  expect(before).toContain("#5 ");
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = gapBlock(flow.sessionReport().text);
+  expect(after).not.toContain("#2 ");
+  expect(after).toContain("#5 ");
 });

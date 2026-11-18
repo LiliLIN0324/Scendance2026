@@ -36,7 +36,7 @@ import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
 import { CASE_IDS, isAllGreen, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
 import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
-import { formatGapList } from "../lib/outdoor-release-gaps";
+import { formatGapList, missingEvidence } from "../lib/outdoor-release-gaps";
 import { ledgerToCsv } from "../lib/outdoor-release-csv";
 import { downloadLedgerCsv as saveLedgerCsv } from "../lib/outdoor-release-csv";
 import {
@@ -2707,6 +2707,8 @@ export function useOutdoorAgentWorkflow(input: {
       cloud,
       // 判断只认台账：`isAllGreen()` 是全局唯一判据，不从标记推。
       verdicts: bundle.ledger.map((row) => ({ id: row.id, allGreen: isAllGreen(row) })),
+      // 待补清单与面板上那块同源：都是 `missingEvidence()` 的行。
+      gaps: missingEvidence(bundle.ledger).map((gap) => gap.line),
     };
   };
   return {
