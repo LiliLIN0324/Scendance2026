@@ -75,6 +75,43 @@ describe('shared place shape inventory', () => {
   });
 });
 
+describe('place shape latency', () => {
+  it('慢镜像不挡住其他镜像返回的园区relation，成功后取消慢请求', async () => {
+    let slowSignal: AbortSignal | undefined;
+    const garden = rect(901, 120.1583, 30.2514, 0.003, '速度测试植物园');
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.includes('photon.')) return Response.json({ features: [] });
+      if (url.includes('maps.mail.ru')) {
+        slowSignal = init?.signal ?? undefined;
+        return new Promise((_resolve, reject) => slowSignal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+      }
+      const query = new URLSearchParams(String(init?.body ?? '')).get('data') ?? '';
+      expect(query).toContain('way["name"');expect(query).toContain('relation["name"');
+      return Response.json({ elements: [{ type: 'relation', id: 901, tags: garden.tags,
+        members: [{ type: 'way', role: 'outer', geometry: garden.geometry }] }] });
+    });
+    const response = await handlePlaceShape(new Request('https://example.test/api/place-shape?name=速度测试植物园&near=120.163,30.249'), fetchImpl);
+    expect((await response.json()).shape.id).toBe('osm:R901');
+    expect(slowSignal?.aborted).toBe(true);
+  });
+  it('慢库存查询不阻止已有地图服务出框', async () => {
+    let stockSignal: AbortSignal | undefined;
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).includes('/rest/v1/place_shapes')) {
+        stockSignal = init?.signal ?? undefined;
+        return new Promise((_resolve, reject) => stockSignal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+      }
+      if (String(input).includes('photon.')) return Response.json({ features: [] });
+      return Response.json({ elements: [rect(902, 120.1583, 30.2514, 0.003, '速度测试展览馆')] });
+    });
+    const response = await handlePlaceShape(new Request('https://example.test/api/place-shape?name=速度测试展览馆&near=120.163,30.249'), fetchImpl,
+      { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture' });
+    expect((await response.json()).shape.id).toBe('osm:W902');
+    expect(stockSignal?.aborted).toBe(true);
+  });
+});
+
 describe('spatialAreaStage（空间命中：点哪儿框哪儿）', () => {
   // 注意 GCJ 偏移：GCJ 点击点 (120.163, 30.249) 对应的 WGS 位置约 (120.1583, 30.2514)，
   // 合成面必须罩住这个 WGS 点（服务端会把面从 WGS 转到 GCJ 再做包含判定）。
@@ -194,7 +231,7 @@ describe('shapeNameCandidates（分段重试）', () => {
 });
 
 describe('Photon失效时的具名Overpass回退', () => {
-  it('轮换mail.ru/de镜像，way先于relation，具名面不被空间面的快返回抢走', async () => {
+  it('镜像并发抢答，同次查询way与relation，具名面不被空间面抢走', async () => {
     const calls: { url: string; query: string }[] = [];
     const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
       const target = String(url); const query = new URLSearchParams(String(init?.body ?? '')).get('data') ?? '';
@@ -208,10 +245,10 @@ describe('Photon失效时的具名Overpass回退', () => {
     expect((await response.json()).shape.id).toBe('osm:W191');
     expect(calls.some(c => c.url.includes('maps.mail.ru'))).toBe(true);
     expect(calls.some(c => c.url.includes('overpass-api.de'))).toBe(true);
-    expect(calls.some(c => c.query.includes('relation["name"'))).toBe(false);
+    expect(calls.some(c => c.query.includes('way["name"') && c.query.includes('relation["name"'))).toBe(true);
     expect(calls.some(c => c.query.includes('["building"]'))).toBe(false);
   });
-  it('way未命中才发relation；null不缓存一天，下次可恢复', async () => {
+  it('way与relation同次查询；null不缓存一天，下次可恢复', async () => {
     const stages: string[] = [];
     const emptyFetch = (async (_url: unknown, init?: RequestInit) => {
       const query = new URLSearchParams(String(init?.body ?? '')).get('data') ?? '';
@@ -221,7 +258,7 @@ describe('Photon失效时的具名Overpass回退', () => {
     }) as typeof fetch;
     const request = () => new Request('https://example.test/api/place-shape?name=回退测试乙楼&near=120.163,30.249');
     const response = await handlePlaceShape(request(), emptyFetch); expect(await response.json()).toEqual({ shape: null }); expect(response.headers.get('Cache-Control')).toBe('no-store');
-    expect(stages.indexOf('way')).toBeLessThan(stages.indexOf('relation'));
+    expect(stages).toContain('way');expect(stages).toContain('relation');
     let attempts = 0;
     await handlePlaceShape(request(), (async () => { attempts += 1; return Response.json({ elements: [], features: [] }); }) as typeof fetch);
     expect(attempts).toBeGreaterThan(0);

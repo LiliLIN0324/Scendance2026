@@ -942,7 +942,7 @@ export function createServer({
         // 失败一律回空 shape，调用方降级保留定位钉，绝不报错打断。
         const controller = new AbortController();
         const close = () => controller.abort(); res.once('close', close);
-        try { result = await shapeRequestBudget.run(AbortSignal.any([controller.signal, AbortSignal.timeout(65000)]), () => fetchPlaceShape(url.searchParams)); }
+        try { result = await shapeRequestBudget.run(AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]), () => fetchPlaceShape(url.searchParams)); }
         finally { res.off('close', close); controller.abort(); }
       } else if (req.method === 'GET' && url.pathname === '/api/site-context') {
         const { handleSiteContext } = await import('../../functions/api/site-context.ts');
@@ -1587,24 +1587,27 @@ async function overpass(query) {
   const now = Date.now();
   const live = OVERPASS_ENDPOINTS.filter(ep => (endpointCooldown.get(ep) ?? 0) <= now);
   if (live.length === 0) return null; // 全部熔断中：直接放弃，别把超时预算烧完
-  for (const endpoint of live) {
+  const winner = new AbortController();
+  const payload = await firstNonNull(live.map(endpoint => async () => {
     try {
       const res = await shapeFetch(endpoint, {
         method: 'POST',
         headers: { 'User-Agent': 'ScdanceDevProxy/2.2.0', 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
-        signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
+        signal: AbortSignal.any([winner.signal, AbortSignal.timeout(OVERPASS_TIMEOUT_MS)]),
       });
-      if (!res.ok) { endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); continue; } // 失败（含 403/451/520 系）熔断后换下一台
+      if (!res.ok) { endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); return null; }
       const payload = await res.json();
       endpointCooldown.delete(endpoint);
       return payload;
     } catch {
-      if (shapeRequestBudget.getStore()?.aborted) return null;
+      if (winner.signal.aborted || shapeRequestBudget.getStore()?.aborted) return null;
       endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); // 超时/网络失败也熔断
     }
-  }
-  return null;
+    return null;
+  }));
+  winner.abort();
+  return payload;
 }
 
 /** relation 成员 way 拼成单环：按 way 首尾节点 id 接龙；拼不拢回 null（多部件园区就放弃）。 */
@@ -1911,21 +1914,23 @@ function pickNameCandidate(candidates, name, near) {
   return scored[0] ?? null;
 }
 
-/** Overpass 按名搜单类要素（kind='way'|'relation'）：geometry 随结果返回，无需二次请求。 */
+/** 按名取轮廓：area 同次查 way/relation，并保持可用 way 优先。 */
 async function nameSearchStage(name, near, kind) {
   if (!near) return null; // 无定位点没法收敛范围，不冒险全城正则扫
   const safe = escapeOverpassRegex(name);
-  const query = `[out:json][timeout:20];${kind}["name"~"${safe}",i]["type"!="route"](around:1500,${near.lat},${near.lng});out geom;`;
+  const selector = type => `${type}["name"~"${safe}",i]["type"!="route"](around:1500,${near.lat},${near.lng});`;
+  const query = `[out:json][timeout:20];${kind === 'area' ? `(${selector('way')}${selector('relation')});` : selector(kind)}out geom;`;
   const payload = await overpass(query);
   const elements = Array.isArray(payload?.elements) ? payload.elements : [];
-  if (kind === 'way') {
+  if (kind !== 'relation') {
     const pick = pickNameCandidate(
       elements
         .filter(el => el?.type === 'way' && Array.isArray(el.geometry))
         .map(el => ({ el, label: el.tags?.name ?? '', ring: el.geometry.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat)) })),
       name, near,
     );
-    return pick ? ringToGcjShape(pick.ring, `osm:W${pick.el.id}`, pick.label || name) : null;
+    const shape = pick ? ringToGcjShape(pick.ring, `osm:W${pick.el.id}`, pick.label || name) : null;
+    if (shape || kind === 'way') return shape;
   }
   const pick = pickNameCandidate(
     elements
@@ -2132,9 +2137,12 @@ async function fetchPlaceShape(searchParams) {
   if (cached && isDisplayablePlaceShape(cached)) return { shape: cached };
   if (cached) shapeCache.delete(cacheKey);
   // 库存查询（2026-11-13 用户拍板「先存杭州」）：挖到过的轮廓存 Supabase 共享表，
-  // 命中即秒回；表未建/无密钥时静默跳过，绝不阻塞主链路。
+  // 快命中直接返回；慢库存与地图查询并发，不串行等完整超时。
   const nameNorm = normalizeShapeName(queryName);
-  const stockHit = await lookupPlaceStock(nameNorm, near);
+  const stockRequest = lookupPlaceStock(nameNorm, near);
+  let stockGrace;
+  const stockHit = await Promise.race([stockRequest, new Promise(resolve => { stockGrace = setTimeout(() => resolve(null), 150); })]);
+  clearTimeout(stockGrace);
   if (stockHit) return { shape: cacheShape(cacheKey, stockHit) };
   // 名字分段重试：高德名「盐官古城-潮乐之城」与 OSM 名「盐官潮乐之城国际旅游度假区」
   // 对不上时，按 -·/空格 拆段逐段试（整名优先，段长的优先）。空间命中本不看名字，
@@ -2148,8 +2156,9 @@ async function fetchPlaceShape(searchParams) {
   for (let i = 0; i < segmentCandidates.length && !shape && !shapeRequestBudget.getStore()?.aborted; i += 1) {
     const candidate = segmentCandidates[i];
     shape = await firstNonNull([
+      () => stockRequest,
       () => photonPath(candidate, near).then(acceptShape),
-      async () => acceptShape(await nameSearchStage(candidate, near, 'way')) ?? acceptShape(await nameSearchStage(candidate, near, 'relation')),
+      async () => acceptShape(await nameSearchStage(candidate, near, 'area')),
       // 线上函数同链路并发抢答：本机到 OSM 可能整段不可达（晚间坏窗口），CF 出口网络独立
       // ——五路谁先出结果用谁，60s 上限恒在预算内；服务端对服务端直调无跨域问题。
       // （线上旧部署的 highway 兜底还没有名字门槛——重部署前本机补一道，免得替 POI 编路选区）

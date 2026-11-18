@@ -42,11 +42,24 @@ it.each(['timer','in-flight'])('project switch and unmount cancel %s work, with 
  if(mode==='in-flight') await act(async()=>finish(shape));
  await act(async()=>vi.advanceTimersByTimeAsync(30000));expect(fetchPlaceShape).toHaveBeenCalledTimes(2);expect(received).not.toHaveBeenCalled();
 });
-it('current request still retries three times and stops loading after a miss', async()=>{
+it('a miss stops immediately without silently repeating the lookup', async()=>{
  vi.mocked(fetchPlaceShape).mockResolvedValue(null);const hook=renderHook(()=>usePlaceShapeLookup('a',vi.fn()));
  await act(async()=>hook.result.current.start('current',near));
  await act(async()=>vi.advanceTimersByTimeAsync(18000));
- expect(fetchPlaceShape).toHaveBeenCalledTimes(3);expect(hook.result.current.loading).toBe(false);
+ expect(fetchPlaceShape).toHaveBeenCalledTimes(1);expect(hook.result.current.loading).toBe(false);
+ expect(hook.result.current.unavailable).toBe(true);
+});
+it('a stalled lookup stops within its total budget and cannot apply a late outline', async()=>{
+ let finish!:(value:typeof shape)=>void;const received=vi.fn();
+ vi.mocked(fetchPlaceShape).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+ const hook=renderHook(()=>usePlaceShapeLookup('slow',received));
+ act(()=>hook.result.current.start('植物园',near));
+ const signal=vi.mocked(fetchPlaceShape).mock.calls[0][1]!.signal!;
+ await act(async()=>vi.advanceTimersByTimeAsync(21000));
+ expect(signal.aborted).toBe(true);expect(hook.result.current.loading).toBe(false);
+ expect(hook.result.current.unavailable).toBe(true);
+ await act(async()=>finish(shape));
+ expect(received).not.toHaveBeenCalled();expect(fetchPlaceShape).toHaveBeenCalledTimes(1);
 });
 
 it.each(['timer','in-flight'])('manual boundary replacement stops %s lookup and its loading pill',async mode=>{
