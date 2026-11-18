@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PLANNING_ROUTE_KIND_COLORS } from '../../../lib/outdoor-plan-tokens';
+import { loadFacilityModelOverride, type FacilityModelCandidate } from '../lib/plan-facility-models';
 import {
   MAX_VEHICLE_INSTANCES,
   vehicleCarrierFor,
@@ -19,13 +20,12 @@ import {
   ensureGlbAsset,
 } from './glb-assets';
 import { planFrameOf, routePathOf, sampleRoute, type RoutePath } from './plan-traffic-layer';
-import { loadFacilityModelOverride, type FacilityModelCandidate } from '../lib/plan-facility-models';
-import type { FurnitureItem } from '../lib/types';
 import type {
   PlanRoute,
   PlanVehicle,
   SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import type { FurnitureItem } from '../lib/types';
 
 /**
  * 车辆 / 后勤实体 3D 层（2026-11-16，任务 #117）。
@@ -196,6 +196,7 @@ export function createPlanVehicleEntitiesLayer(baseY: number): PlanVehicleEntiti
       source: 'public_library',
       materialId: 'asset',
       notes: '',
+      // 目录分类没有 vehicle。加载器只读 glbUrl，这个标记留在运行时对象上。
     } as unknown as FurnitureItem;
     const model = createCachedGlbModel(item, false);
     if (!model) return;

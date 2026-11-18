@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { absorbLayeredInstruction, layeredBounceText } from './outdoor-layered-task';
+﻿import { describe, expect, it } from 'vitest';
+import { absorbLayeredInstruction, deferredNote, layeredBounceText } from './outdoor-layered-task';
 import { createPendingTask } from './outdoor-pending-task';
 
 const BOUNCE = '先定活动范围：地点还没定，这句已经存好。';
@@ -64,5 +64,23 @@ describe('layeredBounceText', () => {
     const layered = absorbLayeredInstruction({ text: '先划出入口，之后上围栏', stage: 'place', task })!;
     expect(layeredBounceText(layered, BOUNCE)).toContain('下一步：在地图上选地点');
     expect(layeredBounceText(layered, BOUNCE)).toContain('之后上围栏');
+  });
+});
+
+describe("拦阻时把后置那句说出来（轮次 105）", () => {
+  it("有后置从句就补一句“后面还有”，不替调用方定下一步", () => {
+    const note = deferredNote("先摆摊位，最后再调通道");
+    expect(note).toContain("后面还有：最后再调通道");
+    expect(note).toContain("现在不用决定");
+    expect(note).not.toContain("下一步");
+  });
+
+  it("没有后置从句时一个字不多写", () => {
+    expect(deferredNote("先摆 30 个摊位")).toBe("");
+  });
+
+  it("空句也不乱写", () => {
+    expect(deferredNote("")).toBe("");
+    expect(deferredNote(undefined as unknown as string)).toBe("");
   });
 });

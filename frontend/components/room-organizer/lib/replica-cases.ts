@@ -8,6 +8,7 @@
  */
 
 import { expandReplicaSpec, type ReplicaCaseSpec } from './replica-kit';
+import { replicaCaseLabels } from './replica-case-labels';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import {
   BASILDON_PRIDE,
@@ -41,6 +42,7 @@ import {
   USA_TRIATHLON_NATIONALS_PTO,
 } from './replica-specs-road-venue';
 import { SENIOR_PRO_RODEO_FINALS } from './replica-specs-rodeo';
+import { CN_SPECS } from './replica-specs-cn';
 import {
   BANBURY_TOWN_COUNCIL_CORONATION,
   FAREHAM_WEST_SCOUTS_CAMP24,
@@ -122,28 +124,61 @@ const SPECS: ReplicaCaseSpec[] = [
 
 export type ReplicaCase = {
   id: string;
+  /** 界面显示名（中文；海外案来自 replica-case-labels，国内案本来就是中文）。 */
   title: string;
+  /** OnePlan 原案名，界面作副标题/提示用；国内案没有这一层。 */
+  titleEn?: string;
+  /** 中文分类。 */
   category: string;
+  categoryEn?: string;
+  /** 中文区域。 */
   region: string;
+  regionEn?: string;
+  /** 'cn' = 官网中国案例；缺省 = OnePlan 海外复刻。 */
+  origin?: 'overseas' | 'cn';
   refImage: string;
   refLink: string;
   locationNote?: string;
-  /** 平面图相对正北的旋转角（度）——界面上用于回显用户确认的角度。 */
+  /** 平面图的几何旋转角；用户确认的观察角保存在 confirmedView。 */
   rotationDeg?: number;
+  confirmedView?: ReplicaCaseSpec['confirmedView'];
+  sourceRegistration?: ReplicaCaseSpec['sourceRegistration'];
+  /** 官网侧平面数据（国内案），对比报告左幅用。 */
+  officialPlan?: ReplicaCaseSpec['officialPlan'];
   buildPlan: () => SitePlanData;
 };
 
-export const REPLICA_CASES: ReplicaCase[] = SPECS.map(spec => ({
-  id: spec.slug,
-  title: spec.title,
-  category: spec.category,
-  region: spec.region,
-  refImage: spec.refImage,
-  refLink: spec.refLink,
-  ...(spec.locationNote ? { locationNote: spec.locationNote } : {}),
-  ...(spec.rotationDeg != null ? { rotationDeg: spec.rotationDeg } : {}),
-  buildPlan: () => expandReplicaSpec(spec),
-}));
+function toReplicaCase(spec: ReplicaCaseSpec): ReplicaCase {
+  const labels = replicaCaseLabels(spec.slug, spec);
+  const origin = spec.origin ?? 'overseas';
+  return {
+    id: spec.slug,
+    title: labels.title,
+    ...(labels.title === spec.title ? {} : { titleEn: spec.title }),
+    category: labels.category,
+    ...(labels.category === spec.category ? {} : { categoryEn: spec.category }),
+    region: labels.region,
+    ...(labels.region === spec.region ? {} : { regionEn: spec.region }),
+    ...(origin === 'cn' ? { origin } : {}),
+    refImage: spec.refImage,
+    refLink: spec.refLink,
+    ...(spec.locationNote ? { locationNote: spec.locationNote } : {}),
+    ...(spec.rotationDeg != null ? { rotationDeg: spec.rotationDeg } : {}),
+    ...(spec.confirmedView ? { confirmedView: spec.confirmedView } : {}),
+    ...(spec.sourceRegistration ? { sourceRegistration: spec.sourceRegistration } : {}),
+    ...(spec.officialPlan ? { officialPlan: spec.officialPlan } : {}),
+    buildPlan: () => expandReplicaSpec(spec),
+  };
+}
+
+/** OnePlan 海外经典案例（45 案）。 */
+export const REPLICA_CASES: ReplicaCase[] = SPECS.map(toReplicaCase);
+
+/** 官网中国案例（同构复刻：真实地点锚点 + 拟设分区/物料/流线）。 */
+export const CN_REPLICA_CASES: ReplicaCase[] = CN_SPECS.map(toReplicaCase);
+
+/** 两个案例库合起来（选单与报告用）。 */
+export const ALL_REPLICA_CASES: ReplicaCase[] = [...CN_REPLICA_CASES, ...REPLICA_CASES];
 
 /** 旧导出（venue-picker 首卡在用）：Scotiabank 冰球日复刻案。 */
 export function buildScotiabankReplicaPlan(): SitePlanData {
