@@ -162,6 +162,31 @@ describe('发布页签', () => {
     expect(screen.getByTestId('share-panel').querySelector('.sc-publish-plan')).toBeNull();
   });
 
+  it('hands out the site page when the publish returns one, keeping the cloud revision behind it', async () => {
+    localStorage.clear();
+    const share = actions();
+    vi.mocked(share.onPublish).mockResolvedValueOnce({
+      url: 'https://studio.example/view/#token',
+      revision: 4,
+      siteUrl: 'https://studio.example/site#s2=1.abc123',
+    });
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(screen.getByRole('button', { name: '发布并复制链接' }));
+    expect(await screen.findByRole('button', { name: /^复制$/ })).toBeTruthy();
+    expect(screen.getByTestId('share-link-row').textContent).toContain('studio.example/site#s2=1.abc');
+    expect(screen.getByText('打开即可查看场地轮廓、分区和尺度，只读、无需登录。')).toBeTruthy();
+    expect(screen.queryByText('打开即可查看场地、分区和尺度，页里可看 3D。')).toBeNull();
+    expect(clipboard).toHaveBeenCalledWith('https://studio.example/site#s2=1.abc123');
+    fireEvent.click(screen.getByRole('button', { name: /^复制$/ }));
+    expect(clipboard).toHaveBeenLastCalledWith('https://studio.example/site#s2=1.abc123');
+    expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toContain('https://studio.example/site#s2=1.abc123');
+    expect(localStorage.getItem('scendance.shareLog.v1.project-1')).toContain('https://studio.example/site#s2=1.abc123');
+  });
+
   it('restores a saved link as the published row and drops it when the server revoked that revision', async () => {
     localStorage.clear();
     localStorage.setItem('scendance.publishedLink.v1.project-1', JSON.stringify({

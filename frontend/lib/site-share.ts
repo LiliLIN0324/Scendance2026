@@ -127,6 +127,25 @@ export async function encodeSiteSnapshot(
   return { url, snapshot };
 }
 
+/**
+ * 发布链路专用：拿得到一整块场地就顺手生成只读场地页链接。
+ *
+ * 发布本身不能因为场地页出问题而失败：没有锚点、轮廓不足或被链接体积拦住时
+ * 返回 null，客户页就退回云端发布那条链接，错误由发布结果自己报。
+ */
+export async function siteShareLink(
+  plan: SitePlanData | null | undefined,
+  title: string,
+  origin: string,
+): Promise<string | null> {
+  if (!plan || plan.boundary.length < 3) return null;
+  try {
+    return (await encodeSiteSnapshot(plan, title, origin)).url;
+  } catch {
+    return null;
+  }
+}
+
 export async function readSiteSnapshotHash(hash: string): Promise<ReadSiteSnapshotResult> {
   if (!hash.startsWith(SITE_SNAPSHOT_HASH_PREFIX)) return { ok: false, reason: 'unreadable' };
   const encoded = hash.slice(SITE_SNAPSHOT_HASH_PREFIX.length);
