@@ -287,6 +287,28 @@ describe('paintBasemapTiles', () => {
     expect(calls[0]!.args).toEqual([0, 0, 1024, 1024]);
   });
 
+  it.each([14.3, 14.7])('自动取景到小数缩放%s时保留整数瓦片网格，不能整张底图被裁掉', zoom => {
+    const tileZoom = Math.round(zoom);
+    const x = 27317, y = 13493;
+    const size = 256 * 2 ** (zoom - tileZoom);
+    const url = `${tileZoom}/${x}/${y}.png`;
+    const { created, createImage } = fakeImageFactory();
+    const cache = new BasemapTileCache({ createImage });
+    cache.load(url, () => {});created[0]!.fireLoad();
+    const { ctx, calls } = makeCtx();
+    const requested: number[] = [];
+    const result = paintBasemapTiles({ ctx, cache, zoom, tileZoom,
+      centerPx: (x + 0.5) * size, centerPy: (y + 0.5) * size,
+      cssW: 800, cssH: 600, tileSize: 256, tiles: [{ x, y }],
+      urlsFor: (z, tx, ty) => { requested.push(z);return [`${z}/${tx}/${ty}.png`]; }, onDirty: () => {} });
+    expect(result.drawn).toBe(1);
+    expect(requested).toEqual([tileZoom]);
+    expect(calls[0]!.args[0]).toBeCloseTo(400 - size / 2);
+    expect(calls[0]!.args[1]).toBeCloseTo(300 - size / 2);
+    expect(calls[0]!.args[2]).toBeCloseTo(size);
+    cache.clear();
+  });
+
   it('当前层级缺失但有祖先缓存时，用祖先子区域放大兜底并排入加载', () => {
     const { created, createImage } = fakeImageFactory();
     const cache = new BasemapTileCache({ createImage });
