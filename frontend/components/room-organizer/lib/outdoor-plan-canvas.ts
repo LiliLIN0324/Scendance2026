@@ -1145,6 +1145,13 @@ export function drawZoneLayer(
  * warning 为 true 时改红虚线描边（越界警示，数据本身保留）；
  * opts.selectedId 命中的设施画白色外圈 + 名称标注（H2-c「放置即选中」可视反馈）。
  */
+/** 画布标签硬上限：长名字只留一段，不许把画布拉成一行。 */
+function planCanvasLabel(name: string, max = 12): string {
+  const text = name.trim();
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : text;
+}
+
 export function drawFacilityLayer(
   c: PlanCanvasContext,
   facilities: readonly {
@@ -1219,7 +1226,7 @@ export function drawFacilityLayer(
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.fillText(f.name, center.x, center.y + Math.max(h / 2, 6) + 3);
+        ctx.fillText(planCanvasLabel(f.name), center.x, center.y + Math.max(h / 2, 6) + 3);
       }
     } else if (opts.selectedIds && f.id && opts.selectedIds.includes(f.id)) {
       // 2026-11-12 B3 组选：白圈同款（无名称标签，多选时不糊一地字）。
@@ -1232,7 +1239,7 @@ export function drawFacilityLayer(
       ctx.restore();
     } else if (sceneVenue) {
       // 未选中时也给一个低调的名字标，用户一眼知道这块矩形是刚摆进来的哪个馆。
-      const label = (f.name ?? '小场地').slice(0, 18);
+      const label = planCanvasLabel(f.name ?? '小场地', 18);
       if (label) {
         ctx.save();
         ctx.font = '10px system-ui, sans-serif';

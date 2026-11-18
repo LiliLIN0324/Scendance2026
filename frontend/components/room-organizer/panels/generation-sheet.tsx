@@ -33,6 +33,7 @@ import {
   type GenerationTask,
 } from '../lib/generation-sheet';
 import { importDisplayName, newLocalGlbKey, validateLocalGlbPick } from '../lib/glb-import';
+import { generatedObjectName } from '../lib/generated-object-name';
 import { subscribeStagedMaterialGenerate } from '../lib/material-generate';
 import {
   UNKNOWN_SUBMISSION_NOTICE,
@@ -232,7 +233,8 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
         ...(formSource === 'image' && reference ? { referenceImageAssetId: reference.id } : {}),
       });
       // 属性卡来路：把 staged 链接落成 taskid↔facility，画布轮询到 ready 就回填模型条首位。
-      if (facility) consumeFacilityGenerateLink(job.id, job.prompt || prompt);
+      // 候选名取目标设施名（短名），不把整段生成提示词带进候选条。
+      if (facility) consumeFacilityGenerateLink(job.id, generatedObjectName(facility.name, facility.name));
       if (job.state === 'submit_unknown') {
         settleGenerationSubmission(requestId, { state: 'unknown', taskid: job.id, message: UNKNOWN_SUBMISSION_NOTICE });
         setNotice(`已创建任务 ${job.id}，但结果暂不可核对。${UNKNOWN_SUBMISSION_NOTICE}`);

@@ -27,6 +27,7 @@ import type {
   OutdoorBrief,
   OutdoorLibraryItem,
 } from "./outdoor-agent-contract";
+import { generatedObjectName, generatedObjectNotes } from "./generated-object-name";
 
 const box = (p: readonly PlanPoint[]) => ({
   w: Math.min(...p.map((p) => p.x)),
@@ -970,7 +971,9 @@ export async function proposeInventoryObjects(
     }
     const material = matches[0]!;
     used.push(material);
-    options?.onPhase?.(`正在落位：${zone.name} · ${material.name} × ${need.count}`);
+    // 物料名可能是整段生成提示词；画布与候选只用短名，原文进备注。
+    const displayName = generatedObjectName(material.name, "物料");
+    options?.onPhase?.(`正在落位：${zone.name} · ${displayName} × ${need.count}`);
     const allocationKey = `${zone.id}:${need.query}`;
     const allocated = next.facilities.filter(
       (f) => f.allocationKey === allocationKey,
@@ -1022,7 +1025,7 @@ export async function proposeInventoryObjects(
           // 2026-11-14 修复：用规范的 oneplan: 前缀（原 library: 前缀贴纸/取色查找都认不出，
           // Agent 摆的物件在画布上全是裸矩形）。
           templateId: `oneplan:${material.id}`.slice(0, 64),
-          name: `${material.name} ${n + 1}`.slice(0, 60),
+          name: `${displayName} ${n + 1}`.slice(0, 60),
           zoneId: zone.id,
           position,
           rotationDeg,
@@ -1030,7 +1033,10 @@ export async function proposeInventoryObjects(
           modelOverride: material.modelSlug,
           sourceAssetId: material.id,
           allocationKey,
-          notes: "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
+          notes: generatedObjectNotes(
+            material.name,
+            "复用我的物料库真实模型与米制尺寸；保留已确认通道/门口。",
+          ),
         };
         if (clearForObject(facility, next, zone, options?.packed === true)) {
           // 建筑禁区 + 室内区域：包围盒预筛后仅对相交者做环运算（性能，见 bboxLoose）。
@@ -1078,7 +1084,7 @@ export async function proposeInventoryObjects(
             outdoorRingsOverlap(zone.polygon, b.ring),
         );
         throw new Error(
-          `“${zone.name}”放不下第${n + 1}件“${material.name}”并保留通道与门口${zoneHitsHardBlock ? "；本分区与水域/围栏禁区重叠，物件排不进禁区，实际可用范围比分区小" : ""}；可减数量、选择较小真实物料或调整分区。整版未写入。`,
+          `“${zone.name}”放不下第${n + 1}件“${displayName}”并保留通道与门口${zoneHitsHardBlock ? "；本分区与水域/围栏禁区重叠，物件排不进禁区，实际可用范围比分区小" : ""}；可减数量、选择较小真实物料或调整分区。整版未写入。`,
         );
       }
       next = { ...next, facilities: [...next.facilities, found] };
