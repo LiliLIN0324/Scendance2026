@@ -1026,6 +1026,14 @@ useEffect(() => {
   const requestReviewLink = useCallback(() => {
     void issueReviewLink().then(result => setReviewLink(result.url)).catch(() => { /* 失败原因由既有气泡/状态行说明 */ });
   }, [issueReviewLink]);
+  // G3：Bingo 的「发给客户评审」不另发一套链接，只打开右上角同一个弹窗；弹窗默认允许钉评。
+  const openReviewShare = useCallback(async () => {
+    setOutdoor2DOpen(true);
+    const result = await issueReviewLink();
+    setReviewLink(result.url);
+    window.setTimeout(() => outdoorOverlayRef.current?.openReviewShare(), 80);
+    return result;
+  }, [issueReviewLink]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
   const publishVersion = useCallback(async () => {
     const snapshot = controller.getSnapshot();
@@ -4588,7 +4596,7 @@ useEffect(() => {
         onSelectMode: selectWorkbenchMode,
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
-        onIssueReviewLink: issueReviewLink,
+        onIssueReviewLink: openReviewShare,
         onFit: fitToRoom,
         onOpenReference: () => businessToolsRef.current?.openReference(),
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
