@@ -155,7 +155,7 @@
 - 合计：5 个文件 / 148 项通过
 - `npm run typecheck`：通过
 - `npm run lint`：0 error；仓库既有 `import/order` / `react-hooks` 警告仍在
-- `npm run build`：成功；3363 个产物扫描，oneplan-icons 违规 0 条
+- `npm run build`：成功；3368 个产物扫描，oneplan-icons 违规 0 条
 
 ### 5.3 明确没做
 
