@@ -39,6 +39,7 @@ import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
 import { formatGapList, missingEvidence } from "../lib/outdoor-release-gaps";
 import { ledgerToCsv } from "../lib/outdoor-release-csv";
 import { downloadLedgerCsv as saveLedgerCsv } from "../lib/outdoor-release-csv";
+import { formatSectionCheck } from "../lib/outdoor-report-sections";
 import {
   bookToRecord,
   markSeen,
@@ -2744,6 +2745,15 @@ export function useOutdoorAgentWorkflow(input: {
           metrics: summarizeMetrics(metricsBook.current),
           release: releaseBlock(),
         }),
+      ),
+    /** 报告段落自检：只数标题在不在（缺段≠没问题，也≠可发布）。 */
+    reportSections: () =>
+      formatSectionCheck(
+        buildSessionReport({
+          turns: traceBook.current.list(),
+          metrics: summarizeMetrics(metricsBook.current),
+          release: releaseBlock(),
+        }).text,
       ),
     /** 发布前自检：这份报告能判哪几条验收用例、缺什么信号（不产生“通过”结论）。 */
     acceptanceCheck: () => {
