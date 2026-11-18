@@ -12484,8 +12484,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                   用地红线只要确认或重画，不该一点开卡片就摊一屏舞台区/观众区…。
                                   所以色板折进自己的子组，默认收起，进 zone 模式才自动展开。 */}
                               {renderOneplanSubgroupHeader({ sectionId: 'areas', key: '分区类型', label: '分区类型', count: planZoneSemantics.length, icon: 'hexagon' })}
-                              {openLibrarySubgroups.includes('areas:分区类型') && (
                               {/* 2026-11-18 全局网格：分区色板跟随 oneplanGrid 开关（开关在搜索框旁），不再单独设钮。 */}
+                              {openLibrarySubgroups.includes('areas:分区类型') && (
                               <div style={oneplanGrid
                                 ? { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, paddingLeft: 18, paddingRight: 2 }
                                 : { display: 'flex', flexDirection: 'column', gap: 2 }}>
