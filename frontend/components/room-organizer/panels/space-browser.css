@@ -101,6 +101,22 @@
 .sc-scan-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .sc-scan-row small { color: var(--space-muted, #546461); font-size: 11px; font-variant-numeric: tabular-nums; }
 .sc-scan-row-tag { padding: 0 5px; border-radius: 4px; background: var(--space-tint, #edf4f1); color: var(--space-accent); font-size: 10px; }
+/* 2026-11-19 上传实景包：手上已有的 .spz/.ply 从这里进库。
+   分类行里的动作按钮不抢标题的字重，尺寸跟计数一致；进度直接用按钮文字回话。 */
+.sc-scene-group-action { flex: none; display: inline-flex; align-items: center; }
+.sc-scan-upload-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border: 1px solid var(--space-line, #e1e8e5); border-radius: 6px;
+  background: #fff; color: var(--space-accent, #245c4a);
+  font: inherit; font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; cursor: pointer;
+}
+.sc-scan-upload-btn:hover:not(:disabled) { background: var(--space-tint, #edf4f1); }
+.sc-scan-upload-btn:disabled { cursor: progress; opacity: .7; }
+.sc-scan-upload { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sc-scan-upload-hint { color: var(--space-muted, #546461); font-size: 11px; }
+.sc-scan-upload-note { margin: 0 0 6px; font-size: 11px; line-height: 1.5; color: var(--space-muted, #546461); }
+.sc-scan-upload-note.is-done { color: var(--space-accent, #245c4a); }
+.sc-scan-upload-note.is-error { color: #a3382f; }
 .sc-space-panel.is-card :is(button, a):focus-visible { outline: 2px solid var(--space-accent); outline-offset: 2px; }
 .sc-project-gallery {
   display: grid;

@@ -4,8 +4,10 @@
 // POST /asset 把会过期的签名产物落到本机，GET /asset/<id>.<ext> 稳定回源。
 // 直接运行才读取环境变量 / 仓库根 .env.local，并监听 127.0.0.1:3199。
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
+import { once } from 'node:events';
 import { isIP } from 'node:net';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -20,12 +22,20 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 // 3DGS 场景（SPZ/PLY）本来就是几十 MB 级，按整包上限收，落盘后才分类型复核。
 const MAX_GLB_BYTES = 32 * 1024 * 1024;
 const MAX_SPLAT_BYTES = 150 * 1024 * 1024;
+// 本机上传口（POST /asset/upload）收的是用户从 Aholo Reality 下载后原样拖进来的包：
+// 实测一个场地 SPZ 185 MB、PLY 1800 MB，比取回通道的 150 MiB 门槛宽得多。
+// 落盘走流式写文件，不把整包读进内存。
+const MAX_UPLOAD_BYTES = 2048 * 1024 * 1024;
 // 场景包走公网 COS 可能几十 MB，60 秒会把还在下载的任务掐断。
 const ASSET_TIMEOUT_MS = 300_000;
 // 落盘只收加载器真正认得的三种：GLB 给物件、SPZ/PLY 给 3DGS 预览。类型按魔数判，不信 URL 后缀。
 const ASSET_KINDS = {
   glb: { contentType: 'model/gltf-binary', matches: b => b.length > 8 && b.subarray(0, 4).toString('latin1') === 'glTF' && b.readUInt32LE(4) === 2 },
-  spz: { contentType: 'application/octet-stream', matches: b => b[0] === 0x1f && b[1] === 0x8b && b[2] === 0x08 },
+  // SPZ 两种存量都收：上游 CDN 给的是 gzip 壳（1f 8b 08），本地导出的可以是裸 SPZ（魔数 NGSP）。
+  spz: {
+    contentType: 'application/octet-stream',
+    matches: b => (b[0] === 0x1f && b[1] === 0x8b && b[2] === 0x08) || (b.length > 4 && b.subarray(0, 4).toString('latin1') === 'NGSP'),
+  },
   ply: { contentType: 'application/octet-stream', matches: b => b.subarray(0, 3).toString('latin1') === 'ply' },
 };
 const ASSET_ID_PATH = /^\/asset\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(glb|spz|ply)$/;
@@ -126,6 +136,47 @@ async function readJson(req) {
   }
   if (!isRecord(body)) throw new HttpError(400, '请求体必须是合法 JSON 对象');
   return body;
+}
+
+/**
+ * 本机上传口：用户从 Aholo Reality 下载的 .spz/.ply 直接推进来。
+ *
+ * 为什么要有这条口子：原来只有「生成 → 代理代下产物落盘」和「脚本对账 .cache 后重建索引」
+ * 两条路，用户手上已有的实景包进不来。这里把字节原样收进同一个落盘目录，资产号与地址规则
+ * 与生成产物完全一致，前端只多一步登记。
+ *
+ * 不落内存：边收边写 .part，按头部魔数定类型，末尾才改名；超限/类型不符/断流一律删半截文件。
+ */
+async function receiveAsset(req, store) {
+  if (typeof store?.open !== 'function') throw new HttpError(501, '本机资产库不支持流式落盘');
+  if (req.headers['content-encoding'] && req.headers['content-encoding'] !== 'identity') {
+    throw new HttpError(415, '上传不接受压缩请求体');
+  }
+  const declared = Number(req.headers['content-length']);
+  if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES) {
+    throw new HttpError(413, `文件超过 ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MiB，未上传`);
+  }
+  const assetId = randomUUID();
+  const sink = await store.open(assetId);
+  let size = 0;
+  let head = Buffer.alloc(0);
+  try {
+    for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+      size += chunk.length;
+      if (size > MAX_UPLOAD_BYTES) throw new HttpError(413, `文件超过 ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MiB，未上传`);
+      if (head.length < 12) head = Buffer.concat([head, chunk.subarray(0, 12 - head.length)]);
+      await sink.write(chunk);
+    }
+    if (!size) throw new HttpError(400, '空文件，没有可建场景');
+    const kind = Object.keys(ASSET_KINDS).find(name => ASSET_KINDS[name].matches(head));
+    if (!kind) throw new HttpError(415, '不是 GLB / SPZ / PLY，未落盘');
+    if (kind === 'glb' && size > MAX_GLB_BYTES) throw new HttpError(413, 'GLB 超过 32 MiB，未落盘');
+    await sink.commit(kind);
+    return { assetId, kind, bytes: size, url: `/asset/${assetId}.${kind}` };
+  } catch (failure) {
+    await sink.discard();
+    throw failure;
+  }
 }
 
 /** 二进制请求体（场地重建素材上传），超限即断。 */
@@ -259,6 +310,31 @@ function fileAssetStore(dir) {
       } catch {
         return null;
       }
+    },
+    /** 流式落盘：先写 .part，校验通过才改名成正式资产，半截文件不会冒充可用的场景包。 */
+    async open(id) {
+      await mkdir(dir, { recursive: true });
+      const tmp = `${dir}/${id}.part`;
+      const stream = createWriteStream(tmp);
+      const failed = new Promise((_resolve, reject) => {
+        stream.once('error', reject);
+      });
+      failed.catch(() => {});
+      return {
+        async write(chunk) {
+          if (!stream.write(chunk)) await Promise.race([once(stream, 'drain'), failed]);
+        },
+        async commit(ext) {
+          await new Promise((resolve, reject) => {
+            stream.end(error => error ? reject(error) : resolve());
+          });
+          await rename(tmp, `${dir}/${id}.${ext}`);
+        },
+        async discard() {
+          stream.destroy();
+          await unlink(tmp).catch(() => {});
+        },
+      };
     },
   };
 }
@@ -767,7 +843,13 @@ export function createServer({
       }
       if (!req.url?.startsWith('/') || req.url.startsWith('//')) throw new HttpError(400, '请求路径无效');
       const url = new URL(req.url, 'http://localhost');
-      if (url.pathname.startsWith('/asset/')) {
+      let result;
+      if (url.pathname === '/asset/upload') {
+        // 必须排在下面 /asset/ 的 GET 守卫之前：上传是 POST，且路径同样以 /asset/ 开头。
+        if (req.method !== 'POST') throw new HttpError(405, '上传只接受 POST');
+        send(res, 200, await receiveAsset(req, assets), origin, key);
+        return;
+      } else if (url.pathname.startsWith('/asset/')) {
         if (req.method !== 'GET') throw new HttpError(405, '资产只支持 GET');
         const asset = ASSET_ID_PATH.exec(url.pathname);
         if (!asset) throw new HttpError(400, '资产地址无效');
@@ -776,7 +858,6 @@ export function createServer({
         sendAsset(res, asset[2], bytes, origin);
         return;
       }
-      let result;
       if (req.method === 'GET' && url.pathname === '/amap-js') {
         const bytes = await fetchAmapScript(url.searchParams);
         res.writeHead(200, {
@@ -1017,6 +1098,7 @@ export function createServer({
       send(res, 200, result, origin, key);
     } catch (failure) {
       req.resume();
+      if (!(failure instanceof HttpError)) console.error('[Aholo dev-proxy]', failure);
       if (!res.destroyed && !res.headersSent) {
         send(res, failure instanceof HttpError ? failure.statusCode : 500,
           { error: failure instanceof HttpError ? failure.message : '代理请求失败' }, origin, key);

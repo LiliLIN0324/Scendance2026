@@ -611,6 +611,24 @@ function memoryStore() {
   };
 }
 
+/** 带流式落盘口的存储：上传口边收边写，提交时才变成正式资产。 */
+function streamingStore() {
+  const store = memoryStore();
+  const opened = [];
+  store.opened = opened;
+  store.open = async id => {
+    const chunks = [];
+    opened.push({ id, committed: false, discarded: false });
+    const record = opened[opened.length - 1];
+    return {
+      write: async chunk => { chunks.push(Buffer.from(chunk)); },
+      commit: async ext => { record.committed = true; store.files.set(`${id}.${ext}`, Buffer.concat(chunks)); },
+      discard: async () => { record.discarded = true; chunks.length = 0; },
+    };
+  };
+  return store;
+}
+
 test('POST /asset 按魔数识别 GLB/SPZ/PLY 并落盘，回源地址是本机相对路径', async t => {
   for (const [name, bytes, kind] of [['glb', glb(Buffer.from('mesh')), 'glb'], ['spz', SPZ, 'spz'], ['ply', PLY, 'ply']]) {
     const store = memoryStore();
@@ -625,6 +643,50 @@ test('POST /asset 按魔数识别 GLB/SPZ/PLY 并落盘，回源地址是本机�
     assert.equal(result.text.includes(KEY), false);
     assert.equal(store.files.get(`${result.body.assetId}.${kind}`).equals(bytes), true);
   }
+});
+
+test('POST /asset/upload 收浏览器直传的实景包：按魔数定类型、字节原样落盘', async t => {
+  // 用户从 Aholo Reality 下载的 .spz/.ply 不必再走生成/云端，直接推进本机资产库。
+  for (const [bytes, kind] of [[Buffer.concat([SPZ, Buffer.alloc(2048)]), 'spz'], [PLY, 'ply']]) {
+    const store = streamingStore();
+    const f = await fixture(t, undefined, { assets: store });
+    const result = await f.request('/asset/upload', {
+      method: 'POST', body: bytes,
+      headers: { 'Content-Type': 'application/octet-stream', Origin: 'http://localhost:3000' },
+    });
+    assert.equal(result.status, 200, result.text);
+    assert.equal(result.body.kind, kind);
+    assert.equal(result.body.bytes, bytes.length);
+    assert.match(result.body.url, new RegExp(`^/asset/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.${kind}$`));
+    assert.equal(result.headers['access-control-allow-origin'], 'http://localhost:3000');
+    // 落盘的是原字节，不是重新编码过的；上传也不该碰上游。
+    assert.equal(store.files.get(`${result.body.assetId}.${kind}`).equals(bytes), true);
+    assert.equal(store.opened[0].committed, true);
+    assert.equal(f.calls.length, 0);
+    // 传完能按同一地址取回。
+    const loaded = await f.request(result.body.url, { raw: true });
+    assert.equal(loaded.status, 200);
+    assert.equal(loaded.bytes.equals(bytes), true);
+  }
+});
+
+test('POST /asset/upload 拒收不是实景包的字节，且不留半截文件', async t => {
+  const store = streamingStore();
+  const f = await fixture(t, undefined, { assets: store });
+  const html = Buffer.from('<html>登录页</html>');
+  const rejected = await f.request('/asset/upload', { method: 'POST', body: html, headers: { 'Content-Type': 'text/html' } });
+  assert.deepEqual([rejected.status, rejected.body], [415, { error: '不是 GLB / SPZ / PLY，未落盘' }]);
+  assert.equal(store.files.size, 0);
+  assert.equal(store.opened[0].discarded, true);
+  const empty = await f.request('/asset/upload', { method: 'POST' });
+  assert.deepEqual([empty.status, empty.body], [400, { error: '空文件，没有可建场景' }]);
+  assert.equal(store.files.size, 0);
+});
+
+test('POST /asset/upload 在不能流式落盘的存储上直接说不行，不缓存在内存里冒充成功', async t => {
+  const f = await fixture(t, undefined, { assets: memoryStore() });
+  const result = await f.request('/asset/upload', { method: 'POST', body: SPZ, headers: { 'Content-Type': 'application/octet-stream' } });
+  assert.deepEqual([result.status, result.body], [501, { error: '本机资产库不支持流式落盘' }]);
 });
 
 test('GET /asset/<id> 原样回源字节，带类型、CORS 与不可变缓存', async t => {

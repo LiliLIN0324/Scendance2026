@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { rememberAholoAsset } from '../lib/aholo-assets';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
@@ -12,6 +12,9 @@ import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
 
 vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
+// 2026-11-19：上传走本机代理，单测里只验「面板把选中的文件交给上传口、并把结果/错误写回界面」。
+const uploadScanFile = vi.hoisted(() => vi.fn());
+vi.mock('../lib/scan-upload', () => ({ uploadScanFile }));
 // 空间卡现在常驻结构入口；这里只要给它一份最小壳体，不验证结构交互。
 const structureContext = vi.hoisted(() => ({
   layout: { name: '普通壳体', width: 10, height: 8, floors: [{ id: 'ground', name: '活动场地', height: 3, items: [] }] },
@@ -23,6 +26,7 @@ vi.mock('../contexts', () => ({
 }));
 
 afterEach(() => { cleanup(); localStorage.clear(); });
+beforeEach(() => { uploadScanFile.mockReset(); });
 
 function environment(preview: SplatPreviewState = { status: 'idle', assetId: '', name: '' }, current: StoredEnvironment | null = null, thumbnails?: Readonly<Record<string, string>>) {
   return { preview, current, environments: current ? [current] : [], floors: [{ id: 'ground', name: '活动场地' }], onSelect: vi.fn(), onRemove: vi.fn(), onSetFloor: vi.fn(), onClear: vi.fn(), ...(thumbnails ? { thumbnails } : {}) };
@@ -86,6 +90,47 @@ describe('SpacePanel', () => {
     fireEvent.click(screen.getByText('项目中的场景'));
     fireEvent.click(screen.getByRole('button', { name: '移除午后咖啡馆' }));
     expect(preview.onRemove).toHaveBeenCalledWith(current.assetId);
+  });
+
+  // 2026-11-19 用户：「我的实景扫描上传不到我的平台……图二这里应该新增一个上传功能」
+  it('card：实景扫描分类行带「上传」，选文件后交给上传口并回报已加入', async () => {
+    uploadScanFile.mockResolvedValue({
+      assetId: '00000000-0000-4000-8000-000000000010', kind: 'spz', name: '新空间 2026-11-9',
+      bytes: 194_000_000, savedAt: Date.now(),
+    });
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+    const button = screen.getByTestId('scan-upload-button');
+    expect(button.textContent).toContain('上传');
+    // 分类行里的动作不能顺手把这一段收起来。
+    fireEvent.click(button);
+    expect(screen.getByTestId('scan-upload-button')).toBeTruthy();
+    const input = screen.getByTestId('scan-upload-input') as HTMLInputElement;
+    const file = new File([new Uint8Array([0x1f, 0x8b, 0x08, 0x00])], '新空间 2026-11-9.spz');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    fireEvent.change(input);
+    await waitFor(() => expect(uploadScanFile).toHaveBeenCalledTimes(1));
+    expect(uploadScanFile.mock.calls[0][0]).toBe(file);
+    expect((await screen.findByRole('status')).textContent).toContain('已加入「新空间 2026-11-9」');
+  });
+
+  it('card：上传失败就把原因显示出来，并自动展开这一段', async () => {
+    uploadScanFile.mockRejectedValue(new Error('连不上本机资产代理。先运行 npm run dev。'));
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
+    const group = [...document.querySelectorAll('details.sc-scene-group')]
+      .find(node => node.querySelector('.sc-scene-group-label')?.textContent === '我的实景扫描') as HTMLDetailsElement;
+    expect(group.open).toBe(false);
+    const input = screen.getByTestId('scan-upload-input') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], '场地.ply')], configurable: true });
+    fireEvent.change(input);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('连不上本机资产代理');
+    expect(group.open).toBe(true);
+  });
+
+  it('shelf：列表上方也有上传入口与后缀提示', () => {
+    render(<SpacePanel layout={makeLayout()} onApply={vi.fn()}/>);
+    expect(screen.getByTestId('scan-upload-button')).toBeTruthy();
+    expect(screen.getByText(/从 Aholo Reality 下载的 \.spz \/ \.ply/)).toBeTruthy();
   });
 
   // 2026-11-17 用户：「是不是上面的应该放在下面」「项目中的场景这玩意根本就不重要啊」
