@@ -8,7 +8,11 @@
 import { getBackendConfig } from '@/lib/backend-session';
 import type { ReviewPin } from '../room-organizer/lib/review-pins';
 
-export type ReviewPinWithFloor = ReviewPin & { floorId?: string };
+export type ReviewPinWithFloor = ReviewPin & {
+  floorId?: string | undefined;
+  author?: string | undefined;
+  createdAt?: string | undefined;
+};
 
 type CloudPinRow = {
   id: string;
@@ -22,6 +26,8 @@ type CloudPinRow = {
   pin_offset: readonly [number, number, number] | null;
   camera: ReviewPin['camera'];
   status: ReviewPin['status'];
+  author: string | null;
+  created_at: string;
 };
 
 type CloudResult<T> = { ok: true; value: T } | { ok: false; reason: 'disabled' | 'network' | 'bad-response' };
@@ -64,6 +70,8 @@ function toPin(row: CloudPinRow): ReviewPinWithFloor {
     camera: row.camera,
     status: row.status,
     floorId: row.floor_id,
+    author: row.author ?? undefined,
+    createdAt: row.created_at,
   };
 }
 
