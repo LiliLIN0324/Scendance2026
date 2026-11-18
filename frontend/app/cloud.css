@@ -282,6 +282,29 @@
 .sc-shortcut-notes{display:grid;gap:4px;margin:0;padding:10px 16px 12px;border-top:1px solid var(--wk-hair);list-style:none;color:var(--sc-muted);font-size:11px;line-height:1.55}
 .sc-shortcut-notes li{position:relative;padding-left:10px}
 .sc-shortcut-notes li::before{content:"";position:absolute;top:.65em;left:0;width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.55}
+.sc-shortcut-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sc-shortcut-search{position:relative;display:flex;align-items:center;flex:1 1 240px;min-width:0}
+.sc-shortcut-search input{width:100%;height:34px;padding:0 32px 0 30px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-paper);color:var(--wk-ink);font:inherit;font-size:12px}
+.sc-shortcut-search input:focus-visible{outline:2px solid var(--ink-soft);outline-offset:1px}
+.sc-shortcut-search input::-webkit-search-cancel-button{display:none}
+.sc-shortcut-search-icon{position:absolute;left:10px;color:var(--sc-muted);font-size:15px;line-height:1;pointer-events:none}
+.sc-shortcut-search-clear{position:absolute;right:5px;display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:50%;background:transparent;color:var(--sc-muted);font-size:16px;line-height:1;cursor:pointer}
+.sc-shortcut-search-clear:hover{background:var(--wk-plane);color:var(--wk-ink)}
+.sc-shortcut-platform-switch{display:inline-flex;flex:none;padding:2px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-plane)}
+.sc-shortcut-platform-switch button{height:28px;padding:0 9px;border:0;border-radius:6px;background:transparent;color:var(--sc-muted);font:inherit;font-size:11px;cursor:pointer}
+.sc-shortcut-platform-switch button[aria-pressed="true"]{background:var(--wk-paper);color:var(--wk-ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.sc-shortcut-meta{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px}
+.sc-shortcut-count{margin:0;color:var(--sc-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.sc-shortcut-filters{display:flex;flex-wrap:wrap;gap:6px}
+.sc-shortcut-filters button{height:28px;padding:0 10px;border:1px solid var(--wk-hair);border-radius:999px;background:var(--wk-paper);color:var(--sc-muted);font:inherit;font-size:11px;cursor:pointer}
+.sc-shortcut-filters button[aria-pressed="true"]{border-color:var(--wk-ink);background:var(--wk-ink);color:var(--wk-paper)}
+.sc-shortcut-platform{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;transition:opacity .15s ease}
+.sc-shortcut-platform:not(.is-primary){opacity:.64}
+.sc-shortcut-platform.is-primary kbd{border-color:var(--wk-ink);background:var(--wk-paper)}
+.sc-shortcut-empty{display:grid;gap:6px;justify-items:start;padding:18px 16px;border:1px dashed var(--wk-hair);border-radius:10px;background:var(--wk-paper)}
+.sc-shortcut-empty strong{font-size:13px}
+.sc-shortcut-empty span{color:var(--sc-muted);font-size:11px}
+.sc-shortcut-empty button{height:28px;padding:0 10px;border:1px solid var(--wk-hair);border-radius:7px;background:var(--wk-plane);color:var(--wk-ink);font:inherit;font-size:11px;cursor:pointer}
 /* 首字母圆片：每人一档颜色，由账号 ID 分出来，取色见 AVATAR_TONES；没分到色就还是灰片。 */
 .sc-settings-avatar{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;background:var(--sc-avatar-bg, var(--wk-plane-deep));font-size:12px;font-weight:600;color:var(--sc-avatar-ink, var(--wk-ink))}
 /* 左轨成员位用同一颗圆片，只按窄轨的尺度收一档。 */
