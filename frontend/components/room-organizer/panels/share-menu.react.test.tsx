@@ -57,7 +57,7 @@ describe('分享钮', () => {
 });
 
 describe('分享页签', () => {
-  it('opens on 分享 with the audience row and Bingo only', () => {
+  it('opens on 分享 with one create action and Bingo only', () => {
     localStorage.clear();
     render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
     const dialog = openMenu();
@@ -66,32 +66,33 @@ describe('分享页签', () => {
     expect(screen.getByRole('tab', { name: '发布' }).getAttribute('data-tone')).toBe('quiet');
     expect(dialog.textContent).toContain('发布会');
     expect(dialog.textContent).toContain('打开即可查看场地、分区和尺度，页里可看 3D。');
-    const audience = screen.getByRole('button', { name: '发给谁' });
+    const create = screen.getByRole('button', { name: '生成并复制评审链接' });
     const bingo = screen.getByRole('button', { name: /送到 Bingo/ });
-    expect(audience.className).toContain('sc-share-row');
+    expect(create.className).toContain('sc-share-cta');
     expect(bingo.className).toContain('sc-share-row');
-    expect(audience.textContent).toContain('送评审方');
-    expect(audience.querySelector('.sc-share-row-status')?.textContent).toBe('可批注');
+    expect(screen.queryByTestId('review-link-row')).toBeNull();
     expect(bingo.querySelector('.sc-share-row-label')?.textContent).toBe('送到 Bingo');
     expect(bingo.querySelector('.sc-share-row-status')?.textContent).toBe('待发');
-    expect(audience.getAttribute('data-align')).toBe('start');
     expect(bingo.getAttribute('data-align')).toBe('start');
     expect(dialog.querySelector('img, .sc-publish-plan')).toBeNull();
     expect(dialog.textContent).not.toMatch(/方案预览|生成分享链接|3D 漫游|分享记录|密码|过期/);
   });
 
-  it('copies the review link for 发给谁 and marks Bingo sent', async () => {
+  it('creates the review link, copies it, and shows its current state', async () => {
     localStorage.clear();
     const share = actions();
     const clipboard = vi.fn(async () => undefined);
     Object.assign(navigator, { clipboard: { writeText: clipboard } });
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: '发给谁' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
     expect((await screen.findByRole('status')).textContent).toContain('评审链接已复制');
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/review/issued');
+    expect(screen.getByTestId('review-link-row').textContent).toContain('studio.example/review/issued');
+    expect(screen.getByRole('button', { name: '复制' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '打开' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '刷新为当前版本' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /送到 Bingo/ }).querySelector('.sc-share-row-status')?.textContent).toBe('待评');
-    expect(screen.queryByRole('textbox')).toBeNull();
     expect(share.onIssueReviewLink).toHaveBeenCalledOnce();
   });
 
@@ -105,12 +106,24 @@ describe('分享页签', () => {
     vi.mocked(share.onIssueReviewLink).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: /送到 Bingo/ }));
+    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
     act(() => { epoch += 1; });
     await act(async () => finish({ url: 'https://studio.example/review/old', isCurrent: () => epoch === token }));
     expect(screen.getByRole('status').textContent).toContain('旧链接未复制');
     expect(clipboard).not.toHaveBeenCalled();
     expect(screen.getByText('待发')).toBeTruthy();
+    expect(screen.queryByTestId('review-link-row')).toBeNull();
+  });
+
+  it('送到 Bingo 只切审校台，不再生成第二条链接', () => {
+    localStorage.clear();
+    const share = actions({ onOpenBingo: vi.fn() });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: /送到 Bingo/ }));
+    expect(share.onOpenBingo).toHaveBeenCalledOnce();
+    expect(share.onIssueReviewLink).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: '分享、发布与导出' })).toBeNull();
   });
 });
 

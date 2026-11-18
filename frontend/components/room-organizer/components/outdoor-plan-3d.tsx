@@ -527,7 +527,12 @@ export default function OutdoorPlan3D({
   const [derivedCrowdCount, setDerivedCrowdCount] = useState(0);
   const derivedCrowdCountRef = useRef(0);
   /** 漫游角色 GLB 的加载态：失败时退回几何占位人，并留一句不吓人的说明。 */
-  const [walkRoleAvatar, setWalkRoleAvatar] = useState<{ status: 'idle' | 'loading' | 'ready' | 'error'; message?: string }>({ status: 'idle' });
+  const [walkRoleAvatar, setWalkRoleAvatar] = useState<{ status: 'idle' | 'loading' | 'ready' | 'error'; message?: string; hasSit?: boolean }>({ status: 'idle' });
+  /** 重试按一次换一个代次，重新走一遍加载。 */
+  const [avatarAttempt, setAvatarAttempt] = useState(0);
+  /** 无 sit 剪辑时下沉对位，HUD 要说清“这不是坐姿动画”。 */
+  const [seatedNoSit, setSeatedNoSit] = useState(false);
+  const seatedNoSitRef = useRef(false);
 
   const zoomBy = useCallback((factor: number) => {
     const camera = cameraRef.current;
@@ -2315,6 +2320,12 @@ export default function OutdoorPlan3D({
           // 动作跟状态走：移动 walk、停下 idle、落座 sit。没有 sit 剪辑就保持站姿，
           // 不假称有坐姿动画（别为了「有坐姿」去动 Aholo 绑骨）。
           const seated = walkFrame.seated === true && Boolean(roleAvatar.actor.sit);
+          // 没有 sit 剪辑也算“落座”：HUD 要诚实说这是下沉对位，不是坐姿动画。
+          const noSitSeated = walkFrame.seated === true && !roleAvatar.actor.sit;
+          if (noSitSeated !== seatedNoSitRef.current) {
+            seatedNoSitRef.current = noSitSeated;
+            setSeatedNoSit(noSitSeated);
+          }
           if (seated !== roleAvatar.seated) {
             roleAvatar.seated = seated;
             if (seated) {
@@ -2333,10 +2344,13 @@ export default function OutdoorPlan3D({
             const previous = walkFrame.moving ? roleAvatar.actor.idle : roleAvatar.actor.walk;
             next.reset().play().crossFadeFrom(previous, 0.16, false);
           }
-          // 坐姿对齐：按实测头高把头顶对到落座眼高，不写死扣 1.6 m。
-          const headOffset = seated && roleAvatar.sitHeadY !== null ? roleAvatar.sitHeadY : 1.6;
-          roleAvatar.actor.group.position.y = seated
-            ? Math.max(0, walkFrame.y - PLAN_LAYER_BASE_Y - headOffset)
+          // 坐姿对齐：有 sit 剪辑按实测头高、没有就按标称 1.6 m 把头对到落座眼高。
+          // 没坐姿动画时身体会沉到地面以下，视觉上由地面遮住腿——这是“下沉对位”，
+          // 不假装有坐姿动作；地面以下最多允许沉 0.75 m。
+          const sinking = walkFrame.seated === true;
+          const headOffset = sinking && roleAvatar.sitHeadY !== null ? roleAvatar.sitHeadY : 1.6;
+          roleAvatar.actor.group.position.y = sinking
+            ? Math.max(-0.75, walkFrame.y - PLAN_LAYER_BASE_Y - headOffset)
             : 0;
           roleAvatar.actor.mixer.update(deltaSeconds);
         }
@@ -2560,9 +2574,19 @@ export default function OutdoorPlan3D({
     root.visible = false;
     scene.add(root);
     setWalkRoleAvatar({ status: 'loading' });
+    // 软超时：角色 GLB 动辄 3～4 MB，满载机器上几十秒仍可能只显示“加载中”。
+    // 10 s 后先说真话、先用几何人，加载真晚到时再自动换上（不假称已就绪）。
+    const softTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      setWalkRoleAvatar({
+        status: 'error',
+        message: '角色模型较大，先用几何人代替；下载完会自动换上。',
+      });
+    }, 10_000);
     void ensureGlbAsset(walkRoleUrl, walkRoleUrl)
       .then(() => {
         if (cancelled) return;
+        window.clearTimeout(softTimer);
         const person: FurnitureItem = {
           id: 'outdoor-walk-avatar',
           type: 'person',
@@ -2585,10 +2609,11 @@ export default function OutdoorPlan3D({
           moving: false,
           sitHeadY: measureWalkSitHeadY(actor),
         };
-        setWalkRoleAvatar({ status: 'ready' });
+        setWalkRoleAvatar({ status: 'ready', hasSit: Boolean(actor.sit) });
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
+        window.clearTimeout(softTimer);
         setWalkRoleAvatar({
           status: 'error',
           message: reason instanceof Error ? reason.message : '角色模型没加载上，先用几何人代替。',
@@ -2596,6 +2621,7 @@ export default function OutdoorPlan3D({
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(softTimer);
       const current = walkRoleAvatarRef.current;
       walkRoleAvatarRef.current = null;
       root.removeFromParent();
@@ -2606,7 +2632,7 @@ export default function OutdoorPlan3D({
         disposeOwnedModel(current.actor.group);
       }
     };
-  }, [walkEnabled, walkRoleUrl, walkRoleName]);
+  }, [walkEnabled, walkRoleUrl, walkRoleName, avatarAttempt]);
 
   useEffect(() => {
     if (layerApiRef.current?.syncEditVisuals) layerApiRef.current.syncEditVisuals();
@@ -2749,7 +2775,30 @@ export default function OutdoorPlan3D({
           {controlledActorRef.current && <span>接管中 · {controlledActorRef.current.actor.label}</span>}
           <span>{viewMode === 'orbit' ? 'WASD 移动角色 · 左键环绕 · 滚轮缩放 · Esc 退出漫游' : 'WASD / 方向键行走 · Shift 加速 · Esc 退出漫游'}</span>
           {viewMode !== 'orbit' && walkRoleAvatar.status === 'loading' && <span>角色加载中…</span>}
-          {viewMode !== 'orbit' && walkRoleAvatar.status === 'error' && <span>{walkRoleAvatar.message}</span>}
+          {viewMode !== 'orbit' && walkRoleAvatar.status === 'error' && (
+            <>
+              <span>{walkRoleAvatar.message}</span>
+              <button
+                type="button"
+                data-testid="outdoor-walk-avatar-retry"
+                onClick={() => setAvatarAttempt((value) => value + 1)}
+                style={{
+                  pointerEvents: 'auto',
+                  border: '1px solid rgba(255,255,255,0.35)',
+                  borderRadius: 6,
+                  background: 'rgba(255,255,255,0.12)',
+                  color: '#fff',
+                  fontSize: 12,
+                  lineHeight: '18px',
+                  padding: '2px 8px',
+                  cursor: 'pointer',
+                }}
+              >
+                重试
+              </button>
+            </>
+          )}
+          {viewMode !== 'orbit' && seatedNoSit && <span>该角色没有坐姿动作，已按坐姿高度下沉对位</span>}
           {viewMode !== 'orbit' && (walkPhase === 'drag' || walkPhase === 'unlocked') && <span>拖动鼠标转头</span>}
           {onCycleView && (
             <button

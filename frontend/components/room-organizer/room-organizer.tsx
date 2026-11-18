@@ -1037,16 +1037,12 @@ useEffect(() => {
     return { url,isCurrent };
   }, [activitySession.isCurrent,sessionToken,floorSession.isCurrent,floorToken]);
   // G3：右上角分享弹窗的「允许钉评」链接与 Bingo 用同一个生成器，不再各造一套。
-  const [reviewLink, setReviewLink] = useState('');
-  const requestReviewLink = useCallback(() => {
-    void issueReviewLink().then(result => setReviewLink(result.url)).catch(() => { /* 失败原因由既有气泡/状态行说明 */ });
-  }, [issueReviewLink]);
-  // G3：Bingo 的「发给客户评审」不另发一套链接，只打开右上角同一个弹窗；弹窗默认允许钉评。
+  // 2026-11-18：旧 OutdoorDeliveryPanel 已退役，Bingo 只打开右上角同一份 ShareMenu。
+  // 先生成（写入本机评审标记）再打开，ShareMenu 打开时才能从标记恢复这条链接。
   const openReviewShare = useCallback(async () => {
     setOutdoor2DOpen(true);
     const result = await issueReviewLink();
-    setReviewLink(result.url);
-    window.setTimeout(() => outdoorOverlayRef.current?.openReviewShare(), 80);
+    setShareOpenRequest(value => value + 1);
     return result;
   }, [issueReviewLink]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
@@ -4565,6 +4561,7 @@ useEffect(() => {
   // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
   const shareActions: ShareMenuActions = {
     onIssueReviewLink: issueReviewLink,
+    onOpenBingo: () => { setWorkbenchMode('layout'); showAgent('bingo'); },
     onPublish: publishVersion,
     onListShares: listProjectShares,
     onRevokeShare: revokeProjectShare,
@@ -5019,8 +5016,6 @@ useEffect(() => {
               legacyPlanProjectId={legacyOutdoorPlanProjectId}
               anchor={isOutdoorProject ? null : (layout.sceneAnchor ?? layout.mapLngLat ?? null)}
               activityName={isOutdoorProject ? null : layout.name}
-              reviewLink={reviewLink}
-              onRequestReviewLink={requestReviewLink}
               onSaveStateChange={handleOutdoorSaveState}
               onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}
               onModeChange={handleOutdoorCanvasMode}

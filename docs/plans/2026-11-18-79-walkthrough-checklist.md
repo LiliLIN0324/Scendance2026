@@ -209,3 +209,20 @@
 ### 9.5 线上构建复核（2026-11-18 晚补）
 
 第三轮之后补做了线上包核对：c778 构建主包 `9150.98974b54efc4f8c2.js` 已确认含 #3 选路口径、#6 超时档、日期不跨轮三处修复标记（方法、干扰项与局限见 `docs/evidence/79/00/2026-11-18-live-build-review.md`）。**这只证明包内有代码，不替代上面任何一条真机走查**；剩余待办与交接边界见 `docs/plans/2026-11-18-79-handoff-next-agent.md`。
+
+## 9.6 第四轮：#2 补证、#5 CDP 离线、#11 部分导出；#3/#6/#7/#8/#9 blocked（2026-11-18）
+
+会话内置产品浏览器（Chrome 147.0.7727.149），登录态有效；归档快照 `docs/evidence/79/walkthrough.json`（本 profile 记录本为空，未继承另一 profile 的标记）。
+
+| 用例 | 本轮结论 | 证据目录 |
+| --- | --- | --- |
+| #2 同名地点 | 维持 pass；补「选中路径无 project 读取、零写」 | `docs/evidence/79/02/` |
+| #5 离线 | 维持 partial；CDP 网络栈离线补证，缺陷①再次复现；云端 revision 仍缺、云端键不点 | `docs/evidence/79/05/` |
+| #3 改口采纳 | blocked：场地边界未确认，提案未出 | `docs/evidence/79/03/` |
+| #6 四类阻塞 | blocked：四档均未分别触发 | `docs/evidence/79/06/` |
+| #7 说等等 | blocked：无待确认提案卡 | `docs/evidence/79/07/` |
+| #8 刷新/双点/切项目 | blocked：无应用写可对账 | `docs/evidence/79/08/` |
+| #9 撤销回读 | blocked：无已应用批次 | `docs/evidence/79/09/` |
+| #11 导出 | partial：5 类产物落盘且计数一致；PDF/效果图/旧云 Run blocked | `docs/evidence/79/11/` |
+
+计数：pass 1 / partial 5 / blocked 5 / fail 0。门禁仍关，签字只能由人。

@@ -22,12 +22,9 @@ import { REPLICA_CASES } from '../lib/replica-cases';
 import { planBoundaryFromSearchArea } from '@/components/room-organizer/lib/outdoor-venue-sync';
 import { GuideBubble, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
 import { GUIDE_STEPS } from '@/components/room-organizer/lib/site-plan-guide';
-import { OutdoorDeliveryPanel } from '@/components/room-organizer/components/outdoor-delivery-panel';
-import { planOverviewStats } from '@/components/room-organizer/lib/site-plan-measure';
 import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, writePlanGroundMode, writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
 import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
 import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
-import { buildShareLink } from '@/components/room-organizer/lib/site-plan-share';
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
@@ -288,10 +285,6 @@ export interface OutdoorPlanOverlayProps {
   /** 活动点位（sceneAnchor/mapLngLat，GCJ-02）：仅用于底图初始定位，不写进 plan.anchor。 */
   anchor?: { lng: number; lat: number } | null;
   activityName?: string | null;
-  /** 允许钉评的评审链接；空串表示还没生成。 */
-  reviewLink?: string;
-  /** 生成评审链接（room-organizer 的 issueReviewLink）。 */
-  onRequestReviewLink?: () => void;
   /** 保存态上报：room-organizer 据此在左轨 foot（主产品保存态原位）显示户外草稿状态。 */
   onSaveStateChange?: (next: OutdoorSaveState) => void;
   /** P2-g：undo/redo 可用态上报（室内工具排撤销/重做钮启用态）。 */
@@ -340,8 +333,6 @@ export interface OutdoorPlanOverlayProps {
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
 export interface OutdoorPlanOverlayHandle {
-  /** G3：从 Bingo 打开同一个分享弹窗（预选允许钉评）。 */
-  openReviewShare(): void;
   /** 缩放一档（与滚轮同源）。 */
   zoomBy(direction: 1 | -1): void;
   /**
@@ -406,8 +397,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   planEditor,
   controller,
   onViewChange,
-  reviewLink = '',
-  onRequestReviewLink,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   // 2026-11-13（用户指令）：在 chat 里搜地点，地图左上角的「搜地点」框要同步出同一批候选，
@@ -436,7 +425,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const [syncBusy, setSyncBusy] = useState(false);
   // 云端副本重试闸：失败后 60s 内不再尝试（不跟着每条编辑发请求）。
   const cloudRetryAtRef = useRef(0);
-  const [shareOpen, setShareOpen] = useState(false);
   const guide = useGuide(GUIDE_STORAGE_KEY);
   const [guideHidden, setGuideHidden] = useState(false);
   const showGuide = !dormant && !guideHidden && Boolean(guide.activeStep);
@@ -800,16 +788,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     onSaveStateChange?.({ state: saveState, savedAt });
   }, [saveState, savedAt, onSaveStateChange]);
 
-  const shareLink = plan
-    ? buildShareLink(
-      { planId: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : '99999999-9999-4999-8999-999999999999',
-        projectId: slotId === LOCAL_DRAFT_SLOT ? '88888888-8888-4888-8888-888888888888' : slotId,
-        revision: 1, updatedAt: new Date().toISOString(), data: plan },
-      typeof window === 'undefined' ? '' : window.location.origin,
-      '/plan-share',
-    )
-    : '';
-
   function exportPlanPng(): boolean {
     const current = planRef.current;
     if (!current) return false;
@@ -823,7 +801,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // P2-g：对外命令句柄（室内工具排的撤销/重做/缩放/导出转发到这里）。
   // 不写依赖数组：每帧重建，句柄永远拿到当帧闭包（内部读的都是 ref/最新 state）。
   useImperativeHandle(ref, () => ({
-    openReviewShare: () => { setShareOpen(true); },
     zoomBy: (direction: 1 | -1) => {
       canvasApiRef.current?.zoomBy(direction);
     },
@@ -885,18 +862,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       pngCanvas?.toDataURL('image/png'),
     );
   }
-
-  const overview = plan ? planOverviewStats(plan) : null;
-  const summaryMeta = overview
-    ? `${Math.round(overview.boundaryAreaM2).toLocaleString('zh-CN')} m² · 分区 ${overview.zoneCount} · 设施 ${overview.facilityCount}`
-    : '';
-
-  const deliveryHandlers = {
-    onExportPng: () => exportPlanPng(),
-    onExportCsv: () => { if (plan) downloadPlanCsv(plan, exportStem, lengthUnit); },
-    onExportGeoJson: () => { if (plan) downloadPlanGeoJson(plan, exportStem); },
-    onPrintDeck: printDeck,
-  };
 
   const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
   // 真瓦片缩略图的取图中心：plan.anchor（GCJ-02，铺瓦片同口径）；plan 未载入时回落手绘示意。
@@ -1008,7 +973,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         </div>
       )}
       {/* 2026-11-15 旧独立分享/导出钮退役：分享、导出、发布统一收进右上工具簇的 ShareMenu 面板，
-          本覆盖层不再自摆快捷钮。OutdoorDeliveryPanel 仅保留为面板挂载宿主，不再由此处按钮打开。 */}
+          本覆盖层不再自摆快捷钮。2026-11-18：旧 OutdoorDeliveryPanel 与其导出宿主接线一并删除，
+          评审/导出只保留 ShareMenu 一条路径。 */}
       {/* 2026-11-16 用户指令：左下只保留一枚「图层」缩略钮；点开是「地图详情」面板，
           面板盖住地图和入口，关闭只走右上角 X，关掉后回到这一枚图层钮。
           2026-11-16 用户指令「这个在 3D 的时候也补上」：接管态（dormant）下整层 visibility:hidden，
@@ -1111,18 +1077,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           </>
         )}
       </div>
-      {plan && (
-        <OutdoorDeliveryPanel
-          open={shareOpen}
-          onClose={() => setShareOpen(false)}
-          activityName={activityName?.trim() || ''}
-          summaryMeta={summaryMeta}
-          shareLink={shareLink}
-          reviewLink={reviewLink}
-          onRequestReviewLink={onRequestReviewLink}
-          handlers={deliveryHandlers}
-        />
-      )}
     </div>
   );
 });

@@ -12,7 +12,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { readBingoSnapshot } from '../lib/bingo-status';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { convertMetres } from '../lib/display-units';
-import { REVIEW_MARK_CHANGED_EVENT } from '../lib/review-share';
+import { REVIEW_MARK_CHANGED_EVENT, readReviewMarks } from '../lib/review-share';
 import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import { isStructuralMarker } from '../lib/structural-layout';
 import { SHARE_READ_ONLY_LINE, SharePanel, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
@@ -29,6 +29,8 @@ export interface PublishedLink {
 export interface ShareMenuActions {
   /** 生成一份可留言的方案页链接。 */
   onIssueReviewLink(): Promise<{ url: string; isCurrent:()=>boolean }>;
+  /** 切到 Bingo 审校台。Bingo 是内部去处，不生成第二条评审链接。 */
+  onOpenBingo?(): void;
   /** 把当前保存的版本发布成只读页，返回扫码链接。 */
   onPublish(): Promise<PublishedLink>;
   /** 打开既有的完整活动交接确认，不切执行模式。 */
@@ -170,6 +172,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<ShareTab>('share');
   const [published, setPublished] = useState<PublishedLink | null>(null);
+  const [reviewLink, setReviewLink] = useState('');
   const [qrSvg, setQrSvg] = useState('');
   const [qrOpen, setQrOpen] = useState(false);
   const [notice, setNotice] = useState('');
@@ -201,6 +204,16 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     setQrOpen(false);
     setTab('share');
   }, [projectId]);
+
+  // 评审链接也要有“当前状态”：重新打开分享时，先从本机标记恢复最近一条。
+  useEffect(() => {
+    try {
+      const mark = projectId ? readReviewMarks().find(entry => entry.projectKey === projectId) : null;
+      setReviewLink((mark as { clientUrl?: string } | null)?.clientUrl?.trim() ?? '');
+    } catch {
+      setReviewLink('');
+    }
+  }, [projectId, open]);
 
   useEffect(() => {
     setBingoSent(false);
@@ -234,14 +247,15 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   }, [open]);
 
   useEffect(() => {
-    if (!published) { setQrSvg(''); setQrOpen(false); return undefined; }
+    const url = tab === 'publish' ? published?.url : tab === 'share' ? reviewLink : '';
+    if (!url) { setQrSvg(''); setQrOpen(false); return undefined; }
     let live = true;
-    void QRCode.toString(published.url, {
+    void QRCode.toString(url, {
       type: 'svg', margin: 0, width: 112, errorCorrectionLevel: 'M',
       color: { dark: '#141416', light: '#FFFFFF' },
     }).then(svg => { if (live) setQrSvg(svg.replace('<svg ', '<svg aria-hidden="true" focusable="false" ')); }).catch(() => { if (live) setQrSvg(''); });
     return () => { live = false; };
-  }, [published]);
+  }, [published, reviewLink, tab]);
 
   // 本机记下的链接如果已被服务端撤回，回到未发布，不再把失效地址当成可复制链接。
   useEffect(() => {
@@ -266,7 +280,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
 
   const selectTab = (next: ShareTab) => {
     setTab(next);
-    if (next !== 'publish') setQrOpen(false);
+    setQrOpen(false);
   };
 
   const publish = async () => {
@@ -305,6 +319,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     try {
       const result = await actions.onIssueReviewLink();
       if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
+      setReviewLink(result.url);
       const copied = await copyText(result.url);
       setBingoSent(true);
       setBingoRev(value => value + 1);
@@ -320,6 +335,27 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     if (!published) return;
     const copied = await copyText(published.url);
     setNotice(copied ? '' : '复制没成功，请再试一次。');
+  };
+
+  const copyReview = async () => {
+    if (!reviewLink) return;
+    const copied = await copyText(reviewLink);
+    setNotice(copied ? '评审链接已复制。' : '复制没成功，请再试一次。');
+  };
+
+  const openReview = () => {
+    if (reviewLink) window.open(reviewLink, '_blank', 'noopener,noreferrer');
+  };
+
+  /** Bingo 是内部审校去处：只切面板，不重复生成链接。 */
+  const openBingo = () => {
+    if (!actions?.onOpenBingo) {
+      setNotice('Bingo 还没接到这套工作台。');
+      return;
+    }
+    setOpen(false);
+    setQrOpen(false);
+    actions.onOpenBingo();
   };
 
   const exports = exportEntries(actions, () => setOpen(false));
@@ -354,8 +390,11 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       qrOpen={qrOpen}
       qrSvg={qrSvg}
       exports={exports}
+      reviewLink={reviewLink}
       onIssueAudience={() => { void issue(); }}
-      onSendBingo={() => { void issue(); }}
+      onSendBingo={openBingo}
+      onCopyReview={() => { void copyReview(); }}
+      onOpenReview={openReview}
       onPublish={() => { void publish(); }}
       onCopy={() => { void copyPublished(); }}
       onToggleQr={() => setQrOpen(current => !current)}
