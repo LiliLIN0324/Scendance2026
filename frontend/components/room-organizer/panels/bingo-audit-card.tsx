@@ -10,9 +10,14 @@ import {
   countOpenFeedbackPins,
   feedbackSummaryLabel,
   formatFeedbackTime,
+  mergeBingoCloudPins,
   readBingoPlanFeedback,
+  reviewPlanKeysForBingoPlan,
   type BingoPlanFeedback,
 } from '../lib/bingo-feedback';
+import { listReviewPinsCloud } from '../../review-share-page/review-pins-cloud';
+import type { ReviewPin } from '../lib/review-pins';
+import { requestOutdoorPlanPointFocus } from '../lib/outdoor-plan-issues';
 import {
   clearBingoReceipt,
   emptyBingoSnapshot,
@@ -281,7 +286,18 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
     finally{if(valid()&&sequence.current===id)setPending(false);}
   }
 
-  const feedback = readBingoPlanFeedback(plan);
+  // G4：远端钉异步并进本机汇总，跨设备评审也能在 Bingo 里看到。
+  const [cloudPins, setCloudPins] = useState<ReviewPin[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const keys = reviewPlanKeysForBingoPlan(plan).filter(key => key.startsWith('review-v2:'));
+    void Promise.all(keys.map(key => listReviewPinsCloud(key))).then(results => {
+      if (!alive) return;
+      setCloudPins(results.flatMap(result => result.ok ? result.value : []));
+    });
+    return () => { alive = false; };
+  }, [plan.projectKey, plan.shareId, plan.reviewPlanKey, plan.clientHref]);
+  const feedback = mergeBingoCloudPins(readBingoPlanFeedback(plan), cloudPins);
   const [open, setOpen] = useState(feedback.pinCount > 0);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
@@ -339,6 +355,9 @@ function AuditPins({ feedback }: { feedback: BingoPlanFeedback }): JSX.Element {
       </p>
       {pin.placement && <p className="ap-audit-place">{pin.placement}</p>}
       <p>{pin.body}</p>
+      {typeof pin.x === 'number' && typeof pin.z === 'number' && (
+        <button type="button" className="ap-audit-link" aria-label={`定位意见「${pin.body}」`} onClick={() => requestOutdoorPlanPointFocus(pin.x as number, pin.z as number)}>定位</button>
+      )}
       {pin.replies.length > 0 && <ul>
         {pin.replies.map((reply, index) => <li key={`${pin.id}-${index}`}>
           <p className="ap-audit-pin-head"><strong>{reply.author}</strong>{reply.createdAt && <time dateTime={reply.createdAt}>{formatFeedbackTime(reply.createdAt)}</time>}</p>

@@ -68,12 +68,12 @@ export function OutdoorWalkthroughBoard({
               onChange={(event) => onAsOf(event.target.value)}
               className="w-44 rounded border border-black/15 px-1.5 py-0.5 text-[11px]"
             />
-            {!book.asOf && <span className="ml-1">（未填：卡片会沿用对照表上的日期）</span>}
+            {!book.asOf && <span className="ml-1">（未填：本轮证据会标注「日期未填」）</span>}
           </>
         ) : book.asOf?.trim() ? (
           `走查日期：${book.asOf.trim()}`
         ) : (
-          "走查日期：未填（卡片会沿用对照表上的日期）"
+          "走查日期：未填（本轮证据会标注「日期未填」）"
         )}
       </p>
       <ol className="space-y-1">

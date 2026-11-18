@@ -45,6 +45,12 @@ export interface ReleaseStatusInput {
 export const EVIDENCE_AS_OF = '2026-11-17 正式站走查第二轮';
 
 /**
+ * 本轮标过证据、却没填走查日期时的显式标注。
+ * 不能拿上一轮的日期顶替——日期与证据跨轮正是 2026-11-18 修的那个矛盾。
+ */
+export const UNSET_ROUND_AS_OF = '本轮走查，日期未填';
+
+/**
  * 每条用例目前在「真实浏览器」这一列有没有证据（照 `2026-11-16-outdoor-evidence-matrix.md` 拄录）。
  * `none` = 一行实证也没有；`partial` = 有部分证据但仍不构成通过。
  */
@@ -107,9 +113,15 @@ export function browserEvidenceFrom(
   return out;
 }
 
-/** 走查日期：有记录用记录的，没有就用常量。 */
+/**
+ * 走查日期：
+ * - 本轮一条都没标（或没有记录）→ 用快照日期，因为浏览器列显示的就是快照；
+ * - 本轮标过 → 用本轮填的日期；没填就明说「日期未填」，不回落到上一轮。
+ */
 export function evidenceAsOf(record?: WalkthroughRecord): string {
-  return record?.asOf?.trim() || EVIDENCE_AS_OF;
+  const hasSeen = !!record && Object.keys(record.seen).length > 0;
+  if (!hasSeen) return EVIDENCE_AS_OF;
+  return record?.asOf?.trim() || UNSET_ROUND_AS_OF;
 }
 
 /**
