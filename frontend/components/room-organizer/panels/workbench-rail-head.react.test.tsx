@@ -30,7 +30,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(materialBlock).toContain('<RailCrate size={28}');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
-    // 空间、物料、创作、户外规划共用圆钮。创作钮打开同一页三张卡片。
+    // 空间、物料、创作、户外规划共用圆钮。创作钮打开同一页两张卡片。
     // 标签不再写「拍摄场地」——否则用户会以为点开只有拍摄。
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
     expect(primary).toContain('aria-label="创作：重建真实场地、文生 3D 或图生 3D"');
