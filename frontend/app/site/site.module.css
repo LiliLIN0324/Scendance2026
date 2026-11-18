@@ -1,0 +1,132 @@
+/* 只读场地页（/site）：浅色纸面，场地平面当主视觉。与 /view 同一套纸面语言。 */
+.page {
+  --site-ink: #20241f;
+  --site-muted: #6a7168;
+  --site-line: #e4e3db;
+  --site-paper: #f6f5f0;
+  --site-card: #ffffff;
+  min-height: 100dvh;
+  background: var(--site-paper);
+  color: var(--site-ink);
+  padding: 24px max(24px, calc((100vw - 1120px) / 2)) 52px;
+  font-family: var(--sc-font, system-ui, sans-serif);
+}
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--site-line);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.masthead small { font-size: 12px; margin-left: 8px; font-weight: 400; letter-spacing: 0; }
+.masthead > span:last-child { font-size: 12px; font-weight: 400; color: var(--site-muted); }
+
+.title { margin: 30px 0 22px; }
+.title h1 { font-size: clamp(26px, 4vw, 40px); line-height: 1.25; margin: 8px 0 12px; font-weight: 600; letter-spacing: -0.035em; overflow-wrap: anywhere; }
+.eyebrow { font-size: 12px; color: var(--site-muted); margin: 0; }
+.meta { font-size: 12px; color: var(--site-muted); margin: 6px 0 0; overflow-wrap: anywhere; }
+
+.stage {
+  position: relative;
+  height: clamp(320px, min(58vw, 62vh), 720px);
+  overflow: hidden;
+  border: 1px solid var(--site-line);
+  border-radius: 12px;
+  background: #f2f1ec;
+  background-image:
+    linear-gradient(#00000008 1px, transparent 1px),
+    linear-gradient(90deg, #00000008 1px, transparent 1px);
+  background-size: 32px 32px;
+  box-shadow: 0 16px 40px #30353012;
+}
+
+.tiles { position: absolute; inset: 0; overflow: hidden; }
+.tiles img { position: absolute; width: 256px; height: 256px; display: block; }
+.tiles[data-down='true'] { display: none; }
+
+.overlay { position: absolute; inset: 0; display: block; pointer-events: none; }
+
+.zoneLabel {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: #fffffff2;
+  border: 1px solid #00000014;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #2f3730;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.attribution {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  margin: 0;
+  padding: 1px 5px;
+  font-size: 10.5px;
+  color: #575d55;
+  background: #ffffffcc;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.north {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--site-line);
+  border-radius: 50%;
+  background: #ffffffe6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--site-ink);
+  pointer-events: none;
+}
+
+.scale { position: absolute; left: 16px; bottom: 14px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.scale span { height: 3px; background: #20241f; border-radius: 2px; }
+.scale small { font-size: 11px; color: var(--site-muted); }
+
+.badge { display: none; }
+
+.legend { margin: 30px 0 20px; }
+.legendHead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.legendHead h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.03em; margin: 0 0 16px; }
+.legendHead span { font-size: 12px; color: var(--site-muted); }
+.legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.legend li { display: flex; align-items: center; gap: 10px; padding: 13px 4px; border-bottom: 1px solid var(--site-line); font-size: 13px; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; border: 1px solid #0002; flex: none; }
+.legend small { margin-left: auto; font-size: 12px; color: var(--site-muted); }
+.empty { font-size: 13px; color: var(--site-muted); }
+
+.footnote { margin-top: 20px; font-size: 13px; line-height: 1.75; color: var(--site-muted); }
+
+.state { max-width: 460px; margin: 16vh auto; padding: 28px; background: var(--site-card); border: 1px solid var(--site-line); border-radius: 12px; }
+.state h1 { font-size: 24px; font-weight: 600; margin: 0 0 14px; }
+.state p { font-size: 14px; line-height: 1.8; margin-bottom: 22px; color: var(--site-muted); }
+.state button { font-size: 13px; padding: 9px 14px; border-radius: 6px; border: 1px solid var(--site-line); background: var(--site-card); color: var(--site-ink); cursor: pointer; }
+
+@media (max-width: 600px) {
+  .page { padding: 20px 16px 36px; }
+  .north { top: 10px; right: 10px; }
+  .scale { left: 12px; bottom: 10px; }
+  .legend li { padding: 12px 2px; }
+}

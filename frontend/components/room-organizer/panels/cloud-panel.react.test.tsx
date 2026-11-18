@@ -67,6 +67,8 @@ let controller: BackendSession;
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
+/** 后端业务错误：面板应把 code 翻成中文提示，而不是把码丢给用户。 */
+function queueError(code: string, status: number) { mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code, details: {} } }), { status, headers: { 'Content-Type': 'application/json' } })); }
 
 function openAccount(section: '我的项目' | '物料' | '团队与权限' = '我的项目'): void {
   fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
@@ -605,28 +607,26 @@ describe('CloudPanel delayed project replacement', () => {
     expect(screen.queryByText(/原账户原文/)).toBeNull();expect(screen.queryByLabelText('授权查看的原始记录')).toBeNull();tracker.stop();
   });
 
-  it('opens the requested project after the current editing lease is released', async () => {
+  it('opens a linked project and takes its editing lease without a manual release', async () => {
     const sessionId = controller.getSnapshot().sessionId;
     queue({ sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
     await controller.acquireLease(projectId);
+    // 列表/工作室用返回值固定，队列里只剩「交还 → 读项目 → 拿编辑权」三步，免得与挂载时机抢队列。
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([original, other] as never);
+    vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }] as never);
     window.history.replaceState(null, '', `/editor/?project=${otherId}`);
-    queue([original, other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    queue({}); // 交还旧项目的编辑权
+    queue(other); // 读目标项目
+    queue({ projectId: otherId, sessionId, generation: 5, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() }); // 顺手拿新项目编辑权
     const onLoadLayout = vi.fn();
     const notices = watchNotices();
     render(<CloudPanel layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={onLoadLayout} />);
-    await notices.next('请先释放当前项目的编辑权，再打开链接中的项目。');
+    await notices.next(/已打开项目/);
     notices.stop();
-    expect(document.querySelector('dialog.sc-account-dialog')?.hasAttribute('open')).toBe(false);
-    expect(onLoadLayout).not.toHaveBeenCalled();
-    // 深链冲突不再自动弹账户面板；用户自己打开后再释放编辑权。
-    queue(other); // 手动打开后的卡片 peek
-    openAccount();
-    await screen.findByLabelText(`${original.name} 更多操作`);
-    queue({ sessionId, generation: 4, revision: 2, expiresAt: new Date().toISOString() }); queue(other);
-    openProjectMenu(original.name);
-    fireEvent.click(screen.getByRole('button', { name: '释放编辑权' }));
-    await waitFor(() => expect(onLoadLayout).toHaveBeenCalledOnce());
+    expect(onLoadLayout).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().project?.id).toBe(otherId);
+    expect(controller.getSnapshot().writeBlocked).toBe(false);
+    expect(document.querySelector('dialog.sc-account-dialog')?.hasAttribute('open')).toBe(false);
   });
   it('keeps the matching unsaved canvas when returning through an editor project link', async () => {
     const sessionId = controller.getSnapshot().sessionId;
@@ -696,6 +696,85 @@ describe('CloudPanel delayed project replacement', () => {
     expect(new URLSearchParams(window.location.search).get('project')).toBe(otherId);
   });
 
+
+  it('creates another team from the account rail and switches to it', async () => {
+    const newStudioId = '70000000-0000-4000-8000-000000000001';
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([original] as never);
+    vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
+    const listStudios = vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }] as never);
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    fireEvent.click(await screen.findByRole('button', { name: /新建团队/ }));
+    fireEvent.change(screen.getByLabelText('新团队名称'), { target: { value: '第二团队' } });
+    listStudios.mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }, { id: newStudioId, name: '第二团队', role: 'owner', displayName: '第二团队' }] as never);
+    queue({ id: newStudioId, name: '第二团队', displayName: '第二团队', role: 'owner' });
+    // 表单只有一个输入框：回车即建，不再另放「创建」钮。
+    fireEvent.submit(screen.getByRole('form', { name: '新建团队' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '第二团队' }).getAttribute('aria-pressed')).toBe('true'));
+    const post = mockFetch.mock.calls.find(call => call[1]?.method === 'POST' && String(call[1]?.body).includes('第二团队'));
+    expect(post).toBeTruthy();
+    expect(JSON.parse(String(post![1]!.body))).toMatchObject({ name: '第二团队', displayName: '第二团队' });
+  });
+
+  it('deletes the current team and falls back to the remaining one', async () => {
+    const secondStudioId = '20000000-0000-4000-8000-000000000002';
+    let studiosNow = [
+      { id: studioId, name: '工作室', role: 'owner', displayName: 'A' },
+      { id: secondStudioId, name: '第二团队', role: 'owner', displayName: 'B' },
+    ];
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([original] as never);
+    vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
+    vi.spyOn(controller, 'listStudios').mockImplementation(async () => studiosNow as never);
+    const notices = watchNotices();
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    queue({ removed: true });
+    const button = await screen.findByRole('button', { name: '删除团队工作室' });
+    // 服务端删掉后，下一次 listStudios 就不该再返回它（测试里手动摹一份真实后端的收敛）。
+    studiosNow = [studiosNow[1]];
+    fireEvent.click(button);
+    // 删除结果走面板内的 only 提示（不往画布发 notice），所以看面板文案。
+    await screen.findByText('团队「工作室」已删除。');
+    expect(screen.queryByRole('button', { name: '工作室' })).toBeNull();
+    expect(screen.getByRole('button', { name: '第二团队' }).getAttribute('aria-pressed')).toBe('true');
+    notices.stop();
+  });
+
+  it('keeps a non-empty team and explains why it cannot be deleted', async () => {
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([original] as never);
+    vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
+    vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }] as never);
+    const notices = watchNotices();
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    queueError('STUDIO_NOT_EMPTY', 409);
+    fireEvent.click(await screen.findByRole('button', { name: '删除团队工作室' }));
+    await screen.findByText('工作室中仍有项目，请先处理其中的项目后再删除。');
+    expect(screen.getByRole('button', { name: '工作室' })).toBeTruthy();
+    notices.stop();
+  });
+
+  it('renames the current team from the rail with Enter and refreshes both places', async () => {
+    queue([original]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    fireEvent.click(await screen.findByRole('button', { name: '工作室' }));
+    expect(screen.getByTitle('当前团队').textContent).toBe('工作室');
+    const input = screen.getByLabelText('团队新名称') as HTMLInputElement;
+    expect(input.value).toBe('工作室');
+    fireEvent.change(input, { target: { value: '  幕景工作室  ' } });
+    queue({ id: studioId, name: '幕景工作室', role: 'owner', displayName: 'A' });
+    // 只有一个输入框：回车即提交，不另放确认钮。
+    fireEvent.submit(input.closest('form')!);
+    expect(await screen.findByRole('button', { name: '幕景工作室' })).toBeTruthy();
+    const patch = mockFetch.mock.calls.find(call => call[1]?.method === 'PATCH' && String(call[1]?.body).includes('幕景工作室'));
+    expect(patch).toBeTruthy();
+    // 前后空白在客户端先 trim，提交给服务端的只有名字本体。
+    expect(JSON.parse(String(patch![1]!.body))).toEqual({ name: '幕景工作室' });
+    expect(screen.getByText('团队已改名为「幕景工作室」。')).toBeTruthy();
+    expect(screen.getByTitle('当前团队').textContent).toBe('幕景工作室');
+  });
 
   it('never labels a local scene preset as saved to the cloud', async () => {
     queue([other]);
@@ -840,6 +919,10 @@ it('returns to the project list when a sidebar team is clicked from 物料 or �
   expect(await screen.findByRole('region', { name: '团队' })).toBeTruthy();
   expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: '一号工作室' }));
+  // 当前团队名点一下是改名，不再当作“切回项目”：回项目走「我的项目」。
+  expect(screen.getByLabelText('团队新名称')).toBeTruthy();
+  fireEvent.keyDown(screen.getByLabelText('团队新名称'), { key: 'Escape' });
+  fireEvent.click(screen.getByRole('button', { name: '我的项目' }));
   expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
   expect(screen.getByRole('region', { name: '我的项目' }).hasAttribute('hidden')).toBe(false);
   openAccount('物料');

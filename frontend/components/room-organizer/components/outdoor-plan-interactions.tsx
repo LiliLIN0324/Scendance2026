@@ -1,25 +1,23 @@
 'use client';
 
 /**
- * 户外 2D 规划交互层 UI（H4-b）：渐进引导气泡、导出菜单、毛玻璃分享弹窗。
+ * 户外 2D 规划交互层 UI：渐进引导气泡。
  *
  * - 纯展示组件，状态逻辑全在 site-plan-guide 纯函数层（可测）。
  * - 引导气泡按每步的 anchor 指向对应区域（canvas=画布中上、left=左缘箭头指向
  *   左栏「添加物件/已放置物件」），箭头用旋转方块拼出，不遮目标。
- * - 视觉消费 outdoor-plan-tokens（幕景绿/间距/圆角），毛玻璃用 backdrop-filter。
- * - 选中态对比度：引导/菜单/弹窗的强调色统一品牌绿 + 白字（AA 级），
+ * - 视觉消费 outdoor-plan-tokens（幕景绿/间距/圆角）。
+ * - 选中态对比度：引导的强调色统一品牌绿 + 白字（AA 级），
  *   悬停加深不透明度，主按钮 autoFocus（键盘可达）。
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  EXPORT_MENU_ITEMS,
   GUIDE_STEP_CONTENT,
   completeGuideStep,
   currentGuideStep,
   dismissGuide,
   parseGuideState,
-  type ExportItemId,
   type GuideState,
   type GuideStep,
 } from '../lib/site-plan-guide';
@@ -109,110 +107,6 @@ export function GuideBubble({ step, stepIndex, totalSteps, onComplete, onDismiss
   );
 }
 
-/* ---------------- 导出菜单 ---------------- */
-
-export interface ExportMenuProps {
-  onPick?: (id: ExportItemId) => void;
-  /** H5-a：PNG/CSV 已可导出。为 true 时对应菜单项可点（否则仍是「即将上线」禁用）。 */
-  enableExports?: boolean;
-  /**
-   * 2026-11-11 交付簇挪到画布左下角后，弹层默认的「向下/右对齐」会掉出屏底——
-   * above-left 让菜单向上翻、左对齐按钮。缺省 below-right 维持原行为。
-   */
-  menuPlacement?: 'below-right' | 'above-left';
-}
-
-export function ExportMenu({ onPick, enableExports = false, variant = 'default', menuPlacement = 'below-right' }: ExportMenuProps & { variant?: 'default' | 'toolbar' | 'canvas' }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-
-  return (
-    <div ref={rootRef} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen(value => !value)}
-        {...(variant === 'toolbar'
-          ? { 'aria-label': '导出/分享', 'data-tip': '导出 / 分享' }
-          : variant === 'canvas'
-            ? {
-              'aria-label': '导出平面图',
-              'data-tip': '导出平面图',
-              style: {
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                height: 34,
-                padding: '0 14px',
-                borderRadius: 999,
-                border: '1px solid #e4e4e7',
-                background: '#ffffff',
-                color: '#141416',
-                fontSize: PLANNING_TYPOGRAPHY.panel,
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(20, 20, 22, 0.10)',
-                fontFamily: 'inherit',
-              } as const,
-            }
-            : { style: secondaryButtonStyle })}
-        aria-expanded={open}
-        aria-haspopup="menu"
-      >
-        {variant === 'toolbar'
-          ? <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>⤓</span>
-          : variant === 'canvas'
-            ? <span aria-hidden style={{ fontSize: PLANNING_TYPOGRAPHY.panel }}>导出</span>
-            : '导出/分享'}
-      </button>
-      {open && (
-        <div role="menu" aria-label="导出菜单" style={{
-          position: 'absolute',
-          ...(menuPlacement === 'above-left'
-            ? { left: 0, bottom: 'calc(100% + 6px)' }
-            : { right: 0, top: 'calc(100% + 6px)' }),
-          zIndex: 40,
-          minWidth: 220,
-          borderRadius: 14,
-          background: '#ffffff',
-          border: '1px solid #e4e4e7',
-          boxShadow: 'var(--e1)',
-          padding: PLANNING_SPACING.xs,
-          fontFamily: 'inherit',
-        }}>
-          {EXPORT_MENU_ITEMS.map(item => {
-            // 只读分享在 H4-b 即可预览毛玻璃弹窗形态；其余三项实现归 H5，如实标「即将上线」。
-            // H5-c：四项全部真导出（PNG/CSV/GeoJSON/分享）。
-            const enabled = enableExports ? true : item.id === 'share';
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="menuitem"
-                disabled={!enabled}
-                title={enabled ? '预览分享弹窗' : `${item.label}（H5 上线）`}
-                onClick={() => onPick?.(item.id)}
-                style={enabled ? menuItemEnabledStyle : menuItemStyle}
-              >
-                <span style={{ display: 'block', fontWeight: 600, fontSize: 13 }}>{item.label}</span>
-                <span style={{ display: 'block', fontSize: PLANNING_TYPOGRAPHY.row, color: '#71767e', marginTop: 2 }}>{item.hint}{enabled ? '' : ' · 即将上线'}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ---------------- 引导编排 hook（持久化注入，逻辑在纯函数层） ---------------- */
 
 export function useGuide(storageKey: string) {
@@ -270,35 +164,6 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: PLANNING_TYPOGRAPHY.panel,
   lineHeight: '20px',
   cursor: 'pointer',
-  font: 'inherit',
-};
-
-const menuItemEnabledStyle: React.CSSProperties = {
-  // 绿仅点睛：可导出项 = 绿淡底 + 绿描边 + 墨字（激活语义）。
-  display: 'block',
-  width: '100%',
-  textAlign: 'left',
-  padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-  borderRadius: 10,
-  border: '1px solid #4a7c59',
-  background: 'rgba(74, 124, 89, 0.12)',
-  color: '#141416',
-  cursor: 'pointer',
-  font: 'inherit',
-  marginBottom: PLANNING_SPACING.xs,
-};
-
-const menuItemStyle: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  textAlign: 'left',
-  padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`,
-  borderRadius: 10,
-  border: 'none',
-  background: 'transparent',
-  color: '#71767e',
-  cursor: 'not-allowed',
-  opacity: 0.75,
   font: 'inherit',
 };
 

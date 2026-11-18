@@ -21,9 +21,11 @@ import type { DisplayUnit, RoomLayout } from '../lib/types';
 export { SHARE_READ_ONLY_LINE };
 
 export interface PublishedLink {
-  /** 手机打开即可看的只读方案页。 */
+  /** 手机打开即可看的只读页（云端发布那条）。 */
   url: string;
   revision: number;
+  /** 同一版顺手生成的只读场地页（/site#s2=…）：客户拿到的是它，自带快照。 */
+  siteUrl?: string;
 }
 
 export interface ShareMenuActions {
@@ -246,6 +248,9 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     };
   }, [open]);
 
+  /** 交给客户的那条：有场地页就用场地页，没有就回云端发布链接。 */
+  const handedUrl = published?.siteUrl ?? published?.url;
+
   useEffect(() => {
     const url = tab === 'publish' ? published?.url : tab === 'share' ? reviewLink : '';
     if (!url) { setQrSvg(''); setQrOpen(false); return undefined; }
@@ -272,7 +277,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
         clearPublishedLink(projectId);
         setPublished(null);
         setQrOpen(false);
-        setNotice('这条链接已撤回。');
+        // 场地页链接自带快照，撤回只能作废云端发布记录，不能把已发出去的链接收回。
+        setNotice(stored.siteUrl ? '云端发布已撤回；已经发出去的场地页快照仍能打开。' : '这条链接已撤回。');
       }
     }).catch(() => { /* 清单暂时读不到时，仍用本机记下的链接 */ });
     return () => { live = false; };
@@ -298,8 +304,9 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       const result = await actions.onPublish();
       setPublished(result);
       writePublishedLink(projectId, result);
-      appendShareRecord(projectId, { kind: 'web', url: result.url, revision: result.revision, at: Date.now() });
-      const copied = await copyText(result.url);
+      const handed = result.siteUrl ?? result.url;
+      appendShareRecord(projectId, { kind: 'web', url: handed, revision: result.revision, at: Date.now() });
+      const copied = await copyText(handed);
       setNotice(copied ? '' : '链接已发布。复制没成功，请点「复制」。');
       setQrOpen(false);
     } catch (error) {
@@ -332,8 +339,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   };
 
   const copyPublished = async () => {
-    if (!published) return;
-    const copied = await copyText(published.url);
+    if (!handedUrl) return;
+    const copied = await copyText(handedUrl);
     setNotice(copied ? '' : '复制没成功，请再试一次。');
   };
 
@@ -437,7 +444,11 @@ function readPublishedLink(projectId?: string): PublishedLink | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PublishedLink>;
     return typeof parsed.url === 'string' && parsed.url && typeof parsed.revision === 'number'
-      ? { url: parsed.url, revision: parsed.revision }
+      ? {
+        url: parsed.url,
+        revision: parsed.revision,
+        ...(typeof parsed.siteUrl === 'string' && parsed.siteUrl ? { siteUrl: parsed.siteUrl } : {}),
+      }
       : null;
   } catch { return null; }
 }

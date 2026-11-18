@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { buildExtrudedWallGeometry } from '../room-organizer/three/interior-walls';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createCachedGlbModel, disposeOwnedModel, ensureGlbAsset } from '../room-organizer/three/glb-assets';
 import { applyRendererLook, DEFAULT_EVENT_LIGHTING, makeBackdropTexture, resolveLook } from '../room-organizer/three/render-look';
@@ -39,29 +38,6 @@ export function createPreviewObject(object: SceneObject): THREE.Group {
   group.position.set(object.position.x, object.elevation ?? 0, object.position.z);
   // Backend positive angles rotate x towards +z; Three.js Y rotation has the opposite sign.
   group.rotation.y = -object.rotation * Math.PI / 180;
-  return group;
-}
-
-export function createPreviewStructure(scene: Scene): THREE.Group {
-  const group = new THREE.Group();
-  if (scene.schemaVersion !== 2) return group;
-  for (const wall of scene.structure.walls) {
-    const length = Math.hypot(wall.end.x - wall.start.x, wall.end.z - wall.start.z);
-    const openings = scene.structure.openings.filter(opening => opening.wallId === wall.id).map(opening => ({
-      centerAlongWall: opening.offset + opening.width / 2 - length / 2,
-      bottomFromFloor: opening.sillHeight, width: opening.width, height: opening.height,
-    }));
-    const mesh = new THREE.Mesh(buildExtrudedWallGeometry(THREE, length, wall.height, wall.thickness, openings), new THREE.MeshStandardMaterial({ color: scene.finishes?.wallColors?.[wall.id] ?? '#e0e0e0', roughness: .85 }));
-    mesh.position.set((wall.start.x + wall.end.x) / 2, 0, (wall.start.z + wall.end.z) / 2);
-    mesh.rotation.y = -Math.atan2(wall.end.z - wall.start.z, wall.end.x - wall.start.x);
-    group.add(mesh);
-  }
-  for (const column of scene.structure.columns) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(column.size.width, column.size.height, column.size.depth), new THREE.MeshStandardMaterial({ color: '#c9ccc6', roughness: .85 }));
-    mesh.position.set(column.position.x, column.size.height / 2, column.position.z);
-    mesh.rotation.y = -column.rotation * Math.PI / 180;
-    group.add(mesh);
-  }
   return group;
 }
 
@@ -118,16 +94,8 @@ export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
     envGenerator.dispose();
     world.environment = envTexture;
     world.environmentIntensity = look.environment;
-    const points = scene.venue.polygon ?? [{ x: 0, z: 0 }, { x: width, z: 0 }, { x: width, z: depth }, { x: 0, z: depth }];
-    const floor = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape(points.map(point => new THREE.Vector2(point.x, -point.z)))), new THREE.MeshStandardMaterial({ color: scene.schemaVersion === 2 ? scene.finishes?.floorColor ?? '#deded5' : '#deded5', side: THREE.DoubleSide }));
-    floor.rotation.x = -Math.PI / 2; floor.position.y = -.005; world.add(floor);
-    const outline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points.map(point => new THREE.Vector3(point.x, .002, point.z))), new THREE.LineBasicMaterial({ color: '#84938b' }));
-    world.add(outline);
-    for (const entrance of scene.venue.entrances) {
-      const marker = new THREE.Mesh(new THREE.CylinderGeometry(entrance.width / 2, entrance.width / 2, .018, 24), new THREE.MeshStandardMaterial({ color: '#6f8f52' }));
-      marker.position.set(entrance.position.x, .009, entrance.position.z); world.add(marker);
-    }
-    world.add(createPreviewStructure(scene));
+    // 2026-11-18：不再画旧室内户型的矩形地面、轮廓线、门楣标记与墙体/柱子。
+    // 场地改由地图底图（地图场地主导）承担，分享页只负责把物件放到真实场地上。
     const assets = scene.objects.filter(object => object.materialId === 'asset');
     setPendingAssets(assets.length);
     for (const object of scene.objects) {
@@ -166,7 +134,7 @@ export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
     resize(); changeView.current(scene.camera);
     return () => {
       disposed = true; changeView.current = () => {}; observer.disconnect(); controls.dispose();
-      disposeOwnedModel(world); outline.geometry.dispose(); (outline.material as THREE.Material).dispose();
+      disposeOwnedModel(world);
       world.background = null; backdrop.dispose(); world.environment = null; envTexture.dispose();
       renderer.dispose(); renderer.domElement.remove();
     };

@@ -2504,6 +2504,30 @@ export default function OutdoorPlan3D({
             target: controls ? controls.target.toArray() : null,
             camPos: camera.position.toArray(),
           },
+          // 体检只读快照：真机上“0% 可达”到底是因为边界没就绪还是坐标不对，靠这几个数判。
+          audit: walkAudit
+            ? {
+                areaM2: walkAudit.areaM2,
+                ratio: walkAudit.reachableRatio,
+                unreachable: walkAudit.unreachableFacilities.length,
+                boundaryPoints: Array.isArray(plan.boundary) ? plan.boundary.length : 0,
+                bbox: (() => {
+                  const points = Array.isArray(plan.boundary) ? plan.boundary : [];
+                  if (points.length === 0) return null;
+                  let minX = Infinity;
+                  let minY = Infinity;
+                  let maxX = -Infinity;
+                  let maxY = -Infinity;
+                  for (const point of points) {
+                    minX = Math.min(minX, point.x);
+                    maxX = Math.max(maxX, point.x);
+                    minY = Math.min(minY, point.y);
+                    maxY = Math.max(maxY, point.y);
+                  }
+                  return { minX, minY, maxX, maxY };
+                })(),
+              }
+            : null,
           screenToPlan: (clientX: number, clientY: number): { pt: PlanPoint; px: { x: number; y: number } } | null => {
             const hit = eventToPlanHit({ clientX, clientY } as MouseEvent);
             return hit ? { pt: hit.pt, px: hit.px } : null;
@@ -2945,7 +2969,7 @@ export default function OutdoorPlan3D({
           )}
         </div>
       )}
-      {walkEnabled && walkAudit && walkAudit.areaM2 >= 20 && (
+      {walkEnabled && walkAudit && walkAudit.reachableRatio > 0 && (
         <div
           data-testid="outdoor-walk-audit"
           style={{

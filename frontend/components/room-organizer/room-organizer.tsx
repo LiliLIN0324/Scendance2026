@@ -18,6 +18,7 @@ import { createBackendSession, type BackendSession } from '@/lib/backend-session
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
+import { siteShareLink } from '@/lib/site-share';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { buildGenerationReport } from '@/lib/generation-report';
 import { generationMaterialDiff } from './lib/generation-material-diff';
@@ -1056,7 +1057,14 @@ useEffect(() => {
       const publication = publicationSchema.parse(await controller.businessRequest<unknown>(
         `/projects/${encodeURIComponent(projectId)}/publish`, 'POST', { expectedRevision: snapshot.revision },
       ));
-      return { url: publication.url, revision: publication.revision };
+      // 同一版顺手拼一条只读场地页：客户点/扫到的是“地在哪、怎么划的”，不用登录。
+      // 云端发布照常走（版本记录、撤回都在那边）；场地页自带快照，缺锚点或超体积就退回 cloud 链接。
+      const siteUrl = await siteShareLink(
+        outdoorFullPlanRef.current,
+        layoutStore.getState().layout.name?.trim() || snapshot.project?.name?.trim() || '未命名场地',
+        `${window.location.origin}/site`,
+      );
+      return { url: publication.url, revision: publication.revision, ...(siteUrl ? { siteUrl } : {}) };
     } catch (error) {
       throw new Error(shareErrorMessage(error));
     }

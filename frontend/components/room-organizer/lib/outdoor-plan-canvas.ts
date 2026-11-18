@@ -19,6 +19,13 @@ import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_CONFLICT_COLORS, PLANNING_LAYER_
 import { axisToScreen, screenToAxis } from './outdoor-canvas-rotation';
 import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { planZoneFillAlpha, defaultZoneColor } from './site-plan-editing';
+import {
+  RING_SCALE_HANDLE_OFFSET_PX,
+  RING_SCALE_HANDLE_SIZE_PX,
+  ringBounds,
+  ringBoundsCenter,
+  ringScaleCorners,
+} from './plan-ring-scale';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { formatAreaM2, formatLengthM, measureDraftReadout, measureValue, type PlanMeasureKind } from './site-plan-measure';
 import { metersPerDegreeLng } from './tdt-probe-scale';
@@ -625,6 +632,81 @@ export function drawBoundaryEditHints(
     ctx.stroke();
     ctx.restore();
   }
+}
+
+/**
+ * 分区 / 用地红线的整体缩放柄屏幕坐标（2026-11-18 用户指令）。
+ *
+ * 四个柄落在外接矩形四角**沿对角往外** `RING_SCALE_HANDLE_OFFSET_PX` 的位置：
+ * 矩形分区的角顶点正压在外接矩形角上，柄如果不外移，就会和「拖顶点改形」抢同一块热区，
+ * 用户永远点不到缩放。外移方向按「从外接矩形中心指向那个角」算屏幕向量，
+ * 所以罗盘转向（viewport.bearing）后柄仍朝外侧，不会跑到框里去。
+ */
+export function ringScaleHandlePoints(
+  ring: readonly PlanPoint[],
+  viewport: PlanViewport,
+  opts: { offsetPx?: number } = {},
+): { x: number; y: number }[] {
+  const bounds = ringBounds(ring);
+  if (!bounds) return [];
+  const offset = opts.offsetPx ?? RING_SCALE_HANDLE_OFFSET_PX;
+  const center = planPointToPixel(ringBoundsCenter(bounds), viewport);
+  return ringScaleCorners(bounds).map(corner => {
+    const px = planPointToPixel(corner, viewport);
+    const dx = px.x - center.x;
+    const dy = px.y - center.y;
+    const len = Math.hypot(dx, dy);
+    // 退化成一条线（高或宽为 0）时没有外侧方向，就贴着角画；命中照旧可用。
+    if (len < 1e-6) return { x: px.x, y: px.y };
+    return { x: px.x + (dx / len) * offset, y: px.y + (dy / len) * offset };
+  });
+}
+
+/**
+ * 画四个缩放角柄：白底 + 描边色方块（拖动中/悬停的那一枚改实心，指明“现在动的是这个角”）。
+ * 与顶点手柄（分区圆点 / 红线方点）刻意不同：方块略大、贴在外侧，一眼分得出「整体缩放」和「单点改形」。
+ */
+export function drawRingScaleHandles(
+  c: PlanCanvasContext,
+  ring: readonly PlanPoint[],
+  opts: {
+    color: string;
+    /** 正在拖的角（0=NW 1=NE 2=SE 3=SW）：实心 + 加粗。 */
+    activeCorner?: number | null;
+    /** 悬停的角：实心预览，松手前就告诉用户这一角能缩。 */
+    hoverCorner?: number | null;
+  },
+): void {
+  const points = ringScaleHandlePoints(ring, c.viewport);
+  if (points.length !== 4) return;
+  const { ctx } = c;
+  const bounds = ringBounds(ring);
+  if (!bounds) return;
+  const corners = ringScaleCorners(bounds);
+  const half = RING_SCALE_HANDLE_SIZE_PX / 2;
+  ctx.save();
+  // 角柄与外接矩形角之间的短引线：说明「这只柄管的是整块形状」，不是又一个顶点。
+  ctx.strokeStyle = hexWithAlpha(opts.color, 0.55);
+  ctx.lineWidth = 1;
+  points.forEach((pt, index) => {
+    const cornerPx = planPointToPixel(corners[index]!, c.viewport);
+    ctx.beginPath();
+    ctx.moveTo(cornerPx.x, cornerPx.y);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+  });
+  points.forEach((pt, index) => {
+    const active = opts.activeCorner === index;
+    const hover = opts.hoverCorner === index;
+    ctx.fillStyle = active || hover ? opts.color : 'rgba(255, 255, 255, 0.96)';
+    ctx.strokeStyle = opts.color;
+    ctx.lineWidth = active ? 2.4 : 1.8;
+    ctx.beginPath();
+    ctx.rect(pt.x - half, pt.y - half, RING_SCALE_HANDLE_SIZE_PX, RING_SCALE_HANDLE_SIZE_PX);
+    ctx.fill();
+    ctx.stroke();
+  });
+  ctx.restore();
 }
 
 /** 动线分叉的锚点：按住 Alt 悬停在已有点上时，从它长出新动线。 */

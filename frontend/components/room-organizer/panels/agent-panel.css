@@ -212,17 +212,9 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-agent-panel .ap-status-card .btn-primary:disabled { background: var(--wk-plane); color: var(--wk-ink-faint); cursor: not-allowed; }
 /* 2026-11-16 用户指令：place 阶段两个入口重新设计——「搜索地点」改成紧凑胶囊（不再通栏墨条，
    宽度跟内容走），「在地图上手画活动范围」补画笔图标、同高同圆角；两者都是「可点的做法」，
-   不是一步提交，次要动作用浅底 + 发丝边，而不是一行裸文字。 */
-.sc-agent-panel .ap-place-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.sc-agent-panel .ap-place-action { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: var(--r-sm); font-size: var(--fs-cap); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
-.sc-agent-panel .ap-place-action .sc-material-symbol { color: inherit; }
-.sc-agent-panel .ap-place-action.is-search { border: 0; background: var(--ink); color: #fff; }
-.sc-agent-panel .ap-place-action.is-search:hover:not(:disabled) { background: #2A2C31; }
-.sc-agent-panel .ap-place-action.is-search:active:not(:disabled) { background: #3D3F45; }
-.sc-agent-panel .ap-place-action.is-draw { border: 1px solid var(--wk-hair); background: var(--wk-paper); color: var(--wk-ink-soft); }
-.sc-agent-panel .ap-place-action.is-draw:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane-deep); color: var(--wk-ink); }
-.sc-agent-panel .ap-place-action:disabled { opacity: .55; cursor: not-allowed; }
-.sc-agent-panel .ap-place-action:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
+   不是一步提交，次要动作用浅底 + 发丝边，而不是一行裸文字。
+   2026-11-18 用户指令：place 两颗入口与 scope 视觉一致，并入 ap-card-actions 的
+   btn-primary/btn-outline 一排；上面的独立胶囊样式随之删除（组件已不再挂这些类）。 */
 /* 2026-11-16 用户：「这个确认的卡片做的一坨」——方案卡重排。
    标题 → 说明条目（带信息图标、11px 弱化）→ 一颗满宽主动作（带勾）→ 一行紧凑次要动作（重画/换排法/撤回）。
    原来的裸文字按钮、重复的「取消本次预览」全部收进这一套里。 */
@@ -1109,8 +1101,23 @@ button.ap-ghost {
 .ap-card-actions > .btn-primary:disabled,
 .ap-card-actions > .btn-outline:disabled,
 .ap-card-actions > .ap-quiet-action:disabled { opacity: .55; cursor: not-allowed; }
-.ap-card-guide { display: grid; gap: 8px; }
-.ap-card-guide .ap-access-question { font-size: var(--fs-p2); line-height: 1.55; }
+/* 2026-11-18 用户指令「随画随出卡」：手画分区时任务卡下方出分区清单卡，每分区一张子卡；
+   名称/用途输入框 + 室内外两个 chip + 删除。原内嵌引导 .ap-card-guide 随 S3 拆卡退役删除。 */
+.ap-zones-list .ap-card-head span { color: var(--wk-muted); font-size: var(--fs-cap); }
+.ap-zones-list { display: grid; gap: 8px; }
+.ap-zone-card { border: 1px solid var(--wk-hair); border-radius: 10px; padding: 8px 10px; display: grid; gap: 6px; background: #fff; }
+.ap-zone-card-row { display: flex; gap: 6px; align-items: center; }
+.ap-zone-card-row input { flex: 1 1 auto; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p2); }
+.ap-zone-card-row input:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
+.ap-zone-card-delete { flex: none; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font: inherit; font-size: var(--fs-cap); height: 30px; padding: 0 10px; cursor: pointer; }
+.ap-zone-card-delete:hover:not(:disabled) { color: var(--wk-ink); border-color: var(--faint); }
+.ap-zone-card-env { flex: none; display: flex; gap: 4px; }
+.ap-zone-card-env button { border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font: inherit; font-size: var(--fs-cap); height: 30px; padding: 0 10px; cursor: pointer; }
+.ap-zone-card-env button.is-on { background: var(--wk-green); border-color: var(--wk-green); color: #fff; }
+.ap-zone-card-env button:disabled { opacity: .55; cursor: not-allowed; }
+/* 2026-11-18 用户指令：缺物料的导入/生成两条路挪成可叉掉的独立卡。 */
+.ap-materials-aux .ap-task-dismiss { font-size: var(--fs-p2); }
+.ap-glb-import { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; opacity: .8; font-size: var(--fs-cap); color: var(--wk-ink-soft); position: relative; }
 .ap-outdoor-reply-wrap { gap: 8px; }
 .ap-outdoor-reply-card { width: 100%; border-inline-start: 3px solid var(--wk-green); }
 .ap-outdoor-reply-title { display: flex; align-items: center; gap: 6px; color: var(--wk-green); font-weight: 600; }

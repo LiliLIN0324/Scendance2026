@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { productionReferenceKey as objectKey } from '@/lib/production-plan';
 import { registerSourceFlush } from '@/lib/source-storage';
-import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
 import { handoffLimits } from '../../../../supabase/functions/_shared/delivery-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationPhases, eventOperationsLimits, eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
-import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
+import { createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { CreativeBrief } from '../lib/creative-brief';
@@ -254,12 +253,6 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       }
     } catch { setError(inputError('title')); }
   }
-  function loadRehearsal(): void {
-    if (disabled || operations.tasks.length) return;
-    const example = eventOperationsSchema.safeParse(rehearsalExample);
-    if (!example.success) { setError('演练安排暂不能读取，请稍后重试。'); return; }
-    if (update(copyRehearsalOperations(example.data))) { setNotice('已载入6项30人共创示例任务，需求和场景保持原样。请按当前活动调整。'); setDeleted(null); }
-  }
   const brief = briefState?.ready && !briefState.error && briefState.hasSavedBrief ? briefState.brief : null;
   const missingOwners = operations.tasks.filter(task => !task.ownerName.trim()).length;
   const missingPlans = operations.tasks.filter(task => !task.plannedStartAt || !task.plannedEndAt).length;
@@ -318,7 +311,6 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       </fieldset>
       <div className="sc-handoff-actions"><button className="sc-button" type="button" disabled={!title} onClick={() => { setTitle(''); setPhase('preparation'); setError(''); setNotice(''); }}>放弃新增任务</button></div>
     </form></details>
-    {!operations.tasks.length && <div className="sc-operation-example"><p className="sc-note">30人共创示例，共6项任务；载入后请按当前活动调整。需求和场景保持原样。</p><button type="button" className="sc-button" disabled={disabled} onClick={loadRehearsal}>载入演练任务示例</button></div>}
     {operations.tasks.length >= eventOperationsLimits.tasks && <p className="sc-note">已达到 {eventOperationsLimits.tasks} 项任务，请整理已有安排。</p>}
     {deleted && <button type="button" className="sc-button" disabled={disabled || operations.tasks.some(task => task.id === deleted.task.id)} onClick={() => {
       const tasks = [...operations.tasks]; tasks.splice(Math.min(deleted.index, tasks.length), 0, deleted.task);

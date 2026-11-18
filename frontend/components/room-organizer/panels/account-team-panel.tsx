@@ -8,7 +8,7 @@ import { avatarToneStyle, avatarTonesFor, useAvatarPresetsFor } from './account-
 import { InfoTip } from './info-tip';
 
 /** 与左轨成员位同一份取数：面板改完成员，左轨跟着换。 */
-export function AccountTeamPanel({ controller }: { controller: BackendSession }): JSX.Element {
+export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: BackendSession; /** 改名后把新名字交给上层（左栏 / 项目页标题同属同一份 studios 状态）。 */ onStudioRenamed?(studioId: string, name: string): void }): JSX.Element {
   const team = useTeam(controller);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -16,6 +16,9 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
   const [noticeError, setNoticeError] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removing, setRemoving] = useState('');
+  // 2026-11-18：团队名从“只能写死在上游”改成面板顶部可改。
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
 
   const isOwner = team.members.some(member => member.userId === team.userId && member.role === 'owner');
   const tones = avatarTonesFor(team.members);
@@ -40,12 +43,33 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
     }
   }
 
+  /**
+   * 2026-11-18：顶部团队名点一下变输入框，回车走 PATCH /studios/:id（api.ts 只收 {name}，trim 后 1–120 字）。
+   * 改完交给 onStudioRenamed，再喊一次 notifyTeamChanged()，左轨和这张名单读的是同一份。
+   */
+  async function commitRename(): Promise<void> {
+    const name = draftName.trim();
+    if (!name || name === team.teamName) { setRenaming(false); setDraftName(''); return; }
+    const renamed = await controller.businessRequest<{ id: string; name: string }>(studioPath(), 'PATCH', { name });
+    setRenaming(false); setDraftName('');
+    onStudioRenamed?.(renamed.id, renamed.name);
+  }
+
   if (!team.userId) return <TeamFrame notice="登录后才能看到团队成员。" busy={false}><p className="sc-account-empty">在账户中心登录后，这里会显示你所在团队的成员。</p></TeamFrame>;
   if (team.error) return <TeamFrame notice={team.error} alert busy={busy} onRefresh={team.refresh}><p className="sc-account-empty">{team.error}</p></TeamFrame>;
   if (team.loading && !team.members.length) return <TeamFrame notice="" busy><p className="sc-account-empty" role="status">正在加载成员…</p></TeamFrame>;
-  if (!team.studioId) return <TeamFrame notice="" busy><p className="sc-account-empty">你还没有团队。在「所有文件」里新建一个工作室，成员就会出现在这里和左轨上。</p></TeamFrame>;
+  if (!team.studioId) return <TeamFrame notice="" busy><p className="sc-account-empty">你还没有团队。在左栏点「＋ 新建团队」建一个，成员就会出现在这里和左轨上。</p></TeamFrame>;
 
-  return <TeamFrame notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} onInvite={() => { if (!isOwner) { say('只有负责人可以邀请成员。', true); return; } setInviteOpen(open => !open); }} inviteOpen={inviteOpen}>
+  return <TeamFrame title={!isOwner
+    ? <h3>{team.teamName}</h3>
+    : renaming
+      ? <form className="sc-settings-rename" aria-label={`重命名团队${team.teamName}`} onSubmit={event => { event.preventDefault(); void run(commitRename, '团队名已更新。'); }}>
+        <input aria-label="团队新名称" type="text" maxLength={120} value={draftName} autoFocus
+          onChange={event => setDraftName(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Escape') { setRenaming(false); setDraftName(''); } }}/>
+      </form>
+      : <button type="button" className="sc-settings-title-name" aria-label={`重命名团队${team.teamName}`} title="点一下改名" onClick={() => { setDraftName(team.teamName); setRenaming(true); }}>{team.teamName}</button>}
+    notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} onInvite={() => { if (!isOwner) { say('只有负责人可以邀请成员。', true); return; } setInviteOpen(open => !open); }} inviteOpen={inviteOpen}>
     <div className="sc-settings-columns" aria-hidden="true"><span>团队名称</span><span>角色</span></div>
     {team.members.map(member => { const tone = tones.get(member.userId); const preset = presets.get(member.userId); return <div className="sc-settings-row" key={member.userId}>
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">
@@ -83,18 +107,18 @@ export function AccountTeamPanel({ controller }: { controller: BackendSession })
   </TeamFrame>;
 }
 
-function TeamFrame({ notice, alert = false, busy, onRefresh, onInvite, inviteOpen, children }: {
-  notice: string; alert?: boolean; busy: boolean; onRefresh?(): void; onInvite?(): void; inviteOpen?: boolean; children: ReactNode;
+function TeamFrame({ title, notice, alert = false, busy, onRefresh, onInvite, inviteOpen, children }: {
+  title?: ReactNode; notice: string; alert?: boolean; busy: boolean; onRefresh?(): void; onInvite?(): void; inviteOpen?: boolean; children: ReactNode;
 }): JSX.Element {
   return <section className="sc-settings" aria-label="团队">
     <header className="sc-settings-head">
-      <div className="sc-settings-title"><h3>成员</h3><InfoTip key="team" label="成员说明"><strong>用邮箱加人</strong><span>填写对方已注册的登录邮箱即可；对方需先有账号。左轨头像与这份名单同源。</span></InfoTip></div>
+      <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>团队名点一下就能改</strong><span>用邮箱加人：填写对方已注册的登录邮箱即可，对方需先有账号。左轨头像与这份名单同源。</span></InfoTip></div>
       <div className="sc-settings-tools">
         {onRefresh && <button className="sc-settings-icon-button" type="button" aria-label="刷新成员" title="刷新" disabled={busy} onClick={onRefresh}><RefreshCw size={15} aria-hidden="true"/></button>}
         {onInvite && <button className="sc-settings-outline" type="button" aria-expanded={inviteOpen} onClick={onInvite}>邀请</button>}
       </div>
     </header>
-    <div className="sc-settings-group">{children}</div>
+    <div className="sc-settings-group">{title ? <h4 className="sc-settings-group-title">成员</h4> : null}{children}</div>
     {notice && <p className={alert ? 'sc-account-error' : 'sc-account-footnote'} role={alert ? 'alert' : 'status'}>{notice}</p>}
   </section>;
 }

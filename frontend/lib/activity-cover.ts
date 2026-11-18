@@ -1,4 +1,4 @@
-import { listSourceRecords, updateSourceForm } from './source-storage';
+import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-storage';
 import { captureStageCover } from './stage-cover';
 
 /** Covers live beside the archives, never inside the backup JSON that users export. */
@@ -25,6 +25,11 @@ export async function readActivityCovers(): Promise<Map<string, string>> {
     if (cover) covers.set(record.key[1], cover.dataUrl);
   }
   return covers;
+}
+
+/** 2026-11-18 项目卡预览：面板只认一张卡时就按 key 读，不必把整库封面拉回来。 */
+export async function readActivityCover(projectId: string): Promise<string | null> {
+  try { return validCover(await readSourceRecord<unknown>(coverKey(projectId)))?.dataUrl ?? null; } catch { return null; }
 }
 
 /** A cover is decoration: a failed write must never touch the archive or the canvas. */

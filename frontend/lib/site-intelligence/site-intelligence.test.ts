@@ -16,6 +16,30 @@ describe('site intelligence coordinates and structured evidence', () => {
   });
   it('does not invent multipolygon outlines, open building rings, missing coordinates or indoor routes', () => { const r = parseOverpassEvidence({ complete: true, elements: [{ type: 'relation', id: 1 }, { type: 'way', id: 2, tags: { building: 'yes' }, geometry: [osmPoint(0, 0), osmPoint(5, 0), osmPoint(0, 5)] }, { type: 'node', id: 3, tags: { entrance: 'yes' } }] }, anchor, 100); expect(r.features).toEqual([]); expect(r.complete).toBe(false); expect(r.warnings.length).toBeGreaterThan(0); });
   it('bounds spatial scope and refuses huge unsupported geometry rather than altering footprint', () => { const r = parseOverpassEvidence({ complete: true, elements: [{ type: 'node', id: 1, tags: { entrance: 'yes' }, ...osmPoint(4000, 0) }, { type: 'way', id: 2, tags: { highway: 'footway' }, geometry: Array.from({ length: 300 }, () => osmPoint(0, 0)) }] }, anchor, 50000); expect(r.features).toEqual([]); expect(r.complete).toBe(false); });
+  // docs/47 A1：停车场/水面/河道/广场/公园都要进结构化证据。
+  // 修前红：TAGS 不含 'amenity'、分类链不认 amenity=parking——停车场整条被丢，A2 分级无停车场可标 info。
+  it('A1 证据集扩展：停车场/水面/河岸/广场/公园分类进证据，amenity 标签存活', () => {
+    const ring = (w: number) => [...square(0, 0, w).points, { x: 0, y: 0 }].map(p => osmPoint(p.x, p.y));
+    const r = parseOverpassEvidence({ complete: true, elements: [
+      { type: 'way', id: 11, tags: { amenity: 'parking', name: '湖滨停车场' }, geometry: ring(10) },
+      { type: 'way', id: 12, tags: { natural: 'water', name: '西湖' }, geometry: ring(30) },
+      { type: 'way', id: 13, tags: { waterway: 'riverbank' }, geometry: ring(5) },
+      { type: 'way', id: 14, tags: { place: 'square', name: '湖滨广场' }, geometry: ring(8) },
+      { type: 'way', id: 15, tags: { leisure: 'garden', name: '湖滨公园' }, geometry: ring(6) },
+    ] }, anchor, 100);
+    expect(r.complete).toBe(true);
+    const byId = Object.fromEntries(r.features.map(f => [f.id, f]));
+    const parking = byId['osm:way/11'];
+    expect(parking?.kind).toBe('open-space');
+    expect(parking?.tags.amenity).toBe('parking');
+    expect(parking?.geometry.type).toBe('polygon');
+    expect(byId['osm:way/12']?.kind).toBe('water');
+    expect(byId['osm:way/12']?.geometry.type).toBe('polygon');
+    expect(byId['osm:way/13']?.kind).toBe('water');
+    expect(byId['osm:way/13']?.geometry.type).toBe('polygon');
+    expect(byId['osm:way/14']?.kind).toBe('open-space');
+    expect(byId['osm:way/15']?.kind).toBe('open-space');
+  });
 });
 describe('joint plan/map snapshot and relations', () => {
   it('maps plan zones/facility footprints and reports doorway, route and barrier conflicts', () => { const p = plan(); const s = buildSiteSnapshot({ projectId: 'p', geometryRevision: 1, plan: p, mapScope: { anchor, radiusM: 100, crs: 'gcj-02' }, mapFeatures: [map('entrance', 'osm:node/2', { type: 'point', points: [{ x: 5, y: 0 }] }), map('building', 'osm:way/1', square(0, 0, 10)), map('barrier', 'osm:way/3', { type: 'line', points: [{ x: 5, y: -5 }, { x: 5, y: 5 }] })] }); expect(s.features.some(f => f.kind === 'zone')).toBe(true); expect(s.relations.map(r => r.type)).toEqual(expect.arrayContaining(['entrance-blocked', 'route-blocked', 'barrier-conflict', 'contains'])); expect(s.coverage.unknowns.join(' ')).toContain('Indoor'); expect(s.confirmedIds).toEqual([]); });
