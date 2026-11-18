@@ -121,11 +121,19 @@ function stallLayoutLabel(layout: SceneDemand['stallLayout']): string {
  * 把一句话变成待确认的设施列表。
  * 失败只返回说明，不猜一套布局。
  */
+export interface ArrangeSpacingDefaults {
+  /** 句子没写通道净宽时，摊位带用这个米数。 */
+  aisleClearM?: number;
+  /** 摊位沿通道的间距（米）。 */
+  boothSpacingM?: number;
+}
+
 export function buildArrangePreview(
   text: string,
   source: ArrangePreviewSource,
   catalogue: readonly ArrangeCatalogueItem[],
   ids: () => string = () => crypto.randomUUID(),
+  defaults?: ArrangeSpacingDefaults,
 ): ArrangePreviewResult {
   const scene = parseSceneDemand(text);
   const suite = scene ? null : parseSuiteDemand(text);
@@ -187,7 +195,8 @@ export function buildArrangePreview(
       count: scene.count,
       stallWidth: stall.width,
       stallDepth: stall.depth,
-      ...(scene.aisleM !== null ? { aisleM: scene.aisleM } : {}),
+      ...(scene.aisleM !== null ? { aisleM: scene.aisleM } : defaults?.aisleClearM !== undefined ? { aisleM: defaults.aisleClearM } : {}),
+      ...(defaults?.boothSpacingM !== undefined ? { gap: defaults.boothSpacingM } : {}),
       ...(scene.stallLayout ? { layout: scene.stallLayout } : {}),
       ...(blocked.length > 0 ? { blocked } : {}),
     });

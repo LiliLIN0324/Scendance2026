@@ -208,12 +208,13 @@ function renderGrid(layout: RoomLayout, margin: number, scale: number, theme: Sv
   const bottom = margin + layout.height * scale;
   const left = margin;
   const right = margin + layout.width * scale;
-  for (const wx of gridLinePositions(layout.width)) {
+  const gridSize = layout.planSettings?.gridSizeM;
+  for (const wx of gridLinePositions(layout.width, gridSize)) {
     if (!isMetreLine(wx)) continue;
     const sx = fmt(margin + (wx + layout.width / 2) * scale);
     segments.push(`M ${sx} ${fmt(top)} V ${fmt(bottom)}`);
   }
-  for (const wz of gridLinePositions(layout.height)) {
+  for (const wz of gridLinePositions(layout.height, gridSize)) {
     if (!isMetreLine(wz)) continue;
     const sy = fmt(margin + (wz + layout.height / 2) * scale);
     segments.push(`M ${fmt(left)} ${sy} H ${fmt(right)}`);

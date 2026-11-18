@@ -111,6 +111,21 @@ describe('落位预览', () => {
     expect(result.facilities.every(item => planFacilitySchema.safeParse(item).success)).toBe(true);
   });
 
+  it('句子没写通道时，用方案里的净宽和摊位间距', () => {
+    const custom = buildArrangePreview('8 个摊位', source(), catalogue, ids, { aisleClearM: 3.2, boothSpacingM: 1.2 });
+    const builtin = buildArrangePreview('8 个摊位', source(), catalogue, ids);
+    expect(custom.ok && builtin.ok).toBe(true);
+    if (!custom.ok || !builtin.ok) return;
+    const gap = (items: typeof custom.facilities) => {
+      const left = items.filter(item => item.rotationDeg === 90).map(item => item.position.x + item.size.depth / 2);
+      const right = items.filter(item => item.rotationDeg === 270).map(item => item.position.x - item.size.depth / 2);
+      return Math.min(...right) - Math.max(...left);
+    };
+    expect(gap(custom.facilities)).toBeCloseTo(3.2);
+    expect(gap(builtin.facilities)).toBeCloseTo(2.4);
+    expect(custom.facilities[1]!.position.y - custom.facilities[0]!.position.y).toBeCloseTo(2 + 1.2);
+  });
+
   it('没边界时说明原因，不编一套坐标', () => {
     const result = buildArrangePreview('8 个摊位，留 2.4 米通道', source({ boundary: [] }), catalogue, ids);
     expect(result).toEqual({ ok: false, message: '先画场地边界，再排场景。' });

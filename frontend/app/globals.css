@@ -1308,7 +1308,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
-/* Bingo D4：28px 槽。未选中是开口环；选中是实心圆盘加纸色孔。不铺 warn/err 大圆，也不再叠角标。 */
+/* Bingo D4：28px 槽里的状态圈。选中不铺实心圆盘，开口、警示珠和对勾保持可见。不铺 warn/err 大圆，也不再叠角标。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
   display: grid; place-items: center; width: 28px; height: 28px; flex: none;
   box-sizing: border-box; position: relative;
@@ -1316,6 +1316,9 @@ body {
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
   display: block; width: 28px; height: 28px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-bingo-mark [data-ring] { transform: none; }
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > svg.sc-rail-hall,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark svg.sc-rail-hall {
@@ -1598,10 +1601,9 @@ body.sc-panel-dragging * {
   .sc-left-stack-splitter { display: none; }
 }
 /* 方案会话不再常驻左栏；History overlay 在Bingo面板内（session-history-panel + agent-panel.css）。
-   室内 Viewport 的 .sc-scene-viewport 已退役为 visibility:hidden / pointer-events:none，
-   执行资料卡仍在它里面。visibility 会继承，不在这里写回 visible 就看不见、也点不到。
-   户外 3D 接管自己写了 visibility:visible（z-index 29）；资料卡要盖住它（32），
-   仍低于地图选址与场地浮层（agent-panel.css 里为 45）。 */
+   执行资料已离开画布，挂在左栏 .sc-data-host。这里的 .sc-canvas-share 只留给选中物料和场地观感。
+   室内 Viewport 退役为 visibility:hidden，visibility 会继承；这两张卡若落回隐藏容器，
+   不写回 visible 就看不见、也点不到。户外 3D 接管自己写了 visibility:visible（z-index 29）。 */
 .sc-canvas-share {
   position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 32;
   visibility: visible; pointer-events: auto;
@@ -1646,8 +1648,13 @@ body.sc-panel-dragging * {
   color: var(--sc-accent-ink); font-size: var(--sc-type-meta, 12px); font-weight: 600;
   pointer-events: none; z-index: 5;
 }
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.has-business:not(.is-collapsed) {
+  visibility: visible; pointer-events: auto;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .sc-data-host {
+  position: relative; z-index: 1;
   border: 0; border-radius: 0; background: transparent;
+  overflow: auto; visibility: visible; pointer-events: auto;
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer .cr-workspace-content { background: var(--wk-paper); }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-drawer.sc-float-layer.is-collapsed {
@@ -2523,7 +2530,7 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
    视觉语言（workbench-shelf.css 同源参数）：透明底、hairline 下边线、激活墨字 + 2px 绿色下划线。 */
 .sc-left-context.is-oneplan-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   margin: 0 10px 8px;
   padding: 0;
@@ -3252,6 +3259,55 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   letter-spacing: 0.02em;
   color: var(--sc-muted, #71767e);
 }
+
+/* 左栏户外卡「清单」页：一行一项。地图左下图例胶囊默认收起，让开左下图层钮和右下比例尺。 */
+.sc-plan-stats { margin: 0 0 4px; }
+.sc-plan-stats dl { margin: 0; }
+.sc-plan-stats dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  border-bottom: 1px solid rgba(20, 20, 22, 0.08);
+}
+.sc-plan-stats dt { margin: 0; color: var(--sc-muted, #71767e); font-size: 12.5px; font-weight: 500; }
+.sc-plan-stats dd { margin: 0; color: #141416; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sc-plan-stats button {
+  border: 0; padding: 0; background: none; font: inherit; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: inherit; cursor: pointer;
+}
+.sc-plan-stats button.is-alert { color: #c23b2e; }
+.sc-plan-stats button[aria-pressed='true'] { text-decoration: underline; }
+.sc-plan-stats-hint { margin: 6px 0 8px; color: #8a8f96; font-size: 11px; line-height: 1.45; }
+.sc-plan-empty { margin: 12px 0; color: var(--sc-muted, #71767e); font-size: 13px; }
+.sc-plan-advisory {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 8px;
+  color: var(--sc-muted, #71767e); font-size: 11px; cursor: pointer;
+}
+.sc-plan-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sc-map-legend {
+  position: absolute; left: 104px; bottom: 28px; z-index: 5; pointer-events: auto;
+}
+.sc-map-legend > button {
+  height: 28px; padding: 0 10px; border: 1px solid rgba(20, 20, 22, 0.12); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96); color: #141416; font: inherit; font-size: 12px; font-weight: 600;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.06), 0 6px 16px rgba(20, 20, 22, 0.08); cursor: pointer;
+}
+.sc-map-legend > button:focus-visible { outline: 2px solid #141416; outline-offset: 2px; }
+.sc-map-legend ul {
+  position: absolute; left: 0; bottom: calc(100% + 6px); margin: 0; padding: 6px 8px; list-style: none;
+  width: max-content; min-width: 168px; max-width: 240px; max-height: 240px; overflow: auto;
+  border: 1px solid rgba(20, 20, 22, 0.08); border-radius: 12px; background: #fff;
+  box-shadow: 0 8px 24px rgba(20, 20, 22, 0.12);
+}
+.sc-map-legend li {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  padding: 4px 2px; font-size: 12px; color: #141416;
+}
+.sc-map-legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+.sc-map-legend-count { color: var(--sc-muted, #71767e); font-variant-numeric: tabular-nums; }
+.sc-workspace.is-chrome-hidden .sc-map-legend { display: none !important; }
 
 /* 2026-11-15 属性卡（多选行 / 对齐工具条 / 静默链接）。
    面板实际只有 ~233 CSS px 宽，所以命中区按 26px 高定、字号 11px，靠间距和悬停态分区，不靠边框。 */

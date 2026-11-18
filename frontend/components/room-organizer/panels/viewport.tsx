@@ -16,6 +16,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import type { AlignEdge, DistributeAxis } from '../lib/alignment';
+import { formatReading } from '../lib/display-units';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { MAX_CUSTOM_SET_NAME_LENGTH } from '../lib/custom-sets';
 import { WALK_CANVAS_ID } from '../lib/walk-engage';
@@ -58,6 +59,8 @@ export interface ViewportProps {
   onAlignSelection?(edge: AlignEdge): void;
   onDistributeSelection?(axis: DistributeAxis): void;
   showMeasurements: boolean;
+  lengthUnit?: import('../lib/types').DisplayUnit;
+  lengthPrecisionM?: import('../../../../supabase/functions/_shared/plan-editor').LengthPrecisionM;
   showMinimap: boolean;
   walkthroughActive?: boolean;
   /** Pointer-lock progress for the eye-level walk hint. */
@@ -247,7 +250,10 @@ interface HoverTooltipProps {
   containerRef: React.RefObject<HTMLCanvasElement>;
 }
 
-function HoverTooltip({ hover, containerRef }: HoverTooltipProps): JSX.Element | null {
+function HoverTooltip({ hover, containerRef, lengthUnit = 'm', lengthPrecisionM = 0.01 }: HoverTooltipProps & {
+  lengthUnit?: ViewportProps['lengthUnit'];
+  lengthPrecisionM?: ViewportProps['lengthPrecisionM'];
+}): JSX.Element | null {
   const canvas = containerRef.current;
   if (!canvas) return null;
   const rect = canvas.getBoundingClientRect();
@@ -290,7 +296,7 @@ function HoverTooltip({ hover, containerRef }: HoverTooltipProps): JSX.Element |
           fontVariantNumeric: 'tabular-nums',
         }}
       >
-        {hover.item.width.toFixed(2)}m × {hover.item.depth.toFixed(2)}m
+        {formatReading(hover.item.width, lengthUnit ?? 'm', lengthPrecisionM ?? 0.01)} × {formatReading(hover.item.depth, lengthUnit ?? 'm', lengthPrecisionM ?? 0.01)}
       </p>
     </div>
   );
@@ -443,7 +449,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
                 ? 'Click a floor point to measure from · Esc to stop'
                 : props.measurementPointsPlaced === 1
                 ? 'Click a second point…'
-                : `Distance: ${(props.measurementDistance ?? 0).toFixed(2)} m`}
+                : `Distance: ${formatReading(props.measurementDistance ?? 0, props.lengthUnit ?? 'm', props.lengthPrecisionM ?? 0.01)}`}
             </StatusChip>
           </div>
         )}
@@ -490,7 +496,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
                       paddingLeft: 20,
                     }}
                   >
-                    {props.wallDrawStatus.currentLength.toFixed(2)} m
+                    {formatReading(props.wallDrawStatus.currentLength, props.lengthUnit ?? 'm', props.lengthPrecisionM ?? 0.01)}
                   </div>
                 )}
               {props.wallDrawStatus.snapKind === 'vertex' && (
@@ -553,7 +559,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
       )}
 
       {props.hover && props.hover.item.id !== props.selectedItem?.id && (
-        <HoverTooltip hover={props.hover} containerRef={props.canvasRef} />
+        <HoverTooltip hover={props.hover} containerRef={props.canvasRef} lengthUnit={props.lengthUnit} lengthPrecisionM={props.lengthPrecisionM} />
       )}
     </>
   );

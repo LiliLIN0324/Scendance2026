@@ -15,6 +15,7 @@ import {projectUnverifiedScene} from './scene-text-projection.ts';
 import {prepareOriginalSceneReview} from './original-scene-review.ts';
 import { ImageUtils } from '@gltf-transform/core';
 import { ApiError, canonical, catalog, leaseSchema, proposalRequestSchema, randomToken, sceneHash, sceneSchema, sceneWarnings, sha256, uuid } from './domain.ts';
+import { preferencePatchSchema, studioSettingsPatchSchema } from './plan-editor.ts';
 import { assetRecord, importPublicModel, normalizedAssetDimensions, recommendations } from './assets.ts';
 import { MAX_GLB_BYTES, repairGlb, validateModel } from './models.ts';
 import { chatModelName, chatProfile, chatRequest, generateProposal } from './providers.ts';
@@ -300,7 +301,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       if(['/assets/import','/assets/floorplan','/assets/glb','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
       if(path==='/preferences' && method==='GET') return respond(await backend.scene(actor,'preferences.get'));
       if(path==='/preferences' && method==='PATCH') {
-        const input=z.strictObject({unit:z.enum(['m','ft']).optional(),showMeasurements:z.boolean().optional()}).parse(await json());
+        const input=preferencePatchSchema.parse(await json());
         return respond(await backend.scene(actor,'preferences.put',input));
       }
       // 2026-11-17 户外引导卡历史：跟活动存后端，换设备/清缓存不丢。只存决策流水，不动规划。
@@ -334,6 +335,14 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       if(path==='/studios' && method==='POST') {
         const input=z.strictObject({requestId:uuid,name,displayName}).parse(await json());
         return respond(await backend.scene(actor,'studios.create',input),201);
+      }
+      const studioSettings=path.match(/^\/studios\/([^/]+)\/settings$/);
+      if(studioSettings && method==='GET') {
+        return respond(await backend.scene(actor,'studio-settings.get',{studioId:uuid.parse(studioSettings[1])}));
+      }
+      if(studioSettings && method==='PATCH') {
+        const input=studioSettingsPatchSchema.parse(await json());
+        return respond(await backend.scene(actor,'studio-settings.put',{studioId:uuid.parse(studioSettings[1]),...input}));
       }
       const studio=path.match(/^\/studios\/([^/]+)(\/projects)?$/);
       if(studio) {

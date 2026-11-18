@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,6 +52,27 @@ function localAutoLoginEnv() {
   return accounts.length ? JSON.stringify(accounts) : '';
 }
 
+/** 关于页要抄真实版本和提交。缺了就留空，界面说明「这次构建没写入」，不编一个假号。 */
+function buildIdentity() {
+  let version = '';
+  try {
+    version = String(JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version ?? '').trim();
+  } catch { version = ''; }
+  const fromCi = (process.env.CF_PAGES_COMMIT_SHA || process.env.GITHUB_SHA || '').trim();
+  let commit = fromCi ? fromCi.slice(0, 12) : '';
+  if (!commit) {
+    try {
+      commit = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], {
+        cwd: path.resolve(__dirname, '..'),
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).toString().trim();
+    } catch { commit = ''; }
+  }
+  return { version, commit };
+}
+
+const buildIdentityEnv = buildIdentity();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -60,9 +82,14 @@ const nextConfig = {
   output: 'export',
   // 本机 dev 免登录：把 .env.local 的账号注入开发构建，登录卡不再要求手填。
   // 生产构建 localAutoLoginEnv 返回空串，产物里没有这段凭据。
+  // 版本和提交给「关于」复制，来自 package.json 与这次构建能读到的 git / CI。
   env: (() => {
     const injected = localAutoLoginEnv();
-    return injected ? { NEXT_PUBLIC_SCENDANCE_LOCAL_LOGIN: injected } : {};
+    return {
+      NEXT_PUBLIC_SCENDANCE_VERSION: buildIdentityEnv.version,
+      NEXT_PUBLIC_SCENDANCE_COMMIT: buildIdentityEnv.commit,
+      ...(injected ? { NEXT_PUBLIC_SCENDANCE_LOCAL_LOGIN: injected } : {}),
+    };
   })(),
   images: { unoptimized: true },
   devIndicators: false,

@@ -264,7 +264,7 @@ export function buildStructureShell(
   }
   // v2 壳体（「确认布置」后走这条分支）也要 2D 同款 0.5 m 网格：
   // 单元对齐世界原点、只铺房间范围，id-less Wall 标签让 applyWallDisplay 任何模式都保留它。
-  const grid = buildGridPlane(THREE, layout.width, layout.height);
+  const grid = buildGridPlane(THREE, layout.width, layout.height, layout.planSettings?.gridSizeM);
   grid.userData.type = 'wall';
   if (mappedVenue) grid.userData.mapVenueGround = true;
   grid.position.y = 0.01;

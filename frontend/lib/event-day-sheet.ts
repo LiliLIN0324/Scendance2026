@@ -1,5 +1,7 @@
+import { DEFAULT_PLAN_TIME_ZONE } from '../../supabase/functions/_shared/plan-editor';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 import { taskTiming } from './event-day';
+import { isValidTimeZone } from './event-profile';
 import { eventProfileContext } from './event-profile-context';
 import { rosterSummary, type Roster } from './event-roster';
 import { latestDeclaration, type SupplierLedger } from './supplier-declarations';
@@ -11,29 +13,45 @@ import { latestDeclaration, type SupplierLedger } from './supplier-declarations'
 const escape = (value: string): string => value.replace(/[&<>"']/g, char =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 
-const SHANGHAI = 'Asia/Shanghai';
+const SHANGHAI = DEFAULT_PLAN_TIME_ZONE;
 
-function shanghaiParts(iso: string, withClock: boolean): Intl.DateTimeFormatPart[] {
+/** 方案时区优先，其次活动档案里已经确认过的时区，都没有或非法时用上海。 */
+export function planTimeZone(layout: Pick<RoomLayout, 'planSettings' | 'eventProfile'>): string {
+  const fromPlan = layout.planSettings?.timeZone;
+  if (fromPlan && isValidTimeZone(fromPlan)) return fromPlan;
+  const fromProfile = layout.eventProfile?.timeWindow.value?.timeZone;
+  if (fromProfile && isValidTimeZone(fromProfile)) return fromProfile;
+  return SHANGHAI;
+}
+
+function zoneParts(iso: string, timeZone: string, withClock: boolean): Intl.DateTimeFormatPart[] {
+  const zone = isValidTimeZone(timeZone) ? timeZone : SHANGHAI;
   return new Intl.DateTimeFormat('en-GB', {
-    timeZone: SHANGHAI, year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
     ...(withClock ? { hour: '2-digit' as const, minute: '2-digit' as const, hourCycle: 'h23' as const } : {}),
   }).formatToParts(new Date(iso));
 }
 
-function shanghaiPart(parts: Intl.DateTimeFormatPart[], type: string): string {
+function zonePart(parts: Intl.DateTimeFormatPart[], type: string): string {
   return parts.find(part => part.type === type)?.value ?? '';
+}
+
+/** 日历日按指定时区，不用 UTC 的日期前缀。跨日界线的凌晨仍属于当地的下一天。 */
+export function zoneCalendarDate(iso: string, timeZone: string): string {
+  const parts = zoneParts(iso, timeZone, false);
+  return `${zonePart(parts, 'year')}-${zonePart(parts, 'month')}-${zonePart(parts, 'day')}`;
+}
+
+export function zoneGeneratedAt(iso: string, timeZone: string): string {
+  const zone = isValidTimeZone(timeZone) ? timeZone : SHANGHAI;
+  const parts = zoneParts(iso, zone, true);
+  const hour = zonePart(parts, 'hour') === '24' ? '00' : zonePart(parts, 'hour');
+  return `${zoneCalendarDate(iso, zone)} ${hour}:${zonePart(parts, 'minute')}（${zone}）`;
 }
 
 /** 日历日按北京时间，不用 UTC 的日期前缀。凌晨仍属于上海的下一天。 */
 export function shanghaiCalendarDate(iso: string): string {
-  const parts = shanghaiParts(iso, false);
-  return `${shanghaiPart(parts, 'year')}-${shanghaiPart(parts, 'month')}-${shanghaiPart(parts, 'day')}`;
-}
-
-function shanghaiGeneratedAt(iso: string): string {
-  const parts = shanghaiParts(iso, true);
-  const hour = shanghaiPart(parts, 'hour') === '24' ? '00' : shanghaiPart(parts, 'hour');
-  return `${shanghaiCalendarDate(iso)} ${hour}:${shanghaiPart(parts, 'minute')}（Asia/Shanghai）`;
+  return zoneCalendarDate(iso, SHANGHAI);
 }
 
 const clock = (iso: string | null): string => iso === null ? '待安排'
@@ -113,6 +131,6 @@ export function renderDaySheet(input: DaySheetInput): string {
     'h1{font-size:20px}h2{font-size:16px;margin-top:24px;border-bottom:1px solid #ddd;padding-bottom:4px}',
     'table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #ddd;padding:6px;text-align:left}',
     'ul{padding-left:20px}@media print{body{margin:0}}</style></head><body>',
-    `<h1>${escape(kind)}</h1><p>${escape(layout.name || '未命名活动')} · 生成于 ${escape(shanghaiGeneratedAt(input.generatedAt))}</p>`,
+    `<h1>${escape(kind)}</h1><p>${escape(layout.name || '未命名活动')} · 生成于 ${escape(zoneGeneratedAt(input.generatedAt, planTimeZone(layout)))}</p>`,
     ...sections, '</body></html>'].join('');
 }

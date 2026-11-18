@@ -69,8 +69,10 @@ describe('左轨四形与共用 Agent 面板', () => {
     const css = readFileSync(join(here, '../../../app/globals.css'), 'utf8');
     const bingoSource = readFileSync(join(here, 'bingo-rail-button.tsx'), 'utf8');
     const brandSource = readFileSync(join(here, 'workbench-brand-toggle.tsx'), 'utf8');
+    const markSource = readFileSync(join(here, 'bingo-status-mark.tsx'), 'utf8');
     expect(bingoSource).toContain('sc-rail-disc');
-    expect(bingoSource).toContain('sc-bingo-badge');
+    expect(bingoSource).toContain('<BingoStatusMark');
+    expect(markSource).toContain('sc-bingo-badge');
     expect(bingoSource).toContain('bingoRingPath');
     expect(bingoSource).not.toContain('sc-bingo-corner');
     expect(brandSource).toContain('<RailHall size={28}');
