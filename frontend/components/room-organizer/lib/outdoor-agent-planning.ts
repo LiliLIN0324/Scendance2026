@@ -176,10 +176,12 @@ export function proposeUseZones(
   plan: SitePlanData,
   brief: OutdoorBrief,
   id: () => string = () => crypto.randomUUID(),
+  deferNote: string = "",
 ): SitePlanData {
   if (!brief.zones.length)
     throw new Error(
-      "这块活动场地要分哪些用途？例如展览区、表演区、签到区；尚不放物件。",
+      // 轮次 110：这是“追问”而不是报错，上一句里的后置活直接接在问句后面。
+      "这块活动场地要分哪些用途？例如展览区、表演区、签到区；尚不放物件。" + deferNote,
     );
   if (brief.zones.some((z) => z.environment === "unknown"))
     throw new Error(
