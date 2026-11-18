@@ -6,6 +6,8 @@
  * 每个型号都在边界里排好，确认前不落库。
  *
  * 换一批沿用同一套排序，跳过已经给出的条目。
+ * 每款带上目录缩略图（没有就是空字符串，界面改用模板贴纸）。
+ * 「用 Aholo 生成一款」只算出要打开的生成面板参数，不在这里提交。
  * 设施只写契约已有字段。材质词可以听出来，但不写入方案：契约还没有材质字段。
  * 坐标与尺寸都是米。
  */
@@ -30,6 +32,8 @@ export interface ArrangeChoiceModel {
   depth: number;
   /** 能力表口径；表外传 `none`，不靠名字猜。 */
   kind: string;
+  /** 目录缩略图。空字符串表示没有，界面改用模板贴纸。 */
+  thumb?: string;
 }
 
 export interface ArrangeChoice {
@@ -38,6 +42,10 @@ export interface ArrangeChoice {
   reason: string;
   count: number;
   facilities: PlanFacility[];
+  /** 目录缩略图；没有时是空字符串。 */
+  thumb: string;
+  /** 落库用的模板，界面用它找贴纸。 */
+  templateId: string;
 }
 
 export type ArrangeChoiceFailure =
@@ -67,6 +75,50 @@ export interface ArrangeChoicePageInput {
   page?: number;
   ids?: () => string;
   focus?: ArrangeClusterFocus | null;
+  /**
+   * 刚用 Aholo 生成、要放进同一张候选列表的模型。
+   * 放得下就排在最前，理由固定为「Aholo 生成」；不另起一套排布。
+   */
+  pinned?: ArrangeChoiceModel | null;
+}
+
+/** 三选一里「用 Aholo 生成一款」预填的模型描述。没听出能力时保留原话。 */
+export function arrangeGeneratePrompt(text: string): string {
+  const demand = parseArrangeDemand(text);
+  if (demand.capability === 'seat') return '一把能坐的椅子';
+  if (demand.capability === 'talk') return '一件可以接待交谈的桌台';
+  if (demand.capability === 'operate') return '一台自助设备';
+  const trimmed = text.trim().slice(0, 80);
+  return trimmed.length > 0 ? trimmed : '一件活动物料';
+}
+
+/**
+ * 三选一点「用 Aholo 生成一款」时，打开现成生成面板要用的参数。
+ * 只描述要打开什么：不提交、不勾额度。面板仍是 generation-sheet。
+ */
+export function arrangeAholoSheet(text: string, facility: { id: string; name: string }): {
+  task: 'model';
+  scope: 'facility';
+  source: 'text';
+  facility: { id: string; name: string };
+  prompt: string;
+} {
+  const name = facility.name.trim().slice(0, 60);
+  return {
+    task: 'model',
+    scope: 'facility',
+    source: 'text',
+    facility: { id: facility.id, name: name.length > 0 ? name : '当前设施' },
+    prompt: arrangeGeneratePrompt(text),
+  };
+}
+
+/** 生成完成的那一款插到当前页最前；同一 slug 不重复。 */
+export function offerGeneratedArrangeChoice(
+  current: readonly ArrangeChoice[] | null,
+  choice: ArrangeChoice,
+): ArrangeChoice[] {
+  return [choice, ...(current ?? []).filter(item => item.slug !== choice.slug)];
 }
 
 function clipName(name: string, fallback: string): string {
@@ -198,6 +250,7 @@ export function buildArrangeChoicePage(input: ArrangeChoicePageInput): ArrangeCh
   if (demand.count === null) {
     return { ok: false, message: '还差数量：请说「30 人」或「30 把」。', keepCurrent: false, reason: 'count' };
   }
+  const count = demand.count;
   if (input.boundary.length < 3) {
     return { ok: false, message: '先画场地边界，再按需求排道具。', keepCurrent: false, reason: 'boundary' };
   }
@@ -215,7 +268,9 @@ export function buildArrangeChoicePage(input: ArrangeChoicePageInput): ArrangeCh
     input.text,
     page * ARRANGE_CHOICE_PAGE_SIZE,
   );
-  if (ranked.length === 0) {
+  const pinned = input.pinned;
+  const pinnedReady = Boolean(pinned && pinned.slug.trim() && pinned.width > 0 && pinned.depth > 0);
+  if (ranked.length === 0 && !pinnedReady) {
     return {
       ok: false,
       message: page > 0 ? '没有更多可换的款。' : '物料库里没有满足这个能力的模型。',
@@ -225,48 +280,69 @@ export function buildArrangeChoicePage(input: ArrangeChoicePageInput): ArrangeCh
   }
   const ids = input.ids ?? (() => crypto.randomUUID());
   const templateId = templateIdFor(demand.capability);
-  const choices: ArrangeChoice[] = [];
-  for (const entry of ranked) {
+  const thumbOf = (slug: string, fallback = ''): string => {
+    const fromCatalog = input.models.find(model => model.slug === slug)?.thumb;
+    return (fromCatalog ?? fallback).trim();
+  };
+  const layoutOne = (item: ArrangeItem, reason: string, thumb: string): ArrangeChoice | null => {
     const positions = relocateArrangeCluster(
       layoutGrid({
         boundary: input.boundary,
-        count: demand.count,
-        width: entry.item.width,
-        depth: entry.item.depth,
+        count,
+        width: item.width,
+        depth: item.depth,
         ...(demand.aisleM !== null ? { aisleM: demand.aisleM } : {}),
       }),
-      { width: entry.item.width, depth: entry.item.depth },
+      { width: item.width, depth: item.depth },
       input.boundary,
       input.focus ?? null,
     );
-    if (positions.length < demand.count) continue;
+    if (positions.length < count) return null;
     const facilities: PlanFacility[] = [];
-    let dropped = false;
     for (const point of positions) {
       const parsed = planFacilitySchema.safeParse({
         id: ids(),
         templateId,
-        name: clipName(entry.item.name, templateId),
+        name: clipName(item.name, templateId),
         position: { x: point.x, y: point.y },
         rotationDeg: point.rotationDeg,
-        size: { width: entry.item.width, depth: entry.item.depth },
+        size: { width: item.width, depth: item.depth },
         notes: '',
-        modelOverride: entry.item.slug.slice(0, 160),
+        modelOverride: item.slug.slice(0, 160),
       });
-      if (!parsed.success) {
-        dropped = true;
-        break;
-      }
+      if (!parsed.success) return null;
       facilities.push(parsed.data);
     }
-    if (dropped || facilities.length !== demand.count) continue;
-    choices.push({
-      slug: entry.item.slug,
-      name: clipName(entry.item.name, templateId),
-      reason: entry.reason,
-      count: demand.count,
+    if (facilities.length !== count) return null;
+    return {
+      slug: item.slug,
+      name: clipName(item.name, templateId),
+      reason,
+      count,
       facilities,
-    });
+      thumb,
+      templateId,
+    };
+  };
+  const choices: ArrangeChoice[] = [];
+  if (pinned && pinnedReady) {
+    const placed = layoutOne(
+      {
+        slug: pinned.slug,
+        name: pinned.name,
+        width: pinned.width,
+        depth: pinned.depth,
+        kind: pinned.kind || 'none',
+      },
+      'Aholo 生成',
+      (pinned.thumb ?? '').trim() || thumbOf(pinned.slug),
+    );
+    if (placed) choices.push(placed);
+  }
+  for (const entry of ranked) {
+    if (choices.some(choice => choice.slug === entry.item.slug)) continue;
+    const placed = layoutOne(entry.item, entry.reason, thumbOf(entry.item.slug));
+    if (placed) choices.push(placed);
   }
   if (choices.length === 0) {
     return {
@@ -284,4 +360,27 @@ export function buildArrangeChoicePage(input: ArrangeChoicePageInput): ArrangeCh
     choices,
     message: `给了 ${choices.length} 个方案，选一个再落库（都能一步撤销）。${materialNote}`,
   };
+}
+
+/**
+ * 把刚生成的一款排进同一句需求。放不下就返回 null，调用方仍走设施候选回填。
+ */
+export function buildGeneratedArrangeChoice(input: {
+  text: string;
+  boundary: ArrangeChoicePageInput['boundary'];
+  model: ArrangeChoiceModel;
+  focus?: ArrangeChoicePageInput['focus'];
+  ids?: ArrangeChoicePageInput['ids'];
+}): ArrangeChoice | null {
+  const result = buildArrangeChoicePage({
+    text: input.text,
+    boundary: input.boundary,
+    models: [],
+    page: 0,
+    pinned: input.model,
+    ...(input.focus !== undefined ? { focus: input.focus } : {}),
+    ...(input.ids ? { ids: input.ids } : {}),
+  });
+  if (!result.ok) return null;
+  return result.choices.find(item => item.slug === input.model.slug) ?? null;
 }
