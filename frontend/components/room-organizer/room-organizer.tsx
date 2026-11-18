@@ -125,7 +125,7 @@ import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from
 import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
 import { noteVenueThreeIntent } from './lib/venue-library';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
-import { loadStoredAholoCatalogItem } from './lib/aholo-model-placement';
+import { loadGeneratedCatalogItem } from './lib/aholo-model-placement';
 import { loadShippedOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
@@ -5157,7 +5157,7 @@ useEffect(() => {
               item = await loadOnlineCatalogItem(model, controller);
             } else if (key.startsWith('generated:')) {
               // 2026-11-12 统一放置流程：「我的生成」物料也可拖入，拖哪落哪。
-              item = await loadStoredAholoCatalogItem(key.slice('generated:'.length));
+              item = await loadGeneratedCatalogItem(key.slice('generated:'.length), assetId => controller.authorizeAsset(assetId));
             }
             if (!item) return;
             if (!dropActive.current) return;
