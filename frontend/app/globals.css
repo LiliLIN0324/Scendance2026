@@ -1034,9 +1034,6 @@ body {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
   /* 左栏 → 画布上的浮层卡。左缘让开图标轨，右缘留出地图。 */
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column:has(> .sc-agent-panel[data-state="material"]:not(.is-detached)) {
-    width: 372px; height: min(680px, calc(100% - 28px));
-  }
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column {
     position: absolute; left: calc(var(--sc-nav-rail-width) + 12px); top: 12px;
     right: auto; bottom: auto; grid-column: auto; grid-row: auto;
@@ -1044,7 +1041,10 @@ body {
     border: 1px solid var(--wk-hair); border-radius: 16px;
     background: var(--paper);
     box-shadow: var(--e1);
-    z-index: 31;
+    /* 2026-11-19 用户：物料卡被画布浮层（规划信息 / 搜地点）压住标题。
+       窄屏这张卡就是前台页面，必须压在画布浮层（规划信息 40、搜地点 6/30）之上；
+       图标轨的 hover 提示再用 46 压回来（见 .sc-mode-rail）。 */
+    z-index: 45;
   }
   /* 画布左上角的抬头/胶囊让到卡片右侧：卡片左缘离画布 12px，再留 24px 间距。
      （.sc-canvas-heading 目前只有自家测试引用，属防御性规则；.sc-canvas-mode 在隔离扫描态
@@ -1143,36 +1143,16 @@ body {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { grid-column: 2; grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 3; grid-row: 1; }
-  /* 物料库是画布旁的工具卡，不是通高左栏。地图仍露在卡片右侧和下方。 */
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column:has(> .sc-left-column > .sc-agent-panel[data-state="material"]:not(.is-detached)):not(:has(.is-outdoor-card:not([hidden]))):not(:has(.sc-left-drawer:not(.is-collapsed):not([hidden]):not(.is-outdoor-card))) {
-    grid-template-columns: var(--sc-nav-rail-width) 0 minmax(0, 1fr);
-  }
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column:has(> .sc-agent-panel[data-state="material"]:not(.is-detached)):not(:has(.is-outdoor-card:not([hidden]))):not(:has(.sc-left-drawer:not(.is-collapsed):not([hidden]):not(.is-outdoor-card))) {
-    position: absolute;
-    left: calc(var(--sc-nav-rail-width) + 12px);
-    top: 12px;
-    width: 372px;
-    height: min(680px, calc(100% - 28px));
-    max-height: calc(100% - 28px);
-    grid-column: auto;
-    grid-row: auto;
-    background: var(--paper, #fff);
-    border: 1px solid var(--wk-hair, #e4e4e7);
-    border-radius: 16px;
-    box-shadow: 0 6px 18px rgba(20, 20, 22, .10);
-    overflow: hidden;
-    z-index: 32;
-  }
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column:has(> .sc-agent-panel[data-state="material"]:not(.is-detached)) .sc-left-card-resizer { display: none; }
 }
 /* T-VISUAL-CHROME-2：底素材条为应用级全宽收起条（对照 04-final-flat.jpg），跨全部列。 */
 /* 物料条改挂画布栏底，不再占 main 第 2 行全宽 */
 .sc-workbench .is-docked-layout.is-mode-rail > .sc-bottom-bar { display: none; }
 /* 左轨悬停提示（data-tip）要能压过左栏与画布覆盖层：提示是 ::after 子元素，
-   父级 z-index 太低时会被左栏（z-index:31）整体裁掉——用户实测反馈「左侧的 hover 层级太低」。 */
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { z-index: 40; }
-/* 左栏永远压在画布之上：户外地图覆盖层 z-index:30 只在自己的画布栏里，窄屏或动画过渡时也不能盖住左栏。 */
-.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { z-index: 31; }
+   父级 z-index 太低时会被左栏（现在 z-index:45）整体裁掉——用户实测反馈「左侧的 hover 层级太低」。 */
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { z-index: 46; }
+/* 左栏永远压在画布之上：户外地图覆盖层 z-index:30 只在自己的画布栏里，窄屏或动画过渡时也不能盖住左栏；
+   规划信息（40）同样属于画布浮层，不能压住左栏的标题。 */
+.sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { z-index: 45; }
 .sc-workbench .is-docked-layout.is-mode-rail > .cr-assistant.is-docked { display: none; }
 .sc-left-column {
   position: relative; min-width: 0; min-height: 0; height: 100%;
@@ -1189,7 +1169,7 @@ body {
 }
 /* 阶段 + 工具栏：白纸、发丝线分隔、选中才是淡绿 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail {
-  display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 40;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 1px; position: relative; z-index: 46;
   flex: 0 0 var(--sc-nav-rail-width); width: var(--sc-nav-rail-width); padding: 10px 0; box-sizing: border-box;
   align-items: center;
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);

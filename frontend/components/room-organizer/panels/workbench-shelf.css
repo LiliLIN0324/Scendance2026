@@ -1021,15 +1021,19 @@
 .sc-lib-search {
   display:flex; align-items:center; gap:8px; box-sizing:border-box;
   width:100%; min-width:0; height:36px; padding:0 5px 0 12px;
+  /* 2026-11-19 用户：搜索框把第一条分类压住了。
+     胶囊不再用 24px 投影往下铺——那层影正好盖在「基础设施」行上；
+     同时留出 6px 下边距，和 .sc-lib-results 的 6px gap 一起凑成 12px 呼吸。 */
+  margin:0 0 6px;
   border:1px solid rgba(20, 20, 22, 0.1); border-radius:999px;
   background:#fff; color:#141416;
-  box-shadow:0 1px 2px rgba(20, 20, 22, 0.04), 0 8px 24px rgba(20, 20, 22, 0.1);
+  box-shadow:0 1px 2px rgba(20, 20, 22, 0.05), 0 6px 16px rgba(20, 20, 22, 0.06);
   transition:border-color .16s ease, box-shadow .16s ease;
 }
 .sc-lib-search:hover { border-color:rgba(20, 20, 22, 0.18); }
 .sc-lib-search:focus-within {
   border-color:rgba(20, 20, 22, 0.34);
-  box-shadow:0 0 0 3px rgba(20, 20, 22, 0.07), 0 10px 28px rgba(20, 20, 22, 0.12);
+  box-shadow:0 0 0 3px rgba(20, 20, 22, 0.07), 0 8px 20px rgba(20, 20, 22, 0.08);
 }
 .sc-lib-search > svg { flex:none; color:#71767e; }
 .sc-lib-search:focus-within > svg { color:#141416; }
