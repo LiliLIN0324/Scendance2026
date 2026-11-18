@@ -80,26 +80,33 @@ export function OutdoorWalkthroughSection({
                 }
               : {})}
           />
-          {gapsLine && (
-            <p
-              aria-label="待补清单"
-              className="mt-2 whitespace-pre-line rounded-lg bg-neutral-50 p-2 text-[11px] leading-relaxed text-neutral-600"
-            >
-              {gapsLine}
-            </p>
-          )}
-          {nextLine && (
-            <p
-              aria-label="下一步"
-              className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-relaxed text-amber-800"
-            >
-              {nextLine}
-            </p>
-          )}
-          {reportLine && (
-            <p aria-label="报告段落自检" className="mt-1 text-[11px] leading-relaxed text-neutral-500">
-              {reportLine}
-            </p>
+          {(nextLine || gapsLine || reportLine) && (
+            <details className="mt-2 rounded-lg bg-neutral-50 p-2" aria-label="开跑前检查">
+              <summary className="cursor-pointer text-[11px] text-neutral-600">
+                开跑前检查（下一步 · 待补 · 报告几段）
+              </summary>
+              {nextLine && (
+                <p
+                  aria-label="下一步"
+                  className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] leading-relaxed text-amber-800"
+                >
+                  {nextLine}
+                </p>
+              )}
+              {gapsLine && (
+                <p
+                  aria-label="待补清单"
+                  className="mt-2 whitespace-pre-line text-[11px] leading-relaxed text-neutral-600"
+                >
+                  {gapsLine}
+                </p>
+              )}
+              {reportLine && (
+                <p aria-label="报告段落自检" className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+                  {reportLine}
+                </p>
+              )}
+            </details>
           )}
         </>
       )}
