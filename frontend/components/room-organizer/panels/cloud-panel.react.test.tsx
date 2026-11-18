@@ -1025,7 +1025,7 @@ describe('CloudPanel preferences section', () => {
       onPreferenceChange={onPreferenceChange} />);
     fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    expect(screen.getByRole('button', { name: '画布' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '个人偏好' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: '快捷键' })).toBeTruthy();
     expect(screen.queryByText('换算示例')).toBeNull();
     expect(screen.getByRole('button', { name: /英尺/ }).getAttribute('aria-pressed')).toBe('true');
@@ -1038,7 +1038,11 @@ describe('CloudPanel preferences section', () => {
     expect(onPreferenceChange).toHaveBeenLastCalledWith({ showMeasurements: true });
     fireEvent.click(screen.getByRole('button', { name: '快捷键' }));
     expect(screen.queryByRole('group', { name: '显示单位' })).toBeNull();
-    expect(screen.getByText('快捷键还在整理，这里先空着。')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '快捷键' })).toBeTruthy();
+    expect(screen.getByText('建造画布 · 编辑')).toBeTruthy();
+    expect(screen.getByText('网格吸附')).toBeTruthy();
+    expect(screen.getByText('只切网格；墙 / 物件吸附是独立开关')).toBeTruthy();
+    expect(screen.queryByText('快捷键还在整理，这里先空着。')).toBeNull();
   });
 });
 
