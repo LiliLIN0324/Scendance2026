@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Camera, Crown, Images, LayoutGrid, Loader2, Scan } from '@/components/solid-icons';
+import { Box, Camera, Crown, Images, LayoutGrid, Loader2, Scan, Upload } from '@/components/solid-icons';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
@@ -8,6 +8,7 @@ import { registerCloudScans, registerLocalScans } from '../lib/local-scans';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
+import { uploadScanFile } from '../lib/scan-upload';
 import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { CaseCards } from './case-cards';
 import { EnvironmentPreview } from './environment-preview';
@@ -25,7 +26,7 @@ import './space-browser.css';
  * 一级段（区域、路线及交通 / 车 / 基础设施…）同一套读法：先看见有哪些类、各有几件，
  * 再按需展开。`open` 只作为首次挂载的展开态，用户点过之后由 details 自己管。
  */
-function SceneGroup({ label, icon, count, open, testId, groupRef, lazy, children }: {
+function SceneGroup({ label, icon, count, open, testId, groupRef, lazy, action, children }: {
   label: string;
   icon: ReactNode;
   count: number;
@@ -34,6 +35,8 @@ function SceneGroup({ label, icon, count, open, testId, groupRef, lazy, children
   groupRef?: RefObject<HTMLDetailsElement>;
   /** 收起时连子节点都不建（经典案例 44 张预览各自要算一遍方案）。 */
   lazy?: boolean;
+  /** 分类行右侧的动作（如「上传实景包」）；点它不展开/收起这一段。 */
+  action?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   // 2026-11-17：懒挂载只服务于重的那几段；已展开过的段照旧由 details 自己管开合。
@@ -44,6 +47,8 @@ function SceneGroup({ label, icon, count, open, testId, groupRef, lazy, children
       <span className="sc-scene-group-caret" aria-hidden="true" />
       {icon}
       <span className="sc-scene-group-label">{label}</span>
+      {/* 动作放在 summary 里，点击默认会连带开合这一段；preventDefault 挡掉，只做动作。 */}
+      {action && <span className="sc-scene-group-action" onClick={event => event.preventDefault()}>{action}</span>}
       <span className="sc-scene-group-count">{count}</span>
     </summary>
     <div className="sc-scene-group-body">{shown ? children : null}</div>
@@ -121,6 +126,37 @@ export function SpacePanel({
   }, []);
   // 真实场地 = 扫描库里已重建好的这一场；每次渲染重读，刚重建完的场立刻出现。
   const scans = listScannedVenues();
+  // 2026-11-19 用户：「我的实景扫描上传不到我的平台……图二这里应该新增一个上传功能」。
+  // 手上已有的 .spz/.ply 直传本机资产代理落盘（POST /asset/upload），登记后立刻进这一段列表。
+  const scansRef = useRef<HTMLDetailsElement>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const [upload, setUpload] = useState<{ status: 'idle' | 'uploading' | 'done' | 'error'; percent: number; message: string }>({ status: 'idle', percent: 0, message: '' });
+  const uploading = upload.status === 'uploading';
+  const submitScanFile = async (file: File): Promise<void> => {
+    // 这一段默认收起，进度与错误都在里面；先展开，不然传着传着看不见任何反应。
+    if (scansRef.current) scansRef.current.open = true;
+    setUpload({ status: 'uploading', percent: 0, message: '' });
+    try {
+      const asset = await uploadScanFile(file, {
+        name: file.name,
+        onProgress: (loaded, total) => setUpload({ status: 'uploading', percent: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0, message: '' }),
+      });
+      refreshScanList(value => value + 1);
+      setUpload({ status: 'done', percent: 100, message: `已加入「${asset.name}」，点它就能在 3D 里看。` });
+    } catch (error) {
+      setUpload({ status: 'error', percent: 0, message: error instanceof Error ? error.message : '上传失败，请重试。' });
+    }
+  };
+  const scanUploadButton = <button type="button" className="sc-scan-upload-btn" data-testid="scan-upload-button"
+    title="上传从 Aholo Reality 下载的 .spz / .ply 实景包" disabled={uploading}
+    onClick={event => { event.preventDefault(); event.stopPropagation(); scanInputRef.current?.click(); }}>
+    {uploading
+      ? <Loader2 className="cr-spin" size={13} aria-hidden="true"/>
+      : <Upload size={13} aria-hidden="true"/>}
+    <span>{uploading ? `上传 ${upload.percent}%` : '上传'}</span>
+  </button>;
+  const scanUploadNote = upload.message ? <p className={`sc-scan-upload-note is-${upload.status}`}
+    role={upload.status === 'error' ? 'alert' : 'status'}>{upload.message}</p> : null;
   // 打开过的场会留下浏览器里的止帧；有止帧的排大图，没有的收成索引行。
   const venueThumb = (venue: ScannedVenue) => environment?.thumbnails?.[venue.assetId];
   const venueSize = (venue: ScannedVenue) => venue.meters
@@ -169,7 +205,7 @@ export function SpacePanel({
   // 那套 16:10 卡形；没打开过的没有画面，就收成索引行，不再用一块空白描边框假扮缩略图。
   // 尺寸与日期并成一行元信息，状态交给描边和左上角标签。
   const scanRows = <>
-    {scans.length === 0 && <p className="sc-note">还没有实景扫描。拍摄后可在这里查看。</p>}
+    {scans.length === 0 && <p className="sc-note">还没有实景扫描。上传从 Aholo Reality 下载的 .spz / .ply，或用手机拍一段场地。</p>}
     {framedScans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="有画面的真实场地">
       {framedScans.map(venue => {
         const active = venue.assetId === currentScanId;
@@ -258,6 +294,13 @@ export function SpacePanel({
 
   return (
     <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="空间">
+      {/* 选文件框整页只挂一份：分类行与列表两处的「上传」按钮都点它。 */}
+      <input ref={scanInputRef} type="file" accept=".spz,.ply" hidden data-testid="scan-upload-input" aria-label="选择实景包"
+        onChange={event => {
+          const file = event.currentTarget.files?.[0] ?? null;
+          event.currentTarget.value = '';
+          if (file) void submitScanFile(file);
+        }}/>
       {!card && <ShelfGrip shelfRef={hostRef} label="调整空间面板高度"/>}
       <div className="sc-space-body">
         {/* 2026-11-17 用户：「场地信息记录删掉」——VenueFactsPanel 摘除挂载；venue-facts 子系统本体休眠保留（agent-panel venueFactToken 链路未动）。 */}
@@ -294,12 +337,20 @@ export function SpacePanel({
                 {sampleTiles && <SceneGroup label="示例场景" icon={<Images size={15} aria-hidden="true" />} count={samples.length}>
                   {sampleTiles}
                 </SceneGroup>}
-                <SceneGroup label="我的实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length}>
+                <SceneGroup label="我的实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length} groupRef={scansRef} action={scanUploadButton}>
+                  {scanUploadNote}
                   {scanRows}
                 </SceneGroup>
               </>
             : <>
-                {scans.length > 0 && <div className="sc-scan-options">{scanRows}</div>}
+                <div className="sc-scan-options">
+                  <div className="sc-scan-upload">
+                    {scanUploadButton}
+                    <span className="sc-scan-upload-hint">从 Aholo Reality 下载的 .spz / .ply</span>
+                  </div>
+                  {scanUploadNote}
+                  {scans.length > 0 && scanRows}
+                </div>
                 {moreOptions}
               </>}
           {onTryHanfuWalk && <button className="sc-button" type="button" disabled={!!hanfuWalkDisabledReason}
