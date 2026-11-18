@@ -718,25 +718,38 @@ export function OutdoorWorkflowCard({
           ))}
         </div>
       )}
+      {/* 2026-11-19 用户反馈「S8 无从下手」：四颗动作全部作用于所选设施——没选中时不空挂，
+          出引导句；选中了才出动作组并标注当前设施。 */}
       {flow.state.stage === "refine-3d" && !flow.proposal && (
-        <div className="ap-card-actions">
-          <button type="button" className="btn-outline" onClick={() => void flow.action("models")}>
-            比较所选设施模型
-          </button>
-          <button type="button" className="btn-outline" onClick={() => void flow.action("upload")}>
-            给所选设施上传GLB
-          </button>
-          <button type="button" className="btn-outline" onClick={() => void flow.action("generate")}>
-            准备原位生成（另行确认费用）
-          </button>
-          <button
-            type="button"
-            className="btn-outline"
-            onClick={() => void flow.action("generate-image")}
-          >
-            上传图片准备生成（另行确认费用）
-          </button>
-        </div>
+        flow.selectedFacility || flow.models ? (
+          <div className="ap-card-actions">
+            {flow.selectedFacility && (
+              <p className="ap-task-caption" style={{ margin: 0 }}>
+                已选设施：{flow.selectedFacility.name}
+              </p>
+            )}
+            <button type="button" className="btn-outline" onClick={() => void flow.action("models")}>
+              比较所选设施模型
+            </button>
+            <button type="button" className="btn-outline" onClick={() => void flow.action("upload")}>
+              给所选设施上传GLB
+            </button>
+            <button type="button" className="btn-outline" onClick={() => void flow.action("generate")}>
+              准备原位生成（另行确认费用）
+            </button>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => void flow.action("generate-image")}
+            >
+              上传图片准备生成（另行确认费用）
+            </button>
+          </div>
+        ) : (
+          <p className="ap-task-caption">
+            在 3D 视图里选中一个设施（如主舞台），或对我说「给主舞台换个模型」，我再给比较、上传、生成的动作；不选就先收着。
+          </p>
+        )
       )}
       {/* 2026-11-16 用户拍板：模型说「轮廓取不到，请手画」时，place 阶段卡上就得能点进去手画，
           不用让人自己到工具栏里翻。实现在 manualBoundary 的既有守卫里（无锚点/不可换场原位报错，不乱改）。
@@ -838,10 +851,13 @@ export function OutdoorWorkflowCard({
         </section>
       )}
       {/* 2026-11-18 用户指令：入口通行核对从任务卡内部挪出，做成任务卡下方的独立卡。
-          只取第一个未核实入口；核对动作与口径不变。 */}
+          只取第一个未核实入口；核对动作与口径不变。
+          2026-11-19 用户指令：sub-routes 不再问——子口提案本来就是默认双向
+          （buildZoneSpur 新立节点 verification: user-confirmed, kind: both），
+          这张卡在 S6 显示的多是更早遗留的未核对口；延到 S7 岗位阶段再问。 */}
       {!flow.proposal &&
         !flow.busy &&
-        ["main-routes", "objects", "sub-routes", "people"].includes(
+        ["main-routes", "objects", "people"].includes(
           flow.state.stage,
         ) &&
         flow.unverifiedEntrances.slice(0, 1).map((n) => (
