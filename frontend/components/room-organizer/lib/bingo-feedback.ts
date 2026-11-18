@@ -117,13 +117,13 @@ export function feedbackSummaryLabel(feedback: BingoPlanFeedback, returned: bool
   return '还没有甲方钉评';
 }
 
-function mapSharePin(pin: ReviewPin): BingoFeedbackPin {
+function mapSharePin(pin: ReviewPin & { author?: string | undefined; createdAt?: string | undefined }): BingoFeedbackPin {
   const placement = pin.itemId ? `物件 ${pin.itemId}` : `地面 (${Math.round(pin.x * 10) / 10}, ${Math.round(pin.z * 10) / 10})`;
   return {
     id: pin.id,
-    author: '甲方钉评',
+    author: pin.author?.trim() || '甲方钉评',
     body: pin.text,
-    createdAt: '',
+    createdAt: pin.createdAt ?? '',
     replies: [],
     source: 'share-pin',
     pinStatus: pin.status,

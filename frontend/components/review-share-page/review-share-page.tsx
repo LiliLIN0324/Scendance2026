@@ -50,6 +50,8 @@ export function ReviewSharePage(): JSX.Element {
   const [pinError, setPinError] = useState('');
   // G3：只看链接（?view=1）能看方案与历史钉，但不能新增意见或回复。
   const [viewOnly, setViewOnly] = useState(false);
+  // 访客署名：只存在本机，随钉一起带给创作者；不强制登录。
+  const [author, setAuthor] = useState('');
   const [returned, setReturned] = useState(false);
   const [returnNote, setReturnNote] = useState('');
   const [planVersion,setPlanVersion]=useState<string|null>(null);
@@ -76,6 +78,9 @@ export function ReviewSharePage(): JSX.Element {
       const example=new URLSearchParams(window.location.search).get('example');
       const isolatedExample=!shareHash && (example==='sharing'||example==='hall-d5');
       const localLayout = isolatedExample ? null : readLocalReviewLayout(safeStorage());
+      if (!isolatedExample) {
+        try { setAuthor(window.localStorage.getItem('scendance-review-author') ?? ''); } catch { /* 忽略不可用存储 */ }
+      }
       void loadReviewPlan({
         hash: shareHash,
         search: window.location.search,
@@ -183,7 +188,7 @@ export function ReviewSharePage(): JSX.Element {
     }
     setPins(result.pins);
     if(plan.source==='link'&&plan.planKey.startsWith('review-v2:')){
-      void appendReviewPinCloud({shareKey:plan.planKey,pin:result.pin,floorId:floor.id});
+      void appendReviewPinCloud({shareKey:plan.planKey,pin:result.pin,floorId:floor.id,author});
     }
     setActivePinId(result.pin.id);
     setPinDraft(null);
@@ -260,6 +265,10 @@ export function ReviewSharePage(): JSX.Element {
               </p>
             )}
             <p className="rsp-notice">{plan.notice}</p>
+            {!exampleOnly && <label className="rsp-author" style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span>你的称呼</span>
+              <input value={author} maxLength={24} placeholder="选填，方便对方知道是谁" onChange={event => { const value = event.currentTarget.value; setAuthor(value); try { window.localStorage.setItem('scendance-review-author', value); } catch { /* 忽略 */ } }} style={{flex:1,minWidth:0}} />
+            </label>}
             {plan.planKey==='sample:hall-d5' && <p><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
             {!exampleOnly && !pinDraft && pins.length === 0 && (
               <p className="rsp-review-hint" role="status">点物件或地面，钉一条意见</p>
