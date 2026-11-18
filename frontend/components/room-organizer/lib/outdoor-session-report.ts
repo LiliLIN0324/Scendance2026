@@ -37,6 +37,8 @@ export interface SessionReportRelease {
   verdicts?: readonly { id: number; allGreen: boolean }[];
   /** 待补清单的行（`missingEvidence()` 的 `line`）；空数组 = 台账无缺口。 */
   gaps?: readonly string[];
+  /** 报告自身的底：固定数据覆盖哪几条、走查日期填了什么——两轮报告混用时先看这行。 */
+  sources?: { fixedDataIds: readonly number[]; walkthroughAsOf?: string | undefined };
 }
 
 export interface SessionReportInput {
@@ -67,6 +69,15 @@ export function buildSessionReport(input: SessionReportInput): SessionReport {
   const metricsLine = `${METRICS_EXPORT_PREFIX} ${input.metrics.text}`;
   const lines = [traces.text, '', metricsLine];
   if (input.release) {
+    if (input.release.sources) {
+      const sources = input.release.sources;
+      const ids = [...sources.fixedDataIds].sort((a, b) => a - b);
+      const asOf = sources.walkthroughAsOf?.trim();
+      lines.push(
+        '',
+        `[报告来源] 固定数据用例：${ids.length > 0 ? ids.map((id) => `#${id}`).join(' ') : '无'} · 走查日期：${asOf ?? '未填（卡片会沿用对照表日期）'} · 生成：${new Date(now).toISOString()}`,
+      );
+    }
     // 单行 JSON：两轮报告贴在一起时能按行 diff，不会被格式化噪声搅乱。
     lines.push('', '[发布状态快照]（与状态卡同源；单行 JSON，可直接两轮比对）', JSON.stringify(input.release.snapshot));
     if (input.release.card) lines.push('', input.release.card);
@@ -104,6 +115,8 @@ export function buildSessionReport(input: SessionReportInput): SessionReport {
       if (input.release.gaps.length > 0) lines.push(...input.release.gaps);
       else lines.push('（台账里没有缺口）');
     }
+    // 固定收尾：报告只报事实，不构成发布结论。
+    lines.push('', '（本报告只报事实，不构成发布结论；可发布仍需三类全绿）');
   }
   return {
     version: 1,

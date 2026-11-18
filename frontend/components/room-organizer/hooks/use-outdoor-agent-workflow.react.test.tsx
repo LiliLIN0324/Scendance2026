@@ -2324,3 +2324,13 @@ it("报告里的待补清单与面板同源：标一条并声明后少一条", (
   expect(after).not.toContain("#2 ");
   expect(after).toContain("#5 ");
 });
+
+it("报告来源跟着走查日期走，空日期写未填", () => {
+  const empty = flow.sessionReport().text;
+  expect(empty).toContain("[报告来源] 固定数据用例：#2 #5");
+  expect(empty).toContain("走查日期：未填");
+  act(() => {
+    flow.setWalkthroughAsOf("2026-11-19 第四轮");
+  });
+  expect(flow.sessionReport().text).toContain("走查日期：2026-11-19 第四轮");
+});
