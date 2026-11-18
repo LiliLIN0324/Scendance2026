@@ -1733,8 +1733,8 @@ export class BackendSession {
     return result;
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
-  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true): Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}) });
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true, images?: string[]): Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}), ...(images?.length ? { images } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1747,8 +1747,8 @@ export class BackendSession {
    * 旧部署没有流式路由时（404/405/非 SSE）退回一次性请求，不把「不支持流」当成问答失败。
    * 取消只会停掉这一条请求；不会把已生成的部分当成完整答案。
    */
-  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1'):Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}) });
+  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1', images?:string[]):Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}), ...(images?.length ? { images } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1759,7 +1759,7 @@ export class BackendSession {
     }catch(error){
       dispatch();
       if(error instanceof SceneApiError&&(error.status===404||error.status===405||error.code==='STREAM_UNAVAILABLE'||error.code==='NON_JSON_RESPONSE')){
-        return this.assistantChat(message,history,signal,responseMode,provider,model,responseMode?true:undefined);
+        return this.assistantChat(message,history,signal,responseMode,provider,model,responseMode?true:undefined,images);
       }
       throw error;
     }

@@ -41,6 +41,10 @@ export async function readLayoutFromFile(file: File): Promise<RoomLayout> {
 /** Longest-edge cap for a stored floor plan, in pixels. */
 const MAX_IMAGE_EDGE = 1500;
 
+/** 随理解请求上云的现场截图：长边 1024、JPEG q0.7，单张约 0.1MB 级，10 张仍落在请求体预算内。 */
+const VISION_IMAGE_EDGE = 1024;
+const VISION_IMAGE_QUALITY = 0.7;
+
 export async function readImageAsDataUrl(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) {
     throw new Error('请选择图片文件（PNG、JPG等）。');
@@ -66,7 +70,21 @@ export async function readImageAsDataUrl(file: File): Promise<string> {
   return downscaleDataUrl(rawDataUrl);
 }
 
-function downscaleDataUrl(dataUrl: string): Promise<string> {
+/**
+ * 现场截图专用压缩版：不管原图多小都重编码成 JPEG，压掉截图 PNG 的体积，
+ * 好让「最多 10 张」真的发得出去。重编码失败（受限画布等）就退回原图，
+ * 由请求侧的体积预算兜底，不在这里静默丢图。
+ */
+export async function readVisionImageAsDataUrl(file: File): Promise<string> {
+  const stored = await readImageAsDataUrl(file);
+  try {
+    return await downscaleDataUrl(stored, VISION_IMAGE_EDGE, VISION_IMAGE_QUALITY, true);
+  } catch {
+    return stored;
+  }
+}
+
+function downscaleDataUrl(dataUrl: string, maxEdge = MAX_IMAGE_EDGE, quality = 0.85, reencode = false): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const image = new Image();
     const release = () => {
@@ -82,11 +100,11 @@ function downscaleDataUrl(dataUrl: string): Promise<string> {
           throw new Error('图片尺寸无效，请重新选择。');
         }
         const longEdge = Math.max(width, height);
-        if (longEdge <= MAX_IMAGE_EDGE) {
+        if (!reencode && longEdge <= maxEdge) {
           resolve(dataUrl);
           return;
         }
-        const scale = MAX_IMAGE_EDGE / longEdge;
+        const scale = Math.min(1, maxEdge / longEdge);
         canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(width * scale));
         canvas.height = Math.max(1, Math.round(height * scale));
@@ -96,7 +114,7 @@ function downscaleDataUrl(dataUrl: string): Promise<string> {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const result = canvas.toDataURL('image/jpeg', 0.85);
+        const result = canvas.toDataURL('image/jpeg', quality);
         if (!result.startsWith('data:image/')) throw new Error('图片编码失败，请重新选择。');
         resolve(result);
       } catch (error) {

@@ -1,4 +1,4 @@
-import {OUTDOOR_AGENT_SYSTEM_PROMPT,OUTDOOR_THOUGHT_PROMPT,outdoorTurnSchema,type OutdoorTurn} from './outdoor-agent-response-contract.ts';
+import {OUTDOOR_AGENT_SYSTEM_PROMPT,OUTDOOR_THOUGHT_PROMPT,OUTDOOR_VISION_PROMPT,outdoorTurnSchema,type OutdoorTurn} from './outdoor-agent-response-contract.ts';
 import {z} from 'zod';
 import {ApiError} from './domain.ts';
 import {chatProfile,chatRequest,resolveOpenAINextBase} from './providers.ts';
@@ -134,9 +134,9 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
    const liveThought=includeThought&&!!input.onDelta;
    const structured=parsed.data.responseMode==='outdoor_v1'&&!liveThought?{response_format:{type:'json_object' as const}}:{};
    const systemPrompt=parsed.data.responseMode==='outdoor_v1'
-    ? OUTDOOR_AGENT_SYSTEM_PROMPT+(includeThought?OUTDOOR_THOUGHT_PROMPT:'')
+    ? OUTDOOR_AGENT_SYSTEM_PROMPT+(includeThought?OUTDOOR_THOUGHT_PROMPT:'')+(parsed.data.images?.length?OUTDOOR_VISION_PROMPT:'')
     : ASSISTANT_CHAT_PROMPT;
-   const {url,init}=chatRequest(viewEnv,{messages:[{role:'system',content:systemPrompt},{role:'user',content:context}],...tokenLimit,...structured,...(input.onDelta?{stream:true}:{})},{purpose:'brief'});
+   const {url,init}=chatRequest(viewEnv,{messages:[{role:'system',content:systemPrompt},{role:'user',content:parsed.data.images?.length?[{type:'text' as const,text:context},...parsed.data.images.map(url=>({type:'image_url' as const,image_url:{url}}))]:context}],...tokenLimit,...structured,...(input.onDelta?{stream:true}:{})},{purpose:'brief'});
    const operation=(async():Promise<AssistantChatResult>=>{
     try{
      // Streaming first: the caller receives visible content deltas as they arrive.

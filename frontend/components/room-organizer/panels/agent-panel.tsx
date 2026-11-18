@@ -101,7 +101,7 @@ import { VenuePicker } from './venue-picker';
 import { cloudBriefMessage, cloudSeatingAllocation, cloudSeatingSpecs, initialBriefMemory, memoryExtraction, splitConfirmationLead, type BriefMemory, type LayoutMode } from '../lib/brief-agent';
 import { type PlanDiagnostic } from '../lib/diagnostics';
 import { checkEntranceBlocks } from '../lib/entrance-block-check';
-import { readImageAsDataUrl } from '../lib/file-io';
+import { readImageAsDataUrl, readVisionImageAsDataUrl } from '../lib/file-io';
 import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } from '../lib/layout-review';
 import { localPlan } from '../lib/local-plan';
 import { readBriefMemory, writeBriefMemory } from '../lib/assistant-brief-memory';
@@ -625,8 +625,9 @@ interface AgentValue {
   issueReviewLink(): void;
   acceptFile(file: File): void; retryFile(): void; pickFile(accept?: string): void;
   /** 选进来、还没发出去的图纸/照片：挂在输入框上，点发送才读进场地。 */
-  pendingFile: { name: string; url: string } | null;
-  removePendingFile(): void;
+  /** 2026-11-19 试点：支持最多 10 张现场截图（压缩后随理解请求发给 deepseek-flash 多模态）。 */
+  pendingFiles: Array<{ name: string; url: string }>;
+  removePendingImage(index: number): void;
   send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
   /** 面板自己也要能回话（场景库对话直接把结果说进这场会话），所以把说话口开放出来。 */
   say(bubble: Omit<Bubble, 'id'>): void;
@@ -988,7 +989,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const lastFile = useRef<File | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
   /** 选进来、还没发出去的图纸/照片：先摆在输入框里，等一句需求再一起发。 */
-  const [pendingFile, setPendingFile] = useState<{ file: File; url: string } | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<Array<{ file: File; url: string }>>([]);
   const runToken = useRef(0);
   const seed = useRef(1);
   const colliding = useRef(collidingIds); colliding.current = collidingIds;
@@ -2179,9 +2180,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const verdict = classifyFile(file);
     if (verdict !== 'image') { await acceptFile(file); return; }
     try {
-      const url = await readImageAsDataUrl(file);
+      // 现场截图要随理解请求上云：长边压到 1024、JPEG，10 张仍落在请求体预算内。
+      const url = await readVisionImageAsDataUrl(file);
       setIssue(null);
-      setPendingFile({ file, url });
+      setPendingFiles(list => list.length >= MAX_PENDING_IMAGES ? list : [...list, { file, url }]);
     } catch {
       await acceptFile(file);
     }
@@ -3099,8 +3101,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!allowUncertainRetry && uncertainInputs.current.has(text.trim())) {setRetryUncertain(text.trim());return;}
     if (!sessionScopeIsCurrent()) { say({role:'agent',amber:true,text:'活动已切换，请在当前活动重新发送。'}); return; }
     // 图纸/照片先在输入框里等：这一句发出去时才算读过、才铺底图；纯发文件也算一步。
-    const attachment = queued ? queuedAttachment??null : pendingFile;
-    if (attachment) setPendingFile(null);
+    const staged = queued ? [] : pendingFiles;
+    const attachment = queued ? queuedAttachment??null : staged[0]??null;
+    if (attachment) setPendingFiles([]);
     const trimmed = text.trim();
     if (!trimmed && !attachment) return;
     // 2026-11-16 用户口径：地图优先。地点没定就发布置/动线/分区，本地退回选址，
@@ -3143,7 +3146,15 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const clarification = previousRequest?.role === 'user' && previousReply?.role === 'assistant'
         ? { request: previousRequest.text, question: previousReply.text }
         : undefined;
-      if(attachment){setPendingFile(attachment);say({role:'agent',amber:true,text:'附件尚未结构化进入地图理解，未上传或声称已读图；文件保留在输入框。室内信息请先依图核对并画出真实区域/门口，设施GLB请用当前设施的原位上传。'});if(!trimmed)return;}
+      if(attachment){
+        // 全部待发图（最多 10 张）一起送；超预算的按顺序留下，并如实说几张没带。
+        const { images, skipped } = visionImagesWithinBudget(staged.map(f=>f.url));
+        say({role:'user',text:trimmed||'📎 现场截图'});
+        if (skipped>0) say({role:'agent',amber:true,text:`有 ${skipped} 张图超出本次请求的体积上限，只带了 ${images.length} 张；其余没有上传，可减少张数后重发。`});
+        // 纯发图也给一句默认理解指令（边缘 schema 要求 message 非空）；图片随 outdoor_v1 请求发给 deepseek-flash。
+        await outdoorWorkflow.handle(trimmed||'请看这张现场截图，结合当前规划给布置建议', clarification, images);
+        return;
+      }
       say({role:'user',text:trimmed});
       if(outdoorWorkflow.clarify(trimmed))return;
       // 2026-11-14 用户指令：排流线/排入口是确定性规则命令（读真实路网 → 提案），不依赖理解模型——
@@ -3730,7 +3741,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   /** The fence starts synchronously on submit, including turns waiting in the queue. */
   async function send(text:string,allowUncertainRetry=false,queued=false,queuedAttachment?:{file:File;url:string}|null,queuedHistory?:Array<{role:'user'|'assistant';text:string}>):Promise<void>{
     let finish=()=>{};
-    if(text.trim()||(queued?queuedAttachment:pendingFile)){
+    if(text.trim()||(queued?queuedAttachment:pendingFiles[0])){
       try{
         const begin=dialogueTurnStartRef.current;
         if(begin){
@@ -3832,8 +3843,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); },
     // 浮窗里「图片 / 文件」各自限定 accept；不传时回到全量白名单（老入口行为不变）。
     pickFile: (accept?: string) => { const input = fileInput.current; if (!input) return; input.accept = accept ?? DEFAULT_FILE_ACCEPT; input.click(); },
-    pendingFile: pendingFile ? { name: pendingFile.file.name, url: pendingFile.url } : null,
-    removePendingFile: () => setPendingFile(null),
+    pendingFiles: pendingFiles.map(({ file, url }) => ({ name: file.name, url })),
+    removePendingImage: index => setPendingFiles(list => list.filter((_, i) => i !== index)),
     send, say, rainOn: view.weather === 'rain', streamPreview,
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
     walkthrough: () => {
@@ -3843,7 +3854,15 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   };
   return <AgentContext.Provider value={value}>
     {children}
-    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept={DEFAULT_FILE_ACCEPT} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void stageFile(file); }}/>
+    <input ref={fileInput} type="file" hidden aria-hidden="true" tabIndex={-1} accept={DEFAULT_FILE_ACCEPT} multiple onChange={event => {
+      const picks=Array.from(event.target.files??[]); event.target.value = '';
+      const images=picks.filter(file=>classifyFile(file)==='image');
+      const room=Math.max(0, MAX_PENDING_IMAGES-pendingFiles.length);
+      if(images.length>room) say({role:'agent',amber:true,text:`现场截图最多 ${MAX_PENDING_IMAGES} 张，这次多选的 ${images.length-room} 个没有加进来。`});
+      // 非图片仍走原来的图纸/文件入口，不吃图片的名额。
+      for(const file of picks.filter(file=>classifyFile(file)!=='image')){ if (phaseRef.current !== 'generating') void stageFile(file); }
+      for(const file of images.slice(0, room)){ if (phaseRef.current !== 'generating') void stageFile(file); }
+    }}/>
   </AgentContext.Provider>;
 }
 
@@ -4156,6 +4175,22 @@ function FileLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number;
 
 /** 附件白名单：图片 + 图纸/PDF。加号浮窗会按「图片 / 文件」临时收窄，取消选择后回到这份全量。 */
 const DEFAULT_FILE_ACCEPT = 'image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg';
+
+/** 现场截图一次最多 10 张：与边缘 images schema 的上限一致，前端不多收。 */
+const MAX_PENDING_IMAGES = 10;
+/** 10 张图按 data URL 长度合计的预算（边缘总闸 4M 字符，这里留 100K 余量）。 */
+const VISION_PAYLOAD_BUDGET = 3_900_000;
+
+/** 只送预算内的图：超出部分按顺序留在输入框，不静默丢弃（调用方负责如实说明张数）。 */
+function visionImagesWithinBudget(urls: string[]): { images: string[]; skipped: number } {
+  const images: string[] = []; let total = 0; let skipped = 0;
+  for (const url of urls) {
+    if (!url.startsWith('data:image/')) continue;
+    if (total + url.length > VISION_PAYLOAD_BUDGET) { skipped++; continue; }
+    total += url.length; images.push(url);
+  }
+  return { images, skipped };
+}
 
 /** 麦克风图标：仓库 solid-icons 未收录，本地内联一笔，Stroke 跟其他线性图标一致。 */
 function MicIcon({ size = 18, 'aria-hidden': ariaHidden }: { size?: number; 'aria-hidden'?: boolean | 'true' | 'false' }): JSX.Element {
@@ -4504,8 +4539,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     : '说一句，比如「45 人讲座，入口在东侧」';
   // 发送键双态：空且无附件 → 麦克风；有字（或带附件）→ 箭头。理解中禁用，既有闸门不动。
   const hasDraft = draft.trim().length > 0;
-  const canSend = composerEnabled && !agent.isUnderstanding(draft) && (hasDraft || !!agent.pendingFile);
-  const showMic = !hasDraft && !agent.pendingFile;
+  const canSend = composerEnabled && !agent.isUnderstanding(draft) && (hasDraft || agent.pendingFiles.length>0);
+  const showMic = !hasDraft && !agent.pendingFiles.length;
   const preStates = !generating && !proposed && !paused && !planShown && agent.state !== 'generateFailed';
   // 回看不编数字：人没说人数就不写「0 人」。读数只算一次，回显卡和落盘那行共用。
   const recap = [agent.recap.event, agent.recap.guests, agent.recap.dims].filter(Boolean).join(' · ');
@@ -4516,7 +4551,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const activity = activeAgent === 'door';
   const showOutdoorSuggestion = activity && mode === 'layout' && agent.outdoorBridgeReady && !showHistory
     && !placePending
-    && !draft.trim() && !agent.pendingFile && !agent.venuePick && !agent.mapPickerOpen
+    && !draft.trim() && !agent.pendingFiles.length && !agent.venuePick && !agent.mapPickerOpen
     && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal && !agent.outdoorWorkflow.pendingPlan && !agent.outdoorWorkflow.loginRequired
     && !['working', 'confirm', 'ask', 'blocked'].includes(agent.outdoorTask?.state ?? '');
   /** 活动与 Bingo 共用同一场对话的气泡与底部；布置生成 chrome 只在活动脸出现。 */
@@ -4538,7 +4573,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     && !agent.briefBusy && !agent.understanding && !agent.generationQueued
     && !cloudRunRunning && !agent.cloudBusy && !agent.recovering && !studio?.applyRecovery
     && !agent.outdoorTask && !agent.outdoorWorkflow.busy && !agent.outdoorWorkflow.proposal
-    && !agent.proposal && !agent.pendingFile && !agent.issue && !agent.venuePick && !agent.mapPickerOpen;
+    && !agent.proposal && !agent.pendingFiles.length && !agent.issue && !agent.venuePick && !agent.mapPickerOpen;
   const pickTaskExample = (sentence: string): void => {
     setDraft(sentence);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -4879,10 +4914,12 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           if (event.key === 'Tab' && !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
         }}/>
-        {agent.pendingFile && <div className="sc-chat-file ap-file-chip">
-          <img className="sc-chat-file-thumb" src={agent.pendingFile.url} alt=""/>
-          <span className="sc-chat-file-name">{agent.pendingFile.name}</span>
-          <button type="button" className="sc-chat-file-remove" aria-label="移除附件" onClick={agent.removePendingFile}><X size={14} aria-hidden="true"/></button>
+        {agent.pendingFiles.length>0 && <div className="ap-file-chips" role="list" aria-label="待发截图">
+          {agent.pendingFiles.map((item, index) => <div key={item.url.slice(-24)+String(index)} role="listitem" className="sc-chat-file ap-file-chip">
+            <img className="sc-chat-file-thumb" src={item.url} alt=""/>
+            <span className="sc-chat-file-name">{item.name}</span>
+            <button type="button" className="sc-chat-file-remove" aria-label={`移除附件 ${index+1}`} onClick={() => agent.removePendingImage(index)}><X size={14} aria-hidden="true"/></button>
+          </div>)}
         </div>}
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">还有 {agent.generationQueued} 条消息排队，正在按顺序处理。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}

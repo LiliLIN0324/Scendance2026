@@ -2365,7 +2365,7 @@ export function useOutdoorAgentWorkflow(input: {
     return true;
   }
 
-  async function handle(message: string, clarification?: OutdoorClarification): Promise<boolean> {
+  async function handle(message: string, clarification?: OutdoorClarification, images?: string[]): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
     const waiting = pendingPlanRef.current;
     if (waiting && (explicitProposalApproval(message) || /^批准(?:这(?:份|个))?计划[。！!]?$/u.test(message.trim()))) {
@@ -2463,6 +2463,7 @@ export function useOutdoorAgentWorkflow(input: {
       if (map.status === "unavailable") designStep("本轮未取得地图依据，将使用已有规划和输入内容。");
       const turn = await understandOutdoorTurn({
         message,
+        ...(images?.length ? { images } : {}),
         clarification: waiting
           ? { request: waiting.message, question: `待批准的计划：${waiting.steps.join("；")}。请结合用户补充的要求理解本句。` }
           : clarification && {
