@@ -45,8 +45,11 @@ export function SharePanel({
   qrOpen,
   qrSvg,
   exports,
+  reviewLink = '',
   onIssueAudience,
   onSendBingo,
+  onCopyReview = () => undefined,
+  onOpenReview = () => undefined,
   onPublish,
   onCopy,
   onToggleQr,
@@ -63,8 +66,12 @@ export function SharePanel({
   qrOpen: boolean;
   qrSvg: string;
   exports: ShareExportEntry[];
+  /** 当前评审链接；空串表示还没生成。 */
+  reviewLink?: string;
   onIssueAudience(): void;
   onSendBingo(): void;
+  onCopyReview?: () => void;
+  onOpenReview?: () => void;
   onPublish(): void;
   onCopy(): void;
   onToggleQr(): void;
@@ -80,7 +87,34 @@ export function SharePanel({
     {tab === 'share' && <section className="sc-share-body" role="tabpanel" aria-label="分享" id="share-panel-share">
       <ShareHeading icon={<MarkIcon />} title={title} />
       <p className="sc-share-desc">{OPEN_LINE}</p>
-      <ShareActionRow label="送评审方" status="可批注" icon={<PinIcon />} ariaLabel="发给谁" disabled={busy} onClick={onIssueAudience} />
+      {reviewLink ? <>
+        <div className="sc-share-link" data-testid="review-link-row">
+          <span className="sc-share-link-text" title={reviewLink}>{displayShareUrl(reviewLink)}</span>
+          <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={onCopyReview}>复制</button>
+          <button type="button" className="sc-share-key" data-tone="paper" onClick={onOpenReview}>打开</button>
+          <button
+            type="button"
+            className="sc-share-key sc-share-qr"
+            data-tone="paper"
+            aria-label="评审二维码"
+            aria-expanded={qrOpen}
+            aria-controls="review-qr-pop"
+            onClick={onToggleQr}
+          >
+            <QrKeyIcon />
+          </button>
+          {qrOpen && <div id="review-qr-pop" className="sc-share-qrpop" role="dialog" aria-label="评审二维码">
+            {qrSvg
+              ? <div className="sc-share-qrpop-code" role="img" aria-label="评审二维码" dangerouslySetInnerHTML={{ __html: qrSvg }} />
+              : <p className="sc-share-desc">二维码还在生成。</p>}
+          </div>}
+        </div>
+        <button type="button" className="sc-share-renew" disabled={busy} onClick={onIssueAudience}>
+          {busy ? '正在刷新…' : '刷新为当前版本'}
+        </button>
+      </> : <button type="button" className="sc-share-cta" data-tone="green" disabled={busy} onClick={onIssueAudience}>
+        {busy ? '正在生成…' : '生成并复制评审链接'}
+      </button>}
       <ShareActionRow label="送到 Bingo" status={bingoStatus} icon={<RingIcon />} ariaLabel={`送到 Bingo，${bingoStatus}`} disabled={busy} onClick={onSendBingo} />
     </section>}
 
@@ -184,13 +218,6 @@ function GlobeIcon(): JSX.Element {
     <circle cx="8" cy="8" r="5.6" stroke="currentColor" strokeWidth="1.3" />
     <path d="M8 2.4c1.5 1.5 2.3 3.4 2.3 5.6S9.5 12.1 8 13.6C6.5 12.1 5.7 10.2 5.7 8S6.5 3.9 8 2.4Z" stroke="currentColor" strokeWidth="1.2" />
     <path d="M2.6 8h10.8" stroke="currentColor" strokeWidth="1.2" />
-  </svg>;
-}
-
-function PinIcon(): JSX.Element {
-  return <svg className="sc-share-glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M8 13.4s4-3.2 4-6.1A4 4 0 0 0 4 7.3c0 2.9 4 6.1 4 6.1Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <circle cx="8" cy="7.2" r="1.2" stroke="currentColor" strokeWidth="1.2" />
   </svg>;
 }
 

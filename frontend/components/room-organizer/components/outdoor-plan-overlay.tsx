@@ -339,8 +339,6 @@ export interface OutdoorPlanOverlayProps {
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
 export interface OutdoorPlanOverlayHandle {
-  /** G3：从 Bingo 打开同一个分享弹窗（预选允许钉评）。 */
-  openReviewShare(): void;
   /** 缩放一档（与滚轮同源）。 */
   zoomBy(direction: 1 | -1): void;
   /**
@@ -821,7 +819,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // P2-g：对外命令句柄（室内工具排的撤销/重做/缩放/导出转发到这里）。
   // 不写依赖数组：每帧重建，句柄永远拿到当帧闭包（内部读的都是 ref/最新 state）。
   useImperativeHandle(ref, () => ({
-    openReviewShare: () => { setShareOpen(true); },
     zoomBy: (direction: 1 | -1) => {
       canvasApiRef.current?.zoomBy(direction);
     },
@@ -1005,7 +1002,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         </div>
       )}
       {/* 2026-11-15 旧独立分享/导出钮退役：分享、导出、发布统一收进右上工具簇的 ShareMenu 面板，
-          本覆盖层不再自摆快捷钮。OutdoorDeliveryPanel 仅保留为面板挂载宿主，不再由此处按钮打开。 */}
+          本覆盖层不再自摆快捷钮。2026-11-18：评审入口也从 OutdoorDeliveryPanel 摘除，
+          旧面板仅保留为导出宿主，不再由覆盖层打开。 */}
       {/* 2026-11-16 用户指令：左下只保留一枚「图层」缩略钮；点开是「地图详情」面板，
           面板盖住地图和入口，关闭只走右上角 X，关掉后回到这一枚图层钮。
           2026-11-16 用户指令「这个在 3D 的时候也补上」：接管态（dormant）下整层 visibility:hidden，

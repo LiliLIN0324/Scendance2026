@@ -4489,6 +4489,7 @@ useEffect(() => {
   // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
   const shareActions: ShareMenuActions = {
     onIssueReviewLink: issueReviewLink,
+    onOpenBingo: () => { setWorkbenchMode('layout'); showAgent('bingo'); },
     onPublish: publishVersion,
     onListShares: listProjectShares,
     onRevokeShare: revokeProjectShare,
