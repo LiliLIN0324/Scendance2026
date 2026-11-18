@@ -14,13 +14,13 @@ const row = (id: number, fixedData: boolean, browser: 'pass' | 'partial' | 'none
 });
 
 describe('待补清单', () => {
-  it('全未验时 11 条都在清单里，且每条都写清缺三类', () => {
+  it('全未验时 11 条都在清单里，缺的是浏览器与云端（固定数据已有文件）', () => {
     const gaps = missingEvidence(defaultLedger());
     expect(gaps).toHaveLength(11);
     expect(gaps[0].id).toBe(1);
-    expect(gaps[0].missing).toEqual(['fixed', 'browser', 'cloud']);
+    expect(gaps[0].missing).toEqual(['browser', 'cloud']);
     expect(gaps[0].line).toContain('#1');
-    expect(gaps[0].line).toContain('缺：固定数据、浏览器、云端');
+    expect(gaps[0].line).toContain('缺：浏览器、云端');
   });
 
   it('浏览器看过但云端没声明：只缺云端，不重复列已过的', () => {

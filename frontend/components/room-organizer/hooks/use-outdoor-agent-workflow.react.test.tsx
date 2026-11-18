@@ -6,6 +6,7 @@ import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
+import { FIXED_DATA_CASES } from "../lib/outdoor-release-status-card";
 import { OUTDOOR_STAGE_LABELS, useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import type {
@@ -2327,7 +2328,10 @@ it("报告里的待补清单与面板同源：标一条并声明后少一条", (
 
 it("报告来源跟着走查日期走，空日期写未填", () => {
   const empty = flow.sessionReport().text;
-  expect(empty).toContain("[报告来源] 固定数据用例：#2 #5");
+  // 从常量推期望串，不手抄编号（口径改了才不用再改测试）。
+  expect(empty).toContain(
+    `[报告来源] 固定数据用例：${FIXED_DATA_CASES.map((id) => `#${id}`).join(" ")}`,
+  );
   expect(empty).toContain("走查日期：未填");
   act(() => {
     flow.setWalkthroughAsOf("2026-11-19 第四轮");
