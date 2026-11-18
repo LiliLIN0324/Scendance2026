@@ -213,91 +213,6 @@ export function ExportMenu({ onPick, enableExports = false, variant = 'default',
   );
 }
 
-/* ---------------- 毛玻璃分享弹窗 ---------------- */
-
-export interface ShareDialogProps {
-  open: boolean;
-  onClose: () => void;
-  content: { title: string; lines: string[] };
-  /** H5-b：本地分享链接（可复制）；生产换 token。 */
-  shareLink?: string;
-  /** H5-b：PDF 演示稿打印入口。 */
-  onPrintDeck?: () => void;
-}
-
-export function ShareDialog({ open, onClose, content, shareLink, onPrintDeck }: ShareDialogProps) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  const [copied, setCopied] = useState(false);
-  if (!open) return null;
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={content.title}
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 60,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(20, 20, 22, 0.32)',
-        fontFamily: 'inherit',
-      }}
-    >
-      <div
-        onClick={event => event.stopPropagation()}
-        style={{
-          width: 'min(560px, calc(100vw - 32px))',
-          padding: 24,
-          borderRadius: 18,
-          background: '#ffffff',
-          border: '1px solid #e4e4e7',
-          boxShadow: '0 16px 48px rgba(20, 20, 22, 0.18)',
-          color: '#141416',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: PLANNING_SPACING.md }}>
-          <strong style={{ fontSize: 20, lineHeight: '28px', fontWeight: 600 }}>{content.title}</strong>
-          <button type="button" onClick={onClose} aria-label="关闭" style={iconButtonStyle}>×</button>
-        </div>
-        {content.lines.map((line, index) => (
-          <p key={index} style={{ margin: `0 0 ${PLANNING_SPACING.sm}px`, fontSize: PLANNING_TYPOGRAPHY.panel, lineHeight: '20px', color: index === 0 ? '#141416' : '#55585f' }}>
-            {line}
-          </p>
-        ))}
-        {shareLink && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.sm, margin: `${PLANNING_SPACING.md}px 0 0`, padding: `${PLANNING_SPACING.sm}px ${PLANNING_SPACING.md}px`, background: '#f4f5f7', border: '1px solid #e4e4e7', borderRadius: 10 }}>
-            <input
-              readOnly
-              value={shareLink.length > 72 ? shareLink.slice(0, 48) + '…' + shareLink.slice(-12) : shareLink}
-              aria-label="分享链接"
-              style={{ flex: 1, background: 'transparent', border: 'none', color: '#141416', fontSize: PLANNING_TYPOGRAPHY.row, fontFamily: 'ui-monospace, monospace', outline: 'none', minWidth: 0 }}
-              onFocus={event => event.currentTarget.select()}
-            />
-            <button type="button" onClick={() => { void navigator.clipboard?.writeText(shareLink); setCopied(true); }} style={primaryButtonStyle}>
-              {copied ? '已复制' : '复制链接'}
-            </button>
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: PLANNING_SPACING.sm, marginTop: PLANNING_SPACING.lg }}>
-          {onPrintDeck && (
-            <button type="button" onClick={onPrintDeck} style={secondaryButtonStyle}>打印 PDF 演示稿</button>
-          )}
-          <button type="button" onClick={onClose} style={secondaryButtonStyle}>知道了</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------- 引导编排 hook（持久化注入，逻辑在纯函数层） ---------------- */
 
 export function useGuide(storageKey: string) {
@@ -385,19 +300,6 @@ const menuItemStyle: React.CSSProperties = {
   cursor: 'not-allowed',
   opacity: 0.75,
   font: 'inherit',
-};
-
-const iconButtonStyle: React.CSSProperties = {
-  // ghost 关闭钮：透明底 + 发丝线 + 墨字（模态规范）。
-  width: 28,
-  height: 28,
-  borderRadius: 10,
-  border: '1px solid #e4e4e7',
-  background: 'transparent',
-  color: '#141416',
-  fontSize: 16,
-  lineHeight: 1,
-  cursor: 'pointer',
 };
 
 

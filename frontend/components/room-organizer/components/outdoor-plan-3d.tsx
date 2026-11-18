@@ -17,7 +17,7 @@
  * 这样「北」朝屏幕里侧（-Z），与底图影像上北下南一致。
  */
 
-import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GeoScaleCompass } from '@/components/room-organizer/components/geo-scale-compass';
@@ -97,6 +97,9 @@ import { planFacilityColliders, planSeatAnchors, planWalkBounds, planZoneRings }
 import { planPlayerColliders } from '@/components/room-organizer/lib/plan-player-colliders';
 import { seatWalkAnchor } from '@/components/room-organizer/lib/seat-placement';
 import { workerPresetLine } from '@/components/room-organizer/lib/outdoor-worker-lines';
+import { auditWalkability } from '@/components/room-organizer/lib/walk-audit';
+import { describeRouteGuidance, guidanceAlongRoute } from '@/components/room-organizer/lib/walk-route-guidance';
+import { encodeWalkSpot, readWalkSpotFromHash, upsertWalkSpot, type WalkSpot } from '@/components/room-organizer/lib/walk-spots';
 import type { WalkCollider } from '@/components/room-organizer/lib/walk-collision';
 import {
   splatPlacementOffset,
@@ -433,6 +436,29 @@ export default function OutdoorPlan3D({
     walkChooserRef.current?.close();
     onWalkStart(actor ? 'third' : 'first');
   };
+  // 存观景位：记下当前机位，并把可回放的链接复制到剪贴板（分享 / 评审用）。
+  const saveWalkSpot = () => {
+    const frame = walkFrameRef.current;
+    if (!frame) return;
+    const spot: WalkSpot = {
+      name: `观景位 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`,
+      x: frame.x,
+      z: frame.z,
+      yaw: frame.yaw,
+      view: viewMode,
+    };
+    try {
+      const key = 'scendance-walk-spots-v1';
+      const raw = window.localStorage.getItem(key);
+      const list = raw ? (JSON.parse(raw) as WalkSpot[]) : [];
+      window.localStorage.setItem(key, JSON.stringify(upsertWalkSpot(Array.isArray(list) ? list : [], spot)));
+    } catch { /* 隐私模式 / 配额满：只复制链接 */ }
+    const url = `${window.location.origin}${window.location.pathname}#${encodeWalkSpot(spot)}`;
+    void navigator.clipboard?.writeText(url).catch(() => {});
+    setSpotNotice('观景位已存，链接已复制');
+    window.setTimeout(() => setSpotNotice(null), 2400);
+  };
+
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   // 组件级引用（renderer/scene 本体在 mount effect 里）：captureImage 同步抓帧用。
@@ -528,6 +554,16 @@ export default function OutdoorPlan3D({
   const derivedCrowdCountRef = useRef(0);
   /** 漫游角色 GLB 的加载态：失败时退回几何占位人，并留一句不吓人的说明。 */
   const [walkRoleAvatar, setWalkRoleAvatar] = useState<{ status: 'idle' | 'loading' | 'ready' | 'error'; message?: string; hasSit?: boolean }>({ status: 'idle' });
+  /** 这一帧是不是被红线挡住（HUD 提示用，只在变化时 setState）。 */
+  const [atBoundary, setAtBoundary] = useState(false);
+  /** 沿流线走的导航行（离流线近时才显示）。 */
+  const [routeLine, setRouteLine] = useState<string | null>(null);
+  const atBoundaryRef = useRef(false);
+  const routeTickRef = useRef(0);
+  /** 观景位保存后的短提示。 */
+  const [spotNotice, setSpotNotice] = useState<string | null>(null);
+  /** 从 #wspot1… 链接带进来的机位：进漫游时作为出生点。 */
+  const spotSpawnRef = useRef<{ x: number; z: number; yaw: number } | null>(null);
   /** 重试按一次换一个代次，重新走一遍加载。 */
   const [avatarAttempt, setAvatarAttempt] = useState(0);
   /** 无 sit 剪辑时下沉对位，HUD 要说清“这不是坐姿动画”。 */
@@ -655,6 +691,48 @@ export default function OutdoorPlan3D({
     });
   }, [plan.boundary, plan.facilities]);
 
+  // 通行体检：可达面积 / 走不到的设施 / 被压住的流线 / 最窄通道。
+  // 纯函数在 `lib/walk-audit.ts`，这里只在 plan 变化时跑一次，HUD 只读结论字符串。
+  const walkAudit = useMemo(() => {
+    const boundary = Array.isArray(plan.boundary) ? plan.boundary : [];
+    if (boundary.length < 3) return null;
+    const frame = ringFrame(boundary);
+    const routes = (Array.isArray(plan.routes) ? plan.routes : []).map((route) => ({
+      points: route.points,
+      ...(route.kind ? { kind: route.kind } : {}),
+    }));
+    try {
+      return auditWalkability({
+        facilities: Array.isArray(plan.facilities) ? plan.facilities : [],
+        boundary,
+        metrics: { width: frame.width, depth: frame.depth },
+        routes,
+      });
+    } catch {
+      return null;
+    }
+  }, [plan.boundary, plan.facilities, plan.routes]);
+
+  // 观景位深链接：#wspot1… 带进来就直接当出生点（再点漫游即到位）。
+  useEffect(() => {
+    const spot = readWalkSpotFromHash(window.location.hash);
+    if (spot) spotSpawnRef.current = { x: spot.x, z: spot.z, yaw: spot.yaw };
+  }, []);
+
+  // 化身预加载：3D 编辑态先把角色 GLB 拉进 HTTP 缓存（不解析、不建对象），
+  // 进漫游时直接命中缓存，避免每次都先看 10 秒几何人。
+  useEffect(() => {
+    if (!walkRoleUrl) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      void fetch(walkRoleUrl, { cache: 'force-cache' })
+        .then((response) => { response.body?.cancel().catch(() => {}); })
+        .catch(() => {});
+    }, 1500);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [walkRoleUrl]);
+
   // 一期裸第一人称步行：指针锁 / WASD / 边界钳制自管在本组件内，旧室内
   // walkthroughMode 链路不动；退出由 onWalkExit 交外层收口。
   const { phase: walkPhase } = useOutdoorWalk({
@@ -662,7 +740,7 @@ export default function OutdoorPlan3D({
     canvas: walkCanvas,
     cameraRef,
     orbitRef: controlsRef,
-    spawn: controlledActorRef.current?.spawn,
+    spawn: spotSpawnRef.current ?? controlledActorRef.current?.spawn,
     boundary: plan.designScope?.length ? plan.designScope : plan.boundary,
     viewMode,
     seatRef: seatStateRef,
@@ -674,6 +752,28 @@ export default function OutdoorPlan3D({
     },
     onWalkFrame: (frame) => {
       walkFrameRef.current = frame;
+      // 触到红线：只在变化时 setState，避免每帧重渲染。
+      if (Boolean(frame.atBoundary) !== atBoundaryRef.current) {
+        atBoundaryRef.current = Boolean(frame.atBoundary);
+        setAtBoundary(Boolean(frame.atBoundary));
+      }
+      // 沿流线走：4 次/秒算一次最近流线的剩余距离与 ETA（离流线 8 m 内才显示）。
+      const nowMs = performance.now();
+      if (nowMs - routeTickRef.current > 250) {
+        routeTickRef.current = nowMs;
+        const routes = Array.isArray(plan.routes) ? plan.routes : [];
+        let best: { text: string; off: number } | null = null;
+        for (const route of routes) {
+          if (!Array.isArray(route?.points) || route.points.length < 2) continue;
+          const world = route.points.map((point) => ({ x: point.x, z: -point.y }));
+          const guidance = guidanceAlongRoute(world, { x: frame.x, z: frame.z }, 1.8);
+          if (!guidance) continue;
+          if (!best || guidance.offRouteM < best.off) {
+            best = { text: describeRouteGuidance(guidance), off: guidance.offRouteM };
+          }
+        }
+        setRouteLine(best && best.off < 8 ? best.text : null);
+      }
       const controlled = controlledActorRef.current;
       const group = controlled?.actor.group;
       if (!controlled || !group?.parent) return;
@@ -2799,6 +2899,9 @@ export default function OutdoorPlan3D({
             </>
           )}
           {viewMode !== 'orbit' && seatedNoSit && <span>该角色没有坐姿动作，已按坐姿高度下沉对位</span>}
+          {viewMode !== 'orbit' && atBoundary && <span>已到场地边界</span>}
+          {viewMode !== 'orbit' && routeLine && <span>{routeLine}</span>}
+          {spotNotice && <span>{spotNotice}</span>}
           {viewMode !== 'orbit' && (walkPhase === 'drag' || walkPhase === 'unlocked') && <span>拖动鼠标转头</span>}
           {onCycleView && (
             <button
@@ -2820,6 +2923,46 @@ export default function OutdoorPlan3D({
               {WALK_VIEW_LABEL[viewMode]} · F5
             </button>
           )}
+          {viewMode !== 'orbit' && (
+            <button
+              type="button"
+              data-testid="outdoor-walk-spot"
+              onClick={saveWalkSpot}
+              style={{
+                pointerEvents: 'auto',
+                border: '1px solid rgba(255,255,255,0.35)',
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.12)',
+                color: '#fff',
+                fontSize: 12,
+                lineHeight: '18px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+              }}
+            >
+              存观景位
+            </button>
+          )}
+        </div>
+      )}
+      {walkEnabled && walkAudit && walkAudit.areaM2 >= 20 && (
+        <div
+          data-testid="outdoor-walk-audit"
+          style={{
+            position: 'absolute',
+            left: 16,
+            top: 16,
+            zIndex: 35,
+            maxWidth: 340,
+            padding: '4px 8px',
+            borderRadius: 8,
+            background: 'rgba(18, 20, 26, 0.62)',
+            color: '#fff',
+            fontSize: 11,
+            lineHeight: '16px',
+          }}
+        >
+          {walkAudit ? `体检 · ${walkAudit.headline}` : null}
         </div>
       )}
       {nearEntry && (
