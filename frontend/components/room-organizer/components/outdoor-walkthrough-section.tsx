@@ -23,6 +23,7 @@ export function OutdoorWalkthroughSection({
   onExportCsv,
   gapsLine,
   onAsOf,
+  reportLine,
 }: {
   initialBook: WalkthroughBook;
   onMark: (id: number, state: BrowserEvidence) => WalkthroughBook | null;
@@ -35,6 +36,8 @@ export function OutdoorWalkthroughSection({
   gapsLine?: string;
   /** 给就渲染日期输入框；返回非空才更新副本（与 `onMark` 同一规矩）。 */
   onAsOf?: (value: string) => WalkthroughBook | null;
+  /** 报告段落自检的一行话（`formatSectionCheck()` 返回值）；不传就不显示。 */
+  reportLine?: string;
 }): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [book, setBook] = useState(initialBook);
@@ -80,6 +83,11 @@ export function OutdoorWalkthroughSection({
               className="mt-2 whitespace-pre-line rounded-lg bg-neutral-50 p-2 text-[11px] leading-relaxed text-neutral-600"
             >
               {gapsLine}
+            </p>
+          )}
+          {reportLine && (
+            <p aria-label="报告段落自检" className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+              {reportLine}
             </p>
           )}
         </>
