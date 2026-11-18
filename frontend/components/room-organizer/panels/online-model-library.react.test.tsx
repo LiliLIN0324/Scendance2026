@@ -586,6 +586,16 @@ describe('物料卡三栏互斥', () => {
     expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
   });
 
+  it('导入 GLB 出现在物料库的「我的物料」，我的生成里没有这个入口', async () => {
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()} importSlot={<button type="button">导入 GLB</button>} />);
+    await screen.findByRole('button', { name: '物料库' });
+    const mine = screen.getByRole('region', { name: '我的物料' });
+    expect(mine.textContent).toContain('导入 GLB');
+    fireEvent.click(screen.getByRole('button', { name: '我的生成' }));
+    expect(screen.queryByRole('region', { name: '我的物料' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '导入 GLB' })).toBeNull();
+  });
+
   it('公共物料全被收藏时，库显示空态而不是空白', async () => {
     localStorage.setItem(MATERIAL_LIBRARY_META_KEY, JSON.stringify({ favorites: CATALOGUE.map(item => item.slug) }));
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
