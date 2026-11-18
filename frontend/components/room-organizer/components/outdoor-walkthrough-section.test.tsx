@@ -148,3 +148,23 @@ describe("报告段落自检显示（轮次 97）", () => {
     expect(screen.queryByLabelText("报告段落自检")).toBeNull();
   });
 });
+
+describe("下一步提示（轮次 99）", () => {
+  it("传了 nextLine 就显示在待补清单上方", () => {
+    render(
+      <OutdoorWalkthroughSection
+        initialBook={emptyBook()}
+        onMark={vi.fn()}
+        defaultOpen
+        gapsLine="#1 —— 缺：云端"
+        nextLine="下一步：#1 —— 先去云端核实一次"
+      />,
+    );
+    expect(screen.getByLabelText("下一步").textContent).toContain("先去云端核实一次");
+  });
+
+  it("不传就不渲染", () => {
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} defaultOpen />);
+    expect(screen.queryByLabelText("下一步")).toBeNull();
+  });
+});

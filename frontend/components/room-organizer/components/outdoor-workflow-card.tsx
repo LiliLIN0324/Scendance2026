@@ -834,6 +834,7 @@ export function OutdoorWorkflowCard({
         gapsLine={flow.releaseGaps()}
         onAsOf={(value) => flow.setWalkthroughAsOf(value)}
         reportLine={flow.reportSections()}
+        nextLine={flow.nextGap()}
       />
     </section>
       {flow.loginRequired && !flow.loginSatisfied && (

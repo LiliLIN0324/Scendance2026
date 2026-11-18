@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { formatGapList, missingEvidence, missingRows } from './outdoor-release-gaps';
+﻿import { describe, expect, it } from 'vitest';
+import { formatGapList, formatNextGap, missingEvidence, missingRows, nextGap } from './outdoor-release-gaps';
 import { defaultLedger, ledgerFromEvidence, type CaseLedgerRow } from './outdoor-release-status-card';
 
 /**
@@ -61,5 +61,39 @@ describe('待补清单', () => {
   it('台账缺行时可单独查出少了哪几个号', () => {
     expect(missingRows(defaultLedger().filter((row) => row.id !== 5 && row.id !== 9))).toEqual([5, 9]);
     expect(missingRows(defaultLedger())).toEqual([]);
+  });
+});
+
+describe("下一步干哪条（轮次 99）", () => {
+  it("挑号最小的待补用例，并说清先补哪个信号", () => {
+    const ledger = defaultLedger();
+    const next = nextGap(ledger);
+    expect(next?.id).toBe(1);
+    const line = formatNextGap(ledger);
+    expect(line.startsWith("下一步：#1 ")).toBe(true);
+    expect(line).toMatch(/先(去补固定数据用例|去真实浏览器里跑一遍|去云端核实一次)/);
+    expect(line).not.toContain("可发布");
+  });
+
+  it("空台账不冒充“没活儿”", () => {
+    expect(nextGap([])).toBeNull();
+    expect(formatNextGap([])).toContain("没有台账");
+    expect(formatNextGap([])).not.toContain("无缺口");
+  });
+
+  it("全齐时只说“都补齐了”，能不能发仍以状态卡为准", () => {
+    const green: CaseLedgerRow[] = [
+      { id: 1, fixedData: true, browser: "pass", cloud: "pass" },
+    ];
+    expect(nextGap(green)).toBeNull();
+    const line = formatNextGap(green);
+    expect(line).toContain("都补齐了");
+    expect(line).toContain("仍以状态卡为准");
+  });
+
+  it("下一句与待补清单同源：清单首条就是它", () => {
+    const ledger = defaultLedger();
+    const first = missingEvidence(ledger)[0];
+    expect(formatNextGap(ledger)).toContain(`#${first?.id} ${first?.title}`);
   });
 });
