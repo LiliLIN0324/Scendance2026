@@ -911,6 +911,8 @@ useEffect(() => {
     setSidebarCollapsed(true);
   }, []);
   const businessHostRef = useRef<HTMLDivElement>(null);
+  const businessOpenRef = useRef(false);
+  businessOpenRef.current = businessOpen;
   const businessToolsRef = useRef<BusinessToolsApi | null>(null);
   const toolsEntryRef = useRef<HTMLButtonElement>(null);
   const spaceEntryRef = useRef<HTMLButtonElement>(null);
@@ -919,7 +921,7 @@ useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
     const media = window.matchMedia('(max-width:1080px)');
     const collapseTools = () => {
-      if (!media.matches) return;
+      if (!media.matches || businessOpenRef.current) return;
       if (businessHostRef.current?.parentElement?.contains(document.activeElement)) toolsEntryRef.current?.focus();
       setSidebarCollapsed(true);
     };
@@ -943,17 +945,41 @@ useEffect(() => {
     setConversationOpen(open);
     if (open && window.innerWidth <= 1080) { setSidebarCollapsed(true); }
   }, []);
-  // 深工具打开时左栏让出来；关掉不把简报重新撑开，首屏把宽度留给画布。
-  // 图纸、评审资料、执行清单开在画布上，不把左侧Bingo换成另一张卡。
-  const handleWorkspaceVisibility = useCallback((open: boolean) => {
-    setBusinessOpen(open);
-    if (open) {
-      setLeftMode('business');
-      setSidebarCollapsed(true);
-      setSidePanel(null);
-      setAgentCollapsed(false);
-    } else setLeftMode(mode => (mode === 'business' ? 'brief' : mode));
+  // 执行资料 / 方案评审进左栏这一张卡。不把 Bingo 的内容换成评审或执行。
+  const agentBeforeBusinessRef = useRef<boolean | null>(null);
+  const agentCollapsedRef = useRef(agentCollapsed);
+  const leftModeRef = useRef(leftMode);
+  const outdoorPanelRef = useRef(outdoorPanel);
+  agentCollapsedRef.current = agentCollapsed;
+  leftModeRef.current = leftMode;
+  outdoorPanelRef.current = outdoorPanel;
+  const showBusinessCard = useCallback(() => {
+    if (agentBeforeBusinessRef.current === null) agentBeforeBusinessRef.current = !agentCollapsedRef.current;
+    setLeftMode('business');
+    setBusinessOpen(true);
+    setSidebarCollapsed(false);
+    setSidePanel(null);
+    setAgentCollapsed(true);
+    closeGenerationSheet();
+    setCapturePanel(value => value === 'open' ? 'hidden' : value);
+    setChatPeerId(null);
   }, []);
+  const hideBusinessCard = useCallback(() => {
+    if (!businessOpenRef.current && leftModeRef.current !== 'business') {
+      agentBeforeBusinessRef.current = null;
+      return;
+    }
+    setBusinessOpen(false);
+    setSidebarCollapsed(true);
+    setLeftMode(mode => (mode === 'business' ? 'brief' : mode));
+    const restore = agentBeforeBusinessRef.current;
+    agentBeforeBusinessRef.current = null;
+    if (restore && outdoorPanelRef.current === null) setAgentCollapsed(false);
+  }, []);
+  const handleWorkspaceVisibility = useCallback((open: boolean) => {
+    if (open) showBusinessCard();
+    else hideBusinessCard();
+  }, [showBusinessCard, hideBusinessCard]);
   const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   /** 左轨四格共用一个面板：切到哪一格，整栏就变成那个 agent 的卡。 */
   const showAgent = useCallback((id: AgentId) => {
@@ -987,10 +1013,10 @@ useEffect(() => {
     requestAnimationFrame(() => document.querySelector<HTMLElement>('#agent-panel section[aria-label="场景模板"] button')?.focus());
   }, [showAgent]);
   const closeLeftPanel = useCallback(() => {
-    setBusinessOpen(false);
-    setSidebarCollapsed(true);
+    businessToolsRef.current?.closeWorkspace();
+    hideBusinessCard();
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.sc-mode-rail button[aria-pressed="true"]')?.focus());
-  }, []);
+  }, [hideBusinessCard]);
   // 左轨只留布置。旧的评审/执行不切模式：评审打开分享，执行打开到场清单。
   const selectWorkbenchMode = useCallback((mode: WorkbenchMode) => {
     const next = demoteLegacyMode(mode);
@@ -1104,15 +1130,11 @@ useEffect(() => {
     else showAgent(id);
   }, [generationOpen, captureOpen, agentPanelOpen, activeAgent, chatPeerId, closeBingo, showAgent]);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
-    // 表单仍浮在画布上。不把Bingo切成评审或执行。
-    setLeftMode('business');
-    setBusinessOpen(true);
-    setSidebarCollapsed(true);
-    setSidePanel(null);
-    setAgentCollapsed(false);
+    // 表单进左栏这一张卡。不把 Bingo 切成评审或执行。
+    showBusinessCard();
     if (mode === 'review') setReviewOpenRequest(value => value + 1);
     else setDeliveryOpenRequest(value => value + 1);
-  }, []);
+  }, [showBusinessCard]);
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get('restore') !== 'backup') return;
@@ -2644,11 +2666,12 @@ useEffect(() => {
   // 当前可见的堆栈成员：≤2 张时参与比例调节；>2 张（拍摄向导+私聊+户外同开的极端组合）
   // 安全退化为均分。captureOpen 不再独占左栏：拍摄场地卡与户外卡/私聊卡堆叠共存
   //（Bingo 保持让位，避免三卡同屏）。
+  const businessCardOpen = businessOpen && leftMode === 'business';
   const leftStackCards: LeftStackPanelId[] = [
-    ...(captureOpen ? ['capture' as const] : []),
-    ...(personChat ? ['chat' as const] : []),
-    ...(((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null) ? ['outdoor' as const] : []),
-    ...(!captureOpen && !personChat && agentPanelVisible ? ['bingo' as const] : []),
+    ...(captureOpen && !businessCardOpen ? ['capture' as const] : []),
+    ...(personChat && !businessCardOpen ? ['chat' as const] : []),
+    ...(((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null && !businessCardOpen) ? ['outdoor' as const] : []),
+    ...(!captureOpen && !personChat && agentPanelVisible && !businessCardOpen ? ['bingo' as const] : []),
   ];
   leftStackPairRef.current = leftStackCards.length === 2 ? leftStackCards : null;
   const leftStackPair = leftStackPairRef.current;
@@ -2662,14 +2685,14 @@ useEffect(() => {
   // 栏内实际还占着位置的卡片：已浮成独立小窗的不算。抽屉非收起时也占栏。
   // 全浮走时左栏只留一个白底空壳——此时把列宽/底/调节条收起，fixed 浮窗仍挂在列内不受影响。
   const dockedCards = leftStackCards.filter(id => !isLeftStackDetached(leftStack, id));
-  const drawerDocked = !sidebarCollapsed && !captureOpen;
+  const drawerDocked = ((!sidebarCollapsed && !captureOpen) || businessCardOpen);
   const dockColumnOccupied = dockedCards.length > 0 || drawerDocked || generationOpen;
   // P2-g 修复：户外卡片开着时左栏必须撑着。此前左栏只看 navExpanded/私信/拍摄，
   // 开户外会先关掉室内面板把栏收起 → 图层栈卡片整片被地图盖住（用户实测反馈）。
   // 2026-11-12「3D 的时候也要可编辑」：接管态同样撑着——工具卡 portal 用的宿主都挂在
   // 左栏户外卡片里，接管态不挂卡片 = 3D 里没有任何编辑入口（误删回归，本行修复）。
   // columnExpanded 的全部消费点都在本行之后（769/4130/4135/4264），搬到这里才能引用 takeover。
-  const columnExpanded = navExpanded || personChat || captureOpen || generationOpen || ((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null);
+  const columnExpanded = navExpanded || businessCardOpen || personChat || captureOpen || generationOpen || ((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null);
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -4792,14 +4815,14 @@ useEffect(() => {
             </Suspense>
             {isLeftStackDetached(leftStack, 'capture') && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'capture', event)} />}
           </aside>}
-          <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${sidebarCollapsed || captureOpen ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
+          <div id="workbench-left-panel" className={`sc-left-drawer sc-float-layer ${((sidebarCollapsed || captureOpen) && !businessCardOpen) ? 'is-collapsed' : ''}${leftMode==='brief'?' has-brief':''}${leftMode==='business'?' has-business':''}${leftMode==='properties'?' has-properties':''}`}>
             <div className="sc-left-heading"><nav className="sc-left-context" aria-label="当前工具内容">
               {selectedItem&&<button type="button" aria-pressed={leftMode==='properties'} onClick={()=>{setLeftMode('properties');setSidebarCollapsed(false);}}>选中物料</button>}
               {luxDirectVisible&&(leftMode==='lux3d'||aholoReconPreset)&&<button type="button" aria-pressed={leftMode==='lux3d'} onClick={()=>{setLux3dOpenKind(null);setLeftMode('lux3d');setBusinessOpen(false);setSidebarCollapsed(false);}}>场地观感</button>}
             </nav><button type="button" className="sc-left-close" aria-label="收起左侧面板" onClick={closeLeftPanel}><PanelLeftClose size={18}/></button></div>
-            <div className="sc-left-content sc-mode-card-host" hidden/>
+            <div ref={businessHostRef} className="sc-left-content sc-data-host" data-testid="business-card-host" hidden={!businessCardOpen}/>
           </div>
-          {!captureOpen && !generationOpen && personChat && chatPeerId && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}
+          {!captureOpen && !generationOpen && personChat && chatPeerId && !businessCardOpen && <MemberChat key={chatPeerId} controller={controller} team={team} peerId={chatPeerId} onClose={() => setChatPeerId(null)}
             {...(isLeftStackDetached(leftStack, 'chat') ? {
               className: 'is-detached', style: leftStackFloatStyle('chat'),
               floatBar: <div className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`} onPointerDown={event => beginLeftStackDrag('move', 'chat', event)}>
@@ -4821,7 +4844,7 @@ useEffect(() => {
             <aside
               className={`sc-left-drawer sc-float-layer is-outdoor-card${isLeftStackDetached(leftStack, 'outdoor') ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
               data-testid="outdoor-left-card"
-              hidden={outdoorPanel === null || generationOpen}
+              hidden={outdoorPanel === null || generationOpen || businessCardOpen}
               style={{
                 position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
                 // 堆栈态高度交给 CSS（is-stack-first 吃 --sc-left-stack-percent，第二张吃剩余）；
@@ -4895,7 +4918,7 @@ useEffect(() => {
               </div>
             </div>
           )}
-          {!captureOpen && !generationOpen && !personChat && agentPanelVisible && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(isLeftStackDetached(leftStack, 'bingo') ? {} : { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) })} {...(isLeftStackDetached(leftStack, 'bingo') ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(isLeftStackDetached(leftStack, 'bingo') ? {
+          {!captureOpen && !generationOpen && !personChat && agentPanelVisible && !businessCardOpen && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(isLeftStackDetached(leftStack, 'bingo') ? {} : { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) })} {...(isLeftStackDetached(leftStack, 'bingo') ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(isLeftStackDetached(leftStack, 'bingo') ? {
                 floatBar: (
                   <div
                     className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
@@ -5123,7 +5146,6 @@ useEffect(() => {
               <button type="button" className="sc-checklist-dismiss" onClick={() => setChecklistOpen(false)}>关闭</button>
               <DeliveryChecklistShell items={activeFloor.items} onExport={exportHandoff}/>
             </aside>}
-            <div ref={businessHostRef} className="sc-canvas-share sc-data-host" hidden={!businessOpen || leftMode !== 'business'}/>
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded
                 hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
