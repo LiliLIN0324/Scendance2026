@@ -1,20 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
-import { SettingsMenu } from './settings-menu';
+import { afterEach, expect, it, vi } from 'vitest';
+import { AboutDialog } from './about-dialog';
 
 afterEach(cleanup);
 
-it('keeps the repository link and does not present it as a privacy policy', () => {
-  render(<SettingsMenu/>);
-  fireEvent.click(screen.getByRole('button', { name: '更多' }));
-  expect(screen.getByRole('link', { name: 'GitHub' }).getAttribute('href')).toBe('https://github.com/LiliLIN0324/Scendance2026');
-  expect(screen.queryByRole('link', { name: '隐私政策' })).toBeNull();
-});
-
-it('shows the real Esc close hint and does not fabricate a secret or history clear entry', () => {
-  render(<SettingsMenu/>);
-  fireEvent.click(screen.getByRole('button', { name: '更多' }));
-  expect(screen.getByText('Esc', { selector: '.ap-kbd' })).toBeTruthy();
-  expect(screen.queryByText(/清除密钥|清除历史|清除本机/)).toBeNull();
+it('copies the injected build identity and does not invent a version', async () => {
+  vi.stubEnv('NEXT_PUBLIC_SCENDANCE_VERSION', '9.9.9-test');
+  vi.stubEnv('NEXT_PUBLIC_SCENDANCE_COMMIT', 'abc123def456');
+  const write = vi.fn().mockResolvedValue(undefined);
+  Object.assign(navigator, { clipboard: { writeText: write } });
+  render(<AboutDialog open onClose={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: /复制版本信息/ }));
+  await vi.waitFor(() => expect(write).toHaveBeenCalledWith('Scendance 9.9.9-test\n提交 abc123def456'));
+  expect(screen.queryByText('4.17.12')).toBeNull();
+  vi.unstubAllEnvs();
 });

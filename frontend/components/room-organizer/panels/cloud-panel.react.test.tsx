@@ -68,14 +68,18 @@ let controller: BackendSession;
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
 
-function openAccount(section: '我的项目' | '物料' | '团队与权限' = '我的项目'): void {
-  fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
-  // 默认落在项目；物料 / 团队在左栏团队列表下方。
-  if (section !== '我的项目') fireEvent.click(screen.getByRole('button', { name: section }));
+function openAvatarMenu(): void {
+  const button = screen.getByRole('button', { name: '账户菜单' });
+  if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button);
 }
 
-function openProjects(container: HTMLElement): void {
-  fireEvent.click(container.querySelector('.sc-cloud-trigger')!);
+function openAccount(section: '我的项目' | '物料' = '我的项目'): void {
+  openAvatarMenu();
+  fireEvent.click(screen.getByRole('menuitem', { name: section === '物料' ? '物料' : '所有方案' }));
+}
+
+function openProjects(_container?: HTMLElement): void {
+  openAccount('我的项目');
 }
 
 /** 项目卡改为双击进入；当前卡用「当前项目」标签。 */
@@ -807,7 +811,8 @@ it('closes the account dialog when signing out', async () => {
   expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true);
   await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
   queue({});
-  fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+  openAvatarMenu();
+  fireEvent.click(screen.getByRole('menuitem', { name: '退出登录' }));
   await waitFor(() => expect(controller.getSnapshot().user).toBeNull());
   expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false);
 });
@@ -831,22 +836,17 @@ it('filters projects by name and studio and clears an empty search', async () =>
   expect(screen.getAllByRole('button', { name: /^打开 / })).toHaveLength(1);
 });
 
-it('returns to the project list when a sidebar team is clicked from 物料 or 团队', async () => {
+it('returns to the project list when a sidebar team is clicked from 物料', async () => {
   const secondStudio = '20000000-0000-4000-8000-000000000002';
   queue([original, { ...other, studio_id: secondStudio }]);
   queue([{ id: studioId, name: '一号工作室', role: 'owner', displayName: 'A' }, { id: secondStudio, name: '二号工作室', role: 'editor', displayName: 'A' }]);
   render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
-  openAccount('团队与权限');
-  expect(await screen.findByRole('region', { name: '团队' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: '一号工作室' }));
-  expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
-  expect(screen.getByRole('region', { name: '我的项目' }).hasAttribute('hidden')).toBe(false);
   openAccount('物料');
   expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: '二号工作室' }));
+  fireEvent.click(await screen.findByRole('button', { name: '二号工作室' }));
   expect(screen.queryByRole('button', { name: '我的项目' })).toBeNull();
   expect(await screen.findByText('另一个云项目')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
 });
 
 it('shows the login card instead of fake demo people when signed out', () => {
@@ -879,7 +879,10 @@ it('reports a failed project list without claiming the account is empty and allo
 
 describe('CloudPanel source protection before leaving the workspace', () => {
   const message = '演练约定有未保存修改，请先保存或放弃修改。';
-  const signOutControl = () => screen.getByRole('button', { name: '退出登录' });
+  const signOutControl = () => {
+    openAvatarMenu();
+    return screen.getByRole('menuitem', { name: '退出登录' });
+  };
 
   it('keeps the dialog and live draft when 退出登录 cannot flush, then proceeds once after saving', async () => {
     const scope = 'house-navigation-draft';
@@ -1022,74 +1025,83 @@ describe('CloudPanel preferences section', () => {
     const initial = backendSceneToLayout(scene, { projectId, name: original.name });
     render(<CloudPanel controller={controller} layout={initial} onLoadLayout={vi.fn()}
       preferences={{ lengthUnit: 'ft', showMeasurements: false }}
-      onPreferenceChange={onPreferenceChange} />);
-    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
-    fireEvent.click(screen.getByRole('button', { name: '设置' }));
-    expect(screen.getByRole('tab', { name: '偏好' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: '快捷键' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '个人偏好' })).toBeTruthy();
+      onPreferenceChange={onPreferenceChange}
+      onPlanSettingsChange={vi.fn()} />);
+    openAvatarMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: '设置' }));
+    expect(screen.getByRole('dialog', { name: '个人' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '个人' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByRole('tab', { name: '快捷键' })).toBeNull();
     expect(screen.queryByText('项目设置')).toBeNull();
     expect(screen.queryByText('换算示例')).toBeNull();
-    expect(screen.getByRole('button', { name: /英尺/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: '米 · m' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: '英尺' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '米' }).getAttribute('aria-pressed')).toBe('false');
     const checkbox = screen.getByRole('checkbox', { name: '尺寸标注' }) as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: '米 · m' }));
+    fireEvent.click(screen.getByRole('button', { name: '米' }));
     expect(onPreferenceChange).toHaveBeenLastCalledWith({ lengthUnit: 'm' });
     fireEvent.click(checkbox);
     expect(onPreferenceChange).toHaveBeenLastCalledWith({ showMeasurements: true });
-    fireEvent.click(screen.getByRole('tab', { name: '快捷键' }));
-    expect(screen.queryByRole('group', { name: '显示单位' })).toBeNull();
-    expect(screen.getByRole('heading', { name: '快捷键' })).toBeTruthy();
-    expect(screen.getByText('建造画布 · 编辑')).toBeTruthy();
-    expect(screen.getByText('网格吸附')).toBeTruthy();
-    expect(screen.getByText('只切网格；墙 / 物件吸附是独立开关')).toBeTruthy();
-    expect(screen.queryByText('快捷键还在整理，这里先空着。')).toBeNull();
+    expect(screen.getByRole('button', { name: '查看速查' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '建造画布 · 编辑' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '本方案' }));
+    expect(screen.getByRole('heading', { name: '本方案' })).toBeTruthy();
+    expect(screen.getByRole('spinbutton', { name: '网格间距' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '团队' }));
+    expect(screen.getByRole('heading', { name: '团队' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
   });
 });
 
 describe('CloudPanel section entry points', () => {
-  it('opens 账户中心 from the avatar and follows explicit requests to other sections', () => {
+  it('opens a short avatar menu, then the existing project wall and asset library', async () => {
     queue([]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     const initial = backendSceneToLayout(scene, { projectId, name: original.name });
     const props = { controller, layout: initial, onLoadLayout: vi.fn() };
     const { rerender } = render(<CloudPanel {...props}/>);
-    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
-    // 默认项目主表面；物料 / 团队在左栏团队下方，退出在三点菜单。
+    openAvatarMenu();
+    const menu = screen.getByRole('menu', { name: '账户菜单' });
+    expect(await within(menu).findByText('工作室')).toBeTruthy();
+    expect(within(menu).getByText('A')).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: '团队与权限' })).toBeNull();
+    expect(screen.queryByText('Esc')).toBeNull();
+    expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false);
+    fireEvent.click(screen.getByRole('menuitem', { name: '所有方案' }));
     expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: '账户分区' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '物料' }));
+    expect(screen.getByRole('navigation', { name: '团队' })).toBeTruthy();
+    openAccount('物料');
     expect(screen.getByRole('region', { name: '账户物料' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '物料' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
     rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'projects' }}/>);
     expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
     rerender(<CloudPanel {...props} openRequest={{ serial: 2, section: 'team' }}/>);
-    expect(screen.getByRole('button', { name: '团队与权限' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: '团队' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: '团队' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
   });
 
-  it('puts 团队与权限 under the team list instead of a separate settings surface', () => {
+  it('keeps support to four items and puts the site and repository on 关于', () => {
     queue([]);
-    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
-    const initial = backendSceneToLayout(scene, { projectId, name: original.name });
-    const props = { controller, layout: initial, onLoadLayout: vi.fn() };
-    const { rerender } = render(<CloudPanel {...props}/>);
-    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
-    expect(screen.getByRole('heading', { name: '账户中心' })).toBeTruthy();
-    expect(screen.getByLabelText('更多')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: '账户分区' }).textContent).toContain('团队与权限');
-
-    rerender(<CloudPanel {...props} openRequest={{ serial: 1, section: 'team' }}/>);
-    expect(screen.getByRole('heading', { name: '账户中心' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '关闭设置面板' })).toBeNull();
-    expect(screen.getByRole('button', { name: '退出登录' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '我的项目' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '团队与权限' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('region', { name: '团队' })).toBeTruthy();
-    expect(screen.queryByRole('region', { name: '权限演示空间' })).toBeNull();
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: '终树' }]);
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+    openAvatarMenu();
+    expect(screen.queryByRole('menuitem', { name: '退出登录' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: '支持' }));
+    const support = screen.getByRole('menu', { name: '支持' });
+    expect(within(support).getByRole('menuitem', { name: '新手指引' }).getAttribute('href')).toBe('/guide');
+    expect(within(support).getByRole('menuitem', { name: '键盘快捷键' })).toBeTruthy();
+    expect(within(support).getByRole('menuitem', { name: '发送反馈' })).toBeTruthy();
+    expect(within(support).getByRole('menuitem', { name: '关于' })).toBeTruthy();
+    expect(within(support).queryByRole('menuitem', { name: 'GitHub' })).toBeNull();
+    expect(within(support).queryByRole('link', { name: '切回官网' })).toBeNull();
+    fireEvent.click(within(support).getByRole('menuitem', { name: '关于' }));
+    expect(screen.getByRole('dialog', { name: 'Scendance' })).toBeTruthy();
+    expect(screen.getByText('活动场地规划工作台')).toBeTruthy();
+    expect(screen.getByText('幕景宇宙')).toBeTruthy();
+    expect(screen.getByRole('link', { name: '产品官网' }).getAttribute('href')).toBe('/introduction');
+    expect(screen.getByRole('link', { name: 'GitHub 仓库' }).getAttribute('href')).toBe('https://github.com/LiliLIN0324/Scendance2026');
+    expect(screen.queryByRole('link', { name: '切回官网' })).toBeNull();
   });
 
   it('keeps routine draft notes off the project header and only surfaces save errors', async () => {
@@ -1098,7 +1110,7 @@ describe('CloudPanel section entry points', () => {
     const initial = backendSceneToLayout(scene, { projectId, name: original.name });
     const props = { controller, layout: initial, onLoadLayout: vi.fn(), draftNote: { label: '已保存到本机', error: false } };
     const view = render(<CloudPanel {...props} />);
-    fireEvent.click(screen.getByRole('button', { name: '账户中心' }));
+    openAccount();
     expect(screen.queryByText('已保存到本机')).toBeNull();
     expect(await screen.findByText('当前 · 草稿')).toBeTruthy();
     view.rerender(<CloudPanel {...props} draftNote={{ label: '本机草稿保存失败', error: true, title: '磁盘写入失败' }} />);

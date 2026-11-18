@@ -88,6 +88,14 @@ describe('ShortcutCoach', () => {
     expect(screen.queryByRole('dialog', { name: '快捷键' })).toBeNull();
   });
 
+  it('opens from the support and settings event without adding a map pill', () => {
+    const { baseElement } = render(<ShortcutCoach mode="outdoor" />);
+    fireEvent(window, new Event('scendance:open-shortcut-coach'));
+    expect(screen.getByRole('dialog', { name: '快捷键' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '户外规划' })).toBeTruthy();
+    expect(baseElement.querySelector('.sc-shortcut-coach-trigger')).toBeNull();
+  });
+
   it('does not open on top of another modal', () => {
     render(
       <>

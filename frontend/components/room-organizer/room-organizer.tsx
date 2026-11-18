@@ -218,7 +218,6 @@ type OutdoorPanelKind = 'layers' | 'library';
 import { MemberChat } from './panels/member-chat';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
-import { SettingsMenu } from './panels/settings-menu';
 import { ShortcutCoach, type ShortcutCoachMode } from './panels/shortcut-coach';
 import { CommercialWorkspace } from './panels/commercial-workspace';
 import { CreativeStudioProvider, CreativeAssistant, type BusinessToolsApi } from './panels/creative-studio';
@@ -576,7 +575,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const deliveryEntryRef = useRef<HTMLButtonElement>(null);
   const reviewEntryRef = useRef<HTMLButtonElement>(null);
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
-  // 左轨成员位与「团队与权限」读同一份团队。
+  // 左轨成员位与设置里的团队页读同一份成员。
   const team = useTeam(controller);
   const [teamOpenRequest, setTeamOpenRequest] = useState<{ serial: number; section: string } | undefined>();
   // 左轨点头像，左栏整栏换成那个人的私信；再点同一颗收起。换成员或换团队时窗子跟着换/关。
@@ -964,7 +963,6 @@ useEffect(() => {
       setAgentCollapsed(false);
     } else setLeftMode(mode => (mode === 'business' ? 'brief' : mode));
   }, []);
-  const workspaceEntryRef = useRef<HTMLButtonElement>(null);
   /** 左轨四格共用一个面板：切到哪一格，整栏就变成那个 agent 的卡。 */
   const showAgent = useCallback((id: AgentId) => {
     setCapturePanel(value => value === 'open' ? 'hidden' : value);
@@ -4550,6 +4548,18 @@ useEffect(() => {
     return captureRenderImage({ view: 'current', scale: 1 });
   }, [outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
   if (!activitySession.isCurrent(sessionToken)) return <div role="status">正在核对活动会话，请稍候。</div>;
+  const feedbackPlan = {
+    name: (layout.name || '').trim() || '未命名方案',
+    place: (isOutdoorProject || outdoor2DOpen || outdoor3dTakeover) ? '户外' as const : '室内' as const,
+    boundary: !outdoorPlan
+      ? '当前没有户外用地红线'
+      : outdoorPlan.boundary.length >= 3
+        ? `用地红线已闭合，${outdoorPlan.boundary.length} 个点`
+        : outdoorPlan.boundary.length === 0
+          ? '用地红线未画'
+          : `用地红线未闭合，${outdoorPlan.boundary.length} 个点`,
+    canvas: outdoor3dTakeover ? '户外三维' : outdoor2DOpen ? '户外地图' : view.view2D ? '室内平面' : '室内三维',
+  };
 
   // P4-c：发布卡片只实现一次；3D 工具轨与 2D 画布右上交付簇各自挂一份触发钮，
   // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
@@ -4802,9 +4812,7 @@ useEffect(() => {
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               {/* 2026-11-13 用户指令：左轨底部「标注」开关移除；手动绘制入口收掉后，
                   绘制态只能由流程内部进入，Esc 仍是统一退出。 */}
-              <SettingsMenu buttonRef={workspaceEntryRef} />
-              
-              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements, lengthPrecisionM: view.lengthPrecisionM ?? 0.01, snapToGrid: view.snapToGrid, snapToWall: view.snapToWall, snapToItems: view.snapToItems }} onPreferenceChange={updatePreference} onPlanSettingsChange={actions.setPlanSettings} {...(outdoorPlanState?.plan.quote ? { siteQuote: outdoorPlanState.plan.quote } : {})} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements, lengthPrecisionM: view.lengthPrecisionM ?? 0.01, snapToGrid: view.snapToGrid, snapToWall: view.snapToWall, snapToItems: view.snapToItems }} onPreferenceChange={updatePreference} onPlanSettingsChange={actions.setPlanSettings} {...(outdoorPlanState?.plan.quote ? { siteQuote: outdoorPlanState.plan.quote } : {})} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} planContext={feedbackPlan} onCapturePlan={captureSharePreview} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           {/* 手机端左轨唯一入口；桌面由 CSS 隐藏，不影响三栏。 */}
@@ -5425,7 +5433,7 @@ useEffect(() => {
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             </div>
           </div>
-          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
+          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} onOpenTemplates={openTemplates} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=editorItemLimit(layout)} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
         </main>
       </div>
       </LayoutAgentProvider>
