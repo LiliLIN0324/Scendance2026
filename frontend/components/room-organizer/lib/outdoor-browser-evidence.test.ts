@@ -12,6 +12,7 @@ import {
   formatReleaseStatusCard,
   ledgerFromEvidence,
   statusCardSnapshot,
+  summarizeLedger,
   type WalkthroughRecord,
 } from './outdoor-release-status-card';
 
@@ -89,6 +90,26 @@ describe('浏览器证据可注入', () => {
     expect(derived[4]).toBe('partial');
     expect(derived[1]).toBe('none');
     expect(derived[5]).toBe('none');
+  });
+
+  it('空记录（这一轮还没走查）回落到对照表快照，不是一片「无证据」', () => {
+    // 2026-11-18：真实链路的空记录本是 `{seen:{}}`（不是 undefined），
+    // 旧写法只在 undefined 时回落，于是界面里 11 条全成「无证据」，
+    // 而卡片日期还写着 2026-11-17 第二轮——日期与证据跨了两轮。
+    const derived = browserEvidenceFrom({ seen: {} });
+    for (const id of CASE_IDS) expect(derived[id]).toBe(BROWSER_EVIDENCE[id]);
+    // 走了这一轮（有记录）就整份按记录替换，不拿上一轮顶替。
+    const marked = browserEvidenceFrom({ seen: { 3: 'pass' } });
+    expect(marked[3]).toBe('pass');
+    expect(marked[1]).toBe('none');
+  });
+
+  it('空记录回落时卡片与台账同源：浏览器列不再是 11 条全无证据', () => {
+    const ledger = defaultLedger({ seen: {} });
+    expect(ledger.filter((row) => row.browser === 'partial').length).toBe(9);
+    expect(ledger.filter((row) => row.browser === 'none').length).toBe(2);
+    // 全绿仍是 0：partial 不算过，云端一列也还没有实证。
+    expect(summarizeLedger(ledger).allGreen).toBe(0);
   });
 
   it('记录里多出的号（如 12）被丢掉，不会凭空长出一行台账', () => {

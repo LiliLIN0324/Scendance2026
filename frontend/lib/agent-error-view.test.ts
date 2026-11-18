@@ -25,12 +25,33 @@ describe('agentErrorView 四档归类', () => {
     expect(view.message).toContain('额度已用完或欠费');
   });
 
-  it('provider_error / timeout / 未知状态都落到智能理解（warn）', () => {
-    for (const status of ['provider_error', 'timeout', undefined, 'nope', null]) {
+  it('timeout 单列一档（响应超时），不再与 provider_error 共用兜底', () => {
+    // 2026-11-18（#6）：四类阻塞（未登录 / 功能关闭 / 额度不足 / 超时）要在界面上分得开，
+    // 否则「分别验」无从下手。后端早就单列 timeout，前端这里补上对应的一档。
+    const view = agentErrorView('timeout');
+    expect(view.stamp).toBe('响应超时');
+    expect(view.tone).toBe('warn');
+    expect(view.message).toContain('时限内返回');
+    expect(view.message).not.toContain('服务商可能仍在处理或计费');
+  });
+
+  it('provider_error / 未知状态仍落到智能理解（warn）', () => {
+    for (const status of ['provider_error', undefined, 'nope', null]) {
       const view = agentErrorView(status);
       expect(view.stamp).toBe('智能理解');
       expect(view.tone).toBe('warn');
       expect(view.message).toContain('服务商可能仍在处理或计费');
     }
+  });
+
+  it('四类阻塞各有各的落点，不会互相撞档', () => {
+    const stamps = [
+      agentErrorView('disabled').stamp,
+      agentErrorView('unavailable').stamp,
+      agentErrorView('quota_exhausted').stamp,
+      agentErrorView('timeout').stamp,
+    ];
+    expect(new Set(stamps).size).toBe(3); // disabled 与 unavailable 同一档，其余各一档
+    expect(stamps).not.toContain('智能理解');
   });
 });
