@@ -199,6 +199,9 @@ export async function understandOutdoorTurn(input: {
       ...(issued.anchor ? { anchor: issued.anchor } : {}),
       coverage: issued.coverage,
       warnings: issued.warnings.slice(0, 2),
+      // docs/47 A2：一行式布局摘要随降级透传——密集场地对象明细被裁时，水域/绿地
+      // 的「怎么对待」仍进模型视野（这正是摘要存在的目的），不随 objects 一起消失。
+      ...(issued.layoutEvidence?.length ? { layoutEvidence: issued.layoutEvidence } : {}),
       relations: [],
       instruction:
         "证据已压缩为摘要：仅保留对象ID/名称/边界，几何与关系已省略；引用仍按ID+revision。",

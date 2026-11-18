@@ -45,7 +45,10 @@
 .sc-cloud-dialog button.sc-file-hit:disabled{opacity:1;cursor:default;background:transparent;color:inherit}
 .sc-file-thumb{position:relative;display:grid;place-items:center;height:120px;background:var(--wk-plane);color:var(--sc-muted);overflow:hidden;border-radius:12px 12px 0 0}
 .sc-file-thumb.has-preview{background:#e8ebe3}
-.sc-file-thumb img,.sc-file-thumb>div{position:absolute;inset:0;width:100%;height:100%}
+.sc-file-thumb img,.sc-file-thumb>div,.sc-file-thumb>svg,.sc-file-thumb>canvas{position:absolute;inset:0;width:100%;height:100%}
+/* 2026-11-18：本机平面缩略（project-thumb 的 PlanThumb）与本机户外规划线稿，同一个框、同一底色。 */
+.sc-file-thumb>canvas.sc-project-plan{object-fit:cover;background:#eef2ef}
+.sc-project-thumb{background:#eef2ef;color:var(--sc-muted)}
 .sc-file-thumb img{object-fit:cover;transition:transform var(--sc-slow) var(--sc-ease)}
 .sc-file-card:hover .sc-file-thumb img{transform:scale(1.02)}
 /* 没有画布快照时用名字首字色块占位：同一个占位图形会让所有方案看起来一模一样 */
@@ -183,8 +186,20 @@
 .sc-cloud-dialog button.sc-account-team[aria-pressed=true]{background:transparent;border-color:transparent;color:var(--sc-ink);font-weight:500;box-shadow:inset 2px 0 0 var(--wk-green)}
 .sc-account-team-mark{display:grid;place-items:center;flex:none;width:18px;height:18px;border-radius:3px;background:var(--wk-plane-deep);color:var(--wk-muted);font-size:10px;font-weight:600;line-height:1}
 .sc-account-team-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* 2026-11-18：项目页标题旁带当前团队名，改完名这一行跟着变。 */
+.sc-account-team-current{margin-left:2px;padding:1px 6px;border-radius:2px;background:var(--wk-plane-deep);color:var(--wk-muted);font-size:11px;font-weight:400;line-height:1.6}
 .sc-account-team-role{flex:none;font-size:10px;font-weight:400;color:var(--wk-muted)}
 .sc-account-team-single{display:flex;align-items:center;gap:8px;margin:0;padding:6px 8px;border-radius:2px;background:transparent;font-size:12px;color:var(--sc-ink)}
+/* 2026-11-18：团队随便建——左栏常驻一颗入口钮，点开就地填名字，不跳页。 */
+.sc-cloud-dialog button.sc-account-team-create{display:flex;align-items:center;gap:6px;width:100%;padding:6px 8px;border:1px dashed var(--wk-hair);border-radius:2px;background:none;box-shadow:none;color:var(--wk-muted);font-size:12px;font-weight:400;text-align:left;cursor:pointer}
+.sc-cloud-dialog button.sc-account-team-create:hover{color:var(--wk-green-deep);border-color:var(--wk-green)}
+.sc-account-team-form{display:flex;gap:4px;align-items:center;padding:2px 0}
+.sc-account-team-form input{flex:1;min-width:0;height:26px;padding:0 6px;border:1px solid var(--wk-hair);border-radius:3px;background:var(--paper,#fff);color:var(--sc-ink);font:400 12px var(--sc-font)}
+.sc-cloud-dialog .sc-account-team-form button{flex:none;height:26px;padding:0 8px;border:1px solid var(--wk-hair);border-radius:3px;background:var(--wk-plane);color:var(--sc-ink);font-size:11px}
+.sc-cloud-dialog .sc-account-team-form button:disabled{opacity:.5;cursor:default}
+/* 2026-11-18：建团队有了，删团队也得有——只在 owner 下出现，平常弱化，不抢项目的视线。 */
+.sc-cloud-dialog button.sc-account-team-remove{width:100%;margin-top:2px;padding:4px 8px;border:0;border-radius:2px;background:none;box-shadow:none;color:var(--wk-muted);font-size:11px;font-weight:400;text-align:left;cursor:pointer}
+.sc-cloud-dialog button.sc-account-team-remove:hover{color:#b4413a;background:var(--wk-plane-deep)}
 /* 项目页：物料 / 团队缩进「更多」；次级页用一条细返回栏。 */
 .sc-account-more{position:relative;flex:none}
 .sc-account-more>summary{list-style:none;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:500;color:var(--sc-muted);user-select:none}
@@ -232,6 +247,10 @@
 .sc-settings-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
 .sc-settings-title{display:flex;align-items:center;gap:6px;min-width:0}
 .sc-settings-head h3{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em}
+/* 2026-11-18：面板顶部直接用团队名当标题，点一下就地改名（只负责人可点）。 */
+.sc-cloud-dialog button.sc-settings-title-name{margin:0;padding:1px 4px;border:0;border-radius:4px;background:none;box-shadow:none;color:var(--sc-ink);font-family:inherit;font-size:15px;font-weight:600;letter-spacing:-.01em;text-align:left;cursor:text}
+.sc-settings-rename input{height:26px;min-width:180px;padding:0 8px;border:1px solid var(--wk-hair);border-radius:4px;background:var(--wk-paper);color:var(--sc-ink);font-family:inherit;font-size:14px;font-weight:600}
+.sc-settings-group-title{margin:0;padding:10px 12px 0;font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--wk-muted)}
 .sc-settings-tools{display:flex;align-items:center;gap:6px;flex:none}
 .sc-info{position:relative;display:inline-flex}
 .sc-cloud-dialog .sc-info-trigger{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:none;box-shadow:none;color:var(--sc-muted)}
@@ -318,15 +337,7 @@
 .sc-shortcut-empty strong{font-size:13px}
 .sc-shortcut-empty span{color:var(--sc-muted);font-size:11px}
 
-/* 画布快捷键教练：当前模式胶囊 + 只读速查浮层 */
-.sc-shortcut-coach-trigger{position:absolute;top:14px;left:76px;z-index:34;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 7px;border:1px solid var(--wk-hair);border-radius:999px;background:color-mix(in srgb,var(--wk-paper) 93%,transparent);color:var(--sc-muted);font:inherit;font-size:11px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.06);backdrop-filter:blur(8px);cursor:pointer}
-.sc-shortcut-coach-trigger:hover{color:var(--wk-ink);border-color:var(--wk-ink-faint)}
-.sc-shortcut-coach-trigger:focus-visible{outline:2px solid var(--wk-ink);outline-offset:2px}
-.sc-shortcut-coach-trigger kbd{display:grid;place-items:center;width:18px;height:18px;border:1px solid var(--wk-hair);border-bottom-width:2px;border-radius:5px;background:var(--wk-plane);color:var(--wk-ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10px;line-height:1}
-.sc-shortcut-coach-mode{white-space:nowrap}
-.sc-shortcut-coach-hint{color:var(--sc-muted);font-size:10px;white-space:nowrap}
-.sc-canvas-stage.is-chrome-hidden .sc-shortcut-coach-trigger{display:none}
-
+/* 画布快捷键浮层：没有常驻胶囊，? / Shift+/ 打开，Esc 或遮罩关闭。 */
 .sc-shortcut-coach-backdrop{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:18px;background:rgba(18,18,20,.36);backdrop-filter:blur(2px)}
 .sc-shortcut-coach{width:min(780px,calc(100vw - 32px));max-height:min(84dvh,820px);overflow:auto;border:1px solid var(--wk-hair);border-radius:14px;background:var(--wk-paper);box-shadow:0 24px 72px rgba(18,18,20,.24);padding:18px 20px 14px}
 .sc-shortcut-coach:focus{outline:none}
@@ -345,8 +356,6 @@
 .sc-shortcut-coach .sc-shortcut-groups{gap:8px}
 
 @media(max-width:680px){
-  .sc-shortcut-coach-trigger{left:12px;top:12px;padding:0 7px}
-  .sc-shortcut-coach-mode,.sc-shortcut-coach-hint{display:none}
   .sc-shortcut-coach-backdrop{padding:8px}
   .sc-shortcut-coach{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);padding:14px 12px 10px;border-radius:12px}
   .sc-shortcut-coach-head{padding-bottom:10px}

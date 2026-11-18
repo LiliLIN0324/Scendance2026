@@ -84,6 +84,8 @@ const SIZE_RULES: readonly SizeRule[] = [
   // 2026-11-16 用户指令「门要能自己从图标库放」：门是一道 1.2 m 宽的门扇，不是 10 m 的通行区。
   // 它的分类带「流线」，如果不先拦截，categoryMajor 会给到 10 m——一扇门占满半个场地。
   // 多给的几种门按各自真实尺寸落（双开/推拉 2.4、折叠 2.0、卷帘 3.0、旋转 1.8 见方），必须排在单开门之关。
+  // 2026-11-18 窗：和门一样是「贴在墙上的一扇」，不是 2×2 方块。
+  { re: /(^|-)window(-|$)/, major: 1.2, shortRatio: 0.12 / 1.2 },
   { re: /double-door|sliding-door/, major: 2.4, shortRatio: 0.1 / 2.4 },
   { re: /folding-door/, major: 2, shortRatio: 0.12 / 2 },
   { re: /revolving-door/, major: 1.8 },
@@ -131,6 +133,9 @@ const SIZE_RULES: readonly SizeRule[] = [
   { re: /shooting-range/, major: 8, shortRatio: 0.4 },
   { re: /dugout/, major: 6, shortRatio: 0.35 },
   { re: /switch-back-ramp|(^|-)ramp(-|$)/, major: 4, shortRatio: 0.35 },
+  // 2026-11-18 用户「室内这十件要能按真实占地落」：电梯原先落到 categoryMajor 的
+  // 「流线」10 m——一个电梯开局占满半个厅。客梯轿厢 2.2×2.0 m，按这个落。
+  { re: /(^|-)elevator(-|$)/, major: 2.2, shortRatio: 0.9 },
   { re: /stairs/, major: 2.5, shortRatio: 0.5 },
   { re: /aluminum-trackway|ground-protection|trackway/, major: 3, shortRatio: 0.4 },
   { re: /concrete-block/, major: 0.8 },

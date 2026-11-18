@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { productionReferenceKey as objectKey } from '@/lib/production-plan';
 import { registerSourceFlush } from '@/lib/source-storage';
-import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
 import { handoffLimits } from '../../../../supabase/functions/_shared/delivery-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationPhases, eventOperationsLimits, eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
-import { copyRehearsalOperations, createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
+import { createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { CreativeBrief } from '../lib/creative-brief';
@@ -28,6 +27,8 @@ interface Props {
   onLocate?: ((id: string) => void) | undefined;
   briefState?: { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean } | null | undefined;
   onOpenBrief?: (() => void) | undefined;
+  /** 执行资料门面：档案、需求、当天执行包、任务默认折起。空档案只留一句。 */
+  compact?: boolean;
 }
 type ReviewStatus = EventOperationTask['status'] | 'needs_review' | 'checking';
 const emptyOperations: EventOperations = { schemaVersion: 1, dataKind: 'unspecified', tasks: [] };
@@ -199,7 +200,7 @@ function saveHtmlFile(fileName: string, text: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins, suggestionsPanel }: Props): JSX.Element {
+export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins, suggestionsPanel, compact = false }: Props): JSX.Element {
   const operations = layout.eventOperations ?? emptyOperations;
   const [title, setTitle] = useState(''), [phase, setPhase] = useState<EventOperationTask['phase']>('preparation');
   const [openedTask, setOpenedTask] = useState<string | null>(null), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -254,12 +255,6 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       }
     } catch { setError(inputError('title')); }
   }
-  function loadRehearsal(): void {
-    if (disabled || operations.tasks.length) return;
-    const example = eventOperationsSchema.safeParse(rehearsalExample);
-    if (!example.success) { setError('演练安排暂不能读取，请稍后重试。'); return; }
-    if (update(copyRehearsalOperations(example.data))) { setNotice('已载入6项30人共创示例任务，需求和场景保持原样。请按当前活动调整。'); setDeleted(null); }
-  }
   const brief = briefState?.ready && !briefState.error && briefState.hasSavedBrief ? briefState.brief : null;
   const missingOwners = operations.tasks.filter(task => !task.ownerName.trim()).length;
   const missingPlans = operations.tasks.filter(task => !task.plannedStartAt || !task.plannedEndAt).length;
@@ -269,16 +264,14 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
   const currentReviews = reviewsCurrent ? operations.tasks.map(task => reviews.statuses[task.id]) : [];
   const needsReview = currentReviews.filter(review => review?.status === 'needs_review' && !review.failed).length;
   const failedReviews = currentReviews.filter(review => review?.failed).length;
-  return <section className="sc-event-operations" aria-label="活动安排">
-    <EventProfileTopBar profile={layout.eventProfile} />
-    {checkinsUnavailable&&<p className="sc-handoff-review">{checkins?.error??'点验资料尚未就绪，暂不能确认活动任务。'}<button className="sc-button" type="button" onClick={checkins?.retry}>重新读取点验</button></p>}
-    <div className="sc-operation-brief">
+  const checkinAlert = checkinsUnavailable ? <p className="sc-handoff-review">{checkins?.error??'点验资料尚未就绪，暂不能确认活动任务。'}<button className="sc-button" type="button" onClick={checkins?.retry}>重新读取点验</button></p> : null;
+  const briefBlock = <div className="sc-operation-brief">
       <div className="sc-operation-brief-heading"><div className="sc-operation-project"><small>当前项目</small><h3>{layout.name || '未命名项目'}</h3></div><button className="sc-button" type="button" disabled={!onOpenBrief} onClick={onOpenBrief}>{brief ? '查看活动需求' : '打开活动需求表单'}</button></div>
       {brief ? <><p className="sc-note">已保存需求草稿 · {brief.eventConfirmed === true ? brief.event : '活动类型待确认'} · {brief.guestsConfirmed === true ? `预计 ${brief.guests} 人` : '人数待确认'}</p><details className="sc-operation-brief-details" open={operations.tasks.length ? undefined : true}><summary>需求详情</summary><p className="sc-operation-brief-text">{brief.description || '需求说明尚未填写。'}</p>{brief.mustHave && <p className="sc-note">必需项：{brief.mustHave}</p>}</details></> : <p className={briefState?.error ? 'sc-handoff-error' : 'sc-note'} role={briefState?.error ? 'alert' : undefined}>{briefState?.error ? '活动需求无法读取或尚未保存，请打开原表单核对。' : briefState && !briefState.ready ? '正在读取活动需求…' : '活动需求尚未填写或未保存。'}</p>}
-    </div>
-    <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>
-    <EventProfileCard profile={layout.eventProfile} />
-    <DaySheetExport layout={layout} save={saveHtmlFile} />
+    </div>;
+  const taskBlock = <>
+    {compact && checkinAlert}
+    {compact && <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>}
     <MaterialIntakePanel operations={operations} projectId={layout.id ?? 'local'} disabled={disabled}
       onAccept={next => onUpdate(next)} />
     {suggestionsPanel}
@@ -318,7 +311,6 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       </fieldset>
       <div className="sc-handoff-actions"><button className="sc-button" type="button" disabled={!title} onClick={() => { setTitle(''); setPhase('preparation'); setError(''); setNotice(''); }}>放弃新增任务</button></div>
     </form></details>
-    {!operations.tasks.length && <div className="sc-operation-example"><p className="sc-note">30人共创示例，共6项任务；载入后请按当前活动调整。需求和场景保持原样。</p><button type="button" className="sc-button" disabled={disabled} onClick={loadRehearsal}>载入演练任务示例</button></div>}
     {operations.tasks.length >= eventOperationsLimits.tasks && <p className="sc-note">已达到 {eventOperationsLimits.tasks} 项任务，请整理已有安排。</p>}
     {deleted && <button type="button" className="sc-button" disabled={disabled || operations.tasks.some(task => task.id === deleted.task.id)} onClick={() => {
       const tasks = [...operations.tasks]; tasks.splice(Math.min(deleted.index, tasks.length), 0, deleted.task);
@@ -327,5 +319,18 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
     <p className="sc-note">活动安排随场景保存在此浏览器。人员、时间和完成条件未定时可先保存草稿。</p>
     {error && <p className="sc-handoff-error" role="alert">{error}</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}
+  </>;
+  return <section className="sc-event-operations" aria-label="活动安排">
+    {compact && !layout.eventProfile
+      ? <details className="sc-operation-fold"><summary>活动档案 · 尚未创建</summary><p className="sc-note">尚未创建。</p></details>
+      : compact
+        ? <details className="sc-operation-fold"><summary>{`活动档案 · v${layout.eventProfile?.revision ?? 0}`}</summary><EventProfileTopBar profile={layout.eventProfile} /><EventProfileCard profile={layout.eventProfile} /></details>
+        : <EventProfileTopBar profile={layout.eventProfile} />}
+    {!compact && checkinAlert}
+    {compact ? <details className="sc-operation-fold"><summary>活动需求</summary>{briefBlock}</details> : briefBlock}
+    {!compact && <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>}
+    {!compact && <EventProfileCard profile={layout.eventProfile} />}
+    {compact ? <details className="sc-operation-fold"><summary>当天执行包</summary><DaySheetExport layout={layout} save={saveHtmlFile} /></details> : <DaySheetExport layout={layout} save={saveHtmlFile} />}
+    {compact ? <details className="sc-operation-fold"><summary>{`活动任务 · ${operations.tasks.length} 项`}</summary>{taskBlock}</details> : taskBlock}
   </section>;
 }

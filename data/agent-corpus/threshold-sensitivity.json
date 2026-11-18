@@ -1,0 +1,2814 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-18",
+  "generator": "scripts/analyze-corpus-thresholds.mjs",
+  "method": {
+    "binding": "把判据表里的阈值逐点改动，重跑 16 份夹具；结果有任何变化即视为执行器读了该阈值。",
+    "safeInterval": "同时满足「对照样本 0 条硬违规」与「所有变异样本该报的都报出、且不多报」的阈值集合，取连续区间端点。",
+    "calibration": "43 案平台读数（排除跨度 >2 km 的异常样本），按类型给 P25/中位/P75；只是量级参考，不是判据依据。"
+  },
+  "implementedRules": [
+    "GEN-04",
+    "GEN-07",
+    "MKT-02",
+    "MKT-06",
+    "MKT-07",
+    "MKT-10",
+    "MKT-11",
+    "STG-01",
+    "STG-02",
+    "CMP-02",
+    "CMP-03"
+  ],
+  "analyses": [
+    {
+      "ruleId": "GEN-04",
+      "thresholdLabel": "出口数下限",
+      "field": "count",
+      "current": 2,
+      "unit": "count",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 2,
+      "safeMax": 2,
+      "marginBelow": 0,
+      "marginAbove": 0,
+      "status": "边界敏感（余量 ≤10%），需人工确认",
+      "sourceLevel": "B",
+      "source": "地方公安口径；《大型群众性活动安全管理条例》§11",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-01-GEN-04:GEN-04",
+            "EV-INC-01:GEN-04"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-02-GEN-07:GEN-04",
+            "EV-NEG-03-MKT-02:GEN-04",
+            "EV-NEG-04-MKT-06:GEN-04",
+            "EV-NEG-05-MKT-07:GEN-04",
+            "EV-NEG-06-MKT-10:GEN-04",
+            "EV-NEG-07-MKT-11:GEN-04",
+            "EV-NEG-08-STG-01:GEN-04",
+            "EV-NEG-09-STG-02:GEN-04",
+            "EV-NEG-10-CMP-02:GEN-04",
+            "EV-NEG-11-CMP-03:GEN-04",
+            "EV-NEG-12-CMP-03:GEN-04",
+            "EV-NEG-13-MKT-02:GEN-04",
+            "EV-INC-03:GEN-04"
+          ],
+          "ok": false
+        },
+        {
+          "value": 4,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-02-GEN-07:GEN-04",
+            "EV-NEG-03-MKT-02:GEN-04",
+            "EV-NEG-04-MKT-06:GEN-04",
+            "EV-NEG-05-MKT-07:GEN-04",
+            "EV-NEG-06-MKT-10:GEN-04",
+            "EV-NEG-07-MKT-11:GEN-04",
+            "EV-NEG-08-STG-01:GEN-04",
+            "EV-NEG-09-STG-02:GEN-04",
+            "EV-NEG-10-CMP-02:GEN-04",
+            "EV-NEG-11-CMP-03:GEN-04",
+            "EV-NEG-12-CMP-03:GEN-04",
+            "EV-NEG-13-MKT-02:GEN-04",
+            "EV-INC-03:GEN-04"
+          ],
+          "ok": false
+        },
+        {
+          "value": 5,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-02-GEN-07:GEN-04",
+            "EV-NEG-03-MKT-02:GEN-04",
+            "EV-NEG-04-MKT-06:GEN-04",
+            "EV-NEG-05-MKT-07:GEN-04",
+            "EV-NEG-06-MKT-10:GEN-04",
+            "EV-NEG-07-MKT-11:GEN-04",
+            "EV-NEG-08-STG-01:GEN-04",
+            "EV-NEG-09-STG-02:GEN-04",
+            "EV-NEG-10-CMP-02:GEN-04",
+            "EV-NEG-11-CMP-03:GEN-04",
+            "EV-NEG-12-CMP-03:GEN-04",
+            "EV-NEG-13-MKT-02:GEN-04",
+            "EV-INC-03:GEN-04"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "GEN-07",
+      "thresholdLabel": "距建筑外墙",
+      "field": "m",
+      "current": 3,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 1.8,
+      "safeMax": 12,
+      "marginBelow": 1.2,
+      "marginAbove": 9,
+      "status": "hold",
+      "sourceLevel": "C",
+      "source": "经验值（C）+ 消防车道禁占",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-02-GEN-07:GEN-07",
+            "EV-NEG-07-MKT-11:GEN-07"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1.2,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-02-GEN-07:GEN-07",
+            "EV-NEG-07-MKT-11:GEN-07"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1.8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 10,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 11,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 12,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 13,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:GEN-07",
+            "EV-NEG-03-MKT-02:GEN-07",
+            "EV-NEG-05-MKT-07:GEN-07",
+            "EV-NEG-06-MKT-10:GEN-07",
+            "EV-NEG-08-STG-01:GEN-07",
+            "EV-NEG-09-STG-02:GEN-07",
+            "EV-NEG-10-CMP-02:GEN-07",
+            "EV-NEG-11-CMP-03:GEN-07",
+            "EV-NEG-13-MKT-02:GEN-07"
+          ],
+          "ok": false
+        },
+        {
+          "value": 14,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:GEN-07",
+            "EV-NEG-03-MKT-02:GEN-07",
+            "EV-NEG-05-MKT-07:GEN-07",
+            "EV-NEG-06-MKT-10:GEN-07",
+            "EV-NEG-08-STG-01:GEN-07",
+            "EV-NEG-09-STG-02:GEN-07",
+            "EV-NEG-10-CMP-02:GEN-07",
+            "EV-NEG-11-CMP-03:GEN-07",
+            "EV-NEG-13-MKT-02:GEN-07"
+          ],
+          "ok": false
+        },
+        {
+          "value": 15,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:GEN-07",
+            "EV-NEG-03-MKT-02:GEN-07",
+            "EV-NEG-05-MKT-07:GEN-07",
+            "EV-NEG-06-MKT-10:GEN-07",
+            "EV-NEG-08-STG-01:GEN-07",
+            "EV-NEG-09-STG-02:GEN-07",
+            "EV-NEG-10-CMP-02:GEN-07",
+            "EV-NEG-11-CMP-03:GEN-07",
+            "EV-NEG-13-MKT-02:GEN-07"
+          ],
+          "ok": false
+        },
+        {
+          "value": 16,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:GEN-07",
+            "EV-NEG-03-MKT-02:GEN-07",
+            "EV-NEG-05-MKT-07:GEN-07",
+            "EV-NEG-06-MKT-10:GEN-07",
+            "EV-NEG-08-STG-01:GEN-07",
+            "EV-NEG-09-STG-02:GEN-07",
+            "EV-NEG-10-CMP-02:GEN-07",
+            "EV-NEG-11-CMP-03:GEN-07",
+            "EV-NEG-13-MKT-02:GEN-07"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "MKT-02",
+      "thresholdLabel": "纵向",
+      "field": "m",
+      "current": 2,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 1.2,
+      "safeMax": 16,
+      "marginBelow": 0.8,
+      "marginAbove": 14,
+      "status": "hold",
+      "sourceLevel": "B",
+      "source": "东营市城市便民摊点群设置管理导则",
+      "points": [
+        {
+          "value": 0.8,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-13-MKT-02:MKT-02"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-13-MKT-02:MKT-02"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1.2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 10,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 11,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 12,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 13,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 14,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 15,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 16,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        }
+      ]
+    },
+    {
+      "ruleId": "MKT-02",
+      "thresholdLabel": "横向",
+      "field": "m",
+      "current": 1.5,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 0.6,
+      "safeMax": 7,
+      "marginBelow": 0.9,
+      "marginAbove": 5.5,
+      "status": "hold",
+      "sourceLevel": "B",
+      "source": "东营市城市便民摊点群设置管理导则",
+      "points": [
+        {
+          "value": 0.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 8,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 9,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 10,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 11,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 12,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 13,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 14,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 15,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 16,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-02",
+            "EV-NEG-02-GEN-07:MKT-02",
+            "EV-NEG-04-MKT-06:MKT-02",
+            "EV-NEG-05-MKT-07:MKT-02",
+            "EV-NEG-06-MKT-10:MKT-02",
+            "EV-NEG-07-MKT-11:MKT-02",
+            "EV-NEG-08-STG-01:MKT-02",
+            "EV-NEG-09-STG-02:MKT-02",
+            "EV-NEG-10-CMP-02:MKT-02",
+            "EV-NEG-11-CMP-03:MKT-02",
+            "EV-NEG-12-CMP-03:MKT-02"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "MKT-06",
+      "thresholdLabel": "与其他摊位",
+      "field": "m",
+      "current": 6,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 2,
+      "safeMax": 7.2,
+      "marginBelow": 4,
+      "marginAbove": 1.2,
+      "status": "hold",
+      "sourceLevel": "B",
+      "source": "荆州市夜市示范街建设实施方案",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-04-MKT-06:MKT-06"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4.8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7.2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 10,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 11,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 12,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 13,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 14,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 15,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-07-MKT-11:MKT-06"
+          ],
+          "ok": false
+        },
+        {
+          "value": 16,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-06",
+            "EV-NEG-02-GEN-07:MKT-06",
+            "EV-NEG-03-MKT-02:MKT-06",
+            "EV-NEG-05-MKT-07:MKT-06",
+            "EV-NEG-06-MKT-10:MKT-06",
+            "EV-NEG-07-MKT-11:MKT-06",
+            "EV-NEG-08-STG-01:MKT-06",
+            "EV-NEG-09-STG-02:MKT-06",
+            "EV-NEG-10-CMP-02:MKT-06",
+            "EV-NEG-11-CMP-03:MKT-06",
+            "EV-NEG-13-MKT-02:MKT-06"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "MKT-07",
+      "thresholdLabel": "每 10 摊",
+      "field": "count",
+      "current": 2,
+      "unit": "count",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 1,
+      "safeMax": 2,
+      "marginBelow": 1,
+      "marginAbove": 0,
+      "status": "边界敏感（余量 ≤10%），需人工确认",
+      "sourceLevel": "B",
+      "source": "重庆北碚规定；GB 50140-2005 中危险级",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-07",
+            "EV-NEG-02-GEN-07:MKT-07",
+            "EV-NEG-03-MKT-02:MKT-07",
+            "EV-NEG-04-MKT-06:MKT-07",
+            "EV-NEG-06-MKT-10:MKT-07",
+            "EV-NEG-07-MKT-11:MKT-07",
+            "EV-NEG-08-STG-01:MKT-07",
+            "EV-NEG-09-STG-02:MKT-07",
+            "EV-NEG-10-CMP-02:MKT-07",
+            "EV-NEG-11-CMP-03:MKT-07",
+            "EV-NEG-12-CMP-03:MKT-07",
+            "EV-NEG-13-MKT-02:MKT-07"
+          ],
+          "ok": false
+        },
+        {
+          "value": 4,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-07",
+            "EV-NEG-02-GEN-07:MKT-07",
+            "EV-NEG-03-MKT-02:MKT-07",
+            "EV-NEG-04-MKT-06:MKT-07",
+            "EV-NEG-06-MKT-10:MKT-07",
+            "EV-NEG-07-MKT-11:MKT-07",
+            "EV-NEG-08-STG-01:MKT-07",
+            "EV-NEG-09-STG-02:MKT-07",
+            "EV-NEG-10-CMP-02:MKT-07",
+            "EV-NEG-11-CMP-03:MKT-07",
+            "EV-NEG-12-CMP-03:MKT-07",
+            "EV-NEG-13-MKT-02:MKT-07"
+          ],
+          "ok": false
+        },
+        {
+          "value": 5,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:MKT-07",
+            "EV-NEG-02-GEN-07:MKT-07",
+            "EV-NEG-03-MKT-02:MKT-07",
+            "EV-NEG-04-MKT-06:MKT-07",
+            "EV-NEG-06-MKT-10:MKT-07",
+            "EV-NEG-07-MKT-11:MKT-07",
+            "EV-NEG-08-STG-01:MKT-07",
+            "EV-NEG-09-STG-02:MKT-07",
+            "EV-NEG-10-CMP-02:MKT-07",
+            "EV-NEG-11-CMP-03:MKT-07",
+            "EV-NEG-12-CMP-03:MKT-07",
+            "EV-NEG-13-MKT-02:MKT-07"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "MKT-10",
+      "thresholdLabel": "摊位投影占场地",
+      "field": "value",
+      "current": 0.35,
+      "unit": "ratio",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 0.15,
+      "safeMax": 0.35,
+      "marginBelow": 0.2,
+      "marginAbove": 0,
+      "status": "边界敏感（余量 ≤10%），需人工确认",
+      "sourceLevel": "C",
+      "source": "经验值（C）",
+      "points": [
+        {
+          "value": 0.15,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.25,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.35,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.4,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-06-MKT-10:MKT-10"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 0.5,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-06-MKT-10:MKT-10"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 0.6,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-06-MKT-10:MKT-10"
+          ],
+          "extra": [],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "MKT-11",
+      "thresholdLabel": "距建筑外墙",
+      "field": "m",
+      "current": 3,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 1.8,
+      "safeMax": 16,
+      "marginBelow": 1.2,
+      "marginAbove": 13,
+      "status": "hold",
+      "sourceLevel": "C",
+      "source": "经验值（C）+ 消防检查口径",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-07-MKT-11:MKT-11"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1.2,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-07-MKT-11:MKT-11"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1.8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 10,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 11,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 12,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 13,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 14,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 15,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 16,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        }
+      ]
+    },
+    {
+      "ruleId": "STG-01",
+      "thresholdLabel": "站立硬底线",
+      "field": "value",
+      "current": 1,
+      "unit": "m2_per_person",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 0.6,
+      "safeMax": 1.25,
+      "marginBelow": 0.4,
+      "marginAbove": 0.25,
+      "status": "hold",
+      "sourceLevel": "B",
+      "source": "地方公安口径（深圳、无锡、江西、郑州）",
+      "points": [
+        {
+          "value": 0.3,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-08-STG-01:STG-01"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 0.5,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-08-STG-01:STG-01"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 0.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.75,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.25,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.5,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-01",
+            "EV-NEG-02-GEN-07:STG-01",
+            "EV-NEG-03-MKT-02:STG-01",
+            "EV-NEG-04-MKT-06:STG-01",
+            "EV-NEG-05-MKT-07:STG-01",
+            "EV-NEG-06-MKT-10:STG-01",
+            "EV-NEG-07-MKT-11:STG-01",
+            "EV-NEG-10-CMP-02:STG-01",
+            "EV-NEG-11-CMP-03:STG-01",
+            "EV-NEG-12-CMP-03:STG-01",
+            "EV-NEG-13-MKT-02:STG-01"
+          ],
+          "ok": false
+        },
+        {
+          "value": 2,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-01",
+            "EV-NEG-02-GEN-07:STG-01",
+            "EV-NEG-03-MKT-02:STG-01",
+            "EV-NEG-04-MKT-06:STG-01",
+            "EV-NEG-05-MKT-07:STG-01",
+            "EV-NEG-06-MKT-10:STG-01",
+            "EV-NEG-07-MKT-11:STG-01",
+            "EV-NEG-09-STG-02:STG-01",
+            "EV-NEG-10-CMP-02:STG-01",
+            "EV-NEG-11-CMP-03:STG-01",
+            "EV-NEG-12-CMP-03:STG-01",
+            "EV-NEG-13-MKT-02:STG-01"
+          ],
+          "ok": false
+        },
+        {
+          "value": 2.5,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-01",
+            "EV-NEG-02-GEN-07:STG-01",
+            "EV-NEG-03-MKT-02:STG-01",
+            "EV-NEG-04-MKT-06:STG-01",
+            "EV-NEG-05-MKT-07:STG-01",
+            "EV-NEG-06-MKT-10:STG-01",
+            "EV-NEG-07-MKT-11:STG-01",
+            "EV-NEG-09-STG-02:STG-01",
+            "EV-NEG-10-CMP-02:STG-01",
+            "EV-NEG-11-CMP-03:STG-01",
+            "EV-NEG-12-CMP-03:STG-01",
+            "EV-NEG-13-MKT-02:STG-01"
+          ],
+          "ok": false
+        },
+        {
+          "value": 3,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-01",
+            "EV-NEG-02-GEN-07:STG-01",
+            "EV-NEG-03-MKT-02:STG-01",
+            "EV-NEG-04-MKT-06:STG-01",
+            "EV-NEG-05-MKT-07:STG-01",
+            "EV-NEG-06-MKT-10:STG-01",
+            "EV-NEG-07-MKT-11:STG-01",
+            "EV-NEG-09-STG-02:STG-01",
+            "EV-NEG-10-CMP-02:STG-01",
+            "EV-NEG-11-CMP-03:STG-01",
+            "EV-NEG-12-CMP-03:STG-01",
+            "EV-NEG-13-MKT-02:STG-01"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "STG-01",
+      "thresholdLabel": "舒适",
+      "field": "value",
+      "current": 2,
+      "unit": "m2_per_person",
+      "bound": false,
+      "currentOk": true,
+      "safeMin": 0.3,
+      "safeMax": 3,
+      "marginBelow": 1.7,
+      "marginAbove": 1,
+      "status": "未绑定（执行器不读该阈值）",
+      "sourceLevel": "B",
+      "source": "地方公安口径（深圳、无锡、江西、郑州）",
+      "points": [
+        {
+          "value": 0.3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.75,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.25,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        }
+      ]
+    },
+    {
+      "ruleId": "STG-01",
+      "thresholdLabel": "临时座席",
+      "field": "value",
+      "current": 0.75,
+      "unit": "m2_per_person",
+      "bound": false,
+      "currentOk": true,
+      "safeMin": 0.3,
+      "safeMax": 3,
+      "marginBelow": 0.45,
+      "marginAbove": 2.25,
+      "status": "未绑定（执行器不读该阈值）",
+      "sourceLevel": "B",
+      "source": "地方公安口径（深圳、无锡、江西、郑州）",
+      "points": [
+        {
+          "value": 0.3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.75,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 0.9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.1,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.25,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        }
+      ]
+    },
+    {
+      "ruleId": "STG-02",
+      "thresholdLabel": "台高 <1.5 m",
+      "field": "m",
+      "current": 5,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 3,
+      "safeMax": 6,
+      "marginBelow": 2,
+      "marginAbove": 1,
+      "status": "hold",
+      "sourceLevel": "B",
+      "source": "郑州市公安局大型活动安全管理规范 §34（无锡 6 m、江西 10 m，取较宽）",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-09-STG-02:STG-02"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-09-STG-02:STG-02"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 7.5,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 8,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 9,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 10,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 11,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 12,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 13,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 14,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 15,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02",
+            "EV-INC-01:STG-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 16,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:STG-02",
+            "EV-NEG-02-GEN-07:STG-02",
+            "EV-NEG-03-MKT-02:STG-02",
+            "EV-NEG-04-MKT-06:STG-02",
+            "EV-NEG-05-MKT-07:STG-02",
+            "EV-NEG-06-MKT-10:STG-02",
+            "EV-NEG-07-MKT-11:STG-02",
+            "EV-NEG-08-STG-01:STG-02",
+            "EV-NEG-10-CMP-02:STG-02",
+            "EV-NEG-11-CMP-03:STG-02",
+            "EV-NEG-12-CMP-03:STG-02",
+            "EV-NEG-13-MKT-02:STG-02",
+            "EV-INC-01:STG-02"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "CMP-02",
+      "thresholdLabel": "营位间距",
+      "field": "m",
+      "current": 2,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 1.2,
+      "safeMax": 3,
+      "marginBelow": 0.8,
+      "marginAbove": 1,
+      "status": "hold",
+      "sourceLevel": "A",
+      "source": "GB/T 31710.3-2015 §6.2.9",
+      "points": [
+        {
+          "value": 0.8,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-10-CMP-02:CMP-02"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-10-CMP-02:CMP-02"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1.2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 1.6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 2.4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-11-CMP-03:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-11-CMP-03:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-11-CMP-03:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [
+            "EV-NEG-11-CMP-03:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 8,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 9,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 10,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 11,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 12,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 13,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 14,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 15,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        },
+        {
+          "value": 16,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-02",
+            "EV-NEG-02-GEN-07:CMP-02",
+            "EV-NEG-03-MKT-02:CMP-02",
+            "EV-NEG-04-MKT-06:CMP-02",
+            "EV-NEG-05-MKT-07:CMP-02",
+            "EV-NEG-06-MKT-10:CMP-02",
+            "EV-NEG-07-MKT-11:CMP-02",
+            "EV-NEG-08-STG-01:CMP-02",
+            "EV-NEG-09-STG-02:CMP-02",
+            "EV-NEG-11-CMP-03:CMP-02",
+            "EV-NEG-12-CMP-03:CMP-02",
+            "EV-NEG-13-MKT-02:CMP-02"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "CMP-03",
+      "thresholdLabel": "帐篷之间",
+      "field": "m",
+      "current": 4,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 3.2,
+      "safeMax": 7,
+      "marginBelow": 0.8,
+      "marginAbove": 3,
+      "status": "hold",
+      "sourceLevel": "C",
+      "source": "经验值（C）；标准仅规定 2 m 服务间距，消防口径更严",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-10-CMP-02:CMP-03",
+            "EV-NEG-11-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 1.6,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-11-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-11-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 2.4,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-11-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-11-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 3.2,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 4.8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 8,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 9,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 10,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 11,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 12,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 13,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 14,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 15,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        },
+        {
+          "value": 16,
+          "controlViolations": 1,
+          "missed": [],
+          "extra": [
+            "EV-NEG-01-GEN-04:CMP-03",
+            "EV-NEG-02-GEN-07:CMP-03",
+            "EV-NEG-03-MKT-02:CMP-03",
+            "EV-NEG-04-MKT-06:CMP-03",
+            "EV-NEG-05-MKT-07:CMP-03",
+            "EV-NEG-06-MKT-10:CMP-03",
+            "EV-NEG-07-MKT-11:CMP-03",
+            "EV-NEG-08-STG-01:CMP-03",
+            "EV-NEG-09-STG-02:CMP-03",
+            "EV-NEG-13-MKT-02:CMP-03"
+          ],
+          "ok": false
+        }
+      ]
+    },
+    {
+      "ruleId": "CMP-03",
+      "thresholdLabel": "明火距帐篷",
+      "field": "m",
+      "current": 10,
+      "unit": "m",
+      "bound": true,
+      "currentOk": true,
+      "safeMin": 6,
+      "safeMax": 20,
+      "marginBelow": 4,
+      "marginAbove": 10,
+      "status": "hold",
+      "sourceLevel": "C",
+      "source": "经验值（C）；标准仅规定 2 m 服务间距，消防口径更严",
+      "points": [
+        {
+          "value": 1,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-12-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 2,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-12-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 3,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-12-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 4,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-12-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 5,
+          "controlViolations": 0,
+          "missed": [
+            "EV-NEG-12-CMP-03:CMP-03"
+          ],
+          "extra": [],
+          "ok": false
+        },
+        {
+          "value": 6,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 7,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 8,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 9,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 10,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 11,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 12,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 13,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 14,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 15,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 16,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        },
+        {
+          "value": 20,
+          "controlViolations": 0,
+          "missed": [],
+          "extra": [],
+          "ok": true
+        }
+      ]
+    }
+  ],
+  "calibration": [
+    {
+      "type": "Festivals",
+      "n": 20,
+      "spanWidth": {
+        "p25": 222.7,
+        "median": 407.2,
+        "p75": 587.2
+      },
+      "spanHeight": {
+        "p25": 236.5,
+        "median": 326.8,
+        "p75": 495.5
+      },
+      "zones": {
+        "p25": 5.8,
+        "median": 6.5,
+        "p75": 8
+      },
+      "objects": {
+        "p25": 18.8,
+        "median": 22,
+        "p75": 57.5
+      }
+    },
+    {
+      "type": "Local Governments",
+      "n": 12,
+      "spanWidth": {
+        "p25": 172.2,
+        "median": 251.7,
+        "p75": 353
+      },
+      "spanHeight": {
+        "p25": 264.7,
+        "median": 364,
+        "p75": 450.2
+      },
+      "zones": {
+        "p25": 5,
+        "median": 6.5,
+        "p75": 8
+      },
+      "objects": {
+        "p25": 18.5,
+        "median": 32,
+        "p75": 46.5
+      }
+    },
+    {
+      "type": "未分类",
+      "n": 5,
+      "spanWidth": {
+        "p25": 297.5,
+        "median": 305.5,
+        "p75": 930.3
+      },
+      "spanHeight": {
+        "p25": 216.8,
+        "median": 508.6,
+        "p75": 606.9
+      },
+      "zones": {
+        "p25": 6,
+        "median": 6,
+        "p75": 6
+      },
+      "objects": {
+        "p25": 24,
+        "median": 99,
+        "p75": 252
+      }
+    },
+    {
+      "type": "Road Events",
+      "n": 2,
+      "spanWidth": {
+        "p25": 542.7,
+        "median": 849.2,
+        "p75": 1155.8
+      },
+      "spanHeight": {
+        "p25": 530,
+        "median": 858.4,
+        "p75": 1186.7
+      },
+      "zones": {
+        "p25": 1.5,
+        "median": 3,
+        "p75": 4.5
+      },
+      "objects": {
+        "p25": 12.5,
+        "median": 25,
+        "p75": 37.5
+      }
+    },
+    {
+      "type": "Education",
+      "n": 2,
+      "spanWidth": {
+        "p25": 271.6,
+        "median": 325.2,
+        "p75": 378.7
+      },
+      "spanHeight": {
+        "p25": 208,
+        "median": 232.7,
+        "p75": 257.3
+      },
+      "zones": {
+        "p25": 7,
+        "median": 8,
+        "p75": 9
+      },
+      "objects": {
+        "p25": 13.8,
+        "median": 15.5,
+        "p75": 17.3
+      }
+    },
+    {
+      "type": "Venues",
+      "n": 1,
+      "spanWidth": {
+        "p25": 306.6,
+        "median": 306.6,
+        "p75": 306.6
+      },
+      "spanHeight": {
+        "p25": 261.3,
+        "median": 261.3,
+        "p75": 261.3
+      },
+      "zones": {
+        "p25": 7,
+        "median": 7,
+        "p75": 7
+      },
+      "objects": {
+        "p25": 23,
+        "median": 23,
+        "p75": 23
+      }
+    }
+  ],
+  "summary": {
+    "thresholds": 15,
+    "bound": 13,
+    "unbound": [
+      "STG-01:舒适",
+      "STG-01:临时座席"
+    ],
+    "boundarySensitive": [
+      "GEN-04:出口数下限",
+      "MKT-07:每 10 摊",
+      "MKT-10:摊位投影占场地"
+    ],
+    "notOk": []
+  }
+}

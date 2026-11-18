@@ -90,38 +90,6 @@ export function restartGuide(_state: GuideState): GuideState {
   return { done: [], dismissed: false };
 }
 
-/* ---------------- 导出菜单（H4-b 形态层） ---------------- */
-
-/**
- * 导出菜单四项形态（对齐 OnePlan 四件套，实现归 H5）。
- * H4-b 只落形态：图标+文案+可用性；禁用项带「即将上线」而非可点报错。
- */
-export const EXPORT_MENU_ITEMS = [
-  { id: 'png', label: 'PNG 快照', hint: '72/300 DPI，含比例尺与图例' },
-  { id: 'csv', label: 'CSV 清单', hint: '14 字段对齐，Excel 直开' },
-  { id: 'geojson', label: 'GeoJSON', hint: '全量几何，GIS 可用' },
-  { id: 'share', label: '只读分享', hint: '链接分享，绑定当前快照' },
-] as const;
-
-export type ExportItemId = (typeof EXPORT_MENU_ITEMS)[number]['id'];
-
-/** 分享弹窗（毛玻璃）的形态数据：快照摘要 + 链接占位（真实链接 H5-b 生成）。 */
-export function shareDialogContent(input: {
-  revision: number;
-  updatedAt: string;
-  counts: { zones: number; facilities: number; routes: number; workers: number };
-}): { title: string; lines: string[] } {
-  const { revision, updatedAt, counts } = input;
-  return {
-    title: '分享只读规划',
-    lines: [
-      `绑定快照 r${revision} · ${updatedAt}`,
-      `${counts.zones} 分区 · ${counts.facilities} 设施 · ${counts.routes} 动线 · ${counts.workers} 人员`,
-      '链接生成（即将上线）：接收方只读、不可编辑、撤销即失效。',
-    ],
-  };
-}
-
 /* ---------------- 统一交付面板（户外场地方案） ---------------- */
 
 /**
