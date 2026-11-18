@@ -11,6 +11,7 @@
 | `site-evidence.schema.json` | 场地证据摘要的目标 schema（要素类型、确定性、来源、布局权重） | `frontend/lib/site-intelligence/types.ts` 的实际枚举 |
 | `site-evidence.example.json` | 按上述 schema 手写的一个最小样例（合成场地，非真实项目） | —— |
 | `materials.csv` | 物料尺寸与部署参数；尺寸取自代码，重量/风载等未有的标 `待核` | `site-plan-facilities.ts`、`oneplan-library-size.ts` |
+| `frontend/lib/agent-corpus/` | 执行器：11 条可算判据 + 69 条 `unsupported` 原因码；提示词摘要生成器（21 条 / 1600 字符预算） | `layout-assertions.json` |
 
 ## 三条硬规矩
 
@@ -20,8 +21,8 @@
 
 ## 与代码的关系（2026-11-18 实况）
 
-- 本目录**目前不被运行时代码读取**：它是 A1/A2/A3（场地证据）、B1/B2（物料落位）、D1/D2（模板）与 C4/E2（校验回执）的输入契约，不是已上线的能力。
-- 已落码的几何校验只有 `agent-proposal.ts` 的 `BBOX_OVERLAP` / `OUT_OF_BOUNDS`，以及室内 `plan-scoring.ts` 的容量与罚分；本目录的 80 条判据**尚未**接进户外校验器。
+- **判据已有执行器，但未接进运行时**：`frontend/lib/agent-corpus/`（`evaluate.ts` / `geometry.ts` / `prompt-digest.ts`）能把 `facilities / zones / nodes / obstacles` 直接算成回执，已实现 11 条判据，其余 69 条带原因码进 `unsupported`。它现在只被 `tests/agent-corpus-eval.test.ts` 调用，没有接进 Agent 主链与面板。
+- 已落码的几何校验只有 `agent-proposal.ts` 的 `BBOX_OVERLAP` / `OUT_OF_BOUNDS`，以及室内 `plan-scoring.ts` 的容量与罚分；执行器的 11 条**尚未**接入落笔前预检。
 - 场地证据运行时已经有 `water` 要素与岸线排布（`openfreemap-water.ts`、`outdoor-shoreline-layout.ts`）；schema 里的 `layoutWeight`、`precisionM`、`constraints`、`gaps` 是**目标字段**，当前快照不产出。
 
 ## 谁能改
