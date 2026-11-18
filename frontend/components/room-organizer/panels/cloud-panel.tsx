@@ -29,6 +29,9 @@ import { assertCloudZoneSupport, backendSceneToLayout, layoutToBackendScene } fr
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
+import { copyAssistantScope } from '../lib/assistant-scope-registry';
+import { projectSessionScope } from '../lib/project-session-scope';
+import { copyOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { AccountTeamPanel } from './account-team-panel';
 import { AVATAR_PRESETS, avatarForSeed, loadAvatar, saveAvatar, type AvatarPreset } from './account-avatars';
 import { InfoTip } from './info-tip';
@@ -38,7 +41,7 @@ import type {LocalWriteCapability} from '@/lib/local-write-lease';
 import type {ActivitySessionToken} from '../lib/activity-session-epoch';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: SettingsPreferences; onPreferenceChange?: (patch: Partial<SettingsPreferences>) => void; onPlanSettingsChange?: (next: PlanEditorSettings | undefined) => void; siteQuote?: PlanQuote | undefined; planContext?: FeedbackPlanContext; onCapturePlan?: () => Promise<string | null> | string | null }
+interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onDeleteCurrentActivity?: () => Promise<string>; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: SettingsPreferences; onPreferenceChange?: (patch: Partial<SettingsPreferences>) => void; onPlanSettingsChange?: (next: PlanEditorSettings | undefined) => void; siteQuote?: PlanQuote | undefined; planContext?: FeedbackPlanContext; onCapturePlan?: () => Promise<string | null> | string | null }
 
 /** 点在对话框边框外（背后遮罩）才关。面板里的点击、按钮都不关。 */
 export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): void {
@@ -82,7 +85,7 @@ function coverMark(): JSX.Element {
 
 type TrashProjectSummary = { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string };
 
-export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp, onPlanSettingsChange, siteQuote, planContext, onCapturePlan }: Props): JSX.Element {
+export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onDeleteCurrentActivity, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp, onPlanSettingsChange, siteQuote, planContext, onCapturePlan }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const preferences = preferencesProp ?? { lengthUnit: 'm' as DisplayUnit, showMeasurements: true, lengthPrecisionM: 0.01 as const, snapToGrid: false, snapToWall: false, snapToItems: false };
@@ -697,6 +700,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       if (layoutRef.current !== current) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
       try { await copySourceScope(current.id ?? 'local', created.id); }
       catch { sourceNotice = ' 资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
+      // 2026-11-19：存为方案后，这段对话和地图规划跟着新项目走；本机草稿保留一份原记录。
+      try { copyAssistantScope(projectSessionScope(current.id), projectSessionScope(created.id)); } catch { /* 会话复制失败不影响建项目 */ }
+      try { copyOutdoorProjectRecord(current.id ?? '', created.id); } catch { /* 规划复制失败时新项目仍可用空白规划 */ }
       let nextScene = created.scene;
       try { nextScene = (await controller.acquireLease(created.id)).scene; } catch { /* 建完仍可只读打开，不阻断创建回执 */ }
       await acceptScene(nextScene, created.id, created.name, current,checkSwitch);
@@ -707,8 +713,16 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     await refreshProjects(); showNotice(`新项目已保存。${controller.getSnapshot().writeBlocked ? '这份暂时只读，需要改动时在卡片上取回编辑权。' : ''}${sourceNotice}`);
   }
   /** 丢弃本机草稿：换一个新的空白本机活动，不触碰任何云端项目。 */
-  function discardLocalDraft(): void {
-    if (!window.confirm('删除本机草稿？云端项目不受影响；当前画布会换成一个新的空白活动。')) return;
+  async function discardLocalDraft(): Promise<void> {
+    if (!window.confirm('删除当前本机活动？\n\n· 归档与封面\n· 地图规划\n· 活动需求、点验与图纸\n· 这段对话\n都会一并清除，删除后无法恢复。')) return;
+    try {
+      showNotice(onDeleteCurrentActivity ? await onDeleteCurrentActivity() : discardLocalDraftLegacy());
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : '活动未删除，请重试。', true);
+    }
+  }
+  /** 无 Provider 的独立渲染（测试/Story）仍可用的降级：只换画布，不声称删除了资料。 */
+  function discardLocalDraftLegacy(): string {
     onBeforeActivitySwitch?.(layoutRef.current)?.();
     const fresh = backendSceneToLayout(emptyProjectScene(), { projectId: crypto.randomUUID(), name: '未命名活动' });
     onLoadLayout(fresh);
@@ -720,7 +734,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       url.searchParams.delete('project');
       window.history.replaceState(null, '', `${url.pathname}${url.search}`);
     }
-    showNotice('本机草稿已删除，画布已换成新的空白活动。');
+    return '画布已换成新的空白活动；本工作台未接入活动资料清理，旧资料仍保留在本机。';
   }
   function downloadContract(): void {
     try {
@@ -1002,8 +1016,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 }}>存为方案</button>
                 <button type="button" disabled={busy} onClick={event => {
                   (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
-                  discardLocalDraft();
-                }}>删除本机</button>
+                  void discardLocalDraft();
+                }}>删除活动</button>
               </div>
             </details>
           </li>}

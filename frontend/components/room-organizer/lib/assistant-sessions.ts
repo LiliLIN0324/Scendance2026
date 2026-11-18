@@ -40,6 +40,17 @@ export function clampAssistantSessionTitle(title: string): string {
   return chars.slice(0, ASSISTANT_SESSION_TITLE_MAX).join('');
 }
 
+/**
+ * 2026-11-19：默认标题「新会话」不再当终点。首条用户消息落盘后按内容命名，
+ * 列表里能一眼认出哪场对话是哪场（对齐 ChatGPT / Claude 的会话命名）。
+ */
+export function assistantSessionTitleFromText(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (!compact) return '';
+  const chars = Array.from(compact);
+  return chars.length > 24 ? `${chars.slice(0, 24).join('')}…` : compact;
+}
+
 export function createAssistantSessionId(): string {
   const uuid = globalThis.crypto?.randomUUID?.();
   if (uuid) return `ses-${uuid}`;

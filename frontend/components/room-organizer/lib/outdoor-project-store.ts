@@ -121,6 +121,17 @@ export function renameOutdoorProject(projectId: string, name: string, storage?: 
 }
 
 /** 删除本机草稿（测试/用户清库用；云端项目本体不受影响）。 */
+/** 2026-11-19：「存为方案」后地图规划跟着新项目走。只复制，不删本机草稿的槽位。 */
+export function copyOutdoorProjectRecord(fromId: string, toId: string, storage?: KeyValueStorage | null): boolean {
+  if (!fromId || !toId || fromId === toId) return false;
+  const record = readOutdoorProjectRecord(fromId, storage);
+  if (!record) return false;
+  try {
+    saveOutdoorProjectRecord({ ...record, projectId: toId, updatedAt: new Date().toISOString() }, storage);
+    return true;
+  } catch { return false; }
+}
+
 export function clearOutdoorProjectRecord(projectId: string, storage?: KeyValueStorage | null): void {
   const store = storage ?? safeDefaultStorage();
   if (!store) return;

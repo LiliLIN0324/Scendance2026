@@ -287,3 +287,10 @@
   line-height: 1.55;
   white-space: pre-wrap;
 }
+
+/* 2026-11-19：其他活动的会话也可删；行内右上角悬停出现。 */
+.sc-session-row.is-readonly { position: relative; }
+.sc-session-readonly-delete { position: absolute; top: 6px; right: 6px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--wk-ink-soft, #71767e); opacity: 0; cursor: pointer; transition: opacity 0.12s ease, background 0.12s ease; }
+.sc-session-row.is-readonly:hover .sc-session-readonly-delete,
+.sc-session-row.is-readonly:focus-within .sc-session-readonly-delete { opacity: 1; }
+.sc-session-readonly-delete:hover { background: var(--wk-plane, #f4f5f7); color: var(--wk-danger, #b3261e); }

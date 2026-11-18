@@ -128,10 +128,10 @@ describe('local activity creation and switching', () => {
     };
     const view = render(<LocalActivitiesPanel mode="create" layout={original} actions={actions}/>);
     expect(screen.getByRole('form', { name: '新建活动' })).toBeTruthy();
-    expect(screen.queryByText('最近活动')).toBeNull();
+    expect(screen.queryByText('本机活动')).toBeNull();
     view.rerender(<LocalActivitiesPanel mode="list" layout={original} actions={actions}/>);
     expect(screen.queryByRole('form', { name: '新建活动' })).toBeNull();
-    expect(await screen.findByText('最近活动')).toBeTruthy();
+    expect(await screen.findByText('本机活动')).toBeTruthy();
   });
 
   it('puts the open canvas first in the same list and keeps a duplicate archive out of it', async () => {
@@ -407,14 +407,14 @@ describe('local activity creation and switching', () => {
     };
     const view = render(<LocalActivitiesPanel mode="list" compact layout={original} actions={actions}/>);
     const island = view.container.querySelector('.sc-activity-group')!;
-    const pill = screen.getByRole('button', { name: /最近活动/ });
+    const pill = screen.getByRole('button', { name: /本机活动/ });
     // 收起时只有一颗胶囊，卡片墙不铺开；点开才展开。
     expect(pill.getAttribute('aria-expanded')).toBe('false');
     expect(island.classList.contains('is-open')).toBe(false);
     expect(island.classList.contains('is-island')).toBe(true);
     await screen.findByText('演练目标活动');
     fireEvent.click(pill);
-    expect(screen.getByRole('button', { name: /最近活动/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: /本机活动/ }).getAttribute('aria-expanded')).toBe('true');
     expect(island.classList.contains('is-open')).toBe(true);
     // 折叠不吞掉列表：卡片与新建入口都在，只是默认收着。
     expect(screen.getByRole('button', { name: `打开活动「${target.name}」` })).toBeTruthy();
@@ -428,7 +428,7 @@ describe('local activity creation and switching', () => {
     };
     const onRenameCurrent = vi.fn();
     render(<LocalActivitiesPanel mode="list" compact layout={original} actions={actions} onRenameCurrent={onRenameCurrent}/>);
-    const toggle = screen.getByRole('button', { name: /最近活动/ });
+    const toggle = screen.getByRole('button', { name: /本机活动/ });
     fireEvent.click(screen.getByRole('button', { name: /重命名当前活动/ }));
     const input = await screen.findByRole('textbox', { name: '重命名当前活动' });
     fireEvent.change(input, { target: { value: '  西湖团建  ' } });

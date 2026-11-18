@@ -1090,7 +1090,7 @@ it('puts local draft actions in the card menu and keeps the basemap note muted',
   expect(screen.queryByText('ROUTE_NOT_FOUND')).toBeNull();
   expect(document.querySelector('.sc-file-draft-save')).toBeNull();
   const save = screen.getByRole('button', { name: '存为方案' });
-  const discard = screen.getByRole('button', { name: '删除本机' });
+  const discard = screen.getByRole('button', { name: '删除活动' });
   expect(save.closest('.sc-file-more-menu')).toBeTruthy();
   expect(discard.closest('.sc-file-more-menu')).toBeTruthy();
   const menu = save.closest('details');

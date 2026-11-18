@@ -3,13 +3,17 @@ import { mergeMaterialCheckinLedgers } from '../../supabase/functions/_shared/ma
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from '../components/room-organizer/lib/initial-layout';
 import { MAX_NAME_LENGTH } from '../components/room-organizer/lib/schema';
 import { deleteActivityCover, readActivityCovers } from './activity-cover';
+import { materialCheckinStorageKey } from './material-checkin-storage';
+import { clearOutdoorProjectRecord } from '../components/room-organizer/lib/outdoor-project-store';
+import { forgetAssistantScope } from '../components/room-organizer/lib/assistant-scope-registry';
+import { projectSessionScope } from '../components/room-organizer/lib/project-session-scope';
 import {
   createLocalProjectBackupV3, createLocalProjectBackupV5WithDocuments, createLocalProjectBackupV6,
   parseLocalProjectBackupJson,
   type LocalProjectBackupV3, type LocalProjectBackupV5, type LocalProjectBackupV6,
   type ValidatedLocalProjectRestoreCandidate,
 } from './local-project-backup';
-import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-storage';
+import { listSourceRecords, readSourceRecord, updateSourceForm, deleteSource, deleteSourceForm, readSourceScopeSnapshot } from './source-storage';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 
 export const LOCAL_ACTIVITIES_NAMESPACE = 'local-activity';
@@ -125,6 +129,29 @@ export async function readLocalActivity(projectId: string): Promise<ValidatedLoc
 export async function deleteLocalActivity(projectId: string): Promise<void> {
   await updateSourceForm(activityKey(projectId), () => undefined);
   await deleteActivityCover(projectId);
+}
+
+/**
+ * 2026-11-19 用户「我删不了这个项目」：删除一个本机活动必须连它派生出去的东西一起清。
+ * 归档/封面只代表列表；规划、点验、需求、图纸和对话都按活动编号另存。
+ * 先删主体，再逐项清理；某项清不掉时保留原记录并把失败项报出来，不假装删干净。
+ */
+export async function deleteLocalActivityData(projectId: string): Promise<void> {
+  if (!projectId.trim()) throw new Error('缺少活动编号，未删除。');
+  const failures: string[] = [];
+  try { await deleteLocalActivity(projectId); } catch { failures.push('活动归档'); }
+  try { clearOutdoorProjectRecord(projectId); } catch { failures.push('地图规划'); }
+  try { await updateSourceForm(materialCheckinStorageKey(projectId), () => undefined); } catch { failures.push('数量点验'); }
+  try { await deleteSourceForm(`${projectId}:brief`); } catch { failures.push('活动需求'); }
+  try {
+    const snapshot = await readSourceScopeSnapshot(projectId);
+    for (const source of snapshot.sources) await deleteSource(source.id);
+    await deleteSourceForm(projectId);
+  } catch { failures.push('图纸资料'); }
+  try { forgetAssistantScope(projectSessionScope(projectId)); } catch { failures.push('对话记录'); }
+  if (failures.length) {
+    throw new Error(`活动主体已删除，但${failures.join('、')}未能清干净；请重试，原记录已保留。`);
+  }
 }
 
 /** Thumbnails draw floors only; keeping attachments or embedded scene copies would pin them in list state. */
