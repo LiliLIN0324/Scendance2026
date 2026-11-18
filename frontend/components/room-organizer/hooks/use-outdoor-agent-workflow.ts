@@ -3,6 +3,7 @@ import type { BackendSession } from "@/lib/backend-session";
 import { agentErrorView, type AgentErrorView } from "@/lib/agent-error-view";
 import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
+import { lux3dFacilityTarget, openLux3dDialogGeneration, parseLux3dDialogIntent } from "../lib/lux3d-dialog-entry";
 import {
   boundaryKey,
   mergeOutdoorFacts,
@@ -2236,6 +2237,25 @@ export function useOutdoorAgentWorkflow(input: {
     return true;
   }
 
+  /**
+   * 任务卡入口：已有合法红线的户外方案里，直接用 Aholo Lux3D 造一件道具。
+   * 只打开现成的生成面板（额度确认、提交回执、unknown 锁都在那里）；本次不提交、不扣额度。
+   */
+  function startLux3dGeneration(prompt = ""): boolean {
+    const bridge = callbacks.current.bridge();
+    const plan = bridge?.getPlan();
+    if (!plan || !checkBoundaryRing(plan.boundary).ok) {
+      status("还没有可用的活动红线：先在图上圈定活动范围，再用 Aholo Lux3D 生成道具；本次没有创建任务。", "blocked");
+      return false;
+    }
+    const facility = lux3dFacilityTarget(plan.facilities, bridge?.selectedIds?.() ?? []);
+    openLux3dDialogGeneration({ facility, prompt });
+    status(
+      `已打开 Aholo Lux3D 生成面板${facility ? `（生成结果回填「${facility.name}」）` : "（生成结果先进模型库）"}；勾选额度并提交后才会创建任务，本次没有提交。`,
+    );
+    return true;
+  }
+
   async function handle(message: string, clarification?: OutdoorClarification): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
     const waiting = pendingPlanRef.current;
@@ -2255,6 +2275,25 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const plan = callbacks.current.bridge()?.getPlan();
     if (!plan) return false;
+    // 对话主路径的生成入口：先认「生成一件新道具」，再走模型理解。
+    // 只打开现有生成面板，不提交、不扣额度；「摆/放」句仍归 #167 的落位预览。
+    if (!clarification) {
+      const lux3d = parseLux3dDialogIntent(message);
+      if (lux3d) {
+        if (!checkBoundaryRing(plan.boundary).ok) {
+          status("还没有可用的活动红线：先在图上圈定活动范围，再用 Aholo Lux3D 生成道具；本次没有创建任务。", "blocked");
+          return true;
+        }
+        const selected = callbacks.current.bridge()?.selectedIds?.() ?? [];
+        const facility = lux3dFacilityTarget(plan.facilities, selected, message);
+        openLux3dDialogGeneration({ facility, prompt: lux3d.prompt });
+        callbacks.current.say(
+          `已按这句话打开 Aholo Lux3D 生成面板${facility ? `，生成结果回填「${facility.name}」` : "，生成结果先保存到模型库"}；勾选额度并提交后才会创建任务。`,
+        );
+        status("已打开 Aholo Lux3D 生成面板；本次没有提交、没有扣额度。");
+        return true;
+      }
+    }
     // 2026-11-17：先认「这句是不是在回答上一轮的二选一」。认出来就把选中的那一项结构化带进理解层；
     // 认不出就清空——绝不让上一轮的选项影响下一句无关的话。
     const choiceReply = clarification
@@ -2910,6 +2949,7 @@ export function useOutdoorAgentWorkflow(input: {
         (stateRef.current.stage === "people" && n.kind === "entry"),
     ),
     clarify,
+    startLux3dGeneration,
     handle,
     action,
     cancel,

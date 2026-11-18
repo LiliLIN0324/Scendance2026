@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, it, expect, vi, type Mock } from "vitest";
@@ -9,6 +9,7 @@ import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from "../lib/outdo
 import { FIXED_DATA_CASES } from "../lib/outdoor-release-status-card";
 import { OUTDOOR_STAGE_LABELS, useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
+import { getGenerationSheetState, resetGenerationSheetForTests } from "../lib/generation-sheet";
 import type {
   OutdoorMapContext,
   OutdoorAgentBridge,
@@ -161,6 +162,7 @@ beforeEach(() => {
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
+  resetGenerationSheetForTests();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -2409,4 +2411,70 @@ it("缺分区要追问时，提示条里也带上后置活", async () => {
   await turn("先划展览区和表演区，最后再调通道", response("zones", {}));
   expect(flow.notice).toContain("要分哪些用途");
   expect(flow.notice).toContain("后面还有：最后再调通道");
+});
+
+// 2026-11-18：对话主路径接上 Aholo Lux3D——说「生成一件道具」就打开现成生成面板，
+// 不再先回一句「请到侧栏点设施」；也不把「摆一批折叠椅」静默改成收费生成。
+it("对话里点名 Lux3D 生成道具，直接打开现成生成面板且不调模型理解", async () => {
+  mountAtFlowState({ stage: "objects", completed: ["place", "scope", "zones"] });
+  await act(async () => {
+    await flow.handle("用 Lux3D 生成一个木质花箱摆到展览区");
+  });
+  expect(understand).not.toHaveBeenCalled();
+  expect(getGenerationSheetState()).toMatchObject({
+    open: true,
+    task: "model",
+    scope: "material",
+    prompt: "木质花箱",
+  });
+  const said = saySpy.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
+  expect(said).toContain("Aholo Lux3D");
+  expect(flow.notice).toContain("没有提交");
+});
+
+it("画布选中设施时，生成的模型回填那件设施", async () => {
+  const fixture = {
+    id: "f-lux",
+    name: "签到台",
+    position: { x: 10, y: 10 },
+    rotationDeg: 0,
+    size: { width: 1, depth: 1 },
+    notes: "",
+    templateId: "checkin",
+  } as unknown as SitePlanData["facilities"][number];
+  plan = { ...plan, facilities: [fixture] };
+  bridge.selectedIds = () => ["f-lux"];
+  mountAtFlowState({ stage: "objects", completed: ["place", "scope", "zones"] });
+  await act(async () => {
+    await flow.handle("生成一个木纹签到台");
+  });
+  expect(getGenerationSheetState()).toMatchObject({
+    open: true,
+    task: "model",
+    scope: "facility",
+    facility: { id: "f-lux", name: "签到台" },
+  });
+});
+
+it("没有合法红线时不打开面板，如实说先圈活动范围", async () => {
+  plan = { ...plan, boundary: [] };
+  await act(async () => {
+    await flow.handle("生成一个签到台");
+  });
+  expect(getGenerationSheetState().open).toBe(false);
+  expect(understand).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("还没有可用的活动红线");
+});
+
+it("物件阶段的卡片给 Aholo Lux3D 入口，点和「落位预览」分开", async () => {
+  mountAtFlowState({ stage: "objects", completed: ["place", "scope", "zones"] });
+  const entry = host.querySelector('[data-testid="outdoor-lux3d-entry"]');
+  expect(entry?.textContent).toContain("由 Aholo Lux3D 生成三维模型");
+  expect(entry?.textContent).toContain("落位预览");
+  const button = host.querySelector('[data-testid="outdoor-lux3d-generate"]');
+  expect(button).not.toBeNull();
+  await act(async () => {
+    (button as HTMLButtonElement).click();
+  });
+  expect(getGenerationSheetState()).toMatchObject({ open: true, task: "model" });
 });

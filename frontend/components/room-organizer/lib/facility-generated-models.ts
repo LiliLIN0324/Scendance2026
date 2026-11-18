@@ -16,7 +16,7 @@
  *    并据此禁止二次提交——这是防止重复扣费的最后一道本地闸门。
  */
 
-import { generationFailureText } from './generation-failure';
+import { generationFailureText, generationProgressText } from './generation-failure';
 
 /** 本机导入的 GLB（缓存键 `local-glb:*`）只在本会话有效，不持久化。 */
 export interface GeneratedFacilityModel {
@@ -474,7 +474,7 @@ export interface FacilityGenerateResolveOptions {
   /** 测试里替掉全局 fetch（透传给 fetchLux3dTask）。 */
   fetchImpl?: typeof fetch;
   cloud?: {
-    getGenerationJob(id: string): Promise<{ state: string; asset_id: string | null }>;
+    getGenerationJob(id: string): Promise<{ state: string; asset_id: string | null; created_at?: string | null }>;
     authorizeAsset(id: string): Promise<{ url: string; name: string }>;
   };
 }
@@ -509,7 +509,12 @@ export async function resolveFacilityGenerateLink(
         markFacilityGenerateTerminal(taskid, job.state, message);
         return { state: 'failed', message };
       }
-      if (!['ready', 'added'].includes(job.state) || !job.asset_id) return { state: 'pending', message: `云端生成中 · ${job.state}` };
+      if (!['ready', 'added'].includes(job.state) || !job.asset_id) {
+        // 2026-11-18：排队卡死与「正在跑」必须长得不一样。只给 `云端生成中 · queued`，
+        // 用户看不出是运维没装触发器，只会以为描述写错再点一次（= 再扣一次额度）。
+        const stalled = generationProgressText(job);
+        return { state: 'pending', message: stalled ? `云端生成中 · ${job.state}。${stalled}` : `云端生成中 · ${job.state}` };
+      }
       const asset = await options.cloud.authorizeAsset(job.asset_id);
       const { ensureGlbAsset, getGlbAssetState } = await import('../three/glb-assets');
       await ensureGlbAsset(job.asset_id, asset.url);

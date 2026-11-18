@@ -205,6 +205,21 @@ describe('useKeyboardShortcuts — walkthrough gate (#339)', () => {
 describe('useKeyboardShortcuts — review lock', () => {
   afterEach(cleanup);
 
+  it('reports why a layout edit was blocked', () => {
+    const handlers = makeHandlers();
+    const onBlocked = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      layoutLocked: true,
+      selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
+      selectedWall: null,
+      hasSignalItems: false,
+      onBlocked,
+      handlers: handlers as unknown as KeyboardShortcutHandlers,
+    }));
+    press('Delete');
+    expect(onBlocked).toHaveBeenCalledWith('locked');
+  });
+
   it('blocks layout edits and keeps a view shortcut', () => {
     const handlers = makeHandlers();
     renderHook(() => useKeyboardShortcuts({
@@ -224,6 +239,62 @@ describe('useKeyboardShortcuts — review lock', () => {
     expect(handlers.moveItem).not.toHaveBeenCalled();
     expect(handlers.rotateItem).not.toHaveBeenCalled();
     expect(handlers.toggleMeasurements).toHaveBeenCalledOnce();
+  });
+});
+
+describe('shortcut block reasons', () => {
+  afterEach(cleanup);
+
+  it('reports a walkthrough block for layout edits', () => {
+    const handlers = makeHandlers();
+    const onBlocked = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      walkthroughActive: true,
+      selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
+      selectedWall: null,
+      hasSignalItems: false,
+      onBlocked,
+      handlers: handlers as unknown as KeyboardShortcutHandlers,
+    }));
+    press('Delete');
+    expect(onBlocked).toHaveBeenCalledWith('walkthrough');
+    expect(handlers.removeItem).not.toHaveBeenCalled();
+  });
+
+  it('asks for a selection before delete or rotate', () => {
+    const handlers = makeHandlers();
+    const onBlocked = vi.fn();
+    renderHook(() => useKeyboardShortcuts({
+      selectedItem: null,
+      selectedWall: null,
+      hasSignalItems: false,
+      onBlocked,
+      handlers: handlers as unknown as KeyboardShortcutHandlers,
+    }));
+    press('Delete');
+    press('r');
+    expect(onBlocked).toHaveBeenNthCalledWith(1, 'needs-selection');
+    expect(onBlocked).toHaveBeenNthCalledWith(2, 'needs-selection');
+  });
+
+  it('ignores canvas keys while any modal is open', () => {
+    const handlers = makeHandlers();
+    const modal = document.createElement('div');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    document.body.appendChild(modal);
+    try {
+      renderHook(() => useKeyboardShortcuts({
+        selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
+        selectedWall: null,
+        hasSignalItems: false,
+        handlers: handlers as unknown as KeyboardShortcutHandlers,
+      }));
+      press('Delete');
+      expect(handlers.removeItem).not.toHaveBeenCalled();
+    } finally {
+      modal.remove();
+    }
   });
 });
 

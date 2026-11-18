@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { AuthCard } from '@/components/intro/auth-card';
+import { ShortcutReference } from '@/components/room-organizer/panels/shortcut-reference';
 import { DoorOpen, Images, MoreHorizontal, RefreshCw, Settings, Trash2, UserRound, UsersRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
@@ -101,7 +102,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const actionPending = useRef(false);
   const projectedCreation=useRef<{base:RoomLayout;projectId:string}|null>(null);
   const [section, setSection] = useState<AccountSection>('projects');
-  const [settingsPane, setSettingsPane] = useState<'canvas' | 'shortcuts'>('canvas');
+  const [settingsPane, setSettingsPane] = useState<'personal' | 'shortcuts'>('personal');
   const [noticeError, setNoticeError] = useState(false);
   // 成员页要取云端团队数据：第一次点开才挂载，之后一直留着，避免反复打列表。
   const [teamMounted, setTeamMounted] = useState(false);
@@ -962,11 +963,14 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       <section hidden={section !== 'settings'} aria-label="设置">
         <div className="sc-account-prefs">
           <nav className="sc-account-prefs-nav" aria-label="设置分区">
-            <button type="button" aria-pressed={settingsPane === 'canvas'} onClick={() => setSettingsPane('canvas')}>画布</button>
+            <button type="button" aria-pressed={settingsPane === 'personal'} onClick={() => setSettingsPane('personal')}>个人偏好</button>
             <button type="button" aria-pressed={settingsPane === 'shortcuts'} onClick={() => setSettingsPane('shortcuts')}>快捷键</button>
           </nav>
-          {settingsPane === 'canvas' ? <div className="sc-account-prefs-main">
-            <h3>画布</h3>
+          {settingsPane === 'personal' ? <div className="sc-account-prefs-main">
+            <div className="sc-account-prefs-head">
+              <h3>个人偏好</h3>
+              <p>跟账号走；未登录或离线时按账号留在本机。场景数据仍按米存储。</p>
+            </div>
             <div className="sc-settings-prefs">
               <div className="sc-settings-group">
                 <div className="sc-settings-row">
@@ -992,8 +996,11 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
               </div>
             </div>
           </div> : <div className="sc-account-prefs-main">
-            <h3>快捷键</h3>
-            <p className="sc-account-footnote">快捷键还在整理，这里先空着。</p>
+            <div className="sc-account-prefs-head">
+              <h3>快捷键</h3>
+              <p>按模式列出当前绑定；同名键在不同模式下含义不同。</p>
+            </div>
+            <ShortcutReference />
           </div>}
         </div>
       </section>

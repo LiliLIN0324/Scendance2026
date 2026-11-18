@@ -35,6 +35,13 @@ export interface KeyboardShortcutHandlers {
   cancelPlacement?(): void;
 }
 
+export type KeyboardBlockReason =
+  | 'locked'
+  | 'drag'
+  | 'walkthrough'
+  | 'needs-selection'
+  | 'no-signal-items';
+
 export interface UseKeyboardShortcutsOptions {
   enabled?: boolean;
   selectedItem: FurnitureItem | null;
@@ -54,6 +61,8 @@ export interface UseKeyboardShortcutsOptions {
   layoutLocked?: boolean;
   /** Whether an item drag is in progress; read at keypress time. */
   isDragActive?: () => boolean;
+  /** 键被模式拦住时给画布一条可解释的提示；提示文案由调用方决定。 */
+  onBlocked?: (reason: KeyboardBlockReason) => void;
   handlers: KeyboardShortcutHandlers;
 }
 
@@ -105,21 +114,26 @@ export function useKeyboardShortcuts({
   walkthroughActive = false,
   layoutLocked = false,
   isDragActive,
+  onBlocked,
   handlers,
 }: UseKeyboardShortcutsOptions): void {
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
+      // 任何 modal 打开时，画布都不该在背后响应裸键；速查浮层自己也靠这条让路。
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
 
       if (layoutLocked && editsLayout(event, Boolean(handlers.confirmPlacement))) {
         event.preventDefault();
+        onBlocked?.('locked');
         return;
       }
 
       // Held until the drop; view-only keys (snap, measurements, time) still work.
       if (isDragActive?.() && interruptsDrag(event)) {
         event.preventDefault();
+        onBlocked?.('drag');
         return;
       }
 
@@ -180,7 +194,13 @@ export function useKeyboardShortcuts({
       // doesn't also toggle the WiFi overlay, `2`/`m`/`g`/`p`/`[`/`]`/PageUp/Down
       // don't fire mid-walk, etc. (see #67). Undo/redo and Escape above still
       // work; the walkthrough hook owns its own Esc-to-exit handling.
-      if (walkthroughActive) return;
+      if (walkthroughActive) {
+        const key = event.key.toLowerCase();
+        if (event.key === 'Delete' || event.key === 'Backspace' || ((event.ctrlKey || event.metaKey) && (key === 'd' || key === 'v'))) {
+          onBlocked?.('walkthrough');
+        }
+        return;
+      }
 
       // Everything below is a bare single-key shortcut. Never swallow browser
       // shortcuts like Cmd/Ctrl+F (find), Ctrl+R (reload), or Cmd+M.
@@ -194,6 +214,11 @@ export function useKeyboardShortcuts({
       if (key === 'f' && selectedItem) {
         event.preventDefault();
         handlers.focusOnSelection();
+        return;
+      }
+
+      if ((event.key === 'Delete' || event.key === 'Backspace') && !selectedItem && !selectedWall) {
+        onBlocked?.('needs-selection');
         return;
       }
 
@@ -213,6 +238,11 @@ export function useKeyboardShortcuts({
         } else {
           handlers.toggleExteriorWall(selectedWall.id);
         }
+        return;
+      }
+
+      if (key === 'r' && !selectedItem) {
+        onBlocked?.('needs-selection');
         return;
       }
 
@@ -275,6 +305,11 @@ export function useKeyboardShortcuts({
         return;
       }
 
+      if (key === 'w' && !hasSignalItems) {
+        onBlocked?.('no-signal-items');
+        return;
+      }
+
       if (key === 'w' && hasSignalItems) {
         event.preventDefault();
         handlers.toggleSignals();
@@ -302,7 +337,7 @@ export function useKeyboardShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, layoutLocked, isDragActive, handlers]);
+  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, layoutLocked, isDragActive, onBlocked, handlers]);
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

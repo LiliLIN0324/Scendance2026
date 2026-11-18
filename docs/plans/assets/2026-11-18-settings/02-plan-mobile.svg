@@ -1,0 +1,213 @@
+<svg width="1600" height="1000" viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Scendance 本方案设置与移动端草图</title>
+  <desc id="desc">低保真草图：本方案设置显示来源与仅本机状态，移动端把快捷键表改成卡片。</desc>
+  <defs>
+    <filter id="shadow2" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#1F2933" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .ink { fill: #1F2933; }
+      .muted { fill: #6B7280; }
+      .faint { fill: #9CA3AF; }
+      .teal { fill: #0F766E; }
+      .orange { fill: #C2410C; }
+      .amber { fill: #8A5A12; }
+      .label { font: 600 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; letter-spacing: .04em; }
+      .h1 { font: 700 34px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .h2 { font: 700 20px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .h3 { font: 700 17px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .body { font: 400 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .small { font: 400 12px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .tiny { font: 400 11px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .strong { font: 600 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .kbd { font: 600 12px "Cascadia Mono", "SFMono-Regular", Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#F7F5EF"/>
+  <text x="1522" y="48" class="tiny muted" text-anchor="end">讨论稿 · 2026-11-18</text>
+
+  <text x="48" y="60" class="h1 ink">Scendance 设置 · 本方案与移动端</text>
+  <text x="48" y="92" class="body muted">“本方案”不是第二个个人偏好页：它要显示覆盖来源、存储边界和消费方；没有真实字段就不出现。</text>
+
+  <!-- Frame C -->
+  <rect x="48" y="150" width="880" height="790" rx="18" fill="#FFFDF8" stroke="#D8D4CA"/>
+  <text x="48" y="184" class="label teal">C · 本方案（PR3 / PR4 后）</text>
+  <text x="48" y="210" class="h2 ink">等有真实字段再出现</text>
+  <text x="48" y="234" class="small muted">无方案时不展示，不造空页签；有方案时先说明“仅本机”。</text>
+
+  <g filter="url(#shadow2)">
+    <rect x="72" y="258" width="832" height="652" rx="14" fill="#FFFFFF" stroke="#E5E1D8"/>
+  </g>
+  <path d="M86 258h804a14 14 0 0 1 14 14v44H72v-44a14 14 0 0 1 14-14z" fill="#FFFFFF"/>
+  <line x1="72" y1="316" x2="904" y2="316" stroke="#ECE8DF"/>
+  <text x="94" y="292" class="h3 ink">设置</text>
+  <rect x="806" y="274" width="76" height="24" rx="12" fill="#FDF6E3" stroke="#E8D6A6"/>
+  <text x="844" y="290" class="tiny amber" text-anchor="middle">仅本机</text>
+
+  <rect x="72" y="316" width="200" height="594" fill="#F3F4F1"/>
+  <line x1="272" y1="316" x2="272" y2="910" stroke="#ECE8DF"/>
+
+  <text x="94" y="346" class="tiny faint">个人</text>
+  <text x="102" y="378" class="body ink">个人偏好</text>
+  <text x="102" y="414" class="body ink">快捷键</text>
+
+  <text x="94" y="462" class="tiny faint">本方案</text>
+  <rect x="84" y="474" width="176" height="38" rx="8" fill="#C2410C"/>
+  <text x="102" y="498" class="strong" fill="#FFFFFF">显示与网格</text>
+  <text x="102" y="538" class="body ink">时区</text>
+  <text x="94" y="570" class="tiny orange">仅在本方案打开时出现</text>
+
+  <text x="94" y="872" class="small muted">团队与权限 ↗</text>
+  <text x="94" y="892" class="tiny faint">团队默认只影响新建</text>
+
+  <rect x="292" y="334" width="592" height="50" rx="10" fill="#FFF3E8" stroke="#F0C7A6"/>
+  <text x="308" y="356" class="strong orange">本方案 · 跟这份活动走</text>
+  <text x="308" y="374" class="tiny" fill="#8A3D12">换方案就换一组；不会改到你的个人偏好。</text>
+  <rect x="734" y="346" width="134" height="24" rx="12" fill="#FFFFFF" stroke="#F0C7A6"/>
+  <text x="801" y="362" class="tiny orange" text-anchor="middle">云端暂不同步</text>
+
+  <text x="292" y="414" class="h3 ink">显示与网格</text>
+  <text x="292" y="434" class="small muted">每行都先显示来源，再给“跟随个人 / 本方案覆盖”。</text>
+
+  <rect x="292" y="448" width="592" height="84" rx="10" fill="#FFFFFF" stroke="#ECE8DF"/>
+  <text x="310" y="474" class="strong ink">显示单位</text>
+  <text x="310" y="494" class="tiny muted">标注、属性面板与导出清单；场景数据仍按米存储</text>
+  <rect x="640" y="462" width="224" height="32" rx="8" fill="#F8F9F7" stroke="#D8D4CA"/>
+  <text x="654" y="482" class="tiny ink">跟随个人（米）</text>
+  <path d="M844 474 l4 4 4-4" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <rect x="640" y="500" width="62" height="20" rx="10" fill="#E6F4F1"/>
+  <text x="671" y="514" class="tiny teal" text-anchor="middle">来自个人</text>
+  <text x="714" y="514" class="tiny teal">改为本方案覆盖</text>
+
+  <rect x="292" y="540" width="592" height="84" rx="10" fill="#FFFDF8" stroke="#E5E1D8"/>
+  <text x="310" y="566" class="strong ink">网格间距</text>
+  <text x="310" y="586" class="tiny muted">2D / 3D 网格、落位与平面导出使用同一值</text>
+  <rect x="700" y="554" width="132" height="32" rx="8" fill="#F3F4F1" stroke="#D8D4CA"/>
+  <text x="718" y="574" class="small ink">−</text>
+  <text x="766" y="574" class="tiny ink" text-anchor="middle">0.5 m</text>
+  <text x="814" y="574" class="small ink">＋</text>
+  <rect x="842" y="554" width="42" height="20" rx="10" fill="#FFF3E8" stroke="#F0C7A6"/>
+  <text x="863" y="568" class="tiny orange" text-anchor="middle">3B</text>
+  <text x="310" y="610" class="tiny faint">没有接线前不显示这个控件</text>
+
+  <rect x="292" y="632" width="592" height="84" rx="10" fill="#FFFDF8" stroke="#E5E1D8"/>
+  <text x="310" y="658" class="strong ink">微移步长</text>
+  <text x="310" y="678" class="tiny muted">方向键每次移动；按住 Shift 为 10 倍</text>
+  <rect x="700" y="646" width="132" height="32" rx="8" fill="#F3F4F1" stroke="#D8D4CA"/>
+  <text x="766" y="666" class="tiny ink" text-anchor="middle">0.1 m</text>
+  <text x="814" y="666" class="tiny muted">×10</text>
+  <rect x="842" y="646" width="42" height="20" rx="10" fill="#FFF3E8" stroke="#F0C7A6"/>
+  <text x="863" y="660" class="tiny orange" text-anchor="middle">3B</text>
+  <text x="310" y="702" class="tiny faint">与网格间距分开；不把“精度”混成模型精度</text>
+
+  <line x1="292" y1="734" x2="884" y2="734" stroke="#ECE8DF"/>
+  <text x="292" y="762" class="h3 ink">时间</text>
+  <rect x="292" y="776" width="592" height="76" rx="10" fill="#FFFFFF" stroke="#ECE8DF"/>
+  <text x="310" y="802" class="strong ink">方案时区</text>
+  <text x="310" y="822" class="tiny muted">执行包文件名与“生成于”；默认 Asia/Shanghai</text>
+  <rect x="700" y="790" width="132" height="32" rx="8" fill="#F8F9F7" stroke="#D8D4CA"/>
+  <text x="714" y="810" class="tiny ink">Asia/Shanghai</text>
+  <path d="M814 802 l4 4 4-4" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <rect x="842" y="790" width="42" height="20" rx="10" fill="#FFF3E8" stroke="#F0C7A6"/>
+  <text x="863" y="804" class="tiny orange" text-anchor="middle">4</text>
+
+  <text x="292" y="878" class="small teal">恢复为个人默认</text>
+  <rect x="798" y="858" width="86" height="30" rx="8" fill="#C2410C"/>
+  <text x="841" y="878" class="tiny" fill="#FFFFFF" text-anchor="middle">完成</text>
+
+  <text x="72" y="930" class="tiny muted">来源必须可见：跟随个人 / 本方案覆盖 / 默认；“仅本机”写在作用域条，不藏在帮助里。</text>
+
+  <!-- Frame D -->
+  <rect x="960" y="150" width="592" height="790" rx="18" fill="#FFFDF8" stroke="#D8D4CA"/>
+  <text x="960" y="184" class="label teal">D · 390px 移动端</text>
+  <text x="960" y="210" class="h2 ink">表格改卡片，不横向滚动</text>
+  <text x="960" y="234" class="small muted">作用域仍然先出现；快捷键一屏能扫完一组。</text>
+
+  <g filter="url(#shadow2)">
+    <rect x="1038" y="258" width="360" height="650" rx="28" fill="#FFFFFF" stroke="#1F2933" stroke-width="2"/>
+  </g>
+  <rect x="1170" y="270" width="96" height="18" rx="9" fill="#1F2933"/>
+  <text x="1058" y="290" class="tiny ink">9:41</text>
+  <rect x="1352" y="282" width="22" height="10" rx="3" fill="none" stroke="#1F2933"/>
+  <rect x="1354" y="284" width="15" height="6" rx="1" fill="#1F2933"/>
+
+  <text x="1062" y="332" class="h3 ink">设置</text>
+  <circle cx="1364" cy="326" r="11" fill="#F3F4F1"/>
+  <path d="M1360 322l8 8m0-8l-8 8" stroke="#6B7280" stroke-width="1.4" stroke-linecap="round"/>
+
+  <g transform="translate(1062 348)">
+    <rect x="0" y="0" width="70" height="30" rx="15" fill="#0F766E"/>
+    <text x="35" y="20" class="tiny" fill="#FFFFFF" text-anchor="middle">个人</text>
+    <rect x="78" y="0" width="70" height="30" rx="15" fill="#F3F4F1" stroke="#E5E1D8"/>
+    <text x="113" y="20" class="tiny muted" text-anchor="middle">本方案</text>
+
+  </g>
+
+  <g transform="translate(1062 394)">
+    <rect x="0" y="10" width="64" height="30" rx="8" fill="#F3F4F1"/>
+    <text x="32" y="30" class="tiny muted" text-anchor="middle">偏好</text>
+    <rect x="72" y="10" width="72" height="30" rx="8" fill="#E6F4F1" stroke="#9CCFC5"/>
+    <text x="108" y="30" class="tiny teal" text-anchor="middle">快捷键</text>
+  </g>
+
+  <text x="1062" y="464" class="h3 ink">快捷键</text>
+  <rect x="1062" y="478" width="312" height="38" rx="8" fill="#F8F9F7" stroke="#D8D4CA"/>
+  <circle cx="1080" cy="494" r="5" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <line x1="1084" y1="498" x2="1089" y2="503" stroke="#6B7280" stroke-width="1.5" stroke-linecap="round"/>
+  <text x="1098" y="502" class="tiny muted">搜索操作或按键</text>
+
+  <rect x="1062" y="526" width="150" height="30" rx="8" fill="#F3F4F1"/>
+  <rect x="1064" y="528" width="74" height="26" rx="6" fill="#FFFFFF" stroke="#D8D4CA"/>
+  <text x="1101" y="545" class="tiny ink" text-anchor="middle">Windows</text>
+  <text x="1171" y="545" class="tiny muted" text-anchor="middle">macOS</text>
+  <rect x="1308" y="530" width="66" height="22" rx="11" fill="#F8F9F7" stroke="#D8D4CA"/>
+  <text x="1341" y="545" class="tiny muted" text-anchor="middle">只读</text>
+
+  <text x="1062" y="588" class="tiny teal">建造画布 · 视图</text>
+  <line x1="1062" y1="598" x2="1374" y2="598" stroke="#E6F4F1"/>
+
+  <rect x="1062" y="610" width="312" height="58" rx="9" fill="#E6F4F1" stroke="#9CCFC5"/>
+  <text x="1076" y="632" class="small ink">网格吸附</text>
+  <rect x="1332" y="618" width="30" height="24" rx="5" fill="#FFFFFF" stroke="#9CCFC5"/>
+  <text x="1347" y="635" class="kbd ink" text-anchor="middle">G</text>
+  <text x="1076" y="653" class="tiny teal">仅网格；墙 / 物件吸附独立</text>
+
+  <rect x="1062" y="678" width="312" height="52" rx="9" fill="#FFFFFF" stroke="#ECE8DF"/>
+  <text x="1076" y="700" class="small ink">尺寸标注</text>
+  <rect x="1332" y="686" width="30" height="24" rx="5" fill="#F8F9F7" stroke="#D8D4CA"/>
+  <text x="1347" y="703" class="kbd ink" text-anchor="middle">M</text>
+  <text x="1076" y="718" class="tiny muted">画布上显示尺寸读数</text>
+
+  <rect x="1062" y="740" width="312" height="52" rx="9" fill="#FFFFFF" stroke="#ECE8DF"/>
+  <text x="1076" y="762" class="small ink">楼层</text>
+  <rect x="1306" y="748" width="62" height="24" rx="5" fill="#F8F9F7" stroke="#D8D4CA"/>
+  <text x="1337" y="765" class="tiny ink" text-anchor="middle">PgUp/PgDn</text>
+  <text x="1076" y="780" class="tiny muted">建造画布 · 视图</text>
+
+  <rect x="1038" y="842" width="360" height="66" fill="#FFFFFF"/>
+  <line x1="1038" y1="842" x2="1398" y2="842" stroke="#ECE8DF"/>
+  <text x="1062" y="868" class="tiny muted">同名键在漫游 / 锁定下含义不同</text>
+  <text x="1062" y="888" class="tiny teal">查看“模式与例外” →</text>
+
+  <text x="962" y="936" class="tiny muted">不在 360px 下保留四列表格；每组先给最常用 3 条。</text>
+
+  <g transform="translate(1418 330)">
+    <circle cx="10" cy="10" r="10" fill="#C2410C"/>
+    <text x="10" y="14" class="tiny" fill="#FFFFFF" text-anchor="middle">1</text>
+    <text x="28" y="14" class="tiny muted">作用域胶囊先出现</text>
+    <circle cx="10" cy="46" r="10" fill="#C2410C"/>
+    <text x="10" y="50" class="tiny" fill="#FFFFFF" text-anchor="middle">2</text>
+    <text x="28" y="50" class="tiny muted">快捷键行改两行卡片</text>
+    <circle cx="10" cy="82" r="10" fill="#C2410C"/>
+    <text x="10" y="86" class="tiny" fill="#FFFFFF" text-anchor="middle">3</text>
+    <text x="28" y="86" class="tiny muted">触控目标 ≥44px</text>
+    <circle cx="10" cy="118" r="10" fill="#C2410C"/>
+    <text x="10" y="122" class="tiny" fill="#FFFFFF" text-anchor="middle">4</text>
+    <text x="28" y="122" class="tiny muted">条件不藏进 tooltip</text>
+  </g>
+
+  <rect x="48" y="952" width="1504" height="34" rx="8" fill="#1F2933"/>
+  <text x="66" y="974" class="small" fill="#FFFFFF">先拍板：本方案入口放账户中心还是方案信息？方案设置先本机是否可接受？</text>
+  <text x="1534" y="974" class="tiny" fill="#C7D2D0" text-anchor="end">快捷键搜索可进 PR2，也可单独一刀</text>
+</svg>

@@ -17,10 +17,22 @@
 --   重叠触发时后来的调用拿不到同一行，不会重复提交给 Aholo（重复提交=重复计费）。
 
 create extension if not exists pg_cron;
-create extension if not exists pg_net with schema extensions;
+-- pg_net 固定装在 net schema（扩展自身声明 schema=net，不可重定位）。
+-- 带 `with schema extensions` 在部分项目上会直接报「must be installed in schema net」并中断整个脚本，
+-- 所以这里只用官方写法；装完再验 net schema 真的在（见下一段）。
+create extension if not exists pg_net;
 
 do $$ begin
-  if (select count(*) from vault.decrypted_secrets where name in ('scene_project_url','scene_worker_secret')) <> 2 then
+  if to_regnamespace('net') is null then
+    raise exception 'pg_net 已安装但没有 net schema：到 Dashboard → Database → Extensions 启用 pg_net 后重跑本脚本';
+  end if;
+end $$;
+
+do $$ begin
+  -- 按 name 去重后必须恰好两条：
+  -- 旧写法按行数 <> 2 判定，同一个 name 存了两遍也能过，随后取 scene_worker_secret 得到 null，
+  -- 于是 cron 用空密钥调用 worker，每分钟 401——比装不上更难查。
+  if (select count(distinct name) from vault.decrypted_secrets where name in ('scene_project_url','scene_worker_secret')) <> 2 then
     raise exception 'Configure exactly one scene_project_url and scene_worker_secret in Vault first';
   end if;
   if (select length(decrypted_secret) from vault.decrypted_secrets where name = 'scene_worker_secret') < 32 then

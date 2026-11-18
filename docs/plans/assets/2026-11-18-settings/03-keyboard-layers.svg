@@ -1,0 +1,233 @@
+<svg width="1600" height="1040" viewBox="0 0 1600 1040" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">快捷键学习系统 · 整键盘分层草图</title>
+  <desc id="desc">用一张整键盘示意五种模式下的按键归属，并并列 VS Code、Blender、Linear/GitHub 三种成熟参照，结论是键盘图只做索引，搜索与模式分组才是主界面。</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="14" flood-color="#1F2933" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .ink { fill: #1F2933; }
+      .muted { fill: #6B7280; }
+      .faint { fill: #9CA3AF; }
+      .teal { fill: #0F766E; }
+      .orange { fill: #B45309; }
+      .purple { fill: #6D28D9; }
+      .blue { fill: #1D4ED8; }
+      .gray { fill: #6B7280; }
+      .label { font: 600 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; letter-spacing: .04em; }
+      .h1 { font: 700 34px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .h2 { font: 700 20px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .h3 { font: 700 17px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .body { font: 400 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .small { font: 400 12px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .tiny { font: 400 11px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .strong { font: 600 13px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
+      .kbd { font: 600 12px "Cascadia Mono", "SFMono-Regular", Consolas, monospace; }
+      .key { font: 600 12px "Cascadia Mono", "SFMono-Regular", Consolas, monospace; fill: #1F2933; }
+      .key.small-key { font-size: 10px; }
+      .key.tiny-key { font-size: 9px; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1040" fill="#F7F5EF"/>
+  <text x="1552" y="50" class="tiny muted" text-anchor="end">讨论稿 · 2026-11-18</text>
+
+  <text x="48" y="60" class="h1 ink">快捷键学习系统 · 整键盘分层</text>
+  <text x="48" y="92" class="body muted">同一套键位，在建造 / 户外 / 标注 / 漫游 / 评审下含义不同。键盘图只回答「键在哪」，搜索和模式分组回答「现在能做什么」。</text>
+
+  <g transform="translate(48 116)">
+    <circle cx="6" cy="6" r="4" fill="#0F766E"/><text x="18" y="10" class="tiny muted">布置</text>
+    <circle cx="86" cy="6" r="4" fill="#B45309"/><text x="98" y="10" class="tiny muted">户外</text>
+    <circle cx="166" cy="6" r="4" fill="#6D28D9"/><text x="178" y="10" class="tiny muted">标注</text>
+    <circle cx="246" cy="6" r="4" fill="#1D4ED8"/><text x="258" y="10" class="tiny muted">漫游</text>
+    <circle cx="326" cy="6" r="4" fill="#6B7280"/><text x="338" y="10" class="tiny muted">评审 / 执行</text>
+    <text x="448" y="10" class="tiny faint">键帽右上角的小点 = 该键在哪些模式里有绑定；不是装饰。</text>
+  </g>
+
+  <!-- Left panel -->
+  <rect x="48" y="150" width="1020" height="700" rx="18" fill="#FFFDF8" stroke="#D8D4CA"/>
+  <text x="72" y="184" class="label teal">A · 整键盘是索引</text>
+  <text x="72" y="210" class="h2 ink">先画「一键多义」，再决定要不要常驻</text>
+  <text x="72" y="232" class="small muted">示意图按 75% 键盘压缩；方向键与 PageUp / PageDown 放在右侧，不代表完整键位表。</text>
+
+  <!-- mode tabs -->
+  <g transform="translate(72 246)">
+    <rect x="0" y="0" width="72" height="30" rx="8" fill="#0F766E"/>
+    <text x="36" y="19" text-anchor="middle" class="tiny" fill="#FFFFFF">布置</text>
+    <rect x="80" y="0" width="72" height="30" rx="8" fill="#FFFDF8" stroke="#D8D4CA"/>
+    <text x="116" y="19" text-anchor="middle" class="tiny muted">户外</text>
+    <rect x="160" y="0" width="72" height="30" rx="8" fill="#FFFDF8" stroke="#D8D4CA"/>
+    <text x="196" y="19" text-anchor="middle" class="tiny muted">标注</text>
+    <rect x="240" y="0" width="72" height="30" rx="8" fill="#FFFDF8" stroke="#D8D4CA"/>
+    <text x="276" y="19" text-anchor="middle" class="tiny muted">漫游</text>
+    <rect x="320" y="0" width="72" height="30" rx="8" fill="#FFFDF8" stroke="#D8D4CA"/>
+    <text x="356" y="19" text-anchor="middle" class="tiny muted">评审</text>
+    <text x="416" y="19" class="tiny faint">← 这里只是筛选视图；真实交互在设置页 / ? 浮层</text>
+  </g>
+
+  <!-- Keyboard -->
+  <g>
+    <!-- row 0 -->
+    <g>
+      <rect x="84" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="113" y="329" text-anchor="middle" class="key small-key">Esc</text>
+      <rect x="149" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="178" y="329" text-anchor="middle" class="key">1</text>
+      <rect x="214" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="243" y="329" text-anchor="middle" class="key">2</text><circle cx="262" cy="311" r="3" fill="#0F766E"/>
+      <rect x="279" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="308" y="329" text-anchor="middle" class="key">3</text>
+      <rect x="344" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="373" y="329" text-anchor="middle" class="key">4</text>
+      <rect x="409" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="438" y="329" text-anchor="middle" class="key">5</text>
+      <rect x="474" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="503" y="329" text-anchor="middle" class="key">6</text>
+      <rect x="539" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="568" y="329" text-anchor="middle" class="key">7</text>
+      <rect x="604" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="633" y="329" text-anchor="middle" class="key">8</text>
+      <rect x="669" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="698" y="329" text-anchor="middle" class="key">9</text>
+      <rect x="734" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="763" y="329" text-anchor="middle" class="key">0</text>
+      <rect x="799" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="828" y="329" text-anchor="middle" class="key">-</text>
+      <rect x="864" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="893" y="329" text-anchor="middle" class="key">=</text>
+      <rect x="929" y="300" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="958" y="329" text-anchor="middle" class="key tiny-key">Backspace</text>
+    </g>
+    <!-- row 1 -->
+    <g>
+      <rect x="84" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="113" y="384" text-anchor="middle" class="key small-key">Tab</text>
+      <rect x="149" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="178" y="384" text-anchor="middle" class="key">Q</text><circle cx="197" cy="366" r="3" fill="#0F766E"/>
+      <rect x="214" y="355" width="58" height="48" rx="7" fill="#E6F4F1" stroke="#0F766E"/><text x="243" y="384" text-anchor="middle" class="key">W</text><circle cx="262" cy="366" r="3" fill="#1D4ED8"/>
+      <rect x="279" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="308" y="384" text-anchor="middle" class="key">E</text><circle cx="327" cy="366" r="3" fill="#0F766E"/><circle cx="335" cy="366" r="3" fill="#1D4ED8"/>
+      <rect x="344" y="355" width="58" height="48" rx="7" fill="#E6F4F1" stroke="#0F766E"/><text x="373" y="384" text-anchor="middle" class="key">R</text><circle cx="392" cy="366" r="3" fill="#B45309"/><circle cx="400" cy="366" r="3" fill="#6D28D9"/>
+      <rect x="409" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="438" y="384" text-anchor="middle" class="key">T</text><circle cx="457" cy="366" r="3" fill="#B45309"/><circle cx="465" cy="366" r="3" fill="#6D28D9"/>
+      <rect x="474" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="503" y="384" text-anchor="middle" class="key">Y</text><circle cx="522" cy="366" r="3" fill="#B45309"/><circle cx="530" cy="366" r="3" fill="#6D28D9"/>
+      <rect x="539" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="568" y="384" text-anchor="middle" class="key">U</text>
+      <rect x="604" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="633" y="384" text-anchor="middle" class="key">I</text>
+      <rect x="669" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="698" y="384" text-anchor="middle" class="key">O</text><circle cx="717" cy="366" r="3" fill="#B45309"/><circle cx="725" cy="366" r="3" fill="#6D28D9"/>
+      <rect x="734" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="763" y="384" text-anchor="middle" class="key">P</text><circle cx="782" cy="366" r="3" fill="#0F766E"/>
+      <rect x="799" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="828" y="384" text-anchor="middle" class="key">[</text><circle cx="847" cy="366" r="3" fill="#0F766E"/>
+      <rect x="864" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="893" y="384" text-anchor="middle" class="key">]</text><circle cx="912" cy="366" r="3" fill="#0F766E"/>
+      <rect x="929" y="355" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="958" y="384" text-anchor="middle" class="key">\</text>
+    </g>
+    <!-- row 2 -->
+    <g>
+      <rect x="84" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="113" y="439" text-anchor="middle" class="key small-key">Caps</text>
+      <rect x="149" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="178" y="439" text-anchor="middle" class="key">A</text><circle cx="197" cy="421" r="3" fill="#1D4ED8"/>
+      <rect x="214" y="410" width="58" height="48" rx="7" fill="#E6F4F1" stroke="#0F766E"/><text x="243" y="439" text-anchor="middle" class="key">S</text><circle cx="262" cy="421" r="3" fill="#B45309"/><circle cx="270" cy="421" r="3" fill="#1D4ED8"/>
+      <rect x="279" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="308" y="439" text-anchor="middle" class="key">D</text><circle cx="327" cy="421" r="3" fill="#1D4ED8"/>
+      <rect x="344" y="410" width="58" height="48" rx="7" fill="#E6F4F1" stroke="#0F766E"/><text x="373" y="439" text-anchor="middle" class="key">F</text><circle cx="392" cy="421" r="3" fill="#1D4ED8"/>
+      <rect x="409" y="410" width="58" height="48" rx="7" fill="#E6F4F1" stroke="#0F766E"/><text x="438" y="439" text-anchor="middle" class="key">G</text>
+      <rect x="474" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="503" y="439" text-anchor="middle" class="key">H</text><circle cx="522" cy="421" r="3" fill="#B45309"/>
+      <rect x="539" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="568" y="439" text-anchor="middle" class="key">J</text>
+      <rect x="604" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="633" y="439" text-anchor="middle" class="key">K</text>
+      <rect x="669" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="698" y="439" text-anchor="middle" class="key">L</text><circle cx="717" cy="421" r="3" fill="#B45309"/><circle cx="725" cy="421" r="3" fill="#6D28D9"/>
+      <rect x="734" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="763" y="439" text-anchor="middle" class="key">;</text>
+      <rect x="799" y="410" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="828" y="439" text-anchor="middle" class="key">'</text>
+      <rect x="864" y="410" width="123" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="925" y="439" text-anchor="middle" class="key small-key">Enter</text>
+    </g>
+    <!-- row 3 -->
+    <g>
+      <rect x="84" y="465" width="123" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="145" y="494" text-anchor="middle" class="key small-key">Shift</text>
+      <rect x="214" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="243" y="494" text-anchor="middle" class="key">Z</text>
+      <rect x="279" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="308" y="494" text-anchor="middle" class="key">X</text>
+      <rect x="344" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="373" y="494" text-anchor="middle" class="key">C</text>
+      <rect x="409" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="438" y="494" text-anchor="middle" class="key">V</text>
+      <rect x="474" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="503" y="494" text-anchor="middle" class="key">B</text>
+      <rect x="539" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="568" y="494" text-anchor="middle" class="key">N</text>
+      <rect x="604" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="633" y="494" text-anchor="middle" class="key">M</text><circle cx="652" cy="476" r="3" fill="#0F766E"/>
+      <rect x="669" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="698" y="494" text-anchor="middle" class="key">,</text>
+      <rect x="734" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="763" y="494" text-anchor="middle" class="key">.</text>
+      <rect x="799" y="465" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="828" y="494" text-anchor="middle" class="key">/</text>
+      <rect x="864" y="465" width="123" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="925" y="494" text-anchor="middle" class="key small-key">Shift</text>
+    </g>
+    <!-- row 4 -->
+    <g>
+      <rect x="84" y="520" width="123" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="145" y="549" text-anchor="middle" class="key small-key">Ctrl</text>
+      <rect x="214" y="520" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="243" y="549" text-anchor="middle" class="key small-key">Win</text>
+      <rect x="279" y="520" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="308" y="549" text-anchor="middle" class="key small-key">Alt</text>
+      <rect x="344" y="520" width="253" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="470" y="549" text-anchor="middle" class="key small-key">Space</text>
+      <rect x="604" y="520" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="633" y="549" text-anchor="middle" class="key small-key">Alt</text>
+      <rect x="669" y="520" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="698" y="549" text-anchor="middle" class="key small-key">Win</text>
+      <rect x="734" y="520" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="763" y="549" text-anchor="middle" class="key tiny-key">Menu</text>
+      <rect x="799" y="520" width="58" height="48" rx="7" fill="#F3F1EA" stroke="#D8D4CA"/><text x="828" y="549" text-anchor="middle" class="key small-key">Ctrl</text>
+    </g>
+    <!-- arrow cluster：放在第 4 行右侧空位，避免与右 Shift 重叠 -->
+    <g>
+      <rect x="864" y="520" width="26" height="34" rx="6" fill="#F3F1EA" stroke="#D8D4CA"/><text x="877" y="542" text-anchor="middle" class="key">←</text>
+      <rect x="894" y="520" width="26" height="34" rx="6" fill="#F3F1EA" stroke="#D8D4CA"/><text x="907" y="542" text-anchor="middle" class="key">↑</text>
+      <rect x="924" y="520" width="26" height="34" rx="6" fill="#F3F1EA" stroke="#D8D4CA"/><text x="937" y="542" text-anchor="middle" class="key">↓</text>
+      <rect x="954" y="520" width="26" height="34" rx="6" fill="#F3F1EA" stroke="#D8D4CA"/><text x="967" y="542" text-anchor="middle" class="key">→</text>
+      <text x="922" y="566" text-anchor="middle" class="tiny faint">方向键：微移 / 漫游</text>
+    </g>
+  </g>
+
+  <!-- one key multiple meanings strip -->
+  <g transform="translate(72 600)">
+    <rect x="0" y="0" width="960" height="54" rx="10" fill="#F4F9F7" stroke="#BFE1D9"/>
+    <rect x="14" y="12" width="30" height="30" rx="6" fill="#FFFFFF" stroke="#0F766E"/><text x="29" y="32" text-anchor="middle" class="kbd teal">R</text>
+    <text x="56" y="22" class="strong ink">一个键最多三种含义</text>
+    <text x="56" y="40" class="small muted">建造 = 旋转 90° · 户外 = 矩形标注 · 标注 = 矩形；设施落位时 R 先让给旋转。</text>
+    <text x="780" y="32" class="tiny teal" text-anchor="end">同名键用「模式」解释，不叫「冲突」</text>
+  </g>
+  <g transform="translate(72 664)">
+    <rect x="0" y="0" width="960" height="54" rx="10" fill="#FFFDF8" stroke="#E5E1D8"/>
+    <text x="14" y="22" class="strong ink">键盘图放什么</text>
+    <text x="14" y="40" class="small muted">只放「键位 + 模式归属 + 是否被拦」；不放大段说明，不把整张键盘当主界面。</text>
+    <text x="760" y="32" class="tiny muted" text-anchor="end">主界面仍是搜索 + 分组</text>
+  </g>
+  <text x="72" y="748" class="tiny faint">注：键帽上的 Backspace 同时承担 Delete；Mac 的 ⌫ 在设置页单独映射，不在键盘图重复画。</text>
+
+  <!-- Right panel -->
+  <rect x="1092" y="150" width="460" height="700" rx="18" fill="#FFFDF8" stroke="#D8D4CA"/>
+  <text x="1116" y="184" class="label orange">B · 三个成熟参照</text>
+  <text x="1116" y="210" class="h2 ink">不重新发明学习路径</text>
+  <text x="1116" y="232" class="small muted">每个参考只借一个结构，不照搬其复杂度。</text>
+
+  <!-- VS Code card -->
+  <g filter="url(#shadow)">
+    <rect x="1116" y="250" width="412" height="178" rx="12" fill="#FFFFFF" stroke="#E5E1D8"/>
+  </g>
+  <text x="1132" y="276" class="strong ink">VS Code · Keyboard Shortcuts</text>
+  <text x="1132" y="294" class="tiny muted">搜索是一等公民；命令名与键位分列</text>
+  <rect x="1132" y="306" width="380" height="28" rx="6" fill="#F3F4F1" stroke="#E5E1D8"/>
+  <text x="1144" y="325" class="tiny faint">⌕  Search keybindings</text>
+  <line x1="1132" y1="344" x2="1512" y2="344" stroke="#ECE8DF"/>
+  <text x="1132" y="362" class="tiny faint">Command</text><text x="1380" y="362" class="tiny faint">Keybinding</text>
+  <text x="1132" y="384" class="small ink">Toggle Grid</text><text x="1380" y="384" class="kbd muted">G</text>
+  <text x="1132" y="404" class="small ink">Delete Selection</text><text x="1380" y="404" class="kbd muted">Delete</text>
+  <text x="1132" y="424" class="tiny teal">借：搜索 + 命令/键位两列 → 设置页快捷键表</text>
+
+  <!-- Blender card -->
+  <g filter="url(#shadow)">
+    <rect x="1116" y="444" width="412" height="178" rx="12" fill="#FFFFFF" stroke="#E5E1D8"/>
+  </g>
+  <text x="1132" y="470" class="strong ink">Blender · Keymap</text>
+  <text x="1132" y="488" class="tiny muted">按上下文/类别分组；不按键盘位置组织</text>
+  <rect x="1132" y="500" width="118" height="102" rx="8" fill="#F3F4F1" stroke="#E5E1D8"/>
+  <text x="1144" y="520" class="tiny ink">View</text>
+  <text x="1144" y="540" class="tiny muted">Select</text>
+  <text x="1144" y="560" class="tiny muted">Transform</text>
+  <text x="1144" y="580" class="tiny muted">Annotation</text>
+  <rect x="1260" y="500" width="252" height="28" rx="6" fill="#FFFDF8" stroke="#E5E1D8"/><text x="1272" y="519" class="tiny ink">Rotate</text><text x="1468" y="519" class="kbd muted">R</text>
+  <rect x="1260" y="534" width="252" height="28" rx="6" fill="#FFFDF8" stroke="#E5E1D8"/><text x="1272" y="553" class="tiny ink">Fine Rotate</text><text x="1458" y="553" class="kbd muted">⇧R</text>
+  <rect x="1260" y="568" width="252" height="28" rx="6" fill="#FFFDF8" stroke="#E5E1D8"/><text x="1272" y="587" class="tiny ink">Rectangle</text><text x="1462" y="587" class="kbd muted">R</text>
+  <text x="1132" y="616" class="tiny orange">借：模式/类别分组 → 设置页「编辑 / 变换 / 视图 / 户外 / 标注 / 例外」</text>
+
+  <!-- Linear GitHub card -->
+  <g filter="url(#shadow)">
+    <rect x="1116" y="638" width="412" height="178" rx="12" fill="#FFFFFF" stroke="#E5E1D8"/>
+  </g>
+  <text x="1132" y="664" class="strong ink">Linear / GitHub · ?</text>
+  <text x="1132" y="682" class="tiny muted">浮层先回答「当前上下文」，再给完整表</text>
+  <rect x="1132" y="694" width="380" height="88" rx="8" fill="#1F2933"/>
+  <text x="1148" y="716" class="tiny" fill="#9CA3AF">Keyboard shortcuts</text>
+  <text x="1148" y="736" class="tiny" fill="#FFFFFF">Current: Outdoor plan</text>
+  <rect x="1148" y="748" width="348" height="20" rx="4" fill="#374151"/>
+  <text x="1158" y="762" class="tiny" fill="#D1D5DB">Search actions…</text>
+  <text x="1132" y="800" class="tiny blue">借：? 打开、按当前模式起步 → 画布速查浮层</text>
+  <text x="1132" y="818" class="tiny faint">不借：全局命令面板式的「所有功能」列表</text>
+
+  <!-- Bottom conclusion -->
+  <rect x="48" y="874" width="1504" height="112" rx="16" fill="#1F2933"/>
+  <text x="76" y="906" class="label" fill="#9CCFC5">结论</text>
+  <text x="76" y="934" class="h3" fill="#FFFFFF">整键盘图是「索引」，不是「主界面」</text>
+  <text x="76" y="958" class="small" fill="#D1D5DB">① 设置页：搜索 + 模式筛选 + 平台强调；② 画布：? 浮层先落到当前模式；③ 拦截：说原因，不静默。</text>
+  <text x="76" y="976" class="tiny" fill="#9CA3AF">参照：VS Code 的搜索、Blender 的上下文分组、Linear / GitHub 的 ? 浮层；不在本轮做自定义改键与冲突检测。</text>
+  <g transform="translate(1310 900)">
+    <rect x="0" y="0" width="214" height="58" rx="10" fill="#2B3530" stroke="#4B5A52"/>
+    <text x="14" y="23" class="tiny" fill="#9CCFC5">本轮已实现</text>
+    <text x="14" y="43" class="small" fill="#FFFFFF">键帽拆分 · ? 速查 · 模式徽标</text>
+  </g>
+</svg>

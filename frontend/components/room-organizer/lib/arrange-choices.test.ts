@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { planFacilitySchema } from '../../../../supabase/functions/_shared/site-plan';
-import { buildArrangeChoicePage, type ArrangeChoiceModel } from './arrange-choices';
+import {
+  arrangeAholoSheet,
+  arrangeGeneratePrompt,
+  buildArrangeChoicePage,
+  buildGeneratedArrangeChoice,
+  offerGeneratedArrangeChoice,
+  type ArrangeChoiceModel,
+} from './arrange-choices';
 import { capabilityForSlug } from './prop-capabilities';
 
 const boundary = [
@@ -143,5 +150,91 @@ describe('语义三选一', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.choices[0]!.slug).toBe('hall-chair');
+  });
+
+  it('目录缩略图和模板跟着候选走，没有图就是空字符串', () => {
+    const result = buildArrangeChoicePage({
+      text: '要能坐 12 把',
+      boundary,
+      models: [
+        {
+          slug: 'hot-air-balloon-festival-folding-camp-chair-ba5bb3d0',
+          name: '热气球营地折叠椅',
+          width: 0.48,
+          depth: 0.49,
+          kind: 'seat',
+          thumb: '/showcase/assets/library/thumb/hot-air-balloon-festival-folding-camp-chair-ba5bb3d0.webp',
+        },
+      ],
+      ids,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.choices[0]).toMatchObject({
+      thumb: '/showcase/assets/library/thumb/hot-air-balloon-festival-folding-camp-chair-ba5bb3d0.webp',
+      templateId: 'chair',
+    });
+    const bare = buildArrangeChoicePage({
+      text: '要能坐 12 把',
+      boundary,
+      models: [{ slug: 'chair', name: '礼堂椅', width: 0.62, depth: 0.6, kind: 'seat' }],
+      ids,
+    });
+    expect(bare.ok).toBe(true);
+    if (!bare.ok) return;
+    expect(bare.choices[0]!.thumb).toBe('');
+  });
+
+  it('Aholo 生成的一款排在最前，点它用的是这款的尺寸和 slug', () => {
+    const generated: ArrangeChoiceModel = {
+      slug: 'generated:4475964',
+      name: '一把能坐的椅子',
+      width: 0.5,
+      depth: 0.5,
+      kind: 'none',
+    };
+    const result = buildArrangeChoicePage({
+      text: '要能坐 12 把',
+      boundary,
+      models,
+      pinned: generated,
+      ids,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.choices[0]).toMatchObject({
+      slug: 'generated:4475964',
+      name: '一把能坐的椅子',
+      reason: 'Aholo 生成',
+      templateId: 'chair',
+      thumb: '',
+    });
+    expect(result.choices[0]!.facilities).toHaveLength(12);
+    expect(result.choices[0]!.facilities.every(item => item.modelOverride === 'generated:4475964')).toBe(true);
+    expect(result.choices[0]!.facilities.every(item => item.size.width === 0.5 && item.size.depth === 0.5)).toBe(true);
+    const plain = buildArrangeChoicePage({ text: '要能坐 12 把', boundary, models, ids });
+    expect(plain.ok).toBe(true);
+    if (!plain.ok) return;
+    expect(result.choices.slice(1).map(choice => choice.slug)).toEqual(plain.choices.map(choice => choice.slug));
+    const alone = buildGeneratedArrangeChoice({ text: '要能坐 12 把', boundary, model: generated, ids });
+    expect(alone?.slug).toBe('generated:4475964');
+    expect(offerGeneratedArrangeChoice(
+      result.choices.slice(1),
+      result.choices[0]!,
+    ).map(choice => choice.slug)).toEqual(['generated:4475964', 'chair', 'bench', 'sofa']);
+  });
+
+  it('生成入口只准备描述，不带提交', () => {
+    expect(arrangeGeneratePrompt('要能坐 12 把')).toBe('一把能坐的椅子');
+    expect(arrangeGeneratePrompt('接待 4 个')).toBe('一件可以接待交谈的桌台');
+    expect(arrangeGeneratePrompt('放 2 个自助取号机')).toBe('一台自助设备');
+    const sheet = arrangeAholoSheet('要能坐 12 把', { id: 'booth-1', name: '  马戏团售票亭 1  ' });
+    expect(sheet).toEqual({
+      task: 'model',
+      scope: 'facility',
+      source: 'text',
+      facility: { id: 'booth-1', name: '马戏团售票亭 1' },
+      prompt: '一把能坐的椅子',
+    });
   });
 });

@@ -6,7 +6,7 @@
  */
 
 import { commentThreads, readReviewComments } from '../../review-share-page/comments';
-import { readReviewSharePins } from '../../review-share-page/share-pins';
+import { readReviewSharePinsForPlan } from '../../review-share-page/share-pins';
 import { reviewPlanKeyForClientUrl } from '../../review-share-page/load-plan';
 import { isReviewShareId, listReviewComments } from './review-share';
 import type { ReviewPin } from './review-pins';
@@ -59,7 +59,7 @@ export function readBingoPlanFeedback(
 ): BingoPlanFeedback {
   const sharePins = new Map<string, BingoFeedbackPin>();
   for (const key of reviewPlanKeysForBingoPlan(plan)) {
-    for (const pin of readReviewSharePins(key, storage)) {
+    for (const pin of readReviewSharePinsForPlan(key, storage)) {
       // 去重键 `${key}:${pin.id}` 即未来跨表 join 键（Q4 云化注释）；读端聚合逻辑云化时换 repo 不改。
       sharePins.set(`${key}:${pin.id}`, mapSharePin(pin));
     }
