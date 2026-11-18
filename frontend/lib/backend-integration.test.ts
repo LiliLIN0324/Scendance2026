@@ -8,6 +8,7 @@ import { startLocalServer, testAccounts, testPublicKey } from '../../tests/local
 import { tetrahedron } from '../../tests/model-fixture';
 import { backendSceneToLayout, layoutToBackendScene } from '../components/room-organizer/lib/backend-adapter';
 import { INITIAL_LAYOUT } from '../components/room-organizer/lib/initial-layout';
+import { makeItem } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { parseStoredLayout } from '../components/room-organizer/lib/schema';
 import { clearGlbAssetCache, ensureGlbAsset, getGlbAssetState } from '../components/room-organizer/three/glb-assets';
 import { BackendSession, getBackendConfig } from './backend-session';
@@ -50,7 +51,10 @@ describe('frontend session → HTTP API → migrated PostgreSQL', () => {
   it('round-trips actual editor coordinates and rotation through save and a new login', async () => {
     const a = await login();
     expect(await a.listStudios()).toEqual([expect.objectContaining({ id: studio, role: 'owner' })]);
-    const initial = layoutToBackendScene(structuredClone(INITIAL_LAYOUT));
+    // 2026-11-11 起首屏为空，联调需要一个真实物件来改坐标。
+    const seeded = { ...INITIAL_LAYOUT, floors: [{ ...INITIAL_LAYOUT.floors[0]!,
+      items: [makeItem({ id: 'e1000000-0000-4000-8000-000000000001', name: '联调椅子' })] }] };
+    const initial = layoutToBackendScene(structuredClone(seeded));
     const p = await a.createProject(studio, '前后端联调', initial);
     expect(p.revision).toBe(0);
     const acquired = await a.acquireLease(p.id);

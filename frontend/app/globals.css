@@ -1577,9 +1577,14 @@ body.sc-panel-dragging * {
 @media (max-width: 760px) {
   .sc-left-stack-splitter { display: none; }
 }
-/* 方案会话不再常驻左栏；History overlay 在Bingo面板内（session-history-panel + agent-panel.css）。 */
+/* 方案会话不再常驻左栏；History overlay 在Bingo面板内（session-history-panel + agent-panel.css）。
+   室内 Viewport 的 .sc-scene-viewport 已退役为 visibility:hidden / pointer-events:none，
+   执行资料卡仍在它里面。visibility 会继承，不在这里写回 visible 就看不见、也点不到。
+   户外 3D 接管自己写了 visibility:visible（z-index 29）；资料卡要盖住它（32），
+   仍低于地图选址与场地浮层（agent-panel.css 里为 45）。 */
 .sc-canvas-share {
-  position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 28;
+  position: absolute; left: 12px; top: 52px; bottom: 16px; z-index: 32;
+  visibility: visible; pointer-events: auto;
   width: min(380px, calc(100% - 80px));
   display: flex; flex-direction: column; min-height: 0; overflow: auto;
   height: auto; max-height: none;
