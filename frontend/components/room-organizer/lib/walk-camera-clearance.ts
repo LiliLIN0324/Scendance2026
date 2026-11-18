@@ -20,8 +20,11 @@ export interface CameraRay {
 
 /**
  * 射线进入一个外扩盒子前表面的距离；不命中返回 `Infinity`，起点已在盒内返回 `0`。
+ *
+ * 导出供视线检查（`lib/walk-sightline.ts`）复用同一套 slab 求交，免得两处
+ * 对“什么叫被挡住”各写一份判定。
  */
-function rayBoxEntry(box: WalkCollider, from: CameraRay, dir: CameraRay, pad: number): number {
+export function rayBoxEntry(box: WalkCollider, from: CameraRay, dir: CameraRay, pad: number): number {
   const ox = from.x - box.cx;
   const oz = from.z - box.cz;
   // 转到盒子局部轴

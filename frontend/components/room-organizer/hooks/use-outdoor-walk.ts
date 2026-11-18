@@ -42,6 +42,10 @@ export interface OutdoorWalkFrame {
   seated?: boolean;
   /** 落座椅面高度（米），人物碱关节按它对齐，避免屁股浮在椅面上。 */
   seatHeight?: number;
+  /** 这一帧是不是被红线钳住了（HUD 用来提示“已到场地边界”）。 */
+  atBoundary?: boolean;
+  /** 触屏摇杆是否在推（HUD / 测试用）。 */
+  touchMoving?: boolean;
 }
 
 /**
@@ -327,6 +331,12 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         camera.quaternion.setFromEuler(entryEuler);
       }
       let moving = false;
+      /** 这一帧的红线钳制是否真的压住了脚步（触碰边界提示用）。 */
+      let atBoundary = false;
+      /** 触屏左半屏摇杆：不依赖指针锁，手机也能走。 */
+      let touchStick: { id: number; x0: number; y0: number; x: number; y: number } | null = null;
+      const TOUCH_STICK_RADIUS_PX = 56;
+      const TOUCH_DEADZONE = 0.15;
 
       const markRefused = () => {
         if (!cancelled) setPhase(lockedOnceRef.current ? 'unlocked' : 'drag');
@@ -363,6 +373,16 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
       let dragMoved = false;
       const onDragStart = (event: PointerEvent) => {
         if (viewModeRef.current === 'orbit' || controls?.isLocked || event.button !== 0) return;
+        // 触屏：左半屏是移动摇杆，右半屏才是看视角。指针锁在手机上不可用，
+        // 全靠这一路兜底；鼠标行为不变（整块画布都是看视角）。
+        if (event.pointerType === 'touch') {
+          const rect = canvas.getBoundingClientRect();
+          if (event.clientX - rect.left < rect.width * 0.5) {
+            touchStick = { id: event.pointerId, x0: event.clientX, y0: event.clientY, x: 0, y: 0 };
+            try { canvas.setPointerCapture(event.pointerId); } catch { /* jsdom */ }
+            return;
+          }
+        }
         dragPointer = event.pointerId;
         dragX = event.clientX;
         dragY = event.clientY;
@@ -370,6 +390,15 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         try { canvas.setPointerCapture(event.pointerId); } catch { /* jsdom / older engines */ }
       };
       const onDragMove = (event: PointerEvent) => {
+        if (touchStick && touchStick.id === event.pointerId) {
+          const dx = event.clientX - touchStick.x0;
+          const dy = event.clientY - touchStick.y0;
+          const magnitude = Math.hypot(dx, dy);
+          const scale = magnitude > TOUCH_STICK_RADIUS_PX ? TOUCH_STICK_RADIUS_PX / magnitude : 1;
+          touchStick.x = (dx * scale) / TOUCH_STICK_RADIUS_PX;
+          touchStick.y = (dy * scale) / TOUCH_STICK_RADIUS_PX;
+          return;
+        }
         if (controls?.isLocked || dragPointer !== event.pointerId) return;
         if (!dragMoved && Math.hypot(event.clientX - dragX, event.clientY - dragY) < DRAG_CLICK_SLOP) return;
         dragMoved = true;
@@ -382,11 +411,20 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         dragY = event.clientY;
       };
       const onDragCancel = (event: PointerEvent) => {
+        if (touchStick && touchStick.id === event.pointerId) {
+          touchStick = null;
+          try { canvas.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+          return;
+        }
         if (dragPointer !== event.pointerId) return;
         dragPointer = null;
         try { canvas.releasePointerCapture(event.pointerId); } catch { /* already released */ }
       };
       const onDragEnd = (event: PointerEvent) => {
+        if (touchStick && touchStick.id === event.pointerId) {
+          onDragCancel(event);
+          return;
+        }
         if (dragPointer !== event.pointerId) return;
         const wasClick = !dragMoved;
         onDragCancel(event);
@@ -566,6 +604,14 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
         if (pressed.has('KeyS') || pressed.has('ArrowDown')) dz += 1;
         if (pressed.has('KeyA') || pressed.has('ArrowLeft')) dx -= 1;
         if (pressed.has('KeyD') || pressed.has('ArrowRight')) dx += 1;
+        if (touchStick) {
+          const magnitude = Math.hypot(touchStick.x, touchStick.y);
+          if (magnitude > TOUCH_DEADZONE) {
+            const scale = Math.min(1, magnitude) / magnitude;
+            dx += touchStick.x * scale;
+            dz += touchStick.y * scale;
+          }
+        }
 
         const prevX = player.x;
         const prevZ = player.z;
@@ -581,6 +627,7 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
           const blocked = resolveAgainstFacilities(player, stepTo);
           // 接管场地外路段上的人物时，可以先沿线走回范围；从进入范围起再限制越界。
           const clamped = enteredBounds ? constrainWorldToBoundary(player, blocked, boundaryRef.current) : blocked;
+          atBoundary = enteredBounds && Math.hypot(clamped.x - blocked.x, clamped.z - blocked.z) > 0.005;
           player.x = clamped.x;
           player.z = clamped.z;
           if (!enteredBounds) enteredBounds = pointInBoundaryRing(worldToEnu(player.x, player.z), boundaryRef.current);
@@ -603,6 +650,8 @@ export function useOutdoorWalk(options: UseOutdoorWalkOptions): { phase: Outdoor
           moving,
           thirdPerson: rig.thirdPerson,
           delta,
+          atBoundary,
+          touchMoving: touchStick !== null,
         });
       };
       rafId = requestAnimationFrame(step);
