@@ -255,86 +255,244 @@
 .sc-generation-card .gs-drop-text small { font-size: 10px; line-height: 14px; color: #8b9098; }
 .sc-generation-card .gs-primary[disabled] { opacity: .55; cursor: default; }
 
-/* 场地入口：冷石纸面上的两张卡片。阴影只用在这张浮起的创作卡，占位卡靠发丝线。 */
-.sc-generation-card .gs-venue { display: flex; flex-direction: column; gap: 10px; }
-.sc-generation-card .gs-venue-card {
+/* 创作入口：冷石画廊。三张纸白卡片铺在浅底上，第一张略高。草绿不进这些按钮。 */
+.sc-generation-card.is-entry { background: #F4F5F7; }
+.sc-generation-card.is-entry .gs-head {
+  background: transparent;
+  border-bottom: 0;
+  height: 44px;
+}
+.sc-generation-card.is-entry .gs-head strong { font-size: 15px; }
+.sc-generation-card.is-entry .gs-body {
+  padding: 0 12px 12px;
+  gap: 0;
+  background: transparent;
+}
+.sc-generation-card .gs-create-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+.sc-generation-card .gs-create-host[hidden] { display: none !important; }
+.sc-generation-card .gs-create {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 0;
-  padding: 14px;
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: var(--r-md, 14px);
-  background: var(--paper, #fff);
-  color: var(--ink, #141416);
-  box-shadow: var(--e1, 0 8px 24px rgba(20, 20, 22, 0.12), 0 2px 6px rgba(20, 20, 22, 0.06));
-  text-align: left;
 }
-.sc-generation-card .gs-venue-card h2 {
+.sc-generation-card .gs-create-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 22px;
-  color: var(--ink, #141416);
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid #E4E4E7;
+  border-radius: 18px;
+  background: #FFFFFF;
+  color: #141416;
+  box-shadow: 0 6px 18px rgba(20, 20, 22, 0.10);
 }
-.sc-generation-card .gs-venue-lead { margin: 0; font-size: 12px; line-height: 18px; color: var(--ink-soft, #55585f); }
-.sc-generation-card .gs-venue-stage {
+.sc-generation-card .gs-create-card.is-recon { flex: 36 1 0; }
+.sc-generation-card .gs-create-card:not(.is-recon) { flex: 32 1 0; }
+.sc-generation-card .gs-create-kicker {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 84px;
-  padding: 12px;
-  border: 1px solid var(--hair-soft, #efeff1);
-  border-radius: 12px;
-  background: var(--plane-deep, #ecedef);
-  color: var(--ink-soft, #55585f);
-}
-.sc-generation-card .gs-venue-prompt,
-.sc-generation-card .gs-venue-drop {
-  display: inline-flex;
-  align-items: center;
   gap: 6px;
-  max-width: 100%;
+  margin: 0;
+  color: #71767E;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+}
+.sc-generation-card .gs-create-aa {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.sc-generation-card .gs-create-card h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #141416;
+}
+.sc-generation-card .gs-create-lead {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: #55585F;
+}
+.sc-generation-card .gs-create-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #F4F5F7;
+  box-shadow: inset 0 1px 3px rgba(20, 20, 22, 0.06), inset 0 0 0 1px rgba(20, 20, 22, 0.04);
+}
+.sc-generation-card .gs-create-stage.has-media { background: #ECEEF1; }
+.sc-generation-card .gs-create-figure {
+  display: block;
+  width: auto;
+  height: 64px;
+  max-width: 86%;
+  flex: none;
+}
+.sc-generation-card .gs-create-caption {
+  flex: none;
+  margin: 0 0 6px;
+  color: #C5C8CE;
+  font-size: 10px;
+  line-height: 14px;
+}
+.sc-generation-card .gs-create-empty {
+  margin: 0;
+  padding: 8px;
+  text-align: center;
+  color: #71767E;
   font-size: 12px;
   line-height: 18px;
 }
-.sc-generation-card .gs-venue-prompt {
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--paper, #fff);
-  color: var(--ink, #141416);
+.sc-generation-card .gs-create-empty small {
+  display: block;
+  margin-top: 2px;
+  color: #A6AAB2;
+  font-size: 11px;
+  line-height: 16px;
 }
-.sc-generation-card .gs-venue-go {
-  height: 32px;
-  border: 0;
+.sc-generation-card .gs-create-file {
+  margin: 0;
+  padding: 8px 12px;
+  color: #55585F;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.sc-generation-card .gs-create-stage img,
+.sc-generation-card .gs-create-stage video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #ECEEF1;
+}
+.sc-generation-card .gs-create-count {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
   border-radius: 999px;
-  background: var(--green, #4a7c59);
-  color: var(--paper, #fff);
+  background: rgba(255, 255, 255, 0.9);
+  color: #55585F;
+  font-size: 10px;
+  line-height: 14px;
+}
+.sc-generation-card .gs-create-row {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  margin-top: 8px;
+}
+.sc-generation-card .gs-create-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sc-generation-card .gs-create-shoot {
+  flex: 1 1 0;
+  border: 0;
+  background: #141416;
+  color: #fff;
+}
+.sc-generation-card .gs-create-shoot:hover { background: #2a2a2d; }
+.sc-generation-card .gs-create-upload {
+  flex: 1.22 1 0;
+  border: 1px solid #E4E4E7;
+  background: #fff;
+  color: #141416;
+}
+.sc-generation-card .gs-create-upload:hover { background: #F4F5F7; }
+.sc-generation-card .gs-create-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.sc-generation-card .gs-create-go {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 36px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #141416;
+  color: #fff;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
-.sc-generation-card .gs-venue-go:hover { background: var(--green-deep, #35624a); }
-.sc-generation-card .gs-venue-card.is-placeholder {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  box-shadow: none;
-  cursor: pointer;
+.sc-generation-card .gs-create-go:hover { background: #2a2a2d; }
+.sc-generation-card .gs-create-btn:focus-visible,
+.sc-generation-card .gs-create-go:focus-visible {
+  outline: 2px solid #141416;
+  outline-offset: 2px;
 }
-.sc-generation-card .gs-venue-placeholder-icon { display: inline-flex; color: var(--ink-soft, #55585f); }
-.sc-generation-card .gs-venue-placeholder-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sc-generation-card .gs-venue-placeholder-text strong { font-size: 13px; font-weight: 600; color: var(--ink, #141416); }
-.sc-generation-card .gs-venue-placeholder-text small { font-size: 11px; line-height: 16px; color: var(--ink-soft, #55585f); }
-.sc-generation-card .gs-venue-card.is-placeholder em {
-  font-style: normal;
+.sc-generation-card .gs-create-note {
+  flex: none;
+  margin: 6px 0 0;
+  color: #71767E;
   font-size: 11px;
-  line-height: 16px;
-  color: var(--ink-soft, #55585f);
-  white-space: nowrap;
+  line-height: 15px;
 }
+.sc-generation-card.is-venue .gs-primary {
+  border-color: #141416;
+  background: #141416;
+  color: #fff;
+}
+.sc-generation-card.is-venue .gs-primary:hover { background: #2a2a2d; }
+.sc-generation-card.is-venue .gs-composer:focus-within {
+  border-color: #d4d4d8;
+  box-shadow: 0 0 0 3px rgba(20, 20, 22, 0.06);
+}
+.sc-generation-card.is-venue .gs-drop.has-file {
+  border-color: #d4d4d8;
+  background: #F4F5F7;
+  color: #141416;
+}
+.sc-generation-card.is-venue .gs-target {
+  background: #F4F5F7;
+  color: #55585F;
+}
+.sc-generation-card.is-venue .gs-credit input { accent-color: #141416; }
 .sc-generation-card .gs-window {
   display: flex;
   flex-direction: column;

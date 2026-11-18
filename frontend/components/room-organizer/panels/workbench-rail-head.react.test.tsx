@@ -30,17 +30,20 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(materialBlock).toContain('<RailCrate size={28}');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
-    // 空间、物料、场地、户外规划共用圆钮。场地钮打开文生 / 图生卡片，重建只是占位。
+    // 空间、物料、创作、户外规划共用圆钮。创作钮打开同一页三张卡片。
     // 标签不再写「拍摄场地」——否则用户会以为点开只有拍摄。
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
-    expect(primary).toContain('aria-label="场地：文生 3D、图生 3D，或重建真实场地"');
+    expect(primary).toContain('aria-label="创作：重建真实场地、文生 3D 或图生 3D"');
     expect(primary).not.toContain('生成新场景');
     expect(primary).toContain('sc-rail-3d-tag');
-    // 点开的是统一生成面板首层（只列场地两项），再点一次收起。
+    // 点开的是统一生成面板首层，再点一次收起。
     expect(primary).toContain("onClick={() => {");
     expect(primary).toContain("openGenerationSheet({ scope: 'venue' })");
     expect(primary).toContain('closeGenerationSheet()');
-    expect(primary).toContain('data-tip="场地"');
+    expect(primary).toContain('data-tip="创作"');
+    expect(primary).toContain('>创作</span>');
+    expect(primary).not.toContain('data-tip="场地"');
+    expect(primary).not.toContain('>场地</span>');
     expect(primary).toContain('data-tip="空间"');
     expect(primary).toContain('data-tip="物料"');
     expect(primary).not.toContain('sc-space-chevron');

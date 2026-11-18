@@ -46,14 +46,16 @@ import {
   uploadModelReference,
 } from '../lib/model-generation';
 import { addMyItem } from '../lib/my-items';
+import { CreationEntry } from './creation-entry';
 import type { CatalogItem } from '../lib/types';
 import './generation-sheet.css';
 
 /**
  * 统一生成面板。
  *
- * 场地来路（2026-11-19）：左栏先给文生 3D / 图生 3D 两张卡片，点一下进现成的模型表单
- * （source: 'text' | 'image'）。重建真实场地只占位。导入 GLB 不在这张卡片上。
+ * 创作来路：左栏同一页三张卡片（重建真实场地、文生 3D、图生 3D）。
+ * 点「开始创作」才进入已有的模型表单（source: 'text' | 'image'）。
+ * 重建卡只收照片/视频并在本卡预览，不提交重建。导入 GLB 不在这些卡片上。
  * 物料 / 设施来路仍直接进模型表单，导入仍是那张表单里的一种输入。
  *
  * 模型这条接真提交：描述/图片走 generated-model-library 同一套 createGenerationJob
@@ -73,7 +75,7 @@ function useOptionalCloud(controller?: BackendSession): BackendSnapshot {
 }
 
 export function GenerationSheetHost({ controller, onAddLocalGlb }: {
-  /** 保留给拍摄向导接线。重建这一轮是占位，面板不会调用它。 */
+  /** 保留给拍摄向导接线。创作入口的「拍摄现场」走卡片自己的相机/文件口，不打开拍摄向导。 */
   onOpenCapture?: (() => void) | undefined;
   /** 云项目会话：模型生成走它的队列。缺省时模型表单只解释为什么不能提交。 */
   controller?: BackendSession | undefined;
@@ -88,7 +90,6 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
   const [credit, setCredit] = useState(false);
   const [photoName, setPhotoName] = useState('');
   const [reference, setReference] = useState<{ id: string; name: string } | null>(null);
-  const [reconNote, setReconNote] = useState(false);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<GenerationCapabilities | null>(null);
@@ -123,7 +124,6 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
     setPhotoName('');
     setReference(null);
     setCredit(false);
-    setReconNote(false);
     setNotice('');
     setBusy(false);
   }, [state.open, state.task, state.source, state.prompt, state.facility?.id, state.scope]);
@@ -347,15 +347,13 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
     chooseGenerationTask('model');
   };
 
-  const venueLead = state.source === 'image'
-    ? '上传一张参考图，生成可放进场地的 3D 模型。主体清楚、背景干净即可。'
-    : '用文字描述想要的物件，生成可放进场地的 3D 模型。不需要参考图，也不需要建模经验。';
+  const venueEntry = state.scope === 'venue' && (state.task === 'choose' || state.task === 'scene-recon');
 
   return (
     <aside
       ref={cardRef}
       id="generation-sheet"
-      className={`sc-generation-card${state.scope === 'venue' ? ' is-venue' : ''}`}
+      className={`sc-generation-card${state.scope === 'venue' ? ' is-venue' : ''}${venueEntry ? ' is-entry' : ''}`}
       aria-label={title}
       data-testid="generation-sheet"
       tabIndex={-1}
@@ -372,43 +370,12 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
       </div>
 
       <div className="gs-body">
-        {state.task === 'choose' && state.scope === 'venue' ? (
-          <div className="gs-venue">
-            <div className="gs-seg" role="group" aria-label="生成方式">
-              <button type="button" aria-pressed={state.source !== 'image'} onClick={() => setGenerationModelSource('text')}>文生 3D</button>
-              <button type="button" aria-pressed={state.source === 'image'} onClick={() => setGenerationModelSource('image')}>图生 3D</button>
-            </div>
-            <article className="gs-venue-card">
-              <h2>{state.source === 'image' ? '图片生成 3D 模型' : '文字生成 3D 模型'}</h2>
-              <p className="gs-venue-lead">{venueLead}</p>
-              <div className="gs-venue-stage" aria-hidden="true">
-                {state.source === 'image' ? (
-                  <span className="gs-venue-drop"><FileImage size={16} aria-hidden />参考图在下一步选择</span>
-                ) : (
-                  <span className="gs-venue-prompt">一座带檐的小亭，暖白墙面</span>
-                )}
-              </div>
-              <button type="button" className="gs-venue-go" data-testid="generation-venue-start" onClick={() => openVenueModel(state.source === 'image' ? 'image' : 'text')}>
-                开始创作
-              </button>
-              <p className="gs-hint">完成后出现在物料库「我的生成」。不会自动勾选消耗额度。</p>
-            </article>
-            <button
-              type="button"
-              className="gs-venue-card is-placeholder"
-              data-testid="generation-task-scene-recon"
-              onClick={() => setReconNote(true)}
-            >
-              <span className="gs-venue-placeholder-icon" aria-hidden><Camera size={15} /></span>
-              <span className="gs-venue-placeholder-text">
-                <strong>重建真实场地</strong>
-                <small>现场拍摄，或上传已有的照片、视频。以后会进空间。</small>
-              </span>
-              <em>暂未开放</em>
-            </button>
-            {reconNote ? <p className="gs-notice" role="status" data-testid="generation-recon-closed">暂未开放</p> : null}
+        {state.scope === 'venue' ? (
+          <div className="gs-create-host" hidden={!venueEntry}>
+            <CreationEntry onStartText={() => openVenueModel('text')} onStartImage={() => openVenueModel('image')} />
           </div>
-        ) : state.task === 'choose' ? (
+        ) : null}
+        {venueEntry ? null : state.task === 'choose' ? (
           <div className="gs-tasks">
             {tasks.map(task => {
               const copy = GENERATION_TASK_COPY[task];
@@ -432,14 +399,7 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
             })}
           </div>
         ) : state.task === 'scene-recon' ? (
-          <div className="gs-venue-card is-placeholder" data-testid="generation-task-scene-recon">
-            <span className="gs-venue-placeholder-text">
-              <strong>重建真实场地</strong>
-              <small>暂未开放。这一轮不能拍摄，也不能上传。以后重建结果会进空间。</small>
-            </span>
-            <p className="gs-notice" role="status" data-testid="generation-recon-closed">暂未开放</p>
-            <button type="button" className="gs-link" onClick={backToGenerationChooser}>← 返回</button>
-          </div>
+          <CreationEntry onStartText={() => openVenueModel('text')} onStartImage={() => openVenueModel('image')} />
         ) : (
           <>
             {state.scope === 'venue' ? (
