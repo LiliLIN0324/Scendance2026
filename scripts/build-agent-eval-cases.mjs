@@ -311,6 +311,22 @@ const MUTATIONS = [
       findFacility(layout, 'food-truck-1').position = { x: 30, y: 38 };
     },
   },
+  {
+    id: 'EV-NEG-13-MKT-02',
+    rule: 'MKT-02',
+    change: '在展位 3 正下方 1 m 处加一个展位（上下相邻 <2 m）',
+    expected: ['MKT-02'],
+    apply(layout) {
+      layout.facilities.push({
+        id: 'booth-7',
+        templateId: 'booth-3x3',
+        name: '展位 7（贴下行）',
+        position: { x: -20, y: 57.5 },
+        rotationDeg: 0,
+        size: { width: 3, depth: 3 },
+      });
+    },
+  },
 ].map((mutation) => {
   const layout = baselineFixture();
   mutation.apply(layout);
