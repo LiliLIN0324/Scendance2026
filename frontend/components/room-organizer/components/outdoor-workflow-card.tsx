@@ -5,10 +5,9 @@ import {
   type OutdoorCardRecord,
   type useOutdoorAgentWorkflow,
 } from "../hooks/use-outdoor-agent-workflow";
-import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
-import { OutdoorWalkthroughSection } from "./outdoor-walkthrough-section";
 import { loginResumeCaption, loginResumeHeadline } from "../lib/outdoor-login-copy";
 import { formatDurationClock } from "../panels/agent-chat-store";
+import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
 
 /** 每阶段一句图注；进行中的真实进度文案会临时顶替它，报错走红卡。 */
 const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
@@ -237,7 +236,6 @@ export function OutdoorWorkflowCard({
   onCancelPreview?: (() => void) | undefined;
 }) {
   const [libraryQuery, setLibraryQuery] = useState("");
-  // 走查面板默认收起：验收标记是阶段岖峡的事，不该挡主流程；开关与副本都在 `OutdoorWalkthroughSection` 里。
   // 2026-11-16：历史行可点开——展开当时的说明与按钮，看回这张卡当时到底问了什么。
   const [openRecordAt, setOpenRecordAt] = useState<number | null>(null);
   // 低风险提示条倒计时收场（对标谷地工坊「8 秒后自动按下」）：非错误提示、空闲且无待确认
@@ -842,19 +840,6 @@ export function OutdoorWorkflowCard({
           </button>
         </div>
       )}
-      <OutdoorWalkthroughSection
-        initialBook={flow.walkthroughBook()}
-        onMark={(id, state) => flow.recordWalkthrough(id, state)}
-        cloudPass={flow.cloudPass()}
-        onCloud={(id, pass) => {
-          flow.declareCloud(id, pass);
-        }}
-        onExportCsv={() => flow.downloadLedgerCsv()}
-        gapsLine={flow.releaseGaps()}
-        onAsOf={(value) => flow.setWalkthroughAsOf(value)}
-        reportLine={flow.reportSections()}
-        nextLine={flow.nextGap()}
-      />
     </section>
       {flow.loginRequired && !flow.loginSatisfied && (
       <section
