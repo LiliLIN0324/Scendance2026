@@ -192,7 +192,7 @@ export function peekCachedPlaceShape(
 /**
  * 点了一个地点建议后，从 OSM 挖这个地点的**真实占地多边形**
  * （商场/公园/景区在 OSM 里多为面要素；高德商圈框的公开等价物）。
- * 服务端三路并发抢答（photon 精确链 / way 按名 / relation 按名）+ 镜像熔断，
+ * 服务端并发抢答（photon 精确链 / way+relation 同次按名查询）+ 镜像熔断，
  * 命中结果写 localStorage——同一个地点再点秒出。失败回 null，
  * 调用方静默保留定位钉。`cache: false` 供测试绕开 localStorage。
  */
@@ -215,8 +215,8 @@ export async function fetchPlaceShape(
     ? `http://127.0.0.1:3199/api/place-shape?${params.toString()}`
     : `/api/place-shape?${params.toString()}`;
   try {
-    // 服务端预算：单台 Overpass 25s × 熔断轮换，三路并发抢答；给足 85s 兜底。
-    const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(85000)]) : AbortSignal.timeout(85000) });
+    // 服务端总预算 20s；客户端只留传输余量，不再为镜像串行轮换等待 85s。
+    const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(21000)]) : AbortSignal.timeout(21000) });
     if (!response.ok) return null;
     const body = await response.json() as { shape?: { id?: string; name?: string; kind?: string; polygon?: [number, number][]; bounds?: number[] } | null };
     const raw = body?.shape;

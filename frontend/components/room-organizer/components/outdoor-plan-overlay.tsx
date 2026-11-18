@@ -501,7 +501,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 桥在 effect 里注册一次；核对要读到最新选区，不能闭上注册那一帧的 state。
   const placeAreaRef = useRef(placeArea);
   placeAreaRef.current = placeArea;
-  const { loading: shapeLoading, start: lookupPlaceShape, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
+  const { loading: shapeLoading, unavailable: shapeUnavailable, start: lookupPlaceShape, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
     const [west, south, east, north] = shape.bounds;
     setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: name });
     setPlaceArea({ polygon: shape.polygon, label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
@@ -647,7 +647,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       clearVenuePreview: () => { setPlacePin(null); setPlaceArea(null); },
       cancelVenueBoundary: () => canvasApiRef.current?.setMode('view'),
       inspectFacility: id => canvasApiRef.current?.inspectFacility(id) ?? false,
-      beginVenueBoundary: anchor => canvasApiRef.current?.beginVenueBoundary(anchor) ?? false,
+      beginVenueBoundary: anchor => { cancelPlaceShape(); return canvasApiRef.current?.beginVenueBoundary(anchor) ?? false; },
       applyRoutes: (routes, nodes) => canvasApiRef.current?.applyRoutes(routes, nodes) ?? false,
       applyZoneProposal: (zones, facilities, routes, nodes) => canvasApiRef.current?.applyZoneProposal(zones, facilities, routes, nodes) ?? false,
       applyWorkers: workers => canvasApiRef.current?.applyWorkers(workers) ?? false,
@@ -995,15 +995,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         />
         </PlaceSearchSlot>
       )}
-      {/* 2026-11-12 用户拍板：挖形期间的小提示（Overpass 排队 30~50s，别让用户以为点了没反应）。
+      {/* 查询真实轮廓有总预算；未命中如实提示手画，不自动重复请求。
           与画布白底名称胶囊同范式；只压 2D 画面，3D/接管态不出镜。 */}
-      {shapeLoading && !canvasHidden && (
+      {(shapeLoading || shapeUnavailable) && !canvasHidden && (
         <div
           data-testid="outdoor-shape-loading"
           className="sc-shape-loading-pill"
           style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 4 }}
         >
-          正在圈范围…
+          {shapeLoading ? '正在圈范围…' : '暂未取得真实范围，可在地图上手画'}
         </div>
       )}
       {/* 2026-11-15 旧独立分享/导出钮退役：分享、导出、发布统一收进右上工具簇的 ShareMenu 面板，

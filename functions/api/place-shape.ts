@@ -11,10 +11,10 @@ type Context = { request: Request; env: PlaceStockEnv };
  * （商场/公园/景区多为 landuse/building/leisure 面）。两步取形：
  *   ① photon（OSM 地理编码，免 key）按「名称 + 中心点」定位 → osm_type/osm_id；
  *   ② Overpass 按 id 取几何：way 直接用点列；relation 把成员 way 接龙成单环。
- * photon 不可达时的兜底：Overpass 直接按名搜面要素（先 way 快查、再 relation 慢查），
+ * photon 不可达时的兜底：Overpass 同次按名查 way 与 relation，
  * 用 near 收敛范围防全城正则扫；命中结果进程内缓存，镜像抖动时重复查询秒回。
  * 输出统一 GCJ-02（与 SitePlanData.anchor 同基准）、单环、≤320 点。
- * Overpass 忙时排队数十秒：预算给足，失败一律回 `{ shape: null }`（no-store，
+ * 总查询预算 20 秒；镜像并发，失败一律回 `{ shape: null }`（no-store，
  * 不让 CDN 把瞬断期间的 null 缓存一天），调用方降级只落定位钉，不弹错。
  */
 export interface PlaceShape {
@@ -105,7 +105,7 @@ export async function photonLookup(
 const endpointCooldownByFetch = new WeakMap<typeof fetch, Map<string, number>>();
 const requestBudgetByFetch = new WeakMap<typeof fetch, AbortSignal>();
 
-/** Overpass POST；失败/超时熔断该台 60s 后换下一台，全部熔断中秒回 null。 */
+/** 镜像并发，首个有效响应胜出并取消余下请求；坏镜像熔断 60s。 */
 export async function overpass(query: string, fetchImpl: typeof fetch): Promise<unknown | null> {
   let endpointCooldown = endpointCooldownByFetch.get(fetchImpl);
   if (!endpointCooldown) { endpointCooldown = new Map(); endpointCooldownByFetch.set(fetchImpl, endpointCooldown); }
@@ -113,24 +113,27 @@ export async function overpass(query: string, fetchImpl: typeof fetch): Promise<
   const now = Date.now();
   const live = OVERPASS_ENDPOINTS.filter(ep => (endpointCooldown.get(ep) ?? 0) <= now);
   if (live.length === 0) return null; // 全部熔断中：直接放弃，别把超时预算烧完
-  for (const endpoint of live) {
+  const winner = new AbortController();
+  const payload = await firstNonNull(live.map(endpoint => async () => {
     try {
       const res = await fetchImpl(endpoint, {
         method: 'POST',
         headers: { 'User-Agent': 'ScdancePages/2.2.0', 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
-        signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
+        signal: AbortSignal.any([winner.signal, AbortSignal.timeout(OVERPASS_TIMEOUT_MS)]),
       });
-      if (!res.ok) { endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); continue; } // 失败（含 403/451/520 系）熔断后换下一台
+      if (!res.ok) { endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); return null; }
       const payload = await res.json();
       endpointCooldown.delete(endpoint);
       return payload;
     } catch {
-      if (requestBudgetByFetch.get(fetchImpl)?.aborted) return null;
+      if (winner.signal.aborted || requestBudgetByFetch.get(fetchImpl)?.aborted) return null;
       endpointCooldown.set(endpoint, Date.now() + OVERPASS_COOLDOWN_MS); // 超时/网络失败也熔断
     }
-  }
-  return null;
+    return null;
+  }));
+  winner.abort();
+  return payload;
 }
 
 interface OverpassNode { lat: number; lon: number }
@@ -341,25 +344,27 @@ export function pickNameCandidate(
   return scored[0] ?? null;
 }
 
-/** Overpass 按名搜单类要素（kind='way'|'relation'）：geometry 随结果返回，无需二次请求。 */
+/** 按名取轮廓：area 同次查 way/relation，并保持可用 way 优先的选择规则。 */
 export async function nameSearchStage(
   name: string,
   near: { lng: number; lat: number },
-  kind: 'way' | 'relation',
+  kind: 'way' | 'relation' | 'area',
   fetchImpl: typeof fetch,
 ): Promise<PlaceShape | null> {
   const safe = escapeOverpassRegex(name);
-  const query = `[out:json][timeout:20];${kind}["name"~"${safe}",i]["type"!="route"](around:1500,${near.lat},${near.lng});out geom;`;
+  const selector = (type: string) => `${type}["name"~"${safe}",i]["type"!="route"](around:1500,${near.lat},${near.lng});`;
+  const query = `[out:json][timeout:20];${kind === 'area' ? `(${selector('way')}${selector('relation')});` : selector(kind)}out geom;`;
   const payload = await overpass(query, fetchImpl) as { elements?: OverpassElement[] } | null;
   const elements = payload?.elements ?? [];
-  if (kind === 'way') {
+  if (kind !== 'relation') {
     const pick = pickNameCandidate(
       elements
         .filter(el => el?.type === 'way' && Array.isArray(el.geometry))
         .map(el => ({ el, label: el.tags?.name ?? '', ring: el.geometry!.filter(g => Number.isFinite(g?.lon) && Number.isFinite(g?.lat)) })),
       name, near,
     );
-    return pick ? shapeFromNodes(pick.ring, `osm:W${pick.el.id}`, pick.label || name) : null;
+    const shape = pick ? shapeFromNodes(pick.ring, `osm:W${pick.el.id}`, pick.label || name) : null;
+    if (shape || kind === 'way') return shape;
   }
   const relCandidates: NameCandidate[] = [];
   for (const el of elements) {
@@ -679,7 +684,8 @@ export async function handlePlaceShape(
   fetchImpl: typeof fetch = fetch,
   env: PlaceStockEnv = {},
 ): Promise<Response> {
-  const budget = AbortSignal.any([request.signal, AbortSignal.timeout(65000)]);
+  const completed = new AbortController();
+  const budget = AbortSignal.any([request.signal, completed.signal, AbortSignal.timeout(20000)]);
   const transport = fetchImpl;
   const cooldown = endpointCooldownByFetch.get(transport) ?? new Map<string, number>();
   endpointCooldownByFetch.set(transport, cooldown);
@@ -700,7 +706,10 @@ export async function handlePlaceShape(
   const cached = shapeCache.get(cacheKey);
   if (cached && isDisplayablePlaceShape(cached)) return json({ shape: cached }, 200);
   if (cached) shapeCache.delete(cacheKey); // 缓存里的垃圾几何（如 3 点 line）丢掉，重新挖
-  const stocked = await lookupPlaceStock(nameNorm, near, env, fetchImpl);
+  const stockRequest = lookupPlaceStock(nameNorm, near, env, fetchImpl);
+  let stockGrace: ReturnType<typeof setTimeout> | undefined;
+  const stocked = await Promise.race([stockRequest, new Promise<null>(resolve => { stockGrace = setTimeout(() => resolve(null), 150); })]);
+  clearTimeout(stockGrace);
   if (stocked) return json({ shape: cacheShape(cacheKey, stocked) }, 200);
   // 五路抢答（2026-11-13「点哪儿框哪儿」改造）：空间命中是主路径——点的坐标就在
   // 建筑/园区里，按点查面不看名字，结构上保证「点建筑=建筑选区」；way/rel 按名兜底；
@@ -711,17 +720,18 @@ export async function handlePlaceShape(
   for (let i = 0; i < segmentCandidates.length && !shape && !budget.aborted; i += 1) {
     const candidate = segmentCandidates[i]!;
     shape = await firstNonNull([
+      () => stockRequest,
       () => photonPath(candidate, near, fetchImpl).then(acceptShape),
       async () => {
         if (!near) return null;
-        return acceptShape(await nameSearchStage(candidate, near, 'way', fetchImpl))
-          ?? acceptShape(await nameSearchStage(candidate, near, 'relation', fetchImpl));
+        return acceptShape(await nameSearchStage(candidate, near, 'area', fetchImpl));
       },
     ]);
   }
   if (!shape && near && !budget.aborted) shape = acceptShape(await spatialAreaStage(queryName, near, fetchImpl));
   if (!shape && near && !budget.aborted) shape = acceptShape(await highwayLineStage(near, queryName, fetchImpl));
   if (shape) cacheShape(cacheKey, shape);
+  completed.abort();
   // 未命中不写进程缓存、HTTP no-store：避免把 Overpass 抖动期间的 null 缓存一天。
   return shape ? json({ shape }, 200) : json({ shape: null }, 200, false);
 }
