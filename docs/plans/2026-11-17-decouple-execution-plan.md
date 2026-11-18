@@ -54,11 +54,12 @@
 关卡 G 基线债与工程卫生（验收后一次清）
 ```
 
-## 2. 关卡 A：§C 决策准备（待拍板，agent 只读准备）
+## 2. 关卡 A：§C 决策（已拍板 2026-11-18）
 
-> 现状与推荐口径见 `g1-closure-status.md §8`。拍板前**不得**：改 `planFacilitySchema`/`sourceAssetId`/`modelOverride` 约束；在纯函数层加载 manifest；把 3D 特化字段写进 notes；新建 plan 租约；动 lawn/market 与室内预设清单。
+> 现状与推荐口径见 `g1-closure-status.md §8`。**2026-11-18 已拍板：C1 A、C4 A、C5 A，其余按推荐。**
+> 冻结面仍有效：不改 `planFacilitySchema`/`sourceAssetId`/`modelOverride` 约束；不在纯函数层加载 manifest；不把 3D 特化字段写进 notes；不新建 plan 租约；不动 lawn/market 与室内预设清单。
 
-| 项 | 决策点 | 推荐（待拍板） | 拍板后解锁 |
+| 项 | 决策点 | 推荐（已拍板） | 拍板后解锁 |
 | --- | --- | --- | --- |
 | C1 | assetId ↔ 物料库 slug 命名空间 | A 严格分离：assetId 只存后端 id，`modelOverride` 只存 slug；迁移不硬猜；G2 再收紧 `sourceAssetId` | 3D 选型按 slug 稳定回查；facility 壳体注入点收口 |
 | C4 | 旧云项目 `/editor/?project=<id>` 投影策略 | A 只读旧室内视图 + 显式「复制为 plan 草稿」，不自动改写原项目 | 定 R3 是否保留迁移降级通路 |
