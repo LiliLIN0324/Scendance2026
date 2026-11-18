@@ -118,8 +118,25 @@ export const planFacilitySchema = z.strictObject({
    * 「自动」清回 undefined；与 opacity/color 同口径不写 default，旧数据缺字段照常解析（无需迁移）。
    */
   modelOverride: z.string().min(1).max(160).optional(),
+  /**
+   * 2026-11-17 单价（元/件）：人工按型号填写后写到这一件上。
+   * 缺省 = 未定价，清单不按 0 元计；旧数据缺字段照常解析。
+   */
+  unitPrice: z.number().min(0).max(1_000_000).optional(),
 });
 export type PlanFacility = z.infer<typeof planFacilitySchema>;
+
+/**
+ * 报价单抬头（2026-11-17）。项目名 / 客户 / 有效期 / 报价人由用户填写，
+ * 未填的键不落盘，读取层不补默认客户或报价人。
+ */
+export const planQuoteSchema = z.strictObject({
+  projectName: z.string().min(1).max(120).optional(),
+  client: z.string().min(1).max(120).optional(),
+  validUntil: z.string().min(1).max(40).optional(),
+  preparedBy: z.string().min(1).max(120).optional(),
+});
+export type PlanQuote = z.infer<typeof planQuoteSchema>;
 
 /**
  * 墙体（M2 walls，2026-11-17 拍板落地）：一段墙 = 一条线段 + 可选厚度/高度/类型/状态。
@@ -396,6 +413,13 @@ export const sitePlanDataSchema = z.strictObject({
   annotations: z.array(planAnnotationSchema).max(500).optional(),
   /** 2026-11-17 M2：墙体集合（可选，单线段；旧数据不带照常解析；上限 500 段）。 */
   walls: z.array(planWallSchema).max(500).optional(),
+  /**
+   * 2026-11-17 项目级价格书：modelOverride slug → 单价（元）。
+   * 一次定价后写入；之后新放置的同款只补空缺、不覆盖已手填的单价。旧数据不带照常解析。
+   */
+  priceBook: z.record(z.string().min(1).max(160), z.number().min(0).max(1_000_000)).optional(),
+  /** 2026-11-17 报价单抬头。旧数据不带照常解析；空对象也不必落盘。 */
+  quote: planQuoteSchema.optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
     ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'], ['walls', '墙体'],

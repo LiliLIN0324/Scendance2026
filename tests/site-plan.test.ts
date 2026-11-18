@@ -399,3 +399,34 @@ describe('vehicles（#118 方案 B 车辆集合）', () => {
     expect(sitePlanDataSchema.safeParse(planWithVehicle({ ...sampleVehicle(), count: 100 })).success).toBe(false);
   });
 });
+
+describe('site plan price book and quote (2026-11-17)', () => {
+  it('旧方案不带价格书和报价抬头，解析成功且不虚构字段', () => {
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.priceBook).toBeUndefined();
+    expect(legacy.quote).toBeUndefined();
+    expect(legacy.facilities[0].unitPrice).toBeUndefined();
+  });
+
+  it('单价、价格书和报价抬头往返保留', () => {
+    const plan = samplePlan();
+    const priced = {
+      ...plan,
+      facilities: [{ ...plan.facilities[0], modelOverride: 'folding-chair', unitPrice: 88 }],
+      priceBook: { 'folding-chair': 88 },
+      quote: { projectName: '秋季发布会', client: '星河品牌部', validUntil: '2026-12-31', preparedBy: '幕景策划' },
+    };
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(priced)));
+    expect(restored.facilities[0].unitPrice).toBe(88);
+    expect(restored.priceBook).toEqual({ 'folding-chair': 88 });
+    expect(restored.quote).toEqual(priced.quote);
+  });
+
+  it('拒绝负单价、超长型号键和空报价字段', () => {
+    const plan = samplePlan();
+    expect(sitePlanDataSchema.safeParse({ ...plan, priceBook: { chair: -1 } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...plan, priceBook: { ['x'.repeat(161)]: 10 } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...plan, quote: { client: '' } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...plan, quote: { projectName: 'x'.repeat(121) } }).success).toBe(false);
+  });
+});

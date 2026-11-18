@@ -408,8 +408,11 @@ import {
 import { buildArrangeChoicePage, type ArrangeChoice } from '../lib/arrange-choices';
 import { arrangePreviewKind, buildArrangePreview } from '../lib/arrange-preview';
 import { loadShippedOnlineModels } from '../lib/online-models';
+import { applyModelPrice } from '../lib/plan-bom';
+import { inheritPrice, replaceModelPrice, withModelPrice } from '../lib/price-book';
 import { capabilityForSlug } from '../lib/prop-capabilities';
 import type { PlanSceneObject } from '../lib/plan-item-bridge';
+import { PlanBomPanel } from './plan-bom-panel';
 
 export type CanvasBasemapSource = TdtProbeLayer | ProbePublicSource;
 
@@ -2537,7 +2540,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function confirmArrangePreview() {
     const facilities = arrangePreviewRef.current;
     if (!facilities?.length) return;
-    commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, ...facilities] });
+    const book = planRef.current.priceBook;
+    commitPlan({
+      ...planRef.current,
+      facilities: [...planRef.current.facilities, ...facilities.map(facility => inheritPrice(facility, book))],
+    });
     arrangePreviewRef.current = null;
     setArrangePreview(null);
     clearArrangeChoices();
@@ -4404,7 +4411,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       commitPlan({
         ...current,
         zones: [...current.zones, ...zones.map(zone => ({ ...zone, ...activeLevelStamp() }))],
-        facilities: [...current.facilities, ...facilities.map(facility => ({ ...facility, ...activeLevelStamp() }))],
+        facilities: [...current.facilities, ...facilities.map(facility => inheritPrice({ ...facility, ...activeLevelStamp() }, current.priceBook))],
         routes: [...current.routes, ...routes.map(route => ({ ...route, ...activeLevelStamp() }))],
         nodes: [...current.nodes, ...nodes.map(node => ({ ...node, ...activeLevelStamp() }))],
       });
@@ -4479,7 +4486,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     addFacility: (facility: PlanFacility) => {
       const current = planRef.current;
       if (current.facilities.some(f => f.id === facility.id)) return false;
-      commitPlan({ ...current, facilities: [...current.facilities, { ...facility, ...activeLevelStamp() }] });
+      commitPlan({ ...current, facilities: [...current.facilities, inheritPrice({ ...facility, ...activeLevelStamp() }, current.priceBook)] });
       return true;
     },
     /** M5：单条设施删除；不存在回 false。 */
@@ -5877,13 +5884,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         commitPlan({
           ...current,
           facilities: current.facilities.map(f => f.id === target.id
-            ? {
+            ? replaceModelPrice({
               ...f,
               templateId,
               modelOverride,
               size: { width: template.width, depth: template.depth },
               ...activeLevelStamp(),
-            }
+            }, current.priceBook, modelOverride)
             : f),
         });
         selectFacility(target.id);
@@ -5905,7 +5912,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(result.issue.message);
       return;
     }
-    commitPlan({ ...current, facilities: [...current.facilities, { ...result.value, ...(modelOverride ? { modelOverride } : {}), ...activeLevelStamp() }] });
+    commitPlan({
+      ...current,
+      facilities: [...current.facilities, inheritPrice(
+        { ...result.value, ...(modelOverride ? { modelOverride } : {}), ...activeLevelStamp() },
+        current.priceBook,
+      )],
+    });
     selectFacility(result.value.id);
     const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
     const angle = facilityRotationRef.current;
@@ -5944,9 +5957,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         ? normalizeFacilitySize(requestedSize, f.templateId, { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }, modelOverride)
         : f.size;
       const rotationDeg = patch.rotationDeg !== undefined ? ((patch.rotationDeg % 360) + 360) % 360 : f.rotationDeg;
-      return { ...f, ...patch, size, rotationDeg };
+      const next = { ...f, ...patch, size, rotationDeg };
+      // 换型号时单价跟价格书走：新款有价就带上，没有就清掉旧款的价。
+      return modelChanged ? replaceModelPrice(next, current.priceBook, modelOverride) : next;
     });
     commitPlan({ ...current, facilities });
+  }
+
+  /** 按型号一次定价：同款全部改价，并写入 plan.priceBook；一次 commit 可撤销。 */
+  function priceModel(slug: string, unitPrice: number | null) {
+    const current = planRef.current;
+    const facilities = applyModelPrice(current.facilities, slug, unitPrice);
+    const priceBook = withModelPrice(current.priceBook, slug, unitPrice);
+    const next: SitePlanData = { ...current, facilities };
+    if (Object.keys(priceBook).length === 0) delete next.priceBook;
+    else next.priceBook = { ...priceBook };
+    commitPlan(next);
+  }
+
+  /** 报价单抬头写进 plan.quote。空抬头不留空对象。 */
+  function updateQuote(quote: SitePlanData['quote']) {
+    const current = planRef.current;
+    const next: SitePlanData = { ...current };
+    if (quote) next.quote = quote;
+    else delete next.quote;
+    commitPlan(next);
   }
 
   function deleteFacility(id: string) {
@@ -10496,6 +10531,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <span>导入 GLB</span>
                         </button>
                       </div>
+                      <PlanBomPanel
+                        facilities={plan.facilities}
+                        quote={plan.quote}
+                        onPriceModel={priceModel}
+                        onQuoteChange={updateQuote}
+                      />
                       {/* + 布场信息（OnePlan Object setup 镜像：供应商/进撤场/用电）。 */}
                       <button
                         type="button"
