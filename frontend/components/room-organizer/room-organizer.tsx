@@ -1005,7 +1005,8 @@ useEffect(() => {
     if(!sameRecoveryFormValue(layout,initial.layout))throw new Error('当前方案无法完整核对，未生成评审链接。');
     const isCurrent=()=>activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&layoutStore.getState().revision===initial.revision&&sameRecoveryFormValue(layoutStore.getState().layout,layout);
     const check=()=>{if(!isCurrent())throw new Error('活动、楼层或方案已变化；旧评审记录如已写入会保留，链接未复制。');};
-    const encoded = await encodeShareUrl(layout, window.location.origin);
+    // 户外优先：评审链接同时携带当前户外规划，评审页不再只拿到室内楼层。
+    const encoded = await encodeShareUrl(layout, window.location.origin, outdoorFullPlanRef.current);
     check();
     const url = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
     if (!url) throw new Error('评审链接没有生成。');

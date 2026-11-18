@@ -16,6 +16,7 @@ import {
   type LoadedReviewPlan,
 } from './load-plan';
 import { itemNames, ReviewPlanSheet } from './review-plan-sheet';
+import OutdoorPlanCanvas from '../room-organizer/components/outdoor-plan-canvas';
 import { markReviewReturned, readReviewReturn, REVIEW_RETURN_STORAGE_KEY } from './review-return';
 import { appendReviewPinCloud, listReviewPinsCloud } from './review-pins-cloud';
 import {
@@ -279,6 +280,14 @@ export function ReviewSharePage(): JSX.Element {
                   <button key={entry.id} type="button" aria-pressed={entry.id === floor.id} onClick={() => { setFloorIndex(index); setPinDraft(null); }}>{entry.name}</button>
                 ))}
               </div>
+            )}
+            {plan.outdoorPlan && (
+              <section aria-label="户外方案">
+                <p className="rsp-review-hint" role="status">这是分享链接携带的户外方案：可直接缩放查看场地、分区、设施与动线。</p>
+                <div style={{ position: 'relative', height: '62vh', minHeight: 420, borderRadius: 12, overflow: 'hidden' }}>
+                  <OutdoorPlanCanvas plan={plan.outdoorPlan} />
+                </div>
+              </section>
             )}
             <div className="rsp-sheet rsp-sheet-interactive">
               <ReviewPlanSheet
