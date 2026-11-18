@@ -212,7 +212,10 @@ function evaluateMkt10(rule: CorpusRule, layout: Layout): Receipt {
   if (!layout.boundary) return skipped(rule, 'no-boundary', '没有场地边界，无法算占地率。');
   const siteArea = ringArea(layout.boundary);
   if (siteArea <= 0) return skipped(rule, 'no-boundary', '场地边界面积为 0。');
-  const stallArea = layout.facilities.filter(isStall).reduce((sum, facility) => {
+  // 没有摊位时不算 0% 合规：空布局不该因为「什么都没摆」拿到 pass。
+  const stalls = layout.facilities.filter(isStall);
+  if (stalls.length === 0) return skipped(rule, 'not-enough-stalls', '没有摊位，占地率不适用；空布局不视为合规。');
+  const stallArea = stalls.reduce((sum, facility) => {
     const rect = facilityRect(facility);
     return sum + rectArea(rect);
   }, 0);
