@@ -11,8 +11,9 @@
  * WGS84（解码层原样带出）。入口、障碍、开放空间、室内连接不在 planet 这两个
  * 图层内，保持未知并在 warnings 如实标注。
  */
-import { fetchOpenFreeMapRoads } from "./openfreemap-roads";
 import { fetchOpenFreeMapBuildings, type LngLatRing } from "./openfreemap-buildings";
+import { fetchOpenFreeMapParks, type ParkPatch } from "./openfreemap-parks";
+import { fetchOpenFreeMapRoads } from "./openfreemap-roads";
 import { fetchOpenFreeMapWater, type WaterWire } from "./openfreemap-water";
 import type { RoadSegment } from "./road-network";
 import {
@@ -172,6 +173,57 @@ function waterFeature(
 }
 
 
+/**
+ * 绿地要素（2026-11-18 docs/47 A1）：planet park/landcover 图层的绿地面按 polygon 出，
+ * kind 沿 open-space（可踩踏面）；park/garden 出 leisure 标签，grass/wood 出 landcover
+ * 标签，A2 分级都按 soft 档输入。
+ */
+function parkFeature(
+  patch: ParkPatch,
+  anchor: { lng: number; lat: number },
+  radius: number,
+): MapFeature | null {
+  try {
+    let points = patch.lngLat.map(([lng, lat]) => toLocal(lng, lat, anchor, "wgs84"));
+    if (points.length < 3) return null;
+    const closed =
+      points.length >= 4 &&
+      Math.hypot(
+        points[0]!.x - points[points.length - 1]!.x,
+        points[0]!.y - points[points.length - 1]!.y,
+      ) < 0.01;
+    if (closed) points = points.slice(0, -1);
+    if (points.length < 3) return null;
+    const geometry = { type: "polygon" as const, points };
+    if (!isValidGeometry(geometry) || !inRange(points, radius)) return null;
+    const isLeisure = patch.parkClass === "park" || patch.parkClass === "garden";
+    const fallbackName =
+      patch.parkClass === "park"
+        ? "公园"
+        : patch.parkClass === "garden"
+          ? "公园绿地"
+          : patch.parkClass === "wood"
+            ? "林地"
+            : "草地";
+    return {
+      id: patch.id,
+      kind: "open-space",
+      name: patch.name || fallbackName,
+      geometry,
+      tags: isLeisure ? { leisure: patch.parkClass } : { landcover: patch.parkClass },
+      evidence: {
+        source: "osm",
+        sourceId: patch.id,
+        certainty: "mapped",
+        note: "OpenFreeMap（OSM 同源瓦片）公园/绿地几何；开放空间不代表可占用、权属或活动授权。入口/障碍未知。",
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 export async function fetchOfmEvidence(
   anchor: { lng: number; lat: number },
   radiusM: number,
@@ -191,6 +243,7 @@ export async function fetchOfmEvidence(
       fetchOpenFreeMapRoads(bbox, signal ? { signal } : {}),
       fetchOpenFreeMapBuildings(bbox, signal),
       fetchOpenFreeMapWater(bbox, signal),
+      fetchOpenFreeMapParks(bbox, signal),
     ]);
   } catch (error) {
     throw error;
@@ -198,12 +251,15 @@ export async function fetchOfmEvidence(
   const roadSettled = settled[0]!;
   const buildingSettled = settled[1]!;
   const waterSettled = settled[2]!;
+  const parkSettled = settled[3]!;
   const roads: RoadSegment[] =
     roadSettled.status === "fulfilled" ? (roadSettled.value as RoadSegment[]) : [];
   const rings: LngLatRing[] =
     buildingSettled.status === "fulfilled" ? (buildingSettled.value as LngLatRing[]) : [];
   const waters: WaterWire[] =
     waterSettled?.status === "fulfilled" ? (waterSettled.value as WaterWire[]) : [];
+  const parks: ParkPatch[] =
+    parkSettled?.status === "fulfilled" ? (parkSettled.value as ParkPatch[]) : [];
 
   const features: MapFeature[] = [];
   for (const road of roads.slice(0, MAX_FEATURES)) {
@@ -218,6 +274,10 @@ export async function fetchOfmEvidence(
     const feature = waterFeature(wire, anchor, radius);
     if (feature) features.push(feature);
   }
+  for (const patch of parks.slice(0, MAX_FEATURES)) {
+    const feature = parkFeature(patch, anchor, radius);
+    if (feature) features.push(feature);
+  }
   if (!features.length) return null;
 
   const fetchedAt = new Date().toISOString();
@@ -226,8 +286,12 @@ export async function fetchOfmEvidence(
     status: "partial",
     features,
     warnings: [
-      "OpenFreeMap（OSM 同源瓦片）道路、建筑足迹与水体几何；真实入口、障碍、开放空间与室内连接仍未知，需现场核对。",
+      "OpenFreeMap（OSM 同源瓦片）道路、建筑足迹、水体与公园绿地几何；真实入口、障碍与室内连接仍未知，需现场核对。",
       ...(waters.length ? [] : ["本轮瓦片未取到水体/水道几何：沿岸类需求应先确认水在哪一侧，不能凭底图像素推断。"]),
+      ...(parks.length ? [] : ["本轮瓦片未取到公园/绿地几何：草坪类需求应先确认可用绿地在哪，不能凭底图像素推断。"]),
+      // planet 图层不含停车场与广场面（amenity=parking / place=square）：
+      // 按「未知」处理，不凭底图像素推断；退服务端 Overpass 兜底时才有这些要素。
+      "planet 图层不含停车场与广场面：此类铺装证据按未知处理，需现场核对。",
     ],
     complete: false,
     fetchedAt,

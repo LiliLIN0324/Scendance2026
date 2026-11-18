@@ -300,6 +300,8 @@ export const PLANNING_EDIT_MODE_LABELS = {
   // 单独一个模式——它不参与越界判定，只决定「哪块地算这次设计」。
   scope: '圈设计范围',
   zone: '画分区',
+  /** 2026-11-18 用户口径：墙是线，不是占地块——点两下成一段，端点吸室内分区边。 */
+  wall: '画墙',
   facility: '放设施',
   route: '画动线',
   node: '放节点',
@@ -343,6 +345,8 @@ export const PLANNING_EDIT_MODE_ICONS: Record<PlanningEditMode, PlanningIconName
   // 设计范围用外框图标；hexagon 已登记，与边界的笔尖、分区的套索都不撞。
   scope: 'hexagon',
   zone: 'lasso',
+  // 画墙用砌体图标（已登记的 brick-wall，与图例里的墙体同源）。
+  wall: 'brick-wall',
   facility: 'tent',
   route: 'route',
   node: 'door-open',

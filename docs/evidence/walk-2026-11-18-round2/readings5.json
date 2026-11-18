@@ -1,0 +1,108 @@
+{
+  "case": {
+    "hud": null,
+    "audit": null,
+    "cam": [
+      4.43,
+      133.71282858587483,
+      180.50525656172283
+    ],
+    "auditDebug": {
+      "areaM2": 37667.9,
+      "ratio": 1,
+      "unreachable": 0,
+      "boundaryPoints": 4,
+      "bbox": {
+        "minX": -82.22,
+        "minY": -78.4,
+        "maxX": 91.08,
+        "maxY": 145.36
+      }
+    }
+  },
+  "edge": {
+    "entry": {
+      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…第一人称 · F5存观景位",
+      "audit": "体检 · 可达 100% · 通行正常",
+      "cam": [
+        0,
+        1.6,
+        0
+      ],
+      "auditDebug": {
+        "areaM2": 44,
+        "ratio": 1,
+        "planFacilities": [
+          {
+            "name": "角落帐篷",
+            "w": 1.5,
+            "d": 1.5,
+            "x": -3,
+            "y": 2
+          }
+        ],
+        "routeCount": 0,
+        "designScopeCount": 0,
+        "blockedRoutes": 0,
+        "firstBlocker": null,
+        "blockedAtM": null,
+        "narrowestRouteWidthM": null,
+        "sightline": {
+          "target": "角落帐篷",
+          "blocked": false,
+          "distanceM": null,
+          "ratio": 0
+        },
+        "boundaryPoints": 4,
+        "bbox": {
+          "minX": -4,
+          "minY": -3,
+          "maxX": 4,
+          "maxY": 3
+        }
+      }
+    },
+    "after": {
+      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…已到场地边界第一人称 · F5存观景位",
+      "audit": "体检 · 可达 100% · 通行正常",
+      "cam": [
+        0,
+        1.6,
+        2.860199999999998
+      ],
+      "auditDebug": {
+        "areaM2": 44,
+        "ratio": 1,
+        "planFacilities": [
+          {
+            "name": "角落帐篷",
+            "w": 1.5,
+            "d": 1.5,
+            "x": -3,
+            "y": 2
+          }
+        ],
+        "routeCount": 0,
+        "designScopeCount": 0,
+        "blockedRoutes": 0,
+        "firstBlocker": null,
+        "blockedAtM": null,
+        "narrowestRouteWidthM": null,
+        "sightline": {
+          "target": "角落帐篷",
+          "blocked": false,
+          "distanceM": null,
+          "ratio": 0
+        },
+        "boundaryPoints": 4,
+        "bbox": {
+          "minX": -4,
+          "minY": -3,
+          "maxX": 4,
+          "maxY": 3
+        }
+      }
+    },
+    "hitAt": 3
+  }
+}

@@ -65,6 +65,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * 画布里的快捷键学习入口：地图上不新增常驻控件。
  * 按 ? 或 Shift+/ 打开只读速查；头像菜单和设置里的「查看速查」派发同一事件。
  * 不写存储、不改键位；Esc / 点击遮罩关闭，焦点交给 useDialogFocus。
+ * 输入框与已有 aria-modal 弹层里让路，避免抢走正在打的字。
  */
 export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX.Element | null {
   const [open, setOpen] = useState(false);

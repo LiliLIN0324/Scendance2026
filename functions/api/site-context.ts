@@ -100,6 +100,11 @@ export async function handleSiteContext(
     'way["leisure"]',
     'way["landuse"]',
     'way["barrier"]',
+    // docs/47 A1：水系/绿地/停车场/广场要素进结构化证据（leisure=park/garden 已含在 way["leisure"]）。
+    'way["natural"]',
+    'way["waterway"]',
+    'way["amenity"="parking"]',
+    'way["place"="square"]',
     'node["entrance"]',
     'node["barrier"]',
     'node["highway"="crossing"]',

@@ -226,3 +226,17 @@
 | #11 导出 | partial：5 类产物落盘且计数一致；PDF/效果图/旧云 Run blocked | `docs/evidence/79/11/` |
 
 计数：pass 1 / partial 5 / blocked 5 / fail 0。门禁仍关，签字只能由人。
+
+## 9.7 第五轮：#7/#8/#9 半链取证，#3 改口被通道失败拦住（2026-11-18）
+
+会话内置产品浏览器，登录态有效；活动 A `house-uat5t1nz`（边界 12 / 分区 3 / 动线 9 / 出入口 7）。归档快照 `docs/evidence/79/walkthrough.json`（本 profile 记录本仍为空）。
+
+| 用例 | 本轮结论 | 证据目录 |
+| --- | --- | --- |
+| #3 改口采纳 | blocked：改口句进会话，模型 provider_error，无候选可对照 | `docs/evidence/79/03/` |
+| #7 说等等 | partial：旧票被顶掉零写，新提案单次应用 0→255；失效 DOM / 提案身份 / revision 响应体缺 | `docs/evidence/79/07/` |
+| #8 刷新/双点/切项目 | partial：撤销后刷新一致零写；受控双点未做；切项目 A 未被改写、B 室内未载入 | `docs/evidence/79/08/` |
+| #9 撤销回读 | partial：Ctrl+Z 回退 255→0 并刷新保留；revision 响应体缺，撤销后未重新应用 | `docs/evidence/79/09/` |
+| #11 导出 | partial：补登记入口启用/禁用矩阵；PDF/效果图/旧云 Run 仍 blocked | `docs/evidence/79/11/` |
+
+计数：pass 1 / partial 8 / blocked 2 / fail 0。仍不判任何 pass；门禁解除只能由人签字。

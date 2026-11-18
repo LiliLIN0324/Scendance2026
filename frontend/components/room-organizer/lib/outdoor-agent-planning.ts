@@ -683,6 +683,42 @@ function seatCandidates(
   return out;
 }
 
+/**
+ * docs/47 A3：footprint 与 soft-avoid 绿地重叠面积的估测值（㎡）。
+ * footprint 是凸四/五边形、绿地环任意，不做多边形裁剪——对 footprint 包围盒 4×4 采样，
+ * 只计 footprint 多边形内部的采样点，按命中比例折算 footprint 面积。
+ * 没传绿地或包围盒不相交时恒为 0：零证据时落位行为与旧首-fit完全一致。
+ */
+const SOFT_COST_SAMPLES = 4;
+function softOverlapCostM2(
+  footprint: PlanPoint[],
+  softs: { ring: PlanPoint[]; bbox: ReturnType<typeof bboxLoose> }[],
+): number {
+  if (!softs.length) return 0;
+  const fb = bboxLoose(footprint);
+  if (!softs.some((s) => bBoxesIntersect(fb, s.bbox))) return 0;
+  const w = fb.maxX - fb.minX;
+  const h = fb.maxY - fb.minY;
+  if (w <= 0 || h <= 0) return 0;
+  let inside = 0;
+  let hits = 0;
+  for (let i = 0; i < SOFT_COST_SAMPLES; i++)
+    for (let j = 0; j < SOFT_COST_SAMPLES; j++) {
+      const p = {
+        x: fb.minX + ((i + 0.5) * w) / SOFT_COST_SAMPLES,
+        y: fb.minY + ((j + 0.5) * h) / SOFT_COST_SAMPLES,
+      };
+      if (!planPointInRing(p, footprint)) continue;
+      inside += 1;
+      if (
+        softs.some((s) => pointInBBox(p, s.bbox) && planPointInRing(p, s.ring))
+      )
+        hits += 1;
+    }
+  if (!inside) return 0;
+  return (hits / inside) * ringAreaM2(footprint);
+}
+
 function gridCandidates(zone: PlanZone): PlanPoint[] {
   const b = box(zone.polygon);
   const grid: PlanPoint[] = [];
@@ -839,6 +875,12 @@ export async function proposeInventoryObjects(
     /** 2026-11-18 用户口径「先设计，用户会告诉你他的想法」：人数/面积粗筛不拦整版，
      *  改由 demandNote 带回卡上，预览照出。 */
     softDemand?: boolean;
+    /** docs/47 A3：hard-block 禁区（水域/围栏，plan 同基准 ENU 环）。物件 footprint
+     *  不得压禁区，与建筑/室内禁区同一套「中心进环或环相交即跳过」判据。 */
+    hardBlocks?: PlanPoint[][] | undefined;
+    /** docs/47 A3：soft-avoid 绿地（plan 同基准 ENU 环）。可摆但有代价——落位评分按
+     *  footprint 与绿地的估测重叠面积计代价，零绿地时行为与旧首-fit完全一致。 */
+    softAreas?: PlanPoint[][] | undefined;
   },
 ): Promise<{
   plan: SitePlanData;
@@ -859,9 +901,14 @@ export async function proposeInventoryObjects(
   const buildings = options?.buildings ?? [];
   // 室内区域（用户手画的 indoor 语义分区）同样是禁区。
   const indoorZones = plan.zones.filter(z => z.environment === "indoor");
+  // docs/47 A3：证据分级进引擎——水域/围栏 hard 块扩进禁区集合；绿地 soft 块只计代价不禁。
+  const hardBlocks = options?.hardBlocks ?? [];
+  const softAreas = options?.softAreas ?? [];
   // 2026-11-14 性能：禁区包围盒预筛——逐候选只对 bbox 相交的少数禁区做环运算（323 栋×900 候选×39 物件的逐顶点环运算实测冻结主线程）。
   const buildingBBoxes = buildings.map(ring => ({ ring, bbox: bboxLoose(ring) }));
   const indoorZoneBBoxes = indoorZones.map(zone => ({ zone, bbox: bboxLoose(zone.polygon) }));
+  const hardBlockBBoxes = hardBlocks.map(ring => ({ ring, bbox: bboxLoose(ring) }));
+  const softAreaBBoxes = softAreas.map(ring => ({ ring, bbox: bboxLoose(ring) }));
   let next = { ...plan, facilities: [...plan.facilities] };
   const used: OutdoorLibraryItem[] = [];
   const capacityShortfall: { zone: string; query: string; requested: number; placed: number }[] = [];
@@ -954,7 +1001,10 @@ export async function proposeInventoryObjects(
       };
     }
     for (let n = Math.min(allocated.length, need.count); n < need.count; n++) {
-      let found: PlanFacility | null = null;
+      // docs/47 A3：绿地代价评分——首个零代价落位即收（与旧首-fit一致，零绿地时行为不变）；
+      // 首选压绿地时继续扫完全表，全都有代价时取代价最小的一格（并列取先出现者）。
+      let best: PlanFacility | null = null;
+      let bestCost = Number.POSITIVE_INFINITY;
       // 2026-11-18 用户指令「agent 能不能智能根据分区摆放物件」：先按用途给语义锚点与朝向，
       // 网格仍作兜底（用途认不出、或语义位置放不下时行为不变）。
       const candidates = zonePlacementCandidates(zone, strategy, { plan: next, material });
@@ -964,7 +1014,7 @@ export async function proposeInventoryObjects(
         ...candidates.map((c) => ({ ...c, rotationDeg: (c.rotationDeg + 90) % 180 })),
       ];
       for (const attempt of attempts) {
-        if (found) break;
+        if (best && bestCost === 0) break;
         const position = attempt.position;
         const rotationDeg = attempt.rotationDeg;
         const facility: PlanFacility = {
@@ -990,9 +1040,25 @@ export async function proposeInventoryObjects(
           if (indoorZoneBBoxes.some(z => pointInBBox(position, z.bbox) && planPointInRing(position, z.zone.polygon))) continue;
           if (buildingBBoxes.some(b => bBoxesIntersect(footprintBBox, b.bbox) && outdoorRingsOverlap(footprint, b.ring))) continue;
           if (indoorZoneBBoxes.some(z => bBoxesIntersect(footprintBBox, z.bbox) && outdoorRingsOverlap(footprint, z.zone.polygon))) continue;
-          found = facility;
+          // docs/47 A3：禁区扩集——水域/围栏 hard 块与建筑/室内同判据，摆位不得进入。
+          if (hardBlockBBoxes.some(b => pointInBBox(position, b.bbox) && planPointInRing(position, b.ring))) continue;
+          if (hardBlockBBoxes.some(b => bBoxesIntersect(footprintBBox, b.bbox) && outdoorRingsOverlap(footprint, b.ring))) continue;
+          const cost = softOverlapCostM2(footprint, softAreaBBoxes);
+          if (!best || cost < bestCost) {
+            best = facility;
+            bestCost = cost;
+          }
+          if (cost === 0) break;
         }
       }
+      // docs/47 A3：避不开绿地时如实注明——不冒充「避让成功」。
+      const found =
+        best && bestCost > 0
+          ? {
+              ...best,
+              notes: `${best.notes}；本区没有完全避开绿地的空位：按代价最小落位，仍与绿地面重叠约${Math.max(1, Math.round(bestCost))}㎡（植被保护/审批需现场核对）。`,
+            }
+          : best;
       if (!found) {
         // 2026-11-17 用户拍板「就硬挤在一起，甲方就会明白放不下了」：硬挤模式下塞到物理极限就停，
         // 差额如实返回；非硬挤（正常间距）仍然整版报错，不静默出半版。
@@ -1005,8 +1071,14 @@ export async function proposeInventoryObjects(
           });
           break;
         }
+        // docs/47 A3：分区与水域/围栏禁区重叠时如实说明——禁区吃掉了可用面积，不是纯放不下。
+        const zoneHitsHardBlock = hardBlockBBoxes.some(
+          (b) =>
+            bBoxesIntersect(bboxLoose(zone.polygon), b.bbox) &&
+            outdoorRingsOverlap(zone.polygon, b.ring),
+        );
         throw new Error(
-          `“${zone.name}”放不下第${n + 1}件“${material.name}”并保留通道与门口；可减数量、选择较小真实物料或调整分区。整版未写入。`,
+          `“${zone.name}”放不下第${n + 1}件“${material.name}”并保留通道与门口${zoneHitsHardBlock ? "；本分区与水域/围栏禁区重叠，物件排不进禁区，实际可用范围比分区小" : ""}；可减数量、选择较小真实物料或调整分区。整版未写入。`,
         );
       }
       next = { ...next, facilities: [...next.facilities, found] };

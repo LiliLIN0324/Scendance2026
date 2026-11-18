@@ -624,3 +624,79 @@ it("2026-11-17 生产实测：贴着建筑外墙走的路线不算穿楼（OSM �
   });
   expect(notes.join(" ")).not.toContain("未命名建筑足迹");
 });
+
+/**
+ * docs/47 A2 轮注的结构性发现（A3 修复）：`water()`/`roadLines()` 挂在外层 adapter 对象上，
+ * 而 hook 经 `bridge.mapContext`→`load()` 拿到的是内层 issued 对象——生产路径
+ * `mapRef.current.water?.()` 恒为 undefined，沿岸/沿线预览永远拿空数组。
+ * react harness 用带 water 的对象冒充所以没拦住；本测走真实 load 管线拦这个洞。
+ */
+it("docs/47 A3：load 返回的内层上下文自带 water/roadLines（hook 生产路径经它取岸线/沿线）", async () => {
+  const ring = (pts: [number, number][]) =>
+    [...pts, pts[0]!].map(([x, y]) => {
+      const p = wgs(x, y);
+      return { lon: p.lng, lat: p.lat };
+    });
+  // 道路两端点在本用例内现算（beforeEach 里的 a/b 不可引用，引用即运行时断链）。
+  const roadA = wgs(-40, -28);
+  const roadB = wgs(40, -28);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            crs: "wgs84",
+            complete: true,
+            warnings: [],
+            elements: [
+              {
+                type: "way",
+                id: 31,
+                geometry: ring([
+                  [-30, 5],
+                  [-5, 5],
+                  [-5, 25],
+                  [-30, 25],
+                ]),
+                tags: { natural: "water", name: "西湖" },
+              },
+              {
+                type: "way",
+                id: 32,
+                geometry: [
+                  { lon: roadA.lng, lat: roadA.lat },
+                  { lon: roadB.lng, lat: roadB.lat },
+                ],
+                tags: { highway: "footway", name: "沿湖人行路" },
+              },
+            ],
+          }),
+        ),
+    ),
+  );
+  const adapter = createOutdoorMapContext();
+  // load 的返回值就是 hook 里 mapRef.current 持有的对象——只对它断言，不走外层冒充。
+  const map = await adapter.load(
+    "project-a",
+    plan,
+    [],
+    true,
+    new AbortController().signal,
+  );
+  const water = map.water?.() ?? [];
+  const lines = map.roadLines?.() ?? [];
+  expect(water).toHaveLength(1);
+  expect(water[0]!.name).toBe("西湖");
+  expect(water[0]!.closed).toBe(true);
+  expect(water[0]!.points.length).toBeGreaterThanOrEqual(4);
+  expect(lines).toHaveLength(1);
+  expect(lines[0]!.name).toBe("沿湖人行路");
+  // 外层旧 API 仍在，不得破坏。
+  expect(adapter.water!()).toHaveLength(1);
+  expect(adapter.roadLines!()).toHaveLength(1);
+  // A3 消费点：内层 layoutEvidence 分档里这片水域在 hard 档。
+  const evidence = map.layoutEvidence?.();
+  expect(evidence?.hard.some((f) => f.name === "西湖")).toBe(true);
+});
