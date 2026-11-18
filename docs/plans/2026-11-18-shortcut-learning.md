@@ -23,7 +23,7 @@
 | 层 | 入口 | 回答的问题 | 当前实现 |
 |---|---|---|---|
 | 设置页 · 快捷键 | 账户中心 → 快捷键 | 「所有键是什么？怎么找？」 | 搜索、模式筛选、平台强调、键帽拆分、空结果恢复 |
-| 画布 · `?` | 画布左上 `? + 当前模式` | 「我现在能按什么？」 | `ShortcutCoach`：`?` 打开、按模式预选、Esc / 遮罩关闭 |
+| 画布 · `?` | 键盘 `?`，地图不新增控件 | 「我现在能按什么？」 | `ShortcutCoach`：`?` 打开、按模式预选、Esc / 遮罩关闭 |
 | 模式 / 失效提示 | 顶部模式、toast | 「为什么没反应？下一步做什么？」 | `onBlocked(reason)` + 去重 toast；modal 打开时画布让路 |
 
 ---
@@ -64,7 +64,9 @@
 - 别名：`cmd` / `command` → `⌘`；`ctrl` / `control` → `Ctrl`；`alt` / `option` → `⌥`；`del` / `delete` → `Delete` / `⌫`；`esc` / `escape` → `Esc`；`return` / `enter`；`pageup` / `pagedown`。
 - 搜不到时给「清除搜索与筛选」，不显示空白。
 
-### 3.4 画布 `?`：先落到当前模式
+### 3.4 画布 `?`：先落到当前模式，不占地图左上
+
+地图左上已经是「搜地点」。不在那里、也不在地图上新增「`?` + 当前模式 + 速查」胶囊。完整参考在左轨「设 → 快捷键」；画布上按 `?` 打开同一套只读浮层。
 
 | 模式 | 判定 | 打开时预选 | 说明 |
 |---|---|---|---|
@@ -99,7 +101,7 @@
 
 - dialog：`role="dialog"`、`aria-modal="true"`、`aria-labelledby`、`tabIndex={-1}`。
 - 复用 `useDialogFocus`：打开时聚焦关闭按钮；Tab / Shift+Tab 在浮层内循环；Esc 关闭；关闭后把焦点还给原来的元素。
-- 入口：`aria-haspopup="dialog"`、`aria-expanded`；平台切换用 `aria-pressed`；筛选按钮用 `aria-pressed`。
+- 平台切换和模式筛选用 `aria-pressed`。地图上没有常驻入口按钮。
 - 画布快捷键在任意 modal 打开时全部让路，避免「浮层里按 Delete 删掉背后物件」。
 
 ---
@@ -118,9 +120,9 @@
 
 ![画布 ? 浮层](assets/2026-11-18-settings/04-canvas-cheatsheet.svg)
 
-- 入口带当前模式，不是孤立问号。
+- 地图不新增常驻入口；左上保持搜地点。按 `?` 打开浮层，先落到当前模式。
 - 浮层：搜索、平台强调、模式筛选、拆分键帽、条件行内、Esc / 遮罩关闭。
-- 右下角示意「拦截说原因」的 toast；浮层只读，不改键位。
+- 右下角示意「拦截说原因」的 toast；浮层只读，不改键位。完整表在设置页。
 
 ### 4.3 模式状态与失效原因
 
@@ -143,19 +145,18 @@
 | `lib/shortcut-catalog.ts` | 多动作拆成独立条目；`G` 仅网格 |
 | `panels/cloud-panel.tsx` | 设置页分区与快捷键入口 |
 | `panels/viewport.tsx` | 文案与模式说明同步 |
-| `app/cloud.css` | 表格、浮层、入口、响应式样式 |
+| `app/cloud.css` | 表格、浮层、响应式样式；地图上没有速查胶囊 |
 
 ### 5.2 验证
 
 - `shortcut-catalog.test.ts`：4 项
 - `shortcut-reference.react.test.tsx`：5 项
-- `shortcut-coach.react.test.tsx`：4 项
+- `shortcut-coach.react.test.tsx`：7 项（含「地图上没有速查胶囊」、遮罩关闭、焦点归还）
 - `use-keyboard-shortcuts.react.test.ts`：50 项
 - `cloud-panel.react.test.tsx`：85 项
-- 合计：5 个文件 / 148 项通过
-- `npm run typecheck`：通过
-- `npm run lint`：0 error；仓库既有 `import/order` / `react-hooks` 警告仍在
-- `npm run build`：成功；3368 个产物扫描，oneplan-icons 违规 0 条
+- 合计：5 个文件 / 151 项通过。这是合入 `origin/main`（`9d7ceff2`）并撤掉地图左上胶囊之后重跑的结果。
+- `git diff --check`：干净。
+- 合并前的 `45e0373f` 上跑过 `typecheck` / `lint`（0 error）/ `build`。合并后的全量 `tsc --noEmit` 在这台环境里仍有约 2185 条既有错误；`shortcut-coach.tsx` 不在其中。`cloud-panel.tsx` 里会话令牌形状、`room-organizer.tsx` 里隐式 `any` 与 `origin/main` 上同一处调用一致，不是这次撤胶囊引入的。
 
 ### 5.3 明确没做
 
@@ -171,6 +172,6 @@
 
 ## 6. 评审时最该看的三个点
 
-1. **入口是否太隐蔽？** 左上 `? + 模式` 是否会和 Agent 球 / 模式胶囊打架；移动端只留 `?` 圆钮是否够。
-2. **模式判定是否符合直觉？** 标注优先于户外、漫游优先于其他；如果同时打开，是否应让用户看到「当前模式」而不是猜。
+1. **入口会不会挡住搜地点？** 不会。地图左上保持搜地点，不放「`?` + 模式 + 速查」。可见的完整参考在设置页；画布只认键盘 `?`。
+2. **模式判定是否符合直觉？** 标注优先于户外、漫游优先于其他；浮层打开后标题下能看到当前模式。
 3. **拦截提示是否吵？** 1.6s 去重是否足够；哪些键应该静默（视图键）已经在实现里排除。

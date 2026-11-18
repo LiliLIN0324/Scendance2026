@@ -66,7 +66,7 @@
   <line x1="68" y1="416" x2="320" y2="416" stroke="#ECE8DF"/>
   <text x="68" y="442" class="tiny teal">反馈</text>
   <text x="68" y="462" class="small muted">执行不提示；拖拽/锁定时说明。</text>
-  <text x="68" y="486" class="tiny faint">入口：画布左上 ? 布置</text>
+  <text x="68" y="486" class="tiny faint">入口：键盘 ? · 布置</text>
   <line x1="68" y1="508" x2="320" y2="508" stroke="#F1EDE5"/>
   <text x="68" y="528" class="code">workbenchMode === layout</text>
   <text x="68" y="544" class="tiny faint">状态来源：建造画布</text>
@@ -96,7 +96,7 @@
   <line x1="378" y1="416" x2="630" y2="416" stroke="#ECE8DF"/>
   <text x="378" y="442" class="tiny orange">反馈</text>
   <text x="378" y="462" class="small muted">同名键用「模式」解释，不叫冲突。</text>
-  <text x="378" y="486" class="tiny faint">入口：画布左上 ? 户外</text>
+  <text x="378" y="486" class="tiny faint">入口：键盘 ? · 户外</text>
   <line x1="378" y1="508" x2="630" y2="508" stroke="#F1EDE5"/>
   <text x="378" y="528" class="code">outdoor2DOpen || takeover</text>
   <text x="378" y="544" class="tiny faint">状态来源：户外地图 / 场地接管</text>
@@ -124,7 +124,7 @@
   <line x1="688" y1="416" x2="940" y2="416" stroke="#ECE8DF"/>
   <text x="688" y="442" class="tiny purple">反馈</text>
   <text x="688" y="462" class="small muted">Esc 先取消当前一笔，再退出工具。</text>
-  <text x="688" y="486" class="tiny faint">入口：画布左上 ? 标注</text>
+  <text x="688" y="486" class="tiny faint">入口：键盘 ? · 标注</text>
   <line x1="688" y1="508" x2="940" y2="508" stroke="#F1EDE5"/>
   <text x="688" y="528" class="code">planAnnot.drawMode !== off</text>
   <text x="688" y="544" class="tiny faint">状态来源：标注绘图</text>
@@ -157,7 +157,7 @@
   </g>
   <text x="998" y="440" class="tiny blue">仍可用</text>
   <text x="998" y="460" class="small muted">撤销 / 重做 / Esc；按 Esc 退出漫游。</text>
-  <text x="998" y="486" class="tiny faint">入口：画布左上 ? 漫游</text>
+  <text x="998" y="486" class="tiny faint">入口：键盘 ? · 漫游</text>
   <line x1="998" y1="508" x2="1250" y2="508" stroke="#F1EDE5"/>
   <text x="998" y="528" class="code">walkthroughActive</text>
   <text x="998" y="544" class="tiny faint">状态来源：一人称漫游</text>
@@ -192,7 +192,7 @@
   <line x1="1308" y1="424" x2="1532" y2="424" stroke="#ECE8DF"/>
   <text x="1308" y="448" class="tiny gray">反馈</text>
   <text x="1308" y="468" class="small muted">顶部持续说明「只看不改」，并提供切回布置。</text>
-  <text x="1308" y="490" class="tiny faint">入口：画布左上 ? 评审</text>
+  <text x="1308" y="490" class="tiny faint">入口：键盘 ? · 评审</text>
   <line x1="1308" y1="508" x2="1532" y2="508" stroke="#F1EDE5"/>
   <text x="1308" y="528" class="code">workbenchMode !== layout</text>
   <text x="1308" y="544" class="tiny faint">状态来源：评审 / 执行</text>
