@@ -333,6 +333,15 @@ describe('activity operations in the delivery panel', () => {
     await settled();
   });
 
+  it('shows the archive surfaces on a layout that has no profile and no tasks', () => {
+    render(<EventOperationsPanel layout={makeLayout()} disabled={false} onUpdate={vi.fn()}/>);
+    expect(screen.getByRole('group', { name: '活动概览' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: '活动档案' })).toBeTruthy();
+    expect(screen.getByText('尚未创建')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '下载当天执行包' })).toBeTruthy();
+    expect(screen.getByText('粘贴材料起草流程单')).toBeTruthy();
+  });
+
   it('shows only a saved source brief and opens the original form', () => {
     const open = vi.fn();
     const view = render(<EventOperationsPanel layout={makeLayout()} disabled={false} onUpdate={vi.fn()} onOpenBrief={open} briefState={{ brief: INITIAL_BRIEF, ready: true, error: null, hasSavedBrief: false }}/>);

@@ -547,4 +547,35 @@ describe('V5 异步载入版本守卫', () => {
     expect(layer.group.parent?.getObjectByName('plan-model-preview')?.children).toHaveLength(0);
     layer.dispose();
   });
+
+  it('setBatchPreview 画半透明体块，不进已落模型，清空并 dispose 后摘组', () => {
+    const parent = new THREE.Scene();
+    const layer = createPlanModelLayer({ parent, props: [], metrics: { width: 100, depth: 60 }, isDisposed: () => false });
+    layer.group.position.set(3, 0, -4);
+    const previews = [
+      prop('__arrange_0', { x: 60, z: 30, width: 2, depth: 2, rotationDeg: 90 }),
+      prop('__arrange_1', { x: 70, z: 30, width: 2, depth: 2, rotationDeg: 270 }),
+    ];
+    layer.setBatchPreview(previews);
+    const batch = parent.getObjectByName('plan-model-preview-batch');
+    expect(batch).toBeTruthy();
+    expect(batch?.position.x).toBe(3);
+    expect(batch?.position.z).toBe(-4);
+    const bodies = batch?.children.filter(child => child instanceof THREE.Mesh) ?? [];
+    expect(bodies).toHaveLength(2);
+    const material = (bodies[0] as THREE.Mesh).material as THREE.MeshBasicMaterial;
+    expect(material.transparent).toBe(true);
+    expect(material.opacity).toBeCloseTo(0.28);
+    expect(material.depthWrite).toBe(false);
+    expect((bodies[0] as THREE.Mesh).rotation.y).toBeCloseTo(Math.PI / 2);
+    expect(layer.group.children).toHaveLength(0);
+    layer.group.position.set(8, 0, 1);
+    layer.setBatchPreview(previews);
+    expect(batch?.position.x).toBe(8);
+    expect(batch?.children.filter(child => child instanceof THREE.Mesh)).toHaveLength(2);
+    layer.setBatchPreview([]);
+    expect(batch?.children).toHaveLength(0);
+    layer.dispose();
+    expect(parent.getObjectByName('plan-model-preview-batch')).toBeUndefined();
+  });
 });

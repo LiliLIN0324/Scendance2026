@@ -5,6 +5,7 @@ export const eventOperationPhases = ['preparation', 'setup', 'event', 'teardown'
 export const eventOperationsLimits = {
   tasks: 500, title: 120, objectIds: 500, objectId: 128,
   ownerName: handoffLimits.ownerName, contractorName: handoffLimits.ownerName,
+  contactName: handoffLimits.ownerName, contactPhone: 32, zoneId: 128,
   acceptance: handoffLimits.acceptance, evidenceNote: handoffLimits.evidenceNote,
 } as const;
 
@@ -25,6 +26,13 @@ export const eventOperationTaskSchema = z.strictObject({
   plannedEndAt: timeSchema.nullable().default(null),
   ownerName: z.string().trim().max(eventOperationsLimits.ownerName).default(''),
   contractorName: z.string().trim().max(eventOperationsLimits.contractorName).default(''),
+  /** 现场对接人与电话：本地联络信息，只用于当天执行；缺省即未记录，不推测。 */
+  contactName: z.string().trim().min(1).max(eventOperationsLimits.contactName).optional(),
+  contactPhone: z.string().trim().min(3).max(eventOperationsLimits.contactPhone)
+    .regex(/^[+0-9()\-.\s]+$/, '联系方式只能包含数字、空格与 + - ( ) .').optional(),
+  /** 区域编号引用 `floors[].zones[].id`；存在性由布局消费方核对。 */
+  zoneId: z.string().max(eventOperationsLimits.zoneId)
+    .refine(value => value.trim().length > 0, '区域编号不能为空').optional(),
   acceptance: z.string().trim().max(eventOperationsLimits.acceptance).default(''),
   status: z.enum(['todo', 'doing', 'review', 'accepted']).default('todo'),
   objectIds: z.array(objectIdSchema).max(eventOperationsLimits.objectIds)

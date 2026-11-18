@@ -92,6 +92,7 @@ import {
   drawMapEditHighlight,
   drawBuildingLayer,
   drawConflictMarkers,
+  drawArrangePreview,
   drawDraftLayer,
   drawFacilityGhost,
   drawFacilityLayer,
@@ -198,8 +199,8 @@ import {
   type PlanRect,
 } from '../lib/site-plan-facilities';
 import { resolveFacilityTemplate } from '../lib/plan-facility-catalog';
-import { clearPlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from '../lib/plan-facility-drag';
-import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, type PlanCatalogDrag } from '../lib/plan-catalog-drag';
+import { clearPlanFacilityDrag, consumePlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from '../lib/plan-facility-drag';
+import { consumePlanCatalogDrag, getPlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, PLAN_CATALOG_TEXT_PREFIX, readPlanCatalogDrag, type PlanCatalogDrag } from '../lib/plan-catalog-drag';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import {
   FACILITY_GENERATE_POLL_MS,
@@ -302,6 +303,7 @@ import { basemapNativeMaxZoom } from '../lib/basemap-zoom-caps';
 import { planningIcon } from './outdoor-plan-icons';
 import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
+import { ArrangeChoiceList } from './arrange-choice-list';
 import { useAnnotateDrawShortcuts } from '../hooks/use-annotate-draw-shortcuts';
 import { annotateDrawSelectionLabel, resolveAnnotateDrawToolClick } from '../lib/annotate-draw-shortcuts';
 import { applyOutdoorInspectorPanel, type OutdoorInspectorPanel } from '../lib/outdoor-inspector-panels';
@@ -403,7 +405,14 @@ import {
   type PlanZone,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { buildArrangeChoicePage, type ArrangeChoice } from '../lib/arrange-choices';
+import { arrangePreviewKind, buildArrangePreview } from '../lib/arrange-preview';
+import { loadShippedOnlineModels } from '../lib/online-models';
+import { applyModelPrice } from '../lib/plan-bom';
+import { inheritPrice, replaceModelPrice, withModelPrice } from '../lib/price-book';
+import { capabilityForSlug } from '../lib/prop-capabilities';
 import type { PlanSceneObject } from '../lib/plan-item-bridge';
+import { PlanBomPanel } from './plan-bom-panel';
 
 export type CanvasBasemapSource = TdtProbeLayer | ProbePublicSource;
 
@@ -1417,6 +1426,16 @@ export interface PlanEditVisuals {
   selectedFacilityId: string | null;
   /** 2026-11-12 3D 手柄：设施层当前可直接编辑（浏览/选择模式 + 未锁定）；false 时 3D 不挂柄。 */
   facilityEditable: boolean;
+  /** 一句话布置的批量落位预览：3D 画半透明体块，确认前不落库。 */
+  arrangePreview: ReadonlyArray<{
+    templateId: string;
+    name: string;
+    position: PlanPoint;
+    rotationDeg: number;
+    width: number;
+    depth: number;
+    modelOverride?: string;
+  }> | null;
   draft: {
     ring: PlanPoint[];
     ringColor: string;
@@ -1604,6 +1623,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const facilityTemplateRef = useRef<string | null>(null);
   const facilityTemplateObjRef = useRef<PlanFacilityTemplate | null>(null);
   const ghostPointRef = useRef<PlanPoint | null>(null);
+  /** Enter 落位走窗口监听，监听只装一次，真正落位始终读最新的 placeFacilityAt。 */
+  const placeArmedFacilityRef = useRef<(point: PlanPoint) => void>(() => {});
   /** 2026-11-16 门的贴边吸附：悬停算出的落点 / 法线，高亮与落位共用这一份。 */
   const doorSnapRef = useRef<{ point: PlanPoint; rotationDeg: number; zoneId: string; edge: readonly [PlanPoint, PlanPoint] } | null>(null);
   /** 2026-11-16 落位前旋转：R / Shift+R 每次 ±15°，2D 与 3D draft 共用同一个角度。 */
@@ -1896,6 +1917,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     try { localStorage.setItem('scendance:oneplan-grid', value ? '1' : '0'); } catch { /* 隐私模式写不进就算了 */ }
   };
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
+  /** 一句话布置：预览停在画布上，落库才 commitPlan（可一步撤销）。 */
+  const [oneLine, setOneLine] = useState('');
+  const [oneLineBusy, setOneLineBusy] = useState(false);
+  const [arrangePreview, setArrangePreview] = useState<{ label: string; count: number } | null>(null);
+  const arrangePreviewRef = useRef<PlanFacility[] | null>(null);
+  /** 语义三选一：当前页的型号。点一款才写入预览，换一批沿用同一句。 */
+  const [arrangeChoices, setArrangeChoices] = useState<ArrangeChoice[] | null>(null);
+  const arrangeChoicePageRef = useRef(0);
+  const arrangeChoiceTextRef = useRef('');
   /**
    * 2026-11-14 统一右键菜单（用户拍板「右键弹浮窗，不再右键即删」）：
    * - 画布设施（浏览/选择模式点中实体）= 复制 + 层级四项 + 删除；
@@ -2487,6 +2517,180 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onPlanChange?.(next);
     setEditMessage('已重做。');
     draw();
+  }
+
+  function previewArrangeFacilities(facilities: PlanFacility[], label: string) {
+    arrangePreviewRef.current = facilities;
+    setArrangePreview({ label, count: facilities.length });
+    draw();
+    notifyPlanDraftChanged();
+  }
+
+  function clearArrangePreview() {
+    arrangePreviewRef.current = null;
+    setArrangePreview(null);
+    draw();
+    notifyPlanDraftChanged();
+  }
+
+  function clearArrangeChoices() {
+    arrangeChoicePageRef.current = 0;
+    arrangeChoiceTextRef.current = '';
+    setArrangeChoices(null);
+  }
+
+  function confirmArrangePreview() {
+    const facilities = arrangePreviewRef.current;
+    if (!facilities?.length) return;
+    const book = planRef.current.priceBook;
+    commitPlan({
+      ...planRef.current,
+      facilities: [...planRef.current.facilities, ...facilities.map(facility => inheritPrice(facility, book))],
+    });
+    arrangePreviewRef.current = null;
+    setArrangePreview(null);
+    clearArrangeChoices();
+    setOneLine('');
+    setEditMessage(`已落库 ${facilities.length} 件，可一步撤销。`);
+    draw();
+    notifyPlanDraftChanged();
+  }
+
+  function focusArrangeFacilities(facilities: readonly PlanFacility[]) {
+    if (facilities.length === 0) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const facility of facilities) {
+      minX = Math.min(minX, facility.position.x - facility.size.width / 2);
+      maxX = Math.max(maxX, facility.position.x + facility.size.width / 2);
+      minY = Math.min(minY, facility.position.y - facility.size.depth / 2);
+      maxY = Math.max(maxY, facility.position.y + facility.size.depth / 2);
+    }
+    if (![minX, minY, maxX, maxY].every(Number.isFinite)) return;
+    const pad = 2;
+    focusDesignScope([
+      { x: minX - pad, y: minY - pad },
+      { x: maxX + pad, y: minY - pad },
+      { x: maxX + pad, y: maxY + pad },
+      { x: minX - pad, y: maxY + pad },
+    ]);
+  }
+
+  function pickArrangeChoice(slug: string) {
+    const choice = arrangeChoices?.find(item => item.slug === slug);
+    if (!choice) return;
+    previewArrangeFacilities(choice.facilities, choice.name);
+    focusArrangeFacilities(choice.facilities);
+    setEditMessage(`预览：${choice.name} · ${choice.count} 件，确认后落库。`);
+  }
+
+  /**
+   * 能力三选一：观礼 / 摊位 / 宴会套装没接住的句子。
+   * 第一页失败就清掉旧候选；换一批已经到底时保留当前页。
+   */
+  async function runArrangeChoiceCommand(text: string, page: number) {
+    const boundary = planRef.current.boundary;
+    if (page === 0) {
+      const early = buildArrangeChoicePage({ text, boundary, models: [], page: 0 });
+      if (!early.ok && early.reason !== 'empty') {
+        clearArrangePreview();
+        clearArrangeChoices();
+        setEditMessage(early.message);
+        return;
+      }
+    }
+    setOneLineBusy(true);
+    try {
+      const { models } = await loadShippedOnlineModels();
+      const selectedId = selectedFacilityRef.current;
+      const selected = selectedId
+        ? planRef.current.facilities.find(facility => facility.id === selectedId) ?? null
+        : null;
+      const result = buildArrangeChoicePage({
+        text,
+        boundary,
+        ...(selected ? {
+          focus: {
+            x: selected.position.x,
+            y: selected.position.y,
+            width: selected.size.width,
+            depth: selected.size.depth,
+          },
+        } : {}),
+        models: models.map(model => ({
+          slug: model.slug,
+          name: model.name,
+          width: model.width,
+          depth: model.depth,
+          kind: capabilityForSlug(model.slug)?.kind ?? 'none',
+        })),
+        page,
+      });
+      if (!result.ok) {
+        if (!result.keepCurrent) {
+          clearArrangePreview();
+          clearArrangeChoices();
+        }
+        setEditMessage(result.message);
+        return;
+      }
+      clearArrangePreview();
+      arrangeChoicePageRef.current = page;
+      arrangeChoiceTextRef.current = text;
+      setArrangeChoices(result.choices);
+      setEditMessage(result.message);
+    } catch {
+      setEditMessage('物料库读取失败，稍后再试。');
+    } finally {
+      setOneLineBusy(false);
+    }
+  }
+
+  /** 一句话布置：观礼区 / 摊位带 / 宴会套装先出预览；其余能力句给三选一。落库才写 plan。 */
+  async function runOneLineCommand(raw: string) {
+    const text = raw.trim();
+    if (!text || oneLineBusy) return;
+    const kind = arrangePreviewKind(text);
+    if (!kind) {
+      await runArrangeChoiceCommand(text, 0);
+      return;
+    }
+    clearArrangeChoices();
+    if (planRef.current.boundary.length < 3) {
+      clearArrangePreview();
+      setEditMessage(kind === 'suite' ? '先画场地边界，再成套排桌。' : '先画场地边界，再排场景。');
+      return;
+    }
+    setOneLineBusy(true);
+    try {
+      const { models } = await loadShippedOnlineModels();
+      const current = planRef.current;
+      const result = buildArrangePreview(text, {
+        boundary: current.boundary,
+        facilities: current.facilities,
+        ...(current.buildings ? { buildings: current.buildings } : {}),
+      }, models.map(model => ({
+        slug: model.slug,
+        name: model.name,
+        width: model.width,
+        depth: model.depth,
+        bucket: model.bucket,
+      })));
+      if (!result.ok) {
+        clearArrangePreview();
+        setEditMessage(result.message);
+        return;
+      }
+      previewArrangeFacilities(result.facilities, result.label);
+      setEditMessage(result.message);
+      setOneLine('');
+    } catch {
+      setEditMessage('物料库读取失败，稍后再试。');
+    } finally {
+      setOneLineBusy(false);
+    }
   }
 
   /**
@@ -3128,6 +3332,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           });
         }
       }
+      // 一句话布置的落位预览（不落库、不进 undo，确认后才写 plan）。
+      const arrangeGhost = arrangePreviewRef.current;
+      if (arrangeGhost?.length) drawArrangePreview(planCtx, arrangeGhost, viewport);
       // P2-i：选中设施的可直接拖拽手柄（四角改尺寸 + 顶部旋转）；锁定设施层或非浏览模式不画。
       // 2026-11-12 B2：选择（select）模式同样可用（OnePlan Selection tool 下也能旋转/改尺寸）。
       const selectedForHandles = selectedFacilityRef.current
@@ -3792,6 +3999,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         rotatePendingFacility(event.shiftKey ? -15 : 15);
         return;
       }
+      // 待放设施：Enter 按当前幽灵位置落下。单击、拖动松手同一条路；以前 Enter 不提交，幽灵一直停着。
+      if (
+        event.key === 'Enter'
+        && modeRef.current === 'facility'
+        && !inField
+        && !target?.isContentEditable
+        && !event.ctrlKey && !event.metaKey && !event.altKey
+      ) {
+        const point = ghostPointRef.current;
+        if (!point || !onPlanChange) return;
+        event.preventDefault();
+        placeArmedFacilityRef.current(point);
+        return;
+      }
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
@@ -4241,7 +4462,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       commitPlan({
         ...current,
         zones: [...current.zones, ...zones.map(zone => ({ ...zone, ...activeLevelStamp() }))],
-        facilities: [...current.facilities, ...facilities.map(facility => ({ ...facility, ...activeLevelStamp() }))],
+        facilities: [...current.facilities, ...facilities.map(facility => inheritPrice({ ...facility, ...activeLevelStamp() }, current.priceBook))],
         routes: [...current.routes, ...routes.map(route => ({ ...route, ...activeLevelStamp() }))],
         nodes: [...current.nodes, ...nodes.map(node => ({ ...node, ...activeLevelStamp() }))],
       });
@@ -4316,7 +4537,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     addFacility: (facility: PlanFacility) => {
       const current = planRef.current;
       if (current.facilities.some(f => f.id === facility.id)) return false;
-      commitPlan({ ...current, facilities: [...current.facilities, { ...facility, ...activeLevelStamp() }] });
+      commitPlan({ ...current, facilities: [...current.facilities, inheritPrice({ ...facility, ...activeLevelStamp() }, current.priceBook)] });
       return true;
     },
     /** M5：单条设施删除；不存在回 false。 */
@@ -4495,6 +4716,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 2026-11-12 3D 手柄：把选中设施与可编辑态透出，3D 侧只画柄不拷贝编辑逻辑。
         selectedFacilityId: selectedFacilityRef.current,
         facilityEditable: !!onPlanChange && !layerLocked('facility') && (modeRef.current === 'view' || modeRef.current === 'select'),
+        arrangePreview: arrangePreviewRef.current?.map(facility => ({
+          templateId: facility.templateId,
+          name: facility.name,
+          position: facility.position,
+          rotationDeg: facility.rotationDeg,
+          width: facility.size.width,
+          depth: facility.size.depth,
+          ...(facility.modelOverride ? { modelOverride: facility.modelOverride } : {}),
+        })) ?? null,
         draft: {
           ring,
           ringColor: mode === "zone"
@@ -5705,13 +5935,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         commitPlan({
           ...current,
           facilities: current.facilities.map(f => f.id === target.id
-            ? {
+            ? replaceModelPrice({
               ...f,
               templateId,
               modelOverride,
               size: { width: template.width, depth: template.depth },
               ...activeLevelStamp(),
-            }
+            }, current.priceBook, modelOverride)
             : f),
         });
         selectFacility(target.id);
@@ -5733,7 +5963,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(result.issue.message);
       return;
     }
-    commitPlan({ ...current, facilities: [...current.facilities, { ...result.value, ...(modelOverride ? { modelOverride } : {}), ...activeLevelStamp() }] });
+    commitPlan({
+      ...current,
+      facilities: [...current.facilities, inheritPrice(
+        { ...result.value, ...(modelOverride ? { modelOverride } : {}), ...activeLevelStamp() },
+        current.priceBook,
+      )],
+    });
     selectFacility(result.value.id);
     const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
     const angle = facilityRotationRef.current;
@@ -5743,6 +5979,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     draw();
     notifyPlanDraftChanged();
   }
+  placeArmedFacilityRef.current = (point) => { placeFacilityAt(point); };
 
   /**
    * P2-i：设施改名/备注之外，接旋转（度）与尺寸（宽×深，米）——面板输入与画布手柄共用，
@@ -5772,9 +6009,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         ? normalizeFacilitySize(requestedSize, f.templateId, { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }, modelOverride)
         : f.size;
       const rotationDeg = patch.rotationDeg !== undefined ? ((patch.rotationDeg % 360) + 360) % 360 : f.rotationDeg;
-      return { ...f, ...patch, size, rotationDeg };
+      const next = { ...f, ...patch, size, rotationDeg };
+      // 换型号时单价跟价格书走：新款有价就带上，没有就清掉旧款的价。
+      return modelChanged ? replaceModelPrice(next, current.priceBook, modelOverride) : next;
     });
     commitPlan({ ...current, facilities });
+  }
+
+  /** 按型号一次定价：同款全部改价，并写入 plan.priceBook；一次 commit 可撤销。 */
+  function priceModel(slug: string, unitPrice: number | null) {
+    const current = planRef.current;
+    const facilities = applyModelPrice(current.facilities, slug, unitPrice);
+    const priceBook = withModelPrice(current.priceBook, slug, unitPrice);
+    const next: SitePlanData = { ...current, facilities };
+    if (Object.keys(priceBook).length === 0) delete next.priceBook;
+    else next.priceBook = { ...priceBook };
+    commitPlan(next);
+  }
+
+  /** 报价单抬头写进 plan.quote。空抬头不留空对象。 */
+  function updateQuote(quote: SitePlanData['quote']) {
+    const current = planRef.current;
+    const next: SitePlanData = { ...current };
+    if (quote) next.quote = quote;
+    else delete next.quote;
+    commitPlan(next);
   }
 
   function deleteFacility(id: string) {
@@ -8894,6 +9153,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
     }
+    // 放设施：单击或拖动松手都落在抬起点。
+    // 以前只有几乎没移动的抬起才算单击，拖着幽灵松手被丢掉，物件一直停在幽灵上。
+    if (modeRef.current === 'facility' && event.button === 0) {
+      const release = eventPlanPoint(event);
+      downPxRef.current = null;
+      if (release) handleDrawClick(release.px, release.pt);
+      else if (ghostPointRef.current) placeFacilityAt(ghostPointRef.current);
+      return;
+    }
     // 绘制模式：位移小于阈值的抬起才算单击加顶点。
     const hit = eventPlanPoint(event);
     const down = downPxRef.current;
@@ -9936,6 +10204,56 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <BenchRepeatIcon size={16} aria-hidden />
                         </button>
                       </div>
+                      {/* 一句话布置：先出虚线占地和 3D 体块，落库才写入方案。 */}
+                      <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                        <input
+                          aria-label="一句话布置或改材质"
+                          value={oneLine}
+                          onChange={event => setOneLine(event.target.value)}
+                          onKeyDown={event => {
+                            if (event.key !== 'Enter' || oneLineBusy) return;
+                            event.preventDefault();
+                            void runOneLineCommand(oneLine);
+                          }}
+                          placeholder="一句话：8 个摊位，留 2.4 米通道"
+                          style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 6, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, background: PLANNING_SURFACE.fieldBg, color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.panel }}
+                        />
+                        <button
+                          type="button"
+                          disabled={oneLineBusy || oneLine.trim().length === 0}
+                          onClick={() => void runOneLineCommand(oneLine)}
+                          style={{ ...modeButtonStyle(false), cursor: oneLineBusy ? 'wait' : 'pointer', opacity: oneLineBusy || oneLine.trim().length === 0 ? 0.5 : 1 }}
+                        >
+                          {oneLineBusy ? '排布中…' : '执行'}
+                        </button>
+                      </div>
+                      {arrangeChoices && (
+                        <div style={{ marginTop: 6 }}>
+                          <ArrangeChoiceList
+                            choices={arrangeChoices}
+                            busy={oneLineBusy}
+                            onPick={pickArrangeChoice}
+                            onRefresh={() => {
+                              const text = arrangeChoiceTextRef.current;
+                              if (!text || oneLineBusy) return;
+                              void runArrangeChoiceCommand(text, arrangeChoicePageRef.current + 1);
+                            }}
+                            onCancel={() => {
+                              clearArrangeChoices();
+                              setEditMessage(null);
+                            }}
+                          />
+                        </div>
+                      )}
+                      {arrangePreview && (
+                        <div role="group" aria-label="落位预览" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
+                            预览：{arrangePreview.label} · {arrangePreview.count} 件
+                          </span>
+                          <button type="button" onClick={confirmArrangePreview} style={modeButtonStyle(true)}>落库</button>
+                          <button type="button" onClick={() => { clearArrangePreview(); setEditMessage(null); }} style={modeButtonStyle(false)}>取消</button>
+                        </div>
+                      )}
                       {/* 2026-11-15 用户：位置与尺寸压成一块——标题留在上面（位置 / 尺寸两栏），
                           下面一行就是具体数字；四项都直接可改：纬/经 逆映射回米，W/L 等比缩放。
                           2026-11-15 视觉修正：属性卡实际只有 ~233 CSS px 宽（截图 DPR2），
@@ -10274,6 +10592,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           <span>导入 GLB</span>
                         </button>
                       </div>
+                      <PlanBomPanel
+                        facilities={plan.facilities}
+                        quote={plan.quote}
+                        onPriceModel={priceModel}
+                        onQuoteChange={updateQuote}
+                      />
                       {/* + 布场信息（OnePlan Object setup 镜像：供应商/进撤场/用电）。 */}
                       <button
                         type="button"
@@ -10964,16 +11288,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       onDragOver={event => {
         // 2026-11-16 物料卡直接拖进 2D：按卡片左下角图标对应的设施落位，
         // dragover 读不到 dataTransfer，用拖起时记下的模型宽深先出幽灵。
+        // 自定义 MIME 在部分浏览器的 dragover.types 里不出现，有模块级记录就允许落下。
         const catalogDrag = getPlanCatalogDrag();
         const dragTypes = Array.from(event.dataTransfer.types);
-        if (dragTypes.includes(PLAN_CATALOG_DRAG_MIME)) {
-          if (!catalogDrag) return;
+        if (catalogDrag) {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'copy';
           const hit = eventPlanPoint(event);
           if (hit) previewCatalogDrop(catalogDrag, hit.pt);
           return;
         }
+        if (dragTypes.includes(PLAN_CATALOG_DRAG_MIME)) return;
         // 物料卡没带户外载荷（旧代码/禁用态）时不要退化成上一次的设施模板，否则会落成别的物件。
         if (dragTypes.includes(CATALOG_DRAG_MIME)) return;
         // 2026-11-16 直接从物件库拖进来：dragover 读不到 dataTransfer，
@@ -10993,17 +11318,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // H2-c：拖放提交（与单击提交同一入口）。
         event.preventDefault();
         const types = Array.from(event.dataTransfer.types);
-        if (types.includes(PLAN_CATALOG_DRAG_MIME)) {
-          const catalogDrag = parsePlanCatalogDrag(event.dataTransfer.getData(PLAN_CATALOG_DRAG_MIME)) ?? getPlanCatalogDrag();
-          clearPlanCatalogDrag();
-          if (!catalogDrag) return;
+        const text = event.dataTransfer.getData('text/plain');
+        const catalogDrag = readPlanCatalogDrag(event.dataTransfer.getData(PLAN_CATALOG_DRAG_MIME), text);
+        if (catalogDrag || types.includes(PLAN_CATALOG_DRAG_MIME) || text.startsWith(PLAN_CATALOG_TEXT_PREFIX)) {
+          consumePlanCatalogDrag();
           const hit = eventPlanPoint(event);
-          if (hit) dropCatalogAt(catalogDrag, hit.pt);
+          if (catalogDrag && hit) dropCatalogAt(catalogDrag, hit.pt);
           return;
         }
         if (types.includes(CATALOG_DRAG_MIME)) return;
-        const dragged = event.dataTransfer.getData('text/plain') || getPlanFacilityDrag();
-        clearPlanFacilityDrag();
+        const dragged = text || getPlanFacilityDrag();
+        consumePlanFacilityDrag();
         const hit = eventPlanPoint(event);
         if (!dragged || !hit) return;
         dropFacilityAtPoint(dragged, hit.pt);
@@ -11011,6 +11336,35 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     >
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {arrangePreview && (
+        <div
+          role="group"
+          aria-label="落位预览"
+          onMouseDown={event => event.stopPropagation()}
+          style={{
+            position: 'absolute',
+            left: 16,
+            bottom: 16,
+            zIndex: 5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexWrap: 'wrap',
+            maxWidth: 'min(420px, calc(100% - 32px))',
+            padding: '8px 10px',
+            borderRadius: 8,
+            background: 'rgba(20, 24, 28, 0.88)',
+            color: '#f4f1ea',
+            pointerEvents: 'auto',
+          }}
+        >
+          <span style={{ fontSize: PLANNING_TYPOGRAPHY.hint }}>
+            预览：{arrangePreview.label} · {arrangePreview.count} 件
+          </span>
+          <button type="button" onClick={confirmArrangePreview} style={{ ...modeButtonStyle(true), color: '#f4f1ea' }}>落库</button>
+          <button type="button" onClick={() => { clearArrangePreview(); setEditMessage(null); }} style={{ ...modeButtonStyle(false), color: '#f4f1ea' }}>取消</button>
+        </div>
+      )}
       {measureRulerCard}
       {/* 2026-11-12 用户「地图加载时页面灰扑扑」：底图补瓦片期间顶部居中一枚轻提示，
           全部结算（含失败）即收；pointer-events 无、不挡任何画布交互。 */}
