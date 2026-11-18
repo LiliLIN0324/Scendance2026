@@ -131,3 +131,67 @@ describe("报告携带发布快照（轮次 85）", () => {
     expect(report.text.endsWith(card)).toBe(true);
   });
 });
+
+describe("报告带原始走查标记（轮次 92）", () => {
+  const base = () => ({
+    turns: [],
+    metrics: {
+      totals: {
+        turns: 0,
+        modelCalls: 0,
+        mapCalls: 0,
+        confirmations: 0,
+        appliedCount: 0,
+        firstUsefulFeedbackAvgMs: null,
+        previewAvgMs: null,
+        applyAvgMs: null,
+      },
+      rows: [],
+      text: "turns=0 model=0 map=0 confirm=0 applied=0",
+    },
+  });
+
+  it("只列标过的号、按编号升序，none 不算标过", () => {
+    const report = buildSessionReport({
+      ...base(),
+      now: 1,
+      release: {
+        snapshot: { allGreen: 0 },
+        walkthrough: { asOf: "2026-11-19 第三轮", seen: { 5: "partial", 2: "pass", 7: "none" } },
+      },
+    });
+    expect(report.text).toContain("[走查标记]");
+    expect(report.text).toContain("#2 pass · #5 partial");
+    expect(report.text).not.toContain("#7");
+    expect(report.text).toContain("走查日期：2026-11-19 第三轮");
+  });
+
+  it("一条没标就明说一条都没标，不留空行", () => {
+    const report = buildSessionReport({
+      ...base(),
+      now: 1,
+      release: { snapshot: {}, walkthrough: { seen: {} } },
+    });
+    expect(report.text).toContain("（一条都没标）");
+    expect(report.text).not.toContain("走查日期：");
+  });
+
+  it("云端声明去重升序，空集合写“一条都没声明”", () => {
+    const report = buildSessionReport({
+      ...base(),
+      now: 1,
+      release: { snapshot: {}, cloud: [5, 2, 5] },
+    });
+    expect(report.text).toContain("[云端声明]");
+    expect(report.text).toContain("#2 · #5");
+
+    const empty = buildSessionReport({ ...base(), now: 1, release: { snapshot: {}, cloud: [] } });
+    expect(empty.text).toContain("（一条都没声明）");
+  });
+
+  it("不给 walkthrough/cloud 就不出现这两段（旧报告格式不被动）", () => {
+    const report = buildSessionReport({ ...base(), now: 1, release: { snapshot: {} } });
+    expect(report.text).not.toContain("[走查标记]");
+    expect(report.text).not.toContain("[云端声明]");
+  });
+});

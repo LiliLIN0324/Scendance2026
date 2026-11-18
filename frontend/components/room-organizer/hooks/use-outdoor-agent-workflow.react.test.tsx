@@ -2279,3 +2279,17 @@ it("台账 CSV 落盘：jsdom 里导不出也只回报原因，不抛", () => {
     expect(result).toMatchObject({ ok: false, reason: "no-url-api" });
   }
 });
+
+it("会话报告带上走查原件与云端声明，人可对着报告复核卡片", () => {
+  act(() => {
+    flow.setWalkthroughAsOf("2026-11-19 第三轮");
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const report = flow.sessionReport();
+  expect(report.release?.walkthrough?.asOf).toBe("2026-11-19 第三轮");
+  expect(report.text).toContain("[走查标记]");
+  expect(report.text).toContain("#2 pass");
+  expect(report.text).toContain("#2");
+  expect(report.text).toContain("[云端声明]");
+});

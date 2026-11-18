@@ -2687,13 +2687,25 @@ export function useOutdoorAgentWorkflow(input: {
     const rows = assessAcceptance(
       buildSessionReport({ turns: traceBook.current.list(), metrics }),
     );
+    const book = walkthroughBook.current;
+    const cloud = cloudPass.current;
     const bundle = releaseStatusBundle({
       rows,
       metrics,
-      evidence: bookToRecord(walkthroughBook.current),
-      cloudPass: cloudPass.current,
+      evidence: bookToRecord(book),
+      cloudPass: cloud,
     });
-    return { rows, metrics, bundle };
+    return { rows, metrics, bundle, book, cloud };
+  };
+  /** 报告里带的发布块：快照 + 卡片 + 走查原件 + 云端声明，四处同源。 */
+  const releaseBlock = () => {
+    const { bundle, book, cloud } = currentRelease();
+    return {
+      snapshot: bundle.snapshot,
+      card: bundle.card,
+      walkthrough: bookToRecord(book),
+      cloud,
+    };
   };
   return {
     state,
@@ -2712,26 +2724,22 @@ export function useOutdoorAgentWorkflow(input: {
     metricsSummary: () => summarizeMetrics(metricsBook.current),
     /** 把汇总打到控制台并尽量写进剪贴板；返回值说明剪贴板是否发起成功。 */
     exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
-    /** 轨迹 + 指标一份导出（两份都是白名单字段）；带上发布快照，两轮报告可 diff。 */
-    sessionReport: () => {
-      const { metrics, bundle } = currentRelease();
-      return buildSessionReport({
+    /** 轨迹 + 指标一份导出；带上发布块（快照/卡片/走查原件/云端声明），四处同源。 */
+    sessionReport: () =>
+      buildSessionReport({
         turns: traceBook.current.list(),
-        metrics,
-        release: { snapshot: bundle.snapshot, card: bundle.card },
-      });
-    },
+        metrics: summarizeMetrics(metricsBook.current),
+        release: releaseBlock(),
+      }),
     /** 把会话报告存成本地 .txt（Web 下载）；导不出时只返回 ok:false，不抛。 */
-    downloadReport: () => {
-      const { metrics, bundle } = currentRelease();
-      return downloadSessionReport(
+    downloadReport: () =>
+      downloadSessionReport(
         buildSessionReport({
           turns: traceBook.current.list(),
-          metrics,
-          release: { snapshot: bundle.snapshot, card: bundle.card },
+          metrics: summarizeMetrics(metricsBook.current),
+          release: releaseBlock(),
         }),
-      );
-    },
+      ),
     /** 发布前自检：这份报告能判哪几条验收用例、缺什么信号（不产生“通过”结论）。 */
     acceptanceCheck: () => {
       const rows = assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }));
