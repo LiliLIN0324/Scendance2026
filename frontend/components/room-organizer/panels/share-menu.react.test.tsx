@@ -73,6 +73,10 @@ describe('分享页签', () => {
     expect(screen.queryByTestId('review-link-row')).toBeNull();
     expect(bingo.querySelector('.sc-share-row-label')?.textContent).toBe('送到 Bingo');
     expect(bingo.querySelector('.sc-share-row-status')?.textContent).toBe('待发');
+    const mark = bingo.querySelector('.sc-bingo-badge');
+    expect(mark?.getAttribute('data-visual')).toBe('to-send');
+    expect(mark?.querySelector('[data-part="ring"]')?.getAttribute('stroke')).toContain('55585F');
+    expect(mark?.querySelector('circle')).toBeNull();
     expect(bingo.getAttribute('data-align')).toBe('start');
     expect(dialog.querySelector('img, .sc-publish-plan')).toBeNull();
     expect(dialog.textContent).not.toMatch(/方案预览|生成分享链接|3D 漫游|分享记录|密码|过期/);
@@ -107,12 +111,55 @@ describe('分享页签', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
     fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    const sending = screen.getByRole('button', { name: /送到 Bingo，送出中/ });
+    expect(sending.querySelector('.sc-share-row-status')?.textContent).toBe('送出中');
+    expect(sending.querySelector('.sc-bingo-badge')?.getAttribute('data-visual')).toBe('sending');
+    expect(sending.querySelector('.sc-bingo-badge')?.getAttribute('data-spin-ms')).toBe('1200');
+    expect(sending.querySelector('[data-ring] text')).toBeNull();
+    expect(sending.querySelector('.sc-share-row-label')?.textContent).toBe('送到 Bingo');
     act(() => { epoch += 1; });
     await act(async () => finish({ url: 'https://studio.example/review/old', isCurrent: () => epoch === token }));
     expect(screen.getByRole('status').textContent).toContain('旧链接未复制');
     expect(clipboard).not.toHaveBeenCalled();
     expect(screen.getByText('待发')).toBeTruthy();
     expect(screen.queryByTestId('review-link-row')).toBeNull();
+  });
+
+  it('分享行待评和已回执用同一枚状态圈', () => {
+    const shareId = '11111111-1111-4111-8111-111111111111';
+    const record = {
+      saved: true,
+      status: 'needs-review',
+      projectKey: 'project-1',
+      title: '发布会',
+      shareId,
+      reviewPlanKey: shareId,
+      markedAt: '2026-10-31T00:00:00.000Z',
+    };
+    localStorage.clear();
+    localStorage.setItem('scendance.reviewMark.v1', JSON.stringify([record]));
+    const waitingView = render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
+    openMenu();
+    const waiting = screen.getByRole('button', { name: /送到 Bingo，待评/ });
+    expect(waiting.querySelector('.sc-bingo-badge')?.getAttribute('data-visual')).toBe('awaiting');
+    expect(waiting.querySelector('text')?.textContent).toBe('1');
+    expect(waiting.querySelector('[data-part="bead"]')?.getAttribute('fill')).toContain('96651F');
+    expect(waiting.querySelector('[data-ring] text')).toBeNull();
+    waitingView.unmount();
+
+    localStorage.setItem('scendance-review-share-return-v1', JSON.stringify({
+      version: 1,
+      planKey: shareId,
+      at: '2026-10-31T08:00:00.000Z',
+    }));
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
+    openMenu();
+    const done = screen.getByRole('button', { name: /送到 Bingo，已回执/ });
+    const badge = done.querySelector('.sc-bingo-badge');
+    expect(badge?.getAttribute('data-step')).toBe('check');
+    expect(badge?.querySelector('[data-part="bead"]')).toBeNull();
+    expect(badge?.querySelector('[data-part="ring"]')?.getAttribute('fill')).toBe('none');
+    expect(badge?.querySelector('[data-mark="check"]')?.getAttribute('stroke')).toContain('141416');
   });
 
   it('送到 Bingo 只切审校台，不再生成第二条链接', () => {

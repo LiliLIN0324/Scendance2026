@@ -1308,7 +1308,7 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > span.sc-rail-avatar {
   display: block; width: 28px; height: 28px;
 }
-/* Bingo D4：28px 槽。未选中是开口环；选中是实心圆盘加纸色孔。不铺 warn/err 大圆，也不再叠角标。 */
+/* Bingo D4：28px 槽里的状态圈。选中不铺实心圆盘，开口、警示珠和对勾保持可见。不铺 warn/err 大圆，也不再叠角标。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge {
   display: grid; place-items: center; width: 28px; height: 28px; flex: none;
   box-sizing: border-box; position: relative;
@@ -1316,6 +1316,9 @@ body {
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-bingo-badge svg {
   display: block; width: 28px; height: 28px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-bingo-mark [data-ring] { transform: none; }
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark > svg.sc-rail-hall,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand > .sc-brand-mark svg.sc-rail-hall {
