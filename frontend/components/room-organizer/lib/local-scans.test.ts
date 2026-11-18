@@ -21,7 +21,7 @@ describe('本机扫描登记', () => {
     vi.resetModules();
   });
 
-  it('按文件索引把本机高斯登记进资产表，带上落盘时间与真实尺度', async () => {
+  it('按文件索引把实景扫描登记进资产表，带上落盘时间与真实尺度', async () => {
     const { registerLocalScans } = await loadWithProxy(LOCAL_PROXY);
     const { listAholoAssets } = await import('./aholo-assets');
     expect(registerLocalScans()).toBe(8);
@@ -80,9 +80,11 @@ describe('云端扫描登记', () => {
     expect(westLake?.origin).toBe('cloud');
     expect(westLake?.name).toBe('西湖 0233 · 极速档');
     expect(resolveAholoAssetUrl(WEST_LAKE_FAST)).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}.spz`);
-    // 「本机高斯」在云端语境改名，不再误导访客
+    // 2026-11-19 用户：「没有其他和我的区分，这些都是我们的云资产」——
+    // 索引里的「本机高斯 26932bea」进注册表时换成日期名，线上不看机器前缀与资产号。
     const gauss = listAholoAssets().find(asset => asset.assetId === TEAROOM);
-    expect(gauss?.name).not.toContain('本机');
+    expect(gauss?.name).toMatch(/^实景扫描 \d{2}\/\d{2}$/);
+    expect(gauss?.name).not.toMatch(/本机|云端|高斯/);
   });
 
   it('本机副本优先：能直连本机文件时云端登记只补缺、不覆盖', async () => {

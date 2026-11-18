@@ -205,7 +205,7 @@ export function SpacePanel({
   // 状态交给描边和左上角那颗标签。
   const scanCards = <>
     {scans.length === 0 && <p className="sc-note">还没有实景扫描。上传从 Aholo Reality 下载的 .spz / .ply，或用手机拍一段场地。</p>}
-    {scans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="我的实景扫描">
+    {scans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="实景扫描">
       {scans.map(venue => {
         const thumb = venueThumb(venue);
         const active = venue.assetId === currentScanId;
@@ -318,7 +318,10 @@ export function SpacePanel({
                 {sampleTiles && <SceneGroup label="示例场景" icon={<Images size={15} aria-hidden="true" />} count={samples.length}>
                   {sampleTiles}
                 </SceneGroup>}
-                <SceneGroup label="我的实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length} groupRef={scansRef} action={scanUploadButton}>
+                {/* 2026-11-19 用户：「没有其他和我的区分，这些都是我们的云资产」——
+                    这一段不再叫「我的实景扫描」：库里每一份扫描都是团队的云资产，
+                    名字里的「本机 / 云端」前缀也已在 lib/scan-names.ts 那一道口去掉。 */}
+                <SceneGroup label="实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length} groupRef={scansRef} action={scanUploadButton}>
                   {scanUploadNote}
                   {scanCards}
                 </SceneGroup>

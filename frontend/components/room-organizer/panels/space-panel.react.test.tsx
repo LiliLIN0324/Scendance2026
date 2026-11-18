@@ -84,7 +84,7 @@ describe('SpacePanel', () => {
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} environment={environment(undefined, null, { [framed]: cover })} onPickScan={vi.fn()}/>);
     const grid = document.querySelector('ul.sc-space-samples.sc-scan-cards') as HTMLUListElement;
     expect(grid).toBeTruthy();
-    expect(grid.getAttribute('aria-label')).toBe('我的实景扫描');
+    expect(grid.getAttribute('aria-label')).toBe('实景扫描');
     // 面板打开会先登记扫描库里的云端副本，这里只核「同一张卡网里装下所有场」，
     // 不把索引条数写死在用例里。
     const cards = grid.querySelectorAll('.sc-scan-card');
@@ -148,7 +148,7 @@ describe('SpacePanel', () => {
     uploadScanFile.mockRejectedValue(new Error('连不上本机资产代理。先运行 npm run dev。'));
     render(<SpacePanel layout={makeLayout()} onApply={vi.fn()} variant="card"/>);
     const group = [...document.querySelectorAll('details.sc-scene-group')]
-      .find(node => node.querySelector('.sc-scene-group-label')?.textContent === '我的实景扫描') as HTMLDetailsElement;
+      .find(node => node.querySelector('.sc-scene-group-label')?.textContent === '实景扫描') as HTMLDetailsElement;
     expect(group.open).toBe(false);
     const input = screen.getByTestId('scan-upload-input') as HTMLInputElement;
     Object.defineProperty(input, 'files', { value: [new File(['x'], '场地.ply')], configurable: true });
@@ -173,10 +173,11 @@ describe('SpacePanel', () => {
     expect(labels[0]).toBe('国内案例');
     expect(labels[1]).toBe('经典案例');
     expect(labels).not.toContain('项目中的场景');
-    expect(labels[labels.length - 1]).toBe('我的实景扫描');
+    expect(labels[labels.length - 1]).toBe('实景扫描');
     // 2026-11-17 用户：「每次打开都默认打开了示例场景和我的实景扫描……默认都不要打开」——
-    // 这两段从收起起步；展开与否交给用户点。
-    for (const label of ['示例场景', '我的实景扫描']) {
+    // 2026-11-19 用户：「没有其他和我的区分」——分类行也不再叫「我的实景扫描」。
+    // 两段从收起起步；展开与否交给用户点。
+    for (const label of ['示例场景', '实景扫描']) {
       const group = [...document.querySelectorAll('details.sc-scene-group')]
         .find(node => node.querySelector('.sc-scene-group-label')?.textContent === label) as HTMLDetailsElement | undefined;
       expect(group, `${label} 分类行应该在`).toBeTruthy();
