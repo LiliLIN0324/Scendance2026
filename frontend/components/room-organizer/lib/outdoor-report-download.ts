@@ -57,7 +57,26 @@ export function downloadSessionReport(
   report: SessionReport,
   deps: ReportDownloadDeps = {},
 ): ReportDownloadResult {
-  const filename = reportFilename(report.exportedAt);
+  return downloadTextFile({
+    text: report.text,
+    filename: reportFilename(report.exportedAt),
+    mime: 'text/plain;charset=utf-8',
+    deps,
+  });
+}
+
+/**
+ * 通用版：把一段文本落成文件。报告与台账 CSV 共用这一条路径，
+ * 免得两处各写一套 blob/anchor 逻辑——一套错了另一套看着“能跑”。
+ */
+export function downloadTextFile(input: {
+  text: string;
+  filename: string;
+  mime: string;
+  deps?: ReportDownloadDeps | undefined;
+}): ReportDownloadResult {
+  const deps = input.deps ?? {};
+  const filename = input.filename;
   const create =
     deps.createObjectURL ??
     (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
@@ -67,7 +86,7 @@ export function downloadSessionReport(
 
   let url: string;
   try {
-    url = create(new Blob([report.text], { type: 'text/plain;charset=utf-8' }));
+    url = create(new Blob([input.text], { type: input.mime }));
   } catch {
     return { ok: false, filename, reason: 'create-failed' };
   }

@@ -21,6 +21,7 @@ import {
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
 import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
+import { deferredNote } from "../lib/outdoor-layered-task";
 import { readOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from "../lib/outdoor-design-scope";
 import {
@@ -34,7 +35,19 @@ import { createLiveTurn } from "../lib/outdoor-turn-live";
 import { createMetricsBook, summarizeMetrics } from "../lib/outdoor-metrics-book";
 import { exportMetricsReport } from "../lib/outdoor-metrics-export";
 import { buildSessionReport } from "../lib/outdoor-session-report";
-import { defaultLedger, logReleaseStatus } from "../lib/outdoor-release-status-card";
+import { CASE_IDS, FIXED_DATA_CASES, isAllGreen, logReleaseStatus, type BrowserEvidence } from "../lib/outdoor-release-status-card";
+import { releaseStatusBundle } from "../lib/outdoor-release-bundle";
+import { formatGapList, formatNextGap, missingEvidence } from "../lib/outdoor-release-gaps";
+import { ledgerToCsv } from "../lib/outdoor-release-csv";
+import { downloadLedgerCsv as saveLedgerCsv } from "../lib/outdoor-release-csv";
+import { formatSectionCheck } from "../lib/outdoor-report-sections";
+import {
+  bookToRecord,
+  markSeen,
+  setAsOf,
+  summarizeWalkthrough,
+} from "../lib/outdoor-walkthrough-book";
+import { loadBook, loadCloud, saveBook, saveCloud } from "../lib/outdoor-walkthrough-store";
 import { createTurnTraceBook } from "../lib/turn-trace-log";
 import { downloadSessionReport } from "../lib/outdoor-report-download";
 import { assessAcceptance, formatAcceptanceStatement, summarizeAssessment } from "../lib/outdoor-acceptance-selfcheck";
@@ -164,6 +177,9 @@ class OutdoorStepBlocked extends Error {
     super(message);
   }
 }
+/** 范围未确认时的拦阻文案（两个分支共用一份，避免改一处忘一处）。 */
+const NO_BOUNDARY_NOTICE =
+  "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。";
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
   // 2026-11-18 用户反馈「为什么要写这么多」：应用提示只保留一句真正要紧的动作话；
   // 「边界就在眼前」「下一步是什么」分别由画布和任务卡标题承担，聊天里不重复。
@@ -487,6 +503,10 @@ export function useOutdoorAgentWorkflow(input: {
   // M7.1：一轮对话的轨迹与指标（只打日志与记簿，不影响界面与请求）。
   const metricsBook = useRef(createMetricsBook());
   const traceBook = useRef(createTurnTraceBook());
+  /** 走查记录本：本轮页面里逐条标，标完直接进状态卡（同时落盘，刷新后不丢）。 */
+  const walkthroughBook = useRef(loadBook());
+  /** 云端真跑过的用例号：只能人显式声明，永远不从浏览器结果推。 */
+  const cloudPass = useRef<number[]>(loadCloud());
   const liveTurn = useRef(createLiveTurn({ book: metricsBook.current, traceBook: traceBook.current }));
   const token = useRef<number | null>(null);
   const scopeRef = useRef(input.scope);
@@ -1168,7 +1188,9 @@ export function useOutdoorAgentWorkflow(input: {
     }
     if (turn.action === "search") {
       if (!turn.query?.trim())
-        throw new Error("想在哪个地点做？请给地点名或地址。");
+        throw new Error(
+          "想在哪个地点做？请给地点名或地址。" + deferredNote(priorUserTextRef.current),
+        );
       // 2026-11-17 玉泉鱼跃实测卡点：已确认场地后，一次 search（哪怕只是模型误判）不再
       // 静默清掉 confirmedBoundary——候选照常列出，但换场必须走候选确认卡显式换锚；
       // 用户不理候选直接继续说需求，仍能按已确认范围推进布局。
@@ -1344,7 +1366,7 @@ export function useOutdoorAgentWorkflow(input: {
           completed: stateRef.current.completed.filter((s) => s === "place"),
         });
         status(
-          "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+          NO_BOUNDARY_NOTICE + deferredNote(priorUserTextRef.current),
           "blocked",
         );
         setBusy(false);
@@ -1366,7 +1388,7 @@ export function useOutdoorAgentWorkflow(input: {
             completed: stateRef.current.completed.filter((s) => s === "place"),
           });
           status(
-            "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+            NO_BOUNDARY_NOTICE + deferredNote(priorUserTextRef.current),
             "blocked",
           );
           setBusy(false);
@@ -1454,7 +1476,13 @@ export function useOutdoorAgentWorkflow(input: {
           : "根据已知用途和室内外条件，在活动边界内安排分区。");
         const next = bridge.proposeZones
           ? bridge.proposeZones(plan, stateRef.current.brief)
-          : proposeUseZones(plan, stateRef.current.brief);
+          : proposeUseZones(
+              plan,
+              stateRef.current.brief,
+              undefined,
+              // 轮次 110：「缺分区要分哪些用途」是追问，上一句的后置活接在问句后（不回退成“下一步”）。
+              deferredNote(priorUserTextRef.current),
+            );
         if (needsZones) {
           const names = next.zones.slice(0, 4).map(zone => zone.name).join("、");
           designStep(`分区预览包含 ${next.zones.length} 个区域：${names}${next.zones.length > 4 ? "等" : ""}。`);
@@ -2178,8 +2206,11 @@ export function useOutdoorAgentWorkflow(input: {
     }
   }
   function askForDetails(question: string) {
-    callbacks.current.say(question, true);
-    status("补充对话里的信息后可以继续。", "ask");
+    // 轮次 109：反问只问“现在要什么”，但上一句里已经交代过的后置活（“最后再调通道”）
+    // 不能因为正在追问就消失——气泡与提示条都把它补上，用户才看得出后半句没被吞。
+    const note = deferredNote(priorUserTextRef.current);
+    callbacks.current.say(question + note, true);
+    status("补充对话里的信息后可以继续。" + note, "ask");
   }
   /** 2026-11-17：红卡上的「下一步」——按卡上写的那个动作真正推进，而不是把同一个动作原样重放。 */
   async function applyNoticeFix() {
@@ -2670,6 +2701,37 @@ export function useOutdoorAgentWorkflow(input: {
     autoResumedLogin.current = key;
     void resumeAfterLogin();
   }, [state.pendingLogin, accountReady]);
+  /** 发布状态的现值：报告、卡片、快照都从这里取，避免同一轮各算一遍而说法不一。 */
+  const currentRelease = () => {
+    const metrics = summarizeMetrics(metricsBook.current);
+    const rows = assessAcceptance(
+      buildSessionReport({ turns: traceBook.current.list(), metrics }),
+    );
+    const book = walkthroughBook.current;
+    const cloud = cloudPass.current;
+    const bundle = releaseStatusBundle({
+      rows,
+      metrics,
+      evidence: bookToRecord(book),
+      cloudPass: cloud,
+    });
+    return { rows, metrics, bundle, book, cloud };
+  };
+  /** 报告里带的发布块：快照 + 卡片 + 走查原件 + 云端声明 + 逐条判断，全部同源。 */
+  const releaseBlock = () => {
+    const { bundle, book, cloud } = currentRelease();
+    return {
+      snapshot: bundle.snapshot,
+      card: bundle.card,
+      walkthrough: bookToRecord(book),
+      cloud,
+      // 判断只认台账：`isAllGreen()` 是全局唯一判据，不从标记推。
+      verdicts: bundle.ledger.map((row) => ({ id: row.id, allGreen: isAllGreen(row) })),
+      // 待补清单与面板上那块同源：都是 `missingEvidence()` 的行。
+      gaps: missingEvidence(bundle.ledger).map((gap) => gap.line),
+      sources: { fixedDataIds: FIXED_DATA_CASES, walkthroughAsOf: book.asOf },
+    };
+  };
   return {
     state,
     designSteps,
@@ -2687,10 +2749,31 @@ export function useOutdoorAgentWorkflow(input: {
     metricsSummary: () => summarizeMetrics(metricsBook.current),
     /** 把汇总打到控制台并尽量写进剪贴板；返回值说明剪贴板是否发起成功。 */
     exportMetrics: () => exportMetricsReport(summarizeMetrics(metricsBook.current)),
-    /** 轨迹 + 指标一份导出（两份都是白名单字段）。 */
-    sessionReport: () => buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }),
+    /** 轨迹 + 指标一份导出；带上发布块（快照/卡片/走查原件/云端声明），四处同源。 */
+    sessionReport: () =>
+      buildSessionReport({
+        turns: traceBook.current.list(),
+        metrics: summarizeMetrics(metricsBook.current),
+        release: releaseBlock(),
+      }),
     /** 把会话报告存成本地 .txt（Web 下载）；导不出时只返回 ok:false，不抛。 */
-    downloadReport: () => downloadSessionReport(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })),
+    downloadReport: () =>
+      downloadSessionReport(
+        buildSessionReport({
+          turns: traceBook.current.list(),
+          metrics: summarizeMetrics(metricsBook.current),
+          release: releaseBlock(),
+        }),
+      ),
+    /** 报告段落自检：只数标题在不在（缺段≠没问题，也≠可发布）。 */
+    reportSections: () =>
+      formatSectionCheck(
+        buildSessionReport({
+          turns: traceBook.current.list(),
+          metrics: summarizeMetrics(metricsBook.current),
+          release: releaseBlock(),
+        }).text,
+      ),
     /** 发布前自检：这份报告能判哪几条验收用例、缺什么信号（不产生“通过”结论）。 */
     acceptanceCheck: () => {
       const rows = assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }));
@@ -2698,8 +2781,61 @@ export function useOutdoorAgentWorkflow(input: {
     },
     /** 一行可粘进 PR 的验收声明（固定收尾“三类全绿 0 条，未验部分不作通过”）。 */
     acceptanceStatement: () => formatAcceptanceStatement(assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) }))),
-    /** 把整张发布前状态卡打到控制台（前缀 [outdoor-release]，只读，不产生结论）。 */
-    logReleaseStatus: () => logReleaseStatus({ rows: assessAcceptance(buildSessionReport({ turns: traceBook.current.list(), metrics: summarizeMetrics(metricsBook.current) })), metrics: summarizeMetrics(metricsBook.current), ledger: defaultLedger() }),
+    /** 把整张发布前状态卡打到控制台（前缀 [outdoor-release]，只读，不产生结论）。
+     *  台账只算一次：`bundle.ledger` 同时用于打日志与返回快照，
+     *  所以不会出现“卡片说 1 条、快照说 0 条”。
+     */
+    logReleaseStatus: () => {
+      const { rows, metrics, bundle } = currentRelease();
+      // 用同一份台账再格式一次：日志里那段文本与 `bundle.card` 逐字相同。
+      const card = logReleaseStatus({ rows, metrics, ledger: bundle.ledger });
+      return { ...bundle, card };
+    },
+    /** 待补清单：哪几条还差什么，一条一行（空台账写“没有台账”，不写“无缺口”）。 */
+    releaseGaps: () => formatGapList(currentRelease().bundle.ledger),
+    /** 下一步干哪条：号最小的待补用例 + 先补哪个信号（不下发布结论）。 */
+    nextGap: () => formatNextGap(currentRelease().bundle.ledger),
+    /** 台账 CSV：表头 + 11 行，五列无“结论”（结论只由状态卡算）。 */
+    releaseCsv: () => ledgerToCsv(currentRelease().bundle.ledger),
+    /** 把台账存成本地 .csv（带 BOM）；导不出时只返回 ok:false，不抛。 */
+    downloadLedgerCsv: () =>
+      saveLedgerCsv(currentRelease().bundle.ledger, {
+        asOf: walkthroughBook.current.asOf,
+        today: new Date().toISOString().slice(0, 10),
+      }),
+    /** 逐条标一次走查：返回 null 表示编号不合法（这一标没生效）。 */
+    recordWalkthrough: (id: number, state: BrowserEvidence) => {
+      const next = markSeen(walkthroughBook.current, id, state);
+      if (next === walkthroughBook.current) return null;
+      walkthroughBook.current = next;
+      // 落盘失败（隐私模式/配额）不影响本轮继续标；只是刷新后会丢。
+      saveBook(next);
+      return next;
+    },
+    /** 走查进度一行话（只报“看了几条”，不下“可发布”结论）。 */
+    walkthroughLine: () => summarizeWalkthrough(walkthroughBook.current).line,
+    /** 改走查日期：空串就是“没填”（删字段，不存空串）。 */
+    setWalkthroughAsOf: (value: string) => {
+      const next = setAsOf(walkthroughBook.current, value);
+      walkthroughBook.current = next;
+      saveBook(next);
+      return next;
+    },
+    /** 当前记录本（受控面板需要它才能渲染按压态）。 */
+    walkthroughBook: () => walkthroughBook.current,
+    /** 声明某条用例的云端证据是否真跑过；编号不合法返回 null（不生效）。 */
+    declareCloud: (id: number, pass: boolean) => {
+      if (!CASE_IDS.includes(id)) return null;
+      const next = new Set(cloudPass.current);
+      if (pass) next.add(id);
+      else next.delete(id);
+      cloudPass.current = [...next].sort((a, b) => a - b);
+      // 落盘失败（隐私模式/配额）不影响本轮继续声明；只是刷新后会丢。
+      saveCloud(cloudPass.current);
+      return cloudPass.current;
+    },
+    /** 当前已声明的云端通过用例号（升序）。 */
+    cloudPass: () => cloudPass.current,
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);

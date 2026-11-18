@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：对照表顶部已有“当前状态快照（锚点）”，以后每轮只需与它 diff。main = origin = `10a54bec`；9222 二十四轮不通。下轮：把快照真正跑出来打印一遍（用 node 直接 import 分支上的 `statusCardSnapshot` + 最小 report），确认实际输出与锚点逐字一致；不一致就修锚点。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-status-card.test.ts`。
+- 下一条操作：把“缺分区要分哪些用途”这条追问（来自 `proposeUseZones` 的 throw，提示条只显示异常原文、不走 `askForDetails`）接上后置活：给 `proposeUseZones` 加可选 `deferNote` 并拼在问句后，hook 传入 `deferredNote(priorUserTextRef.current)`；hook **92/92** + planning 23/23 = **115/115**、`tsc` 0 行。**TLS 握手连续第十九轮失败**。待 PR 分支本地 `cd74cf0d`+本轮（领先 main 56 笔）。9222 六十五轮不通。另顺手查了死代码：`lib` 下 369 个模块中只有 10 个无引用，均不属 outdoor 批次。下一条：M3 剩下的 brief 本体（`submitTurn` 里原话入 brief 那段抽成可测函数，先不改行为）。首条命令 `cd frontend; npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -27,7 +27,7 @@
 | M0 固定复现 | 已收口 | 首断点两条已定位并修复：`placeStillPending` 增加 `rangeConfirmed`；复合句不再被 `matchVenueCommand` 整句吃掉。浏览器重验：零 `/assistant/chat`，待恢复槽已写入原句。 |
 | M1 诊断 | 进行中 | 切片 1：`turn-trace.ts` 14 条。切片 2：`turn-trace-log.ts` 7 条。切片 3：`turn-failure-diag.ts` 5 条 + 面板接线（失败卡显示编号与可做动作），面板 30 条 react 测试仍绿。待验：真实失败下的浏览器实证（需登录）；M1b 待 B。 |
 | M2 恢复需求 | 已验收（接回链） | 2a：`pending-brief.ts` 9 条。2b：`shouldResumeBrief` 按边界去重。2c：`outdoor-pending-task.ts` 12 条。2d：`outdoor-task-brief-bridge.ts` 9 条。轮次 14：退回气泡带唯一下一步且零 `/assistant/chat`。**轮次 21（登录态真实浏览器）：搜索目标地点 → 在地图上手画活动范围 → 四点闭合 → 确认并应用这一版，卡片自动前进到「分区用途与室内外依据」，红线已写进画布，静置 14 秒 xhr/fetch = 0。** 遗留：进度行「正在把…写入画布…」在 14 秒后仍显示（滞留守卫还是卡住未判定）；「跨活动不串」未验。 |
-| M3 分流与上下文 | 进行中（解析层已交，接线未做） | 切片 3a：复合句保留整句、设计入槽，8 条测试通过。**轮次 25 实测：在已确认范围后发「无室内，后续是造墙」，xhr/fetch = 0，brief 与卡片均无变化，提示被「登录后继续这次选址」顶掉，也不追问——即这句现在说了等于没说。** 已交付 `lib/instruction-layers.ts`（环境口径 / 后置动作 / 当前指令三层拆分，9 条测试），接线到 brief 是下一步。 |
+| M3 分流与上下文 | 进行中（接线已开第一条） | 切片 3a：复合句保留整句、设计入槽，8 条测试通过。**轮次 25 实测：在已确认范围后发「无室内，后续是造墙」，xhr/fetch = 0，brief 与卡片均无变化，提示被「登录后继续这次选址」顶掉，也不追问——即这句现在说了等于没说。** 已交付 `lib/instruction-layers.ts`（环境口径 / 后置动作 / 当前指令三层拆分，9 条测试）+ `lib/outdoor-layered-task.ts`；**轮次 105 接线第一条**：「定地点」拦阻不再把上一句的「最后再调通道」吞掉，改为补一句“后面还有：…；现在不用决定”（`deferredNote()`，3 条单测 + 1 条 hook 用例），hook 89/89。接线到 brief 本体仍是下一步。 |
 | M4 组合预览 | 离线切片已交付（在线模型路径仍待登录态验收） | 以首条代表需求和直接编辑为中心。轮次 28 取证的登录门已按「确定性路径」拆开：**轮次 69 未登录离线切片——「帮我分区」「200 人市集，签到靠近入口，留出通道」在未登录时不再落登录卡，本地模板直接出分区+物料+流线预览（零模型请求），确认才写入；登录卡只拦白名单外的模型类需求**。已交付前置切片（v4.15.1：范围已确认后不再说“这次选址”）。在线模型路径（九方位 proposeUseZones、局部小改「往东挪 2 米」）仍需登录态验收。 |
 | M5 应用与恢复 | 进行中 | 补版本、应用幂等、撤销及中断验收。**轮次 29**：`ApplyOnce` 票号接在分区确认前（同一 epoch + 基准版本只写一次），6/6。**轮次 30**：刷新恢复改为逐项取舍（旧草稿不再整份丢掉、过期登录等待作废、未确认边界仍以“待确认”回来），9/9；`use-outdoor-agent-workflow.react.test.tsx` 40/40 全过。剩余：双击确认/切换活动/撤销的真实浏览器验收（需登录态）。 |
 | M6 工作台体验 | 已验收（375/768） | 375/768 退回流程端到端已过。**375 卡片收口已修**：根因是 `mobile-shell.css:244` 的手机规则把左栏所有 `.sc-left-heading` 藏了，连同户外卡片标题栏里那枚唯一的关闭钮；改为只给 `.sc-left-drawer.is-outdoor-card` 放回标题栏。真实浏览器复验：关闭钮 32×32、点后 `cardOpen=false`、`railOpen=false`、入口可命中；768 同样通过且无横向溢出。**遗留：卡片打开时入口仍被盖住，只能靠顶部关闭钮退出（不再算缺陷）。480 全流程未跑。** |
@@ -103,6 +103,634 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 19:00 · 自动轮次 110 · 缺分区追问也带上后置活
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 19:00，自动轮次 110
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M3 / 缺分区追问接线 / 已本地提交（未推送）
+开工事实：分支 `cd74cf0d`（上一轮自己提交）、锁无、领先 main 55 笔
+交付：`proposeUseZones()` 新增可选 `deferNote`，缺分区问句后接“后面还有：最后再调通道”；hook 传入 `deferredNote(priorUserTextRef.current)`
+验证（固定数据）：hook **92/92**（新增 1 条：action=zones 时提示条同时含“要分哪些用途”与“后面还有：最后再调通道”）+ planning 23/23 = **115/115**；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第六十五轮 down）
+未完成：M3 的 brief 本体；#2/#5 浏览器；推送仍被拦住
+```
+
+- **先证伪再动手**：这轮先试“接在 offer 的 notes 上”和“接在 `askForDetails` 上”两种假设，均用真实断言跑红（提示条并不显示 notes，也不显示 say 内容），才定位到真身：`proposeUseZones` 的 throw → 提示条只显示异常原文。**没有把未经过证伪的改动留在分支里。**
+- **顺手量了一次死代码**：`lib` 369 个模块中只有 10 个无任何引用（`material-query-evidence`、`outdoor-demo-plan`、`plan-candidate-apply`、`plan-candidate-preview`、`plan-history`、`plan-traffic-preview`、`scene-chat-intent`、`sharing-example`、`site-plan-migrate`、`site-plan-store`），**没有一个是 outdoor 批次的**，未改。
+
+### 2026-11-19 18:00 · 自动轮次 109 · 反问漏斗统一带上后置活
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 18:00，自动轮次 109
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M3 / 反问漏斗接线 / 已本地提交（未推送）
+开工事实：上一轮在工作区留下锁与未提交改动（run=r108），先回退、清锁、拆 worktree，再开 r109；分支 `b26b66be`、领先 main 54 笔
+交付：`askForDetails()` 内统一补 `deferredNote()`（气泡与提示条同句），一次盖住所有反问
+验证（固定数据）：hook **91/91**（新增 1 条，`response("ask", {}, { reply })` 时提示条含“后面还有：最后再调通道”与“现在不用决定”）；layered-task 11/11；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第六十四轮 down）
+未完成：M3 的 brief 本体；#2/#5 浏览器；推送仍被拦住
+```
+
+- **别在分支里逐处接线**：上两轮想“逐条拦阻点接”，结果每次都要先猜中分支；这轮改成接**唯一漏斗** `askForDetails`，一处覆盖全部反问语义。
+- **上一轮没收尾，先收拾再开工**：残锁 + 未提交改动全在本轮开头回退并清掉，没有把上一轮的半成品当成基线往下堆。
+
+### 2026-11-19 17:00 · 自动轮次 107 · 拦阻文案去重 + 第三处拦阻定位
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 17:00，自动轮次 107
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M3 / 去重与定位 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `baac8a0e`、领先 main 53 笔
+交付：`NO_BOUNDARY_NOTICE` 常量（两个分支共用一份）+ 两处仍用 `deferredNote()`
+验证（固定数据）：hook 90/90 + layered-task 11/11 = **101/101**；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第六十三轮 down）
+未完成：第三处拦阻（缺分区追问）未接；brief 本体未接；#2/#5 浏览器；推送仍被拦住
+```
+
+- **没测落地的改动必须回退**：我曾把 `deferredNote` 加在 `askForDetails` 上，但那条路径的文案根本不经过它（实测通知条是 `outdoor-agent-planning.ts:62` 的原文），加了两行也测不到——已完整回退，不留“看起来很拼”的死改动。
+- **先查文案来自哪里，再定接线点**：一个字符串在三处出现不代表一个入口；这轮多花了 4 次尝试才搞清楚“缺分区追问”走的是 `status(turn.reply)`，而不是追问函数。
+
+### 2026-11-19 16:00 · 自动轮次 106 · M3 接线第二条（范围未确认也不吞后置活）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 16:00，自动轮次 106
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M3 / 第二处拦阻接线 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `7237662d`、领先 main 52 笔
+交付：两处同文案的「地图上还没有可核对的活动边界…」拦阻均接 `deferredNote(priorUserTextRef.current)`
+验证（固定数据）：hook **90/90**（新增 1 条，实发带后置从句的句 + 边界为空 → notice 同时含活动边界提示与“后面还有：最后再调通道”）；layered-task 11/11；`tsc` 0 行
+真实浏览器/云端：仍未验（9222 第六十二轮 down）
+未完成：第三处“缺分区”拦阻未接；brief 本体未接；#2/#5 浏览器；推送仍被拦住
+```
+
+- **先复现再改**：第一版测试直接发句，结果走了“确认范围预览已就绪”那条路（摆设默认就有合法边界），跟拦阻无关；改成 `boundary: []` + `mountAtFlowState({stage:"scope"})` 才真正踩到那两处。测试没踩到代码时，绿也是假的。
+- **同一句文案出现两次**：两个分支各写了一遍同一句拦阻；这轮两处都接上了，但“同一句写两遍”本身就是隐患（改一处忘一处），已记进待办。
+
+### 2026-11-19 15:00 · 自动轮次 105 · M3 接线第一条（拦阻不再吞掉后置活）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 15:00，自动轮次 105
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M3 / 拦阻文案接线 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `eb7bb190`、领先 main 51 笔
+问题：`outdoor-layered-task.ts` 从交付起就没有调用点（纯死代码）；“定地点”拦阻直接把上一句丢掉
+交付：`deferredNote(userText)`（有后置从句才补“后面还有：…；现在不用决定”，无则一个字不加）+ hook 在「想在哪个地点做」处接上
+验证（固定数据）：`outdoor-layered-task` **11/11**（新增 3）；hook **89/89**（新增 1，实发“先摆摊位，最后再调通道”后拦阻文案同时含“想在哪个地点做”与“后面还有：最后再调通道”）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第六十一轮 down）
+未完成：另外两个拦阻点（范围未确认、缺分区）未接；brief 本体未接；#2/#5 浏览器；推送仍被拦住
+```
+
+- **先确认“是不是死代码”再谈接线**：`layeredBounceText` 写了却全库零引用，等于给进度贴了个假标签；本轮只接一个真实调用点，不把整块一次性接上。
+- **只补他缺的那半句**：拦阻本身那句（缺什么）不动，只在后面补“后面还有”，且不写“下一步”——下一步是调用方的责任，不归这层编。
+- **批量改 import 会把文件改坏**：我用 `-replace` 整体替换 `import {`，一下把三行 import 都插脏了，靠 `tsc`/测试才发现；以后改 import 只改目标那一行。
+
+### 2026-11-19 14:00 · 自动轮次 104 · M0–M7 验收结论汇
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 14:00，自动轮次 104
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ 汇总 / 验收结论汇 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `e8c234a8`、领先 main 50 笔
+交付：`docs/plans/2026-11-19-outdoor-acceptance-rollup.md`——每批一行（结论 / 可复跑证据 / 缺口与归属）+ 11 条用例逐条一行 + 总判断与最短路径 + 复跑命令
+验证（固定数据）：抽验 3 文件（固定数据证据、状态卡、待补清单）**52/52**；本批整体 70 文件/764 测试（轮次 103 实测）
+真实浏览器/云端：仍未验（9222 第六十轮 down）
+未完成：#2/#5 真实浏览器；#3/#6/#11 已观测未通过；云端 11 条全未验；推送仍被网络拦住
+```
+
+- **把“每批到底验了没有”集中到一页**：以前结论散在进度表、对照表、PR 草稿三处；现在一页齐，且每条都指向可复跑的命令。
+- **汇表里写清“谁去补”**：批次表加一列“缺口与归属”，区分“需 9222 / 需云端授权 / 我可做”——不把球停在自己脚下，也不把球往外一直丢。
+- **不许汇表自动变绿**：本页只汇总已有证据，不产生新结论；总判断仍是“不能发”，并写明“无网络下我能推的只会是打磨”。
+
+### 2026-11-19 13:00 · 自动轮次 103 · 证据文件存在性自检
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 13:00，自动轮次 103
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 证据存在性自检 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `a68f4d1a`、领先 main 49 笔
+交付：`outdoor-fixed-data-evidence.test.ts`（node:fs 验 11 条用例点到的每个 `*.test.ts` 真实存在；用例号在 11 条内；导出表与证据表一致）
+变异验证：向 #1 塞 `no-such-file` → 测试确实红（`#1 → no-such-file.test.ts`），改回即绿
+验证（固定数据）：outdoor/walkthrough **70 文件 / 764 测试全过**；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十九轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **会绿的测试不等于会抓错的测试**：文件存在性测试写完后 3/3 全绿，但那可能只是“碰巧都对”；故意塞一个不存在的文件名看它红不红，红得准确（报出具体是 #1 → 哪个文件）才算真的有用。
+- **两张表不许各写一份**：新增一条用例直接比 `FIXED_DATA_CASES` 与 `Object.keys(FIXED_DATA_EVIDENCE)`，以后谁在后一处相里手写列表，测试会当场拒绝。
+
+### 2026-11-19 12:00 · 自动轮次 102 · 固定数据口径纠正（2 条 → 11 条）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 12:00，自动轮次 102
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 口径纠正 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `6ef4f669`、领先 main 48 笔
+问题：`FIXED_DATA_CASES = [2, 5]` 从轮次 55 写下，依据是“只有这两条能逐条点名”；但对照表从轮次 33 起就给 #1/#3/#4/#6–#11 列了具体测试文件与条数 → 卡片白白把 9 条报成“缺固定数据”
+交付：新增 `FIXED_DATA_EVIDENCE`（用例号 → 实存测试文件名），`FIXED_DATA_CASES` 由它推出
+变化：卡片 `fixedOnly` 2→11；待补清单 #1…“缺：浏览器、云端”；报告 `[报告来源]` 列 11 个编号；**allGreen 仍 0**（缺浏览器/云端）
+验证（固定数据）：outdoor/walkthrough 69 文件 **761/761**；相关 6 文件 178/178；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十八轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住；文件列表还只验“非空”，没验文件存在
+```
+
+- **旧常量是保守，但保守也会错**：当初只写 #2/#5 是为了不虚报，结果把已有的 9 条证据报了缺失；改成“有实存文件才算”，并把依据搬到代码里（`FIXED_DATA_EVIDENCE`），以后改口径只改一处。
+- **改行为就要改旧断言**：三条旧断言（`fixedOnly: 2`、`缺：固定数据、浏览器、云端`、报告来源 `#2 #5`）全部改为新事实，其中报告那条改成从常量拼期望串，不再手抄编号。
+- **对照表里有不存在的文件**：它引了 `indoor-zone-door`，仓库里已无此文件（只有 `plan-door-snap` / `zones`）；本轮用实存的代替，并把“文件存在性还未钉”写进下一条。
+- **不把“有文件”说成“覆盖充分”**：本轮只动“有没有”，不动“够不够”；浏览器、云端仍全部未验，能不能发仍为 0 条全绿。
+
+### 2026-11-19 11:00 · 自动轮次 101 · PR 草稿与可粘贴证据
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 11:00，自动轮次 101
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / PR 草稿 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `388a87a5`、领先 main 47 笔
+交付：`docs/plans/2026-11-19-outdoor-m7-pr-draft.md`（可整段粘贴的 PR 正文）
+验证（固定数据）：本批 outdoor/walkthrough 测试 **69 文件 / 760 测试全过**；`tsc --noEmit` 0 行；对比 main：28 文件 +3322/−32、47 笔
+真实浏览器/云端：仍未验（9222 第五十七轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **推不上去就把“要推什么”写死**：网络是我解不了的，但 PR 正文、验证输出、刻意没做的事都能先写清；等网一通就是复制粘贴，不再现场回忆。
+- **草稿里写清“这不是证据”**：顶部就注明“不要把本文件当作已合并的证据”，避免以后被人当成 PR 已开。
+
+### 2026-11-19 10:00 · 自动轮次 100 · 开跑前检查折叠（三行变一块）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 10:00，自动轮次 100
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 面板折叠整理 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `28f70485`、领先 main 46 笔
+交付：走查区把 `nextLine` / `gapsLine` / `reportLine` 包进默认收起的 `<details aria-label="开跑前检查">`，summary 写「下一步 · 待补 · 报告几段」；三行都没有时不渲染空块；卡片传参不变
+验证（固定数据）：区 19/19（新增 2 条：折叠存在且默认 `open=false`、三行全无时不渲染）+ 与 hook 合跑 107/107；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十六轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **信息不删，只收起来**：三行内容一字未改，只是默认折叠——面板主流程（11 条用例的勾选）先占视野，缺什么点开再看。
+- **“默认收起”要写进断言**：新增案例直接验证 `hasAttribute("open") === false`，否则以后谁加了 `open` 属性也发现不了。
+
+### 2026-11-19 09:00 · 自动轮次 99 · “下一步干哪条” + 并行超时定位
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 09:00，自动轮次 99
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 下一步提示 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `9290f14d`、领先 main 45 笔
+交付：`nextGap()`/`formatNextGap()`（号最小的待补用例 + 先补哪个信号，不下结论）+ hook `nextGap()` + 走查区 `nextLine?`（待补清单上方一行；不传不渲染）
+验证（固定数据）：gaps 10/10、hook 88/88、区 15/15（三文件合计 115/115）；`tsc --noEmit` 0 行
+附带定位（不修）：556 文件全量跑时 30 文件红；上轮那 5 个“只在分支红”的文件错误文本全部是 `Test timed out in 5000ms / 20000ms`（全量里超时 17 次），**不是断言失败** → 属那些文件自己的测试体量，别人所有，不占本轮范围
+真实浏览器/云端：仍未验（9222 第五十五轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **“下一步”只能指路，不能给结论**：`formatNextGap()` 只说“先去补哪个信号”，全齐时也只说“都补齐了…能不能发仍以状态卡为准”。
+- **超时不是断言错**：上轮把 5 个文件归为“并行竞争”是对的，本轮拿到了直接证据（`Test timed out`），以后同类失败先看错误文本再谈修。
+- **自己写的断言也要过一遍**：本轮新加的一条 hook 断言写成 `expect(line).toContain("".length >= 0 ? "先" : "")`，虽然能过，但是废码，已改回 `toContain("先")`。
+
+### 2026-11-19 08:00 · 自动轮次 98 · 合并前总检（基线对照，不是新功能）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 08:00，自动轮次 98
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ 合并前总检 / 已完成（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；本地引用陈旧不可信；分支 `5a1c5813`、领先 main 44 笔
+做法：分支 worktree 跑整个 components/room-organizer（556 文件），干净 main（b9266188）detached worktree 跑同一批 28 个失败文件作基线
+结果（固定数据）：
+· 分支全量：556 文件 → 528 通过 / 28 失败；测试 6679 通过 / 518 失败 / 56 跳过（7253）
+· 基线（main，28 文件）：23 文件失败 / 511 测试失败 / 218 通过
+· 差集：5 文件只在分支失败（agent-chat-capability、project-review-panel、scendance-workspace、event-layout-agent、share）→ **单独跑 5 文件 = 121/121 全过**
+· 判定：并行资源竞争导致，**不归为本轮回归**；我的 27 个切片在可判定范围内 **新增失败 0**
+真实浏览器/云端：仍未验（9222 第五十四轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **“全量一片红”先别修先判归属**：518 个失败看着像天塌了，拿干净 main 跑同一批文件后只剩 5 个可疑，再单独跑就全过——**同一检查必须在基线上复现才叫回归**。
+- **并行敏感是真实风险**：这 5 个文件在 556 文件并行时必挂，意味着 CI 上也可能不稳；已记进下一条待办，不是“与本轮无关”就了事。
+
+### 2026-11-19 07:00 · 自动轮次 97 · 段落自检上屏
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 07:00，自动轮次 97
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 段落自检上屏 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；本地引用陈旧不可信
+合并：无法验证；分支无需变更
+交付：走查区 `reportLine?`（待补清单下一行；不传不渲染、收起不显示）；卡里接 `flow.reportSections()`；区测试 15/15
+验证（固定数据）：区 15/15（新增 3 条）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十三轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住；分支已领先 main 44 笔，建议人拆 PR
+```
+
+- **面板底部不是堆料区**：待补清单 + 段落自检两行已经够，再多会抢主流程；下一条先把这两行合成一段“开跑前检查”。
+- **分支体量本身成了风险**：本地已 27 个切片、领先主干 44 笔且推不上去；进度里写清了建议拆分方式，避免人一次评审 44 笔。
+
+### 2026-11-19 06:00 · 自动轮次 96 · 报告段落自检（只数标题，不判内容）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 06:00，自动轮次 96
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 段落自检 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（**他人分支 `agent/classic-case-basemap-audit-20261118`**），脏文件 52；本地引用陈旧不可信
+合并：无法验证；分支无需变更
+交付：`outdoor-report-sections.ts`（`REPORT_SECTIONS` 六段；`checkReportSections()`；`formatSectionCheck()` 输出“6/6 段齐（内容对不对仍要人看）”或“缺 N 段：[…]。缺段不代表出错…”）+ hook `reportSections()`
+验证（固定数据）：段检 4/4 + hook 套件 91/91；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十二轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住；段检还没上界面
+```
+
+- **“齐”不等于“对”**：段检只在六段标题都在时说“齐”，后半句固定写“内容对不对仍要人看”；缺段也绝不写成“报告有问题”。
+- **建工作目录的坑又踩了一次**：`mklink` 的路径拼接写错，建出一个指向 `...node_modules.Path` 的坏 junction（`ssr=False`）；先 `rmdir` 掉链接再重建才正常。链接目标里永远不该出现 `.Path` 字面量。
+
+### 2026-11-19 05:00 · 自动轮次 95 · 报告来源与固定收尾
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 05:00，自动轮次 95
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 报告来源行 / 已本地提交（未推送）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 48；本地引用陈旧不可信
+合并：无法验证；分支无需变更
+交付：`SessionReportRelease.sources?` → `[报告来源] 固定数据用例：#2 #5 · 走查日期：… · 生成：<ISO>`；带发布块时末行固定“本报告只报事实，不构成发布结论；可发布仍需三类全绿”；hook 的 `releaseBlock()` 带上 sources
+验证（固定数据）：report+hook+download 117/117；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十一轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **改行为就要改旧断言**：轮次 85 那条 `text.endsWith(card)` 本轮红了——新加的收尾行接在卡片后面。没把它删掉了事，改成“卡片原文仍在、且位于收尾行之前”，两边的意图都保住。
+
+### 2026-11-19 04:00 · 自动轮次 94 · 待补清单进报告
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 04:00，自动轮次 94
+批次 / 切片 / 状态：合并不明（fetch/push 仍 TLS 失败）+ M7 / 待补清单进报告 / 已本地提交（未推送）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 47；本地引用：main = origin = `b9266188`（陈旧不可信）
+合并：无法验证；分支无需变更
+交付：`SessionReportRelease.gaps?`；报告多 `[待补清单]（缺口未补前不可发布）`，行直接来自 `missingEvidence()`；hook 的 `releaseBlock()` 一并带上
+验证（固定数据）：report+hook 105/105（新增 4 条）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十轮 down）
+未完成：#2/#5 真实浏览器；推送被网络拦住
+```
+
+- **首跑就报了我一个真错**：钩子用例在**全文**里搜 `#2 `，结果被 `[逐条判断]` 的“#2 全绿”撞上。断言改成先切出待补那一段再比——同一份报告里同一个编号会出现在多个段落，全文搜索一定会误判。
+
+### 2026-11-19 03:00 · 自动轮次 93 · 逐条判断进报告（判据只留一处）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 03:00，自动轮次 93
+批次 / 切片 / 状态：合并不明（fetch/push 仍 TLS 失败）+ M7 / 逐条判断 / 已本地提交（未推送）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 45；本地 main = origin = `b9266188`（引用陈旧不可信）
+合并：无法验证；分支 `merge` 无需变更（`Already up to date`）
+交付：`isAllGreen(row)` 抽为全局唯一判据（`summarizeLedger()` 改调它）；`SessionReportRelease.verdicts`；报告多 `[逐条判断]（由台账算；不从标记推）`；hook `releaseBlock()` 带上 verdicts
+验证（固定数据）：report+hook+status-card+cloud-ledger 146/146（新增 4 条，含“只声明云端仍不是全绿”）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十九轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+推送：**失败**（`schannel: failed to receive handshake`），远端仍是 `286600da`
+```
+
+- **判据只能有一份**：全绿条件原先在 `summarizeLedger` 里手写、报告若要“逐条”很可能再拄一份；先抽 `isAllGreen()` 再让两处都调它，报告里那一列才不会和卡片打架。
+- **“没有台账”不是“都全绿”**：`verdicts: []` 只输出“（没有台账）”。
+
+### 2026-11-19 02:00 · 自动轮次 92 · 报告带原始走查标记与云端声明
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 02:00，自动轮次 92
+批次 / 切片 / 状态：合并（`merge` 报 Already up to date；**fetch 连续 3 次失败，远端未知**）+ M7 / 报告带原件 / 已交付（分支待 PR）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 43；local main = origin = `b9266188`（`div 0/0`，但引用可能陈旧）
+合并：分支 `merge --no-edit main` → Already up to date，仍 `286600da`
+交付：`SessionReportRelease` 加 `walkthrough?` / `cloud?`；报告文本多 `[走查标记]`（只列标过的号，`none` 不算，升序）与 `[云端声明]`（去重升序，空集写“一条都没声明”）；hook 抽 `releaseBlock()` 统四份同源
+验证（固定数据）：报告+hook 97/97（新增 5 条：只列标过/一条没标/云端去重/旧格式不变/hook 端到端）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十八轮 down）
+未完成：#2/#5 真实浏览器；报告里的标记行还没接“该条当前全绿”
+推送：**失败**——`git push` 3 次均 `schannel: failed to receive handshake, SSL/TLS connection failed`；提交已在本地 `928c1808`，远端仍是 `286600da`
+```
+
+- **报告要能自证，不靠信任**：卡片说“全绿 0 条”，人得能对着报告看到“#2 标了 pass、#7 根本没标”；所以报告里带原件（走查簿 + 云端声明），而不是只带结论。
+- **`none` 不是标记**：显式点“未看”只是回到初始态，列进“标过的号”会让人以为看过。
+
+### 2026-11-19 01:00 · 自动轮次 91 · 走查日期能填了
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 01:00，自动轮次 91
+批次 / 切片 / 状态：合并（main 被 PR #165 推进 1 笔，分支已吸收）+ M7 / 日期输入 / 已交付（分支待 PR）
+开工事实：HEAD = `b9266188`，分支 `main`，脏文件 31；local main = origin = `b9266188`（`div 0/0`）
+合并：`merge --no-edit main` 零冲突 → `75f3808b`（分支由 `94daaec7` 前进；此前 35 领先 1 落后 → 现 0 落后）
+交付：`setAsOf(book,value)`（trim；空白删字段而非存空串）；面板 `onAsOf` 输入框（不给就仍是一行文字）；区里返回非空才更新副本；hook `setWalkthroughAsOf()` 即时 `saveBook()`；卡接线
+验证（固定数据）：book+board+section+hook 118/118（新增 7 条）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十七轮 down）
+未完成：#2/#5 真实浏览器；报告还没有“逐条标了什么”的原始记录
+```
+
+- **空串不是“没填”的等价物**：`asOf: ""` 会让 `bookToRecord` 与 `evidenceAsOf` 的判断分叉，所以 `setAsOf` 直接删字段，并有用例盯 `"asOf" in book === false`。
+- **输入框不在组件里裁剪**：面板把原始 `value` 回调给外层，裁剪与落盘只在一处（`setAsOf`），避免两处规则不一致。
+
+### 2026-11-19 00:00 · 自动轮次 90 · 走查日期与待补清单上屏
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 00:00，自动轮次 90
+批次 / 切片 / 状态：合并（Already up to date，连续第四轮无待合）+ M7 / 日期与待补上屏 / 已交付（分支待 PR）
+开工事实：HEAD = `fd725edd`，分支 `main`，脏文件 33；local main = origin = `fd725edd`（`div 0/0`）
+合并：`git merge main` → Already up to date，分支仍 `60f1985e`
+交付：面板 header 下加一行「走查日期：…」（填了原样写，没填写“未填（卡片会沿用对照表上的日期）”）；展开时在面板下方显示 `gapsLine`（`whitespace-pre-line`，不传不渲染）；卡里接 `flow.releaseGaps()`
+验证（固定数据）：面板+区 21/21（新增 5 条）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十六轮 down）
+未完成：#2/#5 真实浏览器；`asOf` 还不能在界面上填
+```
+
+- **“没填”要能一眼看出来**：断言里专盯“未填”那行不含任何 `YYYY-MM-DD`，防止以后改成 `new Date()` 就悄悄冒充走查日期。
+- **不传就不是空壳**：`gapsLine` 缺省时 `queryByLabelText("待补清单")` 必须为 null，而不是渲染一个空 `<p>`。
+
+### 2026-11-18 23:00 · 自动轮次 89 · 「导出 CSV」接到界面
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 23:00，自动轮次 89
+批次 / 切片 / 状态：合并（Already up to date，连续第三轮无待合）+ M7 / 导出按钮 / 已交付（分支待 PR）
+开工事实：HEAD = `fd725edd`，分支 `main`，脏文件 33；local main = origin = `fd725edd`（`div 0/0`）
+合并：`git merge main` → Already up to date，分支仍 `e3fc9b86`
+交付：`outdoor-walkthrough-section.tsx` 加 `onExportCsv?`（不传不渲染，与云端列同一规矩；点导出不改展开态）；卡里接 `flow.downloadLedgerCsv()`；区测试 3 条新增
+验证（固定数据）：区 8/8；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十五轮 down）
+未完成：#2/#5 真实浏览器；按钮未在真实浏览器点过
+```
+
+- **新按钮要能“不存在”**：`onExportCsv` 可缺省，缺省时不渲染——这样调用方没接好时界面不会露一个点了没反应的键。
+- **导出不该顺带改别的状态**：测试专盯“收起状态下点导出，仍收起”，避免把 `setOpen` 误放进导出路径。
+
+### 2026-11-18 22:00 · 自动轮次 88 · CSV 落盘（BOM + 共用下载路径）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 22:00，自动轮次 88
+批次 / 切片 / 状态：合并（Already up to date，无待合）+ M7 / CSV 落盘 / 已交付（分支待 PR）
+开工事实：HEAD = `fd725edd`，分支 `main`，脏文件 31；local main = origin = `fd725edd`（`div 0/0`）
+合并：`git merge main` 报 Already up to date，分支仍在 `382458b3`
+交付：`outdoor-report-download.ts` 抽出 `downloadTextFile()`（报告与 CSV 共用一套 blob/anchor/回收）；`outdoor-release-csv.ts` 加 `downloadLedgerCsv()`（UTF-8 BOM + `text/csv`）；hook 加 `downloadLedgerCsv()`
+验证（固定数据）：csv+download+session 28/28，csv+download+hook 100/100；`tsc --noEmit` 0 行（先报 5 行：未使用 `vi`、`exactOptionalPropertyTypes` 下 `deps?: T` 不收显式 undefined，两处都改掉）
+真实浏览器/云端：仍未验（9222 第四十四轮 down）
+未完成：#2/#5 真实浏览器；按钮还没接到界面
+```
+
+- **`Blob.text()` 会剥掉 BOM**：断言 `text.charCodeAt(0) === 0xfeff` 永远红（拿到的是“编”字的 32534）；要看原始字节 `arrayBuffer()` 的前三个 `EF BB BF`。
+- **`exactOptionalPropertyTypes` 下接口要写 `deps?: T | undefined`**：否则“把可能为 undefined 的变量传进去”直接编译失败。
+
+### 2026-11-18 21:00 · 自动轮次 87 · 台账 CSV（给人逐行填的表）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 21:00，自动轮次 87
+批次 / 切片 / 状态：合并（无待合）+ M7 / 台账 CSV / 已交付（分支待 PR）
+开工事实：HEAD = `fd725edd`，分支 `main`，脏文件 31；local main = origin = `fd725edd`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `f32b465e`
+交付：`outdoor-release-csv.ts`（`ledgerToCsv()`：编号/用例/固定数据/浏览器/云端 五列，**无结论列**；单元格只写 `有|无|pass|partial|none`；`ledgerCsvName()` 带日期） + hook `releaseCsv()`
+验证（固定数据）：CSV 7/7（首跑 1 挂：误以为 `defaultLedger()` 浏览器列全 `none`，实际 #1 是 `partial`）；CSV+hook 88/88；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十三轮 down）
+未完成：#2/#5 真实浏览器；CSV 接到界面按钮
+```
+
+- **导出不是重算**：`BROWSER_EVIDENCE` 里 #1 是 `partial`、#2 是 `none`；测试第一版把“全未验”当成默认值写死，立刻红了。断言改成“拿实际两行进位比对”，比写死一句“全部 none”可靠。
+- **表格里不放结论列**：结论只能由 `summarizeLedger()` 算；表里多一列“是否可发布”就会被人手改。
+
+### 2026-11-18 20:00 · 自动轮次 86 · 待补清单（哪几条还差什么）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 20:00，自动轮次 86
+批次 / 切片 / 状态：合并（无待合）+ M7 / 待补清单 / 已交付（分支待 PR）
+开工事实：HEAD = `8d1b4f15`，分支 `main`，脏文件 30；local main = origin = `8d1b4f15`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `ddf8fd40`
+交付：`outdoor-release-gaps.ts`（`missingEvidence()` 一条一行写清缺固定数据/浏览器/云端；`formatGapList()` 空台账写“没有台账”而非“无缺口”；`missingRows()` 查少了几行）+ hook `releaseGaps()`
+验证（固定数据）：清单 6/6（首跑 1 挂：把 #2 标题手写成“真实搜索”，实际是“两个同名地点”，改用 `case2.title` 自校）；清单+hook 86/86；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十二轮 down）
+未完成：#2/#5 真实浏览器；台账 CSV 导出
+```
+
+- **标题不能手抄**：6 条用例里我凭记忆写了 “#2 真实搜索”，真值是“两个同名地点，地图选中其中一个”。断言改成用 `case2.title` 自校，以后再歪就会红。
+- **空集合的两种含义要分开**：`ledger = []` 是“没算”，不是“齐了”；所以 `formatGapList([])` 只输出“没有台账”。
+
+### 2026-11-18 19:00 · 自动轮次 85 · 报告带发布快照（两轮导出可 diff）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 19:00，自动轮次 85
+批次 / 切片 / 状态：合并（无待合）+ M7 / 报告携带快照 / 已交付（分支待 PR）
+开工事实：HEAD = `788b5288`，分支 `main`，脏文件 17；local main = origin = `788b5288`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `295c96c5`
+交付：`SessionReport.release?: {snapshot, card?}`（可选）；`buildSessionReport()` 给了才追加 `[发布状态快照]` + 单行 JSON + 卡片原文；hook 抽出 `currentRelease()`，`sessionReport` / `downloadReport` / `logReleaseStatus` 共用
+验证（固定数据）：session-report + hook 共 89/89（新增 3 条报告侧、1 条 hook 侧）；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十一轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；快照缺 `asOf`
+```
+
+- **可选字段才能不破旧调用**：`release?` 不给就不出现，旧报告文本逐字不变；`{}` 或 0 条全绿都不能拿来冒充“没算”。
+- **单行 JSON 是为 diff 服务的**：多行格式化看着舒服，但两轮报告贴在一起比时全是噪声，所以强制一行。
+
+### 2026-11-18 18:00 · 自动轮次 84 · 状态卡改用 bundle（返回卡+快照，日志同源）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 18:00，自动轮次 84
+批次 / 切片 / 状态：合并（无待合）+ M7 / 卡与快照同源接线 / 已交付（分支待 PR）
+开工事实：HEAD = `d3d2bc08`，分支就是 `main`，脏文件 10；local main = origin = `d3d2bc08`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `a13762ec`
+交付：hook 的 `logReleaseStatus()` 改为：`releaseStatusBundle({rows, metrics, evidence, cloudPass})` 一次算台账 → 用 `bundle.ledger` 再格式化一次打印 → **返回 `{...bundle, card}`**。hook 新增 1 条：先 0 条，标 #2 浏览器 pass + 声明 #2 云端 → 全绿 1 条，卡片与快照一致
+验证（固定数据）：hook 套件 78/78；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第四十轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；snapshot 写进导出报告
+```
+
+- **“同源”要能拿同一个值验证**：测试里直接断言 `after.snapshot.allGreen === after.allGreen`、且卡片末行与 `bundle.card` 一致，不靠“应该一样”。
+
+### 2026-11-18 17:00 · 自动轮次 83 · 一次算齐（卡片与快照共用一份台账）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 17:00，自动轮次 83
+批次 / 切片 / 状态：合并（无待合）+ M7 / releaseStatusBundle / 已交付（分支待 PR）
+开工事实：HEAD = `3edf35a7`，**分支就是 `main`**（脏文件 6）；local main = origin = `3edf35a7`（`div 0/0`）
+合并：main 无待合；分支 `merge --no-edit main` 零冲突 → `1f540d33`
+交付：`outdoor-release-bundle.ts`（`releaseStatusBundle()`：台账算一次，卡片/快照/全绿/门禁就绪同源；`gateSummaryLine()` 压一行）+ 6 条用例
+验证（固定数据）：新用例 6/6（首跑 1 挂：手撕的 `GateReading` 形状不对，改用 `readGates({})` 表示“三项都没跑”），`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十九轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；bundle 接进 hook
+```
+
+- **同一事实不要算两次**：卡片与快照各自调 `defaultLedger()`，少传一个参数就会在工单里自相矛盾；`releaseStatusBundle()` 的价值就是让这件事不可能发生。
+- **“没跑”的道具不要手撕**：`GateReading` 有 `types/tests/build/verdict/line`，手写假对象容易长得像“跑过且干净”；用 `readGates({})` 表达“三项都没跑”才是真的。
+
+### 2026-11-18 16:00 · 自动轮次 82 · 云端列为空时的提示语（把“空”和“都行”分开）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 16:00，自动轮次 82
+批次 / 切片 / 状态：合并（无待合）+ M7 / 空列提示 / 已交付（分支待 PR）
+开工事实：HEAD = `680a0b13`（`agent/outdoor-copy-pass-1`），脏文件 6；**local main 已等于 origin/main `712b6331`（`div 0/0`）——本轮无待合**
+合并（分支）：`merge --no-edit main` 零冲突 → `3a4491f9`（分支已含主干最新 6 笔）
+交付：`cloudLine()` 在 `pass === 0` 时追加“（要么没跑、要么还没声明）”；只要有 1 条通过，括注自动消失。新增 2 条用例（0 条时包含括注 / 1 条后不包含），连同状态卡与落盘 58/58
+验证（固定数据）：`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十八轮 down）——**声明仍是 0 条**
+未完成：#2 真实搜索、#5 浏览器行为；三者一次返回的 bundle
+```
+
+- **“0 条”是最容易被误读的数字**：它既可能是“没跑”，也可能是“跑了没声明”；把两种原因并列写在同一个括号里，比单独加图例有效。
+
+### 2026-11-18 15:00 · 自动轮次 81 · 云端声明落盘（单独一个键，与记录本互不覆盖）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 15:00，自动轮次 81
+批次 / 切片 / 状态：合并 + M7 / 云端声明落盘 / 已交付（分支待 PR）
+开工事实：HEAD = `fb7e8dc8`（`agent/outdoor-copy-pass-1`），脏文件 29；local main = `d52fefde`，origin/main = `9612c3c2`（落后 6 笔）
+合并：`git branch -f main origin/main` → `div 0/0`；分支 `merge --no-edit main` 过程中 PowerShell 报了 `fatal: Out of memory, malloc failed`（同时 `git rev-parse` 也失败），**但复查发现合并提交已生成**（`56974606`，2 parents、main 为祖先、工作区干净）——不重复跑合并，只重建了 node_modules junction
+交付：`outdoor-walkthrough-store.ts` 新增 `CLOUD_KEY` / `encodeCloud` / `decodeCloud` / `saveCloud` / `loadCloud`（去重升序、只留 1..11、坏数据当空、写失败返回 false）；hook 开局 `useRef(loadCloud())`，`declareCloud()` 成功即 `saveCloud()`。用例：store 13/13（新增 5，含“两个键互不覆盖”）、hook + 面板 85/85（新增 1：标完 `localStorage` 里有 `pass:[4]`，撤回后 `[]`）
+验证（固定数据）：`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十七轮 down）——**声明仍为空**
+未完成：#2 真实搜索、#5 浏览器行为；空云端列的提示语
+```
+
+- **OOM 报错的合并未必没成**：先 `git log -1 --parents` 看是否已生成合并提交，再决定要不要重跑——重跑可能把干净状态弄成冲突。
+- **两类事实分两个键**：走查记录本（看了哪几条）与云端声明（哪几条真跑过）语义不同，合存一份以后改格式会互相影响。
+
+### 2026-11-18 14:00 · 自动轮次 80 · 面板第四个键：云端（声明/撤回）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 14:00，自动轮次 80
+批次 / 切片 / 状态：合并 + M7 / 云端声明入面板 / 已交付（分支待 PR）
+开工事实：HEAD = `fb7e8dc8`（`agent/outdoor-copy-pass-1`），脏文件 23；local main = `a3bff73b`，origin/main = `d52fefde`（落后 8 笔）；`.temp` 目录再次不存在
+合并：`git branch -f main origin/main` → `main = origin = d52fefde div 0/0`；分支 `merge --no-edit main` 零冲突 → `22c62cfc`
+交付：`outdoor-walkthrough-board.tsx` 可选 `cloudPass` / `onCloud`——不传 `onCloud` 就还是三键（默认界面一字不变），传了每行多一个“云端”键（`aria-label="用例 N 云端是否已跑"`，点击切换）；`outdoor-walkthrough-section.tsx` 透传（用条件展开避开 `exactOptionalPropertyTypes`）；工作流卡把 `flow.cloudPass()` / `flow.declareCloud()` 接上。新增 3 条用例：没传就三键、已声明才是按下态、点一下声明再点撤回
+验证（固定数据）：面板 8 + 走查区 5 + hook 69 = 82/82；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十六轮 down）——**键有了，声明仍是空的**
+未完成：#2 真实搜索、#5 浏览器行为；云端声明落盘
+```
+
+- **新键必须“不传就不渲染”**：默认三键的旧断言一条都没改，说明这个扩展真的向后兼容。
+- **安全键与事实键并排但不等价**：“云端”键只记“跑过”，能不能发布仍由三类全绿算；提示语直接写“只有它不会让全绿变成 1”。
+
+### 2026-11-18 13:00 · 自动轮次 79 · 云端声明接到 hook（人点才算，仍不自己凑绿）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 13:00，自动轮次 79
+批次 / 切片 / 状态：合并 + M7 / 云端声明入 hook / 已交付（分支待 PR）
+开工事实：HEAD = `3c03017d`（`agent/outdoor-clear-zone`），脏文件 17；local main = `139f42c4`，origin/main = `a3bff73b`（落后 4 笔）；`.temp` 目录已不存在（前一轮清理掉了）
+合并：main 未被 checkout → `git branch -f main origin/main` → `main = origin = a3bff73b div 0/0`；分支 `merge --no-edit main` 零冲突 → `8de9c906`
+交付：hook 新增 `cloudPass` ref 与 `declareCloud(id, pass)`（编号不在 1..11 返回 `null`、不生效；返回升序数组）/`cloudPass()`；`logReleaseStatus()` 改用 `defaultLedger(record, cloudPass.current)`。hook 套件新增 1 条：开场空、声明 #2 → `[2]`、99 不生效、撤回→ `[]`
+验证（固定数据）：hook 套件 69/69；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十五轮 down）——**声明入口有，声明仍然为空，因为没人真跑过云端**
+未完成：#2 真实搜索、#5 浏览器行为；云端声明接到面板键
+```
+
+- **“有入口”不等于“有证据”**：本轮只把声明通道打通，默认值仍为空；进度里必须写清“声明仍为空”而不是“云端已支持”。
+- **`.temp` 也会被清**：写锁前先 `New-Item -ItemType Directory -Force .temp`，否则锁文件根本没落盘，并发保护形同虚设。
+
+### 2026-11-18 12:00 · 自动轮次 78 · 云端那一列可以声明了（但不许自己变绿）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 12:00，自动轮次 78
+批次 / 切片 / 状态：M7 / 云端列可声明 / 已交付（分支待 PR）
+开工事实：HEAD = `60d6871d`（`agent/outdoor-objects-packed`），脏文件 35；**local main = origin = `139f42c4`（`div 0/0`）——本轮无需合并**
+交付：`ledgerFromEvidence(fixedDataIds, evidence?, cloudPassIds?)` / `defaultLedger(evidence?, cloudPassIds?)`：云端只接“显式给的号”，不在 1..11 的丢掉；未声明整列 `none`。新增 `outdoor-release-cloud-ledger.test.ts` 5 条，钉住三种情形：只声明云端 → `allGreen` 仍 0；云端 + 浏览器 pass + 固定数据 → 计 1 条（卡末行也写 1）；夹带 0/12 → 不凭空长行
+验证（固定数据）：云端台账 5/5 + 状态卡 38/38 = 43/43；`tsc --noEmit` 0 行
+过程中两次红：① 写盘时首行引号坏了（`from "vitest';`），vitest 直接报 `[PARSE_ERROR] Unterminated string`；② 断言默认常量里 #2 是 `partial`，实际是 `none`（`BROWSER_EVIDENCE` 里 #2、#5 都是无证据）——改断言不改常量
+真实浏览器/云端：仍未验（9222 第三十四轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；云端声明入口接到 hook/面板
+```
+
+- **“可声明”与“可推出”要分开**：云端那一列只能人来声明；只声明云端、浏览器没 pass 时全绿仍为 0，这样卡就不可能被参数“凑绿”。
+- **默认常量不是凭印象**：`BROWSER_EVIDENCE` 里 #2/#5 是 `none`（无任何证据），#2 的固定数据来自 `outdoor-venue-candidates`，两者不是一回事。
+
+### 2026-11-18 11:00 · 自动轮次 77 · 走查区抽件（能单测的开关 + 面板）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 11:00，自动轮次 77
+批次 / 切片 / 状态：合并 + M7 / 走查区抽件 / 已交付（分支待 PR）
+开工事实：HEAD = `60d6871d`（`agent/outdoor-objects-packed`，别人的分支），脏文件 23；local main = `7731f59b`，origin/main = `139f42c4`（落后 2 笔）
+合并：main 未被 checkout → `git branch -f main origin/main`（已 fetch 过）→ `main = origin = 139f42c4 div 0/0`；分支 `merge --no-edit main` 零冲突 → `c134fec2`
+交付：新 `outdoor-walkthrough-section.tsx`（开关 + 面板 + 显示用副本，`onMark` 返回非空才 `setBook`）+ 5 条用例；`outdoor-workflow-card.tsx` 从 18 行内联块减为 4 行挂载
+验证（固定数据）：区/面板/hook 三文件 77/77（首跑 67 挂，原因是把 import 改成了 `OutdoorWalkthroughSection` 而定义没引进来，`ReferenceError`；补上 import 后全绿），`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十三轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；台账与记录本联动
+```
+
+- **800 行的卡里那块状态机必须抽出来**：抽成 40 行的区之后，“展开→点→按压态”才可能在 5 秒内单测完。
+- **删旧引而没加新引的报错长这样**：`ReferenceError: X is not defined` 在组件里，但根因在文件头的 import 行——先看 import 再看 JSX。
+
+### 2026-11-18 10:00 · 自动轮次 76 · 合并（含一次真冲突）+ 面板接进工作流卡
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 10:00，自动轮次 76
+批次 / 切片 / 状态：合并 + M7 / 面板接线 / 已交付（分支待 PR）
+开工事实：HEAD = `ad675228`（`agent/outdoor-designer-draft`，别人的分支），脏文件 14；local main = `d1d01673`，origin/main = `7731f59b`（落后 5 笔）
+合并一：`git fetch origin main:main` 撞上 `schannel: SSL/TLS handshake failed`（网络），改用 `git branch -f main origin/main`（首次 fetch 已把 origin/main 拉下来）→ `main = origin = 7731f59b div 0/0`
+合并二：分支 `agent/outdoor-m7-walkthrough-wire`（自 `agent/outdoor-m7-walkthrough-panel`）`merge main` → **1 处真冲突** `use-outdoor-agent-workflow.react.test.tsx`（两边都在文件尾追加用例，我的走查用例 vs 别人的默认方案两用例）。按行拼接：保留对方两个 `it` 并各自补 `});`，再附我的用例；`markers=0` 后提交 → `21503eec`
+交付：hook 增 `walkthroughBook()` getter；`outdoor-workflow-card.tsx` 底部加可收起区（`aria-expanded`）——“走查记录（验收时逐条标记）”，展开才渲染面板；受控：`onMark` 拿到新记录本才 `setWalkthrough`
+验证（固定数据）：hook + 面板 70/70（61 + 9 中的两文件合并计数），`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十二轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；卡片层“展开→点→按压态”用例
+```
+
+- **冲突多发生在文件尾**：两边都往测试文件末追加用例，git 会把两段当成同一位置，**必须两边都留**，不能选一边。
+- **fetched 过的 ref 不必再联网**：`git fetch origin main:main` 报 SSL 时，本地 `origin/main` 已可用 `git branch -f` 追上，不必重试网络。
+
+### 2026-11-18 09:00 · 自动轮次 75 · 走查面板（11 行 × 三键，受控且不下结论）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 09:00，自动轮次 75
+批次 / 切片 / 状态：M7 / 走查面板 / 已交付（分支待 PR）
+开工事实：HEAD = `a1fd523d`（**detached**），脏文件 10；local main = `c0869f62`，origin/main = `d1d01673`（落后 2 笔）
+合并：main 未被 checkout → `git fetch origin main:main`（c0869f62..d1d01673）只更新 ref；收工 `main = origin = d1d01673 div 0/0`
+分支：`agent/outdoor-m7-walkthrough-panel` 自 `agent/outdoor-m7-walkthrough-persist`（aa1d7d0e）开，`merge --no-edit main` 零冲突 → `eb47492e`；五个切片一条分支
+交付：`outdoor-walkthrough-board.tsx` + 5 条用例——11 行取自 `ACCEPTANCE_RULES` 的标题，每行三个按钮（看过/不构成通过/未看），`aria-pressed` 反映真实状态；**受控**：点只调 `onMark(id,state)`，外层不回传就还是原状态；进度行照搬 `summarizeWalkthrough().line`，整块不出现“可发布（”
+验证（固定数据）：面板用例 5/5；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第三十一轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；面板接进 `outdoor-workflow-card.tsx`
+```
+
+- **UI 也先做受控件**：面板不持有记录本，才能在没有完整工作流的情况下单测（11 行 × 3 键全靠 props）。
+- **“不下结论”要能被测试验到**：断言里直接写 `not.toContain("可发布（")`，比人工看图可靠。
+
+### 2026-11-18 08:00 · 自动轮次 74 · 本地 main 一次性追上（工作区不再是 main）+ 记录本落盘
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 08:00，自动轮次 74
+批次 / 切片 / 状态：合并 + M7 / 记录本落盘 / 已交付（分支待 PR）
+开工事实：HEAD = `a1fd523d`，**分支是 `agent/outdoor-scope-frost-walk-batch`（别人在改，不是 main）**，脏文件 6；local main = `c9706da5`，origin/main = `d3fb50e5`（落后 45 笔）
+合并：`git merge-base --is-ancestor main origin/main` 为真 → 用 `git fetch origin main:main` **只更新 main ref**（c9706da5..d3fb50e5），不动工作区、不动别人分支；收工 `main = origin = d3fb50e5 div 0/0`
+分支：`agent/outdoor-m7-walkthrough-persist` 从 `agent/outdoor-m7-walkthrough-hook`（800369c5）开，`merge --no-edit main` 零冲突 → `5c262efc`；四个切片合成一条待 PR 分支
+交付：`outdoor-walkthrough-store.ts` + 8 条用例（`encodeBook`/`decodeBook`/`saveBook`/`loadBook`，键 `scendance.outdoor.walkthrough.v1`）：只认 1..11 与三档状态、版本不对/JSON 坏/存了数组一律当空、写入抛错返回 false、无 window 返回空。hook：初始 `useRef(loadBook())`，`recordWalkthrough()` 成功后 `saveBook()`（失败不影响继续标）
+验证（固定数据）：落盘用例 8/8，hook 套件 61/61（新增断言：标完后 `localStorage` 里确实有 `#3`），`tsc --noEmit` **0 行**（基线那条 `gm-compass-host` 已随主干修好）
+真实浏览器/云端：仍未验（9222 第三十轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；面板按钮；本地 main 已无差异
+```
+
+- **main 没被 check out 时，同步只需动 ref**：`git fetch origin main:main` 一次到位，既不用 stash 几十个脏文件，也不会把别人正在用的分支挤掉。
+- **落盘的失败不能变成流程的失败**：`saveBook` 返回 false 只是“刷新会丢”，不是“标不上”，所以调用点不判断返回值。
+
+### 2026-11-18 07:05 · 自动轮次 73 · 记录本接进 hook + 三个切片合成一条待 PR 分支
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 07:05，自动轮次 73
+批次 / 切片 / 状态：M7 / hook 接线与分支合并 / 已交付（分支待 PR）
+开工事实：HEAD = main = `c9706da5`，origin/main = `dbc874c2`（落后 14 笔），脏文件 62（连续四轮不变）
+合并（本地 main）：**第四次被同一批 WIP 挡住** —— 75 个入站文件里 59 个与脏文件重叠，`--ff-only` 报覆盖；不代人为用户 WIP 做取舍
+合并（分支）：新开 `agent/outdoor-m7-walkthrough-hook`（自 `origin/main dbc874c2`），依次 `merge --no-edit` 了 `agent/outdoor-m7-browser-evidence` 与 `agent/outdoor-m7-walkthrough-book`，**两次 merge 零冲突**，树干净（`head=7fdb4ffa`）——三个切片现在只差一次 PR
+交付：hook 新增 `walkthroughBook` ref 与 `recordWalkthrough(id, state)`（非法编号返回 `null`、不生效）/`walkthroughLine()`；`logReleaseStatus()` 改为带 `evidence: bookToRecord(...)` 与 `ledger: defaultLedger(record)`。hook 测试新增 1 条（标一条才算看过、非法编号不生效、行里不出现“可发布（”）
+验证（固定数据）：hook 套件 61/61（含新 1 条）；`tsc` 余 1 行，仍是已归基线的 `gm-compass-host.test.tsx` 缺 `focusVenue`（行号 48→64 随主干变化，同一错误）
+真实浏览器/云端：仍未验（9222 第二十九轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；记录本落盘；本地 main 追上 origin
+```
+
+- **碎片分支要及时合拢**：三个切片各自可 PR，但叠了三个分支就要合三次；merge（非 cherry-pick）成一条待 PR 分支，人只需点一次。
+- **接线也要有断言**：只“能编译”不算接线完成，至少断言“标一条 → 进度行变化、非法编号不变”。
+
+### 2026-11-18 06:10 · 自动轮次 72 · 走查记录本（只能往上标，不能下结论）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 06:10，自动轮次 72
+批次 / 切片 / 状态：M7 / 走查记录本 / 已交付（分支待 PR，叠在 71 上）
+开工事实：HEAD = main = `c9706da5`，origin/main = `eade0159`（落后 13 笔），脏文件 62（连续三轮不变）
+合并：**第三次被同一批 WIP 挡住** —— 75 个入站文件里 59 个与脏文件重叠，`--ff-only` 报会覆盖本地改动。脏文件数量三轮不变（62/62/62）说明这批改动一直没提交；不代人为它做取舍，不 stash 后强行合。
+交付：`frontend/components/room-organizer/lib/outdoor-walkthrough-book.ts` + 8 条用例——`emptyBook()` / `markSeen()`（不可变，非法编号 0/12/1.5/NaN 原样退回同一引用）/ `lookedCount()`（显式 `none` 仍算没看）/ `summarizeWalkthrough()`（一行话，11 条全 pass 也只说“看完了”）/ `bookToRecord()`（空白日期不写，交卡片回落常量）。分支基于 `agent/outdoor-m7-browser-evidence 16fde421`
+验证（固定数据）：新用例 8/8。`tsc` 余 1 行，仍是已归基线的 `gm-compass-host.test.tsx`（轮次 71 已在 `origin/main` 干净树上复现同一错）
+真实浏览器/云端：仍未验（9222 第二十八轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；记录本接 hook；本地 main 追上 origin
+```
+
+- **记录本与结论要分层**：“看过 11/11”是事实，“可发布”是判断；前者可以自动化，后者不行，所以记录本的输出里写死一句“仍需三类全绿（含真实云端）”。
+- **非法输入不抛错、返回同一引用**：调用方用 `===` 就能判断“这一标没生效”，比 try/catch 更适合 React 事件处理。
+
+### 2026-11-18 05:20 · 自动轮次 71 · 浏览器证据从常量改成可注入
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-18 05:20，自动轮次 71
+批次 / 切片 / 状态：M7 / 浏览器证据可注入 / 已交付（分支待 PR）
+开工事实：HEAD = main = `c9706da5`，origin/main = `dabfbc34`（落后 11 笔），脏文件 62
+合并：**仍未合** —— 68 个入站文件里 59 个与脏文件重叠，`--ff-only` 报 `Your local changes ... would be overwritten`；不 stash 这 59 个文件，分支从 `origin/main` 开
+交付：`outdoor-release-status-card.ts` 新增 `BrowserEvidence` 三态、`WalkthroughRecord`、`browserEvidenceFrom()`、`evidenceAsOf()`；`ReleaseStatusInput.evidence?` 接入卡片与快照（`browser` 多一档 `pass`，仍升序）；`ledgerFromEvidence(ids, evidence?)` / `defaultLedger(evidence?)` 跟着走。新增 `outdoor-browser-evidence.test.ts` 6 条。对照表 §0 锚点 JSON 同步改（`browser.pass: []`）
+验证（固定数据）：两份定向用例 44/44（状态卡 38 + 新 6）。`tsc` 余 1 行：`gm-compass-host.test.tsx` 缺 `focusVenue`——**已归为基线**：在 `origin/main dabfbc34` 的干净 worktree 上单跑 tsc 也是同一行、同一错误，不是本轮引入
+真实浏览器/云端：仍未验（9222 第二十七轮 down）
+未完成：#2 真实搜索、#5 浏览器行为；hook 接线 `recordWalkthrough()`；本地 main 追上 origin
+```
+
+- **“归为基线”要有干净树证据**：同一错误在 `origin/main` 的隔离 worktree 上单跑一遍能复现，才叫基线；否则就是自己引入的。
+- **可注入不是把常量删掉**：不传记录时行为与以前一字不差，旧调用点与旧断言才不用改。
 
 ### 2026-11-18 10:55 · 轮次 69 · M4 离线确定性切片（未登录也能出组合分区预览）
 
