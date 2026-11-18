@@ -4,6 +4,7 @@ import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, ExternalLink, MapPin, 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {inspectReviewFeedbackReceipt,type ReceiptPin} from '@/components/review-share-page/review-feedback-receipt';
 import {importReviewFeedback,readImportedReviewFeedback} from '@/components/review-share-page/review-feedback-storage';
+import {readReviewLink,reviewCodeFromHash} from '@/components/review-share-page/review-link-cloud';
 import {readShareHash} from '../lib/share';
 import { violationCodeLabel, type BingoScore } from '../../../lib/bingo-score';
 import {
@@ -396,10 +397,16 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
   const capture=()=>{const captured={url:plan.clientHref,project:plan.projectKey,scope:scopeKey,guard:isCurrent};
     return ()=>{try{return alive.current&&!!captured.guard&&captured.guard()&&captured.scope===`activity:${captured.project}`&&latest.current.scopeKey===captured.scope&&latest.current.plan.clientHref===captured.url&&latest.current.plan.projectKey===captured.project&&readBingoSnapshot(window.localStorage).plans.some(p=>p.projectKey===captured.project&&p.clientHref===captured.url);}catch{return false;}};};
   const eligible=!!isCurrent&&scopeKey===`activity:${plan.projectKey}`&&plan.projectKey!=='local-draft'&&plan.linkStatus==='needs-verification';
-  function shareHash():string {const hash=new URL(plan.clientHref,window.location.origin).hash;if(!hash.startsWith('#layout='))throw new Error('缺少完整分享链接，无法核对版本。');return hash;}
+  async function shareHash():Promise<string> {
+    const hash=new URL(plan.clientHref,window.location.origin).hash;
+    if(hash.startsWith('#layout='))return hash;
+    const code=reviewCodeFromHash(hash);
+    if(code){const record=await readReviewLink(code);if(record.ok)return record.value.longHash;}
+    throw new Error('缺少完整分享链接，无法核对版本。');
+  }
   useEffect(()=>{
     if(!eligible)return;const valid=capture(),id=sequence.current;
-    void (async()=>{try{if(!valid())return;const hash=shareHash();const stored=await readImportedReviewFeedback(window.localStorage,hash);if(!valid()||sequence.current!==id)return;
+    void (async()=>{try{if(!valid())return;const hash=await shareHash();const stored=await readImportedReviewFeedback(window.localStorage,hash);if(!valid()||sequence.current!==id)return;
       const decoded=await readShareHash(hash);if(!decoded.ok||!valid()||sequence.current!==id)return;
       if(stored.pins.length||stored.reportedCompleted)setSaved({...stored,floorNames:Object.fromEntries(decoded.layout.floors.map((floor,index)=>[floor.id,floor.name||`第 ${index+1} 层`]))});
     }catch{/* 无法读取时不把旧记录当成已导入。 */}})();
@@ -409,7 +416,7 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
     if(!valid()){setNotice('活动或分享记录已变化，无法导入。');return;}
     if(file.size>256_000){setNotice('反馈文件超过 256 KB，未读取。');return;}
     setPending(true);setPreview(null);setNotice('');
-    try {const hash=shareHash(),json=await file.text();if(!valid()||sequence.current!==id)return;
+    try {const hash=await shareHash(),json=await file.text();if(!valid()||sequence.current!==id)return;
       const stored=await readImportedReviewFeedback(window.localStorage,hash);if(!valid()||sequence.current!==id)return;
       const result=await inspectReviewFeedbackReceipt(json,hash,stored.pins);if(!valid()||sequence.current!==id)return;
       const decoded=await readShareHash(hash);if(!decoded.ok)throw new Error('分享方案无法读取，不能导入反馈。');if(!valid()||sequence.current!==id)return;
