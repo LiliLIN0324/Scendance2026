@@ -4117,15 +4117,15 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     expect(screen.queryByText(/对方的意见保存在对方浏览器/)).toBeNull();
     expect(document.getElementById('gen-progress')).toBeNull();
     expect(document.getElementById('plan-proposal')).toBeNull();
-    // 主入口只留分享；体检与旧钉评链接收进「更多」。
     expect(screen.getByRole('button', { name: '发给客户评审' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重新检查' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
   });
 
   it('Bingo 脸只回放审校气泡：体检回执出现在审校台', async () => {
     state.layout = seatLayout();
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
+    fireEvent.click(screen.getByRole('button', { name: '重新检查' }));
     expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
   });
 
@@ -4153,24 +4153,26 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
 });
 
 describe('S2 Bingo 审校台：单一分享主入口', () => {
-  it('Bingo 脸只留「发给客户评审」，其余动作收进更多', () => {
+  it('Bingo 脸把重新检查和发给客户评审放在同一行', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     expect(screen.getByRole('button', { name: '发给客户评审' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重新检查' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '准备客户评审' })).toBeNull();
-    expect(screen.getByRole('button', { name: '立即体检' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '发送钉评链接' })).toBeTruthy();
+    expect(screen.queryByText('更多审校动作')).toBeNull();
+    expect(screen.queryByRole('button', { name: '立即体检' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '发送钉评链接' })).toBeNull();
   });
 
   it('活动脸不挂审校动作', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     expect(screen.queryByRole('button', { name: '发给客户评审' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '立即体检' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '重新检查' })).toBeNull();
     expect(screen.queryByRole('button', { name: '发送钉评链接' })).toBeNull();
   });
 
-  it('点「立即体检」不打字即出几何体检回执', async () => {
+  it('点「重新检查」不打字即出几何体检回执', async () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
+    fireEvent.click(screen.getByRole('button', { name: '重新检查' }));
     // 与 T-03 口令路径同引擎、同口径声明，只是入口从 send() 换成按钮。
     expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
   });
@@ -4187,7 +4189,7 @@ describe('S2 Bingo 审校台：单一分享主入口', () => {
     let finish!:(value:{url:string;isCurrent:()=>boolean})=>void;
     callbacks.onIssueReviewLink.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button',{name:'发送钉评链接'}));fireEvent.click(screen.getByRole('button',{name:'发送钉评链接'}));
+    fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));
     expect(callbacks.onIssueReviewLink).toHaveBeenCalledTimes(1);
     act(()=>{if(mode==='layout'||mode==='layout-aba'){const revision=layoutStore.getState().revision;layoutStore.setState({layout:{...base,name:'改后的方案'},revision:revision+1});if(mode==='layout-aba')layoutStore.setState({layout:base,revision:revision+2});}else {layoutStore.setState({activeFloorIndex:1});if(mode==='floor-aba')layoutStore.setState({activeFloorIndex:0});}});
     await act(async()=>{finish({url:'https://example.test/review/#layout=old',isCurrent:()=>true});await Promise.resolve();});
@@ -4197,28 +4199,28 @@ describe('S2 Bingo 审校台：单一分享主入口', () => {
   it('requires the producer guard to remain valid even if the local snapshot is unchanged',async()=>{
     callbacks.onIssueReviewLink.mockResolvedValueOnce({url:'https://example.test/review/#layout=old',isCurrent:()=>false});
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button',{name:'发送钉评链接'}));
+    fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));
     expect(await screen.findByText(/旧评审记录如已写入会保留，链接未复制/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
   });
 
   it('never treats an unguarded legacy return as a verified current link',async()=>{
     callbacks.onIssueReviewLink.mockResolvedValueOnce('https://example.test/review/#layout=legacy');
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button',{name:'发送钉评链接'}));
+    fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));
     expect(await screen.findByText(/当前版本无法核对/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
   });
   it('does not report an old result into a replaced activity session',async()=>{
     let epoch=1;const captured=epoch;let finish!:(value:{url:string;isCurrent:()=>boolean})=>void;
     callbacks.onIssueReviewLink.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     state.layout=makeLayout({id:'review-a'});render(<LayoutAgentProvider sessionScope="activity:review-a" isSessionCurrent={()=>epoch===captured} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button',{name:'发送钉评链接'}));epoch+=2;
+    fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));epoch+=2;
     await act(async()=>{finish({url:'https://example.test/review/#layout=old',isCurrent:()=>false});await Promise.resolve();});
     expect(screen.queryByText(/评审链接已准备好/)).toBeNull();expect(screen.queryByText(/链接未复制/)).toBeNull();
   });
 
-  it('点「发送钉评链接」打开分享面板，并说明钉评会自动回流', async () => {
+  it('点「发给客户评审」打开分享面板，并说明钉评会自动回流', async () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
-    fireEvent.click(screen.getByRole('button', { name: '发送钉评链接' }));
+    fireEvent.click(screen.getByRole('button', { name: '发给客户评审' }));
     await waitFor(() => expect(callbacks.onIssueReviewLink).toHaveBeenCalled());
     expect(screen.getByText(/对方的钉评会自动回到 Bingo/)).toBeTruthy();
     // 长链接不进聊天框；复制动作住在审计卡上（复用既有「复制甲方链接」钮）。

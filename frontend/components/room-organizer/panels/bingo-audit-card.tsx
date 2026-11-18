@@ -1,7 +1,7 @@
 'use client';
 
-import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, MessageSquare, ShieldCheck, Trash2 } from '@/components/solid-icons';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, ExternalLink, MapPin, MessageSquare, RotateCw, Trash2 } from '@/components/solid-icons';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {inspectReviewFeedbackReceipt,type ReceiptPin} from '@/components/review-share-page/review-feedback-receipt';
 import {importReviewFeedback,readImportedReviewFeedback} from '@/components/review-share-page/review-feedback-storage';
 import {readShareHash} from '../lib/share';
@@ -17,8 +17,8 @@ import {
 } from '../lib/bingo-feedback';
 import { listReviewPinsCloud } from '../../review-share-page/review-pins-cloud';
 import type { ReviewPin } from '../lib/review-pins';
-import { requestOutdoorPlanPointFocus } from '../lib/outdoor-plan-issues';
 import {
+  bingoPhaseLabel,
   clearBingoReceipt,
   emptyBingoSnapshot,
   formatBingoTime,
@@ -26,7 +26,8 @@ import {
   type BingoPlan,
   type BingoSnapshot,
 } from '../lib/bingo-status';
-import { getOutdoorPlanIssues, requestOutdoorPlanIssueFocus, subscribeOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
+import { getOutdoorPlanIssues, getOutdoorPlanSettled, requestOutdoorPlanIssueFocus, requestOutdoorPlanPointFocus, subscribeOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
+import { BingoStatusMark, useBingoSending } from './bingo-status-mark';
 import { useGenerationOutcome } from '../lib/use-generation-outcome';
 import {REVIEW_MARK_CHANGED_EVENT} from '../lib/review-share';
 import {useLayoutStore} from '../hooks/use-layout-store';
@@ -39,7 +40,14 @@ import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
  * Bingo 审计卡可由主调用方注入的「完成卡 Z8」字段。
  * 全部可选；不传时卡片回退到旧行为（只显示甲方评审钉评）。
  */
+export interface BingoReviewActions {
+  onRecheck(): void;
+  onSendReview(): void;
+}
+
 export interface BingoAuditCardProps {
+  /** 重新检查与发给客户评审。缺省时不画工具栏（卡片单测不接 Agent）。 */
+  reviewActions?: BingoReviewActions;
   /** 体检量化分；不传则不渲染体检分区。 */
   score?: BingoScore;
   /** 活动身份与同步代次由工作台提供；缺失时禁止导入。 */
@@ -53,6 +61,86 @@ export interface BingoAuditCardProps {
   durationMs?: number;
   /** AI 思考轮数。 */
   rounds?: number;
+}
+
+const REVIEW_ROW_PREVIEW = 4;
+const CORRIDOR_TITLE = /^「[^」]*」的通行带（宽 [^）]*）与设施「([^」]+)」占地相交。?$/;
+const CATEGORY_TITLE = /^(?:⚠|缺|核)\s+([^：]+)：([\s\S]+)$/;
+
+export function reviewIssueTitle(text: string): { category: string; title: string } {
+  const matched = CATEGORY_TITLE.exec(text.trim());
+  const category = matched?.[1] ?? '其他问题';
+  const message = (matched?.[2] ?? text).replace(/\s+/g, ' ').trim();
+  const facility = CORRIDOR_TITLE.exec(message);
+  return { category, title: facility ? `${facility[1]} 压到通行带` : message };
+}
+
+export interface ReviewIssueGroup {
+  category: string;
+  rows: { key: string; title: string; text: string }[];
+}
+
+export function reviewIssueGroups(issues: readonly { key: string; text: string }[]): ReviewIssueGroup[] {
+  const groups = new Map<string, ReviewIssueGroup>();
+  const order: string[] = [];
+  for (const issue of issues) {
+    const { category, title } = reviewIssueTitle(issue.text);
+    let group = groups.get(category);
+    if (!group) {
+      group = { category, rows: [] };
+      groups.set(category, group);
+      order.push(category);
+    }
+    group.rows.push({ key: issue.key, title, text: issue.text });
+  }
+  return order.map(category => groups.get(category)!);
+}
+
+export function settledLayers(settled: { boundaryClosed: boolean; zoneCount: number; routeCount: number }): { count: number; aside: string } {
+  const parts: string[] = [];
+  if (settled.boundaryClosed) parts.push('红线');
+  if (settled.zoneCount > 0) parts.push(`分区 ${settled.zoneCount}`);
+  if (settled.routeCount > 0) parts.push(`动线 ${settled.routeCount}`);
+  return { count: parts.length, aside: parts.join(' · ') };
+}
+
+function usableReviewHref(plans: readonly BingoPlan[]): string {
+  for (const plan of plans) {
+    if (plan.linkStatus === 'unavailable') continue;
+    const href = plan.clientHref.trim();
+    if (!href || href === '/review/' || href === '/review') continue;
+    return href;
+  }
+  return '';
+}
+
+function PriorityMark(): JSX.Element {
+  return <svg className="ap-review-priority" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+    <rect x="0.75" y="0.75" width="12.5" height="12.5" rx="3" fill="currentColor"/>
+    <path d="M7 3.35v4.15" stroke="#fff" strokeWidth="1.35" strokeLinecap="round"/>
+    <circle cx="7" cy="10.15" r="0.8" fill="#fff"/>
+  </svg>;
+}
+
+function ReviewGroup({ open, onToggle, mark, title, count, aside, children }: {
+  open: boolean;
+  onToggle(): void;
+  mark: ReactNode;
+  title: string;
+  count: number;
+  aside?: string;
+  children?: ReactNode;
+}): JSX.Element {
+  return <div className="ap-review-block">
+    <button type="button" className="ap-review-group" aria-expanded={open} onClick={onToggle}>
+      <span className="ap-review-chevron">{open ? <ChevronDown size={12} aria-hidden="true"/> : <ChevronRight size={12} aria-hidden="true"/>}</span>
+      <span className="ap-review-mark">{mark}</span>
+      <span className="ap-review-title">{title}</span>
+      <span className="ap-review-count">{count}</span>
+      {aside ? <span className="ap-review-aside">{aside}</span> : null}
+    </button>
+    {open ? children : null}
+  </div>;
 }
 
 function formatDuration(ms: number | undefined): string {
@@ -74,10 +162,18 @@ function isDemoPlan(plan: BingoPlan): boolean {
  * 这里不再并列体检 / 评审 / 钉评三颗按钮，也不再承担全案统计与图例。
  */
 export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | null {
-  const { score, durationMs, rounds, scopeKey, isCurrent } = props;
+  const { score, durationMs, rounds, scopeKey, isCurrent, reviewActions } = props;
   const [snapshot, setSnapshot] = useState<BingoSnapshot>(emptyBingoSnapshot);
   const { outcome } = useGenerationOutcome();
   const issues = useSyncExternalStore(subscribeOutdoorPlanIssues, getOutdoorPlanIssues, getOutdoorPlanIssues);
+  const settled = useSyncExternalStore(subscribeOutdoorPlanIssues, getOutdoorPlanSettled, getOutdoorPlanSettled);
+  const sendingNow = useBingoSending();
+  const [armed, setArmed] = useState(false);
+  const [settledOpen, setSettledOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set(['通行带压设施']));
+  const [feedbackOpen, setFeedbackOpen] = useState(true);
+  const [linkCopied, setLinkCopied] = useState(false);
+  useEffect(() => { setArmed(true); }, []);
   const isMaterial=(item:unknown)=>!item||typeof item!=='object'||!isStructuralMarker(item as FurnitureItem);
   const visibleOutcome=outcome?{...outcome,placed:outcome.placed.filter(isMaterial),removed:outcome.removed?.filter(isMaterial),
     refused:outcome.refused.filter(entry=>isMaterial(entry.item)),skipped:outcome.skipped.filter(entry=>isMaterial(entry.item))}:null;
@@ -119,116 +215,165 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   // 完成卡只在真的有完成卡字段时才出现：光有 Outcome 不开块，
   // 否则「改了件数」会和上面的「本次结果」摘要重复说同一件事。
   const hasZ8 = Boolean(effectiveScore) || effectiveRounds !== undefined || effectiveDuration !== undefined;
-  if (!hasAuditRecord && !hasZ8 && issues.length === 0) return null;
+  const placedCount = visibleOutcome?.placed.length ?? 0;
+  const refusedList = visibleOutcome?.refused ?? [];
+  const hasDiagnostics = Boolean(effectiveScore) || Boolean(outcome) || refusedList.length > 0 || hasZ8;
+  useEffect(() => { if (hasDiagnostics) setSettledOpen(true); }, [hasDiagnostics]);
 
   const onClearReceipt = () => {
     clearBingoReceipt(window.localStorage);
     sync();
   };
 
-  const placedCount = visibleOutcome?.placed.length ?? 0;
-  const refusedList = visibleOutcome?.refused ?? [];
   const plansWithFeedback = snapshot.plans.map(plan => ({ plan, feedback: readBingoPlanFeedback(plan) }));
+  const feedbackRows = plansWithFeedback.flatMap(({ feedback }) => feedback.pins);
   const pinCount = plansWithFeedback.reduce((sum, entry) => sum + entry.feedback.pinCount, 0);
   const openPinCount = plansWithFeedback.reduce((sum, entry) => sum + countOpenFeedbackPins(entry.feedback), 0);
   // 系统问题只算能落到这张图上、且还没收尾的；被拒件也是我要处理的事。
   const todoCount = issues.length + refusedList.length;
-  const statusText = todoCount > 0
-    ? `还剩 ${todoCount} 件我要收尾${openPinCount > 0 ? ` · 对方提了 ${openPinCount} 条修改` : ''}`
-    : openPinCount > 0
-      ? `我要收尾的已处理完 · 对方提了 ${openPinCount} 条修改`
-      : '我要收尾的已处理完 · 还没有对方的修改';
+  const phaseLabel = bingoPhaseLabel(snapshot.phase);
+  const statusTail = todoCount > 0 ? `还剩 ${todoCount} 件要收尾` : '我要收尾的已处理完';
+  const statusOther = openPinCount > 0 ? `对方提了 ${openPinCount} 条修改` : '还没有对方的修改';
+  const statusText = `${phaseLabel} ${statusTail} · ${statusOther}`;
+  const layers = settledLayers(settled);
+  const issueGroups = reviewIssueGroups(issues);
+  const reviewHref = usableReviewHref(snapshot.plans);
+  const shownFeedback = feedbackRows.slice(0, REVIEW_ROW_PREVIEW);
+  const copyReviewLink = () => {
+    if (!reviewHref) return;
+    void navigator.clipboard.writeText(new URL(reviewHref, window.location.origin).toString()).then(() => {
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 1600);
+    }).catch(() => setLinkCopied(false));
+  };
+  const toggleGroup = (category: string) => {
+    setOpenGroups(current => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
 
-  return <section className="ap-card ap-audit" aria-label="我的完成与对方的修改">
-    <span className="ap-blocked-stamp"><ShieldCheck size={12} aria-hidden="true"/>审校</span>
+  return <section className="ap-review" aria-label="我的完成与对方的修改">
+    <p className="ap-review-status" data-testid="bingo-review-status">
+      <BingoStatusMark phase={snapshot.phase} sending={sendingNow && snapshot.phase !== 'returned'} size={14} armed={armed} />
+      <span>{statusText}</span>
+    </p>
+    {reviewActions && <div className="ap-review-toolbar" aria-label="审校动作">
+      <button type="button" className="ap-review-tool" onClick={reviewActions.onRecheck}>
+        <RotateCw size={14} aria-hidden="true"/>重新检查
+      </button>
+      {reviewHref
+        ? <>
+          <button type="button" className="ap-review-tool" onClick={copyReviewLink}>
+            {linkCopied ? <Check size={14} aria-hidden="true"/> : <Copy size={14} aria-hidden="true"/>}{linkCopied ? '已复制' : '复制评审链接'}
+          </button>
+          <a className="ap-review-tool" href={reviewHref} target="_blank" rel="noreferrer">
+            <ExternalLink size={14} aria-hidden="true"/>查看评审页
+          </a>
+        </>
+        : <button type="button" className="ap-review-tool is-send" onClick={reviewActions.onSendReview}>
+          <ArrowUp size={14} aria-hidden="true"/>发给客户评审
+        </button>}
+    </div>}
 
-    <h4>我的完成与对方的修改</h4>
-    <p className="ap-audit-status" data-testid="bingo-review-status">{statusText}</p>
-
-    <section aria-label="我的完成" className="ap-audit-group">
-      <h4>我的完成</h4>
-
-      {effectiveScore && <>
-        <p className="ap-audit-score-title">系统体检结果</p>
-        <div className="ap-audit-score" data-testid="bingo-score">
-          <p>几何检查：{effectiveScore.itemCount === 0 ? '还没有可检查的已建模物件' : effectiveScore.failedCount > 0 ? `${effectiveScore.failedCount} 件待处理` : '已通过'}</p>
-          <p className="ap-audit-scope">只核对已建模几何；消防、无障碍与现场条件需另行核验。</p>
-        </div>
-      </>}
-
-      {outcome && <p className="ap-audit-outcome" role="status"><strong>{outcomeCurrent?'本次结果：':'历史操作结果（当前布局已变化或无法核对）：'}</strong>{summary}</p>}
-
-      {hasZ8 && <div className="ap-audit-z8" data-testid="bingo-z8">
-        <div className="ap-audit-z8-row">
-          <span className="ap-audit-z8-key">改动件数</span>
-          <span className="ap-audit-z8-val">放了 {placedCount} 件</span>
-        </div>
-        {effectiveRounds !== undefined && (
-          <div className="ap-audit-z8-row">
-            <span className="ap-audit-z8-key">思考轮数</span>
-            <span className="ap-audit-z8-val">{effectiveRounds} 轮</span>
+    <p className="ap-review-kicker">我的完成</p>
+    <ReviewGroup
+      open={settledOpen}
+      onToggle={() => setSettledOpen(value => !value)}
+      mark={<BingoStatusMark phase="returned" size={14} armed={false} />}
+      title="已落实"
+      count={layers.count}
+      aside={layers.aside}
+    >
+      {hasDiagnostics ? <div className="ap-review-detail">
+        {effectiveScore && <>
+          <p className="ap-audit-score-title">系统体检结果</p>
+          <div className="ap-audit-score" data-testid="bingo-score">
+            <p>几何检查：{effectiveScore.itemCount === 0 ? '还没有可检查的已建模物件' : effectiveScore.failedCount > 0 ? `${effectiveScore.failedCount} 件待处理` : '已通过'}</p>
+            <p className="ap-audit-scope">只核对已建模几何；消防、无障碍与现场条件需另行核验。</p>
           </div>
-        )}
-        {effectiveDuration !== undefined && (
+        </>}
+        {outcome && <p className="ap-audit-outcome" role="status"><strong>{outcomeCurrent?'本次结果：':'历史操作结果（当前布局已变化或无法核对）：'}</strong>{summary}</p>}
+        {hasZ8 && <div className="ap-audit-z8" data-testid="bingo-z8">
           <div className="ap-audit-z8-row">
-            <span className="ap-audit-z8-key">{durationLabel}</span>
-            <span className="ap-audit-z8-val">{formatDuration(effectiveDuration)}</span>
+            <span className="ap-audit-z8-key">改动件数</span>
+            <span className="ap-audit-z8-val">放了 {placedCount} 件</span>
           </div>
-        )}
-        <div className="ap-audit-z8-row"><span className="ap-audit-z8-key">后续建议</span><span className="ap-audit-z8-val">请核对实际出入口、通行净宽及现场条件，消防与无障碍要求需另行核验。</span></div>
-      </div>}
+          {effectiveRounds !== undefined && (
+            <div className="ap-audit-z8-row">
+              <span className="ap-audit-z8-key">思考轮数</span>
+              <span className="ap-audit-z8-val">{effectiveRounds} 轮</span>
+            </div>
+          )}
+          {effectiveDuration !== undefined && (
+            <div className="ap-audit-z8-row">
+              <span className="ap-audit-z8-key">{durationLabel}</span>
+              <span className="ap-audit-z8-val">{formatDuration(effectiveDuration)}</span>
+            </div>
+          )}
+          <div className="ap-audit-z8-row"><span className="ap-audit-z8-key">后续建议</span><span className="ap-audit-z8-val">请核对实际出入口、通行净宽及现场条件，消防与无障碍要求需另行核验。</span></div>
+        </div>}
+        {refusedList.length > 0 && <div className="ap-audit-refused" data-testid="bingo-refused">
+          <p className="ap-audit-refused-title">被拒件（{refusedList.length}）</p>
+          <ul>
+            {refusedList.map((entry, index) => (
+              <li key={index} className="ap-audit-refused-row">
+                <code className="ap-audit-refused-id">{String((entry.item as { id?: unknown }).id ?? index)}</code>
+                <span className="ap-audit-refused-reason">{violationCodeLabel(entry.code)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>}
+      </div> : null}
+    </ReviewGroup>
 
-      {refusedList.length > 0 && <div className="ap-audit-refused" data-testid="bingo-refused">
-        <p className="ap-audit-refused-title">被拒件（{refusedList.length}）</p>
-        <ul>
-          {refusedList.map((entry, index) => (
-            <li key={index} className="ap-audit-refused-row">
-              <code className="ap-audit-refused-id">{String((entry.item as { id?: unknown }).id ?? index)}</code>
-              <span className="ap-audit-refused-reason">{violationCodeLabel(entry.code)}</span>
-            </li>
-          ))}
-        </ul>
-      </div>}
+    {issueGroups.map(group => {
+      const open = openGroups.has(group.category);
+      const shown = group.rows.slice(0, REVIEW_ROW_PREVIEW);
+      const rest = group.rows.length - shown.length;
+      return <ReviewGroup
+        key={group.category}
+        open={open}
+        onToggle={() => toggleGroup(group.category)}
+        mark={<PriorityMark />}
+        title={group.category}
+        count={group.rows.length}
+      >
+        <>
+          {shown.map(row => <button key={row.key} type="button" className="ap-review-row" title={row.text} onClick={() => requestOutdoorPlanIssueFocus(row.key)}>
+            <span className="ap-review-icons"><PriorityMark /><MapPin className="ap-review-pin" size={14} aria-hidden="true"/></span>
+            <span className="ap-review-title">{row.title}</span>
+          </button>)}
+          {rest > 0 && <p className="ap-review-more">还有 {rest} 处，点开一条飞到地图</p>}
+        </>
+      </ReviewGroup>;
+    })}
 
-      <div aria-label="待收尾的系统问题">
-        {issues.length === 0
-          ? <p className="ap-audit-empty">当前没有系统问题。</p>
-          : <ol className="ap-audit-pins">
-            {issues.slice(0, 20).map(issue => <li key={issue.key}>
-              <button type="button" className="ap-audit-link" onClick={() => requestOutdoorPlanIssueFocus(issue.key)}>
-                {issue.text}
-              </button>
-            </li>)}
-          </ol>}
-        {issues.length > 20 && <p className="ap-audit-more">还有 {issues.length - 20} 条，在画布上逐条核对。</p>}
-      </div>
-    </section>
-
-    <section aria-label="对方的修改" className="ap-audit-group">
-      <h4>对方的修改</h4>
+    <ReviewGroup
+      open={feedbackOpen}
+      onToggle={() => setFeedbackOpen(value => !value)}
+      mark={<MessageSquare size={14} aria-hidden="true"/>}
+      title="对方的修改"
+      count={pinCount}
+    >
       {pinCount === 0
-        ? <p className="ap-audit-empty">还没有对方的修改</p>
-        : plansWithFeedback.filter(entry => entry.feedback.pins.length > 0).map(({ plan, feedback }) => (
-          <article key={`${plan.shareId}-${plan.markedAt}`} className="ap-audit-plan">
-            <p className="ap-audit-meta">
-              <strong>{plan.title}</strong>
-              {isDemoPlan(plan) && <span className="ap-audit-badge">案例演示</span>}
-              <span>{feedbackSummaryLabel(feedback, false)}</span>
-            </p>
-            <ol className="ap-audit-pins">
-              {feedback.pins.map(pin => <li key={pin.id}>
-                <p className="ap-audit-pin-head">
-                  <strong>{pin.author}</strong>
-                  {pin.pinStatus && <span className={`ap-audit-pin-status is-${pin.pinStatus}`}>{pin.pinStatus === 'resolved' ? '已处理' : '待处理'}</span>}
-                  <time dateTime={pin.createdAt || undefined}>{formatFeedbackTime(pin.createdAt) || '时间未记录'}</time>
-                </p>
-                {pin.placement && <p className="ap-audit-place">{pin.placement}</p>}
-                <p>{pin.body}</p>
-              </li>)}
-            </ol>
-          </article>
-        ))}
-    </section>
+        ? <p className="ap-review-empty"><MessageSquare size={14} aria-hidden="true"/>还没有对方的修改</p>
+        : <>
+          {shownFeedback.map(pin => {
+            const title = pin.body.trim() || pin.placement || '未写意见';
+            const locatable = typeof pin.x === 'number' && typeof pin.z === 'number';
+            const mark = <span className="ap-review-icons"><MessageSquare size={14} aria-hidden="true"/><MapPin className="ap-review-pin" size={14} aria-hidden="true"/></span>;
+            return locatable
+              ? <button key={pin.id} type="button" className="ap-review-row" onClick={() => requestOutdoorPlanPointFocus(pin.x as number, pin.z as number)}>
+                {mark}<span className="ap-review-title">{title}</span>
+              </button>
+              : <div key={pin.id} className="ap-review-row">{mark}<span className="ap-review-title">{title}</span></div>;
+          })}
+          {feedbackRows.length > shownFeedback.length && <p className="ap-review-more">还有 {feedbackRows.length - shownFeedback.length} 处，点开一条飞到地图</p>}
+        </>}
+    </ReviewGroup>
 
     {hasAuditRecord && <details className="ap-audit-records">
       <summary>本机评审记录</summary>
