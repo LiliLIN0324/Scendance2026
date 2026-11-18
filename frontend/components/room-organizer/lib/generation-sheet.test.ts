@@ -18,12 +18,12 @@ import {
 
 /**
  * 统一生成面板的状态契约：面板只有一个，入口只差「来路（scope）」与「带不带设施」。
- * 场地首层是文生 / 图生，不再列「生成新场景」；导入也不从场地进来。
+ * 创作首层是三张卡片，不再列「生成新场景」；导入也不从创作进来。
  */
 describe('generation-sheet 状态', () => {
   beforeEach(() => { resetGenerationSheetForTests(); });
 
-  it('场地入口：先停在卡片，标题叫「场地」，首层不再列生成新场景或生成模型', () => {
+  it('创作入口：先停在卡片，标题叫「创作」，首层不再列生成新场景或生成模型', () => {
     openGenerationSheet({ scope: 'venue' });
     const state = getGenerationSheetState();
     expect(state.open).toBe(true);
@@ -31,7 +31,8 @@ describe('generation-sheet 状态', () => {
     expect(state.scope).toBe('venue');
     expect(state.source).toBe('text');
     expect(state.facility).toBeNull();
-    expect(generationScopeTitle(state.scope)).toBe('场地');
+    expect(generationScopeTitle(state.scope)).toBe('创作');
+    expect(generationSheetTitle(state)).toBe('创作');
     expect(generationTaskList('venue')).toEqual(['scene-recon']);
     expect(generationTaskList('venue')).not.toContain('scene-new');
     expect(generationTaskList('venue')).not.toContain('model');
@@ -119,8 +120,8 @@ describe('generation-sheet 状态', () => {
     expect(getGenerationSheetState().prompt).toBe('');
   });
 
-  it('主按钮文案与扣额度确认随操作变：导入和重建占位都不扣费', () => {
-    expect(generationPrimaryLabel('scene-recon')).toBe('暂未开放');
+  it('主按钮文案与扣额度确认随操作变：导入和重建入口都不扣费', () => {
+    expect(generationPrimaryLabel('scene-recon')).toBe('拍摄现场');
     expect(generationPrimaryLabel('model', 'text')).toBe('生成');
     expect(generationPrimaryLabel('model', 'image')).toBe('生成');
     expect(generationPrimaryLabel('model', 'import')).toBe('导入');

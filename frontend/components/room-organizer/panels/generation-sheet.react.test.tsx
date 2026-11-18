@@ -49,7 +49,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); controller.dispose(); vi.restoreAllMocks(); });
 
 describe('统一生成面板', () => {
-  it('场地入口：文生 / 图生一张卡片点开，重建只占位，没有生成新场景', () => {
+  it('创作入口：同一页三张卡片，开始创作打开原来的生成窗口，没有分页和暂未开放', () => {
     const onOpenCapture = vi.fn();
     render(<GenerationSheetHost controller={controller} onOpenCapture={onOpenCapture} />);
     expect(screen.queryByTestId('generation-sheet')).toBeNull();
@@ -57,23 +57,27 @@ describe('统一生成面板', () => {
     act(() => openGenerationSheet({ scope: 'venue' }));
     expect(screen.queryByText('你想做什么？')).toBeNull();
     expect(screen.queryByText('生成新场景')).toBeNull();
+    expect(screen.queryByText('暂未开放')).toBeNull();
+    expect(screen.queryByText('一座带檐的小亭，暖白墙面')).toBeNull();
     expect(screen.queryByRole('button', { name: '导入' })).toBeNull();
-    expect(screen.getByRole('complementary', { name: '场地' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '文生 3D' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '图生 3D' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '文生 3D' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '图生 3D' })).toBeNull();
+    expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '重建真实场地' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: '文字生成 3D 模型' })).toBeTruthy();
-    expect(screen.getByTestId('generation-task-scene-recon').textContent).toContain('暂未开放');
-
-    fireEvent.click(screen.getByTestId('generation-task-scene-recon'));
-    expect(screen.getByTestId('generation-recon-closed').textContent).toBe('暂未开放');
-    expect(screen.queryByText('现场拍摄')).toBeNull();
+    expect(screen.getByRole('heading', { name: '图片生成 3D 模型' })).toBeTruthy();
+    expect(screen.getByText('实地重建')).toBeTruthy();
+    expect(screen.getByText('拍摄现场，或上传已有的照片、视频。')).toBeTruthy();
+    expect(screen.getByText('描述一件要放进场地的物件。')).toBeTruthy();
+    expect(screen.getByText('上传一张参考图，生成可布置的模型。')).toBeTruthy();
+    expect(screen.getByText('重建后在这里预览')).toBeTruthy();
+    expect(screen.getAllByText('三维示意，不是生成结果')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: '开始创作' })).toHaveLength(2);
     expect(screen.queryByRole('checkbox', { name: /消耗额度/ })).toBeNull();
     expect(onOpenCapture).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: '图生 3D' }));
-    expect(screen.getByRole('heading', { name: '图片生成 3D 模型' })).toBeTruthy();
-    fireEvent.click(screen.getByTestId('generation-venue-start'));
+    fireEvent.click(screen.getByTestId('generation-venue-start-image'));
     expect(screen.getByRole('complementary', { name: '图生 3D' })).toBeTruthy();
     expect(screen.getByText('选一张参考图，或拖进来')).toBeTruthy();
     expect(screen.getByTestId('generation-target').textContent).toContain('我的生成');
@@ -85,9 +89,65 @@ describe('统一生成面板', () => {
     expect(screen.getByRole('textbox', { name: '描述' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /返回/ }));
-    expect(screen.getByRole('complementary', { name: '场地' })).toBeTruthy();
+    expect(screen.getByRole('complementary', { name: '创作' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '图片生成 3D 模型' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '关闭生成面板' }));
     expect(screen.queryByTestId('generation-sheet')).toBeNull();
+  });
+
+  it('重建卡：拍摄和上传是同一个口，选中后在预览台显出', () => {
+    const previousCreate = URL.createObjectURL;
+    const previousRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn((blob: Blob) => `blob:${(blob as File).name || 'media'}`) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL;
+    const asList = (files: File[]): FileList => {
+      const list = {
+        length: files.length,
+        item: (index: number) => files[index] ?? null,
+        *[Symbol.iterator]() { yield* files; },
+      } as FileList;
+      files.forEach((file, index) => { Object.defineProperty(list, index, { value: file }); });
+      return list;
+    };
+    try {
+      render(<GenerationSheetHost controller={controller} />);
+      act(() => openGenerationSheet({ scope: 'venue' }));
+      const shoot = screen.getByLabelText('拍摄现场') as HTMLInputElement;
+      const upload = screen.getByLabelText('上传照片或视频') as HTMLInputElement;
+      expect(shoot.getAttribute('capture')).toBe('environment');
+      expect(shoot.multiple).toBe(true);
+      expect(upload.multiple).toBe(true);
+      expect(upload.hasAttribute('capture')).toBe(false);
+      expect(shoot.accept).toBe(upload.accept);
+      for (const token of ['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.m4v', '.mov', '.qt', '.insv', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime']) {
+        expect(shoot.accept).toContain(token);
+      }
+      expect(screen.getByTestId('creation-entry').textContent).not.toMatch(/Insta360|insta360|云盘|至少 ?20/);
+
+      const png = new File(['png'], 'hall.png', { type: 'image/png' });
+      Object.defineProperty(upload, 'files', { configurable: true, value: asList([png]) });
+      fireEvent.change(upload);
+      expect(screen.getByRole('img', { name: 'hall.png' }).getAttribute('src')).toBe('blob:hall.png');
+
+      const insv = new File(['i'], 'spin.insv', { type: 'application/octet-stream' });
+      const clip = new File(['v'], 'walk.mp4', { type: 'video/mp4' });
+      Object.defineProperty(shoot, 'files', { configurable: true, value: asList([insv, clip]) });
+      fireEvent.change(shoot);
+      const stage = screen.getByTestId('creation-recon-stage');
+      expect(stage.querySelector('video')?.getAttribute('src')).toBe('blob:walk.mp4');
+      expect(stage.textContent).toContain('已选 2 个');
+      expect(screen.queryByRole('img', { name: 'hall.png' })).toBeNull();
+
+      const pdf = new File(['%'], 'notes.pdf', { type: 'application/pdf' });
+      Object.defineProperty(upload, 'files', { configurable: true, value: asList([pdf]) });
+      fireEvent.change(upload);
+      expect(screen.getByRole('status').textContent).toContain('请选择照片或视频');
+      expect(stage.querySelector('video')).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      URL.createObjectURL = previousCreate;
+      URL.revokeObjectURL = previousRevoke;
+    }
   });
 
   it('属性卡入口：标题「生成模型」，先过额度确认才真提交', async () => {
@@ -287,8 +347,7 @@ describe('统一生成面板', () => {
   it('图生没有参考图时不提交；文生没有描述时也不提交', async () => {
     render(<GenerationSheetHost controller={controller} />);
     act(() => openGenerationSheet({ scope: 'venue' }));
-    fireEvent.click(screen.getByRole('button', { name: '图生 3D' }));
-    fireEvent.click(screen.getByTestId('generation-venue-start'));
+    fireEvent.click(screen.getByTestId('generation-venue-start-image'));
     await waitFor(() => expect(screen.queryByText(/正在读取可用的生成模型/)).toBeNull());
     fireEvent.change(screen.getByPlaceholderText('按照片做同款，哑光白桌面'), { target: { value: '按照片做同款' } });
     fireEvent.click(screen.getByLabelText(/消耗额度/));

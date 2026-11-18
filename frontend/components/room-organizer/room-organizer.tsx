@@ -4826,12 +4826,12 @@ useEffect(() => {
                 </button>
                 <button type="button"
                   className={`sc-rail-tool sc-rail-disc sc-rail-capture${captureOpen || generationOpen ? ' is-active' : ''}`}
-                  /* 2026-11-19：场地钮打开文生 / 图生卡片。重建真实场地只占位，不再从这里进拍摄。 */
+                  /* 2026-11-18：创作钮打开同一页三张卡片。文生/图生的「开始创作」才进原来的生成窗口。 */
                   aria-pressed={captureOpen || generationOpen}
                   aria-expanded={captureOpen || generationOpen}
                   aria-controls="generation-sheet workbench-capture-card"
-                  aria-label="场地：文生 3D、图生 3D，或重建真实场地"
-                  data-tip="场地"
+                  aria-label="创作：重建真实场地、文生 3D 或图生 3D"
+                  data-tip="创作"
                   onClick={() => {
                     // 再点一次收起，和拍摄卡/户外卡同一种手感。
                     if (generationOpen) { closeGenerationSheet(); return; }
@@ -4840,7 +4840,7 @@ useEffect(() => {
                 >
                   <RailPlus size={28} active={captureOpen || generationOpen} aria-hidden="true" />
                   <span className="sc-rail-3d-tag" aria-hidden="true">3D</span>
-                  <span className="sc-rail-label" aria-hidden="true">场地</span>
+                  <span className="sc-rail-label" aria-hidden="true">创作</span>
                 </button>
                 <button
                   type="button"
