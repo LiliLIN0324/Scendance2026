@@ -1034,11 +1034,13 @@ useEffect(() => {
     void issueReviewLink().then(result => setReviewLink(result.url)).catch(() => { /* 失败原因由既有气泡/状态行说明 */ });
   }, [issueReviewLink]);
   // G3：Bingo 的「发给客户评审」不另发一套链接，只打开右上角同一个弹窗；弹窗默认允许钉评。
+  // 2026-11-18：旧 OutdoorDeliveryPanel 不再作为评审入口——它和新版 ShareMenu 是两套 UI，
+  // 点 Bingo 会看到旧分享页。这里改为递增 shareOpenRequest，走右上角同一份 ShareMenu。
   const openReviewShare = useCallback(async () => {
     setOutdoor2DOpen(true);
+    setShareOpenRequest(value => value + 1);
     const result = await issueReviewLink();
     setReviewLink(result.url);
-    window.setTimeout(() => outdoorOverlayRef.current?.openReviewShare(), 80);
     return result;
   }, [issueReviewLink]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
@@ -4487,6 +4489,7 @@ useEffect(() => {
   // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
   const shareActions: ShareMenuActions = {
     onIssueReviewLink: issueReviewLink,
+    onOpenBingo: () => { setWorkbenchMode('layout'); showAgent('bingo'); },
     onPublish: publishVersion,
     onListShares: listProjectShares,
     onRevokeShare: revokeProjectShare,

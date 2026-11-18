@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "site": {
+    "projectId": "demo-project",
+    "name": "示例：河滨公园东段（合成数据）",
+    "crs": "local-enu-gcj02",
+    "anchor": { "lng": 120.15, "lat": 30.27 },
+    "areaM2": 4800,
+    "bounds": { "minX": 0, "minY": 0, "maxX": 80, "maxY": 60 }
+  },
+  "elements": [
+    {
+      "id": "b-1",
+      "kind": "boundary",
+      "name": "场地边界",
+      "certainty": "user-confirmed",
+      "source": "user-plan",
+      "geometry": { "type": "polygon", "points": [{ "x": 0, "y": 0 }, { "x": 80, "y": 0 }, { "x": 80, "y": 60 }, { "x": 0, "y": 60 }] },
+      "layoutWeight": "hard",
+      "semantics": ["边界"],
+      "precisionM": 1
+    },
+    {
+      "id": "w-1",
+      "kind": "water",
+      "name": "河道",
+      "certainty": "mapped",
+      "source": "osm",
+      "sourceId": "way/000000",
+      "observedAt": "2026-06-01",
+      "geometry": { "type": "polygon", "points": [{ "x": 0, "y": 0 }, { "x": 80, "y": 0 }, { "x": 80, "y": 8 }, { "x": 0, "y": 8 }] },
+      "widthM": 8,
+      "precisionM": 3,
+      "layoutWeight": "hard",
+      "semantics": ["水域", "岸线", "近岸缓冲"]
+    },
+    {
+      "id": "e-1",
+      "kind": "entrance",
+      "name": "东入口",
+      "certainty": "mapped",
+      "source": "osm",
+      "geometry": { "type": "point", "points": [{ "x": 78, "y": 30 }] },
+      "layoutWeight": "hard",
+      "semantics": ["入口", "人行"]
+    },
+    {
+      "id": "g-1",
+      "kind": "open-space",
+      "name": "草坪",
+      "certainty": "inferred",
+      "source": "osm",
+      "geometry": { "type": "polygon", "points": [{ "x": 20, "y": 12 }, { "x": 60, "y": 12 }, { "x": 60, "y": 44 }, { "x": 20, "y": 44 }] },
+      "layoutWeight": "soft",
+      "semantics": ["绿地", "铺装"]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "c-1",
+      "kind": "shoreline-buffer",
+      "severity": "hard",
+      "evidenceIds": ["w-1"],
+      "bufferM": 2,
+      "reason": "水域边界外 2 m 为近岸缓冲；儿童设备不得进入，且近岸水深 >0.7 m 时须设护栏",
+      "assertionIds": ["KID-09"]
+    },
+    {
+      "id": "c-2",
+      "kind": "no-build",
+      "severity": "hard",
+      "evidenceIds": ["w-1"],
+      "reason": "水域面积为禁建区，任何物料不得落位",
+      "assertionIds": []
+    }
+  ],
+  "gaps": [
+    { "code": "noWaterDepth", "message": "有水域但无水深数据，KID-09 的水深判定无法执行", "blocks": ["KID-09"] },
+    { "code": "noSlope", "message": "无高程数据，CMP-04/CMP-07 无法执行", "blocks": ["CMP-04", "CMP-07"] },
+    { "code": "noShade", "message": "无树冠/遮荫数据，KID-11/ELD-09 只能报缺", "blocks": ["KID-11", "ELD-09"] }
+  ],
+  "coverage": {
+    "status": "partial",
+    "complete": false,
+    "unknowns": ["水深", "高程", "遮荫"],
+    "scope": { "radiusM": 300, "crs": "gcj-02" },
+    "fetchedAt": "2026-06-01"
+  }
+}
