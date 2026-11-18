@@ -2196,8 +2196,11 @@ export function useOutdoorAgentWorkflow(input: {
     }
   }
   function askForDetails(question: string) {
-    callbacks.current.say(question, true);
-    status("补充对话里的信息后可以继续。", "ask");
+    // 轮次 109：反问只问“现在要什么”，但上一句里已经交代过的后置活（“最后再调通道”）
+    // 不能因为正在追问就消失——气泡与提示条都把它补上，用户才看得出后半句没被吞。
+    const note = deferredNote(priorUserTextRef.current);
+    callbacks.current.say(question + note, true);
+    status("补充对话里的信息后可以继续。" + note, "ask");
   }
   /** 2026-11-17：红卡上的「下一步」——按卡上写的那个动作真正推进，而不是把同一个动作原样重放。 */
   async function applyNoticeFix() {
