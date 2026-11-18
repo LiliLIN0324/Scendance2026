@@ -1269,10 +1269,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     const notes = report.notes.length ? `\n${report.notes.join('\n')}` : '';
     if (report.clean) {
-      say({ role: 'agent', review: true, long: true, text: `检查了 ${report.checked} 件：本次未发现这些几何问题。检查只覆盖已建模物件，不代表现场安全或规范验收。${notes}` });
+      say({ role: 'agent', review: true, long: true, text: `检查了 ${report.checked} 件：挤、压墙、出界、挡门前留空这几项没发现问题。只看了已建模的物件，没建模的先加进来再查。${notes}` });
       return;
     }
-    say({ role: 'agent', review: true, long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只报挤、压墙/柱、出界、挡门前留空和座椅拉不开，不是合规审查。${notes}` });
+    say({ role: 'agent', review: true, long: true, text: `我按画布几何看了一遍 ${report.checked} 件，找到 ${report.issues.length} 条：\n只查挤、压墙/柱、出界、挡门前留空和座椅拉不开这几项。${notes}` });
     const actionable = report.issues.filter(issue => !!issue.fix);
     for (const issue of actionable.slice(0, 3)) {
       say({ role: 'agent', review: true, text: `${issue.title}。${issue.detail}`, action: { label: `按这条改：${issue.fix!.label}`, run: () => applyReviewFix(issue) } });
@@ -1731,7 +1731,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (!bridge.beginVenueBoundary(anchor)) { setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '已有规划不能直接更换地理锚点，请先新建户外活动；当前内容保持不变', steps: [] }); return; }
       manualVenueAnchorRef.current = anchor;
       setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'blocked', action: '请在地图手画并闭合边界；未写入新场地', steps: ['候选地点已确认', '自动轮廓未命中，启用手画'] });
-      say({ role: 'agent', text: '没找到可用的真实边界，已定位到候选地点。请在户外地图逐点手画并闭合边界；闭合前不写入新锚点，不虚构 300m 方块。Esc 可取消。' });
+      say({ role: 'agent', text: '没找到可用的真实边界，地图已移到候选地点。沿实际用地逐点圈出并闭合，闭合那一刻写入地点和红线；Esc 取消。' });
       return;
     }
     if(bridge.applyPlan){outdoorWorkflow.offerBoundary(anchor,boundary,place.name);say({role:'agent',text:'已取得地点候选轮廓。请先核对其中哪一片确实是本次活动场地；不会把整座商场当成已授权活动范围。'});return;}
@@ -1928,7 +1928,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     setRouteProposal(null); setZoneProposal(null);
     setFlowSimActive(true);
-    setOutdoorTask({ intent: '查看流动示意', state: 'working', stopLabel: '停止模拟', action: '2D 流动示意已开启；不写入规划，不代表容量/疏散评估', steps: ['读取已应用流线', '启动真实画布动画'] });
+    setOutdoorTask({ intent: '查看流动示意', state: 'working', stopLabel: '停止模拟', action: '流动示意已开启：只看走向，要改就回流线卡', steps: ['读取已应用流线', '启动真实画布动画'] });
     say({ role: 'agent', text: `流动模拟开始了：${plan.routes.length} 条流线上的小点就是人流/车流，线色深浅=密度。这是预览动画，不写入方案；说「停止模拟」结束。` });
   }
 
@@ -2516,17 +2516,17 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const routeReview=assessLocalDraftRoutes(base,result.layout,annotations,activeFloorIndex);
       const limitations=[annotations.hasUnmodelled?'当前版本尚未将已有路线、区域或阶段纳入组团计算，暂只能预览。':null,localDraftRouteBlock(routeReview)].filter((item,index,items):item is string=>!!item&&items.indexOf(item)===index);
       const routeNotices=annotations.routes.length?[
-        '仅核对手绘路线中心线与数字模型包围占地；图纸原件、路线净宽、门、疏散、消防、无障碍和现场条件仍需核验。',
+        '这次只核对手绘路线中心线和模型的占地范围；路线净宽、门和无障碍的实测值补进来后一起算。',
         ...(routeReview.existing.length?[`原场景已有 ${routeReview.existing.length} 处路线与模型包围占地相交，不归因于本次新增；仍需核对。`]:[]),
         ...(routeReview.contacts.length?['路线与模型包围占地边缘接触，实际净宽仍需核对。']:[]),
       ]:[];
-      const doorNotice=markedDoor||annotations.hasDoor?'图中门洞或入口未纳入本次组团净空检查；门位、宽度和开启情况仍需核验，本版只是探索草案，不代表安全通过或可交付。':null;
+      const doorNotice=markedDoor||annotations.hasDoor?'这次组团净空没算门洞和入口：门位、宽度、开启方向补进图后，下一版一起算。':null;
       const dimensionLine=(name:string,size:{width:number;depth:number;height:number},facts:SeatingItemFacts|undefined)=>`${name} ${(['width','depth','height'] as const).map(axis=>`${size[axis]}（${facts?.[axis]?.status==='reported'?'用户提供':'假设'}）`).join(' × ')} 米`;
       const localDraftDetails=[shared?`本机草案：需求 ${result.requested} 人、${requestedTables} 桌；本次排了 ${result.placed} 人、${placedTables} 桌、${result.placed} 把椅子，尚缺 ${result.shortfall} 人；未同步云端，也未确认本机持久化。`:`本机草案：本次排了 ${result.placed} / ${result.requested} 套，尚缺 ${result.shortfall} 套；未同步云端，也未确认本机持久化。`,
         shared?'每桌 2 人：用户明确选择；实际桌椅仍需核验。':allocation?.status==='one_per_desk'?'每人一桌：用户明确选择；实际桌椅仍需核验。':'每人一桌：本次探索假设，用户尚未指定，可随时修改。',
         `示意尺寸：${dimensionLine(shared?'双人桌':'单人桌',desk.value,saved?.desk)}；${dimensionLine('椅子',chair.value,saved?.chair)}；实物待核验。`,
-        `示意间距：桌椅 0.1 米、${shared?'椅间 0.1 米、':''}列间 0.3 米、排间 0.5 米、距边 0.3 米，均为假设；不代表通行或规范结论。`,
-        ...(shared&&result.shortfall?[`${result.limitReason==='object_limit'?'已触及本机场景物件数量上限':result.limitReason==='scan_limit'?'本次搜索达到计算上限':'本次排布未找到更多位置'}，不代表场地最大容量。`]:[]),
+        `示意间距：桌椅 0.1 米、${shared?'椅间 0.1 米、':''}列间 0.3 米、排间 0.5 米、距边 0.3 米；这是我取的默认值，要改就说数字。`,
+        ...(shared&&result.shortfall?[`${result.limitReason==='object_limit'?'已触及本机场景物件数量上限':result.limitReason==='scan_limit'?'本次搜索达到计算上限':'本次排布未找到更多位置'}，这一版就到这儿；要更多位置就腾地方或换分区。`]:[]),
         `${result.unknown.join('、')}仍需核验。`,...(doorNotice?[doorNotice]:[]),...routeNotices,...limitations];
       const plan:PlanProposal & {localDraftDetails:string[]}={layouts:[result.layout],added:result.placed+placedTables,removing:0,
         keptLocked:base.floors[activeFloorIndex]?.items.filter(item=>item.locked&&!isStructuralMarker(item)).length??0,
@@ -2712,7 +2712,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setPhase('ready'); setProgress(GEN_STEPS.length);
     say({ role: 'agent', text: review
       ? `确认了：${moved} 件换了位置，其他没动${skipped ? `；还有 ${skipped} 件没动（锁着或没找到落点）` : ''}。不想要就撤销一步，整体退回原位。`
-      : localExploration ? `已写入本机画布：这一版一共 ${total} 件物料，可撤销；尚未确认本机持久化，也未同步云端。门、路线、消防、无障碍和现场条件仍需核验，这只是探索草案，不代表安全通过或可交付。`
+      : localExploration ? `已写入本机画布：这一版一共 ${total} 件物料，可撤销；还没同步云端。门、路线和无障碍的实测值补进图后，下一版一起算。`
       : `写进画布了：这一版一共 ${total} 件物料，都能直接拖；不想要就撤销一步，整体退回来。` });
     if (styleHistoryFailed) say({ role: 'agent', amber: true, text: '布置已应用，但风格历史未能保存。' });
     callbacks.onFit();
@@ -3806,7 +3806,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     startFlowSim,
     stopFlowSim,
     outdoorWorkflow,outdoorBridgeReady,searchOutdoorVenue,
-    registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after); },
+    registerRouteBridge: bridge => { const before=Boolean(routeBridgeRef.current?.applyPlan);routeBridgeRef.current = bridge;const after=Boolean(bridge?.applyPlan);if(before!==after)setOutdoorBridgeReady(after);outdoorWorkflow.reconcileCanvasStage(); },
     exportPreview, previewExport: proposeExport, confirmExport, confirmCloudMaterialDraft, dismissExport, reviewNow, issueReviewLink,
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); },
     // 浮窗里「图片 / 文件」各自限定 accept；不传时回到全量白名单（老入口行为不变）。
@@ -4373,6 +4373,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 卸载时别把麦克风挂在后台。
   useEffect(() => () => { recognitionRef.current?.abort(); recognitionRef.current = null; }, []);
   const feed = useRef<HTMLDivElement>(null);
+  /** 对话流挂载重试计数：feed 晚于本 effect 挂载（conversation 后切过来）时触发重连观察器。 */
+  const [feedPinnedTick, setFeedPinnedTick] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // 树外入口（选中物件弹层）经预填总线把指令送进既有 composer：
   // 并入现有草稿（空格追加、不覆盖），聚焦输入框；不自动发送，仍走原提案审批链。
@@ -4403,6 +4405,38 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     if (agent.bubbles.length === 0 && mode === 'layout') return;
     feed.current?.scrollTo?.({ top: feed.current.scrollHeight });
   }, [agent.bubbles.length, agent.state, mode]);
+  // 2026-11-18 用户实测：分屏拖比例、卡片展开、步骤追加之后，对话区停在旧位置，要从头翻。
+  // 会话永远锚定最新消息：容器或内容高度一变就钉回底部（气泡变化那条 effect 之外的兜底）。
+  // feed 只在 conversation 态挂载，这里用 ref 是否挂上做门，不必引 conversation 本身。
+  useEffect(() => {
+    let ro: ResizeObserver | null = null;
+    let mo: MutationObserver | null = null;
+    const attach = () => {
+      const el = feed.current;
+      if (!el) return false;
+      const pin = () => { el.scrollTo({ top: el.scrollHeight }); };
+      pin();
+      const resize = new ResizeObserver(pin);
+      resize.observe(el);
+      for (const child of Array.from(el.children)) resize.observe(child);
+      // 子节点增删（卡片/气泡挂载卸载）后重新跟踪新的内容元素。
+      const mutation = new MutationObserver(() => {
+        resize.disconnect();
+        resize.observe(el);
+        for (const child of Array.from(el.children)) resize.observe(child);
+      });
+      mutation.observe(el, { childList: true });
+      ro = resize;
+      mo = mutation;
+      return true;
+    };
+    if (!attach()) {
+      // 挂载早于 feed 渲染（conversation 还没切过来）：下一帧再试一次。
+      const raf = requestAnimationFrame(() => { if (!attach()) setFeedPinnedTick(value => value + 1); });
+      return () => cancelAnimationFrame(raf);
+    }
+    return () => { ro?.disconnect(); mo?.disconnect(); };
+  }, [mode, feedPinnedTick]);
   const generating = agent.state === 'generating';
   const localStageLine = runState.scope === 'layout'
     ? runState.stepLog.find(step => step.outcome === 'running')?.thought ?? null
@@ -4549,6 +4583,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           </div>
         </details>}
         {activity && <>
+        {/* 没有「这一版布置」也能进执行资料：只打开画布上的资料浮层，不提交生成。 */}
+        <button
+          type="button"
+          className="ap-delivery-entry"
+          onClick={() => agent.callbacks.onOpenDelivery()}
+        >
+          执行资料
+        </button>
         <button
           type="button"
           className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}

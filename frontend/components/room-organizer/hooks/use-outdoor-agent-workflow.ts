@@ -137,7 +137,7 @@ export interface OutdoorWorkflowProposal {
  * 这种句子不该再被反问清单——按分区用途与面积出默认方案就行。
  */
 function designerCue(message: string): boolean {
-  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的|搋好的/u.test(message);
+  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的/u.test(message);
 }
 
 export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
@@ -165,9 +165,11 @@ class OutdoorStepBlocked extends Error {
   }
 }
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
-  scope: "请在地图上检查边界是否贴合实际可用范围。拖动顶点调整后，请重新核对活动范围。",
-  zones: "请核对地图上蓝色描边的分区。选中后可以拖动分区，或拖动顶点调整轮廓。",
-  "main-routes": "请核对地图上蓝色标记的主通道和候选入口。选中路线后可拖动路线转折点绕开障碍（在线段上点一下就加点，点中已有折点即删掉，拖到相邻折点上就合并），也可把候选入口移到实际门口。",
+  // 2026-11-18 用户反馈「为什么要写这么多」：应用提示只保留一句真正要紧的动作话；
+  // 「边界就在眼前」「下一步是什么」分别由画布和任务卡标题承担，聊天里不重复。
+  scope: "不贴合就拖顶点调整，改完重新核对。",
+  zones: "分区不合适可拖动整块或拖顶点微调。",
+  "main-routes": "路线和候选入口可拖动微调。",
 };
 
 function changedIds<T extends { id: string }>(before: readonly T[], after: readonly T[]): string[] {
@@ -427,6 +429,16 @@ export function useOutdoorAgentWorkflow(input: {
   >();
   const [busy, setBusy] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  /**
+   * 2026-11-18 用户实测：进入手画模式后任务卡还挂着旧引导（「先说用途或手画」+手画按钮），
+   * 与通知条自相矛盾，「收起」也和内容脱节。这里记录当前绘制模式，卡上据此收掉旧内容，
+   * 让通知条成为唯一指令。任意新回合、取消、切活动都会清掉。
+   */
+  const [drawingMode, setDrawingMode] = useState<"zone" | "route" | "node" | null>(null);
+  /** 2026-11-18：scope 阶段画布上是否已有合法用地红线——卡片据此决定「直接给核对卡」还是「教怎么画」。 */
+  const [boundaryReady, setBoundaryReady] = useState(false);
+  /** 已经自动签发过确认预览的那份边界；同一份边界撤回后不再自动弹回。 */
+  const autoScopeSig = useRef<string | null>(null);
   const [notice, setNotice] = useState("");
   const [designSteps, setDesignSteps] = useState<string[]>([]);
   /** 2026-11-17：画布规模并进思考卡摘要（一行），不再作为一条步骤占一行。 */
@@ -560,6 +572,7 @@ export function useOutdoorAgentWorkflow(input: {
   function cancel(options?: { preservePendingLogin?: boolean }) {
     const withdrawnCard = proposalRef.current;
     setDesignSteps([]);
+    setDrawingMode(null);
     setCanvasNote(null);
     updatePendingPlan(null);
     setAwaitingThought(false);
@@ -568,6 +581,9 @@ export function useOutdoorAgentWorkflow(input: {
     if (simulating) callbacks.current.simulate?.(false);
     setSimulating(false);
     abort.current?.abort();
+    // 2026-11-18：撤回预览 / 改手画后，同一份红线不再自动弹回确认卡（重画边界才会重新签）。
+    const livePlan = callbacks.current.bridge()?.getPlan();
+    autoScopeSig.current = livePlan ? JSON.stringify(livePlan.boundary) : null;
     callbacks.current.begin(); // Invalidate the shared outer task epoch as well as this hook.
     token.current = null;
     proposalRef.current = null;
@@ -580,10 +596,11 @@ export function useOutdoorAgentWorkflow(input: {
       persist({ ...kept, pendingBoundary: undefined });
     }
     liveTurn.current.settle("cancelled");
-    status("已取消当前预览/请求；已应用规划和需求保留。", "stopped");
+    status("已取消当前预览/请求；已应用的规划与需求都保留。", "stopped");
   }
   useEffect(() => {
     setDesignSteps([]);
+    setDrawingMode(null);
     setThought(null);
     setThoughtMs(null);
     setThoughtRequest(null);
@@ -632,6 +649,54 @@ export function useOutdoorAgentWorkflow(input: {
     });
     return false;
   }
+  /**
+   * 2026-11-18 用户实测：画布上已有画好的红线（甚至已确认），进页任务卡却默认停在
+   * 「搜索目标地点」——流程草稿里没有这份事实，阶段就和画布脱节了。这里对账：
+   * 画布上有合法闭合边界时，阶段不退回 place，未确认的推到 scope 等确认卡。
+   * 只对账，不发言不发请求；在画布 bridge 注册时调用（进页/切活动都会重新注册）。
+   */
+  function reconcileCanvasStage() {
+    const plan = callbacks.current.bridge()?.getPlan();
+    if (!plan || !checkBoundaryRing(plan.boundary).ok) return;
+    if (stateRef.current.stage !== "place") return;
+    persist({ ...stateRef.current, stage: "scope" });
+  }
+  /**
+   * 2026-11-18 用户拍板：场地已经有用地红线时，任务卡就该直接是「待你核对」这张，
+   * 不该让人先点一次「确认活动范围」才看到它；只有场地还没有红线时，才给画红线的引导卡。
+   * 画布不对外发变更事件，所以 scope 阶段低频读一次 bridge 快照：红线一闭合就签发确认预览。
+   * 同一份边界只自动签一次——用户点了「撤回预览」不会立刻又被弹回来；重画边界才会重新签。
+   */
+  useEffect(() => {
+    if (state.stage !== "scope" || proposal || busy || drawingMode) {
+      setBoundaryReady(false);
+      return undefined;
+    }
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
+      const ready = !!planNow && checkBoundaryRing(planNow.boundary).ok;
+      setBoundaryReady(ready);
+      if (!ready || !planNow) return;
+      const sig = JSON.stringify(planNow.boundary);
+      if (autoScopeSig.current === sig) return;
+      autoScopeSig.current = sig;
+      const job = start();
+      persist({ ...stateRef.current, stage: "scope" });
+      offer(planNow, "scope", "确认当前活动范围", job, [
+        "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
+      ]);
+      setBusy(false);
+    };
+    tick();
+    const timer = setInterval(tick, 800);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [state.stage, proposal, busy, drawingMode]);
+
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
     const map = bridge?.mapContext
@@ -680,7 +745,8 @@ export function useOutdoorAgentWorkflow(input: {
       callbacks.current.bridge()?.previewBoundary?.(next.anchor, next.boundary);
     }
     if (kind === "zones" || kind === "main-routes" || kind === "objects") {
-      designStep(`已生成「${label}」预览，等待核对。`);
+      // 「等待核对」由下面 status 的提示条说，运行卡只记事实，避免同一句在两个表面重复。
+      designStep(`已生成「${label}」预览。`);
     }
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
     liveTurn.current.markPreview();
@@ -856,7 +922,7 @@ export function useOutdoorAgentWorkflow(input: {
         : "";
     status(
       mapEditHint
-        ? `已应用「${p.label}」。${mapEditHint}合适后可继续：${nextStep}。${packedNote}`
+        ? `已应用「${p.label}」。${mapEditHint}`
         : `已应用「${p.label}」。下一步：${nextStep}；也可直接补充要求或回退修改。${packedNote}`,
       "done",
     );
@@ -914,6 +980,17 @@ export function useOutdoorAgentWorkflow(input: {
     }
     setBusy(false);
   }
+  /**
+   * 搜索选区画在地图上，但不是 plan.boundary。核对（以及范围未确认时的下一步）
+   * 把它送进现有的范围确认卡：确认后才写入红线，取消则选区还在。
+   */
+  function promoteVisibleRange(): boolean {
+    const visible = callbacks.current.bridge()?.visibleActivityRange?.() ?? null;
+    if (!visible || !checkBoundaryRing(visible.boundary).ok) return false;
+    if (!callbacks.current.bridge()?.getPlan()) return false;
+    offerBoundary(visible.anchor, visible.boundary, visible.name.trim() || "当前地图范围");
+    return true;
+  }
   function manualBoundary(expected?: OutdoorWorkflowProposal) {
     if (expected && proposalRef.current !== expected) {
       status("这张确认卡已过期，未应用其他任务的提案。", "blocked");
@@ -939,7 +1016,7 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     status(
-      "请在同一地图圈出实际活动范围并闭合；完成后还需在对话核对，不把商场整体当活动场地。",
+      "请在同一地图圈出实际活动范围并闭合：只圈这次真正用到的那片地，闭合后回来核对。",
     );
   }
   // 2026-11-14 用户指令「给我几个方案」：物件排布方案基座（objects 动作时的 plan/候选/当前策略）。
@@ -964,7 +1041,7 @@ export function useOutdoorAgentWorkflow(input: {
     const stored = objectsLayoutRef.current;
     const p = proposalRef.current;
     if (!stored || !p || p.kind !== "objects") {
-      status("没有可切换的物件排布预览；先说一次物件清单。", "blocked");
+      status("还没有可切换排法的物件预览；说一句想摆什么，或者说「随便摆」，我先出一版默认方案。", "blocked");
       return;
     }
     const job = start();
@@ -1061,6 +1138,9 @@ export function useOutdoorAgentWorkflow(input: {
     );
   }
   async function act(turn: OutdoorTurn, message: string, continueDesign = false) {
+    // 新回合开始即视为离开「纯手画」状态：卡上旧内容恢复，或按新意图重排。
+    if (turn.action !== "draw-zone" && turn.action !== "draw-route" && turn.action !== "draw-entrance")
+      setDrawingMode(null);
     const priorUserText = priorUserTextRef.current;
     priorUserTextRef.current = message;
     if (turn.action === "cancel") {
@@ -1075,7 +1155,7 @@ export function useOutdoorAgentWorkflow(input: {
       status(
         ok
           ? active
-            ? "2D沿已确认路线的流动示意已启动；不是容量/疏散安全模拟。"
+            ? "流动示意已启动：按已应用的流线看走向，改完流线再播一次。"
             : "流动示意已停止，规划不变。"
           : "当前无已确认路线可播放；请先应用主线/支线。",
         active && ok ? "working" : "ready",
@@ -1092,11 +1172,17 @@ export function useOutdoorAgentWorkflow(input: {
       // 2026-11-17 玉泉鱼跃实测卡点：已确认场地后，一次 search（哪怕只是模型误判）不再
       // 静默清掉 confirmedBoundary——候选照常列出，但换场必须走候选确认卡显式换锚；
       // 用户不理候选直接继续说需求，仍能按已确认范围推进布局。
-      const confirmed = Boolean(stateRef.current.confirmedBoundary);
+      // 同一天补：画布上已有红线、待确认候选或可见选区时，不要把任务卡打回「搜索目标地点」。
+      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
+      const pending = stateRef.current.pendingBoundary;
+      const hasRange = Boolean(stateRef.current.confirmedBoundary)
+        || Boolean(planNow && checkBoundaryRing(planNow.boundary).ok)
+        || Boolean(pending && checkBoundaryRing(pending.boundary).ok)
+        || Boolean(callbacks.current.bridge()?.visibleActivityRange?.());
       persist({
         ...stateRef.current,
-        stage: "place",
-        ...(confirmed ? {} : { confirmedBoundary: null, completed: [] }),
+        stage: hasRange ? stateRef.current.stage : "place",
+        ...(hasRange ? {} : { confirmedBoundary: null, completed: [] }),
       });
       callbacks.current.search(turn.query);
       return;
@@ -1239,8 +1325,13 @@ export function useOutdoorAgentWorkflow(input: {
           // 边界与画布内容都不动；确认后才写入并推进，不把已有边界清掉。
           persist({ ...stateRef.current, stage: "scope" });
           offer(plan, "scope", "确认当前活动范围", job, [
-            "确认的是本次活动范围，不是地图产权或消防认证。",
+            "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
           ]);
+          setBusy(false);
+          return;
+        }
+        // 红线还没落盘，但地图上有搜索选区：用同一张确认卡把它写进 plan.boundary。
+        if (promoteVisibleRange()) {
           setBusy(false);
           return;
         }
@@ -1264,6 +1355,10 @@ export function useOutdoorAgentWorkflow(input: {
         // 对检索不到轮廓的 POI 就是 85 秒白等）。画布上已有合法闭合边界时直接出确认卡，
         // 一键回到主流程；没有边界也留在核对阶段，给手画/重搜两条路，不把任务打回搜索。
         if (!checkBoundaryRing(plan.boundary).ok) {
+          if (promoteVisibleRange()) {
+            setBusy(false);
+            return;
+          }
           persist({
             ...stateRef.current,
             stage: "scope",
@@ -1279,7 +1374,7 @@ export function useOutdoorAgentWorkflow(input: {
         }
         persist({ ...stateRef.current, stage: "scope" });
         offer(plan, "scope", "确认当前活动范围", job, [
-          "确认的是本次活动范围，不是地图产权或消防认证。",
+          "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
         ]);
         setBusy(false);
         return;
@@ -1304,6 +1399,7 @@ export function useOutdoorAgentWorkflow(input: {
               : "node";
         if (!bridge.beginDrawing?.(mode))
           throw new Error("当前画布尚未准备好，原规划保留。");
+        setDrawingMode(mode);
         status(
           mode === "zone"
             ? "已进入手画模式。请在地图上画出分区轮廓并闭合，再补充分区名称、用途和室内外属性。"
@@ -1433,7 +1529,7 @@ export function useOutdoorAgentWorkflow(input: {
           "主要流线与待核对入口",
           job,
           [
-            "道路等级只用于候选分类；真实门与室内连接未证实，需逐个核对，不保证可通行。",
+            "这些线是按道路等级挑的到场候选；哪个口真能走，等你核对后写进规划。",
             "界外段是到场流线候选（怎么来的），与边界的交点即待核对入口；写入后可画布编辑。",
           ],
         );
@@ -1507,8 +1603,8 @@ export function useOutdoorAgentWorkflow(input: {
         setSelectedLibraryId(undefined);
         status(
           found.length
-            ? "已读到真实个人库候选与尺寸；选定后告诉我对应分区和数量，仍先预览。"
-            : "个人库没有可用匹配；可改名检索或在当前卡导入GLB（本机解析真实尺寸、不上传不收费）。",
+            ? "已读到真实库候选与尺寸（个人库与内置件都查过）；选定后告诉我对应分区和数量，仍先预览。"
+            : "库里没有可用匹配（个人库与内置件都查过）；可改名检索或在当前卡导入GLB（本机解析真实尺寸、不上传不收费）。",
           "ready",
         );
         return;
@@ -1728,7 +1824,7 @@ export function useOutdoorAgentWorkflow(input: {
         }
         offer(result.plan, "objects", draft ? "按分区用途出的默认方案" : "逐区复用库内真实设施", job, [
           // 默认值必须自证是默认值：用户看到的每一版都说清「这不是你说的数量」。
-          ...(draft ? ["这一版是默认方案：数量按分区用途与可用面积反算，不是你说的数字；要改哪一件直接说。", ...draft.notes] : []),
+          ...(draft ? ["这版是默认方案：数量按分区用途和面积反算；说个数或哪件要改，我按你的改。", ...draft.notes] : []),
           ...(packedWarning ? [packedWarning] : []),
           ...(fitError && draft && shrinkItems
             ? [`按面积算的数量现场排不下：已缩到实际能容纳的 ${shrinkItems.map((i) => `${i.query}×${i.count}`).join("、")}；要更多只能换更小的真实物料或扩分区，不硬塞。`]
@@ -1804,7 +1900,7 @@ export function useOutdoorAgentWorkflow(input: {
           "按岗位、数量与通路安排人员",
           job,
           [
-            "人员活动范围/路线由关联区域及路径限定，不是随机散布或真实疏散模拟。",
+            "人员按岗位挂在对应分区和通路上；区域或流线一改，人员跟着重排。",
             ...peopleMismatch,
           ],
         );
@@ -1881,7 +1977,7 @@ export function useOutdoorAgentWorkflow(input: {
           "model",
           `替换“${facility.name}”模型`,
           job,
-          ["占地与通道仍以同一规划守卫核对；不会重新生成收费。"],
+          ["换模型后按同一套占地和通道规则重查；这次不再计费。"],
         );
         return;
       }
@@ -2437,7 +2533,7 @@ export function useOutdoorAgentWorkflow(input: {
       await mapContext(job.controller.signal);
       if(!live(job))return;
       if(JSON.stringify(callbacks.current.bridge()?.getPlan())!==baseVersion)throw new Error('规划已变化，请重新选择色板预览。');
-      offer(proposeOutdoorStyle(base,bundle),'style',`「${bundle.name}」现有设施配色`,job,['仅改设施主色；不新增物件、不改变尺寸/占地/通路，不承诺GLB原材质可换色。']);
+      offer(proposeOutdoorStyle(base,bundle),'style',`「${bundle.name}」现有设施配色`,job,['只换设施主色，尺寸和占地不动；模型自带材质不跟着变。']);
     }catch(error){if(live(job))status(error instanceof Error?error.message:'配色预览无法核对，未修改。','blocked');}
     finally{if(live(job))setBusy(false);}
   }
@@ -2580,6 +2676,7 @@ export function useOutdoorAgentWorkflow(input: {
     awaitingThought: state.scope === input.scope && busy && awaitingThought,
     thoughtDraft: state.scope === input.scope && busy && awaitingThought ? thoughtDraft : "",
     noticeSticky,
+    drawingMode,
     cardRecords: state.scope === input.scope ? cardRecords : [],
     mapGap,
     /** M7.1：只读导出——最近几轮指标（不发请求、不落盘，只拿走数字）。 */
@@ -2603,12 +2700,15 @@ export function useOutdoorAgentWorkflow(input: {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && stateRef.current.confirmedBoundary === boundaryKey(plan);
     },
+    reconcileCanvasStage,
     proposal,
     pendingPlan: state.scope === input.scope ? pendingPlan : null,
     approvePlan,
     appliedHighlight: state.scope === input.scope ? appliedHighlight : null,
     models,
     busy,
+    /** scope 阶段画布上已有合法用地红线（卡片据此直接给核对卡，没红线才教怎么画）。 */
+    boundaryReady,
     simulating,
     libraryChoices,
     selectedLibraryId,

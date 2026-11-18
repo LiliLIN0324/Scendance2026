@@ -226,6 +226,11 @@ export interface PlanModelLayer {
    * 否则旧默认模型会和卡片预览叠在一起。传 null 清掉预览。
    */
   setPreview(preview: PlanPropShape | null, hiddenPropId?: string | null): void;
+  /**
+   * 一句话布置的批量落位预览：半透明体块，不加载 GLB，不进 placedPropIds。
+   * 确认前不写 plan；传空数组清掉。
+   */
+  setBatchPreview(previews: readonly PlanPropShape[]): void;
 }
 
 export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
@@ -252,6 +257,53 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
   // 预览不放进 plan-models 组：那里按设施 id 做增删/同步，混进去会干扰已落模型的计数。
   // 外层用同一个 parent，位置在 setPreview 时跟 group 的场地偏移对齐。
   deps.parent.add(previewGroup);
+  /** 批量体块预览（一句话布置）：半透明盒体，不加载 GLB，确认前不进 plan。 */
+  const batchPreviewGroup = new THREE.Group();
+  batchPreviewGroup.name = 'plan-model-preview-batch';
+  deps.parent.add(batchPreviewGroup);
+  const batchGhostMaterial = new THREE.MeshBasicMaterial({
+    color: 0x4a7c59,
+    transparent: true,
+    opacity: 0.28,
+    depthWrite: false,
+  });
+  const batchGhostEdgeMaterial = new THREE.LineBasicMaterial({
+    color: 0x4a7c59,
+    transparent: true,
+    opacity: 0.85,
+  });
+  let batchPreviewKey = '';
+  const clearBatchPreview = (): void => {
+    for (const child of [...batchPreviewGroup.children]) {
+      batchPreviewGroup.remove(child);
+      (child as THREE.Mesh).geometry?.dispose();
+    }
+  };
+  const setBatchPreview = (previews: readonly PlanPropShape[]): void => {
+    const key = previews
+      .map(item => `${item.id}|${item.center.x.toFixed(2)}|${item.center.z.toFixed(2)}|${item.rotationDeg}|${item.width}|${item.depth}`)
+      .join(';');
+    batchPreviewGroup.position.copy(group.position);
+    batchPreviewGroup.quaternion.copy(group.quaternion);
+    batchPreviewGroup.scale.copy(group.scale);
+    if (key === batchPreviewKey) return;
+    batchPreviewKey = key;
+    clearBatchPreview();
+    const height = 0.9;
+    for (const item of previews) {
+      const { position, rotationY } = planModelTransform(item, currentMetrics, false);
+      const geometry = new THREE.BoxGeometry(item.width, height, item.depth);
+      const body = new THREE.Mesh(geometry, batchGhostMaterial);
+      body.name = 'arrange-ghost';
+      body.position.set(position[0], position[1] + height / 2, position[2]);
+      body.rotation.y = rotationY;
+      batchPreviewGroup.add(body);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), batchGhostEdgeMaterial);
+      edges.position.copy(body.position);
+      edges.rotation.y = rotationY;
+      batchPreviewGroup.add(edges);
+    }
+  };
   let previewProp: PlanPropShape | null = null;
   let previewModel: THREE.Group | null = null;
   let previewFit: ShrinkFit | null = null;
@@ -565,9 +617,14 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
     },
     placeNew,
     setPreview,
+    setBatchPreview,
     dispose() {
       clearPreviewModel();
       previewGroup.parent?.remove(previewGroup);
+      clearBatchPreview();
+      batchGhostMaterial.dispose();
+      batchGhostEdgeMaterial.dispose();
+      batchPreviewGroup.parent?.remove(batchPreviewGroup);
       unsubscribeRegistry();
       run += 1;
       group.children.slice().forEach((child) => disposeOwnedModel(child));

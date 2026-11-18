@@ -261,7 +261,7 @@ export function buildLogicalOutdoorEvent(input: BuildZoneEventInput, id: () => s
     if (!clearCorridor(aisle)) return null;
     // Preserve existing pedestrian aisles as real occupied corridors, not just harmless centerlines.
     if ((input.existingRoutes ?? []).some(r => r.kind === 'pedestrian' && outdoorCorridorStrips(r.points, r.widthM ?? 3).some(strip => facilities.some(f => outdoorRingsOverlap(strip, facilityFootprintRing(f)))))) return null;
-    const warnings = ['仅为几何与业务初稿；不是消防、疏散或人数容量安全认证。', '厕所、停车、后勤与无障碍服务需核对现场资源，不虚构其位置。'];
+    const warnings = ['按面积和用途排的几何初稿。', '厕所、停车、后勤、无障碍的位置等你指定。'];
     if (entrance) {
       const end = aisle[0]!;
       const paths = connectionPaths(entrance.position, end, boundary);

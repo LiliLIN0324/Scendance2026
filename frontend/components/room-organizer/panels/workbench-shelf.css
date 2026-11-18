@@ -1000,20 +1000,45 @@
 }
 
 /* ── F4：物料库常驻搜索 + 最近用过 ────────────────────────────────
-   搜索不再折叠成图标；最近用过一行小卡，纯本地、不进后端。 */
+   搜索不再折叠成图标；最近用过一行小卡，纯本地、不进后端。
+   2026-11-18 用户：「物料的搜索参考户外的搜索，视觉一致」——
+   直接复用户外目录那套胶囊（999 圆角、白底浮起、图标灰→墨），
+   右侧圆钮切「一行四张」平铺浏览。 */
 .sc-lib-search {
-  display:flex; align-items:center; gap:6px; box-sizing:border-box;
-  width:100%; min-width:0; height:28px; padding:3px 8px;
-  border:1px solid var(--wk-hair); border-radius:var(--r-sm);
-  background:var(--wk-paper); color:var(--wk-muted);
+  display:flex; align-items:center; gap:8px; box-sizing:border-box;
+  width:100%; min-width:0; height:36px; padding:0 5px 0 12px;
+  border:1px solid rgba(20, 20, 22, 0.1); border-radius:999px;
+  background:#fff; color:#141416;
+  box-shadow:0 1px 2px rgba(20, 20, 22, 0.04), 0 8px 24px rgba(20, 20, 22, 0.1);
+  transition:border-color .16s ease, box-shadow .16s ease;
 }
-.sc-lib-search:focus-within { border-color:var(--wk-ink-soft); }
-.sc-lib-search > svg { flex:none; }
+.sc-lib-search:hover { border-color:rgba(20, 20, 22, 0.18); }
+.sc-lib-search:focus-within {
+  border-color:rgba(20, 20, 22, 0.34);
+  box-shadow:0 0 0 3px rgba(20, 20, 22, 0.07), 0 10px 28px rgba(20, 20, 22, 0.12);
+}
+.sc-lib-search > svg { flex:none; color:#71767e; }
+.sc-lib-search:focus-within > svg { color:#141416; }
 .sc-lib-search > input {
-  flex:1; min-width:0; width:100%; padding:0; border:0; background:transparent;
-  font-size:var(--fs-p2); color:var(--wk-ink); opacity:1;
+  flex:1; min-width:0; width:100%; height:100%; padding:0; border:0; outline:0; background:transparent;
+  font-family:inherit; font-size:12.5px; color:inherit;
 }
-.sc-lib-search > input::placeholder { color:var(--wk-muted); }
+.sc-lib-search > input::placeholder { color:#71767e; opacity:1; }
+
+/* 一行四张：搜索框右侧圆钮打开，整库平铺（不再一层层展开分类）。 */
+.sc-lib-browse { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px 8px; margin:0; padding:0; list-style:none; }
+.sc-lib-browse .sc-lib-tile { display:block; min-width:0; }
+.sc-lib-browse .sc-lib-tile-btn {
+  display:flex; flex-direction:column; align-items:stretch; gap:5px; width:100%;
+  padding:6px; border:1px solid var(--wk-hair); border-radius:var(--r-sm); background:var(--wk-paper);
+}
+.sc-lib-browse .sc-lib-tile-btn:hover:not(:disabled) { border-color:var(--wk-ink-soft); }
+.sc-lib-browse .sc-lib-tile-thumb { width:100%; height:auto; aspect-ratio:16 / 10; }
+.sc-lib-browse .sc-lib-tile-name { font-size:11px; line-height:15px; text-align:center; }
+.sc-lib-browse .sc-lib-star { position:absolute; top:8px; right:8px; width:22px; height:22px; opacity:1; }
+@container (max-width: 360px) {
+  .sc-lib-browse { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
 .sc-library-tabs-equal { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-bottom: 1px solid var(--wk-hair); }
 .sc-library-tabs-equal > button {
   position: relative; min-width: 0; min-height: 36px; padding: 6px 2px 9px;

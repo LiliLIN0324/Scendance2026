@@ -10,6 +10,7 @@ import {
   seededPlanFromLayout,
   seededPlanFromVenue,
   trueFootprintBoundary,
+  planBoundaryFromSearchArea,
   SHELL_RING_LIMIT,
   SHELL_SIZE_LIMIT_M,
 } from './outdoor-venue-sync';
@@ -390,5 +391,29 @@ describe('播种出的方案自带设计范围（红线外扩 20 m）', () => {
   it('退化输入仍不播种（也就没有白框可补）', () => {
     expect(seededPlanFromVenue({ width: 0, depth: 0 }, null)).toBeNull();
     expect(seededPlanFromLayout({ width: 0, height: 10 })).toBeNull();
+  });
+});
+
+describe('planBoundaryFromSearchArea · 搜索选区收成红线', () => {
+  const anchor = { lng: 120.14, lat: 30.25 };
+  const d = 0.0008;
+  const polygon: [number, number][] = [
+    [anchor.lng, anchor.lat],
+    [anchor.lng + d, anchor.lat],
+    [anchor.lng + d, anchor.lat + d],
+    [anchor.lng, anchor.lat + d],
+  ];
+
+  it('闭合选区转成能通过红线校验的环', () => {
+    const boundary = planBoundaryFromSearchArea({ polygon }, anchor);
+    expect(boundary).not.toBeNull();
+    expect(boundary!.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('道路折线、点数不够、没有锚点都不当成红线', () => {
+    expect(planBoundaryFromSearchArea({ polygon, kind: 'line' }, anchor)).toBeNull();
+    expect(planBoundaryFromSearchArea({ polygon: polygon.slice(0, 2) }, anchor)).toBeNull();
+    expect(planBoundaryFromSearchArea({ polygon }, null)).toBeNull();
+    expect(planBoundaryFromSearchArea(null, anchor)).toBeNull();
   });
 });

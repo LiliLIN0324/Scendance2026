@@ -312,7 +312,7 @@ export function createOutdoorMapContext() {
               semantic: "reserved",
               polygon: feature.geometry.points,
               geometrySource: "map-unverified",
-              notes: `地图开放空间候选${feature.id}；尚不代表活动使用授权`,
+              notes: `开放空间候选${feature.id}：先当可用空地，能不能用你确认后我再往里排`,
             },
           ],
         };
@@ -753,7 +753,7 @@ export function createOutdoorMapContext() {
         );
       if (cached.evidence.complete)
         notes.push(
-          "地图为OSM结构化证据，不含底图像素阅读，也不代表权属、现场通行或安全认证。",
+          "用 OSM 的结构化路网/水域判断周边；哪些路真能走，以你在地图上的确认为准。",
         );
       else
         notes.push(

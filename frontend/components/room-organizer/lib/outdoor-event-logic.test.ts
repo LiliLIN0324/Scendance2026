@@ -33,7 +33,9 @@ describe('户外活动逻辑/几何守卫', () => {
       if (Math.min(...footprint.map(p => p.y)) > Math.max(...aisle.points.map(p => p.y))) continue;
       expect(Math.max(...xs) <= centerX - 1.5 || Math.min(...xs) >= centerX + 1.5).toBe(true);
     }
-    expect(p!.summary.warnings?.join('')).toContain('不是消防');
+    // 2026-11-18 文案口径：警告说清“这版是什么 + 缺的东西等你给”，不再写「不是消防…」这类免责句。
+    expect(p!.summary.warnings?.join('')).toContain('几何初稿');
+    expect(p!.summary.warnings?.join('')).toContain('等你指定');
   });
   it('北入口朝向反转；80人市集出20摊、不照搬讲座舞台/座椅', () => {
     const p = build('讲座', 45, boundary, [north]); expect(p).not.toBeNull();

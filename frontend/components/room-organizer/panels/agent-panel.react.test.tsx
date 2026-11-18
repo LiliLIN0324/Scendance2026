@@ -1031,7 +1031,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:3,height:3});
     render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内3×3，每2人一桌，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/需求 30 人、15 桌；本次排了 \d+ 人、\d+ 桌、\d+ 把椅子，尚缺 \d+ 人/,{},{timeout:15000})).toBeTruthy();expect(screen.getByText(/不代表场地最大容量/)).toBeTruthy();
+    expect(await screen.findByText(/需求 30 人、15 桌；本次排了 \d+ 人、\d+ 桌、\d+ 把椅子，尚缺 \d+ 人/,{},{timeout:15000})).toBeTruthy();expect(screen.getByText(/要更多位置就腾地方或换分区/)).toBeTruthy();
   },20000);
   it('uses a one-per-desk exploration assumption only when no allocation was stated',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
@@ -1246,16 +1246,16 @@ describe('explicit local-only seating draft',()=>{
     state.layout=makeLayout({id:'local-seating',width:20,height:20,floors:[makeFloor({items:[door]})]});
     const onApply=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，按一人一套课桌椅生成本地草案');
-    expect((await screen.findAllByText(/图中门洞或入口未纳入本次组团净空检查/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/这次组团净空没算门洞和入口/)).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button',{name:'确认布置'}));expect(onApply).toHaveBeenCalledOnce();
-    expect(await screen.findByText(/只是探索草案，不代表安全通过或可交付/)).toBeTruthy();
+    expect(await screen.findByText(/门、路线和无障碍的实测值补进图后/)).toBeTruthy();
   },20000);
   it('does not treat an inferred default door as a hard failure',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     annotationSnapshot={revision:3,draft:{id:'draft',createdAt:1,stages:[],annotations:[{id:'inferred-door',kind:'door',label:'推测门',stageNo:1,geometry:{kind:'door',wall:'south',position:0,widthM:null,inferred:true}}]}};
     const onApply=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，按一人一套课桌椅生成本地草案');
-    expect(await screen.findByText(/图中门洞或入口未纳入本次组团净空检查/)).toBeTruthy();
+    expect(await screen.findByText(/这次组团净空没算门洞和入口/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认布置'}));expect(onApply).toHaveBeenCalledOnce();
   },20000);
   it('refuses to generate when an annotation snapshot cannot be read',async()=>{
@@ -1464,6 +1464,13 @@ async function reviewAndFix(): Promise<void> {
 }
 
 beforeEach(() => {
+  // jsdom 30 没有 Element.scrollTo / ResizeObserver；对话区钉底 effect 会在挂载时用到。
+  if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollTo !== 'function') {
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, writable: true, value() {} });
+  }
+  if (typeof globalThis.ResizeObserver !== 'function') {
+    globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  }
   useRealLayoutStore = false;
   vi.spyOn(layoutStore, 'getState').mockImplementation(() => {
     const actual = realLayoutStoreGetState();
@@ -1562,7 +1569,7 @@ describe('T-03 review in the Agent panel', () => {
     render(ui(state.layout, onApply, onPreview));
     send('看看哪里有问题');
 
-    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
+    expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
     expect(await screen.findByText(/入口通道我不猜/)).toBeTruthy();
     expect(await screen.findByText(/靠边的椅子拉不开/)).toBeTruthy();
     const before = JSON.stringify(state.layout);
@@ -2998,7 +3005,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     studioMock.generate.mockImplementation(async()=>{studioMock.preview=preview;});
     render(ui({...state.layout,width:12,height:9}));send('30 人，室内 12×9，圆桌');
     expect(await screen.findByText(/本版排了 24 \/ 30 套，尚缺 6 套/)).toBeTruthy();
-    expect(screen.getByText(/已触及云场景物件数量上限，不代表场地最大容量/)).toBeTruthy();
+    expect(screen.getByText(/已触及云场景物件数量上限。要更多位置就腾地方或减人数/)).toBeTruthy();
     expect(document.body.textContent).not.toContain('SEATING_SHORTFALL:30:24');
   });
 
@@ -4043,6 +4050,18 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
   });
 });
 
+describe('执行资料入口', () => {
+  it('opens delivery from a new activity header without submitting generation', () => {
+    state.layout = INITIAL_LAYOUT;
+    render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
+    expect(screen.queryByText('这一版布置')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '执行资料' }));
+    expect(callbacks.onOpenDelivery).toHaveBeenCalledOnce();
+    expect(studioMock.generate).not.toHaveBeenCalled();
+    expect(callbacks.onSelectMode).not.toHaveBeenCalled();
+  });
+});
+
 describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除', () => {
   it('活动脸集齐例句卡、会话操作与两枚能力芯片', () => {
     state.layout = INITIAL_LAYOUT;
@@ -4082,7 +4101,7 @@ describe('S1 活动归位：活动脸接走唯一生成对话，假分派拆除'
     state.layout = seatLayout();
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
-    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
+    expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
   });
 
   it('假分派控件与话术全部消失，空态不再挂引导句', () => {
@@ -4127,7 +4146,7 @@ describe('S2 Bingo 审校台：三钮状态台直达', () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '立即体检' }));
     // 与 T-03 口令路径同引擎、同口径声明，只是入口从 send() 换成按钮。
-    expect(await screen.findByText(/不是合规审查/)).toBeTruthy();
+    expect(await screen.findByText(/只查挤、压墙/)).toBeTruthy();
   });
 
   it('点「准备客户评审」直接回调，不落气泡', () => {
