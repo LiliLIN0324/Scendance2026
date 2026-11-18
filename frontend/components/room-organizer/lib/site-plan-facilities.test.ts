@@ -231,6 +231,23 @@ describe('buildFacility (H2-c 放置)', () => {
     expect(planFacilitySchema.safeParse({ ...base, modelOverride: 'x'.repeat(161) }).success).toBe(false);
   });
 
+  it('parses legacy facilities without unitPrice and round-trips a price', () => {
+    const base = {
+      id: 'b5000000-0000-4000-8000-000000000001',
+      templateId: 'chair',
+      name: '折叠椅',
+      position: { x: 10, y: 8 },
+      rotationDeg: 0,
+      size: { width: 0.55, depth: 0.53 },
+    };
+    expect(planFacilitySchema.parse(base).unitPrice).toBeUndefined();
+    const priced = planFacilitySchema.parse({ ...base, unitPrice: 88 });
+    expect(priced.unitPrice).toBe(88);
+    expect(planFacilitySchema.parse(JSON.parse(JSON.stringify(priced))).unitPrice).toBe(88);
+    expect(planFacilitySchema.safeParse({ ...base, unitPrice: -1 }).success).toBe(false);
+    expect(planFacilitySchema.safeParse({ ...base, unitPrice: 1_000_001 }).success).toBe(false);
+  });
+
   it('allows out-of-boundary placement but returns a warning issue', () => {
     const inside = buildFacility({ templateId: 'booth-2x2', position: { x: 60, y: 80 } }, BOUNDARY);
     expect(inside.ok && inside.issues?.length === 0).toBe(true);
