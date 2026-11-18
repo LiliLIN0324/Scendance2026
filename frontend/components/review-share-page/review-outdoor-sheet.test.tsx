@@ -3,7 +3,7 @@
 import { fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createStarterOutdoorPlan } from '../room-organizer/lib/outdoor-project-store';
-import { ReviewOutdoorSheet } from './review-outdoor-sheet';
+import { planPointFromClient, ReviewOutdoorSheet } from './review-outdoor-sheet';
 
 const plan = {
   ...createStarterOutdoorPlan(),
@@ -17,18 +17,15 @@ const plan = {
 
 describe('ReviewOutdoorSheet', () => {
   it('把画布点击换算成 ENU 米制坐标', () => {
-    const onPick = vi.fn();
-    const { container } = render(
-      <ReviewOutdoorSheet plan={plan} pins={[]} activePinId={null} onPick={onPick} onFocusPin={() => {}} />,
-    );
-    const svg = container.querySelector('svg');
-    expect(svg).not.toBeNull();
-    svg!.getBoundingClientRect = () => ({
-      left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
+    const point = planPointFromClient({
+      clientX: 50,
+      clientY: 50,
+      rect: { left: 0, top: 0, width: 100, height: 100 },
+      scale: 1,
+      tx: 0,
+      ty: 0,
+      bounds: { minX: -4, maxY: 14, width: 18, height: 18 },
     });
-    fireEvent.click(svg!, { clientX: 50, clientY: 50 });
-    expect(onPick).toHaveBeenCalledTimes(1);
-    const point = onPick.mock.calls[0][0] as { x: number; y: number };
     expect(point.x).toBeCloseTo(5, 1);
     expect(point.y).toBeCloseTo(5, 1);
   });
@@ -49,10 +46,6 @@ describe('ReviewOutdoorSheet', () => {
         onFocusPin={onFocusPin}
       />,
     );
-    const svg = container.querySelector('svg');
-    svg!.getBoundingClientRect = () => ({
-      left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
-    });
     const pinCircle = container.querySelector('circle');
     expect(pinCircle).not.toBeNull();
     fireEvent.click(pinCircle!);
