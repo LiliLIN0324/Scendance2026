@@ -817,8 +817,7 @@ button.ap-ghost {
   flex-shrink: 0;
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-head h2 { display: none; }
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-library-presets,
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-board {
+.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-library-presets {
   height: auto; min-height: 0; overflow: visible;
 }
 /* 空间卡：模板区在展开态自己滚，不再用固定 240px 的旧规则。 */
@@ -847,29 +846,7 @@ button.ap-ghost {
   margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--wk-hair);
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-library-presets { max-height: none; overflow: visible; }
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-rail {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 9px;
-  height: auto; margin: 0; overflow: visible; mask-image: none;
-}
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-tile {
-  width: auto; height: auto; min-width: 0;
-}
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-card {
-  height: auto; grid-template-rows: auto auto; width: 100%; gap: 5px;
-  border: 0; background: transparent; padding: 0 0 4px; text-align: left;
-}
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-card strong {
-  height: auto; line-height: 1.4; font-size: 12px; padding-inline: 3px;
-}
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-preset-card :is(img, .sc-preset-blank) {
-  width: 100%; height: auto; aspect-ratio: 16 / 10; border-radius: 9px;
-}
 /* 收起态是一行摘要：空白场地卡收掉说明字，别和名称叠在一起。 */
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-blank { gap: 0; }
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-blank small { display: none; }
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card:not(.is-expanded) .sc-preset-blank::before {
-  width: 28px; height: 20px;
-}
 /* 展开态内滚：细滚动条，出现时不抢眼。 */
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-library-presets::-webkit-scrollbar { width: 6px; }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-library-presets::-webkit-scrollbar-thumb {
@@ -886,17 +863,6 @@ button.ap-ghost {
   /* 模板多时底部只做很轻的渐隐：留半行提示还能往下滚，不要整行消失。 */
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 8px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 8px), transparent);
-}
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-expanded .sc-preset-rail {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
-  gap: 8px; height: auto; margin: 0; overflow: visible;
-}
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-expanded .sc-preset-tile {
-  flex: none; width: auto; height: 76px;
-}
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-expanded .sc-preset-card { height: 76px; grid-template-rows: minmax(0, 1fr) 15px; }
-.sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-expanded .sc-preset-card strong {
-  height: 15px; line-height: 15px; font-size: 10px;
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-card.is-expanded .sc-env-preview { width: 116px; height: 87px; }
 /* 展开/收起：与物料卡同一枚轻量控件。 */
@@ -916,12 +882,6 @@ button.ap-ghost {
 }
 .sc-agent-panel .ap-agent-surface .sc-space-panel.is-card .sc-space-back:hover { color: var(--wk-ink); }
 /* 当前模板：绿描边 + 一枚「使用中」角标，和其它模板区分开。 */
-.sc-compact-shelf .sc-preset-card.is-current { border-color: var(--wk-green); box-shadow: inset 0 0 0 1px var(--wk-green); }
-.sc-compact-shelf .sc-preset-now {
-  position: absolute; left: 4px; top: 4px; z-index: var(--z-card-pop, 6);
-  padding: 0 4px; border-radius: 4px; background: var(--wk-green); color: #fff;
-  font-size: 9.5px; line-height: 15px; pointer-events: none;
-}
 
 /* Bingo 审计位：3.0.0 左栏「收甲方反馈」并回对话后的只读记录，不新增第二个入口。 */
 .ap-audit { gap: 8px; }
