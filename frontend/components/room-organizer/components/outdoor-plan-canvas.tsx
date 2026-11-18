@@ -173,6 +173,11 @@ import {
   type PlanZoneIssue,
 } from '../lib/site-plan-editing';
 import { planBoundaryFromSearchArea } from '../lib/outdoor-venue-sync';
+import {
+  RING_DRAFT_MIN_VERTICES,
+  appendRingDraftVertex,
+  isRingCloseHit,
+} from '../lib/outdoor-draft-ring';
 import { findZoneBoundsOverflow, zoneOverflowReason, type ZoneBoundsOverflow } from '../lib/plan-zone-bounds';
 import {
   FACILITY_HANDLE_MIN_FOOTPRINT_PX,
@@ -1620,6 +1625,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const onVenueBoundaryCanceledRef = useRef(onVenueBoundaryCanceled);
   onVenueBoundaryCanceledRef.current = onVenueBoundaryCanceled;
   const draftRef = useRef<PlanPoint[]>([]);
+  /** 草稿是否由搜索选区大框种子而来：第一个手工顶点要整段替换种子，不与大框顶点混排。 */
+  const seededDraftRef = useRef(false);
   const previewRingRef = useRef<PlanPoint[] | null>(null);
   const dragVertexRef = useRef<number | null>(null);
   // 2026-11-16：刚在边界线上插过点——松手时不要把“新插的顶”当成“点一下删掉”。
@@ -1974,6 +1981,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // oneWay/人数的纯 UI 态仍在选中实体编辑器里调，画布逻辑读各自的 ref（draw 侧真值）。
   const [nodeKind, setNodeKind] = useState<PlanNode['kind']>('both');
   const [, setRouteDraftCount] = useState(0);
+  /** 红线 / 分区草稿点数：面板上的「完成 / 撤销上一点」按钮按它置灰。 */
+  const [ringDraftCount, setRingDraftCount] = useState(0);
   const [workerRole, setWorkerRole] = useState('安保');
   /** 2026-11-17 #118 补录入 UI：布车模式当前车型（面板高亮用，与 vehicleTypeRef 同值）。 */
   const [vehicleType, setVehicleType] = useState<PlanVehicle['type']>('business');
@@ -2312,6 +2321,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     else if (next === 'route') ensureSubgroups(['areas:路线']);
     else if (next === 'boundary') ensureSubgroups(['areas:区域'], ['areas:分区类型']);
     draftRef.current = [];
+    seededDraftRef.current = false;
+    setRingDraftCount(0);
     previewRingRef.current = null;
     scopeDragRef.current = null;
     scopeResizeRef.current = null;
@@ -2381,6 +2392,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const seeded = planBoundaryFromSearchArea(searchArea ?? null, planRef.current.anchor);
       if (seeded) {
         draftRef.current = seeded;
+        seededDraftRef.current = true;
+        setRingDraftCount(seeded.length);
         setEditMessage('地图上的范围已放进红线草稿。点一下起点闭合，确认后写入方案；Esc 取消。');
       }
     }
@@ -2415,6 +2428,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function setDraft(next: PlanPoint[]) {
     draftRef.current = next;
+    if (next.length === 0) seededDraftRef.current = false;
+    setRingDraftCount(next.length);
     draw();
   }
 
@@ -4058,6 +4073,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         placeArmedFacilityRef.current(point);
         return;
       }
+      // 红线 / 分区 / 设计范围：Enter 作为明确的完成操作，走与「点起点、双击」同一条 closeDraft。
+      if (
+        event.key === 'Enter'
+        && (modeRef.current === 'boundary' || modeRef.current === 'zone' || modeRef.current === 'scope')
+        && !inField
+        && !target?.isContentEditable
+        && !event.ctrlKey && !event.metaKey && !event.altKey
+      ) {
+        if (draftRef.current.length === 0) return;
+        event.preventDefault();
+        closeDraft();
+        return;
+      }
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
@@ -4974,25 +5002,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage('用地红线已锁定：先在左侧「用地红线」行解锁，再重画红线。');
       return;
     }
-    // 近首点 → 尝试闭合提交。
-    if (draftPoints.length >= 3) {
+    // 近首点 → 尝试闭合提交（红线 / 分区 / 设计范围同一套环草稿）。
+    if (draftPoints.length >= RING_DRAFT_MIN_VERTICES) {
       const firstPx = planPointToPixel(draftPoints[0]!, currentViewport());
-      if (Math.hypot(firstPx.x - px.x, firstPx.y - px.y) <= DRAFT_CLOSE_HIT_PX) {
+      if (isRingCloseHit({ x: px.x, y: px.y }, firstPx)) {
         closeDraft();
         return;
       }
     }
-    if (draftPoints.length >= PLAN_RING_MAX_VERTICES) {
+    const append = appendRingDraftVertex(draftPoints, pt, { seeded: seededDraftRef.current });
+    if (append.status === 'too-many') {
       setEditMessage(`顶点已达上限 ${PLAN_RING_MAX_VERTICES} 个，先闭合或按 Esc 取消。`);
       return;
     }
-    for (const existing of draftPoints) {
-      if (planPointDistanceM(existing, pt) < PLAN_MIN_VERTEX_GAP_M) {
-        setEditMessage('离已有的点太近（<0.5 m），当作重复点击忽略。');
-        return;
-      }
+    if (append.status === 'too-close') {
+      setEditMessage('离已有的点太近（<0.5 m），当作重复点击忽略。');
+      return;
     }
-    setDraft([...draftPoints, { x: pt.x, y: pt.y }]);
+    seededDraftRef.current = append.replacedSeed;
+    setDraft(append.points);
     setEditMessage(null);
   }
 
@@ -7527,11 +7555,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     if ((mode === 'zone' || mode === 'boundary') && draftRef.current.length > 0) {
       const next = draftRef.current.slice(0, -1);
-      draftRef.current = next;
+      setDraft(next);
       setEditMessage(next.length === 0
         ? '草稿已清空（仍在收点模式：单击重新开始，Esc 退出）。'
         : `已撤回上一个点，还剩 ${next.length} 个。`);
-      draw();
       notifyPlanDraftChanged();
       return true;
     }
@@ -11925,8 +11952,43 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         >
           {annotateDrawSelectionLabel(mode, annotateShape)
             ? `当前：${annotateDrawSelectionLabel(mode, annotateShape)} · 再点一次或 Esc 退出`
-            : `当前：${PLANNING_EDIT_MODE_LABELS[mode]} · Esc 返回浏览`}
+            : (mode === 'boundary' || mode === 'zone' || mode === 'scope')
+              ? `当前：${PLANNING_EDIT_MODE_LABELS[mode]} · 点起点 / Enter 闭合，Esc 取消`
+              : `当前：${PLANNING_EDIT_MODE_LABELS[mode]} · Esc 返回浏览`}
         </button>
+      )}
+      {/* 红线 / 分区 / 设计范围草稿完成条：显式「完成」按钮 + 撤上一点，不依赖点起点是否命中。 */}
+      {!readOnly && (mode === 'boundary' || mode === 'zone' || mode === 'scope') && (
+        <div
+          data-testid="ring-draft-controls"
+          onMouseDown={event => event.stopPropagation()}
+          onMouseUp={event => event.stopPropagation()}
+          onClick={event => event.stopPropagation()}
+          onContextMenu={event => event.preventDefault()}
+          style={{
+            position: 'absolute', top: levelsPanelHost ? 34 : 66, left: '50%', transform: 'translateX(-50%)', zIndex: 4,
+            display: 'inline-flex', alignItems: 'center', gap: 6, pointerEvents: 'auto',
+          }}
+        >
+          <button
+            type="button"
+            data-testid="ring-draft-undo"
+            disabled={ringDraftCount === 0}
+            onClick={() => undoDraftStep()}
+            style={{ ...modeButtonStyle(false), opacity: ringDraftCount === 0 ? 0.5 : 1 }}
+          >
+            撤销上一点
+          </button>
+          <button
+            type="button"
+            data-testid="ring-draft-finish"
+            disabled={ringDraftCount < RING_DRAFT_MIN_VERTICES}
+            onClick={() => closeDraft()}
+            style={{ ...modeButtonStyle(true), opacity: ringDraftCount < RING_DRAFT_MIN_VERTICES ? 0.5 : 1 }}
+          >
+            完成（{ringDraftCount} 点）
+          </button>
+        </div>
       )}
 
       {/* H3-c 规划信息面板：宿主在 Bingo 面板里；Bingo 收起时整块不渲染（不再在画布顶部拉成横条）。 */}
