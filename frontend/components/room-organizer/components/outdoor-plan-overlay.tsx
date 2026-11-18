@@ -288,6 +288,10 @@ export interface OutdoorPlanOverlayProps {
   /** 活动点位（sceneAnchor/mapLngLat，GCJ-02）：仅用于底图初始定位，不写进 plan.anchor。 */
   anchor?: { lng: number; lat: number } | null;
   activityName?: string | null;
+  /** 允许钉评的评审链接；空串表示还没生成。 */
+  reviewLink?: string;
+  /** 生成评审链接（room-organizer 的 issueReviewLink）。 */
+  onRequestReviewLink?: () => void;
   /** 保存态上报：room-organizer 据此在左轨 foot（主产品保存态原位）显示户外草稿状态。 */
   onSaveStateChange?: (next: OutdoorSaveState) => void;
   /** P2-g：undo/redo 可用态上报（室内工具排撤销/重做钮启用态）。 */
@@ -398,6 +402,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   lengthUnit = 'm',
   controller,
   onViewChange,
+  reviewLink = '',
+  onRequestReviewLink,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   // 2026-11-13（用户指令）：在 chat 里搜地点，地图左上角的「搜地点」框要同步出同一批候选，
@@ -1106,6 +1112,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           activityName={activityName?.trim() || ''}
           summaryMeta={summaryMeta}
           shareLink={shareLink}
+          reviewLink={reviewLink}
+          onRequestReviewLink={onRequestReviewLink}
           handlers={deliveryHandlers}
         />
       )}
