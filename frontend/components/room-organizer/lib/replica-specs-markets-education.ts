@@ -233,7 +233,8 @@ export const TRAFALGAR_SQUARE_COURSE: ReplicaCaseSpec = {
   region: 'Europe',
   refImage: 'trafalgar-square-event-planning-for-crowded-space-course.png',
   refLink: LINK('trafalgar-square-event-planning-for-crowded-space-course'),
-  anchor: { lng: -0.1281, lat: 51.508 },
+  anchor: { lng: -0.128072, lat: 51.508055 },
+  rotationDeg: 0,
   locationNote: '精确锚点：Trafalgar Square, London（拥挤空间规划课示范案）',
   zones: [
     { name: 'North Green 北绿区', semantic: 'audience', color: '#3fb544', opacity: 0.3, rect: { cx: -18, cy: 40, w: 60, h: 22 } },

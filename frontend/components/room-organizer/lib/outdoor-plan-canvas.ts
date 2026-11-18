@@ -129,6 +129,33 @@ export function lngLatToEnu(lng: number, lat: number, anchorLng: number, anchorL
   };
 }
 
+/**
+ * 已放置物件面板的红线计数。
+ * `plan.boundary` 仍是红线正源；它为空时，地图上已经看得见的闭合范围
+ *（核对预览，或搜索选区）也算「有范围」，面板不要再写「还没画红线」。
+ * 道路折线（kind = line）不是闭合用地，不计入。
+ */
+export function placedRedlineCount(input: {
+  boundaryCount: number;
+  searchArea?: { polygon: readonly unknown[]; kind?: 'area' | 'line' } | null | undefined;
+  previewBoundaryCount?: number | undefined;
+}): number {
+  if (input.boundaryCount > 0) return input.boundaryCount;
+  if ((input.previewBoundaryCount ?? 0) >= 3) return input.previewBoundaryCount ?? 0;
+  const area = input.searchArea;
+  if (area && area.kind !== 'line' && area.polygon.length >= 3) return area.polygon.length;
+  return 0;
+}
+
+/** 没有任何红线、也没有可核对的可见闭合范围时，才提示去画红线。 */
+export function placedItemsNeedsRedlineHint(input: {
+  boundaryCount: number;
+  searchArea?: { polygon: readonly unknown[]; kind?: 'area' | 'line' } | null | undefined;
+  previewBoundaryCount?: number | undefined;
+}): boolean {
+  return placedRedlineCount(input) === 0;
+}
+
 /** 图层可见性：隐藏的层整层跳过，不影响全案统计（评审稿 §4 口径）。 */
 export type LayerVisibility = Record<PlanningLayerKind, boolean>;
 
@@ -1261,6 +1288,34 @@ export function drawFacilityGhost(
   ctx.textBaseline = 'top';
   ctx.fillStyle = 'rgba(15,22,32,0.9)';
   ctx.fillText(`${template.name} ${template.width}×${template.depth}m`, center.x, center.y + Math.max(h / 2, 6) + 3);
+}
+
+/** 一句话布置的落位预览：半透明虚线占地，不写 plan、不进 undo。朝向与设施层同一套（屏幕 y 向下，故取负角）。 */
+export function drawArrangePreview(
+  ctx: CanvasRenderingContext2D,
+  facilities: readonly { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } }[],
+  viewport: PlanViewport,
+): void {
+  if (facilities.length === 0) return;
+  const metersPerPx = planMetersPerPixel(viewport);
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  for (const facility of facilities) {
+    const point = planPointToPixel(facility.position, viewport);
+    const w = Math.max(3, facility.size.width / metersPerPx);
+    const h = Math.max(3, facility.size.depth / metersPerPx);
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.rotate((-facility.rotationDeg * Math.PI) / 180);
+    ctx.fillStyle = 'rgba(74, 124, 89, 0.22)';
+    ctx.strokeStyle = 'rgba(74, 124, 89, 0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 /**

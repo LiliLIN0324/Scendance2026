@@ -1,6 +1,7 @@
 import type { Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 import type { Scene, SceneObject } from '../../../../supabase/functions/_shared/domain';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { EventProfile } from '../../../lib/event-profile';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { Provenance } from '../../../lib/rng';
 import type { ZoneSemanticType } from '../../../lib/plan-annotation';
@@ -431,6 +432,8 @@ export interface SceneAnchor {
  * building because they're shared across levels.
  */
 export interface RoomLayout {
+  /** 活动档案只做本地侧车；不进云端场景、分享与客户产物。 */
+  eventProfile?: EventProfile | undefined;
   /** Internal local production planning; excluded from public sharing. */
   productionPlan?: ProductionPlan | undefined;
   /** Local activity execution metadata, saved and restored with the layout. */

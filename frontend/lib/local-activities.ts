@@ -4,8 +4,10 @@ import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from '../components/room-organiz
 import { MAX_NAME_LENGTH } from '../components/room-organizer/lib/schema';
 import { deleteActivityCover, readActivityCovers } from './activity-cover';
 import {
-  createLocalProjectBackupV3, parseLocalProjectBackupJson,
-  type LocalProjectBackupV3, type ValidatedLocalProjectRestoreCandidate,
+  createLocalProjectBackupV3, createLocalProjectBackupV5WithDocuments, createLocalProjectBackupV6,
+  parseLocalProjectBackupJson,
+  type LocalProjectBackupV3, type LocalProjectBackupV5, type LocalProjectBackupV6,
+  type ValidatedLocalProjectRestoreCandidate,
 } from './local-project-backup';
 import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-storage';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
@@ -35,20 +37,32 @@ function activityKey(projectId: string): [string, string] {
 }
 
 /** Archives are the existing complete V3 envelope, not another storage format. */
-function backupFromText(text: string, projectId: string): LocalProjectBackupV3 {
+/** Archives are V3, V5 when the activity has image documents, or V6 when it carries a local event profile. */
+type LocalActivityArchive = LocalProjectBackupV3 | LocalProjectBackupV5 | LocalProjectBackupV6;
+
+/** V5 full backups are accepted only when their image documents are actually present. */
+function backupFromText(text: string, projectId: string): LocalActivityArchive {
   activityKey(projectId);
   const candidate = parseLocalProjectBackupJson(text);
-  if (candidate.source !== 'backup' || candidate.backupVersion !== 3 || candidate.brief.status === 'not-in-file' ||
-      candidate.materialCheckins.status === 'not-in-file') {
-    throw new Error('本机活动归档需要包含数量点验状态的 V3 备份。');
+  if (candidate.source !== 'backup' ||
+      (candidate.backupVersion !== 3 && candidate.backupVersion !== 5 && candidate.backupVersion !== 6) ||
+      candidate.brief.status === 'not-in-file' || candidate.materialCheckins.status === 'not-in-file') {
+    throw new Error('本机活动归档需要 V3/V5/V6 备份（含数量点验状态）。');
   }
   if (candidate.layout.id !== projectId) throw new Error('归档与活动编号不一致，未切换活动。');
-  return createLocalProjectBackupV3(candidate.layout,
-    { state: 'ready', scope: projectId, brief: candidate.brief },
-    { state: 'ready', scope: projectId, materialCheckins: candidate.materialCheckins }, candidate.createdAt!);
+  const briefSnapshot = { state: 'ready' as const, scope: projectId, brief: candidate.brief };
+  const checkinSnapshot = { state: 'ready' as const, scope: projectId, materialCheckins: candidate.materialCheckins };
+  if (candidate.backupVersion === 5 && candidate.sourceDocuments.status === 'present') {
+    return createLocalProjectBackupV5WithDocuments(candidate.layout, briefSnapshot, checkinSnapshot,
+      candidate.sourceDocuments, candidate.createdAt!);
+  }
+  if (candidate.backupVersion === 6 || candidate.layout.eventProfile !== undefined) {
+    return createLocalProjectBackupV6(candidate.layout, briefSnapshot, checkinSnapshot, candidate.createdAt!);
+  }
+  return createLocalProjectBackupV3(candidate.layout, briefSnapshot, checkinSnapshot, candidate.createdAt!);
 }
 
-function checkedArchive(value: unknown, projectId: string): LocalProjectBackupV3 {
+function checkedArchive(value: unknown, projectId: string): LocalActivityArchive {
   if (value === undefined) throw new Error('这份本机活动归档已不存在，当前活动未改变。');
   let text: string;
   try {
@@ -68,7 +82,7 @@ function checkedArchive(value: unknown, projectId: string): LocalProjectBackupV3
 
 /** Switching is allowed only after native commit and independent readback both succeed. */
 export async function archiveLocalActivity(text: string, expectedProjectId: string,
-  beforeWrite: () => void = () => {}): Promise<LocalProjectBackupV3> {
+  beforeWrite: () => void = () => {}): Promise<LocalActivityArchive> {
   const proposal = backupFromText(text, expectedProjectId), key = activityKey(expectedProjectId);
   const written = await updateSourceForm(key, value => {
     beforeWrite();
@@ -80,9 +94,20 @@ export async function archiveLocalActivity(text: string, expectedProjectId: stri
         ? mergeMaterialCheckinLedgers(current.materialCheckins.value, materialCheckins.value)
         : current.materialCheckins.value };
     }
-    return createLocalProjectBackupV3(proposal.layout,
-      { state: 'ready', scope: expectedProjectId, brief: proposal.brief },
-      { state: 'ready', scope: expectedProjectId, materialCheckins }, proposal.createdAt);
+    // 旧快照同样不能抹掉已归档的活动档案与图片；新值（若有）以本次为准。
+    const profile = proposal.layout.eventProfile ?? current?.layout.eventProfile;
+    const layout: RoomLayout = profile === undefined ? proposal.layout : { ...proposal.layout, eventProfile: profile };
+    const proposedDocuments = 'sourceDocuments' in proposal ? proposal.sourceDocuments : undefined;
+    const currentDocuments = current && 'sourceDocuments' in current ? current.sourceDocuments : undefined;
+    const sourceDocuments = proposedDocuments ?? currentDocuments;
+    const briefSnapshot = { state: 'ready' as const, scope: expectedProjectId, brief: proposal.brief };
+    const checkinSnapshot = { state: 'ready' as const, scope: expectedProjectId, materialCheckins };
+    if (sourceDocuments) {
+      return createLocalProjectBackupV5WithDocuments(layout, briefSnapshot, checkinSnapshot, sourceDocuments, proposal.createdAt);
+    }
+    return profile === undefined
+      ? createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, proposal.createdAt)
+      : createLocalProjectBackupV6(layout, briefSnapshot, checkinSnapshot, proposal.createdAt);
   });
   const readback = checkedArchive(await readSourceRecord<unknown>(key), expectedProjectId);
   if (canonical(written) !== canonical(readback)) {
@@ -114,6 +139,8 @@ function previewLayout(layout: RoomLayout): RoomLayout {
   delete preview.itemLayers;
   delete preview.productionPlan;
   delete preview.eventOperations;
+  // 列表缩略图只画楼层：日期/预算/分工等档案不进列表状态。
+  delete preview.eventProfile;
   return preview;
 }
 
@@ -140,7 +167,10 @@ function placementForNewActivity(source: RoomLayout): RoomLayout {
   if (!scope) throw new Error('当前布置缺少活动编号，不能沿用。');
   const copy = createLocalProjectBackupV3(source,
     { state: 'ready', scope, brief: { status: 'absent' } },
-    { state: 'ready', scope, materialCheckins: { status: 'absent' } }).layout;
+    { state: 'ready', scope, materialCheckins: { status: 'absent' } },
+    undefined, { allowEventProfile: true }).layout;
+  // 新活动不继承上一场的日期、预算与分工。
+  delete copy.eventProfile;
   delete copy.productionPlan;
   delete copy.eventOperations;
   delete copy.designBook;
