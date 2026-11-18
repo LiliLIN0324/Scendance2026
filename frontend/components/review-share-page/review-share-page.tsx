@@ -47,12 +47,21 @@ export function ReviewSharePage(): JSX.Element {
   const [activePinId, setActivePinId] = useState<string | null>(null);
   const [pinDraft, setPinDraft] = useState<ReviewPinDraft | null>(null);
   const [pinError, setPinError] = useState('');
+  // G3：只看链接（?view=1）能看方案与历史钉，但不能新增意见或回复。
+  const [viewOnly, setViewOnly] = useState(false);
   const [returned, setReturned] = useState(false);
   const [returnNote, setReturnNote] = useState('');
   const [planVersion,setPlanVersion]=useState<string|null>(null);
   const [exportNote,setExportNote]=useState('');
   const [pinsUsable,setPinsUsable]=useState(true);
   const linkHashRef=useRef<string|null>(null),pinWritePending=useRef(false);
+
+  useEffect(() => {
+    const readViewOnly = () => setViewOnly(new URLSearchParams(window.location.search).get('view') === '1');
+    readViewOnly();
+    window.addEventListener('hashchange', readViewOnly);
+    return () => window.removeEventListener('hashchange', readViewOnly);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -119,7 +128,7 @@ export function ReviewSharePage(): JSX.Element {
   const pinNumbers = useMemo(() => new Map(pins.map((pin, index) => [pin.id, index + 1])), [pins]);
 
   const openPinDraft = useCallback((pick: { itemId: string | null; x: number; z: number }) => {
-    if (!plan || !floor || exampleOnly) return;
+    if (!plan || !floor || exampleOnly || viewOnly) return;
     const floorY = floorElevation(plan.layout.floors, floorIndex);
     const item = pick.itemId ? floor.items.find((entry) => entry.id === pick.itemId) : null;
     const origin = item?.position ? { x: item.position.x, y: floorY, z: item.position.z } : null;
@@ -130,10 +139,10 @@ export function ReviewSharePage(): JSX.Element {
     };
     setPinError('');
     setPinDraft({ itemId: pick.itemId, x: pick.x, y: floorY, z: pick.z, offset, camera });
-  }, [plan, floor, floorIndex, exampleOnly]);
+  }, [plan, floor, floorIndex, exampleOnly, viewOnly]);
 
   const commitPin = useCallback(async (text: string) => {
-    if (!plan || !pinDraft || !floor || pinWritePending.current) return;
+    if (!plan || !pinDraft || !floor || pinWritePending.current || viewOnly) return;
     if(plan.source==='link'&&(!planVersion||!pinsUsable)){setPinError('无法完整核对本机反馈，未保存新意见。');return;}
     const capturedHash=linkHashRef.current;
     if(plan.source==='link'&&(!capturedHash||window.location.hash!==capturedHash)){setPinError('分享版本已变化，未保存意见。');return;}
@@ -313,6 +322,7 @@ export function ReviewSharePage(): JSX.Element {
                   })}
                 </ol>
               )}
+              {viewOnly && <p className="rsp-form-note" role="status">这是只看链接：可以查看方案与已有意见，不能新增或回复。</p>}
               {pinError && <p className="rsp-form-error" role="alert">{pinError}</p>}
               <details className="rsp-entry">
                 <summary>分享链接怎么进这一页</summary>

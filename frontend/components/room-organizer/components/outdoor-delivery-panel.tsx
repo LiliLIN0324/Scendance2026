@@ -47,6 +47,10 @@ export interface OutdoorDeliveryPanelProps {
   summaryMeta: string;
   /** 只读分享链接（/plan-share）；空串表示尚未生成。 */
   shareLink: string;
+  /** 允许钉评的评审链接（/review/#layout=）；空串表示尚未生成。 */
+  reviewLink?: string;
+  /** 生成评审链接：宿主调用现有 issueReviewLink 并回填。 */
+  onRequestReviewLink?: (() => void) | undefined;
   handlers: DeliveryExportHandlers;
   /** 预览缩略图 dataURL（可选；缺省用占位帧）。 */
   previewImage?: string | null;
@@ -85,6 +89,8 @@ export function OutdoorDeliveryPanel({
   activityName,
   summaryMeta,
   shareLink,
+  reviewLink = '',
+  onRequestReviewLink,
   handlers,
   previewImage,
 }: OutdoorDeliveryPanelProps) {
@@ -94,6 +100,10 @@ export function OutdoorDeliveryPanel({
   const [paramSelection, setParamSelection] = useState<Record<string, Record<'view' | 'scale', number>>>({});
   const [futureOpen, setFutureOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [reviewTier, setReviewTier] = useState<'view' | 'pin'>('pin');
+  const reviewHref = reviewTier === 'view' && reviewLink
+    ? `${reviewLink.split('#')[0]}${reviewLink.split('#')[0].includes('?') ? '&' : '?'}view=1${reviewLink.includes('#') ? `#${reviewLink.split('#').slice(1).join('#')}` : ''}`
+    : reviewLink;
 
   useEffect(() => {
     if (!open) return;
@@ -273,17 +283,18 @@ export function OutdoorDeliveryPanel({
                 {seg.id === 'review' && (
                   <>
                     <div style={statusStyle}>
-                      <span style={statusTitleStyle}>待审 v1</span>
-                      <span style={statusMetaStyle}>评审会话与回执链路待接通</span>
+                      <span style={statusTitleStyle}>{reviewTier === 'view' ? '只看' : '允许钉评'}</span>
+                      <span style={statusMetaStyle}>{reviewLink ? '对方无需账号即可打开' : '还没生成评审链接'}</span>
                       <span style={{ flex: 1 }} />
-                      <button type="button" disabled style={disabledBtnStyle}>发评审链接</button>
-                      <button type="button" disabled style={disabledBtnStyle}>去 Bingo</button>
+                      <button type="button" onClick={() => setReviewTier('view')} style={secondaryBtnStyle}>只看</button>
+                      <button type="button" onClick={() => setReviewTier('pin')} style={secondaryBtnStyle}>允许钉评</button>
                     </div>
                     <div style={linkBoxStyle}>
-                      <input readOnly value="/review/#layout=待接通" aria-label="评审链接" style={{ flex: 1, border: 'none', background: 'transparent', fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted, outline: 'none', minWidth: 0, fontFamily: 'ui-monospace, monospace' }} />
-                      <button type="button" disabled style={disabledBtnStyle}>复制</button>
-                      <button type="button" disabled style={disabledBtnStyle}>打开对方所见</button>
+                      <input readOnly value={reviewHref} aria-label="评审链接" placeholder="先生成评审链接" style={{ flex: 1, border: 'none', background: 'transparent', fontSize: PLANNING_TYPOGRAPHY.row, color: PLANNING_TEXT.muted, outline: 'none', minWidth: 0, fontFamily: 'ui-monospace, monospace' }} />
+                      <button type="button" disabled={!reviewHref} onClick={() => { if(!reviewHref)return; void navigator.clipboard?.writeText(reviewHref); setCopied(true); window.setTimeout(()=>setCopied(false),1600); }} style={secondaryBtnStyle}>{copied ? '已复制' : '复制'}</button>
+                      <button type="button" disabled={!reviewHref} onClick={() => reviewHref && window.open(reviewHref, '_blank')} style={secondaryBtnStyle}>打开对方所见</button>
                     </div>
+                    {!reviewLink && <button type="button" onClick={() => onRequestReviewLink?.()} style={secondaryBtnStyle}>生成评审链接</button>}
                   </>
                 )}
 

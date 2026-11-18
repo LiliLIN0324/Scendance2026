@@ -42,6 +42,15 @@ export function agentErrorView(status: string | null | undefined): AgentErrorVie
         stamp: '额度不足',
         tone: 'warn',
       };
+    // 2026-11-18（#6）：超时原来与 provider_error、未知状态共用兜底档，
+    // 四类阻塞（未登录 / 功能关闭 / 额度不足 / 超时）在界面上分不出来，
+    // 「分别验」根本无从下手。后端早就把 timeout 单列了，这里补上对应的一档。
+    case 'timeout':
+      return {
+        message: '服务商这次没在时限内返回，本次未执行；请稍后重试，或把这一句拆短一点再试。',
+        stamp: '响应超时',
+        tone: 'warn',
+      };
     default:
       return FALLBACK_VIEW;
   }
