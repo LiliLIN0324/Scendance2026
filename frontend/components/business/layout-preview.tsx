@@ -3,20 +3,18 @@
 /**
  * 只读 3D 渲染器，给 /view 的 URL 快照模式用。
  *
- * 它只消费分享快照里的 RoomLayout，复用画布同一套建场函数（墙体、内墙、家具模型），
- * 但不接入任何编辑状态：没有选中、没有操作面板、没有射线拾取，只有 OrbitControls。
+ * 它只消费分享快照里的 RoomLayout，只画家具物件本身；
+ * 旧室内户型的墙体与地面已不再绘制（场地改由地图底图承担）。
+ * 不接入任何编辑状态：没有选中、没有操作面板、没有射线拾取，只有 OrbitControls。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { applyWallDisplay, buildRoom } from '../room-organizer/three/room-builder';
-import { renderInteriorWalls } from '../room-organizer/three/interior-walls';
-import { computeWallOpenings } from '../room-organizer/three/wall-openings';
 import { createFurnitureModel } from '../room-organizer/three/furniture-builders';
 import { glbAssetKey, getGlbAssetState, ensureGlbAsset, subscribeGlbAssets } from '../room-organizer/three/glb-assets';
 import { disposeObject } from '../room-organizer/three/builder-utils';
-import { buildingHeight, floorElevation, interiorWallHeight, itemForStorey, storeyHeight } from '../room-organizer/lib/storeys';
+import { buildingHeight, floorElevation, itemForStorey, storeyHeight } from '../room-organizer/lib/storeys';
 import { applyRendererLook, DEFAULT_EVENT_LIGHTING, makeBackdropTexture, placeAccentLight, placeKeyLight, placeWashLights, resolveLook, SHADOW_LOOK } from '../room-organizer/three/render-look';
 import type { RoomLayout } from '../room-organizer/lib/types';
 import { SHARE_VIEW_LABELS, SHARE_VIEW_PRESETS, shareShotFilename, type ShareViewPreset } from '../../lib/share-snapshot';
@@ -158,13 +156,8 @@ export function LayoutPreview({ layout, assetUrls, name, initialView = 'iso' }: 
     furniture.userData.type = 'viewer-furniture';
     world.add(furniture);
 
-    const syncWalls = () => {
-      applyWallDisplay(world, camera.position.x, camera.position.z, 'cutaway', width, depth);
-    };
-
     const renderFrame = () => {
       if (disposed) return;
-      syncWalls();
       renderer.render(world, camera);
     };
 
@@ -186,37 +179,8 @@ export function LayoutPreview({ layout, assetUrls, name, initialView = 'iso' }: 
       renderFrame();
     };
 
-    for (let index = 0; index < layout.floors.length; index += 1) {
-      const floor = layout.floors[index];
-      const y = floorElevation(layout.floors, index);
-      const interiorWalls = layout.backendSceneV2 ? [] : (floor.interiorWalls ?? []);
-      buildRoom(THREE, {
-        scene: world,
-        width,
-        depth,
-        floorColor: floor.floorColor || '#F2EEE4',
-        ...(floor.floorPattern ? { floorPattern: floor.floorPattern } : {}),
-        ...(floor.wallColors ? { wallColors: floor.wallColors } : {}),
-        wallOpenings: computeWallOpenings(floor.items, width, depth, storeyHeight(floor), interiorWalls),
-        ...(floor.hiddenWalls ? { hiddenWalls: floor.hiddenWalls } : {}),
-        floorPlanImage: null,
-        floorPlanOpacity: 0,
-        floorPlanFitMode: 'stretch',
-        floorPlan3DEffect: false,
-        yOffset: y,
-        wallHeight: storeyHeight(floor),
-        groundY: 0,
-      });
-      if (interiorWalls.length > 0) {
-        renderInteriorWalls(THREE, world, interiorWalls, y, undefined, {
-          openingCandidates: floor.items,
-          roomWidth: width,
-          roomDepth: depth,
-          wallHeight: interiorWallHeight(floor),
-          storeyHeight: storeyHeight(floor),
-        });
-      }
-    }
+    // 2026-11-18：分享页不再搭旧室内户型的墙体与地面（buildRoom / 剖切墙显隐）。
+    // 场地改由地图底图承担，这里只把物件放到它的真实位置上。
 
     const buildFurniture = () => {
       for (const child of [...furniture.children]) {
