@@ -60,6 +60,8 @@ docs/evidence/*
 !docs/evidence/mp-del/
 !docs/evidence/aholo/
 docs/evidence/aholo/*
+# #79 验收走查证据（清单 §5 指定 docs/evidence/79/<case>/，按上面写的流程开白名单）
+!docs/evidence/79/
 !docs/evidence/aholo/sculpture-rig/
 !docs/evidence/aholo/sculpture-rig-local/
 !docs/evidence/aholo/sculpture-rig-tpose/
