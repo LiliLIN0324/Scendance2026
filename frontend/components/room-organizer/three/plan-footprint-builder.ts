@@ -5,7 +5,7 @@ import { ROOM_OBJECT_TAGS } from './room-builder';
 import { planFootprintShapes, type PlanFootprintStrokeShape, type ShellPoint } from '../lib/plan-footprint-geometry';
 import { buildGroundLabel, buildPlanGroundSticker, buildPlanPropObject } from './plan-props-builder';
 import { addIndoorWalls } from './plan-indoor-walls';
-import { isDoorTemplateId } from '../lib/plan-indoor-walls';
+import { isDoorTemplateId, isWindowTemplateId } from '../lib/plan-indoor-walls';
 import { workerRoleColor, workerSticker } from '../lib/oneplan-stickers';
 import { libraryEntryColor } from '../lib/oneplan-library';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -317,11 +317,32 @@ export function buildPlanFootprint(
     shapes.zones.map(zone => ({
       id: zone.id,
       environment: zoneEnvironment.get(zone.id),
+      // 旧数据/AI 分区只带语义 indoor、没有 environment：墙与 2D 吸附用同一个判据。
+      semantic: zone.semantic,
       points: zone.points.map(toLocal),
     })),
     shapes.props
       .filter(prop => isDoorTemplateId(prop.templateId))
       .map(prop => ({ id: prop.id, center: toLocal(prop.center), widthM: prop.width })),
+    // 2026-11-18 窗：同一套贴墙开洞，洞口不落地（窗台高在 lib 里定）。
+    shapes.props
+      .filter(prop => isWindowTemplateId(prop.templateId))
+      .map(prop => ({
+        id: prop.id,
+        center: toLocal(prop.center),
+        widthM: prop.width,
+        // 2026-11-18 属性面板可改窗台/窗高；没改过就走 lib 的 0.9 / 1.2。
+        ...(prop.windowSillM !== undefined ? { sillM: prop.windowSillM } : {}),
+        ...(prop.windowHeightM !== undefined ? { heightM: prop.windowHeightM } : {}),
+      })),
+    // 手画的墙：与分区边线同一把尺子（先换壳体系，再减半个场地），否则整层墙会偏半个场地。
+    shapes.walls
+      .filter(wall => wall.points.length === 2)
+      .map(wall => ({
+        id: wall.id,
+        a: toLocal(wall.points[0]!),
+        b: toLocal(wall.points[1]!),
+      })),
   );
 
   // 设施：按平面上的占地矩形 + 朝向铺一块地贴（"物料在哪儿"先落在个真实占位上）。
