@@ -1,0 +1,371 @@
+{
+  "format": "scendance-scene-delivery",
+  "version": 2,
+  "units": "m",
+  "upAxis": "Y",
+  "coordinateOrigin": "venue-north-west",
+  "name": "周末共创工作坊",
+  "snapshot": {
+    "id": "17b3e17b-75e2-4728-bc16-8fffc873a608",
+    "generatedAt": "2026-11-18T14:55:32.661Z"
+  },
+  "scene": {
+    "schemaVersion": 1,
+    "venue": {
+      "width": 23.8,
+      "depth": 16.1,
+      "height": 3,
+      "shape": "rectangle",
+      "entrances": []
+    },
+    "objects": [
+      {
+        "id": "a0100000-0000-4000-8000-000000000001",
+        "materialId": "table",
+        "position": {
+          "x": 10.5,
+          "z": 8.05
+        },
+        "rotation": 0,
+        "size": {
+          "width": 1.2,
+          "depth": 0.6,
+          "height": 0.75
+        },
+        "color": "#c6a580",
+        "locked": false,
+        "notes": ""
+      },
+      {
+        "id": "a0100000-0000-4000-8000-000000000002",
+        "materialId": "table",
+        "position": {
+          "x": 13.3,
+          "z": 8.05
+        },
+        "rotation": 0,
+        "size": {
+          "width": 1.2,
+          "depth": 0.6,
+          "height": 0.75
+        },
+        "color": "#c6a580",
+        "locked": false,
+        "notes": ""
+      },
+      {
+        "id": "a0100000-0000-4000-8000-000000000003",
+        "materialId": "chair",
+        "position": {
+          "x": 10.5,
+          "z": 9.05
+        },
+        "rotation": -180,
+        "size": {
+          "width": 0.5,
+          "depth": 0.5,
+          "height": 0.85
+        },
+        "color": "#356350",
+        "locked": false,
+        "notes": ""
+      },
+      {
+        "id": "a0100000-0000-4000-8000-000000000004",
+        "materialId": "chair",
+        "position": {
+          "x": 13.3,
+          "z": 9.05
+        },
+        "rotation": -180,
+        "size": {
+          "width": 0.5,
+          "depth": 0.5,
+          "height": 0.85
+        },
+        "color": "#356350",
+        "locked": false,
+        "notes": ""
+      },
+      {
+        "id": "a0100000-0000-4000-8000-000000000005",
+        "materialId": "decoration",
+        "position": {
+          "x": 8.100000000000001,
+          "z": 5.3500000000000005
+        },
+        "rotation": 0,
+        "size": {
+          "width": 0.4,
+          "depth": 0.4,
+          "height": 0.6
+        },
+        "color": "#58735a",
+        "locked": false,
+        "notes": ""
+      }
+    ],
+    "camera": "overview",
+    "lighting": "neutral"
+  },
+  "execution": [
+    {
+      "ownerName": "",
+      "dueDate": "",
+      "acceptance": "",
+      "status": "todo",
+      "evidenceUrls": [],
+      "evidenceNote": "",
+      "objectId": "a0100000-0000-4000-8000-000000000001",
+      "name": "桌子",
+      "materialId": "table",
+      "assetVersionId": null,
+      "floorId": "event-floor",
+      "floorName": "活动场地",
+      "size": {
+        "width": 1.2,
+        "depth": 0.6,
+        "height": 0.75
+      },
+      "position": {
+        "x": 10.5,
+        "z": 8.05
+      },
+      "rotation": 0,
+      "elevation": 0,
+      "hasHandoff": false,
+      "effectiveStatus": "todo"
+    },
+    {
+      "ownerName": "",
+      "dueDate": "",
+      "acceptance": "",
+      "status": "todo",
+      "evidenceUrls": [],
+      "evidenceNote": "",
+      "objectId": "a0100000-0000-4000-8000-000000000002",
+      "name": "桌子",
+      "materialId": "table",
+      "assetVersionId": null,
+      "floorId": "event-floor",
+      "floorName": "活动场地",
+      "size": {
+        "width": 1.2,
+        "depth": 0.6,
+        "height": 0.75
+      },
+      "position": {
+        "x": 13.3,
+        "z": 8.05
+      },
+      "rotation": 0,
+      "elevation": 0,
+      "hasHandoff": false,
+      "effectiveStatus": "todo"
+    },
+    {
+      "ownerName": "",
+      "dueDate": "",
+      "acceptance": "",
+      "status": "todo",
+      "evidenceUrls": [],
+      "evidenceNote": "",
+      "objectId": "a0100000-0000-4000-8000-000000000003",
+      "name": "椅子",
+      "materialId": "chair",
+      "assetVersionId": null,
+      "floorId": "event-floor",
+      "floorName": "活动场地",
+      "size": {
+        "width": 0.5,
+        "depth": 0.5,
+        "height": 0.85
+      },
+      "position": {
+        "x": 10.5,
+        "z": 9.05
+      },
+      "rotation": -180,
+      "elevation": 0,
+      "hasHandoff": false,
+      "effectiveStatus": "todo"
+    },
+    {
+      "ownerName": "",
+      "dueDate": "",
+      "acceptance": "",
+      "status": "todo",
+      "evidenceUrls": [],
+      "evidenceNote": "",
+      "objectId": "a0100000-0000-4000-8000-000000000004",
+      "name": "椅子",
+      "materialId": "chair",
+      "assetVersionId": null,
+      "floorId": "event-floor",
+      "floorName": "活动场地",
+      "size": {
+        "width": 0.5,
+        "depth": 0.5,
+        "height": 0.85
+      },
+      "position": {
+        "x": 13.3,
+        "z": 9.05
+      },
+      "rotation": -180,
+      "elevation": 0,
+      "hasHandoff": false,
+      "effectiveStatus": "todo"
+    },
+    {
+      "ownerName": "",
+      "dueDate": "",
+      "acceptance": "",
+      "status": "todo",
+      "evidenceUrls": [],
+      "evidenceNote": "",
+      "objectId": "a0100000-0000-4000-8000-000000000005",
+      "name": "装饰道具",
+      "materialId": "decoration",
+      "assetVersionId": null,
+      "floorId": "event-floor",
+      "floorName": "活动场地",
+      "size": {
+        "width": 0.4,
+        "depth": 0.4,
+        "height": 0.6
+      },
+      "position": {
+        "x": 8.100000000000001,
+        "z": 5.3500000000000005
+      },
+      "rotation": 0,
+      "elevation": 0,
+      "hasHandoff": false,
+      "effectiveStatus": "todo"
+    }
+  ],
+  "materials": [
+    {
+      "name": "桌子",
+      "materialId": "table",
+      "assetVersionId": null,
+      "source": "builtin",
+      "width": 1.2,
+      "depth": 0.6,
+      "height": 0.75,
+      "color": "#c6a580",
+      "quantity": 2,
+      "objectIds": [
+        "a0100000-0000-4000-8000-000000000001",
+        "a0100000-0000-4000-8000-000000000002"
+      ],
+      "procurement": "规格与采购待确认",
+      "sourceUrl": null,
+      "license": null,
+      "sha256": null
+    },
+    {
+      "name": "椅子",
+      "materialId": "chair",
+      "assetVersionId": null,
+      "source": "builtin",
+      "width": 0.5,
+      "depth": 0.5,
+      "height": 0.85,
+      "color": "#356350",
+      "quantity": 2,
+      "objectIds": [
+        "a0100000-0000-4000-8000-000000000003",
+        "a0100000-0000-4000-8000-000000000004"
+      ],
+      "procurement": "规格与采购待确认",
+      "sourceUrl": null,
+      "license": null,
+      "sha256": null
+    },
+    {
+      "name": "装饰道具",
+      "materialId": "decoration",
+      "assetVersionId": null,
+      "source": "builtin",
+      "width": 0.4,
+      "depth": 0.4,
+      "height": 0.6,
+      "color": "#58735a",
+      "quantity": 1,
+      "objectIds": [
+        "a0100000-0000-4000-8000-000000000005"
+      ],
+      "procurement": "规格与采购待确认",
+      "sourceUrl": null,
+      "license": null,
+      "sha256": null
+    }
+  ],
+  "verificationScope": {
+    "state": "draft_unverified",
+    "sceneSize": {
+      "widthMeters": 23.8,
+      "depthMeters": 16.1,
+      "heightMeters": 3,
+      "source": "当前编辑场景",
+      "note": "这是图中尺寸，不自动代表现场实测；具体依据见尺寸记录。"
+    },
+    "dimensions": [],
+    "doors": [],
+    "checks": [
+      {
+        "id": "reference_source",
+        "status": "unknown",
+        "note": "图纸和照片资料状态、原件版本及其与场地的对应关系尚未核验。"
+      },
+      {
+        "id": "entrances_exits",
+        "status": "unknown",
+        "note": "未记录可核对的门或入口；出口信息待确认。"
+      },
+      {
+        "id": "door_swing",
+        "status": "unknown",
+        "note": "门扇开启方向、铰链及净宽未在此交付包核实。"
+      },
+      {
+        "id": "circulation",
+        "status": "unknown",
+        "note": "人流、排队、通行净宽与转弯空间未在此交付包核实。"
+      },
+      {
+        "id": "fire_accessibility_capacity",
+        "status": "unknown",
+        "note": "消防、无障碍及核定容量未在此交付包核验。"
+      }
+    ],
+    "confirmations": {
+      "venue": "unknown",
+      "execution": "unknown",
+      "authority": "unknown",
+      "note": "此交付包未记录与本版本绑定的场地方、执行方或主管部门确认；物件工作单状态不代替这些确认。"
+    }
+  },
+  "operations": null,
+  "operationsTimeZone": "Asia/Shanghai",
+  "source": {
+    "kind": "editor-snapshot",
+    "layoutId": "9a889d2b-0e71-45bd-90b7-d9f36f7b665d"
+  },
+  "provenance": {
+    "ai": 0,
+    "human": 0,
+    "procedural": 0,
+    "structure": 0,
+    "unknown": 5,
+    "deployable": 5,
+    "aiPct": 0
+  },
+  "note": "原方案自由文字未独立核验，本交付包不包含该部分；原方案记录仍保留。assetVersionId 为归档资产标识；重新打开私有资产仍需项目授权。GLB 不包含编辑器环境光和后处理。",
+  "privacy": {
+    "redactedFields": 0,
+    "note": "已识别的部分凭据与私密链接已过滤；不能保证识别全部敏感信息，请分享前核对。需要的证据请另行安全提供。"
+  }
+}

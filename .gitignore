@@ -60,6 +60,11 @@ docs/evidence/*
 !docs/evidence/mp-del/
 !docs/evidence/aholo/
 docs/evidence/aholo/*
+# #79 验收走查证据（清单 §5 指定 docs/evidence/79/<case>/，按上面写的流程开白名单）
+!docs/evidence/79/
+# 户外漫游 W1/W2/W3 真机走查证据（2026-11-18，Chromium + swiftshader 本机跑）
+!docs/evidence/walk-2026-11-18/
+!docs/evidence/walk-2026-11-18-round2/
 !docs/evidence/aholo/sculpture-rig/
 !docs/evidence/aholo/sculpture-rig-local/
 !docs/evidence/aholo/sculpture-rig-tpose/

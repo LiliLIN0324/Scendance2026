@@ -1299,7 +1299,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(typeof result==='string'||typeof result.url!=='string'||!result.url.trim()||!stillCurrent()||typeof result.isCurrent!=='function'||!result.isCurrent()){
         say({role:'agent',review:true,amber:true,text:'活动或方案已变化，或当前版本无法核对；旧评审记录如已写入会保留，链接未复制。'});return;
       }
-      say({ role: 'agent', review: true, text: '评审链接已准备好。请在下方「本机评审记录」复制链接发给对方；对方的意见仅保存在对方浏览器，不会自动回到这里，请另行收集。' });
+      say({ role: 'agent', review: true, text: '已打开右上角分享面板；在「送评审方」生成并复制链接。对方的钉评会自动回到 Bingo，不需要另行收集。' });
     } catch { if(sessionScopeIsCurrent())say({role:'agent',review:true,amber:true,text:'评审链接结果暂时无法核对；旧评审记录如已写入会保留，链接未复制。'}); }
     finally{reviewLinkPending.current=false;}
   }
@@ -4647,11 +4647,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
       {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
       {activity && mode === 'layout' && <ActivitiesGalleryMount/>}
-      {/* 空态引导句只剩 Bingo 脸要：活动脸的对话流自己说话，不再挂静态引导。 */}
-      {bingo && mode === 'layout' && agent.state !== 'generating' && agent.bubbles.filter(b => b.review).length === 0 && <div className="ap-lead">
-        <p className="ap-lead-title">这边只管审校</p>
-        <p className="ap-lead-body">点「立即体检」查看几何问题，或准备客户评审。对方的意见保存在对方浏览器，不会自动回到这里。</p>
-      </div>}
       {showPlanHome && (
         <PlanHome
           draft={draft}
@@ -4738,14 +4733,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           <button type="button" className="ap-text-action" onClick={agent.withdrawAllUnresolved}>全部撤回</button>
         </div>
       </section>}
-      {/* S2-1 审校状态台：体检/客户评审/导出三钮直达，零新 state；composer 摘除属 T2，本刀不动。 */}
-      {bingo && <div className="ap-card ap-status-panel" aria-label="审校状态台">
-        <span className="ap-blocked-stamp">审校状态</span>
-        <div className="ap-chips">
+      {bingo && <div className="ap-card ap-status-panel" aria-label="审校动作">
+        <button type="button" className="chip" onClick={() => agent.issueReviewLink()}>发给客户评审</button>
+        {/* 体检与旧钉评链接收进次级动作：主路径只留分享，避免三颗平级按钮。 */}
+        <details className="ap-audit-more-actions">
+          <summary>更多审校动作</summary>
           <button type="button" className="chip btn-outline" onClick={() => agent.reviewNow()}>立即体检</button>
-          <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenReview}>准备客户评审</button>
           <button type="button" className="chip btn-outline" onClick={() => agent.issueReviewLink()}>发送钉评链接</button>
-        </div>
+        </details>
       </div>}
       {bingo && <BingoAuditCard scopeKey={agent.sessionScope} isCurrent={agent.isSessionCurrent}/>}
       {/* 布置生成态只属于活动脸；Bingo 脸 S2 再接审校工作台，中间态不挂生成卡片。 */}

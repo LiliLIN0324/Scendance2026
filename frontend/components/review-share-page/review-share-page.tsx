@@ -16,7 +16,9 @@ import {
   type LoadedReviewPlan,
 } from './load-plan';
 import { itemNames, ReviewPlanSheet } from './review-plan-sheet';
+import { ReviewOutdoorSheet } from './review-outdoor-sheet';
 import { markReviewReturned, readReviewReturn, REVIEW_RETURN_STORAGE_KEY } from './review-return';
+import { appendReviewPinCloud, listReviewPinsCloud } from './review-pins-cloud';
 import {
   appendReviewSharePin,
   readReviewSharePins,
@@ -46,13 +48,27 @@ export function ReviewSharePage(): JSX.Element {
   const [pins, setPins] = useState<ReviewPin[]>([]);
   const [activePinId, setActivePinId] = useState<string | null>(null);
   const [pinDraft, setPinDraft] = useState<ReviewPinDraft | null>(null);
+  // 户外钉：ENU 米制点，与楼层钉分开；floorId='outdoor' 作为存储标记。
+  const [outdoorDraft, setOutdoorDraft] = useState<{ x: number; y: number } | null>(null);
+  const [outdoorText, setOutdoorText] = useState('');
   const [pinError, setPinError] = useState('');
+  // G3：只看链接（?view=1）能看方案与历史钉，但不能新增意见或回复。
+  const [viewOnly, setViewOnly] = useState(false);
+  // 访客署名：只存在本机，随钉一起带给创作者；不强制登录。
+  const [author, setAuthor] = useState('');
   const [returned, setReturned] = useState(false);
   const [returnNote, setReturnNote] = useState('');
   const [planVersion,setPlanVersion]=useState<string|null>(null);
   const [exportNote,setExportNote]=useState('');
   const [pinsUsable,setPinsUsable]=useState(true);
   const linkHashRef=useRef<string|null>(null),pinWritePending=useRef(false);
+
+  useEffect(() => {
+    const readViewOnly = () => setViewOnly(new URLSearchParams(window.location.search).get('view') === '1');
+    readViewOnly();
+    window.addEventListener('hashchange', readViewOnly);
+    return () => window.removeEventListener('hashchange', readViewOnly);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -66,6 +82,9 @@ export function ReviewSharePage(): JSX.Element {
       const example=new URLSearchParams(window.location.search).get('example');
       const isolatedExample=!shareHash && (example==='sharing'||example==='hall-d5');
       const localLayout = isolatedExample ? null : readLocalReviewLayout(safeStorage());
+      if (!isolatedExample) {
+        try { setAuthor(window.localStorage.getItem('scendance-review-author') ?? ''); } catch { /* 忽略不可用存储 */ }
+      }
       void loadReviewPlan({
         hash: shareHash,
         search: window.location.search,
@@ -94,6 +113,12 @@ export function ReviewSharePage(): JSX.Element {
           try {const storage=safeStorage();if(!storage)throw new Error();setPins(readExactReviewSharePins(currentPlan.planKey,storage));}
           catch {setPins([]);setPinsUsable(false);setPinError('本机反馈无法完整读取，请保留原记录，暂不能修改或导出。');}
         }else setPins(currentPlan.source==='link'||currentPlan.planKey==='sample:sharing'||currentPlan.planKey==='sample:hall-d5'?[]:readReviewSharePins(currentPlan.planKey,safeStorage()));
+        if(currentPlan.source==='link'&&currentPlan.planKey.startsWith('review-v2:')){
+          void listReviewPinsCloud(currentPlan.planKey).then(remote=>{
+            if(!active||current!==ticket||!remote.ok||!remote.value.length)return;
+            setPins(prev=>{const seen=new Set(prev.map(pin=>pin.id));return [...prev,...remote.value.filter(pin=>!seen.has(pin.id))];});
+          });
+        }
         const storage=safeStorage();
         const receipt = readReviewReturn(storage&&currentPlan.source==='link'?versionedReturnStorage(storage,currentPlan.planKey):storage);
         const already = receipt?.planKey === currentPlan.planKey;
@@ -116,10 +141,13 @@ export function ReviewSharePage(): JSX.Element {
   const exampleOnly=plan?.planKey==='sample:sharing'||plan?.planKey==='sample:hall-d5';
   const floor = plan ? plan.layout.floors[floorIndex] ?? plan.layout.floors[0] : undefined;
   const legend = floor ? itemLegend(floor.items) : { rows: [], hidden: 0 };
+  const outdoorMode = !!plan?.outdoorPlan;
+  const outdoorPins = outdoorMode ? pins.filter(pin => (pin as ReviewPin & { floorId?: string }).floorId === 'outdoor') : [];
+  const floorPins = outdoorMode ? pins.filter(pin => (pin as ReviewPin & { floorId?: string }).floorId !== 'outdoor') : pins;
   const pinNumbers = useMemo(() => new Map(pins.map((pin, index) => [pin.id, index + 1])), [pins]);
 
   const openPinDraft = useCallback((pick: { itemId: string | null; x: number; z: number }) => {
-    if (!plan || !floor || exampleOnly) return;
+    if (!plan || !floor || exampleOnly || viewOnly) return;
     const floorY = floorElevation(plan.layout.floors, floorIndex);
     const item = pick.itemId ? floor.items.find((entry) => entry.id === pick.itemId) : null;
     const origin = item?.position ? { x: item.position.x, y: floorY, z: item.position.z } : null;
@@ -130,10 +158,47 @@ export function ReviewSharePage(): JSX.Element {
     };
     setPinError('');
     setPinDraft({ itemId: pick.itemId, x: pick.x, y: floorY, z: pick.z, offset, camera });
-  }, [plan, floor, floorIndex, exampleOnly]);
+  }, [plan, floor, floorIndex, exampleOnly, viewOnly]);
+
+  const openOutdoorPinDraft = useCallback((point: { x: number; y: number }) => {
+    if (!plan?.outdoorPlan || viewOnly) return;
+    setPinError('');
+    setOutdoorText('');
+    setOutdoorDraft(point);
+  }, [plan, viewOnly]);
+
+  const commitOutdoorPin = useCallback(async (text: string) => {
+    if (!plan?.outdoorPlan || !outdoorDraft || viewOnly) return;
+    const storage = safeStorage();
+    if (!storage) { setPinError(PIN_ERRORS.storage); return; }
+    const draft = {
+      itemId: null,
+      x: outdoorDraft.x,
+      y: 0,
+      z: outdoorDraft.y,
+      offset: null,
+      camera: { position: [outdoorDraft.x, 12, outdoorDraft.y + 12] as const, target: [outdoorDraft.x, 0, outdoorDraft.y] as const },
+    };
+    const result = appendReviewSharePin(storage, {
+      planKey: plan.planKey,
+      text,
+      draft,
+      id: randomId('pin'),
+      floorId: 'outdoor',
+    });
+    if (!result.ok) { setPinError(PIN_ERRORS[result.reason] ?? PIN_ERRORS.text); return; }
+    setPins(result.pins);
+    if (plan.source === 'link' && plan.planKey.startsWith('review-v2:')) {
+      void appendReviewPinCloud({ shareKey: plan.planKey, pin: result.pin, floorId: 'outdoor', author });
+    }
+    setActivePinId(result.pin.id);
+    setOutdoorDraft(null);
+    setOutdoorText('');
+    setPinError('');
+  }, [plan, outdoorDraft, viewOnly, author]);
 
   const commitPin = useCallback(async (text: string) => {
-    if (!plan || !pinDraft || !floor || pinWritePending.current) return;
+    if (!plan || !pinDraft || !floor || pinWritePending.current || viewOnly) return;
     if(plan.source==='link'&&(!planVersion||!pinsUsable)){setPinError('无法完整核对本机反馈，未保存新意见。');return;}
     const capturedHash=linkHashRef.current;
     if(plan.source==='link'&&(!capturedHash||window.location.hash!==capturedHash)){setPinError('分享版本已变化，未保存意见。');return;}
@@ -166,6 +231,9 @@ export function ReviewSharePage(): JSX.Element {
       return;
     }
     setPins(result.pins);
+    if(plan.source==='link'&&plan.planKey.startsWith('review-v2:')){
+      void appendReviewPinCloud({shareKey:plan.planKey,pin:result.pin,floorId:floor.id,author});
+    }
     setActivePinId(result.pin.id);
     setPinDraft(null);
     setPinError('');
@@ -241,8 +309,12 @@ export function ReviewSharePage(): JSX.Element {
               </p>
             )}
             <p className="rsp-notice">{plan.notice}</p>
+            {!exampleOnly && <label className="rsp-author" style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span>你的称呼</span>
+              <input value={author} maxLength={24} placeholder="选填，方便对方知道是谁" onChange={event => { const value = event.currentTarget.value; setAuthor(value); try { window.localStorage.setItem('scendance-review-author', value); } catch { /* 忽略 */ } }} style={{flex:1,minWidth:0}} />
+            </label>}
             {plan.planKey==='sample:hall-d5' && <p><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
-            {!exampleOnly && !pinDraft && pins.length === 0 && (
+            {!exampleOnly && !outdoorMode && !pinDraft && pins.length === 0 && (
               <p className="rsp-review-hint" role="status">点物件或地面，钉一条意见</p>
             )}
             {plan.layout.floors.length > 1 && (
@@ -252,12 +324,53 @@ export function ReviewSharePage(): JSX.Element {
                 ))}
               </div>
             )}
-            <div className="rsp-sheet rsp-sheet-interactive">
+            {plan.outdoorPlan && (
+              <section aria-label="户外方案">
+                <p className="rsp-review-hint" role="status">这是分享链接携带的户外方案：点平面任意位置，钉一条意见。</p>
+                <ReviewOutdoorSheet
+                  plan={plan.outdoorPlan}
+                  pins={outdoorPins}
+                  activePinId={activePinId}
+                  onPick={openOutdoorPinDraft}
+                  onFocusPin={setActivePinId}
+                />
+                {outdoorDraft && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+                    <span>钉在 ({outdoorDraft.x.toFixed(1)}, {outdoorDraft.y.toFixed(1)})</span>
+                    <span style={{ fontSize: 12, color: '#5d6b60', whiteSpace: 'nowrap' }}>{outdoorDraft.x.toFixed(1)}, {outdoorDraft.y.toFixed(1)} m</span>
+                    <input autoFocus value={outdoorText} maxLength={80} aria-label="户外钉评内容" placeholder="这里要改什么？" onChange={event => setOutdoorText(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void commitOutdoorPin(outdoorText); } else if (event.key === 'Escape') { setOutdoorDraft(null); } }} style={{ flex: 1, minWidth: 160 }} />
+                    <button type="button" disabled={!outdoorText.trim()} onClick={() => { void commitOutdoorPin(outdoorText); }}>钉下</button>
+                    <button type="button" onClick={() => setOutdoorDraft(null)}>取消</button>
+                  </div>
+                )}
+                {outdoorPins.length > 0 && (
+                  <ol aria-label="户外钉评" style={{ listStyle: 'none', padding: 0, margin: '10px 0 0', display: 'grid', gap: 6 }}>
+                    {outdoorPins.map((pin, index) => (
+                      <li key={pin.id}>
+                        <button
+                          type="button"
+                          aria-pressed={pin.id === activePinId}
+                          onClick={() => setActivePinId(pin.id)}
+                          style={{ width: '100%', textAlign: 'left', display: 'flex', gap: 8, alignItems: 'baseline', padding: '6px 8px', background: pin.id === activePinId ? '#e4efe6' : 'transparent', border: '1px solid #d6ded7', borderRadius: 8, cursor: 'pointer' }}
+                        >
+                          <strong>{index + 1}</strong>
+                          <span style={{ flex: 1 }}>{pin.text}</span>
+                          <small style={{ color: '#5d6b60' }}>
+                            {(pin as ReviewPin & { author?: string }).author || '访客'}{pin.status === 'resolved' ? ' · 已处理' : ''}
+                          </small>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            )}
+            {!outdoorMode && <div className="rsp-sheet rsp-sheet-interactive">
               <ReviewPlanSheet
                 layout={plan.layout}
                 floor={floor}
                 floorIndex={floorIndex}
-                pins={pins}
+                pins={floorPins}
                 activePinId={activePinId}
                 pinDraft={pinDraft}
                 onAnchor={openPinDraft}
@@ -265,7 +378,7 @@ export function ReviewSharePage(): JSX.Element {
                 onCommitPin={commitPin}
                 onCancelPin={() => setPinDraft(null)}
               />
-            </div>
+            </div>}
             <div className="rsp-legend">
               <h2>场内物件</h2>
               {legend.rows.length === 0 ? <p>这一层平面上还没有物件。</p> : (
@@ -313,6 +426,7 @@ export function ReviewSharePage(): JSX.Element {
                   })}
                 </ol>
               )}
+              {viewOnly && <p className="rsp-form-note" role="status">这是只看链接：可以查看方案与已有意见，不能新增或回复。</p>}
               {pinError && <p className="rsp-form-error" role="alert">{pinError}</p>}
               <details className="rsp-entry">
                 <summary>分享链接怎么进这一页</summary>

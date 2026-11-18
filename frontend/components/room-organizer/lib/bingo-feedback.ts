@@ -6,7 +6,7 @@
  */
 
 import { commentThreads, readReviewComments } from '../../review-share-page/comments';
-import { readReviewSharePins } from '../../review-share-page/share-pins';
+import { readReviewSharePinsForPlan } from '../../review-share-page/share-pins';
 import { reviewPlanKeyForClientUrl } from '../../review-share-page/load-plan';
 import { isReviewShareId, listReviewComments } from './review-share';
 import type { ReviewPin } from './review-pins';
@@ -29,6 +29,10 @@ export interface BingoFeedbackPin {
   source: BingoFeedbackSource;
   pinStatus?: 'open' | 'resolved';
   placement?: string;
+  /** 户外钉的 ENU 锚点；楼层钉也有，供列表定位用。 */
+  x?: number;
+  z?: number;
+  floorId?: string;
 }
 
 export interface BingoPlanFeedback {
@@ -53,13 +57,29 @@ export function reviewPlanKeysForBingoPlan(plan: BingoFeedbackPlan): string[] {
   return [...keys];
 }
 
+/** G4：把云端钉并进本机汇总；按钉 id 去重，不改本机已有条目。 */
+export function mergeBingoCloudPins(
+  feedback: BingoPlanFeedback,
+  pins: readonly ReviewPin[],
+): BingoPlanFeedback {
+  const seen = new Set(feedback.pins.map(pin => pin.id));
+  const extra = pins.filter(pin => !seen.has(pin.id)).map(pin => mapSharePin(pin));
+  if (extra.length === 0) return feedback;
+  return {
+    ...feedback,
+    sharePinCount: feedback.sharePinCount + extra.length,
+    pinCount: feedback.pinCount + extra.length,
+    pins: [...feedback.pins, ...extra],
+  };
+}
+
 export function readBingoPlanFeedback(
   plan: BingoFeedbackPlan,
   storage: Pick<Storage, 'getItem'> | null = typeof window !== 'undefined' ? window.localStorage : null,
 ): BingoPlanFeedback {
   const sharePins = new Map<string, BingoFeedbackPin>();
   for (const key of reviewPlanKeysForBingoPlan(plan)) {
-    for (const pin of readReviewSharePins(key, storage)) {
+    for (const pin of readReviewSharePinsForPlan(key, storage)) {
       // 去重键 `${key}:${pin.id}` 即未来跨表 join 键（Q4 云化注释）；读端聚合逻辑云化时换 repo 不改。
       sharePins.set(`${key}:${pin.id}`, mapSharePin(pin));
     }
@@ -101,17 +121,23 @@ export function feedbackSummaryLabel(feedback: BingoPlanFeedback, returned: bool
   return '还没有甲方钉评';
 }
 
-function mapSharePin(pin: ReviewPin): BingoFeedbackPin {
-  const placement = pin.itemId ? `物件 ${pin.itemId}` : `地面 (${Math.round(pin.x * 10) / 10}, ${Math.round(pin.z * 10) / 10})`;
+function mapSharePin(pin: ReviewPin & { author?: string | undefined; createdAt?: string | undefined; floorId?: string | undefined }): BingoFeedbackPin {
+  const outdoor = pin.floorId === 'outdoor';
+  const placement = outdoor
+    ? `户外 (${Math.round(pin.x * 10) / 10}, ${Math.round(pin.z * 10) / 10}) 米`
+    : pin.itemId ? `物件 ${pin.itemId}` : `地面 (${Math.round(pin.x * 10) / 10}, ${Math.round(pin.z * 10) / 10})`;
   return {
     id: pin.id,
-    author: '甲方钉评',
+    author: pin.author?.trim() || '甲方钉评',
     body: pin.text,
-    createdAt: '',
+    createdAt: pin.createdAt ?? '',
     replies: [],
     source: 'share-pin',
     pinStatus: pin.status,
     placement,
+    x: pin.x,
+    z: pin.z,
+    ...(pin.floorId ? { floorId: pin.floorId } : {}),
   };
 }
 

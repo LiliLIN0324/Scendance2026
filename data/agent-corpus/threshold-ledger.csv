@@ -1,0 +1,16 @@
+rule_id,threshold_label,field,current,unit,binding,safe_min,safe_max,margin_below,margin_above,source_level,status,note
+GEN-04,出口数下限,count,2,count,bound,2,2,0,0,B,边界敏感（余量 ≤10%），需人工确认,边界敏感（余量 ≤10%），需人工确认
+GEN-07,距建筑外墙,m,3,m,bound,1.8,12,1.2,9,C,hold,当前值在夹具上成立
+MKT-02,纵向,m,2,m,bound,1.2,16,0.8,14,B,hold,当前值在夹具上成立
+MKT-02,横向,m,1.5,m,bound,0.6,7,0.9,5.5,B,hold,当前值在夹具上成立
+MKT-06,与其他摊位,m,6,m,bound,2,7.2,4,1.2,B,hold,当前值在夹具上成立
+MKT-07,每 10 摊,count,2,count,bound,1,2,1,0,B,边界敏感（余量 ≤10%），需人工确认,边界敏感（余量 ≤10%），需人工确认
+MKT-10,摊位投影占场地,value,0.35,ratio,bound,0.15,0.35,0.2,0,C,边界敏感（余量 ≤10%），需人工确认,边界敏感（余量 ≤10%），需人工确认
+MKT-11,距建筑外墙,m,3,m,bound,1.8,16,1.2,13,C,hold,当前值在夹具上成立
+STG-01,站立硬底线,value,1,m2_per_person,bound,0.6,1.25,0.4,0.25,B,hold,当前值在夹具上成立
+STG-01,舒适,value,2,m2_per_person,unbound,0.3,3,1.7,1,B,未绑定（执行器不读该阈值）,判据表里有值，但执行器用的是写死副本；改表不生效
+STG-01,临时座席,value,0.75,m2_per_person,unbound,0.3,3,0.45,2.25,B,未绑定（执行器不读该阈值）,判据表里有值，但执行器用的是写死副本；改表不生效
+STG-02,台高 <1.5 m,m,5,m,bound,3,6,2,1,B,hold,当前值在夹具上成立
+CMP-02,营位间距,m,2,m,bound,1.2,3,0.8,1,A,hold,当前值在夹具上成立
+CMP-03,帐篷之间,m,4,m,bound,3.2,7,0.8,3,C,hold,当前值在夹具上成立
+CMP-03,明火距帐篷,m,10,m,bound,6,20,4,10,C,hold,当前值在夹具上成立

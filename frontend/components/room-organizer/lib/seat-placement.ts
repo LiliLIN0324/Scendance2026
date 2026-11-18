@@ -75,6 +75,47 @@ export function seatSurfaceHeight(input: SeatFacilityInput): number {
   return Math.max(0.28, capped);
 }
 
+/** 坐姿 / 起身落点（世界系：x 东、z = −北；与 `outdoor-walk-boundary` 同一口径）。 */
+export interface SeatWalkAnchor {
+  /** 落座锚点（髂部落点）。 */
+  x: number;
+  z: number;
+  /** 落座朝向（弧度）。 */
+  yaw: number;
+  /** 起身落点：再沿朝向后让 `standoffM`，站起来不站在椅子里。 */
+  standX: number;
+  standZ: number;
+}
+
+/** 坐姿朝向：设施模型 `rotation.y = -deg`、人物正面 +Z，人转 π − deg 才背靠椅背。 */
+export function seatFacingRad(rotationDeg: number): number {
+  return Math.PI - (rotationDeg * Math.PI) / 180;
+}
+
+/**
+ * 座位 ENU 落点 → 落座锚点与起身落点。
+ *
+ * 纯函数，供户外 3D 的 E 键落座与起身共用，避免「坐下在椅面上、起身站进椅子里」
+ * 两处各算一套。髋部后移 0.12 m、起身再让 0.45 m，与 `planSeatAnchors` 同一手感。
+ */
+export function seatWalkAnchor(
+  seat: { x: number; y: number; rotationDeg: number },
+  options: { hipBackM?: number; standoffM?: number } = {},
+): SeatWalkAnchor {
+  const hipBack = options.hipBackM ?? 0.12;
+  const standoff = options.standoffM ?? 0.45;
+  const yaw = seatFacingRad(seat.rotationDeg);
+  const baseX = seat.x;
+  const baseZ = -seat.y;
+  return {
+    x: baseX - Math.sin(yaw) * hipBack,
+    z: baseZ - Math.cos(yaw) * hipBack,
+    yaw,
+    standX: baseX - Math.sin(yaw) * (hipBack + standoff),
+    standZ: baseZ - Math.cos(yaw) * (hipBack + standoff),
+  };
+}
+
 /** 单个设施 → 座位目标；不可坐返回 null。 */
 export function seatTargetOf(
   input: SeatFacilityInput,

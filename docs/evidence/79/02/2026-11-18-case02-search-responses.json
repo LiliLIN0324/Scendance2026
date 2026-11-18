@@ -1,0 +1,91 @@
+{
+  "case": "#2 两个同名地点，地图选中其中一个",
+  "capturedAt": "2026-11-18T21:10:40+08:00",
+  "note": "全部为真实上游返回的原始载荷（未加工）。生产站与本机 3211 用的是同一把高德 key，两边 id/坐标一致。",
+  "production": {
+    "site": "https://scendance-scene-planner-ewz.pages.dev/",
+    "source": "GET /api/amap-place（Pages Function 代理高德 restapi.amap.com/v3/place/text）",
+    "request": "/api/amap-place?keywords=%E8%A1%97%E5%BF%83%E5%85%AC%E5%9B%AD&limit=10",
+    "responseStatus": 200,
+    "responseBody": {
+      "places": [
+        { "id": "B0FFMBT7FG", "name": "街心公园", "address": "学府树中街与学府树北街交叉口西北侧", "lng": 116.332721, "lat": 40.034093 },
+        { "id": "B000A6DCCD", "name": "街心公园", "address": "黄村镇兴丰南大街139号", "lng": 116.338711, "lat": 39.729027 },
+        { "id": "B0JACSHC54", "name": "庞各庄街心公园", "address": "隆华大街51号", "lng": 116.304749, "lat": 39.631453 },
+        { "id": "B000A7Y99K", "name": "街心公园", "address": "俸伯", "lng": 116.7122, "lat": 40.165282 },
+        { "id": "B000A81HKU", "name": "街心公园", "address": "琉璃河", "lng": 116.019111, "lat": 39.593152 }
+      ]
+    },
+    "sameNameGroups": [
+      {
+        "name": "街心公园",
+        "count": 4,
+        "ids": ["B0FFMBT7FG", "B000A6DCCD", "B000A7Y99K", "B000A81HKU"],
+        "maxDistanceMeters": 89772
+      }
+    ]
+  },
+  "localDev3211": {
+    "site": "http://localhost:3211/",
+    "note": "本机 dev 实例（main@4fc210aa 的 next dev）。本机是「高德 + 天地图」双源并发合并：高德不带 center（全国检索），天地图带 center（锚在场地锚点附近的小范围）。",
+    "amap": {
+      "request": "GET http://127.0.0.1:3199/amap-place?keywords=街心公园&limit=6",
+      "responseStatus": 200,
+      "responseBody": {
+        "places": [
+          { "id": "B0FFMBT7FG", "name": "街心公园", "address": "学府树中街与学府树北街交叉口西北侧", "lng": 116.332721, "lat": 40.034093 },
+          { "id": "B000A6DCCD", "name": "街心公园", "address": "黄村镇兴丰南大街139号", "lng": 116.338711, "lat": 39.729027 },
+          { "id": "B0JACSHC54", "name": "庞各庄街心公园", "address": "隆华大街51号", "lng": 116.304749, "lat": 39.631453 },
+          { "id": "B000A7Y99K", "name": "街心公园", "address": "俸伯", "lng": 116.7122, "lat": 40.165282 },
+          { "id": "B000A81HKU", "name": "街心公园", "address": "琉璃河", "lng": 116.019111, "lat": 39.593152 }
+        ]
+      }
+    },
+    "tdt": {
+      "request": "GET http://127.0.0.1:3199/api/tdt-search?keywords=街心公园&limit=6&center=120.146037,30.252192",
+      "responseStatus": 200,
+      "responseBody": {
+        "places": [
+          { "id": "F627FD88BC260DDC", "name": "临江口袋公园", "address": "浙江省杭州市钱塘区临江街道", "lng": 120.589567, "lat": 30.292865 },
+          { "id": "B64D7ADDF72FDDEC", "name": "求是村口袋公园", "address": "浙江省杭州市余杭区径山镇求是村", "lng": 119.878264, "lat": 30.371619 },
+          { "id": "FD7524A1E6EC2BCD", "name": "葛巷村口袋公园", "address": "浙江省杭州市余杭区仓前街道葛巷村", "lng": 119.983947, "lat": 30.260476 },
+          { "id": "EA3583CFBCB12D47", "name": "南山村口袋公园", "address": "浙江省杭州市余杭区瓶窑镇南山村", "lng": 119.95866, "lat": 30.391652 },
+          { "id": "B17E2E5554614873", "name": "长命村口袋公园", "address": "浙江省杭州市余杭区瓶窑镇长命村", "lng": 120.008961, "lat": 30.385972 },
+          { "id": "7EEDE9D9D6CB678D", "name": "新桥村口袋公园", "address": "浙江省杭州市余杭区仁和街道新桥村", "lng": 120.149155, "lat": 30.462093 }
+        ]
+      }
+    },
+    "mergedDropdownCount": 11,
+    "mergedDropdownSameNameHead": 4
+  },
+  "pickReadback": {
+    "mechanism": "被点选的候选由 app 自己写进 localStorage 的「最近选过」scendance-place-recent-v1（含 id/name/address/lng/lat），这是 app 对「选了哪一个」的自记，可精确回读",
+    "productionPick1": { "clicked": "下拉第 4 条（琉璃河）", "readback": { "id": "B000A81HKU", "name": "街心公园", "address": "琉璃河", "lng": 116.019111, "lat": 39.593152 } },
+    "productionPick2": { "clicked": "下拉第 2 条（大兴）", "readback": { "id": "B000A6DCCD", "name": "街心公园", "address": "黄村镇兴丰南大街139号", "lng": 116.338711, "lat": 39.729027 } },
+    "localDevPick1": { "clicked": "下拉第 4 条（琉璃河）", "readback": { "id": "B000A81HKU", "name": "街心公园", "address": "琉璃河", "lng": 116.019111, "lat": 39.593152 } },
+    "localDevPick2": { "clicked": "下拉第 2 条（大兴）", "readback": { "id": "B000A6DCCD", "name": "街心公园", "address": "黄村镇兴丰南大街139号", "lng": 116.338711, "lat": 39.729027 } },
+    "planAnchorUnchanged": { "lng": 120.1460368, "lat": 30.2521924, "crs": "gcj-02", "source": "preset" }
+  },
+  "network": {
+    "productionTotalFetchXhr": 20,
+    "productionWriteRequests": 0,
+    "productionMethods": ["GET"],
+    "cloudReads": [
+      { "method": "GET", "url": "https://wkhfvnzgopjdzxlmycks.supabase.co/functions/v1/scene-api/studios/8b033463-3511-4ac4-96d3-e558e49f507f/messages/unread", "status": 200, "count": 5 },
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/amap-place", "status": 200 },
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/place-shape", "status": 200 },
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/place-shape-hints", "status": 200 },
+      { "method": "GET", "url": "https://scendance-scene-planner-ewz.pages.dev/api/tdt-area", "status": 200 }
+    ],
+    "localDevTotalFetchXhr": 22,
+    "localDevWriteRequests": 0,
+    "localDevMethods": ["GET"],
+    "note": "本机 3211 那次因为未登录，页面全程没有向 Supabase 发任何请求，所以云端列只在正式站取证。"
+  },
+  "console": {
+    "errors": 0,
+    "warnings": 1,
+    "warningText": "THREE.WebGLProgram: Program Info Log: ... X4122: sum of 0.996094 and -2.98545e-017 cannot be represented accurately in double precision",
+    "warningAttribution": "three.js 着色器精度警告，页面加载时的 3D 渲染，与本用例操作无关"
+  }
+}

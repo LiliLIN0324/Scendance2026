@@ -1,0 +1,164 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scendance.local/schemas/site-evidence.schema.json",
+  "title": "场地证据摘要（SiteEvidenceDigest）",
+  "description": "给户外 Agent 消费的场地证据摘要。目标格式，当前运行时快照（SiteSnapshot）尚未产出本结构；字段枚举取自 frontend/lib/site-intelligence/types.ts。原则：agent 只能引用这里出现过的证据，不得凭底图想象补要素。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "site", "elements", "constraints", "gaps", "coverage"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "crs", "anchor", "areaM2", "bounds"],
+      "properties": {
+        "projectId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "crs": {
+          "enum": ["local-enu-gcj02", "gcj-02"],
+          "description": "local-enu-gcj02=场地局部东北天坐标（米），gcj-02=经纬度。两者不得混用；跨坐标系必须先换算再比对。"
+        },
+        "anchor": {
+          "type": "object",
+          "required": ["lng", "lat"],
+          "properties": {
+            "lng": { "type": "number", "minimum": -180, "maximum": 180 },
+            "lat": { "type": "number", "minimum": -90, "maximum": 90 }
+          }
+        },
+        "areaM2": { "type": "number", "exclusiveMinimum": 0 },
+        "bounds": {
+          "type": "object",
+          "required": ["minX", "minY", "maxX", "maxY"],
+          "properties": {
+            "minX": { "type": "number" },
+            "minY": { "type": "number" },
+            "maxX": { "type": "number" },
+            "maxY": { "type": "number" }
+          }
+        }
+      }
+    },
+    "elements": {
+      "type": "array",
+      "description": "场地要素。layoutWeight 决定 Agent 能不能压：hard=禁区（水、建筑、消防通道），soft=尽量避让（绿地、树池），info=只作参考（铺装、命名区域）。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "certainty", "source", "geometry", "layoutWeight"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": ["building", "road", "water", "open-space", "entrance", "barrier", "boundary", "zone", "facility", "route", "worker"],
+            "description": "与 site-intelligence/types.ts 的 FeatureKind 完全一致；新增类型必须同时改代码与本枚举。"
+          },
+          "name": { "type": "string" },
+          "certainty": {
+            "enum": ["mapped", "user-confirmed", "inferred", "unknown"],
+            "description": "mapped=来自 OSM/矢量底图；user-confirmed=用户在场地上确认过；inferred=由几何推断（例如由道路闭合推断边界）；unknown=来源不明。除 user-confirmed 外，解释文案必须带保留语。"
+          },
+          "source": {
+            "enum": ["osm", "legacy-road-proxy", "user-plan", "navigable-water"],
+            "description": "osm=OpenStreetMap；legacy-road-proxy=旧版道路代理（精度差，不得当实测）；user-plan=用户上传/手绘；navigable-water=通航水域数据。"
+          },
+          "sourceId": { "type": "string" },
+          "observedAt": { "type": "string", "description": "ISO 日期；底图/影像日期。缺失时 Agent 不得声称「现状」。" },
+          "geometry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "points"],
+            "properties": {
+              "type": { "enum": ["point", "line", "polygon"] },
+              "points": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["x", "y"],
+                  "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+                }
+              }
+            }
+          },
+          "widthM": { "type": "number", "exclusiveMinimum": 0, "description": "线状要素（道路/岸线/屏障）宽度；未知则不写。" },
+          "precisionM": { "type": ["number", "null"], "description": "该要素的几何精度（米）。null 表示未评估；Agent 不得把 null 当精确。" },
+          "layoutWeight": {
+            "enum": ["hard", "soft", "info"],
+            "description": "hard=落位必须避让，压上即拒绝；soft=允许但需警告并说明代价；info=不参与碰撞。"
+          },
+          "semantics": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "可检索语义标签，例如 水域/岸线/绿地/铺装/树池/井盖/台阶/停车/消防通道。用于「沿水岸线」「找块草地」这类话术匹配。"
+          },
+          "tags": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "description": "由证据推出的硬/软约束，供校验器与提示词共同引用；每条必须能追到 evidenceIds。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "severity", "evidenceIds", "reason"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": ["no-build", "keep-clear", "shoreline-buffer", "fire-lane", "slope-limit", "capacity-cap"],
+            "description": "no-build=禁建区；keep-clear=净空/退距；shoreline-buffer=近岸缓冲；fire-lane=消防车道；slope-limit=坡度上限；capacity-cap=容量上限。"
+          },
+          "severity": { "enum": ["hard", "soft"] },
+          "evidenceIds": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "bufferM": { "type": "number", "minimum": 0 },
+          "reason": { "type": "string", "minLength": 1 },
+          "assertionIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "对应 layout-assertions.json 的判据 id，例如 KID-09、GEN-07。"
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "description": "证据缺口。有 gap 时 Agent 必须如实说明缺什么，不得用默认值假装齐全。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "enum": ["unknownMap", "noBoundary", "noEntrance", "noWaterDepth", "noSlope", "noShade", "staleImagery", "noScale", "partialCoverage"],
+            "description": "unknownMap=底图未加载；noBoundary=缺边界；noEntrance=缺入口；noWaterDepth=有水域但无水深；noSlope=无高程；noShade=无树冠/遮荫；staleImagery=影像过旧；noScale=无比例尺；partialCoverage=覆盖不全。"
+          },
+          "message": { "type": "string", "minLength": 1 },
+          "blocks": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "被这个缺口挡住的判据 id，例如 KID-09（缺水深）、CMP-04（缺坡度）。"
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "complete", "unknowns"],
+      "properties": {
+        "status": { "enum": ["ready", "partial", "failed", "cancelled", "stale", "not-loaded"] },
+        "complete": { "type": "boolean" },
+        "unknowns": { "type": "array", "items": { "type": "string" } },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "radiusM": { "type": "number", "exclusiveMinimum": 0 },
+            "crs": { "enum": ["gcj-02"] }
+          }
+        },
+        "fetchedAt": { "type": "string" }
+      }
+    }
+  }
+}
