@@ -687,6 +687,9 @@ useEffect(() => {
   const [outdoorMeasureKind, setOutdoorMeasureKind] = useState<'distance' | 'area'>('distance');
   // 2026-11-15 户外网格吸附开关：默认开；关闭后放置/拖动/拖顶点自由摆放。
   const [outdoorSnapOn, setOutdoorSnapOn] = useState(true);
+  // 2026-11-19 用户指令：规划信息不再常驻左上，改浮在画布右上角、默认收起；
+  // 底条「规划信息」钮点了才展开（宿主存在 = 面板出现，画布侧 portal 靠 MutationObserver 补解析）。
+  const [outdoorInfoOpen, setOutdoorInfoOpen] = useState(false);
   const handleOutdoorCanvasMode = useCallback((mode: string) => {
     if (mode === 'measure') { setOutdoorMeasureActive(true); setOutdoorCanvasMode('view'); return; }
     setOutdoorMeasureActive(false);
@@ -2801,6 +2804,9 @@ useEffect(() => {
     // 2026-11-15 网格吸附开关：底条吸附钮切换，转发到 2D 画布。
     snapOn: outdoorSnapOn,
     setSnapOn: (on: boolean) => { setOutdoorSnapOn(on); outdoorOverlayRef.current?.setSnapOn(on); },
+    // 2026-11-19 用户指令：规划信息（总览/清单/问题/图例）由底条钮开合，默认不展开。
+    infoOpen: outdoorInfoOpen,
+    toggleInfo: () => setOutdoorInfoOpen(open => !open),
     enterMeasure: () => outdoorOverlayRef.current?.setToolMode('measure'),
     exitMeasure: () => outdoorOverlayRef.current?.setToolMode('view'),
     // 2026-11-12 三张卡拆开：右轨每枚圆钮只管自己那张卡的展开态。
@@ -4925,8 +4931,10 @@ useEffect(() => {
             if (id) selectOnly(id, { keepPanel: true });
           }}>
           <ShortcutCoach mode={shortcutCoachMode} enabled={isActive} />
-          {/* 规划信息从 Bingo 迁回画布：Bingo 只留「我的完成 / 对方的修改」，四页签不再占用审校台。 */}
-          {(outdoor2DOpen || outdoor3dTakeover) ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 12, left: 12, width: 320, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 40 }} /> : null}
+          {/* 2026-11-19 用户指令：规划信息不再常驻左上角，改浮在画布右上角（让开右上圆钮簇），
+              默认不渲染；底条「规划信息」钮点了才挂宿主，画布经 MutationObserver 解析后 portal 进来。
+              收起走卡头 ×（onInfoPanelClose）或底条钮再点一次。 */}
+          {(outdoor2DOpen || outdoor3dTakeover) && outdoorInfoOpen ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 14, right: 76, width: 280, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 40 }} /> : null}
           {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
               供全屏 OutdoorPlan3D 的左键物件手势用（canvasApiRef → pointerFromPlan 管线）。
               2026-11-12 统一右轨（用户拍板）：「发布」2D/3D 都固定在右轨顶部（tool-share），
@@ -4951,6 +4959,7 @@ useEffect(() => {
               onPlanChange={handleOutdoorPlanChange}
               controller={controller}
               onActiveLevelChange={handleOutdoorActiveLevelChange}
+              onInfoPanelClose={() => setOutdoorInfoOpen(false)}
               seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
               onViewChange={handleOutdoorViewSwitch}
