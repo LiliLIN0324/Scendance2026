@@ -629,6 +629,13 @@
 .sc-space-env > :not(.sc-space-section-head) { margin-block: auto; }
 /* 工作台物料面板直接浏览，整栏滚动。 */
 .sc-lib-wrap { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.sc-lib-shell.is-browse { min-height:0; height:100%; }
+.sc-lib-shell.is-browse .sc-lib-results { flex:1 1 auto; min-height:0; overflow:auto; }
+.sc-lib-dock-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; flex:none; margin:0; padding:8px 2px 2px; border-top:1px solid var(--wk-hair,#e4e4e7); color:var(--ink-soft,#55585F); font-size:12px; line-height:1.4; }
+.sc-lib-dock-foot .sc-my-materials { display:flex; align-items:center; margin:0; min-width:0; }
+.sc-lib-dock-foot .sc-glb-bar { margin:0; }
+.sc-lib-dock-foot .sc-glb-bar-main { min-height:0; }
+.sc-lib-dock-foot .sc-glb-bar-btn { height:28px; padding:0 10px; border:1px solid var(--wk-hair,#e4e4e7); border-radius:8px; background:var(--paper,#fff); }
 /* 三块同一版式：图标左、标题中、数量最右；单行不换行，hover 只提亮，选中只留绿内描边。 */
 .sc-lib-triad > button.sc-lib-card {
   display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:none;
