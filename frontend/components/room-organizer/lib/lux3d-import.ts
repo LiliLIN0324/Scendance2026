@@ -1,6 +1,7 @@
 import { aholoAssetUrl, DIRECT_BASE, findAholoAssetByTask, isLux3dLocalProxy } from './aholo-assets';
 import { loadAholoCatalogItem } from './aholo-model-placement';
 import { listPendingMaterials, removePendingMaterial, type PendingMaterial } from './material-generate';
+import { generatedObjectName } from './generated-object-name';
 import type { CatalogItem } from './types';
 
 /**
@@ -130,7 +131,8 @@ export async function importPendingMaterial(cardId: string, options: ImportOptio
     const cached = findAholoAssetByTask(taskid);
     const item = await loadAholoCatalogItem({
       url: aholoAssetUrl(cached) ?? glbUrl,
-      name: card.name,
+      // 旧待取回卡片可能把整段提示词当名字存过；入库前收口成短名。
+      name: generatedObjectName(card.name, '生成模型'),
       taskid,
     });
     removePendingMaterial(cardId);

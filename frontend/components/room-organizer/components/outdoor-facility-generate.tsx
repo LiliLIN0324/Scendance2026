@@ -6,6 +6,7 @@ import type { BackendSession } from '@/lib/backend-session';
 import { submitMaterialGenerate, type MaterialCloudLane } from '../lib/material-generate';
 import { attachFacilityGenerateTask, listFacilityGenerateLinks, findGeneratedFacilityModel, markFacilityGenerateTerminal, subscribeFacilityGenerateLinks, getFacilityGenerateLinksRevision } from '../lib/facility-generated-models';
 import { generationFailureText } from '../lib/generation-failure';
+import { generatedObjectName } from '../lib/generated-object-name';
 
 interface Submission {
   requestId: string; projectId: string; facilityId: string; facilityName: string;
@@ -79,7 +80,7 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
       const next: Submission = { ...original, state: 'terminal', terminal: { status, message, checkedAt: Date.now() } };
       // Save before exposing the explicit retry action. Never infer a refund/no charge.
       saveSubmission(next);
-      attachFacilityGenerateTask({ ...original, taskid: original.taskid!, name: original.facilityName });
+      attachFacilityGenerateTask({ ...original, taskid: original.taskid!, name: generatedObjectName(original.facilityName, '生成模型') });
       markFacilityGenerateTerminal(original.taskid!, status, message);
       setReceipt(next); setSubmitted(false); setCredit(false); setNote(submissionNote(next));
     }
@@ -99,7 +100,7 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
           if (job.status === 3 && !glbOutputOf(job.outputs)) { terminal('completed_without_glb', '任务已完成，但没有 GLB 模型'); return; }
         }
         if (!active) return;
-        attachFacilityGenerateTask({ ...original, taskid: original.taskid!, name: original.facilityName });
+        attachFacilityGenerateTask({ ...original, taskid: original.taskid!, name: generatedObjectName(original.facilityName, '生成模型') });
         setSubmitted(true);
         setNote(`已接回原任务 ${original.taskid}，留在户外规划等待候选回填；不会重复提交。`);
       } catch { if (active) setNote(`原任务 ${original.taskid} 暂时无法核对，仍保留任务与提交锁，请勿重复扣费。`); }
@@ -158,7 +159,7 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
         return;
       }
       record.taskid = result.taskid; record.lane = result.lane; record.state = 'submitted'; saveSubmission(record);
-      attachFacilityGenerateTask({ ...record, taskid: result.taskid, name: prompt.trim() || imageName || target.facilityName });
+      attachFacilityGenerateTask({ ...record, taskid: result.taskid, name: generatedObjectName(prompt.trim() || imageName || target.facilityName, '生成模型') });
       setReceipt({ ...record }); setSubmitted(true);
       setNote(`已提交 ${result.taskid}。留在户外规划，选中「${target.facilityName}」即可查看进度和回填候选。`);
     } catch {

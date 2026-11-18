@@ -2,6 +2,7 @@ import type { BackendSession } from "@/lib/backend-session";
 import { validAssetSize, type CloudAsset } from "@/lib/assets-api";
 import { listAholoAssets, aholoAssetUrl } from "./aholo-assets";
 import { registerGeneratedFacilityModel } from "./facility-generated-models";
+import { generatedObjectName } from "./generated-object-name";
 import {
   ensureGlbAsset,
   getGlbAssetState,
@@ -83,7 +84,8 @@ export async function readOutdoorPersonalLibrary(
       const authorized = await controller.authorizeAsset(asset.id);
       records.push({
         id: asset.id,
-        name: asset.name,
+        // 旧资产可能把整段提示词当名字存过；进候选/画布前只留短名，检索仍按原名。
+        name: generatedObjectName(asset.name, "生成模型"),
         url: authorized.url,
         ...(asset.metadata?.sourceSize
           ? { size: asset.metadata.sourceSize }
@@ -98,7 +100,7 @@ export async function readOutdoorPersonalLibrary(
     if (url)
       records.push({
         id: asset.assetId,
-        name: asset.name,
+        name: generatedObjectName(asset.name, "生成模型"),
         url,
         ...(asset.meters ? { size: asset.meters } : {}),
       });
@@ -108,7 +110,7 @@ export async function readOutdoorPersonalLibrary(
   ))
     records.push({
       id: asset.key,
-      name: asset.name,
+      name: generatedObjectName(asset.name, "生成模型"),
       url: asset.key,
       localKey: asset.key,
     });

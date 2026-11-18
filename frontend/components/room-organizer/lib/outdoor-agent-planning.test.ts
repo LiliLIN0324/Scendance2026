@@ -172,6 +172,36 @@ describe("户外用途、真实库、人员几何守卫", () => {
       ]),
     ).rejects.toThrow("具体名称");
   });
+  it("生成物料名是一整段提示词时，落位只用短名，完整描述留在备注", async () => {
+    const plan = proposeUseZones(base(), {
+      ...brief,
+      zones: [brief.zones[0]!],
+    });
+    const prompt =
+      "户外折叠椅 1：铝合金折叠框架，藏青色厚棉布坐垫靠背，座高 45 厘米，展开尺寸约 45×50×88 厘米，四脚带黑色防滑脚垫，可折叠收纳。";
+    const out = await proposeInventoryObjects(
+      plan,
+      {
+        ...brief,
+        items: [{ zone: "展览区", query: "户外折叠椅", count: 1, evidence: "一把户外折叠椅" }],
+      },
+      [
+        {
+          id: "generated-chair",
+          name: prompt,
+          source: "personal",
+          width: 0.45,
+          depth: 0.5,
+          height: 0.88,
+          modelSlug: "generated:chair",
+          available: true,
+        },
+      ],
+    );
+    expect(out.plan.facilities[0]!.name).toBe("户外折叠椅 1");
+    expect(out.plan.facilities[0]!.notes).toContain("生成描述：");
+    expect(out.plan.facilities[0]!.notes).toContain("铝合金折叠框架");
+  });
   it("库内占地与来源、混合用途、角色路径在保存读回时不丢", async () => {
     const plan = proposeUseZones(base(), {
       ...brief,
