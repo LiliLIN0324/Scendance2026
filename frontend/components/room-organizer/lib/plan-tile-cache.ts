@@ -326,8 +326,9 @@ export function paintBasemapTiles(spec: BasemapPaintSpec): BasemapPaintResult {
   const cullH = spec.cullH ?? cssH;
   const cullLeft = cssW / 2 - cullW / 2;
   const cullTop = cssH / 2 - cullH / 2;
-  // overzoom：视图级别高于图源上限时，按上限取瓦片再等比放大（drawSize > tileSize）。
-  const tileZoom = Math.min(zoom, spec.tileZoom ?? zoom);
+  // 瓦片网格使用调用方的整数级别；它也可能高于小数视图级别，此时等比缩小。
+  // 不能取 min(zoom, tileZoom)：会破坏网格坐标，把整屏瓦片误裁到视口外。
+  const tileZoom = spec.tileZoom ?? zoom;
   const drawSize = tileSize * 2 ** (zoom - tileZoom);
 
   const visible: { x: number; y: number; left: number; top: number }[] = [];
