@@ -7,7 +7,7 @@ import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
 import { registerCloudScans, registerLocalScans } from '../lib/local-scans';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
-import { REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
+import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
 import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { CaseCards } from './case-cards';
 import { EnvironmentPreview } from './environment-preview';
@@ -152,7 +152,7 @@ export function SpacePanel({
       saveOutdoorProjectRecord({
         v: 1,
         projectId,
-        name: `经典案例 · ${replica.title}`,
+        name: `${replica.origin === 'cn' ? '国内案例' : '经典案例'} · ${replica.title}`.slice(0, 60),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         plan: replica.buildPlan(),
@@ -229,6 +229,10 @@ export function SpacePanel({
     </li>)}
   </ul> : null;
 
+  const cnCases = CN_REPLICA_CASES.length > 0 ? <SceneGroup label="国内案例" icon={<Crown size={15} aria-hidden="true" />} count={CN_REPLICA_CASES.length} testId="space-group-cn-cases" lazy>
+    <CaseCards cases={CN_REPLICA_CASES} onOpen={openReplicaCase}/>
+  </SceneGroup> : null;
+
   const cases = <SceneGroup label="经典案例" icon={<Crown size={15} aria-hidden="true" />} count={REPLICA_CASES.length} testId="space-group-cases" lazy>
     <CaseCards onOpen={openReplicaCase}/>
     {caseNotice && <p className="sc-note" role="status">{caseNotice}</p>}
@@ -282,6 +286,7 @@ export function SpacePanel({
                 {/* 2026-11-17 用户：「是不是上面的应该放在下面」「项目中的场景这玩意根本就不重要啊」——
                     案例与模板库提到最前，本机那 8 行实景扫描压到最后；「项目中的场景」从卡里摘掉
                     （shelf 版仍在「更多场地选项」里挂着，环境切换没丢）。 */}
+                {cnCases}
                 {cases}
                 {templates}
                 {/* 2026-11-17 用户：「每次打开都默认打开了示例场景和我的实景扫描……默认都不要打开」——

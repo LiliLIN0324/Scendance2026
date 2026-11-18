@@ -266,6 +266,7 @@ const FACILITY_TEMPLATE_RULES: readonly { pattern: RegExp; sticker: OneplanStick
   { pattern: /security|安保|岗亭/i, sticker: { kind: 'icon', slug: 'security-checkpoint', icon: 'user-plus' } },
   { pattern: /trash|垃圾|waste/i, sticker: { kind: 'icon', slug: 'waste-and-recycling-point', icon: 'list' } },
   { pattern: /booth|摊|stall/i, sticker: { kind: 'scale', slug: 'market-stall', icon: 'tent' } },
+  { pattern: /chair|椅|凳/i, sticker: { kind: 'scale', slug: 'folding-chair', icon: 'tent' } },
 ];
 
 /* ------------------------------------------------------------------ */

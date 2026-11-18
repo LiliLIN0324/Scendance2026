@@ -1,14 +1,22 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  catalogDragFromText,
   catalogFacilityTemplateId,
   clearPlanCatalogDrag,
+  consumePlanCatalogDrag,
   getPlanCatalogDrag,
+  PLAN_CATALOG_TEXT_PREFIX,
   planCatalogDragFor,
   planCatalogDragForScenePreset,
+  readPlanCatalogDrag,
+  serializePlanCatalogDrag,
   setPlanCatalogDrag,
 } from './plan-catalog-drag';
 
-afterEach(() => clearPlanCatalogDrag());
+afterEach(() => {
+  consumePlanCatalogDrag();
+  vi.useRealTimers();
+});
 
 describe('plan-catalog-drag', () => {
   it('有贴纸时沿用卡片图标模板，2D 落位不是白框', () => {
@@ -31,14 +39,32 @@ describe('plan-catalog-drag', () => {
     expect(payload.templateId).not.toBe(catalogFacilityTemplateId(`${slug}-other`));
   });
 
-  it('store 只保留最后拖起的一件，松手/取消后清空', () => {
+  it('store 只保留最后拖起的一件；dragend 先于 drop 时下一拍才清空', () => {
+    vi.useFakeTimers();
     const first = planCatalogDragFor({ slug: 'a', name: 'A', width: 1, depth: 1 });
     const second = planCatalogDragFor({ slug: 'b', name: 'B', width: 2, depth: 2 });
     setPlanCatalogDrag(first);
     setPlanCatalogDrag(second);
     expect(getPlanCatalogDrag()).toEqual(second);
     clearPlanCatalogDrag();
+    expect(getPlanCatalogDrag()).toEqual(second);
+    const json = serializePlanCatalogDrag(second);
+    expect(readPlanCatalogDrag('', `${PLAN_CATALOG_TEXT_PREFIX}${json}`)).toEqual(second);
+    expect(catalogDragFromText('oneplan:icon:tent')).toBeNull();
+    vi.runAllTimers();
     expect(getPlanCatalogDrag()).toBeNull();
+  });
+
+  it('drop 取走载荷后，迟到的 dragend 清空不会抹掉下一件', () => {
+    vi.useFakeTimers();
+    const first = planCatalogDragFor({ slug: 'a', name: 'A', width: 1, depth: 1 });
+    const second = planCatalogDragFor({ slug: 'b', name: 'B', width: 2, depth: 2 });
+    setPlanCatalogDrag(first);
+    clearPlanCatalogDrag();
+    consumePlanCatalogDrag();
+    setPlanCatalogDrag(second);
+    vi.runAllTimers();
+    expect(getPlanCatalogDrag()).toEqual(second);
   });
 
   it('场景预设沿用同一份落位载荷，templateId 可反解回预设 key', () => {

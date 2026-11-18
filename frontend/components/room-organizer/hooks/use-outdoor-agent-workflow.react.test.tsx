@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, it, expect, vi, type Mock } from "vitest";
@@ -6,6 +6,7 @@ import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
+import { FIXED_DATA_CASES } from "../lib/outdoor-release-status-card";
 import { OUTDOOR_STAGE_LABELS, useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import type {
@@ -645,6 +646,29 @@ it("未确认活动边界先出范围确认卡而不是死路，保留本句自�
 });
 it("多轮事实延续、改口人数，分区预览及自然非暗号确认推进同规划", async () => {
   await confirmScope();
+  // 2026-11-18 用户口径「先设计」：分区确认后直接接物件预览，测试给一份真实库反应。
+  bridge.readLibrary = vi.fn(async () => [
+    {
+      id: "my-display",
+      name: "展板",
+      source: "personal" as const,
+      width: 2,
+      depth: 1,
+      height: 2,
+      modelSlug: "generated:library-my-display",
+      available: true,
+    },
+    {
+      id: "my-stall",
+      name: "市集摊位",
+      source: "personal" as const,
+      width: 3,
+      depth: 3,
+      height: 2.5,
+      modelSlug: "generated:library-my-stall",
+      available: true,
+    },
+  ]);
   await turn(
     "做户外市集60人",
     response("ask", {
@@ -672,9 +696,12 @@ it("多轮事实延续、改口人数，分区预览及自然非暗号确认推�
     await flow.handle("这个安排没问题，就按它落下去吧");
   });
   expect(plan.zones).toHaveLength(1);
-  expect(flow.state.stage).toBe("main-routes");
-  expect(flow.appliedHighlight).toEqual({ kind: "zones", zoneIds: [plan.zones[0]!.id] });
-  expect(host.textContent).toContain("分区不合适可拖动整块或拖顶点微调");
+  // 确认分区后不再停在「主通道」，直接给一版按分区排的物件预览。
+  expect(flow.state.stage).toBe("objects");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  // 分区已应用；随后接的物件版是未确认的预览，画布高亮让给新一版。
+  expect(flow.appliedHighlight).toBeNull();
+  expect(host.textContent).toContain("这版是默认方案");
 
   const editedZone = {
     ...plan.zones[0]!,
@@ -1214,8 +1241,20 @@ it("人数还没定也能排物料：不拦成红卡、阶段照样前进，并�
   await action("confirm");
   expect(plan.facilities).toHaveLength(1);
 });
-it("缺主入口时失败不把任务卡改名成物件阶段", async () => {
+it("没核实入口也先出设计：分区确认后直接给物件预览，缺口写在卡上", async () => {
   await confirmScope();
+  bridge.readLibrary = vi.fn(async () => [
+    {
+      id: "my-display",
+      name: "展板",
+      source: "personal" as const,
+      width: 2,
+      depth: 1,
+      height: 2,
+      modelSlug: "generated:library-my-display",
+      available: true,
+    },
+  ]);
   await turn(
     "室外市集，展览区1个展板",
     response("zones", {
@@ -1231,39 +1270,30 @@ it("缺主入口时失败不把任务卡改名成物件阶段", async () => {
     }),
   );
   await action("confirm");
-  // 未核对主入口时，分区确认后下一站就是主通道阶段。
-  expect(flow.state.stage).toBe("main-routes");
-  await action("objects");
-  expect(flow.notice).toContain("请先核对主入口和主要通道");
-  // 阶段落盘挪到前置校验之后：失败一次不该把标题永久改成「按用途复用我的物料」。
-  expect(flow.state.stage).toBe("main-routes");
+  // 2026-11-18 用户口径「先设计，用户会告诉你他的想法」：不再先拦到主通道阶段，
+  // 确认分区就直接排一版预览；入口没用核实的只写在卡上，不挡人。
+  expect(flow.state.stage).toBe("objects");
+  expect(flow.proposal?.kind, flow.notice).toBe("objects");
+  expect(flow.noticeKind).not.toBe("error");
+  expect(flow.proposal?.warnings.join()).toContain("入口还没核对");
+  expect([...host.querySelectorAll("button")].map(button => button.textContent?.trim()))
+    .not.toContain("去核对主要入口与通道");
 });
 // 2026-11-17 用户拍「都做」之一：红卡上的「重试」= 原样重放当前阶段动作，缺前置条件时点了还是同一句话。
 // 这类拦阻改成给一个真能改变状态的动作。
-it("缺前置条件时红卡给的是能推进的动作，不是把同一动作再放一遍", async () => {
+it("缺分区时红卡给的是能推进的动作，不是把同一动作再放一遍", async () => {
   await confirmScope();
-  await turn(
-    "室外市集，展览区1个展板",
-    response("zones", {
-      zones: [
-        { name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "展览区" },
-      ],
-      items: [{ zone: "展览区", query: "展板", count: 1, evidence: "1个展板" }],
-    }),
-  );
-  await action("confirm");
-  await action("objects");
-  expect(flow.notice).toContain("请先核对主入口和主要通道");
-  expect(flow.noticeFix).toEqual({ action: "main-routes", label: "去核对主要入口与通道" });
+  await action("sub-routes");
+  expect(flow.notice).toContain("先明确并确认区域用途和边界");
+  expect(flow.noticeFix).toEqual({ action: "zones", label: "先生成分区预览" });
   const labels = [...host.querySelectorAll("button")].map(button => button.textContent?.trim());
-  expect(labels).toContain("去核对主要入口与通道");
+  expect(labels).toContain("先生成分区预览");
   // 不再同时给一个只会重放 objects 的「重试」。
   expect(labels).not.toContain("重试");
-  const fix = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "去核对主要入口与通道");
+  const fix = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "先生成分区预览");
   await act(async () => { (fix as HTMLButtonElement).click(); });
-  // 真的去跑了主通道：本机拉不到路网，会落到一个明确的下一步，而不是同一句重复提示。
-  expect(flow.notice).not.toContain("请先核对主入口和主要通道");
-  expect(flow.notice).toContain("未取得可核对路网");
+  // 真的去跑了分区：不会停在同一句重复提示上。
+  expect(flow.notice).not.toContain("先明确并确认区域用途和边界");
 });
 // 2026-11-17 用户拍「都做」之二：答「第一个方案」后模型又把同一句追问端回来，
 // 旧行为就是「我明明选了，却什么都没发生」。现在本地按原请求接着走。
@@ -2161,4 +2191,222 @@ it("连续两次追问都没有推进时，直接出默认方案而不是问第�
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
   expect(flow.proposal?.warnings.join()).toContain("默认方案");
   expect(plan.facilities).toHaveLength(0);
+});
+
+
+it("走查记录本：标一条才算看过，非法编号这一标不生效", () => {
+  // 开场没有任何证据：11 条全算没看。
+  expect(flow.walkthroughLine()).toContain("已看 0/11");
+  act(() => {
+    flow.recordWalkthrough(3, "pass");
+  });
+  expect(flow.walkthroughLine()).toContain("已看 1/11");
+  expect(flow.walkthroughLine()).toContain("通过 1");
+  // 已落盘：刷新后能读回来（键里确实有 #3）。
+  const stored = window.localStorage.getItem("scendance.outdoor.walkthrough.v1");
+  expect(stored).toBeTruthy();
+  expect(JSON.parse(stored!).seen["3"]).toBe("pass");
+  // 编号不在 1..11：返回 null，且记录本不变。
+  expect(flow.recordWalkthrough(99, "pass")).toBeNull();
+  expect(flow.walkthroughLine()).toContain("已看 1/11");
+  // 记录本永远不下结论。
+  expect(flow.walkthroughLine()).not.toContain("可发布（");
+});
+
+it("云端声明：只能显式给号，编号不合法这一标不生效", () => {
+  // 没声明就是“云端一条都没验”，不从浏览器结果推。
+  expect(flow.cloudPass()).toEqual([]);
+  act(() => {
+    flow.declareCloud(2, true);
+  });
+  expect(flow.cloudPass()).toEqual([2]);
+  // 编号不在 1..11：返回 null，声明不变。
+  expect(flow.declareCloud(99, true)).toBeNull();
+  expect(flow.cloudPass()).toEqual([2]);
+  // 撤回声明。
+  act(() => {
+    flow.declareCloud(2, false);
+  });
+  expect(flow.cloudPass()).toEqual([]);
+});
+
+it("云端声明落盘：标完刷新也能读回来，撤掉同步写出", () => {
+  expect(flow.cloudPass()).toEqual([]);
+  act(() => {
+    flow.declareCloud(4, true);
+  });
+  const stored = window.localStorage.getItem("scendance.outdoor.walkthrough.cloud.v1");
+  expect(stored).toBeTruthy();
+  expect(JSON.parse(stored!).pass).toEqual([4]);
+  act(() => {
+    flow.declareCloud(4, false);
+  });
+  expect(JSON.parse(window.localStorage.getItem("scendance.outdoor.walkthrough.cloud.v1")!).pass).toEqual([]);
+});
+
+it("发布状态一次算齐：卡片与快照同源，标一条云端+浏览器才涨到 1", () => {
+  const before = flow.logReleaseStatus();
+  expect(before.allGreen).toBe(0);
+  expect(before.snapshot.allGreen).toBe(before.allGreen);
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = flow.logReleaseStatus();
+  expect(after.allGreen).toBe(1);
+  expect(after.snapshot.allGreen).toBe(1);
+  // 卡片文本与 bundle.card 必须逐字一致（同一份台账）。
+  expect(after.card).toBe(after.card.trim());
+  expect(after.card).toContain("不可发布（三类全绿 1 条）");
+  expect(after.card).toContain("云端证据：1 条通过");
+});
+
+it("会话报告带上发布快照：两轮导出能按行 diff", () => {
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const report = flow.sessionReport();
+  expect(report.release).toBeDefined();
+  expect(report.release?.snapshot).toMatchObject({ allGreen: 1 });
+  expect(report.text).toContain("[发布状态快照]");
+  expect(report.text).toContain("不可发布（三类全绿 1 条）");
+});
+
+it("待补清单：标一条并声明云端后，清单就少一条，末行只报待补", () => {
+  const before = flow.releaseGaps();
+  expect(before).toContain("共 11 条待补");
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = flow.releaseGaps();
+  expect(after).not.toContain("#2 ");
+  expect(after).toContain("共 10 条待补");
+  expect(after).toContain("三类全绿 1 条");
+  expect(after).not.toContain("可发布（");
+});
+
+it("台账 CSV：表头五列 + 11 行，标了浏览器与云端就分别落列", () => {
+  const before = flow.releaseCsv().split("\n");
+  expect(before).toHaveLength(12);
+  expect(before[0]).toBe("编号,用例,固定数据,浏览器,云端");
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = flow.releaseCsv().split("\n");
+  const case2 = after.find((line: string) => line.startsWith("2,")) as string;
+  expect(case2.endsWith(",有,pass,pass")).toBe(true);
+  expect(after.join("\n")).not.toContain("可发布");
+});
+
+it("台账 CSV 落盘：jsdom 里导不出也只回报原因，不抛", () => {
+  const result = flow.downloadLedgerCsv();
+  expect(result.filename).toMatch(/^outdoor-acceptance-ledger-.*\.csv$/);
+  // jsdom 没有 URL.createObjectURL：这里只验“如实回报失败”，不假装成功。
+  if (!("createObjectURL" in URL)) {
+    expect(result).toMatchObject({ ok: false, reason: "no-url-api" });
+  }
+});
+
+it("会话报告带上走查原件与云端声明，人可对着报告复核卡片", () => {
+  act(() => {
+    flow.setWalkthroughAsOf("2026-11-19 第三轮");
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const report = flow.sessionReport();
+  expect(report.release?.walkthrough?.asOf).toBe("2026-11-19 第三轮");
+  expect(report.text).toContain("[走查标记]");
+  expect(report.text).toContain("#2 pass");
+  expect(report.text).toContain("#2");
+  expect(report.text).toContain("[云端声明]");
+});
+
+it("报告逐条判断只认台账：只声明云端仍不是全绿", () => {
+  act(() => {
+    flow.declareCloud(2, true);
+  });
+  const onlyCloud = flow.sessionReport();
+  expect(onlyCloud.text).toContain("#2 未全绿");
+
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+  });
+  const both = flow.sessionReport();
+  expect(both.text).toContain("#2 全绿");
+  expect(both.text).toContain("#5 未全绿");
+});
+
+
+it("报告里的待补清单与面板同源：标一条并声明后少一条", () => {
+  // 只看待补那一段：#2 会同时出现在「逐条判断」里，全文搜索会误判。
+  const gapBlock = (text: string) => (text.split("[待补清单]")[1] ?? "").split("\n\n")[0] ?? "";
+  const before = gapBlock(flow.sessionReport().text);
+  expect(before).toContain("#2 ");
+  expect(before).toContain("#5 ");
+  act(() => {
+    flow.recordWalkthrough(2, "pass");
+    flow.declareCloud(2, true);
+  });
+  const after = gapBlock(flow.sessionReport().text);
+  expect(after).not.toContain("#2 ");
+  expect(after).toContain("#5 ");
+});
+
+it("报告来源跟着走查日期走，空日期写未填", () => {
+  const empty = flow.sessionReport().text;
+  // 从常量推期望串，不手抄编号（口径改了才不用再改测试）。
+  expect(empty).toContain(
+    `[报告来源] 固定数据用例：${FIXED_DATA_CASES.map((id) => `#${id}`).join(" ")}`,
+  );
+  expect(empty).toContain("走查日期：未填");
+  act(() => {
+    flow.setWalkthroughAsOf("2026-11-19 第四轮");
+  });
+  expect(flow.sessionReport().text).toContain("走查日期：2026-11-19 第四轮");
+});
+
+it("报告段落自检：六段全在也只说“齐”，不说合格", () => {
+  const line = flow.reportSections();
+  expect(line).toContain("6/6 段齐");
+  expect(line).not.toContain("可发布");
+  expect(line).not.toContain("合格");
+});
+
+it("下一步提示与待补清单同源，且不含发布结论", () => {
+  const line = flow.nextGap();
+  expect(line.startsWith("下一步：#")).toBe(true);
+  expect(line).toContain("先");
+  expect(line).not.toContain("可发布");
+});
+
+it("定地点拦阻时，把上一句里的后置活说出来（不再等于没说）", async () => {
+  await turn("先摆摊位，最后再调通道", response("search", {}, {}));
+  expect(flow.notice).toContain("想在哪个地点做");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
+});
+
+it("范围未确认时，也把上一句里的后置活说出来", async () => {
+  plan = { ...plan, boundary: [] };
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
+  await turn("先划展览区和表演区，最后再调通道", response("zones", {}));
+  expect(flow.notice).toContain("地图上还没有可核对的活动边界");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
+});
+
+it("反问时也把上一句里的后置活说出来", async () => {
+  await confirmScope();
+  await turn("先摆摊位，最后再调通道", response("ask", {}, { reply: "分区想怎么分？" }));
+  expect(flow.notice).toContain("补充对话里的信息后可以继续");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
+  expect(flow.notice).toContain("现在不用决定");
+});
+
+it("缺分区要追问时，提示条里也带上后置活", async () => {
+  await confirmScope();
+  await turn("先划展览区和表演区，最后再调通道", response("zones", {}));
+  expect(flow.notice).toContain("要分哪些用途");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
 });
