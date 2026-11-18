@@ -323,4 +323,35 @@ describe('plan-facility-migration（室内物件 → plan 设施）', () => {
     expect(result.facilities).toHaveLength(0);
     expect(result.skipped).toHaveLength(0);
   });
+
+  it('C1：resolver 返回 UUID 时不落 modelOverride', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({ id: 'g1', type: 'glb-asset', assetId: 'asset-123', position: { x: 2, z: 2 } })],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds(), [], {
+      modelSlug: () => '50000000-0000-4000-8000-000000000001',
+    });
+
+    expect('modelOverride' in result.facilities[0]!).toBe(false);
+  });
+
+  it('C1：slug 只进 modelOverride，不改写 sourceAssetId', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({ id: 'g1', type: 'glb-asset', assetId: 'asset-123', position: { x: 2, z: 2 } })],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds(), [], {
+      modelSlug: () => 'lib:sofa-01',
+    });
+
+    expect(result.facilities[0]!.sourceAssetId).toBe('asset-123');
+    expect(result.facilities[0]!.modelOverride).toBe('lib:sofa-01');
+  });
 });
