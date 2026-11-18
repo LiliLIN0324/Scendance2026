@@ -125,7 +125,7 @@ import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from
 import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
 import { noteVenueThreeIntent } from './lib/venue-library';
 import { loadOnlineCatalogItem } from './lib/online-model-placement';
-import { loadStoredAholoCatalogItem } from './lib/aholo-model-placement';
+import { loadGeneratedCatalogItem } from './lib/aholo-model-placement';
 import { loadShippedOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
@@ -4789,12 +4789,11 @@ useEffect(() => {
                 </button>
                 <button type="button"
                   className={`sc-rail-tool sc-rail-disc sc-rail-capture${captureOpen || generationOpen ? ' is-active' : ''}`}
-                  /* 2026-11-15 用户拍板：这颗钮同时承接「重建真实场地」与「生成新场景」，
-                     所以叫「场地」，点开先并列问做哪件；现场拍摄/上传照片都从重建设支进去。 */
+                  /* 2026-11-19：场地钮打开文生 / 图生卡片。重建真实场地只占位，不再从这里进拍摄。 */
                   aria-pressed={captureOpen || generationOpen}
                   aria-expanded={captureOpen || generationOpen}
                   aria-controls="generation-sheet workbench-capture-card"
-                  aria-label="场地：重建真实场地，或生成新场景"
+                  aria-label="场地：文生 3D、图生 3D，或重建真实场地"
                   data-tip="场地"
                   onClick={() => {
                     // 再点一次收起，和拍摄卡/户外卡同一种手感。
@@ -5167,7 +5166,7 @@ useEffect(() => {
               item = await loadOnlineCatalogItem(model, controller);
             } else if (key.startsWith('generated:')) {
               // 2026-11-12 统一放置流程：「我的生成」物料也可拖入，拖哪落哪。
-              item = await loadStoredAholoCatalogItem(key.slice('generated:'.length));
+              item = await loadGeneratedCatalogItem(key.slice('generated:'.length), assetId => controller.authorizeAsset(assetId));
             }
             if (!item) return;
             if (!dropActive.current) return;

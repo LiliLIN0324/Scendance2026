@@ -60,13 +60,26 @@ export async function loadAholoCatalogItem(source: {
 }
 
 /** 货架里的重复摆放：本机落盘的认资产号，仓库留档的认那条随网站发布的路径。 */
-export async function loadStoredAholoCatalogItem(assetId: string): Promise<CatalogItem> {
+export function loadStoredAholoCatalogItem(assetId: string): Promise<CatalogItem> {
+  return loadGeneratedCatalogItem(assetId);
+}
+
+/**
+ * 「我的生成」落位：先本机/随包，没有再向账户资产库要一次签名地址。
+ * 授权函数由调用方传入（现成的 `authorizeAsset`），这里不自己拉名单、也不提交生成。
+ */
+export async function loadGeneratedCatalogItem(
+  assetId: string,
+  authorize?: (assetId: string) => Promise<{ id: string; url: string; name: string }>,
+): Promise<CatalogItem> {
   const shipped = findShippedAsset(assetId);
   if (shipped) return toCatalogItem(shipped, shippedAssetUrl(shipped));
   const asset = findAholoAsset(assetId);
   const url = aholoAssetUrl(asset);
-  if (!asset || !url) throw new Error('本机已经没有这个模型，请重新生成。');
-  return toCatalogItem(asset, url);
+  if (asset && url) return toCatalogItem(asset, url);
+  if (!authorize) throw new Error('本机已经没有这个模型，请重新生成。');
+  const authorized = await authorize(assetId);
+  return toCatalogItem({ assetId: authorized.id, kind: 'glb', name: authorized.name }, authorized.url);
 }
 
 /** 3DGS 场景预览：签名链接先落盘，lod-meta 换真实尺度（高斯优先），预览只认本机那条稳定地址。 */
