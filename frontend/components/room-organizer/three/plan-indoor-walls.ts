@@ -14,7 +14,9 @@ import {
   INDOOR_WALL_HEIGHT_M,
   INDOOR_WALL_THICKNESS_M,
   planIndoorWalls,
+  type ExtraIndoorWall,
   type IndoorWallDoor,
+  type IndoorWallWindow,
   type IndoorWallZone,
 } from '../lib/plan-indoor-walls';
 import { buildExtrudedWallGeometry } from './interior-walls';
@@ -37,8 +39,15 @@ export function addIndoorWalls(
   parent: ThreeNS.Object3D,
   zones: readonly IndoorWallZone[],
   doors: readonly IndoorWallDoor[],
+  /** 窗：同一套贴墙/开洞，洞口不落地（窗台高来自 opening.bottomFromFloor）。 */
+  windows: readonly IndoorWallWindow[] = [],
+  /** 手画的墙（`plan.walls`）：已经换成壳体系，和分区边线一起立墙、开洞。 */
+  extraWalls: readonly ExtraIndoorWall[] = [],
 ): AddedIndoorWalls {
-  const plan = planIndoorWalls(zones, doors);
+  const plan = planIndoorWalls(zones, doors, {
+    ...(windows.length ? { windows } : {}),
+    ...(extraWalls.length ? { extraWalls } : {}),
+  });
   if (!plan.walls.length) return { walls: 0, openings: 0, refusals: plan.refusals.length };
 
   // 一层墙共用一个材质：段数不多但材质对象没必要一人一份。
@@ -62,9 +71,10 @@ export function addIndoorWalls(
       INDOOR_WALL_HEIGHT_M,
       INDOOR_WALL_THICKNESS_M,
       // 门洞一律落地：`bottomFromFloor = 0`，高度取 2 m（洞口上方的过梁由墙高 3.5 m 给）。
+      // 窗洞用窗台高（2026-11-18），不再一律 0。
       wall.openings.map(opening => ({
         centerAlongWall: opening.centerAlongWall,
-        bottomFromFloor: 0,
+        bottomFromFloor: opening.bottomFromFloor,
         width: opening.width,
         height: opening.height,
       })),
@@ -76,7 +86,8 @@ export function addIndoorWalls(
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.userData.planIndoorWall = true;
-    mesh.userData.planZoneId = wall.zoneId;
+    // owner 可能是分区，也可能是墙自己（手画墙），所以不叫 planZoneId、也不编造。
+    if (wall.ownerId) mesh.userData.planOwnerId = wall.ownerId;
     mesh.userData.planIndoorWallOpenings = wall.openings.length;
     group.add(mesh);
     openings += wall.openings.length;

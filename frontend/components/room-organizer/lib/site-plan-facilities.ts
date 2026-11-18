@@ -532,6 +532,31 @@ export function facilityUniformCornerResize(
   };
 }
 
+/**
+ * 2026-11-18 用户「窗户要可拉动宽度」：贴在墙上的薄片专用——只改宽度，绕中心对称，
+ * 深度与中心都不动。
+ *
+ * 不能用单面/角柄那两套的原因：
+ * - 它们按指针的**绝对位置**求尺寸，小物件手柄画在虚拟外扩盒上，按下的瞬间宽度会跳到盒宽；
+ * - 它们把中心沿法向推走，中心一离开墙线，3D 洞口就找不到这面墙（容差 3 cm），窗洞凭空消失。
+ *
+ * 宽度按**拖拽增量**算：`start.width + 2·Δ`，指针往哪边拖两侧同时长/缩，中心始终压在墙上。
+ */
+export function facilitySymmetricWidthResize(
+  anchor: { rotationDeg: number; size: { width: number; depth: number } },
+  from: PlanPoint,
+  to: PlanPoint,
+  bounds: { minM: number; maxM: number },
+): { size: { width: number; depth: number } } {
+  const theta = (anchor.rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  // 宽向单位向量 u = (cos, sin)：与 facilityFootprintRing 的局部 x 轴同一套。
+  const along = (to.x - from.x) * cos + (to.y - from.y) * sin;
+  const width = Math.max(bounds.minM, Math.min(bounds.maxM, anchor.size.width + 2 * along));
+  return { size: { width, depth: anchor.size.depth } };
+}
+
 /** 占地环自检：面积恒等于宽深乘积、永不自交（任意旋转角）。 */
 export function footprintSelfCheck(
   facility: { position: PlanPoint; rotationDeg: number; size: { width: number; depth: number } },

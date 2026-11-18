@@ -5,14 +5,16 @@ import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
  * 户外 2D 规划覆盖层（P2-e · 融进 3D 页面框架）：**本组件只负责画布本体**——
  * 满幅 OutdoorPlanCanvas + 引导 + 分享弹窗，再无任何自造按钮/顶条/侧栏。
  * 其余功能全部 portal 进主产品 3D 页面**现有的框架锚点**（由 room-organizer 渲染）：
- * - `#outdoor-panel-host-layers` / `#outdoor-panel-host-info`：主产品左栏卡片里的两个
- *   卡片宿主（图层栈与编辑 / 规划信息，画布浮窗经 PanelPortal 进去）；
+ * - `#outdoor-panel-host-layers`：主产品左栏「已放置物件」宿主；
+ * - `#outdoor-panel-host-inventory`：左栏户外卡「清单」页宿主（统计 + 清单，不挂在地图上）；
+ * - `#outdoor-place-search-slot`：画布左上搜地点槽；
  * - `#outdoor-tools-dock`：主产品右侧工具排位置（sc-editor-dock 内，同款
  *   sc-view-tools/sc-canvas-rail 框架），挂图源循环 / 导出 / 引导三枚钮。
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
@@ -376,6 +378,25 @@ export interface OutdoorPlanOverlayHandle {
   resetNorth(): void;
   /** 当前 2D 地图方位角（弧度，0=正北朝上）；无画布时 0。 */
   getBearing(): number;
+}
+
+/**
+ * 搜地点要画在地图覆盖层之上。覆盖层整层是 z-index 30，
+ * 所以 2D 时把搜索条 portal 到 `#outdoor-place-search-slot`。
+ * 槽位不在（或 3D 保活隐藏）时仍画在覆盖层里。
+ */
+function PlaceSearchSlot({ active, children }: { active: boolean; children: ReactNode }): JSX.Element {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!active) {
+      setHost(null);
+      return;
+    }
+    setHost(document.getElementById('outdoor-place-search-slot'));
+  }, [active]);
+  const layer = <div style={{ pointerEvents: 'auto' }}>{children}</div>;
+  if (!host) return layer;
+  return createPortal(layer, host);
 }
 
 const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
@@ -914,7 +935,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(onInspectorChange ? { onInspectorChange } : {})}
             {...(inspectorHostId ? { inspectorHostId } : {})}
             panelsHostId="outdoor-panel-host-layers"
-            infoPanelHostId="outdoor-panel-host-info"
+            infoPanelHostId="outdoor-panel-host-inventory"
             libraryPanelHostId="outdoor-panel-host-library"
             levelsHostId="outdoor-panel-host-levels"
             measureHostId="outdoor-panel-host-measure"
@@ -936,8 +957,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         </div>
       )}
       {/* 搜地点（用户 m04938 / m05472）：左上角，和地图 App 一样。
-          选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。 */}
+          选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。
+          2D 时 portal 到画布上的搜索槽，否则会困在覆盖层 z-index 30 里。 */}
       {plan && (
+        <PlaceSearchSlot active={!canvasHidden}>
         <PlanPlaceSearch
           testIdPrefix="outdoor-place-search"
           {...(venueSearchSync ? { sync: venueSearchSync } : {})}
@@ -960,6 +983,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           }}
           onClear={() => { cancelPlaceShape(); setPlacePin(null); setPlaceArea(null); }}
         />
+        </PlaceSearchSlot>
       )}
       {/* 2026-11-12 用户拍板：挖形期间的小提示（Overpass 排队 30~50s，别让用户以为点了没反应）。
           与画布白底名称胶囊同范式；只压 2D 画面，3D/接管态不出镜。 */}

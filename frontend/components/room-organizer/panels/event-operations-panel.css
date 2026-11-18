@@ -14,8 +14,6 @@
 .sc-operation-guide { margin: 6px 0 10px; }
 .sc-operation-overview { margin: 6px 0 10px; padding: 7px 9px; background: #efede680; border-radius: 6px; }
 .sc-operation-overview p { margin: 0; }
-.sc-operation-example { border-top: 1px solid var(--sc-line, #d6d6d2); padding-top: 8px; }
-.sc-operation-example .sc-note { margin: 0 0 8px; }
 .sc-operation-kind-label { font-size: 12px; font-weight: 600; }
 .sc-operation-toolbar .sc-operation-kind { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11px; }
 .sc-operation-kind select { width: auto; }

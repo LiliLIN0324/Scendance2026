@@ -15,15 +15,18 @@ import { convertMetres } from '../lib/display-units';
 import { REVIEW_MARK_CHANGED_EVENT, readReviewMarks } from '../lib/review-share';
 import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import { isStructuralMarker } from '../lib/structural-layout';
+import { bingoBadgeCount, setBingoSending, useBingoSending } from './bingo-status-mark';
 import { SHARE_READ_ONLY_LINE, SharePanel, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 
 export { SHARE_READ_ONLY_LINE };
 
 export interface PublishedLink {
-  /** 手机打开即可看的只读方案页。 */
+  /** 手机打开即可看的只读页（云端发布那条）。 */
   url: string;
   revision: number;
+  /** 同一版顺手生成的只读场地页（/site#s2=…）：客户拿到的是它，自带快照。 */
+  siteUrl?: string;
 }
 
 export interface ShareMenuActions {
@@ -95,6 +98,20 @@ export function shareBingoStatus(
   if (returned) return '已回执';
   if (waiting || sentNow) return '待评';
   return '待发';
+}
+
+/** 这一份方案还没回执的链接数。0 不画进环里。 */
+export function shareBingoCount(
+  projectId: string | undefined,
+  storage: { getItem(key: string): string | null } | null,
+): string {
+  try {
+    const snap = readBingoSnapshot(storage);
+    const mine = projectId ? snap.plans.filter(plan => plan.projectKey === projectId && !plan.returned) : [];
+    return bingoBadgeCount(mine.length);
+  } catch {
+    return '';
+  }
 }
 
 export interface PlanOutline {
@@ -179,6 +196,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const [busy, setBusy] = useState(false);
   const [bingoSent, setBingoSent] = useState(false);
   const [bingoRev, setBingoRev] = useState(0);
+  const bingoSending = useBingoSending();
   const seenOpen = useRef(openRequest);
   const seenClose = useRef(closeSignal);
   const projectId = layout?.id;
@@ -217,6 +235,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
 
   useEffect(() => {
     setBingoSent(false);
+    setBingoSending(false);
     setBingoRev(value => value + 1);
     const sync = () => setBingoRev(value => value + 1);
     window.addEventListener(REVIEW_MARK_CHANGED_EVENT, sync);
@@ -224,11 +243,10 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   }, [projectId]);
 
   // 首屏与服务端都先待发，挂上后再读本机记录，避免注水时状态对不上。
-  const bingoStatus = shareBingoStatus(
-    projectId,
-    bingoSent,
-    bingoRev > 0 && typeof localStorage !== 'undefined' ? localStorage : null,
-  );
+  const bingoStorage = bingoRev > 0 && typeof localStorage !== 'undefined' ? localStorage : null;
+  const storedBingoStatus = shareBingoStatus(projectId, bingoSent, bingoStorage);
+  const bingoStatus = bingoSending && storedBingoStatus !== '已回执' ? '送出中' : storedBingoStatus;
+  const bingoCount = shareBingoCount(projectId, bingoStorage);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -245,6 +263,9 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  /** 交给客户的那条：有场地页就用场地页，没有就回云端发布链接。 */
+  const handedUrl = published?.siteUrl ?? published?.url;
 
   useEffect(() => {
     const url = tab === 'publish' ? published?.url : tab === 'share' ? reviewLink : '';
@@ -272,7 +293,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
         clearPublishedLink(projectId);
         setPublished(null);
         setQrOpen(false);
-        setNotice('这条链接已撤回。');
+        // 场地页链接自带快照，撤回只能作废云端发布记录，不能把已发出去的链接收回。
+        setNotice(stored.siteUrl ? '云端发布已撤回；已经发出去的场地页快照仍能打开。' : '这条链接已撤回。');
       }
     }).catch(() => { /* 清单暂时读不到时，仍用本机记下的链接 */ });
     return () => { live = false; };
@@ -298,8 +320,9 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       const result = await actions.onPublish();
       setPublished(result);
       writePublishedLink(projectId, result);
-      appendShareRecord(projectId, { kind: 'web', url: result.url, revision: result.revision, at: Date.now() });
-      const copied = await copyText(result.url);
+      const handed = result.siteUrl ?? result.url;
+      appendShareRecord(projectId, { kind: 'web', url: handed, revision: result.revision, at: Date.now() });
+      const copied = await copyText(handed);
       setNotice(copied ? '' : '链接已发布。复制没成功，请点「复制」。');
       setQrOpen(false);
     } catch (error) {
@@ -316,6 +339,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     }
     setBusy(true);
     setNotice('');
+    setBingoSending(true);
     try {
       const result = await actions.onIssueReviewLink();
       if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
@@ -327,13 +351,14 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
+      setBingoSending(false);
       setBusy(false);
     }
   };
 
   const copyPublished = async () => {
-    if (!published) return;
-    const copied = await copyText(published.url);
+    if (!handedUrl) return;
+    const copied = await copyText(handedUrl);
     setNotice(copied ? '' : '复制没成功，请再试一次。');
   };
 
@@ -386,6 +411,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       busy={busy}
       notice={notice}
       bingoStatus={bingoStatus}
+      bingoCount={bingoCount}
+      bingoLive={bingoRev > 0}
       readOnly={Boolean(actions?.readOnly)}
       qrOpen={qrOpen}
       qrSvg={qrSvg}
@@ -437,7 +464,11 @@ function readPublishedLink(projectId?: string): PublishedLink | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PublishedLink>;
     return typeof parsed.url === 'string' && parsed.url && typeof parsed.revision === 'number'
-      ? { url: parsed.url, revision: parsed.revision }
+      ? {
+        url: parsed.url,
+        revision: parsed.revision,
+        ...(typeof parsed.siteUrl === 'string' && parsed.siteUrl ? { siteUrl: parsed.siteUrl } : {}),
+      }
       : null;
   } catch { return null; }
 }

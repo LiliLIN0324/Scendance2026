@@ -117,8 +117,8 @@ export const X = makeSolidIcon('close');
 /**
  * 左轨自绘标记（2026-11-18 补救）。
  * 四枚工具标与 Bingo 环同为 24 网格。未选中：单线 1.65、圆端、`--ink-soft`，形状完整。
- * 选中：图标填 `#141416`，细节留纸色 `#FFFFFF`。轨钮左缘 3px `--green` 仍由按钮承担。
- * 门厅不参与反黑，始终实心 `--green-deep`。
+ * 选中：图标填 `#141416`，细节留纸色 `#FFFFFF`。不再靠轨钮左缘绿条。
+ * 门厅不参与反黑，始终实心 `--green-deep`。右下角也不再加品牌句点。
  */
 export const RAIL_STROKE = 1.65;
 export const RAIL_SELECTED = '#141416';

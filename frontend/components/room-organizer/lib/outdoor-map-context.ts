@@ -39,6 +39,7 @@ import {
   type OutdoorTurn,
   type OutdoorBrief,
 } from "./outdoor-agent-contract";
+import { buildLayoutEvidence } from "./outdoor-layout-weights";
 
 export { MAP_EVIDENCE_MISSING_NOTE };
 export type OutdoorEvidenceHighlight = ReturnType<
@@ -147,6 +148,46 @@ export function createOutdoorMapContext() {
     string,
     Promise<MapEvidenceResult | undefined>
   >();
+  // docs/47 A3 断线修复（A2 轮注的结构性发现）：这两个 accessor 此前只挂在外层 adapter 对象上，
+  // 而 hook 经 bridge.mapContext→load() 拿到的是内层 issued 对象——生产路径
+  // `mapRef.current.water?.()` 恒为 undefined，沿岸/沿线预览永远拿空数组。
+  // 现抽成闭包实现、内外两层统一挂载，修前红测走真实 load 管线拦住这个洞。
+  const waterFeatures = () => {
+    // 2026-11-17：水岸排布的输入。快照坐标已经是 plan 同基准的 ENU 米，直接交给排布层。
+    return (snapshot?.features ?? [])
+      .filter(
+        (f) =>
+          f.kind === "water" &&
+          f.geometry.points.length >= 2 &&
+          f.geometry.points.every(
+            (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
+          ),
+      )
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        points: f.geometry.points.map((p) => ({ x: p.x, y: p.y })),
+        closed: f.geometry.type === "polygon",
+      }));
+  };
+  const roadLineFeatures = () => {
+    // 2026-11-17：沿线排布的参照输入。快照道路坐标已是 plan 同基准的 ENU 米，直接交给排布层。
+    return (snapshot?.features ?? [])
+      .filter(
+        (f) =>
+          f.kind === "road" &&
+          f.geometry.type === "line" &&
+          f.geometry.points.length >= 2 &&
+          f.geometry.points.every(
+            (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
+          ),
+      )
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        points: f.geometry.points.map((p) => ({ x: p.x, y: p.y })),
+      }));
+  };
   return {
     async load(
       projectId: string,
@@ -235,12 +276,15 @@ export function createOutdoorMapContext() {
         },
       });
       const sourceSnapshot = snapshot;
+      // docs/47 A2：证据分级——摘要（一行式）随 issued 上下文给模型，明细分档留给排布引擎（A3）。
+      const layout = buildLayoutEvidence(snapshot.features, plan.boundary);
       const issue = (maxChars: number) =>
         buildModelContext(sourceSnapshot, {
           maxObjects: 8,
           maxRelations: 8,
           maxChars,
           compact: true,
+          layoutEvidence: layout.summary,
         });
       const issued = issue(3400);
       return {
@@ -266,6 +310,12 @@ export function createOutdoorMapContext() {
             .map((f) => [f.id, f.highlight.sourceId]),
         ),
         unknowns: snapshot.coverage.unknowns,
+        // docs/47 A3 断线修复：water/roadLines 统一挂内外两层——hook 持有的是本内层对象，
+        // 沿岸/沿线预览在生产路径终于能取到真实要素（修前红测见 outdoor-map-context.test.ts）。
+        water: () => waterFeatures(),
+        roadLines: () => roadLineFeatures(),
+        // docs/47 A2：分档明细随本轮 load 结果走（hook/A3 从这里读），没有证据就回空档。
+        layoutEvidence: () => layout,
       };
     },
     highlights(
@@ -354,40 +404,10 @@ export function createOutdoorMapContext() {
       };
     },
     water() {
-      // 2026-11-17：水岸排布的输入。快照坐标已经是 plan 同基准的 ENU 米，直接交给排布层。
-      return (snapshot?.features ?? [])
-        .filter(
-          (f) =>
-            f.kind === "water" &&
-            f.geometry.points.length >= 2 &&
-            f.geometry.points.every(
-              (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
-            ),
-        )
-        .map((f) => ({
-          id: f.id,
-          name: f.name,
-          points: f.geometry.points.map((p) => ({ x: p.x, y: p.y })),
-          closed: f.geometry.type === "polygon",
-        }));
+      return waterFeatures();
     },
     roadLines() {
-      // 2026-11-17：沿线排布的参照输入。快照道路坐标已是 plan 同基准的 ENU 米，直接交给排布层。
-      return (snapshot?.features ?? [])
-        .filter(
-          (f) =>
-            f.kind === "road" &&
-            f.geometry.type === "line" &&
-            f.geometry.points.length >= 2 &&
-            f.geometry.points.every(
-              (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
-            ),
-        )
-        .map((f) => ({
-          id: f.id,
-          name: f.name,
-          points: f.geometry.points.map((p) => ({ x: p.x, y: p.y })),
-        }));
+      return roadLineFeatures();
     },
     spatial(turn: OutdoorTurn, plan: SitePlanData): SitePlanData {
       if (!snapshot || !turn.operation)

@@ -247,3 +247,17 @@ replica-specs-gov-1.ts(29,78): 同上
 | #11 导出 | **partial**：CSV/JSON/GLB/DXF/HTML 落盘且计数与画布一致（5 件 / 3 类）；PDF、效果图、旧云 Run blocked | partial | n/a（导出本机产物，零写） | `11/2026-11-18-case11-exports.md` |
 
 本轮计数：**pass 1 / partial 5 / blocked 5 / fail 0**。门禁仍关；blocked 不计入全绿也不计失败。下一轮最短路径：先在一个项目里定地点、圈出边界 → 出待确认提案 → 按 #7 → #8b → #9 → #8a → #8c 连跑。
+
+### 8.7 第五轮：#7/#8/#9 半链取证，#3 改口仍被通道失败拦住（2026-11-18）
+
+环境：同一正式站，登录态有效；活动 A `house-uat5t1nz`「周末共创工作坊」（边界 12 / 分区 3 / 动线 9 / 出入口 7）。证据落 `docs/evidence/79/03|07|08|09|11/`。
+
+| 用例 | 本轮结论 | 浏览器 | 云端 | 关键读数 | 证据 |
+| --- | --- | --- | --- | --- | --- |
+| #3 改口采纳 | **blocked** | 未取得 | 无 | 改口句「主通道别走湖滨路…延安路口双向」进会话，但模型回合 provider_error「这次问答没有完成」，无路线候选可对照 | `03/2026-11-18-case03-round5-supplement.md` |
+| #7 说等等 | **partial** | partial | 未声明 | 旧票被新回合顶掉、零 scene-api 写；新提案单次应用 设施 0→255（50+200+1+2+2，无翻倍）；旧确认失效 DOM、提案身份 digest、revision 响应体未取到 | `07/2026-11-18-case07-round5-supplement.md` |
+| #8 刷新/双点/切项目 | **partial** | partial | 未声明 | 8a 撤销后刷新终态一致、零写（非 in-flight 刷新）；8b 仅单次点击未翻倍旁证，受控双点未做；8c A 未被改写、会话按活动键隔离，B 为室内活动未载入户外画布 | `08/2026-11-18-case08-round5-supplement.md` |
+| #9 撤销回读 | **partial** | partial | 未声明 | Ctrl+Z 整批撤销 255→0、plan 长度回 10 726、刷新保留；撤销触发 1 次 PUT outdoor-plans；revision/undoGroup 响应体缺，撤销后未再走通一次重新应用 | `09/2026-11-18-case09-round5-supplement.md` |
+| #11 导出入口 | **partial** | partial | n/a | 在活动 A 登记交付面板启用/禁用矩阵；PDF、效果图、旧云 Run 仍 blocked | `11/2026-11-18-case11-round5-button-matrix.md` |
+
+本轮计数：**pass 1 / partial 8 / blocked 2 / fail 0**（#3、#6 维持 blocked）。架构事实订正：`outdoor-history` 是卡片历史副本；规划本体有独立 `outdoor-plans` 表与版本保护（`baseRevision` / conflict / force），户外链路不走室内 `/proposals/apply` 契约。门禁仍关，签字只能由人。

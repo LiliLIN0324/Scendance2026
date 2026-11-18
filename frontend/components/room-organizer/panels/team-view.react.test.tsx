@@ -100,6 +100,38 @@ describe('rail members and the team page share one source', () => {
     expect([...rail.querySelectorAll('.sc-rail-member')][1].textContent).toBe('终');
   });
 
+  it('renames the team from the panel header and pushes the new name upstream', async () => {
+    let currentName = '幕景';
+    const calls: Array<{ url: string; method: string; body: string }> = [];
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      calls.push({ url, method, body: String(init?.body ?? '') });
+      if (/\/messages\/unread/.test(url)) return respond([]);
+      if (/\/studios\/[^/]+\/members/.test(url)) return respond([owner, editor]);
+      if (/\/studios\/[^/]+$/.test(url) && method === 'PATCH') {
+        currentName = (JSON.parse(String(init?.body)) as { name: string }).name;
+        return respond({ id: studioId, name: currentName, role: 'owner', displayName: '丽丽' });
+      }
+      if (/\/studios\/?$/.test(url)) return respond([{ id: studioId, name: currentName, role: 'owner', displayName: '丽丽' }]);
+      return respond({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'user-a', aud: 'authenticated', email: 'test@example.com' } });
+    }));
+    await controller.signIn('test@example.com', 'password');
+    const onStudioRenamed = vi.fn();
+    render(<AccountTeamPanel controller={controller} onStudioRenamed={onStudioRenamed}/>);
+    fireEvent.click(await screen.findByRole('button', { name: '重命名团队幕景' }));
+    const input = screen.getByLabelText('团队新名称') as HTMLInputElement;
+    expect(input.value).toBe('幕景');
+    fireEvent.change(input, { target: { value: '  幕景二组  ' } });
+    fireEvent.submit(input.closest('form')!);
+    expect(await screen.findByRole('button', { name: '重命名团队幕景二组' })).toBeTruthy();
+    const patch = calls.find(call => call.method === 'PATCH');
+    expect(patch && JSON.parse(patch.body)).toEqual({ name: '幕景二组' });
+    expect(onStudioRenamed).toHaveBeenCalledWith(studioId, '幕景二组');
+    // 成员名单不跟着变名字而消失：同一个团队、同一批人。
+    expect(screen.getByText('丽丽 · 你')).toBeTruthy();
+  });
+
   it('still lists a member when the backend sends no email', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input: RequestInfo | URL) => {
       const url = String(input);

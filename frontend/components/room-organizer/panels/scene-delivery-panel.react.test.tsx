@@ -86,10 +86,16 @@ function deferred<T>() {
 }
 beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
 afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
+function openInternalTools(): void {
+  const details = screen.getByText('内部资料').closest('details') as HTMLDetailsElement | null;
+  if (details && !details.open) fireEvent.click(details.querySelector('summary')!);
+}
 function openExportTab(): void {
+  openInternalTools();
   fireEvent.click(screen.getByRole('tab', { name: '导出' }));
 }
 function openBackupTab(): void {
+  openInternalTools();
   const tab = screen.queryByRole('tab', { name: '本机备份' });
   if (tab) fireEvent.click(tab);
 }
@@ -98,6 +104,22 @@ function knownMobilityDialogue() {
   return {project:(reference?:{event?:string|null;guests?:number|null})=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}};
 }
 describe('Bingo scene delivery panel',()=>{
+  it('opens on version confirm and export, with an empty archive folded to one line', () => {
+    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateEventOperations={vi.fn()}/>);
+    expect(screen.getByRole('button', { name: '确认这一版' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '导出交付包' })).toBeTruthy();
+    expect(screen.queryByText('未记录')).toBeNull();
+    expect(screen.queryByText('日期待确认')).toBeNull();
+    const archive = screen.getByText('活动档案 · 尚未创建').closest('details') as HTMLDetailsElement;
+    expect(archive.open).toBe(false);
+    fireEvent.click(archive.querySelector('summary')!);
+    expect(screen.getByText('尚未创建。')).toBeTruthy();
+    expect(screen.queryByText('未记录')).toBeNull();
+    for (const title of ['活动需求', '当天执行包', '内部资料']) {
+      expect((screen.getByText(title).closest('details') as HTMLDetailsElement).open).toBe(false);
+    }
+    expect((screen.getAllByText('活动任务 · 0 项')[0].closest('details') as HTMLDetailsElement).open).toBe(false);
+  });
   it('blocks direct delivery while either local or cloud candidate remains pending',async()=>{
     const registry=createPendingCandidateRegistry(),scope={},access=bindPendingCandidateRegistry(registry,scope,()=>true),local={},cloud={};
     access.register('local',local);access.register('cloud',cloud);
