@@ -176,12 +176,33 @@ export function ledgerFromEvidence(
 }
 
 /**
- * 本仓当前有「固定数据」证据的用例号（只写我能指到测试文件的）：
- *   #2 同名地点 —— `outdoor-venue-candidates.test.ts`（选择语义；真实搜索仍未跑）
- *   #5 离线/无路网 —— `outdoor-case5-offline.test.ts`（无证据时如实声明；浏览器仍未跑）
- * 其它 9 条没有我能点名的确定性用例，就不写进来。
+ * 每条用例的**固定数据证据**（只写能点到具体测试文件的）。
+ *
+ * 轮次 102 口径纠正：此前只写了「#2 #5」，依据是“只有这两条能逐条点名”；
+ * 但对照表（`2026-11-16-outdoor-evidence-matrix.md`）从轮次 33 起就给 11 条里 9 条
+ * 列了具体文件与条数，旧写法把已有的证据报少了——卡片因此说“缺固定数据”，那是错的。
+ *
+ * 本表只读“有这个文件且它跑得过”，**不声称覆盖充分**；文件不存在的不写（如旧文档里的
+ * `indoor-zone-door` 已不存在，改用实存的 `plan-door-snap` / `plan-indoor-walls`）。
  */
-export const FIXED_DATA_CASES: readonly number[] = [2, 5];
+export const FIXED_DATA_EVIDENCE: Readonly<Record<number, readonly string[]>> = {
+  1: ['outdoor-event-turn', 'instruction-layers', 'outdoor-map-context'],
+  2: ['outdoor-venue-candidates', 'outdoor-venue-sync', 'outdoor-project-store'],
+  3: ['instruction-layers', 'outdoor-event-turn'],
+  4: ['outdoor-pending-task', 'pending-brief'],
+  5: ['outdoor-case5-offline', 'outdoor-map-context', 'outdoor-walk-boundary'],
+  6: ['outdoor-login-copy', 'turn-failure-diag'],
+  7: ['outdoor-apply-once'],
+  8: ['outdoor-flow-restore', 'outdoor-apply-once', 'outdoor-project-store'],
+  9: ['outdoor-apply-once', 'turn-trace'],
+  10: ['turn-failure-diag', 'turn-trace'],
+  11: ['plan-door-snap', 'zones'],
+};
+
+/** 有固定数据证据的用例号（由上面的表推出，不另维护一份）。 */
+export const FIXED_DATA_CASES: readonly number[] = Object.keys(FIXED_DATA_EVIDENCE)
+  .map(Number)
+  .sort((a, b) => a - b);
 
 /** 卡默认用的台账：直接由上面的常量生成，不给人填的余地。 */
 export function defaultLedger(

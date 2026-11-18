@@ -3,10 +3,12 @@ import {
   BROWSER_EVIDENCE,
   defaultLedger,
   EVIDENCE_AS_OF,
+  FIXED_DATA_CASES,
+  FIXED_DATA_EVIDENCE,
   formatReleaseStatusCard,
+  isAllGreen,
   ledgerFromEvidence,
-  logReleaseStatus,
-  RELEASE_STATUS_PREFIX,
+  logReleaseStatus,  RELEASE_STATUS_PREFIX,
   statusCardSnapshot,
   summarizeLedger,
   type CaseLedgerRow,
@@ -273,10 +275,22 @@ describe('云端那列（以前卡里根本没写）', () => {
 });
 
 describe('默认台账（FIXED_DATA_CASES）', () => {
-  it('只把能点到测试文件的两条算作有固定数据', () => {
+  it('有一条能点到测试文件的证据就算有固定数据（轮次 102 口径纠正：11 条都有）', () => {
     const ledger = defaultLedger();
-    expect(summarizeLedger(ledger)).toEqual({ allGreen: 0, fixedOnly: 2, total: 11 });
-    expect(ledger.filter((r) => r.fixedData).map((r) => r.id)).toEqual([2, 5]);
+    expect(summarizeLedger(ledger)).toEqual({ allGreen: 0, fixedOnly: 11, total: 11 });
+    expect(ledger.filter((r) => r.fixedData).map((r) => r.id)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    ]);
+    // 每一条都要能点到至少一个测试文件；空数组就是“说有其实没有”。
+    for (const id of FIXED_DATA_CASES) {
+      expect(FIXED_DATA_EVIDENCE[id]!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('固定数据只是“有文件”，不等于该用例通过（全绿仍为 0）', () => {
+    const ledger = defaultLedger();
+    expect(isAllGreen(ledger[0]!)).toBe(false);
+    expect(ledger.every((r) => r.cloud !== 'pass')).toBe(true);
   });
 
   it('默认台账下卡永远写 0 条全绿', () => {
