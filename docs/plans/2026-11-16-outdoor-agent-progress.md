@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：把 `deferredNote` 接到**所有反问的唯一漏斗** `askForDetails()`（气泡与提示条都补“后面还有：…；现在不用决定”），不再逐处找“缺分区”那条；hook **91/91**（新增 1 条：`response("ask")` 反问时提示条同时含“补充对话里的信息后可以继续”与“后面还有：最后再调通道”）、layered-task 11/11、`tsc` 0 行。**TLS 握手连续第十八轮失败**。待 PR 分支本地 `b26b66be`+本轮（领先 main 55 笔）。9222 六十四轮不通。下一条：M3 剩下的 brief 本体——先把 `submitTurn` 里“原话进 brief”那段单独抽成可测函数（不改行为），再接后置从句。首条命令 `cd frontend; npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx`。
+- 下一条操作：把“缺分区要分哪些用途”这条追问（来自 `proposeUseZones` 的 throw，提示条只显示异常原文、不走 `askForDetails`）接上后置活：给 `proposeUseZones` 加可选 `deferNote` 并拼在问句后，hook 传入 `deferredNote(priorUserTextRef.current)`；hook **92/92** + planning 23/23 = **115/115**、`tsc` 0 行。**TLS 握手连续第十九轮失败**。待 PR 分支本地 `cd74cf0d`+本轮（领先 main 56 笔）。9222 六十五轮不通。另顺手查了死代码：`lib` 下 369 个模块中只有 10 个无引用，均不属 outdoor 批次。下一条：M3 剩下的 brief 本体（`submitTurn` 里原话入 brief 那段抽成可测函数，先不改行为）。首条命令 `cd frontend; npm test -- components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 19:00 · 自动轮次 110 · 缺分区追问也带上后置活
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 19:00，自动轮次 110
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M3 / 缺分区追问接线 / 已本地提交（未推送）
+开工事实：分支 `cd74cf0d`（上一轮自己提交）、锁无、领先 main 55 笔
+交付：`proposeUseZones()` 新增可选 `deferNote`，缺分区问句后接“后面还有：最后再调通道”；hook 传入 `deferredNote(priorUserTextRef.current)`
+验证（固定数据）：hook **92/92**（新增 1 条：action=zones 时提示条同时含“要分哪些用途”与“后面还有：最后再调通道”）+ planning 23/23 = **115/115**；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第六十五轮 down）
+未完成：M3 的 brief 本体；#2/#5 浏览器；推送仍被拦住
+```
+
+- **先证伪再动手**：这轮先试“接在 offer 的 notes 上”和“接在 `askForDetails` 上”两种假设，均用真实断言跑红（提示条并不显示 notes，也不显示 say 内容），才定位到真身：`proposeUseZones` 的 throw → 提示条只显示异常原文。**没有把未经过证伪的改动留在分支里。**
+- **顺手量了一次死代码**：`lib` 369 个模块中只有 10 个无任何引用（`material-query-evidence`、`outdoor-demo-plan`、`plan-candidate-apply`、`plan-candidate-preview`、`plan-history`、`plan-traffic-preview`、`scene-chat-intent`、`sharing-example`、`site-plan-migrate`、`site-plan-store`），**没有一个是 outdoor 批次的**，未改。
 
 ### 2026-11-19 18:00 · 自动轮次 109 · 反问漏斗统一带上后置活
 
