@@ -2374,3 +2374,10 @@ it("反问时也把上一句里的后置活说出来", async () => {
   expect(flow.notice).toContain("后面还有：最后再调通道");
   expect(flow.notice).toContain("现在不用决定");
 });
+
+it("缺分区要追问时，提示条里也带上后置活", async () => {
+  await confirmScope();
+  await turn("先划展览区和表演区，最后再调通道", response("zones", {}));
+  expect(flow.notice).toContain("要分哪些用途");
+  expect(flow.notice).toContain("后面还有：最后再调通道");
+});

@@ -1476,7 +1476,13 @@ export function useOutdoorAgentWorkflow(input: {
           : "根据已知用途和室内外条件，在活动边界内安排分区。");
         const next = bridge.proposeZones
           ? bridge.proposeZones(plan, stateRef.current.brief)
-          : proposeUseZones(plan, stateRef.current.brief);
+          : proposeUseZones(
+              plan,
+              stateRef.current.brief,
+              undefined,
+              // 轮次 110：「缺分区要分哪些用途」是追问，上一句的后置活接在问句后（不回退成“下一步”）。
+              deferredNote(priorUserTextRef.current),
+            );
         if (needsZones) {
           const names = next.zones.slice(0, 4).map(zone => zone.name).join("、");
           designStep(`分区预览包含 ${next.zones.length} 个区域：${names}${next.zones.length > 4 ? "等" : ""}。`);
