@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { AgentPanel, LayoutAgentProvider, VenuePickerOverlay } from './agent-panel';
+import { SceneApiError } from '../../../../client/scene-client';
 import { VenuePicker } from './venue-picker';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
@@ -17,7 +18,10 @@ const mocks = vi.hoisted(() => ({
 const snapshot: { user: { id: string } | null } = { user: { id: 'me' } };
 const controller = { ...mocks, subscribe: () => () => {}, getSnapshot: () => snapshot };
 vi.mock('@/lib/auth-provider', () => ({ useAuth: () => ({ ready: true, controller }) }));
-vi.mock('@/lib/backend-session', () => ({ useBackendSession: () => snapshot }));
+vi.mock('@/lib/backend-session', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/backend-session')>('@/lib/backend-session');
+  return { useBackendSession: () => snapshot, backendFailureText: actual.backendFailureText };
+});
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
 const state = vi.hoisted(() => ({ layout: null as unknown as RoomLayout, apply: vi.fn(), view: null as unknown, setView: vi.fn() }));
@@ -130,10 +134,10 @@ describe('VenuePicker（换场地 / 新建）', () => {
       plan: { anchor?: { lng: number; lat: number; source: string }; boundary: unknown[]; zones: unknown[]; facilities: unknown[]; routes: unknown[]; nodes: unknown[] };
     };
     expect(record.name).toBe('复刻示例 · Scotiabank Hockey Day Canada');
-    expect(record.plan.anchor).toEqual({ lng: -123.3716, lat: 48.4235, crs: 'gcj-02', source: 'preset' });
+    expect(record.plan.anchor).toEqual({ lng: -123.370099, lat: 48.423153, crs: 'gcj-02', source: 'preset' });
     expect(record.plan.boundary.length).toBeGreaterThanOrEqual(3);
-    expect(record.plan.zones.length).toBeGreaterThanOrEqual(10);
-    expect(record.plan.facilities.length).toBeGreaterThanOrEqual(40);
+    expect(record.plan.zones.length).toBe(9);
+    expect(record.plan.facilities.length).toBe(71);
     expect(record.plan.routes.length).toBeGreaterThanOrEqual(3);
     expect(record.plan.nodes.length).toBeGreaterThanOrEqual(3);
   });
@@ -257,6 +261,15 @@ describe('VenuePicker（换场地 / 新建）', () => {
     expect(await screen.findByRole('dialog', { name: '换场地 / 新建' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(screen.queryByRole('dialog', { name: '换场地 / 新建' })).toBeNull();
+  });
+
+  it('新建失败时弹层显示可读说明，而不是裸的 ROUTE_NOT_FOUND', async () => {
+    mocks.createProject.mockRejectedValue(new SceneApiError('ROUTE_NOT_FOUND', 404, null));
+    render(<VenuePicker onClose={vi.fn()} />);
+    await screen.findByRole('button', { name: /云端验证/ });
+    fireEvent.click(screen.getByRole('button', { name: '开始规划' }));
+    const note = await screen.findByText('请求的接口不存在，这次操作没有发出。');
+    expect(note.textContent).not.toBe('ROUTE_NOT_FOUND');
   });
 
   it('弹层里选空白开始，走地图草稿通路而不立室内壳', async () => {

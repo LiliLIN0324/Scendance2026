@@ -113,8 +113,8 @@ import {
 } from '@/components/room-organizer/lib/site-capture';
 import type { FurnitureItem } from '@/components/room-organizer/lib/types';
 import { OUTDOOR_WALK_CANVAS_ID } from '@/components/room-organizer/lib/walk-engage';
-import { clearPlanFacilityDrag, getPlanFacilityDrag } from '@/components/room-organizer/lib/plan-facility-drag';
-import { clearPlanCatalogDrag, getPlanCatalogDrag, parsePlanCatalogDrag, PLAN_CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/plan-catalog-drag';
+import { consumePlanFacilityDrag, getPlanFacilityDrag } from '@/components/room-organizer/lib/plan-facility-drag';
+import { consumePlanCatalogDrag, getPlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, PLAN_CATALOG_TEXT_PREFIX, readPlanCatalogDrag } from '@/components/room-organizer/lib/plan-catalog-drag';
 import { SCOPE_FROST_BLUR_PX, SCOPE_FROST_VEIL, drawScopeFrost } from '@/components/room-organizer/lib/outdoor-scope-frost';
 
 /** 没锚点的场地（纯纸面规划）用的地面底色。 */
@@ -1953,12 +1953,9 @@ export default function OutdoorPlan3D({
     let lastDropAt = 0;
     const onDragOver = (event: DragEvent): void => {
       if (walkEnabledRef.current) return;
-      const dragTypes = Array.from(event.dataTransfer?.types ?? []);
-      if (dragTypes.includes(PLAN_CATALOG_DRAG_MIME)) {
-        if (!getPlanCatalogDrag()) return;
-      } else if (dragTypes.includes(CATALOG_DRAG_MIME)) {
-        return;
-      } else if (!getPlanFacilityDrag()) return;
+      const catalogArmed = !!getPlanCatalogDrag();
+      const facilityArmed = !!getPlanFacilityDrag();
+      if (!catalogArmed && !facilityArmed) return;
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
       // 拖放期间也不让左键/中键转视角；右键平移、滚轮缩放保持。
@@ -1997,9 +1994,10 @@ export default function OutdoorPlan3D({
     const onDrop = (event: DragEvent): void => {
       if (walkEnabledRef.current) return;
       const types = Array.from(event.dataTransfer?.types ?? []);
-      if (types.includes(PLAN_CATALOG_DRAG_MIME)) {
-        const catalogDrag = parsePlanCatalogDrag(event.dataTransfer?.getData(PLAN_CATALOG_DRAG_MIME) ?? '') ?? getPlanCatalogDrag();
-        clearPlanCatalogDrag();
+      const text = event.dataTransfer?.getData('text/plain') ?? '';
+      const catalogDrag = readPlanCatalogDrag(event.dataTransfer?.getData(PLAN_CATALOG_DRAG_MIME) ?? '', text);
+      if (catalogDrag || types.includes(PLAN_CATALOG_DRAG_MIME) || text.startsWith(PLAN_CATALOG_TEXT_PREFIX)) {
+        consumePlanCatalogDrag();
         if (!catalogDrag) return;
         event.preventDefault();
         event.stopPropagation();
@@ -2023,7 +2021,7 @@ export default function OutdoorPlan3D({
       }
       // 物料卡没带户外载荷时不要落成上一次的设施模板。
       if (types.includes(CATALOG_DRAG_MIME)) return;
-      const templateId = event.dataTransfer?.getData('text/plain') || getPlanFacilityDrag();
+      const templateId = text || getPlanFacilityDrag();
       if (!templateId) return;
       event.preventDefault();
       event.stopPropagation();
@@ -2034,7 +2032,7 @@ export default function OutdoorPlan3D({
         dragPreviewFrame = 0;
       }
       lastDragOver = null;
-      clearPlanFacilityDrag();
+      consumePlanFacilityDrag();
       const hit = eventToPlanHit(event);
       if (!hit) return;
       const api = canvasEditApiRef.current?.current;
