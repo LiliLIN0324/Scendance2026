@@ -339,6 +339,8 @@ export interface OutdoorPlanOverlayProps {
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
 export interface OutdoorPlanOverlayHandle {
+  /** G3：从 Bingo 打开同一个分享弹窗（预选允许钉评）。 */
+  openReviewShare(): void;
   /** 缩放一档（与滚轮同源）。 */
   zoomBy(direction: 1 | -1): void;
   /**
@@ -819,6 +821,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // P2-g：对外命令句柄（室内工具排的撤销/重做/缩放/导出转发到这里）。
   // 不写依赖数组：每帧重建，句柄永远拿到当帧闭包（内部读的都是 ref/最新 state）。
   useImperativeHandle(ref, () => ({
+    openReviewShare: () => { setShareOpen(true); },
     zoomBy: (direction: 1 | -1) => {
       canvasApiRef.current?.zoomBy(direction);
     },
