@@ -614,6 +614,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 同时表达「收起」和「3D 接管」两种态，收起被派生成全屏接管。引入显式接管开关：
   // 只有它为 true（且非 2D）才全屏接管；收起＝两者都 false，回工作台。
   const [outdoor3dTakeoverActive, setOutdoor3dTakeoverActive] = useState(false);
+  // Bingo 点户外钉：先确保回到户外 2D，再让画布按锚点居中。
+  useEffect(() => {
+    const focus = () => { setOutdoor2DOpen(true); setOutdoor3dTakeoverActive(false); };
+    window.addEventListener('scendance:outdoor-plan-point-focus', focus);
+    return () => window.removeEventListener('scendance:outdoor-plan-point-focus', focus);
+  }, []);
   const applyPresetRef = useRef<(preset: 'iso') => void>(() => undefined);
   // 2026-11-12 用户反馈「2D/立体切换不丝滑」：3D 场地组件常驻保活（切回 2D 只隐藏不卸载）。
   // 但一进户外就建 three 场景会拖慢开卡首帧，所以等 2D 先落地 ~0.7s 再后台预热一次。
@@ -1006,7 +1012,8 @@ useEffect(() => {
     if(!sameRecoveryFormValue(layout,initial.layout))throw new Error('当前方案无法完整核对，未生成评审链接。');
     const isCurrent=()=>activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&layoutStore.getState().revision===initial.revision&&sameRecoveryFormValue(layoutStore.getState().layout,layout);
     const check=()=>{if(!isCurrent())throw new Error('活动、楼层或方案已变化；旧评审记录如已写入会保留，链接未复制。');};
-    const encoded = await encodeShareUrl(layout, window.location.origin);
+    // 户外优先：评审链接同时携带当前户外规划，评审页不再只拿到室内楼层。
+    const encoded = await encodeShareUrl(layout, window.location.origin, outdoorFullPlanRef.current);
     check();
     const url = reviewShareHref(window.location.origin, new URL(encoded.url).hash);
     if (!url) throw new Error('评审链接没有生成。');
@@ -1022,6 +1029,15 @@ useEffect(() => {
     check();
     return { url,isCurrent };
   }, [activitySession.isCurrent,sessionToken,floorSession.isCurrent,floorToken]);
+  // G3：右上角分享弹窗的「允许钉评」链接与 Bingo 用同一个生成器，不再各造一套。
+  // 2026-11-18：旧 OutdoorDeliveryPanel 已退役，Bingo 只打开右上角同一份 ShareMenu。
+  // 先生成（写入本机评审标记）再打开，ShareMenu 打开时才能从标记恢复这条链接。
+  const openReviewShare = useCallback(async () => {
+    setOutdoor2DOpen(true);
+    const result = await issueReviewLink();
+    setShareOpenRequest(value => value + 1);
+    return result;
+  }, [issueReviewLink]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
   const publishVersion = useCallback(async () => {
     const snapshot = controller.getSnapshot();
@@ -4475,6 +4491,7 @@ useEffect(() => {
   // 但动作对象是同一份，保证「导出 / 分享 / 发布」读的是同一个方案快照。
   const shareActions: ShareMenuActions = {
     onIssueReviewLink: issueReviewLink,
+    onOpenBingo: () => { setWorkbenchMode('layout'); showAgent('bingo'); },
     onPublish: publishVersion,
     onListShares: listProjectShares,
     onRevokeShare: revokeProjectShare,
@@ -4591,7 +4608,7 @@ useEffect(() => {
         onSelectMode: selectWorkbenchMode,
         onOpenReview: () => openBusinessWorkspace('review'),
         onOpenDelivery: () => openBusinessWorkspace('delivery'),
-        onIssueReviewLink: issueReviewLink,
+        onIssueReviewLink: openReviewShare,
         onFit: fitToRoom,
         onOpenReference: () => businessToolsRef.current?.openReference(),
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
@@ -4897,7 +4914,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})} {...(outdoor2DOpen || outdoor3dTakeover ? { bingoSlot: <div id="outdoor-panel-host-info" style={{ order: -1, position: 'relative', flex: '0 0 auto', maxHeight: '38vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' }} /> } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} onApply={scopedApply} onPlaceScene={placeScenePreset} workflow={spaceWorkflow} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} onApply={scopedApply} onPlaceScene={placeScenePreset} workflow={spaceWorkflow} onPickScan={venue => mappedWorkspace ? previewProjectScene(venue.assetId, venue.name) : applyRealVenue(venue, true)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -4911,6 +4928,8 @@ useEffect(() => {
             if (id) selectOnly(id, { keepPanel: true });
           }}>
           <ShortcutCoach mode={shortcutCoachMode} enabled={isActive} />
+          {/* 规划信息从 Bingo 迁回画布：Bingo 只留「我的完成 / 对方的修改」，四页签不再占用审校台。 */}
+          {(outdoor2DOpen || outdoor3dTakeover) ? <div id="outdoor-panel-host-info" style={{ position: 'absolute', top: 12, left: 12, width: 320, maxHeight: '58vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px', zIndex: 40 }} /> : null}
           {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
               供全屏 OutdoorPlan3D 的左键物件手势用（canvasApiRef → pointerFromPlan 管线）。
               2026-11-12 统一右轨（用户拍板）：「发布」2D/3D 都固定在右轨顶部（tool-share），
@@ -5079,6 +5098,8 @@ useEffect(() => {
                   onWalkExit={() => setOutdoorWalkActive(false)}
                   viewMode={outdoorWalkView}
                   onCycleView={cycleOutdoorWalkView}
+                  walkRoleUrl={walkRoleUrl}
+                  walkRoleName={walkRole.name}
                 />
               </div>
             )}

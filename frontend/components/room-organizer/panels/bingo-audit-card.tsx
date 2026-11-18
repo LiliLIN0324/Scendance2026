@@ -1,17 +1,23 @@
 'use client';
 
 import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, MessageSquare, ShieldCheck, Trash2 } from '@/components/solid-icons';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {inspectReviewFeedbackReceipt,type ReceiptPin} from '@/components/review-share-page/review-feedback-receipt';
 import {importReviewFeedback,readImportedReviewFeedback} from '@/components/review-share-page/review-feedback-storage';
 import {readShareHash} from '../lib/share';
 import { violationCodeLabel, type BingoScore } from '../../../lib/bingo-score';
 import {
+  countOpenFeedbackPins,
   feedbackSummaryLabel,
   formatFeedbackTime,
+  mergeBingoCloudPins,
   readBingoPlanFeedback,
+  reviewPlanKeysForBingoPlan,
   type BingoPlanFeedback,
 } from '../lib/bingo-feedback';
+import { listReviewPinsCloud } from '../../review-share-page/review-pins-cloud';
+import type { ReviewPin } from '../lib/review-pins';
+import { requestOutdoorPlanPointFocus } from '../lib/outdoor-plan-issues';
 import {
   clearBingoReceipt,
   emptyBingoSnapshot,
@@ -20,6 +26,7 @@ import {
   type BingoPlan,
   type BingoSnapshot,
 } from '../lib/bingo-status';
+import { getOutdoorPlanIssues, requestOutdoorPlanIssueFocus, subscribeOutdoorPlanIssues } from '../lib/outdoor-plan-issues';
 import { useGenerationOutcome } from '../lib/use-generation-outcome';
 import {REVIEW_MARK_CHANGED_EVENT} from '../lib/review-share';
 import {useLayoutStore} from '../hooks/use-layout-store';
@@ -48,24 +55,29 @@ export interface BingoAuditCardProps {
   rounds?: number;
 }
 
-const CHECKLIST_LABELS = ['椅子分布', '画布中线附近', '矩形画布边界', '已建模内墙'] as const;
-
 function formatDuration(ms: number | undefined): string {
   if (ms === undefined || Number.isNaN(ms)) return '—';
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** 经典案例记录必须与真甲方评审分开：只认标题或链接里的明确标记。 */
+function isDemoPlan(plan: BingoPlan): boolean {
+  const hay = `${plan.title}\n${plan.clientHref}`.toLowerCase();
+  return /案例|演示|scotiabank/.test(hay) || /(^|[\/\-_])demo([\/\-_?]|$)/.test(hay);
+}
+
 /**
- * Bingo 的审计位：3.0.0 左栏「收甲方反馈」并进对话后留下的只读记录。
- * 只读本机评审钉与完成回执，不在这里发链接、写评论或完成评审。
+ * Bingo 的审校位：创作者视角的「我的完成 + 对方的修改」。
  *
- * 第 7 批收尾：新增体检分区（score 注入时）、Z8 完成卡字段、被拒件人话列表、页脚常驻 disclaimer。
+ * 只读本机评审钉、完成回执与画布发布的问题清单；发链接走右上角分享，
+ * 这里不再并列体检 / 评审 / 钉评三颗按钮，也不再承担全案统计与图例。
  */
 export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | null {
   const { score, durationMs, rounds, scopeKey, isCurrent } = props;
   const [snapshot, setSnapshot] = useState<BingoSnapshot>(emptyBingoSnapshot);
   const { outcome } = useGenerationOutcome();
+  const issues = useSyncExternalStore(subscribeOutdoorPlanIssues, getOutdoorPlanIssues, getOutdoorPlanIssues);
   const isMaterial=(item:unknown)=>!item||typeof item!=='object'||!isStructuralMarker(item as FurnitureItem);
   const visibleOutcome=outcome?{...outcome,placed:outcome.placed.filter(isMaterial),removed:outcome.removed?.filter(isMaterial),
     refused:outcome.refused.filter(entry=>isMaterial(entry.item)),skipped:outcome.skipped.filter(entry=>isMaterial(entry.item))}:null;
@@ -106,9 +118,9 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   const hasAuditRecord = snapshot.plans.length > 0 || Boolean(snapshot.receipt);
   // 完成卡只在真的有完成卡字段时才出现：光有 Outcome 不开块，
   // 否则「改了件数」会和上面的「本次结果」摘要重复说同一件事。
-  const hasZ8 = Boolean(effectiveScore) || effectiveRounds !== undefined || effectiveDuration !== undefined
-;
-  if (!hasAuditRecord && !hasZ8) return null;
+  const hasZ8 = Boolean(effectiveScore) || effectiveRounds !== undefined || effectiveDuration !== undefined;
+  if (!hasAuditRecord && !hasZ8 && issues.length === 0) return null;
+
   const onClearReceipt = () => {
     clearBingoReceipt(window.localStorage);
     sync();
@@ -116,58 +128,113 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
 
   const placedCount = visibleOutcome?.placed.length ?? 0;
   const refusedList = visibleOutcome?.refused ?? [];
+  const plansWithFeedback = snapshot.plans.map(plan => ({ plan, feedback: readBingoPlanFeedback(plan) }));
+  const pinCount = plansWithFeedback.reduce((sum, entry) => sum + entry.feedback.pinCount, 0);
+  const openPinCount = plansWithFeedback.reduce((sum, entry) => sum + countOpenFeedbackPins(entry.feedback), 0);
+  // 系统问题只算能落到这张图上、且还没收尾的；被拒件也是我要处理的事。
+  const todoCount = issues.length + refusedList.length;
+  const statusText = todoCount > 0
+    ? `还剩 ${todoCount} 件我要收尾${openPinCount > 0 ? ` · 对方提了 ${openPinCount} 条修改` : ''}`
+    : openPinCount > 0
+      ? `我要收尾的已处理完 · 对方提了 ${openPinCount} 条修改`
+      : '我要收尾的已处理完 · 还没有对方的修改';
 
-  return <section className="ap-card ap-audit" aria-label="系统体检与评审记录">
-    <span className="ap-blocked-stamp"><ShieldCheck size={12} aria-hidden="true"/>体检 · 评审</span>
+  return <section className="ap-card ap-audit" aria-label="我的完成与对方的修改">
+    <span className="ap-blocked-stamp"><ShieldCheck size={12} aria-hidden="true"/>审校</span>
 
-    {effectiveScore && <><h4>{outcome && !outcomeCurrent ? '历史系统体检记录' : '系统体检结果'}</h4><p className="ap-audit-scope">仅粗略检查已建模物件与画布；现场净宽、出入口、消防和规范验收均未核验。修改场景后请重新体检。</p>
-      <div className="ap-audit-score" data-testid="bingo-score">
-        <p>几何检查：待核验{effectiveScore.failedCount > 0 ? `；${outcome && !outcomeCurrent ? '上次快照' : ''}发现 ${effectiveScore.failedCount} 件需关注` : ''}</p>
-        <ul>{CHECKLIST_LABELS.map(label=><li key={label}>{label}：待核验</li>)}</ul>
-      </div>
-    </>}
+    <h4>我的完成与对方的修改</h4>
+    <p className="ap-audit-status" data-testid="bingo-review-status">{statusText}</p>
 
-    {outcome && <p className="ap-audit-outcome" role="status"><strong>{outcomeCurrent?'本次结果：':'历史操作结果（当前布局已变化或无法核对）：'}</strong>{summary}</p>}
+    <section aria-label="我的完成" className="ap-audit-group">
+      <h4>我的完成</h4>
 
-    {hasZ8 && <div className="ap-audit-z8" data-testid="bingo-z8">
-      <div className="ap-audit-z8-row">
-        <span className="ap-audit-z8-key">改动件数</span>
-        <span className="ap-audit-z8-val">放了 {placedCount} 件</span>
-      </div>
-      {effectiveRounds !== undefined && (
-        <div className="ap-audit-z8-row">
-          <span className="ap-audit-z8-key">思考轮数</span>
-          <span className="ap-audit-z8-val">{effectiveRounds} 轮</span>
+      {effectiveScore && <>
+        <p className="ap-audit-score-title">系统体检结果</p>
+        <div className="ap-audit-score" data-testid="bingo-score">
+          <p>几何检查：{effectiveScore.itemCount === 0 ? '还没有可检查的已建模物件' : effectiveScore.failedCount > 0 ? `${effectiveScore.failedCount} 件待处理` : '已通过'}</p>
+          <p className="ap-audit-scope">只核对已建模几何；消防、无障碍与现场条件需另行核验。</p>
         </div>
-      )}
-      {effectiveDuration !== undefined && (
-        <div className="ap-audit-z8-row">
-          <span className="ap-audit-z8-key">{durationLabel}</span>
-          <span className="ap-audit-z8-val">{formatDuration(effectiveDuration)}</span>
-        </div>
-      )}
-      <div className="ap-audit-z8-row"><span className="ap-audit-z8-key">后续建议</span><span className="ap-audit-z8-val">请核对实际出入口、通行净宽及现场条件，消防与无障碍要求需另行核验。</span></div>
-    </div>}
+      </>}
 
-    {refusedList.length > 0 && <div className="ap-audit-refused" data-testid="bingo-refused">
-      <p className="ap-audit-refused-title">被拒件（{refusedList.length}）</p>
-      <ul>
-        {refusedList.map((entry, index) => (
-          <li key={index} className="ap-audit-refused-row">
-            <code className="ap-audit-refused-id">{String((entry.item as { id?: unknown }).id ?? index)}</code>
-            <span className="ap-audit-refused-reason">{violationCodeLabel(entry.code)}</span>
-          </li>
+      {outcome && <p className="ap-audit-outcome" role="status"><strong>{outcomeCurrent?'本次结果：':'历史操作结果（当前布局已变化或无法核对）：'}</strong>{summary}</p>}
+
+      {hasZ8 && <div className="ap-audit-z8" data-testid="bingo-z8">
+        <div className="ap-audit-z8-row">
+          <span className="ap-audit-z8-key">改动件数</span>
+          <span className="ap-audit-z8-val">放了 {placedCount} 件</span>
+        </div>
+        {effectiveRounds !== undefined && (
+          <div className="ap-audit-z8-row">
+            <span className="ap-audit-z8-key">思考轮数</span>
+            <span className="ap-audit-z8-val">{effectiveRounds} 轮</span>
+          </div>
+        )}
+        {effectiveDuration !== undefined && (
+          <div className="ap-audit-z8-row">
+            <span className="ap-audit-z8-key">{durationLabel}</span>
+            <span className="ap-audit-z8-val">{formatDuration(effectiveDuration)}</span>
+          </div>
+        )}
+        <div className="ap-audit-z8-row"><span className="ap-audit-z8-key">后续建议</span><span className="ap-audit-z8-val">请核对实际出入口、通行净宽及现场条件，消防与无障碍要求需另行核验。</span></div>
+      </div>}
+
+      {refusedList.length > 0 && <div className="ap-audit-refused" data-testid="bingo-refused">
+        <p className="ap-audit-refused-title">被拒件（{refusedList.length}）</p>
+        <ul>
+          {refusedList.map((entry, index) => (
+            <li key={index} className="ap-audit-refused-row">
+              <code className="ap-audit-refused-id">{String((entry.item as { id?: unknown }).id ?? index)}</code>
+              <span className="ap-audit-refused-reason">{violationCodeLabel(entry.code)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>}
+
+      <div aria-label="待收尾的系统问题">
+        {issues.length === 0
+          ? <p className="ap-audit-empty">当前没有系统问题。</p>
+          : <ol className="ap-audit-pins">
+            {issues.slice(0, 20).map(issue => <li key={issue.key}>
+              <button type="button" className="ap-audit-link" onClick={() => requestOutdoorPlanIssueFocus(issue.key)}>
+                {issue.text}
+              </button>
+            </li>)}
+          </ol>}
+        {issues.length > 20 && <p className="ap-audit-more">还有 {issues.length - 20} 条，在画布上逐条核对。</p>}
+      </div>
+    </section>
+
+    <section aria-label="对方的修改" className="ap-audit-group">
+      <h4>对方的修改</h4>
+      {pinCount === 0
+        ? <p className="ap-audit-empty">还没有对方的修改</p>
+        : plansWithFeedback.filter(entry => entry.feedback.pins.length > 0).map(({ plan, feedback }) => (
+          <article key={`${plan.shareId}-${plan.markedAt}`} className="ap-audit-plan">
+            <p className="ap-audit-meta">
+              <strong>{plan.title}</strong>
+              {isDemoPlan(plan) && <span className="ap-audit-badge">案例演示</span>}
+              <span>{feedbackSummaryLabel(feedback, false)}</span>
+            </p>
+            <ol className="ap-audit-pins">
+              {feedback.pins.map(pin => <li key={pin.id}>
+                <p className="ap-audit-pin-head">
+                  <strong>{pin.author}</strong>
+                  {pin.pinStatus && <span className={`ap-audit-pin-status is-${pin.pinStatus}`}>{pin.pinStatus === 'resolved' ? '已处理' : '待处理'}</span>}
+                  <time dateTime={pin.createdAt || undefined}>{formatFeedbackTime(pin.createdAt) || '时间未记录'}</time>
+                </p>
+                {pin.placement && <p className="ap-audit-place">{pin.placement}</p>}
+                <p>{pin.body}</p>
+              </li>)}
+            </ol>
+          </article>
         ))}
-      </ul>
-    </div>}
+    </section>
 
-    {hasAuditRecord && <section aria-label="本机评审记录">
-      <h4>本机评审记录</h4>
-      <p>对方的意见不会自动同步。请对方导出反馈文件，再在对应分享记录中导入。</p>
-      <p>请核对反馈来源和身份；文件所述完成状态不代表身份认证或安全验收。</p>
+    {hasAuditRecord && <details className="ap-audit-records">
+      <summary>本机评审记录</summary>
       {snapshot.receipt && <><button type="button" className="ap-icon-btn ap-audit-clear" aria-label="清回执" title="清回执" onClick={onClearReceipt}><Trash2 size={14} aria-hidden="true"/></button><p className="ap-audit-receipt"><Check size={14} aria-hidden="true"/>本机旧回执，未核对当前版本 · <time dateTime={snapshot.receipt.at}>{formatBingoTime(snapshot.receipt.at) || snapshot.receipt.at}</time></p></>}
       {snapshot.plans.map((plan, index) => <AuditPlan key={`${plan.shareId}-${index}`} plan={plan} ordinal={index + 1} scopeKey={scopeKey} isCurrent={isCurrent}/>)}
-    </section>}
+    </details>}
 
     <p className="ap-audit-disclaimer">我会出错，也可能破坏你的设计。请在交付前亲自巡场一遍。</p>
   </section>;
@@ -219,7 +286,18 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
     finally{if(valid()&&sequence.current===id)setPending(false);}
   }
 
-  const feedback = readBingoPlanFeedback(plan);
+  // G4：远端钉异步并进本机汇总，跨设备评审也能在 Bingo 里看到。
+  const [cloudPins, setCloudPins] = useState<ReviewPin[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const keys = reviewPlanKeysForBingoPlan(plan).filter(key => key.startsWith('review-v2:'));
+    void Promise.all(keys.map(key => listReviewPinsCloud(key))).then(results => {
+      if (!alive) return;
+      setCloudPins(results.flatMap(result => result.ok ? result.value : []));
+    });
+    return () => { alive = false; };
+  }, [plan.projectKey, plan.shareId, plan.reviewPlanKey, plan.clientHref]);
+  const feedback = mergeBingoCloudPins(readBingoPlanFeedback(plan), cloudPins);
   const [open, setOpen] = useState(feedback.pinCount > 0);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
@@ -235,6 +313,7 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
     <button type="button" className="ap-audit-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
       {open ? <ChevronDown size={14} aria-hidden="true"/> : <ChevronRight size={14} aria-hidden="true"/>}
       <span className="ap-audit-title">{plan.title}</span>
+      {isDemoPlan(plan) && <span className="ap-audit-badge">案例演示</span>}
       <span className="ap-audit-badge">记录 {ordinal}</span>
     </button>
     <p className="ap-audit-meta">分享于 {formatBingoTime(plan.markedAt) || '时间待核对'}</p>
@@ -276,6 +355,9 @@ function AuditPins({ feedback }: { feedback: BingoPlanFeedback }): JSX.Element {
       </p>
       {pin.placement && <p className="ap-audit-place">{pin.placement}</p>}
       <p>{pin.body}</p>
+      {typeof pin.x === 'number' && typeof pin.z === 'number' && (
+        <button type="button" className="ap-audit-link" aria-label={`定位意见「${pin.body}」`} onClick={() => requestOutdoorPlanPointFocus(pin.x as number, pin.z as number)}>定位</button>
+      )}
       {pin.replies.length > 0 && <ul>
         {pin.replies.map((reply, index) => <li key={`${pin.id}-${index}`}>
           <p className="ap-audit-pin-head"><strong>{reply.author}</strong>{reply.createdAt && <time dateTime={reply.createdAt}>{formatFeedbackTime(reply.createdAt)}</time>}</p>

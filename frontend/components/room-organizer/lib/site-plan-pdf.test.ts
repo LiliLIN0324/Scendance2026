@@ -1,6 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest';
 import { buildDeckPages, deckCaption, deckLegendLines } from './site-plan-pdf';
-import { encodeSnapshot, decodeSnapshot } from './site-plan-share';
 import type { SitePlanSnapshot } from '../../../../supabase/functions/_shared/site-plan';
 
 function sampleSnapshot(): SitePlanSnapshot {
@@ -112,24 +111,6 @@ describe('pdf deck pages (H5-b)', () => {
     const caption = deckCaption(5, new Date('2026-11-10T15:00:00'));
     expect(caption).toContain('r5');
     expect(caption).toContain('OpenStreetMap');
-  });
-});
-
-describe('share link snapshot codec (H5-b)', () => {
-  it('round-trips a snapshot through base64url without loss', () => {
-    const snapshot = sampleSnapshot();
-    const encoded = encodeSnapshot(snapshot);
-    expect(encoded).toMatch(/^[A-Za-z0-9\-_]+$/);
-    const decoded = decodeSnapshot(encoded);
-    expect(decoded).not.toBeNull();
-    expect(decoded!.revision).toBe(3);
-    expect(decoded!.data.zones[0].name).toBe('观众区');
-    expect(decoded!.data.facilities).toHaveLength(1);
-  });
-
-  it('rejects corrupted payloads safely', () => {
-    expect(decodeSnapshot('!!!not-base64!!!')).toBeNull();
-    expect(decodeSnapshot('eyJub3QiOiJhIHNuYXBzaG90In0')).toBeNull(); // 合法 b64 但 schema 不符。
   });
 });
 

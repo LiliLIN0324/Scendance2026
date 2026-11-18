@@ -1,0 +1,14 @@
+material_id,field,value,unit,source_type,source_url,retrieved,confidence,note
+tent-3x3,重量,29,kg,vendor-page,https://www.yiwugo.com/product/detail/928760818.html,2026-11-18,单款商家页面（未核）,3×3 防积水帐篷单款；铁架/铝架与布料克重差异可达一倍
+tent-3x3,展开高度,3.2,m,vendor-page,https://kunming.11467.com/info/6025550.htm,2026-11-18,同系列不同规格,该页为 3×6 加强型；3×3 未单独标高度，按同系列上限记
+water-barrier-1.25,宽,1.25,m,vendor-page,https://www.cdgtw.net/sell/cb1862960.html,2026-11-18,单款商家页面（未核）,三孔水马 1250×650 mm
+water-barrier-1.25,深,0.45,m,vendor-page,https://www.iotworld.com.cn/html/IOTProduct/201905/20376.shtml,2026-11-18,替代值（偏保守）,该页只给 1.5 m 规格下宽 450 mm；1.25 规格下宽未标
+water-barrier-1.25,高,0.65,m,vendor-page,https://www.cdgtw.net/sell/cb1862960.html,2026-11-18,单款商家页面（未核）,与水马常见 650 mm 高度一致
+water-barrier-1.25,空重,4,kg,vendor-page,https://www.cdgtw.net/sell/cb1862960.html,2026-11-18,单款商家页面（未核）,未注水状态
+water-barrier-1.25,注水后重量,120,kg,vendor-page,https://www.cdgtw.net/sell/cb1862960.html,2026-11-18,单款商家页面（未核）,另有 250/500 kg 大规格，按项目选型
+water-barrier-1.25,部署人数,2,人,vendor-page,https://www.iotworld.com.cn/html/IOTProduct/201905/20376.shtml,2026-11-18,单款商家页面（未核）,商家称两人可完成安装拆迁
+portable-toilet,宽,1.1,m,vendor-page,https://zyp061698.cn.b2b168.com/video/29501.html,2026-11-18,单款商家页面（未核）,单体 1.1×1.1×2.1 m
+portable-toilet,深,1.1,m,vendor-page,https://zyp061698.cn.b2b168.com/video/29501.html,2026-11-18,单款商家页面（未核）,同上
+portable-toilet,高,2.1,m,vendor-page,https://zyp061698.cn.b2b168.com/video/29501.html,2026-11-18,单款商家页面（未核）,同上
+toilet-2.4x1.2,高,2.6,m,vendor-page,https://rec.suning.com/show/mfind/0071586204/000000012436722784.html,2026-11-18,单款商家页面（未核）,另一款 2.4×1.3×2.6 m；与内置 2.4×1.2 深度差 0.1 m
+toilet-2.4x1.2,多联规格,3.0×6.0×2.8,m,vendor-page,https://shenzhen.11467.com/info/16244381.htm,2026-11-18,单款商家页面（未核）,景区多联款；说明单体与连体不可混算

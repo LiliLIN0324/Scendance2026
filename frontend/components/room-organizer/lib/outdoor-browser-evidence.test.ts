@@ -6,12 +6,14 @@ import {
   BROWSER_EVIDENCE,
   CASE_IDS,
   EVIDENCE_AS_OF,
+  UNSET_ROUND_AS_OF,
   browserEvidenceFrom,
   defaultLedger,
   evidenceAsOf,
   formatReleaseStatusCard,
   ledgerFromEvidence,
   statusCardSnapshot,
+  summarizeLedger,
   type WalkthroughRecord,
 } from './outdoor-release-status-card';
 
@@ -91,16 +93,45 @@ describe('浏览器证据可注入', () => {
     expect(derived[5]).toBe('none');
   });
 
+  it('空记录（这一轮还没走查）回落到对照表快照，不是一片「无证据」', () => {
+    // 2026-11-18：真实链路的空记录本是 `{seen:{}}`（不是 undefined），
+    // 旧写法只在 undefined 时回落，于是界面里 11 条全成「无证据」，
+    // 而卡片日期还写着 2026-11-17 第二轮——日期与证据跨了两轮。
+    const derived = browserEvidenceFrom({ seen: {} });
+    for (const id of CASE_IDS) expect(derived[id]).toBe(BROWSER_EVIDENCE[id]);
+    // 走了这一轮（有记录）就整份按记录替换，不拿上一轮顶替。
+    const marked = browserEvidenceFrom({ seen: { 3: 'pass' } });
+    expect(marked[3]).toBe('pass');
+    expect(marked[1]).toBe('none');
+  });
+
+  it('空记录回落时卡片与台账同源：浏览器列不再是 11 条全无证据', () => {
+    const ledger = defaultLedger({ seen: {} });
+    expect(ledger.filter((row) => row.browser === 'partial').length).toBe(9);
+    expect(ledger.filter((row) => row.browser === 'none').length).toBe(2);
+    // 全绿仍是 0：partial 不算过，云端一列也还没有实证。
+    expect(summarizeLedger(ledger).allGreen).toBe(0);
+  });
+
   it('记录里多出的号（如 12）被丢掉，不会凭空长出一行台账', () => {
     const ledger = ledgerFromEvidence([2], { seen: { 12: 'pass' } });
     expect(ledger.map((row) => row.id)).toEqual([...CASE_IDS]);
     expect(ledger.some((row) => row.id === 12)).toBe(false);
   });
 
-  it('走查日期跟着记录走；写成空白就回落到常量', () => {
-    expect(evidenceAsOf({ asOf: '2026-11-18 走查第三轮', seen: {} })).toBe('2026-11-18 走查第三轮');
+  it('日期不跨轮：标过证据没填日期就明说未填，不拿上一轮顶替', () => {
+    expect(evidenceAsOf({ seen: { 2: 'pass' }, asOf: '2026-11-18 走查第三轮' })).toBe('2026-11-18 走查第三轮');
+    expect(evidenceAsOf({ seen: { 2: 'pass' } })).toBe(UNSET_ROUND_AS_OF);
+    // 只填了日期、一条都没标：浏览器列仍是快照，日期也必须跟快照一致。
+    expect(evidenceAsOf({ seen: {}, asOf: '2026-11-18 走查第三轮' })).toBe(EVIDENCE_AS_OF);
     expect(evidenceAsOf({ asOf: '   ', seen: {} })).toBe(EVIDENCE_AS_OF);
     expect(evidenceAsOf()).toBe(EVIDENCE_AS_OF);
+  });
+
+  it('标了证据却没填日期时，卡片不再写上一轮的日期', () => {
+    const text = card({ seen: { 2: 'pass' } });
+    expect(text).toContain(UNSET_ROUND_AS_OF);
+    expect(text).not.toContain(EVIDENCE_AS_OF);
   });
 
   it('快照的浏览器三档升序、合起来正好覆盖 11 条（不重不漏）', () => {

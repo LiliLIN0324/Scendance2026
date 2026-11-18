@@ -13,6 +13,7 @@ import { createSharingExample } from '../room-organizer/lib/sharing-example';
 import { parseStoredLayout } from '../room-organizer/lib/schema';
 import { isShareHash, readShareHash, type ReadPlanShareIdentity } from '../room-organizer/lib/share';
 import type { RoomLayout } from '../room-organizer/lib/types';
+import type { SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 
 export const REVIEW_SHARE_PATH = '/review/';
 
@@ -36,6 +37,8 @@ export interface LoadedReviewPlan {
   notice: string;
   /** 链接绑定的交付版本身份（SC-10）；旧链接与本机方案没有这一段。 */
   identity: ReadPlanShareIdentity | null;
+  /** 链接携带的户外规划；旧链接与本机方案没有这一段。 */
+  outdoorPlan?: SitePlanData | null | undefined;
 }
 
 export type LoadReviewPlanResult =
@@ -94,6 +97,7 @@ export async function loadReviewPlan(input: {
         planKey: `link:${fnv1a(input.hash)}`,
         notice: REVIEW_PLAN_NOTICES.link,
         identity: decoded.identity,
+        outdoorPlan: decoded.outdoor,
       },
     };
   }

@@ -45,6 +45,12 @@ export interface ReleaseStatusInput {
 export const EVIDENCE_AS_OF = '2026-11-17 正式站走查第二轮';
 
 /**
+ * 本轮标过证据、却没填走查日期时的显式标注。
+ * 不能拿上一轮的日期顶替——日期与证据跨轮正是 2026-11-18 修的那个矛盾。
+ */
+export const UNSET_ROUND_AS_OF = '本轮走查，日期未填';
+
+/**
  * 每条用例目前在「真实浏览器」这一列有没有证据（照 `2026-11-16-outdoor-evidence-matrix.md` 拄录）。
  * `none` = 一行实证也没有；`partial` = 有部分证据但仍不构成通过。
  */
@@ -74,18 +80,32 @@ export type BrowserEvidence = 'none' | 'partial' | 'pass';
 export interface WalkthroughRecord {
   /** 走查日期；不写就沿用 `EVIDENCE_AS_OF`。 */
   asOf?: string;
-  /** 逐条状态。没写的号一律当 `none`——没记录就是没证据，不默认给 partial。 */
+  /**
+   * 逐条状态。**这一轮标过什么就以什么为准**，没写的号一律当 `none`——
+   * 没记录就是没证据，不默认给 partial。
+   * 例外：整份记录一条都没标（`seen` 为空）时，视为「这一轮还没走查」，
+   * 整列回落到对照表快照（见 `browserEvidenceFrom`）。
+   */
   seen: Readonly<Record<number, BrowserEvidence>>;
 }
 
 /**
  * 把走查记录摊成「编号 → 三态」。
- * 没传记录就返回 `BROWSER_EVIDENCE`（照对照表抄的那份），这样老调用点行为不变。
+ *
+ * 两条口径（2026-11-18 修）：
+ * 1) **没有记录**（没传记录，或记录里一条都没标）→ 回落到 `BROWSER_EVIDENCE`——
+ *    也就是对照表上那一列真实走查（2026-11-17 第二轮）的结果。
+ *    旧写法只在 `record` 为 `undefined` 时回落，可实际链路
+ *    `loadBook() → bookToRecord()` 永远返回一个对象（空记录本也是 `{seen:{}}`），
+ *    于是真实界面里 11 条全成「无证据」，而卡片日期又写着那一轮的日期——
+ *    **日期与证据跨了两轮，自相矛盾**。
+ * 2) **有记录**（哪怕只标了一条）→ 整份按记录替换，没提到的号一律 `none`，
+ *    不拿上一轮的结果顶替（这一轮没看就是没看）。
  */
 export function browserEvidenceFrom(
   record?: WalkthroughRecord,
 ): Readonly<Record<number, BrowserEvidence>> {
-  if (!record) return BROWSER_EVIDENCE;
+  if (!record || Object.keys(record.seen).length === 0) return BROWSER_EVIDENCE;
   const out: Record<number, BrowserEvidence> = {};
   for (const id of CASE_IDS) {
     out[id] = record.seen[id] ?? 'none';
@@ -93,9 +113,15 @@ export function browserEvidenceFrom(
   return out;
 }
 
-/** 走查日期：有记录用记录的，没有就用常量。 */
+/**
+ * 走查日期：
+ * - 本轮一条都没标（或没有记录）→ 用快照日期，因为浏览器列显示的就是快照；
+ * - 本轮标过 → 用本轮填的日期；没填就明说「日期未填」，不回落到上一轮。
+ */
 export function evidenceAsOf(record?: WalkthroughRecord): string {
-  return record?.asOf?.trim() || EVIDENCE_AS_OF;
+  const hasSeen = !!record && Object.keys(record.seen).length > 0;
+  if (!hasSeen) return EVIDENCE_AS_OF;
+  return record?.asOf?.trim() || UNSET_ROUND_AS_OF;
 }
 
 /**

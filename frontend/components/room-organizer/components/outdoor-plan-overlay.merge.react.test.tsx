@@ -8,11 +8,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { ComponentProps } from "react";
+import { createRef, type ComponentProps } from "react";
 import type { OutdoorAgentBridge, OutdoorMapEditHighlight } from "../lib/outdoor-agent-contract";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import type { BackendSession } from "@/lib/backend-session";
-import Overlay from "./outdoor-plan-overlay";
+import Overlay, { type OutdoorPlanOverlayHandle } from "./outdoor-plan-overlay";
 import { createStarterOutdoorPlan, readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import {
   readPlanGroundSource,
@@ -83,11 +83,6 @@ vi.mock("./plan-place-search", () => ({
     placeSearch.props = props;
     return null;
   },
-}));
-vi.mock("./outdoor-delivery-panel", () => ({
-  OutdoorDeliveryPanel: (props: { handlers: { onExportCsv: () => void } }) => (
-    <button onClick={props.handlers.onExportCsv}>merge csv</button>
-  ),
 }));
 vi.mock("../lib/site-plan-csv", () => ({ downloadPlanCsv: state.csv }));
 beforeEach(() => {
@@ -253,12 +248,13 @@ it("主线缺省高德与已有图源偏好保留，同时单位导出和Agent�
     onViewChange: onView,
     onPlanChange: onPlan,
   };
-  render(<Overlay {...props} />);
+  const ref = createRef<OutdoorPlanOverlayHandle>();
+  render(<Overlay {...props} ref={ref} />);
   expect(state.canvas?.source).toBe("amap-satellite");
   expect(readPlanGroundSource()).toBe("amap-satellite");
   act(() => state.bridge!.setView!("3d"));
   expect(onView).toHaveBeenCalledWith("3d");
-  fireEvent.click(screen.getByText("merge csv"));
+  act(() => ref.current?.exportCsv());
   expect(state.csv.mock.calls[0]?.[2]).toBe("ft");
   expect(JSON.stringify(state.bridge!.getPlan())).toBe(before);
   act(() => {

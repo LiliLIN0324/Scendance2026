@@ -118,7 +118,7 @@ import { proposeOutdoorStyle } from "../lib/outdoor-style-preview";
 import type { StyleBundle } from "../lib/style-bundles";
 import { fetchRoadNetwork } from "../lib/road-network";
 import { checkBoundaryRing } from "../lib/site-plan-editing";
-import { buildRouteProposal, roadFetchPlanForBoundary } from "../lib/route-proposal";
+import { buildRouteProposal, roadFetchPlanForBoundary, routeIntentNote } from "../lib/route-proposal";
 import { buildSubEntranceProposal } from "../lib/sub-entrance";
 import {
   parseShorelineDemand,
@@ -1560,6 +1560,9 @@ export function useOutdoorAgentWorkflow(input: {
           boundary: plan.boundary,
           anchor: plan.anchor,
           roads: roads.roads,
+          // 2026-11-18（#3）：把这一轮的原话接进选路口径——「改走仁和路、别沿湖滨路走」
+          // 这类改口要能落到提案上，而不是照旧按等级与长度挑同一条路。
+          request: message,
         });
         if (!proposal)
           throw new Error(
@@ -1587,7 +1590,9 @@ export function useOutdoorAgentWorkflow(input: {
           "主要流线与待核对入口",
           job,
           [
-            "这些线是按道路等级挑的到场候选；哪个口真能走，等你核对后写进规划。",
+            // 2026-11-18（#3）：按了原话改选路的，卡上要写清改了什么；没改就还是老口径。
+            routeIntentNote(proposal.intent) ??
+              "这些线是按道路等级挑的到场候选；哪个口真能走，等你核对后写进规划。",
             "界外段是到场流线候选（怎么来的），与边界的交点即待核对入口；写入后可画布编辑。",
           ],
         );
