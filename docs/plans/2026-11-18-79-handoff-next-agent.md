@@ -58,10 +58,10 @@
 **状态（2026-11-18 第四轮）**：已补。规范域名带登录态重跑 #2 选择路径：无 `scene-api` project 读取、无方案写请求；选中归属以 `scendance-place-recent-v1` 首条 id/坐标回读。证据 `docs/evidence/79/02/2026-11-18-case02-selection-readback.md`。
 备注：正式站检索除高德外还触发天地图 `tdt-area` 与轮廓提示 `place-shape-hints`，候选为多源拼装。
 
-## D. 线上构建复核：本轮已闭合（留档，不是待办）
+## D. 线上构建复核：第五轮已闭合（留档，不是待办）
 
-- 结论与方法见 `docs/evidence/79/00/2026-11-18-live-build-review.md`：c778 主包含三处修复标记。
-- 下一轮若复核构建：先核对当前 runtime 哈希（别名会轮换），用完整超时文案 `服务商这次没在时限内返回` 作 #6 标记，别单搜「响应超时」（会撞上生成服务商的旧文案）；线上不发 source map，标识符被压缩，只能按中文文案 + 分支结构核对。
+- c778 构建核对见 `docs/evidence/79/00/2026-11-18-live-build-review.md`；第五轮按 `performance` 真实加载清单补扫了轮换后的 `572c7ae8` / `ff25e07` 构建，三处修复标记在户外组织器懒加载包 `572.99434d…` 内逐条命中，见 `docs/evidence/79/00/2026-11-18-live-build-review-round5.md`。
+- 下一轮若复核构建：先核对当前 runtime 哈希（别名会轮换），用完整超时文案 `服务商这次没在时限内返回` 作 #6 标记，别单搜「响应超时」（会撞上生成服务商的旧文案）；懒加载 chunk 是 dot 分隔命名，清单以 `performance.getEntriesByType('resource')` 为准，别只按 HTML `<script>` 或 dash 分隔正则解析。线上不发 source map，标识符被压缩，只能按中文文案 + 分支结构核对。
 
 ## E. 走查记录本落盘 — 第四轮已闭合（取做法 2）
 

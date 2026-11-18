@@ -2509,7 +2509,17 @@ export default function OutdoorPlan3D({
             ? {
                 areaM2: walkAudit.areaM2,
                 ratio: walkAudit.reachableRatio,
-                unreachable: walkAudit.unreachableFacilities.length,
+                // 应用侧实际拿到的 plan：用于排查“注入草稿”与“应用 plan”是否同一份。
+                planFacilities: (Array.isArray(plan.facilities) ? plan.facilities : []).map((f) => ({
+                  name: f.name, w: f.size?.width ?? null, d: f.size?.depth ?? null, x: f.position?.x ?? null, y: f.position?.y ?? null,
+                })),
+                routeCount: Array.isArray(plan.routes) ? plan.routes.length : 0,
+                designScopeCount: Array.isArray(plan.designScope) ? plan.designScope.length : 0,
+                blockedRoutes: walkAudit.blockedRoutes.length,
+                firstBlocker: walkAudit.blockedRoutes[0]?.blockers?.[0] ?? null,
+                blockedAtM: walkAudit.blockedRoutes[0]?.distanceAlongM ?? null,
+                narrowestRouteWidthM: walkAudit.narrowestRouteWidthM,
+                sightline: walkAudit.sightline,
                 boundaryPoints: Array.isArray(plan.boundary) ? plan.boundary.length : 0,
                 bbox: (() => {
                   const points = Array.isArray(plan.boundary) ? plan.boundary : [];

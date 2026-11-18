@@ -1,7 +1,7 @@
 {
   "entry": {
     "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…第一人称 · F5存观景位",
-    "audit": "体检 · 可达 0% · 3 件设施走不到",
+    "audit": null,
     "hint": null,
     "spot": true,
     "view": "第一人称 · F5",
@@ -14,7 +14,31 @@
     "auditDebug": {
       "areaM2": 194.5,
       "ratio": 0,
-      "unreachable": 3,
+      "planFacilities": [
+        {
+          "name": "隔断",
+          "w": 21,
+          "d": 21,
+          "x": 6,
+          "y": 0
+        },
+        {
+          "name": "主舞台",
+          "w": 6,
+          "d": 6,
+          "x": 10,
+          "y": 0
+        },
+        {
+          "name": "侧面帐篷",
+          "w": 3,
+          "d": 3,
+          "x": -6,
+          "y": 4
+        }
+      ],
+      "routeCount": 0,
+      "designScopeCount": 0,
       "boundaryPoints": 4,
       "bbox": {
         "minX": -15,
@@ -26,7 +50,7 @@
   },
   "afterEdge": {
     "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色模型较大，先用几何人代替；下载完会自动换上。重试第一人称 · F5存观景位",
-    "audit": "体检 · 可达 0% · 3 件设施走不到",
+    "audit": null,
     "hint": null,
     "spot": true,
     "view": "第一人称 · F5",
@@ -34,12 +58,36 @@
     "cam": [
       -4.7801,
       1.6,
-      7.142760000193113
+      6.389999999999994
     ],
     "auditDebug": {
       "areaM2": 194.5,
       "ratio": 0,
-      "unreachable": 3,
+      "planFacilities": [
+        {
+          "name": "隔断",
+          "w": 21,
+          "d": 21,
+          "x": 6,
+          "y": 0
+        },
+        {
+          "name": "主舞台",
+          "w": 6,
+          "d": 6,
+          "x": 10,
+          "y": 0
+        },
+        {
+          "name": "侧面帐篷",
+          "w": 3,
+          "d": 3,
+          "x": -6,
+          "y": 4
+        }
+      ],
+      "routeCount": 0,
+      "designScopeCount": 0,
       "boundaryPoints": 4,
       "bbox": {
         "minX": -15,
@@ -56,19 +104,19 @@
     },
     {
       "t": 1,
-      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色模型较大，先用几何人代替；下载完会自动换上。重试第一人称 · F5存观景位"
+      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…第一人称 · F5存观景位"
     },
     {
       "t": 2,
-      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色模型较大，先用几何人代替；下载完会自动换上。重试第一人称 · F5存观景位"
+      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…第一人称 · F5存观景位"
     },
     {
       "t": 3,
-      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色模型较大，先用几何人代替；下载完会自动换上。重试第一人称 · F5存观景位"
+      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…第一人称 · F5存观景位"
     },
     {
       "t": 4,
-      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色模型较大，先用几何人代替；下载完会自动换上。重试第一人称 · F5存观景位"
+      "hud": "WASD / 方向键行走 · Shift 加速 · Esc 退出漫游角色加载中…第一人称 · F5存观景位"
     },
     {
       "t": 5,

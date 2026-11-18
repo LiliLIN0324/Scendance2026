@@ -102,6 +102,19 @@ describe('auditWalkability', () => {
     expect(report.sightline).toBeNull();
   });
 
+  it('does not treat the red line itself as a narrow passage', () => {
+    // 流线贴着红线走：场外不该被当成障碍，否则每条贴边流线都会报 0.5 m。
+    const report = auditWalkability({
+      facilities: [],
+      boundary,
+      metrics,
+      routes: [{ points: [{ x: -14, y: 9.5 }, { x: 14, y: 9.5 }], kind: 'pedestrian' }],
+    });
+    expect(report.blockedRoutes).toEqual([]);
+    expect(report.narrowSpots).toEqual([]);
+    expect(report.narrowestRouteWidthM).toBeNull();
+  });
+
   it('summarises into one HUD line', () => {
     const tent = facility({ id: 'tent', name: '帐篷 A', position: { x: 0, y: 0 }, size: { width: 4, depth: 4 } });
     const report = auditWalkability({
