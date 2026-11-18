@@ -168,3 +168,27 @@ describe("下一步提示（轮次 99）", () => {
     expect(screen.queryByLabelText("下一步")).toBeNull();
   });
 });
+
+describe("开跑前检查折叠（轮次 100）", () => {
+  it("三行提示合成一个折叠块，默认收起（不抢主流程）", () => {
+    const { container } = render(
+      <OutdoorWalkthroughSection
+        initialBook={emptyBook()}
+        onMark={vi.fn()}
+        defaultOpen
+        gapsLine="#1 —— 缺：云端"
+        nextLine="下一步：#1 —— 先去云端核实一次"
+        reportLine="报告段落：6/6 段齐（内容对不对仍要人看）"
+      />,
+    );
+    const box = screen.getByLabelText("开跑前检查");
+    expect(box.tagName.toLowerCase()).toBe("details");
+    expect(box.hasAttribute("open")).toBe(false);
+    expect(container.textContent).toContain("下一步 · 待补 · 报告几段");
+  });
+
+  it("三行都没有时不渲染空折叠块", () => {
+    render(<OutdoorWalkthroughSection initialBook={emptyBook()} onMark={vi.fn()} defaultOpen />);
+    expect(screen.queryByLabelText("开跑前检查")).toBeNull();
+  });
+});

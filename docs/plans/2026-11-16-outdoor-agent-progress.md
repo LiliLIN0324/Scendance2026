@@ -11,7 +11,7 @@
 - 推送规则（2026-11-16 用户授权）：每轮验证通过即推 `main`，不 force；改动跨模块 → minor（当前 4.14.0 → 4.15.0），单点 → patch（4.14.0 → 4.14.1），两个 `package.json` 与 CHANGELOG 同步。**首次推送会把在途的 26 改 + 11 新增一起带上 main**，按模块拆成可回退的提交，不揉成一个。
 - 调度现状：定时任务仍为 `*/30`（创建入口未返回可用的 automationId，按名更新返回 “Automation is unavailable”，未能改成 45 分钟）。文件侧要求「距上轮提交不足 40 分钟则本轮只核对退出」，实际节奏接近 45 分钟。
 - 初始基线：`main` 在 `f1c5a525`，并带下列在途未提交改动。**本轮复现直接用这份工作树，不新建干净 checkout**——`place-first` 等守卫只存在于未提交文件里，干净检出会跑出与文档不符的另一种行为。
-- 下一条操作：新增「下一步干哪条」——`nextGap()` / `formatNextGap()` 取号最小的待补用例，只说“先补哪个信号”（固定数据 / 浏览器 / 云端），面板待补清单上方一行琥珀色提示，卡里接 `flow.nextGap()`。顺手把上轮那 5 个“只在全量并行时挂”的文件定位清楚了：**全是超时（5000ms / 20000ms），不是断言失败**，属于别的文件的测试体量问题，已写进进度不占本轮范围。**TLS 握手连续第八轮失败**，推送仍不通。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–99 切片（本地）。9222 五十五轮不通。下一条：在面板里把「待补清单 / 下一步 / 段落自检」三行合成一个可折叠的“开跑前”小节（三行已到视觉上限）。首条命令 `cd frontend; npm test -- components/room-organizer/lib/outdoor-release-gaps.test.ts`。
+- 下一条操作：面板三行提示（下一步 / 待补清单 / 报告段落自检）合成一个**默认收起的 `details` 折叠块**「开跑前检查（下一步 · 待补 · 报告几段）」，三行都没时不渲染空块；区 19/19、hook 88/88。**TLS 握手连续第九轮失败**，推送不通。待 PR 分支 `agent/outdoor-m7-walkthrough-wire` 已含 71–100 切片（本地）。9222 五十六轮不通。下一条：给折叠块加“展开时把三行拼成一段文本”的复制按钮（现场贴到群里用）。首条命令 `cd frontend; npm test -- components/room-organizer/components/outdoor-walkthrough-section.test.tsx`。
 - 本轮 dev server：**无**。轮次 29 起的 :3210 早已不响（/editor 探不通），但其 node 子进程（pid 19180）仍在内存里吃 2.8GB，轮次 31 已 `Stop-Process` 消掉——不消的话 `next build` 在 4.6GB 空闲内存下必 OOM。要跑浏览器再现先启：`cd frontend; $env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev > ..\.temp\dev-r32.log 2>&1`（默认 :3210）。
 - 轮次 27 的 tsc 口径（必看）：工作树 `npx tsc --noEmit` 当前有用户在途改动引入的报错（`supabase/functions/_shared/api.ts:439` 的 `backend.agent` 可能为 undefined，及 `creative-studio.tsx` 引 `appendAgentRunThoughts`、`AgentRunEventPage.thoughts` 几处时有时无）。这些都不是本轮文件；本轮提交在隔离 worktree 上单独 typedcheck 验证（见执行记录）。
 - 冲突处置留痕（轮次 11）：4 个文件的四段冲突全取了上游（已推的 `32844f72`，含 2026-11-16“室内不卡分区”新口径）；放弃的那一版已存成 `.temp/round11-stash.patch`（3299 行），`stash@{0}` 也仍在。
@@ -103,6 +103,21 @@ scripts/probe-basemap-zoom.mjs
 **尚未覆盖（不得当已验）**：主流程浏览器验收与生产验证（需 9222 登录态与发布授权）；Edge 契约/权限/迁移检查（B 角色）；真实云端请求与日志关联。
 
 ## 执行记录
+
+### 2026-11-19 10:00 · 自动轮次 100 · 开跑前检查折叠（三行变一块）
+
+```text
+日期时间（中国标准时间）及运行 ID：2026-11-19 10:00，自动轮次 100
+批次 / 切片 / 状态：合并不明（fetch 仍 TLS 失败）+ M7 / 面板折叠整理 / 已本地提交（未推送）
+开工事实：HEAD = `f251b956`（他人分支），脏文件 58；分支 `28f70485`、领先 main 46 笔
+交付：走查区把 `nextLine` / `gapsLine` / `reportLine` 包进默认收起的 `<details aria-label="开跑前检查">`，summary 写「下一步 · 待补 · 报告几段」；三行都没有时不渲染空块；卡片传参不变
+验证（固定数据）：区 19/19（新增 2 条：折叠存在且默认 `open=false`、三行全无时不渲染）+ 与 hook 合跑 107/107；`tsc --noEmit` 0 行
+真实浏览器/云端：仍未验（9222 第五十六轮 down）
+未完成：#2/#5 真实浏览器；推送仍被网络拦住
+```
+
+- **信息不删，只收起来**：三行内容一字未改，只是默认折叠——面板主流程（11 条用例的勾选）先占视野，缺什么点开再看。
+- **“默认收起”要写进断言**：新增案例直接验证 `hasAttribute("open") === false`，否则以后谁加了 `open` 属性也发现不了。
 
 ### 2026-11-19 09:00 · 自动轮次 99 · “下一步干哪条” + 并行超时定位
 
