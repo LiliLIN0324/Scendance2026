@@ -32,10 +32,13 @@ export function modeSupports(capabilities: GenerationCapabilities | null, mode: 
   return engineSupports(capabilities, 'hy3d', mode) || engineSupports(capabilities, 'aholo', mode);
 }
 
-/** 面板不给人挑引擎：优先 HY-3D，没开通就自动落到 Aholo。 */
+/**
+ * 面板不给人挑引擎。计量的文字 / 图片：配了 Aholo Lux3D 就走它，没配再回 HY-3D。
+ * HY-3D 通道与开关都留着，只是不再压过已经开通的 Lux3D。
+ */
 export function pickEngine(capabilities: GenerationCapabilities | null, mode: GenerationMode): GenerationEngine {
-  if (engineSupports(capabilities, 'hy3d', mode)) return 'hy3d';
   if (engineSupports(capabilities, 'aholo', mode)) return 'aholo';
+  if (engineSupports(capabilities, 'hy3d', mode)) return 'hy3d';
   return 'hy3d';
 }
 

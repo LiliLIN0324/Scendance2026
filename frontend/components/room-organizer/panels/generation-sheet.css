@@ -254,3 +254,106 @@
 .sc-generation-card .gs-drop-text strong { font-size: 11.5px; font-weight: 600; overflow-wrap: anywhere; }
 .sc-generation-card .gs-drop-text small { font-size: 10px; line-height: 14px; color: #8b9098; }
 .sc-generation-card .gs-primary[disabled] { opacity: .55; cursor: default; }
+
+/* 场地入口：冷石纸面上的两张卡片。阴影只用在这张浮起的创作卡，占位卡靠发丝线。 */
+.sc-generation-card .gs-venue { display: flex; flex-direction: column; gap: 10px; }
+.sc-generation-card .gs-venue-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--hair, #e4e4e7);
+  border-radius: var(--r-md, 14px);
+  background: var(--paper, #fff);
+  color: var(--ink, #141416);
+  box-shadow: var(--e1, 0 8px 24px rgba(20, 20, 22, 0.12), 0 2px 6px rgba(20, 20, 22, 0.06));
+  text-align: left;
+}
+.sc-generation-card .gs-venue-card h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--ink, #141416);
+}
+.sc-generation-card .gs-venue-lead { margin: 0; font-size: 12px; line-height: 18px; color: var(--ink-soft, #55585f); }
+.sc-generation-card .gs-venue-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  padding: 12px;
+  border: 1px solid var(--hair-soft, #efeff1);
+  border-radius: 12px;
+  background: var(--plane-deep, #ecedef);
+  color: var(--ink-soft, #55585f);
+}
+.sc-generation-card .gs-venue-prompt,
+.sc-generation-card .gs-venue-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 18px;
+}
+.sc-generation-card .gs-venue-prompt {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--paper, #fff);
+  color: var(--ink, #141416);
+}
+.sc-generation-card .gs-venue-go {
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--green, #4a7c59);
+  color: var(--paper, #fff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-generation-card .gs-venue-go:hover { background: var(--green-deep, #35624a); }
+.sc-generation-card .gs-venue-card.is-placeholder {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-shadow: none;
+  cursor: pointer;
+}
+.sc-generation-card .gs-venue-placeholder-icon { display: inline-flex; color: var(--ink-soft, #55585f); }
+.sc-generation-card .gs-venue-placeholder-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-generation-card .gs-venue-placeholder-text strong { font-size: 13px; font-weight: 600; color: var(--ink, #141416); }
+.sc-generation-card .gs-venue-placeholder-text small { font-size: 11px; line-height: 16px; color: var(--ink-soft, #55585f); }
+.sc-generation-card .gs-venue-card.is-placeholder em {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-soft, #55585f);
+  white-space: nowrap;
+}
+.sc-generation-card .gs-window {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--hair, #e4e4e7);
+  border-radius: var(--r-md, 14px);
+  background: var(--paper, #fff);
+  box-shadow: var(--e1, 0 8px 24px rgba(20, 20, 22, 0.12), 0 2px 6px rgba(20, 20, 22, 0.06));
+}
+.sc-generation-card .gs-again {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--hair, #e4e4e7);
+  border-radius: 7px;
+  background: var(--paper, #fff);
+  color: var(--ink, #141416);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-generation-card .gs-again:hover { background: var(--plane-deep, #ecedef); }
