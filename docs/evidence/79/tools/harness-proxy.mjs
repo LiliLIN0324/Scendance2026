@@ -385,9 +385,15 @@ export async function driveToProposal(page, { answers = ['室外展览区和表�
 /** 标准建场：搜索地点 → 选候选 → 定场地 → 确认范围（红线进画布） */export async function setupSite(page, { keyword = '杭州 IN77', optionIndex = 0, shot = null } = {}) {
   await dismissCloudRecover(page);
   const trace = {};
-  await page.getByRole('button', { name: '搜索地点', exact: true }).first().click();
+  const searchButton = page.getByRole('button', { name: '搜索地点', exact: true }).first();
+  if (await searchButton.count()) {
+    await searchButton.click();
+  } else {
+    // 2026-11-19 新包：搜索入口收成左上角 plan-place-search 胶囊，没有独立按钮。
+    await page.locator('.sc-plan-place-search-field').first().click();
+  }
   await page.waitForTimeout(800);
-  const input = page.locator('[data-testid=outdoor-place-search-input]').first();
+  const input = page.locator('[data-testid=outdoor-place-search-input], [data-testid=plan-place-search-input]').first();
   await input.click();
   await input.fill(keyword);
   await page.waitForTimeout(4500);
