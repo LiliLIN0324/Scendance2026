@@ -64,6 +64,8 @@ import { buildStructureShell } from '../three/structure-builder';
 import { BasemapTileCache } from '../lib/plan-tile-cache';
 import { buildPlanFootprint } from '../three/plan-footprint-builder';
 import { computeFloorOpenings, computeWallOpenings } from '../three/wall-openings';
+import { planWorldMatrix, planShellWorldMatrix } from '../three/plan-world-frame';
+import { planPointFromWorld } from '../lib/scan-placement';
 import { useGlbAssets } from './use-glb-assets';
 import type { FloorLayout, RoomLayout, ViewSettings } from '../lib/types';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -182,6 +184,8 @@ export interface UseSceneEffectsParams {
   wallSnapResult: { point: { x: number; z: number }; kind: string } | null;
   measurementPoints: ReadonlyArray<{ x: number; z: number }>;
   showBasemap?: boolean;
+  outdoorWorkspace?: boolean;
+  modelPosition?: { x: number; z: number } | undefined;
   /**
    * 户外 2D 规划（P2-g）：有值时把分区/设施/动线/点位摊到 3D 地面上，
    * 与 `layout.width/height` 同一个壳体口径；为 null 时清掉该图层。
@@ -214,6 +218,8 @@ export function useSceneEffects({
   wallSnapResult,
   measurementPoints,
   showBasemap = true,
+  outdoorWorkspace = false,
+  modelPosition,
   outdoorPlan = null,
 }: UseSceneEffectsParams): void {
   const showBasemapRef = useRef(showBasemap);
@@ -334,7 +340,7 @@ export function useSceneEffects({
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
 
-    if (!view.drawWallMode || !wallDraft || !wallSnapResult) {
+    if (outdoorWorkspace || !view.drawWallMode || !wallDraft || !wallSnapResult) {
       clearWallPreview(scene);
       return;
     }
@@ -343,7 +349,7 @@ export function useSceneEffects({
     );
     // activeFloor is read for its storey height only; storeyHeightsKey covers it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, threeModuleRef, sceneRef, view.drawWallMode, wallDraft, wallSnapResult, activeFloorY, storeyHeightsKey]);
+  }, [isReady, invalidate, threeModuleRef, sceneRef, outdoorWorkspace, view.drawWallMode, wallDraft, wallSnapResult, activeFloorY, storeyHeightsKey]);
 
   // Build floor + walls
   useEffect(() => {
@@ -354,6 +360,7 @@ export function useSceneEffects({
     if (!THREE || !scene) return;
 
     removeTagged(scene, ROOM_OBJECT_TAGS.Floor, ROOM_OBJECT_TAGS.Wall);
+    if (outdoorWorkspace) { clearRoomDimensions(scene); requestShadowUpdate(); return; }
     if (layout.backendSceneV2) {
       buildStructureShell(THREE, scene, layout, {
         onTextureLoaded: invalidate,
@@ -470,7 +477,7 @@ export function useSceneEffects({
     // interior walls (nearest wall wins), so the exterior hole set changes
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
-    layout.backendSceneV2, layout.width, layout.height, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
+    outdoorWorkspace, layout.backendSceneV2, layout.width, layout.height, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
     layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef, !!layout.researchArea, geoGroundShellActive,
     layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0, layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale, layout.mapGroundFrame?.latSign,
     layout.mapGroundPolygon?.length,
@@ -490,11 +497,14 @@ export function useSceneEffects({
     removeTagged(scene, ROOM_OBJECT_TAGS.PlanFootprint);
     if (!outdoorPlan) return;
     if (buildPlanFootprint(THREE, scene, outdoorPlan, { width: layout.width, depth: layout.height })) {
+      if (outdoorWorkspace && outdoorPlan.anchor) {
+        scene.children.find(child => child.userData.type === ROOM_OBJECT_TAGS.PlanFootprint)?.applyMatrix4(planShellWorldMatrix(layout, outdoorPlan.anchor, outdoorPlan.boundary));
+      }
       requestShadowUpdate();
     }
     invalidate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, outdoorPlan, layout.width, layout.height]);
+  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, outdoorPlan, layout.width, layout.height, outdoorWorkspace, layout.sceneAnchor]);
 
   // GeoGround（2026-11-12）：主舞台的真实地图瓦片地面。计划有锚点时铺近场金字塔 →
   // 扩展金字塔 → 远景兜底（与 outdoor-plan-3d 初始铺地同款三阶段），相机移动挂
@@ -511,8 +521,10 @@ export function useSceneEffects({
     const plan = outdoorPlanRef.current;
     const anchor = plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null;
     if (!THREE || !scene || !anchor || !plan || !showBasemapRef.current || view2DRef.current) return;
-    const siteFrame = ringFrame(plan.boundary);
-    if (siteFrame.width < 4 || siteFrame.depth < 4) return;
+    const boundaryFrame = ringFrame(plan.boundary);
+    const focus = planPointFromWorld(layout, plan.anchor!, modelPosition ?? { x: 0, z: 0 });
+    const siteFrame = boundaryFrame.width >= 4 && boundaryFrame.depth >= 4 ? boundaryFrame : squareFrame(focus.x, focus.y, 80);
+    if (!outdoorWorkspace && (boundaryFrame.width < 4 || boundaryFrame.depth < 4)) return;
     // 境外场地：高德/天地图两档在境外没图，换全球卫星源（境内原样）。
     // 这里的 `source` 同时决定瓦片上限与下游 paintTilePyramid 的取图。
     const source = sourceForLocation(geoBasemapSource, anchor.lng, anchor.lat);
@@ -525,8 +537,15 @@ export function useSceneEffects({
     const geoRoot = new THREE.Group();
     geoRoot.name = 'geo-ground';
     geoRoot.userData.type = ROOM_OBJECT_TAGS.GeoGround;
-    geoRoot.scale.set(scaleX, 1, scaleZ);
-    geoRoot.position.set(-minX * scaleX - layout.width / 2, 0, maxY * scaleZ - layout.height / 2);
+    if (outdoorWorkspace) {
+      geoRoot.applyMatrix4(planWorldMatrix(layout, plan.anchor!));
+      geoRoot.position.y = -0.06;
+    }
+    else {
+      geoRoot.scale.set(scaleX, 1, scaleZ);
+      geoRoot.position.set(-minX * scaleX - layout.width / 2, 0, maxY * scaleZ - layout.height / 2);
+    }
+    geoRoot.updateMatrixWorld(true);
     scene.add(geoRoot);
 
     const disposables: { dispose: () => void }[] = [];
@@ -616,21 +635,16 @@ export function useSceneEffects({
     let lastLodZoom = preferredZoom;
     let lastLodAt = 0;
     let lastLodFocus = { x: focusEnu.x, y: focusEnu.y };
-    const worldToEnu = (x: number, z: number): { x: number; y: number } => ({
-      x: (x - geoRoot.position.x) / scaleX,
-      y: -(z - geoRoot.position.z) / scaleZ,
-    });
-    // coverFrameFromFrustum 输出 cy=-z（北朝 y+）的世界框；翻回 plan ENU 框。
+    const worldToEnu = (x: number, z: number): { x: number; y: number } => {
+      const local = geoRoot.worldToLocal(new THREE.Vector3(x, 0, z));
+      return { x: local.x, y: -local.z };
+    };
     const worldFrameToEnuFrame = (frame: SiteFrame): SiteFrame => {
-      const west = (frame.cx - frame.width / 2 - geoRoot.position.x) / scaleX;
-      const east = (frame.cx + frame.width / 2 - geoRoot.position.x) / scaleX;
-      const zMin = -frame.cy - frame.depth / 2;
-      const zMax = -frame.cy + frame.depth / 2;
-      const yMin = -(zMax - geoRoot.position.z) / scaleZ;
-      const yMax = -(zMin - geoRoot.position.z) / scaleZ;
-      const width = Math.max(4, east - west);
-      const depth = Math.max(4, yMax - yMin);
-      return { cx: (west + east) / 2, cy: (yMin + yMax) / 2, width, depth, span: Math.max(width, depth) };
+      const corners = [-1, 1].flatMap(dx => [-1, 1].map(dy => worldToEnu(frame.cx + dx * frame.width / 2, -frame.cy + dy * frame.depth / 2)));
+      const xs = corners.map(p => p.x), ys = corners.map(p => p.y);
+      const west = Math.min(...xs), east = Math.max(...xs), south = Math.min(...ys), north = Math.max(...ys);
+      const width = Math.max(4, east - west), depth = Math.max(4, north - south);
+      return { cx: (west + east) / 2, cy: (south + north) / 2, width, depth, span: Math.max(width, depth) };
     };
     const loadCloserTiles = (): void => {
       if (disposed || lodBusy || view2DRef.current || !showBasemapRef.current) return;
@@ -714,7 +728,7 @@ export function useSceneEffects({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, invalidate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef,
     outdoorPlan?.anchor?.lng, outdoorPlan?.anchor?.lat, geoBoundaryKey, geoBasemapSource, geoGroundMode,
-    layout.width, layout.height, view.view2D, showBasemap]);
+    layout.width, layout.height, view.view2D, showBasemap, outdoorWorkspace, layout.sceneAnchor]);
 
   // —— 计划设施 GLB 模型层（2026-11-12，与户外 3D 共享 three/plan-model-layer.ts）——
   // 退出户外后主 3D 不再只有低模占位：同一批设施落地真模型。glb-assets 缓存是模块级
@@ -742,13 +756,14 @@ export function useSceneEffects({
     // 2026-11-12 用户反馈「物体没放在平面上」：模型底面垫到瓦片金字塔顶（z19=0.048）之上，
     // 与户外 3D 的 PLAN_LAYER_BASE_Y 同一口径；GeoGround 未激活（室内地板）时 5 cm 悬浮不可感知。
     modelLayer.group.position.set(0, 0.052, 0);
+    if (outdoorWorkspace && outdoorPlan.anchor) modelLayer.group.applyMatrix4(planShellWorldMatrix(layout, outdoorPlan.anchor, outdoorPlan.boundary));
     invalidate();
     return () => {
       modelLayer.dispose();
       invalidate();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, threeModuleRef, sceneRef, outdoorPlan, layout.width, layout.height, glbAssetsRevision]);
+  }, [isReady, invalidate, threeModuleRef, sceneRef, outdoorPlan, layout.width, layout.height, glbAssetsRevision, outdoorWorkspace, layout.sceneAnchor]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -1128,7 +1143,7 @@ export function useSceneEffects({
     const THREE = threeModuleRef.current;
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
-    setOutdoorVisible(THREE, scene, view.showOutdoor, layout.width, layout.height, {
+    setOutdoorVisible(THREE, scene, view.showOutdoor && !outdoorWorkspace, layout.width, layout.height, {
       ...(layout.terrain ? { terrain: layout.terrain } : {}),
       ...(layout.neighbours ? { neighbours: layout.neighbours } : {}),
       ...(layout.frontage ? { frontage: layout.frontage } : {}),
@@ -1136,7 +1151,7 @@ export function useSceneEffects({
     // Trees/shrubs are shadow casters; the shadow map is static (autoUpdate off)
     // so it must be told the caster set changed.
     requestShadowUpdate();
-  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, view.showOutdoor, layout.width, layout.height, layout.terrain, layout.neighbours, layout.frontage]);
+  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, outdoorWorkspace, view.showOutdoor, layout.width, layout.height, layout.terrain, layout.neighbours, layout.frontage]);
 
   // The street of neighbours (#202, #310). Never touched by applyWallDisplay,
   // so they stay put in every wall-display mode (#201). Keyed on exactly what
@@ -1155,7 +1170,7 @@ export function useSceneEffects({
     const THREE = threeModuleRef.current;
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
-    if (!hasNeighbours(layout.neighbours)) {
+    if (outdoorWorkspace || !hasNeighbours(layout.neighbours)) {
       removeNeighbours(scene);
     } else {
       const houses = generateStreet({
@@ -1177,7 +1192,7 @@ export function useSceneEffects({
     // floor count), and layout.neighbours / roof / terrain through the
     // narrow keys above, so an item edit doesn't rebuild the neighbours.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, layout.width, layout.height, layout.floors.length, storeyHeightsKey, neighboursKey, roofStyle, roofColor, terrainFrontY, terrainBackY, layout.frontage]);
+  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, layout.width, layout.height, layout.floors.length, storeyHeightsKey, neighboursKey, outdoorWorkspace, roofStyle, roofColor, terrainFrontY, terrainBackY, layout.frontage]);
 
   // Interior walls
   useEffect(() => {
@@ -1188,6 +1203,7 @@ export function useSceneEffects({
     if (!THREE || !scene) return;
 
     clearInteriorWalls(scene);
+    if (outdoorWorkspace) return;
     if (layout.backendSceneV2) return;
     const floorsToRender = view.showAllFloors
       ? layout.floors.map((floor, index) => ({ floor, index }))
@@ -1241,7 +1257,7 @@ export function useSceneEffects({
     // door/window opening candidates only; the two keys cover exactly that,
     // so a furniture edit doesn't re-extrude every interior wall.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, layout.backendSceneV2, interiorWallsKey, wallOpeningsKey, storeyHeightsKey, activeFloorIndex, view.showAllFloors, view.wallDisplay, layout.width, layout.height, layout.entrance, layout.terrain]);
+  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, outdoorWorkspace, layout.backendSceneV2, interiorWallsKey, wallOpeningsKey, storeyHeightsKey, activeFloorIndex, view.showAllFloors, view.wallDisplay, layout.width, layout.height, layout.entrance, layout.terrain]);
 
   // Cyan outline on selected wall. Declared AFTER the shell + interior-wall
   // rebuild effects and keyed on the same rebuild keys, so it always snapshots
@@ -1325,12 +1341,12 @@ export function useSceneEffects({
     const THREE = threeModuleRef.current;
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
-    if (!view.showMeasurements) {
+    if (outdoorWorkspace || !view.showMeasurements) {
       clearRoomDimensions(scene);
       return;
     }
     renderRoomDimensions(THREE, scene, layout.width, layout.height, layout.planSettings?.displayUnit ?? view.lengthUnit, activeFloorY, view.lengthPrecisionM ?? 0.01);
-  }, [isReady, invalidate, threeModuleRef, sceneRef, view.showMeasurements, view.lengthUnit, layout.width, layout.height, activeFloorY]);
+  }, [isReady, invalidate, threeModuleRef, sceneRef, outdoorWorkspace, view.showMeasurements, view.lengthUnit, layout.width, layout.height, activeFloorY]);
 
   // Item labels
   // 物件多时标签降级成圆点，只有选中/高亮的那几件继续显示名字。
@@ -1365,7 +1381,7 @@ export function useSceneEffects({
 
     const topFloorIndex = layout.floors.length - 1;
     const showRoof =
-      layout.roof &&
+      !outdoorWorkspace && layout.roof &&
       layout.roof.style !== 'none' &&
       (view.showAllFloors || activeFloorIndex === topFloorIndex);
 
@@ -1395,7 +1411,7 @@ export function useSceneEffects({
     // layout.floors is read for the eaves height only (floor count + storey
     // heights); keying on its identity would rebuild the roof on every item edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, cameraRef, layout.roof, layout.width, layout.height, layout.floors.length, storeyHeightsKey, activeFloorIndex, view.showAllFloors, view.wallDisplay]);
+  }, [isReady, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, cameraRef, outdoorWorkspace, layout.roof, layout.width, layout.height, layout.floors.length, storeyHeightsKey, activeFloorIndex, view.showAllFloors, view.wallDisplay]);
 
   // 2D top-down view. The backing store is sized to the container's
   // clientWidth/clientHeight × devicePixelRatio (via a ResizeObserver) so the

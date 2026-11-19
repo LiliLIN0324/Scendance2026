@@ -72,6 +72,7 @@ function planApi(getBearing: () => number, orbitByDelta = vi.fn(), resetNorth = 
     getBearing,
     orbitByDelta,
     captureImage: () => null,
+    captureScanImage: () => null,
   };
 }
 

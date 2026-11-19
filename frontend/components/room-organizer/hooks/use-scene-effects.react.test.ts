@@ -257,6 +257,29 @@ describe('main canvas geo ground (GeoGround tiles)', () => {
     expect(scene.children.some((child) => child.userData.type === ROOM_OBJECT_TAGS.Wall)).toBe(true);
   });
 
+  it('keeps an outdoor scan on a metre-scale map without a boundary or an indoor shell', async () => {
+    stubTileImages();
+    const input = params();
+    input.isReady = true;
+    input.outdoorWorkspace = true;
+    input.outdoorPlan = { ...geoPlan(), boundary: [] };
+    input.modelPosition = { x: 45, z: 15 };
+    input.view = makeViewSettings({ showOutdoor: true, showMeasurements: true, view2D: false });
+    const staleFloor = new THREE.Mesh(); staleFloor.userData.type = ROOM_OBJECT_TAGS.Floor;
+    const staleWall = new THREE.Mesh(); staleWall.userData.type = ROOM_OBJECT_TAGS.Wall;
+    input.sceneRef.current!.add(staleFloor, staleWall);
+    renderHook(() => useSceneEffects(input));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const scene = input.sceneRef.current!;
+    const ground = scene.children.find(child => child.userData.type === ROOM_OBJECT_TAGS.GeoGround)!;
+    expect(ground).toBeDefined();
+    expect(ground.children.length).toBeGreaterThan(0);
+    expect(ground.scale.x).toBeCloseTo(1);
+    expect(ground.scale.z).toBeCloseTo(1);
+    expect(ground.position.y).toBeLessThan(0);
+    expect(scene.children.some(child => [ROOM_OBJECT_TAGS.Floor, ROOM_OBJECT_TAGS.Wall, 'outdoor'].includes(child.userData.type))).toBe(false);
+  });
+
   it('does not paint tiles while the main view is 2D', async () => {
     stubTileImages();
     const input = params();

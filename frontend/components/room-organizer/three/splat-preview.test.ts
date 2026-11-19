@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import { fitSplatBox, frameSplatView, paintAsBackLayer, percentile, robustBox, rotatedBox, upAxisQuaternion, walkBoundsOf } from './splat-preview';
+import { estimatedHeightScale, fitSplatBox, frameSplatView, paintAsBackLayer, percentile, robustBox, rotatedBox, upAxisQuaternion, walkBoundsOf } from './splat-preview';
 
 const box = (min: [number, number, number], max: [number, number, number]) =>
   new THREE.Box3(new THREE.Vector3(...min), new THREE.Vector3(...max));
@@ -46,6 +46,16 @@ describe('朝向归正', () => {
 });
 
 describe('按场地尺寸落位', () => {
+  it('sizes a Z-up sample to a 3.6m storey uniformly, preserving its proportions', () => {
+    const local = box([-2, -3, -0.5], [2, 3, 0.5]);
+    const scale = estimatedHeightScale(local, upAxisQuaternion('Z'), 3.6);
+    const size = rotatedBox(local, upAxisQuaternion('Z')).getSize(new THREE.Vector3()).multiplyScalar(scale);
+    expect(size.y).toBeCloseTo(3.6);
+    expect(size.x).toBeCloseTo(14.4);
+    expect(size.z).toBeCloseTo(21.6);
+    expect(estimatedHeightScale(local, upAxisQuaternion('Z'))).toBe(1);
+    expect(estimatedHeightScale(box([0, 0, 0], [0, 0, 0]), upAxisQuaternion('Z'), 3.6)).toBe(1);
+  });
   it('最长水平边等于场地边长，底面贴 y=0，水平中心回到原点', () => {
     const fit = fitSplatBox(box([-2, 1, 0], [2, 5, 7]), 14);
     expect(fit.scale).toBeCloseTo(2);
@@ -61,6 +71,18 @@ describe('按场地尺寸落位', () => {
 });
 
 describe('环境预览的渲染栈隔离', () => {  const part = (type: string, visible = true) => ({ userData: { type }, visible });
+  it('renders the map with the Gaussian layer so it cannot cover the model afterward', () => {
+    const scene = new THREE.Scene(), back = new THREE.Scene();
+    const map = new THREE.Group(); map.userData.type = 'geo-ground'; map.position.set(12, -0.06, 20);
+    scene.add(map);
+    const renderer = { autoClear: true, render: vi.fn((target: THREE.Scene) => {
+      expect(map.parent).toBe(back);
+      if (target === scene) expect(scene.children).not.toContain(map);
+    }) } as unknown as THREE.WebGLRenderer;
+    paintAsBackLayer({ renderer, scene, back, camera: new THREE.PerspectiveCamera() });
+    expect(map.parent).toBe(scene);
+    expect(map.position.toArray()).toEqual([12, -0.06, 20]);
+  });
 
   it('先画点云那一条栈，再把布置场景叠上去', () => {
     const sky = new THREE.Color(0xdceefb);

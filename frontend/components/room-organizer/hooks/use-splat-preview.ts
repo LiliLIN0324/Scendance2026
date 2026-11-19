@@ -27,6 +27,7 @@ import {
   type SiteCalibration,
 } from '../lib/site-capture';
 import { createCalibrationHud } from '../three/calibration-hud';
+import { findShippedAsset } from '../lib/shipped-assets';
 
 export type SplatPreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
 /** 当前场景的标定快照：比例、朝向、基准面、锚点与误差提示。 */
@@ -103,7 +104,8 @@ export function useSplatPreview(deps: {
   /** Upper edge of the active building storey; scanned roof points above it are hidden. */
   roofCutoffY: number;
   position: SplatPosition;
-  otherScenes?: readonly Readonly<{ id: string; source: SplatSource; position: SplatPosition; floorIndex: number; roofCutoffY: number }>[];
+  placementScale?: number;
+  otherScenes?: readonly Readonly<{ id: string; source: SplatSource; position: SplatPosition; scale?: number; floorIndex: number; roofCutoffY: number }>[];
   activeFloorIndex?: number;
   primaryVisible?: boolean;
   transformMode: SplatTransformMode;
@@ -166,6 +168,8 @@ export function useSplatPreview(deps: {
   roofCutoffRef.current = deps.roofCutoffY;
   const positionRef = useRef(deps.position);
   positionRef.current = deps.position;
+  const scaleRef = useRef(deps.placementScale ?? 1);
+  scaleRef.current = deps.placementScale ?? 1;
   const activeFloorRef = useRef(deps.activeFloorIndex ?? 0);
   activeFloorRef.current = deps.activeFloorIndex ?? 0;
   const primaryVisibleRef = useRef(deps.primaryVisible ?? true);
@@ -286,6 +290,9 @@ export function useSplatPreview(deps: {
         sizeMeters: sizeRef.current,
         roofCutoffY: roofCutoffRef.current,
         position: positionRef.current,
+        placementScale: scaleRef.current,
+        ...(!stored.reference && findShippedAsset(source.assetId)?.estimatedHeightMeters
+          ? { estimatedHeightMeters: findShippedAsset(source.assetId)!.estimatedHeightMeters! } : {}),
         ...(upAxisRef.current ? { upAxis: upAxisRef.current } : {}),
         calibration: {
           scale: stored.scale,
@@ -329,13 +336,21 @@ export function useSplatPreview(deps: {
     controllerRef.current?.setPosition(deps.position);
   }, [deps.position.x, deps.position.y, deps.position.z, isReady]);
   useEffect(() => {
+    const result = controllerRef.current?.setScale(deps.placementScale ?? 1);
+    if (!result) return;
+    metersRef.current = result.meters;
+    setState(previous => previous.status === 'ready' ? {
+      ...previous, meters: result.meters, ...(result.walkBounds ? { walkBounds: result.walkBounds } : {}),
+    } : previous);
+  }, [deps.placementScale, isReady]);
+  useEffect(() => {
     void controllerRef.current?.setTransformMode(deps.transformMode);
   }, [deps.transformMode, isReady]);
   useEffect(() => {
     controllerRef.current?.setVisible(deps.primaryVisible ?? true);
   }, [deps.primaryVisible, isReady]);
 
-  const otherScenesKey = (deps.otherScenes ?? []).map(scene => `${scene.id}:${scene.source.assetId}:${scene.floorIndex}:${scene.position.x}:${scene.position.y}:${scene.position.z}:${scene.roofCutoffY}`).join('|');
+  const otherScenesKey = (deps.otherScenes ?? []).map(scene => `${scene.id}:${scene.source.assetId}:${scene.floorIndex}:${scene.position.x}:${scene.position.y}:${scene.position.z}:${scene.scale ?? 1}:${scene.roofCutoffY}`).join('|');
   useEffect(() => {
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
@@ -359,6 +374,9 @@ export function useSplatPreview(deps: {
           sizeMeters: sizeRef.current,
           roofCutoffY: placement.roofCutoffY,
           position: placement.position,
+          placementScale: placement.scale ?? 1,
+          ...(!readSiteCalibration(placement.source.assetId)?.reference && findShippedAsset(placement.source.assetId)?.estimatedHeightMeters
+            ? { estimatedHeightMeters: findShippedAsset(placement.source.assetId)!.estimatedHeightMeters! } : {}),
           ...(upAxisRef.current ? { upAxis: upAxisRef.current } : {}),
           calibration: (() => {
             const stored = readSiteCalibration(placement.source.assetId);
@@ -371,6 +389,7 @@ export function useSplatPreview(deps: {
           const latestPlacement = otherScenesRef.current.find(scene => scene.id === id);
           if (!latestPlacement) return;
           ownedController.setPosition(latestPlacement.position);
+          ownedController.setScale(latestPlacement.scale ?? 1);
           ownedController.setRoofCutoff(latestPlacement.roofCutoffY);
           ownedController.setDisplayMode(displayModeRef.current);
           ownedController.setVisible(latestPlacement.floorIndex === activeFloorRef.current);
@@ -383,6 +402,7 @@ export function useSplatPreview(deps: {
         });
       } else {
         controller.setPosition(placement.position);
+        controller.setScale(placement.scale ?? 1);
         controller.setRoofCutoff(placement.roofCutoffY);
         controller.setVisible(placement.floorIndex === activeFloorRef.current);
         controller.setDisplayMode(displayModeRef.current);
