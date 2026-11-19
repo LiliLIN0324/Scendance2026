@@ -33,6 +33,8 @@ export type SplatLodStats = Readonly<{
   bytes: number;
   loadedBytes: number;
   fps: number | undefined;
+  /** 允许的最细档（越小越细）：402 MB 这类 L0 会被挡在上限之外。 */
+  ceiling: number;
   samples: readonly Readonly<{ level: number; bytes: number; fps: number }>[];
 }>;
 
@@ -85,7 +87,25 @@ type SplatLodRuntime = {
   pendingLevel: number | null;
   /** 换档时复用同一个消隐 modifier，不重复构造 dyno。 */
   modifier: unknown;
+  /** 允许的最细档（数字越小越细）：距离想换更细的，也要先过这一关。 */
+  ceiling: number;
 };
+
+/**
+ * 一次换档最多再下这么多。L0 动辄几百 MB（jiangnan-village 是 402 MB / 953 万高斯），
+ * 比这一档大就干脆不进：主档停在能接受的最细一档，别让「走近一点」变成一次 400 MB 下载。
+ */
+const LOD_MAX_LEVEL_BYTES = 160 * 1024 * 1024;
+/** 帧率低于它就主动往粗档退一档；只认首屏/换档后的采样窗，不看按需绘制的空闲帧。 */
+const LOD_MIN_FPS = 24;
+/** 首屏与每次换档后持续续帧的时长：凑够每秒一窗的帧率样本。 */
+const LOD_SAMPLE_WINDOW_MS = 12_000;
+
+/** 允许的最细档：第一档超过下载上限就退到下一档；全超就只留最粗那档。 */
+function finestAllowedLevel(meta: SplatLodMeta): number {
+  const index = meta.files.findIndex(file => !(file.bytes > LOD_MAX_LEVEL_BYTES));
+  return index >= 0 ? index : meta.levels - 1;
+}
 export type SplatPosition = Readonly<{ x: number; y: number; z: number }>;
 export type SplatDisplayMode = 'gaussian' | 'footprint';
 /** Whole-scene move: gizmo shows XYZ axes; numeric keeps the panel only. */
@@ -543,6 +563,7 @@ export function createSplatPreview(deps: {
       bytes: lodRuntime.meta.files[lodRuntime.level].bytes,
       loadedBytes: lodRuntime.loadedBytes,
       fps: lodRuntime.fps,
+      ceiling: lodRuntime.ceiling,
       samples: Object.freeze([...lodRuntime.samples]),
     });
   }
@@ -898,6 +919,10 @@ export function createSplatPreview(deps: {
     runtime.fps = undefined;
     runtime.startedAt = performance.now();
     runtime.lastCheck = 0;
+    // 帧率表也跟着重置：上一档的帧数与窗口不能算进新档，否则刚解码的停顿会被当成「新档也卡」。
+    frameCount = 0;
+    fpsWindowStart = 0;
+    currentFps = undefined;
     console.info(`[splat-lod] 已切 L${level}，耗时 ${((performance.now() - started) / 1000).toFixed(1)}s`);
     publishLodStats();
     deps.invalidate();
@@ -993,9 +1018,10 @@ export function createSplatPreview(deps: {
       fps: undefined,
       pendingLevel: null,
       modifier: cutModifier,
+      ceiling: finestAllowedLevel(lod),
     } : null;
     if (lod) {
-      console.info(`[splat-lod] 首屏 L${lodStartLevel} ${(lod.files[lodStartLevel].bytes / 1048576).toFixed(2)} MB · 全量 L0 ${(lod.files[0].bytes / 1048576).toFixed(2)} MB · ${lod.levels} 档`);
+      console.info(`[splat-lod] 首屏 L${lodStartLevel} ${(lod.files[lodStartLevel].bytes / 1048576).toFixed(2)} MB · 全量 L0 ${(lod.files[0].bytes / 1048576).toFixed(2)} MB · ${lod.levels} 档 · 最细允许 L${finestAllowedLevel(lod)}`);
       publishLodStats();
     }
     if (transformMode === 'gizmo' && transformControls) transformControls.attach(group);
@@ -1026,22 +1052,35 @@ export function createSplatPreview(deps: {
       currentFps = (frameCount * 1000) / (now - fpsWindowStart);
       frameCount = 0;
       fpsWindowStart = now;
-      lodRuntime.fps = currentFps;
-      publishLodStats();
+      // 换档后头 2.5 s 的窗口不算数：新档解码那一下本来就卡，拿它判帧率会把好档位误降。
+      if (now - lodRuntime.startedAt > 2500) {
+        lodRuntime.fps = currentFps;
+        publishLodStats();
+      }
     }
     // 首屏先看 2.5s 粗档，再按距离决定是否换档；阈值带迟滞由档位本身承担。
     if (now - lodRuntime.startedAt > 2500 && now - lodRuntime.lastCheck > 700 && lodRuntime.pendingLevel === null) {
       lodRuntime.lastCheck = now;
+      // 帧率兜底：采样窗里撑不住就退一档，并把上限钉在退回来的这一档。
+      // 距离判定只看远近，站进场景里必然要求最细那档；没有这条，402 MB 的 L0 会被反复拉回来。
+      if (lodRuntime.fps !== undefined && lodRuntime.fps < LOD_MIN_FPS
+        && now - lodRuntime.startedAt < LOD_SAMPLE_WINDOW_MS
+        && lodRuntime.level < lodRuntime.meta.levels - 1) {
+        lodRuntime.ceiling = Math.max(lodRuntime.ceiling, lodRuntime.level + 1);
+        console.info(`[splat-lod] ${lodRuntime.fps.toFixed(1)} fps 撑不住 L${lodRuntime.level}，退到 L${lodRuntime.level + 1}`);
+      }
       const center = bounds.getCenter(new THREE.Vector3());
       const size = bounds.getSize(new THREE.Vector3());
       const horizontal = Math.max(size.x, size.z, 0.001);
       const ratio = camera.position.distanceTo(center) / horizontal;
-      const desired = ratio < 0.35 ? 0 : ratio < 0.85 ? 1 : lodRuntime.meta.levels - 1;
+      const byDistance = ratio < 0.35 ? 0 : ratio < 0.85 ? 1 : lodRuntime.meta.levels - 1;
+      // ceiling 是允许的最细档（越小越细）：换档的下载量上限在这里生效。
+      const desired = Math.max(byDistance, lodRuntime.ceiling);
       if (desired !== lodRuntime.level) void switchLod(desired);
     }
     // 按需绘制不会为「量帧率」自己转起来：换档后头 12 秒主动续帧，凑满每秒一窗的样本；
     // 表计结束就回到按需绘制，不长期占 GPU。
-    if (now - lodRuntime.startedAt < 12000) deps.invalidate();
+    if (now - lodRuntime.startedAt < LOD_SAMPLE_WINDOW_MS) deps.invalidate();
   }
 
   const renderFrame: SplatPaint = (renderer, scene, camera, options) => {

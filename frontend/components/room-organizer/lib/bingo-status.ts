@@ -10,6 +10,7 @@
  */
 
 import { reviewPlanKeyForClientUrl } from '../../review-share-page/load-plan';
+import { reviewClientLinkKind } from '../../review-share-page/review-link-cloud';
 import {MAX_SHARE_HASH_LENGTH} from './share';
 
 export const BINGO_MARK_KEY = 'scendance.reviewMark.v1';
@@ -148,11 +149,11 @@ function parsePlan(value: unknown, receipt: BingoReceipt | null): BingoPlan | nu
   let clientUrl='',linkStatus:BingoPlan['linkStatus'];
   if(rawUrl){
     try{
-      const parsed=new URL(rawUrl),short=/^#review=[a-z0-9]{12,24}$/.test(parsed.hash),valid=['http:','https:'].includes(parsed.protocol)&&!parsed.username&&!parsed.password&&!parsed.search&&['/review','/review/'].includes(parsed.pathname)&&(short||parsed.hash.startsWith('#layout=')&&parsed.hash.length<=MAX_SHARE_HASH_LENGTH)&&rawUrl.length<=MAX_SHARE_HASH_LENGTH+2048;
+      const parsed=new URL(rawUrl),kind=reviewClientLinkKind(parsed),valid=kind!==null&&(kind!=='layout'||parsed.hash.length<=MAX_SHARE_HASH_LENGTH)&&rawUrl.length<=MAX_SHARE_HASH_LENGTH+2048;
       if(valid&&!(record.versionBinding!=='sha256-v1'&&rawUrl.length>=512)){clientUrl=rawUrl;linkStatus='needs-verification';}else linkStatus='unavailable';
     }catch{linkStatus='unavailable';}
   }
-  // 新链优先 /review/#review=<短码>，旧链 /review/#layout= hash 快照继续可读。
+  // 新链是 /r/<短码>。旧的 /review/#review=<短码> 与 /review/#layout= 继续可读。
   // UUID 分支为 T5 冻结的旧 /review/<id> 链遗留兼容。
   const clientHref = clientUrl || (!rawUrl&&SHARE_ID.test(shareId) ? reviewPlanHref(shareId) : '/review/');
   const storedReviewKey = typeof record.reviewPlanKey === 'string' ? clip(record.reviewPlanKey, MAX_KEY) : '';

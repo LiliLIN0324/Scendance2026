@@ -29,6 +29,17 @@ describe('review link version preservation',()=>{
   const old=JSON.stringify(Array.from({length:40},(_,i)=>({opaque:i})));localStorage.setItem(BINGO_MARK_KEY,old);
   await expect(rememberReviewLinkMark(input(link('新方案')))).rejects.toThrow('已满');expect(localStorage.getItem(BINGO_MARK_KEY)).toBe(old);
  });
+ it('records a path short link without a hash and refuses a query on it',async()=>{
+  const long=link('短链场地');
+  const hash=new URL(long).hash;
+  const clientUrl=`https://example.test/r/${'ab'.repeat(6)}`;
+  await rememberReviewLinkMark({...input(clientUrl),longHash:hash});
+  const plan=readBingoSnapshot(localStorage).plans[0];
+  expect(plan?.clientHref).toBe(clientUrl);
+  expect(plan?.linkStatus).toBe('needs-verification');
+  expect(plan?.reviewPlanKey).toMatch(/^review-v2:[0-9a-f]{64}$/);
+  await expect(rememberReviewLinkMark({...input(`${clientUrl}?view=1`),longHash:hash})).rejects.toThrow('无效');
+ });
  it('refuses credentials and query strings, and marks old clipped links as unavailable',async()=>{
   const good=link('原版');await expect(rememberReviewLinkMark(input(good.replace('https://','https://user:pass@')))).rejects.toThrow('无效');
   await expect(rememberReviewLinkMark(input(good.replace('/review/#','/review/?token=secret#')))).rejects.toThrow('无效');

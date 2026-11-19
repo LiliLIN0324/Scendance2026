@@ -1,0 +1,1 @@
+{"result":[{"event_message":"assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }\n","source":"function_logs","timestamp":"2026-11-19T01:54:29.450000"}]}

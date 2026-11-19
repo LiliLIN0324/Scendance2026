@@ -31,7 +31,7 @@ export interface PublishedLink {
 
 export interface ShareMenuActions {
   /** 生成一份可留言的方案页链接。 */
-  onIssueReviewLink(): Promise<{ url: string; isCurrent:()=>boolean }>;
+  onIssueReviewLink(permissions?: { pins: boolean; levels: boolean; basemap: boolean }): Promise<{ url: string; isCurrent:()=>boolean }>;
   /** 切到 Bingo 审校台。Bingo 是内部去处，不生成第二条评审链接。 */
   onOpenBingo?(): void;
   /** 把当前保存的版本发布成只读页，返回扫码链接。 */
@@ -194,6 +194,9 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const [qrOpen, setQrOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [allowPins, setAllowPins] = useState(true);
+  const [allowLevels, setAllowLevels] = useState(true);
+  const [allowBasemap, setAllowBasemap] = useState(true);
   const [bingoSent, setBingoSent] = useState(false);
   const [bingoRev, setBingoRev] = useState(0);
   const bingoSending = useBingoSending();
@@ -342,7 +345,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     setNotice('');
     setBingoSending(true);
     try {
-      const result = await actions.onIssueReviewLink();
+      const result = await actions.onIssueReviewLink({ pins: allowPins, levels: allowLevels, basemap: allowBasemap });
       if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
       setReviewLink(result.url);
       const copied = await copyText(result.url);
@@ -419,6 +422,12 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       qrSvg={qrSvg}
       exports={exports}
       reviewLink={reviewLink}
+      permits={{ pins: allowPins, levels: allowLevels, basemap: allowBasemap }}
+      onPermit={(key, value) => {
+        if (key === 'pins') setAllowPins(value);
+        else if (key === 'levels') setAllowLevels(value);
+        else setAllowBasemap(value);
+      }}
       onIssueAudience={() => { void issue(); }}
       onSendBingo={openBingo}
       onCopyReview={() => { void copyReview(); }}
