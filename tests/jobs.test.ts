@@ -18,16 +18,19 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     await expect(f.jobs(editor,'jobs.get',{id:j.id})).rejects.toThrow('JOB_NOT_FOUND');
     await expect(f.jobs(outsider,'jobs.create',input())).rejects.toThrow('FORBIDDEN');
   });
-  it('allows one active generation per owner, independent across members',async()=>{
+  it('allows three concurrent generations per owner, independent across members',async()=>{
     const a=await f.jobs(owner,'jobs.create',input());
     const b=await f.jobs(editor,'jobs.create',input());
     expect(a.owner_id).toBe(owner);
     expect(b.owner_id).toBe(editor);
-    // 同一 owner 的第二单仍被挡；其他 owner 的活跃任务不连坐。
+    // 同一 owner 同时占满三个槽位；第四单才被挡。其他 owner 的活跃任务不连坐。
+    const c=await f.jobs(owner,'jobs.create',input()),d=await f.jobs(owner,'jobs.create',input());
+    expect([a.active_slot,c.active_slot,d.active_slot].sort()).toEqual([1,2,3]);
     await expect(f.jobs(owner,'jobs.create',input())).rejects.toThrow('GENERATION_BUSY');
     const rows=(await f.db.query<{owner_id:string}>("select owner_id from scene_private.requests where kind='generation'")).rows;
-    expect(rows).toHaveLength(2);
-    expect(rows.map(r=>r.owner_id).sort()).toEqual([editor,owner].sort());
+    expect(rows).toHaveLength(4);
+    expect(rows.filter(r=>r.owner_id===owner)).toHaveLength(3);
+    expect(rows.filter(r=>r.owner_id===editor)).toHaveLength(1);
   });
   it('allows spending beyond former category ceilings while requiring accounting',async()=>{
     await f.db.exec("update scene_private.budgets set committed_cents=2147483647");
@@ -41,7 +44,9 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     await f.db.query("update scene_private.generation_jobs set worker_until=now()-interval '1 second' where id=$1",[j.id]);
     expect(await f.jobs(null,'jobs.claim')).toBeNull();
     expect((await f.jobs(owner,'jobs.get',{id:j.id})).state).toBe('submit_unknown');
-    await expect(f.jobs(owner,'jobs.create',input())).rejects.toThrow('GENERATION_BUSY');
+    // 这一单自己的槽位还占着（不会自动重投），但另外两个槽位照常可用。
+    const next=await f.jobs(owner,'jobs.create',input());
+    expect(next.active_slot).not.toBe(j.active_slot);
   });
   it('releases an ambiguous submission after the grace window instead of locking the queue',async()=>{
     const j=await f.jobs(owner,'jobs.create',input());
@@ -52,14 +57,17 @@ describe('generation queue, idempotency, fencing and budget',()=>{
     await f.db.query("update scene_private.generation_jobs set updated_at=now()-interval '9 minutes' where id=$1",[j.id]);
     expect(await f.jobs(null,'jobs.claim')).toBeNull();
     expect((await f.jobs(owner,'jobs.get',{id:j.id})).state).toBe('submit_unknown');
-    await expect(f.jobs(owner,'jobs.create',input())).rejects.toThrow('GENERATION_BUSY');
+    // 窗口内这一单仍占着自己的槽位（不会被自动重投）。
+    expect((await f.db.query<{active_slot:number|null}>('select active_slot from scene_private.generation_jobs where id=$1',[j.id])).rows[0].active_slot).toBe(j.active_slot);
     // Past the window the claim sweep fails it terminally: never a resubmit, but the fence frees up.
     await f.db.query("update scene_private.generation_jobs set updated_at=now()-interval '11 minutes' where id=$1",[j.id]);
     expect(await f.jobs(null,'jobs.claim')).toBeNull();
     const expired=await f.jobs(owner,'jobs.get',{id:j.id});
     expect(expired.state).toBe('failed');expect(expired.error_code).toBe('SUBMIT_RESULT_UNKNOWN_EXPIRED');
     expect((await f.db.query<{state:string}>('select state from scene_private.requests where id=$1',[j.id])).rows[0].state).toBe('failed');
-    await expect(f.jobs(owner,'jobs.create',input())).resolves.toMatchObject({state:'queued'});
+    // 槽位随终态释放：新的任务拿回刚才那个槽位，队列没有被永久锁死。
+    const reused=await f.jobs(owner,'jobs.create',input());
+    expect(reused.active_slot).toBe(j.active_slot);
   });
   it('resolves one ambiguous submission on demand for its owner only',async()=>{
     const j=await f.jobs(owner,'jobs.create',input());

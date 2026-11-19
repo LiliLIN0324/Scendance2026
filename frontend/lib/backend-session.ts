@@ -1885,7 +1885,7 @@ export class BackendSession {
   async getChatCapabilities(): Promise<ChatCapabilities> {
     return chatCapabilitiesSchema.parse(await this.businessRequest('/chat/capabilities'));
   }
-  async uploadGenerationReference(file: File): Promise<{ id: string }> {
+  async uploadGenerationReference(file: File, name?: string): Promise<{ id: string }> {
     this.assertCanvasProjectMatch();
     if (!['image/png','image/jpeg'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) throw new Error('请选择 5 MB 以内的 PNG 或 JPEG 参考图。');
     this.requireConfig();
@@ -1894,7 +1894,11 @@ export class BackendSession {
     if (!token) throw new SceneApiError('UNAUTHENTICATED', 401, null);
     try {
       dispatch();
-      const response = await fetch(`${this.config.apiUrl}/assets/floorplan`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type }, body: file, cache: 'no-store' });
+      // 参考图和场地平面图共用一条上传口：给了名字就用给的，
+      // 不然图生 3D 的参考图会在物料库里顶着「场地平面图」的名头。
+      const given=name?.trim();
+      const query=given?`?name=${encodeURIComponent(given.slice(0,120))}`:'';
+      const response = await fetch(`${this.config.apiUrl}/assets/floorplan${query}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': file.type }, body: file, cache: 'no-store' });
       if (epoch !== this.epoch || !this.isCurrentRequestScope(scope)) throw new SceneApiError('SESSION_CHANGED', 409, null);
       if (response.status === 401) throw new SceneApiError('UNAUTHENTICATED', 401, null);
       const result = await response.json();

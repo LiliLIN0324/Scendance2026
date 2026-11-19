@@ -62,6 +62,8 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
   const [genPrompt, setGenPrompt] = useState('');
   const [genPending, setGenPending] = useState(false);
   const [genReference, setGenReference] = useState<{ id: string; name: string } | null>(null);
+  /** 照片被归一化过时要说一句：HEIC 转换、缩尺寸、压体积。 */
+  const [genReferenceNotice, setGenReferenceNotice] = useState('');
   const [mode, setMode] = useState<GenerationMode>('text');
   const [engine, setEngine] = useState<GenerationEngine>('hy3d');
   const lock = useRef(false);
@@ -195,8 +197,10 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
     if (!file) return;
     setError('');
     try {
+      // 上传前归一化：HEIC 转 JPEG、超尺寸降采样、超 5MB 压画质。
       const uploaded = await uploadModelReference(controller, file);
       setGenReference({ id: uploaded.id, name: uploaded.name });
+      setGenReferenceNotice(uploaded.notice);
     } catch (failure) { if (mounted.current) setError(plainFailure(failure instanceof Error && /5 MB/.test(failure.message) ? failure.message : failure)); }
   }
 
@@ -257,10 +261,12 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
       {capabilityState === 'ready' && !engineSupportsMode && <p className="sc-note">{engineLabel(engine)} 暂未开通{mode === 'image' ? '图片' : '文字'}生成。{modeSupports(capabilities, mode) ? '请换一个模型。' : ''}</p>}
       {mode === 'image' ? <>
         <label className="sc-field" htmlFor="generation-reference">参考图
-          <input id="generation-reference" type="file" accept="image/png,image/jpeg" disabled={genPending || Boolean(generationBlocked)}
+          <input id="generation-reference" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif" disabled={genPending || Boolean(generationBlocked)}
             onChange={event => { void pickReference(event.target.files?.[0]); event.target.value = ''; }} />
         </label>
-        {genReference ? <p className="sc-note">已选参考图：{genReference.name}</p> : <p className="sc-note">需要一张主体清楚、背景干净的照片。</p>}
+        {genReference
+          ? <p className="sc-note">已选参考图：{genReference.name}{genReferenceNotice ? `（${genReferenceNotice}）` : ''}</p>
+          : <p className="sc-note">需要一张主体清楚、背景干净的照片。</p>}
         <label className="sc-field" htmlFor="generation-prompt">补充描述
           <input id="generation-prompt" type="text" maxLength={200} value={genPrompt} disabled={genPending || Boolean(generationBlocked)}
             placeholder="例：按照片做同款，哑光白桌面"
