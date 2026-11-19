@@ -8,7 +8,7 @@ import { registerCloudScans, registerLocalScans, repairStaleScans } from '../lib
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
-import { uploadScanFile } from '../lib/scan-upload';
+import { findScanLodUrl, uploadScanFile } from '../lib/scan-upload';
 import { CaseCards } from './case-cards';
 import { EnvironmentPreview } from './environment-preview';
 import { ShelfGrip } from './scendance-workspace';
@@ -146,12 +146,15 @@ export function SpacePanel({
     if (scansRef.current) scansRef.current.open = true;
     setUpload({ status: 'uploading', percent: 0, message: '' });
     try {
+      // 先探同名的本地 LOD（make-lod.mjs 的产物目录）：有就随记录登记，预览按距离换档。
+      const lodUrl = await findScanLodUrl(file.name);
       const asset = await uploadScanFile(file, {
         name: file.name,
+        ...(lodUrl ? { lodUrl } : {}),
         onProgress: (loaded, total) => setUpload({ status: 'uploading', percent: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0, message: '' }),
       });
       refreshScanList(value => value + 1);
-      setUpload({ status: 'done', percent: 100, message: `已加入「${asset.name}」，点它就能在 3D 里看。` });
+      setUpload({ status: 'done', percent: 100, message: `已加入「${asset.name}」${asset.lodUrl ? '（多档 LOD）' : ''}，点它就能在 3D 里看。` });
     } catch (error) {
       setUpload({ status: 'error', percent: 0, message: error instanceof Error ? error.message : '上传失败，请重试。' });
     }
