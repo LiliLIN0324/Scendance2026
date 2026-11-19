@@ -1035,6 +1035,9 @@ body {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
   /* 左栏 → 画布上的浮层卡。左缘让开图标轨，右缘留出地图。 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column:has(> .sc-agent-panel[data-state="material"]:not(.is-detached)) {
+    width: 372px; height: min(680px, calc(100% - 28px));
+  }
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column {
     position: absolute; left: calc(var(--sc-nav-rail-width) + 12px); top: 12px;
     right: auto; bottom: auto; grid-column: auto; grid-row: auto;
@@ -1144,6 +1147,27 @@ body {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column { grid-column: 2; grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 3; grid-row: 1; }
+  /* 物料库是画布旁的工具卡，不是通高左栏。地图仍露在卡片右侧和下方。 */
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column:has(> .sc-left-column > .sc-agent-panel[data-state="material"]:not(.is-detached)):not(:has(.is-outdoor-card:not([hidden]))):not(:has(.sc-left-drawer:not(.is-collapsed):not([hidden]):not(.is-outdoor-card))) {
+    grid-template-columns: var(--sc-nav-rail-width) 0 minmax(0, 1fr);
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column:has(> .sc-agent-panel[data-state="material"]:not(.is-detached)):not(:has(.is-outdoor-card:not([hidden]))):not(:has(.sc-left-drawer:not(.is-collapsed):not([hidden]):not(.is-outdoor-card))) {
+    position: absolute;
+    left: calc(var(--sc-nav-rail-width) + 12px);
+    top: 12px;
+    width: 372px;
+    height: min(680px, calc(100% - 28px));
+    max-height: calc(100% - 28px);
+    grid-column: auto;
+    grid-row: auto;
+    background: var(--paper, #fff);
+    border: 1px solid var(--wk-hair, #e4e4e7);
+    border-radius: 16px;
+    box-shadow: 0 6px 18px rgba(20, 20, 22, .10);
+    overflow: hidden;
+    z-index: 32;
+  }
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column:has(> .sc-agent-panel[data-state="material"]:not(.is-detached)) .sc-left-card-resizer { display: none; }
 }
 /* T-VISUAL-CHROME-2：底素材条为应用级全宽收起条（对照 04-final-flat.jpg），跨全部列。 */
 /* 物料条改挂画布栏底，不再占 main 第 2 行全宽 */
