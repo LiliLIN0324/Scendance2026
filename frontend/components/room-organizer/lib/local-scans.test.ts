@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { metersFromForwardBox } from './splat-meters';
 
 const LOCAL_PROXY = 'http://127.0.0.1:3199';
 const REMOTE_RELAY = 'https://relay.example.test';
@@ -40,8 +41,14 @@ describe('本机扫描登记', () => {
     expect(westLake?.bytes).toBe(7_795_522);
     // 茶室 130 有 lod-meta 的 forwardBox：宽 20.4 m、深 17.2 m、高 35.8 m。
     expect(assets.find(asset => asset.assetId === TEAROOM)?.meters).toEqual({ width: 20.4, depth: 17.2, height: 35.8 });
-    // 房间 130 的 forwardBox 是 ±2047 的坏档，不能拿来当场地尺寸。
-    expect(assets.find(asset => asset.assetId === ROOM130)?.meters).toBeUndefined();
+    // 2026-11-19：房间 130 以前被测试夹具目录 tearoom-lod-test 盖掉，读到的 ±2047 假盒被尺度守卫挡下；
+    // 改成「夹具目录不参与反查」后它读自己的 scan-room130-2048，宽深按真实包围盒。
+    expect(assets.find(asset => asset.assetId === ROOM130)?.meters).toMatchObject({ width: 40.8, depth: 27.1 });
+    // ±2047 这种坏档仍然不能当尺度：守卫在 splat-meters，不靠调用方自己记得。
+    expect(metersFromForwardBox({ min: [-2047.46, -2047.68, -2047.03], max: [2047.43, 2047.95, 2047.23] })).toBeNull();
+    // 索引带的 lodUrl 要跟记录一起落进注册表，否则派生好的 LOD 没人用。
+    expect(assets.find(asset => asset.assetId === TEAROOM)?.lodUrl).toBe('/scans/tearoom-130/lod-meta.json');
+    expect(assets.every(asset => Boolean(asset.lodUrl))).toBe(true);
   });
 
   it('重复登记不会灌水：已登记的条目跳过，资产表数量不变', async () => {
@@ -99,6 +106,9 @@ describe('云端扫描登记', () => {
     expect(westLake?.origin).toBe('cloud');
     expect(westLake?.name).toBe('西湖 0233 · 极速档');
     expect(resolveAholoAssetUrl(WEST_LAKE_FAST)).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}.spz`);
+    // 云端登记走云端 LOD（scans/<id>/lod-meta.json），不指站内的 /scans/<dir>/：
+    // 那一整个目录在 .gitignore 里，部署站读不到。
+    expect(westLake?.lodUrl).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}/lod-meta.json`);
     // 2026-11-19 用户：「没有其他和我的区分，这些都是我们的云资产」——
     // 索引里的「本机高斯 26932bea」进注册表时换成日期名，线上不看机器前缀与资产号。
     const gauss = listAholoAssets().find(asset => asset.assetId === TEAROOM);

@@ -64,7 +64,7 @@ describe('review share plan loading', () => {
     const href = reviewShareHref('https://app.example/editor?local=1', hash);
     expect(href).toBe(`https://app.example${REVIEW_SHARE_PATH}${hash}`);
     expect(reviewShareHref('https://app.example/editor?local=1', hash, 'abcdef123456'))
-      .toBe(`https://app.example${REVIEW_SHARE_PATH}#review=abcdef123456`);
+      .toBe('https://app.example/r/abcdef123456');
     const loaded = await loadReviewPlan({ hash, search: '?demo=1', localLayout: { ...INITIAL_LAYOUT, name: '本机另一份' } });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
@@ -81,7 +81,7 @@ describe('review share plan loading', () => {
     const longHash = new URL(encoded.url).hash;
     vi.mocked(readReviewLink).mockResolvedValueOnce({ ok: true, value: { longHash, payload: encoded.payload } });
 
-    const short = await loadReviewPlan({ hash: '#review=abcdef123456', search: '', localLayout: null });
+    const short = await loadReviewPlan({ hash: '', search: '', pathname: '/r/abcdef123456', localLayout: null });
     const long = await loadReviewPlan({ hash: longHash, search: '', localLayout: null });
     expect(short.ok).toBe(true);
     expect(long.ok).toBe(true);
@@ -90,10 +90,37 @@ describe('review share plan loading', () => {
     expect(short.plan.shareHash).toBe(longHash);
     expect(short.plan.planKey).toBe(long.plan.planKey);
     expect(short.plan.identity).toEqual(long.plan.identity);
+    expect(short.plan.reviewAccess).toMatchObject({ pins: true, levels: true, basemap: true, basemapStyle: 'map' });
 
     vi.mocked(readReviewLink).mockResolvedValueOnce({ ok: false, reason: 'not-found' });
     await expect(loadReviewPlan({ hash: '#review=abcdef123456', search: '', localLayout: null }))
       .resolves.toEqual({ ok: false, reason: 'not-found' });
+  });
+
+  it('keeps send-time locks that were stored beside the snapshot', async () => {
+    const encoded = await encodeShareUrl({ ...INITIAL_LAYOUT, name: '锁定方案' }, 'https://app.example/editor');
+    const longHash = new URL(encoded.url).hash;
+    vi.mocked(readReviewLink).mockResolvedValueOnce({
+      ok: true,
+      value: {
+        longHash,
+        payload: {
+          ...encoded.payload,
+          reviewAccess: { pins: false, levels: false, basemap: false, levelId: 'level-2', basemapStyle: 'satellite' },
+        },
+      },
+    });
+    const loaded = await loadReviewPlan({ hash: '', search: '', pathname: '/r/abcdef123456', localLayout: null });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(loaded.plan.reviewAccess).toEqual({
+      pins: false,
+      levels: false,
+      basemap: false,
+      levelId: 'level-2',
+      basemapStyle: 'satellite',
+    });
+    expect(loaded.plan.layout.name).toBe('锁定方案');
   });
 
   it('carries the outdoor site plan in the review link', async () => {

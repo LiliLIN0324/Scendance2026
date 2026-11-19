@@ -37,6 +37,7 @@ import { get2DViewTransform } from './canvas-2d/render';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
 import { publishReviewLink } from '../review-share-page/review-link-cloud';
+import { reviewBasemapFromGround, reviewLinkFailureCopy, type ReviewAccess } from '../review-share-page/review-access';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
@@ -1068,7 +1069,7 @@ useEffect(() => {
     setSidePanel(null);
     setAgentCollapsed(false);
   }, []);
-  const issueReviewLink = useCallback(async () => {
+  const issueReviewLink = useCallback(async (permissions?: { pins: boolean; levels: boolean; basemap: boolean }) => {
     const token=sessionToken,selectedFloor=floorToken,initial=layoutStore.getState();
     if(!activitySession.isCurrent(token)||!floorSession.isCurrent(selectedFloor))throw new Error('活动或楼层正在切换，请重新生成评审链接。');
     const layout=structuredClone(initial.layout);
@@ -1082,10 +1083,18 @@ useEffect(() => {
     const projectKey = (layout.id ?? '').trim() || 'local-draft';
     // 评审键永远按规范长哈希算，这样长短链打开的是同一版钉与回执。
     const reviewPlanKey = reviewPlanKeyForClientUrl(encoded.url) ?? localPlanKey(layout);
-    // 短链只是载体：未登录或后端不可用时保留长链，评审不会因此发不出去。
-    const short = await publishReviewLink({ longHash, payload: encoded.payload });
+    const reviewAccess: ReviewAccess = {
+      pins: permissions?.pins !== false,
+      levels: permissions?.levels !== false,
+      basemap: permissions?.basemap !== false,
+      levelId: outdoorLevelIdRef.current,
+      basemapStyle: reviewBasemapFromGround(readPlanGroundMode(), readPlanGroundSource()),
+    };
+    // 短链失败就停在这里说明原因。不把 #layout= 长链当成已经发出去的客户链接。
+    const short = await publishReviewLink({ longHash, payload: encoded.payload, reviewAccess });
     check();
-    const url = reviewShareHref(window.location.origin, longHash, short.ok ? short.code : null);
+    if (!short.ok) throw new Error(reviewLinkFailureCopy(short.reason));
+    const url = reviewShareHref(window.location.origin, longHash, short.code);
     if (!url) throw new Error('评审链接没有生成。');
     await rememberReviewLinkMark({
       projectKey,

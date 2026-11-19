@@ -1,5 +1,5 @@
 import { DIRECT_BASE, findAholoAsset, isLux3dLocalProxy, listAholoAssets, rememberAholoAsset } from './aholo-assets';
-import { cloudScanUrl } from './cloud-assets';
+import { cloudScanLodUrl, cloudScanUrl } from './cloud-assets';
 import index from './local-scan-index.json';
 import { readableScanName } from './scan-names';
 import { metersFromForwardBox } from './splat-meters';
@@ -13,6 +13,8 @@ export type LocalScanIndexEntry = {
   savedAt: number;
   /** lod-meta 的米制包围盒，用来换算真实尺度；坏档没有这一项。 */
   forwardBox?: { min?: number[]; max?: number[] };
+  /** 同目录派生好的 LOD 元数据（站内路径）；有它预览才会按距离换档。 */
+  lodUrl?: string;
 };
 
 /** 索引全量（按落盘时间倒序）。 */
@@ -71,6 +73,9 @@ export async function registerLocalScans(): Promise<number> {
       bytes: entry.bytes,
       savedAt: entry.savedAt,
       ...(meters ? { meters } : {}),
+      // 索引带 lodUrl（build-local-scan-index 反查到资产号就会写）：登记时一并落进注册表，
+      // 否则 `/scans/<主干>/lod-meta.json` 摆在那里也没人用，预览照旧全量解码。
+      ...(entry.lodUrl ? { lodUrl: entry.lodUrl } : {}),
     });
     if (saved) added += 1;
   }
@@ -127,6 +132,10 @@ export function registerCloudScans(): number {
   for (const entry of localScanIndex()) {
     if (findAholoAsset(entry.assetId)) continue;
     const meters = metersFromForwardBox(entry.forwardBox);
+    // 云端条目走云端 LOD：`scans/<id>/lod-meta.json` 由 tools/aholo/r2-upload-scan-lod.mjs 上传，
+    // 它的第 0 档指回同桶的 scans/<id>.spz。站内目录 frontend/public/scans 被 .gitignore 忽略、
+    // 部署站读不到，拿它当首选只会让线上每次都 404 后退回单文件。
+    const lodUrl = cloudScanLodUrl(entry.assetId);
     const saved = rememberAholoAsset({
       assetId: entry.assetId,
       kind: entry.kind,
@@ -135,6 +144,7 @@ export function registerCloudScans(): number {
       bytes: entry.bytes,
       savedAt: entry.savedAt,
       ...(meters ? { meters } : {}),
+      ...(lodUrl ? { lodUrl } : {}),
       origin: 'cloud',
     });
     if (saved) added += 1;

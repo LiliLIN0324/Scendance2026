@@ -2750,6 +2750,54 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-share-readonly {
   margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
 }
+.sc-workbench .sc-share-permits {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 0 2px;
+  border: 0;
+}
+.sc-workbench .sc-share-permits legend {
+  padding: 0;
+  color: var(--ink-soft, #55585f);
+  font-size: 12px;
+}
+.sc-workbench .sc-share-permit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink, #141416);
+  font-size: 13px;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch {
+  position: relative;
+  width: 36px !important;
+  height: 22px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 1px solid var(--hair, #e4e4e7) !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch[aria-checked="true"] {
+  background: var(--ink, #141416) !important;
+  border-color: var(--ink, #141416) !important;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.18);
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch[aria-checked="true"] i {
+  left: 16px;
+}
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta {
   width: 100% !important; height: 32px !important; min-height: 0 !important;
   padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
