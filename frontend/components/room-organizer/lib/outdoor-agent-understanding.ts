@@ -11,7 +11,8 @@ import {
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 
-import { OUTDOOR_AGENT_RULES as RULES } from "../../../../supabase/functions/_shared/outdoor-agent-response-contract";
+import { rebuiltSceneRefs } from "./wedding-venue-catalog";
+import { compactResearchCitations, isVenueResearchRequest, researchVenues, venueResearchSources } from "./venue-research";
 
 export function outdoorClarificationQuestion(
   message: string,
@@ -122,9 +123,14 @@ export async function understandOutdoorTurn(input: {
   // 不改写，引用仍按整份 issued 校验）；级②精简 fixedContext 的候选/提示（brief/selected/version
   // 等约束字段原样保留）；连最小可行上下文都装不下时仍明确拒绝。凡降级，声明追加进 reply。
   const CHANNEL_LIMIT = 6000;
-  const clarification = input.clarification ? { clarification: input.clarification } : {};
+  // 地点咨询也能在未圈范围时先做：本地资料与本次联网结果都交给模型比较。
+  const research = isVenueResearchRequest(input.message)
+    ? await researchVenues(input.message, { signal: input.signal, center: input.plan.anchor ?? null })
+    : undefined;
+  const clarification = input.clarification ? { clarification: {
+    ...input.clarification, question: compactResearchCitations(input.clarification.question),
+  } } : {};
   const clarificationCost = JSON.stringify(clarification).length;
-  const ruleChunks = RULES.match(/[\s\S]{1,1100}/g) ?? [];
 
   const buildFixedContext = (level: 0 | 1 | 2) => {
     const staging =
@@ -138,6 +144,8 @@ export async function understandOutdoorTurn(input: {
       brief: input.state.brief,
       version,
       selected: [...selected],
+      ...(research ? { venueResearch: research } : {}),
+      rebuiltScenes: rebuiltSceneRefs(),
       map: {
         version: input.map.version,
         status: input.map.status,
@@ -278,10 +286,9 @@ export async function understandOutdoorTurn(input: {
       ...(withClarification ? clarification : {}),
       mapContext: evidence.mapContext,
     });
-    const history = [
-      ...ruleChunks,
-      ...(context.match(/[\s\S]{1,1100}/g) ?? []),
-    ].map((text) => ({ role: "user" as const, text }));
+    // 协议已经在服务端 system prompt 中；重复塞进用户历史会挤掉资料和证据。
+    const history = (context.match(/[\s\S]{1,1100}/g) ?? [])
+      .map((text) => ({ role: "user" as const, text }));
     return {
       history,
       issuedForTurn: evidence.issuedForTurn,
@@ -295,7 +302,6 @@ export async function understandOutdoorTurn(input: {
   // 级0保持旧决策：follow-up 不得挤占下一轮校验所需的地图证据预算。
   const baseMapBudget0 =
     CHANNEL_LIMIT -
-    RULES.length -
     input.message.length -
     fixedLenAt(0) -
     32;
@@ -319,7 +325,7 @@ export async function understandOutdoorTurn(input: {
   } else {
     // 分级降级：①证据摘要（fixed 不动）→ ②fixedContext 精简两级；澄清问题能在预算内就带上。
     const budgetAt = (level: 0 | 1 | 2) =>
-      CHANNEL_LIMIT - RULES.length - input.message.length - fixedLenAt(level) - 32;
+      CHANNEL_LIMIT - input.message.length - fixedLenAt(level) - 32;
     const hasClar = input.clarification !== undefined;
     const ladder: Array<{ level: 0 | 1 | 2; evidence: EvidencePlan; clar: boolean }> = [];
     for (const level of [0, 1, 2] as const) {
@@ -367,6 +373,11 @@ export async function understandOutdoorTurn(input: {
     );
   }
   let turn = outdoorTurnSchema.parse(raw);
+  if (research) {
+    // 调研只回复候选和建议，不替用户选场地或改变画布；选定名字后再走原地点确认链。
+    turn = { ...turn, action: "ask", references: [], facts: {}, operation: undefined,
+      reply: `${turn.reply}\n\n${venueResearchSources(research)}` };
+  }
   // E1：降级必须在 reply 里如实声明，绝不静默丢约束。
   if (chosen.notes.length) {
     const notice = `本场内容较多，已按精简后的范围理解（${chosen.notes.join("；")}）；你的需求与约束全部保留。`;
