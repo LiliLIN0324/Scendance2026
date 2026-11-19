@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentDocument } from "../lib/agent-documents";
 import { reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
+import { proposeWeddingLayout, WEDDING_LIBRARY_QUERIES } from "../lib/wedding-layout";
+import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
 import { getActiveAssistantSessionId } from "./use-assistant-sessions";
 import { isVenueResearchRequest } from "../lib/venue-research";
 import { gateAction, type SupervisionLevel } from "../lib/agent-supervision";
@@ -11,6 +13,7 @@ import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat
 import { lux3dFacilityTarget, openLux3dDialogGeneration, parseLux3dDialogIntent } from "../lib/lux3d-dialog-entry";
 import {
   boundaryKey,
+  evidencedCount,
   mergeOutdoorFacts,
   planVersion,
   proposalMapWarnings,
@@ -150,7 +153,8 @@ export interface OutdoorWorkflowProposal {
   next: SitePlanData;
   warnings: string[];
   references: OutdoorTurn["references"];
-  afterConfirm?: "main-routes" | "objects";
+  afterConfirm?: "main-routes" | "objects" | "design-event";
+  afterConfirmRequest?: { turn: OutdoorTurn; message: string; documents: AgentDocument[]; imageCount: number };
 }
 /**
  * 2026-11-17：用户把设计交回来的口头禅。「随便放」「你看着办」不是新需求，是授权我先做一版。
@@ -217,6 +221,7 @@ function mapEditHighlight(kind: OutdoorWorkflowProposal["kind"], before: SitePla
 }
 const stages = Object.keys(OUTDOOR_STAGE_LABELS) as OutdoorStage[];
 const outdoorPlanSteps: Partial<Record<OutdoorTurn["action"], readonly string[]>> = {
+  'design-event': ['读取婚礼需求与附件分区', '预留完整线宽的通道', '联合布置物料与桌椅并列出缺项'],
   zones: ["核对活动范围和已有分区", "按活动用途和室内外依据生成分区预览"],
   revise: ["核对要调整的分区和需要保留的内容", "生成调整后的分区预览"],
   "main-routes": ["核对边界、道路和入口依据", "预览连接活动区域的主通道"],
@@ -464,6 +469,12 @@ export function useOutdoorAgentWorkflow(input: {
    */
   const [drawnZones, setDrawnZones] = useState<SitePlanData["zones"]>([]);
   /**
+   * 2026-11-19 T1-d2：把画布上的**真实用地红线**同步给任务卡画轮廓。
+   * 口径沿用分区清单：低频读 bridge 快照（800ms），只有合法闭合环才算数，
+   * 内容不变不 setState。卡片不再画任何示意地图，没真实红线就只出一句状态。
+   */
+  const [boundaryRing, setBoundaryRing] = useState<PlanPoint[] | null>(null);
+  /**
    * 2026-11-19 用户反馈「S8 无从下手」：精修卡的四颗动作全部作用于所选设施——没选中时
    * 挂着也只能报错。这里把画布当前选中的设施同步给卡：有选中才出动作组，没选中出引导句。
    * 画布不对外发变更事件，沿用分区清单的同款轮询口径。
@@ -675,12 +686,11 @@ export function useOutdoorAgentWorkflow(input: {
     [],
   );
   function nextStage(stage: OutdoorStage) {
-    const i = stages.indexOf(stage);
     const completed = [...new Set([...stateRef.current.completed, stage])];
     persist({
       ...stateRef.current,
       completed,
-      stage: stages[Math.min(stages.length - 1, i + 1)]!,
+      stage,
     });
   }
   function requireScope(plan: SitePlanData): boolean {
@@ -758,6 +768,24 @@ export function useOutdoorAgentWorkflow(input: {
     };
   }, [state.stage, proposal, busy, drawingMode]);
 
+  // 2026-11-19 T1-d2：真实用地红线同步（任务卡画真轮廓用，不再画示意地图）。
+  // 与分区清单同口径：800ms 读一次 bridge 快照，只有合法闭合环才交给卡；不变不重渲染。
+  useEffect(() => {
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      const ring = callbacks.current.bridge()?.getPlan()?.boundary ?? null;
+      const valid = ring && checkBoundaryRing(ring).ok ? ring : null;
+      setBoundaryRing(current => (JSON.stringify(current) === JSON.stringify(valid) ? current : valid));
+    };
+    tick();
+    const timer = setInterval(tick, 800);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
+
   // 2026-11-18 用户指令「随画随出卡」：zones 阶段（含手画中）把画布分区清单同步给任务卡，
   // 与上面 scope 阶段的边界轮询同口径。内容不变时不 setState，避免轮询空转重渲染。
   useEffect(() => {
@@ -825,6 +853,7 @@ export function useOutdoorAgentWorkflow(input: {
     job: { epoch: number; controller: AbortController; scope: string },
     warnings: string[] = [],
     afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
+    afterConfirmRequest?: OutdoorWorkflowProposal["afterConfirmRequest"],
   ): void | Promise<void> {
     // 有了一版可看的预览就不再记账：追问预算只数“毫无进展”的那几轮。
     askStreakRef.current = 0;
@@ -848,6 +877,7 @@ export function useOutdoorAgentWorkflow(input: {
       warnings,
       references: [...refsRef.current],
       ...(afterConfirm ? { afterConfirm } : {}),
+      ...(afterConfirmRequest ? { afterConfirmRequest } : {}),
     };
     const replaced = proposalRef.current;
     if (replaced && replaced.base !== p.base) recordCard(replaced, "replaced");
@@ -1039,11 +1069,7 @@ export function useOutdoorAgentWorkflow(input: {
     } else if (p.kind === "verify-access") {
       persist({
         ...stateRef.current,
-        stage: ["sub-routes", "people", "refine-3d"].includes(
-          stateRef.current.stage,
-        )
-          ? stateRef.current.stage
-          : "objects",
+        stage: "objects",
       });
     } else if (p.kind === "style") {
       // Cosmetic only: do not advance or confirm any venue/layout stage.
@@ -1066,7 +1092,10 @@ export function useOutdoorAgentWorkflow(input: {
     if (p.kind === "zones" || p.kind === "main-routes" || p.kind === "objects") {
       designStep(`已确认并应用「${p.label}」。`);
     }
-    if (p.afterConfirm) {
+    if (p.afterConfirmRequest) {
+      const request=p.afterConfirmRequest;
+      await act(request.turn,request.message,true,request.documents,request.imageCount);
+    } else if (p.afterConfirm) {
       await act({ action: p.afterConfirm, reply: "", references: [], facts: {} }, "", true);
     }
   }
@@ -1075,6 +1104,7 @@ export function useOutdoorAgentWorkflow(input: {
     boundary: SitePlanData["boundary"],
     name: string,
     basis?: VenueRangeBasis,
+    continuation?: OutdoorWorkflowProposal["afterConfirmRequest"],
   ) {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base) return;
@@ -1112,6 +1142,8 @@ export function useOutdoorAgentWorkflow(input: {
           ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
           ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],
+        continuation ? 'design-event' : undefined,
+        continuation,
       );
     } catch (error) {
       status(
@@ -1289,7 +1321,7 @@ export function useOutdoorAgentWorkflow(input: {
       "ready",
     );
   }
-  async function act(turn: OutdoorTurn, message: string, continueDesign = false, documents?: AgentDocument[]) {
+  async function act(turn: OutdoorTurn, message: string, continueDesign = false, documents?: AgentDocument[], imageCount = 0) {
     // 新回合开始即视为离开「纯手画」状态：卡上旧内容恢复，或按新意图重排。
     if (turn.action !== "draw-zone" && turn.action !== "draw-route" && turn.action !== "draw-entrance")
       setDrawingMode(null);
@@ -1395,12 +1427,12 @@ export function useOutdoorAgentWorkflow(input: {
       !/\d/.test(message) &&
       !/[个张把套顶组排座条件台块只面根副]/u.test(message);
     const fabricated =
-      vagueDemand &&
+      turn.action !== 'design-event' && vagueDemand &&
       ((turn.facts.items?.length ?? 0) > 0 || Boolean(turn.facts.guests));
     const candidates = fabricated
       ? { ...normalized, facts: { ...normalized.facts, items: undefined, guests: undefined } }
       : normalized;
-    persist(mergeOutdoorFacts(stateRef.current, candidates, message, priorUserText));
+    persist(mergeOutdoorFacts(stateRef.current, turn.action === 'design-event' ? { ...candidates, facts: {} } : candidates, message, priorUserText));
     if (fabricated) {
       const what = (turn.facts.items ?? [])
         .map((item) => item.query)
@@ -1536,6 +1568,12 @@ export function useOutdoorAgentWorkflow(input: {
         setBusy(false);
         return;
       }
+      if (turn.action === 'design-event' && stateRef.current.pendingBoundary) {
+        const candidate=stateRef.current.pendingBoundary;
+        offerBoundary(candidate.anchor,candidate.boundary,candidate.name,candidate.basis,{turn,message,documents:documents??[],imageCount});
+        designStep('范围确认后会继续同一份婚礼联合布置，不用重新说一遍需求。');
+        return;
+      }
       if (!requireScope(plan)) {
         // 2026-11-17 玉泉鱼跃实测卡点：范围未确认不硬抛死路（原文案把用户引回重新搜索地点，
         // 对检索不到轮廓的 POI 就是 85 秒白等）。画布上已有合法闭合边界时直接出确认卡，
@@ -1561,11 +1599,48 @@ export function useOutdoorAgentWorkflow(input: {
         persist({ ...stateRef.current, stage: "scope" });
         await offer(plan, "scope", "确认当前活动范围", job, [
           "红线圈住的就是这次活动实际用的那片地；确认后分区、流线、物件都按这片范围排。",
-        ]);
+        ],turn.action==='design-event'?'design-event':undefined,turn.action==='design-event'?{turn,message,documents:documents??[],imageCount}:undefined);
         setBusy(false);
         return;
       }
       const designingRoutes = turn.action === "main-routes";
+      if(turn.action==='design-event'){
+        const grounded=(fact:{evidence:string;sourceId?:string|undefined}):boolean=>message.includes(fact.evidence)
+          || Boolean(documents?.some(doc=>doc.sections.some((section,index)=>(!fact.sourceId||fact.sourceId===`${doc.id}:${index}`)&&section.text.includes(fact.evidence))))
+          || Boolean(fact.sourceId?.match(/^image:(\d+)$/)&&Number(fact.sourceId.slice(6))<imageCount);
+        const current=stateRef.current.brief;
+        const suppliedZones=turn.facts.zones?.filter(grounded)??[];
+        const suppliedItems=turn.facts.items?.filter(item=>grounded(item)&&evidencedCount(item.evidence,item.count))??[];
+        const designBrief:OutdoorBrief={...current,
+          ...(turn.facts.event&&grounded(turn.facts.event)?{event:turn.facts.event.value}:{}),
+          ...(turn.facts.guests&&grounded(turn.facts.guests)&&evidencedCount(turn.facts.guests.evidence,turn.facts.guests.value)?{guests:turn.facts.guests.value}:{}),
+          ...(suppliedZones.length?{zones:suppliedZones}:{}),
+          ...(suppliedItems.length?{items:suppliedItems}:{}),
+        };
+        if(!/婚礼|婚宴|结婚/u.test(designBrief.event??message)){
+          askForDetails('这条联合布置工具当前用于婚礼。请说明婚礼的场地与已有要求；其他活动仍可按分区和物料分别安排。');return;
+        }
+        persist({...stateRef.current,brief:designBrief,stage:'objects'});
+        status('正在把婚礼分区、通道和物料安排成同一份布局。','working',{stopLabel:'停止布置'});
+        await mapContext(job.controller.signal);
+        if(!live(job)||JSON.stringify(bridge.getPlan())!==original)return;
+        const queries=[...WEDDING_LIBRARY_QUERIES,...designBrief.items.map(item=>item.query)];
+        const library=bridge.readLibrary?await bridge.readLibrary(queries,job.controller.signal)
+          :(await Promise.allSettled([readOutdoorPersonalLibrary(callbacks.current.controller(),bridge.projectId?.()??input.scope,queries,job.controller.signal),readOutdoorBuiltinLibrary(queries,job.controller.signal)]))
+            .flatMap(result=>result.status==='fulfilled'?result.value:[]);
+        if(!live(job)||JSON.stringify(bridge.getPlan())!==original)return;
+        const map=mapRef.current,graded=map.layoutEvidence?.();
+        const hardBlocks=[...(map.buildingAreas?.()??[]),...(graded?.hard??[]).flatMap(feature=>feature.geometry.type==='polygon'
+          ?[feature.geometry.points]:outdoorCorridorStrips(feature.geometry.points,1))];
+        const report=await proposeWeddingLayout({plan,brief:designBrief,library,strategy:turn.designStrategy??'ceremony-first',hardBlocks,signal:job.controller.signal,
+          onPhase:text=>{if(live(job)){status(text,'working',{stopLabel:'停止布置'});designStep(text);}}});
+        if(!live(job)||JSON.stringify(bridge.getPlan())!==original)return;
+        for(const quantity of report.quantities)designStep(`${quantity.zone}：${quantity.role} ${quantity.placed}/${quantity.requested}${quantity.placeholder?'（尺寸占位件）':''}`);
+        objectsLayoutRef.current=null;
+        await offer(report.plan,'objects','婚礼联合布置：分区、物料与流线',job,[...report.notes,
+          ...report.quantities.map(quantity=>`${quantity.zone} · ${quantity.role}：${quantity.placed} 件${quantity.placeholder?'，占位待选型':''}`)]);
+        return;
+      }
       const designingObjects = turn.action === "objects";
       if (designingRoutes || designingObjects || turn.action === "zones" || turn.action === "revise") {
         designStep(plan.zones.length
@@ -1646,7 +1721,7 @@ export function useOutdoorAgentWorkflow(input: {
         persist({ ...stateRef.current, stage: "zones" });
         // 2026-11-18 用户口径「先设计，用户会告诉你他的想法」：分区确认后直接接一版物件预览，
         // 不再先停到「核对主通道」；只有用户自己点名要主通道时才接主通道。
-        const afterConfirm = designingRoutes ? "main-routes" : "objects";
+        const afterConfirm = designingRoutes ? "main-routes" : undefined;
         designStep(needsZones
           ? `先按已知用途划分区域，让${designingRoutes ? "主通道" : "物料"}有明确的服务范围。`
           : "根据已知用途和室内外条件，在活动边界内安排分区。");
@@ -2673,7 +2748,7 @@ export function useOutdoorAgentWorkflow(input: {
         return true;
       }
       const constraintBefore = JSON.stringify({brief:stateRef.current.brief,stage:stateRef.current.stage,completed:stateRef.current.completed});
-      await act(turn, message, true, documents);
+      await act(turn, message, true, documents, images?.length??0);
       // A neutral clarification is not cancellation or authorization. Only the unchanged
       // scope checkpoint may remain pending; never retain a geometric/model proposal
       // across unstructured new requirements. Cancel/new facts/new actions still invalidate.
@@ -3219,6 +3294,8 @@ export function useOutdoorAgentWorkflow(input: {
     cancel,
     /** 2026-11-18 用户指令「随画随出卡」：画布分区清单（800ms 快照同步）+ 分区卡编辑动作。 */
     drawnZones,
+    /** 2026-11-19 T1-d2：真实用地红线（已过 checkBoundaryRing）；null = 还没有或不合格。 */
+    boundaryRing,
     zoneEdits,
     /** 2026-11-19 用户反馈：精修卡不空挂——画布上选中的设施（快照同步），没有则出引导句。 */
     selectedFacility,

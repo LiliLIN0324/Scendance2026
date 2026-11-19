@@ -316,6 +316,8 @@ export function createOutdoorMapContext() {
         roadLines: () => roadLineFeatures(),
         openAreas: () => sourceSnapshot.features.filter(feature => feature.kind === 'open-space' && feature.geometry.type === 'polygon')
           .map(feature => ({ id: feature.id, name: feature.name, ring: feature.geometry.points.map(point => ({ ...point })), tags: { ...feature.tags } })),
+        buildingAreas: () => sourceSnapshot.features.filter(feature => feature.kind === 'building' && feature.geometry.type === 'polygon')
+          .map(feature => feature.geometry.points.map(point => ({ ...point }))),
         // docs/47 A2：分档明细随本轮 load 结果走（hook/A3 从这里读），没有证据就回空档。
         layoutEvidence: () => layout,
       };

@@ -390,7 +390,7 @@ export async function understandOutdoorTurn(input: {
     );
   }
   let turn = outdoorTurnSchema.parse(raw);
-  if (research) {
+  if (research && (turn.action === 'ask' || turn.action === 'search')) {
     // 调研只回复候选和建议，不替用户选场地或改变画布；选定名字后再走原地点确认链。
     turn = { ...turn, action: "ask", references: [], facts: {}, operation: undefined,
       reply: `${turn.reply}\n\n${venueResearchSources(research)}` };

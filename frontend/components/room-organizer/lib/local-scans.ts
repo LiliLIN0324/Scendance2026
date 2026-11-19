@@ -1,4 +1,4 @@
-import { DIRECT_BASE, findAholoAsset, isLux3dLocalProxy, listAholoAssets, rememberAholoAsset } from './aholo-assets';
+import { DIRECT_BASE, findAholoAsset, forgetAholoAsset, isLux3dLocalProxy, listAholoAssets, rememberAholoAsset } from './aholo-assets';
 import { cloudScanLodUrl, cloudScanUrl } from './cloud-assets';
 import index from './local-scan-index.json';
 import { readableScanName } from './scan-names';
@@ -17,9 +17,33 @@ export type LocalScanIndexEntry = {
   lodUrl?: string;
 };
 
+/** 索引文件：scans 是现存扫描，removed 是清单声明已删的资产号（墓碑）。 */
+type LocalScanIndexFile = { scans: LocalScanIndexEntry[]; removed?: string[] };
+
 /** 索引全量（按落盘时间倒序）。 */
 export function localScanIndex(): LocalScanIndexEntry[] {
-  return index as unknown as LocalScanIndexEntry[];
+  return (index as unknown as LocalScanIndexFile).scans;
+}
+
+/** 清单里已声明删除的资产号（墓碑），打开面板时据此退掉历史登记。 */
+export function removedScanIds(): string[] {
+  return (index as unknown as LocalScanIndexFile).removed ?? [];
+}
+
+/**
+ * 墓碑同步：清单里删掉的资产不能靠历史注册表复活（2026-11-19 用户：「把西湖标准档删了」——
+ * 注册表只进不出，光从清单/索引里删源，换过的浏览器里卡片照样挂着）。
+ * 本机代理与部署站都要执行，所以不挂在 registerLocalScans 里、由面板打开路径直接调。
+ * 返回退掉的条数。
+ */
+export function forgetRemovedScans(): number {
+  let forgotten = 0;
+  for (const assetId of removedScanIds()) {
+    if (!findAholoAsset(assetId)) continue;
+    forgetAholoAsset(assetId);
+    forgotten += 1;
+  }
+  return forgotten;
 }
 
 /** 直连代理是否指向这台电脑：只有指向本机才谈得上「本机扫描」。 */

@@ -1,0 +1,48 @@
+{
+  "_readme": "西湖区草坪婚礼候选场地。polygon 为空 = 还没描边，脚本会跳过并提示。坐标一律 GCJ-02，与画布/高德一致：[lng, lat]。描完把点列填进 polygon（首尾不必重复）。",
+  "_howto": "在产品里选中地点画好边界 -> 导出/复制边界点 -> 按顺序填进 polygon -> node tools/place-shapes/upsert-place-shape.mjs --file tools/place-shapes/venues.json",
+  "venues": [
+    {
+      "name": "杭州花家山庄",
+      "address": "三台山路25号",
+      "lawnAreaM2": 1200,
+      "drawWhat": "酒店草坪本体（方形、无遮挡那块），不含客房楼",
+      "polygon": []
+    },
+    {
+      "name": "浙江宾馆",
+      "address": "三台山路278号",
+      "lawnAreaM2": 800,
+      "drawWhat": "800㎡ 大草坪；心形花园可另建一条",
+      "polygon": []
+    },
+    {
+      "name": "杭州金溪山庄",
+      "address": "杨公堤39号",
+      "lawnAreaM2": null,
+      "drawWhat": "临湖草坪（面积小，只够 60-80 人）",
+      "polygon": []
+    },
+    {
+      "name": "浙江西子宾馆(南山路店)",
+      "address": "南山路37号",
+      "lawnAreaM2": null,
+      "drawWhat": "雷峰塔背景大草坪",
+      "polygon": []
+    },
+    {
+      "name": "杭州西湖国宾馆",
+      "address": "杨公堤18号",
+      "lawnAreaM2": null,
+      "drawWhat": "临湖草坪（一天只接一场）",
+      "polygon": []
+    },
+    {
+      "name": "杭州西溪十里芳菲",
+      "address": "西溪湿地内",
+      "lawnAreaM2": null,
+      "drawWhat": "主草坪一块即可，其余草坪后续补",
+      "polygon": []
+    }
+  ]
+}

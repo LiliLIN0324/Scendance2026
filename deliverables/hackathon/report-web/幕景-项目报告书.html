@@ -72,6 +72,64 @@
   }
   @page{size:A4;margin:15mm 14mm}
 </style>
+<style id="rp-edit-css">
+/* ==== 乐谱式就地编辑层（打印时完全隐藏，不影响 8 页版式） ==== */
+#rp-bar{
+  position:fixed; top:12px; right:12px; z-index:9999;
+  display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+  max-width:calc(100vw - 24px);
+  padding:7px 9px;
+  background:#fff; border:1px solid #d8dcd8; border-radius:10px;
+  box-shadow:0 6px 22px rgba(0,0,0,.14);
+  font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+  font-size:12px; line-height:1.4; color:#1B1B1B;
+}
+#rp-bar button{
+  font:inherit; padding:5px 10px; cursor:pointer;
+  background:#fff; color:#1B1B1B;
+  border:1px solid #cfd8d2; border-radius:7px;
+}
+#rp-bar button:hover{background:#F0F5F1;border-color:#2F6B4F}
+#rp-bar button[data-on="1"]{background:#2F6B4F;color:#fff;border-color:#2F6B4F}
+#rp-bar button[data-tone="warn"]{color:#8C6420;border-color:#E3CFAE}
+#rp-bar .rp-status{color:#7A7A7A;font-size:11px;padding:0 3px;white-space:nowrap}
+#rp-bar .rp-sep{width:1px;height:18px;background:#E2E6E2;margin:0 2px}
+#rp-bar.rp-min > *:not(#rp-toggle){display:none !important}
+#rp-bar.rp-min{background:#2F6B4F;border-color:#2F6B4F;padding:4px 5px}
+#rp-bar.rp-min #rp-toggle{background:#2F6B4F;color:#fff;border-color:#2F6B4F;padding:6px 10px}
+#rp-toggle{min-width:32px}
+
+.doc.rp-editing{box-shadow:inset 0 0 0 2px #E6F0E9}
+.doc.rp-editing section.page{outline:1px dashed #D8DCD8;outline-offset:8px}
+.doc.rp-editing:focus{outline:none}
+.doc.rp-editing img{cursor:pointer}
+.doc.rp-editing img:hover{outline:2px solid #2F6B4F;outline-offset:2px}
+.doc.rp-editing a{cursor:text}
+
+#rp-toast{
+  position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+  z-index:10000; max-width:min(680px,90vw);
+  padding:9px 15px; border-radius:9px;
+  background:#173D2C; color:#fff;
+  font-family:"Microsoft YaHei","PingFang SC",sans-serif; font-size:12.5px; line-height:1.6;
+  box-shadow:0 8px 24px rgba(0,0,0,.22);
+  opacity:0; pointer-events:none; transition:opacity .18s ease;
+}
+#rp-toast.show{opacity:1}
+
+@media (max-width:700px){
+  #rp-bar{top:auto;bottom:10px;right:10px;left:10px;justify-content:center}
+  #rp-bar .rp-status{width:100%;text-align:center}
+}
+
+@media print{
+  #rp-bar,#rp-toast{display:none !important}
+  .doc.rp-editing{box-shadow:none}
+  .doc.rp-editing section.page{outline:none}
+  .doc.rp-editing img:hover{outline:none}
+}
+
+</style>
 </head>
 <body>
 <div class="doc">
@@ -325,5 +383,296 @@
 </section>
 
 </div>
+<script id="rp-edit-js">
+/* ==== 幕景项目报告书 · 网页就地编辑层 v1 ==== */
+(function () {
+  'use strict';
+
+  var KEY = 'scdance-report-draft-v1';
+  var doc = document.querySelector('.doc');
+  if (!doc) return;
+
+  var imgs = [].slice.call(doc.querySelectorAll('img'));
+  var ORIG = imgs.map(function (im) { return im.src; });
+  var editing = false;
+  var dirty = false;
+  var autoTimer = null;
+  var restoredAt = null;
+  var baseSections = doc.querySelectorAll('section.page').length;
+
+  /* ---------- 工具栏 ---------- */
+  var bar = document.createElement('div');
+  bar.id = 'rp-bar';
+  bar.setAttribute('role', 'toolbar');
+
+  var btnEdit = mk('编辑文字', '开/关文字编辑：开着时正文可以直接点着改');
+  var btnSave = mk('保存草稿', '把修改存在本机浏览器（不上传，换设备看不到）');
+  var st = document.createElement('span');
+  st.className = 'rp-status';
+  st.textContent = '未修改';
+  var sep = document.createElement('span');
+  sep.className = 'rp-sep';
+  var btnExport = mk('导出 HTML', '下载一份改好的完整网页（图片内嵌，双击就能继续改）');
+  var btnPrint = mk('打印 / 存 PDF', '按 A4 打印，可直接另存为 PDF');
+  var btnReset = mk('还原发布版', '丢掉本机草稿，回到线上发布的内容');
+  btnReset.setAttribute('data-tone', 'warn');
+  var btnToggle = mk('−', '收起编辑栏（窄屏时避免挡住正文）');
+  btnToggle.id = 'rp-toggle';
+  btnToggle.addEventListener('click', function () {
+    var min = bar.classList.toggle('rp-min');
+    btnToggle.textContent = min ? '✎ 改这份报告' : '−';
+    btnToggle.title = min ? '展开编辑栏' : '收起编辑栏（窄屏时避免挡住正文）';
+  });
+
+  bar.appendChild(btnEdit);
+  bar.appendChild(btnSave);
+  bar.appendChild(st);
+  bar.appendChild(sep);
+  bar.appendChild(btnExport);
+  bar.appendChild(btnPrint);
+  bar.appendChild(btnReset);
+  bar.appendChild(btnToggle);
+  document.body.appendChild(bar);
+
+  var toastEl = document.createElement('div');
+  toastEl.id = 'rp-toast';
+  document.body.appendChild(toastEl);
+
+  function mk(label, title) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (title) b.title = title;
+    return b;
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 4200);
+  }
+
+  function hhmm() {
+    var d = new Date();
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  function setStatus(t) { st.textContent = t; }
+
+  /* ---------- 草稿：序列化 / 恢复 ---------- */
+  function serialize(keepNewImages) {
+    var clone = doc.cloneNode(true);
+    var list = [].slice.call(clone.querySelectorAll('img'));
+    list.forEach(function (im, i) {
+      var cur = im.getAttribute('src') || '';
+      var orig = ORIG[i] || '';
+      if (cur === orig) {
+        im.setAttribute('src', 'rp-orig:' + i);
+      } else if (keepNewImages) {
+        /* 用户换过图：整张 dataURL 存进草稿（可能超配额） */
+        im.setAttribute('src', cur);
+        im.setAttribute('data-rp-new', String(i));
+      } else {
+        im.setAttribute('src', 'rp-orig:' + i);
+        im.removeAttribute('data-rp-new');
+      }
+    });
+    return clone.innerHTML;
+  }
+
+  function save(silent) {
+    var payload = { html: serialize(true), ts: Date.now(), v: 1 };
+    try {
+      localStorage.setItem(KEY, JSON.stringify(payload));
+      dirty = false;
+      setStatus('已保存 ' + hhmm() + '（本机）');
+      if (!silent) toast('草稿已存在本机浏览器。要给别人看，点「导出 HTML」或「打印 / 存 PDF」。');
+      return true;
+    } catch (e) {
+      try {
+        payload = { html: serialize(false), ts: Date.now(), v: 1, imgsDropped: true };
+        localStorage.setItem(KEY, JSON.stringify(payload));
+        dirty = false;
+        setStatus('已保存 ' + hhmm() + '（新图未存）');
+        toast('文字已保存；你替换的图片太大，没进草稿——请用「导出 HTML」带走完整版本。');
+        return true;
+      } catch (e2) {
+        toast('保存失败：浏览器本地存储空间不够。改用「导出 HTML」保存。');
+        return false;
+      }
+    }
+  }
+
+  function scheduleAuto() {
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(function () { if (dirty) save(true); }, 1600);
+  }
+
+  function restoreDraft() {
+    var raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return false; }
+    if (!raw) return false;
+    var d;
+    try { d = JSON.parse(raw); } catch (e) { return false; }
+    if (!d || typeof d.html !== 'string' || !d.html) return false;
+
+    var holder = document.createElement('div');
+    holder.innerHTML = d.html;
+    [].slice.call(holder.querySelectorAll('img')).forEach(function (im) {
+      var s = im.getAttribute('src') || '';
+      var m = s.match(/^rp-orig:(\d+)$/);
+      if (m) {
+        im.setAttribute('src', ORIG[Number(m[1])] || '');
+        im.removeAttribute('data-rp-new');
+      }
+    });
+    doc.innerHTML = holder.innerHTML;
+    imgs = [].slice.call(doc.querySelectorAll('img'));
+    restoredAt = d.ts ? new Date(d.ts) : new Date();
+    return true;
+  }
+
+  /* ---------- 编辑开关 ---------- */
+  function setEditing(on) {
+    editing = on;
+    if (on) {
+      doc.setAttribute('contenteditable', 'true');
+      doc.classList.add('rp-editing');
+    } else {
+      doc.removeAttribute('contenteditable');
+      doc.classList.remove('rp-editing');
+    }
+    btnEdit.dataset.on = on ? '1' : '0';
+    btnEdit.textContent = on ? '完成编辑' : '编辑文字';
+    if (on) {
+      doc.focus({ preventScroll: true });
+      toast('现在可以直接点正文改字了。粘贴只保留文字，不会带进 Word 的样式；双击图片可换图。');
+    } else if (dirty) {
+      save(true);
+    }
+  }
+
+  btnEdit.addEventListener('click', function () { setEditing(!editing); });
+  btnSave.addEventListener('click', function () { save(false); });
+
+  btnPrint.addEventListener('click', function () {
+    if (dirty) save(true);
+    setTimeout(function () { window.print(); }, 120);
+  });
+
+  btnReset.addEventListener('click', function () {
+    var has = false;
+    try { has = !!localStorage.getItem(KEY); } catch (e) { has = false; }
+    if (!has) { toast('本机没有保存过草稿，当前显示的就是发布版。'); return; }
+    if (!window.confirm('丢掉本机草稿，恢复到线上发布的内容？')) return;
+    try { localStorage.removeItem(KEY); } catch (e) { }
+    location.reload();
+  });
+
+  /* ---------- 导出 HTML ---------- */
+  function stamp() {
+    var d = new Date();
+    return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '-' + ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  btnExport.addEventListener('click', function () {
+    var clone = document.documentElement.cloneNode(true);
+    var b = clone.querySelector('#rp-bar'); if (b) b.remove();
+    var t = clone.querySelector('#rp-toast'); if (t) t.remove();
+    var d2 = clone.querySelector('.doc');
+    if (d2) {
+      d2.removeAttribute('contenteditable');
+      d2.classList.remove('rp-editing');
+      [].slice.call(d2.querySelectorAll('img')).forEach(function (im) {
+        im.removeAttribute('data-rp-new');
+        if (im.getAttribute('src') === 'rp-orig:0') { /* 不会发生，防御 */ }
+      });
+    }
+    var html = '<!DOCTYPE html>\n' + clone.outerHTML;
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '幕景-项目报告书-可编辑-' + stamp() + '.html';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+    toast('已下载改好的完整网页（图片内嵌，约 3.4 MB）。这个文件本身也能继续编辑。');
+  });
+
+  /* ---------- 编辑态行为 ---------- */
+  doc.addEventListener('input', function () {
+    dirty = true;
+    if (editing) setStatus('修改中…');
+    scheduleAuto();
+  });
+
+  /* 粘贴只取纯文本，避免带入外部样式 */
+  doc.addEventListener('paste', function (e) {
+    if (!editing) return;
+    var cd = e.clipboardData || window.clipboardData;
+    if (!cd) return;
+    var text = cd.getData('text/plain');
+    if (!text) return;
+    e.preventDefault();
+    document.execCommand('insertText', false, text);
+  });
+
+  /* 双击图片换图 */
+  doc.addEventListener('dblclick', function (e) {
+    if (!editing) return;
+    var im = e.target && e.target.closest ? e.target.closest('img') : null;
+    if (!im) return;
+    e.preventDefault();
+    var inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0];
+      if (!f) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        im.setAttribute('src', String(fr.result));
+        im.removeAttribute('alt');
+        dirty = true;
+        save(true);
+        toast('图已替换。要交给别人，点「导出 HTML」或「打印 / 存 PDF」。');
+      };
+      fr.readAsDataURL(f);
+    });
+    inp.click();
+  });
+
+  /* 结构守卫：分页段被删掉时提醒 */
+  var guard = new MutationObserver(function () {
+    var n = doc.querySelectorAll('section.page').length;
+    if (n < baseSections) {
+      toast('注意：页数从 ' + baseSections + ' 降到 ' + n + '。Ctrl+Z 可撤销，或点「还原发布版」。');
+      baseSections = n;
+    }
+  });
+  guard.observe(doc, { childList: true, subtree: true });
+
+  /* ---------- 启动 ---------- */
+  /* 公开页默认收起，避免评审看到一排按钮；加 ?edit=1 直接展开 */
+  if (!/[?&]edit=1/.test(location.search)) {
+    bar.classList.add('rp-min');
+    btnToggle.textContent = '✎ 改这份报告';
+    btnToggle.title = '展开编辑栏';
+  }
+  if (restoreDraft()) {
+    toast('这台电脑上有上次没发布的修改，已恢复。点「还原发布版」可回到线上内容；点「导出 HTML」可带走改好的整页。');
+  }
+  if (restoredAt) {
+    setStatus('草稿 ' + ('0' + restoredAt.getHours()).slice(-2) + ':' + ('0' + restoredAt.getMinutes()).slice(-2) + '（未发布）');
+  } else {
+    setStatus(dirty ? '有未保存修改' : '未修改');
+  }
+})();
+
+</script>
 </body>
 </html>

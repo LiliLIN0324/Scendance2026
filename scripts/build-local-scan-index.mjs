@@ -11,6 +11,8 @@
 //   - 有 lod-meta 的条目会带上 forwardBox（应用侧换算真实尺度）与 lodUrl
 //     （预览按相机距离换档）。只带 forwardBox 不带 lodUrl 时，LOD 派生好了也用不上
 //     ——登记断点就在这里。
+//   - 清单里的 removed（已删资产号墓碑）原样透传进索引：应用打开面板时按它
+//     从浏览器注册表退掉历史登记，已删扫描不能靠旧注册表复活。
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -98,9 +100,13 @@ for (const scan of scans) {
 }
 
 entries.sort((a, b) => b.savedAt - a.savedAt);
-await writeFile(outputPath, `${JSON.stringify(entries, null, 2)}\n`, 'utf8');
+// 墓碑只收像资产号的字符串：手滑写错时宁可不透传，也别让应用去退掉不存在的条目。
+const removed = Array.isArray(manifest?.removed)
+  ? manifest.removed.filter((id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))
+  : [];
+await writeFile(outputPath, `${JSON.stringify({ scans: entries, removed }, null, 2)}\n`, 'utf8');
 
-process.stdout.write(`本机扫描索引：${entries.length} 条 → ${outputPath}\n`);
+process.stdout.write(`本机扫描索引：${entries.length} 条（removed ${removed.length}）→ ${outputPath}\n`);
 if (missing.length) {
   process.stderr.write(`本机没有这些文件，已跳过 ${missing.length} 条：${missing.join(', ')}\n`);
 }

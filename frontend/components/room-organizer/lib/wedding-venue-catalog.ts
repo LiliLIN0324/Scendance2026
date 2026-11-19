@@ -38,7 +38,10 @@ export const WEDDING_VENUES: readonly WeddingVenue[] = [
     area: "西湖景区内园地",
     setting: "garden",
     indoorFallback: true,
-    rebuiltAssetId: "c338f720-3f60-4adb-8f3b-023300000001",
+    // 2026-11-19 标准档（…000001）已从扫描库删除（见 data/local-scans.json 的 removed），
+    // 重建资产改指同一场 0233 的极速档（同一 worldId 3FO4FMTUKCW4 的低档产物），
+    // 「已重建，可当场进 3D」的能力不丢，加载还更快（7.8 MB vs 23 MB）。
+    rebuiltAssetId: "c338f720-3f60-4adb-8f3b-023300000002",
     highlight: "已重建，可当场进 3D 看树冠遮挡与地面起伏（Demo 展示名）",
   },
   {

@@ -7,6 +7,7 @@
 ## 当前长期任务入口（2026-11-17）
 
 - [Agent T2/T3 接手记录](plans/2026-11-19-agent-t2-t3-handoff.md)：可配置网页搜索、附件读取与来源、自动范围及聊天改范围；未配置搜索服务，T3 按用户要求未验收，未部署。
+- [聊天驱动完整活动设计：跨 AI 执行任务书](plans/2026-11-19-chat-first-event-agent-execution.md)：Chat/附件完成选址到物料与个人安排；含卡片删补、T0–T8、婚礼/公益双案例、目标网站截图与 main 交付要求。待实施，不代表已完成。
 - [最新 main 长期任务分派计划](plans/2026-11-17-main-long-horizon-agent-plan.md)：以 af748a6d 核对，五条开发线与独立验收责任、P0 数据条件、阶段终点和文件归属。本次仅规划，产品检查与发布仍未完成。
 - [对照 Event Producer Bot 的能力差距与提升计划 v3](plans/2026-11-17-event-producer-bot-gap-plan.md)：P0–P3 分层、「只陈述证据、不推导状态」口径，含 P1-0 材料起草与 P0-5 只读聚合；九条口径已拍板。
 - [eventProfile P0 契约草案 v2](plans/2026-11-17-event-profile-p0-contract.md)：字段表、标注不变量、9 个迁移面、`eventBrief` 契约与 T1–T18 验收。**点卡前先对这份**。

@@ -62,7 +62,7 @@ export function emptyOutdoorFlow(scope: string): OutdoorFlowState {
     completed: [],
   };
 }
-function evidencedCount(evidenceText: string, value: number): boolean {
+export function evidencedCount(evidenceText: string, value: number): boolean {
   const normalized = evidenceText
     .normalize("NFKC")
     .replace(/第[零〇一二两三四五六七八九十百千万\d]+[个项]/gu, "");
@@ -133,8 +133,10 @@ export function mergeOutdoorFacts(
       normalizedPrior.includes(normalizeEvidence(value.evidence)));
   // 2026-11-14 实测：模型会把上一轮记住的事实原样重发（evidence 还是更早句子的原文），
   // 本句溯源对「顺带重发且与上一轮完全一致」的事实不适用——跳过；只有新增/变化的事实才要求本句依据。
+  const semanticValue = (value: unknown) => value && typeof value === 'object'
+    ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'evidence' && key !== 'sourceId').sort(([a],[b]) => a.localeCompare(b))) : value;
   const carriedOver = (value: unknown, before: unknown) =>
-    before !== undefined && JSON.stringify(before) === JSON.stringify(value);
+    before !== undefined && JSON.stringify(semanticValue(before)) === JSON.stringify(semanticValue(value));
   for (const value of [...(facts.zones ?? []), ...(facts.items ?? []), ...(facts.people ?? [])]) {
     if (!value) continue;
     const before = [...state.brief.zones, ...state.brief.items, ...state.brief.people].find(
@@ -264,6 +266,7 @@ export function planVersion(plan: SitePlanData): string {
   return `plan:${(hash >>> 0).toString(16)}`;
 }
 export interface OutdoorMapContext {
+  buildingAreas?(): SitePlanData['boundary'][];
   openAreas?(): Array<{ id: string; name: string; ring: SitePlanData['boundary']; tags: Record<string, string> }>;
   version: string;
   status: "ready" | "partial" | "unavailable";

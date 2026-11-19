@@ -94,8 +94,10 @@ export function resolveChoiceReply(
   const options = parseChoiceOptions(question);
   if (options.length < 2) return null;
   const index = resolveOrdinal(message);
-  if (index === null || index >= options.length) return null;
-  return { options, chosen: { index, text: options[index]! } };
+  const normalize = (text: string) => stripTrailing(text.normalize('NFKC').replace(/^[1-9一二三四五][.、):]\s*/u, '')).replace(/\s+/g, '');
+  const matched = index ?? options.findIndex(option => normalize(option) === normalize(message));
+  if (matched < 0 || matched >= options.length) return null;
+  return { options, chosen: { index: matched, text: options[matched]! } };
 }
 
 /**
