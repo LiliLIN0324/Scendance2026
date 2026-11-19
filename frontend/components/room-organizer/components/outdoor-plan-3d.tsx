@@ -23,10 +23,12 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GeoScaleCompass } from '@/components/room-organizer/components/geo-scale-compass';
 import { useOutdoorWalk, type OutdoorWalkFrame, type SeatWalkState } from '@/components/room-organizer/hooks/use-outdoor-walk';
 import {
+  DIRECT_BASE,
   findAholoAsset,
   resolveAholoAssetUrl,
 } from '@/components/room-organizer/lib/aholo-assets';
 import { CATALOG_DRAG_MIME } from '@/components/room-organizer/lib/catalog-drag';
+import { storedAholoSceneSource } from '@/components/room-organizer/lib/aholo-model-placement';
 import { createCrowdIdlePacer } from '@/components/room-organizer/lib/idle-crowd-pacer';
 import {
   InteractRegistry,
@@ -73,7 +75,7 @@ import {
 import { advancePeopleAnimations, registerPersonAnim, setPersonSeatContext, setPersonWalkContext, setPersonZoneContext, takePersonControl } from '@/components/room-organizer/three/people-anim';
 import { buildProceduralPerson } from '@/components/room-organizer/three/builders/builders-people';
 import { findWalkRole } from '@/components/room-organizer/lib/walk-roles';
-import { createSplatPreview, type SplatPreview } from '@/components/room-organizer/three/splat-preview';
+import { createSplatPreview, type SplatPreview, type SplatWalkBounds } from '@/components/room-organizer/three/splat-preview';
 import { type PlanFacility, type PlanPoint, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { CanvasBasemapSource, OutdoorPlanCanvasHandle, PlanEditVisuals } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
@@ -89,7 +91,6 @@ import { acquireWebGLSurface } from '@/components/room-organizer/lib/webgl-conte
 import {
   planCrowdShellPlacements,
   planSceneObjectPlacements,
-  type SceneObjectPlacement,
 } from '@/components/room-organizer/lib/plan-scene-placement';
 import { assignCrowdWalkRoutes } from '@/components/room-organizer/lib/plan-crowd-routes';
 import { DERIVED_CROWD_NOTE, deriveCrowdFromRoutes, mergeDerivedCrowd, shouldDeriveCrowd } from '@/components/room-organizer/lib/plan-crowd-derived';
@@ -279,10 +280,51 @@ export interface OutdoorPlan3DApi {
   orbitByDelta(deltaTheta: number): void;
   /** 同步渲染一帧后读 canvas：接管态（主画布复用本组件）导出效果图用。 */
   captureImage(): string | null;
+  /** 封面机位：框住当前这套高斯重建（含高斯层）抓一帧，抓完把相机还回去；没有就绪的重建时返回 null。 */
+  captureScanImage(): string | null;
 }
 
-export interface OutdoorPlan3DProps {
-  plan: SitePlanData;
+/**
+ * 实景扫描加载状态（由 OutdoorPlan3D 上报）。
+ * 2026-11-19 用户拍板拆除室内点云管线（B 方案）：
+ * 尺寸校准与漫游边界不能再问隐藏管线要，这里改成由可见的 3D 画布报出来。
+ */
+export type SplatScanState = Readonly<{
+  assetId: string;
+  name: string;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  /** 0..1；未知时不带。 */
+  progress?: number;
+  error?: string;
+  /** 点云落地后的真实米制尺寸（尺寸校准用）。 */
+  meters?: { width: number; depth: number; height: number };
+  /** 漫游可走边界（米，第一人称围栏用）；没有就是不带。 */
+  walkBounds?: SplatWalkBounds;
+}>;
+
+/** 一份场地高斯重建的落位请求：地面占位标记 + 世界落点 + 资产地址。 */
+type VenueSplatRequest = {
+  patch: THREE.Mesh;
+  outline: THREE.LineLoop;
+  assetId: string;
+  url: string;
+  name: string;
+  world: { x: number; z: number };
+};
+
+/**
+ * 已挂上的那份高斯重建。与底图场景分开持有：换扫描才重新加载，
+ * 挪落点只按差值平移（offset 是预览器的落位偏移，世界中心 = calibration.origin + offset）。
+ */
+type VenueSplat = VenueSplatRequest & {
+  /** 加载失败时置 null，占位标记留在原地当降级提示。 */
+  preview: SplatPreview | null;
+  offset: THREE.Vector3;
+  meters?: { width: number; depth: number; height: number };
+  walkBounds?: SplatWalkBounds | null;
+};
+
+export interface OutdoorPlan3DProps {  plan: SitePlanData;
   /** 跟 2D 画布同一个图源，3D 地面直接贴同一套瓦片（默认 osm）。 */
   source?: CanvasBasemapSource;
   /**
@@ -324,6 +366,20 @@ export interface OutdoorPlan3DProps {
   /** 当前选中的漫游角色 GLB（左侧「漫游角色」的同一份选择）；缺省或加载失败时退回几何占位人。 */
   walkRoleUrl?: string;
   walkRoleName?: string;
+  /**
+   * 2026-11-19：把场地实景（高斯点云）的加载状态报给外层。
+   * 室内点云管线已退役，外层（room-organizer）只看这一份：顶部状态条、漫游可用性、
+   * 尺寸校准、加载失败重试都以它为准。
+   */
+  onScanState?(state: SplatScanState): void;
+  /** 2026-11-19：当前正在看的实景扫描（世界坐标）；不传就只有地面轮廓、看不到点云。 */
+  scan?: {
+    assetId: string;
+    name: string;
+    x: number;
+    z: number;
+    meters?: { width: number; depth: number; height: number };
+  } | undefined;
 }
 
 interface WalkActor {
@@ -374,6 +430,8 @@ export default function OutdoorPlan3D({
   onInteract,
   walkRoleUrl,
   walkRoleName,
+  onScanState,
+  scan,
 }: OutdoorPlan3DProps): JSX.Element {
   const stageRef = useRef<HTMLDivElement | null>(null);
   // 保活态：隐藏时仍旧跑 LOD，但不渲染（不可见的 GPU 耗时没意义）。
@@ -464,6 +522,30 @@ export default function OutdoorPlan3D({
   // 组件级引用（renderer/scene 本体在 mount effect 里）：captureImage 同步抓帧用。
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
+  // 场地高斯重建独立持有：换扫描重新加载、挪落点只平移，都不重建底图场景。
+  const venueSplatRef = useRef<VenueSplat | null>(null);
+  const venueSplatApiRef = useRef<{ start(request: VenueSplatRequest): void; dispose(): void } | null>(null);
+  const scanRef = useRef(scan);
+  scanRef.current = scan;
+  const onScanStateRef = useRef(onScanState);
+  onScanStateRef.current = onScanState;
+  const disposeVenueSplat = useCallback((): void => {
+    const entry = venueSplatRef.current;
+    if (!entry) return;
+    venueSplatRef.current = null;
+    // 解码出来的 GPU 资源不会随场景 traverse 走，要显式释放。
+    try {
+      entry.preview?.dispose();
+    } catch {
+      /* 释放失败不影响卸载。 */
+    }
+    entry.patch.parent?.remove(entry.patch);
+    entry.outline.parent?.remove(entry.outline);
+    entry.patch.geometry.dispose();
+    (entry.patch.material as THREE.Material).dispose();
+    entry.outline.geometry.dispose();
+    (entry.outline.material as THREE.Material).dispose();
+  }, []);
   // 真实模型层的“换代号”：plan 变化或组件卸载后自增，晚到的模型直接丢掉。
   const modelRunRef = useRef(0);
   const canvasEditApiRef = useRef(canvasApiRef);
@@ -665,7 +747,10 @@ export default function OutdoorPlan3D({
     const camera = cameraRef.current;
     if (!renderer || !scene || !camera) return null;
     // 主渲染器没有 preserveDrawingBuffer：先同步渲染一帧再立即读 canvas。
-    renderer.render(scene, camera);
+    // 高斯重建在独立绘制层（paintAsBackLayer），只 render(scene) 抓出来是纯底图。
+    const preview = venueSplatRef.current?.preview;
+    if (preview?.shownId) preview.renderFrame(renderer, scene, camera);
+    else renderer.render(scene, camera);
     try {
       return renderer.domElement.toDataURL('image/png');
     } catch {
@@ -673,11 +758,41 @@ export default function OutdoorPlan3D({
     }
   }, []);
 
+  const captureScanImage = useCallback((): string | null => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    const entry = venueSplatRef.current;
+    if (!camera || !entry?.preview?.shownId) return null;
+    const bounds = entry.walkBounds;
+    const width = bounds ? bounds.maxX - bounds.minX : (entry.meters?.width ?? 4);
+    const depth = bounds ? bounds.maxZ - bounds.minZ : (entry.meters?.depth ?? 3);
+    const height = entry.meters?.height ?? 3;
+    const center = new THREE.Vector3(
+      bounds ? (bounds.minX + bounds.maxX) / 2 : entry.world.x,
+      (bounds?.minY ?? 0) + height / 2,
+      bounds ? (bounds.minZ + bounds.maxZ) / 2 : entry.world.z,
+    );
+    const span = Math.max(width, depth, height, 1);
+    const savedPosition = camera.position.clone();
+    const savedTarget = controls ? controls.target.clone() : null;
+    camera.position.set(center.x + span * 1.1, center.y + span * 0.8, center.z + span * 1.5);
+    if (controls) controls.target.copy(center);
+    camera.lookAt(center);
+    const image = captureImage();
+    camera.position.copy(savedPosition);
+    if (controls && savedTarget) {
+      controls.target.copy(savedTarget);
+      controls.update();
+    }
+    camera.lookAt(controls ? controls.target : center);
+    return image;
+  }, [captureImage]);
+
   useEffect(() => {
     if (!apiRef) return undefined;
-    apiRef.current = { zoomBy: zoomByStep, focusLngLat, focusVenue, resetNorth, getBearing, orbitByDelta, captureImage };
+    apiRef.current = { zoomBy: zoomByStep, focusLngLat, focusVenue, resetNorth, getBearing, orbitByDelta, captureImage, captureScanImage };
     return () => { apiRef.current = null; };
-  }, [apiRef, zoomByStep, focusLngLat, focusVenue, resetNorth, getBearing, orbitByDelta, captureImage]);
+  }, [apiRef, zoomByStep, focusLngLat, focusVenue, resetNorth, getBearing, orbitByDelta, captureImage, captureScanImage]);
 
   // 玩家设施碰撞：plan 变化时按世界系重算一次；RAF 里只读 ref，不每帧建盒。
   // 口径见 `lib/plan-player-colliders.ts`：设施盒是场地局部系，玩家在世界系，差一个场地中心平移。
@@ -1320,16 +1435,9 @@ export default function OutdoorPlan3D({
       setWalkActors(actors);
     };
 
-    // 实景扫描（高斯点云）：先把地面轮廓标记画出来，点云本体等 controls 建好再起
+    // 实景扫描（高斯重建）：先把地面轮廓标记画出来，本体等 controls 建好再起
     //（预览器要 renderer + camera + 环绕控制器）。
-    const splatRequests: {
-      placement: SceneObjectPlacement;
-      patch: THREE.Mesh;
-      outline: THREE.LineLoop;
-      assetId: string;
-      url: string;
-    }[] = [];
-    let splatPreview: SplatPreview | null = null;
+    const splatRequests: VenueSplatRequest[] = [];
 
     planSceneObjectPlacements(sceneObjects ?? [], plan.boundary, metrics).forEach((placement) => {
       const { shell } = placement;
@@ -1359,12 +1467,13 @@ export default function OutdoorPlan3D({
         outline.position.y = 0.03;
         outline.name = `plan-scene-outline-${placement.id}`;
         sceneLayer.add(outline);
-        // 实景扫描（高斯点云）：本机 Aholo 注册表里能取到这份资产才起点云；
-        // 点云起不来时这块轮廓就留在原地当占位标记（静默降级，不打断其它落点）。
+        // 实景扫描（高斯重建）：本机 Aholo 注册表里能取到这份资产才起本体；
+        // 起不来时这块轮廓就留在原地当占位标记（静默降级，不打断其它落点）。
         const assetId = placement.assetId;
         const url = assetId ? resolveAholoAssetUrl(assetId) : undefined;
         if (assetId && url) {
-          splatRequests.push({ placement, patch, outline, assetId, url });
+          const at = splatWorldPosition(placement.shell, metrics);
+          splatRequests.push({ patch, outline, assetId, url, name: placement.name, world: { x: at.x, z: at.z } });
         }
         return;
       }
@@ -1692,12 +1801,12 @@ export default function OutdoorPlan3D({
     };
     requestAnimationFrame(animateTilt);
 
-    // —— 实景扫描（高斯点云）——
+    // —— 实景扫描（高斯重建）——
     // 预览器要 renderer + camera + 环绕控制器，所以等 controls 建好再起。
-    // 一个预览器同一时刻只挂一份点云，因此只起第一块（场地那块）实景扫描。
-    const startVenueSplat = (request: (typeof splatRequests)[number]): void => {
+    // 一个预览器同一时刻只挂一份，因此只起第一块（场地那块）实景扫描。
+    const startVenueSplat = (request: VenueSplatRequest): void => {
       if (!renderer || !controls) return;
-      const { placement, patch, outline, assetId, url } = request;
+      const { patch, outline, assetId, url, name, world } = request;
       const preview = createSplatPreview({
         renderer,
         camera,
@@ -1709,50 +1818,90 @@ export default function OutdoorPlan3D({
         // 渲染循环在本组件里自己转，这里只作 LOD 统计回调，用不上。
         invalidate: () => {},
       });
-      splatPreview = preview;
       const asset = findAholoAsset(assetId);
+      onScanState?.({ assetId, name, status: 'loading', ...(asset?.meters ? { meters: asset.meters } : {}) });
       const calibration = readSiteCalibration(assetId) ?? defaultSiteCalibration(assetId);
       // 落点口径与 patch / outline 同一条链路（壳体 → three 世界）。
-      const target = splatWorldPosition(placement.shell, metrics);
+      const target = new THREE.Vector3(world.x, 0, world.z);
       // 预览器默认 roofCutoffY = 3（室内按楼层切天花板用），室外整场扫描不能这么裁：
       // 3 米以上会被整片削掉（树冠、楼体、屋顶）。这里给一个足够大的上限，等于不裁切。
       const roofCutoffY = Math.max(60, (asset?.meters?.height ?? 0) * 2);
-      void preview
-        .start(
-          {
-            assetId,
-            url,
-            name: placement.name,
+      const placementOffset = splatPlacementOffset(target, calibration.origin);
+      venueSplatRef.current = {
+        ...request,
+        preview,
+        offset: new THREE.Vector3(placementOffset.x, placementOffset.y, placementOffset.z),
+      };
+      // 进度限频用的时间戳（同一套扫描只在 >120ms 时才上报一次）。
+      let lastProgressAt = 0;
+      const loadOptions = {
+        sizeMeters: splatVenueSpan(metrics),
+        upAxis: 'Z' as const,
+        roofCutoffY,
+        position: placementOffset,
+        // 2026-11-19：进度上报。加载器会在 effect 里同步连着打进度事件，
+        // 直接 setState 会在同一轮里嵌套更新（React 报 Maximum update depth exceeded），
+        // 所以这里限频 + 推到下一帧再报。
+        onProgress: (ratio: number | undefined) => {
+          const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+          if (now - lastProgressAt < 120) return;
+          lastProgressAt = now;
+          const emit = () => onScanState?.({
+            assetId, name, status: 'loading' as const,
+            ...(ratio === undefined ? {} : { progress: ratio }),
             ...(asset?.meters ? { meters: asset.meters } : {}),
-            ...(asset?.lodUrl ? { lodUrl: asset.lodUrl } : {}),
-          },
-          {
-            sizeMeters: splatVenueSpan(metrics),
-            upAxis: 'Z',
-            roofCutoffY,
-            position: splatPlacementOffset(target, calibration.origin),
-            calibration: {
-              scale: calibration.scale,
-              yawDeg: calibration.yawDeg,
-              origin: calibration.origin,
-              ground: calibration.ground,
-              anchors: calibration.anchors,
-            },
-          },
-        )
-        .then(() => {
-          if (disposed) return;
-          // 点云起来了就把地面轮廓收掉，避免两层标记叠着。
+          });
+          if (typeof requestAnimationFrame === 'function') requestAnimationFrame(emit);
+          else emit();
+        },
+        calibration: {
+          scale: calibration.scale,
+          yawDeg: calibration.yawDeg,
+          origin: calibration.origin,
+          ground: calibration.ground,
+          anchors: calibration.anchors,
+        },
+      };
+      const startWith = (src: string) => preview.start({
+        assetId,
+        url: src,
+        name,
+        ...(asset?.meters ? { meters: asset.meters } : {}),
+        ...(asset?.lodUrl ? { lodUrl: asset.lodUrl } : {}),
+      }, loadOptions);
+      void startWith(url)
+        .catch((error: unknown) => {
+          // 2026-11-19：「实景扫描 11/19」实测云端 404、本机 200（194,081,219 B）。
+          // 云端没有副本时回退本机代理，不让一条登记写错就永远空画面。
+          const local = `${DIRECT_BASE}/asset/${assetId}.${asset?.kind ?? 'spz'}`;
+          if (local === url) throw error;
+          return startWith(local);
+        })
+        .then(result => {
+          const entry = venueSplatRef.current;
+          // 晚到的结果：扫描已换或场景已拆，就别再动画面的占位标记。
+          if (entry?.preview !== preview) return;
+          entry.meters = result.meters;
+          entry.walkBounds = result.walkBounds;
+          // 高斯重建起来了就把地面轮廓收掉，避免两层标记叠着。
           patch.visible = false;
           outline.visible = false;
+          onScanState?.({ assetId, name, status: 'ready', meters: result.meters, ...(result.walkBounds ? { walkBounds: result.walkBounds } : {}) });
         })
-        .catch(() => {
-          // 静默降级：保留 patch / outline 当占位标记。
+        .catch((error: unknown) => {
+          // 静默降级：保留 patch / outline 占位标记，但把失败报到外层（卡片要能标红重试）。
           preview.dispose();
-          if (splatPreview === preview) splatPreview = null;
+          const entry = venueSplatRef.current;
+          if (entry?.preview === preview) entry.preview = null;
+          onScanState?.({
+            assetId, name, status: 'error',
+            ...(error instanceof Error ? { error: error.message } : {}),
+          });
         });
     };
-    splatRequests.slice(0, 1).forEach(startVenueSplat);
+    venueSplatApiRef.current = { start: startVenueSplat, dispose: disposeVenueSplat };
+    // 当前扫描由独立 effect 按「扫描 + 落点」挂（见下），这里只起 2D 落点派生的场景物件。
+    if (!scan) splatRequests.slice(0, 1).forEach(startVenueSplat);
 
     function resize(): void {
       if (!renderer || !stage) return;
@@ -2594,10 +2743,11 @@ export default function OutdoorPlan3D({
           ...(viewport ? { viewport: { metersPerPixel: planMetersPerPixel(viewport) } } : {}),
         };
       }
-      // 点云在场时走预览器的分层绘制（点云当背景层，主场景再叠上去）。
+      // 高斯重建在场时走预览器的分层绘制（重建当背景层，主场景再叠上去）。
       // 毛玻璃取的是「这一帧已经画好的画面」，所以必须排在渲染之后。
-      if (splatPreview && splatPreview.shownId && renderer) {
-        splatPreview.renderFrame(renderer, scene, camera);
+      const venueSplat = venueSplatRef.current?.preview;
+      if (venueSplat && venueSplat.shownId && renderer) {
+        venueSplat.renderFrame(renderer, scene, camera);
         updateScopeFrost();
         return;
       }
@@ -2629,13 +2779,9 @@ export default function OutdoorPlan3D({
       renderer?.domElement.removeEventListener('pointerup', onPointerUp);
       renderer?.domElement.removeEventListener('pointercancel', onPointerUp);
       renderer?.domElement.removeEventListener('dblclick', onDblClick);
-      // 点云预览器要显式释放：解码出来的 GPU 资源不会随场景 traverse 走。
-      try {
-        splatPreview?.dispose();
-      } catch {
-        /* 点云释放失败不影响卸载。 */
-      }
-      splatPreview = null;
+      // 高斯重建预览器要显式释放：解码出来的 GPU 资源不会随场景 traverse 走。
+      venueSplatApiRef.current = null;
+      disposeVenueSplat();
       controls?.dispose();
       cameraRef.current = null;
       controlsRef.current = null;
@@ -2692,7 +2838,80 @@ export default function OutdoorPlan3D({
       if (canvas && canvas.parentNode === stage) stage.removeChild(canvas);
     };
     // 图源 / 初始视口变化才重建场景；规划线的增改走 syncFootprint，避免编辑时镜头被重置。
-  }, [onReady, source, groundMode, mapView, plan.anchor?.lng, plan.anchor?.lat, releaseControlledActor]);
+  }, [onReady, source, groundMode, mapView, plan.anchor?.lng, plan.anchor?.lat, releaseControlledActor, disposeVenueSplat]);
+
+  // 当前场地的高斯重建：跟着「哪份扫描」走，与建场景解耦。
+  // 此前它挂在建场景的 effect 里，而那份 effect 不认 scan——先建场景后选扫描时，
+  // 落点永远等不到下一次重建，画面就只剩地面轮廓（2026-11-19 实测：全程零 spz 请求）。
+  // walkCanvas 是「renderer/controls 已就绪」的信号，场景重建后也会换新，届时重新挂上。
+  useEffect(() => {
+    const api = venueSplatApiRef.current;
+    const scene = sceneRef.current;
+    const current = scanRef.current;
+    if (!api || !scene || !current) return undefined;
+    // 注册表里可能根本没有这条（扫描是别的机器落的盘），那就直接问本机代理要。
+    const localUrl = `${DIRECT_BASE}/asset/${current.assetId}.spz`;
+    const url = current.assetId.startsWith('shipped-')
+      ? storedAholoSceneSource(current.assetId).url
+      : resolveAholoAssetUrl(current.assetId) ?? localUrl;
+    const width = Math.max(0.5, current.meters?.width ?? 12);
+    const depth = Math.max(0.5, current.meters?.depth ?? 9);
+    const patch = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, depth),
+      new THREE.MeshBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.12 }),
+    );
+    patch.rotation.x = -Math.PI / 2;
+    patch.position.set(current.x, 0.015, current.z);
+    patch.name = 'plan-scan-patch';
+    const outline = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-width / 2, 0, -depth / 2),
+        new THREE.Vector3(width / 2, 0, -depth / 2),
+        new THREE.Vector3(width / 2, 0, depth / 2),
+        new THREE.Vector3(-width / 2, 0, depth / 2),
+      ]),
+      new THREE.LineBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.9 }),
+    );
+    outline.position.set(current.x, 0.03, current.z);
+    outline.name = 'plan-scan-outline';
+    // 占位标记直接挂世界系：sceneLayer 带场地中心平移，用世界坐标会偏一个场地。
+    scene.add(patch);
+    scene.add(outline);
+    api.start({ patch, outline, assetId: current.assetId, url, name: current.name, world: { x: current.x, z: current.z } });
+    return () => { api.dispose(); };
+  }, [walkCanvas, scan?.assetId]);
+
+  // 挪落点：只平移已挂上的高斯重建与占位标记，不重新下载、不重新解码。
+  useEffect(() => {
+    const entry = venueSplatRef.current;
+    const current = scanRef.current;
+    if (!entry || !current || entry.assetId !== current.assetId) return;
+    const dx = current.x - entry.world.x;
+    const dz = current.z - entry.world.z;
+    if (dx === 0 && dz === 0) return;
+    entry.world = { x: current.x, z: current.z };
+    entry.patch.position.set(current.x, 0.015, current.z);
+    entry.outline.position.set(current.x, 0.03, current.z);
+    entry.offset.set(entry.offset.x + dx, entry.offset.y, entry.offset.z + dz);
+    entry.preview?.setPosition({ x: entry.offset.x, y: entry.offset.y, z: entry.offset.z });
+    // 漫游围栏跟着落点走，否则第一人称会被关在旧位置。
+    const bounds = entry.walkBounds;
+    if (entry.preview && bounds) {
+      const moved = {
+        minX: bounds.minX + dx, maxX: bounds.maxX + dx,
+        minZ: bounds.minZ + dz, maxZ: bounds.maxZ + dz,
+        minY: bounds.minY,
+      };
+      entry.walkBounds = moved;
+      onScanStateRef.current?.({
+        assetId: entry.assetId,
+        name: entry.name,
+        status: 'ready',
+        ...(entry.meters ? { meters: entry.meters } : {}),
+        walkBounds: moved,
+      });
+    }
+  }, [scan?.x, scan?.z, scan?.assetId]);
 
   // 漫游化身：用当前选中的可走角色 GLB（idle / walk / 可选 sit），不再固定用一个胶囊人。
   // 加载失败只降级、不白屏；退出漫游或换角色时摘掉临时化身并释放 GPU 资源。

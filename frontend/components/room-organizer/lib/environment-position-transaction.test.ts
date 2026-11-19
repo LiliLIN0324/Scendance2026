@@ -13,6 +13,16 @@ beforeEach(async()=>{localStorage.clear();const locks={request(_name:string,_opt
 afterEach(async()=>{await lease.release();localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function run(overrides:Partial<Parameters<typeof persistEnvironmentPosition>[0]>={}) {return persistEnvironmentPosition({scope,generation:1,environments:original,assetId:'venue',position:{x:2,y:0,z:3},capability:lease.capability,assertCurrent:()=>{},...overrides});}
 describe('one-domain environment position transaction',()=>{
+  it('persists metre calibration for one venue without scaling the others',()=>{
+    const entries=[...original,{assetId:'second',name:'第二场景',scale:2}];
+    localStorage.setItem(key,JSON.stringify({'activity-a':entries}));
+    const result=run({environments:entries,position:{x:0,y:0,z:0},scale:5});
+    expect(result.status).toBe('saved');
+    if(result.status!=='saved')return;
+    expect(result.next.map(entry=>entry.scale)).toEqual([5,2]);
+    expect(JSON.parse(result.raw)['activity-a'][0].scale).toBe(5);
+    expect(run({scale:NaN})).toMatchObject({status:'blocked'});
+  });
   it('写入并核对成功后才返回可应用的副本，不修改调用方内存',()=>{
     const result=run();expect(result.status).toBe('saved');if(result.status!=='saved')return;
     expect(result.next[0]!.position).toEqual({x:2,y:0,z:3});expect(original[0]!.position).toEqual({x:0,y:0,z:0});

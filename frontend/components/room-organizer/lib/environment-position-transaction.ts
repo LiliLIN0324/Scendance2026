@@ -13,11 +13,12 @@ export type EnvironmentPositionResult =
  */
 export function persistEnvironmentPosition(input: {
   scope: EnvironmentScope; generation: number; environments: readonly StoredEnvironment[]; assetId: string;
-  position: Readonly<{x:number;y:number;z:number}>; capability: LocalWriteCapability; assertCurrent(): void;
+  position: Readonly<{x:number;y:number;z:number}>; scale?: number; capability: LocalWriteCapability; assertCurrent(): void;
 }): EnvironmentPositionResult {
   const {scope,generation,environments,assetId,position,capability,assertCurrent}=input;
   if (!environmentScopeKey(scope) || !Number.isSafeInteger(generation) || generation < 0 || !assetId ||
-      ![position.x,position.y,position.z].every(Number.isFinite)) return {status:'blocked',reason:'场地位置或范围无效。'};
+      ![position.x,position.y,position.z].every(Number.isFinite) ||
+      (input.scale !== undefined && (!Number.isFinite(input.scale) || input.scale < 0.01 || input.scale > 100))) return {status:'blocked',reason:'场地位置、比例或范围无效。'};
   try { assertCurrent(); } catch { return {status:'blocked',reason:'活动已变化，未保存场地位置。'}; }
   const read=readEnvironmentsStrict(scope,capability);
   if (!read.ok) return {status:'blocked',reason:`场地记录无法核对：${read.reason}`};
@@ -28,7 +29,7 @@ export function persistEnvironmentPosition(input: {
     if (!read.snapshot.present || !sameRecoveryFormValue(persisted,environments)) return {status:'blocked',reason:'场地记录已变化，请先核对。'};
   } catch { return {status:'blocked',reason:'场地草稿无法核对。'}; }
   if (environments.filter(entry=>entry.assetId===assetId).length !== 1) return {status:'blocked',reason:'场地编号缺失或重复，请先核对。'};
-  const next=structuredClone(environments).map(entry=>entry.assetId===assetId ? {...entry,position:{...position}} : entry);
+  const next=structuredClone(environments).map(entry=>entry.assetId===assetId ? {...entry,position:{...position},...(input.scale !== undefined ? {scale:input.scale} : {})} : entry);
   let pending:PendingEnvironmentWrite;
   try { pending=createPendingEnvironmentWrite(scope,generation,read.snapshot,next); }
   catch { return {status:'blocked',reason:'场地草稿无法核对。'}; }

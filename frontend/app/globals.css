@@ -851,6 +851,12 @@ body {
 .sc-delete-button { display: flex; justify-content: center; align-items: center; gap: 6px; color: var(--err); border: 1px solid var(--err); background: var(--paper); width: 100%; padding: 9px; margin-top: 8px; border-radius: var(--r-sm); font-size: var(--fs-cap) !important; }
 .sc-local-conflict { position: absolute; top: 60px; left: 20px; right: 20px; z-index: 32; background: var(--paper); border: 1px solid var(--wk-hair); border-left: 3px solid var(--warn); color: var(--warn); border-radius: var(--r-sm); padding: 10px 13px; display: flex; align-items: center; gap: 12px; font-size: var(--fs-p2); }
 .sc-local-conflict button { border: none; background: transparent; color: var(--wk-ink-soft); text-decoration: underline; font-size: var(--fs-p2); }
+/* 2026-11-19 待落位提示：上一版借用了 .sc-local-conflict（一条通栏横幅，带 top/right），
+   只覆盖 left/bottom 后 top/right 仍在生效，提示被拉成盖住整个地图的白框。
+   这里给它自己的胶囊样式，只占底部一行。 */
+.sc-scan-arming-hint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 36; display: inline-flex; align-items: center; gap: 10px; max-width: min(560px, calc(100% - 32px)); padding: 8px 14px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p2); box-shadow: var(--e1); }
+.sc-scan-arming-hint span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-scan-arming-hint button { flex: none; border: none; background: transparent; color: var(--sc-accent-ink); text-decoration: underline; font-size: inherit; cursor: pointer; }
 .sc-canvas-mode { position: absolute; top: 52px; left: var(--sc-space-md); z-index: 24; display: flex; align-items: center; gap: 6px; max-width: min(560px, calc(100% - 32px)); padding: 4px 10px; border: 1px solid var(--wk-hair); border-radius: 999px; background: var(--wk-paper); color: var(--wk-ink-soft); font-size: var(--fs-cap); }
 .sc-canvas-mode strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wk-ink); font-weight: 500; }
 .sc-canvas-mode button { flex: none; padding: 2px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--wk-ink-soft); cursor: pointer; font-size: inherit; text-decoration: underline; }

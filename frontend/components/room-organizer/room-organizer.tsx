@@ -13,7 +13,6 @@ import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from './lib
 import { openGenerationSheet } from './lib/generation-sheet';
 import { getGenerationSheetState, subscribeGenerationSheet, closeGenerationSheet } from './lib/generation-sheet';
 import { GenerationSheetHost } from './panels/generation-sheet';
-import type * as ThreeNS from 'three';
 import { createBackendSession, type BackendSession } from '@/lib/backend-session';
 import { hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, proveFreshActivityScopeUnused, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
@@ -84,14 +83,16 @@ import { useProposalPreview } from './hooks/use-proposal-preview';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
-import { useSceneEffects, measurementDistance, MAP_VENUE_BOUNDARY } from './hooks/use-scene-effects';
+import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
 import { useSceneLighting } from './hooks/use-scene-lighting';
 import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
 import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
-import { useSplatPreview } from './hooks/use-splat-preview';
-import { useSplatLod } from './hooks/use-splat-lod';
 import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
+import { useSplatPreview } from './hooks/use-splat-preview';
+import type { SplatPaint } from './three/splat-preview';
+import { paintModelOnPlan } from './three/paint-model-on-plan';
+import type { PlanViewport } from './lib/outdoor-plan-canvas';
 import { useWalkthrough, type WalkViewMode } from './hooks/use-walkthrough';
 import { nextWalkViewMode, type WalkViewMode as OutdoorWalkViewMode } from './lib/walk-view-modes';
 import { useWalkAvatar } from './hooks/use-walk-avatar';
@@ -137,17 +138,19 @@ import { parseLayoutEventOperations } from './lib/schema';
 import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
 import { encodeShareUrl } from './lib/share';
 import { rememberReviewLinkMark } from './lib/review-share';
-import { DEMO_WORLD_SCENE_ID } from './lib/shipped-assets';
+import { DEMO_WORLD_SCENE_ID, findShippedAsset } from './lib/shipped-assets';
 import { playSound, type SoundCue } from './lib/sounds';
 import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
 import type { ScannedVenue } from './lib/venue-scans';
 import { listScannedVenues } from './lib/venue-scans';
+import { defaultScanPlacement, scanPlacementNote, worldFromPlanPoint } from './lib/scan-placement';
+import { repairScanFallback, repairScanToLocal } from './lib/local-scans';
 import { mapVenueFootprint, sceneAnchorOf } from './lib/scene-anchor';
 import { cameraDistanceClamp } from './lib/camera-framing';
 import type { SceneAnchor, SceneAnchorSource } from './lib/types';
 import { useSceneZoom, SCENE_ZOOM_CLOSER_RATIO } from './hooks/use-scene-zoom';
 import { SceneGeoDots } from './panels/scene-geo-dots';
-import { SplatLodMarker } from './panels/splat-lod-marker';
+import { scanStateBridge } from './lib/scan-state-bridge';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount, isEvidenceProtectedWall } from './lib/structural-layout';
@@ -212,8 +215,9 @@ import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
-import OutdoorPlan3D, { type OutdoorPlan3DApi } from './components/outdoor-plan-3d';
+import OutdoorPlan3D, { type OutdoorPlan3DApi, type SplatScanState } from './components/outdoor-plan-3d';
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
+import { enuToLngLat } from './lib/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
 /** 户外左栏一张卡三个页签：添加物件 / 已放置物件 / 清单。Bingo 不再挂规划信息。 */
 type OutdoorPanelKind = 'layers' | 'library' | 'inventory';
@@ -267,7 +271,6 @@ import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } fro
 import { mergeRemotePreferences, readLocalPreferences, writeLocalPreferences, type LocalPreferences } from './lib/account-preferences';
 import { readStudioSettingsCache, rememberStudioSettings } from './lib/studio-settings-cache';
 import { sanitizeStudioSettings, seedPlanEditor } from '../../../supabase/functions/_shared/plan-editor';
-import type { SplatPaint } from './three/splat-preview';
 
 function zoomCamera(
   camera: import('three').PerspectiveCamera,
@@ -664,6 +667,15 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       window.removeEventListener('scendance:open-outdoor-inventory', openOutdoorInventory);
     };
   }, [openOutdoorLibrary, openOutdoorInventory]);
+  /**
+   * 2026-11-19 用户：「点卡片 → 默认落在场地中心 → 再在地图上点一下落位」。
+   * 待落位状态放这儿（而不是挤在 placeScanOnSite 下面），好让换项目时一并清掉；
+   * ref 供 pointer capture 同步读，避免闭包里拿到旧值。
+   */
+  const [scanArming, setScanArming] = useState<{ venue: ScannedVenue } | null>(null);
+  const scanArmingRef = useRef<{ venue: ScannedVenue } | null>(null);
+  scanArmingRef.current = scanArming;
+  /** 地图上的落位钉：点完地图也留着，让人看见落到了哪。 */
   // 2026-11-13 收敛 14b：纯户外项目起步直接进户外 2D 地图（外壳 A 下线后户外入口统一落到本工作台）；
   // 视角按项目记忆回读，不进 3D 接管、不回室内壳体。
   useEffect(() => {
@@ -671,6 +683,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     // 不再按室内/户外语境决定地图是否出镜；视角记忆仅户外项目按 projectId 回读。
     setOutdoor2DOpen(true);
     setOutdoor3dTakeoverActive(false);
+    // 2026-11-19：换项目/换场地时收掉待落位状态与上一场的落位钉，别让钉子留在地图上。
+    setScanArming(null);
     // 左栏户外卡片不再随打开/切项目自动展开（用户要求：等我点了再打开）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outdoorProjectIdProp, isOutdoorProject]);
@@ -1933,14 +1947,14 @@ useEffect(() => {
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
   // 首次进户外先让 2D 卡落地（首帧/首交互优先），0.7s 后再把 3D 建好并停在隐藏态。
   useEffect(() => {
-    if (!outdoorPlan) {
+    if (!outdoorPlan || environment) {
       setOutdoor3dWarm(false);
       return undefined;
     }
     if (outdoor3dWarm) return undefined;
     const timer = window.setTimeout(() => setOutdoor3dWarm(true), 700);
     return () => window.clearTimeout(timer);
-  }, [outdoorPlan, outdoor3dWarm]);
+  }, [outdoorPlan, outdoor3dWarm, environment]);
   // GeoGround 瓦片地面（2026-11-12）与户外 2D 同一份图源偏好；署名随源切换。
   const geoGroundSourceRaw = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as const);
   // 2026-11-17：署名/图源必须报「实际用的那张图」。境外场地高德换全球卫星，
@@ -2529,18 +2543,16 @@ useEffect(() => {
     }
   }, [view.view2D, layout, overlayTick, canvas2DRef]);
 
-  // 3DGS 环境预览的渲染入口；useThreeScene 每帧走它，预览关闭时它是空的。
+  // Both outdoor views use the existing scene renderer and Gaussian loader.
   const splatPaintRef = useRef<SplatPaint | null>(null);
-  const environmentPickerRef = useRef<((ray: ThreeNS.Ray) => string | null) | null>(null);
   const environmentSelectionRef = useRef<((assetId: string) => void) | null>(null);
 
   const { isReady: rendererReady, error, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef, worldPositionFromClient } =
     useThreeScene({
       canvasRef,
-      // 环境预览开着时，这一帧由点云那条渲染栈先画背景再画本场景；关掉时它自己退回默认渲染。
       renderFrame: (renderer, scene, camera) => {
         const paint = splatPaintRef.current;
-        if (paint) paint(renderer, scene, camera);
+        if (paint) paint(renderer, scene, camera, { guides: false });
         else renderer.render(scene, camera);
       },
       onViewportResize: () => frameViewportRef.current(),
@@ -2557,12 +2569,6 @@ useEffect(() => {
       onItemDragCancel: scopedDragCancel,
       onItemHover: setHover,
       onEmptyClick: handleEmptyClick,
-      onEnvironmentPick: ray => {
-        const assetId = environmentPickerRef.current?.(ray);
-        if (!assetId || assetId === environmentsRef.current[0]?.assetId) return false;
-        environmentSelectionRef.current?.(assetId);
-        return true;
-      },
       editingLocked: workbenchMode !== 'layout',
       onWallSelect: ({ wallId, kind }) => {
         setSelectedWall({ id: wallId, kind });
@@ -2589,9 +2595,6 @@ useEffect(() => {
   },[canvasRef,rendererReady]);
   const isReady=activitySession.isCurrent(sessionToken)&&rendererReady&&!!canvasRef.current&&rendererRef.current?.domElement===canvasRef.current;
 
-  const preserveSplatCameraRef = useRef(false);
-  preserveSplatCameraRef.current = walkthroughActive;
-  const splatPositionSetterRef=useRef<(position:SplatPosition)=>void>(()=>{});
   const [pendingEnvironmentPosition,setPendingEnvironmentPosition]=useState<PendingEnvironmentWrite|null>(null);
   useEffect(()=>{
     const scope=layout.id??'local';
@@ -2605,16 +2608,14 @@ useEffect(() => {
   // Map geometry and project-library scene positions use different coordinate frames.
   // The library stores display offsets, with no verified map registration yet.
   const mappedWorkspace = !!layout.researchArea || (layout.mapGroundPolygon?.length ?? 0) >= 3;
-  const onSplatPositionChange = useCallback((position: SplatPosition) => {
+  const onSplatPositionChange = useCallback((position: SplatPosition, scale?: number) => {
     const current=environmentsRef.current, active=current[0];
     if(!active)return;
-    const reset=(value: SplatPosition)=>splatPositionSetterRef.current(value);
     if(!workspaceWriteGuards){
-      const next=[{...active,position},...current.slice(1)];environmentsRef.current=next;setEnvironments(next);
+      const next=[{...active,position,...(scale !== undefined ? {scale} : {})},...current.slice(1)];environmentsRef.current=next;setEnvironments(next);
       writeEnvironments(layoutStore.getState().layout.id,next);return;
     }
     if(pendingEnvironmentPositionRef.current){
-      reset((pendingEnvironmentPositionRef.current.intended?.[0]?.position ?? active.position ?? ZERO_SPLAT_POSITION));
       notify('上次场地位置保存结果尚待核对，请先保留候选，不能重复写入。','error');return;
     }
     const id=layoutStore.getState().layout.id;
@@ -2625,33 +2626,21 @@ useEffect(() => {
       if(!token||!activitySession.isCurrent(token)||layoutStore.getState().layout.id!==id)throw new Error('活动已变化');
     };
     const result=persistEnvironmentPosition({scope,generation:token?.epoch ?? -1,environments:current,assetId:active.assetId,
-      position,capability:workspaceWriteGuards.capability,assertCurrent});
+      position,...(scale !== undefined ? {scale} : {}),capability:workspaceWriteGuards.capability,assertCurrent});
     if(result.status==='saved'){
-      environmentsRef.current=result.next;setEnvironments(result.next);reset(position);return;
+      environmentsRef.current=result.next;setEnvironments(result.next);return;
     }
     if(result.status==='uncertain'&&result.pending&&result.next){
       pendingEnvironmentPositionRef.current=result.pending;setPendingEnvironmentPosition(result.pending);
-      environmentsRef.current=result.next;setEnvironments(result.next);reset(position);
+      environmentsRef.current=result.next;setEnvironments(result.next);
       notify('场地位置保存结果待核对，已保留候选，暂不重复写入。','error');return;
     }
-    reset(active.position ?? ZERO_SPLAT_POSITION);notify(result.reason,'error');
+    notify(result.reason,'error');
   }, [workspaceWriteGuards,sessionToken,activitySession.isCurrent]);
-  const otherSplatScenes = useMemo(() => mappedWorkspace ? [] : environments.slice(1).flatMap(entry => {
-    try {
-      return [{ id: entry.assetId, source: storedAholoSceneSource(entry.assetId), position: entry.position ?? ZERO_SPLAT_POSITION,
-        floorIndex: entry.floorIndex ?? 0, roofCutoffY: floorElevation(layout.floors, (entry.floorIndex ?? 0) + 1) + (entry.position?.y ?? 0) - floorElevation(layout.floors, entry.floorIndex ?? 0) }];
-    } catch { return []; }
-  }), [mappedWorkspace, environments, layout.floors]);
-  // 第 3 步：整景区视距 LOD。锚点 = 点云落位（geo 锚点投影到世界后即环境位移），
-  // 距离按锚点 metersPerUnit 折回真实米。MAP-03：凡铺了调研底图（整景区预设、
-  // 地名定位、scanAssetId 自动铺图）都启用——概览视距下点云一样不该解码；室内照旧。
-  const splatLodAnchor = environment ? {
-    x: environment.position?.x ?? 0,
-    z: environment.position?.z ?? 0,
-  } : null;
+  // 第 3 步：整景区视距 LOD 已随室内管线退役（2026-11-19）。
   const [isolatedScanId, setIsolatedScanId] = useState<string>();
   const scanIsolated = !!environment && environment.assetId === isolatedScanId;
-  const showGaussianInCanvas = !mappedWorkspace || scanIsolated;
+  const showGaussianInCanvas = !!environment;
   // 户外项目主画布 3D 接管（2026-11-12 续三）：非漫游 3D 态直接复用户外 3D 场地组件
   // （OutdoorPlan3D），卡内 3D 与退出后的主 3D 是同一份渲染（docs/42 终局形态）。
   // 2026-11-12 用户拍板（统一 2D/3D）：有户外计划时关掉覆盖层就是接管 3D（图六），
@@ -2659,9 +2648,14 @@ useEffect(() => {
   // 2026-11-19 用户：「实景模式是不是重新画了地图啊？」——以前实景隔离会把接管踢掉，
   // 3D 不接管就没人画那团点云，屏幕上只剩底图重铺（看着像“重新画了地图”）。
   // 现在实景隔离强制走 3D 接管（点云就是在 OutdoorPlan3D 里画的），漫游仍不接管。
-  const outdoor3dTakeover = (outdoor3dTakeoverActive || scanIsolated) && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive;
+  const outdoor3dTakeover = (outdoor3dTakeoverActive || scanIsolated) && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive && !environment;
   // 右轨放大/缩小按当前视图分派：3D 接管交给 OutdoorPlan3D 的相机；2D 等其余仍走覆盖层里的 2D 画布。
   outdoorZoomRef.current = (direction) => {
+    if (environment && !outdoor2DOpen) {
+      if (cameraRef.current && controlsRef.current) zoomCamera(cameraRef.current, controlsRef.current, direction === 1 ? '+' : '-');
+      invalidate();
+      return;
+    }
     if (outdoor3dTakeover) {
       outdoorPlan3DRef.current?.zoomBy(direction);
       return;
@@ -2699,7 +2693,7 @@ useEffect(() => {
   const leftStackCards: LeftStackPanelId[] = [
     ...(captureOpen && !businessCardOpen ? ['capture' as const] : []),
     ...(personChat && !businessCardOpen ? ['chat' as const] : []),
-    ...(((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null && !businessCardOpen) ? ['outdoor' as const] : []),
+    ...((outdoorPanel !== null && !businessCardOpen) ? ['outdoor' as const] : []),
     ...(!captureOpen && !personChat && agentPanelVisible && !businessCardOpen ? ['bingo' as const] : []),
   ];
   leftStackPairRef.current = leftStackCards.length === 2 ? leftStackCards : null;
@@ -2721,7 +2715,7 @@ useEffect(() => {
   // 2026-11-12「3D 的时候也要可编辑」：接管态同样撑着——工具卡 portal 用的宿主都挂在
   // 左栏户外卡片里，接管态不挂卡片 = 3D 里没有任何编辑入口（误删回归，本行修复）。
   // columnExpanded 的全部消费点都在本行之后（769/4130/4135/4264），搬到这里才能引用 takeover。
-  const columnExpanded = navExpanded || businessCardOpen || personChat || captureOpen || generationOpen || ((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null);
+  const columnExpanded = navExpanded || businessCardOpen || personChat || captureOpen || generationOpen || outdoorPanel !== null;
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -2783,7 +2777,7 @@ useEffect(() => {
       return;
     }
     setWalkViewMode('third');
-    if (!scanIsolated && mappedWorkspace) {
+    if (!scanIsolated && mappedWorkspace && !environment) {
       tryMapVenue();
       return;
     }
@@ -2820,7 +2814,7 @@ useEffect(() => {
   }
 
   function toggleWalkthrough(on: boolean) {
-    if (!scanIsolated && (isOutdoorProject || outdoor2DOpen || outdoor3dTakeoverActive)) {
+    if (!environment && !scanIsolated && (isOutdoorProject || outdoor2DOpen || outdoor3dTakeoverActive)) {
       toggleOutdoorWalk(on);
       return;
     }
@@ -2867,73 +2861,99 @@ useEffect(() => {
     onToggleView: () => handleOutdoorViewSwitch(outdoor3dTakeoverActive && !outdoor2DOpen ? '2d' : '3d'),
     // 指北针：3D 接管回正相机朝向正北；2D 平面把地图方位角转回 0（罗盘拖转后用）。
     resetNorth: () => {
+      if (environment && !outdoor2DOpen && cameraRef.current && controlsRef.current) {
+        const camera = cameraRef.current, controls = controlsRef.current;
+        const radius = Math.hypot(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
+        camera.position.x = controls.target.x;
+        camera.position.z = controls.target.z + radius;
+        controls.update(); invalidate(); return;
+      }
       if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.resetNorth();
       else outdoorOverlayRef.current?.resetNorth();
     },
     // 大罗盘：3D 接管读相机方位；2D 读画布 bearing（罗盘拖转 2D，2026-11-16 用户指令）。
     bearingRad: () => {
+      if (environment && !outdoor2DOpen && cameraRef.current && controlsRef.current) {
+        return Math.atan2(-(cameraRef.current.position.x - controlsRef.current.target.x), cameraRef.current.position.z - controlsRef.current.target.z);
+      }
       if (outdoor3dTakeoverActive && !outdoor2DOpen) return outdoorPlan3DRef.current?.getBearing() ?? 0;
       return outdoorOverlayRef.current?.getBearing() ?? 0;
     },
     orbitByDelta: (deltaTheta: number) => {
+      if (environment && !outdoor2DOpen && cameraRef.current && controlsRef.current) {
+        const camera = cameraRef.current, controls = controlsRef.current;
+        const dx = camera.position.x - controls.target.x, dz = camera.position.z - controls.target.z;
+        camera.position.x = controls.target.x + dx * Math.cos(deltaTheta) + dz * Math.sin(deltaTheta);
+        camera.position.z = controls.target.z - dx * Math.sin(deltaTheta) + dz * Math.cos(deltaTheta);
+        controls.update(); invalidate(); return;
+      }
       if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.orbitByDelta(deltaTheta);
       else outdoorOverlayRef.current?.orbitByDelta(deltaTheta);
     },
   } : null;
-  const splatLodEnabled = showGaussianInCanvas && !!layout.researchArea && !!environment && !scanIsolated;
-  const splatLodMetersPerUnit = sceneAnchorOf(layout)?.metersPerUnit ?? 1;
-  const { mode: splatLod, measured: splatLodMeasured } = useSplatLod({
-    isReady,
-    cameraRef,
-    controlsRef,
-    anchor: splatLodAnchor,
-    metersPerUnit: splatLodMetersPerUnit,
-    enabled: splatLodEnabled,
-  });
-  const { state: splatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat,
-    setPosition: setSplatPosition, displayMode: splatDisplayMode, setDisplayMode: setSplatDisplayMode,
-    setTransformMode: setSplatTransform, pickScene: pickSplatScene, framePrimaryScene } = useSplatPreview({
-    isReady,
-    rendererRef,
-    cameraRef,
-    controlsRef,
-    invalidate,
-    requestShadowUpdate,
-    // 兜底缩放：场景没带真实尺度（lod-meta forwardBox）时，才按场地最长水平边等比塞。
-    sizeMeters: Math.max(layout.width, layout.height),
-    // 1F exposes the scan by cutting away its roof at the top of 1F; 2F
-    // raises the same live cut plane to the top of 2F.
-    roofCutoffY: floorElevation(layout.floors, (environment?.floorIndex ?? 0) + 1) + (environment?.position?.y ?? 0) - floorElevation(layout.floors, environment?.floorIndex ?? 0),
-    position: environment?.position ?? ZERO_SPLAT_POSITION,
-    transformMode: splatTransformMode,
-    onPositionChange: onSplatPositionChange,
-    calibrationReadOnly: !!workspaceWriteGuards,
-    calibrationCapability: workspaceWriteGuards?.capability,
-    ...(!scanIsolated ? { otherScenes: otherSplatScenes } : {}),
+  const { state: loadedSplatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat,
+    displayMode: splatDisplayMode, setDisplayMode: setSplatDisplayMode, framePrimaryScene } = useSplatPreview({
+    isReady, rendererRef, cameraRef, controlsRef, invalidate, requestShadowUpdate,
+    sizeMeters: Math.max(layout.width, layout.height), roofCutoffY: 10000,
+    position: environment?.position ?? ZERO_SPLAT_POSITION, placementScale: environment?.scale ?? 1, transformMode: splatTransformMode,
+    otherScenes: environments.slice(1).flatMap(entry => {
+      if (scanIsolated) return [];
+      try {
+        return [{ id: entry.assetId, source: storedAholoSceneSource(entry.assetId),
+          position: entry.position ?? ZERO_SPLAT_POSITION, scale: entry.scale ?? 1,
+          floorIndex: entry.floorIndex ?? 0, roofCutoffY: 10000 }];
+      } catch { return []; }
+    }),
     activeFloorIndex,
-    primaryVisible: showGaussianInCanvas && (environment?.floorIndex ?? 0) === activeFloorIndex && (scanIsolated || splatLod !== 'poi'),
-    preserveCameraRef: preserveSplatCameraRef,
+    onPositionChange: onSplatPositionChange, calibrationReadOnly: !!workspaceWriteGuards,
+    calibrationCapability: workspaceWriteGuards?.capability, primaryVisible: !!environment && (environment.floorIndex ?? 0) === activeFloorIndex,
   });
-  splatPositionSetterRef.current = setSplatPosition;
+  splatPaintRef.current = paintSplatFrame;
+  const paintCleanSplatFrame = useCallback<SplatPaint>((renderer, scene, camera) => {
+    paintSplatFrame(renderer, scene, camera, { guides: false });
+  }, [paintSplatFrame]);
+  const [reportedSplatState, setSplatState] = useState<SplatScanState>({ assetId: '', name: '', status: 'idle' });
+  // 逐字段比对后写入：进度事件很密，没变就不重渲染（避免 3D 那边反复重跑）。
+  const handleScanState = useCallback((next: SplatScanState) => {
+    setSplatState(prev => (prev.status === next.status && prev.assetId === next.assetId
+      && prev.progress === next.progress && prev.error === next.error && prev.meters === next.meters
+      && prev.walkBounds === next.walkBounds ? prev : next));
+  }, []);
+  const splatState = loadedSplatState.status === 'idle' ? reportedSplatState : loadedSplatState;
+  useEffect(() => {
+    if (!environment?.assetId) { stopSplat(); return; }
+    try { void startSplat(storedAholoSceneSource(environment.assetId)).catch(failure => notify(failure instanceof Error ? failure.message : String(failure), 'error')); }
+    catch (failure) { notify(failure instanceof Error ? failure.message : String(failure), 'error'); }
+  }, [environment?.assetId, startSplat, stopSplat, notify]);
+  useEffect(() => {
+    if (!outdoor2DOpen && loadedSplatState.status === 'ready') framePrimaryScene();
+  }, [outdoor2DOpen, loadedSplatState.assetId, loadedSplatState.status, framePrimaryScene]);
+  // 测试接缝：jsdom 里没有 3D 画布，扫描上报与位置写回只能由测试注入（见 lib/scan-state-bridge.ts）。
+  useEffect(() => {
+    scanStateBridge.pushScanState = setSplatState;
+    scanStateBridge.writePosition = onSplatPositionChange;
+    return () => {
+      scanStateBridge.pushScanState = () => {};
+      scanStateBridge.writePosition = null;
+    };
+  }, [onSplatPositionChange]);
   const hanfuWalkDisabledReason = splatState.status === 'error' ? '西湖实景加载失败，先重试'
     : splatState.status === 'ready' ? undefined : '等西湖实景加载完成后再试';
   const isolatedScanFailed = scanIsolated && splatState.status === 'error' && splatState.assetId === isolatedScanId;
   const isolatedScanLoading = scanIsolated && splatState.status === 'loading' && splatState.assetId === isolatedScanId;
   useEffect(() => {
-    if (scanIsolated && splatState.status === 'ready' && splatState.assetId === isolatedScanId) framePrimaryScene();
-  }, [scanIsolated, isolatedScanId, splatState.status, splatState.assetId, framePrimaryScene]);
-  environmentPickerRef.current = pickSplatScene;
-  // The Gaussian venue and its editable room layout form one placed unit.
-  // Apply the venue offset to the main scene too, so walls, floors, furniture,
-  // and routes keep their relative positions while the venue is moved.
+    if (scanIsolated && splatState.status === 'ready' && splatState.assetId === isolatedScanId) outdoorPlan3DRef.current?.focusVenue();
+  }, [scanIsolated, isolatedScanId, splatState.status, splatState.assetId]);
+  // Outdoor map layers already use anchored world coordinates. Moving a scan
+  // must not translate the map or the entire shared scene along with it.
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
     const position = environment?.position ?? ZERO_SPLAT_POSITION;
-    scene.position.set(position.x, position.y, position.z);
+    if (outdoorPlan?.anchor) scene.position.set(0, 0, 0);
+    else scene.position.set(position.x, position.y, position.z);
     invalidate();
-  }, [environment?.position?.x, environment?.position?.y, environment?.position?.z, isReady, sceneRef, invalidate]);
-  splatPaintRef.current = paintSplatFrame;
+  }, [environment?.position?.x, environment?.position?.y, environment?.position?.z, outdoorPlan?.anchor, isReady, sceneRef, invalidate]);
   const restoredEnvironmentRef = useRef('');
   // 遥远视距先记录场景，进入范围后再加载。
   const deferredEnvironmentRef = useRef<StoredEnvironment | null>(null);
@@ -2989,6 +3009,17 @@ useEffect(() => {
     }
   }, [selectEnvironment, setView]);
   environmentSelectionRef.current = startStoredScene;
+  const addSampleScene = (assetId: string) => {
+    try {
+      const source = storedAholoSceneSource(assetId);
+      selectEnvironment(assetId, source.name, { restoreItems: false });
+      setIsolatedScanId(undefined);
+      setOutdoor2DOpen(false);
+      setOutdoor3dTakeoverActive(true);
+    } catch (failure) {
+      notify(failure instanceof Error ? failure.message : String(failure), 'error');
+    }
+  };
   /** D0：地图立壳后自动挂历史 World .spz（只读 shipped，不扣额度）。 */
   const hangDemoEnvironment = useCallback(() => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
@@ -3015,13 +3046,6 @@ useEffect(() => {
   const hasMapVenue = (layout.mapGroundPolygon?.length ?? 0) >= 3;
   environmentsRef.current = environments;
   const environmentKeyRef = useRef<string | null>(null);
-  const restoreEnvironment = useCallback((value: StoredEnvironment) => {
-    try {
-      void startSplat(storedAholoSceneSource(value.assetId));
-    } catch (failure) {
-      notify(failure instanceof Error ? failure.message : String(failure), 'error');
-    }
-  }, [startSplat]);
   useEffect(() => {
     const previousKey = environmentKeyRef.current;
     environmentKeyRef.current = environmentKey;
@@ -3035,7 +3059,7 @@ useEffect(() => {
       environmentPreferenceReadyRef.current=true;
       const stored=result.snapshot.value;
       const list=Array.isArray(stored)?stored:stored?[stored]:[];
-      environmentsRef.current=list;setEnvironments(list);if(!list.length)stopSplat();
+      environmentsRef.current=list;setEnvironments(list);
       return;
     }
     const hasPreference = hasEnvironmentPreference(layout.id);
@@ -3043,17 +3067,15 @@ useEffect(() => {
     deferredEnvironmentRef.current = null;
     if (hasPreference) {
       const saved = readEnvironments(layout.id);
-      const stored = hasMapVenue ? saved.filter(entry => entry.assetId !== DEMO_WORLD_SCENE_ID) : saved;
+      const stored = saved;
       if (stored.length !== saved.length) writeEnvironments(layout.id, stored);
       environmentsRef.current = stored;
       setEnvironments(stored);
-      if (!stored.length) stopSplat();
       return;
     }
     if (hasMapVenue) {
       environmentsRef.current = [];
       setEnvironments([]);
-      stopSplat();
       return;
     }
     if (carried.length) {
@@ -3067,49 +3089,7 @@ useEffect(() => {
     writeEnvironments(layout.id, defaults);
     environmentsRef.current = defaults;
     setEnvironments(defaults);
-  }, [environmentKey, hasMapVenue, layout.id, stopSplat, workspaceWriteGuards]);
-  // 对话里立了明确尺寸的场地后，样例高斯背景就不作数了：场地事实换了空间，
-  // 宴会厅样例不再是这间厅的观感参照（与 hasMapVenue 同一待遇）。只摘样例，
-  // 不动用户自己在场景库选的环境；刷新重挂时 venueScaleRef 为 null，不误摘。
-  const venueScale = `${layout.width}×${layout.height}`;
-  const venueScaleRef = useRef<string | null>(null);
-  useEffect(() => {
-    const previous = venueScaleRef.current;
-    venueScaleRef.current = venueScale;
-    if (previous === null || previous === venueScale) return;
-    const current = environmentsRef.current;
-    if (!current.some(entry => entry.assetId === DEMO_WORLD_SCENE_ID)) return;
-    const kept = current.filter(entry => entry.assetId !== DEMO_WORLD_SCENE_ID);
-    writeEnvironments(layout.id, kept);
-    environmentsRef.current = kept;
-    setEnvironments(kept);
-    if (!kept.length) stopSplat();
-  }, [layout.id, venueScale, stopSplat]);
-  // 渲染器还没起来时 startSplat 会自己排队；同一个项目同一条环境只自动挂一次。
-  // 第 3 步：整景区视距（>200 m）下不解码点云，先挂锚点 POI；等到 <100 m 再补挂。
-  // 等 splatLodMeasured 才判断，避免相机/控件尚未就绪时把「还没量」误当成近景。
-  useEffect(() => {
-    if (!environment || !showGaussianInCanvas) return;
-    if (!isReady || !splatLodMeasured) return;
-    const key = `${environmentKey}:${environment.assetId}`;
-    if (restoredEnvironmentRef.current === key) return;
-    if (splatLod === 'poi') {
-      deferredEnvironmentRef.current = environment;
-      return;
-    }
-    restoredEnvironmentRef.current = key;
-    deferredEnvironmentRef.current = null;
-    restoreEnvironment(environment);
-  }, [environment, environmentKey, restoreEnvironment, isReady, splatLodMeasured, splatLod, showGaussianInCanvas]);
-  // 从整景区视距回到 100 m 内：把先前压住的自动挂载补上（只补一次）。
-  useEffect(() => {
-    if (!showGaussianInCanvas || !isReady || !splatLodMeasured || splatLod !== 'splat') return;
-    const deferred = deferredEnvironmentRef.current;
-    if (!deferred) return;
-    deferredEnvironmentRef.current = null;
-    restoredEnvironmentRef.current = `${environmentKey}:${deferred.assetId}`;
-    restoreEnvironment(deferred);
-  }, [isReady, splatLodMeasured, splatLod, environmentKey, restoreEnvironment, showGaussianInCanvas]);
+  }, [environmentKey, hasMapVenue, layout.id, workspaceWriteGuards]);
   const removeEnvironment = useCallback((assetId: string) => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
     const next = environmentsRef.current.filter(entry => entry.assetId !== assetId);
@@ -3120,9 +3100,8 @@ useEffect(() => {
     if (next.length) writeEnvironments(layoutStore.getState().layout.id, next);
     else {
       clearEnvironment(layoutStore.getState().layout.id);
-      stopSplat();
     }
-  }, [stopSplat,workspaceWriteGuards]);
+  }, [workspaceWriteGuards]);
   const dropEnvironment = useCallback(() => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
     environmentsRef.current = [];
@@ -3130,8 +3109,7 @@ useEffect(() => {
     clearEnvironment(layoutStore.getState().layout.id);
     restoredEnvironmentRef.current = '';
     deferredEnvironmentRef.current = null;
-    stopSplat();
-  }, [stopSplat,workspaceWriteGuards]);
+  }, [workspaceWriteGuards]);
   const setEnvironmentFloor = useCallback((assetId: string, floorIndex: number) => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持更换场地楼层，请保留现有资料。','error');return;}
     let current = environmentsRef.current;
@@ -3150,8 +3128,7 @@ useEffect(() => {
     setEnvironments(next);
     writeEnvironments(layoutStore.getState().layout.id, next);
     actions.setActiveFloorIndex(floorIndex);
-    if (current[0]?.assetId === assetId) setSplatPosition(position);
-  }, [actions, selectEnvironment, setSplatPosition, workspaceWriteGuards]);
+  }, [actions, selectEnvironment, workspaceWriteGuards]);
   useEffect(() => {
     if (workspaceWriteGuards || (environment?.floorIndex ?? 0) === activeFloorIndex) return;
     const match = environments.find(entry => (entry.floorIndex ?? 0) === activeFloorIndex);
@@ -3180,6 +3157,16 @@ useEffect(() => {
   // 环境预览就绪时，围栏换成点云真实范围：1:1 实景漫游（不再被 12×9 的场地板困住）。
   const splatWalkBounds = showGaussianInCanvas && splatState.status === 'ready' ? splatState.walkBounds ?? null : null;
   splatWalkBoundsRef.current = splatWalkBounds;
+
+  // 落位存档是世界系（场地锚点），户外 3D 场景建在 plan ENU 上。两个锚点不同心时
+  // 差一个平移（本项目实测 3.5 km），传入前逆变换，否则高斯重建被甩到场外看不见。
+  const renderScanPlan = useCallback((ctx: CanvasRenderingContext2D, viewport: PlanViewport) => {
+    const renderer = rendererRef.current, scene = sceneRef.current;
+    const anchor = outdoorPlan?.anchor;
+    if (!environment || !isReady || !renderer || !scene || !anchor || loadedSplatState.status !== 'ready') return;
+    paintModelOnPlan({ ctx, viewport, renderer, scene, paint: paintSplatFrame,
+      toWorld: point => worldFromPlanPoint(layout, anchor, point) });
+  }, [environment, isReady, outdoorPlan?.anchor, loadedSplatState.status, loadedSplatState.assetId, layout, paintSplatFrame, rendererRef, sceneRef]);
 
   // 进漫游就带当前角色；左侧换人时 url 变了，这里会热切到新模型。
   const walkAvatarOn = walkthroughActive && walkRoleReady;
@@ -3243,7 +3230,9 @@ useEffect(() => {
   const peopleModelReady = usePeopleModel(threeModuleRef, isReady, layoutHasPeople);
 
   useSceneEffects({
-    showBasemap: !scanIsolated,
+    showBasemap: true,
+    outdoorWorkspace: !!outdoorPlan || !!environment,
+    modelPosition: environment?.position,
     outdoorPlan,
     isReady,
     peopleModelReady,
@@ -3422,6 +3411,7 @@ useEffect(() => {
   // 只调 focusMapVenue 会「点了没反应」）。
   // 实景隔离：维持原来的场地取景。只动视图、不改 plan。
   const focusScopeOrVenue = useCallback(() => {
+    if (environment && !outdoor2DOpen) { framePrimaryScene(); return; }
     if (outdoor3dTakeover) {
       outdoorPlan3DRef.current?.focusVenue();
       return;
@@ -3435,7 +3425,7 @@ useEffect(() => {
       return;
     }
     focusMapVenue();
-  }, [outdoor2DOpen, outdoor3dTakeover, outdoorPlan, focusMapVenue]);
+  }, [environment, outdoor2DOpen, outdoor3dTakeover, outdoorPlan, focusMapVenue, framePrimaryScene]);
   useEffect(() => {
     if (walkthroughActive || !mapVenueTrialRef.current) return;
     mapVenueTrialRef.current = false;
@@ -3493,17 +3483,8 @@ useEffect(() => {
     cameraRef,
     controlsRef,
     applyPreset,
-    // 导出走实时那条渲染栈（点云背景 + 布置前景），否则成图里只剩布置。
-    paintFrame: (renderer, scene, camera) => {
-      const boundary = scene.getObjectByName(MAP_VENUE_BOUNDARY);
-      const visible = boundary?.visible ?? false;
-      if (boundary) boundary.visible = false;
-      try {
-        paintSplatFrame(renderer, scene, camera, { guides: false });
-      } finally {
-        if (boundary) boundary.visible = visible;
-      }
-    },
+    paintFrame: paintCleanSplatFrame,
+    ...(outdoor3dTakeover ? { capture3D: async () => outdoorPlan3DRef.current?.captureImage() ?? null } : {}),
     onImported: clearTransientSelection,
   });
 
@@ -3649,9 +3630,12 @@ useEffect(() => {
 
   useEffect(() => {
     let cancel = false;
+    let running = false;
     const loadTeamDefaults = async () => {
+      if (running) return;
       const snapshot = controller.getSnapshot();
       if (!snapshot.user || snapshot.user.is_anonymous) return;
+      running = true;
       try {
         const studios = await controller.listStudios();
         const id = studios.find(item => item.role === 'owner')?.id ?? studios[0]?.id;
@@ -3660,9 +3644,19 @@ useEffect(() => {
         if (!cancel) rememberStudioSettings(id, settings);
       } catch {
         /* 团队默认读不到不影响画布，也不挡住新建活动。 */
+      } finally {
+        running = false;
       }
     };
-    const stop = controller.subscribe(() => { void loadTeamDefaults(); });
+    // 只认登录身份变化：失败请求也会发快照通知（request 的 block/update），
+    // 若每次通知都重读，404 会自激成无限请求循环（2026-11-19 实测刷屏）。
+    let lastUserId = controller.getSnapshot().user?.id ?? null;
+    const stop = controller.subscribe(() => {
+      const userId = controller.getSnapshot().user?.id ?? null;
+      if (userId === lastUserId) return;
+      lastUserId = userId;
+      void loadTeamDefaults();
+    });
     void loadTeamDefaults();
     return () => { cancel = true; stop(); };
   }, [controller]);
@@ -4222,14 +4216,8 @@ useEffect(() => {
     setIsolatedScanId(isolate ? venue.assetId : undefined);
     if (venue.assetId === environmentsRef.current[0]?.assetId) {
       if (isolate) {
-        const active = environmentsRef.current[0];
-        if (splatState.assetId !== venue.assetId || splatState.status === 'idle' || splatState.status === 'error') {
-          restoredEnvironmentRef.current = `${environmentKey}:${venue.assetId}`;
-          deferredEnvironmentRef.current = null;
-          restoreEnvironment(active);
-        } else if (isolatedScanId === venue.assetId && splatState.status === 'ready') {
-          framePrimaryScene();
-        }
+        // 扫描由 OutdoorPlan3D 自己加载；就绪后只把镜头对上去（见下面的 ready effect）。
+        if (isolatedScanId === venue.assetId && splatState.status === 'ready') outdoorPlan3DRef.current?.focusVenue();
         return;
       }
       // 点当前场地：已在焦点上的再点推近一档（×0.75），没在焦点上的 zoom 过去。
@@ -4265,33 +4253,24 @@ useEffect(() => {
       return;
     }
     if (isolate) return;
-    // MAP-03：整景区视距（POI）下点云被延后挂载，等 splat ready 再 zoom 会永远等不到——
-    // 先把相机推到场地，推近途中视距翻回 splat（<100 m），延后的挂载自动补上。
-    if (splatLod === 'poi') {
-      zoomToVenue(venue, false);
-      return;
-    }
     // 场地 splat 异步加载，就绪后 zoom 到该场景（pending 效果在 splatState ready 时触发）。
     pendingVenueZoomRef.current = venue;
-  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId, workspaceWriteGuards, splatLod, isolatedScanId, framePrimaryScene, environmentKey, restoreEnvironment, splatState.assetId, splatState.status]);
+  }, [notify, onApplyCreative, selectEnvironment, zoomToVenue, focusedVenueId, workspaceWriteGuards, isolatedScanId, splatState.assetId, splatState.status]);
 
-  // 单场查看失败后在画布上直接重试：重新挂载同一套扫描，不离开单场。
+  // 单场查看失败后的重试：扫描加载已交给 OutdoorPlan3D，这里回到全部场景重开一次。
   const retryIsolatedScan = useCallback(() => {
-    const active = environmentsRef.current[0];
-    if (!active || active.assetId !== isolatedScanId) {
-      setIsolatedScanId(undefined);
-      notify('这个场地已不在清单里，已回到全部场景。', 'error');
-      return;
-    }
-    restoreEnvironment(active);
-  }, [isolatedScanId, notify, restoreEnvironment]);
+    setIsolatedScanId(undefined);
+    notify('已回到全部场景，重新点开这场扫描即可重试。', 'info');
+  }, [notify]);
 
   const previewProjectScene = (assetId: string, name: string) => {
     // 2026-11-19：selectEnvironment 在编辑权模式下是 throw；以前没人接，点击就变成「点了没反应」。
     try {
-      if (!mappedWorkspace && !listScannedVenues().some(venue => venue.assetId === assetId)) {
+      if (findShippedAsset(assetId) || (!mappedWorkspace && !listScannedVenues().some(venue => venue.assetId === assetId))) {
         setIsolatedScanId(undefined);
         selectEnvironment(assetId, name, { restoreItems: false });
+        setOutdoor2DOpen(false);
+        setOutdoor3dTakeoverActive(true);
         return;
       }
       setView(current => current.view2D ? { ...current, view2D: false } : current);
@@ -4301,11 +4280,7 @@ useEffect(() => {
       if (environmentsRef.current[0]?.assetId !== assetId) {
         selectEnvironment(assetId, name, { restoreItems: false });
       } else if (splatState.assetId === assetId && splatState.status === 'ready') {
-        framePrimaryScene();
-      } else if (splatState.status !== 'loading') {
-        const active = environmentsRef.current[0];
-        deferredEnvironmentRef.current = null;
-        restoreEnvironment(active);
+        outdoorPlan3DRef.current?.focusVenue();
       }
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
@@ -4313,41 +4288,84 @@ useEffect(() => {
   };
 
   /**
-   * 2026-11-19 用户：「实景扫描就是点击，然后放在特定的场地位置而已」。
-   * 卡片点一下 = 把这一套挂到场上：带遥测经纬度的直接落在投影出来的那一点，
-   * 没带经纬度的先落场地原点，落完用画布拖动 / XYZ 微调对齐；不再整场替换，
-   * 也不再卡「先有米制尺寸才能切」——尺寸未确认只提醒，不拦。
+   * 2026-11-19 用户：「实景扫描就是点击，然后放在特定的场地位置而已」，紧接着又问
+   * 「为什么点了还是没有落在场地上？」——上一版点卡片就把 2D 地图收掉、直接跳 3D 隔离，
+   * 落点还只在带遥测经纬度时才计算，本地扫描就留在室内并排槽位上，看着哪儿也没落。
+   *
+   * 现在分两步，且 2D 地图一直开着：
+   * 1) 点卡片：按 geo → 调研范围中心 → 地块中心 → 原点 的顺序落一个默认点，地图上钉一枚
+   *    落位钉，进「待落位」；
+   * 2) 点地图：点哪落哪（plan ENU → 世界坐标），钉跟着走；Esc / 取消退出待落位。
    */
   const placeScanOnSite = (venue: ScannedVenue) => {
     try {
+      outdoorCanvasBridgeRef.current?.setMode('view');
+      // 换主场地：点云只有挂在当前环境上才画得出来（编辑权模式会在 selectEnvironment 里抛）。
       if (environmentsRef.current[0]?.assetId !== venue.assetId) {
         selectEnvironment(venue.assetId, venue.name, { restoreItems: false });
-      } else if (splatState.status === 'error' && splatState.assetId === venue.assetId) {
-        // 同一套上次就没加载成功：再点一下就是重试（文件补回来能直接变好）。
-        const active = environmentsRef.current[0];
-        if (active) restoreEnvironment(active);
       }
-      setIsolatedScanId(venue.assetId);
-      setView(current => (current.view2D ? { ...current, view2D: false } : current));
-      if (mappedWorkspace) setOutdoor2DOpen(false);
-      const current = layoutStore.getState().layout;
-      const world = venue.geo?.source === 'telemetry'
-        ? researchGeoToWorld(current, venue.geo.lng, venue.geo.lat)
-        : null;
-      if (world) {
-        const base = environmentsRef.current[0]?.position ?? ZERO_SPLAT_POSITION;
-        onSplatPositionChange({ ...base, x: world.x, z: world.z });
+      const placement = defaultScanPlacement({
+        layout: layoutStore.getState().layout,
+        venue,
+        planAnchor: outdoorFullPlanRef.current?.anchor ?? null,
+      });
+      const base = environmentsRef.current[0]?.position ?? ZERO_SPLAT_POSITION;
+      onSplatPositionChange({ ...base, x: placement.world.x, z: placement.world.z });
+      // 先把地图留住：落点在图上看得见，才谈得上「落在场地上」。
+      setIsolatedScanId(undefined);
+      if (!outdoor2DOpen) {
+        setOutdoor2DOpen(true);
+        setOutdoor3dTakeoverActive(false);
       }
-      notify(venue.meters
-        ? `已把「${venue.name}」放到场地上，拖它或用坐标微调。`
-        : `「${venue.name}」尺寸还没确认，先落在场地上，拖它到实际位置。`, 'info');
+      const anchor = outdoorFullPlanRef.current?.anchor;
+      if (anchor && placement.pin) {
+        const geo = enuToLngLat(placement.pin.x, placement.pin.y, anchor.lng, anchor.lat);
+        outdoorCanvasBridgeRef.current?.focusLngLat(geo.lng, geo.lat, 19);
+      }
+      setScanArming({ venue });
+      notify(`${scanPlacementNote(placement, venue.name)}在地图上点一下换位置，Esc 取消。`, 'info');
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
     }
   };
 
+  /**
+   * 2026-11-19「点地图落位」：客户端坐标 → plan ENU（画布出）→ 世界坐标（锚点投影），
+   * 改的是当前这套扫描的场地位置。返回 true 表示这次点击已被落位吃掉，画布不要再处理。
+   */
+  const placeScanAtClientPoint = (clientX: number, clientY: number): boolean => {
+    const arming = scanArmingRef.current;
+    if (!arming) return false;
+    const planAnchor = outdoorFullPlanRef.current?.anchor ?? null;
+    if (!planAnchor) {
+      notify('这块场地还没有地图锚点，先在地图上定好位再放。', 'error');
+      return false;
+    }
+    const point = outdoorCanvasBridgeRef.current?.planPointAt(clientX, clientY) ?? null;
+    if (!point) return false;
+    const world = worldFromPlanPoint(layoutStore.getState().layout, planAnchor, point);
+    const base = environmentsRef.current[0]?.position ?? ZERO_SPLAT_POSITION;
+    onSplatPositionChange({ ...base, x: world.x, z: world.z });
+    const geo = enuToLngLat(point.x, point.y, planAnchor.lng, planAnchor.lat);
+    outdoorCanvasBridgeRef.current?.focusLngLat(geo.lng, geo.lat, 19);
+    setScanArming(null);
+    notify(`已把「${arming.venue.name}」落在你点的位置；切到 3D 就能看点云。`, 'info');
+    return true;
+  };
+
+  // 待落位时 Esc 退出（与物料「待放置」的取消手势一致）。
+  useEffect(() => {
+    if (!scanArming) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setScanArming(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [scanArming]);
+
   const [projectSceneThumbnails, setProjectSceneThumbnails] = useState<Record<string, string>>({});
-  const thumbnailCacheKey = 'scendance.project-scene-thumbnails.v3';
+  // v4：v3 缓存里的封面是不含高斯层的底图（抓帧漏了独立绘制层），整批作废重抓。
+  const thumbnailCacheKey = 'scendance.project-scene-thumbnails.v5';
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(thumbnailCacheKey) ?? '{}') as Record<string, unknown> | null;
@@ -4361,10 +4379,15 @@ useEffect(() => {
    * 所以抓出来是空/黑，缓存里一个都没落。改成和分享卡预览同一套口子：谁在出镜就抓谁。
    */
   const captureSceneThumb = useCallback(async (): Promise<string | null> => {
-    if (outdoor3dTakeover) return outdoorPlan3DRef.current?.captureImage() ?? null;
+    if (environment && !outdoor2DOpen) return captureRenderImage({ view: 'current', scale: 1, resolution: { width: 320, height: 200 } });
+    if (outdoor3dTakeover) {
+      // 封面要的是这套高斯重建本身：框住它、带高斯层抓帧；整机位抓出来只有底图。
+      const api = outdoorPlan3DRef.current;
+      return api?.captureScanImage() ?? api?.captureImage() ?? null;
+    }
     if (outdoor2DOpen) return outdoorOverlayRef.current?.captureImage() ?? null;
     return captureRenderImage({ view: 'current', scale: 1, resolution: { width: 320, height: 200 } });
-  }, [outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
+  }, [environment, outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
   useEffect(() => {
     // 2026-11-19 用户：「其他的为什么加载不出来？」——封面以前只给「只看这一场」那一套抓，
     // 已经加入项目的场次从来没留过图。改成：只要某套点云真的 ready，就把它的封面存下来，
@@ -4419,6 +4442,28 @@ useEffect(() => {
     try { localStorage.setItem(scanFailureCacheKey, JSON.stringify(failedScans)); } catch { /* Keep it in memory. */ }
   }, [failedScans]);
 
+  /**
+   * 2026-11-19：「加载失败」大多是本机文件被清掉了，而注册表还指着 127.0.0.1。
+   * 探到本机 404、云端有副本就把这条改成 origin: 'cloud'，并且自动重载一次；
+   * 同一套每个会话只修一次，避免来回重试。
+   */
+  const repairedScansRef = useRef(new Set<string>());
+  useEffect(() => {
+    const assetId = splatState.assetId;
+    if (splatState.status !== 'error' || !assetId || repairedScansRef.current.has(assetId)) return;
+    repairedScansRef.current.add(assetId);
+    void (async () => {
+      // 2026-11-19：先反向修 —— 有些条目被写成 cloud，但云端没副本、本机文件是好的。
+      if (await repairScanToLocal(assetId)) {
+        notify('这套实景的本机文件是好的，已把来源切回本机，重新点一下这张卡。', 'info');
+        return;
+      }
+      if (await repairScanFallback(assetId)) {
+        notify('本机已经没有这套实景的文件，已切到云端副本，重新点一次卡片即可加载。', 'info');
+      }
+    })();
+  }, [splatState.status, splatState.assetId, notify]);
+
   // 场景点位（docs/19 需求A）：有经纬度的扫描场地在底图上各钉一个点，点一下 zoom 过去。
   const sceneGeoDots = useMemo(() => {
     if (view.view2D || !layout.researchArea) return [];
@@ -4438,8 +4483,12 @@ useEffect(() => {
   const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     showAgent('space');
-    await startSplat(await loadAholoSceneSource(source));
-  }, [setView, startSplat, showAgent]);
+    const loaded = await loadAholoSceneSource(source);
+    selectEnvironment(loaded.assetId, loaded.name, { restoreItems: false });
+    setOutdoor2DOpen(false);
+    setOutdoor3dTakeoverActive(true);
+    await startSplat(loaded);
+  }, [setView, showAgent, selectEnvironment, startSplat]);
   // 高斯优先（用户裁决）：室内预览就绪后把场地宽深校到高斯实测值（0.1 m 精度，进撤销历史）。
   // 地图户外（盐官一类）和过不了几何闸的壳不改尺寸——以前直接 throw，整页工作台会塌。
   const [splatShellKeptFor, setSplatShellKeptFor] = useState('');
@@ -4487,14 +4536,12 @@ useEffect(() => {
   };
   const setSplatTransformMode = useCallback((mode: SplatTransformMode) => {
     setSplatTransformModeState(mode);
-    setSplatTransform(mode);
     if (mode !== 'off') setView(current => ({ ...current, selectMode: false, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false }));
-  }, [setSplatTransform, setView]);
+  }, [setView]);
   useEffect(() => {
     if (environment) return;
     setSplatTransformModeState('off');
-    setSplatTransform('off');
-  }, [environment, setSplatTransform]);
+  }, [environment]);
 
   const onBindProject = useCallback((projectId: string) => {
     const before=layoutStore.getState().layout;
@@ -4711,7 +4758,7 @@ useEffect(() => {
     if (outdoor3dTakeover) return outdoorPlan3DRef.current?.captureImage() ?? null;
     if (outdoor2DOpen) return outdoorOverlayRef.current?.captureImage() ?? null;
     return captureRenderImage({ view: 'current', scale: 1 });
-  }, [outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
+  }, [environment, outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
   if (!activitySession.isCurrent(sessionToken)) return <div role="status">正在核对活动会话，请稍候。</div>;
   const feedbackPlan = {
     name: (layout.name || '').trim() || '未命名方案',
@@ -4938,12 +4985,13 @@ useEffect(() => {
                   onClick={() => {
                     // 2026-11-13 用户拍板：右侧地图是唯一常驻画面，这个钮只控制左栏户外物料面板的
                     // 展开/收起，不收回地图。面板开 → 再点只收左栏面板（地图保留）；面板收 → 展开。
-                    const panelOpen = outdoorPanel !== null;
+                    const panelOpen = outdoorPanel !== null && !generationOpen && !businessCardOpen;
                     if (!panelOpen) {
                       // 展开左栏户外物料面板；先清待放置：地图点击只服务边界/分区/动线。
                       clearPendingPlacement();
                       // 左栏一次只留一张卡：开户外就先收生成卡（同拍摄卡被切走时的手感）。
                       closeGenerationSheet();
+                      hideBusinessCard();
                       setOutdoorPanel('library');
                       // 仅当地图已不在出镜形态（异常兜底）时把它带回 2D；正常常驻态这里不动地图。
                       if (!outdoor2DOpen && !outdoor3dTakeoverActive) {
@@ -5059,7 +5107,6 @@ useEffect(() => {
           {/* 2026-11-13 用户指令：这张户外卡片默认收起，只有点左轨「户外规划」才展开。
               DOM 仍常驻（hidden 只做视觉隐藏）：画布的图层/物件库/清单浮窗宿主挂在这里，
               卸载会让这些面板回落到画布内浮窗，等于又「自动打开」了。 */}
-          {(outdoor2DOpen || outdoor3dTakeover) && (
             <aside
               className={`sc-left-drawer sc-float-layer is-outdoor-card${isLeftStackDetached(leftStack, 'outdoor') ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
               data-testid="outdoor-left-card"
@@ -5117,7 +5164,7 @@ useEffect(() => {
               </div>
               {isLeftStackDetached(leftStack, 'outdoor') && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'outdoor', event)} />}
             </aside>
-          )}
+
           {leftStackSplit && (
             <div
               className={`sc-left-stack-splitter${leftStackDragging ? ' is-dragging' : ''}`}
@@ -5150,7 +5197,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={startStoredScene} layout={layout} workflow={spaceWorkflow} onPlaceScan={placeScanOnSite} failedScanIds={Object.keys(failedScans)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: selectEnvironment, onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={addSampleScene} layout={layout} workflow={spaceWorkflow} onPlaceScan={placeScanOnSite} failedScanIds={Object.keys(failedScans)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }), onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -5172,10 +5219,23 @@ useEffect(() => {
               2D 左下簇不再重复放发布胶囊（deliverySlot 撤了），右轨按钮列切换视角时不再跳格。 */}
           {(outdoor2DOpen || !!outdoorPlanState) && (
             <div
+              data-testid="outdoor-plan-surface"
               style={{
                 position: 'absolute',
                 inset: 0,
                 ...(outdoor2DOpen ? {} : { visibility: 'hidden' as const, pointerEvents: 'none' as const }),
+                ...(scanArming ? { cursor: 'crosshair' as const } : {}),
+              }}
+              // 2026-11-19「点地图落位」：待落位时这一步先吃点击，画布不再当成选择/框选。
+              // 只认地图本体（canvas）：缩放钮/图例/指南针这些控件仍照常可点，不被落位吃掉。
+              onPointerDownCapture={event => {
+                if (!scanArming || event.button !== 0) return;
+                const target = event.target as Element | null;
+                if (!target || !target.closest('canvas')) return;
+                if (placeScanAtClientPoint(event.clientX, event.clientY)) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
               }}
             >
             <OutdoorPlanOverlay
@@ -5192,6 +5252,8 @@ useEffect(() => {
               onActiveLevelChange={handleOutdoorActiveLevelChange}
               seedPlan={isOutdoorProject ? null : outdoorSeedPlan}
               sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
+              renderScanPlan={outdoor2DOpen ? renderScanPlan : undefined}
+              scanError={environment ? (error ?? (splatState.status === 'error' ? splatState.error : undefined)) : undefined}
               onViewChange={handleOutdoorViewSwitch}
               lengthUnit={layout.planSettings?.displayUnit ?? view.lengthUnit}
               {...(layout.planSettings ? { planEditor: layout.planSettings } : {})}
@@ -5201,6 +5263,17 @@ useEffect(() => {
               // 卡片 portal 出隐藏覆盖层；2D 卡内不传，浮窗照旧画在画布内。
               {...(outdoor3dTakeover ? { inspectorHostId: 'outdoor-inspector-host' } : {})}
 />
+              </div>
+            )}
+            {/* 2026-11-19 待落位提示：放在指针捕获层之外，点「取消」不会被当成落位。 */}
+            {scanArming && outdoor2DOpen && (
+              <div
+                className="sc-scan-arming-hint"
+                role="status"
+                data-testid="scan-placement-hint"
+              >
+                <span>待落位：{scanArming.venue.name} · 在地图上点一下放到那儿</span>
+                <button type="button" onClick={() => setScanArming(null)}>取消</button>
               </div>
             )}
             {/* 2026-11-12 用户指令：接管态左下角「2D地图/3D场地」胶囊已移除——右轨 #tool-2d3d
@@ -5215,10 +5288,9 @@ useEffect(() => {
             />
             {/* 2026-11-15 方案 A：2D/3D 分段胶囊退役，切换入口收进右下工具簇一枚可切换圆钮（#tool-view-toggle）。
                 原左下胶囊挂载不再渲染；OutdoorViewSwitch 组件文件已于 2026-11-17 零引用清理删除。 */}
-      {/* 2026-11-13 用户拍板：右侧唯一画面 = 户外地图 2D/3D；室内房间 three 画布整体退役出镜，
-          容器常驻隐藏但保留保活管线（renderer/canvas ref 仍被环境、漫游、就绪态逻辑复用），
-          彻底卸载 Viewport 与室内 layout 回写链路作为后续清理。 */}
-      <div className="sc-scene-viewport" style={{ visibility: 'hidden', pointerEvents: 'none' }}><Viewport
+      {/* Gaussian venues retain the original renderer and canvas in outdoor projects.
+          The map borrows that renderer in 2D; 3D reveals the same loaded scene. */}
+      <div className="sc-scene-viewport" style={{ visibility: environment && !outdoor2DOpen ? 'visible' : 'hidden', pointerEvents: environment && !outdoor2DOpen ? 'auto' : 'none' }}><Viewport
         isReady={isReady}
         error={error}
         view2D={view.view2D}
@@ -5312,7 +5384,7 @@ useEffect(() => {
                 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：组件**常驻不卸载**——切回 2D 时
                 只置 hidden（内层 active=false 停渲染、只推进瓦片 LOD），切回 3D 当帧就出画面，
                 镜头保持上一次的位置，不再重建 three 场景/重抓瓦片/重放顶部俯冲倾斜动画。 */}
-            {outdoorPlan && (outdoor3dTakeover || outdoor3dWarm) && !walkthroughActive && !scanIsolated && (
+            {outdoorPlan && (outdoor3dTakeover || outdoor3dWarm) && !walkthroughActive && (
               <div
                 className="sc-outdoor-takeover"
                 data-testid="outdoor-takeover"
@@ -5328,6 +5400,7 @@ useEffect(() => {
                   groundMode={groundMode}
                   sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
                   apiRef={outdoorPlan3DRef}
+                  onScanState={handleScanState}
                   canvasApiRef={outdoorCanvasBridgeRef}
                   active={outdoor3dTakeover}
                   walkEnabled={outdoor3dTakeover && outdoorWalkActive}
@@ -5404,7 +5477,7 @@ useEffect(() => {
               {isolatedScanFailed
                 ? <><strong title={splatState.error || undefined}>「{environment.name}」没打开</strong>
                   <button type="button" onClick={retryIsolatedScan}>重试</button></>
-                : <><strong>只看「{environment.name}」</strong>
+                : <><strong>已把「{environment.name}」放到场地上</strong>
                   {mappedWorkspace && <span>地图位置未校准</span>}
                   {isolatedScanLoading && <><Loader2 size={12} className="cr-spin" aria-hidden="true"/><span>加载中…</span></>}</>}
               <button type="button" onClick={hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined)}>{mappedWorkspace ? '返回地图' : '看其他场景'}</button>
@@ -5417,26 +5490,16 @@ useEffect(() => {
               cameraReady={isReady}
               onPick={pickSceneGeoDot}
             />
-            <SplatLodMarker
-              visible={splatLodEnabled && splatLod === 'poi'}
-              name={environment?.name ?? '扫描场地'}
-              anchor={splatLodAnchor}
-              metersPerUnit={splatLodMetersPerUnit}
-              cameraRef={cameraRef}
-              controlsRef={controlsRef}
-              toScreen={toScreen}
-              cameraReady={isReady}
-            />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {workspaceWriteGuards && environmentShown && <div className="sc-local-conflict" role="status"><span>当前编辑权模式暂不支持修改场地标定；标定结果仍需现场核对。</span></div>}
             {showSplatBanner && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
               {environmentShown
                 ? <button type="button" aria-label="收起场地提示" onClick={() => setSplatShellKeptFor('')}>收起</button>
-                : <button type="button" onClick={stopSplat}>退出预览</button>}
+                : <button type="button" onClick={() => setIsolatedScanId(undefined)}>退出预览</button>}
             </div>}
             {environmentShown && splatDisplayMode === 'gaussian' && !view.view2D && splatTransformMode !== 'off' && <div className="sc-splat-transform-tools is-active" role="group" aria-label="高斯场景坐标与移动">
               <div className="sc-splat-transform-heading">
-                <strong>移动整体场景</strong>
+                <strong>{environment?.name} · 位置与大小</strong>
                 <div className="sc-splat-transform-modes" role="group" aria-label="移动模式">
                   <button type="button" aria-pressed={splatTransformMode === 'gizmo'} className={splatTransformMode === 'gizmo' ? 'is-active' : ''} onClick={() => setSplatTransformMode('gizmo')}>坐标轴</button>
                   <button type="button" aria-pressed={splatTransformMode === 'numeric'} className={splatTransformMode === 'numeric' ? 'is-active' : ''} onClick={() => setSplatTransformMode('numeric')}>无轴</button>
@@ -5449,7 +5512,21 @@ useEffect(() => {
                   <input aria-label={`高斯场景 ${axis.toUpperCase()} 坐标，米`} type="number" step="0.1" value={(environment?.position?.[axis] ?? 0).toFixed(1)} onChange={event => updateSplatPosition(axis, event.currentTarget.valueAsNumber)}/>
                 </label>)}
                 <button type="button" onClick={() => updateSplatPosition('y', floorElevation(layout.floors, activeFloorIndex))}>对齐 {activeFloorIndex + 1}F</button>
+                <label><span>比例</span><input aria-label="当前场景缩放比例" type="number" min="0.01" max="100" step="0.1" value={environment?.scale ?? 1} onChange={event => {
+                  const scale = event.currentTarget.valueAsNumber;
+                  if (!Number.isFinite(scale) || scale < 0.01 || scale > 100) return;
+                  onSplatPositionChange(environment?.position ?? ZERO_SPLAT_POSITION, scale);
+                }}/></label>
+                {splatState.meters && <label><span>层高（米）</span><input aria-label="当前场景层高，米" type="number" min="0.1" step="0.1" value={Number(splatState.meters.height.toFixed(1))} onChange={event => {
+                  const height = event.currentTarget.valueAsNumber;
+                  const measured = splatState.meters?.height;
+                  if (!measured || !Number.isFinite(height) || height <= 0) return;
+                  const scale = (environment?.scale ?? 1) * height / measured;
+                  if (scale < 0.01 || scale > 100) return;
+                  onSplatPositionChange(environment?.position ?? ZERO_SPLAT_POSITION, scale);
+                }}/></label>}
               </div>
+              {splatState.meters && <span className="sc-splat-transform-hint">当前尺寸 {splatState.meters.width.toFixed(1)} × {splatState.meters.depth.toFixed(1)} × {splatState.meters.height.toFixed(1)} 米（宽 × 深 × 高）{findShippedAsset(environment?.assetId)?.estimatedHeightMeters ? '；示例默认层高按 3.6 米估算，可修改' : ''}</span>}
               <span className="sc-splat-transform-hint">{splatTransformMode === 'gizmo' ? '拖动红 X、绿 Y、蓝 Z 轴调整位置' : '用上方数值调整位置，场景中不显示坐标轴'}</span>
             </div>}
             {pendingEnvironmentPosition && <div className="sc-local-conflict" role="status"><span>场地位置保存结果待核对，候选暂留本页；关闭前请导出，核对前不能重复保存。</span><button type="button" onClick={()=>downloadTextFile('场地位置待核对草稿.json','application/json;charset=utf-8',JSON.stringify({version:1,scope:pendingEnvironmentPosition.scope,candidate:pendingEnvironmentPosition.intended},null,2))}>导出候选</button><button type="button" onClick={()=>{

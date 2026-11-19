@@ -20,6 +20,7 @@ import OutdoorPlanCanvas, {
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { REPLICA_CASES } from '../lib/replica-cases';
 import { planBoundaryFromSearchArea } from '@/components/room-organizer/lib/outdoor-venue-sync';
 import { GuideBubble, useGuide } from '@/components/room-organizer/components/outdoor-plan-interactions';
@@ -311,6 +312,13 @@ export interface OutdoorPlanOverlayProps {
    */
   sceneObjects?: readonly PlanSceneObject[] | undefined;
   /**
+   * 2026-11-19 用户：「点了还是没有落在场地上」——实景扫描落位钉（plan ENU）。
+   * 只读标记：不写进 plan，不参与统计或命中测试。
+   */
+  scanPin?: { point: PlanPoint; label: string; assetId?: string } | null;
+  renderScanPlan?: ((ctx: CanvasRenderingContext2D, viewport: import('../lib/outdoor-plan-canvas').PlanViewport) => void) | undefined;
+  scanError?: string | undefined;
+  /**
    * 2026-11-12 接管态保活隐藏：全屏 OutdoorPlan3D 接管画布时，本覆盖层**保持挂载**
    * （2D 画布编辑桥 pointerFromPlan 要用它的句柄与布局），但它自己的 2D 画面/浮层
    * 必须真正不可见、不可点。只在外层包 div 上设 visibility:hidden 不够——内层画布
@@ -413,6 +421,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onActiveLevelChange,
   seedPlan,
   sceneObjects,
+  scanPin, renderScanPlan, scanError,
   dormant = false,
   inspectorHostId,
   lengthUnit = 'm',
@@ -956,6 +965,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             annotateHostId="outdoor-panel-host-annotate"
             onActiveLevelChange={onActiveLevelChange}
             sceneObjects={sceneObjects}
+            {...(scanPin ? { scanPin } : {})}
+            renderScanPlan={renderScanPlan} scanError={scanError}
             {...(placePin ? { searchPin: placePin } : {})}
             {...(placeArea ? { searchArea: placeArea } : {})}
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}

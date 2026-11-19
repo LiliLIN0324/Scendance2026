@@ -544,7 +544,9 @@ export interface OutdoorPlanCanvasProps {
    * 2026-11-19 用户：「点了还是没有落在场地上」——实景扫描的落位钉（plan ENU）。
    * 与搜地点钉同一支笔，但它是「这套点云落在哪」的只读标记：不写进 plan、不参与命中测试。
    */
-  scanPin?: { point: PlanPoint; label: string } | null;
+  scanPin?: { point: PlanPoint; label: string; assetId?: string } | null;
+  renderScanPlan?: ((ctx: CanvasRenderingContext2D, viewport: import('../lib/outdoor-plan-canvas').PlanViewport) => void) | undefined;
+  scanError?: string | undefined;
   /**
    * 2026-11-12 搜地点「选区」：行政区边界环（经纬度），画成浅填充 + 虚线描边。
    * 与定位钉同性质——纯视图辅助，不写进 plan，不参与统计与冲突判定。
@@ -1556,7 +1558,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onInspectorChange,
   onModeChange,
   searchPin,
-  scanPin,
+  scanPin, renderScanPlan, scanError,
   searchArea,
   routeProposal,
   zoneProposal,
@@ -1624,8 +1626,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [renamingLevelId, setRenamingLevelId] = useState<string | null>(null);
   const [levelNameDraft, setLevelNameDraft] = useState('');
   const [deleteArmLevelId, setDeleteArmLevelId] = useState<string | null>(null);
-  // 2026-11-19：整条删红线也走两段式（第一次点亮、第二次确认），与删图层同一手感，不弹窗打断画布。
-  const [boundaryDeleteArmed, setBoundaryDeleteArmed] = useState(false);
+  // 2026-11-19 用户拍板：删用地红线不挂目录行句子，直接点红线的填充区选中整条，再 Delete 删。
+  const [boundarySelected, setBoundarySelected] = useState(false);
+  /** draw() 读 ref：选中态要能在下一次重绘里立刻生效。 */
+  const boundarySelectedRef = useRef(false);
   const panRef = useRef<{ x: number; y: number }>();
   const layerStateRef = useRef<LayerVisibility>(visibility ?? defaultLayerVisibility());
   // 底图瓦片缓存：同一 URL 只加载一次，缺当前层级时用上一级兜底 —— 缩放不再一闪一闪。
@@ -1637,7 +1641,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
   // 2026-11-19：实景扫描落位钉（plan ENU），与搜钉同一条 props → ref → 重绘的路。
-  const scanPinRef = useRef<{ point: PlanPoint; label: string } | null>(scanPin ?? null);
+  const scanPinRef = useRef<OutdoorPlanCanvasProps['scanPin']>(scanPin ?? null);
+  const scanPaintRef = useRef(renderScanPlan);
+  scanPaintRef.current = renderScanPlan;
   const searchAreaRef = useRef<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(searchArea ?? null);
   // V-2d：流线提案预览（同一路数；应用走 handle.applyRoutes，预览本身不进 plan）。
   const routeProposalRef = useRef<{ routes: PlanRoute[]; nodes: PlanNode[] } | null>(routeProposal ?? null);
@@ -2460,12 +2466,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onModeChange?.(next);
     // 2026-11-16 用户「我现在好像画不了场地边界了啊？」：
     // 锁只该挡「没选工具时的误触」。点了「画边界 / 编辑边界」就是明摆着要改几何，
-    // 进模式即自动解锁（否则单击收点会被锁直接拦下，工具看着就是坏的）。画完可在左栏再锁上。
+    // 进模式即自动解锁；重画闭合后自动锁回去，避免绘制完成后仍拖到顶点。
     if ((next === 'boundary' || next === 'boundary-vertex') && lockedLayersRef.current.boundary === true) {
       const unlocked: LockedLayerMap = { ...lockedLayersRef.current, boundary: false };
       lockedLayersRef.current = unlocked;
       setLockedLayers(unlocked);
-      setEditMessage('已自动解除用地红线锁定（选了红线工具就是要改它）；画完可在左侧「用地红线」行再锁上。');
+      setEditMessage('已解锁用地红线，可以修改；重画闭合后会自动锁定。');
     }
     // 还没红线、但地图上有搜索选区：把这块闭合范围放进红线草稿。
     // 点起点闭合走现有 closeDraft（写入 plan.boundary，再出确认卡）；Esc 仍是取消。
@@ -3273,6 +3279,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       activeSource === 'img' || activeSource === 'amap-satellite' || activeSource === 'esri-satellite' ? 'dark' : 'light',
     );
 
+    scanPaintRef.current?.(planCtx, viewport);
+
     // 2) 业务图层（planCanvas，叠在底图之上）：按图层栈顺序叠加，
     //    底图瓦片异步返回时不会覆盖业务层。
     // 节点拖动预览：被拖节点与受影响路线端点随动预览（未 commit 前仅绘制）。
@@ -3326,6 +3334,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 「边界没锁 + 浏览/选择/编辑边界」= 可拖的编辑态，方点画大一号。
         vertexHandles: editingBoundary,
         vertexDots: lockedLayersRef.current.boundary !== true,
+        // 2026-11-19：点填充区选中后加深一档，让人看得出「接下来 Delete 删的是它」。
+        selected: boundarySelectedRef.current === true,
         // 2026-11-16 用户：不同底图上的对比要不一样——矢量底灰线，影像/深色底亮线。
         halo: boundaryHaloToneFor(activeSource),
         // 2026-11-16 用户「锁定之后不要描边」：锁上就只留一层淡填色，没有任何边。
@@ -3868,10 +3878,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       drawSearchPin({ ctx: planCtx, viewport }, { point: pinPoint, label: pin.label });
     }
     // 2026-11-19 实景扫描落位钉：钉在「这套点云落在哪」，跟搜地点钉分开画，互不顶掉。
-    const scanPinNow = scanPinRef.current;
-    if (scanPinNow) {
-      drawSearchPin({ ctx: planCtx, viewport }, { point: scanPinNow.point, label: scanPinNow.label });
-    }
 
     // 7b) V-2d：流线提案预览（虚线 + 出入口圆点）——画在搜钉之上，应用前不进 plan。
     if (routeProposalRef.current) {
@@ -3983,6 +3989,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     scanPinRef.current = scanPin ?? null;
     drawRef.current();
   }, [scanPin]);
+  useEffect(() => {
+    if (!renderScanPlan) return;
+    let frame = 0;
+    let last = 0;
+    const paint = (now: number) => {
+      if (now - last >= 66) { last = now; drawRef.current(); }
+      frame = requestAnimationFrame(paint);
+    };
+    frame = requestAnimationFrame(paint);
+    return () => cancelAnimationFrame(frame);
+  }, [renderScanPlan]);
   // 选区：同一定位钉的同步路数（props → ref → 重绘）。
   useEffect(() => {
     searchAreaRef.current = searchArea ?? null;
@@ -4345,6 +4362,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           || selectedWorkerRef.current
           || selectedAnnotationRef.current
           || selectedMeasurementRef.current
+          || boundarySelectedRef.current
         ) {
           clearEntitySelection();
         }
@@ -4354,6 +4372,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // 2026-11-19 用户实测「画完红线 Enter 按不了了」：Enter 只在冒泡阶段处理，焦点一旦不在画布上，
+  // Enter 就落不到闭合分支——停在面板按钮上会先激活那个按钮（点「撤销上一点」后焦点留在它上面，
+  // 再按 Enter 反而又少一个点），停在输入框里则被 inField 直接挡掉，两种都表现为「按了没反应」。
+  // 这里在捕获阶段只兜这一件事：环草稿已有顶点时，Enter 就是闭合（与「点起点 / 双击 / 完成」同一条 closeDraft）。
+  // 真正在输入文字（输入框里有内容、可编辑区域）时让位，不抢输入框的 Enter。
+  useEffect(() => {
+    const onEnterCapture = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.shiftKey) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const mode = modeRef.current;
+      if (mode !== 'boundary' && mode !== 'zone' && mode !== 'scope') return;
+      if (draftRef.current.length === 0) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable) return;
+      const tag = target?.tagName?.toLowerCase();
+      const typing = (tag === 'input' || tag === 'textarea')
+        && String((target as HTMLInputElement).value ?? '').trim().length > 0;
+      if (typing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeDraft();
+    };
+    window.addEventListener('keydown', onEnterCapture, true);
+    return () => window.removeEventListener('keydown', onEnterCapture, true);
   }, []);
 
   // P2-i 选中实体的键盘操作：Delete/Backspace 删除、Ctrl/Cmd+D 复制设施、方向键微调设施
@@ -4446,6 +4490,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         if (vehicleId) {
           event.preventDefault();
           deleteVehicle(vehicleId);
+          return;
+        }
+        // 2026-11-19 用户：选中整条红线后，一条 Delete 删掉整条（误画两圈也是一次清干净）。
+        // 锁只拦改形状；删整条是「选中 + Delete」两段显式动作，不再要求先解锁。
+        if (boundarySelectedRef.current) {
+          event.preventDefault();
+          commitPlan(clearPlanBoundary(planRef.current));
+          selectBoundary(false);
+          setEditMessage('用地红线已整条删除（分区与物料保留，锚点不动）。Ctrl+Z 可撤销，或点「用地红线」重画。');
           return;
         }
         // 2026-11-11：分区选中（Placed Objects 树点行）也支持 Delete/Backspace 删除。
@@ -5387,9 +5440,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (nextAnchor) onVenueBoundaryApplied?.(nextAnchor);
       pendingVenueAnchorRef.current = undefined;
       setMode('view');
+      setLayerLocked('boundary', true);
+      selectBoundary(false);
+      clearBoundaryDeleteArm();
+      if (!scopeLockedRef.current) toggleScopeLock();
       focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。${overflowSuffix(boundaryOverflow)}`);
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；红线和范围已锁定，需要调整时点锁解锁。${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
@@ -5459,6 +5516,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 2026-11-16 用户：「点 esc 就退出物体编辑模式」——取消全部单选实体，属性卡与 3D 手柄一起收回。 */
   function clearEntitySelection() {
+    selectBoundary(false);
     selectFacility(null);
     selectZone(null);
     selectRoute(null);
@@ -5502,6 +5560,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /* ---------------- P2-j 分区选中与顶点改形 ---------------- */
+
+  /**
+   * 2026-11-19 用户：用地红线要能像分区那样「点一下选中、Delete 删掉」。
+   * 只做整条选中——顶点/边/角柄仍在选中之外各管各的编辑。
+   */
+  function selectBoundary(next: boolean) {
+    boundarySelectedRef.current = next;
+    setBoundarySelected(next);
+    if (next) {
+      selectFacility(null);
+      selectZone(null);
+      selectRoute(null);
+      selectNode(null);
+      selectWorker(null);
+      selectVehicle(null);
+      selectAnnotation(null);
+      selectMeasurement(null);
+      clearMultiSelection(false);
+    }
+    draw();
+  }
 
   function selectZone(id: string | null) {
     selectedZoneRef.current = id;
@@ -5777,7 +5856,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setMode(tool);
     if (tool === 'boundary') {
       // 2026-11-11：边界重画入口回归（OnePlan 化时曾随顶部工具条丢失）——画完闭合即替换起步矩形。
-      setBoundaryDeleteArmed(false);
       setEditMessage(boundaryWasLocked
         ? '重画用地红线：用地原为锁定，已自动解锁；沿用地单击加顶点，双击或点回起点闭合替换旧红线，Esc 取消。'
         : '重画用地红线：沿用地单击加顶点，双击或点回起点闭合替换旧红线；Esc 取消。');
@@ -8371,6 +8449,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           draw();
           return;
         }
+      }
+      // 2026-11-19 用户：点红线填充区即选中整条（顶点/边/角柄都没命中才落这里）。
+      // 故意放在锁定判断之外——锁只拦「改几何形状」，不该拦「选中一条待删的误画红线」。
+      // 不吃掉这次按下：场地里仍能拖着平移，选中只决定「接下来 Delete 删谁」。
+      if (hit && onPlanChange && planRef.current.boundary.length >= 3
+        && planPointInRing(hit.pt, planRef.current.boundary) && !boundarySelectedRef.current) {
+        selectBoundary(true);
+        setEditMessage(layerLocked('boundary')
+          ? '已选中用地红线（整条，图层锁定中）：Delete 删除整条红线与设计范围；改形状需先解锁。Esc 取消选择。'
+          : '已选中用地红线（整条）：Delete 删除整条红线与设计范围，Esc 取消选择。');
       }
       // 2026-11-16：锁着时点边界不能“默不作声”——告知解锁入口。
       if (hit && layerLocked('boundary')) {
@@ -12269,6 +12357,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         dropFacilityAtPoint(dragged, hit.pt);
       }}
     >
+      {scanError && <div role="alert" style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 10, maxWidth: 440, padding: '12px 16px', background: '#fff', border: '1px solid #e4e4e7', borderRadius: 8, color: '#b4443c' }}>{scanError}</div>}
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
       {arrangePreview && (
@@ -12878,6 +12967,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           </button>
         </div>
       )}
+      {/* 2026-11-19 用户：红线不靠目录行句子删——点完填充区出现这条，Delete 或点按钮都行。 */}
+      {!readOnly && boundarySelected && mode === 'view' && (
+        <div
+          data-testid="boundary-selection-bar"
+          onMouseDown={event => event.stopPropagation()}
+          onMouseUp={event => event.stopPropagation()}
+          onClick={event => event.stopPropagation()}
+          onContextMenu={event => event.preventDefault()}
+          style={{
+            position: 'absolute', top: levelsPanelHost ? 34 : 66, left: '50%', transform: 'translateX(-50%)', zIndex: 4,
+            display: 'inline-flex', alignItems: 'center', gap: 6, pointerEvents: 'auto',
+          }}
+        >
+          <span style={{ fontSize: 12, opacity: 0.82, padding: '0 2px' }}>已选中用地红线</span>
+          <button
+            type="button"
+            data-testid="boundary-delete-selected"
+            onClick={() => {
+              if (readOnly) return;
+              commitPlan(clearPlanBoundary(planRef.current));
+              selectBoundary(false);
+              setEditMessage('用地红线已整条删除（分区与物料保留，锚点不动）。Ctrl+Z 可撤销，或点「用地红线」重画。');
+            }}
+            style={modeButtonStyle(true)}
+          >
+            删除整条红线
+          </button>
+          <button type="button" data-testid="boundary-deselect" onClick={() => selectBoundary(false)} style={modeButtonStyle(false)}>
+            取消选择
+          </button>
+        </div>
+      )}
 
       {/* 清单在左栏户外卡。没有宿主时不在地图上留浮卡。图例单独贴在画布左下。 */}
       {infoPanelHost && <PanelPortal host={infoPanelHost}>
@@ -13400,28 +13521,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                   白框由红线自动送（外扩 20 m）、红线顶出去自动重置，微调直接在画布上
                                   拖白框的边/角（可锁定）。拖矩形入口撤掉后 mode='scope' 那条路径没有
                                   入口了，画布代码先原样留着（用户：死代码先不清理）。 */}
-                              {/* 2026-11-19 用户实测：「用地红线不能整个删掉」——重画只能替换，缺一个整条清空。
-                                  两段式（点一次点亮、第二次确认）与删图层同一手感；只清场地壳与设计范围，
-                                  已摆的分区/物料/流线保留，锚点不动，整批可 Ctrl+Z 撤销。 */}
-                              {plan.boundary.length >= 3 && !readOnly && renderOneplanItemRow({
-                                key: 'catalog-boundary-delete',
-                                testId: 'catalog-boundary-delete',
-                                label: boundaryDeleteArmed ? '确认删除红线' : '删除用地红线',
-                                active: boundaryDeleteArmed,
-                                onClick: () => {
-                                  if (!boundaryDeleteArmed) {
-                                    setBoundaryDeleteArmed(true);
-                                    setEditMessage('再点一次「删除用地红线」：整条红线与设计范围会清空，分区、物料、流线保留，锚点不动。Ctrl+Z 可撤销。');
-                                    return;
-                                  }
-                                  setBoundaryDeleteArmed(false);
-                                  if (mode === 'boundary') setMode('view');
-                                  commitPlan(clearPlanBoundary(planRef.current));
-                                  setEditMessage('用地红线已整条删除（分区与物料保留，锚点不动）。按 Ctrl+Z 可以恢复，或点「用地红线」重新画一圈。');
-                                },
-                                title: '整条清空用地红线（连同设计范围）；已摆内容保留，可撤销',
-                                icon: <BoundarySwatch size={22} />,
-                              })}
                               {plan.boundary.length >= 3 && renderOneplanItemRow({
                                 key: 'catalog-scope-expand',
                                 testId: 'catalog-scope-expand',
