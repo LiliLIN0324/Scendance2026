@@ -654,3 +654,107 @@ Supabase Dashboard 会话过期导致 SQL Editor 不可用时，**不必等人�
 
 **前置条件**：`api.supabase.com` 直连可达（本机实测可达），且 Node 需带代理环境变量时加 `NODE_USE_ENV_PROXY=1`
 （Node 24+ 的 `fetch` 才会读 `HTTP_PROXY`）。令牌只从 `.env.local` 读，脚本不打印。
+
+## 十五、公开物料上线与积分口径收官（2026-11-19 晚间）
+
+> 本章为晚间续作的实测结项。**推翻 14.2 的一条结论**（积分「无法回答扣了几点」），见 15.1；
+> 14.10 列的 D1–D6 待决项本轮全部落地，见 15.6。所有数字来自生产库直查、线上 Edge 实调与部署记录。
+
+### 15.1 积分口径量准（14.2 的「问不了」被推翻）
+
+服务商任务**列表**接口带扣点字段，此前只查了单任务 `get`（不返扣点），所以没读到：
+
+```
+GET https://api.aholo3d.cn/lux3d/v1/generate/task/list
+  → { total, page, pageSize, items:[{ taskId, status, taskType, consumedCredits, … }] }
+```
+
+| 口径 | 实测值 | 依据 |
+| --- | --- | --- |
+| `image-to-3d` 单价 | **20 credits/件** | 成功件 `consumedCredits` 全为 20.00 |
+| `multimodal-to-image`（参考图）单价 | **12 credits/张** | 同上 |
+| **失败件是否扣分** | **不扣** | `taskId 8377276`（status=4）`consumedCredits=0`；本轮 1 件失败同样 0 |
+| 全量台账 | 137 单 / 总消耗 1958；当日 15 单 3D = 300、43 张参考图 = 516 | 同接口分页拉全 |
+| 余额查询 | **仍然没有** | `/lux3d/v1/user/*`、`/account/*`、`/points/*` 全 404；`POST /account/balance` → 400 `PRICING_REQUEST_INVALID` |
+| 积分耗尽判据 | `provider_usage.vendorError = {vendorCode:"-1", vendorMessage:"no credits"}` | 2026-11-17 旧任务留样 |
+
+**结论**：单件与单张单价已可量准（20 / 12），**失败不扣分**（所以多建空单只产生噪声不花钱）；
+但**余额仍只能由用户口述**（最近一次 142），代码侧依旧没有余额端点。
+
+### 15.2 14.3 提效选项①已做：每账号 3 个槽位
+
+- 迁移 `20261119130000_per_owner_concurrent_generation.sql`：owner 可占 slot 1/2/3，**第四单才 `GENERATION_BUSY`**；
+  槽位随任务终态释放（原口径是「每 owner 只允许 1 个活跃生成任务」）。
+- 测试改口径（`tests/jobs.test.ts`）：同 owner 连占三槽 + 第四单被挡；ambiguous 提交仍占自己的槽位但不锁死队列；
+  终态后新任务拿回同一槽位。
+- **②（worker 单次领多单）未做**：worker 仍每分钟领 1 单 + pg_cron 每分钟触发，单件端到端 5.8–7.1 分钟不变。
+- 实测吞吐：晚间驱动连续建单，单账号同时 3 件在跑，队列不再是一条。
+
+### 15.3 公开物料：普通用户可见（用户口径升级）
+
+用户口径从「共享给丽丽」升级为「**我的生成都放到平台上，让更多普通用户都能看到**」。
+
+| 项 | 做法 | 备注 |
+| --- | --- | --- |
+| 存储 | 新表 `scene_private.published_assets(asset_id, published_by, published_at, catalog)` | **不复用 `library_assets`**：那张表强绑 3dassets.dev 目录四件套（sourceId/sourceUrl/license/catalog），塞服务商出件会污染管理员目录契约 |
+| 可见性 | 扩展 `scene_rpc('assets.list')` 为「本人的 + 公共目录的」，每行带 `published_at` | **只改 SQL 就上线**，不依赖 Edge 重部署 |
+| 可用性 | 扩展 `scene_private.can_use_asset`：公共目录物料对任何有工作室身份的用户可用 | 撤下公开不回收项目级权限（用过该物料的项目成员仍可取用）——这是正确语义 |
+| 写接口 | `assets.publish` / `assets.unpublish` | 仅物主、仅 `format='glb'`；参考图与平面图 → `ASSET_NOT_PUBLISHABLE` |
+| 边缘路由 | `POST/DELETE /assets/{id}/publish`（`supabase/functions/_shared/api.ts`） | 已部署（15.5） |
+| 前端 | 物料库面板「公开 / 撤下」按钮 + 「公共物料」徽标 | 别人的公共物料只标出来，不给按钮 |
+
+**线上实测读数（真打生产 Edge）**：
+
+```
+GET  /assets （我）            → 总 62 / 公开 27 / GLB 28
+POST /assets/{id}/publish     → 200 {"published":true,"publishedAt":"2026-11-19T07:29:10Z"}
+DELETE /assets/{id}/publish   → 200 {"published":false,"publishedAt":null}
+GET  /assets （丽丽）          → 总 28 / 公开 27 / 其中我发布的 27
+```
+
+**顺带修掉自己写的一个谎**：撤下时用 `delete … returning * into pub` 再报 `pub.asset_id is not null`，
+被删的那行一定非空 → **撤下成功也回 `published: true`**。库里状态对、返回体在撒谎。
+追加迁移 `20261119160000_published_assets_publish_flag.sql` 改成查表确认，
+实测 `published:false / publishedAt:null`（已应用生产并记账）。
+
+### 15.4 顺手修掉的既有缺陷：三张业务表漏开 RLS
+
+`user_preferences` / `outdoor_card_history` / `outdoor_plans` 三张表**没开 RLS**——
+`scene_core.sql` 的统一开关只覆盖了当时已存在的表，后加的表漏了。
+迁移 `20261119151000_scene_private_rls_backfill.sql` 用自愈式循环**只给「当前未开 RLS」的 `scene_private` 表补开**，
+不碰已有策略；生产自检 `rls_missing = (none)`。已应用生产并记账。
+
+### 15.5 上线证据（这一刀已真的生效）
+
+| 面 | 证据 |
+| --- | --- |
+| 提交 | `9a6b9599 feat(generation): 公开物料目录、每账号 3 个生成槽位、参考图直传`（21 文件），合并后 `main` = `e2c9b572`，`origin/main` 已同步（0/0） |
+| 类型与测试 | 根 `tsc --noEmit` exit 0；前端 `tsc --noEmit` exit 0；根 vitest 29/29；前端 vitest 33/33（**在独立 worktree 里验**，避开同工作树里并行会话的在途改动） |
+| Edge | `scene-api` **version 66**（2026-11-19T07:12:09Z）。`supabase functions deploy scene-api --use-api`（本地打包器在本机网络下取不到 npm 源，`--use-api` 走管理 API 直接上传源码树才通） |
+| 前端 | Cloudflare Pages 部署 `1806389b`（branch=main）；正式域 `scendance-scene-planner-ewz.pages.dev` 实测含四个本次标记：公共物料徽标 / 公开按钮 / 「3 个生成任务」文案 / 候选免责声明 |
+| 公开物料 | 生产库已公开 **27 件** GLB（我名下 GLB 全部）；丽丽账号在线可见 |
+
+### 15.6 14.10 的 D1–D6 处置对照
+
+| # | 事项 | 本轮处置 | 证据 |
+| --- | --- | --- | --- |
+| D1 | 公开物料目录 | **已做** | 15.3；线上 27 件已公开、丽丽可见可取用 |
+| D2 | 放宽 owner 多活跃任务 + worker 并发 | **①已做 / ②未做** | 15.2：每账号 3 槽位；worker 仍每分钟 1 单 |
+| D3 | 审计 a 档零风险文案/交互 | **已做 a1/a2/a3/a6** | a1 对话里说清任务号在「我的生成」；a2 候选卡标注「不代表云端物料库存」；a3/a6 槽位满文案提到单一真源 `GENERATION_BUSY_NOTICE` |
+| D4 | 参考图 HEIC + 降采样 ≤4096px | **已做** | `frontend/lib/reference-photo.ts`：文件头读尺寸，合规照片**原样上传**（不掉画质、资产 id 稳定）；HEIC/超长边/超 5MB 才解码重编码，HEIC 解不了给明确文案 |
+| D5 | `/assets/floorplan` 支持传入文件名 | **已做** | `?name=` 查询参数 + Edge 侧读取；参考图不再顶着「场地平面图」名头 |
+| D6 | 合并 PR | **已做** | 直接在 `main` 上；只提交本次改动，**并行会话的在途改动留在工作树没进这次提交** |
+
+### 15.7 本轮仍未闭环 / 明确不做
+
+- **生成批次**：本轮累计建单 20 单，28 件已 `ready`；清单里还有约 13 件未建单。
+  积分是否续到只能问用户（无余额接口）；驱动带「服务商拒绝含积分/额度/quota/credit/欠费即停」的自限保险。
+- **1 件失败**（婚礼暖光串灯，`PROVIDER_FAILED`，`provider_usage` 为空）：按既定口径**不自动重派付费请求**，保留原样等人工判断。
+- **b/c 档体验断点未做**：job 终态回写对话、对话侧轮询、结果自动落画布——要改契约或产品口径，不在这一刀范围。
+- **根全量 11 个文件失败**的归因（都不是本次改动引入）：
+  `auth.uid()` 缺失导致全部 PGlite 套件在迁移阶段就崩（来自并行会话已提交的 `20261119120000_review_share_links.sql`，
+  它自建 PGlite 没补 `auth.uid()` 桩，而 `tests/fixtures.ts` 有桩）；
+  `merged-library` 279 vs 290 是并行会话往 `merged.json` 加了 11 件；
+  `config` / `hunyuan-config` / `local-persistence` 的 5–30 s 超时是负载型 flaky，单独重跑即过。
+- **CHANGELOG 与版本号未动**：`check:changelog` 当前对 8 个既有版本就是红的（并行会话写的条目不合 `docs/43` 规范），发布口径不由这一刀决定。
+- **治理改动仍需人 review**：Edge 路由（`/assets/{id}/publish`）与三份迁移已按用户授权落地并上线，但正式流程上属「需人 review」的范围，review 时看 15.3–15.5 的读数即可。
