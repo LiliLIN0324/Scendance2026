@@ -49,3 +49,8 @@
 .sc-assets button:not(:disabled):active{transform:translateY(1px)}
 @media(prefers-reduced-motion:reduce){.sc-assets button{transition:none}.sc-assets button:not(:disabled):active{transform:none}}
 @media(max-width:480px){.sc-assets .sc-assets-preview{padding:12px}.sc-assets .sc-assets-list li{align-items:flex-start}.sc-assets .sc-assets-section-heading{flex-wrap:wrap}}
+/* 公开物料：徽标说明它已经在公共目录里，按钮只给物主。 */
+.sc-assets .sc-assets-foot{display:flex;align-items:center;gap:8px;margin-top:6px}
+.sc-assets .sc-assets-public{font-style:normal;font-size:11px;color:var(--sc-muted)}
+.sc-assets .sc-assets-publish{min-width:0;max-width:none;padding:3px 9px;border:1px solid var(--sc-line);border-radius:999px;background:transparent;box-shadow:none;color:var(--sc-muted);font-size:11px;line-height:1.4}
+.sc-assets .sc-assets-publish[aria-pressed=true]{color:var(--sc-ink);border-color:color-mix(in srgb,var(--sc-ink) 30%,transparent)}

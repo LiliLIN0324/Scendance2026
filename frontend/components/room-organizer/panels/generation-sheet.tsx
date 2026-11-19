@@ -38,6 +38,7 @@ import {
   UNKNOWN_SUBMISSION_NOTICE,
   generationBlockReason,
   generationFailureDisposition,
+  isGenerationBusy,
   modeSupports,
   pickEngine,
   plainFailure,
@@ -98,6 +99,8 @@ export function GenerationSheetHost({ controller, onAddLocalGlb, className, styl
   const [reference, setReference] = useState<{ id: string; name: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  /** 服务端说「这个账号的生成槽位满了」：这句就一直挂在面板顶上，别让人以为是描述写错了。 */
+  const [slotBusy, setSlotBusy] = useState(false);
   const [capabilities, setCapabilities] = useState<GenerationCapabilities | null>(null);
   const [capabilityState, setCapabilityState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
 
@@ -181,6 +184,7 @@ export function GenerationSheetHost({ controller, onAddLocalGlb, className, styl
     anyConfigured,
     disabled: busy,
     writeBlocked: cloud.writeBlocked,
+    busy: slotBusy,
   });
   // 正在提交时不要显示「上次结果未知」：那一条 submitting 回执就是本次请求。
   const lockForUi = busy ? null : unknownLock;
@@ -249,6 +253,7 @@ export function GenerationSheetHost({ controller, onAddLocalGlb, className, styl
         return;
       }
       settleGenerationSubmission(requestId, { state: 'submitted', taskid: job.id });
+      setSlotBusy(false);
       setNotice(`已提交：任务号 ${job.id}「${job.prompt || spoken}」。${facility
         ? `生成完会回填到「${facility.name}」的模型条。`
         : '生成完会出现在「我的生成」。'}`);
@@ -257,6 +262,8 @@ export function GenerationSheetHost({ controller, onAddLocalGlb, className, styl
     } catch (failure) {
       // 无论哪种失败都先清 staged：残留会把下一次生成错挂到这件设施。
       if (facility) discardFacilityGenerateLink();
+      // 槽位满要说清楚是这个账号的并发上限，不是描述写错了。
+      setSlotBusy(isGenerationBusy(failure));
       if (generationFailureDisposition(failure) === 'unknown') {
         settleGenerationSubmission(requestId, { state: 'unknown', message: UNKNOWN_SUBMISSION_NOTICE });
         setNotice(`结果未知：请求号 ${requestId}。先查任务记录与费用，不重试。`);
@@ -277,9 +284,11 @@ export function GenerationSheetHost({ controller, onAddLocalGlb, className, styl
     setPhotoName(file.name);
     if (!controller) { setNotice('登录云项目后才能上传参考图。'); return; }
     try {
+      // 手机照片先归一化：HEIC 转 JPEG、超尺寸降采样、超 5MB 压画质。
+      // 已经合规的原样上传，不白白掉画质。
       const uploaded = await uploadModelReference(controller, file);
       setReference(uploaded);
-      setNotice('');
+      setNotice(uploaded.notice);
     } catch (failure) {
       setReference(null);
       setNotice(plainFailure(failure));

@@ -60,6 +60,29 @@ describe('personal cloud assets', () => {
     const pictured = await screen.findByRole('button', { name: '预览 有图的椅' });
     expect(pictured.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example/chair.webp');
   });
+  it('lets the owner publish or withdraw a model and marks public ones', async () => {
+    const owned = { ...asset, owner_id: userId, published_at: '2026-11-19T00:00:00Z' };
+    const calls: { path: string; method: string }[] = [];
+    requests.mockImplementation(async (path: string, method = 'GET') => {
+      if (path === '/assets') return [owned] as never;
+      calls.push({ path, method });
+      return {} as never;
+    });
+    setup();
+    // 已在公共目录里的物料：标出来，并给物主一个「撤下」。
+    const withdraw = await screen.findByRole('button', { name: '撤下' });
+    expect(withdraw.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('公共物料')).toBeTruthy();
+    fireEvent.click(withdraw);
+    await waitFor(() => expect(calls).toEqual([{ path: `/assets/${asset.id}/publish`, method: 'DELETE' }]));
+  });
+  it('gives no publish button for somebody else material', async () => {
+    requests.mockResolvedValueOnce([{ ...asset, owner_id: '30000000-0000-4000-8000-000000000009', published_at: '2026-11-19T00:00:00Z' }]);
+    setup();
+    expect(await screen.findByText('公共物料')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '撤下' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '公开' })).toBeNull();
+  });
   it('only lists personal assets without another AI generation entry or requests', async () => {
     setup(); await screen.findByRole('button', { name: '预览 木椅' });
     expect(screen.getByRole('tab', { name: /^我的生成/ }).getAttribute('aria-selected')).toBe('true');

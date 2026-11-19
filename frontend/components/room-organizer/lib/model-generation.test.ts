@@ -5,6 +5,7 @@ import {
   engineSupports,
   generationBlockReason,
   generationFailureDisposition,
+  isGenerationBusy,
   modeSupports,
   pickEngine,
   plainFailure,
@@ -12,6 +13,7 @@ import {
   submitModelJob,
   uploadModelReference,
 } from './model-generation';
+import { GENERATION_BUSY_NOTICE, assetError } from '@/lib/assets-api';
 import { SceneApiError } from '@/lib/backend-session';
 import type { BackendSession, GenerationCapabilities } from '@/lib/backend-session';
 
@@ -62,10 +64,11 @@ describe('模型生成规则', () => {
     expect(textOptions).toEqual({ kind: 'text' });
   });
 
-  it('参考图上传回原名', async () => {
+  it('参考图上传回原名，并带回归一化说明', async () => {
     const controller = fakeController();
     const uploaded = await uploadModelReference(controller, new File(['x'], '椅子.png', { type: 'image/png' }));
-    expect(uploaded).toEqual({ id: 'ref-1', name: '椅子.png' });
+    // notice 是新增的：照片被 HEIC 转换 / 缩尺寸 / 压体积时要告诉用户改了什么。
+    expect(uploaded).toEqual({ id: 'ref-1', name: '椅子.png', notice: '' });
   });
 
   it('回执的 requestId 由面板传入；缺省仍生成合法 UUID', async () => {
@@ -100,5 +103,16 @@ describe('模型生成规则', () => {
     expect(generationBlockReason({ ...base, capabilityState: 'failed' })).toContain('连不上云端');
     expect(generationBlockReason({ ...base, anyConfigured: false })).toContain('尚未连接服务商');
     expect(generationBlockReason(base)).toBe('');
+  });
+
+  it('槽位满时用同源的那一句，并说清是这个账号的并发上限', () => {
+    const base = { signedIn: true, capabilityState: 'ready' as const, anyConfigured: true, disabled: false, writeBlocked: false };
+    // 与资产接口同源：两个入口不能各说各的。
+    expect(generationBlockReason({ ...base, busy: true })).toBe(GENERATION_BUSY_NOTICE);
+    expect(generationBlockReason({ ...base, busy: true })).toBe(assetError(new SceneApiError('GENERATION_BUSY', 429, null)));
+    expect(GENERATION_BUSY_NOTICE).toContain('3 个生成任务');
+    expect(isGenerationBusy(new SceneApiError('GENERATION_BUSY', 429, null))).toBe(true);
+    expect(isGenerationBusy(new SceneApiError('BUDGET_EXCEEDED', 402, null))).toBe(false);
+    expect(isGenerationBusy(new Error('别的错'))).toBe(false);
   });
 });
