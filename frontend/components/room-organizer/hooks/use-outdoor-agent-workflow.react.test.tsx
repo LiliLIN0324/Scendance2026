@@ -211,6 +211,39 @@ it("户外问答跟随面板所选 provider 与 model 透传到对话请求", as
   expect(chatMeta.provider).toBe("tokendance");
   expect(chatMeta.model).toBe("tk-another");
 });
+
+it('婚礼自主重排不因缺参数请求云端追问，生成地图候选并在应用前保存完整恢复版本',async()=>{
+  plan.zones=[{id:crypto.randomUUID(),name:'仪式区',purpose:'audience',semantic:'audience',environment:'outdoor',polygon:[{x:1,y:1},{x:3,y:1},{x:3,y:3},{x:1,y:3}],notes:''}];
+  bridge.readLibrary=vi.fn(async()=>[]);
+  await confirmScope();
+  const original=structuredClone(plan);
+  apply.mockClear();
+  await act(async()=>{await flow.handle('请重新规划60人户外婚礼，不需要等待我逐项补充参数');});
+  if(flow.pendingPlan){const pending=flow.pendingPlan;await act(async()=>{await flow.approvePlan(pending);});}
+  expect(understand).not.toHaveBeenCalled();
+  expect(flow.proposal?.next.facilities.filter(f=>f.name.startsWith('观礼椅'))).toHaveLength(60);
+  expect(flow.proposal?.next.facilities.filter(f=>f.name.startsWith('宴席圆桌'))).toHaveLength(6);
+  expect(plan).toEqual(original);
+  expect(apply).not.toHaveBeenCalled();
+  await action('confirm');
+  expect(apply).toHaveBeenCalledOnce();
+  const backupKey=Object.keys(localStorage).find(key=>key.startsWith('scendance-outdoor-plan-v1:wedding-before-'));
+  expect(backupKey).toBeTruthy();
+  expect(JSON.parse(localStorage.getItem(backupKey!)!).plan).toEqual(original);
+  expect(saySpy.mock.calls.some(([text])=>text.includes('打开原方案'))).toBe(true);
+});
+
+it('婚礼自主规划的复杂要求保留模型事实，缺少桌位参数的追问自动转成设计候选',async()=>{
+  await confirmScope();
+  bridge.readLibrary=vi.fn(async()=>[]);
+  await turn('请继续执行60人户外婚礼规划，入口尚未核对，不需要等待我逐项补充参数',response('ask',{
+    event:{value:'户外婚礼',evidence:'户外婚礼'},guests:{value:60,evidence:'60人'},
+  },{reply:'每桌几人？'}));
+  expect(understand).toHaveBeenCalledOnce();
+  expect(flow.proposal?.next.facilities.filter(f=>f.name.startsWith('宴席圆桌'))).toHaveLength(6);
+  expect(flow.proposal?.warnings.join(' ')).toContain('入口');
+  expect(saySpy.mock.calls.some(([text])=>text==='每桌几人？')).toBe(false);
+});
 it("「你在做」在地图和模型响应完成前显示实际工作步骤与模型片段", async () => {
   const thought = "我在核对当前活动的分区用途，并等待你补充要求。";
   let mapReady!: (value: OutdoorMapContext) => void;

@@ -24,6 +24,7 @@ export function eventLayoutPath(input: {
   };
   const edge = (a: PlanPoint, b: PlanPoint) => Math.hypot(a.x-b.x, a.y-b.y) < 0.001
     || outdoorCorridorStrips([a,b], input.widthM).every(clearRing);
+  if(Math.hypot(input.start.x-input.end.x,input.start.y-input.end.y)>0.001&&edge(input.start,input.end))return[input.start,input.end];
   const snap = (target: PlanPoint): number | null => {
     let best: number | null = null, distance = Math.max(4, step * 2);
     const col = Math.round((target.x-west)/step), row = Math.round((target.y-south)/step);
