@@ -106,8 +106,9 @@ describe('云端扫描登记', () => {
     expect(westLake?.origin).toBe('cloud');
     expect(westLake?.name).toBe('西湖 0233 · 极速档');
     expect(resolveAholoAssetUrl(WEST_LAKE_FAST)).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}.spz`);
-    // 云端登记也要带 LOD：索引里有站内目录就用它（线上静态文件一样能读）。
-    expect(westLake?.lodUrl).toBe('/scans/scan-xihu-0233-low/lod-meta.json');
+    // 云端登记走云端 LOD（scans/<id>/lod-meta.json），不指站内的 /scans/<dir>/：
+    // 那一整个目录在 .gitignore 里，部署站读不到。
+    expect(westLake?.lodUrl).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}/lod-meta.json`);
     // 2026-11-19 用户：「没有其他和我的区分，这些都是我们的云资产」——
     // 索引里的「本机高斯 26932bea」进注册表时换成日期名，线上不看机器前缀与资产号。
     const gauss = listAholoAssets().find(asset => asset.assetId === TEAROOM);
