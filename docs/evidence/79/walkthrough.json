@@ -38,7 +38,7 @@
       10,
       11
     ],
-    "note": "2026-11-19 已确认 cc62d333 的自动构建生效（构建号 c5kUZnUkPk1tp_wPX6wC2；新补丁 chunk 1103.f3a07e80340bf165.js）；本轮 #1 正式站跑通。"
+    "note": "2026-11-19 已确认 cc62d333 与 d10eb066 的自动构建生效（首个构建号 c5kUZnUkPk1tp_wPX6wC2；修复构建号 4k4_IcaP3PoG_xnPIWpyc）；#1 正式站跑通；#4 空白序列人数变更复跑不再红卡。"
   },
   "ledger": [
     {
@@ -77,8 +77,8 @@
       "cloud": "pass",
       "conclusion": "partial",
       "evidence": "docs/evidence/79/04/2026-11-19-case04-v2-v5.md；docs/evidence/79/04/2026-11-19-case04-v2.json；docs/evidence/79/04/2026-11-19-case04-v3.json；docs/evidence/79/04/2026-11-19-case04-v4.json；docs/evidence/79/04/2026-11-19-case04-v5.json；docs/evidence/79/04/2026-11-19-v5-budget.png；docs/evidence/79/04/2026-11-19-case04-v9-local.md；docs/evidence/79/04/2026-11-19-v9-local-headcount.json；docs/evidence/79/04/2026-11-19-v9-headcount.png；docs/evidence/79/04/2026-11-19-case04-v10-formal.md；docs/evidence/79/04/2026-11-19-v10-formal-probe.json；docs/evidence/79/04/2026-11-19-v10-blank-probe.json；docs/evidence/79/04/2026-11-19-v10-formal-before.png；docs/evidence/79/04/2026-11-19-v10-formal-after.png；docs/evidence/79/04/2026-11-19-v10-formal-headcount-no-range.png",
-      "readings": "2026-11-19 正式站 v10：云端找回 house-lrvrntin（版本 4；4 分区 / 4 边界 / 2340B）发「人数改为 150 人，保持现有分区」→ assistant/chat/stream 200，回复「已记下人数改为 150 人、现有分区保持不变…需要我按 150 人重新核算各分区尺寸，还是仅更新人数、分区尺寸先保持现状？」→ 画布仍 4/4/2340B，人数回合零 outdoor-plans 写（打开云端草稿本身的两次 PUT 单独计）。空白无范围首跑：设计句 200 后要求确认范围；同句人数变更被模型判成 revise，旧逻辑只认 adjust，误触发「地图上还没有可核对的活动边界」红卡。已修 headcountOnlyAdjustment 为按句子识别、不依赖动作标签，并补 9 项单测 + 1 项 React 回归；本地 3010 复跑不再红卡。",
-      "gap": "正式站空白无范围序列尚未在部署本次补丁后重跑；在重跑前 #4 仍 partial。云端 4 分区草稿不破坏画布已实证。"
+      "readings": "2026-11-19 正式站 v10：云端找回 house-lrvrntin（版本 4；4 分区 / 4 边界 / 2340B）发「人数改为 150 人，保持现有分区」→ assistant/chat/stream 200，回复「已记下人数改为 150 人、现有分区保持不变…需要我按 150 人重新核算各分区尺寸，还是仅更新人数、分区尺寸先保持现状？」→ 画布仍 4/4/2340B，人数回合零 outdoor-plans 写（打开云端草稿本身的两次 PUT 单独计）。空白无范围首跑：设计句 200 后要求确认范围；同句人数变更被模型判成 revise，旧逻辑只认 adjust，误触发「地图上还没有可核对的活动边界」红卡。已修 headcountOnlyAdjustment 为按句子识别、不依赖动作标签，并补 9 项单测 + 1 项 React 回归；d10eb066 部署后（构建号 4k4_IcaP3PoG_xnPIWpyc）正式站复跑：第二条不再红卡，plan 仍 0/0/167B，无云端写；第一条设计句仍以范围红卡呈现，故 #4 仍 partial。",
+      "gap": "正式站空白无范围序列的「设计句先留存」体验仍未达标（第一条给的是范围红卡而非中性待续提示）；人数变更不再误拦、云端 4 分区草稿不破坏画布已实证。"
     },
     {
       "case": 5,
@@ -157,7 +157,7 @@
     "blocked": 0,
     "fail": 0,
     "na": 0,
-    "note": "全绿 3 条：#1、#2、#7。2026-11-19 正式站 v10 新增 #1 全绿（空白项目 + 真实候选 + 12 点范围 + 云端 boundary 12/766B）。#4 云端 4 分区草稿上人数变更不破坏画布，但空白无范围序列修复后尚待正式站重跑，仍 partial。其余仍按各自证据计，partial/blocked 不计入全绿；门禁解除仍需人签字。"
+    "note": "全绿 3 条：#1、#2、#7。2026-11-19 正式站 v10 新增 #1 全绿（空白项目 + 真实候选 + 12 点范围 + 云端 boundary 12/766B）。#4 云端 4 分区草稿上人数变更不破坏画布，d10eb066 部署后空白序列第二条不再红卡；但第一条设计句仍红卡，故仍 partial。其余仍按各自证据计，partial/blocked 不计入全绿；门禁解除仍需人签字。"
   },
   "signoff": {
     "status": "pending-human",
