@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 Scendance · 把真实场地变成能照着搭的 3D 布置方案</title>
+<meta name="description" content="Aholo 全球 3D AI 黑客松 2026 参赛报告。真实场地几何 + 37 件 AI 生成婚礼物料 + 188 件物料的户外布置规划，全部过契约校验，附过程截图、资产迭代对比与关键效果。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="幕景 Scendance · 把真实场地变成能照着搭的 3D 布置方案">
+<meta property="og:description" content="真实场地 + 一句话/一张图 → 一份过契约校验、能照着搭的户外布置规划。">
+<meta property="og:image" content="/report/assets/huajia-plan.png">
+<meta name="theme-color" content="#f6f7f3">
+<style>
+  :root{
+    /* 沿用官网 introduction.html 的设计口径（--sc-* 系列），不另起一套视觉语言 */
+    --sc-ink:#26392f; --sc-ink-2:#465c33; --sc-muted:#6a7268; --sc-faint:#a9bf8d;
+    --sc-paper:#fff; --sc-canvas:#eef0e4; --sc-plane-deep:#e6e9dc;
+    --sc-line:rgba(56,74,48,.16); --sc-line-soft:rgba(56,74,48,.09);
+    --sc-accent:#6f8f52; --sc-accent-ink:#465c33; --sc-accent-soft:#e7ecd7; --sc-accent-glow:#6f8f5247;
+    --sc-glass-shadow:0 12px 36px #2f3a2610, inset 0 1px 0 #fff;
+    --sc-ease:cubic-bezier(.22,1,.36,1); --sc-fast:160ms; --sc-enter:280ms;
+    --sc-btn-h:44px; --sc-btn-r:999px; --sc-btn-px:22px; --sc-btn-fs:13px;
+    --sc-lh-tight:1.25; --sc-lh-ui:1.4; --sc-lh-body:1.55; --sc-lh-prose:1.7;
+    --ink:var(--sc-ink); --ink-2:var(--sc-muted); --ink-3:#8b9384; --line:var(--sc-line);
+    --paper:var(--sc-paper); --card:var(--sc-paper); --wash:var(--sc-accent-soft);
+    --green:var(--sc-accent); --green-2:var(--sc-accent-ink); --gold:#b98d43;
+    --red:#b4443c; --blue:#4a6b86;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--sc-canvas);color:var(--sc-ink);
+    font-family:"Inter","Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",Arial,system-ui,sans-serif;
+    font-size:15px;line-height:var(--sc-lh-body);-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  .serif{letter-spacing:.012em}
+  a{color:var(--sc-accent-ink);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{background:var(--sc-accent-soft);border-radius:5px;padding:1.5px 6px;font-size:.88em;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--sc-accent-ink)}
+
+  /* ---------- 顶栏 ---------- */
+  header{position:sticky;top:0;z-index:20;background:#ffffffe6;backdrop-filter:blur(14px) saturate(150%);
+    border-bottom:1px solid var(--sc-line-soft)}
+  .nav{display:flex;align-items:center;gap:20px;height:64px}
+  .brand{font-weight:600;font-size:15px;color:var(--sc-ink)}
+  .brand span{color:var(--sc-faint);font-weight:500;font-size:12px;margin-left:8px;letter-spacing:.08em}
+  .nav nav{display:flex;gap:18px;margin-left:auto;font-size:13px}
+  .nav nav a{color:var(--sc-muted)}
+  .nav nav a:hover{color:var(--sc-accent-ink);text-decoration:none}
+  .btn{display:inline-flex;align-items:center;justify-content:center;height:var(--sc-btn-h);padding:0 var(--sc-btn-px);
+    border-radius:var(--sc-btn-r);font-size:var(--sc-btn-fs);font-weight:500;letter-spacing:.02em;
+    border:1px solid transparent;transition:filter var(--sc-fast) var(--sc-ease),transform var(--sc-fast) var(--sc-ease),box-shadow var(--sc-fast) var(--sc-ease)}
+  .btn:hover{filter:brightness(1.05);text-decoration:none;transform:translateY(-1px)}
+  .btn.p{background:var(--sc-ink);color:#fff;box-shadow:0 8px 20px #26392f26}
+  .btn.g{background:var(--sc-accent);color:#fff;box-shadow:0 8px 20px #6f8f5233}
+  .btn.o{background:#ffffffd9;color:var(--sc-ink);border-color:var(--sc-line);backdrop-filter:blur(8px)}
+
+  /* ---------- Hero ---------- */
+  .hero{padding:76px 0 60px;background:
+    radial-gradient(1100px 460px at 10% -10%,#dfe9cf 0%,transparent 58%),
+    radial-gradient(900px 400px at 92% 0%,#f3e9d4 0%,transparent 60%),
+    var(--sc-canvas);}
+  .kicker{display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.12em;color:var(--sc-accent-ink);
+    font-weight:500;background:#ffffffb3;border:1px solid var(--sc-line);border-radius:999px;padding:6px 15px;
+    backdrop-filter:blur(8px);box-shadow:var(--sc-glass-shadow)}
+  h1{font-size:clamp(32px,5vw,56px);line-height:var(--sc-lh-tight);margin:24px 0 0;font-weight:700;letter-spacing:-.01em}
+  h1 em{font-style:normal;color:var(--sc-accent-ink)}
+  .lede{margin:22px 0 0;max-width:780px;font-size:16.5px;color:var(--sc-muted);line-height:var(--sc-lh-prose)}
+  .lede b{color:var(--sc-ink);font-weight:500}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:32px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;margin-top:52px;
+    background:var(--sc-line-soft);border:1px solid var(--sc-line-soft);border-radius:var(--sc-accent-r,18px);overflow:hidden;
+    box-shadow:var(--sc-glass-shadow)}
+  .stat{background:#fffffff2;padding:22px 18px}
+  .stat b{display:block;font-size:28px;font-weight:700;color:var(--sc-accent-ink);line-height:1}
+  .stat span{font-size:12.5px;color:var(--sc-muted);margin-top:6px;display:block}
+
+  /* ---------- 章节 ---------- */
+  section{padding:64px 0;border-top:1px solid var(--sc-line-soft)}
+  .sechead{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+  .num{font-size:12px;font-weight:600;color:var(--sc-accent);letter-spacing:.18em}
+  h2{font-size:clamp(23px,3vw,32px);margin:0;font-weight:650;letter-spacing:-.005em;line-height:var(--sc-lh-tight)}
+  .secsub{margin:14px 0 34px;max-width:840px;color:var(--sc-muted);font-size:15.5px;line-height:var(--sc-lh-prose)}
+  h3{font-size:18.5px;margin:0 0 10px;font-weight:600;letter-spacing:.005em}
+
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px}
+  .card{background:#fffffff2;border:1px solid var(--sc-line-soft);border-radius:16px;padding:24px 24px 26px;
+    box-shadow:var(--sc-glass-shadow);backdrop-filter:blur(8px);transition:transform var(--sc-enter) var(--sc-ease),box-shadow var(--sc-enter) var(--sc-ease)}
+  .card:hover{transform:translateY(-2px);box-shadow:0 16px 40px #2f3a261a, inset 0 1px 0 #fff}
+  .card p{margin:8px 0 0;color:var(--sc-muted);font-size:14.5px;line-height:var(--sc-lh-prose)}
+  .card p b{color:var(--sc-ink);font-weight:500}
+  .card .ico{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:14px;font-weight:600;color:#fff;margin-bottom:13px;
+    box-shadow:0 6px 14px #2f3a2626}
+  .tag{display:inline-block;font-size:11.5px;font-weight:500;color:var(--sc-accent-ink);background:var(--sc-accent-soft);
+    border:1px solid #d6e0c4;border-radius:7px;padding:2px 9px;margin-bottom:11px;letter-spacing:.03em}
+
+  /* ---------- 图 ---------- */
+  figure{margin:0}
+  .shot{background:#fffffff2;border:1px solid var(--sc-line-soft);border-radius:14px;overflow:hidden;
+    box-shadow:var(--sc-glass-shadow)}
+  .shot img{display:block;width:100%;height:auto;background:#e9ebe2}
+  .shot figcaption{padding:12px 15px;font-size:13px;color:var(--sc-muted);border-top:1px solid var(--sc-line-soft);line-height:var(--sc-lh-ui)}
+  .shot figcaption b{color:var(--sc-ink);font-weight:600}
+  .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+  .shots figure.shot img{aspect-ratio:16/10;object-fit:cover;object-position:top center}
+  .step{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
+  .step .shot img{aspect-ratio:1/1;object-fit:contain;background:#f4f6ee}
+  .stepno{display:inline-grid;place-items:center;width:21px;height:21px;border-radius:50%;background:var(--sc-accent);color:#fff;font-size:12px;font-weight:600;margin-right:7px}
+
+  /* ---------- 资产墙 ---------- */
+  .wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+  .asset{background:#fffffff2;border:1px solid var(--sc-line-soft);border-radius:12px;overflow:hidden;box-shadow:var(--sc-glass-shadow)}
+  .asset img{display:block;width:100%;aspect-ratio:1/1;object-fit:contain;background:#f4f6ee}
+  .asset div{padding:10px 12px;font-size:12.5px;color:var(--sc-ink)}
+  .asset div em{display:block;font-style:normal;color:var(--sc-faint);font-size:11.5px;margin-top:2px}
+
+  /* ---------- 平面图 ---------- */
+  .planwrap{background:#fffffff2;border:1px solid var(--sc-line-soft);border-radius:18px;padding:18px;box-shadow:var(--sc-glass-shadow)}
+  .planwrap img{width:100%;height:auto;display:block;border-radius:10px}
+  .legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:16px;padding-top:14px;border-top:1px solid var(--sc-line-soft);font-size:12.5px;color:var(--sc-muted)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+  /* ---------- 表格 / 引用 ---------- */
+  table{width:100%;border-collapse:separate;border-spacing:0;background:#fffffff2;border:1px solid var(--sc-line-soft);
+    border-radius:14px;overflow:hidden;font-size:14px;box-shadow:var(--sc-glass-shadow)}
+  th,td{padding:12px 15px;text-align:left;border-bottom:1px solid var(--sc-line-soft);vertical-align:top;line-height:var(--sc-lh-ui)}
+  th{background:var(--sc-accent-soft);font-weight:600;font-size:12.5px;color:var(--sc-accent-ink);letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  td code{white-space:nowrap}
+  .quote{border-left:2px solid var(--sc-accent);padding:4px 0 4px 20px;color:var(--sc-muted);font-size:15.5px;
+    margin:0 0 26px;max-width:840px;line-height:var(--sc-lh-prose)}
+
+  /* ---------- 不做 ---------- */
+  .nope{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .nope div{background:#fdf6e7f2;border:1px solid #e8dcbe;border-radius:14px;padding:18px 20px;font-size:14.5px;color:#6f5c2c;line-height:var(--sc-lh-prose)}
+  .nope div b{display:block;color:#8a6a1c;margin-bottom:5px;font-size:15px;font-weight:600}
+
+  /* ---------- 验证 ---------- */
+  .check{background:#1e2f24;color:#d7e6da;border-radius:16px;padding:26px 28px;font-size:13.5px;line-height:1.95;overflow-x:auto}
+  .check b{color:#a9d6b4}
+  .check .g{color:#8fdc9e}
+  .check .y{color:#e6cf8c}
+  pre{background:#fffffff2;border:1px solid var(--sc-line-soft);border-radius:14px;padding:18px 20px;overflow-x:auto;font-size:12.5px;line-height:1.85;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--sc-ink-2);box-shadow:var(--sc-glass-shadow)}
+
+  footer{padding:48px 0 64px;border-top:1px solid var(--sc-line-soft);color:var(--sc-muted);font-size:13px;background:#e9ece1}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  footer .wrap>*{margin-right:auto}
+
+  @media (max-width:640px){
+    .nav nav{display:none}
+    h1{font-size:30px}
+    .lede{font-size:15px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand">幕景 Scendance<span>参赛报告</span></div>
+    <nav>
+      <a href="#problem">问题</a>
+      <a href="#four">四条产线</a>
+      <a href="#process">过程</a>
+      <a href="#iteration">资产迭代</a>
+      <a href="#result">关键效果</a>
+      <a href="#limits">边界</a>
+      <a href="#verify">验证</a>
+    </nav>
+    <a class="btn p" href="/huajia-loader.html">打开真实规划</a>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <span class="kicker">Aholo 全球 3D AI 黑客松 2026 · 参赛报告</span>
+    <h1 class="serif">把真实场地，<br>变成<em>能照着搭</em>的 3D 布置方案</h1>
+    <p class="lede">
+      婚礼策划拿到手的是一张场地照片和一句「草坪上摆个仪式区」。幕景把这句话接住：
+      真实场地的坐标与边界从地图服务取，物料由 AI 生成后进公共物料库，
+      最后落成一份 <b>过契约校验、每件物料都有出处</b> 的户外布置规划——
+      11 个分区、188 件物料、4 条动线、10 个岗位，能直接导出给执行团队搭。
+    </p>
+    <div class="cta">
+      <a class="btn p" href="/huajia-loader.html">打开花家山庄真实规划</a>
+      <a class="btn g" href="#result">看关键效果</a>
+      <a class="btn o" href="#process">看过程截图</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>11</b><span>分区（含真实草坪边界）</span></div>
+      <div class="stat"><b>188</b><span>件物料（103 件 AI 生成）</span></div>
+      <div class="stat"><b>37</b><span>件已公开进物料库</span></div>
+      <div class="stat"><b>4</b><span>条动线 · 10 个岗位</span></div>
+      <div class="stat"><b>0</b><span>处编造：查不到就写查不到</span></div>
+    </div>
+  </div>
+</div>
+
+<section id="problem">
+  <div class="wrap">
+    <div class="sechead"><span class="num">01</span><h2 class="serif">这件事今天为什么难</h2></div>
+    <p class="secsub">我们不是在做「又一个 AI 出图工具」。难点在另外三件事上——它们都不是生成模型能解决的。</p>
+    <div class="grid2">
+      <div class="card">
+        <span class="tag">难点一</span>
+        <h3>场地是真的，比例不是</h3>
+        <p>效果图里的草坪和真实草坪差着几十米。布置方案一旦尺寸不对，落地就全废。
+          所以我们先解决坐标：锚点、高德 POI 点位、OSM 真实多边形，全部转成同一套局部米制坐标。</p>
+      </div>
+      <div class="card">
+        <span class="tag">难点二</span>
+        <h3>物料库里没有婚礼的东西</h3>
+        <p>976 个模型里没有白木椅、没有香槟塔、没有桌花。婚礼物料要么靠采购清单里的一行字，
+          要么现做。我们选择现做，并且把做出来的东西<b>公开回物料库</b>，让下一个婚礼直接用。</p>
+      </div>
+      <div class="card">
+        <span class="tag">难点三</span>
+        <h3>生成出来的东西没有尺寸</h3>
+        <p>AI 生成的 3D 没有绝对尺寸，比例跟着参考图走。所以我们不假装它准：
+          每个物件的实测包围盒尺寸都记在案，并单列一张<b>偏差表</b>——备料前必须以实测为准。</p>
+      </div>
+      <div class="card">
+        <span class="tag">难点四</span>
+        <h3>交付物必须是能照着搭的</h3>
+        <p>「一张好看的平面图」没法施工。要交付的是：分区边界、每件物料的规格与数量、
+          三条动线不打架、岗位怎么排、哪些还得采购。我们把这些做成了同一份数据契约。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="four">
+  <div class="wrap">
+    <div class="sechead"><span class="num">02</span><h2 class="serif">我们把它接成了四条产线</h2></div>
+    <p class="secsub">每条产线的产出都能单独验证，也都能单独用。</p>
+    <div class="grid2">
+      <div class="card">
+        <div class="ico" style="background:linear-gradient(135deg,#3c6b45,#28512f)">地</div>
+        <h3>① 真实场地搬进屏幕</h3>
+        <p>锚点用平台自己的高德检索（GCJ-02），建筑点位同样；草坪与水体边界用 OSM
+          <code>leisure=grass</code> / <code>natural=water</code> 真实多边形，
+          WGS-84 先转 GCJ-02 再换算到局部 ENU。
+          <br><b>花家山庄</b>：主草坪 1449 m²、其北侧草坪带 1951 m²、滴翠湖 2574 m²。</p>
+      </div>
+      <div class="card">
+        <div class="ico" style="background:linear-gradient(135deg,#c8a45c,#a2802f)">3D</div>
+        <h3>② 物料从参考图或一句话长出来</h3>
+        <p>aholo 图生 3D（20 credits/件）与文生 3D（20 credits/件）两条通道都接进平台自己的
+          生成任务体系，产物落对象存储、自动渲染预览图、<b>公开进公共物料库</b>。
+          失败 0 扣分。</p>
+      </div>
+      <div class="card">
+        <div class="ico" style="background:linear-gradient(135deg,#3d6b8a,#2b4f68)">约</div>
+        <h3>③ 摆放回到同一份契约</h3>
+        <p>2D 平面与 3D 场景读同一份 <code>SitePlanData</code>：分区语义、动线类型、
+          人员岗位、模型引用全部有 schema 约束，越界与悬空引用在写入前就会被拒绝。
+          本次 188 件物料全部过校验。</p>
+      </div>
+      <div class="card">
+        <div class="ico" style="background:linear-gradient(135deg,#8a4b3a,#673329)">单</div>
+        <h3>④ 交付是一张能照着搭的清单</h3>
+        <p>149 行物料 BOM（名称 / 规格 / 数量 / 许可 / 来源）、18 条库内缺口分档、
+          18 条尺寸偏差逐条列明，外加 PNG / CSV / GeoJSON / PDF 导出。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="process">
+  <div class="wrap">
+    <div class="sechead"><span class="num">03</span><h2 class="serif">过程：这些图都是真跑出来的</h2></div>
+    <p class="secsub">
+      下面每一张都是幕景工作台的真实运行截图（不是示意图、不是效果概念图）。
+      流程是：说一句话 → 检索并选定场地 → Agent 给出分区提案 → 确认范围 → 应用 → 可撤销。
+    </p>
+    <div class="shots">
+      <figure class="shot"><img src="report/assets/p01-agent.webp" alt="幕景 Agent 面板" loading="lazy">
+        <figcaption><b>① 一句话开工</b>　直接在 Agent 面板里描述需求，不必先填表。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p02-search.webp" alt="场地检索" loading="lazy">
+        <figcaption><b>② 检索场地</b>　走平台自有的地点检索，锚点直接落到 GCJ-02 坐标。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p03-picked.webp" alt="选定场地" loading="lazy">
+        <figcaption><b>③ 选定场地</b>　确认后底图按真实坐标定位，比例尺可信。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p04-proposal.webp" alt="Agent 分区提案" loading="lazy">
+        <figcaption><b>④ Agent 给提案</b>　分区、动线、岗位一次给全，人可以逐条改。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p05-range.webp" alt="范围确认" loading="lazy">
+        <figcaption><b>⑤ 确认范围</b>　先确认设计范围再谈布置，避免把场外流线漏掉。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p06-applied.webp" alt="应用提案" loading="lazy">
+        <figcaption><b>⑥ 应用</b>　落进画布后仍可继续编辑，撤销随时可用。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p07-boundary.webp" alt="场地边界" loading="lazy">
+        <figcaption><b>⑦ 场地边界</b>　红线是真实场地的边界，不是矩形示意。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p08-undo.webp" alt="撤销" loading="lazy">
+        <figcaption><b>⑧ 撤销</b>　任何一次应用都能退回去——这是可交付方案的前提。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p09-library.webp" alt="物料库" loading="lazy">
+        <figcaption><b>⑨ 物料库</b>　AI 生成件与库内件在同一张卡上，缩略图直接可见。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p11-3d.webp" alt="3D 视图" loading="lazy">
+        <figcaption><b>⑩ 3D 视图</b>　2D 落的位，3D 里就是那件真模型。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p10-delivery.webp" alt="交付面板" loading="lazy">
+        <figcaption><b>⑪ 交付面板</b>　清单、报价与导出从同一份数据现算，不二次录入。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/p12-budget.webp" alt="改预算与人数" loading="lazy">
+        <figcaption><b>⑫ 改预算 / 改人数</b>　改一个数，整套方案跟着重算。</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="iteration">
+  <div class="wrap">
+    <div class="sechead"><span class="num">04</span><h2 class="serif">关键资产迭代：一张签到台，四次改法</h2></div>
+    <p class="secsub">
+      这是本轮最典型的一次迭代。结论先说：<b>换形态，不换种子</b>——
+      图生通道不把提示词发给模型，换参考图才是唯一有效变量；换到第三张仍然失败之后，
+      我们换通道（文生 3D）一次成功。
+    </p>
+    <div class="step">
+      <figure class="shot"><img src="report/assets/i1-ref-v1.webp" alt="参考图 v1" loading="lazy">
+        <figcaption><span class="stepno">1</span><b>参考图 v1</b>　主体是签到台，但桌布落地、笔记本上有字。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/i2-ref-cleaned.webp" alt="参考图去字后" loading="lazy">
+        <figcaption><span class="stepno">2</span><b>局部抹字</b>　垂直中值滤波 + 边缘渐隐，把笔记本上的字去掉。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/i3-ref-v2.webp" alt="参考图 v2" loading="lazy">
+        <figcaption><span class="stepno">3</span><b>换种子 · 无缝白底</b>　重新生成一张：纯白背景、单主体、无字。</figcaption></figure>
+      <figure class="shot"><img src="report/assets/i4-final-3d.webp" alt="最终 3D 成品" loading="lazy">
+        <figcaption><span class="stepno">4</span><b>文生 3D 成品</b>　实测 1.80 × 0.92 × 1.15 m，已公开入库。</figcaption></figure>
+    </div>
+
+    <table style="margin-top:26px">
+      <thead><tr><th style="width:34px">#</th><th>尝试</th><th>结果</th><th>拿到的信息</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>图生 3D · 参考图 v1</td><td><b style="color:var(--red)">失败</b></td><td>aholo 返回 <code>status:4</code>，零原因字段；<b>失败 0 扣分</b>；<code>providers.ts:73</code> 显示图生请求体里根本没有 prompt</td></tr>
+        <tr><td>2</td><td>图生 3D · 抹字后</td><td><b style="color:var(--red)">失败</b></td><td>改 prompt 无效（通道不收 prompt），换形态才对</td></tr>
+        <tr><td>3</td><td>图生 3D · 无缝白底</td><td><b style="color:var(--red)">未建单</b></td><td>参考图已满足「单主体 / 干净背景 / 无字」，但时间紧，没有再花积分赌一次</td></tr>
+        <tr><td>4</td><td><b>文生 3D · 一句描述</b></td><td><b style="color:var(--green)">成功</b></td><td>实测 1.80 × 0.92 × 1.15 m，与描述里的「长约一米八」吻合；说明<b>文生通道的 prompt 真正生效</b></td></tr>
+      </tbody>
+    </table>
+
+    <p class="quote">
+      我们没有把失败藏起来。aholo 的失败至今是黑盒：<code>status:4</code>、没有任何原因字段、
+      除 <code>task/get</code> 外 detail / result / log / error / history 全部 404。
+      但「失败 0 扣分」意味着每次试探的成本只有时间。
+    </p>
+  </div>
+</section>
+
+<section id="result">
+  <div class="wrap">
+    <div class="sechead"><span class="num">05</span><h2 class="serif">关键效果：一份真的能打开的规划</h2></div>
+    <p class="secsub">
+      下面是「花家山庄婚礼 · 户外布置起稿」的平面图。<b>这张图不是画出来的</b>——
+      它由 188 件设施、11 个分区、4 条动线的真实规划数据直接算出，
+      连虚线（地图来源未核实）都如实画在图上。
+    </p>
+
+    <div class="planwrap">
+      <img src="report/assets/huajia-plan.svg" alt="花家山庄婚礼户外布置平面图：11 个分区、188 件物料、4 条动线">
+      <div class="legend">
+        <span><i style="background:#2f6b3c"></i>aholo 生成件（103 件）</span>
+        <span><i style="background:#8a7a45"></i>物料库既有件（85 件）</span>
+        <span><i style="background:#e3c88a"></i>仪式区</span>
+        <span><i style="background:#cfe0bd"></i>宾客席位区</span>
+        <span><i style="background:#bcd2e0"></i>迎宾签到区</span>
+        <span><i style="background:#3f7d4c"></i>人行动线</span>
+        <span><i style="background:#8a6d1f"></i>车行动线</span>
+        <span><i style="background:#8a4b3a"></i>后勤动线</span>
+        <span><i style="background:#9aa0a8"></i>建筑禁区</span>
+        <span style="color:var(--ink-3)">虚线框 = 地图来源、尚未现场核实</span>
+      </div>
+    </div>
+
+    <h3 style="margin:34px 0 16px">37 件 AI 生成的婚礼物料（全部已公开进公共物料库）</h3>
+    <p style="color:var(--ink-2);margin:-4px 0 18px;font-size:14.5px;max-width:820px">
+      下面每一张都是 GLB 的真实渲染预览图（不是生成图、不是概念图）。尺寸一栏是模型包围盒实测值——
+      也是我们为什么要单列一张偏差表的原因。
+    </p>
+    <div class="wall">
+      <div class="asset"><img src="report/assets/a-6ba6af9a-871a-4500-be20-536db5bd1b01.webp" alt="婚礼双拱花门" loading="lazy"><div>婚礼双拱花门<em>2.40 × 0.66 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-0bc698c6-d2c9-4091-8483-6039113061e4.webp" alt="婚礼花柱" loading="lazy"><div>婚礼花柱<em>0.73 × 0.68 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-4923657e-af62-4469-98d3-dedbf45db633.webp" alt="婚礼香槟布幔花艺柱" loading="lazy"><div>婚礼香槟布幔花艺柱<em>0.74 × 0.69 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-ee6e392d-3ac0-4ee8-b005-9304ad8bb627.webp" alt="婚礼白纱幔" loading="lazy"><div>婚礼白纱幔<em>3.00 × 1.94 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-cb293f67-912b-4b0b-ac98-d0f38b9be787.webp" alt="婚礼珍珠串帘" loading="lazy"><div>婚礼珍珠串帘<em>2.07 × 0.15 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-87221ce6-aab3-4cf3-89a0-0a8a651ee004.webp" alt="婚礼垂吊花球" loading="lazy"><div>婚礼垂吊花球<em>0.45 × 0.43 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-53cbb011-92b8-4c1a-a074-f7390b5ae29c.webp" alt="婚礼白木椅" loading="lazy"><div>婚礼白木椅<em>0.54 × 0.52 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-b15a34fc-f3f2-4c7c-965c-30998ae7487f.webp" alt="婚礼圆桌" loading="lazy"><div>婚礼圆桌<em>1.20 × 1.20 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-bf6aac70-f314-45ec-bc21-03820e428617.webp" alt="婚礼签到背景墙" loading="lazy"><div>婚礼签到背景墙<em>2.40 × 0.74 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-709ae5c9-c685-4538-b6e4-1a11b1947c71.webp" alt="婚礼甜品长桌" loading="lazy"><div>婚礼甜品长桌<em>2.40 × 0.89 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-c8d2b6ee-e308-483f-a349-dacd159b585d.webp" alt="婚礼香槟塔" loading="lazy"><div>婚礼香槟塔<em>0.80 × 0.80 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-17ca104e-689e-4fe8-91c1-fa2a83ecf262.webp" alt="婚礼桌号牌" loading="lazy"><div>婚礼桌号牌<em>0.06 × 0.06 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-cf868de5-a05d-4d9b-9a89-3505d36586df.webp" alt="婚礼落地花瓶" loading="lazy"><div>婚礼落地花瓶<em>0.15 × 0.12 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-2b0e506e-bd1c-4a32-bfb4-6bb4f28bfcb4.webp" alt="婚礼月洞门绿雕" loading="lazy"><div>婚礼月洞门绿雕<em>0.94 × 0.53 m</em></div></div>
+      <div class="asset"><img src="report/assets/a-e5e16370-d57d-414a-8b22-5c2dd8fa3c17.webp" alt="婚礼心形绿雕" loading="lazy"><div>婚礼心形绿雕<em>0.46 × 0.30 m</em></div></div>
+    </div>
+
+    <table style="margin-top:30px">
+      <thead><tr><th>分区</th><th>语义</th><th>面积</th><th>几何来源</th><th>物料</th></tr></thead>
+      <tbody>
+        <tr><td>仪式区</td><td>stage</td><td>1448 m²</td><td>地图来源 · 未核实</td><td>32</td></tr>
+        <tr><td>宾客席位区</td><td>audience</td><td>1951 m²</td><td>地图来源 · 未核实</td><td>85</td></tr>
+        <tr><td>餐饮区</td><td>reserved</td><td>1564 m²</td><td>人工排布</td><td>17</td></tr>
+        <tr><td>迎宾签到区</td><td>checkin</td><td>512 m²</td><td>人工排布</td><td>15</td></tr>
+        <tr><td>排队等候区</td><td>queue</td><td>252 m²</td><td>人工排布</td><td>4</td></tr>
+        <tr><td>医疗点</td><td>medical</td><td>192 m²</td><td>人工排布</td><td>3</td></tr>
+        <tr><td>停车落客区</td><td>parking</td><td>4096 m²</td><td>地图来源 · 未核实</td><td>8</td></tr>
+        <tr><td>装卸后勤区</td><td>loading</td><td>1520 m²</td><td>人工排布</td><td>11</td></tr>
+        <tr><td>雨备区</td><td>reserved</td><td>968 m²</td><td>人工排布</td><td>3</td></tr>
+        <tr><td>环卫点</td><td>reserved</td><td>352 m²</td><td>人工排布</td><td>5</td></tr>
+        <tr><td>室内 · 仙子厅（雨备退路）</td><td>indoor</td><td>468 m²</td><td>人工排布</td><td>5</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="wrap">
+    <div class="sechead"><span class="num">06</span><h2 class="serif">我们不做什么，以及哪里还没做完</h2></div>
+    <p class="secsub">这一节和前面一样重要。报告里出现的每一个数字，都能在仓库或生产库里查到出处。</p>
+    <div class="nope">
+      <div><b>不编场地事实</b>官方平面图、两片草坪的准确边界、禁喷花 / 明火 / 雨天条款、非合作婚庆入场费——查不到就写「未查到」，不猜。</div>
+      <div><b>不假装尺寸是准的</b>AI 生成的 3D 没有绝对尺寸。18 条偏差逐条列出，含「婚礼圆桌提示词 1.8 m、实测 1.20 m」这类会直接影响席位数的事实。</div>
+      <div><b>不自动重派付费请求</b>生成失败不自动重试。aholo 失败至今是黑盒（<code>status:4</code>、零原因字段），好在失败 0 扣分，试探成本只有时间。</div>
+      <div><b>不动契约</b>本轮没有改数据库迁移、Edge Function 契约、根依赖或 CI。新增的只是数据与文档。</div>
+      <div><b>真实 DEM 地形本轮不做</b>第二档工作。起稿用的是平台自己的底图，接真实地形需要额外的位移网格接线。</div>
+      <div><b>不做室内设计</b>仙子厅 26×18 m、层高 7.5 m、约 30 桌，只作为雨天退路标注在图上。</div>
+    </div>
+  </div>
+</section>
+
+<section id="verify">
+  <div class="wrap">
+    <div class="sechead"><span class="num">07</span><h2 class="serif">你可以自己验一遍</h2></div>
+    <p class="secsub">三条路径：直接看、在自己机器上跑、或者看代码。</p>
+    <div class="grid2">
+      <div class="card">
+        <span class="tag">路径一</span><h3>直接打开</h3>
+        <p>正式站的一键载入页会把这份规划写进你浏览器的本机草稿，
+          然后直接进画布。<b>同一台设备上已有同名草稿会先问，不会覆盖。</b></p>
+        <p><a class="btn p" href="/huajia-loader.html">打开一键载入页</a></p>
+      </div>
+      <div class="card">
+        <span class="tag">路径二</span><h3>看代码与数据</h3>
+        <p>规划本体在 <code>frontend/public/huajia-plan.json</code>，
+          交接说明在 <code>docs/plans/2026-11-19-huajia-plan-handover.md</code>，
+          物料 BOM 在 <code>docs/plans/2026-11-19-huajia-material-bom.md</code>。</p>
+        <p>schema 校验用仓库自己的契约复跑：</p>
+      </div>
+    </div>
+    <pre>$ node --experimental-transform-types .temp/verify-huajia-plan.mjs
+✅ 契约校验通过
+   分区 11｜设施 188（生成件 103 / 库内件 85）｜动线 4｜出入口 4｜岗位 10｜建筑 4
+   锚点 120.132272, 30.223908 (gcj-02/lookup)
+   几何来源统计：{"map-unverified":3,"user-drawing":8}
+   生成件 modelOverride 全部是 generated:library- 前缀：true
+   生成件都带 sourceAssetId：true
+   templateId 长度最大 63（契约上限 64）
+   实体 id 全局唯一：217 个</pre>
+    <div class="check" style="margin-top:18px">
+      <b>生产侧实测</b><br>
+      <span class="g">✔</span> 37 件生成物全部公开入库，<span class="g">37/37</span> 带预览图（签名地址逐条 <span class="g">HEAD 200</span>）<br>
+      <span class="g">✔</span> 公开物料对任意工作组成员可用（<code>can_use_asset</code>），跨账号可授权<br>
+      <span class="g">✔</span> 生成任务终态：<span class="g">ready 37 / failed 6 / rejected 1</span>，失败全部 0 扣分<br>
+      <span class="y">▲</span> 未验证：真实浏览器里 2D/3D 的渲染效果未做真机走查（并行会话占用 dev 端口）<br>
+      <span class="y">▲</span> 未验证：交付方（丽丽）账号里的「找回云端活动」弹窗未做浏览器点击复验
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <b style="color:var(--ink)">幕景 Scendance</b>　Aholo 全球 3D AI 黑客松 2026 参赛作品<br>
+      本页所有截图与数据均为本项目真实运行产出；素材与生成物的作者与许可状态见物料 BOM 文档。
+    </div>
+    <a class="btn o" href="/">回到工作台</a>
+    <a class="btn o" href="/introduction">产品介绍</a>
+  </div>
+</footer>
+
+</body>
+</html>
