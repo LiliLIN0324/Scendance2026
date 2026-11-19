@@ -12,9 +12,11 @@ afterEach(()=>{cleanup();localStorage.clear();pathState.path='/';});
 function Editor({mounted}:{mounted:()=>void}) { mounted();return <div>编辑器与自动保存</div>; }
 
 describe('restore startup gate',()=>{
-  it('服务端或首次检查前不挂载编辑器',()=>{
+  it('服务端或首次检查前不挂载编辑器，占位用骨架屏',()=>{
     const mounted=vi.fn();
-    expect(renderToString(<RestoreStartupGate><Editor mounted={mounted}/></RestoreStartupGate>)).toContain('正在核对');
+    const html=renderToString(<RestoreStartupGate><Editor mounted={mounted}/></RestoreStartupGate>);
+    expect(html).toContain('sc-boot');
+    expect(html).not.toContain('正在核对');
     expect(mounted).not.toHaveBeenCalled();
   });
   it('无标记时检查通过后才挂载',()=>{

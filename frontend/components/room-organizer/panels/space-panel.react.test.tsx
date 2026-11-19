@@ -120,6 +120,21 @@ describe('SpacePanel', () => {
     expect(document.querySelector('.sc-scan-card-only')).toBeNull();
   });
 
+  it('已加入的扫描有独立编辑与重新落位入口，编辑不触发放置', () => {
+    const assetId = '00000000-0000-4000-8000-000000000024';
+    rememberAholoAsset({ assetId, kind: 'spz', name: '已放置庭院', bytes: 20000000, savedAt: 1 });
+    const onMoveScan = vi.fn();
+    const onPlaceScan = vi.fn();
+    const current = { assetId, name: '已放置庭院', position: { x: 12, y: 0, z: 25 } };
+    render(<SpacePanel variant="card" layout={makeLayout()} environment={environment(undefined, current)}
+      onMoveScan={onMoveScan} onPlaceScan={onPlaceScan}/>);
+    fireEvent.click(screen.getByRole('button', { name: '编辑实景扫描 已放置庭院' }));
+    expect(onMoveScan).toHaveBeenCalledWith(assetId);
+    expect(onPlaceScan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '重新落位实景扫描 已放置庭院' }));
+    expect(onPlaceScan).toHaveBeenCalledWith(expect.objectContaining({ assetId }));
+  });
+
   // 2026-11-19 用户：「到底文件好没好？」——空态要能分开：「没打开过」和「加载失败」。
   it('separates 未打开过 from 加载失败 so a broken file is visible', () => {
     const broken = '00000000-0000-4000-8000-000000000022';

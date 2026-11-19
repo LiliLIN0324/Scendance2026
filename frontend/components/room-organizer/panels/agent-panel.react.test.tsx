@@ -16,6 +16,7 @@ import * as placeSearch from '../lib/place-search';
 import * as placeArea from '../lib/place-area';
 import * as placeSearchOptions from '../lib/place-search-options';
 import * as roadNetwork from '../lib/road-network';
+import * as mapBuildings from '../lib/openfreemap-buildings';
 import { getAssistantSessionBodies, resetAssistantSessionsStoreForTests, useAssistantSessions } from '../hooks/use-assistant-sessions';
 import { useHistory } from '../hooks/use-history';
 import { useLayoutState } from '../hooks/use-layout-state';
@@ -3583,7 +3584,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     send('预计30人，室内12×9，采用课桌椅布局，出方案');
     const warning=await screen.findByText(/规划课桌椅，当前仅识别到/);
     expect(warning.textContent).toContain('约 30 人');expect(warning.textContent).toContain('1 把单人椅');
-    expect(screen.getByText(/其他家具容量、课桌数量和现场条件仍需核验。每桌人数尚未确认/)).toBeTruthy();
+    expect(screen.getByText(/其他家具和课桌没有算在内。每桌人数未定/)).toBeTruthy();
     expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
   });
   it('shows a shared-desk choice without claiming one desk per person or a seating conflict',async()=>{
@@ -3591,7 +3592,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     render(ui({...state.layout,width:12,height:9}));send('每2人一桌');await screen.findByText('每2人一桌');
     send('不要求所有人都坐下');await screen.findByText(/不要求所有参加者都入座/);
     send('预计30人，室内12×9，采用课桌椅布局，出方案');
-    expect(await screen.findByText(/已说明不要求人人入座。用户要求每桌 2 人/)).toBeTruthy();
+    expect(await screen.findByText(/已说明不要求人人入座。每桌 2 人/)).toBeTruthy();
     expect(document.body.textContent).not.toContain('已选择每人一套');expect(document.body.textContent).not.toContain('两项需求可能不一致');
   });
 
@@ -3603,7 +3604,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     render(ui({...state.layout,width:12,height:9}));
     send('预计30人，室内12×9，采用课桌椅布局，出方案');
     expect(await screen.findByText(/当前仅识别到 0 把单人椅/)).toBeTruthy();
-    expect(screen.getByText(/其他家具容量、课桌数量和现场条件仍需核验。每桌人数尚未确认/)).toBeTruthy();
+    expect(screen.getByText(/其他家具和课桌没有算在内。每桌人数未定/)).toBeTruthy();
     expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
   });
 
@@ -3620,7 +3621,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     render(ui({...state.layout,width:12,height:9}));
     send('不要求所有人都坐下');await screen.findByText(/不要求所有参加者都入座/);
     send('预计30人，室内12×9，采用课桌椅布局，出方案');
-    expect(await screen.findByText(/已说明不要求人人入座。每桌人数尚未确认/)).toBeTruthy();
+    expect(await screen.findByText(/已说明不要求人人入座。每桌人数未定/)).toBeTruthy();
     expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
   });
 
@@ -3630,7 +3631,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     send('所有人都坐下');await screen.findByText(/每位参加者都需要座位/);
     send('不要求所有人都坐下');await screen.findByText(/不要求所有参加者都入座/);
     send('预计30人，室内12×9，采用课桌椅布局，出方案');
-    expect(await screen.findByText(/已说明不要求人人入座。每桌人数尚未确认/)).toBeTruthy();
+    expect(await screen.findByText(/已说明不要求人人入座。每桌人数未定/)).toBeTruthy();
     expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy();
   });
 
@@ -5153,4 +5154,36 @@ describe('bounded neighboring location question regression',()=>{
   send('在入口怎么安排签到，门必须保持打开');await act(async()=>{await Promise.resolve();await Promise.resolve()});
   expect(current.venuePick).toBeNull();
  });
+});
+
+
+it('聊天生产入口：已有边界但无分区，在线加物件直接到模型并写入画布', async () => {
+  vi.spyOn(mapBuildings, 'fetchOpenFreeMapBuildings').mockResolvedValue([]);
+  vi.spyOn(roadNetwork, 'fetchRoadNetwork').mockResolvedValue({ roads: [] });
+  let plan = { ...createStarterOutdoorPlan(), boundary: [{x:0,y:0},{x:30,y:0},{x:30,y:30},{x:0,y:30}] };
+  let current!: NonNullable<ReturnType<typeof useAgent>>;
+  const apply = vi.fn((next, expected) => { if (JSON.stringify(plan) !== expected) return false; plan = next; return true; });
+  function Probe() {
+    current = useAgent()!;
+    useEffect(() => {
+      current.registerRouteBridge({ getPlan: () => plan, applyPlan: apply, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true,
+        readLibrary: async () => [{id:'chair',name:'椅子',modelSlug:'oneplan:chair',source:'built-in',available:true,width:1,depth:1,height:1}] });
+      return () => current.registerRouteBridge(null);
+    }, []);
+    return null;
+  }
+  const controller = studioMock.controller as typeof studioMock.controller & { getSnapshot?: () => unknown };
+  controller.getSnapshot = () => ({ user: { id: 'designer' } });
+  studioMock.controller.assistantChat.mockResolvedValueOnce({status:'ok',answer:JSON.stringify({action:'objects',reply:'',references:[],facts:{items:[{zone:'',query:'椅子',count:2,evidence:'放2把椅子'}]}})});
+  try {
+  render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+  send('放2把椅子');
+  await waitFor(() => expect(apply.mock.calls.length, JSON.stringify({notice: current.outdoorWorkflow.notice, bubbles: current.bubbles.map(b => b.text), modelCalls: studioMock.controller.assistantChat.mock.calls.length})).toBe(1));
+  expect(studioMock.controller.assistantChat).toHaveBeenCalledTimes(1);
+  expect(plan.zones).toHaveLength(0);
+  expect(plan.facilities).toHaveLength(2);
+  expect(current.outdoorWorkflow.pendingPlan).toBeNull();
+  expect(current.outdoorWorkflow.proposal).toBeNull();
+  expect(studioMock.generate).not.toHaveBeenCalled();
+  } finally { cleanup(); delete controller.getSnapshot; }
 });

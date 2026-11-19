@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
+import { BootSkeleton } from '@/components/workspace-shell';
 import { inspectRestoreStartup, type RestoreStartupState } from '@/lib/restore-startup';
 
 /** Mount outside the editor and all persistence providers. This component never clears a marker. */
@@ -19,7 +20,8 @@ export function RestoreStartupGate({ children, getStorage }: {
     (window as unknown as { __pcRecoveryGateReady?: boolean }).__pcRecoveryGateReady = blocked;
     return () => { (window as unknown as { __pcRecoveryGateReady?: boolean }).__pcRecoveryGateReady = false; };
   }, [checked, getStorage]);
-  if (!checked || checked.source !== getStorage) return <div role="status">正在核对本机恢复状态，请稍候。</div>;
+  // 核对完成前不能挂载子树；占位沿用工作台骨架屏，避免首屏出现裸文本。
+  if (!checked || checked.source !== getStorage) return <BootSkeleton />;
   const state = checked.value;
   const safePath = (pathname ?? '').replace(/\/$/, '');
   if (state.status === 'blocked' && ['/auth', '/auth/callback', '/reset-password', '/view'].includes(safePath)) return <>{children}</>;

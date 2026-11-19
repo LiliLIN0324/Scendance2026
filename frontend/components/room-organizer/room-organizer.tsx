@@ -144,7 +144,7 @@ import { playSound, type SoundCue } from './lib/sounds';
 import { placeSplatPreview, splatShellKeptNote } from './lib/splat-venue-fit';
 import type { ScannedVenue } from './lib/venue-scans';
 import { listScannedVenues } from './lib/venue-scans';
-import { defaultScanPlacement, scanPlacementNote, worldFromPlanPoint } from './lib/scan-placement';
+import { worldFromPlanPoint } from './lib/scan-placement';
 import { repairScanFallback, repairScanToLocal } from './lib/local-scans';
 import { mapVenueFootprint, sceneAnchorOf } from './lib/scene-anchor';
 import { cameraDistanceClamp } from './lib/camera-framing';
@@ -218,7 +218,6 @@ import { RailTeamBlock } from './panels/rail-team-block';
 import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
 import OutdoorPlan3D, { type OutdoorPlan3DApi, type SplatScanState } from './components/outdoor-plan-3d';
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
-import { enuToLngLat } from './lib/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
 /** 户外左栏一张卡三个页签：添加物件 / 已放置物件 / 清单。Bingo 不再挂规划信息。 */
 type OutdoorPanelKind = 'layers' | 'library' | 'inventory';
@@ -4306,46 +4305,19 @@ useEffect(() => {
     }
   };
 
-  /**
-   * 2026-11-19 用户：「实景扫描就是点击，然后放在特定的场地位置而已」，紧接着又问
-   * 「为什么点了还是没有落在场地上？」——上一版点卡片就把 2D 地图收掉、直接跳 3D 隔离，
-   * 落点还只在带遥测经纬度时才计算，本地扫描就留在室内并排槽位上，看着哪儿也没落。
-   *
-   * 现在分两步，且 2D 地图一直开着：
-   * 1) 点卡片：按 geo → 调研范围中心 → 地块中心 → 原点 的顺序落一个默认点，地图上钉一枚
-   *    落位钉，进「待落位」；
-   * 2) 点地图：点哪落哪（plan ENU → 世界坐标），钉跟着走；Esc / 取消退出待落位。
-   */
+  // 选卡片只进入待落位；确认地图上的位置后才加入/移动扫描。
+  // 取消或重复选卡片不会改写已有扫描的位置。
   const placeScanOnSite = (venue: ScannedVenue) => {
-    try {
-      outdoorCanvasBridgeRef.current?.setMode('view');
-      // 换主场地：点云只有挂在当前环境上才画得出来（编辑权模式会在 selectEnvironment 里抛）。
-      if (environmentsRef.current[0]?.assetId !== venue.assetId) {
-        selectEnvironment(venue.assetId, venue.name, { restoreItems: false });
-      }
-      const placement = defaultScanPlacement({
-        layout: layoutStore.getState().layout,
-        venue,
-        planAnchor: outdoorFullPlanRef.current?.anchor ?? null,
-      });
-      const base = environmentsRef.current[0]?.position ?? ZERO_SPLAT_POSITION;
-      onSplatPositionChange({ ...base, x: placement.world.x, z: placement.world.z });
-      // 先把地图留住：落点在图上看得见，才谈得上「落在场地上」。
-      setIsolatedScanId(undefined);
-      if (!outdoor2DOpen) {
-        setOutdoor2DOpen(true);
-        setOutdoor3dTakeoverActive(false);
-      }
-      const anchor = outdoorFullPlanRef.current?.anchor;
-      if (anchor && placement.pin) {
-        const geo = enuToLngLat(placement.pin.x, placement.pin.y, anchor.lng, anchor.lat);
-        outdoorCanvasBridgeRef.current?.focusLngLat(geo.lng, geo.lat, 19);
-      }
-      setScanArming({ venue });
-      notify(`${scanPlacementNote(placement, venue.name)}在地图上点一下换位置，Esc 取消。`, 'info');
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
+    if (workspaceWriteGuards) {
+      notify('当前编辑权模式暂不支持修改场地标定。', 'error');
+      return;
     }
+    outdoorCanvasBridgeRef.current?.setMode('view');
+    setIsolatedScanId(undefined);
+    setOutdoor2DOpen(true);
+    setOutdoor3dTakeoverActive(false);
+    setScanArming({ venue });
+    notify(`请在地图上点击「${venue.name}」的位置，Esc 取消。`, 'info');
   };
 
   /**
@@ -4362,13 +4334,16 @@ useEffect(() => {
     }
     const point = outdoorCanvasBridgeRef.current?.planPointAt(clientX, clientY) ?? null;
     if (!point) return false;
-    const world = worldFromPlanPoint(layoutStore.getState().layout, planAnchor, point);
-    const base = environmentsRef.current[0]?.position ?? ZERO_SPLAT_POSITION;
-    onSplatPositionChange({ ...base, x: world.x, z: world.z });
-    const geo = enuToLngLat(point.x, point.y, planAnchor.lng, planAnchor.lat);
-    outdoorCanvasBridgeRef.current?.focusLngLat(geo.lng, geo.lat, 19);
-    setScanArming(null);
-    notify(`已把「${arming.venue.name}」落在你点的位置；切到 3D 就能看点云。`, 'info');
+    try {
+      const world = worldFromPlanPoint(layoutStore.getState().layout, planAnchor, point);
+      selectEnvironment(arming.venue.assetId, arming.venue.name, { restoreItems: false });
+      const base = environmentsRef.current[0]?.position ?? ZERO_SPLAT_POSITION;
+      onSplatPositionChange({ ...base, x: world.x, z: world.z });
+      setScanArming(null);
+      notify(`已把「${arming.venue.name}」放在你点的位置，可在卡片上点「编辑」调整。`, 'info');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
     return true;
   };
 
@@ -5232,7 +5207,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={addSampleScene} layout={layout} workflow={spaceWorkflow} onPlaceScan={placeScanOnSite} failedScanIds={Object.keys(failedScans)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }), onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={addSampleScene} onMoveScan={(assetId) => { const scan = environmentsRef.current.find(entry => entry.assetId === assetId); if (!scan) return; try { selectEnvironment(assetId, scan.name, { restoreItems: false }); } catch (error) { notify(error instanceof Error ? error.message : String(error), 'error'); return; } setScanArming(null); setSplatDisplayMode('gaussian'); setIsolatedScanId(assetId); if (outdoorPlanState) handleOutdoorViewSwitch('3d'); else setView(current => current.view2D || current.walkthroughMode ? { ...current, view2D: false, walkthroughMode: false } : current); setSplatTransformModeState('gizmo'); }} layout={layout} workflow={spaceWorkflow} onPlaceScan={placeScanOnSite} failedScanIds={Object.keys(failedScans)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }), onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -5246,8 +5221,6 @@ useEffect(() => {
             if (id) selectOnly(id, { keepPanel: true });
           }}>
           <ShortcutCoach mode={shortcutCoachMode} enabled={isActive} />
-          {/* 搜地点独占左上。覆盖层整层 z-index 是 30，搜索槽抬到 33，避免被地图盖住。 */}
-          {outdoor2DOpen ? <div id="outdoor-place-search-slot" style={{ position: 'absolute', inset: 0, zIndex: 33, pointerEvents: 'none' }} /> : null}
           {/* 2026-11-12 统一 2D/3D：接管态覆盖层**保活不卸载**（隐藏），其 2D 画布编辑桥
               供全屏 OutdoorPlan3D 的左键物件手势用（canvasApiRef → pointerFromPlan 管线）。
               2026-11-12 统一右轨（用户拍板）：「发布」2D/3D 都固定在右轨顶部（tool-share），
@@ -5692,7 +5665,7 @@ useEffect(() => {
               plan3dRef={outdoorPlan3DRef}
               overlayRef={outdoorOverlayRef}
             />
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && scanIsolated && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);

@@ -98,16 +98,17 @@ describe("draftDemand —— 用户说「随便」时的默认方案", () => {
     expect(draft.notes.join()).toContain("还没有用途");
   });
 
-  it("没有分区时不产出清单，并指向先分区", () => {
+  it("没有分区时在活动边界内先出最小方案", () => {
     const draft = draftDemand(planWith(), {});
-    expect(draft.items).toHaveLength(0);
-    expect(draft.notes.join()).toContain("画布上还没有分区");
+    expect(draft.items.length).toBeGreaterThan(0);
+    expect(draft.items.every(item => item.zone === "")).toBe(true);
+    expect(draft.notes.join()).not.toContain("先按活动类型分一次区");
   });
 
   it("人数没定也能出方案：只按面积排，不做容量粗筛", () => {
     const draft = draftDemand(planWith(zone("摆摊区", "market", 10, 4)), {});
     expect(draft.items).toHaveLength(1);
-    expect(draft.notes.join()).toContain("人数还没定");
+    expect(draft.notes.join()).not.toContain("人数还没定");
   });
 
   it("同一输入永远同一输出（可单测、可复现）", () => {

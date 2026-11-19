@@ -42,6 +42,7 @@ let root: Root,
   plan: SitePlanData,
   epoch: number,
   scope: string;
+let supervision: "strict" | "key-points" | undefined;
 let chatMeta: { provider: unknown; model: unknown };
 // undefined = 会话不给 getSnapshot（旧用例口径）；null = 未登录；对象 = 已登录。
 let sessionUser: { id: string; is_anonymous?: boolean } | null | undefined;
@@ -80,6 +81,7 @@ let saySpy: Mock<(text: string, clarification?: boolean) => void>;
 function Harness() {
   flow = useOutdoorAgentWorkflow({
     scope,
+    supervision: () => supervision ?? "key-points",
     bridge: () => bridge,
     controller: () =>
       ({
@@ -171,6 +173,7 @@ beforeEach(() => {
   scope = "project-a";
   chatMeta = { provider: undefined, model: null };
   sessionUser = undefined;
+  supervision = "strict";
   cardHistorySession = {};
   providerOverride = undefined;
   modelOverride = undefined;
@@ -1263,7 +1266,7 @@ it("人数还没定也能排物料：不拦成红卡、阶段照样前进，并�
   expect(flow.notice).not.toContain("预计同时在场多少人");
   expect(flow.noticeKind).not.toBe("error");
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
-  expect(flow.proposal?.warnings.join()).toContain("人数还没定");
+  expect(flow.proposal?.warnings.join()).not.toContain("人数还没定");
   expect(flow.proposal?.warnings.join()).not.toContain("仅按2㎡/人");
   expect(plan.facilities).toHaveLength(0);
   await action("confirm");
@@ -1303,7 +1306,7 @@ it("没核实入口也先出设计：分区确认后直接给物件预览，缺�
   expect(flow.state.stage).toBe("objects");
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
   expect(flow.noticeKind).not.toBe("error");
-  expect(flow.proposal?.warnings.join()).toContain("入口还没核对");
+  expect(flow.proposal?.warnings.join()).not.toContain("入口还没核对");
   expect([...host.querySelectorAll("button")].map(button => button.textContent?.trim()))
     .not.toContain("去核对主要入口与通道");
 });
@@ -1312,7 +1315,7 @@ it("没核实入口也先出设计：分区确认后直接给物件预览，缺�
 it("缺分区时红卡给的是能推进的动作，不是把同一动作再放一遍", async () => {
   await confirmScope();
   await action("sub-routes");
-  expect(flow.notice).toContain("先明确并确认区域用途和边界");
+  expect(flow.notice).toContain("需要知道要连接的区域");
   expect(flow.noticeFix).toEqual({ action: "zones", label: "先生成分区预览" });
   const labels = [...host.querySelectorAll("button")].map(button => button.textContent?.trim());
   expect(labels).toContain("先生成分区预览");
@@ -2132,7 +2135,7 @@ it("没有物料清单也出方案：按分区用途与面积走默认设计，�
   expect(flow.notice).not.toContain("各区需要哪些物件");
   expect(flow.noticeKind, flow.notice).not.toBe("error");
   expect(flow.proposal?.kind, flow.notice).toBe("objects");
-  expect(flow.proposal?.label).toBe("按分区用途出的默认方案");
+  expect(flow.proposal?.label).toBe("物料布置");
   expect(flow.proposal?.warnings.join()).toContain("默认方案");
   // 预览阶段不写画布。
   expect(plan.facilities).toHaveLength(0);
@@ -2142,7 +2145,7 @@ it("没有物料清单也出方案：按分区用途与面积走默认设计，�
   // 默认值是草案，不写回用户需求：用户下一句亲口说的数量仍然优先。
   expect(flow.state.brief.items).toHaveLength(0);
   // 阶段名也不能再说「按用途复用我的物料」——用户根本没给清单，用的不是他的库。
-  expect(OUTDOOR_STAGE_LABELS.objects).toBe("按分区摆放物料");
+  expect(OUTDOOR_STAGE_LABELS.objects).toBe("摆放物料");
 });
 // 2026-11-17 正式站截图原句：追问「各分区各放什么物件」→ 用户「随便放」→ 模型编了一份清单，
 // 校验按「本句无依据」整轮抛错 → 红卡「模型提取缺少本句原文依据」+ 重试（重试还是同一堵墙）。
@@ -2503,4 +2506,67 @@ it("物件阶段的卡片给 Aholo Lux3D 入口，点和「落位预览」分开
     (button as HTMLButtonElement).click();
   });
   expect(getGenerationSheetState()).toMatchObject({ open: true, task: "model" });
+});
+
+
+it("默认直接执行：无分区、无入口、未重复确认范围也能加物件并增量追加", async () => {
+  supervision = undefined;
+  sessionUser = { id: "designer" };
+  bridge.readLibrary = vi.fn(async () => [{ id: "chair", name: "椅子", source: "built-in" as const, modelSlug: "oneplan:chair", available: true, width: 1, depth: 1, height: 1 }]);
+  await turn("放2把椅子", response("objects", { items: [{ zone: "", query: "椅子", count: 2, evidence: "放2把椅子" }] }));
+  expect(understand).toHaveBeenCalledTimes(1);
+  expect(flow.pendingPlan).toBeNull();
+  expect(flow.proposal).toBeNull();
+  expect(plan.zones).toHaveLength(0);
+  expect(plan.facilities).toHaveLength(2);
+  expect(plan.facilities.every(item => !item.zoneId)).toBe(true);
+  expect(apply).toHaveBeenCalledTimes(1);
+  const originalIds = plan.facilities.map(item => item.id);
+  await turn("再加2把椅子", response("objects", { items: [{ zone: "", query: "椅子", count: 2, evidence: "再加2把椅子" }] }));
+  expect(plan.facilities).toHaveLength(4);
+  expect(plan.facilities.map(item => item.id)).toEqual(expect.arrayContaining(originalIds));
+  expect(apply).toHaveBeenCalledTimes(2);
+  expect(flow.proposal).toBeNull();
+});
+
+it("默认直接执行仍对删除保留一次结果确认，不先批准计划", async () => {
+  supervision = undefined;
+  bridge.readLibrary = vi.fn(async () => [{ id: "chair", name: "椅子", source: "built-in" as const, modelSlug: "oneplan:chair", available: true, width: 1, depth: 1, height: 1 }]);
+  await turn("放2把椅子", response("objects", { items: [{ zone: "", query: "椅子", count: 2, evidence: "放2把椅子" }] }));
+  await turn("椅子改成1把", response("objects", { items: [{ zone: "", query: "椅子", count: 1, evidence: "椅子改成1把" }] }));
+  expect(flow.pendingPlan).toBeNull();
+  expect(flow.proposal?.kind).toBe("objects");
+  expect(plan.facilities).toHaveLength(2);
+  expect(apply).toHaveBeenCalledTimes(1);
+  await action("confirm");
+  expect(plan.facilities).toHaveLength(1);
+});
+
+it("默认直接执行：没有报数量的单件添加不会反问", async () => {
+  supervision = undefined;
+  bridge.readLibrary = vi.fn(async () => [{ id: "chair", name: "椅子", source: "built-in" as const, modelSlug: "oneplan:chair", available: true, width: 1, depth: 1, height: 1 }]);
+  await turn("放把椅子", response("objects", { items: [{ zone: "", query: "椅子", count: 1, evidence: "放把椅子" }] }));
+  expect(plan.facilities).toHaveLength(1);
+  expect(flow.proposal).toBeNull();
+});
+
+it("默认直接执行：超过100件时只展示结果预览", async () => {
+  supervision = undefined;
+  bridge.readLibrary = vi.fn(async () => [{ id: "chair", name: "椅子", source: "built-in" as const, modelSlug: "oneplan:chair", available: true, width: 1, depth: 1, height: 1 }]);
+  await turn("放101把椅子", response("objects", { items: [{ zone: "", query: "椅子", count: 101, evidence: "放101把椅子" }] }));
+  expect(flow.pendingPlan).toBeNull();
+  expect(flow.proposal?.next.facilities).toHaveLength(101);
+  expect(plan.facilities).toHaveLength(0);
+  expect(apply).not.toHaveBeenCalled();
+});
+
+
+it("默认直接执行：无分区时「你看着办」直接出一版小型布置", async () => {
+  supervision = undefined;
+  bridge.readLibrary = vi.fn(async () => ["桌子", "垃圾桶", "指示牌"].map(name => ({ id: name, name, modelSlug: "oneplan:fixture", source: "built-in" as const, available: true, width: 1, depth: 1, height: 1 })));
+  await turn("你看着办", response("ask", {}, { reply: "需要先分区吗？" }));
+  expect(plan.zones).toHaveLength(0);
+  expect(plan.facilities).toHaveLength(5);
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(saySpy.mock.calls.map(call => call[0]).join()).not.toContain("需要先分区吗");
 });

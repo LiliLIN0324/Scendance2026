@@ -295,23 +295,23 @@ function isBanquetSession(memory: BriefMemory): boolean {
 function seatRequirement(layout: RoomLayout | undefined, floorIndex: number, memory: BriefMemory): { blocked: string | null; warning: string | null } {
   const deskSelected=memory.layoutModeConfirmed === true && memory.layoutMode === 'desk-chair';
   const allocation=memory.localSeatingAllocation;
-  const allocationNote=allocation?.status==='one_per_desk'?'用户选择每人一桌，实际桌椅配套仍需核验。'
-    :allocation?.status==='shared_desk'?`用户要求每桌 ${allocation.peoplePerDesk} 人，实际桌椅配比仍需核验。`
-    :'每桌人数尚未确认，实际桌椅配比仍需核验。';
+  const allocationNote=allocation?.status==='one_per_desk'?'每人一桌。'
+    :allocation?.status==='shared_desk'?`每桌 ${allocation.peoplePerDesk} 人。`
+    :'每桌人数未定。';
   if (memory.allGuestsSeated !== true) {
     if (!deskSelected) return { blocked: null, warning: null };
     if (memory.allGuestsSeated === false) return { blocked: null, warning: `已说明不要求人人入座。${allocationNote}` };
     if (!Number.isSafeInteger(memory.headcount) || !memory.headcount || memory.headcount < 1) return { blocked: null, warning: `人数尚未确认；${allocationNote}` };
     const seats=countSingleSeats(layout,floorIndex),target=memory.headcountMode === 'must' ? `${memory.headcount} 人` : `约 ${memory.headcount} 人`;
-    if (seats === null) return { blocked: null, warning: `按 ${target} 规划课桌椅，候选场地或楼层信息不完整，座席数量待核验。${allocationNote}` };
-    const remaining=seats < memory.headcount ? `是否满足 ${target} 的座席需求尚未核对。` : '单人椅数量已达到规划人数，实际用途仍需核对。';
-    return { blocked: null, warning: `按 ${target} 规划课桌椅，当前仅识别到 ${seats} 把单人椅。${remaining}其他家具容量、课桌数量和现场条件仍需核验。${allocationNote}` };
+    if (seats === null) return { blocked: null, warning: `按 ${target} 规划课桌椅，候选场地或楼层信息不完整，座席数量还差数据。${allocationNote}` };
+    const remaining=seats < memory.headcount ? `是否满足 ${target} 的座席需求还没核对。` : '单人椅数量已达到规划人数。';
+    return { blocked: null, warning: `按 ${target} 规划课桌椅，当前仅识别到 ${seats} 把单人椅。${remaining}其他家具和课桌没有算在内。${allocationNote}` };
   }
   if (!Number.isSafeInteger(memory.headcount) || !memory.headcount || memory.headcount < 1)
     return { blocked: '已要求所有人入座，请先确认人数。', warning: null };
   const check = checkRequiredSeats(layout, floorIndex, memory.headcount, true);
   return { blocked: check.status === 'unknown' ? check.message : null,
-    warning: check.status === 'quantity_met' ? `${check.message ?? ''}${memory.headcountMode !== 'must' ? '人数可能变化，请在活动前重新核对座席需求。' : ''}${deskSelected?allocationNote:''}` : null };
+    warning: check.status === 'quantity_met' ? `${check.message ?? ''}${memory.headcountMode !== 'must' ? '人数可能变化，活动前再核一次。' : ''}${deskSelected?allocationNote:''}` : null };
 }
 
 /** A local object command cannot safely stand in for the unparsed activity requirements in the same utterance. */
@@ -2509,7 +2509,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const requestedTables='requestedTables' in result?result.requestedTables:result.requested;
       if(!result.placed){
         const reason=result.limitReason==='object_limit'?'本机场景物件已达上限':result.limitReason==='no_placement'?'当前排布没有找到可放位置':result.limitReason==='scan_limit'?'本次搜索达到计算上限':result.limitReason==='preset_unverified'?'预设或扫描结构尚未核对':'场地几何待核验';
-        say({role:'agent',amber:true,text:`本地草案暂未生成：${reason}，场景未改；${shared?`需求 ${result.requested} 人、${requestedTables} 桌，已排 0 人、0 桌，尚缺 ${result.shortfall} 人；`:''}${result.unknown.join('、')}仍需核验。`});setPhase('failed');return;
+        say({role:'agent',amber:true,text:`本地草案暂未生成：${reason}，场景未改；${shared?`需求 ${result.requested} 人、${requestedTables} 桌，已排 0 人、0 桌，尚缺 ${result.shortfall} 人；`:''}${result.unknown.join('、')}没有值。`});setPhase('failed');return;
       }
       if(token!==runToken.current||!localDraftAllowed(owner,authority)||!floorStillCurrent(floorToken)||!sameLayoutContent(base,live.current)){
         say({role:'agent',amber:true,text:'活动、云端连接或场景已变化，本地草案未应用。'});setPhase('failed');return;
@@ -2522,17 +2522,17 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const limitations=[annotations.hasUnmodelled?'当前版本尚未将已有路线、区域或阶段纳入组团计算，暂只能预览。':null,localDraftRouteBlock(routeReview)].filter((item,index,items):item is string=>!!item&&items.indexOf(item)===index);
       const routeNotices=annotations.routes.length?[
         '这次只核对手绘路线中心线和模型的占地范围；路线净宽、门和无障碍的实测值补进来后一起算。',
-        ...(routeReview.existing.length?[`原场景已有 ${routeReview.existing.length} 处路线与模型包围占地相交，不归因于本次新增；仍需核对。`]:[]),
-        ...(routeReview.contacts.length?['路线与模型包围占地边缘接触，实际净宽仍需核对。']:[]),
+        ...(routeReview.existing.length?[`原场景已有 ${routeReview.existing.length} 处路线与模型包围占地相交，不归因于本次新增；还没量。`]:[]),
+        ...(routeReview.contacts.length?['路线与模型包围占地边缘接触，实际净宽还没量。']:[]),
       ]:[];
       const doorNotice=markedDoor||annotations.hasDoor?'这次组团净空没算门洞和入口：门位、宽度、开启方向补进图后，下一版一起算。':null;
       const dimensionLine=(name:string,size:{width:number;depth:number;height:number},facts:SeatingItemFacts|undefined)=>`${name} ${(['width','depth','height'] as const).map(axis=>`${size[axis]}（${facts?.[axis]?.status==='reported'?'用户提供':'假设'}）`).join(' × ')} 米`;
       const localDraftDetails=[shared?`本机草案：需求 ${result.requested} 人、${requestedTables} 桌；本次排了 ${result.placed} 人、${placedTables} 桌、${result.placed} 把椅子，尚缺 ${result.shortfall} 人；未同步云端，也未确认本机持久化。`:`本机草案：本次排了 ${result.placed} / ${result.requested} 套，尚缺 ${result.shortfall} 套；未同步云端，也未确认本机持久化。`,
-        shared?'每桌 2 人：用户明确选择；实际桌椅仍需核验。':allocation?.status==='one_per_desk'?'每人一桌：用户明确选择；实际桌椅仍需核验。':'每人一桌：本次探索假设，用户尚未指定，可随时修改。',
-        `示意尺寸：${dimensionLine(shared?'双人桌':'单人桌',desk.value,saved?.desk)}；${dimensionLine('椅子',chair.value,saved?.chair)}；实物待核验。`,
+        shared?'每桌 2 人。':allocation?.status==='one_per_desk'?'每人一桌。':'每人一桌：本次探索假设，用户尚未指定，可随时修改。',
+        `示意尺寸：${dimensionLine(shared?'双人桌':'单人桌',desk.value,saved?.desk)}；${dimensionLine('椅子',chair.value,saved?.chair)}。`,
         `示意间距：桌椅 0.1 米、${shared?'椅间 0.1 米、':''}列间 0.3 米、排间 0.5 米、距边 0.3 米；这是我取的默认值，要改就说数字。`,
         ...(shared&&result.shortfall?[`${result.limitReason==='object_limit'?'已触及本机场景物件数量上限':result.limitReason==='scan_limit'?'本次搜索达到计算上限':'本次排布未找到更多位置'}，这一版就到这儿；要更多位置就腾地方或换分区。`]:[]),
-        `${result.unknown.join('、')}仍需核验。`,...(doorNotice?[doorNotice]:[]),...routeNotices,...limitations];
+        `${result.unknown.join('、')}没有值。`,...(doorNotice?[doorNotice]:[]),...routeNotices,...limitations];
       const plan:PlanProposal & {localDraftDetails:string[]}={layouts:[result.layout],added:result.placed+placedTables,removing:0,
         keptLocked:base.floors[activeFloorIndex]?.items.filter(item=>item.locked&&!isStructuralMarker(item)).length??0,
         dropped:result.shortfall+(requestedTables-placedTables),overlapCount:overlaps.count,overlapNames:overlaps.names,blocked:limitations.join(' ')||null,
@@ -3108,7 +3108,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 2026-11-16 实测补充：像「在植物园周边做两日市集，签到放进摊区」这种地名 + 设计
     // 的复合句，不能被 matchVenueCommand 整句吃掉。保留整句：设计部分存成待办，
     // 地名交给选址流程定位，范围确认后由待恢复槽接回。
-    if(!queued&&!attachment&&looksLikeDesignInstruction(trimmed)&&!matchResearchCommand(trimmed)
+    if(!queued&&!attachment&&(outdoorWorkflow.viewerKnownAnonymous || (typeof navigator !== 'undefined' && !navigator.onLine))
+      &&looksLikeDesignInstruction(trimmed)&&!matchResearchCommand(trimmed)
       && placeStillPending({ hasOutdoorPlan: Boolean(routeBridgeRef.current?.applyPlan), stage: outdoorWorkflow.state.stage, venueUp, rangeConfirmed: outdoorWorkflow.scopeConfirmed() })){
       writePendingBrief(outdoorWorkflow.state.scope, trimmed, outdoorWorkflow.state.stage);
       if(!isCompositeDesignBrief(trimmed, matchVenueCommand(trimmed))){
@@ -3154,9 +3155,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       }
       say({role:'user',text:trimmed});
       if(outdoorWorkflow.clarify(trimmed))return;
-      // 2026-11-14 用户指令：排流线/排入口是确定性规则命令（读真实路网 → 提案），不依赖理解模型——
-      // 本地无模型、模型暂时不可用都要能跑；放在工作流模型理解之前拦截（此前这分支在桥接模式下是死代码）。
-      if (matchRouteCommand(trimmed, true)) {
+      // 一个入口：登录且在线时，排流线也交给域 Agent，由模型决定用哪些工具；
+      // 本地确定性路线规划只在未登录或断网时兜底（viewerKnownAnonymous / navigator.onLine）。
+      // 这样同一句话不会时而秒回、时而反问。
+      const localOnly = outdoorWorkflow.viewerKnownAnonymous || (typeof navigator!=='undefined' && !navigator.onLine);
+      if (matchRouteCommand(trimmed, true) && localOnly) {
         if (outdoorWorkflow.scopeConfirmed()) await outdoorWorkflow.action('main-routes');
         else await proposeRoutePlan();
         return;
