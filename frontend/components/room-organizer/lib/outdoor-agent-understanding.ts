@@ -135,7 +135,7 @@ export async function understandOutdoorTurn(input: {
   const buildFixedContext = (level: 0 | 1 | 2) => {
     const staging =
       input.plan.zones.length === 0
-        ? "同时要求分区和设计主通道或排布物料时，action 保留 main-routes 或 objects，本句明确的分区写入 facts.zones。补答分区问题时延续原请求的设计目标；先预览分区，确认后再做详细预览。"
+        ? "同时要求分区和设计主通道或排布物料时，action 保留 main-routes 或 objects，本句明确的分区写入 facts.zones。补答分区问题时延续原请求的设计目标；分区只在用户要求时生成；添加物件不需要分区，未指定分区时 items.zone 填空字符串，直接在活动边界内落位。"
         : undefined;
     const base = {
       stage: input.state.stage,
