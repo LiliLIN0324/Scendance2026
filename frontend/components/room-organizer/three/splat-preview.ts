@@ -103,6 +103,10 @@ export type SplatCalibration = Readonly<{
   anchors?: readonly GroundAnchor[];
 }>;
 export type SplatLoadOptions = Readonly<{
+  /** Project instance scale, independent of the asset's survey calibration. */
+  placementScale?: number;
+  /** Assumed sample-room height, only when no measured calibration exists. */
+  estimatedHeightMeters?: number;
   /** 场地最长水平边（米）：无真实尺度时的兜底——点云按它等比缩放。 */
   sizeMeters: number;
   upAxis?: SplatUpAxis;
@@ -162,6 +166,11 @@ export function fitSplatBox(box: THREE.Box3, sizeMeters: number): SplatFit {
   const scale = sizeMeters > 0 && horizontal > EPSILON ? sizeMeters / horizontal : 1;
   const center = box.getCenter(new THREE.Vector3());
   return { scale, position: new THREE.Vector3(-center.x * scale, -box.min.y * scale, -center.z * scale) };
+}
+
+export function estimatedHeightScale(box: THREE.Box3, up: THREE.Quaternion, height?: number): number {
+  const measured = rotatedBox(box, up).getSize(new THREE.Vector3()).y;
+  return height && Number.isFinite(height) && height > 0 && measured > EPSILON ? height / measured : 1;
 }
 
 /** 把落地后的包围盒折成漫游边界；退化盒（薄片 / 空点云）退回 null，让调用方保留旧围栏。 */
@@ -431,7 +440,7 @@ export function paintSplatLayers(deps: {
   // 渲染背景栈时临时挪进点云场景，画完挪回，世界坐标不变。
   const underlays: THREE.Object3D[] = [];
   for (const child of scene.children) {
-    if (child.userData.type === RESEARCH_BASEMAP_TAG) underlays.push(child);
+    if (child.userData.type === RESEARCH_BASEMAP_TAG || child.userData.type === ROOM_OBJECT_TAGS.GeoGround) underlays.push(child);
   }
   for (const child of underlays) backs[0]!.attach(child);
   const lightIso = underlays.some(child => child.visible && child.userData.isoBasemap === true);
@@ -471,7 +480,7 @@ export function paintSplatLayers(deps: {
  */
 export function createSplatPreview(deps: {
   renderer: THREE.WebGLRenderer;
-  camera: THREE.PerspectiveCamera;
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
   orbitControls: SplatOrbit;
   invalidate(): void;
   onPositionChange?(position: SplatPosition): void;
@@ -503,6 +512,8 @@ export function createSplatPreview(deps: {
   let localCenters: THREE.Vector3[] = [];
   let upQuaternion = new THREE.Quaternion();
   // 当前生效的标定：默认 1:1 米制、水平基准面、无锚点。
+  let placementScale = 1;
+  let sampleScale = 1;
   let calibration: Required<SplatCalibration> = {
     scale: 1,
     yawDeg: 0,
@@ -828,7 +839,7 @@ export function createSplatPreview(deps: {
   function placeSplat(): THREE.Box3 | null {
     if (!holder || !mesh || !localBox) return null;
     // 竖直轴校正 → 朝向 → 基准面倾斜；旋转作用在点云本身。
-    const fit = computeScanFit(localBox, upQuaternion, calibration);
+    const fit = computeScanFit(localBox, upQuaternion, { ...calibration, scale: calibration.scale * sampleScale * placementScale });
     const { quaternion, scale } = fit;
     const fitPosition = fit.position;
     const rotated = rotatedBox(localBox, quaternion);
@@ -957,9 +968,11 @@ export function createSplatPreview(deps: {
     // 缩放和落位挂在包装层上，点云本身只管朝向，换场地不必重算旋转。
     // 默认 1:1 米制；只有存在手动标定时才乘 sceneScale（扫描米 → 真实米）。
     calibration = sanitizeCalibration(options.calibration);
+    placementScale = options.placementScale ?? 1;
     localBox = local;
     localCenters = centers;
     upQuaternion = next.quaternion.clone();
+    sampleScale = estimatedHeightScale(localBox, upQuaternion, options.estimatedHeightMeters);
     currentOffset.set(options.position?.x ?? 0, options.position?.y ?? 0, options.position?.z ?? 0);
     const group = new THREE.Group();
     group.add(next);
@@ -1093,6 +1106,15 @@ export function createSplatPreview(deps: {
       if (transformHelper) transformHelper.visible = transformMode === 'gizmo' && !!holder;
       if (!wantGizmo) releaseTransformControls();
       deps.invalidate();
+    },
+    setScale(scale: number) {
+      if (!Number.isFinite(scale) || scale < 0.01 || scale > 100) return null;
+      placementScale = scale;
+      const box = placeSplat();
+      deps.invalidate();
+      if (!box) return null;
+      const size = box.getSize(new THREE.Vector3());
+      return { meters: { width: size.x, depth: size.z, height: size.y }, walkBounds: walkBoundsOf(box) };
     },
     setPosition(position: SplatPosition) {
       if (!holder) return;

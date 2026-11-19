@@ -154,6 +154,7 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
       const renderer = new THREE.WebGLRenderer({
         canvas,
         antialias: true,
+        alpha: true,
         failIfMajorPerformanceCaveat: false,
         powerPreference: 'high-performance',
         // Reversed-Z (r183+): near-uniform depth precision across the range,
