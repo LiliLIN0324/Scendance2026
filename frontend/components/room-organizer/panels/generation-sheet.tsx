@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { Camera, FileImage, Sparkles, X } from '@/components/solid-icons';
 import { type BackendSession, type BackendSnapshot, type GenerationCapabilities } from '@/lib/backend-session';
 import {
@@ -72,13 +73,20 @@ function useOptionalCloud(controller?: BackendSession): BackendSnapshot {
   );
 }
 
-export function GenerationSheetHost({ controller, onAddLocalGlb }: {
+export function GenerationSheetHost({ controller, onAddLocalGlb, className, style, onHeaderPointerDown, floatBar, floatFooter }: {
   /** 保留给拍摄向导接线。创作入口的「拍摄现场」走卡片自己的相机/文件口，不打开拍摄向导。 */
   onOpenCapture?: (() => void) | undefined;
   /** 云项目会话：模型生成走它的队列。缺省时模型表单只解释为什么不能提交。 */
   controller?: BackendSession | undefined;
   /** 导入的本机 GLB 在「物料」来路下落进哪里（room-organizer 传 placeFromCatalog）。 */
   onAddLocalGlb?: ((item: CatalogItem) => void) | undefined;
+  /** 2026-11-19 左栏半卡片堆栈：与户外规划同时开着时，由外部给类名、排序与标题抓取手势。 */
+  className?: string;
+  style?: CSSProperties;
+  onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
+  /** 拖成独立小窗时的标题条与右下角缩放把。 */
+  floatBar?: ReactNode;
+  floatFooter?: ReactNode;
 }): JSX.Element | null {
   const state = useSyncExternalStore(subscribeGenerationSheet, getGenerationSheetState, getGenerationSheetState);
   const cardRef = useRef<HTMLElement>(null);
@@ -381,7 +389,8 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
     <aside
       ref={cardRef}
       id="generation-sheet"
-      className={`sc-generation-card${state.scope === 'venue' ? ' is-venue' : ''}${showCreation ? ' is-entry' : ''}`}
+      className={`sc-generation-card${state.scope === 'venue' ? ' is-venue' : ''}${showCreation ? ' is-entry' : ''}${className ? ` ${className}` : ''}`}
+      style={style}
       aria-label={panelTitle}
       data-testid="generation-sheet"
       tabIndex={-1}
@@ -392,7 +401,9 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
         closeGenerationSheet();
       }}
     >
-      <div className="gs-head">
+      {floatBar}
+      <div className="gs-head" onPointerDown={onHeaderPointerDown}
+        style={onHeaderPointerDown ? { cursor: 'grab', touchAction: 'none' } : undefined}>
         <strong>{panelTitle}</strong>
         <button type="button" className="sc-left-close" aria-label="关闭生成面板" onClick={closeGenerationSheet}><X size={18} aria-hidden="true" /></button>
       </div>
@@ -527,6 +538,7 @@ export function GenerationSheetHost({ controller, onAddLocalGlb }: {
           </>
         )}
       </div>
+      {floatFooter}
     </aside>
   );
 }

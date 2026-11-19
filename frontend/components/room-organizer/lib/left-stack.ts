@@ -14,8 +14,8 @@
 
 import { NAV_RAIL_WIDTH_PX } from './nav-chrome';
 
-/** 左栏堆栈成员：户外规划卡 / Bingo 会话卡 / 拍摄场地卡 / 成员私聊卡。 */
-export type LeftStackPanelId = 'outdoor' | 'bingo' | 'capture' | 'chat';
+/** 左栏堆栈成员：户外规划卡 / Bingo 会话卡 / 拍摄场地卡 / 成员私聊卡 / 创作（生成）卡。 */
+export type LeftStackPanelId = 'outdoor' | 'bingo' | 'capture' | 'chat' | 'generation';
 
 /**
  * 独立小窗列表：数组顺序就是层叠顺序——队首压在最底下，队尾浮在最上面。
@@ -86,13 +86,13 @@ export function pointInDockBand(band: DockBandRect, x: number, y: number): boole
 
 const FALLBACK_VIEWPORT = { width: 1280, height: 800 };
 
-const PANEL_IDS: readonly LeftStackPanelId[] = ['outdoor', 'bingo', 'capture', 'chat'];
+const PANEL_IDS: readonly LeftStackPanelId[] = ['outdoor', 'bingo', 'capture', 'chat', 'generation'];
 
-/** 各卡独立小窗的默认落位：户外/会话沿用原位，拍摄场地与私聊卡居中偏右一点。 */
+/** 各卡独立小窗的默认落位：户外/会话沿用原位，拍摄场地、私聊与创作卡居中偏右一点。 */
 export function defaultFloatRect(panel: LeftStackPanelId, viewport: { width: number; height: number } = FALLBACK_VIEWPORT, cascadeIndex = 0): LeftStackRect {
   const width = Math.max(LEFT_STACK_FLOAT_MIN_WIDTH, Math.min(480, Math.round(viewport.width * 0.4)));
   const height = Math.max(LEFT_STACK_FLOAT_MIN_HEIGHT, Math.min(720, Math.round(viewport.height * 0.66)));
-  const shift = panel === 'outdoor' ? -24 : panel === 'bingo' ? 0 : panel === 'capture' ? 24 : 48;
+  const shift = panel === 'outdoor' ? -24 : panel === 'bingo' ? 0 : panel === 'capture' ? 24 : panel === 'generation' ? 72 : 48;
   const x = Math.max(LEFT_STACK_FLOAT_MARGIN, Math.round(viewport.width / 2 - width - 24 + shift + cascadeIndex * LEFT_STACK_CASCADE_OFFSET));
   const y = Math.max(LEFT_STACK_FLOAT_MARGIN, 72 + cascadeIndex * Math.round(LEFT_STACK_CASCADE_OFFSET * 0.7));
   return { x, y, width, height };
@@ -109,6 +109,7 @@ export function defaultLeftStackState(viewport: { width: number; height: number 
       bingo: defaultFloatRect('bingo', viewport),
       capture: defaultFloatRect('capture', viewport),
       chat: defaultFloatRect('chat', viewport),
+      generation: defaultFloatRect('generation', viewport),
     },
   };
 }
@@ -176,6 +177,7 @@ export function normalizeLeftStackState(input: unknown, viewport?: { width: numb
       bingo: isRect(rects.bingo) ? clampFloatRect(rects.bingo, viewport ?? FALLBACK_VIEWPORT) : fallback.rects.bingo,
       capture: isRect(rects.capture) ? clampFloatRect(rects.capture, viewport ?? FALLBACK_VIEWPORT) : fallback.rects.capture,
       chat: isRect(rects.chat) ? clampFloatRect(rects.chat, viewport ?? FALLBACK_VIEWPORT) : fallback.rects.chat,
+      generation: isRect(rects.generation) ? clampFloatRect(rects.generation, viewport ?? FALLBACK_VIEWPORT) : fallback.rects.generation,
     },
   };
 }
