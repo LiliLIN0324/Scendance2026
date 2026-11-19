@@ -423,7 +423,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* 2026-11-19 用户：红卡里的「怎么办」和诊断行之前是裸 <p>（跟正文同号同色），和走查稿里
    打印体诊断不像一套。保持可选中复制，只是把字号、底色、等宽体分开。 */
 .ap-error-hint { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-muted); }
-.ap-error-diag { margin: 0; padding: 6px 8px; border-radius: var(--r-sm); background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-cap); line-height: 1.45; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.ap-error-diag { margin: 0; padding: 6px 8px; border-radius: var(--r-sm); background: var(--plane-deep); color: var(--wk-ink-soft); font-size: var(--fs-cap); line-height: 1.45; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 /* 失败消息转成的错误卡：正文沿用摘要字号，保留换行与列表结构。 */
 .ap-error-body { display: flex; flex-direction: column; gap: 5px; margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); white-space: pre-line; overflow-wrap: anywhere; }
 .ap-error-body.is-long { white-space: pre-line; }
@@ -915,6 +915,17 @@ button.ap-ghost {
 /* 第 7 批收尾：体检分 + Z8 完成卡 + 被拒件 + disclaimer。 */
 .ap-audit-scope { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-audit-score { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: #F4F5F7; border-radius: 8px; }
+/* 2026-11-19 用户：体检结论上方的小标题与本机评审记录折叠行之前是裸 <p>/<details>，
+   和同卡其它行不同字体、不同颜色。 */
+.ap-audit-score-title { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-p2); color: var(--ap-grey); }
+/* 体检块里的两行正文之前继承面板 14px，比同一块的 12px 标签还大；收到和卡内正文同号。 */
+.ap-audit-score > p { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+.ap-audit-score > p.ap-audit-scope { color: var(--ap-grey); }
+.ap-audit-records { display: grid; gap: 8px; }
+.ap-audit-records > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--fs-p2); line-height: var(--lh-p2); color: var(--wk-ink-soft); }
+.ap-audit-records > summary::-webkit-details-marker { display: none; }
+.ap-audit-records > summary::before { content: '▸'; flex: none; font-size: 9px; color: var(--wk-muted); }
+.ap-audit-records[open] > summary::before { content: '▾'; }
 .ap-audit-score-total { display: flex; align-items: baseline; gap: 6px; }
 .ap-audit-score-num { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .ap-audit-score-label { font-size: var(--fs-cap); color: var(--ap-grey); }

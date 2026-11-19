@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { ChevronDown, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
 import { loadGeneratedCatalogItem, loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
@@ -13,9 +13,9 @@ import { walkRoleCrowdType } from '../lib/walk-roles';
 import { planningIcon } from '../components/outdoor-plan-icons';
 import { CROWD_GROUP_LABEL, MATERIAL_GROUP_LABELS, materialGroupLabel } from '../lib/material-taxonomy';
 import { INFRA_CATEGORY_ORDER, INFRA_ROW_LABEL } from '../lib/oneplan-catalog';
-import { libraryEntries, packsToEntries, type LibraryEntry, type OneplanManifest, type OneplanPacksFile } from '../lib/oneplan-library';
+import { libraryEntries, libraryEntryColor, materialChipColor, materialPlateColor, packsToEntries, type LibraryEntry, type OneplanManifest, type OneplanPacksFile } from '../lib/oneplan-library';
 import { oneplanStickerSrc, oneplanStickerUsesChip, type OneplanStickerDescriptor } from '../lib/oneplan-stickers';
-import { planStickerForModel } from '../lib/plan-icon-for-model';
+import { planEntryForModel, planStickerForModel } from '../lib/plan-icon-for-model';
 import {
   addCustomTag, emptyMaterialLibraryMeta, loadMaterialLibraryMeta, saveMaterialLibraryMeta, toggleAssignment, toggleFavorite,
   type MaterialLibraryMeta,
@@ -104,10 +104,15 @@ export function onlineModelDisplayName(model: OnlineModel): string {
   return subject || model.name;
 }
 
-function PlanIconBadge({ sticker, dimmed = false }: { sticker: OneplanStickerDescriptor | null; dimmed?: boolean }): JSX.Element | null {
+function PlanIconBadge({ sticker, color, dimmed = false }: { sticker: OneplanStickerDescriptor | null; color?: string | undefined; dimmed?: boolean }): JSX.Element | null {
   if (!sticker) return null;
+  // 2026-11-19 用户：角标要跟物料自己的主题色，不要一律黑圆底。
+  // 颜色走 CSS 变量：芯片（白字形）用 chip，真实尺度线稿用 plate（浅色底）。
+  const theme = color
+    ? ({ '--sc-lib-chip': materialChipColor(color), '--sc-lib-plate': materialPlateColor(color) } as CSSProperties)
+    : undefined;
   return (
-    <span className={`sc-lib-plan-icon${oneplanStickerUsesChip(sticker) ? ' is-chip' : ''}${dimmed ? ' is-dimmed' : ''}`} aria-hidden="true">
+    <span className={`sc-lib-plan-icon${oneplanStickerUsesChip(sticker) ? ' is-chip' : ''}${dimmed ? ' is-dimmed' : ''}`} style={theme} aria-hidden="true">
       <img src={oneplanStickerSrc(sticker)} alt="" width={14} height={14} />
     </span>
   );
@@ -159,9 +164,10 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const [loadError, setLoadError] = useState('');
   const [placeError, setPlaceError] = useState('');
   const [query, setQuery] = useState('');
-  // 物料卡四块的当前页：我的生成 / 收藏 / 库 / 不同人群。四块只是入口，结果都在下方同一块内容区。
-  const [pane, setPane] = useState<'mine' | 'fav' | 'lib' | 'crowd'>('lib');
-  const [libSection, setLibSection] = useState<'infra' | 'crowd' | 'recent' | null>('infra');
+  // 物料卡的当前页：物料库 / 我的生成 / 不同人群。收藏不再占页签（2026-11-19 用户：挪到基础设施/不同人群上方）。
+  const [pane, setPane] = useState<'mine' | 'lib' | 'crowd'>('lib');
+  // 物料库树展开的那一段：最近用过 / 收藏 / 基础设施 / 不同人群（手风琴，单开）。
+  const [libSection, setLibSection] = useState<'infra' | 'crowd' | 'recent' | 'fav' | null>('infra');
   const [libSubgroup, setLibSubgroup] = useState<string | null>(null);
   const [crowdSection, setCrowdSection] = useState<string | null>(null);
   const [planEntries, setPlanEntries] = useState<LibraryEntry[]>([]);
@@ -665,7 +671,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
     const tile = (model: OnlineModel, withFavorite = false) => {
       const name = onlineModelDisplayName(model);
       const favorited = meta.favorites.includes(model.slug);
-      const sticker = planStickerForModel(model, planEntries);
+      const entry = planEntryForModel(model, planEntries);
+      const sticker = entry?.sticker ?? null;
       return <li className="sc-lib-tile is-object" key={model.slug}>
         <button type="button" className="sc-lib-tile-btn" disabled={disabled || (busy !== null && !batchRunning.current)} aria-busy={busy === model.slug || undefined}
           draggable={!disabled && busy === null}
@@ -678,7 +685,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           }}
           onDragEnd={() => clearPlanCatalogDrag()}
           onClick={() => clickModel(model)} aria-label={`添加${name}`} title={`${model.name}\n拖到场地落下，或点一下再点场地选位`}>
-          <span className="sc-lib-tile-thumb"><span className="sc-lib-tile-photo">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span><PlanIconBadge sticker={sticker} dimmed={dimPlanIcons}/></span>
+          <span className="sc-lib-tile-thumb"><span className="sc-lib-tile-photo">{model.thumb ? <MaterialThumb src={model.thumb}/> : <span className="sc-material-thumb-empty">▦</span>}</span><PlanIconBadge sticker={sticker} color={entry ? libraryEntryColor(entry) : undefined} dimmed={dimPlanIcons}/></span>
           <span className="sc-lib-tile-name">{name}</span>
         </button>
         {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, model.slug))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
@@ -710,24 +717,22 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
       {bundle.swatches.map(color => <span className="sc-lib-style-swatch" key={color} style={{ background: color }}/>)}
     </span>;
     // 这一屏的缩略图提前预热（命中缓存的直接跳过）：切页/翻页后滚到哪一格都已经是图。
-    warmMaterialThumbs(pane === 'fav'
-      ? [...favoriteModels.map(model => model.thumb), ...favoriteGenerated.map(card => card.image)]
-      : pane === 'mine'
-        ? [...generatedShown.map(card => card.image), ...pending.map(card => card.image)]
-        : pane === 'crowd'
-          ? peopleModels.map(model => model.thumb)
-          : searching
-            ? libraryShown.map(model => model.thumb)
-            : [
-              ...(libSection === 'recent' ? recentInLib.map(model => model.thumb) : []),
-              ...(infraGroups.find(group => group.label === openSubgroup)?.models ?? []).map(model => model.thumb),
-              ...(libSection === 'crowd' ? crowdInLib.map(model => model.thumb) : []),
-            ]);
+    warmMaterialThumbs(pane === 'mine'
+      ? [...generatedShown.map(card => card.image), ...pending.map(card => card.image)]
+      : pane === 'crowd'
+        ? peopleModels.map(model => model.thumb)
+        : searching
+          ? libraryShown.map(model => model.thumb)
+          : [
+            ...(libSection === 'recent' ? recentInLib.map(model => model.thumb) : []),
+            ...(libSection === 'fav' ? [...favoriteModels.map(model => model.thumb), ...favoriteGenerated.map(card => card.image)] : []),
+            ...(infraGroups.find(group => group.label === openSubgroup)?.models ?? []).map(model => model.thumb),
+            ...(libSection === 'crowd' ? crowdInLib.map(model => model.thumb) : []),
+          ]);
     // 点哪一块就切到哪一页并展开：tabs 与素材同属一张卡，切换即看到完整内容。
     return <div className="sc-lib-wrap sc-lib-shell is-browse">
       <nav className="sc-library-tabs-equal" aria-label="物料来源">
         <button type="button" aria-pressed={pane === 'lib'} onClick={() => setPane('lib')}>物料库</button>
-        <button type="button" aria-pressed={pane === 'fav'} onClick={() => setPane('fav')}>收藏</button>
         <button type="button" aria-pressed={pane === 'mine'} onClick={() => setPane('mine')}>我的生成</button>
         <button type="button" aria-pressed={pane === 'crowd'} onClick={() => setPane('crowd')}>不同人群</button>
       </nav>
@@ -775,11 +780,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             </div>;
           })}
           {walkRoles.length === 0 && walkRoleSlot && <div className="sc-lib-tree-panel">{walkRoleSlot}</div>}
-        </div> : pane === 'fav'
-          ? (favoriteRows === 0
-            ? <p className="sc-lib-empty"><Star size={14} aria-hidden="true"/><span>还没有收藏</span></p>
-            : <ul className="sc-lib-grid">{favoriteModels.map(model => tile(model, true))}{favoriteGenerated.map(card => generatedTile(card, true))}</ul>)
-          : pane === 'mine'
+        </div> : pane === 'mine'
             ? <>
               {cloudNote ? <p className="sc-lib-empty" role="status">{cloudNote}</p> : null}
               {generatedShown.length === 0 && styleRuns.length === 0 && !cloudNote && <p className="sc-lib-empty"><Sparkles size={14} aria-hidden="true"/><span>还没有生成过</span></p>}
@@ -836,7 +837,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               </ul>
               {libraryFiltered.length === 0 && <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>没有匹配的模型</span></p>}
               {libraryFiltered.length > libraryShown.length && <button type="button" className="sc-lib-more" onClick={() => setVisible(current => current + PAGE_SIZE)}><span>加载更多</span><ChevronDown size={13} aria-hidden="true"/></button>}
-            </> : libraryModels.length === 0 ? (
+            </> : libraryModels.length === 0 && favoriteRows === 0 ? (
               <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>库里没有可用的公共素材</span></p>
             ) : (
               <div className="sc-lib-tree">
@@ -847,35 +848,52 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
                   </div>
                   {libSection === 'recent' && <ul className="sc-lib-grid sc-lib-tree-panel" role="list" aria-label="最近用过">{recentInLib.map(modelRow)}</ul>}
                 </>}
+                {/* 2026-11-19 用户：「收藏挪到基础设施/不同人群的上方」——收藏不再占顶层页签，
+                    而是树里的第一段：排在最近用过之后、基础设施之前。 */}
                 {treeRow({
                   level: 'section',
-                  label: INFRA_ROW_LABEL,
-                  count: infraCount,
-                  open: libSection === 'infra',
-                  icon: <TentIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
-                  onToggle: () => { setLibSection(current => current === 'infra' ? null : 'infra'); setLibSubgroup(null); },
+                  label: '收藏',
+                  count: favoriteRows,
+                  open: libSection === 'fav',
+                  icon: <Star size={14} strokeWidth={1.75} aria-hidden="true"/>,
+                  onToggle: () => setLibSection(current => current === 'fav' ? null : 'fav'),
                 })}
-                {libSection === 'infra' && infraGroups.map(group => <div key={group.label}>
-                  {treeRow({
-                    level: 'sub',
-                    label: group.label,
-                    count: group.models.length,
-                    open: openSubgroup === group.label,
-                    onToggle: () => setLibSubgroup(current => (current ?? infraGroups[0]?.label) === group.label ? '' : group.label),
-                  })}
-                  {openSubgroup === group.label && <ul className="sc-lib-grid sc-lib-tree-panel">{group.models.map(modelRow)}</ul>}
-                </div>)}
-                {treeRow({
-                  level: 'section',
-                  label: CROWD_GROUP_LABEL,
-                  count: crowdInLib.length,
-                  open: libSection === 'crowd',
-                  icon: <UsersIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
-                  onToggle: () => setLibSection(current => current === 'crowd' ? 'infra' : 'crowd'),
-                })}
-                {libSection === 'crowd' && (crowdInLib.length > 0
-                  ? <ul className="sc-lib-grid sc-lib-tree-panel">{crowdInLib.map(modelRow)}</ul>
-                  : <p className="sc-lib-empty"><span>这一类还没有模型</span></p>)}
+                {libSection === 'fav' && (favoriteRows === 0
+                  ? <p className="sc-lib-empty"><Star size={14} aria-hidden="true"/><span>还没有收藏</span></p>
+                  : <ul className="sc-lib-grid sc-lib-tree-panel" role="list" aria-label="收藏">{favoriteModels.map(model => tile(model, true))}{favoriteGenerated.map(card => generatedTile(card, true))}</ul>)}
+                {libraryModels.length === 0
+                  ? <p className="sc-lib-empty"><LayoutGrid size={14} aria-hidden="true"/><span>库里没有可用的公共素材</span></p>
+                  : <>
+                    {treeRow({
+                      level: 'section',
+                      label: INFRA_ROW_LABEL,
+                      count: infraCount,
+                      open: libSection === 'infra',
+                      icon: <TentIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
+                      onToggle: () => { setLibSection(current => current === 'infra' ? null : 'infra'); setLibSubgroup(null); },
+                    })}
+                    {libSection === 'infra' && infraGroups.map(group => <div key={group.label}>
+                      {treeRow({
+                        level: 'sub',
+                        label: group.label,
+                        count: group.models.length,
+                        open: openSubgroup === group.label,
+                        onToggle: () => setLibSubgroup(current => (current ?? infraGroups[0]?.label) === group.label ? '' : group.label),
+                      })}
+                      {openSubgroup === group.label && <ul className="sc-lib-grid sc-lib-tree-panel">{group.models.map(modelRow)}</ul>}
+                    </div>)}
+                    {treeRow({
+                      level: 'section',
+                      label: CROWD_GROUP_LABEL,
+                      count: crowdInLib.length,
+                      open: libSection === 'crowd',
+                      icon: <UsersIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
+                      onToggle: () => setLibSection(current => current === 'crowd' ? 'infra' : 'crowd'),
+                    })}
+                    {libSection === 'crowd' && (crowdInLib.length > 0
+                      ? <ul className="sc-lib-grid sc-lib-tree-panel">{crowdInLib.map(modelRow)}</ul>
+                      : <p className="sc-lib-empty"><span>这一类还没有模型</span></p>)}
+                  </>}
               </div>
             )}
           </>}
@@ -945,7 +963,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         const name = onlineModelDisplayName(model);
         const favorite = meta.favorites.includes(model.slug);
         const tagged = armedTag ? (meta.assignments[model.slug] ?? []).includes(armedTag) : false;
-        const sticker = planStickerForModel(model, planEntries);
+        const entry = planEntryForModel(model, planEntries);
+        const sticker = entry?.sticker ?? null;
         return <div className="sc-material-tile" key={model.slug}>
           <button type="button" className="sc-material-card" disabled={disabled || (busy !== null && !batchRunning.current)}
             draggable={!disabled && busy === null} onDragStart={event => {
@@ -963,7 +982,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
               <span className="sc-lib-tile-photo">{model.thumb
                 ? <MaterialThumb src={model.thumb}/>
                 : <span className="sc-material-thumb-empty">暂无预览</span>}</span>
-              <PlanIconBadge sticker={sticker} dimmed={dimPlanIcons}/>
+              <PlanIconBadge sticker={sticker} color={entry ? libraryEntryColor(entry) : undefined} dimmed={dimPlanIcons}/>
               {busy === model.slug && <span className="sc-material-add"><Loader2 className="cr-spin" size={12}/></span>}
             </span>
             <span className="sc-material-name">{name}</span>
