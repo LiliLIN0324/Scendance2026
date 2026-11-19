@@ -1,3 +1,5 @@
 # Static export only prerenders /review/local. Serve that shell for every share id
 # without changing the browser URL, so the client can read the real id.
 /review/:id /review/local.html 200
+# 客户评审短链：/r/<code> 打开同一张评审页，地址留在路径上（微信会剥掉哈希）。
+/r/:code /review.html 200
