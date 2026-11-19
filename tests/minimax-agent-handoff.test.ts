@@ -35,12 +35,14 @@ describe('MiniMax agent handoff: nudges and deadline',()=>{
   expect(run.state).toBe('complete');expect(run.candidates).toHaveLength(1);expect(fetcher).toHaveBeenCalledTimes(2);
  });
 
- it('fails with a downgrade message after more than two plain-text turns',async()=>{
+ it('accepts a plain-text answer as the run result instead of failing',async()=>{
+  // 只回话不提交是允许的结果：提醒一次之后仍然只回话，就以这段答复收尾，不伪造候选、也不算失败。
   const i=await setup();
   const fetcher=vi.fn(async()=>stopReply('还需要再想一下。'));
   const run=await send(i,fetcher);
-  expect(run.state).toBe('failed');expect(run.errorCode).toBe('AGENT_SUBMIT_NOT_REACHED');
-  expect(run.message).toContain('文字回复');expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(run.state).toBe('complete');expect(run.errorCode).toBeUndefined();
+  expect(run.candidates).toEqual([]);expect(run.message).toBe('还需要再想一下。');
+  expect(fetcher).toHaveBeenCalledTimes(2);
  });
 
  it('fails descriptively with no candidate when the budget is already spent at round start',async()=>{

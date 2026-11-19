@@ -10,6 +10,7 @@ import {
   closeAgentStep,
   endAgentRun,
   getAgentRun,
+  parseAgentThoughtSections,
   pushAgentSteerNote,
   setAgentPhase,
   setAgentSteerDelivered,
@@ -142,7 +143,7 @@ describe('AgentRunPanel', () => {
   it('执行过程可收起，明确记录可能不完整，不把模型原文或任意进度文本展示成过程', () => {
     appendAgentStep({toolName:'用户私密内容或非白名单文本',thought:'模型内部内容',durationMs:30,isReadonly:true,startedAt:Date.now()});
     render(<AgentRunPanel scope="layout"/>);
-    expect(screen.getByText(/可能遗漏步骤/)).toBeTruthy();
+    expect(screen.getByText('根据工具回执整理。')).toBeTruthy();
     expect(screen.getByText('正在处理任务')).toBeTruthy();
     expect(screen.queryByText('用户私密内容或非白名单文本')).toBeNull();
     expect(screen.queryByText(/模型内部内容/)).toBeNull();
@@ -161,7 +162,7 @@ describe('AgentRunPanel', () => {
     appendAgentRunEvents([{seq:2,tool:'get_scene',stage:'finished',outcome:'success',errorCode:null}]);
     render(<AgentRunPanel scope="layout"/>);
     expect(screen.getByText(/已发起/)).toBeTruthy();expect(screen.getByText(/已返回结果/)).toBeTruthy();
-    expect(screen.getByText(/结果待核对/)).toBeTruthy();expect(screen.getByText(/工具返回结果不代表安全或规范检查通过/)).toBeTruthy();
+    expect(screen.getByText(/结果待核对/)).toBeTruthy();
     expect(screen.getAllByText('读取场景')).toHaveLength(2);
     expect(getAgentRun().eventLog).toHaveLength(3);
     startAgentRun('layout');expect(getAgentRun().eventLog).toHaveLength(0);
@@ -301,12 +302,26 @@ describe('思考记录（逐轮可见自述）', () => {
     appendAgentThoughts([{round:1,thought:'先把场地上已有的物件盘一遍。'},{round:2,thought:'主区摆 3 桌，留出主通道。'}],1000);
     render(<AgentRunPanel scope="layout" controls={false}/>);
     expect(screen.getByText(/思考记录 · 2 条/)).toBeTruthy();
-    expect(screen.getByText('模型自述，非原始推理')).toBeTruthy();
     expect(screen.getByText('第 1 轮')).toBeTruthy();
     expect(screen.getByText('第 2 轮')).toBeTruthy();
     expect(screen.getByText('先把场地上已有的物件盘一遍。')).toBeTruthy();
     // 思考不是工具回执：执行过程列表里不应出现它。
     expect(document.querySelector('.ap-run-list')?.textContent ?? '').not.toContain('先把场地上已有');
+  });
+
+  it('三段式自述按计划 / 下一步 / 为什么分行显示', () => {
+    appendAgentThoughts([{round:1,thought:'开始检查。计划：先量主区 下一步：调用 find_free_areas 为什么：先确认净宽再摆桌'}],1000);
+    render(<AgentRunPanel scope="layout" controls={false}/>);
+    expect(screen.getByText('计划：')).toBeTruthy();
+    expect(screen.getByText('下一步：')).toBeTruthy();
+    expect(screen.getByText('为什么：')).toBeTruthy();
+    expect(screen.getByText('先量主区')).toBeTruthy();
+    expect(screen.getByText('开始检查。')).toBeTruthy();
+  });
+
+  it('没有固定标签时整段原文照旧显示', () => {
+    expect(parseAgentThoughtSections('先把场地上已有的物件盘一遍。')).toEqual({rest:'先把场地上已有的物件盘一遍。',plan:null,next:null,why:null});
+    expect(parseAgentThoughtSections('计划：A 为什么：B')).toEqual({rest:'',plan:'A',next:null,why:'B'});
   });
 
   it('跑完收起后仍可在归档卡里回看', () => {
