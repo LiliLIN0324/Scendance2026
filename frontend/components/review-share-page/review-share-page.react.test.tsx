@@ -97,7 +97,7 @@ describe('review share page', () => {
     render(<ReviewSharePage/>);await screen.findByRole('heading',{name:'评审版本'});
     fireEvent.click(screen.getByRole('button',{name:'mock-plan-click'}));fireEvent.click(screen.getByRole('button',{name:'钉上'}));
     expect(await screen.findByText('主舞台偏左')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'完成评审'}));
-    fireEvent.click(screen.getByRole('button',{name:'导出评审反馈'}));await waitFor(()=>expect(create).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button',{name:'导出备份'}));await waitFor(()=>expect(create).toHaveBeenCalledOnce());
     expect(await screen.findByText(/请将反馈文件发给方案创建者/)).toBeTruthy();
     const stored=JSON.parse(localStorage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2)!);
     const key=Object.keys(stored.byPlan)[0]!;expect(key).toMatch(/^review-v2:[0-9a-f]{64}$/);
@@ -130,7 +130,7 @@ describe('review share page', () => {
     render(<ReviewSharePage/>);await screen.findByRole('heading',{name:'需核对'});
     fireEvent.click(screen.getByRole('button',{name:'mock-plan-click'}));fireEvent.click(screen.getByRole('button',{name:'钉上'}));
     expect(await screen.findByText(/意见可能已保存，请刷新核对/)).toBeTruthy();
-    expect((screen.getByRole('button',{name:'导出评审反馈'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button',{name:'导出备份'}) as HTMLButtonElement).disabled).toBe(true);
     expect(localStorage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2)).toContain('主舞台偏左');
   });
   it('keeps a malformed completion record instead of overwriting it',async()=>{

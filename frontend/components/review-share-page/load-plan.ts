@@ -1,8 +1,9 @@
 /**
  * 可评论方案页读哪一份平面。
  *
- * 两种进入方式，路径都必须是 `/review/`：
- * - `/review/#review=<code>`：短链，从 Supabase 取回整份快照；
+ * 三种进入方式：
+ * - `/r/<code>`：短链，从 Supabase 取回整份快照（发给客户的地址）；
+ * - `/review/#review=<code>`：旧短链，同样取回快照；
  * - `/review/#layout=…`：长链，与编辑器 `encodeShareUrl` 相同，快照就在 URL 里。
  * 没有片段时，先读本机当前布置（`scendance-editor-local-v1`）；都没有，或 `?demo=1`，用示例场地。
  * 片段在但解不开时停在错误，不改显另一份方案。
@@ -13,7 +14,8 @@ import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
 import { createSharingExample } from '../room-organizer/lib/sharing-example';
 import { parseStoredLayout } from '../room-organizer/lib/schema';
 import { isShareHash, readShareHash, readSharePayload, type ReadPlanShareIdentity } from '../room-organizer/lib/share';
-import { readReviewLink, reviewCodeFromHash, reviewShortHref } from './review-link-cloud';
+import { readReviewLink, reviewCodeFromHash, reviewCodeFromPath, reviewShortHref } from './review-link-cloud';
+import { parseReviewAccess, type ReviewAccess } from './review-access';
 import type { RoomLayout } from '../room-organizer/lib/types';
 import type { SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 
@@ -45,13 +47,15 @@ export interface LoadedReviewPlan {
   outdoorPlan?: SitePlanData | null | undefined;
   /** 这条评审对应的规范长哈希；短链从服务端取回，Bingo 回执与钉版本都按它对齐。 */
   shareHash: string | null;
+  /** 短链上的发送权限。长链与本机方案没有这一段，按全部允许处理。 */
+  reviewAccess: ReviewAccess;
 }
 
 export type LoadReviewPlanResult =
   | { ok: true; plan: LoadedReviewPlan }
   | { ok: false; reason: keyof typeof REVIEW_PLAN_ERRORS };
 
-/** 分享菜单用：优先短码，短链服务不可用时退回 `#layout=` 长链。 */
+/** 分享菜单用：有短码就给 `/r/<code>`。没有短码时不要拿来生成客户链接。 */
 export function reviewShareHref(origin: string, layoutHash: string, shortCode?: string | null): string | null {
   if (!isShareHash(layoutHash)) return null;
   try {
@@ -91,9 +95,10 @@ export function readLocalReviewLayout(storage: Pick<Storage, 'getItem'> | null):
 export async function loadReviewPlan(input: {
   hash: string;
   search: string;
+  pathname?: string;
   localLayout: RoomLayout | null;
 }): Promise<LoadReviewPlanResult> {
-  const code = reviewCodeFromHash(input.hash);
+  const code = reviewCodeFromPath(input.pathname ?? '') ?? reviewCodeFromHash(input.hash);
   if (code) {
     const record = await readReviewLink(code);
     if (!record.ok) {
@@ -101,6 +106,11 @@ export async function loadReviewPlan(input: {
     }
     const decoded = await readSharePayload(record.value.payload);
     if (!decoded.ok) return { ok: false, reason: decoded.reason };
+    const reviewAccess = parseReviewAccess(
+      record.value.payload && typeof record.value.payload === 'object'
+        ? (record.value.payload as { reviewAccess?: unknown }).reviewAccess
+        : undefined,
+    );
     return {
       ok: true,
       plan: {
@@ -111,6 +121,7 @@ export async function loadReviewPlan(input: {
         identity: decoded.identity,
         outdoorPlan: decoded.outdoor,
         shareHash: record.value.longHash,
+        reviewAccess,
       },
     };
   }
@@ -127,6 +138,7 @@ export async function loadReviewPlan(input: {
         identity: decoded.identity,
         outdoorPlan: decoded.outdoor,
         shareHash: input.hash,
+        reviewAccess: parseReviewAccess(undefined),
       },
     };
   }
@@ -134,12 +146,12 @@ export async function loadReviewPlan(input: {
   const example=query.get('example');
   if(example==='sharing') {
     const layout=createSharingExample({...INITIAL_LAYOUT,name:'分享会示例（虚构）'});
-    return {ok:true,plan:{source:'sample',layout,planKey:'sample:sharing',notice:'虚构的 12 × 10 米场地示例，仅供查看；场地轮廓、门与物料均为示意，不代表消防或无障碍验收。',identity:null,shareHash:null}};
+    return {ok:true,plan:{source:'sample',layout,planKey:'sample:sharing',notice:'虚构的 12 × 10 米场地示例，仅供查看；场地轮廓、门与物料均为示意，不代表消防或无障碍验收。',identity:null,shareHash:null,reviewAccess:parseReviewAccess(undefined)}};
   }
   if(example==='hall-d5') {
     const layout:RoomLayout={name:'Hall D5 尺寸参考（示意）',width:16.5,height:17.2,
       floors:[{id:'hall-d5-example',name:'场地轮廓（示意）',floorColor:'#f5f6f7',items:[]}]};
-    return {ok:true,plan:{source:'sample',layout,planKey:'sample:hall-d5',notice:'尺寸 16.5 × 17.2 米参考东京国际论坛官网标称；矩形轮廓仅为示意。门位、门宽、开启方向、通道及现场条件未知，未作消防或无障碍验收。',identity:null,shareHash:null}};
+    return {ok:true,plan:{source:'sample',layout,planKey:'sample:hall-d5',notice:'尺寸 16.5 × 17.2 米参考东京国际论坛官网标称；矩形轮廓仅为示意。门位、门宽、开启方向、通道及现场条件未知，未作消防或无障碍验收。',identity:null,shareHash:null,reviewAccess:parseReviewAccess(undefined)}};
   }
   const demo = query.get('demo') === '1';
   if (!demo && input.localLayout) {
@@ -152,6 +164,7 @@ export async function loadReviewPlan(input: {
         notice: REVIEW_PLAN_NOTICES.local,
         identity: null,
         shareHash: null,
+        reviewAccess: parseReviewAccess(undefined),
       },
     };
   }
@@ -164,6 +177,7 @@ export async function loadReviewPlan(input: {
       notice: REVIEW_PLAN_NOTICES.sample,
       identity: null,
       shareHash: null,
+      reviewAccess: parseReviewAccess(undefined),
     },
   };
 }

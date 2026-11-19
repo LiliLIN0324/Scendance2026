@@ -16,7 +16,9 @@ import {
   type LoadedReviewPlan,
 } from './load-plan';
 import { itemNames, ReviewPlanSheet } from './review-plan-sheet';
-import { ReviewOutdoorSheet } from './review-outdoor-sheet';
+import { ReviewSiteMap } from './review-site-canvas';
+import { filterPlanByLevel, planLevels } from '../room-organizer/lib/plan-levels';
+import type { ReviewBasemap } from './review-access';
 import { markReviewReturned, readReviewReturn, REVIEW_RETURN_STORAGE_KEY } from './review-return';
 import { appendReviewPinCloud, listReviewPinsCloud } from './review-pins-cloud';
 import {
@@ -53,6 +55,9 @@ export function ReviewSharePage(): JSX.Element {
   const [pinError, setPinError] = useState('');
   // G3：只看链接（?view=1）能看方案与历史钉，但不能新增意见或回复。
   const [viewOnly, setViewOnly] = useState(false);
+  const [levelId, setLevelId] = useState<string | null>(null);
+  const [basemap, setBasemap] = useState<ReviewBasemap>('map');
+  const [syncNote, setSyncNote] = useState('');
   // 访客署名：只存在本机，随钉一起带给创作者；不强制登录。
   const [author, setAuthor] = useState('');
   const [returned, setReturned] = useState(false);
@@ -76,7 +81,7 @@ export function ReviewSharePage(): JSX.Element {
       const current = ++ticket;
       linkHashRef.current=null;canonicalHashRef.current=null;
       setPhase({ kind: 'loading' });
-      setPlanVersion(null);setExportNote('');setPinsUsable(true);
+      setPlanVersion(null);setExportNote('');setPinsUsable(true);setSyncNote('');
       const shareHash=window.location.hash;
       const example=new URLSearchParams(window.location.search).get('example');
       const isolatedExample=!shareHash && (example==='sharing'||example==='hall-d5');
@@ -87,10 +92,13 @@ export function ReviewSharePage(): JSX.Element {
       void loadReviewPlan({
         hash: shareHash,
         search: window.location.search,
+        pathname: window.location.pathname,
         localLayout,
       }).then(async (result) => {
         if (!active || current !== ticket) return;
         setFloorIndex(0);
+        setLevelId(result.ok ? result.plan.reviewAccess.levelId : null);
+        setBasemap(result.ok ? result.plan.reviewAccess.basemapStyle : 'map');
         setPinDraft(null);
         setActivePinId(null);
         setPinError('');
@@ -107,7 +115,7 @@ export function ReviewSharePage(): JSX.Element {
           const canonical=currentPlan.shareHash;
           if(canonical){
             try {const version=await reviewVersionForHash(canonical);if(!active||current!==ticket)return;
-              currentPlan={...currentPlan,planKey:`review-v2:${version.slice(7)}`};linkHashRef.current=shareHash;canonicalHashRef.current=canonical;setPlanVersion(version);
+              currentPlan={...currentPlan,planKey:`review-v2:${version.slice(7)}`};linkHashRef.current=reviewLocationToken();canonicalHashRef.current=canonical;setPlanVersion(version);
             } catch {if(!active||current!==ticket)return;setExportNote('无法核对分享版本，暂不能保存或导出反馈。');}
           }else if(active&&current===ticket)setExportNote('无法核对分享版本，暂不能保存或导出反馈。');
         }
@@ -144,12 +152,20 @@ export function ReviewSharePage(): JSX.Element {
   const floor = plan ? plan.layout.floors[floorIndex] ?? plan.layout.floors[0] : undefined;
   const legend = floor ? itemLegend(floor.items) : { rows: [], hidden: 0 };
   const outdoorMode = !!plan?.outdoorPlan;
+  const levels = plan?.outdoorPlan ? planLevels(plan.outdoorPlan) : [];
+  const access = plan?.reviewAccess;
+  const activeLevelId = access && !access.levels && access.levelId && levels.some(level => level.id === access.levelId)
+    ? access.levelId
+    : (levelId && levels.some(level => level.id === levelId) ? levelId : levels[0]?.id ?? '');
+  const shownOutdoor = plan?.outdoorPlan ? filterPlanByLevel(plan.outdoorPlan, activeLevelId) : null;
+  const shownBasemap: ReviewBasemap = access && !access.basemap ? access.basemapStyle : basemap;
+  const canPin = !viewOnly && (access?.pins !== false) && !exampleOnly;
   const outdoorPins = outdoorMode ? pins.filter(pin => (pin as ReviewPin & { floorId?: string }).floorId === 'outdoor') : [];
   const floorPins = outdoorMode ? pins.filter(pin => (pin as ReviewPin & { floorId?: string }).floorId !== 'outdoor') : pins;
   const pinNumbers = useMemo(() => new Map(pins.map((pin, index) => [pin.id, index + 1])), [pins]);
 
   const openPinDraft = useCallback((pick: { itemId: string | null; x: number; z: number }) => {
-    if (!plan || !floor || exampleOnly || viewOnly) return;
+    if (!plan || !floor || exampleOnly || viewOnly || !plan.reviewAccess.pins) return;
     const floorY = floorElevation(plan.layout.floors, floorIndex);
     const item = pick.itemId ? floor.items.find((entry) => entry.id === pick.itemId) : null;
     const origin = item?.position ? { x: item.position.x, y: floorY, z: item.position.z } : null;
@@ -163,14 +179,14 @@ export function ReviewSharePage(): JSX.Element {
   }, [plan, floor, floorIndex, exampleOnly, viewOnly]);
 
   const openOutdoorPinDraft = useCallback((point: { x: number; y: number }) => {
-    if (!plan?.outdoorPlan || viewOnly) return;
+    if (!plan?.outdoorPlan || viewOnly || !plan.reviewAccess.pins) return;
     setPinError('');
     setOutdoorText('');
     setOutdoorDraft(point);
   }, [plan, viewOnly]);
 
   const commitOutdoorPin = useCallback(async (text: string) => {
-    if (!plan?.outdoorPlan || !outdoorDraft || viewOnly) return;
+    if (!plan?.outdoorPlan || !outdoorDraft || viewOnly || !plan.reviewAccess.pins) return;
     const storage = safeStorage();
     if (!storage) { setPinError(PIN_ERRORS.storage); return; }
     const draft = {
@@ -191,7 +207,9 @@ export function ReviewSharePage(): JSX.Element {
     if (!result.ok) { setPinError(PIN_ERRORS[result.reason] ?? PIN_ERRORS.text); return; }
     setPins(result.pins);
     if (plan.source === 'link' && plan.planKey.startsWith('review-v2:')) {
-      void appendReviewPinCloud({ shareKey: plan.planKey, pin: result.pin, floorId: 'outdoor', author });
+      void appendReviewPinCloud({ shareKey: plan.planKey, pin: result.pin, floorId: 'outdoor', author }).then(remote => {
+        setSyncNote(remote.ok ? '' : cloudSyncFailure(remote.reason));
+      });
     }
     setActivePinId(result.pin.id);
     setOutdoorDraft(null);
@@ -200,10 +218,10 @@ export function ReviewSharePage(): JSX.Element {
   }, [plan, outdoorDraft, viewOnly, author]);
 
   const commitPin = useCallback(async (text: string) => {
-    if (!plan || !pinDraft || !floor || pinWritePending.current || viewOnly) return;
+    if (!plan || !pinDraft || !floor || pinWritePending.current || viewOnly || !plan.reviewAccess.pins) return;
     if(plan.source==='link'&&(!planVersion||!pinsUsable)){setPinError('无法完整核对本机反馈，未保存新意见。');return;}
     const capturedHash=linkHashRef.current;
-    if(plan.source==='link'&&(!capturedHash||window.location.hash!==capturedHash)){setPinError('分享版本已变化，未保存意见。');return;}
+    if(plan.source==='link'&&(!capturedHash||reviewLocationToken()!==capturedHash)){setPinError('分享版本已变化，未保存意见。');return;}
     const storage = safeStorage();
     if (!storage) {
       setPinError(PIN_ERRORS.storage);
@@ -222,11 +240,11 @@ export function ReviewSharePage(): JSX.Element {
       try {
         if(!navigator.locks?.request)throw new Error();
         result=await navigator.locks.request('scendance:review-feedback-pins',{ifAvailable:true},lock=>{
-          if(!lock||linkHashRef.current!==capturedHash||window.location.hash!==capturedHash)throw new Error();return write();
+          if(!lock||linkHashRef.current!==capturedHash||reviewLocationToken()!==capturedHash)throw new Error();return write();
         });
-      }catch{setPinError(linkHashRef.current!==capturedHash||window.location.hash!==capturedHash?'分享版本已变化，未保存意见。':'本机评审正在另一页面修改或无法安全协调，请稍后重试。');return;}
+      }catch{setPinError(linkHashRef.current!==capturedHash||reviewLocationToken()!==capturedHash?'分享版本已变化，未保存意见。':'本机评审正在另一页面修改或无法安全协调，请稍后重试。');return;}
     } else result=write();
-    if(plan.source==='link'&&(linkHashRef.current!==capturedHash||window.location.hash!==capturedHash))return;
+    if(plan.source==='link'&&(linkHashRef.current!==capturedHash||reviewLocationToken()!==capturedHash))return;
     if (!result.ok) {
       if(result.reason==='unknown')setPinsUsable(false);
       setPinError(PIN_ERRORS[result.reason] ?? PIN_ERRORS.text);
@@ -234,7 +252,9 @@ export function ReviewSharePage(): JSX.Element {
     }
     setPins(result.pins);
     if(plan.source==='link'&&plan.planKey.startsWith('review-v2:')){
-      void appendReviewPinCloud({shareKey:plan.planKey,pin:result.pin,floorId:floor.id,author});
+      void appendReviewPinCloud({shareKey:plan.planKey,pin:result.pin,floorId:floor.id,author}).then(remote => {
+        setSyncNote(remote.ok ? '' : cloudSyncFailure(remote.reason));
+      });
     }
     setActivePinId(result.pin.id);
     setPinDraft(null);
@@ -245,7 +265,7 @@ export function ReviewSharePage(): JSX.Element {
   const onComplete = () => {
     if (!plan) return;
     if(plan.source==='link'&&(!planVersion||!pinsUsable)){setReturnNote('无法完整核对本机反馈，未记下完成。');return;}
-    if(plan.source==='link'&&(!linkHashRef.current||window.location.hash!==linkHashRef.current)){setReturnNote('分享版本已变化，未记下完成。');return;}
+    if(plan.source==='link'&&(!linkHashRef.current||reviewLocationToken()!==linkHashRef.current)){setReturnNote('分享版本已变化，未记下完成。');return;}
     const storage = safeStorage();
     if (!storage) {
       setReturnNote('这台浏览器没有记下完成。');
@@ -267,19 +287,19 @@ export function ReviewSharePage(): JSX.Element {
   };
 
   const exportFeedback=async()=>{
-    if(!planVersion||!plan||!pinsUsable||!linkHashRef.current||window.location.hash!==linkHashRef.current){setExportNote('请使用完整分享链接并核对本机反馈后再导出。');return;}
+    if(!planVersion||!plan||!pinsUsable||!linkHashRef.current||reviewLocationToken()!==linkHashRef.current){setExportNote('请使用完整分享链接并核对本机反馈后再导出。');return;}
     try {
       const storage=safeStorage();if(!storage||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins))throw new Error('反馈已变化');
       if((readReviewReturn(versionedReturnStorage(storage,plan.planKey))?.planKey===plan.planKey)!==returned)throw new Error('评审完成状态已变化');
       const json=createReviewFeedbackReceipt(planVersion,pins as ReceiptPin[],returned);
       const canonical=canonicalHashRef.current;if(!canonical)throw new Error('缺少规范分享版本');
       await inspectReviewFeedbackReceipt(json,canonical);
-      if(canonicalHashRef.current!==canonical||window.location.hash!==linkHashRef.current||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins)||
+      if(canonicalHashRef.current!==canonical||reviewLocationToken()!==linkHashRef.current||JSON.stringify(readExactReviewSharePins(plan.planKey,storage))!==JSON.stringify(pins)||
         (readReviewReturn(versionedReturnStorage(storage,plan.planKey))?.planKey===plan.planKey)!==returned)throw new Error('反馈已变化');
       const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
       try {const link=document.createElement('a');link.href=url;link.download='方案评审反馈.json';link.click();}
       finally {URL.revokeObjectURL(url);}
-      setExportNote('已发起下载，请将反馈文件发给方案创建者；不会自动同步。');
+      setExportNote('已发起下载，请将反馈文件发给方案创建者。已经送到审校的意见，对方打开 Bingo 也能看到。');
     } catch {setExportNote('反馈未能导出，请检查浏览器下载权限并保留本页。');}
   };
 
@@ -299,7 +319,7 @@ export function ReviewSharePage(): JSX.Element {
             <div className="rsp-intro-main">
               <p className="rsp-kicker">方案评审</p>
               <h1 id="rsp-plan-title">{plan.layout.name}</h1>
-              <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · 平面上 {placedCount(floor.items)} 件</p>
+              {!outdoorMode && <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · 平面上 {placedCount(floor.items)} 件</p>}
             </div>
             <div className="rsp-intro-side">
               {plan.identity && (
@@ -319,7 +339,7 @@ export function ReviewSharePage(): JSX.Element {
           <div className="rsp-workspace">
             <section className="rsp-stage" aria-label="方案平面">
               <div className="rsp-stage-bar">
-                {plan.layout.floors.length > 1 && (
+                {!outdoorMode && plan.layout.floors.length > 1 && (
                   <div className="rsp-floors" role="group" aria-label="楼层">
                     {plan.layout.floors.map((entry, index) => (
                       <button key={entry.id} type="button" aria-pressed={entry.id === floor.id} onClick={() => { setFloorIndex(index); setPinDraft(null); }}>{entry.name}</button>
@@ -331,13 +351,21 @@ export function ReviewSharePage(): JSX.Element {
                 )}
               </div>
               {plan.planKey==='sample:hall-d5' && <p className="rsp-source"><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
-            {plan.outdoorPlan && (
+            {shownOutdoor && (
               <section className="rsp-outdoor" aria-label="户外方案">
-                <p className="rsp-review-hint" role="status">户外方案：点平面任意位置，钉一条意见。</p>
-                <ReviewOutdoorSheet
-                  plan={plan.outdoorPlan}
+                {canPin && <p className="rsp-review-hint" role="status">点地图落一条意见。滚轮缩放，拖拽平移。</p>}
+                <ReviewSiteMap
+                  plan={shownOutdoor}
+                  levelId={activeLevelId}
+                  canSwitchLevel={access?.levels !== false}
+                  onLevel={setLevelId}
+                  basemap={shownBasemap}
+                  canSwitchBasemap={access?.basemap !== false}
+                  onBasemap={setBasemap}
                   pins={outdoorPins}
+                  pinNumbers={pinNumbers}
                   activePinId={activePinId}
+                  canPin={canPin}
                   onPick={openOutdoorPinDraft}
                   onFocusPin={setActivePinId}
                 />
@@ -365,7 +393,7 @@ export function ReviewSharePage(): JSX.Element {
                 onCancelPin={() => setPinDraft(null)}
               />
             </div>}
-            <div className="rsp-legend">
+            {!outdoorMode && <div className="rsp-legend">
               <h2>场内物件</h2>
               {legend.rows.length === 0 ? <p>这一层平面上还没有物件。</p> : (
                 <ul>
@@ -381,7 +409,7 @@ export function ReviewSharePage(): JSX.Element {
               {(floor.zones ?? []).length > 0 && (
                 <p className="rsp-zones">分区：{(floor.zones ?? []).map((zone) => zone.name).join('、')}</p>
               )}
-            </div>
+            </div>}
           </section>
           {!exampleOnly && <aside className="rsp-rail" aria-labelledby="rsp-comments-title">
             <div className="rsp-rail-head">
@@ -390,7 +418,7 @@ export function ReviewSharePage(): JSX.Element {
                 <span>你的称呼</span>
                 <input value={author} maxLength={24} placeholder="选填，方便对方知道是谁" onChange={event => { const value = event.currentTarget.value; setAuthor(value); try { window.localStorage.setItem('scendance-review-author', value); } catch { /* 忽略 */ } }} />
               </label>
-              <p className="rsp-persist">只存在这台浏览器；完成后导出交给方案创建者。</p>
+              <p className="rsp-persist">{syncNote || (plan.source === 'link' ? '意见会回到方案的审校里。' : '这是本机预览。发给客户的短链上，意见才会回到审校。')}</p>
             </div>
             <div className="rsp-rail-list">
               {pins.length === 0 ? (
@@ -410,7 +438,7 @@ export function ReviewSharePage(): JSX.Element {
                           <b aria-hidden="true">{pinNumbers.get(pin.id)}</b>
                           <span>
                             <strong>{pin.text}</strong>
-                            <small>{pinSubject(pin.itemId, itemNames(floor.items))}</small>
+                            <small>{(pin as ReviewPin & { author?: string }).author || pinSubject(pin.itemId, itemNames(floor.items))}</small>
                           </span>
                         </button>
                       </li>
@@ -418,16 +446,16 @@ export function ReviewSharePage(): JSX.Element {
                   })}
                 </ol>
               )}
-              {viewOnly && <p className="rsp-form-note" role="status">这是只看链接：可以查看方案与已有意见，不能新增或回复。</p>}
+              {(viewOnly || access?.pins === false) && <p className="rsp-form-note" role="status">这是只看链接：可以查看方案与已有意见，不能新增。</p>}
               {pinError && <p className="rsp-form-error" role="alert">{pinError}</p>}
             </div>
             <div className="rsp-rail-foot">
               <div className="rsp-actions">
                 <button type="button" className="rsp-primary" onClick={onComplete}>{returned ? '已完成评审' : '完成评审'}</button>
-                <button type="button" className="rsp-secondary" onClick={exportFeedback} disabled={!planVersion||!pinsUsable}>导出评审反馈</button>
+                <button type="button" className="rsp-backup" onClick={exportFeedback} disabled={!planVersion||!pinsUsable}>导出备份</button>
               </div>
-              <p className="rsp-status" role="status">{exportNote || '导出后请把文件交给方案创建者，反馈不会自动同步。'}</p>
-              <p className="rsp-status" role="status">{returnNote || (plan.source==='link'?'完成后可导出反馈；评审状态只记录在这台浏览器。':'完成状态只记录在这台浏览器。')}</p>
+              {exportNote && <p className="rsp-status" role="status">{exportNote}</p>}
+              <p className="rsp-status" role="status">{returnNote || (plan.source==='link' ? '意见会回到方案的审校里。' : '这是本机预览，意见不会送到审校。')}</p>
             </div>
           </aside>}
           </div>
@@ -437,6 +465,15 @@ export function ReviewSharePage(): JSX.Element {
       )}
     </main>
   );
+}
+
+function reviewLocationToken(): string {
+  return `${window.location.pathname}${window.location.hash}`;
+}
+
+function cloudSyncFailure(reason: string): string {
+  if (reason === 'disabled') return '评审服务没接上，这条意见只留在这台浏览器，对方的审校里看不到。';
+  return '这条意见没有送到审校。请检查网络后再钉一次，或先导出备份。';
 }
 
 function safeStorage(): Storage | null {
