@@ -2,4 +2,6 @@
 # without changing the browser URL, so the client can read the real id.
 /review/:id /review/local.html 200
 # 客户评审短链：/r/<code> 打开同一张评审页，地址留在路径上（微信会剥掉哈希）。
-/r/:code /review.html 200
+# 目标写 /review，不能写 /review.html：Pages 的 HTML 规范化会把 .html 目标 308 到 /review，
+# 短码随地址一起丢掉，客户打开就退回本机/示例方案。
+/r/:code /review 200
