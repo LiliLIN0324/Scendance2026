@@ -27,4 +27,15 @@ describe('客户评审短链的 Pages 重写', () => {
     expect(destination).toBe('/review');
     expect(status).toBe('200');
   });
+
+  it('不保留指向已删除静态页的旧 /review/:id 重写', () => {
+    // app/review/[id] 在 T4 合并时删除，local.html 从未在产物里，重写只会 404。
+    expect(ruleFor('/review/:id')).toBeUndefined();
+  });
+
+  it('所有 200 重写的目标都不以 .html 结尾', () => {
+    for (const [, destination, status] of rules) {
+      if (status === '200') expect(destination).not.toMatch(/\.html$/);
+    }
+  });
 });
