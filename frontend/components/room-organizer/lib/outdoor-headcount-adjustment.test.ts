@@ -16,6 +16,15 @@ describe("headcountOnlyAdjustment", () => {
     expect(headcountOnlyAdjustment(base, "人数改为 150 人，保持现有分区。")).toBe(150);
   });
 
+  it("模型把同一句判成 revise 时仍按简报人数处理", () => {
+    expect(headcountOnlyAdjustment({ ...base, action: "revise" } as OutdoorTurn, "人数改为 150 人，保持现有分区。")).toBe(150);
+  });
+
+  it("模型只回 ask 且没有 guests 事实时，取本句明确的人数", () => {
+    const ask = { ...base, action: "ask", facts: {} } as unknown as OutdoorTurn;
+    expect(headcountOnlyAdjustment(ask, "人数改为 150 人，保持现有分区。")).toBe(150);
+  });
+
   it("真正带 operation 的空间调整不吞掉", () => {
     const withOperation = {
       ...base,
@@ -28,8 +37,8 @@ describe("headcountOnlyAdjustment", () => {
     expect(headcountOnlyAdjustment(base, "保持现有分区。")).toBeNull();
   });
 
-  it("非 adjust/connect 动作不在这里处理", () => {
-    expect(headcountOnlyAdjustment({ ...base, action: "objects" } as OutdoorTurn, "人数改为 150 人")).toBeNull();
+  it("带空间动作的同一句不在这里处理", () => {
+    expect(headcountOnlyAdjustment({ ...base, action: "objects" } as OutdoorTurn, "人数改为 150 人，并把舞台挪到东侧")).toBeNull();
   });
 });
 
