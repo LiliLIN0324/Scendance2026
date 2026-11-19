@@ -12,26 +12,47 @@ export interface OutdoorTaskProgress {
 }
 
 /** 同一任务的一张卡：只写真实动作，不编执行时长、不展示底层工具噪声。 */
-export function OutdoorTaskCard({ task, canStop = false, onStop, onPrefill, onInspectFacility, children }: {
+export function OutdoorTaskCard({ task, canStop = false, historical = false, onStop, onPrefill, onInspectFacility, children }: {
   task: OutdoorTaskProgress;
   canStop?: boolean;
+  /** T1-c：已有 ToolCallTrace 当前状态时，任务卡只留可展开的历史过程，不再抢当前进度位。 */
+  historical?: boolean;
   onStop(): void;
   onPrefill(text: string): void;
   onInspectFacility?(id: string): void;
   children?: ReactNode;
 }): JSX.Element {
   const labels = { ready: '待操作', working: '正在处理', ask: '待你回复', confirm: '待你确认', done: '已应用', stopped: '已停止', blocked: '需要补充' };
-  return <section className="ap-card ap-venue-card" aria-label="户外规划任务" data-testid="outdoor-task-card" data-state={task.state}>
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
-      <span className="ap-option-row-mark" role="status">{labels[task.state]}</span>
-      <span className="ap-lead-body" style={{ flex: 1 }}>{task.action}</span>
-      {canStop && task.state === 'working' && <button type="button" className="chip" onClick={onStop}>{task.stopLabel ?? '停止查找'}</button>}
-    </div>
-    <p className="ap-lead-title">{task.intent}</p>
-    {task.steps.length > 0 && <details style={{ width: '100%' }}>
-      <summary className="ap-lead-body">已完成 {task.steps.length} 步 · 查看最近步骤</summary>
-      <ol className="ap-lead-body">{task.steps.slice(-3).map((step, index) => <li key={`${index}:${step}`}>✓ {step}</li>)}</ol>
-    </details>}
+  const stopButton = canStop && task.state === 'working'
+    ? <button type="button" className="chip" onClick={onStop}>{task.stopLabel ?? '停止查找'}</button>
+    : null;
+  const stepList = task.steps.length > 0 && <details style={{ width: '100%' }}>
+    <summary className="ap-lead-body">已完成 {task.steps.length} 步 · 查看最近步骤</summary>
+    <ol className="ap-lead-body">{task.steps.slice(-3).map((step, index) => <li key={`${index}:${step}`}>✓ {step}</li>)}</ol>
+  </details>;
+  return <section className="ap-card ap-venue-card" aria-label="户外规划任务" data-testid="outdoor-task-card" data-state={task.state} data-historical={historical || undefined}>
+    {historical ? <>
+      {stopButton && <div className="ap-task-history-stop">{stopButton}</div>}
+      <details className="ap-task-history">
+        <summary className="ap-task-history-summary">
+          <span className="ap-option-row-mark" role="status">{labels[task.state]}</span>
+          <span className="ap-lead-body">任务过程</span>
+        </summary>
+        <div className="ap-task-history-body">
+          <p className="ap-lead-body">{task.action}</p>
+          <p className="ap-lead-title">{task.intent}</p>
+          {stepList}
+        </div>
+      </details>
+    </> : <>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
+        <span className="ap-option-row-mark" role="status">{labels[task.state]}</span>
+        <span className="ap-lead-body" style={{ flex: 1 }}>{task.action}</span>
+        {stopButton}
+      </div>
+      <p className="ap-lead-title">{task.intent}</p>
+      {stepList}
+    </>}
     {children}
     {(task.state === 'done' || task.state === 'ready') && task.focusFacilityId && onInspectFacility && <button type="button" className="ap-option-row" onClick={() => onInspectFacility(task.focusFacilityId!)}>选中设施 · 查看模型候选 / 生成 / 上传</button>}
     {task.prompts?.length ? <div className="ap-option-pick">{task.prompts.map(text => <button type="button" className="ap-option-row" key={text} onClick={() => onPrefill(text)}>{text}</button>)}</div> : null}

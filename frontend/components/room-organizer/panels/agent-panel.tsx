@@ -4561,7 +4561,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog });
   // T1-c：ToolCallTrace 是唯一的「当前执行状态」；它出现时卡内阶段图注让位，
   // 任务卡的 working/done/stopped 也收进默认收起的「任务过程」，只保留可操作子卡与停止钮。
-  const traceActive = Boolean(processText || agent.streamPreview || traceRows.some(row => row.status === 'running'));
+  const traceActive = mode === 'layout' && Boolean(processText || agent.streamPreview || traceRows.some(row => row.status === 'running'));
   const outdoorTaskHistorical = Boolean(traceActive && agent.outdoorTask && ['working', 'done', 'stopped'].includes(agent.outdoorTask.state));
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
   // 地图优先：地址没定就只给选址句，不给无地点的设计句；定完地点再回到活动/布置句。
