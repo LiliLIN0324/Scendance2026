@@ -1490,7 +1490,8 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer.is-stack-first,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel.is-stack-first,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-workbench-capture.is-stack-first,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-stack-first {
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-stack-first,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-generation-card.is-stack-first {
   /* 百分比必须由变量直接给（calc(比例 * 100%) 在本机 Chrome 会被整条丢弃）。 */
   flex: 0 0 var(--sc-left-stack-percent, 50%) !important;
   min-height: 0; height: auto !important; width: 100% !important; max-width: none !important;
@@ -1498,7 +1499,8 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer.is-stack-second,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel.is-stack-second,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-workbench-capture.is-stack-second,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-stack-second {
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-stack-second,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-generation-card.is-stack-second {
   flex: 1 1 0 !important; min-height: 0 !important; max-height: none !important;
   width: 100% !important; max-width: none !important;
 }
@@ -1542,10 +1544,12 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-agent-panel.is-detached,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-workbench-capture.is-detached,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-person-chat.is-detached,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-generation-card.is-detached,
 .sc-workbench .sc-left-column > .sc-left-drawer.is-detached,
 .sc-workbench .sc-left-column > .sc-agent-panel.is-detached,
 .sc-workbench .sc-left-column > .sc-workbench-capture.is-detached,
-.sc-workbench .sc-left-column > .sc-person-chat.is-detached {
+.sc-workbench .sc-left-column > .sc-person-chat.is-detached,
+.sc-workbench .sc-left-column > .sc-generation-card.is-detached {
   /* 位置/尺寸从内联 CSS 变量来：上一条 !important 的 inset:auto 会把内联 left/top 抹掉。 */
   position: fixed !important;
   left: var(--sc-float-x, 24px) !important; top: var(--sc-float-y, 72px) !important;

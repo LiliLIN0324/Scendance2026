@@ -48,12 +48,12 @@ function fakeStorage(seed?: string) {
 const VIEWPORT = { width: 1440, height: 900 };
 
 describe('left stack layout state', () => {
-  it('默认户外在上、五五分，没有浮着的小窗，四张卡的独立小窗矩形都落在视口里', () => {
+  it('默认户外在上、五五分，没有浮着的小窗，五张卡的独立小窗矩形都落在视口里', () => {
     const state = defaultLeftStackState(VIEWPORT);
     expect(state.first).toBe('outdoor');
     expect(state.ratio).toBe(0.5);
     expect(state.detached).toEqual([]);
-    for (const panel of ['outdoor', 'bingo', 'capture', 'chat'] as const) {
+    for (const panel of ['outdoor', 'bingo', 'capture', 'chat', 'generation'] as const) {
       const rect = state.rects[panel];
       expect(rect.width).toBeGreaterThanOrEqual(LEFT_STACK_FLOAT_MIN_WIDTH);
       expect(rect.x).toBeGreaterThanOrEqual(LEFT_STACK_FLOAT_MARGIN);
@@ -150,6 +150,7 @@ describe('left stack layout state', () => {
     expect(legacy.rects.outdoor).toEqual({ x: 10, y: 20, width: 300, height: 400 });
     expect(legacy.rects.capture).toEqual(defaultFloatRect('capture', VIEWPORT));
     expect(legacy.rects.chat).toEqual(defaultFloatRect('chat', VIEWPORT));
+    expect(legacy.rects.generation).toEqual(defaultFloatRect('generation', VIEWPORT));
 
     const list = normalizeLeftStackState({ detached: ['chat', 'chat', 'capture', 'outdoor'] }, VIEWPORT);
     expect(list.detached).toEqual(['chat', 'capture']);

@@ -34,6 +34,7 @@ describe('左轨主入口面板', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     expect(source).toContain('agentPanelVisible = (!agentCollapsed || agentClosing) && !sidePanel');
     expect(source).toContain('agentPanelOpen = !agentCollapsed && !agentClosing && !sidePanel');
-    expect(source).toContain('agentPanelVisible && <AgentPanel');
+    // 2026-11-19：生成卡占栏时 Bingo 也不渲染（它已进左栏堆栈，但只与户外卡共存）。
+    expect(source).toContain('!generationOpen && !personChat && agentPanelVisible && !businessCardOpen && <AgentPanel');
   });
 });
