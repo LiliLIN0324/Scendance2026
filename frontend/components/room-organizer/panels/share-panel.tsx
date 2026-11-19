@@ -53,6 +53,8 @@ export function SharePanel({
   qrSvg,
   exports,
   reviewLink = '',
+  permits = { pins: true, levels: true, basemap: true },
+  onPermit = () => undefined,
   onIssueAudience,
   onSendBingo,
   onCopyReview = () => undefined,
@@ -79,6 +81,9 @@ export function SharePanel({
   exports: ShareExportEntry[];
   /** 当前评审链接；空串表示还没生成。 */
   reviewLink?: string;
+  /** 发给客户时的三枚开关，默认全开。墨色，不用绿色。 */
+  permits?: { pins: boolean; levels: boolean; basemap: boolean };
+  onPermit?: (key: 'pins' | 'levels' | 'basemap', value: boolean) => void;
   onIssueAudience(): void;
   onSendBingo(): void;
   onCopyReview?: () => void;
@@ -101,6 +106,12 @@ export function SharePanel({
     {tab === 'share' && <section className="sc-share-body" role="tabpanel" aria-label="分享" id="share-panel-share">
       <ShareHeading icon={<MarkIcon />} title={title} />
       <p className="sc-share-desc">{OPEN_LINE}</p>
+      <fieldset className="sc-share-permits">
+        <legend>发给客户评审</legend>
+        <PermitRow label="可落钉意见" pressed={permits.pins} onChange={value => onPermit('pins', value)} />
+        <PermitRow label="可切换图层" pressed={permits.levels} onChange={value => onPermit('levels', value)} />
+        <PermitRow label="可切换底图" pressed={permits.basemap} onChange={value => onPermit('basemap', value)} />
+      </fieldset>
       {reviewLink ? <>
         <div className="sc-share-link" data-testid="review-link-row">
           <span className="sc-share-link-text" title={reviewLink}>{displayShareUrl(reviewLink)}</span>
@@ -206,6 +217,22 @@ function ShareActionRow({ label, status, icon, ariaLabel, disabled, onClick }: {
     <span className="sc-share-row-label">{label}</span>
     <span className="sc-share-row-status">{status}</span>
   </button>;
+}
+
+function PermitRow({ label, pressed, onChange }: { label: string; pressed: boolean; onChange(value: boolean): void }): JSX.Element {
+  return <label className="sc-share-permit">
+    <span>{label}</span>
+    <button
+      type="button"
+      className="sc-share-switch"
+      role="switch"
+      aria-checked={pressed}
+      aria-label={label}
+      onClick={() => onChange(!pressed)}
+    >
+      <i />
+    </button>
+  </label>;
 }
 
 function Tab({ id, selected, onSelect, children }: {

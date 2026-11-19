@@ -158,3 +158,15 @@ frontend/public/_internal-learning/
 
 # 会话临时目录（日志、一次性脚本；2026-11-18）
 /.tmp/
+
+# 2026-11-19 清工作树：以下都是本机产物/一次性文件，不入仓
+# 构建备份（`.next-*` 匹配不到 `.next.bak-*`，两处合计约 2.1 GB）
+frontend/.next.bak-*/
+# lux3d 代理落盘的本机场景包（约 222 MB）
+/aholo-downloads/
+# 会话级检索索引
+/.memsearch/
+# 交付目录里的一次性产物：验收截图 / 报告备份 / 临时脚本
+/deliverables/*.png
+/deliverables/**/*.bak*
+/deliverables/tmp-*

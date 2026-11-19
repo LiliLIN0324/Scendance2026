@@ -1,15 +1,22 @@
 {
   "schemaVersion": 2,
-  "archivedAt": "2026-11-19T07:10:00+08:00",
+  "archivedAt": "2026-11-19T11:40:00+08:00",
   "site": "https://scendance-scene-planner-ewz.pages.dev/",
   "round": "第六轮（2026-11-19）：真实登录态 + 真实云端 + 真机复跑",
   "account": "walkthrough-79@scendance.test（本轮新建的走查专用账号；不碰团队账号数据）",
   "harness": "docs/evidence/79/tools/（Playwright + HAR + CDP 级离线 + Supabase 管理 API 只读 SQL）",
-  "note": "本文件是走查记录本的归档快照，不是发布结论。判定口径：固定数据 && 真实浏览器 == 'pass' && 真实云端 == 'pass' 三类齐才过；partial 不算过；blocked 单列（不算过也不算失败）；n/a 不能顶 pass。门禁解除只能由人签字，agent 不能代签。",
+  "note": "本文件是走查记录本的归档快照，不是发布结论。判定口径：固定数据 && 真实浏览器 == 'pass' && 真实云端 == 'pass' 三类齐才过；partial 不算过；n/a 不能顶 pass。2026-11-19 部署缺口已修复：scene-api v64（当前 v65）+ 两条迁移，PUT /outdoor-plans 已 200；#7 因此转为 pass。#9 的云端仍为 blocked：该轮 house-7jblibyk / 1438B 两次 PUT 均 404，部署后未重跑；08/cloud-revision 的 revision 3→4 是 #8b 的 house-3ik2jdf2 / 1440B，不计入 #9。#8b 的可复跑读数是 0→2 / 574→1440B，写请求 2 条。2026-11-19 11:23 复跑 #1 时，分区用途回合被上游判 invalid（输入需调整），未出分区预览；空白项目 / 组合需求 / 6 候选 / 红线 12 点已复现。#3/#4/#5/#8 待复跑；#10 缺服务端日志权限。门禁解除只能由人签字，agent 不能代签。",
   "deployGap": {
-    "summary": "正式站前端已调用 PUT /outdoor-plans，但线上 scene-api（2026-11-16 部署）没有该端点，DB 迁移 20261117180000 / 20261117190000 未应用，scene_private.outdoor_plans 表不存在 → 所有依赖云端方案 revision 的读数取不到。",
+    "summary": "2026-11-19 已修复：scene-api 本轮部署到 v64，当前线上 v65（01:46:40Z，非本轮操作，未核对函数体）；迁移 20261117180000 / 20261117190000 已应用；PUT /outdoor-plans 由 404 变 200，GET 返回 200 []，revision 可读写。历史缺口见 00/2026-11-19-deploy-gap.md，解决读数见 00/2026-11-19-deploy-resolution.md。",
     "evidence": "docs/evidence/79/00/2026-11-19-deploy-gap.md",
-    "blockedCases": [1, 3, 4, 5, 7, 8, 9, 10]
+    "resolution": "docs/evidence/79/00/2026-11-19-deploy-resolution.md",
+    "resolvedAt": "2026-11-19T01:40:02Z",
+    "sceneApiVersion": 65,
+    "firstDeployVersion": 64,
+    "blockedCases": [],
+    "partialCases": [1, 3, 4, 5, 6, 8, 9, 10, 11],
+    "resolvedCases": [7],
+    "remainingCases": [1, 3, 4, 5, 6, 8, 9, 10, 11]
   },
   "ledger": [
     {
@@ -18,9 +25,9 @@
       "browser": "pass",
       "cloud": "blocked",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/01/2026-11-19-case01-round6.md；2026-11-19-case01.json",
-      "readings": "空白项目真的建成（新活动 11-19 06:47，全 0）；组合需求 → 6 条地点候选 → 就定这个场地 → 红线 12 点入画布；账号物料库已非空（种入 1 条真实 Aholo 生成素材，sha256 校验一致）",
-      "gap": "云端方案副本端点 404、表不存在 → revision 前后对照取不到"
+      "evidence": "docs/evidence/79/01/2026-11-19-case01-round6.md；2026-11-19-case01.json；2026-11-19-case01-round7.md",
+      "readings": "第六轮：空白项目真的建成（新活动 11-19 06:47，全 0）；组合需求 → 6 条地点候选 → 就定这个场地 → 红线 12 点入画布；账号物料库已非空（种入 1 条真实 Aholo 生成素材，sha256 校验一致）。2026-11-19 11:23 复跑：新选址面板候选 6 条 → 就定这个场地 → 红线 12 点 / 574B 复现；分区用途回合提交后被上游判 invalid（输入需调整），未出分区预览，未进入物料检索",
+      "gap": "云端端点已于 2026-11-19 恢复；本条本轮未重跑 revision。当前阻塞是分区用途回合被上游判 invalid（『问题或近期对话中含链接、敏感信息或超出长度』），需换说法/清历史/手画分区后再验，不能记全绿"
     },
     {
       "case": 2,
@@ -39,7 +46,7 @@
       "conclusion": "partial",
       "evidence": "docs/evidence/79/03/2026-11-19-case03.json",
       "readings": "模型通道本轮已恢复（第五轮的 provider_error 不复现）：conversation-api/assistant/chat/stream 200，真实思考流；「主通道改走场地北侧的仁和路，别沿湖滨路走」确实发出并拿到 200",
-      "gap": "本轮未能取到「候选前后对照」——本轮分区提案未落进画布（分区数 0→0），小改前后没有可比的路线候选；云端 revision 亦不可用"
+      "gap": "本轮未能取到「候选前后对照」——本轮分区提案未落进画布（分区数 0→0），小改前后没有可比的路线候选；云端端点已于 2026-11-19 恢复，本条本轮未复跑 revision"
     },
     {
       "case": 4,
@@ -49,17 +56,17 @@
       "conclusion": "partial",
       "evidence": "docs/evidence/79/07/2026-11-19-case07-08-round6.md（第六轮复现：帮我分区 → 零模型请求、只给唯一下一步）",
       "readings": "前半段第六轮复现成立：无范围发设计句 → 零 /assistant/chat 请求 → 「还没定在哪…这句我先留着。下一步：在地图上选地点。」",
-      "gap": "「再改预算或人数」的后半段未跑；云端 revision 不可用"
+      "gap": "「再改预算或人数」的后半段未跑；云端端点已于 2026-11-19 恢复，本条本轮未复跑 revision"
     },
     {
       "case": 5,
       "label": "地图部分、离线或无路网",
       "browser": "partial",
-      "cloud": "unclaimed",
+      "cloud": "blocked",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/11/2026-11-19-case05-11-round6.md；docs/evidence/79/05/2026-11-19-offline-readings.json；2026-11-19-offline-*.png",
+      "evidence": "docs/evidence/79/11/2026-11-19-case05-11-round6.md；docs/evidence/79/05/2026-11-19-offline-readings.json；2026-11-19-offline-place-search.png；2026-11-19-offline-apply.png；2026-11-19-offline-agent-turn.png；2026-11-19-online-before-offline.png",
       "readings": "本轮用 CDP 级离线（context.setOffline）而非页面级注入：离线窗口内地点检索无候选、本机方案零变化（分区 0、红线 12 不变）、无写请求；恢复网络后无静默重放（只见 studios 轮询与 settings 404）",
-      "gap": "离线窗口内出现 2 条 GET /studios 200（疑为缓存命中），「地图部分」这格仍未完全验到；Agent 回合失败文案本轮未抓到；云端 revision 前后对照取不到"
+      "gap": "离线窗口内出现 2 条 GET /studios 200（疑为缓存命中），「地图部分」这格仍未完全验到；Agent 回合失败文案本轮未抓到；云端端点已于 2026-11-19 恢复，本条本轮未复跑 revision"
     },
     {
       "case": 6,
@@ -67,7 +74,7 @@
       "browser": "partial",
       "cloud": "n/a",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/06/2026-11-19-case06-not-logged-in.md；2026-11-19-not-logged-in.json",
+      "evidence": "docs/evidence/79/06/2026-11-19-case06-not-logged-in.md；2026-11-19-not-logged-in.json；2026-11-19-case06-trigger-runbook.md",
       "readings": "「未登录」这一类已单独触发并取证：零认证调用、零模型请求、界面如实退回（没有候选，请补充城市或地址），不假装成功",
       "gap": "功能关闭 / 额度不足 / 网络超时三类需要改云端函数环境变量（部署级动作，未获授权）"
     },
@@ -75,21 +82,21 @@
       "case": 7,
       "label": "待预览时说「等等」或过时的「确认」",
       "browser": "pass",
-      "cloud": "blocked",
-      "conclusion": "partial",
+      "cloud": "pass",
+      "conclusion": "pass",
       "evidence": "docs/evidence/79/07/2026-11-19-case07-08-round6.md；2026-11-19-v2-chain-07-08-09.json",
-      "readings": "待预览时说「等等，先别动」→ 旧提案按钮消失（proposalStillVisible=false）、本机方案零变化、对云端零写（只有 1 条模型请求）；重发同一句拿到的是新提案（按钮变为「确认分区并预览物料排布」）",
-      "gap": "云端方案 revision 前后对照取不到（端点 404 / 表不存在）"
+      "readings": "待预览时说「等等，先别动」→ 旧提案按钮消失（proposalStillVisible=false）、本机方案零变化、对云端零写（第 3 步只有 1 条模型 POST，无 outdoor-plans / outdoor-history 写）；重发同一句拿到的是新提案（按钮变为「确认分区并预览物料排布」）",
+      "gap": "「过时的确认」子场景未单独取证；本轮按「等等」变体判定"
     },
     {
       "case": 8,
       "label": "应用中刷新、双点确认、切项目",
       "browser": "partial",
-      "cloud": "blocked",
+      "cloud": "partial",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/08/2026-11-19-v2-double-click-apply.png；docs/evidence/79/07/2026-11-19-case07-08-round6.md",
-      "readings": "8b 双点确认已单独取证：间隔 <300ms 连点两次，第二次点击时按钮已消失（不再指向同一元素），画布分区 0→2 只应用一次",
-      "gap": "8a 应用中刷新、8c A→B→A 切项目本轮未跑；云端 revision 取不到"
+      "evidence": "docs/evidence/79/08/2026-11-19-v2-double-click-apply.png；docs/evidence/79/07/2026-11-19-case07-08-round6.md；2026-11-19-v2-chain-07-08-09.json；2026-11-19-cloud-revision.json",
+      "readings": "8b 双点确认已单独取证：间隔 <300ms 连点两次，第二次点击时按钮已消失（不再指向同一元素），画布分区 0→2、方案 574→1440B 只应用一次；该步写请求 2 条：PUT outdoor-history 200 + PUT outdoor-plans 200（plans 仅 1 条，原始读数见 08/2026-11-19-v2-chain-07-08-09.json）",
+      "gap": "8a 应用中刷新、8c A→B→A 切项目本轮未跑；#8 的云端只验到 8b"
     },
     {
       "case": 9,
@@ -98,18 +105,18 @@
       "cloud": "blocked",
       "conclusion": "partial",
       "evidence": "docs/evidence/79/09/2026-11-19-case09-round6.md；2026-11-19-case09-v2.json",
-      "readings": "应用（分区 2 / 1438B）→ 画布 Ctrl+Z 撤销（分区 0 / 574B，红线保留，撤销期间零云端写）→ 重发同一句再应用一次（分区 2 / 1438B，与第一次逐项一致）",
-      "gap": "revision 前后对照取不到；undoGroup 是室内场景域字段，户外域没有云端撤销端点"
+      "readings": "应用（分区 2 / 1438B）→ 画布 Ctrl+Z 撤销（分区 0 / 574B，红线保留，撤销期间零云端写）→ 重发同一句再应用一次（分区 2 / 1438B，与第一次逐项一致）；该轮两条 PUT /outdoor-plans 都是 404，方案没有写入云端",
+      "gap": "同轮 #9 浏览器链的 revision 前后对照未取到；该轮 house-7jblibyk / 1438B 两次 PUT 均 404，部署后未对同一条方案重跑；08/2026-11-19-cloud-revision.json 的 3→4 属于 #8b 的 house-3ik2jdf2 / 1440B，不计入 #9；undoGroup 是室内场景域字段，户外域没有云端撤销端点"
     },
     {
       "case": 10,
       "label": "一条真实模型失败，一条纯本地成功",
       "browser": "partial",
-      "cloud": "unclaimed",
+      "cloud": "partial",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/07/2026-11-19-case07-08-round6.md §7；docs/evidence/79/06/2026-11-19-case06-not-logged-in.md",
-      "readings": "真实失败样本：按分区摆放物料时报「市集摊位区放不下 1 件带桌摊位…整批未写入」；纯本地成功样本：未登录/无范围时的待续需求退回（零模型请求、零云端写）",
-      "gap": "诊断编号与服务端日志关联仍缺（需云端日志权限）"
+      "evidence": "docs/evidence/79/10/2026-11-19-log-correlation-round6.md；2026-11-19-logs-assistant-failures.json；2026-11-19-logs-invalid-shape-window.json；2026-11-19-logs-invalid-input.json；docs/evidence/79/07/2026-11-19-case07-08-round6.md §7；docs/evidence/79/06/2026-11-19-case06-not-logged-in.md",
+      "readings": "服务端日志已可读（新 logs 入口，ClickHouse SQL）。00:00–05:00Z 内只有 1 条真实 assistant_chat_failure：01:54:29.450Z，slot=openai-next，reason=invalid_shape；前后有同路径 POST 200 与一次重试。#1 invalid 窗口 03:24:00–13 两次 POST 200、0 条分类事件，符合模型前输入校验（assistant-chat.ts:84 不调用 diagnose）。",
+      "gap": "仍缺 01:54 同轮 UI 失败卡的逐字对照，以及纯本地成功的同窗 0 请求样本；turnId 不出浏览器，只能做到时间窗 + 分类一致性的弱关联，做不到按编号查全链"
     },
     {
       "case": 11,
@@ -123,18 +130,21 @@
     }
   ],
   "counts": {
-    "pass": 1,
-    "partial": 10,
+    "pass": 2,
+    "partial": 9,
     "blocked": 0,
     "fail": 0,
     "na": 0,
-    "note": "全绿仍然只有 #2 一条。partial 不计入全绿；本文件里的 blocked 指该用例的某一维度被部署缺口挡住（不算过也不算失败）；门禁解除仍需人签字。"
+    "note": "全绿 2 条：#2、#7（#7 是本轮部署修复后新增）。#8b 的写请求 2 条已验，但 #8a/#8c 未跑，故 #8 仍 partial。#9 的云端为 blocked：该轮 house-7jblibyk 两次 PUT 均 404，部署后未重跑；#8b 的 CAS 3→4 不计入 #9。#10 的服务端日志已打通，找到 1 条真实 invalid_shape 事件，但同轮 UI 对照与纯本地 0 请求样本仍缺，故仍 partial。partial/blocked 不计入全绿。门禁解除仍需人签字。"
   },
   "signoff": {
     "status": "pending-human",
     "checklist": "docs/evidence/79/2026-11-19-signoff-checklist.md",
+    "completedItems": [
+      "2026-11-19 已部署 scene-api 本轮 v64（当前 v65），仅应用 20261117180000 / 20261117190000 两条迁移；其余 8 条未动"
+    ],
     "blockingItems": [
-      "部署 main 的 Edge Functions 到 wkhfvnzgopjdzxlmycks，并应用缺失的 10 条迁移（含 20261117180000 / 20261117190000）",
+      "补齐 #1/#3/#4/#5/#8/#9/#10/#11 的剩余证据（当前 2/11 全绿）",
       "确认「额度不足 / 网络超时」两类的触发方式（需改云端函数环境变量）",
       "在 walkthrough.json 上签字"
     ]

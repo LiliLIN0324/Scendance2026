@@ -13,7 +13,8 @@ import type { StoredEnvironment } from '../lib/environment-preference';
 
 // 2026-11-19：上传走本机代理，单测里只验「面板把选中的文件交给上传口、并把结果/错误写回界面」。
 const uploadScanFile = vi.hoisted(() => vi.fn());
-vi.mock('../lib/scan-upload', () => ({ uploadScanFile }));
+const findScanLodUrl = vi.hoisted(() => vi.fn());
+vi.mock('../lib/scan-upload', () => ({ uploadScanFile, findScanLodUrl }));
 // 空间卡现在常驻结构入口；这里只要给它一份最小壳体，不验证结构交互。
 const structureContext = vi.hoisted(() => ({
   layout: { name: '普通壳体', width: 10, height: 8, floors: [{ id: 'ground', name: '活动场地', height: 3, items: [] }] },
@@ -25,18 +26,23 @@ vi.mock('../contexts', () => ({
 }));
 
 afterEach(() => { cleanup(); localStorage.clear(); });
-beforeEach(() => { uploadScanFile.mockReset(); });
+beforeEach(() => {
+  uploadScanFile.mockReset();
+  findScanLodUrl.mockReset();
+  findScanLodUrl.mockResolvedValue(undefined);
+});
 
 function environment(preview: SplatPreviewState = { status: 'idle', assetId: '', name: '' }, current: StoredEnvironment | null = null, thumbnails?: Readonly<Record<string, string>>) {
   return { preview, current, environments: current ? [current] : [], floors: [{ id: 'ground', name: '活动场地' }], onSelect: vi.fn(), onRemove: vi.fn(), onSetFloor: vi.fn(), onClear: vi.fn(), ...(thumbnails ? { thumbnails } : {}) };
 }
 
 describe('SpacePanel', () => {
-  it('puts real venues first and folds secondary actions', () => {
+  // 2026-11-19：登记要先探一次本机文件在不在，变成了异步；面板首帧可能是空列表。
+  it('puts real venues first and folds secondary actions', async () => {
     render(<SpacePanel layout={INITIAL_LAYOUT}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
     // 面板打开即自动登记云端扫描库（索引 8 套实景），空库提示只在真没数据时出现
-    expect(screen.getByText(/\d+ 套已扫描/)).toBeTruthy();
+    expect(await screen.findByText(/\d+ 套已扫描/)).toBeTruthy();
     expect(screen.queryByText('用手机拍一段场地')).toBeNull();
   });
 
@@ -170,7 +176,25 @@ describe('SpacePanel', () => {
     fireEvent.change(input);
     await waitFor(() => expect(uploadScanFile).toHaveBeenCalledTimes(1));
     expect(uploadScanFile.mock.calls[0][0]).toBe(file);
+    expect(findScanLodUrl).toHaveBeenCalledWith('新空间 2026-11-9.spz');
     expect((await screen.findByRole('status')).textContent).toContain('已加入「新空间 2026-11-9」');
+  });
+
+  // 2026-11-19：同名的本地 LOD 目录要在上传时就挂上，别等到预览才发现只有全量一档。
+  it('card：探到同名 LOD 就随上传一起登记', async () => {
+    findScanLodUrl.mockResolvedValue('/scans/jiangnan-village/lod-meta.json');
+    uploadScanFile.mockResolvedValue({
+      assetId: '00000000-0000-4000-8000-000000000011', kind: 'spz', name: 'jiangnan-village',
+      bytes: 422_083_664, savedAt: Date.now(), lodUrl: '/scans/jiangnan-village/lod-meta.json',
+    });
+    render(<SpacePanel layout={makeLayout()} variant="card"/>);
+    const input = screen.getByTestId('scan-upload-input') as HTMLInputElement;
+    const file = new File([new Uint8Array([0x1f, 0x8b, 0x08, 0x00])], 'jiangnan-village.spz');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    fireEvent.change(input);
+    await waitFor(() => expect(uploadScanFile).toHaveBeenCalledTimes(1));
+    expect(uploadScanFile.mock.calls[0][1]).toMatchObject({ lodUrl: '/scans/jiangnan-village/lod-meta.json' });
+    expect((await screen.findByRole('status')).textContent).toContain('多档 LOD');
   });
 
   it('card：上传失败就把原因显示出来，并自动展开这一段', async () => {

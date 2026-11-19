@@ -16,6 +16,7 @@ import { generationRequestSchema, type GenerationRequest } from "../../supabase/
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
 import {isLocalDevHostname,localAutoLoginCredentials,rememberLocalAutoLogin,shouldAttemptLocalAutoLogin} from './local-auto-login';
+import { rebuiltSceneRefs } from '../components/room-organizer/lib/wedding-venue-catalog';
 import { createSupabaseBrowserClient } from "./supabase/client";
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import {commitOriginalReview,isOriginalReviewReceipt,originalReviewReceiptKey,readOriginalReviewPending,type OriginalReviewReceipt} from './original-review-commit';
@@ -1734,7 +1735,7 @@ export class BackendSession {
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
   async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true, images?: string[]): Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}), ...(images?.length ? { images } : {}) });
+    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(responseMode === "outdoor_v1" ? { rebuiltScenes: rebuiltSceneRefs() } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}), ...(images?.length ? { images } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1748,7 +1749,7 @@ export class BackendSession {
    * 取消只会停掉这一条请求；不会把已生成的部分当成完整答案。
    */
   async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1', images?:string[]):Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}), ...(images?.length ? { images } : {}) });
+    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}), ...(responseMode === "outdoor_v1" ? { rebuiltScenes: rebuiltSceneRefs() } : {}), ...(images?.length ? { images } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);

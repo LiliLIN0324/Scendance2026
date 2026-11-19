@@ -7,7 +7,9 @@ import {
   NOT_SPLAT_MESSAGE,
   PROXY_OFF_MESSAGE,
   SCAN_UPLOAD_MAX_BYTES,
+  findScanLodUrl,
   scanDisplayName,
+  scanLodBase,
   splatKindFromHead,
   uploadScanFile,
   validateScanPick,
@@ -24,7 +26,12 @@ function spzFile(name = '新空间 2026-11-9.spz', bytes = GZIP_SPZ): File {
 }
 
 function jsonResponse(body: unknown, status = 200) {
-  return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) };
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(body),
+    json: async () => body,
+  };
 }
 
 describe('实景包上传：选文件当刻就能判的规则', () => {
@@ -55,6 +62,49 @@ describe('实景包上传：选文件当刻就能判的规则', () => {
   });
 });
 
+describe('实景包上传：同名 LOD 目录按约定自动挂上', () => {
+  beforeEach(() => { vi.unstubAllGlobals(); });
+
+  it('目录名就是文件名主干；中文名进不了 URL，直接不认', () => {
+    expect(scanLodBase('jiangnan-village.spz')).toBe('jiangnan-village');
+    expect(scanLodBase('C:\\导出\\tearoom-130.PLY')).toBe('tearoom-130');
+    expect(scanLodBase('新空间 2026-11-9.spz')).toBeNull();
+    expect(scanLodBase('a'.repeat(49) + '.spz')).toBeNull();
+  });
+
+  it('meta 的 source 对得上才挂，对不上宁可全量解码', async () => {
+    const ok = vi.fn(async () => jsonResponse({
+      files: ['jiangnan-village.spz', 'lod-1.spz', 'lod-2.spz'],
+      source: 'jiangnan-village.spz',
+    }) as unknown as Response);
+    vi.stubGlobal('fetch', ok);
+    expect(await findScanLodUrl('jiangnan-village.spz')).toBe('/scans/jiangnan-village/lod-meta.json');
+
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      files: ['other.spz', 'lod-1.spz'], source: 'other.spz',
+    }) as unknown as Response));
+    expect(await findScanLodUrl('jiangnan-village.spz')).toBeUndefined();
+  });
+
+  it('404、形状不对、或只有一档都不挂', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ detail: '不存在' }, 404) as unknown as Response));
+    expect(await findScanLodUrl('jiangnan-village.spz')).toBeUndefined();
+
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ files: ['a.spz'], source: 'jiangnan-village.spz' }) as unknown as Response));
+    expect(await findScanLodUrl('jiangnan-village.spz')).toBeUndefined();
+
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    expect(await findScanLodUrl('jiangnan-village.spz')).toBeUndefined();
+  });
+
+  it('中文名不去发请求，也不登记 lodUrl', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await findScanLodUrl('新空间 2026-11-9.spz')).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('实景包上传：落到本机资产代理并登记', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -74,6 +124,15 @@ describe('实景包上传：落到本机资产代理并登记', () => {
     expect(saved).toMatchObject({ assetId: ID, kind: 'spz', name: '新空间 2026-11-9', bytes: 72, savedAt: expect.any(Number) });
     // 列表读的是注册表：登记完立刻能在「我的实景扫描」里找到，地址由资产号推出。
     expect(findAholoAsset(ID)?.name).toBe('新空间 2026-11-9');
+  });
+
+  // 2026-11-19：LOD 得跟记录一起落进注册表，预览才会走 /scans/<主干>/lod-meta.json。
+  it('带 lodUrl 上传时一并登记', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ assetId: ID, kind: 'spz', bytes: 72 }) as unknown as Response));
+    const file = spzFile();
+    const saved = await uploadScanFile(file, { name: file.name, lodUrl: '/scans/jiangnan-village/lod-meta.json' });
+    expect(saved.lodUrl).toBe('/scans/jiangnan-village/lod-meta.json');
+    expect(findAholoAsset(ID)?.lodUrl).toBe('/scans/jiangnan-village/lod-meta.json');
   });
 
   it('文件头对不上就在本地拒掉，不发请求也不留垃圾记录', async () => {

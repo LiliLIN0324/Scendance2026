@@ -398,6 +398,39 @@ export function appendAgentThoughts(items:readonly {round:number;thought:string}
   commitRun({...run,thoughts:next,thoughtCount:Math.max(run.thoughtCount,next.at(-1)?.round??0)});
 }
 
+/**
+ * 一轮可见自述的三段结构。`rest` 是第一个标签之前的开场白。
+ *
+ * 云端只存一段 ≤400 字、空白被压平的文本，所以这里只按固定标签切分，
+ * 不猜测语义：没有标签就整段留在 rest 里，界面按原文渲染。
+ */
+export interface AgentThoughtSections { rest: string; plan: string | null; next: string | null; why: string | null }
+
+/** 把「计划：… 下一步：… 为什么：…」拆成三段；缺哪段就是 null。 */
+export function parseAgentThoughtSections(text: string): AgentThoughtSections {
+  const source = text.trim();
+  const patterns: ReadonlyArray<readonly ['plan' | 'next' | 'why', RegExp]> = [
+    ['plan', /计\s*划\s*[:：]/],
+    ['next', /下\s*一\s*步\s*[:：]/],
+    ['why', /为\s*什\s*么\s*[:：]/],
+  ];
+  const marks: Array<{ key: 'plan' | 'next' | 'why'; index: number; length: number }> = [];
+  for (const [key, pattern] of patterns) {
+    const match = pattern.exec(source);
+    if (match) marks.push({ key, index: match.index, length: match[0].length });
+  }
+  const sections: AgentThoughtSections = { rest: source, plan: null, next: null, why: null };
+  if (!marks.length) return sections;
+  marks.sort((left, right) => left.index - right.index);
+  sections.rest = source.slice(0, marks[0]!.index).trim();
+  marks.forEach((mark, index) => {
+    const end = index + 1 < marks.length ? marks[index + 1]!.index : source.length;
+    const value = source.slice(mark.index + mark.length, end).trim();
+    sections[mark.key] = value || null;
+  });
+  return sections;
+}
+
 /** 模型每出一段自述思考 +1，用来驱动头部"N 条思考"。 */
 export function bumpAgentThought(count = 1): void {
   commitRun({ ...run, thoughtCount: run.thoughtCount + Math.max(1, count) });

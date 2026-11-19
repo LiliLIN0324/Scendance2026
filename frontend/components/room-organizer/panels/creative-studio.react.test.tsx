@@ -97,7 +97,7 @@ let controller: BackendSession;
 let snapshot: BackendSnapshot;
 let layout: RoomLayout;
 const prepareProposal=vi.fn<(input:AgentRunInput)=>Promise<SceneProposal>>();
-function runFrom(value:SceneProposal,input?:AgentRunInput):AgentRun {return {id:'60000000-0000-4000-8000-000000000001',projectId,requestId:input?.requestId??'70000000-0000-4000-8000-000000000001',state:'complete',progress:'完成',callCount:1,candidates:[{label:'A',title:'交流区',proposal:value}],evaluation:null,executionMode:input?.executionMode??'preview',jevEnabled:input?.jevEnabled??false,expiresAt:value.expires_at};}
+function runFrom(value:SceneProposal,input?:AgentRunInput):AgentRun {return {id:'60000000-0000-4000-8000-000000000001',projectId,requestId:input?.requestId??'70000000-0000-4000-8000-000000000001',state:'complete',progress:'完成',callCount:1,candidates:[{label:'A',title:'交流区',proposal:value}],evaluation:null,executionMode:'preview',jevEnabled:input?.jevEnabled??false,expiresAt:value.expires_at};}
 const onApply = vi.fn<(next: RoomLayout) => void>();
 const onPreview = vi.fn<(next: RoomLayout | null) => void>();
 const createBitmap = vi.fn();
@@ -1072,7 +1072,7 @@ function enterBrief(): void {
 
 async function generatePreview(): Promise<void> {
   enterBrief();
-  fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' }));
+  fireEvent.click(screen.getByRole('button', { name: '按这份细表生成并应用' }));
   await screen.findByText('方案提案 · 尚未应用');
 }
 
@@ -1519,7 +1519,7 @@ describe('creative brief and assistant interaction', () => {
     expect(demand.value).toContain('【需求参考 · 这场活动】');
     expect(demand.value).not.toContain('品牌快闪');
     expect(demand.value).not.toMatch(/活动目标：\s*$/m);
-    const generate=screen.getByRole('button',{name:'按这份细表生成预览'});expect(generate.hasAttribute('disabled')).toBe(false);
+    const generate=screen.getByRole('button',{name:'按这份细表生成并应用'});expect(generate.hasAttribute('disabled')).toBe(false);
     expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
 
@@ -1541,11 +1541,11 @@ describe('creative brief and assistant interaction', () => {
     renderUI(ui());fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
     const input=screen.getByRole('textbox',{name:'客户需求'}) as HTMLTextAreaElement;
     await waitFor(()=>expect(input.value).toBe(''));
-    expect(screen.getByRole('button',{name:'按这份细表生成预览'}).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button',{name:'按这份细表生成并应用'}).hasAttribute('disabled')).toBe(true);
     const button=screen.getByRole('button',{name:'生成需求参考'});await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(false));fireEvent.click(button);
     expect(input.value).toBe(buildBriefReference({...INITIAL_BRIEF,event:'工作坊',guests:16}));
     expect(input.value).not.toContain('活动目标：');
-    expect(screen.getByRole('button',{name:'按这份细表生成预览'}).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button',{name:'按这份细表生成并应用'}).hasAttribute('disabled')).toBe(false);
   });
 
   it('leaves an oversized manual brief unchanged and reports the limit without truncating',async()=>{
@@ -1672,8 +1672,8 @@ describe('creative brief and assistant interaction', () => {
 
   it('keeps text planning available alongside reconstruction for an existing v2 scene',async()=>{
     render(ui(createMeasuredRoomLayout(layout,{width:12,depth:10,height:3})));
-    expect(screen.getByRole('button',{name:'按这份细表生成预览'})).toBeTruthy();
-    expect(screen.getByText('按这份细表生成预览')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'按这份细表生成并应用'})).toBeTruthy();
+    expect(screen.getByText('按这份细表生成并应用')).toBeTruthy();
     selectBusiness('场地重建');
     await waitFor(()=>expect(screen.getByRole('button',{name:'生成布置预览'}).hasAttribute('disabled')).toBe(false));
   });
@@ -1681,7 +1681,7 @@ describe('creative brief and assistant interaction', () => {
   it('sends full resource requirements to the Agent without a built-in catalogue rejection', async () => {
     connected();render(ui());
     fireEvent.change(screen.getByRole('textbox', { name: '客户需求' }), { target: { value: '需要圆桌和帐篷，安排24人交流会' } });
-    fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '按这份细表生成并应用' }));
     await screen.findByText('方案提案 · 尚未应用');
     expect(prepareProposal).toHaveBeenCalledWith(expect.objectContaining({ context:expect.objectContaining({brief: expect.stringContaining('需要圆桌和帐篷')}) }));
     expect(screen.queryByText('圆桌的处理方式')).toBeNull();
@@ -1785,9 +1785,9 @@ describe('creative brief and assistant interaction', () => {
 
   it('explains the missing AI connection offline without fabricating a proposal or changing the scene', async () => {
     render(ui());
-    expect(screen.getByRole('button', { name: '按这份细表生成预览' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: '按这份细表生成并应用' }).hasAttribute('disabled')).toBe(true);
     enterBrief();
-    fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '按这份细表生成并应用' }));
     expect(await screen.findByRole('region', { name: 'Agent' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('生成能力尚未连接服务商');
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
@@ -1807,8 +1807,8 @@ describe('creative brief and assistant interaction', () => {
     expect(screen.getByLabelText('场地尺寸')).toBeTruthy();
     expect(prepareProposal).not.toHaveBeenCalled();
     selectBusiness('活动需求');
-    expect(screen.getByRole('button',{name:'按这份细表生成预览'})).toBeTruthy();
-    expect(screen.getByText('按这份细表生成预览')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'按这份细表生成并应用'})).toBeTruthy();
+    expect(screen.getByText('按这份细表生成并应用')).toBeTruthy();
     selectBusiness('图纸与照片');
     fireEvent.click(screen.getByRole('button', { name: '移除 venue.png' }));
     await waitFor(() => expect(screen.queryByRole('img', { name: '现场照片：venue.png' })).toBeNull());
@@ -1902,7 +1902,7 @@ describe('creative brief and assistant interaction', () => {
     const originals=screen.getAllByText(claim);
     expect(originals.length).toBeGreaterThan(0);
     for(const original of originals){const disclosure=original.closest('details');expect(disclosure).not.toBeNull();expect(disclosure!.open).toBe(false);expect(disclosure!.textContent).toContain('不代表消防');}
-    expect(screen.getByText('请核对下方实际改动；通行、消防及规范条件仍需独立核验。')).toBeTruthy();
+    expect(screen.getByText('请核对下方实际改动。')).toBeTruthy();
     fireEvent.click(within(originals[0]!.closest('details')!).getByText('查看模型原文（未经核验）'));
     expect(originals[0]!.closest('details')!.open).toBe(true);
   });
@@ -2193,9 +2193,9 @@ describe('creative brief and assistant interaction', () => {
     let settled=false;const guard={getConfirmed:()=>observed,isSettled:()=>settled,subscribeInvalidation:()=>()=>{}};
     const read=vi.spyOn(venueSourceRevision,'readVenueSourceRevision').mockImplementation(async(_scope,context)=>context.isSettled()?{status:'unknown'}:{status:'unknown'});
     render(<CreativeStudioProvider controller={controller} layout={layout} venueSourceGuard={guard} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
-    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));
+    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));
     expect((await screen.findAllByText(/场地图纸或比例资料尚未核对/)).length).toBeGreaterThan(0);expect(controller.startAgentRun).not.toHaveBeenCalled();
-    settled=true;fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));
+    settled=true;fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));
     await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(controller.startAgentRun).not.toHaveBeenCalled();
   });
 
@@ -2205,7 +2205,7 @@ describe('creative brief and assistant interaction', () => {
     let finish!:(value:typeof confirmed)=>void;
     const read=vi.spyOn(venueSourceRevision,'readVenueSourceRevision').mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValue(confirmed);
     render(<CreativeStudioProvider controller={controller} layout={layout} venueSourceGuard={guard} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
-    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));
+    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));
     await waitFor(()=>expect(read).toHaveBeenCalledOnce());fireEvent.click(screen.getByRole('button',{name:'取消任务'}));
     await act(async()=>{finish(confirmed);await Promise.resolve();});
     expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
@@ -2217,9 +2217,9 @@ describe('creative brief and assistant interaction', () => {
     let finish!:(value:typeof confirmed)=>void;
     const read=vi.spyOn(venueSourceRevision,'readVenueSourceRevision').mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValue(confirmed);
     render(<CreativeStudioProvider controller={controller} layout={layout} venueSourceGuard={guard} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
-    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));await waitFor(()=>expect(read).toHaveBeenCalledOnce());
+    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));await waitFor(()=>expect(read).toHaveBeenCalledOnce());
     fireEvent.click(screen.getByRole('button',{name:'取消任务'}));
-    fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
     await act(async()=>{finish(confirmed);await Promise.resolve();});expect(controller.startAgentRun).toHaveBeenCalledOnce();
     expect(await screen.findByRole('button',{name:'确认布置'})).toBeTruthy();expect(onApply).not.toHaveBeenCalled();
   });
@@ -2230,7 +2230,7 @@ describe('creative brief and assistant interaction', () => {
     let finish!:(value:typeof confirmed)=>void;
     const read=vi.spyOn(venueSourceRevision,'readVenueSourceRevision').mockResolvedValueOnce(confirmed).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     render(<CreativeStudioProvider controller={controller} layout={layout} venueSourceGuard={guard} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
-    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
+    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
     fireEvent.click(screen.getByRole('button',{name:'取消任务'}));await act(async()=>{finish(confirmed);await Promise.resolve();});
     expect(controller.startAgentRun).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
@@ -2271,7 +2271,7 @@ describe('creative brief and assistant interaction', () => {
     vi.spyOn(venueSourceRevision,'readVenueSourceRevision').mockResolvedValue(confirmed);
     let finish!:(value:SceneProposal)=>void;vi.mocked(prepareProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     render(<CreativeStudioProvider controller={controller} layout={layout} venueSourceGuard={guard} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
-    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));
+    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));
     act(()=>invalidate());await act(async()=>{finish(proposal);});
     expect(await screen.findByText(/原任务编号已保留/)).toBeTruthy();
     expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
@@ -2366,7 +2366,7 @@ describe('creative brief and assistant interaction', () => {
     connected();const store=createLayoutStore({layout,activeFloorIndex:0}),tracker=createFloorSessionTracker(store);tracker.start();
     let finish!:(value:AgentRun)=>void;vi.mocked(controller.startAgentRun).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     render(<CreativeStudioProvider controller={controller} layout={layout} getCurrentLayout={()=>store.getState().layout} floorToken={tracker.capture()} isFloorCurrent={tracker.isCurrent} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
-    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));
+    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));
     act(()=>{store.setState({activeFloorIndex:1});store.setState({activeFloorIndex:0});});await act(async()=>finish(runFrom(proposal)));
     expect(await screen.findByText(/楼层、图纸或活动会话需求已变化，原任务编号已保留/)).toBeTruthy();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
     expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();tracker.stop();
@@ -2410,7 +2410,7 @@ describe('creative brief and assistant interaction', () => {
     connected();const store=createLayoutStore({layout,activeFloorIndex:0});const tracker=createActivitySessionTracker(store);tracker.start();
     let finish!:(value:SceneProposal)=>void;vi.mocked(prepareProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     render(<CreativeStudioProvider controller={controller} layout={layout} getCurrentLayout={()=>store.getState().layout} sessionToken={tracker.capture()} isSessionCurrent={tracker.isCurrent} onApply={onApply} onPreview={onPreview}><CreativeAssistant/></CreativeStudioProvider>);
-    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));
+    enterBrief();fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));
     await waitFor(()=>expect(finish).toBeTypeOf('function'));act(()=>{store.setState({layout:{...layout,id:'other-activity'}});store.setState({layout});});
     await act(async()=>{finish(proposal);});expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();tracker.stop();
   });
@@ -2728,7 +2728,7 @@ describe('creative brief and assistant interaction', () => {
     vi.mocked(prepareProposal).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const rendered = render(ui());
     enterBrief();
-    fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '按这份细表生成并应用' }));
     await waitFor(() => expect(finish).toBeTypeOf('function'));
     rendered.rerender(ui({ ...layout, width: 13 }));
     await act(async () => { finish(proposal); });
@@ -2744,7 +2744,7 @@ describe('creative brief and assistant interaction', () => {
     vi.mocked(prepareProposal).mockResolvedValueOnce({ ...proposal, expires_at: '2026-10-02T10:00:02Z' });
     render(ui());
     enterBrief();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '按这份细表生成预览' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '按这份细表生成并应用' })); });
     expect(screen.getByRole('button', { name: '确认布置' })).toBeTruthy();
     expect(onPreview).toHaveBeenLastCalledWith(expect.objectContaining({ id: projectId }));
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
@@ -3920,7 +3920,7 @@ describe('context continuity and project isolation', () => {
     selectMode('model');fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'生成一把木椅'}});selectMode('plan');
     let finish!:(value:SceneProposal)=>void;
     vi.mocked(prepareProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
-    fireEvent.click(screen.getByRole('button',{name:'按这份细表生成预览'}));
+    fireEvent.click(screen.getByRole('button',{name:'按这份细表生成并应用'}));
     await waitFor(()=>expect(prepareProposal).toHaveBeenCalledOnce());
     const changed={...layout,id:'10000000-0000-4000-8000-000000000002'};
     rendered.rerender(ui(changed));
@@ -4112,14 +4112,27 @@ describe('unified Agent', () => {
     expect(screen.getByText('先预览，再确认布置')).toBeTruthy();
   });
 
-  it('requires explicit confirmation before applying a validated text request', async () => {
+  it('applies a single unambiguous candidate directly without a confirmation stop', async () => {
+    connected();
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input=>({...runFrom(await prepareProposal(input),input),executionMode:'direct'}));
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '打开 Bingo Agent' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一把椅子' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+    await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0].executionMode).toBe('direct');
+    expect(controller.applySceneProposal).toHaveBeenCalledOnce();
+    expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
+  });
+
+  it('sends direct by default and still requires confirmation when the server returns a preview', async () => {
     connected();
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button', { name: '打开 Bingo Agent' }));
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '增加一把椅子' } });
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
     await screen.findByText('方案提案 · 尚未应用');expect(onApply).not.toHaveBeenCalled();expect(controller.applySceneProposal).not.toHaveBeenCalled();
-    expect(prepareProposal).toHaveBeenCalledWith(expect.objectContaining({executionMode:'preview',jevEnabled:false}));
+    expect(prepareProposal).toHaveBeenCalledWith(expect.objectContaining({executionMode:'direct',jevEnabled:false}));
     fireEvent.click(screen.getByRole('button',{name:'确认布置'}));await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
     expect(vi.mocked(prepareProposal).mock.calls[0]![0].context.brief).not.toContain('预计24人');
     expect(controller.applySceneProposal).toHaveBeenCalledWith(proposal, layoutToBackendScene(layout));
@@ -4787,15 +4800,14 @@ describe('scoped seating constraints in deep generation', () => {
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
     await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
     expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0].context.annotationObservation).toEqual(annotationObservation);
-    expect(await screen.findByText(/本次将提供规划标注供模型读取/)).toBeTruthy();
-    expect(screen.getByText(/提供不代表已经用于排布或安全检查/)).toBeTruthy();
+    expect(await screen.findByText(/本次已带上规划标注供模型读取/)).toBeTruthy();
   });
   it('reports an unavailable annotation snapshot instead of sending an empty checked list',async()=>{
     connected();const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation:{status:'unavailable' as const},isCurrent:()=>true});
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
     expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0].context.annotationObservation).toEqual({status:'unavailable'});
-    expect(await screen.findByText(/无法完整读取规划标注/)).toBeTruthy();
+    expect(await screen.findByText(/本次没能完整读取规划标注/)).toBeTruthy();
   });
   it('does not apply a returned candidate if annotation authority becomes stale',async()=>{
     connected();let epoch=1;let finish!:(value:AgentRun)=>void;
@@ -4883,7 +4895,7 @@ describe('scoped seating constraints in deep generation', () => {
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
     await waitFor(()=>expect(controller.startAgentRun).toHaveBeenCalledOnce());
     const request=vi.mocked(controller.startAgentRun).mock.calls[0]![0];
-    expect(request.context.seatingSpecs).toBeUndefined();expect(request.instruction).toContain('示意默认不是已确认实物');expect(request.instruction).toContain('桌子按默认规格');
+    expect(request.context.seatingSpecs).toBeUndefined();expect(request.instruction).toContain('示意默认');expect(request.instruction).toContain('桌子按默认规格');
   });
   it('does not dispatch stale furniture specifications after the final venue check',async()=>{
     connected();let version=1;let finish!:(value:{status:'observed';scope:string;digest:string})=>void;

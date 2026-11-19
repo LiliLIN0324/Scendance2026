@@ -54,10 +54,25 @@ export const agentPlanObservationSchema=z.strictObject({
   planHash:z.string().min(1).max(128).optional(),
   notice:z.literal(AGENT_PLAN_OBSERVATION_NOTICE),
 });
+/**
+ * 同一会话里上一趟的承接信息：只装「做过什么、留下什么、撞过什么」这三类事实，
+ * 不装模型原文，也不带任何句柄——上一趟的 validatedId 在新一趟里无效。
+ * 这一趟仍然从提交的 scene 出发，续跑只是不再从头再来。
+ */
+export const agentPriorRunSchema=z.strictObject({
+  id:z.string().min(1).max(64).optional(),
+  finishedSteps:z.array(z.string().min(1).max(200)).max(20).default([]),
+  /** 上一趟没能做完的步骤；生产方不知道时可以不写，不拿空数组冒充「已全部做完」。 */
+  pendingSteps:z.array(z.string().min(1).max(200)).max(20).optional(),
+  candidateTitles:z.array(z.string().min(1).max(100)).max(3).default([]),
+  errorCodes:z.array(z.string().min(1).max(64)).max(20).default([]),
+  objectCount:z.number().int().nonnegative().optional(),
+});
 export const agentContextSchema=z.strictObject({
   brief:z.string().max(12000).default(''),acceptedDecisions:z.array(z.string().max(1000)).max(20).default([]),
   recentMessages:z.array(z.strictObject({role:z.enum(['user','assistant']),text:z.string().max(3000)})).max(12).default([]),
   lastProposalExplanation:z.string().max(1200).optional(),
+  priorRun:agentPriorRunSchema.optional(),
   seatingAllocation:agentSeatingAllocationSchema.optional(),
   seatingSpecs:agentSeatingSpecsSchema.optional(),
   annotationObservation:agentAnnotationObservationSchema.optional(),

@@ -31,6 +31,12 @@ export interface UseImportExportParams {
    * 关掉时退回普通渲染。导出必须走它，否则成图里没有真实场地。
    */
   paintFrame?: (renderer: ThreeNS.WebGLRenderer, scene: ThreeNS.Scene, camera: ThreeNS.Camera) => void;
+  /**
+   * 2026-11-19 用户：「把 captureRenderImage / exportRenderImage 换成 OutdoorPlan3D 的 captureImage」。
+   * 可见画面已经是 OutdoorPlan3D（室内 Viewport 退役），取图必须问它要；
+   * 返回 null 时才退回下面那条旧渲染器通路（旧管线还在时保命用）。
+   */
+  capture3D?: (options: RenderExportOptions) => Promise<string | null>;
   /** Runs after a successful JSON import (e.g. clear the selection). */
   onImported(): void;
 }
@@ -94,6 +100,7 @@ export function useImportExport({
   controlsRef,
   applyPreset,
   paintFrame,
+  capture3D,
   onImported,
 }: UseImportExportParams): UseImportExportResult {
   const latestLayout = useRef(layout);
@@ -118,6 +125,11 @@ export function useImportExport({
       const renderer = rendererRef.current;
       const scene = sceneRef.current;
       const camera = cameraRef.current;
+      // 先问可见画布（OutdoorPlan3D）；拿不到再走旧渲染器。
+      if (capture3D) {
+        const shot = await capture3D({ view, scale, ...(resolution ? { resolution } : {}) });
+        if (shot) return shot;
+      }
       if (!canvas || !renderer || !scene || !camera) return null;
       const factor = Math.min(3, Math.max(1, Math.round(scale)));
       // 交付尺寸固定从 1920×1080 起算，不再跟着画布 CSS 大小走：
@@ -160,7 +172,7 @@ export function useImportExport({
         paint(renderer, scene, camera);
       }
     },
-    [view2D, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef, controlsRef, applyPreset, paintFrame]
+    [view2D, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef, controlsRef, applyPreset, paintFrame, capture3D]
   );
 
   const exportRenderImage = useCallback(

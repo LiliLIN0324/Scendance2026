@@ -279,9 +279,10 @@ describe('durable bounded DeepSeek Agent',()=>{
   const i=await input({jevEnabled:true});let n=0;const fetcher=vi.fn(async()=>completion([tool('submit_candidates',{candidates:++n===1?[plan(2),plan(5),{}]:[{}]})]));
   const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(run.candidates).toHaveLength(2);expect(run.evaluation?.status).toBe('partial');
  });
- it('forces only one candidate with JEV off even when model repeats three',async()=>{
+ it('keeps only one candidate with JEV off even when model submits three',async()=>{
+  // 默认只要一版：收下第一份就够，不再为「补齐三份」多跑一轮模型。
   const i=await input();const fetcher=vi.fn(async()=>completion([tool('submit_candidates',{candidates:[plan(2),plan(5),plan(8)]})]));
-  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(run.candidates).toHaveLength(1);expect(run.evaluation).toBeNull();expect(fetcher).toHaveBeenCalledTimes(2);
+  const run=agentRunSchema.parse(await (await send(createApi(f.backend,env,fetcher),i)).json());expect(run.candidates).toHaveLength(1);expect(run.evaluation).toBeNull();expect(fetcher).toHaveBeenCalledOnce();
  });
  it('supports a server feature flag back to the prior proposal flow without re-enabling HY3',async()=>{
    const i=await input({jevEnabled:true});const fetcher=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({explanation:'兼容方案',commands:plan().commands})}}],usage:{total_tokens:10}})));
@@ -533,6 +534,7 @@ describe('durable bounded DeepSeek Agent',()=>{
  });
 });
 it.each(['不要直接删除桌子','暂时不要直接改','直接说明原因','先给我看一个方案','能否直接添加椅子？'])('does not auto-apply ambiguous or negative intent: %s',instruction=>{expect(agentExecutionMode(agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction,executionMode:'direct'}))).toBe('preview');});
+it('honors direct execution for an ordinary imperative and keeps explicit preview',()=>{const base={requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction:'在入口摆 20 把椅子'};expect(agentExecutionMode(agentRunRequestSchema.parse({...base,executionMode:'direct'}))).toBe('direct');expect(agentExecutionMode(agentRunRequestSchema.parse({...base,executionMode:'preview'}))).toBe('preview');});
 it('validates JEV output instead of inventing probabilities',async()=>{
  const candidates=[2,5,8].map((x,i)=>({label:['A','B','C'][i],title:'x',scene:scene(),explanation:'x',warnings:[]}));
  for(const body of [{answers:{recommended_plan:{type:'choice',choice:'A',probabilities:{A:0.9,B:0.9,C:0.9,NONE:0},confidence:0.9}}},{choices:[]}])expect((await evaluateCandidates(candidates,'test',env,5000,async()=>new Response(JSON.stringify(body)))).status).toBe('unavailable');

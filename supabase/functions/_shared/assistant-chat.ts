@@ -118,7 +118,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
   const cancelled=new Promise<AssistantChatResult>(resolve=>{reportAbort=resolve;});
   const abort=()=>{controller.abort();diagnose(slot,'cancelled');reportAbort(fail('provider_error'));};input.signal?.addEventListener('abort',abort,{once:true});
   try{
-   const context=JSON.stringify({history:parsed.data.history,message:parsed.data.message});
+   const context=JSON.stringify({history:parsed.data.history,message:parsed.data.message,...(parsed.data.rebuiltScenes?.length?{rebuiltScenes:parsed.data.rebuiltScenes}:{})});
    // This branch's existing provider profile forwards token fields unchanged.
    // MiniMax M3.1 uses max_completion_tokens; do not alter the shared provider
    // behavior of existing workflows just to support this read-only request.

@@ -252,7 +252,9 @@ describe('VenuePicker（换场地 / 新建）', () => {
 
   it('从空间工具打开弹层，取消即关', async () => {
     harness();
-    fireEvent.click(screen.getByRole('button', { name: '新建/换场地' }));
+    // 2026-11-19 用户：「这里也可以删掉了？很奇怪」——空间 Agent 抬头那颗回形针「场地资料」已删，
+    // 换场地改由项目侧入口触发同一条链路（scendance:start-new-project）。
+    fireEvent(window, new Event('scendance:start-new-project', { cancelable: true }));
     expect(await screen.findByRole('dialog', { name: '换场地 / 新建' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(screen.queryByRole('dialog', { name: '换场地 / 新建' })).toBeNull();
@@ -260,7 +262,7 @@ describe('VenuePicker（换场地 / 新建）', () => {
 
   it('弹层里选空白开始，走地图草稿通路而不立室内壳', async () => {
     const onApply = harness();
-    fireEvent.click(screen.getByRole('button', { name: '新建/换场地' }));
+    fireEvent(window, new Event('scendance:start-new-project', { cancelable: true }));
     fireEvent.click(await screen.findByRole('button', { name: '开始规划' }));
     await waitFor(() => expect(mocks.createProject).toHaveBeenCalled());
     expect(onApply).not.toHaveBeenCalled();
