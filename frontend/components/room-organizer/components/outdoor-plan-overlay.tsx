@@ -7,14 +7,12 @@ import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
  * 其余功能全部 portal 进主产品 3D 页面**现有的框架锚点**（由 room-organizer 渲染）：
  * - `#outdoor-panel-host-layers`：主产品左栏「已放置物件」宿主；
  * - `#outdoor-panel-host-inventory`：左栏户外卡「清单」页宿主（统计 + 清单，不挂在地图上）；
- * - `#outdoor-place-search-slot`：画布左上搜地点槽；
  * - `#outdoor-tools-dock`：主产品右侧工具排位置（sc-editor-dock 内，同款
  *   sc-view-tools/sc-canvas-rail 框架），挂图源循环 / 导出 / 引导三枚钮。
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
@@ -30,7 +28,6 @@ import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
 import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
 import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-geojson';
-import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { usePlaceShapeLookup } from '../hooks/use-place-shape-lookup';
 import { isOverseasLocation } from '../lib/basemap-alignment';
@@ -48,7 +45,6 @@ import type { BackendSession } from '@/lib/backend-session';
 import { createOutdoorMapContext,type OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
 import { boundaryKey } from '../lib/outdoor-agent-contract';
-import { answersPlaceRequest } from '../lib/outdoor-place-handover';
 import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
 import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { openGenerationSheet } from '../lib/generation-sheet';
@@ -389,25 +385,6 @@ export interface OutdoorPlanOverlayHandle {
   getBearing(): number;
 }
 
-/**
- * 搜地点要画在地图覆盖层之上。覆盖层整层是 z-index 30，
- * 所以 2D 时把搜索条 portal 到 `#outdoor-place-search-slot`。
- * 槽位不在（或 3D 保活隐藏）时仍画在覆盖层里。
- */
-function PlaceSearchSlot({ active, children }: { active: boolean; children: ReactNode }): JSX.Element {
-  const [host, setHost] = useState<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    if (!active) {
-      setHost(null);
-      return;
-    }
-    setHost(document.getElementById('outdoor-place-search-slot'));
-  }, [active]);
-  const layer = <div style={{ pointerEvents: 'auto' }}>{children}</div>;
-  if (!host) return layer;
-  return createPortal(layer, host);
-}
-
 const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverlayProps>(function OutdoorPlanOverlay({
   projectId,
   legacyPlanProjectId = null,
@@ -430,14 +407,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   onViewChange,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
-  // 2026-11-13（用户指令）：在 chat 里搜地点，地图左上角的「搜地点」框要同步出同一批候选，
-  // 两处检索口径一致，不用在地图框里再输入一遍。这里只做只读同步：
-  // 地图框里选中仍然只是「飞过去 + 落钉」，不改 plan / anchor；真要锚定场地走对话里的确认卡。
-  const venueSearchSync = useMemo(() => {
-    const pick = agent?.venuePick;
-    if (!pick || !pick.query.trim() || pick.loading) return null;
-    return { query: pick.query, hits: pick.candidates };
-  }, [agent?.venuePick?.query, agent?.venuePick?.candidates, agent?.venuePick?.loading]);
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
   const confirmedCaseView = useMemo(() => REPLICA_CASES.find(c => `replica-${c.id}` === slotId)?.confirmedView, [slotId]);
@@ -510,26 +479,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 桥在 effect 里注册一次；核对要读到最新选区，不能闭上注册那一帧的 state。
   const placeAreaRef = useRef(placeArea);
   placeAreaRef.current = placeArea;
-  const { loading: shapeLoading, unavailable: shapeUnavailable, start: lookupPlaceShape, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
+  const { loading: shapeLoading, unavailable: shapeUnavailable, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
     const [west, south, east, north] = shape.bounds;
     setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: name });
     setPlaceArea({ polygon: shape.polygon, label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
       ...(shape.kind === 'line' ? { kind: 'line' as const } : {}) });
     canvasApiRef.current?.focusBounds(shape.bounds);
   }, JSON.stringify(plan?.boundary ?? []));
-  /**
-   * 2026-11-16 线上实测卡点：对话停在「搜索目标地点」时，用户在画布左上角搜到的地点只会飞视图、落钉，
-   * 对话不接手，户外主线就断在这——两边各搜各的，谁也不知道对方找到了什么。
-   * 这里把这次选点当成对那句「找场地」的回答，直接送进对话的候选确认卡（仍要用户点候选才算确认，
-   * 不自动锚定场地）；其它阶段保持原来的「只看一眼」语义，不打断分区/流线工作。
-   */
-  const handOverPlaceToChat = (name: string) =>
-    answersPlaceRequest(agent?.outdoorWorkflow.state.stage, name, query => agent?.searchOutdoorVenue(query));
-  const clearPlaceRangePreview = () => {
-    const flow = agent?.outdoorWorkflow;
-    if (flow?.proposal?.kind === 'scope') flow.cancel();
-  };
-
   // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
   useEffect(() => {
     writePlanGroundSource(source);
@@ -980,37 +936,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(confirmedCaseView ? { initialView: { lng: confirmedCaseView.lng, lat: confirmedCaseView.lat, zoom: confirmedCaseView.zoom, bearing: -confirmedCaseView.rotationDeg * Math.PI / 180 } } : defaultOverview ? { initialView: defaultOverview } : anchor ? { initialView: { lng: anchor.lng, lat: anchor.lat } } : {})}
           />
         </div>
-      )}
-      {/* 搜地点（用户 m04938 / m05472）：左上角，和地图 App 一样。
-          选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。
-          2D 时 portal 到画布上的搜索槽，否则会困在覆盖层 z-index 30 里。 */}
-      {plan && (
-        <PlaceSearchSlot active={!canvasHidden}>
-        <PlanPlaceSearch
-          testIdPrefix="outdoor-place-search"
-          {...(venueSearchSync ? { sync: venueSearchSync } : {})}
-          near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
-          onPickArea={area => {
-            clearPlaceRangePreview();
-            // 选区：只换视图（框住这片地），定位钉让位给边界，避免两种标记叠在一起。
-            cancelPlaceShape(); // Includes the pending retry and in-flight request.
-            setPlacePin(null);
-            setPlaceArea({ polygon: area.polygon, label: `${area.name} · ${area.level}` });
-            canvasApiRef.current?.focusBounds(area.bounds);
-            handOverPlaceToChat(area.name);
-          }}
-          onPick={place => {
-            clearPlaceRangePreview();
-            setPlaceArea(null);
-            setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
-            canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
-            // Pin immediately. Retries, abort, and the centered outline stay on this project/place.
-            lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
-            handOverPlaceToChat(place.name);
-          }}
-          onClear={() => { cancelPlaceShape(); clearPlaceRangePreview(); setPlacePin(null); setPlaceArea(null); }}
-        />
-        </PlaceSearchSlot>
       )}
       {/* 查询真实轮廓有总预算；未命中如实提示手画，不自动重复请求。
           与画布白底名称胶囊同范式；只压 2D 画面，3D/接管态不出镜。 */}

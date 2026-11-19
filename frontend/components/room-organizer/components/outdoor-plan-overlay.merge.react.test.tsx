@@ -182,46 +182,11 @@ it("keeps outside guide actions working and exposes a clean map details panel", 
   fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
   expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
 });
-it("搜索选区在红线写入前留在地图上，核对桥能把它收成边界", () => {
-  const plan = createStarterOutdoorPlan();
-  render(<Overlay projectId="visible-range" seedPlan={plan} />);
-  const anchor = state.bridge!.getPlan()!.anchor!;
-  const d = 0.0008;
-  const polygon: [number, number][] = [
-    [anchor.lng, anchor.lat],
-    [anchor.lng + d, anchor.lat],
-    [anchor.lng + d, anchor.lat + d],
-    [anchor.lng, anchor.lat + d],
-  ];
-  act(() => {
-    placeSearch.props!.onPickArea!({
-      id: "yuquan",
-      name: "玉泉",
-      level: "范围",
-      lng: anchor.lng,
-      lat: anchor.lat,
-      bounds: [anchor.lng, anchor.lat, anchor.lng + d, anchor.lat + d],
-      polygon,
-    });
-  });
-  expect(state.canvas?.searchArea?.polygon).toEqual(polygon);
-  const visible = state.bridge!.visibleActivityRange!();
-  expect(visible?.name).toBe("玉泉");
-  expect(visible!.boundary.length).toBeGreaterThanOrEqual(3);
-  const before = JSON.stringify(state.bridge!.getPlan());
-  act(() => {
-    expect(state.bridge!.applyPlan!(plan, before)).toBe(true);
-  });
-  expect(state.canvas?.searchArea?.polygon).toEqual(polygon);
-  act(() => {
-    state.bridge!.previewBoundary!(anchor, visible!.boundary);
-  });
-  expect(state.canvas?.searchArea?.polygon).toEqual(polygon);
-  const withBoundary = { ...plan, boundary: visible!.boundary };
-  act(() => {
-    expect(state.bridge!.applyPlan!(withBoundary, before)).toBe(true);
-  });
-  expect(state.canvas?.searchArea ?? null).toBeNull();
+it("地图左上不再挂搜索浮钮及其独立拖动宿主", () => {
+  placeSearch.props = null;
+  render(<Overlay projectId="no-floating-search" seedPlan={createStarterOutdoorPlan()} />);
+  expect(placeSearch.props).toBeNull();
+  expect(document.getElementById('outdoor-place-search-slot')).toBeNull();
 });
 it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {
   const plan = createStarterOutdoorPlan();
