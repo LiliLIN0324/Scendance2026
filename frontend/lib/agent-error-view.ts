@@ -29,8 +29,8 @@ export function agentErrorView(status: string | null | undefined): AgentErrorVie
   switch (status) {
     case 'invalid':
       return {
-        message: '问题或近期对话中含链接、敏感信息或超出长度，请调整后再试。',
-        stamp: '输入需调整',
+        message: '这次请求未通过校验，可能涉及输入、上下文或客户端与服务端版本。问题已保留；请重试，仍失败时需检查请求详情。',
+        stamp: '请求未通过校验',
         tone: 'muted',
       };
     case 'disabled':

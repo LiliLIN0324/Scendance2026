@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isVenueResearchRequest } from "../lib/venue-research";
 import type { BackendSession } from "@/lib/backend-session";
 import { agentErrorView, type AgentErrorView } from "@/lib/agent-error-view";
 import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
@@ -2467,13 +2468,16 @@ export function useOutdoorAgentWorkflow(input: {
       { stopLabel: "停止查找" },
     );
     try {
-      const map = await mapContext(job.controller.signal);
+      // 选址调研不依赖当前画布的建筑/道路几何，也不该先等一次地图扫描。
+      const researching = isVenueResearchRequest(message);
+      if (researching) status("正在查本地场地调研与实时地图地点，整理候选和建议。", "working", { stopLabel: "停止查找" });
+      const map = researching ? unknownMap : await mapContext(job.controller.signal);
       if (!live(job)) return true;
       // 本轮地图依据是否取全：place 阶段卡据此决定要不要继续承诺「自动为你框选」。
       setMapGap(map.status !== "ready");
       if (map.status === "ready") designStep("已取得结构化地图依据，用来核对请求涉及的位置。");
       if (map.status === "partial") designStep("地图依据只有一部分，缺失的位置需要核对。");
-      if (map.status === "unavailable") designStep("本轮未取得地图依据，将使用已有规划和输入内容。");
+      if (map.status === "unavailable" && !researching) designStep("本轮未取得地图依据，将使用已有规划和输入内容。");
       const turn = await understandOutdoorTurn({
         message,
         ...(images?.length ? { images } : {}),
