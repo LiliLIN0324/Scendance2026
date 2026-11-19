@@ -586,8 +586,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 左轨点头像，左栏整栏换成那个人的私信；再点同一颗收起。换成员或换团队时窗子跟着换/关。
   const [chatPeerId, setChatPeerId] = useState<string | null>(null);
   const personChat = !!chatPeerId && team.members.some(member => member.userId === chatPeerId);
+  // 2026-11-15 用户：「不要弹窗」——生成面板作为左栏卡片存在，所以这里只订阅它开没开。
+  const generationOpen = useSyncExternalStore(subscribeGenerationSheet, () => getGenerationSheetState().open, () => false);
   // 私信压在栏里的时候，四格不算开着：栏中此刻不是它们的卡，按压态与高亮跟着让开。
-  const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat;
+  // 2026-11-19：创作卡占着栏时同理——生成卡在视觉上盖住 Agent 卡（各自渲染守卫已让位），
+  // 左轨就不能还亮着「空间/物料/Bingo」，否则又是「两个钮都亮、只看到一张卡」。
+  const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat && !generationOpen;
   // 私信开着，左栏就必须撑着——哪怕四格都收着，栏里此刻装的是这场对话。
   const [capturePanel, setCapturePanel] = useState<'new' | 'open' | 'hidden'>('new');  const captureOpen = capturePanel === 'open';
   const capturePanelRef = useRef<HTMLElement>(null);
@@ -607,10 +611,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   };
   useEffect(() => { if (captureOpen) capturePanelRef.current?.focus(); }, [captureOpen]);
   // 2026-11-15 用户：「不要弹窗」——生成面板作为左栏卡片存在，所以这里只订阅它开没开。
-  const generationOpen = useSyncExternalStore(subscribeGenerationSheet, () => getGenerationSheetState().open, () => false);
+  // 2026-11-19：生成卡也进左栏堆栈，可与户外规划同时开着上下分屏。
   useEffect(() => {
     if (!generationOpen) return;
-    // 生成卡独屏：占栏时把拍摄卡收掉。左栏的可视性由 columnExpanded（已含 generationOpen）控制，
+    // 拍摄卡与生成卡仍互斥：占栏时把拍摄卡收掉（生成卡可与户外卡堆叠，不在此列）。
+    // 左栏的可视性由 columnExpanded（已含 generationOpen）控制，
     // 这里不能再把 sidebarCollapsed 置 false——那会把「空间/物料」那张抽屉也同时叫出来，两张卡叠一栏。
     // 2026-11-16 用户反馈「第一次点场地白屏一下」：'new' 表示拍摄卡从未打开过，不能借
     // 'hidden' 这个「关过」哨兵去关它——那会把隐藏的拍摄向导也挂载起来，首次加载 chunk
@@ -768,6 +773,7 @@ useEffect(() => {
           bingo: clampFloatRect(current.rects.bingo, leftStackViewportRef.current),
           capture: clampFloatRect(current.rects.capture, leftStackViewportRef.current),
           chat: clampFloatRect(current.rects.chat, leftStackViewportRef.current),
+          generation: clampFloatRect(current.rects.generation, leftStackViewportRef.current),
         },
       }));
     };
@@ -2697,10 +2703,13 @@ useEffect(() => {
   //（Bingo 保持让位，避免三卡同屏）。
   const businessCardOpen = businessOpen && leftMode === 'business';
   const leftStackCards: LeftStackPanelId[] = [
-    ...(captureOpen && !businessCardOpen ? ['capture' as const] : []),
-    ...(personChat && !businessCardOpen ? ['chat' as const] : []),
+    // 2026-11-19：创作卡也进堆栈——与户外规划同开时上下分屏，不再把户外卡藏起来。
+    ...(generationOpen && !businessCardOpen ? ['generation' as const] : []),
+    // 拍摄/私聊/Bingo 与生成卡仍互斥：生成卡占栏时它们不参与成对（渲染侧也已让位）。
+    ...(captureOpen && !generationOpen && !businessCardOpen ? ['capture' as const] : []),
+    ...(personChat && !generationOpen && !businessCardOpen ? ['chat' as const] : []),
     ...(((outdoor2DOpen || outdoor3dTakeover) && outdoorPanel !== null && !businessCardOpen) ? ['outdoor' as const] : []),
-    ...(!captureOpen && !personChat && agentPanelVisible && !businessCardOpen ? ['bingo' as const] : []),
+    ...(!captureOpen && !generationOpen && !personChat && agentPanelVisible && !businessCardOpen ? ['bingo' as const] : []),
   ];
   leftStackPairRef.current = leftStackCards.length === 2 ? leftStackCards : null;
   const leftStackPair = leftStackPairRef.current;
@@ -2711,6 +2720,9 @@ useEffect(() => {
   const leftStackSecond: LeftStackPanelId | null = leftStackPair && leftStackFirst ? (leftStackPair.find(id => id !== leftStackFirst) ?? null) : null;
   // 双卡片堆栈：成对的两张都还在栏内才分上下；任一被抓成小窗，留在栏内的那张独占整栏。
   const leftStackSplit = !!leftStackPair && leftStackPair.every(id => !isLeftStackDetached(leftStack, id));
+  const generationDetached = isLeftStackDetached(leftStack, 'generation');
+  const generationStackFirst = leftStackSplit && leftStackFirst === 'generation';
+  const generationStackSecond = leftStackSplit && leftStackSecond === 'generation';
   // 栏内实际还占着位置的卡片：已浮成独立小窗的不算。抽屉非收起时也占栏。
   // 全浮走时左栏只留一个白底空壳——此时把列宽/底/调节条收起，fixed 浮窗仍挂在列内不受影响。
   const dockedCards = leftStackCards.filter(id => !isLeftStackDetached(leftStack, id));
@@ -4942,8 +4954,7 @@ useEffect(() => {
                     if (!panelOpen) {
                       // 展开左栏户外物料面板；先清待放置：地图点击只服务边界/分区/动线。
                       clearPendingPlacement();
-                      // 左栏一次只留一张卡：开户外就先收生成卡（同拍摄卡被切走时的手感）。
-                      closeGenerationSheet();
+                      // 2026-11-19：开户外不再收生成卡——两张都进左栏堆栈，按分隔条上下分。
                       setOutdoorPanel('library');
                       // 仅当地图已不在出镜形态（异常兜底）时把它带回 2D；正常常驻态这里不动地图。
                       if (!outdoor2DOpen && !outdoor3dTakeoverActive) {
@@ -5004,11 +5015,28 @@ useEffect(() => {
           </button>}
           <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}${dockColumnOccupied ? '' : ' is-empty-dock'}${leftStackDragging && leftStackDockHover ? ' is-dock-hover' : ''}`}>
           {leftStackDragging && leftStackDockHover && !dockColumnOccupied && <div className="sc-dock-ghost" aria-hidden="true">放回左栏</div>}
-          {/* 2026-11-15 统一生成面板：左栏卡片（同拍摄场地/户外规划），不是弹窗。 */}
+          {/* 2026-11-15 统一生成面板：左栏卡片（同拍摄场地/户外规划），不是弹窗。
+              2026-11-19：接入左栏双卡堆栈——与户外规划同开时各占一半，可拖分隔条/换序/抓成小窗。 */}
           <GenerationSheetHost
             onOpenCapture={openCapturePanel}
             controller={controller}
             onAddLocalGlb={item => { const id = placeFromCatalog(item); if (id) selectOnly(id, { keepPanel: true }); }}
+            className={`${generationDetached ? 'is-detached' : generationStackFirst ? 'is-stack-first' : generationStackSecond ? 'is-stack-second' : ''}`}
+            style={generationDetached ? leftStackFloatStyle('generation') : generationStackFirst ? { order: 0 } : generationStackSecond ? { order: 2 } : {}}
+            {...(generationDetached ? {
+              floatBar: (
+                <div
+                  className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
+                  onPointerDown={event => beginLeftStackDrag('move', 'generation', event)}
+                >
+                  <strong>创作</strong><span>独立小窗</span><span className="spacer" />
+                  <button type="button" aria-label="收回创作面板" title="收回左栏" onClick={() => toggleLeftStackDetach('generation')}><Minimize2 size={12}/>收回</button>
+                </div>
+              ),
+              floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'generation', event)} />,
+            } : {
+              onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('generation', event),
+            })}
           />
           {capturePanel !== 'new' && <aside ref={capturePanelRef} id="workbench-capture-card" aria-hidden={!captureOpen}
             className={`sc-workbench-capture${isLeftStackDetached(leftStack, 'capture') ? ' is-detached' : leftStackSplit && leftStackFirst === 'capture' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'capture' ? ' is-stack-second' : ''}`}
@@ -5063,7 +5091,7 @@ useEffect(() => {
             <aside
               className={`sc-left-drawer sc-float-layer is-outdoor-card${isLeftStackDetached(leftStack, 'outdoor') ? ' is-detached' : leftStackSplit && leftStackFirst === 'outdoor' ? ' is-stack-first' : leftStackSplit && leftStackSecond === 'outdoor' ? ' is-stack-second' : ''}`}
               data-testid="outdoor-left-card"
-              hidden={outdoorPanel === null || generationOpen || businessCardOpen}
+              hidden={outdoorPanel === null || businessCardOpen}
               style={{
                 position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden',
                 // 堆栈态高度交给 CSS（is-stack-first 吃 --sc-left-stack-percent，第二张吃剩余）；
