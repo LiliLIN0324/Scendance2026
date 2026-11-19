@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>花家山庄 · 婚礼户外布置起稿 · 一键载入</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #f6f8f4 0%, #eef3ea 46%, #f7f3e9 100%);
+    color: #1b1f1a; padding: 24px;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  }
+  .card {
+    width: min(620px, 100%); background: #fff; border-radius: 20px; padding: 30px 32px 26px;
+    box-shadow: 0 20px 60px rgba(30, 45, 28, 0.13); border: 1px solid rgba(27, 31, 26, 0.07);
+  }
+  .eyebrow { font-size: 12px; letter-spacing: .18em; color: #8a917f; text-transform: uppercase; }
+  h1 { margin: 8px 0 6px; font-size: 24px; line-height: 1.3; font-weight: 650; }
+  .sub { margin: 0 0 20px; font-size: 14px; line-height: 1.75; color: #5b6357; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 0 0 22px; }
+  .fact { background: #f5f7f3; border: 1px solid rgba(27,31,26,.06); border-radius: 12px; padding: 12px 10px; text-align: center; }
+  .fact b { display: block; font-size: 20px; font-weight: 650; color: #2f5d3a; }
+  .fact span { font-size: 11px; color: #79806f; }
+  .notice {
+    font-size: 13px; line-height: 1.75; background: #fdf7e8; border: 1px solid #e9d9ae;
+    border-radius: 12px; padding: 13px 15px; margin: 0 0 20px; color: #6b5a2c;
+  }
+  .notice b { color: #8a6f1f; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; font-size: 15px; font-weight: 600; padding: 12px 22px; border-radius: 12px;
+    border: 1px solid transparent; cursor: pointer; transition: filter .15s ease, opacity .15s ease;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  button.primary { background: linear-gradient(135deg, #3c6b45, #2c5233); color: #fff; }
+  button.gold { background: linear-gradient(135deg, #c8a45c, #b08d42); color: #fff; }
+  button.ghost { background: #fff; border-color: rgba(27,31,26,.16); color: #4a5245; }
+  button:hover:not(:disabled) { filter: brightness(1.06); }
+  .status { margin-top: 18px; font-size: 13px; line-height: 1.7; min-height: 20px; }
+  .status.ok { color: #2f6b39; }
+  .status.err { color: #a33a2a; }
+  .status.busy { color: #7a6a30; }
+  .foot { margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(27,31,26,.08); font-size: 12px; line-height: 1.8; color: #7c8375; }
+  .foot a { color: #3c6b45; }
+  code { background: #f2f4f0; border-radius: 6px; padding: 1px 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="eyebrow">幕景 Scendance · 户外规划交付</div>
+  <h1>花家山庄 · 婚礼户外布置起稿</h1>
+  <p class="sub">
+    这是一份已按幕景自有契约校验通过的户外规划（真实场地锚点 + 真实草坪边界 + 真实物料）。
+    载入后它会作为一份本机草稿出现在你的幕景工作台里，你可以随意改、改完照常保存与分享。
+  </p>
+
+  <div class="facts">
+    <div class="fact"><b>11</b><span>分区</span></div>
+    <div class="fact"><b>188</b><span>设施</span></div>
+    <div class="fact"><b>4</b><span>动线</span></div>
+    <div class="fact"><b>10</b><span>岗位</span></div>
+  </div>
+
+  <p class="notice">
+    <b>先看这条：</b>载入会把这份起稿写进<b>你当前这台设备的浏览器</b>（幕景的户外规划目前按设备存本机）。
+    同一台设备上如果已经有同名草稿，会先问你再覆盖，不会静默冲掉。
+  </p>
+
+  <div class="row">
+    <button class="primary" id="load">一键载入这份规划</button>
+    <button class="ghost" id="open" disabled>打开规划</button>
+    <button class="ghost" id="dl">下载 JSON</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="foot">
+    载入后访问 <code>/?project=house-huajia-wedding-2026&amp;mode=outdoor</code> 即可打开。
+    原始数据在 <a href="/huajia-plan.json">/huajia-plan.json</a>，
+    物料清单与现场待核实项见幕景仓库 <code>docs/plans/2026-11-19-huajia-plan-handover.md</code>。
+  </div>
+</main>
+
+<script>
+(function () {
+  var PROJECT_ID = 'house-huajia-wedding-2026';
+  var NAME = '花家山庄婚礼 · 户外布置起稿';
+  var PLAN_URL = '/huajia-plan.json';
+  var KEY = 'scendance-outdoor-plan-v1:' + PROJECT_ID;
+  var LAST_KEY = 'scendance-outdoor-last-v1';
+
+  var statusEl = document.getElementById('status');
+  var loadBtn = document.getElementById('load');
+  var openBtn = document.getElementById('open');
+  var dlBtn = document.getElementById('dl');
+
+  function say(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  function storage() {
+    try {
+      var s = window.localStorage;
+      var probe = '__sc_probe__';
+      s.setItem(probe, '1');
+      s.removeItem(probe);
+      return s;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function apply(plan) {
+    var s = storage();
+    if (!s) {
+      say('这个浏览器不让站点用本地存储（可能开了无痕模式或禁了 Cookie），载入不了。换普通窗口再试一次。', 'err');
+      return;
+    }
+    var now = new Date().toISOString();
+    var record = {
+      v: 1,
+      projectId: PROJECT_ID,
+      name: NAME,
+      createdAt: now,
+      updatedAt: now,
+      plan: plan
+    };
+    try {
+      s.setItem(KEY, JSON.stringify(record));
+      s.setItem(LAST_KEY, PROJECT_ID);
+    } catch (e) {
+      say('写入本地存储失败：' + (e && e.message ? e.message : e), 'err');
+      return;
+    }
+    var counts = [
+      (plan.zones || []).length + ' 个分区',
+      (plan.facilities || []).length + ' 件物料',
+      (plan.routes || []).length + ' 条动线',
+      (plan.workers || []).length + ' 个岗位'
+    ].join('、');
+    say('已载入：' + counts + '。点「打开规划」进工作台；之后照常编辑与保存就行。', 'ok');
+    openBtn.disabled = false;
+  }
+
+  loadBtn.addEventListener('click', function () {
+    var s = storage();
+    var existing = null;
+    try { existing = s ? s.getItem(KEY) : null; } catch (e) { existing = null; }
+    if (existing && !window.confirm('这台设备上已经有同名草稿了。要用这份起稿覆盖它吗？（选「取消」就保持原样）')) {
+      say('保持原有草稿，没有改动。', '');
+      return;
+    }
+    loadBtn.disabled = true;
+    say('正在取规划数据…', 'busy');
+    fetch(PLAN_URL, { cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (plan) {
+        if (!plan || plan.schemaVersion !== 1 || !Array.isArray(plan.zones)) {
+          throw new Error('规划数据结构不对');
+        }
+        apply(plan);
+      })
+      .catch(function (e) {
+        say('载入失败：' + (e && e.message ? e.message : e), 'err');
+      })
+      .finally(function () { loadBtn.disabled = false; });
+  });
+
+  openBtn.addEventListener('click', function () {
+    window.location.href = '/?project=' + encodeURIComponent(PROJECT_ID) + '&mode=outdoor';
+  });
+
+  dlBtn.addEventListener('click', function () {
+    window.location.href = PLAN_URL;
+  });
+
+  if (!storage()) {
+    say('提示：这个浏览器当前不让站点用本地存储，等下载入会失败。', 'err');
+  }
+})();
+</script>
+</body>
+</html>

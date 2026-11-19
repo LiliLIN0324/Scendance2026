@@ -1,0 +1,4149 @@
+{
+  "schemaVersion": 1,
+  "anchor": {
+    "lng": 120.132272,
+    "lat": 30.223908,
+    "crs": "gcj-02",
+    "source": "lookup"
+  },
+  "boundary": [
+    {
+      "x": -178,
+      "y": -152
+    },
+    {
+      "x": 0,
+      "y": -152
+    },
+    {
+      "x": 96,
+      "y": -152
+    },
+    {
+      "x": 192,
+      "y": -118
+    },
+    {
+      "x": 196,
+      "y": 40
+    },
+    {
+      "x": 200,
+      "y": 176
+    },
+    {
+      "x": 120,
+      "y": 186
+    },
+    {
+      "x": 40,
+      "y": 176
+    },
+    {
+      "x": -60,
+      "y": 150
+    },
+    {
+      "x": -160,
+      "y": 120
+    },
+    {
+      "x": -180,
+      "y": -20
+    }
+  ],
+  "designScope": [
+    {
+      "x": -215,
+      "y": -190
+    },
+    {
+      "x": 30,
+      "y": -190
+    },
+    {
+      "x": 130,
+      "y": -190
+    },
+    {
+      "x": 228,
+      "y": -150
+    },
+    {
+      "x": 234,
+      "y": 60
+    },
+    {
+      "x": 238,
+      "y": 212
+    },
+    {
+      "x": 140,
+      "y": 224
+    },
+    {
+      "x": 30,
+      "y": 212
+    },
+    {
+      "x": -70,
+      "y": 186
+    },
+    {
+      "x": -196,
+      "y": 156
+    },
+    {
+      "x": -220,
+      "y": -30
+    }
+  ],
+  "zones": [
+    {
+      "id": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "semantic": "stage",
+      "name": "仪式区",
+      "polygon": [
+        {
+          "x": 10.29,
+          "y": -2.17
+        },
+        {
+          "x": -7.92,
+          "y": -15.95
+        },
+        {
+          "x": -5,
+          "y": -23.21
+        },
+        {
+          "x": 11.73,
+          "y": -22.15
+        },
+        {
+          "x": 20.83,
+          "y": -22.88
+        },
+        {
+          "x": 42.31,
+          "y": -26.55
+        },
+        {
+          "x": 49.22,
+          "y": -32.73
+        },
+        {
+          "x": 55.77,
+          "y": -40.73
+        },
+        {
+          "x": 72.51,
+          "y": -40.39
+        },
+        {
+          "x": 82.34,
+          "y": -34.23
+        },
+        {
+          "x": 71.79,
+          "y": -27.67
+        },
+        {
+          "x": 64.87,
+          "y": -11.32
+        },
+        {
+          "x": 60.14,
+          "y": -1.5
+        },
+        {
+          "x": 49.22,
+          "y": -8.4
+        },
+        {
+          "x": 24.12,
+          "y": -16.36
+        },
+        {
+          "x": 9.19,
+          "y": -10.52
+        },
+        {
+          "x": 10.29,
+          "y": -2.17
+        }
+      ],
+      "color": "#e8d9b0",
+      "environment": "outdoor",
+      "geometrySource": "map-unverified",
+      "notes": "OSM leisure=grass 真实多边形（1449 m²，与官方「1500 平方天然大草坪」口径吻合），正对 1 号楼（桂香园/仙子厅）。几何来自 OSM，面积口径待现场复核。"
+    },
+    {
+      "id": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "semantic": "audience",
+      "name": "宾客席位区",
+      "polygon": [
+        {
+          "x": 38.59,
+          "y": 115.51
+        },
+        {
+          "x": -4.13,
+          "y": 57.85
+        },
+        {
+          "x": -3.71,
+          "y": 53.33
+        },
+        {
+          "x": 16.14,
+          "y": 40.81
+        },
+        {
+          "x": 59.95,
+          "y": 101.06
+        },
+        {
+          "x": 38.59,
+          "y": 115.51
+        }
+      ],
+      "color": "#dfe8d0",
+      "environment": "outdoor",
+      "geometrySource": "map-unverified",
+      "notes": "OSM leisure=grass 真实多边形（1951 m²），主草坪北侧。面积与公开口径（1200/1500/600 方）均不一致，待现场核实。"
+    },
+    {
+      "id": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "semantic": "reserved",
+      "name": "餐饮区",
+      "polygon": [
+        {
+          "x": -58,
+          "y": 58
+        },
+        {
+          "x": -12,
+          "y": 58
+        },
+        {
+          "x": -12,
+          "y": 92
+        },
+        {
+          "x": -58,
+          "y": 92
+        }
+      ],
+      "color": "#f0e2d0",
+      "environment": "outdoor",
+      "purpose": "service",
+      "geometrySource": "user-drawing",
+      "notes": "滴翠湖北岸的平地（OSM 水体多边形实测 2574 m²，滴翠湖）。餐饮/甜品摆这里，对湖景取光。边界为人工切分，待现场核实。"
+    },
+    {
+      "id": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "semantic": "checkin",
+      "name": "迎宾签到区",
+      "polygon": [
+        {
+          "x": 0,
+          "y": -46
+        },
+        {
+          "x": 32,
+          "y": -46
+        },
+        {
+          "x": 32,
+          "y": -30
+        },
+        {
+          "x": 0,
+          "y": -30
+        }
+      ],
+      "color": "#d9e4ec",
+      "environment": "outdoor",
+      "geometrySource": "user-drawing",
+      "notes": "紧邻 1 号楼大堂（高德 POI 120.132327,30.223452）与中餐厅。边界为人工切分，待现场核实。"
+    },
+    {
+      "id": "fa5dbf9d-faf0-5796-a1cf-87edae275fc7",
+      "semantic": "queue",
+      "name": "排队等候区",
+      "polygon": [
+        {
+          "x": 34,
+          "y": -46
+        },
+        {
+          "x": 52,
+          "y": -46
+        },
+        {
+          "x": 52,
+          "y": -32
+        },
+        {
+          "x": 34,
+          "y": -32
+        }
+      ],
+      "color": "#e4dcec",
+      "environment": "outdoor",
+      "geometrySource": "user-drawing",
+      "notes": "签到区与人行入口之间的等候带，避免堵住主楼门口。边界为人工切分，待现场核实。"
+    },
+    {
+      "id": "dd80e3db-2457-594d-aa55-d92d069bcfd8",
+      "semantic": "medical",
+      "name": "医疗点",
+      "polygon": [
+        {
+          "x": -34,
+          "y": -18
+        },
+        {
+          "x": -18,
+          "y": -18
+        },
+        {
+          "x": -18,
+          "y": -6
+        },
+        {
+          "x": -34,
+          "y": -6
+        }
+      ],
+      "color": "#f0d6d6",
+      "environment": "outdoor",
+      "geometrySource": "user-drawing",
+      "notes": "靠主通道、可直达车行口。边界为人工切分，待现场核实。"
+    },
+    {
+      "id": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "semantic": "parking",
+      "name": "停车落客区",
+      "polygon": [
+        {
+          "x": 128,
+          "y": 88
+        },
+        {
+          "x": 192,
+          "y": 88
+        },
+        {
+          "x": 192,
+          "y": 152
+        },
+        {
+          "x": 128,
+          "y": 152
+        }
+      ],
+      "color": "#dcdce4",
+      "environment": "outdoor",
+      "geometrySource": "map-unverified",
+      "notes": "高德 POI「杭州花家山庄停车场」(120.133678,30.224685) 与「停车场出入口」(120.134025,30.22538)。落客动线在此接人。边界为人工切分。"
+    },
+    {
+      "id": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "semantic": "loading",
+      "name": "装卸后勤区",
+      "polygon": [
+        {
+          "x": -164,
+          "y": 6
+        },
+        {
+          "x": -124,
+          "y": 6
+        },
+        {
+          "x": -124,
+          "y": 44
+        },
+        {
+          "x": -164,
+          "y": 44
+        }
+      ],
+      "color": "#e2e2d8",
+      "environment": "outdoor",
+      "geometrySource": "user-drawing",
+      "notes": "靠近水仙楼一侧的次入口，供布草/货运用。边界为人工切分，待现场核实。"
+    },
+    {
+      "id": "aa297bc9-66ec-5b9a-aed6-3c2574dfab64",
+      "semantic": "reserved",
+      "name": "雨备区",
+      "polygon": [
+        {
+          "x": -62,
+          "y": 96
+        },
+        {
+          "x": -18,
+          "y": 96
+        },
+        {
+          "x": -18,
+          "y": 118
+        },
+        {
+          "x": -62,
+          "y": 118
+        }
+      ],
+      "color": "#d8e4dc",
+      "environment": "outdoor",
+      "geometrySource": "user-drawing",
+      "notes": "餐饮区北侧的备用篷位，与餐饮区互斥切换（下雨时把宴席移进来）。边界为人工切分，待现场核实。"
+    },
+    {
+      "id": "64c8f84e-5a42-5997-aa44-4400c20d7db4",
+      "semantic": "reserved",
+      "name": "环卫点",
+      "polygon": [
+        {
+          "x": 96,
+          "y": -12
+        },
+        {
+          "x": 118,
+          "y": -12
+        },
+        {
+          "x": 118,
+          "y": 4
+        },
+        {
+          "x": 96,
+          "y": 4
+        }
+      ],
+      "color": "#dcdcd4",
+      "environment": "outdoor",
+      "purpose": "service",
+      "geometrySource": "user-drawing",
+      "notes": "离人群最远的边角。边界为人工切分，待现场核实。"
+    },
+    {
+      "id": "542266ff-4ca1-5314-a5cd-f1273e06e40b",
+      "semantic": "indoor",
+      "name": "室内·仙子厅（雨备退路）",
+      "polygon": [
+        {
+          "x": 10,
+          "y": -61
+        },
+        {
+          "x": 36,
+          "y": -61
+        },
+        {
+          "x": 36,
+          "y": -43
+        },
+        {
+          "x": 10,
+          "y": -43
+        }
+      ],
+      "color": "#c8c8c8",
+      "environment": "outdoor",
+      "geometrySource": "user-drawing",
+      "notes": "仙子厅：1 楼 26×18 m、层高 7.5 m、450 m²、无柱无窗、最多约 30 桌（两处公开来源一致）。位置取 1 号楼 POI 点位。室内不做设计，仅作雨天退路。"
+    }
+  ],
+  "facilities": [
+    {
+      "id": "9de3ee78-ffb5-521d-ab6c-e6e61effcaae",
+      "templateId": "scendance-plan-truss-arch",
+      "name": "桁架拱门",
+      "position": {
+        "x": 42,
+        "y": -10
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 4.3,
+        "depth": 0.64
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "仪式花门位；库内为通用桁架拱门，白绿花艺待用生成件替换",
+      "modelOverride": "scendance-plan-truss-arch"
+    },
+    {
+      "id": "b0adabc6-1505-5f28-a457-c0fd4bacd62b",
+      "templateId": "live-music-venue-and-festival-stage-backdrop-banner-fr-7ebd4df6",
+      "name": "舞台背景横幅框架",
+      "position": {
+        "x": 42,
+        "y": -34
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.98,
+        "depth": 0.699
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 3.98×0.70×4.56 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "live-music-venue-and-festival-stage-backdrop-banner-fr-7ebd4df6"
+    },
+    {
+      "id": "719e88dd-4ae6-59f0-adf1-a0522aa5b3e4",
+      "templateId": "orchestra-and-band-instruments-stage-platform-module-6be1e985",
+      "name": "音乐会舞台平台",
+      "position": {
+        "x": 30,
+        "y": -26
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1.00015259254738
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台台面模块，实际数量按舞台宽度调整",
+      "modelOverride": "orchestra-and-band-instruments-stage-platform-module-6be1e985"
+    },
+    {
+      "id": "ca873add-6a9f-5550-a4a6-0f75661ddd66",
+      "templateId": "orchestra-and-band-instruments-stage-platform-module-6be1e985",
+      "name": "音乐会舞台平台",
+      "position": {
+        "x": 32.2,
+        "y": -26
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1.00015259254738
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台台面模块，实际数量按舞台宽度调整",
+      "modelOverride": "orchestra-and-band-instruments-stage-platform-module-6be1e985"
+    },
+    {
+      "id": "1edf750b-a707-5e2f-adf6-b3b1902579c2",
+      "templateId": "orchestra-and-band-instruments-stage-platform-module-6be1e985",
+      "name": "音乐会舞台平台",
+      "position": {
+        "x": 34.4,
+        "y": -26
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1.00015259254738
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台台面模块，实际数量按舞台宽度调整",
+      "modelOverride": "orchestra-and-band-instruments-stage-platform-module-6be1e985"
+    },
+    {
+      "id": "936bb719-167c-57e1-a308-a7e80dc0dcf3",
+      "templateId": "orchestra-and-band-instruments-stage-platform-module-6be1e985",
+      "name": "音乐会舞台平台",
+      "position": {
+        "x": 36.6,
+        "y": -26
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1.00015259254738
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台台面模块，实际数量按舞台宽度调整",
+      "modelOverride": "orchestra-and-band-instruments-stage-platform-module-6be1e985"
+    },
+    {
+      "id": "64f54b08-c5df-562c-a9e5-072fc5713a23",
+      "templateId": "live-music-venue-and-festival-stage-stage-step-unit-f141dc1c",
+      "name": "舞台台阶",
+      "position": {
+        "x": 27,
+        "y": -26
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2040567264694368,
+        "depth": 1.1224914189169672
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 1.20×1.12×1.81 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "live-music-venue-and-festival-stage-stage-step-unit-f141dc1c"
+    },
+    {
+      "id": "130d3c7a-4629-5ac4-abbe-c974f5e1e9ec",
+      "templateId": "live-music-venue-and-festival-stage-line-array-speaker-7500d812",
+      "name": "线阵列音箱",
+      "position": {
+        "x": 27.5,
+        "y": -20
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.0499999523162842,
+        "depth": 0.44993589069713263
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 1.05×0.45×0.43 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "live-music-venue-and-festival-stage-line-array-speaker-7500d812"
+    },
+    {
+      "id": "f8b77b99-ff1b-5d2f-a147-a8e59a2465ae",
+      "templateId": "live-music-venue-and-festival-stage-line-array-speaker-7500d812",
+      "name": "线阵列音箱",
+      "position": {
+        "x": 27.5,
+        "y": -20
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.0499999523162842,
+        "depth": 0.44993589069713263
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 1.05×0.45×0.43 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "live-music-venue-and-festival-stage-line-array-speaker-7500d812"
+    },
+    {
+      "id": "29a09538-35e4-59dd-a248-0eb9f817ae7f",
+      "templateId": "storybook-christmas-market-festoon-bulb-string-9422da4e",
+      "name": "节庆灯泡串",
+      "position": {
+        "x": 36,
+        "y": -6
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.0899999141693115,
+        "depth": 0.0854872268349388
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "串灯；正式串灯要走 aholo 生成（库内只有节庆款）",
+      "modelOverride": "storybook-christmas-market-festoon-bulb-string-9422da4e"
+    },
+    {
+      "id": "47ab59f5-8127-5a33-abd2-104072c95cab",
+      "templateId": "storybook-christmas-market-festoon-bulb-string-9422da4e",
+      "name": "节庆灯泡串",
+      "position": {
+        "x": 36,
+        "y": -6
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.0899999141693115,
+        "depth": 0.0854872268349388
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "串灯；正式串灯要走 aholo 生成（库内只有节庆款）",
+      "modelOverride": "storybook-christmas-market-festoon-bulb-string-9422da4e"
+    },
+    {
+      "id": "e6cfaa8a-22dc-5dca-a279-de09b0d624a3",
+      "templateId": "storybook-christmas-market-festoon-bulb-string-9422da4e",
+      "name": "节庆灯泡串",
+      "position": {
+        "x": 36,
+        "y": -6
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.0899999141693115,
+        "depth": 0.0854872268349388
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "串灯；正式串灯要走 aholo 生成（库内只有节庆款）",
+      "modelOverride": "storybook-christmas-market-festoon-bulb-string-9422da4e"
+    },
+    {
+      "id": "6c322760-8a38-57ef-ab33-ad439f48bf5a",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 50,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "a776ea11-8277-5c4d-a392-e4265cdac433",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 50,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "550314c8-1485-5737-a8ed-66327bd12e63",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 50,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "2888920b-c618-56f9-a277-54453524fc79",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 50,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "3944fa93-93ad-51e5-a907-6d43abfadf79",
+      "templateId": "hotel-and-resort-operations-banquet-round-table-10-958b76ee",
+      "name": "圆桌",
+      "position": {
+        "x": 4,
+        "y": 66
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.797,
+        "depth": 1.797
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌；实际桌数按宾客数 ÷10 补齐",
+      "modelOverride": "hotel-and-resort-operations-banquet-round-table-10-958b76ee"
+    },
+    {
+      "id": "cf587856-f252-57f3-a67d-aaf7a7f70684",
+      "templateId": "hotel-and-resort-operations-banquet-round-table-10-958b76ee",
+      "name": "圆桌",
+      "position": {
+        "x": 13,
+        "y": 73
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.797,
+        "depth": 1.797
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌；实际桌数按宾客数 ÷10 补齐",
+      "modelOverride": "hotel-and-resort-operations-banquet-round-table-10-958b76ee"
+    },
+    {
+      "id": "1def1c60-50ac-5bcd-aea6-73989893cecc",
+      "templateId": "hotel-and-resort-operations-banquet-round-table-10-958b76ee",
+      "name": "圆桌",
+      "position": {
+        "x": 22,
+        "y": 66
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.797,
+        "depth": 1.797
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌；实际桌数按宾客数 ÷10 补齐",
+      "modelOverride": "hotel-and-resort-operations-banquet-round-table-10-958b76ee"
+    },
+    {
+      "id": "2a0b4499-bf53-56c0-af9e-ed267841d5e2",
+      "templateId": "hotel-and-resort-operations-banquet-round-table-10-958b76ee",
+      "name": "圆桌",
+      "position": {
+        "x": 31,
+        "y": 73
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.797,
+        "depth": 1.797
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌；实际桌数按宾客数 ÷10 补齐",
+      "modelOverride": "hotel-and-resort-operations-banquet-round-table-10-958b76ee"
+    },
+    {
+      "id": "bd823a65-0778-5db5-aeda-d4f3745c82a6",
+      "templateId": "hotel-and-resort-operations-banquet-round-table-10-958b76ee",
+      "name": "圆桌",
+      "position": {
+        "x": 40,
+        "y": 66
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.797,
+        "depth": 1.797
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌；实际桌数按宾客数 ÷10 补齐",
+      "modelOverride": "hotel-and-resort-operations-banquet-round-table-10-958b76ee"
+    },
+    {
+      "id": "6cd9ec37-4a68-5f96-a0a1-5914920a7d78",
+      "templateId": "hotel-and-resort-operations-banquet-round-table-10-958b76ee",
+      "name": "圆桌",
+      "position": {
+        "x": 49,
+        "y": 73
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.797,
+        "depth": 1.797
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌；实际桌数按宾客数 ÷10 补齐",
+      "modelOverride": "hotel-and-resort-operations-banquet-round-table-10-958b76ee"
+    },
+    {
+      "id": "a32dca6b-f10a-5422-a645-4c4186864361",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 6,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "153d44d2-0f58-5a05-ab96-42c3e00bba21",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 11,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "7631a71c-1039-5ed9-a420-fc3464680f2d",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 16,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "0c4c962c-428c-5ce5-af35-1a9b1e3a8ea1",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 21,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "49e945c8-d6bb-5544-ac70-81d9ef4d32aa",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 26,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "a36cc999-833b-5e13-a8e1-48937f3a1656",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 31,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "59aedf17-b5d1-5cb1-ad06-43c8ec55f65c",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 36,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "8faf190b-0428-5e5b-a026-e93e254f6a40",
+      "templateId": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8",
+      "name": "可叠放座椅",
+      "position": {
+        "x": 41,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.460018,
+        "depth": 0.513697
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "占位；真实席位数为桌数×10，库内缺白色礼宾椅",
+      "modelOverride": "office-lobby-and-facilities-canteen-stacking-chair-3440c7d8"
+    },
+    {
+      "id": "264ee280-7e89-5d18-aca4-a895ddbcb08c",
+      "templateId": "indian-bazaar-street-and-temple-sweet-counter-3a98de40",
+      "name": "带托盘甜品柜台",
+      "position": {
+        "x": -50,
+        "y": 62
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.7999999523162842,
+        "depth": 0.8398754622322357
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "实测尺寸 1.80×0.84×1.86 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "indian-bazaar-street-and-temple-sweet-counter-3a98de40"
+    },
+    {
+      "id": "70279d8c-577c-5a65-abbf-5ae5ee81df29",
+      "templateId": "indian-bazaar-street-and-temple-sweet-counter-3a98de40",
+      "name": "带托盘甜品柜台",
+      "position": {
+        "x": -50,
+        "y": 62
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.7999999523162842,
+        "depth": 0.8398754622322357
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "实测尺寸 1.80×0.84×1.86 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "indian-bazaar-street-and-temple-sweet-counter-3a98de40"
+    },
+    {
+      "id": "acb45d51-8b87-5c19-a65f-9b6bedef218b",
+      "templateId": "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc",
+      "name": "一米二模块吧台",
+      "position": {
+        "x": -34,
+        "y": 62
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2,
+        "depth": 0.74
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "实测尺寸 1.20×0.74×1.05 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc"
+    },
+    {
+      "id": "ff69ec61-4085-57e2-adf3-13f701ded1c3",
+      "templateId": "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc",
+      "name": "一米二模块吧台",
+      "position": {
+        "x": -34,
+        "y": 62
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2,
+        "depth": 0.74
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "实测尺寸 1.20×0.74×1.05 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc"
+    },
+    {
+      "id": "c65e0cc6-669f-5307-a64b-7a53c08dc4e3",
+      "templateId": "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc",
+      "name": "一米二模块吧台",
+      "position": {
+        "x": -34,
+        "y": 62
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2,
+        "depth": 0.74
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "实测尺寸 1.20×0.74×1.05 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "bar-pub-and-brewery-taproom-bar-counter-module-4f0062bc"
+    },
+    {
+      "id": "bd06172d-97d4-516a-a251-f8d14db04eb2",
+      "templateId": "distillery-and-bonded-warehouse-tasting-counter-5c8e94aa",
+      "name": "品酒接待吧台",
+      "position": {
+        "x": -20,
+        "y": 66
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.8,
+        "depth": 1.32
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "实测尺寸 2.80×1.32×2.18 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "distillery-and-bonded-warehouse-tasting-counter-5c8e94aa"
+    },
+    {
+      "id": "a63a4c33-32e3-5deb-a39f-2935cd578ea6",
+      "templateId": "scendance-plan-prosecco-bar",
+      "name": "起泡酒吧",
+      "position": {
+        "x": -34,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.78,
+        "depth": 2.75
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "香槟塔/饮品柱库内没有，需走 aholo 生成",
+      "modelOverride": "scendance-plan-prosecco-bar"
+    },
+    {
+      "id": "d29a4c7c-c8cc-5908-ade0-754f3126e056",
+      "templateId": "airport-terminal-and-ground-operations-check-in-desk-ba7d92dc",
+      "name": "机场签到台",
+      "position": {
+        "x": 12,
+        "y": -38
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.11,
+        "depth": 1.88
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "库内为机场签到台；婚礼物料「婚礼签到台」已由 aholo 生成并公开入库，优先用那件",
+      "modelOverride": "airport-terminal-and-ground-operations-check-in-desk-ba7d92dc"
+    },
+    {
+      "id": "209bda2f-566e-5dcb-aa03-8e0fd8d2aad1",
+      "templateId": "scendance-plan-signage-frame-2",
+      "name": "指示牌架·双面",
+      "position": {
+        "x": 4,
+        "y": -36
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.39,
+        "depth": 1.06
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 1.39×1.06×1.94 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-signage-frame-2"
+    },
+    {
+      "id": "4b07feb2-a5f3-5c74-af44-4bd00dc637f4",
+      "templateId": "scendance-plan-signage-frame-2",
+      "name": "指示牌架·双面",
+      "position": {
+        "x": 4,
+        "y": -36
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.39,
+        "depth": 1.06
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 1.39×1.06×1.94 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-signage-frame-2"
+    },
+    {
+      "id": "f248d13d-6e2d-5e3c-a11a-de98a6590544",
+      "templateId": "scendance-plan-pull-up-banner",
+      "name": "易拉宝",
+      "position": {
+        "x": 26,
+        "y": -36
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.94,
+        "depth": 0.29
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 0.94×0.29×2.12 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-pull-up-banner"
+    },
+    {
+      "id": "644c26c0-7262-5017-a188-2e4d08181c7c",
+      "templateId": "scendance-plan-pull-up-banner",
+      "name": "易拉宝",
+      "position": {
+        "x": 26,
+        "y": -36
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.94,
+        "depth": 0.29
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 0.94×0.29×2.12 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-pull-up-banner"
+    },
+    {
+      "id": "4ac54ef7-36f6-5c2a-aac4-abee98a85372",
+      "templateId": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2",
+      "name": "绳式礼宾隔离柱",
+      "position": {
+        "x": 8,
+        "y": -44
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.294006,
+        "depth": 0.360014
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 1.29×0.36×1.03 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2"
+    },
+    {
+      "id": "ad1291fb-f8b5-5c53-accd-3718b9053ae7",
+      "templateId": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2",
+      "name": "绳式礼宾隔离柱",
+      "position": {
+        "x": 8,
+        "y": -44
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.294006,
+        "depth": 0.360014
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 1.29×0.36×1.03 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2"
+    },
+    {
+      "id": "4ecbecab-f6b5-5b66-ad26-05e8be352e0a",
+      "templateId": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2",
+      "name": "绳式礼宾隔离柱",
+      "position": {
+        "x": 8,
+        "y": -44
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.294006,
+        "depth": 0.360014
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 1.29×0.36×1.03 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2"
+    },
+    {
+      "id": "789a5070-801f-55b8-ada4-84d494cf8d7c",
+      "templateId": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2",
+      "name": "绳式礼宾隔离柱",
+      "position": {
+        "x": 8,
+        "y": -44
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.294006,
+        "depth": 0.360014
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "实测尺寸 1.29×0.36×1.03 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "casino-floor-and-back-rooms-rope-stanchion-4fb93cd2"
+    },
+    {
+      "id": "34b546ed-585b-5e9b-a839-621b39aebe5e",
+      "templateId": "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a",
+      "name": "排队隔离栏",
+      "position": {
+        "x": 36,
+        "y": -44
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 4.94,
+        "depth": 0.419
+      },
+      "zoneId": "fa5dbf9d-faf0-5796-a1cf-87edae275fc7",
+      "notes": "实测尺寸 4.94×0.42×1.22 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a"
+    },
+    {
+      "id": "b1a7ab68-059f-584d-ac57-1f12b2548e5a",
+      "templateId": "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a",
+      "name": "排队隔离栏",
+      "position": {
+        "x": 36,
+        "y": -44
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 4.94,
+        "depth": 0.419
+      },
+      "zoneId": "fa5dbf9d-faf0-5796-a1cf-87edae275fc7",
+      "notes": "实测尺寸 4.94×0.42×1.22 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a"
+    },
+    {
+      "id": "c94de4a0-53a0-50c7-a3d6-ec566b30c8de",
+      "templateId": "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a",
+      "name": "排队隔离栏",
+      "position": {
+        "x": 36,
+        "y": -44
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 4.94,
+        "depth": 0.419
+      },
+      "zoneId": "fa5dbf9d-faf0-5796-a1cf-87edae275fc7",
+      "notes": "实测尺寸 4.94×0.42×1.22 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "airport-terminal-and-ground-operations-queue-barrier-r-0d620e5a"
+    },
+    {
+      "id": "106359d6-28d9-5895-a02a-9ec2621570c6",
+      "templateId": "scendance-plan-queues",
+      "name": "排队",
+      "position": {
+        "x": 50,
+        "y": -40
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.84,
+        "depth": 0.4
+      },
+      "zoneId": "fa5dbf9d-faf0-5796-a1cf-87edae275fc7",
+      "notes": "实测尺寸 0.84×0.40×2.00 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-queues"
+    },
+    {
+      "id": "a261f53c-0367-5fc3-a441-bddb0df953ae",
+      "templateId": "scendance-plan-first-aid-point",
+      "name": "急救点",
+      "position": {
+        "x": -30,
+        "y": -12
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.08,
+        "depth": 3.105
+      },
+      "zoneId": "dd80e3db-2457-594d-aa55-d92d069bcfd8",
+      "notes": "实测尺寸 3.08×3.10×3.00 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-first-aid-point"
+    },
+    {
+      "id": "6e2b8ff5-ba67-5dfe-af99-cf176b92c9f6",
+      "templateId": "scendance-plan-water-refill-station",
+      "name": "补水站",
+      "position": {
+        "x": -22,
+        "y": -12
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.51,
+        "depth": 0.517
+      },
+      "zoneId": "dd80e3db-2457-594d-aa55-d92d069bcfd8",
+      "notes": "实测尺寸 0.51×0.52×1.14 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-water-refill-station"
+    },
+    {
+      "id": "28fb8c39-7483-5d98-a16a-96bafbae04fc",
+      "templateId": "scendance-plan-feed-station",
+      "name": "补给站",
+      "position": {
+        "x": -26,
+        "y": -4
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.86,
+        "depth": 0.72
+      },
+      "zoneId": "dd80e3db-2457-594d-aa55-d92d069bcfd8",
+      "notes": "实测尺寸 1.86×0.72×0.99 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-feed-station"
+    },
+    {
+      "id": "582d925e-44d1-5ed9-ad8b-3f83166fd559",
+      "templateId": "scendance-plan-coach",
+      "name": "大巴",
+      "position": {
+        "x": 150,
+        "y": 118
+      },
+      "rotationDeg": 90,
+      "size": {
+        "width": 2.688,
+        "depth": 12.2025
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "实测尺寸 2.69×12.20×3.23 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-coach"
+    },
+    {
+      "id": "743f5155-4eea-59e0-a24a-9987cb966d0d",
+      "templateId": "scendance-plan-bus-coach-station",
+      "name": "公交/大巴站",
+      "position": {
+        "x": 145,
+        "y": 100
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 13.8,
+        "depth": 7.8
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "实测尺寸 13.80×7.80×2.92 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-bus-coach-station"
+    },
+    {
+      "id": "931b2c65-a367-59c5-a014-df06822996cf",
+      "templateId": "car-park-and-road-vehicle-fleet-entry-barrier-7cb4f555",
+      "name": "道闸（抬杆）",
+      "position": {
+        "x": 166,
+        "y": 150
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.339991,
+        "depth": 0.459957
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "实测尺寸 3.34×0.46×1.27 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "car-park-and-road-vehicle-fleet-entry-barrier-7cb4f555"
+    },
+    {
+      "id": "bf8cb99e-fe71-5ce3-ab5c-4149bdc7acf3",
+      "templateId": "scendance-plan-parking",
+      "name": "停车",
+      "position": {
+        "x": 172,
+        "y": 140
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.84,
+        "depth": 0.4
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "实测尺寸 0.84×0.40×2.00 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-parking"
+    },
+    {
+      "id": "1d02ce96-02ff-5070-abf7-ea872c8f68ab",
+      "templateId": "scendance-plan-ground-protection-mats",
+      "name": "地面保护垫",
+      "position": {
+        "x": 138,
+        "y": 132
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.2
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "压草用",
+      "modelOverride": "scendance-plan-ground-protection-mats"
+    },
+    {
+      "id": "fcd7a7d8-695a-534a-a00e-cf51891b56b2",
+      "templateId": "scendance-plan-ground-protection-mats",
+      "name": "地面保护垫",
+      "position": {
+        "x": 141,
+        "y": 132
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.2
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "压草用",
+      "modelOverride": "scendance-plan-ground-protection-mats"
+    },
+    {
+      "id": "eab5db59-610b-51a8-a36e-136ed20413cf",
+      "templateId": "scendance-plan-ground-protection-mats",
+      "name": "地面保护垫",
+      "position": {
+        "x": 144,
+        "y": 132
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.2
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "压草用",
+      "modelOverride": "scendance-plan-ground-protection-mats"
+    },
+    {
+      "id": "d00335f8-8767-5ce6-a2e1-22c0801368ba",
+      "templateId": "scendance-plan-ground-protection-mats",
+      "name": "地面保护垫",
+      "position": {
+        "x": 147,
+        "y": 132
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.2
+      },
+      "zoneId": "6adcbfd3-b252-5c28-a1fd-e9b599946e6d",
+      "notes": "压草用",
+      "modelOverride": "scendance-plan-ground-protection-mats"
+    },
+    {
+      "id": "95cda7f6-eebc-51d4-a879-63398a494233",
+      "templateId": "scendance-plan-load-zone",
+      "name": "装卸区",
+      "position": {
+        "x": -158,
+        "y": 10
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.84,
+        "depth": 0.4
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 0.84×0.40×2.00 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-load-zone"
+    },
+    {
+      "id": "2b76fa50-2b59-574c-ab67-152cff8bfaa0",
+      "templateId": "scendance-plan-aluminum-trackway",
+      "name": "铝制铺道板",
+      "position": {
+        "x": -150,
+        "y": 18
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.15
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.40×1.15×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-aluminum-trackway"
+    },
+    {
+      "id": "68f01130-7fad-599a-a1f3-94d4e7378983",
+      "templateId": "scendance-plan-aluminum-trackway",
+      "name": "铝制铺道板",
+      "position": {
+        "x": -147.4,
+        "y": 18
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.15
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.40×1.15×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-aluminum-trackway"
+    },
+    {
+      "id": "2a2508a0-9ff1-5add-abbe-c1f8ac9a7085",
+      "templateId": "scendance-plan-aluminum-trackway",
+      "name": "铝制铺道板",
+      "position": {
+        "x": -144.8,
+        "y": 18
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.15
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.40×1.15×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-aluminum-trackway"
+    },
+    {
+      "id": "9f6dc8f1-b48b-5af8-a793-d9a7cc0765de",
+      "templateId": "scendance-plan-aluminum-trackway",
+      "name": "铝制铺道板",
+      "position": {
+        "x": -142.2,
+        "y": 18
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.15
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.40×1.15×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-aluminum-trackway"
+    },
+    {
+      "id": "92b206d7-25fc-5676-a0d8-9ae951d9fdca",
+      "templateId": "scendance-plan-aluminum-trackway",
+      "name": "铝制铺道板",
+      "position": {
+        "x": -139.6,
+        "y": 18
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.15
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.40×1.15×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-aluminum-trackway"
+    },
+    {
+      "id": "0d1077dc-af69-5b8f-a5c7-ebe71e8c6dcc",
+      "templateId": "scendance-plan-aluminum-trackway",
+      "name": "铝制铺道板",
+      "position": {
+        "x": -137,
+        "y": 18
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4,
+        "depth": 1.15
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.40×1.15×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-aluminum-trackway"
+    },
+    {
+      "id": "9cc6486c-f0dc-5015-a71a-1ab1928399b2",
+      "templateId": "scendance-plan-plastic-trackway",
+      "name": "塑料铺道板",
+      "position": {
+        "x": -150,
+        "y": 24
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.00×1.00×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-plastic-trackway"
+    },
+    {
+      "id": "2f2493ff-2ed4-595b-ac8b-260572db9c1b",
+      "templateId": "scendance-plan-plastic-trackway",
+      "name": "塑料铺道板",
+      "position": {
+        "x": -147.8,
+        "y": 24
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.00×1.00×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-plastic-trackway"
+    },
+    {
+      "id": "9a7b6fef-816d-5e85-a846-76646df6b6a7",
+      "templateId": "scendance-plan-plastic-trackway",
+      "name": "塑料铺道板",
+      "position": {
+        "x": -145.6,
+        "y": 24
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.00×1.00×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-plastic-trackway"
+    },
+    {
+      "id": "eabd5b90-70b1-5656-a1f1-fb8b73658239",
+      "templateId": "scendance-plan-plastic-trackway",
+      "name": "塑料铺道板",
+      "position": {
+        "x": -143.4,
+        "y": 24
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 1
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": "实测尺寸 2.00×1.00×0.06 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-plastic-trackway"
+    },
+    {
+      "id": "348312bf-1539-58e7-a657-0780712889f9",
+      "templateId": "scendance-plan-stretch-tent",
+      "name": "拉伸棚",
+      "position": {
+        "x": -50,
+        "y": 100
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 9.463403,
+        "depth": 6.315641
+      },
+      "zoneId": "aa297bc9-66ec-5b9a-aed6-3c2574dfab64",
+      "notes": "实测尺寸 9.46×6.32×3.50 m（来源 merged.json，许可 project-authored）",
+      "modelOverride": "scendance-plan-stretch-tent"
+    },
+    {
+      "id": "b8a12220-a769-5c70-ab3c-2d1e9099fabb",
+      "templateId": "caravan-park-and-campsite-bell-tent-d7f74bfd",
+      "name": "钟形帐篷",
+      "position": {
+        "x": -34,
+        "y": 100
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 4.664711,
+        "depth": 4.664711
+      },
+      "zoneId": "aa297bc9-66ec-5b9a-aed6-3c2574dfab64",
+      "notes": "实测尺寸 4.66×4.66×2.68 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "caravan-park-and-campsite-bell-tent-d7f74bfd"
+    },
+    {
+      "id": "cb6c98dd-92a9-505f-a770-164b4763f9ee",
+      "templateId": "hot-air-balloon-festival-registration-gazebo-1f36ec9a",
+      "name": "快搭帐篷",
+      "position": {
+        "x": -26,
+        "y": 112
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3.34,
+        "depth": 3.34
+      },
+      "zoneId": "aa297bc9-66ec-5b9a-aed6-3c2574dfab64",
+      "notes": "实测尺寸 3.34×3.34×3.00 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "hot-air-balloon-festival-registration-gazebo-1f36ec9a"
+    },
+    {
+      "id": "62e6a8c0-49ab-5270-a49f-12d7d45b5fb1",
+      "templateId": "football-soccer-club-grounds-waste-bin-15a6b427",
+      "name": "场馆敞口垃圾桶",
+      "position": {
+        "x": 100,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.4400378604372831,
+        "depth": 0.4400378604372831
+      },
+      "zoneId": "64c8f84e-5a42-5997-aa44-4400c20d7db4",
+      "notes": "实测尺寸 0.44×0.44×0.72 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "football-soccer-club-grounds-waste-bin-15a6b427"
+    },
+    {
+      "id": "e63cfbe2-5e2b-5551-a787-f3888e675db8",
+      "templateId": "football-soccer-club-grounds-waste-bin-15a6b427",
+      "name": "场馆敞口垃圾桶",
+      "position": {
+        "x": 100,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.4400378604372831,
+        "depth": 0.4400378604372831
+      },
+      "zoneId": "64c8f84e-5a42-5997-aa44-4400c20d7db4",
+      "notes": "实测尺寸 0.44×0.44×0.72 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "football-soccer-club-grounds-waste-bin-15a6b427"
+    },
+    {
+      "id": "fcb48d79-faab-5117-abcc-7d2668cd2bbd",
+      "templateId": "football-soccer-club-grounds-waste-bin-15a6b427",
+      "name": "场馆敞口垃圾桶",
+      "position": {
+        "x": 100,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.4400378604372831,
+        "depth": 0.4400378604372831
+      },
+      "zoneId": "64c8f84e-5a42-5997-aa44-4400c20d7db4",
+      "notes": "实测尺寸 0.44×0.44×0.72 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "football-soccer-club-grounds-waste-bin-15a6b427"
+    },
+    {
+      "id": "cf27a710-1103-5b12-a169-c0be59f4d062",
+      "templateId": "football-soccer-club-grounds-waste-bin-15a6b427",
+      "name": "场馆敞口垃圾桶",
+      "position": {
+        "x": 100,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.4400378604372831,
+        "depth": 0.4400378604372831
+      },
+      "zoneId": "64c8f84e-5a42-5997-aa44-4400c20d7db4",
+      "notes": "实测尺寸 0.44×0.44×0.72 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "football-soccer-club-grounds-waste-bin-15a6b427"
+    },
+    {
+      "id": "82fee63f-400d-56bd-a662-d9cb42ec9809",
+      "templateId": "theme-park-rides-and-coasters-theme-park-rides-and-coa-486efc8a",
+      "name": "分类回收桶",
+      "position": {
+        "x": 110,
+        "y": -6
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.7,
+        "depth": 0.800064
+      },
+      "zoneId": "64c8f84e-5a42-5997-aa44-4400c20d7db4",
+      "notes": "实测尺寸 1.70×0.80×1.11 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "theme-park-rides-and-coasters-theme-park-rides-and-coa-486efc8a"
+    },
+    {
+      "id": "4a5856b7-dfff-5c92-a78f-eb4e34518ea9",
+      "templateId": "wedding-and-chapel-kit-chapel-lectern-df983527",
+      "name": "礼拜堂讲台",
+      "position": {
+        "x": 30,
+        "y": -52
+      },
+      "rotationDeg": 180,
+      "size": {
+        "width": 0.5,
+        "depth": 0.4
+      },
+      "zoneId": "542266ff-4ca1-5314-a5cd-f1273e06e40b",
+      "notes": "实测尺寸 0.50×0.40×1.15 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-chapel-lectern-df983527"
+    },
+    {
+      "id": "c04856cc-4fdf-5a83-a489-34cb716fa06e",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 14,
+        "y": -46
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "542266ff-4ca1-5314-a5cd-f1273e06e40b",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "c75cc0a5-000b-5157-ab0d-c137bb37d585",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 19,
+        "y": -46
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "542266ff-4ca1-5314-a5cd-f1273e06e40b",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "d70f5a8a-92db-5609-ad5f-f463c03fdf67",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 24,
+        "y": -46
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "542266ff-4ca1-5314-a5cd-f1273e06e40b",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "d19a6a9d-58a5-5d2b-ab53-a31becef59d3",
+      "templateId": "wedding-and-chapel-kit-lantern-post-c06e501d",
+      "name": "花园灯柱",
+      "position": {
+        "x": 29,
+        "y": -46
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.240025,
+        "depth": 0.240025
+      },
+      "zoneId": "542266ff-4ca1-5314-a5cd-f1273e06e40b",
+      "notes": "实测尺寸 0.24×0.24×1.80 m（来源 merged.json，许可 CC0-1.0）",
+      "modelOverride": "wedding-and-chapel-kit-lantern-post-c06e501d"
+    },
+    {
+      "id": "1144e28b-0256-5c1c-a179-910a7814b380",
+      "sourceAssetId": "6ba6af9a-871a-4500-be20-536db5bd1b01",
+      "templateId": "generated:library-6ba6af9a-871a-4500-be20-536db5bd1b01",
+      "name": "婚礼双拱花门",
+      "position": {
+        "x": 42,
+        "y": -12
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4000000953674316,
+        "depth": 0.6612673997879028
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "仪式主花门（aholo 生成，白绿系）",
+      "modelOverride": "generated:library-6ba6af9a-871a-4500-be20-536db5bd1b01"
+    },
+    {
+      "id": "3eab9ddb-693e-55fa-a84f-857e19cd6076",
+      "sourceAssetId": "f78f294f-1663-4e49-b197-3c7f8dc48a4f",
+      "templateId": "generated:library-f78f294f-1663-4e49-b197-3c7f8dc48a4f",
+      "name": "婚礼花拱门",
+      "position": {
+        "x": 36,
+        "y": -22
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2,
+        "depth": 0.6241368651390076
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "通道花门，与主花门形成双层",
+      "modelOverride": "generated:library-f78f294f-1663-4e49-b197-3c7f8dc48a4f"
+    },
+    {
+      "id": "4d8ef665-7fed-5acd-a52a-61b29fac72ab",
+      "sourceAssetId": "be385dc7-8927-487b-8dbd-7efc8f126a13",
+      "templateId": "generated:library-be385dc7-8927-487b-8dbd-7efc8f126a13",
+      "name": "半圆弧形婚礼花墙背景板",
+      "position": {
+        "x": 42,
+        "y": -33
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4000000953674316,
+        "depth": 1.515047311782837
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台背景花墙",
+      "modelOverride": "generated:library-be385dc7-8927-487b-8dbd-7efc8f126a13"
+    },
+    {
+      "id": "4b9ed5ba-ab9d-5c09-af78-5f3a524be156",
+      "sourceAssetId": "0bc698c6-d2c9-4091-8483-6039113061e4",
+      "templateId": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4",
+      "name": "婚礼花柱",
+      "position": {
+        "x": 28,
+        "y": -14
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.731890082359314,
+        "depth": 0.6847758889198303
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台两侧花柱，间距按舞台宽度调整",
+      "modelOverride": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4"
+    },
+    {
+      "id": "9715259a-ff38-595a-acec-61e9c08ef8d0",
+      "sourceAssetId": "0bc698c6-d2c9-4091-8483-6039113061e4",
+      "templateId": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4",
+      "name": "婚礼花柱",
+      "position": {
+        "x": 28,
+        "y": -14
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.731890082359314,
+        "depth": 0.6847758889198303
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台两侧花柱，间距按舞台宽度调整",
+      "modelOverride": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4"
+    },
+    {
+      "id": "e1d8fbc5-d266-5976-aab7-0746530bc812",
+      "sourceAssetId": "0bc698c6-d2c9-4091-8483-6039113061e4",
+      "templateId": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4",
+      "name": "婚礼花柱",
+      "position": {
+        "x": 28,
+        "y": -14
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.731890082359314,
+        "depth": 0.6847758889198303
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台两侧花柱，间距按舞台宽度调整",
+      "modelOverride": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4"
+    },
+    {
+      "id": "7fc7a1c2-bd53-521f-abf7-eda567b134fd",
+      "sourceAssetId": "0bc698c6-d2c9-4091-8483-6039113061e4",
+      "templateId": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4",
+      "name": "婚礼花柱",
+      "position": {
+        "x": 28,
+        "y": -14
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.731890082359314,
+        "depth": 0.6847758889198303
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "舞台两侧花柱，间距按舞台宽度调整",
+      "modelOverride": "generated:library-0bc698c6-d2c9-4091-8483-6039113061e4"
+    },
+    {
+      "id": "f0cbf7f2-9797-50ae-afc9-19000ab705df",
+      "sourceAssetId": "4923657e-af62-4469-98d3-dedbf45db633",
+      "templateId": "generated:library-4923657e-af62-4469-98d3-dedbf45db633",
+      "name": "婚礼香槟布幔花艺柱",
+      "position": {
+        "x": 50,
+        "y": -16
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.741179883480072,
+        "depth": 0.6918054819107056
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "花艺布幔柱",
+      "modelOverride": "generated:library-4923657e-af62-4469-98d3-dedbf45db633"
+    },
+    {
+      "id": "8d135263-f5d7-5741-a83f-5a5b7473633d",
+      "sourceAssetId": "4923657e-af62-4469-98d3-dedbf45db633",
+      "templateId": "generated:library-4923657e-af62-4469-98d3-dedbf45db633",
+      "name": "婚礼香槟布幔花艺柱",
+      "position": {
+        "x": 50,
+        "y": -16
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.741179883480072,
+        "depth": 0.6918054819107056
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "花艺布幔柱",
+      "modelOverride": "generated:library-4923657e-af62-4469-98d3-dedbf45db633"
+    },
+    {
+      "id": "4126f6c5-a4d1-5f30-a3fb-01fa68173143",
+      "sourceAssetId": "87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "templateId": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "name": "婚礼垂吊花球",
+      "position": {
+        "x": 32,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.44999998807907104,
+        "depth": 0.43409067392349243
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "垂吊花球（顶部悬挂，需桁架承重）",
+      "modelOverride": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004"
+    },
+    {
+      "id": "bb734e82-7eae-5f42-ae9a-f4330f0bc47a",
+      "sourceAssetId": "87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "templateId": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "name": "婚礼垂吊花球",
+      "position": {
+        "x": 32,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.44999998807907104,
+        "depth": 0.43409067392349243
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "垂吊花球（顶部悬挂，需桁架承重）",
+      "modelOverride": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004"
+    },
+    {
+      "id": "fe506ff3-6cf7-5cb6-a4c1-af65656ce2ce",
+      "sourceAssetId": "87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "templateId": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "name": "婚礼垂吊花球",
+      "position": {
+        "x": 32,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.44999998807907104,
+        "depth": 0.43409067392349243
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "垂吊花球（顶部悬挂，需桁架承重）",
+      "modelOverride": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004"
+    },
+    {
+      "id": "5da877e0-cb38-5b4b-ab5d-5b42cbf353db",
+      "sourceAssetId": "87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "templateId": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004",
+      "name": "婚礼垂吊花球",
+      "position": {
+        "x": 32,
+        "y": -8
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.44999998807907104,
+        "depth": 0.43409067392349243
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "垂吊花球（顶部悬挂，需桁架承重）",
+      "modelOverride": "generated:library-87221ce6-aab3-4cf3-89a0-0a8a651ee004"
+    },
+    {
+      "id": "9db3a5eb-9a98-5f94-a0cf-d387eeff0aea",
+      "sourceAssetId": "cb293f67-912b-4b0b-ac98-d0f38b9be787",
+      "templateId": "generated:library-cb293f67-912b-4b0b-ac98-d0f38b9be787",
+      "name": "婚礼珍珠串帘",
+      "position": {
+        "x": 38,
+        "y": -30
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.0722579956054688,
+        "depth": 0.14681407809257507
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "珍珠串帘，替代库内节庆灯泡串",
+      "modelOverride": "generated:library-cb293f67-912b-4b0b-ac98-d0f38b9be787"
+    },
+    {
+      "id": "5447b8c8-aa42-5fc5-a7a6-c27b90410f48",
+      "sourceAssetId": "cb293f67-912b-4b0b-ac98-d0f38b9be787",
+      "templateId": "generated:library-cb293f67-912b-4b0b-ac98-d0f38b9be787",
+      "name": "婚礼珍珠串帘",
+      "position": {
+        "x": 38,
+        "y": -30
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.0722579956054688,
+        "depth": 0.14681407809257507
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "珍珠串帘，替代库内节庆灯泡串",
+      "modelOverride": "generated:library-cb293f67-912b-4b0b-ac98-d0f38b9be787"
+    },
+    {
+      "id": "cd70b936-8f93-5866-a8cb-b5be5ef1c7b0",
+      "sourceAssetId": "ee6e392d-3ac0-4ee8-b005-9304ad8bb627",
+      "templateId": "generated:library-ee6e392d-3ac0-4ee8-b005-9304ad8bb627",
+      "name": "婚礼白纱幔",
+      "position": {
+        "x": 46,
+        "y": -40
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 3,
+        "depth": 1.9395138025283813
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "白纱幔背景",
+      "modelOverride": "generated:library-ee6e392d-3ac0-4ee8-b005-9304ad8bb627"
+    },
+    {
+      "id": "a6e00cf9-2721-5d91-a890-0c6f6c095f24",
+      "sourceAssetId": "b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "templateId": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "name": "婚礼圆桌",
+      "position": {
+        "x": 6,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2000000476837158,
+        "depth": 1.2014265060424805
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌起稿位 1；实际桌数按宾客数 ÷10 调整",
+      "modelOverride": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f"
+    },
+    {
+      "id": "f1ca6ff0-9d3e-563e-a87d-e899f63167a3",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 7.05,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 1",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "88e0918b-8bcc-5c9c-a475-abcf20feb53b",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 6.85,
+        "y": 64.62
+      },
+      "rotationDeg": 36,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 2",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "0a93f898-c89a-5b4c-adab-17bad1ff150a",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 6.32,
+        "y": 65
+      },
+      "rotationDeg": 72,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 3",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "52de430a-0fb7-52bd-a0aa-8eed786f0406",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 5.68,
+        "y": 65
+      },
+      "rotationDeg": 108,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 4",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "18c6bbf3-1182-5da1-a7e9-f75fc8f90a2b",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 5.15,
+        "y": 64.62
+      },
+      "rotationDeg": 144,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 5",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "d8ab3d67-4e12-5214-aaed-950d0a9e73ce",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 4.95,
+        "y": 64
+      },
+      "rotationDeg": 180,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 6",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "5ca11fed-1149-5000-a9e8-907191ba282f",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 5.15,
+        "y": 63.38
+      },
+      "rotationDeg": 216,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 7",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "a00fb75c-08ab-57e5-aee0-225faeb6f461",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 5.68,
+        "y": 63
+      },
+      "rotationDeg": 252,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 8",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "d68261e1-03f8-5e9b-aef5-d3c03a469e01",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 6.32,
+        "y": 63
+      },
+      "rotationDeg": 288,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 9",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "2e97956b-49e8-52d7-aebf-4b6e99bd2548",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 6.85,
+        "y": 63.38
+      },
+      "rotationDeg": 324,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 1 席位 10",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "b104d70d-8a74-546a-a6ae-ff551310dab4",
+      "sourceAssetId": "b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "templateId": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "name": "婚礼圆桌",
+      "position": {
+        "x": 15,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2000000476837158,
+        "depth": 1.2014265060424805
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌起稿位 2；实际桌数按宾客数 ÷10 调整",
+      "modelOverride": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f"
+    },
+    {
+      "id": "fd51c593-eadf-5d0a-a327-5d6b04697e74",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 16.05,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 1",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "9c2c6c4b-f315-58d3-a12d-15a260cb2978",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 15.85,
+        "y": 72.62
+      },
+      "rotationDeg": 36,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 2",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "089ce3b1-cd60-5d40-a141-eb78180aa4f0",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 15.32,
+        "y": 73
+      },
+      "rotationDeg": 72,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 3",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "01d714c8-a82f-5782-a40a-8ab6a0ba9dfd",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 14.68,
+        "y": 73
+      },
+      "rotationDeg": 108,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 4",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "e7a03b40-f06d-5906-a60c-ba07f88c4f06",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 14.15,
+        "y": 72.62
+      },
+      "rotationDeg": 144,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 5",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "8ee98866-af0a-5cd3-adf4-e816d00c8943",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 13.95,
+        "y": 72
+      },
+      "rotationDeg": 180,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 6",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "600b0fa7-c903-54e7-af27-26df467995ca",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 14.15,
+        "y": 71.38
+      },
+      "rotationDeg": 216,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 7",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "bc9e0579-6585-50d5-affa-f1fc679ebea4",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 14.68,
+        "y": 71
+      },
+      "rotationDeg": 252,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 8",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "2c397d0f-519f-5f13-a28e-fd4def34320f",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 15.32,
+        "y": 71
+      },
+      "rotationDeg": 288,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 9",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "af479a46-6feb-5d5c-abb1-4f862f72eb87",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 15.85,
+        "y": 71.38
+      },
+      "rotationDeg": 324,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 2 席位 10",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "aadb54ba-4091-5c66-afd4-5d90bd8a0bec",
+      "sourceAssetId": "b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "templateId": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "name": "婚礼圆桌",
+      "position": {
+        "x": 24,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2000000476837158,
+        "depth": 1.2014265060424805
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌起稿位 3；实际桌数按宾客数 ÷10 调整",
+      "modelOverride": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f"
+    },
+    {
+      "id": "bc5b84d8-16d5-5b67-abae-7275f686fb60",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 25.05,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 1",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "7ae60593-2ae8-5677-ac6d-7269f46b8080",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 24.85,
+        "y": 64.62
+      },
+      "rotationDeg": 36,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 2",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "055e680b-2edd-5ffe-aedc-adde606ebb8e",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 24.32,
+        "y": 65
+      },
+      "rotationDeg": 72,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 3",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "d4413611-48a7-5b0a-a0b3-e7dc374614d6",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 23.68,
+        "y": 65
+      },
+      "rotationDeg": 108,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 4",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "ce91f338-34f6-5c76-aea6-4ca90e944a96",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 23.15,
+        "y": 64.62
+      },
+      "rotationDeg": 144,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 5",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "5022b97c-ef6e-54e9-aaa9-bc87aae0b749",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 22.95,
+        "y": 64
+      },
+      "rotationDeg": 180,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 6",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "081b29b5-060b-5e7e-a3c7-8be792c00f20",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 23.15,
+        "y": 63.38
+      },
+      "rotationDeg": 216,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 7",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "57a02c0d-cb0b-5e8f-abf7-396776c32b09",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 23.68,
+        "y": 63
+      },
+      "rotationDeg": 252,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 8",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "c9e7688c-abee-5557-a03b-d71ae71cf290",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 24.32,
+        "y": 63
+      },
+      "rotationDeg": 288,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 9",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "01772074-6f0a-53a6-ac22-bf39240e259d",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 24.85,
+        "y": 63.38
+      },
+      "rotationDeg": 324,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 3 席位 10",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "3aefa48e-713c-5995-ad08-b0a7841d5438",
+      "sourceAssetId": "b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "templateId": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "name": "婚礼圆桌",
+      "position": {
+        "x": 33,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2000000476837158,
+        "depth": 1.2014265060424805
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌起稿位 4；实际桌数按宾客数 ÷10 调整",
+      "modelOverride": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f"
+    },
+    {
+      "id": "c2aec04b-c67f-5eb0-a491-9c3073971fe9",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 34.05,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 1",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "3e1c3aea-31dc-581a-a175-107411b77db6",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 33.85,
+        "y": 72.62
+      },
+      "rotationDeg": 36,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 2",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "7806925f-3cfc-5136-a294-d01ac16f25c8",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 33.32,
+        "y": 73
+      },
+      "rotationDeg": 72,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 3",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "fcf593a2-b59b-5e68-a288-6eadccb00b21",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 32.68,
+        "y": 73
+      },
+      "rotationDeg": 108,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 4",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "f7727a9e-cdc1-58bd-a461-2c931f67913b",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 32.15,
+        "y": 72.62
+      },
+      "rotationDeg": 144,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 5",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "5934ed20-807a-54f2-a6b3-d6c7794d1287",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 31.95,
+        "y": 72
+      },
+      "rotationDeg": 180,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 6",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "2c2b7cc9-3d14-551b-a5f0-eb50da7d32d8",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 32.15,
+        "y": 71.38
+      },
+      "rotationDeg": 216,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 7",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "55924f5a-ae84-5933-ae8d-a9d973b82be4",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 32.68,
+        "y": 71
+      },
+      "rotationDeg": 252,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 8",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "c0f6ead1-6e53-5532-a48d-6ab68a832046",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 33.32,
+        "y": 71
+      },
+      "rotationDeg": 288,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 9",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "69cc7346-135b-5c68-a87a-e2870343bb0b",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 33.85,
+        "y": 71.38
+      },
+      "rotationDeg": 324,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 4 席位 10",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "e52fdda4-efe7-56c8-a602-4349ca04bfd6",
+      "sourceAssetId": "b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "templateId": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "name": "婚礼圆桌",
+      "position": {
+        "x": 42,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2000000476837158,
+        "depth": 1.2014265060424805
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌起稿位 5；实际桌数按宾客数 ÷10 调整",
+      "modelOverride": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f"
+    },
+    {
+      "id": "f8b57419-7d86-51c7-a090-ba59d4a55c57",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 43.05,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 1",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "6639a7b7-34cf-5e8d-a888-37589823a67f",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 42.85,
+        "y": 64.62
+      },
+      "rotationDeg": 36,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 2",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "27e5e16a-d274-5e48-ac5e-d24843f692a9",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 42.32,
+        "y": 65
+      },
+      "rotationDeg": 72,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 3",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "7c97f411-e953-5201-a2a9-e276d1c89e5e",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 41.68,
+        "y": 65
+      },
+      "rotationDeg": 108,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 4",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "82c7eb7d-7a64-5bf9-ad95-37ae38b7c087",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 41.15,
+        "y": 64.62
+      },
+      "rotationDeg": 144,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 5",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "0170ceb5-f864-53bc-ac52-4173b6e0b129",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 40.95,
+        "y": 64
+      },
+      "rotationDeg": 180,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 6",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "99b1a665-3644-5738-a5e8-d0fc29acd836",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 41.15,
+        "y": 63.38
+      },
+      "rotationDeg": 216,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 7",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "8df92f79-cd86-52ac-afad-80135c390921",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 41.68,
+        "y": 63
+      },
+      "rotationDeg": 252,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 8",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "788c3e37-b280-5d73-a8e1-73b50927b85d",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 42.32,
+        "y": 63
+      },
+      "rotationDeg": 288,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 9",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "c0aa593e-8dfd-50ee-a706-14ff7bbd58bb",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 42.85,
+        "y": 63.38
+      },
+      "rotationDeg": 324,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 5 席位 10",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "0a37e856-76eb-5e65-af64-735a41ba3687",
+      "sourceAssetId": "b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "templateId": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f",
+      "name": "婚礼圆桌",
+      "position": {
+        "x": 51,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.2000000476837158,
+        "depth": 1.2014265060424805
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "十人圆桌起稿位 6；实际桌数按宾客数 ÷10 调整",
+      "modelOverride": "generated:library-b15a34fc-f3f2-4c7c-965c-30998ae7487f"
+    },
+    {
+      "id": "6aec3c20-dcd0-5f5b-ab4a-fadfb74962ae",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 52.05,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 1",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "2306a430-318f-5a74-a4a3-0c362410f039",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 51.85,
+        "y": 72.62
+      },
+      "rotationDeg": 36,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 2",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "3d873702-c2ad-54bd-ae87-6f16e6beaf63",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 51.32,
+        "y": 73
+      },
+      "rotationDeg": 72,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 3",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "5dba9b81-7037-58b2-ad0d-a1dc7edecf0b",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 50.68,
+        "y": 73
+      },
+      "rotationDeg": 108,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 4",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "d45531de-cea4-599d-a045-ba6abb22b8ff",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 50.15,
+        "y": 72.62
+      },
+      "rotationDeg": 144,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 5",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "2a05c76f-8e8c-5d3b-aad0-67d44d007ae8",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 49.95,
+        "y": 72
+      },
+      "rotationDeg": 180,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 6",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "9118b316-b290-56aa-a38f-8059088751bd",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 50.15,
+        "y": 71.38
+      },
+      "rotationDeg": 216,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 7",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "c65c7d56-0b9b-5c0b-a4fa-21c3604f7120",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 50.68,
+        "y": 71
+      },
+      "rotationDeg": 252,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 8",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "bec899e4-601e-5e01-afad-d54ba7f00b25",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 51.32,
+        "y": 71
+      },
+      "rotationDeg": 288,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 9",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "9ac8fa18-20e9-59f2-a0ef-6e2e45496209",
+      "sourceAssetId": "53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "templateId": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c",
+      "name": "婚礼白木椅",
+      "position": {
+        "x": 51.85,
+        "y": 71.38
+      },
+      "rotationDeg": 324,
+      "size": {
+        "width": 0.5367376208305359,
+        "depth": 0.5155550837516785
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌 6 席位 10",
+      "modelOverride": "generated:library-53cbb011-92b8-4c1a-a074-f7390b5ae29c"
+    },
+    {
+      "id": "a206cb04-30ee-5d91-ac55-8b81d161fa73",
+      "sourceAssetId": "7ad8cafa-78ec-4555-8fa8-8232a4aec7ea",
+      "templateId": "generated:library-7ad8cafa-78ec-4555-8fa8-8232a4aec7ea",
+      "name": "婚礼宴会桌花",
+      "position": {
+        "x": 6,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.6000000238418579,
+        "depth": 0.6175956726074219
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌花起稿位；其余各桌按同样规格复制",
+      "modelOverride": "generated:library-7ad8cafa-78ec-4555-8fa8-8232a4aec7ea"
+    },
+    {
+      "id": "2f0b573a-86e1-5215-a6bb-9a65c16ae688",
+      "sourceAssetId": "17ca104e-689e-4fe8-91c1-fa2a83ecf262",
+      "templateId": "generated:library-17ca104e-689e-4fe8-91c1-fa2a83ecf262",
+      "name": "婚礼桌号牌",
+      "position": {
+        "x": 6.5,
+        "y": 64.5
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.06290335953235626,
+        "depth": 0.055085185915231705
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "桌号牌起稿位",
+      "modelOverride": "generated:library-17ca104e-689e-4fe8-91c1-fa2a83ecf262"
+    },
+    {
+      "id": "f9ca26cb-6d3f-5f40-a731-1e8a77d68d17",
+      "sourceAssetId": "8c4257f1-bd9c-4035-b26a-553db34217d2",
+      "templateId": "generated:library-8c4257f1-bd9c-4035-b26a-553db34217d2",
+      "name": "婚礼签到台",
+      "position": {
+        "x": 12,
+        "y": -38
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.7999999523162842,
+        "depth": 0.9235658645629883
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "aholo 文生 3D 出件（实测 1.80×0.92×1.15 m），替代库内机场签到台",
+      "modelOverride": "generated:library-8c4257f1-bd9c-4035-b26a-553db34217d2"
+    },
+    {
+      "id": "3fef519f-6235-5032-a47c-a881c4adf764",
+      "sourceAssetId": "bf6aac70-f314-45ec-bc21-03820e428617",
+      "templateId": "generated:library-bf6aac70-f314-45ec-bc21-03820e428617",
+      "name": "婚礼签到背景墙",
+      "position": {
+        "x": 12,
+        "y": -43
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4000000953674316,
+        "depth": 0.7421532273292542
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "签到背景墙",
+      "modelOverride": "generated:library-bf6aac70-f314-45ec-bc21-03820e428617"
+    },
+    {
+      "id": "cd4e6904-5841-5a65-a2d5-7f4ee22a6795",
+      "sourceAssetId": "c13220f0-68cf-4f95-af80-3e5b04eaad2f",
+      "templateId": "generated:library-c13220f0-68cf-4f95-af80-3e5b04eaad2f",
+      "name": "婚礼迎宾立牌",
+      "position": {
+        "x": 4,
+        "y": -40
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.9683010578155518,
+        "depth": 0.769777238368988
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "迎宾立牌分列签到台两侧",
+      "modelOverride": "generated:library-c13220f0-68cf-4f95-af80-3e5b04eaad2f"
+    },
+    {
+      "id": "279c1eda-d728-5436-a34b-8f33ffeadb7f",
+      "sourceAssetId": "c13220f0-68cf-4f95-af80-3e5b04eaad2f",
+      "templateId": "generated:library-c13220f0-68cf-4f95-af80-3e5b04eaad2f",
+      "name": "婚礼迎宾立牌",
+      "position": {
+        "x": 4,
+        "y": -40
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.9683010578155518,
+        "depth": 0.769777238368988
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "迎宾立牌分列签到台两侧",
+      "modelOverride": "generated:library-c13220f0-68cf-4f95-af80-3e5b04eaad2f"
+    },
+    {
+      "id": "eb60c0a3-f051-5767-ab1f-038da2163452",
+      "sourceAssetId": "5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "templateId": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "name": "婚礼路引花牌",
+      "position": {
+        "x": 26,
+        "y": -34
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.40279799699783325,
+        "depth": 0.35597512125968933
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "路引花牌，指向签到区",
+      "modelOverride": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df"
+    },
+    {
+      "id": "e3c846ca-c1f5-5488-a2e3-d67b460c46f6",
+      "sourceAssetId": "5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "templateId": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "name": "婚礼路引花牌",
+      "position": {
+        "x": 26,
+        "y": -34
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.40279799699783325,
+        "depth": 0.35597512125968933
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "路引花牌，指向签到区",
+      "modelOverride": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df"
+    },
+    {
+      "id": "c9ded93d-c5ab-5934-a52e-73488be94818",
+      "sourceAssetId": "709ae5c9-c685-4538-b6e4-1a11b1947c71",
+      "templateId": "generated:library-709ae5c9-c685-4538-b6e4-1a11b1947c71",
+      "name": "婚礼甜品长桌",
+      "position": {
+        "x": -46,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4000000953674316,
+        "depth": 0.8884349465370178
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "甜品长桌",
+      "modelOverride": "generated:library-709ae5c9-c685-4538-b6e4-1a11b1947c71"
+    },
+    {
+      "id": "f33854df-0640-53e3-abf6-6646ad474626",
+      "sourceAssetId": "709ae5c9-c685-4538-b6e4-1a11b1947c71",
+      "templateId": "generated:library-709ae5c9-c685-4538-b6e4-1a11b1947c71",
+      "name": "婚礼甜品长桌",
+      "position": {
+        "x": -46,
+        "y": 64
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 2.4000000953674316,
+        "depth": 0.8884349465370178
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "甜品长桌",
+      "modelOverride": "generated:library-709ae5c9-c685-4538-b6e4-1a11b1947c71"
+    },
+    {
+      "id": "e2da125a-eba5-5314-a675-c27a181cd6f6",
+      "sourceAssetId": "3122e6c6-eb90-407e-b7a2-a2e297c29311",
+      "templateId": "generated:library-3122e6c6-eb90-407e-b7a2-a2e297c29311",
+      "name": "婚礼咖啡桌",
+      "position": {
+        "x": -34,
+        "y": 70
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.399999976158142,
+        "depth": 1.4007505178451538
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "咖啡桌",
+      "modelOverride": "generated:library-3122e6c6-eb90-407e-b7a2-a2e297c29311"
+    },
+    {
+      "id": "11c269c2-4c5a-5229-a8f9-95a599299b1e",
+      "sourceAssetId": "3122e6c6-eb90-407e-b7a2-a2e297c29311",
+      "templateId": "generated:library-3122e6c6-eb90-407e-b7a2-a2e297c29311",
+      "name": "婚礼咖啡桌",
+      "position": {
+        "x": -34,
+        "y": 70
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 1.399999976158142,
+        "depth": 1.4007505178451538
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "咖啡桌",
+      "modelOverride": "generated:library-3122e6c6-eb90-407e-b7a2-a2e297c29311"
+    },
+    {
+      "id": "cfbfc026-9e1c-5d5a-af8f-c6544c7b955f",
+      "sourceAssetId": "c8d2b6ee-e308-483f-a349-dacd159b585d",
+      "templateId": "generated:library-c8d2b6ee-e308-483f-a349-dacd159b585d",
+      "name": "婚礼香槟塔",
+      "position": {
+        "x": -24,
+        "y": 78
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.800000011920929,
+        "depth": 0.7986356019973755
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "香槟塔",
+      "modelOverride": "generated:library-c8d2b6ee-e308-483f-a349-dacd159b585d"
+    },
+    {
+      "id": "a58cad9c-151b-562f-a41f-4cd9e0f4952f",
+      "sourceAssetId": "2a09ecd3-a1a6-4235-8ad1-d5df722319d1",
+      "templateId": "generated:library-2a09ecd3-a1a6-4235-8ad1-d5df722319d1",
+      "name": "婚礼蛋糕台",
+      "position": {
+        "x": -16,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.4346141815185547,
+        "depth": 0.4329988956451416
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "蛋糕台",
+      "modelOverride": "generated:library-2a09ecd3-a1a6-4235-8ad1-d5df722319d1"
+    },
+    {
+      "id": "f0a526ba-1d31-5c1d-a6f1-fd336b195900",
+      "sourceAssetId": "4136fdcf-e0e4-4f87-a0c9-0088056570d1",
+      "templateId": "generated:library-4136fdcf-e0e4-4f87-a0c9-0088056570d1",
+      "name": "婚礼烛台三件组",
+      "position": {
+        "x": -34,
+        "y": 62
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5283756256103516,
+        "depth": 0.21562112867832184
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "烛台组",
+      "modelOverride": "generated:library-4136fdcf-e0e4-4f87-a0c9-0088056570d1"
+    },
+    {
+      "id": "79c6dff1-cef0-531d-a913-e0382dec2c42",
+      "sourceAssetId": "4136fdcf-e0e4-4f87-a0c9-0088056570d1",
+      "templateId": "generated:library-4136fdcf-e0e4-4f87-a0c9-0088056570d1",
+      "name": "婚礼烛台三件组",
+      "position": {
+        "x": -34,
+        "y": 62
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.5283756256103516,
+        "depth": 0.21562112867832184
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "烛台组",
+      "modelOverride": "generated:library-4136fdcf-e0e4-4f87-a0c9-0088056570d1"
+    },
+    {
+      "id": "b5f40eaf-424e-5ee2-a099-e048e0bfbcd0",
+      "sourceAssetId": "cf868de5-a05d-4d9b-9a89-3505d36586df",
+      "templateId": "generated:library-cf868de5-a05d-4d9b-9a89-3505d36586df",
+      "name": "婚礼落地花瓶",
+      "position": {
+        "x": -50,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.1539667844772339,
+        "depth": 0.12360405176877975
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "落地花瓶",
+      "modelOverride": "generated:library-cf868de5-a05d-4d9b-9a89-3505d36586df"
+    },
+    {
+      "id": "8fcefd57-b6f0-5d4c-ae5e-7f114f0b5e5f",
+      "sourceAssetId": "cf868de5-a05d-4d9b-9a89-3505d36586df",
+      "templateId": "generated:library-cf868de5-a05d-4d9b-9a89-3505d36586df",
+      "name": "婚礼落地花瓶",
+      "position": {
+        "x": -50,
+        "y": 72
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.1539667844772339,
+        "depth": 0.12360405176877975
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": "落地花瓶",
+      "modelOverride": "generated:library-cf868de5-a05d-4d9b-9a89-3505d36586df"
+    },
+    {
+      "id": "5d5abda4-024c-51f3-a0c1-9d0251f6a07c",
+      "sourceAssetId": "5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "templateId": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "name": "婚礼路引花牌",
+      "position": {
+        "x": -40,
+        "y": 56
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.40279799699783325,
+        "depth": 0.35597512125968933
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "人行入场线路引",
+      "modelOverride": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df"
+    },
+    {
+      "id": "518d1381-d248-51d8-af0d-ec68070617bf",
+      "sourceAssetId": "5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "templateId": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "name": "婚礼路引花牌",
+      "position": {
+        "x": -20,
+        "y": 30
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.40279799699783325,
+        "depth": 0.35597512125968933
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "人行入场线路引",
+      "modelOverride": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df"
+    },
+    {
+      "id": "4678f839-9d63-54ec-a9c7-d74bd986aa12",
+      "sourceAssetId": "5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "templateId": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df",
+      "name": "婚礼路引花牌",
+      "position": {
+        "x": -6,
+        "y": 4
+      },
+      "rotationDeg": 0,
+      "size": {
+        "width": 0.40279799699783325,
+        "depth": 0.35597512125968933
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "人行入场线路引",
+      "modelOverride": "generated:library-5a624a1c-f0db-402c-9833-f527a4b9b0df"
+    }
+  ],
+  "routes": [
+    {
+      "audiences": [
+        "visitors"
+      ],
+      "id": "116c1110-df59-57c1-ac37-ac4e4244a48b",
+      "kind": "pedestrian",
+      "carrier": "walk",
+      "name": "宾客人行入场线",
+      "points": [
+        {
+          "x": -150,
+          "y": 120
+        },
+        {
+          "x": -110,
+          "y": 96
+        },
+        {
+          "x": -60,
+          "y": 70
+        },
+        {
+          "x": -20,
+          "y": 20
+        },
+        {
+          "x": 5.3,
+          "y": -50.6
+        }
+      ],
+      "oneWay": false,
+      "widthM": 3,
+      "notes": ""
+    },
+    {
+      "audiences": [
+        "visitors",
+        "service"
+      ],
+      "id": "0ec7cc3a-26f2-597c-a520-176ab2ecf699",
+      "kind": "vehicle",
+      "carrier": "vehicle",
+      "name": "车行落客线",
+      "points": [
+        {
+          "x": 168.6,
+          "y": 163.2
+        },
+        {
+          "x": 140,
+          "y": 120
+        },
+        {
+          "x": 140,
+          "y": 92
+        }
+      ],
+      "oneWay": false,
+      "widthM": 6,
+      "notes": ""
+    },
+    {
+      "audiences": [
+        "service",
+        "staff"
+      ],
+      "id": "31a490a5-cb8d-5edf-a236-c0261a8f7567",
+      "kind": "service",
+      "carrier": "mixed",
+      "name": "后勤动线",
+      "points": [
+        {
+          "x": -148.5,
+          "y": -25.9
+        },
+        {
+          "x": -140,
+          "y": 10
+        },
+        {
+          "x": -120,
+          "y": 30
+        },
+        {
+          "x": -90,
+          "y": 60
+        },
+        {
+          "x": -60,
+          "y": 70
+        }
+      ],
+      "oneWay": false,
+      "widthM": 4,
+      "notes": ""
+    },
+    {
+      "audiences": [
+        "visitors"
+      ],
+      "id": "8a4c239e-219d-5c81-abed-fbc3848da289",
+      "kind": "pedestrian",
+      "carrier": "walk",
+      "name": "主楼到仪式区动线",
+      "points": [
+        {
+          "x": 5.3,
+          "y": -50.6
+        },
+        {
+          "x": 16,
+          "y": -40
+        },
+        {
+          "x": 30,
+          "y": -30
+        },
+        {
+          "x": 42,
+          "y": -14
+        }
+      ],
+      "oneWay": false,
+      "widthM": 2.5,
+      "notes": ""
+    }
+  ],
+  "nodes": [
+    {
+      "id": "2005b810-be6e-5a05-ab58-96c9fb4b4191",
+      "kind": "both",
+      "name": "车行入口（停车场出入口）",
+      "position": {
+        "x": 168.6,
+        "y": 163.2
+      },
+      "verification": "map-evidenced",
+      "notes": "高德 POI「杭州花家山庄停车场(出入口)」(120.134025,30.22538)；西湖景区单双号限行，尾号单双日通行"
+    },
+    {
+      "id": "ece111f3-b63c-5346-a8cb-b41efe476cfe",
+      "kind": "entry",
+      "name": "人行入口（赤山埠步行线）",
+      "position": {
+        "x": -150,
+        "y": 120
+      },
+      "verification": "map-evidenced",
+      "notes": "官网交通指南：游 2/游 5 线「赤山埠」站往回 20 m 左转进三台山路前行 500 m；游 2 线「鹆鹄湾」站步行 10 分钟"
+    },
+    {
+      "id": "dfcbd6e5-0afb-5892-a5f0-e5f50daf6d1b",
+      "kind": "both",
+      "name": "宴会厅入口（1 号楼大堂）",
+      "position": {
+        "x": 5.3,
+        "y": -50.6
+      },
+      "verification": "map-evidenced",
+      "notes": "高德 POI「杭州花家山庄大堂」(120.132327,30.223452)"
+    },
+    {
+      "id": "138b5435-8e10-5b70-a19d-3e969070d07c",
+      "kind": "both",
+      "name": "后勤口（水仙楼侧）",
+      "position": {
+        "x": -148.5,
+        "y": -25.9
+      },
+      "verification": "map-evidenced",
+      "notes": "高德 POI「水仙楼（3 号楼）」(120.130728,30.223674)，后勤走西侧"
+    }
+  ],
+  "workers": [
+    {
+      "id": "eb56de89-52e2-555d-af52-e23f82a32d20",
+      "role": "签到接待",
+      "audience": "staff",
+      "count": 6,
+      "position": {
+        "x": 16,
+        "y": -36
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": "签到台 2 人 + 引导 2 人 + 资料 2 人"
+    },
+    {
+      "id": "7a63cf49-fe53-5ec7-a510-f30f6197b380",
+      "role": "迎宾引导",
+      "audience": "staff",
+      "count": 4,
+      "position": {
+        "x": 4,
+        "y": -42
+      },
+      "zoneId": "763c9353-4761-5301-ac3a-bbad6e0976cd",
+      "notes": ""
+    },
+    {
+      "id": "1797e261-8ab3-5915-aa81-005b6f681509",
+      "role": "排队疏导",
+      "audience": "security",
+      "count": 4,
+      "position": {
+        "x": 44,
+        "y": -40
+      },
+      "zoneId": "fa5dbf9d-faf0-5796-a1cf-87edae275fc7",
+      "notes": ""
+    },
+    {
+      "id": "75ebca57-322c-5cd9-afb1-8d26bf5290e3",
+      "role": "仪式区执行",
+      "audience": "staff",
+      "count": 6,
+      "position": {
+        "x": 42,
+        "y": -18
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": "含音响与灯光"
+    },
+    {
+      "id": "99893d22-7120-5b47-ad65-5db12374993e",
+      "role": "席面服务",
+      "audience": "service",
+      "count": 18,
+      "position": {
+        "x": 30,
+        "y": 70
+      },
+      "zoneId": "895f9e48-cabb-5700-a2dc-97f308adc05a",
+      "notes": "按 6 桌起稿位估算，实际按桌数×1.5 人调整"
+    },
+    {
+      "id": "d9b3a0b3-b532-5a3c-ad03-764d8f5234fc",
+      "role": "餐饮服务",
+      "audience": "service",
+      "count": 8,
+      "position": {
+        "x": -34,
+        "y": 66
+      },
+      "zoneId": "43324b9c-2455-5b15-aad5-6c4b6c3e2264",
+      "notes": ""
+    },
+    {
+      "id": "63dfe93d-e98d-56b9-a28f-aea81ac007a6",
+      "role": "医疗保障",
+      "audience": "service",
+      "count": 2,
+      "position": {
+        "x": -26,
+        "y": -10
+      },
+      "zoneId": "dd80e3db-2457-594d-aa55-d92d069bcfd8",
+      "notes": ""
+    },
+    {
+      "id": "668fa700-af70-5d8d-a90e-d70ccbc2aec7",
+      "role": "安保巡查",
+      "audience": "security",
+      "count": 6,
+      "position": {
+        "x": -60,
+        "y": 40
+      },
+      "zoneId": "9d54336b-4c99-520b-a1bf-71151f800193",
+      "notes": ""
+    },
+    {
+      "id": "6a49c521-2a4c-5256-aeca-3824463c6774",
+      "role": "环卫",
+      "audience": "service",
+      "count": 4,
+      "position": {
+        "x": 105,
+        "y": -6
+      },
+      "zoneId": "64c8f84e-5a42-5997-aa44-4400c20d7db4",
+      "notes": ""
+    },
+    {
+      "id": "f117c192-b9b2-50b3-a35e-9e965e4997af",
+      "role": "后勤调度",
+      "audience": "staff",
+      "count": 4,
+      "position": {
+        "x": -150,
+        "y": 24
+      },
+      "zoneId": "1141c496-7faf-551c-a780-55f1c8aa2aa1",
+      "notes": ""
+    }
+  ],
+  "buildings": [
+    {
+      "id": "bldg-1hao",
+      "name": "1 号楼（桂香园 / 仙子厅）",
+      "points": [
+        {
+          "x": 10,
+          "y": -61
+        },
+        {
+          "x": 36,
+          "y": -61
+        },
+        {
+          "x": 36,
+          "y": -43
+        },
+        {
+          "x": 10,
+          "y": -43
+        }
+      ]
+    },
+    {
+      "id": "bldg-3hao",
+      "name": "3 号楼（水仙楼）",
+      "points": [
+        {
+          "x": -160,
+          "y": -36
+        },
+        {
+          "x": -136,
+          "y": -36
+        },
+        {
+          "x": -136,
+          "y": -16
+        },
+        {
+          "x": -160,
+          "y": -16
+        }
+      ]
+    },
+    {
+      "id": "bldg-dujuan",
+      "name": "杜鹃楼",
+      "points": [
+        {
+          "x": -94,
+          "y": -146
+        },
+        {
+          "x": -68,
+          "y": -146
+        },
+        {
+          "x": -68,
+          "y": -126
+        },
+        {
+          "x": -94,
+          "y": -126
+        }
+      ]
+    },
+    {
+      "id": "bldg-sushe",
+      "name": "宿舍楼",
+      "points": [
+        {
+          "x": 78,
+          "y": -79
+        },
+        {
+          "x": 103,
+          "y": -79
+        },
+        {
+          "x": 103,
+          "y": -65
+        },
+        {
+          "x": 78,
+          "y": -65
+        }
+      ]
+    }
+  ]
+}
