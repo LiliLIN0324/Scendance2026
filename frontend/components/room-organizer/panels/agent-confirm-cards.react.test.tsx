@@ -20,6 +20,13 @@ describe('VenueConfirmCard 失败态（T1-a）', () => {
     expect(screen.queryByText(/换个说法再说一句/)).toBeNull();
   });
 
+  it('没候选时给地图手动圈画入口，不用用户自己找右栏', () => {
+    const onManual = vi.fn();
+    render(<VenueConfirmCard state={emptyState} onPick={vi.fn()} onDismiss={vi.fn()} onManual={onManual} />);
+    screen.getByRole('button', { name: '在地图上手动圈画' }).click();
+    expect(onManual).toHaveBeenCalledOnce();
+  });
+
   it('有候选时拒绝按钮不要求用户改说法', () => {
     const state = {
       query: '西湖草坪婚礼',

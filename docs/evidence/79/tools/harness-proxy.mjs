@@ -93,9 +93,9 @@ export async function outdoorPlanReadings(actor) {
 }
 
 /** 拉起浏览器：注入会话 + 录 HAR + 全量请求/响应记账 */
-export async function launch({ session, har = null, headless = true, viewport = { width: 1600, height: 1000 } } = {}) {
+export async function launch({ session, har = null, headless = true, viewport = { width: 1600, height: 1000 }, proxyBypass = null } = {}) {
   const proxy = process.env.SCENT_PROXY || process.env.HTTPS_PROXY;
-  const browser = await chromium.launch({ headless, executablePath: CHROME, proxy: proxy ? { server: proxy } : undefined, args: ['--disable-http2', '--disable-quic'] });
+  const browser = await chromium.launch({ headless, executablePath: CHROME, proxy: proxy ? { server: proxy, ...(proxyBypass ? { bypass: proxyBypass } : {}) } : undefined, args: ['--disable-http2', '--disable-quic'] });
   const context = await browser.newContext({
     viewport, locale: 'zh-CN', timezoneId: 'Asia/Shanghai',
     recordHar: har ? { path: har, content: 'embed' } : undefined,

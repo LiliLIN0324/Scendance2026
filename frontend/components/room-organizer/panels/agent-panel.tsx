@@ -101,6 +101,7 @@ import { useOutdoorAgentWorkflow, explicitProposalApproval } from '../hooks/use-
 import { OutdoorThoughtRecord, OutdoorWorkflowCard } from '../components/outdoor-workflow-card';
 import type { OutdoorAgentBridge, OutdoorBrief } from '../lib/outdoor-agent-contract';
 import { parseOutdoorEventTurn } from '../lib/outdoor-event-turn';
+import { isHeadcountOnlyMessage } from '../lib/outdoor-headcount-adjustment';
 import { matchesLocalOutdoorCommand } from '../lib/outdoor-local-commands';
 import { outdoorEventIssue, isShorelineEvent, supportedOutdoorEvent, confirmedOutdoorEntrances, outdoorEventSiteSummary, outdoorEventTemplatesSummary } from '../lib/outdoor-event-logic';
 import { buildZoneEventProposal, matchZoneCommand, type ZoneEventProposal } from '../lib/zone-event-proposal';
@@ -3216,6 +3217,23 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         return;
       }
       say({role:'user',text:trimmed});
+      // 2026-11-19 正式站实测：同一句「在杭州湖滨银泰in77做200人发布会…」
+      // 模型有时判 search、有时判 ask，地点入口就时有时无。复合句里地点已写明时，
+      // 先在本地确定性地发起候选检索；设计部分照旧存进待恢复槽，范围确认后接回。
+      const localVenueName = matchVenueCommand(trimmed);
+      const canReplaceVenuePick = !venuePick
+        || (!venuePick.loading && !venuePick.picking && venuePick.candidates.length === 0);
+      if (canReplaceVenuePick && localVenueName && localVenueName !== 'ask'
+        && placeStillPending({ hasOutdoorPlan: Boolean(routeBridgeRef.current?.applyPlan), stage: outdoorWorkflow.state.stage, venueUp, rangeConfirmed: outdoorWorkflow.scopeConfirmed() })) {
+        if (isCompositeDesignBrief(trimmed, localVenueName)) {
+          writePendingBrief(outdoorWorkflow.state.scope, trimmed, outdoorWorkflow.state.stage);
+        }
+        const epoch = beginOutdoorTask('venue');
+        setOutdoorTask({ intent: `在「${localVenueName}」做设计`, state: 'working', action: '检索场地候选', steps: ['理解场地名'] });
+        setVenuePick({ epoch, query: localVenueName, candidates: [], loading: true, picking: null });
+        say({ role: 'agent', text: `我理解为「${localVenueName}」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。` });
+        return;
+      }
       if(outdoorWorkflow.clarify(trimmed))return;
       // 一个入口：登录且在线时，排流线也交给域 Agent，由模型决定用哪些工具；
       // 本地确定性路线规划只在未登录或断网时兜底（viewerKnownAnonymous / navigator.onLine）。
@@ -3405,7 +3423,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     // V-3：区域提案——「分区/排区域」按入场朝向分带生成区域+物料草案，虚线预览等确认。
     const outdoorEventTurn = routeBridgeRef.current?.getPlan() ? parseOutdoorEventTurn(trimmed, memoryRef.current.event ?? null, outdoorKindRef.current === 'zone' && outdoorTask?.state === 'blocked') : null;
-    if (matchZoneCommand(trimmed) || outdoorEventTurn) {
+    // 2026-11-19：「人数改为 150 人，保持现有分区」里的「分区」不是要重新分区。
+    // 只改人数时放回主理解链，否则会在这里被区域提案吞掉，模型和落盘都到不了。
+    const headcountOnly = isHeadcountOnlyMessage(trimmed);
+    if ((matchZoneCommand(trimmed) || outdoorEventTurn) && !headcountOnly) {
       const stated = parseBriefSentence(trimmed);
       if (outdoorEventTurn) saveMemory({ ...memoryRef.current,
         ...(outdoorEventTurn.event ? { event: outdoorEventTurn.event } : {}),
@@ -4800,6 +4821,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         state={agent.venuePick}
         onPick={place => agent.handleVenuePick(place)}
         onPreview={place => agent.previewVenueCandidate(place)}
+        onManual={() => agent.startMapVenuePicker()}
         onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '场地候选' }); agent.dismissVenuePick(); }}
       />}
       {/* V-2d 流线提案确认卡：虚线预览在画布，应用才写入（可撤销）。 */}
