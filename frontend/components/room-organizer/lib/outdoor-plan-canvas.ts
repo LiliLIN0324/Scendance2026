@@ -294,15 +294,18 @@ export function boundaryHaloToneFor(source: string): BoundaryHaloTone {
 export function drawBoundaryLayer(
   c: PlanCanvasContext,
   boundary: readonly PlanPoint[],
-  opts: { vertexHandles?: boolean; vertexDots?: boolean; halo?: BoundaryHaloTone; locked?: boolean } = {},
+  opts: { vertexHandles?: boolean; vertexDots?: boolean; halo?: BoundaryHaloTone; locked?: boolean; selected?: boolean } = {},
 ): void {
   if (boundary.length < 3) return;
   const { ctx, viewport } = c;
   const color = PLANNING_LAYER_COLORS.boundary;
   const style = boundaryHaloStyle(opts.halo ?? 'light', { locked: opts.locked === true });
+  // 2026-11-19：选中态（点填充区选中、待 Delete 删整条）——填充加深一档、外描边加粗，
+  // 不改颜色也不加额外图例：红线的语义不变，只是「现在说的是这一圈」。
+  const selected = opts.selected === true;
   // 2026-11-16：先铺面（场地“底片”）；三种底图都用地红线（规划红实线）。
   traceRing(c, boundary);
-  ctx.fillStyle = hexWithAlpha(color, style.fillAlpha);
+  ctx.fillStyle = hexWithAlpha(color, selected ? Math.min(0.32, style.fillAlpha + 0.12) : style.fillAlpha);
   ctx.fill();
   if (style.halo) {
     traceRing(c, boundary);
@@ -315,11 +318,11 @@ export function drawBoundaryLayer(
   // 碰到分区色块/划线也不会融进去；红线本身仍是实线，警示越界的红虚线不因此混淆。
   traceRing(c, boundary);
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
-  ctx.lineWidth = style.line.width + 2.2;
+  ctx.lineWidth = style.line.width + (selected ? 4 : 2.2);
   ctx.stroke();
   traceRing(c, boundary);
   ctx.strokeStyle = style.line.color;
-  ctx.lineWidth = style.line.width;
+  ctx.lineWidth = style.line.width + (selected ? 1.8 : 0);
   ctx.stroke();
   // 2026-11-16 用户「边角还是实心正方形，不过实心的在编辑模式可以大一些」：
   // 顶点统一实心方块——平时 5 px 当标记，可编辑（未锁）时 9 px 当手柄，形状不变只变大；

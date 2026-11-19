@@ -12,6 +12,8 @@ import type { FurnitureItem } from './types';
 export interface StoredEnvironment {
   assetId: string;
   name: string;
+  /** Uniform scale for this project instance; absent means 1. */
+  scale?: number;
   position?: Readonly<{ x: number; y: number; z: number }>;
   /** Zero-based building storey this scanned space belongs to. */
   floorIndex?: number;
@@ -41,6 +43,7 @@ function isStoredEnvironment(value: unknown): value is StoredEnvironment {
     })));
   return typeof entry.assetId === 'string' && entry.assetId.length > 0 && entry.assetId.length <= 120 &&
     typeof entry.name === 'string' && entry.name.length <= 120 && validPosition && validItems &&
+    (entry.scale === undefined || (typeof entry.scale === 'number' && Number.isFinite(entry.scale) && entry.scale >= 0.01 && entry.scale <= 100)) &&
     (entry.floorIndex === undefined || (Number.isInteger(entry.floorIndex) && (entry.floorIndex as number) >= 0 && (entry.floorIndex as number) < 8));
 }
 
