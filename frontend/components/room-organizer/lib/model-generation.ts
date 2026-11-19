@@ -1,5 +1,6 @@
-import { assetError } from '@/lib/assets-api';
+import { assetError, GENERATION_BUSY_NOTICE } from '@/lib/assets-api';
 import type { BackendSession, GenerationCapabilities, GenerationJob } from '@/lib/backend-session';
+import { normalizeReferenceImage } from '@/lib/reference-photo';
 
 /**
  * 模型生成的提交规则（2026-11-15 从 generated-model-library 抽出来）。
@@ -71,10 +72,17 @@ export function submitModelJob(controller: BackendSession, input: SubmitModelJob
     : { kind: 'text', ...provider });
 }
 
-/** 参考图先上传成资产，提交时只带 id；返回原名给面板回显。 */
-export async function uploadModelReference(controller: BackendSession, file: File): Promise<{ id: string; name: string }> {
-  const uploaded = await controller.uploadGenerationReference(file);
-  return { id: uploaded.id, name: file.name };
+/**
+ * 参考图先上传成资产，提交时只带 id；返回原名给面板回显。
+ *
+ * 上传前先归一化：手机照片多半是 HEIC、长边超 4096 或超过 5MB，
+ * 原样丢给服务端只会被打回。归一化放在这里，两个入口（生成面板与物料库面板）
+ * 都走这一条，不会出现一处能用一处不能用的差别。
+ */
+export async function uploadModelReference(controller: BackendSession, file: File): Promise<{ id: string; name: string; notice: string }> {
+  const prepared = await normalizeReferenceImage(file);
+  const uploaded = await controller.uploadGenerationReference(prepared.file, prepared.file.name);
+  return { id: uploaded.id, name: prepared.file.name, notice: prepared.notice };
 }
 
 /**
@@ -117,12 +125,24 @@ export function generationBlockReason(input: {
   anyConfigured: boolean;
   disabled: boolean;
   writeBlocked: boolean;
+  /** 上一次提交被「槽位满」挡下来了：这句要一直挂在面板顶上。 */
+  busy?: boolean;
 }): string {
   if (!input.signedIn) return '登录云项目后即可生成模型。';
   if (input.capabilityState === 'loading' || input.capabilityState === 'idle') return '正在读取可用的生成模型…';
   if (input.capabilityState === 'failed') return '暂时连不上云端，没读到可用的生成模型。';
   if (!input.anyConfigured) return '生成能力尚未连接服务商。在设置里填入自定义服务商地址和密钥后即可开始。';
+  // 槽位满的文案与资产接口同源（assets-api 的 GENERATION_BUSY_NOTICE），
+  // 两个入口不能各说各的。
+  if (input.busy) return GENERATION_BUSY_NOTICE;
   if (input.disabled) return '当前有其他操作在进行，暂时不能提交生成。';
   if (input.writeBlocked) return '当前项目是只读状态，拿到编辑权后才能生成。';
   return '';
+}
+
+/** 服务端是否因为「这个账号的生成槽位满了」挡下了这次提交。 */
+export function isGenerationBusy(failure: unknown): boolean {
+  const code = failure && typeof failure === 'object' && 'code' in failure
+    ? String((failure as { code?: unknown }).code) : '';
+  return code === 'GENERATION_BUSY';
 }

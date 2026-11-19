@@ -113,6 +113,15 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
     const nextAssets = await controller.businessRequest<CloudAsset[]>('/assets');
     if (current(context)) setAssets(nextAssets);
   }
+  /** 公开物料：放进公共目录后，任何注册用户都能在物料库看到并取用。撤下同理。 */
+  async function togglePublish(asset: CloudAsset, context: RequestContext): Promise<void> {
+    const published = Boolean(asset.published_at);
+    await controller.businessRequest(`/assets/${encodeURIComponent(asset.id)}/publish`, published ? 'DELETE' : 'POST');
+    await refreshAssets(context);
+    if (current(context)) {
+      setNotice(published ? '已从公共物料库撤下，其他人看不到了。' : '已放进公共物料库，任何注册用户都能看到并取用。');
+    }
+  }
   async function loadPreview(assetId: string, context: RequestContext): Promise<void> {
     const authorized = await controller.authorizeAsset(assetId);
     const metadata = assets.find(asset => asset.id === assetId);
@@ -150,9 +159,13 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
         {!loading && !visibleAssets.length && <p>{pane === 'saved' ? '还没有收藏。点条目右侧的星标收藏。' : pane === 'mine' ? '还没有生成物料。' : '还没有物料。'}</p>}
         <ul className="sc-assets-list">{visibleAssets.map(asset => {
           const row = { asset, favorite: favorites.includes(asset.id), pending: !!pending || busy, onToggleFavorite: () => toggleFavorite(asset.id) };
+          // 只有物主能决定公开与否；别人的公共物料只标出来，不给按钮。
+          const canPublish = asset.format === 'glb' && asset.owner_id === userId;
+          const publishRow = { ...row, published: Boolean(asset.published_at), canPublish,
+            onTogglePublish: () => { void run('更新公开状态', account => togglePublish(asset, account)); } };
           return asset.format === 'glb'
-            ? <AssetRow key={asset.id} {...row} onPreview={() => { void run('加载模型预览', account => loadPreview(asset.id, account)); }} />
-            : <AssetRow key={asset.id} {...row} />;
+            ? <AssetRow key={asset.id} {...publishRow} onPreview={() => { void run('加载模型预览', account => loadPreview(asset.id, account)); }} />
+            : <AssetRow key={asset.id} {...publishRow} />;
         })}</ul>
         {preview && <section className="sc-assets-preview" aria-label="三维素材预览">
           <div className="sc-assets-section-heading"><h4>{preview.asset.name}</h4><button type="button" onClick={() => setPreview(null)}>关闭预览</button></div>
@@ -170,12 +183,15 @@ export function AssetsPanel({ controller, layout, onApplyLayout, bound, busy }: 
   </section>;
 }
 
-function AssetRow({ asset, favorite, pending, onToggleFavorite, onPreview }: {
+function AssetRow({ asset, favorite, pending, onToggleFavorite, onPreview, published, canPublish, onTogglePublish }: {
   asset: CloudAsset;
   favorite: boolean;
   pending: boolean;
   onToggleFavorite(): void;
   onPreview?: () => void;
+  published: boolean;
+  canPublish: boolean;
+  onTogglePublish(): void;
 }): JSX.Element {
   const [broken, setBroken] = useState(false);
   const preview = broken ? undefined : storedPreview(asset);
@@ -190,7 +206,13 @@ function AssetRow({ asset, favorite, pending, onToggleFavorite, onPreview }: {
     {onPreview
       ? <button type="button" className="sc-assets-thumb" aria-label={`预览 ${asset.name}`} disabled={pending} onClick={onPreview}>{thumb}</button>
       : <span className="sc-assets-thumb" aria-hidden="true">{thumb}</span>}
-    <div className="sc-assets-copy"><strong>{asset.name}</strong><small>{assetMeta(asset)}</small></div>
+    <div className="sc-assets-copy"><strong>{asset.name}</strong><small>{assetMeta(asset)}</small>
+      <div className="sc-assets-foot">
+        {published && <em className="sc-assets-public">公共物料</em>}
+        {canPublish && <button type="button" className="sc-assets-publish" aria-pressed={published} disabled={pending}
+          title={published ? '从公共物料库撤下' : '放进公共物料库，任何注册用户都能看到并取用'}
+          onClick={onTogglePublish}>{published ? '撤下' : '公开'}</button>}
+      </div></div>
     <button type="button" className="sc-assets-star" aria-label={`${favorite ? '取消收藏' : '收藏'} ${asset.name}`} aria-pressed={favorite} title={favorite ? '取消收藏' : '收藏'} onClick={onToggleFavorite}><Star size={14} fill={favorite ? 'currentColor' : 'none'} aria-hidden="true"/></button>
   </li>;
 }

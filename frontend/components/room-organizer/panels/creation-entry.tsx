@@ -256,7 +256,7 @@ export function CreationEntry({
           >
             <input
               type="file"
-              accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+              accept="image/png,image/jpeg,image/heic,image/heif,.png,.jpg,.jpeg,.heic,.heif"
               className="gs-create-file-input"
               disabled={busy}
               onChange={event => { onPickReference(event.target.files?.[0]); event.target.value = ''; }}

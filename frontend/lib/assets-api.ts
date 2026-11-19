@@ -6,7 +6,12 @@ import type { RoomLayout } from '@/components/room-organizer/lib/types';
 
 export interface CloudAsset {
   id: string; name: string; source: string; format: string; byte_size: number;
-  source_url?: string | null; license?: { id?: string; url?: string; attribution?: string };
+  source_url?: string | null;
+  /** 物主是谁。公共目录里的物料带着原主人的 id。 */
+  owner_id?: string;
+  /** 有值说明这物料在公共目录里，所有注册用户都能看到并取用。 */
+  published_at?: string | null;
+  license?: { id?: string; url?: string; attribution?: string };
   metadata?: {
     sourceSize?: AssetSize;
     /** 物料自己的预览图。没有则界面留空方块，不画通用椅子。 */
@@ -56,13 +61,23 @@ export function readGenerationIntent(storage: Pick<Storage, 'getItem'>, key: str
     return value;
   } catch { throw new Error('无法读取上一次生成请求。请先核对云任务记录；恢复本地存储前不能新建付费任务。'); }
 }
+/**
+ * 槽位满的人话。
+ *
+ * 服务端按「每个账号最多 3 个在跑的生成任务」收口（见
+ * supabase/migrations/20261119130000_per_owner_concurrent_generation.sql），
+ * 所以这里不能说「已有生成任务等待完成」——那是在说单人旧口径。
+ * 统一生成面板与物料库面板都读这一句，别各写各的。
+ */
+export const GENERATION_BUSY_NOTICE = '这个账号已经有 3 个生成任务在跑，等一个完成后再提交；重试会沿用同一请求编号，不会重复扣费。';
+
 export function assetError(error: unknown): string {
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
   const messages: Record<string, string> = {
     SERVICE_NOT_CONFIGURED: '三维生成服务尚未配置，请联系管理员完成配置。',
     BILLING_NOT_CONFIGURED: '生成预算尚未配置，请联系管理员。',
     BUDGET_EXCEEDED: '生成预算已用完。请联系管理员核对预算，重试会沿用同一请求编号。',
-    GENERATION_BUSY: '已有生成任务等待完成，请稍后重试同一请求。',
+    GENERATION_BUSY: GENERATION_BUSY_NOTICE,
     IDEMPOTENCY_CONFLICT: '此请求编号已对应其他内容，请联系管理员核对记录。',
     UNAUTHENTICATED: '登录已失效，请重新登录。当前画布和生成请求已保留。',
     SESSION_CHANGED: '账号已变化，请重新操作。',
