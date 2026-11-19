@@ -46,18 +46,23 @@ out.setup = await setupSite(page, { shot: `${D01}/2026-11-19-range-confirmed.png
 
 // ── 真实物料：我的物料库应非空
 await chat(page, '按分区摆物料', { wait: 45000 });
-const libBtn = await clickText(page, /从我的物料库查找/);
-await page.waitForTimeout(2000);
+const libInput = page.locator('input[aria-label="物料名称或用途"]').first();
+const libInputCount = await libInput.count();
+if (libInputCount) { await libInput.fill('展板'); await page.waitForTimeout(500); }
 const searchBtn = await clickText(page, /检索真实库/);
 await page.waitForTimeout(12000);
 await page.screenshot({ path: `${D01}/2026-11-19-material-library.png` });
 out.material = {
-  libraryButton: libBtn, searchButton: searchBtn,
+  libraryInput: libInputCount, searchButton: searchBtn,
   libraryText: await page.evaluate(() => {
     const el = [...document.querySelectorAll('*')].find((e) => /物料库/.test(e.innerText || '') && (e.innerText || '').length < 1200);
     return (el?.innerText || '').replace(/\s+/g, ' ').slice(0, 600);
   }),
   apiAssets: netlog.slice(m1).filter((n) => n.t === 'res' && /assets/.test(n.url)).map((n) => `${n.method} ${n.status} ${n.url.replace(/https:\/\/[^/]+/, '').slice(0, 90)}`),
+  choiceButtons: await page.evaluate(() => [...document.querySelectorAll('button')]
+    .filter((b) => { const r = b.getBoundingClientRect(); return r.width > 1 && r.height > 1; })
+    .map((b) => (b.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80))
+    .filter((t) => t && /展板|物料|加入|选这个|用这个/.test(t)).slice(0, 20)),
 };
 const cloudAssets = await cloudFetch(session, '/assets');
 out.material.cloudAssets = { status: cloudAssets.status, count: Array.isArray(cloudAssets.body) ? cloudAssets.body.length : cloudAssets.body };
@@ -65,7 +70,7 @@ out.material.cloudAssets = { status: cloudAssets.status, count: Array.isArray(cl
 // ── 推进到提案并应用
 const m2 = netlog.length;
 const drive = await driveToProposal(page, { shot: `${D01}/2026-11-19-proposal.png` });
-const applyBtn = await waitForButton(page, /确认并应用这一版|确认分区并预览/, { timeout: 8000 });
+const applyBtn = await waitForButton(page, /确认并应用这一版|确认分区并预览/, { timeout: 8000, requireEnabled: true });
 const beforeApply = await planState(page);
 if (applyBtn) await page.getByRole('button', { name: /确认并应用这一版|确认分区并预览/ }).first().click().catch(() => {});
 await page.waitForTimeout(18000);
@@ -88,7 +93,7 @@ console.log('撤销后:', JSON.stringify(out.undo.afterUndo));
 
 // ── #9 再应用一次
 const m4 = netlog.length;
-const again = await waitForButton(page, /确认并应用这一版|重试|出分区预览|预览按分区/, { timeout: 15000 });
+const again = await waitForButton(page, /确认并应用这一版|重试|出分区预览|预览按分区/, { timeout: 15000, requireEnabled: true });
 if (again) await page.getByRole('button', { name: /确认并应用这一版|重试|出分区预览|预览按分区/ }).first().click().catch(() => {});
 await page.waitForTimeout(20000);
 await page.screenshot({ path: `${D09}/2026-11-19-reapplied.png` });
