@@ -127,7 +127,25 @@ export const designSchema=z.strictObject({
 const sceneObjectsSchema=z.array(objectSchema).max(500).superRefine((objects,ctx)=>{
   if(duplicateUuidIds(objects.map(object=>object.id)))ctx.addIssue({code:'custom',message:'实例 ID 不能重复'});
 });
-const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool']),editor:planEditorSchema.optional()};
+/**
+ * A named rectangle the user drew on the venue floor (#155) — "签到区", "休息区".
+ * `x`/`z` is its north-west corner in metres from the venue's north-west corner,
+ * the same frame as `objectSchema.position`; `w`/`d` extend along +x / +z.
+ * A zone is the user's own say on where a room is: it never asserts capacity,
+ * a verified clearance or a checked fire path.
+ */
+export const sceneZoneSchema=z.strictObject({
+  id:z.string().trim().min(1).max(128),
+  name:z.string().trim().min(1).max(120),
+  color:colorSchema,
+  zoneType:z.enum(['roundtable','checkin','photo','rest','desk','reserved']).optional(),
+  x:z.number().min(-200).max(400),
+  z:z.number().min(-200).max(400),
+  w:z.number().gt(0).max(400),
+  d:z.number().gt(0).max(400),
+});
+const sceneZonesSchema=z.array(sceneZoneSchema).max(32);
+const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,zones:sceneZonesSchema.optional(),scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool']),editor:planEditorSchema.optional()};
 export const sceneV1Schema=z.strictObject({schemaVersion:z.literal(1),...sceneCommon}).superRefine((s,ctx)=>{
   if(overlappingUuidIds(s.objects.map(object=>object.id),s.venue.entrances.map(entrance=>entrance.id)))ctx.addIssue({code:'custom',message:'物件与出入口 ID 不能互相重复'});
   // V1 has no structure layer, so a site block here could only dangle; keep the
@@ -147,6 +165,8 @@ export const sceneV2Schema=z.strictObject({schemaVersion:z.literal(2),...sceneCo
 });
 export const sceneSchema=z.discriminatedUnion('schemaVersion',[sceneV1Schema,sceneV2Schema]).superRefine((s,ctx)=>{
   if (!s.scenePreset && s.objects.length > 50) ctx.addIssue({code:'custom',message:'普通场景最多50件物件'});
+  // Zones travel with the scene; a duplicate id would fork per-zone stats and cost.
+  if(s.zones&&new Set(s.zones.map(zone=>zone.id)).size!==s.zones.length)ctx.addIssue({code:'custom',message:'区域 ID 不能重复'});
   for (const o of s.objects) if (o.presetNode !== undefined && (!s.scenePreset || !presetManifest[s.scenePreset][o.presetNode])) ctx.addIssue({code:'custom',message:'预设节点不存在'});
   if(s.schemaVersion===2) {
     for(const d of s.dimensions){

@@ -5,8 +5,9 @@ import { metersFromForwardBox } from './splat-meters';
 const LOCAL_PROXY = 'http://127.0.0.1:3199';
 const REMOTE_RELAY = 'https://relay.example.test';
 const WEST_LAKE_FAST = 'c338f720-3f60-4adb-8f3b-023300000002';
-// 2026-11-19 用户拍板：批量删除后索引只剩两条——西湖 0233 极速档与 11/08 新场景。
+// 2026-11-19 用户拍板：批量删除后索引剩三条——西湖 0233 极速档、11/08 新场景、收编的江南田园村落。
 const SCAN_11_08 = '48245ba8-8f0c-456f-a4c4-6a13526e08b9';
+const JIANGNAN = '41fbc06a-20dd-4d82-8192-4e865b596cba';
 // 2026-11-19 已删（见 data/local-scans.json 的 removed）：只剩墓碑，不再进索引；
 // 茶室 130 这个号在回退测试里只当普通 uuid 夹具用。
 const WEST_LAKE_NORMAL = 'c338f720-3f60-4adb-8f3b-023300000001';
@@ -36,9 +37,9 @@ describe('本机扫描登记', () => {
     const { registerLocalScans } = await loadWithProxy(LOCAL_PROXY);
     const { listAholoAssets } = await import('./aholo-assets');
     stubProbe(() => true);
-    expect(await registerLocalScans()).toBe(2);
+    expect(await registerLocalScans()).toBe(3);
     const assets = listAholoAssets();
-    expect(assets).toHaveLength(2);
+    expect(assets).toHaveLength(3);
     const westLake = assets.find(asset => asset.assetId === WEST_LAKE_FAST);
     expect(westLake?.name).toBe('西湖 0233 · 极速档');
     expect(westLake?.kind).toBe('spz');
@@ -55,6 +56,11 @@ describe('本机扫描登记', () => {
     // 索引带的 lodUrl 要跟记录一起落进注册表，否则派生好的 LOD 没人用。
     expect(westLake?.lodUrl).toBe('/scans/scan-xihu-0233-low/lod-meta.json');
     expect(latest?.lodUrl).toBe('/scans/scan-48245ba8/lod-meta.json');
+    // 收编的江南田园村落：补上资产号后反查接通，宽 97.7 m、深 97.9 m、高 11.7 m。
+    const village = assets.find(asset => asset.assetId === JIANGNAN);
+    expect(village?.name).toBe('江南田园村落');
+    expect(village?.meters).toEqual({ width: 97.7, depth: 97.9, height: 11.7 });
+    expect(village?.lodUrl).toBe('/scans/jiangnan-village/lod-meta.json');
     expect(assets.every(asset => Boolean(asset.lodUrl))).toBe(true);
   });
 
@@ -62,9 +68,9 @@ describe('本机扫描登记', () => {
     const { registerLocalScans } = await loadWithProxy(LOCAL_PROXY);
     const { listAholoAssets } = await import('./aholo-assets');
     stubProbe(() => true);
-    expect(await registerLocalScans()).toBe(2);
+    expect(await registerLocalScans()).toBe(3);
     expect(await registerLocalScans()).toBe(0);
-    expect(listAholoAssets()).toHaveLength(2);
+    expect(listAholoAssets()).toHaveLength(3);
   });
 
   it('磁盘上没文件就不登记：这是「加载不出来」的根源，不能装成本机有副本', async () => {
@@ -91,8 +97,8 @@ describe('本机扫描登记', () => {
       assetId: '00000000-0000-4000-8000-000000000000', kind: 'glb',
       name: '一把木椅', bytes: 1_024, savedAt: 1_700_000_000_000,
     });
-    expect(await registerLocalScans()).toBe(2);
-    expect(listAholoAssets()).toHaveLength(3);
+    expect(await registerLocalScans()).toBe(3);
+    expect(listAholoAssets()).toHaveLength(4);
   });
 });
 
@@ -108,7 +114,7 @@ describe('云端扫描登记', () => {
     const { registerCloudScans } = await loadWithProxy(REMOTE_RELAY);
     const { CLOUD_ASSETS_BASE } = await import('./cloud-assets');
     const { listAholoAssets, resolveAholoAssetUrl } = await import('./aholo-assets');
-    expect(registerCloudScans()).toBe(2);
+    expect(registerCloudScans()).toBe(3);
     const westLake = listAholoAssets().find(asset => asset.assetId === WEST_LAKE_FAST);
     expect(westLake?.origin).toBe('cloud');
     expect(resolveAholoAssetUrl(WEST_LAKE_FAST)).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}.spz`);
@@ -126,7 +132,7 @@ describe('云端扫描登记', () => {
     const { registerLocalScans, registerCloudScans } = await loadWithProxy(LOCAL_PROXY);
     const { resolveAholoAssetUrl } = await import('./aholo-assets');
     stubProbe(() => true);
-    expect(await registerLocalScans()).toBe(2);
+    expect(await registerLocalScans()).toBe(3);
     expect(registerCloudScans()).toBe(0);
     expect(resolveAholoAssetUrl(WEST_LAKE_FAST)).toBe(`${LOCAL_PROXY}/asset/${WEST_LAKE_FAST}.spz`);
   });
@@ -137,7 +143,7 @@ describe('云端扫描登记', () => {
     const { resolveAholoAssetUrl } = await import('./aholo-assets');
     stubProbe(() => false);
     expect(await registerLocalScans()).toBe(0);
-    expect(registerCloudScans()).toBe(2);
+    expect(registerCloudScans()).toBe(3);
     expect(resolveAholoAssetUrl(WEST_LAKE_FAST)).toBe(`${CLOUD_ASSETS_BASE}/scans/${WEST_LAKE_FAST}.spz`);
   });
 });
@@ -186,11 +192,12 @@ describe('清单删除的资产退注册表（墓碑同步）', () => {
   it('墓碑里的资产号从注册表退掉，没删的照旧留着', async () => {
     const { forgetRemovedScans, removedScanIds } = await loadWithProxy(LOCAL_PROXY);
     const { findAholoAsset, rememberAholoAsset } = await import('./aholo-assets');
-    // 墓碑就是清单里的 removed：六个已删资产号都在，极速档与 11/08 不在。
+    // 墓碑就是清单里的 removed：六个已删资产号都在，收编的三条不在。
     expect(removedScanIds()).toContain(WEST_LAKE_NORMAL);
     expect(removedScanIds()).toContain(TOMBSTONED_ID);
     expect(removedScanIds()).not.toContain(WEST_LAKE_FAST);
     expect(removedScanIds()).not.toContain(SCAN_11_08);
+    expect(removedScanIds()).not.toContain(JIANGNAN);
     rememberAholoAsset({ assetId: WEST_LAKE_NORMAL, kind: 'spz', name: '西湖 0233 · 标准档', bytes: 23_239_097, savedAt: 1 });
     rememberAholoAsset({ assetId: WEST_LAKE_FAST, kind: 'spz', name: '西湖 0233 · 极速档', bytes: 7_795_522, savedAt: 1 });
     expect(forgetRemovedScans()).toBe(1);

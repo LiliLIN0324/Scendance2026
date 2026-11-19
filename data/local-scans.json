@@ -20,6 +20,12 @@
       "kind": "spz",
       "name": "本机高斯 48245ba8",
       "source": "Aholo web-scan 实景重建「新场景 2026/11/6」，id 48245ba88f0c456fa4c46a13526e08b9，SPZ 82,917,078 B（docs/evidence/aholo/scan-2026-11-06T13-23-44-623Z/probe.json）"
+    },
+    {
+      "assetId": "41fbc06a-20dd-4d82-8192-4e865b596cba",
+      "kind": "spz",
+      "name": "江南田园村落",
+      "source": "Aholo 社区场景样本 jiangnan-village（LOD 派生实测案例，9,534,062 点），SPZ 422,083,664 B；2026-11-19 用户拍板收编进扫描库并上云（社区素材，非自有场地采集）"
     }
   ]
 }

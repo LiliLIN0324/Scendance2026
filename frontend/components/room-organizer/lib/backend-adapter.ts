@@ -9,7 +9,7 @@ import { mergeProposalPresentation } from './creative-brief';
 import { MAX_STOREY_HEIGHT, MIN_STOREY_HEIGHT } from './storeys';
 import { layoutGeometryScene, canApplyLayoutGeometry, stableMeasurement } from './structural-layout';
 import { pruneVenueSite } from './venue-shell';
-import type { FurnitureItem, RoomLayout } from './types';
+import type { FurnitureItem, RoomLayout, RoomZone } from './types';
 
 const publicLibraryIds = new Set(Object.values(libraryAssetIds));
 
@@ -20,22 +20,7 @@ export class SceneAdapterError extends Error {
   }
 }
 
-export const LOCAL_ZONES_CLOUD_MESSAGE = '此云端操作暂不支持本机区域标注。请先备份本机草稿或处理区域标注；现有标注未删除。';
-
-/** 区域暂不属于云端契约；包含区域的方案与历史版本均不能静默转换。 */
-export function assertCloudZoneSupport(layout: RoomLayout): void {
-  const pending = [layout];
-  const seen = new Set<RoomLayout>();
-  while (pending.length) {
-    const current = pending.pop()!;
-    if (seen.has(current)) continue;
-    seen.add(current);
-    if (current.floors.some(floor => (floor.zones?.length ?? 0) > 0)) {
-      throw new SceneAdapterError('ZONES_NOT_SUPPORTED', LOCAL_ZONES_CLOUD_MESSAGE);
-    }
-    pending.push(...(current.designBook?.variants.map(variant => variant.layout) ?? []));
-  }
-}
+/** 区域随场景一起上云（见 domain.sceneZoneSchema）：不再以错误终止云端保存。 */
 
 const rendererTypes: Record<SceneObject['materialId'], string> = {
   chair: 'chair', table: 'table', desk: 'desk', reception: 'counter', backdrop: 'backdrop',
@@ -140,6 +125,12 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
       rotation: backendDegreesToEditorRadians(column.rotation), color: '#d1cdc5', locked: true });
   } else items.push(...scene.venue.entrances.map(e => entranceItem(e, scene.venue)));
   const planSettings = sanitizePlanEditor(scene.editor);
+  // Wire zones are venue-absolute like object positions; the layout frame is room-centred.
+  const zones: RoomZone[] = (scene.zones ?? []).map(zone => ({
+    id: zone.id, name: zone.name, color: zone.color,
+    ...(zone.zoneType ? { zoneType: zone.zoneType } : {}),
+    x: zone.x - scene.venue.width / 2, z: zone.z - scene.venue.depth / 2, w: zone.w, d: zone.d,
+  }));
   return {
     ...(planSettings ? { planSettings } : {}),
     ...(options.projectId ? { id: options.projectId } : {}),
@@ -147,6 +138,7 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
     floors: [{ id: 'event-floor', name: '活动场地', height: scene.venue.height,
       floorColor: scene.schemaVersion === 2 ? scene.finishes?.floorColor ?? scene.design?.palette[0] ?? '#f5f6f7' : '#f5f6f7',
       ...(scene.schemaVersion === 2 && scene.finishes?.floorPattern ? { floorPattern: scene.finishes.floorPattern } : {}), items,
+      ...(zones.length ? { zones } : {}),
       interiorWalls: scene.schemaVersion === 2 ? scene.structure.walls.map(w => ({ id: w.id,
         x1: w.start.x - scene.venue.width / 2, z1: w.start.z - scene.venue.depth / 2,
         x2: w.end.x - scene.venue.width / 2, z2: w.end.z - scene.venue.depth / 2,
@@ -160,7 +152,6 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
 
 export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAdapterOptions,'assetIdMap'|'localAssetIds'> = {}): Scene {
   if (layout.floors.length !== 1) throw new SceneAdapterError('MULTI_FLOOR_NOT_SUPPORTED', '当前云端版暂不支持保存多层方案。这份方案和修改会保留在本机；请勿删除本地方案。');
-  assertCloudZoneSupport(layout);
   // 底图是纯本机资料：云端场景结构里没有它。允许保存，但由工作台明说它不会上传。
   if (!layout.backendSceneV2 && layout.backendVenue?.shape === 'polygon') {
     throw new SceneAdapterError('POLYGON_NOT_SUPPORTED', '多边形场地尚未接入此版编辑器，不能改存为矩形。');
@@ -259,6 +250,14 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
     ...(originalFinishes?.wallColors !== undefined || Object.keys(wallColors).length ? { wallColors } : {}),
   };
   const storedScene = layout.backendSceneV2;
+  const zones = (floor.zones ?? []).map(zone => ({
+    id: zone.id, name: zone.name, color: zone.color,
+    ...(zone.zoneType ? { zoneType: zone.zoneType } : {}),
+    // Keep an untouched zone byte-identical across saves instead of drifting on ±width/2.
+    x: stableMeasurement(zone.x + layout.width / 2, storedScene?.zones?.find(item => item.id === zone.id)?.x),
+    z: stableMeasurement(zone.z + layout.height / 2, storedScene?.zones?.find(item => item.id === zone.id)?.z),
+    w: zone.w, d: zone.d,
+  }));
   const { editor: _storedEditor, ...sceneBody } = storedScene ?? {};
   const editor = sanitizePlanEditor(layout.planSettings);
   const candidate = {
@@ -274,7 +273,7 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
           ? {...r,status:'unmet',reason:'关联物件已被编辑或删除，请重新核对要求。',objectIds:r.objectIds.filter(id=>objects.some(o=>o.id===id))} : r),
       } } : {}),
     } : {}),
-    objects, camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
+    objects, ...(zones.length || storedScene?.zones ? { zones } : {}), camera: layout.backendCamera ?? 'overview', lighting: layout.backendLighting ?? 'neutral',
   };
   if (geometric && geometric.structure.openings.length !== floor.items.filter(i=>i.structuralOpeningId).length) {
     throw new SceneAdapterError('OPENING_MISSING_WALL', '门窗未关联有效墙段，请修正位置或删除该门窗后保存。');

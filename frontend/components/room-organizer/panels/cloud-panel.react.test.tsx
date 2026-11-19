@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, useState } from 'react';
@@ -8,7 +8,7 @@ import { BackendSession, createBackendSession, getBackendConfig, type Scene } fr
 import { readSourceRecord, registerSourceFlush } from '@/lib/source-storage';
 import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import {canonical,sha256} from '../../../../supabase/functions/_shared/domain';
-import { backendSceneToLayout, LOCAL_ZONES_CLOUD_MESSAGE } from '../lib/backend-adapter';
+import { backendSceneToLayout } from '../lib/backend-adapter';
 import { subscribeNotices, type Notice } from '../lib/editor-notices';
 import { LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from '../lib/handoff-cloud-guard';
 import { addDesign } from '../lib/scene-layers';
@@ -284,64 +284,22 @@ describe('CloudPanel independent quantity ledger protection', () => {
   });
 });
 
-describe('CloudPanel local zone protection', () => {
+describe('CloudPanel with a locally drawn zone', () => {
   const zone = { id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 };
   const withZone = (base: RoomLayout): RoomLayout => ({ ...base, floors: [{ ...base.floors[0]!, zones: [zone] }] });
 
-  it('does not replace a local zone when opening a different cloud project', async () => {
-    queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]); queue(other);
-    const local = withZone(backendSceneToLayout(scene, { projectId, name: original.name }));
-    const onLoadLayout = vi.fn();
-    render(<CloudPanel controller={controller} layout={local} onLoadLayout={onLoadLayout}/>);
-    openAccount();
-    await screen.findByRole('button', { name: /^打开 / });
-    const getProject = vi.spyOn(controller, 'getProject');
-    enterListedProject();
-    await waitFor(() => expect(screen.getAllByText(LOCAL_ZONES_CLOUD_MESSAGE).length).toBeGreaterThanOrEqual(2));
-    expect(getProject).not.toHaveBeenCalled();
-    expect(onLoadLayout).not.toHaveBeenCalled();
-    expect(local.floors[0]!.zones).toEqual([zone]);
-    expect(screen.queryByText('当前 · 已保存')).toBeNull();
-  });
-
-  it('rechecks the current local zone after an in-flight cloud project request', async () => {
-    queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]); queue(other);
-    const initial = backendSceneToLayout(scene, { projectId, name: original.name });
-    const onLoadLayout = vi.fn();
-    const view = render(<CloudPanel controller={controller} layout={initial} onLoadLayout={onLoadLayout}/>);
-    openAccount();
-    await screen.findByRole('button', { name: /^打开 / });
-    let finish!: (response: Response) => void;
-    mockFetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    enterListedProject();
-    await waitFor(() => expect(finish).toBeTypeOf('function'));
-    const local = withZone(initial);
-    view.rerender(<CloudPanel controller={controller} layout={local} onLoadLayout={onLoadLayout}/>);
-    await act(async () => { finish(json(other)); });
-    await waitFor(() => expect(screen.getAllByText(LOCAL_ZONES_CLOUD_MESSAGE).length).toBeGreaterThanOrEqual(2));
-    expect(onLoadLayout).not.toHaveBeenCalled();
-    expect(local.floors[0]!.zones).toEqual([zone]);
-    expect(controller.getSnapshot().project?.id).toBe(projectId);
-  });
-
-  it('does not label a locally zoned layout as cloud-saved or send autosave', async () => {
+  it('no longer calls a zoned draft unsaveable, and keeps the zone on the canvas', async () => {
     queue({ sessionId: controller.getSnapshot().sessionId, generation: 4, revision: 2, scene, expiresAt: new Date(Date.now() + 90_000).toISOString() });
     await controller.acquireLease(projectId);
-    const save = vi.spyOn(controller, 'saveScene');
-    const draft = { ...scene, lighting: 'warm' as const };
-    await act(async () => { controller.setDraft(draft); });
-    const local = withZone(backendSceneToLayout(draft, { projectId, name: original.name }));
-    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const local = withZone(backendSceneToLayout(scene, { projectId, name: original.name }));
+    queue([other]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     render(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()}/>);
     openAccount();
-    expect(await screen.findByText(LOCAL_ZONES_CLOUD_MESSAGE)).toBeTruthy();
-    expect(screen.queryByText('当前 · 已保存')).toBeNull();
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    expect(save).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: /^打开 / })).toBeTruthy();
+    expect(screen.queryByText(/暂不支持本机区域标注/)).toBeNull();
     expect(local.floors[0]!.zones).toEqual([zone]);
   });
 });
-
 afterEach(() => {
   cleanup();
   controller.dispose();
