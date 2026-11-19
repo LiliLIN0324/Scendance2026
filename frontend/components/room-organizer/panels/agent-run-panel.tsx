@@ -32,6 +32,7 @@ import {
   formatDurationClock,
   getAgentRun,
   isWriteTool,
+  parseAgentThoughtSections,
   requestAgentStop,
   subscribeAgentRun,
   type AgentRunScope,
@@ -218,15 +219,27 @@ function RunThoughtList({ thoughts, running }: { thoughts: AgentRunState['though
   const first = thoughts[0]!.at;
   return (
     <details className="ap-run-thoughts" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
-      <summary className="ap-run-thoughts-summary">思考记录 · {thoughts.length} 条<span className="ap-run-thoughts-hint">模型自述，非原始推理</span></summary>
+      <summary className="ap-run-thoughts-summary">思考记录 · {thoughts.length} 条</summary>
       <ol className="ap-run-thought-list">
-        {thoughts.map(item => (
-          <li key={`${item.round}-${item.at}`} className="ap-run-thought">
-            <span className="ap-run-thought-round">第 {item.round} 轮</span>
-            <time className="ap-run-thought-time" dateTime={new Date(item.at).toISOString()}>{formatDurationClock(item.at - first)}</time>
-            <p className="ap-run-thought-text">{item.text}</p>
-          </li>
-        ))}
+        {thoughts.map(item => {
+          // 计划 / 下一步 / 为什么 是模型自己写的可见说明；没有这三段就按原文渲染。
+          const sections = parseAgentThoughtSections(item.text);
+          const structured = sections.plan || sections.next || sections.why;
+          return (
+            <li key={`${item.round}-${item.at}`} className="ap-run-thought">
+              <span className="ap-run-thought-round">第 {item.round} 轮</span>
+              <time className="ap-run-thought-time" dateTime={new Date(item.at).toISOString()}>{formatDurationClock(item.at - first)}</time>
+              {structured ? (
+                <div className="ap-run-thought-text" style={{ display: 'grid', gap: 2 }}>
+                  {sections.rest && <p style={{ margin: 0 }}>{sections.rest}</p>}
+                  {sections.plan && <p style={{ margin: 0 }}><strong>计划：</strong>{sections.plan}</p>}
+                  {sections.next && <p style={{ margin: 0 }}><strong>下一步：</strong>{sections.next}</p>}
+                  {sections.why && <p style={{ margin: 0 }}><strong>为什么：</strong>{sections.why}</p>}
+                </div>
+              ) : <p className="ap-run-thought-text">{item.text}</p>}
+            </li>
+          );
+        })}
       </ol>
     </details>
   );
@@ -239,7 +252,7 @@ function RunProcessList({ entry, scope }: { entry: Pick<AgentRunState,'stepLog'|
   const hasEvents = entry.eventLog.length > 0;
   return (
     <>
-      <p className="ap-run-note">{hasEvents ? '根据收到的工具回执整理，可能遗漏步骤；工具返回结果不代表安全或规范检查通过。' : '根据收到的进度整理，可能遗漏步骤；不代表各项检查已通过。'}</p>
+      <p className="ap-run-note">根据工具回执整理。</p>
       <ol aria-label="执行过程" className="ap-run-list">
         {hasEvents ? entry.eventLog.map(event => {
           const category=toolCategory(event.tool),Icon=CATEGORY_ICONS[category];

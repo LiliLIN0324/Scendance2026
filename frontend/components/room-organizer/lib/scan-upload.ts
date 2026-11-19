@@ -48,6 +48,40 @@ export function scanDisplayName(fileName: string): string {
   return name || '上传的实景';
 }
 
+/** LOD 目录名只收 URL 安全字符：与 aholo-assets 的 lodUrl 站内路径规则同源。 */
+const LOD_BASE_PATTERN = /^[A-Za-z0-9_-]{1,48}$/;
+
+/**
+ * 与本实景包同名的 LOD 目录名：`make-lod.mjs --out frontend/public/scans/<主干>` 生成的目录，
+ * 上传时就能按约定自动挂上，不必再让人手填路径。中文名不能进 URL，直接不认。
+ */
+export function scanLodBase(fileName: string): string | null {
+  const base = (fileName.split(/[\\/]/).pop() ?? '').trim().replace(/\.(spz|ply)$/i, '').trim();
+  return LOD_BASE_PATTERN.test(base) ? base : null;
+}
+
+/**
+ * 上传前探一次同名的本地 LOD（`/scans/<主干>/lod-meta.json`）：
+ * 有就随上传一起登记进资产记录，预览按相机距离换档；没有就照旧全量解码。
+ * 探不到、形状不对、或 meta 里记的不是这个包，一律当没有——不能把别的场地 LOD 挂上来。
+ */
+export async function findScanLodUrl(fileName: string): Promise<string | undefined> {
+  const base = scanLodBase(fileName);
+  if (!base || typeof location === 'undefined') return undefined;
+  const url = `/scans/${base}/lod-meta.json`;
+  try {
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) return undefined;
+    const meta = await response.json() as { files?: unknown; source?: unknown };
+    if (!Array.isArray(meta.files) || meta.files.length < 2) return undefined;
+    const name = (fileName.split(/[\\/]/).pop() ?? '').trim().toLowerCase();
+    if (typeof meta.source === 'string' && meta.source.trim() && meta.source.trim().toLowerCase() !== name) return undefined;
+    return url;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * 按头部魔数定类型：gzip 壳的 SPZ（1f 8b 08）与裸 SPZ（NGSP）都算 SPZ，PLY 认「ply」。
  * 不看文件名后缀——代理侧同样按魔数复核，两边口径一致才不会出现「传上去打不开」。
@@ -140,7 +174,12 @@ async function sendBytes(url: string, file: Blob, onProgress?: (loaded: number, 
  */
 export async function uploadScanFile(
   file: File | Blob,
-  options: { name?: string; onProgress?: (loaded: number, total: number) => void } = {},
+  options: {
+    name?: string;
+    onProgress?: (loaded: number, total: number) => void;
+    /** 同目录已派生好的 LOD 元数据（站内路径）；有就随记录一起登记，预览按距离换档。 */
+    lodUrl?: string;
+  } = {},
 ): Promise<AholoAsset> {
   const name = (options.name ?? (file as File).name ?? '').trim();
   const rejected = validateScanPick({ name, size: file.size });
@@ -158,6 +197,7 @@ export async function uploadScanFile(
     name: scanDisplayName(name),
     bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : file.size,
     savedAt: Date.now(),
+    ...(options.lodUrl ? { lodUrl: options.lodUrl } : {}),
   });
   if (!saved) throw new Error(STORAGE_FULL_MESSAGE);
   return saved;

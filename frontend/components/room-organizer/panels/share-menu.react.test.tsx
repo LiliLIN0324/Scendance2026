@@ -112,6 +112,16 @@ describe('分享页签', () => {
     expect(share.onIssueReviewLink).toHaveBeenCalledOnce();
   });
 
+  it('sends the ink permission switches with the review link', async () => {
+    const share = actions();
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('switch', { name: '可落钉意见' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    await screen.findByRole('status');
+    expect(share.onIssueReviewLink).toHaveBeenCalledWith({ pins: false, levels: true, basemap: true });
+  });
+
   it('never copies a review link whose activity changes before the result returns', async () => {
     const share = actions();
     const clipboard = vi.fn(async () => undefined);

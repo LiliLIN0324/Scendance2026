@@ -226,7 +226,37 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
     sync();
   };
 
-  const plansWithFeedback = snapshot.plans.map(plan => ({ plan, feedback: readBingoPlanFeedback(plan) }));
+  const cloudKey = snapshot.plans.map(plan => plan.reviewPlanKey).join('|');
+  const [cloudByKey, setCloudByKey] = useState<Record<string, ReviewPin[]>>({});
+  const [cloudTick, setCloudTick] = useState(0);
+  useEffect(() => {
+    const bump = () => { if (document.visibilityState === 'visible') setCloudTick(value => value + 1); };
+    window.addEventListener('focus', bump);
+    document.addEventListener('visibilitychange', bump);
+    return () => {
+      window.removeEventListener('focus', bump);
+      document.removeEventListener('visibilitychange', bump);
+    };
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    const keys = [...new Set(snapshot.plans.flatMap(plan => reviewPlanKeysForBingoPlan(plan)).filter(key => key.startsWith('review-v2:')))];
+    if (keys.length === 0) { setCloudByKey({}); return () => { alive = false; }; }
+    void Promise.all(keys.map(async key => [key, await listReviewPinsCloud(key)] as const)).then(rows => {
+      if (!alive) return;
+      const next: Record<string, ReviewPin[]> = {};
+      for (const [key, result] of rows) next[key] = result.ok ? result.value : [];
+      setCloudByKey(next);
+    });
+    return () => { alive = false; };
+  }, [cloudKey, cloudTick, snapshot.plans]);
+  const plansWithFeedback = snapshot.plans.map(plan => ({
+    plan,
+    feedback: mergeBingoCloudPins(
+      readBingoPlanFeedback(plan),
+      reviewPlanKeysForBingoPlan(plan).flatMap(key => cloudByKey[key] ?? []),
+    ),
+  }));
   const feedbackRows = plansWithFeedback.flatMap(({ feedback }) => feedback.pins);
   const pinCount = plansWithFeedback.reduce((sum, entry) => sum + entry.feedback.pinCount, 0);
   const openPinCount = plansWithFeedback.reduce((sum, entry) => sum + countOpenFeedbackPins(entry.feedback), 0);

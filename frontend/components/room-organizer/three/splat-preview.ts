@@ -33,6 +33,8 @@ export type SplatLodStats = Readonly<{
   bytes: number;
   loadedBytes: number;
   fps: number | undefined;
+  /** 允许的最细档（越小越细）：402 MB 这类 L0 会被挡在上限之外。 */
+  ceiling: number;
   samples: readonly Readonly<{ level: number; bytes: number; fps: number }>[];
 }>;
 
@@ -85,7 +87,25 @@ type SplatLodRuntime = {
   pendingLevel: number | null;
   /** 换档时复用同一个消隐 modifier，不重复构造 dyno。 */
   modifier: unknown;
+  /** 允许的最细档（数字越小越细）：距离想换更细的，也要先过这一关。 */
+  ceiling: number;
 };
+
+/**
+ * 一次换档最多再下这么多。L0 动辄几百 MB（jiangnan-village 是 402 MB / 953 万高斯），
+ * 比这一档大就干脆不进：主档停在能接受的最细一档，别让「走近一点」变成一次 400 MB 下载。
+ */
+const LOD_MAX_LEVEL_BYTES = 160 * 1024 * 1024;
+/** 帧率低于它就主动往粗档退一档；只认首屏/换档后的采样窗，不看按需绘制的空闲帧。 */
+const LOD_MIN_FPS = 24;
+/** 首屏与每次换档后持续续帧的时长：凑够每秒一窗的帧率样本。 */
+const LOD_SAMPLE_WINDOW_MS = 12_000;
+
+/** 允许的最细档：第一档超过下载上限就退到下一档；全超就只留最粗那档。 */
+function finestAllowedLevel(meta: SplatLodMeta): number {
+  const index = meta.files.findIndex(file => !(file.bytes > LOD_MAX_LEVEL_BYTES));
+  return index >= 0 ? index : meta.levels - 1;
+}
 export type SplatPosition = Readonly<{ x: number; y: number; z: number }>;
 export type SplatDisplayMode = 'gaussian' | 'footprint';
 /** Whole-scene move: gizmo shows XYZ axes; numeric keeps the panel only. */
@@ -103,6 +123,10 @@ export type SplatCalibration = Readonly<{
   anchors?: readonly GroundAnchor[];
 }>;
 export type SplatLoadOptions = Readonly<{
+  /** Project instance scale, independent of the asset's survey calibration. */
+  placementScale?: number;
+  /** Assumed sample-room height, only when no measured calibration exists. */
+  estimatedHeightMeters?: number;
   /** 场地最长水平边（米）：无真实尺度时的兜底——点云按它等比缩放。 */
   sizeMeters: number;
   upAxis?: SplatUpAxis;
@@ -162,6 +186,11 @@ export function fitSplatBox(box: THREE.Box3, sizeMeters: number): SplatFit {
   const scale = sizeMeters > 0 && horizontal > EPSILON ? sizeMeters / horizontal : 1;
   const center = box.getCenter(new THREE.Vector3());
   return { scale, position: new THREE.Vector3(-center.x * scale, -box.min.y * scale, -center.z * scale) };
+}
+
+export function estimatedHeightScale(box: THREE.Box3, up: THREE.Quaternion, height?: number): number {
+  const measured = rotatedBox(box, up).getSize(new THREE.Vector3()).y;
+  return height && Number.isFinite(height) && height > 0 && measured > EPSILON ? height / measured : 1;
 }
 
 /** 把落地后的包围盒折成漫游边界；退化盒（薄片 / 空点云）退回 null，让调用方保留旧围栏。 */
@@ -431,7 +460,7 @@ export function paintSplatLayers(deps: {
   // 渲染背景栈时临时挪进点云场景，画完挪回，世界坐标不变。
   const underlays: THREE.Object3D[] = [];
   for (const child of scene.children) {
-    if (child.userData.type === RESEARCH_BASEMAP_TAG) underlays.push(child);
+    if (child.userData.type === RESEARCH_BASEMAP_TAG || child.userData.type === ROOM_OBJECT_TAGS.GeoGround) underlays.push(child);
   }
   for (const child of underlays) backs[0]!.attach(child);
   const lightIso = underlays.some(child => child.visible && child.userData.isoBasemap === true);
@@ -471,7 +500,7 @@ export function paintSplatLayers(deps: {
  */
 export function createSplatPreview(deps: {
   renderer: THREE.WebGLRenderer;
-  camera: THREE.PerspectiveCamera;
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
   orbitControls: SplatOrbit;
   invalidate(): void;
   onPositionChange?(position: SplatPosition): void;
@@ -503,6 +532,8 @@ export function createSplatPreview(deps: {
   let localCenters: THREE.Vector3[] = [];
   let upQuaternion = new THREE.Quaternion();
   // 当前生效的标定：默认 1:1 米制、水平基准面、无锚点。
+  let placementScale = 1;
+  let sampleScale = 1;
   let calibration: Required<SplatCalibration> = {
     scale: 1,
     yawDeg: 0,
@@ -532,6 +563,7 @@ export function createSplatPreview(deps: {
       bytes: lodRuntime.meta.files[lodRuntime.level].bytes,
       loadedBytes: lodRuntime.loadedBytes,
       fps: lodRuntime.fps,
+      ceiling: lodRuntime.ceiling,
       samples: Object.freeze([...lodRuntime.samples]),
     });
   }
@@ -828,7 +860,7 @@ export function createSplatPreview(deps: {
   function placeSplat(): THREE.Box3 | null {
     if (!holder || !mesh || !localBox) return null;
     // 竖直轴校正 → 朝向 → 基准面倾斜；旋转作用在点云本身。
-    const fit = computeScanFit(localBox, upQuaternion, calibration);
+    const fit = computeScanFit(localBox, upQuaternion, { ...calibration, scale: calibration.scale * sampleScale * placementScale });
     const { quaternion, scale } = fit;
     const fitPosition = fit.position;
     const rotated = rotatedBox(localBox, quaternion);
@@ -887,6 +919,10 @@ export function createSplatPreview(deps: {
     runtime.fps = undefined;
     runtime.startedAt = performance.now();
     runtime.lastCheck = 0;
+    // 帧率表也跟着重置：上一档的帧数与窗口不能算进新档，否则刚解码的停顿会被当成「新档也卡」。
+    frameCount = 0;
+    fpsWindowStart = 0;
+    currentFps = undefined;
     console.info(`[splat-lod] 已切 L${level}，耗时 ${((performance.now() - started) / 1000).toFixed(1)}s`);
     publishLodStats();
     deps.invalidate();
@@ -957,9 +993,11 @@ export function createSplatPreview(deps: {
     // 缩放和落位挂在包装层上，点云本身只管朝向，换场地不必重算旋转。
     // 默认 1:1 米制；只有存在手动标定时才乘 sceneScale（扫描米 → 真实米）。
     calibration = sanitizeCalibration(options.calibration);
+    placementScale = options.placementScale ?? 1;
     localBox = local;
     localCenters = centers;
     upQuaternion = next.quaternion.clone();
+    sampleScale = estimatedHeightScale(localBox, upQuaternion, options.estimatedHeightMeters);
     currentOffset.set(options.position?.x ?? 0, options.position?.y ?? 0, options.position?.z ?? 0);
     const group = new THREE.Group();
     group.add(next);
@@ -980,9 +1018,10 @@ export function createSplatPreview(deps: {
       fps: undefined,
       pendingLevel: null,
       modifier: cutModifier,
+      ceiling: finestAllowedLevel(lod),
     } : null;
     if (lod) {
-      console.info(`[splat-lod] 首屏 L${lodStartLevel} ${(lod.files[lodStartLevel].bytes / 1048576).toFixed(2)} MB · 全量 L0 ${(lod.files[0].bytes / 1048576).toFixed(2)} MB · ${lod.levels} 档`);
+      console.info(`[splat-lod] 首屏 L${lodStartLevel} ${(lod.files[lodStartLevel].bytes / 1048576).toFixed(2)} MB · 全量 L0 ${(lod.files[0].bytes / 1048576).toFixed(2)} MB · ${lod.levels} 档 · 最细允许 L${finestAllowedLevel(lod)}`);
       publishLodStats();
     }
     if (transformMode === 'gizmo' && transformControls) transformControls.attach(group);
@@ -1013,22 +1052,35 @@ export function createSplatPreview(deps: {
       currentFps = (frameCount * 1000) / (now - fpsWindowStart);
       frameCount = 0;
       fpsWindowStart = now;
-      lodRuntime.fps = currentFps;
-      publishLodStats();
+      // 换档后头 2.5 s 的窗口不算数：新档解码那一下本来就卡，拿它判帧率会把好档位误降。
+      if (now - lodRuntime.startedAt > 2500) {
+        lodRuntime.fps = currentFps;
+        publishLodStats();
+      }
     }
     // 首屏先看 2.5s 粗档，再按距离决定是否换档；阈值带迟滞由档位本身承担。
     if (now - lodRuntime.startedAt > 2500 && now - lodRuntime.lastCheck > 700 && lodRuntime.pendingLevel === null) {
       lodRuntime.lastCheck = now;
+      // 帧率兜底：采样窗里撑不住就退一档，并把上限钉在退回来的这一档。
+      // 距离判定只看远近，站进场景里必然要求最细那档；没有这条，402 MB 的 L0 会被反复拉回来。
+      if (lodRuntime.fps !== undefined && lodRuntime.fps < LOD_MIN_FPS
+        && now - lodRuntime.startedAt < LOD_SAMPLE_WINDOW_MS
+        && lodRuntime.level < lodRuntime.meta.levels - 1) {
+        lodRuntime.ceiling = Math.max(lodRuntime.ceiling, lodRuntime.level + 1);
+        console.info(`[splat-lod] ${lodRuntime.fps.toFixed(1)} fps 撑不住 L${lodRuntime.level}，退到 L${lodRuntime.level + 1}`);
+      }
       const center = bounds.getCenter(new THREE.Vector3());
       const size = bounds.getSize(new THREE.Vector3());
       const horizontal = Math.max(size.x, size.z, 0.001);
       const ratio = camera.position.distanceTo(center) / horizontal;
-      const desired = ratio < 0.35 ? 0 : ratio < 0.85 ? 1 : lodRuntime.meta.levels - 1;
+      const byDistance = ratio < 0.35 ? 0 : ratio < 0.85 ? 1 : lodRuntime.meta.levels - 1;
+      // ceiling 是允许的最细档（越小越细）：换档的下载量上限在这里生效。
+      const desired = Math.max(byDistance, lodRuntime.ceiling);
       if (desired !== lodRuntime.level) void switchLod(desired);
     }
     // 按需绘制不会为「量帧率」自己转起来：换档后头 12 秒主动续帧，凑满每秒一窗的样本；
     // 表计结束就回到按需绘制，不长期占 GPU。
-    if (now - lodRuntime.startedAt < 12000) deps.invalidate();
+    if (now - lodRuntime.startedAt < LOD_SAMPLE_WINDOW_MS) deps.invalidate();
   }
 
   const renderFrame: SplatPaint = (renderer, scene, camera, options) => {
@@ -1093,6 +1145,15 @@ export function createSplatPreview(deps: {
       if (transformHelper) transformHelper.visible = transformMode === 'gizmo' && !!holder;
       if (!wantGizmo) releaseTransformControls();
       deps.invalidate();
+    },
+    setScale(scale: number) {
+      if (!Number.isFinite(scale) || scale < 0.01 || scale > 100) return null;
+      placementScale = scale;
+      const box = placeSplat();
+      deps.invalidate();
+      if (!box) return null;
+      const size = box.getSize(new THREE.Vector3());
+      return { meters: { width: size.x, depth: size.z, height: size.y }, walkBounds: walkBoundsOf(box) };
     },
     setPosition(position: SplatPosition) {
       if (!holder) return;

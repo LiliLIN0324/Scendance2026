@@ -21,6 +21,7 @@
  */
 import type { RoomLayout } from './types';
 import {isShareHash,MAX_SHARE_HASH_LENGTH,readShareHash} from './share';
+import {reviewClientLinkKind} from '../../review-share-page/review-link-cloud';
 import {reviewVersionForHash} from '../../review-share-page/review-feedback-receipt';
 
 /** @deprecated local-demo frozen：生产无入口，仅测试与 Q4 云化预留接口读取，禁止新增调用方。 */
@@ -241,10 +242,10 @@ export async function rememberReviewLinkMark(input: {
   const shareId = clip(input.shareId, 80);
   if (!projectKey || projectKey!==input.projectKey || !shareId || shareId!==input.shareId || typeof input.clientUrl!=='string' || input.clientUrl.length>MAX_SHARE_HASH_LENGTH+2048)throw new Error('评审链接信息无效，未记录。');
   let url:URL;try{url=new URL(input.clientUrl);}catch{throw new Error('评审链接无效，未记录。');}
-  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||!['/review','/review/'].includes(url.pathname))throw new Error('评审链接无效，未记录。');
-  // 短链自己不含快照；版本仍按创建时的规范长哈希算，长短链共享同一组钉。
-  const short=/^#review=[a-z0-9]{12,24}$/.test(url.hash);
-  const hash=short?input.longHash:url.hash;
+  const kind=reviewClientLinkKind(url);
+  if(!kind)throw new Error('评审链接无效，未记录。');
+  // 路径短链和旧哈希短链自己不含快照；版本仍按创建时的规范长哈希算。
+  const hash=kind==='layout'?url.hash:input.longHash;
   if(!hash||!isShareHash(hash)||hash.length>MAX_SHARE_HASH_LENGTH)throw new Error('评审链接无效，未记录。');
   if(!(await readShareHash(hash)).ok)throw new Error('评审链接无法完整读取，未记录。');
   check();

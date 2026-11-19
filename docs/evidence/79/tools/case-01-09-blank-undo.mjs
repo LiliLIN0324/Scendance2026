@@ -1,6 +1,6 @@
 // #1 用例（空白项目 + 真实物料）与 #9 用例（撤销整批 → 再应用一次）
 import fs from 'node:fs';
-import { launch, skipGuide, chat, setupSite, driveToProposal, planState, clickText, waitForButton, cloudFetch, SITE } from './harness.mjs';
+import { launch, skipGuide, chat, setupSite, driveToProposal, planState, clickText, waitForButton, cloudFetch, outdoorPlanReadings, SITE } from './harness.mjs';
 
 const session = JSON.parse(fs.readFileSync(process.argv[2] || '.temp/real-session.json', 'utf8'));
 const D01 = 'docs/evidence/79/01', D09 = 'docs/evidence/79/09';
@@ -9,6 +9,12 @@ const { browser, page, netlog, consoleErrors } = await launch({ session, har: '.
 const out = { ranAt: new Date().toISOString(), account: session.user.email, site: SITE };
 const writes = (from = 0) => netlog.slice(from).filter((n) => n.t === 'res' && n.method !== 'GET' && /supabase\.co/.test(n.url))
   .map((n) => `${n.method} ${n.status} ${n.url.replace(/https:\/\/[^/]+/, '').slice(0, 90)}`);
+const cloudFor = async (plan) => {
+  const slot = Object.keys(plan || {}).find((k) => k.startsWith('scendance-outdoor-plan-v1:house-'));
+  const localId = slot ? slot.split(':').pop() : null;
+  const readings = await outdoorPlanReadings(session.user.id);
+  return { localId, readings: readings.available ? readings.list.filter((r) => r.local_activity_id === localId) : readings };
+};
 
 await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForTimeout(9000);
@@ -40,18 +46,23 @@ out.setup = await setupSite(page, { shot: `${D01}/2026-11-19-range-confirmed.png
 
 // ── 真实物料：我的物料库应非空
 await chat(page, '按分区摆物料', { wait: 45000 });
-const libBtn = await clickText(page, /从我的物料库查找/);
-await page.waitForTimeout(2000);
+const libInput = page.locator('input[aria-label="物料名称或用途"]').first();
+const libInputCount = await libInput.count();
+if (libInputCount) { await libInput.fill('展板'); await page.waitForTimeout(500); }
 const searchBtn = await clickText(page, /检索真实库/);
 await page.waitForTimeout(12000);
 await page.screenshot({ path: `${D01}/2026-11-19-material-library.png` });
 out.material = {
-  libraryButton: libBtn, searchButton: searchBtn,
+  libraryInput: libInputCount, searchButton: searchBtn,
   libraryText: await page.evaluate(() => {
     const el = [...document.querySelectorAll('*')].find((e) => /物料库/.test(e.innerText || '') && (e.innerText || '').length < 1200);
     return (el?.innerText || '').replace(/\s+/g, ' ').slice(0, 600);
   }),
   apiAssets: netlog.slice(m1).filter((n) => n.t === 'res' && /assets/.test(n.url)).map((n) => `${n.method} ${n.status} ${n.url.replace(/https:\/\/[^/]+/, '').slice(0, 90)}`),
+  choiceButtons: await page.evaluate(() => [...document.querySelectorAll('button')]
+    .filter((b) => { const r = b.getBoundingClientRect(); return r.width > 1 && r.height > 1; })
+    .map((b) => (b.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80))
+    .filter((t) => t && /展板|物料|加入|选这个|用这个/.test(t)).slice(0, 20)),
 };
 const cloudAssets = await cloudFetch(session, '/assets');
 out.material.cloudAssets = { status: cloudAssets.status, count: Array.isArray(cloudAssets.body) ? cloudAssets.body.length : cloudAssets.body };
@@ -59,12 +70,13 @@ out.material.cloudAssets = { status: cloudAssets.status, count: Array.isArray(cl
 // ── 推进到提案并应用
 const m2 = netlog.length;
 const drive = await driveToProposal(page, { shot: `${D01}/2026-11-19-proposal.png` });
-const applyBtn = await waitForButton(page, /确认并应用这一版|确认分区并预览/, { timeout: 8000 });
+const applyBtn = await waitForButton(page, /确认并应用这一版|确认分区并预览/, { timeout: 8000, requireEnabled: true });
 const beforeApply = await planState(page);
 if (applyBtn) await page.getByRole('button', { name: /确认并应用这一版|确认分区并预览/ }).first().click().catch(() => {});
 await page.waitForTimeout(18000);
 await page.screenshot({ path: `${D09}/2026-11-19-applied.png` });
 out.applied = { drive, applyBtn, beforeApply, afterApply: await planState(page), writes: writes(m2) };
+out.applied.cloud = await cloudFor(out.applied.afterApply);
 console.log('应用后:', JSON.stringify(out.applied.afterApply));
 
 // ── #9 撤销整批：画布 Ctrl+Z
@@ -76,15 +88,17 @@ await page.keyboard.press('Control+z');
 await page.waitForTimeout(12000);
 await page.screenshot({ path: `${D09}/2026-11-19-after-undo.png` });
 out.undo = { afterUndo: await planState(page), writes: writes(m3) };
+out.undo.cloud = await cloudFor(out.undo.afterUndo);
 console.log('撤销后:', JSON.stringify(out.undo.afterUndo));
 
 // ── #9 再应用一次
 const m4 = netlog.length;
-const again = await waitForButton(page, /确认并应用这一版|重试|出分区预览|预览按分区/, { timeout: 15000 });
+const again = await waitForButton(page, /确认并应用这一版|重试|出分区预览|预览按分区/, { timeout: 15000, requireEnabled: true });
 if (again) await page.getByRole('button', { name: /确认并应用这一版|重试|出分区预览|预览按分区/ }).first().click().catch(() => {});
 await page.waitForTimeout(20000);
 await page.screenshot({ path: `${D09}/2026-11-19-reapplied.png` });
 out.reapply = { again, afterReapply: await planState(page), writes: writes(m4) };
+out.reapply.cloud = await cloudFor(out.reapply.afterReapply);
 console.log('再应用后:', JSON.stringify(out.reapply.afterReapply));
 
 out.consoleErrors = consoleErrors.slice(0, 15);
@@ -98,5 +112,6 @@ console.log(JSON.stringify({
   afterReapply: out.reapply.afterReapply && Object.values(out.reapply.afterReapply)[0]?.counts,
   cloudAssets: out.material.cloudAssets,
   writes: { apply: out.applied.writes, undo: out.undo.writes, reapply: out.reapply.writes },
+  cloud: { apply: out.applied.cloud, undo: out.undo.cloud, reapply: out.reapply.cloud },
 }, null, 1));
 await browser.close();

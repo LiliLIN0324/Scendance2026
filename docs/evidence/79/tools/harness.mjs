@@ -44,19 +44,28 @@ export async function newGuestSession(env = readEnv()) {
 /** 直连真实云端 scene-api（读数用） */
 export async function cloudFetch(session, p, init = {}) {
   const env = readEnv();
-  const r = await fetch(`${API}${p}`, {
-    ...init,
-    headers: {
-      apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers || {}),
-    },
-  });
-  const text = await r.text();
-  let body = text;
-  try { body = JSON.parse(text); } catch { /* 非 JSON 原样返回 */ }
-  return { status: r.status, body };
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const r = await fetch(`${API}${p}`, {
+        ...init,
+        headers: {
+          apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          ...(init.headers || {}),
+        },
+      });
+      const text = await r.text();
+      let body = text;
+      try { body = JSON.parse(text); } catch { /* 非 JSON 原样返回 */ }
+      return { status: r.status, body };
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 1200 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 /** 管理 API 只读 SQL（scene_private 未暴露给 PostgREST，只能走这条） */
@@ -173,6 +182,15 @@ export function writeEvidence(caseId, name, data) {
   return file;
 }
 
+/** 关掉「找回云端活动」弹层；云端副本上线后，空设备首次进入会看到它 */
+export async function dismissCloudRecover(page) {
+  const btn = page.locator('[data-testid=outdoor-cloud-recover-dismiss]').first();
+  if (await btn.count()) {
+    await btn.click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(300);
+  }
+}
+
 /** 跳过新手引导气泡 */
 export async function skipGuide(page) {
   const btn = page.getByRole('button', { name: '跳过引导' });
@@ -208,6 +226,7 @@ export async function planState(page) {
 
 /** 在聊天框输入并回车 */
 export async function chat(page, text, { wait = 2500 } = {}) {
+  await dismissCloudRecover(page);
   const ta = page.locator('textarea').first();
   await ta.click();
   await ta.fill(text);
@@ -245,6 +264,7 @@ export async function chatText(page) {
 
 /** 按可见文案点按钮，返回命中的文案（未命中返回 null）；Playwright 点不到时退回 DOM 级 click */
 export async function clickText(page, re, { timeout = 8000, index = 0 } = {}) {
+  await dismissCloudRecover(page);
   const loc = page.getByRole('button', { name: re }).nth(index);
   try {
     await loc.waitFor({ state: 'visible', timeout });
@@ -265,13 +285,18 @@ export async function clickText(page, re, { timeout = 8000, index = 0 } = {}) {
   }, { src: re.source, flags: re.flags, idx: index });
 }
 
-/** 轮询等某个按钮出现，返回其文案 */
-export async function waitForButton(page, re, { timeout = 60000, poll = 1500 } = {}) {
+/** 轮询等某个按钮出现，返回其文案；requireEnabled 时跳过 disabled 的占位按钮 */
+export async function waitForButton(page, re, { timeout = 60000, poll = 1500, requireEnabled = false } = {}) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const n = await page.getByRole('button', { name: re }).count();
     if (n) {
-      const t = (await page.getByRole('button', { name: re }).first().innerText()).trim().replace(/\s+/g, ' ');
+      const loc = page.getByRole('button', { name: re }).first();
+      if (requireEnabled && await loc.isDisabled().catch(() => false)) {
+        await page.waitForTimeout(poll);
+        continue;
+      }
+      const t = (await loc.innerText()).trim().replace(/\s+/g, ' ');
       return t;
     }
     await page.waitForTimeout(poll);
@@ -281,22 +306,52 @@ export async function waitForButton(page, re, { timeout = 60000, poll = 1500 } =
 
 /** 推进到「可应用预览」：批计划 → 出分区预览 → 必要时补一句需求 */
 export async function driveToProposal(page, { answers = ['室外展览区和表演区', '200 人市集，预算 20 万'], maxRounds = 6, shot = null } = {}) {
+  await dismissCloudRecover(page);
   const trace = [];
+  let zonesAnswered = false;
   for (let i = 0; i < maxRounds; i += 1) {
-    const confirm = await waitForButton(page, /确认并应用这一版|确认分区并预览/, { timeout: 12000 });
+    const view = await summary(page).catch(() => null);
+    const viewText = await chatText(page).catch(() => '');
+    console.log(`[drive] round=${i} zonesAnswered=${zonesAnswered}`);
+    console.log('[drive:view]', JSON.stringify(view).slice(0, 1200));
+    console.log('[drive:text]', String(viewText).slice(0, 500));
+    await page.screenshot({ path: `.temp/79-drive-${i}.png` }).catch(() => {});
+    const confirm = await waitForButton(page, /确认并应用这一版|确认分区并预览/, { timeout: 12000, requireEnabled: true });
     if (confirm) { trace.push({ round: i, action: 'proposal-ready', button: confirm }); if (shot) await page.screenshot({ path: shot }); return { ok: true, trace }; }
-    const approve = await waitForButton(page, /批准并执行/, { timeout: 8000 });
+    const approve = await waitForButton(page, /批准并执行/, { timeout: 8000, requireEnabled: true });
     if (approve) {
       await page.getByRole('button', { name: /批准并执行/ }).first().click();
       trace.push({ round: i, action: 'approve-plan', button: approve });
       await page.waitForTimeout(30000);
       continue;
     }
-    const preview = await waitForButton(page, /出分区预览|先生成分区预览/, { timeout: 8000 });
+    // 「出分区预览」在“分区用途”小卡里是 submit，输入为空时 disabled；先填用途再提交。
+    const zonesAsk = page.locator('input[aria-label="分区用途和室内外"]').first();
+    if (await zonesAsk.count() && await zonesAsk.isVisible().catch(() => false)) {
+      const current = (await zonesAsk.inputValue().catch(() => '')).trim();
+      if (!current && !zonesAnswered) {
+        const next = answers[i] ?? answers[answers.length - 1];
+        await zonesAsk.fill(next);
+        await zonesAsk.press('Enter');
+        zonesAnswered = true;
+        trace.push({ round: i, action: 'answer-zones', text: next });
+        await page.waitForTimeout(48000);
+        continue;
+      }
+      // 提交后输入框会被清空；不要再填第二遍，直接往下查预览按钮。
+    }
+    const PREVIEW_RE = /生成分区预览|出分区预览|先生成分区预览|预览主要入口与通道|预览按分区摆放物料|预览物件间隙|预览岗位/;
+    const preview = await waitForButton(page, PREVIEW_RE, { timeout: 20000, requireEnabled: true });
     if (preview) {
-      await page.getByRole('button', { name: /出分区预览|先生成分区预览/ }).first().click();
+      await page.getByRole('button', { name: PREVIEW_RE }).first().click();
       trace.push({ round: i, action: 'make-preview', button: preview });
       await page.waitForTimeout(22000);
+      continue;
+    }
+    if (zonesAnswered) {
+      // 分区已提交，模型/预览还在跑；不再补话，等下一轮看按钮或提案。
+      trace.push({ round: i, action: 'wait-zones-preview' });
+      await page.waitForTimeout(15000);
       continue;
     }
     const next = answers[i] ?? answers[answers.length - 1];
@@ -310,6 +365,7 @@ export async function driveToProposal(page, { answers = ['室外展览区和表�
 }
 
 /** 标准建场：搜索地点 → 选候选 → 定场地 → 确认范围（红线进画布） */export async function setupSite(page, { keyword = '杭州 IN77', optionIndex = 0, shot = null } = {}) {
+  await dismissCloudRecover(page);
   const trace = {};
   await page.getByRole('button', { name: '搜索地点', exact: true }).first().click();
   await page.waitForTimeout(800);
@@ -317,15 +373,33 @@ export async function driveToProposal(page, { answers = ['室外展览区和表�
   await input.click();
   await input.fill(keyword);
   await page.waitForTimeout(4500);
-  trace.candidates = await page.evaluate(() => [...document.querySelectorAll('[data-testid^=outdoor-place-search-option-]')]
-    .map((e) => (e.innerText || '').replace(/\s+/g, ' ').slice(0, 90)));
-  await page.locator(`[data-testid=outdoor-place-search-option-${optionIndex}]`).first().click();
-  await page.waitForTimeout(5000);
-  await page.locator('.ap-option-row').first().click();
-  await page.waitForTimeout(2500);
-  trace.venueButton = await clickText(page, /就定这个场地/);
-  await page.waitForTimeout(11000);
-  trace.rangeButton = await clickText(page, /确认并应用这一版/);
+  // 2026-11-19 新选址面板：amap-suggest 联想 → 选中预览 → 生成户外场地；旧 testid 只在旧包上兜底。
+  const suggestion = page.locator('[data-testid=amap-suggest] [role=option] button').first();
+  if (await suggestion.count()) {
+    trace.candidates = await page.evaluate(() => [...document.querySelectorAll('[data-testid=amap-suggest] [role=option]')]
+      .map((e) => (e.innerText || '').replace(/\s+/g, ' ').slice(0, 90)));
+    await suggestion.click();
+    await page.waitForTimeout(5000);
+    trace.preview = await page.locator('[data-testid=venue-preview]').first().innerText().catch(() => null);
+    const gen = page.getByRole('button', { name: '生成户外场地' }).first();
+    if (await gen.count()) {
+      for (let i = 0; i < 20 && await gen.isDisabled().catch(() => true); i += 1) await page.waitForTimeout(1000);
+      await gen.click().catch(() => {});
+      await page.waitForTimeout(16000);
+      trace.generated = true;
+    }
+  } else {
+    trace.candidates = await page.evaluate(() => [...document.querySelectorAll('[data-testid^=outdoor-place-search-option-]')]
+      .map((e) => (e.innerText || '').replace(/\s+/g, ' ').slice(0, 90)));
+    await page.locator(`[data-testid=outdoor-place-search-option-${optionIndex}]`).first().click();
+    await page.waitForTimeout(5000);
+    await page.locator('.ap-option-row').first().click();
+    await page.waitForTimeout(2500);
+    trace.venueButton = await clickText(page, /就定这个场地/);
+    await page.waitForTimeout(11000);
+  }
+  trace.rangeButton = await waitForButton(page, /确认并应用这一版/, { timeout: 20000, requireEnabled: true });
+  if (trace.rangeButton) await page.getByRole('button', { name: /确认并应用这一版/ }).first().click().catch(() => {});
   await page.waitForTimeout(13000);
   if (shot) await page.screenshot({ path: shot });
   trace.plan = await planState(page);
