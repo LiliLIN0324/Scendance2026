@@ -112,11 +112,11 @@
       "case": 10,
       "label": "一条真实模型失败，一条纯本地成功",
       "browser": "partial",
-      "cloud": "blocked",
+      "cloud": "partial",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/07/2026-11-19-case07-08-round6.md §7；docs/evidence/79/06/2026-11-19-case06-not-logged-in.md；docs/evidence/79/10/2026-11-19-log-correlation-runbook.md",
-      "readings": "真实失败样本：按分区摆放物料时报「市集摊位区放不下 1 件带桌摊位…整批未写入」；纯本地成功样本：未登录/无范围时的待续需求退回（零模型请求、零云端写）",
-      "gap": "诊断编号与服务端日志关联仍缺（需云端日志权限）"
+      "evidence": "docs/evidence/79/10/2026-11-19-log-correlation-round6.md；2026-11-19-logs-assistant-failures.json；2026-11-19-logs-invalid-shape-window.json；2026-11-19-logs-invalid-input.json；docs/evidence/79/07/2026-11-19-case07-08-round6.md §7；docs/evidence/79/06/2026-11-19-case06-not-logged-in.md",
+      "readings": "服务端日志已可读（新 logs 入口，ClickHouse SQL）。00:00–05:00Z 内只有 1 条真实 assistant_chat_failure：01:54:29.450Z，slot=openai-next，reason=invalid_shape；前后有同路径 POST 200 与一次重试。#1 invalid 窗口 03:24:00–13 两次 POST 200、0 条分类事件，符合模型前输入校验（assistant-chat.ts:84 不调用 diagnose）。",
+      "gap": "仍缺 01:54 同轮 UI 失败卡的逐字对照，以及纯本地成功的同窗 0 请求样本；turnId 不出浏览器，只能做到时间窗 + 分类一致性的弱关联，做不到按编号查全链"
     },
     {
       "case": 11,
@@ -135,7 +135,7 @@
     "blocked": 0,
     "fail": 0,
     "na": 0,
-    "note": "全绿 2 条：#2、#7（#7 是本轮部署修复后新增）。#8b 的写请求 2 条已验，但 #8a/#8c 未跑，故 #8 仍 partial。#9 的云端为 blocked：该轮 house-7jblibyk 两次 PUT 均 404，部署后未重跑；#8b 的 CAS 3→4 不计入 #9。partial/blocked 不计入全绿。门禁解除仍需人签字。"
+    "note": "全绿 2 条：#2、#7（#7 是本轮部署修复后新增）。#8b 的写请求 2 条已验，但 #8a/#8c 未跑，故 #8 仍 partial。#9 的云端为 blocked：该轮 house-7jblibyk 两次 PUT 均 404，部署后未重跑；#8b 的 CAS 3→4 不计入 #9。#10 的服务端日志已打通，找到 1 条真实 invalid_shape 事件，但同轮 UI 对照与纯本地 0 请求样本仍缺，故仍 partial。partial/blocked 不计入全绿。门禁解除仍需人签字。"
   },
   "signoff": {
     "status": "pending-human",

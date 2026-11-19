@@ -2,6 +2,8 @@
 
 > 口径：**只读 runbook**。本轮只读代码与文档，**没有登录 Supabase 控制台、没有调用 Management API、没有读取或写入任何用户数据、没有读取或打印任何 token、没有改云端配置**。
 > 项目：`wkhfvnzgopjdzxlmycks`；涉及函数：`conversation-api`、`scene-api`。
+>
+> **2026-11-19 补记**：用户已授权服务端日志访问，并已实测。旧 `analytics/endpoints/logs.all` 返回 410；新入口 `analytics/endpoints/logs` 走 ClickHouse 统一 `logs` 表。实际读数与查询见 `2026-11-19-log-correlation-round6.md`；本 runbook 第 2 节的“未执行/无权限”是当时的基线，不再代表当前状态。
 
 ## 0. 一句话结论
 
