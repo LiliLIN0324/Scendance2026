@@ -51,6 +51,22 @@ const uploadedAssetView=(row:Record<string,unknown>)=>{
     metadata:rest.metadata,
   };
 };
+/**
+ * 预览图在桶里存的是内部路径（<ownerId>/<assetId>/preview.png）。
+ * 列表不能把内部路径发出去，浏览器也不该自己去拼签名——这里换成短期签名地址 previewUrl。
+ * 只签「物主自己目录下、文件名以 /preview.(png|jpg|webp) 结尾」的路径：
+ * metadata 可被写入，不校验就等于给任意存储对象开了签名入口。
+ */
+async function assetPreviewView(backend:Backend,row:Record<string,unknown>):Promise<Record<string,unknown>>{
+  const metadata=row.metadata;
+  if(!metadata||typeof metadata!=='object'||Array.isArray(metadata))return row;
+  const {previewPath,...rest}=metadata as Record<string,unknown>;
+  const ownerId=typeof row.owner_id==='string'?row.owner_id:'';
+  const safe=typeof previewPath==='string'&&Boolean(ownerId)&&previewPath.startsWith(`${ownerId}/`)&&/\/preview\.(?:png|jpg|webp)$/.test(previewPath);
+  if(!safe)return {...row,metadata:rest};
+  try{return {...row,metadata:{...rest,previewUrl:await backend.sign(previewPath,3600)}};}
+  catch{return {...row,metadata:rest};}
+}
 const MODEL_TEXT_NOTICE={status:'unverified',scope:'design_and_issues',note:'原始模型或无来源文字仅供核对，不代表消防、疏散、无障碍或容量验收。'} as const;
 const AGENT_TEXT_NOTICE={status:'unverified',scope:'model_generated_text',note:'模型生成文字未经独立核验，不代表消防、疏散、无障碍或容量验收。'} as const;
 const withAgentTextNotice=(value:unknown)=>value&&typeof value==='object'&&!Array.isArray(value)?{...value,modelText:AGENT_TEXT_NOTICE}:value;
@@ -693,7 +709,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const result=await createParametricAsset(backend,actor,input.studioId,input.requestId,input.parameters);
         return respond(result,result.reused?200:201);
       }
-      if(path==='/assets' && method==='GET') return respond(await backend.scene(actor,'assets.list'));
+      if(path==='/assets' && method==='GET'){
+        const assetRows=await backend.scene(actor,'assets.list');
+        return respond(Array.isArray(assetRows)?await Promise.all(assetRows.map((row:Record<string,unknown>)=>assetPreviewView(backend,row))):assetRows);
+      }
       const materialAsset=path.match(/^\/assets\/([^/]+)\/(materials|customize)$/);
       if(materialAsset) {
         const assetId=uuid.parse(materialAsset[1]);
