@@ -72,6 +72,54 @@ describe('当天执行包（P1-4）', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
   });
 
+  it('按天生成：只出这一天的流程，未排时间的任务单列', () => {
+    const layout = makeLayout({ id: 'sheet-by-day', name: '两日展',
+      eventOperations: eventOperationsSchema.parse({ dataKind: 'real', tasks: [
+        { id: crypto.randomUUID(), title: '首日签到', phase: 'event', plannedStartAt: '2026-12-20T01:00:00+00:00' },
+        { id: crypto.randomUUID(), title: '次日撤场', phase: 'teardown', plannedStartAt: '2026-12-21T02:00:00+00:00' },
+        { id: crypto.randomUUID(), title: '待排彩排', phase: 'setup' },
+      ] }) });
+    const html = renderDaySheet({ layout, generatedAt, day: '2026-12-20' });
+    expect(html).toContain('2026-12-20（周日）');
+    expect(html).toContain('首日签到');
+    expect(html).not.toContain('次日撤场');
+    expect(html).toContain('未排时间');
+    expect(html).toContain('待排彩排');
+  });
+
+  it('归日按方案时区算，Kiritimati 的凌晨不回退到前一天', () => {
+    const layout = makeLayout({ id: 'sheet-day-zone', planSettings: { timeZone: 'Pacific/Kiritimati' },
+      eventOperations: eventOperationsSchema.parse({ dataKind: 'real', tasks: [
+        { id: crypto.randomUUID(), title: '凌晨搭建', phase: 'setup', plannedStartAt: '2026-12-19T11:00:00+00:00' },
+      ] }) });
+    expect(renderDaySheet({ layout, generatedAt, day: '2026-12-20' })).toContain('凌晨搭建');
+    expect(renderDaySheet({ layout, generatedAt, day: '2026-12-19' })).not.toContain('凌晨搭建');
+  });
+
+  it('执行单标出定稿版本身份，草案不冒充定稿', () => {
+    const layout = makeLayout({ id: 'sheet-version' });
+    expect(renderDaySheet({ layout, generatedAt, day: '2026-12-20', delivery: { version: 'v1.0', status: 'confirmed' } }))
+      .toContain('定稿 v1.0');
+    expect(renderDaySheet({ layout, generatedAt, day: '2026-12-20', delivery: { version: 'v1.1', status: 'draft', confirmedVersion: 'v1.0' } }))
+      .toContain('未定稿（已定稿的是 v1.0）');
+    expect(renderDaySheet({ layout, generatedAt, day: '2026-12-20', delivery: { version: 'v1.0', status: 'none' } }))
+      .toContain('未定稿');
+  });
+
+  it('日期不合法直接报错，不静默退回全量', () => {
+    expect(() => renderDaySheet({ layout: makeLayout({ id: 'sheet-bad-day' }), generatedAt, day: '2026-12-20?' }))
+      .toThrow('请选择有效的执行日期');
+  });
+
+  it('供应商到达按天过滤', () => {
+    const suppliers = declareSupplier(supplierLedgerSchema.parse({ dataKind: 'real' }), {
+      supplierName: '搭建公司', status: 'confirmed', declaredBy: '阿岚', declaredAt: generatedAt,
+      contactPhone: '13800000000', arrivalAt: '2026-12-20T00:30:00.000Z' });
+    const layout = makeLayout({ id: 'sheet-supplier-day' });
+    expect(renderDaySheet({ layout, suppliers, generatedAt, day: '2026-12-20' })).toContain('搭建公司');
+    expect(renderDaySheet({ layout, suppliers, generatedAt, day: '2026-12-21' })).not.toContain('搭建公司');
+  });
+
   it('生成于和日历日跟随方案时区，不按 UTC 截断', () => {
     const at = '2026-11-18T10:00:00.000Z';
     const shanghai = makeLayout({ id: 'sheet-zone', name: '发布会' });

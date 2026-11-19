@@ -1,4 +1,6 @@
-﻿.sc-event-operations { min-width: 0; }
+﻿.sc-operation-export-day { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 12px; }
+.sc-operation-export-day input { width: auto; }
+.sc-event-operations { min-width: 0; }
 .sc-event-operations h3 { margin: 16px 0 8px; font-size: 14px; font-weight: 600; }
 .sc-operation-brief { border-bottom: 1px solid var(--sc-line, #d6d6d2); padding-bottom: 8px; margin-bottom: 8px; }
 .sc-operation-brief-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

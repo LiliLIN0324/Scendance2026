@@ -509,7 +509,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
     </div>}
     {/* 档案、需求、当天包、任务在门面上折起。六页执行台留在「内部资料」里。 */}
     <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
-      <EventOperationsPanel compact suggestionsPanel={activityTaskPanel} layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins}/>
+      <EventOperationsPanel compact suggestionsPanel={activityTaskPanel} layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins} delivery={version ? { version: version.deliveryVersion, status: version.status, confirmedVersion: version.confirmed?.deliveryVersion ?? null } : null}/>
     </div>
     <details className="dl-tools" open={toolsOpen} onToggle={event => {
       const open = event.currentTarget.open;
