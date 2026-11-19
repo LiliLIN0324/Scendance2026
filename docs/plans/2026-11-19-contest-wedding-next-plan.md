@@ -854,10 +854,16 @@ aholo 产物确实带 `bounds` / `sourceSize` / `groundOffset`（原点落在地
 
 **16.6.3 平台现状与接入点（代码取证）**
 
-- 户外 3D 地面是**程序化**的：`frontend/components/room-organizer/three/outdoor.ts` 生成草地平面、人行道、沥青路、220 丛草簇、一圈程序化树（birch/oak/pine），由 RNG 围绕一个**矩形房间尺寸**生成，**完全不绑定真实坐标范围**。
-- 唯一的「地形」是 `three/terrain.ts` 的 `TerrainSpec { frontY, backY }`——**手工设定的分段线性坡**（房子前平后平、中间斜），用于「房子挖山」，不是真实高程。
+- 户外 3D 的地面与「地形」现状（**2026-11-19 子智能体复核后更正，原文把 `three/outdoor.ts` 当成户外地面是错的**）：
+  - `three/outdoor.ts` 是**室内编辑器**的「郊区地块」（房子周围草地/人行道/沥青路/程序化树），只在**非**户外工作区建（`hooks/use-scene-effects.ts:1146` 的 `setOutdoorVisible(..., !outdoorWorkspace, …)`）。一进户外工作区，这一整层**根本不建**。
+  - 真正的户外规划 3D 是 `components/outdoor-plan-3d.tsx`（接管态渲染），它的「地面」是**地图瓦片金字塔**（`three/plan-basemap-tiles.ts`，每级瓦片只差 4 mm 叠层）；没有地理锚点时才退化成一块 `PlaneGeometry` 纸面。
+  - `three/terrain.ts` 的 `TerrainSpec { frontY, backY }` 是「房子挖山」的手工分段坡，**只在 `outdoor.ts` 里用**，与真实高程无关。
+  - **结论：DEM 位移网格的落点是 `outdoor-plan-3d.tsx` + `plan-basemap-tiles.ts`**，不是 `outdoor.ts` / `terrain.ts`。
 - **地理锚点换算已经现成**：`frontend/components/room-organizer/lib/scene-anchor.ts` 的 `anchorGeoToWorld(anchor, lng, lat)` 做地理→世界坐标（含 `orientationDeg` 旋转与 `metersPerUnit` 缩放），`sceneAnchorOf(layout)` 从布局取锚点。
-- 户外 2D 侧坐标是 ENU 米（x 东 / y 北），见 `supabase/functions/_shared/site-plan.ts`。
+- 户外 2D 侧坐标是 ENU 米（x 东 / y 北），见 `supabase/functions/_shared/site-plan.ts`；户外 3D 世界 = plan ENU 米制，**1 单位 = 1 米、不缩放**，`three.x = plan.x`、`three.z = −plan.y`。
+- **DEM 落地的两个硬坑**（子智能体取证）：
+  1. **坐标系必须先转**：Terrarium 是 **WGS-84**，而 `plan.anchor.crs` 固定 `'gcj-02'`（`site-plan.ts:28`）。杭州一带 GCJ 偏移实测 ≈ +0.0047° lng / −0.0023° lat ≈ **456 m 东 / 256 m 南**；不转则整块地形错位 500 m。转换用 `lib/geo-coords.ts:62` 的 `gcj02ToWgs84`。
+  2. **规划层抬升只有毫米级**（`three/plan-footprint-builder.ts:31-47` 的 0.049–0.15 m，瓦片金字塔每级差 4 mm），DEM 起伏一旦超过几厘米就会与色块/物件/路线穿插 → **第一阶段只能做「视觉地形」，贴地联动是第二阶段**（要改 `ELEVATION`、`PLAN_LAYER_BASE_Y`、模型层与漫游眼高）。
 
 **16.6.4 范围收口（用户 11-19 明确：只做室外草坪，不做室内）**
 
@@ -890,3 +896,44 @@ aholo 产物确实带 `bounds` / `sourceSize` / `groundOffset`（原点落在地
 - **并行会话冲突待人工**：`supabase/functions/_shared/api.ts` 同文件双改——并行会话的版本给单条 `GET /assets/{id}` 也加了 `previewUrl`，我推的 `646ce4c3` 只含已部署上线的列表路由；他们 rebase 时会在那一个 hunk 上撞一次，需要人工挑。
 - **Edge Function 未跑 `deno check`**：本机 PATH 里没有 deno，`npm run check:edge` 跑不了；改动只有 22 行且已上线实测。
 - **两个本地 `.npmrc`**（仓库根与 `supabase/functions/`）是为绕开 deno 打包器取不到 npm 源而加的本地镜像配置，**故意不进版本库**，但也没加进 `.gitignore`——留个尾巴给后续维护者。
+
+### 16.9 批次最终收官与「零照片链路」的真相（2026-11-19 17:10）
+
+**最终读数：37 件清单 → 36 件 ready、1 件失败。**
+
+- 36 件 GLB **全部**在公共物料库（`published_assets` 里我的 36 条），**36/36 全部有预览图**。
+- 后两件（婚礼签到背景墙 尺寸 `[2.4, 2.2862, 0.7422]`、婚礼餐巾折花 尺寸 `[0.2141, 0.22, 0.216]`）出件后由后台守望脚本自动公开 + 自动渲染预览图，**未人工介入**。
+
+**唯一的失败件：婚礼签到台**（`provider_job_id = 8416344`）。已查 aholo 侧原始响应：
+
+```json
+{"f":null,"c":"0","m":"","d":{"bizId":"LUX_3D","status":4,"taskId":8416344}}
+```
+
+**供应商对失败只给 `status: 4`，不给任何 reason**（无 `failCode` / `failMessage` / `credits` / `outputs`）。所以 `PROVIDER_FAILED` 在 aholo 侧是**黑盒**：平台能落库的只有 `error_code`，`provider_usage` 为空。
+同一模式本轮出现 3 次（`crop-floral-backdrop`、`婚礼暖光串灯`、`婚礼签到台`）。
+**处置：按既定口径不自动重派付费请求。** 若要再试，唯一有意义的动作是**换一张参考图**（本批参考图是 aholo 文生图产物，同一 prompt 重出图大概率换一批像素）——**这是一次新的付费请求，需要用户点头才做**。
+
+**「零照片」链路的真相：平台已经具备，路径如下**
+
+| 环节 | 位置 | 说明 |
+| --- | --- | --- |
+| 文生 3D 通道 | `supabase/functions/_shared/providers.ts:76` | aholo `POST /lux3d/v1/generate/text-to-3d/task/create` |
+| 图生 3D 通道 | `providers.ts:73` | aholo `POST /lux3d/v1/generate/img-to-3d/task/create` |
+| 选路 | `generation-lane.ts:46-48` | 请求显式声明 `provider: 'aholo'` 时走 aholo，覆盖 text 与 image 两条道 |
+| 前端入参 | `frontend/lib/backend-session.ts` `createGenerationJob(prompt, requestId, { kind, provider: 'aholo' })` | `kind:'text'` **不需要任何图片** |
+| 户外原位生成入口 | `frontend/components/room-organizer/components/outdoor-facility-generate.tsx:139-149` | 设施行上直接「原位生成」→ `kind:'text'` 或 `'image'` → 绑定回该设施 |
+
+**也就是说：丽丽要��「完全不拍照、只跟 Agent 聊」在产品里已经能做**——户外设施行 → 原位生成 → 文生 3D → 绑定回该设施；创作面板也有文生 3D / 图生 3D。
+**真正的缺口不是能力，是两件小事**：
+1. **文案与入口**：普通用户不知道「不用上传照片也能生成」，也没人告诉他们户外设施行可以「原位生成」。
+2. **结果落库与公开**：生成完的模型要不要进公共物料库、能不能被直接复用，目前没有产品化口径（本轮 36 件是脚本批量公开的，不是用户点出来的）。
+
+**一条容易踩的端点口径差（记录）**：平台调的 aholo 端点是 `img-to-3d` / `text-to-3d`（base `api.aholo.ai/global`），而本轮批量脚本调的是 `image-to-3d` / `multimodal-to-image`（base `api.aholo3d.cn`）。**两边 task id 在同一个 task/get 上可查**（实测 `api.aholo3d.cn` 能查到平台建的 8416344），但端点命名不一致这件事要记住——写脚本时别照抄平台的路径，反之亦然。
+
+**下一步建议（按「aholo 回报优先」重排，用户 11-19 口径）**
+
+1. **P0｜把「零照片」讲清楚并跑通**：文案 + 入口指引 + 一条端到端演示（丽丽的迎宾签到台 → 一句话 → 3D → 定点绑定）。**这一刀不花积分也能把产品说清楚。**
+2. **P0｜花家山庄分区与物料清单**：用现有 36 件 + 按需补生成，落到 outdoor 的 zones / facilities / routes。
+3. **P1｜签到台要不要换图重试**：一次付费请求（20 分），需要点头。
+4. **P2｜真实 DEM 地形**：方案与坑已齐（16.6），三阶段可验收切片，等有时间再动。**不动它也不影响 aholo 回报。**
