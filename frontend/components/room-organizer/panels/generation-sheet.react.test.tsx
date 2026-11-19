@@ -503,4 +503,24 @@ describe('统一生成面板', () => {
     expect((screen.getByLabelText(/消耗额度/) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole('textbox', { name: '描述' }) as HTMLTextAreaElement).value).toBe('一把藤编躺椅');
   });
+
+  it('接入左栏双卡堆栈：外部类名、排序、标题抓取与独立小窗装饰都落在同一张卡上', () => {
+    const onHeaderPointerDown = vi.fn();
+    render(<GenerationSheetHost
+      controller={controller}
+      className="is-stack-second"
+      style={{ order: 2 }}
+      onHeaderPointerDown={onHeaderPointerDown}
+      floatBar={<div data-testid="generation-float-bar">独立小窗</div>}
+      floatFooter={<div data-testid="generation-float-resize" role="separator" />}
+    />);
+    act(() => openGenerationSheet({ scope: 'venue' }));
+    const card = screen.getByTestId('generation-sheet');
+    expect(card.className).toContain('is-stack-second');
+    expect(card.style.order).toBe('2');
+    expect(screen.getByTestId('generation-float-bar')).toBeTruthy();
+    expect(screen.getByTestId('generation-float-resize')).toBeTruthy();
+    fireEvent.pointerDown(screen.getByText('创作'));
+    expect(onHeaderPointerDown).toHaveBeenCalledTimes(1);
+  });
 });
