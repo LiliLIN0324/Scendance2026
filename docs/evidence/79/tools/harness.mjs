@@ -173,6 +173,15 @@ export function writeEvidence(caseId, name, data) {
   return file;
 }
 
+/** 关掉「找回云端活动」弹层；云端副本上线后，空设备首次进入会看到它 */
+export async function dismissCloudRecover(page) {
+  const btn = page.locator('[data-testid=outdoor-cloud-recover-dismiss]').first();
+  if (await btn.count()) {
+    await btn.click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(300);
+  }
+}
+
 /** 跳过新手引导气泡 */
 export async function skipGuide(page) {
   const btn = page.getByRole('button', { name: '跳过引导' });
@@ -208,6 +217,7 @@ export async function planState(page) {
 
 /** 在聊天框输入并回车 */
 export async function chat(page, text, { wait = 2500 } = {}) {
+  await dismissCloudRecover(page);
   const ta = page.locator('textarea').first();
   await ta.click();
   await ta.fill(text);
@@ -245,6 +255,7 @@ export async function chatText(page) {
 
 /** 按可见文案点按钮，返回命中的文案（未命中返回 null）；Playwright 点不到时退回 DOM 级 click */
 export async function clickText(page, re, { timeout = 8000, index = 0 } = {}) {
+  await dismissCloudRecover(page);
   const loc = page.getByRole('button', { name: re }).nth(index);
   try {
     await loc.waitFor({ state: 'visible', timeout });
@@ -281,6 +292,7 @@ export async function waitForButton(page, re, { timeout = 60000, poll = 1500 } =
 
 /** 推进到「可应用预览」：批计划 → 出分区预览 → 必要时补一句需求 */
 export async function driveToProposal(page, { answers = ['室外展览区和表演区', '200 人市集，预算 20 万'], maxRounds = 6, shot = null } = {}) {
+  await dismissCloudRecover(page);
   const trace = [];
   for (let i = 0; i < maxRounds; i += 1) {
     const confirm = await waitForButton(page, /确认并应用这一版|确认分区并预览/, { timeout: 12000 });
@@ -310,6 +322,7 @@ export async function driveToProposal(page, { answers = ['室外展览区和表�
 }
 
 /** 标准建场：搜索地点 → 选候选 → 定场地 → 确认范围（红线进画布） */export async function setupSite(page, { keyword = '杭州 IN77', optionIndex = 0, shot = null } = {}) {
+  await dismissCloudRecover(page);
   const trace = {};
   await page.getByRole('button', { name: '搜索地点', exact: true }).first().click();
   await page.waitForTimeout(800);
