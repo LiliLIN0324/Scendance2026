@@ -274,6 +274,16 @@ describe('check-79-evidence', () => {
     expect(result.status).toBe(0);
   });
 
+  it('不把嵌套历史列表里的 localActivityId 当作当前用例归属', () => {
+    const { root, evidenceDir } = makeFixture();
+    writeFileSync(join(evidenceDir, '08/cloud.json'), JSON.stringify({ cloudSql: { list: [{ localActivityId: 'house-history-only' }] } }));
+    const ledger: Ledger = JSON.parse(String(readFileSync(join(evidenceDir, 'walkthrough.json'), 'utf8')));
+    ledger.ledger[7].evidence = 'docs/evidence/79/08/cloud.json';
+    writeFileSync(join(evidenceDir, 'walkthrough.json'), JSON.stringify(ledger));
+    const result = run(root);
+    expect(result.status).toBe(0);
+  });
+
   it('拒绝在未全绿时签字', () => {
     const { root } = makeFixture({
       mutateLedger: ledger => {
