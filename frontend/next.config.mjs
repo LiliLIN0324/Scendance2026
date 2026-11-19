@@ -118,7 +118,7 @@ const nextConfig = {
       // dev 下改走这个同源重写，不需要改桶的跨域配置，也不用把开发机加进白名单。
       ...(process.env.NODE_ENV === 'development'
         ? [
-          ...['tdt-tiles', 'tdt-search', 'tdt-area', 'carto-tiles', 'place-shape', 'place-shape-hints', 'road-network', 'site-context'].map(name => ({ source: `/api/${name}`, destination: `http://127.0.0.1:3199/api/${name}` })),
+          ...['venue-research', 'tdt-tiles', 'tdt-search', 'tdt-area', 'carto-tiles', 'place-shape', 'place-shape-hints', 'road-network', 'site-context'].map(name => ({ source: `/api/${name}`, destination: `http://127.0.0.1:3199/api/${name}` })),
           { source: '/api/amap-place', destination: 'http://127.0.0.1:3199/amap-place' },
           { source: '/cloud-assets/:path*', destination: 'https://pub-048147e4c4ad482d95df092dc8098e1d.r2.dev/:path*' },
         ]

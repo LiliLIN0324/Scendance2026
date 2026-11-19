@@ -314,6 +314,8 @@ export function createOutdoorMapContext() {
         // 沿岸/沿线预览在生产路径终于能取到真实要素（修前红测见 outdoor-map-context.test.ts）。
         water: () => waterFeatures(),
         roadLines: () => roadLineFeatures(),
+        openAreas: () => sourceSnapshot.features.filter(feature => feature.kind === 'open-space' && feature.geometry.type === 'polygon')
+          .map(feature => ({ id: feature.id, name: feature.name, ring: feature.geometry.points.map(point => ({ ...point })), tags: { ...feature.tags } })),
         // docs/47 A2：分档明细随本轮 load 结果走（hook/A3 从这里读），没有证据就回空档。
         layoutEvidence: () => layout,
       };

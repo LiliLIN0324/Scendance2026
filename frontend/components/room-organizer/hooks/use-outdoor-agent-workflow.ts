@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import type { AgentDocument } from "../lib/agent-documents";
+import { reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
+import { getActiveAssistantSessionId } from "./use-assistant-sessions";
 import { isVenueResearchRequest } from "../lib/venue-research";
 import { gateAction, type SupervisionLevel } from "../lib/agent-supervision";
 import type { BackendSession } from "@/lib/backend-session";
@@ -1071,6 +1074,7 @@ export function useOutdoorAgentWorkflow(input: {
     anchor: NonNullable<SitePlanData["anchor"]>,
     boundary: SitePlanData["boundary"],
     name: string,
+    basis?: VenueRangeBasis,
   ) {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base) return;
@@ -1080,7 +1084,8 @@ export function useOutdoorAgentWorkflow(input: {
       stage: "scope",
       confirmedBoundary: null,
       completed: ["place"],
-      pendingBoundary: { anchor, boundary, name, base: JSON.stringify(base) },
+      pendingBoundary: { anchor, boundary, name, base: JSON.stringify(base), ...(basis ? { basis } : {}) },
+      ...(basis ? { rangeBasis: basis } : {}),
     });
     try {
       // 2026-11-14 用户拍板「以第一个选区为准」：换边界时旧内容按新边界重新安置（越界随场淘汰，
@@ -1094,12 +1099,16 @@ export function useOutdoorAgentWorkflow(input: {
       offer(
         // 2026-11-17 「同一标准」：范围确认卡是一个自带红线的方案，落地后必须配白框——
         // 预览与确认走同一份数据，不靠画布那边事后补（那条路留给手画红线和换场地）。
-        { ...pruned.next, anchor, boundary, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M) },
+        { ...pruned.next, anchor, boundary, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M),
+          ...(basis ? { annotations: [...(pruned.next.annotations ?? []).filter(note => note.name !== 'Agent 场地范围依据'), {
+            id: crypto.randomUUID(), kind: 'note' as const, name: 'Agent 场地范围依据', points: [{ ...boundary[0] }],
+            text: basis.detail.slice(0, 200), notes: basis.kind,
+          }] } : {}) },
         "scope",
         `确认“${name}”的活动范围`,
         job,
         [
-          "地点轮廓只是候选；只用到一部分就重画。",
+          basis?.detail ?? "地点轮廓只是候选；可用聊天说明要用哪部分、长宽或位移，无需手画。",
           ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
           ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],
@@ -1280,7 +1289,7 @@ export function useOutdoorAgentWorkflow(input: {
       "ready",
     );
   }
-  async function act(turn: OutdoorTurn, message: string, continueDesign = false) {
+  async function act(turn: OutdoorTurn, message: string, continueDesign = false, documents?: AgentDocument[]) {
     // 新回合开始即视为离开「纯手画」状态：卡上旧内容恢复，或按新意图重排。
     if (turn.action !== "draw-zone" && turn.action !== "draw-route" && turn.action !== "draw-entrance")
       setDrawingMode(null);
@@ -1458,11 +1467,43 @@ export function useOutdoorAgentWorkflow(input: {
     try {
       if (turn.action === "scope") {
         const candidate = stateRef.current.pendingBoundary;
+        const range = turn.facts.scope;
+        if (range) {
+          const source = range.sourceId ? documents?.flatMap(doc => doc.sections.map((section, index) => ({ id: `${doc.id}:${index}`, ...section })))
+            .find(section => section.id === range.sourceId) : undefined;
+          if (!message.includes(range.evidence) && !source?.text.includes(range.evidence)) {
+            askForDetails('这次范围调整缺少可核对的原话或图纸尺寸依据，请说出长宽、移动方向或引用资料中的那一段。');
+            return;
+          }
+          const numbers = range.evidence.match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+          const supplied = [range.widthM, range.depthM, range.shiftEastM, range.shiftNorthM, range.rotationDeg]
+            .filter((value): value is number => value !== undefined && value !== 0);
+          if (supplied.some(value => !numbers.includes(Math.abs(value)))) {
+            askForDetails('请用米说明具体长宽或位移，避免把参考图中的比例误当成实际尺寸。');
+            return;
+          }
+          const directionWords = { north: '北', south: '南', east: '东', west: '西' };
+          if (range.portion && (!range.evidence.includes(directionWords[range.portion]) || !/半边|半块|半部分|一半/u.test(range.evidence))) {
+            askForDetails('你想保留哪半边？可以说“用西半边”，也可以直接给出这块活动范围的长宽。');
+            return;
+          }
+          const anchor = candidate?.anchor ?? plan.anchor;
+          if (!anchor) { askForDetails('先说出场地名称，我会定位并提出范围，再根据这句话调整。'); return; }
+          const nextBoundary = reviseVenueRange(candidate?.boundary ?? plan.boundary, range);
+          const previousBasis = candidate?.basis ?? stateRef.current.rangeBasis;
+          offerBoundary(anchor, nextBoundary, candidate?.name ?? '当前场地', {
+            kind: range.widthM || range.depthM ? 'user-dimensions' : previousBasis?.kind ?? 'concept',
+            location: previousBasis?.location ?? 'assumed',
+            scale: range.widthM || range.depthM ? 'user-provided' : previousBasis?.scale ?? 'assumed',
+            detail: `${source ? `资料 ${source.location}` : '用户原话'}：${range.evidence}。${previousBasis?.location !== 'mapped' ? '仍是概念范围，实际草坪位置尚待核对。' : '几何调整不等于场地方已确认可使用。'}`,
+          });
+          return;
+        }
         // 2026-11-17 用户实测：候选轮廓还在，只因为画布基座有了一点点变化（自动补设计范围、
         // 新增实体等），旧的「base 完全一致」门就把候选判死，顺手把 pendingBoundary 也清掉，
         // 任务退回搜索。候选来自用户刚看过的那张图，这里按当前画布重新签发一次候选，不清状态。
         if (candidate && checkBoundaryRing(candidate.boundary).ok) {
-          offerBoundary(candidate.anchor, candidate.boundary, candidate.name);
+          offerBoundary(candidate.anchor, candidate.boundary, candidate.name, candidate.basis);
           return;
         }
         if (checkBoundaryRing(plan.boundary).ok) {
@@ -2418,7 +2459,7 @@ export function useOutdoorAgentWorkflow(input: {
     return true;
   }
 
-  async function handle(message: string, clarification?: OutdoorClarification, images?: string[]): Promise<boolean> {
+  async function handle(message: string, clarification?: OutdoorClarification, images?: string[], documents?: AgentDocument[]): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
     const waiting = pendingPlanRef.current;
     if (waiting && (explicitProposalApproval(message) || /^批准(?:这(?:份|个))?计划[。！!]?$/u.test(message.trim()))) {
@@ -2522,6 +2563,8 @@ export function useOutdoorAgentWorkflow(input: {
       if (map.status === "unavailable" && !researching) designStep("本轮未取得地图依据，将使用已有规划和输入内容。");
       const turn = await understandOutdoorTurn({
         message,
+        documents,
+        researchScope: `${input.scope}:${getActiveAssistantSessionId(input.scope) ?? 'local'}`,
         ...(images?.length ? { images } : {}),
         clarification: waiting
           ? { request: waiting.message, question: `待批准的计划：${waiting.steps.join("；")}。请结合用户补充的要求理解本句。` }
@@ -2630,7 +2673,7 @@ export function useOutdoorAgentWorkflow(input: {
         return true;
       }
       const constraintBefore = JSON.stringify({brief:stateRef.current.brief,stage:stateRef.current.stage,completed:stateRef.current.completed});
-      await act(turn, message, true);
+      await act(turn, message, true, documents);
       // A neutral clarification is not cancellation or authorization. Only the unchanged
       // scope checkpoint may remain pending; never retain a geometric/model proposal
       // across unstructured new requirements. Cancel/new facts/new actions still invalidate.
