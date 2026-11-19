@@ -758,3 +758,135 @@ GET  /assets （丽丽）          → 总 28 / 公开 27 / 其中我发布的 2
   `config` / `hunyuan-config` / `local-persistence` 的 5–30 s 超时是负载型 flaky，单独重跑即过。
 - **CHANGELOG 与版本号未动**：`check:changelog` 当前对 8 个既有版本就是红的（并行会话写的条目不合 `docs/43` 规范），发布口径不由这一刀决定。
 - **治理改动仍需人 review**：Edge 路由（`/assets/{id}/publish`）与三份迁移已按用户授权落地并上线，但正式流程上属「需人 review」的范围，review 时看 15.3–15.5 的读数即可。
+
+## 十六、缩略图归零、生成批次收官与「真实地形」路线定调（2026-11-19 16:00–17:00）
+
+### 16.1 用户投诉「你这还都没放图片」：两层独立根因
+
+投诉指向物料库卡面缩略图全空。查下来是**两层叠加**，只修一层都不够：
+
+| 层 | 现象 | 根因 | 处置 |
+| --- | --- | --- | --- |
+| 数据层 | 23 件新物料从没渲染过图 | 生成归档只写 GLB，不写预览图 | 16.2 批量渲染 |
+| 接口层 | 7 件**有图**也全显示空白 | `GET /assets` 只发内部 `metadata.previewPath`，浏览器拿不到可用的 https 图片地址 | 16.3 逐条签发签名地址 |
+
+### 16.2 数据层：预览图批量渲染（27 件，最终 34/34 覆盖）
+
+用仓库现成工具链（three.js + Playwright Chromium swiftshader）离屏渲染 512×512 PNG：
+下载桶内 GLB → 渲染 → 上传 `scene-assets/<ownerId>/<assetId>/preview.png` → 回写 `metadata.previewPath`。
+
+- 第一轮 26 件全部成功、0 失败；最后一轮补 1 件（婚礼刀叉组，57444 B，`尺寸=[0.23,0.3555,0.0335]`），上传 200。
+- **收官读数：我名下 34 件 GLB，34/34 都有预览图。**
+- 路径必须匹配 Edge 侧校验：`<ownerId>/` 开头 + 文件名以 `/preview.(png|jpg|webp)` 结尾。
+
+### 16.3 接口层：逐条签发短期签名地址（提交 `646ce4c3`）
+
+- `supabase/functions/_shared/backend.ts`：`sign(path, expiresIn?)` 允许逐次指定有效期，**默认 300 s 不变**，其余调用点不受影响。
+- `supabase/functions/_shared/api.ts`：新增 `assetPreviewView`，把 `metadata.previewPath` 换成 **1 小时**有效的签名 `previewUrl`，并把内部路径从响应里去掉。
+- **安全口径**：只签「物主自己目录下、文件名以 `/preview.(png|jpg|webp)` 结尾」的路径。`metadata` 可被写入，不做目录与文件名校验等于给任意存储对象开一个签名入口。
+- **线上复测**（`GET /assets`，真实用户令牌）：`http 200` / 总 71 条 / **带可直接用的 https 预览地址 34 条** / **带 `previewPath` 的 0 条** / GLB 总数 34（其中带 `previewPath` 0）。
+- **公开目录**：我名下 34 件 GLB **全部**已在 `scene_private.published_assets` 里（`published_by = 我`），丽丽及任何注册用户可见可取用。
+- 提交：`646ce4c3`，rebase 到并行会话最新的 `004c24ed` 之上，**零冲突**；已推送 `origin/main`。Edge 部署版本 67。
+
+### 16.4 浏览器端最终确认（正式站实机，不是推断）
+
+- 站点 `https://scendance.lilicoding.space`（正式域），以 endTree 账号登录后打开「物料 → 我的生成」。
+- **卡面缩略图全部渲染出来**：白木椅、圆桌、香槟杯、刀叉组、金色花艺支架、白纱幔+金球、桌花+椅、甜品台、横向花台、珍珠串帘、垂吊花球、花环拱门等。
+- **实读请求**：12 条 `…/storage/v1/object/sign/scene-assets/<ownerId>/<assetId>/preview.png` 全部 `200 image/png`。
+- 登录方式：本地 4322 跳转页 + 现铸会话 cookie，令牌只在浏览器里流转，不进对话上下文。
+- **一条方法论坑（值得记）**：应用只认 `type=recovery` 的 hash，**magiclink 的 `#access_token=` 不会被 `AuthProvider` 消费**（`frontend/lib/auth-provider.tsx:20-26`），所以走 magiclink 跳转必然停在未登录态；改用 `@supabase/ssr` 的 cookie（`sb-<ref>-auth-token`，值为 `base64-` + base64url(JSON(session))）注入才建立会话。
+
+### 16.5 生成批次收官：37 件清单全覆盖
+
+- 上一轮有 3 件一直建不了单，报 `REFERENCE_IMAGE_FORBIDDEN`。**真因不是链路**：这 3 件的本地参考图存在，但**从没注册进 `scene_private.assets`**。
+- 校验口径（`supabase/migrations/20261028120000_aholo_lux3d.sql:25`）：asset 行必须存在 **且** `owner_id = p_actor` **且** `format in ('png','jpeg')`；**尺寸与体积不在 SQL 校验里**（那两关在 Edge 与 worker 侧）。
+- 补齐的三件：**婚礼签到台 / 婚礼签到背景墙 / 婚礼餐巾折花**——正好是丽丽迎宾动线第一站要用的三件。
+- 做法（与平台 `/assets/glb` 端点同款内容寻址）：传桶 → `scene_rpc('assets.register')` → `job_rpc('jobs.create')`，占用槽位 1/2/3。
+- **状态收官：`ready 34` / `submitted 3`（在跑）/ `failed 4` / `rejected 1`。**
+- 失败拆解（避免误判）：`failed 4` 里 **2 件是本轮图生失败**（`PROVIDER_FAILED`，`provider_usage` 为空，11-19 01:42 与 06:51 UTC）；另 2 件是 **11-17 的历史文生失败**，其中一条 `vendorMessage = "no credits"` —— 那是**加积分之前的旧账**，不代表现在耗尽。`rejected 1` 是 11-17 的 `FILE_TOO_LARGE` 文生。
+- 按既定口径**不自动重派付费请求**。
+- **踩坑记**：建单后的中间态叫 **`submitted`**，不叫 `queued`。守望脚本第一版只统计 `queued + processing`，因此提前退出、少等了一轮；已修正。
+
+### 16.6 「立体地形 + 周边环境」路线定调（用户 11-19 决策：直接上真实 DEM，只做室外草坪）
+
+**关键口径：真实 DEM 与 aholo 没关系，是两条独立的路。**
+
+| 层 | 数据来源 | 积分 | 产出 |
+| --- | --- | --- | --- |
+| 地形层（地面起伏） | 公开地理数据（DEM 高程 + 卫星影像） | 0 | 场地真实坡度、岸线、高差 |
+| 布置物层（地上的东西） | aholo/Lux3D 图生 3D | 20 分/件 | 签到台、签到墙、拱门、桌花 |
+
+唯一耦合点是**贴地**：aholo 物件带 `groundOffset`（底面接触点），要落到地形上就得先有地形高度场。顺序是**先有地形，再摆物件**。
+（aholo 那边也有自己的「场景工厂」路线——`meters` 真值 + SPZ/PLY 的 3DGS 场景资产，但那是**扫描重建**真实场地，公开 API 单图→3DGS 实测 2/2 失败，且与目标场地没有地理对应。除非先派人去现场扫一遍，否则用不上。）
+
+**16.6.1 为什么地形不能用 aholo 生成（尺寸实证）**
+
+aholo 产物确实带 `bounds` / `sourceSize` / `groundOffset`（原点落在地面接触点，对定点摆放是对的），但**绝对尺度是按参考照里占的像素比例反推的**：
+
+| 物料 | aholo 推算尺寸 | 实际 | 判定 |
+| --- | --- | --- | --- |
+| 婚礼香槟杯一对 | 0.156 × 0.230 × 0.074 m | ≈15.5 cm 宽 / 23 cm 高 | 对 |
+| 婚礼刀叉组 | 0.23 × 0.355 m | 约 25 cm 宽 / 5 cm 高 | 高 3 倍 |
+| 婚礼餐盘 | 0.27 × **0.997** m | 直径 27 cm，高约 3 cm | **高 33 倍** |
+
+盘子在参考照里是斜拍的，包围盒把透视算了进去。**一个连餐盘高度都能差 30 倍的工具，不能拿来生成米级的地形起伏。**
+产品文档里其实早有同口径：「Aholo 对我们是『道具工厂 + 人物动画外包』，不是『场景工厂』」（`docs/39:20`）；单图→3DGS 公开 API 2/2 失败（`docs/39:115-116`）。
+
+**16.6.2 真实 DEM 数据源实测（浏览器内实测，非文档推断）**
+
+| 候选 | 结果 | 判定 |
+| --- | --- | --- |
+| **AWS Terrain Tiles（Terrarium PNG）** | `200`、`Content-Type: image/png`、**`Access-Control-Allow-Origin: *`**、256×256 | **可用，浏览器直连，零积分零账号** |
+| OpenTopoData SRTM30m | `200` 但**无 CORS 头** | 浏览器端不可用；且 30 m 采样对 1200 ㎡ 草坪过粗 |
+| Open-Meteo terrain API | 404 | 不可用 |
+
+实测高程（z15，**4.13 m/px**；解码公式 `height = R*256 + G + B/256 - 32768`）：
+
+| 位置 | 高程 |
+| --- | --- |
+| 花家山庄 | 10.1 m |
+| 西湖中心 | 10.0 m（与西湖水位量级一致） |
+| 北高峰 | 41.9 m |
+| 灵隐寺 | 53.3 m |
+
+与西湖周边真实地貌吻合，说明数据可用、坐标系对得上。
+**一个必须处理的坑**：瓦片内会出现**负值**（实测 tile 最低 −222.9 m），那是 Terrarium 的 no-data/水体编码，落地时必须过滤或钳位，否则地形会炸出深坑。
+
+**16.6.3 平台现状与接入点（代码取证）**
+
+- 户外 3D 地面是**程序化**的：`frontend/components/room-organizer/three/outdoor.ts` 生成草地平面、人行道、沥青路、220 丛草簇、一圈程序化树（birch/oak/pine），由 RNG 围绕一个**矩形房间尺寸**生成，**完全不绑定真实坐标范围**。
+- 唯一的「地形」是 `three/terrain.ts` 的 `TerrainSpec { frontY, backY }`——**手工设定的分段线性坡**（房子前平后平、中间斜），用于「房子挖山」，不是真实高程。
+- **地理锚点换算已经现成**：`frontend/components/room-organizer/lib/scene-anchor.ts` 的 `anchorGeoToWorld(anchor, lng, lat)` 做地理→世界坐标（含 `orientationDeg` 旋转与 `metersPerUnit` 缩放），`sceneAnchorOf(layout)` 从布局取锚点。
+- 户外 2D 侧坐标是 ENU 米（x 东 / y 北），见 `supabase/functions/_shared/site-plan.ts`。
+
+**16.6.4 范围收口（用户 11-19 明确：只做室外草坪，不做室内）**
+
+室内线整块不碰：`domain.ts` 的 `objectSchema`（≤50 件/场景、单件 ≤50 m）、`presetNode`（前端保存已抛 `UNKNOWN_PRESET_NODE`）、`scene-resources.ts` 的 `merged.json` 米制库、`assets.ts` 的「最长边 ≥20 判厘米」启发式归一化都留在原地不动。
+只走 outdoor 线：`site-plan.ts` 的 `SitePlanData`（boundary / zones / facilities / routes / nodes / workers）+ `three/outdoor.ts` 的户外 3D 壳体。
+
+### 16.7 已有能力盘点（子智能体只读取证，本轮未改代码）
+
+**「定点摆放」契约 outdoor 线已有**：`PlanFacility { position(ENU 米), rotationDeg, size{width,depth} }`（`site-plan.ts:87-134`）+ Agent 桥 `openGenerate(id, 'text'|'image')` → 生成件自动回填到该设施的模型候选首位 → 点候选即换 3D 模型（`outdoor-plan-canvas.tsx:2119-2136`）。**这条链已经存在，是「不拍照直接生成逼真空间」的落点。**
+
+**但有三个硬伤**（诚实记录，未修）：
+
+1. **尺寸不可信**：生成件无米制真值，只有包围盒 + 启发式（`_shared/models.ts:122-129` → `assets.ts:71-89`）。`scene-resources.ts:16-23` 明写 *"Raw GLB bounds are not a statement of real-world dimensions"*。**aholo 侧的 `meters` 真值只给 SPZ/PLY 场景资产，GLB 物件模型没有。**
+2. **朝向不可控**：Lux3D 无朝向语义，平台只能整体绕 Y 转一个角度，说不了「花艺拱门正面朝主舞台」。
+3. **单网格不可分件**：aholo 产出是单网格单材质 GLB，「纱幔帐篷 + 桌椅」不能一次生成再拆。
+
+另有**持久化缺口**：outdoor 生成件是 `sessionOnly`（`facility-generated-models.ts:523-527`），刷新或换设备后 `modelOverride` 悬空。
+
+**没有的东西**（grep 全仓无命中）：① 「空间」作为一等实体的独立 schema；② **宾客画像 / persona 数据对象**——丽丽要的「精细到个人（男方家长/女方家长/亲戚）」目前**没有任何数据承载**，这是下一步必须补的一等公民。
+
+### 16.8 本轮仍未闭环 / 刻意没做
+
+- **最后 3 件**（签到台 / 签到背景墙 / 餐巾折花）出件后自动公开 + 自动渲染预览图，后台守望脚本已挂。
+- **b/c 档体验断点仍未做**：job 终态回写对话、对话侧轮询、结果自动落画布——要改契约或产品口径，不在这一刀范围。
+- **真实 DEM 地形尚未落地**：16.6 只做完选源与可行性实测，代码未写。
+- **宾客画像 / persona 数据模型未建**：见 16.7。
+- **生成件尺寸标定入口未建**：产品侧目前没有「人工填真实米数」的口子，也没定「接受包围盒归一化值」还是「必须人工填」。
+- **根全量 11 个文件失败**仍是既有基线（见 15.7），本轮未引入新失败。
+- **CHANGELOG 与版本号未动**（见 15.7）。
+- **并行会话冲突待人工**：`supabase/functions/_shared/api.ts` 同文件双改——并行会话的版本给单条 `GET /assets/{id}` 也加了 `previewUrl`，我推的 `646ce4c3` 只含已部署上线的列表路由；他们 rebase 时会在那一个 hunk 上撞一次，需要人工挑。
+- **Edge Function 未跑 `deno check`**：本机 PATH 里没有 deno，`npm run check:edge` 跑不了；改动只有 22 行且已上线实测。
+- **两个本地 `.npmrc`**（仓库根与 `supabase/functions/`）是为绕开 deno 打包器取不到 npm 源而加的本地镜像配置，**故意不进版本库**，但也没加进 `.gitignore`——留个尾巴给后续维护者。
