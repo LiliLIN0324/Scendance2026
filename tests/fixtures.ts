@@ -22,6 +22,8 @@ export async function database(dataDir?: string, options?:{excludeMigrations?:re
     create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`);
   // The team list reads the sign-up email through a definer helper, so the stand-in auth table needs the column too.
   await db.exec('alter table auth.users add column if not exists email text');
+  // 真实 Supabase 里 auth.uid() 是内置函数；迁移可能拿它做列默认值，本地夹具要跟着有这个函数。
+  await db.exec(`create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$`);
   await db.exec('create table if not exists public.local_fixture_migrations(name text primary key, checksum text not null)');
   const migrations = new URL('../supabase/migrations/', import.meta.url);
   for(const file of readdirSync(migrations).filter(f=>f.endsWith('.sql')&&!options?.excludeMigrations?.includes(f)).sort()) {
