@@ -54,7 +54,9 @@ export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft
   ];
   return (
     <article className="ap-card ap-outdoor-thought-card" aria-label="思考卡片">
-    {request && <header className="ap-outdoor-thought-heading">{request}</header>}
+    {/* T1-b：等待回答时卡片在问题下方只留一行「思考记录」；不再重复用户请求抬头，
+        避免把最新问题顶出 .ap-feed 视口。 */}
+    {request && !compact && <header className="ap-outdoor-thought-heading">{request}</header>}
     {awaiting && <div className="ap-task-progress" aria-hidden="true" />}
     <details className="ap-run-thoughts" open={open} aria-busy={awaiting || undefined} onToggle={event => setOpen(event.currentTarget.open)}>
       <summary className="ap-run-thoughts-summary">

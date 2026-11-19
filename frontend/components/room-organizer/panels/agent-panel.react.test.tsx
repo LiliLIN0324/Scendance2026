@@ -5049,9 +5049,22 @@ describe('registered capabilities through the atomic outdoor Agent',()=>{
   send(request);
   const question = await screen.findByText(/想挪动哪个设施/);
   expect(question.textContent).toMatch(/哪个位置/);
-  expect(screen.getByText('待你回复', { exact: true }).closest('.ap-head-status')).toBeTruthy();
+  expect(screen.getAllByText('待你回复', { exact: true }).some(node => node.closest('.ap-head-status'))).toBe(true);
   expect(roads).not.toHaveBeenCalled();
   expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
+  // T1-b：等待态卡片只在底部挂一次（不再同时挂进 Bubbles）。
+  const feed = document.querySelector('.ap-feed')!;
+  const replyQuestion = screen.getByRole('region', { name: '待你回复' });
+  const waitingCards = feed.querySelectorAll<HTMLElement>('[data-testid="outdoor-workflow-card"], .ap-outdoor-thought-card');
+  // 本轮的追问由本地命令直接给出，没有思考记录时卡片为空；有卡时也只能有一张。
+  expect(waitingCards.length).toBeLessThanOrEqual(1);
+  expect(replyQuestion.closest('.ap-outdoor-reply-wrap')?.querySelector('.ap-outdoor-thought-card')).toBeNull();
+  if (waitingCards[0]) {
+    expect(replyQuestion.compareDocumentPosition(waitingCards[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+  // 滚动锚点：问题仍是气泡区的最后一格，.ap-feed 的钉底 effect 继续以它为最新内容。
+  const bubbleWraps = feed.querySelectorAll('.ap-bubble-wrap');
+  expect(bubbleWraps.item(bubbleWraps.length - 1)?.contains(replyQuestion)).toBe(true);
 
   send('现有展位，往东侧挪两米');
   await waitFor(() => expect(studioMock.controller.assistantChat).toHaveBeenCalledTimes(1));
