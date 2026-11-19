@@ -3,8 +3,9 @@ import type { OutdoorBrief, OutdoorLibraryItem } from './outdoor-agent-contract'
 import { clearForObject, proposeInventoryObjects, proposeUseZones } from './outdoor-agent-planning';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { checkBoundaryRing } from './site-plan-editing';
-import { outdoorRingsOverlap } from './outdoor-event-logic';
+import { outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
 import { eventLayoutPath } from './event-layout-path';
+import { banquetCenters, ceremonySeats, WEDDING_DEFAULTS } from './wedding-spatial';
 
 type Role = 'arch' | 'ceremony-chair' | 'banquet-table' | 'banquet-chair' | 'welcome-table' | 'sign' | 'photo' | 'rest-chair' | 'service-table';
 type ZoneRole = 'ceremony' | 'banquet' | 'welcome' | 'photo' | 'rest' | 'service';
@@ -12,6 +13,8 @@ export const WEDDING_LIBRARY_QUERIES = ['拱门','背景','椅','桌','指示牌
 export interface WeddingLayoutReport {
   plan: SitePlanData; notes: string[];
   quantities: Array<{ role: string; zone: string; requested: number; placed: number; placeholder: boolean }>;
+  checks: { collisions: number; boundary: number; obstacles: number; corridors: number; ceremonySeats: number; banquetSeats: number; target: number; access: 'pending'; safety: 'unverified' };
+  originalPlan: SitePlanData;
 }
 const bounds=(ring:PlanPoint[])=>({w:Math.min(...ring.map(p=>p.x)),e:Math.max(...ring.map(p=>p.x)),s:Math.min(...ring.map(p=>p.y)),n:Math.max(...ring.map(p=>p.y))});
 const center=(ring:PlanPoint[])=>{const b=bounds(ring);return{x:(b.w+b.e)/2,y:(b.s+b.n)/2};};
@@ -20,7 +23,7 @@ const roles:Record<ZoneRole,{name:string;purpose:NonNullable<PlanZone['purpose']
   welcome:{name:'迎宾签到区',purpose:'service',semantic:'checkin'},photo:{name:'合影区',purpose:'exhibition',semantic:'reserved'},
   rest:{name:'休息区',purpose:'service',semantic:'vip'},service:{name:'后勤备物区',purpose:'service',semantic:'loading'},
 };
-const roleOf=(zone:PlanZone):ZoneRole|null=> /宴|餐饮|餐区|用餐/.test(zone.name)?'banquet':/仪式|观礼|舞台|证婚/.test(zone.name)?'ceremony'
+const roleOf=(zone:PlanZone):ZoneRole|null=> /宴|餐饮|餐区|用餐/.test(zone.name)?'banquet':/仪式|观礼|舞台|证婚|宾客.*[席座]/.test(zone.name)?'ceremony'
   :/签到|迎宾|接待/.test(zone.name)?'welcome':/合影|拍照|摄影/.test(zone.name)?'photo':/休息|长辈|贵宾/.test(zone.name)?'rest':/后勤|备物|备餐|服务/.test(zone.name)?'service':null;
 
 function clipToRect(ring:PlanPoint[],box:{w:number;e:number;s:number;n:number}):PlanPoint[]{
@@ -68,11 +71,6 @@ function initialZones(plan:SitePlanData,brief:OutdoorBrief,strategy:'ceremony-fi
     zones.push({id:crypto.randomUUID(),name:roles[role].name,semantic:roles[role].semantic,purpose:roles[role].purpose,
       environment:'outdoor',event:'婚礼',polygon,notes:'Agent 婚礼布局假设；可用聊天调整，不代表场地方已确认可用。'});
   }
-  for(const key of Object.keys(roles) as ZoneRole[]){
-    const polygon=clipToRect(plan.boundary,boxes[key]);
-    if(!checkBoundaryRing(polygon).ok||facilityPlacementIssues(polygon,plan.boundary).length){notes.push(`${roles[key].name}未取得可用的连续区域，未强行绘制。`);continue;}
-    zones.push({id:crypto.randomUUID(),...roles[key],polygon,environment:'outdoor',geometrySource:'map-unverified',event:'婚礼',notes:'Agent 婚礼起稿假设；分区不是场地方授权范围。'});
-  }
   notes.push(`采用${strategy==='ceremony-first'?'仪式优先':'宴席优先'}布局，迎宾与后勤靠近入场侧，仪式区与宴席区分开；朝向按画布北侧起稿，不推断未知湖景方向。`);
   return zones;
 }
@@ -80,7 +78,7 @@ function initialZones(plan:SitePlanData,brief:OutdoorBrief,strategy:'ceremony-fi
 const specs:Record<Role,{label:string;match:RegExp;width:number;depth:number}>= {
   arch:{label:'仪式背景',match:/婚礼拱门|花艺拱门|拱门|背景/,width:4,depth:1},
   'ceremony-chair':{label:'观礼椅',match:/椅子|折叠椅|单椅|餐椅/,width:0.5,depth:0.55},
-  'banquet-table':{label:'宴席圆桌',match:/圆桌(?!与椅)|宴会桌|餐桌/,width:1.6,depth:1.6},
+  'banquet-table':{label:'宴席圆桌',match:/圆桌(?!与椅)/,width:WEDDING_DEFAULTS.tableDiameterM,depth:WEDDING_DEFAULTS.tableDiameterM},
   'banquet-chair':{label:'宴席座椅',match:/椅子|折叠椅|单椅|餐椅/,width:0.5,depth:0.55},
   'welcome-table':{label:'签到桌',match:/签到台|接待台|长桌|桌子|餐桌/,width:2,depth:0.8},
   sign:{label:'迎宾指示牌',match:/指示牌|导向牌|迎宾牌/,width:0.6,depth:0.4},
@@ -92,24 +90,57 @@ const specs:Record<Role,{label:string;match:RegExp;width:number;depth:number}>= 
 export async function proposeWeddingLayout(input:{
   plan:SitePlanData;brief:OutdoorBrief;library:OutdoorLibraryItem[];strategy?:'ceremony-first'|'banquet-first';
   hardBlocks?:PlanPoint[][];signal:AbortSignal;onPhase?:(text:string)=>void;
+  /** Explicit request to re-evaluate existing wedding zones; original remains untouched. */
+  optimize?:boolean;
 }):Promise<WeddingLayoutReport>{
+  if(input.optimize){
+    const preserved=input.plan.zones.filter(zone=>!roleOf(zone)||zone.environment==='indoor'||input.plan.workers.some(worker=>worker.zoneId===zone.id));
+    const replaced=new Set(input.plan.zones.filter(zone=>!preserved.includes(zone)).map(zone=>zone.id));
+    const base={...input.plan,zones:preserved,facilities:input.plan.facilities.filter(f=>!replaced.has(f.zoneId??'')),
+      routes:input.plan.routes.filter(route=>!route.name.startsWith('婚礼·')||input.plan.workers.some(worker=>worker.routeIds?.includes(route.id)))};
+    const reports:WeddingLayoutReport[]=[];
+    for(const strategy of ['ceremony-first','banquet-first'] as const){
+      input.signal.throwIfAborted();
+      const notes:string[]=[];
+      const proposed=initialZones({...base,zones:[]},{...input.brief,zones:[]},strategy,notes)
+        .filter(zone=>!preserved.some(other=>outdoorRingsOverlap(zone.polygon,other.polygon)));
+      // Preserve IDs so route/node references do not become dangling after zone reshaping.
+      const used=new Set<string>();
+      for(const zone of proposed){const old=input.plan.zones.find(old=>replaced.has(old.id)&&roleOf(old)===roleOf(zone)&&!used.has(old.id));if(old){zone.id=old.id;used.add(old.id);}}
+      try{
+        const report=await proposeWeddingLayout({...input,optimize:false,strategy,plan:{...base,zones:[...preserved,...proposed]},
+          hardBlocks:[...(input.hardBlocks??[]),...preserved.map(zone=>zone.polygon)]});
+        report.notes.unshift(...notes,`已评估原有 ${replaced.size} 个婚礼分区，重新组织签到→仪式→婚宴；原方案未修改，新版采用后可整批撤销。`);
+        reports.push(report);
+      }catch(error){input.signal.throwIfAborted();if(!(error instanceof Error))throw error;}
+    }
+    if(!reports.length)throw new Error('已尝试仪式优先和宴席优先，已知边界与保留区域内没有可落位的婚礼组团；原方案保留。建议扩大可用范围或分时使用仪式与宴席区。');
+    const score=(report:WeddingLayoutReport)=>Math.min(report.checks.ceremonySeats,report.checks.banquetSeats)*100+report.checks.ceremonySeats+report.checks.banquetSeats;
+    reports.sort((a,b)=>score(b)-score(a));
+    const best=reports[0];best.originalPlan=structuredClone(input.plan);
+    best.notes.push(`自动比较 ${reports.length} 版空间组织，优先保留两个环节都能服务的人数；未降低目标人数。`);
+    return best;
+  }
   if(!checkBoundaryRing(input.plan.boundary).ok)throw new Error('还没有可用的活动范围；先用聊天确认或调整 Agent 提出的范围。');
   const notes:string[]=[],quantities:WeddingLayoutReport['quantities']=[];
   const plan:SitePlanData={...input.plan,zones:initialZones(input.plan,input.brief,input.strategy??'ceremony-first',notes),facilities:[...input.plan.facilities],routes:[...input.plan.routes],nodes:[...input.plan.nodes]};
-  const guests=input.brief.guests??60;
+  const guests=input.brief.guests??WEDDING_DEFAULTS.guests;
+  notes.push('初步规划参数：每桌10人，缺尺寸时圆桌直径1.8m、座椅0.5×0.55m；中央通道2.5m、服务净距1.5m、观礼排间净距0.65m、仪式摄影空间2m。均为可修改的设计假设，不是安全规范验收。');
   if(!input.brief.guests)notes.push('人数未给定：暂按 60 人做桌椅需求草案，不写成已确认人数；实际摆下的数量会分别列出。');
   const blocked=[...(input.hardBlocks??[]),...(plan.buildings??[]).map(building=>building.points),...plan.zones.filter(zone=>zone.environment==='indoor').map(zone=>zone.polygon)];
   const zoneFor=(role:ZoneRole)=>plan.zones.find(zone=>roleOf(zone)===role&&zone.environment!=='indoor');
   const ceremony=zoneFor('ceremony'),banquet=zoneFor('banquet');
   const b=bounds(plan.boundary),cx=(b.w+b.e)/2;
-  const entry=plan.nodes.find(node=>node.kind!=='exit');
+  const entry=plan.nodes.find(node=>node.kind!=='exit'&&node.verification!=='unverified');
   if(!entry)notes.push('入场路线从范围内的建议接驳点起稿，尚未识别或确认真实入口；不会把它登记成已核验的门。');
   const start=entry?.position??{x:cx,y:b.s+2};
-  const routeWidth=Math.min(2.5,Math.max(1.2,(b.e-b.w)*0.06));
-  const endpoint=ceremony?{x:center(ceremony.polygon).x,y:bounds(ceremony.polygon).n-4}:center(plan.boundary);
+  const routeWidth=WEDDING_DEFAULTS.aisleM;
+  const ceremonyBox=ceremony?bounds(ceremony.polygon):b;
+  const focus={x:(ceremonyBox.w+ceremonyBox.e)/2,y:ceremonyBox.n-1.5};
+  const endpoint=ceremony?{x:focus.x,y:focus.y-WEDDING_DEFAULTS.photographerM}:center(plan.boundary);
   const addRoute=(name:string,from:PlanPoint,to:PlanPoint,service=false):PlanRoute|null=>{
     const existing=plan.routes.find(route=>route.name===name);if(existing)return existing;
-    const path=eventLayoutPath({boundary:plan.boundary,blocked:[...blocked,...plan.facilities.map(facilityFootprintRing)],start:from,end:to,widthM:service?1.5:routeWidth});
+    const path=eventLayoutPath({boundary:plan.boundary,blocked:[...blocked,...plan.facilities.map(facilityFootprintRing)],start:from,end:to,widthM:service?WEDDING_DEFAULTS.serviceAisleM:routeWidth});
     if(!path){notes.push(`${name}未找到可容纳完整线宽的连续路径，未画穿障碍；需要调整分区或已放物件。`);return null;}
     const route:PlanRoute={id:crypto.randomUUID(),kind:service?'service':'pedestrian',carrier:'walk',audiences:service?['service','staff']:['visitors'],name,points:path,oneWay:false,widthM:service?1.5:routeWidth,notes:'婚礼联合草案：设计通道，宽度为假设；不证明现场出入口或疏散条件。'};
     if(entry&&Math.hypot(path[0].x-entry.position.x,path[0].y-entry.position.y)<0.1)route.startNodeId=entry.id;
@@ -125,7 +156,11 @@ export async function proposeWeddingLayout(input:{
     return best;
   };
   for(const role of ['welcome','banquet','photo','rest'] as ZoneRole[]){const zone=zoneFor(role);if(zone&&main){const to=center(zone.polygon),from=nearest(to);if(Math.hypot(to.x-from.x,to.y-from.y)>1)addRoute(`婚礼·${roles[role].name}连接`,from,to);}}
-  const service=zoneFor('service');if(service)addRoute('婚礼·后勤服务通路',{x:b.e-2,y:b.s+2},center(service.polygon),true);
+  const service=zoneFor('service');
+  if(service){
+    addRoute('婚礼·后勤服务通路',{x:b.e-2,y:b.s+2},center(service.polygon),true);
+    if(banquet){const box=bounds(banquet.polygon);addRoute('婚礼·备餐至婚宴服务连接',center(service.polygon),{x:box.e-1.5,y:(box.s+box.n)/2},true);}
+  }
   notes.push('通道先于物件预留；宾客与后勤路线是布局提案，交叉位置仍需按实际流程协调。');
 
   const materialFor=(role:Role)=>input.library.filter(item=>item.available&&!item.id.startsWith('icon:')&&specs[role].match.test(item.name)
@@ -155,8 +190,10 @@ export async function proposeWeddingLayout(input:{
       ...(material?{sourceAssetId:material.id,modelOverride:material.modelSlug}:{}),
       notes:material?`婚礼联合草案；复用真实库物件「${material.name}」及其标称尺寸，实物库存未确认。`:`婚礼联合草案；缺少已匹配模型的尺寸占位件（${spec.width}×${spec.depth}米假设），待选型，不是已生成资产。`};
   };
+  const cameraSpace=ceremony?[{x:focus.x-2.5,y:focus.y-2.6},{x:focus.x+2.5,y:focus.y-2.6},{x:focus.x+2.5,y:focus.y-0.6},{x:focus.x-2.5,y:focus.y-0.6}]:[];
   const canPlace=(facility:PlanFacility,zone:PlanZone,current:SitePlanData=plan)=>clearForObject(facility,current,zone)
-    &&!blocked.some(ring=>outdoorRingsOverlap(facilityFootprintRing(facility),ring));
+    &&!blocked.some(ring=>outdoorRingsOverlap(facilityFootprintRing(facility),ring))
+    &&(!cameraSpace.length||!outdoorRingsOverlap(facilityFootprintRing(facility),cameraSpace));
   const candidates=(zone:PlanZone,spacingX:number,spacingY:number,northFirst=false):PlanPoint[]=>{
     const box=bounds(zone.polygon),out:PlanPoint[]=[];
     for(let row=0;row<80;row++){
@@ -178,28 +215,52 @@ export async function proposeWeddingLayout(input:{
     await new Promise(resolve=>setTimeout(resolve,0));input.signal.throwIfAborted();
   };
   input.onPhase?.('布置仪式背景、观礼座椅和迎宾设施');
-  await fill('arch',ceremony,1,true);await fill('ceremony-chair',ceremony,guests,true);
+  if(ceremony){
+    const arch=make('arch',ceremony,1,focus);
+    const oldArches=plan.facilities.filter(f=>f.zoneId===ceremony.id&&f.allocationKey?.includes(':arch:'));
+    if(!oldArches.length&&canPlace(arch,ceremony))plan.facilities.push(arch);
+    const actualFocus=oldArches[0]?.position??focus;
+    const wanted=wantedCount('ceremony-chair',ceremony,guests),chair=materialFor('ceremony-chair');
+    const existing=plan.facilities.filter(f=>f.zoneId===ceremony.id&&f.allocationKey?.includes(':ceremony-chair:'));
+    const base=[...plan.facilities];let best:PlanFacility[]=[];
+    // Compare seating block widths against the same focal point and reserved routes.
+    for(const columns of [5,4,3,2]){
+      const probe={...plan,facilities:[...base]},group:PlanFacility[]=[];
+      for(const pose of ceremonySeats({focus:actualFocus,count:wanted,width:chair?.width??0.5,depth:chair?.depth??0.55,columns})){
+        input.signal.throwIfAborted();if(group.length+existing.length>=wanted)break;
+        const seat=make('ceremony-chair',ceremony,existing.length+group.length+1,pose.position,pose.rotationDeg);
+        if(canPlace(seat,ceremony,probe)){probe.facilities.push(seat);group.push(seat);}
+      }
+      if(group.length>best.length)best=group;
+    }
+    plan.facilities.push(...best);
+    quantities.push({role:'仪式背景',zone:ceremony.name,requested:1,placed:oldArches.length+(plan.facilities.includes(arch)?1:0),placeholder:!materialFor('arch')},
+      {role:'观礼椅',zone:ceremony.name,requested:wanted,placed:existing.length+best.length,placeholder:!chair});
+    notes.push('观礼席分为中央通道两侧的组团，逐席朝向仪式中心；已比较不同组团宽度，未用全区网格填充。');
+  }
   await fill('welcome-table',zoneFor('welcome'),1);await fill('sign',zoneFor('welcome'),2);
   await fill('photo',zoneFor('photo'),1,true);await fill('rest-chair',zoneFor('rest'),4);await fill('service-table',service,2);
   input.onPhase?.('按桌组成宴席桌椅，保留座椅到具体桌号的关联');
   if(banquet){
     const table=materialFor('banquet-table'),chair=materialFor('banquet-chair');
-    const tableWidth=table?.width??1.6,tableDepth=table?.depth??1.6,chairWidth=chair?.width??0.5,chairDepth=chair?.depth??0.55;
+    const tableWidth=table?.width??WEDDING_DEFAULTS.tableDiameterM,tableDepth=table?.depth??WEDDING_DEFAULTS.tableDiameterM,chairWidth=chair?.width??0.5,chairDepth=chair?.depth??0.55;
     const radius=Math.hypot(tableWidth,tableDepth)/2+Math.hypot(chairWidth,chairDepth)/2+0.2,envelope=radius+Math.hypot(chairWidth,chairDepth)/2;
     let tables=plan.facilities.filter(item=>item.zoneId===banquet.id&&item.allocationKey?.startsWith(`wedding:${banquet.id}:banquet-table:`)).length;
     let seats=plan.facilities.filter(item=>item.zoneId===banquet.id&&item.allocationKey?.startsWith(`wedding:${banquet.id}:banquet-chair:`)).length;
     const wantedSeats=wantedCount('banquet-chair',banquet,guests);
-    const wantedTables=wantedCount('banquet-table',banquet,Math.ceil(wantedSeats/8));
-    for(const point of candidates(banquet,2*envelope+0.6,2*envelope+0.6)){
-      if(tables>=wantedTables||plan.facilities.length+9>1900)break;input.signal.throwIfAborted();
+    const wantedTables=wantedCount('banquet-table',banquet,Math.ceil(wantedSeats/WEDDING_DEFAULTS.seatsPerTable));
+    const acceptedCenters=plan.facilities.filter(f=>f.zoneId===banquet.id&&f.allocationKey?.includes(':banquet-table:')).map(f=>f.position);
+    for(const point of banquetCenters(bounds(banquet.polygon),envelope)){
+      if(tables>=wantedTables||plan.facilities.length+11>1900)break;input.signal.throwIfAborted();
+      if(acceptedCenters.some(other=>Math.hypot(other.x-point.x,other.y-point.y)<2*envelope+WEDDING_DEFAULTS.serviceAisleM))continue;
       const tableNo=tables+1,group=[make('banquet-table',banquet,tableNo,point)];
-      for(let seat=0;seat<Math.min(8,wantedSeats-seats);seat++){
-        const angle=seat*Math.PI/4,facility=make('banquet-chair',banquet,seats+seat+1,{x:point.x+radius*Math.cos(angle),y:point.y+radius*Math.sin(angle)},((angle*180/Math.PI+90+180)%360)-180);
+      for(let seat=0;seat<Math.min(WEDDING_DEFAULTS.seatsPerTable,wantedSeats-seats);seat++){
+        const angle=seat*2*Math.PI/WEDDING_DEFAULTS.seatsPerTable,facility=make('banquet-chair',banquet,seats+seat+1,{x:point.x+radius*Math.cos(angle),y:point.y+radius*Math.sin(angle)},((angle*180/Math.PI+90+180)%360)-180);
         facility.name=`宴席 ${tableNo} 桌 ${seat+1} 座`;facility.notes+=`；所属桌号 ${tableNo}，未分配具体宾客。`;group.push(facility);
       }
       const probe={...plan,facilities:[...plan.facilities]};let fits=true;
       for(const facility of group){if(!canPlace(facility,banquet,probe)){fits=false;break;}probe.facilities.push(facility);}
-      if(fits){plan.facilities.push(...group);tables++;seats+=group.length-1;}
+      if(fits){plan.facilities.push(...group);acceptedCenters.push(point);tables++;seats+=group.length-1;}
     }
     quantities.push({role:'宴席圆桌',zone:banquet.name,requested:wantedTables,placed:tables,placeholder:!table},{role:'宴席座椅',zone:banquet.name,requested:wantedSeats,placed:seats,placeholder:!chair});
   }
@@ -230,8 +291,20 @@ export async function proposeWeddingLayout(input:{
   if(!input.plan.zones.length)notes.push('草案尚未采用时，可直接说“换成宴席优先”或“换成仪式优先”比较两种分区配比。');
   if(input.brief.items.length)notes.push('明确物料数量优先于默认清单；未落实条目保留并逐项列明，不改写原需求。');
   if(!plan.facilities.length)throw new Error(notes.join(' ')||'当前范围没有可落位的婚礼物件，请用聊天调整尺寸或分区。');
-  const annotations=(plan.annotations??[]).filter(annotation=>annotation.notes!=='wedding-layout:assumptions');
+  const annotations=(plan.annotations??[]).filter(annotation=>!['wedding-layout:assumptions','wedding-layout:camera-space'].includes(annotation.notes));
+  if(cameraSpace.length&&annotations.length<498&&!facilityPlacementIssues(cameraSpace,plan.boundary).length)annotations.push({
+    id:crypto.randomUUID(),kind:'rect',name:'摄影与工作人员预留区（假设）',points:[cameraSpace[0],cameraSpace[2]],text:'摄影与工作人员活动空间',color:'#bca783',notes:'wedding-layout:camera-space'});
   if(annotations.length<500)plan.annotations=[...annotations,{id:crypto.randomUUID(),kind:'note',name:'婚礼起稿假设',points:[center(plan.boundary)],
     text:`${input.strategy==='banquet-first'?'宴席优先':'仪式优先'}；${input.brief.guests?'人数按已提供需求':'人数未提供，暂按60人起稿'}。占位件尺寸是估计，入场路线与真实门的关系需要核对。`,notes:'wedding-layout:assumptions'}];
-  return{plan,notes,quantities};
+  const checks:WeddingLayoutReport['checks']={collisions:0,boundary:0,obstacles:0,corridors:0,
+    ceremonySeats:quantities.find(q=>q.role==='观礼椅')?.placed??0,banquetSeats:quantities.find(q=>q.role==='宴席座椅')?.placed??0,target:guests,access:'pending',safety:'unverified'};
+  for(let i=0;i<plan.facilities.length;i++){
+    const facility=plan.facilities[i],ring=facilityFootprintRing(facility),zone=plan.zones.find(z=>z.id===facility.zoneId);
+    if(facilityPlacementIssues(ring,plan.boundary).length||(zone&&facilityPlacementIssues(ring,zone.polygon).length))checks.boundary++;
+    if(blocked.some(block=>outdoorRingsOverlap(ring,block)))checks.obstacles++;
+    if(plan.routes.some(route=>outdoorCorridorStrips(route.points,route.widthM??3).some(strip=>outdoorRingsOverlap(ring,strip))))checks.corridors++;
+    for(let j=i+1;j<plan.facilities.length;j++)if(outdoorRingsOverlap(ring,facilityFootprintRing(plan.facilities[j])))checks.collisions++;
+  }
+  notes.push(`几何校验：物件碰撞${checks.collisions}处，越界${checks.boundary}件，已知障碍冲突${checks.obstacles}件，通道占用${checks.corridors}件；观礼${checks.ceremonySeats}/${guests}席，宴席${checks.banquetSeats}/${guests}席。真实边界、出入口可达性及现场安全仍待核对。`);
+  return{plan,notes,quantities,checks,originalPlan:structuredClone(input.plan)};
 }

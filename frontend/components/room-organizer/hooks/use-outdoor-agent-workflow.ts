@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentDocument } from "../lib/agent-documents";
 import { reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
 import { proposeWeddingLayout, WEDDING_LIBRARY_QUERIES } from "../lib/wedding-layout";
+import { requestsWeddingOptimization, weddingDesignRequest } from "../lib/wedding-request";
+import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
 import { getActiveAssistantSessionId } from "./use-assistant-sessions";
 import { isVenueResearchRequest } from "../lib/venue-research";
@@ -31,7 +33,6 @@ import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarif
 import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { deferredNote } from "../lib/outdoor-layered-task";
-import { readOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from "../lib/outdoor-design-scope";
 import {
   loadRemoteCardHistory,
@@ -153,6 +154,7 @@ export interface OutdoorWorkflowProposal {
   next: SitePlanData;
   warnings: string[];
   references: OutdoorTurn["references"];
+  preserveOriginal?: boolean;
   afterConfirm?: "main-routes" | "objects" | "design-event";
   afterConfirmRequest?: { turn: OutdoorTurn; message: string; documents: AgentDocument[]; imageCount: number };
 }
@@ -854,6 +856,7 @@ export function useOutdoorAgentWorkflow(input: {
     warnings: string[] = [],
     afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
     afterConfirmRequest?: OutdoorWorkflowProposal["afterConfirmRequest"],
+    preserveOriginal = false,
   ): void | Promise<void> {
     // 有了一版可看的预览就不再记账：追问预算只数“毫无进展”的那几轮。
     askStreakRef.current = 0;
@@ -876,6 +879,7 @@ export function useOutdoorAgentWorkflow(input: {
       next,
       warnings,
       references: [...refsRef.current],
+      preserveOriginal,
       ...(afterConfirm ? { afterConfirm } : {}),
       ...(afterConfirmRequest ? { afterConfirmRequest } : {}),
     };
@@ -1052,12 +1056,22 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     if (!mergeLatest(applyBase)) return; // 基座已被改：mergeLatest 内部已给出失效提示
+    let recoveryProjectId: string | undefined;
+    if(p.preserveOriginal){
+      recoveryProjectId=`wedding-before-${crypto.randomUUID()}`;
+      const now=new Date().toISOString();
+      saveOutdoorProjectRecord({v:1,projectId:recoveryProjectId,name:'婚礼空间优化前方案',createdAt:now,updatedAt:now,plan:applyBase},undefined,false);
+      if(!readOutdoorProjectRecord(recoveryProjectId)?.plan){
+        status('原方案恢复副本未能保存，新方案未应用；请释放本机存储空间后重试。','blocked');return;
+      }
+    }
     if (!bridge?.applyPlan?.(p.next, JSON.stringify(applyBase))) {
       status("画布当前不可写或保存身份变化，未应用；原规划保留。", "blocked");
       return;
     }
     setAppliedHighlight(mapEditHighlight(p.kind, applyBase, p.next));
     liveTurn.current.markApplied();
+    if(recoveryProjectId)callbacks.current.say(`已保留优化前的完整本机方案：[打开原方案](?project=${encodeURIComponent(recoveryProjectId)}&mode=outdoor)。当前优化也可整批撤销。`);
     liveTurn.current.log();
     recordCard(p, "confirmed");
     proposalRef.current = null;
@@ -1444,6 +1458,13 @@ export function useOutdoorAgentWorkflow(input: {
       );
     }
     if (turn.action === "ask") {
+      const autonomousWedding=/婚礼|婚宴|结婚/u.test(`${message} ${stateRef.current.brief.event??''}`)
+        &&/继续执行|不需要等待|无需等待|自主.{0,8}规划/u.test(message);
+      if(autonomousWedding){
+        designStep('已授权自主婚礼规划：缺失桌位与尺寸采用标记的默认参数，场地依据缺口仍待核对。');
+        await act({...turn,action:'design-event'},message,continueDesign,documents,imageCount);
+        return;
+      }
       // 2026-11-17 用户拍「都做」的第二个卡点：用户已经明确选了上一轮二选一里的第 N 项，
       // 模型却又把同一件事反问一遍——原样端回去，用户看到的就是「我选了第一个方案，什么都没发生」。
       // 这时不再重复追问：按原请求确定性地推到对应预览（只出预览，不写画布）。
@@ -1632,13 +1653,14 @@ export function useOutdoorAgentWorkflow(input: {
         const map=mapRef.current,graded=map.layoutEvidence?.();
         const hardBlocks=[...(map.buildingAreas?.()??[]),...(graded?.hard??[]).flatMap(feature=>feature.geometry.type==='polygon'
           ?[feature.geometry.points]:outdoorCorridorStrips(feature.geometry.points,1))];
-        const report=await proposeWeddingLayout({plan,brief:designBrief,library,strategy:turn.designStrategy??'ceremony-first',hardBlocks,signal:job.controller.signal,
+        const optimize=requestsWeddingOptimization(message);
+        const report=await proposeWeddingLayout({plan,brief:designBrief,library,optimize,strategy:turn.designStrategy??'ceremony-first',hardBlocks,signal:job.controller.signal,
           onPhase:text=>{if(live(job)){status(text,'working',{stopLabel:'停止布置'});designStep(text);}}});
         if(!live(job)||JSON.stringify(bridge.getPlan())!==original)return;
         for(const quantity of report.quantities)designStep(`${quantity.zone}：${quantity.role} ${quantity.placed}/${quantity.requested}${quantity.placeholder?'（尺寸占位件）':''}`);
         objectsLayoutRef.current=null;
         await offer(report.plan,'objects','婚礼联合布置：分区、物料与流线',job,[...report.notes,
-          ...report.quantities.map(quantity=>`${quantity.zone} · ${quantity.role}：${quantity.placed} 件${quantity.placeholder?'，占位待选型':''}`)]);
+          ...report.quantities.map(quantity=>`${quantity.zone} · ${quantity.role}：${quantity.placed} 件${quantity.placeholder?'，占位待选型':''}`)],undefined,undefined,optimize);
         return;
       }
       const designingObjects = turn.action === "objects";
@@ -2583,6 +2605,11 @@ export function useOutdoorAgentWorkflow(input: {
         : null;
     // 2026-11-14：确定性 objects 预路由（先于理解模型）——「分区名+数量+物件名」清单句直接合成。
     const planForSynth = plan;
+    const weddingTurn=!documents?.length&&!images?.length?weddingDesignRequest(message,stateRef.current.brief.event,plan):null;
+    if(weddingTurn){
+      await act(weddingTurn,message);
+      return true;
+    }
     const sessionForRouting = callbacks.current.controller();
     const localOnly = (typeof navigator !== "undefined" && !navigator.onLine)
       || !sessionForRouting || (sessionForRouting.getSnapshot && (!sessionForRouting.getSnapshot().user || sessionForRouting.getSnapshot().user?.is_anonymous));
