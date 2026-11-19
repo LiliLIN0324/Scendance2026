@@ -5,7 +5,7 @@ export interface OutdoorTaskProgress {
   intent: string;
   state: 'ready' | 'working' | 'ask' | 'confirm' | 'done' | 'stopped' | 'blocked';
   action: string;
-  stopLabel?: '停止查找' | '停止模拟';
+  stopLabel?: '停止查找' | '停止模拟' | '停止布置';
   steps: string[];
   prompts?: string[];
   focusFacilityId?: string | undefined;
