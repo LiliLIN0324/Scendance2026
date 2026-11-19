@@ -33,6 +33,20 @@ describe('生成物件短名', () => {
     expect(long.endsWith('…')).toBe(true);
   });
 
+  it('颜色材质类定语是属性，剥掉后只剩物件名', () => {
+    expect(
+      generatedObjectName('白色与浅绿配色的婚礼路引花牌：细金色立杆配小花器，插白色洋桔梗'),
+    ).toBe('婚礼路引花牌');
+    expect(generatedObjectName('白色与浅绿配色的婚礼宴会桌花，圆形花艺底座')).toBe('婚礼宴会桌花');
+    expect(generatedObjectName('红色木质的椅子')).toBe('椅子');
+  });
+
+  it('参与词名的颜色和真正的所属关系不动', () => {
+    expect(generatedObjectName('白色圆桌')).toBe('白色圆桌');
+    expect(generatedObjectName('新娘的手捧花')).toBe('新娘的手捧花');
+    expect(generatedObjectName('木质路牌支架')).toBe('木质路牌支架');
+  });
+
   it('空输入回退到业务兜底名', () => {
     expect(generatedObjectName('   ', '图片物料')).toBe('图片物料');
     expect(generatedObjectName('：铝合金框架')).toBe('生成物件');
