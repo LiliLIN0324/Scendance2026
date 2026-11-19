@@ -977,8 +977,10 @@
 /* ── F4：物料库常驻搜索 + 最近用过 ────────────────────────────────
    搜索不再折叠成图标；最近用过一行小卡，纯本地、不进后端。
    2026-11-18 用户：「物料的搜索参考户外的搜索，视觉一致」——
-   直接复用户外目录那套胶囊（999 圆角、白底浮起、图标灰→墨），
-   右侧圆钮切「一行四张」平铺浏览。 */
+   直接复用户外目录那套胶囊（999 圆角、白底、图标灰→墨），
+   右侧圆钮切「一行四张」平铺浏览。
+   2026-11-19 用户：「这个不要投影」——面板里的搜索不再浮起，
+   去掉位移模糊阴影，只留 1px 边框 + 聚焦描边/细环（保留可见的焦点反馈）。 */
 .sc-lib-search {
   display:flex; align-items:center; gap:8px; box-sizing:border-box;
   width:100%; min-width:0; height:36px; padding:0 5px 0 12px;
@@ -988,14 +990,19 @@
   margin:0 0 6px;
   border:1px solid rgba(20, 20, 22, 0.1); border-radius:999px;
   background:#fff; color:#141416;
-  box-shadow:0 1px 2px rgba(20, 20, 22, 0.05), 0 6px 16px rgba(20, 20, 22, 0.06);
+  box-shadow:none;
   transition:border-color .16s ease, box-shadow .16s ease;
 }
 .sc-lib-search:hover { border-color:rgba(20, 20, 22, 0.18); }
 .sc-lib-search:focus-within {
   border-color:rgba(20, 20, 22, 0.34);
-  box-shadow:0 0 0 3px rgba(20, 20, 22, 0.07), 0 8px 20px rgba(20, 20, 22, 0.08);
+  box-shadow:0 0 0 3px rgba(20, 20, 22, 0.07);
 }
+/* 同一元素还带着 globals.css 的 .sc-catalog-search（户外目录那套），两次阴影优先级相同；
+   这里用重复类名抬高特异性，避免两份 CSS 打包顺序不同又把投影带回来。 */
+.sc-lib-search.sc-lib-search { box-shadow:none; }
+.sc-lib-search.sc-lib-search:hover { box-shadow:none; }
+.sc-lib-search.sc-lib-search:focus-within { box-shadow:0 0 0 3px rgba(20, 20, 22, 0.07); }
 .sc-lib-search > svg { flex:none; color:#71767e; }
 .sc-lib-search:focus-within > svg { color:#141416; }
 .sc-lib-search > input {
@@ -1024,7 +1031,7 @@
   border-bottom: 1px solid var(--hair, #e4e4e7);
 }
 .sc-my-materials-label { margin: 0; font-size: 12px; font-weight: 600; line-height: 18px; color: var(--ink, #141416); }
-.sc-library-tabs-equal { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-bottom: 1px solid var(--wk-hair); }
+.sc-library-tabs-equal { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-bottom: 1px solid var(--wk-hair); }
 .sc-library-tabs-equal > button {
   position: relative; min-width: 0; min-height: 36px; padding: 6px 2px 9px;
   border: 0; border-radius: 0;
@@ -1122,13 +1129,14 @@
   display: grid;
   place-items: center;
   border-radius: 6px;
-  background: #eef1f4;
+  /* 2026-11-19 用户：角标用物料自己的主题色；--sc-lib-* 由 PlanIconBadge 按条目落下。 */
+  background: var(--sc-lib-plate, #eef1f4);
   box-shadow: 0 0 0 1px rgba(20, 24, 32, 0.08);
   pointer-events: none;
 }
 .sc-lib-plan-icon.is-chip {
   border-radius: 999px;
-  background: #23252c;
+  background: var(--sc-lib-chip, #23252c);
 }
 .sc-lib-plan-icon img {
   display: block;

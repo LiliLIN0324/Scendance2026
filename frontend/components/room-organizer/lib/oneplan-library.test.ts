@@ -9,6 +9,8 @@ import {
   libraryFacilityTemplate,
   libraryStickerFor,
   libraryTemplateId,
+  materialChipColor,
+  materialPlateColor,
   parseLibraryTemplateId,
   searchLibraryEntries,
   type OneplanManifestAsset,
@@ -26,6 +28,20 @@ const asset = (over: Partial<OneplanManifestAsset>): OneplanManifestAsset => ({
 });
 
 describe('oneplan-library', () => {
+  it('角标跟物料主题色：深色原样，浅色压暗到白字形能读', () => {
+    expect(materialChipColor('#3F8F5F')).toBe('#3F8F5F');
+    expect(materialChipColor('#ffffff')).toBe('#7f7f7f');
+    expect(materialChipColor('#faff00')).toBe('#7c7f00');
+    // 压暗后色相不变：红仍是红，不是灰。
+    const red = materialChipColor('#eb0420');
+    expect(red).toBe('#eb0420');
+  });
+
+  it('真实尺度贴纸的浅底带一点物料色，非法色回落中性灰', () => {
+    expect(materialPlateColor('#3F8F5F')).toBe('#e4efe9');
+    expect(materialPlateColor('not-a-color')).toBe('#eef1f4');
+  });
+
   it('只把 icon / scale-fg / area 当可选物件（scale-bg、categories 只是底形与分类图标）', () => {
     const entries = libraryEntries([
       asset({}),

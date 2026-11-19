@@ -321,6 +321,47 @@ export function libraryEntryColor(entry: Pick<LibraryEntry, 'slug' | 'color'>): 
   return entry.color ?? ENTRY_PALETTE[entryColorHash(entry.slug) % ENTRY_PALETTE.length]!;
 }
 
+/* 2026-11-19 用户：「物料里的物料对应的图标是不是可以和 icon 本身的颜色一样」——
+   主题色此前只落在画布贴纸上，物料卡左下角的角标一律深色圆底，所以看板上全是黑白小圆章。
+   这里把同一个主题色接到角标上：chip = 托得住白色字形的那一档（偏浅的色按比例压暗，保色相），
+   plate = 非芯片贴纸（真实尺度线稿本身是深色线）的浅色底，同样带一点物料色。 */
+
+function srgbChannel(value: number): number {
+  return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex: string): number | null {
+  const value = hex.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) return null;
+  const channel = (index: number) => srgbChannel(parseInt(value.slice(index, index + 2), 16) / 255);
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
+/** 白色字形还能读清的上限（对比度约 3.9:1）。 */
+const CHIP_MAX_LUMINANCE = 0.22;
+
+/** 角标圆片色：物料的主题色；白字压不住时逐档压暗，色相不变（黄/白这类不会被染成灰片）。 */
+export function materialChipColor(color: string): string {
+  let shade = color;
+  for (let step = 0; step < 12; step += 1) {
+    const luminance = relativeLuminance(shade);
+    if (luminance === null || luminance <= CHIP_MAX_LUMINANCE) return shade;
+    const value = shade.replace('#', '');
+    shade = `#${[0, 2, 4]
+      .map(index => Math.round(parseInt(value.slice(index, index + 2), 16) * 0.84).toString(16).padStart(2, '0'))
+      .join('')}`;
+  }
+  return shade;
+}
+
+/** 非芯片贴纸的浅底：物料色 14% + 白 86%，深色线稿仍然清楚，卡片也不再是一片中性灰。 */
+export function materialPlateColor(color: string): string {
+  const value = color.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) return '#eef1f4';
+  const mix = (index: number) => Math.round(parseInt(value.slice(index, index + 2), 16) * 0.14 + 255 * 0.86);
+  return `#${[0, 2, 4].map(index => mix(index).toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** `pack:` 前缀的 templateId 判定（画布与 3D 用它区分 `oneplan:` 库条目与内置模板）。 */
 export const PACK_TEMPLATE_PREFIX = 'pack:';
 

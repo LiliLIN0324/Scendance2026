@@ -584,7 +584,9 @@ describe('物料卡三栏互斥', () => {
     }
     fireEvent.click(tabButton('我的生成'));
     expect(screen.getByRole('button', { name: `添加${listShippedAssets('glb')[0]!.name}` })).toBeTruthy();
-    fireEvent.click(tabButton('收藏'));
+    // 2026-11-19：收藏不再是页签，改成物料库树里的一行，排在基础设施上方。
+    fireEvent.click(tabButton('库'));
+    fireEvent.click(screen.getByRole('button', { name: /^收藏 \d+$/ }));
     expect(screen.getByRole('button', { name: '添加Lounge Chaise' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '添加Lighting Tower' })).toBeNull();
   });
@@ -750,7 +752,9 @@ describe('物料卡三栏互斥', () => {
     localStorage.setItem(MATERIAL_LIBRARY_META_KEY, JSON.stringify({ favorites: CATALOGUE.map(item => item.slug) }));
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()}/>);
     await screen.findByRole('button', { name: '物料库' });
+    // 全被收藏时库仍是空态，但收藏那一行还在（否则整库收藏完就没入口了）。
     expect(screen.getByText('库里没有可用的公共素材')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^收藏 \d+$/ })).toBeTruthy();
   });
 });
 
@@ -760,7 +764,7 @@ describe('物料卡的按风格配一套', () => {
     const onAdd = vi.fn(), onAddSet = vi.fn();
     render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={onAdd} onAddSet={onAddSet}/>);
     await screen.findByRole('button', { name: '物料库' });
-    expect(screen.getByRole('navigation', { name: '物料来源' }).children).toHaveLength(4);
+    expect(screen.getByRole('navigation', { name: '物料来源' }).children).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /按风格配一套/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /^我的生成/ }));
     fireEvent.click(screen.getByRole('button', { name: '再放一套奶油会客' }));
