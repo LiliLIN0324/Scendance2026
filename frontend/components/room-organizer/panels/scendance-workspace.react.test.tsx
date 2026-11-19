@@ -12,7 +12,6 @@ import { rememberAholoAsset } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
-import { loadScenePreset } from '../three/scene-presets';
 import { createVenueFromPick } from '../lib/amap-venue';
 import { readPlanGroundMode, readPlanGroundSource, writePlanGroundMode, writePlanGroundSource } from '../lib/plan-basemap-source';
 import { pinMapSource, readMapSlots, resetMapSlotsCacheForTest } from '../lib/map-source-slots';
@@ -32,7 +31,6 @@ vi.mock('../three/glb-assets', async importOriginal => ({
   ...(await importOriginal<typeof import('../three/glb-assets')>()),
   ensureGlbAsset: vi.fn(),
 }));
-vi.mock('../three/scene-presets', () => ({ loadScenePreset: vi.fn() }));
 // jsdom 里没有真实 canvas/图片解码，自绘贴地底图必然拿不到瓦片；这里固定成「拿不到」，
 // 让贴地逻辑走它本来就有的高德兜底分支（自绘本身的投影/拼图在 plan-ground-capture.test.ts 里测）。
 vi.mock('../lib/plan-ground-capture', async importOriginal => ({
@@ -119,7 +117,6 @@ describe('ScendanceLibrary shelf lifecycle', () => {
     expect(screen.queryByRole('combobox', { name: '现场灯光' })).toBeNull();
     expect(test.placeCatalogItem).not.toHaveBeenCalled();
     expect(test.onLoadPreset).not.toHaveBeenCalled();
-    expect(loadScenePreset).not.toHaveBeenCalled();
     expect(test.actions.applyLayout).not.toHaveBeenCalled();
     expect(JSON.stringify(test.layout)).toBe(before);
     expect(loadOnlineModels).toHaveBeenCalledTimes(1);

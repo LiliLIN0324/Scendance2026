@@ -9,7 +9,6 @@
 **编辑**
 - 2D 平面与 3D 场景双视图，同一份布局来回切，状态不丢 — `panels/scendance-workspace.tsx`
 - 拖动、旋转、缩放、复制、框选、对齐、锁定；撤销/重做按编辑动作成组记录 — `lib/alignment.ts`、`hooks/use-history.ts`
-- 10 套场景模板（bar / cafe / conference / gym / lawn / market / museum / office / popup / studio）与环境切换 — `panels/space-panel.tsx`
 - 真实场地：空间面板列出扫描库中已重建的场地，选中即应用并把尺寸同步到画布 — `panels/space-panel.tsx`、`lib/venue-scans.ts`
 - Lux3D 文本生成 3D：GLB 归一化后自动落到画布；本地走 3199 代理，线上走云端任务队列 — `lib/material-generate.ts`、`lib/lux3d-import.ts`
 
@@ -66,13 +65,14 @@ client/scene-client.ts     前后端契约客户端
 supabase/functions/        scene-api / generation-worker / reconstruction-worker
 supabase/migrations/       25 个数据库迁移
 assets/library/            529 个 GLB 物料
-scene/templates/           10 套场景模板
 scripts/                   打包、dev 代理、配置校验
 docs/                      文档，入口见 docs/README.md
 introduction.html          官网（构建时复制进 public/）
 ```
 
 小程序端（现场采集器）已于 2026-11-05 独立成仓：[`LiliLIN0324/scendance-capture`](https://github.com/LiliLIN0324/scendance-capture)，本仓不再保留 `miniprogram/`。
+
+10 套场景模板库已于 2026-11-19 独立成仓：[`LiliLIN0324/scendance-scene-library`](https://github.com/LiliLIN0324/scendance-scene-library)，本仓不再保留 `scene/templates/` 与模板面板（`scenePreset`）。
 
 ## 文档
 

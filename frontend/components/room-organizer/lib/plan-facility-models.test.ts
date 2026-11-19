@@ -44,32 +44,6 @@ function assertWellFormed(candidates: readonly FacilityModelCandidate[]): void {
   }
 }
 
-describe('scene preset facility models', () => {
-  it('loads the packaged full-venue GLB with real preset dimensions', async () => {
-    const candidates = resolveFacilityModels('scene-preset:popup');
-    expect(candidates).toHaveLength(1);
-    expect(candidates[0]).toMatchObject({
-      slug: 'scene-preset:popup',
-      name: '青序 · 香氛快闪',
-      glbUrl: '/scene-presets/popup/popup.glb',
-      width: 12,
-      depth: 8,
-      height: 3.5,
-      trueScale: true,
-      thumb: '/scene-presets/popup/preview.jpg',
-    });
-    expect(fitFacilityModel(12, 8, candidates[0]!).scale).toBe(1);
-    expect(await loadFacilityModelOverride('scene-preset:popup')).toEqual(candidates[0]);
-    const map = await loadFacilityModelCandidates(['scene-preset:popup']);
-    expect(map.get('scene-preset:popup')).toEqual(candidates);
-  });
-
-  it('does not turn an unknown scene-preset suffix into a model', () => {
-    expect(resolveFacilityModels('scene-preset:not-a-real-venue')).toEqual([]);
-    expect(resolveFacilityModels('scene-preset:')).toEqual([]);
-  });
-});
-
 describe('facilityTemplateSlug', () => {
   it('解析 oneplan 物件库模板的 slug', () => {
     expect(facilityTemplateSlug('oneplan:scale:tent')).toBe('tent');

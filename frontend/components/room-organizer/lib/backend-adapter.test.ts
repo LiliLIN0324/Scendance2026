@@ -51,16 +51,11 @@ describe('the shared backend scene adapter', () => {
     expect(() => layoutToBackendScene(layout)).toThrow(/本机区域标注/);
     expect(layout.designBook.variants[0].layout.floors[0].zones).toHaveLength(1);
   });
-  it('accepts only known preset nodes and still rejects arbitrary local GLBs', () => {
+  it('rejects archived preset nodes now that the template library moved out', () => {
     const layout = backendSceneToLayout(scene());
-    layout.scenePreset = 'gym';
     const item = layout.floors[0].items[0];
     Object.assign(item, { type: 'glb-asset', materialId: 'asset', glbUrl: '/scene-presets/gym/gym.glb', glbNode: 'Preset_Object_0' });
-    expect(layoutToBackendScene(layout).objects[0].presetNode).toBe(0);
-    item.glbNode = 'Preset_Object_307';
-    expect(() => layoutToBackendScene(layout)).toThrow('不在已归档的模型中');
-    item.glbNode = 'Preset_Object_0'; item.glbUrl = 'https://example.test/custom.glb';
-    expect(() => layoutToBackendScene(layout)).toThrow('不在已归档的模型中');
+    expect(() => layoutToBackendScene(layout)).toThrow('模板节点物件');
     delete item.glbNode;
     expect(() => layoutToBackendScene(layout)).toThrow('本地模型尚未归档到云端');
   });
@@ -136,16 +131,19 @@ describe('the shared backend scene adapter', () => {
     expect(() => layoutToBackendScene(layout)).toThrow('本地模型尚未归档到云端');
   });
 
-  it('rejects multistorey, missing entrances and local floorplans instead of dropping them', () => {
+  it('rejects multistorey and missing entrances instead of dropping them, and keeps a local floorplan out of the cloud scene', () => {
     const a = backendSceneToLayout(scene());
     a.floors.push(structuredClone(a.floors[0]));
     expect(() => layoutToBackendScene(a)).toThrow('多层');
     const b = backendSceneToLayout(scene());
     b.floors[0].items = b.floors[0].items.filter(i => !i.venueEntranceId);
     expect(() => layoutToBackendScene(b)).toThrow('出入口');
+    // 3c03017d：底图是纯本机资料，放行云保存，但不能漏进云端场景结构。
     const c = backendSceneToLayout(scene());
     c.floorPlanImage = 'data:image/png;base64,AA==';
-    expect(() => layoutToBackendScene(c)).toThrow('平面图');
+    const saved = layoutToBackendScene(c);
+    expect(JSON.stringify(saved)).not.toContain('data:image/png');
+    expect(c.floorPlanImage).toBe('data:image/png;base64,AA==');
   });
 
   it('uses backend validation for UUIDs and the 50 object cap', () => {

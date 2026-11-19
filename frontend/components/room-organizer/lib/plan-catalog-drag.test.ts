@@ -7,7 +7,6 @@ import {
   getPlanCatalogDrag,
   PLAN_CATALOG_TEXT_PREFIX,
   planCatalogDragFor,
-  planCatalogDragForScenePreset,
   readPlanCatalogDrag,
   serializePlanCatalogDrag,
   setPlanCatalogDrag,
@@ -65,17 +64,5 @@ describe('plan-catalog-drag', () => {
     setPlanCatalogDrag(second);
     vi.runAllTimers();
     expect(getPlanCatalogDrag()).toEqual(second);
-  });
-
-  it('场景预设沿用同一份落位载荷，templateId 可反解回预设 key', () => {
-    const payload = planCatalogDragForScenePreset('popup');
-    expect(payload).toEqual({
-      slug: 'scene-preset:popup',
-      name: '青序 · 香氛快闪',
-      width: 12,
-      depth: 8,
-      templateId: 'scene-preset:popup',
-    });
-    expect(payload.templateId.length).toBeLessThanOrEqual(64);
   });
 });

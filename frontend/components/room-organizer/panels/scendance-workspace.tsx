@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
 import { Check } from 'lucide-react';
@@ -48,7 +48,7 @@ import {
   type GroundBasemapStyle,
 } from '../lib/ground-basemap';
 import { researchAreaWith } from '../lib/research-area';
-import { editorItemLimit } from '../lib/scene-presets';
+import { EDITOR_ITEM_LIMIT } from '../lib/item-limits';
 import { materialCount } from '../lib/structural-layout';
 import { requestWalkPointerLock } from '../lib/walk-engage';
 import { LocalGlbImport } from './local-glb-import';
@@ -174,7 +174,7 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
   const { layout, activeFloor, actions, history } = useRoomEditor();
   const { selectOnly } = useSelection();
   const hostRef = useRef<HTMLElement>(null);
-  const atLimit = materialCount(activeFloor.items) >= editorItemLimit(layout);
+  const atLimit = materialCount(activeFloor.items) >= EDITOR_ITEM_LIMIT;
   const card = variant === 'card';
 
   const addMaterial = (item: CatalogItem):CatalogPlacementResult => {
@@ -188,7 +188,7 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
   // 风格套整组一次落盘：一次提交、一次撤销，不按件走放置动画。
   const addStyleSet = (items: FurnitureItem[]) => {
     if (atLimit || items.length === 0) return;
-    if (materialCount(activeFloor.items) + items.length > editorItemLimit(layout)) return;
+    if (materialCount(activeFloor.items) + items.length > EDITOR_ITEM_LIMIT) return;
     history.commitNow();
     actions.addItems(items);
     const first = items[0];
@@ -225,7 +225,7 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
         ? <div className="sc-library-content">
           <div className="sc-library-materials">
             {mySlot}
-            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} {...(onArmCatalogItem ? { onArmCatalogItem } : {})} importSlot={importSlot} dimPlanIcons={dimPlanIcons} roomSize={{ width: layout.width, depth: layout.height }}
+            <OnlineModelLibrary cardMode {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${EDITOR_ITEM_LIMIT} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} onAddSet={addStyleSet} {...(onArmCatalogItem ? { onArmCatalogItem } : {})} importSlot={importSlot} dimPlanIcons={dimPlanIcons} roomSize={{ width: layout.width, depth: layout.height }}
 
               walkRoles={walkRoles}/>
           </div>
@@ -233,7 +233,7 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
         : <div className="sc-library-content">
           <div className="sc-library-materials">
             {mySlot}
-            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${editorItemLimit(layout)} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} importSlot={importSlot} dimPlanIcons={dimPlanIcons}/>
+            <OnlineModelLibrary {...(controller ? { controller } : {})} {...(capturePlacement ? { capturePlacement } : {})} {...(capturePlacementBatch ? { capturePlacementBatch } : {})} renderedLayout={layout} {...(atLimit ? { limitMessage: `已达到 ${EDITOR_ITEM_LIMIT} 件物料上限，请先删除部分物料。` } : {})} disabled={atLimit} onAdd={addMaterial} importSlot={importSlot} dimPlanIcons={dimPlanIcons}/>
           </div>
         </div>}
     </div>

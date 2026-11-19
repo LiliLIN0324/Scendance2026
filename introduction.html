@@ -2692,8 +2692,9 @@ const SCENES = [
   },
 ];
 
-// 场景库的模型都在 scene/templates/ 下；打包时这个前缀会被改写成 /showcase/scene/templates/。
-const LIBRARY_BASE = './scene/templates/';
+// 场景模板库已独立到 scendance-scene-library（LiliLIN0324/scendance-scene-library）。
+// 十场景查看器直接取该仓库公开站点的 GLB；本仓不再保存这 10 套整馆模型。
+const LIBRARY_BASE = 'https://lililin0324.github.io/scendance-scene-library/scene/templates/';
 
 const VIEWS = [['overview', '◈ 整体'], ['top', '▦ 俯视'], ['inside', '⌂ 场内']];
 

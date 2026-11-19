@@ -18,7 +18,6 @@
 
 import * as THREE from 'three';
 import { findGeneratedFacilityModel, subscribeGeneratedFacilityModels } from '../lib/facility-generated-models';
-import { isScenePresetFacilityId } from '../lib/scene-presets';
 import {
   createCachedGlbModel,
   disposeOwnedModel,
@@ -70,9 +69,6 @@ export function shrinkFactorFor(
   candidate: ShrinkFit,
   dims: { width: number; depth: number; height: number },
 ): number {
-  // 场景预设是整馆 GLB：下面按「原始包围盒 × 高度」推算的口径会把整馆再次缩小，
-  // 这里已经按占地铺满（见 candidateItemFor），不再做二次收缩。
-  if (candidate.glbUrl.startsWith('/scene-presets/')) return 1;
   if (!(dims.width > 0 && dims.depth > 0 && dims.height > 0)) return 1;
   const applied = candidate.height / dims.height;
   const renderedWidth = dims.width * applied;
@@ -86,34 +82,18 @@ export function shrinkFactorFor(
 export function candidateItemFor(
   prop: PlanPropShape,
   candidate: FacilityModelCandidate & FacilityModelFit,
-  actualDims?: { width: number; depth: number; height: number },
 ): FurnitureItem {
-  /*
-   * 场景预设的 GLB 是整个场馆，不能按“标称高度 / 原始高度”统一缩放：
-   * 例如体育馆 GLB 实测 65.1 × 64.3 × 10.725 m，而场景卡标称 70 × 76 × 6 m，
-   * 按高度缩会把它压成 36 × 36 m，和 2D 的 70 × 76 选框差一半。
-   * 这里改成按 2D 占地铺满：宽/深各自切齐选框，高度用更紧的一边倍率，
-   * 避免“按标称高度缩”把整馆压小、也避免把人物/树压扁。
-   */
-  const sceneVenue = isScenePresetFacilityId(candidate.slug);
-  const footprintFit = sceneVenue && actualDims && actualDims.width > 0 && actualDims.depth > 0
-    ? Math.min(prop.width / actualDims.width, prop.depth / actualDims.depth)
-    : null;
-  const height = footprintFit !== null && actualDims
-    ? actualDims.height * footprintFit
-    : candidate.height;
   return {
     id: `plan-model-${prop.id}`,
     type: 'glb-asset',
     name: candidate.name,
-    width: sceneVenue ? prop.width : candidate.width * candidate.scale,
-    depth: sceneVenue ? prop.depth : candidate.depth * candidate.scale,
-    height,
+    width: candidate.width * candidate.scale,
+    depth: candidate.depth * candidate.scale,
+    height: candidate.height,
     color: '#ffffff',
     icon: '◇',
     glbUrl: candidate.glbUrl,
-    // 整馆 GLB 按 2D 占地的宽/深各自铺满（只让水平面切齐选框；高度用同一倍率，避免把人压扁）。
-    uniformScale: footprintFit === null,
+    uniformScale: true,
   };
 }
 
@@ -367,7 +347,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
         if (deps.isDisposed() || token !== previewToken || !live || live.modelOverride !== overrideSlug) return;
         const fitted = { ...candidate, ...fitFacilityModel(live.width, live.depth, candidate) };
         const dims = getGlbAssetState(candidate.glbUrl)?.dimensions;
-        const model = createCachedGlbModel(candidateItemFor(live, fitted, dims), false);
+        const model = createCachedGlbModel(candidateItemFor(live, fitted), false);
         if (!model) return;
         // 预览半透明，不抢真实设施；材质是 createCachedGlbModel 的独立副本，改完不影响已落模型。
         const seen = new Set<THREE.Material>();
@@ -436,7 +416,7 @@ export function createPlanModelLayer(deps: PlanModelLayerDeps): PlanModelLayer {
         const liveProp = currentProps.find(p => p.id === prop.id);
         if (!liveProp) return;
         const dims = getGlbAssetState(candidate.glbUrl)?.dimensions;
-        const model = createCachedGlbModel(candidateItemFor(prop, candidate, dims), false);
+        const model = createCachedGlbModel(candidateItemFor(prop, candidate), false);
         if (!model) return;
         if (deps.isDisposed() || run !== initialRun) {
           disposeOwnedModel(model);

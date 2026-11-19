@@ -7,11 +7,6 @@ import {
 import { iconModelSlugs, packagedIconModel, packModelSlugs } from './icon-model-links';
 import { loadOnlineModels, loadShippedOnlineModels, type OnlineModel } from './online-models';
 import { planPropKind, type PlanPropKind } from './plan-footprint-geometry';
-import {
-  SCENE_PRESETS,
-  presetModelUrl,
-  scenePresetKeyFromFacilityId,
-} from './scene-presets';
 
 /** 一个可用于 3D 落位的真实模型候选。 */
 export interface FacilityModelCandidate {
@@ -40,28 +35,6 @@ export interface FacilityModelCandidate {
 /** 一个设施最多给出几个候选模型（V-5a：候选缩略图网格提到 5 格）。 */
 export const MAX_FACILITY_MODEL_CANDIDATES = 5;
 const MAX_CANDIDATES = MAX_FACILITY_MODEL_CANDIDATES;
-
-/**
- * 场景预设落成设施时的模型候选：直接读打包好的整馆 GLB，不走在线物料库。
- *
- * 这里刻意不用 `catalogFacilityTemplateId(slug)` 的哈希短 id——`scene-preset:<key>`
- * 要同时承担「2D 识别场景预设」和「3D 找到 GLB」两件事，必须在两边都能反解。
- */
-export function scenePresetFacilityCandidate(slug: string): FacilityModelCandidate | null {
-  const key = scenePresetKeyFromFacilityId(slug);
-  if (!key) return null;
-  const preset = SCENE_PRESETS[key];
-  return {
-    slug,
-    name: preset.name,
-    glbUrl: presetModelUrl(key),
-    width: preset.width,
-    depth: preset.depth,
-    height: preset.height,
-    trueScale: true,
-    thumb: `/scene-presets/${key}/preview.jpg`,
-  };
-}
 
 /** 物料库模型的本地同源地址。 */
 function localGlbUrl(slug: string): string {
@@ -398,12 +371,10 @@ export function selectFacilityModel(
  * 因此只认随代码发布的内置尺寸表；查不到返回 null，由调用方回落模板默认。
  */
 export function builtinModelBySlug(slug: string): FacilityModelCandidate | null {
-  return scenePresetFacilityCandidate(slug) ?? candidateFromBuiltin(slug);
+  return candidateFromBuiltin(slug);
 }
 
 function candidateFromBuiltin(slug: string): FacilityModelCandidate | null {
-  const scene = scenePresetFacilityCandidate(slug);
-  if (scene) return scene;
   const packaged = packagedIconModel(slug);
   if (packaged) return packaged;
   const entry = Object.hasOwn(BUILTIN_MODELS, slug) ? BUILTIN_MODELS[slug] : undefined;
@@ -441,8 +412,6 @@ export function facilityTemplateSlug(templateId: string): string | null {
 
 /** Resolve the reviewed model for a library object. Legacy tools retain their preset candidates. */
 export function resolveFacilityModels(templateId: string): FacilityModelCandidate[] {
-  const scene = scenePresetFacilityCandidate(templateId);
-  if (scene) return [scene];
   let slugs: readonly string[];
   if (isPackTemplateId(templateId)) {
     const entry = packEntryByTemplateId(templateId);
@@ -471,7 +440,7 @@ export async function loadFacilityModelCandidates(
   const unique = [...new Set(templateIds)];
   const result = new Map<string, FacilityModelCandidate[]>();
   let models: readonly OnlineModel[] = [];
-  if (unique.some(id => !parseLibraryTemplateId(id) && !isPackTemplateId(id) && !scenePresetFacilityCandidate(id))) {
+  if (unique.some(id => !parseLibraryTemplateId(id) && !isPackTemplateId(id))) {
     try {
       models = (await loadOnlineModels()).models;
     } catch {

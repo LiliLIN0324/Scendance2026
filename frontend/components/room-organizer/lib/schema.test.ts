@@ -887,9 +887,8 @@ describe('round trips', () => {
   });
 });
 
-it('retains local layers and design history when reopening an expanded scene preset', () => {
+it('retains local layers and design history when reopening a stored layout', () => {
   const layout = makeLayout({
-    scenePreset: 'bar',
     itemLayers: [{ id: 'custom-layer', name: '舞台区', itemIds: [] }],
     designBook: { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: makeLayout() }] },
   });

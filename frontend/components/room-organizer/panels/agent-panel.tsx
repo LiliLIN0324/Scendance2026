@@ -23,7 +23,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AgentTaskExamples } from '@/components/agent-task-examples';
-import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, Paperclip, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
+import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
@@ -151,7 +151,7 @@ import { CapabilitySuggestionCards } from './capability-suggestion-cards';
 import { AGENT_INPUT_SUGGESTIONS, BANQUET_INPUT_SUGGESTIONS, PLACE_INPUT_SUGGESTIONS, SuggestionGhost, useSuggestion } from './typed-suggestion';
 import { OutdoorStageSuggestion } from './outdoor-stage-suggestion';
 import { buildStyleBundleItems, matchStyleBundleCommand, saveStyleRun, STYLE_RUNS_KEY, type StyleBundle } from '../lib/style-bundles';
-import { editorItemLimit } from '../lib/scene-presets';
+import { EDITOR_ITEM_LIMIT } from '../lib/item-limits';
 import {
   readSessionBubbles,
   writeSessionBubbles,
@@ -1378,7 +1378,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!floor) { say({ role: 'agent', amber: true, text: '当前楼层不可用，本次没有修改画布。' }); return; }
     const built = buildStyleBundleItems(bundle, { width: base.width, depth: base.height });
     if (!built.ok) { say({ role: 'agent', amber: true, text: built.message }); return; }
-    if (materialCount(floor.items) + built.items.length > editorItemLimit(base)) {
+    if (materialCount(floor.items) + built.items.length > EDITOR_ITEM_LIMIT) {
       say({ role: 'agent', amber: true, text: '这一套超过当前物料数量上限，本次没有修改画布。' }); return;
     }
     const candidate: RoomLayout = { ...base, floors: base.floors.map((item, index) => index === floorIndex ? { ...item, items: [...item.items, ...built.items] } : item) };
@@ -1544,7 +1544,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
    */
   function venueIsUp(layout: RoomLayout = live.current): boolean {
     const floor = layout.floors[Math.min(activeFloorIndex, Math.max(0, layout.floors.length - 1))];
-    return layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || layout.scenePreset !== undefined || (floor?.interiorWalls?.length ?? 0) > 0;
+    return layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || (floor?.interiorWalls?.length ?? 0) > 0;
   }
 
   function scaleFrom(extraction: BriefExtraction): Scale & { fromVenue: boolean } {
@@ -2016,23 +2016,22 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   // 画布上有墙体/场地真相 = 第 ① 步已经过了；撤回或作废不会把它拆掉，进度和尺寸读数都靠它。
   // 模板场馆也是立起来的场地：角标和简报要能报出它的米数。
-  const venueUp = layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || layout.scenePreset !== undefined || (activeFloor.interiorWalls?.length ?? 0) > 0;
+  const venueUp = layout.backendSceneV2 !== undefined || layout.backendVenue !== undefined || (activeFloor.interiorWalls?.length ?? 0) > 0;
 
-  // 模板/空壳自带固定长宽：载入或被尺寸改写后，把读数同步成场地的真实米数，
+  // 空壳自带固定长宽：立壳或被尺寸改写后，把读数同步成场地的真实米数，
   // 否则角标报了米数、卡片还空着，人一说话又按旧读数算。
   const venueDimsStamp = useRef('');
   const lengthValue = lengthCheck.ok ? lengthCheck.value : null;
   const widthValue = widthCheck.ok ? widthCheck.value : null;
   useEffect(() => {
-    const stamp = layout.scenePreset ? `preset:${layout.scenePreset}:${layout.width}x${layout.height}`
-      : layout.backendSceneV2 ? `shell:${layout.width}x${layout.height}` : '';
+    const stamp = layout.backendSceneV2 ? `shell:${layout.width}x${layout.height}` : '';
     if (!stamp || stamp === venueDimsStamp.current) return;
     venueDimsStamp.current = stamp;
     const matches = lengthValue !== null && widthValue !== null
       && Math.abs(lengthValue - layout.width) < 1e-6 && Math.abs(widthValue - layout.height) < 1e-6;
     if (!matches) { setLengthRaw(String(layout.width)); setWidthRaw(String(layout.height)); setScaleOrigin('typed'); }
     setDimsTouched(true);
-  }, [layout.scenePreset, layout.backendSceneV2, layout.width, layout.height, lengthValue, widthValue]);
+  }, [layout.backendSceneV2, layout.width, layout.height, lengthValue, widthValue]);
 
   /**
    * 云端 AI 返回的那一版，折成右栏同一套读数：服务端只说「哪些物件变了」和场地检查警告，
@@ -2250,15 +2249,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }, [layout, planShownPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** 第 1 步的壳体播报：尺寸、墙与门、层高来源，一句一句照实说。 */
-  /** 模板是固定 GLB 外壳：改尺寸时明说已经离开模板，别让人以为只是把体育馆拉长了。 */
-  function presetShellNote(venue: VenuePlan): string {
-    const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
-    return `已离开模板，按新尺寸 ${size} 立了矩形场地。`;
-  }
-
   /** 纯改尺寸只动壳：一句短的，不拉着人再确认一遍布置。 */
-  function sizeOnlyNote(venue: VenuePlan, leavingPreset: boolean): string {
-    if (leavingPreset) return presetShellNote(venue);
+  function sizeOnlyNote(venue: VenuePlan): string {
     const size = `${formatArea(venue.scene.venue.width)} × ${formatArea(venue.scene.venue.depth)} m`;
     return `场地改成 ${size}。`;
   }
@@ -2357,7 +2349,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor, scaleOrigin: scale.origin };
     let venue: VenuePlan | null = null;
     try {
-      venue = (before.scenePreset || before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
+      venue = (before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
     } catch (error) {
       rejectResize(error instanceof Error ? error.message : '这个尺度我立不起来，说一句「12×9」这样告诉我新的长宽。');
       return;
@@ -2385,7 +2377,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     if (sessionScope !== 'legacy' && (memoryRef.current.lengthM !== null || memoryRef.current.areaM2 !== null)) saveMemory({...memoryRef.current,venueScaleBasis:venueScaleBasis(venue.layout),venueFactToken:venueFacts.capture() ?? undefined,scaleNeedsReconfirmation:false});
     if (was2D) setView(current => ({ ...current, view2D: true }));
-    say({ role: 'agent', text: sizeOnlyNote(venue, !!before.scenePreset) });
+    say({ role: 'agent', text: sizeOnlyNote(venue) });
   }
 
   /** 左栏简报的「空白场地」文字链：和模板轨首卡同一块 12×8 空壳，不用先开物料库。 */
@@ -2394,7 +2386,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const before = live.current;
     const materialCount = before.floors.reduce((count, floor) => count + floor.items.filter(item => !isStructuralMarker(item)).length, 0);
     const zoneCount = before.floors.reduce((count, floor) => count + (floor.zones?.length ?? 0), 0);
-    const recordedVenue = !!(before.scenePreset || before.venueScan || before.floorPlanImage || before.researchArea || before.sceneAnchor ||
+    const recordedVenue = !!(before.venueScan || before.floorPlanImage || before.researchArea || before.sceneAnchor ||
       (before.backendVenue && !before.backendSceneV2) ||
       before.floors.length > 1 || before.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind !== 'exterior')) ||
       (before.backendSceneV2 && (before.backendSceneV2.sources.length || before.backendSceneV2.structure.columns.length ||
@@ -2560,9 +2552,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const before = live.current;
     const floorToken=captureFloor(activeFloorIndex);if(!floorToken){failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
     const input = { base: before, floorIndex: activeFloorIndex, widthM: scale.length, depthM: scale.width, indoorOutdoor: venueIO, scaleOrigin: scale.origin };
-    // 模板是固定 GLB 外壳，拉伸它只会看起来「什么都没变」：尺寸一变就卸模板、按新尺寸立矩形空壳。
     const resized = Math.abs(before.width - scale.length) > 1e-6 || Math.abs(before.height - scale.width) > 1e-6;
-    const leavingPreset = resized && !!before.scenePreset;
     let venue: VenuePlan | null;
     try { venue = (resized ? replaceVenueWithShell(input) : null) ?? raiseVenue(input); }
     catch (error) {
@@ -2580,8 +2570,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(venue && hasInvalidRetainedZones(venue.layout)){revertScaleToCanvas();failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'现有区域超出新场地范围或坐标不完整，请先调整区域再生成。'});setPhase('failed');return;}
     const candidateBase = venue?.layout ?? before;
     if (venue) {
-      const shellSummary = leavingPreset ? '将离开模板，改用矩形场地。' : '场地按这个尺寸准备好了。';
-      say({ role: 'agent', text: `${shellSummary}确认后才写入。` });
+      say({ role: 'agent', text: '场地按这个尺寸准备好了。确认后才写入。' });
       await wait(STEP_DELAY_MS); if (token !== runToken.current || !sessionScopeIsCurrent()) return;
       if (!floorStillCurrent(floorToken)) {failOpenLocalStep('这版没出成');say({role:'agent',amber:true,text:'楼层在准备期间已变化，请重新生成。'});setPhase('failed');return;}
       if (!sameLayoutContent(before, live.current)) {
@@ -4645,13 +4634,9 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </span>}
       </div>
       <div className="ap-session-actions">
-        {activeAgent === 'space' && <details className="sc-space-library-menu">
-          <summary aria-label="场地资料" data-tip="场地资料"><Paperclip size={17} aria-hidden="true"/></summary>
-          <div className="sc-space-library-menu-content">
-            <button type="button" className="chip" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); agent.startVenuePicker(); }}>新建/换场地</button>
-            <button type="button" className="chip" onClick={event => { event.currentTarget.closest('details')?.removeAttribute('open'); agent.callbacks.onOpenReference?.(); }}>图纸与照片</button>
-          </div>
-        </details>}
+        {/* 2026-11-19 用户：「这里也可以删掉了？很奇怪」——空间 Agent 抬头那颗回形针「场地资料」弹层
+            （新建/换场地 + 图纸与照片）已删除。换场地的入口留在项目「新方案」/ /projects 的「新建项目」/
+            scendance:start-new-project 事件；图纸与照片仍在工作室分类页签里。 */}
         {activity && <>
         {/* 没有「这一版布置」也能进执行资料：只打开画布上的资料浮层，不提交生成。 */}
         <button

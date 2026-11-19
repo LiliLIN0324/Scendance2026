@@ -244,7 +244,7 @@ describe('scene delivery',()=>{
   });
   it('rejects glbNode presets and multiple floors rather than exporting a partial scene',async()=>{
     const current=layout([object(1)]);current.floors[0].items[0].glbNode='chair';
-    expect(()=>assembleDeliveryScene(current)).toThrow('完整场景预设');
+    expect(()=>assembleDeliveryScene(current)).toThrow('模板模型节点');
     // 产品文案已细化为「暂不支持保存多层方案…保留在本机」（backend-adapter MULTI_FLOOR_NOT_SUPPORTED），钉稳定关键词。
     await expect(sceneDeliveryJson({...layout(),floors:[...layout().floors,...layout().floors]})).rejects.toThrow('多层方案');
   });

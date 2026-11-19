@@ -701,11 +701,6 @@ body {
 .sc-workbench .sc-library.sc-compact-shelf .sc-library-tabs { display: none; }
 
 .sc-library-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sc-space-sm); padding: var(--sc-space-sm); min-height: 54px; border-bottom: 1px solid var(--sc-line); }
-.sc-preset-rail { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 14px; margin-bottom: 18px; }
-.sc-preset-card { overflow: hidden; text-align: left; border: 1px solid var(--sc-line); border-radius: var(--r-md); background: var(--sc-surface); color: var(--sc-ink); }
-.sc-preset-card:disabled { cursor: wait; background: var(--plane); color: var(--faint); opacity: 1; }
-.sc-preset-card img { width: 100%; aspect-ratio: 1.7; object-fit: cover; }
-.sc-preset-card strong { display: block; padding: 10px 12px; font-size: var(--fs-h3); line-height: var(--lh-h3); font-weight: 600; }
 .sc-library-tabs button { border: 1px solid transparent; border-radius: var(--r-sm); background: none; color: var(--wk-muted); font-size: var(--fs-p2); }
 .sc-library-tabs button.is-active { color: var(--sc-accent-ink); background: var(--sc-accent-soft); border-color: var(--sc-line); font-weight: 600; }
 .sc-library-content { padding: var(--sc-space-md); flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--hair) transparent; }
