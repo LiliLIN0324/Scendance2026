@@ -213,6 +213,67 @@ describe('check-79-evidence', () => {
     expect(payload.issues).toEqual([]);
   });
 
+  it('拒绝把带 localActivityId 的云端证据记到别的 case', () => {
+    const { root, evidenceDir } = makeFixture();
+    writeFileSync(join(evidenceDir, '08/cloud.json'), JSON.stringify({
+      localActivityId: 'house-cas-owner',
+      before: { revision: 3 },
+      after: { revision: 4 },
+      applied: { body: { revision: 4 } },
+      stale: { body: { conflict: true } },
+    }));
+    const ledger: Ledger = JSON.parse(String(readFileSync(join(evidenceDir, 'walkthrough.json'), 'utf8')));
+    ledger.ledger[7].readings = 'house-cas-owner：revision 3→4';
+    ledger.ledger[7].evidence = 'docs/evidence/79/08/cloud.json';
+    ledger.ledger[8].evidence = 'docs/evidence/79/08/cloud.json';
+    writeFileSync(join(evidenceDir, 'walkthrough.json'), JSON.stringify(ledger));
+    const result = run(root);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('引用了云端活动 house-cas-owner');
+    expect(result.output).toContain('CAS/活动错配');
+  });
+
+  it('拒绝 CAS 原始证据自身不递增或 applied 与 after 不一致', () => {
+    const { root, evidenceDir } = makeFixture();
+    writeFileSync(join(evidenceDir, '08/cloud.json'), JSON.stringify({
+      localActivityId: 'house-cas-owner',
+      before: { revision: 4 },
+      after: { revision: 4 },
+      applied: { body: { revision: 5 } },
+      stale: { body: { conflict: false } },
+    }));
+    const ledger: Ledger = JSON.parse(String(readFileSync(join(evidenceDir, 'walkthrough.json'), 'utf8')));
+    ledger.ledger[7].readings = 'house-cas-owner：revision 4→4';
+    ledger.ledger[7].evidence = 'docs/evidence/79/08/cloud.json';
+    writeFileSync(join(evidenceDir, 'walkthrough.json'), JSON.stringify(ledger));
+    const result = run(root);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('revision 4→4 没有递增');
+    expect(result.output).toContain('applied.revision=5');
+    expect(result.output).toContain('stale 写入没有 conflict=true');
+  });
+
+  it('拒绝读数写 0→4 但原始 JSON 没有 0 和 4', () => {
+    const { root, evidenceDir } = makeFixture();
+    const ledger: Ledger = JSON.parse(String(readFileSync(join(evidenceDir, 'walkthrough.json'), 'utf8')));
+    ledger.ledger[7].readings = '方案分区 0→4，方案长度 574→1440B';
+    writeFileSync(join(evidenceDir, 'walkthrough.json'), JSON.stringify(ledger));
+    const result = run(root);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('readings 的 0→4');
+    expect(result.output).toContain('没有原始 JSON 同时包含 0 和 4');
+  });
+
+  it('读数数字能在原始 JSON 中找到时通过', () => {
+    const { root, evidenceDir } = makeFixture();
+    writeFileSync(join(evidenceDir, '08/case08.json'), JSON.stringify({ before: { zones: 0, planLen: 574 }, after: { zones: 2, planLen: 1440 } }));
+    const ledger: Ledger = JSON.parse(String(readFileSync(join(evidenceDir, 'walkthrough.json'), 'utf8')));
+    ledger.ledger[7].readings = '方案分区 0→2，方案长度 574→1440B';
+    writeFileSync(join(evidenceDir, 'walkthrough.json'), JSON.stringify(ledger));
+    const result = run(root);
+    expect(result.status).toBe(0);
+  });
+
   it('拒绝在未全绿时签字', () => {
     const { root } = makeFixture({
       mutateLedger: ledger => {
