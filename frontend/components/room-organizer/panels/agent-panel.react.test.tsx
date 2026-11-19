@@ -4802,8 +4802,12 @@ describe('outdoor V1–V5 progressive Agent integration', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
     send('45人讲座'); await waitFor(() => expect(current.outdoorTask?.action).toContain('入口'));
     expect(current.zoneProposal).toBeNull();
-    send('改办100人音乐节'); await waitFor(() => expect(current.outdoorTask?.action).toContain('没有现成排布模板'));
+    // 2026-11-20 D2：音乐节已是演出/音乐会注册模板（会走到入口门），指路卡反例改用仍无模板的烟花燃放。
+    send('改办100人烟花燃放'); await waitFor(() => expect(current.outdoorTask?.action).toContain('没有现成排布模板'));
     expect(current.outdoorTask?.action).not.toContain('只支持');
+    expect(current.zoneProposal).toBeNull(); expect(studioMock.generate).not.toHaveBeenCalled();
+    send('再改办120人音乐节'); await waitFor(() => expect(current.outdoorTask?.action).toContain('入口'));
+    expect(current.outdoorTask?.action).not.toContain('没有现成排布模板');
     expect(current.zoneProposal).toBeNull(); expect(studioMock.generate).not.toHaveBeenCalled();
   });
 });

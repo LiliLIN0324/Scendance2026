@@ -37,7 +37,8 @@ describe('buildZoneEventProposal（活动逻辑安全默认）', () => {
     expect(proposal.routes?.some(r => r.name.includes('签到接驳'))).toBe(true);
   });
   it('不支持活动、缺人数、缺真实入口不回退到固定矩形模板', () => {
-    expect(buildZoneEventProposal({ boundary: BOUNDARY, nodes: [entrance], brief: { event: '音乐节', guests: 120 } }, ids)).toBeNull();
+    // 2026-11-20 D2：音乐节已是演出/音乐会注册模板，不再当「未注册活动」反例；改用仍无模板的烟花燃放锁同一语义。
+    expect(buildZoneEventProposal({ boundary: BOUNDARY, nodes: [entrance], brief: { event: '烟花燃放', guests: 120 } }, ids)).toBeNull();
     expect(buildZoneEventProposal({ boundary: BOUNDARY, nodes: [entrance], brief: { event: '讲座', guests: null } }, ids)).toBeNull();
     expect(buildZoneEventProposal({ boundary: BOUNDARY, nodes: [], brief: { event: '讲座', guests: 45 } }, ids)).toBeNull();
     expect(buildZoneEventProposal({ boundary: BOUNDARY, nodes: [ENTRANCE_S], brief: { event: '讲座', guests: 45 } }, ids)).toBeNull();
