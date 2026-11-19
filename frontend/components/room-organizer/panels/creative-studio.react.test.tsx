@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, SceneApiError, getBackendConfig, type BackendSnapshot, type Scene, type SceneProposal, type AgentRun, type AgentRunInput } from '@/lib/backend-session';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4 } from '@/lib/local-project-backup';
 import { STORAGE_KEY } from '../lib/constants';
+import { setAgentSupervision } from '../lib/agent-supervision-store';
 import { parseLayoutJson } from '../lib/persistence';
 import { createLocalActivitySwitchGuard, LocalActivitySwitchGuardProvider } from '../lib/local-activity-switch-guard';
 import { useWorkspaceWriteGuards } from '../lib/workspace-write-guards';
@@ -4123,6 +4124,69 @@ describe('unified Agent', () => {
     expect(vi.mocked(controller.startAgentRun).mock.calls[0]![0].executionMode).toBe('direct');
     expect(controller.applySceneProposal).toHaveBeenCalledOnce();
     expect(screen.queryByText('方案提案 · 尚未应用')).toBeNull();
+  });
+
+  it('自主权限：云端执行器遵守真实严格档，服务端direct也不能跳过确认',async()=>{
+    connected();setAgentSupervision('strict');
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input=>({...runFrom(await prepareProposal(input),input),executionMode:'direct'}));
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await screen.findByText('方案提案 · 尚未应用');
+    expect(vi.mocked(controller.startAgentRun).mock.calls[0][0].executionMode).toBe('preview');
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'确认布置'}));await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+  });
+
+  it('自主权限：云端模型计算期间收紧档位，返回后保留预览且不提交',async()=>{
+    connected();
+    let complete!:(proposal:SceneProposal)=>void;
+    prepareProposal.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input=>({...runFrom(await prepareProposal(input),input),executionMode:'direct'}));
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(complete).toBeTypeOf('function'));
+    await act(async()=>{setAgentSupervision('strict');complete(proposal);});
+    await screen.findByText('方案提案 · 尚未应用');
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('自主权限：已授权提交开始后切换档位仍完成回执核对，不制造云端与画布分叉',async()=>{
+    connected();
+    let complete!:(result:Awaited<ReturnType<BackendSession['applySceneProposal']>>)=>void;
+    vi.mocked(controller.applySceneProposal).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input=>({...runFrom(await prepareProposal(input),input),executionMode:'direct'}));
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'增加一把椅子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(complete).toBeTypeOf('function'));
+    await act(async()=>{setAgentSupervision('strict');complete({id:projectId,revision:2,scene:candidate,previousScene:scene,updatedAt:'2026-10-02T10:00:00Z',undoGroup:'undo-test',acceptedLocally:true});});
+    await waitFor(()=>expect(onApply).toHaveBeenCalledOnce());
+    expect(controller.applySceneProposal).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/云端已提交.*本机应用结果未能确认/)).toBeNull();
+  });
+
+  it('自主权限：自动档不能授权模型移动锁定物件，手动确认也不放行',async()=>{
+    connected();setAgentSupervision('auto');
+    const lockedBase:Scene={...scene,objects:[{...candidate.objects[0],locked:true}]};
+    const moved:Scene={...lockedBase,objects:[{...lockedBase.objects[0],position:{x:4,z:4}}]};
+    const value={...proposal,base_scene:lockedBase,candidate:moved};
+    layout=backendSceneToLayout(lockedBase,{projectId,name:'客户方案'});
+    snapshot={...snapshot,project:{...snapshot.project!,scene:lockedBase},draft:lockedBase};
+    prepareProposal.mockResolvedValueOnce(value);
+    vi.mocked(controller.startAgentRun).mockImplementationOnce(async input=>({...runFrom(await prepareProposal(input),input),executionMode:'direct'}));
+    renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
+    fireEvent.change(screen.getByRole('textbox',{name:'告诉助手你的想法'}),{target:{value:'移动一把椅子'}});
+    fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await screen.findByText('方案提案 · 尚未应用');
+    fireEvent.click(screen.getByRole('button',{name:'确认布置'}));
+    await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('已锁定'));
+    expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
 
   it('sends direct by default and still requires confirmation when the server returns a preview', async () => {

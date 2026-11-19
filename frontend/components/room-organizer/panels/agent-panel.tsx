@@ -11,14 +11,19 @@ import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { agentErrorView } from '@/lib/agent-error-view';
 import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
+import { gateAction } from '../lib/agent-supervision';
+import { getAgentSupervision } from '../lib/agent-supervision-store';
+import { layoutActionRisk, lockedLayoutChange } from '../lib/agent-action-risk';
+import { addDesign } from '../lib/scene-layers';
+import { AgentSupervisionPicker } from './agent-supervision-picker';
 
 /**
  * 右栏对话优先的 Agent 面板（#agent-panel）+ 画布上的状态层。
  * 一句话开场：敲一句，或在对话里挑活动/场地/人数；客户端解析后铺进预填卡。
  * 出方案：已连接云项目时走现有 AI 生成；否则由 lib/agent-proposal 用现有本地物料组
  * （furniture-sets / surprise）在内存里算一份候选，再按步推给画布做预览。
- * 硬钉（对话四步 ②）：建议 → 画布预览（绿框 = 新位，虚线 = 原位）→「确认布置」/「撤回」。
- * 确认前一个字节都不写场景，所以自动存档与撤销栈看不到提案；确认才一次 applyLayout，撤销一步能整体退回。
+ * 先计算并校验候选，再按监督设置自动应用或等待一次结果确认；写入仍复用 applyLayout 和撤销栈。
+ * 自动覆盖前保留原方案；锁定件、活动身份、楼层、需求与版本守卫不受监督档位影响。
  * 第 1 步「读场地」先把确认过的尺度立成可布置壳体（四面外墙 + 主入口 + 层高，见 lib/venue-shell）。
  * 底图只收图片（复用 layout.floorPlanImage）：图纸只当参照，长宽要么说一句「12×9」、要么说「按图纸估」，
  * 未确认前不把米数说成事实（docs/AI-NATIVE-FOR-EXECUTORS.md 对话四步 ①）。
@@ -828,6 +833,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   const inventoryOwner=useRef<{owner:object|null;serial:number}>({owner:null,serial:0});
   const [,setInventoryRevision]=useState(0);
   const proposalBase = useRef<RoomLayout | null>(null);
+  const automaticConfirmation = useRef(false);
+  const automaticConfirm = useRef<() => void>(() => {});
+  automaticConfirm.current = () => {
+    automaticConfirmation.current = true;
+    try { confirmProposal(); } finally { automaticConfirmation.current = false; }
+  };
   const proposalFloor = useRef<FloorSessionToken|null>(null);
   const floorSession=useFloorSessionTracker(layoutStore);
   function captureFloor(index:number):FloorSessionToken|null {const token=floorSession.capture();return token?.floorIndex===index&&floorSession.isCurrent(token)?token:null;}
@@ -2329,9 +2340,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     pushLocalLayoutStep('validate', plan.overlapCount > 0 || plan.blocked ? 'error' : 'done', overlapNote);
     finishLocalLayoutRun();
     phaseRef.current='proposed';setPhase('proposed');
+    const base=proposalBase.current, final=plan.layouts.at(-1);
+    const automatic=!!(base&&final&&!plan.blocked&&!plan.overlapCount&&!gateAction(getAgentSupervision(),layoutActionRisk(base,final)).required);
+    if(automatic){
+      setTimeout(()=>{if(token===runToken.current&&proposal.current===plan&&sessionScopeIsCurrent())automaticConfirm.current();},0);
+    }
     if (plan.receipt === 'banquet') return;
     const planView = viewOfLocalPlan(plan, proposalBase.current ?? undefined);
-    const tail = planView.review ? '还没落盘。点「确认布置」才挪。' : '还没落盘，点确认才写进画布。';
+    const tail = automatic ? '将按当前执行权限核对并应用，可撤销。' : planView.review ? '还没落盘。点「确认布置」才挪。' : '还没落盘，点确认才写进画布。';
     const hint = layoutChatHint(plan);
     say({ role: 'agent', amber: !!planView.blocked || !!hint, text: planView.blocked
       ? `这版先看着改。确认先不亮。${hint ? hint : ''}`
@@ -2684,6 +2700,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (plan.blocked) { say({ role: 'agent', amber: true, text: plan.blocked }); return; }
     const final = plan.layouts[plan.layouts.length - 1];
     if (!final) { invalidateProposal('这一版没有可落盘的候选'); return; }
+    const lockedChange=lockedLayoutChange(currentLayout,final);
+    if(lockedChange){say({role:'agent',amber:true,text:lockedChange});return;}
     const preservation=reviewOriginalPreservation(memoryRef.current.originalPreservation,final);
     if(preservation.status==='violated'||preservation.status==='unknown'){say({role:'agent',amber:true,text:preservation.message ?? '原物保留要求尚未核对。'});return;}
     const seatCheck = seatRequirement(final, activeFloorIndex, memoryRef.current);
@@ -2704,8 +2722,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const routeBlock=localDraftRouteBlock(assessLocalDraftRoutes(currentLayout,final,annotations,currentState.activeFloorIndex));
       if(routeBlock){say({role:'agent',amber:true,text:routeBlock});return;}
     }
+    const risk=layoutActionRisk(currentLayout,final);
+    if(automaticConfirmation.current&&gateAction(getAgentSupervision(),risk).required)return;
     pushLocalLayoutStep('confirm', 'running');
-    try { onApply(final, { expectedBase, preserveProvenance: true, expectedFloor:floor }); }
+    try { onApply(automaticConfirmation.current&&risk.kind==='destructive'?addDesign(currentLayout,final):final, { expectedBase, preserveProvenance: true, expectedFloor:floor }); }
     catch (error) {
       const raw = error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。';
       pushLocalLayoutStep('confirm', 'error', /包围盒重叠|件物料存在冲突/.test(raw) ? '椅子和圆桌叠在一起' : '这版没写上');
@@ -4958,6 +4978,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {mode === 'layout' && activity && <AgentSuggestionSlot open={capabilitiesOpen} onToggle={toggleCapabilities} placeFirst={placePending} showExample={showTaskExamples && !draft.trim() && placePending} onPickExample={pickTaskExample} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <AgentResearchSources research={agent.venueResearch}/>
         <AgentDocumentSources documents={agent.documents}/>
+        {activity && mode === 'layout' && <details className="ap-card-history-more"><summary>执行权限</summary><AgentSupervisionPicker /></details>}
         <form id="composer" className="ap-composer ap-composer-panel" onSubmit={event => { event.preventDefault(); submitComposer(); }}>
         {showOutdoorSuggestion && <OutdoorStageSuggestion key={agent.outdoorWorkflow.state.stage} stage={agent.outdoorWorkflow.state.stage} onPick={pickTaskExample} />}
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>

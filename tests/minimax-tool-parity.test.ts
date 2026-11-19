@@ -55,7 +55,7 @@ describe('MiniMax receives the configured Agent tool surface',()=>{
   expect(result.candidates[0]?.proposal.candidate.objects[0]?.assetId).not.toBe(original.asset.id);
   expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(draft);
  });
- it('offers configured Aholo generation and queues a job without applying it',async()=>{
+ it('offers configured Aholo request preparation but leaves paid submission for explicit confirmation',async()=>{
   const i=await setup(),over={GENERATION_MAX_TASK_CENTS:'100',LUX3D_API_KEY:'fixture-lux',LUX3D_TERMS_URL:'https://example.test/terms',LUX3D_TERMS_REVIEWED_AT:'2026-10-28'};let toolResult:Record<string,unknown>={};
   const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
    const body=JSON.parse(String(init?.body));expect(body.tools.map((t:{function:{name:string}})=>t.function.name)).toContain('start_lux3d_model');
@@ -63,9 +63,10 @@ describe('MiniMax receives the configured Agent tool surface',()=>{
    toolResult=JSON.parse(body.messages.filter((m:{role:string})=>m.role==='tool').at(-1).content);
    return reply([call('submit','submit_candidates',{candidates:[empty]})]);
   });
-  const result=await run(i,fetcher,over);expect(toolResult).toMatchObject({submitted:true,jobId:expect.any(String)});
+  const before=await f.db.query<{n:number}>('select count(*)::int as n from scene_private.generation_jobs');
+  const result=await run(i,fetcher,over);expect(toolResult).toMatchObject({submitted:false,confirmationRequired:true});
   expect(result.state).toBe('complete');expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(i.scene);
-  const jobs=await f.db.query<{n:number}>('select count(*)::int as n from scene_private.generation_jobs where id=$1',[toolResult.jobId]);expect(jobs.rows[0]?.n).toBe(1);
+  const jobs=await f.db.query<{n:number}>('select count(*)::int as n from scene_private.generation_jobs');expect(jobs.rows[0]?.n).toBe(before.rows[0]?.n);
  });
  it.each(['','0','1.5'])('does not offer Aholo when the task budget is invalid (%s)',async budget=>{
   const i=await setup(),over={GENERATION_MAX_TASK_CENTS:budget,LUX3D_API_KEY:'fixture-lux',LUX3D_TERMS_URL:'https://example.test/terms',LUX3D_TERMS_REVIEWED_AT:'2026-10-28'};

@@ -11,7 +11,7 @@ describe('synthetic activity Agent to local Lux3D job',()=>{
  let calls=0;
  const fakeModel=vi.fn(async(_url:RequestInfo|URL,_init?:RequestInit)=>{
   calls++;const name=calls===1?'start_lux3d_model':'submit_candidates';
-  const args=calls===1?{prompt:'虚构木讲台'}:{candidates:[{title:'待生成物料',explanation:'模型任务已提交，完成后由用户自行查看和选择。',commands:[]}]};
+  const args=calls===1?{prompt:'虚构木讲台'}:{candidates:[{title:'待生成确认',explanation:'生成需求已准备，尚未创建付费任务，需用户单独确认。',commands:[]}]};
   return Response.json({base_resp:{status_code:0},choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[{id:crypto.randomUUID(),type:'function',index:0,function:{name,arguments:JSON.stringify(args)}}]}}]});
  });
  beforeAll(async()=>{
@@ -21,13 +21,17 @@ describe('synthetic activity Agent to local Lux3D job',()=>{
   const login=await fetch(`${server.url}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:testPublicKey,'content-type':'application/json'},body:JSON.stringify({email:'owner@scendance.test',password:'local-integration-only'})});token=(await login.json() as {access_token:string}).access_token;
  },30000);
  afterAll(async()=>{await server?.close();});
- it('creates one task through the tool, then a local worker archives its fixture asset without changing the scene',async()=>{
+ it('keeps the Agent request unpaid, then processes a separately confirmed job without changing the scene',async()=>{
   const initial=scene(),project=await server.rpc(owner,'projects.create',{studioId:studio,name:'隔离模拟',scene:initial});
   const lease=await server.rpc(owner,'lease.acquire',{projectId:project.id,sessionId:session});
   const input=agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:lease.generation,expectedRevision:0,localRevision:0,scene:initial,selectedIds:[],instruction:'请为虚构活动创建一个木讲台模型',executionMode:'preview'});
   const api=`${server.url}/functions/v1/scene-api`,headers={authorization:`Bearer ${token}`,apikey:testPublicKey,'content-type':'application/json'};
   const response=await fetch(`${api}/projects/${project.id}/agent-runs`,{method:'POST',headers,body:JSON.stringify(input)});expect(response.status).toBe(202);
   const run=agentRunSchema.parse(await response.json());expect(run.state).toBe('complete');expect(calls).toBe(2);
+  const pending=await(await fetch(`${api}/jobs`,{headers})).json();expect(pending).toHaveLength(0);
+  // This explicit jobs request represents the existing form's separate credit confirmation.
+  const confirmed=await fetch(`${api}/jobs`,{method:'POST',headers,body:JSON.stringify({requestId:crypto.randomUUID(),prompt:'虚构木讲台',kind:'text',provider:'aholo'})});
+  expect(confirmed.status).toBe(202);
   const jobs=await(await fetch(`${api}/jobs`,{headers})).json() as Array<{id:string;state:string}>;expect(jobs).toHaveLength(1);expect(jobs[0]!.state).toBe('queued');
   await processGeneration(server.backend,server.env,syntheticLux3dFetch);
   await server.db.query('update scene_private.generation_jobs set next_poll_at=now() where id=$1',[jobs[0]!.id]);

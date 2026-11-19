@@ -338,10 +338,10 @@ export function OutdoorWorkflowCard({
                 type="button"
                 className="chip"
                 disabled={flow.busy}
-                onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+                onClick={() => void (async()=>{if(!await flow.retryLastRequest?.())await flow.action(actions[flow.state.stage] ?? "ask");})()}
               >
                 <RotateCw size={14} aria-hidden="true" />
-                重试云端理解
+                重试这次请求
               </button>
               <button
                 type="button"
@@ -372,7 +372,7 @@ export function OutdoorWorkflowCard({
                 type="button"
                 className="ap-task-retry"
                 disabled={flow.busy}
-                onClick={() => void flow.action(actions[flow.state.stage] ?? "ask")}
+                onClick={() => void (async()=>{if(!await flow.retryLastRequest?.())await flow.action(actions[flow.state.stage] ?? "ask");})()}
               >
                 重试
               </button>
@@ -413,6 +413,7 @@ export function OutdoorWorkflowCard({
       {flow.proposal ? (
         <div className="ap-proposal">
           <strong className="ap-proposal-title">{flow.proposal.label}</strong>
+          {flow.proposal.approvalReason && <p className="ap-task-caption">{flow.proposal.approvalReason}</p>}
           {flow.proposal.warnings.length > 0 && (
             <ul className="ap-proposal-notes">
               {flow.proposal.warnings.map((w) => (

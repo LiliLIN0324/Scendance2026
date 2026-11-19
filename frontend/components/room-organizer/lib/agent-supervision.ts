@@ -7,7 +7,7 @@
  * 三档的口径（不按模型说辞判，只按**动作性质**判）：
  * - strict   严格：凡是会改画布的动作（含普通写入）都先问；
  * - key-points 关键节点：只有「破坏性」与「大范围」动作才问，普通写入照跑；
- * - auto     自动：都不问，但照样记进决策留痕，事后可回看。
+ * - auto     自动：可撤销的方案修改自动执行并留痕；付费、外发、不可恢复操作仍单独确认。
  *
  * 判定用到的两个事实必须来自调用方已有的真值：动作类别 + 影响件数。
  * 拿不到件数就按「未知」处理——未知不算大范围，但破坏性仍然要问
@@ -17,7 +17,7 @@
 export type SupervisionLevel = 'strict' | 'key-points' | 'auto';
 
 /** 动作性质：只读 / 普通写入 / 破坏性（删、清空、覆盖既有物件）/ 大范围批量写入。 */
-export type AgentActionKind = 'read' | 'write' | 'destructive' | 'bulk';
+export type AgentActionKind = 'read' | 'write' | 'destructive' | 'bulk' | 'paid' | 'external' | 'irreversible';
 
 export interface SupervisionLevelInfo {
   id: SupervisionLevel;
@@ -37,19 +37,19 @@ export const SUPERVISION_LEVELS: readonly SupervisionLevelInfo[] = Object.freeze
     id: 'strict',
     label: '严格',
     short: '每步都问',
-    detail: '每一处改动画布的动作都先征求你的同意。',
+    detail: 'Agent 生成的方案写入前都先确认；手动编辑照常生效。',
   },
   {
     id: 'key-points',
     label: '关键节点',
     short: '关键处问',
-    detail: '在计划步骤和大范围改动前询问。',
+    detail: '普通可撤销修改直接执行；覆盖、删除、大范围改动先确认。',
   },
   {
     id: 'auto',
     label: '自动',
     short: '先做后看',
-    detail: '不再打断，改动照常记进留痕，事后可看可撤。',
+    detail: '自动执行可撤销改动并留痕；付费、外发和不可恢复操作仍需确认。',
   },
 ]);
 
@@ -95,6 +95,10 @@ export function gateAction(
   if (action.kind === 'read') return { required: false, why: '' };
   const label = action.label?.trim() || '这处改动';
   const bulk = isBulk(action.kind, action.affectedCount);
+
+  if (action.kind === 'paid') return { required: true, why: `${label}可能消耗额度或产生费用，需要单独确认。` };
+  if (action.kind === 'external') return { required: true, why: `${label}会对外发送或发布内容，需要确认范围和接收方。` };
+  if (action.kind === 'irreversible') return { required: true, why: `${label}无法通过撤销恢复，需要单独确认。` };
 
   if (level === 'auto') return { required: false, why: '' };
 

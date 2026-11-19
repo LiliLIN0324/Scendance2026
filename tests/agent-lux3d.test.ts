@@ -12,7 +12,7 @@ const baseEnv:Record<string,string>={
 const env=(over:Record<string,string|undefined>={}):Env=>key=>({ ...baseEnv, ...over })[key];
 const tool=(name:string,args:unknown)=>({id:crypto.randomUUID(),type:'function',function:{name,arguments:JSON.stringify(args)}});
 const completion=(calls:ReturnType<typeof tool>[])=>new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{content:null,tool_calls:calls}}],usage:{total_tokens:10}}));
-const candidate=()=>({title:'等待 Lux3D',explanation:'定制物件已提交异步生成，本方案不包含它。',commands:[]});
+const candidate=()=>({title:'等待生成确认',explanation:'定制物件的生成需求已准备，待用户在物料生成面板单独确认；尚未创建任务。',commands:[]});
 
 describe('agent start_lux3d_model tool (T-AHOLO-UI 形态②)',()=>{
   let f:Awaited<ReturnType<typeof database>>;
@@ -31,7 +31,7 @@ describe('agent start_lux3d_model tool (T-AHOLO-UI 形态②)',()=>{
   }
   const toolNames=(init?:RequestInit)=>JSON.parse(String(init?.body)).tools.map((t:{function:{name:string}})=>t.function.name);
 
-  it('advertises the tool only when aholo is configured and submits through the paid path',async()=>{
+  it.each(['preview','direct'] as const)('自主权限：%s模式只准备生成需求，不将模型工具调用当成付费确认',async mode=>{
     const i=await input();
     const seen:{tools?:string[]}[]=[];let submitted:Record<string,unknown>|undefined;
     const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
@@ -41,13 +41,26 @@ describe('agent start_lux3d_model tool (T-AHOLO-UI 形态②)',()=>{
       submitted=JSON.parse(toolMsgs[0].content);
       return completion([tool('submit_candidates',{candidates:[candidate()]})]);
     });
-    const run=await send(i,fetcher);
+    const run=await send({...i,executionMode:mode},fetcher);
     expect(seen[0]!.tools).toContain('start_lux3d_model');
-    expect(submitted).toMatchObject({submitted:true,jobId:expect.any(String)});
+    expect(submitted).toMatchObject({submitted:false,confirmationRequired:true,prompt:'雕花木质讲台'});
+    expect(submitted).not.toHaveProperty('jobId');
     const jobs=await f.db.query('select * from scene_private.generation_jobs where prompt=$1',['雕花木质讲台']);
-    expect(jobs.rows).toHaveLength(1);
-    expect(jobs.rows[0]).toMatchObject({provider_mode:'aholo',provider_model:'lux3d',kind:'text',state:'queued'});
+    expect(jobs.rows).toHaveLength(0);
     expect(run.state).toBe('complete');expect(run.candidates).toHaveLength(1);
+  });
+  it('自主权限：非MiniMax模型也不能调用本轮未开放工具，整批先拒绝且不执行其他动作',async()=>{
+    const i=await input();let results:Array<{code:string}>=[];
+    const fetcher=vi.fn(async(_url:RequestInfo|URL,init?:RequestInit)=>{
+      if(fetcher.mock.calls.length===1)return completion([tool('get_scene',{}),tool('start_lux3d_model',{prompt:'未授权生成'})]);
+      results=JSON.parse(String(init?.body)).messages.filter((m:{role:string})=>m.role==='tool').map((m:{content:string})=>JSON.parse(m.content));
+      return completion([tool('submit_candidates',{candidates:[candidate()]})]);
+    });
+    const run=await send(i,fetcher,{LUX3D_API_KEY:undefined});
+    expect(results.map(result=>result.code)).toEqual(['AGENT_BATCH_NOT_EXECUTED','UNKNOWN_TOOL']);
+    expect(run.state).toBe('complete');
+    const jobs=await f.db.query<{n:number}>('select count(*)::int as n from scene_private.generation_jobs');
+    expect(jobs.rows[0].n).toBe(0);
   });
   it('hides the tool and never submits when the vendor is unconfigured',async()=>{
     const i=await input();

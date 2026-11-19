@@ -26,7 +26,6 @@ import {readPreserveExisting,type UserPreserve} from './user-preserve.ts';
 import { mergeLocalSeatingSpecs } from './local-seating-specs.ts';
 import {agentPlaceSearchEnabled,agentPlaceSearchSchema,searchAgentPlaces} from './agent-place-search.ts';
 import { generationCapabilities } from './generation-contract.ts';
-import { prepareGenerationRequest } from './generation-input.ts';
 import { AGENT_PHASES, advancePhase, phaseIndex, phaseLabel, progressLine, type AgentPhase } from './agent-progress.ts';
 import { matchRecipes, renderRecipes } from './agent-recipes.ts';
 import { briefTarget, deadlinePressure, renderTurnBrief, type TurnTraceEntry } from './turn-brief.ts';
@@ -113,7 +112,7 @@ const descriptions:Record<keyof typeof schemas,string>={get_scene:'读取本次�
   inspect_zone:'读一块矩形场地：返回按米格画的局部平面（墙#、门窗=、柱子O、物件首字母、出入口E）以及该范围内的墙、洞口、柱子、物件（含 id 与坐标）。局部要改之前先看它，不要凭想象推断现状。',
   prepare_seating_candidate:'在本次原场景上试算一人一桌一椅组团，不删除已有物件、不写画布。须明确给数量、桌椅尺寸、间距与边界留距；这些是本次假设，不是库存或规范。返回 requested、placed、shortfall 和缺口原因；有候选时返回本次运行有效的 preparedId，调用 submit_candidates 时用 {preparedId} 提交。不能声称缺口已满足；出口、通行、消防和现场等仍需核验。用户未明确选择时只能作为标明假设的探索方案。',
   prepare_shared_seating_candidate:'仅当 context.seatingAllocation 是经核实的用户明确要求 shared_desk 且 peoplePerDesk 为 2 时，按人数试排每桌两把独立椅子。输入人数、桌椅尺寸、椅间净距、桌椅间距、行列间距与边界留距；返回实际人数、桌数、缺口、假设与运行内 preparedId。保留原场景，仅供预览，不代表实际库存或安全。',
-  find_free_areas:'让引擎寻找候选落点：给出占地宽深（米）和需要留出的间隙（米，指与其它物件和柱子的净距），返回候选落地中心坐标及到最近标注出入口的距离；结果不证明连续通行或现场条件。摆柜子/签到台/展架/桌椅之前先问它，不要凭坐标试错。',create_parametric_model:'固定参数化建模，创建独立 GLB 资源，可用 add_resource/replace_resource 布置；不会修改场景。只支持桌/椅凳/柜台/台座/背景板/柜六类。',inspect_materials:'读取资源真实材质槽和参数化来源，不假定部件。',customize_material:'对当前未锁定目标的真实槽创建材质副本，返回新 resourceId。目标必须在本次选择范围内；不会直接应用。',validate_candidate:'在原始草稿上试算 commands，不保存。valid 为 true 时返回本次运行专用 validatedId，可用 {validatedId} 提交原候选；修改后必须重新检查。valid 只表示候选构建与部分几何检查结果，warnings 和 coverage 仍须查看，不代表通行、安全或规范通过。',submit_candidates:'结束本次运行并提交方案。优先使用本次 validate_candidate 成功返回的 {validatedId}；组团工具使用 {preparedId}；也可提交完整候选 {title,explanation,commands,materialSuggestions?}。每项只能选择其中一种且不得附加字段。JEV关闭提交1个，开启提交3个不同方案；说明性答复可用空 commands。',get_bom:'按当前草稿统计物料数量、尺寸及场景颜色；GLB颜色为乘值，不保证实物颜色，不编造价格或库存。',start_lux3d_model:'提交 Aholo Lux3D 文生 3D 异步任务（付费，约数分钟）。完成后用户在历史模型面板手动加入场地；本方案不能包含刚提交的物件，不得声称已布置。仅用于参数化六类和现有资源都无法满足的定制物件。',
+  find_free_areas:'让引擎寻找候选落点：给出占地宽深（米）和需要留出的间隙（米，指与其它物件和柱子的净距），返回候选落地中心坐标及到最近标注出入口的距离；结果不证明连续通行或现场条件。摆柜子/签到台/展架/桌椅之前先问它，不要凭坐标试错。',create_parametric_model:'固定参数化建模，创建独立 GLB 资源，可用 add_resource/replace_resource 布置；不会修改场景。只支持桌/椅凳/柜台/台座/背景板/柜六类。',inspect_materials:'读取资源真实材质槽和参数化来源，不假定部件。',customize_material:'对当前未锁定目标的真实槽创建材质副本，返回新 resourceId。目标必须在本次选择范围内；不会直接应用。',validate_candidate:'在原始草稿上试算 commands，不保存。valid 为 true 时返回本次运行专用 validatedId，可用 {validatedId} 提交原候选；修改后必须重新检查。valid 只表示候选构建与部分几何检查结果，warnings 和 coverage 仍须查看，不代表通行、安全或规范通过。',submit_candidates:'结束本次运行并提交方案。优先使用本次 validate_candidate 成功返回的 {validatedId}；组团工具使用 {preparedId}；也可提交完整候选 {title,explanation,commands,materialSuggestions?}。每项只能选择其中一种且不得附加字段。JEV关闭提交1个，开启提交3个不同方案；说明性答复可用空 commands。',get_bom:'按当前草稿统计物料数量、尺寸及场景颜色；GLB颜色为乘值，不保证实物颜色，不编造价格或库存。',start_lux3d_model:'准备 Aholo Lux3D 定制物件生成需求，返回待用户单独确认。此工具不会创建付费任务；用户需在物料生成面板确认消耗额度并提交。不得声称任务已提交、模型已生成或已布置。仅用于现有资源和参数化模型无法满足的需求。',
   get_outdoor_plan:'读取本次运行的户外 2D 草稿（分区/设施/动线/节点/人员计数与锚点）。草稿是待核验快照，读取不代表已用于排布、容量核定或通过安全检查；无锚点时坐标仅为局部米制，不要产出经纬度。',
   prepare_plan_zones:'在本次户外草稿上试算新增分区批次，不删除已有分区、不写画布。给语义类别、名称与 3–64 个米制顶点；越界只出提示，不自交退化环。返回本次运行有效的 preparedId，提交时用 {preparedId}。数量与边界为本次输入假设，不代表场地容量或通行条件。',
   prepare_plan_facilities:'在本次户外草稿上试算新增设施批次，不写画布。templateId 必须命中内置模板目录或 oneplan 物件库白名单，未知模板直接报错不要编造；内置尺寸取自模板，oneplan 条目先用占位尺寸、前端落位后再校准。可给位置、朝向、归属分区。返回 preparedId。数字模板不代表实物库存或供应。',
@@ -167,7 +166,7 @@ const candidateValidationCoverage={status:'partial' as const,
   ]};
 const progressLabels:Record<keyof typeof schemas,string>={get_scene:'正在读取当前场景',search_resources:'正在检索模型资源',search_places:'正在查询地点',
   inspect_zone:'正在读取局部平面',find_free_areas:'正在搜索可落点',prepare_seating_candidate:'正在试排课桌椅',prepare_shared_seating_candidate:'正在试排双人课桌椅',
-  create_parametric_model:'正在创建参数化模型',inspect_materials:'正在读取模型材质',customize_material:'正在创建材质副本',validate_candidate:'正在检查方案',submit_candidates:'正在整理候选方案',get_bom:'正在统计物料清单',start_lux3d_model:'正在提交 Lux3D 生成任务',
+  create_parametric_model:'正在创建参数化模型',inspect_materials:'正在读取模型材质',customize_material:'正在创建材质副本',validate_candidate:'正在检查方案',submit_candidates:'正在整理候选方案',get_bom:'正在统计物料清单',start_lux3d_model:'正在准备模型生成需求',
   get_outdoor_plan:'正在读取户外平面',prepare_plan_zones:'正在试算新增分区',prepare_plan_facilities:'正在试算新增设施',prepare_plan_routes:'正在试算新增动线',prepare_plan_workers:'正在试算新增人员点位',validate_plan_candidate:'正在检查户外方案',submit_plan_candidates:'正在整理户外候选方案'};
 // 每个工具落在四段工作的哪一段。键是 schemas 的完整键集合，所以新增工具不填这一项
 // 会直接编译不过——阶段归属不能默默退回「看现状」。
@@ -240,8 +239,11 @@ export function agentExecutionMode(input:AgentRunRequest) {
   if(input.context.annotationObservation!==undefined)return 'preview';
   if(input.jevEnabled)return 'preview';
   if(input.executionMode!=='direct')return 'preview';
+  // Waiving a parameter questionnaire is not a request to suppress execution.
+  // This does not grant scene writes: the client still checks the actual candidate risk.
+  const instruction=input.instruction.replace(/(?:不需要|无需|不用|不必|不要)(?:再)?(?:等(?:待)?|反复(?:询问|确认)|逐项(?:询问|补充)|(?:询问|追问)(?:参数|人数|清单|桌位))[^，。；,;\n]*/gu,'');
   // 只拦住明确不要执行、只要说明或还在比较的句子；普通祈使句直接执行。
-  return !/不要|别|暂不|暂时不|仅|只(?:要|需|说明|回答)|先(?:给|看|说|讨论)|不(?:要|用|必|需|能|可以)|说明原因/.test(input.instruction)&&!/[?？]|建议|考虑|能否|是否|要不要|比较|预览/.test(input.instruction)?'direct':'preview';
+  return !/不要|别|暂不|暂时不|仅|只(?:要|需|说明|回答)|先(?:给|看|说|讨论)|不(?:要|用|必|需|能|可以)|说明原因/.test(instruction)&&!/[?？]|建议|考虑|能否|是否|要不要|比较|预览/.test(instruction)?'direct':'preview';
 }
 function diversityKey(scene:Scene,identities:Map<string,string>) {
   // Presentation text, random instance IDs and flat color changes do not make a new plan.
@@ -684,7 +686,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         if(name==='search_places'&&!placeReady)return false;
         // 户外工具只在请求附带户外 planObservation 时暴露；室内流工具清单保持不变。
         if(outdoorToolNames.has(name)&&!outdoorObservation)return false;
-        if(miniMax&&forceSubmit&&name!=='submit_candidates'&&name!=='submit_plan_candidates')return false;
+        if(forceSubmit&&name!=='submit_candidates'&&name!=='submit_plan_candidates')return false;
         return true;
       });
       const { url, init } = chatRequest(runEnv, { messages:compactRepeatedValidationArrays(messages), tools:offered, tool_choice:miniMax?'auto':forceSubmit?{type:'function',function:{name:'submit_candidates'}}:'auto', ...(miniMax?{max_completion_tokens:7000}:{max_tokens:7000}) },miniMax?{purpose:'agent'}:undefined);
@@ -704,6 +706,23 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
       // Validate the whole batch before executing anything; private reasoning stays in memory.
       const miniMaxTurn=miniMax?parseMiniMaxToolTurn(raw,offered.map(t=>t.function.name),miniMaxCallIds,forceSubmit,true):null;
       const batchProblems=new Map<string,unknown>();
+      if(!miniMax){
+        const seen=new Set<string>();
+        for(const item of reply.toolCalls){
+          const name=item.function.name as keyof typeof schemas;
+          if(seen.has(item.id)){batchProblems.set(item.id,{code:'AGENT_TOOL_CALL_CONFLICT',hint:'同批工具调用编号重复，本批未执行。'});continue;}
+          seen.add(item.id);
+          if(!(name in schemas)||!offered.some(tool=>tool.function.name===name)){
+            batchProblems.set(item.id,{code:'UNKNOWN_TOOL',hint:'该工具未在本轮开放，本批未执行。'});continue;
+          }
+          try{
+            const checked=schemas[name].safeParse(JSON.parse(item.function.arguments));
+            if(!checked.success){batchProblems.set(item.id,{...safeError(checked.error),hint:'请修正工具参数；本批未执行。'});continue;}
+            const receipt=receipts.get(item.id);
+            if(receipt&&receipt.fingerprint!==canonical({name,args:checked.data}))batchProblems.set(item.id,{code:'AGENT_TOOL_CALL_CONFLICT',hint:'调用编号已绑定其他参数，本批未执行。'});
+          }catch{batchProblems.set(item.id,{code:'INVALID_TOOL_INPUT',hint:'工具参数必须是完整的JSON对象，本批未执行。'});}
+        }
+      }
       if(miniMaxTurn){for(const item of miniMaxTurn.calls){
         miniMaxCallIds.add(item.id);
         if(item.arguments===null){batchProblems.set(item.id,{code:'INVALID_TOOL_INPUT',hint:'工具参数必须是完整的 JSON 对象；请修正后重新调用。'});continue;}
@@ -758,7 +777,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
         try {
           const name=tool.function.name as keyof typeof schemas;
           if(!(name in schemas))throw new ApiError('UNKNOWN_TOOL',422);
-          if(miniMax&&!offered.some(candidate=>candidate.function.name===name))throw new ApiError('UNKNOWN_TOOL',422);
+          if(!offered.some(candidate=>candidate.function.name===name))throw new ApiError('UNKNOWN_TOOL',422);
           if(name==='search_places'&&!placeReady)throw new ApiError('UNKNOWN_TOOL',422);
           const args=schemas[name].parse(JSON.parse(tool.function.arguments));
           fingerprint=canonical({name,args});
@@ -972,10 +991,9 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
               result={items:[...items.values()],pricing:'未提供供应商价格与库存，需另行核实'};
             } else if(name==='start_lux3d_model') {
               const {prompt}=args as z.infer<typeof schemas.start_lux3d_model>;
-              // Same paid path as the /jobs route: identical validation, identity pinning and budget reservation.
-              const prepared=await prepareGenerationRequest(backend,actor,{requestId:crypto.randomUUID(),prompt,kind:'text',provider:'aholo'},env);
-              const job=await backend.jobs(actor,'jobs.create',{...prepared,reserveCents:reserveCost(env,'GENERATION_MAX_TASK_CENTS')});
-              result={submitted:true,jobId:job.id,note:'Lux3D 生成任务已提交，约需数分钟；完成后用户在历史模型面板手动加入场地。'};
+              // The model may prepare a request, but its tool call is never credit consent.
+              // Creation stays on the existing, separately confirmed generation form/jobs path.
+              result={submitted:false,confirmationRequired:true,prompt,note:'尚未创建付费任务。请在物料生成面板核对需求并确认消耗额度后提交；不能声称已生成或已布置。'};
             } else if(name==='validate_candidate') {
               if(input.context.annotationObservation!==undefined&&(annotationReadTurn===null||annotationReadTurn>=turn))throw new ApiError('ANNOTATION_READ_REQUIRED',422);
               // 校验回执要能直接改。通过时给实测净距——「不重叠但通道只剩 0.8 米」是真实

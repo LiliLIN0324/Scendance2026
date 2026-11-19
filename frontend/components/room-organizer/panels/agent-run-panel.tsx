@@ -39,7 +39,6 @@ import {
   type AgentRunState,
   type AgentStepLogEntry,
 } from './agent-chat-store';
-import { AgentSupervisionPicker } from './agent-supervision-picker';
 import { getAgentDecisions, subscribeAgentDecisions, type AgentDecision } from './agent-decision-log';
 
 
@@ -411,10 +410,6 @@ export function AgentRunPanel({ scope = 'layout', controls = true, steerInputId,
             {run.phase && <span className="ap-run-phase">· 当前阶段：{phaseLabel(run.phase)}</span>}
             {run.isRunning && <span className="ap-run-timer">{formatDurationClock(elapsedMs)}</span>}
           </div>
-
-          {/* 监督档位：对标谷地工坊「需要我多久跟你确认一次？」。
-              常驻在运行卡顶部，就在用户盯着进度的时候看得见、改得了。 */}
-          <AgentSupervisionPicker />
 
           {/* 副行：这一段具体在做什么 + 预算读数。
               轮数在这里，不在主标题——它是真实的（6 轮硬上限），但它不回答「在干什么」。 */}

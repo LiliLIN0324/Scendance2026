@@ -8,6 +8,8 @@ import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
 import { getActiveAssistantSessionId } from "./use-assistant-sessions";
 import { isVenueResearchRequest } from "../lib/venue-research";
 import { gateAction, type SupervisionLevel } from "../lib/agent-supervision";
+import { getAgentSupervision, useAgentSupervision } from "../lib/agent-supervision-store";
+import { outdoorActionRisk } from "../lib/agent-action-risk";
 import type { BackendSession } from "@/lib/backend-session";
 import { agentErrorView, type AgentErrorView } from "@/lib/agent-error-view";
 import type { PlanPoint, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
@@ -155,6 +157,8 @@ export interface OutdoorWorkflowProposal {
   warnings: string[];
   references: OutdoorTurn["references"];
   preserveOriginal?: boolean;
+  approvalReason?: string;
+  actorId?: string | null;
   afterConfirm?: "main-routes" | "objects" | "design-event";
   afterConfirmRequest?: { turn: OutdoorTurn; message: string; documents: AgentDocument[]; imageCount: number };
 }
@@ -163,7 +167,7 @@ export interface OutdoorWorkflowProposal {
  * 这种句子不该再被反问清单——按分区用途与面积出默认方案就行。
  */
 function designerCue(message: string): boolean {
-  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的/u.test(message);
+  return /随便|看着办|你看着|你定|都行|都可以|随你|按你的|不用问|挑好的|自主.{0,6}(?:规划|设计|安排)|继续执行|无需等待|不需要等待|采用.{0,6}默认/u.test(message);
 }
 
 export const OUTDOOR_STAGE_LABELS: Record<OutdoorStage, string> = {
@@ -370,7 +374,7 @@ export function useOutdoorAgentWorkflow(input: {
   provider?: () => ChatProviderId | undefined;
   model?: () => string | null;
   simulate?: (active: boolean) => boolean;
-  supervision?: () => SupervisionLevel;
+  supervision?: () => SupervisionLevel | undefined;
 }) {
   // 当前方案版本：刷新恢复时用它判登录等待/未确认边界是否过期。
   // 注意：首次 render 时 callbacks ref 还没建，只能先用入参 bridge；后续（换活动）再用 ref 里的最新回调。
@@ -503,7 +507,9 @@ export function useOutdoorAgentWorkflow(input: {
     message: string;
     base: string;
     selected: string;
-    job: { epoch: number; controller: AbortController; scope: string };
+    documents: AgentDocument[];
+    imageCount: number;
+    job: { epoch: number; controller: AbortController; scope: string; actorId?: string | null };
   };
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
   const pendingPlanRef = useRef<PendingPlan | null>(null);
@@ -526,6 +532,14 @@ export function useOutdoorAgentWorkflow(input: {
   /** 红卡上的「下一步」（缺前置条件时替代无意义的「重试」）；null = 走原有的重试口径。 */
   const [noticeFix, setNoticeFix] = useState<OutdoorNoticeFix | null>(null);
   const refsRef = useRef<OutdoorTurn["references"]>([]);
+  const lastRequestRef=useRef<{scope:string;ownerId:string|null;message:string;clarification:OutdoorClarification|undefined;images:string[];documents:AgentDocument[]}|null>(null);
+  const lastActionRef=useRef<{scope:string;ownerId:string|null;args:Parameters<typeof action>}|null>(null);
+  const supervisionLevel = useAgentSupervision();
+  const currentSupervision = () => callbacks.current.supervision?.() ?? getAgentSupervision();
+  function currentActorId():string|null {
+    const viewer=callbacks.current.controller()?.getSnapshot?.().user;
+    return viewer&&!viewer.is_anonymous?viewer.id:null;
+  }
   /**
    * 2026-11-17：用户刚刚从上一轮二选一里挑了第 N 项（原请求 + 选中的分支）。
    * 只在同一轮内有效：模型如果又把同一句追问端回来，靠它本地接着走，而不是把问题重复一遍。
@@ -608,17 +622,19 @@ export function useOutdoorAgentWorkflow(input: {
     proposalRef.current = null;
     setModels(null);
     setBusy(true);
-    return { epoch, controller, scope: scopeRef.current };
+    return { epoch, controller, scope: scopeRef.current, actorId: currentActorId() };
   }
   function live(job: {
     epoch: number;
     controller: AbortController;
     scope: string;
+    actorId?: string | null;
   }) {
     return (
       token.current === job.epoch &&
       !job.controller.signal.aborted &&
       scopeRef.current === job.scope &&
+      (job.actorId === undefined || job.actorId === (currentActorId())) &&
       callbacks.current.current(job.epoch)
     );
   }
@@ -655,6 +671,22 @@ export function useOutdoorAgentWorkflow(input: {
     liveTurn.current.settle("cancelled");
     status("已取消当前预览/请求；已应用的规划与需求都保留。", "stopped");
   }
+  const sessionController=input.controller();
+  useEffect(()=>{
+    const readOwner=()=>{const viewer=sessionController?.getSnapshot?.().user;return viewer&&!viewer.is_anonymous?viewer.id:null;};
+    let owner=readOwner();
+    return sessionController?.subscribe?.(()=>{
+      const next=readOwner();
+      if(next===owner)return;
+      const previous=owner;owner=next;
+      const pending=stateRef.current.pendingLogin;
+      const keepLogin=!!pending&&(next===null||!pending.ownerId||pending.ownerId===next)&&(previous===null||next===null);
+      cancel({preservePendingLogin:keepLogin});
+      if(!keepLogin)lastRequestRef.current=null;
+      lastActionRef.current=null;
+      status(keepLogin?'登录状态已变化，将按原账号与场地版本核对待续请求。':'账号已变化，已停止原账号请求并收回候选；现有规划保留。','blocked');
+    });
+  },[sessionController,input.scope]);
   useEffect(() => {
     setDesignSteps([]);
     setDrawingMode(null);
@@ -697,7 +729,7 @@ export function useOutdoorAgentWorkflow(input: {
   }
   function requireScope(plan: SitePlanData): boolean {
     if (stateRef.current.confirmedBoundary === boundaryKey(plan)) return true;
-    if (callbacks.current.supervision?.() !== "strict" && checkBoundaryRing(plan.boundary).ok && !stateRef.current.pendingBoundary) {
+    if (currentSupervision() !== "strict" && checkBoundaryRing(plan.boundary).ok && !stateRef.current.pendingBoundary) {
       persist({ ...stateRef.current, confirmedBoundary: boundaryKey(plan) });
       return true;
     }
@@ -751,7 +783,7 @@ export function useOutdoorAgentWorkflow(input: {
         offerBoundary(visible.anchor, visible.boundary, visible.name.trim() || "当前地图范围");
         return;
       }
-      if (callbacks.current.supervision?.() !== "strict" && !stateRef.current.pendingBoundary) {
+      if (currentSupervision() !== "strict" && !stateRef.current.pendingBoundary) {
         persist({ ...stateRef.current, stage: "objects", confirmedBoundary: boundaryKey(planNow) });
         return;
       }
@@ -768,7 +800,7 @@ export function useOutdoorAgentWorkflow(input: {
       stopped = true;
       clearInterval(timer);
     };
-  }, [state.stage, proposal, busy, drawingMode]);
+  }, [state.stage, proposal, busy, drawingMode, supervisionLevel]);
 
   // 2026-11-19 T1-d2：真实用地红线同步（任务卡画真轮廓用，不再画示意地图）。
   // 与分区清单同口径：800ms 读一次 bridge 快照，只有合法闭合环才交给卡；不变不重渲染。
@@ -852,7 +884,7 @@ export function useOutdoorAgentWorkflow(input: {
     next: SitePlanData,
     kind: OutdoorWorkflowProposal["kind"],
     label: string,
-    job: { epoch: number; controller: AbortController; scope: string },
+    job: { epoch: number; controller: AbortController; scope: string; actorId?: string | null },
     warnings: string[] = [],
     afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
     afterConfirmRequest?: OutdoorWorkflowProposal["afterConfirmRequest"],
@@ -870,6 +902,12 @@ export function useOutdoorAgentWorkflow(input: {
       ...warnings,
       ...proposalMapWarnings(kind, mapWarnings),
     ];
+    const risk = outdoorActionRisk(base, next, label);
+    const gate = gateAction(currentSupervision(), risk);
+    const checkpoint = (kind === 'scope' && !afterConfirmRequest) || kind === 'verify-access' || !!objectsLayoutRef.current?.packed;
+    const approvalReason = gate.required ? gate.why : checkpoint
+      ? kind === 'verify-access' ? '真实出入口的通行状态需要你核对。' : kind === 'scope' ? '请核对本次活动要使用的场地范围。' : '这版采用了压缩通道的摆放方式，需要核对。'
+      : '';
     const p = {
       kind,
       label,
@@ -879,7 +917,9 @@ export function useOutdoorAgentWorkflow(input: {
       next,
       warnings,
       references: [...refsRef.current],
-      preserveOriginal,
+      preserveOriginal: preserveOriginal || risk.kind === 'destructive',
+      approvalReason,
+      actorId: job.actorId??null,
       ...(afterConfirm ? { afterConfirm } : {}),
       ...(afterConfirmRequest ? { afterConfirmRequest } : {}),
     };
@@ -897,34 +937,11 @@ export function useOutdoorAgentWorkflow(input: {
     status(`${label}预览已就绪；核对后确认才写入，可整批撤销。`, "confirm");
     liveTurn.current.markPreview();
     liveTurn.current.log();
-    // Decide from the actual diff, never from the model's claim that an operation is safe.
-    const collections = ["facilities", "zones", "routes", "nodes", "workers"] as const;
-    let destructive = false;
-    let affectedCount = 0;
-    for (const key of collections) {
-      const after = new Map<string, unknown>(next[key].map(item => [item.id, item]));
-      const before = new Map<string, unknown>(base[key].map(item => [item.id, item]));
-      destructive ||= base[key].some(item => !after.has(item.id));
-      affectedCount += next[key].filter(item => JSON.stringify(before.get(item.id)) !== JSON.stringify(item)).length;
-      affectedCount += base[key].filter(item => !after.has(item.id)).length;
-    }
-    destructive ||= base.facilities.some(item => {
-      const replacement = next.facilities.find(after => after.id === item.id);
-      return replacement && (replacement.sourceAssetId !== item.sourceAssetId || replacement.modelOverride !== item.modelOverride || replacement.templateId !== item.templateId);
-    });
-    // Replacing existing region geometry can reinterpret everything in it.
-    destructive ||= base.zones.some(zone => {
-      const replacement = next.zones.find(item => item.id === zone.id);
-      return replacement && JSON.stringify(replacement.polygon) !== JSON.stringify(zone.polygon);
-    });
-    const gate = gateAction(callbacks.current.supervision?.() ?? "key-points", {
-      kind: destructive ? "destructive" : "write", affectedCount, label,
-    });
-    if (kind !== "scope" && kind !== "verify-access" && !objectsLayoutRef.current?.packed && !gate.required) {
-      return confirm(p);
+    if (!checkpoint && !gate.required) {
+      return confirm(p, true);
     }
   }
-  async function confirm(expected?: OutdoorWorkflowProposal) {
+  async function confirm(expected?: OutdoorWorkflowProposal, automatic = false) {
     liveTurn.current.markConfirm();
     if (expected && proposalRef.current !== expected) {
       status("这张确认卡已过期，未应用其他任务的提案。", "blocked");
@@ -993,6 +1010,7 @@ export function useOutdoorAgentWorkflow(input: {
           token.current === p!.epoch &&
           proposalRef.current === p &&
           scopeRef.current === confirmationScope &&
+          (p!.actorId === undefined || p!.actorId === (currentActorId())) &&
           callbacks.current.current(p!.epoch),
       );
     if (!owns()) return;
@@ -1056,11 +1074,18 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     if (!mergeLatest(applyBase)) return; // 基座已被改：mergeLatest 内部已给出失效提示
+    if(automatic){
+      const latestGate=gateAction(currentSupervision(),outdoorActionRisk(applyBase,p.next,p.label));
+      if(latestGate.required){
+        p={...p,approvalReason:latestGate.why};proposalRef.current=p;setProposal(p);
+        status(latestGate.why,'confirm');return;
+      }
+    }
     let recoveryProjectId: string | undefined;
     if(p.preserveOriginal){
-      recoveryProjectId=`wedding-before-${crypto.randomUUID()}`;
+      recoveryProjectId=`agent-before-${crypto.randomUUID()}`;
       const now=new Date().toISOString();
-      saveOutdoorProjectRecord({v:1,projectId:recoveryProjectId,name:'婚礼空间优化前方案',createdAt:now,updatedAt:now,plan:applyBase},undefined,false);
+      saveOutdoorProjectRecord({v:1,projectId:recoveryProjectId,name:`${p.label}前方案`,createdAt:now,updatedAt:now,plan:applyBase},undefined,false);
       if(!readOutdoorProjectRecord(recoveryProjectId)?.plan){
         status('原方案恢复副本未能保存，新方案未应用；请释放本机存储空间后重试。','blocked');return;
       }
@@ -1071,6 +1096,7 @@ export function useOutdoorAgentWorkflow(input: {
     }
     setAppliedHighlight(mapEditHighlight(p.kind, applyBase, p.next));
     liveTurn.current.markApplied();
+    if(automatic){p.warnings=[...p.warnings,`已按${currentSupervision()}监督档自动执行；改动可撤销。`];designStep('已按监督设置自动应用这一版，可整批撤销。');}
     if(recoveryProjectId)callbacks.current.say(`已保留优化前的完整本机方案：[打开原方案](?project=${encodeURIComponent(recoveryProjectId)}&mode=outdoor)。当前优化也可整批撤销。`);
     liveTurn.current.log();
     recordCard(p, "confirmed");
@@ -1119,7 +1145,7 @@ export function useOutdoorAgentWorkflow(input: {
     name: string,
     basis?: VenueRangeBasis,
     continuation?: OutdoorWorkflowProposal["afterConfirmRequest"],
-  ) {
+  ): void | Promise<void> {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base) return;
     const job = start();
@@ -1140,7 +1166,7 @@ export function useOutdoorAgentWorkflow(input: {
         pruned.droppedFacilities.length ? `物件 ${pruned.droppedFacilities.join("、")}` : "",
         pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
       ].filter(Boolean);
-      offer(
+      const completion = offer(
         // 2026-11-17 「同一标准」：范围确认卡是一个自带红线的方案，落地后必须配白框——
         // 预览与确认走同一份数据，不靠画布那边事后补（那条路留给手画红线和换场地）。
         { ...pruned.next, anchor, boundary, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M),
@@ -1159,6 +1185,9 @@ export function useOutdoorAgentWorkflow(input: {
         continuation ? 'design-event' : undefined,
         continuation,
       );
+      if(completion)return completion.catch(error=>{
+        status(error instanceof Error?error.message:'范围候选无法核对，未修改规划。','blocked');
+      }).finally(()=>setBusy(false));
     } catch (error) {
       status(
         error instanceof Error
@@ -1496,13 +1525,14 @@ export function useOutdoorAgentWorkflow(input: {
       // 连续第二次追问、画布毫无改动、用户这句又不是在提问（「你能做什么」这种不算）时，
       // 不再问第三句，直接按当前分区出默认方案（只出预览）。
       const planNow = callbacks.current.bridge()?.getPlan() ?? null;
-      const questionish = /[?？]|怎么|如何|能不能|可不可以|可以吗|是不是|为什么/u.test(message);
+      const questionish = /[?？]\s*$|^(?:怎么|如何|能不能|可不可以|可以吗|是不是|为什么)/u.test(message.trim());
       const canDraft = !!planNow && checkBoundaryRing(planNow.boundary).ok
         && !stateRef.current.pendingBoundary
-        && !stateRef.current.brief.items.length;
-      if (!questionish && canDraft && (askStreakRef.current >= 1 || designerCue(message))) {
+        && (!stateRef.current.brief.items.length || designerCue(message));
+      const draftRequested=designerCue(message)||/(?:^|[，,。；;])\s*(?:请|帮我|我想|我要)?\s*(?:布置|规划|设计|安排)/u.test(message);
+      if (!questionish && canDraft && (askStreakRef.current >= 1 || draftRequested)) {
         askStreakRef.current = 0;
-        designStep("用户把设计交给我（随便/你看着办）：不再追问清单，直接按分区用途与面积出一版默认方案（只出预览，未写入画布）。");
+        designStep("已授权自主起稿：按已知用途、面积和物料继续规划，缺失的可调整参数采用标记的默认值，是否应用由监督设置和实际改动决定。");
         await act({ ...turn, action: "objects", reply: "", references: [], facts: {} }, message, continueDesign);
         return;
       }
@@ -1591,7 +1621,7 @@ export function useOutdoorAgentWorkflow(input: {
       }
       if (turn.action === 'design-event' && stateRef.current.pendingBoundary) {
         const candidate=stateRef.current.pendingBoundary;
-        offerBoundary(candidate.anchor,candidate.boundary,candidate.name,candidate.basis,{turn,message,documents:documents??[],imageCount});
+        await offerBoundary(candidate.anchor,candidate.boundary,candidate.name,candidate.basis,{turn,message,documents:documents??[],imageCount});
         designStep('范围确认后会继续同一份婚礼联合布置，不用重新说一遍需求。');
         return;
       }
@@ -1951,7 +1981,7 @@ export function useOutdoorAgentWorkflow(input: {
           : stateRef.current.brief;
         if (draft)
           designStep(
-            `没有清单：按分区用途与面积出默认方案（${draft.items.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、")}）；只出预览，未写入画布。`,
+            `没有清单：按分区用途与面积出默认方案（${draft.items.map((i) => `${i.zone} ${i.query}×${i.count}`).join("、")}）；数量为可调整的布局假设，不改写用户确认需求。`,
           );
         const queries = demandBrief.items.map((i) => i.query);
         const library = bridge.readLibrary
@@ -2470,7 +2500,7 @@ export function useOutdoorAgentWorkflow(input: {
     kind: "shoreline" | "route-line",
     message: string,
     continueDesign: boolean,
-    existingJob?: { epoch: number; controller: AbortController; scope: string } | null,
+    existingJob?: { epoch: number; controller: AbortController; scope: string; actorId?: string | null } | null,
   ): Promise<boolean> {
     const job = existingJob ?? start(continueDesign);
     const before = JSON.stringify(callbacks.current.bridge()?.getPlan());
@@ -2575,6 +2605,8 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const plan = callbacks.current.bridge()?.getPlan();
     if (!plan) return false;
+    lastActionRef.current=null;
+    lastRequestRef.current={scope:scopeRef.current,ownerId:currentActorId(),message,clarification,images:images??[],documents:documents??[]};
     // 对话主路径的生成入口：先认「生成一件新道具」，再走模型理解。
     // 只打开现有生成面板，不提交、不扣额度；「摆/放」句仍归 #167 的落位预览。
     if (!clarification) {
@@ -2760,7 +2792,7 @@ export function useOutdoorAgentWorkflow(input: {
         if (await referencePreview(referenceKind, message, true, job)) return true;
       }
       const steps = outdoorPlanSteps[turn.action];
-      if (steps && callbacks.current.supervision?.() === "strict") {
+      if (steps && /先(?:给|列|拟|出|看).{0,8}计划|先.{0,6}计划.{0,8}(?:确认|批准)/u.test(message)) {
         const zoneNames = turn.facts.zones?.filter(zone => message.includes(zone.evidence)).map(zone => zone.name) ?? [];
         const needsZones = !plan.zones.length && (turn.action === "main-routes" || turn.action === "objects");
         const showZoneNames = zoneNames.length > 0 && (turn.action === "zones" || turn.action === "revise");
@@ -2770,7 +2802,7 @@ export function useOutdoorAgentWorkflow(input: {
             ? `${step}（${zoneNames.join("、")}）`
             : step),
         ];
-        updatePendingPlan({ steps: proposedSteps, turn, message, base, selected: JSON.stringify(selected), job });
+        updatePendingPlan({ steps: proposedSteps, turn, message, base, selected: JSON.stringify(selected), job, documents: documents??[], imageCount: images?.length??0 });
         status("计划已拟好，等你批准。", "confirm");
         return true;
       }
@@ -2989,6 +3021,8 @@ export function useOutdoorAgentWorkflow(input: {
       status("这张操作卡已过期，请使用当前任务卡；未执行。", "blocked");
       return;
     }
+    lastRequestRef.current=null;
+    lastActionRef.current={scope:scopeRef.current,ownerId:currentActorId(),args:[action,choice,reference,query,accessKind]};
     const plan = callbacks.current.bridge()?.getPlan();
     const refs =
       plan && reference
@@ -3051,7 +3085,7 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     try {
-      await act(expected.turn, expected.message, true);
+      await act(expected.turn, expected.message, true, expected.documents, expected.imageCount);
     } catch (error) {
       status(error instanceof Error ? error.message : "未能执行已批准的计划。", "blocked");
     }
@@ -3083,7 +3117,9 @@ export function useOutdoorAgentWorkflow(input: {
       );
       return;
     }
-    await handle(pending.message);
+    const request=lastRequestRef.current;
+    await handle(pending.message,request?.message===pending.message?request.clarification:undefined,
+      request?.message===pending.message?request.images:undefined,request?.message===pending.message?request.documents:undefined);
   }
   // 2026-11-16 用户指令：登录后不要再让人点一次「继续这次搜索」——待续需求自动接上，
   // 「已登录 · 可以继续」那张卡不再存在。每条等待只自动续一次；过期/跨账户等守卫失败时
@@ -3138,6 +3174,16 @@ export function useOutdoorAgentWorkflow(input: {
   };
   return {
     state,
+    retryLastRequest: async ():Promise<boolean> => {
+      const request=lastRequestRef.current;
+      const previous=request??lastActionRef.current;
+      if(!previous||previous.scope!==scopeRef.current||renderedScope!==scopeRef.current)return false;
+      if(previous.ownerId!==currentActorId()){
+        status('账号已变化，请在当前账号重新发送需求；没有重放原账号请求。','blocked');return true;
+      }
+      if(request)return handle(request.message,request.clarification,request.images,request.documents);
+      await action(...lastActionRef.current!.args);return true;
+    },
     designSteps,
     canvasNote: state.scope === input.scope ? canvasNote : null,
     thought: state.scope === input.scope ? thought : null,
@@ -3243,7 +3289,7 @@ export function useOutdoorAgentWorkflow(input: {
     scopeConfirmed: () => {
       const plan = callbacks.current.bridge()?.getPlan();
       return !!plan && (stateRef.current.confirmedBoundary === boundaryKey(plan)
-        || (callbacks.current.supervision?.() !== "strict" && !stateRef.current.pendingBoundary && checkBoundaryRing(plan.boundary).ok));
+        || (currentSupervision() !== "strict" && !stateRef.current.pendingBoundary && checkBoundaryRing(plan.boundary).ok));
     },
     reconcileCanvasStage,
     proposal,

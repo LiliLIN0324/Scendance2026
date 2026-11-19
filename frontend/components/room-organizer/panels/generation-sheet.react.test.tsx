@@ -10,6 +10,7 @@ import { GenerationSheetHost } from './generation-sheet';
 import { closeGenerationSheet, openGenerationSheet, resetGenerationSheetForTests } from '../lib/generation-sheet';
 import { clearGeneratedFacilityModelsForTests, consumeFacilityGenerateLink } from '../lib/facility-generated-models';
 import { clearStagedMaterialGenerateForTests, stageMaterialGenerate } from '../lib/material-generate';
+import { setAgentSupervision } from '../lib/agent-supervision-store';
 
 /**
  * 面板的两件事：① 来路决定标题与首层；② 模型这条是真提交（额度确认是提交前的闸门）。
@@ -203,7 +204,8 @@ describe('统一生成面板', () => {
     }
   });
 
-  it('属性卡入口：标题「生成模型」，先过额度确认才真提交', async () => {
+  it('自主权限：自动档也必须在属性卡单独确认额度才创建付费任务', async () => {
+    setAgentSupervision('auto');
     render(<GenerationSheetHost controller={controller} />);
     act(() => openGenerationSheet({ task: 'model', scope: 'facility', facility: { id: 'f-1', name: '沙滩椅' } }));
 

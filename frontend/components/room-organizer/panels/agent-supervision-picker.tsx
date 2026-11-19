@@ -11,25 +11,13 @@
  * 存的值认不出来时回落到「关键节点」（normalizeSupervision），比自动更保守。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { setAgentSupervision, useAgentSupervision } from '../lib/agent-supervision-store';
 import {
   SUPERVISION_LEVELS,
-  normalizeSupervision,
   supervisionLevelInfo,
   type SupervisionLevel,
 } from '../lib/agent-supervision';
-
-const STORAGE_KEY = 'scendance.agent.supervision';
-
-function readStored(): SupervisionLevel {
-  if (typeof window === 'undefined') return 'key-points';
-  try {
-    return normalizeSupervision(window.localStorage.getItem(STORAGE_KEY));
-  } catch {
-    // 隐私模式下 localStorage 会抛：读不到就按默认档，不因为读偏好失败挡住面板。
-    return 'key-points';
-  }
-}
 
 export function AgentSupervisionPicker({ value, onChange, disabled = false }: {
   /** 受控值；不传则自己从 localStorage 起。 */
@@ -38,21 +26,11 @@ export function AgentSupervisionPicker({ value, onChange, disabled = false }: {
   disabled?: boolean | undefined;
 }): JSX.Element {
   const controlled = value !== undefined;
-  const [stored, setStored] = useState<SupervisionLevel>(readStored);
+  const stored = useAgentSupervision();
   const current = controlled ? value! : stored;
 
-  // 外部改了受控值时不回写自己那份，避免两套真值打架；非受控才落盘。
-  useEffect(() => {
-    if (controlled) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, stored);
-    } catch {
-      // 存不下就只当次生效，不影响本次选择。
-    }
-  }, [controlled, stored]);
-
   const pick = useCallback((level: SupervisionLevel) => {
-    if (!controlled) setStored(level);
+    if (!controlled) setAgentSupervision(level);
     onChange?.(level);
   }, [controlled, onChange]);
 
