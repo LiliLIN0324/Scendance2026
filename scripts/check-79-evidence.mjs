@@ -59,6 +59,47 @@ function normalizeCaseKey(file, evidenceDir) {
   return parts.length > 1 ? parts[0] : null;
 }
 
+function collectNumbers(value, output = new Set()) {
+  if (typeof value === 'number' && Number.isFinite(value)) output.add(value);
+  else if (Array.isArray(value)) for (const item of value) collectNumbers(item, output);
+  else if (value && typeof value === 'object') for (const item of Object.values(value)) collectNumbers(item, output);
+  return output;
+}
+
+function collectLocalActivityIds(value, output = new Set()) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectLocalActivityIds(item, output);
+  } else if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      if (key === 'localActivityId' && typeof item === 'string' && item.trim()) output.add(item.trim());
+      else collectLocalActivityIds(item, output);
+    }
+  }
+  return output;
+}
+
+function readingsTransitions(text) {
+  const output = [];
+  for (const match of String(text ?? '').matchAll(/(\d+(?:\.\d+)?)\s*(?:B)?\s*→\s*(\d+(?:\.\d+)?)/g)) {
+    output.push({ from: Number(match[1]), to: Number(match[2]), raw: match[0] });
+  }
+  return output;
+}
+
+function validateCasShape(file, data, root, issues) {
+  const before = data?.before?.revision;
+  const after = data?.after?.revision;
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return;
+  if (after <= before) issues.push(`CAS 原始证据不自洽：${relative(root, file)} 的 revision ${before}→${after} 没有递增`);
+  const applied = data?.applied?.body?.revision;
+  if (Number.isFinite(applied) && applied !== after) {
+    issues.push(`CAS 原始证据不自洽：${relative(root, file)} 的 applied.revision=${applied}，after.revision=${after}`);
+  }
+  if (data?.stale?.body && data.stale.body.conflict !== true) {
+    issues.push(`CAS 原始证据不自洽：${relative(root, file)} 的 stale 写入没有 conflict=true`);
+  }
+}
+
 function evidencePaths(text, evidenceDir, root) {
   const found = [];
   let lastDir = evidenceDir;
@@ -108,6 +149,7 @@ function validate(root) {
 
   const rows = Array.isArray(ledger.ledger) ? ledger.ledger : [];
   const referencedFiles = new Set();
+  const evidenceByCase = new Map();
   const seen = new Set();
   for (const row of rows) {
     const id = Number(row?.case);
@@ -129,10 +171,15 @@ function validate(root) {
     } else {
       const paths = evidencePaths(row.evidence, evidenceDir, root);
       if (!paths.length) issues.push(`case #${id} evidence 里没有可核对的 docs/evidence/79 路径`);
+      const valid = [];
       for (const file of paths) {
         if (!existsSync(file)) issues.push(`case #${id} 引用的证据不存在：${relative(root, file)}`);
-        else referencedFiles.add(resolve(file));
+        else {
+          referencedFiles.add(resolve(file));
+          valid.push(resolve(file));
+        }
       }
+      evidenceByCase.set(id, valid);
     }
     const bothPass = row.browser === 'pass' && row.cloud === 'pass';
     if (bothPass && row.conclusion !== 'pass') issues.push(`case #${id} 浏览器与云端都 pass，但 conclusion 是 ${row.conclusion}`);
@@ -183,6 +230,7 @@ function validate(root) {
 
   // 证据指纹：只核对台账实际引用的 JSON；未引用的失败样本保留审计，不参与结论。
   const hashes = new Map();
+  const parsedEvidence = new Map();
   for (const file of allJsonFiles(evidenceDir)) {
     if (resolve(file) === resolve(ledgerFile)) continue;
     if (!referencedFiles.has(resolve(file))) continue;
@@ -193,12 +241,15 @@ function validate(root) {
       issues.push(`证据文件无法读取：${relative(root, file)}（${String(error)}）`);
       continue;
     }
+    let data;
     try {
-      JSON.parse(readFileSync(file, 'utf8'));
+      data = JSON.parse(readFileSync(file, 'utf8'));
     } catch {
       issues.push(`证据 JSON 解析失败：${relative(root, file)}`);
       continue;
     }
+    parsedEvidence.set(resolve(file), data);
+    validateCasShape(file, data, root, issues);
     const caseKey = normalizeCaseKey(file, evidenceDir);
     if (!caseKey) continue;
     const name = basename(file);
@@ -218,6 +269,35 @@ function validate(root) {
       issues.push(`证据指纹重复（${digest.slice(0, 12)}…）且文件名不一致，疑似跨 case 复制：${[...entry.cases].join(' / ')}；${entry.files.join('；')}`);
     } else {
       warnings.push(`共享证据（同指纹同文件名，允许）：${[...entry.cases].join(' / ')}；${entry.files.join('；')}`);
+    }
+  }
+
+  // 读数语义：读数里写的数字必须能在本 case 引用的原始 JSON 里找到；
+  // 带 localActivityId 的云端证据只能归给 readings 明写该 ID 的 case。
+  for (const row of rows) {
+    const id = Number(row?.case);
+    if (!Number.isInteger(id)) continue;
+    const files = evidenceByCase.get(id) ?? [];
+    const data = files.map(file => parsedEvidence.get(file)).filter(Boolean);
+    const transitions = readingsTransitions(row.readings);
+    if (!data.length && transitions.length) {
+      issues.push(`case #${id} readings 有数字读数，但没有引用可解析的 JSON，无法核对`);
+    }
+    const numbers = new Set();
+    const activityIds = new Set();
+    for (const item of data) {
+      collectNumbers(item, numbers);
+      collectLocalActivityIds(item, activityIds);
+    }
+    for (const transition of transitions) {
+      if (!numbers.has(transition.from) || !numbers.has(transition.to)) {
+        issues.push(`case #${id} readings 的 ${transition.raw} 没有原始 JSON 同时包含 ${transition.from} 和 ${transition.to}`);
+      }
+    }
+    for (const activityId of activityIds) {
+      if (!String(row.readings ?? '').includes(activityId)) {
+        issues.push(`case #${id} 引用了云端活动 ${activityId}，但 readings 没有归属；疑似 CAS/活动错配`);
+      }
     }
   }
 
@@ -259,7 +339,7 @@ function printHuman(result, strict) {
     console.error(`[79] 证据门禁 FAIL：${result.issues.length} 个问题`);
     return 1;
   }
-  console.log('[79] 证据台账自洽：计数、维度、路径、指纹、签字边界均通过');
+  console.log('[79] 证据台账自洽：计数、维度、路径、指纹、读数、签字边界均通过');
   if (strict) {
     if (!result.allPass) {
       console.error('[79] 发布闸门 FAIL：证据未齐 11/11，不能进入发布签字');
