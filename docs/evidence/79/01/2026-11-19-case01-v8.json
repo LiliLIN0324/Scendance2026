@@ -1,0 +1,66 @@
+{
+  "ranAt": "2026-11-19T10:17:03.450Z",
+  "account": "walkthrough-79@scendance.test",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "blank": {
+    "slot": "scendance-outdoor-plan-v1:house-jguucp1b",
+    "projectId": "house-jguucp1b",
+    "name": "新活动场地",
+    "updatedAt": "2026-11-19T10:17:12.071Z",
+    "counts": {
+      "zones": 0,
+      "routes": 0,
+      "entrances": 0,
+      "workers": 0,
+      "facilities": 0,
+      "objects": 0,
+      "boundary": 0
+    },
+    "planLen": 167
+  },
+  "composite": {
+    "taskText": "需要补充 没有候选，请补充城市或地址 在「湖滨银泰in77 广场」做设计 已完成 2 步 · 查看最近步骤 我理解为「湖滨银泰in77 广场」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 没搜到匹配「湖滨银泰in77 广场」的场地。当前方案没有改动：已确认的场地、边界和分区都原样保留。 下一步可以：① 换关键词或加上城市名再说一次；② 点右栏「地图选址」手动圈一块；③ 先按当前场地往下做，之后再来换。 在杭州湖滨银泰in77 广场做设计 可在下面继续补充要求；预览不等于已写入方案。",
+    "calls": [
+      "POST 200"
+    ],
+    "writes": [
+      "POST 200 /functions/v1/conversation-api/assistant/chat/stream"
+    ],
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-jguucp1b",
+      "projectId": "house-jguucp1b",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T10:17:12.071Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    }
+  },
+  "ok": false,
+  "error": "Error: 手画活动范围入口没有出现\n    at file:///C:/%E5%B9%95%E6%99%AF/Scendance2026/docs/evidence/79/tools/case-01-v8.mjs:38:39",
+  "taskText": "需要补充 没有候选，请补充城市或地址 在「湖滨银泰in77 广场」做设计 已完成 2 步 · 查看最近步骤 我理解为「湖滨银泰in77 广场」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 没搜到匹配「湖滨银泰in77 广场」的场地。当前方案没有改动：已确认的场地、边界和分区都原样保留。 下一步可以：① 换关键词或加上城市名再说一次；② 点右栏「地图选址」手动圈一块；③ 先按当前场地往下做，之后再来换。 在杭州湖滨银泰in77 广场做设计 可在下面继续补充要求；预览不等于已写入方案。",
+  "final": {
+    "slot": "scendance-outdoor-plan-v1:house-jguucp1b",
+    "projectId": "house-jguucp1b",
+    "name": "新活动场地",
+    "updatedAt": "2026-11-19T10:17:12.071Z",
+    "counts": {
+      "zones": 0,
+      "routes": 0,
+      "entrances": 0,
+      "workers": 0,
+      "facilities": 0,
+      "objects": 0,
+      "boundary": 0
+    },
+    "planLen": 167
+  }
+}
