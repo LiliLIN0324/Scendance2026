@@ -67,13 +67,9 @@ function collectNumbers(value, output = new Set()) {
 }
 
 function collectLocalActivityIds(value, output = new Set()) {
-  if (Array.isArray(value)) {
-    for (const item of value) collectLocalActivityIds(item, output);
-  } else if (value && typeof value === 'object') {
-    for (const [key, item] of Object.entries(value)) {
-      if (key === 'localActivityId' && typeof item === 'string' && item.trim()) output.add(item.trim());
-      else collectLocalActivityIds(item, output);
-    }
+  // 只认顶层 localActivityId；cloudSql.list 这类历史列表不能拿来替当前用例归属。
+  if (value && typeof value === 'object' && typeof value.localActivityId === 'string' && value.localActivityId.trim()) {
+    output.add(value.localActivityId.trim());
   }
   return output;
 }

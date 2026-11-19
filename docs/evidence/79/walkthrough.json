@@ -104,9 +104,9 @@
       "browser": "pass",
       "cloud": "blocked",
       "conclusion": "partial",
-      "evidence": "docs/evidence/79/09/2026-11-19-case09-round6.md；2026-11-19-case09-v2.json",
-      "readings": "应用（分区 2 / 1438B）→ 画布 Ctrl+Z 撤销（分区 0 / 574B，红线保留，撤销期间零云端写）→ 重发同一句再应用一次（分区 2 / 1438B，与第一次逐项一致）；该轮两条 PUT /outdoor-plans 都是 404，方案没有写入云端",
-      "gap": "同轮 #9 浏览器链的 revision 前后对照未取到；该轮 house-7jblibyk / 1438B 两次 PUT 均 404，部署后未对同一条方案重跑；08/2026-11-19-cloud-revision.json 的 3→4 属于 #8b 的 house-3ik2jdf2 / 1440B，不计入 #9；undoGroup 是室内场景域字段，户外域没有云端撤销端点"
+      "evidence": "docs/evidence/79/09/2026-11-19-case09-round6.md；2026-11-19-case09-v2.json；docs/evidence/79/09/2026-11-19-case09-v3.md；docs/evidence/79/09/v3/2026-11-19-case09-v3.json",
+      "readings": "第六轮 v2：应用（分区 2 / 1438B）→ 画布 Ctrl+Z 撤销（分区 0 / 574B，红线保留，撤销期间零云端写）→ 重发同一句再应用一次（分区 2 / 1438B，与第一次逐项一致）；该轮两条 PUT /outdoor-plans 都是 404，方案没有写入云端。2026-11-19 v3：手画边界 4 点 / 568B → 重试预览 zones 4 / 2340B；应用前后与撤销/再应用本机均保持 4 / 2340B，未捕获同轮 PUT；末次 GET /outdoor-plans 401",
+      "gap": "同轮 #9 浏览器链的 revision 前后对照未取到；第六轮 house-7jblibyk / 1438B 两次 PUT 均 404；2026-11-19 v3 经代理复跑已到 zones 4 / 2340B，但应用后本机未变、netlog 未捕获 PUT，末次 cloud GET 401；Management SQL 的 house-lrvrntin / revision 3 只作旁证，不能替代同轮写读。08/2026-11-19-cloud-revision.json 的 3→4 属于 #8b 的 house-3ik2jdf2 / 1440B，不计入 #9；undoGroup 是室内场景域字段，户外域没有云端撤销端点"
     },
     {
       "case": 10,
