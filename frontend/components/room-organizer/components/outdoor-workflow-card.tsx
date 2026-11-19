@@ -108,9 +108,12 @@ export function OutdoorWorkflowCard({
   onSearchPlace,
   onAdjustPlan,
   replyPending = false,
+  showCaption = true,
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
   replyPending?: boolean;
+  /** T1-c：已有 ToolCallTrace 当前执行状态时，卡内不再重复阶段图注；真实红线轮廓不受影响。 */
+  showCaption?: boolean;
   onAdjustPlan?: () => void;
   /** 地图优先第一步：任务卡上直接给「搜索地点」入口，不用让人去画布左上角找。 */
   onSearchPlace?: (() => void) | undefined;
@@ -268,7 +271,7 @@ export function OutdoorWorkflowCard({
           )}
         </div>
       )}
-      {!flow.proposal && !showScopeGuide && <p className="ap-task-caption">{STAGE_CAPTIONS[flow.state.stage]}</p>}
+      {!flow.proposal && !showScopeGuide && (showCaption ? <p className="ap-task-caption ap-stage-caption">{STAGE_CAPTIONS[flow.state.stage]}</p> : null)}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         flow.noticeView ? (
           <section

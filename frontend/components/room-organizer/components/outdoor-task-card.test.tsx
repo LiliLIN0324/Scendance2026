@@ -18,3 +18,20 @@ it('只有真实工作态有停止，最近3步折叠，下一步回填而非擅
   act(() => buttons.find(b => b.textContent === '80人市集')!.click()); expect(prefill).toHaveBeenCalledWith('80人市集');
   act(() => buttons.find(b => b.textContent?.includes('模型候选'))!.click()); expect(inspect).toHaveBeenCalledWith('stage');
 });
+it('有当前执行轨迹时任务卡收成默认关闭的任务过程，停止钮、子卡与下一步仍在折叠外', () => {
+  host = document.createElement('div'); document.body.append(host); root = createRoot(host);
+  const stop = vi.fn();
+  const task: OutdoorTaskProgress = { intent: '45人讲座', state: 'working', action: '读取路网', steps: ['1','2','3','4'] };
+  act(() => root!.render(<OutdoorTaskCard task={task} canStop historical onStop={stop} onPrefill={vi.fn()}>
+    <span data-testid="child-confirm">确认卡</span>
+  </OutdoorTaskCard>));
+  const history = host.querySelector<HTMLDetailsElement>('details.ap-task-history')!;
+  expect(history).not.toBeNull();
+  expect(history.open).toBe(false);
+  expect(history.querySelector('summary')?.textContent).toContain('任务过程');
+  expect(history.textContent).toContain('读取路网');
+  expect(host.querySelector('[data-testid="child-confirm"]')).not.toBeNull();
+  const stopButton = [...host.querySelectorAll('button')].find(button => button.textContent === '停止查找')!;
+  expect(history.contains(stopButton)).toBe(false);
+  act(() => stopButton.click()); expect(stop).toHaveBeenCalledTimes(1);
+});

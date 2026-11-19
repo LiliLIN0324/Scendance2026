@@ -71,4 +71,9 @@ describe('OutdoorWorkflowCard 上幅（T1-d）', () => {
 
     expect(container.querySelector('.ap-task-map')).toBeNull();
   });
+  it('当前执行轨迹存在时不重复阶段图注', () => {
+    const { container } = render(<OutdoorWorkflowCard flow={makeFlow() as never} showCaption={false} />);
+
+    expect(container.querySelector('.ap-stage-caption')).toBeNull();
+  });
 });
