@@ -113,32 +113,34 @@ it('translated ENU anchors do not turn an 80x70m site into a different scale',()
  * 「目前支持」话术与示例说法从注册表动态生成；注册新模板接线自动跟上，空注册表给统一话术。
  */
 describe('D1 模板注册表',()=>{
- /** 测试注入的最小模板：只验证注册表接线（识别/话术/派发），不承载真实几何。 */
- function weddingTemplate(): OutdoorEventTemplate {
+ /** 测试注入的最小模板：只验证注册表接线（识别/话术/派发），不承载真实几何。
+  * 2026-11-20 D2 落了八类真实模板（含婚礼），注入桩不能再借「婚礼」占位——
+  * 改用注册表里不存在的类型，避免与真实条目抢 first-match。 */
+ function stubTemplate(): OutdoorEventTemplate {
   return {
-   id:'wedding', label:'婚礼', match:/婚礼/u, example:'30 人婚礼', note:'婚礼', aisleWidth:3,
+   id:'registry-stub', label:'测试活动甲', match:/测试活动甲/u, example:'50 人测试活动甲', note:'测试活动甲', aisleWidth:3,
    measure:()=>({ width:22, depth:40, mainHeight:20, aisleEndY:30 }),
-   zones:ctx=>({ main:ctx.zone('reserved','婚礼区',1,7,ctx.width-2,ctx.layout.mainHeight), stage:null }),
+   zones:ctx=>({ main:ctx.zone('reserved','测试区',1,7,ctx.width-2,ctx.layout.mainHeight), stage:null }),
    fill:ctx=>(ctx.place('booth-2x2','仪式亭',4,10,2,2,ctx.main)?1:null),
   };
  }
  it('注册新模板：识别、「目前支持」话术、提案派发都自动跟上；撤掉即回退',()=>{
-  const template=weddingTemplate();
+  const template=stubTemplate();
   outdoorEventTemplates.push(template);
   try{
-   expect(supportedOutdoorEvent('户外婚礼')?.id).toBe('wedding');
+   expect(supportedOutdoorEvent('来一场测试活动甲')?.id).toBe('registry-stub');
    expect(supportedOutdoorEvent('80 人市集')?.id).toBe('market');
    expect(supportedOutdoorEvent('45 人讲座')?.id).toBe('lecture');
-   expect(outdoorEventIssue('婚礼',30)).toBeNull();
-   expect(outdoorEventIssue(null,null)).toContain('婚礼');
-   expect(outdoorEventTemplatesSummary()).toContain('婚礼');
-   const p=build('婚礼',30);
+   expect(outdoorEventIssue('测试活动甲',30)).toBeNull();
+   expect(outdoorEventIssue(null,null)).toContain('测试活动甲');
+   expect(outdoorEventTemplatesSummary()).toContain('测试活动甲');
+   const p=build('测试活动甲',30);
    expect(p).not.toBeNull();
    expect(p!.facilities.some(f=>f.name==='仪式亭')).toBe(true);
   }finally{
    outdoorEventTemplates.splice(outdoorEventTemplates.indexOf(template),1);
   }
-  expect(supportedOutdoorEvent('户外婚礼')).toBeNull();
+  expect(supportedOutdoorEvent('测试活动甲')).toBeNull();
  });
  it('注册表空跑：统一话术，不虚构类型',()=>{
   const saved=outdoorEventTemplates.splice(0,outdoorEventTemplates.length);
@@ -149,6 +151,105 @@ describe('D1 模板注册表',()=>{
   }finally{
    outdoorEventTemplates.push(...saved);
   }
+ });
+});
+
+/**
+ * D2 模板扩展（2026-11-20）：相亲/社交市集、发布会、婚礼、演出/音乐会、美食节、车展、运动会、展览
+ * 八类注册进注册表。每类三条底线：正例出真实提案、场地不足整版否决、无确认入口不出提案；
+ * 注册表顺序（相亲先于市集、发布会先于讲座、车展先于展览）与「目前支持」话术一并锁定。
+ */
+describe('D2 模板扩展（八类新活动模板）',()=>{
+ /** 12×10m 小场地：任何模板占地都放不下，用于「场地不足」反例（带场内入口，排除无入口干扰）。 */
+ const tiny: PlanPoint[]=[{x:-6,y:-5},{x:6,y:-5},{x:6,y:5},{x:-6,y:5}];
+ const tinyEntrance: PlanNode[]=[{...south,position:{x:0,y:-5}}];
+ it.each([
+  ['40 人相亲会',40],['80 人发布会',80],['30 人婚礼',30],['120 人音乐会',120],
+  ['80 人美食节',80],['100 人车展',100],['90 人运动会',90],['60 人展览',60],
+ ])('%s：正例出提案、场地不足与无入口各被否决',(event,guests)=>{
+  const p=build(event,guests);
+  expect(p,`${event} 应出几何提案`).not.toBeNull();
+  expect(p!.facilities.length).toBeGreaterThan(2); // 除公共签到台/医疗帐篷外还有模板自有设施
+  expect(build(event,guests,tiny,tinyEntrance),`${event} 场地不足应整版否决`).toBeNull();
+  expect(build(event,guests,boundary,[]),`${event} 无确认入口不出提案`).toBeNull();
+ });
+ it('相亲/社交市集：联谊桌成排，不落普通市集摊位网格',()=>{
+  const p=build('40 人相亲会',40)!;
+  const tables=p.facilities.filter(f=>f.name.startsWith('相亲桌'));
+  expect(tables).toHaveLength(10);
+  expect(tables.every(f=>f.templateId==='oneplan:scale:round-table-and-chairs')).toBe(true);
+  expect(p.facilities.some(f=>f.name.startsWith('市集摊位'))).toBe(false);
+  expect(p.zones.some(z=>z.name==='联谊区')).toBe(true);
+ });
+ it('发布会：观众座椅+发布舞台+主视觉大屏；讲座正则不再吃掉发布会',()=>{
+  expect(supportedOutdoorEvent('发布会')?.id).toBe('launch');
+  const p=build('80 人发布会',80)!;
+  expect(p.facilities.filter(f=>f.templateId.includes('chair'))).toHaveLength(80);
+  expect(p.facilities.some(f=>f.name==='发布舞台')).toBe(true);
+  expect(p.facilities.some(f=>f.name==='主视觉大屏')).toBe(true);
+  expect(p.zones.some(z=>z.name==='发布区')).toBe(true);
+ });
+ it('婚礼：宾客座椅分块+仪式台+拱门，仪式区在观礼区深端',()=>{
+  const p=build('30 人婚礼',30)!;
+  expect(p.facilities.filter(f=>f.name.startsWith('宾客座椅'))).toHaveLength(30);
+  expect(p.facilities.some(f=>f.name==='仪式台')).toBe(true);
+  expect(p.facilities.some(f=>f.name==='婚礼拱门')).toBe(true);
+  const stage=p.zones.find(z=>z.name==='仪式区')!;
+  const main=p.zones.find(z=>z.name==='观礼区')!;
+  // 婚礼拱门恰在观礼/仪式区交界线上（仪式动线的门槛），两区相邻不重叠。
+  expect(Math.min(...stage.polygon.map(q=>q.y))).toBeGreaterThanOrEqual(Math.max(...main.polygon.map(q=>q.y)));
+ });
+ it('演出/音乐会：舞台两侧带侧屏，观众座椅成矩阵',()=>{
+  const p=build('120 人音乐会',120)!;
+  expect(p.facilities.filter(f=>f.templateId.includes('chair'))).toHaveLength(120);
+  expect(p.facilities.some(f=>f.name==='演出舞台')).toBe(true);
+  expect(p.facilities.filter(f=>f.name.startsWith('侧屏'))).toHaveLength(2);
+ });
+ it('美食节：餐车列+就餐长桌，不是摊位网格也不是讲座舞台',()=>{
+  const p=build('80 人美食节',80)!;
+  expect(p.facilities.filter(f=>f.name.startsWith('美食餐车'))).toHaveLength(3);
+  expect(p.facilities.filter(f=>f.name.startsWith('就餐长桌'))).toHaveLength(10);
+  expect(p.facilities.some(f=>f.templateId.includes('stage'))).toBe(false);
+ });
+ it('车展：展车按观展通道成网，附咨询帐篷',()=>{
+  const p=build('100 人车展',100)!;
+  const cars=p.facilities.filter(f=>f.name.startsWith('展车'));
+  expect(cars).toHaveLength(5);
+  expect(cars.every(f=>f.templateId==='oneplan:scale:car')).toBe(true);
+  expect(p.facilities.some(f=>f.name==='咨询帐篷')).toBe(true);
+ });
+ it('运动会：终点龙门架+检录帐篷+赛道界标锥桶+休息长凳',()=>{
+  const p=build('90 人运动会',90)!;
+  expect(p.facilities.some(f=>f.name==='终点龙门架')).toBe(true);
+  expect(p.facilities.some(f=>f.name==='检录帐篷')).toBe(true);
+  expect(p.facilities.filter(f=>f.name.startsWith('赛道界标')).length).toBeGreaterThanOrEqual(6);
+  expect(p.facilities.filter(f=>f.name.startsWith('休息长凳'))).toHaveLength(3);
+ });
+ it('展览：3×3 展位成排，与市集摊位区分',()=>{
+  const p=build('60 人展览',60)!;
+  const booths=p.facilities.filter(f=>f.name.startsWith('展位'));
+  expect(booths).toHaveLength(15);
+  expect(booths.every(f=>f.size.width===3&&f.size.depth===3)).toBe(true);
+ });
+ it('注册表顺序：相亲先于市集、发布会先于讲座、车展先于展览',()=>{
+  expect(supportedOutdoorEvent('相亲市集')?.id).toBe('social');
+  expect(supportedOutdoorEvent('80 人市集')?.id).toBe('market');
+  expect(supportedOutdoorEvent('新品发布会')?.id).toBe('launch');
+  expect(supportedOutdoorEvent('45 人讲座')?.id).toBe('lecture');
+  expect(supportedOutdoorEvent('户外婚礼')?.id).toBe('wedding');
+  // brief.event 可能整串含两族词（模型分类产物），数组顺序即裁判。
+  expect(supportedOutdoorEvent('汽车展览会')?.id).toBe('car-show');
+  expect(supportedOutdoorEvent('100 人展览')?.id).toBe('exhibition');
+  expect(supportedOutdoorEvent('趣味运动会')?.id).toBe('sports');
+ });
+ it('「目前支持」话术随八类新模板更新；缺人数给可操作出路',()=>{
+  const summary=outdoorEventTemplatesSummary();
+  for(const label of ['相亲/社交市集','市集','发布会','讲座','婚礼','演出/音乐会','美食节','车展','运动会','展览']){
+   expect(summary).toContain(label);
+  }
+  expect(outdoorEventIssue('美食节',null)).toContain('人数');
+  expect(outdoorEventIssue('车展',null)).toContain('人数');
+  expect(outdoorEventIssue('相亲会',null)).toContain('人数');
  });
 });
 /**

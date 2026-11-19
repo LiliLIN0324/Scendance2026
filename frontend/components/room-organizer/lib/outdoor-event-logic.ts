@@ -1,4 +1,4 @@
-/** 可解释的户外活动 v1：讲座/市集走注册表几何模板；沿岸类（钓鱼等）走参照排布；其他类型走通用需求路径。不是消防/容量安全认证。 */
+/** 可解释的户外活动 v1：十类活动走注册表几何模板（D2：相亲/社交市集、市集、发布会、讲座、婚礼、演出/音乐会、美食节、车展、运动会、展览）；沿岸类（钓鱼等）走参照排布；其他类型走通用需求路径。不是消防/容量安全认证。 */
 import type { PlanFacility, PlanNode, PlanPoint, PlanRoute, PlanZone } from '../../../../supabase/functions/_shared/site-plan';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import { planPointInRing, planSegmentsCrossStrict } from './site-plan-editing';
@@ -105,11 +105,11 @@ function lectureDerived(guests: number): { cols: number; rows: number; width: nu
   return { cols, rows, width: Math.max(22, cols * 0.95 + 7), depth: rows * 1.2 + 23 };
 }
 
-/** 讲座/会议模板：观众座椅矩阵面向舞台，讲台压舞台区深端。 */
+/** 讲座/会议模板：观众座椅矩阵面向舞台，讲台压舞台区深端。（发布会 2026-11-20 D2 拆为独立模板，正则不再收它。） */
 const lectureOutdoorEventTemplate: OutdoorEventTemplate = {
   id: 'lecture',
   label: '讲座',
-  match: /讲座|会议|论坛|发布会/u,
+  match: /讲座|会议|论坛/u,
   example: '45 人讲座',
   note: '讲座/会议',
   aisleWidth: 3,
@@ -137,14 +137,328 @@ const lectureOutdoorEventTemplate: OutdoorEventTemplate = {
 };
 
 /**
- * 模板注册表：只回答「有没有几何模板」（讲座/市集），不是活动准入闸门。
+ * D2（2026-11-20）八类新模板共用的小件 id 均取物件库规范格式（`oneplan:scale:<slug>` /
+ * `oneplan:icon:<slug>`，resolveFacilityTemplate 可解析）；观众座椅沿用讲座既有
+ * `oneplan:scale-fg:chair`（存量兼容格式，plan 层与规范 id 等价）。
+ */
+
+/** 相亲/社交市集参数表：约每 4 人一桌、两列成排、排距 4m；占地与市集同构（19m 宽），联谊长桌替摊位。 */
+function socialDerived(guests: number): { tables: number; rows: number; width: number; depth: number } {
+  const tables = Math.ceil(guests / 4);
+  const rows = Math.ceil(tables / 2);
+  return { tables, rows, width: 19, depth: rows * 4 + 13 };
+}
+
+/** 相亲/社交市集模板：联谊桌沿中央通道成排。注册在市集之前——「相亲市集」落联谊桌，不落摊位网格。 */
+const socialOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'social',
+  label: '相亲/社交市集',
+  match: /相亲|联谊|交友|社交/u,
+  example: '40 人相亲会',
+  note: '相亲/社交联谊',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = socialDerived(guests);
+    return { width, depth, mainHeight: depth - 10, aisleEndY: depth - 1 };
+  },
+  zones(ctx) {
+    return { main: ctx.zone('reserved', '联谊区', 1, 7, ctx.width - 2, ctx.layout.mainHeight), stage: null };
+  },
+  fill(ctx) {
+    const { tables, rows } = socialDerived(ctx.guests);
+    let count = 0;
+    for (let row = 0; row < rows; row += 1) for (const x of [ctx.width / 2 - 4, ctx.width / 2 + 4]) {
+      if (count < tables && ctx.place('oneplan:scale:round-table-and-chairs', `相亲桌 ${count + 1}`, x, 8.5 + row * 4, 2, 2, ctx.main)) count += 1;
+    }
+    if (count < tables) return null;
+    return count;
+  },
+};
+
+/** 发布会模板：观众参数复用讲座推导（卡面口径），舞台扩为 16m 发布区——大屏压台后沿、演讲台在台侧。 */
+const launchOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'launch',
+  label: '发布会',
+  match: /发布会|新品发布|产品发布|品牌发布/u,
+  example: '80 人发布会',
+  note: '发布会',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = lectureDerived(guests);
+    return { width, depth, mainHeight: depth - 19, aisleEndY: depth - 11 };
+  },
+  zones(ctx) {
+    const main = ctx.zone('audience', '观众区', 1, 7, ctx.width - 2, ctx.layout.mainHeight);
+    const stage = ctx.zone('stage', '发布区', ctx.width / 2 - 8, ctx.depth - 11, 16, 9);
+    return { main, stage };
+  },
+  fill(ctx) {
+    if (!ctx.stage || !ctx.place('stage-platform-8x6', '发布舞台', ctx.width / 2, ctx.depth - 6.5, 8, 6, ctx.stage)) return null;
+    if (!ctx.place('oneplan:scale:large-screen', '主视觉大屏', ctx.width / 2, ctx.depth - 2.85, 6, 0.5, ctx.stage)) return null;
+    if (!ctx.place('oneplan:icon:podium', '演讲台', ctx.width / 2 - 5.5, ctx.depth - 6.5, 0.6, 0.6, ctx.stage)) return null;
+    const { cols, rows } = lectureDerived(ctx.guests);
+    const leftCols = Math.ceil(cols / 2);
+    let count = 0;
+    for (let row = 0; row < rows && count < ctx.guests; row += 1) for (let col = 0; col < cols && count < ctx.guests; col += 1) {
+      const offset = col < leftCols ? -(leftCols - col) * 0.95 - 1.5 : (col - leftCols + 1) * 0.95 + 1.5;
+      if (ctx.place('oneplan:scale:chair', `观众座椅 ${count + 1}`, ctx.width / 2 + offset, 8 + row * 1.2, 0.55, 0.6, ctx.main)) count += 1;
+    }
+    if (count < ctx.guests) return null;
+    return count;
+  },
+};
+
+/** 婚礼参数表：宾客座椅约 √人数 列（4–16 夹取）、排距 1.2m；占地宽 max(20, 列×0.95+8)，仪式区 14m 宽贴深端。 */
+function weddingDerived(guests: number): { cols: number; rows: number; width: number; depth: number } {
+  const cols = Math.max(4, Math.min(16, Math.ceil(Math.sqrt(guests))));
+  const rows = Math.ceil(guests / cols);
+  return { cols, rows, width: Math.max(20, cols * 0.95 + 8), depth: rows * 1.2 + 21 };
+}
+
+/** 婚礼模板：宾客座椅分左右两块留出中央红毯通道，仪式台+拱门压深端仪式区，两只音响夹台。 */
+const weddingOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'wedding',
+  label: '婚礼',
+  match: /婚礼|婚宴|结婚/u,
+  example: '30 人婚礼',
+  note: '婚礼',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = weddingDerived(guests);
+    return { width, depth, mainHeight: depth - 19, aisleEndY: depth - 13 };
+  },
+  zones(ctx) {
+    const main = ctx.zone('audience', '观礼区', 1, 7, ctx.width - 2, ctx.layout.mainHeight);
+    // 仪式区与观礼区相邻（婚礼拱门恰在交界线上，是仪式动线的门槛），通道止于区界之前。
+    const stage = ctx.zone('stage', '仪式区', ctx.width / 2 - 7, ctx.depth - 12, 14, 10);
+    return { main, stage };
+  },
+  fill(ctx) {
+    if (!ctx.stage || !ctx.place('stage-platform-8x6', '仪式台', ctx.width / 2, ctx.depth - 6.5, 8, 6, ctx.stage)) return null;
+    if (!ctx.place('oneplan:scale:inflatable-arch', '婚礼拱门', ctx.width / 2, ctx.depth - 10.8, 3, 1.2, ctx.stage)) return null;
+    if (!ctx.place('oneplan:icon:pa-speakers', '音响（左）', ctx.width / 2 - 6.5, ctx.depth - 6.5, 0.5, 0.5, ctx.stage)) return null;
+    if (!ctx.place('oneplan:icon:pa-speakers', '音响（右）', ctx.width / 2 + 6.5, ctx.depth - 6.5, 0.5, 0.5, ctx.stage)) return null;
+    const { cols, rows } = weddingDerived(ctx.guests);
+    const leftCols = Math.ceil(cols / 2);
+    let count = 0;
+    for (let row = 0; row < rows && count < ctx.guests; row += 1) for (let col = 0; col < cols && count < ctx.guests; col += 1) {
+      const offset = col < leftCols ? -(leftCols - col) * 0.95 - 1.5 : (col - leftCols + 1) * 0.95 + 1.5;
+      if (ctx.place('oneplan:scale:chair', `宾客座椅 ${count + 1}`, ctx.width / 2 + offset, 8 + row * 1.2, 0.55, 0.6, ctx.main)) count += 1;
+    }
+    if (count < ctx.guests) return null;
+    return count;
+  },
+};
+
+/** 演出/音乐会参数表：观众约 √人数 列（6–20 夹取）、排距 1.2m；占地宽 max(26, 列×0.95+10)，舞台区 16m 宽贴深端。 */
+function concertDerived(guests: number): { cols: number; rows: number; width: number; depth: number } {
+  const cols = Math.max(6, Math.min(20, Math.ceil(Math.sqrt(guests))));
+  const rows = Math.ceil(guests / cols);
+  return { cols, rows, width: Math.max(26, cols * 0.95 + 10), depth: rows * 1.2 + 25 };
+}
+
+/** 演出/音乐会模板：观众座椅矩阵面向演出舞台，两块侧屏夹台（舞台区同发布会变体加深加宽）。 */
+const concertOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'concert',
+  label: '演出/音乐会',
+  match: /演出|音乐会|演唱会|音乐节|歌舞|汇演|乐队/u,
+  example: '120 人音乐会',
+  note: '演出/音乐会',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = concertDerived(guests);
+    return { width, depth, mainHeight: depth - 19, aisleEndY: depth - 11 };
+  },
+  zones(ctx) {
+    const main = ctx.zone('audience', '观众区', 1, 7, ctx.width - 2, ctx.layout.mainHeight);
+    const stage = ctx.zone('stage', '演出区', ctx.width / 2 - 8, ctx.depth - 11, 16, 9);
+    return { main, stage };
+  },
+  fill(ctx) {
+    if (!ctx.stage || !ctx.place('stage-platform-8x6', '演出舞台', ctx.width / 2, ctx.depth - 6.5, 8, 6, ctx.stage)) return null;
+    if (!ctx.place('oneplan:scale:large-screen', '侧屏（左）', ctx.width / 2 - 6.25, ctx.depth - 6.5, 3, 0.5, ctx.stage)) return null;
+    if (!ctx.place('oneplan:scale:large-screen', '侧屏（右）', ctx.width / 2 + 6.25, ctx.depth - 6.5, 3, 0.5, ctx.stage)) return null;
+    const { cols, rows } = concertDerived(ctx.guests);
+    const leftCols = Math.ceil(cols / 2);
+    let count = 0;
+    for (let row = 0; row < rows && count < ctx.guests; row += 1) for (let col = 0; col < cols && count < ctx.guests; col += 1) {
+      const offset = col < leftCols ? -(leftCols - col) * 0.95 - 1.5 : (col - leftCols + 1) * 0.95 + 1.5;
+      if (ctx.place('oneplan:scale:chair', `观众座椅 ${count + 1}`, ctx.width / 2 + offset, 8 + row * 1.2, 0.55, 0.6, ctx.main)) count += 1;
+    }
+    if (count < ctx.guests) return null;
+    return count;
+  },
+};
+
+/** 美食节参数表：约每 30 人一辆餐车（至少 2 辆）、每 8 人一张就餐长桌；餐车列贴西半场、长桌在东半场成排，占地宽 20m。 */
+function foodFestivalDerived(guests: number): { trucks: number; tables: number; tableRows: number; width: number; depth: number } {
+  const trucks = Math.max(2, Math.ceil(guests / 30));
+  const tables = Math.ceil(guests / 8);
+  const tableRows = Math.ceil(tables / 2);
+  return { trucks, tables, tableRows, width: 20, depth: Math.max(trucks * 4, tableRows * 2.5) + 13 };
+}
+
+/** 美食节模板：餐车单列在西、就餐长桌两列成排在东，中央通道留给取餐人流。 */
+const foodFestivalOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'food-festival',
+  label: '美食节',
+  match: /美食|小吃|餐饮/u,
+  example: '80 人美食节',
+  note: '美食节，餐车+就餐长桌',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = foodFestivalDerived(guests);
+    return { width, depth, mainHeight: depth - 10, aisleEndY: depth - 1 };
+  },
+  zones(ctx) {
+    return { main: ctx.zone('reserved', '美食区', 1, 7, ctx.width - 2, ctx.layout.mainHeight), stage: null };
+  },
+  fill(ctx) {
+    const { trucks, tables, tableRows } = foodFestivalDerived(ctx.guests);
+    let count = 0;
+    for (let i = 0; i < trucks; i += 1) {
+      if (!ctx.place('food-truck-6x2.5', `美食餐车 ${i + 1}`, ctx.width / 2 - 5.75, 8.5 + i * 4, 6, 2.5, ctx.main)) return null;
+    }
+    for (let j = 0; j < tableRows * 2 && count < tables; j += 1) {
+      const x = j % 2 === 0 ? ctx.width / 2 + 3.5 : ctx.width / 2 + 6.5;
+      if (ctx.place('oneplan:scale:picnic-table', `就餐长桌 ${count + 1}`, x, 8.5 + Math.floor(j / 2) * 2.5, 1.8, 0.8, ctx.main)) count += 1;
+    }
+    if (count < tables) return null;
+    return trucks + count;
+  },
+};
+
+/** 车展参数表：约每 20 位观众一辆展车（4–24 辆夹取），四辆一排、排距 6m 观展通道；占地宽 30m。 */
+function carShowDerived(guests: number): { cars: number; carRows: number; width: number; depth: number } {
+  const cars = Math.max(4, Math.min(24, Math.ceil(guests / 20)));
+  const carRows = Math.ceil(cars / 4);
+  return { cars, carRows, width: 30, depth: carRows * 6 + 13 };
+}
+
+/** 车展模板：展车四列成网、列间即观展通道，咨询帐篷在展尾一角。注册在展览之前——整串「汽车展览会」按展车网格排。 */
+const carShowOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'car-show',
+  label: '车展',
+  match: /车展|汽车展|新车展示/u,
+  example: '100 人车展',
+  note: '车展，展车按观展通道成网',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = carShowDerived(guests);
+    return { width, depth, mainHeight: depth - 10, aisleEndY: depth - 1 };
+  },
+  zones(ctx) {
+    return { main: ctx.zone('reserved', '展车区', 1, 7, ctx.width - 2, ctx.layout.mainHeight), stage: null };
+  },
+  fill(ctx) {
+    const { cars, carRows } = carShowDerived(ctx.guests);
+    let count = 0;
+    for (let row = 0; row < carRows && count < cars; row += 1) for (const cx of [-11, -4.5, 4.5, 11]) {
+      if (count < cars && ctx.place('oneplan:scale:car', `展车 ${count + 1}`, ctx.width / 2 + cx, 8.5 + row * 6, 4.5, 2, ctx.main)) count += 1;
+    }
+    if (count < cars) return null;
+    if (!ctx.place('tent-3x3', '咨询帐篷', ctx.width / 2 + 8, ctx.depth - 5, 3, 3, ctx.main)) return null;
+    return count + 1;
+  },
+};
+
+/** 运动会参数表：约每 30 人一队（2–8 队），每队给 5m 赛道纵深；占地宽 32m。 */
+function sportsDerived(guests: number): { squads: number; width: number; depth: number } {
+  const squads = Math.max(2, Math.min(8, Math.ceil(guests / 30)));
+  return { squads, width: 32, depth: 14 + squads * 5 };
+}
+
+/** 运动会/趣味运动会模板：中央留空赛场（锥桶围出赛道边线），终点龙门架压深端、检录帐篷靠前、休息长凳沿西缘。 */
+const sportsOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'sports',
+  label: '运动会',
+  match: /运动会|趣味运动|体育比赛|体育赛事|体育节/u,
+  example: '90 人运动会',
+  note: '运动会/趣味运动会',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = sportsDerived(guests);
+    return { width, depth, mainHeight: depth - 10, aisleEndY: 9 };
+  },
+  zones(ctx) {
+    return { main: ctx.zone('reserved', '赛场', 1, 7, ctx.width - 2, ctx.layout.mainHeight), stage: null };
+  },
+  fill(ctx) {
+    const { squads } = sportsDerived(ctx.guests);
+    if (!ctx.place('oneplan:scale:gantry', '终点龙门架', ctx.width / 2, ctx.depth - 4.5, 6, 1, ctx.main)) return null;
+    if (!ctx.place('oneplan:scale:pop-up-tent', '检录帐篷', ctx.width / 2 - 8.75, 8.5, 3, 3, ctx.main)) return null;
+    // 赛道边线：两条纵列锥桶 + 南缘两枚（中央留给入口通道，不放锥桶）。
+    const coneTop = ctx.depth - 6;
+    let cones = 0;
+    for (const cx of [-11, 11]) for (let y = 10; y <= coneTop; y += 4) {
+      if (ctx.place('oneplan:icon:cone', `赛道界标 ${cones + 1}`, ctx.width / 2 + cx, y, 0.4, 0.4, ctx.main)) cones += 1;
+    }
+    for (const cx of [-5.5, 5.5]) {
+      if (ctx.place('oneplan:icon:cone', `赛道界标 ${cones + 1}`, ctx.width / 2 + cx, 10, 0.4, 0.4, ctx.main)) cones += 1;
+    }
+    for (let i = 0; i < squads; i += 1) {
+      if (!ctx.place('oneplan:scale:bench', `休息长凳 ${i + 1}`, ctx.width / 2 - 13.5, 10 + i * 2.5, 1.8, 0.5, ctx.main)) return null;
+    }
+    return 2 + cones + squads;
+  },
+};
+
+/** 展览参数表：复用市集推导（约每 4 人一展位、两列成排），展位放大为 3×3、排距 5m，占地宽 21m。 */
+function exhibitionDerived(guests: number): { booths: number; rows: number; width: number; depth: number } {
+  const booths = Math.ceil(guests / 4);
+  const rows = Math.ceil(booths / 2);
+  return { booths, rows, width: 21, depth: rows * 5 + 13 };
+}
+
+/** 展览模板：3×3 展位两列成排，中央通道即观展动线。 */
+const exhibitionOutdoorEventTemplate: OutdoorEventTemplate = {
+  id: 'exhibition',
+  label: '展览',
+  match: /展览|展会|博览/u,
+  example: '60 人展览',
+  note: '展览，展位成排',
+  aisleWidth: 3,
+  measure(guests) {
+    const { width, depth } = exhibitionDerived(guests);
+    return { width, depth, mainHeight: depth - 10, aisleEndY: depth - 1 };
+  },
+  zones(ctx) {
+    return { main: ctx.zone('reserved', '展区', 1, 7, ctx.width - 2, ctx.layout.mainHeight), stage: null };
+  },
+  fill(ctx) {
+    const { booths, rows } = exhibitionDerived(ctx.guests);
+    let count = 0;
+    for (let row = 0; row < rows; row += 1) for (const x of [ctx.width / 2 - 4.5, ctx.width / 2 + 4.5]) {
+      if (count < booths && ctx.place('booth-2x2', `展位 ${count + 1}`, x, 8.5 + row * 5, 3, 3, ctx.main)) count += 1;
+    }
+    if (count < booths) return null;
+    return count;
+  },
+};
+
+/**
+ * 模板注册表：只回答「有没有几何模板」（D2 起十类：相亲/社交市集、市集、发布会、讲座、婚礼、
+ * 演出/音乐会、美食节、车展、运动会、展览），不是活动准入闸门。
  * 2026-11-17 用户拍板「活动类型限制太死板」：类型只决定排布策略——
  * 沿岸类（钓鱼/垂钓）由参照驱动（沿真实水岸线，见 outdoor-shoreline-layout.ts），
  * 其余类型一律走「需求→分区→物料」通用路径；两者都不在这里硬套模板。
- * D1 起识别正则/参数表/摆法以注册表条目为唯一来源：新增活动类型只注册条目，不再改 if/正则（D2 消费）。
- * 数组顺序即匹配优先级，沿用旧 if 顺序（市集先判）；两条正则不相交，顺序不影响现网结果。
+ * D1 起识别正则/参数表/摆法以注册表条目为唯一来源：新增活动类型只注册条目，不再改 if/正则。
+ * 数组顺序即匹配优先级。存在整串同时命中两族词的说法（模型分类的 brief.event 可能是
+ * 「相亲市集」「汽车展览会」「新品发布会」），故相亲先于市集、发布会先于讲座、车展先于展览；
+ * 其余条目正则互不相交，顺序只影响可读性。
  */
-export const outdoorEventTemplates: OutdoorEventTemplate[] = [marketOutdoorEventTemplate, lectureOutdoorEventTemplate];
+export const outdoorEventTemplates: OutdoorEventTemplate[] = [
+  socialOutdoorEventTemplate,
+  marketOutdoorEventTemplate,
+  launchOutdoorEventTemplate,
+  lectureOutdoorEventTemplate,
+  weddingOutdoorEventTemplate,
+  concertOutdoorEventTemplate,
+  foodFestivalOutdoorEventTemplate,
+  carShowOutdoorEventTemplate,
+  sportsOutdoorEventTemplate,
+  exhibitionOutdoorEventTemplate,
+];
 
 /** 模板注册表查找：活动说法命中哪个模块就用哪个；未命中返回 null（≠ 不能做，走通用需求路径）。 */
 export function supportedOutdoorEvent(event: string | null): OutdoorEventTemplate | null {
@@ -310,7 +624,7 @@ function connectionPaths(from: PlanPoint, to: PlanPoint, boundary: PlanPoint[]):
 }
 
 export function buildLogicalOutdoorEvent(input: BuildZoneEventInput, id: () => string): ZoneEventProposal | null {
-  // 注册表派发（D1）：命中哪个模板模块就用它出几何提案。注册表只有讲座/市集（2026-11-17 收缩）：
+  // 注册表派发（D1/D2）：命中哪个模板模块就用它出几何提案。注册表外的类型不走模板：
   // 沿岸类走 outdoor-shoreline-layout.ts，其他类型走通用需求路径——未知/沿岸返回 null，绝不硬套市集网格。
   const template = supportedOutdoorEvent(input.brief.event);
   const guests = input.brief.guests;
