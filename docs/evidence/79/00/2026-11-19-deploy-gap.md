@@ -1,6 +1,8 @@
 # 部署缺口证据：正式站前端已写云端副本，后端没有对应端点
 
-> 记录时间：2026-11-19 · 站点：`https://scendance-scence-planner-ewz.pages.dev/`（正式站，实际域名 `scendance-scene-planner-ewz.pages.dev`）
+> **2026-11-19 已解决**：`scene-api` 已发到 v64，`20261117180000` / `20261117190000` 已应用，`PUT /outdoor-plans` 由 404 变 200。本文件保留为修复前证据；解决过程与读数见 `2026-11-19-deploy-resolution.md`。
+>
+> 记录时间：2026-11-19 · 站点：`https://scendance-scene-planner-ewz.pages.dev/`（正式站）
 > 项目：`wkhfvnzgopjdzxlmycks`（Supabase）
 > 结论：**这不是代码缺陷，是"前端已上线、后端未上线"的部署错配**。它直接卡住 #7 / #8 / #9 的"真实云端"一栏。
 
@@ -97,8 +99,8 @@ POST /rest/v1/rpc/scene_rpc {"p_actor":"<uuid>","p_action":"outdoor-plan.list","
 
 ## 4. 要补的两件事（需要人授权）
 
-1. **部署 Edge Functions**：把 main 的 `scene-api` / `conversation-api` 发到 `wkhfvnzgopjdzxlmycks`（当前版本落后 3 天）。
-2. **应用缺失的 10 条迁移**（其中 `20261117180000` / `20261117190000` 是户外副本表与 force 豁免）。
+1. **部署 Edge Functions**：把 main 的 `scene-api` 发到 `wkhfvnzgopjdzxlmycks`（当前版本落后 3 天）。`conversation-api` 本轮模型通道已恢复，不是 #79 的必要项，另单 review。
+2. **应用户外副本所需的 2 条迁移**：`20261117180000_outdoor_plans.sql` / `20261117190000_outdoor_plans_force.sql`。其余 8 条缺失迁移与 #79 无直接关系，另单 review，不捆在这张卡里。
 
 本轮**没有做**这两件事——仓库规范要求迁移与 Edge Functions 变更走人 review，且未获部署授权时不做部署。
 授权后，本文件 §1.3 的 `PUT /outdoor-plans 404` 应当变为 200 且响应体含 `revision`，届时 #7/#8/#9 的云端一栏才有可能补齐。

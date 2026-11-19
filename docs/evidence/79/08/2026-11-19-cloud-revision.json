@@ -1,0 +1,33 @@
+{
+  "ranAt": "2026-11-19T02:01:56.945Z",
+  "account": "walkthrough-79@scendance.test",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "activityId": "ee07ebcf-77f9-41f1-89f9-1163b3fe0e60",
+  "localActivityId": "house-3ik2jdf2",
+  "before": {
+    "revision": 3,
+    "planLen": 1440
+  },
+  "applied": {
+    "status": 200,
+    "body": {
+      "conflict": false,
+      "revision": 4,
+      "activityId": "ee07ebcf-77f9-41f1-89f9-1163b3fe0e60"
+    }
+  },
+  "stale": {
+    "status": 200,
+    "body": {
+      "name": "新活动场地",
+      "conflict": true,
+      "revision": 4,
+      "updatedAt": "2026-11-19T02:01:55.162359+00:00",
+      "activityId": "ee07ebcf-77f9-41f1-89f9-1163b3fe0e60"
+    }
+  },
+  "after": {
+    "revision": 4
+  },
+  "note": "applied 用当前 revision 写入，成功则 revision+1；stale 再用旧 revision 写，必须返回 conflict 且 revision 不再增加。"
+}
