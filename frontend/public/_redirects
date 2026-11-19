@@ -1,6 +1,6 @@
-# Static export only prerenders /review/local. Serve that shell for every share id
-# without changing the browser URL, so the client can read the real id.
-/review/:id /review/local.html 200
+# 旧 /review/<uuid> 页（app/review/[id]）在 T4 合并时已删除，静态产物里没有
+# /review/local.html。这条重写只会 404，故移除。T5 的 UUID 代码仍留在
+# bingo-status 里作云化接口形状，不再对外承诺这条路径能打开。
 # 客户评审短链：/r/<code> 打开同一张评审页，地址留在路径上（微信会剥掉哈希）。
 # 目标写 /review，不能写 /review.html：Pages 的 HTML 规范化会把 .html 目标 308 到 /review，
 # 短码随地址一起丢掉，客户打开就退回本机/示例方案。
