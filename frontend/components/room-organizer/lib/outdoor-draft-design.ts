@@ -94,7 +94,7 @@ const PEOPLE_PER_STALL = 4;
  */
 export function draftDemand(
   plan: SitePlanData,
-  brief: Pick<OutdoorBrief, "guests">,
+  brief: Pick<OutdoorBrief, "guests" | "event">,
   options?: {
     maxLine?: number;
     maxItems?: number;
@@ -102,6 +102,15 @@ export function draftDemand(
     hasMaterial?: (name: string) => boolean;
   },
 ): OutdoorDraftDesign {
+  if (!plan.zones.length && ringAreaM2(plan.boundary) >= 4) {
+    const event = brief.event ?? "";
+    const purpose = /市集|集市|摆摊/u.test(event) ? "market"
+      : /演出|表演|音乐/u.test(event) ? "performance"
+      : /展览|展会/u.test(event) ? "exhibition" : "service";
+    const area: PlanZone = { id: "activity-boundary", name: "活动场地", semantic: "reserved", polygon: plan.boundary, purpose, notes: "" };
+    const draft = draftDemand({ ...plan, zones: [area] }, brief, { ...options, maxLine: Math.min(options?.maxLine ?? 12, 12) });
+    return { ...draft, items: draft.items.map(item => ({ ...item, zone: "" })) };
+  }
   const maxLine = Math.min(OUTDOOR_DRAFT_MAX_LINE, options?.maxLine ?? OUTDOOR_DRAFT_MAX_LINE);
   const maxItems = Math.max(1, options?.maxItems ?? OUTDOOR_DRAFT_MAX_ITEMS);
   const items: OutdoorDraftLine[] = [];
@@ -210,10 +219,8 @@ export function draftDemand(
     }
   }
 
-  if (!guests && items.length)
-    notes.push("人数还没定：本版只按分区面积与用途排，没有做人均容量粗筛；补一句「预计多少人在场」可以再核一遍容量。");
-  if (!plan.zones.length)
-    notes.push("画布上还没有分区：先按活动类型分一次区，再排物料。");
+  if (!plan.zones.length && !items.length)
+    notes.push("请画出活动范围，我就可以在里面布置物料。");
 
   return { items, notes, zones };
 }

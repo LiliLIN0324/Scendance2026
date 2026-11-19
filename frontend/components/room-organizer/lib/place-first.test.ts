@@ -64,3 +64,8 @@ describe('地图优先：无地点设计句的本地守卫', () => {
     expect(placeStillPending({ hasOutdoorPlan: false, venueUp: true, rangeConfirmed: false })).toBe(false);
   });
 });
+
+
+it('已有活动范围时不因旧阶段仍是place而拦回选址', () => {
+  expect(placeStillPending({hasOutdoorPlan:true,stage:'place',venueUp:true,rangeConfirmed:true})).toBe(false);
+});
