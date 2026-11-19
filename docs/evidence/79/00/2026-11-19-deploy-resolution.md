@@ -1,4 +1,4 @@
-# 部署缺口已闭合：scene-api v64 + 两条户外迁移（2026-11-19）
+# 部署缺口已闭合：scene-api v64（当前 v65）+ 两条户外迁移（2026-11-19）
 
 > 对应缺口：`2026-11-19-deploy-gap.md`。本文只记本轮实际做了什么、读到了什么、哪些仍没做。
 > 结论：`PUT /outdoor-plans` 已由 **404 → 200**；`GET /outdoor-plans` 返回 **200 `[]`**；`revision` 可读写，#7 因此转 **pass**，#8b 云端见 1 条 `PUT 200`，#9 云端 CAS 直连验证为 **3→4、旧 revision 冲突不落库**。
@@ -58,6 +58,8 @@ supabase --workdir <clean-worktree> functions deploy scene-api \
 scene-api  ACTIVE  VERSION 64  2026-11-19T01:40:02Z
 Deployed Functions on project wkhfvnzgopjdzxlmycks: scene-api
 ```
+
+> 版本注记：本轮部署是 **v64**（01:40:02Z）；01:46:40Z 又观测到线上 **v65**（非本轮操作，未核对函数体）。02:01Z 的 revision 探针在 v65 上仍为 200；本文的 v64 读数是部署当时的读数，不把 v65 算成本轮成果。
 
 ## 3. 部署后读数
 

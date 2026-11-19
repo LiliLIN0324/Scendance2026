@@ -1,6 +1,6 @@
 # 部署缺口证据：正式站前端已写云端副本，后端没有对应端点
 
-> **2026-11-19 已解决**：`scene-api` 已发到 v64，`20261117180000` / `20261117190000` 已应用，`PUT /outdoor-plans` 由 404 变 200。本文件保留为修复前证据；解决过程与读数见 `2026-11-19-deploy-resolution.md`。
+> **2026-11-19 已解决**：`scene-api` 本轮发到 v64，随后观测到 v65（01:46:40Z，非本轮操作）；`20261117180000` / `20261117190000` 已应用，`PUT /outdoor-plans` 由 404 变 200。本文件保留为修复前证据；解决过程与读数见 `2026-11-19-deploy-resolution.md`。
 >
 > 记录时间：2026-11-19 · 站点：`https://scendance-scene-planner-ewz.pages.dev/`（正式站）
 > 项目：`wkhfvnzgopjdzxlmycks`（Supabase）
