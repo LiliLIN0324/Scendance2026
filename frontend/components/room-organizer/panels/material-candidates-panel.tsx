@@ -24,6 +24,8 @@ export function MaterialCandidatesPanel({query,onOpenLibrary}:{query:string;onOp
   <span className="ap-blocked-stamp"><Info size={12} aria-hidden="true"/>物料库</span>
   <strong>物料候选</strong>
   <p className="ap-blocked-note">这些是可查看的模型，展示的是模型标称尺寸。实物规格、库存和价格还需核实。</p>
+  {/* 2026-11-19 审计 a2：候选来自随包模型目录，不是云端物料库存——不说清楚会被当成「云上有这些物料」。 */}
+  <p className="ap-blocked-note">候选来自随包模型目录，不代表云端物料库存；要用云端已生成的物料请打开物料库。</p>
   {!clean?<p className="ap-blocked-note">先告诉我想找什么物料。</p>:!current||current.state==='loading'?<p className="ap-blocked-note" role="status">正在查找物料…</p>:null}
   {result?.status==='ok'&&(result.items.length===0?<p className="ap-blocked-note">没有找到“{clean}”，试试其他名称。</p>:<>
    <p className="ap-blocked-note">找到 {result.total} 个模型，先看这 {result.items.length} 个：</p>

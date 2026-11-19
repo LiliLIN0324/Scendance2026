@@ -3391,6 +3391,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         if (routeBridgeRef.current?.getPlan()) { setOutdoorTask({ intent: trimmed, state: 'blocked', action: '请先选中户外设施，在同一属性卡查看候选、生成或上传；本次未另起收费任务', steps: [] }); return; }
         stageMaterialGenerate({ kind: aholo.title === '图片物件' ? 'image' : 'text', prompt: aholo.prompt });
         callbacks.onOpenMaterials();
+        // 2026-11-19 审计 a1：生成结果不会回到对话里，任务号在「我的生成」。
+        // 先说清楚，免得用户在对话里等一个永远不会出现的回填。
+        say({ role: 'agent', text: `${step.text}提交后任务号在「我的生成」里，这里不会自动回填。` });
+        return;
       }
       say({ role: 'agent', text: step.text });
       return;

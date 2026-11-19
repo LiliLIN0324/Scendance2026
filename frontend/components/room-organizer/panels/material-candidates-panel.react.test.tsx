@@ -12,6 +12,8 @@ describe('物料候选',()=>{
  it('shows real catalogue chair options and opens the library with the query, without selecting an item',async()=>{
   const open=vi.fn();render(<MaterialCandidatesPanel query="椅子" onOpenLibrary={open}/>);
   const section=screen.getByRole('region',{name:'物料候选'});expect(within(section).getByText(/实物规格、库存和价格还需核实/)).toBeTruthy();
+  // 候选来自随包目录，不是云端库存：这句必须在，免得被当成「云上有这些物料」。
+  expect(within(section).getByText(/不代表云端物料库存/)).toBeTruthy();
   expect(await within(section).findByTitle(/软包餐椅/)).toBeTruthy();expect(within(section).getAllByTitle(/米（宽 × 深 × 高）/).length).toBeGreaterThan(1);
   expect(open).not.toHaveBeenCalled();fireEvent.click(within(section).getByRole('button',{name:'打开物料库'}));expect(open).toHaveBeenCalledExactlyOnceWith('椅子');
  });

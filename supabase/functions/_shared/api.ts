@@ -709,6 +709,13 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const {storage_path,...metadata}=a;
         return respond({...metadata,url:await backend.sign(storage_path),expiresIn:300});
       }
+      // 公开物料：物主把 3D 物料放进公共目录，任何注册用户都能在物料库看到并取用。
+      const publish=path.match(/^\/assets\/([^/]+)\/publish$/);
+      if(publish) {
+        const assetId=uuid.parse(publish[1]);
+        if(method==='POST')return respond(await backend.scene(actor,'assets.publish',{assetId}));
+        if(method==='DELETE')return respond(await backend.scene(actor,'assets.unpublish',{assetId}));
+      }
       if(path==='/catalog/recommendations' && method==='POST') {
         const input=z.strictObject({theme:z.string().max(500),scene:sceneSchema}).parse(await json());
         return respond(await recommendations(input.theme,input.scene,fetcher));
@@ -744,7 +751,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const bytes=await readBounded(request,5*1024*1024);
         const size=ImageUtils.getSize(bytes,mime);
         if(!size || size.some(n=>n<=0||n>4096)) throw new ApiError('INVALID_IMAGE',422);
-        const record=await assetRecord(actor,bytes,{name:'场地平面图',source:'upload',format:mime==='image/png'?'png':'jpeg',metadata:{width:size[0],height:size[1]},license:{type:'user-upload'}});
+        // 这条口同时接平面图和图生 3D 的参考图：给了名字就用给的，
+        // 不然参考图会在物料库里顶着「场地平面图」的名头。
+        const given=new URL(request.url).searchParams.get('name')?.trim();
+        const name=(given&&given.length>0?given:'场地平面图').slice(0,120);
+        const record=await assetRecord(actor,bytes,{name,source:'upload',format:mime==='image/png'?'png':'jpeg',metadata:{width:size[0],height:size[1]},license:{type:'user-upload'}});
         await backend.upload(record.storagePath,bytes,mime);
         return respond(await backend.scene(actor,'assets.register',record),201);
       }
