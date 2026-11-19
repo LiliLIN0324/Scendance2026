@@ -32,11 +32,12 @@ function environment(preview: SplatPreviewState = { status: 'idle', assetId: '',
 }
 
 describe('SpacePanel', () => {
-  it('puts real venues first and folds secondary actions', () => {
+  // 2026-11-19：登记要先探一次本机文件在不在，变成了异步；面板首帧可能是空列表。
+  it('puts real venues first and folds secondary actions', async () => {
     render(<SpacePanel layout={INITIAL_LAYOUT}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
     // 面板打开即自动登记云端扫描库（索引 8 套实景），空库提示只在真没数据时出现
-    expect(screen.getByText(/\d+ 套已扫描/)).toBeTruthy();
+    expect(await screen.findByText(/\d+ 套已扫描/)).toBeTruthy();
     expect(screen.queryByText('用手机拍一段场地')).toBeNull();
   });
 

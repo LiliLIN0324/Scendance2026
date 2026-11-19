@@ -1,4 +1,4 @@
-.sc-space-panel.is-card {
+﻿.sc-space-panel.is-card {
   --space-ink: #1b2826;
   --space-muted: #546461;
   --space-line: #dde6e3;
@@ -79,6 +79,11 @@
   padding: 1px 6px; border-radius: 4px;
   background: #182825db; color: #fff; font-size: 10px; line-height: 16px;
 }
+/* 2026-11-19 用户：「到底文件好没好？」——空态一分为二：
+   没打开过 = 淡图标（默认）；加载失败/本机缺文件 = 暖红警示，一眼能分开。 */
+.sc-scan-card.is-missing .sc-scan-card-shot { background: #fdf1ef; color: #b4473c; }
+.sc-scan-card-blank.is-missing { opacity: .78; }
+.sc-space-sample .sc-scan-card-tag.is-missing { background: #b4473c; }
 .sc-scan-cards .sc-space-sample strong {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; line-height: 1.35;

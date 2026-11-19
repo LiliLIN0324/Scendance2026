@@ -5,7 +5,7 @@
 // 直接运行才读取环境变量 / 仓库根 .env.local，并监听 127.0.0.1:3199。
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createWriteStream } from 'node:fs';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { once } from 'node:events';
 import { isIP } from 'node:net';
@@ -309,6 +309,19 @@ function fileAssetStore(dir) {
         return await readFile(`${dir}/${id}.${ext}`);
       } catch {
         return null;
+      }
+    },
+    /**
+     * 只查文件在不在：给 HEAD 探活用。
+     * 2026-11-19：前端要先知道「本机到底还有没有这套场景」再决定登记本机还是云端，
+     * 拿 GET 去探会把几十 MB 的场景包读进内存再被客户端断掉，所以这里只 stat 一下。
+     */
+    async exists(id, ext) {
+      try {
+        await stat(`${dir}/${id}.${ext}`);
+        return true;
+      } catch {
+        return false;
       }
     },
     /** 流式落盘：先写 .part，校验通过才改名成正式资产，半截文件不会冒充可用的场景包。 */
@@ -850,9 +863,16 @@ export function createServer({
         send(res, 200, await receiveAsset(req, assets), origin, key);
         return;
       } else if (url.pathname.startsWith('/asset/')) {
-        if (req.method !== 'GET') throw new HttpError(405, '资产只支持 GET');
+        if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, '资产只支持 GET/HEAD');
         const asset = ASSET_ID_PATH.exec(url.pathname);
         if (!asset) throw new HttpError(400, '资产地址无效');
+        // HEAD 只回答「在不在」：前端用它在登记前分清「本机有文件」和「只剩云端副本」。
+        if (req.method === 'HEAD') {
+          const exists = await assets.exists(asset[1], asset[2]);
+          res.writeHead(exists ? 200 : 404, origin ? { 'Access-Control-Allow-Origin': origin } : {});
+          res.end();
+          return;
+        }
         const bytes = await assets.read(asset[1], asset[2]);
         if (!bytes) throw new HttpError(404, '本机没有该资产，需重新落盘');
         sendAsset(res, asset[2], bytes, origin);
