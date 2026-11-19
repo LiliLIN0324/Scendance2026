@@ -72,7 +72,7 @@ async function readProviderStream(url:string,init:RequestInit,fetcher:Fetcher,ti
 }
 
 /** One read-only provider attempt. No tools, retries, search, scene or requirement writes. */
-export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;includeThought?:true|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId;model?:string|null|undefined;onDelta?:(text:string)=>void}):Promise<AssistantChatResult>{
+export async function answerAssistantChat(input:{message:unknown;history:unknown;enabled:boolean;env:Env;fetcher:Fetcher;responseMode?:'outdoor_v1'|undefined;includeThought?:true|undefined;signal?:AbortSignal;timeoutMs?:number;provider?:ChatProviderId;model?:string|null|undefined;onDelta?:(text:string)=>void;images?:string[]|undefined;rebuiltScenes?:z.infer<typeof assistantChatRequestSchema>['rebuiltScenes']}):Promise<AssistantChatResult>{
  // Never log raw errors, bodies, prompts, endpoints, headers, model names or configuration.
  // One categorical event per slot attempt; response contract and fail-closed behavior stay unchanged.
  const diagnose=(slot:ChatProviderId,reason:'cancelled'|'provider_status'|'output_truncated'|'finish_reason'|'empty_answer'|'answer_too_long'|'unsupported_output'|'timeout'|'http_error'|'invalid_json'|'response_too_large'|'invalid_shape'|'transport_error'|'configuration_error'|'slot_skipped'|'quota_exhausted',fields:{httpStatus?:number;providerCode?:number;finishReason?:'length'|'content_filter'|'tool_calls'|'function_call'|'unknown'}={})=>{
@@ -80,7 +80,7 @@ export async function answerAssistantChat(input:{message:unknown;history:unknown
  };
  const fail=(status:'disabled'|'invalid'|'unavailable'|'timeout'|'provider_error'|'quota_exhausted'):AssistantChatResult=>({status,answer:null});
  if(!input.enabled)return fail('disabled');
- const parsed=assistantChatRequestSchema.safeParse({message:input.message,history:input.history,responseMode:input.responseMode,includeThought:input.includeThought});
+ const parsed=assistantChatRequestSchema.safeParse({message:input.message,history:input.history,responseMode:input.responseMode,includeThought:input.includeThought,images:input.images,rebuiltScenes:input.rebuiltScenes});
  if(!parsed.success||privateOrLink(parsed.data.message)||parsed.data.history.some(item=>privateOrLink(item.text)))return fail('invalid');
  const timeoutMs=input.timeoutMs??25000;
  if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>110000)return fail('invalid');

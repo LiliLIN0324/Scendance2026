@@ -12,7 +12,8 @@ import type { SitePlanData } from "../../../../supabase/functions/_shared/site-p
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 
 import { rebuiltSceneRefs } from "./wedding-venue-catalog";
-import { compactResearchCitations, isVenueResearchRequest, researchVenues, venueResearchSources } from "./venue-research";
+import { compactResearchCitations, isVenueResearchRequest, readVenueResearch, rememberVenueResearch, researchVenues, venueResearchContext, venueResearchSources } from "./venue-research";
+import { agentDocumentContext, type AgentDocument } from "./agent-documents";
 
 export function outdoorClarificationQuestion(
   message: string,
@@ -50,6 +51,8 @@ export type OutdoorClarification = {
 };
 
 export async function understandOutdoorTurn(input: {
+  researchScope?: string | undefined;
+  documents?: AgentDocument[] | undefined;
   message: string;
   state: OutdoorFlowState;
   plan: SitePlanData;
@@ -127,8 +130,13 @@ export async function understandOutdoorTurn(input: {
   const research = isVenueResearchRequest(input.message)
     ? await researchVenues(input.message, { signal: input.signal, center: input.plan.anchor ?? null })
     : undefined;
+  input.signal.throwIfAborted();
+  const researchScope = input.researchScope ?? input.state.scope;
+  if (research) rememberVenueResearch(researchScope, research);
+  const previousResearch = research ? null : readVenueResearch(researchScope);
   const clarification = input.clarification ? { clarification: {
-    ...input.clarification, question: compactResearchCitations(input.clarification.question),
+    ...input.clarification, question: compactResearchCitations(input.clarification.question)
+      .replace(/https?:\/\/[^\s]+/gi, '[来源链接已保留在上一轮资料卡]'),
   } } : {};
   const clarificationCost = JSON.stringify(clarification).length;
 
@@ -139,12 +147,21 @@ export async function understandOutdoorTurn(input: {
         : undefined;
     const base = {
       stage: input.state.stage,
+      rangeBasis: input.state.rangeBasis,
+      ...(input.state.pendingBoundary ? { pendingRange: {
+        name: input.state.pendingBoundary.name,
+        basis: input.state.pendingBoundary.basis,
+        widthM: Math.max(...input.state.pendingBoundary.boundary.map(point => point.x)) - Math.min(...input.state.pendingBoundary.boundary.map(point => point.x)),
+        depthM: Math.max(...input.state.pendingBoundary.boundary.map(point => point.y)) - Math.min(...input.state.pendingBoundary.boundary.map(point => point.y)),
+      } } : {}),
       pendingProposal: input.proposal,
       selectedLibraryId: input.selectedLibraryId,
       brief: input.state.brief,
       version,
       selected: [...selected],
-      ...(research ? { venueResearch: research } : {}),
+      ...(research ? { venueResearch: venueResearchContext(research) } : {}),
+      ...(previousResearch ? { previousVenueResearch: venueResearchContext(previousResearch) } : {}),
+      ...(input.documents?.length ? { attachmentEvidence: agentDocumentContext(input.documents, input.message, level === 0 ? 2200 : level === 1 ? 1400 : 900) } : {}),
       rebuiltScenes: rebuiltSceneRefs(),
       map: {
         version: input.map.version,

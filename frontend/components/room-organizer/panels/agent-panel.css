@@ -1574,3 +1574,8 @@ button.ap-ghost {
 .ap-run-decision[data-kind="rejected"] { color: var(--warn, #b45309); }
 .ap-run-decision[data-kind="approved"]::before { content: "✓ "; }
 .ap-run-decision[data-kind="rejected"]::before { content: "× "; }
+.ap-document-sources { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--hair, #E4E4E7); border-radius: 12px; background: var(--paper, #FFF); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.ap-document-sources summary { cursor: pointer; color: var(--ink, #141416); }
+.ap-document-sources p { margin: 6px 0; color: var(--muted, #71767E); white-space: pre-wrap; }
+.ap-document-sources a { color: var(--ink-soft, #55585F); text-decoration: underline; }
+.ap-document-source { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair-soft, #EFEFF1); }

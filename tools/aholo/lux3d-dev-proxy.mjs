@@ -927,6 +927,13 @@ export function createServer({
         });
         res.end(tile.bytes);
         return;
+      } else if (req.method === 'GET' && url.pathname === '/api/venue-research') {
+        const { handleVenueResearch } = await import('../../functions/api/venue-research.ts');
+        const searchKey = process.env.TAVILY_API_KEY || await readEnvFile('TAVILY_API_KEY', new URL('../../.env.local', import.meta.url));
+        const response = await handleVenueResearch(new Request(url), { TAVILY_API_KEY: searchKey });
+        res.writeHead(response.status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) });
+        res.end(await response.text());
+        return;
       } else if (req.method === 'GET' && url.pathname === '/api/carto-tiles') {
         // Carto 瓦片代理（dev-only）：直接复用 Pages Function 本体（Node 24 原生跑 TS），
         // dev 与线上只有一套逻辑：运行时读 key、水印图识别、占位兜底都同源。

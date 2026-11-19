@@ -36,7 +36,7 @@ describe("第一步场地调研", () => {
     expect(turn).toMatchObject({ action: "ask", facts: {}, references: [] });
     expect(turn.reply).toContain(reply);
     expect(turn.reply).toContain("https://www.xiaohongshu.com/explore/6939444d000000001e00745c");
-    expect(turn.reply).toContain("未检索网页正文");
+    expect(turn.reply).toContain("本地资料不代表已联网核实");
     const prompt = JSON.parse(String(provider.mock.calls[0]![1]?.body)).messages[0].content;
     expect(prompt).toContain("venueResearch.localNotes");
     expect(prompt).toContain("不要先要求圈范围");

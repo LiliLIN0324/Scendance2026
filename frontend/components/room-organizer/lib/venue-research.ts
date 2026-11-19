@@ -1,4 +1,5 @@
 import { searchPlaces, type PlaceSearchOptions, type PlaceSuggestion } from "./place-search";
+import type { VenueWebResearch } from "../../../../functions/api/venue-research";
 
 /** 摘自用户本地调研 CSV 的具名场地笔记；标题是线索，不是营业/承租核验。 */
 const weddingNotes = [
@@ -26,6 +27,18 @@ export interface VenueResearch {
   collectedAt: string;
   localNotes: Array<{ id: string; name: string; title: string; author: string; area: string }>;
   searches: Array<{ query: string; status: "results" | "no-evidence"; places: PlaceSuggestion[] }>;
+  web?: VenueWebResearch;
+}
+
+const researchKey = (scope: string) => `scendance:venue-research:${scope}`;
+export function readVenueResearch(scope: string): VenueResearch | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(researchKey(scope)) ?? 'null') as VenueResearch | null;
+    return value && Array.isArray(value.localNotes) && Array.isArray(value.searches) && typeof value.collectedAt === 'string' ? value : null;
+  } catch { return null; }
+}
+export function rememberVenueResearch(scope: string, research: VenueResearch): void {
+  try { localStorage.setItem(researchKey(scope), JSON.stringify(research)); } catch { /* Current reply remains usable without persistence. */ }
 }
 
 /** 只在明确杭州/西湖婚礼需求下用这批本地资料，不能拿西湖调研推荐上海场地。 */
@@ -44,12 +57,31 @@ export async function researchVenues(
   const queries = localNotes.length
     ? localNotes.map(note => `杭州 ${note.name}`)
     : [message.trim().slice(0, 80)];
+  const webPromise = (async (): Promise<VenueWebResearch> => {
+    try {
+      const fetcher = options.fetchImpl ?? fetch;
+      const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(25000)]) : AbortSignal.timeout(25000);
+      const response = await fetcher(`/api/venue-research?q=${encodeURIComponent(message.slice(0, 160))}`, { signal });
+      const data: unknown = await response.json();
+      if (!response.ok || !data || typeof data !== 'object' || !('sources' in data) || !Array.isArray(data.sources)) throw new Error('unavailable');
+      return data as VenueWebResearch;
+    } catch { return { status: 'unavailable', query: message, searchedAt: new Date().toISOString(), sources: [] }; }
+  })();
   const searches = await Promise.all(queries.map(async query => {
     const places = await searchPlaces(query, { ...options, limit: 3 });
     return { query, status: places.length ? "results" as const : "no-evidence" as const, places };
   }));
+  const web = await webPromise;
   options.signal?.throwIfAborted();
-  return { collectedAt: new Date().toISOString(), localNotes, searches };
+  return { collectedAt: new Date().toISOString(), localNotes, searches, web };
+}
+
+/** URLs stay in the attributed UI, not the text-only model channel's link guard. */
+export function venueResearchContext(research: VenueResearch): unknown {
+  const omitLinks = (text: string) => text.replace(/(?:https?:\/\/|www\.)\S+/gi, '[来源链接见资料卡]');
+  return { ...research, web: research.web ? { status: research.web.status, searchedAt: research.web.searchedAt,
+    sources: research.web.sources.slice(0, 4).map(source => ({ id: source.id, title: omitLinks(source.title).slice(0, 80),
+      contentStatus: source.contentStatus, excerpt: omitLinks(source.excerpt || source.snippet).slice(0, 420) })) } : undefined };
 }
 
 /** URL 保留在可点验的回复中，不塞进禁止链接的聊天请求历史。 */
@@ -60,7 +92,11 @@ export function venueResearchSources(research: VenueResearch): string {
   }).filter(Boolean);
   const hits = research.searches.reduce((sum, search) => sum + search.places.length, 0);
   return [
-    `本次地图地点检索：${hits ? `取得 ${hits} 条地点记录` : "未取得可核对的地点结果"}；未检索网页正文。`,
+    `本次地图地点检索：${hits ? `取得 ${hits} 条地点记录` : "未取得可核对的地点结果"}。`,
+    research.web?.status === 'ok' ? `网页检索：${research.web.sources.length} 条来源，其中 ${research.web.sources.filter(source => source.contentStatus === 'read').length} 条已读取正文。`
+      : research.web?.status === 'not-configured' ? '网页搜索服务尚未配置，本次只使用已有本地调研与地图地点结果。'
+      : research.web?.status === 'empty' ? '本次网页搜索没有返回可用来源。' : '本次网页检索暂不可用；以下本地资料不代表已联网核实。',
+    ...(research.web?.sources.map(source => `[${source.id}] ${source.title}（${source.contentStatus === 'read' ? '正文摘录' : '仅搜索摘要'}）\n${source.url}`) ?? []),
     ...(sources.length ? ["本地调研来源（2026-11-19 收录，笔记标题线索）：", ...sources] : []),
   ].join("\n");
 }

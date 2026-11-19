@@ -49,7 +49,8 @@ export interface OutdoorFlowState {
   brief: OutdoorBrief;
   confirmedBoundary: string | null;
   completed: OutdoorStage[];
-  pendingBoundary?: { anchor: NonNullable<SitePlanData["anchor"]>; boundary: SitePlanData["boundary"]; name: string; base: string } | undefined;
+  pendingBoundary?: { anchor: NonNullable<SitePlanData["anchor"]>; boundary: SitePlanData["boundary"]; name: string; base: string; basis?: import('./agent-venue-range').VenueRangeBasis } | undefined;
+  rangeBasis?: import('./agent-venue-range').VenueRangeBasis;
   pendingLogin?: { message: string; planVersion: string; ownerId?: string };
 }
 export function emptyOutdoorFlow(scope: string): OutdoorFlowState {
@@ -263,6 +264,7 @@ export function planVersion(plan: SitePlanData): string {
   return `plan:${(hash >>> 0).toString(16)}`;
 }
 export interface OutdoorMapContext {
+  openAreas?(): Array<{ id: string; name: string; ring: SitePlanData['boundary']; tags: Record<string, string> }>;
   version: string;
   status: "ready" | "partial" | "unavailable";
   /** Structured map module supplies this. Never raster pixels or a claim of visual reading. */

@@ -1,5 +1,11 @@
 'use client';
 
+import { AGENT_DOCUMENT_ACCEPT, extractAgentDocument, isAgentDocument, readAgentDocuments, rememberAgentDocuments, type AgentDocument } from '../lib/agent-documents';
+import { AgentDocumentSources } from '../components/agent-document-sources';
+import { AgentResearchSources } from '../components/agent-research-sources';
+import { readVenueResearch, type VenueResearch } from '../lib/venue-research';
+import { proposeAutomaticVenueRange } from '../lib/agent-venue-range';
+
 import { validateCandidateApply } from '../lib/candidate-apply-validation';
 import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -627,6 +633,8 @@ interface AgentValue {
   /** 选进来、还没发出去的图纸/照片：挂在输入框上，点发送才读进场地。 */
   /** 2026-11-19 试点：支持最多 10 张现场截图（压缩后随理解请求发给 deepseek-flash 多模态）。 */
   pendingFiles: Array<{ name: string; url: string }>;
+  documents: AgentDocument[];
+  venueResearch: VenueResearch | null;
   removePendingImage(index: number): void;
   send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
   /** 面板自己也要能回话（场景库对话直接把结果说进这场会话），所以把说话口开放出来。 */
@@ -1704,7 +1712,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const pickBase = JSON.stringify(routeBridgeRef.current?.getPlan());
     const controller = new AbortController();
     outdoorRequestRef.current?.abort(); outdoorRequestRef.current = controller;
-    setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '查询真实占地边界；未命中转手画', steps: ['理解场地名', '候选地点已确认'] });
+    setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '查询地图轮廓与草地，自动提出活动范围', steps: ['理解场地名', '候选地点已确认'] });
     setVenuePick(current => (current ? { ...current, picking: place.name } : current));
     const near = { lng: place.lng, lat: place.lat };
     const spanMeters = (polygon: [number, number][]): number => {
@@ -1721,13 +1729,6 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const shape = await fetchPlaceShape(place.name, { near, signal: controller.signal });
       if (shape && isPersistablePlaceShape(shape) && spanMeters(shape.polygon) <= 9000) { polygon = shape.polygon; source = 'osm'; }
     } catch { /* 静默降级 */ }
-    if (!polygon && !controller.signal.aborted) {
-      try {
-        const areas = await searchAreas(place.name, { near, signal: controller.signal });
-        const area = areas.find(entry => entry.polygon.length >= 3);
-        if (area && spanMeters(area.polygon) <= 9000) { polygon = area.polygon; source = 'area'; }
-      } catch { /* 静默降级 */ }
-    }
     if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
     const bridge = routeBridgeRef.current;
     if (pickBase !== JSON.stringify(bridge?.getPlan())) { setVenuePick(null); setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间规划发生变化，未更换场地，请重新确认', steps: [] }); return; }
@@ -1739,6 +1740,24 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', amber: true, text: '请先打开「户外规划」，本次没有改动场地。' });
       return;
     }
+    if (bridge.applyPlan && bridge.getPlan()) {
+      setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '识别草地候选；缺少真实范围时提出标注假设的概念草案', steps: ['地点已确认'] });
+      let range;
+      try {
+        range = await proposeAutomaticVenueRange({ plan: bridge.getPlan()!, anchor, name: place.name, footprint: boundary, signal: controller.signal });
+      } catch (error) {
+        if (controller.signal.aborted || !currentOutdoorTask(epoch, 'venue')) return;
+        setOutdoorTask({ intent: '自动场地范围', state: 'blocked', action: error instanceof Error ? error.message : '本次未能提出范围，原方案保留，可重新选择地点', steps: [] });
+        return;
+      }
+      if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
+      if (pickBase !== JSON.stringify(bridge.getPlan())) {
+        setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间方案已变化，未应用旧范围，请重新选择地点', steps: [] }); return;
+      }
+      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis);
+      say({ role: 'agent', text: `${range.basis.detail} 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。` });
+      return;
+    }
     if (!boundary) {
       if (!bridge.beginVenueBoundary(anchor)) { setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '已有规划不能直接更换地理锚点，请先新建户外活动；当前内容保持不变', steps: [] }); return; }
       manualVenueAnchorRef.current = anchor;
@@ -1746,7 +1765,6 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', text: '没找到可用的真实边界，地图已移到候选地点。沿实际用地逐点圈出并闭合，闭合那一刻写入地点和红线；Esc 取消。' });
       return;
     }
-    if(bridge.applyPlan){outdoorWorkflow.offerBoundary(anchor,boundary,place.name);say({role:'agent',text:'已取得地点候选轮廓。请先核对其中哪一片确实是本次活动场地；不会把整座商场当成已授权活动范围。'});return;}
     if (bridge.applyVenue(anchor, boundary)) {
       setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'done', action: '真实边界与锚点已写入，2D/3D 同步', steps: ['地点已确认', '取得真实边界', '应用场地'], prompts: ['排一下流线'] });
       say({ role: 'agent', text: `已在户外规划设为「${place.name}」，边界来源：${source === 'osm' ? 'OSM 占地轮廓' : '行政区选区'}。2D/3D 共用这份规划，可撤销，未清除任何已有内容。` });
@@ -2184,6 +2202,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 选文件先挂到输入框，不进对话、不改画布；点发送才按原来的链路读进场地。 */
   async function stageFile(file: File): Promise<void> {
+    if (isAgentDocument(file)) {
+      if (file.size > 20 * 1024 * 1024) { say({ role: 'agent', amber: true, text: '文档超过 20 MB，请拆分后上传。' }); return; }
+      setPendingFiles(list => list.length >= MAX_PENDING_IMAGES ? list : [...list, { file, url: '' }]);
+      return;
+    }
     const verdict = classifyFile(file);
     if (verdict !== 'image') { await acceptFile(file); return; }
     try {
@@ -3146,11 +3169,30 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         : undefined;
       if(attachment){
         // 全部待发图（最多 10 张）一起送；超预算的按顺序留下，并如实说几张没带。
-        const { images, skipped } = visionImagesWithinBudget(staged.map(f=>f.url));
-        say({role:'user',text:trimmed||'📎 现场截图'});
+        const sessionId = boundSessionId.current;
+        const documentScope = `${sessionScope}:${sessionId ?? 'local'}`;
+        const batch = staged.length ? staged : [attachment];
+        const documentFiles = batch.filter(item => isAgentDocument(item.file));
+        let documents = readAgentDocuments(documentScope);
+        if (documentFiles.length) {
+          say({ role: 'agent', text: `正在读取 ${documentFiles.map(item => item.file.name).join('、')}，提取可引用的文字与表格。` });
+          try {
+            const extracted = await Promise.all(documentFiles.map(item => extractAgentDocument(item.file)));
+            if (!sessionScopeIsCurrent() || boundSessionId.current !== sessionId) return;
+            documents = rememberAgentDocuments(documentScope, extracted);
+            say({ role: 'agent', text: `已读取 ${extracted.map(doc => `${doc.name}（${doc.sections.length} 段）`).join('、')}。资料已保存在当前对话，可展开“已读资料”查看原文。` });
+          } catch (error) {
+            if (!sessionScopeIsCurrent() || boundSessionId.current !== sessionId) return;
+            setPendingFiles(batch);
+            say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '文档读取未完成，附件保留，请重试。' });
+            return;
+          }
+        }
+        const { images, skipped } = visionImagesWithinBudget(batch.filter(item => !isAgentDocument(item.file)).map(item=>item.url));
+        say({role:'user',text:trimmed||`📎 ${batch.map(item => item.file.name).join('、')}`});
         if (skipped>0) say({role:'agent',amber:true,text:`有 ${skipped} 张图超出本次请求的体积上限，只带了 ${images.length} 张；其余没有上传，可减少张数后重发。`});
         // 纯发图也给一句默认理解指令（边缘 schema 要求 message 非空）；图片随 outdoor_v1 请求发给 deepseek-flash。
-        await outdoorWorkflow.handle(trimmed||'请看这张现场截图，结合当前规划给布置建议', clarification, images);
+        await outdoorWorkflow.handle(trimmed||'请阅读我上传的资料，概括其中的场地、分区或宾客要求并引用来源；先指出需要澄清的地方', clarification, images, documents);
         return;
       }
       say({role:'user',text:trimmed});
@@ -3189,7 +3231,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         if(chosen){await handleVenuePick(chosen);return;}
         if(isAffirmativeIntent(trimmed)){if(venuePick.candidates.length===1)await handleVenuePick(venuePick.candidates[0]!);else say({role:'agent',text:'有多个地点候选，请告诉我名称或第几个；不把其中一个猜成本次场地。'});return;}
       }
-      await outdoorWorkflow.handle(trimmed,clarification);return;
+      await outdoorWorkflow.handle(trimmed,clarification,undefined,readAgentDocuments(`${sessionScope}:${boundSessionId.current ?? 'local'}`));return;
     }
     if (!attachment && isExplicitProposalConfirmation(trimmed)) {
       if(!queued)say({role:'user',text:trimmed});
@@ -3847,6 +3889,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     acceptFile: file => { void acceptFile(file); }, retryFile: () => { if (lastFile.current) void acceptFile(lastFile.current); },
     // 浮窗里「图片 / 文件」各自限定 accept；不传时回到全量白名单（老入口行为不变）。
     pickFile: (accept?: string) => { const input = fileInput.current; if (!input) return; input.accept = accept ?? DEFAULT_FILE_ACCEPT; input.click(); },
+    venueResearch: readVenueResearch(`${sessionScope}:${boundSessionId.current ?? 'local'}`),
+    documents: readAgentDocuments(`${sessionScope}:${boundSessionId.current ?? 'local'}`),
     pendingFiles: pendingFiles.map(({ file, url }) => ({ name: file.name, url })),
     removePendingImage: index => setPendingFiles(list => list.filter((_, i) => i !== index)),
     send, say, rainOn: view.weather === 'rain', streamPreview,
@@ -4178,7 +4222,7 @@ function FileLineIcon({ size = 16, 'aria-hidden': ariaHidden }: { size?: number;
 }
 
 /** 附件白名单：图片 + 图纸/PDF。加号浮窗会按「图片 / 文件」临时收窄，取消选择后回到这份全量。 */
-const DEFAULT_FILE_ACCEPT = 'image/png,image/jpeg,image/webp,.pdf,.dxf,.dwg';
+const DEFAULT_FILE_ACCEPT = `image/png,image/jpeg,image/webp,${AGENT_DOCUMENT_ACCEPT},.dxf,.dwg`;
 
 /** 现场截图一次最多 10 张：与边缘 images schema 的上限一致，前端不多收。 */
 const MAX_PENDING_IMAGES = 10;
@@ -4512,6 +4556,13 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     failed: generating || agent.understanding || agent.briefBusy ? null : agent.processFailed,
     stageLine: agent.toolPending ? null : localStageLine,
   });
+  const traceRows = runState.scope === 'layout' && runState.eventLog.length > 0
+    ? []
+    : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog });
+  // T1-c：ToolCallTrace 是唯一的「当前执行状态」；它出现时卡内阶段图注让位，
+  // 任务卡的 working/done/stopped 也收进默认收起的「任务过程」，只保留可操作子卡与停止钮。
+  const traceActive = Boolean(processText || agent.streamPreview || traceRows.some(row => row.status === 'running'));
+  const outdoorTaskHistorical = Boolean(traceActive && agent.outdoorTask && ['working', 'done', 'stopped'].includes(agent.outdoorTask.state));
   // 每格只说它自己那一层的事：活动、Bingo、空间、物料共用同一份配置。
   // 地图优先：地址没定就只给选址句，不给无地点的设计句；定完地点再回到活动/布置句。
   const placePending = placeStillPending({ hasOutdoorPlan: agent.outdoorBridgeReady, stage: agent.outdoorWorkflow.state.stage, venueUp: agent.venueUp });
@@ -4564,7 +4615,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   // 2026-11-17 用户：Bingo 底部那张「当前任务·搜索目标地点」是错误地加了素材图，整块收掉。
   // 活动脸的引导卡照旧；Bingo 只留审校统计与气泡，不再带任务缩略图。
   const outdoorWorkflowCard = !bingo && agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply || agent.outdoorWorkflow.pendingPlan) && (
-    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} onSearchPlace={focusPlaceSearch} onAdjustPlan={() => inputRef.current?.focus()} onCancelPreview={() => {
+    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} showCaption={!traceActive} onSearchPlace={focusPlaceSearch} onAdjustPlan={() => inputRef.current?.focus()} onCancelPreview={() => {
       agent.outdoorWorkflow.cancel();
       agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样；已确认的部分保留。');
     }}/>
@@ -4722,7 +4773,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '流线提案' }); agent.dismissRouteProposal(); }}
         onCancelTask={() => agent.stopOutdoorTask()}
       />}
-      {agent.outdoorTask && (!agent.outdoorBridgeReady||agent.venuePick) && <OutdoorTaskCard task={agent.outdoorTask}
+      {agent.outdoorTask && (!agent.outdoorBridgeReady||agent.venuePick) && <OutdoorTaskCard task={agent.outdoorTask} historical={outdoorTaskHistorical}
         canStop={Boolean(agent.venuePick?.loading || agent.venuePick?.picking || agent.routeBusy || agent.flowSimActive)}
         onInspectFacility={agent.inspectOutdoorFacility} onStop={agent.stopOutdoorTask} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}>
       {agent.venuePick && <VenueConfirmCard
@@ -4749,7 +4800,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         onCancelTask={() => agent.stopOutdoorTask()}
       />}
       </OutdoorTaskCard>}
-      {activity && mode === 'layout' && <ToolCallTrace line={processText} draft={agent.streamPreview} rows={runState.scope === 'layout' && runState.eventLog.length > 0 ? [] : toolTraceRows({ isRunning: runState.isRunning, events: runState.eventLog, steps: runState.stepLog })} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
+      {activity && mode === 'layout' && <ToolCallTrace line={processText} draft={agent.streamPreview} rows={traceRows} understanding={agent.understanding} onStop={agent.cancelUnderstanding}/>}
       {/* 云端真跑时由 AgentRunPanel 接管：真步骤时间线 + 停止确认行 + 过往任务归档；
           processText 状态条保留在 ToolCallTrace，避免两份「执行过程」列表。
           onRestoreStart：收尾卡「还原到本轮开始」——开跑瞬间的整盘快照一键写回。 */}
@@ -4905,15 +4956,17 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           />
         )}
         {mode === 'layout' && activity && <AgentSuggestionSlot open={capabilitiesOpen} onToggle={toggleCapabilities} placeFirst={placePending} showExample={showTaskExamples && !draft.trim() && placePending} onPickExample={pickTaskExample} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
+        <AgentResearchSources research={agent.venueResearch}/>
+        <AgentDocumentSources documents={agent.documents}/>
         <form id="composer" className="ap-composer ap-composer-panel" onSubmit={event => { event.preventDefault(); submitComposer(); }}>
         {showOutdoorSuggestion && <OutdoorStageSuggestion key={agent.outdoorWorkflow.state.stage} stage={agent.outdoorWorkflow.state.stage} onPick={pickTaskExample} />}
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <div className="ap-composer-field ap-panel-field">
         {/* 2026-11-19 用户指令：有图时附件条向上展开——它占正常流，贴在打字区上方，
             输入卡随附件往上长、删空自动收回，不再绝对定位压住占位句。 */}
-        {agent.pendingFiles.length>0 && <div className="ap-file-chips" role="list" aria-label="待发截图">
+        {agent.pendingFiles.length>0 && <div className="ap-file-chips" role="list" aria-label="待发附件">
           {agent.pendingFiles.map((item, index) => <div key={item.url.slice(-24)+String(index)} role="listitem" className="sc-chat-file ap-file-chip">
-            <img className="sc-chat-file-thumb" src={item.url} alt=""/>
+            {item.url ? <img className="sc-chat-file-thumb" src={item.url} alt=""/> : <span aria-hidden="true">文档</span>}
             <span className="sc-chat-file-name">{item.name}</span>
             <button type="button" className="sc-chat-file-remove" aria-label={`移除附件 ${index+1}`} onClick={() => agent.removePendingImage(index)}><X size={14} aria-hidden="true"/></button>
           </div>)}
@@ -4938,7 +4991,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
               <button type="button" role="menuitem" className="ap-add-item" onClick={() => { setOpenMenu(null); agent.pickFile('image/png,image/jpeg,image/webp'); }}>
                 <ImageLineIcon size={16} aria-hidden="true"/><span>图片</span>
               </button>
-              <button type="button" role="menuitem" className="ap-add-item" onClick={() => { setOpenMenu(null); agent.pickFile('.pdf,.dxf,.dwg'); }}>
+              <button type="button" role="menuitem" className="ap-add-item" onClick={() => { setOpenMenu(null); agent.pickFile(`${AGENT_DOCUMENT_ACCEPT},.dxf,.dwg`); }}>
                 <FileLineIcon size={16} aria-hidden="true"/><span>文件</span>
               </button>
             </div>}
