@@ -297,6 +297,12 @@ export interface OutdoorMapContext {
    * 没有就回空档——没有证据就如实说没有，不拿底图像素冒充。
    */
   layoutEvidence?: () => import("./outdoor-layout-weights").LayoutEvidence;
+  /**
+   * 2026-11-20 docs/47 B1：可布置域（边界 − 建筑足迹 − 道路走廊缓冲 − hard 块）的
+   * 网格基底 + 轴对齐矩形集合与指标（可用面积/最大内接矩形）。B2 分区分配的消费点。
+   * 轮廓无效时抛明确错误——不猜，不拿包围盒冒充可布置域。
+   */
+  placeableDomain?: () => import("./outdoor-placeable-domain").PlaceableDomain;
 }
 export interface OutdoorLibraryItem {
   id: string;
