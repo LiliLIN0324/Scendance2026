@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   newReviewCode,
   REVIEW_CODE_PATTERN,
+  reviewClientLinkKind,
   reviewCodeFromHash,
+  reviewCodeFromPath,
   reviewShortHref,
 } from './review-link-cloud';
 
@@ -14,11 +16,20 @@ describe('review short link helpers', () => {
     expect(reviewCodeFromHash('#review=ABC')).toBeNull();
     expect(reviewCodeFromHash('#review=abc')).toBeNull();
     expect(reviewCodeFromHash('#review=abcdef123456&x=1')).toBeNull();
+    expect(reviewCodeFromPath('/r/abcdef123456')).toBe('abcdef123456');
+    expect(reviewCodeFromPath('/r/abcdef123456/')).toBe('abcdef123456');
+    expect(reviewCodeFromPath('/review/abcdef123456')).toBeNull();
+    expect(reviewCodeFromPath('/r/short')).toBeNull();
   });
 
-  it('builds the short review URL and refuses a bad origin or code', () => {
+  it('builds a path short link and classifies the three client URL shapes', () => {
     expect(reviewShortHref('https://app.example/editor?local=1', 'abcdef123456'))
-      .toBe('https://app.example/review/#review=abcdef123456');
+      .toBe('https://app.example/r/abcdef123456');
+    expect(reviewClientLinkKind(new URL('https://app.example/r/abcdef123456'))).toBe('path');
+    expect(reviewClientLinkKind(new URL('https://app.example/review/#review=abcdef123456'))).toBe('hash');
+    expect(reviewClientLinkKind(new URL('https://app.example/review/#layout=abc'))).toBe('layout');
+    expect(reviewClientLinkKind(new URL('https://app.example/r/abcdef123456?view=1'))).toBeNull();
+    expect(reviewClientLinkKind(new URL('https://app.example/r/abcdef123456#review=abcdef123456'))).toBeNull();
     expect(reviewShortHref('not a url', 'abcdef123456')).toBeNull();
     expect(reviewShortHref('https://app.example', 'short')).toBeNull();
   });
