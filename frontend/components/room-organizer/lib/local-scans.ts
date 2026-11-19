@@ -132,9 +132,10 @@ export function registerCloudScans(): number {
   for (const entry of localScanIndex()) {
     if (findAholoAsset(entry.assetId)) continue;
     const meters = metersFromForwardBox(entry.forwardBox);
-    // 索引里的 LOD 目录是站内静态文件，线上也一样能读，所以先用手上这份；
-    // 没有才退回云端资产库的 `scans/<id>/lod-meta.json`（R2 上没上传就是 404，预览退回单文件）。
-    const lodUrl = entry.lodUrl ?? cloudScanLodUrl(entry.assetId);
+    // 云端条目走云端 LOD：`scans/<id>/lod-meta.json` 由 tools/aholo/r2-upload-scan-lod.mjs 上传，
+    // 它的第 0 档指回同桶的 scans/<id>.spz。站内目录 frontend/public/scans 被 .gitignore 忽略、
+    // 部署站读不到，拿它当首选只会让线上每次都 404 后退回单文件。
+    const lodUrl = cloudScanLodUrl(entry.assetId);
     const saved = rememberAholoAsset({
       assetId: entry.assetId,
       kind: entry.kind,
