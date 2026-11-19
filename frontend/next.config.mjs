@@ -76,9 +76,9 @@ const buildIdentityEnv = buildIdentity();
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // 同一份源码开两个 dev 时，共用一个 .next 会让 webpack 清单互相覆盖，
-  // 页面报「reading 'call'」的 chunk 错。后启动的那个用 NEXT_DIST_DIR 单独起目录。
-  distDir: process.env.NEXT_DIST_DIR || '.next',
+  // dev 与生产构建不能共用清单。静态导出内部固定用 .next，因此隔离开发缓存。
+  // 保留 NEXT_DIST_DIR 给多个开发实例使用；生产静态交付仍在 out/。
+  distDir: process.env.NEXT_DIST_DIR || (process.env.NODE_ENV === 'development' ? '.next-dev' : '.next'),
   output: 'export',
   // 本机 dev 免登录：把 .env.local 的账号注入开发构建，登录卡不再要求手填。
   // 生产构建 localAutoLoginEnv 返回空串，产物里没有这段凭据。
