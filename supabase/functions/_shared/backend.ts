@@ -22,7 +22,7 @@ export interface Backend {
   /** Injectable monotonic clock for deadline-budget tests; defaults to Date.now in production. */
   agentClock?: ()=>number;
   upload(path:string,bytes:Uint8Array,mime:string):Promise<void>;
-  sign(path:string):Promise<string>;
+  sign(path:string,expiresIn?:number):Promise<string>;
   readSourceBytes?(path:string):Promise<Uint8Array>;
 }
 function rpc(client: SupabaseClient,name:string): Rpc {
@@ -56,6 +56,6 @@ export function createBackend(env:Env):Backend {
       if(error && !('statusCode' in error && String(error.statusCode)==='409')) throw new ApiError('STORAGE_UPLOAD_FAILED',502);
     },
     async readSourceBytes(path) { const {data,error}=await client.storage.from('scene-assets').download(path);if(error||!data)throw new ApiError('STORAGE_DOWNLOAD_FAILED',502);return new Uint8Array(await data.arrayBuffer()); },
-    async sign(path) { const {data,error}=await client.storage.from('scene-assets').createSignedUrl(path,300); if(error||!data) throw new ApiError('STORAGE_SIGN_FAILED',502); return data.signedUrl; },
+    async sign(path,expiresIn=300) { const {data,error}=await client.storage.from('scene-assets').createSignedUrl(path,expiresIn); if(error||!data) throw new ApiError('STORAGE_SIGN_FAILED',502); return data.signedUrl; },
   };
 }
