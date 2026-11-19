@@ -8,6 +8,7 @@ import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationPhases, eventOperationsLimits, eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { createOperation, fromShanghaiDateTimeInput, operationBasis, operationObjectReview, operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toShanghaiDateTimeInput } from '../lib/event-operations';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import type { DaySheetDeliveryIdentity } from '../../../lib/event-day-sheet';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import type { CreativeBrief } from '../lib/creative-brief';
 import type { RoomLayout } from '../lib/types';
@@ -29,6 +30,8 @@ interface Props {
   onOpenBrief?: (() => void) | undefined;
   /** 执行资料门面：档案、需求、当天执行包、任务默认折起。空档案只留一句。 */
   compact?: boolean;
+  /** 交付版本身份：执行单头部写清这张纸基于哪一版。 */
+  delivery?: DaySheetDeliveryIdentity | null | undefined;
 }
 type ReviewStatus = EventOperationTask['status'] | 'needs_review' | 'checking';
 const emptyOperations: EventOperations = { schemaVersion: 1, dataKind: 'unspecified', tasks: [] };
@@ -200,7 +203,7 @@ function saveHtmlFile(fileName: string, text: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins, suggestionsPanel, compact = false }: Props): JSX.Element {
+export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, briefState, onOpenBrief, checkins, suggestionsPanel, compact = false, delivery = null }: Props): JSX.Element {
   const operations = layout.eventOperations ?? emptyOperations;
   const [title, setTitle] = useState(''), [phase, setPhase] = useState<EventOperationTask['phase']>('preparation');
   const [openedTask, setOpenedTask] = useState<string | null>(null), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -330,7 +333,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
     {compact ? <details className="sc-operation-fold"><summary>活动需求</summary>{briefBlock}</details> : briefBlock}
     {!compact && <p className="sc-note sc-operation-guide">活动安排管理布场、签到、主持与撤场；物料工作单逐件核对规格与摆放。</p>}
     {!compact && <EventProfileCard profile={layout.eventProfile} />}
-    {compact ? <details className="sc-operation-fold"><summary>当天执行包</summary><DaySheetExport layout={layout} save={saveHtmlFile} /></details> : <DaySheetExport layout={layout} save={saveHtmlFile} />}
+    {compact ? <details className="sc-operation-fold"><summary>当天执行包</summary><DaySheetExport layout={layout} save={saveHtmlFile} delivery={delivery} /></details> : <DaySheetExport layout={layout} save={saveHtmlFile} delivery={delivery} />}
     {compact ? <details className="sc-operation-fold"><summary>{`活动任务 · ${operations.tasks.length} 项`}</summary>{taskBlock}</details> : taskBlock}
   </section>;
 }
