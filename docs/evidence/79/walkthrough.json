@@ -5,13 +5,14 @@
   "round": "第六轮（2026-11-19）：真实登录态 + 真实云端 + 真机复跑",
   "account": "walkthrough-79@scendance.test（本轮新建的走查专用账号；不碰团队账号数据）",
   "harness": "docs/evidence/79/tools/（Playwright + HAR + CDP 级离线 + Supabase 管理 API 只读 SQL）",
-  "note": "本文件是走查记录本的归档快照，不是发布结论。判定口径：固定数据 && 真实浏览器 == 'pass' && 真实云端 == 'pass' 三类齐才过；partial 不算过；n/a 不能顶 pass。2026-11-19 部署缺口已修复：scene-api v64 + 两条迁移，PUT /outdoor-plans 已 200；#7 因此转为 pass。#9 的云端 CAS 已直连验证，但同轮 #9 浏览器链的 revision 前后对照仍缺；#1/#3/#4/#5/#8 待复跑；#10 缺服务端日志权限。门禁解除只能由人签字，agent 不能代签。",
+  "note": "本文件是走查记录本的归档快照，不是发布结论。判定口径：固定数据 && 真实浏览器 == 'pass' && 真实云端 == 'pass' 三类齐才过；partial 不算过；n/a 不能顶 pass。2026-11-19 部署缺口已修复：scene-api v64（当前 v65）+ 两条迁移，PUT /outdoor-plans 已 200；#7 因此转为 pass。#9 的云端 CAS 已直连验证，但同轮 #9 浏览器链的 revision 前后对照仍缺；#1/#3/#4/#5/#8 待复跑；#10 缺服务端日志权限。门禁解除只能由人签字，agent 不能代签。",
   "deployGap": {
-    "summary": "2026-11-19 已修复：scene-api 部署到 v64，迁移 20261117180000 / 20261117190000 已应用；PUT /outdoor-plans 由 404 变 200，GET 返回 200 []，revision 可读写。历史缺口见 00/2026-11-19-deploy-gap.md，解决读数见 00/2026-11-19-deploy-resolution.md。",
+    "summary": "2026-11-19 已修复：scene-api 本轮部署到 v64，当前线上 v65（01:46:40Z，非本轮操作，未核对函数体）；迁移 20261117180000 / 20261117190000 已应用；PUT /outdoor-plans 由 404 变 200，GET 返回 200 []，revision 可读写。历史缺口见 00/2026-11-19-deploy-gap.md，解决读数见 00/2026-11-19-deploy-resolution.md。",
     "evidence": "docs/evidence/79/00/2026-11-19-deploy-gap.md",
     "resolution": "docs/evidence/79/00/2026-11-19-deploy-resolution.md",
     "resolvedAt": "2026-11-19T01:40:02Z",
-    "sceneApiVersion": 64,
+    "sceneApiVersion": 65,
+    "firstDeployVersion": 64,
     "blockedCases": [1, 3, 4, 5, 8, 9],
     "resolvedCases": [7],
     "remainingCases": [1, 3, 4, 5, 8, 9]
