@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from "react";
+import { waitFor } from '@testing-library/react';
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, it, expect, vi, type Mock } from "vitest";
 import type { BackendSession } from "@/lib/backend-session";
@@ -10,6 +11,7 @@ import { FIXED_DATA_CASES } from "../lib/outdoor-release-status-card";
 import { OUTDOOR_STAGE_LABELS, useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import { getGenerationSheetState, resetGenerationSheetForTests } from "../lib/generation-sheet";
+import { getAgentSupervision, setAgentSupervision } from '../lib/agent-supervision-store';
 import type {
   OutdoorMapContext,
   OutdoorAgentBridge,
@@ -19,6 +21,10 @@ import type { SitePlanData } from "../../../../supabase/functions/_shared/site-p
 vi.mock(import("../lib/road-network"), async (importOriginal) => ({
   ...(await importOriginal()),
   fetchRoadNetwork: vi.fn(async () => ({ roads: [] })),
+}));
+vi.mock(import('../lib/openfreemap-buildings'), async importOriginal => ({
+  ...await importOriginal(),
+  fetchOpenFreeMapBuildings: vi.fn(async () => []),
 }));
 vi.mock("../three/glb-assets", () => ({
   ensureGlbAsset: vi.fn(),
@@ -42,7 +48,7 @@ let root: Root,
   plan: SitePlanData,
   epoch: number,
   scope: string;
-let supervision: "strict" | "key-points" | undefined;
+let supervision: "strict" | "key-points" | "auto" | undefined;
 let chatMeta: { provider: unknown; model: unknown };
 // undefined = 会话不给 getSnapshot（旧用例口径）；null = 未登录；对象 = 已登录。
 let sessionUser: { id: string; is_anonymous?: boolean } | null | undefined;
@@ -81,7 +87,7 @@ let saySpy: Mock<(text: string, clarification?: boolean) => void>;
 function Harness() {
   flow = useOutdoorAgentWorkflow({
     scope,
-    supervision: () => supervision ?? "key-points",
+    supervision: () => supervision,
     bridge: () => bridge,
     controller: () =>
       ({
@@ -227,7 +233,7 @@ it('婚礼自主重排不因缺参数请求云端追问，生成地图候选并�
   expect(apply).not.toHaveBeenCalled();
   await action('confirm');
   expect(apply).toHaveBeenCalledOnce();
-  const backupKey=Object.keys(localStorage).find(key=>key.startsWith('scendance-outdoor-plan-v1:wedding-before-'));
+  const backupKey=Object.keys(localStorage).find(key=>key.startsWith('scendance-outdoor-plan-v1:agent-before-'));
   expect(backupKey).toBeTruthy();
   expect(JSON.parse(localStorage.getItem(backupKey!)!).plan).toEqual(original);
   expect(saySpy.mock.calls.some(([text])=>text.includes('打开原方案'))).toBe(true);
@@ -312,7 +318,7 @@ it("模型提出分区计划后，批准计划才生成预览，再确认才写�
   understand.mockResolvedValueOnce(response("zones", {
     zones: [{ name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "室外展览区" }],
   }));
-  await act(async () => { await flow.handle("安排室外展览区"); });
+  await act(async () => { await flow.handle("先给计划，安排室外展览区"); });
   const planCard = host.querySelector('[aria-label="待批准计划"]');
   const thoughtCard = host.querySelector('[aria-label="思考卡片"]');
   expect(thoughtCard?.textContent).toContain("安排室外展览区");
@@ -2602,4 +2608,121 @@ it("默认直接执行：无分区时「你看着办」直接出一版小型布�
   expect(plan.facilities).toHaveLength(5);
   expect(apply).toHaveBeenCalledTimes(1);
   expect(saySpy.mock.calls.map(call => call[0]).join()).not.toContain("需要先分区吗");
+});
+
+const autonomousChairLibrary = async () => [{id:'chair',name:'椅子',source:'built-in' as const,modelSlug:'oneplan:chair',available:true,width:1,depth:1,height:1}];
+const addTwoChairs = () => response('objects',{items:[{zone:'',query:'椅子',count:2,evidence:'放2把椅子'}]});
+
+it('自主权限：严格档直接计算预览，只在写入前确认一次',async()=>{
+  await confirmScope();apply.mockClear();bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  await turn('放2把椅子',addTwoChairs());
+  expect(flow.pendingPlan).toBeNull();expect(flow.proposal?.next.facilities).toHaveLength(2);
+  expect(flow.proposal?.approvalReason).toContain('严格');expect(apply).not.toHaveBeenCalled();
+  await action('confirm');expect(apply).toHaveBeenCalledOnce();
+});
+
+it('自主权限：真实设置切换立即作用到默认执行器，删除只确认一次',async()=>{
+  supervision=undefined;bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  await act(async()=>setAgentSupervision('key-points'));
+  expect(getAgentSupervision()).toBe('key-points');
+  await turn('放2把椅子',addTwoChairs());expect(apply).toHaveBeenCalledOnce();
+  await act(async()=>setAgentSupervision('strict'));
+  await turn('再加2把椅子',response('objects',{items:[{zone:'',query:'椅子',count:2,evidence:'再加2把椅子'}]}));
+  expect(apply).toHaveBeenCalledOnce();expect(flow.proposal).not.toBeNull();
+  await action('confirm');expect(apply).toHaveBeenCalledTimes(2);
+});
+
+it('自主权限：自动档覆盖前保存完整恢复副本，不能仅依赖本次撤销栈',async()=>{
+  supervision=undefined;bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  await act(async()=>setAgentSupervision('auto'));
+  await turn('放2把椅子',addTwoChairs());const original=structuredClone(plan);
+  await turn('椅子改成1把',response('objects',{items:[{zone:'',query:'椅子',count:1,evidence:'椅子改成1把'}]}));
+  expect(flow.proposal).toBeNull();expect(plan.facilities).toHaveLength(1);
+  const key=Object.keys(localStorage).find(key=>key.startsWith('scendance-outdoor-plan-v1:agent-before-'));
+  expect(key).toBeTruthy();expect(JSON.parse(localStorage.getItem(key!)!).plan.facilities).toEqual(original.facilities);
+});
+
+it('自主权限：地图最后核对期间切成严格档，不自动写入旧授权的候选',async()=>{
+  supervision=undefined;bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  let reads=0;
+  bridge.mapContext=vi.fn(async()=>{
+    reads++;if(reads===3)setAgentSupervision('strict');
+    return{version:'map:ready',status:'ready' as const,text:'已有范围',featureIds:[],unknowns:[]};
+  });
+  await turn('放2把椅子',addTwoChairs());
+  expect(reads).toBe(3);expect(apply).not.toHaveBeenCalled();
+  expect(flow.proposal?.approvalReason).toContain('严格');
+});
+
+it('自主权限：模型处理期间换账号，旧账号结果不能写入当前活动',async()=>{
+  supervision=undefined;sessionUser={id:'designer-a'};bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  let complete!:(value:ReturnType<typeof response>)=>void;
+  understand.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+  let pending!:Promise<boolean>;await act(async()=>{pending=flow.handle('放2把椅子');});
+  await act(async()=>{sessionUser={id:'designer-b'};complete(addTwoChairs());await pending;});
+  expect(apply).not.toHaveBeenCalled();expect(plan.facilities).toHaveLength(0);
+});
+
+it('自主权限：失败重试携带原始需求，不能按更早的子入口阶段重放',async()=>{
+  supervision=undefined;bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  mountAtFlowState({stage:'sub-routes',confirmedBoundary:JSON.stringify({anchor:plan.anchor,boundary:plan.boundary})});
+  understand.mockRejectedValueOnce(new Error('temporary model failure'));
+  await act(async()=>{await flow.handle('放2把椅子');});
+  understand.mockResolvedValueOnce(addTwoChairs());
+  await act(async()=>{await flow.retryLastRequest();});
+  expect(understand.mock.calls[1][0]).toBe('放2把椅子');
+  expect(plan.facilities).toHaveLength(2);expect(plan.nodes).toHaveLength(0);
+});
+
+it('自主权限：非婚礼同样采用布局假设，不把缺少人数当作停止理由',async()=>{
+  supervision=undefined;
+  bridge.readLibrary=vi.fn(async()=>['桌子','垃圾桶','指示牌'].map(name=>({id:name,name,modelSlug:'oneplan:fixture',source:'built-in' as const,available:true,width:1,depth:1,height:1})));
+  await turn('请自主规划，继续执行，缺参数采用默认值',response('ask',{}, {reply:'先提供人数？'}));
+  expect(plan.facilities.length).toBeGreaterThan(0);expect(flow.state.brief.guests).toBeUndefined();
+  expect(saySpy.mock.calls.some(([text])=>text==='先提供人数？')).toBe(false);
+});
+
+it('自主权限：卡片动作失败后只重试该动作，不重复更早已经完成的物件请求',async()=>{
+  supervision=undefined;bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  await turn('放2把椅子',addTwoChairs());
+  expect(plan.facilities).toHaveLength(2);expect(understand).toHaveBeenCalledOnce();
+  await action('sub-routes');
+  expect(flow.notice).toBeTruthy();
+  await act(async()=>{expect(await flow.retryLastRequest()).toBe(true);});
+  expect(understand).toHaveBeenCalledOnce();expect(plan.facilities).toHaveLength(2);
+});
+
+it('自主权限：首次明确布置请求就先起稿，不要求用户再次说自主或补齐人数',async()=>{
+  supervision=undefined;
+  bridge.readLibrary=vi.fn(async()=>['桌子','垃圾桶','指示牌'].map(name=>({id:name,name,modelSlug:'oneplan:fixture',source:'built-in' as const,available:true,width:1,depth:1,height:1})));
+  await turn('帮我布置一个讲座活动',response('ask',{}, {reply:'请提供人数和物件清单'}));
+  expect(plan.facilities.length).toBeGreaterThan(0);expect(flow.state.brief.guests).toBeUndefined();
+  expect(saySpy.mock.calls.some(([text])=>text==='请提供人数和物件清单')).toBe(false);
+});
+
+it('自主权限：原方案副本保存失败时，自动档也不能删除已有物件',async()=>{
+  supervision=undefined;bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  await act(async()=>setAgentSupervision('auto'));
+  await turn('放2把椅子',addTwoChairs());const original=structuredClone(plan);
+  const write=Storage.prototype.setItem;
+  vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key,value){
+    if(key.startsWith('scendance-outdoor-plan-v1:agent-before-'))throw new Error('quota');
+    write.call(this,key,value);
+  });
+  await turn('椅子改成1把',response('objects',{items:[{zone:'',query:'椅子',count:1,evidence:'椅子改成1把'}]}));
+  expect(plan).toEqual(original);expect(apply).toHaveBeenCalledOnce();expect(flow.notice).toContain('恢复副本未能保存');
+});
+
+it('自主权限：真实登录订阅保留原请求并自动续接，不把登录当成跨账号结果应用',async()=>{
+  supervision=undefined;sessionUser=null;bridge.readLibrary=vi.fn(autonomousChairLibrary);
+  bridge.mapContext=vi.fn(async()=>({version:'map:ready',status:'ready' as const,text:'测试范围',featureIds:[],unknowns:[]}));
+  const listeners=new Set<()=>void>();
+  cardHistorySession={subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};}};
+  mount();
+  await act(async()=>{await flow.handle('放2把椅子');});
+  expect(flow.state.pendingLogin?.message).toBe('放2把椅子');expect(understand).not.toHaveBeenCalled();
+  understand.mockResolvedValueOnce(addTwoChairs());
+  await act(async()=>{sessionUser={id:'signed-in-designer'};[...listeners].forEach(listener=>listener());});
+  await waitFor(()=>expect(apply).toHaveBeenCalledOnce());
+  expect(plan.facilities).toHaveLength(2);expect(flow.state.pendingLogin).toBeUndefined();
 });

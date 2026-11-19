@@ -23,6 +23,9 @@ describe('监督档位读数', () => {
 });
 
 describe('gateAction 按动作性质判，不按档位一刀切', () => {
+  it.each(['strict','key-points','auto'] as const)('%s 档不能代替付费、外发和不可恢复操作的单独确认',level=>{
+    for(const kind of ['paid','external','irreversible'] as const)expect(gateAction(level,{kind,label:'提交任务'})).toMatchObject({required:true});
+  });
   const cases: Array<{
     level: SupervisionLevel;
     kind: 'read' | 'write' | 'destructive' | 'bulk';

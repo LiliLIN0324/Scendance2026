@@ -54,6 +54,9 @@ import { type WorkbenchMode } from '../lib/workbench-mode';
 import { ensureGlbAsset, getGlbAssetState } from '../three/glb-assets';
 import { proposalDifferences } from '../three/proposal-preview';
 import { gateAction } from '../lib/agent-supervision';
+import { getAgentSupervision, useAgentSupervision } from '../lib/agent-supervision-store';
+import { layoutActionRisk, lockedLayoutChange } from '../lib/agent-action-risk';
+import { AgentSupervisionPicker } from './agent-supervision-picker';
 import { MaterialCustomization, type MaterialCustomizationSeed } from './material-customization';
 import { ProjectReviewPanel } from './project-review-panel';
 import { useReconstructionPanel } from './reconstruction-panel';
@@ -1521,12 +1524,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const announce=canAnnounceRetained();
     const preferred=prepared.find(item=>item.label===result.evaluation?.choice)??prepared[0]!;
     // 默认执行：普通写入直接落到画布（可撤销）；只有 JEV、多候选、破坏性或大范围改动才停下等确认。
-    const differences=proposalDifferences(preferred.preview.base,preferred.preview.layout);
-    const gate=gateAction('key-points',{
-      kind:differences.some(item=>item.kind==='removed')?'destructive':'write',
-      affectedCount:differences.length,
-      label:'这版方案',
-    });
+    const gate=gateAction(getAgentSupervision(),layoutActionRisk(preferred.preview.base,preferred.preview.layout));
     if(result.executionMode==='direct'&&autoApplyRef.current&&result.evaluation?.status!=='partial'&&!result.errorCode&&prepared.length===1&&!gate.required){
       try{
         await applyCandidate(preferred.preview,{auto:true});
@@ -1755,7 +1753,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     for(const quote of quotes)if(!messageForModel?.includes(quote)&&!messageForModel?.includes(JSON.stringify(quote)))messageForModel=`${messageForModel?.trim()||'请按当前活动需求生成布置方案。'}\n桌椅规格的用户原话：${JSON.stringify(quote)}。`;
     for(const [name,quote] of [['桌子',seatingCapture?.defaults?.desk],['椅子',seatingCapture?.defaults?.chair]] as const)if(quote&&!messageForModel?.includes(quote)&&!messageForModel?.includes(JSON.stringify(quote)))messageForModel=`${messageForModel?.trim()||'请按当前活动需求生成布置方案。'}\n用户选择${name}示意默认的原话：${JSON.stringify(quote)}。`;
     const turnFloor=floorToken;if(!floorValid(turnFloor)){setNotice('楼层正在切换，请稍后重试。');return;}
-    autoApplyRef.current=!(options?.requirePreview||options?.intent==='model');
+    autoApplyRef.current=!(options?.requirePreview||options?.intent==='model'||getAgentSupervision()==='strict');
     const taskGuard=sourceWriteGuard;
     if(requestPending.current||recoverable)return;
     if(applyRecoveryRef.current || currentApplyRecovery()){setNotice('云端与本地版本尚待核对，请先处理版本差异。');return;}
@@ -1884,7 +1882,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       try{rememberRun(marker,submittedScope);}catch{throw new Error('无法保存任务编号，尚未提交。请恢复浏览器本机存储后重试。');}
       requestPending.current=true;setBusy(true);setTrackedPreview(null);setCandidates([]);setRun(null);dispatched=true;dispatchedRequestId=marker.requestId;
       if(annotationObservation)say(annotationObservation.status==='ready'?'本次已带上规划标注供模型读取。':'本次没能完整读取规划标注。');
-      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(priorRun?{priorRun}:{}),...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{}),...(planObservation?{planObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:options?.requirePreview||options?.intent==='model'?'preview':'direct',...(activeProvider!=='default'?{provider:activeProvider}:{}),...(activeModel?{model:activeModel}:{})});
+      const result=await controller.startAgentRun({requestId:marker.requestId,instruction:context.instruction,context:{...context.context,...(priorRun?{priorRun}:{}),...(seatingAllocation?{seatingAllocation}:{}),...(seatingSpecs?{seatingSpecs}:{}),...(annotationObservation?{annotationObservation}:{}),...(planObservation?{planObservation}:{})},scene,selectedIds:[...allSelectedIds].filter(id=>scene.objects.some(object=>object.id===id)),jevEnabled,executionMode:options?.requirePreview||options?.intent==='model'||getAgentSupervision()==='strict'?'preview':'direct',...(activeProvider!=='default'?{provider:activeProvider}:{}),...(activeModel?{model:activeModel}:{})});
       creationResponded=true;
       if(cancelledRequest.current===marker.requestId){
         if(agentScopeRef.current===submittedScope){
@@ -1908,9 +1906,12 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     if(isUnchangedProposal(selected.proposal))throw new Error('这版与当前场景一致，无需应用；请继续核对是否满足需求。');
     const chatScope=`activity:${selected.layout.id??''}`,chatId=getActiveAssistantSessionId(chatScope);
     const briefEpoch=briefEditEpoch.current;
+    let automaticWriteStarted=false;
     const dialogue=captureDialogue?.()??null;
     if(captureDialogue&&!dialogue)throw new Error('当前对话尚未核对完成，请先核对历史需求并重新生成方案。');
     const checkRequirements=()=>{
+      const lockedChange=lockedLayoutChange(selected.base,selected.layout);if(lockedChange)throw new Error(lockedChange);
+      if(options?.auto&&!automaticWriteStarted){const gate=gateAction(getAgentSupervision(),layoutActionRisk(selected.base,selected.layout));if(gate.required)throw new Error(gate.why);}
       if(briefEditEpoch.current!==briefEpoch||briefRef.current!==selected.briefKey||getActiveAssistantSessionId(chatScope)!==chatId||dialogue&&!dialogue.isCurrent())throw new Error('应用期间需求或对话已变化，已保留当前画布。');
       if(dialogue && dialogue.project().availability!=='available')throw new Error('当前对话尚未核对完成，请稍后重试。');
       if(dialogue && !dialogue.isCurrent())throw new Error('应用期间需求或对话已变化，已保留当前画布。');
@@ -1929,10 +1930,10 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     };
     const checkAuthority=()=>{checkWriteAuthority();checkRequirements();if(!options?.auto&&previewRef.current!==selected)throw new Error('候选已变化，请重新核对。');if(!sessionValid(selected.sessionToken))throw new Error('活动已切换，旧候选不能应用，请重新生成。');if(!floorValid(selected.floorToken))throw new Error('楼层已切换，旧候选不能应用，请重新生成。');if(!venueBindingCurrent(selected.venueBinding))throw new Error('场地图纸或比例资料已变化，请重新核对。');if(!seatingCurrent(selected.seatingCapture))throw new Error(selected.seatingCapture?.annotationObservation?'活动需求或规划标注已变化，旧候选不能应用，请重新生成。':'活动会话或桌椅配比已变化，旧候选不能应用，请重新生成。');if(!annotationBindingCurrent(selected))throw new Error('账号、项目或编辑权已变化，旧候选不能应用，请重新生成。');checkCandidateInventoryAuthority(selected,inventoryVersion);};
     checkAuthority();
-    await withApplyLock(projectRecoveryScope(controller.config.apiUrl,selected.proposal.project_id),()=>applyCandidateLocked(selected,checkAuthority,checkWriteAuthority,checkRequirements,[capability?.signal,authority?.source?.signal,authority?.abort.signal].filter((s):s is AbortSignal=>!!s),inventoryVersion));
+    await withApplyLock(projectRecoveryScope(controller.config.apiUrl,selected.proposal.project_id),()=>applyCandidateLocked(selected,checkAuthority,checkWriteAuthority,checkRequirements,[capability?.signal,authority?.source?.signal,authority?.abort.signal].filter((s):s is AbortSignal=>!!s),inventoryVersion,()=>{automaticWriteStarted=true;}));
     } finally { dialogue?.release(); }
   }
-  async function applyCandidateLocked(selected:Preview,checkAuthority:()=>void,checkWriteAuthority:()=>void,checkRequirements:()=>void,signals:AbortSignal[],inventoryVersion:number):Promise<void> {
+  async function applyCandidateLocked(selected:Preview,checkAuthority:()=>void,checkWriteAuthority:()=>void,checkRequirements:()=>void,signals:AbortSignal[],inventoryVersion:number,onApplyStarted:()=>void):Promise<void> {
     checkAuthority();
     if(!sessionValid(selected.sessionToken))throw new Error('活动已切换，旧候选不能应用，请重新生成。');
     if(!venueBindingCurrent(selected.venueBinding))throw new Error('场地图纸或比例资料已变化，请重新核对。');
@@ -1979,7 +1980,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
       checkAuthority();
       let abort!:()=>void;
       const interrupted=new Promise<never>((_resolve,reject)=>{abort=()=>reject(new Error('本机编辑权在提交期间失效'));for(const signal of signals)signal.addEventListener('abort',abort,{once:true});});
-      try { checkAuthority();result=await Promise.race([controller.applySceneProposal(selected.proposal,scene),interrupted]);checkWriteAuthority();checkCandidateInventoryAuthority(selected,inventoryVersion,true); }
+      try { checkAuthority();onApplyStarted();result=await Promise.race([controller.applySceneProposal(selected.proposal,scene),interrupted]);checkWriteAuthority();checkCandidateInventoryAuthority(selected,inventoryVersion,true); }
       finally { for(const signal of signals)signal.removeEventListener('abort',abort); }
     } catch(error) {
       if(definitelyRejectedBeforeApply(error)) {
@@ -2203,6 +2204,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   toolsApiRef?: MutableRefObject<BusinessToolsApi | null>;
 }):JSX.Element {
   const studio=useStudio(); const {setExpanded}=studio; const {selectedItem,allSelectedIds,selectOnly}=useSelection();
+  const supervisionLevel=useAgentSupervision();
   const [seatAdvisoryState,setSeatAdvisoryState]=useState<{preview:Preview;text:string|null}|null>(null);
   useEffect(()=>{
     const preview=studio.preview;
@@ -2641,8 +2643,9 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
         <label className="sr-only" htmlFor="creative-message">告诉助手你的想法</label><textarea ref={messageInput} id="creative-message" value={draft} maxLength={1800} onChange={event=>setDraft(event.target.value)} placeholder={mode==='model'?'填写物料尺寸、样式和摆放要求……':'告诉我想怎么调整……'} rows={2} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();submit();}}}/>
         <div className="cr-composer-toolbar"><label className="sr-only" htmlFor="creative-work-mode">工作模式</label><select id="creative-work-mode" value={mode} onChange={event=>{const next=event.target.value as ChatMode;setMode(next);if(next==='model')setModelOpened(true);if(!docked){setBusinessMode(next);}}}>{(Object.keys(CHAT_MODES) as ChatMode[]).map(key=><option value={key} key={key}>{CHAT_MODES[key]}</option>)}</select>
           <details ref={settings} className="cr-agent-settings" onKeyDown={event=>{if(event.key==='Escape'&&event.currentTarget.open){event.preventDefault();event.stopPropagation();event.currentTarget.open=false;settingsToggle.current?.focus();}}}>
-            <summary ref={settingsToggle} aria-label="助手设置"><SlidersHorizontal size={16}/><small>{studio.jevEnabled?'JEV 开 · 先比较':mode==='model'?'物料先预览':'直接应用 · 可撤销'}</small></summary><div className="cr-settings-panel">
-      {!demoBackend&&<div className="cr-agent-mode"><span>{mode==='model'?'先预览，再确认布置':'直接应用到画布，可随时撤销'}</span></div>}
+            <summary ref={settingsToggle} aria-label="助手设置"><SlidersHorizontal size={16}/><small>{studio.jevEnabled?'JEV 开 · 先比较':mode==='model'?'物料先预览':supervisionLevel==='strict'?'严格 · 先确认':supervisionLevel==='auto'?'自动 · 可撤销':'关键节点确认'}</small></summary><div className="cr-settings-panel">
+      <AgentSupervisionPicker />
+      {!demoBackend&&<div className="cr-agent-mode"><span>{mode==='model'||supervisionLevel==='strict'?'先预览，再确认布置':'按执行权限应用，可随时撤销'}</span></div>}
       <div className="cr-agent-mode"><label><input type="checkbox" checked={studio.jevEnabled} disabled={studio.busy} onChange={event=>studio.setJevEnabled(event.target.checked)}/>JEV 决策模式</label><span>生成 3 个方案，由你最终选择</span></div>
       <p className="cr-hint">{demoHint}</p>
             </div></details><button aria-label="发送消息" type="submit" disabled={!draft.trim()||studio.busy||studio.recoverable}><ArrowUp size={20}/></button>

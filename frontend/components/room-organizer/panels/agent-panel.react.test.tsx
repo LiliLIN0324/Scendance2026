@@ -7,6 +7,7 @@ import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__test
 import { backendSceneToLayout } from '../lib/backend-adapter';
 import * as localPlanModule from '../lib/local-plan';
 import { STORAGE_KEY } from '../lib/constants';
+import { setAgentSupervision } from '../lib/agent-supervision-store';
 import { INITIAL_BRIEF } from '../lib/creative-brief';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { STAGE_PLATFORM_ASSET_ID } from '../lib/stage-platform-plan';
@@ -2474,6 +2475,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     }finally{delete controller.getSnapshot;delete controller.subscribe;}
   },20000);
   it.each([['10厘米',0.1],['100毫米',0.1],['0.1m',0.1],['两米',2]])('previews exact converted movement %s before applying', async (distance, meters) => {
+    setAgentSupervision('strict');
     const onApply = vi.fn(), onPreview = vi.fn();
     const chair = makeItem({id:'only-chair',type:'chair',name:'椅子',position:{x:0,z:0},width:0.5,depth:0.5});
     state.layout=makeLayout({width:24,height:16,floors:[makeFloor({items:[chair]})]});
@@ -2489,6 +2491,21 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     await waitFor(() => expect(onApply).toHaveBeenCalledOnce());
     expect(onApply.mock.calls[0]![0].floors[0]!.items[0]!.position!.x).toBeCloseTo(-meters);
   }, 20000);
+  it.each(['strict','key-points','auto'] as const)('自主权限：本地画布移动遵守%s档并保留全部写入守卫',async level=>{
+    setAgentSupervision(level);
+    const chair=makeItem({id:'only-chair',type:'chair',name:'椅子',position:{x:0,z:0},width:0.5,depth:0.5});
+    state.layout=makeLayout({width:24,height:16,floors:[makeFloor({items:[chair]})]});
+    const onApply=vi.fn(),onMemory=vi.fn();
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
+    send('圆桌');await waitFor(()=>expect(onMemory.mock.calls.some(([value])=>value.layoutModeConfirmed===true)).toBe(true));
+    send('把椅子往左挪10厘米');
+    if(level==='strict'){
+      const confirm=await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
+      expect(onApply).not.toHaveBeenCalled();fireEvent.click(confirm);
+    }
+    await waitFor(()=>expect(onApply).toHaveBeenCalledOnce(),{timeout:15000});
+    expect(onApply.mock.calls[0][0].floors[0].items[0].position.x).toBeCloseTo(-0.1);
+  },20000);
   it('does not silently round a one-millimetre move', async () => {
     const onApply=vi.fn(),onPreview=vi.fn();
     const chair=makeItem({id:'only-chair',type:'chair',name:'椅子',position:{x:0,z:0},width:.5,depth:.5});

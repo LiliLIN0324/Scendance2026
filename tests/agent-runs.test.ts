@@ -533,7 +533,12 @@ describe('durable bounded DeepSeek Agent',()=>{
   expect((await f.rpc(owner,'projects.get',{projectId:i.projectId})).scene).toEqual(cloudBefore);
  });
 });
-it.each(['不要直接删除桌子','暂时不要直接改','直接说明原因','先给我看一个方案','能否直接添加椅子？'])('does not auto-apply ambiguous or negative intent: %s',instruction=>{expect(agentExecutionMode(agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction,executionMode:'direct'}))).toBe('preview');});
+it.each(['不要直接删除桌子','暂时不要直接改','直接说明原因','先给我看一个方案','能否直接添加椅子？','不需要修改任何东西，只说明方案'])('does not auto-apply ambiguous or negative intent: %s',instruction=>{expect(agentExecutionMode(agentRunRequestSchema.parse({requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction,executionMode:'direct'}))).toBe('preview');});
+it.each(['请继续执行，不需要等待我逐项补充参数，直接添加两把椅子','采用默认尺寸，不用再等待我填写桌位，布置圆桌'])('自主权限：不等待缺省参数不等于禁止执行：%s',instruction=>{
+  const input={requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction};
+  expect(agentExecutionMode(agentRunRequestSchema.parse({...input,executionMode:'direct'}))).toBe('direct');
+  expect(agentExecutionMode(agentRunRequestSchema.parse({...input,executionMode:'preview'}))).toBe('preview');
+});
 it('honors direct execution for an ordinary imperative and keeps explicit preview',()=>{const base={requestId:crypto.randomUUID(),sessionId:session,generation:1,expectedRevision:0,localRevision:0,scene:scene(),selectedIds:[],instruction:'在入口摆 20 把椅子'};expect(agentExecutionMode(agentRunRequestSchema.parse({...base,executionMode:'direct'}))).toBe('direct');expect(agentExecutionMode(agentRunRequestSchema.parse({...base,executionMode:'preview'}))).toBe('preview');});
 it('validates JEV output instead of inventing probabilities',async()=>{
  const candidates=[2,5,8].map((x,i)=>({label:['A','B','C'][i],title:'x',scene:scene(),explanation:'x',warnings:[]}));
