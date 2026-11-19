@@ -32,6 +32,7 @@ import {
   type OutdoorBrief,
 } from "../lib/outdoor-agent-contract";
 import { outdoorClarificationQuestion, understandOutdoorTurn, type OutdoorClarification } from "../lib/outdoor-agent-understanding";
+import { headcountOnlyAdjustment } from "../lib/outdoor-headcount-adjustment";
 import { resolveChoiceReply, resumeActionForRequest } from "../lib/outdoor-choice-reply";
 import { restoreOutdoorFlow } from "../lib/outdoor-flow-restore";
 import { deferredNote } from "../lib/outdoor-layered-task";
@@ -1475,7 +1476,27 @@ export function useOutdoorAgentWorkflow(input: {
     const candidates = fabricated
       ? { ...normalized, facts: { ...normalized.facts, items: undefined, guests: undefined } }
       : normalized;
-    persist(mergeOutdoorFacts(stateRef.current, turn.action === 'design-event' ? { ...candidates, facts: {} } : candidates, message, priorUserText));
+    // 2026-11-19 正式站实测：模型把「人数改为 150 人，保持现有分区」判成 adjust，
+    // 但 operation 为空；这不是空间变更，不该走下面「没有本句依据」的红卡。
+    // guests 已逐字引用本句时只更新简报，画布与分区原样保留。
+    const headcountOnly = headcountOnlyAdjustment(turn, message);
+    const merged = mergeOutdoorFacts(
+      stateRef.current,
+      turn.action === 'design-event' ? { ...candidates, facts: {} } : candidates,
+      message,
+      priorUserText,
+    );
+    persist(headcountOnly !== null
+      ? { ...merged, brief: { ...merged.brief, guests: headcountOnly } }
+      : merged);
+    if (headcountOnly !== null) {
+      designStep(`只更新人数为 ${headcountOnly} 人；现有分区、边界和画布内容保持不变。`);
+      status(
+        turn.reply?.trim() || `已把人数记为 ${headcountOnly} 人；现有分区保持不变，未改动画布。`,
+        "ready",
+      );
+      return;
+    }
     if (fabricated) {
       const what = (turn.facts.items ?? [])
         .map((item) => item.query)

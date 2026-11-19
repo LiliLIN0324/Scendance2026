@@ -12,6 +12,7 @@ describe('matchVenueCommand（V-1a 场地意图）', () => {
     expect(matchVenueCommand('到滨湖银泰in77做布置')).toBe('滨湖银泰in77');
     expect(matchVenueCommand('在西湖里规划一下')).toBe('西湖');
     expect(matchVenueCommand('帮我在潮乐之城做设计')).toBe('潮乐之城');
+    expect(matchVenueCommand('在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道')).toBe('杭州湖滨银泰in77');
   });
 
   it('普通 brief（没有动词壳）不误抓，交给 brief 管线', () => {

@@ -1,0 +1,3819 @@
+{
+  "ranAt": "2026-11-19T15:00:33.018Z",
+  "account": "walkthrough-79@scendance.test",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "site": "http://localhost:3010/",
+  "searches": [
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:3199/amap-place?keywords=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77&limit=5",
+      "ms": 5237,
+      "bytes": 527,
+      "attempt": 1,
+      "body": "{\"places\":[{\"id\":\"B0FFI1ULJR\",\"name\":\"杭州湖滨银泰in77 C3区\",\"address\":\"延安路258号银泰百货(龙翔桥地铁站D口步行330米)\",\"lng\":120.164759,\"lat\":30.251068},{\"id\":\"B023B08RT2\",\"name\":\"杭州湖滨银泰in77 A区\",\"address\":\"东坡路7号\",\"lng\":120.162484,\"lat\":30.25316},{\"id\":\"B023B1DIOC\",\"name\":\"杭州湖滨in77B区\",\"address\":\"延安路245号\",\"lng\":120.163391,\"lat\":30.25457},{\"id\":\"B0FFIMEKW0\",\"name\":\"杭州湖滨银泰in77\",\"address\":\"延安路258号(龙翔桥地铁站C口步行200米)\",\"lng\":120.163749,\"lat\":30.25283},{\"id\":\"B0FFJYKKR1\",\"name\":\"杭州湖滨银泰in77 E区\",\"address\":\"延安路与邮电路交叉口西南100米\",\"lng\":120.163603,\"lat\":30.251097}]}"
+    },
+    {
+      "status": "failed",
+      "url": "http://127.0.0.1:3199/amap-place?keywords=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77&limit=6",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:3199/amap-place?keywords=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77&limit=6",
+      "ms": 9799,
+      "bytes": 633,
+      "attempt": 1,
+      "body": "{\"places\":[{\"id\":\"B0FFI1ULJR\",\"name\":\"杭州湖滨银泰in77 C3区\",\"address\":\"延安路258号银泰百货(龙翔桥地铁站D口步行330米)\",\"lng\":120.164759,\"lat\":30.251068},{\"id\":\"B023B08RT2\",\"name\":\"杭州湖滨银泰in77 A区\",\"address\":\"东坡路7号\",\"lng\":120.162484,\"lat\":30.25316},{\"id\":\"B023B1DIOC\",\"name\":\"杭州湖滨in77B区\",\"address\":\"延安路245号\",\"lng\":120.163391,\"lat\":30.25457},{\"id\":\"B0FFIMEKW0\",\"name\":\"杭州湖滨银泰in77\",\"address\":\"延安路258号(龙翔桥地铁站C口步行200米)\",\"lng\":120.163749,\"lat\":30.25283},{\"id\":\"B0FFJYKKR1\",\"name\":\"杭州湖滨银泰in77 E区\",\"address\":\"延安路与邮电路交叉口西南100米\",\"lng\":120.163603,\"lat\":30.251097},{\"id\":\"B0I6A76FQA\",\"name\":\"杭州湖滨银泰广场\",\"address\":\"延安路245号杭州湖滨银泰in77B区F3层\",\"lng\":120.163485,\"lat\":30.255344}]}"
+    },
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:3199/amap-place?keywords=%E6%9D%AD%E5%B7%9E%E6%B9%96%E6%BB%A8%E9%93%B6%E6%B3%B0in77&limit=6",
+      "ms": 1248,
+      "bytes": 633,
+      "attempt": 1,
+      "body": "{\"places\":[{\"id\":\"B0FFI1ULJR\",\"name\":\"杭州湖滨银泰in77 C3区\",\"address\":\"延安路258号银泰百货(龙翔桥地铁站D口步行330米)\",\"lng\":120.164759,\"lat\":30.251068},{\"id\":\"B023B08RT2\",\"name\":\"杭州湖滨银泰in77 A区\",\"address\":\"东坡路7号\",\"lng\":120.162484,\"lat\":30.25316},{\"id\":\"B023B1DIOC\",\"name\":\"杭州湖滨in77B区\",\"address\":\"延安路245号\",\"lng\":120.163391,\"lat\":30.25457},{\"id\":\"B0FFIMEKW0\",\"name\":\"杭州湖滨银泰in77\",\"address\":\"延安路258号(龙翔桥地铁站C口步行200米)\",\"lng\":120.163749,\"lat\":30.25283},{\"id\":\"B0FFJYKKR1\",\"name\":\"杭州湖滨银泰in77 E区\",\"address\":\"延安路与邮电路交叉口西南100米\",\"lng\":120.163603,\"lat\":30.251097},{\"id\":\"B0I6A76FQA\",\"name\":\"杭州湖滨银泰广场\",\"address\":\"延安路245号杭州湖滨银泰in77B区F3层\",\"lng\":120.163485,\"lat\":30.255344}]}"
+    }
+  ],
+  "blank": {
+    "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+    "projectId": "house-9mdm2en8",
+    "name": "新活动场地",
+    "updatedAt": "2026-11-19T15:00:42.027Z",
+    "counts": {
+      "zones": 0,
+      "routes": 0,
+      "entrances": 0,
+      "workers": 0,
+      "facilities": 0,
+      "objects": 0,
+      "boundary": 0
+    },
+    "planLen": 167
+  },
+  "immediate": {
+    "taskText": "正在处理 检索场地候选 停止查找 在「杭州湖滨银泰in77」做设计 已完成 1 步 · 查看最近步骤 我理解为「杭州湖滨银泰in77」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 正在找「杭州湖滨银泰in77」的候选场地… 可在下面继续补充要求；预览不等于已写入方案。",
+    "buttons": [
+      {
+        "text": "拍摄场地",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "图层 1(1/1)▸",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "添加物件",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件",
+        "disabled": false
+      },
+      {
+        "text": "清单",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件▾",
+        "disabled": false
+      },
+      {
+        "text": "▾图层 10",
+        "disabled": false
+      },
+      {
+        "text": "▾用地红线0",
+        "disabled": false
+      },
+      {
+        "text": "☰",
+        "disabled": false
+      },
+      {
+        "text": "▾区域、路线及交通28",
+        "disabled": false
+      },
+      {
+        "text": "▾区域2",
+        "disabled": false
+      },
+      {
+        "text": "▸分区类型10",
+        "disabled": false
+      },
+      {
+        "text": "▸入口和通道图标15",
+        "disabled": false
+      },
+      {
+        "text": "▸路线3",
+        "disabled": false
+      },
+      {
+        "text": "▸车28",
+        "disabled": false
+      },
+      {
+        "text": "▸室内10",
+        "disabled": false
+      },
+      {
+        "text": "▸基础设施247",
+        "disabled": false
+      },
+      {
+        "text": "▸工作人员9",
+        "disabled": false
+      },
+      {
+        "text": "▸活动包与图元341",
+        "disabled": false
+      },
+      {
+        "text": "物件库611 件",
+        "disabled": false
+      },
+      {
+        "text": "0",
+        "disabled": false
+      },
+      {
+        "text": "执行资料",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "周末共创工作坊",
+        "disabled": false
+      },
+      {
+        "text": "1 个 ",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "停止查找",
+        "disabled": false
+      },
+      {
+        "text": "默认（按服务端配置）",
+        "disabled": false
+      },
+      {
+        "text": "图层",
+        "disabled": false
+      },
+      {
+        "text": "按已知尺寸标定",
+        "disabled": false
+      },
+      {
+        "text": "应用朝向",
+        "disabled": false
+      },
+      {
+        "text": "应用原点",
+        "disabled": false
+      },
+      {
+        "text": "应用基准高度",
+        "disabled": false
+      },
+      {
+        "text": "+舞台位",
+        "disabled": false
+      },
+      {
+        "text": "+入口",
+        "disabled": false
+      },
+      {
+        "text": "+锚点",
+        "disabled": false
+      },
+      {
+        "text": "恢复 1:1 默认",
+        "disabled": false
+      },
+      {
+        "text": "−",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "恢复自动",
+        "disabled": false
+      },
+      {
+        "text": "i",
+        "disabled": false
+      },
+      {
+        "text": "2D",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": " 工具",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "所有方案",
+        "disabled": false
+      },
+      {
+        "text": "物料",
+        "disabled": false
+      },
+      {
+        "text": "设置",
+        "disabled": false
+      },
+      {
+        "text": "走走查账号的工作室负责人",
+        "disabled": false
+      },
+      {
+        "text": "＋ 新建团队",
+        "disabled": false
+      },
+      {
+        "text": "删除团队",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+        "disabled": true
+      },
+      {
+        "text": "存为方案",
+        "disabled": false
+      },
+      {
+        "text": "删除活动",
+        "disabled": false
+      },
+      {
+        "text": "＋新方案",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "我的生成38",
+        "disabled": false
+      },
+      {
+        "text": "收藏空",
+        "disabled": false
+      },
+      {
+        "text": "库38",
+        "disabled": false
+      },
+      {
+        "text": "刷新",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      }
+    ],
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+      "projectId": "house-9mdm2en8",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T15:00:42.027Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    }
+  },
+  "afterSearch": {
+    "taskText": "待你确认 选择真实场地，确认后才锚定 在「杭州湖滨银泰in77」做设计 已完成 2 步 · 查看最近步骤 我理解为「杭州湖滨银泰in77」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 1. 杭州湖滨银泰in77 2. 杭州湖滨银泰in77 A区 3. 杭州湖滨银泰in77 E区 都不合适，按条件再找 可在下面继续补充要求；预览不等于已写入方案。",
+    "buttons": [
+      {
+        "text": "拍摄场地",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "图层 1(1/1)▸",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "添加物件",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件",
+        "disabled": false
+      },
+      {
+        "text": "清单",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件▾",
+        "disabled": false
+      },
+      {
+        "text": "▾图层 10",
+        "disabled": false
+      },
+      {
+        "text": "▾用地红线0",
+        "disabled": false
+      },
+      {
+        "text": "☰",
+        "disabled": false
+      },
+      {
+        "text": "▾区域、路线及交通28",
+        "disabled": false
+      },
+      {
+        "text": "▾区域2",
+        "disabled": false
+      },
+      {
+        "text": "▸分区类型10",
+        "disabled": false
+      },
+      {
+        "text": "▸入口和通道图标15",
+        "disabled": false
+      },
+      {
+        "text": "▸路线3",
+        "disabled": false
+      },
+      {
+        "text": "▸车28",
+        "disabled": false
+      },
+      {
+        "text": "▸室内10",
+        "disabled": false
+      },
+      {
+        "text": "▸基础设施247",
+        "disabled": false
+      },
+      {
+        "text": "▸工作人员9",
+        "disabled": false
+      },
+      {
+        "text": "▸活动包与图元341",
+        "disabled": false
+      },
+      {
+        "text": "物件库611 件",
+        "disabled": false
+      },
+      {
+        "text": "0",
+        "disabled": false
+      },
+      {
+        "text": "执行资料",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "周末共创工作坊",
+        "disabled": false
+      },
+      {
+        "text": "1 个 ",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "1. 杭州湖滨银泰in77",
+        "disabled": false
+      },
+      {
+        "text": "2. 杭州湖滨银泰in77 A区",
+        "disabled": false
+      },
+      {
+        "text": "3. 杭州湖滨银泰in77 E区",
+        "disabled": false
+      },
+      {
+        "text": "都不合适，按条件再找",
+        "disabled": false
+      },
+      {
+        "text": "默认（按服务端配置）",
+        "disabled": false
+      },
+      {
+        "text": "1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米)",
+        "disabled": false
+      },
+      {
+        "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+        "disabled": false
+      },
+      {
+        "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+        "disabled": false
+      },
+      {
+        "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+        "disabled": false
+      },
+      {
+        "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+        "disabled": false
+      },
+      {
+        "text": "6 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+        "disabled": false
+      },
+      {
+        "text": "7 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+        "disabled": false
+      },
+      {
+        "text": "8 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+        "disabled": false
+      },
+      {
+        "text": "9 杭州湖滨in77B区 延安路245号",
+        "disabled": false
+      },
+      {
+        "text": "10 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+        "disabled": false
+      },
+      {
+        "text": "图层",
+        "disabled": false
+      },
+      {
+        "text": "按已知尺寸标定",
+        "disabled": false
+      },
+      {
+        "text": "应用朝向",
+        "disabled": false
+      },
+      {
+        "text": "应用原点",
+        "disabled": false
+      },
+      {
+        "text": "应用基准高度",
+        "disabled": false
+      },
+      {
+        "text": "+舞台位",
+        "disabled": false
+      },
+      {
+        "text": "+入口",
+        "disabled": false
+      },
+      {
+        "text": "+锚点",
+        "disabled": false
+      },
+      {
+        "text": "恢复 1:1 默认",
+        "disabled": false
+      },
+      {
+        "text": "−",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "恢复自动",
+        "disabled": false
+      },
+      {
+        "text": "i",
+        "disabled": false
+      },
+      {
+        "text": "2D",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": " 工具",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "所有方案",
+        "disabled": false
+      },
+      {
+        "text": "物料",
+        "disabled": false
+      },
+      {
+        "text": "设置",
+        "disabled": false
+      },
+      {
+        "text": "走走查账号的工作室负责人",
+        "disabled": false
+      },
+      {
+        "text": "＋ 新建团队",
+        "disabled": false
+      },
+      {
+        "text": "删除团队",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+        "disabled": true
+      },
+      {
+        "text": "存为方案",
+        "disabled": false
+      },
+      {
+        "text": "删除活动",
+        "disabled": false
+      },
+      {
+        "text": "＋新方案",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "我的生成38",
+        "disabled": false
+      },
+      {
+        "text": "收藏空",
+        "disabled": false
+      },
+      {
+        "text": "库38",
+        "disabled": false
+      },
+      {
+        "text": "刷新",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      }
+    ],
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+      "projectId": "house-9mdm2en8",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T15:00:42.027Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "calls": []
+  },
+  "preview": {
+    "taskText": "待你确认 选择真实场地，确认后才锚定 在「杭州湖滨银泰in77」做设计 已完成 2 步 · 查看最近步骤 我理解为「杭州湖滨银泰in77」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 1. 杭州湖滨银泰in77 地图预览中 2. 杭州湖滨银泰in77 A区 3. 杭州湖滨银泰in77 E区 就定这个场地（杭州湖滨银泰in77） 都不合适，按条件再找 可在下面继续补充要求；预览不等于已写入方案。",
+    "buttons": [
+      {
+        "text": "拍摄场地",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "图层 1(1/1)▸",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "添加物件",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件",
+        "disabled": false
+      },
+      {
+        "text": "清单",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件▾",
+        "disabled": false
+      },
+      {
+        "text": "▾图层 10",
+        "disabled": false
+      },
+      {
+        "text": "▾用地红线0",
+        "disabled": false
+      },
+      {
+        "text": "☰",
+        "disabled": false
+      },
+      {
+        "text": "▾区域、路线及交通28",
+        "disabled": false
+      },
+      {
+        "text": "▾区域2",
+        "disabled": false
+      },
+      {
+        "text": "▸分区类型10",
+        "disabled": false
+      },
+      {
+        "text": "▸入口和通道图标15",
+        "disabled": false
+      },
+      {
+        "text": "▸路线3",
+        "disabled": false
+      },
+      {
+        "text": "▸车28",
+        "disabled": false
+      },
+      {
+        "text": "▸室内10",
+        "disabled": false
+      },
+      {
+        "text": "▸基础设施247",
+        "disabled": false
+      },
+      {
+        "text": "▸工作人员9",
+        "disabled": false
+      },
+      {
+        "text": "▸活动包与图元341",
+        "disabled": false
+      },
+      {
+        "text": "物件库611 件",
+        "disabled": false
+      },
+      {
+        "text": "0",
+        "disabled": false
+      },
+      {
+        "text": "执行资料",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "周末共创工作坊",
+        "disabled": false
+      },
+      {
+        "text": "1 个 ",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "1. 杭州湖滨银泰in77 地图预览中",
+        "disabled": false
+      },
+      {
+        "text": "2. 杭州湖滨银泰in77 A区",
+        "disabled": false
+      },
+      {
+        "text": "3. 杭州湖滨银泰in77 E区",
+        "disabled": false
+      },
+      {
+        "text": "就定这个场地（杭州湖滨银泰in77）",
+        "disabled": false
+      },
+      {
+        "text": "都不合适，按条件再找",
+        "disabled": false
+      },
+      {
+        "text": "默认（按服务端配置）",
+        "disabled": false
+      },
+      {
+        "text": "1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米)",
+        "disabled": false
+      },
+      {
+        "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+        "disabled": false
+      },
+      {
+        "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+        "disabled": false
+      },
+      {
+        "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+        "disabled": false
+      },
+      {
+        "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+        "disabled": false
+      },
+      {
+        "text": "6 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+        "disabled": false
+      },
+      {
+        "text": "7 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+        "disabled": false
+      },
+      {
+        "text": "8 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+        "disabled": false
+      },
+      {
+        "text": "9 杭州湖滨in77B区 延安路245号",
+        "disabled": false
+      },
+      {
+        "text": "10 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+        "disabled": false
+      },
+      {
+        "text": "图层",
+        "disabled": false
+      },
+      {
+        "text": "按已知尺寸标定",
+        "disabled": false
+      },
+      {
+        "text": "应用朝向",
+        "disabled": false
+      },
+      {
+        "text": "应用原点",
+        "disabled": false
+      },
+      {
+        "text": "应用基准高度",
+        "disabled": false
+      },
+      {
+        "text": "+舞台位",
+        "disabled": false
+      },
+      {
+        "text": "+入口",
+        "disabled": false
+      },
+      {
+        "text": "+锚点",
+        "disabled": false
+      },
+      {
+        "text": "恢复 1:1 默认",
+        "disabled": false
+      },
+      {
+        "text": "−",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "恢复自动",
+        "disabled": false
+      },
+      {
+        "text": "i",
+        "disabled": false
+      },
+      {
+        "text": "2D",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": " 工具",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "所有方案",
+        "disabled": false
+      },
+      {
+        "text": "物料",
+        "disabled": false
+      },
+      {
+        "text": "设置",
+        "disabled": false
+      },
+      {
+        "text": "走走查账号的工作室负责人",
+        "disabled": false
+      },
+      {
+        "text": "＋ 新建团队",
+        "disabled": false
+      },
+      {
+        "text": "删除团队",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+        "disabled": true
+      },
+      {
+        "text": "存为方案",
+        "disabled": false
+      },
+      {
+        "text": "删除活动",
+        "disabled": false
+      },
+      {
+        "text": "＋新方案",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "我的生成38",
+        "disabled": false
+      },
+      {
+        "text": "收藏空",
+        "disabled": false
+      },
+      {
+        "text": "库38",
+        "disabled": false
+      },
+      {
+        "text": "刷新",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      }
+    ]
+  },
+  "afterPick": {
+    "taskText": "正在处理 查询地图轮廓与草地，自动提出活动范围 停止查找 在「杭州湖滨银泰in77」做设计 已完成 2 步 · 查看最近步骤 我理解为「杭州湖滨银泰in77」，设为场地？ 点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。 正在查找真实边界（最多约 85 秒）；超时将转为手画，不会编造边界。 1. 杭州湖滨银泰in77 确认中… 2. 杭州湖滨银泰in77 A区 3. 杭州湖滨银泰in77 E区 都不合适，按条件再找 可在下面继续补充要求；预览不等于已写入方案。",
+    "buttons": [
+      {
+        "text": "拍摄场地",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "图层 1(1/1)▸",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "添加物件",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件",
+        "disabled": false
+      },
+      {
+        "text": "清单",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件▾",
+        "disabled": false
+      },
+      {
+        "text": "▾图层 10",
+        "disabled": false
+      },
+      {
+        "text": "▾用地红线0",
+        "disabled": false
+      },
+      {
+        "text": "☰",
+        "disabled": false
+      },
+      {
+        "text": "▾区域、路线及交通28",
+        "disabled": false
+      },
+      {
+        "text": "▾区域2",
+        "disabled": false
+      },
+      {
+        "text": "▸分区类型10",
+        "disabled": false
+      },
+      {
+        "text": "▸入口和通道图标15",
+        "disabled": false
+      },
+      {
+        "text": "▸路线3",
+        "disabled": false
+      },
+      {
+        "text": "▸车28",
+        "disabled": false
+      },
+      {
+        "text": "▸室内10",
+        "disabled": false
+      },
+      {
+        "text": "▸基础设施247",
+        "disabled": false
+      },
+      {
+        "text": "▸工作人员9",
+        "disabled": false
+      },
+      {
+        "text": "▸活动包与图元341",
+        "disabled": false
+      },
+      {
+        "text": "物件库611 件",
+        "disabled": false
+      },
+      {
+        "text": "0",
+        "disabled": false
+      },
+      {
+        "text": "执行资料",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "周末共创工作坊",
+        "disabled": false
+      },
+      {
+        "text": "1 个 ",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "停止查找",
+        "disabled": false
+      },
+      {
+        "text": "1. 杭州湖滨银泰in77 确认中…",
+        "disabled": true
+      },
+      {
+        "text": "2. 杭州湖滨银泰in77 A区",
+        "disabled": true
+      },
+      {
+        "text": "3. 杭州湖滨银泰in77 E区",
+        "disabled": true
+      },
+      {
+        "text": "都不合适，按条件再找",
+        "disabled": false
+      },
+      {
+        "text": "默认（按服务端配置）",
+        "disabled": false
+      },
+      {
+        "text": "1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米)",
+        "disabled": false
+      },
+      {
+        "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+        "disabled": false
+      },
+      {
+        "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+        "disabled": false
+      },
+      {
+        "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+        "disabled": false
+      },
+      {
+        "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+        "disabled": false
+      },
+      {
+        "text": "6 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+        "disabled": false
+      },
+      {
+        "text": "7 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+        "disabled": false
+      },
+      {
+        "text": "8 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+        "disabled": false
+      },
+      {
+        "text": "9 杭州湖滨in77B区 延安路245号",
+        "disabled": false
+      },
+      {
+        "text": "10 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+        "disabled": false
+      },
+      {
+        "text": "图层",
+        "disabled": false
+      },
+      {
+        "text": "按已知尺寸标定",
+        "disabled": false
+      },
+      {
+        "text": "应用朝向",
+        "disabled": false
+      },
+      {
+        "text": "应用原点",
+        "disabled": false
+      },
+      {
+        "text": "应用基准高度",
+        "disabled": false
+      },
+      {
+        "text": "+舞台位",
+        "disabled": false
+      },
+      {
+        "text": "+入口",
+        "disabled": false
+      },
+      {
+        "text": "+锚点",
+        "disabled": false
+      },
+      {
+        "text": "恢复 1:1 默认",
+        "disabled": false
+      },
+      {
+        "text": "−",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "恢复自动",
+        "disabled": false
+      },
+      {
+        "text": "i",
+        "disabled": false
+      },
+      {
+        "text": "2D",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": " 工具",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "所有方案",
+        "disabled": false
+      },
+      {
+        "text": "物料",
+        "disabled": false
+      },
+      {
+        "text": "设置",
+        "disabled": false
+      },
+      {
+        "text": "走走查账号的工作室负责人",
+        "disabled": false
+      },
+      {
+        "text": "＋ 新建团队",
+        "disabled": false
+      },
+      {
+        "text": "删除团队",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+        "disabled": true
+      },
+      {
+        "text": "存为方案",
+        "disabled": false
+      },
+      {
+        "text": "删除活动",
+        "disabled": false
+      },
+      {
+        "text": "＋新方案",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "我的生成38",
+        "disabled": false
+      },
+      {
+        "text": "收藏空",
+        "disabled": false
+      },
+      {
+        "text": "库38",
+        "disabled": false
+      },
+      {
+        "text": "刷新",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      }
+    ],
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+      "projectId": "house-9mdm2en8",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T15:00:42.027Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "boundaryCandidate": {
+      "taskText": "当前物料 0 件 · 场地容量待核验 在杭州湖滨银泰in77做200人发布会，户外广场… 执行资料    周末共创工作坊 1 个  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道   我理解为「杭州湖滨银泰in77」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。  待你核对 确认“杭州湖滨银泰in77”的活动范围  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。  换场地已清空旧内容，确认后整批可撤销。  确认并应用这一版  在地图上重画实际活动范围 撤回预览 告诉 Agent 要改的 默认（按服务端配置） 无法解码这个 3DGS 场景，可能文件已损坏或不是场景产物。 杭州湖滨银泰in77 1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米) 2 杭州湖滨银泰in77 A区 东坡路7号 3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米 4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米) 5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1 6 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117 7 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036 8 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F 9 杭州湖滨in77B区 延安路245号 10 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层 图层 2D    工具",
+      "buttons": [
+        {
+          "text": "拍摄场地",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "图层 1(1/1)▸",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "添加物件",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件",
+          "disabled": false
+        },
+        {
+          "text": "清单",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件▾",
+          "disabled": false
+        },
+        {
+          "text": "▾图层 10",
+          "disabled": false
+        },
+        {
+          "text": "▾用地红线12",
+          "disabled": false
+        },
+        {
+          "text": "☰",
+          "disabled": false
+        },
+        {
+          "text": "▾区域、路线及交通28",
+          "disabled": false
+        },
+        {
+          "text": "▾区域2",
+          "disabled": false
+        },
+        {
+          "text": "▸分区类型10",
+          "disabled": false
+        },
+        {
+          "text": "▸入口和通道图标15",
+          "disabled": false
+        },
+        {
+          "text": "▸路线3",
+          "disabled": false
+        },
+        {
+          "text": "▸车28",
+          "disabled": false
+        },
+        {
+          "text": "▸室内10",
+          "disabled": false
+        },
+        {
+          "text": "▸基础设施247",
+          "disabled": false
+        },
+        {
+          "text": "▸工作人员9",
+          "disabled": false
+        },
+        {
+          "text": "▸活动包与图元341",
+          "disabled": false
+        },
+        {
+          "text": "物件库611 件",
+          "disabled": false
+        },
+        {
+          "text": "0",
+          "disabled": false
+        },
+        {
+          "text": "执行资料",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "周末共创工作坊",
+          "disabled": false
+        },
+        {
+          "text": "1 个 ",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": " 确认并应用这一版",
+          "disabled": false
+        },
+        {
+          "text": " 在地图上重画实际活动范围",
+          "disabled": false
+        },
+        {
+          "text": "撤回预览",
+          "disabled": false
+        },
+        {
+          "text": "默认（按服务端配置）",
+          "disabled": false
+        },
+        {
+          "text": "1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米)",
+          "disabled": false
+        },
+        {
+          "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+          "disabled": false
+        },
+        {
+          "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+          "disabled": false
+        },
+        {
+          "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+          "disabled": false
+        },
+        {
+          "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+          "disabled": false
+        },
+        {
+          "text": "6 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+          "disabled": false
+        },
+        {
+          "text": "7 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+          "disabled": false
+        },
+        {
+          "text": "8 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+          "disabled": false
+        },
+        {
+          "text": "9 杭州湖滨in77B区 延安路245号",
+          "disabled": false
+        },
+        {
+          "text": "10 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+          "disabled": false
+        },
+        {
+          "text": "图层",
+          "disabled": false
+        },
+        {
+          "text": "按已知尺寸标定",
+          "disabled": false
+        },
+        {
+          "text": "应用朝向",
+          "disabled": false
+        },
+        {
+          "text": "应用原点",
+          "disabled": false
+        },
+        {
+          "text": "应用基准高度",
+          "disabled": false
+        },
+        {
+          "text": "+舞台位",
+          "disabled": false
+        },
+        {
+          "text": "+入口",
+          "disabled": false
+        },
+        {
+          "text": "+锚点",
+          "disabled": false
+        },
+        {
+          "text": "恢复 1:1 默认",
+          "disabled": false
+        },
+        {
+          "text": "−",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "恢复自动",
+          "disabled": false
+        },
+        {
+          "text": "i",
+          "disabled": false
+        },
+        {
+          "text": "2D",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": " 工具",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "所有方案",
+          "disabled": false
+        },
+        {
+          "text": "物料",
+          "disabled": false
+        },
+        {
+          "text": "设置",
+          "disabled": false
+        },
+        {
+          "text": "走走查账号的工作室负责人",
+          "disabled": false
+        },
+        {
+          "text": "＋ 新建团队",
+          "disabled": false
+        },
+        {
+          "text": "删除团队",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+          "disabled": true
+        },
+        {
+          "text": "存为方案",
+          "disabled": false
+        },
+        {
+          "text": "删除活动",
+          "disabled": false
+        },
+        {
+          "text": "＋新方案",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "我的生成38",
+          "disabled": false
+        },
+        {
+          "text": "收藏空",
+          "disabled": false
+        },
+        {
+          "text": "库38",
+          "disabled": false
+        },
+        {
+          "text": "刷新",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        }
+      ]
+    },
+    "applied": {
+      "taskText": "当前物料 0 件 · 场地容量待核验 在杭州湖滨银泰in77做200人发布会，户外广场… 执行资料    周末共创工作坊 1 个  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道  我理解为「杭州湖滨银泰in77」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。  地点和范围定了，接着你刚才那句继续。  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道   这一步没做成 · 摆放物料 已确认 确认“杭州湖滨银泰in77”的活动范围 按画布真实用地红线：12 个点 · 341.2 × 550.5 m · 99936 ㎡  智能理解 这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。 重试云端理解 改一句再说 设计过程 1 步 地图依据只有一部分，缺失的位置需要核对。 预览摆放物料 从我的物料库查找检索真实库 缺物料？导入或生成 × 收起 原位导入 GLB（≤10MB，仅本会话，不上传不收费）  ✨ 用 Aholo Lux3D 生成道具 由 Aholo Lux3D 生成三维模型：区别于「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。 告诉 Agent 要改的 默认（按服务端配置） 无法解码这个 3DGS 场景，可能文件已损坏或不是场景产物。 图例 杭州湖滨银泰in77 1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米) 2 杭州湖滨银泰in77 A区 东坡路7号 3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米 4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米) 5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1 6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层 7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117 8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036 9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F 10 杭州湖滨in77B区 延安路245号 11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层 12 玩具反斗城杭州湖滨银泰店 湖滨街道 图层 2D    工具",
+      "buttons": [
+        {
+          "text": "拍摄场地",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "图层 1(1/1)▸",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "添加物件",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件",
+          "disabled": false
+        },
+        {
+          "text": "清单",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件▾",
+          "disabled": false
+        },
+        {
+          "text": "▾图层 11",
+          "disabled": false
+        },
+        {
+          "text": "▾文本1",
+          "disabled": false
+        },
+        {
+          "text": "▾用地红线12",
+          "disabled": false
+        },
+        {
+          "text": "☰",
+          "disabled": false
+        },
+        {
+          "text": "▾区域、路线及交通28",
+          "disabled": false
+        },
+        {
+          "text": "▾区域2",
+          "disabled": false
+        },
+        {
+          "text": "▸分区类型10",
+          "disabled": false
+        },
+        {
+          "text": "▸入口和通道图标15",
+          "disabled": false
+        },
+        {
+          "text": "▸路线3",
+          "disabled": false
+        },
+        {
+          "text": "▸车28",
+          "disabled": false
+        },
+        {
+          "text": "▸室内10",
+          "disabled": false
+        },
+        {
+          "text": "▸基础设施247",
+          "disabled": false
+        },
+        {
+          "text": "▸工作人员9",
+          "disabled": false
+        },
+        {
+          "text": "▸活动包与图元341",
+          "disabled": false
+        },
+        {
+          "text": "物件库611 件",
+          "disabled": false
+        },
+        {
+          "text": "0",
+          "disabled": false
+        },
+        {
+          "text": "Agent 场地范围依据文本仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。",
+          "disabled": false
+        },
+        {
+          "text": "执行资料",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "周末共创工作坊",
+          "disabled": false
+        },
+        {
+          "text": "1 个 ",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "已确认 确认“杭州湖滨银泰in77”的活动范围",
+          "disabled": false
+        },
+        {
+          "text": "重试云端理解",
+          "disabled": false
+        },
+        {
+          "text": "改一句再说",
+          "disabled": false
+        },
+        {
+          "text": "预览摆放物料",
+          "disabled": false
+        },
+        {
+          "text": "检索真实库",
+          "disabled": true
+        },
+        {
+          "text": "× 收起",
+          "disabled": false
+        },
+        {
+          "text": " ✨ 用 Aholo Lux3D 生成道具",
+          "disabled": false
+        },
+        {
+          "text": "默认（按服务端配置）",
+          "disabled": false
+        },
+        {
+          "text": "图例",
+          "disabled": false
+        },
+        {
+          "text": "1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米)",
+          "disabled": false
+        },
+        {
+          "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+          "disabled": false
+        },
+        {
+          "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+          "disabled": false
+        },
+        {
+          "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+          "disabled": false
+        },
+        {
+          "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+          "disabled": false
+        },
+        {
+          "text": "6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层",
+          "disabled": false
+        },
+        {
+          "text": "7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+          "disabled": false
+        },
+        {
+          "text": "8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+          "disabled": false
+        },
+        {
+          "text": "9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+          "disabled": false
+        },
+        {
+          "text": "10 杭州湖滨in77B区 延安路245号",
+          "disabled": false
+        },
+        {
+          "text": "11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+          "disabled": false
+        },
+        {
+          "text": "12 玩具反斗城杭州湖滨银泰店 湖滨街道",
+          "disabled": false
+        },
+        {
+          "text": "图层",
+          "disabled": false
+        },
+        {
+          "text": "按已知尺寸标定",
+          "disabled": false
+        },
+        {
+          "text": "应用朝向",
+          "disabled": false
+        },
+        {
+          "text": "应用原点",
+          "disabled": false
+        },
+        {
+          "text": "应用基准高度",
+          "disabled": false
+        },
+        {
+          "text": "+舞台位",
+          "disabled": false
+        },
+        {
+          "text": "+入口",
+          "disabled": false
+        },
+        {
+          "text": "+锚点",
+          "disabled": false
+        },
+        {
+          "text": "恢复 1:1 默认",
+          "disabled": false
+        },
+        {
+          "text": "−",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "恢复自动",
+          "disabled": false
+        },
+        {
+          "text": "i",
+          "disabled": false
+        },
+        {
+          "text": "2D",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": " 工具",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "所有方案",
+          "disabled": false
+        },
+        {
+          "text": "物料",
+          "disabled": false
+        },
+        {
+          "text": "设置",
+          "disabled": false
+        },
+        {
+          "text": "走走查账号的工作室负责人",
+          "disabled": false
+        },
+        {
+          "text": "＋ 新建团队",
+          "disabled": false
+        },
+        {
+          "text": "删除团队",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+          "disabled": true
+        },
+        {
+          "text": "存为方案",
+          "disabled": false
+        },
+        {
+          "text": "删除活动",
+          "disabled": false
+        },
+        {
+          "text": "＋新方案",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "我的生成38",
+          "disabled": false
+        },
+        {
+          "text": "收藏空",
+          "disabled": false
+        },
+        {
+          "text": "库38",
+          "disabled": false
+        },
+        {
+          "text": "刷新",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        }
+      ],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+        "projectId": "house-9mdm2en8",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-19T15:01:40.293Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 766
+      }
+    },
+    "retryBefore": {
+      "taskText": "当前物料 0 件 · 场地容量待核验 在杭州湖滨银泰in77做200人发布会，户外广场… 执行资料    周末共创工作坊 1 个  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道  我理解为「杭州湖滨银泰in77」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。  地点和范围定了，接着你刚才那句继续。  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道   这一步没做成 · 摆放物料 已确认 确认“杭州湖滨银泰in77”的活动范围 按画布真实用地红线：12 个点 · 341.2 × 550.5 m · 99936 ㎡  智能理解 这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。 重试云端理解 改一句再说 设计过程 1 步 地图依据只有一部分，缺失的位置需要核对。 预览摆放物料 从我的物料库查找检索真实库 缺物料？导入或生成 × 收起 原位导入 GLB（≤10MB，仅本会话，不上传不收费）  ✨ 用 Aholo Lux3D 生成道具 由 Aholo Lux3D 生成三维模型：区别于「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。 告诉 Agent 要改的 默认（按服务端配置） 无法解码这个 3DGS 场景，可能文件已损坏或不是场景产物。 图例 杭州湖滨银泰in77 1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米) 2 杭州湖滨银泰in77 A区 东坡路7号 3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米 4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米) 5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1 6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层 7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117 8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036 9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F 10 杭州湖滨in77B区 延安路245号 11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层 12 玩具反斗城杭州湖滨银泰店 湖滨街道 图层 2D    工具",
+      "buttons": [
+        {
+          "text": "拍摄场地",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "图层 1(1/1)▸",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "添加物件",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件",
+          "disabled": false
+        },
+        {
+          "text": "清单",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件▾",
+          "disabled": false
+        },
+        {
+          "text": "▾图层 11",
+          "disabled": false
+        },
+        {
+          "text": "▾文本1",
+          "disabled": false
+        },
+        {
+          "text": "▾用地红线12",
+          "disabled": false
+        },
+        {
+          "text": "☰",
+          "disabled": false
+        },
+        {
+          "text": "▾区域、路线及交通28",
+          "disabled": false
+        },
+        {
+          "text": "▾区域2",
+          "disabled": false
+        },
+        {
+          "text": "▸分区类型10",
+          "disabled": false
+        },
+        {
+          "text": "▸入口和通道图标15",
+          "disabled": false
+        },
+        {
+          "text": "▸路线3",
+          "disabled": false
+        },
+        {
+          "text": "▸车28",
+          "disabled": false
+        },
+        {
+          "text": "▸室内10",
+          "disabled": false
+        },
+        {
+          "text": "▸基础设施247",
+          "disabled": false
+        },
+        {
+          "text": "▸工作人员9",
+          "disabled": false
+        },
+        {
+          "text": "▸活动包与图元341",
+          "disabled": false
+        },
+        {
+          "text": "物件库611 件",
+          "disabled": false
+        },
+        {
+          "text": "0",
+          "disabled": false
+        },
+        {
+          "text": "Agent 场地范围依据文本仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。",
+          "disabled": false
+        },
+        {
+          "text": "执行资料",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "周末共创工作坊",
+          "disabled": false
+        },
+        {
+          "text": "1 个 ",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "已确认 确认“杭州湖滨银泰in77”的活动范围",
+          "disabled": false
+        },
+        {
+          "text": "重试云端理解",
+          "disabled": false
+        },
+        {
+          "text": "改一句再说",
+          "disabled": false
+        },
+        {
+          "text": "预览摆放物料",
+          "disabled": false
+        },
+        {
+          "text": "检索真实库",
+          "disabled": true
+        },
+        {
+          "text": "× 收起",
+          "disabled": false
+        },
+        {
+          "text": " ✨ 用 Aholo Lux3D 生成道具",
+          "disabled": false
+        },
+        {
+          "text": "默认（按服务端配置）",
+          "disabled": false
+        },
+        {
+          "text": "图例",
+          "disabled": false
+        },
+        {
+          "text": "1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米)",
+          "disabled": false
+        },
+        {
+          "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+          "disabled": false
+        },
+        {
+          "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+          "disabled": false
+        },
+        {
+          "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+          "disabled": false
+        },
+        {
+          "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+          "disabled": false
+        },
+        {
+          "text": "6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层",
+          "disabled": false
+        },
+        {
+          "text": "7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+          "disabled": false
+        },
+        {
+          "text": "8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+          "disabled": false
+        },
+        {
+          "text": "9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+          "disabled": false
+        },
+        {
+          "text": "10 杭州湖滨in77B区 延安路245号",
+          "disabled": false
+        },
+        {
+          "text": "11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+          "disabled": false
+        },
+        {
+          "text": "12 玩具反斗城杭州湖滨银泰店 湖滨街道",
+          "disabled": false
+        },
+        {
+          "text": "图层",
+          "disabled": false
+        },
+        {
+          "text": "按已知尺寸标定",
+          "disabled": false
+        },
+        {
+          "text": "应用朝向",
+          "disabled": false
+        },
+        {
+          "text": "应用原点",
+          "disabled": false
+        },
+        {
+          "text": "应用基准高度",
+          "disabled": false
+        },
+        {
+          "text": "+舞台位",
+          "disabled": false
+        },
+        {
+          "text": "+入口",
+          "disabled": false
+        },
+        {
+          "text": "+锚点",
+          "disabled": false
+        },
+        {
+          "text": "恢复 1:1 默认",
+          "disabled": false
+        },
+        {
+          "text": "−",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "恢复自动",
+          "disabled": false
+        },
+        {
+          "text": "i",
+          "disabled": false
+        },
+        {
+          "text": "2D",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": " 工具",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "所有方案",
+          "disabled": false
+        },
+        {
+          "text": "物料",
+          "disabled": false
+        },
+        {
+          "text": "设置",
+          "disabled": false
+        },
+        {
+          "text": "走走查账号的工作室负责人",
+          "disabled": false
+        },
+        {
+          "text": "＋ 新建团队",
+          "disabled": false
+        },
+        {
+          "text": "删除团队",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+          "disabled": true
+        },
+        {
+          "text": "存为方案",
+          "disabled": false
+        },
+        {
+          "text": "删除活动",
+          "disabled": false
+        },
+        {
+          "text": "＋新方案",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "我的生成38",
+          "disabled": false
+        },
+        {
+          "text": "收藏空",
+          "disabled": false
+        },
+        {
+          "text": "库38",
+          "disabled": false
+        },
+        {
+          "text": "刷新",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        }
+      ]
+    },
+    "retry": {
+      "taskText": "当前物料 0 件 · 场地容量待核验 在杭州湖滨银泰in77做200人发布会，户外广场… 执行资料    周末共创工作坊 1 个  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道  我理解为「杭州湖滨银泰in77」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。  地点和范围定了，接着你刚才那句继续。  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道   这一步没做成 · 摆放物料 已确认 确认“杭州湖滨银泰in77”的活动范围 按画布真实用地红线：12 个点 · 341.2 × 550.5 m · 99936 ㎡  “活动场地”放不下第1件“桌子”并保留通道与门口；本分区与水域/围栏禁区重叠，物件排不进禁区，实际可用范围比分区小；可减数量、选择较小真实物料或调整分区。整版未写入。 重试 设计过程 3 步 已核对活动边界，当前场地还没有功能分区。 按分区用途、物料的真实尺寸和已核对的通道试排。 没有清单：按分区用途与面积出默认方案（ 桌子×1、 垃圾桶×2、 指示牌×2）；只出预览，未写入画布。 预览摆放物料 从我的物料库查找检索真实库 缺物料？导入或生成 × 收起 原位导入 GLB（≤10MB，仅本会话，不上传不收费）  ✨ 用 Aholo Lux3D 生成道具 由 Aholo Lux3D 生成三维模型：区别于「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。 告诉 Agent 要改的 默认（按服务端配置） 无法解码这个 3DGS 场景，可能文件已损坏或不是场景产物。 图例 杭州湖滨银泰in77 1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米) 2 杭州湖滨银泰in77 A区 东坡路7号 3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米 4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米) 5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1 6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层 7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117 8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036 9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F 10 杭州湖滨in77B区 延安路245号 11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层 12 玩具反斗城杭州湖滨银泰店 湖滨街道 图层 2D    工具",
+      "buttons": [
+        {
+          "text": "拍摄场地",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "图层 1(1/1)▸",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "添加物件",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件",
+          "disabled": false
+        },
+        {
+          "text": "清单",
+          "disabled": false
+        },
+        {
+          "text": "已放置物件▾",
+          "disabled": false
+        },
+        {
+          "text": "▾图层 11",
+          "disabled": false
+        },
+        {
+          "text": "▾文本1",
+          "disabled": false
+        },
+        {
+          "text": "▾用地红线12",
+          "disabled": false
+        },
+        {
+          "text": "☰",
+          "disabled": false
+        },
+        {
+          "text": "▾区域、路线及交通28",
+          "disabled": false
+        },
+        {
+          "text": "▾区域2",
+          "disabled": false
+        },
+        {
+          "text": "▸分区类型10",
+          "disabled": false
+        },
+        {
+          "text": "▸入口和通道图标15",
+          "disabled": false
+        },
+        {
+          "text": "▸路线3",
+          "disabled": false
+        },
+        {
+          "text": "▸车28",
+          "disabled": false
+        },
+        {
+          "text": "▸室内10",
+          "disabled": false
+        },
+        {
+          "text": "▸基础设施247",
+          "disabled": false
+        },
+        {
+          "text": "▸工作人员9",
+          "disabled": false
+        },
+        {
+          "text": "▸活动包与图元341",
+          "disabled": false
+        },
+        {
+          "text": "物件库611 件",
+          "disabled": false
+        },
+        {
+          "text": "0",
+          "disabled": false
+        },
+        {
+          "text": "Agent 场地范围依据文本仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。",
+          "disabled": false
+        },
+        {
+          "text": "执行资料",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "周末共创工作坊",
+          "disabled": false
+        },
+        {
+          "text": "1 个 ",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "已确认 确认“杭州湖滨银泰in77”的活动范围",
+          "disabled": false
+        },
+        {
+          "text": "重试",
+          "disabled": false
+        },
+        {
+          "text": "预览摆放物料",
+          "disabled": false
+        },
+        {
+          "text": "检索真实库",
+          "disabled": true
+        },
+        {
+          "text": "× 收起",
+          "disabled": false
+        },
+        {
+          "text": " ✨ 用 Aholo Lux3D 生成道具",
+          "disabled": false
+        },
+        {
+          "text": "默认（按服务端配置）",
+          "disabled": false
+        },
+        {
+          "text": "图例",
+          "disabled": false
+        },
+        {
+          "text": "1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米)",
+          "disabled": false
+        },
+        {
+          "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+          "disabled": false
+        },
+        {
+          "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+          "disabled": false
+        },
+        {
+          "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+          "disabled": false
+        },
+        {
+          "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+          "disabled": false
+        },
+        {
+          "text": "6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层",
+          "disabled": false
+        },
+        {
+          "text": "7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+          "disabled": false
+        },
+        {
+          "text": "8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+          "disabled": false
+        },
+        {
+          "text": "9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+          "disabled": false
+        },
+        {
+          "text": "10 杭州湖滨in77B区 延安路245号",
+          "disabled": false
+        },
+        {
+          "text": "11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+          "disabled": false
+        },
+        {
+          "text": "12 玩具反斗城杭州湖滨银泰店 湖滨街道",
+          "disabled": false
+        },
+        {
+          "text": "图层",
+          "disabled": false
+        },
+        {
+          "text": "按已知尺寸标定",
+          "disabled": false
+        },
+        {
+          "text": "应用朝向",
+          "disabled": false
+        },
+        {
+          "text": "应用原点",
+          "disabled": false
+        },
+        {
+          "text": "应用基准高度",
+          "disabled": false
+        },
+        {
+          "text": "+舞台位",
+          "disabled": false
+        },
+        {
+          "text": "+入口",
+          "disabled": false
+        },
+        {
+          "text": "+锚点",
+          "disabled": false
+        },
+        {
+          "text": "恢复 1:1 默认",
+          "disabled": false
+        },
+        {
+          "text": "−",
+          "disabled": false
+        },
+        {
+          "text": "+",
+          "disabled": false
+        },
+        {
+          "text": "恢复自动",
+          "disabled": false
+        },
+        {
+          "text": "i",
+          "disabled": false
+        },
+        {
+          "text": "2D",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": " 工具",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "所有方案",
+          "disabled": false
+        },
+        {
+          "text": "物料",
+          "disabled": false
+        },
+        {
+          "text": "设置",
+          "disabled": false
+        },
+        {
+          "text": "走走查账号的工作室负责人",
+          "disabled": false
+        },
+        {
+          "text": "＋ 新建团队",
+          "disabled": false
+        },
+        {
+          "text": "删除团队",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+          "disabled": true
+        },
+        {
+          "text": "存为方案",
+          "disabled": false
+        },
+        {
+          "text": "删除活动",
+          "disabled": false
+        },
+        {
+          "text": "＋新方案",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "我的生成38",
+          "disabled": false
+        },
+        {
+          "text": "收藏空",
+          "disabled": false
+        },
+        {
+          "text": "库38",
+          "disabled": false
+        },
+        {
+          "text": "刷新",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        },
+        {
+          "text": "",
+          "disabled": false
+        }
+      ],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+        "projectId": "house-9mdm2en8",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-19T15:01:40.293Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 766
+      }
+    },
+    "ticks": [
+      {
+        "at": "2026-11-19T15:01:38.998Z",
+        "boundary": 0,
+        "zones": 0,
+        "task": "当前物料 0 件 · 场地容量待核验 在杭州湖滨银泰in77做200人发布会，户外广场… 执行资料    周末共创工作坊 1 个  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道   我理解为「杭州湖滨银泰in77」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。  待你核对 确认“杭州湖滨银泰in77”的活动范围  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。  换场地已清空旧内容，确认后整批可撤销。  确认并应用这一版  在地图上重画实际活动范围 撤回预览 告诉 Agent 要改的 默认（按服务端配置） 无法解码这个 3DGS 场景，可能文件已损坏或不是场景产物。 杭州湖滨银泰in77 1 杭州湖滨银泰in77 延安路258号(龙翔桥地铁站C口步行200米) 2 杭州湖滨银泰in77 A区 东坡路7号 3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米 4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米) 5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1 6 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117 7 太兴餐厅杭州湖滨银"
+      }
+    ],
+    "finalTask": "当前物料 0 件 · 场地容量待核验 在杭州湖滨银泰in77做200人发布会，户外广场… 执行资料    周末共创工作坊 1 个  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道  我理解为「杭州湖滨银泰in77」，先找一下这个场地——下面点一个候选确认是真实场地，我再把它设为活动场地。  仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。  地点和范围定了，接着你刚才那句继续。  在杭州湖滨银泰in77做200人发布会，户外广场30×20米，签到台放西侧入口，留出通道   这一步没做成 · 摆放物料 已确认 确认“杭州湖滨银泰in77”的活动范围 按画布真实用地红线：12 个点 · 341.2 × 550.5 m · 99936 ㎡  “活动场地”放不下第1件“桌子”并保留通道与门口；本分区与水域/围栏禁区重叠，物件排不进禁区，实际可用范围比分区小；可减数量、选择较小真实物料或调整分区。整版未写入。 重试 设计过程 3 步 已核对活动边界，当前场地还没有功能分区。 按分区用途、物料的真实尺寸和已核对的通道试排。 没有清单：按分区用途与面积出默认方案（ 桌子×1、 垃圾桶×2、 指示牌×2）；只出预览，未写入画布。 预览摆放物料 从我的物料库查找检索真实库 缺物料？导入或生成 × 收起 原位导入 GLB（≤10MB，仅本会话，不上传不收费）  ✨ 用 Aholo Lux3D 生成道具 由 Aholo Lux3D 生成三维模型：区别于「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。 告诉 Agent 要改的 默认（按服务端配置） 无法解码这个 3DGS 场景，可能文件已损坏或不是场景产物。 图例 杭州湖滨银泰in77 1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米) 2 杭州湖滨银泰in77 A区 东坡路7号 3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米 4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米) 5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1 6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层 7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117 8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036 9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F 10 杭州湖滨in77B区 延安路245号 11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层 12 玩具反斗城杭州湖滨银泰店 湖滨街道 图层 2D    工具",
+    "buttonsAfter": [
+      {
+        "text": "拍摄场地",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "图层 1(1/1)▸",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "添加物件",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件",
+        "disabled": false
+      },
+      {
+        "text": "清单",
+        "disabled": false
+      },
+      {
+        "text": "已放置物件▾",
+        "disabled": false
+      },
+      {
+        "text": "▾图层 11",
+        "disabled": false
+      },
+      {
+        "text": "▾文本1",
+        "disabled": false
+      },
+      {
+        "text": "▾用地红线12",
+        "disabled": false
+      },
+      {
+        "text": "☰",
+        "disabled": false
+      },
+      {
+        "text": "▾区域、路线及交通28",
+        "disabled": false
+      },
+      {
+        "text": "▾区域2",
+        "disabled": false
+      },
+      {
+        "text": "▸分区类型10",
+        "disabled": false
+      },
+      {
+        "text": "▸入口和通道图标15",
+        "disabled": false
+      },
+      {
+        "text": "▸路线3",
+        "disabled": false
+      },
+      {
+        "text": "▸车28",
+        "disabled": false
+      },
+      {
+        "text": "▸室内10",
+        "disabled": false
+      },
+      {
+        "text": "▸基础设施247",
+        "disabled": false
+      },
+      {
+        "text": "▸工作人员9",
+        "disabled": false
+      },
+      {
+        "text": "▸活动包与图元341",
+        "disabled": false
+      },
+      {
+        "text": "物件库611 件",
+        "disabled": false
+      },
+      {
+        "text": "0",
+        "disabled": false
+      },
+      {
+        "text": "Agent 场地范围依据文本仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。",
+        "disabled": false
+      },
+      {
+        "text": "执行资料",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "周末共创工作坊",
+        "disabled": false
+      },
+      {
+        "text": "1 个 ",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "已确认 确认“杭州湖滨银泰in77”的活动范围",
+        "disabled": false
+      },
+      {
+        "text": "重试",
+        "disabled": false
+      },
+      {
+        "text": "预览摆放物料",
+        "disabled": false
+      },
+      {
+        "text": "检索真实库",
+        "disabled": true
+      },
+      {
+        "text": "× 收起",
+        "disabled": false
+      },
+      {
+        "text": " ✨ 用 Aholo Lux3D 生成道具",
+        "disabled": false
+      },
+      {
+        "text": "默认（按服务端配置）",
+        "disabled": false
+      },
+      {
+        "text": "图例",
+        "disabled": false
+      },
+      {
+        "text": "1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米)",
+        "disabled": false
+      },
+      {
+        "text": "2 杭州湖滨银泰in77 A区 东坡路7号",
+        "disabled": false
+      },
+      {
+        "text": "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+        "disabled": false
+      },
+      {
+        "text": "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+        "disabled": false
+      },
+      {
+        "text": "5 廖记棒棒鸡(杭州湖滨银泰in77D区店) 延安路239号杭州湖滨银泰in77D区B1",
+        "disabled": false
+      },
+      {
+        "text": "6 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层",
+        "disabled": false
+      },
+      {
+        "text": "7 浪琴杭州湖滨银泰直营店 延安路258号杭州湖滨银泰in77C2区1层B117",
+        "disabled": false
+      },
+      {
+        "text": "8 太兴餐厅杭州湖滨银泰店 延安路258号杭州湖滨银泰in77C2区-1层B036",
+        "disabled": false
+      },
+      {
+        "text": "9 新榆园湖滨银泰IN77店 杭州湖滨银泰in77E区3F",
+        "disabled": false
+      },
+      {
+        "text": "10 杭州湖滨in77B区 延安路245号",
+        "disabled": false
+      },
+      {
+        "text": "11 万宁杭州湖滨银泰店 延安路245号湖滨银泰in77B区-2层",
+        "disabled": false
+      },
+      {
+        "text": "12 玩具反斗城杭州湖滨银泰店 湖滨街道",
+        "disabled": false
+      },
+      {
+        "text": "图层",
+        "disabled": false
+      },
+      {
+        "text": "按已知尺寸标定",
+        "disabled": false
+      },
+      {
+        "text": "应用朝向",
+        "disabled": false
+      },
+      {
+        "text": "应用原点",
+        "disabled": false
+      },
+      {
+        "text": "应用基准高度",
+        "disabled": false
+      },
+      {
+        "text": "+舞台位",
+        "disabled": false
+      },
+      {
+        "text": "+入口",
+        "disabled": false
+      },
+      {
+        "text": "+锚点",
+        "disabled": false
+      },
+      {
+        "text": "恢复 1:1 默认",
+        "disabled": false
+      },
+      {
+        "text": "−",
+        "disabled": false
+      },
+      {
+        "text": "+",
+        "disabled": false
+      },
+      {
+        "text": "恢复自动",
+        "disabled": false
+      },
+      {
+        "text": "i",
+        "disabled": false
+      },
+      {
+        "text": "2D",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": " 工具",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "所有方案",
+        "disabled": false
+      },
+      {
+        "text": "物料",
+        "disabled": false
+      },
+      {
+        "text": "设置",
+        "disabled": false
+      },
+      {
+        "text": "走走查账号的工作室负责人",
+        "disabled": false
+      },
+      {
+        "text": "＋ 新建团队",
+        "disabled": false
+      },
+      {
+        "text": "删除团队",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "当前 · 本机周末共创工作坊本机 · 未上传",
+        "disabled": true
+      },
+      {
+        "text": "存为方案",
+        "disabled": false
+      },
+      {
+        "text": "删除活动",
+        "disabled": false
+      },
+      {
+        "text": "＋新方案",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "我的生成38",
+        "disabled": false
+      },
+      {
+        "text": "收藏空",
+        "disabled": false
+      },
+      {
+        "text": "库38",
+        "disabled": false
+      },
+      {
+        "text": "刷新",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      },
+      {
+        "text": "",
+        "disabled": false
+      }
+    ],
+    "planAfter": {
+      "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+      "projectId": "house-9mdm2en8",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T15:01:40.293Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 766
+    }
+  },
+  "final": {
+    "slot": "scendance-outdoor-plan-v1:house-9mdm2en8",
+    "projectId": "house-9mdm2en8",
+    "name": "新活动场地",
+    "updatedAt": "2026-11-19T15:01:40.293Z",
+    "counts": {
+      "zones": 0,
+      "routes": 0,
+      "entrances": 0,
+      "workers": 0,
+      "facilities": 0,
+      "objects": 0,
+      "boundary": 12
+    },
+    "planLen": 766
+  },
+  "ok": true,
+  "consoleErrors": []
+}

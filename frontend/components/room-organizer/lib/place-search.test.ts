@@ -5,6 +5,7 @@ import {
   mergePlaceSuggestions,
   placeRelevance,
   placeSearchUrl,
+  placeSearchAttempts,
   rankPlaces,
   recentPlaces,
   rememberPlace,
@@ -112,6 +113,29 @@ describe('searchPlaces', () => {
       throw new Error('network down');
     });
     expect(await searchPlaces('平湖秋月', { fetchImpl: broken, local: false })).toEqual([]);
+  });
+
+  it('上游 502 时用同一句再试一次，真实地点不被一次网关错误误报成无候选', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'place failed' }, 502))
+      .mockResolvedValueOnce(jsonResponse(PLACES));
+    const places = await searchPlaces('杭州湖滨银泰in77', { fetchImpl, local: false });
+    expect(places.map(item => item.id)).toEqual(['poi-1', 'poi-2']);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('整句带了通用尾巴时，空结果会退到剥掉「广场」的词再搜', async () => {
+    const fetchImpl = vi.fn(async (...args: unknown[]) => {
+      const keywords = new URL(String(args[0]), 'https://example.test').searchParams.get('keywords');
+      return keywords === '湖滨银泰in77 广场'
+        ? jsonResponse({ places: [] })
+        : jsonResponse(PLACES);
+    });
+    const places = await searchPlaces('湖滨银泰in77 广场', { fetchImpl, local: false });
+    expect(places).toHaveLength(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchImpl.mock.calls[1]?.[0]), 'https://example.test').searchParams.get('keywords')).toBe('湖滨银泰in77');
+    expect(placeSearchAttempts('湖滨银泰in77 广场')).toEqual(['湖滨银泰in77 广场', '湖滨银泰in77']);
   });
 
   it('坐标非数字的候选被丢掉，name 缺失时退回 address', async () => {

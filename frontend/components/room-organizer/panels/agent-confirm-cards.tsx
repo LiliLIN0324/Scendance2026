@@ -14,12 +14,14 @@ import type { ZoneEventProposal } from '../lib/zone-event-proposal';
  *  完整候选带门牌地址、按 1/2/3… 编号排在地图左上角搜索框的下拉里，逐个点开看。
  *  2026-11-19 用户指令：点选不再立刻确认——先在右侧地图预览（钉点+飞过去，不写方案），
  *  1/2/3 可随意切换，点「就定这个场地」才走 V-1c 锚定链（立壳、铺底图、框边界）。 */
-export function VenueConfirmCard({ state, onPick, onPreview, onDismiss }: {
+export function VenueConfirmCard({ state, onPick, onPreview, onDismiss, onManual }: {
   state: { query: string; candidates: PlaceSuggestion[]; loading: boolean; picking: string | null };
   onPick: (place: PlaceSuggestion) => void;
   /** 点选只做地图预览；不传则维持旧行为（点选即确认）。 */
   onPreview?: (place: PlaceSuggestion) => void;
   onDismiss: () => void;
+  /** 没有候选时的地图兜底：打开地图圈画，不让用户卡在「没搜到」。 */
+  onManual?: (() => void) | undefined;
 }): JSX.Element {
   const topThree = state.candidates.slice(0, 3);
   const [browsing, setBrowsing] = useState<string | null>(null);
@@ -30,7 +32,10 @@ export function VenueConfirmCard({ state, onPick, onPreview, onDismiss }: {
     {state.loading && <p className="ap-agent-line" role="status">正在找「{state.query}」的候选场地…</p>}
     {!state.loading && state.candidates.length === 0 && <>
       <p className="ap-agent-line">没搜到匹配「{state.query}」的场地。当前方案没有改动：已确认的场地、边界和分区都原样保留。</p>
-      <p className="ap-agent-line">下一步可以：① 换关键词或加上城市名再说一次；② 点右栏「地图选址」手动圈一块；③ 先按当前场地往下做，之后再来换。</p>
+      <p className="ap-agent-line">下一步可以：① 换关键词或加上城市名再说一次；② 在地图上手动圈画；③ 先按当前场地往下做，之后再来换。</p>
+      {onManual && <button type="button" className="btn-outline" onClick={onManual}>
+        在地图上手动圈画
+      </button>}
     </>}
     {state.picking && <p role="status">正在查找真实边界（最多约 85 秒）；超时将转为手画，不会编造边界。</p>}
     {topThree.length > 0 && <div className="ap-option-pick">
