@@ -2458,7 +2458,20 @@ it("定地点拦阻时，把上一句里的后置活说出来（不再等于没�
   expect(flow.notice).toContain("后面还有：最后再调通道");
 });
 
-it("范围未确认时，也把上一句里的后置活说出来", async () => {
+it("无边界时只改人数不触发范围红卡，简报记下人数", async () => {
+  plan = { ...plan, boundary: [] };
+  mountAtFlowState({ stage: "scope", completed: ["place"] });
+  await turn(
+    "人数改为 150 人，保持现有分区。",
+    response("revise", { guests: { value: 150, evidence: "人数改为 150 人" } }, { reply: "已记下人数改为 150 人。" }),
+  );
+  expect(flow.state.brief.guests).toBe(150);
+  expect(flow.notice).not.toContain("地图上还没有可核对的活动边界");
+  expect(flow.noticeKind, flow.notice).not.toBe("error");
+  expect(plan.boundary).toEqual([]);
+});
+
+it("入围未确认时，也把上一句里的后置活说出来", async () => {
   plan = { ...plan, boundary: [] };
   mountAtFlowState({ stage: "scope", completed: ["place"] });
   await turn("先划展览区和表演区，最后再调通道", response("zones", {}));

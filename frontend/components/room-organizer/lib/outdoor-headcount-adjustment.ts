@@ -24,18 +24,24 @@ export function isHeadcountOnlyMessage(message: string): boolean {
 }
 
 /**
- * 模型把「人数改为 150 人，保持现有分区」判成 adjust，但没有给空间操作。
- * 这句不是几何变更：只要 guests 事实逐字来自本句，就按简报更新处理，
- * 不再让空间变更守卫抛红卡。带 operation 的 adjust 不在此列。
+ * 模型把「人数改为 150 人，保持现有分区」判成 adjust / revise / ask 都可能：
+ * 正式站同一句实测出现过 adjust 与 revise 两种动作。用户这句话没有空间操作时，
+ * 动作标签不应决定它是否被当成红卡；只按句子本身和 guests 事实逐字引用判断。
+ * 带 operation 的空间调整仍然不在此列。
  */
 export function headcountOnlyAdjustment(
   turn: Pick<OutdoorTurn, "action" | "facts" | "operation">,
   message: string,
 ): number | null {
-  if (turn.action !== "adjust" && turn.action !== "connect") return null;
   if (turn.operation) return null;
+  if (!isHeadcountOnlyMessage(message)) return null;
   const guests = turn.facts.guests;
-  if (!guests || !Number.isInteger(guests.value) || guests.value < 1) return null;
-  if (!guests.evidence.trim() || !message.includes(guests.evidence)) return null;
-  return guests.value;
+  if (guests && Number.isInteger(guests.value) && guests.value >= 1 && guests.evidence.trim() && message.includes(guests.evidence)) {
+    return guests.value;
+  }
+  // 模型不可用或只回了 ask/revise 时，句子本身已经足够明确：取本句的人数，
+  // 不凭空补空间操作，也不把画布改坏。
+  const match = message.normalize("NFKC").match(/(\d+)\s*(?:人|位)/u);
+  const value = match ? Number(match[1]) : NaN;
+  return Number.isInteger(value) && value >= 1 ? value : null;
 }

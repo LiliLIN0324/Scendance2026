@@ -1,0 +1,84 @@
+{
+  "ranAt": "2026-11-19T15:52:40.626Z",
+  "rows": [
+    "新活动场地 版本 5 · 11/19 23:50 打开",
+    "新活动场地 版本 1 · 11/19 23:49 打开",
+    "新活动场地 版本 1 · 11/19 23:47 打开",
+    "新活动场地 版本 1 · 11/19 23:46 打开",
+    "新活动场地 版本 1 · 11/19 23:45 打开",
+    "新活动场地 版本 1 · 11/19 23:43 打开",
+    "新活动场地 版本 2 · 11/19 23:43 打开",
+    "新活动场地 版本 1 · 11/19 23:39 打开",
+    "新活动场地 版本 1 · 11/19 23:38 打开",
+    "新活动场地 版本 1 · 11/19 23:28 打开",
+    "新活动场地 版本 1 · 11/19 23:25 打开",
+    "新活动场地 版本 1 · 11/19 23:11 打开",
+    "新活动场地 版本 2 · 11/19 23:01 打开",
+    "新活动场地 版本 1 · 11/19 22:34 打开",
+    "新活动场地 版本 2 · 11/19 22:33 打开",
+    "新活动场地 版本 1 · 11/19 22:28 打开",
+    "新活动场地 版本 1 · 11/19 19:23 打开",
+    "#4 local 版本 1 · 11/19 19:17 打开",
+    "新活动场地 版本 1 · 11/19 19:03 打开",
+    "新活动场地 版本 1 · 11/19 18:36 打开"
+  ],
+  "idx": 6,
+  "plan": {
+    "scendance-outdoor-plan-v1:house-da2w2xf6": {
+      "projectId": "house-da2w2xf6",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T15:53:30.677Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 766
+    },
+    "scendance-outdoor-plan-v1:house-urrf2dx4": {
+      "projectId": "house-urrf2dx4",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T15:52:49.964Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-19T15:52:44.646Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-last-v1": "house-da2w2xf6"
+  },
+  "raw": {
+    "key": "scendance-outdoor-plan-v1:house-da2w2xf6",
+    "updatedAt": "2026-11-19T15:53:43.267Z",
+    "bytes": 980
+  },
+  "writes": [
+    "POST 200 /auth/v1/token?grant_type=refresh_token",
+    "PUT 200 /functions/v1/scene-api/outdoor-plans",
+    "PUT 200 /functions/v1/scene-api/outdoor-plans"
+  ]
+}
