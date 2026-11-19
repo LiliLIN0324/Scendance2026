@@ -1046,6 +1046,15 @@ const UNDO_LIMIT = 30;
 const FACILITY_MIN_SIZE_M = 0.5;
 const FACILITY_MAX_SIZE_M = 100;
 
+/**
+ * 生成件在户外规划里的 slug 前缀（与 generated-material-cards.ts 的 generatedPlacementSlug 同口径）。
+ *
+ * 为什么不从 generated-material-cards 导入常量：那个文件正在被并行会话改动，
+ * 这里只用到字面量，自带一份常量免得两边同时改同一行。
+ * slug 形如 `generated:library-<资产 uuid>`；前缀后面那截就是云端资产 id。
+ */
+const GENERATED_LIBRARY_SLUG_PREFIX = 'generated:library-';
+
 /** P2-i：图层锁定表（key 缺省 = 未锁；只锁可编辑的业务层）。 */
 type LockedLayerMap = Partial<Record<PlanningLayerKind, boolean>>;
 
@@ -6479,6 +6488,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       explicitModelSlug,
       catalog && catalog.templateId === templateId ? catalog.slug : undefined,
     );
+    // 2026-11-19：手动拖放/点选也要写 sourceAssetId。
+    // 只写 modelOverride 的话，刷新后 restoreOutdoorLibraryModels（outdoor-personal-library.ts:170）
+    // 认不出这件（它同时要求 sourceAssetId 与 generated:library- 前缀），3D 会掉回低模占位体，
+    // 看着像「没摆上」。slug 形如 generated:library-<uuid> 时把资产 id 反解出来。
+    const generatedAssetId = modelOverride?.startsWith(GENERATED_LIBRARY_SLUG_PREFIX)
+      ? modelOverride.slice(GENERATED_LIBRARY_SLUG_PREFIX.length).trim()
+      : '';
     // 物料卡落在已有设施上：把它当作「换这个物件的模型」，不叠第二件。
     // 用户从库里拖卡到 3D 已有物件上时，期望看到的就是这一件跟着变；旧数据缺 modelOverride 也在这里补上。
     if (modelOverride) {
@@ -6486,15 +6502,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (target) {
         commitPlan({
           ...current,
-          facilities: current.facilities.map(f => f.id === target.id
-            ? replaceModelPrice({
+          facilities: current.facilities.map(f => {
+            if (f.id !== target.id) return f;
+            const next = {
               ...f,
               templateId,
               modelOverride,
               size: { width: template.width, depth: template.depth },
               ...activeLevelStamp(),
-            }, current.priceBook, modelOverride)
-            : f),
+            };
+            // 换成生成件就指回云端资产；换成库内件就清掉旧引用，不留悬空 sourceAssetId。
+            if (generatedAssetId) next.sourceAssetId = generatedAssetId;
+            else delete next.sourceAssetId;
+            return replaceModelPrice(next, current.priceBook, modelOverride);
+          }),
         });
         selectFacility(target.id);
         setEditMessage(`已把「${target.name}」换成「${template.name}」，2D/3D 同一件跟着换模型。`);
@@ -6531,7 +6552,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan({
       ...current,
       facilities: [...current.facilities, inheritPrice(
-        { ...result.value, ...(modelOverride ? { modelOverride } : {}), ...activeLevelStamp() },
+        {
+          ...result.value,
+          ...(modelOverride ? { modelOverride } : {}),
+          ...(generatedAssetId ? { sourceAssetId: generatedAssetId } : {}),
+          ...activeLevelStamp(),
+        },
         current.priceBook,
       )],
     });
