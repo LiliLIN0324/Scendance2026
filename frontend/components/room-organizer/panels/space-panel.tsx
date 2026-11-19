@@ -4,7 +4,7 @@ import { Box, Camera, Crown, Images, Loader2, Scan, TriangleAlert, Upload } from
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
-import { registerCloudScans, registerLocalScans } from '../lib/local-scans';
+import { registerCloudScans, registerLocalScans, repairStaleScans } from '../lib/local-scans';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
@@ -122,7 +122,16 @@ export function SpacePanel({
   // 文件才是事实，所以每次开面板先登记本机文件、再用云端副本补缺，两边都不漏。
   const [, refreshScanList] = useState(0);
   useEffect(() => {
-    if (registerLocalScans() + registerCloudScans() > 0) refreshScanList(value => value + 1);
+    let cancelled = false;
+    void (async () => {
+      // 先按磁盘事实登记本机副本（文件不在就不登记），再用云端副本补缺，
+      // 最后把「登记还指着本机、文件已经不在了」的历史条目改回云端来源。
+      const local = await registerLocalScans();
+      const cloud = registerCloudScans();
+      const repaired = await repairStaleScans();
+      if (!cancelled && local + cloud + repaired > 0) refreshScanList(value => value + 1);
+    })();
+    return () => { cancelled = true; };
   }, []);
   // 真实场地 = 扫描库里已重建好的这一场；每次渲染重读，刚重建完的场立刻出现。
   const scans = listScannedVenues();
@@ -216,11 +225,11 @@ export function SpacePanel({
         const loading = !!active && preview?.status === 'loading';
         const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
         // 空态分两种：没打开过（只是没图）对坏文件（加载失败）。有图的卡不再标注。
-        const state = loading ? '加载中' : !thumb && !failed ? '未打开过' : '';
+        const state = failed ? '加载失败' : loading ? '加载中' : !thumb ? '未打开过' : '';
         const meta = [state, venueSize(venue), venueDay(venue)].filter(Boolean).join(' · ');
         return <li key={venue.assetId}>
           <button type="button" className={`sc-space-sample sc-scan-card${active ? ' is-current' : ''}${failed ? ' is-missing' : ''}`}
-            title={failed ? '上次没加载成功，点一下重试（本机可能缺这个文件）' : onPlaceScan ? '点一下放到场地上，再拖动或用坐标微调' : '打开这一场的 3D 实景'}
+            title={failed ? '上次没加载成功，点一下重试（本机可能缺这个文件）' : onPlaceScan ? '点一下先落在场地中心，再在地图上点选精确位置' : '打开这一场的 3D 实景'}
             aria-label={failed ? `重试加载真实场地 ${venue.name}` : onPlaceScan ? `放置真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
             aria-pressed={active} onClick={() => pickScan(venue)}>
             <span className="sc-scan-card-shot">
@@ -229,7 +238,7 @@ export function SpacePanel({
                 : failed
                   ? <TriangleAlert size={22} className="sc-scan-card-blank is-missing" aria-hidden="true"/>
                   : <Scan size={22} className="sc-scan-card-blank" aria-hidden="true"/>}
-              {loading && <span className="sc-scan-card-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
+              {loading && !failed && <span className="sc-scan-card-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
               {failed
                 ? <span className="sc-scan-card-tag is-missing">加载失败</span>
                 : (active || inProject) && <span className="sc-scan-card-tag">{active ? '当前' : '已加入'}</span>}
@@ -251,6 +260,7 @@ export function SpacePanel({
         aria-label={`加入示例场景 ${asset.name}`}>
         {asset.image && <img src={shippedImageUrl(asset)} alt="" loading="lazy" />}
         <strong>{asset.name}</strong>
+        {asset.estimatedHeightMeters && <small>估算层高 {asset.estimatedHeightMeters} 米</small>}
       </button>
     </li>)}
   </ul> : null;
