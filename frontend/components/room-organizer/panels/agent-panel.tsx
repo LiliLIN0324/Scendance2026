@@ -84,7 +84,7 @@ import {
 import { resolveCommonCapability } from '../lib/agent-common-capabilities';
 import { matchVenueCommand } from '../lib/venue-intent';
 import { searchPlaces, type PlaceSuggestion } from '../lib/place-search';
-import { fetchPlaceShape, searchAreas, peekCachedPlaceShape } from '../lib/place-area';
+import { fetchPlaceShape, peekCachedPlaceShape } from '../lib/place-area';
 import { fetchPlaceShapeHints, hintedOutlineNames, buildPlaceSearchOptions } from '../lib/place-search-options';
 import { normalizeOutlineName } from '../lib/place-shape-quality';
 import { isPersistablePlaceShape } from '../lib/place-shape-quality';

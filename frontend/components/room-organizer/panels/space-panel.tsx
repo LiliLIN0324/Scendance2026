@@ -4,7 +4,7 @@ import { Box, Camera, Crown, Images, Loader2, Scan, TriangleAlert, Upload } from
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
-import { registerCloudScans, registerLocalScans, repairStaleScans } from '../lib/local-scans';
+import { forgetRemovedScans, registerCloudScans, registerLocalScans, repairStaleScans } from '../lib/local-scans';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
@@ -127,12 +127,17 @@ export function SpacePanel({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      // 先按磁盘事实登记本机副本（文件不在就不登记），再用云端副本补缺，
+      // 清单里已删的资产先退掉（墓碑同步，本机与部署站都要执行），
+      // 再按磁盘事实登记本机副本（文件不在就不登记），用云端副本补缺，
       // 最后把「登记还指着本机、文件已经不在了」的历史条目改回云端来源。
+      const removed = forgetRemovedScans();
+      // 退墓碑是同步的，刷一次列表让已删卡片当场消失；登记/修补的增量之后再补刷，
+      // 不把列表刷新押在探活请求上——代理没响应时卡片会停在旧数据。
+      if (!cancelled && removed > 0) refreshScanList(value => value + 1);
       const local = await registerLocalScans();
       const cloud = registerCloudScans();
       const repaired = await repairStaleScans();
-      if (!cancelled && local + cloud + repaired > 0) refreshScanList(value => value + 1);
+      if (!cancelled && local + cloud + repaired + removed > 0) refreshScanList(value => value + 1);
     })();
     return () => { cancelled = true; };
   }, []);

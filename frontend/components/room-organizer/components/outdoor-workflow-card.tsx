@@ -7,6 +7,7 @@ import {
 } from "../hooks/use-outdoor-agent-workflow";
 import { loginResumeCaption, loginResumeHeadline } from "../lib/outdoor-login-copy";
 import { formatDurationClock } from "../panels/agent-chat-store";
+import type { PlanPoint } from "../../../../supabase/functions/_shared/site-plan";
 import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
 
 /** 每阶段一句图注；进行中的真实进度文案会临时顶替它，报错走红卡。 */
@@ -20,6 +21,52 @@ const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
   people: "岗位、人数与活动路径；可开流动示意看散场节奏",
   "refine-3d": "选中设施换模型、原位上传或生成（费用单独确认）",
 };
+
+/**
+ * 2026-11-19 T1-d2：卡片上幅的真实用地范围轮廓。
+ * 只画从画布同步来的合法闭合环（已过 checkBoundaryRing），不造任何示意形状：
+ * 比例、尺寸、面积全从环本身算，没有环就不渲染（上层退回一句状态句）。
+ */
+function BoundaryThumb({ ring }: { ring: readonly PlanPoint[] }): JSX.Element {
+  const xs = ring.map((p) => p.x);
+  const ys = ring.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const widthM = Math.max(maxX - minX, 0.01);
+  const depthM = Math.max(maxY - minY, 0.01);
+
+  const VIEW_W = 320;
+  const VIEW_H = 150;
+  const PAD = 12;
+  const scale = Math.min((VIEW_W - PAD * 2) / widthM, (VIEW_H - PAD * 2) / depthM);
+  const offsetX = (VIEW_W - widthM * scale) / 2;
+  const offsetY = (VIEW_H - depthM * scale) / 2;
+  const points = ring
+    .map((p) => `${(offsetX + (p.x - minX) * scale).toFixed(1)},${(offsetY + (maxY - p.y) * scale).toFixed(1)}`)
+    .join(" ");
+
+  // 面积用环本身的多边形面积（鞋带公式），与尺寸一起标注，不做估值。
+  let twiceArea = 0;
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    twiceArea += a.x * b.y - b.x * a.y;
+  }
+  const areaM2 = Math.abs(twiceArea) / 2;
+
+  return (
+    <figure className="ap-boundary-thumb">
+      <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} role="img" aria-label="真实用地范围轮廓">
+        <polygon points={points} fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+      <figcaption className="ap-task-caption">
+        按画布真实用地红线：{ring.length} 个点 · {widthM.toFixed(1)} × {depthM.toFixed(1)} m · {areaM2.toFixed(0)} ㎡
+      </figcaption>
+    </figure>
+  );
+}
 
 export function OutdoorThoughtRecord({ thought, request, awaiting = false, draft = "", steps = [], elapsedMs = null, compact = false, canvasNote = null, attention = false }: {
   thought: string | null;
@@ -112,7 +159,7 @@ export function OutdoorWorkflowCard({
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
   replyPending?: boolean;
-  /** T1-c：已有 ToolCallTrace 当前执行状态时，卡内不再重复阶段图注；真实红线轮廓不受影响。 */
+  /** T1-c：当前已有 ToolCallTrace 执行状态时，卡内不再重复阶段图注；真实红线轮廓不受影响。 */
   showCaption?: boolean;
   onAdjustPlan?: () => void;
   /** 地图优先第一步：任务卡上直接给「搜索地点」入口，不用让人去画布左上角找。 */
@@ -271,7 +318,9 @@ export function OutdoorWorkflowCard({
           )}
         </div>
       )}
-      {!flow.proposal && !showScopeGuide && (showCaption ? <p className="ap-task-caption ap-stage-caption">{STAGE_CAPTIONS[flow.state.stage]}</p> : null)}
+      {!flow.proposal && !showScopeGuide && (flow.boundaryRing && flow.boundaryRing.length >= 3
+        ? <BoundaryThumb ring={flow.boundaryRing} />
+        : showCaption ? <p className="ap-task-caption ap-stage-caption">{STAGE_CAPTIONS[flow.state.stage]}</p> : null)}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         flow.noticeView ? (
           <section

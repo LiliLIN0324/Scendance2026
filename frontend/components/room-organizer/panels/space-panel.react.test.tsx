@@ -41,7 +41,7 @@ describe('SpacePanel', () => {
   it('puts real venues first and folds secondary actions', async () => {
     render(<SpacePanel layout={INITIAL_LAYOUT}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
-    // 面板打开即自动登记云端扫描库（索引 8 套实景），空库提示只在真没数据时出现
+    // 面板打开即自动登记云端扫描库（2026-11-19 批量删除后索引剩 2 套实景），空库提示只在真没数据时出现
     expect(await screen.findByText(/\d+ 套已扫描/)).toBeTruthy();
     expect(screen.queryByText('用手机拍一段场地')).toBeNull();
   });
@@ -118,6 +118,20 @@ describe('SpacePanel', () => {
     expect(onPlaceScan).toHaveBeenCalledWith(expect.objectContaining({ assetId, name: '雨后庭院' }));
     expect(screen.queryByText('只看这一场')).toBeNull();
     expect(document.querySelector('.sc-scan-card-only')).toBeNull();
+  });
+
+  // 2026-11-19 用户：「把西湖标准档删了」——清单删掉的资产在面板打开时从注册表退掉，
+  // 历史登记不能让已删扫描复活；没删的极速档不受影响。
+  it('面板打开时执行墓碑同步：已删的标准档卡消失，极速档保留', async () => {
+    rememberAholoAsset({ assetId: 'c338f720-3f60-4adb-8f3b-023300000001', kind: 'spz', name: '西湖 0233 · 标准档', bytes: 23_239_097, savedAt: 1_794_042_957_908 });
+    rememberAholoAsset({ assetId: 'c338f720-3f60-4adb-8f3b-023300000002', kind: 'spz', name: '西湖 0233 · 极速档', bytes: 7_795_522, savedAt: 1_794_041_328_101 });
+    render(<SpacePanel layout={makeLayout()} environment={environment()}/>);
+    // 退墓碑是同步的：act 里 effect 跑完首帧就可能已刷掉，直接断言最终态。
+    await waitFor(() => expect(screen.queryByText('西湖 0233 · 标准档')).toBeNull());
+    expect(screen.getByText('西湖 0233 · 极速档')).toBeTruthy();
+    // 注册表里也真的退掉了：刷新或重开面板都不会再出现。
+    expect(localStorage.getItem('scendance:aholo-assets')).not.toContain('023300000001');
+    expect(localStorage.getItem('scendance:aholo-assets')).toContain('023300000002');
   });
 
   it('已加入的扫描有独立编辑与重新落位入口，编辑不触发放置', () => {

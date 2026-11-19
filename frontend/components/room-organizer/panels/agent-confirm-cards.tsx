@@ -28,7 +28,10 @@ export function VenueConfirmCard({ state, onPick, onPreview, onDismiss }: {
     <p className="ap-lead-title">我理解为「{state.query}」，设为场地？</p>
     <p className="ap-lead-body">点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。</p>
     {state.loading && <p className="ap-agent-line" role="status">正在找「{state.query}」的候选场地…</p>}
-    {!state.loading && state.candidates.length === 0 && <p className="ap-agent-line">没搜到候选场地。换个说法再说一句，或点右栏「地图选址」手动圈。</p>}
+    {!state.loading && state.candidates.length === 0 && <>
+      <p className="ap-agent-line">没搜到匹配「{state.query}」的场地。当前方案没有改动：已确认的场地、边界和分区都原样保留。</p>
+      <p className="ap-agent-line">下一步可以：① 换关键词或加上城市名再说一次；② 点右栏「地图选址」手动圈一块；③ 先按当前场地往下做，之后再来换。</p>
+    </>}
     {state.picking && <p role="status">正在查找真实边界（最多约 85 秒）；超时将转为手画，不会编造边界。</p>}
     {topThree.length > 0 && <div className="ap-option-pick">
       {topThree.map((place, index) => (
@@ -59,7 +62,7 @@ export function VenueConfirmCard({ state, onPick, onPreview, onDismiss }: {
       </button>
     )}
     {!state.loading && state.candidates.length > 0 && (
-      <button type="button" className="chip" onClick={onDismiss}>都不是，换个说法</button>
+      <button type="button" className="chip" onClick={onDismiss}>都不合适，按条件再找</button>
     )}
   </section>;
 }

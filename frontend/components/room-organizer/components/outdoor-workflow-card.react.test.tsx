@@ -30,6 +30,7 @@ function makeFlow(stage = 'place') {
     cardRecords: [] as unknown[],
     designSteps: [] as string[],
     drawnZones: [] as unknown[],
+    boundaryRing: null as readonly { x: number; y: number }[] | null,
     unverifiedEntrances: [] as unknown[],
     libraryChoices: [] as unknown[],
     selectedLibraryId: null,
@@ -71,9 +72,37 @@ describe('OutdoorWorkflowCard 上幅（T1-d）', () => {
 
     expect(container.querySelector('.ap-task-map')).toBeNull();
   });
-  it('当前执行轨迹存在时不重复阶段图注', () => {
-    const { container } = render(<OutdoorWorkflowCard flow={makeFlow() as never} showCaption={false} />);
 
-    expect(container.querySelector('.ap-stage-caption')).toBeNull();
+  it('有真实红线时画真实轮廓，尺寸/面积/点数都从环算', () => {
+    const flow = makeFlow();
+    flow.boundaryRing = [
+      { x: 0, y: 0 },
+      { x: 30, y: 0 },
+      { x: 30, y: 20 },
+      { x: 0, y: 20 },
+    ];
+    const { container } = render(<OutdoorWorkflowCard flow={flow as never} />);
+
+    expect(container.querySelector('.ap-boundary-thumb polygon')).not.toBeNull();
+    expect(container.textContent).toContain('按画布真实用地红线：4 个点 · 30.0 × 20.0 m · 600 ㎡');
+  });
+
+  it('没有真实红线时不出轮廓、也不造示意图形', () => {
+    const { container } = render(<OutdoorWorkflowCard flow={makeFlow() as never} />);
+
+    expect(container.querySelector('.ap-boundary-thumb')).toBeNull();
+    expect(container.querySelector('polygon')).toBeNull();
+  });
+
+  it('当前执行轨迹存在时不重复阶段图注，但真实红线轮廓仍保留', () => {
+    const noCaption = render(<OutdoorWorkflowCard flow={makeFlow() as never} showCaption={false} />);
+    expect(noCaption.container.querySelector('.ap-stage-caption')).toBeNull();
+    noCaption.unmount();
+
+    const flow = makeFlow();
+    flow.boundaryRing = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }];
+    const withRing = render(<OutdoorWorkflowCard flow={flow as never} showCaption={false} />);
+    expect(withRing.container.querySelector('.ap-boundary-thumb polygon')).not.toBeNull();
+    expect(withRing.container.textContent).toContain('按画布真实用地红线');
   });
 });
