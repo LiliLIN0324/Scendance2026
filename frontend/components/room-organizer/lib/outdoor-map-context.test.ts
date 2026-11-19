@@ -700,3 +700,123 @@ it("docs/47 A3：load 返回的内层上下文自带 water/roadLines（hook 生�
   const evidence = map.layoutEvidence?.();
   expect(evidence?.hard.some((f) => f.name === "西湖")).toBe(true);
 });
+
+it("docs/47 B1：load 返回的内层上下文自带 placeableDomain（水域 hard 块与道路走廊从可用面积里扣掉）", async () => {
+  const ring = (pts: [number, number][]) =>
+    [...pts, pts[0]!].map(([x, y]) => {
+      const p = wgs(x, y);
+      return { lon: p.lng, lat: p.lat };
+    });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            crs: "wgs84",
+            complete: true,
+            warnings: [],
+            elements: [
+              {
+                type: "way",
+                id: 31,
+                // 西湖占场地东南角 40×30 的一块（[0,40]×[-35,-5]）。
+                geometry: ring([
+                  [0, -35],
+                  [40, -35],
+                  [40, -5],
+                  [0, -5],
+                ]),
+                tags: { natural: "water", name: "西湖" },
+              },
+              {
+                type: "way",
+                id: 32,
+                geometry: [
+                  { lon: wgs(-40, 20).lng, lat: wgs(-40, 20).lat },
+                  { lon: wgs(40, 20).lng, lat: wgs(40, 20).lat },
+                ],
+                tags: { highway: "footway", name: "沿湖人行路" },
+              },
+            ],
+          }),
+        ),
+    ),
+  );
+  const adapter = createOutdoorMapContext();
+  const map = await adapter.load(
+    "project-a",
+    plan,
+    [],
+    true,
+    new AbortController().signal,
+  );
+  const domain = map.placeableDomain?.();
+  expect(domain).toBeDefined();
+  // 场地 80×70=5600；扣水域 40×30=1200、扣 3m 走廊 80×3=240（走廊在 y=20，与水域不相交）。
+  expect(domain!.areaM2).toBeGreaterThan(0);
+  const expected = 5600 - 1200 - 240;
+  expect(Math.abs(domain!.areaM2 - expected) / expected).toBeLessThan(0.05);
+  expect(domain!.boundaryAreaM2).toBeGreaterThan(domain!.areaM2);
+  expect(domain!.rects.length).toBeGreaterThan(0);
+  expect(domain!.maxRect).not.toBeNull();
+});
+
+it("docs/47 B1：走廊与水域重叠时按并集扣，不重复扣同一块地", async () => {
+  const ring = (pts: [number, number][]) =>
+    [...pts, pts[0]!].map(([x, y]) => {
+      const p = wgs(x, y);
+      return { lon: p.lng, lat: p.lat };
+    });
+  const roadA = wgs(-40, -20);
+  const roadB = wgs(40, -20);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            crs: "wgs84",
+            complete: true,
+            warnings: [],
+            elements: [
+              {
+                type: "way",
+                id: 31,
+                geometry: ring([
+                  [0, -35],
+                  [40, -35],
+                  [40, -5],
+                  [0, -5],
+                ]),
+                tags: { natural: "water", name: "西湖" },
+              },
+              {
+                type: "way",
+                id: 32,
+                geometry: [
+                  { lon: roadA.lng, lat: roadA.lat },
+                  { lon: roadB.lng, lat: roadB.lat },
+                ],
+                tags: { highway: "footway", name: "穿湖人行路" },
+              },
+            ],
+          }),
+        ),
+    ),
+  );
+  const adapter = createOutdoorMapContext();
+  const map = await adapter.load(
+    "project-a",
+    plan,
+    [],
+    true,
+    new AbortController().signal,
+  );
+  const domain = map.placeableDomain?.();
+  // 水域 1200；走廊与水域重叠段不再扣，只有水域以西 x∈[-40,0] 的 3m 条带 120 是新增禁区。
+  const expected = 5600 - 1200 - 120;
+  expect(Math.abs(domain!.areaM2 - expected) / expected).toBeLessThan(0.05);
+});

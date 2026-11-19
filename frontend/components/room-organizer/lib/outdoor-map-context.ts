@@ -6,30 +6,12 @@ import {
   evidenceHighlights,
   validateSnapshotReferences,
 } from "@/lib/site-intelligence";
-import type {
-  MapEvidenceResult,
-  SiteSnapshot,
-} from "@/lib/site-intelligence/types";
-import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
-import { clearForObject, proposeUseZones } from "./outdoor-agent-planning";
-import {
-  outdoorCorridorStrips,
-  outdoorRingsOverlap,
-  outdoorRouteInsideRingLength,
-} from "./outdoor-event-logic";
-import {
-  facilityPlacementIssues,
-  facilityFootprintRing,
-} from "./site-plan-facilities";
 import {
   bounds,
   boundsIntersect,
   geometryDistance,
   isValidGeometry,
 } from "@/lib/site-intelligence/geometry";
-import type { Geometry } from "@/lib/site-intelligence/types";
-import { enuToLngLat } from "./outdoor-plan-canvas";
-import { planPointInRing } from "./site-plan-editing";
 import { fetchOfmEvidence } from "./openfreemap-evidence";
 import {
   MAP_EVIDENCE_MISSING_NOTE,
@@ -39,7 +21,26 @@ import {
   type OutdoorTurn,
   type OutdoorBrief,
 } from "./outdoor-agent-contract";
+import { clearForObject, proposeUseZones } from "./outdoor-agent-planning";
+import {
+  outdoorCorridorStrips,
+  outdoorRingsOverlap,
+  outdoorRouteInsideRingLength,
+} from "./outdoor-event-logic";
 import { buildLayoutEvidence } from "./outdoor-layout-weights";
+import { computePlaceableDomain } from "./outdoor-placeable-domain";
+import { enuToLngLat } from "./outdoor-plan-canvas";
+import { planPointInRing } from "./site-plan-editing";
+import {
+  facilityPlacementIssues,
+  facilityFootprintRing,
+} from "./site-plan-facilities";
+import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
+import type { Geometry } from "@/lib/site-intelligence/types";
+import type {
+  MapEvidenceResult,
+  SiteSnapshot,
+} from "@/lib/site-intelligence/types";
 
 export { MAP_EVIDENCE_MISSING_NOTE };
 export type OutdoorEvidenceHighlight = ReturnType<
@@ -320,6 +321,21 @@ export function createOutdoorMapContext() {
           .map(feature => feature.geometry.points.map(point => ({ ...point }))),
         // docs/47 A2：分档明细随本轮 load 结果走（hook/A3 从这里读），没有证据就回空档。
         layoutEvidence: () => layout,
+        // docs/47 B1：可布置域随本轮 load 结果走——边界 − 建筑 − 道路走廊（3m）− hard 块。
+        // 绿地（soft）不扣：可摆但有代价，不进禁区；几何异常的 hard 环整条丢弃，不猜。
+        placeableDomain: () =>
+          computePlaceableDomain({
+            boundary: plan.boundary,
+            buildings: sourceSnapshot.features
+              .filter(
+                (f) => f.kind === "building" && f.geometry.type === "polygon",
+              )
+              .map((f) => f.geometry.points),
+            hardBlocks: layout.hard
+              .filter((f) => f.geometry.type === "polygon")
+              .map((f) => f.geometry.points),
+            corridorLines: roadLineFeatures().map((r) => r.points),
+          }),
       };
     },
     highlights(
