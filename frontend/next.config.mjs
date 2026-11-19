@@ -110,6 +110,8 @@ const nextConfig = {
     return [
       { source: '/introduction', destination: '/introduction.html' },
       { source: '/guide', destination: '/guide.html' },
+      // 静态导出后由 public/_redirects 把 /r/:code 指到评审页。dev 用这条重写保持地址。
+      { source: '/r/:code', destination: '/review' },
       // 天地图瓦片：线上由 Cloudflare Pages Functions（functions/api/tdt-tiles.ts）处理；
       // 本机 next dev 没有 Functions，转发到 3199 本机代理，见 tools/aholo/lux3d-dev-proxy.mjs。
       // 云端资产（R2 桶）同理：R2 的 CORS 白名单只放行线上站点，浏览器从 localhost 直取会被拦，
