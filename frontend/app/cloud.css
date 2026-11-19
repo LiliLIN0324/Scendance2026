@@ -438,6 +438,8 @@
 .sc-account-menu button:disabled{opacity:.5;cursor:default}
 .sc-account-menu-signout{margin-top:4px;border-top:1px solid var(--wk-hair);border-radius:0 0 8px 8px}
 .sc-account-menu-support{position:relative}
+/* 行与子列表之间 6px 间隙的透明热区，坐标由 placeSupportFlyout 旁的 gapBridge 计算。 */
+.sc-account-menu-bridge{position:fixed;display:none;pointer-events:auto;background:transparent}
 .sc-account-menu-caret{margin-left:auto;color:var(--sc-muted)}
 .sc-account-menu-flyout{position:absolute;left:calc(100% + 6px);bottom:0;top:auto;display:grid;gap:2px;width:176px;max-height:calc(100dvh - 16px);padding:6px;border:1px solid var(--wk-hair);border-radius:12px;background:var(--wk-paper);box-shadow:0 12px 32px rgba(20,20,22,.14);overflow:auto}
 .sc-account-menu-kbd{display:grid;place-items:center;width:15px;height:15px;border:1px solid var(--wk-hair);border-radius:4px;font-size:11px}

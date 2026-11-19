@@ -50,6 +50,30 @@ export function placeSupportFlyout(
   return { top, left, maxHeight };
 }
 
+/**
+ * 「支持」行与子列表之间有 6px 视觉间隙。鼠标横移穿过间隙时既不在行内、也不在面板内，
+ * hover 被打断，面板当场卸载——表现就是「来不及移过去就消失」。
+ * 这里补一块透明热区跨过间隙：横向只盖住间隙（两侧各多搭 `bite` 像素，避免亚像素裂缝），
+ * 纵向取行与面板的并集，于是从行到面板的路径始终落在同一个 hover 子树里。
+ */
+export function gapBridge(anchor: FlyoutBox, flyout: FlyoutBox, bite = 1): FlyoutBox | null {
+  const opensRight = flyout.left >= anchor.right;
+  const opensLeft = flyout.right <= anchor.left;
+  if (!opensRight && !opensLeft) return null;
+  const left = opensRight ? anchor.right - bite : flyout.right;
+  const right = opensRight ? flyout.left + bite : anchor.left + bite;
+  if (right <= left) return null;
+  return {
+    left,
+    right,
+    top: Math.min(anchor.top, flyout.top),
+    bottom: Math.max(anchor.bottom, flyout.bottom),
+  };
+}
+
+/** 悬停移出后留一点时间给指针穿缝；零点几秒内重新进入即取消关闭。 */
+const HOVER_CLOSE_DELAY = 160;
+
 export function AccountMenu({
   open,
   onClose,
@@ -86,15 +110,36 @@ export function AccountMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const supportRef = useRef<HTMLDivElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
+  const bridgeRef = useRef<HTMLDivElement>(null);
   const supportButtonRef = useRef<HTMLButtonElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const supportId = useId();
   const [supportOpen, setSupportOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [box, setBox] = useState<{ left: number; bottom: number } | null>(null);
 
+  function cancelSupportClose(): void {
+    if (closeTimerRef.current === null) return;
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  }
+
+  function scheduleSupportClose(): void {
+    cancelSupportClose();
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setSupportOpen(false);
+    }, HOVER_CLOSE_DELAY);
+  }
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+  }, []);
+
   useEffect(() => {
     if (!open) {
+      cancelSupportClose();
       setSupportOpen(false);
       return undefined;
     }
@@ -134,9 +179,11 @@ export function AccountMenu({
     const row = supportRef.current;
     if (!flyout || !row) return undefined;
     const place = () => {
+      const size = { width: flyout.offsetWidth, height: flyout.scrollHeight };
+      const anchor = row.getBoundingClientRect();
       const next = placeSupportFlyout(
-        row.getBoundingClientRect(),
-        { width: flyout.offsetWidth, height: flyout.scrollHeight },
+        anchor,
+        size,
         { width: window.innerWidth, height: window.innerHeight },
       );
       flyout.style.position = 'fixed';
@@ -145,6 +192,23 @@ export function AccountMenu({
       flyout.style.right = 'auto';
       flyout.style.bottom = 'auto';
       flyout.style.maxHeight = `${next.maxHeight}px`;
+      const bridge = bridgeRef.current;
+      if (!bridge) return;
+      const patch = gapBridge(anchor, {
+        top: next.top,
+        bottom: next.top + Math.min(size.height, next.maxHeight),
+        left: next.left,
+        right: next.left + size.width,
+      });
+      if (!patch) {
+        bridge.style.display = 'none';
+        return;
+      }
+      bridge.style.display = 'block';
+      bridge.style.top = `${patch.top}px`;
+      bridge.style.left = `${patch.left}px`;
+      bridge.style.width = `${patch.right - patch.left}px`;
+      bridge.style.height = `${patch.bottom - patch.top}px`;
     };
     place();
     window.addEventListener('resize', place);
@@ -175,8 +239,8 @@ export function AccountMenu({
       <div
         className="sc-account-menu-support"
         ref={supportRef}
-        onMouseEnter={() => { if (hoverFine()) setSupportOpen(true); }}
-        onMouseLeave={() => { if (hoverFine()) setSupportOpen(false); }}
+        onMouseEnter={() => { if (!hoverFine()) return; cancelSupportClose(); setSupportOpen(true); }}
+        onMouseLeave={() => { if (hoverFine()) scheduleSupportClose(); }}
       >
         <button
           ref={supportButtonRef}
@@ -198,6 +262,7 @@ export function AccountMenu({
           <HelpCircle size={15} aria-hidden="true"/>支持
           <span className="sc-account-menu-caret" aria-hidden="true">›</span>
         </button>
+        {supportOpen && <div ref={bridgeRef} className="sc-account-menu-bridge" aria-hidden="true" />}
         {supportOpen && (
           <div
             id={supportId}
@@ -205,6 +270,7 @@ export function AccountMenu({
             className="sc-account-menu-flyout"
             role="menu"
             aria-label="支持"
+            onMouseEnter={cancelSupportClose}
             onKeyDown={event => {
               const items = Array.from(flyoutRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
               const index = items.indexOf(document.activeElement as HTMLElement);
