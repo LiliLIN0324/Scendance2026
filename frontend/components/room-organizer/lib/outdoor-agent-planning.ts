@@ -95,6 +95,66 @@ const ZONE_M2_PER_OBJECT: Record<NonNullable<PlanZone["purpose"]>, number> = {
 };
 type ZoneRect = { w: number; e: number; s: number; n: number };
 
+/** 用户只报了活动类型（“搞个集市”“办婚礼”）时，先按常见分区出一版，不把问题甩回给用户。 */
+const EVENT_ZONE_PRESETS: ReadonlyArray<{
+  match: RegExp;
+  zones: ReadonlyArray<{ name: string; purpose: NonNullable<PlanZone["purpose"]> }>;
+}> = [
+  {
+    match: /集市|市集|摆摊|摊位|庙会/,
+    zones: [
+      { name: "摊位区", purpose: "market" },
+      { name: "表演区", purpose: "performance" },
+      { name: "入口服务区", purpose: "service" },
+    ],
+  },
+  {
+    match: /婚礼|婚宴/,
+    zones: [
+      { name: "仪式区", purpose: "performance" },
+      { name: "宴会区", purpose: "audience" },
+      { name: "签到区", purpose: "service" },
+    ],
+  },
+  {
+    match: /发布会|新品发布|媒体发布/,
+    zones: [
+      { name: "主会场", purpose: "audience" },
+      { name: "展示区", purpose: "exhibition" },
+      { name: "签到区", purpose: "service" },
+    ],
+  },
+  {
+    match: /展览|展会|展销|艺术展/,
+    zones: [
+      { name: "展区", purpose: "exhibition" },
+      { name: "签到区", purpose: "service" },
+    ],
+  },
+  {
+    match: /音乐节|演出|演唱会|音乐现场/,
+    zones: [
+      { name: "舞台区", purpose: "performance" },
+      { name: "观众区", purpose: "audience" },
+      { name: "服务区", purpose: "service" },
+    ],
+  },
+];
+
+/**
+ * 从用户这句话里推断一版默认分区。只覆盖常见活动类型；
+ * 没有明确室内线索时按室外处理（当前主流程也是地图上的室外场地）。
+ */
+export function defaultZonesForEvent(message: string): OutdoorBrief["zones"] {
+  const preset = EVENT_ZONE_PRESETS.find((entry) => entry.match.test(message));
+  if (!preset) return [];
+  const environment: "indoor" | "outdoor" = /室内|馆内|厅内|商场内|楼内/.test(message)
+    ? "indoor"
+    : "outdoor";
+  const evidence = `用户提到「${message.trim().slice(0, 40)}」，按该类活动的常见分区先出一版`;
+  return preset.zones.map((zone) => ({ ...zone, environment, evidence }));
+}
+
 function zoneRectArea(rect: ZoneRect): number {
   return Math.max(0, rect.e - rect.w) * Math.max(0, rect.n - rect.s);
 }
@@ -808,6 +868,15 @@ export interface OutdoorZoneMismatch<TNeed extends { zone: string }> {
   reason: OutdoorZoneMismatchReason;
 }
 
+/** 未指定分区的物件在活动边界内落位；这里只提供几何搜索域，不创建画布分区。 */
+export function objectPlacementArea(plan: SitePlanData): PlanZone {
+  return { id: "activity-boundary", name: "活动场地", semantic: "reserved", polygon: plan.boundary, notes: "" };
+}
+
+function usesActivityBoundary(zone: string): boolean {
+  return ["", "场地", "活动场地", "活动范围", "全场"].includes(zone.trim());
+}
+
 /** 按画布分区给需求里的分区名定身：唯一命中才算对得上，其余都如实记为对不上。 */
 export function splitNeedsByZone<TNeed extends { zone: string }>(
   plan: SitePlanData,
@@ -819,6 +888,7 @@ export function splitNeedsByZone<TNeed extends { zone: string }>(
   const matched: TNeed[] = [];
   const mismatched: OutdoorZoneMismatch<TNeed>[] = [];
   for (const need of needs) {
+    if (usesActivityBoundary(need.zone)) { matched.push(need); continue; }
     const hits = plan.zones.filter((z) => z.id === need.zone || z.name === need.zone);
     if (hits.length === 1) matched.push(need);
     else
@@ -923,7 +993,8 @@ export async function proposeInventoryObjects(
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (options?.signal?.aborted)
       throw new Error("已取消本次物件排布。");
-    const zone = plan.zones.find(
+    const unzoned = usesActivityBoundary(need.zone);
+    const zone = unzoned ? objectPlacementArea(plan) : plan.zones.find(
       (z) => z.id === need.zone || z.name === need.zone,
     )!;
     let matches = library.filter(
@@ -1026,7 +1097,7 @@ export async function proposeInventoryObjects(
           // Agent 摆的物件在画布上全是裸矩形）。
           templateId: `oneplan:${material.id}`.slice(0, 64),
           name: `${displayName} ${n + 1}`.slice(0, 60),
-          zoneId: zone.id,
+          ...(unzoned ? {} : { zoneId: zone.id }),
           position,
           rotationDeg,
           size: { width: material.width, depth: material.depth },
@@ -1363,7 +1434,7 @@ export function validateWorkflowPlan(
       JSON.stringify(base.facilities.find((b) => b.id === f.id)) !==
         JSON.stringify(f),
   )) {
-    const zone = next.zones.find((z) => z.id === f.zoneId);
+    const zone = f.zoneId ? next.zones.find((z) => z.id === f.zoneId) : objectPlacementArea(next);
     if (
       !zone ||
       !clearForObject(
@@ -1440,14 +1511,14 @@ export function prunePlanForBoundary(
   const facilities: PlanFacility[] = [];
   for (const facility of base.facilities) {
     const ring = facilityFootprintRing(facility);
-    const host = zones.find(
+    const host = !facility.zoneId ? objectPlacementArea(skeleton) : zones.find(
       (zone) => !facilityPlacementIssues(ring, zone.polygon).length,
     );
     if (!host || !clearForObject(facility, { ...skeleton, facilities }, host)) {
       droppedFacilities.push(facility.name);
       continue;
     }
-    facilities.push({ ...facility, zoneId: host.id });
+    facilities.push({ ...facility, zoneId: facility.zoneId ? host.id : undefined });
   }
   // 流线：全宽走廊越出新边界或压到保留物件的一律淘汰（与 validateWorkflowPlan 同口径）。
   const droppedRoutes: string[] = [];

@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { agentErrorView } from './agent-error-view';
 
 describe('agentErrorView 四档归类', () => {
-  it('invalid 归为输入需调整（muted）', () => {
+  it('invalid 说明请求校验失败，不把上下文或版本问题归咎用户输入', () => {
     const view = agentErrorView('invalid');
-    expect(view.stamp).toBe('输入需调整');
+    expect(view.stamp).toBe('请求未通过校验');
     expect(view.tone).toBe('muted');
-    expect(view.message).toContain('链接、敏感信息');
+    expect(view.message).toContain('客户端与服务端版本');
   });
 
   it('disabled 与 unavailable 都归为暂未启用（muted）', () => {

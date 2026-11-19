@@ -1154,3 +1154,16 @@ describe("docs/47 A3 排布引擎吃证据", () => {
     ).toEqual(without.plan.facilities.map((f) => [f.position.x, f.position.y]));
   });
 });
+
+
+it("无分区物件依旧校验边界、碰撞与悬空分区引用", async () => {
+  const original = base();
+  const result = await proposeInventoryObjects(original, { zones: [], people: [], items: [{ zone: "", query: "椅子", count: 2, evidence: "2把椅子" }] }, [{ id: "chair", name: "椅子", source: "built-in", modelSlug: "oneplan:chair", available: true, width: 1, depth: 1, height: 1 }]);
+  expect(result.plan.zones).toHaveLength(0);
+  expect(() => validateWorkflowPlan(original, result.plan)).not.toThrow();
+  const first = result.plan.facilities[0]!;
+  const second = result.plan.facilities[1]!;
+  expect(() => validateWorkflowPlan(original, { ...result.plan, facilities: [first, { ...second, position: first.position }] })).toThrow("冲突");
+  expect(() => validateWorkflowPlan(original, { ...result.plan, facilities: [{ ...first, position: { x: -20, y: -20 } }] })).toThrow("冲突");
+  expect(() => validateWorkflowPlan(original, { ...result.plan, facilities: [{ ...first, zoneId: crypto.randomUUID() }] })).toThrow("主归属分区不存在");
+});

@@ -92,6 +92,19 @@ export function localAmapPlaceUrl(keywords: string, limit: number): string {
 const LOCAL_SEARCH_TIMEOUT_MS = 20000;
 const REMOTE_SEARCH_TIMEOUT_MS = 8000;
 
+/**
+ * 天地图/高德对整句口语化查询很容易 0 命中：「杭州适合婚礼的地点」不如「杭州 婚礼」。
+ * 只在第一次检索为空时兜底重试，不改变正常查询的排序与结果。
+ */
+export function simplifyPlaceQuery(query: string): string {
+  const stripped = query
+    .replace(/[，。！？、,.!?；;：:]/g, " ")
+    .replace(/我希望|我想要|我想|帮我|请|找几个|找一些|找|几个|一些|哪些|有没有|适合|推荐|活动|的|地点|场地|场所/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return stripped.length >= 2 && stripped !== query.trim() ? stripped : "";
+}
+
 /** 检索失败（网络/404/超时）一律回空数组——调用方只当作「没建议」，不弹错。 */
 export async function searchPlaces(keywords: string, options: PlaceSearchOptions = {}): Promise<PlaceSuggestion[]> {
   const query = keywords.trim();
@@ -100,38 +113,46 @@ export async function searchPlaces(keywords: string, options: PlaceSearchOptions
   const doFetch = options.fetchImpl ?? fetch;
   const limit = options.limit ?? 6;
   const timeoutMs = local ? LOCAL_SEARCH_TIMEOUT_MS : REMOTE_SEARCH_TIMEOUT_MS;
-  const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
-  try {
-    if (!local) {
-      const response = await doFetch(placeSearchUrl(query, limit, false, options.center ?? null), { signal });
-      if (!response.ok) return [];
-      return rankPlaces(parsePlaces(await response.json()), query);
-    }
-    // 本机双源合并（2026-11-13）：新 POI（如「潮乐之城」）天地图常不收录，高德才有——
-    // 两源都打，高德在前、天地图补位，按「名字+坐标」去重；任一源 404/503/超时只丢该源。
-    const settled = await Promise.allSettled([
-      doFetch(localAmapPlaceUrl(query, limit), { signal }),
-      doFetch(placeSearchUrl(query, limit, true, options.center ?? null), { signal }),
-    ]);
-    const seen = new Set<string>();
-    const merged: PlaceSuggestion[] = [];
-    for (const entry of settled) {
-      if (entry.status !== 'fulfilled' || !entry.value.ok) continue;
-      try {
-        for (const place of parsePlaces(await entry.value.json())) {
-          const key = `${normalizeText(place.name)}|${place.lng.toFixed(4)},${place.lat.toFixed(4)}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          merged.push(place);
-        }
-      } catch {
-        // 坏响应体（HTML 错误页等）只丢该源，不影响另一源
+
+  async function run(searchText: string): Promise<PlaceSuggestion[]> {
+    const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
+    try {
+      if (!local) {
+        const response = await doFetch(placeSearchUrl(searchText, limit, false, options.center ?? null), { signal });
+        if (!response.ok) return [];
+        return rankPlaces(parsePlaces(await response.json()), searchText);
       }
+      // 本机双源合并（2026-11-13）：新 POI（如「潮乐之城」）天地图常不收录，高德才有——
+      // 两源都打，高德在前、天地图补位，按「名字+坐标」去重；任一源 404/503/超时只丢该源。
+      const settled = await Promise.allSettled([
+        doFetch(localAmapPlaceUrl(searchText, limit), { signal }),
+        doFetch(placeSearchUrl(searchText, limit, true, options.center ?? null), { signal }),
+      ]);
+      const seen = new Set<string>();
+      const merged: PlaceSuggestion[] = [];
+      for (const entry of settled) {
+        if (entry.status !== 'fulfilled' || !entry.value.ok) continue;
+        try {
+          for (const place of parsePlaces(await entry.value.json())) {
+            const key = `${normalizeText(place.name)}|${place.lng.toFixed(4)},${place.lat.toFixed(4)}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            merged.push(place);
+          }
+        } catch {
+          // 坏响应体（HTML 错误页等）只丢该源，不影响另一源
+        }
+      }
+      return rankPlaces(merged, searchText);
+    } catch {
+      return [];
     }
-    return rankPlaces(merged, query);
-  } catch {
-    return [];
   }
+
+  const first = await run(query);
+  if (first.length) return first;
+  const simplified = simplifyPlaceQuery(query);
+  return simplified ? run(simplified) : [];
 }
 
 /* ---------------- 模糊排序：让「完全命中 > 前缀 > 包含 > 只在地址里」排前面 ---------------- */

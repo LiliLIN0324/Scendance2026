@@ -66,6 +66,7 @@ export function SpacePanel({
   onShowScanContext,
   onOpenCapture,
   onAddSampleScene,
+  onMoveScan,
   onTryHanfuWalk,
   hanfuWalkDisabledReason,
   workflow,
@@ -99,6 +100,8 @@ export function SpacePanel({
   onShowScanContext?(): void;
   onOpenCapture?(): void;
   onAddSampleScene?(assetId: string): void;
+  /** 把当前场景切进 3D 对齐模式，场景是环境而不是 item，不能靠普通拖动。 */
+  onMoveScan?(assetId: string): void;
   onTryHanfuWalk?(): void;
   /** 实景还没就绪时说明为什么不能进汉服漫游。 */
   hanfuWalkDisabledReason?: string;
@@ -232,7 +235,7 @@ export function SpacePanel({
         const meta = [state, venueSize(venue), venueDay(venue)].filter(Boolean).join(' · ');
         return <li key={venue.assetId}>
           <button type="button" className={`sc-space-sample sc-scan-card${active ? ' is-current' : ''}${failed ? ' is-missing' : ''}`}
-            title={failed ? '上次没加载成功，点一下重试（本机可能缺这个文件）' : onPlaceScan ? '点一下先落在场地中心，再在地图上点选精确位置' : '打开这一场的 3D 实景'}
+            title={failed ? '上次没加载成功，点一下重试（本机可能缺这个文件）' : onPlaceScan ? '选择后在地图上点击放置位置' : '打开这一场的 3D 实景'}
             aria-label={failed ? `重试加载真实场地 ${venue.name}` : onPlaceScan ? `放置真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
             aria-pressed={active} onClick={() => pickScan(venue)}>
             <span className="sc-scan-card-shot">
@@ -249,6 +252,12 @@ export function SpacePanel({
             <strong title={venue.name}>{venue.name}</strong>
             {meta && <span className="sc-scan-card-meta">{meta}</span>}
           </button>
+          {inProject && <div className="sc-scan-card-actions">
+            {onMoveScan && <button type="button" className="sc-button" aria-label={`编辑实景扫描 ${venue.name}`}
+              onClick={() => onMoveScan(venue.assetId)}>编辑</button>}
+            {onPlaceScan && <button type="button" className="sc-button" aria-label={`重新落位实景扫描 ${venue.name}`}
+              onClick={() => onPlaceScan(venue)}>重新落位</button>}
+          </div>}
         </li>;
       })}
     </ul>}
@@ -277,6 +286,7 @@ export function SpacePanel({
     {caseNotice && <p className="sc-note" role="status">{caseNotice}</p>}
   </SceneGroup>;
 
+  const currentScene = environment?.current ?? null;
   const projectScenes = environment ? <SceneGroup label="项目中的场景" icon={<Box size={15} aria-hidden="true" />} count={environment.environments.length}>
     <EnvironmentPreview {...environment} gallery={card}/>
   </SceneGroup> : null;
@@ -322,6 +332,22 @@ export function SpacePanel({
               .sc-library-chat-choices 因 material-create-cell 仍在用而单独保留。 */}
           {card
             ? <>
+                {/* 2026-11-19 用户：「示例场景摆放之后没有办法挪动啊 删除啊」——
+                    场景是环境不是 item，普通拖动/删除够不到它；在卡片顶部给一行明确的当前场景操作。 */}
+                {currentScene && (
+                  <div className="sc-space-current-scene" aria-label="当前场景">
+                    <div>
+                      <small>当前场景</small>
+                      <strong>{currentScene.name || '示例场景'}</strong>
+                    </div>
+                    <div className="sc-space-current-scene-actions">
+                      {onMoveScan && (
+                        <button type="button" className="sc-button" onClick={() => onMoveScan(currentScene.assetId)}>移动</button>
+                      )}
+                      <button type="button" className="sc-button" onClick={() => environment?.onRemove(currentScene.assetId)}>移除</button>
+                    </div>
+                  </div>
+                )}
                 {/* 2026-11-17 用户：「是不是上面的应该放在下面」「项目中的场景这玩意根本就不重要啊」——
                     案例与模板库提到最前，本机那 8 行实景扫描压到最后；「项目中的场景」从卡里摘掉
                     （shelf 版仍在「更多场地选项」里挂着，环境切换没丢）。 */}

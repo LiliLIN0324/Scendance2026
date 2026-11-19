@@ -199,7 +199,12 @@ export function mergeOutdoorFacts(
       !deltaAdjusted.has(item) &&
       item.count !== 0 &&
       !evidencedCount(item.evidence, item.count) &&
-      !sameQuantity(item)
+      !sameQuantity(item) &&
+      // An unquantified request to add a named object starts with one editable instance.
+      !(facts.items?.includes(item as NonNullable<OutdoorTurn["facts"]["items"]>[number]) &&
+        item.count === 1 && "query" in item && item.evidence.includes(item.query) &&
+        /加|放|摆|添|布置|装饰|种/u.test(item.evidence) &&
+        !/[0-9零一二两三四五六七八九十百千万几多]/u.test(item.evidence))
     )
       throw new Error(
         "物件/岗位数量缺少本句数字依据，请明确总数量，未猜测或应用。",

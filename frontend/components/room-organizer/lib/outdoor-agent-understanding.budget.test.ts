@@ -120,7 +120,7 @@ describe("E1 上下文预算分级降级（docs/47）", () => {
         name: `多功能综合服务区${i + 1}`,
         purpose: "service" as const,
         environment: "outdoor" as const,
-        evidence: `用户明确要求第${i + 1}个区域用于综合服务，包含签到咨询物资中转与志愿者休整，位置靠近主入口内侧并避开车行通道，此约束不可省略——${"夜间需要保留照明与安保巡视通道，不得被展位挤占".repeat(3)}`,
+        evidence: `用户明确要求第${i + 1}个区域用于综合服务，包含签到咨询物资中转与志愿者休整，位置靠近主入口内侧并避开车行通道，此约束不可省略——${"夜间需要保留照明与安保巡视通道，不得被展位挤占".repeat(10)}`,
       })),
       items: [
         {
@@ -161,7 +161,7 @@ describe("E1 上下文预算分级降级（docs/47）", () => {
     };
     const candidates = Array.from({ length: 8 }, (_, i) => ({
       id: `real-personal-asset-${i}-stable-id`,
-      name: `真实展板候选${i + 1}：${"铝合金双面立式宣传展示展架室外活动专用防风配重底座需核对固定与承重".repeat(3)}`,
+      name: `真实展板候选${i + 1}：${"铝合金双面立式宣传展示展架室外活动专用防风配重底座需核对固定与承重".repeat(10)}`,
       width: 1.2,
       depth: 0.5,
       height: 2,
@@ -217,7 +217,7 @@ describe("E1 上下文预算分级降级（docs/47）", () => {
         name: `沿河活动分区${i + 1}`,
         purpose: "market" as const,
         environment: "outdoor" as const,
-        evidence: `用户要求第${i + 1}分区沿河布置并保留亲水步道通行，${"摊位不得遮挡河岸栏杆与救生器材，夜间照明走预埋电缆不走临时拉线".repeat(3)}`,
+        evidence: `用户要求第${i + 1}分区沿河布置并保留亲水步道通行，${"摊位不得遮挡河岸栏杆与救生器材，夜间照明走预埋电缆不走临时拉线".repeat(20)}`,
       })),
       items: [
         {

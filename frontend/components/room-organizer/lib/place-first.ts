@@ -45,6 +45,6 @@ export function placeStillPending(input: { hasOutdoorPlan: boolean; stage?: stri
   // 2026-11-16 浏览器实测：空白活动的 stage 还没初始化，旧条件 `stage === 'place'`
   // 永远不成立，于是设计句被当成选址请求，最后卡在登录墙。
   // 户外只要范围没确认，就按“地点未定”处理（室内分支不受影响）。
-  if (input.hasOutdoorPlan && input.rangeConfirmed === false) return true;
+  if (input.hasOutdoorPlan && input.rangeConfirmed !== undefined) return !input.rangeConfirmed;
   return input.hasOutdoorPlan ? input.stage === 'place' : !input.venueUp;
 }

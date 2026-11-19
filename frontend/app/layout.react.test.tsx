@@ -8,7 +8,7 @@ import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 import type { ReactNode } from 'react';
 
 const mounts = vi.hoisted(() => ({ workspace: vi.fn(), editor: vi.fn() }));
-vi.mock('@/components/workspace-shell', () => ({ BootSkeleton: () => null, WorkspaceShell: ({ children }: { children: ReactNode }) => { mounts.workspace(); return children; } }));
+vi.mock('@/components/workspace-shell', () => ({ BootSkeleton: () => <p>骨架屏占位</p>, WorkspaceShell: ({ children }: { children: ReactNode }) => { mounts.workspace(); return children; } }));
 vi.mock('@/lib/auth-provider', () => ({ AuthProvider: ({ children }: { children: ReactNode }) => children }));
 
 let root: Root | undefined;
@@ -34,7 +34,7 @@ it.each([false, true])('hydrates the real root with extension injection=%s and p
 });
 
 it('still reports a real hydration mismatch inside the startup gate', async () => {
-  const html = renderToString(<RootLayout><p>页面内容</p></RootLayout>).replace('正在核对本机恢复状态，请稍候。', '服务端不同内容');
+  const html = renderToString(<RootLayout><p>页面内容</p></RootLayout>).replace('<p>骨架屏占位</p>', '<p>服务端不同内容</p>');
   document.open(); document.write(`<!doctype html>${html}`); document.close();
   const error = vi.spyOn(console, 'error').mockImplementation(() => {});
   await act(async () => { root = hydrateRoot(document, <RootLayout><p>页面内容</p></RootLayout>); });
