@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { consumeSelfAttachedProject } from '@/lib/workspace-api';
 import { makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { useSilentCloudAttach } from './use-silent-cloud-attach';
-import { LOCAL_ZONES_CLOUD_MESSAGE } from '../lib/backend-adapter';
 import { subscribeNotices } from '../lib/editor-notices';
 import type { BackendSession } from '@/lib/backend-session';
 import type { RoomLayout } from '../lib/types';
@@ -104,7 +103,7 @@ describe('无感挂云', () => {
     expect(onBind).not.toHaveBeenCalled();expect(new URLSearchParams(window.location.search).get('project')).toBeNull();
   });
 
-  it('reports unsupported local zones, does not create a cloud project, and retries after they are removed', async () => {
+  it('carries local zones into the cloud project instead of refusing to attach', async () => {
     const notices: string[] = [];
     const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
     try {
@@ -112,14 +111,14 @@ describe('无感挂云', () => {
       const zone = { id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 };
       const local = { ...base, floors: [{ ...base.floors[0]!, zones: [zone] }] };
       const onBind = vi.fn();
-      const { rerender } = render(<Probe layout={local} onBind={onBind}/>);
-      await waitFor(() => expect(notices).toContain(LOCAL_ZONES_CLOUD_MESSAGE));
-      expect(mocks.listStudios).not.toHaveBeenCalled();
-      expect(mocks.createProject).not.toHaveBeenCalled();
-      expect(onBind).not.toHaveBeenCalled();
-      expect(local.floors[0]!.zones).toEqual([zone]);
-      rerender(<Probe layout={base} onBind={onBind}/>);
+      render(<Probe layout={local} onBind={onBind}/>);
       await waitFor(() => expect(onBind).toHaveBeenCalledWith('p-new'));
+      expect(mocks.createProject).toHaveBeenCalledOnce();
+      const sent = mocks.createProject.mock.calls[0]![2] as { zones?: { id: string; name: string }[] };
+      expect(sent.zones).toHaveLength(1);
+      expect(sent.zones![0]).toMatchObject({ id: 'rest', name: '休息区' });
+      expect(notices.some(text => text.includes('本机区域标注'))).toBe(false);
+      expect(local.floors[0]!.zones).toEqual([zone]);
     } finally { unsubscribe(); }
   });
 

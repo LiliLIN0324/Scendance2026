@@ -25,7 +25,7 @@ import { emptyProjectScene, consumeSelfAttachedProject, preferredStudio, remembe
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 import {projectUnverifiedScene} from '../../../../supabase/functions/_shared/scene-text-projection';
 import { assetCloudLabel, cloudAssetIdMap, prepareLayoutAssetsForCloud, useAssetCloudRecords } from '../lib/asset-cloud';
-import { assertCloudZoneSupport, backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -334,9 +334,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }
   async function assertCloudTransition(value: RoomLayout): Promise<void> {
     try {
-      assertCloudZoneSupport(value);
       await assertNoLocalRecordsCloudTransition(value);
-      assertCloudZoneSupport(value);
       setRecordsBlockedScope(current => current === value.id ? undefined : current);
     } catch(error) {
       if (value.id && value.id === layoutRef.current.id) setRecordsBlockedScope(value.id);
@@ -344,7 +342,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }
   }
   async function flushBeforeReplacement(openingFrom: RoomLayout): Promise<()=>void> {
-    assertCloudZoneSupport(openingFrom);assertNoLocalHandoffCloudTransition(openingFrom);
+    assertNoLocalHandoffCloudTransition(openingFrom);
     const check=onBeforeActivitySwitch?.(openingFrom)??(()=>{if(layoutRef.current!==openingFrom)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');});
     check();
     await assertCloudTransition(openingFrom);
@@ -437,7 +435,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   async function claimEditRight(project: { id: string; name: string; scene: Scene }, checkSwitch: () => void): Promise<string> {
     try {
       await controller.acquireLease(project.id, scene => {
-        assertCloudZoneSupport(layoutRef.current); assertNoLocalHandoffCloudTransition(layoutRef.current);
+        assertNoLocalHandoffCloudTransition(layoutRef.current);
         checkSwitch(); backendSceneToLayout(scene, { projectId: project.id, name: project.name });
       });
     } catch {
@@ -458,7 +456,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       // 只在换到别的项目时交还编辑权；重新打开同一项目（本机留有未保存改动）不动租约。
       if (openingFrom.id !== id) await releaseForSwitch();
       const project = current.project?.id === id && !current.writeBlocked ? current.project :
-        await controller.getProject(id, incoming => { assertCloudZoneSupport(layoutRef.current); assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(incoming.scene, { projectId: incoming.id, name: incoming.name }); });
+        await controller.getProject(id, incoming => { assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(incoming.scene, { projectId: incoming.id, name: incoming.name }); });
       checkSwitch();
       await assertCloudTransition(openingFrom);
       await assertCloudTransition(layoutRef.current);
@@ -550,7 +548,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     await assertCloudTransition(backendSceneToLayout(active.scene, { projectId: active.id, name: active.name }));
     await assertCloudTransition(layoutRef.current);
     if (layoutRef.current !== openingFrom) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
-    const lease = await controller.acquireLease(active.id, scene => { assertCloudZoneSupport(layoutRef.current); assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(scene, { projectId: active.id, name: active.name }); });
+    const lease = await controller.acquireLease(active.id, scene => { assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(scene, { projectId: active.id, name: active.name }); });
     try { await acceptScene(lease.scene, active.id, active.name, openingFrom,checkSwitch); }
     catch (error) {
       try{if(controller.getSnapshot().writeBlocked)await controller.releaseLeaseAfterCanvasMismatch(active.id);else await controller.releaseLease();}
@@ -580,7 +578,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       setBoundLayout(undefined);
       let opened;
       try {
-        opened=await controller.getProject(project.id, candidate => { assertCloudZoneSupport(layoutRef.current); assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(candidate.scene, { projectId: candidate.id, name: candidate.name }); });
+        opened=await controller.getProject(project.id, candidate => { assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(candidate.scene, { projectId: candidate.id, name: candidate.name }); });
         checkSwitch();
       }catch(error){
         if(controller.getSnapshot().project?.id===project.id&&layoutRef.current.id!==project.id){
@@ -593,7 +591,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         await assertCloudTransition(backendSceneToLayout(opened.scene,{projectId:opened.id,name:opened.name}));checkSwitch();
       }catch(error){suspendFailedReplacement(opened.id);throw error;}
       let lease;
-      try{lease=await controller.acquireLease(opened.id, scene => { assertCloudZoneSupport(layoutRef.current); assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(scene, { projectId: opened.id, name: opened.name }); });}
+      try{lease=await controller.acquireLease(opened.id, scene => { assertNoLocalHandoffCloudTransition(layoutRef.current);checkSwitch();backendSceneToLayout(scene, { projectId: opened.id, name: opened.name }); });}
       catch(error){
         if(controller.getSnapshot().project?.id===opened.id&&layoutRef.current.id!==opened.id){
           suspendFailedReplacement(opened.id);
@@ -673,7 +671,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   async function saveDraftAsProject(): Promise<void> {
     const current = layoutRef.current;
     if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){showNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
-    assertCloudZoneSupport(current);assertNoLocalHandoffCloudTransition(current);
+    assertNoLocalHandoffCloudTransition(current);
     const checkSwitch=onBeforeActivitySwitch?.(current)??(()=>{if(layoutRef.current!==current)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');});
     checkSwitch();
     await assertCloudTransition(current);
@@ -1097,7 +1095,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
               void run(async () => {
               const current = layoutRef.current;
               if(projectedCreation.current&&sameRecoveryFormValue(projectedCreation.current.base,current)){showNotice(`云端项目已创建（编号 ${projectedCreation.current.projectId}），目前仅供只读核对；本机草稿未替换，请先核对原项目。`);return;}
-              assertCloudZoneSupport(current);assertNoLocalHandoffCloudTransition(current);
+              assertNoLocalHandoffCloudTransition(current);
               const checkSwitch=onBeforeActivitySwitch?.(current)??(()=>{if(layoutRef.current!==current)throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');});
               checkSwitch();
               await assertCloudTransition(current);

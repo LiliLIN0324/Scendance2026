@@ -41,7 +41,7 @@ describe('SpacePanel', () => {
   it('puts real venues first and folds secondary actions', async () => {
     render(<SpacePanel layout={INITIAL_LAYOUT}/>);
     expect(screen.getByRole('heading', { name: '真实场地' })).toBeTruthy();
-    // 面板打开即自动登记云端扫描库（2026-11-19 批量删除后索引剩 2 套实景），空库提示只在真没数据时出现
+    // 面板打开即自动登记云端扫描库（2026-11-19 收编江南村后索引 3 套实景），空库提示只在真没数据时出现
     expect(await screen.findByText(/\d+ 套已扫描/)).toBeTruthy();
     expect(screen.queryByText('用手机拍一段场地')).toBeNull();
   });

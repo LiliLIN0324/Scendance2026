@@ -23,16 +23,25 @@ function scene(): Scene {
 }
 
 describe('the shared backend scene adapter', () => {
-  it('does not silently drop a locally marked rest area on a cloud round trip', () => {
+  it('carries a drawn room zone to the cloud instead of refusing to save', () => {
     const original = backendSceneToLayout(scene());
     const zone = { id: 'rest-one', name: '休息区（待核验）', color: '#4A7C59', x: -2, z: -2, w: 2.2, d: 1.6 };
     original.floors[0].zones = [zone];
-    const localCopy = parseStoredLayout(JSON.parse(JSON.stringify(original)));
-    expect(localCopy?.floors[0].zones).toEqual([zone]);
-    expect(() => layoutToBackendScene(original)).toThrow(/本机区域标注/);
-    try { layoutToBackendScene(original); throw new Error('unexpected success'); }
-    catch (error) { expect((error as SceneAdapterError).code).toBe('ZONES_NOT_SUPPORTED'); }
+    const saved = layoutToBackendScene(original);
+    // 10×8 场地：编辑帧以房间中心为原点，云端帧以北西角为原点。
+    expect(saved.zones).toEqual([{ ...zone, color: '#4a7c59', x: 3, z: 2 }]);
+    const roundtrip = backendSceneToLayout(saved);
+    expect(roundtrip.floors[0].zones).toEqual([{ ...zone, color: '#4a7c59' }]);
     expect(original.floors[0].zones).toEqual([zone]);
+  });
+
+  it('rejects duplicate zone ids at the contract boundary', () => {
+    const layout = backendSceneToLayout(scene());
+    layout.floors[0].zones = [
+      { id: 'dup', name: '签到区', color: '#3b82f6', x: 0, z: 0, w: 1, d: 1 },
+      { id: 'dup', name: '休息区', color: '#4A7C59', x: 1, z: 0, w: 1, d: 1 },
+    ];
+    expect(() => layoutToBackendScene(layout)).toThrow(/区域 ID 不能重复/);
   });
 
   it('still round-trips a scene with an empty zone list', () => {
@@ -43,12 +52,13 @@ describe('the shared backend scene adapter', () => {
     expect(roundtrip.floors[0].items.length).toBe(layout.floors[0].items.length);
   });
 
-  it('also stops if a saved design variant contains a local zone', () => {
+  it('no longer refuses a layout because a saved variant still holds a zone', () => {
     const layout = backendSceneToLayout(scene());
     const variant = backendSceneToLayout(scene());
     variant.floors[0].zones = [{ id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 }];
     layout.designBook = { activeId: 'alternative', variants: [{ id: 'alternative', name: '另一版', layout: variant }] };
-    expect(() => layoutToBackendScene(layout)).toThrow(/本机区域标注/);
+    // Only the active floor is the cloud scene; a variant's zones stay a local draft.
+    expect(layoutToBackendScene(layout).zones ?? []).toEqual([]);
     expect(layout.designBook.variants[0].layout.floors[0].zones).toHaveLength(1);
   });
   it('rejects archived preset nodes now that the template library moved out', () => {

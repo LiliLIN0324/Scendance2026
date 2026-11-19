@@ -4688,10 +4688,10 @@ useEffect(() => {
   }), [isReady, view.view2D, outdoor2DOpen]);
   const reviewContext=JSON.stringify(referenceImage.layer??null);
   // §二.4 默认在云上：保存态只说「已保存」，不出现云/本地二元说法。
-  const hasLocalZones = layout.floors.some(floor => (floor.zones?.length ?? 0) > 0);
-  const draftLabel = saveError ? '保存失败' : isSaving ? '正在保存…' : hasLocalZones ? '本机草稿' : lastSavedAt ? '已保存' : '草稿';
-  const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : hasLocalZones ? '本机草稿' : lastSavedAt ? '已保存' : '';
-  const draftTitle = saveError ? '保存失败，请导出备份' : hasLocalZones ? '区域标注仅在本机保留，云端暂不支持；请备份。' : draftLabel;
+  // 区域（分区）随场景上云，不再单独拉一个「只在本机」的保存态。
+  const draftLabel = saveError ? '保存失败' : isSaving ? '正在保存…' : lastSavedAt ? '已保存' : '草稿';
+  const draftFoot = saveError ? '未保存' : isSaving ? '保存中' : lastSavedAt ? '已保存' : '';
+  const draftTitle = saveError ? '保存失败，请导出备份' : draftLabel;
   // 集成接线：顶栏容量计——从 layout 读宽深（height 字段在本仓库里是深度），调用纯函数估算。
   // A heuristic object density is neither the venue's approved capacity nor
   // a physical upper bound. Show the observable count and keep capacity unknown.

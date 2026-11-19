@@ -1,6 +1,26 @@
 {
   "scans": [
     {
+      "assetId": "41fbc06a-20dd-4d82-8192-4e865b596cba",
+      "kind": "spz",
+      "name": "江南田园村落",
+      "bytes": 422083664,
+      "savedAt": 1795053410376,
+      "forwardBox": {
+        "min": [
+          -52.7998046875,
+          -47.93798828125,
+          -6.537353515625
+        ],
+        "max": [
+          44.900390625,
+          49.94482421875,
+          5.178955078125
+        ]
+      },
+      "lodUrl": "/scans/jiangnan-village/lod-meta.json"
+    },
+    {
       "assetId": "48245ba8-8f0c-456f-a4c4-6a13526e08b9",
       "kind": "spz",
       "name": "本机高斯 48245ba8",
