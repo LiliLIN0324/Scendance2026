@@ -11,7 +11,6 @@ import type { TableArrangement } from './table-seat-plan';
 import { hasCollisions, itemsOverlap, rotatedHalfExtents } from './geometry';
 import { randomSuffix } from './ids';
 import { floorKeepOut } from './floor-keep-out';
-import { presetModelUrl } from './scene-presets';
 import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides, usableSeatingRect } from './structural-layout';
 import type { FurnitureItem, RoomLayout, Vec2 } from './types';
 import { buildVenueShell, type ScaleOrigin } from './venue-shell';
@@ -145,7 +144,8 @@ const seatCountIn = (items: readonly FurnitureItem[]): number => items.filter(it
  */
 export function raiseVenue(input: VenueInput): VenuePlan | null {
   const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin, polygonMeters } = input;
-  if (base.scenePreset || base.backendSceneV2 || base.floors.length !== 1) return null;
+  // 已有结构（云端 V2 结构或实测场地）就是场地真相，不再另砌一个壳体盖掉它。
+  if (base.backendSceneV2 || base.backendVenue || base.floors.length !== 1) return null;
   const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin, ...(polygonMeters?.length ? { polygonMeters } : {}) });
   const shellLayout = backendSceneToLayout(scene, { name: base.name, ...(base.id ? { projectId: base.id } : {}) });
   // 壳体只换结构这几栏：底图、层高、屋顶这些跟布置无关的现场信息得跟着人原来填的走。
@@ -191,11 +191,11 @@ function rebuildableShell(layout: RoomLayout): boolean {
 export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
   const { base, floorIndex, widthM, depthM, indoorOutdoor, scaleOrigin, polygonMeters } = input;
   if (base.floors.length !== 1) return null;
-  if (!base.scenePreset && !rebuildableShell(base)) return null;
+  if (!rebuildableShell(base)) return null;
   const scene = buildVenueShell({ widthM, depthM, indoorOutdoor, scaleOrigin, ...(polygonMeters?.length ? { polygonMeters } : {}) });
   const shellLayout = backendSceneToLayout(scene, { name: base.name, ...(base.id ? { projectId: base.id } : {}) });
   const {
-    scenePreset: _preset, backendSceneV2: _structure, backendVenue: _venue,
+    backendSceneV2: _structure, backendVenue: _venue,
     backendCamera: _camera, backendLighting: _lighting, floors: _floors, roof: _roof, ...rest
   } = base;
   const oldFloor = base.floors[floorIndex];
@@ -211,9 +211,8 @@ export function replaceVenueWithShell(input: VenueInput): VenuePlan | null {
   };
   const index = Math.min(floorIndex, shell.floors.length - 1);
   const markers = structuralOnly(shell.floors[index]?.items ?? []);
-  const presetUrl = base.scenePreset ? presetModelUrl(base.scenePreset) : null;
   const current = oldFloor?.items ?? [];
-  const kept = current.filter(item => !isStructuralMarker(item) && !(presetUrl && item.glbUrl === presetUrl));
+  const kept = current.filter(item => !isStructuralMarker(item));
   const withOld = withItems(shell, index, [...markers, ...kept]);
   if (canApplyLayoutGeometry(base, withOld)) return { layout: withOld, scene, cleared: 0 };
   const locked = kept.filter(item => item.locked);

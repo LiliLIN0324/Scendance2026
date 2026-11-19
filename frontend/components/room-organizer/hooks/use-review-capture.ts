@@ -2,7 +2,6 @@ import { useEffect, useRef, type RefObject, type MutableRefObject } from 'react'
 import { captureProjectReviewCanvas, ProjectReviewCaptureError, ProjectReviewChangedError, type ProjectReviewCaptureOptions } from '@/lib/project-review-workflow';
 import { ensureFloorPlanImageDecoded, isFloorPlanImageReady, render2DTopDown } from '../canvas-2d/render';
 import { DEFAULT_FLOOR_PLAN_OPACITY } from '../lib/constants';
-import { presetModelUrl } from '../lib/scene-presets';
 import { getGlbAssetRevision, getGlbAssetState, glbAssetKey } from '../three/glb-assets';
 import type { FurnitureItem, RoomLayout, ViewSettings } from '../lib/types';
 import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
@@ -79,7 +78,6 @@ export function useReviewCapture(inputs:Inputs):(
       const floors=now.view.showAllFloors&&!view2D?now.layout.floors:[now.layout.floors[floorIndex]!];
       const items=floors.flatMap(floor=>floor.items);
       const keys=items.map(glbAssetKey).filter((key):key is string=>!!key);
-      if(now.layout.scenePreset)keys.push(presetModelUrl(now.layout.scenePreset));
       const modelsReady=view2D||keys.every(key=>getGlbAssetState(key).status==='ready');
       const referenceUrl=visibleReferenceUrl(now),referenceVisible=!!referenceUrl;
       const committedFrame=!!frame&&frame.layout===now.layout&&frame.view===now.view&&frame.floor===floorIndex&&

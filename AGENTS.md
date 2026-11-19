@@ -26,7 +26,6 @@ client/scene-client.ts       前后端契约客户端
 supabase/functions/          scene-api / generation-worker / reconstruction-worker
 supabase/migrations/         数据库迁移
 assets/library/              GLB 物料库
-scene/templates/             场景模板
 scripts/                     打包、dev 代理、配置校验
 tests/                       后端测试（根 npm test）
 docs/                        文档，入口 docs/README.md
@@ -86,7 +85,7 @@ npm run dev:floorplan                    # 本机平面图脚本
 
 ## 七、禁止事项
 
-- 不 `git add -A`，不强推，推送被拒就报告，不绕过。
+- 不 `git add -A`。原则上不强推；历史重写确需强推时，须由仓库管理员明确授权、完成内容校验并确认协作者同步方案，且只能使用 `--force-with-lease` 推送指定分支，禁止 `--force` 与全分支/标签强推；其他推送被拒就报告，不绕过。
 - 不提交 `.env.local`、`node_modules`、`.next`、`out`、TypeScript 构建缓存或任何密钥。
 - 不擅自改数据库迁移、Edge Functions 契约、根依赖或 CI/治理配置；这些改动需要人 review。
 - 不伪造账号、生成任务或云端保存的降级路径；不把未执行的步骤算作通过。

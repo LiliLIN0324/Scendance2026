@@ -1,5 +1,18 @@
 import { enuToLngLat, lngLatToEnu } from './outdoor-plan-canvas';
 import type { PlanPoint, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+
+/**
+ * 整条删除用地红线（2026-11-19 用户实测：红线只能重画替换，删不掉整条）。
+ *
+ * 口径与 schema 一致：`boundary: []` 是合法的「用户明确不设范围」起步态，不是坏数据。
+ * 只清场地壳（boundary）与失去依据的设计范围（designScope）；锚点保持不动，
+ * 分区 / 物料 / 流线 / 出入口 / 人员 / 车 / 标注 / 测量一律原样保留（同一引用，不复制）。
+ * 撤销由调用方走 commitPlan 的 undo 栈，这里只做纯函数。
+ */
+export function clearPlanBoundary(plan: SitePlanData): SitePlanData {
+  if (plan.boundary.length === 0 && (plan.designScope ?? []).length === 0) return plan;
+  return { ...plan, boundary: [], designScope: undefined };
+}
 /** Changing the local geographic frame must never silently relocate existing work. */
 export function canReanchorOutdoorPlan(plan: SitePlanData, anchor: NonNullable<SitePlanData['anchor']>): boolean {
   // 车辆也算内容：只有车（plan.vehicles，2026-11-16 #118）的平面若被判为空，换锚点会让所有车整体位移。

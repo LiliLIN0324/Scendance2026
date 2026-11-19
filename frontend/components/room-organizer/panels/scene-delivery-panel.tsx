@@ -1,6 +1,7 @@
 'use client';
 
 
+import { ChevronRight, Lock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useBackendSession, type BackendSession } from '@/lib/backend-session';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
@@ -470,33 +471,51 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       if (mounted.current) { setBusy(false); setPackageStage(''); }
     }
   }
+  const confirmed = version?.status === 'confirmed';
+  const versionBadge = !version ? '核对中' : confirmed ? '已确认' : '未确认';
+  const versionSupport = confirmed ? '分享链接和导出文件名都用这一版。' : deliveryVersionLabel(version);
+  const primaryLabel = confirmed
+    ? (busy ? '正在打包…' : packageResult ? (packageResult.missing.length ? '重试缺件' : '重新打包') : '导出交付包')
+    : (versionBusy ? '正在确认…' : '确认这一版');
+  const primaryDisabled = confirmed ? busy || versionBusy : versionBusy || !version;
+  const packageContents = '效果图 ×3 · 平面 DXF · 物料清单 · 分享链接';
+  function runPrimary(): void {
+    if (confirmed) void buildPackage(packageResult?.missing.length ? 'retry' : 'fresh');
+    else void confirmVersion();
+  }
   return <section aria-label="场景交付" className="sc-generated-models sc-delivery-panel">
     <div className="sc-section-heading"><div><h2>执行资料</h2></div></div>
-    {/* 版本身份（SC-06）：确认一次分配一个号，导出与分享链接共用。 */}
+    {/* 版本身份（SC-06）：打开先看见版本、状态和主按钮。确认锁这一版，不是发送。 */}
     <div className="dl-version" data-delivery-version={version?.deliveryVersion ?? ''} data-snapshot-id={version?.snapshotId ?? ''} data-delivery-version-status={version?.status ?? 'checking'}>
-      <div className="dl-version-main">
-        <p className="dl-version-label">交付版本</p>
-        <p className="dl-version-line">
-          <b>{version?.deliveryVersion ?? '—'}</b>
-          <span>{deliveryVersionLabel(version)}</span>
-          {version && <small>快照 {version.snapshotId} · 内容指纹 {version.contentFingerprint.slice(0, 8)}…</small>}
-        </p>
+      <p className="dl-version-label">交付版本</p>
+      <div className="dl-version-head">
+        <b className="dl-version-number">{version?.deliveryVersion ?? '—'}</b>
+        <span className={`dl-badge${confirmed ? ' is-confirmed' : version ? ' is-warn' : ' is-muted'}`}>{versionBadge}</span>
       </div>
-      <button type="button" className="sc-button" disabled={versionBusy || !version || version.status === 'confirmed'} onClick={() => void confirmVersion()}>
-        {version?.status === 'confirmed' ? '这一版已确认' : versionBusy ? '正在确认…' : '确认这一版'}
-      </button>
+      <p className="dl-support">{versionSupport}</p>
+      <button type="button" className="sc-button dl-primary" disabled={primaryDisabled} onClick={runPrimary}>{primaryLabel}</button>
+      {confirmed ? <>
+        <p className="dl-contents">{packageContents}</p>
+        <p className="dl-quiet">再改草案会排到下一版，旧链接仍打开这一版。</p>
+      </> : <p className="dl-quiet">确认后，分享链接会固定在这一版；再改会排到下一版。</p>}
+      {version && <details className="dl-version-more">
+        <summary>版本详情</summary>
+        <p>快照 {version.snapshotId}</p>
+        <p>内容指纹 {version.contentFingerprint}</p>
+      </details>}
+      {versionNotice && <p className="dl-status" role="status">{versionNotice}</p>}
+      {confirmed && busy && packageStage && <p className="dl-package-stage" role="status">{packageStage}</p>}
+      {packageNotice && <p className="dl-status" role="status">{packageNotice}</p>}
     </div>
-    <p className="sc-note">确认后导出文件名和分享链接都用这个快照号；再改草案会排到下一版，旧链接仍打开原来那一版。</p>
-    {versionNotice && <p className="sc-note" role="status">{versionNotice}</p>}
-    {/* B2 一键交付包：只打确认版，缺件也出包但明确标「不完整」，可以只重试缺的几件。 */}
-    <div className="dl-package">
-      <button type="button" className="sc-button" disabled={busy || versionBusy || version?.status !== 'confirmed'} onClick={() => void buildPackage(packageResult?.missing.length ? 'retry' : 'fresh')}>
-        {busy ? '正在打包…' : packageResult ? (packageResult.missing.length ? '重试缺件' : '重新打包') : '导出交付包'}
-      </button>
-      {version && version.status !== 'confirmed' && <p className="sc-note">确认这一版后，才能打成带版本号的 zip 交付包（效果图 ×3、平面 DXF、物料清单、分享链接）。</p>}
-      {busy && packageStage && <p className="dl-package-stage" role="status">{packageStage}</p>}
-      {packageNotice && <p className="sc-note" role="status">{packageNotice}</p>}
-    </div>
+    {/* 确认前导出是次要按钮；确认后主按钮换成导出，不再并列两个。 */}
+    {!confirmed && <div className="dl-package">
+      <p className="dl-version-label">交付包</p>
+      <p className="dl-contents">{packageContents}</p>
+      <div className="dl-package-row">
+        <button type="button" className="sc-button dl-outline" disabled onClick={() => void buildPackage('fresh')}>导出交付包</button>
+        <span className="dl-package-wait">确认后可导出</span>
+      </div>
+    </div>}
     {packageResult && <div className="dl-package-result" data-delivery-package-status={packageResult.manifest.status} data-delivery-package-root={packageResult.root}>
       <p className="sc-note">{packageResult.manifest.status === 'complete'
         ? `交付包已导出：${packageResult.fileName} · ${packageResult.files.length} 个文件 · 版本 ${packageResult.manifest.deliveryVersion} · 快照 ${packageResult.manifest.snapshotId}。`
@@ -511,20 +530,26 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
     <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
       <EventOperationsPanel compact suggestionsPanel={activityTaskPanel} layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins} delivery={version ? { version: version.deliveryVersion, status: version.status, confirmedVersion: version.confirmed?.deliveryVersion ?? null } : null}/>
     </div>
-    <details className="dl-tools" open={toolsOpen} onToggle={event => {
+    <details className="dl-tools dl-row" open={toolsOpen} onToggle={event => {
       const open = event.currentTarget.open;
       setToolsOpen(open);
       if (!open) setView(operationsAvailable ? 'operations' : 'materials');
     }}>
-      <summary>内部资料</summary>
+      <summary>
+        <span className="dl-row-icon" aria-hidden="true"><Lock size={16} strokeWidth={1.75} /></span>
+        <span className="dl-row-title">内部资料</span>
+        <ChevronRight className="dl-row-chevron" size={16} aria-hidden="true" />
+      </summary>
+      <div className="dl-row-body">
       <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
-      <button type="button" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => showTool('operations')}>活动安排</button>
-      <button type="button" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => showTool('materials')}>物料工作单</button>
-      <button type="button" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => showTool('production')}>制作计划</button>
-      <button type="button" role="tab" id="delivery-checkins-tab" aria-controls="delivery-checkins" aria-selected={view === 'checkins'} onClick={() => showTool('checkins')}>数量点验</button>
-      <button type="button" role="tab" id="delivery-export-tab" aria-controls="delivery-export" aria-selected={view === 'export'} onClick={() => showTool('export')}>导出</button>
-      {backupActions && <button type="button" role="tab" id="delivery-backup-tab" aria-controls="delivery-backup" aria-selected={view === 'backup'} onClick={() => showTool('backup')}>本机备份</button>}
+      <button type="button" className="dl-chip" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => showTool('operations')}>活动安排</button>
+      <button type="button" className="dl-chip" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => showTool('materials')}>物料工作单</button>
+      <button type="button" className="dl-chip" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => showTool('production')}>制作计划</button>
+      <button type="button" className="dl-chip" role="tab" id="delivery-checkins-tab" aria-controls="delivery-checkins" aria-selected={view === 'checkins'} onClick={() => showTool('checkins')}>数量点验</button>
+      <button type="button" className="dl-chip" role="tab" id="delivery-export-tab" aria-controls="delivery-export" aria-selected={view === 'export'} onClick={() => showTool('export')}>导出</button>
+      {backupActions && <button type="button" className="dl-chip" role="tab" id="delivery-backup-tab" aria-controls="delivery-backup" aria-selected={view === 'backup'} onClick={() => showTool('backup')}>本机备份</button>}
       </div>
+      {view === 'operations' && <p className="dl-tools-foot">活动安排随当前场景保存在此浏览器。</p>}
     <div role="tabpanel" id="delivery-production" aria-labelledby="delivery-production-tab" hidden={view !== 'production'}>
       <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy||checkinsUnavailable} onExport={()=>void download('production')}/>
     </div>
@@ -598,6 +623,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
     {backupActions && <div role="tabpanel" id="delivery-backup" aria-labelledby="delivery-backup-tab" hidden={view !== 'backup'}>
       <LocalProjectBackupPanel layout={layout} actions={backupActions} briefState={briefState} onComplete={onBackupRestored}/>
     </div>}
+      </div>
     </details>
     {preview.error && view === 'operations' && <p className="sc-note">当前场馆模型暂不能完整交付，文字活动安排仍可单独导出。</p>}
     {notice && <p className="sc-note" role="status">{notice}</p>}

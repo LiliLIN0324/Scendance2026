@@ -186,10 +186,11 @@ describe('operations delivery snapshot', () => {
     expect(csv.startsWith('\uFEFF')).toBe(true);
   });
   it('exports text operations for a complete venue without silently exporting partial model materials', async () => {
-    const layout = { ...venue(), scenePreset: 'gym' as const };
+    const layout = venue();
+    layout.floors[0]!.items[0]!.glbNode = 'Preset_Object_0';
     layout.eventOperations = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [createOperation('演练主持', 'event')] });
     expect(await eventOperationsCsv(layout)).toContain('演练主持');
-    await expect(sceneDeliveryJson(layout)).rejects.toThrow('完整场景预设');
+    await expect(sceneDeliveryJson(layout)).rejects.toThrow('模板模型节点');
   });
   it('exports missing-instance status with preserved timestamps and evidence and omits local review digests', async () => {
     const layout = venue(); const task = await accepted(layout, [objectId]);

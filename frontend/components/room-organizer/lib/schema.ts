@@ -8,7 +8,6 @@ import { orientMapShellNorthUp } from './amap-venue';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION } from './constants';
 import { MAX_DORMERS, isDormerSpec } from './dormers';
 import { isGlbUrl } from './glb-url';
-import { SCENE_PRESET_KEYS, type ScenePresetKey } from './scene-presets';
 import { NEIGHBOUR_FLAGS, isStreetSeed, isTerrainY } from './site';
 import { isStairsLeadIn, isStairsShape } from './stairs';
 import { isStoreyHeight } from './storeys';
@@ -396,7 +395,6 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
       !book.variants.some(variant => variant.id === book.activeId) || new Set(book.variants.map(variant => variant.id)).size !== book.variants.length) return false;
   }
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
-  if (v.scenePreset !== undefined && !SCENE_PRESET_KEYS.includes(v.scenePreset as ScenePresetKey)) return false;
   if (v.venueScan !== undefined && (!isPlainObject(v.venueScan) ||
     typeof v.venueScan.assetId !== 'string' || v.venueScan.assetId.length === 0 || v.venueScan.assetId.length > MAX_ID_LENGTH ||
     typeof v.venueScan.name !== 'string' || v.venueScan.name.length > MAX_NAME_LENGTH)) return false;
@@ -597,7 +595,6 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   eventOperations: true,
   itemLayers: true,
   designBook: true,
-  scenePreset: true,
   venueScan: true,
   backendVenue: true,
   backendSceneV2: true,

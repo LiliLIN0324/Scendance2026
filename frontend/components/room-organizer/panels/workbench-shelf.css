@@ -131,14 +131,11 @@
   scrollbar-width: none;
 }
 /* 滚动条压在标签上很难读；改成右缘渐隐 + 滚轮/方向键横滚。 */
-.sc-compact-shelf .sc-material-rail::-webkit-scrollbar,
-.sc-compact-shelf .sc-preset-rail::-webkit-scrollbar { display: none; }
-.sc-compact-shelf .sc-material-rail[data-overflow="more"],
-.sc-compact-shelf .sc-preset-rail[data-overflow="more"] {
+.sc-compact-shelf .sc-material-rail::-webkit-scrollbar { display: none; }
+.sc-compact-shelf .sc-material-rail[data-overflow="more"] {
   mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);
 }
-.sc-compact-shelf .sc-material-rail[data-overflow="both"],
-.sc-compact-shelf .sc-preset-rail[data-overflow="both"] {
+.sc-compact-shelf .sc-material-rail[data-overflow="both"] {
   mask-image:linear-gradient(90deg,transparent,#000 34px calc(100% - 34px),transparent);
 }
 .sc-compact-shelf .sc-material-card {
@@ -341,7 +338,6 @@
   box-shadow:none;
 }
 .sc-compact-shelf .sc-material-card:hover { border-color:var(--wk-ink-faint); box-shadow:none; }
-.sc-compact-shelf .sc-preset-notice { color:var(--wk-muted); }
 .sc-compact-shelf .sc-material-more {
   border:1px solid var(--wk-hair); border-radius:var(--r-sm);
   background:var(--wk-paper); color:var(--wk-ink-soft);
@@ -372,40 +368,7 @@
 /* ── 场景模板 · 抽屉内横着一排 ────────────────────────────────────
    抽屉只有一行高，空白场地与模板共用同一条横向轨道，不做纵向长滚。 */
 .sc-compact-shelf .sc-library-presets { display:flex; flex-direction:column; gap:8px; height:100%; min-height:0; overflow:hidden; }
-.sc-compact-shelf .sc-preset-board { display:flex; flex-direction:column; gap:6px; flex:1 1 auto; min-height:0; }
-.sc-compact-shelf .sc-preset-rail {
-  display:flex; align-items:stretch; flex:1 1 auto; min-height:0; gap:8px; margin:0;
-  overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain;
-  scroll-snap-type:x proximity; scrollbar-width:none;
-}
-.sc-compact-shelf .sc-preset-tile { position:relative; flex:0 0 156px; scroll-snap-align:start; }
-.sc-compact-shelf .sc-preset-card {
-  display:grid; grid-template-rows:minmax(0,1fr) 20px; align-items:stretch; gap:2px;
-  /* 卡片是 <button>，不写 width 会按文字宽度 fit-content，卡与卡之间空隙一宽一窄。 */
-  width:100%; min-width:0; height:100%;
-  padding:3px; border:1px solid var(--wk-hair);
-  border-radius:var(--r-sm); background:var(--wk-paper); box-shadow:none;
-}
-.sc-compact-shelf .sc-preset-card:hover { border-color:var(--wk-ink-faint); }
-.sc-compact-shelf .sc-preset-card img { width:100%; height:100%; min-height:0; aspect-ratio:auto; object-fit:cover; border-radius:8px; }
 /* 空白场地卡：没有缩略图，用一张虚线空地告诉人「这里可以从零开始」。 */
-.sc-compact-shelf .sc-preset-blank {
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px;
-  width:100%; height:100%; min-height:0; border-radius:8px;
-  background:var(--wk-plane);
-  color:var(--wk-ink-soft); text-align:center;
-}
-.sc-compact-shelf .sc-preset-blank::before {
-  content:''; width:46px; height:32px; border:1px dashed var(--wk-ink-faint);
-  border-radius:4px; background:var(--wk-paper);
-}
-.sc-compact-shelf .sc-preset-blank small { font-size:var(--fs-cap); line-height:var(--lh-cap); white-space:nowrap; }
-.sc-compact-shelf .sc-preset-card strong {
-  height:20px; padding:0; line-height:20px;
-  font-size:var(--fs-cap); color:var(--wk-ink,#141416);
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-}
-.sc-compact-shelf .sc-preset-notice { margin:0; flex:0 0 auto; font-size:var(--fs-cap); line-height:var(--lh-cap); }
 /* 空间三块同级：场景模板 / 环境 / 结构，都是同一张卡，不再有浮层。 */
 .sc-space-section {
   display:flex; flex-direction:column; gap:6px; min-width:0;
@@ -619,11 +582,9 @@
   background: var(--wk-paper); color: var(--wk-ink-soft); font-size: var(--fs-cap); cursor: pointer;
 }
 .sc-space-new:hover { border-color: var(--wk-ink-faint); color: var(--wk-ink); }
-.sc-space-panel .sc-library-presets,
-.sc-space-panel .sc-preset-board { height: auto; overflow: visible; flex: none; }
+.sc-space-panel .sc-library-presets { height: auto; overflow: visible; flex: none; }
 .sc-space-panel .sc-space-templates .sc-library-presets { max-height: 236px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 /* 两卡等宽后各自限高：模板条横滚、环境只留一张，不会一侧内容把另一侧挤窄。 */
-.sc-space-panel .sc-preset-rail { flex: none; height: 112px; }
 .sc-space-panel .sc-material-rail { flex: none; height: 148px; }
 .sc-space-templates, .sc-space-env { min-height: 0; }
 .sc-space-env > :not(.sc-space-section-head) { margin-block: auto; }

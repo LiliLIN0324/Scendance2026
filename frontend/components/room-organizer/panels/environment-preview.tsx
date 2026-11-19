@@ -1,7 +1,9 @@
 'use client';
 
-import { ArrowLeftRight, Eye, Loader2, Mountain } from '@/components/solid-icons';
 import { useMemo, useState } from 'react';
+import { ArrowLeftRight, Eye, Loader2, Mountain } from '@/components/solid-icons';
+import { findAholoAsset } from '../lib/aholo-assets';
+import { readableScanName } from '../lib/scan-names';
 import { DEMO_WORLD_SCENE_ID, listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { MaterialThumb } from './material-thumb';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
@@ -66,11 +68,15 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
   });
   const toggleSolo = (assetId: string) => setSoloId(current => (current === assetId ? null : assetId));
   const currentScene = scenes.find(scene => scene.assetId === currentId);
-  const currentName = currentScene?.name ?? current?.name ?? '';
+  // 2026-11-19 用户：「没有其他和我的区分，这些都是我们的云资产」——项目里早先存下的
+  // 「云端高斯 48245ba8」这类旧名也走同一套可读名口径（lib/scan-names.ts）：
+  // 库里查得到落盘时间就带上日期，查不到就只叫「实景扫描」；用户起的名字原样保留。
+  const venueName = (assetId: string, name: string): string => readableScanName(name, findAholoAsset(assetId)?.savedAt);
+  const currentName = currentScene?.name ?? (current ? venueName(current.assetId, current.name) : '');
   if (gallery) return environments.length ? <>{photoError && <p role="alert">{photoError}</p>}<ul className="sc-project-gallery" aria-label="项目中的空间场景">
-    {[...environments].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')).map(environment => {
+    {[...environments].sort((a, b) => venueName(a.assetId, a.name).localeCompare(venueName(b.assetId, b.name), 'zh-CN')).map(environment => {
       const scene = scenes.find(entry => entry.assetId === environment.assetId);
-      const name = scene?.name ?? environment.name;
+      const name = scene?.name ?? venueName(environment.assetId, environment.name);
       const photo = photos[environment.assetId] ?? scene?.image;
       const cloudPreview = thumbnails?.[environment.assetId];
       const image = photo ?? cloudPreview;
@@ -129,7 +135,7 @@ export function EnvironmentPreview({ preview, current, environments, floors, onS
     {environments.length > 0 ? <ul className="sc-env-scenes" aria-label="项目中的空间场景">
       {environments.map((environment, index) => {
         const scene = scenes.find(entry => entry.assetId === environment.assetId);
-        const name = scene?.name ?? environment.name;
+        const name = scene?.name ?? venueName(environment.assetId, environment.name);
         const floorIndex = Math.min(floors.length - 1, environment.floorIndex ?? 0);
         const loading = busy && preview.assetId === environment.assetId;
         const failed = preview.status === 'error' && preview.assetId === environment.assetId;

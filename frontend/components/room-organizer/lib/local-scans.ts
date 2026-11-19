@@ -1,6 +1,7 @@
 import { DIRECT_BASE, findAholoAsset, isLux3dLocalProxy, rememberAholoAsset } from './aholo-assets';
-import { metersFromForwardBox } from './splat-meters';
 import index from './local-scan-index.json';
+import { readableScanName } from './scan-names';
+import { metersFromForwardBox } from './splat-meters';
 
 /** 索引里的一条本机扫描；来源是 scripts/build-local-scan-index.mjs 对账 .cache/aholo 的结果。 */
 export type LocalScanIndexEntry = {
@@ -44,7 +45,7 @@ export function registerLocalScans(): number {
     const saved = rememberAholoAsset({
       assetId: entry.assetId,
       kind: entry.kind,
-      name: entry.name,
+      name: readableScanName(entry.name, entry.savedAt),
       bytes: entry.bytes,
       savedAt: entry.savedAt,
       ...(meters ? { meters } : {}),
@@ -52,11 +53,6 @@ export function registerLocalScans(): number {
     if (saved) added += 1;
   }
   return added;
-}
-
-/** 索引名按本机语境起（「本机高斯」）；云端登记改叫「云端」，访客看了不误导。 */
-function cloudScanName(name: string): string {
-  return name.replace(/^本机/, '云端');
 }
 
 /**
@@ -71,7 +67,8 @@ export function registerCloudScans(): number {
     const saved = rememberAholoAsset({
       assetId: entry.assetId,
       kind: entry.kind,
-      name: cloudScanName(entry.name),
+      // 同上：库里每一份都是我们的云资产，不再按「本机 / 云端」改写名字。
+      name: readableScanName(entry.name, entry.savedAt),
       bytes: entry.bytes,
       savedAt: entry.savedAt,
       ...(meters ? { meters } : {}),

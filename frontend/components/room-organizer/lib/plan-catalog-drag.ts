@@ -1,9 +1,3 @@
-import {
-  SCENE_PRESETS,
-  scenePresetFacilityId,
-  type ScenePresetKey,
-} from './scene-presets';
-
 /**
  * 物料卡 → 户外规划的拖放载荷（2026-11-16）。
  *
@@ -68,23 +62,6 @@ export function catalogFacilityTemplateId(slug: string): string {
   }
   const suffix = (hash >>> 0).toString(36);
   return `web:${slug.length.toString(36)}-${suffix}`;
-}
-
-/**
- * 场景预设 → 同一个户外设施落位通道。
- * slug 与 templateId 都带 `scene-preset:` 前缀，3D 模型层据此加载整馆 GLB，
- * 2D 则按预设真实宽深画占地；不再替换用户当前地图。
- */
-export function planCatalogDragForScenePreset(key: ScenePresetKey): PlanCatalogDrag {
-  const preset = SCENE_PRESETS[key];
-  const id = scenePresetFacilityId(key);
-  return {
-    slug: id,
-    name: preset.name,
-    width: preset.width,
-    depth: preset.depth,
-    templateId: id,
-  };
 }
 
 export function planCatalogDragFor(input: {

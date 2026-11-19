@@ -114,7 +114,7 @@ export class DeliveryArtifactError extends Error {
 export function classifyDeliveryFailure(error: unknown): { code: DeliveryFailureCode; detail: string } {
   if (error instanceof DeliveryArtifactError) return { code: error.code, detail: error.message };
   const detail = error instanceof Error ? error.message : String(error ?? '');
-  if (/完整场景预设/.test(detail)) return { code: 'preset-unsupported', detail };
+  if (/模板模型节点|完整场景预设/.test(detail)) return { code: 'preset-unsupported', detail };
   if (/建筑入口/.test(detail)) return { code: 'entrance-unsupported', detail };
   if (/多层方案|MULTI_FLOOR/.test(detail)) return { code: 'preset-unsupported', detail };
   if (/没有楼层|no floor/i.test(detail)) return { code: 'no-floor', detail };

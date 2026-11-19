@@ -1,8 +1,7 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
 import { proposeAddition, proposePlan, raiseVenue, replaceVenueWithShell, type VenueInput } from './agent-proposal';
 import { backendSceneToLayout } from './backend-adapter';
-import { presetModelUrl } from './scene-presets';
 import { isStructuralMarker } from './structural-layout';
 import { buildVenueShell } from './venue-shell';
 import type { FurnitureItem, RoomLayout } from './types';
@@ -49,8 +48,8 @@ describe('raiseVenue — 场地真相先落地（T-01 的产物，本卡不改�
   });
 
   it('已有结构的场地不再砌墙', () => {
-    const preset = makeLayout({ scenePreset: 'gym' });
-    expect(raiseVenue({ base: preset, floorIndex: 0, widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })).toBeNull();
+    const structured = makeLayout({ backendVenue: { width: 20, depth: 14, height: 3, shape: 'rectangle', entrances: [] } });
+    expect(raiseVenue({ base: structured, floorIndex: 0, widthM: 12, depthM: 9, indoorOutdoor: 'indoor', scaleOrigin: 'stated' })).toBeNull();
   });
 
   it('户外场地不砌墙也不开门', () => {
@@ -60,41 +59,37 @@ describe('raiseVenue — 场地真相先落地（T-01 的产物，本卡不改�
   });
 });
 
-describe('replaceVenueWithShell — 有模板改尺寸就卸模板立壳（T-VENUE B）', () => {
-  const fixture = (key: 'gym' = 'gym', id = 'gym-seat'): FurnitureItem =>
-    makeItem({ id, type: 'glb-asset', name: '模板座椅', glbUrl: presetModelUrl(key), glbNode: 'Seat' });
-  const presetBase = (items: FurnitureItem[]): RoomLayout => makeLayout({
-    width: 70, height: 76, scenePreset: 'gym', roof: { style: 'none' },
-    floors: [makeFloor({ items })],
-  });
+describe('replaceVenueWithShell — 有壳改尺寸就卸壳重立（T-VENUE B）', () => {
+  const shellBase = (items: FurnitureItem[]): RoomLayout => {
+    const shell = backendSceneToLayout(buildVenueShell({ widthM: 70, depthM: 76, indoorOutdoor: 'indoor', scaleOrigin: 'typed' }), { name: '体育馆' });
+    return { ...shell, floors: [{ ...shell.floors[0]!, items: [...shell.floors[0]!.items, ...items] }] };
+  };
   const input = (base: RoomLayout): VenueInput => ({ base, floorIndex: 0, widthM: 20, depthM: 12, indoorOutdoor: 'indoor', scaleOrigin: 'stated' });
 
-  it('卸掉预设与模板 GLB 物件，按新尺寸立矩形空壳，留下塞得进的物料', () => {
+  it('按新尺寸立矩形空壳，留下塞得进的物料', () => {
     const chair = makeItem({ id: 'user-chair', type: 'chair', name: '自己的椅子', position: { x: 0, z: 0 } });
-    const base = presetBase([fixture(), chair]);
+    const base = shellBase([chair]);
     const venue = replaceVenueWithShell(input(base));
 
     expect(venue?.scene.venue.width).toBe(20);
     expect(venue?.scene.venue.depth).toBe(12);
     expect(venue?.scene.structure.walls).toHaveLength(4);
-    expect(venue?.layout.scenePreset).toBeUndefined();
     expect(venue?.layout.backendSceneV2).toBeDefined();
     expect(venue?.layout.width).toBe(20);
     expect(venue?.layout.height).toBe(12);
     expect(itemsOf(venue!.layout).some(item => item.id === 'user-chair')).toBe(true);
-    expect(itemsOf(venue!.layout).some(item => item.id === 'gym-seat')).toBe(false);
     expect(venue?.layout.floors[0]?.floorColor).toBe(base.floors[0]?.floorColor);
     expect(venue?.cleared).toBe(0);
   });
 
   it('放不下的散件随清场撤掉并报数，锁着的压墙则直说', () => {
     const far = makeItem({ id: 'far', type: 'chair', position: { x: 9, z: 6 } });
-    const loose = replaceVenueWithShell(input(presetBase([fixture(), far])));
+    const loose = replaceVenueWithShell(input(shellBase([far])));
     expect(loose?.cleared).toBe(1);
     expect(itemsOf(loose!.layout).some(item => item.id === 'far')).toBe(false);
 
     const stuck = makeItem({ id: 'stuck', type: 'sofa', width: 2, depth: 1, locked: true, position: { x: 9.8, z: 0 } });
-    expect(() => replaceVenueWithShell(input(presetBase([stuck])))).toThrow(/压在新墙体或边界上/);
+    expect(() => replaceVenueWithShell(input(shellBase([stuck])))).toThrow(/压在新墙体或边界上/);
   });
 
   it('空白场地这类编辑器自己立的壳也能按新尺寸重立', () => {
@@ -105,12 +100,11 @@ describe('replaceVenueWithShell — 有模板改尺寸就卸模板立壳（T-VEN
 
     expect(venue?.layout.width).toBe(20);
     expect(venue?.layout.height).toBe(12);
-    expect(venue?.layout.scenePreset).toBeUndefined();
     expect(itemsOf(venue!.layout).some(item => item.id === 'chair')).toBe(true);
     expect(itemsOf(venue!.layout).filter(isStructuralMarker)).toHaveLength(1);
   });
 
-  it('普通空地没有模板也没有壳就不硬改尺寸', () => {
+  it('普通空地没有壳就不硬改尺寸', () => {
     expect(replaceVenueWithShell(input(makeLayout()))).toBeNull();
   });
 });

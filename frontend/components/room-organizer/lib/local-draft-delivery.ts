@@ -92,7 +92,7 @@ function assertDraftStructureConsistent(layout: RoomLayout): void {
   const source=layout.backendSceneV2;
   const sourceIds=new Set([...source.structure.walls,...source.structure.openings,...source.structure.columns].map(value=>value.id));
   if(layout.floors.slice(1).some(floor=>floor.items.some(item=>isStructuralMarker(item)) || floor.interiorWalls?.some(wall=>sourceIds.has(wall.id)))) return fail();
-  const {roof:_roof,terrain:_terrain,entrance:_entrance,scenePreset:_preset,designBook:_book,...base}=layout;
+  const {roof:_roof,terrain:_terrain,entrance:_entrance,designBook:_book,...base}=layout;
   const {zones:_zones,...floor}=first;
   const structureOnly:RoomLayout={...base,roof:{style:'none'},floors:[{...floor,items:floor.items.filter(isStructuralMarker)}]};
   try { layoutToBackendScene(structureOnly); } catch { fail(); }

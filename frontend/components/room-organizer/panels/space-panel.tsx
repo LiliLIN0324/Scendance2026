@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Camera, Crown, Images, LayoutGrid, Loader2, Scan, Upload } from '@/components/solid-icons';
+import { Box, Camera, Crown, Images, Loader2, Scan, TriangleAlert, Upload } from '@/components/solid-icons';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
@@ -9,11 +9,9 @@ import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdo
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
 import { uploadScanFile } from '../lib/scan-upload';
-import { SCENE_PRESETS, type ScenePresetKey } from '../lib/scene-presets';
 import { CaseCards } from './case-cards';
 import { EnvironmentPreview } from './environment-preview';
 import { ShelfGrip } from './scendance-workspace';
-import { ScenePresetsPanel } from './scene-presets-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
 import type { RoomLayout } from '../lib/types';
@@ -61,11 +59,10 @@ function SceneGroup({ label, icon, count, open, testId, groupRef, lazy, action, 
  */
 export function SpacePanel({
   layout,
-  onApply,
-  onPlaceScene,
   environment,
   currentScanId,
-  onPickScan,
+  failedScanIds,
+  onPlaceScan,
   onShowScanContext,
   onOpenCapture,
   onAddSampleScene,
@@ -75,9 +72,6 @@ export function SpacePanel({
   variant = 'shelf',
 }: {
   layout: RoomLayout;
-  onApply(layout: RoomLayout): void;
-  /** 户外地图打开时，场景卡改为在当前地图上摆一个小场地（不替换整图）。 */
-  onPlaceScene?(key: ScenePresetKey): boolean;
   environment?: {
     preview: SplatPreviewState;
     current: StoredEnvironment | null;
@@ -92,8 +86,16 @@ export function SpacePanel({
   };
   /** 当前正在使用的真实场地（扫描库 assetId），只用于列表里的「使用中」。 */
   currentScanId?: string;
-  /** 选中一套已扫描场地；不传时退回环境切换，保证面板单独渲染也能用。 */
-  onPickScan?(venue: ScannedVenue): void;
+  /**
+   * 2026-11-19 用户：「到底文件好没好？」——曾经加载失败的场次（本机缺文件/损坏）。
+   * 只有这一组能把「从没打开过」和「文件已经不在」分开，两种空态长得一样就会看糊涂。
+   */
+  failedScanIds?: readonly string[];
+  /**
+   * 2026-11-19 用户：「实景扫描就是点击，然后放在特定的场地位置而已」。
+   * 卡片主点击 = 把这一套落到当前场地上（默认朝向，落完可拖动/调坐标），不再整场替换。
+   */
+  onPlaceScan?(venue: ScannedVenue): void;
   onShowScanContext?(): void;
   onOpenCapture?(): void;
   onAddSampleScene?(assetId: string): void;
@@ -111,11 +113,9 @@ export function SpacePanel({
   // 改成和物料库一样的连续列表：本活动 → 实景扫描（示例并入其中）→ 场景模板。
   // 2026-11-17 分类行重排后不再需要「首展开哪一段」的互斥状态，每段自己管展开。
   const moreRef = useRef<HTMLDetailsElement>(null);
-  const templatesRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     if (workflow !== 'traditional') return;
     if (variant !== 'card' && moreRef.current) moreRef.current.open = true;
-    if (templatesRef.current) templatesRef.current.open = true;
   }, [variant, workflow]);
   const card = variant === 'card';
   // 扫描登记在浏览器的来源隔离存储里（127.0.0.1 与 localhost 各存各的），换来源就丢；
@@ -167,9 +167,10 @@ export function SpacePanel({
     : '';
   const hasBoundary = (layout.mapGroundPolygon?.length ?? 0) >= 3;
   const samples = onAddSampleScene ? listShippedAssets('spz') : [];
-  const presetCount = Object.keys(SCENE_PRESETS).length;
   const pickScan = (venue: ScannedVenue) => {
-    if (onPickScan) onPickScan(venue);
+    // 2026-11-19 用户拍板删掉「只看这一场」：卡片只剩一件事——落到场地上；
+    // 没有宿主接落位（单独渲染/测试）时退回环境切换。
+    if (onPlaceScan) onPlaceScan(venue);
     else environment?.onSelect(venue.assetId, venue.name);
   };
   // 2026-11-17：经典案例不是“模板替换”，点开就在本机落一个独立活动（同一 id 复用，
@@ -205,25 +206,33 @@ export function SpacePanel({
   // 状态交给描边和左上角那颗标签。
   const scanCards = <>
     {scans.length === 0 && <p className="sc-note">还没有实景扫描。上传从 Aholo Reality 下载的 .spz / .ply，或用手机拍一段场地。</p>}
-    {scans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="我的实景扫描">
+    {scans.length > 0 && <ul className="sc-space-samples sc-scan-cards" aria-label="实景扫描">
       {scans.map(venue => {
         const thumb = venueThumb(venue);
         const active = venue.assetId === currentScanId;
         const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
-        const failed = !!active && preview?.status === 'error';
+        // 实时报错和「以前失败过」都算坏文件；后者让没被选中的卡也能一眼看出问题。
+        const failed = (!!active && preview?.status === 'error') || !!failedScanIds?.includes(venue.assetId);
+        const loading = !!active && preview?.status === 'loading';
         const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
-        const meta = [failed ? '加载失败' : '', venueSize(venue), venueDay(venue)].filter(Boolean).join(' · ');
+        // 空态分两种：没打开过（只是没图）对坏文件（加载失败）。有图的卡不再标注。
+        const state = loading ? '加载中' : !thumb && !failed ? '未打开过' : '';
+        const meta = [state, venueSize(venue), venueDay(venue)].filter(Boolean).join(' · ');
         return <li key={venue.assetId}>
-          <button type="button" className={`sc-space-sample sc-scan-card${active ? ' is-current' : ''}`}
-            title="打开这一场的 3D 实景"
-            aria-label={failed ? `重试加载真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
+          <button type="button" className={`sc-space-sample sc-scan-card${active ? ' is-current' : ''}${failed ? ' is-missing' : ''}`}
+            title={failed ? '上次没加载成功，点一下重试（本机可能缺这个文件）' : onPlaceScan ? '点一下放到场地上，再拖动或用坐标微调' : '打开这一场的 3D 实景'}
+            aria-label={failed ? `重试加载真实场地 ${venue.name}` : onPlaceScan ? `放置真实场地 ${venue.name}` : `应用真实场地 ${venue.name}`}
             aria-pressed={active} onClick={() => pickScan(venue)}>
             <span className="sc-scan-card-shot">
               {thumb
                 ? <img src={thumb} alt="" loading="lazy"/>
-                : <Scan size={22} className="sc-scan-card-blank" aria-hidden="true"/>}
-              {preview?.status === 'loading' && <span className="sc-scan-card-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
-              {(active || inProject) && <span className="sc-scan-card-tag">{active ? '当前' : '已加入'}</span>}
+                : failed
+                  ? <TriangleAlert size={22} className="sc-scan-card-blank is-missing" aria-hidden="true"/>
+                  : <Scan size={22} className="sc-scan-card-blank" aria-hidden="true"/>}
+              {loading && <span className="sc-scan-card-loading"><Loader2 className="cr-spin" size={16} aria-hidden="true"/></span>}
+              {failed
+                ? <span className="sc-scan-card-tag is-missing">加载失败</span>
+                : (active || inProject) && <span className="sc-scan-card-tag">{active ? '当前' : '已加入'}</span>}
             </span>
             <strong title={venue.name}>{venue.name}</strong>
             {meta && <span className="sc-scan-card-meta">{meta}</span>}
@@ -255,12 +264,6 @@ export function SpacePanel({
     {caseNotice && <p className="sc-note" role="status">{caseNotice}</p>}
   </SceneGroup>;
 
-  const templates = <SceneGroup label={card ? '场景模板库' : '场景模板'} icon={<LayoutGrid size={15} aria-hidden="true" />} count={presetCount} groupRef={templatesRef}>
-    <div className="sc-library-presets">
-      <ScenePresetsPanel layout={layout} onApply={onApply} active={layout.scenePreset} {...(onPlaceScene ? { onPlace: onPlaceScene } : {})}/>
-    </div>
-  </SceneGroup>;
-
   const projectScenes = environment ? <SceneGroup label="项目中的场景" icon={<Box size={15} aria-hidden="true" />} count={environment.environments.length}>
     <EnvironmentPreview {...environment} gallery={card}/>
   </SceneGroup> : null;
@@ -268,7 +271,6 @@ export function SpacePanel({
   const moreOptions = <details className={card ? 'sc-space-library-menu' : 'sc-space-library-details'} ref={moreRef}>
     <summary>更多场地选项</summary>
     <div className="sc-space-library-menu-content">
-      {!card && templates}
       {!card && projectScenes}
     </div>
   </details>;
@@ -312,13 +314,15 @@ export function SpacePanel({
                     （shelf 版仍在「更多场地选项」里挂着，环境切换没丢）。 */}
                 {cnCases}
                 {cases}
-                {templates}
                 {/* 2026-11-17 用户：「每次打开都默认打开了示例场景和我的实景扫描……默认都不要打开」——
                     两段一律收起起步，要看再点开；展开态此后由 details 自己管。 */}
                 {sampleTiles && <SceneGroup label="示例场景" icon={<Images size={15} aria-hidden="true" />} count={samples.length}>
                   {sampleTiles}
                 </SceneGroup>}
-                <SceneGroup label="我的实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length} groupRef={scansRef} action={scanUploadButton}>
+                {/* 2026-11-19 用户：「没有其他和我的区分，这些都是我们的云资产」——
+                    这一段不再叫「我的实景扫描」：库里每一份扫描都是团队的云资产，
+                    名字里的「本机 / 云端」前缀也已在 lib/scan-names.ts 那一道口去掉。 */}
+                <SceneGroup label="实景扫描" icon={<Scan size={15} aria-hidden="true" />} count={scans.length} groupRef={scansRef} action={scanUploadButton}>
                   {scanUploadNote}
                   {scanCards}
                 </SceneGroup>

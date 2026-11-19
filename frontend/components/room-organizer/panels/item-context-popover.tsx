@@ -8,7 +8,7 @@ import { layoutReducer } from '../hooks/layout-reducer';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { MAX_ITEM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '../lib/constants';
 import { onlineModelThumb } from '../lib/online-models';
-import { editorItemLimit } from '../lib/scene-presets';
+import { EDITOR_ITEM_LIMIT } from '../lib/item-limits';
 import { ENTRANCE_DOOR_ID } from '../lib/street';
 import { MaterialGlyph, NumberField } from './scendance-workspace';
 import { routeIsLoop, routeLength } from '../lib/person-route';
@@ -283,7 +283,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
         : <section><h3>物料颜色 <input type="color" aria-label="物料颜色" value={item.color} disabled={locked} onChange={event => { actions.setColor(item.id, event.target.value); pushColor(event.target.value); }}/></h3><div className="sc-color-swatches">{COLORS.map(color => <button type="button" key={color} style={{ background: color }} aria-label={`颜色 ${color}`} aria-pressed={item.color.toUpperCase() === color} disabled={locked} onClick={() => { actions.setColor(item.id, color); pushColor(color); }}/>)}</div></section>}
       <section><h3>物料备注</h3><textarea className="sc-notes" aria-label="物料备注" placeholder="例如：预留电源 / 实物待确认" maxLength={500} disabled={locked} value={item.notes ?? ''} onChange={event => actions.updateItem(item.id, { notes: event.target.value })}/></section>
       {provenanceLine(item) && <p className="sc-note" data-testid="item-provenance">{provenanceLine(item)}</p>}
-      <div className="sc-property-actions"><button type="button" className="sc-button" disabled={protectedStructure || activeFloor.items.length >= editorItemLimit(layout)} onClick={() => props.onDuplicate(item.id)}><Copy size={16}/>复制</button></div>
+      <div className="sc-property-actions"><button type="button" className="sc-button" disabled={protectedStructure || activeFloor.items.length >= EDITOR_ITEM_LIMIT} onClick={() => props.onDuplicate(item.id)}><Copy size={16}/>复制</button></div>
       <button type="button" className="sc-delete-button" disabled={locked || protectedStructure} onClick={() => props.onRemove(item.id)}><Trash2 size={16}/>删除物料</button>
     </div>
   </aside>;

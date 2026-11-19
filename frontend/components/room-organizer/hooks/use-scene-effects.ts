@@ -59,7 +59,6 @@ import { setOutdoorVisible } from '../three/outdoor';
 import { buildResearchBasemap, clearGeoCrosses, clearResearchBasemap, buildGeoCrosses, parseGeoCrossParam } from '../three/research-basemap';
 import { buildRoof, removeRoof } from '../three/roof';
 import { ROOM_OBJECT_TAGS, applyWallDisplay, buildRoom, clearFloorPlanImageCache, removeTagged } from '../three/room-builder';
-import { createPresetStructure } from '../three/scene-presets';
 import { addSignalOverlays } from '../three/signal-overlay';
 import { buildStructureShell } from '../three/structure-builder';
 import { BasemapTileCache } from '../lib/plan-tile-cache';
@@ -366,15 +365,6 @@ export function useSceneEffects({
       requestShadowUpdate();
       return;
     }
-    if (layout.scenePreset) {
-      const structure = createPresetStructure(layout.scenePreset);
-      if (structure) {
-        structure.userData.type = ROOM_OBJECT_TAGS.Floor;
-        scene.add(structure);
-      }
-      requestShadowUpdate();
-      return;
-    }
 
     // The building no longer has a floor plan: release the decoded multi-MB
     // image. (Only here — see clearFloorPlanImageCache for why buildRoom must
@@ -480,7 +470,7 @@ export function useSceneEffects({
     // interior walls (nearest wall wins), so the exterior hole set changes
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
-    layout.backendSceneV2, layout.width, layout.height, layout.scenePreset, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
+    layout.backendSceneV2, layout.width, layout.height, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
     layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef, !!layout.researchArea, geoGroundShellActive,
     layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0, layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale, layout.mapGroundFrame?.latSign,
     layout.mapGroundPolygon?.length,

@@ -123,9 +123,8 @@ describe('local execution handoff and reviewable delivery', async () => {
     expect(await sceneDeliveryJson(layout)).not.toContain('token=private');
     expect((await deliveryExecution(layout))[0].effectiveStatus).toBe('needs_review');
   });
-  it.each(['scenePreset', 'glbNode', 'entrance', 'multiFloor'] as const)('rejects %s for the new execution export as well', async kind => {
+  it.each(['glbNode', 'entrance', 'multiFloor'] as const)('rejects %s for the new execution export as well', async kind => {
     const layout = ordinary();
-    if (kind === 'scenePreset') layout.scenePreset = 'gym';
     if (kind === 'glbNode') layout.floors[0].items[0].glbNode = 'fixture';
     if (kind === 'entrance') layout.entrance = { width: 2, depth: 1 };
     if (kind === 'multiFloor') layout.floors.push(makeFloor({ id: 'upstairs' }));
