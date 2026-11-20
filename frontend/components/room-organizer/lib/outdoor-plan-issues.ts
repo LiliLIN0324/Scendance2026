@@ -12,8 +12,8 @@ export interface OutdoorPlanIssue {
   key: string;
   /** 面向创作者的一句话，已含对象名与原因。 */
   text: string;
-  /** 定位锚点（方案本地米）。 */
-  anchor: { x: number; y: number };
+  /** 定位锚点（方案本地米）。缺省 = 当前楼层算不出来，消费方不要拿它飞视图。 */
+  anchor?: { x: number; y: number };
   color?: string;
   facilityId?: string;
 }
@@ -33,6 +33,12 @@ let snapshot: OutdoorPlanIssueSnapshot = EMPTY;
 let settled: OutdoorPlanSettled = EMPTY_SETTLED;
 const listeners = new Set<() => void>();
 
+/** 两个锚点是否相同（缺省也算一种取值，不能直接比字段）。 */
+function sameAnchor(a?: { x: number; y: number }, b?: { x: number; y: number }): boolean {
+  if (!a || !b) return !a && !b;
+  return a.x === b.x && a.y === b.y;
+}
+
 /** 发布当前问题快照；内容没变就不通知，避免 Bingo 每次重渲染。 */
 export function publishOutdoorPlanIssues(next: OutdoorPlanIssueSnapshot): void {
   const cleaned = next.filter(issue => issue.key && issue.text);
@@ -41,11 +47,13 @@ export function publishOutdoorPlanIssues(next: OutdoorPlanIssueSnapshot): void {
     return previous !== undefined
       && previous.key === issue.key
       && previous.text === issue.text
-      && previous.anchor.x === issue.anchor.x
-      && previous.anchor.y === issue.anchor.y;
+      && sameAnchor(previous.anchor, issue.anchor);
   });
   if (same) return;
-  snapshot = Object.freeze(cleaned.map(issue => ({ ...issue, anchor: { ...issue.anchor } })));
+  snapshot = Object.freeze(cleaned.map(issue => ({
+    ...issue,
+    ...(issue.anchor ? { anchor: { ...issue.anchor } } : {}),
+  })));
   for (const listener of listeners) listener();
 }
 

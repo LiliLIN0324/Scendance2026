@@ -337,6 +337,8 @@ import {
   planLayerBlockReason,
 } from '../lib/plan-edit-gate';
 import { resolveBridgedHit } from '../lib/plan-pointer-bridge';
+// 2026-11-20 审计 B7/F6：定位前先查「对象还在不在、锚点有没有」。
+import { keepPlanEntityIds, resolvePlanLocate } from '../lib/plan-locate';
 import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
 import { ArrangeChoiceList } from './arrange-choice-list';
@@ -1358,7 +1360,8 @@ interface PlanLocatableIssue {
   key: string;
   text: string;
   color?: string;
-  anchor: PlanPoint;
+  /** 定位锚点；null = 当前楼层算不出来（对象在另一层），此时不飞视图，只解释一句。 */
+  anchor: PlanPoint | null;
   routeId?: string;
   facilityId?: string;
   nodeId?: string;
@@ -5208,7 +5211,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     getSelectedIds: () => {
       const picked = [selectedZoneRef.current, selectedFacilityRef.current, selectedRouteRef.current, selectedNodeRef.current, selectedWorkerRef.current, selectedAnnotationRef.current, ...multiSelectedFacilityIdsRef.current];
-      return [...new Set(picked.filter((id): id is string => !!id))];
+      // 2026-11-20 审计 B7：选中集合可能挂着刚被删除/撤销掉的对象（问题条目、撤销、Agent
+      // 都会留下这种悬空 id）。交给 Agent 之前先按方案过滤，别让它拿一个不存在的实体去改。
+      return keepPlanEntityIds(planRef.current, picked);
     },
     previewFacilityDrop,
     dropFacilityAt: dropFacilityAtPoint,
@@ -8323,7 +8328,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setInfoMessage(blocked);
       return;
     }
-    centerViewOn(row.anchor);
+    // 2026-11-20 审计 B7：行可能来自上一次渲染（对象刚被删/被撤销），先确认它还在、锚点可用，
+    // 否则「飞过去 + 写一句已定位」会指一片空地。
+    const located = resolvePlanLocate(planRef.current, { kind: row.kind, id: row.id, anchor: row.anchor });
+    if (located.status !== 'ok') {
+      setInfoMessage(located.message);
+      return;
+    }
+    centerViewOn(located.anchor);
     if (row.kind === 'facility') {
       selectRoute(null);
       selectNode(null);
@@ -8365,9 +8377,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setInfoMessage('已在地图上定位到评审钉。');
   }), []);
 
-  /** 问题条目 → 地图：居中锚点，关联实体可选中。 */
+  /**
+   * 问题条目 → 地图：先确认对象还在、锚点可用，再居中并选中。
+   * 2026-11-20 审计 B7/F6：被修复/删除的问题条目不再飞走并谎报「已定位」；
+   * 缺锚点（对象在另一楼层）也不拿 {0,0} 当锚点飞场地原点。
+   */
   function locateIssue(entry: PlanLocatableIssue) {
-    centerViewOn(entry.anchor);
+    const target = entry.routeId
+      ? { kind: 'route' as const, id: entry.routeId }
+      : entry.facilityId
+        ? { kind: 'facility' as const, id: entry.facilityId }
+        : entry.nodeId
+          ? { kind: 'node' as const, id: entry.nodeId }
+          : entry.workerId
+            ? { kind: 'worker' as const, id: entry.workerId }
+            : null;
+    const located = resolvePlanLocate(planRef.current, { ...target, anchor: entry.anchor });
+    if (located.status !== 'ok') {
+      setInfoMessage(located.message);
+      return;
+    }
+    centerViewOn(located.anchor);
     if (entry.routeId) {
       selectRoute(entry.routeId);
     } else if (entry.facilityId) {
@@ -10679,6 +10709,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     repeatParamsRef.current.cardMode = 'props';
     setFacilitySetupOpen(false);
     setFacilityNotesOpen(false);
+    // 2026-11-20 审计 F7：换选中（或选中被清掉）时把上一件的经纬/尺寸/窗洞草稿一起清掉。
+    // 否则输入框里还留着上一件的数字，失焦时按当前选中提交，写出错误尺寸。
+    setFacilityGeoDraft(null);
+    setFacilitySizeDraft(null);
+    setFacilityWindowDraft(null);
   }, [selectedFacility?.id]);
   // 2026-11-12 B2 组选与单选互斥：任一单选实体出现即清组选（组选流程自身不经这些 setter）。
   useEffect(() => {
@@ -10739,24 +10774,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     ...issues.map((item, i) => ({
       key: `z-${item.zoneId}-${item.issue.code}-${i}`,
       text: `${item.zoneName}：${item.issue.message}`,
-      anchor: anchorById.get(item.zoneId) ?? { x: 0, y: 0 },
+      // 2026-11-20 审计 F6：算不出锚点就留 null（对象在另一楼层），不要回落场地原点。
+      anchor: anchorById.get(item.zoneId) ?? null,
     })),
     ...facilityIssues.map((item, i) => ({
       key: `f-${item.facilityId}-${i}`,
       text: `${item.facilityName}：${item.issue.message}`,
-      anchor: anchorById.get(item.facilityId) ?? { x: 0, y: 0 },
+      anchor: anchorById.get(item.facilityId) ?? null,
       facilityId: item.facilityId,
     })),
     ...nodeIssues.map((item, i) => ({
       key: `n-${item.nodeId}-${i}`,
       text: `出入口「${item.nodeName}」：${item.issue.message}`,
-      anchor: anchorById.get(item.nodeId) ?? { x: 0, y: 0 },
+      anchor: anchorById.get(item.nodeId) ?? null,
       nodeId: item.nodeId,
     })),
     ...workerIssues.map((item, i) => ({
       key: `w-${item.workerId}-${i}`,
       text: `人员「${item.workerRole}」：${item.issue.message}`,
-      anchor: anchorById.get(item.workerId) ?? { x: 0, y: 0 },
+      anchor: anchorById.get(item.workerId) ?? null,
       workerId: item.workerId,
     })),
   ];
@@ -10767,7 +10803,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     publishOutdoorPlanIssues(infoIssuesRef.current.map(item => ({
       key: item.key,
       text: item.text,
-      anchor: item.anchor,
+      ...(item.anchor ? { anchor: item.anchor } : {}),
       ...(item.color ? { color: item.color } : {}),
       ...(item.facilityId ? { facilityId: item.facilityId } : {}),
     })));
