@@ -55,6 +55,7 @@ export function AssetDetailModal({
   return (
     <div
       role="presentation"
+      className="sc-asset-detail-modal"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -68,6 +69,7 @@ export function AssetDetailModal({
         role="dialog"
         aria-modal="true"
         aria-label={`${title}详情`}
+        className="sc-asset-detail-modal__dialog"
         onClick={(event) => event.stopPropagation()}
         style={{
           width: 'min(480px, 100%)', maxHeight: 'min(720px, calc(100vh - 32px))',
@@ -76,7 +78,7 @@ export function AssetDetailModal({
           fontFamily: 'inherit',
         }}
       >
-        <header style={{
+        <header className="sc-asset-detail-modal__header" style={{
           position: 'sticky', top: 0, zIndex: 1, display: 'flex', alignItems: 'center',
           justifyContent: 'space-between', gap: 12, padding: '12px 18px',
           background: '#F4F5F7', borderBottom: '1px solid #e3e6e9',
@@ -87,6 +89,7 @@ export function AssetDetailModal({
             type="button"
             aria-label="关闭详情"
             onClick={onClose}
+            className="sc-asset-detail-modal__close"
             style={{
               flex: 'none', width: 28, height: 28, padding: 0, borderRadius: 6,
               border: '1px solid #d0d7de', background: '#fff', color: '#57606a',
@@ -111,7 +114,7 @@ export function AssetDetailModal({
 
           <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, margin: 0 }}>
             {rows.map(row => (
-              <div key={row.label} style={{ minWidth: 0, padding: '8px 10px', background: '#F8F9FA', borderRadius: 8 }}>
+              <div key={row.label} className="sc-asset-detail-modal__field" style={{ minWidth: 0, padding: '8px 10px', background: '#F8F9FA', borderRadius: 8 }}>
                 <dt style={{ color: '#6b7280', fontSize: 11, lineHeight: 1.4 }}>{row.label}</dt>
                 <dd style={{ margin: '2px 0 0', fontSize: 12, lineHeight: 1.5, overflowWrap: 'anywhere' }}>{row.value}</dd>
               </div>
@@ -119,7 +122,7 @@ export function AssetDetailModal({
           </dl>
 
           {description && (
-            <div style={{ marginTop: 12, padding: '10px 12px', background: '#F8F9FA', borderRadius: 8 }}>
+            <div className="sc-asset-detail-modal__desc" style={{ marginTop: 12, padding: '10px 12px', background: '#F8F9FA', borderRadius: 8 }}>
               <strong style={{ display: 'block', color: '#6b7280', fontSize: 11, fontWeight: 500 }}>生成描述</strong>
               <p style={{ margin: '4px 0 0', fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                 {description}
@@ -128,12 +131,13 @@ export function AssetDetailModal({
           )}
         </div>
 
-        <footer style={{
+        <footer className="sc-asset-detail-modal__footer" style={{
           position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8,
           padding: '12px 18px', background: '#fff', borderTop: '1px solid #e3e6e9',
         }}>
           <button
             type="button"
+            className="sc-asset-detail-modal__close-footer"
             onClick={onClose}
             style={{
               padding: '6px 14px', borderRadius: 6, border: '1px solid #d0d7de',
@@ -143,6 +147,7 @@ export function AssetDetailModal({
           {onPlace && (
             <button
               type="button"
+              className="sc-asset-detail-modal__place"
               onClick={onPlace}
               style={{
                 padding: '6px 14px', borderRadius: 6, border: '1px solid #4A7C59',

@@ -12396,7 +12396,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         dropFacilityAtPoint(dragged, hit.pt);
       }}
     >
-      {scanError && <div role="alert" style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 10, maxWidth: 440, padding: '12px 16px', background: '#fff', border: '1px solid #e4e4e7', borderRadius: 8, color: '#b4443c' }}>{scanError}</div>}
+      {scanError && <div role="alert" className="sc-scan-error-toast" style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 10, maxWidth: 440, padding: '12px 16px', background: '#fff', border: '1px solid #e4e4e7', borderRadius: 8, color: '#b4443c' }}>{scanError}</div>}
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
       {arrangePreview && (

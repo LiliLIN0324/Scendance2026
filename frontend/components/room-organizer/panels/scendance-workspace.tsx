@@ -1047,7 +1047,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       {/* 2026-11-13 M1：户外地图接管后楼层是室内结构概念，右轨楼层钮隐藏；户外方案层（levels）切换走画布自身的图层面板。 */}
       {!outdoorEditing && (
       <div className="sc-floor-switcher" role="group" aria-label={`楼层切换，当前第 ${activeFloorIndex + 1} 层`}>
-        {addFloorBlocked && <span role="note" style={{ maxWidth: 140, padding: '4px 6px', borderRadius: 6, background: '#F4F5F7', color: '#4A7C59', fontSize: 11, lineHeight: 1.3 }}>{floorBlockMessage}</span>}
+        {addFloorBlocked && <span role="note" className="sc-floor-blocked-note" style={{ maxWidth: 140, padding: '4px 6px', borderRadius: 6, background: '#F4F5F7', color: '#4A7C59', fontSize: 11, lineHeight: 1.3 }}>{floorBlockMessage}</span>}
         <span className="sc-floor-switcher-label" aria-hidden="true">{activeFloorIndex + 1}F</span>
         <div className="sc-floor-switcher-arrows">
           <button type="button" aria-label={addFloorBlocked ? floorBlockMessage : activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} title={addFloorBlocked ? floorBlockMessage : activeFloorIndex < layout.floors.length - 1 ? `切换到第 ${activeFloorIndex + 2} 层` : layout.floors.length < MAX_FLOORS ? `新建并切换到第 ${activeFloorIndex + 2} 层` : '已经是最高层'} disabled={addFloorBlocked || activeFloorIndex >= MAX_FLOORS - 1 || (activeFloorIndex >= layout.floors.length - 1 && layout.floors.length >= MAX_FLOORS)} onClick={() => changeVisibleFloor(1)}>
