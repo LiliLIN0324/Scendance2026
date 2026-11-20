@@ -4,7 +4,7 @@ import { preserveCurrentActivity } from '../../../lib/production-plan';
 import { createLayoutStore } from '../hooks/use-layout-store';
 import { INITIAL_LAYOUT } from './initial-layout';
 import { blankHandoff, handoffBasis, effectiveHandoffStatus } from './scene-handoff';
-import { addDesign, switchDesign, materialLayers, batchLayerEdit } from './scene-layers';
+import { addDesign, switchDesign, saveDesignSnapshot, removeDesignVariant, materialLayers, batchLayerEdit } from './scene-layers';
 import { parseStoredLayout } from './schema';
 
 describe('scene layers', () => {
@@ -129,5 +129,57 @@ describe('scene layers', () => {
     const saved = addDesign(layout, INITIAL_LAYOUT);
     saved.designBook!.variants[0]!.layout = saved;
     expect(parseStoredLayout(saved)).toBeNull();
+  });
+
+  it('saves a manual snapshot without switching the active design and isolates later edits', () => {
+    const base = structuredClone(INITIAL_LAYOUT);
+    const saved = saveDesignSnapshot(base, { name: '迎宾区先落位', note: '桌距先按 1.2m', savedAt: '2026-11-20T09:00:00.000Z' });
+    expect(saved.designBook!.activeId).toBe('original');
+    const snapshot = saved.designBook!.variants[saved.designBook!.variants.length - 1]!;
+    expect(snapshot.origin).toBe('manual');
+    expect(snapshot.savedAt).toBe('2026-11-20T09:00:00.000Z');
+    expect(snapshot.note).toBe('桌距先按 1.2m');
+    saved.name = '后续改的当前名';
+    expect(snapshot.layout.name).not.toBe('后续改的当前名');
+    const restored = parseStoredLayout(JSON.parse(JSON.stringify(saved)))!;
+    const loaded = switchDesign(restored, snapshot.id);
+    expect(loaded.name).toBe(snapshot.layout.name);
+  });
+
+  it('falls back to a placeholder name and omits an empty note', () => {
+    const base = structuredClone(INITIAL_LAYOUT);
+    const saved = saveDesignSnapshot(base, { name: '   ', note: '  ', savedAt: '2026-11-20T09:00:00.000Z' });
+    const snapshot = saved.designBook!.variants[saved.designBook!.variants.length - 1]!;
+    expect(snapshot.name).toBe('过程态 1');
+    expect(snapshot.note).toBeUndefined();
+  });
+
+  it('keeps the active design and original baseline when removing snapshots', () => {
+    const base = structuredClone(INITIAL_LAYOUT);
+    const saved = saveDesignSnapshot(base, { name: '过程态一', savedAt: '2026-11-20T09:00:00.000Z' });
+    const other = saveDesignSnapshot(saved, { name: '过程态二', savedAt: '2026-11-20T10:00:00.000Z' });
+    const removed = removeDesignVariant(other, other.designBook!.variants[1]!.id);
+    expect(removed.designBook!.variants.map(v => v.name)).toEqual(['原始方案', '过程态二']);
+    expect(removeDesignVariant(other, other.designBook!.activeId)).toBe(other);
+    expect(removeDesignVariant(other, 'original')).toBe(other);
+  });
+
+  it('roundtrips snapshot metadata through stored layout parsing', () => {
+    const base = structuredClone(INITIAL_LAYOUT);
+    const saved = saveDesignSnapshot(base, { name: '待回环验证', note: '备注回环', savedAt: '2026-11-20T09:00:00.000Z' });
+    const restored = parseStoredLayout(JSON.parse(JSON.stringify(saved)))!;
+    const snapshot = restored.designBook!.variants[restored.designBook!.variants.length - 1]!;
+    expect(snapshot.origin).toBe('manual');
+    expect(snapshot.savedAt).toBe('2026-11-20T09:00:00.000Z');
+    expect(snapshot.note).toBe('备注回环');
+  });
+
+  it('keeps the whole-activity profile out of the saved snapshot', () => {
+    const base = structuredClone(INITIAL_LAYOUT);
+    (base as { eventProfile?: unknown }).eventProfile = { schemaVersion: 1, revision: 0 };
+    const saved = saveDesignSnapshot(base, { name: '带活动档案', savedAt: '2026-11-20T09:00:00.000Z' });
+    const snapshot = saved.designBook!.variants[saved.designBook!.variants.length - 1]!;
+    expect(snapshot.layout.eventProfile).toBeUndefined();
+    expect((saved as { eventProfile?: unknown }).eventProfile).toEqual({ schemaVersion: 1, revision: 0 });
   });
 });

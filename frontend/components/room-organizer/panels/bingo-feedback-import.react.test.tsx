@@ -49,6 +49,32 @@ it('does not write when the session is invalidated while the file is read',async
  expect(localStorage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2)).toBeNull();
 });
 
+it('marks an imported share pin resolved on the local store', async () => {
+  const version = await reviewVersionForHash(hash);
+  const v2Key = `review-v2:${version.slice(7)}`;
+  localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([{
+    saved: true, status: 'needs-review', projectKey: project, title: '活动', shareId: 'one',
+    markedAt: '2026-11-07T00:00:00Z', clientUrl: `http://localhost/review/${hash}`,
+    versionBinding: 'sha256-v1', reviewPlanKey: v2Key,
+  }]));
+  const json = createReviewFeedbackReceipt(version, [pin], true);
+  const view = render(<BingoAuditCard scopeKey={`activity:${project}`} isCurrent={() => true} />);
+  upload(json);
+  const preview = await screen.findByRole('region', { name: '待导入反馈预览' });
+  fireEvent.click(within(preview).getByRole('button', { name: '确认导入反馈' }));
+  await screen.findByRole('region', { name: '已导入反馈' });
+  view.unmount();
+  render(<BingoAuditCard scopeKey={`activity:${project}`} isCurrent={() => true} />);
+  const resolveButton = await screen.findByRole('button', { name: '标记意见「舞台向左」已处理' });
+  fireEvent.click(resolveButton);
+  await waitFor(() => {
+    const raw = localStorage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2);
+    expect(raw).toBeTruthy();
+    const file = JSON.parse(raw!) as { byPlan: Record<string, Array<{ id: string; status: string }>> };
+    expect(file.byPlan[v2Key][0].status).toBe('resolved');
+  });
+});
+
 it('rejects a feedback file bound to a different snapshot',async()=>{
  const different=`#layout=${Buffer.from(JSON.stringify({...layout,name:'另一版本'})).toString('base64url')}`;
  const json=createReviewFeedbackReceipt(await reviewVersionForHash(different),[pin],true);

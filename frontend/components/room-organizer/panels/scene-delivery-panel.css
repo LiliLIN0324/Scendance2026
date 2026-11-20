@@ -125,3 +125,16 @@ body.is-theme-dark .sc-delivery-panel .dl-primary {
   border-color: hsl(var(--primary)) !important;
   color: hsl(var(--primary-foreground)) !important;
 }
+
+/* ── 核对段：只读缺口聚合 ── */
+.dl-review-group { margin: 12px 0; }
+.dl-review-group h3 { margin: 0 0 8px; font-size: 13px; }
+.dl-review-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dl-review-item { border: 1px solid var(--sc-line, #d6d6d2); border-radius: 8px; padding: 10px; background: #ffffff80; }
+.dl-review-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+.dl-review-title { font-weight: 500; }
+.dl-review-details { margin: 6px 0 0; padding-left: 18px; color: var(--sc-muted, #6f6f6f); font-size: 12px; line-height: 1.5; }
+.dl-review-head .sc-button { flex: none; }
+
+body.is-theme-dark .dl-review-item { background: var(--paper) !important; border-color: var(--hair) !important; }
+body.is-theme-dark .dl-review-details { color: var(--ink-soft) !important; }

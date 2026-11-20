@@ -444,7 +444,7 @@ export interface RoomLayout {
   eventOperations?: EventOperations | undefined;
   /** Local editor metadata; cloud scenes contain only the active design. */
   itemLayers?: { id: string; name: string; itemIds: string[] }[];
-  designBook?: { activeId: string; variants: { id: string; name: string; layout: Omit<RoomLayout, 'designBook'> }[] };
+  designBook?: { activeId: string; variants: DesignVariant[] };
   /** Authoritative v2 provenance and design, retained through local save and undo. */
   backendSceneV2?: Extract<Scene, { schemaVersion: 2 }>;
   /**
@@ -516,6 +516,19 @@ export interface RoomLayout {
   entrance?: EntranceSpec;
   /** 'pavement': the pavement runs right up to the front wall, no front garden. */
   frontage?: Frontage;
+}
+
+/**
+ * 方案过程态快照。整包布局存于 `layout`；`origin` 区分 AI 提案与手动存档，
+ * `savedAt`/`note` 仅手动存档的本机元数据，不随候选快照上云。
+ */
+export interface DesignVariant {
+  id: string;
+  name: string;
+  layout: Omit<RoomLayout, 'designBook'>;
+  origin?: 'ai' | 'manual';
+  savedAt?: string;
+  note?: string;
 }
 
 /** Default floor-to-floor height of a storey in metres; see `FloorLayout.height`. */

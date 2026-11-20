@@ -162,6 +162,60 @@ export function appendReviewSharePin(
   return { ok: true, pins: byPlan[input.planKey] ?? [], pin };
 }
 
+/**
+ * 把一条本机钉标记为已处理 / 重新打开。v2 优先、v1 兜底；按 planKey 分区更新。
+ * 返回是否在本机找到并改到了该钉。云端一致性由调用方另调 setReviewPinStatusCloud。
+ */
+export function setReviewSharePinStatus(
+  storage: PinStore,
+  planKey: string,
+  pinId: string,
+  status: ReviewPinStatus,
+): boolean {
+  if (!planKey || planKey.length > 80 || !pinId) return false;
+  const changedV2 = updateV2PinStatus(storage, planKey, pinId, status);
+  const changedV1 = updateV1PinStatus(storage, planKey, pinId, status);
+  return changedV2 || changedV1;
+}
+
+function updateV2PinStatus(storage: PinStore, planKey: string, pinId: string, status: ReviewPinStatus): boolean {
+  let raw: string | null = null;
+  try { raw = storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2); } catch { return false; }
+  if (raw === null) return false;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return false; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+  const file = parsed as { version?: unknown; byPlan?: unknown };
+  if (file.version !== 1 || !file.byPlan || typeof file.byPlan !== 'object' || Array.isArray(file.byPlan)) return false;
+  const byPlan = file.byPlan as Record<string, unknown>;
+  const rows = byPlan[planKey];
+  if (!Array.isArray(rows)) return false;
+  let changed = false;
+  const nextRows = rows.map(row => {
+    if (isPin(row) && row.id === pinId) { changed = true; return { ...row, status }; }
+    return row;
+  });
+  if (!changed) return false;
+  byPlan[planKey] = nextRows;
+  try { storage.setItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2, JSON.stringify(parsed)); } catch { return false; }
+  return true;
+}
+
+function updateV1PinStatus(storage: PinStore, planKey: string, pinId: string, status: ReviewPinStatus): boolean {
+  const file = parseFile(storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY));
+  const rows = file.byPlan[planKey];
+  if (!rows) return false;
+  let changed = false;
+  const nextRows = rows.map(row => {
+    if (row.id === pinId) { changed = true; return { ...row, status }; }
+    return row;
+  });
+  if (!changed) return false;
+  const byPlan = { ...file.byPlan, [planKey]: nextRows };
+  try { storage.setItem(REVIEW_SHARE_PIN_STORAGE_KEY, JSON.stringify({ version: 1, byPlan })); } catch { return false; }
+  return true;
+}
+
 function newPinId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   return `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
