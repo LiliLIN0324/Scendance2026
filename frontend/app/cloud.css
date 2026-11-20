@@ -301,6 +301,19 @@
 .sc-unit-seg button{display:inline-flex;align-items:center;gap:4px;margin:0;padding:5px 10px;border:0;border-radius:6px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:500;white-space:nowrap}
 .sc-unit-seg button[aria-pressed=true]{background:var(--wk-paper);color:var(--wk-ink);font-weight:600}
 .sc-unit-seg button:hover:not([aria-pressed=true]){color:var(--wk-ink)}
+/* 外观入口：一行触发器 + 下方浮层菜单（参照成熟产品设置范式：图标 / 标题 / 当前档 / 箭头）。 */
+.sc-settings-group--menu{overflow:visible}
+.sc-appearance-menu{position:relative}
+.sc-appearance-menu-trigger{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 16px;border:0;background:transparent;color:var(--wk-ink);font:inherit;text-align:left;cursor:pointer}
+.sc-appearance-menu-title{flex:1 1 auto;font-size:13px;font-weight:600}
+.sc-appearance-menu-value{color:var(--sc-muted);font-size:12px}
+.sc-appearance-menu-chevron{flex:none;color:var(--wk-ink-faint);transition:transform .16s ease}
+.sc-appearance-menu-chevron.is-open{transform:rotate(90deg)}
+.sc-appearance-menu-pop{position:absolute;top:calc(100% + 6px);left:12px;right:12px;z-index:60;display:grid;gap:2px;padding:6px;background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:12px;box-shadow:var(--e1)}
+.sc-appearance-menu-pop button{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--wk-ink);font:inherit;font-size:13px;cursor:pointer}
+.sc-appearance-menu-pop button:hover{background:var(--wk-plane)}
+.sc-appearance-menu-pop button.is-active{font-weight:600}
+.sc-appearance-menu-pop button.is-active .sc-material-symbol{color:var(--wk-green)}
 .sc-account-prefs-head{display:grid;gap:3px;margin:0 0 16px}
 .sc-account-prefs-head h3{margin:0}
 .sc-account-prefs-head p{margin:0;color:var(--sc-muted);font-size:12px;line-height:1.55}
@@ -375,9 +388,9 @@
 .sc-shortcut-empty button{height:28px;padding:0 10px;border:1px solid var(--wk-hair);border-radius:7px;background:var(--wk-plane);color:var(--wk-ink);font:inherit;font-size:11px;cursor:pointer}
 /* 首字母圆片：每人一档颜色，由账号 ID 分出来，取色见 AVATAR_TONES；没分到色就还是灰片。 */
 .sc-settings-avatar{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;background:var(--sc-avatar-bg, var(--wk-plane-deep));font-size:12px;font-weight:600;color:var(--sc-avatar-ink, var(--wk-ink))}
-/* 左轨成员位用同一颗圆片，只按窄轨的尺度收一档。 */
+/* 消息列表行用同一颗圆片，只按窄轨的尺度收一档。 */
 .sc-settings-avatar.is-rail{width:28px;height:28px;font-size:11px}
-/* 本人在这台设备上选过的头像：图直接铺满同一颗圆片，所以左轨、成员表、对话顶栏和左下角是同一张脸。 */
+/* 本人在这台设备上选过的头像：图直接铺满同一颗圆片，所以消息列表、成员表、对话顶栏和左下角是同一张脸。 */
 .sc-settings-avatar.is-image{background:var(--wk-paper)}
 .sc-settings-avatar img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}
 .sc-settings-contact{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -481,6 +494,28 @@
 .sc-mini-actions button{height:32px;padding:0 14px;border:1px solid var(--wk-hair);border-radius:8px;background:var(--wk-paper);color:var(--wk-ink);font:inherit;font-size:13px;cursor:pointer}
 .sc-mini-primary{background:var(--wk-ink)!important;border-color:var(--wk-ink)!important;color:var(--wk-paper)!important}
 .sc-about-dialog{width:min(320px,calc(100vw - 48px));text-align:center;padding-top:28px}
+
+/* ================================================================
+   外观模式 · 深色作用域补遗（flow/tasks/editor-appearance-mode.md）
+   对话框 portal 到 body，随 body.is-theme-dark 一起进暗色。
+   ================================================================ */
+body.is-theme-dark .sc-cloud-dialog {
+  background: linear-gradient(145deg, rgba(255, 255, 255, .04), transparent 45%), var(--sc-surface);
+  box-shadow: var(--e2), inset 0 1px 0 rgba(255, 255, 255, .06), inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+body.is-theme-dark .sc-cloud-dialog button,
+body.is-theme-dark .sc-cloud-dialog a.sc-cloud-primary {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+body.is-theme-dark .sc-cloud-dialog .sc-cloud-primary,
+body.is-theme-dark .sc-mini-primary {
+  background: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+body.is-theme-dark .sc-file-more > summary {
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+}
 .sc-about-dialog .sc-mini-close{position:absolute;top:10px;right:10px}
 .sc-about-line{margin:6px 0 0;font-size:13px}
 .sc-about-brand{margin:4px 0 14px;color:var(--sc-muted);font-size:12px}

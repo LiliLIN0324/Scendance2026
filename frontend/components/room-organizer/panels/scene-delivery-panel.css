@@ -83,3 +83,45 @@
 #agent-panel-delivery .sc-delivery-panel .dl-chip { padding: 6px 12px; font-size: 12px; }
 #agent-panel-delivery .sc-delivery-panel .dl-row .sc-field { font-size: 13px; }
 #agent-panel-delivery .sc-delivery-panel .dl-row .sc-field :is(input, select, textarea) { min-height: 36px; font-size: 14px; }
+
+/* ── 暗色补遗：执行资料面板字面白底 / 近黑字回到暗色 token；语义色（err/warn）保留。 ── */
+body.is-theme-dark .sc-delivery-panel { color: var(--ink); }
+body.is-theme-dark .sc-handoff-item { background: var(--paper) !important; border-color: var(--hair) !important; }
+body.is-theme-dark .dl-chip { background: var(--plane) !important; border-color: var(--hair) !important; color: var(--ink-soft) !important; }
+body.is-theme-dark .dl-chip[aria-selected="true"] { background: var(--paper) !important; border-color: var(--hair) !important; color: var(--ink) !important; }
+body.is-theme-dark .dl-row { border-top-color: var(--hair) !important; }
+body.is-theme-dark .dl-row > summary,
+body.is-theme-dark .dl-drafts details > summary { color: var(--ink) !important; border-top-color: var(--hair) !important; }
+body.is-theme-dark .dl-row-icon,
+body.is-theme-dark .dl-row-status,
+body.is-theme-dark .dl-support { color: var(--ink-soft) !important; }
+body.is-theme-dark .dl-row-chevron,
+body.is-theme-dark .dl-tools-foot,
+body.is-theme-dark .dl-foot,
+body.is-theme-dark .dl-hint,
+body.is-theme-dark .dl-empty,
+body.is-theme-dark .dl-quiet,
+body.is-theme-dark .dl-contents,
+body.is-theme-dark .dl-status,
+body.is-theme-dark .dl-draft-label,
+body.is-theme-dark .dl-version-label,
+body.is-theme-dark .dl-package-stage,
+body.is-theme-dark .dl-package-wait { color: var(--faint) !important; }
+body.is-theme-dark .dl-version { background: var(--plane-deep) !important; }
+body.is-theme-dark .dl-version-number,
+body.is-theme-dark .dl-brief-name { color: var(--ink) !important; }
+body.is-theme-dark .dl-badge.is-confirmed { background: var(--paper) !important; border-color: var(--hair) !important; color: var(--ink-soft) !important; }
+body.is-theme-dark .dl-badge.is-muted { background: var(--plane) !important; color: var(--faint) !important; }
+body.is-theme-dark .dl-kind { color: var(--ink-soft) !important; }
+body.is-theme-dark .dl-kind select,
+body.is-theme-dark .sc-delivery-panel :is(input, textarea) { background: var(--plane) !important; border-color: var(--hair) !important; color: var(--ink) !important; }
+body.is-theme-dark .dl-package-result { background: var(--paper) !important; border-color: var(--hair) !important; }
+body.is-theme-dark .dl-package-missing { color: var(--ink-soft) !important; }
+body.is-theme-dark .dl-outline { background: var(--plane) !important; border-color: var(--hair) !important; color: var(--faint) !important; }
+body.is-theme-dark .dl-row .sc-operation-export > .sc-button { background: var(--paper) !important; border-color: var(--hair) !important; color: var(--ink) !important; }
+body.is-theme-dark .dl-row .sc-operation-export > .sc-button:hover:not(:disabled) { background: var(--plane-deep) !important; }
+body.is-theme-dark .sc-delivery-panel .dl-primary {
+  background: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}

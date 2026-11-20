@@ -170,3 +170,6 @@ frontend/.next.bak-*/
 /deliverables/*.png
 /deliverables/**/*.bak*
 /deliverables/tmp-*
+
+# 幕录 stage-reel · 演示片产物（成片/唯一帧/音频体积大，不入库）
+/tools/demo-video/out/

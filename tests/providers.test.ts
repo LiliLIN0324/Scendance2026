@@ -191,6 +191,29 @@ describe('worker recovery against PostgreSQL queue',()=>{
     const task=await f.jobs(owner,'jobs.get',{id:j.id});expect(task.state).toBe('ready');expect(task.asset_id).toBe(j.id);expect(upload).toHaveBeenCalledTimes(1);
     expect((await f.rpc(owner,'assets.get',{assetId:j.id})).metadata.triangles).toBe(4);
   });
+  it('persists the archived preview and short name on the registered asset',async()=>{
+    const prompt='户外折叠椅 1：铝合金折叠框架，藏青色厚棉布坐垫靠背，座高 45 厘米';
+    const j=await f.jobs(owner,'jobs.create',{providerMode:'tokenhub',requestId:crypto.randomUUID(),fingerprint:'preview',prompt,reserveCents:100});
+    const fixture=tetrahedron(),bytes=packGltf(fixture.json,fixture.resources),preview=new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0,0,0,0]);
+    const network=vi.fn(async(url:unknown)=>{
+      if(String(url).endsWith('/submit')) return response({id:'generated-preview'});
+      if(String(url).endsWith('/query')) return response({status:'completed',data:[{type:'glb',url:'https://assets.myqcloud.com/prop.glb',preview_image_url:'https://assets.myqcloud.com/prop.png'}]});
+      if(String(url)==='https://assets.myqcloud.com/prop.glb') return new Response(new Uint8Array(bytes));
+      if(String(url)==='https://assets.myqcloud.com/prop.png') return new Response(new Uint8Array(preview));
+      throw new Error('unexpected '+String(url));
+    });
+    const upload=vi.fn(f.backend.upload);f.backend.upload=upload;
+    const providerEnv:Env=key=>key==='HUNYUAN_API_MODE'?'tokenhub':env(key);
+    await processGeneration(f.backend,providerEnv,network);
+    await f.db.query('update scene_private.generation_jobs set next_poll_at=now() where id=$1',[j.id]);
+    await processGeneration(f.backend,providerEnv,network);
+    const task=await f.jobs(owner,'jobs.get',{id:j.id});expect(task.state).toBe('ready');
+    const asset=await f.rpc(owner,'assets.get',{assetId:j.id});
+    expect(asset.name).toBe('户外折叠椅');
+    expect(task.prompt).toBe(prompt);
+    expect(asset.metadata.previewPath).toBe(`${owner}/${j.id}/preview.png`);
+    expect(upload).toHaveBeenCalledWith(`${owner}/${j.id}/preview.png`,expect.any(Uint8Array),'image/png');
+  });
   it('rejects malformed provider output without registering a substitute asset',async()=>{
     const j=await create();const network=async(url:unknown)=>String(url).endsWith('/submit')?response({JobId:'bad-model'}):String(url).endsWith('/query')?response({Status:'DONE',ResultFile3Ds:[{Type:'GLB',Url:'https://a.myqcloud.com/bad.glb'}]}):new Response(new Uint8Array(100));
     await processGeneration(f.backend,env,network);await f.db.query('update scene_private.generation_jobs set next_poll_at=now() where id=$1',[j.id]);await processGeneration(f.backend,env,network);

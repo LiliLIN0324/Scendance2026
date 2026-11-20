@@ -78,6 +78,9 @@
   --e1: 0 8px 24px rgba(20, 20, 22, 0.12), 0 2px 6px rgba(20, 20, 22, 0.06);
   --e2: 0 16px 48px rgba(20, 20, 22, .18); /* 模态/抽屉 */
   --e3: 0 1px 2px rgba(20, 20, 22, .06);   /* 唯一例外：左轨激活卡片 */
+  /* 固定 chrome（图标轨 / 左栏）朝向地图的窄边投影：只负责把面板抬离底图，
+     中性色、不随地图瓦片换肤；浮动卡片仍用 --e1。 */
+  --e-edge: 2px 0 12px -4px rgba(20, 20, 22, .12);
   /* 动效：120/200/300ms，统一缓动 */
   --dur-1: 120ms; --dur-2: 200ms; --dur-3: 300ms;
   --ease-spec: cubic-bezier(.2, 0, 0, 1);
@@ -113,6 +116,13 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 手机端专属入口（助理菜单 / 拍摄场地 / 底部对话坞）桌面默认隐藏。
+   基础隐藏放在常驻全局表，避免依赖后加载的组件 CSS 分片导致桌面泄漏；
+   ≤768px 的展开样式仍由 mobile-shell.css 的媒体查询接管。 */
+.sc-mobile-agent-entry,
+.sc-mobile-capture-entry,
+.sc-mobile-dock { display: none; }
+
 /* ================================================================
    Dark overrides inside frosted-glass sidebar
    ================================================================ */
@@ -134,6 +144,529 @@ body {
   --primary-foreground: 215 25% 10%;
   --secondary: 215 20% 18%;
   --secondary-foreground: 210 20% 90%;
+}
+
+/* ================================================================
+   外观模式 · 深色作用域（flow/tasks/editor-appearance-mode.md）
+   只重映射 L1 语义 token 与 shadcn HSL 三元组；组件层零分支。
+   作用域 = body.is-theme-dark 下的工作台外壳与 portal 对话框；
+   画布渲染、导出产物、官网 / 登录 / 分享页不在此作用域。
+   ================================================================ */
+body.is-theme-dark {
+  /* 冷石中性阶（暗色提案；对比度按 docs/05 §五 AA 复核） */
+  --paper: #1C1F24;
+  --plane: #25282F;
+  --plane-deep: #2D3038;
+  --hair-soft: #26292F;
+  --hair: #363A42;
+  --faint: #6B7078;
+  --ink-soft: #C9CED6;
+  --ink: #EDF0F2;
+  --green: #7FB58F;
+  --green-deep: #93C7A3;
+  --green-pale: rgba(74, 124, 89, 0.20);
+  --ok: #6FB585;
+  --info: #B9C0C9;
+  --warn: #D9A95E;
+  --err: #E07A72;
+
+  /* shadcn HSL 三元组（Tailwind bg-card / border-border 等消费） */
+  --background: 220 11% 14%;
+  --foreground: 210 18% 93%;
+  --card: 220 11% 16%;
+  --card-foreground: 210 18% 93%;
+  --popover: 220 11% 16%;
+  --popover-foreground: 210 18% 93%;
+  --primary: 210 18% 90%;
+  --primary-foreground: 220 11% 12%;
+  --secondary: 220 9% 22%;
+  --secondary-foreground: 210 18% 93%;
+  --muted: 220 9% 22%;
+  --muted-foreground: 215 15% 64%;
+  --accent: 220 9% 22%;
+  --accent-foreground: 210 18% 93%;
+  --destructive: 6 55% 62%;
+  --destructive-foreground: 220 11% 12%;
+  --border: 220 8% 26%;
+  --input: 220 8% 24%;
+  --ring: 150 28% 62%;
+
+  /* :root 上 --wk-* 别名以 var() 指向 L1，自定义属性的 var() 在声明元素处冻结，
+     暗色下必须在本作用域重新挂回暗色 L1，否则别名沿继承链带下来的仍是浅色值。 */
+  --wk-paper: var(--paper);
+  --wk-plane: var(--plane);
+  --wk-plane-deep: var(--plane-deep);
+  --wk-canvas: var(--plane);
+  --wk-hair: var(--hair);
+  --wk-hair-soft: var(--hair-soft);
+  --wk-ink: var(--ink);
+  --wk-ink-soft: var(--ink-soft);
+  --wk-ink-faint: var(--faint);
+  --wk-muted: #9BA1AC;
+  --wk-green: var(--green);
+  --wk-green-deep: var(--green-deep);
+  --wk-green-pale: var(--green-pale);
+
+  /* :root 上 --sc-* 别名同样在声明处冻结，暗色下一并挂回 L1。 */
+  --sc-ink: var(--ink);
+  --sc-muted: var(--ink-soft);
+  --sc-line: var(--hair);
+  --sc-paper: var(--paper);
+  --sc-canvas: var(--plane);
+  --sc-surface: var(--paper);
+  --sc-accent: var(--green);
+  --sc-accent-ink: var(--green-deep);
+  --sc-accent-soft: var(--green-pale);
+  /* 暗色 chrome 贴亮底图时边投影压深一点、仍保持中性，不偏色。 */
+  --e-edge: 2px 0 14px -4px rgba(0, 0, 0, .5);
+}
+
+/* 暗色下工作台 / 对话框内滚动条回到暗轨道，避免浏览器默认白 track 浮在深底上；不碰画布与地图控件。 */
+body.is-theme-dark .sc-workbench,
+body.is-theme-dark .sc-cloud-dialog { scrollbar-color: var(--hair) transparent; }
+body.is-theme-dark .sc-workbench ::-webkit-scrollbar,
+body.is-theme-dark .sc-cloud-dialog ::-webkit-scrollbar { width: 10px; height: 10px; }
+body.is-theme-dark .sc-workbench ::-webkit-scrollbar-track,
+body.is-theme-dark .sc-cloud-dialog ::-webkit-scrollbar-track { background: transparent; }
+body.is-theme-dark .sc-workbench ::-webkit-scrollbar-thumb,
+body.is-theme-dark .sc-cloud-dialog ::-webkit-scrollbar-thumb {
+  background: var(--hair);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* 工作台 / 对话框局部钉死的表面别名在暗色下回到纸面 L1。 */
+body.is-theme-dark .sc-workbench,
+body.is-theme-dark .sc-cloud-dialog {
+  --sc-surface: var(--paper);
+}
+
+/* 主操作钮：浅色 = 墨底白字；暗色反转为浅底深字（--primary / --primary-foreground）。 */
+body.is-theme-dark .sc-button.is-primary,
+body.is-theme-dark .sc-button.is-primary:hover:not(:disabled),
+body.is-theme-dark .sc-button.is-primary:active:not(:disabled) {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+/* 各 tooltip 胶囊在暗色下跟随墨/纸反转，避免浅底白字。 */
+body.is-theme-dark .sc-workbench .sc-nav-brand[data-tip]::after,
+body.is-theme-dark .sc-workbench .sc-mode-rail [data-tip]::after,
+body.is-theme-dark .sc-workbench .sc-tool-column [data-tip]::after {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Agent / 创作室里墨底白字的主操作钮与本人气泡，暗色下跟随 primary 反转；
+   手动降级入口与禁用态仍走各自的 plane / faint 规则。 */
+body.is-theme-dark .sc-agent-panel .ap-user,
+body.is-theme-dark .sc-agent-panel .ap-proposal-confirm,
+body.is-theme-dark .sc-agent-panel .btn-primary,
+body.is-theme-dark .sc-agent-panel .ap-send,
+body.is-theme-dark .sc-venue-picker-go,
+body.is-theme-dark .ap-zones-ask-form > .btn-primary,
+body.is-theme-dark .ap-confirm-choice.is-primary,
+body.is-theme-dark .ap-panel-field .ap-panel-send,
+body.is-theme-dark .cr-generate:not(.is-manual):not(:disabled),
+body.is-theme-dark .cr-proposal button:first-child,
+body.is-theme-dark .sc-mode-card header button,
+body.is-theme-dark .sc-operation-add-actions .sc-button.dl-primary,
+body.is-theme-dark .sc-plan-act,
+body.is-theme-dark .cr-message.is-user p {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+body.is-theme-dark .sc-agent-panel .ap-proposal-confirm:hover:not(:disabled),
+body.is-theme-dark .sc-agent-panel .btn-primary:hover:not([aria-disabled="true"]),
+body.is-theme-dark .sc-agent-panel .ap-send:hover:not(:disabled),
+body.is-theme-dark .sc-venue-picker-go:hover:not(:disabled),
+body.is-theme-dark .ap-zones-ask-form > .btn-primary:hover:not(:disabled),
+body.is-theme-dark .ap-confirm-choice.is-primary:hover:not(:disabled),
+body.is-theme-dark .ap-panel-field .ap-panel-send:hover:not(:disabled),
+body.is-theme-dark .cr-generate:not(.is-manual):not(:disabled):hover,
+body.is-theme-dark .cr-proposal button:first-child:hover {
+  background: hsl(var(--primary));
+  filter: brightness(.94);
+}
+
+/* 绿色点睛按钮（确认 / 发送 / 完成）暗色下用深绿底白字，保 ≥4.5:1；
+   浅绿 #7FB58F 只留作文字与浅底点缀。 */
+body.is-theme-dark .sc-agent-panel .ap-zone-proposal__btn,
+body.is-theme-dark .sc-agent-panel .ap-steps li.is-done svg,
+body.is-theme-dark .sc-agent-panel .ap-review-tool.is-send,
+body.is-theme-dark .ap-zone-card-env button.is-on,
+body.is-theme-dark .sc-issue-confirm,
+body.is-theme-dark .sc-zone-picker button.is-active,
+body.is-theme-dark .sc-issue-go b,
+body.is-theme-dark .sc-mobile-dock-send,
+body.is-theme-dark .cr-chat-composer button:not(:disabled) {
+  background: #35624A;
+  border-color: #35624A;
+  color: #fff;
+}
+body.is-theme-dark .sc-agent-panel .ap-review-tool.is-send:hover,
+body.is-theme-dark .sc-agent-panel .ap-zone-proposal__btn:hover {
+  background: #2E5640;
+  border-color: #2E5640;
+}
+
+/* 未读徽标：暗色下加深红底白字，避免浅红配白字对比度不足。 */
+body.is-theme-dark .sc-workbench .sc-rail-message-badge,
+body.is-theme-dark .sc-workbench .sc-message-row-badge { background: #BF4F48; }
+
+/* 底部工具坞把手：字面白底胶囊回到暗色平面，描边与文字跟 token。 */
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle {
+  background: var(--plane-deep);
+  border-color: var(--hair);
+  color: var(--ink-soft);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle:hover {
+  background: var(--plane);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .32);
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle {
+  background: #2D3038 !important;
+  border-color: #363A42 !important;
+  color: #C9CED6 !important;
+}
+
+/* ── 户外地图浮层 chrome：字面白底 / 白描边 / 浅灰投影回到暗色平面 ──
+   只重绘外壳与控件，地图瓦片、缩略图内容、罗盘盘面保持原样。 */
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster {
+  background: var(--paper);
+  border-color: var(--hair);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .30);
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-round:not(.oc-gm-compass),
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom {
+  background: #2D3038 !important;
+  border-color: #363A42 !important;
+  color: #C9CED6 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .28) !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-round:hover,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom:hover {
+  background: #25282F !important;
+}
+/* 缩放连体条内 +/− 按钮：基色 #5f6368 在暗平面上对比不足，图标回次级墨色；分隔线压暗。 */
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn {
+  color: #C9CED6 !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn:hover {
+  background: #25282F !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps .oc-gm-zoom button.oc-gm-zoom-btn:first-child {
+  border-bottom-color: #363A42 !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .is-ghost-eye {
+  background: #2D3038 !important;
+  color: #C9CED6 !important;
+}
+/* 左下图层入口卡片：绿灰底 + 白描边换成暗色平面，纸面格网压暗。 */
+body.is-theme-dark .oc-layer-entry {
+  background: #25282F;
+  border-color: #363A42;
+}
+body.is-theme-dark .oc-layer-entry__thumb--paper {
+  background-color: var(--plane);
+  background-image: linear-gradient(var(--hair-soft) 1px, transparent 1px), linear-gradient(90deg, var(--hair-soft) 1px, transparent 1px);
+}
+/* 图层弹层条与地图详情浮层：白底板回到纸面，行文字跟墨色 token。 */
+body.is-theme-dark .oc-layer-strip,
+body.is-theme-dark .oc-map-details {
+  background: var(--paper);
+  border-color: var(--hair);
+  color: var(--ink);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .34);
+}
+body.is-theme-dark .oc-map-details__head { background: var(--paper); }
+body.is-theme-dark .oc-map-details__close { color: var(--ink-soft); }
+body.is-theme-dark .oc-map-details__close:hover { background: var(--plane); }
+body.is-theme-dark .oc-map-details__section { border-top-color: var(--hair-soft); }
+body.is-theme-dark .oc-map-details__label,
+body.is-theme-dark .oc-map-details__name,
+body.is-theme-dark .oc-map-details__sub { color: var(--ink-soft); }
+body.is-theme-dark .oc-map-details__source { color: var(--ink); }
+body.is-theme-dark .oc-map-details__source[aria-checked="true"] .oc-map-details__name { color: var(--ink); }
+body.is-theme-dark .oc-map-details__thumb { border-color: var(--hair); background: var(--plane); }
+body.is-theme-dark .oc-map-details__thumb--paper {
+  background-color: var(--plane);
+  background-image: linear-gradient(var(--hair-soft) 1px, transparent 1px), linear-gradient(90deg, var(--hair-soft) 1px, transparent 1px);
+}
+body.is-theme-dark .oc-map-details__pin { color: var(--ink-soft); }
+body.is-theme-dark .oc-map-details__pin:disabled { color: var(--faint); }
+body.is-theme-dark .oc-layer-strip__thumb {
+  border-color: var(--hair);
+  background: var(--plane);
+}
+body.is-theme-dark .oc-layer-strip__thumb--paper {
+  background-color: var(--plane);
+  background-image: linear-gradient(var(--hair-soft) 1px, transparent 1px), linear-gradient(90deg, var(--hair-soft) 1px, transparent 1px);
+}
+body.is-theme-dark .oc-layer-strip__row { color: var(--ink-soft); }
+body.is-theme-dark .oc-layer-strip__row[aria-pressed="true"] .oc-layer-strip__label,
+body.is-theme-dark .oc-layer-strip__row:hover .oc-layer-strip__label { color: var(--ink); }
+body.is-theme-dark .oc-layer-strip__row--slim {
+  border-top-color: var(--hair-soft);
+  color: var(--ink-soft);
+}
+body.is-theme-dark .oc-layer-strip__row--slim:hover { color: var(--ink); }
+/* 户外面板图层行 / 弹层菜单：内联 #fff 表面与近黑字被长手覆盖回暗色（inline 普通样式需 !important 压过）。 */
+body.is-theme-dark [data-testid="outdoor-levels-row"] > div {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+}
+body.is-theme-dark [data-testid="outdoor-levels-row"] button {
+  color: var(--ink) !important;
+  border-color: var(--hair) !important;
+}
+body.is-theme-dark [data-testid="levels-popover"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+}
+/* 户外目录树：一级组头 / 二级子组头 / 条目行内联近黑面板字与亮发丝线回暗色 token。 */
+body.is-theme-dark .is-outdoor-card button,
+body.is-theme-dark .is-outdoor-card [role="button"] {
+  color: var(--ink) !important;
+  border-top-color: var(--hair) !important;
+}
+body.is-theme-dark .is-outdoor-card button svg,
+body.is-theme-dark .is-outdoor-card [role="button"] svg {
+  color: var(--ink-soft) !important;
+  stroke: var(--ink-soft) !important;
+}
+body.is-theme-dark .is-outdoor-card [role="button"][aria-pressed="true"] {
+  color: var(--ink) !important;
+}
+/* 清单统计值 / 类型下拉 / 图层列表文字：内联 panelText 在暗色下近黑，统一回次级墨色。 */
+body.is-theme-dark .is-outdoor-card dd { color: var(--ink-soft) !important; }
+body.is-theme-dark .is-outdoor-card select,
+body.is-theme-dark .is-outdoor-card option {
+  color: var(--ink) !important;
+  background-color: var(--plane) !important;
+}
+body.is-theme-dark #outdoor-panel-host-layers div,
+body.is-theme-dark #outdoor-panel-host-layers span { color: var(--ink-soft) !important; }
+body.is-theme-dark .is-outdoor-card .sc-plan-sheet,
+body.is-theme-dark .is-outdoor-card .sc-plan-sheet div { color: var(--ink-soft) !important; }
+/* 户外卡片其余内联近黑文字（图层文件夹 / 实体行 / 库存行）与下拉外壳：补 div / span 与 select 表面。 */
+body.is-theme-dark .is-outdoor-card div,
+body.is-theme-dark .is-outdoor-card span { color: var(--ink-soft) !important; }
+body.is-theme-dark .is-outdoor-card select {
+  background-color: var(--plane) !important;
+  border-color: var(--hair) !important;
+}
+
+/* 户外测量 / 标注 / 属性三张工具卡：inspectorCardStyle 内联 panelBg/panelBorder/panelText，
+   白字面与近墨字在暗色下回暗色纸面（inline 普通样式需 !important 压过）。只重绘外壳与控件。 */
+body.is-theme-dark .sc-outdoor-toolcard {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .34) !important;
+}
+body.is-theme-dark .sc-outdoor-toolcard--annotate::after {
+  background: var(--paper) !important;
+  border-right-color: var(--hair) !important;
+  border-bottom-color: var(--hair) !important;
+}
+body.is-theme-dark [data-testid="annotate-zone"] { border-bottom-color: var(--hair) !important; }
+body.is-theme-dark [data-testid="annotate-draw-tools"],
+body.is-theme-dark [data-testid="annotate-color-bar"] { background: var(--plane) !important; }
+body.is-theme-dark [data-testid="annotate-draw-tools"] button {
+  background: transparent;
+  border-color: transparent !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark [data-testid="annotate-draw-tools"] button[aria-pressed="true"] {
+  background: var(--green-pale) !important;
+  border-color: var(--green) !important;
+  color: var(--green-deep) !important;
+}
+body.is-theme-dark [data-testid="annotate-color-bar"] > span { background: var(--hair) !important; }
+/* 线宽钮选中态：白底细边回暗色纸面；色点本体保留内联选中色，只把内圈白环回纸面。 */
+body.is-theme-dark [data-testid="annotate-color-bar"] button[data-testid^="annotate-stroke-"][aria-checked="true"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  box-shadow: inset 0 0 0 1px var(--hair) !important;
+}
+body.is-theme-dark [data-testid="annotate-color-bar"] button[data-testid^="annotate-color-"][aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--paper) !important;
+}
+body.is-theme-dark [data-testid="annotate-color-bar"] button[data-testid^="annotate-color-"]:not([aria-checked="true"]) {
+  box-shadow: inset 0 0 0 1px var(--hair) !important;
+}
+/* 卡内实体行（测量 / 标注 / 属性）：内联 panelText 近墨字与浅绿选中态回暗色 token。 */
+body.is-theme-dark .sc-outdoor-toolcard [role="button"] { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-outdoor-toolcard [role="button"][aria-pressed="true"] {
+  background: var(--green-pale) !important;
+  border-color: var(--green) !important;
+  color: var(--green-deep) !important;
+}
+body.is-theme-dark [data-testid="annotate-hint"] { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-outdoor-toolcard .sc-outdoor-toolcard-btn { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-outdoor-toolcard .sc-danger-quiet { color: var(--ink-soft) !important; }
+
+/* 顶部模式提示胶囊（当前：xx · 再点一次或 Esc 退出）：内联白底 + 发丝边回暗色纸面。 */
+body.is-theme-dark [data-testid="outdoor-mode-chip"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .28) !important;
+}
+
+/* 目录 / 物料搜索放大镜：实心字形跟 currentColor，暗色下回次级墨色，聚焦回墨色。 */
+body.is-theme-dark .sc-catalog-search-icon { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-catalog-search:focus-within .sc-catalog-search-icon { color: var(--ink) !important; }
+
+/* ── 3D 场景标定 / 光照 HUD：JS 内联写死的暖白纸面与近墨字，暗色下回到暗色表面。
+   HUD 直接挂在视口内、不在 .is-outdoor-card 作用域里，按 testid 单独覆盖；
+   内联为普通样式，需 !important 压过。只重绘外壳与控件，不碰 3D 画布。 */
+body.is-theme-dark [data-testid="site-calibration-toggle"],
+body.is-theme-dark [data-testid="site-calibration-panel"],
+body.is-theme-dark [data-testid="scene-lighting-hud"] > button,
+body.is-theme-dark [data-testid="scene-lighting-hud"] > div {
+  background-color: #1C1F24 !important;
+  border-color: #363A42 !important;
+  color: #EDF0F2 !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .30) !important;
+}
+body.is-theme-dark [data-testid="site-calibration-panel"] input,
+body.is-theme-dark [data-testid="site-calibration-panel"] select {
+  background-color: #25282F !important;
+  border-color: #363A42 !important;
+  color: #EDF0F2 !important;
+}
+body.is-theme-dark [data-testid="site-calibration-panel"] select option {
+  color: #EDF0F2;
+  background-color: #25282F;
+}
+body.is-theme-dark [data-testid="site-calibration-panel"] button {
+  background-color: transparent !important;
+  border-color: #363A42 !important;
+  color: #EDF0F2 !important;
+}
+body.is-theme-dark [data-testid="site-calibration-panel"] span,
+body.is-theme-dark [data-testid="scene-lighting-hud"] span { color: #C9CED6 !important; }
+body.is-theme-dark [data-testid="scene-lighting-hud"] button:not([data-role="trigger"]) {
+  background-color: transparent !important;
+  border-color: #363A42 !important;
+  color: #EDF0F2 !important;
+}
+
+/* 漫游角色选择对话框：Tailwind bg-white / neutral 字面量在暗色下回到纸面与墨字。 */
+body.is-theme-dark dialog[aria-labelledby="outdoor-walk-chooser-title"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+}
+body.is-theme-dark dialog[aria-labelledby="outdoor-walk-chooser-title"] h2 { color: var(--ink) !important; }
+body.is-theme-dark dialog[aria-labelledby="outdoor-walk-chooser-title"] p { color: var(--ink-soft) !important; }
+body.is-theme-dark dialog[aria-labelledby="outdoor-walk-chooser-title"] button {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+}
+body.is-theme-dark dialog[aria-labelledby="outdoor-walk-chooser-title"] button:hover { background: var(--plane-deep) !important; }
+
+/* 走查记录板 / 开跑前检查：Tailwind neutral 浅底与灰字回暗色 token。 */
+body.is-theme-dark [aria-label="走查记录"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark [aria-label="走查记录"] h3 { color: var(--ink) !important; }
+body.is-theme-dark [aria-label="走查记录"] button {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark [aria-label="开跑前检查"] {
+  background: var(--plane) !important;
+  color: var(--ink-soft) !important;
+}
+
+/* 右轨地图控件补齐：选中态 / 眼睛 / 底部展开簇的字面白底回到暗色平面；漫游钮保留琥珀图标色。 */
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-round.is-active,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye {
+  background: #2D3038 !important;
+  border-color: #363A42 !important;
+  color: #C9CED6 !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk {
+  background: #2D3038 !important;
+  border-color: #363A42 !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye:hover { background: #25282F !important; }
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-eye.is-active {
+  background: rgba(45, 48, 56, .62) !important;
+  border-color: #363A42 !important;
+  color: #C9CED6 !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb {
+  background: #1C1F24 !important;
+  border-color: #363A42 !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close:hover {
+  background: #2D3038 !important;
+  color: #EDF0F2 !important;
+}
+/* 其余压在地图 / 3D 画布上的浮层：字面白底回到暗色表面，描边与投影压暗；罗盘指针蓝/灰保留。 */
+body.is-theme-dark .sc-geo-compass-card {
+  background: var(--plane-deep);
+  border-color: var(--hair);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .30);
+}
+body.is-theme-dark .sc-splat-transform-tools {
+  background: var(--paper);
+  border-color: var(--hair);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, .34);
+}
+body.is-theme-dark .sc-shape-loading-pill {
+  background: var(--paper);
+  border-color: var(--hair);
+  color: var(--ink);
+  box-shadow: 0 1.5px 6px rgba(0, 0, 0, .30);
+}
+
+/* 面板关闭钮与右上分享钮：按钮上 var 链偶发回退到 UA 白，这里用长手暗色字面量兜底。 */
+body.is-theme-dark .sc-workbench .sc-left-close {
+  background: #25282F !important;
+  border-color: #363A42 !important;
+  color: #C9CED6 !important;
+}
+body.is-theme-dark .sc-workbench .sc-left-close:hover:not(:disabled) { background: #2D3038 !important; }
+body.is-theme-dark .sc-workbench .sc-share-trigger {
+  background: #1C1F24 !important;
+  border-color: #363A42 !important;
+  color: #C9CED6 !important;
+}
+body.is-theme-dark .sc-workbench .sc-share-trigger.is-active {
+  border-color: #7FB58F !important;
+  color: #7FB58F !important;
+}
+
+/* 物料 / 空间目录搜索胶囊：字面白底回到纸面，描边与阴影压暗。 */
+body.is-theme-dark .sc-catalog-search {
+  background: var(--paper);
+  border-color: var(--hair);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 8px 24px rgba(0, 0, 0, .28);
+}
+body.is-theme-dark .sc-catalog-search:hover,
+body.is-theme-dark .sc-catalog-search:focus-within {
+  border-color: var(--hair);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 28px rgba(0, 0, 0, .32);
+}
+/* 物料卡上悬浮的收藏 / 标签小钮：字面白圆底回到暗色平面。 */
+body.is-theme-dark .sc-material-star,
+body.is-theme-dark .sc-material-tagpin {
+  background: var(--plane-deep) !important;
+  color: var(--ink-soft) !important;
 }
 
 /* Cards inside dark glass panels: inherit dark theme */
@@ -520,7 +1053,7 @@ body {
   --sc-accent: var(--wk-green);
   --sc-accent-ink: var(--wk-green-deep, #35624A);
   --sc-accent-soft: var(--wk-green-pale, #EEF3EF);
-  --sc-surface: #ffffff;
+  --sc-surface: var(--paper);
   --sc-glass-shadow: 0 1px 3px rgba(24, 24, 27, .05);
   --sc-ease: var(--ease-spec);
   --sc-fast: var(--dur-1);
@@ -871,12 +1404,12 @@ body {
 .sc-splat-transform-modes button:hover { background: var(--wk-plane); color: var(--wk-ink); }
 .sc-splat-transform-modes button.is-active { background: var(--wk-plane); color: var(--wk-ink); font-weight: 650; }
 .sc-splat-transform-fields { display: flex; align-items: center; gap: 7px; }
-.sc-splat-transform-fields > button { min-height: 30px; padding: 0 9px; border: 1px solid var(--wk-hair); border-radius: 6px; background: #fff; color: var(--wk-ink); cursor: pointer; white-space: nowrap; }
+.sc-splat-transform-fields > button { min-height: 30px; padding: 0 9px; border: 1px solid var(--wk-hair); border-radius: 6px; background: var(--paper); color: var(--wk-ink); cursor: pointer; white-space: nowrap; }
 .sc-splat-transform-tools label { display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; }
 .sc-splat-transform-tools label:nth-of-type(1) > span { color: #c94d45; }
 .sc-splat-transform-tools label:nth-of-type(2) > span { color: #438659; }
 .sc-splat-transform-tools label:nth-of-type(3) > span { color: #4776bb; }
-.sc-splat-transform-tools input { width: 58px; height: 28px; border: 1px solid var(--wk-hair); border-radius: 5px; padding: 0 4px; color: var(--wk-ink); background: #fff; font-variant-numeric: tabular-nums; }
+.sc-splat-transform-tools input { width: 58px; height: 28px; border: 1px solid var(--wk-hair); border-radius: 5px; padding: 0 4px; color: var(--wk-ink); background: var(--paper); font-variant-numeric: tabular-nums; }
 .sc-splat-transform-hint { color: var(--wk-ink-soft); font-size: 11px; }
 @media (max-width: 720px) { .sc-splat-transform-tools { left: 10px; right: 68px; bottom: 10px; min-width: 0; } .sc-splat-transform-fields { flex-wrap: wrap; } .sc-splat-transform-tools input { width: min(54px, 15vw); } }
 .sc-workbench .pc-status-toasts { top: 68px !important; }
@@ -885,7 +1418,7 @@ body {
   /* 悬停走中性灰，品牌绿只留给选中与发送（T-VISUAL-2026）。 */
   .sc-button:hover:not(:disabled), .sc-icon-button:hover { background: var(--wk-plane); border-color: var(--wk-hair); color: var(--wk-ink); }
   .sc-header .sc-button:hover:not(:disabled), .sc-header .sc-icon-button:hover { background: var(--wk-plane); color: var(--wk-ink); border-color: var(--wk-hair); }
-  .sc-material-card:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--wk-hair); background: #fff; }
+  .sc-material-card:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--wk-hair); background: var(--paper); }
   .sc-library-tabs button:hover:not(.is-active), .sc-tool-group button:hover:not(:disabled) { background: var(--wk-plane); color: var(--wk-ink); }
   .sc-bucket-rail button:hover:not(.is-active) { background: var(--wk-plane); color: var(--wk-ink); box-shadow: none; }
   .sc-delete-button:hover:not(:disabled) { background: #FBF1F0; border-color: var(--err); }
@@ -904,8 +1437,8 @@ body {
   .sc-material-card:hover:not(:disabled) { transform: none; }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .sc-header { background: #fff; }
-  .sc-library, .sc-properties, .sc-view-tools, .pc-world .pc-glass, .sc-workbench .pc-glass { background: #f8fafc; }
+  .sc-header { background: var(--paper); }
+  .sc-library, .sc-properties, .sc-view-tools, .pc-world .pc-glass, .sc-workbench .pc-glass { background: var(--paper); }
 }
 @media (max-width: 1200px) {
   .sc-header { gap: 12px; }
@@ -1159,6 +1692,7 @@ body {
   position: relative; min-width: 0; min-height: 0; height: 100%;
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--paper); border-right: 1px solid var(--wk-hair);
+  box-shadow: var(--e-edge);
 }
 /* 卡片是这一列的内容，不能再 absolute 到工作台左缘盖住图标轨。 */
 .sc-workbench .is-docked-layout.is-mode-rail .sc-left-column > .sc-left-drawer,
@@ -1174,6 +1708,7 @@ body {
   flex: 0 0 var(--sc-nav-rail-width); width: var(--sc-nav-rail-width); padding: 10px 0; box-sizing: border-box;
   align-items: center;
   background: var(--wk-paper); border-right: 1px solid var(--wk-hair);
+  box-shadow: var(--e-edge);
   overflow: visible;
 }
 /* 窄轨只留图标。名称不写在钮下；悬停或聚焦时只出右侧黑胶囊（data-tip），不另挂 title。 */
@@ -1196,22 +1731,9 @@ body {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active {
   position: relative; color: var(--wk-ink);
 }
-/* 成员位：四个 bot 形体下面，圆片与「团队与权限」里的成员行同一个类，两处必然长得一样。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-team {
-  display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 12px 0;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member {
-  display: grid; place-items: center; width: 100%; min-height: 32px; padding: 2px 0;
-  border: 0; border-radius: 0; background: transparent;
-}
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member > span.sc-settings-avatar { display: grid; }
-/* 悬停只压暗一档，不能换底色——那圈颜色是这个人的身份。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member:hover > span.sc-settings-avatar,
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member:focus-visible > span.sc-settings-avatar { filter: brightness(.93); }
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-member.is-placeholder > span.sc-settings-avatar { color: var(--wk-ink-faint); }
-/* 未读的红数字只在真有新消息时出现，贴在圆片右上角；读完就没了。 */
-.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-member-badge {
-  position: absolute; top: 1px; right: 3px; display: grid; place-items: center;
+/* 消息钮未读红数字：全部私信未读之和，贴在钮右上角；读完就没了。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc > .sc-rail-message-badge {
+  position: absolute; top: 2px; right: 2px; display: grid; place-items: center;
   min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box;
   border-radius: 999px; background: var(--err, #B4443C); color: #fff;
   font-size: 10px; font-weight: 600; line-height: 1;
@@ -2840,6 +3362,14 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-qr {
   width: 24px !important; min-width: 24px !important; height: 24px !important;
+}
+/* 评审短链作废：危险动作默认弱化次级灰，悬停/聚焦才显警示红，不与复制/打开抢注意力。 */
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-revoke {
+  color: var(--wk-muted, #71767e) !important;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-revoke:hover,
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-revoke:focus-visible {
+  color: var(--err, #b4443c) !important;
 }
 .sc-workbench .sc-share-qrpop {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 3;

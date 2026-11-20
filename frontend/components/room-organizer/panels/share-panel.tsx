@@ -60,6 +60,7 @@ export function SharePanel({
   onSendBingo,
   onCopyReview = () => undefined,
   onOpenReview = () => undefined,
+  onRevokeReview,
   onPublish,
   onCopy,
   onRevoke,
@@ -95,6 +96,8 @@ export function SharePanel({
   onSendBingo(): void;
   onCopyReview?: () => void;
   onOpenReview?: () => void;
+  /** 作废当前评审短链；不传则不显示作废入口。 */
+  onRevokeReview?: () => void;
   onPublish(): void;
   onCopy(): void;
   onRevoke?: (() => void) | undefined;
@@ -132,6 +135,17 @@ export function SharePanel({
           <span className="sc-share-link-text" title={reviewLink}>{displayShareUrl(reviewLink)}</span>
           <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={onCopyReview}>复制</button>
           <button type="button" className="sc-share-key" data-tone="paper" onClick={onOpenReview}>打开</button>
+          {onRevokeReview && (
+            <button
+              type="button"
+              className="sc-share-key sc-share-revoke"
+              data-tone="paper"
+              aria-label="作废这条评审链接"
+              onClick={onRevokeReview}
+            >
+              作废
+            </button>
+          )}
           <button
             type="button"
             className="sc-share-key sc-share-qr"

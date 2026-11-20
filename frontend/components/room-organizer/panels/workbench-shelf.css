@@ -668,6 +668,21 @@
 .sc-lib-star:hover { color:var(--wk-ink); border-color:var(--wk-ink-faint); }
 .sc-lib-star:active { transform:scale(.9); }
 .sc-lib-star:focus-visible { outline:2px solid var(--wk-ink-soft); outline-offset:1px; }
+/* 详情入口：浏览格放左下角，和右上角收藏错开；抽屉横卡放左上角，避开收藏和挂标签。 */
+.sc-lib-info {
+  position:absolute; left:8px; bottom:8px; z-index:var(--z-card-pop, 6);
+  display:grid; place-items:center; width:24px; height:24px; padding:0;
+  border:1px solid var(--wk-hair); border-radius:6px; background:var(--wk-paper);
+  color:var(--wk-ink-soft); cursor:pointer; opacity:0; transition:opacity .12s ease;
+}
+.sc-material-tile > .sc-lib-info { left:auto; right:6px; top:6px; bottom:auto; }
+.sc-lib-list .sc-lib-tile .sc-lib-info { position:static; flex:none; width:32px; height:32px; margin-left:4px; }
+.sc-lib-tile:hover .sc-lib-info, .sc-lib-tile:focus-within .sc-lib-info,
+.sc-material-tile:hover .sc-lib-info, .sc-material-tile:focus-within .sc-lib-info { opacity:1; }
+.sc-lib-info:hover { color:var(--wk-ink); border-color:var(--wk-ink-faint); }
+.sc-lib-info:active { transform:scale(.9); }
+.sc-lib-info:focus-visible { outline:2px solid var(--wk-ink-soft); outline-offset:1px; }
+@media (hover:none) { .sc-lib-info { opacity:1; } }
 /* 加载更多：一行小字 + 箭头，不做胶囊按钮。 */
 .sc-lib-more { display:inline-flex; align-items:center; align-self:flex-start; gap:3px; margin:0; padding:2px 0; border:0; background:transparent; color:var(--wk-ink-soft); font-size:var(--fs-cap); line-height:18px; cursor:pointer; }
 .sc-lib-more:hover { color:var(--wk-ink); text-decoration:underline; }

@@ -3,10 +3,12 @@ import { MATERIAL_SYMBOL_CODEPOINTS } from '@/components/material-symbol-codepoi
 
 // IconPark SVG paths (Apache 2.0). Their filled theme uses a solid lens and
 // white negative-space symbols, matching the zoom/search family in the spec.
-const ICON_PARK_LOUPE_PATHS: Record<string, { lens: string; detail?: string }> = {
+const ICON_PARK_LOUPE_PATHS: Record<string, { lens: string; detail?: string; ring?: boolean }> = {
+  // search 按放大镜字形走描边圆环（ring），镜片不填充：浅底主钮与暗色表面上都能读出环 + 柄，
+  // 不会被实心圆盘糊成一块黑。zoom_in / zoom_out 仍是实心圆盘 + 白色负形符号。
   iconpark_search_solid: {
     lens: 'M21 38C30.3888 38 38 30.3888 38 21C38 11.6112 30.3888 4 21 4C11.6112 4 4 11.6112 4 21C4 30.3888 11.6112 38 21 38Z',
-    detail: 'M26.657 14.3431C25.2093 12.8954 23.2093 12 21.0001 12C18.791 12 16.791 12.8954 15.3433 14.3431',
+    ring: true,
   },
   iconpark_zoom_in_solid: {
     lens: 'M21 38C30.3888 38 38 30.3888 38 21C38 11.6112 30.3888 4 21 4C11.6112 4 4 11.6112 4 21C4 30.3888 11.6112 38 21 38Z',
@@ -81,5 +83,6 @@ export function MaterialSymbol({ name, size = 20, className, style: customStyle,
     whiteSpace: 'nowrap',
   };
 
-  return <span {...props} className={['sc-material-symbol', className].filter(Boolean).join(' ')} style={style} aria-label={ariaLabel} aria-hidden={ariaLabel ? undefined : (ariaHidden ?? true)} role={ariaLabel ? 'img' : undefined}>{loupePaths ? <svg width={renderedSvgSize} height={renderedSvgSize} viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false"><path d={loupePaths.lens} fill="currentColor" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />{loupePaths.detail && <path d={loupePaths.detail} stroke={name === 'iconpark_search_solid' ? 'currentColor' : '#fff'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}<path d="M33.2216 33.2217L41.7069 41.707" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" /></svg> : MATERIAL_SYMBOL_FILLED_SVG_ASSETS.has(name) ? <span style={materialSvgStyle} aria-hidden="true" /> : codePoint ? String.fromCodePoint(codePoint) : ''}</span>;
+  const loupeRing = Boolean(loupePaths?.ring);
+  return <span {...props} className={['sc-material-symbol', className].filter(Boolean).join(' ')} style={style} aria-label={ariaLabel} aria-hidden={ariaLabel ? undefined : (ariaHidden ?? true)} role={ariaLabel ? 'img' : undefined}>{loupePaths ? <svg width={renderedSvgSize} height={renderedSvgSize} viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false"><path d={loupePaths.lens} fill={loupeRing ? 'none' : 'currentColor'} stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />{loupePaths.detail && !loupeRing && <path d={loupePaths.detail} stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}<path d="M33.2216 33.2217L41.7069 41.707" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" /></svg> : MATERIAL_SYMBOL_FILLED_SVG_ASSETS.has(name) ? <span style={materialSvgStyle} aria-hidden="true" /> : codePoint ? String.fromCodePoint(codePoint) : ''}</span>;
 }

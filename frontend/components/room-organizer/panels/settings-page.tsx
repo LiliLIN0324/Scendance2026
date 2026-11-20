@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Ruler, UserRound, UsersRound } from '@/components/solid-icons';
+import { Check, ChevronRight, Palette, Ruler, UserRound, UsersRound } from '@/components/solid-icons';
 import {
   DEFAULT_AISLE_CLEAR_M,
   DEFAULT_ANGLE_SNAP_DEG,
@@ -22,8 +22,9 @@ import {
   type StudioSettingsPatch,
 } from '../../../../supabase/functions/_shared/plan-editor';
 import { isValidTimeZone } from '../../../lib/event-profile';
-import type { DisplayUnit, RoomLayout } from '../lib/types';
 import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
+import type { AppearanceMode } from '../lib/appearance';
+import type { DisplayUnit, RoomLayout } from '../lib/types';
 
 export interface SettingsPreferences {
   lengthUnit: DisplayUnit;
@@ -41,6 +42,12 @@ const SOURCE_LABEL: Record<SettingSource, string> = {
   personal: '个人',
   team: '团队',
   builtin: '默认',
+};
+
+const APPEARANCE_LABELS: Record<AppearanceMode, string> = {
+  system: '跟随系统',
+  light: '浅色',
+  dark: '深色',
 };
 
 const TIME_ZONES = [
@@ -99,6 +106,8 @@ function Row({
 export function SettingsPage({
   preferences,
   onPreferenceChange,
+  appearanceMode = 'system',
+  onAppearanceModeChange,
   preferenceStatus,
   layout,
   onPlanSettingsChange,
@@ -115,6 +124,8 @@ export function SettingsPage({
 }: {
   preferences: SettingsPreferences;
   onPreferenceChange: (patch: Partial<SettingsPreferences>) => void;
+  appearanceMode?: AppearanceMode;
+  onAppearanceModeChange?: (mode: AppearanceMode) => void;
   preferenceStatus: string;
   layout?: RoomLayout;
   onPlanSettingsChange?: (next: PlanEditorSettings | undefined) => void;
@@ -139,6 +150,18 @@ export function SettingsPage({
   }, [paneRequest]);
   const [teamDraft, setTeamDraft] = useState<StudioSettingsPatch>({});
   const [teamMessage, setTeamMessage] = useState('');
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const appearanceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!appearanceOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (appearanceRef.current && !appearanceRef.current.contains(event.target as Node)) {
+        setAppearanceOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [appearanceOpen]);
   const plan = sanitizePlanEditor(layout?.planSettings) ?? {};
   const precision = preferences.lengthPrecisionM ?? 0.01;
   const owner = studioRole === 'owner';
@@ -256,6 +279,43 @@ export function SettingsPage({
               <Row title="键盘快捷键" detail="按 ? 或 Shift + / 打开只读速查。户外先显示户外分组。">
                 <button type="button" className="sc-settings-outline" onClick={onOpenShortcuts}>查看速查</button>
               </Row>
+            </div>
+            <p className="sc-settings-kicker">外观</p>
+            <div className="sc-settings-group sc-settings-group--menu">
+              <div className="sc-appearance-menu" ref={appearanceRef}>
+                <button
+                  type="button"
+                  className="sc-appearance-menu-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={appearanceOpen}
+                  onClick={() => setAppearanceOpen(open => !open)}
+                >
+                  <Palette size={16} aria-hidden="true" />
+                  <span className="sc-appearance-menu-title">外观</span>
+                  <span className="sc-appearance-menu-value">{APPEARANCE_LABELS[appearanceMode]}</span>
+                  <ChevronRight size={16} aria-hidden="true" className={`sc-appearance-menu-chevron${appearanceOpen ? ' is-open' : ''}`} />
+                </button>
+                {appearanceOpen ? (
+                  <div className="sc-appearance-menu-pop" role="menu" aria-label="外观模式">
+                    {(Object.keys(APPEARANCE_LABELS) as AppearanceMode[]).map(mode => (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={appearanceMode === mode}
+                        className={appearanceMode === mode ? 'is-active' : ''}
+                        onClick={() => {
+                          onAppearanceModeChange?.(mode);
+                          setAppearanceOpen(false);
+                        }}
+                      >
+                        <span>{APPEARANCE_LABELS[mode]}</span>
+                        {appearanceMode === mode ? <Check size={16} aria-hidden="true" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

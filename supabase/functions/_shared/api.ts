@@ -53,16 +53,15 @@ const uploadedAssetView=(row:Record<string,unknown>)=>{
   };
 };
 /**
- * 预览图在桶里存的是内部路径（<ownerId>/<assetId>/preview.png）。
- * 列表不能把内部路径发出去，浏览器也不该自己去拼签名——这里换成短期签名地址 previewUrl。
- * 只签「物主自己目录下、文件名以 /preview.(png|jpg|webp) 结尾」的路径：
- * metadata 可被写入，不校验就等于给任意存储对象开了签名入口。
+ * 生成预览图存的是存储路径；列表只发短期签名地址，把内部路径从响应里取掉。
+ * 签名失败不影响物料本身，只是卡面留空。
  */
 async function assetPreviewView(backend:Backend,row:Record<string,unknown>):Promise<Record<string,unknown>>{
   const metadata=row.metadata;
   if(!metadata||typeof metadata!=='object'||Array.isArray(metadata))return row;
   const {previewPath,...rest}=metadata as Record<string,unknown>;
   const ownerId=typeof row.owner_id==='string'?row.owner_id:'';
+  // 只签本人物料目录下的预览图；元数据被篡改时不把它当任意对象的签名入口。
   const safe=typeof previewPath==='string'&&Boolean(ownerId)&&previewPath.startsWith(`${ownerId}/`)&&/\/preview\.(?:png|jpg|webp)$/.test(previewPath);
   if(!safe)return {...row,metadata:rest};
   try{return {...row,metadata:{...rest,previewUrl:await backend.sign(previewPath,3600)}};}
@@ -325,6 +324,16 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const input=preferencePatchSchema.parse(await json());
         return respond(await backend.scene(actor,'preferences.put',input));
       }
+      // 官方通知：平台广播的只读列表 / 未读数 / 已读回执，不经过工作室成员门禁。
+      const notices=path.match(/^\/notices(\/(unread|read))?$/);
+      if(notices){
+        if(notices[1]==='/unread' && method==='GET') return respond(await backend.scene(actor,'official.notices.unread',{}));
+        if(notices[1]==='/read' && method==='POST') {
+          const input=z.strictObject({noticeId:uuid}).parse(await json());
+          return respond(await backend.scene(actor,'official.notices.read',input));
+        }
+        if(!notices[1] && method==='GET') return respond(await backend.scene(actor,'official.notices.list',{}));
+      }
       // 2026-11-17 户外引导卡历史：跟活动存后端，换设备/清缓存不丢。只存决策流水，不动规划。
       if(path==='/outdoor-history' && method==='GET') {
         const projectId=z.string().trim().min(1).max(200).parse(url.searchParams.get('projectId') ?? '');
@@ -585,6 +594,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
           const input=z.strictObject({...leaseSchema.shape,name}).parse(await json());
           return respond(projectSceneResponse(await backend.scene(actor,'projects.rename',{...input,projectId})));
         }
+        if(tail==='/visibility' && method==='PATCH') {
+          const input=z.strictObject({visibility:z.enum(['team','view-only','private'])}).parse(await json());
+          return respond(await backend.scene(actor,'projects.set_visibility',{projectId,...input}));
+        }
         const source=tail.match(/^\/sources\/([^/]+)$/);
         if(source&&method==='DELETE')return respond(await backend.scene(actor,'sources.unlink',{projectId,assetId:uuid.parse(source[1])}));
         if(tail==='/sources'&&method==='GET')return respond(await backend.scene(actor,'sources.list',{projectId}));
@@ -714,9 +727,21 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const result=await createParametricAsset(backend,actor,input.studioId,input.requestId,input.parameters);
         return respond(result,result.reused?200:201);
       }
-      if(path==='/assets' && method==='GET'){
-        const assetRows=await backend.scene(actor,'assets.list');
-        return respond(Array.isArray(assetRows)?await Promise.all(assetRows.map((row:Record<string,unknown>)=>assetPreviewView(backend,row))):assetRows);
+      if(path==='/assets' && method==='GET') {
+        const rows=await backend.scene(actor,'assets.list');
+        return respond(Array.isArray(rows)?await Promise.all(rows.map((row:Record<string,unknown>)=>assetPreviewView(backend,row))):rows);
+      }
+      // 团队素材库：本人待审/被拒与同室已审核件；提交与审核走下面两条子路径。
+      if(path==='/assets/team' && method==='GET') return respond(await backend.scene(actor,'assets.team.list',{}));
+      const teamSubmit=path.match(/^\/assets\/([^/]+)\/team$/);
+      if(teamSubmit && method==='POST') {
+        const input=z.strictObject({studioId:uuid}).parse(await json());
+        return respond(await backend.scene(actor,'assets.team.submit',{assetId:uuid.parse(teamSubmit[1]),...input}),201);
+      }
+      const teamReview=path.match(/^\/assets\/([^/]+)\/team\/review$/);
+      if(teamReview && method==='POST') {
+        const input=z.strictObject({studioId:uuid,decision:z.enum(['approve','reject'])}).parse(await json());
+        return respond(await backend.scene(actor,'assets.team.review',{assetId:uuid.parse(teamReview[1]),...input}));
       }
       const materialAsset=path.match(/^\/assets\/([^/]+)\/(materials|customize)$/);
       if(materialAsset) {
@@ -731,7 +756,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
       if(asset && method==='POST') {
         const a=await backend.scene(actor,'assets.get',{assetId:uuid.parse(asset[1])});
         const {storage_path,...metadata}=a;
-        return respond({...metadata,url:await backend.sign(storage_path),expiresIn:300});
+        return respond({...await assetPreviewView(backend,metadata),url:await backend.sign(storage_path),expiresIn:300});
       }
       // 公开物料：物主把 3D 物料放进公共目录，任何注册用户都能在物料库看到并取用。
       const publish=path.match(/^\/assets\/([^/]+)\/publish$/);

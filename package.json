@@ -13,8 +13,6 @@
     "typecheck": "tsc --noEmit",
     "gate": "node scripts/release-gate.mjs",
     "check": "npm run typecheck && npm test",
-    "check:79": "node scripts/check-79-evidence.mjs",
-    "gate:79": "node scripts/check-79-evidence.mjs --strict",
     "check:edge": "deno check --config supabase/functions/deno.json supabase/functions/scene-api/index.ts supabase/functions/generation-worker/index.ts supabase/functions/reconstruction-worker/index.ts",
     "demo:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "smoke:edge": "deno run --config supabase/functions/deno.json scripts/smoke-edge.ts",

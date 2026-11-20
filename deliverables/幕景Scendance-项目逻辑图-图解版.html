@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 Scendance · 项目逻辑图解（通俗版）</title>
+<style>
+  :root{
+    --bg:#f3f0e9; --paper:#fff; --ink:#1d2a23; --muted:#5d6a61; --line:#ddd6c8;
+    --green:#2f6b4f; --green-d:#1e4d38; --green-l:#e4efe8;
+    --blue:#335d84; --blue-l:#e6eef6;
+    --amber:#d9931f; --amber-l:#f9eed6;
+    --red:#c2544a; --red-l:#f8e7e5;
+    --gray:#6c746c; --gray-l:#eceae3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.55;padding:22px 18px 60px}
+  .wrap{max-width:1160px;margin:0 auto}
+
+  header.top{margin-bottom:16px}
+  header.top h1{font-size:25px;color:var(--green-d)}
+  header.top .tagline{margin-top:8px;font-size:15px;color:var(--muted);max-width:780px}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:13px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+  .dot.g{background:#2e9e5b}.dot.y{background:var(--amber)}.dot.r{background:var(--red)}.dot.gray{background:var(--gray)}
+
+  nav.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0}
+  nav.tabs button{border:1px solid var(--line);background:var(--paper);color:var(--muted);
+    padding:10px 16px;border-radius:12px;font-size:14px;cursor:pointer}
+  nav.tabs button.active{background:var(--green);color:#fff;border-color:var(--green)}
+  nav.tabs button:hover:not(.active){border-color:var(--green);color:var(--green)}
+
+  section.view{display:none}
+  section.view.active{display:block}
+
+  .h2{font-size:17px;font-weight:700;color:var(--green-d);margin:22px 0 12px}
+  .h2:first-child{margin-top:0}
+  .sub{font-size:13px;color:var(--muted);margin:-6px 0 14px}
+
+  /* 主流程步骤 */
+  .flow{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+  .step{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:14px 12px;position:relative}
+  .step .ico{width:42px;height:42px;border-radius:12px;background:var(--green-l);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:10px}
+  .step h4{font-size:14px;margin-bottom:6px}
+  .step p{font-size:12.5px;color:var(--muted)}
+  .step .who{display:inline-block;margin-top:8px;font-size:11px;color:var(--green-d);background:var(--green-l);border-radius:8px;padding:2px 8px}
+  .arrow{position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--green);font-size:15px;z-index:2}
+  @media(max-width:1100px){.flow{grid-template-columns:repeat(4,1fr)}.arrow{display:none}}
+  @media(max-width:640px){.flow{grid-template-columns:repeat(2,1fr)}}
+
+  /* 状态条（五步） */
+  .track{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .tstep{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:13px}
+  .tstep .head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .tstep .num{font-size:12px;font-weight:700;color:#fff;background:var(--green);border-radius:8px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;flex:none}
+  .tstep h4{font-size:13.5px}
+  .tstep p{font-size:12.5px;color:var(--muted)}
+  .tstep .state{margin-top:8px;font-size:12px;display:inline-flex;align-items:center;gap:6px}
+  @media(max-width:900px){.track{grid-template-columns:repeat(2,1fr)}}
+
+  /* 系统组成 */
+  .layers{display:grid;gap:14px}
+  .layer{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:18px}
+  .layer-title{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .layer-title .badge{font-size:11px;font-weight:600;color:var(--muted);background:var(--gray-l);border-radius:8px;padding:2px 9px}
+  .boxes{display:grid;gap:10px}
+  .b3{grid-template-columns:repeat(3,1fr)}.b4{grid-template-columns:repeat(4,1fr)}.b2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:900px){.b3,.b4,.b2{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.b3,.b4,.b2{grid-template-columns:1fr}}
+  .box{border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:#fff}
+  .box h5{font-size:13.5px;margin-bottom:4px}
+  .box p{font-size:12.5px;color:var(--muted)}
+  .box.green{background:var(--green-l);border-color:#bcd9c8}
+  .box.blue{background:var(--blue-l);border-color:#c3d5e6}
+  .box.amber{background:var(--amber-l);border-color:#ecd9a8}
+  .box.gray{background:var(--gray-l)}
+  .connector{text-align:center;color:var(--green);font-size:18px;margin:-6px 0}
+
+  /* Agent 闭环 */
+  .loop{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;counter-reset:loop}
+  .lstep{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:14px 12px}
+  .lstep .n{font-size:11px;font-weight:700;color:var(--green-d);letter-spacing:1px}
+  .lstep .ico{font-size:22px;margin:6px 0}
+  .lstep h4{font-size:13.5px;margin-bottom:5px}
+  .lstep p{font-size:12.5px;color:var(--muted)}
+  @media(max-width:1000px){.loop{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:560px){.loop{grid-template-columns:repeat(2,1fr)}}
+
+  .rules{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+  .rule{background:var(--green-l);border:1px solid #bcd9c8;border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--green-d)}
+  .rule b{display:block;margin-bottom:3px;font-size:13px}
+  @media(max-width:900px){.rules{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.rules{grid-template-columns:1fr}}
+
+  /* 卡点地图 */
+  .gaps{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .gap{background:var(--paper);border:1px solid var(--line);border-left:5px solid var(--gray);border-radius:14px;padding:14px 16px}
+  .gap.r{border-left-color:var(--red)}
+  .gap.y{border-left-color:var(--amber)}
+  .gap.g{border-left-color:#2e9e5b}
+  .gap .top{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+  .gap .tag{font-size:12px;font-weight:700;color:#fff;border-radius:8px;padding:2px 9px;background:var(--gray)}
+  .gap.r .tag{background:var(--red)}.gap.y .tag{background:var(--amber)}.gap.g .tag{background:#2e9e5b}
+  .gap h4{font-size:14px}
+  .gap p{font-size:12.5px;color:var(--muted)}
+  .gap .meta{margin-top:7px;font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+  @media(max-width:800px){.gaps{grid-template-columns:1fr}}
+
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+  @media(max-width:800px){.twocol{grid-template-columns:1fr}}
+  .panel{border-radius:16px;padding:16px 18px}
+  .panel.ok{background:var(--green-l);border:1px solid #bcd9c8}
+  .panel.no{background:var(--red-l);border:1px solid #ecc4c1}
+  .panel h4{font-size:14px;margin-bottom:8px}
+  .panel ul{margin-left:18px;font-size:13px;color:var(--ink)}
+  .panel li{margin:5px 0}
+
+  .note{margin-top:16px;background:var(--amber-l);border-left:4px solid var(--amber);border-radius:10px;padding:12px 15px;font-size:13px;color:#6b4d12}
+  footer{margin-top:28px;border-top:1px solid var(--line);padding-top:14px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>幕景 Scendance · 项目逻辑图解</h1>
+  <p class="tagline">把真实户外场地变成能搭建的 3D 空间：先把场地搬进画布，再让 Agent 按「提案 → 预览 → 人确认」的方式把方案摆进去，最后导出执行团队能照着搭的交付物。</p>
+  <div class="legend">
+    <span><i class="dot g"></i>已打通 / 单点可用</span>
+    <span><i class="dot y"></i>半通：部分可用，有待复测或收尾</span>
+    <span><i class="dot r"></i>断：当前走不通或会出问题</span>
+    <span><i class="dot gray"></i>独立 / 已停用</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="active" data-view="v1">① 方案是怎么长出来的</button>
+  <button data-view="v2">② 系统由哪些部分组成</button>
+  <button data-view="v3">③ Agent 怎么干活</button>
+  <button data-view="v4">④ 现在通到哪一步</button>
+</nav>
+
+<!-- ============ ① 主流程 ============ -->
+<section class="view active" id="v1">
+  <div class="h2">七个环节：从一句需求到可交付方案</div>
+  <p class="sub">这是对客户和执行团队讲的业务顺序；每一步的产出都是下一步的输入。</p>
+  <div class="flow">
+    <div class="step">
+      <div class="ico">📍</div>
+      <h4>1 · 选场地</h4>
+      <p>按人数、风格、能不能做 3D 预览，给出候选场地。</p>
+      <span class="who">Agent 初选</span>
+    </div>
+    <div class="step">
+      <div class="ico">🗺️</div>
+      <h4>2 · 圈范围</h4>
+      <p>地图上定锚点和边界，成为后面所有尺寸的坐标系。</p>
+      <span class="who">地图锚定</span>
+    </div>
+    <div class="step">
+      <div class="ico">📱</div>
+      <h4>3 · 现场采集</h4>
+      <p>手机端导引：拍够数量、层数、重叠度和尺度基准，不达标就重建不出来。</p>
+      <span class="who">独立采集端</span>
+    </div>
+    <div class="step">
+      <div class="ico">🛰️</div>
+      <h4>4 · 重建场地</h4>
+      <p>照片/视频重建成 3D 高斯场地（.spz），铺在画布上当真实底。</p>
+      <span class="who">Aholo Reality</span>
+    </div>
+    <div class="step">
+      <div class="ico">🎯</div>
+      <h4>5 · 画布布置</h4>
+      <p>七分区、三条流线；2D 平面与 3D 场景同源同一份方案。</p>
+      <span class="who">幕景画布</span>
+    </div>
+    <div class="step">
+      <div class="ico">🎨</div>
+      <h4>6 · 定制物料</h4>
+      <p>对话生成拱门、迎宾牌、签到台等定制件，归一化后进物料库，原位替换体块。</p>
+      <span class="who">Lux3D 生成</span>
+    </div>
+    <div class="step">
+      <div class="ico">📦</div>
+      <h4>7 · 交付</h4>
+      <p>机位图册、物料清单 CSV、DXF 平面图、只读分享链接。</p>
+      <span class="who">幕景导出</span>
+    </div>
+  </div>
+
+  <div class="note">注意：第 4 步重建出的 3D 高斯场景<strong>只提供观感，不提供精确几何</strong>——量尺寸和碰撞由矢量墙体与 GLB 物料承担，不能拿点云当量尺用。</div>
+
+  <div class="h2">工作台里的五步走查（当前实测状态）</div>
+  <p class="sub">普通用户在工作台里实际会走的五步；颜色对应上面的状态图例。</p>
+  <div class="track">
+    <div class="tstep">
+      <div class="head"><span class="num">1</span><h4>选场景 / 导入扫描</h4></div>
+      <p>空间面板已有「真实场地」区块，可选中扫描；缩略图仍是占位符，端到端待复测。</p>
+      <span class="state"><i class="dot y"></i>入口已通，待复测</span>
+    </div>
+    <div class="tstep">
+      <div class="head"><span class="num">2</span><h4>描述生成装置</h4></div>
+      <p>表单可填、扣额度前确认；生产未配直连时走云端队列，真实提交与自动入库未实测。</p>
+      <span class="state"><i class="dot y"></i>半通，未提交实测</span>
+    </div>
+    <div class="tstep">
+      <div class="head"><span class="num">3</span><h4>进场景调位置大小</h4></div>
+      <p>库里的件点一下能放入，移动/旋转/缩放可用；生成件自动落位、贴地、尺寸标定未验证。</p>
+      <span class="state"><i class="dot y"></i>库件可用，自动落位待验</span>
+    </div>
+    <div class="tstep">
+      <div class="head"><span class="num">4</span><h4>用 Agent 改方案</h4></div>
+      <p>精确移动已达标；缩放因子算错、数量解析错（说两盏只加一盏），动作文案与实际不符。</p>
+      <span class="state"><i class="dot y"></i>移动准，缩放/数量有错</span>
+    </div>
+    <div class="tstep">
+      <div class="head"><span class="num">5</span><h4>保存并分享</h4></div>
+      <p>干净场景能生成只读链接；含本机资产会静默丢件，分享页也没有真实场地背景。</p>
+      <span class="state"><i class="dot r"></i>收尾链路有阻塞</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ② 系统组成 ============ -->
+<section class="view" id="v2">
+  <div class="h2">一张图看清：东西都放在哪</div>
+  <div class="layers">
+
+    <div class="layer">
+      <div class="layer-title">🖥️ 你在浏览器里看到的 <span class="badge">前端 · Next.js 静态导出</span></div>
+      <div class="boxes b4">
+        <div class="box green"><h5>2D / 3D 双画布</h5><p>平面与场景双视图，切换不丢状态；拖动、旋转、缩放、复制、框选、对齐、锁定。</p></div>
+        <div class="box green"><h5>空间面板</h5><p>场地选择、扫描列表、墙体/开口/柱子等结构、尺寸显示。</p></div>
+        <div class="box green"><h5>物料库 + 生成</h5><p>标准件库、已生成件、描述生成表单、候选预览与入库。</p></div>
+        <div class="box green"><h5>Agent 对话</h5><p>聊天入口、提案卡片、确认/驳回、决策记录。</p></div>
+        <div class="box green"><h5>活动与执行</h5><p>需求简报、任务建议、执行时间表、制作计划、点验、项目成果。</p></div>
+        <div class="box green"><h5>分享与导出</h5><p>只读链接、快照编解码、图册 / CSV / DXF / PDF 导出。</p></div>
+        <div class="box green"><h5>账户与云项目</h5><p>匿名访客 / 邮箱登录、项目列表、成员与资料面板。</p></div>
+        <div class="box green"><h5>独立页面</h5><p><code>/view</code> 只读查看器、<code>/introduction</code> 介绍页、<code>/guide</code> 新手指引。</p></div>
+      </div>
+    </div>
+
+    <div class="connector">↓ 同一套数据口径（前后端共用契约，不另起一套格式）</div>
+
+    <div class="layer">
+      <div class="layer-title">🧠 工作台内部的规则 <span class="badge">状态与校验</span></div>
+      <div class="boxes b3">
+        <div class="box"><h5>场景数据</h5><p>分区 → 主流线 → 物件 → 次流线 → 人员；撤销 / 重做按动作成组。</p></div>
+        <div class="box"><h5>放置校验</h5><p>重叠、越界、墙柱冲突、净距、视线保留、锁定件保护；无效拖放回到有效位置。</p></div>
+        <div class="box"><h5>本地草稿与备份</h5><p>自动保存、本地项目备份、来源图片备份；保存失败保留原稿，不提前报成功。</p></div>
+      </div>
+    </div>
+
+    <div class="connector">↓ 需要保存、生成或取云端资产时</div>
+
+    <div class="layer">
+      <div class="layer-title">☁️ 后台服务 <span class="badge">Supabase · Postgres + Edge Functions（Deno）</span></div>
+      <div class="boxes b3">
+        <div class="box blue"><h5>scene-api 主接口</h5><p>项目读写、编辑租约、版本/基线校验保存、私有资产授权、Agent 与任务运行、身份与来源校验。</p></div>
+        <div class="box blue"><h5>reconstruction-worker</h5><p>图纸/照片重建的独立队列，定时轮询领取，识别规划、候选预览、确认应用，带预算与去重。</p></div>
+        <div class="box gray"><h5>generation-worker（旧）</h5><p>早期文生/图生/纹理队列；第三方能力已停用，旧任务进入终态，源码保留未恢复。</p></div>
+      </div>
+      <div class="boxes b2" style="margin-top:10px">
+        <div class="box blue"><h5>数据库与私有存储</h5><p>场景版本、扫描与图片索引、重建任务、Agent 运行记录、额度预算；用户资产按人隔离授权。</p></div>
+        <div class="box blue"><h5>本地素材库</h5><p>529 个 GLB 标准物料、场景模板；公共模型只按已核编号与来源摘要解析。</p></div>
+      </div>
+    </div>
+
+    <div class="connector">↓ 调用外部能力（密钥只放在服务端，不进前端构建）</div>
+
+    <div class="layer">
+      <div class="layer-title">🔌 外部依赖 <span class="badge">第三方服务</span></div>
+      <div class="boxes b4">
+        <div class="box amber"><h5>Aholo Reality</h5><p>照片/视频 → 3D 高斯场地 .spz/.ply，作为场景真实底图。</p></div>
+        <div class="box amber"><h5>Lux3D</h5><p>文字描述 → 定制 GLB 装置；归一化单位/轴向/底面后进库落位。</p></div>
+        <div class="box amber"><h5>高德地图 + 底图</h5><p>场地锚点与边界；Carto / 开放地图瓦片作地面参考。</p></div>
+        <div class="box amber"><h5>对话模型网关</h5><p>SiliconFlow / TokenDance 网关提供 Agent 对话与规划能力。</p></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-title">📦 拆出去的两个独立仓库</div>
+      <div class="boxes b2">
+        <div class="box gray"><h5>scendance-capture · 现场采集器</h5><p>手机端采集导引与评分阈值，2026-11-05 独立成仓；阈值规则仍与本仓共用。</p></div>
+        <div class="box gray"><h5>scendance-scene-library · 场景模板库</h5><p>10 套场景模板，2026-11-19 独立成仓。</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ③ Agent 闭环 ============ -->
+<section class="view" id="v3">
+  <div class="h2">Agent 改方案：每一步都先问过人</div>
+  <p class="sub">核心原则：Agent 只出候选，不动画布；人确认之后才写入，写错了能一步撤回。</p>
+  <div class="loop">
+    <div class="lstep">
+      <div class="n">STEP 1</div>
+      <div class="ico">💬</div>
+      <h4>人说需求</h4>
+      <p>「把共创桌往西挪 2 米」「加两盏舞台侧灯」，只说角色、方向、距离，不带坐标。</p>
+    </div>
+    <div class="lstep">
+      <div class="n">STEP 2</div>
+      <div class="ico">🔍</div>
+      <h4>读懂并算候选</h4>
+      <p>定位物件/角色，算出移动、旋转、缩放、加件、删除等候选动作；这一步只读，不写画布。</p>
+    </div>
+    <div class="lstep">
+      <div class="n">STEP 3</div>
+      <div class="ico">👀</div>
+      <h4>提案预览</h4>
+      <p>半透明是候选，线框是原位；卡片说明改了哪几件、有没有冲突。</p>
+    </div>
+    <div class="lstep">
+      <div class="n">STEP 4</div>
+      <div class="ico">✋</div>
+      <h4>人来决定</h4>
+      <p>确认、驳回或作废；没确认之前，画布上的原方案保持不变。</p>
+    </div>
+    <div class="lstep">
+      <div class="n">STEP 5</div>
+      <div class="ico">✅</div>
+      <h4>确认才落盘</h4>
+      <p>一次写入场景，并进撤销栈；撤回可整体退回这一步，不影响其它物件。</p>
+    </div>
+    <div class="lstep">
+      <div class="n">STEP 6</div>
+      <div class="ico">📒</div>
+      <h4>记入台账</h4>
+      <p>确认、驳回、作废都进复核记录；提案带有效期，画布一变就自动作废。</p>
+    </div>
+  </div>
+
+  <div class="rules">
+    <div class="rule"><b>🔒 只动该动的</b>修改限定在选中/指定范围内；锁定件不可被命令改动。</div>
+    <div class="rule"><b>✔️ 过校验才算候选</b>重叠、越界、墙柱冲突、净距、视线、资产能否解析，逐项检查。</div>
+    <div class="rule"><b>🤷 不硬猜</b>识别不到物件时列出清单让人点选，而不是回一句「没接住」。</div>
+    <div class="rule"><b>💰 额度透明</b>生成或扣额度前明确告知；失败不重复扣额度。</div>
+    <div class="rule"><b>⏳ 提案会过期</b>提案有身份标识与约 10 分钟有效期；基线一变即失效，不能拿旧提案往新画布上套。</div>
+    <div class="rule"><b>🧾 数字唯一口径</b>同一件方案在 Agent、发布卡片、到场清单里件数与品类必须一致。</div>
+  </div>
+
+  <div class="note">当前 Agent 已落地：按物件/角色挪、转、缩放、删、换色、加件的增量命令（<code>plan.revise</code>），并接入同一张预览/确认卡。仍缺：场地自检 <code>space.inspect</code>、方案体检 <code>plan.check</code>、替换 <code>replace</code> 与预留带 <code>reserve</code>；增量命令本身还没走完验收。</div>
+</section>
+
+<!-- ============ ④ 现状卡点 ============ -->
+<section class="view" id="v4">
+  <div class="h2">现状地图：哪条通、哪条卡</div>
+  <p class="sub">依据 2026-11-04 代码复核与当日真实点击走查；标注的是当时状态，复测后以最新结果为准。</p>
+  <div class="gaps">
+    <div class="gap g">
+      <div class="top"><span class="tag">G1</span><h4>生成与取回云端化</h4></div>
+      <p>表单入口可用；未配直连时生产走云端队列，「提交 → 取回 GLB → 自动入库」闭环尚未在 staging 实测。</p>
+      <div class="meta"><span>状态：🟡 已解除阻塞，待复测</span><span>不挡演示</span></div>
+    </div>
+    <div class="gap r">
+      <div class="top"><span class="tag">G2</span><h4>资产只存在本机</h4></div>
+      <p>含本机/生成资产的方案云保存被 <code>LOCAL_ASSET_NOT_UPLOADED</code> 拦下；分享时静默丢件（6 件变 5 件），客户侧不报错只会少东西。</p>
+      <div class="meta"><span>状态：🔴 断</span><span>演示阻塞</span></div>
+    </div>
+    <div class="gap g">
+      <div class="top"><span class="tag">G3</span><h4>真实场地入口</h4></div>
+      <p>空间面板已有扫描区块与选中即应用；缩略图仍是占位符，选中效果待复测。</p>
+      <div class="meta"><span>状态：🟡 入口已通，待复测</span><span>不挡演示</span></div>
+    </div>
+    <div class="gap y">
+      <div class="top"><span class="tag">G4</span><h4>尺寸标定与落地入口</h4></div>
+      <p>标定、基准面、贴地能力底层已接线，但界面没有暴露入口；用户不知道场地尺寸可不可信。</p>
+      <div class="meta"><span>状态：🟡 半通</span><span>挡「可量尺寸」承诺</span></div>
+    </div>
+    <div class="gap r">
+      <div class="top"><span class="tag">G5</span><h4>分享页缺真实环境</h4></div>
+      <p>客户打开的只读页只有 3D 布局示意，没有 3DGS 现场背景，也缺物料表；依赖 G2 先把资产传到云端。</p>
+      <div class="meta"><span>状态：🔴 断</span><span>演示阻塞</span></div>
+    </div>
+    <div class="gap y">
+      <div class="top"><span class="tag">G6</span><h4>Agent 精确改单件</h4></div>
+      <p>位移已达标（误差 ≤5cm）；缩放因子算错、数量解析错、动作文案与实际不符；锁定件与角色消歧仍需补校验。</p>
+      <div class="meta"><span>状态：🟡 半通</span><span>挡「对话精确改」承诺</span></div>
+    </div>
+    <div class="gap r">
+      <div class="top"><span class="tag">G7</span><h4>西湖素材与空域报备</h4></div>
+      <p>现有素材 0/32 有可用坐标、覆盖 102.6°，判定不可用；需按标准重采，另加空域许可与属地报备。属第二阶段，不阻塞前六项链路。</p>
+      <div class="meta"><span>状态：🔴 断（B + C 档）</span><span>不挡链路</span></div>
+    </div>
+  </div>
+
+  <div class="twocol">
+    <div class="panel ok">
+      <h4>✅ 现在已经能单点演示的</h4>
+      <ul>
+        <li>在空白/演示场地上摆放方案</li>
+        <li>对话做精确移动，确认后落盘、可撤销</li>
+        <li>标准库件点选放入画布并调整</li>
+        <li>干净场景生成无需登录的只读分享链接</li>
+        <li>结构尺寸修改应用并提示可撤销</li>
+      </ul>
+    </div>
+    <div class="panel no">
+      <h4>⛔ 还不能对外承诺的</h4>
+      <ul>
+        <li>普通用户走通「选真实场地 → 生成 → 分享」整条链路</li>
+        <li>一句话生成装置后自动落位、贴地不悬空</li>
+        <li>场地尺寸可量、误差可信（标定入口未暴露）</li>
+        <li>分享链接里看到真实场地背景与完整物料表</li>
+        <li>真实付费生成质量、双账号云端、现场搭建效果</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">修复依赖链：<strong>G1（生成取回上云）→ G2（资产上传拿云端编号）→ G5（分享页带 .spz 背景）</strong>；G3、G4、G6 改不同文件，可并行插入；G7 重采与报备独立推进。</div>
+</section>
+
+<footer>
+  依据：仓库 README、docs/01 素材与重建、docs/02 交付与 Agent 能力、docs/04 Golden Path 规格与实测、前端 panels/lib 目录核对。状态以 2026-11-04 复核为准；与最新 main 代码不一致时，以代码和 docs 活文档为准。
+</footer>
+</div>
+
+<script>
+  const btns=document.querySelectorAll('nav.tabs button');
+  const views=document.querySelectorAll('section.view');
+  btns.forEach(b=>b.addEventListener('click',()=>{
+    btns.forEach(x=>x.classList.remove('active'));
+    views.forEach(v=>v.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById(b.dataset.view).classList.add('active');
+  }));
+</script>
+</body>
+</html>

@@ -69,7 +69,7 @@ export async function startLocalServer(port = 0, aiFetcher?: typeof fetch, optio
       return { bytes: new Uint8Array(bytes), mime };
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
   }
-  const origins = options.origins ?? ['http://127.0.0.1:3018', 'http://localhost:3018', 'http://localhost:3000'];
+  const origins = options.origins ?? ['http://127.0.0.1:3018', 'http://localhost:3018', 'http://localhost:3000', 'http://127.0.0.1:3002', 'http://localhost:3002'];
   let url = '';
   const backend = {
     ...fixture.backend,

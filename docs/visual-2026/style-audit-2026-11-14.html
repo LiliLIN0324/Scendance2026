@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>左右轨 × 地图簇 风格一致性盘点 · 2026-11-14</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9' fill='%234A7C59'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF; --hair-soft:#EFEFF1; --hair:#E4E4E7;
+  --faint:#A6AAB2; --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#35624A; --green-pale:#EEF3EF;
+  --warn:#96651F; --warn-pale:#FBF1E7; --err:#B4443C;
+  --r-sm:10px; --r-md:14px; --r-lg:18px; --e1:0 6px 18px rgba(20,20,22,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 64px}
+h1{font-size:20px;font-weight:600;margin:0 0 6px}
+.meta{color:var(--muted);font-size:12px}
+.note{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:12px 14px;color:var(--ink-soft);font-size:13px;margin:16px 0}
+.note b{color:var(--ink)}
+section{margin-top:36px}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.sec-sub{color:var(--muted);font-size:12px;margin:0 0 16px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);margin-bottom:16px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot.g{background:var(--green)} .dot.o{background:var(--warn)} .dot.x{background:var(--faint)}
+
+/* 三栏快照 */
+.fam3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.fam{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden}
+.fam .head{padding:14px 16px 10px;border-bottom:1px solid var(--hair-soft)}
+.fam h3{font-size:13px;font-weight:600;margin:0 0 2px}
+.fam .sub{font-size:11px;color:var(--muted)}
+.fam ul{margin:0;padding:12px 16px;list-style:none;display:grid;gap:7px;font-size:12px;color:var(--ink-soft)}
+.fam li{display:grid;grid-template-columns:74px 1fr;gap:8px}
+.fam li b{color:var(--ink);font-weight:500}
+.fam li .v{color:var(--ink-soft)}
+.pill{display:inline-block;font-size:10px;padding:1px 7px;border-radius:999px;margin-left:6px}
+.pill.g{background:var(--green-pale);color:var(--green-deep)}
+.pill.o{background:var(--warn-pale);color:var(--warn)}
+.pill.x{background:var(--plane);color:var(--muted)}
+
+/* 对照表 */
+table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden;font-size:12px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--hair-soft);text-align:left;vertical-align:top}
+th{background:var(--plane);font-weight:600;color:var(--ink-soft);font-size:11px}
+td.dim{font-weight:500;color:var(--ink);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.cell{display:flex;align-items:flex-start;gap:6px;color:var(--ink-soft)}
+.cell .dot{margin-top:5px;flex:none}
+
+/* 问题清单 */
+.issues{display:grid;gap:12px}
+.issue{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:14px 16px;display:grid;grid-template-columns:64px 1fr;gap:14px}
+.issue .lvl{font-size:11px;font-weight:600;border-radius:var(--r-sm);padding:3px 8px;height:fit-content;text-align:center}
+.lvl.p0{background:var(--err);color:#fff}
+.lvl.p1{background:var(--warn-pale);color:var(--warn)}
+.lvl.p2{background:var(--plane);color:var(--muted)}
+.issue h4{margin:0 0 4px;font-size:13px}
+.issue p{margin:0;font-size:12px;color:var(--ink-soft)}
+.issue .fix{margin-top:6px;font-size:12px;color:var(--green-deep)}
+.issue .fix b{color:var(--green-deep)}
+
+/* 示意钮 */
+.slot-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px}
+.demo-btn{width:30px;height:30px;border-radius:50%;background:var(--paper);border:1px solid transparent;box-shadow:0 1px 3px rgba(20,20,22,.12);display:grid;place-items:center;color:var(--ink-soft)}
+.demo-btn.old2{width:34px;height:34px;box-shadow:0 4px 14px rgba(20,20,22,.10)}
+.demo-btn.old3{width:40px;height:40px;border-radius:12px;background:transparent;box-shadow:none}
+.demo-btn.active{border-color:var(--green);color:var(--green-deep)}
+.demo-btn svg{width:20px;height:20px}
+.demo-cap{font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>左右轨 × 地图簇 · 风格一致性盘点</h1>
+  <p class="meta">基线：main 工作树 2026-11-14 磁盘实读 ｜ 对照设计规范 v2.5.12 ｜ 本稿只盘点现状与调整方向，不改代码</p>
+</header>
+
+<div class="note">
+  <b>结论先行：</b>三族分工骨架成立——<b>导航族</b>（左轨，切面板/身份）、<b>工具族</b>（右轨，画布动作）、<b>地图簇</b>（右下/左下，视图与图源）。
+  不一致集中在五类：<b>槽位尺寸四档并存、禁用透明度三套口径、图标越档、覆盖层内联样式未接令牌、个别静息态用了品牌绿</b>。族与族之间的选中表达（左绿条 / 右绿描边）是已定分工，保留；要统一的是规格令牌，不互换族语义。
+</div>
+
+<div class="legend">
+  <span><i class="dot g"></i>合规（接规范令牌）</span>
+  <span><i class="dot o"></i>漂移（需收口）</span>
+  <span><i class="dot x"></i>族/领域例外（保留，登记在册）</span>
+</div>
+
+<!-- 三栏快照 -->
+<section>
+  <h2>一、三族现状实测（磁盘口径）</h2>
+  <p class="sec-sub">数值来自 globals.css 与组件 JSX 实读，不是截图目测。</p>
+  <div class="fam3">
+
+    <div class="fam">
+      <div class="head"><h3>左轨 · 导航族</h3><p class="sub">room-organizer.tsx ｜ CSS 1097–1326</p></div>
+      <ul>
+        <li><b>槽位</b><span class="v">40×40 触达 <span class="pill g">合规</span></span></li>
+        <li><b>形状</b><span class="v">圆角 12px <span class="pill o">偏离 r-sm 10</span></span></li>
+        <li><b>底色</b><span class="v">透明裸钮，hover plane <span class="pill g">合规</span></span></li>
+        <li><b>描边</b><span class="v">无 <span class="pill g">合规</span></span></li>
+        <li><b>阴影</b><span class="v">E0 无投影 <span class="pill g">合规</span></span></li>
+        <li><b>选中</b><span class="v">左缘 3px 绿条 + 墨字 600 <span class="pill x">已定分工</span></span></li>
+        <li><b>图标</b><span class="v">形体/头像 28px 例外；capture 26、Bingo svg 13 <span class="pill o">越档</span></span></li>
+        <li><b>禁用</b><span class="v">plane 底 + faint 字，opacity 1 <span class="pill g">合规</span></span></li>
+        <li><b>样式落点</b><span class="v">CSS 类 <span class="pill g">合规</span></span></li>
+      </ul>
+    </div>
+
+    <div class="fam">
+      <div class="head"><h3>右轨 · 工具族</h3><p class="sub">scendance-workspace.tsx ｜ CSS 1651–1761</p></div>
+      <ul>
+        <li><b>槽位</b><span class="v">30×30（≤640px 缩 26）<span class="pill o">低于 32 触达</span></span></li>
+        <li><b>形状</b><span class="v">正圆 50% <span class="pill x">工具族形制</span></span></li>
+        <li><b>底色</b><span class="v">paper 白气泡 <span class="pill g">合规</span></span></li>
+        <li><b>描边</b><span class="v">1px 透明，选中显绿边 <span class="pill g">合规</span></span></li>
+        <li><b>阴影</b><span class="v">rest 0 1px 3px/.12；hover 0 2px 6px/.16 <span class="pill o">非 E 档</span></span></li>
+        <li><b>选中</b><span class="v">绿描边 + green-deep 字 <span class="pill x">已定分工</span></span></li>
+        <li><b>图标</b><span class="v">控件 20；菜单行 15、勾 14 <span class="pill o">越档</span></span></li>
+        <li><b>禁用</b><span class="v">faint 字 + opacity .45；walk/grid 内联 .35；楼层柱 .55 <span class="pill o">三套口径</span></span></li>
+        <li><b>样式落点</b><span class="v">CSS 类为主，少量内联 <span class="pill o">待清</span></span></li>
+      </ul>
+    </div>
+
+    <div class="fam">
+      <div class="head"><h3>覆盖层 · 地图簇</h3><p class="sub">outdoor-plan-overlay / geo-scale-compass / view-switch</p></div>
+      <ul>
+        <li><b>槽位</b><span class="v">交付/底图钮 34×34；罗盘 36 <span class="pill o">第三四档</span></span></li>
+        <li><b>形状</b><span class="v">正圆 999；署名胶囊 r6 <span class="pill o">胆怯圆角</span></span></li>
+        <li><b>底色</b><span class="v">paper / PLANNING.panelBg <span class="pill o">未接全局令牌</span></span></li>
+        <li><b>描边</b><span class="v">1px 实 hair / panelBorder <span class="pill o">口径不一</span></span></li>
+        <li><b>阴影</b><span class="v">0 4px 14px/.10；罗盘 0 1px 4px/.25 <span class="pill o">超 E1 口径</span></span></li>
+        <li><b>选中</b><span class="v">无选中态（视图胶囊另算） <span class="pill x">地图簇语义</span></span></li>
+        <li><b>图标</b><span class="v">字符 ▢/◱ 作图标；罗盘自绘三角 <span class="pill o">字符待换</span></span></li>
+        <li><b>禁用</b><span class="v">无禁用态 <span class="pill x">—</span></span></li>
+        <li><b>样式落点</b><span class="v">大量内联 style + PLANNING_* 常量 <span class="pill o">待迁类</span></span></li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<!-- 维度对照 -->
+<section>
+  <h2>二、逐维度一致性对照</h2>
+  <p class="sec-sub">绿＝与规范一致；橙＝漂移需收口；灰＝族/领域例外，保留并登记。</p>
+  <table>
+    <thead>
+      <tr><th style="width:120px">维度</th><th>左轨导航族</th><th>右轨工具族</th><th>覆盖层 / 地图簇</th><th style="width:180px">判定</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="dim">槽位尺寸</td>
+        <td><div class="cell"><i class="dot g"></i>40×40，达 ≥32 触达</div></td>
+        <td><div class="cell"><i class="dot o"></i>30×30，窄屏 26，触达不足</div></td>
+        <td><div class="cell"><i class="dot o"></i>34×34 / 罗盘 36，又一档</div></td>
+        <td>工具族与地图簇上收同一触达档（建议 40，窄屏 36）</td>
+      </tr>
+      <tr>
+        <td class="dim">形状圆角</td>
+        <td><div class="cell"><i class="dot o"></i>r12，规范 r-sm 10</div></td>
+        <td><div class="cell"><i class="dot x"></i>正圆，工具族形制</div></td>
+        <td><div class="cell"><i class="dot o"></i>正圆 + 署名 r6</div></td>
+        <td>导航族对齐 r-sm 10；署名胶囊对齐 r-sm；正圆保留给工具族</td>
+      </tr>
+      <tr>
+        <td class="dim">底色</td>
+        <td><div class="cell"><i class="dot g"></i>透明裸钮</div></td>
+        <td><div class="cell"><i class="dot g"></i>paper 白</div></td>
+        <td><div class="cell"><i class="dot o"></i>paper / PLANNING 常量</div></td>
+        <td>透明裸钮是导航族例外；工具/地图簇统一接 --tool-bg</td>
+      </tr>
+      <tr>
+        <td class="dim">描边</td>
+        <td><div class="cell"><i class="dot g"></i>无</div></td>
+        <td><div class="cell"><i class="dot g"></i>1px 透明，选中显边</div></td>
+        <td><div class="cell"><i class="dot o"></i>1px 实 hair / panelBorder 双口径</div></td>
+        <td>统一 1px hair，默认透明，选中/悬浮再显</td>
+      </tr>
+      <tr>
+        <td class="dim">阴影层级</td>
+        <td><div class="cell"><i class="dot g"></i>E0</div></td>
+        <td><div class="cell"><i class="dot o"></i>1px 3px/.12，非 E 档</div></td>
+        <td><div class="cell"><i class="dot o"></i>4px 14px/.10、罗盘 1px 4px/.25</div></td>
+        <td>工具钮收 E3 级 0 1px 2px/.06；浮层才用 E1；移除超档柔影</td>
+      </tr>
+      <tr>
+        <td class="dim">选中表达</td>
+        <td><div class="cell"><i class="dot x"></i>左缘 3px 绿条</div></td>
+        <td><div class="cell"><i class="dot x"></i>绿描边 + 绿字</div></td>
+        <td><div class="cell"><i class="dot x"></i>视图胶囊反白</div></td>
+        <td>两套族语义已定，保留；只对齐令牌取值</td>
+      </tr>
+      <tr>
+        <td class="dim">图标族 / 档</td>
+        <td><div class="cell"><i class="dot o"></i>26、13 越档；三族已归位</div></td>
+        <td><div class="cell"><i class="dot o"></i>行内 15、勾 14 越档；自绘三枚待登记</div></td>
+        <td><div class="cell"><i class="dot o"></i>字符按钮待换正式图标</div></td>
+        <td>收齐 16/20/24/32 档；通用走 Material 实心；例外登记</td>
+      </tr>
+      <tr>
+        <td class="dim">禁用态</td>
+        <td><div class="cell"><i class="dot g"></i>plane + faint，opacity 1</div></td>
+        <td><div class="cell"><i class="dot o"></i>opacity .45 / 内联 .35 / 柱 .55</div></td>
+        <td><div class="cell"><i class="dot x"></i>无禁用</div></td>
+        <td>禁用统一 plane 底 + faint 字 + opacity 1，删整钮降透明度</td>
+      </tr>
+      <tr>
+        <td class="dim">静息用色</td>
+        <td><div class="cell"><i class="dot g"></i>静息墨色</div></td>
+        <td><div class="cell"><i class="dot o"></i>漫游钮常态深绿字</div></td>
+        <td><div class="cell"><i class="dot x"></i>罗盘红针为地图语义</div></td>
+        <td>静息态不用品牌绿；绿只给选中/发送；地图红针保留例外</td>
+      </tr>
+      <tr>
+        <td class="dim">样式落点</td>
+        <td><div class="cell"><i class="dot g"></i>CSS 类</div></td>
+        <td><div class="cell"><i class="dot o"></i>类 + 内联禁用/提示</div></td>
+        <td><div class="cell"><i class="dot o"></i>整组内联 + PLANNING 常量</div></td>
+        <td>硬值迁 CSS 令牌；主题切换时外观一并跟随</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 问题优先级 -->
+<section>
+  <h2>三、调整方向（按优先级）</h2>
+  <p class="sec-sub">沿 petitmaker 一个组件一个组件改；令牌先行，业务逻辑不动。</p>
+  <div class="issues">
+
+    <div class="issue">
+      <div class="lvl p0">P0</div>
+      <div>
+        <h4>禁用态收口：删掉三套整钮透明度</h4>
+        <p>右轨 disabled opacity .45、walk/grid 内联 .35、楼层柱 .55 并存；规范禁用口径是 plane 底 + faint 字、opacity 1。</p>
+        <p class="fix"><b>调整：</b>抽统一禁用基础类，内联 opacity 全部迁出；未接住的能力置灰 + tooltip 说明，不触发室内壳。</p>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="lvl p0">P0</div>
+      <div>
+        <h4>静息态品牌绿回收</h4>
+        <p>漫游钮未选中就是深绿字（#35624A），属静息态用品牌绿；规范品牌绿只给选中指示与发送键。</p>
+        <p class="fix"><b>调整：</b>静息回 ink-soft；选中再显绿边 + green-deep 字；地图罗盘红针属领域语义，保留。</p>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="lvl p1">P1</div>
+      <div>
+        <h4>槽位与阴影上收到同一套工具令牌</h4>
+        <p>右轨 30、覆盖层 34、罗盘 36 三档；投影轻重断层，覆盖层 4px 14px 超出 E1。</p>
+        <p class="fix"><b>调整：</b>工具钮统一 --tool-size（桌面 40 / 窄屏 36）、E3 级轻投影；浮层/tooltip 才用 E1；左轨 40 触达不动，r12 回 r-sm 10。</p>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="lvl p1">P1</div>
+      <div>
+        <h4>图标档位与族收编</h4>
+        <p>26px capture、13px Bingo svg、菜单行 15 / 勾 14 越档；覆盖层字符 ▢/◱ 作图标；自绘 HandStop / MoveScene / GridSnap 待逐枚对照登记表。</p>
+        <p class="fix"><b>调整：</b>控件图标 20、行内 16；字符钮换已登记 map / layers 族；有同语义 Material 形优先替换，确属领域图形的登记例外。</p>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="lvl p2">P2</div>
+      <div>
+        <h4>覆盖层内联样式迁入 CSS 类</h4>
+        <p>交付钮、底图钮、底图面板、2D/3D 胶囊的尺寸/边框/投影走内联与 PLANNING_* 常量，主题变量接管不到。</p>
+        <p class="fix"><b>调整：</b>迁到 globals.css 工具族基础类，接 --tool-* 令牌；PLANNING 常量只保留面板内部布局，不落到钮面规格。</p>
+      </div>
+    </div>
+
+    <div class="issue">
+      <div class="lvl p2">P2</div>
+      <div>
+        <h4>地图控件角区归位</h4>
+        <p>缩放 +/- 现在在右轨底部，未与底图钮成组；罗盘、比例尺、署名在左下，落点与地图惯例对照。</p>
+        <p class="fix"><b>调整：</b>底图钮 + 缩放 +/- 收右下地图簇（待真机对照拍板）；署名贴左下，比例尺/罗盘落点对照 Google / Mapbox 惯例。</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 待拍板 -->
+<section>
+  <h2>四、仍需拍板的口子</h2>
+  <div class="note">
+    1. 工具钮槽位：上收 40，还是保 30 圆钮 + 补 32 触达（建议 40）。<br>
+    2. 楼层胶囊：深色圆头箭头柱是否改白底工具族圆钮。<br>
+    3. 缩放 +/- 留右轨底部，还是挪右下地图簇成组（建议挪，待真机对照）。<br>
+    4. 跨栏选中表达：左绿条 / 右绿描边维持两套族语义（建议维持，只对齐令牌）。<br>
+    5. 自绘三枚图标：哪些换 Material、哪些登记领域例外，逐枚对照 outdoor-tool-icons.ts。<br>
+    6. 户外方案层是否需要在地图簇旁补快速上下切换入口。
+  </div>
+</section>
+
+</div>
+</body>
+</html>

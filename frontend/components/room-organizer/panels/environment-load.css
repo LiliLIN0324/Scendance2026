@@ -59,7 +59,7 @@
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: #4A7C59;
+  background: var(--green);
   transition: width var(--dur-2, 200ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1));
 }
 .sc-env-load-fill::after {

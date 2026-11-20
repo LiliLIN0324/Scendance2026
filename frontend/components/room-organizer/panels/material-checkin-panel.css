@@ -1,7 +1,7 @@
 ﻿.sc-material-checkin { font-size:12px; }
 .sc-material-checkin fieldset { border:0; margin:0; padding:0; min-width:0; }
 .sc-material-checkin .sc-field { display:grid; gap:5px; margin:10px 0; }
-.sc-material-checkin input,.sc-material-checkin select,.sc-material-checkin textarea { width:100%; min-width:0; box-sizing:border-box; padding:8px; border:1px solid var(--sc-line,#d6d6d2); border-radius:7px; background:#ffffff; color:inherit; font:inherit; }
+.sc-material-checkin input,.sc-material-checkin select,.sc-material-checkin textarea { width:100%; min-width:0; box-sizing:border-box; padding:8px; border:1px solid var(--sc-line,#d6d6d2); border-radius:7px; background:var(--paper); color:inherit; font:inherit; }
 .sc-material-checkin textarea { resize:vertical; }
 .sc-material-checkin details { margin:12px 0; padding-top:10px; border-top:1px solid var(--sc-line,#d6d6d2); }
 .sc-material-checkin summary { cursor:pointer; }

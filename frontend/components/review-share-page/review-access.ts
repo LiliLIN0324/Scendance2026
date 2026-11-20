@@ -74,3 +74,16 @@ export function reviewLinkFailureCopy(reason: string): string {
       return '评审短链没有被收下。这次没有生成链接。';
   }
 }
+
+export function reviewLinkRevokeFailureCopy(reason: string): string {
+  switch (reason) {
+    case 'signed-out':
+      return '登录后才能作废评审链接。';
+    case 'disabled':
+      return '评审短链服务还没接上，暂时没法作废。';
+    case 'network':
+      return '评审短链暂时连不上，稍后再试。';
+    default:
+      return '这条评审链接没有被作废，请稍后再试。';
+  }
+}

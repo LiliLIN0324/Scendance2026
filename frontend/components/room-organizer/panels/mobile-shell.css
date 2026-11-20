@@ -159,7 +159,7 @@
     will-change: transform;
   }
   .sc-mobile-agent-entry[aria-expanded="true"] {
-    background: var(--wk-green-pale); border-color: #c8d8cc; color: var(--wk-green-deep);
+    background: var(--wk-green-pale); border-color: var(--hair); color: var(--wk-green-deep);
   }
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail {
     position: fixed !important;
@@ -186,7 +186,7 @@
     flex: 1 1 auto; min-width: 0; align-items: stretch;
   }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-primary { display: contents; }
-  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-team { display: none; }
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-messages { display: none; }
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-rail-draft { display: none; }
   /* 五格：图标 28 + 标签 16，格高 64，整格即触控区 */
   .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand,

@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕景 Scendance · 项目整体逻辑图（最新 main）</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --ink:#16202e; --sub:#5a6b80; --line:#dbe3ee;
+    --blue:#2563eb; --blue-bg:#eaf1ff; --green:#128a5a; --green-bg:#e6f5ee;
+    --amber:#b7791f; --amber-bg:#fdf3e3; --red:#c0392b; --red-bg:#fdecea;
+    --purple:#6d4fc2; --purple-bg:#f0ebfb; --teal:#0e8a8a; --teal-bg:#e4f5f5;
+    --shadow:0 1px 3px rgba(22,32,46,.08),0 4px 14px rgba(22,32,46,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;line-height:1.55}
+  .wrap{max-width:1200px;margin:0 auto;padding:22px 20px 60px}
+  header.top{background:linear-gradient(135deg,#16324f,#2563eb);color:#fff;border-radius:18px;padding:24px 26px;box-shadow:var(--shadow)}
+  header.top h1{margin:0 0 6px;font-size:24px;letter-spacing:.5px}
+  header.top p{margin:3px 0;color:#dbe7ff;font-size:14px}
+  .badge{display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:2px 12px;font-size:12px;margin-right:8px}
+  nav.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 20px}
+  nav.tabs button{border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:12px;padding:10px 16px;font-size:14px;cursor:pointer;font-weight:600}
+  nav.tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+  section.panel{display:none;animation:fade .18s ease}
+  section.panel.on{display:block}
+  @keyframes fade{from{opacity:.4}to{opacity:1}}
+  h2{font-size:18px;margin:24px 0 12px}
+  h3{font-size:14px;margin:0 0 8px;color:var(--ink)}
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+  .card .sub{color:var(--sub);font-size:13px}
+  .tag{display:inline-block;border-radius:8px;padding:2px 10px;font-size:12px;font-weight:600}
+  .t-blue{background:var(--blue-bg);color:var(--blue)}
+  .t-green{background:var(--green-bg);color:var(--green)}
+  .t-amber{background:var(--amber-bg);color:var(--amber)}
+  .t-red{background:var(--red-bg);color:var(--red)}
+  .t-purple{background:var(--purple-bg);color:var(--purple)}
+  .t-teal{background:var(--teal-bg);color:var(--teal)}
+  ul.tight{margin:6px 0 0;padding-left:18px}
+  ul.tight li{margin:5px 0;font-size:13.5px}
+  /* seven-step chain */
+  .chain{display:flex;flex-wrap:wrap;gap:0;align-items:stretch;margin:10px 0}
+  .step{flex:1 1 150px;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px}
+  .step .num{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px;margin-bottom:8px}
+  .step h3{font-size:13.5px}
+  .step p{margin:5px 0 0;font-size:12.5px;color:var(--sub)}
+  .step .who{font-size:11.5px;color:var(--blue);font-weight:600}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--blue);font-size:20px;padding:0 4px;flex:0 0 22px}
+  @media(max-width:900px){.arrow{transform:rotate(90deg);flex:0 0 22px}}
+  .layer{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
+  .layer .lt{font-weight:700;font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .mods{display:flex;flex-wrap:wrap;gap:10px}
+  .mod{flex:1 1 180px;border:1px dashed var(--line);border-radius:12px;padding:11px;background:#fbfcfe}
+  .mod h3{font-size:13px}
+  .mod p{margin:3px 0 0;font-size:12.5px;color:var(--sub)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+  .note{border-left:3px solid var(--amber);background:var(--amber-bg);border-radius:0 12px 12px 0;padding:12px 14px;font-size:13px;color:#6b4a17;margin:12px 0}
+  .note.blue{border-color:var(--blue);background:var(--blue-bg);color:#23417a}
+  .note.red{border-color:var(--red);background:var(--red-bg);color:#8c2b20}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+  th{color:var(--sub);font-weight:600;font-size:12.5px}
+  .st{font-weight:700;font-size:12px;white-space:nowrap}
+  .st-done{color:var(--green)} .st-wip{color:var(--amber)} .st-todo{color:var(--sub)}
+  .depchain{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0}
+  .depchain .node{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#fff;font-size:12.5px;font-weight:600}
+  .depchain .arr{color:var(--blue);font-size:18px}
+  .kpi{display:flex;gap:12px;flex-wrap:wrap}
+  .kpi .box{flex:1 1 150px;background:#fbfcfe;border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+  .kpi .big{font-size:24px;font-weight:800;color:var(--blue)}
+  .kpi .lab{font-size:12.5px;color:var(--sub)}
+  .footer{margin-top:26px;color:var(--sub);font-size:12px;text-align:center}
+  code{background:#eef2f8;border-radius:4px;padding:1px 5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>幕景 Scendance · 项目整体逻辑图</h1>
+  <p><span class="badge">口径：最新 main · 2026-11-19</span><span class="badge">范围：产品全貌 + 系统组成 + 室内线退役演进</span></p>
+  <p>把真实户外场地变成能搭建的 3D 空间，再把方案摆进去。生成模型给的是「看起来对」，幕景补的是<b>量得准、摆得下、交得出</b>——真实尺寸、真实地面、执行团队能直接照着搭。</p>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-p="p1" class="on">① 方案怎么长出来</button>
+  <button data-p="p2">② 规划编排的数据结构</button>
+  <button data-p="p3">③ 物料与人物从哪来</button>
+  <button data-p="p4">④ Agent：意图 · 动作 · 工具</button>
+  <button data-p="p5">⑤ 系统组成与交付</button>
+  <button data-p="p6">⑥ 室内线正在逐步退出</button>
+</nav>
+
+<!-- ============ 面板 1 ============ -->
+<section class="panel on" id="p1">
+  <div class="card">
+    <h3>业务主线：七环节一条方案从想法到可交付</h3>
+    <p class="sub">前四步把「真实场地」搞到手，第五步在画布上编排，第六步补定制物料，第七步交付出去。每一步都标了谁在做、产出什么、落到哪个系统。</p>
+  </div>
+
+  <div class="chain" style="margin-top:16px">
+    <div class="step"><div class="num">1</div><span class="who">Agent / 人</span><h3>选场地</h3><p>按人数、风格、能否 3D 预览给候选场地。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">2</div><span class="who">Agent</span><h3>地图圈选锚定</h3><p>锚点 + 边界，成为后续所有尺寸的坐标系。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">3</div><span class="who">手机采集器（独立仓）</span><h3>现场采集</h3><p>数量、层数、重叠、尺度基准达标的素材与回执。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">4</div><span class="who">Aholo Reality · 重建 worker</span><h3>场景重建</h3><p>3DGS 场景 .spz，真实地面与天光的底。</p></div>
+  </div>
+  <div class="chain" style="margin-top:10px">
+    <div class="step"><div class="num">5</div><span class="who">幕景画布</span><h3>空间布置</h3><p>七分区、三流线的 2D/3D 同源方案。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">6</div><span class="who">Lux3D / Aholo</span><h3>定制物料</h3><p>GLB 归一化进物料库，原位替换体块。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">7</div><span class="who">幕景导出</span><h3>交付</h3><p>机位图册、物料清单 CSV、DXF 平面、只读分享链接。</p></div>
+  </div>
+
+  <div class="note blue">
+    Agent 每一步都是 <b>提案 → 预览 → 人确认 → 才写画布</b>；确认、驳回、作废都进复核台账。方案不是 Agent 直接改出来的，人在每一步都有否决权。
+  </div>
+
+  <h2>两个拆出去的独立仓</h2>
+  <div class="grid g2">
+    <div class="card">
+      <span class="tag t-purple">scendance-capture（私有）</span>
+      <ul class="tight">
+        <li>现场采集器：手机端导引拍摄，产出采集回执 JSON</li>
+        <li>采集阈值真源仍留在本仓 <code>frontend/lib/capture-guide/</code>，双端共用</li>
+        <li>本仓自 2026-11-05 起不再保留 <code>miniprogram/</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag t-purple">scendance-scene-library</span>
+      <ul class="tight">
+        <li>10 套场景模板库，2026-11-19 独立成仓</li>
+        <li>预设场地与模板条目从主仓抽出单独维护</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note red">
+    硬边界：照片 / 视频不是点一下就出可编辑几何——采集不达标就重建不出来；重建出的 3DGS <b>只提供观感，不提供精确几何</b>，量尺与碰撞由矢量壳和 GLB 承担。
+  </div>
+</section>
+
+<!-- ============ 面板 2 ============ -->
+<section class="panel" id="p2">
+  <div class="card">
+    <h3>唯一正源：地图方案契约 SitePlanData</h3>
+    <p class="sub">户外方案的所有物料、墙体、出入口、分区、动线、人员、测量、标注、会话、历史、导出都消费这一份 plan。米制 ENU 坐标（x 东 / y 北），1 世界单位 = 1 米，2D 平面与 3D 壳体同源。</p>
+  </div>
+
+  <div class="layer" style="margin-top:14px">
+    <div class="lt"><span class="dot" style="background:var(--blue)"></span>场地几何</div>
+    <div class="mods">
+      <div class="mod"><h3>boundary 场地边界</h3><p>物料只落边界内；0 点 = 不设范围，或 3–64 点闭合环</p></div>
+      <div class="mod"><h3>designScope 设计范围</h3><p>流线允许落在边界外、设计范围内；物料仍只落边界内</p></div>
+      <div class="mod"><h3>anchor 地理锚点</h3><p>固定 GCJ-02 坐标；与 WGS-84 转换后再贴 DEM / 瓦片</p></div>
+    </div>
+  </div>
+
+  <div class="layer">
+    <div class="lt"><span class="dot" style="background:var(--green)"></span>编排实体</div>
+    <div class="mods">
+      <div class="mod"><h3>zones 分区 ≤200</h3><p>迎宾 / 仪式 / 宴席等用途分区，四点闭合环</p></div>
+      <div class="mod"><h3>facilities 设施 ≤2000</h3><p>位置 ENU、朝向角度、长宽、归属分区、模板 / 模型覆盖</p></div>
+      <div class="mod"><h3>routes 路线 ≤200</h3><p>来宾 / 工作人员动线，端点挂接出入口</p></div>
+      <div class="mod"><h3>nodes 出入口 ≤100</h3><p>入口 / 出口 / 两用，路线端点留口</p></div>
+      <div class="mod"><h3>workers 人员 ≤500</h3><p>角色与站位，可归属分区</p></div>
+      <div class="mod"><h3>walls 墙体（草案）</h3><p>独立折线集合，评审通过后落契约；墙两侧可放物体</p></div>
+      <div class="mod"><h3>其余图层</h3><p>车辆 vehicles、测量 measurements、标注 annotations、图层 levels</p></div>
+    </div>
+  </div>
+
+  <h2>画布编辑能力</h2>
+  <div class="grid g3">
+    <div class="card">
+      <h3>对象操作</h3>
+      <ul class="tight">
+        <li>拖动、旋转、缩放、复制、框选、对齐、锁定</li>
+        <li>选中态走地图选中；落点自动网格吸附</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>撤销 / 重做</h3>
+      <ul class="tight">
+        <li>按动作成组，plan 快照上限 30 步</li>
+        <li>回放只作用于当前 plan，不碰旧布局</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>双视图同源</h3>
+      <ul class="tight">
+        <li>2D 平面 ↔ 3D 壳体直切，状态不丢</li>
+        <li>越界判定、分区归属、模板白名单在契约层校验</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 面板 3 ============ -->
+<section class="panel" id="p3">
+  <h2>物料三路来源</h2>
+  <div class="grid g3">
+    <div class="card">
+      <span class="tag t-teal">本地 CC0 物料库</span>
+      <ul class="tight">
+        <li><code>assets/library/</code> 30 条分类</li>
+        <li>舞台 / 展陈 / 座椅 / 桌台 / 运动 / 灯光 / 植物 / 物流 / 结构 / 装饰 / 数字</li>
+        <li>可复用木椅、桌、签到台、展架、指示牌、盆栽、帐篷、遮阳伞、地毯</li>
+        <li>无婚礼花艺品类，花艺靠生成件补</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag t-blue">在线库 + 公共目录</span>
+      <ul class="tight">
+        <li><code>published_assets</code>：物主一键公开 / 撤下，仅 GLB</li>
+        <li>任何注册用户可取用；带发布时间与目录分类</li>
+        <li>预览图离屏渲染 512×512，签名地址 1 小时有效</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag t-purple">AI 生成</span>
+      <ul class="tight">
+        <li>三模式：<b>text</b> 文生 / <b>image</b> 图生（必带参考图）/ <b>texture</b> 纹理（必带源模型）</li>
+        <li>worker 队列推进；每账号 3 个并发槽位</li>
+        <li>图生 20 积分 / 件，参考图 12 积分 / 张，失败不扣分</li>
+        <li>单件端到端 5.8–7.1 分钟</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>生成件从参考图到公共库（已跑通闭环）</h2>
+  <div class="chain">
+    <div class="step"><div class="num">1</div><h3>登录取租约</h3><p>lease TTL ≈ 90 秒，过期回只读</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">2</div><h3>选模式</h3><p>text / image / texture，契约层拦截不合规入参</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">3</div><h3>参考图四道闸</h3><p>png/jpeg、单边 ≤4096px、≤5MB、单主体干净背景</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">4</div><h3>提交占槽</h3><p>第四单回 GENERATION_BUSY；参考图须归本人</p></div>
+  </div>
+  <div class="chain" style="margin-top:10px">
+    <div class="step"><div class="num">5</div><h3>worker 领单</h3><p>pg_cron 每分钟触发，每分钟领 1 单转供应商</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">6</div><h3>供应商生成</h3><p>活跃态每 30 秒轮询；无百分比进度条</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">7</div><h3>归档入库预检</h3><p>GLB 落桶；校验落地偏移、许可、体积；渲染预览图</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">8</div><h3>公开复用</h3><p>进公共目录，任何注册用户可取用</p></div>
+  </div>
+
+  <h2>人物 / 人群链路</h2>
+  <div class="card">
+    <p class="sub">参考形象 → 四视图 → 静态人形 → 绑骨 → 动作重定向。动作预设：Idle_Loop / Walk_Loop / Idle_Talking_Loop / Sitting_Idle_Loop；NPC 动作类型 <code>idle / talk / walk / sit / wave / emote</code>。列队、分区漫游、落座行为已有入口；<b>绑骨角色接人群组配置尚未做</b>。</p>
+  </div>
+
+  <div class="note">
+    产物已知硬伤：① 生成件无米制真值，只有包围盒 + 启发式归一化；② 朝向不可控，只能整体绕 Y 转；③ 单网格不可分件；④ 户外生成件当前 sessionOnly，刷新 / 换设备模型绑定悬空；⑤ 宾客画像 persona 数据模型未建。
+  </div>
+</section>
+
+<!-- ============ 面板 4：Agent ============ -->
+<section class="panel" id="p4">
+
+  <div class="card">
+    <h3>Agent 分两层：模型只懂意图，工作台才动手</h3>
+    <div class="grid g2" style="margin-top:8px">
+      <div class="mod" style="border-color:var(--purple)">
+        <h3>① 意图理解层（对话模型）</h3>
+        <p>读用户这句话，只返回结构化 JSON：<code>action</code> + <code>facts</code> + <code>references</code> + <code>operation</code> + <code>choice</code>。<b>不执行任何写操作</b>，不直接改画布。</p>
+      </div>
+      <div class="mod" style="border-color:var(--blue)">
+        <h3>② 工作台执行层（前端 bridge）</h3>
+        <p>把 JSON 翻译成对 plan 的读 / 算 / 预览动作；候选<b>只算不写</b>，人点确认后才 <code>applyPlan</code> 落进画布。</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>一轮对话可能走的世界线</h2>
+  <div class="chain">
+    <div class="step"><div class="num">1</div><h3>用户发言</h3><p>进 composer；先过本地确定性匹配器，再决定要不要调模型。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">2</div><h3>本地命令直出</h3><p>排流线 / 入口、分区 / 自动分区、活动句「N 人 + 类型」三类，零模型请求、零云端写入。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">3</div><h3>送对话模型</h3><p>其余走 <code>/assistant/chat</code> 或 <code>/stream</code>；简报抽取走 <code>/brief/extract</code>。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">4</div><h3>facts 校验</h3><p>每条事实 evidence 须逐字来自本句；数量对得上；不过则报错，不改规划。</p></div>
+  </div>
+  <div class="chain" style="margin-top:10px">
+    <div class="step"><div class="num">5</div><h3>生成候选快照</h3><p>按 action 取桥接工具算一版 plan；绿框新摆、红框将撤，只在预览层。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">6</div><h3>确认卡三分支</h3><p>确认应用 / 撤回预览 / 换排法或重画范围；被新提案顶掉也留记录。</p></div>
+    <div class="arrow">→</div>
+    <div class="step"><div class="num">7</div><h3>落画布 + 台账</h3><p>版本哈希比对通过后写 plan、进撤销历史、留卡片记录（上限 30 条，按项目存本地）。</p></div>
+  </div>
+
+  <div class="note">
+    <b>拦阻世界线</b>：未登录 → 登录卡；活动边界未确认 → 提示先画范围；地图证据缺失 → 先按参数排并提示；几何冲突 → blocked 红卡；生成槽位忙 → <code>GENERATION_BUSY</code>；指代多义或动作会清除已有成果 → <code>ask</code> 列候选解读让人挑。
+  </div>
+
+  <h2>27 个动作（action）分组</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:130px">分组</th><th>action</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag t-blue">选址与场地</span></td><td><code>search</code> · <code>virtual-venue</code> · <code>scope</code> · <code>verify-access</code></td><td>地点候选；虚拟纸面起稿；活动范围核对；出入口可达性核对</td></tr>
+        <tr><td><span class="tag t-green">规划编排</span></td><td><code>zones</code> · <code>main-routes</code> · <code>objects</code> · <code>sub-routes</code> · <code>people</code> · <code>revise</code> · <code>adjust</code> · <code>connect</code></td><td>分区 / 主通道 / 摆物料 / 支线 / 岗位人数；按对象改、移动避让、入口接旁路</td></tr>
+        <tr><td><span class="tag t-purple">物料与模型</span></td><td><code>models</code> · <code>choose-model</code> · <code>library-search</code> · <code>generate</code> · <code>generate-image</code> · <code>upload</code> · <code>refine-3d</code></td><td>候选模型 / 选定 / 查库 / 生成 GLB / 生成参考图 / 上传 GLB / 设施 3D 精修</td></tr>
+        <tr><td><span class="tag t-teal">画布手绘</span></td><td><code>draw-zone</code> · <code>draw-route</code> · <code>draw-entrance</code></td><td>未知区域 / 通道 / 门启动同一地图的用户手绘；不编几何坐标</td></tr>
+        <tr><td><span class="tag t-amber">会话与模拟</span></td><td><code>confirm</code> · <code>cancel</code> · <code>ask</code> · <code>simulate</code> · <code>stop-simulation</code></td><td>确认提案 / 取消 / 澄清候选 / 漫游模拟 / 停止模拟</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>工作台可调用的工具（bridge 方法，按职能分 7 组）</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3>读上下文</h3>
+      <ul class="tight">
+        <li><code>getPlan</code> 读当前 plan 快照；<code>projectId</code> / <code>selectedIds</code></li>
+        <li><code>mapContext</code> 地图文本依据、水体岸线、道路折线、证据分级</li>
+        <li><code>roadNetwork</code> 真实路网；<code>readLibrary</code> 查物料库；<code>models</code> 设施候选模型</li>
+        <li><code>getLevels</code> 图层；<code>validateCurrentReferences</code> / <code>validateMapPlan</code> 校验</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>选址与边界</h3>
+      <ul class="tight">
+        <li><code>applyVenue</code> 应用场地；<code>previewBoundary</code> 预览边界</li>
+        <li><code>visibleActivityRange</code> 可见未确认选区</li>
+        <li><code>previewVenuePoint</code> 地点预览；<code>beginVenueBoundary</code> / <code>cancelVenueBoundary</code> / <code>clearVenuePreview</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>分区 / 物料 / 动线 / 人员</h3>
+      <ul class="tight">
+        <li><code>applyRoutes</code> 动线 + 出入口；<code>applyZoneProposal</code> 分区 + 物料提案</li>
+        <li><code>applyWorkers</code> 人员点位；<code>addFacility</code> / <code>removeFacility</code> / <code>updateFacility</code></li>
+        <li><code>inspectFacility</code> 巡检；<code>proposeZones</code> / <code>proposeSpatialEdit</code> 提案生成</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>测量 / 标注 / 图层 / 视图</h3>
+      <ul class="tight">
+        <li><code>applyMeasurements</code> / <code>applyAnnotations</code></li>
+        <li><code>setActiveLevel</code> 切层；<code>setView</code> 2D / 3D；<code>beginDrawing</code> 启动手绘</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>模型与生成入口</h3>
+      <ul class="tight">
+        <li><code>selectModel</code> 选定候选模型；<code>openGenerate</code> 原位打开文生 / 图生</li>
+        <li><code>openUpload</code> 打开上传 GLB</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>写入与提交</h3>
+      <ul class="tight">
+        <li><code>applyPlan(next, expected)</code> 带版本哈希比对后写 plan</li>
+        <li><code>exportPlanDraft</code> 导出草稿；<code>highlightReferences</code> 高亮引用对象</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>红线与约束（写进系统协议）</h2>
+  <div class="grid g2">
+    <div class="card">
+      <ul class="tight">
+        <li>事实 <code>evidence</code> 逐字来自本句；未说不填，数量不猜；<code>count=0</code> 表示整区清空</li>
+        <li>地点候选只引用本次 <code>search</code> 实际返回，不凭记忆写酒店 / 场地名</li>
+        <li>商场轮廓 ≠ 活动授权；道路交点 ≠ 真实门；不编地图像素与测量值</li>
+      </ul>
+    </div>
+    <div class="card">
+      <ul class="tight">
+        <li>指代必须绑真实 <code>ID / revision</code>；多义先 <code>ask</code></li>
+        <li>普通肯定只确认当前待确认提案，不触发收费生成任务</li>
+        <li>生成类动作受登录、能力配置、只读项目、3 槽位并发门禁</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note blue">
+    后端对话：<code>conversation-api</code> 提供 <code>/brief/extract</code>、<code>/assistant/chat</code>、<code>/assistant/chat/stream</code> 三个端点；未启用时降级 503。模型槽位 MiniMax / DeepSeek / Tokendance 网关，置顶槽位不跨槽重试。会话按项目 id 绑定，过渡期仍保留旧布局的影子订阅。
+  </div>
+
+  <h2>还能提升什么（按优先级）</h2>
+  <div class="grid g2">
+    <div class="card">
+      <span class="tag t-red">P0 · 闭环补齐</span>
+      <ul class="tight">
+        <li><b>生成结果回写对话</b>：job 终态（ready / failed）回写对话线程，就绪后出「放入方案」候选卡；失败带可读原因与是否重试。现状发起生成后对话不轮询，结果要自己去物料库取。</li>
+        <li><b>巡检自检接成动作</b>：把已有可达性 <code>walk-audit</code>、验收 <code>acceptance-selfcheck</code>、重叠 / 越界 / 人数-座位 / 通道检查封装成一个 <code>plan.check</code> 类动作；现状这些纯函数只在 HUD / 验收板消费，Agent 调不到。</li>
+        <li><b>提案确认卡链补全</b>：人员、测量、标注、图层、设施增删改的对话内提案 + 预览 + 确认 / 驳回卡，对齐分区 / 动线已有范式；墙体工具随 M2 落地后接入。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag t-blue">P1 · 理解与规划质量</span>
+      <ul class="tight">
+        <li><b>尺寸标定入口</b>：给生成件 / 物料补人工米数（宽深高），排布、间距、座位测算才不靠包围盒猜；否则「摆得下」的建议不可信。</li>
+        <li><b>宾客 persona 对象</b>：把身份（家长 / 嘉宾 / 工作人员…）、人数、动线偏好建成 plan 可承载的数据，才能分区排人、安排落座与动线，而不是 role + count 粗排。</li>
+        <li><b>场地证据分级喂稳</b>：partial / unavailable 时不先硬排；hard-block / soft-avoid / info 分级更稳地进上下文，提案标注「依据不足」。</li>
+        <li><b>多轮改口回灌</b>：把已确认 brief 结构化回灌模型，减少「再加 2 个」被当总量、旧物件名残留这类差错。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag t-amber">P2 · 候选与费控</span>
+      <ul class="tight">
+        <li><b>候选排序带依据</b>：选址、物料、模型候选按人数 / 面积 / 风格 / 预算匹配度排序并说理由；风格包与排布变体统一成「多方案对比」卡。</li>
+        <li><b>收费动作前置提示</b>：生成 / 参考图类动作在提案前写明扣几次、失败是否返还；确认卡讲清，避免普通肯定误触发付费。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag t-purple">P3 · 工程与可靠性</span>
+      <ul class="tight">
+        <li><b>会话 / 台账上云</b>：卡片记录与复核台账目前本地 localStorage（30 条），跨设备不同步；随 M3 绑 project id 后上云，延续已确认决策。</li>
+        <li><b>模型槽位降级</b>：置顶槽位失败不跨槽重试，可为理解类请求补有限降级路径与可读提示。</li>
+        <li><b>台账回溯</b>：Agent 可读确认 / 驳回历史，自我规避已否决方案，并能解释「这版改了什么、依据哪句原话」。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    不在 Agent 层单独解的：生成件朝向可控、单网格分件、DEM 贴地联动——这些卡在模型能力与地形链路，要从产物 / 地形侧补。
+  </div>
+</section>
+
+<!-- ============ 面板 5 ============ -->
+<section class="panel" id="p5">
+
+  <div class="layer">
+    <div class="lt"><span class="dot" style="background:var(--blue)"></span>前端 · Next.js 15 + React 18 + TypeScript + Tailwind + Zustand + three.js</div>
+    <div class="mods">
+      <div class="mod"><h3>页面路由</h3><p>工作台、/view 只读、/review 评审、/projects、/editor、/guide、/cases、/pricing、/auth</p></div>
+      <div class="mod"><h3>画布层</h3><p>2D 规划画布、3D 户外壳体、地图瓦片金字塔、splat 预览、人物模型与动画</p></div>
+      <div class="mod"><h3>面板族</h3><p>账号团队、Agent 对话、选址场地、物料生成、规划编排、评审、人物、交付分享</p></div>
+      <div class="mod"><h3>本地库</h3><p>契约客户端、分享快照编解码、导出几何、采集导引、会话与历史 store</p></div>
+    </div>
+  </div>
+
+  <div class="layer">
+    <div class="lt"><span class="dot" style="background:var(--green)"></span>后端 · Supabase Edge Functions（Deno）</div>
+    <div class="mods">
+      <div class="mod"><h3>scene-api</h3><p>主接口：项目 / 租约 / 资产 / 生成 job / 公开发布 / 会话</p></div>
+      <div class="mod"><h3>generation-worker</h3><p>生成队列：领单、轮询供应商、归档产物</p></div>
+      <div class="mod"><h3>reconstruction-worker</h3><p>照片 / 视频重建队列处理</p></div>
+      <div class="mod"><h3>conversation-api</h3><p>对话后端接口</p></div>
+      <div class="mod"><h3>pay-api</h3><p>付费扣次：预扣 / 返还 / 查单 / 幂等；未配置凭据降级 mock 并标识</p></div>
+      <div class="mod"><h3>_shared 契约层</h3><p>domain、generation-contract、site-plan、providers、lane、quality、命名规则等前后端共用</p></div>
+    </div>
+  </div>
+
+  <div class="layer">
+    <div class="lt"><span class="dot" style="background:var(--purple)"></span>数据库 scene_private 与对象存储</div>
+    <div class="mods">
+      <div class="mod"><h3>assets 资产表</h3><p>GLB、参考图、平面图；元数据含预览路径、尺寸、许可、来源</p></div>
+      <div class="mod"><h3>jobs 生成任务</h3><p>状态机、供应商 taskId、尝试次数、错误码、用量</p></div>
+      <div class="mod"><h3>published_assets</h3><p>公共目录：物主、发布时间、目录分类</p></div>
+      <div class="mod"><h3>对象存储桶</h3><p><code>&lt;ownerId&gt;/&lt;assetId&gt;/</code> 下存 GLB 与 preview.png；签名地址按目录与文件名校验</p></div>
+    </div>
+  </div>
+
+  <div class="layer">
+    <div class="lt"><span class="dot" style="background:var(--teal)"></span>外部依赖</div>
+    <div class="mods">
+      <div class="mod"><h3>Aholo Reality</h3><p>照片 / 视频重建成 3DGS 场地场景</p></div>
+      <div class="mod"><h3>Lux3D / Aholo</h3><p>图生 3D、文生 3D、纹理迁移、参考图生图</p></div>
+      <div class="mod"><h3>地图瓦片</h3><p>高德 / Carto 底图金字塔，户外 3D 地面基础</p></div>
+      <div class="mod"><h3>DEM 高程</h3><p>AWS Terrain Tiles，真实地形起伏（代码未落地）</p></div>
+      <div class="mod"><h3>对话模型</h3><p>Agent 会话与提案生成的模型通道</p></div>
+      <div class="mod"><h3>支付渠道</h3><p>支付宝 AI 付 / Vibe Pay，标准 RSA2 流程</p></div>
+    </div>
+  </div>
+
+  <h2>交付物</h2>
+  <div class="card">
+    <div class="mods">
+      <div class="mod"><h3>机位图册</h3><p>4 机位 + 离线 HTML，按机位顺序飞行导览</p></div>
+      <div class="mod"><h3>物料清单 CSV</h3><p>方案内物料条目、数量、来源</p></div>
+      <div class="mod"><h3>DXF 平面</h3><p>按比例平面，供执行团队照搭</p></div>
+      <div class="mod"><h3>SVG / PNG / PDF</h3><p>成图、按比例打印、导出可见性校验</p></div>
+      <div class="mod"><h3>GeoJSON</h3><p>方案平面几何导出</p></div>
+      <div class="mod"><h3>分享 / 评审</h3><p>/view 只读分享快照；/review 评审链接与机位 Pin</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 面板 6 ============ -->
+<section class="panel" id="p6">
+  <div class="card">
+    <h3>终局目标：不再区分室内 / 室外，只剩一套地图规划</h3>
+    <ul class="tight">
+      <li>生产链路不再挂载室内 Viewport / three 室内场景，DOM 里只剩唯一地图画布（2D ↔ 3D 直切）</li>
+      <li>唯一正源是 <code>SitePlanData</code>；物料、墙体、出入口、分区、动线、人员、测量、标注、会话、历史、导出都消费这份 plan</li>
+      <li>会话绑定项目 id，不再绑室内 <code>layout.id</code>；undo/redo 基于 plan 快照；导出从 plan 出图</li>
+      <li>产品概念上无「室内 / 室外」二分；场地类型只作为 Agent 提案的业务输入字段保留</li>
+    </ul>
+  </div>
+
+  <div class="note blue" style="margin-top:14px">
+    迁移方法：<b>绞杀者模式</b>——新地图旁路逐块接管旧系统；<b>防腐层</b>隔离旧概念漏进新侧；<b>垂直切片</b>按功能域走「建新 → 验一致 → 切流 → 拆旧」；过渡期 <b>plan ↔ layout 双写影子镜像</b>；新侧稳定后旧模型退为只读投影再删除。<b>拆旧必须等对应建新在地图侧接住，不允许先拆旧再补能力。</b>
+  </div>
+
+  <h2>M 线 · 迁建（地图侧把能力接住）</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:120px">切片</th><th>内容</th><th style="width:90px">状态</th></tr></thead>
+      <tbody>
+        <tr><td><b>M1</b> 五钮地图化</td><td>楼层 / 漫游 / 网格 / 测量 / 标注回调从室内 store 改派到地图画布；户外态未接住的钮置灰带提示</td><td><span class="st st-done">✅ 完成</span></td></tr>
+        <tr><td><b>M2</b> 物料 / 墙体落地</td><td>分区、人员、动线、设施映射纯函数层完成；未接壳体。walls 独立集合契约草案待评审；oneplan 尺寸校准、modelOverride 对应关系待补</td><td><span class="st st-wip">🟡 进行中</span></td></tr>
+        <tr><td><b>M3</b> 会话 / 历史 / 导出解耦</td><td>3a 会话地基与接线完成（绑 project id）；3b 历史快照、3c 导出 / 写守卫、3d 回写镜像退役尚未做（关键路径）</td><td><span class="st st-wip">🟡 进行中</span></td></tr>
+        <tr><td><b>M4</b> 出入口工具收尾</td><td>节点选类型、归属分区；契约与纯函数校验就位</td><td><span class="st st-done">✅ 完成</span></td></tr>
+        <tr><td><b>M5</b> 智能体工具桥接扩充</td><td>画布写能力补成 canvas handle + routeBridge 方法；提案生成 / 确认卡链属后续研究层</td><td><span class="st st-done">✅ 完成</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>R 线 · 退役（室内壳体卸载，依赖对应 M 完成）</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:120px">切片</th><th>退役内容</th><th style="width:90px">状态</th></tr></thead>
+      <tbody>
+        <tr><td><b>R1</b> 立壳入口并入地图草稿</td><td>空白空间 / 模板面板入口退役，统一走地图空白选址草稿（依赖 M3a）</td><td><span class="st st-todo">⬜ 未开始</span></td></tr>
+        <tr><td><b>R2</b> 卸保活 Viewport / three</td><td>删室内保活容器与 renderer / scene / camera 驻留；句柄全改派地图 3D 后断室内 ref（依赖 M1 + M3b/c）</td><td><span class="st st-todo">⬜ 未开始</span></td></tr>
+        <tr><td><b>R3</b> 删 layoutStore 与室内墙模型</td><td>室内 RoomLayout / floors / items / 墙体渲染 / 开门 / 碰撞 / 吸附、室内 NPC 与漫游段（依赖 M2 + R2）</td><td><span class="st st-todo">⬜ 未开始</span></td></tr>
+        <tr><td><b>R4</b> 删二分概念与回写链路</td><td>删室内恒真分支、layout.id 回退、false 侧镜像回写、投影适配器（依赖 R3）</td><td><span class="st st-todo">⬜ 未开始</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>依赖关系与过渡期现状</h2>
+  <div class="card">
+    <div class="depchain">
+      <span class="node">M3 会话/历史/导出解耦</span><span class="arr">→</span>
+      <span class="node">R2 卸保活视口</span><span class="arr">→</span>
+      <span class="node">R3 删室内数据模型</span><span class="arr">→</span>
+      <span class="node">R4 删二分与回写</span>
+    </div>
+    <p class="sub">关键路径 <code>M3 → R2 → R3 → R4</code>；M1、M2、M4 可并行小步推进。过渡期旧 <code>room-organizer</code> 壳体仍 hidden 保活（残留室内 WebGL 上下文），plan ↔ layout 双写镜像；layout 是只读过渡影子，终局随壳体一并移除。</p>
+  </div>
+
+  <div class="note">
+    <b>保留不动（D 层）</b>：Agent 提案里的 <code>indoorOutdoor</code> 枚举、<code>venueIO</code> 场地事实等字段，是业务输入而不是产品壳体概念，退役时保留，不删。
+  </div>
+
+  <h2>本轮参赛备忘（11-19 收官口径）</h2>
+  <div class="kpi">
+    <div class="box"><div class="big">36</div><div class="lab">ready 就绪 GLB</div></div>
+    <div class="box"><div class="big" style="color:var(--red)">1</div><div class="lab">failed 失败</div></div>
+    <div class="box"><div class="big">36/36</div><div class="lab">预览图覆盖</div></div>
+    <div class="box"><div class="big">36</div><div class="lab">已进公共目录</div></div>
+  </div>
+  <div class="note blue" style="margin-top:14px">
+    户外图生链路已收官。Agent 交互链路、文生 3D 批量、人群绑骨接组本轮暂缓；场地方案 / 分区布置 / 流程设计由丽丽侧承接。
+  </div>
+</section>
+
+<div class="footer">本图依据本地仓库 main 代码与 2026-11-19 规划台账绘制 · 不含线上未部署的在途改动</div>
+</div>
+
+<script>
+  const tabs=document.getElementById('tabs');
+  tabs.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    document.getElementById(b.dataset.p).classList.add('on');
+  });
+</script>
+</body>
+</html>

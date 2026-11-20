@@ -114,6 +114,61 @@ describe('分享页签', () => {
     expect(share.onIssueReviewLink).toHaveBeenCalledOnce();
   });
 
+  it('revokes the issued review short link and clears the link row', async () => {
+    localStorage.clear();
+    const revoke = vi.fn(async () => undefined);
+    const share = actions({ onRevokeReviewLink: revoke });
+    vi.mocked(share.onIssueReviewLink).mockResolvedValue({
+      url: 'https://studio.example/r/abcdef1234567890abcdef12',
+      isCurrent: () => true,
+    });
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    await screen.findByTestId('review-link-row');
+
+    fireEvent.click(screen.getByRole('button', { name: '作废这条评审链接' }));
+    expect(revoke).toHaveBeenCalledWith('abcdef1234567890abcdef12');
+    await screen.findByRole('status');
+    expect(screen.getByRole('status').textContent).toContain('已作废');
+    expect(screen.queryByTestId('review-link-row')).toBeNull();
+  });
+
+  it('keeps the link row when revocation fails', async () => {
+    localStorage.clear();
+    const revoke = vi.fn(async () => { throw new Error('这条评审链接没有被作废，请稍后再试。'); });
+    const share = actions({ onRevokeReviewLink: revoke });
+    vi.mocked(share.onIssueReviewLink).mockResolvedValue({
+      url: 'https://studio.example/r/abcdef1234567890abcdef12',
+      isCurrent: () => true,
+    });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    await screen.findByTestId('review-link-row');
+
+    fireEvent.click(screen.getByRole('button', { name: '作废这条评审链接' }));
+    await screen.findByRole('status');
+    expect(screen.getByRole('status').textContent).toContain('没有被作废');
+    expect(screen.getByTestId('review-link-row')).toBeTruthy();
+  });
+
+  it('hides the revoke entry when the workbench does not wire review revocation', async () => {
+    localStorage.clear();
+    const share = actions();
+    vi.mocked(share.onIssueReviewLink).mockResolvedValue({
+      url: 'https://studio.example/r/abcdef1234567890abcdef12',
+      isCurrent: () => true,
+    });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    await screen.findByTestId('review-link-row');
+    expect(screen.queryByRole('button', { name: '作废这条评审链接' })).toBeNull();
+  });
+
   it('sends the ink permission switches with the review link', async () => {
     const share = actions();
     render(<ShareMenu actions={share} layout={sampleLayout()} />);

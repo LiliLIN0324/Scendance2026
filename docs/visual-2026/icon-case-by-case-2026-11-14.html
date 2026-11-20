@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>逐案例图标设计对照 · 2026-11-14</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='5' fill='%234A7C59'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF; --hair-soft:#EFEFF1; --hair:#E4E4E7;
+  --faint:#A6AAB2; --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#35624A; --green-pale:#EEF3EF;
+  --warn:#96651F; --warn-pale:#FBF1E7; --err:#B4443C;
+  --r-sm:10px; --r-md:14px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6}
+.wrap{max-width:1240px;margin:0 auto;padding:28px 24px 64px}
+h1{font-size:20px;font-weight:600;margin:0 0 6px}
+.meta{color:var(--muted);font-size:12px}
+.note{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:12px 14px;color:var(--ink-soft);font-size:13px;margin:16px 0}
+.note b{color:var(--ink)}
+.group-title{margin:36px 0 14px}
+.group-title h2{font-size:15px;font-weight:600;margin:0}
+.group-title p{color:var(--muted);font-size:12px;margin:2px 0 0}
+
+.case{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);margin-bottom:16px;overflow:hidden;display:grid;grid-template-columns:320px 1fr}
+.case .shot{background:var(--plane-deep);padding:14px;border-right:1px solid var(--hair-soft);display:flex;flex-direction:column;gap:8px}
+.case .shot img{width:100%;height:150px;object-fit:cover;border-radius:8px;border:1px solid var(--hair-soft)}
+.case .shot .idx{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.06em}
+.case .shot h3{font-size:14px;font-weight:600;margin:0}
+.case .body{padding:16px 18px;display:grid;gap:12px}
+.block .lab{font-size:11px;font-weight:600;letter-spacing:.04em;margin:0 0 4px;display:flex;align-items:center;gap:6px}
+.block.how .lab{color:var(--ink-soft)}
+.block.map .lab{color:#6359a8}
+.block.dec{background:var(--green-pale);border-radius:var(--r-sm);padding:10px 12px}
+.block.dec .lab{color:var(--green-deep)}
+.block p{margin:0;font-size:12.5px;color:var(--ink-soft)}
+.block ul{margin:0;padding-left:16px;font-size:12.5px;color:var(--ink-soft);display:grid;gap:4px}
+.block ul li b{color:var(--ink)}
+.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--ink-soft)}
+.pill{display:inline-block;font-size:10px;padding:1px 8px;border-radius:999px;background:var(--plane-deep);color:var(--ink-soft)}
+.pill.g{background:var(--green-pale);color:var(--green-deep)}
+.pill.w{background:var(--warn-pale);color:var(--warn)}
+.no{color:var(--muted)}
+
+table{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden;font-size:12px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--hair-soft);text-align:left;vertical-align:top}
+th{background:var(--plane);font-weight:600;color:var(--ink-soft);font-size:11px}
+tr:last-child td{border-bottom:0}
+td.dim{font-weight:500;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>逐案例图标设计对照</h1>
+  <p class="meta">2026-11-14 ｜ 每个案例拆成「它怎么做 → 映射到我们哪批图标 → 我们怎么定」｜ 基线 main 工作树实读，只出建议不改代码</p>
+</header>
+
+<div class="note">
+  <b>读法：</b>九个案例分三组——图标库定族形基准、产品工具条定轨内形制与选中、地图句柄定角区边界。每条「决策」都落到本产品已盘出的具体图标与归属；<span class="pill g">可直接借鉴</span> <span class="pill w">形制可取、按令牌调整</span> <span class="pill">仅作储备</span>。
+</div>
+
+<!-- ===== 组一 图标库 ===== -->
+<div class="group-title">
+  <h2>组一 · 图标库：定族形、收框与档位基准</h2>
+  <p>库不直接决定我们用哪套，但决定「同一族内该怎么对齐」：网格、收框比例、线宽、档位成套。</p>
+</div>
+
+<!-- 01 Lucide -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">01 · 图标库</span>
+    <h3>Lucide</h3>
+    <img src="assets/rail-refs/ref-icons-lucide-row.jpg" alt="Lucide 线性图标排">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li><b>24px 网格</b>，约 1.8–2px 描边，round cap / join，造型克制统一。</li>
+        <li>方形与圆角几何混用但基线对齐；黑白 <span class="code">currentColor</span>，不靠多档颜色区分状态。</li>
+        <li>同族图标收框比例一致，小尺寸下仍可辨认。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>对应我们的<b>域线性族</b>：Plotcraft 77 枚家具/结构 + lucide-react 53 枚户外画布。</li>
+        <li>现有两套线性并存、描边宽不一（Plotcraft 1.5px ｜ lucide 1.8px），收框也不齐。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 域族统一到 <b>24 视窗、1.5–1.6px 描边、round 转角</b>；图形收框 78%–90%，同档同视觉重量。</li>
+        <li><span class="pill g">借鉴</span> 域图标只走 currentColor，状态靠底色/反白表达，不在图标本体上加颜色。</li>
+        <li><span class="pill w">不照搬</span> 我们通用 UI 仍是 Material 实心，不把控件也换成 Lucide 线性。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- 02 Tabler -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">02 · 图标库</span>
+    <h3>Tabler</h3>
+    <img src="assets/rail-refs/ref-icons-tabler.jpg" alt="Tabler 线族与 fill 双族">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>同一构形同时给 <b>Line 与 Fill 两套重量</b>，成对成套；24 网格 2px。</li>
+        <li>互为反义的状态（锁/解锁、开/合、左/右）共享同一骨架，只改关键笔画。</li>
+        <li>几何偏方正，直线与圆头比例克制。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>我们的成对状态：<span class="code">lock / lock_open</span>、<span class="code">view_compact / view_in_ar</span>、<span class="code">undo / redo</span>、<span class="code">zoom_in / zoom_out</span>、<span class="code">grid_3x3 / grid_on</span>。</li>
+        <li>目前 2D/3D、缩放 +/- 分属不同来源（Material 与 IconPark 镜片），骨架不统一。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 成对/反义图标<b>同构骨架</b>：同一外框与基准，只变区分笔画，让 2D/3D、锁/解锁一眼成对。</li>
+        <li><span class="pill g">借鉴</span> 控件默认实心、选中与禁用各取一套重量/灰阶，成对交付，不临时现画。</li>
+        <li><span class="pill w">动作</span> 缩放 +/- 收编回 Material <span class="code">zoom_in/out</span>，与 undo/redo 同骨架；IconPark 镜片留作可选例外。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- 03 Phosphor -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">03 · 图标库</span>
+    <h3>Phosphor</h3>
+    <img src="assets/rail-refs/ref-icons-phosphor-sizes.jpg" alt="Phosphor 四档六字重">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>按 <b>16 / 20 / 24 / 32 四档</b>成组交付，另给六档字重；每档构形一致、笔画随档微调。</li>
+        <li>连家具、食物、角色等领域图形也纳入同一套档位体系。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>我们规范档位：行内 16 ｜ 控件 20 ｜ 面板 24 ｜ 空态 32；与 Phosphor 四档完全对齐。</li>
+        <li>现状问题：交付弹层行内档 14/15 混用；左轨 26 脱离档位；域图标多停在单档 24。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 全产品只认 <b>16 / 20 / 24 / 32</b> 四档；弹层行内统一收 16，不再出现 14/15。</li>
+        <li><span class="pill g">借鉴</span> 同一枚图标在不同档位下保持构形与收框一致，笔画随档微调，不重新设计。</li>
+        <li><span class="pill w">二期</span> 左轨 26 档评估降到 20/24；右轨 30 钮本轮不动，只换族不改版式。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ===== 组二 产品工具条 ===== -->
+<div class="group-title">
+  <h2>组二 · 产品工具条：定轨内形制、选中表达与分组</h2>
+  <p>控件在工具条上怎么排、选中怎么表达、同类工具怎么同槽，直接对照我们的右轨与 tool-select 弹层。</p>
+</div>
+
+<!-- 04 Figma 横条 -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">04 · 产品工具条</span>
+    <h3>Figma · 白底圆角横条</h3>
+    <img src="assets/rail-refs/ref-editor-figma-toolbar.jpg" alt="Figma 白底圆角横条工具">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>一条白底细圆角胶囊内，图标<b>同族同档同描边宽</b>；可展开钮带下挂 chevron。</li>
+        <li>选中态：<b>蓝底圆角块 + 白色反白图标</b>；未选中灰黑线性。选中只靠底色反白，图标不变色。</li>
+        <li>动作簇与辅助簇之间用发丝竖线分隔；低频/辅助钮落在右侧独立小簇。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>对应右轨竖列：选择 / 2D3D / 测量 / 标注 / 属性 / 图层 / 漫游 / 网格 / 地图 / 卫星 / 撤销重做 / 缩放 / 导出 / 氛围。</li>
+        <li>我们现状：通用控件里混进了自绘抓手、四向、网格井字等第三套字形；选中靠绿边 + 绿字。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 右轨一轨内 <b>只放 A 族 Material 实心</b>；零散自绘逐枚归位（<span class="code">open_with / pan_tool / grid_3x3 / photo_camera</span>）。</li>
+        <li><span class="pill g">借鉴</span> 选中表达统一：按钮底色承接 + 图标 currentColor 反白/绿字；静息态图标不变色，禁用统一一套灰阶。</li>
+        <li><span class="pill g">借鉴</span> 动作簇（选择/测量/标注/属性）与地图簇（地图/卫星/缩放）之间用发丝线或留白分组，不混成一列。</li>
+        <li><span class="pill w">不照搬</span> Figma 是线性族；我们轨内保持实心，品牌蓝换品牌绿 <span class="code">#4A7C59 / #35624A</span>。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- 05 Miro -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">05 · 产品工具条</span>
+    <h3>Miro · 左竖轨双钮独立</h3>
+    <img src="assets/rail-refs/ref-miro-two-buttons.jpg" alt="Miro 选择与抓手双钮独立">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>窄轨图标单列等距；选择箭头与抓手<b>各自独立占格</b>，不叠放同槽。</li>
+        <li>同族线性；当前项图标本身变品牌色，其余深墨。全轨不混第三套字形。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>对应我们 <span class="code">tool-select</span>：选择（near_me）与抓手（HandStopIcon）目前同槽菜单弹层切换。</li>
+        <li>这是「同槽合钮」与「双钮独立」两种取舍的直接对照。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 无论合钮还是双钮，两图标必须<b>同族同档</b>；抓手归 Material <span class="code">pan_tool</span> 后与选择 <span class="code">near_me</span> 同重量。</li>
+        <li><span class="pill w">取舍</span> 轨内空间紧张时维持同槽弹层（见案例 09）；空间允许可像 Miro 双钮独立占格，二者不混用。</li>
+        <li><span class="pill w">不照搬</span> 选中靠图标变蓝；我们选中仍以底色/绿字承接。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- 06 Affinity -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">06 · 产品工具条</span>
+    <h3>Affinity · 深轨实心一族</h3>
+    <img src="assets/rail-refs/ref-affinity-rail.jpg" alt="Affinity 深轨实心族">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>深轨内以<b>实心/填充图标</b>为主，工具重量统一；选中深色底反白。</li>
+        <li>个别工具保留局部彩色（笔尖、铅笔），属工具身份标识，不扩散到全轨。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>对照我们右轨的实心族重量：Material Rounded fill 与 Affinity 同属「实心一族」路线。</li>
+        <li>我们的品牌绿只两处（选中指示、发送键），工具身份不靠图标局部着色。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 实心一族的<b>统一重量</b>：右轨 30 钮内图标填充度、收框、圆角一致，不出现一枚实心一枚描边。</li>
+        <li><span class="pill">储备</span> Affinity 整套深色轨仅作深色模式储备；现行浅色工作台不搬深色底。</li>
+        <li><span class="pill g">守住</span> 不在工具图标上做局部彩色；品牌绿只用于选中与发送。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ===== 组三 地图句柄 ===== -->
+<div class="group-title">
+  <h2>组三 · 地图句柄：定角区边界与例外语义</h2>
+  <p>地图类控件不与编辑器工具列混排；罗盘、缩放、底图各成角区，指针色属领域语义例外。</p>
+</div>
+
+<!-- 07 Google Maps -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">07 · 地图句柄</span>
+    <h3>Google Maps 桌面 · 右竖列控件</h3>
+    <img src="assets/rail-refs/ref-map-google-desktop-controls.jpg" alt="Google Maps 桌面右竖列地图控件">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>罗盘、2D、定位、缩放 +/- 沿右缘<b>竖排成簇</b>，深色圆钮；缩放上下叠放成一组。</li>
+        <li>底图缩略图另起底部横条；罗盘指北针保留红白双色，属地图领域语义，不跟控件同色板。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>对应我们右下罗盘卡、底图横条、缩放 +/-、地图/卫星钮；现状缩放还混在右轨工具列里。</li>
+        <li>我们罗盘已是蓝灰双针自绘例外；底图字符钮散在地图簇。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 缩放、罗盘、底图归到<b>右下地图角区</b>自成白卡，不与右轨编辑器工具混排；缩放 +/- 上下叠放成一组。</li>
+        <li><span class="pill g">借鉴</span> 地图/卫星 <span class="code">map / satellite</span> 与底图钮同簇同族；句柄内小钮归 A 族。</li>
+        <li><span class="pill w">例外</span> 罗盘双针属地理指北语义，保留自绘并登记为例外，不强制翻成 Material 实心。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- 08 Mapbox -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">08 · 地图句柄</span>
+    <h3>Mapbox 导航 · 右竖列成组</h3>
+    <img src="assets/rail-refs/ref-map-mapbox-nav.jpg" alt="Mapbox 导航深色右竖列">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>消息、设置、分享、麦克风沿右竖列圆钮成组；主操作反白，其余同色线性。</li>
+        <li>转向箭头、搜索、天气、取消各成<b>独立黑卡</b>，按功能分簇，不挤在同一列。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>对应我们右上交付钮、氛围/天气组（<span class="code">sunny / rainy / light_mode / wb_sunny</span>）、导出/图库。</li>
+        <li>现状交付入口与轨内上传箭头重复；氛围图标成组但未明确簇边界。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 交付独立一枚主钮收进弹层；天气/光线自成一簇卡片，不与工具钮同列。</li>
+        <li><span class="pill g">借鉴</span> 簇内主操作（发送/交付）反白承接，其余 currentColor 墨色；禁用统一灰阶。</li>
+        <li><span class="pill">储备</span> Mapbox 深色整套仅作深色模式参照；现行浅色用白卡 + 发丝边。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- 09 Figma 同槽菜单 -->
+<article class="case">
+  <div class="shot">
+    <span class="idx">09 · 同槽弹层</span>
+    <h3>Figma · 同槽弹出菜单</h3>
+    <img src="assets/rail-refs/ref-figma-slot-menu.jpg" alt="Figma Move/Hand/Scale 同槽菜单">
+  </div>
+  <div class="body">
+    <div class="block how">
+      <p class="lab">做法</p>
+      <ul>
+        <li>同类工具一槽叠放；弹层每行 <b>图标 + 名称 + 快捷键 + 选中勾</b>，信息对齐。</li>
+        <li>选中行蓝底白字白勾；槽位前景显示当前工具，右下小 chevron 提示可展开。</li>
+        <li>弹层内图标仍属同一族，不另造一套字形。</li>
+      </ul>
+    </div>
+    <div class="block map">
+      <p class="lab">映射到我们</p>
+      <ul>
+        <li>对应我们 <span class="code">tool-select</span> 弹层：选择 / 抓手（后续可扩缩放）；行内已有 Check 勾，缺名称与快捷键列的规整对齐。</li>
+      </ul>
+    </div>
+    <div class="block dec">
+      <p class="lab">我们的决策</p>
+      <ul>
+        <li><span class="pill g">借鉴</span> 弹层行内固定四列：族图标 ｜ 名称 ｜ 快捷键（若有）｜ 选中勾；行距与留白统一。</li>
+        <li><span class="pill g">借鉴</span> 当前工具前景显示在槽位；展开指示用小 chevron，弹层内图标随 A 族实心。</li>
+        <li><span class="pill w">不照搬</span> 弹层深底仅在深色模式启用；现行浅色用白卡 + 发丝边，选中绿底绿字。</li>
+      </ul>
+    </div>
+  </div>
+</article>
+
+<!-- ===== 汇总 ===== -->
+<section>
+  <h2 style="font-size:15px;font-weight:600;margin:36px 0 4px">汇总：案例 → 落到我们的动作</h2>
+  <p class="meta" style="margin-bottom:16px">按案例顺序回溯，每条对应大盘清单里的具体图标。</p>
+  <table>
+    <thead>
+      <tr><th style="width:16%">案例</th><th style="width:30%">借鉴要点</th><th style="width:28%">对应我们的图标 / 场景</th><th>动作</th></tr>
+    </thead>
+    <tbody>
+    <tr><td class="dim">01 Lucide</td><td>24 网格、收框 78–90%、currentColor</td><td>Plotcraft 77 + lucide 53 域线性族</td><td>两套线性收编一套，描边 1.5–1.6px、round 转角</td></tr>
+    <tr><td class="dim">02 Tabler</td><td>反义状态同构骨架、双重量成套</td><td>lock/unlock、2D/3D、undo/redo、zoom +/-</td><td>成对图标同骨架；缩放收编回 Material zoom_in/out</td></tr>
+    <tr><td class="dim">03 Phosphor</td><td>16/20/24/32 四档成套交付</td><td>弹层行内、右轨控件、面板、空态</td><td>行内统一 16；消除 14/15 与脱离档位的 26</td></tr>
+    <tr><td class="dim">04 Figma 横条</td><td>一族到底、选中反白、发丝分组</td><td>右轨整列工具</td><td>轨内只放 A 族；零散自绘归位；动作簇与地图簇分开</td></tr>
+    <tr><td class="dim">05 Miro</td><td>双钮独立占格、同族不混字形</td><td>选择 near_me ｜ 抓手 pan_tool</td><td>两图标同族同重量；合钮/双钮二选一不混用</td></tr>
+    <tr><td class="dim">06 Affinity</td><td>实心一族、重量统一、局部彩色不外扩</td><td>右轨实心族重量对照</td><td>填充度/收框/圆角一致；品牌绿只两处</td></tr>
+    <tr><td class="dim">07 Google Maps</td><td>角区成簇、缩放竖排、罗盘例外</td><td>右下罗盘、底图横条、缩放、地图/卫星</td><td>地图句柄归角区白卡；罗盘双针登记例外</td></tr>
+    <tr><td class="dim">08 Mapbox</td><td>功能分簇、独立卡片、主操作反白</td><td>右上交付、氛围天气组、导出图库</td><td>交付单入口；天气自成一簇；主操作反白</td></tr>
+    <tr><td class="dim">09 Figma 弹层</td><td>行内 图标+名+快捷键+勾、前景当前</td><td>tool-select 弹层</td><td>四列对齐；弹层图标随 A 族；小 chevron 展开</td></tr>
+    </tbody>
+  </table>
+  <p class="meta" style="margin-top:16px">待拍板仍沿大盘：线性族收编以 Plotcraft 还是 lucide 为主；pan_tool / open_with 补 Material 资产还是留自绘例外；左轨 26 档是否二期下调。代码本轮未改。</p>
+</section>
+
+</div>
+</body>
+</html>

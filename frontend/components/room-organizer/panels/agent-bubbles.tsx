@@ -4,7 +4,7 @@
  * 只接渲染需要的数据与回调，不再接整个 AgentValue——
  * 会话、写保护、提案确认仍留在 LayoutAgentProvider 与面板主体。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Check, Copy, FileImage, HelpCircle, Pencil, RotateCw, SquareDashed, TriangleAlert } from '@/components/solid-icons';
 import { parseFollowUpOptions, segmentBubbleBlocks } from '../lib/bubble-text';
 import { toolChipStatus, toolStatusWord, toolTraceRows } from '../lib/tool-trace';
@@ -97,11 +97,12 @@ export function ToolCallTrace({ line, draft, rows, understanding, onStop }: {
   </section>;
 }
 
-export function Bubbles({ bubbles, sessionKey, reviewOnly = false, onPickOption, onResendMessage, onOpenMaterials }: {
+export function Bubbles({ bubbles, sessionKey, reviewOnly = false, beforeLatestQuestion, onPickOption, onResendMessage, onOpenMaterials }: {
   bubbles: readonly Bubble[];
   /** 面板算好的会话标识：物料候选卡的 key 用它，组件本身不认识 session。 */
   sessionKey: string;
   reviewOnly?: boolean;
+  beforeLatestQuestion?: ReactNode;
   onPickOption: (text: string) => void;
   onResendMessage?: (text: string) => void;
   onOpenMaterials: () => void;
@@ -166,6 +167,7 @@ export function Bubbles({ bubbles, sessionKey, reviewOnly = false, onPickOption,
       </>)}
     </div>
     : <div key={bubble.id} className={activeQuestion ? 'ap-bubble-wrap ap-outdoor-reply-wrap' : 'ap-bubble-wrap'}>
+      {activeQuestion && beforeLatestQuestion}
       <div className="ap-turn">{bubble.outdoorQuestion ? (
       <section className="ap-card ap-status-card ap-outdoor-reply-card" aria-label={activeQuestion ? '待你回复' : '追问'}>
         <header className="ap-outdoor-reply-title"><HelpCircle size={15} aria-hidden="true" />{activeQuestion ? '待你回复' : '追问'}</header>

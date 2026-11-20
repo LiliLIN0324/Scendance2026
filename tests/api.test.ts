@@ -201,6 +201,17 @@ describe('HTTP request -> validation -> PostgreSQL -> response',()=>{
   it('rejects non-member imports before external download or storage writes',async()=>{
     expect((await req('/assets/import','POST',{modelId:'chinese_armchair'},outsider)).status).toBe(403);
   });
+  it('signs a generated preview on the asset list without exposing its storage path',async()=>{
+    const id=crypto.randomUUID(),previewPath=`${owner}/${id}/preview.png`,foreign=crypto.randomUUID();
+    await f.rpc(owner,'assets.register',{id,name:'户外折叠椅',source:'aholo',format:'glb',storagePath:`${owner}/${id}/model.glb`,byteSize:10,sha256:'a'.repeat(64),metadata:{previewPath},license:{}});
+    await f.rpc(owner,'assets.register',{id:foreign,name:'伪造预览',source:'aholo',format:'glb',storagePath:`${owner}/${foreign}/model.glb`,byteSize:10,sha256:'b'.repeat(64),metadata:{previewPath:`${outsider}/${foreign}/preview.png`},license:{}});
+    const list=await (await req('/assets')).json() as {id:string;metadata:Record<string,unknown>}[];
+    const row=list.find(item=>item.id===id);
+    expect(row?.metadata.previewUrl).toBe(`https://storage.example/signed/${previewPath}`);
+    expect(row?.metadata.previewPath).toBeUndefined();
+    // 元数据指向别人目录时不签名，也不回传内部路径。
+    expect(list.find(item=>item.id===foreign)?.metadata.previewUrl).toBeUndefined();
+  });
   it('client rejects stale local state before sending an apply request',async()=>{
     const s=scene(),projectId=crypto.randomUUID();
     const proposal={id:crypto.randomUUID(),project_id:projectId,session_id:session,generation:1,base_revision:0,local_revision:2,base_hash:await sceneHash(s),candidate:s,expires_at:new Date(Date.now()+60_000).toISOString(),applied_at:null};

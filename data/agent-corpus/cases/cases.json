@@ -42,6 +42,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -84,6 +85,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -126,6 +128,7 @@
       },
       "useCase": "路跑与封控：按路线与路口点试验，跨度大，适合视图缩放验证",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "STG"
       ],
@@ -167,6 +170,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -209,6 +213,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -251,6 +256,7 @@
       },
       "useCase": "场馆：馆体+外围服务区，适合入口与通道试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "EXH"
       ],
@@ -292,6 +298,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -333,6 +340,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -375,6 +383,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -416,6 +425,9 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [
+        "span-outlier"
+      ],
       "templateHints": [
         "MKT",
         "STG"
@@ -458,6 +470,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -500,6 +513,10 @@
       },
       "useCase": "路跑与封控：按路线与路口点试验，跨度大，适合视图缩放验证",
       "recommended": false,
+      "flags": [
+        "span-outlier",
+        "counts-missing"
+      ],
       "templateHints": [
         "STG"
       ],
@@ -541,6 +558,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -582,6 +600,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -623,6 +642,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -664,6 +684,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -705,6 +726,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -747,6 +769,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -788,6 +811,7 @@
       },
       "useCase": "待按场地判断",
       "recommended": true,
+      "flags": [],
       "templateHints": [],
       "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
       "evidence": {
@@ -827,6 +851,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -868,6 +893,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -910,6 +936,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -951,6 +978,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -992,6 +1020,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1034,6 +1063,7 @@
       },
       "useCase": "密集空间课程/校园：适合人群密度与疏散提示试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "EXH"
       ],
@@ -1075,6 +1105,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1117,6 +1148,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -1158,6 +1190,7 @@
       },
       "useCase": "待按场地判断",
       "recommended": false,
+      "flags": [],
       "templateHints": [],
       "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
       "evidence": {
@@ -1197,6 +1230,7 @@
       },
       "useCase": "待按场地判断",
       "recommended": false,
+      "flags": [],
       "templateHints": [],
       "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
       "evidence": {
@@ -1236,6 +1270,7 @@
       },
       "useCase": "街区活动：封路、市集、照明，适合边界与通行试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "MKT"
       ],
@@ -1277,6 +1312,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1319,6 +1355,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1361,6 +1398,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1403,6 +1441,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1445,6 +1484,9 @@
       },
       "useCase": "待按场地判断",
       "recommended": false,
+      "flags": [
+        "span-outlier"
+      ],
       "templateHints": [],
       "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
       "evidence": {
@@ -1484,6 +1526,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1526,6 +1569,10 @@
       },
       "useCase": "路跑与封控：按路线与路口点试验，跨度大，适合视图缩放验证",
       "recommended": false,
+      "flags": [
+        "span-outlier",
+        "counts-missing"
+      ],
       "templateHints": [
         "STG"
       ],
@@ -1567,6 +1614,7 @@
       },
       "useCase": "密集空间课程/校园：适合人群密度与疏散提示试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "EXH"
       ],
@@ -1608,6 +1656,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": true,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1650,6 +1699,7 @@
       },
       "useCase": "待按场地判断",
       "recommended": false,
+      "flags": [],
       "templateHints": [],
       "confidence": "平台案例底图核对读数；锚点与件数为核对值，不是主办方官方数据",
       "evidence": {
@@ -1689,6 +1739,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1731,6 +1782,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"
@@ -1773,6 +1825,7 @@
       },
       "useCase": "节庆场地：展位/舞台/围栏/动线，按分区+物料件试验",
       "recommended": false,
+      "flags": [],
       "templateHints": [
         "MKT",
         "STG"

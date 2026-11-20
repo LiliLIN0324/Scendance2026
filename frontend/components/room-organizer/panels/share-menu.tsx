@@ -14,7 +14,8 @@ import { catalogGroupLabel } from '../lib/catalog-taxonomy';
 import { ensurePublishedArchiveNow } from '../lib/complete-archive';
 import { detectCloudCaseSession } from '../lib/cloud-cases';
 import { convertMetres } from '../lib/display-units';
-import { REVIEW_MARK_CHANGED_EVENT, readReviewMarks } from '../lib/review-share';
+import { REVIEW_MARK_CHANGED_EVENT, forgetReviewLinkMark, readReviewMarks } from '../lib/review-share';
+import { reviewCodeFromHash, reviewCodeFromPath } from '../../review-share-page/review-link-cloud';
 import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import { isStructuralMarker } from '../lib/structural-layout';
 import { bingoBadgeCount, setBingoSending, useBingoSending } from './bingo-status-mark';
@@ -61,6 +62,8 @@ export interface ShareMenuActions {
   onListShares?(): Promise<ServerShare[]>;
   /** 撤回一条已生成的分享链接；服务端作废 token，只读页立即失效。 */
   onRevokeShare?(shareId: string): Promise<void>;
+  /** 作废一条评审短链；服务端吊销后原地址立即失效。只接云端短链，长链快照无法远程收回。 */
+  onRevokeReviewLink?(code: string): Promise<void>;
   /** 抓当前画布真实一帧当预览（户外 2D/3D、室内各走各的抓帧句柄）；抓不到时卡片退回示意图。 */
   onCapturePreview?(): Promise<string | null>;
   /**
@@ -459,6 +462,39 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     if (reviewLink) window.open(reviewLink, '_blank', 'noopener,noreferrer');
   };
 
+  /** 从评审地址里取云端短码；快照长链（#layout=）没有短码，不能远程吊销。 */
+  const reviewCodeOf = (url: string): string | null => {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      return reviewCodeFromPath(parsed.pathname) ?? reviewCodeFromHash(parsed.hash);
+    } catch {
+      return null;
+    }
+  };
+
+  const revokeReview = async () => {
+    if (!actions?.onRevokeReviewLink || busy || !reviewLink) return;
+    const code = reviewCodeOf(reviewLink);
+    if (!code) {
+      setNotice('这条是快照长链，没法远程作废；重新生成一条评审链接即可。');
+      return;
+    }
+    setBusy(true);
+    setNotice('');
+    try {
+      await actions.onRevokeReviewLink(code);
+      const markKey = (projectId ?? '').trim() || 'local-draft';
+      forgetReviewLinkMark(markKey, reviewLink);
+      setReviewLink('');
+      setQrOpen(false);
+      setNotice('评审链接已作废，原来的地址打不开了。');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '评审链接没有作废成功。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** Bingo 是内部审校去处：只切面板，不重复生成链接。 */
   const openBingo = () => {
     if (!actions?.onOpenBingo) {
@@ -517,6 +553,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       onSendBingo={openBingo}
       onCopyReview={() => { void copyReview(); }}
       onOpenReview={openReview}
+      {...(actions?.onRevokeReviewLink ? { onRevokeReview: () => { void revokeReview(); } } : {})}
       onPublish={() => { void publish(); }}
       onCopy={() => { void copyPublished(); }}
       onRevoke={actions?.onRevokeShare && actions.onListShares && !actions.readOnly ? () => { void revokePublished(); } : undefined}

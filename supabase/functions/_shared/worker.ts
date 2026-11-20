@@ -1,10 +1,47 @@
 import { compareTextureGeometry, requireTextureSource } from './generation-quality.ts';
 import { ApiError } from './domain.ts';
 import { assetRecord } from './assets.ts';
+import { generatedObjectName } from './generated-object-name.ts';
 import { download, required, type Env, type Fetcher } from './http.ts';
 import { aholoLux3d, hunyuan } from './providers.ts';
 import { MAX_PROVIDER_GLB_BYTES, repairGlb, validateModel } from './models.ts';
 import type { Backend } from './backend.ts';
+
+const MAX_PROVIDER_PREVIEW_BYTES = 2 * 1024 * 1024;
+
+/** 预览图只收真图片字节，避免把上游的错误页存成缩略图。 */
+function previewImage(bytes: Uint8Array): { ext: 'png' | 'jpg' | 'webp'; mime: string } | null {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return { ext: 'png', mime: 'image/png' };
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { ext: 'jpg', mime: 'image/jpeg' };
+  if (bytes.length >= 12
+    && String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF'
+    && String.fromCharCode(...bytes.subarray(8, 12)) === 'WEBP') return { ext: 'webp', mime: 'image/webp' };
+  return null;
+}
+
+/**
+ * 供应商随 GLB 一起给的预览图存进同一个账号目录。
+ * 预览只是卡面，取不到或存不下都不该让一次已经付费的模型归档失败。
+ */
+async function archivePreview(
+  backend: Backend,
+  job: { id: string; owner_id: string },
+  url: string | undefined,
+  hosts: string[],
+  fetcher: Fetcher,
+): Promise<{ previewPath?: string }> {
+  if (!url) return {};
+  try {
+    const bytes = await download(url, hosts, MAX_PROVIDER_PREVIEW_BYTES, fetcher);
+    const format = previewImage(bytes);
+    if (!format) return {};
+    const path = `${job.owner_id}/${job.id}/preview.${format.ext}`;
+    await backend.upload(path, bytes, format.mime);
+    return { previewPath: path };
+  } catch {
+    return {};
+  }
+}
 
 export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=fetch) {
   // Pre-claim guard: without any vendor credential there is no work we could do. The exact
@@ -74,6 +111,9 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
       const bytes=aholo?repairGlb(raw,MAX_PROVIDER_GLB_BYTES):raw;
       const metadata:Record<string,unknown>=await validateModel(bytes,MAX_PROVIDER_GLB_BYTES);
       metadata.generation={kind:job.kind??'text',providerMode:job.provider_mode,providerModel:job.provider_model,referenceImageAssetId:job.reference_image_asset_id??undefined};
+      // 名字只取短对象名；完整描述留在 metadata 里，物料详情才能还原用户当时写了什么。
+      metadata.originalPrompt=job.prompt;
+      Object.assign(metadata,await archivePreview(backend,job,result.ResultFile3Ds?.find(f=>f.PreviewImageUrl)?.PreviewImageUrl,aholo?['.kujiale.com','.myqcloud.com','.tencentcos.cn','.tencentcos.com']:['.myqcloud.com','.tencentcos.cn','.tencentcos.com'],fetcher));
       if(job.kind==='texture'){
         const source=await backend.scene(job.owner_id,'assets.get',{assetId:job.source_asset_id});
         if(!backend.readSourceBytes)throw new ApiError('SERVICE_NOT_CONFIGURED',503);
@@ -83,7 +123,8 @@ export async function processGeneration(backend:Backend,env:Env,fetcher:Fetcher=
         metadata.textureVariant={validation:quality,procurementStatus:'needs_confirmation'};
       }
       const asset=await assetRecord(job.owner_id,bytes,{
-        name:job.prompt.slice(0,120),source:aholo?'aholo':'hunyuan',sourceId:job.provider_job_id,
+        // 描述是提示词，不是物件名：入库先收成短名，整段原话留在任务记录里。
+        name:generatedObjectName(job.prompt),source:aholo?'aholo':'hunyuan',sourceId:job.provider_job_id,
         sourceUrl:aholo?'https://labs.aholo.ai':'https://cloud.tencent.com/product/ai3d',metadata,
         license:aholo
           ?{type:'provider-terms',reviewedAt:required(env,'LUX3D_TERMS_REVIEWED_AT'),url:required(env,'LUX3D_TERMS_URL')}

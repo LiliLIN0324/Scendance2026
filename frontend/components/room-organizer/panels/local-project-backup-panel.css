@@ -8,4 +8,4 @@
 .sc-project-backup-preview dl > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; margin: 6px 0; }
 .sc-project-backup-preview dt { color: var(--sc-muted, #6f6f6f); }
 .sc-project-backup-preview dd { margin: 0; overflow-wrap: anywhere; }
-.sc-project-backup-warning { color: #835a16; line-height: 1.6; }
+.sc-project-backup-warning { color: var(--warn); line-height: 1.6; }

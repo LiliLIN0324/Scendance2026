@@ -5,6 +5,14 @@
   --space-tint: #edf4f1;
   --space-accent: #245c4a;
 }
+/* 暗色：面板自带调色板回到工作台 L1 token（占位底用平面深一档，避免浅绿块发亮）。 */
+body.is-theme-dark .sc-space-panel.is-card {
+  --space-ink: var(--ink);
+  --space-muted: var(--ink-soft);
+  --space-line: var(--hair);
+  --space-tint: var(--plane-deep);
+  --space-accent: var(--green-deep);
+}
 .sc-space-library-menu { position: relative; color: var(--wk-ink-soft); }
 .sc-space-library-menu > summary {
   display: grid; place-items: center; list-style: none;
@@ -110,6 +118,8 @@
   font: inherit; font-size: 11px; font-weight: 500; line-height: 18px; white-space: nowrap; cursor: pointer;
 }
 .sc-scan-upload-btn:hover:not(:disabled) { background: var(--space-tint, #edf4f1); }
+body.is-theme-dark .sc-scan-upload-btn { background: var(--plane); border-color: var(--hair); }
+body.is-theme-dark .sc-scan-upload-btn:hover:not(:disabled) { background: var(--plane-deep); }
 .sc-scan-upload-btn:disabled { cursor: progress; opacity: .7; }
 .sc-scan-upload { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .sc-scan-upload-hint { color: var(--space-muted, #546461); font-size: 11px; }

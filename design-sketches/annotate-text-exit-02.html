@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>标注 · 文本模式与退出行为 · 草图 02</title>
+<style>
+  :root{
+    --paper:#fff;
+    --plane:#f4f5f7;
+    --hair:#e4e4e7;
+    --ink:#141416;
+    --ink-soft:#55585f;
+    --muted:#71767e;
+    --faint:#9aa0a6;
+    --green:#4a7c59;
+    --green-deep:#35624a;
+    --green-pale:#eef3ef;
+    --red:#b4483c;
+    --red-pale:#fbefed;
+    --violet:#7b3f9e;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#eceeeb;color:var(--ink);
+    font-family:"Inter","Noto Sans SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  body{padding:34px 40px 44px}
+  .page{max-width:1240px;margin:0 auto}
+  header{display:flex;align-items:flex-end;gap:16px;margin-bottom:22px}
+  .kicker{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h1{font-size:24px;line-height:1.2;margin:6px 0 0;font-weight:700;letter-spacing:-.01em}
+  .sub{font-size:12px;line-height:18px;color:var(--ink-soft);margin:7px 0 0;max-width:760px}
+  .stamp{margin-left:auto;text-align:right;font-size:11px;line-height:17px;color:var(--muted);white-space:nowrap}
+  .stamp b{display:block;color:var(--ink);font-size:12px}
+  .cols{display:grid;grid-template-columns:390px 64px 390px;justify-content:center;align-items:start;gap:0}
+  .col-head{display:flex;align-items:center;gap:8px;margin:0 0 10px 2px}
+  .col-head h2{font-size:13px;margin:0;font-weight:700}
+  .tag{font-size:10px;line-height:1;padding:4px 7px;border-radius:999px;font-weight:600}
+  .tag-now{background:#f1f1ef;color:#6b6f73;border:1px solid #dededb}
+  .tag-new{background:var(--green-pale);color:var(--green-deep);border:1px solid #cddfd3}
+  .tag-warn{background:var(--red-pale);color:var(--red);border:1px solid #efd3ce}
+  .phone{position:relative;width:390px;height:740px;border-radius:28px;overflow:hidden;
+    background:#e7e5dd;box-shadow:0 18px 50px rgba(20,20,22,.14),0 0 0 1px rgba(20,20,22,.06)}
+  /* faux map */
+  .map{position:absolute;inset:0;background:
+      radial-gradient(120% 90% at 22% 18%,#f3f1e8 0 38%,transparent 60%),
+      radial-gradient(90% 70% at 86% 70%,#e9eee4 0 32%,transparent 62%),
+      linear-gradient(180deg,#e9e7de,#e2e0d7)}
+  .map:before,.map:after{content:"";position:absolute;background:#f8f7f2;box-shadow:0 0 0 1px #dedbd1}
+  .map:before{width:760px;height:20px;left:-180px;top:250px;transform:rotate(-18deg)}
+  .map:after{width:520px;height:14px;left:120px;top:500px;transform:rotate(24deg)}
+  .road{position:absolute;background:#f8f7f2;box-shadow:0 0 0 1px #dedbd1}
+  .r1{width:12px;height:820px;left:86px;top:-40px;transform:rotate(8deg)}
+  .r2{width:9px;height:820px;left:310px;top:-40px;transform:rotate(-13deg)}
+  .r3{width:520px;height:9px;left:-60px;top:118px;transform:rotate(4deg)}
+  .block{position:absolute;border-radius:3px;background:#d9d6c8;opacity:.72}
+  .b1{width:96px;height:64px;left:22px;top:66px}
+  .b2{width:70px;height:48px;left:148px;top:148px;background:#e3ddc8}
+  .b3{width:110px;height:72px;left:238px;top:322px;background:#d7dfd1}
+  .b4{width:66px;height:52px;left:40px;top:408px}
+  .park{position:absolute;width:170px;height:120px;left:190px;top:40px;border-radius:26px;background:#cfdec8;opacity:.75}
+  .water{position:absolute;width:240px;height:80px;left:-40px;top:606px;border-radius:50%;background:#c9dde4;opacity:.75;transform:rotate(-8deg)}
+  /* notes already on the map */
+  .note-pill{position:absolute;z-index:3;padding:5px 8px;border-radius:6px;color:#fff;
+    font-size:12px;line-height:16px;font-weight:500;box-shadow:0 2px 8px rgba(20,20,22,.14);white-space:nowrap}
+  .n1{left:44px;top:174px;background:var(--green-deep)}
+  .n2{left:226px;top:424px;background:var(--violet)}
+  .n3{left:56px;top:548px;background:#2f6491}
+  /* mode chip */
+  .chip{position:absolute;left:50%;top:18px;transform:translateX(-50%);z-index:6;
+    display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:10px;
+    background:#fff;border:1px solid rgba(20,20,22,.10);color:var(--ink);font-size:11px;line-height:16px;
+    box-shadow:0 2px 8px rgba(20,20,22,.08);white-space:nowrap}
+  .chip em{font-style:normal;color:var(--muted)}
+  /* inline textarea */
+  .ta{position:absolute;left:102px;top:306px;width:186px;height:62px;z-index:5;
+    background:#fff;border:1.5px solid var(--green);border-radius:6px;padding:6px 8px;
+    box-shadow:0 4px 16px rgba(20,20,22,.16);font-size:12px;line-height:16px;color:var(--ink)}
+  .ta .placeholder{color:var(--faint)}
+  .ta .caret{display:inline-block;width:1px;height:14px;background:var(--ink);
+    vertical-align:-2px;margin-left:1px;animation:blink 1s steps(1,end) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .ta .grip{position:absolute;right:3px;bottom:2px;width:8px;height:8px;
+    background:linear-gradient(135deg,transparent 45%,#b9bec4 45%,#b9bec4 55%,transparent 55%,transparent 70%,#b9bec4 70%,#b9bec4 80%,transparent 80%)}
+  /* panel */
+  .panel{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);width:302px;
+    background:#fff;border-radius:16px;border:1px solid rgba(20,20,22,.06);
+    box-shadow:0 14px 40px rgba(20,20,22,.18);padding:10px;z-index:7}
+  .panel .pointer{position:absolute;left:50%;bottom:-7px;width:14px;height:14px;background:#fff;
+    border-right:1px solid rgba(20,20,22,.06);border-bottom:1px solid rgba(20,20,22,.06);
+    transform:translateX(-50%) rotate(45deg)}
+  .newtools{display:flex;gap:4px;padding:2px;background:var(--plane);border-radius:12px}
+  .tool{width:46px;height:46px;border-radius:10px;border:1.5px solid transparent;background:transparent;
+    display:grid;place-items:center;color:var(--ink);padding:0;position:relative}
+  .tool svg{width:20px;height:20px}
+  .tool.t{font-size:17px;font-weight:700;letter-spacing:-.02em;color:#1b1d20}
+  .tool.on{background:var(--green-pale);border-color:var(--green);color:var(--green-deep)}
+  .tool.on.t{color:var(--green-deep)}
+  .options{display:flex;align-items:center;gap:7px;margin-top:9px;padding:5px 6px;background:var(--plane);border-radius:12px}
+  .swatches{display:flex;align-items:center;gap:7px;flex:1}
+  .dot{width:20px;height:20px;border-radius:50%;position:relative;flex:0 0 auto;
+    box-shadow:inset 0 0 0 1px rgba(20,20,22,.16)}
+  .dot.p{background:var(--violet)}
+  .dot.k{background:#141416}
+  .dot.g{background:var(--green-deep)}
+  .dot.b{background:#2f6491}
+  .dot.o{background:#c98a25}
+  .dot.pk{background:#a24b77}
+  .dot.sel{box-shadow:inset 0 0 0 2px #fff,0 0 0 2px var(--violet)}
+  .dot.sel:after{content:"";position:absolute;inset:5px;border-radius:50%;background:#fff;opacity:.9;
+    clip-path:polygon(14% 52%,40% 78%,88% 18%,78% 8%,40% 56%,24% 42%)}
+  .swsep{width:1px;height:20px;background:var(--hair);margin:0 1px;flex:0 0 auto}
+  .stroke{display:flex;align-items:center;gap:2px;flex:0 0 auto;padding:1px}
+  .stroke button{width:30px;height:24px;border:0;background:transparent;border-radius:6px;
+    display:grid;place-items:center;color:#7b3f9e;padding:0}
+  .stroke button.on{background:#fff;box-shadow:inset 0 0 0 1px var(--hair)}
+  .stroke svg{width:18px;height:9px}
+  .stroke.dead{outline:1.5px dashed #d9a49d;outline-offset:1px;border-radius:7px}
+  .dead-tag{display:flex;align-items:center;gap:5px;margin:6px 2px 0;font-size:9px;line-height:13px;color:var(--red)}
+  .dead-tag b{font-weight:600}
+  .text-only{margin-left:auto;font-size:9px;line-height:12px;color:var(--muted);white-space:nowrap}
+  .hint{display:flex;align-items:flex-start;gap:6px;font-size:10px;line-height:15px;color:var(--muted);margin:8px 2px 1px}
+  .hint .txt{flex:1}
+  .hint b{color:var(--ink);font-weight:600}
+  .key{flex:0 0 auto;font-size:9px;line-height:13px;color:var(--muted);border:1px solid #d5d7da;
+    background:#fff;border-radius:4px;padding:0 4px;margin-top:1px}
+  /* dock */
+  .dock{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:8px;padding:8px;border-radius:999px;
+    background:rgba(255,255,255,.94);box-shadow:0 8px 24px rgba(20,20,22,.16),0 0 0 1px rgba(20,20,22,.05);
+    backdrop-filter:blur(8px);z-index:8}
+  .dock button{width:44px;height:44px;border-radius:50%;border:1px solid transparent;background:#fff;
+    display:grid;place-items:center;color:#3d4147;box-shadow:0 1px 3px rgba(20,20,22,.08);padding:0}
+  .dock button svg{width:20px;height:20px}
+  .dock button.active{border-color:var(--green);color:var(--green-deep);background:var(--green-pale)}
+  .dock .sep{width:1px;height:22px;background:var(--hair);margin:0 1px}
+  .vs{display:flex;flex-direction:column;align-items:center;justify-content:center;height:740px;gap:10px;color:var(--muted)}
+  .vs .line{width:1px;height:220px;background:linear-gradient(#d5d8d4,transparent)}
+  .vs .word{font-size:10px;font-weight:700;letter-spacing:.16em;background:#fff;border:1px solid #d9dcd8;
+    border-radius:999px;padding:6px 8px;color:#6f746f}
+  /* exit flow cards */
+  .flow{margin-top:12px;background:#fff;border:1px solid #dfe1dc;border-radius:14px;padding:12px 14px 10px;
+    box-shadow:0 6px 18px rgba(20,20,22,.04)}
+  .flow h3{font-size:11px;line-height:16px;margin:0 0 7px;font-weight:700;display:flex;align-items:center;gap:6px}
+  .flow h3 span{font-size:9px;font-weight:500;color:var(--muted)}
+  .frow{display:flex;align-items:flex-start;gap:7px;padding:4px 0;font-size:10px;line-height:15px;color:var(--ink-soft);
+    border-top:1px solid #f0f1ee}
+  .frow:first-of-type{border-top:0}
+  .frow .k{flex:0 0 74px;color:var(--ink);font-weight:600}
+  .frow .k kbd{font-family:inherit;font-size:9px;line-height:14px;border:1px solid #d5d7da;background:#fafbf8;
+    border-radius:4px;padding:0 4px;color:var(--ink)}
+  .frow.bad{color:var(--red)}
+  .frow.bad .k{color:var(--red)}
+  .frow .icon{flex:0 0 12px;color:var(--green);font-weight:700}
+  .frow.bad .icon{color:var(--red)}
+  /* decisions */
+  .decisions{margin-top:24px;background:#fff;border:1px solid #dfe1dc;border-radius:16px;overflow:hidden;
+    box-shadow:0 8px 24px rgba(20,20,22,.05)}
+  .dec-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #e9eae6}
+  .dec-head h2{font-size:13px;margin:0;font-weight:700}
+  .dec-head span{font-size:11px;color:var(--muted)}
+  .dec-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#eef0ec}
+  .dec{background:#fff;padding:14px 16px}
+  .dec .label{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .dec .label em{font-style:normal;font-size:9px;line-height:1;padding:3px 6px;border-radius:4px;font-weight:600}
+  .dec .label em.go{background:var(--green-pale);color:var(--green-deep)}
+  .dec .label em.keep{background:#f1f1ef;color:#6b6f73}
+  .dec h3{font-size:12px;line-height:17px;margin:0 0 5px;font-weight:700}
+  .dec p{font-size:11px;line-height:17px;color:var(--ink-soft);margin:0}
+  .dec p b{color:var(--ink);font-weight:600}
+  .limits{margin-top:12px;display:flex;gap:10px;align-items:flex-start;
+    background:#fafbf8;border:1px solid #e4e6e0;border-radius:12px;padding:11px 14px;
+    font-size:10px;line-height:16px;color:var(--ink-soft)}
+  .limits b{color:var(--ink);font-weight:600;flex:0 0 auto}
+  .next{margin-top:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;
+    background:var(--green-pale);border:1px solid #d4e2d8;border-radius:12px;padding:11px 14px;
+    font-size:11px;line-height:17px;color:var(--green-deep)}
+  .next b{font-weight:700}
+  .foot{display:flex;justify-content:space-between;margin-top:18px;font-size:10px;color:#8b908a}
+  @media (max-width:900px){
+    body{padding:22px 16px}
+    .cols{grid-template-columns:390px}
+    .vs{height:40px;flex-direction:row}
+    .vs .line{width:120px;height:1px;background:#d5d8d4}
+    .phone{margin:0 auto}
+    .dec-grid{grid-template-columns:1fr}
+    .flow{max-width:390px;margin-left:auto;margin-right:auto}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <div class="kicker">Sketch 02 · Text mode &amp; exit</div>
+      <h1>文本模式 / 退出行为：现在是什么，建议怎么改</h1>
+      <p class="sub">只回答两件事：按 T 之后到底能做什么、怎么结束；以及触摸端没有 Esc 时，怎么退出画图工具。左边是现在的真实行为，右边是建议；这一页还没有改行为代码。</p>
+    </div>
+    <div class="stamp"><b>2026-11-17</b>示意图 · 非实时截图<br/>390 × 740 画布</div>
+  </header>
+
+  <div class="cols">
+    <!-- ================= CURRENT ================= -->
+    <div>
+      <div class="col-head"><h2>现在 · 文本模式</h2><span class="tag tag-now">T + 就地输入</span></div>
+      <div class="phone">
+        <div class="map">
+          <div class="park"></div><div class="block b1"></div><div class="block b2"></div>
+          <div class="block b3"></div><div class="block b4"></div>
+          <div class="road r1"></div><div class="road r2"></div><div class="road r3"></div>
+          <div class="water"></div>
+        </div>
+
+        <span class="note-pill n1">卸货区</span>
+        <span class="note-pill n2">VIP 入口</span>
+        <span class="note-pill n3">西门</span>
+
+        <div class="chip">当前：文本 T <em>· Esc 返回浏览</em></div>
+
+        <div class="ta">
+          主入口<span class="caret"></span>
+          <span class="grip"></span>
+        </div>
+
+        <div class="panel">
+          <div class="newtools" role="toolbar" aria-label="绘图工具">
+            <button class="tool t on" aria-label="文本" aria-pressed="true">T</button>
+            <button class="tool" aria-label="矩形"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="6" width="16" height="12" rx="2"/></svg></button>
+            <button class="tool" aria-label="圆形"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="7.5"/></svg></button>
+            <button class="tool" aria-label="三角形"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 5 20 19H4z" stroke-linejoin="round"/></svg></button>
+            <button class="tool" aria-label="线段"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 12h16" stroke-linecap="round"/></svg></button>
+          </div>
+
+          <div class="options">
+            <div class="swatches" role="radiogroup" aria-label="颜色">
+              <span class="dot p sel"></span><span class="dot k"></span><span class="dot g"></span>
+              <span class="dot b"></span><span class="dot o"></span><span class="dot pk"></span>
+            </div>
+            <span class="swsep"></span>
+            <div class="stroke dead">
+              <button class="on" aria-label="细线"><svg viewBox="0 0 20 10" fill="none" stroke="currentColor"><path d="M2 5h16" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+              <button aria-label="粗线"><svg viewBox="0 0 20 10" fill="none" stroke="currentColor"><path d="M2 5h16" stroke-width="3.5" stroke-linecap="round"/></svg></button>
+            </div>
+          </div>
+          <div class="dead-tag"><b>✕</b> 线宽对文本无效，保存时会被忽略</div>
+
+          <div class="hint"><span class="txt"><b>文本</b> · 点一下放置，就地输入（Enter 提交 / Esc 取消）</span></div>
+          <div class="pointer"></div>
+        </div>
+
+        <div class="dock">
+          <button aria-label="测量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 16 9-9 4 4-9 9z"/><path d="M8 12l1.5 1.5M11 9l1.5 1.5M14 6l1.5 1.5"/></svg></button>
+          <button class="active" aria-label="标注"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19h14M7 16l8-8 3 3-8 8H7z"/></svg></button>
+          <button aria-label="属性"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M5 12h14M5 17h14"/><circle cx="9" cy="7" r="2" fill="#fff"/><circle cx="15" cy="12" r="2" fill="#fff"/><circle cx="10" cy="17" r="2" fill="#fff"/></svg></button>
+          <span class="sep"></span>
+          <button aria-label="网格"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5h14v14H5zM9.5 5v14M14.5 5v14M5 9.5h14M5 14.5h14"/></svg></button>
+        </div>
+      </div>
+
+      <div class="flow">
+        <h3>现在怎么退出 <span>没有单独的“完成”按钮</span></h3>
+        <div class="frow"><span class="icon">→</span><span class="k">输入中 <kbd>Esc</kbd></span><span>只关掉输入框；文本模式还在，输入内容不提交。</span></div>
+        <div class="frow"><span class="icon">→</span><span class="k">再按 <kbd>Esc</kbd></span><span>回到浏览，未提交的文字/草稿一起清掉。</span></div>
+        <div class="frow bad"><span class="icon">!</span><span class="k">再点 T</span><span>会清空正在输入的文字，但<b>仍停在文本模式</b>——看起来像“没反应”。</span></div>
+        <div class="frow"><span class="icon">→</span><span class="k">提交之后</span><span>仍留在文本模式，可以继续点下一个位置。</span></div>
+        <div class="frow"><span class="icon">→</span><span class="k">触屏</span><span>只能点画布顶部「当前：文本 T」小条回浏览。</span></div>
+      </div>
+    </div>
+
+    <div class="vs"><div class="line"></div><div class="word">VS</div><div class="line"></div></div>
+
+    <!-- ================= PROPOSED ================= -->
+    <div>
+      <div class="col-head"><h2>建议 · 文本模式</h2><span class="tag tag-new">只留颜色</span></div>
+      <div class="phone">
+        <div class="map">
+          <div class="park"></div><div class="block b1"></div><div class="block b2"></div>
+          <div class="block b3"></div><div class="block b4"></div>
+          <div class="road r1"></div><div class="road r2"></div><div class="road r3"></div>
+          <div class="water"></div>
+        </div>
+
+        <span class="note-pill n1">卸货区</span>
+        <span class="note-pill n2">VIP 入口</span>
+        <span class="note-pill n3">西门</span>
+
+        <div class="chip">当前：文本 T <em>· 再点 T 退出</em></div>
+
+        <div class="ta">
+          主入口<span class="caret"></span>
+          <span class="grip"></span>
+        </div>
+
+        <div class="panel">
+          <div class="newtools" role="toolbar" aria-label="绘图工具">
+            <button class="tool t on" aria-label="文本" aria-pressed="true">T</button>
+            <button class="tool" aria-label="矩形"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="6" width="16" height="12" rx="2"/></svg></button>
+            <button class="tool" aria-label="圆形"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="7.5"/></svg></button>
+            <button class="tool" aria-label="三角形"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 5 20 19H4z" stroke-linejoin="round"/></svg></button>
+            <button class="tool" aria-label="线段"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 12h16" stroke-linecap="round"/></svg></button>
+          </div>
+
+          <div class="options">
+            <div class="swatches" role="radiogroup" aria-label="文字颜色">
+              <span class="dot p sel"></span><span class="dot k"></span><span class="dot g"></span>
+              <span class="dot b"></span><span class="dot o"></span><span class="dot pk"></span>
+            </div>
+            <span class="text-only">文字只用颜色</span>
+          </div>
+
+          <div class="hint">
+            <span class="txt"><b>文本</b> · 点一下输入，Enter 提交；再点 T 或 Esc 退出</span>
+            <span class="key">T</span>
+          </div>
+          <div class="pointer"></div>
+        </div>
+
+        <div class="dock">
+          <button aria-label="测量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 16 9-9 4 4-9 9z"/><path d="M8 12l1.5 1.5M11 9l1.5 1.5M14 6l1.5 1.5"/></svg></button>
+          <button class="active" aria-label="标注"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19h14M7 16l8-8 3 3-8 8H7z"/></svg></button>
+          <button aria-label="属性"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M5 12h14M5 17h14"/><circle cx="9" cy="7" r="2" fill="#fff"/><circle cx="15" cy="12" r="2" fill="#fff"/><circle cx="10" cy="17" r="2" fill="#fff"/></svg></button>
+          <span class="sep"></span>
+          <button aria-label="网格"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5h14v14H5zM9.5 5v14M14.5 5v14M5 9.5h14M5 14.5h14"/></svg></button>
+        </div>
+      </div>
+
+      <div class="flow">
+        <h3>建议怎么退出 <span>手边就能结束</span></h3>
+        <div class="frow"><span class="icon">→</span><span class="k">再点 <kbd>T</kbd></span><span>直接回浏览；手不用离开底部工具条。</span></div>
+        <div class="frow"><span class="icon">→</span><span class="k"><kbd>Esc</kbd></span><span>保留：任何时候回浏览，清掉未提交内容。</span></div>
+        <div class="frow"><span class="icon">→</span><span class="k">提交之后</span><span>留在文本模式，连续标注；提示写明「再点 T 退出」。</span></div>
+        <div class="frow"><span class="icon">✓</span><span class="k">有草稿时</span><span>退出会取消未提交内容，给一条轻提示，不弹确认框。</span></div>
+        <div class="frow"><span class="icon">✓</span><span class="k">触屏</span><span>不用再找顶部小条；T 本身就是开关。</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="decisions">
+    <div class="dec-head"><h2>需要你拍板的三件事</h2><span>前两条建议做，第三条建议先保持现状</span></div>
+    <div class="dec-grid">
+      <div class="dec">
+        <div class="label"><em class="go">建议改</em><span class="tag tag-now">死控件</span></div>
+        <h3>文本模式下藏起“线宽”</h3>
+        <p>现在细线/粗线还在，但文本提交时根本不保存线宽，点了只会让人以为生效。建议文本模式只留颜色；切回形状时线宽再出现。</p>
+      </div>
+      <div class="dec">
+        <div class="label"><em class="go">建议改</em><span class="tag tag-warn">现在会误清</span></div>
+        <h3>再点当前工具 = 退出</h3>
+        <p>现在再点 T / 矩形会清掉草稿却停在原工具，看起来像没反应，还会丢掉正在输入的字。建议改成回浏览，并提示「已取消未提交内容」。</p>
+      </div>
+      <div class="dec">
+        <div class="label"><em class="keep">建议保持</em><span class="tag tag-new">连续标注</span></div>
+        <h3>画完一个，不自动回浏览</h3>
+        <p>现在提交后仍留在工具里，适合一次标很多个。建议先不改；想结束时再点当前工具或 Esc。若你更想要 Figma 那样“画完就回选择”，也可以改，但每标一个都要重选工具。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="limits">
+    <b>文本本身的已知限制</b>
+    <span>字号固定 12px；画布最多显示 6 行（输入框可以输更多）；提交后不能改字，只能删除重画。这些是另一件事，不在这次工具条改动里。</span>
+  </div>
+
+  <div class="next">
+    <span><b>下一步：</b>你确认「藏线宽 + 再点退出 + 保持连续」这三条后，我再改 <code>AnnotateColorBar</code>、<code>onNote</code> / <code>onShape</code> 和说明行，并补对应的交互测试。</span>
+    <span>Scendance · 草图 02</span>
+  </div>
+
+  <div class="foot"><span>说明：两边的地图与面板为示意图，不是实时截图；左侧行为按当前代码整理。</span><span>2026-11-17</span></div>
+</div>
+</body>
+</html>

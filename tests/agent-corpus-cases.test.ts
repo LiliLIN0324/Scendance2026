@@ -24,6 +24,7 @@ type CaseFile = {
     anchor: { lat: number; lng: number; raw: string; rawOrder: string; matchesRaw: boolean };
     spanM: { width: number | null; height: number | null };
     counts: { zones: number | null; objects: number | null; routes: number | null; entrances: number | null };
+    flags: string[];
     templateHints: string[];
     recommended: boolean;
     confidence: string;
@@ -60,6 +61,11 @@ const materials = (() => {
 })();
 const materialIds = new Set(materials.map((row) => row.id));
 
+/** 受控脏样本标记：只描述读数可判定的异常，不替代上游核对结论。 */
+const ALLOWED_FLAGS = new Set(['span-outlier', 'counts-missing']);
+/** 正常活动场地量级 <500m；任一维 >1000m 判为底图缩放异常（沿用 BM-12 口径）。 */
+const SPAN_OUTLIER_M = 1000;
+
 describe('案例库：底图核对 43 案', () => {
   it('数量、推荐数与统计字段一致', () => {
     expect(cases.basemap).toHaveLength(43);
@@ -95,6 +101,25 @@ describe('案例库：底图核对 43 案', () => {
       for (const value of Object.values(item.counts)) {
         if (value !== null) expect(value).toBeGreaterThanOrEqual(0);
       }
+    }
+  });
+
+  it('flags 取值受控，且与读数双向一致（不靠手工备注）', () => {
+    for (const item of cases.basemap) {
+      for (const flag of item.flags) expect(ALLOWED_FLAGS.has(flag)).toBe(true);
+      const spanOutlier =
+        item.spanM.width != null && item.spanM.height != null
+          ? Math.max(item.spanM.width, item.spanM.height) > SPAN_OUTLIER_M
+          : false;
+      const countsMissing = item.counts.zones === 0 || item.counts.objects === 0;
+      expect(item.flags.includes('span-outlier')).toBe(spanOutlier);
+      expect(item.flags.includes('counts-missing')).toBe(countsMissing);
+    }
+  });
+
+  it('推荐案例不带阻断性脏样本标记', () => {
+    for (const item of cases.basemap) {
+      if (item.recommended) expect(item.flags).toEqual([]);
     }
   });
 
@@ -188,5 +213,21 @@ describe('物料参考值', () => {
     const tent = materials.find((row) => row.id === 'tent-3x3')!;
     expect(tent['高_m']).toBe('待核');
     expect(tent['重量_kg']).toBe('待核');
+  });
+});
+
+describe('案例库：评测引用隔离', () => {
+  const evalCases = JSON.parse(
+    readFileSync(path.join(dir, 'cases', 'eval-cases.json'), 'utf8'),
+  ) as { samples: { derivedFrom: string }[] };
+
+  it('layout 评测样本引用的底图案例都不是脏样本', () => {
+    const byId = new Map(cases.basemap.map((item) => [item.id, item]));
+    for (const sample of evalCases.samples) {
+      if (!sample.derivedFrom.startsWith('BM-')) continue;
+      const source = byId.get(sample.derivedFrom);
+      expect(source, `评测样本 ${sample.derivedFrom} 在案例库中不存在`).toBeDefined();
+      expect(source?.flags).toEqual([]);
+    }
   });
 });

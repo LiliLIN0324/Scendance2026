@@ -645,6 +645,43 @@ describe('物料卡三栏互斥', () => {
     }
   });
 
+  it('详情按钮打开物料护照：完整描述、来源、尺寸和文件都在，不误触发摆放', async () => {
+    const chairId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const prompt = '户外折叠椅 1：铝合金折叠框架，藏青色厚棉布坐垫靠背，座高 45 厘米';
+    const snapshot = { user: { id: 'member' } };
+    const businessRequest = vi.fn().mockResolvedValue([{
+      id: chairId, name: '户外折叠椅', source: 'aholo', format: 'glb', byte_size: 10_380_902,
+      created_at: '2026-11-18T10:00:00.000Z',
+      license: { type: 'provider-terms' },
+      metadata: {
+        sourceSize: { width: 0.45, depth: 0.5, height: 0.88 },
+        backfill: { originalName: prompt },
+      },
+    }]);
+    const controller = {
+      config: { apiUrl: 'https://example.test' },
+      subscribe: () => () => {},
+      getSnapshot: () => snapshot,
+      businessRequest,
+      authorizeAsset: vi.fn(),
+    } as unknown as BackendSession;
+    const onAdd = vi.fn();
+    render(<OnlineModelLibrary cardMode controller={controller} onAdd={onAdd} />);
+    fireEvent.click(await screen.findByRole('button', { name: '我的生成' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看户外折叠椅详情' }));
+
+    const dialog = screen.getByRole('dialog', { name: '户外折叠椅详情' });
+    expect(dialog.textContent).toContain(prompt);
+    expect(dialog.textContent).toContain('Aholo Lux3D');
+    expect(dialog.textContent).toContain('0.45 × 0.5 × 0.88 米');
+    expect(dialog.textContent).toContain('GLB · 9.9 MB');
+    expect(dialog.textContent).toContain('服务商条款');
+    expect(onAdd).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭详情' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('没有预览的云端折叠椅名字可读，拖进地图用合法 slug，点一下会登记模型', async () => {
     const chairId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const slug = `generated:library-${chairId}`;

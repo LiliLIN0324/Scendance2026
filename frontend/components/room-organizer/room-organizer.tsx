@@ -36,8 +36,9 @@ import { planPointToCanvas } from './lib/review-pins';
 import { get2DViewTransform } from './canvas-2d/render';
 import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
-import { publishReviewLink } from '../review-share-page/review-link-cloud';
-import { reviewBasemapFromGround, reviewLinkFailureCopy, type ReviewAccess } from '../review-share-page/review-access';
+import { publishReviewLink, revokeReviewLink } from '../review-share-page/review-link-cloud';
+import { reviewBasemapFromGround, reviewLinkFailureCopy, reviewLinkRevokeFailureCopy, type ReviewAccess } from '../review-share-page/review-access';
+import { AppearanceProvider } from './contexts/appearance-context';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
@@ -228,6 +229,8 @@ import { GeoScaleCompass } from './components/geo-scale-compass';
 /** 户外左栏一张卡三个页签：添加物件 / 已放置物件 / 清单。Bingo 不再挂规划信息。 */
 type OutdoorPanelKind = 'layers' | 'library' | 'inventory';
 import { MemberChat } from './panels/member-chat';
+import { RailMessagesButton } from './panels/rail-messages-button';
+import { MessagesPanel } from './panels/messages-panel';
 import { useTeam } from './lib/team-data';
 import { CloudPanel } from './panels/cloud-panel';
 import { ShortcutCoach, type ShortcutCoachMode } from './panels/shortcut-coach';
@@ -595,12 +598,14 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 左轨点头像，左栏整栏换成那个人的私信；再点同一颗收起。换成员或换团队时窗子跟着换/关。
   const [chatPeerId, setChatPeerId] = useState<string | null>(null);
   const personChat = !!chatPeerId && team.members.some(member => member.userId === chatPeerId);
+  // 左轨「消息」打开左栏消息面板：列表 / 私信 / 官方通知的切换留在面板内部；再点同一颗收起。
+  const [messagesOpen, setMessagesOpen] = useState(false);
   // 2026-11-15 用户：「不要弹窗」——生成面板作为左栏卡片存在，所以这里只订阅它开没开。
   const generationOpen = useSyncExternalStore(subscribeGenerationSheet, () => getGenerationSheetState().open, () => false);
   // 私信压在栏里的时候，四格不算开着：栏中此刻不是它们的卡，按压态与高亮跟着让开。
   // 2026-11-19：创作卡占着栏时同理——生成卡在视觉上盖住 Agent 卡（各自渲染守卫已让位），
   // 左轨就不能还亮着「空间/物料/Bingo」，否则又是「两个钮都亮、只看到一张卡」。
-  const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat && !generationOpen;
+  const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat && !messagesOpen && !generationOpen;
   // 私信开着，左栏就必须撑着——哪怕四格都收着，栏里此刻装的是这场对话。
   const [capturePanel, setCapturePanel] = useState<'new' | 'open' | 'hidden'>('new');  const captureOpen = capturePanel === 'open';
   const capturePanelRef = useRef<HTMLElement>(null);
@@ -1062,6 +1067,7 @@ useEffect(() => {
     closeGenerationSheet();
     setCapturePanel(value => value === 'open' ? 'hidden' : value);
     setChatPeerId(null);
+    setMessagesOpen(false);
   }, []);
   const hideBusinessCard = useCallback(() => {
     if (!businessOpenRef.current && leftModeRef.current !== 'business') {
@@ -1093,8 +1099,9 @@ useEffect(() => {
       setOutdoor2DOpen(true);
     }
     if (id === 'material') setWorkbenchMode('layout');
-    // 点四格任意一格 = 栏里换回那个 agent 的卡，私信先收起。
+    // 点四格任意一格 = 栏里换回那个 agent 的卡，私信与消息面板先收起。
     setChatPeerId(null);
+    setMessagesOpen(false);
     setActiveAgent(id);
     setAgentClosing(false);
     setAgentCollapsed(false);
@@ -1220,6 +1227,11 @@ useEffect(() => {
     if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
     await controller.businessRequest(`/projects/${encodeURIComponent(projectId)}/shares/${encodeURIComponent(shareId)}`, 'DELETE');
   }, [controller]);
+  // 评审短链吊销：只作废云端短码；本机标记由分享菜单在成功后清掉。
+  const revokeReviewShareLink = useCallback(async (code: string) => {
+    const result = await revokeReviewLink(code);
+    if (!result.ok) throw new Error(reviewLinkRevokeFailureCopy(result.reason));
+  }, []);
   const exportHandoff = useCallback(() => {
     setSidePanel(null);
     setAgentCollapsed(false);
@@ -1247,9 +1259,9 @@ useEffect(() => {
   /** 点同一格收起，点别的格就地换成那个 agent 的卡。私信开着时点格子 = 换回那一格，不是收起整栏。 */
   const toggleAgent = useCallback((id: AgentId) => {
     // 生成卡/拍摄卡占着栏时，点回当前格应当是「换回那一格」，而不是把隐藏的面板再收一次。
-    if (!generationOpen && !captureOpen && agentPanelOpen && activeAgent === id && !chatPeerId) closeBingo();
+    if (!generationOpen && !captureOpen && agentPanelOpen && activeAgent === id && !chatPeerId && !messagesOpen) closeBingo();
     else showAgent(id);
-  }, [generationOpen, captureOpen, agentPanelOpen, activeAgent, chatPeerId, closeBingo, showAgent]);
+  }, [generationOpen, captureOpen, agentPanelOpen, activeAgent, chatPeerId, messagesOpen, closeBingo, showAgent]);
   const openBusinessWorkspace = useCallback((mode: 'review' | 'delivery') => {
     // 表单进左栏这一张卡。不把 Bingo 切成评审或执行。
     showBusinessCard();
@@ -2769,9 +2781,9 @@ useEffect(() => {
     ...(generationOpen && !businessCardOpen ? ['generation' as const] : []),
     // 拍摄/私聊/Bingo 与生成卡仍互斥：生成卡占栏时它们不参与成对（渲染侧也已让位）。
     ...(captureOpen && !generationOpen && !businessCardOpen ? ['capture' as const] : []),
-    ...(personChat && !generationOpen && !businessCardOpen ? ['chat' as const] : []),
+    ...((personChat || messagesOpen) && !generationOpen && !businessCardOpen ? ['chat' as const] : []),
     ...((outdoorPanel !== null && !businessCardOpen) ? ['outdoor' as const] : []),
-    ...(!captureOpen && !generationOpen && !personChat && agentPanelVisible && !businessCardOpen ? ['bingo' as const] : []),
+    ...(!captureOpen && !generationOpen && !personChat && !messagesOpen && agentPanelVisible && !businessCardOpen ? ['bingo' as const] : []),
   ];
   leftStackPairRef.current = leftStackCards.length === 2 ? leftStackCards : null;
   const leftStackPair = leftStackPairRef.current;
@@ -2795,7 +2807,7 @@ useEffect(() => {
   // 2026-11-12「3D 的时候也要可编辑」：接管态同样撑着——工具卡 portal 用的宿主都挂在
   // 左栏户外卡片里，接管态不挂卡片 = 3D 里没有任何编辑入口（误删回归，本行修复）。
   // columnExpanded 的全部消费点都在本行之后（769/4130/4135/4264），搬到这里才能引用 takeover。
-  const columnExpanded = navExpanded || businessCardOpen || personChat || captureOpen || generationOpen || outdoorPanel !== null;
+  const columnExpanded = navExpanded || businessCardOpen || personChat || messagesOpen || captureOpen || generationOpen || outdoorPanel !== null;
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   useEffect(() => {
     if (columnExpanded) setMobileRailOpen(false);
@@ -4837,6 +4849,7 @@ useEffect(() => {
     onPublish: publishVersion,
     onListShares: listProjectShares,
     onRevokeShare: revokeProjectShare,
+    onRevokeReviewLink: revokeReviewShareLink,
     onCapturePreview: captureSharePreview,
     onExportHandoff: exportHandoff,
     onGenerateShareLink: handleShareLink,
@@ -4866,6 +4879,7 @@ useEffect(() => {
   };
 
   return (
+    <AppearanceProvider>
     <LocalActivitySwitchGuardProvider guard={localSwitchGuard}>
     <RoomEditorProvider value={roomEditorValue}>
     <SelectionProvider value={selectionValue}>
@@ -4967,8 +4981,8 @@ useEffect(() => {
               marginRight: 12,
               padding: '2px 8px',
               borderRadius: 4,
-              background: '#F4F5F7',
-              color: '#4A7C59',
+              background: 'var(--plane)',
+              color: 'var(--green)',
               fontSize: 11,
               lineHeight: '18px',
               fontFamily: 'inherit',
@@ -5073,6 +5087,13 @@ useEffect(() => {
               // 2026-11-16 用户指令：私信卡也浮在 3D 上，不再为开私信退回 2D。
               setChatPeerId(current => current === member.userId ? null : member.userId);
             }} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
+            <RailMessagesButton controller={controller} team={team} open={messagesOpen}
+              onToggle={() => {
+                // 左栏一次只留一张卡：开消息面板就收掉生成卡。
+                closeGenerationSheet();
+                setMessagesOpen(current => !current);
+              }}
+              onOpenAccount={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'settings' }))}/>
             <div className="sc-mode-rail-foot">
               {/* 2026-11-11 用户指令：户外态不再显示草稿保存状态文字（保存仍自动进行）。 */}
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
@@ -5176,6 +5197,21 @@ useEffect(() => {
               } : {}),
               onHeaderPointerDown: event => beginLeftStackPull('chat', event),
             })} />}
+          {!captureOpen && !generationOpen && messagesOpen && !businessCardOpen && <MessagesPanel controller={controller} team={team} onClose={() => setMessagesOpen(false)}
+            {...(isLeftStackDetached(leftStack, 'chat') ? {
+              className: 'is-detached', style: leftStackFloatStyle('chat'),
+              floatBar: <div className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`} onPointerDown={event => beginLeftStackDrag('move', 'chat', event)}>
+                <strong>消息</strong><span>独立小窗</span><span className="spacer" />
+                <button type="button" aria-label="收回消息面板" title="收回左栏" onClick={() => toggleLeftStackDetach('chat')}><Minimize2 size={12}/>收回</button>
+              </div>,
+              floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'chat', event)} />,
+            } : {
+              ...(leftStackSplit ? {
+                className: leftStackFirst === 'chat' ? 'is-stack-first' : 'is-stack-second',
+                style: { order: leftStackFirst === 'chat' ? 0 : 2 },
+              } : {}),
+              onHeaderPointerDown: event => beginLeftStackPull('chat', event),
+            })} />}
           {/* 2026-11-13 用户指令：这张户外卡片默认收起，只有点左轨「户外规划」才展开。
               DOM 仍常驻（hidden 只做视觉隐藏）：画布的图层/物件库/清单浮窗宿主挂在这里，
               卸载会让这些面板回落到画布内浮窗，等于又「自动打开」了。 */}
@@ -5258,7 +5294,7 @@ useEffect(() => {
               </div>
             </div>
           )}
-          {!captureOpen && !generationOpen && !personChat && agentPanelVisible && !businessCardOpen && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(isLeftStackDetached(leftStack, 'bingo') ? {} : { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) })} {...(isLeftStackDetached(leftStack, 'bingo') ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(isLeftStackDetached(leftStack, 'bingo') ? {
+          {!captureOpen && !generationOpen && !personChat && !messagesOpen && agentPanelVisible && !businessCardOpen && <AgentPanel onClose={closeBingo} activeAgent={activeAgent} {...(isLeftStackDetached(leftStack, 'bingo') ? {} : { onHeaderPointerDown: (event: React.PointerEvent<HTMLElement>) => beginLeftStackPull('bingo', event) })} {...(isLeftStackDetached(leftStack, 'bingo') ? { className: 'is-detached', style: leftStackFloatStyle('bingo') } : leftStackSplit ? { className: leftStackFirst === 'bingo' ? 'is-stack-first' : 'is-stack-second', style: { order: leftStackFirst === 'bingo' ? 0 : 2 } } : {})}{...(isLeftStackDetached(leftStack, 'bingo') ? {
                 floatBar: (
                   <div
                     className={`sc-agent-float-bar${leftStackDragging ? ' is-dragging' : ''}`}
@@ -5758,6 +5794,7 @@ useEffect(() => {
     </SelectionProvider>
     </RoomEditorProvider>
     </LocalActivitySwitchGuardProvider>
+    </AppearanceProvider>
   );
 }
 

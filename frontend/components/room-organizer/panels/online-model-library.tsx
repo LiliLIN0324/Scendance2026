@@ -1,7 +1,9 @@
 ﻿'use client';
 
-import { ChevronDown, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
+import { ChevronDown, Info, LayoutGrid, Loader2, Search, Sparkles, Star, Tag } from '@/components/solid-icons';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import { assetBytesLabel, assetLicenseLabel, assetSourceLabel, type CloudAsset } from '@/lib/assets-api';
+import { AssetDetailModal } from '../components/asset-detail-modal';
 import { useHorizontalRail } from '../hooks/use-horizontal-rail';
 import { listAholoAssets } from '../lib/aholo-assets';
 import { loadGeneratedCatalogItem, loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
@@ -36,7 +38,6 @@ import { openGenerationSheet } from '../lib/generation-sheet';
 import { MaterialThumb, warmMaterialThumbs } from './material-thumb';
 import type { OnlineModel, OnlineModelIndex } from '../lib/online-models';
 import type { CatalogItem, FurnitureItem, RoomLayout } from '../lib/types';
-import type { CloudAsset } from '@/lib/assets-api';
 import type { BackendSession, BackendSnapshot } from '@/lib/backend-session';
 
 type GeneratedCard = GeneratedMaterialCard;
@@ -181,6 +182,8 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   const [attempt, setAttempt] = useState(0);
   const [meta, setMeta] = useState<MaterialLibraryMeta>(emptyMaterialLibraryMeta);
   const [generated, setGenerated] = useState<GeneratedCard[]>([]);
+  /** 工作台「我的生成」的物料详情；不存云端返回的短时签名地址，只存卡片已有字段。 */
+  const [detailCard, setDetailCard] = useState<GeneratedCard | null>(null);
   const pending = usePendingMaterials();
   const cloudRecords = useAssetCloudRecords();
   const cloudSnapshot = useSyncExternalStore(
@@ -593,6 +596,34 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
   };
 
   // 物料卡三块并排：生成（去对话）/ 收藏 / 库。三块只是摘要入口，内容都在下面的结果区。
+  const detailRows = detailCard ? [
+    { label: '来源', value: detailCard.source ? assetSourceLabel(detailCard.source) : detailCard.shipped ? '随包物料' : '本机生成' },
+    { label: '状态', value: detailCard.cloud ? '云端物料' : detailCard.shipped ? '随包物料' : '本机物料' },
+    ...(detailCard.width && detailCard.depth ? [{
+      label: '占地',
+      value: `${detailCard.width} × ${detailCard.depth}${detailCard.height ? ` × ${detailCard.height}` : ''} 米`,
+    }] : []),
+    ...(detailCard.format ? [{
+      label: '文件',
+      value: `${detailCard.format.toUpperCase()}${detailCard.byteSize ? ` · ${assetBytesLabel(detailCard.byteSize)}` : ''}`,
+    }] : []),
+    ...(detailCard.createdAt ? [{
+      label: '创建',
+      value: Number.isNaN(Date.parse(detailCard.createdAt)) ? detailCard.createdAt : new Date(detailCard.createdAt).toLocaleString('zh-CN', { hour12: false }),
+    }] : []),
+    ...(detailCard.license ? [{ label: '授权', value: assetLicenseLabel({ license: detailCard.license }) }] : []),
+  ] : [];
+  const detailModal = <AssetDetailModal
+    open={!!detailCard}
+    title={detailCard?.name ?? ''}
+    {...(detailCard?.image ? { image: detailCard.image } : {})}
+    {...(detailCard?.description ? { description: detailCard.description } : {})}
+    rows={detailRows}
+    onClose={() => setDetailCard(null)}
+    {...(!disabled && busy === null && detailCard && !detailCard.id.startsWith('pending:') ? {
+      onPlace: () => { const card = detailCard; setDetailCard(null); clickGenerated(card); },
+    } : {})}
+  />;
   if (cardMode) {
     const favoriteModels = index.models.filter(model => meta.favorites.includes(model.slug));
     const favoriteGenerated = [...generated, ...pending].filter(card => meta.favorites.includes(card.id));
@@ -709,6 +740,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           <span className="sc-lib-tile-name">{card.name}{cloudState && <small> · {cloudState}</small>}</span>
         </button>
         {withFavorite && <button type="button" className={`sc-lib-star${favorited ? ' is-favorite' : ''}`} aria-label={`${favorited ? '取消收藏' : '收藏'}物料 ${card.name}`} aria-pressed={favorited} onClick={() => writeMeta(toggleFavorite(meta, card.id))}><Star size={12} fill={favorited ? 'currentColor' : 'none'} aria-hidden="true"/></button>}
+        {!pendingCard && <button type="button" className="sc-lib-info" aria-label={`查看${card.name}详情`} title="查看物料详情" onClick={() => setDetailCard(card)}><Info size={12} aria-hidden="true"/></button>}
       </li>;
     };
     const modelRow = (model: OnlineModel) => tile(model, true);
@@ -915,6 +947,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         <span>拖到地图上放置</span>
         {pane === 'lib' && importSlot ? <section className="sc-my-materials" aria-label="我的物料">{importSlot}</section> : null}
       </footer>
+      {detailModal}
     </div>;
   }
 
@@ -1025,6 +1058,7 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
           <button type="button" className={`sc-material-star${favorite ? ' is-on' : ''}`} aria-pressed={favorite} aria-label={favorite ? `取消收藏物料 ${card.name}` : `收藏物料 ${card.name}`} onClick={() => writeMeta(toggleFavorite(meta, card.id))}>
             <Star size={14} fill={favorite ? 'currentColor' : 'none'} aria-hidden="true"/>
           </button>
+          {!pendingCard && <button type="button" className="sc-lib-info" aria-label={`查看${card.name}详情`} title="查看物料详情" onClick={() => setDetailCard(card)}><Info size={12} aria-hidden="true"/></button>}
           {armedTag && !pendingCard && <button type="button" className={`sc-material-tagpin${tagged ? ' is-on' : ''}`} aria-pressed={tagged} aria-label={tagged ? `从${armedTag}卸下${card.name}` : `把${card.name}挂上${armedTag}`} onClick={() => writeMeta(toggleAssignment(meta, card.id, armedTag))}>{tagged ? '已挂' : '挂上'}</button>}
         </div>;
       })}
@@ -1032,5 +1066,6 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
         再显示 {Math.min(PAGE_SIZE, filtered.length - shown.length)} 个
       </button>}
     </div>
+    {detailModal}
   </>;
 }

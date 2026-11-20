@@ -7,10 +7,10 @@
   width: min(620px, calc(100% - 32px));
   box-sizing: border-box;
   padding: 12px 16px;
-  border: 1px solid #D9DCE1;
+  border: 1px solid var(--hair);
   border-radius: 12px;
-  background: #F4F5F7;
-  color: #3A3F47;
+  background: var(--plane);
+  color: var(--ink);
   box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
 }
 .sc-annotation-guide { padding: 10px 14px; }
@@ -18,14 +18,14 @@
 .sc-annotation-guide p { margin: 6px 0; font-size: 12px; line-height: 1.5; }
 .sc-annotation-guide__modes, .sc-annotation-guide__types { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-annotation-guide__modes { margin-top: 8px; }
-.sc-annotation-guide__lead { color: #3A3F47; }
-.sc-annotation-guide__hint { color: #71767E; }
-.sc-annotation-guide__section-label { margin: 10px 0 2px !important; font-size: 11px; color: #71767E; }
-.sc-annotation-guide details { margin-top: 8px; font-size: 12px; color: #71767E; }
-.sc-annotation-guide details summary { cursor: pointer; color: #5A6068; }
-.sc-annotation-guide button { border: 1px solid #D9DCE1; border-radius: 6px; padding: 5px 9px; background: #fff; color: #3A3F47; cursor: pointer; font: inherit; font-size: 12px; }
+.sc-annotation-guide__lead { color: var(--ink); }
+.sc-annotation-guide__hint { color: var(--wk-muted); }
+.sc-annotation-guide__section-label { margin: 10px 0 2px !important; font-size: 11px; color: var(--wk-muted); }
+.sc-annotation-guide details { margin-top: 8px; font-size: 12px; color: var(--wk-muted); }
+.sc-annotation-guide details summary { cursor: pointer; color: var(--ink-soft); }
+.sc-annotation-guide button { border: 1px solid var(--hair); border-radius: 6px; padding: 5px 9px; background: var(--paper); color: var(--ink); cursor: pointer; font: inherit; font-size: 12px; }
 /* 用途标签是次级操作：比工具行更轻，避免看起来像预设好的固定模块。 */
-.sc-annotation-guide__types button { background: #F4F5F7; border-color: transparent; color: #5A6068; padding: 4px 9px; }
-.sc-annotation-guide__types button[aria-pressed='true'] { background: #4A7C59; color: #fff; border-color: #4A7C59; }
-.sc-annotation-guide__modes button[aria-pressed='true'] { background: #4A7C59; color: #fff; border-color: #4A7C59; }
-.sc-annotation-guide__header button { background: #fff; }
+.sc-annotation-guide__types button { background: var(--plane); border-color: transparent; color: var(--ink-soft); padding: 4px 9px; }
+.sc-annotation-guide__types button[aria-pressed='true'] { background: var(--green-deep); color: #fff; border-color: var(--green-deep); }
+.sc-annotation-guide__modes button[aria-pressed='true'] { background: var(--green-deep); color: #fff; border-color: var(--green-deep); }
+.sc-annotation-guide__header button { background: var(--paper); }

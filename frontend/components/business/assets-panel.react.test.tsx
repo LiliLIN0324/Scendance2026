@@ -60,28 +60,28 @@ describe('personal cloud assets', () => {
     const pictured = await screen.findByRole('button', { name: '预览 有图的椅' });
     expect(pictured.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example/chair.webp');
   });
-  it('lets the owner publish or withdraw a model and marks public ones', async () => {
-    const owned = { ...asset, owner_id: userId, published_at: '2026-11-19T00:00:00Z' };
-    const calls: { path: string; method: string }[] = [];
-    requests.mockImplementation(async (path: string, method = 'GET') => {
-      if (path === '/assets') return [owned] as never;
-      calls.push({ path, method });
-      return {} as never;
-    });
+  it('shows a generated asset by its short object name instead of the whole prompt', async () => {
+    requests.mockResolvedValueOnce([{
+      ...asset, source: 'aholo',
+      name: '户外折叠椅 1：铝合金折叠框架，藏青色厚棉布坐垫靠背，座高 45 厘米，展开尺寸约 45×50×88 厘米',
+    }]);
     setup();
-    // 已在公共目录里的物料：标出来，并给物主一个「撤下」。
-    const withdraw = await screen.findByRole('button', { name: '撤下' });
-    expect(withdraw.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('公共物料')).toBeTruthy();
-    fireEvent.click(withdraw);
-    await waitFor(() => expect(calls).toEqual([{ path: `/assets/${asset.id}/publish`, method: 'DELETE' }]));
+    expect(await screen.findByRole('button', { name: '预览 户外折叠椅' })).toBeTruthy();
+    expect(screen.queryByText(/铝合金折叠框架/)).toBeNull();
   });
-  it('gives no publish button for somebody else material', async () => {
-    requests.mockResolvedValueOnce([{ ...asset, owner_id: '30000000-0000-4000-8000-000000000009', published_at: '2026-11-19T00:00:00Z' }]);
+  it('opens the asset passport with the full prompt, file facts and license', async () => {
+    const prompt = '户外折叠椅 1：铝合金折叠框架，藏青色厚棉布坐垫靠背，座高 45 厘米';
+    requests.mockResolvedValueOnce([{
+      ...asset, source: 'aholo', name: '户外折叠椅',
+      metadata: { sourceSize: { width: .45, depth: .5, height: .88 }, backfill: { originalName: prompt } },
+      license: { type: 'provider-terms' },
+    }]);
     setup();
-    expect(await screen.findByText('公共物料')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '撤下' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '公开' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: '预览 户外折叠椅' }));
+    expect(await screen.findByText('生成描述')).toBeTruthy();
+    expect(screen.getByText(prompt)).toBeTruthy();
+    expect(screen.getByText('服务商条款')).toBeTruthy();
+    expect(screen.getAllByText('Aholo Lux3D', { exact: false }).length).toBeGreaterThan(0);
   });
   it('only lists personal assets without another AI generation entry or requests', async () => {
     setup(); await screen.findByRole('button', { name: '预览 木椅' });
@@ -137,8 +137,63 @@ describe('personal cloud assets', () => {
     await screen.findByText('连接中断');
     expect(screen.getByRole('button', { name: '预览 木椅' })).toBeTruthy();
   });
-  it('requires valid dimensions and edit permission to add a personal asset', async () => {
-    const view = setup(); fireEvent.click(await screen.findByRole('button', { name: '预览 木椅' }));
+  it('lets the owner publish or withdraw a model and marks public ones', async () => {
+    const owned = { ...asset, owner_id: userId, published_at: '2026-11-19T00:00:00Z' };
+    const calls: { path: string; method: string }[] = [];
+    requests.mockImplementation(async (path: string, method = 'GET') => {
+      if (path === '/assets') return [owned] as never;
+      calls.push({ path, method });
+      return {} as never;
+    });
+    setup();
+    // 已在公共目录里的物料：标出来，并给物主一个「撤下」。
+    const withdraw = await screen.findByRole('button', { name: '撤下' });
+    expect(withdraw.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('公共物料')).toBeTruthy();
+    fireEvent.click(withdraw);
+    await waitFor(() => expect(calls).toEqual([{ path: `/assets/${asset.id}/publish`, method: 'DELETE' }]));
+  });
+  it('splits the library pane into public directory, team materials and my materials', async () => {
+    const publicOne = { ...asset, id: '30000000-0000-4000-8000-000000000002', owner_id: '30000000-0000-4000-8000-000000000009', published_at: '2026-11-19T00:00:00Z', name: '公共椅' };
+    const teamOne = { ...asset, id: '30000000-0000-4000-8000-000000000003', owner_id: userId, team_studio_id: 'studio', name: '团队椅' };
+    const privateOne = { ...asset, owner_id: userId, name: '私有椅' };
+    requests.mockResolvedValueOnce([publicOne, teamOne, privateOne]);
+    const onApplyLayout = vi.fn();
+    render(<AssetsPanel controller={controller} layout={backendSceneToLayout(scene)} onApplyLayout={onApplyLayout} bound={false} busy={false} />);
+    expect(await screen.findByRole('button', { name: '预览 公共椅' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '公共目录' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '团队物料' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '我的物料' })).toBeTruthy();
+    const publicSection = screen.getByRole('heading', { name: '公共目录' }).closest('section');
+    const teamSection = screen.getByRole('heading', { name: '团队物料' }).closest('section');
+    const privateSection = screen.getByRole('heading', { name: '我的物料' }).closest('section');
+    expect(publicSection?.textContent).toContain('公共椅');
+    expect(teamSection?.textContent).toContain('团队椅');
+    expect(privateSection?.textContent).toContain('私有椅');
+    expect(teamSection?.textContent).not.toContain('私有椅');
+  });
+  it('lets the owner submit a private model to the current studio team library', async () => {
+    const privateOne = { ...asset, owner_id: userId, name: '待提交椅' };
+    const calls: { path: string; method: string; body?: unknown }[] = [];
+    requests.mockImplementation(async (path: string, method = 'GET', body?: unknown) => {
+      if (path === '/assets') return [privateOne] as never;
+      calls.push({ path, method, body });
+      return {} as never;
+    });
+    const onApplyLayout = vi.fn();
+    render(<AssetsPanel controller={controller} layout={backendSceneToLayout(scene)} onApplyLayout={onApplyLayout} bound={false} busy={false} />);
+    const submit = await screen.findByRole('button', { name: '提交团队' });
+    fireEvent.click(submit);
+    await waitFor(() => expect(calls).toEqual([{ path: `/assets/${asset.id}/team`, method: 'POST', body: { studioId: 'studio' } }]));
+  });
+  it('gives no publish button for somebody else s material', async () => {
+    requests.mockResolvedValueOnce([{ ...asset, owner_id: '30000000-0000-4000-8000-000000000009', published_at: '2026-11-19T00:00:00Z' }]);
+    setup();
+    expect(await screen.findByText('公共物料')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '撤下' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '公开' })).toBeNull();
+  });
+  it('requires valid dimensions and edit permission to add a personal asset', async () => {    const view = setup(); fireEvent.click(await screen.findByRole('button', { name: '预览 木椅' }));
     const add = await screen.findByRole('button', { name: '确认加入当前画布' });
     expect((screen.getByLabelText('模型高（米）') as HTMLInputElement).value).toBe('0.9');
     fireEvent.change(screen.getByLabelText('模型宽（米）'), { target: { value: '0' } });

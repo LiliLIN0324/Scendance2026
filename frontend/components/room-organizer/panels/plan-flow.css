@@ -52,7 +52,7 @@
   border: 0;
   border-radius: 8px;
   background: var(--ink, #141416);
-  color: #fff;
+  color: var(--paper);
   font-weight: 500;
   font-size: var(--fs-c1, 14px);
   cursor: pointer;
