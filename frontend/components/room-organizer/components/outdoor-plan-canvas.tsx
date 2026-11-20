@@ -4419,6 +4419,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         redoPlan();
         return;
       }
+      // 2026-11-20 审计 F10：Windows 用户习惯的 Ctrl+Y 也是重做（原来只有 Ctrl+Shift+Z）。
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'y') {
+        if (inField || !onPlanChange) return;
+        event.preventDefault();
+        redoPlan();
+        return;
+      }
       // 2026-11-16 设施落位前旋转：R +15°，Shift+R −15°（2D / 3D 接管态同一个 window 监听）。
       if (
         modeRef.current === 'facility'
@@ -10677,6 +10684,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function handleStageMouseLeave() {
+    // 2026-11-20 审计 K6：2D 用鼠标事件，指针一离开画布就收不到 move/up，只能丢弃拖拽会话。
+    // 这里先记下「离开前是不是真正在拖东西」：真取消时要说一句，而不是让物件默默弹回去。
+    const cancelledDrag = Boolean(
+      facilityDragRef.current
+      || groupDragRef.current
+      || dragNodeRef.current
+      || dragZoneVertexRef.current
+      || dragZoneMoveRef.current
+      || zoneScaleRef.current
+      || dragRouteVertexRef.current
+      || dragWorkerRef.current,
+    );
     panRef.current = undefined;
     setDragging(false);
     downPxRef.current = null;
@@ -10764,6 +10783,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 2026-11-14：人员点位拖拽同理。
     dragWorkerRef.current = null;
     workerDragPreviewRef.current = null;
+    if (cancelledDrag) setEditMessage('这次拖动已取消（指针离开了画布），方案没有改动。');
     draw();
   }
 
@@ -13670,6 +13690,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   type="button"
                   data-testid="plan-undo"
                   aria-label="撤销上一步"
+                  aria-keyshortcuts="Control+Z"
+                  title="撤销上一步（Ctrl+Z）"
                   disabled={historyCount === 0}
                   style={{ ...modeButtonStyle(false), opacity: historyCount === 0 ? 0.5 : 1 }}
                   onClick={() => undoPlan()}

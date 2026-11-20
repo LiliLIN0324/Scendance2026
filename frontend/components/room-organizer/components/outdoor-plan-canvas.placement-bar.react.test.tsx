@@ -6,8 +6,9 @@ import Canvas, { type OutdoorPlanCanvasHandle } from './outdoor-plan-canvas';
 import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 
 /**
- * 2026-11-20 审计 K5/K11：落位前的朝向与取消要有可点的入口（原来只有 R / Esc），
- * 且 3D 右键要回到 2D 同一份菜单逻辑（取消放置 / 撤草稿上一点 / 设施菜单）。
+ * 2026-11-20 审计 K5/K11/F10：落位前的朝向与取消要有可点的入口（原来只有 R / Esc），
+ * 3D 右键要回到 2D 同一份菜单逻辑（取消放置 / 撤草稿上一点 / 设施菜单），
+ * 以及 Windows 习惯的 Ctrl+Y 也得能重做。
  */
 const ARM = { slug: 'tent', name: '帐篷', width: 3, depth: 3, templateId: 'oneplan:scale:tent' };
 
@@ -75,4 +76,24 @@ it('3D 右键桥在浏览态把设施菜单打开到命中的物件上', () => {
     ref.current!.pointerFromPlan('contextmenu', { px: { x: 120, y: 120 }, pt: { x: 4, y: 4 } }, { button: 2 });
   });
   expect(ref.current!.getSelectedIds()).toContain('22222222-2222-4222-8222-222222222222');
+});
+
+it('Ctrl+Y 与 Ctrl+Shift+Z 一样能重做', () => {
+  const { ref, commit } = mount();
+  act(() => { ref.current!.cancelPendingPlacement(); });
+  act(() => {
+    ref.current!.addFacility({
+      id: '33333333-3333-4333-8333-333333333333',
+      templateId: 'oneplan:scale:tent',
+      name: '帐篷 2',
+      position: { x: 6, y: 6 },
+      rotationDeg: 0,
+      size: { width: 3, depth: 3 },
+      notes: '',
+    });
+  });
+  act(() => { ref.current!.undo(); });
+  expect(commit.mock.calls.at(-1)![0].facilities).toHaveLength(0);
+  fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+  expect(commit.mock.calls.at(-1)![0].facilities).toHaveLength(1);
 });
