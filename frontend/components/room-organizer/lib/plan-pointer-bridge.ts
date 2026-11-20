@@ -7,7 +7,9 @@
  *
  * 这里把规则定成纯函数，桥和测试共用一份：
  * - 有命中：用新命中，并记成「上一个有效落点」；
- * - 没命中：沿用上一个有效落点（拖拽预览停在最后一次真的踩到地面的位置）；
+ * - move/up 没命中：沿用本手势上一个有效落点；up 后清缓存；
+ * - 新 down/dblclick 需要新命中，不能借用上一个手势；
+ * - 右键即使没有落点也派发，取消/撤点无需坐标；对象菜单不猜坐标。
  * - 一次有效落点都没有（点天空起手）：不猜坐标，告诉调用方这次事件直接忽略。
  */
 
@@ -33,6 +35,9 @@ export function resolveBridgedHit<H extends PlanBridgeHit>(
   if (kind === 'leave') {
     return { hit: null, lastHit: null, ignore: false };
   }
+  if (kind === 'contextmenu') return { hit, lastHit: null, ignore: false };
+  if (kind === 'down' || kind === 'dblclick') return { hit, lastHit: hit, ignore: !hit };
+  if (kind === 'up') return { hit: hit ?? lastHit, lastHit: null, ignore: !hit && !lastHit };
   if (hit) {
     return { hit, lastHit: hit, ignore: false };
   }

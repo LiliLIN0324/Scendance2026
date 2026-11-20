@@ -78,3 +78,56 @@ it('画墙态右键丢弃这一段的草稿，模式不退出', () => {
   act(() => { ref.current!.pointerFromPlan('contextmenu', { px: { x: 200, y: 100 }, pt: { x: 8, y: 2 } }, { button: 2 }); });
   expect(ref.current!.getMode()).toBe('wall');
 });
+
+it('测量会话中多次 Agent 编辑：退出只剥离临时线，逐次撤销仍保留每次设施编辑', () => {
+  const { ref } = mount();
+  act(() => { ref.current!.setMode('measure'); });
+  click(ref, 120, 120);
+  click(ref, 240, 240);
+  act(() => { ref.current!.pointerFromPlan('contextmenu', null, { button: 2 }); });
+  expect(ref.current!.getEditVisuals().plan.measurements).toHaveLength(1);
+  for (const name of ['A', 'B', 'C']) {
+    act(() => {
+      ref.current!.addFacility({
+        id: crypto.randomUUID(), templateId: 'oneplan:scale:tent', name,
+        position: { x: 6, y: 6 }, rotationDeg: 0, size: { width: 3, depth: 3 }, notes: '',
+      });
+    });
+  }
+  act(() => { ref.current!.setMode('view'); });
+  for (const names of [['A', 'B'], ['A'], []]) {
+    act(() => { ref.current!.undo(); });
+    const plan = ref.current!.getEditVisuals().plan;
+    expect(plan.facilities.map(f => f.name)).toEqual(names);
+    expect(plan.measurements ?? []).toHaveLength(0);
+  }
+  act(() => { ref.current!.redo(); });
+  expect(ref.current!.getEditVisuals().plan.facilities.map(f => f.name)).toEqual(['A']);
+  expect(ref.current!.getEditVisuals().plan.measurements ?? []).toHaveLength(0);
+});
+
+it('无地面命中的右键也能退出放置，且不会误用 2D 像素定位菜单', () => {
+  const { ref, commit } = mount();
+  act(() => { ref.current!.armCatalogFacility({ slug: 'tent', name: '帐篷', width: 3, depth: 3, templateId: 'oneplan:scale:tent' }); });
+  act(() => { ref.current!.pointerFromPlan('contextmenu', null, { button: 2, clientX: 200, clientY: 200 }); });
+  expect(ref.current!.getMode()).toBe('view');
+  expect(commit).not.toHaveBeenCalled();
+  expect(screen.queryByTestId('plan-context-menu')).toBeNull();
+});
+
+it('会话内已撤掉临时线时退出，重做也只恢复实际编辑', () => {
+  const { ref } = mount();
+  act(() => { ref.current!.setMode('measure'); });
+  click(ref, 120, 120);
+  click(ref, 240, 240);
+  act(() => { ref.current!.pointerFromPlan('contextmenu', null, { button: 2 }); });
+  act(() => { ref.current!.addFacility({
+    id: crypto.randomUUID(), templateId: 'oneplan:scale:tent', name: 'A',
+    position: { x: 6, y: 6 }, rotationDeg: 0, size: { width: 3, depth: 3 }, notes: '',
+  }); });
+  act(() => { ref.current!.undo(); ref.current!.undo(); });
+  act(() => { ref.current!.setMode('view'); ref.current!.redo(); });
+  const plan = ref.current!.getEditVisuals().plan;
+  expect(plan.facilities.map(f => f.name)).toEqual(['A']);
+  expect(plan.measurements ?? []).toHaveLength(0);
+});

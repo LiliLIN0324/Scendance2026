@@ -142,6 +142,11 @@ describe('打开时的待同步标记与内容基线（B1 / F9）', () => {
 });
 
 describe('samePlanContent（键序不同不算改动）', () => {
+  it('省略可选字段与显式 undefined 的落盘内容一致，null 仍是真实变更', () => {
+    expect(samePlanContent({ facilities: [{ id: 'a' }] }, { facilities: [{ id: 'a', zoneId: undefined }] })).toBe(true);
+    expect(samePlanContent({ facilities: [{ id: 'a', zoneId: undefined }] }, { facilities: [{ id: 'a' }] })).toBe(true);
+    expect(samePlanContent({ zoneId: null }, {})).toBe(false);
+  });
   it('结构相等忽略对象键序，但区分数组顺序与真实差异', () => {
     expect(samePlanContent({ a: 1, b: [1, 2] }, { b: [1, 2], a: 1 })).toBe(true);
     expect(samePlanContent({ a: 1 }, { a: 1, b: 2 })).toBe(false);

@@ -100,8 +100,9 @@ export function samePlanContent(a: unknown, b: unknown): boolean {
   if (a && b && typeof a === 'object' && typeof b === 'object') {
     const left = a as Record<string, unknown>;
     const right = b as Record<string, unknown>;
-    const keys = Object.keys(left);
-    if (keys.length !== Object.keys(right).length) return false;
+    // 可选字段显式设为 undefined 和省略该字段落盘后相同，不应制造历史或待同步改动。
+    const keys = Object.keys(left).filter(key => left[key] !== undefined);
+    if (keys.length !== Object.keys(right).filter(key => right[key] !== undefined).length) return false;
     return keys.every(key => Object.hasOwn(right, key) && samePlanContent(left[key], right[key]));
   }
   return false;

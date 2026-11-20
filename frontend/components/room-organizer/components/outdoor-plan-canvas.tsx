@@ -1,4 +1,5 @@
 'use client';
+import { samePlanContent } from '../lib/outdoor-project-store';
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIssues, publishOutdoorPlanSettled } from '../lib/outdoor-plan-issues';
 import { firstModelSlug } from '../lib/asset-namespace';
@@ -337,6 +338,7 @@ import {
   PLAN_MODE_TARGET_LAYER,
   planEntityBlockReason,
   planEntityEditable,
+  planLayerAccess,
   planLayerBlockReason,
 } from '../lib/plan-edit-gate';
 import { resolveBridgedHit } from '../lib/plan-pointer-bridge';
@@ -1529,6 +1531,8 @@ function notifyPlanDraftChanged(): void {
 
 /** 3D 倾斜地图用来叠当前编辑预览（草稿折线、幽灵占位）。 */
 export interface PlanEditVisuals {
+  /** 已提交方案；预览不得驱动整群人物重建。 */
+  committedPlan?: SitePlanData;
   plan: SitePlanData;
   selectedZoneId: string | null;
   /** 2026-11-12 3D 手柄：当前选中的设施 id（null=无选中）；3D 据此挂编辑手柄。 */
@@ -1549,6 +1553,8 @@ export interface PlanEditVisuals {
   selectedMeasurementId: string | null;
   /** 组选设施（Shift/Ctrl 多选、框选）：3D 画组包围盒与逐件底环（K13）。 */
   multiSelectedFacilityIds: readonly string[];
+  multiSelectedRouteIds?: readonly string[];
+  multiSelectedNodeIds?: readonly string[];
   /**
    * 2026-11-20 审计 K5：正在放置的物料（不依赖光标是否有幽灵——3D 的放置浮条靠它）。
    * null = 没在放；rotationDeg 与键盘 R / 浮条 ±15° 同一份 ref。
@@ -2059,6 +2065,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [mode, setModeState] = useState<PlanningEditMode>('view');
   const [zoneSemantic, setZoneSemantic] = useState<PlanningZoneSemantic>('audience');
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [accessNotice, setAccessNotice] = useState<string | null>(null);
   /** 2026-11-15：边界/范围提交后的分区越界清单（提示条 + 一键收进）。 */
   const [zoneOverflow, setZoneOverflow] = useState<ZoneBoundsOverflow[]>([]);
   const [zoneUndoAvailable, setZoneUndoAvailable] = useState(false);
@@ -2687,6 +2694,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     event.preventDefault();
+    if (refuseEntityWrite('facility')) { setContextMenu(null); return; }
     // 选择模式下组选让位给单件聚焦（菜单动作都按单件语义走）；浏览模式组选本就不成立。
     clearMultiSelection(false);
     if (!layerLocked('facility')) selectFacility(target.id);
@@ -2856,14 +2864,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (Object.keys(quote).length > 0) next.quote = quote;
       else delete next.quote;
     }
-    return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    return samePlanContent(next, current) ? current : next;
   }
 
   /** 编辑提交：undo 栈推入旧快照（上限 UNDO_LIMIT），再同步 ref 与父级。 */
   function commitPlan(next: SitePlanData) {
     // 2026-11-20 审计 F1：内容相等就不压历史。对齐/分布已经在位、把同一个数字再输一遍、
     // 拖了一圈又拖回原位，都不应该占掉 30 步撤销里的一格。
-    if (JSON.stringify(next) === JSON.stringify(planRef.current)) return;
+    if (samePlanContent(next, planRef.current)) return false;
+    if (refusePlanWrite(next)) return false;
     historyRef.current.push(planRef.current);
     if (historyRef.current.length > UNDO_LIMIT) historyRef.current.shift();
     setHistoryCount(historyRef.current.length);
@@ -2874,6 +2883,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     planRef.current = next;
     onPlanChangeRef.current?.(next);
+    return true;
   }
 
   /** 连续调整的合并键与时间戳（K2）：只对同一个对象、同一个属性的连续写入生效。 */
@@ -2888,7 +2898,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const previous = mergeCommitRef.current;
     if (previous && previous.key === mergeKey && now - previous.at < PLAN_COMMIT_MERGE_MS) {
       mergeCommitRef.current = { key: mergeKey, at: now };
-      if (JSON.stringify(next) === JSON.stringify(planRef.current)) return;
+      if (samePlanContent(next, planRef.current) || refusePlanWrite(next)) return;
       planRef.current = next;
       onPlanChangeRef.current?.(next);
       return;
@@ -4828,6 +4838,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function eventPlanPoint(event: { clientX: number; clientY: number }): { px: { x: number; y: number }; pt: PlanPoint } | null {
     if (pointerOverrideRef.current) return pointerOverrideRef.current;
+    if (pointerFrom3dRef.current) return null;
     const stage = stageRef.current;
     if (!stage) return null;
     const rect = stage.getBoundingClientRect();
@@ -5005,7 +5016,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     isFacilityLayerLocked: () => lockedLayersRef.current.facility === true,
     inspectFacility: id => {
       const facility = planRef.current.facilities.find(item => item.id === id);
-      if (!facility) return false;
+      if (!facility || refuseEntityWrite('facility')) return false;
       if (facility.levelId) setActiveLevelId(facility.levelId);
       setMode('select'); selectFacility(id); if (selectionPanelOnRef.current) setInspectorPanel('selection', true);
       setInspectorCollapsed(current => ({ ...current, selection: false }));
@@ -5023,7 +5034,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return true;
     },
     applyWorkflowPlan:(next,expected)=>{
-      const current=planRef.current;if(JSON.stringify(current)!==expected||!next.anchor)return false;
+      const current = planRef.current;
+      let baseline: unknown;
+      try { baseline = JSON.parse(expected); } catch { return false; }
+      if (!samePlanContent(current, baseline) || !next.anchor || refusePlanWrite(next)) return false;
       // 2026-11-14「以第一个选区为准」：提案已不携带任何旧坐标系内容（换场清空）时允许换锚点——
       // 没有内容被静默搬动；内容存续时维持原有换锚保护。
       const frameBound=[next.zones,next.routes,next.nodes,next.facilities,next.workers,next.annotations,next.measurements].some(items=>items?.length);
@@ -5036,7 +5050,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         nextBoundary: next.boundary,
         nextScope: next.designScope,
       });
-      commitPlan(scope ? { ...next, designScope: scope } : next);setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
+      if(!commitPlan(scope ? { ...next, designScope: scope } : next))return false;setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
     },
     openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);if(selectionPanelOnRef.current)setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
@@ -5046,7 +5060,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 2026-11-17 用户指令「画好红线默认=设计范围」：两条分支都自动生成外扩 20 m 的设计范围。
       const { plan: next, replaced, cleared } = planForPickedVenue(planRef.current, anchor, boundary);
       const withScope: SitePlanData = { ...next, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M) };
-      commitPlan(withScope);
+      if (!commitPlan(withScope)) return false;
       if (replaced) {
         setEditMessage(cleared > 0
           ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
@@ -5060,28 +5074,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     applyRoutes: (routes: PlanRoute[], nodes: PlanNode[]) => {
       const current = planRef.current;
       if (routes.length === 0 && nodes.length === 0) return false;
-      commitPlan({
+      return commitPlan({
         ...current,
         routes: [...current.routes, ...routes.map(route => ({ ...route, ...activeLevelStamp() }))],
         nodes: [...current.nodes, ...nodes.map(node => ({ ...node, ...activeLevelStamp() }))],
       });
-      return true;
     },
     /** V-3c：应用区域提案（合并 zones/facilities 进 plan，commitPlan 可撤销）；空提案回 false。 */
     applyZoneProposal: (zones: PlanZone[], facilities: PlanFacility[], routes: PlanRoute[] = [], nodes: PlanNode[] = []) => {
       const current = planRef.current;
       if (zones.length === 0 && facilities.length === 0) return false;
-      commitPlan({
+      return commitPlan({
         ...current,
         zones: [...current.zones, ...zones.map(zone => ({ ...zone, ...activeLevelStamp() }))],
         facilities: [...current.facilities, ...facilities.map(facility => inheritPrice({ ...facility, ...activeLevelStamp() }, current.priceBook))],
         routes: [...current.routes, ...routes.map(route => ({ ...route, ...activeLevelStamp() }))],
         nodes: [...current.nodes, ...nodes.map(node => ({ ...node, ...activeLevelStamp() }))],
       });
-      return true;
     },
     /** M5：合并人员布点进 plan（commitPlan 可撤销）；逐条 buildWorker 校验，全非法/空回 false。 */
     applyWorkers: (workers: PlanWorker[]) => {
+      if (refuseEntityWrite('worker')) return false;
       const current = planRef.current;
       if (workers.length === 0) return false;
       const valid: PlanWorker[] = [];
@@ -5104,6 +5117,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     /** M5：合并测量进 plan；逐条 buildMeasurement 几何校验，全非法/空回 false。 */
     applyMeasurements: (measurements: PlanMeasurement[]) => {
+      if (refuseEntityWrite('measurement')) return false;
       const current = planRef.current;
       if (measurements.length === 0) return false;
       const valid: PlanMeasurement[] = [];
@@ -5120,6 +5134,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     /** M5：合并标注进 plan；逐条 buildAnnotation 几何校验，全非法/空回 false。 */
     applyAnnotations: (annotations: PlanAnnotation[]) => {
+      if (refuseEntityWrite('annotation')) return false;
       const current = planRef.current;
       if (annotations.length === 0) return false;
       const valid: PlanAnnotation[] = [];
@@ -5147,6 +5162,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     /** M5：单条设施新增；id 已存在回 false。校验在提案侧 buildFacility 完成。 */
     addFacility: (facility: PlanFacility) => {
+      if (refuseEntityWrite('facility')) return false;
       const current = planRef.current;
       if (current.facilities.some(f => f.id === facility.id)) return false;
       commitPlan({ ...current, facilities: [...current.facilities, inheritPrice({ ...facility, ...activeLevelStamp() }, current.priceBook)] });
@@ -5154,12 +5170,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     /** M5：单条设施删除；不存在回 false。 */
     removeFacility: (id: string) => {
+      if (refuseEntityWrite('facility')) return false;
       if (!planRef.current.facilities.some(f => f.id === id)) return false;
       deleteFacility(id);
       return true;
     },
     /** M5：单条设施属性改；不存在回 false。 */
     updateFacility: (id: string, patch) => {
+      if (refuseEntityWrite('facility')) return false;
       if (!planRef.current.facilities.some(f => f.id === id)) return false;
       updateFacility(id, patch);
       return true;
@@ -5281,12 +5299,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           routes: next.routes.map((route) => nodePreview.routes.find((item) => item.id === route.id) ?? route),
         };
       }
+      const routePreview = routeDragPreviewRef.current;
+      if (routePreview) next = { ...next, routes: next.routes.map(route =>
+        route.id === routePreview.routeId ? { ...route, points: routePreview.points } : route) };
+      const workerPreview = workerDragPreviewRef.current;
+      if (workerPreview) next = { ...next, workers: next.workers.map(worker =>
+        worker.id === workerPreview.worker.id ? workerPreview.worker : worker) };
+      const measurementPreview = measurementDragPreviewRef.current;
+      if (measurementPreview) next = { ...next, measurements: (next.measurements ?? []).map(measurement =>
+        measurement.id === measurementPreview.id ? { ...measurement, points: measurementPreview.points } : measurement) };
       if (previewRingRef.current) {
         next = { ...next, boundary: previewRingRef.current };
       }
       const DRAFT_ID = "00000000-0000-4000-8000-000000000001";
       const mode = modeRef.current;
-      if (mode === "facility" && ghostPointRef.current) {
+      if (mode === "facility" && entityEditable('facility') && ghostPointRef.current) {
         const template = facilityTemplateObjRef.current
           ?? (facilityTemplateRef.current
             ? libraryTemplatesRef.current.get(facilityTemplateRef.current) ?? resolveFacilityTemplate(facilityTemplateRef.current)
@@ -5363,10 +5390,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         : null;
       return {
         plan: next,
+        committedPlan: planRef.current,
         selectedZoneId: selectedZoneRef.current,
         // 2026-11-12 3D 手柄：把选中设施与可编辑态透出，3D 侧只画柄不拷贝编辑逻辑。
         selectedFacilityId: selectedFacilityRef.current,
-        facilityEditable: !!onPlanChange && !layerLocked('facility') && (modeRef.current === 'view' || modeRef.current === 'select'),
+        facilityEditable: !!onPlanChange && entityEditable('facility') && (modeRef.current === 'view' || modeRef.current === 'select'),
         // 2026-11-20 审计 B9/K13：把其余六类选中与框选矩形一并透出，3D 才有反馈可画。
         selectedRouteId: selectedRouteRef.current,
         selectedNodeId: selectedNodeRef.current,
@@ -5375,6 +5403,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         selectedAnnotationId: selectedAnnotationRef.current,
         selectedMeasurementId: selectedMeasurementRef.current,
         multiSelectedFacilityIds: multiSelectedFacilityIdsRef.current.slice(),
+        multiSelectedRouteIds: multiSelectedRouteIdsRef.current.slice(),
+        multiSelectedNodeIds: multiSelectedNodeIdsRef.current.slice(),
         marquee: marqueeBoxFromRect(marqueeRectRef.current),
         pendingPlacement,
         arrangePreview: arrangePreviewRef.current?.map(facility => ({
@@ -5422,6 +5452,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 图层栈开关：切换某层可见并回传（受控/非受控均生效）。关层时收掉该层选中，避免「选中不可见对象」。 */
   function setLayerVisible(kind: PlanningLayerKind, visible: boolean) {
+    setAccessNotice(null);
     const next = { ...layerState, [kind]: visible };
     setLayerState(next);
     layerStateRef.current = next;
@@ -5431,10 +5462,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已隐藏：该层内容暂不可选中或编辑。`);
     }
     draw();
+    notifyPlanDraftChanged();
   }
 
   /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁上时收掉该层选中。 */
   function setLayerLocked(kind: PlanningLayerKind, locked: boolean) {
+    setAccessNotice(null);
     const next: LockedLayerMap = { ...lockedLayersRef.current, [kind]: locked };
     lockedLayersRef.current = next;
     setLockedLayers(next);
@@ -5443,6 +5476,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已锁定：只读，解锁后才能选中或编辑。`);
     }
     draw();
+    notifyPlanDraftChanged();
   }
 
   /** P2-i：设施能否在画布上直接操作——浏览模式 + 设施层未锁定。 */
@@ -5484,10 +5518,33 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 隐藏/锁定层的写入口统一拒绝：真拒绝时给一次提示并返回 true。 */
   function refuseEntityWrite(kind: PlanInventoryKind): boolean {
+    if (!onPlanChangeRef.current) return true;
     const reason = layerBlockedReason(kind);
     if (!reason) return false;
+    setAccessNotice(reason);
     setEditMessage(reason);
     return true;
+  }
+
+  /** 提交前再查一次所有变化的层，含级联删除、Agent 整批写入和已打开菜单的动作。 */
+  function refusePlanWrite(next: SitePlanData): boolean {
+    if (!onPlanChangeRef.current) return true;
+    const current = planRef.current;
+    const fields: [keyof SitePlanData, PlanningLayerKind][] = [
+      ['anchor', 'boundary'], ['boundary', 'boundary'], ['designScope', 'zone'], ['walls', 'zone'], ['zones', 'zone'],
+      ['facilities', 'facility'], ['routes', 'route'], ['nodes', 'access'],
+      ['workers', 'worker'], ['vehicles', 'route'], ['measurements', 'measure'],
+      ['annotations', 'annotate'],
+    ];
+    for (const [field, layer] of fields) {
+      if (samePlanContent(current[field], next[field])) continue;
+      const access = planLayerAccess(layer, layerStateRef.current, lockedLayersRef.current);
+      // 红线默认锁用于保护已有轮廓，不能挡住空白活动的首次选址/圈画。
+      if (layer === 'boundary' && current.boundary.length < 3) access.locked = false;
+      const reason = planLayerBlockReason(layer, access);
+      if (reason) { setAccessNotice(reason); setEditMessage(reason); return true; }
+    }
+    return false;
   }
 
   /** 关掉/锁上某层时，收掉挂在该层实体上的单选、组选与拖拽会话（不留「选中不可见对象」）。 */
@@ -5959,6 +6016,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedAnnotationId,
     selectedMeasurementId,
     multiSelectedFacilityIds,
+    multiSelectedRouteIds,
+    multiSelectedNodeIds,
     boundarySelected,
   ]);
 
@@ -6004,6 +6063,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * 数组越靠后画得越上，所以重排数组即可，草稿/导出/3D 都自动跟着变。
    */
   function reorderFacility(id: string, action: 'up' | 'top' | 'down' | 'bottom') {
+    if (refuseEntityWrite('facility')) return;
     const current = planRef.current;
     const index = current.facilities.findIndex(item => item.id === id);
     if (index < 0) return;
@@ -6019,7 +6079,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setContextMenu(null);
       return;
     }
-    commitPlan({ ...current, facilities: next });
+    if (!commitPlan({ ...current, facilities: next })) return;
     const label = action === 'up' ? '上移一层' : action === 'top' ? '置于顶层' : action === 'down' ? '下移一层' : '置于底层';
     const at = next.findIndex(item => item.id === id) + 1;
     setEditMessage(`「${moved.name}」${label}（第 ${at} / ${next.length} 层）。`);
@@ -6834,7 +6894,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       depth: number;
     } | null;
   } | null {
-    if (modeRef.current !== 'facility') return null;
+    if (modeRef.current !== 'facility' || !entityEditable('facility')) return null;
     const position = ghostPointRef.current;
     if (!position || !facilityTemplateRef.current) return null;
     const template = resolvePendingTemplate();
@@ -6860,6 +6920,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 2026-11-16 拖放预览：2D onDragOver 与 3D 地面 dragover 共用，拖起即出幽灵。 */
   function previewFacilityDrop(templateId: string, point: PlanPoint): boolean {
+    if ((!onPlanChangeRef.current || layerLocked('facility') || (modeRef.current === 'facility' && !layerVisible('facility'))) && refuseEntityWrite('facility')) return false;
     if (!templateId) return false;
     if (modeRef.current !== 'facility') setMode('facility');
     if (facilityTemplateRef.current !== templateId) pickFacilityTemplate(templateId);
@@ -6871,13 +6932,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 2026-11-16 拖放落位：与单击放置共用 placeFacilityAt，角度/尺寸/校验不另走一套。 */
   function dropFacilityAtPoint(templateId: string, point: PlanPoint): boolean {
-    if (!templateId) return false;
-    if (modeRef.current !== 'facility') setMode('facility');
-    if (facilityTemplateRef.current !== templateId) pickFacilityTemplate(templateId);
-    ghostPointRef.current = point;
+    if (!previewFacilityDrop(templateId, point)) return false;
+    const before = planRef.current;
     facilityDropAtRef.current = Date.now();
     placeFacilityAt(point);
-    return true;
+    return planRef.current !== before;
+
   }
 
   /** 2026-11-16 拖出画布：只清幽灵，不清工具（用户可能接着点放）。 */
@@ -6896,6 +6956,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function armCatalogFacility(payload: PlanCatalogDrag): boolean {
+    if ((!onPlanChangeRef.current || layerLocked('facility')) && refuseEntityWrite('facility')) return false;
     if (!payload.slug || !(payload.width > 0) || !(payload.depth > 0)) return false;
     // setMode 会清待放模板，必须先切模式再写模板。
     setMode('facility');
@@ -6911,6 +6972,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function previewCatalogDrop(payload: PlanCatalogDrag, point: PlanPoint): boolean {
+    if ((!onPlanChangeRef.current || layerLocked('facility') || (modeRef.current === 'facility' && !layerVisible('facility'))) && refuseEntityWrite('facility')) return false;
     if (!payload.slug || !(payload.width > 0) || !(payload.depth > 0)) return false;
     if (modeRef.current !== 'facility' || facilityCatalogRef.current?.slug !== payload.slug) {
       if (modeRef.current !== 'facility') setMode('facility');
@@ -6928,9 +6990,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   function dropCatalogAt(payload: PlanCatalogDrag, point: PlanPoint): boolean {
     if (!previewCatalogDrop(payload, point)) return false;
+    const before = planRef.current;
     facilityDropAtRef.current = Date.now();
     placeFacilityAt(point, payload.slug);
-    return true;
+    return planRef.current !== before;
   }
 
   /**
@@ -7119,9 +7182,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function deleteFacility(id: string) {
+    if (refuseEntityWrite('facility')) return;
     const current = planRef.current;
     if (!current.facilities.some(f => f.id === id)) return;
-    commitPlan({ ...current, facilities: current.facilities.filter(f => f.id !== id) });
+    if (!commitPlan({ ...current, facilities: current.facilities.filter(f => f.id !== id) })) return;
     // 2026-11-18 用户「门删掉之后并没有从场地消失」：删除后把这些“不是 plan 但在画布上”的状态一并收掉，
     // 并当场重绘一次——不能只等父级下一次传 plan 回来才刷。
     if (multiSelectedFacilityIdsRef.current.includes(id)) {
@@ -7147,19 +7211,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * 这里把经纬度逆映射回 ENU 米再落盘，仍走 commitPlan（可撤销）。
    */
   function moveFacilityTo(id: string, position: PlanPoint) {
+    if (refuseEntityWrite('facility')) return;
     if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
     const current = planRef.current;
     if (!current.facilities.some(f => f.id === id)) return;
     // 2026-11-16 用户「物料要有归属意识」：位置变了归属重算——搬进哪个分区就归哪个区，
     // 搬出所有分区就是未归属（与人员/出入口的「按落点归属」同一口径）。
-    commitPlan({
+    if (!commitPlan({
       ...current,
       facilities: current.facilities.map(f =>
         f.id === id
           ? { ...f, position: { x: position.x, y: position.y }, zoneId: inferZoneIdAt(position, current.zones) }
           : f,
       ),
-    });
+    })) return;
   }
 
   /** 提交纬度/经度草稿（失焦或回车）：无效值直接丢弃，不回退上一次合法位置。 */
@@ -7328,6 +7393,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function duplicateFacility(id: string) {
+    if (refuseEntityWrite('facility')) return;
     const facility = planRef.current.facilities.find(f => f.id === id);
     if (!facility) return;
     // 2026-11-20 审计 F2：默仍用 +2/+2，但它压在别人身上或出了红线就找最近的空地，
@@ -7341,7 +7407,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       position,
       zoneId: inferZoneIdAt(position, planRef.current.zones),
     };
-    commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, copy] });
+    if (!commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, copy] })) return;
     selectFacility(copy.id);
     setEditMessage(clear
       ? `已复制「${facility.name}」，可直接拖动或用面板改尺寸/旋转。`
@@ -7372,7 +7438,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (!multiRouteIds.length && !multiNodeIds.length && !multiFacilityIds.length) return;
     const current = planRef.current;
     const facilityIds = new Set(multiFacilityIds);
-    commitPlan({
+    if (!commitPlan({
       ...current,
       facilities: current.facilities.filter(f => !facilityIds.has(f.id)),
       routes: multiNodeIds.reduce(
@@ -7380,7 +7446,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         current.routes.filter(r => !multiRouteIds.includes(r.id)),
       ),
       nodes: current.nodes.filter(n => !multiNodeIds.includes(n.id)),
-    });
+    })) return;
     multiSelectedFacilityIdsRef.current = [];
     setMultiSelectedFacilityIds([]);
     multiSelectedRouteIdsRef.current = [];
@@ -7419,9 +7485,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 组选批量删除（一条 undo）。 */
   function deleteFacilitiesMulti(ids: string[]) {
+    if (refuseEntityWrite('facility')) return;
     const current = planRef.current;
     const idSet = new Set(ids);
-    commitPlan({ ...current, facilities: current.facilities.filter(f => !idSet.has(f.id)) });
+    if (!commitPlan({ ...current, facilities: current.facilities.filter(f => !idSet.has(f.id)) })) return;
     clearMultiSelection(false);
     setEditMessage(`已删除 ${ids.length} 件设施。`);
     draw();
@@ -7429,6 +7496,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 组选批量复制（整体偏移 2 m，一条 undo；复制件成为新组选）。 */
   function duplicateFacilitiesMulti(ids: string[]) {
+    if (refuseEntityWrite('facility')) return;
     const current = planRef.current;
     const idSet = new Set(ids);
     const copies: PlanFacility[] = [];
@@ -7450,7 +7518,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       });
     }
     if (copies.length === 0) return;
-    commitPlan({ ...current, facilities: [...nextFacilities, ...copies] });
+    if (!commitPlan({ ...current, facilities: [...nextFacilities, ...copies] })) return;
     multiSelectedFacilityIdsRef.current = copies.map(c => c.id);
     setMultiSelectedFacilityIds(multiSelectedFacilityIdsRef.current);
     setEditMessage(clear
@@ -7975,6 +8043,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function updateRoute(id: string, patch: Partial<Pick<PlanRoute, 'name' | 'kind' | 'oneWay' | 'carrier'>>) {
+    if (refuseEntityWrite('route')) return;
     const current = planRef.current;
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
     const route = current.routes.find(r => r.id === id);
@@ -8017,19 +8086,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function deleteRoute(id: string) {
+    if (refuseEntityWrite('route')) return;
     const current = planRef.current;
     // 2026-11-15：删动线时把它自己建的交界出入口一并收走（被别人引用 / 用户改过名字的保留）。
     const nodes = removeAutoCrossingNodesOfRoute(id, current);
-    commitPlan({
+    if (!commitPlan({
       ...current,
       routes: current.routes.filter(r => r.id !== id),
       ...(nodes.length !== current.nodes.length ? { nodes } : {}),
-    });
+    })) return;
     selectRoute(null);
     setEditMessage(nodes.length !== current.nodes.length ? '动线已删除（交界处自动生成的出入口一并移除）。' : '动线已删除。');
   }
 
   function updateNode(id: string, patch: Partial<Pick<PlanNode, 'name' | 'kind' | 'zoneId'>>) {
+    if (refuseEntityWrite('node')) return;
     const current = planRef.current;
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
     const target = current.nodes.find(n => n.id === id);
@@ -8047,18 +8118,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function deleteNode(id: string) {
+    if (refuseEntityWrite('node')) return;
     const current = planRef.current;
     // 引用该节点的动线剥离 nodeId 引用但保留几何（评审稿「删除关联保留有效引用」）。
-    commitPlan({
+    if (!commitPlan({
       ...current,
       nodes: current.nodes.filter(n => n.id !== id),
       routes: detachNodeFromRoutes(id, current.routes),
-    });
+    })) return;
     selectNode(null);
     setEditMessage('出入口已删除；关联动线保留几何、引用已解除。');
   }
 
   function updateWorker(id: string, patch: Partial<Pick<PlanWorker, 'role' | 'count' | 'zoneId' | 'assetId'>>) {
+    if (refuseEntityWrite('worker')) return;
     const current = planRef.current;
     if (patch.role !== undefined && patch.role.trim().length === 0) return;
     if (patch.count !== undefined && (!Number.isInteger(patch.count) || patch.count < 1)) return;
@@ -8071,8 +8144,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function deleteWorker(id: string) {
+    if (refuseEntityWrite('worker')) return;
     const current = planRef.current;
-    commitPlan({ ...current, workers: current.workers.filter(w => w.id !== id) });
+    if (!commitPlan({ ...current, workers: current.workers.filter(w => w.id !== id) })) return;
     selectWorker(null);
     setEditMessage('人员点位已删除。');
   }
@@ -8084,6 +8158,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * 会算小落客区与转弯半径）。台数按契约上限 99 收。
    */
   function updateVehicle(id: string, patch: Partial<Pick<PlanVehicle, 'type' | 'count' | 'zoneId' | 'modelSlug'>>) {
+    if (refuseEntityWrite('vehicle')) return;
     const current = planRef.current;
     if (patch.count !== undefined && (!Number.isInteger(patch.count) || patch.count < 1 || patch.count > 99)) return;
     const vehicle = (current.vehicles ?? []).find(v => v.id === id);
@@ -8107,8 +8182,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function deleteVehicle(id: string) {
+    if (refuseEntityWrite('vehicle')) return;
     const current = planRef.current;
-    commitPlan({ ...current, vehicles: (current.vehicles ?? []).filter(v => v.id !== id) });
+    if (!commitPlan({ ...current, vehicles: (current.vehicles ?? []).filter(v => v.id !== id) })) return;
     selectVehicle(null);
     setEditMessage('车辆已删除。');
   }
@@ -8131,13 +8207,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (ids.length === 0) return;
     const current = planRef.current;
     const remaining = (current.measurements ?? []).filter(item => !ids.includes(item.id));
+    const next = planWithMeasurements(current, remaining);
     if (remaining.length !== (current.measurements ?? []).length) {
       // 2026-11-20 审计 B4：退出清除不进历史（走 adopt），并把历史里的临时线一起摘掉，
       // 否则退出后一按 Ctrl+Z 就把线恢复成一条不会再被自动清的正式测量。
-      const next = planWithMeasurements(current, remaining);
       adoptPlan(next);
-      dropSessionMeasurementsFromHistory(ids, next);
     }
+    dropSessionMeasurementsFromHistory(ids, next);
     if (selectedMeasurementRef.current && ids.includes(selectedMeasurementRef.current)) {
       selectedMeasurementRef.current = null;
       setSelectedMeasurementId(null);
@@ -8243,27 +8319,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    *
    * 背景：画完一条测量会 commitPlan（会话内可撤销），退出测量时再 commit 一次删除——两个快照都含
    * 这条线，于是退出后按 Ctrl+Z 会把线恢复成一条再也不会被自动清掉的正式测量。
-   * 这里在退出/删除临时线后，把这批 id 从历史与重做里一并摘掉；順手去掉“撤了等于没撤”的快照
+   * 这里在退出/删除临时线后，只剥离历史与重做快照里的这批 id，保留其它编辑；合并相邻重复快照
    *（与当前方案完全相同的快照），避免出现一次空撤销。
    */
   function dropSessionMeasurementsFromHistory(ids: readonly string[], next: SitePlanData): void {
     if (ids.length === 0) return;
-    const dirty = (snapshot: SitePlanData) => (snapshot.measurements ?? []).some(item => ids.includes(item.id));
-    const nextKey = JSON.stringify(next);
-    const prunedHistory = historyRef.current.filter(snapshot => !dirty(snapshot) && JSON.stringify(snapshot) !== nextKey);
-    const prunedRedo = redoRef.current.filter(snapshot => !dirty(snapshot) && JSON.stringify(snapshot) !== nextKey);
-    if (prunedHistory.length !== historyRef.current.length) {
-      historyRef.current = prunedHistory;
-      setHistoryCount(prunedHistory.length);
-    }
-    if (prunedRedo.length !== redoRef.current.length) {
-      redoRef.current = prunedRedo;
-      setRedoCount(prunedRedo.length);
-    }
+    const strip = (snapshot: SitePlanData) => planWithMeasurements(snapshot,
+      (snapshot.measurements ?? []).filter(item => !ids.includes(item.id)));
+    const prune = (stack: SitePlanData[]): SitePlanData[] => {
+      const result: SitePlanData[] = [];
+      for (const snapshot of stack) {
+        const clean = strip(snapshot);
+        if (!result.length || !samePlanContent(result.at(-1), clean)) result.push(clean);
+      }
+      while (result.length && samePlanContent(result.at(-1), next)) result.pop();
+      return result;
+    };
+    historyRef.current = prune(historyRef.current);
+    redoRef.current = prune(redoRef.current);
+    setHistoryCount(historyRef.current.length);
+    setRedoCount(redoRef.current.length);
   }
 
   /** 删除固定测量标注（测量不是实体，删了就没了；不参与冲突判定，无需剥离引用）。 */
   function deleteMeasurement(id: string) {
+    if (refuseEntityWrite('measurement')) return;
     const current = planRef.current;
     const remaining = (current.measurements ?? []).filter(m => m.id !== id);
     const next = planWithMeasurements(current, remaining);
@@ -8409,6 +8489,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 删除标注（标注不是实体，删了就没了；不参与冲突判定，无需剥离引用）。 */
   function deleteAnnotation(id: string) {
+    if (refuseEntityWrite('annotation')) return;
     const current = planRef.current;
     commitPlan({ ...current, annotations: (current.annotations ?? []).filter(a => a.id !== id) });
     if (selectedAnnotationRef.current === id) selectAnnotation(null);
@@ -8548,20 +8629,22 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 清单行 → 地图：居中锚点 + 选中实体（分区/测量无选中态，仅居中）。 */  /** 2026-11-11：分区删除（树行右键/Delete 入口）——worker/facility 的 zoneId 引用一并摘除，不留悬空。 */
   function deleteZone(id: string) {
+    if (refuseEntityWrite('zone')) return;
     const zone = planRef.current.zones.find(z => z.id === id);
     if (!zone) return;
-    commitPlan({
+    if (!commitPlan({
       ...planRef.current,
       zones: planRef.current.zones.filter(z => z.id !== id),
       workers: planRef.current.workers.map(w => (w.zoneId === id ? { ...w, zoneId: undefined } : w)),
       facilities: planRef.current.facilities.map(f => (f.zoneId === id ? { ...f, zoneId: undefined } : f)),
-    });
+    })) return;
     if (selectedZoneId === id) selectZone(null);
     setEditMessage(`已删除分区「${zone.name}」。`);
   }
 
   /** 2026-11-14 统一右键菜单：分区复制（整体平移 2 m，名称加「副本」，一条 undo，与设施复制同口径）。 */
   function duplicateZone(id: string) {
+    if (refuseEntityWrite('zone')) return;
     const zone = planRef.current.zones.find(z => z.id === id);
     if (!zone) return;
     const copy: PlanZone = {
@@ -8571,13 +8654,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       polygon: zone.polygon.map(p => ({ x: p.x + 2, y: p.y + 2 })),
       ...activeLevelStamp(),
     };
-    commitPlan({ ...planRef.current, zones: [...planRef.current.zones, copy] });
+    if (!commitPlan({ ...planRef.current, zones: [...planRef.current.zones, copy] })) return;
     selectZone(copy.id);
     setEditMessage(`已复制分区「${zone.name}」，可直接拖动或用面板改色/透明度。`);
   }
 
+  function openRowContextMenu(event: React.MouseEvent, row: PlanInventoryRow) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (refuseEntityWrite(row.kind)) { setContextMenu(null); return; }
+    setContextMenu({ surface: 'row', x: event.clientX, y: event.clientY, row });
+  }
+
   /** 2026-11-11：树行右键删除的统一入口（按行 kind 分发到既有删除器）。 */
   function deleteRow(row: PlanInventoryRow) {
+    if (refuseEntityWrite(row.kind)) return;
     if (row.kind === 'zone') deleteZone(row.id);
     else if (row.kind === 'facility') deleteFacility(row.id);
     else if (row.kind === 'route') deleteRoute(row.id);
@@ -8595,6 +8686,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 只给一句解释。否则会出现「画布点不中，清单行却能选中并改名」的双口径。
     const blocked = layerBlockedReason(row.kind);
     if (blocked) {
+      setAccessNotice(blocked);
       setInfoMessage(blocked);
       return;
     }
@@ -8681,6 +8773,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       selectWorker(entry.workerId);
     }
     setInfoMessage(`已定位：${entry.text}`);
+  }
+
+  function blockedEntityAt(hit: { px: { x: number; y: number }; pt: PlanPoint }): PlanInventoryKind | null {
+    if (nearestNodeIdAt(hit.px, { includeHidden: true })) return 'node';
+    if (nearestWorkerIdAt(hit.px, { includeHidden: true })) return 'worker';
+    if (nearestVehicleIdAt(hit.px, { includeHidden: true })) return 'vehicle';
+    if (nearestRouteIdAt(hit.px, { includeHidden: true })) return 'route';
+    if (nearestAnnotationIdAt(hit.pt, { includeHidden: true })) return 'annotation';
+    if ([...viewPlan().facilities].reverse().some(f => facilityContainsPoint(hit.pt, f))) return 'facility';
+    if ([...viewPlan().zones].reverse().some(z => planPointInRing(hit.pt, z.polygon))) return 'zone';
+    if (nearestMeasurementIdAt(hit.pt, { includeHidden: true })) return 'measurement';
+    return null;
   }
 
   function viewHitSelectable(hit: { px: { x: number; y: number }; pt: PlanPoint }): boolean {
@@ -8848,6 +8952,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     captureStagePointer(event);
     const activeMode = modeRef.current;
     const hit = eventPlanPoint(event);
+    if (hit && (activeMode === 'view' || activeMode === 'select') && !viewHitSelectable(hit)) {
+      const blocked = blockedEntityAt(hit);
+      if (blocked && refuseEntityWrite(blocked)) {
+        downPxRef.current = null;
+        pointerConsumedRef.current = true;
+        return;
+      }
+    }
     // 2026-11-16 用户「按住 Alt 在原来的点上添加线」：Alt + 点已有点 = 从它分叉一条新动线。
     // 2026-11-16 用户反馈「和双击删除冲突，很容易误删」：Alt 现在是一个**严格手势**——
     // 只要按着 Alt，任何删除/加点/选中都不允许跑；没命中已有点就只给提示，不做事。
@@ -9212,9 +9324,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const hitFacility = [...viewPlan().facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
         if (hitFacility) {
           if (event.shiftKey) {
-            const next = multi.includes(hitFacility.id)
-              ? multi.filter(id => id !== hitFacility.id)
-              : [...multi, hitFacility.id];
+            const base = multi.length ? multi : selectedFacilityRef.current ? [selectedFacilityRef.current] : [];
+            const next = base.includes(hitFacility.id)
+              ? base.filter(id => id !== hitFacility.id)
+              : [...base, hitFacility.id];
             if (next.length >= 2) selectFacilityGroup(next);
             else if (next.length === 1) { clearMultiSelection(false); selectFacility(next[0]!); }
             else { clearMultiSelection(false); selectFacility(null); }
@@ -10630,19 +10743,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           }
           // 2026-11-20 审计 K3：位置上有实体但所在图层被隐藏/锁定 → 给一次解释，
           // 保留当前选中，不再“点了没反应、选中却没了”。
-          const blockedKind: PlanInventoryKind | null = (() => {
-            if (nearestNodeIdAt(hit.px, { includeHidden: true })) return 'node';
-            if (nearestWorkerIdAt(hit.px, { includeHidden: true })) return 'worker';
-            if (nearestVehicleIdAt(hit.px, { includeHidden: true })) return 'vehicle';
-            if (nearestRouteIdAt(hit.px, { includeHidden: true })) return 'route';
-            if (nearestAnnotationIdAt(hit.pt, { includeHidden: true })) return 'annotation';
-            if ([...viewPlan().facilities].reverse().some(f => facilityContainsPoint(hit.pt, f))) return 'facility';
-            if ([...viewPlan().zones].reverse().some(z => planPointInRing(hit.pt, z.polygon))) return 'zone';
-            return null;
-          })();
+          const blockedKind = blockedEntityAt(hit);
           if (blockedKind) {
             const reason = layerBlockedReason(blockedKind);
-            if (reason) { setEditMessage(reason); return; }
+            if (reason) { setAccessNotice(reason); setEditMessage(reason); return; }
           }
           selectFacility(null);
           selectZone(null);
@@ -13884,7 +13988,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 const selected = inventoryRowSelected(row);
                 return (
                   <li key={`${row.kind}-${row.id}`} data-inventory-id={row.id} data-testid="inventory-row">
-                    <button type="button" onClick={() => locateRow(row)} style={inventoryRowButtonStyle(selected)} title="点击定位到地图">
+                    <button type="button" onClick={() => locateRow(row)} onContextMenu={event => openRowContextMenu(event, row)} style={inventoryRowButtonStyle(selected)} title="点击定位到地图">
                       {row.hasIssue && <span style={{ color: PLANNING_CONFLICT_COLORS.conflict }} title="命中问题/冲突清单">⚠</span>}
                       <span style={{ fontWeight: 600 }}>{row.name}</span>
                       <TypeCapsule kind={row.kind} label={row.typeLabel} />
@@ -13911,6 +14015,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
       <PanelPortal host={layerPanelHost}>
       <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} onWheel={stopPanelWheel}>
+        {accessNotice && <p role="status" data-testid="plan-access-notice" style={{ margin: '4px 0', color: PLANNING_SURFACE.warnText, fontSize: PLANNING_TYPOGRAPHY.row }}>{accessNotice}</p>}
         {/* 2026-11-11 OnePlan Placed Objects 镜像：头部计数 + 按类型分组的文件夹树。
             旧「图层栈与编辑/浏览/撤销/提示」清理掉——撤销走右栏工具排，浏览回 Esc，
             放置工具全在物件库页签（区域/入口/路线/基建/劳动力），本页签只管「画了什么」。 */}
@@ -14076,11 +14181,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         active: inventoryRowSelected(row),
                         onClick: () => locateRow(row),
                         // 2026-11-14 统一右键菜单：不再右键即删；stopPropagation 防冒泡进舞台处理器二次弹菜单。
-                        onContextMenu: event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setContextMenu({ surface: 'row', x: event.clientX, y: event.clientY, row });
-                        },
+                        onContextMenu: event => openRowContextMenu(event, row),
                         title: '点击定位到地图；右键复制/删除',
                         icon: renderLayerEntityIcon(row),
                         trailing: <TypeCapsule kind={row.kind} label={row.typeLabel} />,

@@ -35,6 +35,7 @@ import {
   nearestNearbyEntry,
   type InteractableEntry,
 } from '@/components/room-organizer/lib/interact-registry';
+import { createPlanPreviewRefresh } from '../lib/plan-preview-refresh';
 import { libraryEntryColor } from '@/components/room-organizer/lib/oneplan-library';
 import { workerRoleColor, workerSticker } from '@/components/room-organizer/lib/oneplan-stickers';
 import { facilityInteractables, interactHintLabel, seatInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
@@ -1565,6 +1566,7 @@ export default function OutdoorPlan3D({
     handleGroup.visible = false;
     scene.add(handleGroup);
     const handleMeshes: THREE.Mesh[] = [];
+    const groupCornerMeshes: THREE.Mesh[] = [];
     const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
     const sphereGeometry = new THREE.SphereGeometry(0.5, 14, 10);
     const handleWhiteMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', depthTest: false, transparent: true, opacity: 0.95 });
@@ -1643,7 +1645,7 @@ export default function OutdoorPlan3D({
       // 3D 原来只有一颗纯白球，压在浅色底图/分区块上边界直接消失。
       // 用一颗略大的「只画背面」的球当描边：透视下只在轮廓外露一圈，和 2D 的细描边同观感。
       const outlineMaterial = new THREE.MeshBasicMaterial({ color: zone.color ?? '#6e5fd0', side: THREE.BackSide });
-      disposables.push(geometry, material, outlineMaterial);
+      overlayDisposables.push(geometry, material, outlineMaterial);
       for (const point of zone.polygon) {
         const outline = new THREE.Mesh(geometry, outlineMaterial);
         outline.position.set(point.x - frame.cx, 0.82, -(point.y - frame.cy));
@@ -1660,6 +1662,8 @@ export default function OutdoorPlan3D({
     };
 
     let lastEditKey = '';
+    let lastFootprintKey = '';
+    let lastCommittedPlan = plan;
     /** 落位后短暂不要重建预览：否则同一次放置的指针位置会立刻再叠一个预览模型。 */
     let previewMutedUntil = 0;
     /** 2026-11-16 物料卡落位前预览：用卡片 slug 构造 3D 预览 prop；没有 catalog 载荷就不挂模型。 */
@@ -1736,8 +1740,11 @@ export default function OutdoorPlan3D({
         selectedAnnotationId: visuals.selectedAnnotationId,
         selectedMeasurementId: visuals.selectedMeasurementId,
         multiSelectedFacilityIds: visuals.multiSelectedFacilityIds,
+        multiSelectedRouteIds: visuals.multiSelectedRouteIds,
+        multiSelectedNodeIds: visuals.multiSelectedNodeIds,
         marquee: visuals.marquee,
         plan: visuals.plan,
+        committedPlan: visuals.committedPlan,
         draft: visuals.draft ?? null,
       });
       if (key === lastEditKey) {
@@ -1745,7 +1752,21 @@ export default function OutdoorPlan3D({
         return;
       }
       lastEditKey = key;
-      syncFootprint(visuals.plan, visuals.selectedZoneId, visuals.draft, visuals);
+      // 选中/框选/草稿每次更新，和重建全场地几何分开。模型变换同样实时跟手。
+      syncOverlay(visuals);
+      const frame = ringFrame(visuals.plan.boundary);
+      const metrics = { width: frame.width, depth: frame.depth };
+      const shapes = planFootprintShapes(visuals.plan, metrics, { clampPoints: false });
+      if (shapes) {
+        planModelLayer.group.position.set(frame.cx, PLAN_LAYER_BASE_Y, -frame.cy);
+        planModelLayer.syncPositions(shapes.props.filter(prop => !trafficLayer.movesFacility(prop.id)), metrics);
+      }
+      const footprintKey = JSON.stringify({ plan: visuals.plan, hidden: previewTargetId(visuals.plan, visuals.draft) });
+      if (footprintKey !== lastFootprintKey || (visuals.committedPlan && visuals.committedPlan !== lastCommittedPlan)) {
+        lastFootprintKey = footprintKey;
+        lastCommittedPlan = visuals.committedPlan ?? visuals.plan;
+        previewRefresh.request(visuals, !!visuals.committedPlan && visuals.plan !== visuals.committedPlan);
+      }
       planModelLayer.setBatchPreview(arrangeGhosts);
     };
 
@@ -1811,17 +1832,13 @@ export default function OutdoorPlan3D({
         group.add(mesh);
         overlayDisposables.push(geometry, material);
       };
-      const route = visuals.selectedRouteId
-        ? currentPlan.routes.find((item) => item.id === visuals.selectedRouteId)
-        : undefined;
-      if (route) {
+      const routeIds = new Set([visuals.selectedRouteId, ...(visuals.multiSelectedRouteIds ?? [])]);
+      for (const route of currentPlan.routes.filter(item => routeIds.has(item.id))) {
         addRibbon(route.points, route.color ?? SELECTION_ACCENT, 0.4);
         for (const point of route.points) addRing(point, SELECTION_WHITE, 0.7);
       }
-      const node = visuals.selectedNodeId
-        ? currentPlan.nodes.find((item) => item.id === visuals.selectedNodeId)
-        : undefined;
-      if (node) addRing(node.position, SELECTION_WHITE, 1.5);
+      const nodeIds = new Set([visuals.selectedNodeId, ...(visuals.multiSelectedNodeIds ?? [])]);
+      for (const node of currentPlan.nodes.filter(item => nodeIds.has(item.id))) addRing(node.position, SELECTION_WHITE, 1.5);
       const worker = visuals.selectedWorkerId
         ? currentPlan.workers.find((item) => item.id === visuals.selectedWorkerId)
         : undefined;
@@ -1844,7 +1861,7 @@ export default function OutdoorPlan3D({
         addRibbon(annotation.points, SELECTION_WHITE, 0.14, annotation.points.length >= 3);
         for (const point of annotation.points) addRing(point, SELECTION_WHITE, 0.5);
       }
-      // 组选（Shift/Ctrl 多选、框选）：逐件底环 + 组包围盒，3D 里抓不到组角柄但至少看得见选了谁。
+      // 组选：底环、包围盒与可拾取角柄共用 2D 的角序及等比缩放逻辑。
       if (visuals.multiSelectedFacilityIds.length) {
         const picks = currentPlan.facilities.filter(item => visuals.multiSelectedFacilityIds.includes(item.id));
         for (const facility of picks) addRing(facility.position, SELECTION_ACCENT, 1.1);
@@ -1861,6 +1878,22 @@ export default function OutdoorPlan3D({
             { x: minX, y: maxY },
           ];
           addRibbon(box, SELECTION_ACCENT, 0.09, true);
+          if (picks.length >= 2 && visuals.facilityEditable) {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshBasicMaterial({ color: SELECTION_WHITE, depthTest: false });
+            overlayDisposables.push(geometry, material);
+            for (const point of box) {
+              const mesh = new THREE.Mesh(geometry, material);
+              const spot = local(point);
+              mesh.position.set(spot.x, lineY, -spot.y);
+              const distance = camera.position.distanceTo(new THREE.Vector3(point.x, lineY, -point.y));
+              mesh.scale.setScalar(Math.min(1.5, Math.max(0.05, distance * 0.012)));
+              mesh.renderOrder = 31;
+              mesh.userData.planGroupCorner = point;
+              groupCornerMeshes.push(mesh);
+              group.add(mesh);
+            }
+          }
         }
       }
       // 2D 框选矩形：按同一视口投回平面画半透明面，框选过程在 3D 里不再是盲选。
@@ -1902,9 +1935,21 @@ export default function OutdoorPlan3D({
       }
     };
 
+    const syncOverlay = (visuals: PlanEditVisuals): void => {
+      const frame = ringFrame(visuals.plan.boundary);
+      const group = clearOverlayGroup();
+      groupCornerMeshes.length = 0;
+      group.position.set(frame.cx, 0, -frame.cy);
+      addSelectedZoneHandles(group, visuals.plan, frame, visuals.selectedZoneId);
+      if (visuals.draft) addDraftOverlay(group, frame, visuals.draft, overlayDisposables);
+      addSelectionOverlay(group, frame, visuals);
+      const materials = group.userData.planLineMaterials as { resolution: THREE.Vector2 }[] | undefined;
+      materials?.forEach(material => material.resolution.set(stage.clientWidth, stage.clientHeight));
+    };
+
     const syncFootprint = (
       nextPlan: SitePlanData,
-      selectedZoneId?: string | null,
+      _selectedZoneId?: string | null,
       draft?: PlanEditVisuals["draft"],
       visuals?: PlanEditVisuals,
     ): void => {
@@ -1934,14 +1979,8 @@ export default function OutdoorPlan3D({
       if (nextGroup) {
         nextGroup.position.set(nextFrame.cx, 0, -nextFrame.cy);
         hideAnimatedVehiclePlaceholders(nextGroup);
-        addSelectedZoneHandles(nextGroup, nextPlan, nextFrame, selectedZoneId ?? null);
+
       }
-      // 草稿/幽灵/选中反馈统一进覆盖层：有没有占地组都照画，且每轮同步重建。
-      const overlayGroup = clearOverlayGroup();
-      overlayGroup.position.set(nextFrame.cx, 0, -nextFrame.cy);
-      if (draft) addDraftOverlay(overlayGroup, nextFrame, draft, overlayDisposables);
-      if (visuals) addSelectionOverlay(overlayGroup, nextFrame, visuals);
-      collectLineMaterials(overlayGroup);
       if (nextGroup) collectLineMaterials(nextGroup);
       const width = stage.clientWidth;
       const height = stage.clientHeight;
@@ -1950,7 +1989,7 @@ export default function OutdoorPlan3D({
       }
       const nextShapes = planFootprintShapes(nextPlan, nextMetrics, { clampPoints: false });
       if (nextShapes) {
-        planModelLayer.group.position.set(nextFrame.cx, PLAN_LAYER_BASE_Y, -siteFrame.cy);
+        planModelLayer.group.position.set(nextFrame.cx, PLAN_LAYER_BASE_Y, -nextFrame.cy);
         const parkedProps = nextShapes.props.filter(prop => !trafficLayer.movesFacility(prop.id));
         planModelLayer.syncPositions(parkedProps, nextMetrics);
         // 2026-11-12 新放置的设施当场落地真模型：原来要等图源/视口变化触发场景重挂，
@@ -1965,10 +2004,15 @@ export default function OutdoorPlan3D({
       const sceneLayerObj = scene.getObjectByName('plan-scene-objects');
         if (sceneLayerObj) sceneLayerObj.position.set(nextFrame.cx, PLAN_LAYER_BASE_Y, -nextFrame.cy);
       const crowdLayerObj = scene.getObjectByName('plan-crowd');
-        if (crowdLayerObj) crowdLayerObj.position.set(nextFrame.cx, PLAN_LAYER_BASE_Y, -nextFrame.cy);
+      const crowdPlan = visuals?.committedPlan ?? nextPlan;
+      const crowdFrame = ringFrame(crowdPlan.boundary);
+      if (crowdLayerObj) crowdLayerObj.position.set(crowdFrame.cx, PLAN_LAYER_BASE_Y, -crowdFrame.cy);
       // #84：岗位 / 边界变化时重建人群层（设施模型层走 planModelLayer.syncPositions/placeNew）。
-      rebuildCrowd(nextPlan);
+      rebuildCrowd(crowdPlan);
     };
+    const previewRefresh = createPlanPreviewRefresh<PlanEditVisuals>(visuals => {
+      if (!disposed) syncFootprint(visuals.plan, visuals.selectedZoneId, visuals.draft, visuals);
+    });
     layerApiRef.current = { syncFootprint, syncEditVisuals };
 
         controls = new OrbitControls(camera, renderer.domElement);
@@ -2352,13 +2396,23 @@ export default function OutdoorPlan3D({
      */
     const tryFacilityHandleGrab = (event: PointerEvent): boolean => {
       const api = canvasEditApiRef.current?.current;
-      if (!api || !handleGroup.visible || disposed || !renderer) return false;
+      if (!api || (!handleGroup.visible && !groupCornerMeshes.length) || disposed || !renderer) return false;
       const mode = api.getMode();
       if (mode !== 'view' && mode !== 'select') return false;
       const rect = renderer.domElement.getBoundingClientRect();
       pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointerNdc, camera);
+      scene.updateMatrixWorld(true);
+      const groupHandle = raycaster.intersectObjects(groupCornerMeshes, false)[0]?.object;
+      const groupPoint = groupHandle?.userData.planGroupCorner as PlanPoint | undefined;
+      if (groupPoint) {
+        const viewport = derivedViewportNow();
+        if (!viewport) return false;
+        api.pointerFromPlan('down', { px: planPointToPixel(groupPoint, viewport), pt: groupPoint }, pointerFlags(event, { viewport }));
+        syncEditVisuals();
+        return true;
+      }
       const grabbed = raycaster.intersectObjects(handleMeshes, false)[0]?.object;
       const handle = grabbed?.userData?.planHandle as { kind: 'resize' | 'side' | 'rotate'; index: number } | undefined;
       if (!handle) return false;
@@ -2400,7 +2454,6 @@ export default function OutdoorPlan3D({
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
       const hit = eventToPlanHit(event);
-      if (!hit) return;
       api.pointerFromPlan('contextmenu', hit, pointerFlags(event, hit));
       syncEditVisuals();
     };
@@ -2432,6 +2485,7 @@ export default function OutdoorPlan3D({
       const mode = api.getMode();
       const hit = eventToPlanHit(event);
       if (!hit) {
+        api.pointerFromPlan('leave', null);
         // 放置/绘制模式下点到天空或场地外：左键也只吞掉，不转视角、不落位。
         if (mode !== 'view') {
           event.preventDefault();
@@ -2479,6 +2533,7 @@ export default function OutdoorPlan3D({
       syncEditVisuals();
     };
     const onPointerUp = (event: PointerEvent): void => {
+      if (event.button !== 0) return;
       if (walkEnabledRef.current) return;
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
@@ -2510,6 +2565,21 @@ export default function OutdoorPlan3D({
       if (!hit) return;
       api.pointerFromPlan('dblclick', hit, pointerFlags(event, hit));
       syncEditVisuals();
+    };
+    const cancelPointerEdit = (): void => {
+      if (pointerEditing || blankReleased) canvasEditApiRef.current?.current?.pointerFromPlan('leave', null);
+      pointerEditing = false;
+      blankReleased = false;
+      rightDown = null;
+      if (controls) controls.enabled = true;
+      syncEditVisuals();
+    };
+    // 捕获失败时松手可能落在 renderer 外；取消/失焦必须丢弃预览，不能当作 up 提交。
+    const onWindowPointerUp = (event: PointerEvent): void => {
+      if ((pointerEditing || blankReleased) && event.target !== renderer?.domElement) onPointerUp(event);
+    };
+    const onLostPointerCapture = (): void => {
+      if (pointerEditing) cancelPointerEdit();
     };
     // 2026-11-16 2D 画布发来的草稿变更：R 旋转 / Esc 取消 / 落位后用同一事件通知，
     // 3D 不用等下一次指针移动就能重画待放置幽灵。
@@ -2628,7 +2698,10 @@ export default function OutdoorPlan3D({
     renderer.domElement.addEventListener('pointerdown', onPointerDown, { capture: true });
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
-    renderer.domElement.addEventListener('pointercancel', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', cancelPointerEdit);
+    renderer.domElement.addEventListener('lostpointercapture', onLostPointerCapture);
+    window.addEventListener('pointerup', onWindowPointerUp);
+    window.addEventListener('blur', cancelPointerEdit);
     renderer.domElement.addEventListener('dblclick', onDblClick);
     // 2026-11-20 审计 K11：右键菜单桥（不拦住右键拖动平移）。
     renderer.domElement.addEventListener('contextmenu', onContextMenu);
@@ -2932,6 +3005,13 @@ export default function OutdoorPlan3D({
             const hit = eventToPlanHit({ clientX, clientY } as MouseEvent);
             return hit ? { pt: hit.pt, px: hit.px } : null;
           },
+          planToScreen: (point: PlanPoint) => {
+            if (!renderer) return null;
+            const rect = renderer.domElement.getBoundingClientRect();
+            const v = new THREE.Vector3(point.x, PLAN_LAYER_BASE_Y, -point.y).project(camera);
+            return { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
+          },
+          groupScreen: groupCornerMeshes.map(project),
           screen: handleGroup.visible
             ? {
                 corners: cornerHandles.map(project),
@@ -3015,10 +3095,14 @@ export default function OutdoorPlan3D({
       stage.removeEventListener('dragleave', onDragLeave);
       stage.removeEventListener('drop', onDrop);
       if (dragPreviewFrame) window.cancelAnimationFrame(dragPreviewFrame);
+      previewRefresh.dispose();
       renderer?.domElement.removeEventListener('pointerdown', onPointerDown, true);
       renderer?.domElement.removeEventListener('pointermove', onPointerMove);
       renderer?.domElement.removeEventListener('pointerup', onPointerUp);
-      renderer?.domElement.removeEventListener('pointercancel', onPointerUp);
+      renderer?.domElement.removeEventListener('pointercancel', cancelPointerEdit);
+      renderer?.domElement.removeEventListener('lostpointercapture', onLostPointerCapture);
+      window.removeEventListener('pointerup', onWindowPointerUp);
+      window.removeEventListener('blur', cancelPointerEdit);
       renderer?.domElement.removeEventListener('dblclick', onDblClick);
     renderer?.domElement.removeEventListener('contextmenu', onContextMenu);
       // 高斯重建预览器要显式释放：解码出来的 GPU 资源不会随场景 traverse 走。

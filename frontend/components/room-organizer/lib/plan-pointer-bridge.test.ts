@@ -44,4 +44,16 @@ describe('3D → 2D 指针桥 · 命中丢失时的落点', () => {
     expect(out.ignore).toBe(false);
     expect(resolveBridgedHit('up', null, out.lastHit).ignore).toBe(true);
   });
+
+  it('新手势点天空不能借到上一次 move 的落点，松手后也清缓存', () => {
+    const old = hitAt(9, 9);
+    expect(resolveBridgedHit('down', null, old)).toEqual({ hit: null, lastHit: null, ignore: true });
+    expect(resolveBridgedHit('up', null, old)).toEqual({ hit: old, lastHit: null, ignore: false });
+    expect(resolveBridgedHit('dblclick', null, old).ignore).toBe(true);
+  });
+
+  it('天空右键仍派发取消/撤点，但不借旧坐标打开物件菜单', () => {
+    expect(resolveBridgedHit('contextmenu', null, hitAt(9, 9)))
+      .toEqual({ hit: null, lastHit: null, ignore: false });
+  });
 });
