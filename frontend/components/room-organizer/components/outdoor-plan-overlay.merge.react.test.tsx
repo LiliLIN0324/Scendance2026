@@ -205,6 +205,18 @@ it("routes the active scope preview and applied highlights to the canvas, and cl
   rerender(<Overlay {...props} />);
   expect(state.canvas?.mapEditHighlight).toEqual(highlight);
 });
+it("当前视角如实报给对话层：3D 时不默认成 2d", () => {
+  const plan = createStarterOutdoorPlan();
+  const { rerender } = render(<Overlay projectId="view-mode" seedPlan={plan} view="3d" />);
+  expect(state.bridge!.currentView?.()).toBe("3d");
+  // bridge 只注册一次，换视角靠 ref 跟上，不需要重新注册。
+  rerender(<Overlay projectId="view-mode" seedPlan={plan} view="2d" />);
+  expect(state.bridge!.currentView?.()).toBe("2d");
+  // 只读分享页不传：那里只有平面图，如实报 2d。
+  rerender(<Overlay projectId="view-mode" seedPlan={plan} />);
+  expect(state.bridge!.currentView?.()).toBe("2d");
+});
+
 it("主线缺省高德与已有图源偏好保留，同时单位导出和Agent受控2D/3D接线共存", () => {
   expect(readPlanGroundSource()).toBe("amap-streets");
   writePlanGroundSource("amap-satellite");

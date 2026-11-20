@@ -120,6 +120,38 @@ describe("一句话局部调整", () => {
   });
 });
 
+describe("3D 视角里「右」的语义", () => {
+  it("3D 里不把「向右」默认成东，先把口径问一次", () => {
+    const parse = parseLocalAdjustment("这组向右移 2 米", { selectedCount: 2, view: "3d", screenBearingDeg: 0 });
+    expect(parse.kind).toBe("clarify");
+    if (parse.kind !== "clarify") return;
+    expect(parse.reason).toBe("no-basis-bearing");
+    expect(parse.question).toContain("3D");
+  });
+
+  it("3D 里记住了「按屏幕」也不拿 2D 转角硬算", () => {
+    const parse = parseLocalAdjustment("这组向右移 2 米", {
+      selectedCount: 2, view: "3d", rightBasis: "screen", screenBearingDeg: 30,
+    });
+    expect(parse).toMatchObject({ kind: "clarify", reason: "screen-basis-3d" });
+  });
+
+  it("3D 里记住按东侧就老老实实按 +x 走", () => {
+    const parse = parseLocalAdjustment("这组向右移 2 米", {
+      selectedCount: 2, view: "3d", rightBasis: "east", screenBearingDeg: 0,
+    });
+    expect(parse.kind).toBe("adjust");
+    if (parse.kind !== "adjust") return;
+    expect(parse.request.dx).toBe(2);
+    expect(parse.request.dy).toBe(0);
+  });
+
+  it("2D 正北朝上仍直接按东算，不被 3D 规则带走", () => {
+    const parse = parseLocalAdjustment("这组向右移 2 米", { selectedCount: 2, view: "2d", screenBearingDeg: 0 });
+    expect(parse.kind).toBe("adjust");
+  });
+});
+
 describe("局部调整的冲突计数（与问题清单同一套判据）", () => {
   it("压到相邻物料时如实计数，并说出影响的分区", () => {
     // 椅子允许叠到桌子上（K7 的 mayStack），所以要用两张桌子试真冲突。

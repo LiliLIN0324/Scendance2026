@@ -303,6 +303,45 @@ async function generateDesign() {
   expect(flow.designResult).not.toBeNull();
 }
 
+describe("3D 视角里「右」的语义", () => {
+  it("先问口径、不动画布；答“按东侧”后才按 +x 走", async () => {
+    selection = ["t1"];
+    bridge.viewBearingDeg = () => 0;
+    bridge.currentView = () => "3d";
+    await act(async () => {
+      await flow.handle("这组向右移 2 米");
+    });
+    expect(apply).not.toHaveBeenCalled();
+    expect(say).toHaveBeenCalledWith(expect.stringContaining("3D"), true);
+    expect(byId("t1").position).toEqual({ x: 4, y: 4 });
+
+    await act(async () => {
+      await flow.handle("按东侧");
+    });
+    await act(async () => {
+      await flow.handle("这组向右移 2 米");
+    });
+    expect(byId("t1").position).toEqual({ x: 6, y: 4 });
+  });
+
+  it("3D 里答“按屏幕”不当成记住了，也不写画布", async () => {
+    selection = ["t1"];
+    bridge.viewBearingDeg = () => 0;
+    bridge.currentView = () => "3d";
+    await act(async () => {
+      await flow.handle("这组向右移 2 米");
+    });
+    await act(async () => {
+      await flow.handle("按屏幕");
+    });
+    expect(say).toHaveBeenCalledWith(expect.stringContaining("落不成"), true);
+    await act(async () => {
+      await flow.handle("这组向右移 2 米");
+    });
+    expect(apply).not.toHaveBeenCalled();
+  });
+});
+
 describe("锁定设施层", () => {
   it("锁定时不移动选中组，也不进确认", async () => {
     selection = ["t1"];

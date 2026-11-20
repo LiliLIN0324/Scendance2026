@@ -387,6 +387,12 @@ export interface OutdoorPlanOverlayProps {
    */
   controller?: BackendSession | undefined;
   onViewChange?:(view:'2d'|'3d')=>void;
+  /**
+   * 2026-11-20 P1：壳层当前实拍的视角（由 room-organizer 算，覆盖层不自己猜）。
+   * 对话层据此判断「右」的语义：3D 相机里屏幕右不是固定场地东侧，必须先问一次。
+   * 不传（只读分享页）就按 2d：那里只有平面图。
+   */
+  view?: '2d' | '3d';
 }
 
 /** P2-g：覆盖层对外命令句柄（room-organizer 的室内工具排通用钮转发到这里）。 */
@@ -456,6 +462,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   planEditor,
   controller,
   onViewChange,
+  view,
 }: OutdoorPlanOverlayProps, ref): JSX.Element {
   const agent = useAgentOptional();
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
@@ -646,6 +653,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   }, [syncNote, syncConflict]);
   const flowRef=useRef(agent?.outdoorWorkflow);flowRef.current=agent?.outdoorWorkflow;
   const viewChangeRef=useRef(onViewChange);viewChangeRef.current=onViewChange;
+  // 视图模式：壳层算好的 2d/3d 用 ref 带进终身注册的 bridge，换视角不用重注册。
+  const viewModeRef=useRef<'2d'|'3d'>(view??'2d');viewModeRef.current=view??'2d';
   const planRef = useRef<SitePlanData | null>(plan);
   planRef.current = plan;
   // V-2d/V-3c：把「应用流线/应用区域」的画布入口与当前 plan 读取口注册给 chat agent——
@@ -715,6 +724,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       facilityLayerLocked: () => canvasApiRef.current?.isFacilityLayerLocked() ?? false,
       // 「右」的坐标口径：2D 罗盘的旋转角。读不到（例如还没挂载）就如实回 null，让对话只澄清一次。
       viewBearingDeg: () => canvasApiRef.current?.getBearing?.() ?? null,
+      currentView: () => viewModeRef.current,
       beginVenueBoundary: anchor => { cancelPlaceShape(); return canvasApiRef.current?.beginVenueBoundary(anchor) ?? false; },
       applyRoutes: (routes, nodes) => canvasApiRef.current?.applyRoutes(routes, nodes) ?? false,
       applyZoneProposal: (zones, facilities, routes, nodes) => canvasApiRef.current?.applyZoneProposal(zones, facilities, routes, nodes) ?? false,

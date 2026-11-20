@@ -5361,6 +5361,9 @@ useEffect(() => {
               renderScanPlan={outdoor2DOpen ? renderScanPlan : undefined}
               scanError={environment ? (error ?? (splatState.status === 'error' ? splatState.error : undefined)) : undefined}
               onViewChange={handleOutdoorViewSwitch}
+              // 2026-11-20 P1：把壳层实拍的视角告诉对话层——地图不在前面时就是 3D（接管/实景隔离），
+              // 不能拿 2D 罗盘口径当「右」的依据。
+              view={outdoor2DOpen ? '2d' : '3d'}
               lengthUnit={layout.planSettings?.displayUnit ?? view.lengthUnit}
               {...(layout.planSettings ? { planEditor: layout.planSettings } : {})}
               // 保活隐藏：接管态下覆盖层只留 2D 画布句柄（编辑桥），画面不给看。

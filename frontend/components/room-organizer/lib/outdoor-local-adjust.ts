@@ -28,7 +28,7 @@ export interface LocalAdjustRequest {
 
 export type LocalAdjustParse =
   | { kind: "adjust"; request: LocalAdjustRequest }
-  | { kind: "clarify"; question: string; reason: "no-selection" | "direction-basis" | "no-distance" | "no-direction" | "no-basis-bearing" }
+  | { kind: "clarify"; question: string; reason: "no-selection" | "direction-basis" | "no-distance" | "no-direction" | "no-basis-bearing" | "screen-basis-3d" }
   | { kind: "none" };
 
 const CN_NUMBERS: Record<string, number> = {
@@ -151,10 +151,21 @@ export function parseLocalAdjustment(message: string, context: LocalAdjustContex
         return {
           kind: "clarify",
           reason: "no-basis-bearing",
-          question: "当前画布朝向读不到（3D 或转过角度），“向右”按屏幕右边还是按场地东侧？回一句“按屏幕”或“按东侧”，我记住这个口径。",
+          // 3D 里「右」全看相机，不能拿 2D 罗盘口径兜底——先把这一个问题问清。
+          question: viewIs3d
+            ? "现在是 3D 视角，“向右”随相机转，不是固定的场地东侧。按屏幕右边算，还是按场地东侧？回“按屏幕”或“按东侧”，我记住这个口径。"
+            : "当前画布朝向读不到（转过角度），“向右”按屏幕右边还是按场地东侧？回一句“按屏幕”或“按东侧”，我记住这个口径。",
         };
       }
     } else {
+      if (viewIs3d) {
+        // 已记住「按屏幕」但现在是 3D：2D 转角在这里不成立，不能拿它硬算一个方向。
+        return {
+          kind: "clarify",
+          reason: "screen-basis-3d",
+          question: "3D 里“屏幕右”随相机转，落不成固定方向。这次说成“往东/往西 几米”，或切回 2D 平面再说“往右”。",
+        };
+      }
       // 已记住「按屏幕」：没有转角就按东侧算，有转角才换算；始终把依据写进回话。
       if (bearingKnown && Math.abs(bearing) > 1e-6) {
         const vector = screenRightVector(bearing);

@@ -35,13 +35,21 @@
 | --- | --- | --- |
 | `focusEntities(ids)` | 画布 `focusFacilities` + overlay 透传 | 结果卡「定位到分区 / 取回这组」一次把整组塞进视口；只动视图，不改 plan 与选中；一件都找不到时回 `false` |
 | `viewBearingDeg()` | 画布 `getBearing()` + overlay 透传 | 「左/右」按画布当前罗盘朝向换算；画布没挂载时回 `null`，对话仍只澄清一次 |
-| `currentView()` | 仍未实现 | 需要 3D 宿主自己报；缺省按 `2d` 处理，不猜 3D |
+| `currentView()` | 壳层（`room-organizer` `view={outdoor2DOpen ? '2d' : '3d'}`）→ overlay ref → bridge | 3D 里不拿 2D 罗盘口径当「右」的依据；不传时（只读分享页）如实报 `2d` |
 
 `focusFacilities` 的实现要点：按每件设施的位置 ± 尺寸算外接框；单件或一排椅子会退化成一点，补 1.5 m 最小框（否则 `focusBounds` 因 `east === west` 直接不动），再复用现成的 `focusBounds` 入镜。
 
 定位的回落顺序：`focusEntities`（整组入镜）→ `inspectFacility`（逐件聚焦，提示里写「同组 n 件」）→ 如实写「画布没有提供定位接口」。
 
-3D 视图里的「左/右」：本轮不替 3D 宿主做判断。`currentView` 未实现时一律按 2D 口径（画布罗盘朝向）解释；要 3D 语义时由 3D 宿主补上这一个方法，hook 已经在读它。
+3D 视图里的「左/右」（2026-11-20 补）：二维画布本身不知道有没有 3D 接管——真相在壳层，所以由 `room-organizer` 把 `view` 传进覆盖层（`outdoor2DOpen ? '2d' : '3d'`，跟 2D/3D 切换钮同一个判断），overlay 用 ref 带进终身注册的 bridge，换视角不用重新注册。行为：
+
+| 场景 | 行为 |
+| --- | --- |
+| 2D 正北朝上 | 直接按东（+x）走，不打断 |
+| 2D 转过角度 | 只问一次「按屏幕 / 按东侧」，记住丨按转角换算 |
+| 3D，还没口径 | 只问一次，并把「这是 3D」写进问题；不再默默按东算 |
+| 3D，答“按东侧” | 按 +x 走（已记住） |
+| 3D，答“按屏幕” | 不当成记住了：当场说明 3D 里屏幕右随相机转、落不成坐标，请说“往东/往西”或切回 2D |
 
 ## 三、验证
 
@@ -73,6 +81,12 @@ npx vitest run \
     npx vitest run --maxWorkers=1 --pool=forks <设计闭环>            → 14 passed
     npx vitest run --maxWorkers=1 --pool=forks <其余 4 个>          → 17 passed
   合计 45 passed；没有合并成一次并发跑，因为两台其它窗口在建/在测，重复 OOM。
+→ 2026-11-20 补 3D 视角口径后：
+    局部调整 18、设计闭环 16、覆盖层桥 12（含 `currentView` 那条）、结果卡 6、差异 4、摘要 4、画布入镜 3
+    实跑（单 worker）：vitest run <outdoor-local-adjust.test.ts> → 18 passed
+                        vitest run <use-outdoor-agent-workflow.design.react.test.tsx> → 16 passed
+                        vitest run <outdoor-plan-overlay.merge.react.test.tsx> → 12 passed
+    tsc --noEmit → 4 条 error，仍全在发布流文件；本轮改动的 5 个文件 0 条
 ```
 
 覆盖到的验收项（都能在 `use-outdoor-agent-workflow.design.react.test.tsx` 里逐条对上）：
@@ -129,7 +143,7 @@ npm run build
 
 - **真实浏览器交互链路未执行**：只做到「dev server 起得来、`/editor` 返回 200 且有应用壳」的烟雾检查（`http://localhost:3001/editor` → 200，19674 字节）；「生成 → 点选 → 局部改 → 撤销 → 比较」需要已登录会话 + 已有边界/锚点的项目 + 可用模型后端，本环境没有这个会话，所以没有换成「已验」的口径。
 - 画布 `focusFacilities` 只在 jsdom 里验证了「能定位 / 找不到如实回 false」；真实底图上的取景范围（整组是否刚好装得下）没有目测。
-- 3D 视图的「左/右」语义未验证（`currentView` 未实现）。
+- 3D 里「右」的追问只在测试里验过，没在真浏览器 3D 视角里点过；“地图不在前面就是 3D”这个判断在「全部收起」时也成立，属有意选择。
 ## 四、刻意没做的事
 
 - 不改 `lib/wedding-layout.ts`（布局算法仍归规划线），不改后端契约、迁移、依赖、CI。
