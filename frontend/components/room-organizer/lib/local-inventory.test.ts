@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectArchiveInventory, enqueuePendingInventoryItems, readOutdoorInventoryRecords } from './local-inventory';
+import { collectArchiveInventory, enqueuePendingInventoryItems, inventoryActionHint, inventoryTone, isReplicaCaseItem, readOutdoorInventoryRecords, type InventoryItem } from './local-inventory';
 import type { ArchiveJob, ArchiveScope } from './archive-queue';
 import type { AholoAsset } from './aholo-assets';
 
@@ -109,5 +109,32 @@ describe('local inventory (C14)', () => {
     const queued = await enqueuePendingInventoryItems(report, SCOPE, async input => { enqueued.push(`${input.localId}:${input.kind}`); }, registry);
     expect(queued).toBe(1);
     expect(enqueued).toEqual(['22222222-2222-4222-8222-222222222222:scan']);
+  });
+
+  function item(partial: Partial<InventoryItem> & { localId: string; state: InventoryItem['state'] }): InventoryItem {
+    return { type: 'model', name: partial.localId, ...partial };
+  }
+
+  it('splits archived copies into private, public-library and activity tones; pending and failures stay local/error', () => {
+    expect(inventoryTone(item({ localId: 'm1', state: 'archived' }))).toBe('private');
+    expect(inventoryTone(item({ localId: 's1', type: 'scan', state: 'archived', detail: '公共云资产库有副本（非私有归档）' }))).toBe('public');
+    expect(inventoryTone(item({ localId: 'o1', type: 'outdoor-plan', state: 'archived' }))).toBe('activity');
+    expect(inventoryTone(item({ localId: 'm2', state: 'pending' }))).toBe('local');
+    expect(inventoryTone(item({ localId: 'm3', state: 'needs-file' }))).toBe('error');
+    expect(inventoryTone(item({ localId: 'm4', state: 'failed' }))).toBe('error');
+  });
+
+  it('marks replica- classic cases as built-in examples, not personal inventory', () => {
+    expect(isReplicaCaseItem(item({ localId: 'replica-banbury', state: 'pending' }))).toBe(true);
+    expect(isReplicaCaseItem(item({ localId: 'real-draft', state: 'pending' }))).toBe(false);
+  });
+
+  it('routes the next action by object ownership: model/scan to upload queue, plan to project save', () => {
+    expect(inventoryActionHint(item({ localId: 'replica-x', state: 'pending' }))).toBe('示例，不参与同步');
+    expect(inventoryActionHint(item({ localId: 'm1', state: 'pending' }))).toBe('加入补传队列后上传');
+    expect(inventoryActionHint(item({ localId: 's1', type: 'scan', state: 'pending' }))).toBe('加入补传队列后上传');
+    expect(inventoryActionHint(item({ localId: 'o1', type: 'outdoor-plan', state: 'pending' }))).toBe('打开项目保存后同步到云端');
+    expect(inventoryActionHint(item({ localId: 'o2', type: 'outdoor-plan', state: 'archived' }))).toBe('版本已随活动保存');
+    expect(inventoryActionHint(item({ localId: 'm2', state: 'archived' }))).toBe('');
   });
 });

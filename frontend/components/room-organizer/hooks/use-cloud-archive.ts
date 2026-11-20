@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BackendSession } from '@/lib/backend-session';
+import { backendFailureText, type BackendSession } from '@/lib/backend-session';
 import { aholoAssetUrl, findAholoAsset } from '../lib/aholo-assets';
 import { sharedArchiveQueue, type ArchiveJob, type ArchiveScope } from '../lib/archive-queue';
 import {
@@ -111,7 +111,8 @@ export function useCloudArchive({ controller, userId, studioId, archiveStudioId,
       setCapabilities(next); setCapabilityError(null);
     } catch (error) {
       setCapabilities(null);
-      setCapabilityError(error instanceof Error ? error.message : '云端归档能力查询失败。');
+      // 能力探测失败属通道状态，错误码转人话，不把后端 code 贴到面板上。
+      setCapabilityError(backendFailureText(error));
     }
   }, [transport, userId]);
 

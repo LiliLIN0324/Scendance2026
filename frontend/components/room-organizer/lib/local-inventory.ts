@@ -158,3 +158,28 @@ export async function enqueuePendingInventoryItems(report: InventoryReport, _sco
   }
   return queued;
 }
+
+/** 归档状态五档派生：给面板徽章与计数用，不改盘点原始状态。 */
+export type InventoryTone = 'private' | 'public' | 'activity' | 'local' | 'error';
+
+export function inventoryTone(item: InventoryItem): InventoryTone {
+  if (item.state === 'needs-file' || item.state === 'failed') return 'error';
+  if (item.state === 'pending') return 'local';
+  if (item.type === 'scan' && item.detail?.includes('公共云资产库')) return 'public';
+  if (item.type === 'outdoor-plan') return 'activity';
+  return 'private';
+}
+
+/** 经典案例用 replica- 伪 id 占本机槽位（见 space-panel），是内置示例，不计入个人归档。 */
+export function isReplicaCaseItem(item: InventoryItem): boolean {
+  return item.localId.startsWith('replica-');
+}
+
+/** 缺口条目的下一步提示；动作按对象归属：素材走补传队列，规划随项目保存同步。 */
+export function inventoryActionHint(item: InventoryItem): string {
+  if (isReplicaCaseItem(item)) return '示例，不参与同步';
+  if (item.state === 'pending' && (item.type === 'model' || item.type === 'scan')) return '加入补传队列后上传';
+  if (item.state === 'pending' && item.type === 'outdoor-plan') return '打开项目保存后同步到云端';
+  if (item.state === 'archived' && item.type === 'outdoor-plan') return '版本已随活动保存';
+  return '';
+}

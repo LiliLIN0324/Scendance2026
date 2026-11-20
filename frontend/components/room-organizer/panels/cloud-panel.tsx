@@ -13,7 +13,7 @@ import { rememberStudioSettings } from '../lib/studio-settings-cache';
 import { sanitizeStudioSettings, type StudioSettings, type StudioSettingsPatch } from '../../../../supabase/functions/_shared/plan-editor';
 import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
 import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
-import { Box, FolderOpen, Images, MoreHorizontal, RefreshCw, Settings, Trash2, UserRound, X } from '@/components/solid-icons';
+import { Box, FileImage, FolderOpen, Images, MapPin, MoreHorizontal, Mountain, RefreshCw, Settings, Trash2, UserRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
@@ -30,7 +30,7 @@ import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapt
 import { fetchArchiveAssetUrl, parseCompleteProjectSnapshot, resolveCompleteProjectTransport, type CloudArchiveAsset } from '../lib/cloud-archive';
 import { failCloudSync, finishCloudSync, setPendingCount, startCloudSync, useSaveStatus } from '../lib/save-status';
 import { buildCompleteManifest, manifestCompletenessLabel, type ManifestBuildResult } from '../lib/project-manifest';
-import { collectArchiveInventory, enqueuePendingInventoryItems, readOutdoorInventoryRecords, type InventoryItem, type InventoryReport } from '../lib/local-inventory';
+import { collectArchiveInventory, enqueuePendingInventoryItems, inventoryActionHint, inventoryTone, isReplicaCaseItem, readOutdoorInventoryRecords, type InventoryItem, type InventoryReport, type InventoryTone } from '../lib/local-inventory';
 import { sharedArchiveQueue, type ArchiveJob } from '../lib/archive-queue';
 import { useCloudArchive } from '../hooks/use-cloud-archive';
 import { listStoredSources, type StoredSource } from '@/lib/source-storage';
@@ -112,14 +112,45 @@ function archiveJobLabel(job: ArchiveJob): string {
   }
 }
 
-const INVENTORY_TYPE_LABELS: Record<InventoryItem['type'], string> = {
-  model: '模型', scan: '实景扫描', floorplan: '图纸', photo: '图片', attachment: '附件', 'outdoor-plan': '户外规划',
+/** 归档盘点的展示状态：把现有 archived 再按副本性质拆开，避免「已归档」一锅端。 */
+const INVENTORY_TONE_META: Record<InventoryTone, { label: string; badgeClass: string }> = {
+  private:  { label: '私有云端已归档', badgeClass: 'sc-archive-badge-private' },
+  public:   { label: '公共库副本 · 非个人', badgeClass: 'sc-archive-badge-public' },
+  activity: { label: '活动云端副本', badgeClass: 'sc-archive-badge-activity' },
+  local:    { label: '仅本机 · 待同步', badgeClass: 'sc-archive-badge-local' },
+  error:    { label: '缺原件 / 失败', badgeClass: 'sc-archive-badge-error' },
 };
 
-function inventoryItemLabel(item: InventoryItem): string {
-  const kind = INVENTORY_TYPE_LABELS[item.type];
-  const size = formatArchiveBytes(item.bytes);
-  return `${kind} · ${item.detail ?? ''}${size ? ` · ${size}` : ''}`;
+const INVENTORY_GROUPS: ReadonlyArray<{ type: InventoryItem['type']; label: string; Icon: typeof Box }> = [
+  { type: 'scan', label: '实景扫描', Icon: Mountain },
+  { type: 'outdoor-plan', label: '户外规划', Icon: MapPin },
+  { type: 'model', label: '物料模型', Icon: Box },
+  { type: 'photo', label: '资料图', Icon: Images },
+  { type: 'floorplan', label: '图纸', Icon: FileImage },
+  { type: 'attachment', label: '附件', Icon: FolderOpen },
+];
+
+function InventoryRow({ item, Icon }: { item: InventoryItem; Icon: typeof Box }) {
+  const demo = isReplicaCaseItem(item);
+  const tone = inventoryTone(item);
+  const meta = INVENTORY_TONE_META[tone];
+  const hint = inventoryActionHint(item);
+  const size = typeof item.bytes === 'number' && item.bytes ? formatArchiveBytes(item.bytes) : '';
+  return (
+    <li className="sc-archive-row">
+      <span className="sc-archive-row-icon"><Icon size={14} aria-hidden="true" /></span>
+      <span className="sc-archive-row-main">
+        <strong>{item.name}</strong>
+        <small>{item.detail ?? ''}{size ? ` · ${size}` : ''}</small>
+      </span>
+      <span className="sc-archive-row-side">
+        {demo
+          ? <span className="sc-archive-badge-demo">内置示例</span>
+          : <span className={`sc-archive-badge ${meta.badgeClass}`}>{meta.label}</span>}
+        {hint && <span className="sc-archive-hint">{hint}</span>}
+      </span>
+    </li>
+  );
 }
 
 type TrashProjectSummary = { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string };
@@ -155,6 +186,16 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   // C05：统一保存状态（本机/上传中/同步中/云端已保存/失败/冲突）。
   const saveStatusState = useSaveStatus(layout.id ?? 'local');
   const [inventory, setInventory] = useState<InventoryReport | null>(null);
+  // 盘点展示口径：内置示例不计入个人归档计数；其余按副本性质分五态。
+  const inventoryView = useMemo(() => {
+    const items = inventory?.items ?? [];
+    const counts = { private: 0, public: 0, activity: 0, local: 0, error: 0, demo: 0 };
+    for (const item of items) {
+      if (isReplicaCaseItem(item)) { counts.demo += 1; continue; }
+      counts[inventoryTone(item)] += 1;
+    }
+    return { items, counts };
+  }, [inventory]);
   const [cloudAssets, setCloudAssets] = useState<CloudArchiveAsset[] | null>(null);
   const [cloudAssetsError, setCloudAssetsError] = useState('');
   const [manifestNote, setManifestNote] = useState('');
@@ -1406,12 +1447,12 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         </div></div>
         {!cloud.user ? <p className="sc-account-empty">登录后查看云端归档。</p> : <>
           {archive.unavailableMessage && <p className="sc-account-footnote" role="status">{archive.unavailableMessage}</p>}
-          {archive.capabilityError && <p className="sc-account-error" role="alert">{archive.capabilityError}</p>}
           {archive.capabilities && <p className="sc-account-footnote" role="status">
             {archive.capabilities.superAdmin
               ? `平台管理员归档通道已接通${archive.capabilities.officialStudioId ? '；官方内容按授权共同归属归档' : ''}。`
               : '归档通道已接通：本账号按普通私有范围归档。'}
           </p>}
+          {archive.capabilityError && <p className="sc-account-footnote" role="status">{archive.capabilityError}</p>}
           <p className="sc-account-footnote" role="status">
             {saveStatusState.stage === 'cloud-saved' && saveStatusState.cloudConfirmedAt
               ? `最近云端确认：${saveStatusState.cloudRevision !== null ? `v${saveStatusState.cloudRevision} · ` : ''}${new Date(saveStatusState.cloudConfirmedAt).toLocaleString()}`
@@ -1435,16 +1476,82 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 </li>)}
               </ul>}
             </section>
-            <section aria-label="本机存量盘点">
-              <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>本机存量盘点</h4><span className="sc-note">只盘点不删除；资料图按当前活动清点，户外规划按本机记录清点。</span></div></div>
-              {inventory && <p className="sc-account-footnote" role="status">
-                {`共 ${inventory.summary.total} 项：已归档 ${inventory.summary.archived} · 待补传 ${inventory.summary.pending} · 需原文件 ${inventory.summary.needsFile} · 失败 ${inventory.summary.failed}`}
-              </p>}
-              {(inventory?.items ?? []).length === 0 ? <p className="sc-account-empty">{inventory ? '本机没有待盘点的素材记录。' : '正在盘点…'}</p> : <ul className="sc-trash-list">
-                {(inventory?.items ?? []).slice(0, 12).map(item => <li key={`${item.type}:${item.localId}`} className="sc-trash-item">
-                  <span><strong>{item.name}</strong><small>{inventoryItemLabel(item)}</small></span>
-                </li>)}
-              </ul>}
+            <section aria-label="本机存量盘点" className="sc-archive-section">
+              <div className="sc-archive-overview">
+                <div className="sc-archive-overview-head">
+                  <h4>本机存量盘点</h4>
+                  <span className="sc-archive-range">私有空间</span>
+                </div>
+                <p className="sc-note">只盘点不删除；资料图按当前活动清点，户外规划按本机记录清点。</p>
+                {inventory ? (
+                  <>
+                    {(() => {
+                      const c = inventoryView.counts;
+                      const nonDemo = inventoryView.items.length - c.demo;
+                      const pct = (n: number) => nonDemo > 0 ? `${(n / nonDemo) * 100}%` : '0%';
+                      const cloudN = c.private + c.public + c.activity;
+                      return (
+                        <>
+                          <div className="sc-archive-progress" role="img" aria-label={`云端副本 ${cloudN} 项，仅本机 ${c.local} 项`}>
+                            {c.private > 0 && <i className="seg-private" style={{ width: pct(c.private) }} />}
+                            {c.public > 0 && <i className="seg-public" style={{ width: pct(c.public) }} />}
+                            {c.activity > 0 && <i className="seg-activity" style={{ width: pct(c.activity) }} />}
+                            {c.local > 0 && <i className="seg-local" style={{ width: pct(c.local) }} />}
+                          </div>
+                          <div className="sc-archive-legend">
+                            <span className="legend-dot"><b className="seg-private" />私有归档 {c.private}</span>
+                            <span className="legend-dot"><b className="seg-public" />公共库副本 {c.public}</span>
+                            <span className="legend-dot"><b className="seg-activity" />活动副本 {c.activity}</span>
+                            <span className="legend-dot"><b className="seg-local" />仅本机 {c.local}</span>
+                            <span className="legend-dot">内置示例 {c.demo}（不计入计数）</span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : <p className="sc-account-footnote" role="status">正在盘点…</p>}
+              </div>
+
+              {inventoryView.items.length === 0 ? (
+                <p className="sc-account-empty is-bare">{inventory ? '本机没有待盘点的素材记录。' : '正在盘点…'}</p>
+              ) : INVENTORY_GROUPS.map(group => {
+                const groupItems = inventoryView.items.filter(item => item.type === group.type);
+                if (groupItems.length === 0) {
+                  return (
+                    <section className="sc-archive-group" key={group.type}>
+                      <div className="sc-archive-group-head">
+                        <span className="sc-archive-group-icon"><group.Icon size={14} aria-hidden="true" /></span>
+                        <h5>{group.label}</h5>
+                        <span className="sc-archive-count">0</span>
+                      </div>
+                      <p className="sc-account-empty is-bare">本机没有此类记录。</p>
+                    </section>
+                  );
+                }
+                const real = groupItems.filter(item => !isReplicaCaseItem(item));
+                const demo = groupItems.filter(item => isReplicaCaseItem(item));
+                const countLabel = demo.length > 0 ? `${real.length} 草稿 · ${demo.length} 示例` : `${groupItems.length}`;
+                return (
+                  <section className="sc-archive-group" key={group.type}>
+                    <div className="sc-archive-group-head">
+                      <span className="sc-archive-group-icon"><group.Icon size={14} aria-hidden="true" /></span>
+                      <h5>{group.label}</h5>
+                      <span className="sc-archive-count">{countLabel}</span>
+                    </div>
+                    <ul className="sc-archive-rows">
+                      {real.map(item => <InventoryRow key={`${item.type}:${item.localId}`} item={item} Icon={group.Icon} />)}
+                    </ul>
+                    {demo.length > 0 && (
+                      <>
+                        <p className="sc-archive-sub-head">内置示例</p>
+                        <ul className="sc-archive-rows">
+                          {demo.map(item => <InventoryRow key={`${item.type}:${item.localId}`} item={item} Icon={group.Icon} />)}
+                        </ul>
+                      </>
+                    )}
+                  </section>
+                );
+              })}
               <button type="button" className="sc-button" disabled={busy || !archive.scope || !inventory || inventory.summary.pending === 0}
                 onClick={() => void run(async () => {
                   if (!archive.scope || !inventory) return;
