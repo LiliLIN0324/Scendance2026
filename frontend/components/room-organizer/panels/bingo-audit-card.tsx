@@ -6,6 +6,7 @@ import {inspectReviewFeedbackReceipt,type ReceiptPin} from '@/components/review-
 import {importReviewFeedback,readImportedReviewFeedback} from '@/components/review-share-page/review-feedback-storage';
 import {readReviewLink,reviewCodeFromHash} from '@/components/review-share-page/review-link-cloud';
 import {readShareHash} from '../lib/share';
+import {projectSessionScope} from '../lib/project-session-scope';
 import { violationCodeLabel, type BingoScore } from '../../../lib/bingo-score';
 import {
   countOpenFeedbackPins,
@@ -427,8 +428,8 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
   useEffect(()=>{alive.current=true;return ()=>{alive.current=false;sequence.current++;};},[]);
   useEffect(()=>{sequence.current++;setPreview(null);setSaved(null);setPending(false);setUnknown(false);setNotice('');},[plan.clientHref,plan.projectKey,scopeKey]);
   const capture=()=>{const captured={url:plan.clientHref,project:plan.projectKey,scope:scopeKey,guard:isCurrent};
-    return ()=>{try{return alive.current&&!!captured.guard&&captured.guard()&&captured.scope===`activity:${captured.project}`&&latest.current.scopeKey===captured.scope&&latest.current.plan.clientHref===captured.url&&latest.current.plan.projectKey===captured.project&&readBingoSnapshot(window.localStorage).plans.some(p=>p.projectKey===captured.project&&p.clientHref===captured.url);}catch{return false;}};};
-  const eligible=!!isCurrent&&scopeKey===`activity:${plan.projectKey}`&&plan.projectKey!=='local-draft'&&plan.linkStatus==='needs-verification';
+    return ()=>{try{return alive.current&&!!captured.guard&&captured.guard()&&captured.scope===projectSessionScope(captured.project)&&latest.current.scopeKey===captured.scope&&latest.current.plan.clientHref===captured.url&&latest.current.plan.projectKey===captured.project&&readBingoSnapshot(window.localStorage).plans.some(p=>p.projectKey===captured.project&&p.clientHref===captured.url);}catch{return false;}};};
+  const eligible=!!isCurrent&&scopeKey===projectSessionScope(plan.projectKey)&&plan.projectKey!=='local-draft'&&plan.linkStatus==='needs-verification';
   async function shareHash():Promise<string> {
     const hash=new URL(plan.clientHref,window.location.origin).hash;
     if(hash.startsWith('#layout='))return hash;
