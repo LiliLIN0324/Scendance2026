@@ -8,7 +8,7 @@
  * 与户外规划的劳动力岗位对齐（lib/oneplan-catalog.ts 的 LABOR_ROLES），另外多出
  * 工作人员 / 演员 / 游客 / 观众几类——规划和 3D 都常用，但不算「岗位」。
  */
-import { WALK_ROLES, walkRoleCrowdType } from './walk-roles';
+import { peopleOfType, selectablePeople } from './people-registry';
 
 export interface CrowdType {
   id: string;
@@ -44,7 +44,7 @@ export type CrowdTypeModelStatus = 'walk' | 'lowpoly' | 'todo';
  * 这样「哪些类型有 walk 模型」只有 walk-roles 一处声明，避免与这里的硬编码清单漂移。
  * 低模清单仍独立挂在 CROWD_TYPE_MODELS，两者可以同时存在。
  */
-export const CROWD_TYPES_WITH_WALK_MODELS = new Set<string>(WALK_ROLES.map(walkRoleCrowdType));
+export const CROWD_TYPES_WITH_WALK_MODELS = new Set<string>(selectablePeople().map(slot => slot.crowdType));
 
 /**
  * 库内低模人物按类型挂上。每个 slug 只属于一类，避免同一模型在多处重复出现。
@@ -107,9 +107,9 @@ export function crowdDirectory(): CrowdDirectoryEntry[] {
     note: type.note,
     status: crowdTypeModelStatus(type.id),
     statusLabel: crowdTypeStatusLabel(type.id),
-    walkAssetIds: WALK_ROLES
-      .filter(role => walkRoleCrowdType(role) === type.id)
-      .map(role => role.assetId),
+    walkAssetIds: peopleOfType(type.id)
+      .filter(slot => slot.walkable && Boolean(slot.assetId))
+      .map(slot => slot.assetId as string),
     slugs: crowdTypeModelSlugs(type.id),
   }));
 }

@@ -12,7 +12,8 @@
  */
 
 import { CROWD_TYPE_MODELS, type CrowdTypeId } from './crowd-types';
-import { WALK_ROLES, walkRoleCrowdType, walkRoleGlbUrl } from './walk-roles';
+import { findPerson, defaultPersonForType } from './people-registry';
+import { walkRoleGlbUrl } from './walk-roles';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 
 /** 单个岗位最多渲染几个人（worker.count 上限 9999，全放会卡死）。 */
@@ -30,7 +31,7 @@ const ROLE_TO_CROWD: ReadonlyArray<{ readonly role: string; readonly crowdType: 
   { role: '保安', crowdType: 'security' },
   { role: '管理员', crowdType: 'admin' },
   { role: '主管', crowdType: 'manager' },
-  { role: '经理', crowdType: 'manager' },
+  { role: '经理', crowdType: 'executive' },
   { role: '志愿', crowdType: 'volunteer' },
   { role: '演员', crowdType: 'performer' },
   { role: '游客', crowdType: 'visitor' },
@@ -68,14 +69,13 @@ export function crowdGlbUrl(slug: string): string {
 /** 绑定代号是否登记在可走漫游角色表里（未登记或不可走视为未绑定，回退到岗位默认）。 */
 function registeredWalkAsset(assetId: string | undefined): string | null {
   if (!assetId) return null;
-  const role = WALK_ROLES.find(candidate => candidate.assetId === assetId && candidate.walkable);
-  return role?.assetId ?? null;
+  const role = findPerson(assetId);
+  return role?.walkable && role.assetId ? role.assetId : null;
 }
 
-/** 该类人群的默认漫游角色：取登记表第一个可走角色，稳定兜底，不在男女之间轮换。 */
+/** 该类人群的默认漫游角色：由人物登记表的默认性别表决定，不在男女之间轮换。 */
 export function defaultWalkAssetIdForType(crowdType: CrowdTypeId): string | null {
-  const role = WALK_ROLES.find(candidate => walkRoleCrowdType(candidate) === crowdType && candidate.walkable);
-  return role?.assetId ?? null;
+  return defaultPersonForType(crowdType)?.assetId ?? null;
 }
 
 /** 2D 岗位点位（只取本模块需要的字段）。 */

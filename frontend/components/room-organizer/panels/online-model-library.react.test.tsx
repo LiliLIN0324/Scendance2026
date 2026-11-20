@@ -20,6 +20,7 @@ import * as aholoAssets from '../lib/aholo-assets';
 import * as aholoPlacement from '../lib/aholo-model-placement';
 import * as materialGenerate from '../lib/material-generate';
 import * as lux3dImport from '../lib/lux3d-import';
+import { selectablePeople } from '../lib/people-registry';
 import { OnlineModelLibrary, onlineModelDisplayName } from './online-model-library';
 import type { OnlineModel } from '../lib/online-models';
 import type { CatalogItem, FurnitureItem } from '../lib/types';
@@ -819,5 +820,36 @@ describe('物料库与 2D 目录对齐', () => {
     fireEvent.click(screen.getByRole('button', { name: /^景点/ }));
     const tower = screen.getByRole('button', { name: '添加Lighting Tower' });
     expect(tower.querySelector('.sc-lib-plan-icon img')).toBeNull();
+  });
+});
+
+describe('不同人群（2026-11-20 去重）', () => {
+  const crowdRoles = () => selectablePeople()
+    .filter(slot => Boolean(slot.assetId))
+    .map(slot => ({
+      id: slot.id,
+      name: slot.name,
+      image: slot.image,
+      walkable: slot.walkable,
+      ...(slot.note ? { note: slot.note } : {}),
+      crowdType: slot.crowdType,
+      selected: false,
+      onSelect: () => {},
+    }));
+
+  it('保安只出男、女两张卡，旧单模不再出现在选择器', async () => {
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()} walkRoles={crowdRoles()}/>);
+    fireEvent.click(await screen.findByRole('button', { name: '不同人群' }));
+    fireEvent.click(screen.getByRole('button', { name: '保安 2' }));
+    expect(screen.getByRole('button', { name: '选用保安男漫游' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '选用保安女漫游' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '选用保安漫游' })).toBeNull();
+  });
+
+  it('没有模型的人群也占一行，显示「待补模型」而不是整行消失', async () => {
+    render(<OnlineModelLibrary cardMode roomSize={{ width: 8, depth: 8 }} onAdd={vi.fn()} walkRoles={crowdRoles()}/>);
+    fireEvent.click(await screen.findByRole('button', { name: '不同人群' }));
+    expect(screen.getByLabelText('演员 待补模型')).toBeTruthy();
+    expect(screen.getByLabelText('观众 待补模型')).toBeTruthy();
   });
 });

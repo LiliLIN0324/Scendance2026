@@ -19,10 +19,11 @@
 
 import { routeCarrier, type PlanNode, type PlanPoint, type PlanRoute, type PlanWorker } from '../../../../supabase/functions/_shared/site-plan';
 import { MIN_WAYPOINT_DISTANCE_M, routeLength } from './person-route';
-import { crowdGlbUrl, crowdModelSlugForType, defaultWalkAssetIdForType } from './plan-crowd-placement';
+import { crowdGlbUrl, crowdModelSlugForType } from './plan-crowd-placement';
 import { walkablePedestrianRoutes } from './plan-crowd-routes';
 import { planShellFrame } from './plan-footprint-geometry';
-import { walkRoleGlbUrl, walkRoleCrowdType, WALK_ROLES } from './walk-roles';
+import { walkRoleGlbUrl } from './walk-roles';
+import { defaultPersonForType, findPersonById, peopleOfType } from './people-registry';
 import type { CrowdTypeId } from './crowd-types';
 import type { CrowdShellPlacement, PlanSiteMetrics } from './plan-scene-placement';
 import type { Vec2, WalkRoute } from './types';
@@ -111,30 +112,44 @@ export function mergeDerivedCrowd(input: {
  * 12 人一轮 = 10 游客 + 1 志愿者 + 1 保安（游客约 83%）。
  */
 const DERIVED_ROLE_POOL: readonly string[] = [
-  '唐女', '宋女', '唐男', '明女', '宋男', '明男',
-  '唐女', '宋女', '志愿者', '明男', '唐男', '保安',
+  'visitor:tang-female', 'visitor:song-female', 'visitor:tang-male',
+  'visitor:ming-female', 'visitor:song-male', 'visitor:ming-male',
+  'visitor:tang-female', 'visitor:song-female', 'volunteer',
+  'visitor:ming-male', 'visitor:tang-male', 'security',
 ];
 
 const DERIVED_ROLE_COLOR: Readonly<Record<string, string>> = {
-  志愿者: '#d25555',
-  保安: '#3f5a80',
+  volunteer: '#d25555',
+  security: '#3f5a80',
 };
 const DERIVED_VISITOR_COLOR = '#c8a06a';
 
 interface DerivedRoleProfile {
+  /** 登记表槽位 id：岗位类角色按序号在男女之间轮换，所以 id 也在这里定。 */
+  slotId: string;
   name: string;
   crowdType: CrowdTypeId;
   color: string;
 }
 
-/** 第 index 个派生路人是谁：角色名、人群类型、标签色都由这一处决定。 */
+/** 岗位类（志愿者 / 保安）在男女两槽之间按序号轮换，固定序号永远同一个性别。 */
+function staffSlotAt(crowdType: CrowdTypeId, index: number) {
+  const list = peopleOfType(crowdType).filter(slot => slot.walkable);
+  if (list.length === 0) return null;
+  return list[index % list.length] ?? null;
+}
+
+/** 第 index 个派生路人是谁：角色、人群类型、标签色都由这一处决定。 */
 export function derivedRoleAt(index: number): DerivedRoleProfile {
-  const name = DERIVED_ROLE_POOL[((index % DERIVED_ROLE_POOL.length) + DERIVED_ROLE_POOL.length) % DERIVED_ROLE_POOL.length]!;
-  const walkRole = WALK_ROLES.find(role => role.name === name);
+  const pool = DERIVED_ROLE_POOL;
+  const key = pool[((index % pool.length) + pool.length) % pool.length]!;
+  const slot = key.includes(':') ? findPersonById(key) : staffSlotAt(key as CrowdTypeId, index);
+  if (!slot) throw new Error(`派生人群缺少登记槽位：${key}`);
   return {
-    name,
-    crowdType: (walkRole ? walkRoleCrowdType(walkRole) : 'visitor') as CrowdTypeId,
-    color: DERIVED_ROLE_COLOR[name] ?? DERIVED_VISITOR_COLOR,
+    slotId: slot.id,
+    name: slot.name,
+    crowdType: slot.crowdType,
+    color: DERIVED_ROLE_COLOR[slot.crowdType] ?? DERIVED_VISITOR_COLOR,
   };
 }
 
@@ -204,9 +219,9 @@ function placementFor(input: {
   role: DerivedRoleProfile;
 }): CrowdShellPlacement {
   const { role } = input;
-  // 角色池里的名字都能在 WALK_ROLES 里查到带模型的槽位；查不到才回退到该类型的默认模型。
-  const walkRole = WALK_ROLES.find(candidate => candidate.name === role.name && candidate.walkable);
-  const assetId = walkRole?.assetId ?? defaultWalkAssetIdForType(role.crowdType);
+  // 角色池里存的是登记表槽位 id；查不到才回退到该类型的默认模型。
+  const person = findPersonById(role.slotId);
+  const assetId = person?.assetId ?? defaultPersonForType(role.crowdType)?.assetId ?? null;
   const slug = assetId ? null : crowdModelSlugForType(role.crowdType, input.index);
   return {
     id: input.id,
