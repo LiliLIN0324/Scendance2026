@@ -1267,6 +1267,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       onOpenAssets={() => openAccountSection('assets')}
       onOpenSettings={() => openSettings('personal')}
       onSignOut={signOutFromMenu}
+      appearanceMode={appearance?.mode ?? 'system'}
+      onAppearanceModeChange={next => appearance?.setMode(next)}
       {...(planContext ? { plan: planContext } : {})}
       {...(onCapturePlan ? { onCapturePlan } : {})}
     />
@@ -1652,8 +1654,6 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         <SettingsPage
           preferences={preferences}
           onPreferenceChange={onPreferenceChange}
-          appearanceMode={appearance?.mode ?? 'system'}
-          onAppearanceModeChange={next => appearance?.setMode(next)}
           preferenceStatus={cloud.user && !cloud.user.is_anonymous ? '已登录：本机先记下，再同步到账号。云端失败不挡画布。' : '未登录：只存在这台设备。'}
           layout={layout}
           {...(onPlanSettingsChange ? { onPlanSettingsChange } : {})}

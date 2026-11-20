@@ -1,8 +1,9 @@
 'use client';
 
-import { BookOpen, FolderOpen, HelpCircle, Home, Images, Info, MessageSquare, Settings, UserRound } from '@/components/solid-icons';
+import { BookOpen, Check, FolderOpen, HelpCircle, Home, Images, Info, MessageSquare, Palette, Settings, UserRound } from '@/components/solid-icons';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { APPEARANCE_LABELS, APPEARANCE_MODE_ORDER, type AppearanceMode } from '../lib/appearance';
 import { AboutDialog } from './about-dialog';
 import { FeedbackDialog, type FeedbackPlanContext } from './feedback-dialog';
 
@@ -88,6 +89,8 @@ export function AccountMenu({
   onOpenAssets,
   onOpenSettings,
   onSignOut,
+  appearanceMode,
+  onAppearanceModeChange,
   plan,
   onCapturePlan,
 }: {
@@ -104,32 +107,41 @@ export function AccountMenu({
   onOpenAssets: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
+  appearanceMode?: AppearanceMode;
+  onAppearanceModeChange?: (mode: AppearanceMode) => void;
   plan?: FeedbackPlanContext;
   onCapturePlan?: () => Promise<string | null> | string | null;
 }): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement>(null);
-  const supportRef = useRef<HTMLDivElement>(null);
-  const flyoutRef = useRef<HTMLDivElement>(null);
-  const bridgeRef = useRef<HTMLDivElement>(null);
+  const supportRowRef = useRef<HTMLDivElement>(null);
+  const supportFlyoutRef = useRef<HTMLDivElement>(null);
+  const supportBridgeRef = useRef<HTMLDivElement>(null);
   const supportButtonRef = useRef<HTMLButtonElement>(null);
+  const appearanceRowRef = useRef<HTMLDivElement>(null);
+  const appearanceFlyoutRef = useRef<HTMLDivElement>(null);
+  const appearanceBridgeRef = useRef<HTMLDivElement>(null);
+  const appearanceButtonRef = useRef<HTMLButtonElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const supportId = useId();
-  const [supportOpen, setSupportOpen] = useState(false);
+  const appearanceId = useId();
+  const [openMenu, setOpenMenu] = useState<null | 'support' | 'appearance'>(null);
+  const supportOpen = openMenu === 'support';
+  const appearanceOpen = openMenu === 'appearance';
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [box, setBox] = useState<{ left: number; bottom: number } | null>(null);
 
-  function cancelSupportClose(): void {
+  function cancelClose(): void {
     if (closeTimerRef.current === null) return;
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
   }
 
-  function scheduleSupportClose(): void {
-    cancelSupportClose();
+  function scheduleClose(): void {
+    cancelClose();
     closeTimerRef.current = window.setTimeout(() => {
       closeTimerRef.current = null;
-      setSupportOpen(false);
+      setOpenMenu(null);
     }, HOVER_CLOSE_DELAY);
   }
 
@@ -139,8 +151,8 @@ export function AccountMenu({
 
   useEffect(() => {
     if (!open) {
-      cancelSupportClose();
-      setSupportOpen(false);
+      cancelClose();
+      setOpenMenu(null);
       return undefined;
     }
     const anchor = anchorRef.current;
@@ -155,10 +167,10 @@ export function AccountMenu({
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
-      if (supportOpen) {
+      if (openMenu) {
         event.preventDefault();
         event.stopPropagation();
-        setSupportOpen(false);
+        setOpenMenu(null);
         return;
       }
       event.preventDefault();
@@ -171,12 +183,13 @@ export function AccountMenu({
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open, onClose, anchorRef, supportOpen]);
+  }, [open, onClose, anchorRef, openMenu]);
 
   useLayoutEffect(() => {
-    if (!open || !supportOpen) return undefined;
-    const flyout = flyoutRef.current;
-    const row = supportRef.current;
+    if (!open || !openMenu) return undefined;
+    const row = openMenu === 'support' ? supportRowRef.current : appearanceRowRef.current;
+    const flyout = openMenu === 'support' ? supportFlyoutRef.current : appearanceFlyoutRef.current;
+    const bridge = openMenu === 'support' ? supportBridgeRef.current : appearanceBridgeRef.current;
     if (!flyout || !row) return undefined;
     const place = () => {
       const size = { width: flyout.offsetWidth, height: flyout.scrollHeight };
@@ -192,7 +205,6 @@ export function AccountMenu({
       flyout.style.right = 'auto';
       flyout.style.bottom = 'auto';
       flyout.style.maxHeight = `${next.maxHeight}px`;
-      const bridge = bridgeRef.current;
       if (!bridge) return;
       const patch = gapBridge(anchor, {
         top: next.top,
@@ -213,10 +225,10 @@ export function AccountMenu({
     place();
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [open, supportOpen]);
+  }, [open, openMenu]);
 
   function openSupportItem(action: () => void): void {
-    setSupportOpen(false);
+    setOpenMenu(null);
     onClose();
     action();
   }
@@ -236,11 +248,81 @@ export function AccountMenu({
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenProjects(); }}><FolderOpen size={15} aria-hidden="true"/>所有方案</button>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenAssets(); }}><Images size={15} aria-hidden="true"/>物料</button>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenSettings(); }}><Settings size={15} aria-hidden="true"/>设置</button>
+      {onAppearanceModeChange ? (
+        <div
+          className="sc-account-menu-appearance"
+          ref={appearanceRowRef}
+          onMouseEnter={() => { if (!hoverFine()) return; cancelClose(); setOpenMenu('appearance'); }}
+          onMouseLeave={() => { if (hoverFine()) scheduleClose(); }}
+        >
+          <button
+            ref={appearanceButtonRef}
+            type="button"
+            role="menuitem"
+            aria-haspopup="menu"
+            aria-expanded={appearanceOpen}
+            aria-controls={appearanceId}
+            onClick={() => setOpenMenu(openMenu === 'appearance' ? null : 'appearance')}
+            onKeyDown={event => {
+              if (event.key !== 'ArrowRight') return;
+              event.preventDefault();
+              setOpenMenu('appearance');
+              window.setTimeout(() => {
+                appearanceRowRef.current?.querySelector<HTMLElement>('.sc-account-menu-flyout [role="menuitem"]')?.focus();
+              }, 0);
+            }}
+          >
+            <Palette size={15} aria-hidden="true"/>外观
+            <span className="sc-account-menu-caret" aria-hidden="true">›</span>
+          </button>
+          {appearanceOpen && <div ref={appearanceBridgeRef} className="sc-account-menu-bridge" aria-hidden="true" />}
+          {appearanceOpen && (
+            <div
+              id={appearanceId}
+              ref={appearanceFlyoutRef}
+              className="sc-account-menu-flyout"
+              role="menu"
+              aria-label="外观模式"
+              onMouseEnter={cancelClose}
+              onKeyDown={event => {
+                const items = Array.from(appearanceFlyoutRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+                const index = items.indexOf(document.activeElement as HTMLElement);
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  const delta = event.key === 'ArrowDown' ? 1 : -1;
+                  const next = items[index + delta];
+                  (next ?? items[index] ?? items[0])?.focus();
+                  return;
+                }
+                if (event.key === 'ArrowLeft') {
+                  event.preventDefault();
+                  setOpenMenu(null);
+                  appearanceButtonRef.current?.focus();
+                }
+              }}
+            >
+              {APPEARANCE_MODE_ORDER.map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={appearanceMode === mode}
+                  className={appearanceMode === mode ? 'is-active' : ''}
+                  onClick={() => onAppearanceModeChange(mode)}
+                >
+                  <span>{APPEARANCE_LABELS[mode]}</span>
+                  {appearanceMode === mode ? <Check size={16} aria-hidden="true"/> : null}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
       <div
         className="sc-account-menu-support"
-        ref={supportRef}
-        onMouseEnter={() => { if (!hoverFine()) return; cancelSupportClose(); setSupportOpen(true); }}
-        onMouseLeave={() => { if (hoverFine()) scheduleSupportClose(); }}
+        ref={supportRowRef}
+        onMouseEnter={() => { if (!hoverFine()) return; cancelClose(); setOpenMenu('support'); }}
+        onMouseLeave={() => { if (hoverFine()) scheduleClose(); }}
       >
         <button
           ref={supportButtonRef}
@@ -249,30 +331,30 @@ export function AccountMenu({
           aria-haspopup="menu"
           aria-expanded={supportOpen}
           aria-controls={supportId}
-          onClick={() => setSupportOpen(value => !value)}
+          onClick={() => setOpenMenu(openMenu === 'support' ? null : 'support')}
           onKeyDown={event => {
             if (event.key !== 'ArrowRight') return;
             event.preventDefault();
-            setSupportOpen(true);
+            setOpenMenu('support');
             window.setTimeout(() => {
-              supportRef.current?.querySelector<HTMLElement>('.sc-account-menu-flyout [role="menuitem"]')?.focus();
+              supportRowRef.current?.querySelector<HTMLElement>('.sc-account-menu-flyout [role="menuitem"]')?.focus();
             }, 0);
           }}
         >
           <HelpCircle size={15} aria-hidden="true"/>支持
           <span className="sc-account-menu-caret" aria-hidden="true">›</span>
         </button>
-        {supportOpen && <div ref={bridgeRef} className="sc-account-menu-bridge" aria-hidden="true" />}
+        {supportOpen && <div ref={supportBridgeRef} className="sc-account-menu-bridge" aria-hidden="true" />}
         {supportOpen && (
           <div
             id={supportId}
-            ref={flyoutRef}
+            ref={supportFlyoutRef}
             className="sc-account-menu-flyout"
             role="menu"
             aria-label="支持"
-            onMouseEnter={cancelSupportClose}
+            onMouseEnter={cancelClose}
             onKeyDown={event => {
-              const items = Array.from(flyoutRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+              const items = Array.from(supportFlyoutRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
               const index = items.indexOf(document.activeElement as HTMLElement);
               if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                 event.preventDefault();
@@ -283,18 +365,18 @@ export function AccountMenu({
               }
               if (event.key === 'ArrowLeft') {
                 event.preventDefault();
-                setSupportOpen(false);
+                setOpenMenu(null);
                 supportButtonRef.current?.focus();
               }
             }}
           >
-            <a role="menuitem" href={GUIDE_URL} target="_blank" rel="noopener noreferrer" onClick={() => { setSupportOpen(false); onClose(); }}>
+            <a role="menuitem" href={GUIDE_URL} target="_blank" rel="noopener noreferrer" onClick={() => { setOpenMenu(null); onClose(); }}>
               <BookOpen size={15} aria-hidden="true"/>新手指引
             </a>
-            <a role="menuitem" href={HOME_URL} onClick={() => { setSupportOpen(false); onClose(); }}>
+            <a role="menuitem" href={HOME_URL} onClick={() => { setOpenMenu(null); onClose(); }}>
               <Home size={15} aria-hidden="true"/>产品官网
             </a>
-            <a role="menuitem" href={GITHUB_URL} target="_blank" rel="noopener noreferrer" onClick={() => { setSupportOpen(false); onClose(); }}>
+            <a role="menuitem" href={GITHUB_URL} target="_blank" rel="noopener noreferrer" onClick={() => { setOpenMenu(null); onClose(); }}>
               <GithubMark/>GitHub 仓库
             </a>
             <button type="button" role="menuitem" onClick={() => openSupportItem(openShortcutCoach)}>

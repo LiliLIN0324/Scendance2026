@@ -79,3 +79,66 @@ describe('AccountMenu support flyout hover', () => {
     expect(screen.queryByRole('menu', { name: '支持' })).toBeNull();
   });
 });
+
+describe('AccountMenu appearance flyout', () => {
+  const onAppearanceModeChange = vi.fn();
+
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      media: '(hover: hover) and (pointer: fine)',
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.querySelectorAll('body > button').forEach(node => node.remove());
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    onAppearanceModeChange.mockClear();
+  });
+
+  it('shows the three modes in a right-side flyout without an inline current label', () => {
+    const anchor = document.createElement('button');
+    document.body.appendChild(anchor);
+    const anchorRef = { current: anchor as HTMLButtonElement | null };
+    render(
+      <AccountMenu
+        open
+        onClose={() => {}}
+        anchorRef={anchorRef}
+        displayName="endTree"
+        studioName="endTree 的工作室"
+        showSignOut
+        busy={false}
+        onOpenProjects={() => {}}
+        onOpenAssets={() => {}}
+        onOpenSettings={() => {}}
+        onSignOut={() => {}}
+        appearanceMode="dark"
+        onAppearanceModeChange={onAppearanceModeChange}
+      />,
+    );
+
+    const rowButton = screen.getByRole('menuitem', { name: '外观' });
+    expect(rowButton).toBeTruthy();
+    expect(rowButton.textContent).not.toContain('深色');
+
+    fireEvent.mouseOver(rowButton.parentElement as HTMLElement);
+    const flyout = screen.getByRole('menu', { name: '外观模式' });
+    expect(flyout).toBeTruthy();
+    const radios = screen.getAllByRole('menuitemradio');
+    expect(radios).toHaveLength(3);
+    expect(screen.getByRole('menuitemradio', { name: '深色' }).getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '浅色' }));
+    expect(onAppearanceModeChange).toHaveBeenCalledWith('light');
+  });
+});

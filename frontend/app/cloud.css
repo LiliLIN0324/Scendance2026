@@ -301,19 +301,12 @@
 .sc-unit-seg button{display:inline-flex;align-items:center;gap:4px;margin:0;padding:5px 10px;border:0;border-radius:6px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:500;white-space:nowrap}
 .sc-unit-seg button[aria-pressed=true]{background:var(--wk-paper);color:var(--wk-ink);font-weight:600}
 .sc-unit-seg button:hover:not([aria-pressed=true]){color:var(--wk-ink)}
-/* 外观入口：一行触发器 + 下方浮层菜单（参照成熟产品设置范式：图标 / 标题 / 当前档 / 箭头）。 */
-.sc-settings-group--menu{overflow:visible}
-.sc-appearance-menu{position:relative}
-.sc-appearance-menu-trigger{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 16px;border:0;background:transparent;color:var(--wk-ink);font:inherit;text-align:left;cursor:pointer}
-.sc-appearance-menu-title{flex:1 1 auto;font-size:13px;font-weight:600}
-.sc-appearance-menu-value{color:var(--sc-muted);font-size:12px}
-.sc-appearance-menu-chevron{flex:none;color:var(--wk-ink-faint);transition:transform .16s ease}
-.sc-appearance-menu-chevron.is-open{transform:rotate(90deg)}
-.sc-appearance-menu-pop{position:absolute;top:calc(100% + 6px);left:12px;right:12px;z-index:60;display:grid;gap:2px;padding:6px;background:var(--wk-paper);border:1px solid var(--wk-hair);border-radius:12px;box-shadow:var(--e1)}
-.sc-appearance-menu-pop button{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:var(--wk-ink);font:inherit;font-size:13px;cursor:pointer}
-.sc-appearance-menu-pop button:hover{background:var(--wk-plane)}
-.sc-appearance-menu-pop button.is-active{font-weight:600}
-.sc-appearance-menu-pop button.is-active .sc-material-symbol{color:var(--wk-green)}
+/* 账户菜单里的外观行：与「支持」同构，悬停在右侧浮出三档列表，当前档打勾。 */
+.sc-account-menu-appearance{position:relative}
+.sc-account-menu-flyout [role="menuitemradio"]{justify-content:space-between}
+.sc-account-menu-flyout [role="menuitemradio"].is-active{font-weight:600}
+.sc-account-menu-flyout [role="menuitemradio"].is-active svg,
+.sc-account-menu-flyout [role="menuitemradio"].is-active .sc-material-symbol{color:var(--wk-green)}
 .sc-account-prefs-head{display:grid;gap:3px;margin:0 0 16px}
 .sc-account-prefs-head h3{margin:0}
 .sc-account-prefs-head p{margin:0;color:var(--sc-muted);font-size:12px;line-height:1.55}

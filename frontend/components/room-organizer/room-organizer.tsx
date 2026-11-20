@@ -602,12 +602,18 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [messagesOpen, setMessagesOpen] = useState(false);
   // 2026-11-15 用户：「不要弹窗」——生成面板作为左栏卡片存在，所以这里只订阅它开没开。
   const generationOpen = useSyncExternalStore(subscribeGenerationSheet, () => getGenerationSheetState().open, () => false);
+  // 拍摄向导卡：'new' 从未打开，'open' 占栏，'hidden' 已收起。
+  const [capturePanel, setCapturePanel] = useState<'new' | 'open' | 'hidden'>('new');
+  const captureOpen = capturePanel === 'open';
   // 私信压在栏里的时候，四格不算开着：栏中此刻不是它们的卡，按压态与高亮跟着让开。
   // 2026-11-19：创作卡占着栏时同理——生成卡在视觉上盖住 Agent 卡（各自渲染守卫已让位），
   // 左轨就不能还亮着「空间/物料/Bingo」，否则又是「两个钮都亮、只看到一张卡」。
-  const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !personChat && !messagesOpen && !generationOpen;
+  // 2026-11-20：被盖住的车道底层状态仍保留，钮进次级「待切回」态——点它是把车道换回来，
+  // 不是关闭；视觉上要和「从没打开过」的空钮区分开，避免点来点去猜不到结果。
+  const laneCovered = personChat || messagesOpen || generationOpen || captureOpen;
+  const isLaneOpen = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && !laneCovered;
+  const isLaneRetained = (id: AgentId): boolean => agentPanelOpen && activeAgent === id && laneCovered;
   // 私信开着，左栏就必须撑着——哪怕四格都收着，栏里此刻装的是这场对话。
-  const [capturePanel, setCapturePanel] = useState<'new' | 'open' | 'hidden'>('new');  const captureOpen = capturePanel === 'open';
   const capturePanelRef = useRef<HTMLElement>(null);
   const captureReturnFocusRef = useRef<HTMLElement | null>(null);
   const openCapturePanel = () => {
@@ -784,12 +790,6 @@ useEffect(() => {
   const [outdoorMeasureKind, setOutdoorMeasureKind] = useState<'distance' | 'area'>('distance');
   // 2026-11-15 户外网格吸附开关：默认开；关闭后放置/拖动/拖顶点自由摆放。
   const [outdoorSnapOn, setOutdoorSnapOn] = useState(true);
-  // 2026-11-19 合并上游后：规划信息就是左栏户外卡的「清单」页（#outdoor-panel-host-inventory），
-  // 不再是画布浮卡。底条「规划信息」钮改成切这张左栏页——开关在，但形态跟随上游的清单页。
-  const outdoorInfoOpen = outdoorPanel === 'inventory';
-  const toggleOutdoorInfo = useCallback(() => {
-    setOutdoorPanel(panel => (panel === 'inventory' ? null : 'inventory'));
-  }, []);
   const handleOutdoorCanvasMode = useCallback((mode: string) => {
     if (mode === 'measure') { setOutdoorMeasureActive(true); setOutdoorCanvasMode('view'); return; }
     setOutdoorMeasureActive(false);
@@ -2965,9 +2965,6 @@ useEffect(() => {
     // 2026-11-15 网格吸附开关：底条吸附钮切换，转发到 2D 画布。
     snapOn: outdoorSnapOn,
     setSnapOn: (on: boolean) => { setOutdoorSnapOn(on); outdoorOverlayRef.current?.setSnapOn(on); },
-    // 2026-11-19 用户指令：规划信息由底条钮开合；合并上游后它等于左栏「清单」页。
-    infoOpen: outdoorInfoOpen,
-    toggleInfo: toggleOutdoorInfo,
     enterMeasure: () => outdoorOverlayRef.current?.setToolMode('measure'),
     exitMeasure: () => outdoorOverlayRef.current?.setToolMode('view'),
     // 2026-11-12 三张卡拆开：右轨每枚圆钮只管自己那张卡的展开态。
@@ -5047,19 +5044,19 @@ useEffect(() => {
           <button ref={deliveryEntryRef} type="button" hidden aria-hidden tabIndex={-1}/>
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
             <div className="sc-rail-head">
-              <WorkbenchBrandToggle expanded={columnExpanded} active={isLaneOpen('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
+              <WorkbenchBrandToggle open={isLaneOpen('door')} retained={isLaneRetained('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
               <nav className="sc-mode-rail-primary" aria-label="活动、Bingo、空间、物料">
-                <BingoRailButton open={isLaneOpen('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
+                <BingoRailButton open={isLaneOpen('bingo')} retained={isLaneRetained('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
                 <button
                   type="button"
                   ref={spaceEntryRef}
-                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('space') ? ' is-active' : ''}`}
-                  aria-pressed={isLaneOpen('space')}
+                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('space') ? ' is-active' : isLaneRetained('space') ? ' is-retained' : ''}`}
+                  aria-pressed={isLaneOpen('space') || isLaneRetained('space')}
                   aria-expanded={isLaneOpen('space')}
                   aria-controls="agent-panel"
                   aria-label="空间"
                   data-tour="nav-space"
-                  data-tip="空间"
+                  data-tip={isLaneRetained('space') ? '空间：切回当前面板' : '空间'}
                   onClick={() => toggleAgent('space')}
                 >
                   <RailSpace size={28} active={isLaneOpen('space')} aria-hidden="true" />
@@ -5068,44 +5065,45 @@ useEffect(() => {
                 <button
                   type="button"
                   ref={toolsEntryRef}
-                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('material') ? ' is-active' : ''}`}
-                  aria-pressed={isLaneOpen('material')}
+                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('material') ? ' is-active' : isLaneRetained('material') ? ' is-retained' : ''}`}
+                  aria-pressed={isLaneOpen('material') || isLaneRetained('material')}
                   aria-expanded={isLaneOpen('material')}
                   aria-controls="agent-panel"
                   aria-label="物料"
                   data-tour="nav-material"
-                  data-tip="物料"
+                  data-tip={isLaneRetained('material') ? '物料：切回当前面板' : '物料'}
                   onClick={() => toggleAgent('material')}
                 >
                   <RailCrate size={28} active={isLaneOpen('material')} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">物料</span>
                 </button>
                 <button type="button"
-                  className={`sc-rail-tool sc-rail-disc sc-rail-capture${captureOpen || generationOpen ? ' is-active' : ''}`}
+                  className={`sc-rail-tool sc-rail-disc sc-rail-capture${generationOpen ? ' is-active' : captureOpen ? ' is-retained' : ''}`}
                   /* 2026-11-18：创作钮打开同一页两张卡片。文生 / 图生在卡片上完成，不再打开第二层窗口。 */
-                  aria-pressed={captureOpen || generationOpen}
-                  aria-expanded={captureOpen || generationOpen}
+                  aria-pressed={generationOpen || captureOpen}
+                  aria-expanded={generationOpen}
                   aria-controls="generation-sheet workbench-capture-card"
                   aria-label="创作：重建真实场地、文生 3D 或图生 3D"
                   data-tour="nav-capture"
-                  data-tip="创作"
+                  data-tip={captureOpen && !generationOpen ? '创作：拍摄向导开着，点按切到生成' : '创作'}
                   onClick={() => {
                     // 再点一次收起，和拍摄卡/户外卡同一种手感。
                     if (generationOpen) { closeGenerationSheet(); return; }
                     openGenerationSheet({ scope: 'venue' });
                   }}
                 >
-                  <RailPlus size={28} active={captureOpen || generationOpen} aria-hidden="true" />
+                  <RailPlus size={28} active={generationOpen} aria-hidden="true" />
                   <span className="sc-rail-3d-tag" aria-hidden="true">3D</span>
                   <span className="sc-rail-label" aria-hidden="true">创作</span>
                 </button>
                 <button
                   type="button"
-                  className={`sc-rail-tool sc-rail-disc${outdoorPanel !== null ? ' is-active' : ''}`}
+                  className={`sc-rail-tool sc-rail-disc${outdoorPanel !== null && !businessCardOpen ? ' is-active' : outdoorPanel !== null ? ' is-retained' : ''}`}
                   aria-pressed={outdoorPanel !== null}
+                  aria-expanded={outdoorPanel !== null && !businessCardOpen}
                   aria-label="户外规划"
                   data-tour="nav-outdoor"
-                  data-tip="户外规划"
+                  data-tip={outdoorPanel !== null && businessCardOpen ? '户外规划：被业务卡盖住，点按切回' : '户外规划'}
                   onClick={() => {
                     // 2026-11-13 用户拍板：右侧地图是唯一常驻画面，这个钮只控制左栏户外物料面板的
                     // 展开/收起，不收回地图。面板开 → 再点只收左栏面板（地图保留）；面板收 → 展开。
@@ -5130,7 +5128,7 @@ useEffect(() => {
                     setOutdoorPanel(null);
                   }}
                 >
-                  <RailMap size={28} active={outdoorPanel !== null} aria-hidden="true" />
+                  <RailMap size={28} active={outdoorPanel !== null && !businessCardOpen} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
                 </button>
                 <RailMessagesButton controller={controller} team={team} open={messagesOpen}
