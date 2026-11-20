@@ -39,6 +39,8 @@ export const cloudCasePublicSchema = z.object({
   description: z.string().optional().default(''),
   category: z.string().optional().default(''),
   coverAssetId: z.string().nullable().optional(),
+  /** 封面是服务端按权限签发的临时地址（300s）；只收 https，拒绝任何非 https 的注入面。 */
+  coverUrl: z.string().refine(value => value.startsWith('https://')).nullable().optional(),
   sortOrder: z.number().optional().default(0),
   provenance: z.string().optional().default(''),
   publicationId: z.string().optional(),

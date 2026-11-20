@@ -111,7 +111,9 @@ export function CloudCaseCatalog({ session, onUseCase, useLabel = '使用此案�
           <span className="sc-cloud-case-shot" aria-hidden="true">
             {viewing?.id === item.id && viewing.payload
               ? <CaseThumb plan={cloudCaseThumbPlan(viewing.payload)} />
-              : <CaseThumb className="sc-case-thumb is-empty" plan={EMPTY_PLAN} />}
+              : item.coverUrl
+                ? <img className="sc-cloud-case-cover" src={item.coverUrl} alt="" loading="lazy" referrerPolicy="no-referrer"/>
+                : <CaseThumb className="sc-case-thumb is-empty" plan={EMPTY_PLAN} />}
           </span>
           <strong>{item.title}</strong>
           <span className="sc-cloud-case-meta">{metaLine(item)}</span>

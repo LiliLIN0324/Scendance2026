@@ -8,7 +8,7 @@ import type { CloudCaseSessionContract } from '../lib/cloud-cases';
 afterEach(cleanup);
 
 const CASE_A = { id: 'cn-yuquan-chrysanthemum', title: '杭州植物园菊花展', category: '花卉展', sortOrder: 0, revision: 4, updatedAt: '2026-11-19T00:00:00.000Z' };
-const CASE_B = { id: 'cn-west-lake-lantern', title: '西湖灯会', category: '灯会', sortOrder: 1, revision: 2 };
+const CASE_B = { id: 'cn-west-lake-lantern', title: '西湖灯会', category: '灯会', sortOrder: 1, revision: 2, coverUrl: 'https://wkhfvnzgopjdzxlmycks.supabase.co/storage/v1/object/sign/cases/cover.png?token=abc' };
 
 function sessionStub(overrides: {
   list?: () => Promise<unknown>;
@@ -80,5 +80,16 @@ describe('CloudCaseCatalog', () => {
     render(<CloudCaseCatalog session={session} onUseCase={vi.fn()}/>);
     const empty = await screen.findByTestId('cloud-cases-empty');
     expect(empty.textContent).toContain('云端还没有已发布的案例');
+  });
+
+  it('设了封面的案例未展开时直接用封面图，没封面的仍是空底缩略（C09）', async () => {
+    const session = sessionStub();
+    render(<CloudCaseCatalog session={session} onUseCase={vi.fn()}/>);
+    await waitFor(() => expect(screen.getByLabelText('查看云端案例 西湖灯会')).toBeTruthy());
+    const coverImg = document.querySelector('.sc-cloud-case-cover') as HTMLImageElement | null;
+    expect(coverImg?.src).toContain('sign/cases/cover.png');
+    const cardA = screen.getByLabelText('查看云端案例 杭州植物园菊花展');
+    expect(cardA.querySelector('svg.sc-case-thumb.is-empty')).toBeTruthy();
+    expect(cardA.querySelector('img')).toBeNull();
   });
 });

@@ -99,6 +99,22 @@ describe('listCloudCases', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('invalid');
   });
+
+  it('封面地址（C09）：https 签名地址原样透出，非 https 拒绝', async () => {
+    const session = fakeSession();
+    (session.listCloudCases as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: CN_CASE_ID, title: '带封面案', revision: 1, coverUrl: 'https://wkhfvnzgopjdzxlmycks.supabase.co/storage/v1/object/sign/x.png?token=abc' },
+    ]);
+    const ok = await listCloudCases(session);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.value[0].coverUrl).toContain('sign/x.png');
+    (session.listCloudCases as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: CN_CASE_ID, title: '坏封面案', revision: 1, coverUrl: 'javascript:alert(1)' },
+    ]);
+    const bad = await listCloudCases(session);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.error.code).toBe('invalid');
+  });
 });
 
 describe('readCloudCase / cloudCaseOutdoorPlan', () => {

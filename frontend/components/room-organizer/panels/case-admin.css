@@ -6,12 +6,14 @@
 .sc-case-admin-field { display: grid; gap: 3px; font-size: 12px; color: #55585f; }
 .sc-case-admin-field > span { font-size: 11px; color: #71767e; }
 .sc-case-admin-field input,
+.sc-case-admin-field select,
 .sc-case-admin-field textarea {
   width: 100%; padding: 4px 8px; border: 1px solid #d8dedb; border-radius: 7px;
   font: inherit; color: #141416; background: #fff; box-sizing: border-box;
 }
 .sc-case-admin-field textarea { min-height: 56px; resize: vertical; }
 .sc-case-admin-field input:focus-visible,
+.sc-case-admin-field select:focus-visible,
 .sc-case-admin-field textarea:focus-visible { outline: 2px solid #4a7c59; outline-offset: -1px; }
 .sc-case-admin-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sc-case-admin-drafts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -27,6 +29,7 @@
 body.is-theme-dark .sc-case-admin-field { color: var(--ink-soft); }
 body.is-theme-dark .sc-case-admin-field > span { color: var(--faint); }
 body.is-theme-dark .sc-case-admin-field input,
+body.is-theme-dark .sc-case-admin-field select,
 body.is-theme-dark .sc-case-admin-field textarea {
   border-color: var(--hair);
   background: var(--paper);

@@ -243,6 +243,11 @@ body.is-theme-dark .sc-scan-upload-btn:hover:not(:disabled) { background: var(--
 .sc-cloud-case-list { margin-top: 2px; }
 .sc-cloud-case-shot { display: block; }
 .sc-cloud-case-shot .sc-case-thumb.is-empty { opacity: .38; }
+/* 管理员给案例设了封面时（C09），未展开的卡直接用这张已归档照片/图纸；签名地址过期时由 <img> 自然裂空，不影响交互。 */
+.sc-cloud-case-shot .sc-cloud-case-cover {
+  display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover;
+  border-radius: 8px; background: #f2f4f3; border: 1px solid var(--space-line, #e1e8e5);
+}
 .sc-cloud-case-meta { font-variant-numeric: tabular-nums; }
 .sc-cloud-case-view { display: grid; gap: 6px; padding: 6px 8px; border: 1px dashed var(--space-line, #e1e8e5); border-radius: 9px; }
 .sc-cloud-case-preview { display: grid; gap: 4px; }

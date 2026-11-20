@@ -2,10 +2,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CaseAdminSection } from './case-admin';
+import { registerPublishGateProvider, type PublishGateSnapshot } from '../lib/project-manifest';
 import type { CloudCaseSessionContract } from '../lib/cloud-cases';
 import type { BackendSession } from '@/lib/backend-session';
 
 afterEach(cleanup);
+
+const PHOTO_ID = '11111111-1111-4111-8111-111111111111';
 
 const DRAFT = {
   id: 'cn-yuquan-chrysanthemum',
@@ -142,6 +145,71 @@ describe('CaseAdminSection', () => {
     expect(notice.textContent).toContain('已下架');
     expect(notice.textContent).toContain('已发出的固定交付不受影响');
     expect(session.unpublishCloudCase).toHaveBeenCalledOnce();
+  });
+
+  it('封面（C09）：从关联草稿预填，可在已归档照片里选择并随草稿保存', async () => {
+    const session = adminSession();
+    (session.listCloudCaseDrafts as ReturnType<typeof vi.fn>).mockResolvedValue([{ ...DRAFT, coverAssetId: PHOTO_ID }]);
+    (session.upsertCloudCase as ReturnType<typeof vi.fn>).mockResolvedValue({ ...DRAFT, coverAssetId: PHOTO_ID, version: 4 });
+    registerPublishGateProvider(async () => ({
+      scopeId: 'layout-1', projectId: 'proj-official-1', cloudRevision: 7,
+      manifest: { version: 1, scene: { schemaVersion: 1 }, outdoor: null, sources: {}, dependencies: [{ assetId: PHOTO_ID, visibility: 'published' }] },
+      gaps: [], complete: true, readyForPublish: true, note: '', conflict: null, capturedRevision: 7,
+    } as unknown as PublishGateSnapshot));
+    const controller = {
+      getSnapshot: () => ({ project: { id: 'proj-official-1' }, revision: 7, lease: { projectId: 'proj-official-1', sessionId: 's1', generation: 1 } }),
+      saveCompleteProject: vi.fn(async () => ({})),
+      listArchiveAssets: vi.fn(async () => [{
+        id: PHOTO_ID, name: '入口主视觉', kind: 'photo', format: 'jpg', byteSize: 1024, sha256: 'a'.repeat(64),
+        ownerId: 'u', studioId: null, integrity: 'full' as const, metadata: {}, createdAt: '2026-11-19T00:00:00.000Z',
+      }]),
+    } as unknown as BackendSession;
+    try {
+      render(<CaseAdminSection session={session} controller={controller} layoutName="菊花展"/>);
+      // 先等草稿拉回、表单按关联案例预填（下方关联说明行出现），否则点击保存读到的是未预填的闭包。
+      await screen.findByText(/当前项目关联案例/);
+      const select = (await screen.findByLabelText('案例封面')) as HTMLSelectElement;
+      // 等草稿与封面候选都拉回再断言，避免在异步预填完成前读到空值。
+      await waitFor(() => expect(select.value).toBe(PHOTO_ID));
+      await waitFor(() => expect(screen.getByRole('option', { name: '入口主视觉（照片）' })).toBeTruthy());
+      expect(screen.queryByTestId('case-cover-note')).toBeNull();
+      fireEvent.change(select, { target: { value: '' } });
+      fireEvent.click(screen.getByTestId('case-save-draft'));
+      await screen.findByTestId('case-admin-notice');
+      const upsert = session.upsertCloudCase as ReturnType<typeof vi.fn>;
+      expect(upsert.mock.calls[0][1].coverAssetId).toBeNull();
+      fireEvent.change(screen.getByLabelText('案例封面'), { target: { value: PHOTO_ID } });
+      fireEvent.click(screen.getByTestId('case-save-draft'));
+      await waitFor(() => expect(upsert.mock.calls.length).toBe(2));
+      expect(upsert.mock.calls[1][1].coverAssetId).toBe(PHOTO_ID);
+    } finally {
+      registerPublishGateProvider(null);
+    }
+  });
+
+  it('封面候选为空时给明确指引，保存仍按无封面提交', async () => {
+    const session = adminSession();
+    registerPublishGateProvider(async () => ({
+      scopeId: 'layout-1', projectId: 'proj-official-1', cloudRevision: 7,
+      manifest: { version: 1, scene: { schemaVersion: 1 }, outdoor: null, sources: {}, dependencies: [] },
+      gaps: [], complete: true, readyForPublish: true, note: '', conflict: null, capturedRevision: 7,
+    } as unknown as PublishGateSnapshot));
+    const controller = {
+      getSnapshot: () => ({ project: { id: 'proj-official-1' }, revision: 7, lease: { projectId: 'proj-official-1', sessionId: 's1', generation: 1 } }),
+      saveCompleteProject: vi.fn(async () => ({})),
+    } as unknown as BackendSession;
+    try {
+      render(<CaseAdminSection session={session} controller={controller} layoutName="菊花展"/>);
+      await screen.findByText(/当前项目关联案例/);
+      const select = (await screen.findByLabelText('案例封面')) as HTMLSelectElement;
+      await waitFor(() => expect(select.options).toHaveLength(1));
+      expect(screen.getByTestId('case-cover-note').textContent).toContain('还没有已归档的依赖');
+      fireEvent.click(screen.getByTestId('case-save-draft'));
+      await screen.findByTestId('case-admin-notice');
+      expect((session.upsertCloudCase as ReturnType<typeof vi.fn>).mock.calls[0][1].coverAssetId).toBeNull();
+    } finally {
+      registerPublishGateProvider(null);
+    }
   });
 
   it('权限探测失败可重试', async () => {

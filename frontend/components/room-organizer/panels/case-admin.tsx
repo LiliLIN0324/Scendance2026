@@ -17,6 +17,8 @@ import {
   type CloudCaseSessionContract,
 } from '../lib/cloud-cases';
 import { ensurePublishedArchiveNow } from '../lib/complete-archive';
+import { publishGateSnapshot } from '../lib/project-manifest';
+import type { CloudArchiveAsset } from '../../../../supabase/functions/_shared/cloud-storage-contract';
 import type { BackendSession } from '@/lib/backend-session';
 import './case-admin.css';
 
@@ -42,6 +44,41 @@ function currentProjectRef(controller: BackendSession | null, layoutId?: string 
   }
 }
 
+/** 封面候选：从项目发布清单的已归档照片/图纸里选（服务端只认 published 依赖里的封面资产）。 */
+interface CoverCandidate {
+  assetId: string;
+  label: string;
+}
+
+/** 浏览器里能当封面渲染的资产种类；模型/扫描不是图片，列出来只会得到一张裂图。 */
+const COVER_KIND_LABELS: Record<string, string> = { photo: '照片', floorplan: '图纸' };
+
+async function loadCoverCandidates(controller: BackendSession | null, studioId: string | null | undefined): Promise<{ candidates: CoverCandidate[]; note: string }> {
+  const gate = await publishGateSnapshot();
+  const manifest = gate.manifest;
+  if (!manifest) return { candidates: [], note: '完整归档状态未就绪；先在「归档」页补齐依赖，才能从已归档的照片/图纸里选封面。' };
+  const dependencyIds = [...new Set(manifest.dependencies.map(dep => dep.assetId))];
+  if (dependencyIds.length === 0) return { candidates: [], note: '这个项目还没有已归档的依赖；先把要当封面的照片/图纸归档，再回来选。' };
+  const listArchiveAssets = (controller as Partial<BackendSession> | null)?.listArchiveAssets;
+  if (typeof listArchiveAssets !== 'function') return { candidates: [], note: '这套后端没有归档清单接口，暂不能按名字选封面。' };
+  let assets: CloudArchiveAsset[];
+  try {
+    assets = await listArchiveAssets.call(controller, studioId ?? undefined);
+  } catch (error) {
+    return { candidates: [], note: `归档资产清单没有读到：${error instanceof Error ? error.message : '请求失败'}` };
+  }
+  const byId = new Map(assets.map(asset => [asset.id, asset]));
+  const candidates: CoverCandidate[] = [];
+  for (const assetId of dependencyIds) {
+    const asset = byId.get(assetId);
+    const kindLabel = asset ? COVER_KIND_LABELS[asset.kind] : null;
+    if (!asset || !kindLabel) continue;
+    candidates.push({ assetId, label: `${asset.name}（${kindLabel}）` });
+  }
+  if (candidates.length === 0) return { candidates: [], note: '已归档依赖里还没有照片或图纸；先把要当封面的照片/图纸归档，再回来选。' };
+  return { candidates, note: '' };
+}
+
 export function CaseAdminSection({ session, controller, layoutId, layoutName }: {
   session: CloudCaseSessionContract | null;
   /** 后端会话：动作时现读快照拿项目 id 与已保存版本（CAS 的 expectedRevision）。 */
@@ -61,6 +98,8 @@ export function CaseAdminSection({ session, controller, layoutId, layoutName }: 
   const [description, setDescription] = useState('');
   const [provenance, setProvenance] = useState('');
   const [sortOrder, setSortOrder] = useState('0');
+  const [coverAssetId, setCoverAssetId] = useState('');
+  const [cover, setCover] = useState<{ candidates: CoverCandidate[]; note: string }>({ candidates: [], note: '' });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [history, setHistory] = useState<{ id: string; rows: CloudCaseVersion[]; loading: boolean; error: string }>(
@@ -108,9 +147,22 @@ export function CaseAdminSection({ session, controller, layoutId, layoutName }: 
     setDescription(linked?.description ?? '');
     setProvenance(linked?.provenance ?? '');
     setSortOrder(String(linked?.sortOrder ?? 0));
+    setCoverAssetId(linked?.coverAssetId ?? '');
     // 只在关联对象/项目变化时重填，不跟用户输入打架；字段值随 linked.id 变化整体换。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linked?.id, projectNow.projectId, layoutName]);
+
+  // 封面候选（C09 补齐）：管理员 + 云项目就绪后，从发布闸门的清单里取已归档照片/图纸。
+  // 清单就是服务端发布快照的数据源，所以这里选到的封面一定能通过服务端的 published 依赖校验。
+  useEffect(() => {
+    if (!session || !admin) return undefined;
+    let live = true;
+    void loadCoverCandidates(controller, caps.value?.officialStudioId ?? null).then(next => {
+      if (!live) return;
+      setCover(next);
+    });
+    return () => { live = false; };
+  }, [session, admin, controller, draftsEpoch, projectNow.projectId, caps.value?.officialStudioId]);
 
   const run = (action: () => Promise<void>): void => {
     if (busy) return;
@@ -142,7 +194,7 @@ export function CaseAdminSection({ session, controller, layoutId, layoutName }: 
       title: title.trim(),
       description: description.trim(),
       category: category.trim(),
-      coverAssetId: formDraft?.id === id ? formDraft.coverAssetId ?? null : null,
+      coverAssetId: formDraft?.id === id ? (coverAssetId.trim() || null) : null,
       sortOrder: Number.isFinite(sort) ? sort : 0,
       projectId,
       provenance: provenance.trim(),
@@ -244,6 +296,16 @@ export function CaseAdminSection({ session, controller, layoutId, layoutName }: 
         <input value={category} aria-label="案例分类"
           onChange={event => setCategory(event.currentTarget.value)} placeholder="如 花卉展"/>
       </label>
+      <label className="sc-case-admin-field">
+        <span>封面（可选，取自已归档的照片/图纸）</span>
+        <select value={coverAssetId} aria-label="案例封面" data-testid="case-cover"
+          onChange={event => setCoverAssetId(event.currentTarget.value)}>
+          <option value="">不设封面</option>
+          {cover.candidates.map(candidate =>
+            <option key={candidate.assetId} value={candidate.assetId}>{candidate.label}</option>)}
+        </select>
+      </label>
+      {cover.candidates.length === 0 && cover.note && <p className="sc-share-desc" role="status" data-testid="case-cover-note">{cover.note}</p>}
       <label className="sc-case-admin-field">
         <span>说明</span>
         <textarea value={description} aria-label="案例说明"
