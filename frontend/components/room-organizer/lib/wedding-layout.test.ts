@@ -100,6 +100,11 @@ describe('场地组织与候选取舍',()=>{
       expect(facilityPlacementIssues(facilityFootprintRing(facility),report.plan.boundary)).toHaveLength(0);
     }
     expect(report.site.entrance.confirmed).toBe(false);
+    // 多块连续区域时宴席留在入口侧、仪式放到最远处，宾客不用穿过背景去吃饭。
+    const centerY=(ring:typeof report.plan.zones[number]['polygon'])=>ring.reduce((sum,point)=>sum+point.y,0)/ring.length;
+    expect(centerY(report.plan.zones.find(zone=>zone.name==='宴席区')!.polygon))
+      .toBeLessThan(centerY(report.plan.zones.find(zone=>zone.name==='仪式观礼区')!.polygon));
+    expect(report.quantities.find(item=>item.role==='仪式背景')!.placed).toBe(1);
     expect(report.checks).toMatchObject({status:'ready',hardConflicts:0,ceremonySeats:60,banquetSeats:60});
     expect(()=>validateWorkflowPlan(concave(),report.plan)).not.toThrow();
   });
@@ -115,6 +120,10 @@ describe('场地组织与候选取舍',()=>{
       expect(outdoorCorridorStrips(route.points,route.widthM??3).some(strip=>outdoorRingsOverlap(strip,building))).toBe(false);
     expect(report.checks).toMatchObject({status:'ready',obstacles:0,boundary:0,collisions:0,corridors:0});
     expect(report.checks.ceremonySeats).toBe(60);
+    // 建筑背后那一块仍要能沿中轴进人：主通道不能从坐席里斜着穿过去。
+    const main=report.plan.routes.find(route=>route.name==='婚礼·宾客主通道')!;
+    const last=main.points.at(-1)!,before=main.points.at(-2)!;
+    expect(Math.abs(last.x-before.x)).toBeLessThan(0.3);
     expect(()=>sitePlanDataSchema.parse(report.plan)).not.toThrow();
   });
 
@@ -130,6 +139,11 @@ describe('场地组织与候选取舍',()=>{
     expect(report.candidates.find(candidate=>candidate.id===report.recommendedId)!.metrics.tableGroupIntegrity).toBe(1);
     expect(report.notes.join(' ')).toContain('差');
     expect(report.checks.target).toBe(60);
+    // 小场地里的迎宾与后勤同样要能落地：不为了画通道把整个迎宾带吃掉。
+    const placedOf=(role:string)=>report.quantities.find(item=>item.role===role)?.placed??0;
+    expect(placedOf('签到桌')).toBe(1);
+    expect(placedOf('迎宾指示牌')).toBe(2);
+    expect(placedOf('后勤备物桌')).toBe(2);
 
     // 更小的场地一桌也放不下：报 0 桌、整组率 0，人数目标仍是 60，不能把「没摆桌」写成合格。
     const smaller=await draft(venue(16));

@@ -349,9 +349,25 @@ function organizeWeddingZones(
     ceremony = buildCeremony(cFrac);
   }
 
+  /** 接入口的那条边在主轴上的坐标：用来决定哪一块连续区域离入口更近。 */
+  const nearEdge = (rect: PlanRect): number => site.approach.axis === 'y'
+    ? site.approach.sign > 0 ? rect.s : rect.n
+    : site.approach.sign > 0 ? rect.w : rect.e;
   let ceremonyZone: PlanZone;
   let banquetBase: PlanRect;
-  if (ceremony.seats >= demand.guests * 0.6) {
+  // 多块连续区域（凹形/L 形）：仪式区放到离入口最远的一块，宴席留在入口侧，
+  // 否则宴席会排在仪式背景背后，宾客要穿过仪式区才能吃饭。
+  const spread = site.rects.length > 1
+    ? [...site.rects].sort((a, b) => nearEdge(a) - nearEdge(b))
+    : [];
+  const farRect = spread[spread.length - 1];
+  if (spread.length > 1 && farRect && farRect !== spread[0]
+    && estimateCeremonySeats(farRect, site.focusAxis, demand.seat) >= demand.guests) {
+    used.add(farRect);
+    ceremonyZone = zoneOf('ceremony', farRect);
+    banquetBase = spread[0]!;
+    notes.push(`场地有 ${site.rects.length} 块连续区域：仪式区放到离入口最远的一块（${Math.round(rectArea(farRect))} ㎡），宴席留在入口侧，不让宾客穿过仪式背景去吃饭。`);
+  } else if (ceremony.seats >= demand.guests * 0.6) {
     ceremonyZone = zoneOf('ceremony', ceremony.rect);
     banquetBase = bandRect(primary, site.focusAxis, 0, Math.min(0.76, 1 - cFrac));
   } else {
@@ -612,15 +628,30 @@ async function buildWeddingCandidate(context: CandidateContext): Promise<BuiltCa
       && Math.hypot(ceremonyEdge.x - ceremonyEntry.x, ceremonyEdge.y - ceremonyEntry.y) < 1)) {
       return addRoute('婚礼·宾客主通道', start, ceremonyEntry);
     }
+    // 路口不能正好落在巳有建筑/障碍的边上：沿中轴往区内退半条通道宽，路径才能整宽通过。
+    const dock = {
+      x: ceremonyEdge.x + facing.x * (routeWidth / 2 + 0.25),
+      y: ceremonyEdge.y + facing.y * (routeWidth / 2 + 0.25),
+    };
     const head = eventLayoutPath({
       boundary: plan.boundary,
       blocked: [...blocked, ...plan.facilities.map(facilityFootprintRing)],
-      start, end: ceremonyEdge, widthM: routeWidth,
+      start, end: dock, widthM: routeWidth,
     });
     if (!head) return addRoute('婚礼·宾客主通道', start, ceremonyEntry);
     return pushRoute('婚礼·宾客主通道', [...head, ceremonyEntry].filter((point, index, all) =>
       index === 0 || Math.hypot(point.x - all[index - 1]!.x, point.y - all[index - 1]!.y) > 0.05));
   })();
+  // 入口与仪式焦点不在一条轴上时，首段会斜穿前场/宴席区：写清楚这是故意的中央通道，不是落位失误。
+  if (main && main.points.length > 1) {
+    const leg = { x: main.points[1]!.x - main.points[0]!.x, y: main.points[1]!.y - main.points[0]!.y };
+    const length = Math.hypot(leg.x, leg.y);
+    const toward = axisUnit(site.approach);
+    const cosine = length > 0.5 ? (leg.x * toward.x + leg.y * toward.y) / length : 1;
+    if (Math.acos(Math.max(-1, Math.min(1, cosine))) > (25 * Math.PI) / 180) {
+      notes.push('入口方向与仪式焦点不在一条轴上：主通道先斜向接近仪式中轴再直入坐席，斜穿的那一段就是中央通道，两侧桌位都按这条走廊让开。');
+    }
+  }
   const nearest = (target: PlanPoint): PlanPoint => {
     if (!main) return start;
     let best = main.points[0]!, distance = Infinity;
@@ -634,6 +665,19 @@ async function buildWeddingCandidate(context: CandidateContext): Promise<BuiltCa
     }
     return best;
   };
+  // 小分区（迎宾/合影/休息/后勤）家具密度高，一条 2.5 m 走廊穿过去就把它们废了：不画穿区连线。
+  const crossingSupport = (from: PlanPoint, to: PlanPoint, own: PlanZone): PlanZone | undefined => {
+    for (const other of roleZones) {
+      if (other.id === own.id) continue;
+      const role = roleOf(other);
+      if (role === 'ceremony' || role === 'banquet') continue;
+      for (let step = 1; step < 10; step++) {
+        const t = step / 10;
+        if (planPointInRing({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }, other.polygon)) return other;
+      }
+    }
+    return undefined;
+  };
   for (const role of ['welcome', 'banquet', 'photo', 'rest'] as ZoneRole[]) {
     const zone = zoneFor(role);
     if (!zone || !main) continue;
@@ -642,7 +686,13 @@ async function buildWeddingCandidate(context: CandidateContext): Promise<BuiltCa
     const center = rectCenter(rectFromRing(zone.polygon));
     const from = nearest(center);
     const to = closestPointOnRing(zone.polygon, from);
-    if (Math.hypot(to.x - from.x, to.y - from.y) > 1) addRoute(`婚礼·${roles[role].name}连接`, from, to);
+    if (Math.hypot(to.x - from.x, to.y - from.y) <= 1) continue;
+    const crossing = crossingSupport(from, to, zone);
+    if (crossing) {
+      notes.push(`「${zone.name}」与主通道之间隔着「${crossing.name}」，未开穿区走廊；这段动线按现场引导，席前需再确认。`);
+      continue;
+    }
+    addRoute(`婚礼·${roles[role].name}连接`, from, to);
   }
   const service = zoneFor('service');
   if (service) {
@@ -657,28 +707,29 @@ async function buildWeddingCandidate(context: CandidateContext): Promise<BuiltCa
       { x: clamp(center.x, boundaryRect.w + 0.5, boundaryRect.e - 0.5), y: boundaryRect.n - 0.5 },
     ];
     const gate = gates.sort((a, b) => Math.hypot(a.x - center.x, a.y - center.y) - Math.hypot(b.x - center.x, b.y - center.y))[0]!;
+    // 后勤只接到备物区的边缘：接到中心会在区内留一条穿走桌台的走廊，小场地直接摆不下备物桌。
+    // 备物区本身就贴着边界时，边界入口直接算入场，不再在区内画一条多余的线。
+    const gateInside = planPointInRing(gate, service.polygon);
+    const serviceDock = gateInside ? gate : closestPointOnRing(service.polygon, gate);
     const guestCorridors = plan.routes
       .filter(route => route.name.startsWith('婚礼·') && route.kind !== 'service')
       .flatMap(route => outdoorCorridorStrips(route.points, (route.widthM ?? routeWidth) + 0.5));
-    const servicePath = eventLayoutPath({
+    const servicePath = gateInside ? null : eventLayoutPath({
       boundary: plan.boundary,
       blocked: [...blocked, ...plan.facilities.map(facilityFootprintRing), ...guestCorridors],
-      start: gate, end: center, widthM: WEDDING_DEFAULTS.serviceAisleM,
+      start: gate, end: serviceDock, widthM: WEDDING_DEFAULTS.serviceAisleM,
     });
-    if (servicePath) {
-      const route: PlanRoute = {
-        id: crypto.randomUUID(), kind: 'service', carrier: 'mixed', audiences: ['service', 'staff'],
-        name: '婚礼·后勤服务通路', points: servicePath, oneWay: false, widthM: WEDDING_DEFAULTS.serviceAisleM,
-        notes: '婚礼联合草案：后勤从离备物区最近的边界侧接入，宽度为假设；不证明真实货运门。',
-      };
-      plan.routes.push(route);
+    if (gateInside || servicePath) {
+      if (servicePath) pushRoute('婚礼·后勤服务通路', servicePath, true);
+      else notes.push('备物区紧贴场地边界，后勤按边界侧直接入场，未在区内单画服务通路。');
       if (banquet) {
         // 备餐接到宴席区靠近后勤的那条边；不直接从中间穿过去，隔得太远就不画少了一条跨场走廊。
-        const dock = closestPointOnRing(banquet.polygon, center);
-        if (Math.hypot(dock.x - center.x, dock.y - center.y) <= 6) {
-          addRoute('婚礼·备餐至婚宴服务连接', center, dock, true);
+        const from = closestPointOnRing(service.polygon, closestPointOnRing(banquet.polygon, center));
+        const dock = closestPointOnRing(banquet.polygon, from);
+        if (Math.hypot(dock.x - from.x, dock.y - from.y) <= 6) {
+          addRoute('婚礼·备餐至婚宴服务连接', from, dock, true);
         } else {
-          notes.push(`备餐区与宴席区不直接相邻（${Math.round(Math.hypot(dock.x - center.x, dock.y - center.y))} m），未画穿越仪式区或坐席的备餐走廊；上菜动线需现场确认。`);
+          notes.push(`备餐区与宴席区不直接相邻（${Math.round(Math.hypot(dock.x - from.x, dock.y - from.y))} m），未画穿越仪式区或坐席的备餐走廊；上菜动线需现场确认。`);
         }
       }
     } else {
@@ -1024,7 +1075,11 @@ function recommend(
   reasons.push(`观礼 ${chosen.metrics.ceremonySeats}/${chosen.metrics.target} 席、宴席 ${chosen.metrics.banquetSeats}/${chosen.metrics.target} 席（${chosen.metrics.banquetTables} 桌，整组率 ${Math.round(chosen.metrics.tableGroupIntegrity * 100)}%）`);
   if (other) {
     reasons.push(`另一版「${other.label}」：观礼 ${other.metrics.ceremonySeats} 席、宴席 ${other.metrics.banquetSeats} 席、仪式区 ${other.metrics.ceremonyZoneM2} ㎡、入口步行 ${other.metrics.entryWalkM} m`);
-    reasons.push(`两版差在面积归属：仪式区 ${chosen.metrics.ceremonyZoneM2} ㎡ 对 ${other.metrics.ceremonyZoneM2} ㎡，入口步行 ${chosen.metrics.entryWalkM} m 对 ${other.metrics.entryWalkM} m`);
+    const sameArea = chosen.metrics.ceremonyZoneM2 === other.metrics.ceremonyZoneM2
+      && chosen.metrics.banquetZoneM2 === other.metrics.banquetZoneM2;
+    reasons.push(sameArea
+      ? `两版面积归属相同（场地只能这么分），差别只在通道走向与落位结果：仪式区 ${chosen.metrics.ceremonyZoneM2} ㎡，入口步行 ${chosen.metrics.entryWalkM} m 对 ${other.metrics.entryWalkM} m`
+      : `两版差在面积归属：仪式区 ${chosen.metrics.ceremonyZoneM2} ㎡ 对 ${other.metrics.ceremonyZoneM2} ㎡，入口步行 ${chosen.metrics.entryWalkM} m 对 ${other.metrics.entryWalkM} m`);
   }
   reasons.push(chosen.metrics.landscapeApplied
     ? `焦点朝${directionText(focusDirection)}，有已给出的景观依据；遮挡仍需 3D 核对`
