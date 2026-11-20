@@ -1888,6 +1888,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState<string[]>([]);
   const multiSelectedNodeIdsRef = useRef<string[]>([]);
   const marqueeRectRef = useRef<{ startPx: { x: number; y: number }; curPx: { x: number; y: number } } | null>(null);
+  // 2026-11-20 审计 K6：指针捕获状态（见 captureStagePointer）。
+  // true = 这根指针已被舞台捕获：移出画布也继续跟手，leave 因此不必丢弃拖拽会话。
+  const pointerCapturedRef = useRef(false);
   /** 组会话：move=整组平移；scale=角柄等比缩放（anchor=对角，米制）。preview 与单选拖拽同机制，松手一条 undo。 */
   const groupDragRef = useRef<{
     kind: 'move' | 'scale';
@@ -2413,6 +2416,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 拖拽抬起后抑制紧随的那次 click，避免拖完面板误触发卡头折叠。
   const inspectorSuppressClickRef = useRef(false);
   const onInspectorPanelPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    // 2026-11-20 审计 K6：舞台改指针事件后，卡片上的按下必须自己吃掉，
+    // 否则会冒到舞台被当成画布手势（更糟的是把指针捕获走，卡片拖不动）。
+    event.stopPropagation();
     const panel = inspectorPanelRef.current;
     // 只允许从卡头拖拽；卡片内容区不拖。
     if (!panel || !(event.target as HTMLElement).closest('[data-inspector-header]')) return;
@@ -2446,6 +2452,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setInspectorPanelPos({ x, y });
   }, []);
   const onInspectorPanelPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     const drag = inspectorDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (drag.moved) {
@@ -5222,12 +5229,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 3D 桥的合成事件也要提供它，否则一按右键就抛 TypeError。
         stopPropagation() {},
         nativeEvent: { defaultPrevented: false },
-      } as unknown as React.MouseEvent;
+      } as unknown as React.PointerEvent<HTMLDivElement>;
       try {
-        if (kind === 'down') handleStageMouseDown(ev);
-        else if (kind === 'move') handleStageMouseMove(ev);
-        else if (kind === 'up') handleStageMouseUp(ev);
-        else if (kind === 'leave') handleStageMouseLeave();
+        if (kind === 'down') handleStagePointerDown(ev);
+        else if (kind === 'move') handleStagePointerMove(ev);
+        else if (kind === 'up') handleStagePointerUp(ev);
+        else if (kind === 'leave') handleStagePointerLeave({ force: true });
         else if (kind === 'dblclick') handleStageDoubleClick(ev);
         // 2026-11-20 审计 K11：3D 右键接回同一份菜单逻辑（取消放置/撤点/设施菜单）。
         else if (kind === 'contextmenu') handleStageContextMenu(ev);
@@ -8807,11 +8814,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     draw();
   }
 
-  function handleStageMouseDown(event: React.MouseEvent) {
+  function handleStagePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     // 2026-11-16 罗盘拖转 2D：右下 Google 控制簇（罗盘/2D3D/缩放/漫游）挂在 stage 里，
     // 控件上的指针事件会一路冒泡到这里被当成画布手势——罗盘拖转就会连带平移地图。
     // 控件目标一律不当画布手势处理（其余 UI 冒泡行为不变）。
     if (event.target instanceof Element && event.target.closest('.oc-gmaps')) return;
+    // 2026-11-20 审计 K6：画布手势只认落在「地图表面」上的指针。
+    // 舞台里还挂着属性卡/清单/浮条/控件，它们各自拦了 pointer 事件；这里再兜一层，
+    // 免得某个没拦住的控件按下时被当成画布手势（更糟的是把指针捕获走，控件按不动）。
+    const downTarget = event.target;
+    if (downTarget instanceof Element && downTarget !== baseCanvasRef.current && downTarget !== stageRef.current) return;
+    // 2026-11-20 审计 K6：按下即捕获指针。此后指针移出画布（掠过右侧属性卡/左栏）
+    // 画布仍持续收到 move/up，物件跟着手走，松手才落位——不再是「拖出画布＝取消」。
+    captureStagePointer(event);
     const activeMode = modeRef.current;
     const hit = eventPlanPoint(event);
     // 2026-11-16 用户「按住 Alt 在原来的点上添加线」：Alt + 点已有点 = 从它分叉一条新动线。
@@ -9278,7 +9293,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
   }
 
-  function handleStageMouseMove(event: React.MouseEvent) {
+  function handleStagePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     // 2026-11-16 用户「按住 Alt 在原来的点上添加线」：Alt 按着时，鼠标下的已有点亮一枚「+」，
     // 告诉你“从这里能长一条新线”；没锚点就什么都不画。
     if (altHeldRef.current) {
@@ -9991,7 +10006,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
   }
 
-  function handleStageMouseUp(event: React.MouseEvent) {
+  function handleStagePointerUp(event: React.PointerEvent<HTMLDivElement>) {
     // 2026-11-16 Alt 分叉期间，松手不能落进“单击选中 / 点折点删点”那几条路径。
     if (event.altKey) {
       downPxRef.current = null;
@@ -10804,10 +10819,34 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }
   }
 
-  function handleStageMouseLeave() {
-    // 2026-11-20 审计 K6：2D 用鼠标事件，指针一离开画布就收不到 move/up，只能丢弃拖拽会话。
-    // 这里先记下「离开前是不是真正在拖东西」：真取消时要说一句，而不是让物件默默弹回去。
-    const cancelledDrag = Boolean(
+  /**
+   * 把指针捕获到舞台上。
+   *
+   * 2026-11-20 审计 K6：捕获成功 = 指针移出画布（掠过右侧属性卡/左栏）仍持续收到
+   * move/up，拖拽不会被静默取消；捕获不可用（老浏览器 / 合成事件 / 指针已抬起）时
+   * 如实回 false，leave 走旧口径（取消并说一声）。
+   */
+  function captureStagePointer(event: React.PointerEvent<HTMLDivElement>): boolean {
+    pointerCapturedRef.current = false;
+    // 右键留给右键菜单：捕获会把后续指针事件锁在舞台上，菜单手感会变。
+    if (event.button === 2) return false;
+    const stage = event.currentTarget as HTMLElement | null;
+    if (!stage || typeof stage.setPointerCapture !== 'function') return false;
+    try {
+      stage.setPointerCapture(event.pointerId);
+      pointerCapturedRef.current = true;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 丢弃当前所有拖拽会话：预览不提交、方案不变。
+   * 返回 true = 确实有东西在拖（调用方据此给一句「已取消」，别让物件默默弹回）。
+   */
+  function cancelStageDragSessions(): boolean {
+    const dragging = Boolean(
       facilityDragRef.current
       || groupDragRef.current
       || dragNodeRef.current
@@ -10820,6 +10859,56 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     panRef.current = undefined;
     setDragging(false);
     downPxRef.current = null;
+    dragVertexRef.current = null;
+    boundaryJustInsertedRef.current = false;
+    setPreviewRing(null);
+    ghostPointRef.current = null;
+    routeCursorRef.current = null;
+    nodeGhostRef.current = null;
+    workerGhostRef.current = null;
+    measureCursorRef.current = null;
+    zoneVertexSnapRef.current = null;
+    routeVertexSnapRef.current = null;
+    // 拖拽测量中放弃：已收的单击草稿点保留，与既有半成品口径一致。
+    measureDragRef.current = null;
+    // 2026-11-11 用户指令：形状拖拽放弃时拖拽预览草稿一并清；单击已收的点保留。
+    if (annotateDragRef.current?.active) {
+      annotateDraftRef.current = [];
+      setAnnotateDraftCount(0);
+    }
+    annotateDragRef.current = null;
+    annotateCursorRef.current = null;
+    // 节点拖动中放弃：预览不提交，回弹原位。
+    dragNodeRef.current = null;
+    nodeDragPreviewRef.current = null;
+    // P2-i：设施拖拽中放弃同样丢弃预览（不提交）。
+    facilityDragRef.current = null;
+    // P2-j：分区顶点拖动中放弃同样丢弃预览。
+    dragZoneVertexRef.current = null;
+    // 2026-11-14：分区整体拖动同理。
+    dragZoneMoveRef.current = null;
+    zoneDragPreviewRef.current = null;
+    // 2026-11-18：角柄缩放中放弃同样丢弃（预览不提交，数据不动）。
+    zoneScaleRef.current = null;
+    boundaryScaleRef.current = null;
+    // 2026-11-14：流线顶点拖动同理。
+    dragRouteVertexRef.current = null;
+    routeDragPreviewRef.current = null;
+    // 2026-11-14：人员点位拖动同理。
+    dragWorkerRef.current = null;
+    workerDragPreviewRef.current = null;
+    pointerCapturedRef.current = false;
+    return dragging;
+  }
+
+  /**
+   * 清掉舞台上的悬停态。
+   *
+   * 指针已经不在画布上（离开 / 被浏览器收走）就不该留幽灵提示：幽灵「+」、
+   * 边线高亮、角柄提示、Alt 分叉提示…。leave 与 cancel 共用这一份，
+   * 免得两条路径各清一半、cancel 之后还挂着上一次的悬停高亮。
+   */
+  function clearStageHoverState() {
     if (scopeEdgeHoverRef.current !== null) {
       scopeEdgeHoverRef.current = null;
       setScopeEdgeHover(null);
@@ -10832,14 +10921,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       boundaryLockHoverRef.current = false;
       setBoundaryLockHover(false);
     }
-    dragVertexRef.current = null;
-    boundaryJustInsertedRef.current = false;
-    setPreviewRing(null);
-    ghostPointRef.current = null;
-    routeCursorRef.current = null;
-    nodeGhostRef.current = null;
-    workerGhostRef.current = null;
-    measureCursorRef.current = null;
     if (zoneEdgeHintRef.current) {
       zoneEdgeHintRef.current = null;
       draw();
@@ -10863,51 +10944,53 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       draw();
     }
     clearBoundaryDeleteArm();
-    zoneVertexSnapRef.current = null;
     zoneVertexHoverRef.current = null;
-    // 2026-11-15：流线加点的悬停手柄同理——离开画布不该留一枚“幽灵加号”。
+    // 2026-11-15：流线加点的悬停手柄同理——离开画布不该留一枚「幽灵加号」。
     if (routeEdgeHintRef.current) {
       routeEdgeHintRef.current = null;
       draw();
     }
-    routeVertexSnapRef.current = null;
     routeVertexHoverRef.current = null;
-    // 拖拽测量中离开画布：丢弃拖拽会话（已收的单击草稿点保留，与既有半成品口径一致）。
-    measureDragRef.current = null;
-    // 2026-11-11 用户指令：形状拖拽离开画布同样丢弃会话（拖拽预览草稿一并清；单击已收的点保留）。
-    if (annotateDragRef.current?.active) {
-      annotateDraftRef.current = [];
-      setAnnotateDraftCount(0);
-    }
-    annotateDragRef.current = null;
-    annotateCursorRef.current = null;
-    // 节点拖动中离开画布：预览不提交，回弹原位。
-    dragNodeRef.current = null;
-    nodeDragPreviewRef.current = null;
-    // P2-i：设施拖拽中离开画布同样丢弃预览（不提交）。
-    facilityDragRef.current = null;
-    // P2-j：分区顶点拖动中离开画布同样丢弃预览。
-    dragZoneVertexRef.current = null;
-    // 2026-11-14：分区整体拖动同理。
-    dragZoneMoveRef.current = null;
-    zoneDragPreviewRef.current = null;
-    // 2026-11-18：角柄缩放中离开画布同样丢弃（预览不提交，数据不动）。
-    zoneScaleRef.current = null;
-    boundaryScaleRef.current = null;
     if (ringScaleHoverRef.current) {
       ringScaleHoverRef.current = null;
       setRingScaleHover(null);
     }
-    // 2026-11-14：流线顶点拖拽同理。
-    dragRouteVertexRef.current = null;
-    routeDragPreviewRef.current = null;
-    // 2026-11-14：人员点位拖拽同理。
-    dragWorkerRef.current = null;
-    workerDragPreviewRef.current = null;
-    if (cancelledDrag) setEditMessage('这次拖动已取消（指针离开了画布），方案没有改动。');
+  }
+
+  /**
+   * 浏览器把这根指针收走了（系统手势、窗口失焦、触控被接管）：
+   * 捕获随之失效，拖拽会话一律丢弃，并说一句，别让物件默默弹回原位。
+   *
+   * 2026-11-20 审计 K6：口径与 `handleStagePointerLeave({ force: true })` 一致——
+   * 清悬停态 → 丢弃会话（预览不提交、方案不变）→ 只在「真在拖」时说一句 → 重绘；
+   * 两条路径只差文案：cancel 是浏览器取消，leave 是指针离开了画布。
+   */
+  function handleStagePointerCancel() {
+    clearStageHoverState();
+    if (cancelStageDragSessions()) {
+      setEditMessage('这次拖动被系统取消了，方案没有改动。');
+    }
     draw();
   }
 
+  /**
+   * 指针离开舞台。
+   *
+   * 2026-11-20 审计 K6：以前舞台用鼠标事件，指针一离开画布就收不到 move/up，
+   * 拖拽只能作废（物件弹回原位，且分不清是「自己取消了」还是没拖动）。
+   * 现在按下即捕获指针：捕获生效时指针移出画布仍继续跟手，这里**只清悬停态**，
+   * 拖拽会话留到松手（pointerup）再结算。
+   * 没有捕获（老浏览器 / 捕获失败 / 3D 桥强制旧口径）才退回「离开即取消」。
+   */
+  function handleStagePointerLeave(options?: { force?: boolean }) {
+    const captured = pointerCapturedRef.current && options?.force !== true;
+    clearStageHoverState();
+    // 拖拽会话：捕获生效就留着（松手再结算）；没捕获（含 force，3D 桥合成离开）才丢弃。
+    if (!captured && cancelStageDragSessions()) {
+      setEditMessage('这次拖动已取消（指针离开了画布），方案没有改动。');
+    }
+    draw();
+  }
   const readOnly = !onPlanChange;
   // 2026-11-11 图层：面板统计/清单/选中全部以当前层视图为准（boundary/levels 等共享字段原样在）。
   const levelView = filterPlanByLevel(plan, activeLevelId);
@@ -11122,7 +11205,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return folders;
   })();
   // 面板内点击不再冒泡到画布（否则勾选/选模板/点按钮会在面板对应画布位置误加草稿点或放置实体）。
-  const stopPanelMouse = (event: React.MouseEvent) => event.stopPropagation();
+  const stopPanelMouse = (event: React.SyntheticEvent) => event.stopPropagation();
   // 滚轮同理：面板经 portal 挂到地图舞台外的宿主，若让 wheel 沿 React 树冒泡回 stage，
   // 会被当成地图缩放。成熟地图产品（Leaflet / Mapbox / 高德）的滚轮缩放只绑地图视口，
   // 侧栏滚动只滚动侧栏、不带动地图。面板根节点在此截断冒泡。
@@ -12973,10 +13056,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   ? (scopeEdgeIsHorizontal(scopeEdgeHover) ? 'ns-resize' : 'ew-resize')
                   : mode === 'view' ? (dragging ? 'grabbing' : 'grab') : 'crosshair',
       }}
-      onMouseDown={handleStageMouseDown}
-      onMouseMove={handleStageMouseMove}
-      onMouseUp={handleStageMouseUp}
-      onMouseLeave={handleStageMouseLeave}
+      onPointerDown={handleStagePointerDown}
+      onPointerMove={handleStagePointerMove}
+      onPointerUp={handleStagePointerUp}
+      onPointerLeave={() => handleStagePointerLeave()}
+      onPointerCancel={handleStagePointerCancel}
       onDoubleClick={handleStageDoubleClick}
       onContextMenu={handleStageContextMenu}
       onDragOver={event => {
@@ -13036,6 +13120,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           role="group"
           aria-label="落位预览"
           onMouseDown={event => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
           style={{
             position: 'absolute',
             left: 16,
@@ -13080,6 +13165,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           data-testid="zone-out-of-bounds-chip"
           style={{ top: basemapLoading ? 54 : 14, transform: 'translateX(-50%)', zIndex: 27 }}
           onMouseDown={event => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
           onDoubleClick={event => event.stopPropagation()}
         >
           <div
@@ -13203,6 +13289,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               boxShadow: '0 12px 32px rgba(20, 20, 22, 0.28)',
             }}
             onMouseDown={stopPanelMouse}
+            onPointerDown={stopPanelMouse}
             onWheel={stopPanelWheel}
             onContextMenu={event => event.preventDefault()}
           >
@@ -13261,7 +13348,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             pointerEvents: 'auto',
           }}
           onMouseDown={stopPanelMouse}
+          onPointerDown={stopPanelMouse}
           onMouseUp={stopPanelMouse}
+          onPointerUp={stopPanelMouse}
           onDoubleClick={stopPanelMouse}
           onWheel={stopPanelWheel}
         >
@@ -13635,7 +13724,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         <div
           data-testid="ring-draft-controls"
           onMouseDown={event => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
           onMouseUp={event => event.stopPropagation()}
+          onPointerUp={event => event.stopPropagation()}
           onClick={event => event.stopPropagation()}
           onContextMenu={event => event.preventDefault()}
           style={{
@@ -13668,7 +13759,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         <div
           data-testid="boundary-selection-bar"
           onMouseDown={event => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
           onMouseUp={event => event.stopPropagation()}
+          onPointerUp={event => event.stopPropagation()}
           onClick={event => event.stopPropagation()}
           onContextMenu={event => event.preventDefault()}
           style={{
@@ -14100,7 +14193,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               ...(panelInline ? { display: 'flex', flexDirection: 'column', height: '100%' } : {}),
             }}
             onMouseDown={stopPanelMouse}
+            onPointerDown={stopPanelMouse}
             onMouseUp={stopPanelMouse}
+            onPointerUp={stopPanelMouse}
             onDoubleClick={stopPanelMouse}
             onWheel={stopPanelWheel}
             data-testid="outdoor-library-panel"
@@ -14600,7 +14695,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   onWheel={stopPanelWheel}
                   style={inspectorCardStyle({ key: card.key, annotateAnchor })}
                   onMouseDown={stopPanelMouse}
+                  onPointerDown={stopPanelMouse}
                   onMouseUp={stopPanelMouse}
+                  onPointerUp={stopPanelMouse}
                   onDoubleClick={stopPanelMouse}
                 >
                   {card.key === 'annotate' && (
