@@ -1803,16 +1803,9 @@ body.is-theme-dark .sc-material-tagpin {
     left: calc(var(--sc-medium-card-w) + 36px);
     max-width: calc(100% - var(--sc-medium-card-w) - 96px);
   }
-  /* 首次开图引导气泡（GuideBubble）避让卡片。
-     它在 .sc-canvas-stage 里，而该元素 container-type:size 形成栈上下文，气泡自身的
-     z-index 压不过左栏卡（实测把 z 提到 99 仍是卡片在上），所以只能平移：
-     canvas 锚点原本居中（left:50% + translateX(-50%)）、left 锚点原本 left:12，
-     两者在 1024 宽下都会落在卡片后面。统一让到卡片右侧，箭头朝向不变。
-     内联样式需要 !important。 */
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column [data-testid="guide-bubble"] {
-    left: calc(var(--sc-medium-card-w) + 36px) !important;
-    transform: none !important;
-  }
+  /* 2026-11-20：旧三步引导气泡（GuideBubble）退役，避让规则随之删除。
+     新的引导卡片由 onboarding/ 挂到 body 上的 fixed 浮层，不参与 .sc-canvas-stage 栈上下文，
+     位置由控件实测矩形算出，不再需要按卡片宽度平移。 */
   /* 断点里不再按拖边改宽：那条线只服务桌面的 --sc-left-card-width。 */
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column .sc-left-card-resizer { display: none; }
 }

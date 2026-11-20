@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { acquireWebGLSurface } from '../room-organizer/lib/webgl-context';
 import { createCachedGlbModel, disposeOwnedModel, ensureGlbAsset } from '../room-organizer/three/glb-assets';
 import { applyRendererLook, DEFAULT_EVENT_LIGHTING, makeBackdropTexture, resolveLook } from '../room-organizer/three/render-look';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Scene, SceneObject } from '../../../supabase/functions/_shared/domain';
-import { acquireWebGLSurface } from '../room-organizer/lib/webgl-context';
 import '@/app/share.css';
 
 const EMPTY: Record<string, string> = {};
@@ -41,8 +41,10 @@ export function createPreviewObject(object: SceneObject): THREE.Group {
   return group;
 }
 
-export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
+export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY, onRefresh }: {
   scene: Scene; assetUrls?: Record<string, string>; assetNames?: Record<string, string>;
+  /** V14（2026-11-20 P5）：模型加载失败后的就地重试入口，宿主传刷新回调时展示；旧调用方不传则保持纯文字指引。 */
+  onRefresh?: () => void;
 }): JSX.Element {
   const host = useRef<HTMLDivElement>(null);
   const changeView = useRef<(view: Scene['camera']) => void>(() => {});
@@ -150,6 +152,8 @@ export function ScenePreview({ scene, assetUrls = EMPTY, assetNames = EMPTY }: {
     <p className="sc-preview-help">拖动旋转 · 滚轮或双指缩放 · 箭头键平移</p>
     {problem && <p className="sc-share-notice" role="alert">{problem}</p>}
     {pendingAssets > 0 && <p className="sc-share-notice" role="status">正在加载 {pendingAssets} 个模型…</p>}
-    {failedAssets.length > 0 && <p className="sc-share-notice" role="alert">{failedAssets.join('、')}未能加载，仅显示线框占位。请刷新模型资源重试。</p>}
+    {failedAssets.length > 0 && <p className="sc-share-notice" role="alert">{failedAssets.join('、')}未能加载，仅显示线框占位。{onRefresh
+      ? <button type="button" onClick={onRefresh} style={{ margin: '0 0 0 8px', padding: '6px 10px' }}>刷新模型资源</button>
+      : '请刷新模型资源重试。'}</p>}
   </section>;
 }

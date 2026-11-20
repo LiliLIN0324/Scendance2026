@@ -155,7 +155,7 @@ describe('buildPlanInventory (H3-c 清单构建)', () => {
     expect(rowOf(rows, ZONE_A).typeLabel).toBe('观众区');
     expect(rowOf(rows, ZONE_A).metric).toBe('3600 m²');
     expect(rowOf(rows, 'b2000000-0000-4000-8000-000000000001').typeLabel).toBe('市集摊位');
-    expect(rowOf(rows, 'b2000000-0000-4000-8000-000000000001').metric).toBe('2×2 m');
+    expect(rowOf(rows, 'b2000000-0000-4000-8000-000000000001').metric).toBe('2 × 2 m');
     expect(rowOf(rows, 'c3000000-0000-4000-8000-000000000001').typeLabel).toBe('人行动线');
     expect(rowOf(rows, 'c3000000-0000-4000-8000-000000000001').metric).toBe('85 m');
     expect(rowOf(rows, 'd4000000-0000-4000-8000-000000000001').typeLabel).toBe('入口');

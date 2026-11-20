@@ -13,6 +13,7 @@ import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from './lib
 import { openGenerationSheet } from './lib/generation-sheet';
 import { getGenerationSheetState, subscribeGenerationSheet, closeGenerationSheet } from './lib/generation-sheet';
 import { GenerationSheetHost } from './panels/generation-sheet';
+import { HelpRailButton, OnboardingHost } from './onboarding/onboarding-host';
 import { createBackendSession, SceneApiError, type BackendSession } from '@/lib/backend-session';
 import { hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, proveFreshActivityScopeUnused, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
@@ -256,8 +257,6 @@ import { Viewport } from './panels/viewport';
 import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 import { ConfirmModal } from './components/ConfirmModal';
-import { useF3CoachBubble } from './hooks/use-f3-coach-bubble';
-import { F3CoachBubble } from './panels/f3-coach-bubble';
 import { usePlanAnnotations } from './hooks/use-plan-annotations';
 import { buildDefaultZoneRects } from '@/lib/auto-zone-apply';
 import { PlanOverlay } from './canvas-2d/plan-overlay';
@@ -413,8 +412,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const floorSession = useFloorSessionTracker(layoutStore);
   const floorToken = floorSession.token;
   const routeVenueFacts = useVenueFactTracker(layoutStore);
-  // 集成接线：F3 首次吸附教练气泡、规划标注层、确认弹层状态。
-  const f3Coach = useF3CoachBubble();
+  // 集成接线：规划标注层、确认弹层状态。（2026-11-20 拖动教练气泡并入 onboarding/ 的单点提示，
+  // 自带第二个 localStorage 键的旧 hook 一并退役。）
   const planAnnot = usePlanAnnotations();
   // 第 10 批「批注→施工」：正在画但还没落地的临时点（世界坐标），喂给 PlanOverlay 做跟随反馈。
   const [draftPoints, setDraftPoints] = useState<PlanPoint[]>([]);
@@ -4886,13 +4885,27 @@ useEffect(() => {
     onGenerateShareLink: handleShareLink,
     onOpenMaterials: openMaterialsFromShare,
     onOpenChecklist: () => setChecklistOpen(true),
-    // P0-B（接口约定 §2）：预检阻塞项只接真实存在的入口——登录走账户中心登录卡，
-    // 归档走账户中心「归档」页。保存/编辑权/冲突没有现成一键入口，只在清单里说明，不放假按钮。
+    // P1（恢复入口，接口约定 §2）：预检阻塞项只接真实存在的入口，每条都走既有链路。
+    // - login：账户中心登录卡（既有）。
+    // - archive-page：账户中心「归档」页（既有）。
+    // - save-changes / save-project / grant-edit：转给 CloudPanel 里既有的保存链与取回编辑权入口
+    //   （scendance:publish-recovery-action 事件通道，与登录卡同款；落地见 panels/cloud-panel.tsx）。
+    // - resolve-conflict：切到户外地图，露出户外提示里既有的「用我这版 / 用服务器那版」二选一。
+    //   冲突只有户外规划会上报（统一状态机 reportConflict），保留哪一版仍由用户自己选，不自动择一。
+    // 这些恢复动作只落盘、取权或切视图，**绝不触发发布**：发布仍要用户自己在发布页点一次。
     onPrecheckAction: action => {
       if (action === 'login') { window.dispatchEvent(new Event('scendance:request-account-login')); return; }
-      if (action === 'archive-page') setAccountOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'archive' }));
+      if (action === 'archive-page') { setAccountOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'archive' })); return; }
+      if (action === 'resolve-conflict') {
+        handleOutdoorViewSwitch('2d');
+        notify('已切到户外地图：顶部提示里选「用我这版」或「用服务器那版」。处理完回发布页重新检查。', 'info');
+        return;
+      }
+      if (action === 'save-changes' || action === 'save-project' || action === 'grant-edit') {
+        window.dispatchEvent(new CustomEvent('scendance:publish-recovery-action', { detail: { action } }));
+      }
     },
-    precheckActions: ['login', 'archive-page'],
+    precheckActions: ['login', 'archive-page', 'save-changes', 'save-project', 'grant-edit', 'resolve-conflict'],
     // 2026-11-15 出图收编进分享面板：按当前视图抓帧下载 PNG，独立导出钮不再出镜。
     onExportImage: async () => {
       if (outdoor3dTakeover) return handleOutdoor3dExport();
@@ -5045,6 +5058,7 @@ useEffect(() => {
                   aria-expanded={isLaneOpen('space')}
                   aria-controls="agent-panel"
                   aria-label="空间"
+                  data-tour="nav-space"
                   data-tip="空间"
                   onClick={() => toggleAgent('space')}
                 >
@@ -5073,6 +5087,7 @@ useEffect(() => {
                   aria-expanded={captureOpen || generationOpen}
                   aria-controls="generation-sheet workbench-capture-card"
                   aria-label="创作：重建真实场地、文生 3D 或图生 3D"
+                  data-tour="nav-capture"
                   data-tip="创作"
                   onClick={() => {
                     // 再点一次收起，和拍摄卡/户外卡同一种手感。
@@ -5089,6 +5104,7 @@ useEffect(() => {
                   className={`sc-rail-tool sc-rail-disc${outdoorPanel !== null ? ' is-active' : ''}`}
                   aria-pressed={outdoorPanel !== null}
                   aria-label="户外规划"
+                  data-tour="nav-outdoor"
                   data-tip="户外规划"
                   onClick={() => {
                     // 2026-11-13 用户拍板：右侧地图是唯一常驻画面，这个钮只控制左栏户外物料面板的
@@ -5133,6 +5149,7 @@ useEffect(() => {
               setChatPeerId(current => current === member.userId ? null : member.userId);
             }} onOpenTeam={() => setAccountOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
+              <HelpRailButton />
               {/* 2026-11-11 用户指令：户外态不再显示草稿保存状态文字（保存仍自动进行）。 */}
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               {/* 2026-11-13 用户指令：左轨底部「标注」开关移除；手动绘制入口收掉后，
@@ -5690,8 +5707,6 @@ useEffect(() => {
             {externalConflict && <div className="sc-local-conflict" role="status"><span>另一标签页更新了本地副本，自动保存已暂停。请先备份当前内容，再核对更新。</span>{remoteLayout ? <><button type="button" onClick={adoptRemoteLayout}>采用更新</button><button type="button" onClick={clearRemoteLayout}>稍后核对</button></> : hasRemoteCandidate ? <button type="button" onClick={reopenRemoteLayout}>重新核对更新</button> : <span>当前无法读取另一版本，请保留本页并检查本机存档。</span>}</div>}
             <PlacementHint active={placingId !== null}/>
             <StatusToastHost/>
-            {/* 集成接线：F3 首次吸附教练气泡，固定锚点（画布中央偏左），不追求精确吸附位置。 */}
-            <F3CoachBubble anchor={{ x: 240, y: 260 }} visible={f3Coach.shouldShow} onDismiss={f3Coach.dismiss} />
             {/* 集成接线：2D 视图下渲染规划标注层；transform 与 render2DTopDown 同源，避免错位。 */}
             {view.view2D && (
               <PlanOverlay
@@ -5821,6 +5836,13 @@ useEffect(() => {
           </div>
           <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=EDITOR_ITEM_LIMIT} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
         </main>
+          <OnboardingHost
+            signals={{
+              hasBoundary: (outdoorPlan?.boundary?.length ?? 0) >= 3,
+              hasItems: (outdoorPlan?.zones?.length ?? 0) + (outdoorPlan?.facilities?.length ?? 0) > 0
+                || layout.floors.some(floor => floor.items.length > 0),
+            }}
+          />
       </div>
       </LayoutAgentProvider>
       <ConfirmModal

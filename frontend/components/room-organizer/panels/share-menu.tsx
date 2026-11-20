@@ -22,7 +22,7 @@ import { appendShareRecord, mergeShareRows, readShareRecords, type ServerShare }
 import { isStructuralMarker } from '../lib/structural-layout';
 import { bingoBadgeCount, setBingoSending, useBingoSending } from './bingo-status-mark';
 import { CaseAdminSection } from './case-admin';
-import { SHARE_READ_ONLY_LINE, SharePanel, type PublishFeedback, type PublishPrecheckState, type PublishRecordsState, type PublishSummaryItem, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
+import { SHARE_READ_ONLY_LINE, SharePanel, type PublishFeedback, type PublishPrecheckState, type PublishRecordsState, type PublishSummaryItem, type ShareBingoStatus, type ShareExportEntry, type SharePermits, type ShareTab } from './share-panel';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -234,6 +234,10 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   // P0-A：绑定生成时的项目，切项目即作废，撤销按绑定项目发请求，不再重读快照。
   const [completeShare, setCompleteShare] = useState<{ projectId: string; shareId: string; revision: number; token: string | null } | null>(null);
   const [reviewLink, setReviewLink] = useState('');
+  // P2（V16）：这条评审链接送出时写进链接的权限。null = 本机不知道（旧链 / 从本机标记恢复）。
+  const [issuedPermits, setIssuedPermits] = useState<SharePermits | null>(null);
+  const reviewLinkRef = useRef('');
+  reviewLinkRef.current = reviewLink;
   const [qrSvg, setQrSvg] = useState('');
   const [qrOpen, setQrOpen] = useState(false);
   const [notice, setNotice] = useState('');
@@ -293,6 +297,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     completeShareAttempt.current = null;
     setPublished(readPublishedLink(projectId));
     setCompleteShare(null);
+    setReviewLink('');
+    setIssuedPermits(null);
     setNotice('');
     setQrOpen(false);
     setTab('share');
@@ -304,13 +310,20 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   }, [projectId]);
 
   // 评审链接也要有“当前状态”：重新打开分享时，先从本机标记恢复最近一条。
+  // 恢复出来的链接没有权限组合（标记只存地址），所以权限说明退回「只讲规则」，不猜它当时允许什么。
   useEffect(() => {
+    let next = '';
     try {
       const mark = projectId ? readReviewMarks().find(entry => entry.projectKey === projectId) : null;
-      setReviewLink((mark as { clientUrl?: string } | null)?.clientUrl?.trim() ?? '');
+      next = (mark as { clientUrl?: string } | null)?.clientUrl?.trim() ?? '';
     } catch {
-      setReviewLink('');
+      next = '';
     }
+    if (next !== reviewLinkRef.current) {
+      reviewLinkRef.current = next;
+      setIssuedPermits(null);
+    }
+    setReviewLink(next);
   }, [projectId, open]);
 
   useEffect(() => {
@@ -584,11 +597,14 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     setBusy(true);
     setNotice('');
     setBingoSending(true);
+    // P2：权限在这一个时刻写进链接。之后改开关只影响下一次送出。
+    const issued = { pins: allowPins, levels: allowLevels, basemap: allowBasemap };
     try {
-      const result = await actions.onIssueReviewLink({ pins: allowPins, levels: allowLevels, basemap: allowBasemap });
+      const result = await actions.onIssueReviewLink(issued);
       if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
       setReviewLink(result.url);
+      setIssuedPermits(issued);
       const copied = await copyText(result.url);
       if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setBingoSent(true);
@@ -732,6 +748,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       const markKey = (projectId ?? '').trim() || 'local-draft';
       forgetReviewLinkMark(markKey, reviewLink);
       setReviewLink('');
+      setIssuedPermits(null);
       setQrOpen(false);
       setNotice('评审链接已作废，原来的地址打不开了。');
     } catch (error) {
@@ -752,7 +769,24 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     actions.onOpenBingo();
   };
 
-  const exports = exportEntries(actions, () => setOpen(false));
+  const exports = exportEntries(actions);
+  /**
+   * P3：导出绑定到阅读器能核对的版本——服务端已确认的 revision + 是否有未保存修改。
+   * 没有会话时如实写「本机方案 · 含未保存修改」，不冒充云端版本。
+   */
+  const exportBinding = (): { version: string; dirty: boolean } => {
+    try {
+      const snapshot = controller?.getSnapshot();
+      if (snapshot) {
+        const revision = typeof snapshot.revision === 'number' && Number.isFinite(snapshot.revision) ? snapshot.revision : null;
+        const dirty = Boolean(snapshot.dirty) || hasUnpublishedChanges(snapshot);
+        return revision == null
+          ? { version: '未保存版本', dirty: true }
+          : { version: `版本 ${revision}`, dirty };
+      }
+    } catch { /* 快照读不到时按本机方案标注 */ }
+    return { version: '本机方案', dirty: true };
+  };
   // 完整只读链接的展示地址；令牌只在生成响应里出现一次，撤销后重建才拿到新的。
   const completeShareUrl = completeShare?.token && typeof window !== 'undefined' ? `${window.location.origin}/view/#c${completeShare.token}` : '';
 
@@ -790,13 +824,14 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       exports={exports}
       reviewLink={reviewLink}
       permits={{ pins: allowPins, levels: allowLevels, basemap: allowBasemap }}
+      issuedPermits={issuedPermits}
       onPermit={(key, value) => {
         if (key === 'pins') setAllowPins(value);
         else if (key === 'levels') setAllowLevels(value);
         else setAllowBasemap(value);
       }}
       onIssueAudience={() => { void issue(); }}
-      onSendBingo={openBingo}
+      onOpenBingoDesk={openBingo}
       onCopyReview={() => { void copyReview(); }}
       onOpenReview={openReview}
       {...(actions?.onRevokeReviewLink ? { onRevokeReview: () => { void revokeReview(); } } : {})}
@@ -813,24 +848,35 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       publishFeedback={publishFeedback}
       copyFeedback={copyFeedback}
       publishRecords={publishRecords}
+      exportBinding={exportBinding}
     />}
   </div>;
 }
 
-function exportEntries(actions: ShareMenuActions | undefined, close: () => void): ShareExportEntry[] {
+/**
+ * P3（V18）：四类导出各自把动作交回面板，由面板跟踪进行中 / 完成 / 失败 / 重试。
+ * 不再「点了就关菜单」——关菜单既表示不了成功，也表示不了失败。
+ * 能给出回执的句柄（onExportImage 返回 Promise<boolean>）如实落成完成/失败；
+ * 同步 void 的句柄只能标「已交给画布导出」，不冒充完成。
+ */
+function exportEntries(actions: ShareMenuActions | undefined): ShareExportEntry[] {
   if (!actions) return [];
   const entries: ShareExportEntry[] = [];
   if (actions.onExportImage) {
     const run = actions.onExportImage;
-    entries.push({ id: 'render', label: '效果图', icon: 'image', onSelect: () => { void run(); close(); } });
+    entries.push({ id: 'render', label: '效果图', icon: 'image', scope: '当前镜头，按画布现况出 PNG', onSelect: () => run() });
   }
   if (actions.onExportCsv) {
     const run = actions.onExportCsv;
-    entries.push({ id: 'materials', label: '物料清单', icon: 'list', onSelect: () => { run(); close(); } });
+    entries.push({ id: 'materials', label: '物料清单', icon: 'list', scope: '全部楼层物件与数量，CSV', onSelect: () => run() });
   }
   if (actions.onExportGeoJson) {
     const run = actions.onExportGeoJson;
-    entries.push({ id: 'site', label: '场地范围文件', icon: 'site', onSelect: () => { run(); close(); } });
+    entries.push({ id: 'site', label: '场地范围文件', icon: 'site', scope: '场地轮廓与户外分区，GeoJSON', onSelect: () => run() });
+  }
+  if (actions.onPrintDeck) {
+    const run = actions.onPrintDeck;
+    entries.push({ id: 'deck', label: '演示稿', icon: 'deck', scope: '当前方案的分页排版，PDF', onSelect: () => run() });
   }
   return entries;
 }

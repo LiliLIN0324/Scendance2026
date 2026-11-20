@@ -4,10 +4,10 @@
  * SharePanel 只做展示：状态/阻塞/摘要/反馈/记录全部由宿主通过可选 props 传入；
  * 不传 props 时必须保持旧版发布页渲染（普通发布与完整分享历史兼容）。
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatShareTime, SharePanel, type PublishPrecheckState, type PublishRecordsState, type ShareTab } from './share-panel';
+import { formatShareTime, SharePanel, type PublishPrecheckState, type PublishRecordsState, type ShareExportEntry, type ShareTab } from './share-panel';
 
 afterEach(cleanup);
 
@@ -24,7 +24,7 @@ function panelProps(extra: Partial<Parameters<typeof SharePanel>[0]> = {}): Para
     qrSvg: '',
     exports: [],
     onIssueAudience: () => undefined,
-    onSendBingo: () => undefined,
+    onOpenBingoDesk: () => undefined,
     onPublish: () => undefined,
     onCopy: () => undefined,
     onToggleQr: () => undefined,
@@ -333,5 +333,118 @@ describe('P1-B：完整只读链接行', () => {
       expect(open).toHaveBeenCalledWith(expect.stringContaining('/view/#c'), '_blank', 'noopener,noreferrer');
       expect(screen.getByTestId('complete-share-fullurl').textContent).toContain('/view/#c');
     } finally { open.mockRestore(); }
+  });
+});
+
+describe('P2（V16）：评审权限的生效边界', () => {
+  const link = 'https://studio.example/r/abc123';
+
+  it('没送出前只说规则：开关只影响下一次送出', () => {
+    render(<SharePanel {...panelProps({ tab: 'share' })} />);
+    expect(screen.getByTestId('permit-rule').textContent).toContain('开关只影响下一次送出');
+    expect(screen.queryByTestId('permit-pending')).toBeNull();
+    expect(screen.getByRole('button', { name: '送出评审链接' })).toBeTruthy();
+  });
+
+  it('已有链接且开关未改：这条链接的权限是送出时固定的', () => {
+    render(<SharePanel {...panelProps({
+      tab: 'share',
+      reviewLink: link,
+      permits: { pins: true, levels: true, basemap: false },
+      issuedPermits: { pins: true, levels: true, basemap: false },
+    })} />);
+    expect(screen.getByTestId('permit-rule').textContent).toContain('这条链接送出时是「可落钉意见 · 可切换图层 · 不可切换底图」');
+    expect(screen.queryByTestId('permit-pending')).toBeNull();
+    expect(screen.getByRole('button', { name: '重新送出（当前版本）' })).toBeTruthy();
+    expect(screen.getByTestId('review-version-owner').textContent).toContain('客户意见记在这一版上');
+  });
+
+  it('开关改过但还没重新送出：旧链接保持原权限，新权限只在重新送出后生效', () => {
+    render(<SharePanel {...panelProps({
+      tab: 'share',
+      reviewLink: link,
+      permits: { pins: false, levels: true, basemap: true },
+      issuedPermits: { pins: true, levels: false, basemap: true },
+    })} />);
+    const pending = screen.getByTestId('permit-pending');
+    expect(pending.textContent).toContain('开关已改成「不可落钉意见 · 可切换图层 · 可切换底图」');
+    expect(pending.textContent).toContain('这条仍是「可落钉意见 · 不可切换图层 · 可切换底图」');
+    expect(pending.textContent).toContain('旧链接不会自动失效');
+    // 旧链接在校时复制拿到的也是旧权限那条，不能让人以为已经换了权限。
+    expect(screen.getByTestId('review-link-row').textContent).toContain('studio.example/r/abc123');
+  });
+
+  it('本机不知道这条链接的权限时不冒充：只说规则', () => {
+    render(<SharePanel {...panelProps({ tab: 'share', reviewLink: link, issuedPermits: null })} />);
+    expect(screen.getByTestId('permit-rule').textContent).toContain('本机没存下当时的组合');
+    expect(screen.queryByTestId('permit-pending')).toBeNull();
+  });
+});
+
+describe('P4（V17）：进入／送出／待评／回执', () => {
+  it('送出状态行说动作与结果，进入行只去审校台', () => {
+    render(<SharePanel {...panelProps({ tab: 'share', bingoStatus: '待评', bingoCount: '2' })} />);
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待评（已送出 2 份，等客户回执）');
+    const desk = screen.getByRole('button', { name: '进入 Bingo 审校台，待评 2 份' });
+    expect(desk.querySelector('.sc-share-row-label')?.textContent).toBe('进入 Bingo 审校台');
+    expect(desk.querySelector('.sc-share-row-status')?.textContent).toBe('待评 2 份');
+    expect(desk.querySelector('.sc-bingo-badge')?.getAttribute('data-visual')).toBe('awaiting');
+  });
+
+  it('回执与待发分别说清，不把进入写成送出', () => {
+    const view = render(<SharePanel {...panelProps({ tab: 'share', bingoStatus: '已回执' })} />);
+    expect(view.getByTestId('review-send-status').textContent).toContain('送出状态：已回执');
+    expect(view.getByRole('button', { name: '进入 Bingo 审校台，有回执' })).toBeTruthy();
+    view.unmount();
+    render(<SharePanel {...panelProps({ tab: 'share', bingoStatus: '待发' })} />);
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待发');
+    expect(screen.getByRole('button', { name: '进入 Bingo 审校台，暂无待评' })).toBeTruthy();
+  });
+});
+
+describe('P3（V18）：导出的范围、版本与四态反馈', () => {
+  it('选择范围时就写清覆盖哪一段，并绑定当前版本', () => {
+    const rows: ShareExportEntry[] = [
+      { id: 'render', label: '效果图', icon: 'image', scope: '当前镜头，按画布现况出 PNG', onSelect: () => true },
+      { id: 'materials', label: '物料清单', icon: 'list', scope: '全部楼层物件与数量，CSV', onSelect: () => undefined },
+      { id: 'site', label: '场地范围文件', icon: 'site', scope: '场地轮廓与户外分区，GeoJSON', onSelect: () => undefined },
+      { id: 'deck', label: '演示稿', icon: 'deck', scope: '当前方案的分页排版，PDF', onSelect: () => undefined },
+    ];
+    render(<SharePanel {...panelProps({ tab: 'export', exports: rows, exportBinding: () => ({ version: '版本 7', dirty: false }) })} />);
+    expect(screen.getByTestId('export-binding').textContent).toContain('版本 7');
+    for (const row of rows) {
+      expect(screen.getByTestId(`export-row-${row.id}`).textContent).toContain(row.scope);
+    }
+  });
+
+  it('进行中 → 完成（有回执）与失败 → 重试各自独立', async () => {
+    let finish!: (value: boolean) => void;
+    let csvCalls = 0;
+    const rows: ShareExportEntry[] = [
+      { id: 'render', label: '效果图', icon: 'image', onSelect: () => new Promise<boolean>(resolve => { finish = resolve; }) },
+      { id: 'materials', label: '物料清单', icon: 'list', onSelect: () => { csvCalls += 1; if (csvCalls === 1) throw new Error('清单没有可写的行。'); } },
+    ];
+    render(<SharePanel {...panelProps({
+      tab: 'export',
+      exports: rows,
+      exportBinding: () => ({ version: '版本 7', dirty: true }),
+    })} />);
+    // 效果图：进行中（按钮禁用、版本写在回执上），回执回来才写「已导出」。
+    fireEvent.click(screen.getByRole('button', { name: '效果图' }));
+    expect(screen.getByTestId('export-status-render').textContent).toContain('正在导出 · 版本 7 · 含未保存修改');
+    expect((screen.getByRole('button', { name: '效果图' }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => finish(true));
+    expect(screen.getByTestId('export-status-render').textContent).toContain('已导出 · 版本 7');
+    // 物料清单：同步抛错 → 失败留在面板里，给重试；重试成功后如实写「无回执」。
+    fireEvent.click(screen.getByRole('button', { name: '物料清单' }));
+    const failed = await screen.findByTestId('export-status-materials');
+    expect(failed.getAttribute('role')).toBe('alert');
+    expect(failed.textContent).toContain('导出没成功 · 版本 7 · 含未保存修改');
+    expect(failed.textContent).toContain('清单没有可写的行。');
+    expect(screen.getByTestId('export-row-materials').getAttribute('data-phase')).toBe('failed');
+    fireEvent.click(screen.getByTestId('export-retry-materials'));
+    await waitFor(() => expect(screen.getByTestId('export-status-materials').textContent).toContain('已交给画布导出'));
+    expect(screen.getByTestId('export-status-materials').textContent).not.toContain('已导出 ·');
+    expect(csvCalls).toBe(2);
   });
 });

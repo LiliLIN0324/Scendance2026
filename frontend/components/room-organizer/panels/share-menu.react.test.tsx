@@ -80,13 +80,13 @@ describe('分享页签', () => {
     expect(screen.getByRole('tab', { name: '发布' }).getAttribute('data-tone')).toBe('quiet');
     expect(dialog.textContent).toContain('发布会');
     expect(dialog.textContent).toContain('打开即可查看场地、分区和尺度，页里可看 3D。');
-    const create = screen.getByRole('button', { name: '生成并复制评审链接' });
-    const bingo = screen.getByRole('button', { name: /送到 Bingo/ });
+    const create = screen.getByRole('button', { name: '送出评审链接' });
+    const bingo = screen.getByRole('button', { name: /进入 Bingo 审校台/ });
     expect(create.className).toContain('sc-share-cta');
     expect(bingo.className).toContain('sc-share-row');
     expect(screen.queryByTestId('review-link-row')).toBeNull();
-    expect(bingo.querySelector('.sc-share-row-label')?.textContent).toBe('送到 Bingo');
-    expect(bingo.querySelector('.sc-share-row-status')?.textContent).toBe('待发');
+    expect(bingo.querySelector('.sc-share-row-label')?.textContent).toBe('进入 Bingo 审校台');
+    expect(bingo.querySelector('.sc-share-row-status')?.textContent).toBe('暂无待评');
     const mark = bingo.querySelector('.sc-bingo-badge');
     expect(mark?.getAttribute('data-visual')).toBe('to-send');
     expect(mark?.querySelector('[data-part="ring"]')?.getAttribute('stroke')).toContain('55585F');
@@ -103,14 +103,14 @@ describe('分享页签', () => {
     Object.assign(navigator, { clipboard: { writeText: clipboard } });
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
     expect((await screen.findByRole('status')).textContent).toContain('评审链接已复制');
     expect(clipboard).toHaveBeenCalledWith('https://studio.example/review/issued');
     expect(screen.getByTestId('review-link-row').textContent).toContain('studio.example/review/issued');
     expect(screen.getByRole('button', { name: '复制' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '打开' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '刷新为当前版本' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /送到 Bingo/ }).querySelector('.sc-share-row-status')?.textContent).toBe('待评');
+    expect(screen.getByRole('button', { name: '重新送出（当前版本）' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /进入 Bingo 审校台/ }).querySelector('.sc-share-row-status')?.textContent).toBe('待评');
     expect(share.onIssueReviewLink).toHaveBeenCalledOnce();
   });
 
@@ -126,7 +126,7 @@ describe('分享页签', () => {
     Object.assign(navigator, { clipboard: { writeText: clipboard } });
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
     await screen.findByTestId('review-link-row');
 
     fireEvent.click(screen.getByRole('button', { name: '作废这条评审链接' }));
@@ -146,7 +146,7 @@ describe('分享页签', () => {
     });
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
     await screen.findByTestId('review-link-row');
 
     fireEvent.click(screen.getByRole('button', { name: '作废这条评审链接' }));
@@ -164,7 +164,7 @@ describe('分享页签', () => {
     });
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
     await screen.findByTestId('review-link-row');
     expect(screen.queryByRole('button', { name: '作废这条评审链接' })).toBeNull();
   });
@@ -174,9 +174,59 @@ describe('分享页签', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
     fireEvent.click(screen.getByRole('switch', { name: '可落钉意见' }));
-    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
     await screen.findByRole('status');
     expect(share.onIssueReviewLink).toHaveBeenCalledWith({ pins: false, levels: true, basemap: true });
+  });
+
+  it('P2：改权限后旧链接与新链接各自何时生效分开说，重新送出才按新权限生成', async () => {
+    localStorage.clear();
+    const share = actions();
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    // 还没送出：先把规则说清——开关只影响下一次送出。
+    expect(screen.getByTestId('permit-rule').textContent).toContain('开关只影响下一次送出');
+    expect(screen.queryByTestId('permit-pending')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
+    await screen.findByTestId('review-link-row');
+    // 送出后：这条链接的权限是送出那刻写进去的。
+    expect(screen.getByTestId('permit-rule').textContent).toContain('这条链接送出时是「可落钉意见 · 可切换图层 · 可切换底图」');
+    // 意见归属原方案版本（V16）。
+    expect(screen.getByTestId('review-version-owner').textContent).toContain('客户意见记在这一版上');
+    expect(screen.queryByTestId('permit-pending')).toBeNull();
+    expect(share.onIssueReviewLink).toHaveBeenCalledWith({ pins: true, levels: true, basemap: true });
+    // 改开关：没作用到任何链接，旧链接仍是原权限，旧地址不变。
+    fireEvent.click(screen.getByRole('switch', { name: '可落钉意见' }));
+    const pending = screen.getByTestId('permit-pending');
+    expect(pending.textContent).toContain('开关已改成「不可落钉意见 · 可切换图层 · 可切换底图」');
+    expect(pending.textContent).toContain('这条仍是「可落钉意见 · 可切换图层 · 可切换底图」');
+    expect(screen.getByTestId('review-link-row').textContent).toContain('studio.example/review/issued');
+    expect(share.onIssueReviewLink).toHaveBeenCalledOnce();
+    // 重新送出：按新开关生成新链接，旧链接不会被动过。
+    fireEvent.click(screen.getByRole('button', { name: '重新送出（当前版本）' }));
+    await waitFor(() => expect(screen.queryByTestId('permit-pending')).toBeNull());
+    expect(share.onIssueReviewLink).toHaveBeenLastCalledWith({ pins: false, levels: true, basemap: true });
+    expect(screen.getByTestId('permit-rule').textContent).toContain('「不可落钉意见 · 可切换图层 · 可切换底图」');
+  });
+
+  it('P4：送出是动作、待评是结果、进入是去处，三者不互相冒充', async () => {
+    localStorage.clear();
+    const share = actions({ onOpenBingo: vi.fn() });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待发');
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
+    await screen.findByTestId('review-link-row');
+    // 送出不会把人带进审校台；审校台那一行也不发链接。
+    expect(share.onOpenBingo).not.toHaveBeenCalled();
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待评');
+    const desk = screen.getByRole('button', { name: /进入 Bingo 审校台，待评/ });
+    expect(desk.querySelector('.sc-share-row-status')?.textContent).toBe('待评');
+    fireEvent.click(desk);
+    expect(share.onOpenBingo).toHaveBeenCalledOnce();
+    expect(share.onIssueReviewLink).toHaveBeenCalledOnce();
   });
 
   it('never copies a review link whose activity changes before the result returns', async () => {
@@ -189,18 +239,19 @@ describe('分享页签', () => {
     vi.mocked(share.onIssueReviewLink).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: '生成并复制评审链接' }));
-    const sending = screen.getByRole('button', { name: /送到 Bingo，送出中/ });
-    expect(sending.querySelector('.sc-share-row-status')?.textContent).toBe('送出中');
-    expect(sending.querySelector('.sc-bingo-badge')?.getAttribute('data-visual')).toBe('sending');
-    expect(sending.querySelector('.sc-bingo-badge')?.getAttribute('data-spin-ms')).toBe('1200');
-    expect(sending.querySelector('[data-ring] text')).toBeNull();
-    expect(sending.querySelector('.sc-share-row-label')?.textContent).toBe('送到 Bingo');
+    fireEvent.click(screen.getByRole('button', { name: '送出评审链接' }));
+    // P4（V17）：送出这一动作自己的状态在送出按钮与状态行上，「进入」那一行不冒充发送中。
+    const sending = screen.getByRole('button', { name: '正在送出…' }) as HTMLButtonElement;
+    expect(sending.disabled).toBe(true);
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：送出中');
+    const deskRow = screen.getByRole('button', { name: /进入 Bingo 审校台/ });
+    expect(deskRow.querySelector('.sc-share-row-label')?.textContent).toBe('进入 Bingo 审校台');
+    expect(deskRow.querySelector('.sc-share-row-status')?.textContent).toBe('暂无待评');
     act(() => { epoch += 1; });
     await act(async () => finish({ url: 'https://studio.example/review/old', isCurrent: () => epoch === token }));
     expect(screen.getByRole('status').textContent).toContain('旧链接未复制');
     expect(clipboard).not.toHaveBeenCalled();
-    expect(screen.getByText('待发')).toBeTruthy();
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待发');
     expect(screen.queryByTestId('review-link-row')).toBeNull();
   });
 
@@ -219,11 +270,14 @@ describe('分享页签', () => {
     localStorage.setItem('scendance.reviewMark.v1', JSON.stringify([record]));
     const waitingView = render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
     openMenu();
-    const waiting = screen.getByRole('button', { name: /送到 Bingo，待评/ });
+    const waiting = screen.getByRole('button', { name: /进入 Bingo 审校台，待评/ });
+    expect(waiting.querySelector('.sc-share-row-status')?.textContent).toBe('待评 1 份');
     expect(waiting.querySelector('.sc-bingo-badge')?.getAttribute('data-visual')).toBe('awaiting');
     expect(waiting.querySelector('text')?.textContent).toBe('1');
     expect(waiting.querySelector('[data-part="bead"]')?.getAttribute('fill')).toContain('96651F');
     expect(waiting.querySelector('[data-ring] text')).toBeNull();
+    // P4（V17）：送出状态与「进入」分开：同一份记录下，送出那一行说的是待评。
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待评');
     waitingView.unmount();
 
     localStorage.setItem('scendance-review-share-return-v1', JSON.stringify({
@@ -233,7 +287,8 @@ describe('分享页签', () => {
     }));
     render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
     openMenu();
-    const done = screen.getByRole('button', { name: /送到 Bingo，已回执/ });
+    const done = screen.getByRole('button', { name: /进入 Bingo 审校台，有回执/ });
+    expect(done.querySelector('.sc-share-row-status')?.textContent).toBe('有回执');
     const badge = done.querySelector('.sc-bingo-badge');
     expect(badge?.getAttribute('data-step')).toBe('check');
     expect(badge?.querySelector('[data-part="bead"]')).toBeNull();
@@ -241,12 +296,12 @@ describe('分享页签', () => {
     expect(badge?.querySelector('[data-mark="check"]')?.getAttribute('stroke')).toContain('141416');
   });
 
-  it('送到 Bingo 只切审校台，不再生成第二条链接', () => {
+  it('进入 Bingo 审校台只切审校台，不再生成第二条链接', () => {
     localStorage.clear();
     const share = actions({ onOpenBingo: vi.fn() });
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
-    fireEvent.click(screen.getByRole('button', { name: /送到 Bingo/ }));
+    fireEvent.click(screen.getByRole('button', { name: /进入 Bingo 审校台/ }));
     expect(share.onOpenBingo).toHaveBeenCalledOnce();
     expect(share.onIssueReviewLink).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: '分享、发布与导出' })).toBeNull();
@@ -366,7 +421,7 @@ describe('发布页签', () => {
 });
 
 describe('导出页签', () => {
-  it('lists only the export actions the workbench already provides', () => {
+  it('lists only the export actions the workbench already provides', async () => {
     localStorage.clear();
     const share = actions({
       onExportImage: vi.fn(async () => true),
@@ -382,17 +437,19 @@ describe('导出页签', () => {
     }
     expect(screen.queryByRole('button', { name: '导出交接' })).toBeNull();
     expect(screen.queryByRole('button', { name: '到场清单' })).toBeNull();
+    // P3（V18）：导出不关菜单——关菜单既表示不了成功，也表示不了失败。
     fireEvent.click(screen.getByRole('button', { name: '物料清单' }));
     expect(share.onExportCsv).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('dialog', { name: '分享、发布与导出' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '分享' }));
-    fireEvent.click(screen.getByRole('tab', { name: '导出' }));
+    expect(screen.getByRole('tab', { name: '导出' }).getAttribute('aria-selected')).toBe('true');
+    // CSV/GeoJSON 句柄是同步 void：只能如实写「已交给画布导出」，不冒充完成。
+    expect(screen.getByTestId('export-status-materials').textContent).toContain('已交给画布导出');
     fireEvent.click(screen.getByRole('button', { name: '效果图' }));
     expect(share.onExportImage).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: '分享' }));
-    fireEvent.click(screen.getByRole('tab', { name: '导出' }));
+    // 效果图句柄有回执（Promise<boolean>）：resolve 才写「已导出」。
+    await waitFor(() => expect(screen.getByTestId('export-status-render').textContent).toContain('已导出'));
     fireEvent.click(screen.getByRole('button', { name: '场地范围文件' }));
     expect(share.onExportGeoJson).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('export-status-site').textContent).toContain('已交给画布导出');
   });
 
   it('does not invent an export row when that callback is absent', () => {
@@ -403,6 +460,44 @@ describe('导出页签', () => {
     expect(screen.getByRole('button', { name: '效果图' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '物料清单' })).toBeNull();
     expect(screen.queryByRole('button', { name: '场地范围文件' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '演示稿' })).toBeNull();
+  });
+
+  it('P3：四类导出的范围与版本写在行下，失败留在面板里给重试', async () => {
+    localStorage.clear();
+    let csvCalls = 0;
+    const share = actions({
+      onExportImage: vi.fn(async () => true),
+      onExportCsv: vi.fn(() => { csvCalls += 1; if (csvCalls === 1) throw new Error('清单没有可写的行。'); }),
+      onExportGeoJson: vi.fn(),
+      onPrintDeck: vi.fn(),
+    });
+    render(<ShareMenu
+      actions={share}
+      layout={sampleLayout()}
+      controller={{ getSnapshot: () => ({ configured: true, sessionId: 's1', revision: 4, dirty: false, user: { id: 'u1' }, project: { id: 'project-1' } }) } as never}
+    />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '导出' }));
+    // 选择范围时绑定明确版本：每行都写清覆盖哪一段，并在点击时绑定当前版本。
+    for (const name of ['效果图', '物料清单', '场地范围文件', '演示稿']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
+    expect(screen.getByTestId('export-row-materials').textContent).toContain('全部楼层物件与数量，CSV');
+    expect(screen.getByTestId('export-row-site').textContent).toContain('场地轮廓与户外分区，GeoJSON');
+    expect(screen.getByTestId('export-row-deck').textContent).toContain('当前方案的分页排版，PDF');
+    expect(screen.getByTestId('export-binding').textContent).toContain('版本 4');
+    // 失败不被关菜单当成成功：错误与重试都留在面板里。
+    fireEvent.click(screen.getByRole('button', { name: '物料清单' }));
+    const failed = await screen.findByTestId('export-status-materials');
+    expect(failed.getAttribute('role')).toBe('alert');
+    expect(failed.textContent).toContain('导出没成功');
+    expect(failed.textContent).toContain('清单没有可写的行。');
+    expect(failed.textContent).toContain('版本 4');
+    expect(screen.getByTestId('share-panel')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('export-retry-materials'));
+    await waitFor(() => expect(screen.getByTestId('export-status-materials').textContent).toContain('已交给画布导出'));
+    expect(share.onExportCsv).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -647,7 +742,7 @@ function panelProps(extra: Partial<Parameters<typeof SharePanel>[0]> = {}): Para
     qrSvg: '',
     exports: [],
     onIssueAudience: () => undefined,
-    onSendBingo: () => undefined,
+    onOpenBingoDesk: () => undefined,
     onPublish: () => undefined,
     onCopy: () => undefined,
     onToggleQr: () => undefined,
