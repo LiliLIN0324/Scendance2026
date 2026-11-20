@@ -9,8 +9,21 @@ import { __resetGenerationOutcome, setGenerationOutcome } from '../lib/use-gener
 import { clearOutdoorPlanIssues, onOutdoorPlanIssueFocus, publishOutdoorPlanIssues, publishOutdoorPlanSettled } from '../lib/outdoor-plan-issues';
 import { BingoAuditCard } from './bingo-audit-card';
 import {layoutStore} from '../hooks/use-layout-store';
+import { appendReviewSharePin, setReviewSharePinStatus } from '../../review-share-page/share-pins';
 
 const SHARE = '11111111-1111-4111-8111-111111111111';
+
+const pinDraft = {
+  itemId: null,
+  x: 1,
+  y: 0,
+  z: -2,
+  offset: null,
+  camera: {
+    position: [3.4, 2.8, 0.4] as const,
+    target: [1, 0, -2] as const,
+  },
+};
 
 const SCORE: BingoScore = {
   total: 88,
@@ -277,5 +290,24 @@ describe('BingoAuditCard', () => {
     expect(screen.getByRole('button', { name: '复制评审链接' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '查看评审页' }).getAttribute('href')).toBe(`/review/${SHARE}`);
     expect(screen.getByText(/待评 /)).toBeTruthy();
+  });
+
+  it('top feedback group counts only open pins; resolved pins stay out of the preview', () => {
+    localStorage.setItem(BINGO_MARK_KEY, JSON.stringify([{
+      saved: true, status: 'needs-review', projectKey: 'p', title: '发布会',
+      shareId: SHARE, reviewPlanKey: SHARE, markedAt: '2026-10-31T00:00:00.000Z',
+    }]));
+    const open = appendReviewSharePin(localStorage, { planKey: SHARE, text: '入口要加指示牌', draft: pinDraft });
+    const done = appendReviewSharePin(localStorage, { planKey: SHARE, text: '通道加宽', draft: pinDraft });
+    expect(open.ok).toBe(true);
+    expect(done.ok).toBe(true);
+    if (done.ok) setReviewSharePinStatus(localStorage, SHARE, done.pin.id, 'resolved');
+
+    render(<BingoAuditCard/>);
+    const group = screen.getByText('对方的修改').closest('.ap-review-block') as HTMLElement | null;
+    expect(group).toBeTruthy();
+    expect(group?.querySelector('.ap-review-count')?.textContent).toBe('1');
+    expect(within(group!).getByText('入口要加指示牌')).toBeTruthy();
+    expect(within(group!).queryByText('通道加宽')).toBeNull();
   });
 });
