@@ -306,6 +306,8 @@ import {
   buildPlanInventory,
   filterPlanInventory,
   planInventoryKindLabel,
+  planInventoryWindow,
+  planSelectionHiddenByFilter,
   type PlanInventoryFilter,
   type PlanInventoryKind,
   type PlanInventoryRow,
@@ -2620,7 +2622,45 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       );
       return;
     }
-    if (action !== 'context-menu') return;
+    if (action !== 'context-menu') {
+      // 2026-11-20 审计 F8：测量/画墙/标注草稿原来右键完全没动作（只能 Esc）。
+      // 按与区/线同一套惯例收口：测量右键 = 结段/撤点，画墙右键 = 弃这段，标注右键 = 撤上一点。
+      if (modeRef.current === 'measure' && measureDraftRef.current.length > 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (measureDraftRef.current.length >= 2) {
+          finishMeasure();
+        } else {
+          measureDraftRef.current = [];
+          measureCursorRef.current = null;
+          setMeasureDraftCount(0);
+          setEditMessage('已撤掉这个测量起点；继续点选或按 Esc 退出测量。');
+          draw();
+        }
+        return;
+      }
+      if (modeRef.current === 'wall' && wallDraftRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        wallDraftRef.current = null;
+        setEditMessage('已取消这段墙，未写入方案；继续拖动画下一段。');
+        draw();
+        return;
+      }
+      if ((modeRef.current === 'note' || modeRef.current === 'shape') && annotateDraftRef.current.length > 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        const next = annotateDraftRef.current.slice(0, -1);
+        annotateDraftRef.current = next;
+        setAnnotateDraftCount(next.length);
+        setEditMessage(next.length > 0
+          ? `已撤上一个点（还剩 ${next.length} 个）；继续点选或按 Esc 退出。`
+          : '已撤完所有点；继续点选新图形，或按 Esc 退出。');
+        draw();
+        return;
+      }
+      return;
+    }
     const hit = eventPlanPoint(event);
     if (!hit) {
       setContextMenu(null);
@@ -3272,8 +3312,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   useEffect(() => { layerStateRef.current = layerState; draw(); }, [layerState]);
 
   // 地图选中后滚到清单行。左栏页签可能晚一帧才显示，多等几帧再滚。
+  // 2026-11-20 审计 F3：以前只覆盖设施/动线/出入口/人员四类，分区/车辆/测量/标注选中不滚。
+  const selectedInventoryRowId = selectedFacilityId ?? selectedRouteId ?? selectedNodeId ?? selectedWorkerId
+    ?? selectedZoneId ?? selectedVehicleId ?? selectedAnnotationId ?? selectedMeasurementId ?? null;
   useEffect(() => {
-    const id = selectedFacilityId ?? selectedRouteId ?? selectedNodeId ?? selectedWorkerId;
+    const id = selectedInventoryRowId;
     if (!id) return;
     let frames = 0;
     let raf = 0;
@@ -3290,7 +3333,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [selectedFacilityId, selectedRouteId, selectedNodeId, selectedWorkerId]);
+  }, [selectedInventoryRowId]);
 
   // 底图「加载中」状态上报：只在跨态时 set 一次，避免每帧重渲染。
   const publishBasemapLoading = useCallback((loading: boolean) => {
@@ -8029,7 +8072,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     const remaining = (current.measurements ?? []).filter(item => !ids.includes(item.id));
     if (remaining.length !== (current.measurements ?? []).length) {
-      commitPlan({ ...current, measurements: remaining });
+      // 2026-11-20 审计 B4：退出清除不进历史（走 adopt），并把历史里的临时线一起摘掉，
+      // 否则退出后一按 Ctrl+Z 就把线恢复成一条不会再被自动清的正式测量。
+      const next = planWithMeasurements(current, remaining);
+      adoptPlan(next);
+      dropSessionMeasurementsFromHistory(ids, next);
     }
     if (selectedMeasurementRef.current && ids.includes(selectedMeasurementRef.current)) {
       selectedMeasurementRef.current = null;
@@ -8124,10 +8171,50 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setEditMessage(`已量「${result.value.name}」= ${valueText}；可接着加一段，或双击 / Esc 结束（退出会自动清掉这条线）。`);
   }
 
+  /** 把测量集合写成剩余集；为空时不留下空数组（保持与历史快照同形，方便比较）。 */
+  function planWithMeasurements(current: SitePlanData, remaining: SitePlanData['measurements']): SitePlanData {
+    if (remaining && remaining.length > 0) return { ...current, measurements: remaining };
+    const { measurements: _dropped, ...rest } = current;
+    return rest as SitePlanData;
+  }
+
+  /**
+   * 2026-11-20 审计 B4：退出测量后，本次临时线不能从撤销栈里“复活”。
+   *
+   * 背景：画完一条测量会 commitPlan（会话内可撤销），退出测量时再 commit 一次删除——两个快照都含
+   * 这条线，于是退出后按 Ctrl+Z 会把线恢复成一条再也不会被自动清掉的正式测量。
+   * 这里在退出/删除临时线后，把这批 id 从历史与重做里一并摘掉；順手去掉“撤了等于没撤”的快照
+   *（与当前方案完全相同的快照），避免出现一次空撤销。
+   */
+  function dropSessionMeasurementsFromHistory(ids: readonly string[], next: SitePlanData): void {
+    if (ids.length === 0) return;
+    const dirty = (snapshot: SitePlanData) => (snapshot.measurements ?? []).some(item => ids.includes(item.id));
+    const nextKey = JSON.stringify(next);
+    const prunedHistory = historyRef.current.filter(snapshot => !dirty(snapshot) && JSON.stringify(snapshot) !== nextKey);
+    const prunedRedo = redoRef.current.filter(snapshot => !dirty(snapshot) && JSON.stringify(snapshot) !== nextKey);
+    if (prunedHistory.length !== historyRef.current.length) {
+      historyRef.current = prunedHistory;
+      setHistoryCount(prunedHistory.length);
+    }
+    if (prunedRedo.length !== redoRef.current.length) {
+      redoRef.current = prunedRedo;
+      setRedoCount(prunedRedo.length);
+    }
+  }
+
   /** 删除固定测量标注（测量不是实体，删了就没了；不参与冲突判定，无需剥离引用）。 */
   function deleteMeasurement(id: string) {
     const current = planRef.current;
-    commitPlan({ ...current, measurements: (current.measurements ?? []).filter(m => m.id !== id) });
+    const remaining = (current.measurements ?? []).filter(m => m.id !== id);
+    const next = planWithMeasurements(current, remaining);
+    if (measureSessionIdsRef.current.includes(id)) {
+      // 临时线不归历史管：删了就不该被撤销回来。
+      measureSessionIdsRef.current = measureSessionIdsRef.current.filter(item => item !== id);
+      adoptPlan(next);
+      dropSessionMeasurementsFromHistory([id], next);
+    } else {
+      commitPlan(next);
+    }
     if (selectedMeasurementRef.current === id) {
       selectedMeasurementRef.current = null;
       setSelectedMeasurementId(null);
@@ -10875,6 +10962,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     ? invZone
     : undefined;
   const filteredInventoryRows = filterPlanInventory(inventoryRows, { kind: invKind, zone: invZoneActive, issuesOnly: invIssuesOnly });
+  // 2026-11-20 审计 F3：选中行不能被 40 行窗口截掉（判定在 lib 里，可单独测）。
+  const inventoryWindow = planInventoryWindow(filteredInventoryRows, selectedInventoryRowId, PLAN_INFO_LIST_LIMIT);
+  const visibleInventoryRows = inventoryWindow.rows;
+  const selectedInventoryRow = selectedInventoryRowId
+    ? inventoryRows.find(row => row.id === selectedInventoryRowId) ?? null
+    : null;
+  const selectedRowFilteredOut = planSelectionHiddenByFilter(inventoryRows, filteredInventoryRows, selectedInventoryRowId);
+  // 选中被筛掉时自动退回全量筛选（只做一次，避免每次渲染都重置用户刚选的筛选）。
+  const invFilterResetRef = useRef('');
+  useEffect(() => {
+    if (!selectedRowFilteredOut || !selectedInventoryRow) return;
+    const key = `${selectedInventoryRow.id}|${invKind}|${invZoneActive}|${invIssuesOnly}`;
+    if (invFilterResetRef.current === key) return;
+    invFilterResetRef.current = key;
+    setInvKind('all');
+    setInvZone(undefined);
+    setInvIssuesOnly(false);
+    setInfoMessage(`选中的「${selectedInventoryRow.name}」不在当前清单筛选里，已切回全部类型。`);
+  }, [selectedRowFilteredOut, selectedInventoryRow, invKind, invZoneActive, invIssuesOnly]);
   // 件数口径与筛选一致：受当前类型 / 只看问题约束，只算能归属的类型（设施 / 人员）。
   const invZoneCounts = (() => {
     const counts = new Map<string, number>();
@@ -10889,6 +10995,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   })();
   const legendGroups = buildPlanLegend(levelView);
   const mapLegendEntries = legendEntriesForMap(legendGroups, levelView.boundary.length);
+  // 2026-11-20 审计 F11：扫描/户型家具的虚线框看着像可编辑物件，点了却没反应。
+  // 不改它的只读语义（不是 plan 实体），只把「只读」写进图例，让用户先知道。
+  const sceneObjectLegend = sceneObjects && sceneObjects.length > 0
+    ? [{
+        icon: 'shapes' as const,
+        swatch: '#8a93a0',
+        label: '场景物件（只读）',
+        count: sceneObjects.length,
+        detail: '',
+      }]
+    : [];
+  const mapLegendEntriesWithScene = [...mapLegendEntries, ...sceneObjectLegend];
   const hasClosedBoundary = levelView.boundary.length >= 3;
   const listBlank = inventoryRows.length === 0
     && !invIssuesOnly
@@ -13616,7 +13734,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               </div>
             )}
             <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {filteredInventoryRows.slice(0, PLAN_INFO_LIST_LIMIT).map(row => {
+              {visibleInventoryRows.map(row => {
                 const selected = inventoryRowSelected(row);
                 return (
                   <li key={`${row.kind}-${row.id}`} data-inventory-id={row.id} data-testid="inventory-row">
@@ -13631,8 +13749,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 );
               })}
             </ul>
-            {filteredInventoryRows.length > PLAN_INFO_LIST_LIMIT && (
-              <div style={{ opacity: 0.7 }}>其余 {filteredInventoryRows.length - PLAN_INFO_LIST_LIMIT} 行从略，可用筛选缩小范围。</div>
+            {filteredInventoryRows.length > visibleInventoryRows.length && (
+              <div style={{ opacity: 0.7 }}>
+                其余 {filteredInventoryRows.length - visibleInventoryRows.length} 行从略，可用筛选缩小范围。
+              </div>
             )}
             <div role="status" aria-live="polite" style={{ marginTop: PLANNING_SPACING.sm, minHeight: 16, color: infoMessage ? PLANNING_SURFACE.warnText : 'transparent' }}>
               {infoMessage ?? '·'}
@@ -13641,7 +13761,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         )}
       </div>
       </PanelPortal>}
-      <MapLegendCapsule entries={mapLegendEntries} />
+      <MapLegendCapsule entries={mapLegendEntriesWithScene} />
 
       <PanelPortal host={layerPanelHost}>
       <div style={panelStyle} onMouseDown={stopPanelMouse} onMouseUp={stopPanelMouse} onDoubleClick={stopPanelMouse} onWheel={stopPanelWheel}>

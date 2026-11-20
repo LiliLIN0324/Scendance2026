@@ -259,3 +259,40 @@ export function filterPlanInventory(rows: readonly PlanInventoryRow[], filter: P
     return true;
   });
 }
+
+/**
+ * 2026-11-20 审计 F3：清单只显示前 N 行，而选中行可能排在第 41 行之后——
+ * 以前就静静不滚、也不显示，用户以为「定位没反应」。这里把窗口放宽到「包含选中行」。
+ */
+export interface PlanInventoryWindow {
+  /** 实际要渲染的行（已含选中行，长度可能超过 limit）。 */
+  rows: PlanInventoryRow[];
+  /** 因超限被省略的行数。 */
+  hidden: number;
+}
+
+export function planInventoryWindow(
+  filtered: readonly PlanInventoryRow[],
+  selectedId: string | null,
+  limit: number,
+): PlanInventoryWindow {
+  const safeLimit = Math.max(0, Math.floor(limit));
+  const head = filtered.slice(0, safeLimit);
+  const index = selectedId ? filtered.findIndex(row => row.id === selectedId) : -1;
+  const rows = index >= safeLimit ? filtered.slice(0, index + 1) : head;
+  return { rows: [...rows], hidden: Math.max(0, filtered.length - rows.length) };
+}
+
+/**
+ * 选中对象在清单里是否被当前筛选挡住了（F3）：被挡住时画布要退回全量筛选，
+ * 否则「画布上选中了，左侧清单里找不到」看起来像丢数据。
+ */
+export function planSelectionHiddenByFilter(
+  all: readonly PlanInventoryRow[],
+  filtered: readonly PlanInventoryRow[],
+  selectedId: string | null,
+): boolean {
+  if (!selectedId) return false;
+  if (!all.some(row => row.id === selectedId)) return false;
+  return !filtered.some(row => row.id === selectedId);
+}

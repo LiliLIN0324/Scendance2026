@@ -3,6 +3,8 @@ import {
   buildPlanInventory,
   filterPlanInventory,
   planInventoryKindLabel,
+  planInventoryWindow,
+  planSelectionHiddenByFilter,
   type PlanInventoryRow,
 } from './site-plan-inventory';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -319,5 +321,46 @@ describe('planInventoryKindLabel', () => {
     // 2026-11-16 #122：车辆是独立类型行。
     expect(planInventoryKindLabel('vehicle')).toBe('车辆');
     expect(planInventoryKindLabel('measurement')).toBe('测量');
+  });
+});
+
+// 2026-11-20 审计 F3：选中行在 40 行之后或筛选之外时，清单不能静静不显示。
+describe('planInventoryWindow / planSelectionHiddenByFilter（F3 选中行可见）', () => {
+  const row = (id: string, kind: PlanInventoryRow['kind'] = 'facility'): PlanInventoryRow => ({
+    id,
+    kind,
+    name: id,
+    typeLabel: '',
+    zoneName: null,
+    zoneId: null,
+    metric: '',
+    anchor: { x: 0, y: 0 },
+    hasIssue: false,
+  });
+  const rows = Array.from({ length: 45 }, (_, index) => row(`f${index + 1}`));
+
+  it('选中行在限制内：只给前 limit 行', () => {
+    const window = planInventoryWindow(rows, 'f3', 40);
+    expect(window.rows).toHaveLength(40);
+    expect(window.hidden).toBe(5);
+  });
+
+  it('选中行在第 41 行之后：窗口延到它，且不被截掉', () => {
+    const window = planInventoryWindow(rows, 'f42', 40);
+    expect(window.rows).toHaveLength(42);
+    expect(window.rows.at(-1)!.id).toBe('f42');
+    expect(window.hidden).toBe(3);
+  });
+
+  it('没有选中时就是普通分页', () => {
+    expect(planInventoryWindow(rows, null, 40).rows).toHaveLength(40);
+  });
+
+  it('选中被筛选挡住时能识别（画布据此退回全量筛选）', () => {
+    const filtered = rows.filter(item => item.id !== 'f5');
+    expect(planSelectionHiddenByFilter(rows, filtered, 'f5')).toBe(true);
+    expect(planSelectionHiddenByFilter(rows, filtered, 'f6')).toBe(false);
+    expect(planSelectionHiddenByFilter(rows, filtered, 'gone')).toBe(false);
+    expect(planSelectionHiddenByFilter(rows, filtered, null)).toBe(false);
   });
 });
