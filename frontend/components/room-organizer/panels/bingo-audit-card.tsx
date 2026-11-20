@@ -261,7 +261,8 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
     ),
   }));
   const feedbackRows = plansWithFeedback.flatMap(({ feedback }) => feedback.pins);
-  const pinCount = plansWithFeedback.reduce((sum, entry) => sum + entry.feedback.pinCount, 0);
+  // 顶层「对方的修改」只列待处理钉；已处理钉在方案展开详情里回看，计数与状态行口径一致。
+  const openFeedbackRows = feedbackRows.filter(pin => pin.pinStatus !== 'resolved');
   const openPinCount = plansWithFeedback.reduce((sum, entry) => sum + countOpenFeedbackPins(entry.feedback), 0);
   // 系统问题只算能落到这张图上、且还没收尾的；被拒件也是我要处理的事。
   const todoCount = issues.length + refusedList.length;
@@ -272,7 +273,7 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   const layers = settledLayers(settled);
   const issueGroups = reviewIssueGroups(issues);
   const reviewHref = usableReviewHref(snapshot.plans);
-  const shownFeedback = feedbackRows.slice(0, REVIEW_ROW_PREVIEW);
+  const shownFeedback = openFeedbackRows.slice(0, REVIEW_ROW_PREVIEW);
   const copyReviewLink = () => {
     if (!reviewHref) return;
     void navigator.clipboard.writeText(new URL(reviewHref, window.location.origin).toString()).then(() => {
@@ -390,9 +391,9 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
       onToggle={() => setFeedbackOpen(value => !value)}
       mark={<MessageSquare size={14} aria-hidden="true"/>}
       title="对方的修改"
-      count={pinCount}
+      count={openPinCount}
     >
-      {pinCount === 0
+      {openPinCount === 0
         ? <p className="ap-review-empty"><MessageSquare size={14} aria-hidden="true"/>还没有对方的修改</p>
         : <>
           {shownFeedback.map(pin => {
@@ -405,7 +406,7 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
               </button>
               : <div key={pin.id} className="ap-review-row">{mark}<span className="ap-review-title">{title}</span></div>;
           })}
-          {feedbackRows.length > shownFeedback.length && <p className="ap-review-more">还有 {feedbackRows.length - shownFeedback.length} 处，点开一条飞到地图</p>}
+          {openFeedbackRows.length > shownFeedback.length && <p className="ap-review-more">还有 {openFeedbackRows.length - shownFeedback.length} 处，点开一条飞到地图</p>}
         </>}
     </ReviewGroup>
 
