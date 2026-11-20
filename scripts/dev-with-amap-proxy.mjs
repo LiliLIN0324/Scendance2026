@@ -7,8 +7,13 @@
 //    退出后重新探活，若已有实例接管就按「复用」处理，而不是报警；
 //  - 自己拉起的代理意外退出时自动重启（有限次数），避免 dev 跑着跑着地图断掉；
 //  - dev 退出时不杀代理：它是共享单例，留给下次 dev 复用，也避免别的 dev 掉线。
+//
+// 端口：dev 固定跑 3000（云端服务的允许来源只放行这个本机地址）。
+// next dev 在 3000 被占用时会自己顺延到 3001，页面照常打开、跨域请求全被拒，
+// 页面只显示 "Failed to fetch"。这里显式钉住端口并把占用说清楚，不偷偷换端口。
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -18,6 +23,8 @@ const nextBin = fileURLToPath(new URL('../frontend/node_modules/next/dist/bin/ne
 const proxyHealth = 'http://127.0.0.1:3199/health';
 const START_ATTEMPTS = 3;
 const RESTART_ATTEMPTS = 5;
+/** 本机 dev 的固定端口：与云端服务的允许来源一致，见文件末尾的端口说明。 */
+const DEFAULT_PORT = 3000;
 
 let proxyChild = null;
 let restarting = false;
@@ -34,6 +41,42 @@ async function proxyUp() {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 命令行里显式指定的端口（-p / --port / --port=）；没有就返回 null。 */
+function requestedPort(args) {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    let value = null;
+    if (arg === '-p' || arg === '--port') value = Number(args[i + 1]);
+    else if (arg.startsWith('--port=')) value = Number(arg.slice('--port='.length));
+    if (Number.isInteger(value) && value > 0) return value;
+  }
+  return null;
+}
+
+/**
+ * 端口是否还空着；已被占用返回 false。
+ * 绑定方式与 next dev 一致（不指定 host）。Windows 上绑具体地址（如 127.0.0.1）
+ * 探不出占用——同一个端口可以被另一个进程用 :: 绑着，所以这里按 next 的方式绑。
+ */
+function portFree(port) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port);
+  });
+}
+
+/** 端口上已经有服务在应答（另一个 dev 跑着时，next 会自己顺延到下一个端口）。 */
+async function portAnswering(port) {
+  try {
+    await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(1500) });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** 等到 3199 能响应 /health，或子进程已退出。返回 'up' | 'exited' | 'timeout'。 */
 async function waitForProxy(child) {
@@ -133,5 +176,25 @@ if (!existsSync(nextBin)) {
 }
 
 const args = ['dev', ...process.argv.slice(2)];
+
+// 云端服务（scene-api）的允许来源是一份固定名单：本机只放行 3000，线上放行两个正式域名。
+// next dev 在 3000 被占用时会自己顺延到 3001——页面照常打开，浏览器里所有跨域请求却在预检
+// 阶段被拒，fetch 直接抛 "Failed to fetch"，页面上只剩一句看不懂的报错，还查不到根因。
+// 这里显式钉住端口：默认 3000；被占用就直说，不再偷偷换端口。
+const userArgs = process.argv.slice(2);
+const explicitPort = requestedPort(userArgs);
+const port = explicitPort ?? DEFAULT_PORT;
+if (!(await portFree(port)) || (await portAnswering(port))) {
+  console.error(`[dev] 端口 ${port} 已被占用。`);
+  console.error('[dev] 云端服务只放行 http://localhost:3000 与 http://127.0.0.1:3000；');
+  console.error('[dev] 换到别的端口，页面里的云端功能（案例/归档/分享/项目列表）都会因跨域被拒而失败。');
+  console.error(`[dev] 请先停掉占用 ${port} 的旧 dev，或显式 --port <端口> 另起（此时云端功能不可用）。`);
+  process.exit(1);
+}
+if (port !== DEFAULT_PORT) {
+  console.warn(`[dev] 本次用 ${port} 端口：云端服务只放行 3000，案例/归档/分享等云端功能会因跨域被拒而失败。`);
+}
+if (explicitPort === null) args.push('-p', String(port));
+console.log(`[dev] 前端地址 http://localhost:${port}`);
 devChild = spawn(process.execPath, [nextBin, ...args], { cwd: frontend, stdio: 'inherit' });
 devChild.on('exit', (code) => shutdown(code ?? 0));

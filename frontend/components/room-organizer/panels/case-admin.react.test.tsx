@@ -64,6 +64,18 @@ describe('CaseAdminSection', () => {
     expect(screen.queryByTestId('case-save-draft')).toBeNull();
   });
 
+  it('权限探测连不上时给出可操作的中文，不把 "Failed to fetch" 甩给用户', async () => {
+    const session = adminSession();
+    (session.getCloudCapabilities as ReturnType<typeof vi.fn>).mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<CaseAdminSection session={session} controller={controllerStub()} layoutName="菊花展" />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('案例管理权限没有确认');
+    expect(alert.textContent).toContain('没能连上云端服务');
+    expect(alert.textContent).not.toContain('Failed to fetch');
+    expect(screen.getByTestId('case-admin-error-hint').textContent).toContain('localhost:3000');
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
+  });
+
   it('管理员进入后拉草稿并预填当前项目关联案例', async () => {
     const session = adminSession();
     render(<CaseAdminSection session={session} controller={controllerStub()} layoutName="菊花展"/>);

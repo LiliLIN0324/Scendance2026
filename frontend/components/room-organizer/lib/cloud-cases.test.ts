@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SceneApiError } from '../../../../client/scene-client';
 import {
   cloudCaseOutdoorPlan,
   detectCloudCaseSession,
   ensureCloudCaseCopyRecord,
+  fetchCloudCapabilities,
   listCloudCases,
   readCloudCase,
   suggestCloudCaseStableId,
@@ -252,5 +254,37 @@ describe('使用此案例端到端（2026-11-20 集成回归：A 实际响应形
     const result = await listCloudCases(session);
     expect(result.ok).toBe(true);
     expect(result.ok && result.value[0]?.revision).toBe(4);
+  });
+});
+
+describe('fetchCloudCapabilities（权限探测的错误口径）', () => {
+  it('浏览器连不上时给出可操作的中文，不把 "Failed to fetch" 甩给用户', async () => {
+    const session = fakeSession();
+    (session.getCloudCapabilities as ReturnType<typeof vi.fn>).mockRejectedValue(new TypeError('Failed to fetch'));
+    const result = await fetchCloudCapabilities(session);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('unreachable');
+    expect(result.error.message).toContain('没能连上云端服务');
+    expect(result.error.hint).toContain('localhost:3000');
+    expect(JSON.stringify(result.error)).not.toContain('Failed to fetch');
+  });
+
+  it('服务端明确拒绝时按状态码分类', async () => {
+    const session = fakeSession();
+    (session.getCloudCapabilities as ReturnType<typeof vi.fn>).mockRejectedValue(new SceneApiError('PLATFORM_ADMIN_REQUIRED', 403, null));
+    const result = await fetchCloudCapabilities(session);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('forbidden');
+  });
+
+  it('契约不符仍然是 invalid，不混进传输层结论', async () => {
+    const session = fakeSession();
+    (session.getCloudCapabilities as ReturnType<typeof vi.fn>).mockResolvedValue({ version: 'one' });
+    const result = await fetchCloudCapabilities(session);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('invalid');
   });
 });
