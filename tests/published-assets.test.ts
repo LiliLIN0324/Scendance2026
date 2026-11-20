@@ -72,7 +72,8 @@ describe('published assets reach every registered user', { timeout: 60_000 }, ()
     // 撤下之后立刻不再可见、也不再可用。
     await f.rpc(owner, 'assets.publish', { assetId: glbId });
     expect((await listAssets(peer)).some(entry => entry.id === glbId)).toBe(true);
-    expect(await f.rpc(owner, 'assets.unpublish', { assetId: glbId })).toMatchObject({ assetId: glbId, published: true });
+    // 迁移 20261119160000 起撤下如实返回 published:false（旧行为「撤下仍报 true」是在说谎）。
+    expect(await f.rpc(owner, 'assets.unpublish', { assetId: glbId })).toMatchObject({ assetId: glbId, published: false, publishedAt: null });
     expect((await listAssets(peer)).some(entry => entry.id === glbId)).toBe(false);
     await expect(f.rpc(peer, 'assets.get', { assetId: glbId })).rejects.toMatchObject({ code: 'ASSET_NOT_FOUND' });
   });
