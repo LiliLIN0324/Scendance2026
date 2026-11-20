@@ -11,6 +11,12 @@ import '../share.css';
 const ScenePreview = dynamic(() => import('@/components/business/scene-preview').then(module => module.ScenePreview), { ssr: false, loading: () => <p>正在准备三维预览…</p> });
 const LayoutPreview = dynamic(() => import('@/components/business/layout-preview').then(module => module.LayoutPreview), { ssr: false, loading: () => <p>正在准备三维预览…</p> });
 
+/** 归档资源类别人话标签；未知类别按原文展示，不编造。 */
+const ASSET_KIND_LABEL: Record<string, string> = { model: '模型', scan: '实景扫描', floorplan: '图纸', photo: '照片', attachment: '附件' };
+function shareAssetKindLabel(kind: string): string {
+  return ASSET_KIND_LABEL[kind] ?? kind;
+}
+
 export default function SharedViewPage(): JSX.Element {
   const [snapshot, setSnapshot] = useState<SharedSnapshot | null>(null);
   const [complete, setComplete] = useState<CompleteShareSnapshot | null>(null);
@@ -78,6 +84,17 @@ export default function SharedViewPage(): JSX.Element {
   const completeAssetUrls = useMemo(() => Object.fromEntries(complete?.assets.map(asset => [asset.id, asset.url]) ?? []), [complete]);
   const completeAssetNames = useMemo(() => Object.fromEntries(complete?.assets.map(asset => [asset.id, asset.name]) ?? []), [complete]);
   const completeOutdoor = useMemo(() => complete?.manifest.outdoor ? sitePlanDataSchema.safeParse(complete.manifest.outdoor) : null, [complete]);
+  // PUB-11（发布摘要与客户页实际呈现对齐）：逐类清点三维物件、户外规划与资源文件。
+  // 归档资源存在不等于已在 3D 里还原：本页只渲染 GLB 模型，扫描/图纸/附件只提供文件下载。
+  const completeModelObjects = useMemo(() => complete?.manifest.scene.objects.filter(object => object.materialId === 'asset') ?? [], [complete]);
+  const completeMissingModels = useMemo(() => complete
+    ? completeModelObjects.filter(object => !object.assetId || !complete.assets.some(asset => asset.id === object.assetId)).length
+    : 0, [complete, completeModelObjects]);
+  const completeKindCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const asset of complete?.assets ?? []) counts.set(asset.kind, (counts.get(asset.kind) ?? 0) + 1);
+    return counts;
+  }, [complete]);
 
   return <main className="sc-share-page">
     <header className="sc-share-masthead"><span>幕景 <small className="sc-brand-en">Scendance</small></span><span>{localSnapshot ? '只读 3D 方案' : complete ? '完整方案只读' : '客户只读方案'}</span></header>
@@ -87,6 +104,7 @@ export default function SharedViewPage(): JSX.Element {
           <p>只读 · 不可编辑 · {localSnapshot.scene.objects} 件物件</p>
           <h1>{localSnapshot.name}</h1>
           <p>{new Date(localSnapshot.createdAt).toLocaleString('zh-CN')} · {localSnapshot.scene.width} × {localSnapshot.scene.depth} 米</p>
+          <p>此页包含：三维布置与公开模型；资料原件与扫描文件不随此链接公开。</p>
         </div>
       </div>
       <LayoutPreview layout={localSnapshot.layout} assetUrls={localAssetUrls} name={localSnapshot.name} initialView={localSnapshot.camera === 'top' || localSnapshot.camera === 'front' ? localSnapshot.camera : 'iso'}/>
@@ -95,6 +113,17 @@ export default function SharedViewPage(): JSX.Element {
       <div className="sc-share-title"><div><p>完整方案 · 只读 · 版本 {complete.revision}</p><h1>{complete.case?.title ?? '完整方案分享'}</h1><p>{complete.manifest.scene.venue.width} × {complete.manifest.scene.venue.depth} 米 · 含 {complete.assets.length} 项已归档资源</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>
       {expired && <p className="sc-share-notice" role="status">资源授权已到期；已载入的模型仍可查看。重新加载模型前，请刷新资源以检查链接状态。</p>}
       <ScenePreview scene={complete.manifest.scene} assetUrls={completeAssetUrls} assetNames={completeAssetNames} />
+      <section className="sc-share-resources" data-testid="share-scope" aria-labelledby="sc-share-scope-title">
+        <h2 id="sc-share-scope-title">对外可见内容</h2>
+        <ul>
+          <li>三维布置 · {complete.manifest.scene.objects.length} 件物件（{complete.manifest.scene.objects.length - completeModelObjects.length} 件内置道具、{completeModelObjects.length} 件外部模型）；场地 {complete.manifest.scene.venue.width} × {complete.manifest.scene.venue.depth} 米。</li>
+          {completeOutdoor?.success && <li>户外规划 · {completeOutdoor.data.zones.length} 个分区 · {completeOutdoor.data.routes.length} 条路线 · {completeOutdoor.data.facilities.length} 件设施（只读 2D 示意，不进入三维画面）。</li>}
+          {completeKindCounts.size > 0 && <li>资源文件 · {[...completeKindCounts.entries()].map(([kind, count]) => `${shareAssetKindLabel(kind)} ${count}`).join('、')}（下方列表可下载）。</li>}
+          {completeKindCounts.has('scan') && <li>实景扫描文件以资源形式提供下载；本页三维画面不渲染扫描背景，布置为示意呈现。</li>}
+          {completeMissingModels > 0 && <li>有 {completeMissingModels} 件外部模型没有随本版发布，三维画面中以线框占位显示。</li>}
+          <li>发布者的原始资料原件不在对外范围。</li>
+        </ul>
+      </section>
       {completeOutdoor && <section className="sc-share-outdoor" aria-labelledby="sc-share-outdoor-title">
         <h2 id="sc-share-outdoor-title">户外规划</h2>
         {completeOutdoor.success ? <>
@@ -102,10 +131,10 @@ export default function SharedViewPage(): JSX.Element {
           <details><summary>分区与设施清单</summary><ul>{completeOutdoor.data.zones.map(zone => <li key={zone.id}>{zone.name}</li>)}{completeOutdoor.data.facilities.map(facility => <li key={facility.id}>{facility.name} · {facility.size.width} × {facility.size.depth} 米</li>)}</ul></details>
         </> : <p role="alert">户外规划数据格式暂不支持，无法绘制平面图。</p>}
       </section>}
-      {complete.assets.length > 0 && <section className="sc-share-resources" aria-labelledby="sc-share-resources-title"><h2 id="sc-share-resources-title">已归档资源</h2><ul>{complete.assets.map(asset => <li key={asset.id}>{expired ? <span>{asset.name}</span> : <a href={asset.url} target="_blank" rel="noopener noreferrer">{asset.name}</a>} · {asset.format.toUpperCase()}</li>)}</ul>{expired && <p>资源授权已到期，请先刷新模型资源。</p>}</section>}
+      {complete.assets.length > 0 && <section className="sc-share-resources" aria-labelledby="sc-share-resources-title"><h2 id="sc-share-resources-title">已归档资源</h2><ul>{complete.assets.map(asset => <li key={asset.id}>{expired ? <span>{asset.name}</span> : <a href={asset.url} target="_blank" rel="noopener noreferrer">{asset.name}</a>} · {asset.format.toUpperCase()} · {shareAssetKindLabel(asset.kind)}</li>)}</ul>{expired && <p>资源授权已到期，请先刷新模型资源。</p>}</section>}
       <p className="sc-share-footnote">受控完整分享：发布者撤销后，新访问将被拒绝；已打开或已下载的副本无法收回。页面只读、不可编辑。模型为布置效果参考，实物规格以最终确认为准。</p>
     </> : snapshot && <>
-      <div className="sc-share-title"><div><p>已发布 · 版本 {snapshot.revision}</p><h1>{snapshot.name}</h1><p>{new Date(snapshot.createdAt).toLocaleString('zh-CN')} · {snapshot.scene.venue.width} × {snapshot.scene.venue.depth} 米</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>
+      <div className="sc-share-title"><div><p>已发布 · 版本 {snapshot.revision}</p><h1>{snapshot.name}</h1><p>{new Date(snapshot.createdAt).toLocaleString('zh-CN')} · {snapshot.scene.venue.width} × {snapshot.scene.venue.depth} 米</p><p>此页包含：三维布置、物料清单与模型来源说明；资料原件与扫描文件不随普通发布公开。</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>
       {expired && <p className="sc-share-notice" role="status">资源授权已到期；已载入的模型仍可查看。重新加载模型前，请刷新资源以检查链接状态。</p>}
       <ScenePreview scene={snapshot.scene} assetUrls={assetUrls} assetNames={assetNames} />
       <section className="sc-share-materials" aria-labelledby="sc-share-materials-title">

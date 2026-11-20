@@ -175,9 +175,32 @@ Invariant: Expected clientReferenceManifest to be defined. This is a bug in Next
 
 | 批次 | 状态 | 证据／未覆盖项 |
 | --- | --- | --- |
-| 前置 | 待执行 | 本轮本地工作台遇到 clientReferenceManifest 运行时错误 |
-| P0-A | 待执行 | 风险代码已定位，实际错误结果待复现 |
-| P0-B | 待执行 | 预检与恢复入口待实施 |
-| P1-A | 待执行 | 新版发布与统一管理待实施 |
-| P1-B | 待执行 | 复用已有匿名分享证据，新增交互与内容一致性仍待验 |
-| P2 | 待执行 | 评审与导出专项待验 |
+| 前置 | 部分完成 | 2026-11-20 复核：`npx tsc --noEmit` 0 错；`npm --prefix frontend run build` exit 0（20 条路由 + oneplan 产物 0 违规）；`npx eslint` 发布链 6 个文件 0 errors（49 条既有 import-order/hook 风格 warning）。本轮未再复现 §1.1 的 clientReferenceManifest 运行时错误，但也没有做真实浏览器发布走查。 |
+| P0-A | 代码完成，待真实浏览器复查 | 项目/会话/账号/版本上下文在 `publishVersion`、`ensurePublishedArchive`、分享卡四个异步动作入口捕获并在每个等待点后核对；切项目清空链接、二维码、通知、完整分享卡与任务态；完整分享重试复用同一 `requestId`。证据：`room-organizer-publish.react.test.tsx` 4 例、`share-menu.react.test.tsx` P0-A 段、`complete-archive.test.ts`。未覆盖：V07/V08 的真实浏览器切项目、真机迟到响应。 |
+| P0-B | 代码完成，恢复入口部分接通 | 打开发布页跑预检（`evaluatePublishBlockers`），阻塞项逐条列出；摘要按场地/楼层/物件/依赖/户外/缺口分类呈现。恢复动作只接真实入口：登录走账户中心登录卡、归档走账户中心「归档」页；保存、编辑权、版本冲突没有现成一键入口，界面只说明原因、不放必失败按钮（PUB-03 部分覆盖）。证据：`share-menu.react.test.tsx`「P0-B 预检呈现」3 例 + `share-panel.react.test.tsx` 预检状态 20 例。 |
+| P1-A | 代码完成，待真实云端复查 | 已发布页显示版本/时间/是否有新修改，可发布新版；发布记录以服务端 `GET /projects/:id/shares` 为权威并与本机记录合并；令牌丢失如实说明、不伪造恢复。未覆盖：V10/V12 的真实云端首发→新版→换设备管理链。 |
+| P1-B | 部分完成 | 客户页新增「对外可见内容」摘要（物件/内置道具/外部模型分类、户外规划、资源类别、缺模型提示），普通与完整页各自写明不含哪些原件；发布页补「打开」「完整地址」「发布记录」与页签方向键导航、焦点进入/返回。未覆盖：V13/V19 的真机窄屏与键盘实测，V11 的真实剪贴板拒绝。 |
+| P2 | 未实施 | 评审开关生效规则、Bingo 进入/送出语义、导出范围与结果反馈本轮未动。 |
+
+### 8.1 本轮验收（2026-11-20，集成复核）
+
+复核对象为工作树里未提交的发布链改动。命令与原始结果：
+
+```text
+npm --prefix frontend run typecheck            → tsc --noEmit，无输出（0 错）
+npm --prefix frontend run build                → exit 0，20 条路由 prerender；check-oneplan-artifacts 违规 0 条
+npx vitest run share-menu / share-panel / room-organizer-publish / publish-flow / complete-archive / view-page / share-api
+                                              → Test Files 7 passed (7)，Tests 103 passed (103)
+npx eslint（发布链 6 个文件）                  → 0 errors，49 warnings
+```
+
+复核中发现并已修掉的实现缺口：
+
+1. 预检的 `checking` 态从未被写入，面板那句「正在检查保存状态与资源归档…」不可达；且预检异常/提前退出时会把面板永久卡在检查中、主按钮再也拿不回来。现改为：已有结果的重查先进检查中，首次打开保持旧版渲染；加运行序号与 `finally` 收口，任何提前退出都落成可重查的阻塞项。
+2. 发布摘要（`summary` / `visibilityLine`）从未被宿主计算，`PublishSummary` 永不渲染，PUB-11 在发布侧等于没做。现由 `publishSummaryOf` 依闸门清单与画布逐类生成。
+3. 所有阻塞项的恢复动作都落到 `onOpenMaterials`（「去登录」会打开物料库）。现按宿主声明的 `precheckActions` 只给真实接得上的动作，其余只说明。
+4. 发布超时的「结果待确认」分支因为 `publishVersion` 把所有异常压成纯文案而不可达。现按错误类型标记 `publishAmbiguous`（服务端明确拒绝或回包格式错误不算），分享卡据此核对分享记录而不是直接判失败。
+5. `CloudPanel` 的 `openRequest.section` 不认 `archive`，归档恢复入口只能落到「所有方案」。现补 `archive` 分支。
+
+仍未验证：真实浏览器与真实云端的发布、上传、撤回、跨设备记录（本轮无授权环境与画面证据），以及下列未覆盖项逐条在 §8 表内标注。
+

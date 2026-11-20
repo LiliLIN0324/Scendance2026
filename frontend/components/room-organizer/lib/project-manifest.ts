@@ -152,6 +152,12 @@ export interface PublishGateSnapshot {
   note: string;
   /** 未解决的版本冲突（2026-11-20 集成补充）：冲突未消不解发布。 */
   conflict: { remoteRevision: number; remoteName?: string } | null;
+  /**
+   * 清单构建时对应的保存版本（2026-11-20 P0-A 接口要求，room-organizer 提供）：
+   * provider 读画布与清单时记下当前 revision；发布链用它与落库版本核对，
+   * 避免「清单是 A 版、落库/发布是 B 版」。未提供时由服务端 CAS 兼底。
+   */
+  capturedRevision?: number | null;
 }
 
 export type PublishGateProvider = () => Promise<PublishGateSnapshot>;
@@ -166,6 +172,7 @@ const unavailableSnapshot: PublishGateSnapshot = {
   readyForPublish: false,
   note: '完整归档状态未接入，不能声称可发布。',
   conflict: null,
+  capturedRevision: null,
 };
 
 let publishGateProvider: PublishGateProvider | null = null;

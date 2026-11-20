@@ -84,4 +84,76 @@ describe('ensurePublishedArchive', () => {
     const outcome = await ensurePublishedArchive(controller({ saveCompleteProject: save }), gate());
     expect(outcome).toMatchObject({ ok: false, error: 'REVISION_CONFLICT' });
   });
+
+  // ---- P0-A（主计划 §4 实现约束 1/2，2026-11-20）：项目/会话/版本一致性 ----
+
+  it('P0-A：ok 时返回绑定的项目与版本，调用方不得另读快照取项目', async () => {
+    const outcome = await ensurePublishedArchive(controller(), gate());
+    expect(outcome).toMatchObject({ ok: true, projectId: 'p1', revision: 5 });
+  });
+
+  it('P0-A：闸门清单对应别的云项目时拒绝落库', async () => {
+    const save = vi.fn(async () => ({}));
+    const outcome = await ensurePublishedArchive(controller({ saveCompleteProject: save }), gate({ projectId: 'p2', scopeId: 'p2' }));
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('不是当前云项目');
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('P0-A：有未保存改动时不落 published 清单', async () => {
+    const save = vi.fn(async () => ({}));
+    const dirty = controller({
+      getSnapshot: () => ({
+        configured: true, sessionId: 's1', revision: 5, dirty: true,
+        project: { id: 'p1', name: '项目' },
+        lease: { projectId: 'p1', sessionId: 's1', generation: 2, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 5 },
+      }),
+      saveCompleteProject: save,
+    });
+    const outcome = await ensurePublishedArchive(dirty, gate());
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('没保存');
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('P0-A：闸门 capturedRevision 与落库版本不一致时 fail-closed', async () => {
+    const save = vi.fn(async () => ({}));
+    const outcome = await ensurePublishedArchive(controller({ saveCompleteProject: save }), gate({ capturedRevision: 4 }));
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('v4');
+    expect(outcome.error).toContain('v5');
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('P0-A：归档期间切项目或换账号时清单不再使用', async () => {
+    let phase = 0;
+    const snap = () => phase === 0
+      ? { configured: true, sessionId: 's1', userId: 'u1', revision: 5, project: { id: 'p1', name: '项目' }, lease: { projectId: 'p1', sessionId: 's1', generation: 2, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 5 } }
+      : { configured: true, sessionId: 's1', userId: 'u1', revision: 5, project: { id: 'p2', name: '另一个项目' }, lease: { projectId: 'p2', sessionId: 's1', generation: 2, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 5 } };
+    const switching = controller({
+      getSnapshot: snap,
+      saveCompleteProject: vi.fn(async () => { phase = 1; return {}; }),
+    });
+    const outcome = await ensurePublishedArchive(switching, gate({ projectId: 'p1' }));
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('已变化');
+    expect(outcome.projectId).toBeUndefined();
+  });
+
+  it('P0-A：归档期间又保存了新版本时拒绝使用旧清单', async () => {
+    let saved = false;
+    const snap = () => ({
+      configured: true, sessionId: 's1', revision: saved ? 6 : 5,
+      project: { id: 'p1', name: '项目' },
+      lease: { projectId: 'p1', sessionId: 's1', generation: 2, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 5 },
+    });
+    const raced = controller({
+      getSnapshot: snap,
+      saveCompleteProject: vi.fn(async () => { saved = true; return {}; }),
+    });
+    const outcome = await ensurePublishedArchive(raced, gate());
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('新版本');
+    expect(outcome.revision).toBeUndefined();
+  });
 });

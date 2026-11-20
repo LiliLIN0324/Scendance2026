@@ -78,4 +78,61 @@ describe('anonymous publication view', () => {
     expect(screen.getByText(/资源授权已到期/)).toBeTruthy();
     expect(readShare).toHaveBeenCalledTimes(1);
   });
+
+  it('states the page scope under the title instead of implying everything is public', async () => {
+    window.history.replaceState(null, '', `/view/#${token}`);
+    vi.mocked(readShare).mockResolvedValue(snapshot);
+    render(<SharedViewPage />);
+    await screen.findByText('已发布客户方案');
+    expect(screen.getByText(/此页包含：三维布置、物料清单与模型来源说明/).textContent).toContain('资料原件与扫描文件不随普通发布公开');
+  });
+});
+
+describe('complete share content honesty (PUB-11, 2026-11-20 P1-B)', () => {
+  const uuid = () => crypto.randomUUID();
+  const object = (extra: Record<string, unknown>) => ({
+    id: uuid(), materialId: 'table' as const, position: { x: 0, z: 0 }, rotation: 0,
+    size: { width: 1, depth: 0.6, height: 0.75 }, color: '#4a5568', locked: false, notes: '', ...extra,
+  });
+  const asset = (extra: Record<string, unknown>) => ({
+    id: uuid(), name: '资源', kind: 'attachment', format: 'pdf', byteSize: 16, sha256: 'b'.repeat(64),
+    integrity: 'full' as const, metadata: {}, url: 'https://storage.example/a', expiresIn: 300, ...extra,
+  });
+
+  it('itemizes what the customer actually gets, per category, with missing models flagged', async () => {
+    const publishedModelId = uuid();
+    const missingModelId = uuid();
+    window.history.replaceState(null, '', `/view/#c${token}`);
+    vi.mocked(readCompleteShare).mockResolvedValueOnce({
+      publicationId: snapshot.publicationId, revision: 6,
+      manifest: {
+        version: 1, dependencies: [],
+        scene: { schemaVersion: 1 as const, camera: 'overview' as const, lighting: 'neutral' as const,
+          venue: { shape: 'rectangle' as const, width: 30, depth: 20, height: 3, entrances: [] },
+          objects: [
+            object({}),
+            object({ materialId: 'asset', assetId: publishedModelId }),
+            object({ materialId: 'asset', assetId: missingModelId }),
+          ] },
+        outdoor: null,
+      },
+      assets: [
+        asset({ name: '场地扫描.spz', kind: 'scan', format: 'spz' }),
+        asset({ name: '执行资料.pdf', kind: 'attachment', format: 'pdf' }),
+        asset({ id: publishedModelId, name: '展台.glb', kind: 'model', format: 'glb' }),
+      ],
+    });
+    render(<SharedViewPage />);
+    await screen.findByRole('heading', { name: '对外可见内容' });
+    const scope = screen.getByTestId('share-scope').textContent;
+    expect(scope).toContain('三维布置 · 3 件物件（1 件内置道具、2 件外部模型）');
+    expect(scope).toContain('场地 30 × 20 米');
+    expect(scope).toContain('资源文件 · 实景扫描 1、附件 1、模型 1');
+    expect(scope).toContain('实景扫描文件以资源形式提供下载；本页三维画面不渲染扫描背景');
+    expect(scope).toContain('有 1 件外部模型没有随本版发布');
+    expect(scope).toContain('发布者的原始资料原件不在对外范围');
+    // 资源列表逐项带类别，扫描/附件不再冒充三维内容
+    expect(screen.getByRole('link', { name: '展台.glb' }).closest('li')?.textContent).toContain('GLB · 模型');
+    expect(screen.getByText('场地扫描.spz').closest('li')?.textContent).toContain('SPZ · 实景扫描');
+  });
 });

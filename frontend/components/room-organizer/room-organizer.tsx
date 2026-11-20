@@ -13,12 +13,12 @@ import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from './lib
 import { openGenerationSheet } from './lib/generation-sheet';
 import { getGenerationSheetState, subscribeGenerationSheet, closeGenerationSheet } from './lib/generation-sheet';
 import { GenerationSheetHost } from './panels/generation-sheet';
-import { createBackendSession, type BackendSession } from '@/lib/backend-session';
+import { createBackendSession, SceneApiError, type BackendSession } from '@/lib/backend-session';
 import { hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, proveFreshActivityScopeUnused, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 import { createLocalActivityBackup, deleteLocalActivityData } from '@/lib/local-activities';
 import { parseLocalProjectBackupJson } from '@/lib/local-project-backup';
-import { publicationSchema, shareErrorMessage } from '@/lib/share-api';
+import { publicationSchema, shareErrorMessage, type Publication } from '@/lib/share-api';
 import { siteShareLink } from '@/lib/site-share';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
 import { buildGenerationReport } from '@/lib/generation-report';
@@ -594,7 +594,8 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [conversationCloseRequest, setConversationCloseRequest] = useState(0);
   // 左轨成员位与设置里的团队页读同一份成员。
   const team = useTeam(controller);
-  const [teamOpenRequest, setTeamOpenRequest] = useState<{ serial: number; section: string } | undefined>();
+  // 账户中心打开请求：队伍与归档共用这一条通道，后设的胜出（CloudPanel 的 openRequest）。
+  const [accountOpenRequest, setAccountOpenRequest] = useState<{ serial: number; section: string } | undefined>();
   // 左轨点头像，左栏整栏换成那个人的私信；再点同一颗收起。换成员或换团队时窗子跟着换/关。
   const [chatPeerId, setChatPeerId] = useState<string | null>(null);
   const personChat = !!chatPeerId && team.members.some(member => member.userId === chatPeerId);
@@ -1179,43 +1180,73 @@ useEffect(() => {
     return result;
   }, [issueReviewLink]);
   // 发布：把已保存的这一版冻成只读页，链接既是二维码内容也是复制出去的地址。
+  // PUB-06（2026-11-20 集成）：入口捕获本次发布的完整身份——活动会话、楼层、云端版本、
+  // 活动名与户外规划；每个等待点之后核对当前性，附属场地页一律从捕获值生成，
+  // 不再读发布之后的可变状态，保证「发布 + siteUrl」来自同一份快照。
   const publishVersion = useCallback(async () => {
+    const token = sessionToken, floor = floorToken, initial = layoutStore.getState();
+    if (!activitySession.isCurrent(token) || !floorSession.isCurrent(floor)) throw new Error('活动或楼层正在切换，请稍后再发布。');
     const snapshot = controller.getSnapshot();
     if (!snapshot.configured) throw new Error('发布服务还没连上。');
     if (!snapshot.user || snapshot.user.is_anonymous) throw new Error('登录后再发布。');
-    const projectId = snapshot.project?.id ?? layoutStore.getState().layout.id;
-    if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
+    // 未挂云项目时 layout.id 不是云端身份，不能拿去发发布请求（接口约定 §1.3）。
+    const projectId = snapshot.project?.id ?? null;
+    if (!projectId) throw new Error('这份方案还没挂到项目上，保存云项目后再发布。');
     if (snapshot.writeBlocked) throw new Error(SHARE_READ_ONLY_LINE);
     if (!Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再发布。');
     if (snapshot.dirty) {
-      const pendingLocal = [...localAssetIdsInLayout(layoutStore.getState().layout)]
+      const pendingLocal = [...localAssetIdsInLayout(initial.layout)]
         .filter(id => assetCloudStateOf(id).state !== 'uploaded');
       throw new Error(pendingLocal.length
         ? '画布里的本机模型还没上云，保存成功后才能发布；本机副本还在，网络恢复后重试保存即可。'
         : '还有改动没保存，保存后再发布。');
     }
+    const capturedRevision = snapshot.revision as number;
+    const capturedScope = initial.layout.id ?? 'local';
+    const capturedName = initial.layout.name?.trim() || snapshot.project?.name?.trim() || '未命名场地';
+    const capturedOutdoorPlan = outdoorFullPlanRef.current;
+    // 服务端 expectedRevision 是版本保护的最后一道；这里的活动性核对负责防「切项目后旧回执串台」。
+    const sameActivity = () => activitySession.isCurrent(token)
+      && floorSession.isCurrent(floor)
+      && (layoutStore.getState().layout.id ?? 'local') === capturedScope
+      && controller.getSnapshot().project?.id === projectId;
     // 2026-11-20 集成接通（主计划 §5.2）：发布前核对完整依赖清单——扫描/资料图/附件
     // 这几类不在既有 dirty 检查的覆盖里，未归档就发布会产出引用本机代理的公开版本。
     // 闸门未接通或核对失败按不可发布处理（fail-closed），缺口在报错里如实列出。
     const publishGate = await publishGateSnapshot();
+    if (!sameActivity()) throw new Error('活动已切换，请回到要发布的项目里重新发布。');
+    if (publishGate.scopeId && publishGate.scopeId !== capturedScope) throw new Error('活动已切换，请回到要发布的项目里重新发布。');
     const gateBlock = publishGateBlockReason(publishGate);
     if (gateBlock) throw new Error(gateBlock);
+    let publication: Publication;
     try {
-      const publication = publicationSchema.parse(await controller.businessRequest<unknown>(
-        `/projects/${encodeURIComponent(projectId)}/publish`, 'POST', { expectedRevision: snapshot.revision },
+      publication = publicationSchema.parse(await controller.businessRequest<unknown>(
+        `/projects/${encodeURIComponent(projectId)}/publish`, 'POST', { expectedRevision: capturedRevision },
       ));
-      // 同一版顺手拼一条只读场地页：客户点/扫到的是“地在哪、怎么划的”，不用登录。
-      // 云端发布照常走（版本记录、撤回都在那边）；场地页自带快照，缺锚点或超体积就退回 cloud 链接。
-      const siteUrl = await siteShareLink(
-        outdoorFullPlanRef.current,
-        layoutStore.getState().layout.name?.trim() || snapshot.project?.name?.trim() || '未命名场地',
-        `${window.location.origin}/site`,
-      );
-      return { url: publication.url, revision: publication.revision, ...(siteUrl ? { siteUrl } : {}) };
     } catch (error) {
-      throw new Error(shareErrorMessage(error));
+      // §3.2 结果待确认：只有服务端明确拒绝（SceneApiError）或回包格式确定不对（ZodError）才断言失败；
+      // 超时/断网没有回应时服务端可能已经建好发布，标记为结果未知交给分享卡核对记录（PUB-09/V09）。
+      const failure = new Error(shareErrorMessage(error)) as Error & { publishAmbiguous?: boolean };
+      failure.publishAmbiguous = !(error instanceof SceneApiError || (error instanceof Error && error.name === 'ZodError'));
+      throw failure;
     }
-  }, [controller]);
+    if (publication.revision !== capturedRevision) throw new Error('云端版本已变化，本次发布被拒绝；请核对最新版本后重新发布。');
+    // 同一版顺手拼一条只读场地页：客户点/扫到的是“地在哪、怎么划的”，不用登录。
+    // 云端发布照常走（版本记录、撤回都在那边）；场地页自带快照，缺锚点或超体积就退回 cloud 链接。
+    // 快照一致性：场地页取入口捕获的户外规划与活动名，与本次发布的版本同源。
+    const siteUrl = await siteShareLink(
+      capturedOutdoorPlan,
+      capturedName,
+      `${window.location.origin}/site`,
+    );
+    return {
+      url: publication.url,
+      revision: publication.revision,
+      ...(siteUrl ? { siteUrl } : {}),
+      // 供分享卡按项目绑定回执（接口约定 §1.2）：活动已切换时不把旧回执记进新项目。
+      isCurrent: sameActivity,
+    };
+  }, [controller, activitySession.isCurrent, sessionToken, floorSession.isCurrent, floorToken]);
   // 分享记录：版本 / 时间 / 撤回状态以服务端为准；链接 token 只在生成时返回一次，URL 由卡片记在本机日志里。
   const listProjectShares = useCallback(async (): Promise<ServerShare[]> => {
     const projectId = controller.getSnapshot().project?.id ?? layoutStore.getState().layout.id;
@@ -4855,6 +4886,13 @@ useEffect(() => {
     onGenerateShareLink: handleShareLink,
     onOpenMaterials: openMaterialsFromShare,
     onOpenChecklist: () => setChecklistOpen(true),
+    // P0-B（接口约定 §2）：预检阻塞项只接真实存在的入口——登录走账户中心登录卡，
+    // 归档走账户中心「归档」页。保存/编辑权/冲突没有现成一键入口，只在清单里说明，不放假按钮。
+    onPrecheckAction: action => {
+      if (action === 'login') { window.dispatchEvent(new Event('scendance:request-account-login')); return; }
+      if (action === 'archive-page') setAccountOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'archive' }));
+    },
+    precheckActions: ['login', 'archive-page'],
     // 2026-11-15 出图收编进分享面板：按当前视图抓帧下载 PNG，独立导出钮不再出镜。
     onExportImage: async () => {
       if (outdoor3dTakeover) return handleOutdoor3dExport();
@@ -5085,7 +5123,7 @@ useEffect(() => {
                     closeGenerationSheet();
                     setMessagesOpen(current => !current);
                   }}
-                  onOpenAccount={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'settings' }))}/>
+                  onOpenAccount={() => setAccountOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'settings' }))}/>
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => {
@@ -5093,13 +5131,13 @@ useEffect(() => {
               closeGenerationSheet();
               // 2026-11-16 用户指令：私信卡也浮在 3D 上，不再为开私信退回 2D。
               setChatPeerId(current => current === member.userId ? null : member.userId);
-            }} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
+            }} onOpenTeam={() => setAccountOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
             <div className="sc-mode-rail-foot">
               {/* 2026-11-11 用户指令：户外态不再显示草稿保存状态文字（保存仍自动进行）。 */}
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
               {/* 2026-11-13 用户指令：左轨底部「标注」开关移除；手动绘制入口收掉后，
                   绘制态只能由流程内部进入，Esc 仍是统一退出。 */}
-              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} onDeleteCurrentActivity={deleteCurrentActivity} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements, lengthPrecisionM: view.lengthPrecisionM ?? 0.01, snapToGrid: view.snapToGrid, snapToWall: view.snapToWall, snapToItems: view.snapToItems }} onPreferenceChange={updatePreference} onPlanSettingsChange={actions.setPlanSettings} {...(outdoorPlanState?.plan.quote ? { siteQuote: outdoorPlanState.plan.quote } : {})} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(teamOpenRequest ? { openRequest: teamOpenRequest } : {})} planContext={feedbackPlan} onCapturePlan={captureSharePreview} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
+              <CloudPanel sessionToken={sessionToken} isSessionCurrent={activitySession.isCurrent} onBeforeActivitySwitch={flushPendingBeforeSwitch} onDeleteCurrentActivity={deleteCurrentActivity} getCurrentLayout={()=>layoutStore.getState().layout} controller={controller} layout={layout} preferences={{ lengthUnit: view.lengthUnit, showMeasurements: view.showMeasurements, lengthPrecisionM: view.lengthPrecisionM ?? 0.01, snapToGrid: view.snapToGrid, snapToWall: view.snapToWall, snapToItems: view.snapToItems }} onPreferenceChange={updatePreference} onPlanSettingsChange={actions.setPlanSettings} {...(outdoorPlanState?.plan.quote ? { siteQuote: outdoorPlanState.plan.quote } : {})} draftNote={{ label: draftLabel, error: !!saveError, ...(draftTitle ? { title: draftTitle } : {}) }} onLoadLayout={onLoadLayout} onApplyLayout={onApplyCreative} {...(accountOpenRequest ? { openRequest: accountOpenRequest } : {})} planContext={feedbackPlan} onCapturePlan={captureSharePreview} onClose={()=>{if(conversationOpen&&window.innerWidth<=680)headerRef.current?.parentElement?.querySelector<HTMLButtonElement>('.cr-chat-header-actions button')?.focus();}}/>
             </div>
           </div>
           {/* 手机端左轨唯一入口；桌面由 CSS 隐藏，不影响三栏。 */}

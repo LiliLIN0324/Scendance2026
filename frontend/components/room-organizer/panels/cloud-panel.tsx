@@ -339,7 +339,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       if (!dialog.current?.open) dialog.current?.showModal();
       return;
     }
-    setSection(openRequest.section === 'assets' ? 'assets' : 'projects');
+    setSection(openRequest.section === 'assets' ? 'assets' : openRequest.section === 'archive' ? 'archive' : 'projects');
     setMenuOpen(false);
     if (!dialog.current?.open) { setAccountOpen(true); dialog.current?.showModal(); focusAuthEmail(); }
   }, [openRequest, controller]);

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planOutline, ShareMenu, shareBingoStatus, sharePublishReadOnly, shareTriggerChrome, type ShareMenuActions } from './share-menu';
 import { displayShareUrl, SHARE_READ_ONLY_LINE, SharePanel, type ShareExportEntry } from './share-panel';
 import { registerPublishGateProvider, type PublishGateSnapshot } from '../lib/project-manifest';
-import type { ServerShare } from '../lib/share-records';
+import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import type { RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -254,7 +254,7 @@ describe('分享页签', () => {
 });
 
 describe('发布页签', () => {
-  it('shows only the green publish action until a link exists', () => {
+  it('shows only the green publish action until a link exists', async () => {
     localStorage.clear();
     render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
     openMenu();
@@ -262,7 +262,7 @@ describe('发布页签', () => {
     const publish = screen.getByRole('tab', { name: '发布' });
     expect(publish.getAttribute('aria-selected')).toBe('true');
     expect(publish.getAttribute('data-tone')).toBe('ink');
-    const cta = screen.getByRole('button', { name: '发布并复制链接' });
+    const cta = await screen.findByRole('button', { name: '发布并复制链接' });
     expect(cta.getAttribute('data-tone')).toBe('green');
     expect(screen.getByText('发布后即可查看场地、分区和尺度，页里可看 3D。')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^复制$/ })).toBeNull();
@@ -280,7 +280,7 @@ describe('发布页签', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
     fireEvent.click(screen.getByRole('tab', { name: '发布' }));
-    fireEvent.click(screen.getByRole('button', { name: '发布并复制链接' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
     expect(await screen.findByRole('button', { name: /^复制$/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '发布并复制链接' })).toBeNull();
     expect(screen.getByText('打开即可查看场地、分区和尺度，页里可看 3D。')).toBeTruthy();
@@ -314,7 +314,7 @@ describe('发布页签', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
     fireEvent.click(screen.getByRole('tab', { name: '发布' }));
-    fireEvent.click(screen.getByRole('button', { name: '发布并复制链接' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
     expect(await screen.findByRole('button', { name: /^复制$/ })).toBeTruthy();
     // 发布页不再把自带快照的场地页冒充主链接：交给客户的是受控发布链接（版本/撤回都在云端）。
     expect(screen.getByTestId('share-link-row').textContent).toContain('studio.example/view/#token');
@@ -345,7 +345,7 @@ describe('发布页签', () => {
     expect(screen.queryByRole('img', { name: '方案二维码' })).toBeNull();
     expect(screen.queryByRole('button', { name: '发布并复制链接' })).toBeNull();
     await act(async () => finish([{ shareId: 'sh-1', publicationId: 'pub-1', revision: 2, createdAt: '2026-11-17T04:12:00Z', revokedAt: '2026-11-17T05:00:00Z' }]));
-    expect(screen.getByRole('button', { name: '发布并复制链接' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '发布并复制链接' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '二维码' })).toBeNull();
     expect(screen.getByRole('status').textContent).toContain('已撤回');
     expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toBeNull();
@@ -358,10 +358,10 @@ describe('发布页签', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
     fireEvent.click(screen.getByRole('tab', { name: '发布' }));
-    fireEvent.click(screen.getByRole('button', { name: '发布并复制链接' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
     expect((await screen.findByRole('status')).textContent).toContain('保存后再发布');
     expect(screen.queryByRole('button', { name: '二维码' })).toBeNull();
-    expect(screen.getByRole('button', { name: '发布并复制链接' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '发布并复制链接' })).toBeTruthy();
   });
 });
 
@@ -461,7 +461,7 @@ describe('发布页只读', () => {
     render(<ShareMenu actions={share} layout={sampleLayout()} />);
     openMenu();
     fireEvent.click(screen.getByRole('tab', { name: '发布' }));
-    fireEvent.click(screen.getByRole('button', { name: '发布并复制链接' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
     expect((await screen.findByTestId('share-readonly')).textContent).toBe(SHARE_READ_ONLY_LINE);
     expect(screen.queryByRole('button', { name: '发布并复制链接' })).toBeNull();
     const cta = document.querySelector('.sc-share-cta');
@@ -693,7 +693,8 @@ describe('完整只读分享（2026-11-20 集成，C12/C13）', () => {
   function cloudController(extra: Record<string, unknown> = {}): BackendSession {
     return {
       getSnapshot: () => ({
-        configured: true, sessionId: 's1', revision: 4,
+        configured: true, sessionId: 's1', revision: 4, dirty: false,
+        user: { id: 'user-1' },
         project: { id: 'proj-1', name: '项目' },
         lease: { projectId: 'proj-1', sessionId: 's1', generation: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 4 },
       }),
@@ -758,10 +759,349 @@ describe('完整只读分享（2026-11-20 集成，C12/C13）', () => {
     const controller = cloudController();
     await openPublishWith(controller);
     fireEvent.click(screen.getByTestId('complete-share').querySelector('button')!);
-    expect((await screen.findByRole('status')).textContent).toContain('西湖扫描');
+    expect((await screen.findByText(/西湖扫描/)).textContent).toContain('西湖扫描');
     expect(controller.createCompleteShare).not.toHaveBeenCalled();
     expect(controller.saveCompleteProject).not.toHaveBeenCalled();
     expect(screen.queryByTestId('complete-share-link-row')).toBeNull();
+  });
+});
+
+// P0-A（主计划 PUB-05/PUB-06 复现与回归，2026-11-20）：切项目与迟到回执的项目/版本一致性。
+describe('P0-A 项目切换与迟到回执一致性', () => {
+  const TOKEN = 'b'.repeat(64);
+
+  afterEach(() => registerPublishGateProvider(null));
+
+  function cloudController(extra: Record<string, unknown> = {}, snapshotOverride?: () => Record<string, unknown>): BackendSession {
+    return {
+      getSnapshot: snapshotOverride ?? (() => ({
+        configured: true, sessionId: 's1', revision: 4, dirty: false,
+        user: { id: 'user-1' },
+        project: { id: 'proj-1', name: '项目' },
+        lease: { projectId: 'proj-1', sessionId: 's1', generation: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 4 },
+      })),
+      saveCompleteProject: vi.fn(async () => ({})),
+      createCompleteShare: vi.fn(async () => ({ shareId: 'share-9', publicationId: 'pub-9', revision: 4, token: TOKEN })),
+      revokeCompleteShare: vi.fn(async () => ({ revoked: true })),
+      ...extra,
+    } as unknown as BackendSession;
+  }
+
+  function completeGateFor(projectId: string, overrides: Partial<PublishGateSnapshot> = {}): PublishGateSnapshot {
+    return {
+      scopeId: projectId, projectId, cloudRevision: 4,
+      manifest: {
+        version: 1,
+        scene: { schemaVersion: 1 as const, venue: { shape: 'rectangle' as const, width: 12, depth: 10, height: 3, entrances: [] }, objects: [], camera: 'overview' as const, lighting: 'neutral' as const },
+        outdoor: null, sources: {},
+        dependencies: [{ assetId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', visibility: 'private' }],
+      },
+      gaps: [], complete: true, readyForPublish: true, note: 'ok', conflict: null,
+      ...overrides,
+    };
+  }
+
+  it('PUB-05 复现：切项目后旧项目的完整只读链接残留在新项目面板里', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => completeGateFor('proj-1'));
+    const controller = cloudController();
+    const view = render(<ShareMenu actions={actions()} layout={sampleLayout()} controller={controller} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(screen.getByTestId('complete-share').querySelector('button')!);
+    expect(await screen.findByTestId('complete-share-link-row')).toBeTruthy();
+    // 切到另一份方案（另一活动）：上一份的受控链接、令牌行和复制动作都不得跟着过来。
+    view.rerender(<ShareMenu actions={actions()} layout={{ ...sampleLayout(), id: 'project-2', name: '另一个活动' }} controller={controller} />);
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    expect(screen.queryByTestId('complete-share-link-row')).toBeNull();
+    expect(screen.queryByText(/令牌只在这一次显示/)).toBeNull();
+  });
+
+  it('PUB-05 复现：发布回执迟到时写入新项目面板', async () => {
+    localStorage.clear();
+    const share = actions();
+    let finish!: (value: { url: string; revision: number }) => void;
+    vi.mocked(share.onPublish).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    const view = render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
+    // 发布在途时切到另一份方案。
+    view.rerender(<ShareMenu actions={share} layout={{ ...sampleLayout(), id: 'project-2', name: '另一个活动' }} />);
+    await act(async () => finish({ url: 'https://studio.example/view/#old-token', revision: 3 }));
+    // 回执迟到后用户在新项目里点开发布页签：旧项目的链接不得出现。
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    expect(screen.queryByTestId('share-link-row')).toBeNull();
+    expect(clipboard).not.toHaveBeenCalled();
+    // 服务端确实为原项目生成了链接：记录写回原项目名下，切回去还能看到。
+    expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toContain('old-token');
+  });
+
+  it('PUB-06 复现：完整分享用归档时读到的快照之外的项目创建分享', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => completeGateFor('proj-1'));
+    let phase = 0;
+    const snapshot = () => phase === 0
+      ? {
+        configured: true, sessionId: 's1', revision: 4,
+        project: { id: 'proj-1', name: '项目' },
+        lease: { projectId: 'proj-1', sessionId: 's1', generation: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 4 },
+      }
+      : {
+        configured: true, sessionId: 's1', revision: 9,
+        project: { id: 'proj-2', name: '另一个项目' },
+        lease: { projectId: 'proj-2', sessionId: 's1', generation: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 9 },
+      };
+    const controller = cloudController({
+      saveCompleteProject: vi.fn(async () => { phase = 1; return {}; }),
+    }, snapshot);
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} controller={controller} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(screen.getByTestId('complete-share').querySelector('button')!);
+    await screen.findByRole('status');
+    // 归档落在 proj-1；切到 proj-2 后不得把 proj-1 的归档确认配上 proj-2 的分享请求。
+    expect(controller.saveCompleteProject).toHaveBeenCalledWith('proj-1', expect.anything());
+    expect(controller.createCompleteShare).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('complete-share-link-row')).toBeNull();
+  });
+
+  it('P0-A：完整分享失败后重试复用同一 requestId（服务端幂等闸按 actor+requestId 去重）', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => completeGateFor('proj-1'));
+    const controller = cloudController({
+      createCompleteShare: vi.fn()
+        .mockImplementationOnce(async () => { throw new Error('NETWORK_ERROR'); })
+        .mockImplementationOnce(async () => ({ shareId: 'share-9', publicationId: 'pub-9', revision: 4, token: TOKEN })),
+    });
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} controller={controller} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    const create = () => screen.getByTestId('complete-share').querySelector('button')!;
+    fireEvent.click(create());
+    expect((await screen.findByText(/NETWORK_ERROR/)).textContent).toContain('NETWORK_ERROR');
+    fireEvent.click(create());
+    expect(await screen.findByTestId('complete-share-link-row')).toBeTruthy();
+    const calls = vi.mocked(controller.createCompleteShare).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1].requestId).toBe(calls[1]![1].requestId);
+    expect(calls[1]![0]).toBe('proj-1');
+    // 成功后创建钮被链接行替换（重新生成须先撤销）：UI 自身挡住「新操作复用旧身份」。
+    expect(screen.getByTestId('complete-share').querySelector('.sc-share-copy')).toBeTruthy();
+  });
+
+  it('P0-A：发布请求丢失但服务端已有新分享记录时按可能已成功处理，不引导重复发布', async () => {
+    localStorage.clear();
+    const share = actions({
+      onListShares: vi.fn(async () => [
+        { shareId: 'sh-x', publicationId: 'pub-x', revision: 3, createdAt: new Date().toISOString(), revokedAt: null },
+      ]),
+    });
+    vi.mocked(share.onPublish).mockRejectedValueOnce(Object.assign(new Error('暂时无法连接分享服务，请重试。'), { publishAmbiguous: true }));
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
+    expect((await screen.findByRole('status')).textContent).toContain('可能已成功');
+    expect(share.onListShares).toHaveBeenCalledOnce();
+    // URL 不可知（令牌只返回一次）：不伪造链接行，也不写本机链接键。
+    expect(screen.queryByTestId('share-link-row')).toBeNull();
+    expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toBeNull();
+  });
+
+  it('P0-A：发布请求丢失且服务端无新记录时如实说未知', async () => {
+    localStorage.clear();
+    const share = actions({ onListShares: vi.fn(async () => []) });
+    vi.mocked(share.onPublish).mockRejectedValueOnce(Object.assign(new Error('暂时无法连接分享服务，请重试。'), { publishAmbiguous: true }));
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
+    expect((await screen.findByRole('status')).textContent).toContain('是否成功未知');
+    expect(share.onListShares).toHaveBeenCalledOnce();
+  });
+
+  it('P0-A：同一项目内方案已变（isCurrent=false）时不复制不展示，链接记录仍写回本项目', async () => {
+    localStorage.clear();
+    const share = actions();
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    vi.mocked(share.onPublish).mockResolvedValueOnce({ url: 'https://studio.example/view/#tok', revision: 3, isCurrent: () => false });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
+    expect((await screen.findByRole('status')).textContent).toContain('方案或版本已变化');
+    expect(clipboard).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('share-link-row')).toBeNull();
+    // 服务端确已生成 v3 的链接：记录写回本项目名下（服务端记录为准），重开面板可见。
+    expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toContain('#tok');
+  });
+
+  it('P0-A：在途发布切项目后旧任务结算不再干扰新项目的发布', async () => {
+    localStorage.clear();
+    const share = actions();
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    const resolvers: Array<(value: { url: string; revision: number }) => void> = [];
+    vi.mocked(share.onPublish).mockImplementation(() => new Promise(resolve => { resolvers.push(resolve); }));
+    const view = render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
+    view.rerender(<ShareMenu actions={share} layout={{ ...sampleLayout(), id: 'project-2', name: '另一个活动' }} />);
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    // 切项目复位任务态：新项目的发布钮立即可用。
+    const cta = await screen.findByRole('button', { name: '发布并复制链接' });
+    expect(cta).toBeTruthy();
+    fireEvent.click(cta);
+    // 旧任务的回执先到：不进入新项目面板、不复制、不动 busy。
+    await act(async () => resolvers[0]!({ url: 'https://studio.example/view/#old', revision: 3 }));
+    expect(screen.queryByTestId('share-link-row')).toBeNull();
+    expect(clipboard).not.toHaveBeenCalled();
+    // 新任务的回执后到：正常展示并复制。
+    await act(async () => resolvers[1]!({ url: 'https://studio.example/view/#new', revision: 5 }));
+    expect(screen.getByTestId('share-link-row').textContent).toContain('#new');
+    expect(clipboard).toHaveBeenCalledWith('https://studio.example/view/#new');
+    expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toContain('#old');
+    expect(localStorage.getItem('scendance.publishedLink.v1.project-2')).toContain('#new');
+  });
+
+  it('P1-A：打开发布页即预检，保存状态与服务端记录合并渲染，令牌丢失如实说明', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => completeGateFor('proj-1'));
+    const share = actions({
+      onListShares: vi.fn(async () => [
+        { shareId: 'sh-1', publicationId: 'pub-1', revision: 3, createdAt: '2026-11-19T04:12:00Z', revokedAt: null },
+        { shareId: 'sh-2', publicationId: 'pub-2', revision: 2, createdAt: '2026-11-18T04:12:00Z', revokedAt: '2026-11-18T05:00:00Z' },
+      ] as ServerShare[]),
+    });
+    appendShareRecord('project-1', { kind: 'web', url: 'https://studio.example/view/#tok', revision: 3, at: Date.parse('2026-11-19T04:12:00Z') });
+    render(<ShareMenu actions={share} layout={sampleLayout()} controller={cloudController()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    // 预检状态块：保存状态 + 最近发布版本 + 当前修改。
+    expect(await screen.findByTestId('publish-status')).toBeTruthy();
+    expect(screen.getByTestId('publish-status').textContent).toContain('已发布：版本 3');
+    // 服务端权威发布记录：合并本机 URL 后按版本渲染，含已撤回行。
+    await waitFor(() => expect(screen.getByTestId('publish-records')).toBeTruthy());
+    expect(screen.getByTestId('publish-records').textContent).toContain('版本 3');
+    expect(screen.getByTestId('publish-records').textContent).toContain('版本 2');
+    expect(screen.getByTestId('publish-records').textContent).toContain('已撤回');
+    // 服务端有记录但本机没 URL 的行（v2 已撤回）与有 URL 的行（v3）分别渲染：
+    // URL 丢失行如实说明「链接只在生成时显示一次」，不假装能恢复。
+    const rows = screen.getAllByTestId(/^publish-record-/);
+    const revokedRow = rows.find(row => row.textContent?.includes('版本 2'));
+    expect(revokedRow?.textContent).toContain('已撤回');
+    expect(rows.some(row => row.querySelector('.sc-share-copy'))).toBe(true);
+  });
+
+  it('P1-A：预检阻塞时列出缺口与既有动作入口；发布成功与复制失败分开反馈', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => completeGateFor('proj-1', {
+      complete: false,
+      gaps: [{ localId: 'scan-1', kind: 'scan', name: '西湖扫描', reason: 'not-uploaded' }],
+    }));
+    const share = actions({ onPrecheckAction: vi.fn() });
+    render(<ShareMenu actions={share} layout={sampleLayout()} controller={cloudController()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    const blockers = await screen.findByTestId('publish-blockers');
+    expect(blockers.textContent).toContain('西湖扫描');
+    expect(blockers.textContent).toContain('需要处理');
+    // 阻塞项动作按钮接到宿主 onPrecheckAction，不造假入口。
+    fireEvent.click(screen.getByRole('button', { name: '去归档页补传' }));
+    expect(share.onPrecheckAction).toHaveBeenCalledWith('archive-page');
+    // 缺口补齐后（闸门 provider 换可发布快照）：发布成功、复制失败分别反馈，不诱导重复发布。
+    registerPublishGateProvider(async () => completeGateFor('proj-1'));
+    // copyText 的契约是「writeText 不抛错即复制成功」；要模拟拒绝剪贴板权限，桩必须 reject。
+    delete (navigator as { clipboard?: unknown }).clipboard;
+    const clipboard = vi.fn(async () => { throw new Error('NotAllowedError'); });
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: clipboard }, configurable: true });
+    fireEvent.click(await screen.findByRole('button', { name: '发布并复制链接' }));
+    await waitFor(() => expect(screen.getByTestId('publish-feedback').textContent).toContain('已发布版本 3'));
+    expect(screen.getByTestId('copy-feedback').textContent).toContain('复制没成功');
+    expect(screen.getByTestId('copy-feedback').getAttribute('data-tone')).toBe('warn');
+    expect(clipboard).toHaveBeenCalledWith('https://studio.example/view/#token');
+  });
+});
+
+// P0-B（2026-11-20 集成补）：预检先报「检查中」，再给发布摘要；阻塞动作只在宿主声明支持时才给按钮。
+describe('P0-B 预检呈现（2026-11-20 集成）', () => {
+  afterEach(() => registerPublishGateProvider(null));
+
+  const gate: PublishGateSnapshot = {
+    scopeId: 'p', projectId: 'proj-1', cloudRevision: 3,
+    manifest: {
+      version: 1,
+      scene: { schemaVersion: 1 as const, venue: { shape: 'rectangle' as const, width: 12, depth: 10, height: 3, entrances: [] }, objects: [], camera: 'overview' as const, lighting: 'neutral' as const },
+      outdoor: null, sources: {}, dependencies: [],
+    },
+    gaps: [], complete: true, readyForPublish: true, note: 'ok', conflict: null,
+  };
+
+  function loggedInController(): BackendSession {
+    return {
+      getSnapshot: () => ({
+        configured: true, sessionId: 's1', revision: 3, dirty: false,
+        user: { id: 'user-1' },
+        project: { id: 'proj-1', name: '项目' },
+        lease: { projectId: 'proj-1', sessionId: 's1', generation: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 3 },
+      }),
+    } as unknown as BackendSession;
+  }
+
+  it('打开发布页先报检查中，再按类别列出本次发布内容与对外范围', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => gate);
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} controller={loggedInController()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    // 首查完成后按类别列清本次发布内容（PUB-02/PUB-11）；「检查中」渲染由 share-panel 用例覆盖。
+    const summary = await screen.findByTestId('publish-summary');
+    expect(summary.textContent).toContain('场地与楼层');
+    expect(summary.textContent).toContain('12 × 8 米');
+    expect(summary.textContent).toContain('本次不含户外规划');
+    // 对外范围如实写：原件与扫描不随发布公开（PUB-11）。
+    expect(summary.textContent).toContain('资料原件');
+  });
+
+  it('阻塞项只在宿主声明支持时给处理按钮', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => ({
+      ...gate,
+      complete: false,
+      gaps: [{ localId: 'scan-1', kind: 'scan' as const, name: '西湖扫描', reason: 'not-uploaded' as const }],
+    }));
+    const onPrecheckAction = vi.fn();
+    render(<ShareMenu
+      actions={actions({ onPrecheckAction, precheckActions: ['login', 'archive-page'] })}
+      layout={sampleLayout()}
+      controller={loggedInController()}
+    />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    const blocker = await screen.findByTestId('publish-blocker-archive-gaps');
+    expect(blocker.textContent).toContain('西湖扫描');
+    fireEvent.click(blocker.querySelector('button')!);
+    expect(onPrecheckAction).toHaveBeenCalledWith('archive-page');
+  });
+
+  it('宿主没提供恢复动作时只说明原因，不放必失败的按钮', async () => {
+    localStorage.clear();
+    registerPublishGateProvider(async () => ({
+      ...gate,
+      complete: false,
+      gaps: [{ localId: 'scan-1', kind: 'scan' as const, name: '西湖扫描', reason: 'not-uploaded' as const }],
+    }));
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} controller={loggedInController()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    const blocker = await screen.findByTestId('publish-blocker-archive-gaps');
+    expect(blocker.textContent).toContain('西湖扫描');
+    expect(blocker.querySelector('button')).toBeNull();
   });
 });
 

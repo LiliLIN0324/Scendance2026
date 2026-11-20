@@ -11,16 +11,18 @@ import QRCode from 'qrcode';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { readBingoSnapshot } from '../lib/bingo-status';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
-import { ensurePublishedArchiveNow } from '../lib/complete-archive';
 import { detectCloudCaseSession } from '../lib/cloud-cases';
+import { ensurePublishedArchiveNow } from '../lib/complete-archive';
 import { convertMetres } from '../lib/display-units';
+import { publishGateSnapshot, type PublishGateSnapshot } from '../lib/project-manifest';
+import { evaluatePublishBlockers, hasUnpublishedChanges, type PublishBlockerAction } from '../lib/publish-flow';
 import { REVIEW_MARK_CHANGED_EVENT, forgetReviewLinkMark, readReviewMarks } from '../lib/review-share';
 import { reviewCodeFromHash, reviewCodeFromPath } from '../../review-share-page/review-link-cloud';
-import { appendShareRecord, type ServerShare } from '../lib/share-records';
+import { appendShareRecord, mergeShareRows, readShareRecords, type ServerShare } from '../lib/share-records';
 import { isStructuralMarker } from '../lib/structural-layout';
 import { bingoBadgeCount, setBingoSending, useBingoSending } from './bingo-status-mark';
 import { CaseAdminSection } from './case-admin';
-import { SHARE_READ_ONLY_LINE, SharePanel, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
+import { SHARE_READ_ONLY_LINE, SharePanel, type PublishFeedback, type PublishPrecheckState, type PublishRecordsState, type PublishSummaryItem, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 import type { BackendSession } from '@/lib/backend-session';
 
@@ -33,6 +35,20 @@ export interface PublishedLink {
   shareId?: string;
   /** 同一版顺手生成的只读场地页（/site#s2=…）：客户拿到的是它，自带快照。 */
   siteUrl?: string;
+  /**
+   * 发布回执的当前性校验（2026-11-20 P0-A，主计划 §4.1；接口要求 room-organizer 提供）：
+   * 发布动作开始时捕获活动/楼层/方案上下文，回执返回时为假表示这次结果对应的是旧快照，
+   * 分享卡不再展示或复制它。旧宿主不提供时，分享卡退回项目/会话级的自身校验。
+   */
+  isCurrent?: () => boolean;
+}
+
+/** 发布失败的「结果未知」标记（主计划 §4.6）：请求已发出但回应丢失，服务端可能已成功。 */
+export interface PublishAmbiguousError extends Error { publishAmbiguous?: boolean }
+
+/** publishVersion 重抛网络/超时类错误时保留此标记；分享卡据此用服务端分享清单核对，不直接断言失败。 */
+export function isAmbiguousPublishFailure(error: unknown): error is PublishAmbiguousError {
+  return error instanceof Error && (error as PublishAmbiguousError).publishAmbiguous === true;
 }
 
 export interface ShareMenuActions {
@@ -66,6 +82,16 @@ export interface ShareMenuActions {
   onRevokeReviewLink?(code: string): Promise<void>;
   /** 抓当前画布真实一帧当预览（户外 2D/3D、室内各走各的抓帧句柄）；抓不到时卡片退回示意图。 */
   onCapturePreview?(): Promise<string | null>;
+  /**
+   * P1-A（接口约定 §2）：发布预检阻塞项的既有恢复动作入口。宿主接到真实链路
+   * （登录/保存/归档/冲突）后传入；没有时预检只说明不放必失败按钮。
+   */
+  onPrecheckAction?(action: string): void;
+  /**
+   * 宿主真实接得上的恢复动作（PublishBlockerAction 取值）。只有列在这里的动作才渲染按钮，
+   * 其余只在清单里说明原因——避免「点了去登录却打开物料库」这类假恢复路径（主计划 PUB-03）。
+   */
+  precheckActions?: string[];
   /**
    * 已登录、方案已挂上项目、但没有编辑权。
    * 未发布页不给绿色「发布并复制链接」，只留只读说明。
@@ -205,7 +231,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const [published, setPublished] = useState<PublishedLink | null>(null);
   // 完整只读分享（2026-11-20 集成补齐，C12/C13）：含户外规划与已归档资源的受控链接。
   // 令牌只在生成响应里出现一次（服务端仅存哈希），所以只留在内存里，不落 localStorage。
-  const [completeShare, setCompleteShare] = useState<{ shareId: string; revision: number; token: string | null } | null>(null);
+  // P0-A：绑定生成时的项目，切项目即作废，撤销按绑定项目发请求，不再重读快照。
+  const [completeShare, setCompleteShare] = useState<{ projectId: string; shareId: string; revision: number; token: string | null } | null>(null);
   const [reviewLink, setReviewLink] = useState('');
   const [qrSvg, setQrSvg] = useState('');
   const [qrOpen, setQrOpen] = useState(false);
@@ -216,10 +243,26 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const [allowBasemap, setAllowBasemap] = useState(true);
   const [bingoSent, setBingoSent] = useState(false);
   const [bingoRev, setBingoRev] = useState(0);
+  // P1-A（接口约定 §2/§4）：发布页打开即预检 + 发布/复制反馈拆分 + 服务端发布记录。
+  // 全部由本卡计算，share-panel 只渲染；切项目即清（与 PUB-05 同一出口）。
+  const [precheck, setPrecheck] = useState<PublishPrecheckState | null>(null);
+  const [publishFeedback, setPublishFeedback] = useState<PublishFeedback | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<PublishFeedback | null>(null);
+  const [publishRecords, setPublishRecords] = useState<PublishRecordsState | null>(null);
   const bingoSending = useBingoSending();
   const seenOpen = useRef(openRequest);
   const seenClose = useRef(closeSignal);
   const projectId = layout?.id;
+  // P0-A（主计划 §4.1/§4.3）：每个异步动作开始时捕获（项目, 会话, 账号, 任务纪元），
+  // 每个等待点后重新核对；切项目或新动作都会推进 taskRun，旧结果一律不再写入状态。
+  const taskRun = useRef(0);
+  // 预检的运行序号：只允许最新一轮改写「检查中」状态。
+  const precheckRun = useRef(0);
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+  // 完整分享的重试复用同一 requestId（服务端幂等闸按 actor+requestId 去重；
+  // 超时但服务端成功时，重试拿回原确认 token=null，而不是再生成一条孤儿分享）。
+  const completeShareAttempt = useRef<{ projectId: string; requestId: string } | null>(null);
   const listSharesRef = useRef(actions?.onListShares);
   listSharesRef.current = actions?.onListShares;
   // 案例维护（任务 C）：能力探测到 backendSession 的云端案例方法才给「案例」页；
@@ -243,11 +286,21 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     setQrOpen(false);
   }, [closeSignal]);
 
+  // PUB-05：切项目立即清空链接、二维码、通知、任务态与完整分享卡；在途回执靠
+  // shareTaskStale 丢弃，这里先把面板回到新项目的干净状态。
   useEffect(() => {
+    taskRun.current += 1;
+    completeShareAttempt.current = null;
     setPublished(readPublishedLink(projectId));
+    setCompleteShare(null);
     setNotice('');
     setQrOpen(false);
     setTab('share');
+    setBusy(false);
+    setPrecheck(null);
+    setPublishFeedback(null);
+    setCopyFeedback(null);
+    setPublishRecords(null);
   }, [projectId]);
 
   // 评审链接也要有“当前状态”：重新打开分享时，先从本机标记恢复最近一条。
@@ -331,6 +384,134 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const selectTab = (next: ShareTab) => {
     setTab(next);
     setQrOpen(false);
+    if (next === 'publish') void runPublishPrecheck();
+  };
+
+  /**
+   * P1-A 预检（接口约定 §2）：数据源固定 controller.getSnapshot() + publishGateSnapshot()，
+   * 不另开探测、不发写请求。动作完成回调由宿主接线（onPrecheckAction），没有就只说明。
+   * 预检身份绑定当前 projectId；结果迟到（切项目）时丢弃。
+   */
+  const runPublishPrecheck = async (): Promise<void> => {
+    const snapshotProject = projectIdRef.current;
+    const run = ++precheckRun.current;
+    // PUB-02：已有预检结果时，重查先回到「检查中」，不提前声称就绪。
+    // 首次打开还没结果时保持旧版渲染：首查只差一个微任务，避免主按钮闪一下再被拿走。
+    setPrecheck(previous => (previous ? { ...previous, checking: true } : previous));
+    try {
+      await runPublishPrecheckNow(snapshotProject);
+    } catch (error) {
+      // 预检写状态之前抛错时不能把面板卡在「检查中」（fail-closed）：如实说明并给重查路径。
+      if (projectIdRef.current !== snapshotProject) return;
+      console.warn('[publish-precheck] 预检未完成', error);
+      setPrecheck({
+        checking: false,
+        saveLine: '发布检查没有完成。',
+        lastPublished: null,
+        blockers: [{ id: 'precheck', message: '发布前检查没有跑完；请重新打开发布页重查，或先保存并通过归档检查。' }],
+      });
+    } finally {
+      // 任何提前退出（切项目/迟到丢弃）都不能把面板卡在「检查中」：
+      // 仍是最新一轮且检查态未完时，落成可重查的阻塞项，主按钮不被永久遮掉。
+      if (precheckRun.current === run && projectIdRef.current === snapshotProject) {
+        setPrecheck(current => (current?.checking
+          ? {
+            ...current,
+            checking: false,
+            blockers: current.blockers.length ? current.blockers : [{ id: 'precheck', message: '发布前检查没跑完；请重新打开发布页重查。' }],
+          }
+          : current));
+      }
+    }
+  };
+
+  const runPublishPrecheckNow = async (snapshotProject: string | undefined): Promise<void> => {
+    const snapshot = (() => {
+      try { return controller?.getSnapshot() ?? null; } catch { return null; }
+    })();
+    let gate: PublishGateSnapshot;
+    try {
+      gate = await publishGateSnapshot();
+    } catch {
+      // 闸门读不到时 fail-closed：说明原因并给重查路径，不把「检查失败」当成「可以发布」。
+      if (projectIdRef.current !== snapshotProject) return;
+      setPrecheck({ checking: false, saveLine: '发布检查没有完成。', lastPublished: null, blockers: [{ id: 'gate', message: '发布前检查没跑完；请重新打开发布页重查，或先保存并通过归档检查。' }] });
+      return;
+    }
+    if (projectIdRef.current !== snapshotProject) return;
+    if (!snapshot || !layout) {
+      setPrecheck({ checking: false, saveLine: '会话状态不可用，暂时不能发布。', lastPublished: null, blockers: [{ id: 'session', message: '发布服务还没连上，暂时不能发布。' }] });
+      return;
+    }
+    const blockers = evaluatePublishBlockers({ snapshot, gate, layout });
+    const saveLine = snapshot.dirty
+      ? '有未保存的修改'
+      : Number.isFinite(snapshot.revision) ? `已保存到云端 · 版本 ${snapshot.revision}` : '还没有保存到云端';
+    const local = readShareRecords(snapshotProject);
+    const lastPublished = local.length
+      ? { revision: [...local].sort((a, b) => (b.revision ?? 0) - (a.revision ?? 0))[0]!.revision ?? 0, at: [...local].sort((a, b) => b.at - a.at)[0]!.at }
+      : null;
+    // PUB-11：发布摘要逐类核对，与客户页实际呈现对齐；缺口如实标注，不用「已包含」含糊过去。
+    const summary = publishSummaryOf(layout, gate);
+    setPrecheck({
+      checking: false,
+      saveLine,
+      lastPublished,
+      dirty: hasUnpublishedChanges(snapshot),
+      blockers: blockers.map(blocker => {
+        const action = blocker.action;
+        const supported = action != null && actions?.onPrecheckAction != null
+          && (actions.precheckActions == null || actions.precheckActions.includes(action));
+        return {
+          id: blocker.code,
+          message: blocker.message,
+          ...(supported ? { action: { label: precheckActionLabel(action), onSelect: () => { actions?.onPrecheckAction?.(action); } } } : {}),
+        };
+      }),
+      summary,
+      visibilityLine: '对外范围：本次发布版本的布置与已归档模型；资料原件、实景扫描文件与后台草稿不对外。',
+    });
+    // P1-A（接口约定 §4）：发布记录以服务端 shares 清单为权威；拉不到时退化为纯本机行并如实标注。
+    if (actions?.onListShares) {
+      setPublishRecords({ rows: mergeShareRows(local, null), loading: true, onRevoke: undefined });
+      void actions.onListShares().then(rows => {
+        if (projectIdRef.current !== snapshotProject) return;
+        setPublishRecords({ rows: mergeShareRows(local, rows as ServerShare[]), onRevoke: row => { void revokeShareRow(row); } });
+      }).catch(() => {
+        if (projectIdRef.current !== snapshotProject) return;
+        setPublishRecords({ rows: mergeShareRows(local, null), error: '发布记录暂时读不到；先按本机记录操作，网络恢复后自动对齐。' });
+      });
+    } else {
+      setPublishRecords({ rows: mergeShareRows(local, null) });
+    }
+  };
+
+  const precheckActionLabel = (action: PublishBlockerAction): string => ({
+    login: '去登录',
+    'save-project': '保存为云项目',
+    'save-changes': '保存当前修改',
+    'grant-edit': '取回编辑权',
+    'archive-page': '去归档页补传',
+    'resolve-conflict': '处理版本冲突',
+  }[action] ?? '去处理');
+
+  /** 按发布记录行撤销（P1-A）：绑定该行的 shareId/项目，不重读快照。 */
+  const revokeShareRow = async (row: { key: string; kind: string; revision: number | null; at: number; url: string | null; shareId: string | null; revoked: boolean }): Promise<void> => {
+    if (!actions?.onListShares || !actions.onRevokeShare || !row.shareId) return;
+    const run = ++taskRun.current;
+    const identity = shareTaskIdentity(controller, projectIdRef.current, run);
+    setBusy(true);
+    try {
+      await actions.onRevokeShare(row.shareId);
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
+      setNotice(`版本 ${row.revision ?? '—'} 的链接已撤回；已下载或离线副本无法收回。`);
+      void runPublishPrecheck();
+    } catch (error) {
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
+      setNotice(error instanceof Error ? error.message : '撤回失败，请重试。');
+    } finally {
+      if (taskRun.current === run) setBusy(false);
+    }
   };
 
   const publish = async () => {
@@ -342,21 +523,54 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       setNotice(actions ? '' : '分享还没接到工作台。');
       return;
     }
+    const run = ++taskRun.current;
+    const identity = shareTaskIdentity(controller, projectIdRef.current, run);
+    const startedAt = Date.now();
     setBusy(true);
     setNotice('');
+    setPublishFeedback({ tone: 'ok', text: '正在发布，请稍候…' });
+    setCopyFeedback(null);
     try {
       const result = await actions.onPublish();
+      // 服务端确实为发布时的项目生成了链接：记录写回该项目名下；展示与复制按当前上下文核对。
+      writePublishedLink(identity.projectId, result);
+      appendShareRecord(identity.projectId, { kind: 'web', url: result.url, revision: result.revision, at: startedAt });
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
+      if (result.isCurrent && !result.isCurrent()) {
+        // 同一项目内方案/楼层已变（V08）：这次结果对应旧快照，不展示不复制；服务端记录为准。
+        setPublishFeedback({ tone: 'warn', text: '方案或版本已变化，这次发布不复制链接；请核对分享记录后按当前版本重发。' });
+        throw new Error('方案或版本已变化，这次发布不复制链接；请核对分享记录后按当前版本重发。');
+      }
       setPublished(result);
-      writePublishedLink(projectId, result);
-      const handed = result.url;
-      appendShareRecord(projectId, { kind: 'web', url: handed, revision: result.revision, at: Date.now() });
-      const copied = await copyText(handed);
+      const copied = await copyText(result.url);
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
+      setPublishFeedback({ tone: 'ok', text: `已发布版本 ${result.revision}。` });
+      setCopyFeedback(copied ? { tone: 'ok', text: '链接已复制。' } : { tone: 'warn', text: '发布成功，复制没成功；请点「复制」或在完整地址里手动取走。' });
       setNotice(copied ? '' : '链接已发布。复制没成功，请点「复制」。');
       setQrOpen(false);
+      void runPublishPrecheck();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '链接没有生成。');
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
+      if (isAmbiguousPublishFailure(error) && actions.onListShares) {
+        // 请求已发出但回应丢失（§4.6）：以服务端分享清单为准，不直接断言失败、不引导重复发布。
+        try {
+          const rows = await actions.onListShares();
+          if (!shareTaskStale(identity, controller, projectIdRef.current, run)) {
+            const created = rows.some(row => !row.revokedAt && Date.parse(row.createdAt) >= startedAt);
+            const text = created
+              ? '发布请求可能已成功（服务端已有新的分享记录），但链接令牌没能取回；请先在分享记录里撤销这条发布，再重新发布。'
+              : '网络中断，这次发布是否成功未知；请稍后核对分享记录再重试。';
+            setNotice(text);
+            setPublishFeedback({ tone: 'warn', text });
+          }
+          return;
+        } catch { /* 清单也读不到时按普通失败提示 */ }
+      }
+      const text = error instanceof Error ? error.message : '链接没有生成。';
+      setNotice(text);
+      setPublishFeedback({ tone: 'err', text });
     } finally {
-      setBusy(false);
+      if (taskRun.current === run) setBusy(false);
     }
   };
 
@@ -365,69 +579,96 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       setNotice(actions ? '' : '分享还没接到工作台。');
       return;
     }
+    const run = ++taskRun.current;
+    const identity = shareTaskIdentity(controller, projectIdRef.current, run);
     setBusy(true);
     setNotice('');
     setBingoSending(true);
     try {
       const result = await actions.onIssueReviewLink({ pins: allowPins, levels: allowLevels, basemap: allowBasemap });
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       if (!result.isCurrent()) throw new Error('活动、楼层或方案已变化，旧链接未复制。');
       setReviewLink(result.url);
       const copied = await copyText(result.url);
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setBingoSent(true);
       setBingoRev(value => value + 1);
       setNotice(copied ? '评审链接已复制。' : '评审链接已生成，复制没成功，请再试一次。');
     } catch (error) {
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setNotice(error instanceof Error ? error.message : '评审链接没有生成。');
     } finally {
-      setBingoSending(false);
-      setBusy(false);
+      if (taskRun.current === run) {
+        setBingoSending(false);
+        setBusy(false);
+      }
     }
   };
 
   const copyPublished = async () => {
     if (!handedUrl) return;
     const copied = await copyText(handedUrl);
+    setCopyFeedback(copied ? { tone: 'ok', text: '链接已复制。' } : { tone: 'warn', text: '复制没成功；请再点一次「复制」，或在完整地址里手动取走。' });
     setNotice(copied ? '' : '复制没成功，请再试一次。');
   };
 
   const revokePublished = async () => {
     if (!published || busy || actions?.readOnly || !actions?.onListShares || !actions.onRevokeShare) return;
+    const run = ++taskRun.current;
+    const identity = shareTaskIdentity(controller, projectIdRef.current, run);
+    const target = published;
+    const targetProjectId = projectIdRef.current;
     setBusy(true);
     setNotice('');
     try {
       const rows = await actions.onListShares();
-      const matches = rows.filter(row => published.shareId ? row.shareId === published.shareId : row.revision === published.revision);
+      const matches = rows.filter(row => target.shareId ? row.shareId === target.shareId : row.revision === target.revision);
       if (matches.length !== 1) throw new Error('无法唯一确认这条分享，请从分享记录选择具体链接撤销。');
       if (!matches[0].revokedAt) await actions.onRevokeShare(matches[0].shareId);
-      clearPublishedLink(projectId);
+      // 本机记录按发布时的项目清；当前面板的状态按当前上下文核对后再动（PUB-05）。
+      clearPublishedLink(targetProjectId);
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setPublished(null);
       setQrOpen(false);
       setNotice('这条受控链接已撤回；离线快照和已下载内容无法收回。');
     } catch (error) {
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setNotice(error instanceof Error ? error.message : '撤回失败，请重试。');
-    } finally { setBusy(false); }
+    } finally {
+      if (taskRun.current === run) setBusy(false);
+    }
   };
 
   /** 完整只读链接：先把清单按 published 口径落库（幂等），再创建受控分享（token 只回一次）。 */
   const createCompleteShare = async () => {
     if (!controller || busy || actions?.readOnly) return;
+    const run = ++taskRun.current;
+    const identity = shareTaskIdentity(controller, projectIdRef.current, run);
     setBusy(true);
     setNotice('');
     try {
       const ensured = await ensurePublishedArchiveNow(controller);
       if (!ensured.ok) throw new Error(ensured.error ?? '完整归档没有就绪。');
-      const snapshot = controller.getSnapshot();
-      const shareProjectId = snapshot.project?.id ?? null;
-      if (!shareProjectId) throw new Error('这份方案还没挂到云项目上。');
-      if (!Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再生成完整链接。');
-      const result = await controller.createCompleteShare(shareProjectId, { requestId: crypto.randomUUID(), expectedRevision: snapshot.revision ?? 0 });
-      setCompleteShare({ shareId: result.shareId, revision: result.revision, token: result.token });
+      // PUB-06：绑定归档落库时的项目与版本；不得在等待后重读快照另取项目。
+      const shareProjectId = ensured.projectId;
+      if (!shareProjectId) throw new Error('完整归档没有返回项目身份，请重试。');
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
+      const attempt = completeShareAttempt.current;
+      const requestId = attempt && attempt.projectId === shareProjectId ? attempt.requestId : crypto.randomUUID();
+      completeShareAttempt.current = { projectId: shareProjectId, requestId };
+      const result = await controller.createCompleteShare(shareProjectId, { requestId, expectedRevision: ensured.revision ?? 0 });
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
+      completeShareAttempt.current = null;
+      setCompleteShare({ projectId: shareProjectId, shareId: result.shareId, revision: result.revision, token: result.token });
       setNotice(result.token
         ? '完整只读链接已生成；令牌只在这一次显示，请立即复制保存。'
         : '这条完整链接此前已生成过；令牌不重复显示，请使用当时保存的链接，或撤销后重新生成。');
     } catch (error) {
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setNotice(error instanceof Error ? error.message : '完整链接没有生成，请重试。');
-    } finally { setBusy(false); }
+    } finally {
+      if (taskRun.current === run) setBusy(false);
+    }
   };
 
   const copyCompleteShare = async () => {
@@ -438,18 +679,23 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
 
   const revokeCompleteShare = async () => {
     if (!controller || !completeShare || busy) return;
+    const run = ++taskRun.current;
+    const identity = shareTaskIdentity(controller, projectIdRef.current, run);
+    const target = completeShare;
     setBusy(true);
     setNotice('');
     try {
-      const snapshot = controller.getSnapshot();
-      const shareProjectId = snapshot.project?.id ?? null;
-      if (!shareProjectId) throw new Error('这份方案还没挂到云项目上，无法撤销。');
-      await controller.revokeCompleteShare(shareProjectId, completeShare.shareId);
+      // 撤销按生成时绑定的项目发请求，不重读快照（PUB-05/PUB-06）。
+      await controller.revokeCompleteShare(target.projectId, target.shareId);
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setCompleteShare(null);
       setNotice('完整只读链接已撤销；新访问将被拒绝，已打开或已下载的副本无法收回。');
     } catch (error) {
+      if (shareTaskStale(identity, controller, projectIdRef.current, run)) return;
       setNotice(error instanceof Error ? error.message : '撤销失败，请重试。');
-    } finally { setBusy(false); }
+    } finally {
+      if (taskRun.current === run) setBusy(false);
+    }
   };
 
   const copyReview = async () => {
@@ -563,6 +809,10 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       onRevokeCompleteShare={completeShare ? () => { void revokeCompleteShare(); } : undefined}
       cases={casesNode}
       onToggleQr={() => setQrOpen(current => !current)}
+      precheck={precheck}
+      publishFeedback={publishFeedback}
+      copyFeedback={copyFeedback}
+      publishRecords={publishRecords}
     />}
   </div>;
 }
@@ -621,6 +871,71 @@ function writePublishedLink(projectId: string | undefined, link: PublishedLink):
 function clearPublishedLink(projectId: string | undefined): void {
   if (!projectId) return;
   try { localStorage.removeItem(LINK_KEY + projectId); } catch { /* 清不掉就只在这一次把卡片退回未发布 */ }
+}
+
+// ---------------------------------------------------------------------------
+// P0-A（主计划 §4 实现约束 1/3）：分享卡异步任务的当前性绑定。
+// 身份 = (projectId, sessionId, userId, taskRun)。taskRun 在切项目与每个新动作开始时
+// 推进；每个 await 之后用 shareTaskStale 重新核对，不匹配的结果一律不写入本卡状态、
+// 不复制、不动通知。sessionId/userId 从 controller 快照实时读取，不缓存。
+// ---------------------------------------------------------------------------
+
+interface ShareTaskIdentity {
+  projectId?: string | undefined;
+  sessionId: string | null;
+  userId: string | null;
+  run: number;
+}
+
+function shareTaskIdentity(controller: BackendSession | null | undefined, projectId: string | undefined, run: number): ShareTaskIdentity {
+  let sessionId: string | null = null;
+  let userId: string | null = null;
+  try {
+    const snapshot = controller?.getSnapshot();
+    if (snapshot) {
+      sessionId = snapshot.sessionId ?? null;
+      userId = snapshot.user?.id ?? null;
+    }
+  } catch { /* 会话不可用时只绑项目与任务纪元 */ }
+  return { projectId, sessionId, userId, run };
+}
+
+function shareTaskStale(identity: ShareTaskIdentity, controller: BackendSession | null | undefined, projectId: string | undefined, currentRun: number): boolean {
+  if (currentRun !== identity.run) return true;
+  const now = shareTaskIdentity(controller, projectId, identity.run);
+  return now.projectId !== identity.projectId
+    || now.sessionId !== identity.sessionId
+    || now.userId !== identity.userId;
+}
+
+/**
+ * PUB-11：发布摘要——场地、楼层、物件、依赖归档、户外规划与缺失项逐类列清。
+ * 口径与客户只读页（app/view/page.tsx「对外可见内容」）一致：归档文件存在不等于三维里还原，
+ * 户外规划只进只读示意，扫描文件只作为资源下载。
+ */
+function publishSummaryOf(layout: RoomLayout, gate: PublishGateSnapshot): PublishSummaryItem[] {
+  const itemCount = layout.floors.reduce((total, floor) => total + floor.items.length, 0);
+  const archived = gate.manifest?.dependencies.length ?? 0;
+  const items: PublishSummaryItem[] = [
+    { label: '场地与楼层', detail: `${layout.floors.length} 层 · ${itemCount} 件物件 · ${layout.width} × ${layout.height} 米` },
+    {
+      label: '模型与资料',
+      detail: archived > 0 ? `${archived} 项依赖已归档` : '没有需要归档的依赖',
+      ...(gate.complete ? {} : { missing: true }),
+    },
+    { label: '户外规划', detail: gate.manifest?.outdoor ? '含分区、路线与设施（客户只读页展示，不进三维）' : '本次不含户外规划' },
+  ];
+  if (gate.gaps.length > 0) {
+    const labels: Record<string, string> = { model: '模型', scan: '扫描', source: '资料图', attachment: '附件' };
+    const byKind = new Map<string, number>();
+    for (const gap of gate.gaps) byKind.set(gap.kind, (byKind.get(gap.kind) ?? 0) + 1);
+    items.push({
+      label: '缺失项',
+      detail: [...byKind.entries()].map(([kind, count]) => `${labels[kind] ?? kind} ×${count}`).join('、'),
+      missing: true,
+    });
+  }
+  return items;
 }
 
 function titleOf(layout?: RoomLayout): string {
