@@ -2,10 +2,10 @@
   "version": 1,
   "provider": "3dassets.dev",
   "license": "per-model",
-  "count": 976,
-  "placeableCount": 975,
+  "count": 990,
+  "placeableCount": 987,
   "registeredCount": 528,
-  "totalBytes": 77404348,
+  "totalBytes": 93325872,
   "buckets": [
     {
       "key": "seating",
@@ -25,7 +25,7 @@
     {
       "key": "stage",
       "label": "舞台设施",
-      "count": 39
+      "count": 41
     },
     {
       "key": "audio",
@@ -35,12 +35,12 @@
     {
       "key": "lighting",
       "label": "灯光照明",
-      "count": 27
+      "count": 28
     },
     {
       "key": "signage",
       "label": "标识导视",
-      "count": 95
+      "count": 96
     },
     {
       "key": "people",
@@ -75,7 +75,7 @@
     {
       "key": "structure",
       "label": "建筑结构",
-      "count": 112
+      "count": 113
     },
     {
       "key": "digital",
@@ -85,7 +85,7 @@
     {
       "key": "decor",
       "label": "装饰陈设",
-      "count": 64
+      "count": 73
     },
     {
       "key": "food",
@@ -17284,6 +17284,288 @@
       "cdnUrl": "https://cdn.3dassets.dev/assets/27913/v1/model.glb",
       "sha256": "ce09678832e8492f48e09415364bebdbffb7c4116bb2db180e676fd2a3861139",
       "license": "CC0-1.0",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-grand-opening-flower-basket",
+      "name": "开业花篮",
+      "originalName": "开业花篮 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 0.9157,
+      "depth": 0.8274,
+      "height": 1.4,
+      "bytes": 1596432,
+      "triangles": 39710,
+      "glb": "/showcase/assets/library/model/aholo-20261119-grand-opening-flower-basket.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-grand-opening-flower-basket.webp",
+      "sha256": "be98db83cab2c721294b68d2eca8512d17384cd404528af3ca481826b14e6db3",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-floral-aisle-pillar",
+      "name": "路引花柱",
+      "originalName": "路引花柱 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 0.6444,
+      "depth": 0.6378,
+      "height": 2,
+      "bytes": 2343224,
+      "triangles": 48606,
+      "glb": "/showcase/assets/library/model/aholo-20261119-floral-aisle-pillar.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-floral-aisle-pillar.webp",
+      "sha256": "0a66f693d59d22f0e0f1d1ee4d5fbd5d414564f071bd855183d114388b9f7df6",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-table-flower-arrangement",
+      "name": "桌花摆件",
+      "originalName": "桌花摆件 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 0.55,
+      "depth": 0.5567,
+      "height": 0.4644,
+      "bytes": 1486044,
+      "triangles": 34752,
+      "glb": "/showcase/assets/library/model/aholo-20261119-table-flower-arrangement.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-table-flower-arrangement.webp",
+      "sha256": "8bc5c65f7af21c2f1cd32cd73091936d6f444decbdf90254ca28ed41c3b6535c",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-floral-arch",
+      "name": "花艺拱门",
+      "originalName": "花艺拱门 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 2.4887,
+      "depth": 0.7567,
+      "height": 2.2,
+      "bytes": 1792612,
+      "triangles": 38990,
+      "glb": "/showcase/assets/library/model/aholo-20261119-floral-arch.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-floral-arch.webp",
+      "sha256": "c8fca23acae68a5f8a3039d96ee83820e4f20c27c605cb848445bc91ce43fa5d",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-champagne-glass-tower",
+      "name": "香槟塔",
+      "originalName": "香槟塔 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 0.58,
+      "depth": 0.5803,
+      "height": 0.5765,
+      "bytes": 1280480,
+      "triangles": 37574,
+      "glb": "/showcase/assets/library/model/aholo-20261119-champagne-glass-tower.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-champagne-glass-tower.webp",
+      "sha256": "41b03ab858c6b2e75a69fe2ba1c45fdbb92115ba6c7f722dfd6ebf0e3fcd3c0c",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": [],
+      "blockedReason": "候选弱图：透明杯在白底上辨识度不足，待重渲染后替换，暂不可放置。"
+    },
+    {
+      "slug": "aholo-20261119-confetti-cannon",
+      "name": "礼花筒",
+      "originalName": "礼花筒 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 0.0475,
+      "depth": 0.0451,
+      "height": 0.18,
+      "bytes": 699540,
+      "triangles": 25034,
+      "glb": "/showcase/assets/library/model/aholo-20261119-confetti-cannon.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-confetti-cannon.webp",
+      "sha256": "a023fd8289d8069e5c1a4031bbee185df8f610c89dae94d378414c9e1fabbc83",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-photo-frame-booth",
+      "name": "合影拍照框",
+      "originalName": "合影拍照框 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 0.9927,
+      "depth": 0.5381,
+      "height": 1.6,
+      "bytes": 690744,
+      "triangles": 27352,
+      "glb": "/showcase/assets/library/model/aholo-20261119-photo-frame-booth.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-photo-frame-booth.webp",
+      "sha256": "f9f8434a8a77a8392e10084d6ba87d4642ad4d2bafe2fd67a4ee4d9e228c3014",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-folding-screen-partition",
+      "name": "折叠屏风",
+      "originalName": "折叠屏风 · Aholo 生成",
+      "bucket": "structure",
+      "subcategory": "建筑结构",
+      "width": 2,
+      "depth": 1.5166,
+      "height": 2.0566,
+      "bytes": 657828,
+      "triangles": 20422,
+      "glb": "/showcase/assets/library/model/aholo-20261119-folding-screen-partition.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-folding-screen-partition.webp",
+      "sha256": "063851d66b33e751cdf1f8be47d3d045a1092aafa112c7918d0f01c4d0d18cf5",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-drapery-swag",
+      "name": "舞台帷幔",
+      "originalName": "舞台帷幔 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 1.8,
+      "depth": 0.237,
+      "height": 1.2142,
+      "bytes": 1218648,
+      "triangles": 46618,
+      "glb": "/showcase/assets/library/model/aholo-20261119-drapery-swag.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-drapery-swag.webp",
+      "sha256": "4bbb71d4793596e07b491a6775417ff9f573bb4539a87b5ec758eb2a761146c5",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-crystal-chandelier",
+      "name": "水晶吊灯",
+      "originalName": "水晶吊灯 · Aholo 生成",
+      "bucket": "lighting",
+      "subcategory": "灯光照明",
+      "width": 0.6159,
+      "depth": 0.6105,
+      "height": 0.75,
+      "bytes": 1412204,
+      "triangles": 41976,
+      "glb": "/showcase/assets/library/model/aholo-20261119-crystal-chandelier.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-crystal-chandelier.webp",
+      "sha256": "cbfef2e5641a4c97d180deffb9de63b7802eb45e991e7a6c42001c650d58cd8f",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-table-number-card-stand",
+      "name": "桌牌卡架",
+      "originalName": "桌牌卡架 · Aholo 生成",
+      "bucket": "signage",
+      "subcategory": "标识导视",
+      "width": 0.21,
+      "depth": 0.1175,
+      "height": 0.197,
+      "bytes": 439808,
+      "triangles": 19444,
+      "glb": "/showcase/assets/library/model/aholo-20261119-table-number-card-stand.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-table-number-card-stand.webp",
+      "sha256": "7b18af19e548a6760b1fbb0ad264fab2d85e07e43a18a89918f233c15c178cd2",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-cold-fountain",
+      "name": "冷焰火筒",
+      "originalName": "冷焰火筒 · Aholo 生成",
+      "bucket": "stage",
+      "subcategory": "舞台设施",
+      "width": 0.1858,
+      "depth": 0.1595,
+      "height": 0.32,
+      "bytes": 711352,
+      "triangles": 25906,
+      "glb": "/showcase/assets/library/model/aholo-20261119-cold-fountain.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-cold-fountain.webp",
+      "sha256": "91d661ac1a8e11128a20999ea4f7dde128f1f560ee0ff841c2da5b82fa0f65ca",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": [],
+      "blockedReason": "候选弱图：贴图含待清理的伪标签贴花，待回炉重生成后替换，暂不可放置。"
+    },
+    {
+      "slug": "aholo-20261119-bubble-machine",
+      "name": "泡泡机",
+      "originalName": "泡泡机 · Aholo 生成",
+      "bucket": "stage",
+      "subcategory": "舞台设施",
+      "width": 0.209,
+      "depth": 0.2174,
+      "height": 0.45,
+      "bytes": 818008,
+      "triangles": 29922,
+      "glb": "/showcase/assets/library/model/aholo-20261119-bubble-machine.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-bubble-machine.webp",
+      "sha256": "780e804cbdc56461ba9ba0e0d342d3667b21e11e54c70e0b9111b413b7fef2e0",
+      "license": "project-authored",
+      "sources": [
+        "open-extra"
+      ],
+      "aliases": []
+    },
+    {
+      "slug": "aholo-20261119-balloon-cluster",
+      "name": "气球束",
+      "originalName": "气球束 · Aholo 生成",
+      "bucket": "decor",
+      "subcategory": "装饰陈设",
+      "width": 0.4633,
+      "depth": 0.4065,
+      "height": 0.6,
+      "bytes": 774600,
+      "triangles": 28868,
+      "glb": "/showcase/assets/library/model/aholo-20261119-balloon-cluster.glb",
+      "thumb": "/showcase/assets/library/thumb/aholo-20261119-balloon-cluster.webp",
+      "sha256": "3def1bb8aca4a186b0ea9bc11029e9e06ba49d99b342480232ad1139466df005",
+      "license": "project-authored",
       "sources": [
         "open-extra"
       ],

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "reviewedAt": "2026-11-20",
+  "note": "缩略图目检结论。pass=可入库；weak=材质偏淡/轮廓弱但可辨，与现有库透明件观感一致，建议入库；hold=存疑，待人工裁决后再决定是否入库。渲染管线：tools/aholo/render-thumbs.mjs + thumb-preview.html，产物在 .cache/aholo/thumbs/。",
+  "items": [
+    { "slug": "aholo-20261119-grand-opening-flower-basket", "zh": "开业花篮", "verdict": "pass", "note": "红花篮+黑金属架+垂坠缎带，接地完整，无碎片/畸形/文字" },
+    { "slug": "aholo-20261119-floral-aisle-pillar", "zh": "路引花柱", "verdict": "pass", "note": "白粉玫瑰花柱，底座落地，完整" },
+    { "slug": "aholo-20261119-table-flower-arrangement", "zh": "桌花摆件", "verdict": "pass", "note": "黄白花+玻璃花瓶，白花在白底略淡，花叶轮廓可辨" },
+    { "slug": "aholo-20261119-floral-arch", "zh": "花艺拱门", "verdict": "pass", "note": "白绿玫瑰拱门，两侧支架落地，拱形完整" },
+    { "slug": "aholo-20261119-champagne-glass-tower", "zh": "香槟塔", "verdict": "hold", "note": "透明玻璃杯在纯白底上几乎融掉，仅杯腿/托盘可辨，辨识度低；需浅灰底或压环境光重渲染，或回炉" },
+    { "slug": "aholo-20261119-confetti-cannon", "zh": "礼花筒", "verdict": "weak", "note": "红金圆筒，中部金色块有不可读的伪字符贴花；结构完整，无残留可读文字" },
+    { "slug": "aholo-20261119-photo-frame-booth", "zh": "合影拍照框", "verdict": "pass", "note": "金色空画框+木画架，三角架落地，空心居中" },
+    { "slug": "aholo-20261119-folding-screen-partition", "zh": "折叠屏风", "verdict": "pass", "note": "木框米色布面三折屏，落地结构清楚" },
+    { "slug": "aholo-20261119-drapery-swag", "zh": "舞台帷幔", "verdict": "pass", "note": "酒红丝绒 swag+金色流苏绳，褶皱清楚" },
+    { "slug": "aholo-20261119-crystal-chandelier", "zh": "水晶吊灯", "verdict": "weak", "note": "黄铜架+蜡烛头+水晶垂坠，水晶偏白但灯架/吊盘可辨，同基线玻璃件观感" },
+    { "slug": "aholo-20261119-table-number-card-stand", "zh": "桌牌卡架", "verdict": "weak", "note": "透明亚克力+空白帐篷卡，白底上轮廓偏弱，可辨认" },
+    { "slug": "aholo-20261119-cold-fountain", "zh": "冷焰火筒", "verdict": "hold", "note": "底部黑标为 AI 臆造的伪品牌标签贴花（不可读），另有一圈外露电线；需回炉重生成或后期遮罩" },
+    { "slug": "aholo-20261119-bubble-machine", "zh": "泡泡机", "verdict": "pass", "note": "灰机身+圆形泡泡轮+提手+三脚架，落地完整" },
+    { "slug": "aholo-20261119-balloon-cluster", "zh": "气球束", "verdict": "pass", "note": "白金粉气球簇+丝带+底部配重，接地阴影正常" }
+  ]
+}

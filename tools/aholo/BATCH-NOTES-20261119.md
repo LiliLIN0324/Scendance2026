@@ -56,6 +56,12 @@ node tools/aholo/lux3d-batch.mjs --shard 1/3
 - 结构备注：压缩件带 `EXT_meshopt_compression` / `EXT_texture_webp` / `KHR_mesh_quantization` 必需扩展；前端加载器已挂 MeshoptDecoder（`glb-loader.ts`），浏览器原生解 WebP。**云端 `validateModel` 只收 png/jpeg 贴图、拒绝 extensionsRequired**——这批只能走静态随包目录，不能直接登记成云端公开物料。
 - 尺寸取原件包围盒（压缩不改几何尺度）；模型质心在原点、未落地，落地偏移由编辑器运行时按 `groundOffset` 处理。
 
+### 2026-11-20 更正：去 meshopt 重压（目录门禁对齐）
+
+- 收尾跑静态目录门禁 `scripts/library-model.ts` 才发现：目录校验的 `extensionsRequired` 白名单同样**只放行 `KHR_mesh_quantization` 与 `EXT_texture_webp`**，不收 `EXT_meshopt_compression`；现有库 976 件实测均非 meshopt。上一版 meshopt 产物在目录门禁下抛 `UNSUPPORTED_MODEL_FEATURE`。
+- 处置：`tools/aholo/recompress-nomeshopt.mjs` 从 raw 原件重压，`--compress quantize --texture-compress webp --texture-size 1024 --simplify true`，产物在 `.cache/aholo/ingest-nomeshopt/`（单件 0.42–2.23 MB，三角面 19.4k–48.6k），14 件全部通过 `validateLibraryModel`。旧 `.cache/aholo/ingest-20261119/` meshopt 产物废弃。
+- 2 件弱图候选（香槟塔、冷焰火筒）带 `blockedReason` 挂候选库、不进可放置面板；其 blocked 原因是「弱图待替换」而非几何超限，测试口径已按两类屏蔽分别处理。
+
 ### 仍未完成（登记前的硬门禁）
 
 1. **缩略图 webp**：仓库内没有本地 GLB 渲染出图链路；现有 975 张缩略图来自源 CDN 下载（`scripts/fetch-open-models.mjs`）。构建脚本对 `thumb/<slug>.webp` 有 RIFF/WEBP 格式校验，**不能放占位图**。候选链路：本地 three.js 预览页 + CDP `Page.captureScreenshot`（webp 格式），需要先搭出来并目检角度/背景。

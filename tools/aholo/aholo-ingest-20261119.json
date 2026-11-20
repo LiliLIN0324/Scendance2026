@@ -1,0 +1,695 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-20T01:11:49.301Z",
+  "preset": "far",
+  "textureSize": "1024",
+  "note": "草稿清单：人工审过缩略图/朝向/落地后，再把 models 并入 assets/library/incoming-extra.json，并补 labels.zh.json 与 thumb/<slug>.webp。【2026-11-20 更正】下表 compressed 段为旧 meshopt 产物，目录门禁不收 meshopt，已由 tools/aholo/recompress-nomeshopt.mjs 重压为 quantize 格式，元数据见 .cache/aholo/ingest-nomeshopt/meta.json；本表仅保留 raw 尺寸与条目文案（zh/bucket/subcategory/prompt）供重压复用。",
+  "models": [
+    {
+      "slug": "aholo-20261119-grand-opening-flower-basket",
+      "zh": "开业花篮",
+      "bucket": "decor",
+      "subcategory": "花艺装饰",
+      "prompt": "A tall grand-opening celebration flower basket on a metal stand, filled with red roses, gold ornaments and green foliage, ribbon hanging down, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 14009380,
+        "triangles": 39712,
+        "width": 0.9157,
+        "height": 1.4,
+        "depth": 0.8274
+      },
+      "compressed": {
+        "bytes": 841696,
+        "sha256": "6c3546e075561c1f30942bf39d7ad9cb5f8269557d15892464b68b7cd0a9e1a9",
+        "triangles": 39710,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.9157,
+        "height": 1.4,
+        "depth": 0.8274
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-floral-aisle-pillar",
+      "zh": "路引花柱",
+      "bucket": "decor",
+      "subcategory": "花艺装饰",
+      "prompt": "A tall cylindrical wedding aisle floral pillar covered with white and pale pink roses and greenery, standing upright, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 15726976,
+        "triangles": 48756,
+        "width": 0.6444,
+        "height": 2,
+        "depth": 0.6378
+      },
+      "compressed": {
+        "bytes": 1081836,
+        "sha256": "c6d7f993a1369f5c94dd4988a94df06d3e2fe29c360649755f08595683e9f8b2",
+        "triangles": 48606,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.6444,
+        "height": 2,
+        "depth": 0.6378
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-table-flower-arrangement",
+      "zh": "桌花摆件",
+      "bucket": "decor",
+      "subcategory": "花艺装饰",
+      "prompt": "A low round table centerpiece flower arrangement in a clear glass vase, mixed white and yellow blooms with eucalyptus leaves, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 14731920,
+        "triangles": 34782,
+        "width": 0.55,
+        "height": 0.4644,
+        "depth": 0.5567
+      },
+      "compressed": {
+        "bytes": 856916,
+        "sha256": "6557d94657bca96d887910664a5f36c042ee396dd3f2f3e8328378834994123a",
+        "triangles": 34752,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.55,
+        "height": 0.4644,
+        "depth": 0.5567
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-floral-arch",
+      "zh": "花艺拱门",
+      "bucket": "decor",
+      "subcategory": "花艺装饰",
+      "prompt": "A semicircular wedding floral arch covered with white roses, baby breath and green vines, freestanding frame, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 15586688,
+        "triangles": 39050,
+        "width": 2.4887,
+        "height": 2.2,
+        "depth": 0.7567
+      },
+      "compressed": {
+        "bytes": 984864,
+        "sha256": "e7b247a436b1e7fad25288612b8ad1c2570f5b180b1f63d57205f254b2e87f42",
+        "triangles": 38990,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 2.4887,
+        "height": 2.2,
+        "depth": 0.7567
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-champagne-glass-tower",
+      "zh": "香槟塔",
+      "bucket": "decor",
+      "subcategory": "庆典道具",
+      "prompt": "A pyramid tower of empty champagne flutes standing on a round silver tray, three tiers, single object centered, plain neutral studio background, PBR glass material, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 8255564,
+        "triangles": 37744,
+        "width": 0.58,
+        "height": 0.5765,
+        "depth": 0.5803
+      },
+      "compressed": {
+        "bytes": 772648,
+        "sha256": "5eebc563374f6ec7cf0f0168aa62331508168fda17ad803225aabf68a1d9a6b6",
+        "triangles": 37574,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.58,
+        "height": 0.5765,
+        "depth": 0.5803
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-confetti-cannon",
+      "zh": "礼花筒",
+      "bucket": "decor",
+      "subcategory": "庆典道具",
+      "prompt": "A handheld party confetti cannon tube, red and gold cardboard cylinder with gold confetti visible at the top, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 8473852,
+        "triangles": 28208,
+        "width": 0.0475,
+        "height": 0.18,
+        "depth": 0.0451
+      },
+      "compressed": {
+        "bytes": 358808,
+        "sha256": "d2911238bcc0a377880c6abf27529a4a56592f25496cfcf0f98b551dc1c77ca4",
+        "triangles": 25034,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.0475,
+        "height": 0.18,
+        "depth": 0.0451
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-photo-frame-booth",
+      "zh": "合影拍照框",
+      "bucket": "decor",
+      "subcategory": "庆典道具",
+      "prompt": "A large decorative hollow rectangular photo frame on a wooden easel stand, gold painted border, empty center, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 8153916,
+        "triangles": 28734,
+        "width": 0.9927,
+        "height": 1.6,
+        "depth": 0.5381
+      },
+      "compressed": {
+        "bytes": 326716,
+        "sha256": "88a4a6b67696b4774ffc87364dec621d924f0e9cc7714fa0039e79c46922e9d8",
+        "triangles": 27352,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.9927,
+        "height": 1.6,
+        "depth": 0.5381
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-folding-screen-partition",
+      "zh": "折叠屏风",
+      "bucket": "structure",
+      "subcategory": "围护隔断",
+      "prompt": "A four-panel wooden folding room divider screen with cream fabric panels and dark wood frame, slightly angled, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 9152416,
+        "triangles": 21254,
+        "width": 2,
+        "height": 2.0566,
+        "depth": 1.5166
+      },
+      "compressed": {
+        "bytes": 370700,
+        "sha256": "2c974362017fdd5451b7e580e9ffb64dc8f503666848c9e806bcc71fb10925f5",
+        "triangles": 20422,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 2,
+        "height": 2.0566,
+        "depth": 1.5166
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-drapery-swag",
+      "zh": "舞台帷幔",
+      "bucket": "decor",
+      "subcategory": "舞台装饰",
+      "prompt": "A draped burgundy fabric swag valance with soft folds and gold tassel ropes, stage backdrop curtain decoration, single object centered, plain neutral studio background, PBR fabric material, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 10971712,
+        "triangles": 46914,
+        "width": 1.8,
+        "height": 1.2142,
+        "depth": 0.237
+      },
+      "compressed": {
+        "bytes": 556420,
+        "sha256": "cba0e3d5d7ab73815772b281d9a06537cb445ff871d8a8ba085019058a8256c4",
+        "triangles": 46618,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 1.8,
+        "height": 1.2142,
+        "depth": 0.237
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-crystal-chandelier",
+      "zh": "水晶吊灯",
+      "bucket": "lighting",
+      "subcategory": "照明",
+      "prompt": "A small elegant crystal chandelier with polished brass frame and hanging crystal drops, ceiling mount, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 12309196,
+        "triangles": 42036,
+        "width": 0.6159,
+        "height": 0.75,
+        "depth": 0.6105
+      },
+      "compressed": {
+        "bytes": 757572,
+        "sha256": "bcba356045f31f8f919b650b4a940dbe53455600e82d0f8d272f5f254e7131ea",
+        "triangles": 41976,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.6159,
+        "height": 0.75,
+        "depth": 0.6105
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-table-number-card-stand",
+      "zh": "桌牌卡架",
+      "bucket": "signage",
+      "subcategory": "标识",
+      "prompt": "A clear acrylic table number card holder stand with a blank white tent card inside, small tabletop size, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 3951912,
+        "triangles": 26990,
+        "width": 0.21,
+        "height": 0.197,
+        "depth": 0.1175
+      },
+      "compressed": {
+        "bytes": 203580,
+        "sha256": "4653feb493b30dedbcf3962f0bc7f191a30f96dabcfc35b32a4e9f7275a9d195",
+        "triangles": 19444,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.21,
+        "height": 0.197,
+        "depth": 0.1175
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-cold-fountain",
+      "zh": "冷焰火筒",
+      "bucket": "stage",
+      "subcategory": "舞台特效",
+      "prompt": "A cylindrical stage cold spark fountain firework canister, dark metal body with a nozzle on top, standing upright, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 11446068,
+        "triangles": 27976,
+        "width": 0.1858,
+        "height": 0.32,
+        "depth": 0.1595
+      },
+      "compressed": {
+        "bytes": 359880,
+        "sha256": "2fc4530e7fa527adb2287e4b6033b116f2eeb800926d4af58b77f82019065f2a",
+        "triangles": 25906,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.1858,
+        "height": 0.32,
+        "depth": 0.1595
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-bubble-machine",
+      "zh": "泡泡机",
+      "bucket": "stage",
+      "subcategory": "舞台特效",
+      "prompt": "A portable black party bubble machine on a small tripod, round blower wheel on the front, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 12676016,
+        "triangles": 30642,
+        "width": 0.209,
+        "height": 0.45,
+        "depth": 0.2174
+      },
+      "compressed": {
+        "bytes": 409720,
+        "sha256": "4cdfd1baa838e13cc8f950cc6e6a41fb538cc19e1e2bcc33d20f195f11586fac",
+        "triangles": 29922,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.209,
+        "height": 0.45,
+        "depth": 0.2174
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    },
+    {
+      "slug": "aholo-20261119-balloon-cluster",
+      "zh": "气球束",
+      "bucket": "decor",
+      "subcategory": "庆典道具",
+      "prompt": "A cluster of matte latex balloons in white, gold and blush pink tied together with ribbons and a small weight, bouquet shape, single object centered, plain neutral studio background, PBR materials, no text, no watermark",
+      "source": "aholo-lux3d-batch-20261119",
+      "raw": {
+        "bytes": 7611400,
+        "triangles": 29046,
+        "width": 0.4633,
+        "height": 0.6,
+        "depth": 0.4065
+      },
+      "compressed": {
+        "bytes": 390144,
+        "sha256": "be233cb9d56530130717832b5cf214c26ee1eb6c5439330dbd16db453141c656",
+        "triangles": 28868,
+        "primitives": 1,
+        "nodes": 1,
+        "materials": 1,
+        "images": 2,
+        "skins": 0,
+        "animations": 0,
+        "extensionsRequired": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_mesh_quantization"
+        ],
+        "extensionsUsed": [
+          "EXT_meshopt_compression",
+          "EXT_texture_webp",
+          "KHR_materials_specular",
+          "KHR_mesh_quantization"
+        ],
+        "imageMimes": [
+          "image/webp",
+          "image/webp"
+        ],
+        "width": 0.4633,
+        "height": 0.6,
+        "depth": 0.4065
+      },
+      "problems": [],
+      "notes": [
+        "云端登记需解 extensionsRequired: EXT_meshopt_compression,EXT_texture_webp,KHR_mesh_quantization",
+        "贴图为 WebP：云端 validateModel 只收 png/jpeg"
+      ]
+    }
+  ]
+}
