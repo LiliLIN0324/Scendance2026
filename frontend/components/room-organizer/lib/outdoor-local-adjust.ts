@@ -8,9 +8,10 @@
  * 1. **只作用于显式选中的对象**。没有选中就问「先点选哪一组」，不猜「这里」。
  * 2. **方向必须有坐标语义**。「右」在正北朝上的 2D 画布里 = +x（东）；画布转过角度或
  *    进了 3D，屏幕右与场地东侧就不是一回事——此时只澄清这一件事，并把答案记住。
- * 3. **不重排整个场**。只改选中物件的坐标/间距，边界、分区、流线、锁定层一律不动；
- *    越界或压到障碍如实计数，不静默夹回原位。
+ * 3. **不重排整个场**。只改选中物件的坐标/间距，边界、分区、流线一律不动；
+ *    越界、压到相邻物料如实计数，不静默夹回原位。锁定层由调用方写入前拦（本函数不读锁）。
  */
+import { facilityOverlapPairs } from "./plan-facility-overlap";
 import { facilityFootprintRing, facilityPlacementIssues } from "./site-plan-facilities";
 import type { PlanFacility, SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 
@@ -188,8 +189,10 @@ export function parseLocalAdjustment(message: string, context: LocalAdjustContex
 export interface LocalAdjustResult {
   plan: SitePlanData;
   movedIds: string[];
-  /** 移动后越界/压障的件数（如实计数，不静默夹回）。 */
+  /** 移动后越界/压物料的件数与处数之和（如实计数，不静默夹回）。 */
   conflicts: number;
+  /** 这次动到的分区名（去重），用于说清「影响范围」。 */
+  affectedZones: string[];
   note: string;
 }
 
@@ -202,7 +205,7 @@ export function applyLocalAdjust(
   const wanted = new Set(ids);
   const selected = plan.facilities.filter((facility) => wanted.has(facility.id));
   if (!selected.length) {
-    return { plan, movedIds: [], conflicts: 0, note: "选中的对象已不在画布上，没有移动。" };
+    return { plan, movedIds: [], conflicts: 0, affectedZones: [], note: "选中的对象已不在画布上，没有移动。" };
   }
 
   const centroid = selected.reduce(
@@ -248,8 +251,10 @@ export function applyLocalAdjust(
   );
 
   let conflicts = 0;
+  const affectedZoneIds = new Set<string>();
   for (const id of movedIds) {
     const facility = moved.get(id)!;
+    if (facility.zoneId) affectedZoneIds.add(facility.zoneId);
     const ring = facilityFootprintRing(facility);
     const zone = plan.zones.find((item) => item.id === facility.zoneId);
     if (
@@ -260,9 +265,23 @@ export function applyLocalAdjust(
     }
   }
 
-  const note = conflicts
-    ? `移动后有 ${conflicts} 件越出活动范围或所属分区，已如实标出，没有自动夹回；可撤销。`
-    : `只移动了选中的 ${movedIds.length} 件，其余物件与分区未动。`;
+  // 2026-11-20 P1：设施压设施过去只进问题清单（审计 K7），局部调整完必须当场说清，
+  // 否则「只挪了一组」看起来永远安全。判据与 K7 同一份，不另写一套。
+  const movedSet = new Set(movedIds);
+  const overlaps = facilityOverlapPairs(next.facilities).filter(
+    (pair) => movedSet.has(pair.a.id) || movedSet.has(pair.b.id),
+  ).length;
 
-  return { plan: next, movedIds, conflicts, note };
+  const affectedZones = [...affectedZoneIds]
+    .map((id) => plan.zones.find((zone) => zone.id === id)?.name)
+    .filter((name): name is string => Boolean(name));
+
+  const problems: string[] = [];
+  if (conflicts) problems.push(`${conflicts} 件越出活动范围或所属分区`);
+  if (overlaps) problems.push(`${overlaps} 处压到相邻物料`);
+  const note = problems.length
+    ? `移动后有 ${problems.join("、")}，已如实标出，没有自动夹回；可撤销。`
+    : `只移动了选中的 ${movedIds.length} 件${affectedZones.length ? `（${affectedZones.join("、")}）` : ""}，其余物件与分区未动。`;
+
+  return { plan: next, movedIds, conflicts: conflicts + overlaps, affectedZones, note };
 }

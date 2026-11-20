@@ -405,6 +405,11 @@ export interface OutdoorAgentBridge {
   inspectFacility?(id: string): boolean;
   /** 2026-11-20 P1：把一组设施整组塞进视口；只动视图，不改 plan 与选中。 */
   focusEntities?(ids: readonly string[]): boolean;
+  /**
+   * 2026-11-20 P1：设施层是否锁定。锁定层上的对象不改位移/尺寸；
+   * 调用方在写入前拦下并说明原因，不静默跳过。
+   */
+  facilityLayerLocked?(): boolean;
   models?(id: string): Promise<OutdoorModelChoice[]>;
   selectModel?(id: string, slug: string, expected: string): boolean;
   openGenerate?(id: string, kind: "text" | "image"): boolean;

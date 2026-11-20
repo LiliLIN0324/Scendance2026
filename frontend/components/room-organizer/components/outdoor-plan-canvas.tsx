@@ -1425,6 +1425,8 @@ export interface OutdoorPlanCanvasHandle {
    * 只动视图，不改 plan、不改选中；一件都找不到时如实回 false。
    */
   focusFacilities(ids: readonly string[]): boolean;
+  /** 2026-11-20 P1：设施层锁（只读）；锁定后不改位移/尺寸，由调用方拦下并说明。 */
+  isFacilityLayerLocked(): boolean;
   /**
    * 2026-11-20 审计 K5：落位前旋转/取消的公共入口（2D 浮条、3D HUD、键盘 R 同一份）。
    * 不在放置态时如实回 false，不偷写方案。
@@ -5000,6 +5002,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       ]);
       return true;
     },
+    isFacilityLayerLocked: () => lockedLayersRef.current.facility === true,
     inspectFacility: id => {
       const facility = planRef.current.facilities.find(item => item.id === id);
       if (!facility) return false;

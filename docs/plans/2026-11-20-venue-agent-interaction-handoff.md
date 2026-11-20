@@ -16,6 +16,8 @@
 | 本次变化（新增/移动/删除） | `lib/outdoor-plan-change.ts`、卡片「本次变化」 | 应用后给出「新增 x 件、移动 y 件、删除 z 件」与明细，撤销入口只出现一次 |
 | A/B 同视图比较 | hook `openDesignCompare` / `selectDesignCandidate` / `adoptDesignCandidate`、卡片比较区 | 同一份 `designInput` 快照重算两种策略，切候选不改画布；只有「采用这一版」才写盘 |
 | 旧候选不能覆盖新改动 | `baseStillIntact` + 候选基座比对 | 打开比较后用户手动改过画布，采用会被拒绝并写明「不再覆盖你的修改」 |
+| 锁定层不放行（2026-11-20 补） | `facilityLayerLocked`（契约→画布 `isFacilityLayerLocked` →overlay） | 设施层锁定时局部位移/候选采用直接拒写，并说清「先在图层里解锁」；撤销仍放行（回到锁前快照） |
+| 冲突与影响范围（2026-11-20 补） | `applyLocalAdjust` + `facilityOverlapPairs`（K7 同一套判据） | 越界件数与「压到相邻物料」处数分开计，并报出这次动到的分区名；椅子叠桌子仍按 K7 允许，不算冲突 |
 | 复用监督档 / 撤销 / 恢复 | `gateAction` + `commitDesignChange` + 整份快照写回 | 严格档一次确认（未确认前画布不动），默认档按既有风险规则；撤销 = 写回应用前完整方案（对象、分区、引用一起回来） |
 
 集成面只加在 `hooks/use-outdoor-agent-workflow.ts`，对外返回新增：
@@ -47,7 +49,12 @@
 
 ```
 npx tsc --noEmit
-→ 通过（无输出）
+→ 第一版：通过（无输出）
+→ 2026-11-20 补锁与冲突计数后：5 条 error，均在另一条线的发布流文件
+  （lib/publish-flow.test.ts:44、panels/share-menu.tsx:412/444、
+   room-organizer-publish.react.test.tsx:89/129），本轮文件 0 条。
+  期间两次 `Zone Allocation failed` / `heap out of memory` 崩在系统内存不足（当时全机可用约 1.4 GB），
+  降低并发后重跑得到上述结果；不把崩溃当成「通过」。
 ```
 
 ```
@@ -59,6 +66,13 @@ npx vitest run \
   components/room-organizer/hooks/use-outdoor-agent-workflow.design.react.test.tsx
 → Test Files  5 passed (5) / Tests  34 passed (34)   # 第一版
 → Test Files  3 passed (3) / Tests  17 passed (17)   # 补画布适配后：设计闭环 10 + 结果卡 6 + 画布入镜 1
+→ 2026-11-20 打完锁定与冲突计数：6 个文件 / 45 条全过
+  （设计闭环 14 + 结果卡 6 + 画布入镜 1 + 局部调整 14 + 摘要 4 + 差异 4）
+  实跑（因机器内存吃紧分两批，单 worker）：
+    npx vitest run --maxWorkers=1 --pool=forks <局部调整>            → 14 passed
+    npx vitest run --maxWorkers=1 --pool=forks <设计闭环>            → 14 passed
+    npx vitest run --maxWorkers=1 --pool=forks <其余 4 个>          → 17 passed
+  合计 45 passed；没有合并成一次并发跑，因为两台其它窗口在建/在测，重复 OOM。
 ```
 
 覆盖到的验收项（都能在 `use-outdoor-agent-workflow.design.react.test.tsx` 里逐条对上）：
@@ -72,6 +86,9 @@ npx vitest run \
 7. 应用前画布又改过 → 拒绝写入，不覆盖用户较新的手动修改；
 8. 候选比较：打开不改画布，A/B 可切，画布改动后采用被拒绝。
 9. 定位分区优先整组入镜（`focusEntities` 收到该区全部 id），画布不提供时如实回落到逐件聚焦。
+10. 设施层锁定时：局部位移不写、不进确认；采用候选也被拒（测试 `锁定设施层` 两条）。
+11. 采用候选后可撤销回到采用前的完整方案（测试 `候选采用与撤销`）。
+12. 选中上下文件数只数现存对象，已删掉的不算（测试 `选中上下文的件数`）。
 
 卡片渲染层另有 6 条（`outdoor-design-result-card.react.test.tsx`）：摘要文案、分区定位派发、选中上下文的清除/取回、已应用态的撤销入口唯一、严格档不谎称已写入、A/B 切换 + 采用 + 结束比较。
 

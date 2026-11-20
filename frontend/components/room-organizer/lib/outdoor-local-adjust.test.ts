@@ -119,3 +119,29 @@ describe("一句话局部调整", () => {
     expect(parseLocalAdjustment("把宴席区改成蓝色", { selectedCount: 3 })).toEqual({ kind: "none" });
   });
 });
+
+describe("局部调整的冲突计数（与问题清单同一套判据）", () => {
+  it("压到相邻物料时如实计数，并说出影响的分区", () => {
+    // 椅子允许叠到桌子上（K7 的 mayStack），所以要用两张桌子试真冲突。
+    const base = plan();
+    base.facilities.push({
+      id: "t2", templateId: "oneplan:table", name: "宴席圆桌 2", zoneId: "z1",
+      position: { x: 10, y: 10 }, rotationDeg: 0, size: { width: 1.8, depth: 1.8 }, notes: "",
+    });
+    const result = applyLocalAdjust(base, ["t1"], {
+      kind: "move", dx: 6, dy: 6, distanceM: 8.49, basisLabel: "测试",
+    });
+    expect(result.movedIds).toEqual(["t1"]);
+    expect(result.conflicts).toBeGreaterThan(0);
+    expect(result.note).toContain("压到相邻物料");
+    expect(result.affectedZones).toEqual(["宴席区"]);
+  });
+
+  it("只位移、不压到东西时报告影响范围，不报告冲突", () => {
+    const result = applyLocalAdjust(plan(), ["t1"], {
+      kind: "move", dx: 0, dy: 3, distanceM: 3, basisLabel: "测试",
+    });
+    expect(result.conflicts).toBe(0);
+    expect(result.note).toContain("宴席区");
+  });
+});

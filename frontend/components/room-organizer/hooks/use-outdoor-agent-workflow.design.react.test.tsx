@@ -295,3 +295,76 @@ describe("候选方案比较", () => {  it("采用候选前不改画布；画布
     expect(flow.designResult?.compareNote).toContain("修改");
   }, 30000);
 });
+
+async function generateDesign() {
+  await act(async () => {
+    await flow.handle("请重新规划60人户外婚礼，不需要等待我逐项补充参数");
+  });
+  expect(flow.designResult).not.toBeNull();
+}
+
+describe("锁定设施层", () => {
+  it("锁定时不移动选中组，也不进确认", async () => {
+    selection = ["t1"];
+    bridge.viewBearingDeg = () => 0;
+    bridge.facilityLayerLocked = () => true;
+    await act(async () => {
+      await flow.handle("这组向右移 2 米");
+    });
+    expect(apply).not.toHaveBeenCalled();
+    expect(flow.designPendingApply).toBeNull();
+    expect(byId("t1").position).toEqual({ x: 4, y: 4 });
+  });
+
+  it("锁定时拒绝采用候选，画布保持原样", async () => {
+    selection = [];
+    await generateDesign();
+    await act(async () => {
+      await flow.openDesignCompare();
+    });
+    expect(flow.designResult?.compare).not.toBeNull();
+    bridge.facilityLayerLocked = () => true;
+    apply.mockClear();
+    await act(async () => {
+      flow.designActions.onAdoptCandidate();
+    });
+    expect(apply).not.toHaveBeenCalled();
+  }, 30000);
+});
+
+describe("候选采用与撤销", () => {
+  it("采用候选后可撤销回到采用前的完整方案", async () => {
+    selection = [];
+    await generateDesign();
+    await act(async () => {
+      await flow.openDesignCompare();
+    });
+    const beforeAdopt = structuredClone(plan);
+    await act(async () => {
+      flow.designActions.onAdoptCandidate();
+    });
+    if (flow.designPendingApply) {
+      await act(async () => {
+        flow.designActions.onConfirmPending();
+      });
+    }
+    expect(apply).toHaveBeenCalled();
+    await act(async () => {
+      flow.designActions.onUndo();
+    });
+    expect(plan).toEqual(beforeAdopt);
+  }, 30000);
+});
+
+describe("选中上下文的件数", () => {
+  it("只数还在画布上的选中对象，不把已删掉的算进去", async () => {
+    selection = [];
+    await generateDesign();
+    selection = ["t1", "ghost-id"];
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+    expect(flow.designResult?.selection?.count).toBe(1);
+    expect(flow.designResult?.selection?.labels).toEqual(["宴席圆桌 t1"]);
+  }, 30000);
+});

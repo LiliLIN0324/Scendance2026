@@ -3181,13 +3181,17 @@ export function useOutdoorAgentWorkflow(input: {
   /** 下一句的显式对象：选中 id 与可读名字（最多 2 个，避免卡上一长串）。 */
   function designSelectionView(): { count: number; labels: string[]; detached: boolean } {
     const plan = callbacks.current.bridge()?.getPlan();
+    // 件数也只数「现在还在画布上的」：选中后又被删掉的对象不该出现在上下文条里（审计 B7 同类）。
+    const present = plan
+      ? selectionIds.filter((id) => plan.facilities.some((facility) => facility.id === id))
+      : [];
     const labels = plan
-      ? selectionIds
+      ? present
           .map((id) => plan.facilities.find((facility) => facility.id === id)?.name)
           .filter((name): name is string => Boolean(name))
           .slice(0, 2)
       : [];
-    return { count: selectionIds.length, labels, detached: selectionDetached };
+    return { count: present.length, labels, detached: selectionDetached };
   }
 
   /**
@@ -3249,6 +3253,11 @@ export function useOutdoorAgentWorkflow(input: {
     extras: { summary?: DesignSummary; title?: string } = {},
   ): "applied" | "pending" | "blocked" {
     // 撤销是回到我们刚保存的快照，本身可再应用，不再叠一层确认。
+    if (kind !== "undo" && callbacks.current.bridge()?.facilityLayerLocked?.()) {
+      // 采用候选/局部位移都在改写现有设施，锁定层上不写；撤销放行（回到锁定前的快照）。
+      status("设施层已锁定：这次改动没有写入画布。先在图层里解锁设施层，再说一次。", "blocked");
+      return "blocked";
+    }
     if (kind !== "undo") {
       const risk = outdoorActionRisk(before, next, label);
       const gate = gateAction(currentSupervision(), risk);
@@ -3386,6 +3395,12 @@ export function useOutdoorAgentWorkflow(input: {
       if (parse.reason === "no-basis-bearing") basisAsked.current = true;
       callbacks.current.say(parse.question, true);
       status(parse.question, "ask");
+      return true;
+    }
+    if (callbacks.current.bridge()?.facilityLayerLocked?.()) {
+      // 审计 K3：层锁只锁画布、锁不住清单侧选中；写入前必须自己拦，不能靠选中态。
+      callbacks.current.say("设施层现在是锁定的，这组对象我没有移动。先在图层里解锁设施层，再说一次就能改。", true);
+      status("设施层已锁定：本次没有移动任何对象，也未写入画布。", "blocked");
       return true;
     }
     const result = applyLocalAdjust(plan, ids, parse.request);

@@ -711,6 +711,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       inspectFacility: id => canvasApiRef.current?.inspectFacility(id) ?? false,
       // 2026-11-20 P1：结果卡「定位到分区 / 取回这组」整组入镜；只动视图，不改 plan 与选中。
       focusEntities: ids => canvasApiRef.current?.focusFacilities(ids) ?? false,
+      // 设施层锁：锁定后本地位移/候选采用一律不写，并由对话说清原因。
+      facilityLayerLocked: () => canvasApiRef.current?.isFacilityLayerLocked() ?? false,
       // 「右」的坐标口径：2D 罗盘的旋转角。读不到（例如还没挂载）就如实回 null，让对话只澄清一次。
       viewBearingDeg: () => canvasApiRef.current?.getBearing?.() ?? null,
       beginVenueBoundary: anchor => { cancelPlaceShape(); return canvasApiRef.current?.beginVenueBoundary(anchor) ?? false; },
