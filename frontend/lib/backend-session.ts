@@ -44,6 +44,7 @@ import {auditOriginalReviewStartup,type OriginalReviewCompletion,type OriginalRe
 import {createOriginalReviewLedger} from './original-review-ledger-idb';
 import {localWriteCapabilityGuard,type LocalWriteCapability} from './local-write-lease';
 import {sameRecoveryFormValue} from './recovery-form-value';
+import {startVisiblePolling} from '../components/room-organizer/lib/visible-polling';
 export { SceneApiError };
 export type { AgentRun };
 export type { ChatProviderId };
@@ -424,7 +425,7 @@ export class BackendSession {
   private tokens: Tokens | null = null;
   private recoveryTokens: Tokens | null = null;
   private readonly supabase: SupabaseClient | null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private renewalStop: (() => void) | null = null;
   private operationPending = false;
   private renewing = false;
   private epoch = 0;
@@ -520,8 +521,8 @@ export class BackendSession {
     for (const listener of this.listeners) listener();
   }
   private stopRenewal() {
-    if (this.timer !== null) clearInterval(this.timer);
-    this.timer = null;
+    this.renewalStop?.();
+    this.renewalStop = null;
   }
   private cancelGeometryPreparation(): void {
     ++this.geometryEpoch;
@@ -1579,7 +1580,8 @@ export class BackendSession {
         draft: geometry ? this.snapshot.draft ?? scene : scene, project: { ...project, scene, revision: result.revision }, dirty: !!geometry,
         geometryBinding: geometry ? geometry.bindingFor(project) : null,
         localRevision: this.snapshot.localRevision + 1, writeBlocked: false, status: "editing", error: null });
-      this.timer = setInterval(() => { void this.renewLease().catch(() => { /* Exposed through snapshot.error. */ }); }, 30_000);
+      // 页面隐藏时停表，回到前台立即补续一次；30 秒对应 90 秒服务端锁 TTL，这个间隔不能改。
+      this.renewalStop = startVisiblePolling(() => { void this.renewLease().catch(() => { /* Exposed through snapshot.error. */ }); }, 30_000);
       return { ...result, scene };
     } catch (error) {
       // A supported JSON schema can still be unsupported by this editor. Release the

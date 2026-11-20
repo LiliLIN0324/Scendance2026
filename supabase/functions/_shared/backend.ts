@@ -1,6 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ApiError } from './domain.ts';
 import { required, type Env } from './http.ts';
+import { createR2Storage } from './r2-storage.ts';
+import { publishUserSignal, type SignalEvent } from './realtime-signal.ts';
 import type {AgentTrialDiagnostic} from './agent-trial-diagnostic.ts';
 
 // RPC responses are PostgreSQL JSON; route-specific inputs are validated with Zod.
@@ -32,6 +34,8 @@ export interface Backend {
   stat?(path:string):Promise<{size:number}>;
   /** 浏览器直传签名地址（归档大文件不经过 Edge body）。 */
   createUploadUrl?(path:string):Promise<{url:string;token:string}>;
+  /** 写完私信/已读后给相关用户推一条 Realtime 信号；失败只记日志，不影响主流程。 */
+  notify?(userId:string,event:SignalEvent,payload:Record<string,unknown>):Promise<void>;
 }
 function rpc(client: SupabaseClient,name:string): Rpc {
   return async(actor,action,data={})=>{
@@ -53,11 +57,19 @@ function rpc(client: SupabaseClient,name:string): Rpc {
   };
 }
 export function createBackend(env:Env):Backend {
-  const client=createClient(required(env,'SUPABASE_URL'),required(env,'SUPABASE_SERVICE_ROLE_KEY'),{ auth:{persistSession:false,autoRefreshToken:false} });
+  // 存储后端只有这一个选择点：SCENE_STORAGE_DRIVER=r2 时整体替换五个存储方法，
+  // 不设或设成 supabase 时原样返回，改回变量即可回滚。
+  const files=createR2Storage(env);
+  return files?Object.assign(buildBackend(env),files):buildBackend(env);
+}
+function buildBackend(env:Env):Backend {
+  const url=required(env,'SUPABASE_URL'),serviceKey=required(env,'SUPABASE_SERVICE_ROLE_KEY');
+  const client=createClient(url,serviceKey,{ auth:{persistSession:false,autoRefreshToken:false} });
   const scene=rpc(client,'scene_rpc'),studios=rpc(client,'studio_rpc'),agent=rpc(client,'agent_rpc'),guardedAgent=rpc(client,'agent_steering_guard_rpc');
   return {
     async user(token) { const {data,error}=await client.auth.getUser(token); if(error||!data.user) throw new ApiError('UNAUTHENTICATED',401); return data.user.id; },
     scene:(actor,action,data)=>(action.startsWith('studios.')?studios:scene)(actor,action,data),cloud:rpc(client,'cloud_storage_rpc'),jobs:rpc(client,'job_rpc'),reconstruction:rpc(client,'reconstruction_rpc'),originalSceneReview:rpc(client,'original_scene_review_rpc'),agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:agent)(actor,action,data),agentGuardReady:guardedAgent,agentEvents:rpc(client,'agent_run_events_rpc'),conversation:rpc(client,'conversation_rpc'),
+    notify:(userId,event,payload)=>publishUserSignal(url,serviceKey,userId,event,payload),
     async upload(path,bytes,mime) {
       const {error}=await client.storage.from('scene-assets').upload(path,new Uint8Array(bytes),{contentType:mime,upsert:false});
       // Retry after a worker crash reuses a content-addressed immutable path.

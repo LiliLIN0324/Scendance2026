@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listOfficialNotices, listOfficialUnread, markOfficialNoticeRead, type OfficialNotice } from '@/lib/workspace-api';
 import type { BackendSession } from '@/lib/backend-session';
+import { startVisiblePolling } from './visible-polling';
 
 /** 未读徽标监听：面板记已读后喊一声，左轨红点跟着扣；列表本身读本地状态，不参与自唤醒。 */
 const officialListeners = new Set<() => void>();
@@ -55,8 +56,8 @@ export function useOfficialNotices(controller: BackendSession, userId: string): 
       }
     };
     void load();
-    const timer = setInterval(() => void load(), 20_000);
-    return () => { alive = false; clearInterval(timer); };
+    const stop = startVisiblePolling(() => void load(), 20_000);
+    return () => { alive = false; stop(); };
   }, [controller, userId, revision]);
 
   const refresh = useCallback(() => setRevision(current => current + 1), []);
@@ -96,8 +97,8 @@ export function useOfficialUnread(controller: BackendSession, userId: string): n
       } catch { /* 拉不到就保留旧未读，不能清零冒充已读。 */ }
     };
     void load();
-    const timer = setInterval(() => void load(), 20_000);
-    return () => { alive = false; clearInterval(timer); };
+    const stop = startVisiblePolling(() => void load(), 60_000);
+    return () => { alive = false; stop(); };
   }, [controller, userId, revision]);
 
   return unread;

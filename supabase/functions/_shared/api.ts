@@ -479,7 +479,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(messages[2]==='/unread' && method==='GET') return respond(await backend.scene(actor,'studios.messages.unread',{studioId}));
         if(messages[2]==='/read' && method==='POST') {
           const input=z.strictObject({peerId:uuid}).parse(await json());
-          return respond(await backend.scene(actor,'studios.messages.read',{...input,studioId}));
+          const marked=await backend.scene(actor,'studios.messages.read',{...input,studioId});
+          // 已读回执影响对端（发送方）的界面：只有真的标了才推，避免空转。
+          if(actor && backend.notify && marked?.marked)
+            await backend.notify(input.peerId,'message-read',{studioId,byUserId:actor});
+          return respond(marked);
         }
         if(!messages[2] && method==='GET') {
           const peerId=uuid.parse(url.searchParams.get('peerId'));
@@ -487,7 +491,13 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         }
         if(!messages[2] && method==='POST') {
           const input=z.strictObject({requestId:uuid,peerId:uuid,body:messageBody}).parse(await json());
-          return respond(await backend.scene(actor,'studios.messages.send',{...input,studioId}),201);
+          const sent=await backend.scene(actor,'studios.messages.send',{...input,studioId});
+          // 落库成功后再广播；推给收发双方，同账号的其它端也能立刻刷新。
+          if(actor && backend.notify) {
+            const signal={studioId,fromUserId:actor,toUserId:input.peerId,messageId:sent.id};
+            await Promise.all([backend.notify(actor,'message',signal),backend.notify(input.peerId,'message',signal)]);
+          }
+          return respond(sent,201);
         }
       }
       if(path==='/catalog' && method==='GET') return respond(catalog);
