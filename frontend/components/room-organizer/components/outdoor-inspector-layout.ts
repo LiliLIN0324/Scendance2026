@@ -61,8 +61,14 @@ export function inspectorStackStyle(position?: InspectorPanelPosition | null): C
 export function inspectorCardStyle(options: {
   key: string;
   annotateAnchor?: { left: number; bottom: number } | null;
+  /**
+   * 固定宽度（px）。2026-11-20 用户：「这个标注为什么搞那么宽」——
+   * 卡片宽度原来由内容决定（fixed 定位 + width:auto = 收缩到内容宽），
+   * 标注列表里一行长文本就把整张卡撑到近满屏；这里给出定宽，长文本在卡内省略。
+   */
+  fixedWidth?: number | undefined;
 }): CSSProperties {
-  const { key, annotateAnchor } = options;
+  const { key, annotateAnchor, fixedWidth } = options;
   const anchored = key === 'annotate' && annotateAnchor;
   return {
     // 允许收缩：内容再宽也不许冲出宿主/视口（2026-11-17「文字生成点不动」的修法）。
@@ -79,6 +85,7 @@ export function inspectorCardStyle(options: {
     overflow: key === 'annotate' ? 'visible' : 'hidden',
     color: PLANNING_SURFACE.panelText,
     fontSize: PLANNING_TYPOGRAPHY.panel,
+    ...(fixedWidth ? { width: fixedWidth } : {}),
     ...(anchored
       ? {
           position: 'fixed' as const,
