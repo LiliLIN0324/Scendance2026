@@ -1417,6 +1417,13 @@ export interface OutdoorPlanCanvasHandle {
   openFacilityUpload(id:string):boolean;
   applyVenue(anchor: NonNullable<SitePlanData['anchor']>, boundary: SitePlanData['boundary']): boolean;
   inspectFacility(id: string): boolean;
+  /**
+   * 2026-11-20 审计 K5：落位前旋转/取消的公共入口（2D 浮条、3D HUD、键盘 R 同一份）。
+   * 不在放置态时如实回 false，不偷写方案。
+   */
+  rotatePendingFacility(deltaDeg: number): boolean;
+  /** 取消这次放置（Esc / 右键 / 浮条按钮同一下场）；不写 plan、不进历史。 */
+  cancelPendingPlacement(): void;
   beginVenueBoundary(anchor: NonNullable<SitePlanData['anchor']>): boolean;
   applyRoutes(routes: PlanRoute[], nodes: PlanNode[]): boolean;
   /** V-3c：应用区域提案（合并 zones/facilities 进 plan，commitPlan 可撤销）；空提案回 false。 */
@@ -1532,6 +1539,16 @@ export interface PlanEditVisuals {
   selectedMeasurementId: string | null;
   /** 组选设施（Shift/Ctrl 多选、框选）：3D 画组包围盒与逐件底环（K13）。 */
   multiSelectedFacilityIds: readonly string[];
+  /**
+   * 2026-11-20 审计 K5：正在放置的物料（不依赖光标是否有幽灵——3D 的放置浮条靠它）。
+   * null = 没在放；rotationDeg 与键盘 R / 浮条 ±15° 同一份 ref。
+   */
+  pendingPlacement: {
+    name: string;
+    width: number;
+    depth: number;
+    rotationDeg: number;
+  } | null;
   /** 2D 框选矩形（舞台 CSS px，相对画布左上）；null = 没在框。K13：3D 里框选不再盲选。 */
   marquee: { x: number; y: number; w: number; h: number } | null;
   /** 一句话布置的批量落位预览：3D 画半透明体块，确认前不落库。 */
@@ -2563,6 +2580,62 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     draw();
     notifyPlanDraftChanged();
+  }
+
+  /**
+   * 2026-11-20 审计 K11：右键菜单的唯一实现。
+   * 从 JSX 内联搬到函数，3D 桥（pointerFromPlan('contextmenu')）和 2D 舞台共用同一份：
+   * 取消放置 / 撤草稿上一点 / 设施菜单三件事在 3D 里也就能走到。
+   */
+  function handleStageContextMenu(event: React.MouseEvent) {
+    // 视口边界（与 onWheel 同口径）：面板经 portal 挂在舞台 DOM 之外，右键合成事件仍沿 React 树冒泡，
+    // 目标不在舞台子树内直接忽略，避免在面板里右键误退画布草稿或弹出层级菜单。
+    // 3D 桥送来的合成事件没有 DOM target，也不属于 2D 舞台子树——它已经在 3D 里被判过一次，直接放行。
+    const stageGate = stageRef.current;
+    if (!pointerFrom3dRef.current && (!stageGate || !stageGate.contains(event.target as Node))) return;
+    // 2026-11-19 用户：「或者右键取消呢」——按成熟编辑器惯例（Blender/Unity/Unreal/AutoCAD），
+    // 待放置物料时右键 = 放弃这次放置，不弹菜单、不落位。
+    // 其他模式保持原行为：画区域/边界/流线右键撤上一点，浏览/选择右键开设施菜单。
+    const action = planRightClickAction({
+      mode: modeRef.current,
+      placing: Boolean(facilityTemplateRef.current || armedCatalogRef.current),
+      draftCount: draftRef.current.length,
+    });
+    if (action === 'cancel-placement') {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelPlacement();
+      return;
+    }
+    if (action === 'remove-draft-vertex') {
+      // P2-l（用户 m05374）：画区域/边界/流线时右键 = 移除上一个节点。
+      const draft = draftRef.current;
+      event.preventDefault();
+      const next = draft.slice(0, -1);
+      setDraft(next);
+      setEditMessage(
+        next.length === 0
+          ? '已移除全部节点；自己按 Esc 退出绘制。'
+          : `已移除上一个节点（还剩 ${next.length} 个）；双击左键完成绘制。`,
+      );
+      return;
+    }
+    if (action !== 'context-menu') return;
+    const hit = eventPlanPoint(event);
+    if (!hit) {
+      setContextMenu(null);
+      return;
+    }
+    const target = [...viewPlan().facilities].reverse().find(item => facilityContainsPoint(hit.pt, item));
+    if (!target) {
+      setContextMenu(null);
+      return;
+    }
+    event.preventDefault();
+    // 选择模式下组选让位给单件聚焦（菜单动作都按单件语义走）；浏览模式组选本就不成立。
+    clearMultiSelection(false);
+    if (!layerLocked('facility')) selectFacility(target.id);
+    setContextMenu({ surface: 'stage-facility', x: event.clientX, y: event.clientY, facilityId: target.id });
   }
 
   /**
@@ -4843,6 +4916,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setInspectorCollapsed(current => ({ ...current, selection: false }));
       return true;
     },
+    // 2026-11-20 审计 K5：3D HUD / 浮条按钮共用同一份落位前旋转与取消。
+    rotatePendingFacility: deltaDeg => rotatePendingFacility(deltaDeg),
+    cancelPendingPlacement: () => cancelPlacement(),
     beginVenueBoundary: anchor => {
       if (!canReanchorOutdoorPlan(planRef.current, anchor)) { setEditMessage('已有规划不能直接更换地理锚点，请先新建户外活动；当前内容保持不变。'); return false; }
       pendingVenueAnchorRef.current = anchor;
@@ -5058,6 +5134,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         clientX: flags?.clientX ?? 0,
         clientY: flags?.clientY ?? 0,
         preventDefault() {},
+        // 2026-11-20 审计 K11：右键菜单逻辑会 stopPropagation（真事件里防止冒到面板），
+        // 3D 桥的合成事件也要提供它，否则一按右键就抛 TypeError。
+        stopPropagation() {},
         nativeEvent: { defaultPrevented: false },
       } as unknown as React.MouseEvent;
       try {
@@ -5066,6 +5145,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         else if (kind === 'up') handleStageMouseUp(ev);
         else if (kind === 'leave') handleStageMouseLeave();
         else if (kind === 'dblclick') handleStageDoubleClick(ev);
+        // 2026-11-20 审计 K11：3D 右键接回同一份菜单逻辑（取消放置/撤点/设施菜单）。
+        else if (kind === 'contextmenu') handleStageContextMenu(ev);
       } finally {
         pointerOverrideRef.current = null;
         pointerFrom3dRef.current = false;
@@ -5167,6 +5248,24 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const annotate = annotateDraftRef.current.slice();
       if (annotateCursorRef.current) annotate.push(annotateCursorRef.current);
       const ghost = pendingFacilityGhost();
+      // 2026-11-20 审计 K5：3D 放置浮条要的数据。与 2D 浮条同一套取值（物料卡载荷优先），
+      // 不看 ghostPointRef——光标还没移到地图上时浮条也该在，否则 3D 里连“在放置”都看不到。
+      const pendingTemplate = mode === 'facility'
+        ? (facilityTemplateObjRef.current
+          ?? (facilityTemplateRef.current
+            ? libraryTemplatesRef.current.get(facilityTemplateRef.current) ?? resolveFacilityTemplate(facilityTemplateRef.current)
+            : null))
+        : null;
+      const armedPayload = armedCatalogRef.current;
+      const pendingSpec = pendingTemplate ? facilityFootprintSpec(pendingTemplate.templateId) : null;
+      const pendingPlacement = pendingTemplate && pendingSpec
+        ? {
+            name: (armedPayload?.name || pendingTemplate.name || '物料').trim(),
+            width: armedPayload?.width ?? pendingSpec.width,
+            depth: armedPayload?.depth ?? pendingSpec.depth,
+            rotationDeg: Math.round(doorSnapRef.current?.rotationDeg ?? facilityRotationRef.current),
+          }
+        : null;
       return {
         plan: next,
         selectedZoneId: selectedZoneRef.current,
@@ -5182,6 +5281,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         selectedMeasurementId: selectedMeasurementRef.current,
         multiSelectedFacilityIds: multiSelectedFacilityIdsRef.current.slice(),
         marquee: marqueeBoxFromRect(marqueeRectRef.current),
+        pendingPlacement,
         arrangePreview: arrangePreviewRef.current?.map(facility => ({
           templateId: facility.templateId,
           name: facility.name,
@@ -11155,6 +11255,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     : null;
   /* 2026-11-12 OnePlan Bench 卡同款控件样式：白底发丝线盒式输入、单位内嵌、28px 图标钮。 */
   const benchIconButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, flex: '0 0 auto', padding: 0, background: 'none', border: 'none', borderRadius: PLANNING_RADIUS.sm, cursor: 'pointer', color: PLANNING_SURFACE.panelText };
+  /** 2026-11-20 审计 K5：放置浮条上的 ±15° 小按钮（与浮条同一套白底细边）。 */
+  const placementRotateButtonStyle: React.CSSProperties = { padding: '0 5px', height: 18, borderRadius: PLANNING_RADIUS.sm, border: `1px solid ${PLANNING_SURFACE.panelBorder}`, background: PLANNING_SURFACE.panelBg, color: PLANNING_SURFACE.panelText, font: 'inherit', fontWeight: 600, cursor: 'pointer', lineHeight: 1 };
   /* 2026-11-15 视觉统一（以用户提供的 Figma 属性面板为参照）：
      ① 分区标题 = 12px/600 + 上方发丝线（Figma 的 Position / Layout / Fill… 靠这条线分节）；
      ② 输入框 = 浅灰填充块，无描边（Figma #F5F5F5），不再是白底细边；
@@ -12704,55 +12806,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       onMouseUp={handleStageMouseUp}
       onMouseLeave={handleStageMouseLeave}
       onDoubleClick={handleStageDoubleClick}
-      onContextMenu={event => {
-        // 视口边界（与 onWheel 同口径）：面板经 portal 挂在舞台 DOM 之外，右键合成事件仍沿 React 树冒泡，
-        // 目标不在舞台子树内直接忽略，避免在面板里右键误退画布草稿或弹出层级菜单。
-        const stageGate = stageRef.current;
-        if (!stageGate || !stageGate.contains(event.target as Node)) return;
-        // 2026-11-19 用户：「或者右键取消呢」——按成熟编辑器惯例（Blender/Unity/Unreal/AutoCAD），
-        // 待放置物料时右键 = 放弃这次放置，不弹菜单、不落位。
-        // 其他模式保持原行为：画区域/边界/流线右键撤上一点，浏览/选择右键开设施菜单。
-        const action = planRightClickAction({
-          mode: modeRef.current,
-          placing: Boolean(facilityTemplateRef.current || armedCatalogRef.current),
-          draftCount: draftRef.current.length,
-        });
-        if (action === 'cancel-placement') {
-          event.preventDefault();
-          event.stopPropagation();
-          cancelPlacement();
-          return;
-        }
-        if (action === 'remove-draft-vertex') {
-          // P2-l（用户 m05374）：画区域/边界/流线时右键 = 移除上一个节点。
-          const draft = draftRef.current;
-          event.preventDefault();
-          const next = draft.slice(0, -1);
-          setDraft(next);
-          setEditMessage(
-            next.length === 0
-              ? '已移除全部节点；自己按 Esc 退出绘制。'
-              : `已移除上一个节点（还剩 ${next.length} 个）；双击左键完成绘制。`,
-          );
-          return;
-        }
-        if (action !== 'context-menu') return;
-        const hit = eventPlanPoint(event);
-        if (!hit) {
-          setContextMenu(null);
-          return;
-        }
-        const target = [...viewPlan().facilities].reverse().find(item => facilityContainsPoint(hit.pt, item));
-        if (!target) {
-          setContextMenu(null);
-          return;
-        }
-        event.preventDefault();
-        // 选择模式下组选让位给单件聚焦（菜单动作都按单件语义走）；浏览模式组选本就不成立。
-        clearMultiSelection(false);
-        if (!layerLocked('facility')) selectFacility(target.id);
-        setContextMenu({ surface: 'stage-facility', x: event.clientX, y: event.clientY, facilityId: target.id });
-      }}
+      onContextMenu={handleStageContextMenu}
       onDragOver={event => {
         // 2026-11-16 物料卡直接拖进 2D：按卡片左下角图标对应的设施落位，
         // dragover 读不到 dataTransfer，用拖起时记下的模型宽深先出幽灵。
@@ -13348,7 +13402,32 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           }}>
             <span>{formatPlanObjectSize(placementBar.width, placementBar.depth)}</span>
             <span aria-hidden>·</span>
-            <span>当前 {placementBar.rotationDeg}°</span>
+            {/* 2026-11-20 审计 K5：落位前朝向原来只能靠 R / Shift+R，触屏和不知道快捷键的人改不了。 */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <button
+                type="button"
+                data-testid="plan-placement-rotate-left"
+                aria-label="待放置物件左转 15 度"
+                aria-keyshortcuts="Shift+R"
+                title="左转 15°（Shift+R 同效）"
+                onClick={() => rotatePendingFacility(-15)}
+                style={placementRotateButtonStyle}
+              >
+                −15°
+              </button>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>当前 {placementBar.rotationDeg}°</span>
+              <button
+                type="button"
+                data-testid="plan-placement-rotate-right"
+                aria-label="待放置物件右转 15 度"
+                aria-keyshortcuts="R"
+                title="右转 15°（R 同效）"
+                onClick={() => rotatePendingFacility(15)}
+                style={placementRotateButtonStyle}
+              >
+                +15°
+              </button>
+            </span>
             <span aria-hidden>·</span>
             <span>点击地图落位</span>
             <span aria-hidden>·</span>

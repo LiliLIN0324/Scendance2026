@@ -416,6 +416,20 @@ function measureWalkSitHeadY(actor: NonNullable<ReturnType<typeof createWalkAvat
   return Number.isFinite(height) ? height : null;
 }
 
+/** 2026-11-20 审计 K5：3D 放置浮条上的小按钮（与 2D 浮条同一套白底按钮口径的深底版）。 */
+const hudButtonStyle: React.CSSProperties = {
+  padding: '0 7px',
+  height: 20,
+  borderRadius: 6,
+  border: '1px solid rgba(255,255,255,0.35)',
+  background: 'rgba(255,255,255,0.10)',
+  color: '#fff',
+  font: 'inherit',
+  fontWeight: 600,
+  cursor: 'pointer',
+  lineHeight: 1,
+};
+
 export default function OutdoorPlan3D({
   plan,
   source = 'amap-streets',
@@ -650,6 +664,12 @@ export default function OutdoorPlan3D({
   const routeTickRef = useRef(0);
   /** 观景位保存后的短提示。 */
   const [spotNotice, setSpotNotice] = useState<string | null>(null);
+  /**
+   * 2026-11-20 审计 K5：3D 自己的放置浮条。2D 浮条在 3D 接管态整块被 visibility:hidden
+   * 藏起来，于是 3D 里连「正在放置、怎么取消、当前多少度」都看不到。这里只镜像状态，
+   * 旋转/取消仍走画布句柄上同一个 `rotatePendingFacility` / `cancelPendingPlacement`。
+   */
+  const [pendingPlacement, setPendingPlacement] = useState<{ name: string; width: number; depth: number; rotationDeg: number } | null>(null);
   /** 从 #wspot1… 链接带进来的机位：进漫游时作为出生点。 */
   const spotSpawnRef = useRef<{ x: number; z: number; yaw: number } | null>(null);
   /** 重试按一次换一个代次，重新走一遍加载。 */
@@ -2365,9 +2385,34 @@ export default function OutdoorPlan3D({
       return true;
     };
 
+    // 2026-11-20 审计 K11：右键在 3D 里原来只被 OrbitControls 用来平移，2D 的三件事
+    //（取消放置 / 撤草稿上一点 / 设施拷贝层级删除菜单）全部不可达。
+    // 这里把右键接回 2D：短按（位移 ≤ 6 px）= 交给 2D 同一份菜单逻辑；右键拖动仍归平移，
+    // 不在拖动结束后误弹菜单。
+    let rightDown: { x: number; y: number; moved: boolean } | null = null;
+    const onContextMenu = (event: MouseEvent): void => {
+      if (walkEnabledRef.current) return;
+      // 浏览器自带菜单一律不弹（编辑器惯例）。
+      event.preventDefault();
+      const state = rightDown;
+      rightDown = null;
+      if (state?.moved) return;
+      const api = canvasEditApiRef.current?.current;
+      if (!api) return;
+      const hit = eventToPlanHit(event);
+      if (!hit) return;
+      api.pointerFromPlan('contextmenu', hit, pointerFlags(event, hit));
+      syncEditVisuals();
+    };
+
     const onPointerDown = (event: PointerEvent): void => {
       // 漫游态：左键让给指针锁视角，不进 2D 编辑桥手势。
       if (walkEnabledRef.current) return;
+      // 右键：记下起点供 onContextMenu 判断「短按还是拖平移」。
+      if (event.button === 2) {
+        rightDown = { x: event.clientX, y: event.clientY, moved: false };
+        return;
+      }
       if (event.button !== 0) return;
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
@@ -2419,6 +2464,8 @@ export default function OutdoorPlan3D({
       blankReleased = true;
     };
     const onPointerMove = (event: PointerEvent): void => {
+      if (rightDown && !rightDown.moved
+        && Math.hypot(event.clientX - rightDown.x, event.clientY - rightDown.y) > 6) rightDown.moved = true;
       if (walkEnabledRef.current) return;
       const api = canvasEditApiRef.current?.current;
       if (!api) return;
@@ -2466,8 +2513,18 @@ export default function OutdoorPlan3D({
     };
     // 2026-11-16 2D 画布发来的草稿变更：R 旋转 / Esc 取消 / 落位后用同一事件通知，
     // 3D 不用等下一次指针移动就能重画待放置幽灵。
-    const onPlanVisuals = (): void => syncEditVisuals();
+    // 2026-11-20 审计 K5：同一份事件也刷新 3D 放置浮条（旋转角/是否还在放置）。
+    const refreshPendingPlacement = (): void => {
+      const api = canvasEditApiRef.current?.current;
+      setPendingPlacement(api ? api.getEditVisuals().pendingPlacement : null);
+    };
+    const onPlanVisuals = (): void => {
+      syncEditVisuals();
+      refreshPendingPlacement();
+    };
     window.addEventListener('sc-outdoor-plan-visuals', onPlanVisuals);
+    // 挂载时就在放置态（从 2D 选好物料再切 3D）：不依赖下一次指针移动。
+    refreshPendingPlacement();
 
     // 2026-11-16 物件库拖进 3D：dragover 期间 dataTransfer 读不到模板，用拖起时记下的 id；
     // 地面射线命中后走 canvas 的同一份绿/红幽灵，逐帧合并避免每个 dragover 重建整层。
@@ -2573,6 +2630,8 @@ export default function OutdoorPlan3D({
     renderer.domElement.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('pointercancel', onPointerUp);
     renderer.domElement.addEventListener('dblclick', onDblClick);
+    // 2026-11-20 审计 K11：右键菜单桥（不拦住右键拖动平移）。
+    renderer.domElement.addEventListener('contextmenu', onContextMenu);
 
     /**
      * 2026-11-17 用户「3D 白框外没有模糊」→（同日回修）「为什么给我设计场地里面都加模糊了」。
@@ -2961,6 +3020,7 @@ export default function OutdoorPlan3D({
       renderer?.domElement.removeEventListener('pointerup', onPointerUp);
       renderer?.domElement.removeEventListener('pointercancel', onPointerUp);
       renderer?.domElement.removeEventListener('dblclick', onDblClick);
+    renderer?.domElement.removeEventListener('contextmenu', onContextMenu);
       // 高斯重建预览器要显式释放：解码出来的 GPU 资源不会随场景 traverse 走。
       venueSplatApiRef.current = null;
       disposeVenueSplat();
@@ -3234,6 +3294,73 @@ export default function OutdoorPlan3D({
           }}
         >
           还没有用地红线：切回 2D 画一圈，这里就会立起你的场地
+        </div>
+      )}
+      {/* 2026-11-20 审计 K5：3D 自己的放置浮条。2D 浮条在 3D 接管态是 hidden 的，
+          以前在 3D 里只能凭记忆按 Esc / R。旋转与取消走画布句柄上的同一份实现。 */}
+      {pendingPlacement && !walkEnabled && (
+        <div
+          data-testid="outdoor-3d-placement-bar"
+          role="group"
+          aria-label={`正在放置：${pendingPlacement.name}`}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: 28,
+            transform: 'translateX(-50%)',
+            zIndex: 3,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 10px',
+            borderRadius: 10,
+            background: 'rgba(18, 20, 26, 0.82)',
+            color: '#fff',
+            fontSize: 12,
+            lineHeight: '18px',
+            pointerEvents: 'auto',
+            whiteSpace: 'nowrap',
+            maxWidth: 'calc(100vw - 32px)',
+          }}
+        >
+          <span style={{ fontWeight: 700 }}>放置中</span>
+          <span style={{ opacity: 0.86, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {pendingPlacement.name}
+          </span>
+          <button
+            type="button"
+            aria-label="待放置物件左转 15 度"
+            aria-keyshortcuts="Shift+R"
+            title="左转 15°（Shift+R 同效）"
+            onClick={() => canvasEditApiRef.current?.current?.rotatePendingFacility(-15)}
+            style={hudButtonStyle}
+          >
+            −15°
+          </button>
+          <span style={{ fontVariantNumeric: 'tabular-nums', minWidth: 34, textAlign: 'center' }}>
+            {pendingPlacement.rotationDeg}°
+          </span>
+          <button
+            type="button"
+            aria-label="待放置物件右转 15 度"
+            aria-keyshortcuts="R"
+            title="右转 15°（R 同效）"
+            onClick={() => canvasEditApiRef.current?.current?.rotatePendingFacility(15)}
+            style={hudButtonStyle}
+          >
+            +15°
+          </button>
+          <button
+            type="button"
+            data-testid="outdoor-3d-placement-cancel"
+            aria-label="取消放置，返回浏览"
+            aria-keyshortcuts="Escape"
+            title="取消这次放置（Esc / 右键同效）"
+            onClick={() => canvasEditApiRef.current?.current?.cancelPendingPlacement()}
+            style={hudButtonStyle}
+          >
+            取消
+          </button>
         </div>
       )}
       {/* 2026-11-17 用户「3D 的时候设计白框外并没有添加蒙版」「就是没有模糊」，
