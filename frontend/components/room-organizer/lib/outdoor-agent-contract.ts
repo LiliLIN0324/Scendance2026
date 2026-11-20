@@ -330,7 +330,10 @@ export interface OutdoorAgentBridge {
    * 2026-11-20 P1：「向右」的坐标语义要靠这两个只读事实——画布当前朝向与 2D/3D。
    * 未实现时调用方按「读不到朝向」处理并先澄清一次，不假设正北朝上。
    */
-  viewBearingDeg?(): number;
+  /**
+   * 画布相机的方位角（度，0 = 正北，顺时针）。读不到就回 null，不要编一个 0。
+   */
+  viewBearingDeg?(): number | null;
   currentView?(): "2d" | "3d";
   exportPlanDraft?(expected: string, context: import("./outdoor-plan-handoff").OutdoorDraftContext): boolean;
   applyPlan?(next: SitePlanData, expected: string): boolean;
@@ -400,6 +403,8 @@ export interface OutdoorAgentBridge {
     > & { size?: { width: number; depth: number } },
   ): boolean;
   inspectFacility?(id: string): boolean;
+  /** 2026-11-20 P1：把一组设施整组塞进视口；只动视图，不改 plan 与选中。 */
+  focusEntities?(ids: readonly string[]): boolean;
   models?(id: string): Promise<OutdoorModelChoice[]>;
   selectModel?(id: string, slug: string, expected: string): boolean;
   openGenerate?(id: string, kind: "text" | "image"): boolean;

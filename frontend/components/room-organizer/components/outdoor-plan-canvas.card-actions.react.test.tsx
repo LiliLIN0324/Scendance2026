@@ -62,3 +62,17 @@ it('单件卡复制按钮复制出一件副本并偏移落位', () => {
   expect(facilities[1].id).not.toBe(FACILITY_ID);
   expect(facilities[1].position).not.toEqual(facilities[0].position);
 });
+
+/**
+ * 2026-11-20 P1：结果卡「定位到分区」走整组入镜。这里锁两件事：
+ * 能找到就回 true（真去改视图），一件都找不到就回 false（不假装动了镜头）。
+ */
+it('整组入镜：有这组设施时返回 true，全是未知 id 时如实返回 false', () => {
+  const { ref } = mount();
+  act(() => {
+    expect(ref.current!.focusFacilities([FACILITY_ID])).toBe(true);
+    expect(ref.current!.focusFacilities([FACILITY_ID, 'not-a-real-id'])).toBe(true);
+    expect(ref.current!.focusFacilities(['not-a-real-id'])).toBe(false);
+    expect(ref.current!.focusFacilities([])).toBe(false);
+  });
+});

@@ -3161,6 +3161,15 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     const first = plan.facilities.find((facility) => facility.id === available[0]);
+    // 优先整组入镜：画布提供 focusEntities 时一次把这一组都塞进视口；
+    // 没有就回落到既有 inspectFacility（只聚焦第一件，并在提示里如实说明是同一组）。
+    const groupWide = bridge.focusEntities?.(available) ?? false;
+    if (groupWide) {
+      setLocateNote(
+        `已在画布框出这一组${available.length > 1 ? `（${available.length} 件）` : `「${first?.name ?? "设施"}」`}；之后不再继续跟拍。`,
+      );
+      return;
+    }
     const ok = bridge.inspectFacility?.(available[0]) ?? false;
     setLocateNote(
       ok

@@ -239,8 +239,27 @@ describe("场地局部调整闭环", () => {
   });
 });
 
-describe("候选方案比较", () => {
-  it("采用候选前不改画布；画布有新修改时旧候选被拒绝", async () => {
+describe("摘要与画布双向定位", () => {
+  it("定位分区优先整组入镜（focusEntities），不再逐件聚焦", async () => {
+    const focusEntities = vi.fn(() => true);
+    bridge.focusEntities = focusEntities;
+    await act(async () => {
+      flow.designActions.onLocateZone("zone-banquet");
+    });
+    expect(focusEntities).toHaveBeenCalledWith(["t1", "c1", "c2", "t2"]);
+    expect(bridge.inspectFacility).not.toHaveBeenCalled();
+  });
+
+  it("画布不提供整组入镜时如实回落到逐件聚焦，不假装动了镜头", async () => {
+    delete bridge.focusEntities;
+    await act(async () => {
+      flow.designActions.onLocateZone("zone-banquet");
+    });
+    expect(bridge.inspectFacility).toHaveBeenCalledWith("t1");
+  });
+});
+
+describe("候选方案比较", () => {  it("采用候选前不改画布；画布有新修改时旧候选被拒绝", async () => {
     selection = [];
     supervision = "key-points";
     await act(async () => {

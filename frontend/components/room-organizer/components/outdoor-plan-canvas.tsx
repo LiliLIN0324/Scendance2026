@@ -1420,6 +1420,11 @@ export interface OutdoorPlanCanvasHandle {
   applyVenue(anchor: NonNullable<SitePlanData['anchor']>, boundary: SitePlanData['boundary']): boolean;
   inspectFacility(id: string): boolean;
   /**
+   * 2026-11-20 P1：把一组设施整组塞进视口（结果卡「定位到分区 / 取回这组」用）。
+   * 只动视图，不改 plan、不改选中；一件都找不到时如实回 false。
+   */
+  focusFacilities(ids: readonly string[]): boolean;
+  /**
    * 2026-11-20 审计 K5：落位前旋转/取消的公共入口（2D 浮条、3D HUD、键盘 R 同一份）。
    * 不在放置态时如实回 false，不偷写方案。
    */
@@ -4958,6 +4963,35 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     focusLngLat: (lng: number, lat: number, zoom?: number) => focusLngLat(lng, lat, zoom),
     focusBounds: (bounds: [number, number, number, number]) => focusBounds(bounds),
     focusDesignScope: () => focusDesignScope(planRef.current.designScope ?? []),
+    focusFacilities: ids => {
+      const wanted = new Set(ids);
+      const items = planRef.current.facilities.filter(item => wanted.has(item.id));
+      if (!items.length) return false;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const item of items) {
+        const halfW = (item.size?.width ?? 1) / 2;
+        const halfD = (item.size?.depth ?? 1) / 2;
+        minX = Math.min(minX, item.position.x - halfW);
+        maxX = Math.max(maxX, item.position.x + halfW);
+        minY = Math.min(minY, item.position.y - halfD);
+        maxY = Math.max(maxY, item.position.y + halfD);
+      }
+      // 单件、一排椅子常退化成一个点：给 1.5 m 最小框，否则 focusBounds 会因为 east==west 直接不动。
+      if (maxX - minX < 1.5) { const center = (minX + maxX) / 2; minX = center - 0.75; maxX = center + 0.75; }
+      if (maxY - minY < 1.5) { const center = (minY + maxY) / 2; minY = center - 0.75; maxY = center + 0.75; }
+      const anchor = planRef.current.anchor;
+      const lng0 = anchor?.lng ?? DEFAULT_ANCHOR_LNG;
+      const lat0 = anchor?.lat ?? DEFAULT_ANCHOR_LAT;
+      const sw = enuToLngLat(minX, minY, lng0, lat0);
+      const ne = enuToLngLat(maxX, maxY, lng0, lat0);
+      focusBounds([
+        Math.min(sw.lng, ne.lng),
+        Math.min(sw.lat, ne.lat),
+        Math.max(sw.lng, ne.lng),
+        Math.max(sw.lat, ne.lat),
+      ]);
+      return true;
+    },
     inspectFacility: id => {
       const facility = planRef.current.facilities.find(item => item.id === id);
       if (!facility) return false;

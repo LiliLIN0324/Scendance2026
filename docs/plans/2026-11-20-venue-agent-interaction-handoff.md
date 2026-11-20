@@ -25,28 +25,21 @@
 - `designActions`：`on*` 动作集合
 - `openDesignCompare`：异步打开比较
 
-## 二、还差一步：画布侧适配（未改画布文件）
+## 二、画布侧适配已接上（2026-11-20 补）
 
-`outdoor-plan-canvas.tsx` / `outdoor-plan-overlay.tsx` 当前有别的改动在途，本轮**没动**。`OutdoorAgentBridge` 因此新增了两个可选能力（`lib/outdoor-agent-contract.ts`）：
+第一版落地时画布文件在途，只加了可选能力；画布随后由另一条线提交（`853e53fd`），本轮把这层补完：
 
-```ts
-/** 画布相机的方位角（度，0 = 正北，顺时针）。读不到就不要实现。 */
-viewBearingDeg?: () => number | null;
-/** 当前视图：2d / 3d；决定「屏幕右边」这层语义是否成立。 */
-currentView?: () => "2d" | "3d";
-```
+| 桥能力 | 落点 | 作用 |
+| --- | --- | --- |
+| `focusEntities(ids)` | 画布 `focusFacilities` + overlay 透传 | 结果卡「定位到分区 / 取回这组」一次把整组塞进视口；只动视图，不改 plan 与选中；一件都找不到时回 `false` |
+| `viewBearingDeg()` | 画布 `getBearing()` + overlay 透传 | 「左/右」按画布当前罗盘朝向换算；画布没挂载时回 `null`，对话仍只澄清一次 |
+| `currentView()` | 仍未实现 | 需要 3D 宿主自己报；缺省按 `2d` 处理，不猜 3D |
 
-接入时在画布的 bridge 实现里补三行即可（示例，按现有 bridge 组装处照抄）：
+`focusFacilities` 的实现要点：按每件设施的位置 ± 尺寸算外接框；单件或一排椅子会退化成一点，补 1.5 m 最小框（否则 `focusBounds` 因 `east === west` 直接不动），再复用现成的 `focusBounds` 入镜。
 
-```ts
-selectedIds: () => useOutdoorPlanStore.getState().selectedIds,   // 已有则不用改
-viewBearingDeg: () => camera?.bearingDeg ?? null,                 // 2D 正北朝上时返回 0
-currentView: () => (viewMode === "3d" ? "3d" : "2d"),
-```
+定位的回落顺序：`focusEntities`（整组入镜）→ `inspectFacility`（逐件聚焦，提示里写「同组 n 件」）→ 如实写「画布没有提供定位接口」。
 
-不补的后果是明确的、可接受的：左/右类指令会**只澄清一次**方向口径，用户回答「按东侧 / 按屏幕」后按记住的口径执行；东/南/西/北一直可用。不会出现猜方向、也不会重复追问。
-
-定位侧同理：如果画布提供 `inspectFacility(id)`（现有能力）即可逐件聚焦；要「整组入镜」需要画布新增一个 `focusEntities(ids)`，卡片侧已经把 id 交出去了，只等画布接。
+3D 视图里的「左/右」：本轮不替 3D 宿主做判断。`currentView` 未实现时一律按 2D 口径（画布罗盘朝向）解释；要 3D 语义时由 3D 宿主补上这一个方法，hook 已经在读它。
 
 ## 三、验证
 
@@ -64,7 +57,8 @@ npx vitest run \
   components/room-organizer/lib/outdoor-local-adjust.test.ts \
   components/room-organizer/components/outdoor-design-result-card.react.test.tsx \
   components/room-organizer/hooks/use-outdoor-agent-workflow.design.react.test.tsx
-→ Test Files  5 passed (5) / Tests  34 passed (34)
+→ Test Files  5 passed (5) / Tests  34 passed (34)   # 第一版
+→ Test Files  3 passed (3) / Tests  17 passed (17)   # 补画布适配后：设计闭环 10 + 结果卡 6 + 画布入镜 1
 ```
 
 覆盖到的验收项（都能在 `use-outdoor-agent-workflow.design.react.test.tsx` 里逐条对上）：
@@ -77,6 +71,7 @@ npx vitest run \
 6. 撤销写回应用前完整方案（坐标、桌号引用、分区一起回来）；
 7. 应用前画布又改过 → 拒绝写入，不覆盖用户较新的手动修改；
 8. 候选比较：打开不改画布，A/B 可切，画布改动后采用被拒绝。
+9. 定位分区优先整组入镜（`focusEntities` 收到该区全部 id），画布不提供时如实回落到逐件聚焦。
 
 卡片渲染层另有 6 条（`outdoor-design-result-card.react.test.tsx`）：摘要文案、分区定位派发、选中上下文的清除/取回、已应用态的撤销入口唯一、严格档不谎称已写入、A/B 切换 + 采用 + 结束比较。
 
@@ -112,8 +107,8 @@ npm run build
 ### 没做的验证
 
 - **真实浏览器手验未执行**：本轮只做了 jsdom + 组件测试与静态构建，没有在 `/editor` 里跑「生成 → 点选 → 局部改 → 撤销 → 比较」的肉眼链路。视觉（卡片在窄侧栏里的换行、比较区高度）需要人工过一眼。
-- 没有提交任何画布/overlay 改动，因此「整组入镜」的镜头行为没有端到端验证。
-
+- 画布 `focusFacilities` 只在 jsdom 里验证了「能定位 / 找不到如实回 false」；真实底图上的取景范围（整组是否刚好装得下）没有目测。
+- 3D 视图的「左/右」语义未验证（`currentView` 未实现）。
 ## 四、刻意没做的事
 
 - 不改 `lib/wedding-layout.ts`（布局算法仍归规划线），不改后端契约、迁移、依赖、CI。

@@ -709,6 +709,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       clearVenuePreview: () => { setPlacePin(null); setPlaceArea(null); },
       cancelVenueBoundary: () => canvasApiRef.current?.setMode('view'),
       inspectFacility: id => canvasApiRef.current?.inspectFacility(id) ?? false,
+      // 2026-11-20 P1：结果卡「定位到分区 / 取回这组」整组入镜；只动视图，不改 plan 与选中。
+      focusEntities: ids => canvasApiRef.current?.focusFacilities(ids) ?? false,
+      // 「右」的坐标口径：2D 罗盘的旋转角。读不到（例如还没挂载）就如实回 null，让对话只澄清一次。
+      viewBearingDeg: () => canvasApiRef.current?.getBearing?.() ?? null,
       beginVenueBoundary: anchor => { cancelPlaceShape(); return canvasApiRef.current?.beginVenueBoundary(anchor) ?? false; },
       applyRoutes: (routes, nodes) => canvasApiRef.current?.applyRoutes(routes, nodes) ?? false,
       applyZoneProposal: (zones, facilities, routes, nodes) => canvasApiRef.current?.applyZoneProposal(zones, facilities, routes, nodes) ?? false,
