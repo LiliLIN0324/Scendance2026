@@ -135,7 +135,7 @@ export function ShortcutCoach({ mode, enabled = true }: ShortcutCoachProps): JSX
           </button>
         </div>
         <ShortcutReference initialMode={meta.initialMode} />
-        <p className="sc-shortcut-coach-foot">按 ? 或 Shift + / 打开 · Esc 关闭 · 这里只读，不会改动你的键位</p>
+        <p className="sc-shortcut-coach-foot">按 ? 或 Shift + / 打开 · Esc 关闭 · 这里只读，不会改动你的键位 · 桌面优先：触屏与纯键盘路径尚未覆盖</p>
       </div>
     </div>,
     document.body,
