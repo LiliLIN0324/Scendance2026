@@ -103,3 +103,17 @@ export async function appendReviewPinCloud(input: {
     p_author: input.author ?? null,
   });
 }
+
+/** 创作者侧把一条钉标记为已处理（resolved）；回写云端版本，跨设备一致。 */
+export async function setReviewPinStatusCloud(input: {
+  shareKey: string;
+  pinId: string;
+  status: ReviewPin['status'];
+}): Promise<CloudResult<CloudPinRow | null>> {
+  if (!input.shareKey || !input.pinId) return { ok: false, reason: 'disabled' };
+  return rpc<CloudPinRow | null>('review_pins_set_status', {
+    p_share_key: input.shareKey,
+    p_id: input.pinId,
+    p_status: input.status,
+  });
+}

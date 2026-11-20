@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { appendReviewComment } from '../../review-share-page/comments';
 import { appendReviewSharePin } from '../../review-share-page/share-pins';
 import { addReviewComment, issueReviewShare } from './review-share';
-import { feedbackSummaryLabel, readBingoPlanFeedback } from './bingo-feedback';
+import { feedbackSummaryLabel, mergeBingoCloudPins, readBingoPlanFeedback, type BingoPlanFeedback } from './bingo-feedback';
 import { readBingoSnapshot, type BingoReadable } from './bingo-status';
+import type { ReviewPin } from './review-pins';
 import { makeLayout } from './__testfixtures__/fixtures';
 
 const pinDraft = {
@@ -162,5 +163,46 @@ describe('bingo snapshot with client links', () => {
     const snapshot = readBingoSnapshot(storage);
     expect(snapshot.plans[0]?.clientHref).toBe('http://localhost/review/#layout=abc');
     expect(snapshot.plans[0]?.reviewPlanKey).toBe('link:0a4b1c2d');
+  });
+});
+
+function cloudPin(id: string, status: ReviewPin['status']): ReviewPin {
+  return {
+    id,
+    text: '云端意见',
+    itemId: null,
+    x: 1,
+    y: 0,
+    z: -2,
+    offset: null,
+    camera: { position: [3.4, 2.8, 0.4], target: [1, 0, -2] },
+    status,
+  };
+}
+
+describe('mergeBingoCloudPins', () => {
+  it('以云端状态校正同 id 本机陈旧 open，且不重复计数', () => {
+    const feedback: BingoPlanFeedback = {
+      sharePinCount: 1,
+      legacyCount: 0,
+      pinCount: 1,
+      pins: [{ id: 'a', author: '甲方钉评', body: '本机意见', createdAt: '', replies: [], source: 'share-pin', pinStatus: 'open', x: 1, z: -2, floorId: 'outdoor' }],
+    };
+    const merged = mergeBingoCloudPins(feedback, [cloudPin('a', 'resolved')]);
+    expect(merged.pinCount).toBe(1);
+    expect(merged.sharePinCount).toBe(1);
+    expect(merged.pins[0]?.pinStatus).toBe('resolved');
+  });
+
+  it('追加云端新钉，条数相应增加', () => {
+    const feedback: BingoPlanFeedback = {
+      sharePinCount: 1,
+      legacyCount: 0,
+      pinCount: 1,
+      pins: [{ id: 'a', author: '甲方钉评', body: '本机意见', createdAt: '', replies: [], source: 'share-pin', pinStatus: 'resolved', x: 1, z: -2, floorId: 'outdoor' }],
+    };
+    const merged = mergeBingoCloudPins(feedback, [cloudPin('a', 'resolved'), cloudPin('b', 'open')]);
+    expect(merged.pinCount).toBe(2);
+    expect(merged.pins.map(pin => pin.id).sort()).toEqual(['a', 'b']);
   });
 });
