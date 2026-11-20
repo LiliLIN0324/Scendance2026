@@ -82,6 +82,10 @@ import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/ou
 import { draftDemand } from "../lib/outdoor-draft-design";
 // docs/46 V-P2：虚拟场地意图切纸面（ground-mode store，2D/3D 同步跟随）。
 import { writePlanGroundMode } from "../lib/plan-basemap-source";
+// 2026-11-20 P1：结果摘要、本次变化、一句话局部调整（纯逻辑在 lib，hook 只做接线与档位判定）。
+import { buildDesignSummary, type DesignSummary } from "../lib/outdoor-design-summary";
+import { describePlanChange, diffPlanObjects, type PlanChangeSummary } from "../lib/outdoor-plan-change";
+import { applyLocalAdjust, parseLocalAdjustment, parseRightBasisAnswer, type DirectionBasis } from "../lib/outdoor-local-adjust";
 // 2026-11-14：直引纯函数库（原从组件模块引入，会把 three.js 级别的依赖链拖进 hook 且有循环风险）。
 import { enuToLngLat, lngLatToEnu } from "../lib/outdoor-plan-canvas";
 
@@ -489,6 +493,63 @@ export function useOutdoorAgentWorkflow(input: {
   const [selectedFacility, setSelectedFacility] = useState<{ id: string; name: string } | null>(
     null,
   );
+  /**
+   * 2026-11-20 P1：一版方案的结果摘要（推荐理由 / 实际容量 / 关键假设）+ 本次变化 + 撤销快照。
+   * `undoBefore` 是「这次应用前」的完整 plan 快照：撤销时整份写回，对象与引用一起恢复，
+   * 不靠逐条反推，也不依赖画布内部撤销栈的实现细节。
+   */
+  type DesignState = {
+    title: string;
+    summary: DesignSummary;
+    state: "proposal" | "applied";
+    change: PlanChangeSummary | null;
+    undoBefore: SitePlanData | null;
+    appliedVersion: string | null;
+  };
+  type DesignPending = {
+    label: string;
+    why: string;
+    next: SitePlanData;
+    before: SitePlanData;
+    kind: "design" | "adjust" | "adopt" | "undo";
+    summary?: DesignSummary;
+    title?: string;
+  };
+  type DesignCompareCandidate = {
+    id: "A" | "B";
+    label: string;
+    strategy: "ceremony-first" | "banquet-first";
+    plan: SitePlanData;
+    summary: DesignSummary;
+  };
+  const [design, setDesign] = useState<DesignState | null>(null);
+  /** 最近一次由 Agent 写入的改动快照；结果卡还没出现时（例如只位移了一组）也能撤销。 */
+  const [lastEdit, setLastEdit] = useState<{ before: SitePlanData; label: string } | null>(null);
+  const [designPending, setDesignPending] = useState<DesignPending | null>(null);
+  const [designCompare, setDesignCompare] = useState<{
+    activeId: "A" | "B";
+    candidates: DesignCompareCandidate[];
+    base: string;
+  } | null>(null);
+  const [compareBusy, setCompareBusy] = useState(false);
+  const [compareNote, setCompareNote] = useState<string | null>(null);
+  const [locateNote, setLocateNote] = useState<string | null>(null);
+  /** 画布当前显式选中的对象 id（下一句的上下文）；`detached` = 用户主动清除了引用。 */
+  const [selectionIds, setSelectionIds] = useState<string[]>([]);
+  const [selectionDetached, setSelectionDetached] = useState(false);
+  const selectionIdsRef = useRef<string[]>([]);
+  /** 用户已经回答过「右＝屏幕还是场地东侧」；只记本会话，不写配置。 */
+  const directionBasis = useRef<DirectionBasis | null>(null);
+  /** 刚问过方向口径：只有这时才把「按东侧 / 按屏幕」当成回答，避免误吞地名。 */
+  const basisAsked = useRef(false);
+  /** 本轮婚礼布局的输入快照：比较另一版时按同一份边界/物料/禁区重算。 */
+  const designInput = useRef<{
+    plan: SitePlanData;
+    brief: OutdoorBrief;
+    library: OutdoorLibraryItem[];
+    hardBlocks: PlanPoint[][];
+    guests?: number;
+  } | null>(null);
   /** 2026-11-18：scope 阶段画布上是否已有合法用地红线——卡片据此决定「直接给核对卡」还是「教怎么画」。 */
   const [boundaryReady, setBoundaryReady] = useState(false);
   /** 已经自动签发过确认预览的那份边界；同一份边界撤回后不再自动弹回。 */
@@ -872,6 +933,26 @@ export function useOutdoorAgentWorkflow(input: {
     };
   }, [state.stage]);
 
+  // 2026-11-20 P1：画布选中即「下一句的对象」。同一条低频快照口径（800ms），
+  // 选中变化时把用户之前「清除引用」的标记复位——重新点选就是重新带上。
+  useEffect(() => {
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      const ids = callbacks.current.bridge()?.selectedIds?.() ?? [];
+      if (ids.join("|") === selectionIdsRef.current.join("|")) return;
+      selectionIdsRef.current = ids;
+      setSelectionIds(ids);
+      setSelectionDetached(false);
+    };
+    tick();
+    const timer = setInterval(tick, 800);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
+
   async function mapContext(signal: AbortSignal) {
     const bridge = callbacks.current.bridge();
     const map = bridge?.mapContext
@@ -1097,6 +1178,17 @@ export function useOutdoorAgentWorkflow(input: {
     }
     setAppliedHighlight(mapEditHighlight(p.kind, applyBase, p.next));
     liveTurn.current.markApplied();
+    // 2026-11-20 P1：婚礼联合布置/候选采用落到画布后，结果卡切到「已应用 + 本次变化 + 可撤销」。
+    // 快照就是这次的 applyBase，整份写回即可完整撤销对象与引用。
+    if (p.label.startsWith("婚礼联合布置") || p.label.startsWith("采用「")) {
+      const appliedPlan = p.next;
+      const designChange = describePlanChange(diffPlanObjects(applyBase, appliedPlan), appliedPlan);
+      setDesign((prev) =>
+        prev
+          ? { ...prev, state: "applied", change: designChange, undoBefore: applyBase, appliedVersion: planVersion(appliedPlan) }
+          : prev,
+      );
+    }
     if(automatic){p.warnings=[...p.warnings,`已按${currentSupervision()}监督档自动执行；改动可撤销。`];designStep('已按监督设置自动应用这一版，可整批撤销。');}
     if(recoveryProjectId)callbacks.current.say(`已保留优化前的完整本机方案：[打开原方案](?project=${encodeURIComponent(recoveryProjectId)}&mode=outdoor)。当前优化也可整批撤销。`);
     liveTurn.current.log();
@@ -1709,6 +1801,12 @@ export function useOutdoorAgentWorkflow(input: {
           onPhase:text=>{if(live(job)){status(text,'working',{stopLabel:'停止布置'});designStep(text);}}});
         if(!live(job)||JSON.stringify(bridge.getPlan())!==original)return;
         for(const quantity of report.quantities)designStep(`${quantity.zone}：${quantity.role} ${quantity.placed}/${quantity.requested}${quantity.placeholder?'（尺寸占位件）':''}`);
+        // 2026-11-20 P1：结果摘要 + 本轮输入快照（比较另一版时按同一份边界/物料重算）。
+        const designSummary=buildDesignSummary({plan:report.plan,quantities:report.quantities,checks:report.checks,notes:report.notes,
+          strategy:turn.designStrategy??'ceremony-first',...(designBrief.guests?{guests:designBrief.guests}:{})});
+        designInput.current={plan,brief:designBrief,library,hardBlocks,...(designBrief.guests?{guests:designBrief.guests}:{})};
+        setDesign({title:designSummary.title,summary:designSummary,state:'proposal',change:null,undoBefore:null,appliedVersion:null});
+        setDesignCompare(null);setDesignPending(null);setCompareNote(null);setLocateNote(null);
         objectsLayoutRef.current=null;
         await offer(report.plan,'objects','婚礼联合布置：分区、物料与流线',job,[...report.notes,
           ...report.quantities.map(quantity=>`${quantity.zone} · ${quantity.role}：${quantity.placed} 件${quantity.placeholder?'，占位待选型':''}`)],undefined,undefined,optimize);
@@ -2628,6 +2726,21 @@ export function useOutdoorAgentWorkflow(input: {
     if (!plan) return false;
     lastActionRef.current=null;
     lastRequestRef.current={scope:scopeRef.current,ownerId:currentActorId(),message,clarification,images:images??[],documents:documents??[]};
+    // 2026-11-20 P1：选中对象 + 明确位移句在本地完成，先于模型理解。
+    // 「按东侧 / 按屏幕」只在上一次真问过方向口径时当成回答，避免吞掉地名。
+    if (!clarification) {
+      if (basisAsked.current) {
+        const basis = parseRightBasisAnswer(message);
+        if (basis) {
+          basisAsked.current = false;
+          directionBasis.current = basis;
+          status(`记住了：“右”按${basis === 'east' ? '场地东侧（+x）' : '屏幕右边'}算；再说一次怎么移就行。`, 'ready');
+          callbacks.current.say(`“右”按${basis === 'east' ? '场地东侧（+x）' : '屏幕右边'}算。`, false);
+          return true;
+        }
+      }
+      if (tryLocalAdjust(message)) return true;
+    }
     // 对话主路径的生成入口：先认「生成一件新道具」，再走模型理解。
     // 只打开现有生成面板，不提交、不扣额度；「摆/放」句仍归 #167 的落位预览。
     if (!clarification) {
@@ -3031,6 +3144,258 @@ export function useOutdoorAgentWorkflow(input: {
         facilities: plan.facilities.map(f => (f.zoneId === id ? { ...f, zoneId: undefined } : f)),
       })),
   };
+  /**
+   * 2026-11-20 P1：结果卡里的分区/设施 → 画布定位。
+   * 只读：不改坐标、不改选中以外的状态；画布没有定位接口时如实说，不用「假装飞过去」。
+   */
+  function locateDesignEntities(ids: readonly string[]): void {
+    const bridge = callbacks.current.bridge();
+    const plan = bridge?.getPlan();
+    if (!bridge || !plan) {
+      setLocateNote("画布尚未载入，无法定位。");
+      return;
+    }
+    const available = ids.filter((id) => plan.facilities.some((facility) => facility.id === id));
+    if (!available.length) {
+      setLocateNote("这一项没有可直接定位的设施（分区/流线定位还需画布提供接口）。");
+      return;
+    }
+    const first = plan.facilities.find((facility) => facility.id === available[0]);
+    const ok = bridge.inspectFacility?.(available[0]) ?? false;
+    setLocateNote(
+      ok
+        ? `已在画布定位「${first?.name ?? "设施"}」${available.length > 1 ? `，同组 ${available.length} 件` : ""}；视角只随选中移动，不再继续跟拍。`
+        : "画布没有提供定位接口，没有改变视角。",
+    );
+  }
+
+  /** 下一句的显式对象：选中 id 与可读名字（最多 2 个，避免卡上一长串）。 */
+  function designSelectionView(): { count: number; labels: string[]; detached: boolean } {
+    const plan = callbacks.current.bridge()?.getPlan();
+    const labels = plan
+      ? selectionIds
+          .map((id) => plan.facilities.find((facility) => facility.id === id)?.name)
+          .filter((name): name is string => Boolean(name))
+          .slice(0, 2)
+      : [];
+    return { count: selectionIds.length, labels, detached: selectionDetached };
+  }
+
+  /**
+   * 2026-11-20：应用一版改动。先按真实差异算风险，再走既有监督档（严格档每步都问，
+   * 关键节点只问覆盖/删除/大范围，自动档直接执行）；档位不改锁定与版本校验。
+   */
+  function commitDesignChange(
+    next: SitePlanData,
+    before: SitePlanData,
+    label: string,
+    kind: DesignPending["kind"],
+    extras: { summary?: DesignSummary; title?: string } = {},
+  ): boolean {
+    const bridge = callbacks.current.bridge();
+    const plan = bridge?.getPlan();
+    if (!bridge?.applyPlan || !plan) {
+      status("画布当前不可用，未应用；原方案保留。", "blocked");
+      return false;
+    }
+    if (JSON.stringify(plan) !== JSON.stringify(before)) {
+      status("画布在你确认前又改过，这一版没有覆盖；原方案保留。", "blocked");
+      return false;
+    }
+    if (!bridge.applyPlan(next, JSON.stringify(before))) {
+      status("画布拒绝写入（版本或保存身份变化），原方案保留。", "blocked");
+      return false;
+    }
+    const change = describePlanChange(diffPlanObjects(before, next), next);
+    setLastEdit(kind === "undo" ? null : { before, label });
+    setDesign((prev) =>
+      prev
+        ? {
+            ...prev,
+            title: extras.title ?? prev.title,
+            summary: extras.summary ?? prev.summary,
+            state: "applied",
+            change,
+            // 撤销后不再留「再撤销一次」的按钮；再点一次就是重做，这不是用户要的语义。
+            undoBefore: kind === "undo" ? null : before,
+            appliedVersion: planVersion(next),
+          }
+        : prev,
+    );
+    setDesignPending(null);
+    setLocateNote(null);
+    status(
+      `已应用「${label}」：${change.headline}${kind === "undo" ? "；已回到这次应用前的完整方案" : "；可撤销一次"}。`,
+      "done",
+    );
+    designStep(`本次变化：${change.headline}。`);
+    return true;
+  }
+
+  function requestDesignChange(
+    next: SitePlanData,
+    before: SitePlanData,
+    label: string,
+    kind: DesignPending["kind"],
+    extras: { summary?: DesignSummary; title?: string } = {},
+  ): "applied" | "pending" | "blocked" {
+    // 撤销是回到我们刚保存的快照，本身可再应用，不再叠一层确认。
+    if (kind !== "undo") {
+      const risk = outdoorActionRisk(before, next, label);
+      const gate = gateAction(currentSupervision(), risk);
+      if (gate.required) {
+        setDesignPending({ label, why: gate.why, next, before, kind, ...extras });
+        status(gate.why, "confirm");
+        return "pending";
+      }
+    }
+    return commitDesignChange(next, before, label, kind, extras) ? "applied" : "blocked";
+  }
+
+  function confirmDesignPending(): void {
+    const pending = designPending;
+    if (!pending) return;
+    commitDesignChange(pending.next, pending.before, pending.label, pending.kind, {
+      ...(pending.summary ? { summary: pending.summary } : {}),
+      ...(pending.title ? { title: pending.title } : {}),
+    });
+  }
+
+  function dismissDesignPending(): void {
+    if (!designPending) return;
+    setDesignPending(null);
+    status("已取消这次应用；画布保持原样。", "ready");
+  }
+
+  /** 撤销：整份写回应用前的快照——对象 id、桌号引用、分区归属一起回来，不是逐条反推。 */
+  function undoDesignApply(): void {
+    const before = design?.undoBefore ?? lastEdit?.before;
+    const current = callbacks.current.bridge()?.getPlan();
+    if (!before || !current) {
+      status("没有可撤销的这次应用。", "blocked");
+      return;
+    }
+    requestDesignChange(before, current, "撤销这次应用", "undo");
+  }
+
+  /** 比较方案：按同一份边界/物料重算两种分区配比，只换卡片数据；采用前不改画布视角。 */
+  async function openDesignCompare(): Promise<void> {
+    const inputData = designInput.current;
+    if (!inputData) {
+      status("还没有可比较的婚礼方案；先生成一版，再说比较。", "blocked");
+      return;
+    }
+    setCompareBusy(true);
+    setCompareNote(null);
+    try {
+      const controller = new AbortController();
+      const candidates: DesignCompareCandidate[] = [];
+      for (const strategy of ["ceremony-first", "banquet-first"] as const) {
+        const report = await proposeWeddingLayout({
+          plan: inputData.plan,
+          brief: inputData.brief,
+          library: inputData.library,
+          hardBlocks: inputData.hardBlocks,
+          strategy,
+          optimize: false,
+          signal: controller.signal,
+        });
+        const summary = buildDesignSummary({
+          plan: report.plan,
+          quantities: report.quantities,
+          checks: report.checks,
+          notes: report.notes,
+          strategy,
+          ...(inputData.guests ? { guests: inputData.guests } : {}),
+        });
+        candidates.push({
+          id: strategy === "ceremony-first" ? "A" : "B",
+          label: summary.strategyLabel,
+          strategy,
+          plan: report.plan,
+          summary,
+        });
+      }
+      setDesignCompare({ activeId: "A", candidates, base: JSON.stringify(inputData.plan) });
+      setCompareNote("两版按同一份边界与物料计算；切换只换卡片数据，采用前不改画布，也不移动视角。");
+    } catch (error) {
+      status(error instanceof Error ? error.message : "另一版没有算出来；当前方案保留。", "blocked");
+    } finally {
+      setCompareBusy(false);
+    }
+  }
+
+  function selectDesignCandidate(id: "A" | "B"): void {
+    setDesignCompare((prev) => (prev ? { ...prev, activeId: id } : prev));
+  }
+
+  function adoptDesignCandidate(): void {
+    const compare = designCompare;
+    const current = callbacks.current.bridge()?.getPlan();
+    if (!compare || !current) {
+      status("没有可采用的候选。", "blocked");
+      return;
+    }
+    const candidate = compare.candidates.find((item) => item.id === compare.activeId);
+    if (!candidate) return;
+    let basePlan: SitePlanData | null = null;
+    try {
+      basePlan = JSON.parse(compare.base) as SitePlanData;
+    } catch {
+      basePlan = null;
+    }
+    // 旧候选不能覆盖较新的手动修改：基座实体被动过就拒绝，并要求重新比较。
+    if (!basePlan || !baseStillIntact(basePlan, current)) {
+      setCompareNote("画布在你比较期间有了新的修改；这版候选不会覆盖它，请重新比较。");
+      status("画布已有更新的修改，这版候选没有覆盖；原方案保留。", "blocked");
+      return;
+    }
+    const result = requestDesignChange(candidate.plan, current, `采用「${candidate.label}」`, "adopt", {
+      summary: candidate.summary,
+      title: `婚礼布置 · ${candidate.label}`,
+    });
+    if (result === "applied") {
+      setDesignCompare(null);
+      setCompareNote(null);
+    }
+  }
+
+  /** 当前选中 + 明确位移句 → 本地完成，不改其它分区、不重排全场。 */
+  function tryLocalAdjust(message: string): boolean {
+    const bridge = callbacks.current.bridge();
+    const plan = bridge?.getPlan();
+    if (!bridge || !plan) return false;
+    const ids = selectionDetached ? [] : (bridge.selectedIds?.() ?? []);
+    const parse = parseLocalAdjustment(message, {
+      selectedCount: ids.length,
+      rightBasis: directionBasis.current,
+      screenBearingDeg: bridge.viewBearingDeg?.() ?? null,
+      view: bridge.currentView?.() ?? "2d",
+    });
+    if (parse.kind === "none") return false;
+    if (parse.kind === "clarify") {
+      if (parse.reason === "no-basis-bearing") basisAsked.current = true;
+      callbacks.current.say(parse.question, true);
+      status(parse.question, "ask");
+      return true;
+    }
+    const result = applyLocalAdjust(plan, ids, parse.request);
+    if (!result.movedIds.length) {
+      status(result.note || "选中的对象已不在画布上；没有移动。", "blocked");
+      return true;
+    }
+    const label = parse.request.kind === "spread" ? "把选中的一组拉开" : "移动选中的一组";
+    const outcome = requestDesignChange(result.plan, plan, label, "adjust");
+    designStep(`本次范围：${parse.request.basisLabel} · 只动选中的 ${result.movedIds.length} 件。`);
+    if (outcome === "applied") {
+      status(
+        `已${parse.request.kind === "spread" ? "拉开" : "移动"}选中的 ${result.movedIds.length} 件（${parse.request.basisLabel}）${result.conflicts ? `；${result.conflicts} 件越界，已标出` : "，其余物件与分区未动"}。`,
+        "done",
+      );
+    }
+    return true;
+  }
+
   async function action(
     action: OutdoorTurn["action"],
     choice?: number,
@@ -3393,6 +3758,64 @@ export function useOutdoorAgentWorkflow(input: {
     zoneEdits,
     /** 2026-11-19 用户反馈：精修卡不空挂——画布上选中的设施（快照同步），没有则出引导句。 */
     selectedFacility,
+    /**
+     * 2026-11-20 P1：一版方案的结果卡数据。null = 还没出过婚礼方案。
+     * 只在这里组装展示模型；真源仍是 design state + 画布 plan。
+     */
+    designResult: design
+      ? {
+          title: design.title,
+          summary: design.summary,
+          state: design.state,
+          change: design.change ? { headline: design.change.headline, details: design.change.details } : null,
+          pending: designPending ? { why: designPending.why } : null,
+          selection: designSelectionView(),
+          compare: designCompare
+            ? {
+                activeId: designCompare.activeId,
+                candidates: designCompare.candidates.map((candidate) => ({
+                  id: candidate.id,
+                  label: candidate.label,
+                  seats: `观礼 ${candidate.summary.capacity.ceremonySeats} · 宴席 ${candidate.summary.capacity.banquetSeats} · 目标 ${candidate.summary.capacity.target} 人`,
+                  tradeoff: candidate.summary.reasons[0] ?? "",
+                })),
+              }
+            : null,
+          compareBusy,
+          compareNote,
+          locateNote,
+        }
+      : null,
+    /** 没有结果卡时（比如只对选中对象做了一次位移），确认条仍然要看得见。 */
+    designPendingApply: designPending ? { label: designPending.label, why: designPending.why } : null,
+    /** 打开候选比较（异步算另一版）；面板与测试都可以直接用这个入口。 */
+    openDesignCompare,
+    designActions: {
+      onLocateZone: (zoneId: string) => {
+        const plan = callbacks.current.bridge()?.getPlan();
+        locateDesignEntities(plan ? plan.facilities.filter((facility) => facility.zoneId === zoneId).map((facility) => facility.id) : []);
+      },
+      onLocateSelection: () => {
+        setSelectionDetached(false);
+        locateDesignEntities(selectionIds);
+      },
+      onClearSelection: () => {
+        setSelectionDetached(true);
+        status("已清除下一句的对象引用；画布上的选中不变，重新点选可再次带上。", "ready");
+      },
+      onUndo: undoDesignApply,
+      onConfirmPending: confirmDesignPending,
+      onDismissPending: dismissDesignPending,
+      onOpenCompare: () => void openDesignCompare(),
+      onCloseCompare: () => {
+        setDesignCompare(null);
+        setCompareNote(null);
+      },
+      onSelectCandidate: (id: string) => {
+        if (id === "A" || id === "B") selectDesignCandidate(id);
+      },
+      onAdoptCandidate: adoptDesignCandidate,
+    },
     confirmProposal: confirm,
     previewStyle,
     offerBoundary,

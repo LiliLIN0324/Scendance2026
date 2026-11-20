@@ -326,6 +326,12 @@ export interface OutdoorAgentBridge {
   getPlan(): SitePlanData | null;
   projectId?(): string;
   selectedIds?(): string[];
+  /**
+   * 2026-11-20 P1：「向右」的坐标语义要靠这两个只读事实——画布当前朝向与 2D/3D。
+   * 未实现时调用方按「读不到朝向」处理并先澄清一次，不假设正北朝上。
+   */
+  viewBearingDeg?(): number;
+  currentView?(): "2d" | "3d";
   exportPlanDraft?(expected: string, context: import("./outdoor-plan-handoff").OutdoorDraftContext): boolean;
   applyPlan?(next: SitePlanData, expected: string): boolean;
   previewBoundary?(

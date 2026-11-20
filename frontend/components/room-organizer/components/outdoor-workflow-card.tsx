@@ -9,6 +9,7 @@ import { loginResumeCaption, loginResumeHeadline } from "../lib/outdoor-login-co
 import { formatDurationClock } from "../panels/agent-chat-store";
 import type { PlanPoint } from "../../../../supabase/functions/_shared/site-plan";
 import type { OutdoorStage, OutdoorTurn } from "../lib/outdoor-agent-contract";
+import { OutdoorDesignResultCard } from "./outdoor-design-result-card";
 
 /** 每阶段一句图注；进行中的真实进度文案会临时顶替它，报错走红卡。 */
 const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
@@ -270,6 +271,21 @@ export function OutdoorWorkflowCard({
   return (
     <>
     {thoughtRecord}
+    {/* 2026-11-20 P1：方案结果摘要接在设计结果后面；不新增导航，也不重复展示进度卡。
+        `flow.designResult` 只在一版婚礼方案产出后存在，其它阶段不占位。 */}
+    {flow.designResult && (
+      <OutdoorDesignResultCard model={flow.designResult} actions={flow.designActions} />
+    )}
+    {/* 没有结果卡时（例如只对选中对象做了一次位移）也要能看到严格档的这一次确认。 */}
+    {!flow.designResult && flow.designPendingApply && (
+      <section className="ap-card oddrc" aria-label="待确认的改动" role="alert">
+        <p className="oddrc-pending-copy">{flow.designPendingApply.why}</p>
+        <div className="ap-card-actions">
+          <button type="button" className="btn-primary" onClick={flow.designActions.onConfirmPending}>确认应用</button>
+          <button type="button" className="btn-outline" onClick={flow.designActions.onDismissPending}>先不应用</button>
+        </div>
+      </section>
+    )}
     {/* 2026-11-14 用户指令：「前往登录」独立成一张卡，不再混在任务卡底部。 */}
     <section
       className="ap-card ap-status-card"
