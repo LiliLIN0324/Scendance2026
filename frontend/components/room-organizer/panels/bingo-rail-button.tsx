@@ -27,8 +27,9 @@ export {
  * 圆体 28px，和分享行用同一枚状态圈。选中不铺实心圆盘，开口、警示珠和对勾保持可见。
  * 未读钉仍写进 aria-label / data-tip。送出中只改这一枚的转动，不新写存储状态。
  */
-export function BingoRailButton({ open, onOpen, buttonRef }: {
+export function BingoRailButton({ open, retained = false, onOpen, buttonRef }: {
   open: boolean;
+  retained?: boolean;
   onOpen(): void;
   buttonRef?: RefObject<HTMLButtonElement>;
 }): JSX.Element {
@@ -80,8 +81,8 @@ export function BingoRailButton({ open, onOpen, buttonRef }: {
     <button
       ref={buttonRef}
       type="button"
-      className={`sc-rail-bingo sc-rail-disc${open ? ' is-active' : ''}`}
-      aria-pressed={open}
+      className={`sc-rail-bingo sc-rail-disc${open ? ' is-active' : retained ? ' is-retained' : ''}`}
+      aria-pressed={open || retained}
       aria-expanded={open}
       aria-label={label}
       data-tip="Bingo"

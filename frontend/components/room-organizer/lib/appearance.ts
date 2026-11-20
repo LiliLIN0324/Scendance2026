@@ -12,6 +12,16 @@ export const DEFAULT_APPEARANCE_MODE: AppearanceMode = 'system';
 
 const APPEARANCE_MODES: readonly AppearanceMode[] = ['system', 'light', 'dark'];
 
+/** 菜单展示顺序：跟随系统 / 浅色 / 深色。 */
+export const APPEARANCE_MODE_ORDER: readonly AppearanceMode[] = APPEARANCE_MODES;
+
+/** 三档中文标签，账户菜单与其他入口共用。 */
+export const APPEARANCE_LABELS: Record<AppearanceMode, string> = {
+  system: '跟随系统',
+  light: '浅色',
+  dark: '深色',
+};
+
 /** 把存储里的任意值收窄到合法三档；非法 / 缺失回到跟随系统。 */
 export function parseAppearanceMode(value: string | null | undefined): AppearanceMode {
   return APPEARANCE_MODES.includes(value as AppearanceMode) ? (value as AppearanceMode) : DEFAULT_APPEARANCE_MODE;

@@ -170,6 +170,53 @@
 - **仍待真实 Chrome 复核（截图通道本轮不可用）**：BUA WebView 视口塌陷 0×0，`screenshot` 报 `viewport unavailable`、`snapshot` 报 `snapshot failed: 1`；桌面主平面授权 `switch_desktop('main')` 超时，不能转本机 Chrome 目视。下列浮层在暗色下的实绘仍需真机确认：确认弹层、资产详情弹窗、导引 / F3 气泡、放置中浮条、右键菜单、冲突详情卡、规划草案卡、我的物品 chips、楼层受限提示；以及四轮遗留的右轨圆钮 / 分享钮 / 图层卡 / 底部把手。WebView `getComputedStyle` 背景回读与实绘存在已知不一致，源码级联 + CSSOM 命中不能替代目视。
 - **刻意保留不动**：OSM 瓦片、地图 attribution / 比例尺、`#D9E3EA` 占位空状态、图层缩略图画面、色板白描边、2D/3D 渲染器、目录 chip 色点本体、绿底 / 墨底反转主钮白字、头像 `.sc-rail-eye`、缩略图深色 scrim 白字标签、独立项目管理页 `.sc-studio-manager-delete-project` 浅红底；`lib/plan-export/svg.ts` 白背景属导出产物，不在 chrome 作用域。
 
+### 第十轮（2026-11-20）：tooltip 特异性修复、muted 别名回挂、外观入口迁到账户菜单
+
+- **问题 1 · tooltip 白字浅底（用户实测截图）**：`data-tip` 暗色覆盖选择器只写了 `.sc-workbench .sc-mode-rail [data-tip]`，而基础规则链挂了 `.is-docked-layout.is-mode-rail` 更多类，特异性更高，暗色覆盖被压过——`background` 退回浅色 `--wk-ink`、`color` 仍是 `#fff`，左轨 Bingo 胶囊白字压浅底不可读。修复：覆盖选择器完整复刻基础规则链（nav-brand / mode-rail / tool-column / 物料抽屉把手四类），暗色统一 `--ink` 底 + `--paper` 字；抽屉把手原本漏在覆盖外，一并补上。
+- **问题 2 · 次级文字偏暗**：`.sc-workbench` 规则把 `--wk-muted` 钉死成浅色 `#71767E`，直接声明在工作台元素上，盖过 `body.is-theme-dark` 的暗色别名继承，次级文字退回浅灰、深底上对比不足。补 `body.is-theme-dark .sc-workbench { --wk-muted: #9BA1AC; }` 在元素上挂回暗色 muted。
+- **外观入口迁移（用户指令）**：三档外观选择从设置弹窗「个人」页移到点开头像的账户下拉菜单（「设置」与「支持」之间）；行内显示当前档，展开三档 `menuitemradio` + 当前档打勾，选中不落关闭菜单。设置页移除外观区块、局部 state/effect、图标 import 与旧 `.sc-appearance-menu*` 样式；标签与顺序抽到 `lib/appearance.ts`（`APPEARANCE_LABELS` / `APPEARANCE_MODE_ORDER`）共享。
+- **第十轮门禁**：`typecheck` exit 0；`lint` 0 error（2044 条既有 import/order warning）；`appearance.test` 7 例 + `account-menu.hover.react` 2 例共 9 例通过；`build` 静态导出 exit 0，oneplan 产物扫描违规 0。WebView 核对：账户菜单三档切换落盘 `scendance.appearance.v1`、body `is-theme-dark` 类、行内标签一致；设置页已无「外观」kicker（剩余：读数与标注 / 吸附 / 快捷键）。
+- **本轮遗留（任务 #18）**：灵动岛胶囊 `.sc-activity-island-main` / `.sc-activity-island-name` 暗色下计算色仍是 `#141416` 深字，压在 `--plane` 上对比约 1.1:1；父级 bar/group 颜色已是浅墨，按钮层颜色被某条尚未定位的规则压回浅墨，下一轮继续查全局 button 颜色来源并补暗色覆盖。另有 `#55585F` 图标在深底上对比 2.95 待核。
+- **本轮未 push**：改动在本地攒着，待真机目视复核后再一次性推 main。
+
+### 第十一轮（2026-11-20）：地点搜索浮条恢复 + 外观入口改右侧悬停 flyout
+
+- **地点搜索浮条误删恢复**：提交 `a0252ea5`（rebase 取远端基底）把 `outdoor-plan-overlay.tsx` 左上角「搜地点」浮条整段摘掉——`PlanPlaceSearch` import、`venueSearchSync` 只读同步 memo、`usePlaceShapeLookup` 的 `start` 解构、`handOverPlaceToChat` / `clearPlaceRangePreview` 助手与 JSX 浮条块。已按 `a0252ea5^` 删除前版本逐段忠实恢复；对应 merge 测试旧「不挂载」断言改回「已挂载 + testid 正确 + 输入框在 DOM」。
+- **外观行改二级 flyout（用户截图反馈）**：行面不再内联显示当前档文字（旧 `.sc-account-menu-value` + 内嵌 `.sc-account-menu-appearance-pop` 已删），与「支持 ›」同构——悬停行在右侧浮出三档列表面板，当前档行内绿色打勾。`account-menu.tsx` 把支持行一套 flyout 机制泛化复用：`supportOpen` 布尔改为联合态 `openMenu: null | 'support' | 'appearance'`，派生 `supportOpen` / `appearanceOpen`；ref 拆 support / appearance 两组（row / flyout / bridge / button）；关闭定时器共享 `cancelClose` / `scheduleClose`；定位 effect 按 `openMenu` 取对应 ref 走 `placeSupportFlyout` + `gapBridge`；Esc 先收子菜单再关主菜单；右方向键进面板、左方向键回触发器、上下键遍历。三档仍是 `APPEARANCE_MODE_ORDER`（跟随系统 / 浅色 / 深色）`menuitemradio`；选中后保留面板回显打勾，不主动关主菜单。CSS：旧内嵌列表规则清理，`.sc-account-menu-flyout [role=menuitemradio]` 两端对齐、选中加粗 + 绿勾。
+- **第十一轮门禁**：`typecheck` exit 0；定向测试 account-menu 8 例（含新增外观 flyout：无内联档名、三档齐全、当前档 `aria-checked=true`、点浅色回调 `light`）+ appearance / settings-page / cloud-panel / outdoor-plan-overlay 共 114 例通过；`lint` 0 error（既有 import/order warning，account-menu.tsx 一条同属基线风格）；`build` 静态导出 exit 0，oneplan 产物扫描 3455 文件违规 0。
+- **WebView 核对**：菜单行面文本仅「外观 ›」；外观 flyout 三档、深色选中打勾；点浅色落盘 `light`、body 去 `is-theme-dark`、勾移到浅色；切回跟随系统落盘 `system`、OS 深色下 body 挂回 `is-theme-dark`；切支持行时外观 flyout 互斥关闭，支持六项条目正常。
+- **搜地点胶囊暗色残留补修（用户实测截图）**：左上角 `.sc-plan-place-search-field` 字面 `#ffffff` 白底，而 `--sc-ink` 在暗色下解析成浅墨，白底下浅字不可读；下拉 `.sc-plan-place-search-options` 同是字面白底。在 `globals.css` 暗色段按目录搜索胶囊同口径补整组覆盖：field / 选项列表回 `--paper` 底 + `--hair` 边 + 暗阴影，文字回 `--ink`，图标 / 序号 / 地址 / 徽标回 `--ink-soft`，序号底 `--plane-deep`，选中行 `--plane`，清空钮 hover `--plane-deep`，spinner 边色回 `--hair` / `--ink-soft`；占位走 `--wk-muted`。WebView 回读 field 底 `rgb(28,31,36)`、字 `rgb(237,240,242)`、边 `rgb(54,58,66)`、图标 `rgb(201,206,214)`。
+- **测量标尺卡片暗色残留补修（用户实测截图）**：底部 `measure-ruler-card` 背景已走暗色纸面，但标题 / 读数 / 提示 / 关闭钮 / 边框仍是 `PLANNING_SURFACE` 浅色常量（`#141416` / `#e4e4e7` / `rgba(15,22,32,.62)`），暗底深字。在 `globals.css` 暗色段按既有 `data-testid` 钩子模式补 `!important` 覆盖：卡片回 `--paper` 底 + `--hair` 边 + 暗阴影，标题与读数回 `--ink`，提示回 `--ink-soft`，关闭钮回 `--ink-soft`；距离/面积小弹层 `.sc-measure-pop` 此前已是暗色，未动。WebView 进入测量模式回读：卡底 `rgb(28,31,36)`、字 `rgb(237,240,242)`、边 `rgb(54,58,66)`、提示与关闭钮 `rgb(201,206,214)`。
+- **测量卡片视觉改版（用户反馈「挺丑，成熟案例怎么调整」）**：原卡片把空状态提示语（「点起点开始，可连续加段」/「拖出矩形或点选闭合」）当成 18px/700 读数渲染，标题、读数、提示三层权重拉不开，提示句还与标题语义重复。改版为紧凑三层浮动卡：标题 11px/600 `--ink-soft` caption；有真实读数时读数 20px/700 `--ink` 表格数字，空状态降级为 13px/500 `--wk-muted` 占位；提示收成一行 10.5px `--wk-muted`（距离「单击加点，拖动量一段 · 双击结束」/ 面积「单击描点，近首点闭合 · 双击结束」，删掉「退出自动清线」长句）。颜色/排版从内联 `PLANNING_SURFACE` 常量迁到 `.sc-measure-ruler-*` token 类，明暗自适应，撤换上一轮按 `data-testid` 的暗色 `!important` 覆盖块。WebView 回读：距离空状态标题 `rgb(201,206,214)` 11px、占位 `rgb(155,161,172)` 13px/500、提示 10.5px；面积模式占位与提示文案正确。
+- **已知限制**：BUA 会话视口塌陷 0×0，`snapshot` / 坐标点击不可用，交互走 JS 派发；flyout 在真实窗口右侧展开的实绘观感、搜地点下拉选项展开态实绘、测量卡片有真实读数时的大字实绘仍待真机目视。画布上标尺文字走 2D canvas 绘制，底图瓦片仍为浅色，未随主题反转。全量 Vitest 基线失败集合本轮未重跑归类（沿用第八/九轮归属）。
+- **本轮未 push**：改动在本地攒着，待真机目视复核后再一次性推 main；`cloud-panel.tsx` / `cloud.css` 另混有早前归档盘点改版（`sc-archive-*`）在制改动，提交时需区分 hunk。
+
+### 第十二轮（2026-11-20）：左轨按钮开合逻辑收敛——次级「待切回」态
+
+- **背景（用户反馈）**：左轨「很多可以双选，点来点去不知道为什么出来、为什么回去」。源码 + 3210 实测定位：四车道（活动/Bingo/空间/物料）共用一张 Agent 卡单选互斥；创作、户外可与另一张卡进左栏堆栈双开；消息/私信与车道、创作互斥。核心脱钩点是车道被创作/拍摄/消息/私信盖住时，钮直接变暗成空钮样，但底层车道状态仍保留，此时点下去是「换回车道 + 挤掉占栏卡」，外观像关闭态、结果却是打开。
+- **次级「待切回」态**：`room-organizer.tsx` 新增 `laneCovered`（personChat || messagesOpen || generationOpen || captureOpen）与 `isLaneRetained(id)`；`isLaneOpen` 同步补排 captureOpen。车道被盖住时钮挂 `is-retained`（内描边环 + `aria-pressed=true` / `aria-expanded=false`），tooltip「××：切回当前面板」，与从没打开的空钮区分；点击行为不变（换回车道）。CSS 环取 `--wk-ink-soft` 45% `color-mix` 内描边，亮暗跟随 token。
+- **创作钮高亮口径拆分**：主态 active 只反映生成卡 `generationOpen`；拍摄向导 `captureOpen` 进次级 retained，提示「拍摄向导开着，点按切到生成」；`aria-expanded` 只跟生成卡。
+- **户外钮口径对齐**：被业务卡盖住（`businessCardOpen`）时降次级 retained，提示「被业务卡盖住，点按切回」；active 只在面板可见时点亮，`aria-expanded` 同口径。
+- **品牌钮改车道契约**：`WorkbenchBrandToggle` 旧 props `expanded`（导航列开合标签「收起/展开导航栏」）换成 `open` / `retained`；标签「打开 活动 / 收起 活动 / 活动：切回当前对话」，补 `aria-pressed`，`aria-controls="agent-panel"`。旧导航列文案与 `navToggleLabel` 依赖移除；组件测试同步到车道三态契约，旧 NavHarness（toggleNavColumns 演示桩）删除，lib 函数本身仍由 nav-chrome 测试覆盖。
+- **第十二轮门禁**：`typecheck` exit 0；定向测试 workbench-brand-toggle 4 + bingo-rail-button 13 + workbench-rail-head 1 共 18 例通过；`lint` 0 error（2087 条既有 import/order warning 基线）；`build` 静态导出 exit 0，oneplan 产物扫描违规 0。
+- **WebView 核对**：暗色序列 空间● → 创作盖住时 空间◐ → 点回 空间●；物料◐ retained；拍摄向导开着时创作钮◐；物料 + 户外双开各自独立收起；浅色 retained 环为深灰 45% 描边、白纸上可见。agent-panel.react.test.tsx 等失败为既有基线（旧 vitest-report.json 已列），本轮未引入新失败文件。
+- **已知限制**：retained 环在窄轨 40px 触达区上的实绘观感、业务卡盖住户外面板的次级态真机目视未逐帧核对。
+- **全量 Vitest 基线归类（2026-11-20 20:14，`.tmp-vitest-round12.txt`）**：830 套件 / 10659 用例，34 套件、524 用例失败，1 条 auth-js 未处理 rejection（既有 jsdom 桩缺 fetch.ok）。对照 11-18 旧基线 `frontend/vitest-report.json`（46 套件失败）：22 个基线套件本轮已转绿；9 个相对基线新增失败全部不属于本轮外观/在制改动——aholo 物料 slug 缺能力标签（catalog 在制，assets/library 未入提交）、fixture `INITIAL_LAYOUT` 空 items 致 scene-layers / cloud-material-draft / local-seating-draft 取值 undefined、尺寸度量文案空格漂移（`2 × 2 m` vs `2×2 m`）、plan-card 可行性出口文案、projects 路由断言、page 待确认提案按钮、use-outdoor-agent-workflow 状态机等业务流陈旧断言。本轮改动所涉套件（account-menu.hover、outdoor-plan-overlay.merge、workbench-brand-toggle、bingo-rail-button、workbench-rail-head、outdoor-plan-canvas 各件）全部通过。唯一轨邻套件 `rail-side-panels.react.test.tsx` 失败于源码字符串契约断言（守卫表达式已含 `!captureOpen` / `!personChat`，断言仍写旧子串），该守卫在 HEAD 即如此、测试文件未在本轮工作树内改动，属早先提交遗留的陈旧断言，未在本轮修。
+- **三档真机补验**：`system` 档在系统暗色下刷新后正确挂回 `is-theme-dark`；浅色/暗色档前轮已验。
+
+### 第十三轮（2026-11-20）：遗留暗色复核收口——主钮/徽标/灵动岛/浮层/测量读数
+
+- **主操作钮**：`.sc-agent-panel .btn-primary` 暗色走 `--primary`（210 18% 90% 浅灰底）+ `--primary-foreground`（220 11% 12% 近黑字），对比足够，是中性反转而非白字浅底；户外工作流/结果卡主钮同谱系，实测可读。
+- **当前徽标**：`.sc-activity-current` 暗色反相为浅底深字（#EDF0F2 / #1C1F24），对比约 14:1；状态色令牌暗色已提亮（ok #6FB585、warn #D9A95E、err #E07A72、green #7FB58F）。
+- **灵动岛**：`.sc-activity-island-main` 活动名 `--wk-ink` 浅色、岛体 `--wk-plane` 深底，实测「周末共创工作坊」可读；改名输入框走 paper/ink 令牌自适应。
+- **外观 flyout 修补**：选中档打勾图标是 `.sc-material-symbol` span，旧 CSS 只选 `svg`，绿色没生效（打勾仍是浅色）。`cloud.css` 选择器补到 `.sc-material-symbol`，实测选中「跟随系统」打勾变 `--wk-green` #7FB58F；浮层深底 #1C1F24、发丝 #363A42、文字 ink/ink-soft 层级正常。
+- **搜地点下拉**：listbox 深底，主名 ink、地址 ink-soft、序号片 plane-deep + ink-soft，8 条建议项实测可读。
+- **测量读数卡**：空态标题 ink-soft、占位/提示 muted #9BA1AC；真实读数 `.sc-measure-ruler-value` 20px/700/tabular-nums、颜色 `--ink`，暗色实测「370.8 m」浅色可读。
+- **第十三轮门禁**：`account-menu.hover.react.test.tsx` 3 例通过；`typecheck` exit 0；`lint` 0 error（2087 条既有 import/order warning 基线）。
+- **户外钮 retained 核对（#30）**：业务卡盖住户外面板时户外钮降 retained 次级态。访客会话 DOM 内仅有「登录并进入工作台」入口，评审/交付业务卡需登录并走方案流程，真实「业务卡盖住户外钮」状态流未在本轮点穿；改为在真机 DOM 上临时挂 `is-retained` 类回读 computed style：active 态 color `rgb(237,240,242)`（ink #EDF0F2）、box-shadow none；retained 态 color `rgb(201,206,214)`（ink-soft #C9CED6）、`box-shadow: oklab(0.849905 -0.00214672 -0.0121574 / 0.45) 0px 0px 0px 1px inset`、背景透明；截图左轨靶心钮内描边环与其余素面空钮可区分。该环与 Bingo/空间/物料 retained 共用 `globals.css` 2149–2156 规则，第十二轮已在其余钮上真机验过；临时挂类/属性核对完已 navigate 复位。
+- **契约补断言**：`workbench-rail-head.react.test.tsx` 新增户外钮源码切片断言——active 仅在 `!businessCardOpen` 时挂、被盖时挂 `is-retained`、`aria-expanded` 同条件、tooltip「被业务卡盖住，点按切回」；定向测试 1 例通过，`typecheck` exit 0、`lint` 0 error。
+- **未逐帧核对**：登录态评审/交付业务卡真实盖住户外面板的状态流（需登录 fixture 账号并走方案评审/交付流程，本轮未走）；flyout 非选中项是否降 ink-soft（当前与选中同为 ink，靠加粗 + 绿勾区分，与走查稿一致，未改）。
+
 ### 真机/浏览器验收清单（待人工跑）
 
 - 三档切换即时重绘无刷新；`system` 跟随系统深浅切换；刷新后保留本机档位。

@@ -40,12 +40,25 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(primary).toContain("onClick={() => {");
     expect(primary).toContain("openGenerationSheet({ scope: 'venue' })");
     expect(primary).toContain('closeGenerationSheet()');
-    expect(primary).toContain('data-tip="创作"');
+    expect(primary).toContain('data-tip=');
     expect(primary).toContain('>创作</span>');
     expect(primary).not.toContain('data-tip="场地"');
     expect(primary).not.toContain('>场地</span>');
-    expect(primary).toContain('data-tip="空间"');
-    expect(primary).toContain('data-tip="物料"');
+    expect(primary).toContain('>空间</span>');
+    expect(primary).toContain('>物料</span>');
+    // 被占栏盖住的车道进次级「待切回」态，和空钮区分。
+    expect(primary).toContain('is-retained');
+    // 户外钮：面板仍在但被业务卡盖住时降 retained 次级态；active 只在没被盖住时。
+    const outdoorLabel = source.indexOf('aria-label="户外规划"', primaryStart);
+    const outdoorStart = source.lastIndexOf('<button', outdoorLabel);
+    const outdoorEnd = source.indexOf('<RailMessagesButton', outdoorStart);
+    expect(outdoorStart).toBeGreaterThan(-1);
+    expect(outdoorEnd).toBeGreaterThan(outdoorStart);
+    const outdoorBlock = source.slice(outdoorStart, outdoorEnd);
+    expect(outdoorBlock).toContain("outdoorPanel !== null && !businessCardOpen ? ' is-active'");
+    expect(outdoorBlock).toContain("outdoorPanel !== null ? ' is-retained'");
+    expect(outdoorBlock).toContain('aria-expanded={outdoorPanel !== null && !businessCardOpen}');
+    expect(outdoorBlock).toContain('被业务卡盖住，点按切回');
     expect(primary).not.toContain('sc-space-chevron');
     expect(primary).not.toContain('sc-rail-word');
     expect(primary).toContain('sc-rail-label');

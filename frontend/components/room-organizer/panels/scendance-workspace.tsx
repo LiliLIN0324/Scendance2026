@@ -323,9 +323,6 @@ interface ViewToolsProps {
     exitMeasure?(): void;
     snapOn?: boolean;
     setSnapOn?(on: boolean): void;
-    /** 2026-11-19 用户指令：规划信息（总览/清单/问题/图例）浮在画布右上角，底条钮点了才展开。 */
-    infoOpen?: boolean;
-    toggleInfo?(): void;
     /**
      * 2026-11-13 一期户外第一人称漫游：独立于室内 `walkthroughMode` 的启用信号。
      * `walkIn3D` 仅在户外 3D 接管视图为真（2D 平面仍禁用）；`toggleWalk` 在按钮手势内收口。
@@ -1376,10 +1373,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           <span className="oc-sep" aria-hidden="true" />
           {outdoor?.setInspector && <button type="button" id="tool-selection" data-tip="属性" aria-label="属性" aria-pressed={outdoor.inspectorTabs?.selection === true} className={outdoor.inspectorTabs?.selection === true ? 'is-active' : ''} onClick={() => outdoor.setInspector?.('selection')}>
             <MaterialSymbol name={OUTDOOR_TOOL_ICONS.selection} />
-          </button>}
-          {/* 2026-11-19 用户指令：规划信息收进底条，点开才在画布右上角展开（按下态回显是否已开）。 */}
-          {outdoor?.toggleInfo && <button type="button" id="tool-info" data-tip={outdoor.infoOpen ? '规划信息 · 开着，点按收起' : '规划信息'} aria-label="规划信息" aria-pressed={outdoor.infoOpen === true} className={outdoor.infoOpen === true ? 'is-active' : ''} onClick={() => outdoor.toggleInfo?.()}>
-            <MaterialSymbol name="description" />
           </button>}
           {outdoor?.setSnapOn && <button type="button" id="tool-snap" data-tip={outdoor.snapOn === false ? '网格吸附 · 已关闭，点按开启' : '网格吸附 · 开启，点按关闭'} aria-label="网格吸附" aria-pressed={outdoor.snapOn !== false} className={outdoor.snapOn !== false ? 'is-active' : ''} onClick={() => outdoor.setSnapOn?.(outdoor.snapOn === false)}>
             <GridSnapIcon active={outdoor.snapOn !== false} />

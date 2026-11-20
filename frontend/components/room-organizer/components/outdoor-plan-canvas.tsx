@@ -13075,65 +13075,44 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       else sessionLengthM += measureValue(item);
     }
     const title = measureKind === 'area' ? '测量面积' : '测量距离';
+    const placeholder = measureKind === 'area' ? '拖出矩形或点选闭合' : '点起点开始，可连续加段';
     const value = measureKind === 'area'
-      ? (measureDraftText ?? (sessionAreaM2 > 0 ? formatAreaM2(sessionAreaM2) : '拖出矩形或点选闭合'))
-      : (measureDraftText ?? (sessionLengthM > 0 ? formatLengthM(sessionLengthM) : '点起点开始，可连续加段'));
+      ? (measureDraftText ?? (sessionAreaM2 > 0 ? formatAreaM2(sessionAreaM2) : placeholder))
+      : (measureDraftText ?? (sessionLengthM > 0 ? formatLengthM(sessionLengthM) : placeholder));
+    const hasReadout = measureDraftText !== null || sessionLengthM > 0 || sessionAreaM2 > 0;
+    const hint = measureKind === 'area'
+      ? '单击描点，近首点闭合 · 双击结束'
+      : '单击加点，拖动量一段 · 双击结束';
     return (
       <div
         data-testid="measure-ruler-card"
+        className="sc-measure-ruler-card"
         style={{
           position: 'absolute',
           left: '50%',
           bottom: 92,
           transform: 'translateX(-50%)',
           zIndex: 25,
-          minWidth: 232,
-          maxWidth: 320,
-          background: 'var(--sc-surface, #ffffff)',
-          color: PLANNING_SURFACE.panelText,
-          borderRadius: 12,
-          border: `1px solid ${PLANNING_SURFACE.panelBorder}`,
-          boxShadow: '0 6px 22px rgba(15,22,32,0.24)',
-          padding: '8px 10px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 2,
           pointerEvents: 'auto',
-          fontSize: PLANNING_TYPOGRAPHY.row,
         }}
         onPointerDown={event => event.stopPropagation()}
         onDoubleClick={event => event.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <strong style={{ fontWeight: 700 }}>{title}</strong>
-          <span style={{ flex: 1 }} />
+        <div className="sc-measure-ruler-head">
+          <span className="sc-measure-ruler-title">{title}</span>
           <button
             type="button"
             data-testid="measure-ruler-close"
+            className="sc-measure-ruler-close"
             aria-label="退出测量并清除本次测量"
             title="退出测量并清除本次测量"
-            style={{
-              all: 'unset',
-              cursor: 'pointer',
-              width: 18,
-              height: 18,
-              borderRadius: 999,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              lineHeight: 1,
-              color: 'rgba(15,22,32,0.62)',
-            }}
             onClick={event => { event.stopPropagation(); closeMeasureRuler(); }}
           >
             ×
           </button>
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-        <div style={{ opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-          单击继续加点 / 拖动量一段；双击或「完成」结束；退出测量会自动清掉这条线
-        </div>
+        <div className={hasReadout ? 'sc-measure-ruler-value' : 'sc-measure-ruler-placeholder'}>{value}</div>
+        <div className="sc-measure-ruler-hint">{hint}</div>
       </div>
     );
   })() : null;

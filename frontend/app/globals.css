@@ -242,6 +242,12 @@ body.is-theme-dark .sc-cloud-dialog {
   --sc-surface: var(--paper);
 }
 
+/* .sc-workbench 规则把 --wk-muted 钉死成浅色 #71767E；暗色下必须在工作台元素上
+   再挂回，否则 body 暗色别名被元素自身声明覆盖，次级文字退回浅灰、深底上对比不足。 */
+body.is-theme-dark .sc-workbench {
+  --wk-muted: #9BA1AC;
+}
+
 /* 主操作钮：浅色 = 墨底白字；暗色反转为浅底深字（--primary / --primary-foreground）。 */
 body.is-theme-dark .sc-button.is-primary,
 body.is-theme-dark .sc-button.is-primary:hover:not(:disabled),
@@ -251,10 +257,13 @@ body.is-theme-dark .sc-button.is-primary:active:not(:disabled) {
   color: hsl(var(--primary-foreground));
 }
 
-/* 各 tooltip 胶囊在暗色下跟随墨/纸反转，避免浅底白字。 */
-body.is-theme-dark .sc-workbench .sc-nav-brand[data-tip]::after,
-body.is-theme-dark .sc-workbench .sc-mode-rail [data-tip]::after,
-body.is-theme-dark .sc-workbench .sc-tool-column [data-tip]::after {
+/* 各 tooltip 胶囊在暗色下跟随墨/纸反转，避免浅底白字。
+   选择器必须完整复刻基础规则链：基础规则类名更多，暗色覆盖若少挂类，
+   特异性会被压过，暗色下退回浅底 + #fff 白字（左轨 Bingo 胶囊实测不可读）。 */
+body.is-theme-dark .sc-workbench .sc-left-column > .sc-nav-brand[data-tip]::after,
+body.is-theme-dark .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]::after,
+body.is-theme-dark .sc-workbench .sc-tool-column [data-tip]::after,
+body.is-theme-dark .sc-workbench .sc-material-drawer-handle[data-tip]::after {
   background: var(--ink);
   color: var(--paper);
 }
@@ -877,6 +886,41 @@ body.is-theme-dark .sc-catalog-search:focus-within {
   border-color: var(--hair);
   box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 28px rgba(0, 0, 0, .32);
 }
+
+/* 左上角搜地点胶囊：字面白底回到暗色纸面，描边/阴影压暗；下拉选项列表同回暗色。 */
+body.is-theme-dark .sc-plan-place-search-field {
+  background: var(--paper);
+  border-color: var(--hair);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 8px 24px rgba(0, 0, 0, .28);
+}
+body.is-theme-dark .sc-plan-place-search-field:hover,
+body.is-theme-dark .sc-plan-place-search-field:focus-within {
+  border-color: var(--hair);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 28px rgba(0, 0, 0, .32);
+}
+body.is-theme-dark .sc-plan-place-search-icon { color: var(--ink-soft); }
+body.is-theme-dark .sc-plan-place-search-field:focus-within .sc-plan-place-search-icon { color: var(--ink); }
+body.is-theme-dark .sc-plan-place-search input::placeholder { color: var(--wk-muted); }
+body.is-theme-dark .sc-plan-place-search-collapsed-name { color: var(--ink); }
+body.is-theme-dark .sc-plan-place-search-clear { color: var(--ink-soft); }
+body.is-theme-dark .sc-plan-place-search-clear:hover { background: var(--plane-deep); color: var(--ink); }
+body.is-theme-dark .sc-plan-place-search-spinner {
+  border-color: var(--hair);
+  border-top-color: var(--ink-soft);
+}
+body.is-theme-dark .sc-plan-place-search-options {
+  background: var(--paper);
+  border-color: var(--hair);
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .18), 0 14px 34px rgba(0, 0, 0, .32);
+}
+body.is-theme-dark .sc-plan-place-search-option { color: var(--ink); }
+body.is-theme-dark .sc-plan-place-search-option[aria-selected='true'] { background: var(--plane); }
+body.is-theme-dark .sc-plan-place-search-option-no { background: var(--plane-deep); color: var(--ink-soft); }
+body.is-theme-dark .sc-plan-place-search-option-address { color: var(--ink-soft); }
+body.is-theme-dark .sc-plan-place-search-badge { border-color: var(--hair); color: var(--ink-soft); }
+
 /* 物料卡上悬浮的收藏 / 标签小钮：字面白圆底回到暗色平面。 */
 body.is-theme-dark .sc-material-star,
 body.is-theme-dark .sc-material-tagpin {
@@ -2100,6 +2144,17 @@ body.is-theme-dark .sc-material-tagpin {
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active {
   background: transparent; color: var(--wk-ink); font-weight: 400;
 }
+/* 次级「待切回」态：车道卡被创作/消息/私信等占栏盖住，底层仍保留。
+   用内描边环和从没打开过的空钮区分；点按是把车道换回来，不是关闭。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-retained,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-retained {
+  color: var(--wk-ink-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wk-ink-soft) 45%, transparent);
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-retained:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-retained:hover {
+  background: var(--wk-plane); color: var(--wk-ink);
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-disc.is-active::before,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-nav-brand.is-active::before {
   content: none;
@@ -2928,6 +2983,53 @@ body.sc-panel-dragging * {
 .sc-measure-row-label { text-align: left; }
 .sc-measure-check-slot { display: grid; place-items: center; width: 14px; height: 14px; justify-self: end; }
 .sc-workbench .sc-tool-column .oc-cluster .sc-measure-pop .sc-tool-check { margin-left: 0; display: block; }
+
+/* 测量标尺浮动卡：紧凑三层——小标 caption / 读数（空状态降级为次级占位）/ 一行操作提示；颜色走 token，明暗自适应。 */
+.sc-measure-ruler-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 208px;
+  max-width: 296px;
+  padding: 10px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 6px 22px rgba(15, 22, 32, .18);
+}
+.sc-measure-ruler-head { display: flex; align-items: center; gap: 6px; }
+.sc-measure-ruler-title { font-size: 11px; font-weight: 600; letter-spacing: .01em; color: var(--ink-soft); }
+.sc-measure-ruler-close {
+  all: unset;
+  cursor: pointer;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--wk-muted);
+  transition: background .16s ease, color .16s ease;
+}
+.sc-measure-ruler-close:hover { background: var(--plane-deep); color: var(--ink); }
+.sc-measure-ruler-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.sc-measure-ruler-placeholder {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--wk-muted);
+}
+.sc-measure-ruler-hint { font-size: 10.5px; line-height: 1.45; color: var(--wk-muted); }
 
 /* ===== 2026-11-16 用户指令：Google Maps 桌面网页版控制列一比一复刻 ===== */
 /* 网页版口径：29px 小圆角方块、3px 间距、各自独立阴影、无外层白胶囊；

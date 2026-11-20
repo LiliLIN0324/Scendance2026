@@ -32,6 +32,8 @@ const state = vi.hoisted(() => ({
 }));
 const placeSearch = vi.hoisted(() => ({
   props: null as null | {
+    testIdPrefix?: string;
+    onPick?: (place: { name: string; lng: number; lat: number }) => void;
     onPickArea?: (area: {
       id: string;
       name: string;
@@ -81,7 +83,15 @@ vi.mock("./outdoor-plan-3d", () => ({
 vi.mock("./plan-place-search", () => ({
   default: (props: NonNullable<typeof placeSearch.props>) => {
     placeSearch.props = props;
-    return null;
+    // 渲染出与真组件同名的输入框：真组件的 testid 由 testIdPrefix 派生，
+    // 这里让测试能直接验证 focusPlaceSearch 选中的那个 id 确实在 DOM 里。
+    return (
+      <input
+        data-testid={`${props.testIdPrefix ?? "plan-place-search"}-input`}
+        aria-label="搜地点"
+        readOnly
+      />
+    );
   },
 }));
 vi.mock("../lib/site-plan-csv", () => ({ downloadPlanCsv: state.csv }));
@@ -179,11 +189,15 @@ it("keeps outside clicks through and exposes a clean map details panel", () => {
   fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
   expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
 });
-it("地图左上不再挂搜索浮钮及其独立拖动宿主", () => {
-  placeSearch.props = null;
-  render(<Overlay projectId="no-floating-search" seedPlan={createStarterOutdoorPlan()} />);
-  expect(placeSearch.props).toBeNull();
-  expect(document.getElementById('outdoor-place-search-slot')).toBeNull();
+it("地图左上挂回搜索浮条：组件已挂载，focusPlaceSearch 找得到输入框", () => {
+  render(<Overlay projectId="floating-search" seedPlan={createStarterOutdoorPlan()} />);
+  expect(placeSearch.props).not.toBeNull();
+  // 前缀必须是 outdoor-place-search——focusPlaceSearch 查的就是 outdoor-place-search-input。
+  expect(placeSearch.props?.testIdPrefix).toBe("outdoor-place-search");
+  expect(typeof placeSearch.props?.onPick).toBe("function");
+  expect(screen.getByTestId("outdoor-place-search-input")).toBeTruthy();
+  // 不再需要独立 portal 槽：搜索条直接画在覆盖层里，槽位不存在也不影响挂载。
+  expect(document.getElementById("outdoor-place-search-slot")).toBeNull();
 });
 it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {
   const plan = createStarterOutdoorPlan();
