@@ -121,8 +121,10 @@ export const X = makeSolidIcon('close');
  * 门厅不参与反黑，始终实心 `--green-deep`。右下角也不再加品牌句点。
  */
 export const RAIL_STROKE = 1.65;
-export const RAIL_SELECTED = '#141416';
-export const RAIL_PAPER = '#FFFFFF';
+/* 选中态跟随主题 token：填充 currentColor（= 按钮 active 的 --ink），镂空细节用 --paper。
+   不再钉死 #141416 / #FFFFFF，否则暗色下图标填进黑底、只剩一条白缝。 */
+export const RAIL_SELECTED = 'currentColor';
+export const RAIL_PAPER = 'var(--paper, #FFFFFF)';
 
 const RAIL_INK = 'var(--ink-soft, #55585F)';
 
@@ -227,7 +229,7 @@ function makeCustomIcon(render: (size: number, active: boolean) => JSX.Element):
     return (
       <span
         data-rail-active={active ? 'true' : 'false'}
-        style={{ display: 'inline-flex', flex: 'none', color: active ? RAIL_SELECTED : (color ?? RAIL_INK), ...style }}
+        style={{ display: 'inline-flex', flex: 'none', color: active ? 'var(--ink, #141416)' : (color ?? RAIL_INK), ...style }}
         {...props}
       >
         {render(size, active)}
@@ -274,7 +276,7 @@ export const RailCrate = makeCustomIcon((size, active) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <path d={RAIL_CRATE_LID} {...filledShape(active)} />
     <rect x={5.1} y={9.35} width={13.8} height={10.15} rx={2} {...filledShape(active)} />
-    {active ? <path d={RAIL_CRATE_SEAM} fill="none" stroke={RAIL_PAPER} strokeWidth={1.55} /> : null}
+    {active ? <path d={RAIL_CRATE_SEAM} fill="none" style={{ stroke: RAIL_PAPER }} strokeWidth={1.55} /> : null}
   </svg>
 ));
 
@@ -287,8 +289,36 @@ export const RailPlus = makeCustomIcon((size, active) => (
     <path
       d={RAIL_PLUS_MARK}
       fill="none"
-      stroke={active ? RAIL_PAPER : 'currentColor'}
+      style={active ? { stroke: RAIL_PAPER } : undefined}
+      stroke={active ? undefined : 'currentColor'}
       strokeWidth={active ? 1.7 : RAIL_STROKE}
+      strokeLinecap="round"
+    />
+  </svg>
+));
+
+/** 消息：圆角对话气泡，左下尖角；收进 4–20 安全区、圆角 1.8，选中气泡填墨，两条文字留纸色。 */
+export const RAIL_MESSAGE_BUBBLE = 'M5.8 4.6 H18.2 A1.8 1.8 0 0 1 20 6.4 V14.0 A1.8 1.8 0 0 1 18.2 15.8 H11.4 L7.2 19.4 A.9.9 0 0 1 6.0 18.3 V15.8 H5.8 A1.8 1.8 0 0 1 4 14.0 V6.4 A1.8 1.8 0 0 1 5.8 4.6 Z';
+export const RAIL_MESSAGE_LINE_1 = 'M7.6 8.7 H16.4';
+export const RAIL_MESSAGE_LINE_2 = 'M7.6 11.5 H12.6';
+
+export const RailMessage = makeCustomIcon((size, active) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d={RAIL_MESSAGE_BUBBLE} {...filledShape(active)} />
+    <path
+      d={RAIL_MESSAGE_LINE_1}
+      fill="none"
+      style={active ? { stroke: RAIL_PAPER } : undefined}
+      stroke={active ? undefined : 'currentColor'}
+      strokeWidth={active ? 1.55 : RAIL_STROKE}
+      strokeLinecap="round"
+    />
+    <path
+      d={RAIL_MESSAGE_LINE_2}
+      fill="none"
+      style={active ? { stroke: RAIL_PAPER } : undefined}
+      stroke={active ? undefined : 'currentColor'}
+      strokeWidth={active ? 1.55 : RAIL_STROKE}
       strokeLinecap="round"
     />
   </svg>
@@ -302,13 +332,13 @@ export const RailMap = makeCustomIcon((size, active) => (
       cx={RAIL_OUTDOOR.small.cx}
       cy={RAIL_OUTDOOR.small.cy}
       r={RAIL_OUTDOOR.small.r}
-      {...(active ? { fill: RAIL_PAPER, stroke: 'none' } : railPen)}
+      {...(active ? { style: { fill: RAIL_PAPER }, stroke: 'none' } : railPen)}
     />
     <circle
       cx={RAIL_OUTDOOR.large.cx}
       cy={RAIL_OUTDOOR.large.cy}
       r={RAIL_OUTDOOR.large.r}
-      {...(active ? { fill: RAIL_PAPER, stroke: 'none' } : railPen)}
+      {...(active ? { style: { fill: RAIL_PAPER }, stroke: 'none' } : railPen)}
     />
   </svg>
 ));

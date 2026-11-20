@@ -11,7 +11,11 @@ export interface CloudAsset {
   owner_id?: string;
   /** 有值说明这物料在公共目录里，所有注册用户都能看到并取用。 */
   published_at?: string | null;
-  license?: { id?: string; url?: string; attribution?: string };
+  /** 有值说明这物料在所属工作室的团队库（L2）里，同室成员可见并可取用。 */
+  team_studio_id?: string | null;
+  /** 团队库状态：pending 待审 / approved 已通过 / rejected 被驳回；只在团队列表里回带。 */
+  status?: 'pending' | 'approved' | 'rejected';
+  license?: { id?: string; type?: string; url?: string; attribution?: string; reviewedAt?: string };
   metadata?: {
     sourceSize?: AssetSize;
     /** 物料自己的预览图。没有则界面留空方块，不画通用椅子。 */
@@ -20,6 +24,18 @@ export interface CloudAsset {
     thumbnail?: string;
     thumbnail_url?: string;
     preview_image_url?: string;
+    /** 归档时落下的原提示词；旧数据只在 backfill.originalName 里留了原名。 */
+    originalPrompt?: string;
+    prompt?: string;
+    description?: string;
+    backfill?: { originalName?: string; at?: string; preview?: string };
+    /** 生成任务回执。图生 3D 的参考图是当前唯一可用的历史缩略图来源。 */
+    generation?: {
+      kind?: string;
+      providerMode?: string;
+      providerModel?: string;
+      referenceImageAssetId?: string;
+    };
   }; created_at?: string;
 }
 export interface AuthorizedAsset { id: string; name: string; source: string; url: string }
@@ -84,14 +100,66 @@ export function assetError(error: unknown): string {
     FORBIDDEN: '当前账号没有工作室权限，请联系管理员。',
     NO_COMPATIBLE_MODEL: '该模型暂不符合导入要求，请选择其他模型。',
     ASSET_NOT_FOUND: '没有访问此素材的权限，或素材已不存在。',
+    ASSET_NOT_PUBLISHABLE: '只有 3D 模型可以进入团队库或公共目录。',
+    INVALID_TEAM_DECISION: '审核结论只能是通过或驳回。',
     SOURCE_UV_REQUIRED: '此模型没有可用 UV，暂不能进行纹理生成，可先使用材质参数修改。',
     TEXTURE_GEOMETRY_CHANGED: '生成结果改变了几何或 UV，已拒绝应用，原模型保持不变。',
     REFERENCE_IMAGE_FORBIDDEN: '请选择当前账号上传的 PNG 或 JPEG 参考图。',
     INVALID_REFERENCE_IMAGE: '参考图尺寸不符合要求，请使用 129–4095 像素的 PNG 或 JPEG。',
     ASSET_NOT_IN_SAVED_SCENE: '云端项目尚未保存该资产，请先保存当前画布。',
     ROUTE_NOT_FOUND: '物料接口不存在，列表没有刷新。',
+    PROVIDER_REJECTED: '生成服务商拒绝了这次请求。先检查描述是否含违规内容，或换一个模型再试。',
+    PROVIDER_FAILED: '生成服务商这次没做完，本次通常不扣费；换一个模型或稍后再试。',
+    PROVIDER_TIMEOUT: '生成服务商响应超时，稍后再试；不要连续重复提交。',
+    PROVIDER_NO_GLB: '生成服务商没有产出模型文件，换一个模型再试。',
+    FILE_TOO_LARGE: '生成文件超过入库上限。请降低面数或贴图尺寸，或换一个模型再试。',
+    STORAGE_SIGN_FAILED: '预览图暂时签不出来，物料本身还在；刷新页面再试。',
+    STORAGE_UPLOAD_FAILED: '生成结果上传失败，请稍后重试或联系管理员。',
   };
   return messages[code] ?? (error instanceof Error ? error.message : '请求失败，请稍后重试。');
+}
+
+/** 服务商名称的人话；未知来源原样显示，方便排查。 */
+export function assetSourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    aholo: 'Aholo Lux3D', hunyuan: '混元 3D', polyhaven: 'Poly Haven',
+    upload: '本地上传', parametric: '参数化物料', shipped: '随包物料',
+  };
+  return labels[source] ?? source;
+}
+
+/** 图生 3D 的参考图资产号；只在格式合法时返回，调用方仍需向服务端换签名地址。 */
+export function referenceImageAssetId(asset: Pick<CloudAsset, 'metadata'>): string | undefined {
+  const id = asset.metadata?.generation?.referenceImageAssetId;
+  return typeof id === 'string' && uuid.test(id) ? id : undefined;
+}
+
+/** 生成物料的原始描述。旧数据回填在 backfill.originalName，新数据在 originalPrompt。 */
+export function assetPrompt(asset: Pick<CloudAsset, 'metadata'>): string | undefined {
+  const metadata = asset.metadata;
+  if (!metadata) return undefined;
+  const values = [metadata.originalPrompt, metadata.prompt, metadata.description, metadata.backfill?.originalName];
+  return values.find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim();
+}
+
+/** 授权信息不猜：有署名给署名，有类型给类型，什么都没有就说未记录。 */
+export function assetLicenseLabel(asset: Pick<CloudAsset, 'license'>): string {
+  const license = asset.license;
+  if (!license) return '未记录';
+  if (license.attribution) return license.attribution;
+  const labels: Record<string, string> = {
+    'provider-terms': '服务商条款', 'cc0': 'CC0', 'cc-by': 'CC BY',
+    'cc-by-sa': 'CC BY-SA', 'commercial': '商业授权', 'internal': '内部授权',
+  };
+  return labels[license.type ?? ''] ?? license.type ?? license.id ?? '已记录';
+}
+
+/** 文件大小按人读的单位显示；0/缺失不显示成 0 B。 */
+export function assetBytesLabel(bytes: number | undefined): string {
+  if (!Number.isFinite(bytes) || !bytes || bytes <= 0) return '大小未记录';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 export function validAssetSize(size: AssetSize): boolean {
   return Number.isFinite(size.width) && size.width >= 0.1 && size.width <= 50 &&

@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { AuthCard } from '@/components/intro/auth-card';
 import { SettingsPage, type SettingsPane, type SettingsPreferences } from '@/components/room-organizer/panels/settings-page';
+import { useAppearanceOptional } from '../contexts/appearance-context';
 import { AccountMenu, openShortcutCoach } from '@/components/room-organizer/panels/account-menu';
 import type { FeedbackPlanContext } from '@/components/room-organizer/panels/feedback-dialog';
 import { rememberStudioSettings } from '../lib/studio-settings-cache';
@@ -128,6 +129,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const controller = providedController ?? fallbackController;
   const preferences = preferencesProp ?? { lengthUnit: 'm' as DisplayUnit, showMeasurements: true, lengthPrecisionM: 0.01 as const, snapToGrid: false, snapToWall: false, snapToItems: false };
   const onPreferenceChange = onPreferenceChangeProp ?? (() => undefined);
+  const appearance = useAppearanceOptional();
   const cloud = useBackendSession(controller);
   const requestedProjectId = useSearchParams()?.get('project');
   const router = useRouter();
@@ -317,7 +319,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }).catch(() => { if (!cancelled) showNotice('项目加载失败，请点击刷新重试。', true); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
-  // 左轨成员位打开「团队」时进设置的团队页；项目和物料仍打开原来的账户窗。
+  // 消息钮未登录时打开「设置」；团队成员管理仍在账户窗的团队页里。
   const openedOpenRequest = useRef(0);
   useEffect(() => {
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
@@ -1493,6 +1495,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         <SettingsPage
           preferences={preferences}
           onPreferenceChange={onPreferenceChange}
+          appearanceMode={appearance?.mode ?? 'system'}
+          onAppearanceModeChange={next => appearance?.setMode(next)}
           preferenceStatus={cloud.user && !cloud.user.is_anonymous ? '已登录：本机先记下，再同步到账号。云端失败不挡画布。' : '未登录：只存在这台设备。'}
           layout={layout}
           {...(onPlanSettingsChange ? { onPlanSettingsChange } : {})}

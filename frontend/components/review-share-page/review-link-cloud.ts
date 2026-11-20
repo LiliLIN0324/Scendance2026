@@ -112,17 +112,8 @@ export async function publishReviewLink(input: {
 
   const config = getBackendConfig();
   if (!config.configured) return { ok: false, reason: 'disabled' };
-
-  let token: string | undefined;
-  try {
-    const supabase = createSupabaseBrowserClient(config.url, config.anonKey);
-    const { data, error } = await supabase.auth.getSession();
-    if (error) return { ok: false, reason: 'signed-out' };
-    token = data.session?.access_token;
-  } catch {
-    return { ok: false, reason: 'signed-out' };
-  }
-  if (!token) return { ok: false, reason: 'signed-out' };
+  const token = await currentSessionToken();
+  if (token === null) return { ok: false, reason: 'signed-out' };
 
   const code = newReviewCode();
   const response = await callRpc('review_share_link_create', {
@@ -133,6 +124,35 @@ export async function publishReviewLink(input: {
   if (!response.ok) return { ok: false, reason: response.reason };
   if (response.value !== code) return { ok: false, reason: 'rejected' };
   return { ok: true, code };
+}
+
+/**
+ * 物主本人作废一条已发出的评审短链。服务端立即吊销，匿名评审者再点会读到失效。
+ * 非物主、未登录、码不存在都按拒绝处理；本机标记由调用方在成功后清理。
+ */
+export async function revokeReviewLink(code: string): Promise<ReviewLinkWriteResult> {
+  if (!REVIEW_CODE_PATTERN.test(code)) return { ok: false, reason: 'rejected' };
+  const config = getBackendConfig();
+  if (!config.configured) return { ok: false, reason: 'disabled' };
+  const token = await currentSessionToken();
+  if (token === null) return { ok: false, reason: 'signed-out' };
+
+  const response = await callRpc('review_share_link_revoke', { p_code: code }, token);
+  if (!response.ok) return { ok: false, reason: response.reason };
+  return { ok: true, code };
+}
+
+/** 取当前会话访问令牌；未登录或读不到会话时返回 null。后端是否接上由调用方先判。 */
+async function currentSessionToken(): Promise<string | null> {
+  const config = getBackendConfig();
+  try {
+    const supabase = createSupabaseBrowserClient(config.url, config.anonKey);
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return null;
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
 }
 
 type RpcCallResult =

@@ -5,7 +5,7 @@
  * 关掉就回到刚才那一格，画布不受影响。给自己发不算对话，只算留话，所以标题写「给自己留话」。
  */
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, X } from '@/components/solid-icons';
+import { ArrowLeft, ArrowUp, X } from '@/components/solid-icons';
 import { roleLabel } from '../lib/team-data';
 import { useTeamThread } from '../lib/team-messages';
 import { avatarToneStyle, avatarTonesFor, useAvatarPresetsFor } from './account-avatars';
@@ -20,11 +20,13 @@ function stamp(createdAt: string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-export function MemberChat({ controller, team, peerId, onClose, className, style, onHeaderPointerDown, floatBar, floatFooter }: {
+export function MemberChat({ controller, team, peerId, onClose, onBack, className, style, onHeaderPointerDown, floatBar, floatFooter }: {
   controller: BackendSession;
   team: TeamSnapshot;
   peerId: string;
   onClose(): void;
+  /** 从消息列表进入时的返回钮；不传给本组件时顶栏只有关闭钮（旧独立私信窗形态）。 */
+  onBack?(): void;
   /** 2026-11-12 左栏半卡片堆栈：外部传入的类/样式/头部抓取手势与独立小窗装饰。 */
   className?: string;
   style?: CSSProperties;
@@ -69,6 +71,7 @@ export function MemberChat({ controller, team, peerId, onClose, className, style
     {floatBar}
     <header className="sc-person-chat-head" onPointerDown={onHeaderPointerDown}
       style={onHeaderPointerDown ? { cursor: 'grab', touchAction: 'none' } : undefined}>
+      {onBack && <button type="button" className="sc-person-chat-close" aria-label="返回消息列表" onClick={onBack}><ArrowLeft size={18}/></button>}
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">
         {preset ? <img src={preset.src} alt=""/> : name.slice(0, 1)}
       </span>

@@ -16,7 +16,7 @@
 .ats-body h4 { margin: var(--sc-space-md, 16px) 0 var(--sc-space-sm, 8px); font-size: var(--sc-type-body, 14px); font-weight: 600; }
 .ats-selection { display: grid; gap: var(--sc-space-md, 16px); }
 .ats-field { display: grid; gap: var(--sc-space-sm, 8px); }
-.ats-field textarea { width: 100%; min-width: 0; resize: vertical; box-sizing: border-box; padding: var(--sc-space-sm, 8px); border: 1px solid var(--sc-line, rgba(31,35,45,.12)); border-radius: 8px; background: #fff; color: inherit; font: inherit; }
+.ats-field textarea { width: 100%; min-width: 0; resize: vertical; box-sizing: border-box; padding: var(--sc-space-sm, 8px); border: 1px solid var(--sc-line, rgba(31,35,45,.12)); border-radius: 8px; background: var(--paper); color: inherit; font: inherit; }
 .ats-field textarea::placeholder { color: var(--sc-muted, #6f6f6f); }
 .ats-picks { min-width: 0; margin: 0; padding: var(--sc-space-sm, 8px); border: 1px solid var(--sc-line, rgba(31,35,45,.12)); border-radius: 8px; }
 .ats-picks legend { padding-inline: var(--sc-space-sm, 8px); font-weight: 600; }

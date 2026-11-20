@@ -99,7 +99,7 @@
 .cr-brief-footer .cr-generate { flex:1; }
 .cr-brief-skip { flex:none; padding:10px 14px; border:1px solid var(--wk-hair); border-radius:var(--r-sm); background:var(--wk-paper); color:var(--wk-ink-soft); font-size:var(--fs-p1); cursor:pointer; }
 .cr-brief-skip:hover { background:var(--wk-plane); color:var(--wk-ink); }
-.cr-ideas article { padding: var(--sc-space-md,16px); border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: #ffffffb8; }
+.cr-ideas article { padding: var(--sc-space-md,16px); border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: color-mix(in srgb, var(--paper) 72%, transparent); }
 .cr-ideas article strong { display: block; font-size:var(--fs-h3); color: var(--wk-ink); }
 .cr-ideas article p { margin: var(--sc-space-sm,8px) 0 0; font-size:var(--fs-p1); line-height: 1.7; color: var(--wk-ink-soft); }
 .sc-brand { text-decoration: none; }

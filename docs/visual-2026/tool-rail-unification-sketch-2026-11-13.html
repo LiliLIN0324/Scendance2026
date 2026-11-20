@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>左右工具轨 × 地图簇统一草图 · 2026-11-13</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='5' fill='%234A7C59'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF; --hair-soft:#EFEFF1; --hair:#E4E4E7;
+  --faint:#A6AAB2; --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#35624A; --green-pale:#EEF3EF;
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --e1:0 6px 18px rgba(20,20,22,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 24px 64px}
+header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+h1{font-size:20px;font-weight:600;margin:0 0 6px}
+.meta{color:var(--muted);font-size:12px}
+.note{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:12px 14px;color:var(--ink-soft);font-size:13px;margin:16px 0}
+.note b{color:var(--ink)}
+.scheme-btn{border:1px solid var(--hair);background:var(--paper);color:var(--ink-soft);border-radius:var(--r-sm);padding:8px 12px;font-size:13px;cursor:pointer}
+.scheme-btn:hover{background:var(--plane)}
+section{margin-top:36px}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.sec-sub{color:var(--muted);font-size:12px;margin:0 0 16px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--plane);color:var(--ink-soft)}
+.tag.green{background:var(--green-pale);color:var(--green-deep)}
+
+/* ── 三栏族对照 ── */
+.fam-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.fam-card{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:16px}
+.fam-card h3{font-size:13px;font-weight:600;margin:0 0 2px}
+.fam-card .fam-sub{font-size:11px;color:var(--muted);margin:0 0 14px}
+.fam-demo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:56px;padding:8px;background:var(--plane);border-radius:var(--r-sm)}
+.fam-spec{margin-top:12px;display:grid;gap:4px;font-size:11px;color:var(--ink-soft)}
+.fam-spec div{display:flex;justify-content:space-between;gap:8px}
+.fam-spec span:last-child{color:var(--muted);text-align:right}
+
+/* 基础工具钮（方案态） */
+.tool-btn{width:40px;height:40px;border-radius:999px;border:1px solid transparent;background:var(--paper);
+  box-shadow:0 1px 2px rgba(20,20,22,.06);color:var(--ink-soft);display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:background .12s,border-color .12s,box-shadow .12s,opacity .12s;position:relative;flex:none}
+.tool-btn:hover{box-shadow:0 2px 6px rgba(20,20,22,.16)}
+.tool-btn:focus-visible{outline:2px solid var(--ink-soft);outline-offset:2px}
+.tool-btn.is-active{border-color:var(--green);color:var(--green-deep)}
+.tool-btn:disabled{background:var(--plane);color:var(--faint);box-shadow:none;cursor:not-allowed}
+.tool-btn svg{width:20px;height:20px}
+.tool-btn.off{border-style:dashed;border-color:var(--faint)}
+/* 现状态：30 圆钮 */
+.tool-btn.old{width:30px;height:30px;box-shadow:0 1px 3px rgba(20,20,22,.12)}
+.tool-btn.old svg{width:18px;height:18px}
+.tool-btn.old:disabled{opacity:.45}
+
+/* 左轨导航族（现状已定稿，只画对照） */
+.nav-slot{width:40px;height:40px;border-radius:12px;background:transparent;display:grid;place-items:center;color:var(--ink-soft);position:relative}
+.nav-slot:hover{background:var(--plane)}
+.nav-slot.is-active{color:var(--ink)}
+.nav-slot.is-active::before{content:"";position:absolute;left:-4px;top:7px;bottom:7px;width:3px;border-radius:0 2px 2px 0;background:var(--green)}
+.nav-slot svg{width:26px;height:26px}
+
+/* ── 工作台 mock ── */
+.stage{position:relative;background:var(--plane-deep);border:1px solid var(--hair);border-radius:var(--r-lg);height:520px;overflow:hidden}
+.canvas-label{position:absolute;inset:0;display:grid;place-items:center;color:var(--faint);font-size:12px;letter-spacing:.04em}
+/* 左轨 */
+.mock-left{position:absolute;left:0;top:0;bottom:0;width:64px;background:var(--paper);border-right:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;z-index:5}
+.mock-left .nav-slot{width:40px}
+.mock-left .rail-foot{margin-top:auto;width:100%;padding-top:8px;border-top:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;gap:6px}
+/* 右轨 */
+.mock-right{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:6}
+.mock-right .tool-btn{width:40px;height:40px}
+.mock-right .sep{width:20px;height:1px;background:var(--hair);margin:1px 0}
+/* 角区簇 */
+.corner{position:absolute;z-index:6;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.corner.tr{top:16px;right:72px}
+.corner.br{right:24px;bottom:16px;flex-direction:row;align-items:flex-end}
+.corner.bl{left:16px;bottom:16px;flex-direction:row;align-items:center;gap:10px}
+.cluster{display:flex;flex-direction:column;align-items:center;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:999px;background:var(--ink);color:#fff;font-size:12px;font-weight:500}
+.pill.ghost{background:var(--paper);border:1px solid var(--hair);color:var(--ink-soft)}
+.pill button{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:4px 8px;border-radius:999px}
+.pill button.is-active{background:rgba(255,255,255,.16)}
+.map-panel{width:220px;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);box-shadow:var(--e1);padding:10px;display:flex;flex-direction:column;gap:6px}
+.map-panel h4{margin:0 2px 2px;font-size:12px;font-weight:700}
+.map-panel button{display:flex;justify-content:space-between;align-items:center;padding:7px 9px;border-radius:9px;border:1px solid transparent;background:transparent;color:var(--ink-soft);font-size:12px;cursor:pointer;text-align:left}
+.map-panel button:hover{background:var(--plane)}
+.map-panel button[aria-checked="true"]{border-color:var(--green);background:var(--green-pale);color:var(--ink)}
+/* 角区标注 */
+.zone-tag{position:absolute;font-size:10px;color:var(--muted);border:1px dashed var(--faint);border-radius:6px;padding:2px 6px;background:rgba(255,255,255,.7)}
+.zt-tr{top:64px;right:24px}.zt-br{right:24px;bottom:56px}.zt-bl{left:16px;bottom:52px}.zt-rr{right:64px;top:50%}
+
+/* ── 五态与令牌 ── */
+.states-row{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:18px 14px}
+.state{display:flex;flex-direction:column;align-items:center;gap:8px}
+.state-name{font-size:11px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:13px;background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden}
+th,td{border-top:1px solid var(--hair);padding:8px 10px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+code{font-size:12px}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.compare-card{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:16px}
+.compare-card h3{font-size:13px;margin:0 0 10px}
+.floor-swap{display:flex;flex-direction:column;gap:7px;align-items:center}
+.floor-label{padding:4px 6px;border:1px solid var(--hair);border-radius:7px;background:var(--paper);color:var(--ink-soft);font-size:12px;font-weight:700}
+.floor-arrows{display:flex;flex-direction:column;border:1px solid #333733;border-radius:999px;background:#383d39;overflow:hidden}
+.floor-arrows button{display:grid;place-items:center;width:30px;height:25px;border:0;background:transparent;color:#fff;cursor:pointer}
+.floor-arrows button:disabled{color:#a2a7a3;opacity:.55;cursor:not-allowed}
+.muted{color:var(--muted);font-size:12px}
+.hidden-demo{opacity:.35;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <h1>左右工具轨 × 地图簇 · 统一重设计草图</h1>
+    <p class="meta">2026-11-13 讨论稿 ｜ 依据 <code>docs/05-设计规范.md</code> v2.5.12 令牌 ｜ 图形为占位，落地换本地 Material Symbols Rounded ｜ 本稿不改代码</p>
+  </div>
+  <button class="scheme-btn" id="toggleScheme" type="button">对比：现状 30px 圆钮</button>
+</header>
+
+<div class="note">
+  <b>基线：</b>main 工作树实读。左轨为导航族（切面板/身份，已定稿左缘绿条）；右轨为编辑器工具族；覆盖层右上交付簇、右下地图簇、左下 2D/3D + 比例尺 + 署名。
+  <b>楼层上下钮没有丢</b>：代码在右轨 684–697，被 <code>!outdoorEditing</code> 条件包裹，户外地图态隐藏；户外方案层（levels）走左栏图层面板。
+</div>
+
+<!-- ══ 一、三族对照 ══ -->
+<section>
+  <h2>一、三种钮族 · 只统一令牌，不互换形制</h2>
+  <p class="sec-sub">导航族（左轨）保持透明裸钮 + 左绿条；工具族（右轨）与地图簇共享正圆基础钮；形体/头像/领域图形保留例外。</p>
+  <div class="fam-row">
+    <div class="fam-card">
+      <h3>A 导航族 · 左轨</h3>
+      <p class="fam-sub">切面板 / 身份；圆角方、透明底、左缘 3px 绿条选中</p>
+      <div class="fam-demo">
+        <div class="nav-slot is-active"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v3H4zm0 5.5h16v3H4zm0 5.5h16v3H4z"/></svg></div>
+        <div class="nav-slot"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12l4 6-10 12L2 9z"/></svg></div>
+        <div class="nav-slot"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6z"/></svg></div>
+      </div>
+      <div class="fam-spec">
+        <div><span>槽位</span><span>40×40 / 圆角 12→r-sm 10</span></div>
+        <div><span>底色</span><span>透明（族例外）</span></div>
+        <div><span>选中</span><span>左绿条 + 墨字</span></div>
+        <div><span>图标</span><span>形体 / Material / 头像</span></div>
+      </div>
+    </div>
+
+    <div class="fam-card">
+      <h3>B 工具族 · 右轨</h3>
+      <p class="fam-sub">画布动作；正圆、paper 底、轻投影、绿描边选中</p>
+      <div class="fam-demo" id="famRightDemo">
+        <button class="tool-btn" type="button" aria-pressed="false" data-tip="选择"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></button>
+        <button class="tool-btn is-active" type="button" aria-pressed="true" data-tip="测量"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17l6-6 4 4 8-8v4h2V3h-7v2h4l-7 7-4-4-7 7z"/></svg></button>
+        <button class="tool-btn" type="button" aria-pressed="false" data-tip="标注"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v16H4zm2 2v12h12V6z" opacity=".25"/><path d="M5 19l1-4 8-8 3 3-8 8zm11-11l-1.5-1.5 3-3 1.5 1.5z"/></svg></button>
+        <button class="tool-btn" type="button" disabled data-tip="漫游"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2a3 3 0 0 1 3 3v6l4 2 1 5-4-1-1 4h-4l-1-5-3-2-3 4H3l2-7 6-3V5a3 3 0 0 1 3-3z"/></svg></button>
+      </div>
+      <div class="fam-spec">
+        <div><span>槽位</span><span>40×40（现状 30，上收）</span></div>
+        <div><span>底色</span><span>paper + hair 边</span></div>
+        <div><span>选中</span><span>绿描边 + green-deep 字</span></div>
+        <div><span>禁用</span><span>plane 底 + faint，不降透明度</span></div>
+      </div>
+    </div>
+
+    <div class="fam-card">
+      <h3>C 地图簇 · 覆盖层</h3>
+      <p class="fam-sub">地图动作；与工具族同基础钮，角区成簇，不混进编辑器列</p>
+      <div class="fam-demo">
+        <button class="tool-btn" type="button" aria-pressed="false" data-tip="底图"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3zm1 3.5l4-2v13l-4 2z" opacity=".9"/></svg></button>
+        <button class="tool-btn" type="button" data-tip="缩小"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+        <button class="tool-btn" type="button" data-tip="放大"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z" transform="rotate(45 12 12)"/></svg></button>
+      </div>
+      <div class="fam-spec">
+        <div><span>槽位</span><span>40×40（现状 34 内联）</span></div>
+        <div><span>样式</span><span>去内联，接 CSS 类与令牌</span></div>
+        <div><span>图标</span><span>字符 ▢/◱ 换正式登记图标</span></div>
+        <div><span>角区</span><span>右下缩放 + 底图；右上交付</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 二、工作台示意（可点） ══ -->
+<section>
+  <h2>二、工作台布局 · 地图控件按角成簇</h2>
+  <p class="sec-sub">右轨只留编辑器动作；缩放/底图归右下地图簇；交付归右上；2D/3D、比例尺、署名归左下。钮可点按看选中态。</p>
+  <div class="stage" id="stage">
+    <div class="canvas-label">画布 · 户外地图（示意）</div>
+
+    <!-- 左轨 -->
+    <div class="mock-left">
+      <div class="nav-slot is-active"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 3h10a3 3 0 0 1 3 3v15a1.5 1.5 0 0 1-1.5 1.5h-3v-5a1.5 1.5 0 0 0-3 0v5h-3A1.5 1.5 0 0 1 5 21V6a3 3 0 0 1 3-3Z"/></svg></div>
+      <div class="nav-slot"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v3H4zm0 5.5h16v3H4zm0 5.5h16v3H4z"/></svg></div>
+      <div class="nav-slot"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12l4 6-10 12L2 9z"/></svg></div>
+      <div class="nav-slot"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.3-3 5.7V17h-8v-2.3C6.2 13.3 5 11.4 5 9a7 7 0 0 1 7-7z"/></svg></div>
+      <div class="rail-foot">
+        <div class="nav-slot" style="width:34px;height:34px;border-radius:999px"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6z"/></svg></div>
+      </div>
+    </div>
+
+    <!-- 右轨 -->
+    <div class="mock-right" id="mockRight">
+      <button class="tool-btn" type="button" aria-pressed="false" data-tip="移动场景"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2 5 5-2-2 5 5 2-5 2 2 5-5-2-2 5-2-5-5 2 2-5-5-2 5-2z"/></svg></button>
+      <button class="tool-btn" type="button" aria-pressed="false" data-tip="选择"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></button>
+      <span class="sep"></span>
+      <button class="tool-btn" type="button" aria-pressed="false" data-tip="测量"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17l6-6 4 4 8-8v4h2V3h-7v2h4l-7 7-4-4-7 7z"/></svg></button>
+      <button class="tool-btn" type="button" aria-pressed="false" data-tip="标注"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 19l1-4 8-8 3 3-8 8zm11-11l-1.5-1.5 3-3 1.5 1.5z"/></svg></button>
+      <button class="tool-btn" type="button" aria-pressed="false" data-tip="属性"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17h8v-2H3zm0-6h8V9H3zm0-6h8V3H3zm12 0v2h6V5zm0 6h6V9h-6zm0 6h6v-2h-6z"/></svg></button>
+      <span class="sep"></span>
+      <button class="tool-btn" type="button" disabled data-tip="第一人称漫游（户外暂不支持）"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2a3 3 0 0 1 3 3v6l4 2 1 5-4-1-1 4h-4l-1-5-3-2-3 4H3l2-7 6-3V5a3 3 0 0 1 3-3z"/></svg></button>
+      <button class="tool-btn" type="button" disabled data-tip="网格吸附（户外自动吸附）"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v16H4zm2 2v12h12V6z" opacity=".3"/><path d="M9 6v12M15 6v12M6 9h12M6 15h12" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></button>
+      <span class="sep"></span>
+      <button class="tool-btn" type="button" aria-pressed="false" data-tip="撤销"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V2L7 6l5 4V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/></svg></button>
+      <button class="tool-btn" type="button" aria-pressed="false" data-tip="重做"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V2l5 4-5 4V7c-3.3 0-6 2.7-6 6s2.7 6 6 6 6-2.7 6-6h2c0 4.4-3.6 8-8 8s-8-3.6-8-8 3.6-8 8-8z"/></svg></button>
+    </div>
+
+    <!-- 右上交付簇 -->
+    <div class="corner tr">
+      <button class="tool-btn" type="button" data-tip="分享 / 导出方案"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 15V3m0 0L7 8m5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+
+    <!-- 右下地图簇 -->
+    <div class="corner br">
+      <div class="cluster" id="zoomCluster">
+        <button class="tool-btn" type="button" data-tip="放大" id="zoomIn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+        <button class="tool-btn" type="button" data-tip="缩小" id="zoomOut"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 11h14v2H5z"/></svg></button>
+      </div>
+      <div class="cluster">
+        <button class="tool-btn" type="button" aria-expanded="false" data-tip="底图" id="mapSource"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3zm1 3.5l4-2v13l-4 2z" opacity=".9"/></svg></button>
+        <div class="map-panel" id="mapPanel" hidden>
+          <h4>选择底图</h4>
+          <button type="button" role="radio" aria-checked="true"><span>街道地图</span><span>当前</span></button>
+          <button type="button" role="radio" aria-checked="false"><span>浅色底图</span></button>
+          <button type="button" role="radio" aria-checked="false"><span>深色底图</span></button>
+          <button type="button" role="radio" aria-checked="false"><span>卫星影像</span></button>
+          <button type="button" role="radio" aria-checked="false"><span>关闭底图 · 纸面模式</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 左下 -->
+    <div class="corner bl">
+      <div class="pill" id="viewSwitch">
+        <button type="button" class="is-active" data-view="2d">2D</button>
+        <button type="button" data-view="3d">3D</button>
+      </div>
+      <span class="pill ghost">比例尺 50m</span>
+      <span class="muted">© 图源署名</span>
+    </div>
+
+    <span class="zone-tag zt-tr">右上 · 交付簇</span>
+    <span class="zone-tag zt-rr">右轨 · 编辑器动作</span>
+    <span class="zone-tag zt-br">右下 · 地图簇</span>
+    <span class="zone-tag zt-bl">左下 · 视图 / 比例尺 / 署名</span>
+  </div>
+</section>
+
+<!-- ══ 三、基础钮五态 ══ -->
+<section>
+  <h2>三、工具钮基础类 · 五态与令牌</h2>
+  <p class="sec-sub">禁用走 plane 底 + faint 字，不整钮降透明度；选中双属性（描边 + 字色）；focus-visible 2px 外描边。</p>
+  <div class="states-row">
+    <div class="state"><button class="tool-btn" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></button><span class="state-name">rest</span></div>
+    <div class="state"><button class="tool-btn" type="button" style="box-shadow:0 2px 6px rgba(20,20,22,.16)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></button><span class="state-name">hover</span></div>
+    <div class="state"><button class="tool-btn is-active" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></button><span class="state-name">active</span></div>
+    <div class="state"><button class="tool-btn off" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></button><span class="state-name">off 浏览态</span></div>
+    <div class="state"><button class="tool-btn" type="button" disabled><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></button><span class="state-name">disabled</span></div>
+  </div>
+</section>
+
+<!-- ══ 四、令牌对照 ══ -->
+<section>
+  <h2>四、现状 → 方案令牌对照</h2>
+  <table>
+    <thead><tr><th>维度</th><th>现状（磁盘）</th><th>方案</th></tr></thead>
+    <tbody>
+      <tr><td>槽位</td><td>左 40 / 右 30 / 覆盖层 34</td><td>工具族统一 40×40；窄高屏 36；导航族 40</td></tr>
+      <tr><td>形状</td><td>方角 12 / 正圆 / 正圆</td><td>导航族 r-sm 10；工具族 999 正圆</td></tr>
+      <tr><td>底色 / 描边</td><td>透明 / paper 透明边 / panelBg 实边</td><td>工具族 paper + 1px hair（默认透明）；导航族透明</td></tr>
+      <tr><td>阴影</td><td>E0 / 0 1px 3px/.12 / 0 4px 14px/.10</td><td>rest E3 级 0 1px 2px/.06；hover 0 2px 6px/.16；弹层 E1</td></tr>
+      <tr><td>图标档</td><td>28 / 26 / 20 / 16 / 14 越档</td><td>控件 20、行内 16、面板空态 24；形体/头像例外 28</td></tr>
+      <tr><td>禁用</td><td>左 plane+faint 不透明；右 opacity .45；覆盖层内联 .35</td><td>统一 plane 底 + faint 字，opacity 1，类承载</td></tr>
+      <tr><td>角标</td><td>仅左轨 15px 口径</td><td>抽 `.tool-badge` 全轨复用</td></tr>
+      <tr><td>分隔</td><td>divider 1px / 20px sep</td><td>统一 20×1px hair，组间一根</td></tr>
+      <tr><td>样式落点</td><td>覆盖层大量内联；禁用透明度散落内联</td><td>迁入 CSS 类接令牌，主题可跟随</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══ 五、层数控件口径 ══ -->
+<section>
+  <h2>五、楼层 vs 方案层 · 两套概念不混用</h2>
+  <div class="compare-grid">
+    <div class="compare-card">
+      <h3>室内楼层 floor <span class="tag">建筑结构层</span></h3>
+      <div class="floor-swap">
+        <span class="floor-label">1F</span>
+        <div class="floor-arrows">
+          <button type="button" aria-label="上一层"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 8l6 8H6z"/></svg></button>
+          <button type="button" disabled aria-label="下一层"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 16l-6-8h12z"/></svg></button>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:10px">右轨 `.sc-floor-switcher`；仅室内出镜，户外地图态隐藏。形制是否改白底圆钮待拍板。</p>
+    </div>
+    <div class="compare-card">
+      <h3>户外方案层 level <span class="tag green">方案叠加层</span></h3>
+      <div class="pill ghost" style="height:34px">方案层 <b style="margin:0 4px">庭院布局</b> · 1/3</div>
+      <p class="muted" style="margin-top:10px">左栏头部 levels 胶囊 + 弹层列表；层级切换不回右轨上下三角。若多层需要快速切换，再在地图簇旁补同规格层级胶囊。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 六、待拍板 ══ -->
+<section>
+  <h2>六、待决策项</h2>
+  <table>
+    <tbody>
+      <tr><td>槽位上收</td><td>右轨/地图簇 30/34 → 40，还是保 30 圆钮 + 补足 32 触达（建议 40）</td></tr>
+      <tr><td>楼层胶囊形制</td><td>深色圆头箭头柱保留，还是改白底工具族圆钮</td></tr>
+      <tr><td>缩放归位</td><td>留右轨底部，还是挪右下地图簇（建议挪，待真机对照）</td></tr>
+      <tr><td>跨栏选中表达</td><td>左绿条 / 右绿描边维持两族分工，还是工具族另选表达（建议维持）</td></tr>
+      <tr><td>自绘图标收编</td><td>HandStop / MoveScene / GridSnap 哪些换 Material，哪些登记领域例外，逐枚核</td></tr>
+      <tr><td>层级快速入口</td><td>户外方案层是否需要地图簇旁的上下快速切换</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+(function(){
+  // 工具钮 toggle 选中态
+  document.querySelectorAll('.mock-right .tool-btn, #famRightDemo .tool-btn').forEach(function(btn){
+    if(btn.disabled) return;
+    btn.addEventListener('click', function(){
+      var on = btn.classList.toggle('is-active');
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  });
+
+  // 缩放比例示意
+  var zoom = 100;
+  var stage = document.getElementById('stage');
+  function renderZoom(){ var lbl = stage.querySelector('.canvas-label'); lbl.textContent = '画布 · 户外地图（示意） · 缩放 ' + zoom + '%'; }
+  document.getElementById('zoomIn').addEventListener('click', function(){ zoom = Math.min(200, zoom + 10); renderZoom(); });
+  document.getElementById('zoomOut').addEventListener('click', function(){ zoom = Math.max(40, zoom - 10); renderZoom(); });
+
+  // 底图面板开合
+  var src = document.getElementById('mapSource'), panel = document.getElementById('mapPanel');
+  src.addEventListener('click', function(){
+    var open = panel.hidden;
+    panel.hidden = !open;
+    src.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  panel.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      panel.querySelectorAll('button').forEach(function(b){ b.setAttribute('aria-checked','false'); });
+      btn.setAttribute('aria-checked','true');
+    });
+  });
+
+  // 2D/3D 胶囊
+  var vs = document.getElementById('viewSwitch');
+  vs.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      vs.querySelectorAll('button').forEach(function(b){ b.classList.remove('is-active'); });
+      btn.classList.add('is-active');
+    });
+  });
+
+  // 现状 / 方案 对比：右轨钮回到 30px 旧规格
+  var toggle = document.getElementById('toggleScheme');
+  var old = false;
+  toggle.addEventListener('click', function(){
+    old = !old;
+    document.querySelectorAll('.tool-btn').forEach(function(b){ b.classList.toggle('old', old); });
+    toggle.textContent = old ? '对比：方案 40px 基础钮' : '对比：现状 30px 圆钮';
+  });
+})();
+</script>
+</body>
+</html>

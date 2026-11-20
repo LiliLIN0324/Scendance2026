@@ -4737,14 +4737,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             （新建/换场地 + 图纸与照片）已删除。换场地的入口留在项目「新方案」/ /projects 的「新建项目」/
             scendance:start-new-project 事件；图纸与照片仍在工作室分类页签里。 */}
         {activity && <>
-        {/* 没有「这一版布置」也能进执行资料：只打开画布上的资料浮层，不提交生成。 */}
-        <button
-          type="button"
-          className="ap-delivery-entry"
-          onClick={() => agent.callbacks.onOpenDelivery()}
-        >
-          执行资料
-        </button>
         <button
           type="button"
           className={`ap-icon-btn${showHistory ? ' is-on' : ''}`}
@@ -4773,7 +4765,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       </div>
     </header>
     <div className="ap-body">
-      {activity && <SessionHistoryOverlay open={showHistory} scope={agent.sessionScope} headingKind={studio?.controller?.getSnapshot?.().project ? '项目' : '活动'} assertWrite={agent.assertSessionWrite} onClose={() => setShowHistory(false)} resolveStatus={resolveSessionStatus} onSelect={id => { markSessionSeen(id); /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
+      {activity && <SessionHistoryOverlay open={showHistory} scope={agent.sessionScope} headingKind={studio?.controller?.getSnapshot().project ? '项目' : '活动'} assertWrite={agent.assertSessionWrite} onClose={() => setShowHistory(false)} resolveStatus={resolveSessionStatus} onSelect={id => { markSessionSeen(id); /* 正文由 LayoutAgentProvider 跟 activeId 切换 */ }} />}
     {conversation ? <div className="ap-feed" ref={feed} aria-live="polite">
       {/* S1.1 活动开场画廊：仅活动脸 layout 模式挂载，Bingo/空间/物料脸不进。 */}
       {activity && mode === 'layout' && <ActivitiesGalleryMount/>}
@@ -4786,10 +4778,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       {activity && mode === 'layout' && planShown && <p className="ap-recap recap-done"><Check size={16} aria-hidden="true"/>{recap}</p>}
       {/* T3 封堵：review/delivery 旧模式门已由 demoteLegacyMode 收编，评审只走分享链接，旧 review/delivery 槽与话术随刀删除。 */}
       {/* T2：Bingo 脸只回放审校气泡（体检回执/钉评指路），不再共享活动脸的布置生成对话。 */}
-      {/* T1-b：主工作流卡只在底部挂一个位置；等待追问时不再搬到问题上方。
-          滚动锚点由 .ap-feed 的钉底 effect（bubbles.length/state/mode + ResizeObserver/MutationObserver）负责，
-          与卡片挂载位置无关；等待态只把卡内思考记录压成 compact，卡片主体不折叠。 */}
-      <Bubbles bubbles={agent.bubbles} sessionKey={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}`} reviewOnly={bingo} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onOpenMaterials={() => agent.callbacks.onOpenMaterials()} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
+      <Bubbles bubbles={agent.bubbles} sessionKey={`${agent.sessionScope}:${getActiveAssistantSessionId(agent.sessionScope)??''}`} reviewOnly={bingo} beforeLatestQuestion={waitingOutdoorReply ? outdoorWorkflowCard : undefined} onPickOption={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }} onOpenMaterials={() => agent.callbacks.onOpenMaterials()} {...(bingo ? {} : { onResendMessage: (text: string) => agent.resendEditedLast(text) })}/>
       {/* 运行中排队备注上屏（对标谷地工坊）：写了还没送达的备注挂「下一步」标签，可撤回；
           送达后由运行条「已送达 N 条」接手，这里只显示未送达的。 */}
       {activity && runState.isRunning && runState.scope === 'layout' && runState.steerNotes.length > 0 && (
@@ -4803,7 +4792,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           ))}
         </div>
       )}
-      {outdoorWorkflowCard}
+      {!waitingOutdoorReply && outdoorWorkflowCard}
       {!outdoorWorkflowCard && !bingo && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} request={agent.outdoorWorkflow.thoughtRequest} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard

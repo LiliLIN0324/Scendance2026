@@ -40,6 +40,16 @@ export async function database(dataDir?: string, options?:{excludeMigrations?:re
   await db.query("insert into auth.users(id,email) values ($1,'owner@example.test'),($2,'editor@example.test'),($3,'outsider@example.test') on conflict (id) do update set email=excluded.email",[owner,editor,outsider]);
   await db.query('insert into scene_private.studios(id,name) values ($1,$2) on conflict do nothing',[studio,'Test studio']);
   await db.query("insert into scene_private.members values ($1,$2,'owner','Owner'),($1,$3,'editor','Editor') on conflict do nothing",[studio,owner,editor]);
+  // 本地联调用官方通知样例：全平台广播，owner/editor/outsider 登录都能看到；真实通知由服务端写入。
+  await db.query(
+    `insert into scene_private.official_notifications(id,kind,title,body) values
+       ($1,'announcement',$2,$3),($4,'version',$5,$6)
+     on conflict (id) do nothing`,
+    ['10000000-0000-4000-8000-000000000091', '欢迎使用幕景 Scendance',
+      '这是本地联调样例通知：公告、版本更新、活动提醒与系统通知都会出现在这里。',
+      '10000000-0000-4000-8000-000000000092', '工作台 0.2 版本更新',
+      '左侧消息面板已接通官方通知：点开一条会自动记为已读，未读红点在列表与左轨同步。']
+  );
   const call=(fn:string):Rpc=>async(actor,action,data={})=>{
     try {
       const result=await db.transaction(async tx=>{

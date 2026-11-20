@@ -25,6 +25,7 @@
 .sc-assets strong{font-size:13px;font-weight:600}
 .sc-assets h4{font-size:13px;font-weight:600;margin:0}
 .sc-assets .sc-assets-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0}
+.sc-assets .sc-assets-group + .sc-assets-group{margin-top:4px}
 .sc-assets .sc-assets-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;align-content:start}
 .sc-assets .sc-assets-list li{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:0;min-width:0;padding:0;border:1px solid var(--sc-line);border-radius:12px;background:var(--paper,#fff);overflow:hidden}
 .sc-assets .sc-assets-list li>div{min-width:0;overflow-wrap:anywhere}
@@ -39,6 +40,14 @@
 .sc-assets .sc-assets-jobs li{border-bottom:1px solid var(--sc-line);padding:12px 0}
 .sc-assets .sc-assets-jobs li p{white-space:pre-wrap}
 .sc-assets .sc-assets-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.sc-assets .sc-assets-facts{margin:12px 0 0}
+.sc-assets .sc-assets-facts dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}
+.sc-assets .sc-assets-facts dl>div{min-width:0;padding:8px 10px;background:var(--wk-paper);border:1px solid var(--sc-line);border-radius:8px}
+.sc-assets .sc-assets-facts dt{color:var(--sc-muted);font-size:11px;line-height:1.4}
+.sc-assets .sc-assets-facts dd{margin:2px 0 0;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.sc-assets .sc-assets-prompt{margin:10px 0 0;padding:10px 12px;background:var(--wk-paper);border:1px solid var(--sc-line);border-radius:8px}
+.sc-assets .sc-assets-prompt strong{display:block;color:var(--sc-muted);font-size:11px;font-weight:500}
+.sc-assets .sc-assets-prompt p{margin:4px 0 0;font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
 .sc-assets .sc-assets-message{margin:8px 0 0;padding:0;background:none;border:0;color:var(--err,#B4443C);font-size:12px;line-height:1.6}
 .sc-assets .sc-assets-preview{margin-top:20px;padding:16px;background:var(--wk-plane);border-radius:12px}
 .sc-assets .sc-assets-dimensions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
@@ -48,7 +57,7 @@
 .sc-assets button{transition:background .15s,transform .15s}
 .sc-assets button:not(:disabled):active{transform:translateY(1px)}
 @media(prefers-reduced-motion:reduce){.sc-assets button{transition:none}.sc-assets button:not(:disabled):active{transform:none}}
-@media(max-width:480px){.sc-assets .sc-assets-preview{padding:12px}.sc-assets .sc-assets-list li{align-items:flex-start}.sc-assets .sc-assets-section-heading{flex-wrap:wrap}}
+@media(max-width:480px){.sc-assets .sc-assets-preview{padding:12px}.sc-assets .sc-assets-facts dl{grid-template-columns:1fr}.sc-assets .sc-assets-list li{align-items:flex-start}.sc-assets .sc-assets-section-heading{flex-wrap:wrap}}
 /* 公开物料：徽标说明它已经在公共目录里，按钮只给物主。 */
 .sc-assets .sc-assets-foot{display:flex;align-items:center;gap:8px;margin-top:6px}
 .sc-assets .sc-assets-public{font-style:normal;font-size:11px;color:var(--sc-muted)}

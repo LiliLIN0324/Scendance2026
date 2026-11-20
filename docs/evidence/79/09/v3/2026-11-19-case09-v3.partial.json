@@ -1,0 +1,81 @@
+{
+  "ranAt": "2026-11-19T08:52:26.157Z",
+  "account": "walkthrough-79@scendance.test",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "note": "v3 修复了旧 setupSite 依赖；先两条组合需求，手画闭合红线，再重试出预览；writes 只统计 supabase.co 非 GET。",
+  "steps": [
+    {
+      "step": 1,
+      "name": "组合需求",
+      "calls": [
+        "POST 200"
+      ],
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream"
+      ],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-lrvrntin",
+        "projectId": "house-lrvrntin",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-19T08:52:37.556Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      }
+    },
+    {
+      "step": 2,
+      "name": "补齐边界/入口/分区",
+      "calls": [
+        "POST 200"
+      ],
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream"
+      ],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-lrvrntin",
+        "projectId": "house-lrvrntin",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-19T08:52:37.556Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      }
+    },
+    {
+      "step": 3,
+      "name": "手画闭合边界",
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-lrvrntin",
+        "projectId": "house-lrvrntin",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-19T08:55:08.480Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 4
+        },
+        "planLen": 568
+      }
+    }
+  ]
+}

@@ -38,13 +38,6 @@
 }
 .ap-icon-btn:hover { background: var(--wk-plane); color: var(--wk-ink); }
 .ap-icon-btn.is-on { background: var(--wk-plane); color: var(--wk-ink); }
-.ap-delivery-entry {
-  display: inline-flex; align-items: center; height: 28px; padding: 0 8px;
-  border: 1px solid var(--wk-hair); border-radius: var(--r-sm);
-  background: var(--wk-paper); color: var(--wk-ink);
-  font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer;
-}
-.ap-delivery-entry:hover { background: var(--wk-plane); }
 .ap-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .ap-history-scrim {
   position: absolute; inset: 0; z-index: 8; margin: 0; padding: 0; border: 0;
@@ -235,19 +228,19 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* 2026-11-16：卡片历史不消失——最近一条常驻、可点开看当时的说明与按钮；更早的收在展开项里。 */
 .sc-agent-panel .ap-card-history { margin: 8px 0 2px; padding-top: 6px; border-top: 1px solid rgba(20, 20, 22, 0.08); }
 .sc-agent-panel .ap-card-history-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
-.sc-agent-panel .ap-card-history-list li { font-size: 11px; line-height: 1.45; color: #6b7178; }
+.sc-agent-panel .ap-card-history-list li { font-size: 11px; line-height: 1.45; color: var(--wk-muted); }
 .sc-agent-panel .ap-card-history-row { display: flex; gap: 6px; align-items: baseline; width: 100%; padding: 1px 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .sc-agent-panel .ap-card-history-decision { flex: none; padding: 0 4px; border-radius: 3px; background: rgba(53, 98, 74, 0.1); color: #35624a; }
 .sc-agent-panel .ap-card-history-list li[data-decision="withdrawn"] .ap-card-history-decision { color: #8a6a3a; background: rgba(138, 106, 58, 0.1); }
 .sc-agent-panel .ap-card-history-list li[data-decision="replaced"] .ap-card-history-decision { color: #9a9fa6; background: rgba(20, 20, 22, 0.05); }
 .sc-agent-panel .ap-card-history-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-agent-panel .ap-card-history-list li.is-latest .ap-card-history-title { color: #4a5058; }
+.sc-agent-panel .ap-card-history-list li.is-latest .ap-card-history-title { color: var(--ink-soft); }
 .sc-agent-panel .ap-card-history-detail { margin: 3px 0 6px; padding: 6px 8px; border-radius: 6px; background: rgba(20, 20, 22, 0.03); }
 .sc-agent-panel .ap-card-history-notes { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.sc-agent-panel .ap-card-history-notes li { color: #6b7178; }
-.sc-agent-panel .ap-card-history-actions { margin: 4px 0 0; color: #9a9fa6; }
+.sc-agent-panel .ap-card-history-notes li { color: var(--wk-muted); }
+.sc-agent-panel .ap-card-history-actions { margin: 4px 0 0; color: var(--faint); }
 .sc-agent-panel .ap-card-history-more { margin-top: 3px; }
-.sc-agent-panel .ap-card-history-more summary { font-size: 11px; line-height: 1.4; color: #9a9fa6; cursor: pointer; list-style: none; }
+.sc-agent-panel .ap-card-history-more summary { font-size: 11px; line-height: 1.4; color: var(--faint); cursor: pointer; list-style: none; }
 /* 次要动作统一外观（方案卡的撤回/换排法，与 place 阶段的手画同一个语言）。 */
 .sc-agent-panel .ap-quiet-action { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 6px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font-size: var(--fs-cap); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
 .sc-agent-panel .ap-quiet-action:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane-deep); color: var(--wk-ink); }
@@ -362,7 +355,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-access-choice {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 9px 6px; border: 1px solid var(--wk-hair); border-radius: 10px;
-  background: #fff; color: var(--wk-ink); font: inherit; font-size: var(--fs-p2);
+  background: var(--paper); color: var(--wk-ink); font: inherit; font-size: var(--fs-p2);
   font-weight: 600; line-height: 1.3; cursor: pointer; text-align: center;
 }
 .ap-access-choice span { color: var(--wk-muted); font-size: var(--fs-cap); font-weight: 400; }
@@ -441,7 +434,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-material-card { gap: 8px; }
 /* 2026-11-19 用户指令：物料候选不用文字行——直接铺 3D 模型缩略图网格，名称/尺寸进悬停提示。 */
 .ap-material-grid { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.ap-material-tile { width: 64px; height: 64px; border: 1px solid var(--wk-hair); border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--wk-ink-soft); }
+.ap-material-tile { width: 64px; height: 64px; border: 1px solid var(--wk-hair); border-radius: 10px; background: var(--paper); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--wk-ink-soft); }
 .ap-material-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ap-blocked-stamp { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; background: var(--wk-plane); color: var(--wk-ink-soft); font-size: var(--fs-cap); font-weight: 500; }
 .ap-blocked-note { margin: 0; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
@@ -522,7 +515,7 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-supervise > summary { list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; font-size: 12px; color: var(--wk-muted); cursor: pointer; white-space: nowrap; }
 .ap-supervise > summary::-webkit-details-marker { display: none; }
 .ap-supervise > summary:hover { background: var(--wk-plane); color: var(--wk-ink); }
-.ap-supervise-dot { width: 6px; height: 6px; border-radius: 50%; background: #4A7C59; flex: none; }
+.ap-supervise-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
 .ap-supervise-menu { position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 4; min-width: 200px; max-width: calc(100vw - 48px); max-height: min(50vh, 320px); overflow-y: auto; padding: 8px 10px; border: 1px solid var(--wk-hair); border-radius: 8px; background: var(--wk-paper); box-shadow: var(--e1); }
 /* 模型槽位行：2026-11-14 起并进「智能」菜单（ap-model-menu），独立槽位栏已拆除；
    行内 label/model 复用这两个类。 */
@@ -914,7 +907,7 @@ button.ap-ghost {
 
 /* 第 7 批收尾：体检分 + Z8 完成卡 + 被拒件 + disclaimer。 */
 .ap-audit-scope { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
-.ap-audit-score { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: #F4F5F7; border-radius: 8px; }
+.ap-audit-score { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: var(--plane); border-radius: 8px; }
 /* 2026-11-19 用户：体检结论上方的小标题与本机评审记录折叠行之前是裸 <p>/<details>，
    和同卡其它行不同字体、不同颜色。 */
 .ap-audit-score-title { margin: 0; font-size: var(--fs-cap); line-height: var(--lh-p2); color: var(--ap-grey); }
@@ -932,7 +925,7 @@ button.ap-ghost {
 .ap-audit-score-breakdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .ap-audit-break { display: flex; flex-direction: column; gap: 3px; }
 .ap-audit-break-label { font-size: var(--fs-cap); color: var(--ap-grey); }
-.ap-audit-break-bar { height: 4px; border-radius: 999px; background: #F4F5F7; overflow: hidden; }
+.ap-audit-break-bar { height: 4px; border-radius: 999px; background: var(--plane); overflow: hidden; }
 .ap-audit-break-fill { display: block; height: 100%; border-radius: 999px; transition: width .2s ease; }
 .ap-audit-break-num { font-size: var(--fs-cap); color: var(--ink); font-variant-numeric: tabular-nums; }
 .ap-audit-score-summary { margin: 0; font-size: var(--fs-p2); color: var(--ink); line-height: 1.5; }
@@ -944,37 +937,42 @@ button.ap-ghost {
 .ap-audit-refused-title { margin: 0; font-size: var(--fs-cap); color: var(--ap-grey); }
 .ap-audit-refused ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
 .ap-audit-refused-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-p2); }
-.ap-audit-refused-id { padding: 1px 6px; border-radius: 4px; background: #F4F5F7; color: var(--ink); font-size: var(--fs-cap); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.ap-audit-refused-reason { color: #C0392B; font-size: var(--fs-cap); }
-.ap-audit-disclaimer { margin: 4px 0 0; padding-top: 6px; border-top: 1px solid var(--wk-hair); font-size: var(--fs-cap); color: var(--ap-grey); line-height: 1.5; }
+.ap-audit-refused-id { padding: 1px 6px; border-radius: 4px; background: var(--plane); color: var(--ink); font-size: var(--fs-cap); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ap-audit-refused-reason { color: var(--err); font-size: var(--fs-cap); }
+.ap-audit-disclaimer { margin: 4px 0 0; padding-top: 8px; border-top: 1px solid var(--wk-hair); font-size: var(--fs-p2); color: var(--ap-grey); line-height: var(--lh-p2); }
 
-/* Bingo 审校层次：分组 36px 满宽淡底，问题行 45px 无分割线，工具栏 28px。绿只留给「发给客户评审」。 */
+/* Bingo 审校层次（按设计规范 §一.2 收口）：
+   字号只用面板里的三档——分组标题 14/22·500、正文与问题行 14/22·400、元信息 12/20·400；
+   不再出现 16 / 13px 这类私有值。行高走 4px 步进：分组 36、问题行 40、工具栏 32（触达区下限）。
+   绿只留给「发给客户评审」。 */
 .ap-review { display: flex; flex-direction: column; margin: 0 -16px; min-width: 0; }
-.ap-review-status { display: flex; align-items: center; gap: 8px; margin: 0; padding: 2px 16px 0; color: var(--ink); font-size: 13px; line-height: 20px; }
+.ap-review-status { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 16px 0; color: var(--ink); font-size: var(--fs-p1); line-height: var(--lh-p1); }
 .ap-review-status > span { min-width: 0; }
-.ap-review-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 8px 16px 4px; }
-.ap-review-tool { display: inline-flex; align-items: center; gap: 4px; height: 28px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--hair); border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; font-size: 13px; font-weight: 500; line-height: 1; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.ap-review-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 12px 16px 4px; }
+.ap-review-tool { display: inline-flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--fs-p1); font-weight: 500; line-height: 1; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .ap-review-tool:hover { background: var(--hair-soft); }
+.ap-review-tool:focus-visible { outline: 2px solid var(--ink-soft); outline-offset: 2px; }
 .ap-review-tool.is-send { border-color: var(--green); background: var(--green); color: #fff; }
 .ap-review-tool.is-send:hover { background: var(--green-deep); border-color: var(--green-deep); color: #fff; }
-.ap-review-kicker { margin: 12px 16px 4px; color: var(--ink-soft); font-size: 12px; font-weight: 500; line-height: 16px; }
+.ap-review-kicker { margin: 12px 16px 4px; color: var(--wk-muted); font-size: var(--fs-p2); font-weight: 500; line-height: var(--lh-p2); }
 .ap-review-group, .ap-review-row { display: flex; align-items: center; width: 100%; margin: 0; border: 0; color: var(--ink); text-align: left; font: inherit; background: transparent; }
 .ap-review-group { height: 36px; padding: 0 12px 0 0; background: var(--hair-soft); cursor: pointer; }
-.ap-review-row { height: 45px; padding: 0 12px 0 42px; cursor: pointer; }
+.ap-review-row { height: 40px; padding: 0 12px 0 40px; cursor: pointer; }
 .ap-review-row:not(button) { cursor: default; }
 .ap-review-group:hover, .ap-review-row:hover { background: color-mix(in srgb, var(--ink) 5%, var(--paper)); }
-.ap-review-chevron { flex: 0 0 42px; display: flex; align-items: center; padding-left: 12px; color: var(--ink-soft); }
+.ap-review-group:focus-visible, .ap-review-row:focus-visible { outline: 2px solid var(--ink-soft); outline-offset: -2px; }
+.ap-review-chevron { flex: 0 0 40px; display: flex; align-items: center; padding-left: 12px; color: var(--ink-soft); }
 .ap-review-mark { flex: 0 0 14px; width: 14px; height: 14px; display: grid; place-items: center; color: var(--ink-soft); }
 .ap-review-mark > .sc-bingo-badge { width: 14px; height: 14px; }
 .ap-review-icons { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--ink-soft); }
 .ap-review-priority { display: block; color: var(--warn); }
-.ap-review-title { margin-left: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 500; line-height: 22px; }
-.ap-review-row .ap-review-title { font-size: 13px; font-weight: 400; line-height: 20px; }
-.ap-review-count { margin-left: 8px; flex: none; color: var(--ink-soft); font-size: 13px; font-weight: 400; }
-.ap-review-aside { margin-left: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wk-muted, #71767E); font-size: 12px; font-weight: 400; }
-.ap-review-empty { display: flex; align-items: center; gap: 10px; min-height: 32px; margin: 0; padding: 4px 16px 4px 42px; color: var(--wk-muted, #71767E); font-size: 13px; }
-.ap-review-more { margin: 0; padding: 0 16px 8px 66px; color: var(--wk-muted, #71767E); font-size: 12px; line-height: 18px; }
-.ap-review-detail { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 10px 42px; }
+.ap-review-title { margin-left: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-p1); font-weight: 500; line-height: var(--lh-p1); }
+.ap-review-row .ap-review-title { font-size: var(--fs-p1); font-weight: 400; line-height: var(--lh-p1); }
+.ap-review-count { margin-left: 8px; flex: none; color: var(--wk-muted); font-size: var(--fs-p2); font-weight: 400; line-height: var(--lh-p2); font-variant-numeric: tabular-nums; }
+.ap-review-aside { margin-left: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wk-muted); font-size: var(--fs-p2); font-weight: 400; line-height: var(--lh-p2); }
+.ap-review-empty { display: flex; align-items: center; gap: 8px; min-height: 40px; margin: 0; padding: 0 16px 0 40px; color: var(--wk-muted); font-size: var(--fs-p2); line-height: var(--lh-p2); }
+.ap-review-more { margin: 0; padding: 4px 16px 8px 64px; color: var(--wk-muted); font-size: var(--fs-p2); line-height: var(--lh-p2); }
+.ap-review-detail { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 12px 40px; }
 .ap-review .ap-audit-disclaimer, .ap-review .ap-audit-records { margin: 8px 16px 0; }
 
 /* 空间 / 物料对话：与 Bingo 同一条输入条，不再压内边距做“紧凑版”。 */
@@ -996,7 +994,7 @@ button.ap-ghost {
 .ap-plan-thumb { margin: 2px 0 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--wk-hair); }
 .ap-plan-thumb svg.sc-publish-plan { display: block; width: 100%; height: auto; }
 .ap-plan .ap-seats-meter { height: 8px; border-radius: 999px; background: var(--wk-hair); overflow: hidden; margin: -6px 0 2px; }
-.ap-plan .ap-seats-meter-fill { height: 100%; border-radius: 999px; background: #5c7a54; }
+.ap-plan .ap-seats-meter-fill { height: 100%; border-radius: 999px; background: var(--green); }
 .ap-plan .ap-seats-meter-fill[data-short="true"] { background: var(--warn); }
 .ap-plan .ap-warn-line {
   color: var(--wk-ink-soft);
@@ -1029,10 +1027,10 @@ button.ap-ghost {
 .ap-run-tick[data-pending="true"] { background: rgba(192, 127, 47, .14); color: var(--warn); }
 .ap-run-rollup { border: 0; background: transparent; color: var(--wk-muted); font-size: 11.5px; cursor: pointer; padding: 0; }
 .ap-run-steer { font-size: 11.5px; color: var(--wk-muted); }
-.ap-run-stall { margin: 0 0 6px; padding: 8px 10px; background: #FFF7E6; border-left: 3px solid var(--warn); border-radius: 6px; font-size: 12px; line-height: 1.6; color: #7a4f01; }
+.ap-run-stall { margin: 0 0 6px; padding: 8px 10px; background: color-mix(in srgb, var(--warn) 14%, var(--wk-paper)); border-left: 3px solid var(--warn); border-radius: 6px; font-size: 12px; line-height: 1.6; color: var(--warn); }
 .ap-run-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 .ap-run-pill { padding: 4px 10px; font-size: 11.5px; border-radius: 999px; cursor: pointer; border: 1px solid var(--wk-green); background: var(--wk-paper); color: var(--wk-green); }
-.ap-run-pill[data-stop="true"] { border-color: #c0392b; color: #c0392b; }
+.ap-run-pill[data-stop="true"] { border-color: var(--err); color: var(--err); }
 .ap-run-pill[data-active="false"] { opacity: .55; cursor: default; }
 .ap-run-receipt { flex-direction: row; align-items: center; gap: 8px; border-left: 3px solid var(--wk-green); }
 .ap-run-receipt-title { color: var(--wk-ink); font-size: 12.5px; }
@@ -1175,7 +1173,7 @@ button.ap-ghost {
    名称/用途输入框 + 室内外两个 chip + 删除。原内嵌引导 .ap-card-guide 随 S3 拆卡退役删除。 */
 .ap-zones-list .ap-card-head span { color: var(--wk-muted); font-size: var(--fs-cap); }
 .ap-zones-list { display: grid; gap: 8px; }
-.ap-zone-card { border: 1px solid var(--wk-hair); border-radius: 10px; padding: 8px 10px; display: grid; gap: 6px; background: #fff; }
+.ap-zone-card { border: 1px solid var(--wk-hair); border-radius: 10px; padding: 8px 10px; display: grid; gap: 6px; background: var(--paper); }
 .ap-zone-card-row { display: flex; gap: 6px; align-items: center; }
 .ap-zone-card-row input { flex: 1 1 auto; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink); font-size: var(--fs-p2); }
 .ap-zone-card-row input:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
@@ -1424,10 +1422,10 @@ button.ap-ghost {
   box-shadow: 0 1px 2px rgba(20, 20, 22, .05);
   transition: border-color var(--dur-1) var(--ease-spec), box-shadow var(--dur-1) var(--ease-spec);
 }
-.ap-composer-field.ap-panel-field:focus-within { border-color: #C7C9CF; box-shadow: 0 1px 3px rgba(20, 20, 22, .08); }
+.ap-composer-field.ap-panel-field:focus-within { border-color: var(--hair); box-shadow: 0 1px 3px rgba(20, 20, 22, .08); }
 .ap-panel-field textarea { min-height: 64px; padding: 12px 14px 6px; }
 /* 占位句比默认浏览器灰更实一点：它是这条输入框唯一的说明，得读得清。 */
-.ap-panel-field textarea::placeholder { color: #8A8E96; opacity: 1; }
+.ap-panel-field textarea::placeholder { color: var(--wk-muted); opacity: 1; }
 /* 两行高的框里滚第三行很常见：滚动条会突然出现把版面挤歪，索性收起来，滚轮照旧可用。 */
 .ap-panel-field textarea { scrollbar-width: none; }
 .ap-panel-field textarea::-webkit-scrollbar { width: 0; height: 0; }
@@ -1484,11 +1482,11 @@ button.ap-ghost {
   flex: none;
   appearance: none;
   -webkit-appearance: none;
-  background-color: #141416;
-  color: #FFFFFF;
+  background-color: var(--wk-ink);
+  color: var(--wk-paper);
 }
 .ap-panel-field .ap-panel-send:hover:not(:disabled) { transform: none; }
-.ap-panel-field .ap-panel-send:disabled { background-color: #FFFFFF; color: #A6AAB2; cursor: default; }
+.ap-panel-field .ap-panel-send:disabled { background-color: var(--paper); color: var(--faint); cursor: default; }
 /* 空态麦克风：不画描边圆钮——它和动作行左端的 ⓘ 一样是工具，裸图标 + hover 浅底才统一；
    只有真能发出去时才换墨黑实心圆（那是唯一的主动作）。 */
 .ap-panel-field .ap-panel-send.ap-mic { background-color: transparent; border-color: transparent; color: var(--wk-ink-soft); }
@@ -1579,3 +1577,17 @@ button.ap-ghost {
 .ap-document-sources p { margin: 6px 0; color: var(--muted, #71767E); white-space: pre-wrap; }
 .ap-document-sources a { color: var(--ink-soft, #55585F); text-decoration: underline; }
 .ap-document-source { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair-soft, #EFEFF1); }
+
+/* ── 暗色补遗：次级钮被通用 button 规则压成透明/UA 白底，提高特异性回挂暗色表面。
+   这里用长手字面量，避免 var 链在按钮上解析回退到 UA 白。 ── */
+/* 输入框外壳与加号浮窗：字面 #DEDFE3 发丝线回到暗色描边，表面跟暗色纸面。 */
+body.is-theme-dark .sc-agent-panel .ap-composer-field.ap-panel-field {
+  border-color: #363A42 !important;
+  background-color: #1C1F24 !important;
+  box-shadow: none !important;
+}
+body.is-theme-dark .sc-agent-panel .ap-add-menu,
+body.is-theme-dark .sc-agent-panel .ap-model-menu {
+  border-color: #363A42 !important;
+  background-color: #1C1F24 !important;
+}

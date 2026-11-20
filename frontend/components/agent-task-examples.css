@@ -104,3 +104,16 @@ button.sc-task-example {
   box-shadow: none;
   cursor: pointer;
 }
+
+/* 暗色补遗：建议行与图标回挂暗色表面，避免被通用 button 规则带出 UA 白底。
+   长手字面量 + 优先级，绕开 var 链在按钮上的解析回退。 */
+body.is-theme-dark .sc-task-examples .sc-task-example {
+  background-color: #25282F !important;
+  border-color: #363A42 !important;
+  color: #EDF0F2 !important;
+}
+body.is-theme-dark .sc-task-examples button.sc-task-example:hover { background-color: #2D3038 !important; }
+body.is-theme-dark .sc-task-example-icon {
+  background-color: #1C1F24 !important;
+  color: #C9CED6 !important;
+}

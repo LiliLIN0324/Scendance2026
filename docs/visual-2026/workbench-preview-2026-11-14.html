@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作台图标预览 2026-11-14</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='5' fill='%234A7C59'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF; --hair-soft:#EFEFF1; --hair:#E4E4E7;
+  --faint:#A6AAB2; --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#35624A; --green-pale:#EEF3EF;
+  --warn:#96651F; --err:#B4443C;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--plane);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;font-size:13px}
+.stage{max-width:1240px;margin:24px auto;padding:0 20px}
+.stage h1{font-size:16px;font-weight:600;margin-bottom:4px}
+.stage .meta{font-size:12px;color:var(--muted);margin-bottom:16px}
+
+.workbench{display:grid;grid-template-columns:64px 1fr 44px;height:620px;border:1px solid var(--hair);border-radius:16px;overflow:hidden;background:var(--paper);box-shadow:0 6px 24px rgb(20 20 22 / .08)}
+
+/* ===== 左轨 ===== */
+.rail{width:64;background:var(--paper);border-right:1px solid var(--hair);padding:10px 4px;display:flex;flex-direction:column;gap:1px}
+.disc{width:40px;height:40px;min-height:40px;border:0;border-radius:12px;background:transparent;color:var(--ink-soft);display:grid;place-items:center;position:relative;cursor:default}
+.disc:hover{background:var(--plane)}
+.disc.active{color:var(--ink)}
+.disc.active::before{content:"";position:absolute;left:-4px;top:7px;bottom:7px;width:3px;border-radius:0 2px 2px 0;background:var(--green)}
+.disc.tool{color:var(--faint)}
+.disc.tool:hover{color:var(--ink)}
+.disc.tool.active{color:var(--green-deep)}
+.avatar{width:28px;height:28px;display:block}
+.badge{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--hair);background:var(--paper);display:grid;place-items:center;position:relative;color:var(--ink-soft)}
+.badge svg{width:13px;height:13px}
+.corner{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--err);color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center;border:2px solid var(--paper)}
+.dot{position:absolute;right:3px;bottom:3px;width:9px;height:9px;border-radius:50%;background:var(--faint);border:2px solid var(--paper)}
+.dot.ok{background:var(--green)}
+.member{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--plane-deep);color:var(--muted);margin:12px auto 0}
+.rail-foot{margin-top:auto;padding-top:8px;border-top:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;gap:6px}
+.footbtn{width:34px;height:34px;border-radius:999px;border:1px solid var(--hair);background:transparent;display:grid;place-items:center;color:var(--ink-soft)}
+.footbtn svg{width:18px;height:18px}
+
+/* ===== 地图 ===== */
+.map{position:relative;background:#E9ECEC;overflow:hidden}
+.map-bg{position:absolute;inset:0}
+.map-bg path,.map-bg rect{fill:none;stroke:#D8DCDC;stroke-width:1}
+.plot-a{position:absolute;left:14%;top:18%;width:34%;height:30%;background:#F2F0E8;border:1px solid #DDD9CB;border-radius:10px;transform:rotate(-3deg)}
+.plot-b{position:absolute;right:16%;bottom:20%;width:28%;height:26%;background:#E7EEE5;border:1px solid #CFDCC9;border-radius:10px;transform:rotate(2deg)}
+.capsule{position:absolute;left:12px;bottom:14px;display:flex;background:var(--paper);border:1px solid rgba(20,22,28,.1);border-radius:999px;padding:3px;gap:2px;box-shadow:0 2px 8px rgb(20 20 22 / .1)}
+.capsule button{border:0;background:transparent;font-size:11px;padding:4px 10px;border-radius:999px;color:var(--muted)}
+.capsule button.on{background:var(--ink);color:#fff}
+.scale{position:absolute;left:14px;bottom:14px;display:none}
+.compass{position:absolute;right:16px;bottom:14px;width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.96);border:1px solid rgba(20,22,28,.1);display:grid;place-items:center;box-shadow:0 2px 8px rgb(20 20 22 / .1)}
+.compass svg{width:20px;height:28px}
+.attrib{position:absolute;right:16px;top:14px;font-size:10px;color:var(--muted)}
+
+/* ===== 右轨 ===== */
+.rail-r{width:44;background:transparent;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0}
+.rbtn{width:30px;height:30px;border-radius:50%;background:var(--paper);border:1px solid var(--hair);display:grid;place-items:center;color:var(--ink-soft)}
+.rbtn svg{width:16px;height:16px}
+.rbtn.on{border-color:var(--green);color:var(--green-deep);background:var(--green-pale)}
+.rsep{width:18px;height:1px;background:var(--hair);margin:3px 0}
+</style>
+</head>
+<body>
+<div class="stage">
+  <h1>工作台图标 · 本地预览</h1>
+  <p class="meta">左轨四枚自绘定稿 ｜ 24 网格 · 中心对齐 ｜ 右轨现状保留 ｜ 本地草图，未改代码</p>
+
+  <!-- 字形库 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="sd-space" fill="currentColor">
+        <rect x="4.5" y="4.5" width="6.6" height="6.6" rx="1.8"/>
+        <rect x="12.9" y="4.5" width="6.6" height="6.6" rx="1.8"/>
+        <rect x="4.5" y="12.9" width="6.6" height="6.6" rx="1.8"/>
+        <rect x="12.9" y="12.9" width="6.6" height="6.6" rx="1.8"/>
+      </g>
+      <g id="sd-crate">
+        <path d="M12 4.5 19.2 8.3v7.4L12 19.5 4.8 15.7V8.3Z" fill="currentColor"/>
+        <path d="M12 12.3v7.2M4.8 8.3v7.4M19.2 8.3v7.4" stroke="#fff" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+        <path d="M12 4.5 19.2 8.3 12 12.1 4.8 8.3Z" fill="#fff" opacity=".22"/>
+      </g>
+      <g id="sd-shoot">
+        <rect x="4.8" y="8.0" width="14.4" height="9.0" rx="1.4" fill="currentColor"/>
+        <rect x="9.2" y="6.6" width="5.6" height="1.8" rx=".6" fill="currentColor"/>
+        <circle cx="12" cy="12.5" r="2.7" fill="#fff"/>
+      </g>
+      <g id="sd-map">
+        <circle cx="12" cy="12" r="7.5" fill="currentColor"/>
+        <circle cx="9.5" cy="9.7" r="2.5" fill="#fff"/>
+        <circle cx="14.5" cy="14.3" r="2.5" fill="#fff"/>
+      </g>
+    </defs>
+  </svg>
+
+  <div class="workbench">
+
+    <!-- 左轨 -->
+    <aside class="rail">
+      <button class="disc" title="总控">
+        <img class="avatar" src="../../frontend/public/assets/rail/door.png" alt="总控">
+        <span class="dot ok"></span>
+      </button>
+      <button class="disc" title="Bingo">
+        <span class="badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="7.5"/></svg>
+          <span class="corner">1</span>
+        </span>
+      </button>
+      <button class="disc tool" title="空间">
+        <svg viewBox="0 0 24 24" width="24" height="24"><use href="#sd-space" xlink:href="#sd-space"/></svg>
+        <span class="dot"></span>
+      </button>
+      <button class="disc tool" title="物料">
+        <svg viewBox="0 0 24 24" width="24" height="24"><use href="#sd-crate" xlink:href="#sd-crate"/></svg>
+        <span class="dot"></span>
+      </button>
+      <button class="disc tool" title="拍摄场地">
+        <svg viewBox="0 0 24 24" width="24" height="24"><use href="#sd-shoot" xlink:href="#sd-shoot"/></svg>
+      </button>
+      <button class="disc tool active" title="户外规划">
+        <svg viewBox="0 0 24 24" width="24" height="24"><use href="#sd-map" xlink:href="#sd-map"/></svg>
+      </button>
+      <div class="member">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="12" cy="8.5" r="3.4"/><path d="M5 19c1.2-3.2 3.8-5 7-5s5.8 1.8 7 5Z"/></svg>
+      </div>
+      <div class="rail-foot">
+        <button class="footbtn" title="设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/></svg>
+        </button>
+        <button class="footbtn" title="会话">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3V7a2 2 0 0 1 2-2Z"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- 地图 -->
+    <section class="map">
+      <svg class="map-bg" viewBox="0 0 400 500" preserveAspectRatio="none">
+        <path d="M0 100h400M0 200h400M0 300h400M0 400h400M100 0v500M200 0v500M300 0v500"/>
+      </svg>
+      <div class="plot-a"></div>
+      <div class="plot-b"></div>
+      <div class="attrib">底图示意</div>
+      <div class="capsule">
+        <button class="on">2D</button><button>3D</button>
+      </div>
+      <div class="compass">
+        <svg viewBox="0 0 20 28"><path d="M10 2 13 14 10 12 7 14Z" fill="#1d4ed8"/><path d="M10 26 7 14 10 16 13 14Z" fill="#4b5563"/></svg>
+      </div>
+    </section>
+
+    <!-- 右轨 -->
+    <aside class="rail-r">
+      <button class="rbtn" title="分享"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M12 4 8 8m4-4 4 4"/><path d="M5 12v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></button>
+      <button class="rbtn on" title="抓手"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V6a1.5 1.5 0 0 1 3 0v5M12 11V4.5a1.5 1.5 0 0 1 3 0V11M15 11V6a1.5 1.5 0 0 1 3 0v6.5c0 3.5-2.5 6.5-6 6.5s-5.5-2-6.5-5.5L5 11a1.5 1.5 0 0 1 3-.5"/></svg></button>
+      <div class="rsep"></div>
+      <button class="rbtn" title="测量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19 19 4M7 16l1.5 1.5M10.5 12.5 12 14M14 9.5 15.5 11M17 6.5 18.5 8"/></svg></button>
+      <button class="rbtn" title="标注"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="M13 7l4 4"/></svg></button>
+      <button class="rbtn" title="图层"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3 21 8l-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg></button>
+      <button class="rbtn" title="地图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m9 4 6 2 6-2v12l-6 2-6-2-6 2V6Z"/><path d="M9 4v12M15 6v12"/></svg></button>
+      <div class="rsep"></div>
+      <button class="rbtn" title="撤销"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button class="rbtn" title="重做"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9h-9a6 6 0 0 0 0 12h3"/></svg></button>
+      <button class="rbtn" title="缩小"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5M8 10.5h5"/></svg></button>
+      <button class="rbtn" title="放大"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5M10.5 8v5M8 10.5h5"/></svg></button>
+      <button class="rbtn" title="导出"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7h4.4l1.1 1.7h2.2A1.5 1.5 0 0 1 18.5 8.5v7A1.5 1.5 0 0 1 17 17H5.5A1.5 1.5 0 0 1 4 15.5Z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
+    </aside>
+
+  </div>
+</div>
+</body>
+</html>

@@ -41,7 +41,7 @@ export function consumeSelfAttachedProject(userId: string, projectId: string): b
   return marked;
 }
 
-/** 左轨头像点开的一对一私信。消息在云端，所以换台设备接着聊还在。 */
+/** 消息面板里点开的一对一私信。消息在云端，所以换台设备接着聊还在。 */
 export interface TeamMessage {
   id: string;
   fromUserId: string;
@@ -67,4 +67,40 @@ export function markTeamMessagesRead(controller: BackendSession, studioId: strin
 
 export function listTeamUnread(controller: BackendSession, studioId: string): Promise<TeamUnread[]> {
   return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages/unread`);
+}
+
+/** 官方通知：平台/运营向登录用户推送的只读广播（公告 / 版本 / 活动 / 系统）。 */
+export type OfficialNoticeKind = 'announcement' | 'version' | 'event' | 'system';
+
+export interface OfficialNotice {
+  id: string;
+  kind: OfficialNoticeKind;
+  title: string;
+  body: string;
+  link: string | null;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export function listOfficialNotices(controller: BackendSession): Promise<OfficialNotice[]> {
+  return controller.businessRequest('/notices');
+}
+
+export function listOfficialUnread(controller: BackendSession): Promise<{ count: number }> {
+  return controller.businessRequest('/notices/unread');
+}
+
+export function markOfficialNoticeRead(controller: BackendSession, noticeId: string): Promise<{ marked: number }> {
+  return controller.businessRequest('/notices/read', 'POST', { noticeId });
+}
+
+/** 通知外链只放行 http/https；其他 scheme（javascript:、data: 等）前端不渲染成链接。 */
+export function safeOfficialLink(link: string | null): string | null {
+  if (!link) return null;
+  try {
+    const url = new URL(link);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
 }

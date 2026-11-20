@@ -282,6 +282,23 @@ export async function rememberReviewLinkMark(input: {
   if(typeof window!=='undefined')window.dispatchEvent(new Event(REVIEW_MARK_CHANGED_EVENT));
 }
 
+/** 吊销一条评审短链后，清掉本机对应的待评审标记；只删匹配项目（可选再比对链接）的记录。 */
+export function forgetReviewLinkMark(projectKey: string, clientUrl?: string): void {
+  const key = clip(projectKey, 80);
+  if (!key) return;
+  const existing = readJson(MARK_KEY);
+  if (!Array.isArray(existing)) return;
+  const next = (existing as unknown[]).filter(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return true;
+    const record = value as Record<string, unknown>;
+    if (record.projectKey !== key) return true;
+    if (typeof clientUrl === 'string' && record.clientUrl !== clientUrl) return true;
+    return false;
+  });
+  writeJson(MARK_KEY, next);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(REVIEW_MARK_CHANGED_EVENT));
+}
+
 function rememberReviewMark(mark: ReviewBingoMark & { clientUrl?: string; reviewPlanKey?: string }): void {
   // The frozen legacy writer cannot preserve the new versioned records.
   const existing=readJson(MARK_KEY);

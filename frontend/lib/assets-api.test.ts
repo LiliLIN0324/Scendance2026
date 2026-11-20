@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { backendSceneToLayout, layoutToBackendScene } from '@/components/room-organizer/lib/backend-adapter';
-import { addAssetToLayout, assetPreviewScene, intentStorageKey, readGenerationIntent, saveGenerationIntent, validAssetSize, type AuthorizedAsset } from './assets-api';
+import { addAssetToLayout, assetBytesLabel, assetError, assetLicenseLabel, assetPreviewScene, assetPrompt, assetSourceLabel, intentStorageKey, readGenerationIntent, saveGenerationIntent, validAssetSize, type AuthorizedAsset } from './assets-api';
 import type { Scene } from '../../supabase/functions/_shared/domain';
 
 const scene: Scene = { schemaVersion: 1, venue: { shape: 'rectangle', width: 12, depth: 10, height: 3, entrances: [] }, objects: [], camera: 'overview', lighting: 'neutral' };
@@ -29,8 +29,32 @@ describe('generation intent recovery', () => {
   });
 });
 
-describe('authorized model placement', () => {
-  it('keeps stable asset IDs, original materials and meters without mutating the current layout', () => {
+describe('asset passport fields', () => {
+  it('turns provider failures into an actionable next step', () => {
+    expect(assetError({ code: 'PROVIDER_REJECTED' })).toMatch(/违规|换一个模型/);
+    expect(assetError({ code: 'PROVIDER_FAILED' })).toMatch(/不扣费|换一个模型/);
+    expect(assetError({ code: 'FILE_TOO_LARGE' })).toMatch(/面数|贴图|换一个模型/);
+    expect(assetError({ code: 'GENERATION_BUSY' })).toMatch(/同一请求/);
+  });
+  it('prefers the original prompt and falls back to the backfilled name', () => {
+    expect(assetPrompt({ metadata: { originalPrompt: '新描述' } })).toBe('新描述');
+    expect(assetPrompt({ metadata: { backfill: { originalName: '旧描述' } } })).toBe('旧描述');
+    expect(assetPrompt({ metadata: { originalPrompt: '   ' } })).toBeUndefined();
+    expect(assetPrompt({})).toBeUndefined();
+  });
+  it('labels source, license and file size without inventing values', () => {
+    expect(assetSourceLabel('aholo')).toBe('Aholo Lux3D');
+    expect(assetSourceLabel('vendor-x')).toBe('vendor-x');
+    expect(assetLicenseLabel({ license: { type: 'provider-terms' } })).toBe('服务商条款');
+    expect(assetLicenseLabel({ license: { attribution: 'Poly Haven' } })).toBe('Poly Haven');
+    expect(assetLicenseLabel({})).toBe('未记录');
+    expect(assetBytesLabel(88_470)).toBe('86.4 KB');
+    expect(assetBytesLabel(10_380_902)).toBe('9.9 MB');
+    expect(assetBytesLabel(0)).toBe('大小未记录');
+  });
+});
+
+describe('authorized model placement', () => {  it('keeps stable asset IDs, original materials and meters without mutating the current layout', () => {
     const original = backendSceneToLayout(scene);
     const next = addAssetToLayout(original, asset, size);
     expect(original.floors[0].items).toHaveLength(0);

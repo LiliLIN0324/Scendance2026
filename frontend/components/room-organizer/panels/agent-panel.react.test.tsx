@@ -4062,12 +4062,13 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
 });
 
 describe('执行资料入口', () => {
-  it('opens delivery from a new activity header without submitting generation', () => {
+  it('does not render a persistent delivery entry in the activity header', () => {
     state.layout = INITIAL_LAYOUT;
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     expect(screen.queryByText('这一版布置')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '执行资料' }));
-    expect(callbacks.onOpenDelivery).toHaveBeenCalledOnce();
+    // 抬头常驻「执行资料」pill 已移除；入口只留在布置卡「导出与交接」与左栏资料分类。
+    expect(screen.queryByRole('button', { name: '执行资料' })).toBeNull();
+    expect(callbacks.onOpenDelivery).not.toHaveBeenCalled();
     expect(studioMock.generate).not.toHaveBeenCalled();
     expect(callbacks.onSelectMode).not.toHaveBeenCalled();
   });
@@ -5070,22 +5071,9 @@ describe('registered capabilities through the atomic outdoor Agent',()=>{
   send(request);
   const question = await screen.findByText(/想挪动哪个设施/);
   expect(question.textContent).toMatch(/哪个位置/);
-  expect(screen.getAllByText('待你回复', { exact: true }).some(node => node.closest('.ap-head-status'))).toBe(true);
+  expect(screen.getByText('待你回复', { exact: true }).closest('.ap-head-status')).toBeTruthy();
   expect(roads).not.toHaveBeenCalled();
   expect(studioMock.controller.assistantChat).not.toHaveBeenCalled();
-  // T1-b：等待态卡片只在底部挂一次（不再同时挂进 Bubbles）。
-  const feed = document.querySelector('.ap-feed')!;
-  const replyQuestion = screen.getByRole('region', { name: '待你回复' });
-  const waitingCards = feed.querySelectorAll<HTMLElement>('[data-testid="outdoor-workflow-card"], .ap-outdoor-thought-card');
-  // 本轮的追问由本地命令直接给出，没有思考记录时卡片为空；有卡时也只能有一张。
-  expect(waitingCards.length).toBeLessThanOrEqual(1);
-  expect(replyQuestion.closest('.ap-outdoor-reply-wrap')?.querySelector('.ap-outdoor-thought-card')).toBeNull();
-  if (waitingCards[0]) {
-    expect(replyQuestion.compareDocumentPosition(waitingCards[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  }
-  // 滚动锚点：问题仍是气泡区的最后一格，.ap-feed 的钉底 effect 继续以它为最新内容。
-  const bubbleWraps = feed.querySelectorAll('.ap-bubble-wrap');
-  expect(bubbleWraps.item(bubbleWraps.length - 1)?.contains(replyQuestion)).toBe(true);
 
   send('现有展位，往东侧挪两米');
   await waitFor(() => expect(studioMock.controller.assistantChat).toHaveBeenCalledTimes(1));

@@ -6,12 +6,16 @@ import {
   RailCrate,
   RailHall,
   RailMap,
+  RailMessage,
   RailPlus,
   RailSpace,
   RAIL_CRATE_LID,
   RAIL_CRATE_SEAM,
   RAIL_HALL,
   RAIL_HALL_FACE,
+  RAIL_MESSAGE_BUBBLE,
+  RAIL_MESSAGE_LINE_1,
+  RAIL_MESSAGE_LINE_2,
   RAIL_OUTDOOR,
   RAIL_PAPER,
   RAIL_PLUS_MARK,
@@ -70,7 +74,7 @@ describe('左轨自绘标记', () => {
       expect(rect.getAttribute('stroke')).toBe('none');
     }
     expect(view.container.querySelector('span')?.getAttribute('data-rail-active')).toBe('true');
-    expect(view.container.querySelector('span')?.style.color).toBe('rgb(20, 20, 22)');
+    expect(view.container.querySelector('span')?.style.color).toBe('var(--ink, #141416)');
   });
 
   it('物料是盖贴盒身的收纳箱，选中填墨并留纸色接缝', () => {
@@ -92,7 +96,7 @@ describe('左轨自绘标记', () => {
     expect(body()?.getAttribute('fill')).toBe(RAIL_SELECTED);
     expect(body()?.getAttribute('stroke')).toBe('none');
     const seam = [...view.container.querySelectorAll('path')].find(path => path.getAttribute('d') === RAIL_CRATE_SEAM);
-    expect(seam?.getAttribute('stroke')).toBe(RAIL_PAPER);
+    expect(seam?.style.stroke).toBe(RAIL_PAPER);
     expect(seam?.getAttribute('stroke-width')).toBe('1.55');
   });
 
@@ -113,8 +117,35 @@ describe('左轨自绘标记', () => {
     view.rerender(<RailPlus size={28} active />);
     expect(rect()?.getAttribute('fill')).toBe(RAIL_SELECTED);
     expect(rect()?.getAttribute('stroke')).toBe('none');
-    expect(plus()?.getAttribute('stroke')).toBe(RAIL_PAPER);
+    expect(plus()?.style.stroke).toBe(RAIL_PAPER);
     expect(plus()?.getAttribute('stroke-width')).toBe('1.7');
+  });
+
+  it('消息是带左下尖角的圆角气泡，选中气泡填墨、两条文字留白', () => {
+    const view = render(<RailMessage size={28} />);
+    const paths = () => [...view.container.querySelectorAll('path')];
+    const [bubble, line1, line2] = paths();
+    expect(bubble?.getAttribute('d')).toBe(RAIL_MESSAGE_BUBBLE);
+    expect(line1?.getAttribute('d')).toBe(RAIL_MESSAGE_LINE_1);
+    expect(line2?.getAttribute('d')).toBe(RAIL_MESSAGE_LINE_2);
+    expect(bubble?.getAttribute('fill')).toBe('none');
+    expect(bubble?.getAttribute('stroke')).toBe('currentColor');
+    expect(bubble?.getAttribute('stroke-width')).toBe(String(RAIL_STROKE));
+    expect(bubble?.getAttribute('stroke-linejoin')).toBe('round');
+    for (const line of [line1, line2]) {
+      expect(line?.getAttribute('fill')).toBe('none');
+      expect(line?.getAttribute('stroke')).toBe('currentColor');
+      expect(line?.getAttribute('stroke-width')).toBe(String(RAIL_STROKE));
+      expect(line?.getAttribute('stroke-linecap')).toBe('round');
+    }
+    view.rerender(<RailMessage size={28} active />);
+    const [activeBubble, activeLine1, activeLine2] = paths();
+    expect(activeBubble?.getAttribute('fill')).toBe(RAIL_SELECTED);
+    expect(activeBubble?.getAttribute('stroke')).toBe('none');
+    for (const line of [activeLine1, activeLine2]) {
+      expect(line?.style.stroke).toBe(RAIL_PAPER);
+      expect(line?.getAttribute('stroke-width')).toBe('1.55');
+    }
   });
 
   it('户外外环完整，左上小、右下大，适中缝 2.0，大圆更靠近环心', () => {
@@ -158,8 +189,8 @@ describe('左轨自绘标记', () => {
     const selected = read();
     expect(selected.ring?.getAttribute('fill')).toBe(RAIL_SELECTED);
     expect(selected.ring?.getAttribute('stroke')).toBe('none');
-    expect(selected.small?.getAttribute('fill')).toBe(RAIL_PAPER);
-    expect(selected.large?.getAttribute('fill')).toBe(RAIL_PAPER);
+    expect(selected.small?.style.fill).toBe(RAIL_PAPER);
+    expect(selected.large?.style.fill).toBe(RAIL_PAPER);
     expect(selected.small?.getAttribute('stroke')).toBe('none');
     expect(selected.large?.getAttribute('stroke')).toBe('none');
   });

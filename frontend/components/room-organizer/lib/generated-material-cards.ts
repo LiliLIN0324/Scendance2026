@@ -1,5 +1,6 @@
+import { assetPrompt, referenceImageAssetId, type CloudAsset } from '@/lib/assets-api';
 import { isLibraryModelSlug } from './asset-namespace';
-import type { CloudAsset } from '@/lib/assets-api';
+import { GENERATED_OBJECT_NAME_MAX, generatedObjectName } from './generated-object-name';
 
 /** 工作台「我的生成」里的一格。cloud 表示只在账户资产库里，摆放时要先授权。 */
 export interface GeneratedMaterialCard {
@@ -12,6 +13,16 @@ export interface GeneratedMaterialCard {
   /** 云端记录里的占地（米）。没有时拖到地图用一份小占位，点选仍按 GLB 实测。 */
   width?: number;
   depth?: number;
+  height?: number;
+  /** 生成时的完整描述。旧记录从 metadata.backfill.originalName 取，新记录从 originalPrompt 取。 */
+  description?: string;
+  /** 图生 3D 的参考图。没有供应商预览时，卡面用它兜底并在界面标“参考图”。 */
+  referenceImageAssetId?: string;
+  source?: string;
+  createdAt?: string;
+  format?: string;
+  byteSize?: number;
+  license?: CloudAsset['license'];
 }
 
 /** 拖到地图时还没量过 GLB：给一份能通过落位校验的小占地，点选会换成实测。 */
@@ -44,6 +55,17 @@ function storedPreview(asset: CloudAsset): string | undefined {
   return undefined;
 }
 
+/**
+ * 历史生成记录把整段提示词存成了名字（worker 旧版是 prompt.slice(0,120)）。
+ * 新记录入库已是短名；这里只对超长的生成物在显示层收口，不改库、不碰其它来源的名字。
+ */
+export function generatedAssetName(asset: Pick<CloudAsset, 'name' | 'source'>): string {
+  if (asset.source !== 'aholo' && asset.source !== 'hunyuan') return asset.name;
+  const name = asset.name.trim();
+  if (Array.from(name).length <= GENERATED_OBJECT_NAME_MAX) return asset.name;
+  return generatedObjectName(name);
+}
+
 /** 宽深都在 0.1–50 米才拿来当拖放占地；缺高或不合规就留给点选后的实测。 */
 function storedFootprint(asset: CloudAsset): { width: number; depth: number } | undefined {
   const size = asset.metadata?.sourceSize;
@@ -70,12 +92,23 @@ export function mergeCloudGeneratedCards(
   for (const asset of cloud) {
     if (asset.format.toLowerCase() !== 'glb') continue;
     if (asset.source === 'polyhaven') continue;
-    const name = asset.name.trim();
+    const name = generatedAssetName(asset).trim();
     if (!asset.id || !name || seen.has(asset.id)) continue;
     seen.add(asset.id);
     const image = storedPreview(asset);
+    const referenceImage = referenceImageAssetId(asset);
     const footprint = storedFootprint(asset);
-    added.push({ id: asset.id, name, shipped: false, cloud: true, ...(image ? { image } : {}), ...(footprint ?? {}) });
+    const size = asset.metadata?.sourceSize;
+    const description = assetPrompt(asset);
+    added.push({
+      id: asset.id, name, shipped: false, cloud: true,
+      ...(image ? { image } : {}), ...(referenceImage ? { referenceImageAssetId: referenceImage } : {}), ...(footprint ?? {}),
+      ...(description && description !== name ? { description } : {}),
+      source: asset.source, format: asset.format, byteSize: asset.byte_size,
+      ...(size && Number.isFinite(size.height) && size.height > 0 ? { height: size.height } : {}),
+      ...(asset.created_at ? { createdAt: asset.created_at } : {}),
+      ...(asset.license ? { license: asset.license } : {}),
+    });
   }
   return [...local, ...added];
 }

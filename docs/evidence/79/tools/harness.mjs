@@ -94,7 +94,7 @@ export async function outdoorPlanReadings(actor) {
 
 /** 拉起浏览器：注入会话 + 录 HAR + 全量请求/响应记账 */
 export async function launch({ session, har = null, headless = true, viewport = { width: 1600, height: 1000 } } = {}) {
-  const browser = await chromium.launch({ headless, executablePath: CHROME });
+  const browser = await chromium.launch({ headless, executablePath: CHROME, args: ['--disable-http2', '--disable-quic'] });
   const context = await browser.newContext({
     viewport, locale: 'zh-CN', timezoneId: 'Asia/Shanghai',
     recordHar: har ? { path: har, content: 'embed' } : undefined,
@@ -184,11 +184,18 @@ export function writeEvidence(caseId, name, data) {
 
 /** 关掉「找回云端活动」弹层；云端副本上线后，空设备首次进入会看到它 */
 export async function dismissCloudRecover(page) {
-  const btn = page.locator('[data-testid=outdoor-cloud-recover-dismiss]').first();
+  const dialog = page.locator('[data-testid=outdoor-cloud-recover]').first();
+  for (let i = 0; i < 12 && !(await dialog.count()); i += 1) await page.waitForTimeout(1000);
+  if (!(await dialog.count())) return;
+  const btn = dialog.locator('[data-testid=outdoor-cloud-recover-dismiss]').first();
   if (await btn.count()) {
     await btn.click({ timeout: 2000 }).catch(() => {});
-    await page.waitForTimeout(300);
+  } else {
+    const fresh = dialog.getByRole('button', { name: /新活动/ }).first();
+    if (await fresh.count()) await fresh.click({ timeout: 3000 }).catch(() => {});
+    else await page.keyboard.press('Escape').catch(() => {});
   }
+  await page.waitForTimeout(800);
 }
 
 /** 跳过新手引导气泡 */
@@ -373,9 +380,28 @@ export async function driveToProposal(page, { answers = ['室外展览区和表�
   await input.click();
   await input.fill(keyword);
   await page.waitForTimeout(4500);
-  // 2026-11-19 新选址面板：amap-suggest 联想 → 选中预览 → 生成户外场地；旧 testid 只在旧包上兜底。
+  // 2026-11-19 新选址面板：候选类名 sc-plan-place-search-option（amap-suggest 只在旧包上兜底）。
+  const planOption = page.locator('.sc-plan-place-search-option').nth(optionIndex);
   const suggestion = page.locator('[data-testid=amap-suggest] [role=option] button').first();
-  if (await suggestion.count()) {
+  for (let i = 0; i < 15; i += 1) {
+    if (await planOption.count()) break;
+    if (await suggestion.count()) break;
+    if (await page.locator(`[data-testid=outdoor-place-search-option-${optionIndex}]`).count()) break;
+    await page.waitForTimeout(1000);
+  }
+  if (await planOption.count()) {
+    trace.candidates = await page.evaluate(() => [...document.querySelectorAll('.sc-plan-place-search-option')]
+      .map((e) => (e.innerText || '').replace(/\s+/g, ' ').slice(0, 90)));
+    await planOption.click();
+    await page.waitForTimeout(6000);
+    const gen = page.getByRole('button', { name: /生成户外场地|就定这个场地/ }).first();
+    if (await gen.count()) {
+      for (let i = 0; i < 20 && await gen.isDisabled().catch(() => true); i += 1) await page.waitForTimeout(1000);
+      await gen.click().catch(() => {});
+      await page.waitForTimeout(16000);
+      trace.generated = true;
+    }
+  } else if (await suggestion.count()) {
     trace.candidates = await page.evaluate(() => [...document.querySelectorAll('[data-testid=amap-suggest] [role=option]')]
       .map((e) => (e.innerText || '').replace(/\s+/g, ' ').slice(0, 90)));
     await suggestion.click();

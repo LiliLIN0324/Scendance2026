@@ -2,8 +2,6 @@
 
 > 本文件是**给人签字用**的，不是结论。结论口径：一条用例 = 固定数据 ✅ **且** 真实浏览器 = `pass` **且** 真实云端 = `pass`。
 > `partial` 不算过；`blocked` 是**维度状态**，不是用例结论；`n/a` 不能顶 `pass`。2026-11-19 部署缺口已修复（`scene-api` v64，当前 v65；+ 两条户外迁移）：#7 已转 **pass**；#8b 云端已 pass（2 条写：`outdoor-history` + `outdoor-plans`），但 8a/8c 未跑；#9 云端仍 `blocked`（该轮 `house-7jblibyk` 两次 404，部署后未重跑；#8b 的 CAS 3→4 不计入）；#1 / #3 / #4 / #5 待复跑；#10 服务端日志已可读（真实 `invalid_shape` 已找到），但同轮 UI 对照/纯本地样本仍缺。**agent 不能代签。**
->
-> 机器校验见 `docs/evidence/79/README.md`：日常 `npm run check:79`，发布闸门 `npm run gate:79`。
 
 ## 一、本轮做了什么（台账快照）
 
@@ -53,9 +51,6 @@
 ## 五、复跑命令
 
 ```bash
-npm run check:79   # 台账自洽（当前 2/11 应为 0）
-npm run gate:79    # 发布闸门（当前应 exit 1，提示未齐 11/11）
-
 node docs/evidence/79/tools/case-07-08-09-chain-v2.mjs          # #7 / #8b 链路
 node docs/evidence/79/tools/case-07-08-09-cloud-revision.mjs   # 云端 revision / 冲突读数
 node docs/evidence/79/tools/case-01-09-blank-undo.mjs           # #1 空白项目 + #9 撤销再应用

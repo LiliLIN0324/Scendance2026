@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { addReviewComment, issueReviewShare, listReviewComments, readReviewShare, reviewMarkFor, REVIEW_SHARE_STORAGE } from './review-share';
+import { addReviewComment, forgetReviewLinkMark, issueReviewShare, listReviewComments, readReviewShare, reviewMarkFor, REVIEW_SHARE_STORAGE } from './review-share';
 import type { RoomLayout } from './types';
 
 function layout(): RoomLayout {
@@ -59,5 +59,38 @@ describe('review share local demo', () => {
     expect(reply.parentId).toBe(comment.id);
     expect(listReviewComments(snapshot.id).map(entry => entry.body)).toEqual(['入口再宽一点', '下版改通道']);
     expect(() => addReviewComment(snapshot.id, { parentId: reply.id, author: '甲', body: '再套一层' })).toThrow(/只能回复/);
+  });
+});
+
+describe('review link local mark cleanup', () => {
+  const MARK_KEY = 'scendance.reviewMark.v1';
+  function mark(projectKey: string, clientUrl: string) {
+    return {
+      saved: true,
+      status: 'needs-review' as const,
+      projectKey,
+      title: '发布会',
+      shareId: projectKey,
+      markedAt: '2026-11-20T00:00:00.000Z',
+      clientUrl,
+      reviewPlanKey: `review-v2:${projectKey}`,
+      versionBinding: 'sha256-v1',
+    };
+  }
+
+  it('removes only the matching project and link after revocation', () => {
+    localStorage.clear();
+    const target = mark('project-1', 'https://studio.example/r/abcdef1234567890abcdef12');
+    const otherLink = mark('project-1', 'https://studio.example/r/111111111111111111111111');
+    const otherProject = mark('project-2', 'https://studio.example/r/222222222222222222222222');
+    localStorage.setItem(MARK_KEY, JSON.stringify([target, otherLink, otherProject]));
+
+    forgetReviewLinkMark('project-1', target.clientUrl);
+    let rest = JSON.parse(localStorage.getItem(MARK_KEY)!) as typeof target[];
+    expect(rest.map(entry => entry.clientUrl)).toEqual([otherLink.clientUrl, otherProject.clientUrl]);
+
+    forgetReviewLinkMark('project-1');
+    rest = JSON.parse(localStorage.getItem(MARK_KEY)!) as typeof target[];
+    expect(rest.map(entry => entry.projectKey)).toEqual(['project-2']);
   });
 });

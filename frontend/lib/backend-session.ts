@@ -175,6 +175,7 @@ export interface Studio { id: string; name: string; role: "owner" | "editor"; di
 export interface ProjectSummary {
   id: string; name: string; studio_id: string; revision: number;
   updated_at?: string; current_editor?: string | null; lease_expires?: string | null;
+  visibility?: 'team' | 'view-only' | 'private';
 }
 export interface BackendProject extends ProjectSummary { scene: Scene; materials?: unknown[]; projection?: {requiresOriginalSceneForWrite:boolean;changed?:boolean;status?:string} }
 export interface Lease {
@@ -1315,6 +1316,28 @@ export class BackendSession {
       throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
     }
     return { id: assetId, url: url.href, name: asset.name };
+  }
+  /**
+   * 图生 3D 的参考图只用于卡面兜底：服务端同样按 owner 校验后签发，前端不拼存储路径。
+   * 只接受图片格式；GLB 授权仍走 authorizeAsset，两类 URL 不混用。
+   */
+  async authorizeImageAsset(assetId: string, scope = this.captureRequestScope()): Promise<{ id: string; url: string }> {
+    uuid.parse(assetId);
+    const result = await this.request<unknown>(`/assets/${encodeURIComponent(assetId)}/url`, "POST", undefined, scope, "business");
+    if (!result || typeof result !== "object") throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
+    const asset = result as Record<string, unknown>;
+    if (asset.id !== assetId || !["png", "jpeg", "jpg", "webp"].includes(String(asset.format)) ||
+        typeof asset.url !== "string" || typeof asset.expiresIn !== "number" || !Number.isFinite(asset.expiresIn) || asset.expiresIn <= 0 || asset.expiresIn > 300) {
+      throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
+    }
+    let url: URL;
+    try { url = new URL(asset.url); }
+    catch { throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null); }
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || isDevelopmentFixtureHost(url.hostname);
+    if ((url.protocol !== "https:" && !(local && url.protocol === "http:")) || url.username || url.password || url.hash) {
+      throw new SceneApiError("ASSET_AUTHORIZATION_INVALID", 502, null);
+    }
+    return { id: assetId, url: url.href };
   }
   /** Resolve only referenced GLB IDs; signed URLs remain transient renderer inputs. */
   async authorizeAssets(scene: Scene): Promise<AuthorizedAssets> {

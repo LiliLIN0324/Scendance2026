@@ -7,7 +7,7 @@ import { notifyTeamChanged, useTeam } from '../lib/team-data';
 import { avatarToneStyle, avatarTonesFor, useAvatarPresetsFor } from './account-avatars';
 import { InfoTip } from './info-tip';
 
-/** 与左轨成员位同一份取数：面板改完成员，左轨跟着换。 */
+/** 与消息面板同一份取数：面板改完成员，消息列表跟着换。 */
 export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: BackendSession; /** 改名后把新名字交给上层（左栏 / 项目页标题同属同一份 studios 状态）。 */ onStudioRenamed?(studioId: string, name: string): void }): JSX.Element {
   const team = useTeam(controller);
   const [email, setEmail] = useState('');
@@ -112,7 +112,7 @@ function TeamFrame({ title, notice, alert = false, busy, onRefresh, onInvite, in
 }): JSX.Element {
   return <section className="sc-settings" aria-label="团队">
     <header className="sc-settings-head">
-      <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>团队名点一下就能改</strong><span>用邮箱加人：填写对方已注册的登录邮箱即可，对方需先有账号。左轨头像与这份名单同源。</span></InfoTip></div>
+      <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>团队名点一下就能改</strong><span>用邮箱加人：填写对方已注册的登录邮箱即可，对方需先有账号。消息面板里的成员与这份名单同源。</span></InfoTip></div>
       <div className="sc-settings-tools">
         {onRefresh && <button className="sc-settings-icon-button" type="button" aria-label="刷新成员" title="刷新" disabled={busy} onClick={onRefresh}><RefreshCw size={15} aria-hidden="true"/></button>}
         {onInvite && <button className="sc-settings-outline" type="button" aria-expanded={inviteOpen} onClick={onInvite}>邀请</button>}

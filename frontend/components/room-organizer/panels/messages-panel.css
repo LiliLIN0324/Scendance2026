@@ -1,0 +1,117 @@
+/*
+ * 消息面板：会话列表 + 官方通知预留位。容器沿用 .sc-person-chat 的堆栈/浮窗规则，
+ * 这里只补「列表行」这一层；气泡与输入条继续复用 .ap-* 与 MemberChat。
+ */
+.sc-messages-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px 12px;
+}
+.sc-message-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--r-sm, 10px);
+  background: transparent;
+  color: var(--wk-ink, #141416);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-message-row:hover,
+.sc-message-row:focus-visible { background: var(--wk-plane, #f4f5f7); }
+.sc-message-row-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--wk-plane-deep, #eceef1);
+  color: var(--wk-ink-soft, #55585F);
+}
+.sc-message-row .sc-settings-avatar.is-rail { width: 36px; height: 36px; font-size: 13px; }
+.sc-message-row-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 1px;
+}
+.sc-message-row-body strong {
+  overflow: hidden;
+  font-size: var(--fs-p1, 14px);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-message-row-sub {
+  overflow: hidden;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 18px);
+  color: var(--wk-ink-faint, #8a8a90);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-message-row-badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--err, #B4443C);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.sc-messages-section {
+  margin: 10px 10px 4px;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  color: var(--wk-ink-faint, #8a8a90);
+}
+.sc-messages-hint {
+  margin: 6px 10px;
+  font-size: var(--fs-p2, 12px);
+  line-height: 1.6;
+  color: var(--wk-ink-faint, #8a8a90);
+}
+
+/* 通知详情：只读长文，不挂输入条。 */
+.sc-notice-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.sc-notice-title {
+  margin: 0;
+  font-size: var(--fs-p1, 14px);
+  font-weight: 600;
+}
+.sc-notice-meta {
+  margin: 0;
+  font-size: var(--fs-p2, 12px);
+  color: var(--wk-ink-faint, #8a8a90);
+}
+.sc-notice-body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--fs-p2, 12px);
+  line-height: 1.7;
+}
+.sc-notice-link {
+  align-self: flex-start;
+  font-size: var(--fs-p2, 12px);
+  color: var(--wk-accent, #2f6feb);
+}

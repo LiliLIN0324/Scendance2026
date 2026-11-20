@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工具轨 × 地图控件 · 风格参考图鉴 2026-11-13</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='5' fill='%234A7C59'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#FFFFFF; --plane:#F4F5F7; --plane-deep:#ECEDEF; --hair:#E4E4E7; --hair-soft:#EFEFF1;
+  --faint:#A6AAB2; --muted:#71767E; --ink-soft:#55585F; --ink:#141416;
+  --green:#4A7C59; --green-deep:#35624A; --green-pale:#EEF3EF;
+  --r-sm:10px; --r-md:14px; --r-lg:18px;
+  --e1:0 6px 18px rgba(20,20,22,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 64px}
+header.top{margin-bottom:8px}
+h1{font-size:20px;font-weight:600;margin:0 0 6px}
+.meta{color:var(--muted);font-size:12px}
+.note{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:12px 14px;color:var(--ink-soft);font-size:13px;margin:16px 0}
+.note b{color:var(--ink)}
+section{margin-top:36px}
+h2{font-size:15px;font-weight:600;margin:0 0 4px}
+.sec-sub{color:var(--muted);font-size:12px;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);overflow:hidden;display:flex;flex-direction:column}
+.card .shot{background:var(--plane-deep);aspect-ratio:4/3;display:grid;place-items:center;overflow:hidden;cursor:zoom-in}
+.card .shot img{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.card .body{padding:12px 14px 14px}
+.card h3{font-size:13px;font-weight:600;margin:0 0 4px}
+.card p{margin:0 0 8px;font-size:12px;color:var(--ink-soft)}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--plane);color:var(--ink-soft)}
+.tag.ok{background:var(--green-pale);color:var(--green-deep)}
+.tag.warn{background:#FBF1E7;color:#96651F}
+.tag.no{background:var(--plane-deep);color:var(--muted)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 0;font-size:12px;color:var(--ink-soft)}
+.compare{background:var(--paper);border:1px solid var(--hair);border-radius:var(--r-md);padding:16px 18px}
+.compare h3{font-size:13px;margin:0 0 10px}
+.compare ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:13px;color:var(--ink-soft)}
+.compare li b{color:var(--ink)}
+/* 灯箱 */
+.lightbox{position:fixed;inset:0;background:rgba(20,20,22,.72);display:none;place-items:center;z-index:100;padding:24px;cursor:zoom-out}
+.lightbox.open{display:grid}
+.lightbox img{max-width:100%;max-height:90vh;border-radius:var(--r-md);box-shadow:var(--e1)}
+@media (max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:600px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>工具轨 × 地图控件 · 风格参考图鉴</h1>
+  <p class="meta">2026-11-13 ｜ 供方向选择，非定稿 ｜ 落地仍受 <code>docs/05-设计规范.md</code> 约束：Material 实心图标族、品牌绿只两处、E1 纯色 hair 边、圆角 10/14/18</p>
+</header>
+
+<div class="note">
+  <b>怎么看：</b>五组分别对应「浅色地图经典 / 深色编辑器悬浮条 / 玻璃拟态地图 / 浅色极简竖轨 / 白底编辑器横条」。每张图标注可借鉴点与规范边界；<b>绿标</b>可直接采纳，<b>橙标</b>需按规范调整，<b>灰标</b>与现行规范偏离、仅作氛围参考。点图可放大。
+</div>
+
+<!-- ══ A 浅色地图经典 ══ -->
+<section>
+  <h2>A · 浅色地图经典（Google Maps 系）</h2>
+  <p class="sec-sub">与现行浅色工作台最接近：白卡气泡、轻柔投影、控件按角成簇，缩放竖排落右下。</p>
+  <div class="grid">
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/A1-maps-redesign.jpg" alt="Google Maps 重设计白卡与蓝色 FAB" loading="lazy"></div>
+      <div class="body">
+        <h3>白左卡 + 右下圆形 FAB</h3>
+        <p>左侧白信息卡、地图上蓝色圆形动作钮；投影轻、圆角统一，控件不与编辑器列混排。</p>
+        <div class="tags"><span class="tag ok">角区成簇</span><span class="tag ok">白圆钮</span><span class="tag warn">主色蓝→本项目绿</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/A2-maps-web-desktop.jpg" alt="Google Maps 桌面顶部分类胶囊与右下缩放" loading="lazy"></div>
+      <div class="body">
+        <h3>顶部胶囊 + 右下缩放竖排</h3>
+        <p>分类走顶部横向胶囊；缩放 +/- 竖排白圆钮贴右下；左下信息卡。可直接对照本项目地图簇归位。</p>
+        <div class="tags"><span class="tag ok">缩放归右下簇</span><span class="tag ok">胶囊分段</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/A3-map-light-bottombar.jpg" alt="浅色地图底部白胶囊工具条" loading="lazy"></div>
+      <div class="body">
+        <h3>底部白胶囊工具条</h3>
+        <p>动作收进一条白色圆角胶囊，分类另起白卡；线条图标、克制留白。可对应左下 2D/3D 动作簇。</p>
+        <div class="tags"><span class="tag ok">胶囊成组</span><span class="tag warn">线条图标→Material 实心</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ B 深色编辑器悬浮条 ══ -->
+<section>
+  <h2>B · 深色编辑器悬浮条</h2>
+  <p class="sec-sub">画布上的临时/专业工具条范式：深底圆角、白图标、首钮彩色、组间细分隔。现行浅色工作台暂不启用，可作深色模式储备。</p>
+  <div class="grid">
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/B1-dark-toolbar-row.jpg" alt="深色圆角横条工具条" loading="lazy"></div>
+      <div class="body">
+        <h3>深色横条 · 彩色首钮</h3>
+        <p>深一档圆角横条，首钮彩色方块，其余白描线图标；右侧再分一组深一档工具区。分组与选中首钮的表达可参考。</p>
+        <div class="tags"><span class="tag ok">组间分隔</span><span class="tag warn">深色需配套主题</span><span class="tag no">线条图标</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/B2-dark-rail-tooltip.jpg" alt="深色竖列与 tooltip 气泡" loading="lazy"></div>
+      <div class="body">
+        <h3>深色竖列 + 侧出 tooltip</h3>
+        <p>竖排工具列，选中图标高亮橙色，右侧浮出名字气泡；头像落列底。对照本项目左右轨 tooltip 方向与落底结构。</p>
+        <div class="tags"><span class="tag ok">tooltip 气泡</span><span class="tag ok">头像落底</span><span class="tag warn">高亮色→品牌绿</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/B3-dark-floating-bar.jpg" alt="深色窄悬浮横条" loading="lazy"></div>
+      <div class="body">
+        <h3>窄悬浮横条</h3>
+        <p>搜索框 + 竖线分隔 + 图标 + 更多，一条窄深条悬浮在画布上；密度高、视觉安静。适合收纳低频动作。</p>
+        <div class="tags"><span class="tag ok">分隔线口径</span><span class="tag no">深色悬浮</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ C 玻璃拟态 ══ -->
+<section>
+  <h2>C · 玻璃拟态地图面板</h2>
+  <p class="sec-sub">半透明 + 大圆角 + 柔和光晕，视觉强；但本项目规范是纯色 paper/plane 底 + hair 边 + E1 投影，玻璃模糊与渐变属偏离项，仅作氛围储备。</p>
+  <div class="grid">
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/C1-glass-map-dark.jpg" alt="深色玻璃地图左卡与底部簇按钮" loading="lazy"></div>
+      <div class="body">
+        <h3>深色玻璃左卡 + 底部簇</h3>
+        <p>左卡半透明毛玻璃，底部一排深色圆角动作钮，右下独立缩放；信息层级靠卡片而非描边。</p>
+        <div class="tags"><span class="tag ok">按钮成簇</span><span class="tag no">毛玻璃模糊</span><span class="tag no">大圆角悬浮</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/C2-glass-dashboard-light.jpg" alt="浅色玻璃渐变仪表盘" loading="lazy"></div>
+      <div class="body">
+        <h3>浅玻璃渐变仪表盘</h3>
+        <p>浅暖色渐变底，顶部白胶囊导航、圆角工具卡；柔和轻盈。本项目底色素净，不引入渐变背景。</p>
+        <div class="tags"><span class="tag ok">圆角工具卡</span><span class="tag no">渐变背景</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/C3-glass-map-purple.jpg" alt="深色地图紫色玻璃导航卡" loading="lazy"></div>
+      <div class="body">
+        <h3>深色地图 + 紫色导航</h3>
+        <p>深色底图上叠半透明导航卡，强调色走紫。若未来做深色模式可参考其卡片层级；强调色仍以品牌绿为准。</p>
+        <div class="tags"><span class="tag no">深色玻璃</span><span class="tag warn">强调色→绿</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ D 浅色极简竖轨 ══ -->
+<section>
+  <h2>D · 浅色极简竖轨（左轨导航对照）</h2>
+  <p class="sec-sub">导航族参考：窄轨/宽轨双态、选中浅底或条带、数字与状态点角标、分组小标题与分隔线。</p>
+  <div class="grid">
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/D1-light-rail-dual.jpg" alt="宽轨窄轨双态浅色导航" loading="lazy"></div>
+      <div class="body">
+        <h3>宽轨 / 窄轨双态</h3>
+        <p>同一套条目展开带文字、收起只留图标；选中浅蓝底 + 蓝图标，未读红点。对照本项目左轨 64px 窄轨与展开卡。</p>
+        <div class="tags"><span class="tag ok">宽窄双态</span><span class="tag ok">红点角标</span><span class="tag warn">选中浅底 vs 本项目左绿条</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/D2-light-rail-badge.jpg" alt="浅色竖轨数字角标与分组" loading="lazy"></div>
+      <div class="body">
+        <h3>数字角标 + 分组小标题</h3>
+        <p>选中浅灰底 + 黑图标，条目右侧蓝色圆数字 12；分组小标题灰字，组间细分隔。角标圆片口径可对照本项目 15px err 圆。</p>
+        <div class="tags"><span class="tag ok">角标圆片</span><span class="tag ok">分组小标题</span><span class="tag ok">分隔线</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/D3-light-rail-dot.jpg" alt="窄轨白卡状态点" loading="lazy"></div>
+      <div class="body">
+        <h3>窄轨状态点</h3>
+        <p>窄白轨上图标右下方挂彩色状态点；条目分组排布。对照本项目左轨 9px 状态点与彩点通知。</p>
+        <div class="tags"><span class="tag ok">状态点口径</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/D4-light-wide-nav.jpg" alt="宽轨白卡分组导航" loading="lazy"></div>
+      <div class="body">
+        <h3>宽轨白卡分组</h3>
+        <p>白底细条目，分组小标题，选中紫色块；头像/搜索落顶。可参考展开态卡片的行距与留白。</p>
+        <div class="tags"><span class="tag ok">行距留白</span><span class="tag warn">选中紫块→绿条</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ E 白底编辑器横条 ══ -->
+<section>
+  <h2>E · 白底编辑器横条（Figma 风）</h2>
+  <p class="sec-sub">白底圆角条 + 轻投影，彩色首钮标识当前工具，其余灰图标，右侧另起工具簇。适合把编辑器动作从竖列改成横条的备选方向。</p>
+  <div class="grid">
+    <div class="card">
+      <div class="shot"><img src="assets/rail-refs/E1-light-figma-bar.jpg" alt="白底圆角编辑器工具条" loading="lazy"></div>
+      <div class="body">
+        <h3>白底圆角条 · 彩色首钮</h3>
+        <p>白底细圆角横条，首钮彩色方块，图标灰描线；右侧浅蓝底工具簇。选中靠首钮色块 + 字形，不靠整圈描边。</p>
+        <div class="tags"><span class="tag ok">白底圆角</span><span class="tag ok">轻投影</span><span class="tag warn">线条图标→实心</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 规范对照结论 ══ -->
+<section>
+  <h2>对照本项目规范 · 取舍结论</h2>
+  <div class="compare">
+    <h3>可直接采纳到统一方案</h3>
+    <ul>
+      <li><b>角区成簇：</b>缩放/底图归右下地图簇，交付归右上，视图/比例尺/署名留左下，不与编辑器工具列混排（A1、A2、C1）。</li>
+      <li><b>缩放竖排白圆钮：</b>+/- 上下叠放，贴地图右缘（A2）。</li>
+      <li><b>tooltip 侧出气泡：</b>左轨右出、右轨与地图簇左出，墨黑胶囊 11px（B2 已现行）。</li>
+      <li><b>窄/宽双态与角标：</b>导航轨收起只留图标、展开带文字；未读圆片、状态点复用既有 15px / 9px 口径（D1、D2、D3）。</li>
+      <li><b>分组小标题与细分隔线：</b>工具族按动作组分段，组间一根 hair 线（B1、D2）。</li>
+    </ul>
+  </div>
+  <div class="compare" style="margin-top:16px">
+    <h3>需调整后再用 / 暂不采纳</h3>
+    <ul>
+      <li><b>深色悬浮条：</b>现行是浅色工作台，B 组仅作深色模式储备；启用需配套整套深色令牌，不单改一条工具列。</li>
+      <li><b>玻璃拟态：</b>毛玻璃模糊、渐变大圆角、彩色光晕偏离 E1 纯色 paper/plane + hair 边口径，C 组只作氛围参考。</li>
+      <li><b>线条描边图标：</b>参考图多为线性图标；本项目通用族仍走本地 Material Symbols Rounded 实心，例外仅限角色形体/头像/领域图形。</li>
+      <li><b>彩色大色块首钮：</b>品牌绿全产品只用于选中指示与发送键，不做整钮绿色容器；选中表达沿用左轨绿条 / 右轨绿描边两族分工。</li>
+      <li><b>强调色：</b>参考图的蓝/橙/紫均替换为品牌绿 `#4A7C59` / `#35624A`，语义色 ok/warn/err 只做文字、状态点、描边。</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+<div class="lightbox" id="lightbox"><img id="lightboxImg" alt="参考图放大"></div>
+<script>
+(function(){
+  var box=document.getElementById('lightbox'), img=document.getElementById('lightboxImg');
+  document.querySelectorAll('.shot img').forEach(function(p){
+    p.addEventListener('click', function(){ img.src=p.src; box.classList.add('open'); });
+  });
+  box.addEventListener('click', function(){ box.classList.remove('open'); img.src=''; });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ box.classList.remove('open'); img.src=''; } });
+})();
+</script>
+</body>
+</html>
