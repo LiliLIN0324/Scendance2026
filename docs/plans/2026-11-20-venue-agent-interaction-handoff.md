@@ -83,7 +83,11 @@ npm run lint
 
 ```
 npm run build
-→ 成功静态导出（postbuild strip-internal-learning 已执行）
+→ 第一版（未改画布时）：成功静态导出（postbuild strip-internal-learning 已执行）
+→ 补画布适配后：`npm run build` 在 ESLint 阶段被 V8 崩溃打断（build worker exit 134），
+   连跑三次一致；`npx next build --no-lint` 仍成功静态导出，`npm run lint` 全仓 0 errors。
+   当时工作树里画布正被另一条线并发修改（重复 props 的 lint error 已就地修掉），
+   该崩溃出现在这些并发改动之后，未确认为本轮提交内容引起。
 ```
 
 ### 已知存量失败（与本轮无关）
@@ -106,7 +110,7 @@ npm run build
 
 ### 没做的验证
 
-- **真实浏览器手验未执行**：本轮只做了 jsdom + 组件测试与静态构建，没有在 `/editor` 里跑「生成 → 点选 → 局部改 → 撤销 → 比较」的肉眼链路。视觉（卡片在窄侧栏里的换行、比较区高度）需要人工过一眼。
+- **真实浏览器交互链路未执行**：只做到「dev server 起得来、`/editor` 返回 200 且有应用壳」的烟雾检查（`http://localhost:3001/editor` → 200，19674 字节）；「生成 → 点选 → 局部改 → 撤销 → 比较」需要已登录会话 + 已有边界/锚点的项目 + 可用模型后端，本环境没有这个会话，所以没有换成「已验」的口径。
 - 画布 `focusFacilities` 只在 jsdom 里验证了「能定位 / 找不到如实回 false」；真实底图上的取景范围（整组是否刚好装得下）没有目测。
 - 3D 视图的「左/右」语义未验证（`currentView` 未实现）。
 ## 四、刻意没做的事
