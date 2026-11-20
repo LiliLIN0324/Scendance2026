@@ -5079,6 +5079,13 @@ useEffect(() => {
                   <RailMap size={28} active={outdoorPanel !== null} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
                 </button>
+                <RailMessagesButton controller={controller} team={team} open={messagesOpen}
+                  onToggle={() => {
+                    // 左栏一次只留一张卡：开消息面板就收掉生成卡。
+                    closeGenerationSheet();
+                    setMessagesOpen(current => !current);
+                  }}
+                  onOpenAccount={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'settings' }))}/>
               </nav>
             </div>
             <RailTeamBlock controller={controller} team={team} onOpenChat={member => {
@@ -5087,13 +5094,6 @@ useEffect(() => {
               // 2026-11-16 用户指令：私信卡也浮在 3D 上，不再为开私信退回 2D。
               setChatPeerId(current => current === member.userId ? null : member.userId);
             }} onOpenTeam={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'team' }))}/>
-            <RailMessagesButton controller={controller} team={team} open={messagesOpen}
-              onToggle={() => {
-                // 左栏一次只留一张卡：开消息面板就收掉生成卡。
-                closeGenerationSheet();
-                setMessagesOpen(current => !current);
-              }}
-              onOpenAccount={() => setTeamOpenRequest(current => ({ serial: (current?.serial ?? 0) + 1, section: 'settings' }))}/>
             <div className="sc-mode-rail-foot">
               {/* 2026-11-11 用户指令：户外态不再显示草稿保存状态文字（保存仍自动进行）。 */}
               {!outdoor2DOpen && draftFoot && <p role="status" className={`sc-rail-draft${saveError ? ' has-error' : ''}`} title={draftTitle}>{draftFoot}</p>}
