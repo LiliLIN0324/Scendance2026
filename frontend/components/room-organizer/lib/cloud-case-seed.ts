@@ -66,9 +66,9 @@ export function cnCaseSeedPayloads(cases: readonly ReplicaCase[] = CN_REPLICA_CA
  */
 export function needsSeeding(
   payload: Pick<CloudCaseSeedPayload, 'stableId'>,
-  known: Readonly<{ drafts?: readonly { id: string }[]; published?: readonly { id: string }[] }>,
+  known: Readonly<{ drafts?: readonly { id: string; stableId?: string }[]; published?: readonly { id: string }[] }>,
 ): boolean {
-  const inDrafts = (known.drafts ?? []).some(draft => draft.id === payload.stableId);
+  const inDrafts = (known.drafts ?? []).some(draft => (draft.stableId ?? draft.id) === payload.stableId);
   const inPublished = (known.published ?? []).some(published => published.id === payload.stableId);
   return !inDrafts && !inPublished;
 }

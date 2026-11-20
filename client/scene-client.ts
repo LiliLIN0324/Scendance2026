@@ -268,7 +268,7 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
     async readCloudCase(stableId:string):Promise<CompletePublicRead> {
       return completePublicReadSchema.parse(await request(`/cloud/cases/${encodeURIComponent(cloudCaseIdSchema.parse(stableId))}`,'GET',undefined,true));
     },
-    createCompleteShare(projectId:string,input:CompleteShareInput){return completeShareReceiptSchema.parse(request(`/cloud/projects/${uuid.parse(projectId)}/shares`,'POST',input));},
+    async createCompleteShare(projectId:string,input:CompleteShareInput){return completeShareReceiptSchema.parse(await request(`/cloud/projects/${uuid.parse(projectId)}/shares`,'POST',input));},
     async readCompleteShare(token:string):Promise<CompletePublicRead> {
       return completePublicReadSchema.parse(await request('/cloud/shares/read','POST',{token},true));
     },

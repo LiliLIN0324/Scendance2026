@@ -50,6 +50,13 @@ describe('proposal freshness at the client write boundary', () => {
     expect(network).toHaveBeenCalledOnce();
   });
 
+  it('awaits the complete-share receipt before validating its one-time token', async () => {
+    const receipt = { shareId: crypto.randomUUID(), publicationId: crypto.randomUUID(), revision: 0, token: 'a'.repeat(64) };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(receipt), { status: 201 }));
+    const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');
+    await expect(client.createCompleteShare(crypto.randomUUID(), { requestId: crypto.randomUUID(), expectedRevision: 0 })).resolves.toEqual(receipt);
+  });
+
   it('keeps a JSON error code and its status', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ error: { code: 'UNAUTHENTICATED', details: { private: 'do-not-surface' } } }), { status: 401, headers: { 'Content-Type': 'application/json' } }));
     const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');

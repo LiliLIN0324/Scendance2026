@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBackend } from '../supabase/functions/_shared/backend.ts';
 
 const auth = vi.hoisted(() => ({ getUser: vi.fn() }));
-vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ auth }) }));
+const rpc = vi.hoisted(() => vi.fn());
+vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ auth, rpc }) }));
 const backend = () => createBackend(key => ({ SUPABASE_URL: 'https://test.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'server-test' }[key]));
 afterEach(() => vi.resetAllMocks());
 
@@ -15,5 +16,9 @@ describe('workbench authenticated guest access', () => {
   it('still rejects a missing or invalid signed user session', async () => {
     auth.getUser.mockResolvedValue({ data: { user: null }, error: new Error('invalid token') });
     await expect(backend().user('invalid')).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+  });
+  it('returns HTTP 403 for a platform-admin-only RPC denied by PostgreSQL', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'PLATFORM_ADMIN_REQUIRED' } });
+    await expect(backend().cloud('ordinary-user', 'cloud.case.drafts.list')).rejects.toMatchObject({ code: 'PLATFORM_ADMIN_REQUIRED', status: 403 });
   });
 });

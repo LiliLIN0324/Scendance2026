@@ -23,8 +23,10 @@ function toPoints(points: readonly PlanPoint[]): string {
   return points.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
 }
 
-export function CaseThumb({ plan, className = 'sc-case-thumb', basemap = true }: {
+export function CaseThumb({ plan, className = 'sc-case-thumb', basemap = true, facilityLimit = MAX_FACILITY_DOTS }: {
   plan: SitePlanData;
+  /** Full-size read-only shares render every facility rather than the card's 90-item cap. */
+  facilityLimit?: number;
   /** 2026-11-18 项目卡预览：卡片墙一开就是十几张，瓦片太重时不取底图，只画线稿。 */
   basemap?: boolean;
   className?: string;
@@ -85,7 +87,7 @@ export function CaseThumb({ plan, className = 'sc-case-thumb', basemap = true }:
     {plan.routes.map(route => <polyline key={route.id} points={toPoints(route.points)} fill="none"
       stroke={route.color ?? '#f2c744'} strokeWidth={stroke * 1.2}
       strokeDasharray={route.kind === 'vehicle' ? `${stroke * 4} ${stroke * 3}` : undefined} strokeLinecap="round"/>)}
-    {plan.facilities.slice(0, MAX_FACILITY_DOTS).map(facility => <rect key={facility.id}
+    {plan.facilities.slice(0, facilityLimit).map(facility => <rect key={facility.id}
       x={facility.position.x - facility.size.width / 2}
       y={facility.position.y - facility.size.depth / 2}
       width={facility.size.width} height={facility.size.depth}

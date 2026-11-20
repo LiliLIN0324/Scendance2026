@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createSceneClient, SceneApiError } from '../../client/scene-client';
-import { colorSchema, sceneSchema, sizeSchema, uuid } from '../../supabase/functions/_shared/domain';
 import { completePublicReadSchema } from '../../supabase/functions/_shared/cloud-storage-contract';
+import { colorSchema, sceneSchema, sizeSchema, uuid } from '../../supabase/functions/_shared/domain';
 import { getBackendConfig, type BackendConfig } from './backend-session';
 
 const timestamp = z.string().refine(value => Number.isFinite(Date.parse(value)));
@@ -73,7 +73,7 @@ export async function readShare(token: string, config: BackendConfig = getBacken
 
 /** 匿名读取受控完整分享（scene + 户外 + published 依赖的临时地址；sources 永不出网）。 */
 export async function readCompleteShare(token: string, config: BackendConfig = getBackendConfig()): Promise<CompleteShareSnapshot> {
-  if (completeShareTokenFromHash(`#${token}`) !== token) throw new SceneApiError('SHARE_NOT_FOUND', 404, null);
+  if (completeShareTokenFromHash(`#c${token}`) !== token) throw new SceneApiError('SHARE_NOT_FOUND', 404, null);
   if (!config.configured) throw new SceneApiError('CONFIGURATION_MISSING', 0, null);
   const result = completePublicReadSchema.safeParse(await createSceneClient(config.apiUrl, async () => null).readCompleteShare(token));
   if (!result.success) throw new SceneApiError('INVALID_RESPONSE', 502, null);

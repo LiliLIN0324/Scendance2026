@@ -2,6 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { sitePlanDataSchema } from '../../../supabase/functions/_shared/site-plan';
+import { CaseThumb } from '@/components/room-organizer/panels/case-thumb';
 import { completeShareTokenFromHash, readCompleteShare, readShare, shareErrorMessage, shareTokenFromHash, type CompleteShareSnapshot, type SharedSnapshot } from '@/lib/share-api';
 import { readShareSnapshotHash, shareSnapshotErrorMessage, SHARE_SNAPSHOT_HASH_PREFIX, type ShareSnapshot } from '@/lib/share-snapshot';
 import '../share.css';
@@ -75,6 +77,7 @@ export default function SharedViewPage(): JSX.Element {
   const localAssetUrls = useMemo(() => Object.fromEntries(localSnapshot?.assets.map(asset => [asset.id, asset.url]) ?? []), [localSnapshot]);
   const completeAssetUrls = useMemo(() => Object.fromEntries(complete?.assets.map(asset => [asset.id, asset.url]) ?? []), [complete]);
   const completeAssetNames = useMemo(() => Object.fromEntries(complete?.assets.map(asset => [asset.id, asset.name]) ?? []), [complete]);
+  const completeOutdoor = useMemo(() => complete?.manifest.outdoor ? sitePlanDataSchema.safeParse(complete.manifest.outdoor) : null, [complete]);
 
   return <main className="sc-share-page">
     <header className="sc-share-masthead"><span>幕景 <small className="sc-brand-en">Scendance</small></span><span>{localSnapshot ? '只读 3D 方案' : complete ? '完整方案只读' : '客户只读方案'}</span></header>
@@ -92,7 +95,14 @@ export default function SharedViewPage(): JSX.Element {
       <div className="sc-share-title"><div><p>完整方案 · 只读 · 版本 {complete.revision}</p><h1>{complete.case?.title ?? '完整方案分享'}</h1><p>{complete.manifest.scene.venue.width} × {complete.manifest.scene.venue.depth} 米 · 含 {complete.assets.length} 项已归档资源</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>
       {expired && <p className="sc-share-notice" role="status">资源授权已到期；已载入的模型仍可查看。重新加载模型前，请刷新资源以检查链接状态。</p>}
       <ScenePreview scene={complete.manifest.scene} assetUrls={completeAssetUrls} assetNames={completeAssetNames} />
-      {complete.manifest.outdoor && <p className="sc-share-footnote">这份完整方案包含户外规划数据；本页暂不绘制户外 2D 图，规划内容已随链接提供。</p>}
+      {completeOutdoor && <section className="sc-share-outdoor" aria-labelledby="sc-share-outdoor-title">
+        <h2 id="sc-share-outdoor-title">户外规划</h2>
+        {completeOutdoor.success ? <>
+          <figure aria-label="户外规划只读平面图"><CaseThumb plan={completeOutdoor.data} basemap={false} facilityLimit={Infinity} className="sc-share-outdoor-map" /><figcaption>只读 2D 示意 · {completeOutdoor.data.zones.length} 个分区 · {completeOutdoor.data.routes.length} 条路线 · {completeOutdoor.data.facilities.length} 件设施</figcaption></figure>
+          <details><summary>分区与设施清单</summary><ul>{completeOutdoor.data.zones.map(zone => <li key={zone.id}>{zone.name}</li>)}{completeOutdoor.data.facilities.map(facility => <li key={facility.id}>{facility.name} · {facility.size.width} × {facility.size.depth} 米</li>)}</ul></details>
+        </> : <p role="alert">户外规划数据格式暂不支持，无法绘制平面图。</p>}
+      </section>}
+      {complete.assets.length > 0 && <section className="sc-share-resources" aria-labelledby="sc-share-resources-title"><h2 id="sc-share-resources-title">已归档资源</h2><ul>{complete.assets.map(asset => <li key={asset.id}>{expired ? <span>{asset.name}</span> : <a href={asset.url} target="_blank" rel="noopener noreferrer">{asset.name}</a>} · {asset.format.toUpperCase()}</li>)}</ul>{expired && <p>资源授权已到期，请先刷新模型资源。</p>}</section>}
       <p className="sc-share-footnote">受控完整分享：发布者撤销后，新访问将被拒绝；已打开或已下载的副本无法收回。页面只读、不可编辑。模型为布置效果参考，实物规格以最终确认为准。</p>
     </> : snapshot && <>
       <div className="sc-share-title"><div><p>已发布 · 版本 {snapshot.revision}</p><h1>{snapshot.name}</h1><p>{new Date(snapshot.createdAt).toLocaleString('zh-CN')} · {snapshot.scene.venue.width} × {snapshot.scene.venue.depth} 米</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>

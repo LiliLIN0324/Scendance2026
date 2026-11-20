@@ -58,6 +58,7 @@ describe('CN case cloud seed payloads (C08)', () => {
     const first = payloads[0]!;
     expect(needsSeeding(first, {})).toBe(true);
     expect(needsSeeding(first, { drafts: [{ id: first.stableId }] })).toBe(false);
+    expect(needsSeeding(first, { drafts: [{ id: crypto.randomUUID(), stableId: first.stableId }] })).toBe(false);
     expect(needsSeeding(first, { published: [{ id: first.stableId }] })).toBe(false);
     expect(needsSeeding(first, { drafts: [{ id: 'other-case' }] })).toBe(true);
   });
@@ -69,14 +70,15 @@ describe('CN case cloud seed payloads (C08)', () => {
     const password = envOf('CLOUD_SEED_PASSWORD');
     const origin = (envOf('ALLOWED_ORIGINS') ?? envOf('PUBLIC_APP_URL') ?? '').split(',')[0]?.trim();
     const released: Array<{ projectId: string; body: { sessionId: string; generation: number } }> = [];
+    let accessToken: string | null = null;
 
     afterAll(async () => {
-      if (!REMOTE || !url || !anonKey) return;
+      if (!REMOTE || !url || !anonKey || !accessToken) return;
       for (const lease of released) {
         try {
           await fetch(`${url}/functions/v1/scene-api/projects/${lease.projectId}/lease/release`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Origin: origin! },
+            headers: { 'Content-Type': 'application/json', Origin: origin!, Authorization: `Bearer ${accessToken}` },
             body: JSON.stringify(lease.body),
           });
         } catch { /* 租约最长 90 秒后自动过期，不影响线上状态 */ }
@@ -89,6 +91,7 @@ describe('CN case cloud seed payloads (C08)', () => {
       const { data, error } = await auth.auth.signInWithPassword({ email, password });
       expect(error).toBeNull();
       const token = data.session!.access_token;
+      accessToken = token;
       const client = createSceneClient(`${url}/functions/v1/scene-api`, async () => token);
       const request = async (path: string, method: 'GET' | 'POST', body?: unknown) => {
         const init: RequestInit = { method, headers: { Authorization: `Bearer ${token}`, Origin: origin } };
@@ -120,6 +123,7 @@ describe('CN case cloud seed payloads (C08)', () => {
         const lease = await request(`/projects/${projectId}/lease/acquire`, 'POST', { sessionId: crypto.randomUUID() });
         expect(lease.status).toBe(200);
         const generation = Number((lease.payload as { generation: number }).generation);
+        released.push({ projectId, body: { sessionId: String((lease.payload as { sessionId: string }).sessionId), generation } });
         await client.saveCompleteProject(projectId, {
           requestId: crypto.randomUUID(),
           sessionId: String((lease.payload as { sessionId: string }).sessionId),
@@ -150,7 +154,6 @@ describe('CN case cloud seed payloads (C08)', () => {
         const read = await client.readCloudCase(payload.stableId);
         expect(read.manifest.outdoor).toBeTruthy();
         expect(Object.hasOwn(read.manifest, 'sources')).toBe(false);
-        released.push({ projectId, body: { sessionId: String((lease.payload as { sessionId: string }).sessionId), generation } });
         summary.push({ stableId: payload.stableId, action: 'published' });
       }
       // 汇总只留稳定 ID 与动作，不打印任何凭据。
