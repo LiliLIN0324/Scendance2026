@@ -131,12 +131,11 @@ it("经典案例载入、显示与本机保存保持核验过的设施占地", a
   await waitFor(() => expect(saveState).toHaveBeenCalledWith(expect.objectContaining({ state: "saved" })), { timeout: 2000 });
   expect(readOutdoorProjectRecord(projectId)?.plan).toEqual(plan);
 });
-it("keeps outside guide actions working and exposes a clean map details panel", () => {
+it("keeps outside clicks through and exposes a clean map details panel", () => {
   render(<Overlay projectId="guide-outside-action" seedPlan={createStarterOutdoorPlan()} />);
-  const begin = screen.getByRole("button", { name: "开始浏览" });
-  fireEvent.pointerDown(begin);
-  fireEvent.click(begin);
-  expect(screen.getByRole("dialog", { name: /这边是物件库/ })).toBeTruthy();
+  // 2026-11-20：三步气泡退役后，覆盖层不再挂 window 捕获监听；这里钉住「别把引导做成拦截器」。
+  expect(screen.queryByTestId("guide-bubble")).toBeNull();
+  expect(localStorage.getItem("outdoor-plan-guide-v1")).toBeNull();
 
   const outsideTool = document.createElement("button");
   document.body.append(outsideTool);
@@ -146,8 +145,6 @@ it("keeps outside guide actions working and exposes a clean map details panel", 
     fireEvent.pointerDown(outsideTool);
     fireEvent.click(outsideTool);
     expect(useTool).toHaveBeenCalledOnce();
-    expect(screen.queryByTestId("guide-bubble")).toBeNull();
-    expect(JSON.parse(localStorage.getItem("outdoor-plan-guide-v1")!)).toEqual({ done: ["welcome"], dismissed: false });
   } finally {
     outsideTool.remove();
   }
