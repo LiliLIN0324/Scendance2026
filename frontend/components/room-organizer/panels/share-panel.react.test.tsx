@@ -384,7 +384,7 @@ describe('P2（V16）：评审权限的生效边界', () => {
 describe('P4（V17）：进入／送出／待评／回执', () => {
   it('送出状态行说动作与结果，进入行只去审校台', () => {
     render(<SharePanel {...panelProps({ tab: 'share', bingoStatus: '待评', bingoCount: '2' })} />);
-    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待评（已送出 2 份，等客户回执）');
+    expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待评 · 2 份等回执');
     const desk = screen.getByRole('button', { name: '进入 Bingo 审校台，待评 2 份' });
     expect(desk.querySelector('.sc-share-row-label')?.textContent).toBe('进入 Bingo 审校台');
     expect(desk.querySelector('.sc-share-row-status')?.textContent).toBe('待评 2 份');

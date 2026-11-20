@@ -3392,10 +3392,21 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-map-type-note { padding: 6px 4px 0; font-size: 10px; line-height: 1.4; color: var(--wk-muted); }
 .sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair); }
-/* 分享 / 发布 / 导出：宽约 400、内边距 20、圆角 12。选中页签是白胶囊墨字。
-   字段用规范 plane #F4F5F7（全局 --plane 目前写成纸白，这里按锁定稿填实底）。
-   绿只出现在未发布的「发布并复制链接」。工具弹层按钮有 !important 重置，这里用更高优先级盖回去。 */
+/* 分享 / 发布 / 导出：宽约 400、内边距 20、圆角 12。选中页签是药丸墨字。
+   绿只出现在未发布的「发布并复制链接」。工具弹层按钮有 !important 重置，这里用更高优先级盖回去。
+   2026-11-20 复检改：
+   - 卡内控件一律吃 L1 语义 token，不再写死浅色 hex。暗色下写死的 #F4F5F7 字段底
+     配上亮墨字 = 白底白字（「进入 Bingo 审校台」整行看不见）。
+   - 网格轨道锁 minmax(0,1fr)：字段集默认 min-inline-size:min-content 会把轨道
+     撑到 403px，开关与动作键因此溢出卡片右缘（scrollWidth 423 > 399）。
+   - 字号回到全局七档：标题 H3 16 / 正文 C1 14 / 元信息 P2 12，卡内只此三档。 */
 .sc-workbench .sc-tool-pop.sc-share-panel {
+  /* 卡内局部 token：浅色下取规范 plane（#F4F5F7）；暗色在下面那条规则里换成语义值，
+     面板 CSS 不出现暗色专属 hex 字面量。 */
+  --share-field: #F4F5F7;
+  --share-track: #EEF0F2;
+  --share-tab-on: #FFFFFF;
+  --share-knob: #FFFFFF;
   width: min(400px, calc(100vw - 56px));
   min-width: min(400px, calc(100vw - 56px));
   max-width: min(400px, calc(100vw - 56px));
@@ -3406,6 +3417,9 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   overflow: visible;
   background: var(--paper, #FFFFFF);
   border: 1px solid var(--hair, #E4E4E7);
+  /* 画布右轨是 white-space:nowrap，卡片挂在它里面：这里放开，说明文字才换行，
+     否则整段话会被卡片右缘直接截断。 */
+  white-space: normal;
   /* 分享弹层常压在深色地图上，--e1 在这里不够。保留 v17 两族墨影：
      贴边实影 + 中间衔接 + 底下软抬升；颜色停在 rgb(20,20,22)，不用纯黑。 */
   box-shadow:
@@ -3415,27 +3429,39 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   color: var(--ink, #141416);
   font-family: var(--font-sans);
 }
+/* 暗色：字段底 / 页签轨道 / 选中页签 / 关态滑块改走语义值。 */
+body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
+  --share-field: var(--plane);
+  --share-track: var(--plane);
+  --share-tab-on: var(--plane-deep);
+  --share-knob: var(--ink-soft);
+}
 .sc-workbench .sc-share-tabs {
   display: flex; align-items: center; gap: 2px;
   height: 32px; padding: 2px; box-sizing: border-box;
-  border-radius: 16px; background: #EEF0F2;
+  border-radius: 16px; background: var(--share-track);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab {
   flex: 1 1 0; width: auto !important; height: 28px !important; min-height: 0 !important;
   padding: 0 8px !important; border: 0 !important; border-radius: 14px !important;
   background: transparent !important; box-shadow: none !important;
   color: var(--ink-soft, #55585F) !important;
-  font-family: inherit; font-size: 13px; font-weight: 500; line-height: 28px;
+  font-family: inherit; font-size: 14px; font-weight: 500; line-height: 28px;
   text-align: center !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab.is-selected,
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab[aria-selected="true"] {
-  background: var(--paper, #FFFFFF) !important;
+  background: var(--share-tab-on) !important;
   color: var(--ink, #141416) !important;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.06) !important;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.06), 0 0 0 1px var(--hair-soft, #EFEFF1) !important;
 }
-.sc-workbench .sc-share-body { display: grid; gap: 10px; min-width: 0; justify-items: stretch; }
+/* 轨道锁 minmax(0,1fr)：字段集默认 min-inline-size:min-content，不锁会把轨道撑到
+   403px，字段、开关与动作键一起溢出卡片右缘。 */
+.sc-workbench .sc-share-body {
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  gap: 10px; min-width: 0; justify-items: stretch;
+}
 /* 分享页 .sc-share-heading 是 space-between。这里强制整组靠左，图标贴住标题。 */
 .sc-workbench .sc-share-heading {
   display: flex; align-items: center; justify-content: flex-start; gap: 0;
@@ -3448,25 +3474,73 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-share-heading h2,
 .sc-workbench .sc-share-titlelock h2 {
   margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 15px; line-height: 22px; font-weight: 650;
+  font-size: 16px; line-height: 24px; font-weight: 600;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel .sc-share-glyph,
 .sc-workbench .sc-tool-column .oc-cluster .sc-share-panel .sc-share-glyph {
   flex: none; width: 16px !important; height: 16px !important; color: #141416;
 }
-.sc-workbench .sc-share-desc,
-.sc-workbench .sc-share-note {
-  margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
+/* 卡内只三档：正文 14（--ink）、元信息 12（--ink-soft）、标题 16（上面那条）。 */
+.sc-workbench .sc-share-desc {
+  margin: 0; font-size: 14px; line-height: 22px; color: var(--ink, #141416);
 }
+.sc-workbench .sc-share-meta {
+  margin: 0; font-size: 12px; line-height: 20px; color: var(--ink-soft, #55585F);
+}
+.sc-workbench .sc-share-note {
+  margin: 0; font-size: 14px; line-height: 22px; color: var(--ink, #141416);
+}
+.sc-workbench .sc-share-note[data-tone="warn"] { color: var(--warn, #96651F); }
+.sc-workbench .sc-share-desc[data-tone="err"],
+.sc-workbench .sc-share-meta[data-tone="err"] { color: var(--err, #B4443C); }
+.sc-workbench .sc-share-note[data-tone="err"] { color: var(--err, #B4443C); }
+/* 两栏信息行：键在左（弱字）、值在右（墨字）。代替一串整句说明。 */
+.sc-workbench .sc-share-kvs { display: grid; gap: 4px; }
+.sc-workbench .sc-share-kv { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.sc-workbench .sc-share-kv-k { flex: none; font-size: 12px; line-height: 20px; color: var(--ink-soft, #55585F); }
+.sc-workbench .sc-share-kv-v { flex: 1 1 auto; min-width: 0; font-size: 14px; line-height: 22px; color: var(--ink, #141416); }
+/* 折叠区：摘要、发布记录这类清单默认收起，展开才铺开。 */
+.sc-workbench .sc-share-fold {
+  border: 1px solid var(--hair, #E4E4E7); border-radius: 8px;
+  background: var(--paper, #FFFFFF); padding: 0 10px;
+}
+.sc-workbench .sc-share-fold > summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: 6px;
+  height: 30px; font-size: 12px; line-height: 20px; color: var(--ink-soft, #55585F);
+}
+.sc-workbench .sc-share-fold > summary::-webkit-details-marker { display: none; }
+.sc-workbench .sc-share-fold > summary::before {
+  content: ''; width: 5px; height: 5px; flex: none;
+  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--dur-1, 120ms) var(--ease-spec, ease);
+}
+.sc-workbench .sc-share-fold[open] > summary::before { transform: rotate(45deg); }
+.sc-workbench .sc-share-fold-body { display: grid; gap: 4px; padding-bottom: 10px; }
+.sc-workbench .sc-share-foldwrap { display: grid; gap: 6px; }
+/* 阻塞项：原因在左，处理动作在右，不再一条一整宽按钮。 */
+.sc-workbench .sc-share-fix { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sc-workbench .sc-share-fix-text { flex: 1 1 auto; min-width: 0; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-fixbtn {
+  flex: none; display: inline-flex !important; align-items: center; justify-content: center;
+  box-sizing: border-box !important; width: auto !important;
+  height: 26px !important; min-height: 0 !important; padding: 0 10px !important;
+  border: 1px solid var(--hair, #E4E4E7) !important; border-radius: 13px !important;
+  background: transparent !important; box-shadow: none !important;
+  color: var(--ink-soft, #55585F) !important;
+  font-family: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-fixbtn:hover:not(:disabled) { background: var(--share-field) !important; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-fixbtn:disabled { opacity: .55; cursor: default; }
 /* 右上簇把 button 居中、把 button > span 收成 22px。分享行必须盖回去，否则文字挤在中间。 */
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-row,
 .sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-row {
   display: flex !important; align-items: center; justify-content: flex-start !important; gap: 4px;
   width: 100% !important; height: 32px !important; min-height: 0 !important;
   padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
-  background: #F4F5F7 !important; box-shadow: none !important;
+  background: var(--share-field) !important; box-shadow: none !important;
   color: var(--ink, #141416) !important;
-  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
+  font-family: inherit; font-size: 14px; font-weight: 500; text-align: left !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-row:disabled { opacity: .55; cursor: default; }
 .sc-workbench .sc-share-row-label {
@@ -3475,10 +3549,10 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-share-row-status {
   flex: none; width: auto !important; height: auto !important; margin-left: auto;
-  color: var(--ink-soft, #55585F); font-size: 12px; font-weight: 500;
+  color: var(--ink-soft, #55585F); font-size: 12px; line-height: 20px; font-weight: 500;
 }
 .sc-workbench .sc-share-readonly {
-  margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
+  margin: 0; font-size: 14px; line-height: 22px; color: var(--ink-soft, #55585F);
 }
 .sc-workbench .sc-share-permits {
   display: grid;
@@ -3490,15 +3564,16 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-share-permits legend {
   padding: 0;
   color: var(--ink-soft, #55585f);
-  font-size: 12px;
+  font-size: 12px; line-height: 20px;
 }
 .sc-workbench .sc-share-permit {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   color: var(--ink, #141416);
-  font-size: 13px;
+  font-size: 14px; line-height: 22px;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch {
   position: relative;
@@ -3508,7 +3583,7 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   padding: 0 !important;
   border: 1px solid var(--hair, #e4e4e7) !important;
   border-radius: 999px !important;
-  background: #fff !important;
+  background: var(--share-field) !important;
   box-shadow: none !important;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch[aria-checked="true"] {
@@ -3522,18 +3597,20 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--share-knob);
   box-shadow: 0 1px 2px rgba(20, 20, 22, 0.18);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch[aria-checked="true"] i {
   left: 16px;
+  /* 开态滑块取纸色：浅色下是白点压墨轨，暗色下是墨点压白轨，两边都分得清。 */
+  background: var(--paper, #FFFFFF);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta {
   width: 100% !important; height: 32px !important; min-height: 0 !important;
   padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
   background: var(--green, #4A7C59) !important; box-shadow: none !important;
-  color: #FFFFFF !important;
-  font-family: inherit; font-size: 13px; font-weight: 600; text-align: center !important; cursor: pointer;
+  color: var(--paper, #FFFFFF) !important;
+  font-family: inherit; font-size: 14px; font-weight: 600; text-align: center !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:hover:not(:disabled) { background: var(--green-deep, #35624A) !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:disabled { opacity: .55; cursor: default; }
@@ -3545,16 +3622,16 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   color: var(--ink-soft, #55585F) !important;
   font-family: inherit; font-size: 12px; cursor: pointer;
 }
-.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:hover:not(:disabled) { background: #F4F5F7 !important; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:hover:not(:disabled) { background: var(--share-field) !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:disabled { opacity: .55; cursor: default; }
 .sc-workbench .sc-share-link {
   position: relative; display: flex; align-items: center; gap: 6px;
   height: 32px; min-width: 0; padding: 0 3px 0 12px; box-sizing: border-box;
-  border-radius: 16px; background: #F4F5F7;
+  border-radius: 16px; background: var(--share-field);
 }
 .sc-workbench .sc-share-link-text {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 13px; line-height: 20px; color: var(--ink, #141416);
+  font-size: 14px; line-height: 22px; color: var(--ink, #141416);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-key {
   flex: none; display: inline-flex !important; align-items: center; justify-content: center;
@@ -3596,13 +3673,20 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   width: 100% !important; height: 36px !important; min-height: 0 !important;
   padding: 0 !important; border: 0 !important; border-radius: 0 !important;
   background: transparent !important; box-shadow: none !important;
-  color: #141416 !important;
-  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
+  color: var(--ink, #141416) !important;
+  font-family: inherit; font-size: 14px; font-weight: 500; text-align: left !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export > span,
 .sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-export > span {
-  flex: 1 1 auto; width: auto !important; height: auto !important; min-width: 0;
-  text-align: left; color: #141416;
+  flex: none; width: auto !important; height: auto !important; min-width: 0;
+  text-align: left; color: var(--ink, #141416);
+}
+/* 导出行的范围压成右侧元信息：名称是动作，范围是注解，不该反过来抢眼。 */
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export .sc-share-export-scope,
+.sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-export .sc-share-export-scope {
+  flex: 1 1 auto; min-width: 0; margin-left: auto; padding-left: 8px;
+  font-style: normal; font-size: 12px; line-height: 20px; font-weight: 400;
+  color: var(--ink-soft, #55585F); text-align: right;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export:hover { background: #F4F5F7 !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button:focus-visible {

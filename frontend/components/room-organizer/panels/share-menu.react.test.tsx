@@ -79,7 +79,7 @@ describe('分享页签', () => {
     expect(screen.getByRole('tab', { name: '分享' }).getAttribute('data-tone')).toBe('ink');
     expect(screen.getByRole('tab', { name: '发布' }).getAttribute('data-tone')).toBe('quiet');
     expect(dialog.textContent).toContain('发布会');
-    expect(dialog.textContent).toContain('打开即可查看场地、分区和尺度，页里可看 3D。');
+    expect(dialog.textContent).toContain('发给客户：可留言、可看 3D。');
     const create = screen.getByRole('button', { name: '送出评审链接' });
     const bingo = screen.getByRole('button', { name: /进入 Bingo 审校台/ });
     expect(create.className).toContain('sc-share-cta');
@@ -433,21 +433,21 @@ describe('导出页签', () => {
     fireEvent.click(screen.getByRole('tab', { name: '导出' }));
     expect(screen.getByRole('tab', { name: '导出' }).getAttribute('data-tone')).toBe('ink');
     for (const name of ['效果图', '物料清单', '场地范围文件']) {
-      expect(screen.getByRole('button', { name })).toBeTruthy();
+      expect(screen.getByRole('button', { name: new RegExp(`^${name}`) })).toBeTruthy();
     }
     expect(screen.queryByRole('button', { name: '导出交接' })).toBeNull();
     expect(screen.queryByRole('button', { name: '到场清单' })).toBeNull();
     // P3（V18）：导出不关菜单——关菜单既表示不了成功，也表示不了失败。
-    fireEvent.click(screen.getByRole('button', { name: '物料清单' }));
+    fireEvent.click(screen.getByRole('button', { name: /^物料清单/ }));
     expect(share.onExportCsv).toHaveBeenCalledOnce();
     expect(screen.getByRole('tab', { name: '导出' }).getAttribute('aria-selected')).toBe('true');
     // CSV/GeoJSON 句柄是同步 void：只能如实写「已交给画布导出」，不冒充完成。
     expect(screen.getByTestId('export-status-materials').textContent).toContain('已交给画布导出');
-    fireEvent.click(screen.getByRole('button', { name: '效果图' }));
+    fireEvent.click(screen.getByRole('button', { name: /^效果图/ }));
     expect(share.onExportImage).toHaveBeenCalledOnce();
     // 效果图句柄有回执（Promise<boolean>）：resolve 才写「已导出」。
     await waitFor(() => expect(screen.getByTestId('export-status-render').textContent).toContain('已导出'));
-    fireEvent.click(screen.getByRole('button', { name: '场地范围文件' }));
+    fireEvent.click(screen.getByRole('button', { name: /^场地范围文件/ }));
     expect(share.onExportGeoJson).toHaveBeenCalledOnce();
     expect(screen.getByTestId('export-status-site').textContent).toContain('已交给画布导出');
   });
@@ -457,10 +457,10 @@ describe('导出页签', () => {
     render(<ShareMenu actions={actions({ onExportImage: vi.fn(async () => true) })} layout={sampleLayout()} />);
     openMenu();
     fireEvent.click(screen.getByRole('tab', { name: '导出' }));
-    expect(screen.getByRole('button', { name: '效果图' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '物料清单' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '场地范围文件' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '演示稿' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^效果图/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^物料清单/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^场地范围文件/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^演示稿/ })).toBeNull();
   });
 
   it('P3：四类导出的范围与版本写在行下，失败留在面板里给重试', async () => {
@@ -481,14 +481,14 @@ describe('导出页签', () => {
     fireEvent.click(screen.getByRole('tab', { name: '导出' }));
     // 选择范围时绑定明确版本：每行都写清覆盖哪一段，并在点击时绑定当前版本。
     for (const name of ['效果图', '物料清单', '场地范围文件', '演示稿']) {
-      expect(screen.getByRole('button', { name })).toBeTruthy();
+      expect(screen.getByRole('button', { name: new RegExp(`^${name}`) })).toBeTruthy();
     }
     expect(screen.getByTestId('export-row-materials').textContent).toContain('全部楼层物件与数量，CSV');
     expect(screen.getByTestId('export-row-site').textContent).toContain('场地轮廓与户外分区，GeoJSON');
     expect(screen.getByTestId('export-row-deck').textContent).toContain('当前方案的分页排版，PDF');
     expect(screen.getByTestId('export-binding').textContent).toContain('版本 4');
     // 失败不被关菜单当成成功：错误与重试都留在面板里。
-    fireEvent.click(screen.getByRole('button', { name: '物料清单' }));
+    fireEvent.click(screen.getByRole('button', { name: /^物料清单/ }));
     const failed = await screen.findByTestId('export-status-materials');
     expect(failed.getAttribute('role')).toBe('alert');
     expect(failed.textContent).toContain('导出没成功');
@@ -675,7 +675,7 @@ describe('弹层对齐与阴影', () => {
       expect(painted.length).toBeGreaterThan(8);
       expect(painted).toMatch(/20,\s*20,\s*22|20 20 22/);
       expect(painted).not.toMatch(/0\.08/);
-      const row = screen.getByRole('button', { name: '效果图' });
+      const row = screen.getByRole('button', { name: /^效果图/ });
       const label = row.querySelector('span') as HTMLElement;
       expect(getComputedStyle(row).justifyContent).toMatch(/flex-start|start/);
       expect(getComputedStyle(label).width).not.toBe('22px');
