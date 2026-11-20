@@ -34,6 +34,7 @@ import type { CreativeBriefState, LocalProjectBackupActions } from './creative-s
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
+import { summarizeDeliveryGaps, type DeliveryGapGroup } from '../lib/delivery-review';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import type {PendingCandidateCapture} from '../lib/pending-candidate-registry';
 import './scene-delivery-panel.css';
@@ -99,6 +100,12 @@ const PACKAGE_FAILURE_LABELS: Record<DeliveryFailureCode, string> = {
   'share-over-budget': '分享链接超预算', 'render-failed': '渲染失败',
 };
 
+const REVIEW_GROUPS: { key: DeliveryGapGroup; label: string }[] = [
+  { key: 'operations', label: '活动任务' },
+  { key: 'workorders', label: '物件工作单' },
+  { key: 'plan', label: '制作计划' },
+  { key: 'checkins', label: '数量点验' },
+];
 /**
  * 对话与执行页共用的本机活动资料导出；会话需求尚未完整接入。
  * 调用方负责给出「还是不是当前活动」的判断，导出前后各核对一次。
@@ -252,13 +259,13 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
     }
   }
   const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
-  const [view, setView] = useState<'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'>(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials'));
+  const [view, setView] = useState<'review' | 'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'>(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials'));
   useEffect(() => { setView(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials')); }, [deliveryViewRequest, layout.id, operationsAvailable]);
   // 物料、备份落在「内部资料」里。外部点进来时把这扇门掀开，否则落点在关着的门后面。
   const insideTools = deliveryViewRequest?.view === 'materials' || deliveryViewRequest?.view === 'backup';
   const [toolsOpen, setToolsOpen] = useState(insideTools);
   useEffect(() => { if (insideTools) setToolsOpen(true); }, [deliveryViewRequest, insideTools]);
-  function showTool(next: 'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'): void {
+  function showTool(next: 'review' | 'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'): void {
     setToolsOpen(true);
     setView(next);
   }
@@ -282,6 +289,11 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       return { items: layout.floors.flatMap(floor => floor.items).filter(item => ids.has(item.id)), materials: deliveryMaterials(layout), error: '' };
     } catch (error) { return { items: [], materials: [], error: error instanceof Error ? error.message : '当前场景暂不能交付。' }; }
   }, [layout]);
+  // 核对段：只读聚合本机台账缺口，不产生新记录、不改状态。
+  const reviewSummary = useMemo(
+    () => summarizeDeliveryGaps({ layout, checkins: localCheckins?.ledger }),
+    [layout, localCheckins?.ledger],
+  );
   const requestedCloud = typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('project') === layout.id;
   const cloudBound = !checkinLocal && !!layout.id && (cloud.project?.id === layout.id || requestedCloud);
   const editable = !cloudBound && !!onUpdateItem;
@@ -542,6 +554,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       </summary>
       <div className="dl-row-body">
       <div className="sc-execution-tabs" role="tablist" aria-label="执行内容">
+      <button type="button" className="dl-chip" role="tab" id="delivery-review-tab" aria-controls="delivery-review" aria-selected={view === 'review'} onClick={() => showTool('review')}>核对{reviewSummary.total > 0 ? `（${reviewSummary.total}）` : ''}</button>
       <button type="button" className="dl-chip" role="tab" id="delivery-operations-tab" aria-controls="delivery-operations" aria-selected={view === 'operations'} onClick={() => showTool('operations')}>活动安排</button>
       <button type="button" className="dl-chip" role="tab" id="delivery-materials-tab" aria-controls="delivery-materials" aria-selected={view === 'materials'} onClick={() => showTool('materials')}>物料工作单</button>
       <button type="button" className="dl-chip" role="tab" id="delivery-production-tab" aria-controls="delivery-production" aria-selected={view === 'production'} onClick={() => showTool('production')}>制作计划</button>
@@ -550,6 +563,31 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       {backupActions && <button type="button" className="dl-chip" role="tab" id="delivery-backup-tab" aria-controls="delivery-backup" aria-selected={view === 'backup'} onClick={() => showTool('backup')}>本机备份</button>}
       </div>
       {view === 'operations' && <p className="dl-tools-foot">活动安排随当前场景保存在此浏览器。</p>}
+    <div role="tabpanel" id="delivery-review" aria-labelledby="delivery-review-tab" hidden={view !== 'review'}>
+      <p className="sc-note">以下只读汇总本机活动任务、工作单、制作计划与点验里尚未闭环的缺口；补齐请回到对应表单。列出缺口不等于现场安全或完成验收。</p>
+      {reviewSummary.total === 0 ? (
+        <p className="sc-note">当前台账暂无待核对缺口；仍需对照现场条件与对话需求逐项确认。</p>
+      ) : REVIEW_GROUPS.map(group => {
+        const gaps = reviewSummary.gaps.filter(entry => entry.group === group.key);
+        if (!gaps.length) return null;
+        return (
+          <section key={group.key} className="dl-review-group" aria-label={group.label}>
+            <h3>{group.label} · {gaps.length}</h3>
+            <ul className="dl-review-list">
+              {gaps.map(gap => (
+                <li key={gap.id} className="dl-review-item">
+                  <div className="dl-review-head">
+                    <span className="dl-review-title">{gap.title}</span>
+                    {gap.objectId && onLocate && <button type="button" className="sc-button" onClick={() => onLocate(gap.objectId as string)}>定位物件</button>}
+                  </div>
+                  <ul className="dl-review-details">{gap.details.map(detail => <li key={detail}>{detail}</li>)}</ul>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
     <div role="tabpanel" id="delivery-production" aria-labelledby="delivery-production-tab" hidden={view !== 'production'}>
       <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy||checkinsUnavailable} onExport={()=>void download('production')}/>
     </div>

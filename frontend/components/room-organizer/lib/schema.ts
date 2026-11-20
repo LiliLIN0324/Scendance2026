@@ -391,7 +391,10 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
     if (!isPlainObject(book) || typeof book.activeId !== 'string' || !Array.isArray(book.variants) || book.variants.length > 20 ||
       !book.variants.every(variant => isPlainObject(variant) && typeof variant.id === 'string' && variant.id.length <= MAX_ID_LENGTH &&
         typeof variant.name === 'string' && variant.name.length <= MAX_NAME_LENGTH && isPlainObject(variant.layout) &&
-        variant.layout.designBook === undefined && variant.layout.eventProfile === undefined && isRoomLayout(variant.layout)) ||
+        variant.layout.designBook === undefined && variant.layout.eventProfile === undefined && isRoomLayout(variant.layout) &&
+        (variant.origin === undefined || variant.origin === 'ai' || variant.origin === 'manual') &&
+        (variant.savedAt === undefined || typeof variant.savedAt === 'string') &&
+        (variant.note === undefined || typeof variant.note === 'string')) ||
       !book.variants.some(variant => variant.id === book.activeId) || new Set(book.variants.map(variant => variant.id)).size !== book.variants.length) return false;
   }
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
@@ -903,7 +906,12 @@ function repairLayout(layout: RoomLayout): RoomLayout {
   };
   if (layout.id !== undefined) patch.id = capText(layout.id, MAX_ID_LENGTH);
   if (layout.itemLayers) patch.itemLayers = layout.itemLayers.map(({ id, name, itemIds }) => ({ id, name, itemIds: [...new Set(itemIds)] }));
-  if (layout.designBook) patch.designBook = { activeId: layout.designBook.activeId, variants: layout.designBook.variants.map(({ id, name, layout: snapshot }) => ({ id, name, layout: withUniqueIds(repairLayout(snapshot)) })) };
+  if (layout.designBook) patch.designBook = { activeId: layout.designBook.activeId, variants: layout.designBook.variants.map(({ id, name, layout: snapshot, origin, savedAt, note }) => ({
+    id, name, layout: withUniqueIds(repairLayout(snapshot)),
+    ...(origin === 'ai' || origin === 'manual' ? { origin } : {}),
+    ...(typeof savedAt === 'string' && savedAt.length > 0 ? { savedAt: capText(savedAt, MAX_ID_LENGTH) } : {}),
+    ...(typeof note === 'string' && note.trim().length > 0 ? { note: capText(note, MAX_NAME_LENGTH) } : {}),
+  })) };
   if (layout.roof) patch.roof = repairRoof(layout.roof);
   if (layout.terrain) patch.terrain = pick(layout.terrain, TERRAIN_KEYS);
   if (layout.entrance) patch.entrance = pick(layout.entrance, ENTRANCE_KEYS);
