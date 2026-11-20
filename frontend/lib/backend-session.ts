@@ -6,6 +6,7 @@ import { assertFreshProposal, createSceneClient, SceneApiError, type EditorState
 import { activityTaskRunRequestSchema, type ActivityTaskRun, type ActivityTaskRunRequest } from "../../supabase/functions/_shared/activity-task-contract";
 import { agentRunRequestSchema, agentRunSchema, type AgentRun, type AgentRunRequest } from "../../supabase/functions/_shared/agent-contract";
 import {parseAgentRunEvents,type AgentRunEventPage} from './agent-run-events';
+import { noteServerCall } from './conversation-turn-activity';
 import { resolvedMaterialSuggestionSchema, type MaterialSuggestion } from "../../supabase/functions/_shared/agent-material-contract";
 import { materialVariantProposalRequestSchema } from "../../supabase/functions/_shared/asset-customization-contract";
 import { briefExtractRequestSchema, briefExtractResponseSchema, briefConversationRequestSchema, briefConversationResponseSchema, parseBriefConversation, type BriefExtractResponse, type BriefConversationResponse } from "../../supabase/functions/_shared/brief-extract-contract";
@@ -696,7 +697,7 @@ export class BackendSession {
     };
   }
   private async request<T>(path: string, method = "GET", body?: unknown, scope = this.captureRequestScope(), blocksWrites: boolean | "business" = true, geometry?: GeometryPreparation, transport?: (beforeDispatch:()=>void) => Promise<T>,requestCurrent?:()=>boolean, suppressProjectFailure = false): Promise<T> {
-    if(method.toUpperCase()!=='GET')this.assertCanvasProjectMatch();
+    if(method.toUpperCase()!=='GET'){this.assertCanvasProjectMatch();noteServerCall();}
     const epoch = this.epoch,scopeEpoch=this.dispatchScopeEpoch,actor=this.snapshot.user?.id;
     const beforeDispatch=()=>{
       if(epoch!==this.epoch||scopeEpoch!==this.dispatchScopeEpoch||this.snapshot.user?.id!==actor||!this.isCurrentRequestScope(scope)||geometry&&!geometry.current()||requestCurrent&&!requestCurrent())throw new SceneApiError('SESSION_CHANGED',409,null);
@@ -1840,6 +1841,7 @@ export class BackendSession {
   /** 简报槽位提取：只读、不占租约，模型 key 在 Supabase secrets，浏览器不接触。未启用返回 enabled:false。 */
   async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId, model?: string | null, trace?: { turnKey: string; sessionId: string; turnIndex: number }): Promise<BriefExtractResponse> {
     const input = briefExtractRequestSchema.parse({ message, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(trace ? { trace } : {}) });
+    noteServerCall();
     const dispatch=this.scopedDispatchGuard(false);
     const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch,true);
     dispatch();return briefExtractResponseSchema.parse(result);
@@ -1849,6 +1851,7 @@ export class BackendSession {
     const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history,...(provider?{provider}:{}),...(model?{model}:{}),...(trace?{trace}:{})});
     const client=this.conversationClient();
     if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
+    noteServerCall();
     const dispatch=this.scopedDispatchGuard(false);
     const response=await client.request('/brief/extract','POST',input,false,signal,dispatch,true);
     dispatch();
@@ -1876,6 +1879,7 @@ export class BackendSession {
     const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}), ...(images?.length ? { images } : {}), ...(trace ? { trace } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
+    noteServerCall();
     const dispatch=this.scopedDispatchGuard(false);
     const result=await client.request('/assistant/chat', 'POST', input, false, signal,dispatch,true);
     dispatch();return assistantChatResponseSchema.parse(result);
@@ -1890,6 +1894,7 @@ export class BackendSession {
     const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}), ...(images?.length ? { images } : {}), ...(trace ? { trace } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
+    noteServerCall();
     const dispatch=this.scopedDispatchGuard(false);
     try{
       const result=await client.streamAssistantChat(input,text=>{dispatch();onDelta(text);},signal,responseMode?'thought':'delta');

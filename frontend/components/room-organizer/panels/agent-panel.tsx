@@ -37,6 +37,7 @@ import { AgentTaskExamples } from '@/components/agent-task-examples';
 import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
 import { conversationTurnKey, recordConversationTurn, type ConversationTraceTransport } from '../lib/conversation-recorder';
+import { turnHadServerCall } from '@/lib/conversation-turn-activity';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
 import { toolTraceRows } from '../lib/tool-trace';
@@ -1049,8 +1050,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     // S4 A 档：副作用从 setBubbles updater 体内剥出到 say 函数体，避免渲染期双跑落盘/emit。
     const text = foldConflictBubble(bubble.text);
+    // 只有这一轮确实没打后端时才补记：后端调用过的轮次由服务端自己落库，避免重复。
     const localTurn = localTurnRef.current;
-    if (localTurn && bubble.role === 'agent' && text.trim()) {
+    if (localTurn && bubble.role === 'agent' && text.trim() && !turnHadServerCall(localTurn.startedAt)) {
       recordConversationTurn(studioRef.current?.controller as unknown as ConversationTraceTransport | undefined, {
         turnKey: localTurn.turnKey, sessionId: localTurn.sessionId, turnIndex: localTurn.turnIndex,
         surface: 'local_command', userText: localTurn.userText, assistantText: text,
@@ -3202,7 +3204,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // The single visible outdoor workbench dispatches through the contextual domain workflow.
     // Legacy layout/keyword planners remain only for legacy integrations without the atomic plan bridge.
     if(!queued&&callbacks.workbenchMode==='layout'&&routeBridgeRef.current?.applyPlan){
-      localTurnRef.current=null;
+      // 保留留痕锚点：这条路径可能由本地规则作答（例如场地没匹配上），不发请求也要能补记。
+      // 真的调了模型的轮次由 noteServerCall 打标，say 里不会再重复记。
       const [previousRequest, previousReply] = chatUserHistory(bubblesRef.current.slice(-2), trimmed);
       const clarification = previousRequest?.role === 'user' && previousReply?.role === 'assistant'
         ? { request: previousRequest.text, question: previousReply.text }
