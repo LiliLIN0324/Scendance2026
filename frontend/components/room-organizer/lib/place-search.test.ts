@@ -85,6 +85,26 @@ describe('searchPlaces', () => {
     expect((await searchPlaces('平湖秋月', { fetchImpl: amapBroken, local: true })).map(p => p.id)).toEqual(['poi-1', 'poi-2']);
   });
 
+  it('本机软汇合：天地图挂起（请求永不返回）不再拖死高德，软窗口后高德结果照常出', async () => {
+    // 复现 2026-11-20 线上卡点：天地图上游间歇挂起（单请求可挂 56s），
+    // 旧实现 allSettled 等裸 fetch、body 在结算后才读，20s 超时连带中止已成功的
+    // 高德响应体，两个源全空、下拉永远空。现在 body 在各自源内读完 + 6s 软汇合。
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(async (...args: unknown[]) => {
+        if (String(args[0]).includes('/amap-place')) return jsonResponse(PLACES);
+        return new Promise<never>(() => {}); // 天地图挂起：永不 resolve
+      });
+      const pending = searchPlaces('平湖秋月', { fetchImpl, local: true });
+      await vi.advanceTimersByTimeAsync(6500);
+      expect((await pending).map(p => p.id)).toEqual(['poi-1', 'poi-2']);
+      // 慢源被丢后不再补发第二趟（快源已有结果，failed=false 不触发重试）
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('关键词太短/太长不发请求', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(PLACES));
     expect(await searchPlaces('西', { fetchImpl })).toEqual([]);
