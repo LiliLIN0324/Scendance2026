@@ -317,7 +317,7 @@ function seatRequirement(layout: RoomLayout | undefined, floorIndex: number, mem
     if (memory.allGuestsSeated === false) return { blocked: null, warning: `已说明不要求人人入座。${allocationNote}` };
     if (!Number.isSafeInteger(memory.headcount) || !memory.headcount || memory.headcount < 1) return { blocked: null, warning: `人数尚未确认。${allocationNote}` };
     const seats=countSingleSeats(layout,floorIndex),target=memory.headcountMode === 'must' ? `${memory.headcount} 人` : `约 ${memory.headcount} 人`;
-    if (seats === null) return { blocked: null, warning: `按 ${target} 规划课桌椅，候选场地或楼层信息不完整，座席数量还差数据。${allocationNote}` };
+    if (seats === null) return { blocked: null, warning: `按 ${target} 课桌椅先排不了，场地信息不全。${allocationNote}` };
     const remaining=seats < memory.headcount ? `是否满足 ${target} 的座席需求还没核对。` : '单人椅数量已达到规划人数。';
     return { blocked: null, warning: `按 ${target} 规划课桌椅，当前仅识别到 ${seats} 把单人椅。${remaining}其他家具和课桌没有算在内。${allocationNote}` };
   }
@@ -1323,7 +1323,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', review: true, text: `${issue.title}。${issue.detail}`, action: { label: `按这条改：${issue.fix!.label}`, run: () => applyReviewFix(issue) } });
     }
     const rest = actionable.length - Math.min(3, actionable.length);
-    if (rest > 0) say({ role: 'agent', review: true, amber: true, text: `还有 ${rest} 条没展开：先把上面这几条改了，再说一句「看看哪里有问题」，我接着看。` });
+    if (rest > 0) say({ role: 'agent', review: true, amber: true, text: `还有 ${rest} 条没展开。先改上面几条，再问我一次。` });
   }
 
   /** S2-2：审校台「发送钉评链接」。生成 /review/#layout= 链接并由气泡回链，甲方钉评与回执沿既有 share-pins/review-return 回到审校台。 */
@@ -1453,7 +1453,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     const placed = plan.accepted[0]?.placed ?? 0;
     if (!placed) {
-      say({ role: 'agent', amber: true, text: `画布上没有能放下${request.name}的空位（${request.count} 件都没放下）。先收几件，或者说「换一版」留出空地，我再加。` });
+      say({ role: 'agent', amber: true, text: `画布上没有能放下${request.name}的空位（${request.count} 件都没放下）。先收几件，或换一版留空地。` });
       return;
     }
     if (!pending) {proposalBase.current = structuredClone(live.current);proposalFloor.current=floorToken;}
@@ -1593,7 +1593,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const dims = suggestDimsFromImageRatio(pixels.width, pixels.height, stated ?? live.current.width * live.current.height);
     setLengthRaw(String(dims.length)); setWidthRaw(String(dims.width)); setDimsTouched(true);
     setScaleOrigin('plan');
-    say({ role: 'agent', text: `${stated !== null ? `按图纸比例和你说的 ${formatArea(stated)} ㎡` : '按图纸比例'}估的 ${formatArea(dims.length)} × ${formatArea(dims.width)} m，先按它出一版。这是估的：不对就再说一句长宽。` });
+    say({ role: 'agent', text: `${stated !== null ? `按图纸比例和你说的 ${formatArea(stated)} ㎡` : '按图纸比例'}估的 ${formatArea(dims.length)} × ${formatArea(dims.width)} m，先按它出一版。不对就再说长宽。` });
     return { length: dims.length, width: dims.width, origin: 'plan' };
   }
 
@@ -1756,7 +1756,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     } catch { /* 静默降级 */ }
     if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
     const bridge = routeBridgeRef.current;
-    if (pickBase !== JSON.stringify(bridge?.getPlan())) { setVenuePick(null); setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间规划发生变化，未更换场地，请重新确认', steps: [] }); return; }
+    if (pickBase !== JSON.stringify(bridge?.getPlan())) { setVenuePick(null); setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间规划变了，场地没换。', steps: [] }); return; }
     const anchor = { lng: place.lng, lat: place.lat, crs: 'gcj-02' as const, source: 'lookup' as const };
     const boundary = polygon ? trueFootprintBoundary(polygon.map(([lng, lat]) => ({ lng, lat })), anchor) : null;
     setVenuePick(null);
@@ -1772,12 +1772,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         range = await proposeAutomaticVenueRange({ plan: bridge.getPlan()!, anchor, name: place.name, footprint: boundary, signal: controller.signal });
       } catch (error) {
         if (controller.signal.aborted || !currentOutdoorTask(epoch, 'venue')) return;
-        setOutdoorTask({ intent: '自动场地范围', state: 'blocked', action: error instanceof Error ? error.message : '本次未能提出范围，原方案保留，可重新选择地点', steps: [] });
+        setOutdoorTask({ intent: '自动场地范围', state: 'blocked', action: error instanceof Error ? error.message : '这次没圈出范围，原方案还在。', steps: [] });
         return;
       }
       if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
       if (pickBase !== JSON.stringify(bridge.getPlan())) {
-        setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间方案已变化，未应用旧范围，请重新选择地点', steps: [] }); return;
+        setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '方案变了，旧范围没用上。', steps: [] }); return;
       }
       outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis);
       // 2026-11-20 用户拍板：范围来源不用念给用户，只留下一步能做什么。
@@ -1793,8 +1793,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     if (bridge.applyVenue(anchor, boundary)) {
       setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'done', action: '真实边界与锚点已写入，2D/3D 同步', steps: ['地点已确认', '取得真实边界', '应用场地'], prompts: ['排一下流线'] });
-      say({ role: 'agent', text: `已在户外规划设为「${place.name}」，边界来源：${source === 'osm' ? 'OSM 占地轮廓' : '行政区选区'}。2D/3D 共用这份规划，可撤销，未清除任何已有内容。` });
-    } else setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '已有规划不能直接换地理锚点，或画布暂不可写。本次未更改，请先新建户外活动', steps: [] });
+      say({ role: 'agent', text: `已在户外规划设为「${place.name}」，边界来源：${source === 'osm' ? 'OSM 占地轮廓' : '行政区选区'}。2D/3D 共用这份规划，可撤销。` });
+    } else setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '已有规划不能直接换锚点。先新建户外活动。', steps: [] });
 
   }
 
@@ -1819,7 +1819,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const { roads } = await fetchRoadNetwork(center, spanM, { signal: controller.signal });
       if (!currentOutdoorTask(epoch, 'route') || controller.signal.aborted || outdoorRequestRef.current !== controller) return;
       if (JSON.stringify(routeBridgeRef.current?.getPlan()) !== base) {
-        setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '读取期间场地发生变化，旧结果已丢弃，请重新生成', steps: [], prompts: ['排一下流线'] });
+        setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '场地变了，旧结果作废。', steps: [], prompts: ['排一下流线'] });
         return;
       }
       const proposal = buildRouteProposal({
@@ -1852,7 +1852,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!proposal || !ticket || ticket.proposal !== proposal || !currentOutdoorTask(ticket.epoch, 'route')) return;
     if (routeProposalBaseRef.current !== JSON.stringify(routeBridgeRef.current?.getPlan())) {
       setRouteProposal(null);
-      setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '场地/内容已变化，旧提案已失效，请重新生成', steps: [], prompts: ['排一下流线'] });
+      setOutdoorTask({ intent: '安排流线和出入口', state: 'blocked', action: '场地变了，旧提案作废。', steps: [], prompts: ['排一下流线'] });
       return;
     }
     const ok = routeBridgeRef.current?.applyRoutes(proposal.routes, proposal.nodes) ?? false;
@@ -1889,12 +1889,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         const event = memory.event ?? null;
         const redirect = isShorelineEvent(event)
           ? '沿岸类的沿真实水岸线排。说一句「就沿着水岸线」，我出钓位预览。'
-          : `「${event ?? '这个活动'}」这版没有现成排布模板（${outdoorEventTemplatesSummary()}）。在对话里直接说分区和物料（例如「室外展览区加 20 个摊位」），我按需求排，不套假模板。`;
+          : `「${event ?? '这个活动'}」这版没有现成排布模板（${outdoorEventTemplatesSummary()}）。直接说分区和物料，我按需求排。`;
         setOutdoorTask({ intent: `${memory.headcount ?? ''} 人${event ?? '活动'}`, state: 'blocked', action: redirect, steps: ['核对活动类型'], prompts: isShorelineEvent(event) ? ['就沿着水岸线'] : ['室外展览区加 20 个摊位'] });
         say({ role: 'agent', amber: true, text: redirect });
         return;
       }
-      if (!confirmedOutdoorEntrances(plan.nodes, plan.boundary).length) { setOutdoorTask({ intent: '按活动需求安排区域', state: 'blocked', action: plan.nodes.length ? '现有节点不在当前真实边界内，或只是出口/活动子口。请把真实入口放在边界上或内部，再按当前场地重试' : '先确认真实场地入口，才能安排签到、观众方向与接驳', steps: ['记录活动类型与人数'], prompts: [`按当前场地重新安排${memory.headcount ?? ''}人${memory.event ?? '活动'}`, '排一下流线'] }); return; }
+      if (!confirmedOutdoorEntrances(plan.nodes, plan.boundary).length) { setOutdoorTask({ intent: '按活动需求安排区域', state: 'blocked', action: plan.nodes.length ? '这个节点不在边界上，先放好入口再试。' : '先确认真实场地入口，才能安排签到、观众方向与接驳', steps: ['记录活动类型与人数'], prompts: [`按当前场地重新安排${memory.headcount ?? ''}人${memory.event ?? '活动'}`, '排一下流线'] }); return; }
       const siteSummary = outdoorEventSiteSummary({ boundary: plan.boundary, nodes: plan.nodes, existingFacilities: plan.facilities, existingRoutes: plan.routes });
       const proposal = buildZoneEventProposal({
         boundary: plan.boundary,
@@ -1926,13 +1926,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const ticket = zoneTicketRef.current;
     if (!proposal || !ticket || ticket.proposal !== proposal || !currentOutdoorTask(ticket.epoch, 'zone')) return;
     if (zoneProposalBaseRef.current !== JSON.stringify(routeBridgeRef.current?.getPlan())) {
-      setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'blocked', action: '场地/内容已变化，旧提案已失效，请重新生成', steps: [] }); return;
+      setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'blocked', action: '场地变了，旧提案作废。', steps: [] }); return;
     }
     // 双击/重放只写一次：同一个 epoch + 基准版本已经有票就不再写。
     if (!zoneApplyOnceRef.current.take(applyTicketKey(String(ticket.epoch), zoneProposalBaseRef.current))) return;
     const ok = routeBridgeRef.current?.applyZoneProposal(proposal.zones, proposal.facilities, proposal.routes, proposal.nodes) ?? false;
     if (ok) { zoneTicketRef.current = null; zoneProposalBaseRef.current = null; setZoneProposal(null); setOutdoorTask({ intent: '活动分区与物料', state: 'done', action: '已应用。选设施可切模型/生成/上传。选区域可编辑事件', steps: ['区域物料预览', '用户确认', '写入同一份户外规划'], focusFacilityId: (proposal.facilities.find(f => f.name.includes('舞台')) ?? proposal.facilities[0])?.id, prompts: ['补子出入口', '开始模拟'] }); }
-    if (ok) say({ role: 'agent', decision: 'approved', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料——虚线变实线了，Ctrl+Z 可整批撤销。要改某个区的事件，选中分区在属性卡里改。` });
+    if (ok) say({ role: 'agent', decision: 'approved', text: `已应用 ${proposal.summary.zones} 个区域和 ${proposal.summary.facilities} 件物料，虚线变实线了。要改分区事件，选中分区再改。` });
     else say({ role: 'agent', amber: true, text: '先打开户外规划，提案留着。' });
   }
 
@@ -1985,7 +1985,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setRouteProposal(null); setZoneProposal(null);
     setFlowSimActive(true);
     setOutdoorTask({ intent: '查看流动示意', state: 'working', stopLabel: '停止模拟', action: '流动示意已开启，只看走向。', steps: ['读取已应用流线', '启动真实画布动画'] });
-    say({ role: 'agent', text: `流动模拟开始了：${plan.routes.length} 条流线上的小点就是人流/车流，线色深浅=密度。这是预览动画，不写入方案。说「停止模拟」结束。` });
+    say({ role: 'agent', text: `流动模拟开始了：${plan.routes.length} 条流线上的小点就是人流，线越深越密。这只是预览，不写入方案。` });
   }
 
   function stopFlowSim(): void {
@@ -2049,7 +2049,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         ? '。已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围'
         : pick.satelliteGround ? '。已开启卫星参考底图'
         : '';
-      say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步可在「空间」查看实景，或重新打开地图选址，按采集单拍摄本场素材。` });
+      say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步去「空间」看实景，或重新选址。` });
       return null;
     } catch (error) {
       const reason = error instanceof Error ? error.message : '地图场地没立起来，再试一次。';
@@ -2107,7 +2107,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       : current?.expired ? '这版已经过期了，重新出一版再看。'
       : current?.stale ? CLOUD_STALE
       : comparisonOnly ? '这版未改变场景，仅供对照。可选择其他方案或重新生成。'
-      : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料：我不改锁着的东西，先解锁或换一版。`
+      : plan.lockedTouched ? `这版动了 ${plan.lockedTouched} 件锁着的物料，先解锁再改。`
       : requirementError ? requirementError
       : seatCheck.blocked ? seatCheck.blocked
       : restCheck.status === 'unknown' ? restCheck.message
@@ -2388,7 +2388,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (previousMemory) { saveMemory(previousMemory); syncMemory(previousMemory); }
       say({ role: 'agent', amber: true, text: message });
     };
-    if (phase === 'generating') { rejectResize('还在出这一版：先停一下，再改场地尺寸。'); return; }
+    if (phase === 'generating') { rejectResize('还在出这一版，先停一下。'); return; }
     const before = live.current;
     const size = `${formatArea(scale.length)} × ${formatArea(scale.width)} m`;
     if (Math.abs(before.width - scale.length) < 1e-6 && Math.abs(before.height - scale.width) < 1e-6) {
@@ -2412,7 +2412,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       rejectResize('这个场地是导入或生成的复杂结构，不能只改外框。要换尺寸得先重新立一块矩形空地。');
       return;
     }
-    if(hasInvalidRetainedZones(venue.layout)){rejectResize('现有区域超出新场地范围或坐标不完整，场地没有更改。请先调整区域，再修改尺寸。');return;}
+    if(hasInvalidRetainedZones(venue.layout)){rejectResize('区域超出新场地，先调整区域。');return;}
     const survivingItems = new Set(venue.layout.floors.flatMap(floor => floor.items.map(item => item.id)));
     const lostItems = before.floors.flatMap(floor => floor.items).filter(item => !isStructuralMarker(item) && !survivingItems.has(item.id));
     const survivingZones = new Set(venue.layout.floors.flatMap(floor => (floor.zones ?? []).map(zone => zone.id)));
@@ -2521,7 +2521,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if(memoryRef.current.layoutModeConfirmed!==true||memoryRef.current.layoutMode!=='desk-chair'||!memoryRef.current.headcount){say({role:'agent',amber:true,text:'先说人数和课桌椅布置，再生成草案。'});setPhase('failed');return;}
     const allocation=memoryRef.current.localSeatingAllocation;
     if(allocation?.status==='shared_desk'&&allocation.peoplePerDesk!==2){
-      say({role:'agent',amber:true,text:`已记下每桌 ${allocation.peoplePerDesk} 人。当前本地一人一桌工具暂不支持这种组团，本次没有生成。可继续探索共桌方案，或明确选择每人一桌。`});setPhase('failed');return;
+      say({role:'agent',amber:true,text:`已记下每桌 ${allocation.peoplePerDesk} 人。本地工具不支持这种组团，没有生成。`});setPhase('failed');return;
     }
     if(allocation?.status==='unknown'){
       say({role:'agent',amber:true,text:'每桌坐几人？没说清就没生成。'});setPhase('failed');return;
@@ -2550,7 +2550,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const choose=waitingFact?.status==='reported'&&waitingFact.valueM!==null&&waitingAxis
         ?`可以说“使用现有${waitingTarget}${axisLabel[waitingAxis]}${waitingFact.valueM}米”，或说“${waitingTarget}按默认规格”。`
         :`请带单位明确选用规格，或说“${waitingTarget}按默认规格”。`;
-      say({role:'agent',amber:true,text:`${missing.length?`${missing.join('、')}尚未明确，请带单位重新说明。`:''}${waiting.length?`${waiting.join('、')}只记录为现有物料线索，尚未选择用于这版方案；${choose}`:''}本次没有按默认规格生成。`});setPhase('failed');return;
+      say({role:'agent',amber:true,text:`${missing.length?`${missing.join('、')}尚未明确，请带单位重新说明。`:''}${waiting.length?`${waiting.join('、')}只当作线索，还没选进这版方案。${choose}`:''}本次没有按默认规格生成。`});setPhase('failed');return;
     }
     const floorToken=captureFloor(activeFloorIndex);if(!floorToken){say({role:'agent',amber:true,text:'当前楼层已变化，请重新核对。'});setPhase('failed');return;}
     try {
@@ -2579,10 +2579,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         ...(routeReview.existing.length?[`原场景已有 ${routeReview.existing.length} 处路线与模型包围占地相交，不归因于本次新增。还没量。`]:[]),
         ...(routeReview.contacts.length?['路线与模型包围占地边缘接触，实际净宽还没量。']:[]),
       ]:[];
-      const doorNotice=markedDoor||annotations.hasDoor?'这次组团净空没算门洞和入口：门位、宽度、开启方向补进图后，下一版一起算。':null;
+      const doorNotice=markedDoor||annotations.hasDoor?'这次没算门洞和入口，补进图后一起算。':null;
       const dimensionLine=(name:string,size:{width:number;depth:number;height:number},facts:SeatingItemFacts|undefined)=>`${name} ${(['width','depth','height'] as const).map(axis=>`${size[axis]}（${facts?.[axis]?.status==='reported'?'用户提供':'假设'}）`).join(' × ')} 米`;
-      const localDraftDetails=[shared?`本机草案：需求 ${result.requested} 人、${requestedTables} 桌。本次排了 ${result.placed} 人、${placedTables} 桌、${result.placed} 把椅子，尚缺 ${result.shortfall} 人。未同步云端，也未确认本机持久化。`:`本机草案：本次排了 ${result.placed} / ${result.requested} 套，尚缺 ${result.shortfall} 套。未同步云端，也未确认本机持久化。`,
-        shared?'每桌 2 人。':allocation?.status==='one_per_desk'?'每人一桌。':'每人一桌：本次探索假设，用户尚未指定，可随时修改。',
+      const localDraftDetails=[shared?`本机草案：需求 ${result.requested} 人、${requestedTables} 桌。本次排了 ${result.placed} 人、${placedTables} 桌、${result.placed} 把椅子，尚缺 ${result.shortfall} 人。还没同步云端。`:`本机草案：本次排了 ${result.placed} / ${result.requested} 套，尚缺 ${result.shortfall} 套。未同步云端，也未确认本机持久化。`,
+        shared?'每桌 2 人。':allocation?.status==='one_per_desk'?'每人一桌。':'每人一桌是这次试排的假设，随时可改。',
         `示意尺寸：${dimensionLine(shared?'双人桌':'单人桌',desk.value,saved?.desk)}。${dimensionLine('椅子',chair.value,saved?.chair)}。`,
         `示意间距：桌椅 0.1 米、${shared?'椅间 0.1 米、':''}列间 0.3 米、排间 0.5 米、距边 0.3 米。这是我取的默认值，要改就说数字。`,
         ...(shared&&result.shortfall?[`${result.limitReason==='object_limit'?'已触及本机场景物件数量上限':result.limitReason==='scan_limit'?'本次搜索达到计算上限':'本次排布未找到更多位置'}，这一版就到这儿。要更多位置就腾地方或换分区。`]:[]),
@@ -2772,8 +2772,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setPhase('ready'); setProgress(GEN_STEPS.length);
     say({ role: 'agent', text: review
       ? `确认了：${moved} 件换了位置，其他没动${skipped ? `；还有 ${skipped} 件没动（锁着或没找到落点）` : ''}。不想要就撤销一步，整体退回原位。`
-      : localExploration ? `已写入本机画布：这一版一共 ${total} 件物料，可撤销。还没同步云端。门、路线和无障碍的实测值补进图后，下一版一起算。`
-      : `写进画布了：这一版一共 ${total} 件物料，都能直接拖。不想要就撤销一步，整体退回来。` });
+      : localExploration ? `已写入本机画布：这一版一共 ${total} 件物料，可撤销。门和路线的实测值补进图后再算。`
+      : `写进画布了：这一版一共 ${total} 件物料，可以直接拖。不想要就撤销。` });
     if (styleHistoryFailed) say({ role: 'agent', amber: true, text: '布置已应用，但风格历史未能保存。' });
     callbacks.onFit();
   }
@@ -2811,7 +2811,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     clearFulfilledChip(previewUtterance.current);
     setPhase('ready'); setProgress(GEN_STEPS.length);
-    say({ role: 'agent', amber: !!current.notice, text: `写进画布了，物料都能直接拖。不想要就撤销一步，整体退回来。${current.notice ? ` ${current.notice}。` : ''}` });
+    say({ role: 'agent', amber: !!current.notice, text: `写进画布了，可以直接拖。${current.notice ? ` ${current.notice}。` : ''}` });
     callbacks.onFit();
   }, [studio?.preview, studio?.busy, studio?.applyRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2831,7 +2831,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     dropProposal(); discardCloudPreview();
     setPhase('idle'); setProgress(0);
     say({ role: 'agent', text: review
-      ? '撤了：预览收回，物件都还在原位。想再体检就说一句「看看哪里有问题」。'
+      ? '预览收回，物件还在原位。'
       : `撤了，物料没动${cloud ? '，云端那一版也作废了' : ''}。想再看一版就说「换一版」。` });
   }
 
@@ -2853,7 +2853,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     setProgress(GEN_STEPS.length); setPhase('proposed');
     say({ role: 'agent', amber: !!view.blocked, text: view.blocked
       ? `云端给了一版，结果明细在下面。${view.blocked}`
-      : '云端给了一版，结果明细在下面。画布上是预览，还没落盘，点「确认布置」才写进画布。' });
+      : '这版还是预览，点「确认布置」才写入。' });
     return true;
   }
 
@@ -3352,7 +3352,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         const requirement=captureOriginalPreservation(layoutStore.getState().layout,trimmed,keepOriginals.keepPositions);
         if(!requirement){say({role:'agent',amber:true,text:'活动还没核对，先保存并重说要求。'});return;}
         saveMemory({...memoryRef.current,originalPreservation:requirement});syncMemory(memoryRef.current);
-        say({role:'agent',text:keepOriginals.keepPositions?'已记录：保留当前原有物件，且位置和方向不变。':'已记录：保留当前原有物件，不删除。是否移动仍按你的后续要求处理。'});
+        say({role:'agent',text:keepOriginals.keepPositions?'已记下，原有物件位置不动。':'已记下，原有物件不删。'});
       }else{
         const {originalPreservation:_removed,...rest}=memoryRef.current;
         saveMemory(rest);syncMemory(memoryRef.current);
@@ -3803,7 +3803,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
                       layoutStore.getState().revision !== proposalLayoutRevision || memoryRevision.current !== proposalMemoryRevision ||
                       proposalFloorIndex !== floorIndexRef.current || proposalSessionId !== boundSessionId.current ||
                       proposalLayout.id !== live.current.id || !sameLayoutContent(proposalLayout, live.current)) {
-                    say({ role: 'agent', amber: true, text: '场地或需求已变化，这条区域建议过期了，再说一次。' });
+                    say({ role: 'agent', amber: true, text: '场地变了，这条建议过期了。' });
                     return;
                   }
                   const zones = extractProposedZoneTypes(turn.text).filter((zone) => (zone !== 'checkin' && zone !== 'rest') || memoryRef.current.zoneNeeds[zone] !== false);
@@ -4228,7 +4228,7 @@ export function VenuePickerOverlay(): JSX.Element | null {
   return <div className="sc-venue-overlay" ref={panel} role="dialog" aria-modal="true" aria-label="换场地 / 新建" tabIndex={-1}>
     <div className="sc-map-head">
       <strong>换场地 / 新建</strong>
-      <span className="sc-note">空白选址进 2D 规划后再画边界；云项目同标签打开，进度都在。</span>
+      <span className="sc-note">空白选址先进 2D 规划，再画边界。</span>
       <button type="button" className="sc-button" aria-label="关闭" data-tip="关闭" title="关闭" onClick={agent.closeVenuePicker}><X size={16} aria-hidden="true"/></button>
     </div>
     <VenuePicker onClose={agent.closeVenuePicker} />
@@ -4657,7 +4657,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const ghostVisible = !agent.outdoorBridgeReady && !loginBlocked && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
   const composerPlaceholder = loginBlocked && !loginLocalCommand ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
-    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对其中本次可用的活动范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区2名保安、表演区3名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
+    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对可用范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区 2 名保安，表演区 3 名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : placePending ? '先说地点：城市、场馆或地址'
     : generating ? '为下一步添加备注'
@@ -4880,7 +4880,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           <button type="button" className="btn-primary" disabled={agent.unresolvedDialogue.length>0 || agent.understanding || agent.generationQueued>0} onClick={agent.reviewDialogueHistory}>按当前记录重新开始</button>
         </section>}
         {agent.retainedOtherSessionProposal && <section className="ap-intercept-row" aria-label="其他会话的旧方案">
-          <p className="ap-blocked-note">其他会话有未确认的旧方案；先撤回才能继续。</p>
+          <p className="ap-blocked-note">别的会话有没确认的方案，先撤回。</p>
           <div className="ap-blocked-actions">
             <button type="button" className="chip" onClick={agent.withdrawRetainedOtherSessionProposal}>撤回其他会话旧方案</button>
           </div>
@@ -4929,7 +4929,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
             卡上的「停一下/接着摆/不要了」成了重复入口。 */}
         {agent.state === 'generateFailed' && <section id="inline-error" className="ap-card ap-error-card" role="alert">
           <span className="ap-error-stamp"><TriangleAlert size={12} aria-hidden="true"/>未完成</span>
-          <p className="ap-error-summary">这次未完成，原场景未自动应用。请先查看任务状态或提示，再决定下一步。</p>
+          <p className="ap-error-summary">这次没完成，画布没动。</p>
           <div className="ap-error-actions">
             <button type="button" className="chip" onClick={agent.retry}><RotateCw size={14} aria-hidden="true"/>重试</button>
             <button type="button" className="chip btn-outline" onClick={() => { const input = document.getElementById('ap-input'); input?.focus(); }}>改一句再说</button>
@@ -4974,7 +4974,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
               <div className="ap-stat"><b>{formatArea(venueArea(layout))}</b><span>㎡ 场地</span></div>
               <div className="ap-stat"><b>{items}</b><span>件物料</span></div>
             </div>
-            {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">当前检查未发现物料重叠；场地和通行仍需核对。</p>}
+            {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">没发现物料重叠，场地还要核对。</p>}
             <div className="ap-chips">
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
@@ -4989,14 +4989,14 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         <strong>导出执行资料草案</strong>
         <p className="ap-blocked-note">{agent.outdoorBridgeReady?'只是候选，还没发送。':'包含手工需求和物料单。'}</p>
         {agent.proposal || !!studio?.preview || !!agent.outdoorWorkflow.proposal
-          ? <p className="ap-blocked-note" role="status">当前有尚未应用的方案预览；请先确认布置或撤回预览，再导出。</p>
+          ? <p className="ap-blocked-note" role="status">先确认或撤回预览，再导出。</p>
           : generating || paused || agent.outdoorWorkflow.busy || agent.cloudBusy || agent.recovering || agent.cloudStale || !!studio?.applyRecovery
           ? <p className="ap-blocked-note" role="status">这一版还在生成，先别确认。</p>
           : !agent.outdoorBridgeReady && studio?.cloudMaterialDraftAvailable ? <p className="ap-blocked-note">云项目暂不支持此执行资料草案，可先导出下方物料草案。</p>
           : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
         {!agent.outdoorBridgeReady && studio?.cloudMaterialDraftAvailable && !agent.proposal && !studio.preview && !generating && !paused && !agent.cloudBusy && !agent.recovering && !agent.cloudStale && !studio.applyRecovery && <>
           <button type="button" className="chip" onClick={agent.confirmCloudMaterialDraft}>导出当前场景物料清单草案</button>
-          <p className="ap-blocked-note">本机快照，未冻结；不含完整需求、点验及场地方确认。模型与实物库存、现场条件均需核验。</p>
+          <p className="ap-blocked-note">本机快照，不含点验和场地方确认。实物和现场还要核验。</p>
         </>}
         <div className="ap-error-actions">
           <button type="button" className="chip btn-outline" onClick={agent.dismissExport}>先不了</button>
@@ -5055,8 +5055,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         }}/>
         <p className="ap-field-note" id="ap-data-notice">{understandingLine(Boolean(modelEnabled() && studio?.controller))}</p>
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">排队 {agent.generationQueued} 条，按顺序处理中。</p>}
-        {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上一次请求结果未知，服务商可能仍在处理或计费。再次发送可能产生额外费用；刷新或其他页面无法识别本次记录。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
-        {agent.sessionSaveFailed && <p role="status" className="ap-field-note">会话未能保存在本机，当前内容仍在页面中，请先备份。</p>}
+        {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上次结果未知，可能还在计费。再发可能重复收费。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
+        {agent.sessionSaveFailed && <p role="status" className="ap-field-note">本机没存上，内容还在页面上。</p>}
         <div className="ap-panel-row" ref={menuRowRef}>
           {/* 加号：先开浮窗，再从浮窗里选「图片」或「文件」——分开 accept，选完照旧进同一条 stageFile 链路。 */}
           <div className="ap-add-picker">
