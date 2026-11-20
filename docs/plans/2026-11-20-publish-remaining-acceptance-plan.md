@@ -114,7 +114,7 @@ eslint（发布链 6 个文件）              → 0 errors，49 warnings（既�
 | P3 导出反馈 | 待执行 | — |
 | P4 Bingo 语义 | 待执行 | — |
 | P5 客户页一致性 | 待执行 | — |
-| S2 云端链路 | 待执行 | 依赖授权 |
+| S2 云端链路 | 部分完成（真实云端） | V10 通过、V15 局部通过、V12 部分；完整分享 422 `DEPENDENCY_INCOMPLETE` 未覆盖；见 §10 |
 | S3 矩阵回填 | 待执行 | 依赖 P1–P5、S2 |
 
 ## 9. S1 执行记录
@@ -154,3 +154,52 @@ Packaged /introduction, /guide and /showcase in ...\frontend\public\
 2. 开工时 3000 已被 13:52 遗留的旧 dev 实例占用（`next start-server`，父进程已退出，无法取得其 stdout）。对该实例的首次请求返回 `HTTP 500` 且响应体长度为 0，重试即 200。该实例已终止，**无法判定这次 500 是否就是 `clientReferenceManifest`**（无日志、无复现路径），如实记为「未定位的历史状态」；本轮新起的 dev 冷启动与首屏均无此现象。
 3. 首页首次编译 26.4s 属 dev 按需编译（3448 modules），不是启动耗时；到 `Ready` 为 1.967s。
 4. 本轮清理了两个并存 dev（旧 3000、误起的 3001 副本）与它们的父进程，只保留一份 dev + 一份 3199 代理，避免后续 lane 并发抢端口。
+
+## 10. S2 执行记录
+
+日期：2026-11-20。执行者：主控道（S2 串行道）。
+
+**授权口径**：用户本轮确认「没有 QA 项目 id，本人与科智的邮箱账号已提供」。因此没有使用虚构 QA 项目，而是在 **A（用户本人管理员）的个人工作室**新建一个可删的专用 QA 项目；口令与令牌只从既有本机 `.env.local` 读取，命令行不回显、报告与提交不落任何 token。未新建账号、未重置密码、未发登录邮件。
+
+**对象**：`S2 发布验收（主控 2026-11-20，可删）`，projectId `44667a73-6316-439d-b083-f546291b99db`（保留供人工核对，分享已全部撤销）。
+
+**路径与端点**（按 `frontend/lib/backend-session.ts`、`client/scene-client.ts` 现行契约，未改 wire）：`GET /projects/:id` → `POST /projects/:id/publish`（真实返回 201）→ `POST /projects/:id/lease/acquire` → `PUT /projects/:id/scene` → 再次 `publish` → `GET /projects/:id/shares` → `DELETE /projects/:id/shares/:shareId` → `POST /share/read`。
+
+**原始输出（脱敏，脚本 `.tmp/s2-publish-chain.mjs` / `.tmp/s2-ui-check.mjs`）**
+
+```json
+{"name":"V10 新版发布：两个版本各自独立，旧链接仍是原版","status":"passed","original":12,"edited":15,"oldShareWidth":12,"newShareWidth":15}
+{"name":"V12 服务端清单不含链接与令牌，只有版本与撤回态","status":"passed","count":3,"leaks":false}
+{"name":"V12 完整分享令牌只回一次","status":"not-covered","why":"422 DEPENDENCY_INCOMPLETE（需 published 口径归档）"}
+{"name":"V15（局部）撤回只撤指定 shareId，其他版本仍可读","status":"passed","oldLinkStatus":404,"newLinkStatus":200}
+{"oldLinkCode":"SHARE_NOT_FOUND","deleteStatus":200}
+{"name":"收尾","revokedRemaining":2,"newLinkAfterCleanup":404,"rows":[{"revision":0,"revoked":true},{"revision":0,"revoked":true},{"revision":1,"revoked":true}]}
+```
+
+真实浏览器（Playwright Chromium，全新上下文＝另一台设备，生产站）：
+
+```text
+live:    title=幕景 Scendance · 活动布置工作台 | 客户只读方案 | 已发布 · 版本 1 | 15 × 10 米 | 此页包含：三维布置、物料清单与模型来源说明；资料原件与扫描文件不随普通发布公开。 | 物料清单 共 0 件 | pageErrors=[]
+revoked: 暂时无法查看方案 | 分享链接不存在或已撤销，请联系方案发布者。
+```
+
+截图：`.tmp/s2-ui/share-live.png`、`.tmp/s2-ui/share-revoked.png`（不含令牌）。
+
+**结论**
+
+| 用例 | 结论 | 证据 |
+| --- | --- | --- |
+| V10 版本差异、旧链接仍是原版 | **通过（真实云端）** | revision 0→1；两次发布 shareId/publicationId 全不同；旧链接 venue 宽 12（原版）、新链接 15（新版）；客户页显示「已发布 · 版本 1」「15 × 10 米」 |
+| V12 令牌不可恢复、记录以服务端为准 | **部分通过** | `GET /projects/:id/shares` 3 行，无 `token`/`url`/`tokenHash`/`storagePath`；**完整分享** `POST /cloud/projects/:id/shares` 返回 422 `DEPENDENCY_INCOMPLETE`，该半条未覆盖 |
+| V15 撤回只影响这一条 | **通过（局部）** | 撤 rev0 一条后 `SHARE_NOT_FOUND`，同版本另一条与 rev1 仍 200；撤回后页面如实提示「不存在或已撤销」 |
+| 刷新/换设备后仍可管理 | **部分** | 以干净上下文打开链接 + 服务端 shares 清单为准（不依赖本机缓存）；**未走查工作台内的分享记录面板 UI** |
+| 三账号（B/C）与手机 390px | **未覆盖** | 本轮只用 A；B/C 未参与，移动端未测 |
+
+**没验证什么 / 不得外推**
+
+1. 完整分享（`/view/#c…`）的 token 只回一次与重放 `token:null`：422 阻断，未验。此前 11-20 云存储验收的真实 API 证据不能直接搬到本轮发布链。
+2. 「换设备后管理」只做到「服务端清单为准 + 干净上下文可读链接」，没有在第二台设备的界面里实际撤回/核对记录行。
+3. 脚本里的编辑标志正则（`/编辑|在设计|拖动|摆放/`）会命中视图提示文案，属**误报**；「无编辑控件」以截图人工核对为准，不以该布尔为据。
+4. 本轮未跑 typecheck/build/vitest（S2 只做真实链路），未改任何产品代码或 wire 契约。
+
+**收尾与影响**：3 条 QA 分享全部撤销（`newLinkAfterCleanup=404`），租约已释放；QA 项目保留（内含标题、venue 尺寸等测试内容，无真实业务数据），可由用户按需删除。
