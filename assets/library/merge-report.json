@@ -4,11 +4,11 @@
     "websiteLocal": 30,
     "websiteLegacy": 5,
     "model200": 290,
-    "openExtra": 213,
+    "openExtra": 227,
     "iconProps": 220
   },
-  "count": 976,
-  "placeableCount": 975,
+  "count": 990,
+  "placeableCount": 987,
   "registeredCount": 528,
   "replacements": [
     {
@@ -260,6 +260,16 @@
       "slug": "chocolate-making-and-confectionery-choco-0bed56f3-starter-scene",
       "name": "巧克力工坊生产线场景",
       "reason": "完整工坊场景超出单件模型的复杂度限制，请下载后作为场景模板处理。"
+    },
+    {
+      "slug": "aholo-20261119-champagne-glass-tower",
+      "name": "香槟塔",
+      "reason": "候选弱图：透明杯在白底上辨识度不足，待重渲染后替换，暂不可放置。"
+    },
+    {
+      "slug": "aholo-20261119-cold-fountain",
+      "name": "冷焰火筒",
+      "reason": "候选弱图：贴图含待清理的伪标签贴花，待回炉重生成后替换，暂不可放置。"
     }
   ]
 }

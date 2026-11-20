@@ -21,7 +21,9 @@ describe('merged model library', () => {
       expect(createHash('sha256').update(bytes).digest('hex'), model.slug).toBe(model.sha256);
       const preview = await readFile(new URL(model.thumb.replace('/showcase/', ''), root));
       expect(preview.toString('ascii', 8, 12)).toBe('WEBP');
-      if (model.blockedReason) {
+      // 屏蔽分两类：几何超限（reject MODEL_TOO_COMPLEX）与弱图候选（几何合规、
+      // 仅缩略图待替换，前缀「候选弱图」）。后者仍须通过结构/尺寸门禁。
+      if (model.blockedReason && !model.blockedReason.startsWith('候选弱图')) {
         await expect(validateLibraryModel(bytes)).rejects.toThrow('MODEL_TOO_COMPLEX');
       } else {
         const metadata = await validateLibraryModel(bytes);
@@ -76,6 +78,7 @@ describe('merged model library', () => {
       expect(entry, model.slug).toBeDefined();
       expect(entry.sources).toContain('model200');
     }
-    expect(merged.models.filter((m: { blockedReason?: string }) => m.blockedReason)).toHaveLength(1);
+    // 屏蔽件：1 件几何超限（巧克力工坊场景）+ 2 件弱图候选（香槟塔、冷焰火筒）。
+    expect(merged.models.filter((m: { blockedReason?: string }) => m.blockedReason)).toHaveLength(3);
   });
 });

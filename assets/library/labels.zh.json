@@ -3022,5 +3022,61 @@
   "pixel-modern-office-bean-bag-d3c1aa76": {
     "name": "方形布艺懒人沙发",
     "bucket": "seating"
+  },
+  "aholo-20261119-grand-opening-flower-basket": {
+    "name": "开业花篮",
+    "bucket": "decor"
+  },
+  "aholo-20261119-floral-aisle-pillar": {
+    "name": "路引花柱",
+    "bucket": "decor"
+  },
+  "aholo-20261119-table-flower-arrangement": {
+    "name": "桌花摆件",
+    "bucket": "decor"
+  },
+  "aholo-20261119-floral-arch": {
+    "name": "花艺拱门",
+    "bucket": "decor"
+  },
+  "aholo-20261119-champagne-glass-tower": {
+    "name": "香槟塔",
+    "bucket": "decor"
+  },
+  "aholo-20261119-confetti-cannon": {
+    "name": "礼花筒",
+    "bucket": "decor"
+  },
+  "aholo-20261119-photo-frame-booth": {
+    "name": "合影拍照框",
+    "bucket": "decor"
+  },
+  "aholo-20261119-folding-screen-partition": {
+    "name": "折叠屏风",
+    "bucket": "structure"
+  },
+  "aholo-20261119-drapery-swag": {
+    "name": "舞台帷幔",
+    "bucket": "decor"
+  },
+  "aholo-20261119-crystal-chandelier": {
+    "name": "水晶吊灯",
+    "bucket": "lighting"
+  },
+  "aholo-20261119-table-number-card-stand": {
+    "name": "桌牌卡架",
+    "bucket": "signage"
+  },
+  "aholo-20261119-cold-fountain": {
+    "name": "冷焰火筒",
+    "bucket": "stage"
+  },
+  "aholo-20261119-bubble-machine": {
+    "name": "泡泡机",
+    "bucket": "stage"
+  },
+  "aholo-20261119-balloon-cluster": {
+    "name": "气球束",
+    "bucket": "decor"
   }
 }
