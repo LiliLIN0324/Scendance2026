@@ -139,6 +139,37 @@
 - 复核命令：`tsc --noEmit` exit 0；外观 7 + 标注工具 6 + 颜色条 4 + 图标 6 共 23 例通过；ESLint 0 error（material-symbol 一条既有 import/order warning，非本轮引入）。dev WebView 实测：标注卡 bg `rgb(28,31,36)`、文字 `rgb(237,240,242)`、工具条/色条 `rgb(37,40,47)`；选中紫色点 bg `rgb(142,68,173)` 保留原色 + 纸面内圈；线宽钮选中 `rgb(28,31,36)`；截图 `probe-annotate-card-dark-v3.png`、`probe-mode-chip-dark-v3.png`。
 - **仍待真实 Chrome 复核**：主钮浅底上圆环放大镜的笔画粗细；目录库/线上库/历史/高德场地选择器搜索框在暗色下的实绘（本轮未逐个展开这些面板）。
 
+### 2026-11-20 第八 / 九轮：内联样式白表面收尾 + 基线失败归类
+
+- **全量 Vitest 基线归属**（`.tmp-vitest-round8.txt`：34 文件失败 / 524 例失败 / 9790 通过）：
+  - 最大宗 `agent-panel.react.test.tsx`（457 中 427 失败），stderr 反复 `getSnapshot is not a function`；组件与测试相对 HEAD 无改动，父提交 291ef7e5 上测试 mock 的 `controller` 就缺 `getSnapshot/subscribe`，属既有桩级联失败，非外观回归。
+  - 其余错误归类：759 条 `getSnapshot is not a function`、54 条 `el.scrollTo is not a function`（jsdom 缺）、7 条 `discardPreviewForHistoryReview is not a function`，余下 AssertionError 为业务状态机不匹配（`scope` vs `zones`、清单条数、话术文本），与主题无关。
+  - 33 个其余失败文件逐一 grep，无任何文件 import appearance/Appearance/is-theme-dark；外观线代码已入 HEAD 提交 a0252ea5。
+  - 定向测试：`appearance.test.ts` + `cloud-panel` + `share-menu` 共 128 例全通过。
+
+- **第八轮 CSS 补遗**（面板内联浅底 / 低对比文字回暗色 token，CSS 层覆盖，未改 `outdoor-plan-tokens.ts` 常量）：
+  - `workbench-shelf.css`：拖高抓手 `.sc-shelf-grip` 字面 `#fff` 回 `--paper`。
+  - `case-admin.css`：分享弹窗内案例运营表单 field 标签/输入/草稿卡/分隔线/版本文字回暗色。
+  - `commercial-dossier-panel.css`：warn `#fff5e5` / err `#fff5ed` 浅暖底回低透明 tint + `--warn` / `--err` 文字。
+  - `activity-task-suggestion-view.css`：ats-warning / ats-error 同款 tint 覆盖。
+  - `agent-panel.css`：think 状态文字回 `--warn`；历史决策标签 approved/withdrawn/replaced 与详情块回绿调 / 琥珀 / 中性暗底。
+
+- **第九轮内联样式浮层 / 气泡 / 卡片挂类 + 暗色覆盖**（JSX 只加 className 钩子，颜色仍走 CSS `!important`，未改内联常量与业务逻辑）：
+  - `ConfirmModal.tsx`：确认弹层卡片 / 标题栏 / 正文 / 取消钮回 `--paper/--plane/--ink-soft`，确认绿钮保留。
+  - `asset-detail-modal.tsx`：详情弹窗卡片 / 标题栏 / 关闭钮 / 字段块 / 描述块 / 页脚 / 次钮回暗色，放置绿钮保留；预览图占位底回 `--plane`。
+  - `outdoor-plan-interactions.tsx` 导引气泡 `[data-testid=guide-bubble]`：纸面 / 箭头方块 / 正文 / 步进号 / 次钮 / 主钮回暗色。
+  - `f3-coach-bubble.tsx`：F3 教练气泡卡片回暗色纸面，绿底「知道了」保留。
+  - `outdoor-plan-canvas.tsx`：扫描错误浮条 `.sc-scan-error-toast`；画布浮层 `plan-context-menu`（右键实体菜单）、`conflict-detail`（冲突详情卡）、`plan-placement-bar`（放置中浮条 + 「放置中」徽标 + 取消钮 + kbd）、`annotate-note-input`（文本标注输入框）、`facility-model-*` 模型缩略钮、`facility-multi-copy` / `cross-multi-delete` 多选条回暗色。
+  - 工具卡底部 sticky 动作行「生成或导入模型」白底细条回 `--paper`；`.sc-model-action` 三格按钮回 `--plane` / `--hair` / `--ink-soft`（hover/active 回 `--plane-deep`）；设施设置 / 备注手风琴开关顶发丝线与文字回暗色。
+  - `scendance-workspace.tsx`：`.sc-my-items` 标题与「再放一件」chips 回暗色；`.sc-floor-blocked-note` 楼层受限提示回绿调暗底。
+  - `plan-card.tsx`：规划草案卡挂 `.sc-plan-card` 等钩子，整卡 / 阶段块 / 分数条 / 建议块 / 冲突行 / 分区徽标 / 选中版本行 / 次钮 / 取消钮 / 输入框 / 琥珀横幅回暗色 token。
+  - `creative-studio.tsx`：提案卡 `.cr-recipe-badge` 徽标与选中版本钮 `aria-pressed=true` 回绿调暗底。
+
+- **第九轮门禁**：`typecheck` exit 0；`lint` 0 error（2044 条均既有 import/order warning）；定向回归 12 文件 356 例通过，5 例失败与 round8 基线逐条相同（`plan-card` 1、`plan-card-safety` 2、`scene-delivery-panel` 2，业务状态机不匹配，非本轮引入）；`build` 静态导出 exit 0，oneplan 产物扫描违规 0（日志 `.tmp-build-round9.txt`）。
+- **WebView 状态核对**：三档 localStorage 落盘与 body `is-theme-dark` 类一致——light 去 class、dark 挂 class、system 跟随 OS（本机 prefersDark=true）挂 class；本轮新增的 8 组暗色选择器均已进运行时 CSSOM；当前已渲染 chrome 扫描无残留浅白表面（命中的白色仅为 `.sc-rail-eye` 眼睛与图标白色字形，刻意保留）。
+- **仍待真实 Chrome 复核（截图通道本轮不可用）**：BUA WebView 视口塌陷 0×0，`screenshot` 报 `viewport unavailable`、`snapshot` 报 `snapshot failed: 1`；桌面主平面授权 `switch_desktop('main')` 超时，不能转本机 Chrome 目视。下列浮层在暗色下的实绘仍需真机确认：确认弹层、资产详情弹窗、导引 / F3 气泡、放置中浮条、右键菜单、冲突详情卡、规划草案卡、我的物品 chips、楼层受限提示；以及四轮遗留的右轨圆钮 / 分享钮 / 图层卡 / 底部把手。WebView `getComputedStyle` 背景回读与实绘存在已知不一致，源码级联 + CSSOM 命中不能替代目视。
+- **刻意保留不动**：OSM 瓦片、地图 attribution / 比例尺、`#D9E3EA` 占位空状态、图层缩略图画面、色板白描边、2D/3D 渲染器、目录 chip 色点本体、绿底 / 墨底反转主钮白字、头像 `.sc-rail-eye`、缩略图深色 scrim 白字标签、独立项目管理页 `.sc-studio-manager-delete-project` 浅红底；`lib/plan-export/svg.ts` 白背景属导出产物，不在 chrome 作用域。
+
 ### 真机/浏览器验收清单（待人工跑）
 
 - 三档切换即时重绘无刷新；`system` 跟随系统深浅切换；刷新后保留本机档位。

@@ -28,6 +28,10 @@
 .ats-note { color: var(--sc-muted, #6f6f6f); font-size: var(--sc-type-meta, 12px); overflow-wrap: anywhere; }
 .ats-warning, .ats-error { padding: var(--sc-space-sm, 8px); border-inline-start: 3px solid #9d7445; background: #f5efe3; overflow-wrap: anywhere; }
 .ats-error { border-color: #a55142; background: #faf0ec; }
+
+/* 暗色补遗：告警 / 错误条浅暖底换暗色低透明 tint，边色与文字回 warn/err token。 */
+body.is-theme-dark .ats-warning { border-inline-start-color: var(--warn); background: rgba(217, 169, 94, .12); color: var(--warn); }
+body.is-theme-dark .ats-error { border-inline-start-color: var(--err); background: rgba(224, 122, 114, .12); color: var(--err); }
 .ats-disclosure, .ats-proposal { min-width: 0; padding-top: var(--sc-space-md, 16px); border-top: 1px solid var(--sc-line, rgba(31,35,45,.12)); }
 .ats-facts { display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr); gap: var(--sc-space-sm, 8px); margin: var(--sc-space-sm, 8px) 0 0; }
 .ats-facts dt { color: var(--sc-muted, #6f6f6f); }

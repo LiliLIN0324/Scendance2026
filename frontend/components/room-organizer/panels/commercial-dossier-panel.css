@@ -173,3 +173,13 @@
 
 .sc-commercial .sc-commercial-warning { color: #805c28; background: #fff5e5; }
 .sc-commercial .sc-commercial-error { color: #974d3a; background: #fff5ed; }
+
+/* 暗色补遗：告警 / 错误框的浅暖底换成暗色低透明 tint，文字回暗色 warn/err token。 */
+body.is-theme-dark .sc-commercial .sc-commercial-warning {
+  color: var(--warn);
+  background: rgba(217, 169, 94, .12);
+}
+body.is-theme-dark .sc-commercial .sc-commercial-error {
+  color: var(--err);
+  background: rgba(224, 122, 114, .12);
+}

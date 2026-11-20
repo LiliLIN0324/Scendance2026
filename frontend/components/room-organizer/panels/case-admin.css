@@ -22,3 +22,21 @@
 .sc-case-admin-draft-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-case-admin-history { display: grid; gap: 6px; padding-top: 4px; border-top: 1px dashed #e4e4e7; }
 .sc-case-admin-version { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: #55585f; font-variant-numeric: tabular-nums; }
+
+/* 暗色补遗：表单外壳、草稿卡与字面近墨字回暗色 token（分享弹窗 portal 内，随 body.is-theme-dark 进暗色）。 */
+body.is-theme-dark .sc-case-admin-field { color: var(--ink-soft); }
+body.is-theme-dark .sc-case-admin-field > span { color: var(--faint); }
+body.is-theme-dark .sc-case-admin-field input,
+body.is-theme-dark .sc-case-admin-field textarea {
+  border-color: var(--hair);
+  background: var(--paper);
+  color: var(--ink);
+}
+body.is-theme-dark .sc-case-admin-draft {
+  border-color: var(--hair);
+  background: var(--paper);
+}
+body.is-theme-dark .sc-case-admin-draft-line strong { color: var(--ink); }
+body.is-theme-dark .sc-case-admin-draft-line span { color: var(--ink-soft); }
+body.is-theme-dark .sc-case-admin-history { border-top-color: var(--hair); }
+body.is-theme-dark .sc-case-admin-version { color: var(--ink-soft); }

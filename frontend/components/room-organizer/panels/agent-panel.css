@@ -1591,3 +1591,19 @@ body.is-theme-dark .sc-agent-panel .ap-model-menu {
   border-color: #363A42 !important;
   background-color: #1C1F24 !important;
 }
+/* 暗色补遗：思考态暖灰标签的深棕字回 warn 暖金，避免压在暗色纸面上读不清。 */
+body.is-theme-dark .sc-agent-panel .ap-head-status--think { color: var(--warn); }
+/* 历史决策标签：浅底深字在暗色下换低透明 tint + 浅一档语义字；详情块回白低透明底。 */
+body.is-theme-dark .sc-agent-panel .ap-card-history-decision {
+  color: var(--green-deep);
+  background: var(--green-pale);
+}
+body.is-theme-dark .sc-agent-panel .ap-card-history-list li[data-decision="withdrawn"] .ap-card-history-decision {
+  color: var(--warn);
+  background: rgba(217, 169, 94, .12);
+}
+body.is-theme-dark .sc-agent-panel .ap-card-history-list li[data-decision="replaced"] .ap-card-history-decision {
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, .06);
+}
+body.is-theme-dark .sc-agent-panel .ap-card-history-detail { background: rgba(255, 255, 255, .05); }

@@ -474,6 +474,25 @@ body.is-theme-dark .sc-outdoor-toolcard--annotate::after {
   border-right-color: var(--hair) !important;
   border-bottom-color: var(--hair) !important;
 }
+/* 卡片底部 sticky 动作行（生成 / 图片生成 / 导入 GLB）：内联 panelBg 白底细条回纸面。 */
+body.is-theme-dark .sc-outdoor-toolcard [role="group"][aria-label="生成或导入模型"] {
+  background: var(--paper) !important;
+}
+body.is-theme-dark .sc-model-action {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark .sc-model-action:hover {
+  background: var(--plane-deep) !important;
+  border-color: var(--hair) !important;
+}
+body.is-theme-dark .sc-model-action:active { background: var(--plane-deep) !important; }
+body.is-theme-dark [data-testid="facility-setup-toggle"],
+body.is-theme-dark [data-testid="facility-notes-toggle"] {
+  border-top-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
 body.is-theme-dark [data-testid="annotate-zone"] { border-bottom-color: var(--hair) !important; }
 body.is-theme-dark [data-testid="annotate-draw-tools"],
 body.is-theme-dark [data-testid="annotate-color-bar"] { background: var(--plane) !important; }
@@ -522,6 +541,202 @@ body.is-theme-dark [data-testid="outdoor-mode-chip"] {
 /* 目录 / 物料搜索放大镜：实心字形跟 currentColor，暗色下回次级墨色，聚焦回墨色。 */
 body.is-theme-dark .sc-catalog-search-icon { color: var(--ink-soft) !important; }
 body.is-theme-dark .sc-catalog-search:focus-within .sc-catalog-search-icon { color: var(--ink) !important; }
+
+/* ── 内联样式浮层 / 气泡 / 卡片：原组件纯 inline 字面量，挂类或 testid 后在此回暗色。
+   内联为普通样式，下列表面/发丝/文字覆盖均需 !important；主钮绿底白字保留不动。 */
+
+/* 新手引导气泡（GuideBubble）：纸面、箭头方块、正文与步进号回暗色 token。 */
+body.is-theme-dark [data-testid="guide-bubble"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .30) !important;
+}
+body.is-theme-dark [data-testid="guide-bubble"] [aria-hidden="true"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+}
+body.is-theme-dark [data-testid="guide-bubble"] strong { color: var(--ink) !important; }
+body.is-theme-dark [data-testid="guide-bubble"] p { color: var(--ink-soft) !important; }
+body.is-theme-dark [data-testid="guide-bubble"] > div > span { color: var(--faint) !important; }
+body.is-theme-dark [data-testid="guide-bubble"] button:first-child {
+  border-color: var(--hair) !important;
+  background: transparent !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark [data-testid="guide-bubble"] button:last-child {
+  background: var(--green) !important;
+  border-color: var(--green) !important;
+  color: #fff !important;
+}
+
+/* F3 首次吸附教练气泡：纸面回暗色，绿底「知道了」保留。 */
+body.is-theme-dark .f3-coach-bubble {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .30) !important;
+}
+
+/* 扫描失败顶部浮条：错误红保留，纸面与发丝回暗色。 */
+body.is-theme-dark .sc-scan-error-toast {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--err) !important;
+}
+
+/* 「我的物品 · 本会话」chips：白底胶囊回暗色平面。 */
+body.is-theme-dark .sc-my-items p { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-my-items button {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+
+/* 站内确认弹层（ConfirmModal）：卡片/标题栏/正文/取消钮回暗色，确认绿钮保留。 */
+body.is-theme-dark .sc-confirm-modal__dialog {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .34) !important;
+}
+body.is-theme-dark .sc-confirm-modal__header { background: var(--plane) !important; color: var(--ink) !important; }
+body.is-theme-dark .sc-confirm-modal__body { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-confirm-modal__cancel {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+
+/* 物料详情弹窗（asset-detail-modal）：卡片/标题栏/字段块/描述块/页脚回暗色平面。 */
+body.is-theme-dark .sc-asset-detail-modal__dialog {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .36) !important;
+}
+body.is-theme-dark .sc-asset-detail-modal__header {
+  background: var(--plane) !important;
+  border-bottom-color: var(--hair) !important;
+}
+body.is-theme-dark .sc-asset-detail-modal__header h3 { color: var(--ink) !important; }
+body.is-theme-dark .sc-asset-detail-modal__close {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark .sc-asset-detail-modal__dialog img { background: var(--plane) !important; }
+body.is-theme-dark .sc-asset-detail-modal__field { background: var(--plane) !important; }
+body.is-theme-dark .sc-asset-detail-modal__field dt { color: var(--faint) !important; }
+body.is-theme-dark .sc-asset-detail-modal__field dd { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-asset-detail-modal__desc { background: var(--plane) !important; }
+body.is-theme-dark .sc-asset-detail-modal__desc strong { color: var(--faint) !important; }
+body.is-theme-dark .sc-asset-detail-modal__desc p { color: var(--ink-soft) !important; }
+body.is-theme-dark .sc-asset-detail-modal__footer {
+  background: var(--paper) !important;
+  border-top-color: var(--hair) !important;
+}
+body.is-theme-dark .sc-asset-detail-modal__close-footer {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+
+/* 规划草案卡（PlanCard）：整卡内联调色板，根表面/子块/按钮/输入框回暗色 token。 */
+body.is-theme-dark .sc-plan-card {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark .sc-plan-card .sc-plan-title { color: var(--ink) !important; }
+body.is-theme-dark .sc-plan-card p,
+body.is-theme-dark .sc-plan-card dd { color: var(--faint) !important; }
+body.is-theme-dark .sc-plan-card .sc-plan-stage,
+body.is-theme-dark .sc-plan-card .sc-plan-variants,
+body.is-theme-dark .sc-plan-card .sc-plan-suggestions,
+body.is-theme-dark .sc-plan-card .sc-plan-violation-hard {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+}
+body.is-theme-dark .sc-plan-card .sc-plan-badge-zone {
+  background: var(--green-pale) !important;
+  color: var(--green-deep) !important;
+}
+body.is-theme-dark .sc-plan-card .sc-plan-row-selected {
+  background: var(--plane-deep) !important;
+  border-color: var(--green) !important;
+}
+body.is-theme-dark .sc-plan-card .sc-plan-btn-secondary {
+  background: var(--plane-deep) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark .sc-plan-card .sc-plan-btn-cancel {
+  background: var(--plane-deep) !important;
+  border-color: var(--hair) !important;
+  color: var(--warn) !important;
+}
+body.is-theme-dark .sc-plan-card .sc-plan-input {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+}
+body.is-theme-dark .sc-plan-card .sc-plan-banner {
+  background: rgba(217, 169, 94, .12) !important;
+  border-left-color: var(--warn) !important;
+  color: var(--warn) !important;
+}
+
+/* 生成提案卡内联浅灰徽标 / 选中版本钮 / 楼层受限提示：浅灰底回绿调暗底。 */
+body.is-theme-dark .cr-recipe-badge {
+  background: var(--green-pale) !important;
+  color: var(--green-deep) !important;
+}
+body.is-theme-dark .cr-proposal button[aria-pressed="true"] {
+  background: var(--green-pale) !important;
+  border-color: var(--green) !important;
+  color: var(--green-deep) !important;
+}
+body.is-theme-dark .sc-floor-blocked-note {
+  background: var(--green-pale) !important;
+  color: var(--green-deep) !important;
+}
+
+/* 画布浮层：右键实体菜单 / 冲突详情卡 / 放置中浮条 / 文本标注输入框 / 模型缩略钮 / 多选条。
+   面板底色取自 PLANNING_SURFACE.panelBg 内联字面量，暗色下回到纸面与平面 token。 */
+body.is-theme-dark [data-testid="plan-context-menu"],
+body.is-theme-dark [data-testid="conflict-detail"],
+body.is-theme-dark [data-testid="plan-placement-bar"] {
+  background: var(--paper) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .32) !important;
+}
+body.is-theme-dark [data-testid="plan-context-menu"] [role="menuitem"] { color: var(--ink-soft) !important; }
+body.is-theme-dark [data-testid="plan-context-menu"] [role="separator"] { background: var(--hair) !important; }
+body.is-theme-dark [data-testid="conflict-detail"] { color: var(--ink-soft) !important; }
+body.is-theme-dark [data-testid="annotate-note-input"] {
+  background: var(--paper) !important;
+  border-color: var(--green) !important;
+  color: var(--ink) !important;
+}
+body.is-theme-dark [data-testid^="facility-model-"],
+body.is-theme-dark [data-testid="facility-multi-copy"],
+body.is-theme-dark [data-testid="cross-multi-delete"] {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+}
+body.is-theme-dark [data-testid="facility-multi-copy"] { color: var(--ink-soft) !important; }
+body.is-theme-dark [data-testid="cross-multi-delete"] { color: var(--err) !important; }
+body.is-theme-dark [data-testid="plan-placement-bar"] > div:first-child > span:first-child {
+  background: var(--green-pale) !important;
+  color: var(--green-deep) !important;
+}
+body.is-theme-dark [data-testid="plan-placement-cancel"] {
+  background: var(--plane) !important;
+  border-color: var(--hair) !important;
+  color: var(--ink-soft) !important;
+}
+body.is-theme-dark [data-testid="plan-placement-cancel"] kbd { border-color: var(--hair) !important; }
+body.is-theme-dark [data-testid="plan-placement-bar"] > div:last-child { color: var(--ink-soft) !important; }
 
 /* ── 3D 场景标定 / 光照 HUD：JS 内联写死的暖白纸面与近墨字，暗色下回到暗色表面。
    HUD 直接挂在视口内、不在 .is-outdoor-card 作用域里，按 testid 单独覆盖；

@@ -364,6 +364,8 @@
 .sc-compact-shelf .sc-shelf-grip:hover > span { background:var(--wk-ink-soft); }
 .sc-compact-shelf .sc-shelf-grip:active > span { background:var(--wk-ink,#141416); transform:scaleX(1.2); }
 .sc-compact-shelf .sc-shelf-grip:focus-visible { outline:2px solid var(--wk-ink-soft); outline-offset:-2px; }
+/* 暗色补遗：抓手字面白底回到暗色纸面（独立放置时不在 .sc-compact-shelf 内，选择器放宽到类名）。 */
+body.is-theme-dark .sc-shelf-grip { background: var(--paper); }
 
 /* ── 场景模板 · 抽屉内横着一排 ────────────────────────────────────
    抽屉只有一行高，空白场地与模板共用同一条横向轨道，不做纵向长滚。 */

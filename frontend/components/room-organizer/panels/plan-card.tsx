@@ -456,15 +456,15 @@ export function PlanCard({
     : [];
 
   return (
-    <section style={cardStyle} aria-label="规划草案">
+    <section className="sc-plan-card" style={cardStyle} aria-label="规划草案">
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={titleStyle}>计划</span>
+        <span className="sc-plan-title" style={titleStyle}>计划</span>
         {stages.length > 0 && (
           <span style={metaStyle} data-testid="plan-card-stage-count">{stages.length} 个阶段</span>
         )}
       </header>
       <p style={{ ...rationaleStyle, marginTop: 0 }}>这份计划是按你的要求拟定的，执行前我会先征求你的意见。</p>
-      {blockedReason && <p role="alert" style={violationHardStyle}>{blockedReason}</p>}
+      {blockedReason && <p role="alert" className="sc-plan-violation-hard" style={violationHardStyle}>{blockedReason}</p>}
       {zoneWarnings?.map(warning => <p key={warning} style={rationaleStyle}>{warning}</p>)}
 
       {stages.length === 0 && (
@@ -477,7 +477,7 @@ export function PlanCard({
         );
         const stageRange = formatZoneRange(zoneNumbersByStage.get(stage.stageNo) ?? []);
         return (
-          <div key={stage.stageNo} style={stageStyle}>
+          <div key={stage.stageNo} className="sc-plan-stage" style={stageStyle}>
             <div style={stageTitleStyle}>
               <span aria-hidden="true">{stage.stageNo}.</span> {stage.title}
               {stageRange && <span style={metaStyle} data-testid={`plan-card-stage-range-${stage.stageNo}`}> {stageRange}</span>}
@@ -489,7 +489,7 @@ export function PlanCard({
               const numbered = zoneNumbers.get(a.id);
               return (
                 <div key={a.id} style={metaStyle}>
-                  {numbered ? <span style={zoneBadgeStyle} data-testid={`plan-card-zone-no-${a.id}`}>{numbered.number}</span> : null}
+                  {numbered ? <span className="sc-plan-badge-zone" style={zoneBadgeStyle} data-testid={`plan-card-zone-no-${a.id}`}>{numbered.number}</span> : null}
                   {a.label}
                   {planned ? ` → ${planned}` : ''}
                   {missed ? `（${missed.reason}）` : ''}
@@ -502,7 +502,7 @@ export function PlanCard({
 
       {/* 第 12 批：三版分数小条——思考过程可见，推荐版高亮，可点击换版。 */}
       {hasPlans && (
-        <div style={variantsBlockStyle}>
+        <div className="sc-plan-variants" style={variantsBlockStyle}>
           <div style={variantsTitleStyle}>三版布置打分</div>
           <p style={rationaleStyle}>分数按容量、动线、人体尺度给三版排序；选一版应用到画布，入口和门扇还能在图上改。</p>
           {functionalNeeds?.checkin == null && <p style={rationaleStyle}>尚未确认是否需要签到。</p>}
@@ -515,7 +515,7 @@ export function PlanCard({
           </details>}
           {!plans!.some(isScoredPlanApplicable) && <p style={rationaleStyle}>这次没有可应用的完整候选：改区域或需求后能再出一版。</p>}
           {noRecommendedPlan && (
-            <div style={noRecommendBannerStyle} data-testid="plan-card-no-recommendation">
+            <div className="sc-plan-banner" style={noRecommendBannerStyle} data-testid="plan-card-no-recommendation">
               各候选均有硬冲突，没有可推荐方案：
               {hardConflictSummary.length > 0
                 ? hardConflictSummary.map((m, i) => <div key={`hc-${i}`}>· {m}</div>)
@@ -552,6 +552,7 @@ export function PlanCard({
               <div key={p.variantId} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <button
                   type="button"
+                  className={isSelected ? 'sc-plan-row-selected' : undefined}
                   style={rowStyle}
                   onClick={() => onSelectVariant?.(p.variantId)}
                   aria-pressed={isSelected}
@@ -595,7 +596,7 @@ export function PlanCard({
                 {hasViolations && (
                   <div style={variantViolationsWrapStyle}>
                     {hardViolations.map((v, i) => (
-                      <div key={`h-${i}`} style={violationHardStyle}>{v.message}</div>
+                      <div key={`h-${i}`} className="sc-plan-violation-hard" style={violationHardStyle}>{v.message}</div>
                     ))}
                     {softViolations.map((v, i) => (
                       <div key={`s-${i}`} style={violationSoftStyle}>{v.message}</div>
@@ -610,7 +611,7 @@ export function PlanCard({
 
       {/* 第 12 批：AI 建议卡——按受众/区类型/场地短边给人话提醒。 */}
       {hasSuggestions && (
-        <div style={suggestionsBlockStyle}>
+        <div className="sc-plan-suggestions" style={suggestionsBlockStyle}>
           <div style={suggestionsTitleStyle}>AI 建议</div>
           {suggestions!.map((s, i) => {
             // 防御：title 与 reason 都为空字符串时不渲染那一条。
@@ -631,15 +632,16 @@ export function PlanCard({
         <button type="button" style={primaryButtonStyle} onClick={onApprove} disabled={!!blockedReason || !selectedPlan || !isScoredPlanApplicable(selectedPlan)}>
           批准
         </button>
-        <button type="button" style={secondaryButtonStyle} onClick={onReplace}>
+        <button type="button" className="sc-plan-btn-secondary" style={secondaryButtonStyle} onClick={onReplace}>
           换一份计划
         </button>
-        <button type="button" style={cancelButtonStyle} onClick={onCancel}>
+        <button type="button" className="sc-plan-btn-cancel" style={cancelButtonStyle} onClick={onCancel}>
           取消任务
         </button>
       </div>
 
       <input
+        className="sc-plan-input"
         style={inputStyle}
         placeholder="或用文字回答，直接口头改方案…"
         value={comment}

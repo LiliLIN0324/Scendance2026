@@ -14,6 +14,7 @@ export function F3CoachBubble({ anchor, visible, onDismiss }: F3CoachBubbleProps
   return (
     <div
       role="status"
+      className="f3-coach-bubble"
       style={{
         position: 'absolute',
         left: anchor.x,

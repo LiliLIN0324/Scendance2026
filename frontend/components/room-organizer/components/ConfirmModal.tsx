@@ -52,6 +52,7 @@ export function ConfirmModal({
   return (
     <div
       role="presentation"
+      className="sc-confirm-modal"
       onClick={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
@@ -69,6 +70,7 @@ export function ConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        className="sc-confirm-modal__dialog"
         style={{
           width: 360,
           background: '#ffffff',
@@ -80,6 +82,7 @@ export function ConfirmModal({
         }}
       >
         <div
+          className="sc-confirm-modal__header"
           style={{
             padding: '12px 20px',
             background: '#F4F5F7',
@@ -89,10 +92,11 @@ export function ConfirmModal({
         >
           {title}
         </div>
-        <div style={{ padding: '16px 20px', fontSize: 13, lineHeight: 1.6 }}>
+        <div className="sc-confirm-modal__body" style={{ padding: '16px 20px', fontSize: 13, lineHeight: 1.6 }}>
           {description}
         </div>
         <div
+          className="sc-confirm-modal__footer"
           style={{
             padding: '12px 20px 20px',
             display: 'flex',
@@ -102,6 +106,7 @@ export function ConfirmModal({
         >
           <button
             type="button"
+            className="sc-confirm-modal__cancel"
             onClick={onCancel}
             style={{
               padding: '6px 14px',
@@ -118,6 +123,7 @@ export function ConfirmModal({
           <button
             ref={confirmRef}
             type="button"
+            className="sc-confirm-modal__confirm"
             onClick={onConfirm}
             style={{
               padding: '6px 14px',
