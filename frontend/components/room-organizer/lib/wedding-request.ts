@@ -1,11 +1,11 @@
-import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { outdoorTurnSchema, type OutdoorTurn } from './outdoor-agent-contract';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 /** Explicit whole-wedding drafting is a local capability, not another model clarification. */
 export function weddingDesignRequest(message: string, event: string | undefined, plan: SitePlanData): OutdoorTurn | null {
   if (/^(?:请)?(?:不要|停止|取消)(?:重新|继续|自动|自主)?(?:规划|布置|重排)|^(?:怎么|如何|为什么|能否|是不是|有没有)|[？?]\s*$/u.test(message)) return null;
   const wedding = /婚礼|婚宴|结婚/u.test(`${event??''} ${message} ${plan.zones.map(z=>z.event??'').join(' ')}`);
-  const explicit = /(?:重新|优化|重排|自主|自动|完整|一整版|整场|继续执行)[\s\S]*(?:规划|布局|布置|仪式区|方案)|(?:规划|布局|布置)[\s\S]*(?:婚礼|婚宴)|(?:婚礼|婚宴)[\s\S]*(?:规划|布局|布置)/u.test(message);
+  const explicit = /(?:重新|优化|重排|自主|自动|完整|一整版|整场|继续执行|先出一版|出一版|起个?稿)[\s\S]*(?:规划|布局|布置|仪式区|方案|婚礼|婚宴)|(?:规划|布局|布置)[\s\S]*(?:婚礼|婚宴)|(?:婚礼|婚宴)[\s\S]*(?:规划|布局|布置|先出一版|出一版|起个?稿)/u.test(message);
   if (!wedding || !explicit) return null;
   // Detailed location, dimension, selection or item instructions need the existing
   // structured understanding path; never silently replace them with this default.
