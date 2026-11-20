@@ -263,6 +263,24 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 /* AC 式任务卡：上幅自绘地图缩略 + 图注一行；缩略是示意，不声称真实轮廓。 */
 .ap-task-map { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--wk-hair-soft); }
 .ap-task-caption { margin: 0; display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-p2); line-height: 1.5; color: var(--wk-ink-soft); }
+/* 真实用地红线缩略（950c6dd8 引入时漏了样式）：figure 自带 40px 侧边距会挤瘪 SVG，
+   观感与 AC 式 .ap-task-map 对齐——占满卡内宽、hair-soft 细边、图注收进圆角内。 */
+.ap-boundary-thumb { margin: 0; width: 100%; border: 1px solid var(--wk-hair-soft); border-radius: 10px; overflow: hidden; background: var(--wk-paper); }
+.ap-boundary-thumb svg { display: block; width: 100%; height: auto; }
+.ap-boundary-thumb .ap-task-caption { padding: 6px 10px 8px; }
+/* T1-c：历史任务卡的过程折叠（b703f746 引入时漏了样式）。details 是 .ap-venue-card 的
+   flex 子项，不拉满宽度会缩成内容宽；三角用与 .ap-run-thoughts 同一套 ▸/▾，不裸显浏览器默认。 */
+.ap-task-history { width: 100%; }
+.ap-task-history-summary { display: flex; align-items: center; gap: 8px; min-height: 28px; list-style: none; cursor: pointer; }
+.ap-task-history-summary::-webkit-details-marker { display: none; }
+.ap-task-history-summary::before { content: '▸'; flex: none; color: var(--wk-muted); font-size: 9px; line-height: 1; }
+.ap-task-history[open] .ap-task-history-summary::before { content: '▾'; }
+.ap-task-history-body { display: grid; gap: 6px; padding: 2px 0 2px 17px; }
+.ap-task-history-body details > summary { display: flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; }
+.ap-task-history-body details > summary::-webkit-details-marker { display: none; }
+.ap-task-history-body details > summary::before { content: '▸'; flex: none; color: var(--wk-muted); font-size: 9px; line-height: 1; }
+.ap-task-history-body details[open] > summary::before { content: '▾'; }
+.ap-task-history-stop { width: 100%; display: flex; justify-content: flex-end; }
 .ap-design-process { border-top: 1px solid var(--wk-hair-soft); padding-top: 8px; color: var(--wk-ink); }
 .ap-design-process summary { cursor: pointer; font-size: var(--fs-p2); font-weight: 600; }
 .ap-design-process summary span { margin-inline-start: 6px; color: var(--wk-muted); font-size: var(--fs-cap); font-weight: 400; }
