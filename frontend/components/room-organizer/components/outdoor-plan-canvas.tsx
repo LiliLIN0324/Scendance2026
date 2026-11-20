@@ -339,6 +339,8 @@ import {
 import { resolveBridgedHit } from '../lib/plan-pointer-bridge';
 // 2026-11-20 审计 B7/F6：定位前先查「对象还在不在、锚点有没有」。
 import { keepPlanEntityIds, resolvePlanLocate } from '../lib/plan-locate';
+// 2026-11-20 审计 F2：复制落点先试原偏移，脏了找最近的空地。
+import { planCopyOffset } from '../lib/plan-copy-placement';
 import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
 import { ArrangeChoiceList } from './arrange-choice-list';
@@ -7118,7 +7120,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function duplicateFacility(id: string) {
     const facility = planRef.current.facilities.find(f => f.id === id);
     if (!facility) return;
-    const position = { x: facility.position.x + 2, y: facility.position.y + 2 };
+    // 2026-11-20 审计 F2：默仍用 +2/+2，但它压在别人身上或出了红线就找最近的空地，
+    // 而不是把副本直推到场外等执行团队发现。
+    const { offset, clear } = planCopyOffset([facility], planRef.current.facilities, planRef.current.boundary);
+    const position = { x: facility.position.x + offset.x, y: facility.position.y + offset.y };
     const copy: PlanFacility = {
       ...facility,
       id: crypto.randomUUID(),
@@ -7128,7 +7133,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     };
     commitPlan({ ...planRef.current, facilities: [...planRef.current.facilities, copy] });
     selectFacility(copy.id);
-    setEditMessage(`已复制「${facility.name}」，可直接拖动或用面板改尺寸/旋转。`);
+    setEditMessage(clear
+      ? `已复制「${facility.name}」，可直接拖动或用面板改尺寸/旋转。`
+      : `已复制「${facility.name}」，但四周都被占满：副本仍在原位置偏移 ${offset.x} × ${offset.y} m 处，问题清单会报越界或重叠。`);
   }
 
   /* ---------------- 2026-11-12 OnePlan Selection tool：框选多选（B1–B3） ---------------- */
@@ -7215,21 +7222,30 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     const idSet = new Set(ids);
     const copies: PlanFacility[] = [];
+    const sources: PlanFacility[] = [];
     const nextFacilities = current.facilities.map(f => f);
     for (const facility of current.facilities) {
       if (!idSet.has(facility.id)) continue;
+      sources.push(facility);
+    }
+    if (sources.length === 0) return;
+    // 2026-11-20 审计 F2：整组复制保持相对位置、只平移到最近的空地（与原偏移口径一致）。
+    const { offset, clear } = planCopyOffset(sources, current.facilities, current.boundary);
+    for (const facility of sources) {
       copies.push({
         ...facility,
         id: crypto.randomUUID(),
         name: `${facility.name.replace(/ \d+$/, '')} ${current.facilities.filter(f2 => f2.templateId === facility.templateId).length + copies.length + 1}`,
-        position: { x: facility.position.x + 2, y: facility.position.y + 2 },
+        position: { x: facility.position.x + offset.x, y: facility.position.y + offset.y },
       });
     }
     if (copies.length === 0) return;
     commitPlan({ ...current, facilities: [...nextFacilities, ...copies] });
     multiSelectedFacilityIdsRef.current = copies.map(c => c.id);
     setMultiSelectedFacilityIds(multiSelectedFacilityIdsRef.current);
-    setEditMessage(`已复制 ${copies.length} 件设施（整体右移 2 m）。`);
+    setEditMessage(clear
+      ? `已复制 ${copies.length} 件设施（整体偏移 ${offset.x} × ${offset.y} m）。`
+      : `已复制 ${copies.length} 件设施，但四周都被占满：副本仍在偏移 ${offset.x} × ${offset.y} m 处，问题清单会报越界或重叠。`);
     draw();
   }
 
@@ -11165,6 +11181,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const BenchRepeatIcon = planningIcon('layout-grid');
   const BenchPlusIcon = planningIcon('plus');
   const BenchCloseIcon = planningIcon('x');
+  // 2026-11-20 审计 K9：单件属性卡补一对复制/删除图标，与多选卡、键盘、右键同一套入口。
+  const BenchCopyIcon = planningIcon('copy');
   const selectionInspectorZone = readOnly ? null : (
     <>
                 {/* 2026-11-15 用户：多选在属性卡里只说一次——一个头部（件数 + 分类明细）、
@@ -11532,6 +11550,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           onClick={() => switchRepeatCardMode('repeat')}
                         >
                           <BenchRepeatIcon size={16} aria-hidden />
+                        </button>
+                        {/* 2026-11-20 审计 K9：只用属性卡的用户也得能复制/删除，不必记住
+                            Ctrl+D 或右键。两个钮与键盘/右键落到同一个函数，同一条 undo。 */}
+                        <button
+                          type="button"
+                          aria-label="复制这件设施"
+                          title="复制这件设施（Ctrl+D 同效）"
+                          data-testid="facility-card-copy"
+                          style={{ ...benchIconButtonStyle, width: 24, height: 24 }}
+                          onClick={() => duplicateFacility(selectedFacility.id)}
+                        >
+                          <BenchCopyIcon size={14} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="删除这件设施"
+                          title="删除这件设施（Delete 同效）"
+                          data-testid="facility-card-delete"
+                          style={{ ...benchIconButtonStyle, width: 24, height: 24, color: PLANNING_SURFACE.dangerText }}
+                          onClick={() => deleteFacility(selectedFacility.id)}
+                        >
+                          <MaterialSymbol name="delete" size={15} />
                         </button>
                       </div>
                       {/* 一句话布置：先出虚线占地和 3D 体块，落库才写入方案。 */}
