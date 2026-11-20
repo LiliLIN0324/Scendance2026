@@ -5,6 +5,8 @@
 状态：**基线已建立，真实页面验收被阻塞**。浏览器自动化通道两轮共 8 次调用超时（含 `open`/`snapshot`/`screenshot`/`close`），未取得任何页面截图；因此本文件不包含真实页面复现结论、视觉验收结论与设计效果评价。凡未实际观察到的项目，一律标「未验收」，不以测试通过代替。
 
 > 2026-11-20 第二次复核（HEAD `f2ff2980`）：规划套件已转绿、前端类型检查 0 错；浏览器通道仍然不可用，P0 四步复现**未执行**。详见 §一.2、§二.4、§五.5。
+>
+> 2026-11-20 12:05 更新：用户在客户端内置浏览器里打开了真实页面，**P0 的第一个失败点已确定**——工作台在渲染阶段即崩溃（`handleStagePointerCancel is not defined`），根本到不了「起稿」。归属：交互（画布）。详见 §二.5。
 
 ---
 
@@ -53,6 +55,46 @@
    - `open`（Chrome，独立窗口，`/?local=1`）→ 超时；同时 `dev2.log` **没有任何 GET 请求**，说明卡在浏览器启动而非页面加载；
    - 对 Chrome 会话补一次 `screenshot` → 仍超时。
    **结论**：可用通道只剩「用户在当前任务里打开内置浏览器面板」这一条；Chrome 自动化窗口在本机启动即挂。开发服务器已就绪，面板一打开即可按上面四步自查补 P0。
+
+### 2.5 P0 首个失败点（真实页面，2026-11-20 12:05）
+
+用户在内置浏览器里打开 `http://localhost:3000/?local=1`，页面没有出现工作台，而是 Next.js 运行时错误浮层：
+
+```
+Runtime ReferenceError
+handleStagePointerCancel is not defined
+components\room-organizer\components\outdoor-plan-canvas.tsx (12980:24) @ OutdoorPlanCanvas
+12978 |      onPointerUp={handleStagePointerUp}
+12979 |      onPointerLeave={handleStagePointerLeave}
+> 12980 |      onPointerCancel={handleStagePointerCancel}
+Call Stack: OutdoorPlanCanvas → OutdoorPlanOverlay (outdoor-plan-overlay.tsx 1162:11)
+            → RoomOrganizer (room-organizer.tsx 5314:13) → WorkspaceShell (workspace-shell.tsx 179:9)
+```
+
+代码核对（只读）：
+
+```
+Select-String -Path …\outdoor-plan-canvas.tsx -Pattern "handleStagePointerCancel"
+12980:  onPointerCancel={handleStagePointerCancel}
+13048:  onPointerCancel={handleStagePointerCancel}      # 共 2 处，均为使用，无定义
+对比：handleStagePointerDown/Move/Up/Leave 各 3 处（1 定义 + 2 使用）
+git log -S"handleStagePointerCancel" -- <file>        # 无输出：不在任何提交里，属工作区未提交改动
+文件 mtime：2026-11-20 12:06:30；dev2.log：编译成功（GET /?local=1 200）
+```
+
+**定性**：这是「鼠标事件 → 指针事件」重构（审计 K6/K11：指针捕获与 `pointercancel`）的**在途未完成态**——两个舞台都接上了 `onPointerCancel`，但处理函数尚未落盘。它不是页面太重、也不是浏览器问题。
+
+| 项 | 内容 |
+| --- | --- |
+| 首个失败点 | 工作台渲染期 `ReferenceError`，画布不出现，整个页面停在错误浮层 |
+| 归属 | **交互负责人**（`outdoor-plan-canvas.tsx` 画布交互适配；改动在 `2aadfbad` 之后的未提交工作区） |
+| 最小复现 | ① `npm --prefix frontend run dev`；② 打开 `http://localhost:3000/?local=1`；③ 不等任何操作，页面直接弹上述浮层；④ DevTools Console 同样是 `handleStagePointerCancel is not defined` |
+| 预期 | 工作台正常渲染，出现左轨与画布；错误浮层不出现 |
+| 证据 | 用户提供的内置浏览器截图（12:05）；上文代码核对与提交检索 |
+| 阻断范围 | P0 四步（起稿/点选/局部修改/撤销）全部无法开始；同样阻断 A/B 比较、锁定件、保存刷新与分享的页面验收 |
+| 为何没被拦住 | `next dev`/`next build` 都不做类型检查，未定义标识符是合法 JS；只有 `npm --prefix frontend run typecheck` 会报 TS2304。我在 `f2ff2980` 跑 tsc 时该行尚未写入，故当时 0 错 |
+
+**建议**：由交互负责人在其重构里补齐 `handleStagePointerCancel`（并确认 `cancelStageDragSessions` 的调用语义），提交后我重跑 `typecheck` + 页面 P0。本对话**不代改**该文件：它正在被编辑（mtime 12:06），并发改动会产生冲突。若需要我接手，请明确交接并等对方保存完成。
 
 **替代证据（明确降级，不能算页面验收）**：仓库内 `.tmp-audit/3d-parity.md`、`panel-canvas-sync.md`、`persistence-undo.md` 是同日只读代码审计笔记，给出具体行号。本次只把它们当待核假设；已用当前代码核对的两条见下节。
 
@@ -186,7 +228,7 @@ Test Files 1 passed (1) | Tests 9 passed (9)
 
 | 场景 | 状态 | 依据 |
 | --- | --- | --- |
-| 当前场地起稿与实际容量 | 未验收 | 需页面；规划单测 14/14 绿只证明算法夹具，不含真实场地 |
+| 当前场地起稿与实际容量 | **失败（首个失败点）** | 真实页面渲染即崩溃：`handleStagePointerCancel is not defined`（§二.5），到不了起稿；规划单测 14/14 绿只证明算法夹具 |
 | 点选对象后聊天局部调整 | 未验收 | 需页面 |
 | 已确认景观方向和背景调整 | 未验收 | 需页面；规划套件中景观方向用例已转绿，但仍属夹具 |
 | 锁定件保留 | 未验收 | 需页面；`outdoor-plan-protection` 11 例绿只覆盖锚点/红线安全阀 |
@@ -200,7 +242,7 @@ Test Files 1 passed (1) | Tests 9 passed (9)
 
 ## 八、存量问题与剩余工作
 
-1. **浏览器通道**：内置浏览器与 Chrome 自动化窗口两轮共 8 次超时，连 `close` 都不返回，属 MCP 守护进程层。恢复后按 §二.4 的四步自查，再补 P0 与全部页面验收。
+1. **页面当前不可用**：`outdoor-plan-canvas.tsx` 有未提交的指针事件重构少了一个函数定义，工作台渲染崩溃（§二.5，归属交互）。修好之前，所有页面项都无法验收。浏览器自动化通道本身也仍不可用（内置面板未挂到当前任务、Chrome/Edge 启动即挂），但这次页面崩溃与通道无关。
 2. **在途不绿**：~~类型检查 24 条、规划套件 3 红~~ **已清零**（`f2ff2980`：`tsc` 0 错、规划 14/14）；`outdoor-plan-save-lifecycle` 首轮 worker 未启动，已单跑 **9/9 绿**。剩余不可验证项全部是页面项。
 3. **并发写同一工作区**：本轮已出现文件在我读取期间被改写。建议两位负责人各自收口提交后再进入集成，避免我基于漂移快照下结论。
 4. **未验证的审计结论**：右键/Alt 桥接、无红线草稿提示、3D 换算精度、拖动重建帧耗时，全部仍为待证项。
