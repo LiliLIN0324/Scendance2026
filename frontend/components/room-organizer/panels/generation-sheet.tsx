@@ -470,7 +470,6 @@ export function GenerationSheetHost({ controller, onAddLocalGlb, className, styl
                     }}
                   />
                   <div className="gs-composer-foot">
-                    <span className="gs-composer-hint">回车生成，Shift+Enter 换行</span>
                     <kbd className="gs-kbd">Enter</kbd>
                   </div>
                 </div>
@@ -510,7 +509,7 @@ export function GenerationSheetHost({ controller, onAddLocalGlb, className, styl
                     className="gs-file-input"
                     onChange={event => { void importGlb(event.target.files?.[0]); event.target.value = ''; }}
                   />
-                  <p className="gs-hint">单文件 .glb，≤10 MB；仅本次编辑有效，刷新后需重新导入。</p>
+                  <p className="gs-hint">单文件 .glb ≤10 MB，刷新后需重新导入。</p>
                 </>
               ) : null}
 

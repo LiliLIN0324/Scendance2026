@@ -105,15 +105,15 @@ export function FeedbackDialog({
         />
         <label className="sc-mini-check">
           <input type="checkbox" checked={includePlan} onChange={event => setIncludePlan(event.target.checked)} />
-          <span><strong>附上当前方案信息</strong><small>方案名称、户外或室内、红线与画布状态，便于复现。不含账号或密钥。</small></span>
+          <span><strong>附上当前方案信息</strong><small>附带方案名和画布状态，不含账号和密钥。</small></span>
         </label>
         <label className="sc-mini-check">
           <input type="checkbox" checked={includeShot} onChange={event => setIncludeShot(event.target.checked)} />
-          <span><strong>附上当前画布截图</strong><small>只截规划画布。图片会先下载，再到 issue 里附上。</small></span>
+          <span><strong>附上当前画布截图</strong><small>只截规划画布，图片会先下载。</small></span>
         </label>
         <label className="sc-mini-check">
           <input type="checkbox" checked={includeBrowser} onChange={event => setIncludeBrowser(event.target.checked)} />
-          <span><strong>附上浏览器信息</strong><small>可选，用来排查显示或操作异常。</small></span>
+          <span><strong>附上浏览器信息</strong><small>可选，排查显示异常。</small></span>
         </label>
         {error ? <p className="sc-account-error" role="alert">{error}</p> : null}
         <div className="sc-mini-actions">

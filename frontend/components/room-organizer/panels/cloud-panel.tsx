@@ -1478,7 +1478,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         </ul>
         {trashOpen && activeStudio?.role === 'owner' && <section aria-label="最近删除" className="sc-account-trash">
           <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>最近删除</h4></div><span className="sc-note">保留 7 天 · 只恢复项目本体，分享需重新发布</span></div>
-          {!trash.length && <p className="sc-account-empty">回收站是空的。删除的项目会在这里保留 7 天。</p>}
+          {!trash.length && <p className="sc-account-empty">回收站为空，项目保留 7 天。</p>}
           <ul className="sc-trash-list">
             {trash.map(item => <li key={item.id} className="sc-trash-item">
               <span><strong>{item.name}</strong><small>删除于 {new Date(item.deleted_at).toLocaleString()}</small></span>
@@ -1521,7 +1521,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 {archive.draining ? '正在补传…' : '队列空闲'}
                 {` · 待补传 ${archive.counts.pending} · 失败 ${archive.counts.failed} · 需原文件 ${archive.counts.needsFile} · 已归档 ${archive.counts.uploaded}`}
               </p>
-              {archive.jobs.length === 0 ? <p className="sc-account-empty">队列是空的。素材上传后这里会留底可查。</p> : <ul className="sc-trash-list">
+              {archive.jobs.length === 0 ? <p className="sc-account-empty">队列为空，上传后留底可查。</p> : <ul className="sc-trash-list">
                 {archive.jobs.slice(0, 8).map(job => <li key={job.key} className="sc-trash-item">
                   <span><strong>{job.name}</strong><small>{archiveJobLabel(job)}</small></span>
                   {job.state !== 'uploaded' && <button type="button" className="sc-button" disabled={busy || !archive.transport} onClick={() => void run(async () => { await archive.retry(); })}>重试</button>}
@@ -1642,7 +1642,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 {cloud.project ? <div>
                   <button type="button" className="sc-button" disabled={busy} onClick={() => void run(async () => { await verifyCompleteProject(); })}>核对完整归档</button>
                   <button type="button" className="sc-button" disabled={busy} onClick={() => void restoreCompleteProject()}>恢复到画布</button>
-                </div> : <p className="sc-account-empty">打开一个云端项目后可核对与恢复完整归档。</p>}
+                </div> : <p className="sc-account-empty">打开云端项目后可核对归档。</p>}
                 {completeInfo && <p className="sc-account-footnote" role="status">{`服务器确认：v${completeInfo.revision} · 依赖 ${completeInfo.dependencyCount} 项 · ${new Date(completeInfo.confirmedAt).toLocaleString()}`}</p>}
                 {completeError && <p className="sc-account-error" role="alert">{completeError}</p>}
               </>}

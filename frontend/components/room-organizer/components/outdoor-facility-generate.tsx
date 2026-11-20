@@ -46,9 +46,9 @@ function blocksSubmission(row: Submission | null): boolean {
   return !!row && !(row.state === 'submitted' && row.taskid && findGeneratedFacilityModel(`generated:${row.taskid}`));
 }
 function submissionNote(row: Submission): string {
-  if (row.state === 'terminal') return `原任务 ${row.taskid} 已核对为终态：${row.terminal?.message ?? '未生成可用模型'}。失败不代表未收费，请核对费用；不会自动重发。`;
-  return row.taskid ? `原任务 ${row.taskid} 已保留，正在核对/取回，不会重复创建收费任务。`
-    : `此前提交结果未知（请求 ${row.requestId}）。当前接口不能按请求标识可靠找回任务；已锁定重复提交，请先核对生成任务记录与费用。`;
+  if (row.state === 'terminal') return `任务已结束：${row.terminal?.message ?? '没有生成可用模型'}。可能已经收费，不会自动重发。`;
+  return row.taskid ? `任务已保留，正在取回结果。不会重复收费。`
+    : `上次提交结果未知，目前查不到任务。先核对费用，别重复提交。`;
 }
 /** 户外设施原位表单。只有勾选额度并点击提交才可能创建收费任务；不会切走工作台。 */
 export function OutdoorFacilityGenerate({ target, projectId, controller, onClose }: {
@@ -65,7 +65,7 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
   const [receipt, setReceipt] = useState(() => readSubmission(projectId, target.facilityId));
   const [submitted, setSubmitted] = useState(() => listFacilityGenerateLinks(target.facilityId).some(link => (!link.projectId || link.projectId === projectId) && !link.terminal && !findGeneratedFacilityModel(`generated:${link.taskid}`)));
   const unknown = blocksSubmission(receipt);
-  const [note, setNote] = useState(() => receipt && unknown ? submissionNote(receipt) : submitted ? '此设施已有待取回任务，请先核对原任务，不重复创建收费任务。' : '只回填此设施的模型候选，不会自动选中或添加到另一张画布。');
+  const [note, setNote] = useState(() => receipt && unknown ? submissionNote(receipt) : submitted ? '这个设施有任务还没取回，先取回再生成。' : '只把模型填回这个设施，不会自动放进画布。');
   const lock = useRef(false);
   const imageReadSeq = useRef(0);
   const linksRevision = useSyncExternalStore(subscribeFacilityGenerateLinks, getFacilityGenerateLinksRevision, getFacilityGenerateLinksRevision);
@@ -102,8 +102,8 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
         if (!active) return;
         attachFacilityGenerateTask({ ...original, taskid: original.taskid!, name: generatedObjectName(original.facilityName, '生成模型') });
         setSubmitted(true);
-        setNote(`已接回原任务 ${original.taskid}，留在户外规划等待候选回填；不会重复提交。`);
-      } catch { if (active) setNote(`原任务 ${original.taskid} 暂时无法核对，仍保留任务与提交锁，请勿重复扣费。`); }
+        setNote(`已接回原任务，等待结果填回。`);
+      } catch { if (active) setNote(`原任务 ${original.taskid} 暂时无法核对；别重复提交，避免重复扣费。`); }
     }
     void recover();
     return () => { active = false; };
@@ -122,8 +122,8 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
       localStorage.removeItem(key);
       if (localStorage.getItem(key) !== null) throw new Error('RECEIPT_NOT_CLEARED');
       setReceipt(null); setSubmitted(false); setCredit(false);
-      setNote(`原任务 ${prior.taskid} 与费用核对记录已留存。本操作尚未发请求；新一轮须重新勾选确认扣额度并点击提交。`);
-    } catch { setNote('无法完整保存原任务历史，仍保留提交保护；未发出新请求。'); }
+      setNote(`原任务和费用记录已留存。这次没有发出请求。`);
+    } catch { setNote('原任务记录没保存成功。这次没有发出请求。'); }
   }
   async function submit() {
     if (lock.current || submitted || unknown || !credit || (target.kind === 'image' ? !image : !prompt.trim())) return;
@@ -132,8 +132,8 @@ export function OutdoorFacilityGenerate({ target, projectId, controller, onClose
     if (blocksSubmission(prior)) { setReceipt(prior); setNote(submissionNote(prior!)); return; }
     const record: Submission = { requestId: crypto.randomUUID(), projectId, facilityId: target.facilityId, facilityName: target.facilityName, state: 'submitting', submittedAt: Date.now() };
     try { saveSubmission(record); }
-    catch { setNote('无法持久保存提交保护，本次没有发出生成请求。请恢复本地存储后再试。'); return; }
-    lock.current = true; setBusy(true); setReceipt({ ...record }); setNote('提交已持久登记，正在等待服务端回执；刷新或关闭也不会自动重发。');
+    catch { setNote('本地存储不可用，这次没有提交。恢复后再试。'); return; }
+    lock.current = true; setBusy(true); setReceipt({ ...record }); setNote('已提交，正在等待结果。刷新不会重发。');
     const cloud: MaterialCloudLane | undefined = controller ? {
       createJob: async (text, options) => {
         const job = await controller.createGenerationJob(text, record.requestId, { ...options, provider: 'aholo' });

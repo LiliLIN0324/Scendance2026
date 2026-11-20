@@ -85,7 +85,7 @@ function References({ label, selected, options, onChange, disabled }: {
   for (const option of options) { const found = groups.get(key(option.id)); if (found) found.labels.push(option.label); else groups.set(key(option.id), { id: option.id, labels: [option.label] }); }
   for (const id of selected) if (!groups.has(key(id))) groups.set(key(id), { id, labels: [] });
   return <fieldset className="sc-commercial-reference-list" disabled={disabled}><legend>{label}</legend>
-    {!groups.size && <p className="sc-commercial-subtle">尚无可关联资料，可独立登记约定。</p>}
+    {!groups.size && <p className="sc-commercial-subtle">暂无可关联资料，可单独登记。</p>}
     {[...groups].map(([normal, option]) => <label key={normal}><input type="checkbox" checked={selected.some(id => key(id) === normal)} onChange={event => {
       if (disabled) return; onChange(event.currentTarget.checked ? [...selected, option.id] : selected.filter(id => key(id) !== normal));
     }}/>{option.labels.length === 1 ? option.labels[0] : option.labels.length ? '同编号资料不唯一，需核对' : '原关联未找到，保留待核'}
@@ -402,7 +402,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
   }
 
   return <section className="sc-commercial" aria-label="合同与约定">
-    <header className="sc-commercial-heading"><div><h2>合同与约定</h2><p className="sc-commercial-subtle">登记已有资料、保存原件与版本。金额和收付款节点为手工记录，人工报告不代替验签。</p></div></header>
+    <header className="sc-commercial-heading"><div><h2>合同与约定</h2><p className="sc-commercial-subtle">登记资料与原件。金额与节点手工记录，不代替验签。</p></div></header>
     {!eligible() ? <p className="sc-commercial-warning">请先打开编号明确的活动。云项目的商务资料暂未接入。</p> : <>
       <div className="sc-commercial-toolbar"><button type="button" className="sc-button" disabled={!!props.disabled || busy !== null} onClick={() => void reload()}>重新读取核对</button>
         <Field label="本次录入人" value={viewGeneration.current === generation ? recorder : ''} limit={commercialDossierLimits.party} disabled={!!formBlocked} onChange={value => { if (editable() && previewRef.current?.candidate.status !== 'present') setRecorder(value); }}/>
@@ -430,7 +430,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
           <details className="sc-commercial-section"><summary>原件与来源</summary>{renderFiles('draft')}</details>
           <details className="sc-commercial-section"><summary>关联资料</summary>{renderReferences(shownEditor)}</details>
           <label className="sc-field">资料工作状态<select value={shownEditor.content.workState} onChange={event => changeContent(content => ({ ...content, workState: event.currentTarget.value as CommercialContent['workState'] }))}>{Object.entries(workNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <p className="sc-commercial-subtle">保存草稿不会固定版本或记录签署。归档只整理资料。</p>
+          <p className="sc-commercial-subtle">草稿只保存内容，归档只整理资料。</p>
           <Field label="固定说明" value={fixingNote} multiline onChange={value => { if (editable() && previewRef.current?.candidate.status !== 'present') assignFixingNote(value); }}/>
           {!!fixingNote.trim() && <button className="sc-button" type="button" onClick={() => { if (editable()) assignFixingNote(''); }}>放弃固定说明</button>}
         </fieldset><div className="sc-commercial-actions"><button className="sc-button" type="submit" disabled={!!formBlocked}>保存草稿</button><button className="sc-button" type="button" disabled={blocked} onClick={abandon}>放弃未保存修改</button>
@@ -441,7 +441,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
         {agreement && renderHistory(agreement)}
         {shownEditor && agreement?.draft && agreement.draft.draftToken !== shownEditor.draftToken && <details className="sc-commercial-section"><summary>最新已存草稿摘要（本次输入保留）</summary><ContentView content={agreement.draft.content}/></details>}
         {shownReport && renderReport(shownReport)}
-        <details className="sc-commercial-section" open><summary>商务原件包</summary><p className="sc-commercial-subtle">内部保存台账与已有原件。外链及缺失来源会标明；场景V1–V4不包含本领域。</p>
+        <details className="sc-commercial-section" open><summary>商务原件包</summary><p className="sc-commercial-subtle">内部台账：外链与缺失来源会标明。</p>
           <div className="sc-commercial-actions"><button type="button" className="sc-button" disabled={blocked || dirtyEditor || dirtyReport || preview?.candidate.status === 'present'} onClick={() => void exportPackage()}>导出商务原件包</button>
             <label className="sc-field">选择商务包<input type="file" accept="application/json,.json" aria-label="选择商务包" disabled={blocked || dirtyEditor || dirtyReport} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void inspectPackage(file); }}/></label></div>
           {preview && <div className="sc-commercial-confirm" aria-label="商务包预检结果">{preview.candidate.status === 'present' ? <>
@@ -464,7 +464,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
   </section>;
 
   function renderMoneyAndPlans(edit: Editor): JSX.Element {
-    return <details className="sc-commercial-section"><summary>文件金额与收付款计划</summary><p className="sc-commercial-subtle">只抄录已有依据，不生成报价或实际收付。未知留空；其他币种保留原文待核。</p>
+    return <details className="sc-commercial-section"><summary>文件金额与收付款计划</summary><p className="sc-commercial-subtle">只抄录已有内容，不报价。不知道的留空。</p>
       <div className="sc-commercial-grid"><Field label="文件记载金额（元）" value={edit.money.file ?? ''} onChange={value => changeEdit(editor => ({ ...editor, money: { ...editor.money, file: value } }))}/>
         <label className="sc-field">文件金额币种<select value={edit.content.fileAmount.currency ?? ''} onChange={event => changeContent(content => ({ ...content, fileAmount: { ...content.fileAmount, currency: event.currentTarget.value === 'CNY' ? 'CNY' : null } }))}><option value="">未核对或其他币种</option><option value="CNY">人民币</option></select></label></div>
       <Field label="文件金额依据" value={edit.content.fileAmount.basisNote} multiline onChange={value => changeContent(content => ({ ...content, fileAmount: { ...content.fileAmount, basisNote: value } }))}/>
@@ -500,7 +500,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
     const value = owner === 'draft' ? shownEditor : shownReport;
     if (!value) return <></>;
     const files = ownerFiles(owner), selectedFiles = owner === 'draft' ? (value as Editor).content.documentRefs : (value as ReportEditor).attachmentIds;
-    return <><p className="sc-commercial-subtle">PDF、PNG、JPEG按原字节保存，每件10MiB、项目已有原件合计32MiB。外链不自动读取。</p>
+    return <><p className="sc-commercial-subtle">PDF/PNG/JPEG 原样保存，每件 10MiB。</p>
       <label className="sc-field">文件用途<select value={sourceInput.purpose} disabled={owner === 'report'} onChange={event => { const purpose = event.currentTarget.value as SourceInput['purpose']; changeSource(source => ({ ...source, purpose })); }}>{Object.entries(purposeNames).map(([purpose, label]) => <option value={purpose} key={purpose}>{label}</option>)}</select></label>
       <Field label="文件版本标识" value={sourceInput.label} limit={commercialDossierLimits.title} onChange={label => changeSource(source => ({ ...source, label }))}/>
       <label className="sc-field">添加{owner === 'draft' ? '草稿' : '报告'}原件<input type="file" accept="application/pdf,image/png,image/jpeg" aria-label={owner === 'draft' ? '添加草稿原件' : '添加报告原件'} disabled={!!formBlocked || !recorder.trim()} onChange={event => { const files = event.currentTarget.files; void upload(owner, files); event.currentTarget.value = ''; }}/></label>
@@ -534,7 +534,7 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
         <div className="sc-commercial-actions"><button type="button" className="sc-button" disabled={blocked || dirtyEditor || dirtyReport || !!value.draft} onClick={() => startVersion(value, version)}>从此版起新草稿</button>
           <button type="button" className="sc-button" disabled={blocked || dirtyEditor || dirtyReport} onClick={() => startReport(value, version)}>记录所见签署</button></div>
       </details>)}
-      <p className="sc-commercial-subtle">人工报告只记录所见，不验证签署效力。更正和作废仅处理本页报告。</p>
+      <p className="sc-commercial-subtle">只记录看到的，不验证签名。</p>
       {reports.map(item => { const payload = item.kind === 'correction' ? item.replacement : item; const leaf = !reports.some(row => 'targetId' in row && key(row.targetId) === key(item.id)); const version = value.versions.find(row => key(row.id) === key(item.versionId));
         return <article className="sc-commercial-agreement" key={item.id}><strong>{item.kind === 'reported_signed' ? '原人工报告' : item.kind === 'correction' ? '追加更正报告' : '追加作废报告'}</strong><p>{item.kind !== 'void' && projection?.effectiveReports.some(row => key(row.effectiveReportId) === key(item.id)) ? '当前有效报告记录' : '原历史保留'}</p>
           <p>{payload.evidenceNote}</p><p>录入人 {item.recordedBy} · {recordedTime(item.recordedAt)}</p>{'reason' in item && <p>原因：{item.reason}</p>}

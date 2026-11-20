@@ -2290,8 +2290,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               }
             }
             setEditMessage(offered
-              ? `「${result.model.name}」已回到三选一最前，点它即可预览；也已回填当前设施的模型候选。`
-              : `「${result.model.name}」已回填「${result.model.facilityName}」候选；选候选才更换模型。`);
+              ? `「${result.model.name}」已回到三选一最前，点它即可预览。也已回填当前设施的模型候选。`
+              : `「${result.model.name}」已回填「${result.model.facilityName}」候选。选候选才更换模型。`);
           } else if (result.state === 'failed') {
             if (link.facilityId === selectedFacilityId) setFacilityGenerateStatus(null);
             setEditMessage(`「${link.name}」${result.message}`);
@@ -2330,7 +2330,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         createdAt: Date.now(),
         sessionOnly: true,
       });
-      setEditMessage(`「${asset.name}」已导入并回填候选首位（仅本次编辑有效，刷新后需重新导入），点候选即可切 3D 模型。`);
+      setEditMessage(`「${asset.name}」已导入并放到候选首位。刷新后要重新导入。`);
     } catch (error) {
       setEditMessage(error instanceof Error ? error.message : 'GLB 导入失败，请重试。');
     }
@@ -2579,7 +2579,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const unlocked: LockedLayerMap = { ...lockedLayersRef.current, boundary: false };
       lockedLayersRef.current = unlocked;
       setLockedLayers(unlocked);
-      setEditMessage('已解锁用地红线，可以修改；重画闭合后会自动锁定。');
+      setEditMessage('已解锁用地红线，可以修改。重画闭合后会自动锁定。');
     }
     // 还没红线、但地图上有搜索选区：把这块闭合范围放进红线草稿。
     // 点起点闭合走现有 closeDraft（写入 plan.boundary，再出确认卡）；Esc 仍是取消。
@@ -2589,7 +2589,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         draftRef.current = seeded;
         seededDraftRef.current = true;
         setRingDraftCount(seeded.length);
-        setEditMessage('地图上的范围已放进红线草稿。点一下起点闭合，确认后写入方案；Esc 取消。');
+        setEditMessage('地图上的范围已放进红线草稿。点一下起点闭合，确认后写入方案。Esc 取消。');
       }
     }
     // 2026-11-20 审计 K8：切到会落物的工具时，目标层若被隐藏就自动打开，
@@ -2600,7 +2600,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       layerStateRef.current = vis;
       setLayerState(vis);
       onVisibilityChange?.(vis);
-      setEditMessage(`已自动打开「${LAYER_HUMAN_LABELS[targetLayer]}」图层：这个工具要往该层放内容。`);
+      setEditMessage(`已自动打开「${LAYER_HUMAN_LABELS[targetLayer]}」图层，这个工具要往这层放东西。`);
     }
     draw();
     notifyPlanDraftChanged();
@@ -2639,8 +2639,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setDraft(next);
       setEditMessage(
         next.length === 0
-          ? '已移除全部节点；自己按 Esc 退出绘制。'
-          : `已移除上一个节点（还剩 ${next.length} 个）；双击左键完成绘制。`,
+          ? '已移除全部节点。自己按 Esc 退出绘制。'
+          : `已移除上一个节点（还剩 ${next.length} 个）。双击左键完成绘制。`,
       );
       return;
     }
@@ -2656,7 +2656,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           measureDraftRef.current = [];
           measureCursorRef.current = null;
           setMeasureDraftCount(0);
-          setEditMessage('已撤掉这个测量起点；继续点选或按 Esc 退出测量。');
+          setEditMessage('已撤掉这个测量起点。继续点选或按 Esc 退出测量。');
           draw();
         }
         return;
@@ -2665,7 +2665,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         event.preventDefault();
         event.stopPropagation();
         wallDraftRef.current = null;
-        setEditMessage('已取消这段墙，未写入方案；继续拖动画下一段。');
+        setEditMessage('已取消这段墙，未写入方案。继续拖动画下一段。');
         draw();
         return;
       }
@@ -2676,8 +2676,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         annotateDraftRef.current = next;
         setAnnotateDraftCount(next.length);
         setEditMessage(next.length > 0
-          ? `已撤上一个点（还剩 ${next.length} 个）；继续点选或按 Esc 退出。`
-          : '已撤完所有点；继续点选新图形，或按 Esc 退出。');
+          ? `已撤上一个点（还剩 ${next.length} 个）。继续点选或按 Esc 退出。`
+          : '已撤完所有点。继续点选新图形，或按 Esc 退出。');
         draw();
         return;
       }
@@ -2719,7 +2719,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (modeRef.current !== 'facility' || !facilityTemplateRef.current) return false;
     const next = ((facilityRotationRef.current + deltaDeg) % 360 + 360) % 360;
     facilityRotationRef.current = next;
-    setEditMessage(`待放置已旋转 ${Math.round(next)}°；R / Shift+R 调整，Esc 取消。`);
+    setEditMessage(`待放置已旋转 ${Math.round(next)}°。R / Shift+R 调整，Esc 取消。`);
     draw();
     notifyPlanDraftChanged();
     return true;
@@ -2809,7 +2809,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     commitPlan(result.value.plan);
     switchLevel(result.value.level.id);
-    setEditMessage(`已新建「${result.value.level.name}」并切换过去；撤销可回退。`);
+    setEditMessage(`已新建「${result.value.level.name}」并切换过去。撤销可回退。`);
   }
 
   /** 重命名图层（popover 就地输入提交；走 commitPlan 可撤销）。 */
@@ -2835,7 +2835,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan(result.value);
     setDeleteArmLevelId(null);
     if (activeLevelIdRef.current === id) switchLevel(fallback);
-    setEditMessage('图层连同其中的内容已删除；撤销可找回。');
+    setEditMessage('图层连同其中的内容已删除。撤销可找回。');
   }
 
   /** 设置页写入：不进撤销栈。几何编辑仍走 commitPlan。 */
@@ -3016,7 +3016,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (!choice) return;
     previewArrangeFacilities(choice.facilities, choice.name);
     focusArrangeFacilities(choice.facilities);
-    setEditMessage(`预览：${choice.name} · ${choice.count} 件，确认后落库。`);
+    setEditMessage(`预览 ${choice.name} · ${choice.count} 件，确认后落库。`);
   }
 
   /**
@@ -3162,7 +3162,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       zoneOverflow.filter(item => item.pulled !== null).map(item => [item.zoneId, item.pulled!] as const),
     );
     if (suggestions.size === 0) {
-      setEditMessage('这些分区没法自动收进（红线与设计范围不相交，或缩到最小面积也放不下）；请先确认红线，或手动拖动分区。');
+      setEditMessage('这些分区收不进红线，先确认红线或手动拖。');
       return;
     }
     const next: SitePlanData = {
@@ -3178,8 +3178,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setZoneOverflow(still);
     setEditMessage(
       still.length > 0
-        ? `已收进 ${suggestions.size} 个分区；还有 ${still.length} 个放不下，请手动调整或先扩大红线。`
-        : `已把 ${suggestions.size} 个分区收进红线，原坐标已保留，可点「撤销」恢复。`,
+        ? `已收进 ${suggestions.size} 个分区。还有 ${still.length} 个放不下，请手动调整或先扩大红线。`
+        : `已把 ${suggestions.size} 个分区收进红线，可以撤销。`,
     );
     draw();
   }
@@ -4556,8 +4556,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setMode('view');
         setEditMessage(
           hadDraft
-            ? '已取消这次画线：未写入活动范围。需要时再点「在地图上手画活动范围」。'
-            : '已退出画线模式；活动范围未改动。',
+            ? '已取消这次画线，范围没写入。要画再点「在地图上手画活动范围」。'
+            : '已退出画线模式。活动范围未改动。',
         );
         onVenueBoundaryCanceledRef.current?.();
         return;
@@ -4751,7 +4751,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           event.preventDefault();
           commitPlan(clearPlanBoundary(planRef.current));
           selectBoundary(false);
-          setEditMessage('用地红线已整条删除（分区与物料保留，锚点不动）。Ctrl+Z 可撤销，或点「用地红线」重画。');
+          setEditMessage('整条红线删了，分区和物料还在。Ctrl+Z 可撤销。');
           return;
         }
         // 2026-11-11：分区选中（Placed Objects 树点行）也支持 Delete/Backspace 删除。
@@ -5027,11 +5027,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     rotatePendingFacility: deltaDeg => rotatePendingFacility(deltaDeg),
     cancelPendingPlacement: () => cancelPlacement(),
     beginVenueBoundary: anchor => {
-      if (!canReanchorOutdoorPlan(planRef.current, anchor)) { setEditMessage('已有规划不能直接更换地理锚点，请先新建户外活动；当前内容保持不变。'); return false; }
+      if (!canReanchorOutdoorPlan(planRef.current, anchor)) { setEditMessage('已有规划不能直接更换地理锚点，请先新建户外活动。当前内容保持不变。'); return false; }
       pendingVenueAnchorRef.current = anchor;
       // 手画入口只切工具，保留用户当前的中心、缩放与朝向。
       setMode('boundary');
-      setEditMessage('没有真实轮廓：请在地图上逐点圈出用地，闭合后才会写入新锚点与用地红线；Esc 取消。');
+      setEditMessage('没有真实轮廓，请在地图上逐点圈出用地。闭合后才写入新锚点。');
       return true;
     },
     applyWorkflowPlan:(next,expected)=>{
@@ -5064,10 +5064,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (!commitPlan(withScope)) return false;
       if (replaced) {
         setEditMessage(cleared > 0
-          ? `已换场地：旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
-          : `已换场地：旧草稿已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`);
+          ? `已换场地，旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
+          : `已换场地，旧草稿清空可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`);
       } else {
-        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；要微调就直接拖白框的边或角。`);
+        setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成。要微调就直接拖白框的边或角。`);
       }
       return true;
     },
@@ -5460,7 +5460,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     onVisibilityChange?.(next);
     if (!visible) {
       clearSelectionForLayer(kind);
-      setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已隐藏：该层内容暂不可选中或编辑。`);
+      setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已隐藏，内容暂不可编辑。`);
     }
     draw();
     notifyPlanDraftChanged();
@@ -5474,7 +5474,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setLockedLayers(next);
     if (locked) {
       clearSelectionForLayer(kind);
-      setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已锁定：只读，解锁后才能选中或编辑。`);
+      setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已锁定，解锁后才能编辑。`);
     }
     draw();
     notifyPlanDraftChanged();
@@ -5790,10 +5790,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         wallDraftRef.current = { a: point, b: point, snapA: snapped, snapB: null };
         setEditMessage(
           snapped?.source === 'wall'
-            ? '起点已吸到已有墙上（绿线）。再点一下终点；Esc 取消。'
+            ? '起点已吸到已有墙上（绿线）。再点一下终点。Esc 取消。'
             : snapped
-              ? '起点已吸到室内分区边线上（绿线）。再点一下终点；Esc 取消。'
-              : '起点已落。再点一下终点；Esc 取消。',
+              ? '起点已吸到室内分区边线上（绿线）。再点一下终点。Esc 取消。'
+              : '起点已落。再点一下终点。Esc 取消。',
         );
         draw();
         return;
@@ -5813,7 +5813,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const current = planRef.current;
       commitPlan({ ...current, walls: [...(current.walls ?? []), result.wall] });
       wallDraftRef.current = null;
-      setEditMessage(`已加一段墙：${result.lengthM.toFixed(2)} m。接着点起点画下一段；Esc 结束。`);
+      setEditMessage(`已加一段墙，长 ${result.lengthM.toFixed(2)} m。接着点起点画下一段。Esc 结束。`);
       draw();
       return;
     }
@@ -5879,7 +5879,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 2026-11-16 用户：「场地加一把锁，默认不编辑」——已画好的边界不允许被「画边界」直接覆掉。
     // 进了画边界模式就已在 setMode 里自动解锁，这里只作为兼底（防止外部直接改模式绕过）。
     if (modeRef.current === 'boundary' && layerLocked('boundary') && planRef.current.boundary.length >= 3) {
-      setEditMessage('用地红线已锁定：先在左侧「用地红线」行解锁，再重画红线。');
+      setEditMessage('先解锁用地红线，再重画。');
       return;
     }
     // 近首点 → 尝试闭合提交（红线 / 分区 / 设计范围同一套环草稿）。
@@ -5911,7 +5911,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     if (modeRef.current === 'boundary') {
       const nextAnchor = pendingVenueAnchorRef.current;
-      if (nextAnchor && !canReanchorOutdoorPlan(current, nextAnchor)) { setEditMessage('规划已有内容变化，本次不改变地理锚点；请新建户外活动后选址。'); setMode('view'); return; }
+      if (nextAnchor && !canReanchorOutdoorPlan(current, nextAnchor)) { setEditMessage('规划已有内容变化，本次不改变地理锚点。请新建户外活动后选址。'); setMode('view'); return; }
       const priorAnchor = current.anchor ?? { lng: DEFAULT_ANCHOR_LNG, lat: DEFAULT_ANCHOR_LAT };
       const boundary = nextAnchor ? boundaryAtNewAnchor(draftPoints, priorAnchor, nextAnchor) : draftPoints;
       const check = checkBoundaryRing(boundary);
@@ -5938,7 +5938,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (!scopeLockedRef.current) toggleScopeLock();
       focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成；红线和范围已锁定，需要调整时点锁解锁。${overflowSuffix(boundaryOverflow)}`);
+      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成。红线和范围已锁定，需要调整时点锁解锁。${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
@@ -5978,7 +5978,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }],
       });
       setMode('view');
-      const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
+      const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('。')}` : '';
       setEditMessage(`分区「${name}」已添加${hint}`);
     }
   }
@@ -6256,7 +6256,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     downPxRef.current = hit.px;
     pointerConsumedRef.current = true;
     setDragging(true);
-    setEditMessage('已在线上插入折点，继续拖动调整；松手生效（点中线上的折点即可删掉它）。');
+    setEditMessage('已在线上插入折点，继续拖动调整。松手生效（点中线上的折点即可删掉它）。');
     draw();
     return true;
   }
@@ -6295,7 +6295,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 2026-11-18 用户口径：堵体是「线」，不是占地块——点它进画墙模式，不走放设施。
     if (entry.slug === 'wall') {
       setMode('wall');
-      setEditMessage('画墙：在室内分区边线附近点一下起点，再点一下终点；Esc 结束。');
+      setEditMessage('画墙在分区边线附近点起点，再点终点。Esc 结束。');
       return;
     }
     armedCatalogRef.current = null;
@@ -6310,7 +6310,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     facilityTemplateRef.current = template.templateId;
     facilityTemplateObjRef.current = template;
     setFacilityTemplateId(template.templateId);
-    setEditMessage(`正在放置「${planCanvasLabel(entry.nameZh, 14)}」（${formatPlanObjectSize(template.width, template.depth)}）：点击地图落位；R 旋转，Esc 或右键取消。`);
+    setEditMessage(`正在放置「${planCanvasLabel(entry.nameZh, 14)}」（${formatPlanObjectSize(template.width, template.depth)}）：点击地图落位。R 旋转，Esc 或右键取消。`);
     draw();
   }
 
@@ -6342,7 +6342,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         ...(entry.color ? { color: entry.color } : {}),
         name: entry.nameZh,
       };
-      setEditMessage(`画「${entry.nameZh}」：单击加路径点，双击完成（主题色动线）；Esc 结束。`);
+      setEditMessage(`画「${entry.nameZh}」，单击加点，双击完成。Esc 结束。`);
       draw();
       return;
     }
@@ -6350,7 +6350,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       zonePresetRef.current = { ...(entry.color ? { color: entry.color } : {}), name: entry.nameZh };
       setZoneSemantic('reserved');
       setMode('zone');
-      setEditMessage(`画「${entry.nameZh}」：单击加顶点，双击或靠近首点闭合（主题色区域）；Esc 结束。`);
+      setEditMessage(`画「${entry.nameZh}」，单击加点，点回起点闭合。Esc 结束。`);
       draw();
       return;
     }
@@ -6364,7 +6364,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     facilityTemplateRef.current = template.templateId;
     facilityTemplateObjRef.current = template;
     setFacilityTemplateId(template.templateId);
-    setEditMessage(`正在放置「${planCanvasLabel(entry.nameZh, 14)}」（${formatPlanObjectSize(template.width, template.depth)}）：点击地图落位；R 旋转，Esc 或右键取消。`);
+    setEditMessage(`正在放置「${planCanvasLabel(entry.nameZh, 14)}」（${formatPlanObjectSize(template.width, template.depth)}）：点击地图落位。R 旋转，Esc 或右键取消。`);
     draw();
   }
 
@@ -6391,16 +6391,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (tool === 'boundary') {
       // 2026-11-11：边界重画入口回归（OnePlan 化时曾随顶部工具条丢失）——画完闭合即替换起步矩形。
       setEditMessage(boundaryWasLocked
-        ? '重画用地红线：用地原为锁定，已自动解锁；沿用地单击加顶点，双击或点回起点闭合替换旧红线，Esc 取消。'
-        : '重画用地红线：沿用地单击加顶点，双击或点回起点闭合替换旧红线；Esc 取消。');
+        ? '已自动解锁用地红线，沿用地加点，点回起点闭合。Esc 取消。'
+        : '沿用地加点，点回起点闭合就替换旧红线。Esc 取消。');
     } else if (tool === 'scope') {
-      setEditMessage('拖出设计范围：按住鼠标拖一个矩形（可以比场地大一圈），松手即生效；Esc 取消。');
+      setEditMessage('按住鼠标拖一个矩形，松手生效。Esc 取消。');
     } else if (tool === 'zone') {
-      setEditMessage('画区域：在场地内单击加顶点，双击或靠近首点闭合；Esc 结束。');
+      setEditMessage('在场地内单击加点，点回起点闭合。Esc 结束。');
     } else if (tool === 'node') {
-      setEditMessage('放入口/出口/出入口：单击地图落一个节点，可连续放；Esc 结束。');
+      setEditMessage('单击地图落节点，可以连着放。Esc 结束。');
     } else {
-      setEditMessage('画路线：单击加路径点，双击完成；Esc 结束。');
+      setEditMessage('单击加路径点，双击完成。Esc 结束。');
     }
   }
 
@@ -6415,7 +6415,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     workerRoleRef.current = role;
     setWorkerRole(role);
     setMode('worker');
-    setEditMessage(`布「${role}」：单击地图落一个点位，可连续放；Esc 结束。`);
+    setEditMessage(`布「${role}」：单击地图落一个点位，可连续放。Esc 结束。`);
   }
 
   /**
@@ -6436,7 +6436,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setVehicleType(type);
     setMode('vehicle');
     const entry = VEHICLE_TYPES.find(item => item.id === type);
-    setEditMessage(`布「${entry?.name ?? type}」：单击地图落一台车，可连续放；Esc 结束。`);
+    setEditMessage(`布「${entry?.name ?? type}」：单击地图落一台车，可连续放。Esc 结束。`);
   }
 
   /**
@@ -6966,7 +6966,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     facilityCatalogRef.current = payload;
     armedCatalogRef.current = payload;
     setFacilityTemplateId(payload.templateId);
-    setEditMessage(`正在放置「${planCanvasLabel(payload.name, 14)}」（${formatPlanObjectSize(payload.width, payload.depth)}）：点击地图/地面落位；R 旋转，Esc 或右键取消。`);
+    setEditMessage(`正在放置「${planCanvasLabel(payload.name, 14)}」（${formatPlanObjectSize(payload.width, payload.depth)}）：点击地图/地面落位。R 旋转，Esc 或右键取消。`);
     draw();
     notifyPlanDraftChanged();
     return true;
@@ -7105,7 +7105,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       )],
     });
     selectFacility(result.value.id);
-    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('。')}` : '';
     const angle = rotationDeg;
     // 2026-11-20 审计 K7：压到别的设施时补一句软提示（问题清单里也会记一条，挪开就消失）。
     const overlap = facilityOverlapNotice(result.value, [...current.facilities, result.value]);
@@ -7412,7 +7412,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectFacility(copy.id);
     setEditMessage(clear
       ? `已复制「${facility.name}」，可直接拖动或用面板改尺寸/旋转。`
-      : `已复制「${facility.name}」，但四周都被占满：副本仍在原位置偏移 ${offset.x} × ${offset.y} m 处，问题清单会报越界或重叠。`);
+      : `已复制「${facility.name}」，但四周都被占满，副本只能原地偏移 ${offset.x} × ${offset.y} m 处，问题清单会报越界或重叠。`);
   }
 
   /* ---------------- 2026-11-12 OnePlan Selection tool：框选多选（B1–B3） ---------------- */
@@ -7461,7 +7461,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         multiFacilityIds.length ? `${multiFacilityIds.length} 件设施` : '',
         multiRouteIds.length ? `${multiRouteIds.length} 条流线` : '',
         multiNodeIds.length ? `${multiNodeIds.length} 个出入口候选` : '',
-      ].filter(Boolean).join('、') + '已删除' + (multiNodeIds.length ? '；关联引用已解除。' : '。'),
+      ].filter(Boolean).join('、') + '已删除' + (multiNodeIds.length ? '。关联引用已解除。' : '。'),
     );
     draw();
     notifyPlanDraftChanged();
@@ -7524,7 +7524,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setMultiSelectedFacilityIds(multiSelectedFacilityIdsRef.current);
     setEditMessage(clear
       ? `已复制 ${copies.length} 件设施（整体偏移 ${offset.x} × ${offset.y} m）。`
-      : `已复制 ${copies.length} 件设施，但四周都被占满：副本仍在偏移 ${offset.x} × ${offset.y} m 处，问题清单会报越界或重叠。`);
+      : `已复制 ${copies.length} 件设施，但四周都被占满，副本只能偏移 ${offset.x} × ${offset.y} m 处，问题清单会报越界或重叠。`);
     draw();
   }
 
@@ -7856,7 +7856,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function outsideScopeHint(designScope: readonly PlanPoint[], pt: PlanPoint): string | null {
     if (designScope.length < 3) return null;
     if (scopeContainsPoint(designScope, pt)) return null;
-    return '这个点在设计范围外（蒙版区）：仍然保留，但先确认要不要把设计范围扩大一点。';
+    return '这个点在范围外，先确认要不要扩大范围。';
   }
 
   /** 完成/提交动线：端点吸附节点（唯一端点来源），buildRoute 校验后提交；可连续画下一条。 */
@@ -7873,7 +7873,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (source) {
         const tail = draftPoints.slice(1);
         if (tail.length === 0) {
-          setEditMessage('续接至少还要再点 1 个点：单击加点，双击结束。');
+          setEditMessage('还要再点 1 个点，双击结束。');
           return;
         }
         const mergedRaw = extend.at === 'end'
@@ -7905,12 +7905,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         routeCursorRef.current = null;
         setRouteDraftCount(0);
         selectRoute(source.id);
-        setEditMessage(`已续接「${source.name}」（${planRouteKindLabels[next.kind]}）：现在 ${next.points.length} 个折点；可继续画或 Esc 结束。`);
+        setEditMessage(`已续接「${source.name}」（${planRouteKindLabels[next.kind]}）：现在 ${next.points.length} 个折点。可继续画或 Esc 结束。`);
         return;
       }
     }
     if (draftPoints.length < 2) {
-      setEditMessage('动线至少要 2 个点：单击加路径点，完成后点「完成动线」。');
+      setEditMessage('动线至少要 2 个点，点「完成动线」结束。');
       return;
     }
     const current = planRef.current;
@@ -7955,9 +7955,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectRoute(result.value.id);
     const snapHint = startSnap || endSnap ? '，端点已连接到出入口节点' : '';
     const crossingHint = withCrossings.added.length > 0
-      ? `；交界处已自动加${withCrossings.added.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}`
+      ? `。交界处已自动加${withCrossings.added.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}`
       : '';
-    setEditMessage(`动线「${result.value.name}」已添加${snapHint}${crossingHint}；继续画下一条或 Esc 结束。`);
+    setEditMessage(`动线「${result.value.name}」已添加${snapHint}${crossingHint}。继续画下一条或 Esc 结束。`);
   }
 
   /** 放节点模式单击：类型取当前工具箱选择，落点自动归属分区，自动编号命名，连续放置。 */
@@ -7984,8 +7984,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const node = result.value;
     commitPlan({ ...current, nodes: [...current.nodes, node] });
     selectNode(node.id);
-    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
-    setEditMessage(`已放置「${node.name}」${hint}；继续单击放置或 Esc 结束。`);
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('。')}` : '';
+    setEditMessage(`已放置「${node.name}」${hint}。继续单击放置或 Esc 结束。`);
   }
 
   /** 布人员模式单击：岗位/人数取面板值，落点自动归属分区（当前层分区）；连续放置。 */
@@ -8011,8 +8011,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }],
     });
     selectWorker(result.value.id);
-    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
-    setEditMessage(`已布「${result.value.role} ×${result.value.count}」${hint}；继续单击放置或 Esc 结束。`);
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('。')}` : '';
+    setEditMessage(`已布「${result.value.role} ×${result.value.count}」${hint}。继续单击放置或 Esc 结束。`);
   }
 
   /**
@@ -8039,8 +8039,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       vehicles: [...(current.vehicles ?? []), { ...result.value, ...activeLevelStamp() }],
     });
     selectVehicle(result.value.id);
-    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
-    setEditMessage(`已布「${vehicleLabelOf(result.value)} ×${result.value.count}」${hint}；继续单击放置或 Esc 结束。`);
+    const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('。')}` : '';
+    setEditMessage(`已布「${vehicleLabelOf(result.value)} ×${result.value.count}」${hint}。继续单击放置或 Esc 结束。`);
   }
 
   function updateRoute(id: string, patch: Partial<Pick<PlanRoute, 'name' | 'kind' | 'oneWay' | 'carrier'>>) {
@@ -8081,7 +8081,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan(updated.plan);
     setEditMessage(
       updated.retyped.length > 0
-        ? `动线方向已反转；交界处随之调整：${updated.retyped.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}。`
+        ? `动线方向已反转。交界处随之调整：${updated.retyped.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}。`
         : '动线方向已反转（起终点引用已互换）。',
     );
   }
@@ -8128,7 +8128,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       routes: detachNodeFromRoutes(id, current.routes),
     })) return;
     selectNode(null);
-    setEditMessage('出入口已删除；关联动线保留几何、引用已解除。');
+    setEditMessage('出入口已删除。关联动线保留几何、引用已解除。');
   }
 
   function updateWorker(id: string, patch: Partial<Pick<PlanWorker, 'role' | 'count' | 'zoneId' | 'assetId'>>) {
@@ -8280,8 +8280,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const draft = measureDraftRef.current;
     if (draft.length < (kind === 'area' ? 3 : 2)) {
       setEditMessage(kind === 'area'
-        ? '面积测量：按住对角拖出矩形（Shift 正方形），或单击描顶点、点回起点闭合。'
-        : '距离测量：按住拖一条线，或单击起点和终点；继续单击可接成多段。');
+        ? '面积测量：拖一个矩形，或点回起点闭合。'
+        : '距离测量：拖一条线，或点起点和终点。');
       return;
     }
     const current = planRef.current;
@@ -8305,7 +8305,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const valueText = result.value.kind === 'area'
       ? formatAreaM2(measureValue(result.value))
       : formatLengthM(measureValue(result.value));
-    setEditMessage(`已量「${result.value.name}」= ${valueText}；可接着加一段，或双击 / Esc 结束（退出会自动清掉这条线）。`);
+    setEditMessage(`已量「${result.value.name}」= ${valueText}。可接着加一段，或双击 / Esc 结束（退出会自动清掉这条线）。`);
   }
 
   /** 把测量集合写成剩余集；为空时不留下空数组（保持与历史快照同形，方便比较）。 */
@@ -8437,7 +8437,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return false;
     }
     commitPlan({ ...current, annotations: [...(current.annotations ?? []), { ...result.value, ...activeLevelStamp() }] });
-    setEditMessage(`已添加标注「${result.value.name}」；继续标注或 Esc 结束。`);
+    setEditMessage(`已添加标注「${result.value.name}」。继续标注或 Esc 结束。`);
     return true;
   }
 
@@ -8870,8 +8870,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       routeDraftRef.current = next;
       setRouteDraftCount(next.length);
       setEditMessage(next.length === 0
-        ? '已撤回起点（仍在画动线：单击重新开始，Esc 退出）。'
-        : `已撤回刚放的点，还剩 ${next.length} 个；双击结束动线。`);
+        ? '已撤回起点。单击重新开始，Esc 退出。'
+        : `已撤回刚放的点，还剩 ${next.length} 个。双击结束动线。`);
       draw();
       notifyPlanDraftChanged();
       return true;
@@ -8880,7 +8880,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const next = draftRef.current.slice(0, -1);
       setDraft(next);
       setEditMessage(next.length === 0
-        ? '草稿已清空（仍在收点模式：单击重新开始，Esc 退出）。'
+        ? '草稿已清空。单击重新开始，Esc 退出。'
         : `已撤回上一个点，还剩 ${next.length} 个。`);
       notifyPlanDraftChanged();
       return true;
@@ -8921,8 +8921,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setLayerLocked('boundary', next);
     if (next) clearBoundaryDeleteArm();
     setEditMessage(next
-      ? '用地红线已锁定：拖顶点、加点都不再响应；再点右上角这枚锁即可解锁。'
-      : '用地红线已解锁：可以拖顶点、双击加点 / 点顶点删点。');
+      ? '用地红线已锁定，点右上角那枚锁解锁。'
+      : '用地红线已解锁，可以拖顶点加点。');
   }
 
   /** 开关锁定：只关命中，不动数据；锁上时顺手清掉边悬停光标。 */
@@ -8932,8 +8932,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setScopeEdgeHover(null);
     setEditMessage(
       next
-        ? '设计范围边框已锁定：拖角、拖四条边都不再响应（防止手滑改到范围）；再点一次锁即可解锁。'
-        : '设计范围边框已解锁：可以拖角、拖四条边调整范围。',
+        ? '设计范围已锁定，再点一次锁解锁。'
+        : '设计范围已解锁，可以拖角调整。',
     );
     draw();
   }
@@ -8972,12 +8972,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       downPxRef.current = null;
       if (!anchor) {
         setEditMessage(activeMode === 'route'
-          ? '正在画动线：松开 Alt 单击即可加点（Alt 只用来从已有点分叉）。'
-          : 'Alt 只能从已有的点（出入口 / 动线折点）分叉画线；空白处请松开 Alt 再点。');
+          ? '正在画动线，松开 Alt 单击加点。'
+          : 'Alt 只能从已有的点（出入口 / 动线折点）分叉画线。空白处请松开 Alt 再点。');
         return;
       }
       if (activeMode === 'route' && routeDraftRef.current.length > 0) {
-        setEditMessage('正在画动线：先双击结束或 Esc 取消，再按住 Alt 从别的点分叉。');
+        setEditMessage('先结束这条线，再按住 Alt 分叉。');
         return;
       }
       branchAnchorHintRef.current = null;
@@ -8999,7 +8999,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const kindLabel = planRouteKindLabels[intent.kind];
       setEditMessage(intent.extendAt
         ? `已接着「${anchor.label}」的${intent.extendAt === 'start' ? '起点' : '终点'}画（同一条${kindLabel}线，双击结束后并入、不新建）：单击加点，Ctrl+Z 撤刚放的点。`
-        : `已从「${anchor.label}」分叉一条${kindLabel}新动线（沿用原线的类型/颜色）：单击加点、双击结束；Ctrl+Z 撤刚放的点。`);
+        : `已从「${anchor.label}」分叉一条${kindLabel}新动线沿用原线样式。单击加点，双击结束。`);
       draw();
       return;
     }
@@ -9009,7 +9009,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       scopeDragRef.current = { startPt: hit.pt };
       downPxRef.current = hit.px;
       pointerConsumedRef.current = true;
-      setEditMessage('拖出一个矩形作为设计范围，松手生效；Shift = 正方形，Esc 取消。');
+      setEditMessage('拖出一个矩形作为设计范围，松手生效。Shift = 正方形，Esc 取消。');
       return;
     }
     // 2026-11-16 用户「场地右上角也加一个小锁」：这枚锁先吃掉自己那一小块，
@@ -9046,7 +9046,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           scopeResizeRef.current = { fixed: { x: fixed.x, y: fixed.y } };
           downPxRef.current = hit.px;
           pointerConsumedRef.current = true;
-          setEditMessage('拖角点调整设计范围（仍是轴对齐矩形）；Esc 取消。');
+          setEditMessage('拖角点调整设计范围（仍是轴对齐矩形）。Esc 取消。');
           return;
         }
         // 2026-11-15：角之外还有四条边——按住一条边只改这个方向，对边钉住不动。
@@ -9059,7 +9059,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           downPxRef.current = hit.px;
           pointerConsumedRef.current = true;
           setEditMessage(
-            `拖动「设计范围${scopeEdgeLabel(edge)}边」调整范围（只改这个方向，对边不动）；Esc 取消。`,
+            `拖动「设计范围${scopeEdgeLabel(edge)}边」调整范围（只改这个方向，对边不动）。Esc 取消。`,
           );
           return;
         }
@@ -9095,7 +9095,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             pointerConsumedRef.current = true;
             downPxRef.current = hit.px;
             setDragging(true);
-            setEditMessage(`拖角柄缩放「${zone.name}」：对角钉住不动；Shift = 等比（不变形），Esc 取消。`);
+            setEditMessage(`拖角柄缩放「${zone.name}」：对角钉住不动。Shift = 等比（不变形），Esc 取消。`);
             draw();
             return;
           }
@@ -9133,7 +9133,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             downPxRef.current = hit.px;
             pointerConsumedRef.current = true;
             setDragging(true);
-            setEditMessage('已在边上插入顶点，继续拖动调整；松手生效。');
+            setEditMessage('已在边上插入顶点，继续拖动调整。松手生效。');
             draw();
             return;
           }
@@ -9173,7 +9173,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           downPxRef.current = hit.px;
           setDragging(true);
           setPreviewRing(planRef.current.boundary);
-          setEditMessage('拖角柄缩放用地红线：对角钉住不动；Shift = 等比（不变形），Esc 取消。');
+          setEditMessage('拖角缩放红线，对角不动。Shift 等比，Esc 取消。');
           draw();
           return;
         }
@@ -9195,7 +9195,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           boundaryInsertedAtRef.current = performance.now();
           pointerConsumedRef.current = true;
           downPxRef.current = hit.px;
-          setEditMessage('已在边上插入顶点，继续拖动调整；双击顶点即可删除。');
+          setEditMessage('已在边上插入顶点，继续拖动调整。双击顶点即可删除。');
           draw();
           return;
         }
@@ -9205,7 +9205,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           downPxRef.current = hit.px;
           pointerConsumedRef.current = true;
           setPreviewRing(planRef.current.boundary);
-          setEditMessage('拖动红线顶点改形；拖到另一个顶点上松手即合并，双击顶点可删除。');
+          setEditMessage('拖动红线顶点改形。拖到另一个顶点上松手即合并，双击顶点可删除。');
           draw();
           return;
         }
@@ -9217,14 +9217,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         && planPointInRing(hit.pt, planRef.current.boundary) && !boundarySelectedRef.current) {
         selectBoundary(true);
         setEditMessage(layerLocked('boundary')
-          ? '已选中用地红线（整条，图层锁定中）：Delete 删除整条红线与设计范围；改形状需先解锁。Esc 取消选择。'
-          : '已选中用地红线（整条）：Delete 删除整条红线与设计范围，Esc 取消选择。');
+          ? '已选中整条红线。Delete 删除，改形状要先解锁。'
+          : '已选中整条红线。Delete 删除，Esc 取消。');
       }
       // 2026-11-16：锁着时点边界不能“默不作声”——告知解锁入口。
       if (hit && layerLocked('boundary')) {
         const lockedEdge = nearestRingEdge(planRef.current.boundary, hit.px, currentViewport());
         if (lockedEdge && lockedEdge.distPx <= VERTEX_EDGE_HIT_PX) {
-          setEditMessage('用地红线已锁定：点右上角那枚锁解锁后，就能拖顶点、双击边线加点。');
+          setEditMessage('用地红线已锁定，先点锁解锁。');
         }
       }
       // 2026-11-14：选中流线后按住顶点即改形（Agent 生成物可编辑；优先于节点拖动）。
@@ -9376,7 +9376,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 2026-11-16 用户：「场地和区域是一样的，也有加节点、减节点、挪节点」+「给场地加把锁」。
       // 先看锁：默认锁着，解锁后才有手柄、能加点/减点。
       if (layerLocked('boundary')) {
-        setEditMessage('用地红线已锁定：在左侧「用地红线」行点锁图标解锁后就能加/减/挪顶点。');
+        setEditMessage('用地红线已锁定，先在左侧解锁。');
         return;
       }
       // 2026-11-18：编辑红线模式同样能拖角柄整体缩放（优先于顶点/边线命中，理同浏览模式）。
@@ -9391,7 +9391,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           started: false,
         };
         setPreviewRing(planRef.current.boundary);
-        setEditMessage('拖角柄缩放用地红线：对角钉住不动；Shift = 等比（不变形），Esc 取消。');
+        setEditMessage('拖角缩放红线，对角不动。Shift 等比，Esc 取消。');
         draw();
         return;
       }
@@ -9421,7 +9421,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       dragVertexRef.current = edge.index + 1;
       boundaryJustInsertedRef.current = true;
       boundaryInsertedAtRef.current = performance.now();
-      setEditMessage('已在红线上插入顶点，继续拖动调整；松手生效（点一下顶点即可删掉它）。');
+      setEditMessage('已在红线上插入顶点，继续拖动调整。松手生效（点一下顶点即可删掉它）。');
       draw();
     }
   }
@@ -9480,7 +9480,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             routeId: drag.routeId,
             index: mergeTarget > drag.index ? mergeTarget - 1 : mergeTarget,
           };
-          setEditMessage('够近了：松手就把这个折点并到相邻折点上。');
+          setEditMessage('够近了，松手就并到相邻折点。');
           draw();
           return;
         }
@@ -9857,7 +9857,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               zoneId: drag.zoneId,
               index: mergeTarget > drag.index ? mergeTarget - 1 : mergeTarget,
             };
-            setEditMessage('够近了：松手就把这个顶点并到相邻顶点上。');
+            setEditMessage('够近了，松手就并到相邻顶点。');
             draw();
             return;
           }
@@ -9867,7 +9867,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           draw();
         }
         const stuck = stickPointToBoundary(snapPoint(hit.pt, viewport), planRef.current.boundary, viewport);
-        const stickHint = stuck.stuck ? '已贴到用地红线上；沿着红线拖可以调位置。' : null;
+        const stickHint = stuck.stuck ? '已贴到用地红线上。沿着红线拖可以调位置。' : null;
         const result = moveRingVertex(
           base,
           drag.index,
@@ -9921,7 +9921,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const target = routeSnap ?? hit.pt;
         const result = movePlanNode(node, target, planRef.current.routes);
         if (routeSnap && result.ok) {
-          setEditMessage('已吸附到动线上；继续拖动离开即可脱开。');
+          setEditMessage('已吸附到动线上。继续拖动离开即可脱开。');
         }
         if (result.ok) {
           nodeDragPreviewRef.current = result.value;
@@ -10173,7 +10173,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             // 删点可能把“进界”那一段拉长，交界处的出入口跟着补上。
             commitPlan(planWithCrossingNodes(removeBase, removed.value).plan);
             selectRoute(route.id);
-            setEditMessage(`已删除这个折点，两侧折点已相连（剩 ${removed.value.points.length} 个）；撤销可找回。`);
+            setEditMessage(`已删除这个折点，两侧折点已相连（剩 ${removed.value.points.length} 个）。撤销可找回。`);
           }
           routeVertexHoverRef.current = null;
           draw();
@@ -10204,11 +10204,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             commitPlan(dragged.plan);
             selectRoute(route.id);
             const crossingHint = dragged.added.length > 0
-              ? `；交界处已自动加${dragged.added.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}`
+              ? `。交界处已自动加${dragged.added.map(node => `「${node.name}」（${nodeKindLabel(node.kind)}）`).join('、')}`
               : '';
             setEditMessage(
               mergedNow
-                ? `已把这个折点并到相邻折点上（剩 ${preview.points.length} 个）${crossingHint}；撤销可找回。`
+                ? `已把这个折点并到相邻折点上（剩 ${preview.points.length} 个）${crossingHint}。撤销可找回。`
                 : `「${route.name}」路线已更新（${preview.points.length} 个折点）${crossingHint}。`,
             );
           }
@@ -10226,7 +10226,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setDraft([]);
       if (!onPlanChange) return;
       if (!rectBigEnough(ring)) {
-        setEditMessage('范围太小了：按住鼠标拖出一个矩形（最短边 2 m）。');
+        setEditMessage('范围太小，拖大一点，最短边 2 m。');
         draw();
         return;
       }
@@ -10446,7 +10446,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               });
               selectZone(zone.id);
               const sizeText = ringSizeText(preview.polygon);
-              setEditMessage(`「${zone.name}」已缩放到${sizeText ? ` ${sizeText}` : ''}；撤销可还原。`);
+              setEditMessage(`「${zone.name}」已缩放到${sizeText ? ` ${sizeText}` : ''}。撤销可还原。`);
             }
             draw();
           }
@@ -10491,7 +10491,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           // 只点不拖 = 白框描边转琥珀（预告再点一下会删），这一下不提交任何改动。
           if (!justInserted && down && Math.hypot(down.x - originPx.x, down.y - originPx.y) <= CLICK_MAX_MOVE_PX) {
             armBoundaryVertexDelete(vertexIndex);
-            setEditMessage('再点一下这个顶点就会删掉它（琥珀框 = 待删除）；拖动则改形。');
+            setEditMessage('再点一下这个顶点就会删掉它（琥珀框 = 待删除）。拖动则改形。');
             return;
           }
           const movedPx = planPointToPixel(preview[vertexIndex]!, viewport);
@@ -10573,7 +10573,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                 zones: current.zones.map(z => (z.id === zone.id ? { ...z, polygon: removed.value } : z)),
               });
               selectZone(zone.id);
-              setEditMessage(`已删除顶点，两侧顶点已相连（剩 ${removed.value.length} 个）；撤销可找回。`);
+              setEditMessage(`已删除顶点，两侧顶点已相连（剩 ${removed.value.length} 个）。撤销可找回。`);
             }
             zoneVertexHoverRef.current = null;
             draw();
@@ -10598,7 +10598,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               selectZone(zone.id);
               setEditMessage(
                 mergedNow
-                  ? `已把这个顶点并到相邻顶点上（剩 ${preview.polygon.length} 个）；撤销可找回。`
+                  ? `已把这个顶点并到相邻顶点上（剩 ${preview.polygon.length} 个）。撤销可找回。`
                   : `「${zone.name}」形状已更新。`,
               );
             }
@@ -10647,7 +10647,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             routes: current.routes.map(r => preview.routes.find(rr => rr.id === r.id) ?? r),
           });
           selectNode(preview.node.id);
-          setEditMessage(`出入口已移动；引用它的动线端点已随动。`);
+          setEditMessage(`出入口已移动。引用它的动线端点已随动。`);
           return;
         }
         selectNode(drag.id);
@@ -10887,7 +10887,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (event.altKey === true) {
       event.preventDefault();
       pointerConsumedRef.current = true;
-      setEditMessage('Alt 状态下双击不会删点（避免误删）；要删点请先松开 Alt。');
+      setEditMessage('Alt 状态下双击不会删点（避免误删）。要删点请先松开 Alt。');
       return;
     }
     if ((modeRef.current === 'view' || modeRef.current === 'select')
@@ -11475,7 +11475,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       </div>
       {/* 2026-11-12 精简：不再常驻三模式长说明，只给当前模式一句短引导；拖拽快速、单击逐点两种手势都保留。 */}
       <div style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.72, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-        {measureKind === 'distance' && '点起点，连续单击加段；双击 /「完成」结束'}
+        {measureKind === 'distance' && '点起点，连续单击加段。双击 /「完成」结束'}
         {measureKind === 'area' && '拖矩形（Shift 正方形），或点选闭合'}
       </div>
       {mode === 'measure' && (
@@ -11505,7 +11505,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const row = inventoryRows.find(r => r.kind === 'measurement' && r.id === m.id);
           if (row) setContextMenu({ surface: 'row', x: event.clientX, y: event.clientY, row });
         },
-        title: '点击定位到地图；右键菜单删除',
+        title: '点击定位到地图。右键菜单删除',
         icon: <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: PLACED_KIND_COLORS.measurement }} />,
         trailing: (
           <button
@@ -11609,7 +11609,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const row = inventoryRows.find(r => r.kind === 'annotation' && r.id === a.id);
           if (row) setContextMenu({ surface: 'row', x: event.clientX, y: event.clientY, row });
         },
-        title: '点击定位到地图；右键菜单删除',
+        title: '点击定位到地图。右键菜单删除',
         icon: <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: a.color ?? PLACED_KIND_COLORS.annotation }} />,
         trailing: (
           <button
@@ -11873,7 +11873,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         ×
                       </button>
                     </div>
-                    <label style={zoneRowStyle} title="这条分区服务于哪场活动：填了就代替分区名显示在图上，也会作为 AI 排布时的参考">
+                    <label style={zoneRowStyle} title="这条分区服务哪场活动，填了就显示在图上。">
                       事件
                       <ZoneEventInput key={`${generationProjectId ?? 'local'}:${zone.id}`} name={zone.name}
                         value={zone.event}
@@ -12107,7 +12107,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       {arrangePreview && (
                         <div role="group" aria-label="落位预览" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <span style={{ color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.hint }}>
-                            预览：{arrangePreview.label} · {arrangePreview.count} 件
+                            预览 {arrangePreview.label} · {arrangePreview.count} 件
                           </span>
                           <button type="button" onClick={confirmArrangePreview} style={modeButtonStyle(true)}>落库</button>
                           <button type="button" onClick={() => { clearArrangePreview(); setEditMessage(null); }} style={modeButtonStyle(false)}>取消</button>
@@ -12165,7 +12165,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: PLANNING_TEXT.soft, marginBottom: 4 }}>尺寸</div>
                           <div style={{ display: 'flex', gap: 6 }}>
-                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="宽度（米，失焦或回车生效；等比缩放：改深度时宽度按模板比例跟随）">
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="宽度（米，回车生效。改深度时按比例跟随）">
                           <span style={benchUnitLabelStyle}>W</span>
                           <input
                             aria-label="选中设施宽度（米）"
@@ -12186,7 +12186,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           />
                           <span style={benchUnitSuffixStyle}>m</span>
                         </label>
-                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="深度/长度（米，失焦或回车生效；等比缩放：改宽度时深度按模板比例跟随）">
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="深度（米，回车生效。改宽度时按比例跟随）">
                           <span style={benchUnitLabelStyle}>L</span>
                           <input
                             aria-label="选中设施深度（米）"
@@ -12235,7 +12235,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                 />
                                 <span style={benchUnitSuffixStyle}>m</span>
                               </label>
-                              <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="窗洞高（米，失焦或回车生效；窗顶不超过 3.5 m 墙顶）">
+                              <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="窗洞高（米，失焦或回车生效。窗顶不超过 3.5 m 墙顶）">
                                 <span style={benchUnitLabelStyle}>高</span>
                                 <input
                                   aria-label="选中窗窗高（米）"
@@ -12388,7 +12388,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                             onClick={() => {
                               if (active) return;
                               updateFacility(selectedFacility.id, { modelOverride: isDefault ? undefined : candidate.slug });
-                              setEditMessage(`「${selectedFacility.name}」已换用「${candidate.name}」，2D 占地已重置为模型真实尺寸（约 ${candidate.width.toFixed(1)}×${candidate.depth.toFixed(1)} m）；之后拖角缩放，3D 等比跟随。`);
+                              setEditMessage(`「${selectedFacility.name}」已换用「${candidate.name}」，2D 占地已重置为模型真实尺寸（约 ${candidate.width.toFixed(1)}×${candidate.depth.toFixed(1)} m）。之后拖角缩放，3D 等比跟随。`);
                             }}
                           >
                             {/* 2026-11-15 上图下名：缩略图 40px + 名称条 18px。名称原先压在图上（白字 + textShadow），
@@ -12473,7 +12473,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         <button
                           type="button"
                           data-testid="facility-model-generate"
-                          title="按设施名预填生成面板，确认额度后提交；生成完回填到模型条首位"
+                          title="按设施名预填生成面板，确认额度后提交。生成完回填到模型条首位"
                           className="sc-model-action"
                           onClick={() => openGenerationSheet({ task: 'model', scope: 'facility', source: 'text', facility: { id: selectedFacility.id, name: selectedFacility.name } })}
                         >
@@ -13242,7 +13242,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           }}
         >
           <span style={{ fontSize: PLANNING_TYPOGRAPHY.hint }}>
-            预览：{arrangePreview.label} · {arrangePreview.count} 件
+            预览 {arrangePreview.label} · {arrangePreview.count} 件
           </span>
           <button type="button" onClick={confirmArrangePreview} style={{ ...modeButtonStyle(true), color: '#f4f1ea' }}>落库</button>
           <button type="button" onClick={() => { clearArrangePreview(); setEditMessage(null); }} style={{ ...modeButtonStyle(false), color: '#f4f1ea' }}>取消</button>
@@ -13880,7 +13880,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               if (readOnly) return;
               commitPlan(clearPlanBoundary(planRef.current));
               selectBoundary(false);
-              setEditMessage('用地红线已整条删除（分区与物料保留，锚点不动）。Ctrl+Z 可撤销，或点「用地红线」重画。');
+              setEditMessage('整条红线删了，分区和物料还在。Ctrl+Z 可撤销。');
             }}
             style={modeButtonStyle(true)}
           >
@@ -13912,7 +13912,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           <>
             <label
               className="sc-plan-advisory"
-              title="缺宽度：补上宽度会一起算通行带；容量按面积估，改分区跟着变"
+              title="缺宽度：补上宽度会一起算通行带。容量按面积估，改分区跟着变"
             >
               <input
                 type="checkbox"
@@ -13957,7 +13957,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             {filteredInventoryRows.length === 0 && (
               <div data-testid="inventory-empty" style={{ marginTop: PLANNING_SPACING.xs, opacity: 0.7 }}>
                 {invZoneActive !== undefined && invZoneActive !== 'unassigned'
-                  ? '这个分区里还没有物料或人员；把物料拖进分区就会自动归属到它。'
+                  ? '这个分区里还没有物料或人员。把物料拖进分区就会自动归属到它。'
                   : invZoneActive === 'unassigned'
                     ? '所有物料和人员都已经归到分区里了。'
                     : '当前筛选下没有行。'}
@@ -14162,7 +14162,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         onClick: () => locateRow(row),
                         // 2026-11-14 统一右键菜单：不再右键即删；stopPropagation 防冒泡进舞台处理器二次弹菜单。
                         onContextMenu: event => openRowContextMenu(event, row),
-                        title: '点击定位到地图；右键复制/删除',
+                        title: '点击定位到地图。右键复制/删除',
                         icon: renderLayerEntityIcon(row),
                         trailing: <TypeCapsule kind={row.kind} label={row.typeLabel} />,
                       }))}
@@ -14261,7 +14261,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
                         });
                       },
-                      title: '点击定位到地图上的活动范围；核对后写入用地红线',
+                      title: '点击定位到地图上的活动范围。核对后写入用地红线',
                       icon: <BoundarySwatch size={16} />,
                     })
                   )}
@@ -14430,9 +14430,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                                   setMode('view');
                                   // 生成即框住：刚生成的范围如果大半在视口外，压暗区会盖满屏幕，看着像没画。
                                   focusDesignScope(next);
-                                  setEditMessage(`设计范围已恢复为红线四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）；要微调就直接拖白框的边或角。`);
+                                  setEditMessage(`设计范围已恢复为红线四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m（约 ${Math.round(scopeAreaM2(next))} m²）。要微调就直接拖白框的边或角。`);
                                 },
-                                title: '把框丢回默认：红线外接矩形四边各外扩 20 m；平时直接拖白框的边/角微调，可锁定',
+                                title: '把框丢回默认：红线外接矩形四边各外扩 20 m。平时直接拖白框的边/角微调，可锁定',
                                 icon: <ScopeSwatch size={22} plus />,
                               })}
                               {/* 2026-11-18 用户拍板「设计范围闭环」：这里不再摆「清除设计范围」——

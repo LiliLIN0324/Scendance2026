@@ -156,7 +156,7 @@ export function LocalGlbImport({ onAdd, disabled = false, variant = 'tile' }: Lo
         {imported.map(asset => <li className="sc-glb-chip" key={asset.key}>
           {renaming === asset.key
             ? renameForm(asset)
-            : <button type="button" className="sc-glb-chip-btn" disabled={disabled} title={`${asset.name}\n${importBrief(asset)}\n点一下再放一次`} onClick={() => addAgain(asset)}>
+            : <button type="button" className="sc-glb-chip-btn" disabled={disabled} title={`${asset.name}\n${importBrief(asset)}`} onClick={() => addAgain(asset)}>
               <MaterialSymbol name="view_in_ar" size={14}/>
               <span>{asset.name}</span>
             </button>}
@@ -175,13 +175,13 @@ export function LocalGlbImport({ onAdd, disabled = false, variant = 'tile' }: Lo
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
     >
-      <button type="button" className="sc-material-card sc-material-plus sc-glb-entry" aria-label="导入本机模型（GLB）" title="导入本机模型（GLB）\n也可以把单个 .glb 拖到这里\n只收单文件 .glb；导入后按 0.005–50 m 归一化并自动选中" disabled={disabled || busy} onClick={() => inputRef.current?.click()}>
+      <button type="button" className="sc-material-card sc-material-plus sc-glb-entry" aria-label="导入本机模型（GLB）" title="只收单文件 .glb，可拖入；按 0.005–50 m 归一化" disabled={disabled || busy} onClick={() => inputRef.current?.click()}>
         {busy ? <Loader2 className="cr-spin" size={22} aria-hidden="true"/> : <Upload size={22} aria-hidden="true"/>}
         <span className="sc-material-name">{busy ? '导入中…' : '导入 GLB'}</span>
       </button>
     </div>
     {imported.map(asset => <div className="sc-material-tile sc-glb-tile" key={asset.key}>
-      <button type="button" className="sc-material-card" disabled={disabled} title={`${asset.name}\n${importBrief(asset)}\n点一下再放一次`} aria-label={`再放一次 ${asset.name}`} onClick={() => addAgain(asset)}>
+      <button type="button" className="sc-material-card" disabled={disabled} title={`${asset.name}\n${importBrief(asset)}`} aria-label={`再放一次 ${asset.name}`} onClick={() => addAgain(asset)}>
         <span className="sc-material-preview"><MaterialSymbol name="view_in_ar" size={22}/></span>
         <span className="sc-material-name">{asset.name}</span>
       </button>

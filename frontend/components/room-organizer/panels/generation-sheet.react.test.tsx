@@ -76,13 +76,13 @@ describe('统一生成面板', () => {
     expect(screen.getByRole('heading', { name: '生成 3D 模型' })).toBeTruthy();
     expect(screen.getByText('实地重建')).toBeTruthy();
     expect(screen.getByText('生成 3D')).toBeTruthy();
-    expect(screen.getByText('拍摄现场，或上传已有的照片、视频。')).toBeTruthy();
+    expect(screen.queryByText('拍摄现场，或上传已有的照片、视频。')).toBeNull();
     expect(screen.getByText('描述一件要放进场地的物件。')).toBeTruthy();
     expect(screen.queryByText('上传一张参考图，生成可布置的模型。')).toBeNull();
     expect(screen.getByText('完成后进入空间')).toBeTruthy();
     expect(screen.getByText('完成后放进物料')).toBeTruthy();
     expect(screen.getByText('重建后在这里预览')).toBeTruthy();
-    expect(screen.getByText('现场照片或视频都可以')).toBeTruthy();
+    expect(screen.queryByText('现场照片或视频都可以')).toBeNull();
     const textMode = screen.getByRole('button', { name: '文生 3D' });
     const imageMode = screen.getByRole('button', { name: '图生 3D' });
     expect(textMode.getAttribute('aria-pressed')).toBe('true');

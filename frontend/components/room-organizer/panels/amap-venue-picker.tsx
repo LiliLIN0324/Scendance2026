@@ -477,7 +477,7 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
 
   if (!key || !security) {
     return <div className={`sc-aholo-task${grow ? ' is-grow' : ''}`} aria-label="高德选址圈画">
-      <p className="sc-note">需要高德开放平台（lbs.amap.com）的 <strong>Web端(JS API)</strong> Key 与安全密钥。两者只存在本机浏览器，不会上传。</p>
+      <p className="sc-note">地图服务未配置，可填入 API Key。</p>
       <label className="sc-field" htmlFor="amap-key-input">高德 Key</label>
       <input id="amap-key-input" className="sc-lux-direct-input" value={key} onChange={event => setKey(event.target.value)} placeholder="粘贴 Key" />
       <label className="sc-field" htmlFor="amap-security-input">安全密钥 securityJsCode</label>
@@ -515,9 +515,9 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
           }
         }} />
       <button type="button" className="sc-button" aria-label="搜索" data-tip="搜索" title="搜索" onClick={() => search()} disabled={busy || !mapReady}><Search size={16} aria-hidden="true"/></button>
-      {(results.length > 0 || suggestOpen) && <button type="button" className="sc-button" aria-label="清空搜索结果" data-tip="清空搜索" title="清空搜索结果（取消本次搜索，不改动场地）"
+      {(results.length > 0 || suggestOpen) && <button type="button" className="sc-button" aria-label="清空搜索结果" data-tip="清空搜索" title="清空搜索（不改动场地）"
         onClick={clearSearch}><X size={16} aria-hidden="true"/></button>}
-      <button type="button" className="sc-button" onClick={() => void demoPick()} disabled={busy} title="不手画：立 L 轮廓户外壳（非矩形）+ 默认长轴流线站位">演示圈画 · L 轮廓</button>
+      <button type="button" className="sc-button" onClick={() => void demoPick()} disabled={busy} title="示范：L 轮廓户外壳">演示圈画 · L 轮廓</button>
       {suggestOpen && suggestions.length > 0 && <ul className="sc-amap-suggest" role="listbox" aria-label="地点联想" data-testid="amap-suggest">
         {suggestions.map((item, index) => <li key={item.id} role="option" aria-selected={index === activeSuggest}>
           <button type="button" onMouseEnter={() => setActiveSuggest(index)} onClick={() => adoptSuggestion(item)}>

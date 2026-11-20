@@ -1560,7 +1560,7 @@ export function CaptureGuide({ onClose, venueName, onSendToRecon, onHeaderPointe
                     <li>玻璃、镜面、高反射、频闪灯是硬伤；水面与天空建议分区块或后期拼接。</li>
                     <li>360 相机效率高，但单面分辨率低；手持时靠身体转动，不要只手腕转。</li>
                   </ul>
-                  <p className="cg-source">来源：《拍摄指南 2026》（生成式重建拍摄指南，用户提供）。仅作要点转述与对照，不替代原文。</p>
+                  <p className="cg-source">来源：《拍摄指南 2026》（用户提供）。要点转述，不替代原文。</p>
                 </div>
               </details>
 

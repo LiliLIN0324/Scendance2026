@@ -78,7 +78,7 @@ export function DesignHistoryPanel({ layout, onApply, disabled = false }: Design
       </div>
 
       {variants.length === 0 ? (
-        <p className="dh-empty">还没有存档方案。调整到一个阶段性版本时，先把当前方案存为过程态。</p>
+        <p className="dh-empty">还没有存档。到阶段版本时存一次。</p>
       ) : (
         <ul className="dh-list">
           {variants.map(variant => {

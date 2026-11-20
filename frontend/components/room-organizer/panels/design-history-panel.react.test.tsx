@@ -22,7 +22,8 @@ describe('DesignHistoryPanel', () => {
   it('saves the current layout as a manual snapshot through onApply', () => {
     const onApply = vi.fn();
     render(<DesignHistoryPanel layout={structuredClone(INITIAL_LAYOUT)} onApply={onApply} />);
-    expect(screen.getByText('还没有存档方案。调整到一个阶段性版本时，先把当前方案存为过程态。')).toBeTruthy();
+    expect(screen.queryByText('还没有存档方案。调整到一个阶段性版本时，先把当前方案存为过程态。')).toBeNull();
+    expect(screen.getByText('还没有存档。到阶段版本时存一次。')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('过程态名称'), { target: { value: '迎宾区先落位' } });
     fireEvent.change(screen.getByLabelText('备注（可选）'), { target: { value: '桌距先按 1.2m' } });
     fireEvent.click(screen.getByRole('button', { name: '保存当前方案' }));

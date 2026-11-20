@@ -55,10 +55,10 @@ export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: 
     onStudioRenamed?.(renamed.id, renamed.name);
   }
 
-  if (!team.userId) return <TeamFrame notice="登录后才能看到团队成员。" busy={false}><p className="sc-account-empty">在账户中心登录后，这里会显示你所在团队的成员。</p></TeamFrame>;
+  if (!team.userId) return <TeamFrame notice="登录后才能看到团队成员。" busy={false}><p className="sc-account-empty">登录后这里会列出成员。</p></TeamFrame>;
   if (team.error) return <TeamFrame notice={team.error} alert busy={busy} onRefresh={team.refresh}><p className="sc-account-empty">{team.error}</p></TeamFrame>;
   if (team.loading && !team.members.length) return <TeamFrame notice="" busy><p className="sc-account-empty" role="status">正在加载成员…</p></TeamFrame>;
-  if (!team.studioId) return <TeamFrame notice="" busy><p className="sc-account-empty">你还没有团队。在左栏点「＋ 新建团队」建一个，成员就会出现在这里和左轨上。</p></TeamFrame>;
+  if (!team.studioId) return <TeamFrame notice="" busy><p className="sc-account-empty">还没有团队。左栏「＋ 新建团队」建一个。</p></TeamFrame>;
 
   return <TeamFrame title={!isOwner
     ? <h3>{team.teamName}</h3>
@@ -68,7 +68,7 @@ export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: 
           onChange={event => setDraftName(event.target.value)}
           onKeyDown={event => { if (event.key === 'Escape') { setRenaming(false); setDraftName(''); } }}/>
       </form>
-      : <button type="button" className="sc-settings-title-name" aria-label={`重命名团队${team.teamName}`} title="点一下改名" onClick={() => { setDraftName(team.teamName); setRenaming(true); }}>{team.teamName}</button>}
+      : <button type="button" className="sc-settings-title-name" aria-label={`重命名团队${team.teamName}`} onClick={() => { setDraftName(team.teamName); setRenaming(true); }}>{team.teamName}</button>}
     notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} onInvite={() => { if (!isOwner) { say('只有负责人可以邀请成员。', true); return; } setInviteOpen(open => !open); }} inviteOpen={inviteOpen}>
     <div className="sc-settings-columns" aria-hidden="true"><span>团队名称</span><span>角色</span></div>
     {team.members.map(member => { const tone = tones.get(member.userId); const preset = presets.get(member.userId); return <div className="sc-settings-row" key={member.userId}>

@@ -197,7 +197,6 @@ export function CreationEntry({
       <article className="gs-create-card is-recon" aria-labelledby="creation-recon-title">
         <p className="gs-create-kicker"><span className="gs-create-mark" aria-hidden="true"><CameraMark /></span>实地重建</p>
         <h2 id="creation-recon-title">重建真实场地</h2>
-        <p className="gs-create-lead">拍摄现场，或上传已有的照片、视频。</p>
         <p className="gs-create-chip">完成后进入空间</p>
         <div className={`gs-create-stage${hero ? ' has-media' : ''}`} data-testid="creation-recon-stage">
           {!hero ? <PreviewFloor /> : null}
@@ -213,7 +212,6 @@ export function CreationEntry({
           {!hero ? (
             <p className="gs-create-empty">
               重建后在这里预览
-              <small>现场照片或视频都可以</small>
             </p>
           ) : null}
           {items.length > 1 ? <span className="gs-create-count">已选 {items.length} 个</span> : null}

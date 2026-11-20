@@ -144,7 +144,7 @@ export function ProposalCard({ plan, cloudBusy, recovering, inventoryBlocked, in
     {plan.blocked && <p className="ap-warn-line"><span aria-hidden="true">!</span>{plan.blocked}</p>}
     {inventoryBlocked && <p role="alert">{inventoryInvalid?'物料数量输入无效，请更正或清空后再确认。':'已填写的物料数量不足，请调整数量或方案后再确认。'}</p>}
     {hold
-      ? <p className="ap-small" id="plan-busy" role="status">{recovering && !cloudBusy ? '上一版还在恢复，确认先不亮。' : '正在整理这一版…'}</p>
+      ? <p className="ap-small" id="plan-busy" role="status">{recovering && !cloudBusy ? '上一版还在处理，先别确认。' : '正在整理这一版…'}</p>
       : <>
           {/* 2026-11-19 体检：卡上的「已批准/你拒绝了」瞬态徽章分支删掉——确认/不用都会撤卡卸载，
               持久的决策留痕由对话流徽章负责（agent-panel 的 ap-decision-badge 气泡）。 */}

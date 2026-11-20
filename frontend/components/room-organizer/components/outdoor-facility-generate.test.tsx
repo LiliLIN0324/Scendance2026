@@ -30,7 +30,7 @@ it('没有额度确认绝不调用生成；提交成功仅绑定原设施、不�
 it('未知扣费结果关闭重开仍锁住，不靠重新勾选绕过重复提交', async () => {
   vi.mocked(submitMaterialGenerate).mockResolvedValue({ ok: false, stub: false, outcome: 'unknown', message: '结果未知' });
   show(); await submit(); act(() => root.render(null)); show();
-  expect(document.body.textContent).toContain('此前提交结果未知');
+  expect(document.body.textContent).toContain('上次提交结果未知');
   expect((document.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
   expect(submitMaterialGenerate).toHaveBeenCalledTimes(1);
 });
@@ -48,7 +48,7 @@ it('请求永不返回也在发出前持久登记；刷新式卸载重挂/伪造
   act(() => root.render(null)); show(); await submit();
   expect(submitMaterialGenerate).toHaveBeenCalledTimes(1);
   expect(durableReceipt().requestId).toBe(original.requestId);
-  expect(document.body.textContent).toContain('已锁定重复提交');
+  expect(document.body.textContent).toContain('别重复提交');
 });
 it('云端调用使用已持久化的同一requestId，重挂不能换randomUUID创建另一单', async () => {
   const createGenerationJob = vi.fn((_prompt, requestId) => {
@@ -65,7 +65,7 @@ it('云端调用使用已持久化的同一requestId，重挂不能换randomUUID
 });
 it('存储不可用时拒绝发请求；只有明确未派发的stub才解锁', async () => {
   const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
-  show(); await submit(); expect(submitMaterialGenerate).not.toHaveBeenCalled(); expect(document.body.textContent).toContain('没有发出');
+  show(); await submit(); expect(submitMaterialGenerate).not.toHaveBeenCalled(); expect(document.body.textContent).toContain('没有提交');
   spy.mockRestore();
   vi.mocked(submitMaterialGenerate).mockResolvedValue({ ok: false, stub: true, message: '没有通道，未发请求' });
   await act(async () => { document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
@@ -88,7 +88,7 @@ it('同设施ID跨项目独立锁，晚成功只绑定原项目；已知云任�
 it('损坏的提交存档不能被当成没有提交而覆盖重发', async () => {
   localStorage.setItem(`scendance:facility-submit:${JSON.stringify(['project-a', target.facilityId])}`, '{broken');
   show(); await submit(); expect(submitMaterialGenerate).not.toHaveBeenCalled();
-  expect(document.body.textContent).toContain('已锁定重复提交');
+  expect(document.body.textContent).toContain('别重复提交');
 });
 
 function storeKnown(lane: 'cloud'|'direct' = 'cloud') {
@@ -99,7 +99,7 @@ it.each(['failed','rejected'])('known cloud %s recovers to explicit new round, a
  storeKnown();const controller={getGenerationJob:vi.fn().mockResolvedValue({id:'known-job',state}),createGenerationJob:vi.fn()} as unknown as BackendSession;
  show('project-a',controller);await act(async()=>{await Promise.resolve();});
  expect(durableReceipt()).toMatchObject({state:'terminal',taskid:'known-job'});
- expect(document.body.textContent).toContain('失败不代表未收费');expect(submitMaterialGenerate).not.toHaveBeenCalled();expect(controller.createGenerationJob).not.toHaveBeenCalled();
+ expect(document.body.textContent).toContain('可能已经收费');expect(submitMaterialGenerate).not.toHaveBeenCalled();expect(controller.createGenerationJob).not.toHaveBeenCalled();
  act(()=>(Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.startsWith('准备新一轮'))!).click());
  expect(durableReceipt()).toBeNull();expect(submitMaterialGenerate).not.toHaveBeenCalled();
  const history=JSON.parse(localStorage.getItem(`scendance:facility-submit:${JSON.stringify(['project-a',target.facilityId])}:history`)!);
@@ -121,5 +121,5 @@ it('resolver terminal receipt recovers without querying deleted/failed job again
  show('project-a',controller);await act(async()=>{await Promise.resolve();});expect(controller.getGenerationJob).not.toHaveBeenCalled();
  const write=vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('quota');});
  act(()=>(Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.startsWith('准备新一轮'))!).click());
- expect(durableReceipt().state).toBe('terminal');expect(document.body.textContent).toContain('未发出新请求');expect(submitMaterialGenerate).not.toHaveBeenCalled();write.mockRestore();
+ expect(durableReceipt().state).toBe('terminal');expect(document.body.textContent).toContain('没有发出请求');expect(submitMaterialGenerate).not.toHaveBeenCalled();write.mockRestore();
 });

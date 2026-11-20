@@ -280,7 +280,7 @@ function ConnectedGeneration({ controller, disabled, onAdd, sourceAssetId, sourc
       <button type="button" className="sc-button" disabled={genPending || Boolean(generationBlocked) || !genPrompt.trim() || (mode === 'image' && !genReference) || !engineSupportsMode}
         onClick={() => void submitGeneration()}>{genPending ? '已提交，生成中…' : '生成物件'}</button>
     </div>
-    <div className="sc-section-heading"><div><h2>历史模型</h2><p>已有模型与材质版本仍可使用。</p></div></div>
+    <div className="sc-section-heading"><div><h2>历史模型</h2></div></div>
     {!userId ? <p className="sc-note">登录云项目后可以查看历史模型。</p> : <>
       <button type="button" className="sc-button sc-full" onClick={() => { setError(''); setRefresh(value => value + 1); }}>刷新任务状态</button>
       {error && <p className="sc-warning" role="alert">{error}</p>}

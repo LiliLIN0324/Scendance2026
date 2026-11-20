@@ -512,7 +512,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
     void request<{ keyConfigured: boolean }>('/health', { signal: controller.signal }).then(body => {
       if (controller.signal.aborted) return;
       setOnline(body.keyConfigured);
-      setConnectionError(body.keyConfigured ? '' : '本机代理未配置 LUX3D_API_KEY，暂时不能生成。');
+      setConnectionError(body.keyConfigured ? '' : '生成服务还没开通，暂时不能生成。');
     }).catch(failure => {
       if (!controller.signal.aborted) { setOnline(false); setConnectionError(String(failure.message)); }
     });

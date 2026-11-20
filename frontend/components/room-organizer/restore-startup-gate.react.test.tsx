@@ -26,7 +26,7 @@ describe('restore startup gate',()=>{
   it('标记存在时阻断编辑器，重新检查也不会清除标记',()=>{
     localStorage.setItem(RESTORE_JOURNAL_MARKER,JSON.stringify({version:1,id:'restore-1'}));
     const mounted=vi.fn();render(<RestoreStartupGate><Editor mounted={mounted}/></RestoreStartupGate>);
-    expect(screen.getByRole('alert').textContent).toContain('上次恢复尚未核对完成');
+    expect(screen.getByRole('alert').textContent).toContain('上次恢复还没核对完');
     fireEvent.click(screen.getByRole('button',{name:'重新检查'}));
     expect(mounted).not.toHaveBeenCalled();expect(localStorage.getItem(RESTORE_JOURNAL_MARKER)).not.toBeNull();
   });
@@ -50,7 +50,7 @@ describe('restore startup gate',()=>{
   it('完成标记仍冻结并告知完成记录待核对',()=>{
     localStorage.setItem(RESTORE_JOURNAL_MARKER,JSON.stringify({version:1,id:'restore-1',state:'completed',direction:'apply',digest:'a'.repeat(64)}));
     const mounted=vi.fn();render(<RestoreStartupGate><Editor mounted={mounted}/></RestoreStartupGate>);
-    expect(screen.getByRole('alert').textContent).toContain('完成记录仍需核对');expect(mounted).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('恢复记录还需核对');expect(mounted).not.toHaveBeenCalled();
   });
   it('损坏标记、无法获得或读取存储均阻断，保留原标记',()=>{
     localStorage.setItem(RESTORE_JOURNAL_MARKER,'damaged');
@@ -58,7 +58,7 @@ describe('restore startup gate',()=>{
     expect(inspectRestoreStartup(()=>null)).toEqual({status:'blocked',reason:'unreadable'});
     const failing={getItem:()=>{throw new Error('blocked');}} as unknown as Storage;
     const mounted=vi.fn();render(<RestoreStartupGate getStorage={()=>failing}><Editor mounted={mounted}/></RestoreStartupGate>);
-    expect(screen.getByRole('alert').textContent).toContain('无法读取或识别');expect(mounted).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('读不到本机恢复记录');expect(mounted).not.toHaveBeenCalled();
     expect(localStorage.getItem(RESTORE_JOURNAL_MARKER)).toBe('damaged');
   });
 });

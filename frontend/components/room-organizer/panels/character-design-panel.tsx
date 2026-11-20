@@ -142,7 +142,7 @@ export function CharacterDesignPanel(): JSX.Element {
       <div className="sc-material-create-field">
         <strong>{index + 1}. {def.label}</strong>
         <span className="sc-note">{def.hint}</span>
-        {state.taskid && <span className="sc-note">任务 {state.taskid}{state.statusLabel ? ` · ${state.statusLabel}` : ''}</span>}
+        {state.statusLabel && <span className="sc-note">{state.statusLabel}</span>}
         {state.resultUrl && <span className="sc-note">产物已取回</span>}
       </div>
     );

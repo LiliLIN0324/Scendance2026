@@ -58,8 +58,8 @@ export function AholoGuideCard({ world = false, recon = false, surface = 'direct
           <span><strong>{step.title}</strong><span className="sc-aholo-guide-text">{step.text}</span></span>
         </div>;
       })}
-      {recon && <p className="sc-aholo-guide-foot">提示：高德/卫星图只用于圈范围，不能当重建素材；未确认布置不改本地仓。</p>}
-      {world && !recon && <p className="sc-aholo-guide-foot">提示：非室内场景处于 Beta，质量可能不稳，演示优先用室内文案。</p>}
+      {recon && <p className="sc-aholo-guide-foot">只用来圈范围，不能当重建素材。</p>}
+      {world && !recon && <p className="sc-aholo-guide-foot">非室内场景 Beta，质量可能不稳。</p>}
     </div>}
   </div>;
 }

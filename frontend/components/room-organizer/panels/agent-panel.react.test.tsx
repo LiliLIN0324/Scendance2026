@@ -639,7 +639,7 @@ describe('dialogue export in-flight fence',()=>{
  it('keeps the message fence through preview generation and queued follow-up',async()=>{
   const fence=tracker(),onApply=vi.fn();state.layout=makeLayout();
   render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={onApply} onDialogueTurnStart={fence.start}><AgentPanel/></LayoutAgentProvider>);
-  send('加一把椅子');send('再加一把椅子');expect(fence.active.size).toBe(2);expect(await screen.findByText(/条消息排队/)).toBeTruthy();
+  send('加一把椅子');send('再加一把椅子');expect(fence.active.size).toBe(2);expect(await screen.findByText(/排队 \d+ 条/)).toBeTruthy();
   await waitFor(()=>expect(fence.active.size).toBe(0),{timeout:15000});expect(onApply).not.toHaveBeenCalled();
  },20000);
  it('keeps the original words and does not dispatch if the fence cannot be acquired',async()=>{
@@ -918,7 +918,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     const onPreview=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={onPreview} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，每2人一桌，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/需求 30 人、15 桌；本次排了 30 人、15 桌、30 把椅子，尚缺 0 人/,{},{timeout:15000})).toBeTruthy();
+    expect(await screen.findByText(/需求 30 人、15 桌。本次排了 30 人、15 桌、30 把椅子，尚缺 0 人/,{},{timeout:15000})).toBeTruthy();
     const candidate=onPreview.mock.calls.find(([value])=>!!value)?.[0];
     expect(candidate.floors[0].items.filter((item:{type:string})=>item.type==='desk')).toHaveLength(15);
     expect(candidate.floors[0].items.filter((item:{type:string})=>item.type==='chair')).toHaveLength(30);
@@ -935,7 +935,7 @@ describe('explicit local-only seating draft',()=>{
     state.layout=makeLayout({id:'local-seating',width:20,height:20,floors:[makeFloor({items:[existing]})]});
     const onPreview=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={onPreview} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，每2人一桌，采用课桌椅，生成本地草案');
-    await screen.findByText(/需求 30 人、15 桌；本次排了 30 人/,{},{timeout:15000});
+    await screen.findByText(/需求 30 人、15 桌。本次排了 30 人/,{},{timeout:15000});
     const candidate=onPreview.mock.calls.find(([value])=>!!value)?.[0];expect(candidate.floors[0].items.find((item:{id:string})=>item.id==='old-item')).toEqual(existing);
     expect(candidate.floors[0].items).toHaveLength(46);
   },20000);
@@ -943,7 +943,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     const onPreview=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={onPreview} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('2人，室内20×20，每2人一桌，采用课桌椅，生成本地草案');
-    await screen.findByText(/需求 2 人、1 桌；本次排了 2 人/,{},{timeout:15000});
+    await screen.findByText(/需求 2 人、1 桌。本次排了 2 人/,{},{timeout:15000});
     send('删除课桌');
     expect(await screen.findByText(/原生成的桌椅配套有 .*组缺少物件/,{},{timeout:15000})).toBeTruthy();
     expect(screen.getByText(/实际座位及现场条件仍需核验/)).toBeTruthy();
@@ -954,7 +954,7 @@ describe('explicit local-only seating draft',()=>{
     const onApply=vi.fn(),onPreview=vi.fn();
     render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={onPreview} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('2人，室内20×20，每2人一桌，采用课桌椅，生成本地草案');
-    await screen.findByText(/需求 2 人、1 桌；本次排了 2 人/,{},{timeout:15000});
+    await screen.findByText(/需求 2 人、1 桌。本次排了 2 人/,{},{timeout:15000});
     send('请保留原有物件');
     await screen.findByText(/已记录：保留当前原有物件，不删除/);
     send('删除绿植');
@@ -968,7 +968,7 @@ describe('explicit local-only seating draft',()=>{
     state.layout=makeLayout({id:'local-seating',width:20,height:20,floors:[makeFloor({items:[old]})]});
     const onApply=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('2人，室内20×20，每2人一桌，采用课桌椅，生成本地草案');
-    await screen.findByText(/需求 2 人、1 桌；本次排了 2 人/,{},{timeout:15000});
+    await screen.findByText(/需求 2 人、1 桌。本次排了 2 人/,{},{timeout:15000});
     send('请保留原有物件');await screen.findByText(/已记录：保留当前原有物件，不删除/);
     send('把绿植改成灰色');
     await waitFor(()=>expect(screen.getByRole('button',{name:'确认布置'})).toBeTruthy(),{timeout:15000});
@@ -981,7 +981,7 @@ describe('explicit local-only seating draft',()=>{
     const onApply=vi.fn();function Harness(){const [current,setCurrent]=useState(initial);state.layout=current;return <LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={next=>{onApply(next);setCurrent(next);}}><AgentPanel/></LayoutAgentProvider>;}
     render(<Harness/>);
     send('2人，室内20×20，每2人一桌，采用课桌椅，生成本地草案');
-    await screen.findByText(/需求 2 人、1 桌；本次排了 2 人/,{},{timeout:15000});
+    await screen.findByText(/需求 2 人、1 桌。本次排了 2 人/,{},{timeout:15000});
     fireEvent.click(screen.getByRole('button',{name:'确认布置'}));expect(onApply).toHaveBeenCalledOnce();
     send('删除课桌');
     expect(await screen.findByText(/桌椅配套关系尚未核验，不能只按椅子数量认定座位充足/,{},{timeout:15000})).toBeTruthy();
@@ -990,7 +990,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     const onPreview=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={onPreview} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('31人，室内20×20，每2人一桌，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/需求 31 人、16 桌；本次排了 31 人、16 桌、31 把椅子/,{},{timeout:15000})).toBeTruthy();
+    expect(await screen.findByText(/需求 31 人、16 桌。本次排了 31 人、16 桌、31 把椅子/,{},{timeout:15000})).toBeTruthy();
   },20000);
   it('does not silently enlarge an explicitly narrow desk',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
@@ -1031,7 +1031,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:3,height:3});
     render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内3×3，每2人一桌，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/需求 30 人、15 桌；本次排了 \d+ 人、\d+ 桌、\d+ 把椅子，尚缺 \d+ 人/,{},{timeout:15000})).toBeTruthy();expect(screen.getByText(/要更多位置就腾地方或换分区/)).toBeTruthy();
+    expect(await screen.findByText(/需求 30 人、15 桌。本次排了 \d+ 人、\d+ 桌、\d+ 把椅子，尚缺 \d+ 人/,{},{timeout:15000})).toBeTruthy();expect(screen.getByText(/要更多位置就腾地方或换分区/)).toBeTruthy();
   },20000);
   it('uses a one-per-desk exploration assumption only when no allocation was stated',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
@@ -1272,7 +1272,7 @@ describe('明确待定的需求',()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
     studioMock.controller.briefExtract.mockResolvedValueOnce({enabled:true,extraction:{event:'讲座',headcount:30,venueIO:'indoor',activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'是否签到还没决定'}]}});
     const onApply=vi.fn();render(ui(makeLayout(),onApply));
-    send('为长者办一场室内讲座，预计30人，现有80把椅子；是否签到还没决定。');
+    send('为长者办一场室内讲座，预计30人，现有80把椅子。是否签到还没决定。');
     const reply=await screen.findByText(/签到区暂时待定/);
     expect(reply.textContent).toContain('30 人');
     expect(reply.textContent).toContain('暂未计入库存');
@@ -1290,7 +1290,7 @@ describe('活动需求与清单同句',()=>{
       expect(await screen.findByText(/清单、检查、评审或导出操作暂未执行/)).toBeTruthy();
       await waitFor(()=>expect(studioMock.controller.briefExtract).toHaveBeenCalledOnce());
       expect(studioMock.controller.briefExtract.mock.calls[0]?.[0]).toBe('本场30人，给我物料清单');
-      expect(screen.queryByText(/画布上还没有物料，清单是空的/)).toBeNull();expect(onApply).not.toHaveBeenCalled();
+      expect(screen.queryByText(/说一句「出方案」我先摆一版/)).toBeNull();expect(onApply).not.toHaveBeenCalled();
     } finally {vi.unstubAllEnvs();}
   });
 });
@@ -1399,7 +1399,7 @@ describe('同一轮理解和回答',()=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
     try {
       studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{headcount:30,venueIO:'indoor',inventoryMentions:[{evidence:'80把椅子'}],activityNeeds:[{kind:'checkin',decision:'unknown',evidence:'是否签到还没决定'}]},reply:'先按30人室内讲座了解，签到可以稍后决定。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'},{key:'venueIO',evidence:'室内'}],materialQueries:[{query:'椅子',evidence:'80把椅子'}]});
-      const onApply=vi.fn();render(ui(makeLayout(),onApply));send('为长者办一场室内讲座，预计30人，现有80把椅子；是否签到还没决定。');
+      const onApply=vi.fn();render(ui(makeLayout(),onApply));send('为长者办一场室内讲座，预计30人，现有80把椅子。是否签到还没决定。');
       const reply=await screen.findByText(/签到区暂时待定/);expect(reply.textContent).toContain('30 人');expect(reply.textContent).toContain('暂未计入库存');expect(reply.textContent).not.toContain('请告诉我是否需要');
       expect(await screen.findByText(/已记下你提到的物料数量/)).toBeTruthy();
       const candidates=await screen.findByRole('region',{name:'物料候选'});expect((await within(candidates).findByText(/软包餐椅/)).textContent).toContain('软包餐椅');expect(candidates.textContent).toContain('实物规格、库存和价格还需核实');
@@ -1516,7 +1516,7 @@ beforeEach(() => {
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); clearStagedMaterialGenerateForTests(); });
 
-/** 例句行末的 ⌄ 把输入框上方这一格换成能力卡；要用能力卡的用例先点它。 */
+/** 例句行末的 ⌄ 把输入框上方这一格换成能力卡。要用能力卡的用例先点它。 */
 const expandCapabilityCards = () => { fireEvent.click(screen.getByRole('button', { name: '展开你可以做什么' })); };
 
 describe('T-04 delivery narrative in the Agent panel', () => {
@@ -2324,7 +2324,7 @@ describe('T-UI visible interaction', () => {
     expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
 
     send('导出给搭建方');
-    expect(await screen.findByText(/当前有尚未应用的方案预览；导出读取的是原场景/)).toBeTruthy();
+    expect(await screen.findByText(/当前有尚未应用的方案预览。导出读取的是原场景/)).toBeTruthy();
     expect(screen.queryByText('导出执行资料草案')).toBeNull();
     const primaries = [...document.querySelectorAll('.sc-agent-panel .btn-primary')].map(button => button.textContent?.trim());
     expect(primaries).toEqual(['确认布置']);
@@ -2360,7 +2360,7 @@ describe('T-UI visible interaction', () => {
     expect(await screen.findByRole('button',{name:'导出当前场景物料清单草案'})).toBeTruthy();
     studioMock.preview=cloudPreview();rerender(ui(state.layout));
     await waitFor(()=>expect(screen.queryByRole('button',{name:'导出当前场景物料清单草案'})).toBeNull());
-    expect(screen.getByText(/当前有尚未应用的方案预览；请先确认布置或撤回预览/)).toBeTruthy();
+    expect(screen.getByText(/当前有尚未应用的方案预览。请先确认布置或撤回预览/)).toBeTruthy();
     expect(studioMock.exportCloudMaterialDraft).not.toHaveBeenCalled();
   });
 
@@ -2370,7 +2370,7 @@ describe('T-UI visible interaction', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/><ExportActions/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button',{name:'直接导出'}));
     fireEvent.click(screen.getByRole('button',{name:'直接导出物料'}));
-    await waitFor(()=>expect(screen.getAllByText(/当前有尚未应用的方案预览；导出读取的是原场景/).length).toBe(2));
+    await waitFor(()=>expect(screen.getAllByText(/当前有尚未应用的方案预览。导出读取的是原场景/).length).toBe(2));
     expect(studioMock.exportActivity).not.toHaveBeenCalled();expect(studioMock.exportCloudMaterialDraft).not.toHaveBeenCalled();
   });
 
@@ -2444,16 +2444,16 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   it('按发送顺序处理生成预览期间的后续物料请求',async()=>{
     const onApply=vi.fn(),onPreview=vi.fn();render(<LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview}/>);
     send('加一把椅子');send('再加一把椅子');
-    expect(await screen.findByText(/条消息排队/)).toBeTruthy();expect(screen.getAllByText('加一把椅子')).toHaveLength(1);expect(screen.getAllByText('再加一把椅子')).toHaveLength(1);
-    await waitFor(()=>expect(screen.queryByText(/条消息排队/)).toBeNull(),{timeout:15000});
+    expect(await screen.findByText(/排队 \d+ 条/)).toBeTruthy();expect(screen.getAllByText('加一把椅子')).toHaveLength(1);expect(screen.getAllByText('再加一把椅子')).toHaveLength(1);
+    await waitFor(()=>expect(screen.queryByText(/排队 \d+ 条/)).toBeNull(),{timeout:15000});
     await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
     const candidate=onPreview.mock.calls.map(call=>call[0]).filter(Boolean).at(-1) as RoomLayout;
     expect(candidate.floors[0]!.items.filter(item=>item.type==='chair').length).toBe(2);expect(onApply).not.toHaveBeenCalled();
   },20000);
   it('停止当前预览后仍继续处理已排队的下一句',async()=>{
     const onApply=vi.fn(),onPreview=vi.fn();render(<LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview}/>);
-    send('加一把椅子');send('再加一把椅子');await screen.findByText(/条消息排队/);send('停一下');
-    await waitFor(()=>expect(screen.queryByText(/条消息排队/)).toBeNull(),{timeout:15000});
+    send('加一把椅子');send('再加一把椅子');await screen.findByText(/排队 \d+ 条/);send('停一下');
+    await waitFor(()=>expect(screen.queryByText(/排队 \d+ 条/)).toBeNull(),{timeout:15000});
     await screen.findByRole('button',{name:'确认布置'},{timeout:15000});
     const candidate=onPreview.mock.calls.map(call=>call[0]).filter(Boolean).at(-1) as RoomLayout;
     expect(candidate.floors[0]!.items.filter(item=>item.type==='chair').length).toBe(2);expect(onApply).not.toHaveBeenCalled();
@@ -2461,17 +2461,17 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   it('同一批次切换会话再切回时，旧生成和排队消息不会继续执行',async()=>{
     function SwitchAwayAndBack(){const sessions=useAssistantSessions(()=>{});return <button type="button" onClick={()=>{const original=sessions.activeId;if(original){sessions.openSession();sessions.selectSession(original);}}}>切换后返回</button>;}
     const onApply=vi.fn(),onPreview=vi.fn();render(<><LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview}/><SwitchAwayAndBack/></>);
-    send('加一把椅子');send('再加一把椅子');await screen.findByText(/条消息排队/);fireEvent.click(screen.getByRole('button',{name:'切换后返回'}));
-    await waitFor(()=>expect(screen.queryByText(/条消息排队/)).toBeNull(),{timeout:15000});expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull();expect(onApply).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
+    send('加一把椅子');send('再加一把椅子');await screen.findByText(/排队 \d+ 条/);fireEvent.click(screen.getByRole('button',{name:'切换后返回'}));
+    await waitFor(()=>expect(screen.queryByText(/排队 \d+ 条/)).toBeNull(),{timeout:15000});expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull();expect(onApply).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
   },20000);
   it('同一批次切换账号再切回时，旧生成和排队消息不会继续执行',async()=>{
     let actor='account-a';const listeners=new Set<()=>void>();const controller=studioMock.controller as typeof studioMock.controller&{getSnapshot?:()=>unknown;subscribe?:(fn:()=>void)=>()=>void};
     controller.getSnapshot=()=>({user:{id:actor}});controller.subscribe=fn=>{listeners.add(fn);return()=>{listeners.delete(fn);};};
     try{
       const onApply=vi.fn(),onPreview=vi.fn();render(<LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview}/>);
-      send('加一把椅子');send('再加一把椅子');await screen.findByText(/条消息排队/);
+      send('加一把椅子');send('再加一把椅子');await screen.findByText(/排队 \d+ 条/);
       act(()=>{actor='account-b';listeners.forEach(fn=>fn());actor='account-a';listeners.forEach(fn=>fn());});
-      await waitFor(()=>expect(screen.queryByText(/条消息排队/)).toBeNull(),{timeout:15000});expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull();expect(onApply).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
+      await waitFor(()=>expect(screen.queryByText(/排队 \d+ 条/)).toBeNull(),{timeout:15000});expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull();expect(onApply).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
     }finally{delete controller.getSnapshot;delete controller.subscribe;}
   },20000);
   it.each([['10厘米',0.1],['100毫米',0.1],['0.1m',0.1],['两米',2]])('previews exact converted movement %s before applying', async (distance, meters) => {
@@ -2815,7 +2815,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(onApply).not.toHaveBeenCalled();
   }, 20000);
   it('does not count a backdrop as a stage when the platform cannot be placed', async () => {
-    const stageSearch = vi.spyOn(stagePlatformPlan, 'proposeStagePlatform').mockReturnValue({ ok: false, reason: '这次搜索没有找到可放示意舞台模块的空位；请调整布置或手动选择位置，不能据此断定场地无解。' });
+    const stageSearch = vi.spyOn(stagePlatformPlan, 'proposeStagePlatform').mockReturnValue({ ok: false, reason: '这次搜索没有找到可放示意舞台模块的空位。请调整布置或手动选择位置，不能据此断定场地无解。' });
     const backdrop = makeItem({ id: 'backdrop', type: 'backdrop', materialId: 'backdrop', name: '舞台背景板', width: 2, depth: 0.2, position: { x: 0, z: -3 }, locked: true });
     render(<LocalHarness initial={makeLayout({ width: 12, height: 9, floors: [makeFloor({ items: [backdrop] })] })} onApply={vi.fn()} />);
     send('30 人，室内 12×9，圆桌，需要舞台');
@@ -2867,7 +2867,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     expect(document.getElementById('gen-progress')).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();
 
-    expect(await screen.findByText('识别到 30 把单人椅，目标 30 人；座位用途及可用性待核验', undefined, { timeout: 15000 })).toBeTruthy();
+    expect(await screen.findByText('识别到 30 把单人椅，目标 30 人。座位用途及可用性待核验', undefined, { timeout: 15000 })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '加座，再排一版' })).toBeNull();
     expect(screen.getByRole('button', { name: '确认布置' }).className).toContain('btn-primary');
 
@@ -2883,7 +2883,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     send('200 人，室内 12×9，圆桌，需要签到');
     const fix = await screen.findByRole('button', { name: '加座，再排一版' }, { timeout: 15000 });
     fireEvent.click(fix);
-    expect(await screen.findByText(/^座位还不够；可尝试调整物料规格、功能区或场地，再核对方案。$/, undefined, { timeout: 15000 })).toBeTruthy();
+    expect(await screen.findByText(/^座位还不够。可尝试调整物料规格、功能区或场地，再核对方案。$/, undefined, { timeout: 15000 })).toBeTruthy();
     expect(screen.queryByText(/就是头|按站立留空/)).toBeNull();
   }, 20000);
 
@@ -3331,7 +3331,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
 
   it('shows the current zero seating result without offering a confirmation',async()=>{
     studioMock.connection='项目已连接';
-    const message='本次新增课桌椅组团 0 / 30 套；原场景物件未计入。本次排布未找到更多可用位置，不代表场地最大容量。实际座席和现场条件仍需核验。';
+    const message='本次新增课桌椅组团 0 / 30 套。原场景物件未计入。本次排布未找到更多可用位置，不代表场地最大容量。实际座席和现场条件仍需核验。';
     studioMock.generate.mockResolvedValueOnce({kind:'unchanged',runId:'run-one',message});
     const onApply=vi.fn();render(ui(makeLayout({width:12,height:9}),onApply));send('30 人，室内 12×9，圆桌');
     await waitFor(()=>expect(studioMock.generate).toHaveBeenCalledOnce());
@@ -3589,7 +3589,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
       studioMock.controller.briefExtract.mockResolvedValue({ enabled: true, extraction: null, reason: 'PROVIDER_HTTP_ERROR:429' });
       render(ui(state.layout));
       send('举办一场讲座');
-      expect(await screen.findByText(/智能理解服务请求过多；请先核对服务状态和用量/)).toBeTruthy();
+      expect(await screen.findByText(/智能理解服务请求过多。请先核对服务状态和用量/)).toBeTruthy();
       expect(document.body.textContent).not.toContain('PROVIDER_HTTP_ERROR');
     } finally { vi.unstubAllEnvs(); }
   });
@@ -3731,7 +3731,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     studioMock.recoverable = true;
     rerender(ui(state.layout));
     expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
-    expect(screen.getByText('上一版还在恢复，确认先不亮。')).toBeTruthy();
+    expect(screen.getByText('上一版还在处理，先别确认。')).toBeTruthy();
     expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
   });
 });
@@ -3776,10 +3776,10 @@ describe('brief stays in step with the sentence', () => {
     send('30 人，室内 12×9，圆桌');
     expect(await screen.findByText('正在准备布置预览')).toBeTruthy();
     send('导出给搭建方');
-    expect(await screen.findByText(/条消息排队/)).toBeTruthy();
+    expect(await screen.findByText(/排队 \d+ 条/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: '确认导出' })).toBeNull();
     expect(document.querySelector('.sc-agent-panel .btn-primary')).toBeNull();
-    expect(await screen.findByText(/当前有尚未应用的方案预览；导出读取的是原场景/,{},{timeout:15000})).toBeTruthy();
+    expect(await screen.findByText(/当前有尚未应用的方案预览。导出读取的是原场景/,{},{timeout:15000})).toBeTruthy();
     expect(screen.queryByRole('button',{name:'确认导出'})).toBeNull();
     expect(studioMock.exportActivity).not.toHaveBeenCalled();
   });
@@ -3938,7 +3938,7 @@ describe('T-PLAN 按图纸估跟住说过的面积', () => {
 });
 
 describe('T-ATTACH 图纸照片先进输入框', () => {
-  it('选进来先挂在输入框，点发送才进对话；也能撤掉', async () => {
+  it('选进来先挂在输入框，点发送才进对话。也能撤掉', async () => {
     vi.stubGlobal('Image', class {
       onload: (() => void) | null = null;
       onerror: (() => void) | null = null;
@@ -4181,21 +4181,21 @@ describe('S2 Bingo 审校台：单一分享主入口', () => {
     expect(callbacks.onIssueReviewLink).toHaveBeenCalledTimes(1);
     act(()=>{if(mode==='layout'||mode==='layout-aba'){const revision=layoutStore.getState().revision;layoutStore.setState({layout:{...base,name:'改后的方案'},revision:revision+1});if(mode==='layout-aba')layoutStore.setState({layout:base,revision:revision+2});}else {layoutStore.setState({activeFloorIndex:1});if(mode==='floor-aba')layoutStore.setState({activeFloorIndex:0});}});
     await act(async()=>{finish({url:'https://example.test/review/#layout=old',isCurrent:()=>true});await Promise.resolve();});
-    expect(await screen.findByText(/旧评审记录如已写入会保留，链接未复制/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
+    expect(await screen.findByText(/链接没复制/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
     useRealLayoutStore=false;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});
   });
   it('requires the producer guard to remain valid even if the local snapshot is unchanged',async()=>{
     callbacks.onIssueReviewLink.mockResolvedValueOnce({url:'https://example.test/review/#layout=old',isCurrent:()=>false});
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));
-    expect(await screen.findByText(/旧评审记录如已写入会保留，链接未复制/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
+    expect(await screen.findByText(/链接没复制/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
   });
 
   it('never treats an unguarded legacy return as a verified current link',async()=>{
     callbacks.onIssueReviewLink.mockResolvedValueOnce('https://example.test/review/#layout=legacy');
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));
-    expect(await screen.findByText(/当前版本无法核对/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
+    expect(await screen.findByText(/活动和方案变了，链接没复制/)).toBeTruthy();expect(screen.queryByText(/评审链接已准备好/)).toBeNull();
   });
   it('does not report an old result into a replaced activity session',async()=>{
     let epoch=1;const captured=epoch;let finish!:(value:{url:string;isCurrent:()=>boolean})=>void;
@@ -4203,14 +4203,14 @@ describe('S2 Bingo 审校台：单一分享主入口', () => {
     state.layout=makeLayout({id:'review-a'});render(<LayoutAgentProvider sessionScope="activity:review-a" isSessionCurrent={()=>epoch===captured} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button',{name:'发给客户评审'}));epoch+=2;
     await act(async()=>{finish({url:'https://example.test/review/#layout=old',isCurrent:()=>false});await Promise.resolve();});
-    expect(screen.queryByText(/评审链接已准备好/)).toBeNull();expect(screen.queryByText(/链接未复制/)).toBeNull();
+    expect(screen.queryByText(/评审链接已准备好/)).toBeNull();expect(screen.queryByText(/链接没复制/)).toBeNull();
   });
 
   it('点「发给客户评审」打开分享面板，并说明钉评会自动回流', async () => {
     render(<LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel activeAgent="bingo"/></LayoutAgentProvider>);
     fireEvent.click(screen.getByRole('button', { name: '发给客户评审' }));
     await waitFor(() => expect(callbacks.onIssueReviewLink).toHaveBeenCalled());
-    expect(screen.getByText(/对方的钉评会自动回到 Bingo/)).toBeTruthy();
+    expect(screen.getByText(/钉评会自动回到 Bingo/)).toBeTruthy();
     // 长链接不进聊天框；复制动作住在审计卡上（复用既有「复制甲方链接」钮）。
     expect(screen.queryByRole('button', { name: '复制评审链接' })).toBeNull();
   });
@@ -4450,7 +4450,7 @@ describe('event layout generation path', () => {
       send('确认');
     }
     expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
-    expect(screen.queryByText('已记下你确认的信息；如有其他要求可以继续补充。')).toBeNull();
+    expect(screen.queryByText('已记下你确认的信息。如有其他要求可以继续补充。')).toBeNull();
     expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
     const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
     expect(preview.width).toBeCloseTo(23.8);
@@ -4486,12 +4486,12 @@ describe('event layout generation path', () => {
       send('确认');
       expect(await screen.findByText(/这场生日宴大概多少人/)).toBeTruthy();
     }
-    expect(screen.queryByText('已记下你确认的信息；如有其他要求可以继续补充。')).toBeNull();
+    expect(screen.queryByText('已记下你确认的信息。如有其他要求可以继续补充。')).toBeNull();
     send('80个人');
     const next = await screen.findByText(/这样对吗|确认布置/, undefined, { timeout: 15000 });
     if (/这样对吗/.test(next.textContent ?? '')) send('确认');
     expect(await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 })).toBeTruthy();
-    expect(screen.queryByText('已记下你确认的信息；如有其他要求可以继续补充。')).toBeNull();
+    expect(screen.queryByText('已记下你确认的信息。如有其他要求可以继续补充。')).toBeNull();
     expect(screen.queryByText(/场地已变化，请重新说明当前场地尺寸/)).toBeNull();
     const preview = onPreview.mock.calls.at(-1)?.[0] as RoomLayout;
     expect(preview.width).toBeCloseTo(23.8);
@@ -4795,7 +4795,7 @@ describe('outdoor V1–V5 progressive Agent integration', () => {
     act(() => oldConfirm()); expect(apply).toHaveBeenCalledTimes(1); expect(current.outdoorTask?.state).toBe('done');
     expect(current.zoneProposal).toBeNull();
   });
-  it('没有真实入口只追问下一步；无模板活动如实指路，不走旧生成器', async () => {
+  it('没有真实入口只追问下一步。无模板活动如实指路，不走旧生成器', async () => {
     const plan = createStarterOutdoorPlan();
     plan.boundary = [{ x: -80, y: -70 }, { x: 80, y: -70 }, { x: 80, y: 70 }, { x: -80, y: 70 }];
     let current!: NonNullable<ReturnType<typeof useAgent>>;
@@ -4855,7 +4855,7 @@ describe('outdoor V1–V5 unified task epoch regression', () => {
     const roads: roadNetwork.RoadSegment[] = [{ id: 'walk', highway: 'footway', name: '真实人行道', points: [[plan.anchor!.lng - 0.005, plan.anchor!.lat], [plan.anchor!.lng + 0.005, plan.anchor!.lat]] }];
     return { current: () => current, applyRoutes, applyZone, roads, switchProject: () => rendered.rerender(tree('activity:project-b')) };
   }
-  it('旧路网晚返回不得盖过新60人活动；自然好只应用当前活动', async () => {
+  it('旧路网晚返回不得盖过新60人活动。自然好只应用当前活动', async () => {
     const app = mount(); let finish!: (value: roadNetwork.RoadNetwork) => void; let signal!: AbortSignal;
     vi.spyOn(roadNetwork, 'fetchRoadNetwork').mockImplementation((_anchor, _span, options) => { signal = options!.signal!; return new Promise(resolve => { finish = resolve; }); });
     send('排一下流线'); await waitFor(() => expect(app.current().routeBusy).toBe(true));
@@ -4866,7 +4866,7 @@ describe('outdoor V1–V5 unified task epoch regression', () => {
     expect(screen.getAllByTestId('outdoor-task-card')).toHaveLength(1);
     send('好'); expect(app.applyZone).toHaveBeenCalledTimes(1); expect(app.applyRoutes).not.toHaveBeenCalled();
   });
-  it('反向新流线任务立即作废旧活动确认闭包；自然好只应用新流线', async () => {
+  it('反向新流线任务立即作废旧活动确认闭包。自然好只应用新流线', async () => {
     const app = mount(); let finish!: (value: roadNetwork.RoadNetwork) => void;
     vi.spyOn(roadNetwork, 'fetchRoadNetwork').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
     send('60人讲座'); await waitFor(() => expect(app.current().zoneProposal).not.toBeNull());
@@ -4877,7 +4877,7 @@ describe('outdoor V1–V5 unified task epoch regression', () => {
     await waitFor(() => expect(app.current().routeProposal).not.toBeNull());
     send('好'); expect(app.applyRoutes).toHaveBeenCalledTimes(1); expect(app.applyZone).not.toHaveBeenCalled();
   });
-  it('相同场地查询重开也有新epoch；旧搜索忽略abort返回不能复活旧候选', async () => {
+  it('相同场地查询重开也有新epoch。旧搜索忽略abort返回不能复活旧候选', async () => {
     const app = mount();
     let old!: (places: placeSearch.PlaceSuggestion[]) => void;
     const fresh = { id: 'fresh', name: '新候选', address: '', lng: 120.16, lat: 30.25 };
@@ -4975,7 +4975,7 @@ describe('outdoor M4 offline slice: 未登录确定性分区预览', () => {
     expect(app.applyZone).toHaveBeenCalledTimes(1);
   });
 
-  it('未登录先撞模型需求落登录卡锁输入；「帮我分区」仍可发——缺活动类型给下一步，补上就出预览（轮次 28 序列）', async () => {
+  it('未登录先撞模型需求落登录卡锁输入。「帮我分区」仍可发——缺活动类型给下一步，补上就出预览（轮次 28 序列）', async () => {
     becomeAnonymousViewer();
     const app = mountOutdoorProduction();
     // 轮次 28 的前提是「范围已确认」：action('scope') 走本地 offer（零模型），点卡片确认。
@@ -5128,7 +5128,7 @@ describe('registered capabilities through the atomic outdoor Agent',()=>{
  });
  it('a mixed checkin question keeps the door requirement and never fabricates a venue called 怎么',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
-  studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'签到可先核对入场方式；门的开启要求需要保留并现场核验。',unhandled:[{kind:'other',evidence:'门必须保持打开'}],factEvidence:[]});
+  studioMock.controller.briefConversation.mockResolvedValueOnce({enabled:true,extraction:{},reply:'签到可先核对入场方式。门的开启要求需要保留并现场核验。',unhandled:[{kind:'other',evidence:'门必须保持打开'}],factEvidence:[]});
   let current!:NonNullable<ReturnType<typeof useAgent>>;function Probe(){current=useAgent()!;return null;}
   state.layout=makeLayout();render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
   send('活动签到怎么安排，门必须保持打开');await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledOnce());
