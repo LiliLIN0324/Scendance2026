@@ -7,6 +7,7 @@
 > 2026-11-20 第二次复核（HEAD `f2ff2980`）：规划套件已转绿、前端类型检查 0 错；浏览器通道仍然不可用，P0 四步复现**未执行**。详见 §一.2、§二.4、§五.5。
 >
 > 2026-11-20 12:05 更新：用户在客户端内置浏览器里打开了真实页面，**P0 的第一个失败点已确定**——工作台在渲染阶段即崩溃（`handleStagePointerCancel is not defined`），根本到不了「起稿」。归属：交互（画布）。详见 §二.5。
+> 2026-11-20 13:50 复核更新（HEAD `fd6820c3`，工作区含他窗未提交改动）：**12:05 那个崩溃已修**（`66292f66`，定义见 `outdoor-plan-canvas.tsx:10984`，`tsc` 不再报 TS2304）。重启 dev 后 `GET /` 200、编译 17.2s、页面标题「幕景 Scendance · 活动布置工作台」。但 `screenshot` 仍超时（os error 10060），**P0 四步依旧未执行**，画面证据仍缺。§二.5、§四、§七、§八 已按此更正。
 
 ---
 
@@ -96,6 +97,21 @@ git log -S"handleStagePointerCancel" -- <file>        # 无输出：不在任何
 
 **建议**：由交互负责人在其重构里补齐 `handleStagePointerCancel`（并确认 `cancelStageDragSessions` 的调用语义），提交后我重跑 `typecheck` + 页面 P0。本对话**不代改**该文件：它正在被编辑（mtime 12:06），并发改动会产生冲突。若需要我接手，请明确交接并等对方保存完成。
 
+**13:50 复核：失败点已消除，但只到「能编译/能出 HTML」这一层。**
+
+```
+Select-String -Path …\outdoor-plan-canvas.tsx -Pattern "handleStagePointerCancel"
+10984: function handleStagePointerCancel() {      # 新增定义
+13079: onPointerCancel={handleStagePointerCancel} # 使用
+npx tsc --noEmit                                # 无 TS2304
+netstat :3000 LISTENING → 17872                 # dev 重启（PID 30492 → npm → next）
+GET / 200 in 17826ms（Compiling / … 3159 modules）; 后续 GET / 200 in 47ms
+agent_browser_open http://localhost:3000/ → title=幕景 Scendance · 活动布置工作台
+auth? screenshot → Failed to read: os error 10060（连接方超时）
+```
+
+即：`ReferenceError` 不再出现，SSR/编译层面工作台可加载；但**「画布真的画出来了吗」没有截图证据**，`screenshot` 在 60s/120s 两档都超时。因此 P0 四步仍是未执行，而不是通过。
+
 **替代证据（明确降级，不能算页面验收）**：仓库内 `.tmp-audit/3d-parity.md`、`panel-canvas-sync.md`、`persistence-undo.md` 是同日只读代码审计笔记，给出具体行号。本次只把它们当待核假设；已用当前代码核对的两条见下节。
 
 ---
@@ -139,6 +155,8 @@ git log -S"handleStagePointerCancel" -- <file>        # 无输出：不在任何
 | 框选 / 组选 | 有 | `marquee` 已并入 `PlanEditVisuals`，组包围盒由 3D 绘制 |
 | 放置（点击或物料拖入） | 有 | 有 |
 | 无用地红线时画草稿 | 不受影响 | 审计称草稿与幽灵不画且无提示；未复核 |
+
+**表内已过期的一条（13:50 复核）**：`f52adc3a` 之后 3D 侧已补选中反馈——`PlanEditVisuals` 增加 `selectedRouteId/selectedNodeId/selectedWorkerId/selectedVehicleId/selectedAnnotationId/selectedMeasurementId`（全文件 40 处引用），`marquee` 已并入同一结构并由 3D 绘制（3 处消费）。故「选中反馈刚补齐…未核实」只剩「右键菜单与 Alt 分叉」成立。仍属代码级，未页面验证。
 
 **真实页面未覆盖项（本轮全部未覆盖，因浏览器阻塞）**：结果摘要与画布双向定位、局部修改的作用范围提示、同视角 A/B 比较与恢复、保存刷新与分享一致性、2D/3D 位置朝向一致性、生成中并发修改与停止/失败。
 
@@ -228,22 +246,22 @@ Test Files 1 passed (1) | Tests 9 passed (9)
 
 | 场景 | 状态 | 依据 |
 | --- | --- | --- |
-| 当前场地起稿与实际容量 | **失败（首个失败点）** | 真实页面渲染即崩溃：`handleStagePointerCancel is not defined`（§二.5），到不了起稿；规划单测 14/14 绿只证明算法夹具 |
+| 当前场地起稿与实际容量 | **未验收（阻塞原因已变更）** | 原失败点（渲染崩溃）已由 `66292f66` 修复，12:05 的 `ReferenceError` 不再适用；现阻塞在取证层：`GET /` 200、标题正常，但 `screenshot` 超时（os error 10060），拿不到工作台画面，四步未执行；规划单测只证明算法夹具 |
 | 点选对象后聊天局部调整 | 未验收 | 需页面 |
 | 已确认景观方向和背景调整 | 未验收 | 需页面；规划套件中景观方向用例已转绿，但仍属夹具 |
 | 锁定件保留 | 未验收 | 需页面；`outdoor-plan-protection` 11 例绿只覆盖锚点/红线安全阀 |
 | 不规则场地、建筑阻挡、容量不足 | 未验收 | 规划套件含凹形/建筑/狭小用例，现 14/14 绿（夹具）；真实凹形场地未跑 |
 | 同视角 A/B 比较及恢复 | 未验收 | 需页面；比较动作当前 `tsc` 不通过 |
 | 生成中手动修改、停止、失败与旧候选应用 | 未验收 | 需页面 |
-| 保存刷新、2D/3D 与分享一致性 | 部分（单测） | 持久化层 54 例绿（会话 revision 14 / 写租约 6 / 保存态 14 / 钝点保护 11 / 关页补存 9）；刷新与分享需页面 |
+| 保存刷新、2D/3D 与分享一致性 | 部分（单测，13:50 在当前工作区复跑） | 两批共 **120 例绿**：`vitest run … --maxWorkers=1` → 11 文件 **69 passed**（session、write-guard、save-lifecycle、protection、pointer-capture、scene-objects、measure-session、card-actions、placement-bar、boundary-lock、overlay.merge）+ 4 文件 **51 passed**（facility-footprint-lock、wedding-layout、plan-facility-drag、plan-facility-overlap）；刷新与分享仍需页面 |
 | 设计效果（主次、朝向、组团、留白、动线） | 无法评价 | 无截图，拒绝以文字代替画面 |
 
 ---
 
 ## 八、存量问题与剩余工作
 
-1. **页面当前不可用**：`outdoor-plan-canvas.tsx` 有未提交的指针事件重构少了一个函数定义，工作台渲染崩溃（§二.5，归属交互）。修好之前，所有页面项都无法验收。浏览器自动化通道本身也仍不可用（内置面板未挂到当前任务、Chrome/Edge 启动即挂），但这次页面崩溃与通道无关。
-2. **在途不绿**：~~类型检查 24 条、规划套件 3 红~~ **已清零**（`f2ff2980`：`tsc` 0 错、规划 14/14）；`outdoor-plan-save-lifecycle` 首轮 worker 未启动，已单跑 **9/9 绿**。剩余不可验证项全部是页面项。
+1. **页面可用性未定（12:05 的崩溃已修）**：`66292f66` 补齐了 `handleStagePointerCancel`，dev 重启后 `GET /` 200、标题正常；但 `screenshot` 仍超时，「画布是否渲染」无画面证据，P0 四步仍未执行。当前工作区还有他窗未提交改动（含 `outdoor-plan-canvas.tsx`、`outdoor-plan-overlay.tsx`，并删除 `outdoor-plan-interactions.tsx`、`f3-coach-bubble` 等），故本轮单测与 tsc 的结果都是「含在途改动」状态，不等于任何提交的验收。
+2. **类型检查当前 5 错，全部落在发布窗在途文件**（13:50 复核，`npx tsc --noEmit`）：`room-organizer-publish.react.test.tsx`×2、`panels/share-menu.tsx`×2、`lib/publish-flow.test.ts`×1。上轮报的 `handleStagePointerCancel` TS2304 已消失；他人在途文件我不作判断，仅记录归属线索（未提交 + 文件名均属发布流程）。规划/持久化套件在当前工作区全绿（§七）。
 3. **并发写同一工作区**：本轮已出现文件在我读取期间被改写。建议两位负责人各自收口提交后再进入集成，避免我基于漂移快照下结论。
 4. **未验证的审计结论**：右键/Alt 桥接、无红线草稿提示、3D 换算精度、拖动重建帧耗时，全部仍为待证项。
 5. 未做且按约束不得做：改契约、迁移、依赖、CI；部署；推送；`git add -A`。
