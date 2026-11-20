@@ -217,6 +217,15 @@
 - **契约补断言**：`workbench-rail-head.react.test.tsx` 新增户外钮源码切片断言——active 仅在 `!businessCardOpen` 时挂、被盖时挂 `is-retained`、`aria-expanded` 同条件、tooltip「被业务卡盖住，点按切回」；定向测试 1 例通过，`typecheck` exit 0、`lint` 0 error。
 - **未逐帧核对**：登录态评审/交付业务卡真实盖住户外面板的状态流（需登录 fixture 账号并走方案评审/交付流程，本轮未走）；flyout 非选中项是否降 ink-soft（当前与选中同为 ink，靠加粗 + 绿勾区分，与走查稿一致，未改）。
 
+### 第十四轮（2026-11-20）：登录态点穿业务卡盖户外钮 retained，补图标次级态修补
+
+- **真机链路**：fixture 账号登录后，对话问答在本地为桩（「暂未启用活动问答」），评审/交付指令走不通；改走 `?restore=backup` 直达交付业务卡（`openBusinessWorkspace('delivery')`），再派发应用自身暴露的 `scendance:open-outdoor-library` 窗口事件把户外面板置为打开（不经轨钮 onClick 的 `hideBusinessCard`），复现「业务卡盖住户外面板」的真实状态机。
+- **回读结果（暗色，业务卡开、户外面板底层保留）**：户外钮 `sc-rail-disc is-retained`、`aria-pressed=true`、`aria-expanded=false`、tooltip「户外规划：被业务卡盖住，点按切回」；内描边环 `oklab(0.849905 -0.00214672 -0.0121574 / 0.45) 0 0 0 1px inset`；户外抽屉 `is-outdoor-card` 被压到 0×0。点按 retained 钮后：业务卡隐藏、户外抽屉恢复 407px、钮回 `is-active`/`expanded=true`、tooltip 回「户外规划」，切回链路正确。
+- **发现并修补一处实绘缺陷**：`RailMap` 的 `active` 旧条件是 `outdoorPanel !== null`，retained 下仍为 true，图标走实心 `--ink` 亮色（#EDF0F2），没跟着降次级；与其他 retained 车道（active 取 `isLaneOpen`，被盖为 false 走描边 dim）不一致。改为 `active={outdoorPanel !== null && !businessCardOpen}`，retained 下图标回描边、颜色 `--ink-soft` #C9CED6。
+- **契约补断言**：`workbench-rail-head.react.test.tsx` 户外钮切片追加 `active={outdoorPanel !== null && !businessCardOpen}` 断言。
+- **门禁**：定向 workbench-rail-head 1 例通过；`typecheck` exit 0。
+- **残留说明**：按钮自身计算色在窄轨为 `#55585F`，仅作用于 `display:none` 的 `.sc-rail-label` 隐藏标签，可见图标已由 span 内联色接管，非可见缺陷；浅色 retained 环沿用第十二轮已验的共用 token 结论，本轮未在浅色档重放该链路。
+
 ### 真机/浏览器验收清单（待人工跑）
 
 - 三档切换即时重绘无刷新；`system` 跟随系统深浅切换；刷新后保留本机档位。

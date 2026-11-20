@@ -59,6 +59,8 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(outdoorBlock).toContain("outdoorPanel !== null ? ' is-retained'");
     expect(outdoorBlock).toContain('aria-expanded={outdoorPanel !== null && !businessCardOpen}');
     expect(outdoorBlock).toContain('被业务卡盖住，点按切回');
+    // 图标实心高亮同样只在没被盖住时；retained 下描边降次级，不能跟着 active 仍点亮。
+    expect(outdoorBlock).toContain('active={outdoorPanel !== null && !businessCardOpen}');
     expect(primary).not.toContain('sc-space-chevron');
     expect(primary).not.toContain('sc-rail-word');
     expect(primary).toContain('sc-rail-label');

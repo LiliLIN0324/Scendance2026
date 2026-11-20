@@ -5128,7 +5128,7 @@ useEffect(() => {
                     setOutdoorPanel(null);
                   }}
                 >
-                  <RailMap size={28} active={outdoorPanel !== null} aria-hidden="true" />
+                  <RailMap size={28} active={outdoorPanel !== null && !businessCardOpen} aria-hidden="true" />
                   <span className="sc-rail-label" aria-hidden="true">户外规划</span>
                 </button>
                 <RailMessagesButton controller={controller} team={team} open={messagesOpen}
