@@ -1,48 +1,55 @@
 /**
- * 客户评审页：与 /view 共用同一套纸面、墨色与发丝线。
- * 首屏是画布，右侧是意见栏；不再另起一套卡片与配色。
+ * 客户评审页：对齐生产站只读浅色页（/site、/view、/pricing）同一套纸面语言——
+ * 暖白纸面、纯白卡片发丝边、主视觉一圈轻投影、深绿主行动钮。不另起一套配色。
  */
 
 body:has(.rsp) {
   margin: 0;
-  background: var(--ground, #f4f5f7);
+  background: var(--ground, #f6f5f0);
 }
 
 .rsp {
-  --green: #4a7c59;
-  --green-deep: #35624a;
-  --green-pale: #eef3ef;
+  /* 中性阶（对齐 /site 暖白只读页） */
+  --ground: #f6f5f0;
   --paper: #ffffff;
-  --ink: #141416;
-  --ink-soft: #55585f;
-  --muted: #71767e;
-  --faint: #a6aab2;
-  --hair: #e4e4e7;
-  --hair-soft: #efeff1;
-  --ground: #f4f5f7;
+  --plane: #f4f5f7;
   --plane-deep: #ecedef;
+  --hair-soft: #efeff1;
+  --hair: #e4e3db;
+  --ink: #20241f;
+  --ink-soft: #55585f;
+  --muted: #6a7168;
+  --faint: #a6aab2;
+  /* 品牌绿：只做主行动钮、选中指示与小面积点睛 */
+  --brand: #35624a;
+  --brand-deep: #2a4f3b;
+  --green: #4a7c59;
+  --green-pale: #eef3ef;
   --warning: #96651f;
+  --err: #b4443c;
+  /* 圆角：卡片 r-md 12，按钮/小控件 r-sm 10 */
   --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 18px;
-  --e1: 0 6px 18px rgba(20, 20, 22, 0.1);
-  --e-card: 0 12px 32px rgba(20, 20, 22, 0.08);
+  --r-md: 12px;
+  --r-lg: 14px;
+  /* 主视觉轻投影（/site、/view 先例）；浮层小钮只用一层小影 */
+  --stage-shadow: 0 16px 40px #30353012;
+  --float-shadow: 0 2px 8px #30353008;
   --ease: cubic-bezier(.2, 0, 0, 1);
   min-height: 100dvh;
-  background: var(--ground, #f4f5f7);
+  background: var(--ground);
   color: var(--ink);
   font-family: var(--font-sans, system-ui, sans-serif);
 }
+
+/* ---------- 顶部品牌栏 ---------- */
 
 .rsp-mast {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 56px;
   padding: 0 max(24px, calc((100vw - 1280px) / 2));
-  border-bottom: 1px solid var(--hair, #e4e4e7);
-  background: var(--paper, #fff);
+  border-bottom: 1px solid var(--hair);
 }
 
 .rsp-brand {
@@ -58,17 +65,17 @@ body:has(.rsp) {
 .rsp-brand small {
   font-size: 12px;
   font-weight: 400;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-mast-status {
   margin: 0;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--green-pale, #eef3ef);
-  color: var(--green-deep, #35624a);
   font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
 }
+
+/* ---------- 标题区 ---------- */
 
 .rsp-shell {
   display: grid;
@@ -88,45 +95,33 @@ body:has(.rsp) {
 }
 
 .rsp-kicker {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 10px;
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  color: var(--green-deep, #35624a);
-}
-
-.rsp-kicker::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--green, #4a7c59);
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .rsp h1 {
   margin: 0;
-  font-size: clamp(26px, 3.6vw, 36px);
-  line-height: 1.16;
+  font-size: clamp(26px, 4vw, 40px);
+  line-height: 1.25;
   font-weight: 600;
   letter-spacing: -0.035em;
   overflow-wrap: anywhere;
 }
 
 .rsp-meta {
-  margin: 10px 0 0;
-  font-size: 13px;
+  margin: 12px 0 0;
+  font-size: 12px;
   line-height: 1.7;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-intro-side {
   display: grid;
   justify-items: end;
-  gap: 10px;
+  gap: 12px;
   max-width: 380px;
   text-align: right;
 }
@@ -139,16 +134,17 @@ body:has(.rsp) {
   gap: 6px 10px;
   margin: 0;
   font-size: 12px;
-  color: var(--ink-soft, #55585f);
+  color: var(--ink-soft);
 }
 
 .rsp-version b {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
-  border-radius: var(--r-sm, 10px);
-  background: var(--green-pale, #eef3ef);
-  color: var(--green-deep, #35624a);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink-soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   font-weight: 600;
@@ -159,24 +155,26 @@ body:has(.rsp) {
   flex-basis: 100%;
   font-size: 11px;
   line-height: 1.6;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-notice {
   margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--hair-soft, #efeff1);
-  border-radius: var(--r-md, 14px);
-  background: var(--paper, #fff);
-  font-size: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--hair-soft);
+  border-radius: var(--r-md);
+  background: var(--paper);
+  font-size: 13px;
   line-height: 1.7;
-  color: var(--muted, #71767e);
+  color: var(--ink-soft);
 }
+
+/* ---------- 工作区：地图舞台 + 意见栏 ---------- */
 
 .rsp-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
-  gap: 18px;
+  gap: 16px;
   align-items: stretch;
 }
 
@@ -189,10 +187,10 @@ body:has(.rsp) {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: var(--r-lg, 18px);
-  background: var(--paper, #fff);
-  box-shadow: var(--e-card);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  background: var(--paper);
+  box-shadow: var(--stage-shadow);
   overflow: hidden;
 }
 
@@ -221,29 +219,29 @@ body:has(.rsp) {
 
 .rsp-floors button,
 .rsp-draft button {
-  height: 30px;
-  padding: 0 11px;
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: 999px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
   background: #fffffff2;
-  color: var(--ink-soft, #55585f);
+  color: var(--ink-soft);
   font: 500 12px/1 var(--font-sans, system-ui, sans-serif);
   cursor: pointer;
-  box-shadow: 0 2px 8px #3035300d;
+  box-shadow: var(--float-shadow);
 }
 
 .rsp-floors button[aria-pressed='true'] {
-  border-color: var(--ink, #141416);
-  background: var(--ink, #141416);
-  color: var(--paper, #fff);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .rsp-stage-tip {
   margin: 0 0 0 auto;
   padding: 5px 9px;
   border-radius: 6px;
-  background: #ffffffd9;
-  color: var(--ink-soft, #55585f);
+  background: #ffffffe6;
+  color: var(--ink-soft);
   font-size: 11px;
   line-height: 1.4;
   white-space: nowrap;
@@ -276,20 +274,20 @@ body:has(.rsp) {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 14px;
-  background: var(--paper, #fff);
+  padding: 12px;
+  background: var(--paper);
 }
 
 .rsp-review-hint {
   margin: 0 0 10px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-outdoor svg {
   height: min(62vh, 620px) !important;
-  border-radius: var(--r-md, 14px);
+  border-radius: var(--r-md);
 }
 
 .rsp-draft {
@@ -298,33 +296,33 @@ body:has(.rsp) {
   align-items: center;
   gap: 8px;
   margin-top: 10px;
-  padding: 10px;
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: var(--r-md, 14px);
-  background: var(--plane, #fff);
+  padding: 12px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: var(--paper);
 }
 
 .rsp-draft-point {
   font-size: 12px;
-  color: var(--ink-soft, #55585f);
+  color: var(--ink-soft);
   white-space: nowrap;
 }
 
 .rsp-draft input {
   flex: 1;
   min-width: 160px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: var(--r-sm, 10px);
-  background: var(--paper, #fff);
-  color: var(--ink, #141416);
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
   font: 13px/1.2 var(--font-sans, system-ui, sans-serif);
 }
 
 .rsp-draft button:disabled {
-  background: var(--plane, #fff);
-  color: var(--faint, #a6aab2);
+  background: var(--plane);
+  color: var(--faint);
   cursor: not-allowed;
 }
 
@@ -335,18 +333,20 @@ body:has(.rsp) {
 }
 
 .rsp-source a {
-  color: var(--green-deep, #35624a);
+  color: var(--brand);
   text-underline-offset: 3px;
 }
+
+/* ---------- 图例 ---------- */
 
 .rsp-legend {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 12px;
-  padding: 11px 14px;
-  border-top: 1px solid var(--hair, #e4e4e7);
-  background: var(--paper, #fff);
+  padding: 12px 14px;
+  border-top: 1px solid var(--hair);
+  background: var(--paper);
 }
 
 .rsp-legend h2 {
@@ -354,7 +354,7 @@ body:has(.rsp) {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-legend ul {
@@ -370,38 +370,40 @@ body:has(.rsp) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: var(--ink-soft, #55585f);
+  font-size: 13px;
+  color: var(--ink-soft);
 }
 
 .rsp-legend p {
   margin: 0;
-  font-size: 11px;
-  color: var(--muted, #71767e);
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .rsp-swatch {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   border: 1px solid #0002;
   border-radius: 3px;
 }
+
+/* ---------- 意见栏 ---------- */
 
 .rsp-rail {
   display: flex;
   flex-direction: column;
   min-height: 0;
   max-height: clamp(520px, calc(100dvh - 300px), 780px);
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: var(--r-lg, 18px);
-  background: var(--paper, #fff);
-  box-shadow: var(--e-card);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  background: var(--paper);
+  box-shadow: var(--stage-shadow);
   overflow: hidden;
 }
 
 .rsp-rail-head {
-  padding: 14px 16px 13px;
-  border-bottom: 1px solid var(--hair, #e4e4e7);
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--hair);
 }
 
 .rsp-rail-title {
@@ -413,59 +415,60 @@ body:has(.rsp) {
 
 .rsp-rail-title h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 .rsp-rail-title span {
-  min-width: 20px;
-  padding: 1px 6px;
+  min-width: 22px;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: var(--green-pale, #eef3ef);
-  color: var(--green-deep, #35624a);
+  background: var(--plane-deep);
+  color: var(--ink-soft);
   font-size: 11px;
+  font-weight: 500;
   text-align: center;
 }
 
 .rsp-author {
   display: grid;
-  gap: 4px;
-  margin-top: 11px;
-  font-size: 11px;
-  color: var(--muted, #71767e);
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .rsp-author input {
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: var(--r-sm, 10px);
-  background: var(--paper, #fff);
-  color: var(--ink, #141416);
-  font: 13px/1.2 var(--font-sans, system-ui, sans-serif);
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.2 var(--font-sans, system-ui, sans-serif);
 }
 
 .rsp-persist {
-  margin: 8px 0 0;
-  font-size: 10px;
+  margin: 10px 0 0;
+  font-size: 12px;
   line-height: 1.6;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-rail-list {
   flex: 1;
   min-height: 0;
-  padding: 8px 10px;
+  padding: 12px;
   overflow: auto;
 }
 
 .rsp-empty {
   margin: 0;
-  padding: 24px 10px;
+  padding: 24px 4px;
   font-size: 13px;
   line-height: 1.8;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-pin-list {
@@ -479,18 +482,18 @@ body:has(.rsp) {
   align-items: flex-start;
   gap: 10px;
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: 0;
-  border-radius: var(--r-md, 14px);
+  border-radius: var(--r-md);
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.18s var(--ease);
+  transition: background 120ms var(--ease);
 }
 
 .rsp-pin-go:hover {
-  background: var(--ground, #f4f5f7);
+  background: var(--plane);
 }
 
 .rsp-pin-go b {
@@ -500,14 +503,14 @@ body:has(.rsp) {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--plane-deep, #ecedef);
-  color: var(--ink-soft, #55585f);
+  background: var(--plane-deep);
+  color: var(--ink-soft);
   font: 500 12px/1 var(--font-sans, system-ui, sans-serif);
 }
 
 .rsp-pin-go strong {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -516,38 +519,38 @@ body:has(.rsp) {
 .rsp-pin-go small {
   display: block;
   margin-top: 3px;
-  font-size: 11px;
-  color: var(--muted, #71767e);
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .rsp-pin-list li.is-on .rsp-pin-go {
-  background: var(--green-pale, #eef3ef);
+  background: var(--green-pale);
 }
 
 .rsp-pin-list li.is-on .rsp-pin-go b {
-  background: var(--green-deep, #35624a);
+  background: var(--brand);
   color: #fff;
 }
 
 .rsp-form-note,
 .rsp-form-error {
-  margin: 8px 8px 2px;
-  font-size: 11px;
+  margin: 10px 4px 2px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .rsp-form-note {
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
 .rsp-form-error {
-  color: var(--err, #b4443c);
+  color: var(--err);
 }
 
 .rsp-rail-foot {
-  padding: 12px 14px 13px;
-  border-top: 1px solid var(--hair, #e4e4e7);
-  background: var(--paper, #fff);
+  padding: 16px;
+  border-top: 1px solid var(--hair);
+  background: var(--paper);
 }
 
 .rsp-actions {
@@ -557,70 +560,74 @@ body:has(.rsp) {
 }
 
 .rsp-actions button {
-  height: 38px;
-  border-radius: var(--r-md, 14px);
+  height: 34px;
+  border-radius: var(--r-sm);
   font: 500 13px/1 var(--font-sans, system-ui, sans-serif);
   cursor: pointer;
-  transition: background 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease);
+  transition: background 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease);
 }
 
 .rsp-primary {
-  border: 1px solid var(--ink, #141416);
-  background: var(--ink, #141416);
-  color: var(--paper, #fff);
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: var(--paper);
 }
 
 .rsp-primary:hover:not(:disabled) {
-  background: #2a2a2e;
+  background: var(--brand-deep);
+  border-color: var(--brand-deep);
 }
 
 .rsp-backup {
-  border: 1px solid var(--hair, #e4e4e7);
-  background: var(--paper, #fff);
-  color: var(--ink-soft, #55585f);
+  border: 1px solid var(--hair);
+  background: var(--paper);
+  color: var(--ink-soft);
 }
 
 .rsp-backup:hover:not(:disabled) {
-  background: var(--ground, #f4f5f7);
+  background: var(--plane);
 }
 
 .rsp-actions button:disabled {
-  border-color: var(--hair, #e4e4e7);
-  background: var(--plane, #fff);
-  color: var(--faint, #a6aab2);
+  border-color: var(--hair);
+  background: var(--plane);
+  color: var(--faint);
   cursor: not-allowed;
 }
 
 .rsp-status {
-  margin: 7px 0 0;
-  font-size: 10px;
+  margin: 10px 0 0;
+  font-size: 12px;
   line-height: 1.6;
-  color: var(--muted, #71767e);
+  color: var(--muted);
 }
 
+/* ---------- 载入 / 空态 ---------- */
+
 .rsp-state {
-  max-width: 480px;
-  margin: 14vh auto;
-  padding: 26px 28px;
-  border: 1px solid var(--hair, #e4e4e7);
-  border-radius: var(--r-lg, 18px);
-  background: var(--paper, #fff);
+  max-width: 460px;
+  margin: 16vh auto;
+  padding: 28px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: var(--paper);
 }
 
 .rsp-state h1 {
-  margin: 0 0 10px;
-  font-size: 22px;
+  margin: 0 0 14px;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .rsp-state p {
   margin: 0;
   font-size: 14px;
   line-height: 1.8;
-  color: var(--ink-soft, #55585f);
+  color: var(--muted);
 }
 
 .rsp :focus-visible {
-  outline: 2px solid var(--ink-soft, #55585f);
+  outline: 2px solid var(--ink-soft);
   outline-offset: 2px;
 }
 
@@ -628,7 +635,7 @@ body:has(.rsp) {
   .rsp-intro {
     align-items: flex-start;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
 
   .rsp-intro-side {
@@ -685,6 +692,8 @@ body:has(.rsp) {
   }
 }
 
+/* ---------- 户外地图 ---------- */
+
 .rsp-map {
   position: relative;
   height: min(72vh, 760px);
@@ -728,12 +737,12 @@ body:has(.rsp) {
   gap: 10px;
   width: min(288px, calc(100% - 28px));
   padding: 12px;
-  border: 1px solid var(--hair-soft, #efeff1);
-  border-radius: var(--r-md, 14px);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: var(--e1);
+  box-shadow: var(--float-shadow);
   color: var(--ink);
   font-size: 12px;
 }
@@ -750,26 +759,26 @@ body:has(.rsp) {
 .rsp-map-row > span {
   flex: none;
   width: 34px;
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  letter-spacing: 0.02em;
   color: var(--muted);
 }
 
 .rsp-map-level select,
 .rsp-map-card button {
-  height: 30px;
+  height: 32px;
   padding: 0 10px;
   border: 1px solid var(--hair);
-  border-radius: var(--r-sm, 10px);
+  border-radius: var(--r-sm);
   background: var(--paper);
-  color: var(--ink-soft, #55585f);
+  color: var(--ink-soft);
   font: 500 12px/1 var(--font-sans, system-ui, sans-serif);
   cursor: pointer;
-  transition: background 0.18s var(--ease), border-color 0.18s var(--ease), color 0.18s var(--ease);
+  transition: background 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease);
 }
 
 .rsp-map-card button:hover:not([aria-pressed='true']) {
-  background: var(--ground, #f4f5f7);
+  background: var(--plane);
 }
 
 .rsp-map-card button[aria-pressed='true'] {
@@ -801,10 +810,10 @@ body:has(.rsp) {
   left: 12px;
   max-width: min(360px, calc(100% - 24px));
   padding: 8px 10px;
-  border-radius: var(--r-sm, 10px);
-  background: #fff;
+  border-radius: var(--r-sm);
+  background: var(--paper);
   color: var(--warning);
-  box-shadow: var(--e1);
+  box-shadow: var(--float-shadow);
 }
 
 .rsp-map-credit {
@@ -819,7 +828,7 @@ body:has(.rsp) {
 
 .rsp-pin-dot {
   filter: drop-shadow(0 2px 5px rgba(20, 20, 22, 0.35));
-  transition: fill 0.18s var(--ease);
+  transition: fill 120ms var(--ease);
 }
 
 .rsp-pin-num {
@@ -828,5 +837,5 @@ body:has(.rsp) {
 }
 
 .rsp-map g.is-on .rsp-pin-dot {
-  fill: var(--green-deep, #35624a);
+  fill: var(--brand);
 }
