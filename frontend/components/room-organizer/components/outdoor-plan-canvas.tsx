@@ -278,7 +278,7 @@ import { resolveDrawnWall, snapWallPointToIndoorEdge } from '../lib/plan-wall-dr
 import type { SnappedWallPoint } from '../lib/plan-wall-draw';
 import { isDoorSlug, isDoorTemplateId, isWindowSlug, isWindowTemplateId, INDOOR_WALL_HEIGHT_M, INDOOR_WINDOW_HEIGHT_M, INDOOR_WINDOW_SILL_M } from '../lib/plan-indoor-walls';
 import { autoNodeName, renamedNodeName } from '../lib/site-plan-node-names';
-import { WALK_ROLES, walkRoleCrowdType } from '../lib/walk-roles';
+import { findPerson, selectablePeople } from '../lib/people-registry';
 import { crowdTypeForRole } from '../lib/plan-crowd-placement';
 import { encodeStageCover } from '@/lib/stage-cover';
 import {
@@ -7533,7 +7533,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (patch.role !== undefined && patch.role.trim().length === 0) return;
     if (patch.count !== undefined && (!Number.isInteger(patch.count) || patch.count < 1)) return;
     // 固定角色必须是登记表里可走的漫游角色；未登记/不可走视为未绑定，不写入。
-    if (patch.assetId !== undefined && patch.assetId && !WALK_ROLES.some(role => role.assetId === patch.assetId && role.walkable)) return;
+    if (patch.assetId !== undefined && patch.assetId) {
+      const person = findPerson(patch.assetId);
+      if (!person?.walkable) return;
+    }
     commitPlan({ ...current, workers: current.workers.map(w => (w.id === id ? { ...w, ...patch } : w)) });
   }
 
@@ -10308,15 +10311,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const selectedVehicle = selectedVehicleId ? (plan.vehicles ?? []).find(v => v.id === selectedVehicleId) ?? null : null;
   /** 该车型在物料库里登记的模型（只有登记过的才能选；没有就是「待补模型」）。 */
   const selectedVehicleModelSlugs = selectedVehicle ? (VEHICLE_TYPES.find(item => item.id === selectedVehicle.type)?.modelSlugs ?? []) : [];
-  // 固定角色选项：可走漫游角色；与当前岗位同类的排前，其余在后。
+  // 固定角色选项：可选 22 人；与当前岗位同类的排前，其余在后。
   const selectedWorkerCrowdType = selectedWorker ? crowdTypeForRole(selectedWorker.role) : null;
-  const workerRoleOptions = (() => {
-    const walkable = WALK_ROLES.filter(role => role.walkable);
-    if (!selectedWorkerCrowdType) return walkable;
-    return [
-      ...walkable.filter(role => walkRoleCrowdType(role) === selectedWorkerCrowdType),
-      ...walkable.filter(role => walkRoleCrowdType(role) !== selectedWorkerCrowdType),
-    ];
+  const workerRoleGroups = (() => {
+    const walkable = selectablePeople().filter(slot => slot.walkable && Boolean(slot.assetId));
+    if (!selectedWorkerCrowdType) return { same: [], rest: walkable };
+    const same = walkable.filter(slot => slot.crowdType === selectedWorkerCrowdType);
+    const rest = walkable.filter(slot => slot.crowdType !== selectedWorkerCrowdType);
+    return { same, rest };
+  })();
+  // 旧单模只在该点位本来就绑着它时出现：不把 5 条重复重新搬回列表（2026-11-20）。
+  const boundLegacyRole = (() => {
+    const bound = selectedWorker?.assetId ? findPerson(selectedWorker.assetId) : null;
+    return bound?.legacy ? bound : null;
   })();
   // 2026-11-11 用户指令：右上角浮窗「属性」页签的角标 = 当前同时选中的物件数（点选后自动切过来）。
   // 2026-11-17 #118 补漏：车辆也必须算进去——角标为 0 时整张「属性」卡会被空状态顶掉，
@@ -12067,7 +12074,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         style={{ ...selectStyle, flex: 1, minWidth: 0 }}
                       >
                         <option value="">按岗位自动分配</option>
-                        {workerRoleOptions.map(role => <option key={role.assetId} value={role.assetId}>{role.name}</option>)}
+                        {boundLegacyRole && <option value={boundLegacyRole.assetId}>{`${boundLegacyRole.name}（旧单模，建议换男/女）`}</option>}
+                        {workerRoleGroups.same.length > 0 && <optgroup label="同类岗位">
+                          {workerRoleGroups.same.map(slot => <option key={slot.id} value={slot.assetId ?? ''}>{slot.name}</option>)}
+                        </optgroup>}
+                        {workerRoleGroups.rest.length > 0 && <optgroup label={workerRoleGroups.same.length > 0 ? '其他人群' : '按人群类型'}>
+                          {workerRoleGroups.rest.map(slot => <option key={slot.id} value={slot.assetId ?? ''}>{slot.name}</option>)}
+                        </optgroup>}
                       </select>
                     </label>
                     <div style={{ display: 'flex', gap: PLANNING_SPACING.xs, marginTop: PLANNING_SPACING.xs }}>

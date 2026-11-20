@@ -14,6 +14,8 @@ export const GLB_MAX_CLOUD_FILE_BYTES = 32 * 1024 * 1024;
  * 新增角色时把资产号加到这里，并把 GLB 传到 R2 的 people/ 下。
  * 注意：2026-11-16 起线上都是两档压缩版（hero ≤3.54 MB、far ≤2.47 MB），上限从 48 MB 收到 12 MB；
  * 汉服 id（9b9bb4da…）线上始终 404，已从白名单移除。
+ * 2026-11-20：a007–a00b 是 PEOPLE-05 旧单模，在人物登记表里已降为 legacy（不进选择器）；
+ * 老方案仍会引用这几个 assetId，白名单与 R2 对象都保留，不删。
  */
 export const LOCAL_WALK_ASSET_IDS: readonly string[] = [
   '7a9f1e21-8c34-4d51-a001-b00000000001',

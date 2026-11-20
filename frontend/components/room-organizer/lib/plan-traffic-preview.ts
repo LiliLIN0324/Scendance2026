@@ -4,7 +4,8 @@ import { builtinModelBySlug, facilityTemplateSlug, resolveFacilityModels } from 
 import { nearestRouteEntry, worldPreviewRoute } from './plan-crowd-routes';
 import { routeLength } from './person-route';
 import type { FurnitureItem, WalkRoute } from './types';
-import { WALK_ROLES, walkRoleGlbUrl } from './walk-roles';
+import { walkRoleGlbUrl } from './walk-roles';
+import { defaultPersonForType } from './people-registry';
 
 export interface TrafficPreview {
   routeId: string;
@@ -76,14 +77,14 @@ export function planTrafficPreviews(plan: Pick<SitePlanData, 'facilities' | 'rou
       });
     }
     if (planRoute.kind === 'service' && carrier === 'walk') {
-      const role = WALK_ROLES.find(candidate => candidate.crowdType === 'volunteer' && candidate.walkable);
-      if (role) {
+      const assetId = defaultPersonForType('volunteer')?.assetId;
+      if (assetId) {
         previews.push({
           routeId: id, kind: 'pedestrian', route: { ...route, startDistance: 0 },
           item: {
             id: `traffic-walker-${id}`, name: '后勤步行', type: 'glb-asset', icon: '', color: '#b88632',
-            width: 0.6, height: 1.75, depth: 0.6, assetId: role.assetId,
-            glbUrl: walkRoleGlbUrl(role.assetId), uniformScale: true,
+            width: 0.6, height: 1.75, depth: 0.6, assetId,
+            glbUrl: walkRoleGlbUrl(assetId), uniformScale: true,
           },
         });
       }

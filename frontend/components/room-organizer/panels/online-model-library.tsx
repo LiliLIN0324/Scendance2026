@@ -746,8 +746,17 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
             });
             const roles = walkRoles.filter(role => walkRoleCrowdType(role) === type.id);
             const count = models.length + roles.length;
-            if (count === 0) return null;
             const open = crowdSection === type.id;
+            if (count === 0) {
+              // 没模型的类目照样占一行：以前整行消失，用户会以为类目丢了（2026-11-20）。
+              return <div key={type.id} data-crowd-type={type.id} className="sc-lib-tree-row is-section is-empty" aria-label={`${type.name} 待补模型`}>
+                <span className="sc-lib-tree-chevron" aria-hidden="true">·</span>
+                <UsersIcon size={14} strokeWidth={1.75} aria-hidden="true"/>
+                <span className="sc-lib-tree-name">{type.name}</span>
+                <span className="sc-lib-tree-hint">{type.note}</span>
+                <span className="sc-lib-tree-count">待补模型</span>
+              </div>;
+            }
             return <div key={type.id} data-crowd-type={type.id}>
               {treeRow({
                 level: 'section',
@@ -884,9 +893,10 @@ export function OnlineModelLibrary({ disabled = false, limitMessage, onAdd, onAd
                     </div>)}
                     {treeRow({
                       level: 'section',
-                      label: CROWD_GROUP_LABEL,
+                      label: '人物低模（静态）',
                       count: crowdInLib.length,
                       open: libSection === 'crowd',
+                      hint: '不可漫游',
                       icon: <UsersIcon size={14} strokeWidth={1.75} aria-hidden="true"/>,
                       onToggle: () => setLibSection(current => current === 'crowd' ? 'infra' : 'crowd'),
                     })}
