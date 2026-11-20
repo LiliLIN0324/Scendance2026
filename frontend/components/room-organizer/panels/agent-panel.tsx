@@ -144,7 +144,7 @@ import { proposalDifferences } from '../three/proposal-preview';
 import {describeExistingChanges,type ExistingChangeDescription} from '../lib/proposal-existing-changes';
 import { proposalChangeItems, proposalChangeSummary, proposalZoneCount, type ProposalChangeItem, type ProposalChangeSummary } from '../lib/proposal-change-groups';
 import { isUnchangedProposal, useStudioAgent, type UnchangedRunResult } from './creative-studio';
-import { aholoChatStep, understandingLine } from '../lib/cloud-tool-connection';
+import { aholoChatStep } from '../lib/cloud-tool-connection';
 import { layoutChatHint, revisionRefusalText } from '../lib/layout-feedback';
 import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
@@ -672,6 +672,8 @@ export function readonlyComposerDrafts(scope:string):{sessionId:string|null;text
   return result;
 }
 export function resetVolatileAssistantMemoriesForTests(): void { volatileSessionMemories.clear(); volatileComposerDrafts.clear(); }
+/** 测试种子：往输入框草稿里放一段未发送文本；正常路径只有 composer 自己会写这张表。 */
+export function seedVolatileComposerDraftForTests(scope:string,sessionId:string|null,text:string):void{volatileComposerDrafts.set(JSON.stringify([scope,sessionId]),text);}
 function volatileMemoriesFor(scope: string): Map<string, BriefMemory> {
   let values=volatileSessionMemories.get(scope);
   if(!values){values=new Map();volatileSessionMemories.set(scope,values);}
@@ -4386,7 +4388,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const activeProviderSlot = providerSlots?.find(p => p.id === activeProviderId) ?? null;
   const activeModelId = studio?.activeModel ?? null;
   const activeModelOption = activeProviderSlot?.models?.find(option => option.model === activeModelId) ?? null;
-  const summaryLabel = activeModelOption ? `${activeProviderSlot?.label ?? ''} · ${activeModelOption.label}` : (activeProviderSlot?.label ?? '默认（按服务端配置）');
+  const summaryLabel = activeModelOption ? `${activeProviderSlot?.label ?? ''} · ${activeModelOption.label}` : (activeProviderSlot?.label ?? '默认');
   // 模型槽位浮层：堆栈矮卡里面板自身 overflow:hidden 会裁掉上弹菜单，因此挂到 body 层定位。
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const providerAnchorRef = useRef<HTMLButtonElement>(null);
@@ -4594,7 +4596,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     const attach = () => {
       const el = feed.current;
       if (!el) return false;
-      const pin = () => { el.scrollTo({ top: el.scrollHeight }); };
+      const pin = () => { el.scrollTo?.({ top: el.scrollHeight }); };
       pin();
       const resize = new ResizeObserver(pin);
       resize.observe(el);
@@ -4996,7 +4998,6 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
           : <button type="button" className="btn-primary" onClick={agent.confirmExport}>确认导出</button>}
         {!agent.outdoorBridgeReady && studio?.cloudMaterialDraftAvailable && !agent.proposal && !studio.preview && !generating && !paused && !agent.cloudBusy && !agent.recovering && !agent.cloudStale && !studio.applyRecovery && <>
           <button type="button" className="chip" onClick={agent.confirmCloudMaterialDraft}>导出当前场景物料清单草案</button>
-          <p className="ap-blocked-note">本机快照，不含点验和场地方确认。实物和现场还要核验。</p>
         </>}
         <div className="ap-error-actions">
           <button type="button" className="chip btn-outline" onClick={agent.dismissExport}>先不了</button>
@@ -5048,12 +5049,11 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         </div>}
         {/* 引导句是绝对定位的整句打字机：有附件时收掉，免得和上方的附件条叠在一起。 */}
         {ghostVisible && !agent.pendingFiles.length && <SuggestionGhost className="ap-ghost" full={suggestion.full} shown={suggestion.shown} onPick={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
-        <textarea id="ap-input" data-tour="chat-input" aria-describedby="ap-data-notice" ref={inputRef} rows={2} value={draft} maxLength={600} disabled={!composerEnabled} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+        <textarea id="ap-input" data-tour="chat-input" ref={inputRef} rows={2} value={draft} maxLength={600} disabled={!composerEnabled} placeholder={ghostVisible ? '' : composerPlaceholder} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === 'Tab' && !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
         }}/>
-        <p className="ap-field-note" id="ap-data-notice">{understandingLine(Boolean(modelEnabled() && studio?.controller))}</p>
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">排队 {agent.generationQueued} 条，按顺序处理中。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上次结果未知，可能还在计费。再发可能重复收费。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         {agent.sessionSaveFailed && <p role="status" className="ap-field-note">本机没存上，内容还在页面上。</p>}

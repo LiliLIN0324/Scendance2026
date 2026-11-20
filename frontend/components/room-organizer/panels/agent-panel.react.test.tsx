@@ -2309,12 +2309,11 @@ describe('T-UI visible interaction', () => {
     render(ui(state.layout));send('导出给搭建方');
     const card=(await screen.findByText('导出执行资料草案')).closest('.ap-card') as HTMLElement;
     expect(within(card).getByText(/云项目暂不支持此执行资料草案/)).toBeTruthy();
-    expect(within(card).getByText(/本机快照，未冻结/)).toBeTruthy();
     expect(within(card).queryByRole('button',{name:'确认导出'})).toBeNull();
     fireEvent.click(within(card).getByRole('button',{name:'导出当前场景物料清单草案'}));
     await waitFor(()=>expect(studioMock.exportCloudMaterialDraft).toHaveBeenCalledOnce());
     expect(studioMock.exportActivity).not.toHaveBeenCalled();
-    expect(await screen.findByText(/当前场景物料清单草案已发起下载/)).toBeTruthy();
+    expect(await screen.findByText(/物料清单已下载，还没定稿/)).toBeTruthy();
   });
 
   it('does not offer export of the old scene while a fix is awaiting confirmation', async () => {
@@ -4021,22 +4020,14 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
     expect(localStorage.getItem(key)).toBe(before);
     expect(await screen.findByText(/这次需求暂时无法保存在本机/)).toBeTruthy();
   });
-  it('explains when text may leave the device, without a permanent plan-status line', () => {
-    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '0');
+  it('输入卡不再挂离机说明行，也不留悬空的 aria-describedby', () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
     try {
-      const view = render(ui(makeLayout()));
-      expect(screen.getByText('文字识别按本机规则处理。')).toBeTruthy();
+      render(ui(makeLayout()));
+      expect(screen.queryByText('输入文字可能发送至模型服务。')).toBeNull();
+      expect(screen.queryByText('文字识别按本机规则处理。')).toBeNull();
       expect(screen.queryByText(/本机规则出预览|云端生成会发送/)).toBeNull();
-      expect(screen.getByLabelText('告诉 Agent 要改的').getAttribute('aria-describedby')).toBe('ap-data-notice');
-      vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
-      view.rerender(ui(makeLayout()));
-      expect(screen.getByText('输入文字可能发送至模型服务。')).toBeTruthy();
-      studioMock.connection = '项目已连接';
-      view.rerender(ui(makeLayout()));
-      expect(screen.getByText('输入文字可能发送至模型服务。')).toBeTruthy();
-      vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '0');
-      view.rerender(ui(makeLayout()));
-      expect(screen.getByText('文字识别按本机规则处理。')).toBeTruthy();
+      expect(screen.getByLabelText('告诉 Agent 要改的').getAttribute('aria-describedby')).toBeNull();
     } finally { vi.unstubAllEnvs(); }
   });
   it('会话头展示标题，能力芯片与输入框可用', () => {
