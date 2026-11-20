@@ -1,20 +1,24 @@
 'use client';
 
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Box, Camera, Crown, Images, Loader2, Scan, TriangleAlert, Upload } from '@/components/solid-icons';
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
-import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
+import { useCloudArchive } from '../hooks/use-cloud-archive';
+import { detectCloudCaseSession, ensureCloudCaseCopyRecord } from '../lib/cloud-cases';
 import { forgetRemovedScans, registerCloudScans, registerLocalScans, repairStaleScans } from '../lib/local-scans';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
 import { findScanLodUrl, uploadScanFile } from '../lib/scan-upload';
+import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
+import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
 import { CaseCards } from './case-cards';
+import { CloudCaseCatalog } from './cloud-case-catalog';
 import { EnvironmentPreview } from './environment-preview';
 import { ShelfGrip } from './scendance-workspace';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
 import type { RoomLayout } from '../lib/types';
+import type { BackendSession } from '@/lib/backend-session';
 import './space-browser.css';
 
 /**
@@ -70,6 +74,7 @@ export function SpacePanel({
   onTryHanfuWalk,
   hanfuWalkDisabledReason,
   workflow,
+  controller,
   variant = 'shelf',
 }: {
   layout: RoomLayout;
@@ -107,6 +112,12 @@ export function SpacePanel({
   hanfuWalkDisabledReason?: string;
   /** 可由工作台托管，切换到其他 Agent 后也记住本次选择。 */
   workflow?: 'aholo' | 'traditional';
+  /**
+   * 后端会话（任务 C，2026-11-20）：云端案例目录/另存走它的能力探测方法。
+   * 没传（单独渲染/旧宿主）就不显示云端段，静态案例照旧；传了但服务端未接通
+   * 时目录段会明确显示「不可用」，不用本机数据冒充云端目录。
+   */
+  controller?: BackendSession | null;
   /** shelf = 画布底部抽屉；card = 嵌进 Agent 面板，不要拖拽条。 */
   variant?: 'shelf' | 'card';
 }): JSX.Element {
@@ -121,6 +132,27 @@ export function SpacePanel({
     if (variant !== 'card' && moreRef.current) moreRef.current.open = true;
   }, [variant, workflow]);
   const card = variant === 'card';
+  // 2026-11-20 集成接通（任务 B 的补传队列）：扫描上传成功后，原件同时进私有云归档队列。
+  // userId 跟随会话快照订阅；未登录/未接通时队列只在本机积累，不冒充云端成功（C03/C04）。
+  const [archiveUser, setArchiveUser] = useState<{ id: string; anonymous: boolean } | null>(null);
+  useEffect(() => {
+    // 旧宿主/测试可能传不完整的会话替身（没有 getSnapshot/subscribe）：按未登录处理，不崩。
+    if (!controller || typeof controller.getSnapshot !== 'function' || typeof controller.subscribe !== 'function') {
+      setArchiveUser(null);
+      return undefined;
+    }
+    const update = (): void => {
+      const user = controller.getSnapshot().user ?? null;
+      setArchiveUser(user ? { id: user.id, anonymous: !!user.is_anonymous } : null);
+    };
+    update();
+    return controller.subscribe(update);
+  }, [controller]);
+  const scanArchive = useCloudArchive({
+    controller: controller ?? null,
+    userId: archiveUser?.id ?? null,
+    enabled: !!archiveUser && !archiveUser.anonymous,
+  });
   // 扫描登记在浏览器的来源隔离存储里（127.0.0.1 与 localhost 各存各的），换来源就丢；
   // 文件才是事实，所以每次开面板先登记本机文件、再用云端副本补缺，两边都不漏。
   const [, refreshScanList] = useState(0);
@@ -163,6 +195,15 @@ export function SpacePanel({
       });
       refreshScanList(value => value + 1);
       setUpload({ status: 'done', percent: 100, message: `已加入「${asset.name}」${asset.lodUrl ? '（多档 LOD）' : ''}，点它就能在 3D 里看。` });
+      // 私有云归档（2026-11-20 集成接通）：代理落盘 ≠ 云端归档，原件补进归档队列；
+      // 已登录且通道接通时自动续传，状态在账户面板「归档」页如实展示。
+      void scanArchive.enqueueFile({ localId: asset.assetId, name: file.name, kind: 'scan', file })
+        .then(() => {
+          setUpload(current => current.status === 'done'
+            ? { ...current, message: `${current.message}；原件已进入云端归档队列。` }
+            : current);
+        })
+        .catch(() => { /* 未登录或入队失败不打断本机上传结论；原件与代理登记都还在 */ });
     } catch (error) {
       setUpload({ status: 'error', percent: 0, message: error instanceof Error ? error.message : '上传失败，请重试。' });
     }
@@ -193,8 +234,7 @@ export function SpacePanel({
     if (onPlaceScan) onPlaceScan(venue);
     else environment?.onSelect(venue.assetId, venue.name);
   };
-  // 2026-11-17：经典案例不是“模板替换”，点开就在本机落一个独立活动（同一 id 复用，
-  // 重复打开仍是那一案），当前场地一个字都不动。
+  // 案例首次打开创建个人副本；重复打开只续载，不能用官方初始方案覆盖个人修改。
   // 2026-11-17 用户拍板「按不换页改」：先写本机记录，再请工作台外壳就地换 project id
   // （重挂画布、replaceState 跟 URL），文档不重载、不白屏；没有宿主接住才退回整页跳。
   const [caseNotice, setCaseNotice] = useState('');
@@ -204,20 +244,37 @@ export function SpacePanel({
       const projectId = `replica-${replica.id}`;
       const now = new Date().toISOString();
       const existing = readOutdoorProjectRecord(projectId);
-      saveOutdoorProjectRecord({
+      if (!existing) saveOutdoorProjectRecord({
         v: 1,
         projectId,
         name: `${replica.origin === 'cn' ? '国内案例' : '经典案例'} · ${replica.title}`.slice(0, 60),
-        createdAt: existing?.createdAt ?? now,
+        createdAt: now,
         updatedAt: now,
         plan: replica.buildPlan(),
       });
+      if (!readOutdoorProjectRecord(projectId)) throw new Error('浏览器未能保存案例副本，请检查存储空间后重试。');
       if (!requestOutdoorProjectSwitch(projectId)) {
         window.location.assign(`/editor/?project=${encodeURIComponent(projectId)}&mode=outdoor`);
       }
     } catch (error) {
       setCaseNotice(error instanceof Error ? error.message : '这个案例没能打开，请重试。');
     }
+  };
+  // 云端案例（2026-11-20）：目录与另存走 backendSession 的能力探测方法；
+  // 「使用此案例」= 读公开 manifest 落一份独立个人副本（replica-<稳定ID>），
+  // 已有副本原样续用——官方更新、重复点击都不覆盖个人修改（验收 V11）。
+  const caseSession = useMemo(() => detectCloudCaseSession(controller), [controller]);
+  const openCloudCase = (stableId: string): void => {
+    setCaseNotice('');
+    void ensureCloudCaseCopyRecord(caseSession, stableId)
+      .then(({ projectId }) => {
+        if (!requestOutdoorProjectSwitch(projectId)) {
+          window.location.assign(`/editor/?project=${encodeURIComponent(projectId)}&mode=outdoor`);
+        }
+      })
+      .catch((error: unknown) => {
+        setCaseNotice(error instanceof Error ? error.message : '这个案例没能另存，请重试。');
+      });
   };
 
   // 2026-11-17 用户：「我的实景扫描也要是和上面一样的卡片」；2026-11-19 用户又说
@@ -284,11 +341,14 @@ export function SpacePanel({
 
   const cnCases = CN_REPLICA_CASES.length > 0 ? <SceneGroup label="国内案例" icon={<Crown size={15} aria-hidden="true" />} count={CN_REPLICA_CASES.length} testId="space-group-cn-cases" lazy>
     <CaseCards cases={CN_REPLICA_CASES} onOpen={openReplicaCase}/>
+    {/* 云端案例目录：controller 没传（单独渲染/测试）不占位；传了但服务端没接通时明确显示不可用。 */}
+    {controller != null && <CloudCaseCatalog session={caseSession} onUseCase={openCloudCase} useLabel="使用此案例"/>}
+    {caseNotice && <p className="sc-note" role="status">{caseNotice}</p>}
   </SceneGroup> : null;
 
   const cases = <SceneGroup label="经典案例" icon={<Crown size={15} aria-hidden="true" />} count={REPLICA_CASES.length} testId="space-group-cases" lazy>
     <CaseCards onOpen={openReplicaCase}/>
-    {caseNotice && <p className="sc-note" role="status">{caseNotice}</p>}
+    {caseNotice && CN_REPLICA_CASES.length === 0 && <p className="sc-note" role="status">{caseNotice}</p>}
   </SceneGroup>;
 
   const currentScene = environment?.current ?? null;

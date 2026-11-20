@@ -8,16 +8,20 @@
  * 导出只挂已经接到工作台的回调，不新造下载。
  */
 import QRCode from 'qrcode';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { readBingoSnapshot } from '../lib/bingo-status';
 import { catalogGroupLabel } from '../lib/catalog-taxonomy';
+import { ensurePublishedArchiveNow } from '../lib/complete-archive';
+import { detectCloudCaseSession } from '../lib/cloud-cases';
 import { convertMetres } from '../lib/display-units';
 import { REVIEW_MARK_CHANGED_EVENT, readReviewMarks } from '../lib/review-share';
 import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import { isStructuralMarker } from '../lib/structural-layout';
 import { bingoBadgeCount, setBingoSending, useBingoSending } from './bingo-status-mark';
+import { CaseAdminSection } from './case-admin';
 import { SHARE_READ_ONLY_LINE, SharePanel, type ShareBingoStatus, type ShareExportEntry, type ShareTab } from './share-panel';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
+import type { BackendSession } from '@/lib/backend-session';
 
 export { SHARE_READ_ONLY_LINE };
 
@@ -25,6 +29,7 @@ export interface PublishedLink {
   /** 手机打开即可看的只读页（云端发布那条）。 */
   url: string;
   revision: number;
+  shareId?: string;
   /** 同一版顺手生成的只读场地页（/site#s2=…）：客户拿到的是它，自带快照。 */
   siteUrl?: string;
 }
@@ -170,7 +175,7 @@ export function shareTriggerChrome(open: boolean): CSSProperties {
   };
 }
 
-export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', openRequest = 0, closeSignal = 0, variant = 'rail' }: {
+export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', openRequest = 0, closeSignal = 0, variant = 'rail', controller }: {
   actions?: ShareMenuActions;
   /** 画布当前方案，用来取标题。 */
   layout?: RoomLayout;
@@ -184,11 +189,20 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
    * 同一份卡片的两种触发位。外观都是锁定的 32×32 线稿箭头。
    */
   variant?: 'rail' | 'canvas';
+  /**
+   * 后端会话（任务 C，2026-11-20）：传入后分享卡多一页「案例」，承载官方案例的
+   * 草稿/发布/历史/下架维护。没传（旧宿主/测试）不出现这一页；传了但服务端
+   * 未接通时该页明确显示不可用，不做本机模拟。
+   */
+  controller?: BackendSession | null;
 }): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<ShareTab>('share');
   const [published, setPublished] = useState<PublishedLink | null>(null);
+  // 完整只读分享（2026-11-20 集成补齐，C12/C13）：含户外规划与已归档资源的受控链接。
+  // 令牌只在生成响应里出现一次（服务端仅存哈希），所以只留在内存里，不落 localStorage。
+  const [completeShare, setCompleteShare] = useState<{ shareId: string; revision: number; token: string | null } | null>(null);
   const [reviewLink, setReviewLink] = useState('');
   const [qrSvg, setQrSvg] = useState('');
   const [qrOpen, setQrOpen] = useState(false);
@@ -205,6 +219,12 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   const projectId = layout?.id;
   const listSharesRef = useRef(actions?.onListShares);
   listSharesRef.current = actions?.onListShares;
+  // 案例维护（任务 C）：能力探测到 backendSession 的云端案例方法才给「案例」页；
+  // controller 没传时不出现这一页，方法没接通时页内明确说明不可用。
+  const caseSession = useMemo(() => detectCloudCaseSession(controller), [controller]);
+  const casesNode = controller != null
+    ? <CaseAdminSection session={caseSession} controller={controller} layoutId={layout?.id ?? null} layoutName={titleOf(layout)} />
+    : null;
 
   useEffect(() => {
     if (openRequest === seenOpen.current) return;
@@ -269,7 +289,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   }, [open]);
 
   /** 交给客户的那条：有场地页就用场地页，没有就回云端发布链接。 */
-  const handedUrl = published?.siteUrl ?? published?.url;
+  const handedUrl = published?.url;
 
   useEffect(() => {
     const url = tab === 'publish' ? published?.url : tab === 'share' ? reviewLink : '';
@@ -292,7 +312,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     let live = true;
     void list().then(rows => {
       if (!live) return;
-      const match = rows.find(row => row.revision === published.revision);
+      const matches = rows.filter(row => published.shareId ? row.shareId === published.shareId : row.revision === published.revision);
+      const match = matches.length === 1 ? matches[0] : undefined;
       if (match?.revokedAt) {
         clearPublishedLink(projectId);
         setPublished(null);
@@ -324,7 +345,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       const result = await actions.onPublish();
       setPublished(result);
       writePublishedLink(projectId, result);
-      const handed = result.siteUrl ?? result.url;
+      const handed = result.url;
       appendShareRecord(projectId, { kind: 'web', url: handed, revision: result.revision, at: Date.now() });
       const copied = await copyText(handed);
       setNotice(copied ? '' : '链接已发布。复制没成功，请点「复制」。');
@@ -366,6 +387,68 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
     setNotice(copied ? '' : '复制没成功，请再试一次。');
   };
 
+  const revokePublished = async () => {
+    if (!published || busy || actions?.readOnly || !actions?.onListShares || !actions.onRevokeShare) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      const rows = await actions.onListShares();
+      const matches = rows.filter(row => published.shareId ? row.shareId === published.shareId : row.revision === published.revision);
+      if (matches.length !== 1) throw new Error('无法唯一确认这条分享，请从分享记录选择具体链接撤销。');
+      if (!matches[0].revokedAt) await actions.onRevokeShare(matches[0].shareId);
+      clearPublishedLink(projectId);
+      setPublished(null);
+      setQrOpen(false);
+      setNotice('这条受控链接已撤回；离线快照和已下载内容无法收回。');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '撤回失败，请重试。');
+    } finally { setBusy(false); }
+  };
+
+  /** 完整只读链接：先把清单按 published 口径落库（幂等），再创建受控分享（token 只回一次）。 */
+  const createCompleteShare = async () => {
+    if (!controller || busy || actions?.readOnly) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      const ensured = await ensurePublishedArchiveNow(controller);
+      if (!ensured.ok) throw new Error(ensured.error ?? '完整归档没有就绪。');
+      const snapshot = controller.getSnapshot();
+      const shareProjectId = snapshot.project?.id ?? null;
+      if (!shareProjectId) throw new Error('这份方案还没挂到云项目上。');
+      if (!Number.isFinite(snapshot.revision)) throw new Error('还有改动没保存，保存后再生成完整链接。');
+      const result = await controller.createCompleteShare(shareProjectId, { requestId: crypto.randomUUID(), expectedRevision: snapshot.revision ?? 0 });
+      setCompleteShare({ shareId: result.shareId, revision: result.revision, token: result.token });
+      setNotice(result.token
+        ? '完整只读链接已生成；令牌只在这一次显示，请立即复制保存。'
+        : '这条完整链接此前已生成过；令牌不重复显示，请使用当时保存的链接，或撤销后重新生成。');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '完整链接没有生成，请重试。');
+    } finally { setBusy(false); }
+  };
+
+  const copyCompleteShare = async () => {
+    if (!completeShare?.token) return;
+    const copied = await copyText(`${window.location.origin}/view/#c${completeShare.token}`);
+    setNotice(copied ? '完整只读链接已复制。' : '复制没成功，请再点一次「复制」。');
+  };
+
+  const revokeCompleteShare = async () => {
+    if (!controller || !completeShare || busy) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      const snapshot = controller.getSnapshot();
+      const shareProjectId = snapshot.project?.id ?? null;
+      if (!shareProjectId) throw new Error('这份方案还没挂到云项目上，无法撤销。');
+      await controller.revokeCompleteShare(shareProjectId, completeShare.shareId);
+      setCompleteShare(null);
+      setNotice('完整只读链接已撤销；新访问将被拒绝，已打开或已下载的副本无法收回。');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '撤销失败，请重试。');
+    } finally { setBusy(false); }
+  };
+
   const copyReview = async () => {
     if (!reviewLink) return;
     const copied = await copyText(reviewLink);
@@ -388,6 +471,8 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
   };
 
   const exports = exportEntries(actions, () => setOpen(false));
+  // 完整只读链接的展示地址；令牌只在生成响应里出现一次，撤销后重建才拿到新的。
+  const completeShareUrl = completeShare?.token && typeof window !== 'undefined' ? `${window.location.origin}/view/#c${completeShare.token}` : '';
 
   return <div className="sc-tool-menu" ref={rootRef}>
     <button
@@ -434,6 +519,12 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       onOpenReview={openReview}
       onPublish={() => { void publish(); }}
       onCopy={() => { void copyPublished(); }}
+      onRevoke={actions?.onRevokeShare && actions.onListShares && !actions.readOnly ? () => { void revokePublished(); } : undefined}
+      completeShare={completeShare ? { url: completeShareUrl, revision: completeShare.revision } : null}
+      onCreateCompleteShare={controller && !actions?.readOnly ? () => { void createCompleteShare(); } : undefined}
+      onCopyComplete={() => { void copyCompleteShare(); }}
+      onRevokeCompleteShare={completeShare ? () => { void revokeCompleteShare(); } : undefined}
+      cases={casesNode}
       onToggleQr={() => setQrOpen(current => !current)}
     />}
   </div>;
@@ -477,6 +568,7 @@ function readPublishedLink(projectId?: string): PublishedLink | null {
       ? {
         url: parsed.url,
         revision: parsed.revision,
+        ...(typeof parsed.shareId === 'string' ? { shareId: parsed.shareId } : {}),
         ...(typeof parsed.siteUrl === 'string' && parsed.siteUrl ? { siteUrl: parsed.siteUrl } : {}),
       }
       : null;

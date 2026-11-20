@@ -12,7 +12,7 @@ import { rememberStudioSettings } from '../lib/studio-settings-cache';
 import { sanitizeStudioSettings, type StudioSettings, type StudioSettingsPatch } from '../../../../supabase/functions/_shared/plan-editor';
 import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
 import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
-import { FolderOpen, Images, MoreHorizontal, RefreshCw, Settings, Trash2, UserRound, X } from '@/components/solid-icons';
+import { Box, FolderOpen, Images, MoreHorizontal, RefreshCw, Settings, Trash2, UserRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
@@ -24,8 +24,17 @@ import { readActivityCovers, saveActivityCover } from '@/lib/activity-cover';
 import { emptyProjectScene, consumeSelfAttachedProject, preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import type { Scene } from '../../../../supabase/functions/_shared/domain';
 import {projectUnverifiedScene} from '../../../../supabase/functions/_shared/scene-text-projection';
-import { assetCloudLabel, cloudAssetIdMap, prepareLayoutAssetsForCloud, useAssetCloudRecords } from '../lib/asset-cloud';
+import { assetCloudLabel, cloudAssetIdMap, prepareLayoutAssetsForCloud, useAssetCloudRecords, setAssetCloudScope } from '../lib/asset-cloud';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
+import { fetchArchiveAssetUrl, parseCompleteProjectSnapshot, resolveCompleteProjectTransport, type CloudArchiveAsset } from '../lib/cloud-archive';
+import { failCloudSync, finishCloudSync, setPendingCount, startCloudSync, useSaveStatus } from '../lib/save-status';
+import { buildCompleteManifest, manifestCompletenessLabel, type ManifestBuildResult } from '../lib/project-manifest';
+import { collectArchiveInventory, enqueuePendingInventoryItems, readOutdoorInventoryRecords, type InventoryItem, type InventoryReport } from '../lib/local-inventory';
+import { sharedArchiveQueue, type ArchiveJob } from '../lib/archive-queue';
+import { useCloudArchive } from '../hooks/use-cloud-archive';
+import { listStoredSources, type StoredSource } from '@/lib/source-storage';
+import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -51,7 +60,7 @@ export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): voi
   if (!inside) event.currentTarget.close();
 }
 
-type AccountSection = 'projects' | 'assets' | 'settings';
+type AccountSection = 'projects' | 'assets' | 'settings' | 'archive';
 
 const PREVIEW_LIMIT = 12;
 const ORIGINAL_SCENE_SUBMISSION_ENABLED:boolean=false;
@@ -83,6 +92,35 @@ function coverMark(): JSX.Element {
   return <span className="sc-file-thumb-mark" aria-hidden="true"><i /></span>;
 }
 
+function formatArchiveBytes(bytes: number | undefined): string {
+  if (!Number.isFinite(bytes) || !bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+/** 队列任务的一句人话状态；uploaded 带真实云端资产号前缀，失败带原因。 */
+function archiveJobLabel(job: ArchiveJob): string {
+  switch (job.state) {
+    case 'uploaded': return `已归档 · ${job.assetId?.slice(0, 8) ?? ''}… · ${formatArchiveBytes(job.bytes)}`;
+    case 'uploading': return `上传中 ${Math.round(job.progress * 100)}% · ${formatArchiveBytes(job.bytes)}`;
+    case 'failed': return `失败（已试 ${job.attempts} 次）：${job.error ?? ''}`;
+    case 'needs-file': return job.error ?? '需要原文件补传';
+    default: return job.attempts > 0 ? `待补传（已试 ${job.attempts} 次）` : '待补传';
+  }
+}
+
+const INVENTORY_TYPE_LABELS: Record<InventoryItem['type'], string> = {
+  model: '模型', scan: '实景扫描', floorplan: '图纸', photo: '图片', attachment: '附件', 'outdoor-plan': '户外规划',
+};
+
+function inventoryItemLabel(item: InventoryItem): string {
+  const kind = INVENTORY_TYPE_LABELS[item.type];
+  const size = formatArchiveBytes(item.bytes);
+  return `${kind} · ${item.detail ?? ''}${size ? ` · ${size}` : ''}`;
+}
+
 type TrashProjectSummary = { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string };
 
 export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onDeleteCurrentActivity, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp, onPlanSettingsChange, siteQuote, planContext, onCapturePlan }: Props): JSX.Element {
@@ -102,6 +140,24 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const [trashOpen, setTrashOpen] = useState(false);
   const [studios, setStudios] = useState<Studio[]>([]);
   const [studioId, setStudioId] = useState('');
+  useEffect(() => { setAssetCloudScope(cloud.user?.id ?? null, studioId || cloud.project?.studio_id || null); }, [cloud.user?.id, studioId, cloud.project?.studio_id]);
+  // C03–C05、C14：云端归档队列与能力探测。A 契约未部署时 transport 为 null，这里如实不可用，
+  // 队列任务只在本机积累（原件保留），绝不显示虚假的云端成功。
+  const archive = useCloudArchive({
+    controller,
+    userId: cloud.user?.id ?? null,
+    ...(studioId ? { studioId } : {}),
+    enabled: !!cloud.user && !cloud.user.is_anonymous,
+    statusScope: layout.id ?? 'local',
+  });
+  // C05：统一保存状态（本机/上传中/同步中/云端已保存/失败/冲突）。
+  const saveStatusState = useSaveStatus(layout.id ?? 'local');
+  const [inventory, setInventory] = useState<InventoryReport | null>(null);
+  const [cloudAssets, setCloudAssets] = useState<CloudArchiveAsset[] | null>(null);
+  const [cloudAssetsError, setCloudAssetsError] = useState('');
+  const [manifestNote, setManifestNote] = useState('');
+  const [completeInfo, setCompleteInfo] = useState<{ revision: number; confirmedAt: string; dependencyCount: number } | null>(null);
+  const [completeError, setCompleteError] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [boundLayout, setBoundLayout] = useState<string | undefined>();
@@ -509,22 +565,35 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }
   async function saveBoundSceneQuiet(): Promise<void> {
     const currentLayout = layoutRef.current;
-    await assertCloudTransition(currentLayout);
-    assertNoLocalHandoffCloudTransition(layoutRef.current);
-    if (layoutRef.current !== currentLayout) throw new Error('保存前画布有新改动，当前草稿已保留。请稍后再试。');
-    // 先让本机生成的 GLB 上云并拿到 asset_id，再把本机号换成云端号；失败就停下来报状态，不只报「不能做什么」。
-    const prepared = await prepareLayoutAssetsForCloud(currentLayout, (file, meta, onProgress) => controller.uploadLocalAsset(file, meta, onProgress));
-    if (prepared.failures.length) {
-      const names = prepared.failures.map(failure => `“${failure.name}”（${assetCloudLabel(failure.state)}）`).join('、');
-      throw new Error(`本机模型还没上传成功：${names}。${prepared.failures[0]?.message ?? ''} 本机副本保留着，下次保存会继续重试。`);
+    const scopeKey = currentLayout.id ?? 'local';
+    // C05：先报「同步中」并拿序号；保存期间的新编辑由指纹口径保持 dirty，旧回执不清空它们。
+    const seq = startCloudSync(scopeKey);
+    try {
+      await assertCloudTransition(currentLayout);
+      assertNoLocalHandoffCloudTransition(layoutRef.current);
+      if (layoutRef.current !== currentLayout) throw new Error('保存前画布有新改动，当前草稿已保留。请稍后再试。');
+      // 先让本机生成的 GLB 上云并拿到 asset_id，再把本机号换成云端号；失败就停下来报状态，不只报「不能做什么」。
+      const prepared = await prepareLayoutAssetsForCloud(currentLayout, (file, meta, onProgress) => controller.uploadLocalAsset(file, meta, onProgress));
+      if (prepared.failures.length) {
+        const names = prepared.failures.map(failure => `“${failure.name}”（${assetCloudLabel(failure.state)}）`).join('、');
+        throw new Error(`本机模型还没上传成功：${names}。${prepared.failures[0]?.message ?? ''} 本机副本保留着，下次保存会继续重试。`);
+      }
+      const scene = layoutToBackendScene(currentLayout, { assetIdMap: prepared.assetIdMap, localAssetIds: prepared.localAssetIds });
+      const submitted = JSON.stringify(scene);
+      const saved = await controller.saveScene(scene);
+      await assertCloudTransition(currentLayout);
+      await assertCloudTransition(layoutRef.current);
+      setSavedFingerprint(submitted);
+      finishCloudSync(scopeKey, seq, { revision: saved.revision, confirmedAt: Date.parse(saved.updatedAt) || Date.now() });
+      // C06（2026-11-20 集成接通）：场景确认后把当前画布的完整清单也同步成云端完整归档；
+      // 结果（含缺口与失败）落在归档页状态里，不改变「场景已保存」的结论，也不用弹窗打断保存。
+      void saveCompleteArchive();
+      if (saved.warnings.length) showNotice('已自动保存，请留意场地重叠提示。');
+    } catch (error) {
+      // C05：失败不冒充已保存；本机草稿仍在，待同步计数保持。
+      failCloudSync(scopeKey, seq, error instanceof Error ? error.message : '云端保存失败；本机草稿保留。');
+      throw error;
     }
-    const scene = layoutToBackendScene(currentLayout, { assetIdMap: prepared.assetIdMap, localAssetIds: prepared.localAssetIds });
-    const submitted = JSON.stringify(scene);
-    const saved = await controller.saveScene(scene);
-    await assertCloudTransition(currentLayout);
-    await assertCloudTransition(layoutRef.current);
-    setSavedFingerprint(submitted);
-    if (saved.warnings.length) showNotice('已自动保存，请留意场地重叠提示。');
   }
   // 持有编辑权时云端自动保存，卡片上不再放「保存」。
   useEffect(() => {
@@ -798,8 +867,183 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     void loadCovers();
     return () => { active = false; };
   }, [accountOpen, cloud.user, section, sceneConnection, canvasCoverId]);
+  // C05：待同步数跟会话 dirty 真值走；未绑定项目没有云端同步，状态清零不残留。
+  useEffect(() => {
+    if (!bound || sceneConnection) { setPendingCount(layout.id ?? 'local', 0); return; }
+    setPendingCount(layout.id ?? 'local', cloud.dirty ? 1 : 0);
+  }, [bound, sceneConnection, cloud.dirty, layout.id]);
+  // C14：本机存量盘点（队列任务 + 当前活动资料图 + 户外规划记录）。只读，不删任何本机副本。
+  useEffect(() => {
+    if (!accountOpen || !cloud.user || section !== 'archive') return;
+    let cancelled = false;
+    void (async () => {
+      let sources: StoredSource[] = [];
+      try { sources = await listStoredSources(layout.id ?? 'local'); } catch { sources = []; }
+      let outdoorRecords: ReturnType<typeof readOutdoorInventoryRecords> = [];
+      try { outdoorRecords = readOutdoorInventoryRecords(window.localStorage); } catch { outdoorRecords = []; }
+      const report = collectArchiveInventory({ archiveJobs: archive.jobs, sources, outdoorRecords });
+      if (!cancelled) setInventory(report);
+    })();
+    return () => { cancelled = true; };
+  }, [accountOpen, cloud.user, section, archive.jobs, layout.id]);
+  // 云端资产列表（A 契约 listArchiveAssets）：只在归档页可见且能力确认后读取；
+  // transport 未接通时不读、不假装为空。
+  useEffect(() => {
+    if (section !== 'archive' || !accountOpen || !cloud.user) { setCloudAssets(null); return; }
+    if (!archive.transport) return;
+    if (!archive.capabilities && !archive.capabilityError) { void archive.queryCapabilities(); return; }
+    if (!archive.capabilities) return;
+    let cancelled = false;
+    setCloudAssets(null); setCloudAssetsError('');
+    archive.transport.listArchiveAssets(studioId || undefined)
+      .then(list => { if (!cancelled) setCloudAssets(list); })
+      .catch(error => { if (!cancelled) setCloudAssetsError(error instanceof Error ? error.message : '云端资产读取失败。'); });
+    return () => { cancelled = true; };
+  }, [archive.transport, archive.capabilities, archive.capabilityError, archive.queryCapabilities, section, accountOpen, cloud.user, studioId]);
+  /** C06：当前画布的依赖清单核对（发布闸门在 room-organizer 注册，这里给面板内自查）。 */
+  async function checkCurrentManifest(): Promise<void> {
+    const current = layoutRef.current;
+    let sources: StoredSource[] = [];
+    try { sources = await listStoredSources(current.id ?? 'local'); } catch { sources = []; }
+    let scene: ReturnType<typeof layoutToBackendScene> | null = null;
+    try { scene = layoutToBackendScene(current, { assetIdMap: cloudAssetIdMap() }); } catch { scene = null; }
+    const archiveAssetIds: Record<string, string> = {};
+    if (cloud.user) {
+      try {
+        for (const job of await sharedArchiveQueue.inventoryForUser(cloud.user.id)) {
+          if (job.state === 'uploaded' && job.assetId) archiveAssetIds[job.localId] = job.assetId;
+        }
+      } catch { /* 读不到队列就按缺口处理，不编造已归档 */ }
+    }
+    const result = buildCompleteManifest({ layout: current, scene, outdoorPlan: null, sources, cloudAssetIds: cloudAssetIdMap(), archiveAssetIds });
+    setManifestNote(`${manifestCompletenessLabel(result)}${result.complete ? '' : '；户外规划依赖请在项目卡核对。'}`);
+  }
+  /**
+   * C06（2026-11-20 集成接通）：以指定画布为准构建完整清单（场景 + 户外规划 + 资料图 + 依赖）。
+   * 与上面自查不同，这里读当前项目的户外规划记录，让 saveCompleteProject 的 outdoor 字段
+   * 是完整 payload（任务 C 的公开案例另存按它消费）；缺口如实返回，不编造云端资产 ID。
+   */
+  async function buildCompleteManifestFor(current: RoomLayout): Promise<ManifestBuildResult> {
+    let sources: StoredSource[] = [];
+    try { sources = await listStoredSources(current.id ?? 'local'); } catch { sources = []; }
+    let scene: Scene | null = null;
+    try { scene = layoutToBackendScene(current, { assetIdMap: cloudAssetIdMap() }); } catch { scene = null; }
+    const archiveAssetIds: Record<string, string> = {};
+    if (cloud.user) {
+      try {
+        for (const job of await sharedArchiveQueue.inventoryForUser(cloud.user.id)) {
+          if (job.state === 'uploaded' && job.assetId) archiveAssetIds[job.localId] = job.assetId;
+        }
+      } catch { /* 队列读不到按缺口处理，不编造已归档 */ }
+    }
+    const outdoorPlan = current.id ? readOutdoorProjectRecord(current.id)?.plan ?? null : null;
+    return buildCompleteManifest({ layout: current, scene, outdoorPlan, sources, cloudAssetIds: cloudAssetIdMap(), archiveAssetIds });
+  }
+  /**
+   * C06（2026-11-20 集成接通）：把当前画布的完整清单保存为云端完整归档（saveCompleteProject）。
+   * 需要当前项目租约 + 服务器已确认版本（expectedRevision CAS）；依赖未全部归档时不发请求，
+   * 缺口如实展示。场景保存已成功与否由 saveBoundSceneQuiet 的状态机负责，这里的结果
+   * （含失败原因）只落在归档页状态里，不冒充完整保存成功。
+   */
+  async function saveCompleteArchive(): Promise<'saved' | 'blocked' | 'failed'> {
+    const projectId = cloud.project?.id;
+    if (!projectId) { setCompleteError('先打开一个云端项目再保存完整归档。'); return 'blocked'; }
+    const transport = resolveCompleteProjectTransport(controller);
+    if (!transport) { setCompleteError('完整项目归档接口未接入（后端契约未部署）。'); return 'blocked'; }
+    const snapshot = controller.getSnapshot();
+    const lease = snapshot.lease;
+    if (!lease || lease.projectId !== projectId) { setCompleteError('没有当前项目的编辑租约；先在项目卡取得编辑权，再保存完整归档。'); return 'blocked'; }
+    if (!Number.isFinite(snapshot.revision)) { setCompleteError('还有改动没保存；保存成功后再同步完整归档。'); return 'blocked'; }
+    const built = await buildCompleteManifestFor(layoutRef.current);
+    const { manifest, complete } = built;
+    if (!complete || !manifest.scene) {
+      setManifestNote(manifestCompletenessLabel(built));
+      setCompleteError(!complete ? '依赖未全部归档；完整归档未保存，缺口见上方依赖清单。' : '场景转码失败；完整归档未保存，本机内容未改动。');
+      return 'blocked';
+    }
+    try {
+      const receipt = parseCompleteProjectSnapshot(await transport.saveCompleteProject(projectId, {
+        requestId: crypto.randomUUID(),
+        sessionId: lease.sessionId,
+        generation: lease.generation,
+        expectedRevision: snapshot.revision ?? 0,
+        manifest,
+      }));
+      setCompleteInfo({ revision: receipt.revision, confirmedAt: receipt.confirmedAt, dependencyCount: receipt.dependencyCount });
+      setCompleteError('');
+      setManifestNote(`完整归档已保存：服务器确认 v${receipt.revision} · 依赖 ${receipt.dependencyCount} 项。`);
+      return 'saved';
+    } catch (error) {
+      setCompleteInfo(null);
+      setCompleteError(error instanceof Error ? error.message : '完整归档保存失败；本机内容未改动。');
+      return 'failed';
+    }
+  }
+  /** C06：向服务器核对当前项目的完整归档（依赖数量 + 确认时间 + 版本）。 */
+  async function verifyCompleteProject(): Promise<void> {
+    const projectId = cloud.project?.id;
+    if (!projectId) throw new Error('先打开一个云端项目再核对完整归档。');
+    const transport = resolveCompleteProjectTransport(controller);
+    if (!transport) throw new Error('完整项目归档接口未接入（后端契约未部署）。');
+    try {
+      const snapshot = parseCompleteProjectSnapshot(await transport.getCompleteProject(projectId));
+      setCompleteInfo({ revision: snapshot.revision, confirmedAt: snapshot.confirmedAt, dependencyCount: snapshot.dependencyCount });
+      setCompleteError('');
+    } catch (error) {
+      setCompleteInfo(null);
+      const status = (error as { status?: unknown } | null)?.status;
+      setCompleteError(status === 404 ? '云端还没有这个项目的完整归档。' : error instanceof Error ? error.message : '完整归档核对失败。');
+    }
+  }
+  /**
+   * C07：把云端完整项目恢复到画布（场景 + 户外规划）。与「打开本机缓存」同一路径：
+   * 只换画布、不绑编辑权，冲突交给打开项目流程；本机已有更新的户外规划时不静默覆盖。
+   */
+  async function restoreCompleteProject(): Promise<void> {
+    const projectId = cloud.project?.id;
+    const projectName = cloud.project?.name;
+    if (!projectId) throw new Error('先打开一个云端项目再恢复。');
+    const transport = resolveCompleteProjectTransport(controller);
+    if (!transport) throw new Error('完整项目归档接口未接入（后端契约未部署）。');
+    await run(async () => {
+      const snapshot = parseCompleteProjectSnapshot(await transport.getCompleteProject(projectId));
+      const manifest = snapshot.manifest;
+      if (!manifest || !manifest.scene) throw new Error('云端完整归档缺少场景，无法恢复。');
+      if (dirty && !window.confirm('当前画布有未保存改动。恢复会替换画布（本机恢复点保留），继续吗？')) return;
+      const openingFrom = layoutRef.current;
+      onBeforeActivitySwitch?.(openingFrom)?.();
+      const next = backendSceneToLayout(manifest.scene as Parameters<typeof backendSceneToLayout>[0], { projectId, name: projectName ?? '云端项目' });
+      onLoadLayout(next);
+      setBoundLayout(undefined);
+      setSavedFingerprint(null);
+      let outdoorNote = '';
+      if (manifest.outdoor) {
+        const existing = readOutdoorProjectRecord(projectId);
+        const remoteRevision = snapshot.revision;
+        if (existing && typeof existing.remoteRevision === 'number' && existing.remoteRevision > remoteRevision) {
+          outdoorNote = ' 本机有更新的户外规划（版本更高），未覆盖。';
+        } else {
+          try {
+            saveOutdoorProjectRecord({
+              v: 1, projectId,
+              name: projectName ?? existing?.name ?? '户外规划',
+              createdAt: existing?.createdAt ?? new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              plan: manifest.outdoor as SitePlanData,
+              ...(existing?.remoteActivityId ? { remoteActivityId: existing.remoteActivityId } : {}),
+              remoteRevision,
+            }, undefined, false);
+          } catch { outdoorNote = ' 户外规划写入本机失败，原件未改动。'; }
+        }
+      }
+      showNotice(`已恢复云端完整项目（版本 ${snapshot.revision}，依赖 ${snapshot.dependencyCount} 项）。素材按权限换取地址；要继续编辑请在项目卡获取编辑权。${outdoorNote}`);
+    });
+  }
   // §二.4 默认在云上：状态只说结果，不解释文件存在哪。
-  const saveStatus = conversionError ? '本机草稿' : sceneConnection ? '场景已连接' : !cloud.user || !bound ? '草稿' : cloud.writeBlocked ? '只读' : dirty ? '有改动' : '已保存';
+  // C05：待同步数跟会话 dirty 真值走；「已保存」后面缀上素材归档缺口，不把「场景保存」说成「全部归档」。
+  const outstandingArchive = archive.counts.pending + archive.counts.failed + archive.counts.needsFile;
+  const archiveSuffix = outstandingArchive > 0 ? ` · 素材待归档 ${outstandingArchive}` : '';
+  const saveStatus = conversionError ? '本机草稿' : sceneConnection ? '场景已连接' : !cloud.user || !bound ? '草稿' : cloud.writeBlocked ? '只读' : dirty ? `待同步${archiveSuffix}` : `场景已保存 · v${cloud.revision ?? '—'}${archiveSuffix}`;
   const activeStudio = studios.find(studio => studio.id === studioId) ?? studios[0];
   // 左上角只认身份：有邮箱就写邮箱，没有再用显示名 / 访客。角色和团队名在下面列表里已有。
   const signedInAccount = !!cloud.user && !cloud.user.is_anonymous;
@@ -956,6 +1200,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       <nav className="sc-account-nav" aria-label="账户分区">
         <button type="button" aria-pressed={section === 'projects'} onClick={() => setSection('projects')}><FolderOpen size={15} aria-hidden="true"/>所有方案</button>
         <button type="button" aria-pressed={section === 'assets'} onClick={() => setSection('assets')}><Images size={15} aria-hidden="true"/>物料</button>
+        <button type="button" aria-pressed={section === 'archive'} onClick={() => setSection('archive')}><Box size={15} aria-hidden="true"/>归档</button>
         <button type="button" aria-pressed={section === 'settings'} onClick={() => openSettings(settingsPaneRequest.pane)}><Settings size={15} aria-hidden="true"/>设置</button>
       </nav>
       {teamNav}
@@ -1152,6 +1397,98 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       </div>}
       </section>
       <section hidden={section !== 'assets'} aria-label="账户物料"><div className="sc-account-section-heading"><div className="sc-account-section-title"><h3>物料</h3><InfoTip label="物料说明"><strong>与物料面板同一套分类</strong><span>我的生成 / 收藏 / 库，和画布里的物料面板保持一致。</span></InfoTip></div></div>{cloud.user ? <AssetsPanel controller={controller} layout={layout} onApplyLayout={onApplyLayout ?? onLoadLayout} bound={bound} busy={busy} /> : <p className="sc-account-empty">登录后查看物料。</p>}</section>
+      <section hidden={section !== 'archive'} aria-label="云端归档">
+        <div className="sc-account-section-heading"><div className="sc-account-section-title">
+          <h3>云端归档</h3>
+          <button type="button" className="sc-account-icon-btn" disabled={busy || !archive.transport} aria-label="补传队列" title="补传所有未完成的归档" onClick={() => void run(async () => { await archive.retry(); showNotice('补传已执行；状态见下方队列。'); })}><RefreshCw size={15}/></button>
+        </div></div>
+        {!cloud.user ? <p className="sc-account-empty">登录后查看云端归档。</p> : <>
+          {archive.unavailableMessage && <p className="sc-account-footnote" role="status">{archive.unavailableMessage}</p>}
+          {archive.capabilityError && <p className="sc-account-error" role="alert">{archive.capabilityError}</p>}
+          {archive.capabilities && <p className="sc-account-footnote" role="status">
+            {archive.capabilities.superAdmin
+              ? `平台管理员归档通道已接通${archive.capabilities.officialStudioId ? '；官方内容按授权共同归属归档' : ''}。`
+              : '归档通道已接通：本账号按普通私有范围归档。'}
+          </p>}
+          <p className="sc-account-footnote" role="status">
+            {saveStatusState.stage === 'cloud-saved' && saveStatusState.cloudConfirmedAt
+              ? `最近云端确认：${saveStatusState.cloudRevision !== null ? `v${saveStatusState.cloudRevision} · ` : ''}${new Date(saveStatusState.cloudConfirmedAt).toLocaleString()}`
+              : saveStatusState.stage === 'conflict'
+                ? '存在版本冲突，等你在项目卡或户外提示里选择保留哪一版。'
+                : saveStatusState.stage === 'failed'
+                  ? `云端最近一次同步失败：${saveStatusState.failure ?? ''}`
+                  : '云端还没有确认过这个项目的版本。'}
+          </p>
+          {archive.transport && <>
+            <section aria-label="补传队列">
+              <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>补传队列</h4><span className="sc-note">进度与失败原因在这里；刷新/重开后队列继续，原文件保留在本机。</span></div></div>
+              <p className="sc-account-footnote" role="status">
+                {archive.draining ? '正在补传…' : '队列空闲'}
+                {` · 待补传 ${archive.counts.pending} · 失败 ${archive.counts.failed} · 需原文件 ${archive.counts.needsFile} · 已归档 ${archive.counts.uploaded}`}
+              </p>
+              {archive.jobs.length === 0 ? <p className="sc-account-empty">队列是空的。素材上传后这里会留底可查。</p> : <ul className="sc-trash-list">
+                {archive.jobs.slice(0, 8).map(job => <li key={job.key} className="sc-trash-item">
+                  <span><strong>{job.name}</strong><small>{archiveJobLabel(job)}</small></span>
+                  {job.state !== 'uploaded' && <button type="button" className="sc-button" disabled={busy || !archive.transport} onClick={() => void run(async () => { await archive.retry(); })}>重试</button>}
+                </li>)}
+              </ul>}
+            </section>
+            <section aria-label="本机存量盘点">
+              <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>本机存量盘点</h4><span className="sc-note">只盘点不删除；资料图按当前活动清点，户外规划按本机记录清点。</span></div></div>
+              {inventory && <p className="sc-account-footnote" role="status">
+                {`共 ${inventory.summary.total} 项：已归档 ${inventory.summary.archived} · 待补传 ${inventory.summary.pending} · 需原文件 ${inventory.summary.needsFile} · 失败 ${inventory.summary.failed}`}
+              </p>}
+              {(inventory?.items ?? []).length === 0 ? <p className="sc-account-empty">{inventory ? '本机没有待盘点的素材记录。' : '正在盘点…'}</p> : <ul className="sc-trash-list">
+                {(inventory?.items ?? []).slice(0, 12).map(item => <li key={`${item.type}:${item.localId}`} className="sc-trash-item">
+                  <span><strong>{item.name}</strong><small>{inventoryItemLabel(item)}</small></span>
+                </li>)}
+              </ul>}
+              <button type="button" className="sc-button" disabled={busy || !archive.scope || !inventory || inventory.summary.pending === 0}
+                onClick={() => void run(async () => {
+                  if (!archive.scope || !inventory) return;
+                  const queued = await enqueuePendingInventoryItems(inventory, archive.scope, async input => { await archive.enqueueAholoAsset(input.localId); });
+                  await archive.refresh();
+                  showNotice(queued > 0 ? `已把 ${queued} 项加入补传队列。` : '没有可补传的本机原件；需要原文件的项已在清单里列出。');
+                })}>补传本机素材</button>
+              <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>依赖清单</h4><span className="sc-note">完整保存 = 场景 + 户外 + 资料图的原文件都在云端可授权访问。</span></div></div>
+              <button type="button" className="sc-button" disabled={busy} onClick={() => void run(async () => { await checkCurrentManifest(); })}>核对当前依赖</button>
+              <button type="button" className="sc-button" disabled={busy} onClick={() => void run(async () => {
+                const outcome = await saveCompleteArchive();
+                if (outcome === 'saved') showNotice('完整归档已保存；服务器已确认版本与依赖数量。');
+                else if (outcome === 'failed') showNotice('完整归档保存失败；原因见下方状态。');
+              })}>保存完整归档</button>
+              {manifestNote && <p className="sc-account-footnote" role="status">{manifestNote}</p>}
+            </section>
+            <section aria-label="云端资产">
+              <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>云端资产</h4><span className="sc-note">未放进任何项目的原文件也能在这里找回；地址按权限临时换取。</span></div></div>
+              {cloudAssetsError && <p className="sc-account-error" role="alert">{cloudAssetsError}</p>}
+              {cloudAssets === null && !cloudAssetsError ? <p className="sc-account-empty">云端资产列表未读取。</p> : null}
+              {cloudAssets?.length === 0 && <p className="sc-account-empty">云端还没有归档资产。</p>}
+              {cloudAssets && cloudAssets.length > 0 && <ul className="sc-trash-list">
+                {cloudAssets.slice(0, 12).map(asset => <li key={asset.id} className="sc-trash-item">
+                  <span><strong>{asset.name}</strong><small>{asset.kind} · {formatArchiveBytes(asset.byteSize)} · {asset.id.slice(0, 8)}…</small></span>
+                  <button type="button" className="sc-button" disabled={busy} onClick={() => void run(async () => {
+                    const url = await fetchArchiveAssetUrl(archive.transport!, asset.id);
+                    await navigator.clipboard.writeText(url.url);
+                    showNotice(`已复制「${asset.name}」的临时读取地址（${url.expiresIn} 秒内有效）。`);
+                  })}>复制地址</button>
+                </li>)}
+              </ul>}
+            </section>
+            <section aria-label="完整项目">
+              <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>完整项目核对与恢复</h4><span className="sc-note">完整归档由服务器确认依赖数量与版本；恢复只换画布，不绑编辑权。</span></div></div>
+              {!resolveCompleteProjectTransport(controller) ? <p className="sc-account-footnote" role="status">完整项目归档接口未接入（后端契约未部署）；不能显示虚假的完整保存状态。</p> : <>
+                {cloud.project ? <div>
+                  <button type="button" className="sc-button" disabled={busy} onClick={() => void run(async () => { await verifyCompleteProject(); })}>核对完整归档</button>
+                  <button type="button" className="sc-button" disabled={busy} onClick={() => void restoreCompleteProject()}>恢复到画布</button>
+                </div> : <p className="sc-account-empty">打开一个云端项目后可核对与恢复完整归档。</p>}
+                {completeInfo && <p className="sc-account-footnote" role="status">{`服务器确认：v${completeInfo.revision} · 依赖 ${completeInfo.dependencyCount} 项 · ${new Date(completeInfo.confirmedAt).toLocaleString()}`}</p>}
+                {completeError && <p className="sc-account-error" role="alert">{completeError}</p>}
+              </>}
+            </section>
+          </>}
+        </>}
+      </section>
       <section hidden={section !== 'settings'} className="sc-account-settings" aria-label="账户设置">
         <SettingsPage
           preferences={preferences}

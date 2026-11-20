@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createSceneClient, SceneApiError } from '../../client/scene-client';
 import { colorSchema, sceneSchema, sizeSchema, uuid } from '../../supabase/functions/_shared/domain';
+import { completePublicReadSchema } from '../../supabase/functions/_shared/cloud-storage-contract';
 import { getBackendConfig, type BackendConfig } from './backend-session';
 
 const timestamp = z.string().refine(value => Number.isFinite(Date.parse(value)));
@@ -50,11 +51,31 @@ export function shareTokenFromHash(hash: string): string | null {
   return /^[a-f0-9]{64}$/.test(token) ? token : null;
 }
 
+/**
+ * 完整只读分享（2026-11-20 集成补齐，C12/C13）：链接哈希形如 `#c<64hex>`，
+ * 与固定发布链接的 `#<64hex>` 区分开——两种入口的语义不同，不能共用一个前缀。
+ */
+export function completeShareTokenFromHash(hash: string): string | null {
+  const body = hash.startsWith('#c') ? hash.slice(2) : '';
+  return /^[a-f0-9]{64}$/.test(body) ? body : null;
+}
+
+export type CompleteShareSnapshot = z.infer<typeof completePublicReadSchema>;
+
 export async function readShare(token: string, config: BackendConfig = getBackendConfig()): Promise<SharedSnapshot> {
   if (shareTokenFromHash(token) !== token) throw new SceneApiError('SHARE_NOT_FOUND', 404, null);
   if (!config.configured) throw new SceneApiError('CONFIGURATION_MISSING', 0, null);
   const response = await createSceneClient(config.apiUrl, async () => null).readShare(token);
   const result = snapshotSchema.safeParse(response);
+  if (!result.success) throw new SceneApiError('INVALID_RESPONSE', 502, null);
+  return result.data;
+}
+
+/** 匿名读取受控完整分享（scene + 户外 + published 依赖的临时地址；sources 永不出网）。 */
+export async function readCompleteShare(token: string, config: BackendConfig = getBackendConfig()): Promise<CompleteShareSnapshot> {
+  if (completeShareTokenFromHash(`#${token}`) !== token) throw new SceneApiError('SHARE_NOT_FOUND', 404, null);
+  if (!config.configured) throw new SceneApiError('CONFIGURATION_MISSING', 0, null);
+  const result = completePublicReadSchema.safeParse(await createSceneClient(config.apiUrl, async () => null).readCompleteShare(token));
   if (!result.success) throw new SceneApiError('INVALID_RESPONSE', 502, null);
   return result.data;
 }

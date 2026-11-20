@@ -136,7 +136,13 @@ import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap
 import { snapshotBeforeReplace } from './lib/restore-point';
 import { EDITOR_ITEM_LIMIT } from './lib/item-limits';
 import { parseLayoutEventOperations } from './lib/schema';
-import { assetCloudStateOf, localAssetIdsInLayout } from './lib/asset-cloud';
+import { assetCloudStateOf, cloudAssetIdMap, localAssetIdsInLayout } from './lib/asset-cloud';
+import { sharedArchiveQueue } from './lib/archive-queue';
+import { layoutToBackendScene } from './lib/backend-adapter';
+import { buildCompleteManifest, publishGateBlockReason, publishGateSnapshot, registerPublishGateProvider } from './lib/project-manifest';
+import { saveStatusOf } from './lib/save-status';
+import { listStoredSources, type StoredSource } from '@/lib/source-storage';
+import type { Scene } from '../../../supabase/functions/_shared/domain';
 import { encodeShareUrl } from './lib/share';
 import { rememberReviewLinkMark } from './lib/review-share';
 import { DEMO_WORLD_SCENE_ID, findShippedAsset } from './lib/shipped-assets';
@@ -215,7 +221,7 @@ import { AgentChat } from './panels/agent-chat';
 import { BingoAvatarFlight } from './panels/bingo-avatar-flight';
 import { BingoRailButton } from './panels/bingo-rail-button';
 import { RailTeamBlock } from './panels/rail-team-block';
-import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle } from './components/outdoor-plan-overlay';
+import OutdoorPlanOverlay, { type OutdoorPlanOverlayHandle, type OutdoorSaveState } from './components/outdoor-plan-overlay';
 import OutdoorPlan3D, { type OutdoorPlan3DApi, type SplatScanState } from './components/outdoor-plan-3d';
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
@@ -692,10 +698,59 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outdoorProjectIdProp, isOutdoorProject]);
   // 2026-11-11：保存态不再上左轨 foot（用户指令去掉「户外草稿·已存」文字）——保存管线本身不变。
-  const handleOutdoorSaveState = useCallback((_next: { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null) => { /* no-op：仅接收 */ }, []);
+  // C05：云端确认/失败/冲突状态由覆盖层直接写统一状态机（save-status），这里只收宽化后的上报。
+  const handleOutdoorSaveState = useCallback((_next: OutdoorSaveState) => { /* no-op：仅接收 */ }, []);
   // P2-g 数据打通：室内工具排通用钮（撤销/重做/缩放/导出）在户外模式下转发给 2D 画布，
   // 3D 侧状态原样保活；关掉户外即恢复原来的 3D 行为。
   const outdoorOverlayRef = useRef<OutdoorPlanOverlayHandle | null>(null);
+  // C06/C07（任务 B）：注册发布闸门——任务 C 的分享/发布链在发布前读这份真实快照，
+  // 依赖没全部归档时不得声称可发布。提供方读最新画布，注册一次终身有效。
+  const outdoorPlanGateRef = useRef<{ projectId: string | null; plan: SitePlanData | null }>({ projectId: null, plan: null });
+  useEffect(() => {
+    registerPublishGateProvider(async () => {
+      const currentLayout = layoutStore.getState().layout;
+      const scopeId = currentLayout.id ?? 'local';
+      const session = controller.getSnapshot();
+      const user = session.user;
+      const archiveAssetIds: Record<string, string> = {};
+      if (user) {
+        try {
+          for (const job of await sharedArchiveQueue.inventoryForUser(user.id)) {
+            if (job.state === 'uploaded' && job.assetId) archiveAssetIds[job.localId] = job.assetId;
+          }
+        } catch { /* 队列读不到时按缺口处理，不编造已归档 */ }
+      }
+      let sources: StoredSource[] = [];
+      try { sources = await listStoredSources(scopeId); } catch { sources = []; }
+      let scene: Scene | null = null;
+      try { scene = layoutToBackendScene(currentLayout, { assetIdMap: cloudAssetIdMap() }); } catch { scene = null; }
+      const result = buildCompleteManifest({
+        layout: currentLayout,
+        scene,
+        outdoorPlan: outdoorPlanGateRef.current.plan,
+        sources,
+        cloudAssetIds: cloudAssetIdMap(),
+        archiveAssetIds,
+      });
+      const status = saveStatusOf(scopeId);
+      const complete = result.complete;
+      const note = complete
+        ? `依赖已全部归档（${result.manifest.dependencies.length} 项）；发布还需云端有确认版本。`
+        : `还有 ${result.gaps.length} 项依赖未归档，发布前必须补传。`;
+      return {
+        scopeId,
+        projectId: session.project?.id ?? null,
+        cloudRevision: status.cloudRevision,
+        manifest: result.manifest,
+        gaps: result.gaps,
+        complete,
+        readyForPublish: complete && status.cloudRevision !== null && status.pendingCount === 0 && !status.conflict,
+        note,
+        conflict: status.conflict ?? null,
+      };
+    });
+    return () => registerPublishGateProvider(null);
+  }, [controller]);
 /** 主画布接管态（户外项目非漫游 3D）挂的 OutdoorPlan3D 实例：右轨缩放/导出效果图改派用。 */
 const outdoorPlan3DRef = useRef<OutdoorPlan3DApi | null>(null);
 // 2026-11-16 用户：「3D 下的放大/缩小按钮没有交互」——右轨缩放原来只转发给 2D 画布，
@@ -712,6 +767,7 @@ useEffect(() => {
   // （分区色块/设施占地/动线/点位），所以 2D 改到哪儿 3D 里就在哪儿。
   // 带 projectId：换活动后旧项目的平面不能接着盖在新场地上。
   const [outdoorPlanState, setOutdoorPlanState] = useState<{ projectId: string | null; plan: SitePlanData } | null>(null);
+  outdoorPlanGateRef.current = { projectId: outdoorPlanState?.projectId ?? null, plan: outdoorPlanState?.plan ?? null };
   const [outdoorHistory, setOutdoorHistory] = useState<{ canUndo: boolean; canRedo: boolean }>({ canUndo: false, canRedo: false });
   const handleOutdoorHistory = useCallback((next: { canUndo: boolean; canRedo: boolean }) => {
     setOutdoorHistory(current => (current.canUndo === next.canUndo && current.canRedo === next.canRedo ? current : next));
@@ -1131,6 +1187,12 @@ useEffect(() => {
         ? '画布里的本机模型还没上云，保存成功后才能发布；本机副本还在，网络恢复后重试保存即可。'
         : '还有改动没保存，保存后再发布。');
     }
+    // 2026-11-20 集成接通（主计划 §5.2）：发布前核对完整依赖清单——扫描/资料图/附件
+    // 这几类不在既有 dirty 检查的覆盖里，未归档就发布会产出引用本机代理的公开版本。
+    // 闸门未接通或核对失败按不可发布处理（fail-closed），缺口在报错里如实列出。
+    const publishGate = await publishGateSnapshot();
+    const gateBlock = publishGateBlockReason(publishGate);
+    if (gateBlock) throw new Error(gateBlock);
     try {
       const publication = publicationSchema.parse(await controller.businessRequest<unknown>(
         `/projects/${encodeURIComponent(projectId)}/publish`, 'POST', { expectedRevision: snapshot.revision },
@@ -5207,7 +5269,7 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})}spaceSlot={<SpacePanel variant="card" onOpenCapture={openCapturePanel} onAddSampleScene={addSampleScene} onMoveScan={(assetId) => { const scan = environmentsRef.current.find(entry => entry.assetId === assetId); if (!scan) return; try { selectEnvironment(assetId, scan.name, { restoreItems: false }); } catch (error) { notify(error instanceof Error ? error.message : String(error), 'error'); return; } setScanArming(null); setSplatDisplayMode('gaussian'); setIsolatedScanId(assetId); if (outdoorPlanState) handleOutdoorViewSwitch('3d'); else setView(current => current.view2D || current.walkthroughMode ? { ...current, view2D: false, walkthroughMode: false } : current); setSplatTransformModeState('gizmo'); }} layout={layout} workflow={spaceWorkflow} onPlaceScan={placeScanOnSite} failedScanIds={Object.keys(failedScans)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }), onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})}spaceSlot={<SpacePanel variant="card" controller={controller} onOpenCapture={openCapturePanel} onAddSampleScene={addSampleScene} onMoveScan={(assetId) => { const scan = environmentsRef.current.find(entry => entry.assetId === assetId); if (!scan) return; try { selectEnvironment(assetId, scan.name, { restoreItems: false }); } catch (error) { notify(error instanceof Error ? error.message : String(error), 'error'); return; } setScanArming(null); setSplatDisplayMode('gaussian'); setIsolatedScanId(assetId); if (outdoorPlanState) handleOutdoorViewSwitch('3d'); else setView(current => current.view2D || current.walkthroughMode ? { ...current, view2D: false, walkthroughMode: false } : current); setSplatTransformModeState('gizmo'); }} layout={layout} workflow={spaceWorkflow} onPlaceScan={placeScanOnSite} failedScanIds={Object.keys(failedScans)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }), onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
@@ -5665,7 +5727,7 @@ useEffect(() => {
               plan3dRef={outdoorPlan3DRef}
               overlayRef={outdoorOverlayRef}
             />
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && scanIsolated && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} controller={controller} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && scanIsolated && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);

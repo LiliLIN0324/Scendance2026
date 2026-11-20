@@ -29,6 +29,7 @@ import { prepareGenerationRequest } from './generation-input.ts';
 import { generationCapabilities } from './generation-contract.ts';
 import { createMaterialVariant, prepareMaterialVariant, readAssetMaterials } from './material-variants.ts';
 import { fetchJson, readBounded, required, reserveCost, type Env, type Fetcher } from './http.ts';
+import { handleCloudRequest } from './cloud-storage.ts';
 import type { Backend } from './backend.ts';
 
 const name=z.string().trim().min(1).max(120);
@@ -173,6 +174,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         catch(e) {if(e instanceof ApiError) throw e; throw new ApiError('INVALID_JSON');}
       };
       if(path==='/health' && method==='GET') return respond({ok:true,schemaVersion:1,supportedSchemaVersions:[1,2]});
+      // 云存储/完整保存/官方案例（Task A 草案）：独立处理器；能力未部署时内部统一 503。
+      if(path.startsWith('/cloud/')) {
+        return await handleCloudRequest(request,{backend,env,path,method,respond});
+      }
       if(path==='/chat/capabilities' && method==='GET') return respond(chatCapabilities(env,(view,purpose)=>chatModelName(view,{purpose})));
       if(path==='/share/read' && method==='POST') {
         const input=z.strictObject({token:z.string().regex(/^[a-f0-9]{64}$/)}).parse(await json());

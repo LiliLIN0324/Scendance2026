@@ -2,13 +2,16 @@
 
 import { BingoStatusMark } from './bingo-status-mark';
 import type { BingoPhase } from '../lib/bingo-status';
+import type { ReactNode } from 'react';
 
 /**
- * 分享钮弹出的三页：分享 / 发布 / 导出。
+ * 分享钮弹出的页签：分享 / 发布 / 案例 / 导出。
  * 版式按 2026-11-17 锁定稿：白底卡片、墨色选中页签、绿只留给未发布的主按钮。
  * 已发布只留链接行上的「复制」和二维码小键；二维码本体在小键点开后的浮层里。
+ * 「案例」页签（2026-11-20，任务 C）只在宿主传入 controller 时出现，
+ * 内容由 CaseAdminSection 提供（官方案例的草稿/发布/历史/下架）。
  */
-export type ShareTab = 'share' | 'publish' | 'export';
+export type ShareTab = 'share' | 'publish' | 'export' | 'cases';
 export type ShareExportIcon = 'image' | 'list' | 'site';
 
 export interface ShareExportEntry {
@@ -19,8 +22,6 @@ export interface ShareExportEntry {
 }
 
 const OPEN_LINE = '打开即可查看场地、分区和尺度，页里可看 3D。';
-/** 有场地页时客户打开的是它：只读、自带快照，没有 3D。 */
-const SITE_OPEN_LINE = '打开即可查看场地轮廓、分区和尺度，只读、无需登录。';
 const PUBLISH_LINE = '发布后即可查看场地、分区和尺度，页里可看 3D。';
 /** 未发布且项目只读时的页脚。有这句就不再给可点的绿色发布按钮。 */
 export const SHARE_READ_ONLY_LINE = '这个项目现在是只读，取回编辑权后再发布。';
@@ -61,6 +62,12 @@ export function SharePanel({
   onOpenReview = () => undefined,
   onPublish,
   onCopy,
+  onRevoke,
+  completeShare = null,
+  onCreateCompleteShare,
+  onCopyComplete = () => undefined,
+  onRevokeCompleteShare,
+  cases,
   onToggleQr,
 }: {
   tab: ShareTab;
@@ -90,16 +97,24 @@ export function SharePanel({
   onOpenReview?: () => void;
   onPublish(): void;
   onCopy(): void;
+  onRevoke?: (() => void) | undefined;
+  /** 完整只读分享（2026-11-20 集成，C12/C13）：含户外规划与已归档资源的受控链接。不传就不出现这一块。 */
+  completeShare?: { url: string; revision: number } | null;
+  onCreateCompleteShare?: (() => void) | undefined;
+  onCopyComplete?: () => void;
+  onRevokeCompleteShare?: (() => void) | undefined;
+  /** 「案例」页签内容（CaseAdminSection）。不传就不出现这一页。 */
+  cases?: ReactNode;
   onToggleQr(): void;
 }): JSX.Element {
   const publishBlocked = !published && (readOnly || notice === SHARE_READ_ONLY_LINE);
   /** 交给客户的那条：有场地页就用场地页。 */
-  const handedUrl = published?.siteUrl ?? published?.url ?? '';
-  const handedIsSite = Boolean(published?.siteUrl);
+  const handedUrl = published?.url ?? '';
   return <div id="tool-share-menu" className="sc-tool-pop sc-share-panel" role="dialog" aria-label="分享、发布与导出" data-testid="share-panel">
-    <div className="sc-share-tabs" role="tablist" aria-label="分享、发布、导出">
+    <div className="sc-share-tabs" role="tablist" aria-label="分享、发布、案例、导出">
       <Tab id="share" selected={tab === 'share'} onSelect={onTab}>分享</Tab>
       <Tab id="publish" selected={tab === 'publish'} onSelect={onTab}>发布</Tab>
+      {cases != null && <Tab id="cases" selected={tab === 'cases'} onSelect={onTab}>案例</Tab>}
       <Tab id="export" selected={tab === 'export'} onSelect={onTab}>导出</Tab>
     </div>
 
@@ -152,7 +167,9 @@ export function SharePanel({
 
     {tab === 'publish' && <section className="sc-share-body" role="tabpanel" aria-label="发布" id="share-panel-publish" data-published={published ? 'true' : 'false'} data-readonly={publishBlocked ? 'true' : 'false'}>
       <ShareHeading icon={<GlobeIcon />} title="发布到网页" />
-      <p className="sc-share-desc">{published ? (handedIsSite ? SITE_OPEN_LINE : OPEN_LINE) : PUBLISH_LINE}</p>
+      <p className="sc-share-desc">{published ? OPEN_LINE : PUBLISH_LINE}</p>
+      {published && <p className="sc-share-desc">固定发布版本；后续编辑不会自动更新。撤销仅停止这条受控链接的新访问，无法收回已下载的内容。</p>}
+      {published?.siteUrl && <p className="sc-share-desc"><a href={published.siteUrl} target="_blank" rel="noopener noreferrer">打开离线场地快照</a>：固定副本，不随项目更新，无法远程撤回。</p>}
       {published ? <div className="sc-share-link" data-testid="share-link-row">
         <span className="sc-share-link-text" title={handedUrl}>{displayShareUrl(handedUrl)}</span>
         <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={onCopy}>复制</button>
@@ -176,6 +193,23 @@ export function SharePanel({
         : <button type="button" className="sc-share-cta" data-tone="green" disabled={busy} onClick={onPublish}>
           {busy ? '正在发布…' : '发布并复制链接'}
         </button>}
+    </section>}
+
+    {tab === 'publish' && published && onRevoke && <button type="button" className="sc-share-renew" disabled={busy} onClick={onRevoke}>撤回这条受控链接</button>}
+
+    {tab === 'publish' && onCreateCompleteShare != null && <section className="sc-share-body" data-testid="complete-share" aria-label="完整只读链接">
+      <p className="sc-share-desc">完整只读链接：含户外规划与已归档资源的受控入口，可撤销。令牌只在生成时显示一次。</p>
+      {completeShare?.url ? <div className="sc-share-link" data-testid="complete-share-link-row">
+        <span className="sc-share-link-text" title={completeShare.url}>{displayShareUrl(completeShare.url)}</span>
+        <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={onCopyComplete}>复制</button>
+        {onRevokeCompleteShare && <button type="button" className="sc-share-key" data-tone="paper" disabled={busy} onClick={onRevokeCompleteShare}>撤销</button>}
+      </div> : <button type="button" className="sc-share-renew" disabled={busy} onClick={onCreateCompleteShare}>
+        {busy ? '正在生成…' : '生成完整只读链接'}
+      </button>}
+    </section>}
+
+    {tab === 'cases' && cases != null && <section className="sc-share-body" role="tabpanel" aria-label="案例" id="share-panel-cases">
+      {cases}
     </section>}
 
     {tab === 'export' && <section className="sc-share-body" role="tabpanel" aria-label="导出" id="share-panel-export">

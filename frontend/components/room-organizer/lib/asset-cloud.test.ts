@@ -108,4 +108,21 @@ describe('local asset cloud state and retry', () => {
     expect(cloud.assetCloudLabel('uploaded')).toBe('已上云');
     expect(cloud.assetCloudLabel('failed')).toBe('上传失败');
   });
+
+  it('keeps personal mappings across reloads for a signed-in user without a studio', async () => {
+    // 2026-11-20 集成验收：个人私有（登录但无工作室）的映射按 [userId, ""] 键持久化，
+    // 重新设置同一 scope 时读回，不能被清成空表（否则跨设备找回会丢历史映射）。
+    const user = 'user-1';
+    const scopeKey = `scendance:asset-cloud-v1:${JSON.stringify([user, null])}`;
+    localStorage.setItem(scopeKey, JSON.stringify({
+      [localA]: { localAssetId: localA, state: 'uploaded', cloudAssetId: cloudA, sha256: 'a'.repeat(64), updatedAt: Date.now() },
+    }));
+    const cloud = await import('./asset-cloud');
+    cloud.setAssetCloudScope(user, null);
+    expect(cloud.assetCloudStateOf(localA)).toMatchObject({ state: 'uploaded', cloudAssetId: cloudA });
+    expect(cloud.cloudAssetIdMap()).toEqual({ [localA]: cloudA });
+    // 换账号回到未登录：映射不继承（legacy/他人映射不得串号）。
+    cloud.setAssetCloudScope(null, null);
+    expect(cloud.assetCloudStateOf(localA).state).toBe('local');
+  });
 });

@@ -100,3 +100,29 @@ describe('proposal freshness at the client write boundary', () => {
     expect(network).not.toHaveBeenCalled();
   });
 });
+
+describe('archive direct upload to the signed object URL', () => {
+  const receipt = {
+    uploadId: crypto.randomUUID(), assetId: null, state: 'pending' as const,
+    uploadUrl: 'https://storage.test/upload/sign/archive/req-1', token: 'signed-upload-token',
+    storagePath: 'archive/req-1',
+  };
+
+  it('treats HTTP 409 as the object already stored and proceeds to complete (V03 recovery)', async () => {
+    // storagePath 是 actor/requestId/sha256 内容寻址路径：409 只能是同一次上传意图的
+    // 前次尝试已把同一内容写进对象存储。直传按成功处理，complete 由服务端复核大小与哈希。
+    const network = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 409 }));
+    const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');
+    await expect(client.uploadArchiveToSignedUrl(receipt, new Blob([new Uint8Array(8)]), 'model/gltf-binary')).resolves.toBeUndefined();
+    const [url, init] = network.mock.calls[0];
+    expect(String(url)).toContain('token=signed-upload-token');
+    expect((init as RequestInit).method).toBe('PUT');
+  });
+
+  it('still reports other storage rejections with their real status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 507 }));
+    const client = createSceneClient('https://example.test/scene-api', async () => 'fake-test-token');
+    await expect(client.uploadArchiveToSignedUrl(receipt, new Blob([new Uint8Array(8)]), 'model/gltf-binary'))
+      .rejects.toMatchObject({ code: 'STORAGE_UPLOAD_FAILED', status: 507 });
+  });
+});
