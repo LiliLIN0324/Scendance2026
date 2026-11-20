@@ -18,7 +18,8 @@ import "./outdoor-design-result-card.css";
 export interface DesignResultCardModel {
   title: string;
   summary: DesignSummary;
-  state: "proposal" | "applied";
+  /** proposal = 还没写进画布；applied = 已写入且还能撤一次；reverted = 刚撤完，已回到应用前。 */
+  state: "proposal" | "applied" | "reverted";
   change?: { headline: string; details: string[] } | null;
   pending?: { why: string } | null;
   selection?: { count: number; labels: string[]; detached: boolean } | null;
@@ -67,7 +68,11 @@ export function OutdoorDesignResultCard({
       <header className="ap-card-head oddrc-head">
         <strong>{model.title}</strong>
         <span className="oddrc-state" data-state={model.state}>
-          {model.state === "applied" ? "已应用 · 可撤销" : "尚未写入画布"}
+          {model.state === "applied"
+            ? "已应用 · 可撤销"
+            : model.state === "reverted"
+              ? "已撤销 · 回到上一版"
+              : "尚未写入画布"}
         </span>
       </header>
 

@@ -77,6 +77,15 @@ export interface WeddingCandidate {
   hardConflicts: WeddingHardConflicts;
   /** 可核对的空间取舍（全部是实际算出的数，不是审美分）。 */
   tradeoffs: string[];
+  /**
+   * 这一版自己的物料清单与落位数量。比较两版时必须各用各的：
+   * 拿推荐版的数字去描述另一版，等于把两版说成同一版。
+   */
+  quantities: WeddingLayoutReport['quantities'];
+  /** 这一版草案内部的动线自检；只说明通道串没串起来，不是现场可达性结论。 */
+  reachability: WeddingReachability;
+  /** 这一版相对原始方案的差异（设施 / 分区 / 动线）；由规划器汇总时补齐。 */
+  diff: WeddingPlanDiff;
 }
 
 export interface WeddingSiteSummary {
@@ -493,7 +502,8 @@ interface CandidateContext {
 }
 
 interface BuiltCandidate {
-  candidate: WeddingCandidate;
+  /** diff 在汇总阶段才有（要跟原始方案比），所以这里先不带。 */
+  candidate: Omit<WeddingCandidate, 'diff'>;
   plan: SitePlanData;
   notes: string[];
   quantities: WeddingLayoutReport['quantities'];
@@ -1133,6 +1143,8 @@ async function buildWeddingCandidate(context: CandidateContext): Promise<BuiltCa
       id: strategy, label: strategyLabels[strategy],
       status: conflicts.total ? 'needs-adjustment' : 'ready',
       plan, metrics, hardConflicts: conflicts, tradeoffs,
+      quantities,
+      reachability: describeReachability(plan),
     },
   };
 }
@@ -1304,9 +1316,14 @@ export async function proposeWeddingLayout(input: WeddingLayoutInput): Promise<W
 
   const compareBoth = !existingZones && built.length > 1;
   const preferred: WeddingStrategy = input.strategy ?? 'ceremony-first';
-  const candidates = built.map(item => item.candidate);
+  // 每版各自带一份与原始方案的差异：比较时不能只报推荐版那一份。
+  const candidates: WeddingCandidate[] = built.map(item => ({
+    ...item.candidate,
+    diff: diffPlans(original, item.candidate.plan),
+  }));
   const { chosen, reasons } = recommend(candidates, preferred, compareBoth, directionOfAxis(site.focusAxis), site.landscape);
-  const winner = built.find(item => item.candidate === chosen)!;
+  // candidates 是重新组装过的对象，按 id 找回对应的那一版（不能比引用）。
+  const winner = built.find(item => item.candidate.id === chosen.id)!;
 
   const notes = [...winner.notes];
   if (input.optimize) {

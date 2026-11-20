@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentDocument } from "../lib/agent-documents";
 import { reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
-import { proposeWeddingLayout, WEDDING_LIBRARY_QUERIES } from "../lib/wedding-layout";
+import { proposeWeddingLayout, WEDDING_LIBRARY_QUERIES, type WeddingCandidateMetrics } from "../lib/wedding-layout";
 import { requestsWeddingOptimization, weddingDesignRequest } from "../lib/wedding-request";
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
@@ -501,7 +501,7 @@ export function useOutdoorAgentWorkflow(input: {
   type DesignState = {
     title: string;
     summary: DesignSummary;
-    state: "proposal" | "applied";
+    state: "proposal" | "applied" | "reverted";
     change: PlanChangeSummary | null;
     undoBefore: SitePlanData | null;
     appliedVersion: string | null;
@@ -523,10 +523,14 @@ export function useOutdoorAgentWorkflow(input: {
     summary: DesignSummary;
     /** 与比较基线（当前画布）相比的变更项数；卡片直接显示，不自己重算。 */
     diff: { added: number; removed: number; changed: number };
+    /** 这一版自己算出来的空间取舍（面积 / 席位 / 通道 / 路线交叉）；A/B 各用各的。 */
+    tradeoffs: string[];
+    /** 这一版自己的实算指标；用来判断两版到底差在哪，而不是只看文案。 */
+    metrics: WeddingCandidateMetrics;
   };
   const [design, setDesign] = useState<DesignState | null>(null);
   /** 最近一次由 Agent 写入的改动快照；结果卡还没出现时（例如只位移了一组）也能撤销。 */
-  const [lastEdit, setLastEdit] = useState<{ before: SitePlanData; label: string } | null>(null);
+  const [lastEdit, setLastEdit] = useState<{ before: SitePlanData; label: string; appliedVersion: string } | null>(null);
   const [designPending, setDesignPending] = useState<DesignPending | null>(null);
   const [designCompare, setDesignCompare] = useState<{
     activeId: "A" | "B";
@@ -1810,6 +1814,10 @@ export function useOutdoorAgentWorkflow(input: {
         setDesign({title:designSummary.title,summary:designSummary,state:'proposal',change:null,undoBefore:null,appliedVersion:null});
         setDesignCompare(null);setDesignPending(null);setCompareNote(null);setLocateNote(null);
         objectsLayoutRef.current=null;
+        if (report.checks.hardConflicts > 0) {
+          status(`本版存在硬冲突，尚未写入画布：${designSummary.issues.join("；")}。先调整冲突后重新规划。`, "blocked");
+          return;
+        }
         await offer(report.plan,'objects','婚礼联合布置：分区、物料与流线',job,[...report.notes,
           ...report.quantities.map(quantity=>`${quantity.zone} · ${quantity.role}：${quantity.placed} 件${quantity.placeholder?'，占位待选型':''}`)],undefined,undefined,optimize);
         return;
@@ -3225,19 +3233,26 @@ export function useOutdoorAgentWorkflow(input: {
       status("画布在你确认前又改过，这一版没有覆盖；原方案保留。", "blocked");
       return false;
     }
+    // 确认卡等待期间图层也可能被锁定，写入瞬间必须重查。
+    if (kind !== "undo" && bridge.facilityLayerLocked?.()) {
+      status("设施层已锁定：这次改动没有写入画布。", "blocked");
+      return false;
+    }
     if (!bridge.applyPlan(next, JSON.stringify(before))) {
       status("画布拒绝写入（版本或保存身份变化），原方案保留。", "blocked");
       return false;
     }
     const change = describePlanChange(diffPlanObjects(before, next), next);
-    setLastEdit(kind === "undo" ? null : { before, label });
+    setLastEdit(kind === "undo" ? null : { before, label, appliedVersion: planVersion(next) });
     setDesign((prev) =>
       prev
         ? {
             ...prev,
             title: extras.title ?? prev.title,
             summary: extras.summary ?? prev.summary,
-            state: "applied",
+            // 撤销后状态写「已撤销」，不再挂「可撤销」的字样：画布已经回到应用前，
+            // 再说「已应用 · 可撤销」会让人以为还能再撤一次（实际只会得到「没有可撤销的这次应用」）。
+            state: kind === "undo" ? "reverted" : "applied",
             change,
             // 撤销后不再留「再撤销一次」的按钮；再点一次就是重做，这不是用户要的语义。
             undoBefore: kind === "undo" ? null : before,
@@ -3297,67 +3312,121 @@ export function useOutdoorAgentWorkflow(input: {
 
   /** 撤销：整份写回应用前的快照——对象 id、桌号引用、分区归属一起回来，不是逐条反推。 */
   function undoDesignApply(): void {
-    const before = design?.undoBefore ?? lastEdit?.before;
+    const before = lastEdit?.before ?? design?.undoBefore;
+    const appliedVersion = lastEdit?.appliedVersion ?? design?.appliedVersion;
     const current = callbacks.current.bridge()?.getPlan();
     if (!before || !current) {
       status("没有可撤销的这次应用。", "blocked");
       return;
     }
+    if (!appliedVersion || planVersion(current) !== appliedVersion) {
+      status("画布在这次应用后又改过，旧的整场撤销没有覆盖新内容；请使用画布的逐步撤销。", "blocked");
+      return;
+    }
     requestDesignChange(before, current, "撤销这次应用", "undo");
   }
 
-  /** 比较方案：按同一份边界/物料重算两种分区配比，只换卡片数据；采用前不改画布视角。 */
+  /**
+   * 比较方案：按同一份边界/物料算出两种分区配比，只换卡片数据；采用前不改画布视角。
+   *
+   * 2026-11-20 修正一处真问题：原来按 strategy 跑两遍规划器，但规划器返回的 `report.plan`
+   * 永远是「推荐版」的布局（strategy 只影响推荐的取舍，不影响返回值），所以 A、B 拿到的
+   * 其实是同一份 plan、同一份数量、同一段取舍文案——比较卡看起来有两版，采用哪版都一样。
+   * 现在一次规划就带出两版，各用各的 plan / 数量 / 动线自检 / 差异，并如实说清差在哪。
+   */
   async function openDesignCompare(): Promise<void> {
     const inputData = designInput.current;
-    if (!inputData) {
+    const current = callbacks.current.bridge()?.getPlan();
+    if (!inputData || !current) {
       status("还没有可比较的婚礼方案；先生成一版，再说比较。", "blocked");
       return;
     }
+    const compareBase = JSON.stringify(current);
     setCompareBusy(true);
     setCompareNote(null);
     try {
       const controller = new AbortController();
-      const candidates: DesignCompareCandidate[] = [];
-      for (const strategy of ["ceremony-first", "banquet-first"] as const) {
-        const report = await proposeWeddingLayout({
-          plan: inputData.plan,
-          brief: inputData.brief,
-          library: inputData.library,
-          hardBlocks: inputData.hardBlocks,
-          strategy,
-          optimize: false,
-          signal: controller.signal,
-        });
+      const report = await proposeWeddingLayout({
+        plan: inputData.plan,
+        brief: inputData.brief,
+        library: inputData.library,
+        hardBlocks: inputData.hardBlocks,
+        optimize: false,
+        signal: controller.signal,
+      });
+      const candidates: DesignCompareCandidate[] = report.candidates.map((item) => {
+        const strategy = item.id;
         const summary = buildDesignSummary({
-          plan: report.plan,
-          quantities: report.quantities,
-          checks: report.checks,
+          plan: item.plan,
+          quantities: item.quantities,
+          checks: {
+            collisions: item.hardConflicts.collisions,
+            boundary: item.hardConflicts.boundary,
+            obstacles: item.hardConflicts.obstacles,
+            corridors: item.hardConflicts.corridors,
+            ceremonySeats: item.metrics.ceremonySeats,
+            banquetSeats: item.metrics.banquetSeats,
+            target: item.metrics.target,
+            access: "pending",
+            safety: "unverified",
+          },
           notes: report.notes,
-          reachability: report.reachability,
+          reachability: item.reachability,
           strategy,
           ...(inputData.guests ? { guests: inputData.guests } : {}),
         });
-        candidates.push({
+        return {
           id: strategy === "ceremony-first" ? "A" : "B",
-          label: summary.strategyLabel,
+          label: item.label,
           strategy,
-          plan: report.plan,
+          plan: item.plan,
           summary,
-          // 两版变更多少：设施 / 分区 / 动线三类枚举都算一项。
+          tradeoffs: item.tradeoffs,
+          metrics: item.metrics,
+          // 两版变更多少：设施 / 分区 / 动线三类枚举都算一项；这一版跟自己原始方案比，不跟另一版比。
           diff: {
-            added: report.diff.facilities.added + report.diff.zones.added + report.diff.routes.added,
-            removed: report.diff.facilities.removed + report.diff.zones.removed + report.diff.routes.removed,
-            changed: report.diff.facilities.changed + report.diff.zones.changed + report.diff.routes.changed,
+            added: item.diff.facilities.added + item.diff.zones.added + item.diff.routes.added,
+            removed: item.diff.facilities.removed + item.diff.zones.removed + item.diff.routes.removed,
+            changed: item.diff.facilities.changed + item.diff.zones.changed + item.diff.routes.changed,
           },
-        });
-      }
-      setDesignCompare({ activeId: "A", candidates, base: JSON.stringify(inputData.plan) });
-      setCompareNote("两版按同一份边界与物料计算；切换只换卡片数据，采用前不改画布，也不移动视角。");
+        };
+      });
+      setDesignCompare({ activeId: "A", candidates, base: compareBase });
+      setCompareNote(compareNoteFor(candidates));
     } catch (error) {
       status(error instanceof Error ? error.message : "另一版没有算出来；当前方案保留。", "blocked");
     } finally {
       setCompareBusy(false);
     }
+  }
+
+  /**
+   * 比较卡的口径说明：两版确实有差别就写差别在哪；算下来一模一样就照实说「分不出差别」，
+   * 不把同一份布局包装成两种有取舍的方案。
+   */
+  function compareNoteFor(candidates: DesignCompareCandidate[]): string {
+    const base = "两版按同一份边界与物料计算；切换只换卡片数据，采用前不改画布，也不移动视角。";
+    const [first, second] = candidates;
+    if (!first || !second) {
+      // 场地里已有分区（或非婚礼分区必须原样留下）时，规划器只保得住一版：
+      // 照实说，不拿同一份布局复制成两张页签假装有两版。
+      return "这块场地已有分区要保留，本轮只算得出一版可比较的方案；要换排法先说「重新排一下」，会在保留锁定与其它分区的前提下重排。";
+    }
+    const same = (key: keyof WeddingCandidateMetrics) => first.metrics[key] === second.metrics[key];
+    const identical = same("ceremonySeats")
+      && same("banquetSeats")
+      && same("banquetTables")
+      && same("ceremonyZoneM2")
+      && same("banquetZoneM2")
+      && same("entryWalkM")
+      && same("serviceRouteM")
+      && same("routeCrossings");
+    if (identical) {
+      return `${base} 这两版算出来的面积、席位与通道完全相同——这块场地分不出两种配比的差别，选哪版容量都一样。`;
+    }
+    const a = first.metrics;
+    const b = second.metrics;
+    return `${base} A「${first.label}」仪式区 ${a.ceremonyZoneM2} ㎡、观礼 ${a.ceremonySeats} 席、入口步行 ${a.entryWalkM} m；B「${second.label}」仪式区 ${b.ceremonyZoneM2} ㎡、观礼 ${b.ceremonySeats} 席、入口步行 ${b.entryWalkM} m。`;
   }
 
   function selectDesignCandidate(id: "A" | "B"): void {
@@ -3373,6 +3442,12 @@ export function useOutdoorAgentWorkflow(input: {
     }
     const candidate = compare.candidates.find((item) => item.id === compare.activeId);
     if (!candidate) return;
+    if (candidate.summary.issues.length) {
+      const text = `这一版存在硬冲突，不能直接采用：${candidate.summary.issues.join("；")}。`;
+      setCompareNote(text);
+      status(text, "blocked");
+      return;
+    }
     let basePlan: SitePlanData | null = null;
     try {
       basePlan = JSON.parse(compare.base) as SitePlanData;
@@ -3380,7 +3455,7 @@ export function useOutdoorAgentWorkflow(input: {
       basePlan = null;
     }
     // 旧候选不能覆盖较新的手动修改：基座实体被动过就拒绝，并要求重新比较。
-    if (!basePlan || !baseStillIntact(basePlan, current)) {
+    if (!basePlan || JSON.stringify(basePlan) !== JSON.stringify(current)) {
       setCompareNote("画布在你比较期间有了新的修改；这版候选不会覆盖它，请重新比较。");
       status("画布已有更新的修改，这版候选没有覆盖；原方案保留。", "blocked");
       return;
@@ -3430,7 +3505,7 @@ export function useOutdoorAgentWorkflow(input: {
     designStep(`本次范围：${parse.request.basisLabel} · 只动选中的 ${result.movedIds.length} 件。`);
     if (outcome === "applied") {
       status(
-        `已${parse.request.kind === "spread" ? "拉开" : "移动"}选中的 ${result.movedIds.length} 件（${parse.request.basisLabel}）${result.conflicts ? `；${result.conflicts} 件越界，已标出` : "，其余物件与分区未动"}。`,
+        `已${parse.request.kind === "spread" ? "拉开" : "移动"}选中的 ${result.movedIds.length} 件（${parse.request.basisLabel}）；${result.note}`,
         "done",
       );
     }
@@ -3818,7 +3893,9 @@ export function useOutdoorAgentWorkflow(input: {
                   id: candidate.id,
                   label: candidate.label,
                   seats: `观礼 ${candidate.summary.capacity.ceremonySeats} · 宴席 ${candidate.summary.capacity.banquetSeats} · 目标 ${candidate.summary.capacity.target} 人`,
-                  tradeoff: candidate.summary.reasons[0] ?? "",
+                  // 取舍用这一版自己算出来的数（面积 / 席位 / 通道 / 路线交叉），
+                  // 不用摘要里那条通用理由——那条两版常常一模一样，看不出差别。
+                  tradeoff: candidate.tradeoffs.join("；"),
                   diff: candidate.diff,
                 })),
               }

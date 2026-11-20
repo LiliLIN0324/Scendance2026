@@ -72,6 +72,26 @@ describe('场景驱动的婚礼空间规划',()=>{
     expect(()=>validateWorkflowPlan(base,report.plan)).not.toThrow();
   });
 
+  it('两版候选各带各的布局、数量与差异：比较时不能拿推荐版当另一版',async()=>{
+    const report=await draft(venue());
+    expect(report.candidates).toHaveLength(2);
+    const [first,second]=report.candidates;
+    // 每版有自己的 plan（不是同一份引用）与自己的数量 / 动线自检 / 差异。
+    expect(first.plan).not.toBe(second.plan);
+    expect(first.quantities).toBeDefined();
+    expect(first.reachability).toBeDefined();
+    expect(first.diff).toBeDefined();
+    // 差异是「这一版对原始方案」的差异：原方案没有物件，所以新增数等于这一版自己的物件数。
+    expect(first.diff.facilities.added).toBe(first.plan.facilities.length);
+    expect(second.diff.facilities.added).toBe(second.plan.facilities.length);
+    // 取舍文案里的数必须来自这一版自己的指标。
+    expect(first.tradeoffs.join(' ')).toContain(`仪式区 ${first.metrics.ceremonyZoneM2} ㎡`);
+    expect(second.tradeoffs.join(' ')).toContain(`仪式区 ${second.metrics.ceremonyZoneM2} ㎡`);
+    // 推荐版就是 report.plan 本身。
+    const recommended=report.candidates.find(candidate=>candidate.id===report.recommendedId)!;
+    expect(recommended.plan).toBe(report.plan);
+  });
+
   it('缺人数使用标记的60人假设；取消请求中止候选生成',async()=>{
     const report=await draft(venue(),{brief:{event:'户外婚礼',zones:[],items:[],people:[]}});
     expect(report.checks.target).toBe(60);expect(report.notes.join(' ')).toContain('人数未给定');

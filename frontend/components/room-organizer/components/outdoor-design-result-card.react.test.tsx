@@ -94,6 +94,20 @@ describe("方案结果卡", () => {
     expect(onUndo).toHaveBeenCalledTimes(1);
   });
 
+  it("撤销后不再给撤销入口，状态写明已撤销", () => {
+    const onUndo = vi.fn();
+    render(
+      <OutdoorDesignResultCard
+        model={base({ state: "reverted", change: { headline: "删除 135 件", details: [] } })}
+        actions={{ onUndo }}
+      />,
+    );
+    expect(screen.getByText("已撤销 · 回到上一版")).toBeTruthy();
+    // 撤完就没有第二次撤销可点了：不留一个只会报「没有可撤销的这次应用」的按钮。
+    expect(screen.queryByRole("button", { name: "撤销这次" })).toBeNull();
+    expect(screen.getByText("删除 135 件")).toBeTruthy();
+  });
+
   it("严格档待确认时只给一次确认，不直接声称已写入", () => {
     const onConfirmPending = vi.fn();
     const onUndo = vi.fn();

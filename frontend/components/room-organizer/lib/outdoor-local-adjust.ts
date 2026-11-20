@@ -92,8 +92,12 @@ const SPREAD_PATTERN = /松一点|松一些|松点|拉开|别挤|太挤|间距�
 export function parseLocalAdjustment(message: string, context: LocalAdjustContext): LocalAdjustParse {
   const text = message.normalize("NFKC").trim();
   if (!text) return { kind: "none" };
+  // 只有明确的选中组调整才走本地快捷执行，否定、询问与指定其它目标交回理解路径。
+  if (/不要|不必|不需要|先不|不用|取消|停止|别(?:再|把|将|向|往|移|动|挪|拉)|[?？]|会不会|能不能|能否|是否|可以吗|^(?:怎么|如何|为什么)/u.test(text)
+    || /第\s*[\d一二两三四五六七八九十]+\s*(?:桌|组|排|把|件)|编号|桌号|另一|其他|所有|全部|全场/u.test(text)) return { kind: "none" };
 
   const spread = SPREAD_PATTERN.test(text);
+  if (!spread && !/(?:向|往|朝)[东南西北左右上下](?:侧|边)?\s*(?:移(?:动)?|挪(?:动)?|走)?\s*(?:\d|半|[一二两三四五六七八九十])|(?:移(?:动)?|挪(?:动)?)[\s\S]*(?:向|往|朝|侧|边)|[左右上下]移/u.test(text)) return { kind: "none" };
   const axisInfo = readAxis(text);
   const distance = readDistance(text);
   // 既没有方向词也没有「松一点」：不属于局部调整，交回原理解路径。

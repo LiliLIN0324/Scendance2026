@@ -61,8 +61,8 @@ const seededPlan = (): SitePlanData => ({
   ],
   facilities: [
     table("t1", 4, 4),
-    { ...table("c1", 5.6, 4), name: "宴席 1 桌 1 座", allocationKey: "wedding:zone-banquet:banquet-chair:1" },
-    { ...table("c2", 2.4, 4), name: "宴席 1 桌 2 座", allocationKey: "wedding:zone-banquet:banquet-chair:2" },
+    { ...table("c1", 5.6, 4), templateId: "oneplan:chair", size: { width: 0.5, depth: 0.55 }, name: "宴席 1 桌 1 座", allocationKey: "wedding:zone-banquet:banquet-chair:1" },
+    { ...table("c2", 2.4, 4), templateId: "oneplan:chair", size: { width: 0.5, depth: 0.55 }, name: "宴席 1 桌 2 座", allocationKey: "wedding:zone-banquet:banquet-chair:2" },
     table("t2", 12, 12),
   ],
   routes: [],
@@ -274,7 +274,9 @@ describe("候选方案比较", () => {  it("采用候选前不改画布；画布
     await act(async () => {
       await flow.openDesignCompare();
     });
-    expect(flow.designResult?.compare?.candidates.map((candidate) => candidate.id)).toEqual(["A", "B"]);
+    // 本夹具的场地已经有分区要保留，规划器只保得住一版：照实给一版，不复制成两张页签。
+    expect(flow.designResult?.compare?.candidates.map((candidate) => candidate.id)).toEqual(["A"]);
+    expect(flow.designResult?.compareNote).toContain("只算得出一版");
     expect(flow.designResult?.compare?.activeId).toBe("A");
     // 打开比较不改画布。
     const beforeAdopt = structuredClone(plan);
@@ -294,6 +296,21 @@ describe("候选方案比较", () => {  it("采用候选前不改画布；画布
     expect(apply).not.toHaveBeenCalled();
     expect(flow.designResult?.compareNote).toContain("修改");
   }, 30000);
+
+  it("空场地上比较两版：两版各带各的实算取舍，差别看得见", async () => {
+    // 没有既有分区时，规划器才算得出两种配比；有分区要保留时只有一版（见上一条用例）。
+    plan = { ...plan, zones: [], facilities: [] };
+    await generateDesign();
+    await act(async () => {
+      await flow.openDesignCompare();
+    });
+    const compare = flow.designResult?.compare;
+    expect(compare?.candidates.map((candidate) => candidate.id)).toEqual(["A", "B"]);
+    // 取舍文案来自规划器实算的数（面积 / 席位 / 通道），不是两版共用的那句通用理由。
+    expect(compare?.candidates.every((candidate) => candidate.tradeoff.includes("仪式区"))).toBe(true);
+    // 差别要么写出来，要么如实说这两版算出来一样；不能只给一句「按同一份边界计算」。
+    expect(flow.designResult?.compareNote).toMatch(/仪式区|分不出两种配比的差别/);
+  }, 30000);
 });
 
 async function generateDesign() {
@@ -302,6 +319,62 @@ async function generateDesign() {
   });
   expect(flow.designResult).not.toBeNull();
 }
+
+describe("审查回归：提交时保护用户的新状态", () => {
+  it("存在硬冲突的候选不能直接采用", async () => {
+    plan = { ...plan, facilities: [...plan.facilities,
+      { id: "old-a", templateId: "old-a", name: "旧物件 A", position: { x: 25, y: 25 }, rotationDeg: 0, size: { width: 2, depth: 2 }, notes: "" },
+      { id: "old-b", templateId: "old-b", name: "旧物件 B", position: { x: 25.4, y: 25 }, rotationDeg: 0, size: { width: 2, depth: 2 }, notes: "" },
+    ] };
+    await generateDesign();
+    await act(async () => { await flow.openDesignCompare(); });
+    expect(flow.designResult?.summary.issues.length).toBeGreaterThan(0);
+    apply.mockClear();
+    await act(async () => { flow.designActions.onAdoptCandidate(); });
+    if (flow.designPendingApply) {
+      await act(async () => { flow.designActions.onConfirmPending(); });
+    }
+    expect(apply).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("待确认期间锁定设施层后，确认也不能写入", async () => {
+    supervision = "strict";
+    selection = ["t1"];
+    bridge.viewBearingDeg = () => 0;
+    await act(async () => { await flow.handle("这组向右移 2 米"); });
+    expect(flow.designPendingApply).not.toBeNull();
+    bridge.facilityLayerLocked = () => true;
+    await act(async () => { flow.designActions.onConfirmPending(); });
+    expect(apply).not.toHaveBeenCalled();
+    expect(byId("t1").position).toEqual({ x: 4, y: 4 });
+  });
+
+  it("手动修改后不允许旧的整场撤销覆盖新内容", async () => {
+    selection = ["t1"];
+    bridge.viewBearingDeg = () => 0;
+    await act(async () => { await flow.handle("这组向右移 2 米"); });
+    plan = { ...plan, facilities: plan.facilities.map(f => f.id === "t2" ? { ...f, position: { x: 15, y: 12 } } : f) };
+    const latest = structuredClone(plan);
+    apply.mockClear();
+    await act(async () => { flow.designActions.onUndo(); });
+    expect(apply).not.toHaveBeenCalled();
+    expect(plan).toEqual(latest);
+  });
+
+  it("比较期间新增的物件不能被候选删除", async () => {
+    await generateDesign();
+    await act(async () => { await flow.openDesignCompare(); });
+    plan = { ...plan, facilities: [...plan.facilities, table("manual-new", 25, 25)] };
+    const latest = structuredClone(plan);
+    apply.mockClear();
+    await act(async () => { flow.designActions.onAdoptCandidate(); });
+    if (flow.designPendingApply) {
+      await act(async () => { flow.designActions.onConfirmPending(); });
+    }
+    expect(apply).not.toHaveBeenCalled();
+    expect(plan).toEqual(latest);
+  }, 30000);
+});
 
 describe("3D 视角里「右」的语义", () => {
   it("先问口径、不动画布；答“按东侧”后才按 +x 走", async () => {
@@ -388,10 +461,13 @@ describe("候选采用与撤销", () => {
       });
     }
     expect(apply).toHaveBeenCalled();
+    expect(flow.designResult?.state).toBe("applied");
     await act(async () => {
       flow.designActions.onUndo();
     });
     expect(plan).toEqual(beforeAdopt);
+    // 撤完状态写「已撤销」：画布已回到采用前，不能还挂着「已应用 · 可撤销」。
+    expect(flow.designResult?.state).toBe("reverted");
   }, 30000);
 });
 

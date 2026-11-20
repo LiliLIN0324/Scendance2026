@@ -121,6 +121,9 @@ describe("一句话局部调整", () => {
 });
 
 describe("3D 视角里「右」的语义", () => {
+  it.each(["不要向右移 2 米", "向右移 2 米会不会越界？", "在北侧放一个 2 米宽的背景", "把第 2 桌向右移 3 米"])("不接管需要理解的句子：%s", (message) => {
+    expect(parseLocalAdjustment(message, { selectedCount: 1, screenBearingDeg: 0 }).kind).not.toBe("adjust");
+  });
   it("3D 里不把「向右」默认成东，先把口径问一次", () => {
     const parse = parseLocalAdjustment("这组向右移 2 米", { selectedCount: 2, view: "3d", screenBearingDeg: 0 });
     expect(parse.kind).toBe("clarify");
