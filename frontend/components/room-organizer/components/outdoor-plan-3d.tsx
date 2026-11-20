@@ -38,7 +38,7 @@ import {
 import { libraryEntryColor } from '@/components/room-organizer/lib/oneplan-library';
 import { workerRoleColor, workerSticker } from '@/components/room-organizer/lib/oneplan-stickers';
 import { facilityInteractables, interactHintLabel, seatInteractables, workerInteractables } from '@/components/room-organizer/lib/outdoor-interactables';
-import { enuToLngLat, lngLatToEnu, planMetersPerPixel, planPointToPixel, type PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import { enuToLngLat, lngLatToEnu, planMetersPerPixel, planPixelToPoint, planPointToPixel, type PlanViewport } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import { BasemapTileCache } from '@/components/room-organizer/lib/plan-tile-cache';
 import { basemapSourceAttribution } from '@/components/room-organizer/lib/tdt-probe';
 import { buildPlanFootprint } from '@/components/room-organizer/three/plan-footprint-builder';
@@ -134,6 +134,12 @@ const SKY_GROUND = '#c9d4dc';
  *  2026-11-12 用户反馈「物体没放在平面上」：模型底面原来在 y=0，被 4 cm 高的瓦片盖住脚。
  *  syncFootprint 重摆时也必须带回这个底面，否则一编辑就又沉回 0。 */
 const PLAN_LAYER_BASE_Y = 0.052;
+
+/**
+ * 2026-11-20 审计 B9/K12/K13：草稿、落位幽灵、选中反馈的覆盖层组标签。
+ * 这些内容不属于占地组（没有闭合红线时占地组不存在），单独一组才能每轮同步稳定重建。
+ */
+const PLAN_OVERLAY_TAG = 'plan-edit-overlay';
 
 /** 漫游视角档位按钮文案（与 walk-view-modes 四档对齐）。 */
 const WALK_VIEW_LABEL: Record<WalkViewMode, string> = {
@@ -1700,6 +1706,17 @@ export default function OutdoorPlan3D({
       handleInfoRef.current = { mode: canvasEditApiRef.current?.current?.getMode?.() ?? null, editable: visuals.facilityEditable, selectedId: visuals.selectedFacilityId };
       const key = JSON.stringify({
         selectedZoneId: visuals.selectedZoneId,
+        // 2026-11-20 审计 B8/B9/K13：选中态与框选矩形都进推送键，否则清单换选、
+        // 框选过程在 3D 里看不到任何变化。
+        selectedFacilityId: visuals.selectedFacilityId,
+        selectedRouteId: visuals.selectedRouteId,
+        selectedNodeId: visuals.selectedNodeId,
+        selectedWorkerId: visuals.selectedWorkerId,
+        selectedVehicleId: visuals.selectedVehicleId,
+        selectedAnnotationId: visuals.selectedAnnotationId,
+        selectedMeasurementId: visuals.selectedMeasurementId,
+        multiSelectedFacilityIds: visuals.multiSelectedFacilityIds,
+        marquee: visuals.marquee,
         plan: visuals.plan,
         draft: visuals.draft ?? null,
       });
@@ -1708,11 +1725,169 @@ export default function OutdoorPlan3D({
         return;
       }
       lastEditKey = key;
-      syncFootprint(visuals.plan, visuals.selectedZoneId, visuals.draft);
+      syncFootprint(visuals.plan, visuals.selectedZoneId, visuals.draft, visuals);
       planModelLayer.setBatchPreview(arrangeGhosts);
     };
 
-    const syncFootprint = (nextPlan: SitePlanData, selectedZoneId?: string | null, draft?: PlanEditVisuals["draft"]): void => {
+    /**
+     * 2026-11-20 审计 B9/K13：3D 选中反馈。
+     *
+     * 3D 原来只画「单件设施手柄 + 分区顶点球」：点中一条动线/出入口/人员/车辆/标注时
+     * 屏幕上毫无变化，紧接着按 Delete 却真的删掉了它（看不见被选中）。这里按 visuals 里的
+     * 选中 id 画底环/加粗线，并为组选补包围盒、为 2D 框选补矩形投影。
+     */
+    const SELECTION_ACCENT = '#3d8fa8';
+    const SELECTION_WHITE = '#ffffff';
+    /** 覆盖层（草稿/幽灵/选中反馈）自己的可释放表：每轮同步重建，不跟着占地组一起释放。 */
+    let overlayDisposables: { dispose: () => void }[] = [];
+
+    /**
+     * 取覆盖层组并清空上一轮内容（2026-11-20 审计 K12）：草稿不再只能画在占地组里，
+     * 没有闭合红线、或占地建不起来时也必须能画。
+     */
+    const clearOverlayGroup = (): THREE.Group => {
+      let group = scene.children.find(
+        (child) => child instanceof THREE.Group && child.userData.type === PLAN_OVERLAY_TAG,
+      ) as THREE.Group | undefined;
+      if (!group) {
+        group = new THREE.Group();
+        group.userData.type = PLAN_OVERLAY_TAG;
+        scene.add(group);
+      }
+      for (const child of [...group.children]) group.remove(child);
+      for (const item of overlayDisposables) item.dispose();
+      overlayDisposables = [];
+      return group;
+    };
+
+    const addSelectionOverlay = (group: THREE.Group, frame: SiteFrame, visuals: PlanEditVisuals): void => {
+      const currentPlan = visuals.plan;
+      const lineY = 0.9;
+      const local = (point: PlanPoint): { x: number; y: number } => ({ x: point.x - frame.cx, y: point.y - frame.cy });
+      const addRing = (point: PlanPoint, color: string, radius: number): void => {
+        const geometry = new THREE.RingGeometry(radius * 0.62, radius, 28);
+        const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.rotation.x = -Math.PI / 2;
+        const spot = local(point);
+        mesh.position.set(spot.x, lineY, -spot.y);
+        mesh.renderOrder = 15;
+        group.add(mesh);
+        overlayDisposables.push(geometry, material);
+      };
+      /** 动线/包围盒用细管代替线宽：WebGL 的 linewidth 在多数平台被忽略，细线看不出选中。 */
+      const addRibbon = (points: readonly PlanPoint[], color: string, radius: number, closed = false): void => {
+        if (points.length < 2) return;
+        const ringPoints = closed && points.length >= 3 ? [...points, points[0]!] : points;
+        const vectors = ringPoints.map(point => {
+          const spot = local(point);
+          return new THREE.Vector3(spot.x, lineY, -spot.y);
+        });
+        const curve = new THREE.CatmullRomCurve3(vectors, false, 'catmullrom', 0.02);
+        const geometry = new THREE.TubeGeometry(curve, Math.max(8, vectors.length * 8), radius, 6, false);
+        const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.renderOrder = 15;
+        group.add(mesh);
+        overlayDisposables.push(geometry, material);
+      };
+      const route = visuals.selectedRouteId
+        ? currentPlan.routes.find((item) => item.id === visuals.selectedRouteId)
+        : undefined;
+      if (route) {
+        addRibbon(route.points, route.color ?? SELECTION_ACCENT, 0.4);
+        for (const point of route.points) addRing(point, SELECTION_WHITE, 0.7);
+      }
+      const node = visuals.selectedNodeId
+        ? currentPlan.nodes.find((item) => item.id === visuals.selectedNodeId)
+        : undefined;
+      if (node) addRing(node.position, SELECTION_WHITE, 1.5);
+      const worker = visuals.selectedWorkerId
+        ? currentPlan.workers.find((item) => item.id === visuals.selectedWorkerId)
+        : undefined;
+      if (worker) addRing(worker.position, SELECTION_WHITE, 1.1);
+      const vehicle = visuals.selectedVehicleId
+        ? (currentPlan.vehicles ?? []).find((item) => item.id === visuals.selectedVehicleId)
+        : undefined;
+      if (vehicle) addRing(vehicle.position, SELECTION_WHITE, 1.7);
+      const measurement = visuals.selectedMeasurementId
+        ? (currentPlan.measurements ?? []).find((item) => item.id === visuals.selectedMeasurementId)
+        : undefined;
+      if (measurement) {
+        addRibbon(measurement.points, SELECTION_WHITE, 0.16);
+        for (const point of measurement.points) addRing(point, SELECTION_WHITE, 0.6);
+      }
+      const annotation = visuals.selectedAnnotationId
+        ? (currentPlan.annotations ?? []).find((item) => item.id === visuals.selectedAnnotationId)
+        : undefined;
+      if (annotation) {
+        addRibbon(annotation.points, SELECTION_WHITE, 0.14, annotation.points.length >= 3);
+        for (const point of annotation.points) addRing(point, SELECTION_WHITE, 0.5);
+      }
+      // 组选（Shift/Ctrl 多选、框选）：逐件底环 + 组包围盒，3D 里抓不到组角柄但至少看得见选了谁。
+      if (visuals.multiSelectedFacilityIds.length) {
+        const picks = currentPlan.facilities.filter(item => visuals.multiSelectedFacilityIds.includes(item.id));
+        for (const facility of picks) addRing(facility.position, SELECTION_ACCENT, 1.1);
+        const corners = picks.flatMap(facility => facilityFootprintRing(facility));
+        if (corners.length >= 3) {
+          const minX = Math.min(...corners.map(point => point.x));
+          const maxX = Math.max(...corners.map(point => point.x));
+          const minY = Math.min(...corners.map(point => point.y));
+          const maxY = Math.max(...corners.map(point => point.y));
+          const box: PlanPoint[] = [
+            { x: minX, y: minY },
+            { x: maxX, y: minY },
+            { x: maxX, y: maxY },
+            { x: minX, y: maxY },
+          ];
+          addRibbon(box, SELECTION_ACCENT, 0.09, true);
+        }
+      }
+      // 2D 框选矩形：按同一视口投回平面画半透明面，框选过程在 3D 里不再是盲选。
+      if (visuals.marquee) {
+        const viewport = derivedViewportNow();
+        if (viewport) {
+          const box = visuals.marquee;
+          const a = planPixelToPoint({ x: box.x, y: box.y }, viewport);
+          const b = planPixelToPoint({ x: box.x + box.w, y: box.y + box.h }, viewport);
+          const corners: PlanPoint[] = [
+            { x: a.x, y: a.y },
+            { x: b.x, y: a.y },
+            { x: b.x, y: b.y },
+            { x: a.x, y: b.y },
+          ];
+          const shape = new THREE.Shape();
+          corners.forEach((corner, index) => {
+            const spot = local(corner);
+            if (index === 0) shape.moveTo(spot.x, spot.y);
+            else shape.lineTo(spot.x, spot.y);
+          });
+          shape.closePath();
+          const geometry = new THREE.ShapeGeometry(shape);
+          const material = new THREE.MeshBasicMaterial({
+            color: '#4c8bf5',
+            transparent: true,
+            opacity: 0.16,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.rotation.x = -Math.PI / 2;
+          mesh.position.y = lineY - 0.02;
+          mesh.renderOrder = 14;
+          group.add(mesh);
+          overlayDisposables.push(geometry, material);
+          addRibbon(corners, '#4c8bf5', 0.08, true);
+        }
+      }
+    };
+
+    const syncFootprint = (
+      nextPlan: SitePlanData,
+      selectedZoneId?: string | null,
+      draft?: PlanEditVisuals["draft"],
+      visuals?: PlanEditVisuals,
+    ): void => {
       if (disposed) return;
       const nextFrame = ringFrame(nextPlan.boundary);
       if (!nextFrame) return;
@@ -1728,19 +1903,26 @@ export default function OutdoorPlan3D({
       const footprintPlan = hiddenPreviewId
         ? { ...nextPlan, facilities: nextPlan.facilities.filter(f => f.id !== hiddenPreviewId) }
         : nextPlan;
+      // 2026-11-20 审计 K12：占地建不起来（没有闭合红线）时不再整体 return 掉草稿，
+      // 否则在 3D 里选「画分区/画动线」再点地图毫无反应，看着像功能坏了。
       if (!buildPlanFootprint(THREE, scene, footprintPlan, nextMetrics, { clampPoints: false })) {
         lineMaterialsRef.current = [];
-        return;
       }
       const nextGroup = scene.children.find(
         (child) => child instanceof THREE.Group && child.userData.type === ROOM_OBJECT_TAGS.PlanFootprint,
       ) as THREE.Group | undefined;
-      if (!nextGroup) return;
-      nextGroup.position.set(nextFrame.cx, 0, -nextFrame.cy);
-      hideAnimatedVehiclePlaceholders(nextGroup);
-      addSelectedZoneHandles(nextGroup, nextPlan, nextFrame, selectedZoneId ?? null);
-      if (draft) addDraftOverlay(nextGroup, nextFrame, draft, disposables);
-      collectLineMaterials(nextGroup);
+      if (nextGroup) {
+        nextGroup.position.set(nextFrame.cx, 0, -nextFrame.cy);
+        hideAnimatedVehiclePlaceholders(nextGroup);
+        addSelectedZoneHandles(nextGroup, nextPlan, nextFrame, selectedZoneId ?? null);
+      }
+      // 草稿/幽灵/选中反馈统一进覆盖层：有没有占地组都照画，且每轮同步重建。
+      const overlayGroup = clearOverlayGroup();
+      overlayGroup.position.set(nextFrame.cx, 0, -nextFrame.cy);
+      if (draft) addDraftOverlay(overlayGroup, nextFrame, draft, overlayDisposables);
+      if (visuals) addSelectionOverlay(overlayGroup, nextFrame, visuals);
+      collectLineMaterials(overlayGroup);
+      if (nextGroup) collectLineMaterials(nextGroup);
       const width = stage.clientWidth;
       const height = stage.clientHeight;
       if (width > 1 && height > 1) {
@@ -1753,7 +1935,7 @@ export default function OutdoorPlan3D({
         planModelLayer.syncPositions(parkedProps, nextMetrics);
         // 2026-11-12 新放置的设施当场落地真模型：原来要等图源/视口变化触发场景重挂，
         // 用户放个摩天轮只看得到占地轮廓。重建后的占位表同步接管（贴纸隐藏用）。
-        planModelLayer.placeNew(parkedProps, nextMetrics, collectPlaceholdersByPropId(nextGroup));
+        planModelLayer.placeNew(parkedProps, nextMetrics, nextGroup ? collectPlaceholdersByPropId(nextGroup) : undefined);
         // metrics 刚更新，预览模型按新场地框重新落位；压住的旧设施模型隐藏。
         planModelLayer.setPreview(
           Date.now() < previewMutedUntil ? null : previewPropFor(nextPlan, draft),

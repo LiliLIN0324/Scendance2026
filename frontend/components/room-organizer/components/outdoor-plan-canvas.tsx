@@ -335,6 +335,7 @@ import {
   planEntityEditable,
   planLayerBlockReason,
 } from '../lib/plan-edit-gate';
+import { resolveBridgedHit } from '../lib/plan-pointer-bridge';
 import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
 import { ArrangeChoiceList } from './arrange-choice-list';
@@ -1035,6 +1036,21 @@ function drawGroupSelection(ctx: CanvasRenderingContext2D, viewport: PlanViewpor
   ctx.restore();
 }
 
+/**
+ * 2026-11-20 审计 K13：2D 框选矩形 → 3D 可用的左上角 + 宽高（舞台 CSS px）。
+ * 3D 自己按同一份视口把像素矩形投回平面，不依赖 2D canvas 的绘制状态。
+ */
+function marqueeBoxFromRect(
+  marquee: { startPx: { x: number; y: number }; curPx: { x: number; y: number } } | null,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!marquee) return null;
+  const rect = marqueeScreenRect(marquee);
+  const w = rect.maxX - rect.minX;
+  const h = rect.maxY - rect.minY;
+  if (w < 1 && h < 1) return null;
+  return { x: rect.minX, y: rect.minY, w, h };
+}
+
 /** 框选拖拽矩形：蓝细线 + 淡填充（OnePlan marquee 同观感）。 */
 function drawMarqueeRect(ctx: CanvasRenderingContext2D, marquee: { startPx: { x: number; y: number }; curPx: { x: number; y: number } }): void {
   const x = Math.min(marquee.startPx.x, marquee.curPx.x);
@@ -1488,6 +1504,22 @@ export interface PlanEditVisuals {
   selectedFacilityId: string | null;
   /** 2026-11-12 3D 手柄：设施层当前可直接编辑（浏览/选择模式 + 未锁定）；false 时 3D 不挂柄。 */
   facilityEditable: boolean;
+  /**
+   * 2026-11-20 审计 B9/K13：3D 里动线/节点/人员/车辆/标注/测量的选中态。
+   * 3D 之前只拿到 zone/facility 两种选中：点中一条动线或一个人屏幕上毫无变化，
+   * 而 Delete 又立刻生效——「看不见被选中」却能被删。
+   * 几何不重复传：3D 手里已经有整份 plan，按 id 自己取。
+   */
+  selectedRouteId: string | null;
+  selectedNodeId: string | null;
+  selectedWorkerId: string | null;
+  selectedVehicleId: string | null;
+  selectedAnnotationId: string | null;
+  selectedMeasurementId: string | null;
+  /** 组选设施（Shift/Ctrl 多选、框选）：3D 画组包围盒与逐件底环（K13）。 */
+  multiSelectedFacilityIds: readonly string[];
+  /** 2D 框选矩形（舞台 CSS px，相对画布左上）；null = 没在框。K13：3D 里框选不再盲选。 */
+  marquee: { x: number; y: number; w: number; h: number } | null;
   /** 一句话布置的批量落位预览：3D 画半透明体块，确认前不落库。 */
   arrangePreview: ReadonlyArray<{
     templateId: string;
@@ -4614,6 +4646,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   const pointerOverrideRef = useRef<{ px: { x: number; y: number }; pt: PlanPoint } | null>(null);
   const pointerFrom3dRef = useRef(false);
+  /** 2026-11-20 审计 B5：3D 桥最近一次真的打到地面的点（命中丢失时不回落到像素反算）。 */
+  const pointerLastHitRef = useRef<{ px: { x: number; y: number }; pt: PlanPoint } | null>(null);
   const pointerConsumedRef = useRef(false);
 
   function eventPlanPoint(event: { clientX: number; clientY: number }): { px: { x: number; y: number }; pt: PlanPoint } | null {
@@ -4961,13 +4995,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     },
     getBasemapVisible: () => basemapVisibleRef.current,
     pointerFromPlan: (kind, hit, flags) => {
-      pointerOverrideRef.current = hit;
+      // 2026-11-20 审计 B5：3D 射线打不到地面时 hit 为 null（拖过地平线、相机贴地时最常见）。
+      // 绝不能回落到「clientX/Y 减 2D 舞台矩形」反算——那个点跟 3D 表面无关，松手就把物件
+      // 提交在错位置。规则（保持上一个有效落点/一次都没有就不猜）在 plan-pointer-bridge 里。
+      const bridged = resolveBridgedHit(kind, hit, pointerLastHitRef.current);
+      pointerLastHitRef.current = bridged.lastHit;
+      if (bridged.ignore) {
+        pointerOverrideRef.current = null;
+        pointerFrom3dRef.current = false;
+        return false;
+      }
+      pointerOverrideRef.current = bridged.hit;
       pointerFrom3dRef.current = true;
       pointerConsumedRef.current = kind !== 'down';
       viewportOverrideRef.current = flags?.viewport ?? null;
       const ev = {
         button: flags?.button ?? 0,
         shiftKey: flags?.shiftKey ?? false,
+        // 2026-11-20 审计 K4：3D 已经把 altKey/ctrlKey/metaKey 放进 flags，桥里原来只复制了
+        // button/shiftKey，于是 3D 里按 Alt 不分叉、Ctrl 不加选（像没按）。
+        altKey: flags?.altKey ?? false,
+        ctrlKey: flags?.ctrlKey ?? false,
+        metaKey: flags?.metaKey ?? false,
         clientX: flags?.clientX ?? 0,
         clientY: flags?.clientY ?? 0,
         preventDefault() {},
@@ -5086,6 +5135,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 2026-11-12 3D 手柄：把选中设施与可编辑态透出，3D 侧只画柄不拷贝编辑逻辑。
         selectedFacilityId: selectedFacilityRef.current,
         facilityEditable: !!onPlanChange && !layerLocked('facility') && (modeRef.current === 'view' || modeRef.current === 'select'),
+        // 2026-11-20 审计 B9/K13：把其余六类选中与框选矩形一并透出，3D 才有反馈可画。
+        selectedRouteId: selectedRouteRef.current,
+        selectedNodeId: selectedNodeRef.current,
+        selectedWorkerId: selectedWorkerRef.current,
+        selectedVehicleId: selectedVehicleRef.current,
+        selectedAnnotationId: selectedAnnotationRef.current,
+        selectedMeasurementId: selectedMeasurementRef.current,
+        multiSelectedFacilityIds: multiSelectedFacilityIdsRef.current.slice(),
+        marquee: marqueeBoxFromRect(marqueeRectRef.current),
         arrangePreview: arrangePreviewRef.current?.map(facility => ({
           templateId: facility.templateId,
           name: facility.name,
@@ -5638,6 +5696,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     commitPlan({ ...current, zones: current.zones.map(zone => (zone.id === id ? { ...zone, ...patch } : zone)) });
   }
+
+  /**
+   * 2026-11-20 审计 B8：选中态并进 3D 推送键。
+   *
+   * 各 `select*` 原来只写 ref + `draw()`，不发 PLAN_DRAFT_EVENT；于是从清单行/属性卡
+   * 从 B 换选到 A 时，3D 里的手柄还挂在 B 上，去抓「A 的柄」实际按 B 的落点接管。
+   * 放在 effect 里按状态比对，比在每个 `select*` 尾部各补一次通知难漏。
+   */
+  useEffect(() => {
+    notifyPlanDraftChanged();
+  }, [
+    selectedFacilityId,
+    selectedZoneId,
+    selectedRouteId,
+    selectedNodeId,
+    selectedWorkerId,
+    selectedVehicleId,
+    selectedAnnotationId,
+    selectedMeasurementId,
+    multiSelectedFacilityIds,
+    boundarySelected,
+  ]);
 
   /* ---------------- H2-c 设施放置与选中 ---------------- */
 
