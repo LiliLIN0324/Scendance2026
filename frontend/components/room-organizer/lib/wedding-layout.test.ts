@@ -42,6 +42,14 @@ describe('场景驱动的婚礼空间规划',()=>{
     expect(report.checks.ceremonySeats).toBe(60);expect(report.checks.banquetSeats).toBe(60);
     expect(()=>validateWorkflowPlan(plan,report.plan)).not.toThrow();
     expect(report.notes.join(' ')).toContain('自动比较 2 版');
+    // 差异信息四个维度都要能核对：旧分区与旧椅子被换掉、新分区与通道新增，不就地改对象。
+    expect(report.diff.zones.removed).toBeGreaterThanOrEqual(1);
+    expect(report.diff.zones.added).toBeGreaterThanOrEqual(1);
+    expect(report.diff.facilities.removed).toBeGreaterThanOrEqual(1);
+    expect(report.diff.facilities.added).toBeGreaterThanOrEqual(1);
+    expect(report.diff.routes.added).toBeGreaterThanOrEqual(1);
+    expect(report.diff.facilities.changed+report.diff.zones.changed+report.diff.routes.changed).toBe(0);
+    expect(report.diff.unchanged).toBe(false);
   });
 
   it('面积不足如实报告差额，不缩小物件或降低人数、不伪造入口',async()=>{
@@ -153,6 +161,21 @@ describe('场地组织与候选取舍',()=>{
     expect(smaller.notes.join(' ')).toContain('差');
   });
 
+  it('阻断带把场地切成两半：没接上通道的分区如实列出，不假装连通也不删分区',async()=>{
+    const base=venue();
+    // 全宽阻断带：南北两块只能靠一条不存在的路过去，主通道无法生成。
+    const report=await draft(base,{hardBlocks:[rect(0,30,70,34)]});
+    expect(report.plan.zones.some(zone=>zone.name==='仪式观礼区')).toBe(true);
+    expect(report.reachability.connected).toBe(false);
+    expect(report.reachability.zonesWithoutRoute).toContain('仪式观礼区');
+    expect(report.reachability.entranceToCeremonyM).toBeNull();
+    expect(report.notes.join(' ')).toContain('没有任何通道贴边');
+    expect(report.notes.join(' ')).toContain('现场可达性仍未核对');
+    expect(report.checks.access).toBe('pending');
+    expect(report.checks.safety).toBe('unverified');
+    expect(report.diff.unchanged).toBe(false);
+  });
+
   it('入口关系：已核验北门决定纵深方向，未核验节点不被当成已知入口',async()=>{
     const base=venue();
     const node={id:crypto.randomUUID(),kind:'entry' as const,name:'北门',position:{x:35,y:69},verification:'user-confirmed' as const,notes:''};
@@ -206,12 +229,17 @@ describe('场地组织与候选取舍',()=>{
 
     const unknown=await draft(base);
     expect(unknown.site.landscape.applied).toBe(false);
+    expect(unknown.site.landscape.requested).toBe(false);
     expect(unknown.site.focusDirection).toBe(unknown.site.approachDirection);
     expect(unknown.recommendation.reasons.join(' ')).toContain('没有依据');
 
     const opposite=await draft(base,{landscape:{direction:'south',evidence:'user-confirmed'}});
-    expect(opposite.site.landscape.applied).toBe(false);
+    expect(opposite.site.landscape).toMatchObject({applied:false,requested:true,direction:null});
     expect(opposite.site.landscape.note).toContain('相反');
+    // 给了方向却没采用，不能写成「没有依据」：理由要说清楚是冲突，并要求确认优先关系。
+    expect(opposite.recommendation.reasons.join(' ')).toContain('相反');
+    expect(opposite.recommendation.reasons.join(' ')).toContain('优先关系');
+    expect(opposite.recommendation.reasons.join(' ')).not.toContain('没有依据');
   });
 
   it('两版候选给出可核对的面积取舍，推荐结果与实际采用方案一致',async()=>{
@@ -237,6 +265,18 @@ describe('场地组织与候选取舍',()=>{
     expect(report.notes.join(' ')).toContain('不等于现场出入口可通行');
     expect(report.diff.facilities.added).toBe(report.plan.facilities.length);
     expect(report.diff.unchanged).toBe(false);
+  });
+
+  it('两版平手时按调用方指定的首选采用，比较视图才能真的拿到两版不同平面',async()=>{
+    const ceremony=await draft(venue(),{strategy:'ceremony-first'});
+    const banquet=await draft(venue(),{strategy:'banquet-first'});
+    expect(ceremony.recommendedId).toBe('ceremony-first');
+    expect(banquet.recommendedId).toBe('banquet-first');
+    expect(ceremony.plan).not.toEqual(banquet.plan);
+    const picked=banquet.candidates.find(candidate=>candidate.id==='banquet-first')!;
+    expect(picked.plan).toEqual(banquet.plan);
+    expect(picked.metrics.ceremonyZoneM2)
+      .toBeLessThan(ceremony.candidates.find(candidate=>candidate.id==='ceremony-first')!.metrics.ceremonyZoneM2);
   });
 
   it('既有硬冲突先报告并标为待调整，不被容量或推荐分抵消',async()=>{

@@ -92,6 +92,8 @@ export interface WeddingSiteSummary {
   };
   landscape: {
     applied: boolean;
+    /** 调用方是否给过景观方向。给过但因与入口相反没采用时，理由不能写成「没有依据」。 */
+    requested: boolean;
     direction: WeddingDirection | null;
     evidence: WeddingLandscapeEvidence['evidence'] | null;
     note: string;
@@ -284,6 +286,7 @@ function readWeddingSite(input: WeddingLayoutInput, preservedRings: PlanPoint[][
     domain, rects, entrance, approach, focusAxis, warnings,
     landscape: {
       applied,
+      requested: Boolean(input.landscape),
       direction: applied ? directionOfAxis(focusAxis) : null,
       evidence: applied ? input.landscape!.evidence : null,
       note: landscapeNote,
@@ -1171,6 +1174,7 @@ function recommend(
   preferred: WeddingStrategy,
   compareBoth: boolean,
   focusDirection: WeddingDirection,
+  landscape: WeddingSiteSummary['landscape'],
 ): { chosen: WeddingCandidate; reasons: string[] } {
   const ready = candidates.filter(candidate => candidate.hardConflicts.total === 0);
   const pool = ready.length ? ready : candidates;
@@ -1198,9 +1202,11 @@ function recommend(
       ? `两版面积归属相同（场地只能这么分），差别只在通道走向与落位结果：仪式区 ${chosen.metrics.ceremonyZoneM2} ㎡，入口步行 ${chosen.metrics.entryWalkM} m 对 ${other.metrics.entryWalkM} m`
       : `两版差在面积归属：仪式区 ${chosen.metrics.ceremonyZoneM2} ㎡ 对 ${other.metrics.ceremonyZoneM2} ㎡，入口步行 ${chosen.metrics.entryWalkM} m 对 ${other.metrics.entryWalkM} m`);
   }
-  reasons.push(chosen.metrics.landscapeApplied
+  reasons.push(landscape.applied
     ? `焦点朝${directionText(focusDirection)}，有已给出的景观依据；遮挡仍需 3D 核对`
-    : '景观方向没有依据，两版都没有把「观景」写成推荐理由');
+    : landscape.requested
+      ? '景观方向给过但与入口方向相反：本版保留朝内的仪式焦点，没有按观景改向，优先关系需要用户确认'
+      : '景观方向没有依据，两版都没有把「观景」写成推荐理由');
   return { chosen, reasons };
 }
 
@@ -1299,7 +1305,7 @@ export async function proposeWeddingLayout(input: WeddingLayoutInput): Promise<W
   const compareBoth = !existingZones && built.length > 1;
   const preferred: WeddingStrategy = input.strategy ?? 'ceremony-first';
   const candidates = built.map(item => item.candidate);
-  const { chosen, reasons } = recommend(candidates, preferred, compareBoth, directionOfAxis(site.focusAxis));
+  const { chosen, reasons } = recommend(candidates, preferred, compareBoth, directionOfAxis(site.focusAxis), site.landscape);
   const winner = built.find(item => item.candidate === chosen)!;
 
   const notes = [...winner.notes];
