@@ -12,14 +12,14 @@ describe('conversation recorder',()=>{
   afterEach(()=>{vi.restoreAllMocks();});
 
   it('flushes a local-only turn to the transport',async()=>{
-    const recordConversationTurns=vi.fn(async()=>null);
+    const recordConversationTurns=vi.fn<(turns:unknown[])=>Promise<unknown>>(async()=>null);
     recordConversationTurn({recordConversationTurns} as ConversationTraceTransport,turn());
     await vi.waitFor(()=>expect(recordConversationTurns).toHaveBeenCalledTimes(1));
     expect(recordConversationTurns.mock.calls[0]![0]).toMatchObject([{sessionId:'ses-1',surface:'local_command',outcome:'local_only'}]);
   });
 
   it('keeps the turn queued when the transport fails, and retries on the next turn',async()=>{
-    const recordConversationTurns=vi.fn(async()=>{throw new Error('offline');});
+    const recordConversationTurns=vi.fn<(turns:unknown[])=>Promise<unknown>>(async()=>{throw new Error('offline');});
     recordConversationTurn({recordConversationTurns} as ConversationTraceTransport,turn());
     await vi.waitFor(()=>expect(recordConversationTurns).toHaveBeenCalled());
     expect(JSON.parse(window.localStorage.getItem('scendance:conversation-outbox:v1')??'[]')).toHaveLength(1);
