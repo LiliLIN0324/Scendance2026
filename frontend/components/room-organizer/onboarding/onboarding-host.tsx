@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { MaterialSymbol } from '../panels/material-symbol';
 import { HelpCenter } from './help-center';
 import {
   markStepSeen,
@@ -83,7 +84,7 @@ export function HelpRailButton(): JSX.Element {
       data-tour="help"
       onClick={openHelpCenter}
     >
-      <span aria-hidden="true">?</span>
+      <MaterialSymbol name="help" size={18} />
     </button>
   );
 }

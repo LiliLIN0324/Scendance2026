@@ -316,21 +316,9 @@ body.is-theme-dark .sc-agent-panel .ap-zone-proposal__btn:hover {
 body.is-theme-dark .sc-workbench .sc-rail-message-badge,
 body.is-theme-dark .sc-workbench .sc-message-row-badge { background: #BF4F48; }
 
-/* 底部工具坞把手：字面白底胶囊回到暗色平面，描边与文字跟 token。 */
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle {
-  background: var(--plane-deep);
-  border-color: var(--hair);
-  color: var(--ink-soft);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
-}
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle:hover {
-  background: var(--plane);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, .32);
-}
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle {
-  background: #2D3038 !important;
-  border-color: #363A42 !important;
-  color: #C9CED6 !important;
+/* 底部工具坞的岛：暗色平面上的投影压暗。 */
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb.oc-island {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .34);
 }
 
 /* ── 户外地图浮层 chrome：字面白底 / 白描边 / 浅灰投影回到暗色平面 ──
@@ -826,10 +814,7 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb {
   background: #1C1F24 !important;
   border-color: #363A42 !important;
 }
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close:hover {
-  background: #2D3038 !important;
-  color: #EDF0F2 !important;
-}
+
 /* 其余压在地图 / 3D 画布上的浮层：字面白底回到暗色表面，描边与投影压暗；罗盘指针蓝/灰保留。 */
 body.is-theme-dark .sc-geo-compass-card {
   background: var(--plane-deep);
@@ -2639,6 +2624,12 @@ body.sc-panel-dragging * {
 /* 2026-11-16 用户截图反馈：分享钮比顶部搜索条低 6px。搜索条 40px 高、居中在 y=36，
    分享钮 30px，簇顶同步上移到 14px，二者中心线对齐。 */
 .oc-cluster.oc-tr { top: 14px; right: 20px; flex-direction: column; }
+/* 2026-11-20 用户截图反馈：分享钮外面那圈纸面方框（底座 + 描边 + 阴影）去掉，
+   只留按钮自身那层线稿框。簇盒的边框与内距照旧，分享钮在屏上的位置分毫不动。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-cluster--bare,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-cluster--bare {
+  background: transparent; border-color: transparent; box-shadow: none;
+}
 .oc-cluster.oc-br { bottom: 20px; right: 20px; flex-direction: column; }
 .oc-cluster.oc-bb { bottom: 20px; left: 50%; transform: translateX(-50%); flex-direction: row; max-width: calc(100vw - 150px); flex-wrap: wrap; justify-content: center; row-gap: 6px; }
 .oc-cluster.oc-bl { bottom: 4px; left: 51px; flex-direction: row; }
@@ -2864,6 +2855,34 @@ body.sc-panel-dragging * {
   border-width: 1.2px !important;
   border-color: var(--green, #4A7C59) !important;
   color: var(--green, #4A7C59) !important;
+}
+/* 2026-11-20 用户指令：顶部分享钮要和底中「工具」胶囊同一套投影，
+   不再是一枚贴纸似的浮块。 */
+/* 选择器组与上面那条锁定稿一致：锁定稿里最具体的那条（.oc-cluster .oc-share button#tool-share）
+   特异性更高，只写 :is() 压不过它。 */
+.sc-workbench .sc-tool-column button#tool-share,
+.sc-workbench .sc-tool-column button#tool-outdoor-publish,
+.sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share,
+.sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share {
+  box-shadow: 0 2px 8px rgba(60, 64, 67, .14) !important;
+}
+.sc-workbench .sc-tool-column button#tool-share:hover,
+.sc-workbench .sc-tool-column button#tool-outdoor-publish:hover,
+.sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share:hover,
+.sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share:hover {
+  box-shadow: 0 3px 10px rgba(60, 64, 67, .20) !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-share,
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-outdoor-publish,
+body.is-theme-dark .sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .28) !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-share:hover,
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-outdoor-publish:hover,
+body.is-theme-dark .sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share:hover,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share:hover {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .32) !important;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button#tool-share > svg,
 .sc-workbench .sc-tool-column button#tool-share > svg,
@@ -3178,15 +3197,7 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb {
   animation: oc-dock-unfold .16s ease-out;
 }
-/* 末尾小 × 是明确关闭口；Esc 是快捷键，悬停提示里带出来。 */
-.sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close {
-  width: 26px; height: 26px; min-width: 26px; min-height: 26px;
-  margin-left: 1px; padding: 0; border: 0; border-radius: 50%;
-  background: transparent; box-shadow: none; color: #80868b;
-}
-.sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close:hover {
-  background: #f1f3f4; box-shadow: none; color: #3c4043;
-}
+/* 2026-11-20 用户指令：收起口只留岛核（左端那枚 ⌄），右端的小 × 撤掉。 */
 @keyframes oc-dock-unfold {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: none; }
@@ -3200,22 +3211,56 @@ body.sc-panel-dragging * {
   box-shadow: 0 2px 10px rgba(60, 64, 67, .16);
   flex-wrap: wrap; justify-content: center;
 }
-.sc-workbench .sc-tool-column .oc-dock-handle {
-  pointer-events: auto; display: inline-flex; align-items: center; gap: 5px;
-  height: 28px; padding: 0 12px; border-radius: 999px;
-  background: rgba(255, 255, 255, .96);
-  border: 1px solid rgba(60, 64, 67, .12);
-  box-shadow: 0 2px 8px rgba(60, 64, 67, .14);
-  color: #5f6368; font-size: 11px; font-weight: 500; letter-spacing: .02em;
-  cursor: pointer; transition: background .12s ease, box-shadow .12s ease;
+/* 2026-11-20 灵动岛化：底中工具条从「一颗把手 + 一条另起的工具条」收成一颗岛。
+   收起 = 48px 圆钮（只留 ⌃），悬停横向张开露出「工具」二字，点开继续长成整条工具胶囊；
+   岛始终是同一个元素，宽度连续过渡（沿用画布左上搜索胶囊那套 Dynamic Island 手感）。
+   工具行收起时只藏不卸：展开不必重新挂载，收起也不必重建 DOM。 */
+.sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb.oc-island {
+  position: static; left: auto; right: auto; bottom: auto; transform: none;
+  display: flex; align-items: center; flex-wrap: nowrap; justify-content: flex-start;
+  gap: 6px; padding: 3px; height: 42px;
+  width: max-content; max-width: 42px;
+  border-radius: 999px; overflow: visible; animation: none;
+  transition: max-width .36s cubic-bezier(.32, 1.25, .48, 1);
 }
-.sc-workbench .sc-tool-column .oc-dock-handle:hover {
-  background: #fff; box-shadow: 0 3px 10px rgba(60, 64, 67, .20);
+.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover {
+  max-width: 90px;
 }
-.sc-workbench .sc-tool-column .oc-dock-handle:focus-visible {
-  outline: 2px solid #4a7c59; outline-offset: 2px;
+.sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb.oc-island {
+  max-width: min(92vw, 820px);
 }
-.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-dock-handle { opacity: .92; }
+/* 岛核：左端那颗圆钮，34 见方，图标居中；展开后箭头翻成向下＝收起。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-toggle {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  padding: 0; border: 0; border-radius: 999px;
+  background: transparent; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-toggle:hover {
+  background: var(--plane, #F7F5F0); box-shadow: none;
+}
+/* 「工具」二字是独立的一截胶囊：收起时宽度归零，悬停才张开。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-label {
+  flex: 0 0 auto;
+  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
+  font-size: 11px; font-weight: 500; letter-spacing: .02em; line-height: 1;
+  transition: max-width .36s cubic-bezier(.32, 1.25, .48, 1), opacity .2s ease;
+}
+.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover .oc-island-label {
+  max-width: 40px; opacity: 1;
+}
+/* 工具行：收起时藏起来；展开要等宽度几乎到位才亮，免得先溢出胶囊。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-tools {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  visibility: hidden; opacity: 0;
+  transition: opacity .16s ease .3s, visibility 0s linear .46s;
+}
+.sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb.oc-island .oc-island-tools {
+  visibility: visible; opacity: 1;
+  transition: opacity .16s ease .32s, visibility 0s linear 0s;
+}
 @media (max-width: 760px) {
   .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps { right: 12px; bottom: 14px; }
   .sc-workbench .sc-tool-column .oc-dock { bottom: 14px; }
