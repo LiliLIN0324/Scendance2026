@@ -242,7 +242,8 @@ import {
   facilityFootprintSpec,
   facilitySizeFromModel,
   normalizeFacilitySize,
-  sizeWithMajor,
+  sizeWithDepth,
+  sizeWithWidth,
 } from '../lib/facility-footprint-lock';
 import {
   PLAN_ROUTE_MAX_VERTICES,
@@ -344,6 +345,7 @@ import { annotateDrawSelectionLabel, resolveAnnotateDrawToolClick } from '../lib
 import { applyOutdoorInspectorPanel, type OutdoorInspectorPanel } from '../lib/outdoor-inspector-panels';
 import { OUTDOOR_TOOL_ICONS, type OutdoorToolKey } from './outdoor-tool-icons';
 import { ZoneEventInput } from './zone-event-input';
+import { PlanInlineTextInput } from './plan-inline-text-input';
 import { MaterialSymbol } from '../panels/material-symbol';
 import { MapLegendCapsule, legendEntriesForMap } from './map-legend-capsule';
 import { PlanStatRows } from './plan-inventory-sheet';
@@ -843,6 +845,13 @@ const DRAFT_CLOSE_HIT_PX = 10;
 const CLICK_MAX_MOVE_PX = 4;
 // 2026-11-18 画墙的吸附高亮：和门贴边高亮同色，一眼看出「这一段被吸住了」。
 const WALL_SNAP_HIGHLIGHT_COLOR = '#1f8a5b';
+/**
+ * 2026-11-20 审计 K2：颜色选择器/透明度滑杆这类「连续调整」的合并窗口（ms）。
+ * 同一个对象的同一属性在这个窗口内连续提交只压一条历史，避免一次拖动吃掉几十步撤销。
+ */
+const PLAN_COMMIT_MERGE_MS = 400;
+/** 2026-11-20 审计 K1：面板尺寸草稿与当前值的「算不算改过」阈值（米），避开浮点抖动。 */
+const FACILITY_SIZE_EPSILON_M = 0.05;
 
 /**
  * 2026-11-16 用户指令：门的六种图标（单开/双开/推拉/旋转/卷帘/折叠）。
@@ -2719,6 +2728,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 编辑提交：undo 栈推入旧快照（上限 UNDO_LIMIT），再同步 ref 与父级。 */
   function commitPlan(next: SitePlanData) {
+    // 2026-11-20 审计 F1：内容相等就不压历史。对齐/分布已经在位、把同一个数字再输一遍、
+    // 拖了一圈又拖回原位，都不应该占掉 30 步撤销里的一格。
+    if (JSON.stringify(next) === JSON.stringify(planRef.current)) return;
     historyRef.current.push(planRef.current);
     if (historyRef.current.length > UNDO_LIMIT) historyRef.current.shift();
     setHistoryCount(historyRef.current.length);
@@ -2729,6 +2741,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     }
     planRef.current = next;
     onPlanChangeRef.current?.(next);
+  }
+
+  /** 连续调整的合并键与时间戳（K2）：只对同一个对象、同一个属性的连续写入生效。 */
+  const mergeCommitRef = useRef<{ key: string; at: number } | null>(null);
+
+  /**
+   * 连续调整（颜色/透明度）的提交：窗口内同键的后续写入不再压历史，直接改写当前 plan。
+   * 第一次写入仍走 commitPlan，所以整段拖动只占一条 undo，撤一次回到拖动前。
+   */
+  function commitPlanMerged(next: SitePlanData, mergeKey: string) {
+    const now = performance.now();
+    const previous = mergeCommitRef.current;
+    if (previous && previous.key === mergeKey && now - previous.at < PLAN_COMMIT_MERGE_MS) {
+      mergeCommitRef.current = { key: mergeKey, at: now };
+      if (JSON.stringify(next) === JSON.stringify(planRef.current)) return;
+      planRef.current = next;
+      onPlanChangeRef.current?.(next);
+      return;
+    }
+    commitPlan(next);
+    mergeCommitRef.current = { key: mergeKey, at: now };
   }
 
   const editorKey = JSON.stringify(planEditor ?? null);
@@ -5694,7 +5727,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 2026-11-20 审计 K3：属性写入同样受图层锁定/隐藏约束，别让左栏绕过画布上的锁。
     if (refuseEntityWrite('zone')) return;
     const current = planRef.current;
-    commitPlan({ ...current, zones: current.zones.map(zone => (zone.id === id ? { ...zone, ...patch } : zone)) });
+    const next = { ...current, zones: current.zones.map(zone => (zone.id === id ? { ...zone, ...patch } : zone)) };
+    // 2026-11-20 审计 K2：颜色/透明度是连续调整，同一窗口内合并成一条历史；
+    // 改名/改事件走草稿提交，一次就是一条。
+    const keys = Object.keys(patch);
+    const mergeKey = keys.length === 1
+      ? (keys[0] === 'color' ? `zone:color:${id}` : keys[0] === 'opacity' ? `zone:opacity:${id}` : null)
+      : null;
+    if (mergeKey) commitPlanMerged(next, mergeKey);
+    else commitPlan(next);
   }
 
   /**
@@ -6830,7 +6871,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 换型号时单价跟价格书走：新款有价就带上，没有就清掉旧款的价。
       return modelChanged ? replaceModelPrice(next, current.priceBook, modelOverride) : next;
     });
-    commitPlan({ ...current, facilities });
+    const next = { ...current, facilities };
+    // 2026-11-20 审计 K2：颜色/透明度是连续调整，同一窗口内合并成一条历史。
+    const patchKeys = Object.keys(patch);
+    const mergeKey = patchKeys.length === 1
+      ? (patchKeys[0] === 'color' ? `facility:color:${id}` : patchKeys[0] === 'opacity' ? `facility:opacity:${id}` : null)
+      : null;
+    if (mergeKey) commitPlanMerged(next, mergeKey);
+    else commitPlan(next);
   }
 
   /** 按型号一次定价：同款全部改价，并写入 plan.priceBook；一次 commit 可撤销。 */
@@ -6918,12 +6966,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const width = Number(draft.width);
     const depth = Number(draft.depth);
     if (!Number.isFinite(width) || !Number.isFinite(depth) || width <= 0 || depth <= 0) return;
-    // 以长边为锚一次性回写两轴，避免「先改宽、再改深」两次提交、两次撤销。
-    const major = Math.max(width, depth);
-    updateFacility(selectedFacility.id, {
-      size: sizeWithMajor(selectedFacility.size, major, selectedFacility.templateId,
-        { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M }),
-    });
+    /**
+     * 2026-11-20 审计 K1：等比约束不变，但「哪一边是锚」要按用户真正改过的那一边定。
+     * 原来固定取 `Math.max(width, depth)`：长边 10 m 的展位把短边从 6 改到 8，max 仍是 10，
+     * 等于什么都没改——短边编辑静默失效，用户以为输入框坏了。
+     * 两边都改了则按改动幅度更大的那一边当锚，仍只乘一个统一系数（不会写出自由比例）。
+     */
+    const base = selectedFacility.size;
+    const widthChanged = Math.abs(width - base.width) > FACILITY_SIZE_EPSILON_M;
+    const depthChanged = Math.abs(depth - base.depth) > FACILITY_SIZE_EPSILON_M;
+    if (!widthChanged && !depthChanged) return;
+    const bounds = { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M };
+    const widthRatio = Math.abs(width - base.width) / Math.max(base.width, 1e-6);
+    const depthRatio = Math.abs(depth - base.depth) / Math.max(base.depth, 1e-6);
+    const size = !depthChanged || (widthChanged && widthRatio >= depthRatio)
+      ? sizeWithWidth(width, base, selectedFacility.templateId, bounds)
+      : sizeWithDepth(depth, base, selectedFacility.templateId, bounds);
+    updateFacility(selectedFacility.id, { size });
+    setEditMessage(
+      `尺寸已按等比缩放到 ${size.width.toFixed(1)} × ${size.depth.toFixed(1)} m（改哪一边都行，另一边按模板比例跟随）。`,
+    );
   }
 
   /**
@@ -7297,7 +7359,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return { ...start, size: next.size };
     }
     if (drag.kind === 'side') {
-      // 2026-11-11「多个面」编辑：拖边柄单面拉伸——对面固定，宽深独立变化，中心随拉伸轴平移。
+      // 2026-11-11「多个面」编辑：拖边柄整体等比缩放（2026-11-20 审计 K1 复核：不是单面拉伸，
+      // 宽深恒按模板比例联动），对面固定、中心随缩放轴平移。
       const next = facilitySideResize(start, drag.side as FacilitySideIndex, pt, { minM: FACILITY_MIN_SIZE_M, maxM: FACILITY_MAX_SIZE_M });
       return { ...start, position: next.position, size: next.size };
     }
@@ -11247,17 +11310,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         title="改分区颜色"
                         style={{ width: 18, height: 18, padding: 0, border: 'none', background: 'none', borderRadius: 4, flex: '0 0 auto' }}
                       />
-                      <input
-                        aria-label={`分区「${zone.name}」名称`}
-                        title="点一下改名字"
+                      <PlanInlineTextInput
+                        ariaLabel={`分区「${zone.name}」名称`}
+                        title="点一下改名字（回车或失焦才写入方案）"
                         value={zone.name}
                         maxLength={60}
-                        onChange={event => updateZone(zone.id, { name: event.target.value })}
+                        onCommit={next => updateZone(zone.id, { name: next })}
                         // 2026-11-15 用户反馈：名字框一片灰底 + 灰描边很抢眼。改成“标题”长相：
-                        // 透明底、无常规描边，只在聚焦时透出细边，一眼看出是分区名而不是待填输入框。
+                        // 透明底、无常规描边，只在聚焦时透出细边。
+                        // 2026-11-20 审计 K2：改成草稿提交，改一次名只占一条 undo。
+                        focusBorderColor={PLANNING_SURFACE.panelBorder}
                         style={{ flex: 1, minWidth: 0, background: 'transparent', color: PLANNING_SURFACE.panelText, border: '1px solid transparent', borderRadius: PLANNING_RADIUS.sm, fontSize: 14, fontWeight: 600, padding: '2px 4px' }}
-                        onFocus={event => { event.currentTarget.style.borderColor = PLANNING_SURFACE.panelBorder; }}
-                        onBlur={event => { event.currentTarget.style.borderColor = 'transparent'; }}
                       />
                       {/* 2026-11-15 用户指令：「取消选中」摆在名字前面很怪——当成属性卡的关闭钮，放行尾。 */}
                       <button
@@ -11416,11 +11479,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     <>
                       {/* 2026-11-12 OnePlan Bench 卡对齐：标题=物件名直改 + 阵列复制换页钮；坐标行=经纬度+复制图标（W3W 不做，无格式下拉）。 */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: PLANNING_SPACING.xs }}>
-                        <input
-                          aria-label="选中设施名称"
+                        <PlanInlineTextInput
+                          ariaLabel="选中设施名称"
+                          title="点一下改名（回车或失焦才写入方案）"
                           value={selectedFacility.name}
                           maxLength={60}
-                          onChange={event => updateFacility(selectedFacility.id, { name: event.target.value })}
+                          onCommit={next => updateFacility(selectedFacility.id, { name: next })}
                           style={{ flex: 1, minWidth: 0, background: 'transparent', color: PLANNING_SURFACE.panelText, border: 'none', outline: 'none', fontWeight: 700, fontSize: 14, padding: '4px 0' }}
                         />
                         <button
@@ -11544,7 +11608,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, color: PLANNING_TEXT.soft, marginBottom: 4 }}>尺寸</div>
                           <div style={{ display: 'flex', gap: 6 }}>
-                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="宽度（米，失焦或回车生效）">
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="宽度（米，失焦或回车生效；等比缩放：改深度时宽度按模板比例跟随）">
                           <span style={benchUnitLabelStyle}>W</span>
                           <input
                             aria-label="选中设施宽度（米）"
@@ -11565,7 +11629,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           />
                           <span style={benchUnitSuffixStyle}>m</span>
                         </label>
-                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="深度/长度（米，失焦或回车生效）">
+                        <label style={{ ...benchUnitBoxStyle, flex: '1 1 0', padding: '0 6px', gap: 3 }} title="深度/长度（米，失焦或回车生效；等比缩放：改宽度时深度按模板比例跟随）">
                           <span style={benchUnitLabelStyle}>L</span>
                           <input
                             aria-label="选中设施深度（米）"
