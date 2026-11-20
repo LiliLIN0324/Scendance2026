@@ -304,6 +304,9 @@ it("版本冲突给二选一：点「用我这版」才 force 覆盖，点「用
 
   render(<Overlay projectId={projectId} controller={controller} />);
 
+  // 2026-11-20（F9）：打开时内容与盘上一致就不再写盘/推云端——这里模拟一次真实编辑再等自动保存。
+  act(() => { state.canvas!.onPlanChange!({ ...localPlan, anchor: { lng: 120.21, lat: 30.31, crs: "gcj-02", source: "picker" } }); });
+
   // 自动保存落地后撞上服务器更新版本：不覆盖，先问用户。
   await waitFor(() => expect(screen.getByTestId("outdoor-sync-banner")).toBeTruthy(), { timeout: 3000 });
   expect(screen.getByTestId("outdoor-sync-banner").textContent).toContain("版本 3");
@@ -345,6 +348,8 @@ it("冲突时选「用服务器那版」：本机换成服务器版本并记住�
   });
 
   render(<Overlay projectId={projectId} controller={{ saveOutdoorPlan, getOutdoorPlan } as unknown as BackendSession} />);
+  // 2026-11-20（F9）：干净打开不再推云端；先做一次真实编辑，冲突才会真的发生。
+  act(() => { state.canvas!.onPlanChange!({ ...basePlan, anchor: { lng: 120.18, lat: 30.28, crs: "gcj-02", source: "picker" } }); });
   await waitFor(() => expect(screen.getByTestId("outdoor-sync-banner")).toBeTruthy(), { timeout: 3000 });
 
   fireEvent.click(screen.getByTestId("outdoor-sync-use-remote"));

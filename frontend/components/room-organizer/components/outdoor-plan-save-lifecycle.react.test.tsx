@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 /**
- * 2026-11-20 审计 B1 / B2 的覆盖层级验证：
+ * 2026-11-20 审计 B1 / B2 / B6 / F9 的覆盖层级验证：
  *  - 关页/切后台的最后一次 flush（B1）
  *  - 本机写失败如实上报 + 可见提示（B2）
- *  - 推送回执不拿旧快照盖住在途期间的新编辑
+ *  - 干净打开不写盘、不推云端（F9）
+ *  - 云端版本基线取自本会话、不借共享记录（B6）
+ *  - 同源多窗口写租约被占时不写不推（B6）
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +19,7 @@ import {
   readOutdoorProjectRecord,
   saveOutdoorProjectRecord,
 } from '../lib/outdoor-project-store';
+import { outdoorWriteLockName } from '../lib/outdoor-write-guard';
 import { resetSaveStatusForTests, saveStatusOf } from '../lib/save-status';
 import { resetMapSlotsCacheForTest } from '../lib/map-source-slots';
 import { writePlanGroundSource } from '../lib/plan-basemap-source';
@@ -85,9 +88,34 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  // 恢复真实的 navigator.locks（jsdom 默认没有）。
+  delete (navigator as unknown as { locks?: unknown }).locks;
 });
 
 describe('打开与编辑', () => {
+  it('F9：盘上内容没变时不写盘、不推云端，保存态如实报本机已存', async () => {
+    const plan = createStarterOutdoorPlan();
+    const before = seedRecord(plan);
+    const saveOutdoorPlan = vi.fn();
+    const onSaveStateChange = vi.fn<(next: OutdoorSaveState) => void>();
+
+    render(
+      <Overlay
+        projectId={PROJECT}
+        controller={{ saveOutdoorPlan } as unknown as BackendSession}
+        onSaveStateChange={onSaveStateChange}
+      />,
+    );
+
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 900)); });
+
+    // 一个字节都没变：updatedAt 没被刷新，云端也没被打扰。
+    expect(localStorage.getItem(outdoorPlanStorageKey(PROJECT))).toBe(before);
+    expect(saveOutdoorPlan).not.toHaveBeenCalled();
+    expect(onSaveStateChange).toHaveBeenCalledWith(expect.objectContaining({ state: 'saved', scope: PROJECT }));
+    expect(onSaveStateChange).not.toHaveBeenCalledWith(expect.objectContaining({ state: 'saving' }));
+  });
+
   it('真的编辑一次才会写盘并推一次', async () => {
     const plan = createStarterOutdoorPlan();
     seedRecord(plan);
@@ -226,5 +254,74 @@ describe('推送回执的边界', () => {
     expect(stored.remoteRevision).toBe(5);
     // 新版还没被云端确认过，待同步标记要留着。
     expect(stored.unsyncedPlan).toBe(true);
+  });
+});
+
+describe('B6：云端版本基线属于本会话', () => {
+  it('连续保存用本会话回执推进，且不借另一个窗口写进共享记录的版本', async () => {
+    const plan = createStarterOutdoorPlan();
+    seedRecord(plan, { remoteRevision: 1 });
+    let revision = 1;
+    const saveOutdoorPlan = vi.fn().mockImplementation(async () => {
+      revision += 1;
+      return { conflict: false, activityId: 'a-1', revision };
+    });
+
+    render(<Overlay projectId={PROJECT} controller={{ saveOutdoorPlan } as unknown as BackendSession} />);
+
+    edit(editedPlan(plan, 120.51));
+    await waitFor(() => expect(saveOutdoorPlan).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(saveOutdoorPlan.mock.calls[0]![0]).toMatchObject({ baseRevision: 1, activityId: 'a-1' });
+    // 等本会话回执写回盘上（版本推进到 2）。
+    await waitFor(() => expect(readOutdoorProjectRecord(PROJECT)?.remoteRevision).toBe(2), { timeout: 3000 });
+
+    // 另一个窗口把自己的成功回执写进了同一条本机记录。
+    const shared = readOutdoorProjectRecord(PROJECT)!;
+    saveOutdoorProjectRecord({ ...shared, remoteRevision: 99 });
+
+    edit(editedPlan(plan, 120.52));
+    await waitFor(() => expect(saveOutdoorPlan).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    // 仍然是本会话确认过的 2，不是共享记录里借来的 99。
+    expect(saveOutdoorPlan.mock.calls[1]![0]).toMatchObject({ baseRevision: 2 });
+
+    await waitFor(() => expect(readOutdoorProjectRecord(PROJECT)?.remoteRevision).toBe(3), { timeout: 3000 });
+    edit(editedPlan(plan, 120.53));
+    await waitFor(() => expect(saveOutdoorPlan).toHaveBeenCalledTimes(3), { timeout: 3000 });
+    expect(saveOutdoorPlan.mock.calls[2]![0]).toMatchObject({ baseRevision: 3 });
+  });
+});
+
+describe('B6：同源多窗口写租约', () => {
+  it('租约在别的窗口手里：不写本机、不推云端，并给出可见提示', async () => {
+    const held = outdoorWriteLockName(PROJECT);
+    const locks = {
+      request: (name: string, options: LockOptions | undefined, callback: (lock: unknown) => unknown) => {
+        if (name === held) {
+          // 别的窗口一直占着：ifAvailable 立刻回 null，排队请求永远等不到。
+          if (options?.ifAvailable) return Promise.resolve(callback(null));
+          return new Promise(() => {});
+        }
+        return Promise.resolve(callback({ name, mode: 'exclusive' }));
+      },
+    } as unknown as LockManager;
+    Object.defineProperty(navigator, 'locks', { value: locks, configurable: true });
+    const saveOutdoorPlan = vi.fn();
+    const onSaveStateChange = vi.fn<(next: OutdoorSaveState) => void>();
+
+    render(
+      <Overlay
+        projectId={PROJECT}
+        controller={{ saveOutdoorPlan } as unknown as BackendSession}
+        onSaveStateChange={onSaveStateChange}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('outdoor-write-blocked')).toBeTruthy(), { timeout: 3000 });
+
+    edit(editedPlan(createStarterOutdoorPlan(), 120.71));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
+
+    expect(readOutdoorProjectRecord(PROJECT)).toBeNull();
+    expect(saveOutdoorPlan).not.toHaveBeenCalled();
+    expect(onSaveStateChange).toHaveBeenCalledWith(expect.objectContaining({ state: 'blocked', scope: PROJECT }));
   });
 });

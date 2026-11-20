@@ -56,11 +56,12 @@ import {
   outdoorSaveScope,
   patchOutdoorProjectRemote,
   readOutdoorProjectRecord,
-  samePlanContent,
   saveOutdoorProjectRecord,
   type OutdoorProjectRecord,
   type OutdoorSaveResult,
 } from '@/components/room-organizer/lib/outdoor-project-store';
+import { createOutdoorPlanSession, samePlanContent } from '@/components/room-organizer/lib/outdoor-plan-session';
+import { createOutdoorWriteGuard } from '@/components/room-organizer/lib/outdoor-write-guard';
 import { pushOutdoorPlan, forcePushOutdoorPlan, pullOutdoorPlan } from '@/components/room-organizer/lib/outdoor-plan-sync';
 import { failCloudSync, failLocalSave, finishCloudSync, noteLocalSave, reportConflict, startCloudSync } from '@/components/room-organizer/lib/save-status';
 import { RealSourceThumb } from './map-source-thumb';
@@ -272,7 +273,13 @@ function localSaveFailureMessage(reason: 'unavailable' | 'quota' | 'unknown'): s
   return '本机保存失败，这次改动还没存下来。请点「重试保存」，或导出方案后再关闭页面。';
 }
 
-/** 本机掉盘：和云端冲突条同一套视觉，但不会自动退场。 */
+/** 记录里的 ISO 时间 → 状态条上的本机时钟；坏数据不编时间。 */
+function savedAtLabel(iso: string): string | null {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? null : at.toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+/** 本机掉盘 / 写租约被占：和云端冲突条同一套视觉，但不会自动退场。 */
 const SAVE_ALERT_STACK: CSSProperties = {
   position: 'absolute', bottom: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 41,
   display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 520, width: 'max-content',
@@ -471,6 +478,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const [savedAt, setSavedAt] = useState<string | null>(null);
   // 2026-11-20（B2）：本机写失败要说出来。空串不占位；成功落盘或换活动才清。
   const [localSaveFailure, setLocalSaveFailure] = useState<string | null>(null);
+  // 2026-11-20（B6）：另一个窗口持有写租约时的提示；本窗口不写、不推。
+  const [writeBlocked, setWriteBlocked] = useState<string | null>(null);
   // C05：本机 saved 与云端确认分开报。saved ≠ 云端已同步；云端状态由推送回执改写。
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'syncing' | 'cloud-saved' | 'cloud-failed' | 'conflict' | 'local-failed' | 'blocked'>('idle');
   const [cloudInfo, setCloudInfo] = useState<{ revision: number | null; confirmedAt: number | null }>({ revision: null, confirmedAt: null });
@@ -484,6 +493,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const [syncBusy, setSyncBusy] = useState(false);
   // 云端副本重试闸：失败后 60s 内不再尝试（不跟着每条编辑发请求）。
   const cloudRetryAtRef = useRef(0);
+  // B6：本会话的云端版本基线（只随本会话回执 / 明确接受远端推进）与本机写租约；换活动时重建。
+  const sessionRef = useRef<ReturnType<typeof createOutdoorPlanSession> | null>(null);
+  const writeGuardRef = useRef<ReturnType<typeof createOutdoorWriteGuard> | null>(null);
+  /** 供「租约恢复」「关页 flush」等回调拿到当帧最新的 flushSave。 */
+  const flushRef = useRef<(options?: { localOnly?: boolean }) => void>(() => {});
+  /** 打开后补推只做一次（成功与否都交给 60s 重试闸）。 */
+  const catchUpPushedRef = useRef<string | null>(null);
   // 2026-11-20：这里的三步气泡由全局引导（onboarding/）接管；本覆盖层不再挂第二套引导状态，
   // 也不再挂 window 捕获阶段的「点外面就永久消失」监听——那会让引导一次跳过就回不来。
   // 底图选择面板：对齐 OnePlan 的 Select a map —— 画布右下角一枚「底图」钮 + 弹出列表，
@@ -548,7 +564,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     setSyncNote('');setSyncConflict(null);syncConflictRef.current=null;cloudRetryAtRef.current=0;
     if (cloudRetryTimerRef.current !== null) { window.clearTimeout(cloudRetryTimerRef.current); cloudRetryTimerRef.current = null; }
     setSaveState('idle'); setCloudInfo({ revision: null, confirmedAt: null });
-    setSavedAt(null); setLocalSaveFailure(null);
+    setSavedAt(null); setLocalSaveFailure(null); setWriteBlocked(null);
+    catchUpPushedRef.current = null;
   },[slotId]);
   useEffect(() => {
     cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
@@ -562,6 +579,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       ? storedPlan
       : normalizePlanFacilityFootprints(storedPlan);
     setLoadedSlotId(slotId);
+    // 2026-11-20（B6/F9）：本会话的云端版本基线只在这里建立一次；之后只随本会话成功回执
+    // 或用户明确「用服务器那版」推进，绝不从共享记录里借另一个窗口刚写进去的版本号。
+    const session = createOutdoorPlanSession();
+    session.hydrate(record);
+    // 打开时盘上已经就是这份内容 → 不写盘、不推云端（F9：打开不该把版本 +1）。
+    // 只有规整（宽高比 / 锚点回填）真改了内容，或本来就还没有记录，才需要落一次。
+    if (record?.plan && samePlanContent(record.plan, loaded)) session.markPersisted(loaded);
+    sessionRef.current = session;
+    if (record) { setSavedAt(savedAtLabel(record.updatedAt)); setSaveState('saved'); }
     if (!loaded.anchor && !anchorRef.current) {
       // docs/46 V-P2：虚拟场地（纸面形态）不回填预置锚点——无锚点是虚拟场地的合法态；
       // 等用户画完红线再决定要不要定位。切回真地图（store='map'）时下次载入照常回填。
@@ -574,6 +600,30 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     }
     setPlan(loaded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotId]);
+
+  // 2026-11-20（B6）：同一个浏览器里只允许一个窗口写这份活动。
+  // Web Locks 独占租约按活动名隔离；拿不到就整窗不写、不推，只如实提示；
+  // 对方关掉后排队请求拿到租约，这里翻回可写并把积压的编辑补存一次。
+  // 浏览器没有 Web Locks 时降为 unavailable（仍可写，但只有版本号 CAS 那一层），不假装有互斥。
+  useEffect(() => {
+    const locks = typeof navigator === 'undefined' ? null : (navigator.locks ?? null);
+    const guard = createOutdoorWriteGuard({ projectId: slotId, locks });
+    writeGuardRef.current = guard;
+    setWriteBlocked(guard.blockedDetail());
+    const unsubscribe = guard.onModeChange(() => {
+      setWriteBlocked(guard.blockedDetail());
+      if (guard.mode() !== 'granted') return;
+      // 租约到手：被挡住期间一条都没写，这里把积压的编辑补存（已落过盘的不重写）。
+      const current = planRef.current;
+      const session = sessionRef.current;
+      if (current && session && !session.isPersisted(current)) flushRef.current?.();
+    });
+    return () => {
+      unsubscribe();
+      if (writeGuardRef.current === guard) writeGuardRef.current = null;
+      void guard.release();
+    };
   }, [slotId]);
 
   // SitePlanData 是户外唯一正源。seedPlan 只在初次载入时播种；
@@ -685,15 +735,17 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       // 让「本机已存」那一帧先渲染出去（macrotask 边界）再结算云端状态——
       // React 批处理会把同 tick 的 setSaveState 合成一帧，吞掉本机保存的如实上报。
       window.setTimeout(() => {
+        const session = sessionRef.current;
         if (outcome.status === 'saved') {
           cloudRetryAtRef.current = 0;
-          // 回执只改盘上的版本指针——请求在途期间可能又存过一版新 plan，旧快照不能把它盖回去。
-          const storedPlan = readOutdoorProjectRecord(slotId)?.plan ?? null;
+          // B6：回执只推进本会话的版本基线，并只改盘上的版本指针——
+          // 请求在途期间可能又存过一版新 plan，旧快照不能把它盖回去。
+          session?.confirmSaved(outcome);
           patchOutdoorProjectRemote(slotId, {
             remoteActivityId: outcome.remoteActivityId,
             remoteRevision: outcome.remoteRevision,
             // 这次推的就是盘上那一版才清「待同步」；期间又改了就让标记留着，下次打开补推。
-            ...(storedPlan && samePlanContent(storedPlan, current) ? { unsyncedPlan: false } : {}),
+            ...(session?.isPersisted(current) ? { unsyncedPlan: false } : {}),
           });
           setSaveState('cloud-saved');
           setCloudInfo({ revision: outcome.remoteRevision, confirmedAt: Date.now() });
@@ -701,6 +753,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
           return;
         }
         if (outcome.status === 'conflict') {
+          // 版本号只用于提示，不并进本会话基线（基线只能由本会话成功回执或用户明确接受推进）。
+          session?.noteConflict(outcome.remoteRevision);
           const conflict: OutdoorSyncConflict = { revision: outcome.remoteRevision, name: outcome.remoteName };
           syncConflictRef.current = conflict;
           setSyncConflict(conflict);
@@ -725,32 +779,39 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       const current = planRef.current;
       if (current == null || syncConflictRef.current) return;
       if (Date.now() < cloudRetryAtRef.current) { scheduleCloudRetry(); return; }
-      const existing = readOutdoorProjectRecord(slotId);
-      if (!existing) return;
-      runCloudPush(existing, current);
+      const session = sessionRef.current;
+      const guard = writeGuardRef.current;
+      // 重试也必须用本会话的版本基线；写租约在别的窗口手里时一律不推（那就是一次未经授权的覆盖）。
+      if (!session || (guard && !guard.canPush())) return;
+      runCloudPush(session.buildRecord({ projectId: slotId, plan: current, name: activityName, unsyncedPlan: true }), current);
     }, CLOUD_RETRY_MS);
-  }, [slotId, runCloudPush]);
+  }, [slotId, activityName, runCloudPush]);
   scheduleCloudRetryRef.current = scheduleCloudRetry;
   /**
    * 本机落盘（B2：写失败必须说出来）+ 推送云端副本。
    * `localOnly` = 页面正在销毁（pagehide）：只做同步本机写入，不发网络请求；
    * 记录里留 `unsyncedPlan`，下次打开补推一次（而不是靠「每次打开都推」来兜底）。
+   * 云端版本基线取自**本会话**（B6）：不从共享记录里借别的窗口刚写进去的版本号。
    */
-  const flushSave = useCallback((options?: { localOnly?: boolean }): OutdoorSaveResult | { ok: false; reason: 'no-plan' } => {
+  const flushSave = useCallback((options?: { localOnly?: boolean }): OutdoorSaveResult | { ok: false; reason: 'blocked' | 'no-plan' } => {
     const current = planRef.current;
-    if (current == null) return { ok: false, reason: 'no-plan' };
-    const existing = readOutdoorProjectRecord(slotId);
-    const record: OutdoorProjectRecord = {
-      v: 1,
+    const session = sessionRef.current;
+    if (current == null || !session) return { ok: false, reason: 'no-plan' };
+    const guard = writeGuardRef.current;
+    if (guard && !guard.canWrite()) {
+      // 另一个窗口在写这份活动：这条改动一条都不落盘，也不推云端。
+      const message = guard.blockedDetail() ?? '另一个窗口正在编辑这份活动。';
+      setWriteBlocked(message);
+      setSaveState('blocked');
+      failLocalSave(saveScope, message);
+      return { ok: false, reason: 'blocked' };
+    }
+    const record = session.buildRecord({
       projectId: slotId,
-      name: activityName?.trim() || existing?.name || '户外规划',
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       plan: current,
-      ...(existing?.remoteActivityId ? { remoteActivityId: existing.remoteActivityId } : {}),
-      ...(typeof existing?.remoteRevision === 'number' ? { remoteRevision: existing.remoteRevision } : {}),
+      name: activityName,
       unsyncedPlan: true,
-    };
+    });
     const result = saveOutdoorProjectRecord(record, undefined, !activityScopedPlan);
     if (!result.ok) {
       const message = localSaveFailureMessage(result.reason);
@@ -760,6 +821,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       failLocalSave(saveScope, message);
       return result;
     }
+    session.markPersisted(current);
     setLocalSaveFailure(null);
     setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
     setSaveState('saved');
@@ -774,15 +836,17 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     runCloudPush(record, current);
     return result;
   }, [slotId, saveScope, activityName, activityScopedPlan, runCloudPush, scheduleCloudRetry]);
+  flushRef.current = flushSave;
 
   /** 冲突二选一「用我这版」：明确覆盖服务器（revision 仍 +1）。 */
   const useMyVersion = useCallback(() => {
     const current = planRef.current;
-    const existing = readOutdoorProjectRecord(slotId);
-    if (!current || !existing) return;
+    const session = sessionRef.current;
+    if (!current || !session) return;
     setSyncBusy(true);
     const seq = startCloudSync(saveScope);
-    void forcePushOutdoorPlan(controller ?? null, existing, current).then(outcome => {
+    const record = session.buildRecord({ projectId: slotId, plan: current, name: activityName, unsyncedPlan: true });
+    void forcePushOutdoorPlan(controller ?? null, record, current).then(outcome => {
       setSyncBusy(false);
       if (outcome.status !== 'saved') {
         setSyncNote('这次没传上去，本机这版还在，稍后再试。');
@@ -790,14 +854,21 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         failCloudSync(saveScope, seq, '覆盖没传上去；本机这版还在，稍后再试。');
         return;
       }
-      // force 回执：只改盘上的版本指针，不拿旧快照盖住在途期间存下的新版 plan。
-      const storedPlan = readOutdoorProjectRecord(slotId)?.plan ?? null;
-      const written = patchOutdoorProjectRemote(slotId, {
-        remoteActivityId: outcome.remoteActivityId,
-        remoteRevision: outcome.remoteRevision,
-        ...(storedPlan && samePlanContent(storedPlan, current) ? { unsyncedPlan: false } : {}),
-      });
-      if (!written.ok) setLocalSaveFailure(localSaveFailureMessage(written.reason));
+      // force 回执是本会话自己的成功：推进基线；盘上只改版本指针（不拿旧快照盖 plan）。
+      session.confirmSaved(outcome);
+      const written = session.isPersisted(current)
+        ? patchOutdoorProjectRemote(slotId, {
+          remoteActivityId: outcome.remoteActivityId,
+          remoteRevision: outcome.remoteRevision,
+          unsyncedPlan: false,
+        })
+        : saveOutdoorProjectRecord(
+          session.buildRecord({ projectId: slotId, plan: current, name: activityName, unsyncedPlan: false }),
+          undefined,
+          !activityScopedPlan,
+        );
+      if (written.ok) session.markPersisted(current);
+      else setLocalSaveFailure(localSaveFailureMessage(written.reason));
       syncConflictRef.current = null;
       setSyncConflict(null);
       setSyncNote(`已用本机这版覆盖，现在是版本 ${outcome.remoteRevision}。`);
@@ -805,13 +876,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       setCloudInfo({ revision: outcome.remoteRevision, confirmedAt: Date.now() });
       finishCloudSync(saveScope, seq, { revision: outcome.remoteRevision });
     });
-  }, [slotId, saveScope, controller]);
+  }, [slotId, saveScope, activityName, activityScopedPlan, controller]);
 
   /** 冲突二选一「用服务器那版」：读回来盖掉本机这版。 */
   const useServerVersion = useCallback(() => {
-    const existing = readOutdoorProjectRecord(slotId);
+    const session = sessionRef.current;
     setSyncBusy(true);
-    void pullOutdoorPlan(controller ?? null, existing?.remoteActivityId).then(remote => {
+    void pullOutdoorPlan(controller ?? null, session?.remoteActivityId()).then(remote => {
       setSyncBusy(false);
       if (!remote) {
         setSyncNote('没读到服务器那版，本机先不动。');
@@ -822,18 +893,18 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       setPlan(remote.plan);
       setPlacePin(null);
       setPlaceArea(null);
-      const written = saveOutdoorProjectRecord({
-        v: 1,
-        projectId: slotId,
-        name: remote.name || existing?.name || '户外规划',
-        createdAt: existing?.createdAt ?? new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        plan: remote.plan,
-        ...(existing?.remoteActivityId ? { remoteActivityId: existing.remoteActivityId } : {}),
-        remoteRevision: remote.revision,
-        unsyncedPlan: false,
-      }, undefined, !activityScopedPlan);
-      if (!written.ok) setLocalSaveFailure(localSaveFailureMessage(written.reason));
+      // 用户明确接受了远端版本：这才允许推进本会话的基线（冲突本身不算授权）。
+      if (session) {
+        session.acceptRemote({ remoteActivityId: session.remoteActivityId(), remoteRevision: remote.revision });
+        const written = saveOutdoorProjectRecord(session.buildRecord({
+          projectId: slotId,
+          plan: remote.plan,
+          name: remote.name || undefined,
+          unsyncedPlan: false,
+        }), undefined, !activityScopedPlan);
+        if (written.ok) session.markPersisted(remote.plan);
+        else setLocalSaveFailure(localSaveFailureMessage(written.reason));
+      }
       syncConflictRef.current = null;
       setSyncConflict(null);
       setSyncNote(`已换成服务器那版（版本 ${remote.revision}）。`);
@@ -844,6 +915,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   }, [slotId, saveScope, activityScopedPlan, controller]);
   useEffect(() => {
     if (plan == null) return;
+    // F9：盘上已经就是这份内容（刚打开 / 刚存完）→ 不写盘、不推云端。
+    if (sessionRef.current?.isPersisted(plan)) return;
     setSaveState('saving');
     const timer = window.setTimeout(() => {
       pendingSaveRef.current = null;
@@ -872,6 +945,24 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [flushSave]);
+  // 打开后补推：上次关页只落了本机、或上一轮云端没推上去的改动，重开时补一次。
+  // 干净打开不会走这里（F9）——盘上内容已被云端确认过。
+  useEffect(() => {
+    if (loadedSlotId !== slotId) return;
+    if (catchUpPushedRef.current === slotId) return;
+    const session = sessionRef.current;
+    if (!session?.shouldCatchUpPush()) return;
+    const timer = window.setTimeout(() => {
+      const current = planRef.current;
+      const guard = writeGuardRef.current;
+      if (!current || syncConflictRef.current || catchUpPushedRef.current === slotId) return;
+      // 租约已落定：被别的窗口占着就绝不推（那是未经授权的覆盖）。
+      if (guard && guard.mode() === 'blocked') return;
+      catchUpPushedRef.current = slotId;
+      runCloudPush(session.buildRecord({ projectId: slotId, plan: current, name: activityName, unsyncedPlan: true }), current);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadedSlotId, slotId, activityName, runCloudPush]);
   useEffect(() => () => {
     if (pendingSaveRef.current !== null) flushSave();
   }, [flushSave]);
@@ -921,9 +1012,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       ...(cloudInfo.confirmedAt !== null ? { cloudConfirmedAt: cloudInfo.confirmedAt } : {}),
       ...(saveState === 'cloud-failed' ? { detail: '云端副本暂未同步；本机这版还在，稍后自动重试。' } : {}),
       ...(saveState === 'local-failed' && localSaveFailure ? { detail: localSaveFailure } : {}),
+      ...(saveState === 'blocked' && writeBlocked ? { detail: writeBlocked } : {}),
       ...(saveState === 'conflict' && syncConflict ? { detail: `云端已是版本 ${syncConflict.revision}（${syncConflict.name}），需要你选择保留哪一版。` } : {}),
     });
-  }, [saveState, savedAt, saveScope, cloudInfo, syncConflict, localSaveFailure, onSaveStateChange]);
+  }, [saveState, savedAt, saveScope, cloudInfo, syncConflict, localSaveFailure, writeBlocked, onSaveStateChange]);
 
   function exportPlanPng(): boolean {
     const current = planRef.current;
@@ -1024,14 +1116,19 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       ) : null}
       {/* 2026-11-20（B2/B6）：本机写失败、或写租约在另一个窗口手里——这两种必须一直看得见，
           不能只停在「云端未同步」或一句自动退场的提示上。 */}
-      {localSaveFailure ? (
+      {localSaveFailure || writeBlocked ? (
         <div style={SAVE_ALERT_STACK}>
-          <div role="alert" data-testid="outdoor-local-save-error" style={{ ...SAVE_ALERT_SHELL, border: '1px solid rgba(255,120,90,0.55)' }}>
-            <span>{localSaveFailure}</span>
-            <button type="button" data-testid="outdoor-local-save-retry" style={SAVE_ALERT_ACTION} onClick={() => { flushSave(); }}>
-              重试保存
-            </button>
-          </div>
+          {localSaveFailure ? (
+            <div role="alert" data-testid="outdoor-local-save-error" style={{ ...SAVE_ALERT_SHELL, border: '1px solid rgba(255,120,90,0.55)' }}>
+              <span>{localSaveFailure}</span>
+              <button type="button" data-testid="outdoor-local-save-retry" style={SAVE_ALERT_ACTION} onClick={() => { flushRef.current?.(); }}>
+                重试保存
+              </button>
+            </div>
+          ) : null}
+          {writeBlocked ? (
+            <div role="alert" data-testid="outdoor-write-blocked" style={SAVE_ALERT_SHELL}>{writeBlocked}</div>
+          ) : null}
         </div>
       ) : null}
       {plan && loadedSlotId === slotId && (
