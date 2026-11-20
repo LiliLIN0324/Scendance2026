@@ -226,6 +226,12 @@
 - **门禁**：定向 workbench-rail-head 1 例通过；`typecheck` exit 0。
 - **残留说明**：按钮自身计算色在窄轨为 `#55585F`，仅作用于 `display:none` 的 `.sc-rail-label` 隐藏标签，可见图标已由 span 内联色接管，非可见缺陷；浅色 retained 环沿用第十二轮已验的共用 token 结论，本轮未在浅色档重放该链路。
 
+### 第十五轮（2026-11-20）：对齐 rail-side-panels 陈旧断言，复核各车道 retained 图标口径
+
+- **陈旧断言对齐**：`rail-side-panels.react.test.tsx` 第 38 行仍写旧子串 `!generationOpen && !messagesOpen && agentPanelVisible && !businessCardOpen && <AgentPanel`；源码守卫在第十二轮已扩成 `!captureOpen && !generationOpen && !personChat && !messagesOpen && agentPanelVisible && !businessCardOpen`，断言子串补齐 captureOpen / personChat 并对齐顺序，套件 3 例转绿。
+- **各车道 retained 图标口径复核**：空间 / 物料 active 取 `isLaneOpen(id)`（被盖 false 走描边 dim）；创作 active 只取 `generationOpen`（captureOpen 次级 retained 下 false）；户外 active 上一轮已补 `!businessCardOpen`；品牌脸按设计始终实心、retained 只变环；Bingo 状态珠由 phase 驱动、retained 只变环。无第二处与户外钮同型的 stale active 缺陷。
+- **门禁**：typecheck exit 0；定向 rail-side-panels / workbench-rail-head / workbench-brand-toggle / bingo-rail-button 4 套件 21 例通过；lint 0 error（1664 条既有 import/order warning）。本轮仅测试断言 + 文档，未动生产代码。
+
 ### 真机/浏览器验收清单（待人工跑）
 
 - 三档切换即时重绘无刷新；`system` 跟随系统深浅切换；刷新后保留本机档位。
