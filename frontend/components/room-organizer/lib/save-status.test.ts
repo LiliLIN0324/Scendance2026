@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   clearConflict,
+  clearLocalFailure,
   deriveStage,
   failCloudSync,
+  failLocalSave,
   finishCloudSync,
   forgetSaveStatus,
   noteLocalSave,
@@ -118,7 +120,7 @@ describe('unified save status machine (C05)', () => {
   });
 
   it('derives stages in the documented priority order', () => {
-    const base = { scope: SCOPE, stage: 'local' as const, localSavedAt: null, cloudRevision: null, cloudConfirmedAt: null, pendingCount: 0, uploadsActive: 0, uploadsTotal: 0, failure: null, conflict: null, updatedAt: 0 };
+    const base = { scope: SCOPE, stage: 'local' as const, localSavedAt: null, cloudRevision: null, cloudConfirmedAt: null, pendingCount: 0, uploadsActive: 0, uploadsTotal: 0, failure: null, localFailure: null, conflict: null, updatedAt: 0 };
     expect(deriveStage(base)).toBe('local');
     expect(deriveStage({ ...base, cloudConfirmedAt: 1 })).toBe('cloud-saved');
     expect(deriveStage({ ...base, pendingCount: 2 })).toBe('syncing');
@@ -127,5 +129,49 @@ describe('unified save status machine (C05)', () => {
     expect(deriveStage({ ...base, failure: 'x', uploadsActive: 1 })).toBe('uploading');
     expect(deriveStage({ ...base, syncing: true, failure: 'x' })).toBe('syncing');
     expect(deriveStage({ ...base, conflict: { remoteRevision: 1 } })).toBe('conflict');
+    expect(deriveStage({ ...base, localFailure: '本机存储已满' })).toBe('local-failed');
+    expect(deriveStage({ ...base, localFailure: 'x', failure: 'y', pendingCount: 2 })).toBe('local-failed');
+  });
+});
+
+describe('本机落盘失败（B2）', () => {
+  it('记成本机未保存：不计作已保存、不累加待同步', () => {
+    failLocalSave(SCOPE, '本机存储已满');
+    const status = saveStatusOf(SCOPE);
+    expect(status.stage).toBe('local-failed');
+    expect(status.localFailure).toBe('本机存储已满');
+    // 没进盘就不能算「最近的本地保存时间」，也不能当成一次待同步改动。
+    expect(status.localSavedAt).toBeNull();
+    expect(status.pendingCount).toBe(0);
+    expect(saveStatusLabel(status)).toBe('本机未保存');
+  });
+
+  it('本机失败优先于云端失败：连副本都没有比「云端没同步」更严重', () => {
+    const seq = startCloudSync(SCOPE);
+    failCloudSync(SCOPE, seq, '断网');
+    expect(saveStatusOf(SCOPE).stage).toBe('failed');
+    failLocalSave(SCOPE, '本机存储已满');
+    expect(saveStatusOf(SCOPE).stage).toBe('local-failed');
+  });
+
+  it('真正落盘成功才清掉本机失败', () => {
+    failLocalSave(SCOPE, '本机存储已满');
+    noteLocalSave(SCOPE, 1000);
+    const status = saveStatusOf(SCOPE);
+    expect(status.localFailure).toBeNull();
+    expect(status.stage).toBe('syncing');
+    expect(status.localSavedAt).toBe(1000);
+  });
+
+  it('clearLocalFailure 只清标识，不动其它状态', () => {
+    noteLocalSave(SCOPE, 1000);
+    const seq = startCloudSync(SCOPE);
+    finishCloudSync(SCOPE, seq, { revision: 3 });
+    failLocalSave(SCOPE, '本机存储已满');
+    clearLocalFailure(SCOPE);
+    const status = saveStatusOf(SCOPE);
+    expect(status.localFailure).toBeNull();
+    expect(status.cloudRevision).toBe(3);
+    expect(status.stage).toBe('cloud-saved');
   });
 });

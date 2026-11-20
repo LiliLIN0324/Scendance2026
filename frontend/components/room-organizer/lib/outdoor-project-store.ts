@@ -35,6 +35,29 @@ export interface OutdoorProjectRecord {
   remoteActivityId?: string;
   /** 本机已同步到的后端版本号；后端 revision 不匹配即冲突，不静默覆盖。 */
   remoteRevision?: number;
+  /**
+   * 2026-11-20（审计 B1/F9）：盘上这份 plan 还没被云端确认过。
+   * 关页/隐藏时只做本机落盘、不再等在途推送，靠这个标记让下次打开补推一次；
+   * 内容与盘上完全一致的「干净打开」不写盘也不推送，避免每次打开都把版本 +1。
+   */
+  unsyncedPlan?: boolean;
+}
+
+/**
+ * 本机落盘结果（对齐 `persistence.ts` 的 `SaveResult`：写不进去就要说写不进去）。
+ * `unavailable` = 没有可用存储（SSR/隐私模式/被禁），`quota` = 配额满，`unknown` = 其它异常。
+ * plan 不合法仍然**抛错**——那是上层构造出的坏数据，属于程序缺陷，不该被当成「暂时写不进去」。
+ */
+export type OutdoorSaveFailureReason = 'unavailable' | 'quota' | 'unknown';
+export type OutdoorSaveResult = { ok: true } | { ok: false; reason: OutdoorSaveFailureReason };
+
+function storageFailureReason(error: unknown): OutdoorSaveFailureReason {
+  if (error && typeof error === 'object') {
+    const name = (error as { name?: unknown }).name;
+    const code = (error as { code?: unknown }).code;
+    if (name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED' || code === 22 || code === 1014) return 'quota';
+  }
+  return 'unknown';
 }
 
 function safeDefaultStorage(): KeyValueStorage | null {
@@ -49,6 +72,39 @@ function safeDefaultStorage(): KeyValueStorage | null {
 /** 按项目隔离的存储 key。前缀带 v1，将来信封结构演进时换前缀迁移。 */
 export function outdoorPlanStorageKey(projectId: string): string {
   return `scendance-outdoor-plan-v1:${projectId}`;
+}
+
+/**
+ * 户外保存态上报/订阅 scope（2026-11-20 审计 B2）：必须和消费方同口径。
+ * 云面板订阅的是 `layout.id ?? 'local'`（panels/cloud-panel.tsx）；
+ * 覆盖层以前用存储槽 `projectId || 'local-draft'` 当 scope，没有 id 时两边就对不上，
+ * 于是「本机存失败 / 云端未同步」只能写进一个没人订阅的分区。这里统一成同一个口径。
+ * 注意：它只是状态机的 scope，不是存储 key——空 id 的草稿仍落在 LOCAL_DRAFT_SLOT。
+ */
+export function outdoorSaveScope(projectId: string | null | undefined): string {
+  const id = projectId?.trim();
+  return id || 'local';
+}
+
+/**
+ * 结构相等：忽略对象键序，只判内容。
+ * 用途：判断「盘上那一版」与「要写的这一版」是不是同一份内容——
+ * 打开项目时内容没变就不该写盘（F9），推送回执也不该拿旧快照盖新版。
+ */
+export function samePlanContent(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, index) => samePlanContent(item, b[index]));
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const left = a as Record<string, unknown>;
+    const right = b as Record<string, unknown>;
+    const keys = Object.keys(left);
+    if (keys.length !== Object.keys(right).length) return false;
+    return keys.every(key => Object.hasOwn(right, key) && samePlanContent(left[key], right[key]));
+  }
+  return false;
 }
 
 /** 宽容读取：JSON 坏/信封不符返回 null；plan 字段坏只把 plan 回落 null（meta 仍有效）。 */
@@ -97,20 +153,49 @@ export function hasOutdoorPlanDraft(projectId: string, storage?: KeyValueStorage
  * 不是工作台要续开的项目，不能顶掉「最近项目」指针。
  */
 export function saveOutdoorProjectRecord(record: OutdoorProjectRecord, storage?: KeyValueStorage | null,
-  trackLastProject = true): void {
+  trackLastProject = true): OutdoorSaveResult {
   if (record.plan != null) {
     const verified = sitePlanDataSchema.parse(record.plan);
     record = { ...record, plan: verified };
   }
   const store = storage ?? safeDefaultStorage();
-  if (!store) return; // 存储不可用：静默降级（编辑仍可用，刷新不保留）。
+  if (!store) return { ok: false, reason: 'unavailable' }; // 存储不可用：编辑仍可用，但必须如实上报没落盘。
   try {
     store.setItem(outdoorPlanStorageKey(record.projectId), JSON.stringify(record));
-    // 「最近活动」指针：`/` 无参数时续上次用（见 latestOutdoorProjectId）。
-    if (trackLastProject) store.setItem(OUTDOOR_LAST_PROJECT_KEY, record.projectId);
-  } catch {
-    // 配额满/隐私模式：静默降级，不阻断编辑。
+  } catch (error) {
+    // 配额满/隐私模式：不阻断编辑，但这次改动确实没存下来——由上层决定怎么提示。
+    return { ok: false, reason: storageFailureReason(error) };
   }
+  // 「最近活动」指针：`/` 无参数时续上次用（见 latestOutdoorProjectId）。
+  // 指针写失败不影响「这份规划已落盘」的事实，只影响续开入口，因此单独吞掉。
+  if (trackLastProject) {
+    try { store.setItem(OUTDOOR_LAST_PROJECT_KEY, record.projectId); } catch { /* 续开入口退化，不改变已落盘结果 */ }
+  }
+  return { ok: true };
+}
+
+/**
+ * 只更新云端身份字段（发号 id / 版本号 / 待同步标记），**不碰 plan**。
+ *
+ * 2026-11-20（审计 B2/B6）：推送回执写回本机记录时，旧实现整份覆盖成「推送那一刻」的快照；
+ * 请求在途期间若又存过一版新 plan，回执就把盘上的新 plan 退回旧版（刷新即丢最新改动）。
+ * 回执只该改版本指针，因此这里重读当前记录再合并。
+ */
+export function patchOutdoorProjectRemote(projectId: string, patch: {
+  remoteActivityId?: string;
+  remoteRevision?: number;
+  unsyncedPlan?: boolean;
+}, storage?: KeyValueStorage | null): OutdoorSaveResult {
+  const record = readOutdoorProjectRecord(projectId, storage);
+  if (!record) return { ok: false, reason: 'unavailable' };
+  const next: OutdoorProjectRecord = {
+    ...record,
+    updatedAt: new Date().toISOString(),
+    ...(patch.remoteActivityId ? { remoteActivityId: patch.remoteActivityId } : {}),
+    ...(typeof patch.remoteRevision === 'number' ? { remoteRevision: patch.remoteRevision } : {}),
+    ...(typeof patch.unsyncedPlan === 'boolean' ? { unsyncedPlan: patch.unsyncedPlan } : {}),
+  };
+  return saveOutdoorProjectRecord(next, storage, false);
 }
 
 /** 只改名字（顶栏活动名）：保留 createdAt 与 plan，updatedAt 刷新。记录不存在时不无中生有。 */
@@ -127,8 +212,7 @@ export function copyOutdoorProjectRecord(fromId: string, toId: string, storage?:
   const record = readOutdoorProjectRecord(fromId, storage);
   if (!record) return false;
   try {
-    saveOutdoorProjectRecord({ ...record, projectId: toId, updatedAt: new Date().toISOString() }, storage);
-    return true;
+    return saveOutdoorProjectRecord({ ...record, projectId: toId, updatedAt: new Date().toISOString() }, storage).ok;
   } catch { return false; }
 }
 

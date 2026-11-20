@@ -8,6 +8,8 @@ import {
   latestOutdoorProjectId,
   OUTDOOR_LAST_PROJECT_KEY,
   outdoorPlanStorageKey,
+  outdoorSaveScope,
+  patchOutdoorProjectRemote,
   readOutdoorProjectRecord,
   renameOutdoorProject,
   resolveOutdoorProjectId,
@@ -289,5 +291,114 @@ describe('起步规划不造白框', () => {
     const plan = createStarterOutdoorPlan();
     expect(plan.boundary).toEqual([]);
     expect(plan.designScope).toBeUndefined();
+  });
+});
+
+// 2026-11-20 审计 B2：本机写失败必须能被告知，不能静默当已保存。
+describe('本机落盘结果', () => {
+  it('成功时返回 ok', () => {
+    const storage = memoryStorage();
+    expect(saveOutdoorProjectRecord(record(samplePlan()), storage)).toEqual({ ok: true });
+  });
+
+  it('配额满：返回 quota，且没有写坏已有记录', () => {
+    const storage = memoryStorage();
+    const full: KeyValueStorage = {
+      getItem: key => storage.getItem(key),
+      removeItem: key => storage.removeItem(key),
+      setItem: () => { const error = new Error('quota'); error.name = 'QuotaExceededError'; throw error; },
+    };
+    expect(saveOutdoorProjectRecord(record(samplePlan()), full)).toEqual({ ok: false, reason: 'quota' });
+    expect(readOutdoorProjectRecord(PID, storage)).toBeNull();
+  });
+
+  it('没有存储：返回 unavailable，不抛错', () => {
+    expect(saveOutdoorProjectRecord(record(samplePlan()), null)).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('其它存储异常：返回 unknown', () => {
+    const broken: KeyValueStorage = {
+      getItem: () => null,
+      removeItem: () => {},
+      setItem: () => { throw new Error('disk on fire'); },
+    };
+    expect(saveOutdoorProjectRecord(record(samplePlan()), broken)).toEqual({ ok: false, reason: 'unknown' });
+  });
+
+  it('「最近项目」指针写失败不推翻「记录已落盘」的结论', () => {
+    const storage = memoryStorage();
+    const pointerBroken: KeyValueStorage = {
+      getItem: key => storage.getItem(key),
+      removeItem: key => storage.removeItem(key),
+      setItem: (key, value) => {
+        if (key === OUTDOOR_LAST_PROJECT_KEY) throw new Error('pointer failed');
+        storage.setItem(key, value);
+      },
+    };
+    expect(saveOutdoorProjectRecord(record(samplePlan()), pointerBroken)).toEqual({ ok: true });
+    expect(readOutdoorProjectRecord(PID, storage)?.plan).toEqual(samplePlan());
+  });
+
+  it('plan 不合法仍然抛错（属于程序缺陷，不当成暂时写不进去）', () => {
+    const storage = memoryStorage();
+    const bad = { ...samplePlan(), boundary: [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 1 }] } as SitePlanData;
+    expect(() => saveOutdoorProjectRecord(record(bad), storage)).toThrow();
+    expect(saveOutdoorProjectRecord(record(samplePlan()), storage)).toEqual({ ok: true });
+  });
+});
+
+describe('云端回执只改版本指针（B2/B6）', () => {
+  it('在途期间又存了新 plan：回执不把盘上的 plan 退回旧版', () => {
+    const storage = memoryStorage();
+    saveOutdoorProjectRecord(record(samplePlan()), storage);
+    const newer: SitePlanData = { ...samplePlan(), boundary: [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 60 }] };
+    saveOutdoorProjectRecord(record(newer), storage);
+
+    const patched = patchOutdoorProjectRemote(PID, {
+      remoteActivityId: 'a-1',
+      remoteRevision: 4,
+      unsyncedPlan: false,
+    }, storage);
+
+    expect(patched).toEqual({ ok: true });
+    const loaded = readOutdoorProjectRecord(PID, storage)!;
+    expect(loaded.plan).toEqual(newer);
+    expect(loaded.remoteActivityId).toBe('a-1');
+    expect(loaded.remoteRevision).toBe(4);
+    expect(loaded.unsyncedPlan).toBe(false);
+  });
+
+  it('不传 unsyncedPlan 时保留盘上的值', () => {
+    const storage = memoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), unsyncedPlan: true }, storage);
+    expect(patchOutdoorProjectRemote(PID, { remoteRevision: 2 }, storage)).toEqual({ ok: true });
+    expect(readOutdoorProjectRecord(PID, storage)!.unsyncedPlan).toBe(true);
+  });
+
+  it('记录不存在时不无中生有', () => {
+    const storage = memoryStorage();
+    expect(patchOutdoorProjectRemote(PID, { remoteRevision: 2 }, storage)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(readOutdoorProjectRecord(PID, storage)).toBeNull();
+  });
+
+  it('写失败时如实返回失败（不假装回执已落盘）', () => {
+    const storage = memoryStorage();
+    saveOutdoorProjectRecord(record(samplePlan()), storage);
+    const full: KeyValueStorage = {
+      getItem: key => storage.getItem(key),
+      removeItem: key => storage.removeItem(key),
+      setItem: () => { const error = new Error('quota'); error.name = 'QuotaExceededError'; throw error; },
+    };
+    expect(patchOutdoorProjectRemote(PID, { remoteRevision: 3 }, full)).toEqual({ ok: false, reason: 'quota' });
+  });
+});
+
+describe('outdoorSaveScope（与云面板订阅同口径）', () => {
+  it('有项目 id 就用它，空/未给回落 local（云面板的 layout.id ?? local）', () => {
+    expect(outdoorSaveScope(PID)).toBe(PID);
+    expect(outdoorSaveScope('  spaced  ')).toBe('spaced');
+    expect(outdoorSaveScope(null)).toBe('local');
+    expect(outdoorSaveScope(undefined)).toBe('local');
+    expect(outdoorSaveScope('   ')).toBe('local');
   });
 });

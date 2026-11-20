@@ -11,6 +11,7 @@
  * - cloud-saved  服务器确认过（带版本号与确认时间）
  * - failed       云端失败（本机保留）
  * - conflict     版本冲突（等用户二选一）
+ * - local-failed 本机落盘失败（存储不可用/配额满）——比「云端失败」更严重：连副本都没有
  *
  * 待同步计数是精确的：finishCloudSync 只抵扣「开始这次同步时已积累」的本地保存数，
  * 同步期间新产生的编辑不会被旧回执清掉。
@@ -18,7 +19,7 @@
 
 import { useSyncExternalStore } from 'react';
 
-export type SaveStage = 'local' | 'uploading' | 'syncing' | 'cloud-saved' | 'failed' | 'conflict';
+export type SaveStage = 'local' | 'uploading' | 'syncing' | 'cloud-saved' | 'failed' | 'conflict' | 'local-failed';
 
 export interface SaveStatus {
   scope: string;
@@ -36,6 +37,8 @@ export interface SaveStatus {
   uploadsTotal: number;
   /** 最近一次云端失败的原因；成功同步或新的本地落盘会保留它直到下次同步结束。 */
   failure: string | null;
+  /** 最近一次本机落盘失败的原因；本机落盘成功才清。云端好坏不影响它。 */
+  localFailure: string | null;
   conflict: { remoteRevision: number; remoteName?: string } | null;
   updatedAt: number;
 }
@@ -43,7 +46,7 @@ export interface SaveStatus {
 export type SaveStatusListener = () => void;
 const emptyStatus = (scope: string): SaveStatus => ({
   scope, stage: 'local', localSavedAt: null, cloudRevision: null, cloudConfirmedAt: null,
-  pendingCount: 0, uploadsActive: 0, uploadsTotal: 0, failure: null, conflict: null, updatedAt: 0,
+  pendingCount: 0, uploadsActive: 0, uploadsTotal: 0, failure: null, localFailure: null, conflict: null, updatedAt: 0,
 });
 
 const statuses = new Map<string, InternalStatus>();
@@ -59,14 +62,15 @@ interface InternalStatus extends SaveStatus {
 }
 
 /**
- * 六态全部由数据派生。优先级：冲突 > 同步进行中 > 素材归档中 > 失败 >
- * 待同步 > 云端已保存 > 本机。失败态不分 pending 多少——最近一次失败
- * 就是「云端未同步」的事实，新编辑只会累积到待同步计数里。
+ * 七态全部由数据派生。优先级：冲突 > 同步进行中 > 素材归档中 > 本机写入失败 >
+ * 云端失败 > 待同步 > 云端已保存 > 本机。本机写失败排在云端失败之前：
+ * 云端没同步至少本机还有一份，本机没写进去才是真丢数据。
  */
 export function deriveStage(status: SaveStatus & { syncing?: boolean }): SaveStage {
   if (status.conflict) return 'conflict';
   if (status.syncing) return 'syncing';
   if (status.uploadsActive > 0) return 'uploading';
+  if (status.localFailure) return 'local-failed';
   if (status.failure) return 'failed';
   if (status.pendingCount > 0) return 'syncing';
   if (status.cloudConfirmedAt) return 'cloud-saved';
@@ -112,6 +116,26 @@ export function noteLocalSave(scope: string, at: number = Date.now()): void {
   status.localSavedAt = at;
   status.pendingCount += 1;
   status.conflict = null;
+  status.localFailure = null; // 真的写进去了，之前的本机失败才能清。
+  commit(scope);
+}
+
+/**
+ * 本机落盘失败（2026-11-20 审计 B2）：存储不可用/配额满。不得计作已保存，
+ * 也不得累加待同步数——它没进盘，谈不上「待同步」。
+ */
+export function failLocalSave(scope: string, message: string): void {
+  const status = statusOf(scope);
+  status.localFailure = message;
+  status.conflict = null;
+  commit(scope);
+}
+
+/** 本机失败已解除（成功落盘走 noteLocalSave；只要清标识时用这个）。 */
+export function clearLocalFailure(scope: string): void {
+  const status = statusOf(scope);
+  if (!status.localFailure) return;
+  status.localFailure = null;
   commit(scope);
 }
 
@@ -197,6 +221,7 @@ export function resetSaveStatusForTests(): void {
 export function saveStatusLabel(status: SaveStatus): string {
   switch (status.stage) {
     case 'conflict': return '版本冲突';
+    case 'local-failed': return '本机未保存';
     case 'failed': return '云端未同步';
     case 'uploading': return `素材归档中${status.uploadsTotal > 0 ? `（${status.uploadsTotal - status.uploadsActive}/${status.uploadsTotal}）` : ''}`;
     case 'syncing': return status.pendingCount > 0 ? `待同步 · ${status.pendingCount} 处改动` : '同步中';
