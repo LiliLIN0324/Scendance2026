@@ -1778,7 +1778,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间方案已变化，未应用旧范围，请重新选择地点', steps: [] }); return;
       }
       outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis);
-      say({ role: 'agent', text: `${range.basis.detail} 你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。` });
+      // 2026-11-20 用户拍板：范围来源不用念给用户，只留下一步能做什么。
+      say({ role: 'agent', text: '你可以直接说“用西半边”“长40米宽30米”或“往东移5米”，我会更新范围预览；确认后继续布置。' });
       return;
     }
     if (!boundary) {

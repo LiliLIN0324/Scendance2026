@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentDocument } from "../lib/agent-documents";
-import { reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
+import { AGENT_RANGE_BASIS_NOTE, reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
 import { proposeWeddingLayout, WEDDING_LIBRARY_QUERIES, type WeddingCandidateMetrics } from "../lib/wedding-layout";
 import { requestsWeddingOptimization, weddingDesignRequest } from "../lib/wedding-request";
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
@@ -1268,16 +1268,17 @@ export function useOutdoorAgentWorkflow(input: {
       const completion = offer(
         // 2026-11-17 「同一标准」：范围确认卡是一个自带红线的方案，落地后必须配白框——
         // 预览与确认走同一份数据，不靠画布那边事后补（那条路留给手画红线和换场地）。
+        // 2026-11-20 用户拍板：范围依据是内部口径，不往画布上贴说明注记（此前那条 note 会压在地图正中）。
+        // 旧方案里若已经带了这条注记，这次提交顺手清掉，不再原样带回。
         { ...pruned.next, anchor, boundary, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M),
-          ...(basis ? { annotations: [...(pruned.next.annotations ?? []).filter(note => note.name !== 'Agent 场地范围依据'), {
-            id: crypto.randomUUID(), kind: 'note' as const, name: 'Agent 场地范围依据', points: [{ ...boundary[0] }],
-            text: basis.detail.slice(0, 200), notes: basis.kind,
-          }] } : {}) },
+          ...(pruned.next.annotations?.some(note => note.name === AGENT_RANGE_BASIS_NOTE)
+            ? { annotations: pruned.next.annotations.filter(note => note.name !== AGENT_RANGE_BASIS_NOTE) }
+            : {}) },
         "scope",
         `确认“${name}”的活动范围`,
         job,
         [
-          basis?.detail ?? "地点轮廓只是候选；可用聊天说明要用哪部分、长宽或位移，无需手画。",
+          // 2026-11-20 用户拍板：范围来源、可用聊天缩小这类交代全部不再进卡；卡上只留“换场后发生了什么”。
           ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
           ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],

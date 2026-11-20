@@ -11,6 +11,7 @@ import {
   renamePlanLevel,
 } from './plan-levels';
 import { sitePlanDataSchema, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import { AGENT_RANGE_BASIS_NOTE } from './agent-venue-range';
 
 const LEVEL_1 = '11111111-1111-4111-8111-111111111111';
 const LEVEL_2 = '22222222-2222-4222-8222-222222222222';
@@ -101,6 +102,19 @@ describe('filterPlanByLevel', () => {
     expect(view.facilities.map(f => f.id)).toEqual([FACILITY_1]);
     // 读取层不把字段写回原 plan。
     expect('vehicles' in plan).toBe(false);
+  });
+
+  it('「Agent 场地范围依据」老注记不进图层视图，存盘数据不动', () => {
+    const plan: SitePlanData = {
+      ...basePlan(),
+      annotations: [
+        { id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', kind: 'note', name: '留白说明', points: [{ x: 1, y: 1 }], text: '这里留排风', notes: '' },
+        { id: 'ffffffff-ffff-4fff-8fff-fffffffffffe', kind: 'note', name: AGENT_RANGE_BASIS_NOTE, points: [{ x: 2, y: 2 }], text: '仅取得地点整体轮廓', notes: 'place-outline' },
+      ],
+    };
+    const view = filterPlanByLevel(plan, DEFAULT_PLAN_LEVEL_ID);
+    expect(view.annotations?.map(note => note.name)).toEqual(['留白说明']);
+    expect(plan.annotations).toHaveLength(2);
   });
 });
 

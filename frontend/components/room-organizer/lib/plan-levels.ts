@@ -13,6 +13,7 @@
  */
 
 import type { PlanLevel, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import { AGENT_RANGE_BASIS_NOTE } from './agent-venue-range';
 
 /** 合成默认层的稳定 id（旧数据无 levels 时用；不写入 plan，只作读取键）。 */
 export const DEFAULT_PLAN_LEVEL_ID = '00000000-0000-4000-8000-000000000000';
@@ -50,7 +51,8 @@ export function filterPlanByLevel(plan: SitePlanData, levelId?: string | null): 
     vehicles: (plan.vehicles ?? []).filter(belongs),
     measurements: (plan.measurements ?? []).filter(belongs),
     // 2026-11-11 用户指令：自由标注同样按图层过滤。
-    annotations: (plan.annotations ?? []).filter(belongs),
+    // 2026-11-20 用户拍板：「Agent 场地范围依据」这条老注记不再上图、不进图层清单（存盘数据不动）。
+    annotations: (plan.annotations ?? []).filter(annotation => belongs(annotation) && annotation.name !== AGENT_RANGE_BASIS_NOTE),
   };
 }
 

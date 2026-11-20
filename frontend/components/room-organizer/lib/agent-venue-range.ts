@@ -4,6 +4,13 @@ import { createOutdoorMapContext } from './outdoor-map-context';
 import { checkBoundaryRing } from './site-plan-editing';
 import { planRingAreaM2 } from '../../../../supabase/functions/_shared/site-plan';
 
+/**
+ * 旧版本把「范围依据」当成一条画布 note 贴在地图正中（2026-11-19 的实现）。
+ * 2026-11-20 用户拍板：用户不关心边界是从哪一步推出来的，这类口径只留在内部数据里，
+ * 既不新建、也不再把历史方案里的那条画出来。
+ */
+export const AGENT_RANGE_BASIS_NOTE = 'Agent 场地范围依据';
+
 export interface VenueRangeBasis {
   kind: 'mapped-grass' | 'place-outline' | 'concept' | 'user-dimensions';
   detail: string;

@@ -402,7 +402,9 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   act(() => flow.offerBoundary(anchor, ring, "IN77"));
   expect(apply).not.toHaveBeenCalled();
   expect(flow.appliedHighlight).toBeNull();
-  expect(host.textContent).toContain("地点轮廓只是候选");
+  expect(host.textContent).toContain("确认“IN77”的活动范围");
+  // 2026-11-20 用户拍板：卡上不再写「地点轮廓只是候选」这类交代。
+  expect(host.textContent).not.toContain("地点轮廓只是候选");
   const confirm = [...host.querySelectorAll("button")].find(
     (b) => b.textContent?.includes("确认并应用这一版"),
   )!;
@@ -414,6 +416,23 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(flow.state.stage).toBe("zones");
   expect(flow.appliedHighlight).toEqual({ kind: "scope" });
   expect(host.textContent).toContain("不贴合就拖顶点调整，改完重新核对");
+});
+it("范围依据不再贴到画布：提案不生成说明注记，旧注记随手清掉", () => {
+  const anchor = { ...plan.anchor!, lng: 120.44 };
+  plan = {
+    ...plan,
+    annotations: [{ id: crypto.randomUUID(), kind: "note" as const, name: "Agent 场地范围依据", points: [{ ...ring[0] }], text: "仅取得地点整体轮廓", notes: "place-outline" }],
+  };
+  act(() =>
+    flow.offerBoundary(anchor, ring, "IN77", {
+      kind: "place-outline",
+      location: "mapped",
+      scale: "mapped",
+      detail: "仅取得地点整体轮廓，尚未识别具体可用草坪。",
+    }),
+  );
+  const names = (flow.proposal?.next.annotations ?? []).map(note => note.name);
+  expect(names).not.toContain("Agent 场地范围依据");
 });
 it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => {
   const anchor = { ...plan.anchor!, lng: 120.25 };
@@ -436,7 +455,6 @@ it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => 
   const row = host.querySelector<HTMLButtonElement>(".ap-card-history-row")!;
   act(() => row.click());
   const detail = host.querySelector(".ap-card-history-detail");
-  expect(detail?.textContent).toContain("地点轮廓只是候选");
   expect(detail?.textContent).toContain("确认并应用这一版");
   expect(detail?.textContent).toContain("在地图上重画实际活动范围");
   expect(detail?.textContent).toContain("撤回预览");
@@ -2550,8 +2568,11 @@ it("没有合法红线时不打开面板，如实说先圈活动范围", async (
 it("物件阶段的卡片给 Aholo Lux3D 入口，点和「落位预览」分开", async () => {
   mountAtFlowState({ stage: "objects", completed: ["place", "scope", "zones"] });
   const entry = host.querySelector('[data-testid="outdoor-lux3d-entry"]');
-  expect(entry?.textContent).toContain("由 Aholo Lux3D 生成三维模型");
-  expect(entry?.textContent).toContain("落位预览");
+  // 两条路都是一颗同高的次级按钮：导入 GLB（本机免费）／生成新道具（要勾额度）。
+  expect(entry?.textContent).toContain("用 Aholo Lux3D 生成道具");
+  expect(entry?.textContent).toContain("导入 GLB");
+  // 收费路径的提醒必须在卡上，不能被删成一颗裸入口。
+  expect(host.textContent).toContain("勾选额度");
   const button = host.querySelector('[data-testid="outdoor-lux3d-generate"]');
   expect(button).not.toBeNull();
   await act(async () => {
