@@ -24,7 +24,14 @@ export interface DesignResultCardModel {
   selection?: { count: number; labels: string[]; detached: boolean } | null;
   compare?: {
     activeId: string;
-    candidates: Array<{ id: string; label: string; seats: string; tradeoff: string }>;
+    candidates: Array<{
+      id: string;
+      label: string;
+      seats: string;
+      tradeoff: string;
+      /** 与比较基线相比的变更项数（设施 + 分区 + 动线）。 */
+      diff?: { added: number; removed: number; changed: number };
+    }>;
   } | null;
   compareBusy?: boolean;
   compareNote?: string | null;
@@ -90,6 +97,15 @@ export function OutdoorDesignResultCard({
           <span>需要处理后才算合格</span>
           <ul>
             {summary.issues.map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {summary.unreachableZones.length > 0 && (
+        <div className="oddrc-issue" role="status" data-testid="oddrc-unreachable">
+          <span>这些分区还没有通道接上 · 现场可达性仍未核对</span>
+          <ul>
+            {summary.unreachableZones.map((zone) => <li key={zone}>{zone}</li>)}
           </ul>
         </div>
       )}
@@ -185,6 +201,15 @@ export function OutdoorDesignResultCard({
           {activeCandidate && (
             <div className="oddrc-compare-body">
               <p className="oddrc-compare-seats">{activeCandidate.seats}</p>
+              {activeCandidate.diff && (
+                <p className="oddrc-compare-tradeoff">
+                  与当前画布相比：新增 {activeCandidate.diff.added} · 移除 {activeCandidate.diff.removed}
+                  {" · 改动 "}{activeCandidate.diff.changed}
+                  {"（共 "}{
+                    activeCandidate.diff.added + activeCandidate.diff.removed + activeCandidate.diff.changed
+                  }{" 项）"}
+                </p>
+              )}
               <p className="oddrc-compare-tradeoff">{activeCandidate.tradeoff}</p>
             </div>
           )}

@@ -521,6 +521,8 @@ export function useOutdoorAgentWorkflow(input: {
     strategy: "ceremony-first" | "banquet-first";
     plan: SitePlanData;
     summary: DesignSummary;
+    /** 与比较基线（当前画布）相比的变更项数；卡片直接显示，不自己重算。 */
+    diff: { added: number; removed: number; changed: number };
   };
   const [design, setDesign] = useState<DesignState | null>(null);
   /** 最近一次由 Agent 写入的改动快照；结果卡还没出现时（例如只位移了一组）也能撤销。 */
@@ -1802,7 +1804,7 @@ export function useOutdoorAgentWorkflow(input: {
         if(!live(job)||JSON.stringify(bridge.getPlan())!==original)return;
         for(const quantity of report.quantities)designStep(`${quantity.zone}：${quantity.role} ${quantity.placed}/${quantity.requested}${quantity.placeholder?'（尺寸占位件）':''}`);
         // 2026-11-20 P1：结果摘要 + 本轮输入快照（比较另一版时按同一份边界/物料重算）。
-        const designSummary=buildDesignSummary({plan:report.plan,quantities:report.quantities,checks:report.checks,notes:report.notes,
+        const designSummary=buildDesignSummary({plan:report.plan,quantities:report.quantities,checks:report.checks,notes:report.notes,reachability:report.reachability,
           strategy:turn.designStrategy??'ceremony-first',...(designBrief.guests?{guests:designBrief.guests}:{})});
         designInput.current={plan,brief:designBrief,library,hardBlocks,...(designBrief.guests?{guests:designBrief.guests}:{})};
         setDesign({title:designSummary.title,summary:designSummary,state:'proposal',change:null,undoBefore:null,appliedVersion:null});
@@ -2733,6 +2735,14 @@ export function useOutdoorAgentWorkflow(input: {
         const basis = parseRightBasisAnswer(message);
         if (basis) {
           basisAsked.current = false;
+          // 2026-11-20 P1：3D 里「屏幕右」随相机转，落不成固定场地方向——当场说清，
+          // 别先把口径「记住」再反过来不给用。
+          if (basis === 'screen' && callbacks.current.bridge()?.currentView?.() === '3d') {
+            const text = '3D 里“屏幕右”随相机转，落不成固定方向；这次说“往东/往西 几米”，或切回 2D 平面再说“往右”。';
+            status(text, 'ask');
+            callbacks.current.say(text, true);
+            return true;
+          }
           directionBasis.current = basis;
           status(`记住了：“右”按${basis === 'east' ? '场地东侧（+x）' : '屏幕右边'}算；再说一次怎么移就行。`, 'ready');
           callbacks.current.say(`“右”按${basis === 'east' ? '场地东侧（+x）' : '屏幕右边'}算。`, false);
@@ -3323,6 +3333,7 @@ export function useOutdoorAgentWorkflow(input: {
           quantities: report.quantities,
           checks: report.checks,
           notes: report.notes,
+          reachability: report.reachability,
           strategy,
           ...(inputData.guests ? { guests: inputData.guests } : {}),
         });
@@ -3332,6 +3343,12 @@ export function useOutdoorAgentWorkflow(input: {
           strategy,
           plan: report.plan,
           summary,
+          // 两版变更多少：设施 / 分区 / 动线三类枚举都算一项。
+          diff: {
+            added: report.diff.facilities.added + report.diff.zones.added + report.diff.routes.added,
+            removed: report.diff.facilities.removed + report.diff.zones.removed + report.diff.routes.removed,
+            changed: report.diff.facilities.changed + report.diff.zones.changed + report.diff.routes.changed,
+          },
         });
       }
       setDesignCompare({ activeId: "A", candidates, base: JSON.stringify(inputData.plan) });
@@ -3802,6 +3819,7 @@ export function useOutdoorAgentWorkflow(input: {
                   label: candidate.label,
                   seats: `观礼 ${candidate.summary.capacity.ceremonySeats} · 宴席 ${candidate.summary.capacity.banquetSeats} · 目标 ${candidate.summary.capacity.target} 人`,
                   tradeoff: candidate.summary.reasons[0] ?? "",
+                  diff: candidate.diff,
                 })),
               }
             : null,

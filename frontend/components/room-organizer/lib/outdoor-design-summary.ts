@@ -10,6 +10,8 @@
  * - 推荐理由最多 3 条，每条都要能落到真实数字或真实分区名。
  * - 假设只收原 notes 里明确标了未确认/占位/假设的句子，不自行补充「应该没问题」。
  * - 几何硬冲突（碰撞/越界/障碍/占道）单独列出，且写明「处理后才算合格」。
+ * - 草案内部动线自检（reachability）与几何冲突分开：它只说明本轮画出的通道串没串起来，
+ *   不写「现场可达/疏散合格」。
  */
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
 
@@ -33,11 +35,20 @@ export interface DesignChecks {
   safety?: string;
 }
 
+export interface DesignReachability {
+  /** 草案内部：每个分区都有通道贴边或靠相邻分区穿行。 */
+  connected: boolean;
+  /** 既没有通道贴边、也不与有通道分区相邻的分区名。 */
+  zonesWithoutRoute: readonly string[];
+}
+
 export interface DesignSummaryInput {
   plan: SitePlanData;
   quantities: readonly DesignQuantity[];
   checks: DesignChecks;
   notes: readonly string[];
+  /** 规划器的草案内部动线自检；缺省时不推断「已连通」。 */
+  reachability?: DesignReachability;
   strategy?: "ceremony-first" | "banquet-first";
   guests?: number;
 }
@@ -67,6 +78,8 @@ export interface DesignSummary {
   assumptions: string[];
   /** 几何硬冲突；空数组代表这一版没有已知硬冲突。 */
   issues: string[];
+  /** 草案内部没有通道接上的分区名；空数组 = 本轮每个分区都接上了。 */
+  unreachableZones: string[];
   zones: DesignSummaryZone[];
   /** 查询用：分区名 → 该区设施 id，用于摘要与画布双向定位。 */
   zoneFacilities: Record<string, string[]>;
@@ -127,6 +140,9 @@ export function buildDesignSummary(input: DesignSummaryInput): DesignSummary {
   if (checks.obstacles > 0) issues.push(`压到已知障碍 ${checks.obstacles} 件`);
   if (checks.corridors > 0) issues.push(`占用通道 ${checks.corridors} 件`);
 
+  // 只转述规划器给出的分区名：没给 reachability 就不声称「已连通」，也不自己推算。
+  const unreachableZones = input.reachability ? [...input.reachability.zonesWithoutRoute] : [];
+
   return {
     title: `婚礼布置 · ${STRATEGY_LABELS[input.strategy ?? "ceremony-first"]}`,
     strategyLabel: STRATEGY_LABELS[input.strategy ?? "ceremony-first"],
@@ -143,6 +159,7 @@ export function buildDesignSummary(input: DesignSummaryInput): DesignSummary {
     },
     assumptions,
     issues,
+    unreachableZones,
     zones: plan.zones.map((zone) => ({
       id: zone.id,
       name: zone.name,

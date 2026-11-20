@@ -79,4 +79,38 @@ describe("Agent 结果摘要", () => {
     expect(summary.zoneFacilities).toEqual({ "z-cer": ["f1"], "z-ban": ["f2"] });
     expect(summary.zones.map((item) => item.facilityCount)).toEqual([1, 1]);
   });
+
+  it("草案内部没接通的分区按分区名原样列出，与几何硬冲突分开", () => {
+    const summary = buildDesignSummary({
+      plan: plan(),
+      quantities: [],
+      checks: { collisions: 0, boundary: 0, obstacles: 0, corridors: 0, ceremonySeats: 60, banquetSeats: 60, target: 60 },
+      notes: [],
+      reachability: { connected: false, zonesWithoutRoute: ["仪式观礼区", "后勤备物区"] },
+    });
+    expect(summary.unreachableZones).toEqual(["仪式观礼区", "后勤备物区"]);
+    // 没接通道不等于几何不合格，更不能被当成现场安全结论。
+    expect(summary.issues).toEqual([]);
+  });
+
+  it("没给 reachability 时列表为空，不据此声称已连通", () => {
+    const summary = buildDesignSummary({
+      plan: plan(),
+      quantities: [],
+      checks: { collisions: 0, boundary: 0, obstacles: 0, corridors: 0, ceremonySeats: 60, banquetSeats: 60, target: 60 },
+      notes: [],
+    });
+    expect(summary.unreachableZones).toEqual([]);
+  });
+
+  it("连通时列表为空，不给摘要添噪声", () => {
+    const summary = buildDesignSummary({
+      plan: plan(),
+      quantities: [],
+      checks: { collisions: 0, boundary: 0, obstacles: 0, corridors: 0, ceremonySeats: 60, banquetSeats: 60, target: 60 },
+      notes: [],
+      reachability: { connected: true, zonesWithoutRoute: [] },
+    });
+    expect(summary.unreachableZones).toEqual([]);
+  });
 });

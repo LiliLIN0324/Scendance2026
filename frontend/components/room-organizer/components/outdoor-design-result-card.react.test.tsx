@@ -24,6 +24,7 @@ const summary = (patch: Partial<DesignSummary> = {}): DesignSummary => ({
   },
   assumptions: ["宴席按 10 人一桌", "场地东侧可停车"],
   issues: [],
+  unreachableZones: [],
   zones: [
     { id: "zone-ceremony", name: "仪式区", facilityCount: 60 },
     { id: "zone-banquet", name: "宴席区", facilityCount: 66 },
@@ -110,6 +111,37 @@ describe("方案结果卡", () => {
     expect(screen.queryByRole("button", { name: "撤销这次" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "确认应用" }));
     expect(onConfirmPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("没有通道接上的分区按分区名列出，并写明现场可达性仍未核对", () => {
+    render(
+      <OutdoorDesignResultCard
+        model={base({ summary: summary({ unreachableZones: ["仪式观礼区", "后勤备物区"] }) })}
+      />,
+    );
+    expect(screen.getByText(/这些分区还没有通道接上/)).toBeTruthy();
+    expect(screen.getByText("仪式观礼区")).toBeTruthy();
+    expect(screen.getByText("后勤备物区")).toBeTruthy();
+    // 只报「草案内部没接通」，不能滑向现场安结论。
+    expect(screen.getByText(/现场可达性仍未核对/)).toBeTruthy();
+  });
+
+  it("候选 A/B 各显示与当前画布的变更项数与分项", () => {
+    render(
+      <OutdoorDesignResultCard
+        model={base({
+          compare: {
+            activeId: "A",
+            candidates: [
+              { id: "A", label: "仪式优先", seats: "观礼 60 · 宴席 60", tradeoff: "通道更宽", diff: { added: 132, removed: 0, changed: 0 } },
+              { id: "B", label: "宴席优先", seats: "观礼 60 · 宴席 60", tradeoff: "备桌更多", diff: { added: 130, removed: 2, changed: 0 } },
+            ],
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText(/新增 132/)).toBeTruthy();
+    expect(screen.getByText(/共 132 项/)).toBeTruthy();
   });
 
   it("候选 A/B 同视图对比：切换只看不写，采用是唯一主动作", () => {
