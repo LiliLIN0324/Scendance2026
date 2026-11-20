@@ -6,6 +6,7 @@ import { createApi } from '../supabase/functions/_shared/api.ts';
 import { canonical, sha256 } from '../supabase/functions/_shared/domain.ts';
 import {
   archiveUploadSchema,
+  archiveMime,
   caseWriteSchema,
   completeSaveSchema,
   completeShareSchema,
@@ -47,6 +48,11 @@ describe('cloud storage with review SQL applied',()=>{
   const requestId=()=>crypto.randomUUID();
   // RPC 直调时指纹由调用方给出（与 Edge 一致：canonical(含 requestId) 的 SHA-256）。
   const fingerprintOf=async(input:Record<string,unknown>)=>sha256(canonical(input));
+
+  it('allows every contracted archive MIME in the deployed bucket configuration', async () => {
+    const result = await f.db.query<{ allowed_mime_types: string[] }>("select allowed_mime_types from storage.buckets where id = 'scene-assets'");
+    expect(result.rows[0]!.allowed_mime_types).toEqual(expect.arrayContaining([...new Set(Object.values(archiveMime))]));
+  });
 
   it('grants the first platform admin only through the reviewed server-side table',async()=>{
     // 未授权前：owner 也只是普通用户。
@@ -153,6 +159,22 @@ describe('cloud storage with review SQL applied',()=>{
     expect((read.manifest as Record<string,unknown>).outdoor).toEqual({stages:1});
   });
 
+  it('does not let an outsider publish another account\'s private archive by inserting its ID into a personal manifest', async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const digest = await sha256(bytes);
+    const prepared = await json(await req('/cloud/uploads', 'POST', { requestId: requestId(), name: '私有归档', kind: 'attachment', format: 'txt', byteSize: bytes.length, sha256: digest }));
+    f.objects.set(String(prepared.storagePath), bytes);
+    const asset = await json(await req(`/cloud/uploads/${prepared.uploadId}/complete`, 'POST', {}));
+    const personalStudio = crypto.randomUUID();
+    await f.db.query('insert into scene_private.studios(id,name) values ($1,$2)', [personalStudio, '普通用户个人工作室']);
+    await f.db.query("insert into scene_private.members(studio_id,user_id,role,display_name) values ($1,$2,'owner','普通用户')", [personalStudio, outsider]);
+    const project = await f.rpc(outsider, 'projects.create', { studioId: personalStudio, name: '个人项目', scene: scene() });
+    const lease = await f.rpc(outsider, 'lease.acquire', { projectId: project.id, sessionId: session });
+    const response = await req(`/cloud/projects/${project.id}`, 'PUT', { requestId: requestId(), sessionId: session, generation: lease.generation, expectedRevision: 0, manifest: { version: 1, scene: scene(), outdoor: null, sources: {}, dependencies: [{ assetId: asset.id, visibility: 'published' }] } }, outsider);
+    expect(response.status).toBe(404);
+    await expectCode(response, 'ASSET_NOT_FOUND');
+  });
+
   it('publishes a case only with archived published deps and switches the public entry atomically',async()=>{
     // 准备：注册一个场景 GLB 资产（依赖）并放进场景。
     const assetBytes=new Uint8Array(64).fill(1);
@@ -219,6 +241,17 @@ describe('cloud storage with review SQL applied',()=>{
     expect(restored).toMatchObject({version:2,status:'published',publicationId});
     const publicAfter=await json(await req('/cloud/cases/cn-westlake-demo','GET',undefined,null));
     expect(publicAfter).toMatchObject({publicationId,revision:0});
+  });
+
+  it('allows an ordinary user to save dependencies of a public case in an independent project', async () => {
+    const read = await json(await req('/cloud/cases/cn-westlake-demo', 'GET', undefined, null));
+    const studioId = crypto.randomUUID();
+    await f.db.query('insert into scene_private.studios(id,name) values ($1,$2)', [studioId, '案例副本工作室']);
+    await f.db.query("insert into scene_private.members(studio_id,user_id,role,display_name) values ($1,$2,'owner','普通用户')", [studioId, outsider]);
+    const project = await f.rpc(outsider, 'projects.create', { studioId, name: '案例独立副本', scene: scene() });
+    const lease = await f.rpc(outsider, 'lease.acquire', { projectId: project.id, sessionId: session });
+    const response = await req(`/cloud/projects/${project.id}`, 'PUT', { requestId: requestId(), sessionId: session, generation: lease.generation, expectedRevision: 0, manifest: { ...(read.manifest as object), sources: {} } }, outsider);
+    expect(response.status).toBe(200);
   });
 
   it('keeps case management admin-only and public reads anonymous-safe',async()=>{

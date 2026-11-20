@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SceneApiError } from '../../client/scene-client';
 import { getBackendConfig } from './backend-session';
-import { publicationSchema, readShare, shareErrorMessage, shareTokenFromHash } from './share-api';
+import { completeShareTokenFromHash, publicationSchema, readCompleteShare, readShare, shareErrorMessage, shareTokenFromHash } from './share-api';
 import {sceneSchema} from '../../supabase/functions/_shared/domain';
 
 const token = 'a'.repeat(64);
@@ -21,6 +21,14 @@ const payload = () => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('customer publication contract', () => {
+  it('decodes the complete-share fragment and sends its raw token anonymously', async () => {
+    const data = { publicationId: id, revision: 4, manifest: { version: 1, scene: payload().scene, outdoor: null, dependencies: [] }, assets: [] };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(data)));
+    vi.stubGlobal('fetch', fetcher);
+    expect(completeShareTokenFromHash(`#c${token}`)).toBe(token);
+    await expect(readCompleteShare(token, config)).resolves.toMatchObject({ publicationId: id, revision: 4 });
+    expect(fetcher).toHaveBeenCalledWith('https://scene.example/functions/v1/scene-api/cloud/shares/read', expect.objectContaining({ method: 'POST', body: JSON.stringify({ token }) }));
+  });
   it('shows why an embedded projection marker breaks the current share reader and is not an authorization boundary',async()=>{
     const data=payload();const marked={...data.scene,__scendanceReadonlyProjection:true};
     expect(sceneSchema.safeParse(marked).success).toBe(false);

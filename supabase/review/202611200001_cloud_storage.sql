@@ -1,7 +1,7 @@
 -- ============================================================================
 -- 云存储、完整保存与官方案例：Task A 审核 SQL（2026-11-20）
--- 状态：**草案，仅供人工 review，不进 supabase/migrations/ 自动迁移链**。
--- 部署前须由人确认（AGENTS.md：数据库迁移需要人 review）。
+-- 状态：2026-11-20 已按用户接手完成的授权定向应用；仍不进自动迁移链。
+-- 包含真实验收修订：归档 MIME 补全、完整清单资源使用权限检查。
 --
 -- 本文件为 public.cloud_storage_rpc 及其表结构建立最小能力面：
 --   1. 平台超级管理员（C01）：scene_private.platform_admins + 审计；
@@ -331,6 +331,25 @@ begin
   perform scene_private.cloud_check_scene_covered(p_manifest, p_manifest->'dependencies');
 end $$;
 
+-- Knowing an asset ID does not authorize publishing it through a personal project.
+-- Public case dependencies remain reusable so independent case copies can save normally.
+create or replace function scene_private.cloud_check_manifest_access(p_actor uuid, p_manifest jsonb) returns void
+language plpgsql stable set search_path = '' as $$
+declare d jsonb; asset uuid;
+begin
+  for d in select value from jsonb_array_elements(p_manifest->'dependencies') loop
+    asset := (d->>'assetId')::uuid;
+    if not scene_private.can_use_asset(p_actor, asset)
+      and not exists(select 1 from scene_private.archive_assets a where a.id = asset
+        and (a.owner_id = p_actor or (a.studio_id = scene_private.official_studio()
+          and scene_private.is_platform_admin(p_actor))))
+      and not exists(select 1 from scene_private.cloud_cases c
+        join scene_private.complete_publications cp on cp.publication_id = c.current_publication_id
+        where exists(select 1 from jsonb_array_elements(cp.deps) dep where dep->>'assetId' = asset::text))
+      then raise exception 'ASSET_NOT_FOUND'; end if;
+  end loop;
+end $$;
+
 create or replace function scene_private.cloud_case_view(case_row scene_private.cloud_cases) returns jsonb
 language sql stable set search_path = '' as $$
   select jsonb_build_object(
@@ -570,6 +589,7 @@ begin
     -- 复用既有 require_lease：成员校验 + 租约（sessionId/generation）+ expectedRevision CAS 一次完成。
     proj := scene_private.require_lease(p_actor, p_data);
     perform scene_private.cloud_check_manifest(p_data->'manifest');
+    perform scene_private.cloud_check_manifest_access(p_actor, p_data->'manifest');
     insert into scene_private.complete_projects(project_id, manifest, revision, created_by, updated_by)
       values (proj.id, p_data->'manifest', (p_data->>'expectedRevision')::bigint, p_actor, p_actor)
       on conflict (project_id) do update set manifest = excluded.manifest, revision = excluded.revision,
@@ -649,6 +669,7 @@ begin
       if not found or proj.deleted_at is not null or proj.studio_id is distinct from scene_private.official_studio()
         then raise exception 'PROJECT_NOT_FOUND'; end if;
       if proj.revision is distinct from (p_data->>'expectedRevision')::bigint then raise exception 'REVISION_CONFLICT'; end if;
+      perform scene_private.cloud_check_manifest_access(p_actor, case_row.draft);
       dep_row := scene_private.cloud_published_deps(case_row.draft);
       perform scene_private.cloud_check_scene_covered(case_row.draft, dep_row);
       pub := scene_private.cloud_publish_snapshot(p_actor, proj.id, (p_data->>'expectedRevision')::bigint,
@@ -706,6 +727,7 @@ begin
     if proj.revision is distinct from (p_data->>'expectedRevision')::bigint then raise exception 'REVISION_CONFLICT'; end if;
     select * into cp from scene_private.complete_projects where project_id = proj.id;
     if not found then raise exception 'DEPENDENCY_INCOMPLETE'; end if;
+    perform scene_private.cloud_check_manifest_access(p_actor, cp.manifest);
     dep_row := scene_private.cloud_published_deps(cp.manifest);
     perform scene_private.cloud_check_scene_covered(cp.manifest, dep_row);
     pub := scene_private.cloud_publish_snapshot(p_actor, proj.id, (p_data->>'expectedRevision')::bigint,
@@ -736,7 +758,11 @@ update storage.buckets set
   allowed_mime_types = array[
     'model/gltf-binary','image/png','image/jpeg','image/webp','application/pdf',
     'application/zip','application/json','text/plain','text/csv','application/octet-stream',
-    'video/mp4','video/quicktime','application/x-spz','application/x-ply']
+    'video/mp4','video/quicktime','application/x-spz','application/x-ply',
+    'image/svg+xml','application/dxf','application/acad',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation']
 where id = 'scene-assets';
 
 -- ---------------------------------------------------------------------------
