@@ -155,6 +155,8 @@ frontend/public/_internal-learning/
 # 内嵌 OnePlan 版权图 dataURL 的对比报告页（同上口径，仅本地看，不入仓；2026-11-18）
 /deliverables/replica-report-*.html
 /deliverables/oneplan-replica-geo-report-*.html
+# 内嵌 base64 底图/参考图的单文件核对报告（20 MB 级，仅本地看，不入仓；2026-11-18 摘出索引）
+/deliverables/classic-event-case-basemap-audit-*.html
 
 # 会话临时目录（日志、一次性脚本；2026-11-18）
 /.tmp/
