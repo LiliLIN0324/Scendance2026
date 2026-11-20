@@ -36,7 +36,9 @@ export interface PlanRect {
   n: number;
 }
 
-export type WeddingDirection = 'north' | 'south' | 'east' | 'west';
+export type WeddingCardinal = 'north' | 'south' | 'east' | 'west';
+/** 景观方向：正交四向 + 斜向四角。斜向只用于取分量，分区仍是正交轴线。 */
+export type WeddingDirection = WeddingCardinal | 'northeast' | 'northwest' | 'southeast' | 'southwest';
 
 /**
  * 场地主轴：`axis` 是量深度的方向，`sign` 指向「远端」。
@@ -74,10 +76,23 @@ export const rectDepth = (rect: PlanRect): number => rect.n - rect.s;
 export const rectArea = (rect: PlanRect): number => Math.max(0, rectWidth(rect)) * Math.max(0, rectDepth(rect));
 export const rectCenter = (rect: PlanRect): PlanPoint => ({ x: (rect.w + rect.e) / 2, y: (rect.s + rect.n) / 2 });
 
-export const directionOfAxis = (axis: WeddingAxis): WeddingDirection =>
+export const directionOfAxis = (axis: WeddingAxis): WeddingCardinal =>
   axis.axis === 'y' ? (axis.sign > 0 ? 'north' : 'south') : axis.sign > 0 ? 'east' : 'west';
 
-export const axisToward = (direction: WeddingDirection): WeddingAxis =>
+/** 斜向拆成两个正交分量；正交方向返回自身。 */
+export const directionParts = (direction: WeddingDirection): WeddingCardinal[] => {
+  switch (direction) {
+    case 'northeast': return ['north', 'east'];
+    case 'northwest': return ['north', 'west'];
+    case 'southeast': return ['south', 'east'];
+    case 'southwest': return ['south', 'west'];
+    default: return [direction];
+  }
+};
+
+export const isDiagonalDirection = (direction: WeddingDirection): boolean => directionParts(direction).length > 1;
+
+export const axisToward = (direction: WeddingCardinal): WeddingAxis =>
   direction === 'north'
     ? { axis: 'y', sign: 1 }
     : direction === 'south'

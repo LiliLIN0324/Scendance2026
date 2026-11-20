@@ -191,6 +191,18 @@ describe('场地组织与候选取舍',()=>{
       expect((-Math.sin(angle)*dx+Math.cos(angle)*dy)/Math.hypot(dx,dy)).toBeCloseTo(1);
     }
     expect(report.recommendation.reasons.join(' ')).toContain('景观依据');
+    // 景观与入口不同轴时，主通道先沿入口轴再横切进中轴：两段都是直走廊，不把宴席斜着劈开。
+    const main=report.plan.routes.find(route=>route.name==='婚礼·宾客主通道')!;
+    expect(main.points.length).toBeGreaterThanOrEqual(3);
+    expect(Math.abs(main.points[1]!.x-main.points[0]!.x)).toBeLessThan(0.3);
+    expect(Math.abs(main.points.at(-1)!.y-main.points.at(-2)!.y)).toBeLessThan(0.3);
+
+    // 斜向景观只取与入口轴垂直的分量，并把「未做 45° 斜排」写进依据。
+    const diagonal=await draft(base,{landscape:{direction:'northeast',evidence:'user-confirmed'}});
+    expect(diagonal.site.landscape).toMatchObject({applied:true,direction:'east'});
+    expect(diagonal.site.focusDirection).toBe('east');
+    expect(diagonal.site.landscape.note).toContain('东北');
+    expect(diagonal.site.landscape.note).toContain('45°');
 
     const unknown=await draft(base);
     expect(unknown.site.landscape.applied).toBe(false);
@@ -215,6 +227,14 @@ describe('场地组织与候选取舍',()=>{
     expect(report.recommendation.reasons.length).toBeGreaterThanOrEqual(3);
     expect(report.recommendation.reasons.join(' ')).toContain('硬冲突 0 处');
     expect(report.recommendation.reasons.join(' ')).toMatch(/仪式区 \d+ ㎡ 对 \d+ ㎡/);
+    // 草案内部连通性只证明这版自己把通道接上了，不能冒充现场可达与安全。
+    expect(report.reachability.connected).toBe(true);
+    expect(report.reachability.zonesWithoutRoute).toHaveLength(0);
+    expect(report.reachability.entranceToCeremonyM).toBeGreaterThan(10);
+    expect(report.checks.access).toBe('pending');
+    expect(report.checks.safety).toBe('unverified');
+    expect(report.notes.join(' ')).toContain('草案内部动线自检');
+    expect(report.notes.join(' ')).toContain('不等于现场出入口可通行');
     expect(report.diff.facilities.added).toBe(report.plan.facilities.length);
     expect(report.diff.unchanged).toBe(false);
   });

@@ -6,8 +6,8 @@ import { checkBoundaryRing, planPointInRing } from './site-plan-editing';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
 import {
   axisDepth, axisToward, axisUnit, axisWidth, bandRect, banquetCenters, ceremonyFocus, ceremonySeats,
-  directionOfAxis, estimateBanquetTables, estimateCeremonySeats, pointInRectAt, rectArea, rectCenter,
-  rectDepth, rectFromRing, rectRing, rectWidth, snapAxis, splitAcross, WEDDING_DEFAULTS,
+  directionOfAxis, directionParts, estimateBanquetTables, estimateCeremonySeats, isDiagonalDirection, pointInRectAt,
+  rectArea, rectCenter, rectDepth, rectFromRing, rectRing, rectWidth, snapAxis, splitAcross, WEDDING_DEFAULTS,
   type PlanRect, type WeddingAxis, type WeddingDirection,
 } from './wedding-spatial';
 import type { OutdoorBrief, OutdoorLibraryItem } from './outdoor-agent-contract';
@@ -107,6 +107,19 @@ export interface WeddingPlanDiff {
   unchanged: boolean;
 }
 
+export interface WeddingReachability {
+  /** 本轮草案内部：每个婚礼分区都能从入口走过去（有通道贴边，或与有通道的分区相邻）。不是现场可达性结论。 */
+  connected: boolean;
+  /** 主通道从入口到仪式中轴的折线长度（米）；没有主通道时为 null。 */
+  entranceToCeremonyM: number | null;
+  /** 有婚礼通道贴边或被通道穿过的分区。 */
+  zonesWithRoute: string[];
+  /** 没有通道贴边、但与上面某块分区相邻（同一入口带），靠步行穿过的分区。 */
+  zonesViaNeighbour: string[];
+  /** 既没有通道贴边、也不与有通道的分区相邻的分区。 */
+  zonesWithoutRoute: string[];
+}
+
 export interface WeddingLayoutReport {
   plan: SitePlanData;
   notes: string[];
@@ -125,6 +138,8 @@ export interface WeddingLayoutReport {
     safety: 'unverified';
   };
   originalPlan: SitePlanData;
+  /** 草案内部动线自检：只说明本轮画出的通道串起了入口与各分区，不等于现场出入口可通行或疏散合格。 */
+  reachability: WeddingReachability;
   site: WeddingSiteSummary;
   candidates: WeddingCandidate[];
   recommendedId: WeddingStrategy;
@@ -173,8 +188,13 @@ const materialFor = (role: Role, library: OutdoorLibraryItem[]): OutdoorLibraryI
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 
+const DIRECTION_TEXT: Record<WeddingDirection, string> = {
+  north: '北', south: '南', east: '东', west: '西',
+  northeast: '东北', northwest: '西北', southeast: '东南', southwest: '西南',
+};
+
 const directionText = (direction: WeddingDirection | null): string =>
-  direction === 'north' ? '北' : direction === 'south' ? '南' : direction === 'east' ? '东' : direction === 'west' ? '西' : '未定';
+  direction ? DIRECTION_TEXT[direction] : '未定';
 
 // ---------------------------------------------------------------- site reading
 
@@ -240,15 +260,23 @@ function readWeddingSite(input: WeddingLayoutInput, preservedRings: PlanPoint[][
   let applied = false;
   let landscapeNote = '未收到已确认或地图证据支持的景观方向，本版不以「观景更好」作为推荐理由，景观朝向保留为假设。';
   if (input.landscape) {
-    const wanted = axisToward(input.landscape.direction);
+    // 斜向景观拆成两个正交分量：另一分量与入场轴重合，朝它等于朝入口或背入口，
+    // 所以取与入口轴垂直的那个分量落位；分区本身只支持正交轴线。
+    const parts = directionParts(input.landscape.direction);
+    const part = parts.find(item => axisToward(item).axis !== approach.axis) ?? parts[0]!;
+    const wanted = axisToward(part);
+    const diagonalNote = isDiagonalDirection(input.landscape.direction)
+      ? `景观是斜向（${directionText(input.landscape.direction)}），当前分区只支持正交轴线，按${directionText(part)}落位；45° 斜排需要旋转分区，未在本版实现。`
+      : null;
     const opposite = wanted.axis === approach.axis && wanted.sign === -approach.sign;
     if (opposite) {
       landscapeNote = '景观方向与入口方向相反：把仪式焦点转到入口侧会让宾客动线穿过仪式区，本版保留朝内的仪式焦点，需用户确认优先关系；未按观景理由改向。';
     } else {
       focusAxis = wanted;
       applied = true;
-      landscapeNote = `仪式焦点朝${directionText(input.landscape.direction)}，依据为${input.landscape.evidence === 'user-confirmed' ? '用户确认' : '地图证据'}；背景高度与视线遮挡仍需按实际模型在 3D 核对。`;
+      landscapeNote = `仪式焦点朝${directionText(part)}，依据为${input.landscape.evidence === 'user-confirmed' ? '用户确认' : '地图证据'}；背景高度与视线遮挡仍需按实际模型在 3D 核对。`;
     }
+    if (diagonalNote) landscapeNote = `${landscapeNote} ${diagonalNote}`;
   }
   if (!rects.length) warnings.push('已知边界、建筑与禁放区之外没有形成可用连续区域，不能生成婚礼分区。');
 
@@ -517,6 +545,77 @@ function countCollisions(facilities: readonly PlanFacility[]): number {
   return collisions;
 }
 
+/** 点到折线的最短距离；单点路线返回点到点的距离。 */
+function distanceToPolyline(point: PlanPoint, points: readonly PlanPoint[]): number {
+  if (points.length === 1) return Math.hypot(point.x - points[0]!.x, point.y - points[0]!.y);
+  let best = Infinity;
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1]!, b = points[i]!;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const length2 = dx * dx + dy * dy;
+    const t = length2 > 0 ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length2)) : 0;
+    best = Math.min(best, Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy)));
+  }
+  return best;
+}
+
+/**
+ * 草案内部连通性自检：有通道贴边/被穿过的分区直接连通；与它们相邻（同一入口带、间距 ≤1 m）的分区
+ * 靠步行穿过相邻分区连通，迭代到不再变化。只回答「这版草案自己串没串起来」，不回答现场门洞与疏散。
+ */
+function describeReachability(plan: SitePlanData): WeddingReachability {
+  const routes = plan.routes.filter(route => route.name.startsWith('婚礼·'));
+  const main = plan.routes.find(route => route.name === '婚礼·宾客主通道');
+  const zones = plan.zones.filter(zone => zone.environment !== 'indoor' && roleOf(zone));
+  const sampleRing = (ring: readonly PlanPoint[]): PlanPoint[] => {
+    const samples: PlanPoint[] = [];
+    for (let i = 0; i < ring.length; i += 1) {
+      const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+      for (let step = 0; step < steps; step += 1) {
+        samples.push({ x: a.x + ((b.x - a.x) * step) / steps, y: a.y + ((b.y - a.y) * step) / steps });
+      }
+    }
+    return samples;
+  };
+  const zoneSamples = new Map(zones.map(zone => [zone.id, sampleRing(zone.polygon)]));
+  const direct = new Set<string>();
+  for (const zone of zones) {
+    const samples = zoneSamples.get(zone.id)!;
+    const reached = routes.some(route => route.points.some(point => planPointInRing(point, zone.polygon))
+      || samples.some(point => distanceToPolyline(point, route.points) <= 1.5));
+    if (reached) direct.add(zone.id);
+  }
+  // 相邻关系：两环最近距离 ≤1 m 视为可直接步行穿过。
+  const neighbours = new Map<string, string[]>();
+  for (const zone of zones) {
+    const near = zones.filter(other => other.id !== zone.id).filter(other => {
+      const target = [...other.polygon, other.polygon[0]!];
+      return zoneSamples.get(zone.id)!.some(point => distanceToPolyline(point, target) <= 1);
+    }).map(other => other.id);
+    neighbours.set(zone.id, near);
+  }
+  const reached = new Set(direct);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const id of [...reached]) {
+      for (const next of neighbours.get(id) ?? []) {
+        if (reached.has(next)) continue;
+        reached.add(next);
+        changed = true;
+      }
+    }
+  }
+  const name = (id: string) => zones.find(zone => zone.id === id)?.name ?? id;
+  return {
+    connected: reached.size === zones.length,
+    entranceToCeremonyM: main ? Math.round(polylineLength(main.points) * 10) / 10 : null,
+    zonesWithRoute: zones.filter(zone => direct.has(zone.id)).map(zone => zone.name),
+    zonesViaNeighbour: zones.filter(zone => !direct.has(zone.id) && reached.has(zone.id)).map(zone => zone.name),
+    zonesWithoutRoute: zones.filter(zone => !reached.has(zone.id)).map(zone => name(zone.id)),
+  };
+}
+
 function tableGroupIntegrity(
   facilities: readonly PlanFacility[],
   zone: PlanZone,
@@ -639,8 +738,26 @@ async function buildWeddingCandidate(context: CandidateContext): Promise<BuiltCa
       start, end: dock, widthM: routeWidth,
     });
     if (!head) return addRoute('婚礼·宾客主通道', start, ceremonyEntry);
-    return pushRoute('婚礼·宾客主通道', [...head, ceremonyEntry].filter((point, index, all) =>
-      index === 0 || Math.hypot(point.x - all[index - 1]!.x, point.y - all[index - 1]!.y) > 0.05));
+    const dedupe = (points: PlanPoint[]) => points.filter((point, index, all) =>
+      index === 0 || Math.hypot(point.x - all[index - 1]!.x, point.y - all[index - 1]!.y) > 0.05);
+    // 景观朝向与入口轴垂直时，直奔仪式边会斜穿宴席区：先沿入口轴直走到仪式那一排，再横切进中轴。
+    // 两段都是直走廊，宴席桌椅只在一侧让位，不会被一条斜线劈成两半。
+    const firstLeg = head[1] ? { x: head[1].x - head[0]!.x, y: head[1].y - head[0]!.y } : { x: 0, y: 0 };
+    const legLength = Math.hypot(firstLeg.x, firstLeg.y);
+    const toward = axisUnit(site.approach);
+    const offAxis = legLength > 0.5
+      ? Math.acos(clamp((firstLeg.x * toward.x + firstLeg.y * toward.y) / legLength, -1, 1)) > (12 * Math.PI) / 180
+      : false;
+    if (offAxis) {
+      const elbow = site.approach.axis === 'y'
+        ? { x: start.x, y: ceremonyEntry.y }
+        : { x: ceremonyEntry.x, y: start.y };
+      const free = [...blocked, ...plan.facilities.map(facilityFootprintRing)];
+      const legA = eventLayoutPath({ boundary: plan.boundary, blocked: free, start, end: elbow, widthM: routeWidth });
+      const legB = eventLayoutPath({ boundary: plan.boundary, blocked: free, start: elbow, end: ceremonyEntry, widthM: routeWidth });
+      if (legA && legB) return pushRoute('婚礼·宾客主通道', dedupe([...legA, ...legB.slice(1)]));
+    }
+    return pushRoute('婚礼·宾客主通道', dedupe([...head, ceremonyEntry]));
   })();
   // 入口与仪式焦点不在一条轴上时，首段会斜穿前场/宴席区：写清楚这是故意的中央通道，不是落位失误。
   if (main && main.points.length > 1) {
@@ -1216,12 +1333,18 @@ export async function proposeWeddingLayout(input: WeddingLayoutInput): Promise<W
   };
   if (chosen.status !== 'ready') notes.unshift('本版存在硬冲突，标为待调整，不能直接采用；冲突不会被容量或得分抵消。');
 
+  const reachability = describeReachability(winner.plan);
+  notes.push(reachability.connected
+    ? `草案内部动线自检：主通道从入口到仪式中轴 ${reachability.entranceToCeremonyM ?? 0} m；${reachability.zonesWithRoute.length} 个分区有通道贴边，${reachability.zonesViaNeighbour.length} 个分区靠同带相邻步行穿过。这只证明本版草案内部的动线串起来了，不等于现场出入口可通行、无台阶或疏散合格。`
+    : `草案内部动线自检：${reachability.zonesWithoutRoute.join('、')} 没有任何通道贴边也不与有通道的分区相邻，席前需要补一条可走的路线；现场可达性仍未核对。`);
+
   return {
     plan: winner.plan,
     notes,
     quantities: winner.quantities,
     checks,
     originalPlan: original,
+    reachability,
     site: {
       placeableAreaM2: Math.round(site.domain.areaM2),
       boundaryAreaM2: Math.round(site.domain.boundaryAreaM2),
