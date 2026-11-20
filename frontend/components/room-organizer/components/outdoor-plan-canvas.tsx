@@ -327,6 +327,14 @@ import {
 import { alignedTileCenter, sourceForLocation } from '../lib/basemap-alignment';
 import { basemapNativeMaxZoom } from '../lib/basemap-zoom-caps';
 import { planningIcon } from './outdoor-plan-icons';
+// 2026-11-20 审计 B3/K3/K8：可编辑性（图层可见 ∧ 未锁定）的纯函数判定。
+import {
+  PLAN_LAYER_HUMAN_LABELS,
+  PLAN_MODE_TARGET_LAYER,
+  planEntityBlockReason,
+  planEntityEditable,
+  planLayerBlockReason,
+} from '../lib/plan-edit-gate';
 import { AnnotateColorBar } from './annotate-color-bar';
 import { AnnotateDrawTools } from './annotate-draw-tools';
 import { ArrangeChoiceList } from './arrange-choice-list';
@@ -819,6 +827,10 @@ const LAYER_OF_INVENTORY_KIND: Record<PlanInventoryKind, PlanLayerRow> = {
   measurement: 'measure',
   annotation: 'annotate',
 };
+
+/** 图层可读名与「工具 → 目标图层」的判定都收敛到 lib/plan-edit-gate（2026-11-20 审计 B3/K3/K8）。 */
+const LAYER_HUMAN_LABELS: Record<PlanningLayerKind, string> = PLAN_LAYER_HUMAN_LABELS;
+const MODE_TARGET_LAYER: Partial<Record<PlanningEditMode, PlanningLayerKind>> = PLAN_MODE_TARGET_LAYER;
 
 /** 顶点手柄的命中半径（CSS px），与 drawBoundaryLayer 的手柄绘制半径一致。 */
 const VERTEX_HANDLE_HIT_PX = 10;
@@ -2493,6 +2505,16 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setEditMessage('地图上的范围已放进红线草稿。点一下起点闭合，确认后写入方案；Esc 取消。');
       }
     }
+    // 2026-11-20 审计 K8：切到会落物的工具时，目标层若被隐藏就自动打开，
+    // 避免「放完看不见，右下角却说已放置」。
+    const targetLayer = MODE_TARGET_LAYER[next];
+    if (targetLayer && !layerVisible(targetLayer)) {
+      const vis = { ...layerStateRef.current, [targetLayer]: true };
+      layerStateRef.current = vis;
+      setLayerState(vis);
+      onVisibilityChange?.(vis);
+      setEditMessage(`已自动打开「${LAYER_HUMAN_LABELS[targetLayer]}」图层：这个工具要往该层放内容。`);
+    }
     draw();
     notifyPlanDraftChanged();
   }
@@ -2570,7 +2592,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectRoute(null);
     selectNode(null);
     selectWorker(null);
+    selectVehicle(null);
     selectAnnotation(null);
+    selectMeasurement(null);
     setContextMenu(null);
     draftRef.current = [];
     setDraft([]);
@@ -4369,6 +4393,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           || selectedRouteRef.current
           || selectedNodeRef.current
           || selectedWorkerRef.current
+          || selectedVehicleRef.current
           || selectedAnnotationRef.current
           || selectedMeasurementRef.current
           || boundarySelectedRef.current
@@ -5102,21 +5127,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     armCatalogFacility,
   }));
 
-  /** 图层栈开关：切换某层可见并回传（受控/非受控均生效）。 */
+  /** 图层栈开关：切换某层可见并回传（受控/非受控均生效）。关层时收掉该层选中，避免「选中不可见对象」。 */
   function setLayerVisible(kind: PlanningLayerKind, visible: boolean) {
     const next = { ...layerState, [kind]: visible };
     setLayerState(next);
     layerStateRef.current = next;
     onVisibilityChange?.(next);
+    if (!visible) {
+      clearSelectionForLayer(kind);
+      setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已隐藏：该层内容暂不可选中或编辑。`);
+    }
     draw();
   }
 
-  /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁设施层时顺手清选中。 */
+  /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁上时收掉该层选中。 */
   function setLayerLocked(kind: PlanningLayerKind, locked: boolean) {
     const next: LockedLayerMap = { ...lockedLayersRef.current, [kind]: locked };
     lockedLayersRef.current = next;
     setLockedLayers(next);
-    if (locked && kind === 'facility') selectFacility(null);
+    if (locked) {
+      clearSelectionForLayer(kind);
+      setEditMessage(`「${LAYER_HUMAN_LABELS[kind]}」图层已锁定：只读，解锁后才能选中或编辑。`);
+    }
     draw();
   }
 
@@ -5125,9 +5157,109 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return modeRef.current === 'view' && !layerLocked('facility');
   }
 
+  /**
+   * 2026-11-20 审计 F5：红线自己的直接编辑只看「浏览模式 + 红线层未锁定」。
+   * 之前借设施层的判定，于是为了锁物料锁设施层，连带把红线加点/删点也封了。
+   */
+  function boundaryDirectEditable(): boolean {
+    return modeRef.current === 'view' && !layerLocked('boundary');
+  }
+
   /** P2-i：某图层是否锁定（缺省 false；锁定层不参与点选/拖动，显示与统计照旧）。 */
   function layerLocked(kind: PlanningLayerKind): boolean {
     return lockedLayersRef.current[kind] === true;
+  }
+
+  /** 图层是否可见：隐藏层与绘制同口径，不参与命中。 */
+  function layerVisible(kind: PlanningLayerKind): boolean {
+    return layerStateRef.current[kind] !== false;
+  }
+
+  /**
+   * 2026-11-20 审计 B3/K3：单一可编辑判定 = 所在图层可见 ∧ 未锁定。
+   * 命中、清单行、属性写入都走这一个口径，避免「看不见的还能改」「锁了等于没锁」。
+   * 当前层由 viewPlan() 另行过滤。
+   */
+  function entityEditable(kind: PlanInventoryKind): boolean {
+    return planEntityEditable(kind, layerStateRef.current, lockedLayersRef.current);
+  }
+
+  /** 实体被隐藏/锁定时的一句统一解释；可编辑返回 null。 */
+  function layerBlockedReason(kind: PlanInventoryKind): string | null {
+    return planEntityBlockReason(kind, layerStateRef.current, lockedLayersRef.current);
+  }
+
+  /** 隐藏/锁定层的写入口统一拒绝：真拒绝时给一次提示并返回 true。 */
+  function refuseEntityWrite(kind: PlanInventoryKind): boolean {
+    const reason = layerBlockedReason(kind);
+    if (!reason) return false;
+    setEditMessage(reason);
+    return true;
+  }
+
+  /** 关掉/锁上某层时，收掉挂在该层实体上的单选、组选与拖拽会话（不留「选中不可见对象」）。 */
+  function clearSelectionForLayer(kind: PlanningLayerKind) {
+    if (kind === 'boundary') {
+      boundarySelectedRef.current = false;
+      setBoundarySelected(false);
+      return;
+    }
+    if (kind === 'zone') {
+      selectedZoneRef.current = null;
+      setSelectedZoneId(null);
+      dragZoneVertexRef.current = null;
+      dragZoneMoveRef.current = null;
+      zoneDragPreviewRef.current = null;
+      zoneScaleRef.current = null;
+      return;
+    }
+    if (kind === 'facility') {
+      selectedFacilityRef.current = null;
+      setSelectedFacilityId(null);
+      multiSelectedFacilityIdsRef.current = [];
+      setMultiSelectedFacilityIds([]);
+      facilityDragRef.current = null;
+      groupDragRef.current = null;
+      return;
+    }
+    if (kind === 'route') {
+      selectedRouteRef.current = null;
+      setSelectedRouteId(null);
+      multiSelectedRouteIdsRef.current = [];
+      setMultiSelectedRouteIds([]);
+      // 车辆挂在动线层下，关层时一并收掉。
+      selectedVehicleRef.current = null;
+      setSelectedVehicleId(null);
+      return;
+    }
+    if (kind === 'access' || kind === 'node') {
+      selectedNodeRef.current = null;
+      setSelectedNodeId(null);
+      multiSelectedNodeIdsRef.current = [];
+      setMultiSelectedNodeIds([]);
+      dragNodeRef.current = null;
+      nodeDragPreviewRef.current = null;
+      return;
+    }
+    if (kind === 'worker') {
+      selectedWorkerRef.current = null;
+      setSelectedWorkerId(null);
+      dragWorkerRef.current = null;
+      workerDragPreviewRef.current = null;
+      return;
+    }
+    if (kind === 'measure') {
+      selectedMeasurementRef.current = null;
+      setSelectedMeasurementId(null);
+      dragMeasurementRef.current = null;
+      measurementDragPreviewRef.current = null;
+      return;
+    }
+    if (kind === 'annotate') {
+      selectedAnnotationRef.current = null;
+      setSelectedAnnotationId(null);
+      annotateDragRef.current = null;
+    }
   }
 
   /* ---------------- H2-b 编辑交互 ---------------- */
@@ -5501,6 +5633,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function updateZone(id: string, patch: Partial<Pick<PlanZone, 'name' | 'color' | 'opacity' | 'event'>>) {
+    // 2026-11-20 审计 K3：属性写入同样受图层锁定/隐藏约束，别让左栏绕过画布上的锁。
+    if (refuseEntityWrite('zone')) return;
     const current = planRef.current;
     commitPlan({ ...current, zones: current.zones.map(zone => (zone.id === id ? { ...zone, ...patch } : zone)) });
   }
@@ -5511,6 +5645,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedFacilityRef.current = id;
     setSelectedFacilityId(id);
     // 2026-11-14：单选互斥——选中即清其它实体（流线/分区/节点/人员）与跨类型多选。
+    // 2026-11-20 审计 F4：补齐标注与红线，避免「设施 + 标注」同时选中。
     if (id) {
       selectZone(null);
       selectRoute(null);
@@ -5518,6 +5653,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       selectWorker(null);
       selectVehicle(null);
       selectMeasurement(null);
+      selectAnnotation(null);
+      selectBoundary(false);
       clearMultiSelection(false);
     }
     draw();
@@ -5531,6 +5668,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectRoute(null);
     selectNode(null);
     selectWorker(null);
+    selectVehicle(null);
     selectAnnotation(null);
     selectMeasurement(null);
   }
@@ -5600,7 +5738,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       selectRoute(null);
       selectNode(null);
       selectWorker(null);
+      selectVehicle(null);
       selectMeasurement(null);
+      selectAnnotation(null);
+      selectBoundary(false);
       clearMultiSelection(false);
     }
     draw();
@@ -6480,6 +6621,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(`设施模板「${templateId}」不存在。`);
       return;
     }
+    // 2026-11-20 审计 K8：设施层隐藏/锁定时不再「看不见却报已放置」。
+    if (refuseEntityWrite('facility')) return;
     const current = planRef.current;
     const view = viewPlan();
     const catalog = facilityCatalogRef.current ?? armedCatalogRef.current;
@@ -6584,6 +6727,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       | 'windowSillM' | 'windowHeightM'
     >> & { size?: { width: number; depth: number } },
   ) {
+    // 2026-11-20 审计 K3：属性卡写入口也要认图层锁，否则「锁了设施层还能改名/改尺寸」。
+    if (refuseEntityWrite('facility')) return;
     // 空名会让 plan 过不了契约校验：改名时忽略空值。
     if (patch.name !== undefined && patch.name.trim().length === 0) return;
     const current = planRef.current;
@@ -7092,7 +7237,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedRouteRef.current = id;
     setSelectedRouteId(id);
     if (id !== null) {
-      selectFacility(null); selectZone(null); selectNode(null); selectWorker(null); selectVehicle(null); selectMeasurement(null);
+      selectFacility(null); selectZone(null); selectNode(null); selectWorker(null); selectVehicle(null); selectMeasurement(null); selectAnnotation(null);
+      selectBoundary(false);
       clearMultiSelection(false);
     }
     draw();
@@ -7102,7 +7248,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedNodeRef.current = id;
     setSelectedNodeId(id);
     if (id !== null) {
-      selectFacility(null); selectRoute(null); selectWorker(null); selectVehicle(null); selectMeasurement(null);
+      selectFacility(null); selectZone(null); selectRoute(null); selectWorker(null); selectVehicle(null); selectMeasurement(null); selectAnnotation(null);
+      selectBoundary(false);
       clearMultiSelection(false);
     }
     draw();
@@ -7112,7 +7259,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedWorkerRef.current = id;
     setSelectedWorkerId(id);
     if (id !== null) {
-      selectFacility(null); selectRoute(null); selectNode(null); selectMeasurement(null); selectVehicle(null);
+      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectMeasurement(null); selectVehicle(null); selectAnnotation(null);
+      selectBoundary(false);
+      clearMultiSelection(false);
     }
     draw();
   }
@@ -7120,12 +7269,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   /**
    * 2026-11-17 #118 补录入 UI：选中车辆（独立集合，与设施/分区/动线/节点/人员互斥）。
    * 与 selectWorker 同款：id 为 null 时只清状态，不反向清别人（避免互斥递归）。
+   * 2026-11-20 审计 F4：补齐分区/标注/红线，车辆不再和分区同时挂着。
    */
   function selectVehicle(id: string | null) {
     selectedVehicleRef.current = id;
     setSelectedVehicleId(id);
     if (id !== null) {
-      selectFacility(null); selectRoute(null); selectNode(null); selectWorker(null); selectMeasurement(null);
+      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectMeasurement(null); selectAnnotation(null);
+      selectBoundary(false);
+      clearMultiSelection(false);
     }
     draw();
   }
@@ -7141,7 +7293,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 命中检测：最近的出入口节点（NODE_HIT_PX 内），无则 null。只命中当前层。 */
-  function nearestNodeIdAt(px: { x: number; y: number }): string | null {
+  function nearestNodeIdAt(px: { x: number; y: number }, options: { includeHidden?: boolean } = {}): string | null {
+    if (!options.includeHidden && !entityEditable('node')) return null;
     let best: { id: string; d: number } | null = null;
     for (const n of viewPlan().nodes) {
       const pt = planPointToPixel(n.position, currentViewport());
@@ -7152,7 +7305,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 命中检测：最近的人员点位（WORKER_HIT_PX 内），无则 null。只命中当前层。 */
-  function nearestWorkerIdAt(px: { x: number; y: number }): string | null {
+  function nearestWorkerIdAt(px: { x: number; y: number }, options: { includeHidden?: boolean } = {}): string | null {
+    if (!options.includeHidden && !entityEditable('worker')) return null;
     let best: { id: string; d: number } | null = null;
     for (const w of viewPlan().workers) {
       const pt = planPointToPixel(w.position, currentViewport());
@@ -7163,7 +7317,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 命中检测：最近的车辆（VEHICLE_HIT_PX 内），无则 null。只命中当前层。 */
-  function nearestVehicleIdAt(px: { x: number; y: number }): string | null {
+  function nearestVehicleIdAt(px: { x: number; y: number }, options: { includeHidden?: boolean } = {}): string | null {
+    if (!options.includeHidden && !entityEditable('vehicle')) return null;
     let best: { id: string; d: number } | null = null;
     for (const v of viewPlan().vehicles ?? []) {
       const pt = planPointToPixel(v.position, currentViewport());
@@ -7174,7 +7329,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 命中检测：最近的路线折线（ROUTE_HIT_PX 内的点到段距离），无则 null。只命中当前层。 */
-  function nearestRouteIdAt(px: { x: number; y: number }): string | null {
+  function nearestRouteIdAt(px: { x: number; y: number }, options: { includeHidden?: boolean } = {}): string | null {
+    if (!options.includeHidden && !entityEditable('route')) return null;
     let best: { id: string; d: number } | null = null;
     for (const r of viewPlan().routes) {
       for (let i = 1; i < r.points.length; i++) {
@@ -7718,6 +7874,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setSelectedMeasurementId(id);
     if (id) {
       selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectVehicle(null); selectAnnotation(null);
+      selectBoundary(false);
       clearMultiSelection(false);
       const measurement = (planRef.current.measurements ?? []).find(m => m.id === id);
       if (measurement) {
@@ -7755,7 +7912,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectedAnnotationRef.current = id;
     setSelectedAnnotationId(id);
     if (id !== null) {
-      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectMeasurement(null);
+      selectFacility(null); selectZone(null); selectRoute(null); selectNode(null); selectWorker(null); selectVehicle(null); selectMeasurement(null);
+      selectBoundary(false);
+      clearMultiSelection(false);
     }
     draw();
   }
@@ -7839,7 +7998,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 标注命中测试（浏览模式点选）：容差 8 CSS px 换算成米，数组倒序 = 上层优先。 */
-  function nearestAnnotationIdAt(pt: PlanPoint): string | null {
+  function nearestAnnotationIdAt(pt: PlanPoint, options: { includeHidden?: boolean } = {}): string | null {
+    if (!options.includeHidden && !entityEditable('annotation')) return null;
     const toleranceM = ANNOTATION_HIT_PX * planMetersPerPixel(currentViewport());
     const annotations = viewPlan().annotations ?? [];
     for (const a of [...annotations].reverse()) {
@@ -7853,7 +8013,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    * 只命中外轮廓与环，不把整块面积填充当热区（否则盖在大片场地上会抢走设施点选）。
    * 拖动中的预览几何同样参与命中，拖动时指针不会“掉”出标注。
    */
-  function nearestMeasurementIdAt(px: { x: number; y: number }): string | null {
+  function nearestMeasurementIdAt(px: { x: number; y: number }, options: { includeHidden?: boolean } = {}): string | null {
+    if (!options.includeHidden && !entityEditable('measurement')) return null;
     const viewport = currentViewport();
     const measurements = viewPlan().measurements ?? [];
     let best: { id: string; d: number } | null = null;
@@ -8012,6 +8173,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   function locateRow(row: PlanInventoryRow) {
+    // 2026-11-20 审计 B3/K3：清单行也是选中入口——所在层隐藏/锁定时不选中、不飞视图，
+    // 只给一句解释。否则会出现「画布点不中，清单行却能选中并改名」的双口径。
+    const blocked = layerBlockedReason(row.kind);
+    if (blocked) {
+      setInfoMessage(blocked);
+      return;
+    }
     centerViewOn(row.anchor);
     if (row.kind === 'facility') {
       selectRoute(null);
@@ -8075,14 +8243,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function viewHitSelectable(hit: { px: { x: number; y: number }; pt: PlanPoint }): boolean {
     if (!onPlanChange) return false;
     if (nearestConflictClusterAt(hit.px)) return true;
-    if (!layerLocked('node') && nearestNodeIdAt(hit.px)) return true;
-    if (!layerLocked('worker') && nearestWorkerIdAt(hit.px)) return true;
-    if (!layerLocked('route') && nearestRouteIdAt(hit.px)) return true;
-    // 2026-11-17 #118 补录入 UI：车辆可点选（独立集合，未做图层开关，暂不参与 layerLocked）。
+    if (nearestNodeIdAt(hit.px)) return true;
+    if (nearestWorkerIdAt(hit.px)) return true;
+    if (nearestRouteIdAt(hit.px)) return true;
     if (nearestVehicleIdAt(hit.px)) return true;
-    if (!layerLocked('annotate') && nearestAnnotationIdAt(hit.pt)) return true;
-    if (!layerLocked('facility') && viewPlan().facilities.some((facility) => facilityContainsPoint(hit.pt, facility))) return true;
-    if (!layerLocked('zone') && viewPlan().zones.some((zone) => planPointInRing(hit.pt, zone.polygon))) return true;
+    if (nearestAnnotationIdAt(hit.pt)) return true;
+    if (entityEditable('facility') && viewPlan().facilities.some((facility) => facilityContainsPoint(hit.pt, facility))) return true;
+    if (entityEditable('zone') && viewPlan().zones.some((zone) => planPointInRing(hit.pt, zone.polygon))) return true;
     return false;
   }
 
@@ -9983,41 +10150,55 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           }
           // 点到别处就把明细收起来（下面各分支都是新选择）。
           showConflictDetail(null);
-          const hitNode = layerLocked('node') ? null : nearestNodeIdAt(hit.px);
+          // 2026-11-20 审计 B3/K3：命中统一走 entityEditable（图层可见 ∧ 未锁定）。
+          const hitNode = nearestNodeIdAt(hit.px);
           if (hitNode) { selectNode(hitNode); focusInventory(); return; }
-          const hitWorker = layerLocked('worker') ? null : nearestWorkerIdAt(hit.px);
+          const hitWorker = nearestWorkerIdAt(hit.px);
           if (hitWorker) { selectWorker(hitWorker); focusInventory(); return; }
           // 2026-11-17 #118 补录入 UI：车辆点选（独立集合）。
           const hitVehicle = nearestVehicleIdAt(hit.px);
           if (hitVehicle) { selectVehicle(hitVehicle); focusInventory(); return; }
-          const hitRoute = layerLocked('route') ? null : nearestRouteIdAt(hit.px);
+          const hitRoute = nearestRouteIdAt(hit.px);
           if (hitRoute) { selectRoute(hitRoute); focusInventory(); return; }
           // 2026-11-11 用户指令：标注画在业务层之上，点选先于设施/分区（锁定标注层不响应）。
-          const hitAnnotation = layerLocked('annotate') ? null : nearestAnnotationIdAt(hit.pt);
+          const hitAnnotation = nearestAnnotationIdAt(hit.pt);
           if (hitAnnotation) { selectAnnotation(hitAnnotation); focusInventory(); return; }
-          const hitFacility = layerLocked('facility')
-            ? null
-            : [...viewPlan().facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
-          if (hitFacility) {
+          const hitFacility = [...viewPlan().facilities].reverse().find(f => facilityContainsPoint(hit.pt, f));
+          if (hitFacility && entityEditable('facility')) {
             selectFacility(hitFacility.id);
             focusInventory();
             return;
           }
           // P2-j：设施没命中再看分区（点中分区体 → 选中，之后可拖它的顶点改形）。
-          const hitZone = layerLocked('zone')
-            ? null
-            : [...viewPlan().zones].reverse().find(z => planPointInRing(hit.pt, z.polygon));
-          if (hitZone) {
+          const hitZone = [...viewPlan().zones].reverse().find(z => planPointInRing(hit.pt, z.polygon));
+          if (hitZone && entityEditable('zone')) {
             selectZone(hitZone.id);
             setEditMessage(`已选中分区「${hitZone.name}」：拖白色顶点改形状。`);
             focusInventory();
             return;
+          }
+          // 2026-11-20 审计 K3：位置上有实体但所在图层被隐藏/锁定 → 给一次解释，
+          // 保留当前选中，不再“点了没反应、选中却没了”。
+          const blockedKind: PlanInventoryKind | null = (() => {
+            if (nearestNodeIdAt(hit.px, { includeHidden: true })) return 'node';
+            if (nearestWorkerIdAt(hit.px, { includeHidden: true })) return 'worker';
+            if (nearestVehicleIdAt(hit.px, { includeHidden: true })) return 'vehicle';
+            if (nearestRouteIdAt(hit.px, { includeHidden: true })) return 'route';
+            if (nearestAnnotationIdAt(hit.pt, { includeHidden: true })) return 'annotation';
+            if ([...viewPlan().facilities].reverse().some(f => facilityContainsPoint(hit.pt, f))) return 'facility';
+            if ([...viewPlan().zones].reverse().some(z => planPointInRing(hit.pt, z.polygon))) return 'zone';
+            return null;
+          })();
+          if (blockedKind) {
+            const reason = layerBlockedReason(blockedKind);
+            if (reason) { setEditMessage(reason); return; }
           }
           selectFacility(null);
           selectZone(null);
           selectRoute(null);
           selectNode(null);
           selectWorker(null);
+          selectVehicle(null);
           selectAnnotation(null);
         }
       }
@@ -10180,8 +10361,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         } else if (modeRef.current === 'view') {
           // P2-j：双击顶点删点、双击边界线插点（两下都是「改几何」，不进其它手势）。
           const hit = eventPlanPoint(event);
-          if (!hit || !onPlanChange || !facilityDirectEditable()) return;
-          if (layerLocked('boundary')) {
+          // 2026-11-20 审计 F5：红线自检自己的层（隐藏/锁定），不再被设施层锁定连带禁用。
+          if (!hit || !onPlanChange || modeRef.current !== 'view') return;
+          if (!layerVisible('boundary')) {
+            setEditMessage(planLayerBlockReason('boundary', { visible: false, locked: false }) ?? '用地红线图层已隐藏，先打开再改。');
+            return;
+          }
+          if (!boundaryDirectEditable()) {
             setEditMessage('用地红线图层已锁定，先解锁再改。');
             return;
           }
