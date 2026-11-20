@@ -225,3 +225,14 @@
 
 .sc-scan-card-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 2px 0; }
 .sc-scan-card-actions .sc-button { font-size: 12px; padding: 3px 8px; }
+
+/* 云端案例目录（2026-11-20 任务 C）：国内案例段下、静态卡之后的云端部分。
+   目录卡复用案例卡形；未取详情前用空规划缩略垫底，读取失败/不可用都用 sc-note 如实说话。 */
+.sc-cloud-cases { display: grid; gap: 8px; margin-top: 10px; }
+.sc-cloud-cases-head { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11px; color: var(--space-muted, #546461); }
+.sc-cloud-case-list { margin-top: 2px; }
+.sc-cloud-case-shot { display: block; }
+.sc-cloud-case-shot .sc-case-thumb.is-empty { opacity: .38; }
+.sc-cloud-case-meta { font-variant-numeric: tabular-nums; }
+.sc-cloud-case-view { display: grid; gap: 6px; padding: 6px 8px; border: 1px dashed var(--space-line, #e1e8e5); border-radius: 9px; }
+.sc-cloud-case-preview { display: grid; gap: 4px; }

@@ -62,6 +62,7 @@ import {
   type OutdoorProjectRecord,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import { pushOutdoorPlan, forcePushOutdoorPlan, pullOutdoorPlan } from '@/components/room-organizer/lib/outdoor-plan-sync';
+import { failCloudSync, finishCloudSync, noteLocalSave, reportConflict, startCloudSync } from '@/components/room-organizer/lib/save-status';
 import { RealSourceThumb } from './map-source-thumb';
 import { OutdoorSyncBanner, type OutdoorSyncConflict } from './outdoor-sync-banner';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -273,7 +274,23 @@ const GUIDE_STORAGE_KEY = 'outdoor-plan-guide-v1';
 /** 本地活动没有稳定 id 时的兜底草稿槽（单草稿；云项目 id 恒走按项目隔离）。 */
 const LOCAL_DRAFT_SLOT = 'local-draft';
 
-export type OutdoorSaveState = { state: 'idle' | 'saving' | 'saved'; savedAt: string | null } | null;
+/**
+ * 户外保存状态上报（任务 B / C05：本机与云端分开说真话）。
+ * - saving/saved：本机落盘阶段；saved 只代表本机已存。
+ * - syncing → cloud-saved：云端副本推送确认（带服务器版本与确认时间）。
+ * - cloud-failed：云端暂未同步（未登录/断网/后端不可用），本机这版还在，定时重试。
+ * - conflict：版本冲突，等用户二选一。
+ */
+export type OutdoorSaveState = {
+  state: 'idle' | 'saving' | 'saved' | 'syncing' | 'cloud-saved' | 'cloud-failed' | 'conflict';
+  savedAt: string | null;
+  /** 服务器最近确认的副本版本；未同步过为空。 */
+  cloudRevision?: number;
+  /** 服务器确认时间（毫秒）。 */
+  cloudConfirmedAt?: number;
+  /** 失败/冲突时的一句人话原因。 */
+  detail?: string;
+} | null;
 
 export interface OutdoorPlanOverlayProps {
   /** 草稿归属：layout.id（云项目 id 或本地活动 uuid）；null 落固定兜底槽。 */
@@ -433,7 +450,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     ? { lng: plan.anchor.lng, lat: plan.anchor.lat, zoom: DEFAULT_OUTDOOR_OVERVIEW_ZOOM }
     : null;
   const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // C05：本机 saved 与云端确认分开报。saved ≠ 云端已同步；云端状态由推送回执改写。
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'syncing' | 'cloud-saved' | 'cloud-failed' | 'conflict'>('idle');
+  const [cloudInfo, setCloudInfo] = useState<{ revision: number | null; confirmedAt: number | null }>({ revision: null, confirmedAt: null });
+  // 云端副本重试闸：失败后 60s 内不再尝试（不跟着每条编辑发请求）；到点自动静默重试一次。
+  const cloudRetryTimerRef = useRef<number | null>(null);
   // 2026-11-17：云端副本的人话状态（冲突/未上传）；空串不占位。
   const [syncNote, setSyncNote] = useState<string>('');
   // 版本冲突：让用户二选一（不自动合并、不后写胜）。ref 供防抖回调同步读。
@@ -565,8 +586,16 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const mapContextRef=useRef(createOutdoorMapContext());
   const [evidenceHighlights,setEvidenceHighlights]=useState<OutdoorEvidenceHighlight[]>([]);
   useEffect(()=>{mapContextRef.current.invalidate();setEvidenceHighlights([]);},[slotId]);
-  // 换活动：上一份的云端提示/冲突不带过去。
-  useEffect(()=>{setSyncNote('');setSyncConflict(null);syncConflictRef.current=null;cloudRetryAtRef.current=0;},[slotId]);
+  // 换活动：上一份的云端提示/冲突/保存态与待执行的重试都不带过去。
+  useEffect(()=>{
+    setSyncNote('');setSyncConflict(null);syncConflictRef.current=null;cloudRetryAtRef.current=0;
+    if (cloudRetryTimerRef.current !== null) { window.clearTimeout(cloudRetryTimerRef.current); cloudRetryTimerRef.current = null; }
+    setSaveState('idle'); setCloudInfo({ revision: null, confirmedAt: null });
+  },[slotId]);
+  // 卸载：停掉待执行的重试（本机记录已在，重开活动会继续推）。
+  useEffect(() => () => {
+    if (cloudRetryTimerRef.current !== null) window.clearTimeout(cloudRetryTimerRef.current);
+  }, []);
   // 普通提示自己退场（冲突提示不走这条——它要等用户选）。
   useEffect(() => {
     if (!syncNote || syncConflict) return undefined;
@@ -656,6 +685,57 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const libraryAssetSignature=JSON.stringify(plan?.facilities.filter(f=>f.sourceAssetId).map(f=>[f.id,f.sourceAssetId,f.modelOverride])??[]);
   useEffect(()=>{const p=planRef.current;if(!p)return;const request=new AbortController();void restoreOutdoorLibraryModels(controller??null,slotId,p,request.signal).catch(()=>{/* unavailable models stay visibly unavailable; no generated fallback */});return()=>request.abort();},[slotId,controller,libraryAssetSignature]);
   const pendingSaveRef = useRef<number | null>(null);
+  const scheduleCloudRetryRef = useRef<(() => void) | null>(null);
+  /** 推送云端副本并如实结算统一状态机；例行失败保持静默，只留状态与定时重试。 */
+  const runCloudPush = useCallback((record: OutdoorProjectRecord, current: SitePlanData): void => {
+    const seq = startCloudSync(slotId);
+    void pushOutdoorPlan(controller ?? null, record, current).then(outcome => {
+      // 让「本机已存」那一帧先渲染出去（macrotask 边界）再结算云端状态——
+      // React 批处理会把同 tick 的 setSaveState 合成一帧，吞掉本机保存的如实上报。
+      window.setTimeout(() => {
+        if (outcome.status === 'saved') {
+          cloudRetryAtRef.current = 0;
+          saveOutdoorProjectRecord({
+            ...record,
+            remoteActivityId: outcome.remoteActivityId,
+            remoteRevision: outcome.remoteRevision,
+          }, undefined, !activityScopedPlan);
+          setSaveState('cloud-saved');
+          setCloudInfo({ revision: outcome.remoteRevision, confirmedAt: Date.now() });
+          finishCloudSync(slotId, seq, { revision: outcome.remoteRevision });
+          return;
+        }
+        if (outcome.status === 'conflict') {
+          const conflict: OutdoorSyncConflict = { revision: outcome.remoteRevision, name: outcome.remoteName };
+          syncConflictRef.current = conflict;
+          setSyncConflict(conflict);
+          setSyncNote('');
+          setSaveState('conflict');
+          reportConflict(slotId, { remoteRevision: outcome.remoteRevision, remoteName: outcome.remoteName });
+          return;
+        }
+        // 未登录 / 未部署 / 断网：静默降级；状态机如实记「云端未同步」，60s 后自动再试。
+        cloudRetryAtRef.current = Date.now() + CLOUD_RETRY_MS;
+        setSaveState('cloud-failed');
+        failCloudSync(slotId, seq, '云端副本暂未同步（未登录或网络不可用）；本机这版还在。');
+        scheduleCloudRetryRef.current?.();
+      }, 0);
+    });
+  }, [slotId, activityScopedPlan, controller]);
+  /** 到点静默重试一次：不写本机记录、不动画布，只推当前已有的本机版（旧回执不覆盖新编辑）。 */
+  const scheduleCloudRetry = useCallback((): void => {
+    if (cloudRetryTimerRef.current !== null) return;
+    cloudRetryTimerRef.current = window.setTimeout(() => {
+      cloudRetryTimerRef.current = null;
+      const current = planRef.current;
+      if (current == null || syncConflictRef.current) return;
+      if (Date.now() < cloudRetryAtRef.current) { scheduleCloudRetry(); return; }
+      const existing = readOutdoorProjectRecord(slotId);
+      if (!existing) return;
+      runCloudPush(existing, current);
+    }, CLOUD_RETRY_MS);
+  }, [slotId, runCloudPush]);
+  scheduleCloudRetryRef.current = scheduleCloudRetry;
   const flushSave = useCallback(() => {
     const current = planRef.current;
     if (current == null) return;
@@ -673,32 +753,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     saveOutdoorProjectRecord(record, undefined, !activityScopedPlan);
     setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
     setSaveState('saved');
+    // C05：本机落盘记入统一状态机（待同步 +1）；「已保存」只代表本机，云端结算在 runCloudPush。
+    noteLocalSave(slotId);
     // 后端副本：本机已落盘；推不上去只是少一份副本，不改本机、不拦编辑。
     // 2026-11-17（用户：顶部这条提示很烦人）：例行失败**不弹任何东西**，只是安静地退回去，
-    // 并隔 60s 再试一次（不跟着每条编辑撞一次）；真正需要用户决定的只有版本冲突。
+    // 并隔 60s 自动重试（不再只等下一次编辑）；真正需要用户决定的只有版本冲突。
     if (syncConflictRef.current) return;
-    if (Date.now() < cloudRetryAtRef.current) return;
-    void pushOutdoorPlan(controller ?? null, record, current).then(outcome => {
-      if (outcome.status === 'saved') {
-        cloudRetryAtRef.current = 0;
-        saveOutdoorProjectRecord({
-          ...record,
-          remoteActivityId: outcome.remoteActivityId,
-          remoteRevision: outcome.remoteRevision,
-        }, undefined, !activityScopedPlan);
-        return;
-      }
-      if (outcome.status === 'conflict') {
-        const conflict: OutdoorSyncConflict = { revision: outcome.remoteRevision, name: outcome.remoteName };
-        syncConflictRef.current = conflict;
-        setSyncConflict(conflict);
-        setSyncNote('');
-        return;
-      }
-      // 未登录 / 未部署 / 断网：静默降级，过一会儿再试。
-      cloudRetryAtRef.current = Date.now() + CLOUD_RETRY_MS;
-    });
-  }, [slotId, activityName, controller]);
+    if (Date.now() < cloudRetryAtRef.current) { scheduleCloudRetry(); return; }
+    runCloudPush(record, current);
+  }, [slotId, activityName, runCloudPush, scheduleCloudRetry]);
 
   /** 冲突二选一「用我这版」：明确覆盖服务器（revision 仍 +1）。 */
   const useMyVersion = useCallback(() => {
@@ -706,10 +769,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     const existing = readOutdoorProjectRecord(slotId);
     if (!current || !existing) return;
     setSyncBusy(true);
+    const seq = startCloudSync(slotId);
     void forcePushOutdoorPlan(controller ?? null, existing, current).then(outcome => {
       setSyncBusy(false);
       if (outcome.status !== 'saved') {
         setSyncNote('这次没传上去，本机这版还在，稍后再试。');
+        setSaveState('cloud-failed');
+        failCloudSync(slotId, seq, '覆盖没传上去；本机这版还在，稍后再试。');
         return;
       }
       saveOutdoorProjectRecord({
@@ -722,6 +788,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       syncConflictRef.current = null;
       setSyncConflict(null);
       setSyncNote(`已用本机这版覆盖，现在是版本 ${outcome.remoteRevision}。`);
+      setSaveState('cloud-saved');
+      setCloudInfo({ revision: outcome.remoteRevision, confirmedAt: Date.now() });
+      finishCloudSync(slotId, seq, { revision: outcome.remoteRevision });
     });
   }, [slotId, controller]);
 
@@ -753,6 +822,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       syncConflictRef.current = null;
       setSyncConflict(null);
       setSyncNote(`已换成服务器那版（版本 ${remote.revision}）。`);
+      setSaveState('cloud-saved');
+      setCloudInfo({ revision: remote.revision, confirmedAt: Date.now() });
+      finishCloudSync(slotId, startCloudSync(slotId), { revision: remote.revision });
     });
   }, [slotId, controller]);
   useEffect(() => {
@@ -806,8 +878,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     };
   }, [mapPickerOpen]);
   useEffect(() => {
-    onSaveStateChange?.({ state: saveState, savedAt });
-  }, [saveState, savedAt, onSaveStateChange]);
+    onSaveStateChange?.({
+      state: saveState,
+      savedAt,
+      ...(cloudInfo.revision !== null ? { cloudRevision: cloudInfo.revision } : {}),
+      ...(cloudInfo.confirmedAt !== null ? { cloudConfirmedAt: cloudInfo.confirmedAt } : {}),
+      ...(saveState === 'cloud-failed' ? { detail: '云端副本暂未同步；本机这版还在，稍后自动重试。' } : {}),
+      ...(saveState === 'conflict' && syncConflict ? { detail: `云端已是版本 ${syncConflict.revision}（${syncConflict.name}），需要你选择保留哪一版。` } : {}),
+    });
+  }, [saveState, savedAt, cloudInfo, syncConflict, onSaveStateChange]);
 
   function exportPlanPng(): boolean {
     const current = planRef.current;

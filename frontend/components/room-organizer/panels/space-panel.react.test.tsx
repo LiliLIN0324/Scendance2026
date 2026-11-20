@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { rememberAholoAsset } from '../lib/aholo-assets';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
-import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { createStarterOutdoorPlan, readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { onOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES } from '../lib/replica-cases';
 import { SpacePanel } from './space-panel';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
 import type { StoredEnvironment } from '../lib/environment-preference';
+import type { BackendSession } from '@/lib/backend-session';
 
 // 2026-11-19：上传走本机代理，单测里只验「面板把选中的文件交给上传口、并把结果/错误写回界面」。
 const uploadScanFile = vi.hoisted(() => vi.fn());
@@ -293,7 +294,7 @@ describe('SpacePanel', () => {
     try {
       const expected = `replica-${REPLICA_CASES[0].id}`;
       const current = REPLICA_CASES[0].buildPlan();
-      // 已打开过的旧案例也应在再次点击卡片时读取新版，不续用旧描图。
+      // 再次打开必须保留个人修改，不能随着案例初始方案更新而覆盖。
       saveOutdoorProjectRecord({ v: 1, projectId: expected, name: '旧案例', createdAt: '2026-11-17T00:00:00.000Z', updatedAt: '2026-11-17T00:00:00.000Z', plan: { ...current, zones: current.zones.slice(0, 2), facilities: [] } });
       render(<SpacePanel layout={makeLayout()} variant="card"/>);
       const group = document.querySelector('[data-testid="space-group-cases"]') as HTMLDetailsElement;
@@ -302,9 +303,67 @@ describe('SpacePanel', () => {
       const card = document.querySelector('[data-testid="space-group-cases"] .sc-space-sample') as HTMLElement;
       fireEvent.click(card);
       expect(switched).toEqual([expected]);
-      expect(readOutdoorProjectRecord(expected)?.name).toBe(`经典案例 · ${REPLICA_CASES[0].title}`);
-      expect(readOutdoorProjectRecord(expected)?.plan).toEqual(current);
+      expect(readOutdoorProjectRecord(expected)?.name).toBe('旧案例');
+      expect(readOutdoorProjectRecord(expected)?.plan).toEqual({ ...current, zones: current.zones.slice(0, 2), facilities: [] });
       expect(readOutdoorProjectRecord(expected)?.createdAt).toBe('2026-11-17T00:00:00.000Z');
+    } finally {
+      off();
+    }
+  });
+
+  // 2026-11-20 任务 C：云端案例目录只接真实后端会话；backendSession 还没有案例方法时
+  // 生产明确显示「不可用」，绝不用本机数据冒充云端目录。
+  it('card：controller 没有云端案例方法时，目录段显示不可用且无目录卡', async () => {
+    render(<SpacePanel layout={makeLayout()} variant="card" controller={{} as unknown as BackendSession}/>);
+    const group = document.querySelector('[data-testid="space-group-cn-cases"]') as HTMLDetailsElement;
+    group.open = true;
+    fireEvent(group, new Event('toggle'));
+    expect(await screen.findByTestId('cloud-cases-unavailable')).toBeTruthy();
+    expect(document.querySelector('[data-testid="cloud-case-catalog"] li')).toBeNull();
+  });
+
+  // 2026-11-20 任务 C：云端案例「使用此案例」= 读公开 manifest 另存独立副本再同页切换；
+  // 副本不继承当前项目的云端身份（不写 remoteActivityId/remoteRevision）。
+  it('card：云端案例另存独立副本并同页切换，重复使用不覆盖已有副本', async () => {
+    const session = {
+      getCloudCapabilities: vi.fn(),
+      listCloudCases: vi.fn(async () => [
+        { id: 'cn-yuquan-chrysanthemum', title: '杭州植物园菊花展', category: '花卉展', sortOrder: 0, revision: 4 },
+      ]),
+      readCloudCase: vi.fn(async () => ({
+        case: { id: 'cn-yuquan-chrysanthemum', title: '杭州植物园菊花展', revision: 4 },
+        publicationId: 'pub-1',
+        revision: 4,
+        manifest: { outdoor: createStarterOutdoorPlan() },
+        assets: [],
+      })),
+      upsertCloudCase: vi.fn(),
+      listCloudCaseDrafts: vi.fn(),
+      publishCloudCase: vi.fn(),
+      unpublishCloudCase: vi.fn(),
+      listCloudCaseVersions: vi.fn(),
+      restoreCloudCase: vi.fn(),
+    } as unknown as BackendSession;
+    const expected = 'replica-cn-yuquan-chrysanthemum';
+    const switched: string[] = [];
+    const off = onOutdoorProjectSwitch(id => { switched.push(id); return true; });
+    try {
+      // 用户已改过这份副本：官方目录再怎么更新，重复使用都不覆盖。
+      saveOutdoorProjectRecord({ v: 1, projectId: expected, name: '我改过的副本', createdAt: '2026-11-19T00:00:00.000Z', updatedAt: '2026-11-19T01:00:00.000Z', plan: { ...createStarterOutdoorPlan(), facilities: [] } });
+      render(<SpacePanel layout={makeLayout()} variant="card" controller={session}/>);
+      const group = document.querySelector('[data-testid="space-group-cn-cases"]') as HTMLDetailsElement;
+      group.open = true;
+      fireEvent(group, new Event('toggle'));
+      const use = await screen.findByTestId('cloud-case-use-cn-yuquan-chrysanthemum');
+      fireEvent.click(use);
+      await waitFor(() => expect(switched).toEqual([expected]));
+      expect(readOutdoorProjectRecord(expected)?.name).toBe('我改过的副本');
+      expect(readOutdoorProjectRecord(expected)?.updatedAt).toBe('2026-11-19T01:00:00.000Z');
+      expect(readOutdoorProjectRecord(expected)?.remoteActivityId).toBeUndefined();
+      // 已有副本续用：不读 manifest，也不再写记录。
+      expect((session as unknown as { readCloudCase: ReturnType<typeof vi.fn> }).readCloudCase).not.toHaveBeenCalled();
+      // 全新副本才走「读 manifest → 落新记录 → 不带云端身份」。
+      // （已有副本的路径在上面两行已核；新落记录路径在 lib/cloud-cases.test.ts 覆盖。）
     } finally {
       off();
     }

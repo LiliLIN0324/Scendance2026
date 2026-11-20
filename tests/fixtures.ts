@@ -49,13 +49,28 @@ export async function database(dataDir?: string, options?:{excludeMigrations?:re
       return result.rows[0].result;
     } catch(error) {
       const code=(error as Error).message;
-      if(/^[A-Z_]+$/.test(code)) throw new ApiError(code,code.endsWith('NOT_FOUND')?404:/FORBIDDEN/.test(code)?403:/BUSY|BUDGET/.test(code)?429:409);
-      throw error;
+      if(/^[A-Z_]+$/.test(code)) throw new ApiError(code,code.endsWith('NOT_FOUND')?404:code==='UNAUTHENTICATED'?401:/FORBIDDEN/.test(code)?403:code==='PLATFORM_ADMIN_REQUIRED'?403:/BUDGET|BUSY/.test(code)?429:/LEASE|CONFLICT|STALE|CLAIM/.test(code)?409:/INTEGRITY|INCOMPLETE|TOO_LARGE|OBJECT_MISSING|STATE_INVALID|WORKSPACE_REQUIRED/.test(code)?422:409);
+      // 与真实 backend.ts 同口径：非 ALL_CAPS 的数据库错误按 DATABASE_ERROR 汇报。
+      throw new ApiError('DATABASE_ERROR',500);
     }
   };
   const core=call('scene_rpc'),studios=call('studio_rpc'),jobs=call('job_rpc'),reconstruction=call('reconstruction_rpc');
-  const sceneRpc:Rpc=(actor,action,data)=>(action.startsWith('studios.')?studios:core)(actor,action,data);
+  const cloudRpc=call('cloud_storage_rpc');
+  const sceneRpc:Rpc=(actor,action,data)=>(action.startsWith('studios.')?studios:action.startsWith('cloud.')?cloudRpc:core)(actor,action,data);
   const rawAgent=call('agent_rpc'),guardedAgent=call('agent_steering_guard_rpc');
-  const backend:Backend={scene:sceneRpc,jobs,reconstruction,originalSceneReview:call('original_scene_review_rpc'),agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:rawAgent)(actor,action,data),agentGuardReady:guardedAgent,agentEvents:call('agent_run_events_rpc'),user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},upload:async()=>{},sign:async path=>`https://storage.example/signed/${path}`};
-  return {db,rpc:sceneRpc,jobs,reconstruction,backend};
+  // 直传仿真：upload()/objects 模拟对象存储桶；stat/readSourceBytes 供完整性复核。
+  const objects=new Map<string,Uint8Array>();
+  const backend:Backend={
+    scene:sceneRpc,cloud:call('cloud_storage_rpc'),jobs,reconstruction,
+    originalSceneReview:call('original_scene_review_rpc'),
+    agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:rawAgent)(actor,action,data),
+    agentGuardReady:guardedAgent,agentEvents:call('agent_run_events_rpc'),
+    user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},
+    upload:async(path,bytes)=>{objects.set(path,bytes);},
+    readSourceBytes:async path=>{const hit=objects.get(path);if(!hit)throw new ApiError('STORAGE_DOWNLOAD_FAILED',502);return hit;},
+    sign:async path=>`https://storage.example/signed/${path}`,
+    stat:async path=>{const hit=objects.get(path);if(!hit)throw new ApiError('OBJECT_NOT_FOUND',404);return {size:hit.length};},
+    createUploadUrl:async path=>({url:`https://storage.example/upload/${path}`,token:'fixture-upload-token'}),
+  };
+  return {db,rpc:sceneRpc,jobs,reconstruction,backend,objects};
 }

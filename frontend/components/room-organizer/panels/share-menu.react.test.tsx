@@ -2,12 +2,14 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planOutline, ShareMenu, shareBingoStatus, sharePublishReadOnly, shareTriggerChrome, type ShareMenuActions } from './share-menu';
 import { displayShareUrl, SHARE_READ_ONLY_LINE, SharePanel, type ShareExportEntry } from './share-panel';
+import { registerPublishGateProvider, type PublishGateSnapshot } from '../lib/project-manifest';
 import type { ServerShare } from '../lib/share-records';
 import type { RoomLayout } from '../lib/types';
+import type { BackendSession } from '@/lib/backend-session';
 
 afterEach(cleanup);
 
@@ -244,7 +246,7 @@ describe('发布页签', () => {
     expect(screen.getByTestId('share-panel').querySelector('.sc-publish-plan')).toBeNull();
   });
 
-  it('hands out the site page when the publish returns one, keeping the cloud revision behind it', async () => {
+  it('2026-11-20 任务 C：交给客户的是云端发布链接；场地快照降级为明确标注的离线固定副本', async () => {
     localStorage.clear();
     const share = actions();
     vi.mocked(share.onPublish).mockResolvedValueOnce({
@@ -259,14 +261,15 @@ describe('发布页签', () => {
     fireEvent.click(screen.getByRole('tab', { name: '发布' }));
     fireEvent.click(screen.getByRole('button', { name: '发布并复制链接' }));
     expect(await screen.findByRole('button', { name: /^复制$/ })).toBeTruthy();
-    expect(screen.getByTestId('share-link-row').textContent).toContain('studio.example/site#s2=1.abc');
-    expect(screen.getByText('打开即可查看场地轮廓、分区和尺度，只读、无需登录。')).toBeTruthy();
-    expect(screen.queryByText('打开即可查看场地、分区和尺度，页里可看 3D。')).toBeNull();
-    expect(clipboard).toHaveBeenCalledWith('https://studio.example/site#s2=1.abc123');
-    fireEvent.click(screen.getByRole('button', { name: /^复制$/ }));
-    expect(clipboard).toHaveBeenLastCalledWith('https://studio.example/site#s2=1.abc123');
+    // 发布页不再把自带快照的场地页冒充主链接：交给客户的是受控发布链接（版本/撤回都在云端）。
+    expect(screen.getByTestId('share-link-row').textContent).toContain('studio.example/view/#token');
+    expect(screen.getByText('打开即可查看场地、分区和尺度，页里可看 3D。')).toBeTruthy();
+    // 场地快照只在说明里出现，并如实标注边界：固定副本、不随项目更新、无法远程撤回。
+    const offline = screen.getByText(/打开离线场地快照/).closest('p');
+    expect(offline?.textContent).toContain('固定副本，不随项目更新，无法远程撤回');
+    expect(clipboard).toHaveBeenCalledWith('https://studio.example/view/#token');
     expect(localStorage.getItem('scendance.publishedLink.v1.project-1')).toContain('https://studio.example/site#s2=1.abc123');
-    expect(localStorage.getItem('scendance.shareLog.v1.project-1')).toContain('https://studio.example/site#s2=1.abc123');
+    expect(localStorage.getItem('scendance.shareLog.v1.project-1')).toContain('https://studio.example/view/#token');
   });
 
   it('restores a saved link as the published row and drops it when the server revoked that revision', async () => {
@@ -608,6 +611,104 @@ function expectChrome(trigger: HTMLElement, open: boolean): void {
   expect(trigger.style.color.toLowerCase()).toMatch(ink);
   expect(trigger.style.borderTopColor.toLowerCase()).toMatch(hair);
 }
+
+describe('案例页签（任务 C，2026-11-20）', () => {
+  it('没传 controller 时不出现案例页签', () => {
+    localStorage.clear();
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
+    openMenu();
+    expect(screen.queryByRole('tab', { name: '案例' })).toBeNull();
+  });
+
+  it('传了 controller 就有案例页签；服务端方法没接通时如实显示不可用', () => {
+    localStorage.clear();
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} controller={{ getSnapshot: () => ({ revision: 1 }) } as never} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '案例' }));
+    expect(screen.getByRole('tabpanel', { name: '案例' }).textContent).toContain('还没有接通');
+    expect(screen.queryByTestId('case-save-draft')).toBeNull();
+  });
+});
+
+describe('完整只读分享（2026-11-20 集成，C12/C13）', () => {
+  const TOKEN = 'a'.repeat(64);
+
+  afterEach(() => registerPublishGateProvider(null));
+
+  function cloudController(extra: Record<string, unknown> = {}): BackendSession {
+    return {
+      getSnapshot: () => ({
+        configured: true, sessionId: 's1', revision: 4,
+        project: { id: 'proj-1', name: '项目' },
+        lease: { projectId: 'proj-1', sessionId: 's1', generation: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 4 },
+      }),
+      saveCompleteProject: vi.fn(async () => ({})),
+      createCompleteShare: vi.fn(async () => ({ shareId: 'share-9', publicationId: 'pub-9', revision: 4, token: TOKEN })),
+      revokeCompleteShare: vi.fn(async () => ({ revoked: true })),
+      ...extra,
+    } as unknown as BackendSession;
+  }
+
+  function completeGate(overrides: Partial<PublishGateSnapshot> = {}): PublishGateSnapshot {
+    return {
+      scopeId: 'p', projectId: 'proj-1', cloudRevision: 4,
+      manifest: {
+        version: 1,
+        scene: { schemaVersion: 1 as const, venue: { shape: 'rectangle' as const, width: 12, depth: 10, height: 3, entrances: [] }, objects: [], camera: 'overview' as const, lighting: 'neutral' as const },
+        outdoor: null, sources: {},
+        dependencies: [{ assetId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', visibility: 'private' }],
+      },
+      gaps: [], complete: true, readyForPublish: true, note: 'ok', conflict: null,
+      ...overrides,
+    };
+  }
+
+  async function openPublishWith(controller: BackendSession): Promise<void> {
+    localStorage.clear();
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} controller={controller} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+  }
+
+  it('archives published deps then creates the controlled link and copies it once', async () => {
+    registerPublishGateProvider(async () => completeGate());
+    const controller = cloudController();
+    const clipboard = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText: clipboard } });
+    await openPublishWith(controller);
+    fireEvent.click(screen.getByTestId('complete-share').querySelector('button')!);
+    expect(await screen.findByTestId('complete-share-link-row')).toBeTruthy();
+    // 先按 published 口径落库（幂等 CAS），再创建受控分享。
+    expect(controller.saveCompleteProject).toHaveBeenCalledWith('proj-1', expect.objectContaining({
+      expectedRevision: 4,
+      manifest: expect.objectContaining({ dependencies: [{ assetId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', visibility: 'published' }] }),
+    }));
+    expect(controller.createCompleteShare).toHaveBeenCalledWith('proj-1', expect.objectContaining({ expectedRevision: 4 }));
+    await act(async () => {}); // 等 create 的 finally（busy 结算）落定再点复制
+    fireEvent.click(screen.getByTestId('complete-share-link-row').querySelector('.sc-share-copy')!);
+    await act(async () => {});
+    expect(clipboard).toHaveBeenCalledWith(`${window.location.origin}/view/#c${TOKEN}`);
+    // 撤销走既有项目分享口。
+    fireEvent.click(screen.getByTestId('complete-share-link-row').querySelector('button:last-child')!);
+    await waitFor(() => expect(screen.queryByTestId('complete-share-link-row')).toBeNull());
+    expect(controller.revokeCompleteShare).toHaveBeenCalledWith('proj-1', 'share-9');
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('已撤销'));
+  });
+
+  it('shows the archive gap and never calls createCompleteShare when dependencies are incomplete', async () => {
+    registerPublishGateProvider(async () => completeGate({
+      complete: false, readyForPublish: false,
+      gaps: [{ localId: 'scan-1', kind: 'scan', name: '西湖扫描', reason: 'not-uploaded' }],
+    }));
+    const controller = cloudController();
+    await openPublishWith(controller);
+    fireEvent.click(screen.getByTestId('complete-share').querySelector('button')!);
+    expect((await screen.findByRole('status')).textContent).toContain('西湖扫描');
+    expect(controller.createCompleteShare).not.toHaveBeenCalled();
+    expect(controller.saveCompleteProject).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('complete-share-link-row')).toBeNull();
+  });
+});
 
 function sampleLayout(): RoomLayout {
   return {

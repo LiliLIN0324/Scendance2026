@@ -12,6 +12,27 @@ import { briefExtractRequestSchema, briefExtractResponseSchema, briefConversatio
 import { assistantChatRequestSchema, assistantChatResponseSchema, type AssistantChatResult } from "../../supabase/functions/_shared/assistant-chat-contract";
 import { chatProviderSchema, type ChatProviderId } from "../../supabase/functions/_shared/chat-provider";
 import { canonical, sha256, proposalRequestSchema, sceneSchema, uuid, type Scene } from "../../supabase/functions/_shared/domain";
+import {
+  archiveAssetViewSchema,
+  archiveUploadReceiptSchema,
+  cloudCapabilitiesSchema,
+  cloudCaseDraftSchema,
+  completeShareReceiptSchema,
+  type ArchiveUploadInput,
+  type ArchiveUploadReceipt,
+  type CloudArchiveAsset,
+  type CloudCapabilities,
+  type CloudCaseDraft,
+  type CloudCasePublic,
+  type CloudCasePublishInput,
+  type CloudCaseRestoreInput,
+  type CloudCaseUnpublishInput,
+  type CloudCaseVersion,
+  type CloudCaseWriteInput,
+  type CompletePublicRead,
+  type CompleteSaveInput,
+  type CompleteShareInput,
+} from "../../supabase/functions/_shared/cloud-storage-contract";
 import { generationRequestSchema, type GenerationRequest } from "../../supabase/functions/_shared/generation-contract";
 import { reconstructionRequestSchema, reconstructionJobSchema, sourceImageSchema, type ReconstructionRequest, type SourceImage } from "../../supabase/functions/_shared/reconstruction-contract";
 import { geometryWorkbenchBindingKey, readGeometryWorkbenchBinding, writeGeometryWorkbenchBinding, type GeometryWorkbenchBinding } from "./geometry-workbench-binding";
@@ -364,6 +385,20 @@ function failure(error: unknown): BackendFailure {
     GENERATION_BUSY: "已有模型生成任务正在处理，请先查看任务状态。",
     IDEMPOTENCY_CONFLICT: "同一请求编号不能用于不同需求，请创建新的请求。",
     ROUTE_NOT_FOUND: "请求的接口不存在，这次操作没有发出。",
+    // 云存储 / 完整保存 / 官方案例（Task A · 2026-11-20 草案）。
+    CLOUD_STORAGE_UNAVAILABLE: "云端归档与案例能力尚未开通，本次操作未执行；本机内容保持不变。",
+    PLATFORM_ADMIN_REQUIRED: "当前账号没有平台管理员权限，无法执行官方内容管理。",
+    OFFICIAL_WORKSPACE_REQUIRED: "官方共同工作区尚未配置，请联系平台管理员。",
+    DEPENDENCY_INCOMPLETE: "项目依赖的原文件尚未全部归档，不能保存为完整版本或发布。",
+    UPLOAD_INTEGRITY_FAILED: "上传对象校验失败（大小或哈希不符），已拒绝登记，请重新上传。",
+    UPLOAD_OBJECT_MISSING: "对象存储里找不到这次上传的文件，请重新上传。",
+    UPLOAD_STATE_INVALID: "这次上传已结束或已失效，请重新发起。",
+    UPLOAD_NOT_FOUND: "上传记录不存在或不属于当前账号。",
+    COMPLETE_PROJECT_NOT_FOUND: "该项目还没有云端完整版本记录。",
+    CASE_VERSION_CONFLICT: "案例已被其他人更新，请刷新草稿后重试。",
+    CASE_NOT_FOUND: "案例不存在或已下架。",
+    MANIFEST_TOO_LARGE: "完整项目清单过大，请精简来源与依赖后再保存。",
+    UPLOAD_TOO_LARGE: "文件超过 2GB 协议上限，无法归档。",
   };
   const status = error instanceof SceneApiError ? error.status : 0;
   const mapped = messages[code];
@@ -999,6 +1034,77 @@ export class BackendSession {
     plan: unknown;
   }): Promise<OutdoorPlanSaveResult> {
     return this.businessRequest<OutdoorPlanSaveResult>("/outdoor-plans", "PUT", input);
+  }
+  // ---- 云存储 / 完整保存 / 官方案例（Task A · 2026-11-20 草案；B/C 统一从这里接）----
+  // 后端未部署审核 SQL 时所有方法抛 503 CLOUD_STORAGE_UNAVAILABLE；不提供本机 mock 降级。
+  /** 服务端角色真相：每次实时查询，撤权即时生效；结果不缓存、不落盘。 */
+  async getCloudCapabilities(): Promise<CloudCapabilities> {
+    return cloudCapabilitiesSchema.parse(await this.businessRequest("/cloud/capabilities", "GET"));
+  }
+  /** 登记归档上传意图并取直传地址；requestId 幂等，重试拿到同一 uploadId/storagePath。 */
+  async prepareArchiveUpload(input: ArchiveUploadInput): Promise<ArchiveUploadReceipt> {
+    return archiveUploadReceiptSchema.parse(await this.businessRequest("/cloud/uploads", "POST", input));
+  }
+  /** 浏览器 → 对象存储直传（不经过 Edge body）；有 XHR 时带上传进度。 */
+  uploadArchiveToSignedUrl(receipt: ArchiveUploadReceipt & { uploadUrl: string; token: string }, body: Blob, mime: string, onProgress?: (loaded: number, total: number) => void): Promise<void> {
+    return this.client.uploadArchiveToSignedUrl(receipt, body, mime, onProgress);
+  }
+  /** 服务端复核对象大小/哈希并登记资产；登记失败可对同一 uploadId 重试。 */
+  async completeArchiveUpload(uploadId: string): Promise<z.infer<typeof archiveAssetViewSchema>> {
+    return archiveAssetViewSchema.parse(await this.businessRequest(`/cloud/uploads/${uuid.parse(uploadId)}/complete`, "POST", {}));
+  }
+  /** 归档列表：不带 studioId 为个人私有；官方工作室列表需平台管理员。 */
+  listArchiveAssets(studioId?: string): Promise<CloudArchiveAsset[]> {
+    return this.businessRequest<CloudArchiveAsset[]>(`/cloud/assets${studioId ? `?studioId=${encodeURIComponent(studioId)}` : ""}`);
+  }
+  /** 按权限换取临时读取地址；稳定 assetId 是长期主键，地址不是。 */
+  archiveAssetUrl(assetId: string): Promise<{ id: string; url: string; expiresIn: number; name: string }> {
+    return this.businessRequest(`/cloud/assets/${uuid.parse(assetId)}/url`, "POST");
+  }
+  /** 完整项目保存：需持该项目租约；expectedRevision CAS，清单含 scene/outdoor/sources/依赖。 */
+  saveCompleteProject(projectId: string, input: CompleteSaveInput): Promise<unknown> {
+    return this.businessRequest(`/cloud/projects/${uuid.parse(projectId)}`, "PUT", input);
+  }
+  /** 读取云端完整版本；没有记录时抛 COMPLETE_PROJECT_NOT_FOUND，不降级冒充完整保存。 */
+  getCompleteProject(projectId: string): Promise<unknown> {
+    return this.businessRequest(`/cloud/projects/${uuid.parse(projectId)}`, "GET");
+  }
+  /** 官方案例草稿登记：管理员+官方项目；草稿内容由服务端从完整清单复制，客户端不传内容。 */
+  async upsertCloudCase(stableId: string, input: CloudCaseWriteInput): Promise<CloudCaseDraft> {
+    return cloudCaseDraftSchema.parse(await this.businessRequest(`/cloud/cases/${encodeURIComponent(stableId)}`, "PUT", input));
+  }
+  listCloudCaseDrafts(): Promise<CloudCaseDraft[]> {
+    return this.businessRequest<CloudCaseDraft[]>("/cloud/cases/manage", "GET");
+  }
+  async publishCloudCase(stableId: string, input: CloudCasePublishInput): Promise<CloudCaseDraft> {
+    return cloudCaseDraftSchema.parse(await this.businessRequest(`/cloud/cases/${encodeURIComponent(stableId)}/publish`, "POST", input));
+  }
+  async unpublishCloudCase(stableId: string, input: CloudCaseUnpublishInput): Promise<CloudCaseDraft> {
+    return cloudCaseDraftSchema.parse(await this.businessRequest(`/cloud/cases/${encodeURIComponent(stableId)}/unpublish`, "POST", input));
+  }
+  async restoreCloudCase(stableId: string, input: CloudCaseRestoreInput): Promise<CloudCaseDraft> {
+    return cloudCaseDraftSchema.parse(await this.businessRequest(`/cloud/cases/${encodeURIComponent(stableId)}/restore`, "POST", input));
+  }
+  listCloudCaseVersions(stableId: string): Promise<CloudCaseVersion[]> {
+    return this.businessRequest<CloudCaseVersion[]>(`/cloud/cases/${encodeURIComponent(stableId)}/versions`, "GET");
+  }
+  /** 公开案例目录：匿名可读（未登录也可浏览已发布案例）。 */
+  listCloudCases(): Promise<CloudCasePublic[]> {
+    return this.client.listCloudCases();
+  }
+  readCloudCase(stableId: string): Promise<CompletePublicRead> {
+    return this.client.readCloudCase(stableId);
+  }
+  /** 完整受控分享：复用 shares（token 哈希入库、可撤销）；token 只在首次响应出现一次。 */
+  async createCompleteShare(projectId: string, input: CompleteShareInput): Promise<{ shareId: string; publicationId: string; revision: number; token: string | null }> {
+    return completeShareReceiptSchema.parse(await this.businessRequest(`/cloud/projects/${uuid.parse(projectId)}/shares`, "POST", input));
+  }
+  readCompleteShare(token: string): Promise<CompletePublicRead> {
+    return this.client.readCompleteShare(token);
+  }
+  /** 完整分享撤销走既有项目 shares 口（成员/owner 校验与撤销语义一致）。 */
+  revokeCompleteShare(projectId: string, shareId: string): Promise<{ revoked: boolean }> {
+    return this.businessRequest(`/projects/${uuid.parse(projectId)}/shares/${uuid.parse(shareId)}`, "DELETE");
   }
   /** Scene processing uses a remote project without replacing the caller's local activity identity. */
   async ensureGeometryWorkbenchReady(scene: Scene, name: string, localActivityId: string): Promise<BackendProject> {

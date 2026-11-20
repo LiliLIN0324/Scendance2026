@@ -273,6 +273,11 @@ interface ViewToolsProps {
   layoutLocked?: boolean;
   /** 工具轨唯一分享入口。不传时菜单仍可打开，动作提示未接入。 */
   shareActions?: ShareMenuActions;
+  /**
+   * 后端会话（2026-11-20 集成接通）：透传给 ShareMenu 撑起「案例」维护页签。
+   * 不传（旧宿主/测试）时案例页签不出现，行为与之前一致。
+   */
+  controller?: BackendSession | null;
   /** 旧评审入口改道时递增。 */
   shareOpenRequest?: number;
   /**
@@ -557,7 +562,7 @@ function groundThumbAnchor(polygon: readonly { lng: number; lat: number }[] | un
 }
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false, controller }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
@@ -1055,7 +1060,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       </div>
       )}
       {!publishHidden && !outdoorEditing && (<>
-        <div className="oc-host" data-oc="tr"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/></div>
+        <div className="oc-host" data-oc="tr"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose} controller={controller ?? null}/></div>
         <span className="sc-tool-sep" aria-hidden="true"/>
       </>)}
       {sceneMoveEnabled && <button type="button" id="tool-move-scene" data-tip={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '移动整体场景 · 坐标轴 · 再点切无轴' : '移动整体场景 · 无轴 · 再点完成'} aria-label={sceneMoveMode === 'off' ? '移动整体场景' : sceneMoveMode === 'gizmo' ? '切换到无轴移动' : '完成移动整体场景'} aria-pressed={sceneMoveActive} className={sceneMoveActive ? 'is-active' : ''} onClick={() => onSceneMoveModeChange?.(sceneMoveMode === 'off' ? 'gizmo' : sceneMoveMode === 'gizmo' ? 'numeric' : 'off')}>
@@ -1266,7 +1271,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       {outdoorEditing && (<>
         {/* 方案 A 定稿四角簇：右上＝分享单枚；右下＝罗盘·2D/3D·定位框选·缩放一体条·漫游·眼睛；底中＝工具‖开关‖历史；左下＝账号·地图切换。 */}
         <div className="oc-cluster oc-tr" aria-label="右上工具簇">
-          <div className="oc-share"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose}/></div>
+          <div className="oc-share"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose} controller={controller ?? null}/></div>
         </div>
         {/* 2026-11-16 用户指令：右下角一比一复刻 Google Maps 竖向控制列——
             罗盘 → 2D/3D → 定位 → 连体缩放 → Pegman，最后隔一条发丝线放宽图眼睛。

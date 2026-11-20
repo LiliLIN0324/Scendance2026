@@ -64,6 +64,8 @@ export interface PreparedAssets {
 }
 
 const STORAGE_KEY = 'scendance:asset-cloud-v1';
+let scopeStorageKey = STORAGE_KEY;
+let scopeEpoch = 0;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STATES: AssetCloudState[] = ['local', 'uploading', 'uploaded', 'failed'];
 const LOCAL_FETCH_TIMEOUT_MS = 120_000;
@@ -85,7 +87,7 @@ function readPersisted(): Record<string, AssetCloudRecord> {
   const store = storage();
   if (!store) return {};
   try {
-    const raw: unknown = JSON.parse(store.getItem(STORAGE_KEY) ?? '{}');
+    const raw: unknown = JSON.parse(store.getItem(scopeStorageKey) ?? '{}');
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
     const records: Record<string, AssetCloudRecord> = {};
     for (const value of Object.values(raw)) {
@@ -111,7 +113,19 @@ const inFlight = new Map<string, Promise<AssetUploadResult>>();
 function persist(): void {
   const store = storage();
   if (!store) return;
-  try { store.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch { /* 存不下只丢状态缓存；本机文件与云端记录都还在。 */ }
+  try { store.setItem(scopeStorageKey, JSON.stringify(snapshot)); } catch { /* Originals remain available. */ }
+}
+
+/** Legacy unowned mappings are preserved for inventory, never inherited by a login. */
+export function setAssetCloudScope(userId: string | null, studioId: string | null): void {
+  const key = `${STORAGE_KEY}:${JSON.stringify([userId, studioId])}`;
+  if (scopeStorageKey === key) return;
+  scopeStorageKey = key; scopeEpoch += 1;
+  // 2026-11-20 集成验收修正：只要登录（有 userId）就按 [userId, studioId] 键读回该账号
+  // 自己的映射——个人私有（无工作室）的映射之前被条件 `userId && studioId` 清成空表，
+  // 下一次写入会把旧记录整批覆盖丢失（跨设备找回 V01 依赖这些映射）。
+  snapshot = userId ? readPersisted() : {};
+  mapCache = null; inFlight.clear(); emit();
 }
 
 function emit(): void {
@@ -225,12 +239,15 @@ export interface SyncAssetOptions {
 export function syncLocalAsset(localAssetId: string, uploader: AssetUploader, options: SyncAssetOptions = {}): Promise<AssetUploadResult> {
   const active = inFlight.get(localAssetId);
   if (active) return active;
-  const job = runSync(localAssetId, uploader, options).finally(() => inFlight.delete(localAssetId));
+  const epoch = scopeEpoch;
+  const job = runSync(localAssetId, uploader, options).finally(() => { if (epoch === scopeEpoch) inFlight.delete(localAssetId); });
   inFlight.set(localAssetId, job);
   return job;
 }
 
 async function runSync(localAssetId: string, uploader: AssetUploader, options: SyncAssetOptions): Promise<AssetUploadResult> {
+  const epoch = scopeEpoch;
+  const assertScope = () => { if (scopeEpoch !== epoch) throw new Error('账号或工作室已变化，原账号上传未绑定到当前账号。'); };
   const existing = snapshot[localAssetId];
   if (existing?.state === 'uploaded' && existing.cloudAssetId) {
     return { id: existing.cloudAssetId, byteSize: existing.bytes ?? 0, sha256: existing.sha256 ?? '', reused: true };
@@ -239,7 +256,9 @@ async function runSync(localAssetId: string, uploader: AssetUploader, options: S
   let local: { bytes: Uint8Array; name: string; taskid?: string };
   try {
     local = await fetchLocalBytes(localAssetId, fetchImpl);
+    assertScope();
   } catch (error) {
+    assertScope();
     setRecord(localAssetId, { state: 'failed', error: messageOf(error) });
     throw error;
   }
@@ -250,10 +269,13 @@ async function runSync(localAssetId: string, uploader: AssetUploader, options: S
   let lastError: unknown;
   for (let attempt = 0; attempt <= delays.length; attempt += 1) {
     try {
+      assertScope();
       const result = await uploader(file, meta, (loaded, total) => {
+        if (scopeEpoch !== epoch) return;
         const progress = total > 0 ? Math.min(1, Math.max(0, loaded / total)) : undefined;
         setRecord(localAssetId, { state: 'uploading', ...(progress !== undefined ? { progress } : {}) });
       });
+      assertScope();
       if (!uuidPattern.test(result.id ?? '')) throw new Error('服务端没有返回有效 asset_id，未登记云端资产。');
       setRecord(localAssetId, {
         state: 'uploaded', cloudAssetId: result.id, sha256: result.sha256,
@@ -261,6 +283,7 @@ async function runSync(localAssetId: string, uploader: AssetUploader, options: S
       });
       return result;
     } catch (error) {
+      assertScope();
       lastError = error;
       if (!retryable(error) || attempt === delays.length) break;
       await sleep(delays[attempt] ?? 0);

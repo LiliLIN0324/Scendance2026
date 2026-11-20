@@ -1,6 +1,30 @@
+import { z } from 'zod';
 import { reconstructionJobSchema, type ReconstructionRequest } from '../supabase/functions/_shared/reconstruction-contract';
 import { canonical, sceneHash, sha256, uuid, type SourceImage, type Scene } from '../supabase/functions/_shared/domain';
 import { activityTaskRunRequestSchema, activityTaskRunSchema, type ActivityTaskRunRequest, type ActivityTaskRun } from '../supabase/functions/_shared/activity-task-contract';
+import {
+  archiveAssetViewSchema,
+  archiveUploadReceiptSchema,
+  cloudCapabilitiesSchema,
+  cloudCaseDraftSchema,
+  cloudCaseIdSchema,
+  cloudCasePublicSchema,
+  completePublicReadSchema,
+  completeShareReceiptSchema,
+  type ArchiveUploadInput,
+  type ArchiveUploadReceipt,
+  type CloudCapabilities,
+  type CloudCaseDraft,
+  type CloudCasePublic,
+  type CloudCasePublishInput,
+  type CloudCaseRestoreInput,
+  type CloudCaseUnpublishInput,
+  type CloudCaseVersion,
+  type CloudCaseWriteInput,
+  type CompletePublicRead,
+  type CompleteSaveInput,
+  type CompleteShareInput,
+} from '../supabase/functions/_shared/cloud-storage-contract';
 
 export class SceneApiError extends Error {
   constructor(public code:string,public status:number,public details:unknown) {super(code);}
@@ -180,6 +204,73 @@ export function createSceneClient(baseUrl:string,getAccessToken:()=>Promise<stri
         } else if(event==='error') throw new SceneApiError('STREAM_FAILED',502,null);
       });
       return ending;
+    },
+    // ---- 云存储 / 完整保存 / 官方案例（Task A · 2026-11-20 草案）。----
+    // 后端未部署审核 SQL 时统一 503 CLOUD_STORAGE_UNAVAILABLE；不提供本机降级。
+    async getCloudCapabilities():Promise<CloudCapabilities> {
+      return cloudCapabilitiesSchema.parse(await request('/cloud/capabilities'));
+    },
+    /** 登记上传意图并取直传地址；requestId 幂等，重试拿到同一 uploadId/storagePath。 */
+    async prepareArchiveUpload(input:ArchiveUploadInput):Promise<ArchiveUploadReceipt> {
+      return archiveUploadReceiptSchema.parse(await request('/cloud/uploads','POST',input));
+    },
+    /** 浏览器 → 对象存储直传（不经过 Edge body）；有 XHR 时带进度。 */
+    uploadArchiveToSignedUrl(receipt:ArchiveUploadReceipt & { uploadUrl:string; token:string },body:Blob,mime:string,onProgress?:(loaded:number,total:number)=>void):Promise<void> {
+      const separator=receipt.uploadUrl.includes('?')?'&':'?';
+      const url=`${receipt.uploadUrl}${separator}token=${encodeURIComponent(receipt.token ?? '')}`;
+      // HTTP 409 = 对象已存在（x-upsert:false）。storagePath 是 actor/requestId/sha256 内容寻址路径，
+      // 命中它只可能是同一次上传意图的前次尝试已把同一内容写到对象存储（V03：对象成功但登记失败
+      // 后重试）。按成功处理并继续走 complete——服务端会重新复核大小与哈希，不是幽灵成功。
+      const isAlreadyStored=(status:number)=>status===409;
+      if(typeof XMLHttpRequest==='undefined') {
+        return fetch(url,{method:'PUT',headers:{'x-upsert':'false','Content-Type':mime},body}).then(async response=>{
+          if(!response.ok&&!isAlreadyStored(response.status)) throw new SceneApiError('STORAGE_UPLOAD_FAILED',response.status,null);
+        });
+      }
+      return new Promise((resolve,reject)=>{
+        const xhr=new XMLHttpRequest();
+        xhr.open('PUT',url,true);
+        xhr.setRequestHeader('x-upsert','false');
+        if(mime)xhr.setRequestHeader('Content-Type',mime);
+        xhr.upload.onprogress=event=>{if(event.lengthComputable)onProgress?.(event.loaded,event.total);};
+        xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300||isAlreadyStored(xhr.status))resolve();else reject(new SceneApiError('STORAGE_UPLOAD_FAILED',xhr.status,null));};
+        xhr.onerror=()=>reject(new SceneApiError('NETWORK_ERROR',0,null));
+        xhr.ontimeout=()=>reject(new SceneApiError('STORAGE_UPLOAD_TIMEOUT',408,null));
+        xhr.onabort=()=>reject(new SceneApiError('STORAGE_UPLOAD_ABORTED',499,null));
+        try{xhr.send(body);}catch(error){reject(error);}
+      });
+    },
+    /** 服务端复核对象大小/哈希并登记资产；登记失败可对同一 uploadId 重试。 */
+    async completeArchiveUpload(uploadId:string):Promise<z.infer<typeof archiveAssetViewSchema>> {
+      return archiveAssetViewSchema.parse(await request(`/cloud/uploads/${uuid.parse(uploadId)}/complete`,'POST',{}));
+    },
+    listArchiveAssets(studioId?:string){return request<unknown[]>(`/cloud/assets${studioId?`?studioId=${encodeURIComponent(studioId)}`:''}`);},
+    archiveAssetUrl(assetId:string){return request<{id:string;url:string;expiresIn:number;name:string}>(`/cloud/assets/${uuid.parse(assetId)}/url`,'POST');},
+    saveCompleteProject(projectId:string,input:CompleteSaveInput){return request<unknown>(`/cloud/projects/${uuid.parse(projectId)}`,'PUT',input);},
+    getCompleteProject(projectId:string){return request<unknown>(`/cloud/projects/${uuid.parse(projectId)}`);},
+    async upsertCloudCase(stableId:string,input:CloudCaseWriteInput):Promise<CloudCaseDraft> {
+      return cloudCaseDraftSchema.parse(await request<unknown>(`/cloud/cases/${encodeURIComponent(cloudCaseIdSchema.parse(stableId))}`,'PUT',input));
+    },
+    listCloudCaseDrafts(){return request<CloudCaseDraft[]>('/cloud/cases/manage');},
+    async publishCloudCase(stableId:string,input:CloudCasePublishInput):Promise<CloudCaseDraft> {
+      return cloudCaseDraftSchema.parse(await request<unknown>(`/cloud/cases/${encodeURIComponent(cloudCaseIdSchema.parse(stableId))}/publish`,'POST',input));
+    },
+    async unpublishCloudCase(stableId:string,input:CloudCaseUnpublishInput):Promise<CloudCaseDraft> {
+      return cloudCaseDraftSchema.parse(await request<unknown>(`/cloud/cases/${encodeURIComponent(cloudCaseIdSchema.parse(stableId))}/unpublish`,'POST',input));
+    },
+    async restoreCloudCase(stableId:string,input:CloudCaseRestoreInput):Promise<CloudCaseDraft> {
+      return cloudCaseDraftSchema.parse(await request<unknown>(`/cloud/cases/${encodeURIComponent(cloudCaseIdSchema.parse(stableId))}/restore`,'POST',input));
+    },
+    listCloudCaseVersions(stableId:string){return request<CloudCaseVersion[]>(`/cloud/cases/${encodeURIComponent(cloudCaseIdSchema.parse(stableId))}/versions`);},
+    async listCloudCases():Promise<CloudCasePublic[]> {
+      return cloudCasePublicSchema.array().parse(await request('/cloud/cases','GET',undefined,true));
+    },
+    async readCloudCase(stableId:string):Promise<CompletePublicRead> {
+      return completePublicReadSchema.parse(await request(`/cloud/cases/${encodeURIComponent(cloudCaseIdSchema.parse(stableId))}`,'GET',undefined,true));
+    },
+    createCompleteShare(projectId:string,input:CompleteShareInput){return completeShareReceiptSchema.parse(request(`/cloud/projects/${uuid.parse(projectId)}/shares`,'POST',input));},
+    async readCompleteShare(token:string):Promise<CompletePublicRead> {
+      return completePublicReadSchema.parse(await request('/cloud/shares/read','POST',{token},true));
     },
   };
 }
