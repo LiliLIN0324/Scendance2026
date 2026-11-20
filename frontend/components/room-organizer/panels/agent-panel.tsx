@@ -36,6 +36,7 @@ import { createPortal } from 'react-dom';
 import { AgentTaskExamples } from '@/components/agent-task-examples';
 import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
+import { conversationTurnKey, recordConversationTurn, type ConversationTraceTransport } from '../lib/conversation-recorder';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
 import { toolTraceRows } from '../lib/tool-trace';
@@ -697,6 +698,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     else if (sessionGuardRequired.current) throw new Error('本机写入凭证已失效。');
   }, []);
   const [sessionSaveFailed, setSessionSaveFailed] = useState(false);
+  // 本机命令轮的留痕锚点：进入模型链路前清空，避免把模型回复重复记一遍。
+  const localTurnRef = useRef<{turnKey:string;sessionId:string;turnIndex:number;userText:string;startedAt:number}|null>(null);
   const assistantSessions = useAssistantSessions(requireSessionWrite, sessionScope);
   const confirmVenueSourceRef = useRef(confirmVenueSource); confirmVenueSourceRef.current = confirmVenueSource;
   const sourceAuthorityRequired = useRef(!!confirmVenueSource); if (confirmVenueSource) sourceAuthorityRequired.current = true;
@@ -1046,6 +1049,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     // S4 A 档：副作用从 setBubbles updater 体内剥出到 say 函数体，避免渲染期双跑落盘/emit。
     const text = foldConflictBubble(bubble.text);
+    const localTurn = localTurnRef.current;
+    if (localTurn && bubble.role === 'agent' && text.trim()) {
+      recordConversationTurn(studioRef.current?.controller as unknown as ConversationTraceTransport | undefined, {
+        turnKey: localTurn.turnKey, sessionId: localTurn.sessionId, turnIndex: localTurn.turnIndex,
+        surface: 'local_command', userText: localTurn.userText, assistantText: text,
+        outcome: 'local_only', latencyMs: Date.now() - localTurn.startedAt,
+      });
+    }
     const prev = bubblesRef.current;
     const last = prev.at(-1);
     // One click was posting the same overlap refusal twice. A second identical refusal stays one bubble.
@@ -3147,6 +3158,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (attachment) setPendingFiles([]);
     const trimmed = text.trim();
     if (!trimmed && !attachment) return;
+    // 先占一个留痕锚点：本机命令直接答完时由 say 补记；进入模型链路前把锚点清空。
+    const turnTrace = trimmed ? {
+      turnKey: conversationTurnKey(), sessionId: boundSessionId.current ?? 'unknown',
+      turnIndex: briefTurnSequence.current, userText: trimmed, startedAt: Date.now(),
+    } : null;
+    localTurnRef.current = turnTrace;
     // 2026-11-16 用户口径：地图优先。地点没定就发布置/动线/分区，本地退回选址，
     // 不发起模型调用——否则会先等十几秒再报登录，把人挡在第一步。选址句不受此限。
     // 2026-11-16 实测补充：像「在植物园周边做两日市集，签到放进摊区」这种地名 + 设计
@@ -3184,6 +3201,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // The single visible outdoor workbench dispatches through the contextual domain workflow.
     // Legacy layout/keyword planners remain only for legacy integrations without the atomic plan bridge.
     if(!queued&&callbacks.workbenchMode==='layout'&&routeBridgeRef.current?.applyPlan){
+      localTurnRef.current=null;
       const [previousRequest, previousReply] = chatUserHistory(bubblesRef.current.slice(-2), trimmed);
       const clarification = previousRequest?.role === 'user' && previousReply?.role === 'assistant'
         ? { request: previousRequest.text, question: previousReply.text }
@@ -3437,6 +3455,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     // 模型需求仍由同一个 Agent 接收；只定位设施与原位候选，不自动创建收费任务。
     if (routeBridgeRef.current?.getPlan() && ((/模型|三维|3D/iu.test(trimmed) && /查看|看看|换|生成|上传/iu.test(trimmed)) || (/生成|上传/iu.test(trimmed) && routeBridgeRef.current.getPlan()!.facilities.some(f => trimmed.includes(f.name))))) {
+      localTurnRef.current=null;
       beginOutdoorTask('model');
       const facilities = routeBridgeRef.current.getPlan()!.facilities;
       const target = facilities.find(f => trimmed.includes(f.name))
@@ -3546,6 +3565,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 导出/交接：先出预览卡，不直接下载（T-UI §4-5）。
     if (isExportCommand(trimmed)) { proposeExport(); return; }
     }
+    // 从这里开始交给模型链路：后端会按同一 turnKey 写库，本机兜底不再重复记。
+    localTurnRef.current = null;
     const command = mixedUtility ? null : isGenerateCommand(trimmed);
     // 布置跟进先留着当前预览。生成开始才会换成新的一版；还差事实时确认入口还在。
     const relatedLayout = !mixedUtility && layoutGenerateCommand(trimmed) !== null;
@@ -3601,11 +3622,21 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const selectedModel=provider&&provider!=='default'?studioRef.current?.activeModel??null:null;
       turn = await resolveBriefTurn(trimmed, resolverMemory, {
         venueUp, scaleTyped: lengthCheck.ok && widthCheck.ok, hasBase, command,
-      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined, provider&&provider!=='default'?provider:undefined, selectedModel);
+      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined, provider&&provider!=='default'?provider:undefined, selectedModel, turnTrace ?? undefined);
       if(turn.modelNotice?.includes('可能仍会计费'))uncertainInputs.current.add(trimmed);
       if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}
     } catch (error) { setProcessFailed('understanding'); releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
     if (!sessionScopeIsCurrent() || boundSessionId.current !== turnSessionId || briefTurnSequence.current !== turnSequence) { releaseTurn(); return; }
+    // 模型没参与或没接住时，用户看到的是本地/兜底回复：按同一 turnKey 补上可见答复。
+    if (turnTrace && turn.resolution !== 'model') {
+      recordConversationTurn(studioRef.current?.controller as unknown as ConversationTraceTransport | undefined, {
+        turnKey: turnTrace.turnKey, sessionId: turnTrace.sessionId, turnIndex: turnTrace.turnIndex,
+        surface: 'brief', userText: turnTrace.userText,
+        ...(turn.text ? { assistantText: turn.text } : {}),
+        outcome: turn.resolution === 'local_command' || turn.resolution === 'confirmation' ? 'local_only' : 'answered',
+        latencyMs: Date.now() - turnTrace.startedAt,
+      });
+    }
     const outcome=resolvedTurnOutcome(turn,previousMemory,mixedUtility,trimmed);
     if(outcome.kind==='failed')setProcessFailed('understanding');
     const incompleteUpdate=incompleteUpdateForOutcome(outcome);

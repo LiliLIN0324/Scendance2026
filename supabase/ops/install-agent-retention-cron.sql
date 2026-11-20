@@ -8,7 +8,7 @@ do $$ begin
   end if;
 end $$;
 
--- 03:30 Asia/Shanghai. Keep 30 days of terminal runs, 24h of expired proposals.
+-- 03:30 Asia/Shanghai. Keep 180 days of terminal runs and conversation turns, 24h of expired proposals.
 select cron.schedule('agent-data-retention','30 3 * * *',$job$
-  select scene_private.purge_agent_data(30,24);
+  select scene_private.purge_agent_data(180,24);
 $job$);
