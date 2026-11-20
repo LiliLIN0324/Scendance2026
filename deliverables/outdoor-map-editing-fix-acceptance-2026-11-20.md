@@ -217,3 +217,47 @@ npm --prefix frontend run lint
 - K10 延续桌面优先边界；完整触屏/纯键盘能力仍需产品决策。
 - 原验收提到的 CI 门禁属于治理建议，本轮未修改治理配置。
 - 本轮没有推送、部署、发布，也未提交其他窗口的在途改动。当前全量 typecheck/build 的阻塞未解除，不能将此报告解读为整体工作区可发布。
+
+## 8. 推送前复验与远端同步（2026-11-20）
+
+本节更新 §7 的检查阻塞状态。清除了 `.next-dev/types/app/dev-publish-preview/page.ts` 对已删除临时页面的残留引用，并修正尚未提交的发布测试夹具：使用 layout overrides、正确处理 Proxy 的 symbol 属性、将 Testing Library timeout 放入等待参数，发布回执使用符合原有契约的 UUID。没有弱化生产校验。这些测试属于原发布任务的未提交文件，修正保留在主工作区，没有将整个在制发布功能混入户外修复提交。
+
+当前工作区标准检查：
+
+```text
+npm --prefix frontend run typecheck
+tsc --noEmit
+退出码 0
+
+npm --prefix frontend run build
+Generating static pages (20/20)
+check-oneplan-artifacts: 扫描 3562 个产物文件，oneplan-icons 下随产物发布 592 个（图标资源），违规 0 条。
+退出码 0（完整执行打包、构建、产物检查和 postbuild）
+```
+
+上述构建是在同步远端前的工作区完成。同步远端后工作区再次执行标准 typecheck，退出码 0；发布流程两个本机 mock 测试文件均通过（11 项），包括断言展示的链接为符合原契约的模拟服务端回执，不代表真实云端发布。
+
+远端出现 `a0252ea5`、`00a34f41` 两个新提交。本地仅将尚未发布的提交 rebase 到远端之后，保留远端通知、成员、权限及资产等已有改动，不强推。主工作区在制改动经自动暂存恢复，仅分享面板导入区冲突，保留双方所需导入后恢复原来的未暂存状态；全部原有改动路径仍在，自动暂存已清理，其他既有 stash 未改动。户外修复提交由 `0b97ba79` 变为 `d6b74060`（历史重新接续导致 hash 变化）。
+
+为验证实际将推送的代码，另用无在制功能的干净验证目录检查整合后提交；其树与主分支已提交代码一致（`git diff HEAD c1431699` 无输出，两个目录仅提交时间造成 hash 不同）：
+
+```text
+npm run typecheck
+tsc --noEmit
+退出码 0
+
+npm --prefix frontend run typecheck
+tsc --noEmit
+退出码 0
+
+npm --prefix frontend run test -- outdoor-plan-canvas outdoor-project-store outdoor-plan-save-lifecycle plan-edit-gate plan-pointer-bridge plan-preview-refresh site-plan-facilities plan-footprint-builder outdoor-plan-session outdoor-write-guard messages-panel rail-messages-button
+Test Files  22 passed (22)
+     Tests  286 passed (286)
+
+npm --prefix frontend run build
+Generating static pages (20/20)
+check-oneplan-artifacts: 扫描 3361 个产物文件，oneplan-icons 下随产物发布 592 个（图标资源），违规 0 条。
+退出码 0（含 lint、类型检查、产物检查和 postbuild）
+```
+
+两个构建的产物数量不同，是因为主工作区还有本机在制引导等资源，推送检查以干净目录为准。此次仅准备推送已提交代码与本验收记录；未提交的发布、引导、图片清理及其他在制内容仍留在本机。未全量复跑后端/前端 Vitest，未做真实云端 CAS、真实付费生成或部署；§7 已标明的实机场景验证边界继续有效。
