@@ -18,6 +18,7 @@ import {
   sitePlanDataSchema,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { describeCloudFailure } from './cloud-transport';
 import {
   readOutdoorProjectRecord,
   saveOutdoorProjectRecord,
@@ -148,19 +149,30 @@ export interface CloudCaseSessionContract {
   }): Promise<unknown>;
 }
 
+/** 失败分类：transport 是「连不上」，其余是服务端明确拒绝或契约不符；hint 是下一步该做什么。 */
 export type CloudCaseOpError =
-  | { code: 'unavailable'; message: string }
-  | { code: 'invalid'; message: string }
-  | { code: 'failed'; message: string };
+  | { code: 'unavailable'; message: string; hint?: string }
+  | { code: 'invalid'; message: string; hint?: string }
+  | { code: 'unreachable'; message: string; hint?: string }
+  | { code: 'unauthorized'; message: string; hint?: string }
+  | { code: 'forbidden'; message: string; hint?: string }
+  | { code: 'failed'; message: string; hint?: string };
 
 export type CloudCaseOp<T> = { ok: true; value: T } | { ok: false; error: CloudCaseOpError };
 
 const UNAVAILABLE_MESSAGE = '云端案例服务在这套后端上还没有接通。';
 
-/** 服务端错误尽量带上后端给的语义（如 CLOUD_STORAGE_UNAVAILABLE / CASE_VERSION_CONFLICT）。 */
+/**
+ * 服务端错误尽量带上后端给的语义（如 CLOUD_STORAGE_UNAVAILABLE / CASE_VERSION_CONFLICT）。
+ * 传输层连不上的（浏览器只给 "Failed to fetch"）走共用口径，转成能定位、能操作的中文。
+ */
 function opError(error: unknown): CloudCaseOpError {
   if (error instanceof z.ZodError) {
     return { code: 'invalid', message: '云端案例返回的数据不符合契约，已拒绝展示。' };
+  }
+  const described = describeCloudFailure(error);
+  if (described) {
+    return { code: described.kind, message: described.message, hint: described.hint };
   }
   const message = error instanceof Error ? error.message : String(error ?? '');
   return { code: 'failed', message: message || '云端案例请求失败。' };

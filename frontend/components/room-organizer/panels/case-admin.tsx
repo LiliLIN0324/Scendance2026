@@ -12,6 +12,7 @@ import {
   unpublishCloudCase,
   upsertCloudCase,
   type CloudCapabilities,
+  type CloudCaseOpError,
   type CloudCaseDraft,
   type CloudCaseVersion,
   type CloudCaseSessionContract,
@@ -87,8 +88,8 @@ export function CaseAdminSection({ session, controller, layoutId, layoutName }: 
   layoutId?: string | null;
   layoutName: string;
 }): JSX.Element {
-  const [caps, setCaps] = useState<{ loading: boolean; value: CloudCapabilities | null; error: string }>(
-    { loading: !!session, value: null, error: '' });
+  const [caps, setCaps] = useState<{ loading: boolean; value: CloudCapabilities | null; error: CloudCaseOpError | null }>(
+    { loading: !!session, value: null, error: null });
   const [capsRetry, setCapsRetry] = useState(0);
   const [drafts, setDrafts] = useState<{ loading: boolean; rows: CloudCaseDraft[]; error: string }>({ loading: false, rows: [], error: '' });
   const [draftsEpoch, setDraftsEpoch] = useState(0);
@@ -108,15 +109,15 @@ export function CaseAdminSection({ session, controller, layoutId, layoutName }: 
   // 能力探测：session 变化或用户点重试时重新问服务端。
   useEffect(() => {
     if (!session) {
-      setCaps({ loading: false, value: null, error: '' });
+      setCaps({ loading: false, value: null, error: null });
       return undefined;
     }
     let live = true;
-    setCaps(current => ({ loading: true, value: current.value, error: '' }));
+    setCaps(current => ({ loading: true, value: current.value, error: null }));
     void fetchCloudCapabilities(session).then(result => {
       if (!live) return;
-      if (result.ok) setCaps({ loading: false, value: result.value, error: '' });
-      else setCaps({ loading: false, value: null, error: result.error.message });
+      if (result.ok) setCaps({ loading: false, value: result.value, error: null });
+      else setCaps({ loading: false, value: null, error: result.error });
     });
     return () => { live = false; };
   }, [session, capsRetry]);
@@ -261,7 +262,8 @@ export function CaseAdminSection({ session, controller, layoutId, layoutName }: 
   }
   if (caps.error) {
     return <div className="sc-case-admin" data-testid="case-admin">
-      <p className="sc-share-desc" role="alert">案例管理权限没有确认：{caps.error}</p>
+      <p className="sc-share-desc" role="alert">案例管理权限没有确认：{caps.error.message}</p>
+      {caps.error.hint && <p className="sc-share-desc" data-testid="case-admin-error-hint">{caps.error.hint}</p>}
       <button type="button" className="sc-share-renew" onClick={() => setCapsRetry(value => value + 1)}>重试</button>
     </div>;
   }

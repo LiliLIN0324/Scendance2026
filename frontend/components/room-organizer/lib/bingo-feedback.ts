@@ -57,19 +57,29 @@ export function reviewPlanKeysForBingoPlan(plan: BingoFeedbackPlan): string[] {
   return [...keys];
 }
 
-/** G4：把云端钉并进本机汇总；按钉 id 去重，不改本机已有条目。 */
+/** G4：把云端钉并进本机汇总；按钉 id 去重，状态以云端为准回灌本机陈旧条目。 */
 export function mergeBingoCloudPins(
   feedback: BingoPlanFeedback,
   pins: readonly ReviewPin[],
 ): BingoPlanFeedback {
-  const seen = new Set(feedback.pins.map(pin => pin.id));
-  const extra = pins.filter(pin => !seen.has(pin.id)).map(pin => mapSharePin(pin));
-  if (extra.length === 0) return feedback;
+  const byId = new Map<string, BingoFeedbackPin>(feedback.pins.map(pin => [pin.id, pin]));
+  let added = 0;
+  for (const cloud of pins) {
+    const mapped = mapSharePin(cloud);
+    const existing = byId.get(mapped.id);
+    if (existing) {
+      // 云端状态校正本机陈旧的 open/resolved；其余字段保留本机条目。
+      byId.set(mapped.id, mapped.pinStatus ? { ...existing, pinStatus: mapped.pinStatus } : existing);
+    } else {
+      byId.set(mapped.id, mapped);
+      added += 1;
+    }
+  }
   return {
     ...feedback,
-    sharePinCount: feedback.sharePinCount + extra.length,
-    pinCount: feedback.pinCount + extra.length,
-    pins: [...feedback.pins, ...extra],
+    sharePinCount: feedback.sharePinCount + added,
+    pinCount: feedback.pinCount + added,
+    pins: [...byId.values()],
   };
 }
 

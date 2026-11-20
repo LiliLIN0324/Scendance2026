@@ -74,7 +74,7 @@ export async function database(dataDir?: string, options?:{excludeMigrations?:re
     scene:sceneRpc,cloud:call('cloud_storage_rpc'),jobs,reconstruction,
     originalSceneReview:call('original_scene_review_rpc'),
     agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:rawAgent)(actor,action,data),
-    agentGuardReady:guardedAgent,agentEvents:call('agent_run_events_rpc'),
+    agentGuardReady:guardedAgent,agentEvents:call('agent_run_events_rpc'),conversation:call('conversation_rpc'),
     user:async token=>{if([owner,editor,outsider].includes(token))return token;throw new ApiError('UNAUTHENTICATED',401);},
     upload:async(path,bytes)=>{objects.set(path,bytes);},
     readSourceBytes:async path=>{const hit=objects.get(path);if(!hit)throw new ApiError('STORAGE_DOWNLOAD_FAILED',502);return hit;},

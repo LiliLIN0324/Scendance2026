@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { chatProviderSchema } from './chat-provider.ts';
+import { conversationTraceSchema } from './conversation-turn-contract.ts';
 // 单路主力供应商超时：正常响应实测 3-20s，超过 90s 视为挂死。
 // 注意 Supabase 免费版 Edge Function 墙钟上限 150s，全兜底链（90+25+25）必须压在其下。
 export const BRIEF_PROVIDER_TIMEOUT_MS = 90_000;
@@ -156,7 +157,7 @@ export function parseModelBrief(input:unknown,message:string):BriefSlots {
   return retainExplicitSeating(parseReferencedModelBrief(input,message),message);
 }
 
-export const briefExtractRequestSchema = z.strictObject({ message: z.string().trim().min(1).max(2000), provider: chatProviderSchema.optional(), model: z.string().trim().min(1).max(80).optional() });
+export const briefExtractRequestSchema = z.strictObject({ message: z.string().trim().min(1).max(2000), provider: chatProviderSchema.optional(), model: z.string().trim().min(1).max(80).optional(), trace: conversationTraceSchema.optional() });
 const conversationText=z.string().trim().min(1).max(1200).refine(value=>!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value));
 // Heuristic only; callers must still send only deliberately shared text.
 const privateOrLink=/(?:https?:\/\/|www\.|\b(?:data|blob|file):|(?:api[_ -]?key|access[_ -]?token|secret|password|密码|密钥)\s*[:=：]\s*\S+|\bbearer\s+\S+|\bsk-[A-Za-z0-9_-]{8,})/i;
@@ -166,6 +167,7 @@ export const briefConversationRequestSchema=z.strictObject({
   history:z.array(z.strictObject({role:z.enum(['user','assistant']),text:conversationText})).max(8),
   provider:chatProviderSchema.optional(),
   model:z.string().trim().min(1).max(80).optional(),
+  trace:conversationTraceSchema.optional(),
 }).superRefine((value,ctx)=>{
   if(value.message.length+value.history.reduce((n,item)=>n+item.text.length,0)>6000)ctx.addIssue({code:'custom',message:'context too long'});
   if(privateOrLink.test(value.message)||value.history.some(item=>privateOrLink.test(item.text)))ctx.addIssue({code:'custom',message:'sensitive or non-text content'});

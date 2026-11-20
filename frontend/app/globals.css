@@ -325,21 +325,9 @@ body.is-theme-dark .sc-agent-panel .ap-zone-proposal__btn:hover {
 body.is-theme-dark .sc-workbench .sc-rail-message-badge,
 body.is-theme-dark .sc-workbench .sc-message-row-badge { background: #BF4F48; }
 
-/* 底部工具坞把手：字面白底胶囊回到暗色平面，描边与文字跟 token。 */
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle {
-  background: var(--plane-deep);
-  border-color: var(--hair);
-  color: var(--ink-soft);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
-}
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle:hover {
-  background: var(--plane);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, .32);
-}
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock-handle {
-  background: #2D3038 !important;
-  border-color: #363A42 !important;
-  color: #C9CED6 !important;
+/* 底部工具坞的岛：暗色平面上的投影压暗。 */
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb.oc-island {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .34);
 }
 
 /* ── 户外地图浮层 chrome：字面白底 / 白描边 / 浅灰投影回到暗色平面 ──
@@ -835,10 +823,7 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb {
   background: #1C1F24 !important;
   border-color: #363A42 !important;
 }
-body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close:hover {
-  background: #2D3038 !important;
-  color: #EDF0F2 !important;
-}
+
 /* 其余压在地图 / 3D 画布上的浮层：字面白底回到暗色表面，描边与投影压暗；罗盘指针蓝/灰保留。 */
 body.is-theme-dark .sc-geo-compass-card {
   background: var(--plane-deep);
@@ -1847,16 +1832,9 @@ body.is-theme-dark .sc-material-tagpin {
     left: calc(var(--sc-medium-card-w) + 36px);
     max-width: calc(100% - var(--sc-medium-card-w) - 96px);
   }
-  /* 首次开图引导气泡（GuideBubble）避让卡片。
-     它在 .sc-canvas-stage 里，而该元素 container-type:size 形成栈上下文，气泡自身的
-     z-index 压不过左栏卡（实测把 z 提到 99 仍是卡片在上），所以只能平移：
-     canvas 锚点原本居中（left:50% + translateX(-50%)）、left 锚点原本 left:12，
-     两者在 1024 宽下都会落在卡片后面。统一让到卡片右侧，箭头朝向不变。
-     内联样式需要 !important。 */
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column [data-testid="guide-bubble"] {
-    left: calc(var(--sc-medium-card-w) + 36px) !important;
-    transform: none !important;
-  }
+  /* 2026-11-20：旧三步引导气泡（GuideBubble）退役，避让规则随之删除。
+     新的引导卡片由 onboarding/ 挂到 body 上的 fixed 浮层，不参与 .sc-canvas-stage 栈上下文，
+     位置由控件实测矩形算出，不再需要按卡片宽度平移。 */
   /* 断点里不再按拖边改宽：那条线只服务桌面的 --sc-left-card-width。 */
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column .sc-left-card-resizer { display: none; }
 }
@@ -2701,6 +2679,12 @@ body.sc-panel-dragging * {
 /* 2026-11-16 用户截图反馈：分享钮比顶部搜索条低 6px。搜索条 40px 高、居中在 y=36，
    分享钮 30px，簇顶同步上移到 14px，二者中心线对齐。 */
 .oc-cluster.oc-tr { top: 14px; right: 20px; flex-direction: column; }
+/* 2026-11-20 用户截图反馈：分享钮外面那圈纸面方框（底座 + 描边 + 阴影）去掉，
+   只留按钮自身那层线稿框。簇盒的边框与内距照旧，分享钮在屏上的位置分毫不动。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-cluster--bare,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster.oc-cluster--bare {
+  background: transparent; border-color: transparent; box-shadow: none;
+}
 .oc-cluster.oc-br { bottom: 20px; right: 20px; flex-direction: column; }
 .oc-cluster.oc-bb { bottom: 20px; left: 50%; transform: translateX(-50%); flex-direction: row; max-width: calc(100vw - 150px); flex-wrap: wrap; justify-content: center; row-gap: 6px; }
 .oc-cluster.oc-bl { bottom: 4px; left: 51px; flex-direction: row; }
@@ -2926,6 +2910,34 @@ body.sc-panel-dragging * {
   border-width: 1.2px !important;
   border-color: var(--green, #4A7C59) !important;
   color: var(--green, #4A7C59) !important;
+}
+/* 2026-11-20 用户指令：顶部分享钮要和底中「工具」胶囊同一套投影，
+   不再是一枚贴纸似的浮块。 */
+/* 选择器组与上面那条锁定稿一致：锁定稿里最具体的那条（.oc-cluster .oc-share button#tool-share）
+   特异性更高，只写 :is() 压不过它。 */
+.sc-workbench .sc-tool-column button#tool-share,
+.sc-workbench .sc-tool-column button#tool-outdoor-publish,
+.sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share,
+.sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share {
+  box-shadow: 0 2px 8px rgba(60, 64, 67, .14) !important;
+}
+.sc-workbench .sc-tool-column button#tool-share:hover,
+.sc-workbench .sc-tool-column button#tool-outdoor-publish:hover,
+.sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share:hover,
+.sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share:hover {
+  box-shadow: 0 3px 10px rgba(60, 64, 67, .20) !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-share,
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-outdoor-publish,
+body.is-theme-dark .sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .28) !important;
+}
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-share:hover,
+body.is-theme-dark .sc-workbench .sc-tool-column button#tool-outdoor-publish:hover,
+body.is-theme-dark .sc-workbench .sc-tool-column .sc-tool-menu > button#tool-share:hover,
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#tool-share:hover {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .32) !important;
 }
 .sc-workbench .sc-tool-column .oc-cluster.oc-tr .oc-share button#tool-share > svg,
 .sc-workbench .sc-tool-column button#tool-share > svg,
@@ -3287,15 +3299,7 @@ body.sc-panel-dragging * {
 .sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb {
   animation: oc-dock-unfold .16s ease-out;
 }
-/* 末尾小 × 是明确关闭口；Esc 是快捷键，悬停提示里带出来。 */
-.sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close {
-  width: 26px; height: 26px; min-width: 26px; min-height: 26px;
-  margin-left: 1px; padding: 0; border: 0; border-radius: 50%;
-  background: transparent; box-shadow: none; color: #80868b;
-}
-.sc-workbench .sc-tool-column .oc-cluster button.oc-dock-close:hover {
-  background: #f1f3f4; box-shadow: none; color: #3c4043;
-}
+/* 2026-11-20 用户指令：收起口只留岛核（左端那枚 ⌄），右端的小 × 撤掉。 */
 @keyframes oc-dock-unfold {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: none; }
@@ -3309,22 +3313,56 @@ body.sc-panel-dragging * {
   box-shadow: 0 2px 10px rgba(60, 64, 67, .16);
   flex-wrap: wrap; justify-content: center;
 }
-.sc-workbench .sc-tool-column .oc-dock-handle {
-  pointer-events: auto; display: inline-flex; align-items: center; gap: 5px;
-  height: 28px; padding: 0 12px; border-radius: 999px;
-  background: rgba(255, 255, 255, .96);
-  border: 1px solid rgba(60, 64, 67, .12);
-  box-shadow: 0 2px 8px rgba(60, 64, 67, .14);
-  color: #5f6368; font-size: 11px; font-weight: 500; letter-spacing: .02em;
-  cursor: pointer; transition: background .12s ease, box-shadow .12s ease;
+/* 2026-11-20 灵动岛化：底中工具条从「一颗把手 + 一条另起的工具条」收成一颗岛。
+   收起 = 48px 圆钮（只留 ⌃），悬停横向张开露出「工具」二字，点开继续长成整条工具胶囊；
+   岛始终是同一个元素，宽度连续过渡（沿用画布左上搜索胶囊那套 Dynamic Island 手感）。
+   工具行收起时只藏不卸：展开不必重新挂载，收起也不必重建 DOM。 */
+.sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb.oc-island {
+  position: static; left: auto; right: auto; bottom: auto; transform: none;
+  display: flex; align-items: center; flex-wrap: nowrap; justify-content: flex-start;
+  gap: 6px; padding: 3px; height: 42px;
+  width: max-content; max-width: 42px;
+  border-radius: 999px; overflow: visible; animation: none;
+  transition: max-width .36s cubic-bezier(.32, 1.25, .48, 1);
 }
-.sc-workbench .sc-tool-column .oc-dock-handle:hover {
-  background: #fff; box-shadow: 0 3px 10px rgba(60, 64, 67, .20);
+.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover {
+  max-width: 90px;
 }
-.sc-workbench .sc-tool-column .oc-dock-handle:focus-visible {
-  outline: 2px solid #4a7c59; outline-offset: 2px;
+.sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb.oc-island {
+  max-width: min(92vw, 820px);
 }
-.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-dock-handle { opacity: .92; }
+/* 岛核：左端那颗圆钮，34 见方，图标居中；展开后箭头翻成向下＝收起。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-toggle {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px;
+  padding: 0; border: 0; border-radius: 999px;
+  background: transparent; box-shadow: none;
+}
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-toggle:hover {
+  background: var(--plane, #F7F5F0); box-shadow: none;
+}
+/* 「工具」二字是独立的一截胶囊：收起时宽度归零，悬停才张开。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-label {
+  flex: 0 0 auto;
+  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
+  font-size: 11px; font-weight: 500; letter-spacing: .02em; line-height: 1;
+  transition: max-width .36s cubic-bezier(.32, 1.25, .48, 1), opacity .2s ease;
+}
+.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover .oc-island-label {
+  max-width: 40px; opacity: 1;
+}
+/* 工具行：收起时藏起来；展开要等宽度几乎到位才亮，免得先溢出胶囊。 */
+.sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-tools {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  visibility: hidden; opacity: 0;
+  transition: opacity .16s ease .3s, visibility 0s linear .46s;
+}
+.sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb.oc-island .oc-island-tools {
+  visibility: visible; opacity: 1;
+  transition: opacity .16s ease .32s, visibility 0s linear 0s;
+}
 @media (max-width: 760px) {
   .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps { right: 12px; bottom: 14px; }
   .sc-workbench .sc-tool-column .oc-dock { bottom: 14px; }
@@ -3501,10 +3539,21 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-map-type-note { padding: 6px 4px 0; font-size: 10px; line-height: 1.4; color: var(--wk-muted); }
 .sc-workbench .sc-more-sep { display: block; height: 1px; margin: 3px 4px; background: var(--wk-hair); }
-/* 分享 / 发布 / 导出：宽约 400、内边距 20、圆角 12。选中页签是白胶囊墨字。
-   字段用规范 plane #F4F5F7（全局 --plane 目前写成纸白，这里按锁定稿填实底）。
-   绿只出现在未发布的「发布并复制链接」。工具弹层按钮有 !important 重置，这里用更高优先级盖回去。 */
+/* 分享 / 发布 / 导出：宽约 400、内边距 20、圆角 12。选中页签是药丸墨字。
+   绿只出现在未发布的「发布并复制链接」。工具弹层按钮有 !important 重置，这里用更高优先级盖回去。
+   2026-11-20 复检改：
+   - 卡内控件一律吃 L1 语义 token，不再写死浅色 hex。暗色下写死的 #F4F5F7 字段底
+     配上亮墨字 = 白底白字（「进入 Bingo 审校台」整行看不见）。
+   - 网格轨道锁 minmax(0,1fr)：字段集默认 min-inline-size:min-content 会把轨道
+     撑到 403px，开关与动作键因此溢出卡片右缘（scrollWidth 423 > 399）。
+   - 字号回到全局七档：标题 H3 16 / 正文 C1 14 / 元信息 P2 12，卡内只此三档。 */
 .sc-workbench .sc-tool-pop.sc-share-panel {
+  /* 卡内局部 token：浅色下取规范 plane（#F4F5F7）；暗色在下面那条规则里换成语义值，
+     面板 CSS 不出现暗色专属 hex 字面量。 */
+  --share-field: #F4F5F7;
+  --share-track: #EEF0F2;
+  --share-tab-on: #FFFFFF;
+  --share-knob: #FFFFFF;
   width: min(400px, calc(100vw - 56px));
   min-width: min(400px, calc(100vw - 56px));
   max-width: min(400px, calc(100vw - 56px));
@@ -3515,6 +3564,9 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   overflow: visible;
   background: var(--paper, #FFFFFF);
   border: 1px solid var(--hair, #E4E4E7);
+  /* 画布右轨是 white-space:nowrap，卡片挂在它里面：这里放开，说明文字才换行，
+     否则整段话会被卡片右缘直接截断。 */
+  white-space: normal;
   /* 分享弹层常压在深色地图上，--e1 在这里不够。保留 v17 两族墨影：
      贴边实影 + 中间衔接 + 底下软抬升；颜色停在 rgb(20,20,22)，不用纯黑。 */
   box-shadow:
@@ -3524,27 +3576,39 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   color: var(--ink, #141416);
   font-family: var(--font-sans);
 }
+/* 暗色：字段底 / 页签轨道 / 选中页签 / 关态滑块改走语义值。 */
+body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
+  --share-field: var(--plane);
+  --share-track: var(--plane);
+  --share-tab-on: var(--plane-deep);
+  --share-knob: var(--ink-soft);
+}
 .sc-workbench .sc-share-tabs {
   display: flex; align-items: center; gap: 2px;
   height: 32px; padding: 2px; box-sizing: border-box;
-  border-radius: 16px; background: #EEF0F2;
+  border-radius: 16px; background: var(--share-track);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab {
   flex: 1 1 0; width: auto !important; height: 28px !important; min-height: 0 !important;
   padding: 0 8px !important; border: 0 !important; border-radius: 14px !important;
   background: transparent !important; box-shadow: none !important;
   color: var(--ink-soft, #55585F) !important;
-  font-family: inherit; font-size: 13px; font-weight: 500; line-height: 28px;
+  font-family: inherit; font-size: 14px; font-weight: 500; line-height: 28px;
   text-align: center !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab.is-selected,
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-tab[aria-selected="true"] {
-  background: var(--paper, #FFFFFF) !important;
+  background: var(--share-tab-on) !important;
   color: var(--ink, #141416) !important;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.06) !important;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, 0.06), 0 0 0 1px var(--hair-soft, #EFEFF1) !important;
 }
-.sc-workbench .sc-share-body { display: grid; gap: 10px; min-width: 0; justify-items: stretch; }
+/* 轨道锁 minmax(0,1fr)：字段集默认 min-inline-size:min-content，不锁会把轨道撑到
+   403px，字段、开关与动作键一起溢出卡片右缘。 */
+.sc-workbench .sc-share-body {
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  gap: 10px; min-width: 0; justify-items: stretch;
+}
 /* 分享页 .sc-share-heading 是 space-between。这里强制整组靠左，图标贴住标题。 */
 .sc-workbench .sc-share-heading {
   display: flex; align-items: center; justify-content: flex-start; gap: 0;
@@ -3557,25 +3621,73 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-share-heading h2,
 .sc-workbench .sc-share-titlelock h2 {
   margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 15px; line-height: 22px; font-weight: 650;
+  font-size: 16px; line-height: 24px; font-weight: 600;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel .sc-share-glyph,
 .sc-workbench .sc-tool-column .oc-cluster .sc-share-panel .sc-share-glyph {
   flex: none; width: 16px !important; height: 16px !important; color: #141416;
 }
-.sc-workbench .sc-share-desc,
-.sc-workbench .sc-share-note {
-  margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
+/* 卡内只三档：正文 14（--ink）、元信息 12（--ink-soft）、标题 16（上面那条）。 */
+.sc-workbench .sc-share-desc {
+  margin: 0; font-size: 14px; line-height: 22px; color: var(--ink, #141416);
 }
+.sc-workbench .sc-share-meta {
+  margin: 0; font-size: 12px; line-height: 20px; color: var(--ink-soft, #55585F);
+}
+.sc-workbench .sc-share-note {
+  margin: 0; font-size: 14px; line-height: 22px; color: var(--ink, #141416);
+}
+.sc-workbench .sc-share-note[data-tone="warn"] { color: var(--warn, #96651F); }
+.sc-workbench .sc-share-desc[data-tone="err"],
+.sc-workbench .sc-share-meta[data-tone="err"] { color: var(--err, #B4443C); }
+.sc-workbench .sc-share-note[data-tone="err"] { color: var(--err, #B4443C); }
+/* 两栏信息行：键在左（弱字）、值在右（墨字）。代替一串整句说明。 */
+.sc-workbench .sc-share-kvs { display: grid; gap: 4px; }
+.sc-workbench .sc-share-kv { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.sc-workbench .sc-share-kv-k { flex: none; font-size: 12px; line-height: 20px; color: var(--ink-soft, #55585F); }
+.sc-workbench .sc-share-kv-v { flex: 1 1 auto; min-width: 0; font-size: 14px; line-height: 22px; color: var(--ink, #141416); }
+/* 折叠区：摘要、发布记录这类清单默认收起，展开才铺开。 */
+.sc-workbench .sc-share-fold {
+  border: 1px solid var(--hair, #E4E4E7); border-radius: 8px;
+  background: var(--paper, #FFFFFF); padding: 0 10px;
+}
+.sc-workbench .sc-share-fold > summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: 6px;
+  height: 30px; font-size: 12px; line-height: 20px; color: var(--ink-soft, #55585F);
+}
+.sc-workbench .sc-share-fold > summary::-webkit-details-marker { display: none; }
+.sc-workbench .sc-share-fold > summary::before {
+  content: ''; width: 5px; height: 5px; flex: none;
+  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--dur-1, 120ms) var(--ease-spec, ease);
+}
+.sc-workbench .sc-share-fold[open] > summary::before { transform: rotate(45deg); }
+.sc-workbench .sc-share-fold-body { display: grid; gap: 4px; padding-bottom: 10px; }
+.sc-workbench .sc-share-foldwrap { display: grid; gap: 6px; }
+/* 阻塞项：原因在左，处理动作在右，不再一条一整宽按钮。 */
+.sc-workbench .sc-share-fix { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sc-workbench .sc-share-fix-text { flex: 1 1 auto; min-width: 0; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-fixbtn {
+  flex: none; display: inline-flex !important; align-items: center; justify-content: center;
+  box-sizing: border-box !important; width: auto !important;
+  height: 26px !important; min-height: 0 !important; padding: 0 10px !important;
+  border: 1px solid var(--hair, #E4E4E7) !important; border-radius: 13px !important;
+  background: transparent !important; box-shadow: none !important;
+  color: var(--ink-soft, #55585F) !important;
+  font-family: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-fixbtn:hover:not(:disabled) { background: var(--share-field) !important; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-fixbtn:disabled { opacity: .55; cursor: default; }
 /* 右上簇把 button 居中、把 button > span 收成 22px。分享行必须盖回去，否则文字挤在中间。 */
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-row,
 .sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-row {
   display: flex !important; align-items: center; justify-content: flex-start !important; gap: 4px;
   width: 100% !important; height: 32px !important; min-height: 0 !important;
   padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
-  background: #F4F5F7 !important; box-shadow: none !important;
+  background: var(--share-field) !important; box-shadow: none !important;
   color: var(--ink, #141416) !important;
-  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
+  font-family: inherit; font-size: 14px; font-weight: 500; text-align: left !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-row:disabled { opacity: .55; cursor: default; }
 .sc-workbench .sc-share-row-label {
@@ -3584,10 +3696,10 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 }
 .sc-workbench .sc-share-row-status {
   flex: none; width: auto !important; height: auto !important; margin-left: auto;
-  color: var(--ink-soft, #55585F); font-size: 12px; font-weight: 500;
+  color: var(--ink-soft, #55585F); font-size: 12px; line-height: 20px; font-weight: 500;
 }
 .sc-workbench .sc-share-readonly {
-  margin: 0; font-size: 13px; line-height: 20px; color: var(--ink-soft, #55585F);
+  margin: 0; font-size: 14px; line-height: 22px; color: var(--ink-soft, #55585F);
 }
 .sc-workbench .sc-share-permits {
   display: grid;
@@ -3599,15 +3711,16 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
 .sc-workbench .sc-share-permits legend {
   padding: 0;
   color: var(--ink-soft, #55585f);
-  font-size: 12px;
+  font-size: 12px; line-height: 20px;
 }
 .sc-workbench .sc-share-permit {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   color: var(--ink, #141416);
-  font-size: 13px;
+  font-size: 14px; line-height: 22px;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch {
   position: relative;
@@ -3617,7 +3730,7 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   padding: 0 !important;
   border: 1px solid var(--hair, #e4e4e7) !important;
   border-radius: 999px !important;
-  background: #fff !important;
+  background: var(--share-field) !important;
   box-shadow: none !important;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch[aria-checked="true"] {
@@ -3631,18 +3744,20 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--share-knob);
   box-shadow: 0 1px 2px rgba(20, 20, 22, 0.18);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-switch[aria-checked="true"] i {
   left: 16px;
+  /* 开态滑块取纸色：浅色下是白点压墨轨，暗色下是墨点压白轨，两边都分得清。 */
+  background: var(--paper, #FFFFFF);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta {
   width: 100% !important; height: 32px !important; min-height: 0 !important;
   padding: 0 12px !important; border: 0 !important; border-radius: 16px !important;
   background: var(--green, #4A7C59) !important; box-shadow: none !important;
-  color: #FFFFFF !important;
-  font-family: inherit; font-size: 13px; font-weight: 600; text-align: center !important; cursor: pointer;
+  color: var(--paper, #FFFFFF) !important;
+  font-family: inherit; font-size: 14px; font-weight: 600; text-align: center !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:hover:not(:disabled) { background: var(--green-deep, #35624A) !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-cta:disabled { opacity: .55; cursor: default; }
@@ -3654,16 +3769,16 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   color: var(--ink-soft, #55585F) !important;
   font-family: inherit; font-size: 12px; cursor: pointer;
 }
-.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:hover:not(:disabled) { background: #F4F5F7 !important; }
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:hover:not(:disabled) { background: var(--share-field) !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-renew:disabled { opacity: .55; cursor: default; }
 .sc-workbench .sc-share-link {
   position: relative; display: flex; align-items: center; gap: 6px;
   height: 32px; min-width: 0; padding: 0 3px 0 12px; box-sizing: border-box;
-  border-radius: 16px; background: #F4F5F7;
+  border-radius: 16px; background: var(--share-field);
 }
 .sc-workbench .sc-share-link-text {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 13px; line-height: 20px; color: var(--ink, #141416);
+  font-size: 14px; line-height: 22px; color: var(--ink, #141416);
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-key {
   flex: none; display: inline-flex !important; align-items: center; justify-content: center;
@@ -3705,13 +3820,20 @@ body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
   width: 100% !important; height: 36px !important; min-height: 0 !important;
   padding: 0 !important; border: 0 !important; border-radius: 0 !important;
   background: transparent !important; box-shadow: none !important;
-  color: #141416 !important;
-  font-family: inherit; font-size: 13px; font-weight: 500; text-align: left !important; cursor: pointer;
+  color: var(--ink, #141416) !important;
+  font-family: inherit; font-size: 14px; font-weight: 500; text-align: left !important; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export > span,
 .sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-export > span {
-  flex: 1 1 auto; width: auto !important; height: auto !important; min-width: 0;
-  text-align: left; color: #141416;
+  flex: none; width: auto !important; height: auto !important; min-width: 0;
+  text-align: left; color: var(--ink, #141416);
+}
+/* 导出行的范围压成右侧元信息：名称是动作，范围是注解，不该反过来抢眼。 */
+.sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export .sc-share-export-scope,
+.sc-workbench .sc-tool-column .oc-cluster .sc-share-panel button.sc-share-export .sc-share-export-scope {
+  flex: 1 1 auto; min-width: 0; margin-left: auto; padding-left: 8px;
+  font-style: normal; font-size: 12px; line-height: 20px; font-weight: 400;
+  color: var(--ink-soft, #55585F); text-align: right;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-export:hover { background: #F4F5F7 !important; }
 .sc-workbench .sc-tool-pop.sc-share-panel button:focus-visible {

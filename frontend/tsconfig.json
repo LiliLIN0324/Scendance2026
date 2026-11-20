@@ -41,6 +41,8 @@
     "**/*.tsx",
     ".next-browser/types/**/*.ts",
     ".next-dev-1112/types/**/*.ts",
+    ".next-dev-h4/types/**/*.ts",
+    ".next-dev/types/**/*.ts",
     ".next-local/types/**/*.ts",
     ".next-port3000/types/**/*.ts",
     ".next-smoke-packs/types/**/*.ts",
@@ -49,7 +51,7 @@
     ".next/dev/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-dev/types/**/*.ts"
+    ".next-k6/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

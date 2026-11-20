@@ -1,0 +1,333 @@
+/*
+ * 新手引导（2026-11-20）。
+ * 视觉沿用冷石规范：白底 + 发丝线 + 墨字，主按钮墨底白字；品牌绿只做高亮圈，
+ * 不占按钮位（绿不占主钮位是同一条规范）。
+ * 不做全屏遮罩：引导是旁边的一张小卡，工作台要一直能用。
+ */
+
+.sc-tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+}
+
+.sc-tour-ring {
+  position: fixed;
+  border-radius: 12px;
+  border: 2px solid var(--sc-accent, #4A7C59);
+  box-shadow:
+    0 0 0 4px rgba(74, 124, 89, 0.14),
+    0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+  pointer-events: none;
+  transition: left 0.16s ease, top 0.16s ease, width 0.16s ease, height 0.16s ease;
+}
+
+.sc-tour-card {
+  position: fixed;
+  pointer-events: auto;
+  padding: 13px 15px 11px;
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #141416;
+  box-shadow: 0 12px 32px rgba(20, 20, 22, 0.14), 0 1px 2px rgba(20, 20, 22, 0.06);
+  font-family: inherit;
+}
+
+.sc-tour-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sc-tour-count {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sc-accent-soft, #EEF3EF);
+  color: var(--sc-accent-ink, #35624A);
+  font-size: 10.5px;
+  line-height: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-tour-head strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.sc-tour-close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: -2px -4px -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #71767e;
+  font-size: 16px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.sc-tour-close:hover { background: #f4f4f5; color: #141416; }
+
+.sc-tour-body {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 19px;
+  color: #55585f;
+}
+
+.sc-tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sc-tour-spacer { flex: 1; }
+
+.sc-tour-mute {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8a8f97;
+  font: inherit;
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.sc-tour-mute:hover { color: #55585f; text-decoration: underline; }
+
+.sc-tour-secondary,
+.sc-tour-primary {
+  padding: 5px 10px;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.sc-tour-secondary {
+  border: 1px solid #e4e4e7;
+  background: transparent;
+  color: #141416;
+}
+.sc-tour-secondary:hover { background: #f7f7f8; }
+
+.sc-tour-primary {
+  border: 1px solid #141416;
+  background: #141416;
+  color: #ffffff;
+  font-weight: 600;
+}
+.sc-tour-primary:hover { background: #2a2a2d; }
+
+.sc-tour-secondary:focus-visible,
+.sc-tour-primary:focus-visible,
+.sc-tour-close:focus-visible,
+.sc-tour-mute:focus-visible {
+  outline: 2px solid var(--sc-accent, #4A7C59);
+  outline-offset: 1px;
+}
+
+/* ---------------- 帮助中心 ---------------- */
+
+.sc-help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 20, 22, 0.32);
+}
+
+.sc-help-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: min(720px, 100%);
+  overflow: hidden;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #141416;
+  box-shadow: 0 24px 64px rgba(20, 20, 22, 0.22);
+  font-family: inherit;
+}
+
+.sc-help-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 12px;
+}
+
+.sc-help-head strong {
+  flex: 1;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.sc-help-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 999px;
+  background: transparent;
+  color: #55585f;
+  font-size: 16px;
+  line-height: 24px;
+  cursor: pointer;
+}
+.sc-help-close:hover { background: #f4f4f5; color: #141416; }
+
+.sc-help-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 20px 4px;
+}
+
+.sc-help-section {
+  margin: 6px 0 16px;
+}
+
+.sc-help-section > h3 {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #8a8f97;
+  text-transform: none;
+}
+
+.sc-help-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.sc-help-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid #ececee;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.sc-help-text { min-width: 0; }
+.sc-help-text strong { display: block; font-size: 13px; line-height: 19px; font-weight: 600; }
+.sc-help-text p { margin: 1px 0 0; font-size: 11.5px; line-height: 17px; color: #71767e; }
+
+.sc-help-go {
+  flex: none;
+  margin-left: auto;
+  padding: 5px 11px;
+  border: 1px solid #141416;
+  border-radius: 9px;
+  background: #141416;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-help-go:hover { background: #2a2a2d; }
+.sc-help-go.is-secondary {
+  border-color: #e4e4e7;
+  background: transparent;
+  color: #141416;
+  font-weight: 500;
+}
+.sc-help-go.is-secondary:hover { background: #f7f7f8; }
+
+.sc-help-progress {
+  flex: none;
+  font-size: 11px;
+  line-height: 16px;
+  color: #8a8f97;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-help-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sc-help-topic {
+  padding: 7px 11px;
+  border: 1px solid #e4e4e7;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #141416;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.sc-help-topic:hover { background: #f7f7f8; border-color: #d9d9dd; }
+
+.sc-help-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #f0f0f2;
+  font-size: 12px;
+}
+
+.sc-help-foot a,
+.sc-help-foot button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #55585f;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sc-help-foot a:hover,
+.sc-help-foot button:hover { color: #141416; text-decoration: underline; }
+
+/* 左轨那颗「?」：尺寸与账号头像钮同档，单独一颗，不占四格。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-rail-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  flex: none;
+  border: 1px solid var(--sc-line, #e4e4e7);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wk-ink, #141416);
+  font-size: 15px;
+  line-height: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-rail-help:hover,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot > button.sc-rail-help[aria-pressed='true'] {
+  background: var(--sc-accent-soft, #EEF3EF);
+  border-color: var(--sc-accent, #4A7C59);
+  color: var(--sc-accent-ink, #35624A);
+}

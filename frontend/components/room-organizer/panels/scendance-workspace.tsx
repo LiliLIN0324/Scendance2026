@@ -1266,8 +1266,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         </div>}
       </div>}
       {outdoorEditing && (<>
-        {/* 方案 A 定稿四角簇：右上＝分享单枚；右下＝罗盘·2D/3D·定位框选·缩放一体条·漫游·眼睛；底中＝工具‖开关‖历史；左下＝账号·地图切换。 */}
-        <div className="oc-cluster oc-tr" aria-label="右上工具簇">
+        {/* 方案 A 定稿四角簇：右上＝分享单枚（oc-cluster--bare：按用户要求不设外框，只留按钮自身那层线稿框）；右下＝罗盘·2D/3D·定位框选·缩放一体条·漫游·眼睛；底中＝工具‖开关‖历史；左下＝账号·地图切换。 */}
+        <div className="oc-cluster oc-tr oc-cluster--bare" aria-label="右上工具簇">
           <div className="oc-share"><ShareMenu {...(shareActions ? { actions: shareActions } : {})} layout={layout} lengthUnit={view.lengthUnit} openRequest={shareOpenRequest} closeSignal={shareClose} controller={controller ?? null}/></div>
         </div>
         {/* 2026-11-16 用户指令：右下角一比一复刻 Google Maps 竖向控制列——
@@ -1330,11 +1330,28 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
             <MaterialSymbol name="visibility" size={18} />
           </button>
         </div>
-        {/* 2026-11-16 我们自己的工具栏：贴底一条，可收成一颗把手。
-            Google 控制列只放地图语义钮，规划工具（选择/测量/标注/吸附/历史）全部收进这里。 */}
+        {/* 2026-11-16 我们自己的工具栏：贴底一条。
+            Google 控制列只放地图语义钮，规划工具（选择/测量/标注/吸附/历史）全部收进这里。
+            2026-11-20 灵动岛化：不再是「一颗把手 + 一条另起的工具条」，收成一颗岛——
+            收起是小圆钮，悬停露出「工具」，点开横向长成整条工具胶囊；岛始终是同一个元素。 */}
         <div className={`oc-dock${dockOpen ? ' is-open' : ''}`}>
-          {dockOpen && (
-          <div id="oc-tool-dock" className="oc-cluster oc-bb" aria-label="底部工具条">
+          <div id="oc-tool-dock" className="oc-cluster oc-bb oc-island" aria-label="底部工具条">
+            {/* 岛核：收起时只留 ⌃，展开后翻成 ⌄＝收起。 */}
+            <button
+              type="button"
+              className="oc-island-toggle"
+              aria-expanded={dockOpen}
+              aria-controls="oc-tool-dock"
+              aria-label={dockOpen ? '收起工具条（Esc）' : '展开工具条'}
+              title={dockOpen ? '收起工具条（Esc）' : '展开工具条'}
+              onClick={() => (dockOpen ? closeToolDock() : openToolDock())}
+            >
+              <MaterialSymbol name={dockOpen ? 'keyboard_arrow_down' : 'keyboard_arrow_up'} size={18} />
+            </button>
+            <span className="oc-island-label" aria-hidden="true">工具</span>
+            {/* 工具行常驻 DOM：收起时靠 visibility 藏起来，展开不必重新挂载；
+                收起时同时对读屏器隐身，键盘与读屏都碰不到收起的工具。 */}
+            <div className="oc-island-tools" aria-hidden={dockOpen ? undefined : true}>
           {/* 2026-11-15 直切：户外选择/抓手不再弹二级菜单，点钮在 抓手⇄选择 之间直切；图标随当前态，H/S 快捷键保留。 */}
           <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolLabel} aria-pressed={selectActive} className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { if (canvasSelectOn) chooseHandTool(); else chooseSelectTool(); }}>
             {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <HandStopIcon size={20} />}
@@ -1384,33 +1401,8 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           <button type="button" id="tool-redo" data-tip="重做（平面编辑）" aria-label="重做" disabled={!outdoor!.canRedo} onClick={() => outdoor!.redo()}>
             <MaterialSymbol name="redo" />
           </button>
-          <span className="oc-sep" aria-hidden="true" />
-          <button
-            type="button"
-            id="tool-dock-close"
-            className="oc-dock-close"
-            data-tip="收起工具条 · Esc"
-            aria-label="收起工具条（Esc）"
-            title="收起工具条（Esc）"
-            onClick={() => closeToolDock()}
-          >
-            <MaterialSymbol name="close" size={16} />
-          </button>
-          </div>)}
-          {!dockOpen && (
-          <button
-            type="button"
-            className="oc-dock-handle"
-            aria-expanded={false}
-            aria-controls="oc-tool-dock"
-            aria-label="展开工具条"
-            title="展开工具条"
-            onClick={() => openToolDock()}
-          >
-            <MaterialSymbol name="keyboard_arrow_up" size={16} />
-            <span>工具</span>
-          </button>
-          )}
+            </div>
+          </div>
         </div>
       </>)}
     </nav>

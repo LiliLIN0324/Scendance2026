@@ -319,6 +319,7 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   const requestedProvider=input.provider??'default';
   const runEnv=requestedProvider!=='default'&&!chatProviderConfigured(env,requestedProvider)?env:chatProviderView(env,requestedProvider,input.model);
   const now=backend.agentClock ?? Date.now;
+  const startedAt=now();
   // 这一趟要收几份候选：默认 1 份；JEV 或用户明确要多个方案时最多 3 份。
   // 3 份是上限不是合同——收不满时保留已通过的那些，不硬凑。
   const expectedCandidates=input.jevEnabled||wantsAlternativePlans(input.instruction)?3:1;
@@ -418,7 +419,27 @@ export async function executeAgentRun(backend:Backend,actor:string,projectId:str
   let hasSeatingSpecs=hasCurrentSeatingSpecs();
   // 阶段从行上接着走：这一趟之前推进到哪一段，重新接上时不该从头报。
   const persistedPhase=AGENT_PHASES.find(phase=>phase===start.phase);
-  const call=(action:string,data:Record<string,unknown>={})=>rpc(actor,action,{projectId,id,claim,...data});
+  const recordAgentTurn=(action:string,data:Record<string,unknown>)=>{
+    if(!backend.conversation)return;
+    const candidates=Array.isArray(data.candidates)?data.candidates as Array<Record<string,unknown>>:[];
+    const summary=candidates.map(item=>[item.title,item.explanation].filter(value=>typeof value==='string'&&value).join('：')).filter(Boolean).join('\n').slice(0,4000);
+    const message=typeof data.message==='string'?data.message:'';
+    const text=[summary,message].filter(Boolean).join('\n').slice(0,40000);
+    // 工具明细已在 agent_run_events，这里只留 agentRunId 关联，避免两套轨迹。
+    Promise.resolve(backend.conversation(actor,'turn.put',{
+      projectId,turnKey:input.requestId,sessionId:'sessionId' in input?input.sessionId:'unknown',turnIndex:0,
+      surface:'kind' in input?'activity':'agent',userText:input.instruction,
+      ...(text?{assistantText:text}:{}),provider:requestedProvider,
+      ...(!('kind' in input)&&input.model?{model:input.model}:{}),
+      outcome:action==='fail'?'failed':candidates.length?'preview':'answered',
+      ...(action==='fail'?{errorCode:typeof data.code==='string'?data.code:'AGENT_FAILED'}:{}),
+      latencyMs:Math.max(0,Date.now()-startedAt),agentRunId:id,
+    })).catch(()=>{});
+  };
+  const call=(action:string,data:Record<string,unknown>={})=>{
+    if(action==='finish'||action==='fail')recordAgentTurn(action,data);
+    return rpc(actor,action,{projectId,id,claim,...data});
+  };
   const check=async()=>{if(now()>=deadline)throw new ApiError('AGENT_DEADLINE',409);await call('check');};
   type Candidate=ReturnType<typeof buildProposal>&{label:'A'|'B'|'C';title:string;prepared?:boolean};
   let candidates:Candidate[]=[],lastError:unknown,repair=0,finished=false,consumedSteerTotal=0;

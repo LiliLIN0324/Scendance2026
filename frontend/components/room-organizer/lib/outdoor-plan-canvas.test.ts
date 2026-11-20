@@ -36,7 +36,7 @@ import {
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
-import { formatLengthM } from './site-plan-measure';
+import { formatAreaM2, formatLengthM } from './site-plan-measure';
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 16, canvasW: 1200, canvasH: 800 };
 
 describe('outdoor plan canvas core (H2-a)', () => {
@@ -674,6 +674,24 @@ describe('measurement drawing (H3-a)', () => {
     expect(cap.texts).toEqual([]);
     // 几何照画（贴片只接管文字）。
     expect(cap.fills).toContain('#ffffff');
+  });
+
+  /* 2026-11-20 用户：「双击确认之后这些尺寸反而消失了」「停下来之后尺寸应该还在我的线段上面」——
+     已提交的测量默认就画线上标尺（累计刻度 + 总长）与面积读数；
+     只有显式关掉 showLabel（DOM 贴片接管文字）时才不画，编辑态不能关。 */
+  it('keeps the on-line ruler and the area reading for a committed measurement', () => {
+    const distance = makeCtx();
+    drawMeasureLayer({ ctx: distance.ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm7', kind: 'distance', points: [{ x: 0, y: 0 }, { x: 40, y: 0 }] },
+    ]);
+    // 总长贴在线末端（不传 showLabel 即默认画）。
+    expect(distance.cap.texts).toContain(formatLengthM(40));
+
+    const area = makeCtx();
+    drawMeasureLayer({ ctx: area.ctx, viewport: view } as PlanCanvasContext, [
+      { id: 'm8', kind: 'area', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }] },
+    ]);
+    expect(area.cap.texts).toContain(formatAreaM2(100));
   });
 
   it('haloes the selected measurement with white so the pick is visible', () => {

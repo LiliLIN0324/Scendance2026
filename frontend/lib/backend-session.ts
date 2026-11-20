@@ -1836,15 +1836,15 @@ export class BackendSession {
     return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', check => this.client.startActivityTaskRun(projectId, body,check));
   }
   /** 简报槽位提取：只读、不占租约，模型 key 在 Supabase secrets，浏览器不接触。未启用返回 enabled:false。 */
-  async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId, model?: string | null): Promise<BriefExtractResponse> {
-    const input = briefExtractRequestSchema.parse({ message, ...(provider ? { provider } : {}), ...(model ? { model } : {}) });
+  async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId, model?: string | null, trace?: { turnKey: string; sessionId: string; turnIndex: number }): Promise<BriefExtractResponse> {
+    const input = briefExtractRequestSchema.parse({ message, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(trace ? { trace } : {}) });
     const dispatch=this.scopedDispatchGuard(false);
     const result=await (this.conversationClient()??this.client).request('/brief/extract', 'POST', input, false, signal,dispatch,true);
     dispatch();return briefExtractResponseSchema.parse(result);
   }
   /** One opt-in call returns a reply and proposed facts; it never executes actions. */
-  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId,model?:string|null):Promise<BriefConversationResponse> {
-    const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history,...(provider?{provider}:{}),...(model?{model}:{})});
+  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId,model?:string|null,trace?:{turnKey:string;sessionId:string;turnIndex:number}):Promise<BriefConversationResponse> {
+    const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history,...(provider?{provider}:{}),...(model?{model}:{}),...(trace?{trace}:{})});
     const client=this.conversationClient();
     if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1861,9 +1861,17 @@ export class BackendSession {
     } else if(!result.enabled&&(result.extraction!==null||result.reply!==null||result.unhandled.length||result.factEvidence.length||result.materialQueries?.length))throw new SceneApiError('INVALID_RESPONSE',502,{category:'contract'});
     return result;
   }
+  /** 全链路留痕：本机命令/本地作答没有后端请求，由前端按轮补记；失败由上层的队列重试。 */
+  async recordConversationTurns(turns: Array<Record<string, unknown>>): Promise<unknown> {
+    const client=this.conversationClient()??this.client;
+    if(!client||!turns.length)return null;
+    const dispatch=this.scopedDispatchGuard(false);
+    try{return await client.request('/conversation/turns','POST',{turns},false,undefined,dispatch,true);}
+    finally{dispatch();}
+  }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
-  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true, images?: string[]): Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}), ...(images?.length ? { images } : {}) });
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true, images?: string[], trace?: { turnKey: string; sessionId: string; turnIndex: number }): Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}), ...(images?.length ? { images } : {}), ...(trace ? { trace } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);
@@ -1876,8 +1884,8 @@ export class BackendSession {
    * 旧部署没有流式路由时（404/405/非 SSE）退回一次性请求，不把「不支持流」当成问答失败。
    * 取消只会停掉这一条请求；不会把已生成的部分当成完整答案。
    */
-  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1', images?:string[]):Promise<AssistantChatResult> {
-    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}), ...(images?.length ? { images } : {}) });
+  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1', images?:string[], trace?:{turnKey:string;sessionId:string;turnIndex:number}):Promise<AssistantChatResult> {
+    const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}), ...(images?.length ? { images } : {}), ...(trace ? { trace } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
     const dispatch=this.scopedDispatchGuard(false);

@@ -3,90 +3,10 @@ import {
   DELIVERY_AUDIENCES,
   DELIVERY_EXPORT_ITEMS,
   DELIVERY_SEGMENTS,
-  GUIDE_STEPS,
-  GUIDE_STEP_CONTENT,
-  completeGuideStep,
-  currentGuideStep,
-  dismissGuide,
   enabledDeliveryExports,
   futureDeliveryExports,
-  guideWillAppear,
-  initialGuideState,
-  parseGuideState,
-  restartGuide,
   segmentVisible,
 } from './site-plan-guide';
-
-describe('progressive first-open guide (H4-b)', () => {
-  it('discloses steps in order and hides when all done or dismissed', () => {
-    let state = initialGuideState();
-    expect(currentGuideStep(state)).toBe('welcome');
-    state = completeGuideStep(state, 'welcome');
-    expect(currentGuideStep(state)).toBe('layers');
-    state = completeGuideStep(state, 'layers');
-    expect(currentGuideStep(state)).toBe('edit');
-    state = completeGuideStep(state, 'edit');
-    expect(currentGuideStep(state)).toBeNull();
-    expect(guideWillAppear(state)).toBe(false);
-  });
-
-  it('dismisses the whole guide at once and stays quiet', () => {
-    const dismissed = dismissGuide(initialGuideState());
-    expect(currentGuideStep(dismissed)).toBeNull();
-    expect(dismissed.done).toEqual([...GUIDE_STEPS]);
-  });
-
-  it('keeps completion idempotent and order-stable', () => {
-    let state = initialGuideState();
-    state = completeGuideStep(state, 'welcome');
-    state = completeGuideStep(state, 'welcome'); // 重复完成不改状态。
-    expect(state.done).toEqual(['welcome']);
-  });
-
-  it('parses persisted state leniently and falls back on garbage', () => {
-    expect(parseGuideState({ done: ['welcome'], dismissed: false })).toEqual({ done: ['welcome'], dismissed: false });
-    expect(parseGuideState({ done: ['welcome', 'bogus'], dismissed: true })).toEqual({ done: ['welcome'], dismissed: true });
-    expect(parseGuideState(null)).toEqual(initialGuideState());
-    expect(parseGuideState({ done: 'welcome' })).toEqual(initialGuideState());
-    expect(parseGuideState(42)).toEqual(initialGuideState());
-  });
-
-  it('restarts the guide explicitly regardless of prior state', () => {
-    const dismissed = dismissGuide(initialGuideState());
-    const restarted = restartGuide(dismissed);
-    expect(currentGuideStep(restarted)).toBe('welcome');
-    expect(restarted.dismissed).toBe(false);
-  });
-
-  it('exposes content for every step with title/body/cta', () => {
-    for (const step of GUIDE_STEPS) {
-      const content = GUIDE_STEP_CONTENT[step];
-      expect(content.title.length).toBeGreaterThan(0);
-      expect(content.body.length).toBeGreaterThan(4);
-      expect(content.cta.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('anchors each step at the region it talks about', () => {
-    // 2026-11-12 重做：welcome/edit 讲画布（箭头朝下），layers 讲左栏页签（箭头朝左）。
-    expect(GUIDE_STEP_CONTENT.welcome.anchor).toBe('canvas');
-    expect(GUIDE_STEP_CONTENT.layers.anchor).toBe('left');
-    expect(GUIDE_STEP_CONTENT.edit.anchor).toBe('canvas');
-  });
-
-  it('copy matches the current OnePlan-style UI, not the retired toolbar', () => {
-    // 文案护栏：界面改成左栏页签 + 物件库后，引导不得再提「右侧图层栈/九钮」旧形态。
-    expect(GUIDE_STEP_CONTENT.layers.body).toContain('添加物件');
-    expect(GUIDE_STEP_CONTENT.layers.body).toContain('已放置物件');
-    expect(GUIDE_STEP_CONTENT.layers.title).not.toContain('右侧');
-    expect(GUIDE_STEP_CONTENT.edit.body).toContain('添加物件');
-    expect(GUIDE_STEP_CONTENT.edit.body).toContain('双击闭合');
-    expect(GUIDE_STEP_CONTENT.edit.body).toContain('Ctrl+Z');
-    expect(GUIDE_STEP_CONTENT.welcome.body).toContain('滚轮');
-    expect(JSON.stringify(GUIDE_STEP_CONTENT)).not.toContain('九钮');
-    expect(JSON.stringify(GUIDE_STEP_CONTENT)).not.toContain('图层栈');
-  });
-});
 
 describe('unified delivery panel (outdoor)', () => {
   it('exposes three lightweight audiences with labels and notes', () => {

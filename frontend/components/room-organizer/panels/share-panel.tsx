@@ -16,13 +16,50 @@ import type { BingoPhase } from '../lib/bingo-status';
  * 发布页保持旧版渲染，普通发布与完整分享的历史行为不变。
  */
 export type ShareTab = 'share' | 'publish' | 'export' | 'cases';
-export type ShareExportIcon = 'image' | 'list' | 'site';
+export type ShareExportIcon = 'image' | 'list' | 'site' | 'deck';
 
 export interface ShareExportEntry {
   id: string;
   label: string;
   icon: ShareExportIcon;
-  onSelect(): void;
+  /** 这个导出覆盖到的范围，写在行下：让人在点之前就知道导出的是哪一段内容。 */
+  scope?: string | undefined;
+  /**
+   * 运行这一次导出。返回 Promise 才算有回执（resolve 且不是 false = 完成，reject 或 false = 失败）；
+   * 同步返回 undefined 表示宿主只能把动作交出去、拿不到完成回执，面板如实写「已交给画布导出」。
+   */
+  onSelect(): unknown;
+}
+
+/** 发给客户的评审权限。写进评审链接本身，不是账号级设置。 */
+export interface SharePermits {
+  pins: boolean;
+  levels: boolean;
+  basemap: boolean;
+}
+
+/** 三枚开关给人看的一句话，顺序固定：落钉、图层、底图。 */
+export function describePermits(permits: SharePermits): string {
+  return [
+    permits.pins ? '可落钉意见' : '不可落钉意见',
+    permits.levels ? '可切换图层' : '不可切换图层',
+    permits.basemap ? '可切换底图' : '不可切换底图',
+  ].join(' · ');
+}
+
+/** 两套权限是否一致；用来判断「开关已改、但还没作用到任何链接」。 */
+export function samePermits(a: SharePermits, b: SharePermits): boolean {
+  return a.pins === b.pins && a.levels === b.levels && a.basemap === b.basemap;
+}
+
+/** 一次导出的阶段。done 有回执；sent = 已交给画布、这条链路给不出完成回执（如实写，不冒充完成）。 */
+export type ShareExportPhase = 'running' | 'done' | 'sent' | 'failed';
+
+export interface ExportAttempt {
+  phase: ShareExportPhase;
+  version: string;
+  dirty: boolean;
+  message?: string | undefined;
 }
 
 /** P0-B 反馈拆分：发布与复制各自一条反馈，不再共用一条 notice。ok→status，warn/err→alert。 */
@@ -93,6 +130,8 @@ export interface PublishRecordsState {
 
 const OPEN_LINE = '打开即可查看场地、分区和尺度，页里可看 3D。';
 const PUBLISH_LINE = '发布后即可查看场地、分区和尺度，页里可看 3D。';
+/** 分享页第一行：这一步到底把什么交给客户。一句话，不再补一段解释。 */
+const SHARE_LINE = '发给客户：可留言、可看 3D。';
 /** 未发布且项目只读时的页脚。有这句就不再给可点的绿色发布按钮。 */
 export const SHARE_READ_ONLY_LINE = '这个项目现在是只读，取回编辑权后再发布。';
 
@@ -149,9 +188,10 @@ export function SharePanel({
   exports,
   reviewLink = '',
   permits = { pins: true, levels: true, basemap: true },
+  issuedPermits = null,
   onPermit = () => undefined,
   onIssueAudience,
-  onSendBingo,
+  onOpenBingoDesk,
   onCopyReview = () => undefined,
   onOpenReview = () => undefined,
   onRevokeReview,
@@ -164,6 +204,7 @@ export function SharePanel({
   onRevokeCompleteShare,
   cases,
   onToggleQr,
+  exportBinding,
   precheck = null,
   publishFeedback = null,
   copyFeedback = null,
@@ -188,10 +229,16 @@ export function SharePanel({
   /** 当前评审链接；空串表示还没生成。 */
   reviewLink?: string;
   /** 发给客户时的三枚开关，默认全开。墨色，不用绿色。 */
-  permits?: { pins: boolean; levels: boolean; basemap: boolean };
-  onPermit?: (key: 'pins' | 'levels' | 'basemap', value: boolean) => void;
+  permits?: SharePermits;
+  /**
+   * 当前这条评审链接送出时写进链接的权限（宿主在生成成功那一刻记下的）。
+   * null/不传 = 本机没有这条链接的权限组合（旧链、从本机标记恢复的链接），只说明规则、不冒充知道。
+   */
+  issuedPermits?: SharePermits | null;
+  onPermit?: (key: keyof SharePermits, value: boolean) => void;
   onIssueAudience(): void;
-  onSendBingo(): void;
+  /** 进入 Bingo 审校台：只切面板，不生成第二条链接（送出是 onIssueAudience）。 */
+  onOpenBingoDesk(): void;
   onCopyReview?: () => void;
   onOpenReview?: () => void;
   /** 作废当前评审短链；不传则不显示作废入口。 */
@@ -207,6 +254,11 @@ export function SharePanel({
   /** 「案例」页签内容（CaseAdminSection）。不传就不出现这一页。 */
   cases?: ReactNode;
   onToggleQr(): void;
+  /**
+   * P3：每次导出开始时由宿主给出要绑定的版本（读会话快照，不猜）。
+   * 不传时面板只写「未标版本」，不冒充知道导的是哪一版。
+   */
+  exportBinding?: () => { version: string; dirty: boolean };
   /** P0-B：发布页打开即预检的状态与阻塞清单；不传时发布页保持旧版渲染。 */
   precheck?: PublishPrecheckState | null;
   /** P0-B：发布动作自己的反馈（成功/失败/成功但复制失败），与复制反馈分开。 */
@@ -219,12 +271,39 @@ export function SharePanel({
   const rootRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const [recordCopyNote, setRecordCopyNote] = useState('');
+  const [exportAttempts, setExportAttempts] = useState<Record<string, ExportAttempt>>({});
+  /** 同一条导出重复点：只让最新一轮写结果，旧一轮（重试前的）不盖掉新结果。 */
+  const exportRuns = useRef<Record<string, number>>({});
   const tabOrder: ShareTab[] = cases != null ? ['share', 'publish', 'cases', 'export'] : ['share', 'publish', 'export'];
   const publishBlocked = !published && (readOnly || notice === SHARE_READ_ONLY_LINE);
+  /** 阻塞清单里已经写了只读原因与处理动作时，不再在下面重复同一句只读说明。 */
+  const readOnlyExplained = Boolean(precheck?.blockers.some(blocker => blocker.id === 'read-only'));
   /** 交给客户的那条：有场地页就用场地页。 */
   const handedUrl = published?.url ?? '';
   /** 有已发布版本且当前草稿更新时，主按钮按「发布新版」说；首次发布仍是「发布并复制链接」。 */
   const newVersionLabel = Boolean(precheck?.lastPublished && precheck.dirty);
+  // P2（V16）：权限写进链接本身，改开关不改已经发出去的链接。
+  // issuedPermits 是宿主在送出成功那一刻记下的权限；null 表示本机不知道这条链接的组合，只说明规则。
+  const permitsChanged = issuedPermits != null && !samePermits(permits, issuedPermits);
+  const permitRuleLine = !reviewLink
+    ? '开关只影响下一次送出，已经发出去的链接保持原样。'
+    : issuedPermits
+      ? `这条链接送出时是「${describePermits(issuedPermits)}」，之后的开关改动不会改到它。`
+      : '本机没存下当时的组合；开关只影响下一次送出。';
+  // P4（V17）：送出是动作（生成并复制客户链接），待评/回执是这条链接的评审结果，
+  // 进入是把人带到审校台。三者分开放，不让「进入」那一行冒充成「送出」。
+  const sendStatusLine = bingoStatus === '已回执'
+    ? '送出状态：已回执 · 反馈已回到 Bingo'
+    : bingoStatus === '待评'
+      ? `送出状态：待评${bingoCount ? ` · ${bingoCount} 份等回执` : ' · 等回执'}`
+      : bingoStatus === '送出中'
+        ? '送出状态：送出中'
+        : '送出状态：待发';
+  const bingoRowStatus = bingoStatus === '已回执'
+    ? '有回执'
+    : bingoStatus === '待评'
+      ? (bingoCount ? `待评 ${bingoCount} 份` : '待评')
+      : '暂无待评';
   // 焦点进入与返回（PUB-12）：打开时把焦点移进弹层，关闭时还给触发钮；用户已点到别处就不抢。
   useEffect(() => {
     const root = rootRef.current;
@@ -259,6 +338,46 @@ export function SharePanel({
     const copied = await copyShareText(row.url);
     setRecordCopyNote(copied ? `已复制版本 ${row.revision ?? '—'} 的链接。` : '复制没成功：请在「完整地址」里手动选择复制。');
   };
+  // P3（V18）：四类导出各自带进行中 / 完成 / 失败 / 重试，失败不靠关菜单表示成功。
+  // 只有宿主给出回执（Promise 或 false）才敢写「已导出」；同步 void 的句柄只能写「已交给画布导出」。
+  const bindExport = (): { version: string; dirty: boolean } => {
+    try {
+      const bound = exportBinding?.();
+      if (bound && typeof bound.version === 'string' && bound.version.trim()) {
+        return { version: bound.version, dirty: Boolean(bound.dirty) };
+      }
+    } catch { /* 读不到版本时如实标注没有绑定 */ }
+    return { version: '未标版本', dirty: true };
+  };
+  const runExport = async (entry: ShareExportEntry): Promise<void> => {
+    const run = (exportRuns.current[entry.id] ?? 0) + 1;
+    exportRuns.current[entry.id] = run;
+    const bound = bindExport();
+    const write = (next: ExportAttempt): void => {
+      if (exportRuns.current[entry.id] !== run) return;
+      setExportAttempts(previous => ({ ...previous, [entry.id]: next }));
+    };
+    write({ ...bound, phase: 'running' });
+    let outcome: unknown;
+    try {
+      outcome = entry.onSelect();
+      if (outcome && typeof (outcome as { then?: unknown }).then === 'function') {
+        const value = await (outcome as Promise<unknown>);
+        if (value === false) write({ ...bound, phase: 'failed', message: '导出没有完成。' });
+        else write({ ...bound, phase: 'done' });
+        return;
+      }
+    } catch (error) {
+      write({ ...bound, phase: 'failed', message: error instanceof Error && error.message ? error.message : '导出没有完成。' });
+      return;
+    }
+    if (outcome === false) write({ ...bound, phase: 'failed', message: '导出没有完成。' });
+    else write({ ...bound, phase: 'sent' });
+  };
+  const boundLine = (() => {
+    const bound = bindExport();
+    return `${bound.version}${bound.dirty ? ' · 含未保存修改' : ''}`;
+  })();
   return <div id="tool-share-menu" className="sc-tool-pop sc-share-panel" role="dialog" aria-label="分享、发布与导出" data-testid="share-panel" tabIndex={-1} ref={rootRef}>
     <div className="sc-share-tabs" role="tablist" aria-label="分享、发布、案例、导出" onKeyDown={onTabKeyDown}>
       <Tab id="share" selected={tab === 'share'} onSelect={onTab}>分享</Tab>
@@ -269,12 +388,13 @@ export function SharePanel({
 
     {tab === 'share' && <section className="sc-share-body" role="tabpanel" aria-label="分享" id="share-panel-share">
       <ShareHeading icon={<MarkIcon />} title={title} />
-      <p className="sc-share-desc">{OPEN_LINE}</p>
-      <fieldset className="sc-share-permits">
+      <p className="sc-share-desc">{SHARE_LINE}</p>
+      <fieldset className="sc-share-permits" data-testid="review-permits">
         <legend>发给客户评审</legend>
         <PermitRow label="可落钉意见" pressed={permits.pins} onChange={value => onPermit('pins', value)} />
         <PermitRow label="可切换图层" pressed={permits.levels} onChange={value => onPermit('levels', value)} />
         <PermitRow label="可切换底图" pressed={permits.basemap} onChange={value => onPermit('basemap', value)} />
+        <p className="sc-share-meta" data-testid="permit-rule">{permitRuleLine}</p>
       </fieldset>
       {reviewLink ? <>
         <div className="sc-share-link" data-testid="review-link-row">
@@ -309,19 +429,24 @@ export function SharePanel({
               : <p className="sc-share-desc">二维码还在生成。</p>}
           </div>}
         </div>
+        <p className="sc-share-meta" data-testid="review-version-owner">客户意见记在这一版上；之后改了画布要重新送出。</p>
+        {permitsChanged && issuedPermits && <p className="sc-share-note" role="status" data-tone="warn" data-testid="permit-pending">
+          开关已改成「{describePermits(permits)}」，这条仍是「{describePermits(issuedPermits)}」；旧链接不会自动失效，要收回先作废。
+        </p>}
         <button type="button" className="sc-share-renew" disabled={busy} onClick={onIssueAudience}>
-          {busy ? '正在刷新…' : '刷新为当前版本'}
+          {busy ? '正在送出…' : '重新送出（当前版本）'}
         </button>
       </> : <button type="button" className="sc-share-cta" data-tone="green" disabled={busy} onClick={onIssueAudience}>
-        {busy ? '正在生成…' : '生成并复制评审链接'}
+        {busy ? '正在送出…' : '送出评审链接'}
       </button>}
+      <p className="sc-share-meta" data-testid="review-send-status">{sendStatusLine}</p>
       <ShareActionRow
-        label="送到 Bingo"
-        status={bingoStatus}
-        icon={<BingoStatusMark phase={bingoPhaseOf(bingoStatus)} sending={bingoStatus === '送出中'} count={bingoStatus === '待评' ? bingoCount : ''} size={16} armed={bingoLive} />}
-        ariaLabel={`送到 Bingo，${bingoStatus}`}
+        label="进入 Bingo 审校台"
+        status={bingoRowStatus}
+        icon={<BingoStatusMark phase={bingoPhaseOf(bingoStatus)} count={bingoStatus === '待评' ? bingoCount : ''} size={16} armed={bingoLive} />}
+        ariaLabel={`进入 Bingo 审校台，${bingoRowStatus}`}
         disabled={busy}
-        onClick={onSendBingo}
+        onClick={onOpenBingoDesk}
       />
     </section>}
 
@@ -329,7 +454,7 @@ export function SharePanel({
       <ShareHeading icon={<GlobeIcon />} title="发布到网页" />
       {precheck && <PublishStatusBlock precheck={precheck} />}
       <p className="sc-share-desc">{published ? OPEN_LINE : PUBLISH_LINE}</p>
-      {published && <p className="sc-share-desc">固定发布版本；后续编辑不会自动更新。撤销仅停止这条受控链接的新访问，无法收回已下载的内容。</p>}
+      {published && <p className="sc-share-desc">固定版本，不随编辑更新；撤销只能停掉新访问。</p>}
       {published?.siteUrl && <p className="sc-share-desc"><a href={published.siteUrl} target="_blank" rel="noopener noreferrer">打开离线场地快照</a>：固定副本，不随项目更新，无法远程撤回。</p>}
       {precheck && <PublishBlockers precheck={precheck} busy={busy} />}
       {precheck && <PublishSummary precheck={precheck} />}
@@ -357,10 +482,12 @@ export function SharePanel({
         </div>
         {/* P1-B：完整地址手动取走的路径——剪贴板被拦住时仍能拿到整段链接。 */}
         <details className="sc-share-fullurl" data-testid="share-fullurl" style={{ ...FULL_URL_STYLE, display: 'grid', gap: 4 }}>
-          <summary className="sc-share-desc" style={{ cursor: 'pointer', color: 'inherit' }}>完整地址</summary>
-          <p className="sc-share-desc" style={{ overflowWrap: 'anywhere', userSelect: 'all' }}>{handedUrl}</p>
+          <summary className="sc-share-meta" style={{ cursor: 'pointer', color: 'inherit' }}>完整地址</summary>
+          <p className="sc-share-meta" style={{ overflowWrap: 'anywhere', userSelect: 'all' }}>{handedUrl}</p>
         </details>
-      </> : publishBlocked ? <p className="sc-share-readonly" role="status" data-testid="share-readonly">{SHARE_READ_ONLY_LINE}</p>
+      </> : publishBlocked ? (readOnlyExplained
+        ? null
+        : <p className="sc-share-readonly" role="status" data-testid="share-readonly">{SHARE_READ_ONLY_LINE}</p>)
         : precheck?.checking ? null
         : <button type="button" className="sc-share-cta" data-tone="green" disabled={busy} onClick={onPublish}>
           {busy
@@ -379,7 +506,7 @@ export function SharePanel({
     {tab === 'publish' && published && onRevoke && <button type="button" className="sc-share-renew" disabled={busy} onClick={onRevoke}>撤回这条受控链接</button>}
 
     {tab === 'publish' && onCreateCompleteShare != null && <section className="sc-share-body" data-testid="complete-share" aria-label="完整只读链接">
-      <p className="sc-share-desc">完整只读链接：含户外规划与已归档资源的受控入口，可撤销。令牌只在生成时显示一次。</p>
+      <p className="sc-share-desc">完整只读链接：含户外规划与已归档资源，可撤销。令牌只显示一次。</p>
       {completeShare?.url ? <>
         <div className="sc-share-link" data-testid="complete-share-link-row">
           <span className="sc-share-link-text" title={completeShare.url}>{displayShareUrl(completeShare.url)}</span>
@@ -388,8 +515,8 @@ export function SharePanel({
           {onRevokeCompleteShare && <button type="button" className="sc-share-key" data-tone="paper" disabled={busy} onClick={onRevokeCompleteShare}>撤销</button>}
         </div>
         <details className="sc-share-fullurl" data-testid="complete-share-fullurl" style={{ ...FULL_URL_STYLE, display: 'grid', gap: 4 }}>
-          <summary className="sc-share-desc" style={{ cursor: 'pointer', color: 'inherit' }}>完整地址</summary>
-          <p className="sc-share-desc" style={{ overflowWrap: 'anywhere', userSelect: 'all' }}>{completeShare.url}</p>
+          <summary className="sc-share-meta" style={{ cursor: 'pointer', color: 'inherit' }}>完整地址</summary>
+          <p className="sc-share-meta" style={{ overflowWrap: 'anywhere', userSelect: 'all' }}>{completeShare.url}</p>
         </details>
       </> : <button type="button" className="sc-share-renew" disabled={busy} onClick={onCreateCompleteShare}>
         {busy ? '正在生成…' : '生成完整只读链接'}
@@ -400,14 +527,36 @@ export function SharePanel({
       {cases}
     </section>}
 
-    {tab === 'export' && <section className="sc-share-body" role="tabpanel" aria-label="导出" id="share-panel-export">
+    {tab === 'export' && <section className="sc-share-body" role="tabpanel" aria-label="导出" id="share-panel-export" data-testid="export-section">
+      {/* P3（V18）：导出前先把范围与绑定的版本说清；每行点下去时再绑定一次当前版本。 */}
+      <p className="sc-share-meta" data-testid="export-binding">每次导出绑定当前版本：{boundLine}。版本变了要重新导出。</p>
       {exports.length ? <ul className="sc-share-exports" data-align="start">
-        {exports.map(entry => <li key={entry.id}>
-          <button type="button" className="sc-share-export" data-align="start" onClick={entry.onSelect}>
-            <ExportGlyph icon={entry.icon} />
-            <span>{entry.label}</span>
-          </button>
-        </li>)}
+        {exports.map(entry => {
+          const attempt = exportAttempts[entry.id];
+          const running = attempt?.phase === 'running';
+          return <li key={entry.id} data-testid={`export-row-${entry.id}`} data-phase={attempt?.phase ?? 'idle'} style={EXPORT_ROW_STYLE}>
+            <button
+              type="button"
+              className="sc-share-export"
+              data-align="start"
+              disabled={running}
+              aria-label={entry.scope ? `${entry.label}：${entry.scope}` : entry.label}
+              onClick={() => { void runExport(entry); }}
+            >
+              <ExportGlyph icon={entry.icon} />
+              <span>{entry.label}</span>
+              {entry.scope && <em className="sc-share-export-scope">{entry.scope}</em>}
+            </button>
+            {attempt && <p
+              className="sc-share-meta"
+              role={attempt.phase === 'failed' ? 'alert' : 'status'}
+              data-testid={`export-status-${entry.id}`}
+              data-tone={attempt.phase}
+              style={exportToneStyle(attempt.phase)}
+            >{exportLine(attempt)}</p>}
+            {attempt?.phase === 'failed' && <button type="button" className="sc-share-renew" data-testid={`export-retry-${entry.id}`} onClick={() => { void runExport(entry); }}>重试</button>}
+          </li>;
+        })}
       </ul> : <p className="sc-share-desc">当前方案没有可导出的文件。</p>}
     </section>}
 
@@ -436,19 +585,49 @@ const RECORD_ROWS_STYLE = {
 const RECORD_NOTE_STYLE = {
   margin: '4px 0 0',
 } as const;
+/** 导出行：名称与范围同一行，范围靠右压成元信息；回执另起一行。 */
+const EXPORT_ROW_STYLE = {
+  display: 'grid',
+  gap: 4,
+  padding: '4px 0',
+} as const;
+
+/** 导出的结果一句话：版本必须带在每条回执上，失败也要说清是哪一版。 */
+export function exportLine(attempt: ExportAttempt): string {
+  const bound = `${attempt.version}${attempt.dirty ? ' · 含未保存修改' : ''}`;
+  if (attempt.phase === 'running') return `正在导出 · ${bound}`;
+  if (attempt.phase === 'done') return `已导出 · ${bound}`;
+  if (attempt.phase === 'sent') return `已交给画布导出 · ${bound}；这条链路没有完成回执，没看到文件就重试`;
+  return `导出没成功 · ${bound}${attempt.message ? `：${attempt.message}` : ''}`;
+}
+
+function exportToneStyle(phase: ShareExportPhase): { color: string } | undefined {
+  if (phase === 'failed') return { color: 'var(--err, #B4443C)' };
+  if (phase === 'sent') return { color: 'var(--warn, #96651F)' };
+  return undefined;
+}
 
 /** P0-B：发布页打开即给状态——保存状态、最近发布版本、当前是否还有未发布修改。 */
 function PublishStatusBlock({ precheck }: { precheck: PublishPrecheckState }): JSX.Element {
   const { saveLine, lastPublished, dirty } = precheck;
   const publishedAt = lastPublished?.at ? formatShareTime(lastPublished.at) : '';
-  return <div role="group" aria-label="发布状态" data-testid="publish-status">
-    <p className="sc-share-desc">保存状态：{saveLine}</p>
-    <p className="sc-share-desc">{lastPublished
-      ? `已发布：版本 ${lastPublished.revision}${publishedAt ? ` · ${publishedAt}` : ''}`
-      : '还没有发布过。'}</p>
-    {lastPublished && <p className="sc-share-desc">{dirty
-      ? '当前修改：有未发布的修改，可发布为新版本。'
-      : '当前修改：与已发布版本一致。'}</p>}
+  // 两栏：键在左、值在右。逐字沿用原来的说法，只是从整句改成键值两列。
+  return <div role="group" aria-label="发布状态" data-testid="publish-status" className="sc-share-kvs">
+    <ShareKv k="保存状态：" v={saveLine} />
+    <ShareKv k="已发布：" v={lastPublished
+      ? `版本 ${lastPublished.revision}${publishedAt ? ` · ${publishedAt}` : ''}`
+      : '还没有发布过。'} />
+    {lastPublished && <ShareKv k="当前修改：" v={dirty
+      ? '有未发布的修改，可发布为新版本。'
+      : '与已发布版本一致。'} />}
+  </div>;
+}
+
+/** 两栏信息行：键在左、值在右。整卡里代替一串「保存状态：…」整句。 */
+function ShareKv({ k, v }: { k: string; v: string }): JSX.Element {
+  return <div className="sc-share-kv">
+    <span className="sc-share-kv-k">{k}</span>
+    <span className="sc-share-kv-v">{v}</span>
   </div>;
 }
 
@@ -461,9 +640,9 @@ function PublishBlockers({ precheck, busy }: { precheck: PublishPrecheckState; b
       : blockers.length === 0 ? <p className="sc-share-desc">检查通过，可以发布。</p>
       : <>
         <p className="sc-share-desc" role="alert">还有 {blockers.length} 项需要处理：</p>
-        {blockers.map(blocker => <div key={blocker.id} data-testid={`publish-blocker-${blocker.id}`}>
-          <p className="sc-share-desc">· {blocker.message}</p>
-          {blocker.action && <button type="button" className="sc-share-renew" disabled={busy} onClick={blocker.action.onSelect}>{blocker.action.label}</button>}
+        {blockers.map(blocker => <div key={blocker.id} className="sc-share-fix" data-testid={`publish-blocker-${blocker.id}`}>
+          <p className="sc-share-desc sc-share-fix-text">{blocker.message}</p>
+          {blocker.action && <button type="button" className="sc-share-fixbtn" disabled={busy} onClick={blocker.action.onSelect}>{blocker.action.label}</button>}
         </div>)}
       </>}
   </fieldset>;
@@ -473,11 +652,14 @@ function PublishBlockers({ precheck, busy }: { precheck: PublishPrecheckState; b
 function PublishSummary({ precheck }: { precheck: PublishPrecheckState }): JSX.Element | null {
   const { summary, visibilityLine } = precheck;
   if (!summary?.length && !visibilityLine) return null;
-  return <fieldset className="sc-share-permits" data-testid="publish-summary">
-    <legend>本次发布内容</legend>
-    {summary?.map(item => <p key={item.label} className="sc-share-desc">{item.label}：{item.detail}{item.missing ? '（缺失）' : ''}</p>)}
-    {visibilityLine && <p className="sc-share-desc">{visibilityLine}</p>}
-  </fieldset>;
+  // 摘要与对外范围默认收起：发布这一页的重点是主按钮，清单要有人展开才铺开。
+  return <details className="sc-share-fold" data-testid="publish-summary">
+    <summary className="sc-share-fold-title">本次发布内容</summary>
+    <div className="sc-share-fold-body">
+      {summary?.map(item => <p key={item.label} className="sc-share-meta">{item.label}：{item.detail}{item.missing ? '（缺失）' : ''}</p>)}
+      {visibilityLine && <p className="sc-share-meta">{visibilityLine}</p>}
+    </div>
+  </details>;
 }
 
 /** P0-B：发布与复制分开反馈；ok 用 status，warn/err 用 alert 并落在语义色文字上。 */
@@ -498,30 +680,36 @@ function PublishRecords({ records, busy, copyNote, onCopyRow }: {
   copyNote: string;
   onCopyRow(row: PublishRecordRow): void;
 }): JSX.Element {
-  return <fieldset className="sc-share-permits" data-testid="publish-records">
-    <legend>发布记录</legend>
+  return <div className="sc-share-foldwrap" data-testid="publish-records">
     {records.loading ? <p className="sc-share-desc" role="status">正在读取发布记录…</p>
-      : records.error ? <p className="sc-share-desc" role="alert">{records.error}</p>
-      : records.rows.length === 0 ? <p className="sc-share-desc">还没有发布记录。</p>
-      : <ul className="sc-share-record-rows" style={RECORD_ROWS_STYLE}>
-        {records.rows.map(row => <li key={row.key}>
-          <div className="sc-share-link" data-testid={`publish-record-${row.key}`} data-revoked={row.revoked ? 'true' : undefined}>
-            <span className="sc-share-link-text">
-              {row.kind === 'viewer' ? '3D 快照 · ' : ''}版本 {row.revision ?? '—'} · {formatShareTime(row.at) || '时间未知'}{row.revoked ? ' · 已撤回' : ''}
-            </span>
-            {row.url && !row.revoked && <>
-              <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={() => onCopyRow(row)}>复制</button>
-              <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={() => { if (row.url) openShareUrl(row.url); }}>打开</button>
-            </>}
-            {row.shareId && !row.revoked && records.onRevoke && <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" disabled={busy} onClick={() => records.onRevoke?.(row)}>撤销</button>}
-          </div>
-          {!row.url && <p className="sc-share-desc" style={RECORD_NOTE_STYLE}>{row.revoked
-            ? '链接只在生成时显示一次，服务器不存完整地址。'
-            : '链接只在生成时显示一次，没有留存完整地址；可撤销，或发布新版。'}</p>}
-        </li>)}
-      </ul>}
-    {copyNote && <p className="sc-share-desc" role="status">{copyNote}</p>}
-  </fieldset>;
+      : records.error ? <p className="sc-share-desc" role="alert" data-tone="err">{records.error}</p>
+      : null}
+    {records.rows.length === 0 && !records.loading && !records.error
+      ? <p className="sc-share-meta">还没有发布记录。</p>
+      : <details className="sc-share-fold">
+        <summary className="sc-share-fold-title">发布记录{records.loading || records.error ? '' : `（${records.rows.length}）`}</summary>
+        <div className="sc-share-fold-body">
+          <ul className="sc-share-record-rows" style={RECORD_ROWS_STYLE}>
+            {records.rows.map(row => <li key={row.key}>
+              <div className="sc-share-link" data-testid={`publish-record-${row.key}`} data-revoked={row.revoked ? 'true' : undefined}>
+                <span className="sc-share-link-text">
+                  {row.kind === 'viewer' ? '3D 快照 · ' : ''}版本 {row.revision ?? '—'} · {formatShareTime(row.at) || '时间未知'}{row.revoked ? ' · 已撤回' : ''}
+                </span>
+                {row.url && !row.revoked && <>
+                  <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={() => onCopyRow(row)}>复制</button>
+                  <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" onClick={() => { if (row.url) openShareUrl(row.url); }}>打开</button>
+                </>}
+                {row.shareId && !row.revoked && records.onRevoke && <button type="button" className="sc-share-key sc-share-copy" data-tone="paper" disabled={busy} onClick={() => records.onRevoke?.(row)}>撤销</button>}
+              </div>
+              {!row.url && <p className="sc-share-meta" style={RECORD_NOTE_STYLE}>{row.revoked
+                ? '链接只在生成时显示一次，服务器不存完整地址。'
+                : '链接只在生成时显示一次，没有留存完整地址；可撤销，或发布新版。'}</p>}
+            </li>)}
+          </ul>
+        </div>
+      </details>}
+    {copyNote && <p className="sc-share-meta" role="status">{copyNote}</p>}
+  </div>;
 }
 
 function ShareHeading({ icon, title }: { icon: JSX.Element; title: string }): JSX.Element {
@@ -622,6 +810,13 @@ function ExportGlyph({ icon }: { icon: ShareExportIcon }): JSX.Element {
   if (icon === 'list') {
     return <svg className="sc-share-glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path d="M3 4.2h10M3 8h10M3 11.8h6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>;
+  }
+  if (icon === 'deck') {
+    return <svg className="sc-share-glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="4.6" y="2.4" width="8" height="10.2" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2.6 4.6v9.2a1.2 1.2 0 0 0 1.2 1.2h6.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M6.6 5.4h4M6.6 8h4M6.6 10.4h2.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>;
   }
   return <svg className="sc-share-glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

@@ -2,10 +2,11 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { sitePlanDataSchema } from '../../../supabase/functions/_shared/site-plan';
 import { CaseThumb } from '@/components/room-organizer/panels/case-thumb';
 import { completeShareTokenFromHash, readCompleteShare, readShare, shareErrorMessage, shareTokenFromHash, type CompleteShareSnapshot, type SharedSnapshot } from '@/lib/share-api';
 import { readShareSnapshotHash, shareSnapshotErrorMessage, SHARE_SNAPSHOT_HASH_PREFIX, type ShareSnapshot } from '@/lib/share-snapshot';
+import { sitePlanDataSchema } from '../../../supabase/functions/_shared/site-plan';
+import type { Scene } from '../../../supabase/functions/_shared/domain';
 import '../share.css';
 
 const ScenePreview = dynamic(() => import('@/components/business/scene-preview').then(module => module.ScenePreview), { ssr: false, loading: () => <p>正在准备三维预览…</p> });
@@ -15,6 +16,28 @@ const LayoutPreview = dynamic(() => import('@/components/business/layout-preview
 const ASSET_KIND_LABEL: Record<string, string> = { model: '模型', scan: '实景扫描', floorplan: '图纸', photo: '照片', attachment: '附件' };
 function shareAssetKindLabel(kind: string): string {
   return ASSET_KIND_LABEL[kind] ?? kind;
+}
+
+/** 客户页物件清点结果，口径见 sceneCountsOf。 */
+interface SceneCounts { total: number; builtin: number; external: number; siteOnly: number }
+/**
+ * P5 / V13（2026-11-20）：与发布摘要（share-menu 的 publishSummaryOf）同一口径。
+ * 发布侧按工作台楼层物件数清点（layout.floors[].items.length），其中含出入口与结构构件标记；
+ * 这些标记经 layoutToBackendScene 不进 wire objects，但数量可从 venue.entrances 与 V2 structure
+ * 一一复原（backend-adapter 两侧均为一一对应）：floor.items = objects + entrances + openings + columns。
+ * 客户页按同一口径展示总数，并分开说明哪些进三维画面，数字与发布摘要对得上（PUB-11）。
+ * 可发布的方案必为单层（多层 layoutToBackendScene 直接拒绝保存），故楼层口径固定为「单层」。
+ */
+function sceneCountsOf(scene: Scene): SceneCounts {
+  const structure = scene.schemaVersion === 2 ? scene.structure : null;
+  const external = scene.objects.filter(object => object.materialId === 'asset').length;
+  const siteOnly = scene.venue.entrances.length + (structure ? structure.openings.length + structure.columns.length : 0);
+  return { total: scene.objects.length + siteOnly, builtin: scene.objects.length - external, external, siteOnly };
+}
+
+function sceneCountsText(counts: SceneCounts): string {
+  return `共 ${counts.total} 件物件（${counts.builtin} 件内置道具、${counts.external} 件外部模型进入三维画面`
+    + `${counts.siteOnly > 0 ? `，${counts.siteOnly} 件出入口与结构构件不进三维` : ''}）· 单层`;
 }
 
 export default function SharedViewPage(): JSX.Element {
@@ -50,7 +73,11 @@ export default function SharedViewPage(): JSX.Element {
           const result = await readCompleteShare(completeToken);
           if (!active || current !== request.current) return;
           setComplete(result);
-          setExpiresAt(Date.now() + Math.min(300, ...result.assets.map(asset => asset.expiresIn)) * 1000);
+          // V14：没有随链接下发的临时资源（assets 为空）就不存在「授权到期」，不安排到期计时；
+          // 有资源时按最早到期的那一个算，避免把还有效的链接提前标成失效。
+          setExpiresAt(Date.now() + (result.assets.length > 0
+            ? Math.min(300, ...result.assets.map(asset => asset.expiresIn)) * 1000
+            : Number.POSITIVE_INFINITY));
         } catch (failure) {
           if (active && current === request.current) setError(shareErrorMessage(failure));
         } finally { if (active && current === request.current) setBusy(false); }
@@ -62,7 +89,10 @@ export default function SharedViewPage(): JSX.Element {
         const result = await readShare(token);
         if (!active || current !== request.current) return;
         setSnapshot(result);
-        setExpiresAt(Date.now() + Math.min(300, ...result.assets.map(asset => asset.expiresIn)) * 1000);
+        // V14：同上——没有临时地址就不伪造到期提示，有资源按最早到期算。
+        setExpiresAt(Date.now() + (result.assets.length > 0
+          ? Math.min(300, ...result.assets.map(asset => asset.expiresIn)) * 1000
+          : Number.POSITIVE_INFINITY));
       } catch (failure) {
         if (active && current === request.current) setError(shareErrorMessage(failure));
       } finally { if (active && current === request.current) setBusy(false); }
@@ -73,6 +103,7 @@ export default function SharedViewPage(): JSX.Element {
   }, [refresh]);
   useEffect(() => {
     if (!snapshot && !complete) return;
+    if (!Number.isFinite(expiresAt)) return;
     const timer = window.setTimeout(() => setExpired(true), Math.max(0, expiresAt - Date.now()));
     const check = () => { if (Date.now() >= expiresAt) setExpired(true); };
     document.addEventListener('visibilitychange', check);
@@ -84,6 +115,8 @@ export default function SharedViewPage(): JSX.Element {
   const completeAssetUrls = useMemo(() => Object.fromEntries(complete?.assets.map(asset => [asset.id, asset.url]) ?? []), [complete]);
   const completeAssetNames = useMemo(() => Object.fromEntries(complete?.assets.map(asset => [asset.id, asset.name]) ?? []), [complete]);
   const completeOutdoor = useMemo(() => complete?.manifest.outdoor ? sitePlanDataSchema.safeParse(complete.manifest.outdoor) : null, [complete]);
+  const completeCounts = useMemo(() => complete ? sceneCountsOf(complete.manifest.scene) : null, [complete]);
+  const snapshotCounts = useMemo(() => snapshot ? sceneCountsOf(snapshot.scene) : null, [snapshot]);
   // PUB-11（发布摘要与客户页实际呈现对齐）：逐类清点三维物件、户外规划与资源文件。
   // 归档资源存在不等于已在 3D 里还原：本页只渲染 GLB 模型，扫描/图纸/附件只提供文件下载。
   const completeModelObjects = useMemo(() => complete?.manifest.scene.objects.filter(object => object.materialId === 'asset') ?? [], [complete]);
@@ -112,12 +145,13 @@ export default function SharedViewPage(): JSX.Element {
     </> : complete ? <>
       <div className="sc-share-title"><div><p>完整方案 · 只读 · 版本 {complete.revision}</p><h1>{complete.case?.title ?? '完整方案分享'}</h1><p>{complete.manifest.scene.venue.width} × {complete.manifest.scene.venue.depth} 米 · 含 {complete.assets.length} 项已归档资源</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>
       {expired && <p className="sc-share-notice" role="status">资源授权已到期；已载入的模型仍可查看。重新加载模型前，请刷新资源以检查链接状态。</p>}
-      <ScenePreview scene={complete.manifest.scene} assetUrls={completeAssetUrls} assetNames={completeAssetNames} />
+      <ScenePreview scene={complete.manifest.scene} assetUrls={completeAssetUrls} assetNames={completeAssetNames} onRefresh={() => setRefresh(value => value + 1)} />
       <section className="sc-share-resources" data-testid="share-scope" aria-labelledby="sc-share-scope-title">
         <h2 id="sc-share-scope-title">对外可见内容</h2>
         <ul>
-          <li>三维布置 · {complete.manifest.scene.objects.length} 件物件（{complete.manifest.scene.objects.length - completeModelObjects.length} 件内置道具、{completeModelObjects.length} 件外部模型）；场地 {complete.manifest.scene.venue.width} × {complete.manifest.scene.venue.depth} 米。</li>
+          <li>三维布置 · {sceneCountsText(completeCounts!)}；场地 {complete.manifest.scene.venue.width} × {complete.manifest.scene.venue.depth} 米。</li>
           {completeOutdoor?.success && <li>户外规划 · {completeOutdoor.data.zones.length} 个分区 · {completeOutdoor.data.routes.length} 条路线 · {completeOutdoor.data.facilities.length} 件设施（只读 2D 示意，不进入三维画面）。</li>}
+          {completeOutdoor && !completeOutdoor.success && <li>户外规划数据格式暂不支持，本页无法绘制平面图。</li>}
           {completeKindCounts.size > 0 && <li>资源文件 · {[...completeKindCounts.entries()].map(([kind, count]) => `${shareAssetKindLabel(kind)} ${count}`).join('、')}（下方列表可下载）。</li>}
           {completeKindCounts.has('scan') && <li>实景扫描文件以资源形式提供下载；本页三维画面不渲染扫描背景，布置为示意呈现。</li>}
           {completeMissingModels > 0 && <li>有 {completeMissingModels} 件外部模型没有随本版发布，三维画面中以线框占位显示。</li>}
@@ -134,9 +168,9 @@ export default function SharedViewPage(): JSX.Element {
       {complete.assets.length > 0 && <section className="sc-share-resources" aria-labelledby="sc-share-resources-title"><h2 id="sc-share-resources-title">已归档资源</h2><ul>{complete.assets.map(asset => <li key={asset.id}>{expired ? <span>{asset.name}</span> : <a href={asset.url} target="_blank" rel="noopener noreferrer">{asset.name}</a>} · {asset.format.toUpperCase()} · {shareAssetKindLabel(asset.kind)}</li>)}</ul>{expired && <p>资源授权已到期，请先刷新模型资源。</p>}</section>}
       <p className="sc-share-footnote">受控完整分享：发布者撤销后，新访问将被拒绝；已打开或已下载的副本无法收回。页面只读、不可编辑。模型为布置效果参考，实物规格以最终确认为准。</p>
     </> : snapshot && <>
-      <div className="sc-share-title"><div><p>已发布 · 版本 {snapshot.revision}</p><h1>{snapshot.name}</h1><p>{new Date(snapshot.createdAt).toLocaleString('zh-CN')} · {snapshot.scene.venue.width} × {snapshot.scene.venue.depth} 米</p><p>此页包含：三维布置、物料清单与模型来源说明；资料原件与扫描文件不随普通发布公开。</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>
+      <div className="sc-share-title"><div><p>已发布 · 版本 {snapshot.revision}</p><h1>{snapshot.name}</h1><p>{new Date(snapshot.createdAt).toLocaleString('zh-CN')} · {snapshot.scene.venue.width} × {snapshot.scene.venue.depth} 米</p><p>三维布置 · {sceneCountsText(snapshotCounts!)}。</p><p>此页包含：三维布置、物料清单与模型来源说明；资料原件与扫描文件不随普通发布公开。</p></div><button type="button" onClick={() => setRefresh(value => value + 1)}>刷新模型资源</button></div>
       {expired && <p className="sc-share-notice" role="status">资源授权已到期；已载入的模型仍可查看。重新加载模型前，请刷新资源以检查链接状态。</p>}
-      <ScenePreview scene={snapshot.scene} assetUrls={assetUrls} assetNames={assetNames} />
+      <ScenePreview scene={snapshot.scene} assetUrls={assetUrls} assetNames={assetNames} onRefresh={() => setRefresh(value => value + 1)} />
       <section className="sc-share-materials" aria-labelledby="sc-share-materials-title">
         <div className="sc-share-heading"><h2 id="sc-share-materials-title">物料清单</h2><span>共 {snapshot.materials.reduce((total, item) => total + item.quantity, 0)} 件</span></div>
         {snapshot.materials.length === 0 ? <p>此方案暂无物料。</p> : <div className="sc-share-table-scroll"><table><thead><tr><th scope="col">物料</th><th scope="col">尺寸（宽 × 深 × 高 / 米）</th><th scope="col">颜色</th><th scope="col">数量</th></tr></thead><tbody>

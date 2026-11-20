@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   appendReviewSharePin,
   readReviewSharePins,
+  readReviewSharePinsForPlan,
+  setReviewSharePinStatus,
   REVIEW_SHARE_PIN_STORAGE_KEY,
   REVIEW_SHARE_PIN_STORAGE_KEY_V2,
 } from './share-pins';
@@ -48,6 +50,33 @@ describe('review share pins', () => {
     const storage=memoryStorage(),uncertain={getItem:storage.getItem.bind(storage),setItem:(k:string,v:string)=>{storage.setItem(k,v);throw Error('response lost');}};
     expect(appendReviewSharePin(uncertain,{planKey:key,text:'反馈',draft,floorId:'floor'})).toMatchObject({ok:false,reason:'unknown'});
     expect(storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2)).toContain('反馈');
+  });
+
+  it('marks a v2 pin resolved and reads it back merged', () => {
+    const storage = memoryStorage();
+    const planKey = `review-v2:${'a'.repeat(64)}`;
+    const first = appendReviewSharePin(storage, { planKey, text: '通道窄', draft, floorId: 'floor-1' });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(setReviewSharePinStatus(storage, planKey, first.pin.id, 'resolved')).toBe(true);
+    const [pin] = readReviewSharePinsForPlan(planKey, storage);
+    expect(pin.status).toBe('resolved');
+  });
+
+  it('falls back to the v1 store when the pin lives there', () => {
+    const storage = memoryStorage();
+    const first = appendReviewSharePin(storage, { planKey: 'sample:initial', text: '台面不够', draft });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(setReviewSharePinStatus(storage, 'sample:initial', first.pin.id, 'resolved')).toBe(true);
+    expect(readReviewSharePins('sample:initial', storage)[0].status).toBe('resolved');
+  });
+
+  it('returns false without writing when the pin is missing', () => {
+    const storage = memoryStorage();
+    appendReviewSharePin(storage, { planKey: 'sample:initial', text: '台面不够', draft });
+    expect(setReviewSharePinStatus(storage, 'sample:initial', 'no-such-pin', 'resolved')).toBe(false);
+    expect(storage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY)).not.toContain('resolved');
   });
 });
 

@@ -7,8 +7,13 @@
 //    退出后重新探活，若已有实例接管就按「复用」处理，而不是报警；
 //  - 自己拉起的代理意外退出时自动重启（有限次数），避免 dev 跑着跑着地图断掉；
 //  - dev 退出时不杀代理：它是共享单例，留给下次 dev 复用，也避免别的 dev 掉线。
+//
+// 端口：默认 3000；被占用就自动顺延到下一个空端口并把实际地址打出来。
+// 顺延不再是事故——云端服务对本机回环地址（localhost / 127.0.0.1）放行任意端口，
+// 换端口打开页面不会让云端功能失效；但地址仍要说清楚，否则开错地址没人知道。
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -18,6 +23,10 @@ const nextBin = fileURLToPath(new URL('../frontend/node_modules/next/dist/bin/ne
 const proxyHealth = 'http://127.0.0.1:3199/health';
 const START_ATTEMPTS = 3;
 const RESTART_ATTEMPTS = 5;
+/** 本机 dev 的首选端口；被占用时往后顺延，见文件开头的端口说明。 */
+const DEFAULT_PORT = 3000;
+/** 顺延最多找这么多个端口，避免在异常环境下无限试。 */
+const PORT_SCAN = 10;
 
 let proxyChild = null;
 let restarting = false;
@@ -34,6 +43,42 @@ async function proxyUp() {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 命令行里显式指定的端口（-p / --port / --port=）；没有就返回 null。 */
+function requestedPort(args) {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    let value = null;
+    if (arg === '-p' || arg === '--port') value = Number(args[i + 1]);
+    else if (arg.startsWith('--port=')) value = Number(arg.slice('--port='.length));
+    if (Number.isInteger(value) && value > 0) return value;
+  }
+  return null;
+}
+
+/**
+ * 端口是否还空着；已被占用返回 false。
+ * 绑定方式与 next dev 一致（不指定 host）。Windows 上绑具体地址（如 127.0.0.1）
+ * 探不出占用——同一个端口可以被另一个进程用 :: 绑着，所以这里按 next 的方式绑。
+ */
+function portFree(port) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port);
+  });
+}
+
+/** 端口上已经有服务在应答（另一个 dev 跑着时，next 会自己顺延到下一个端口）。 */
+async function portAnswering(port) {
+  try {
+    await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(1500) });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** 等到 3199 能响应 /health，或子进程已退出。返回 'up' | 'exited' | 'timeout'。 */
 async function waitForProxy(child) {
@@ -133,5 +178,27 @@ if (!existsSync(nextBin)) {
 }
 
 const args = ['dev', ...process.argv.slice(2)];
+
+// 端口：默认 3000；被占用就顺延到下一个空端口，并把实际地址打出来。
+// 云端服务对本机回环地址放行任意端口，所以顺延不影响云端功能；但地址必须说清楚。
+const userArgs = process.argv.slice(2);
+const explicitPort = requestedPort(userArgs);
+let port = explicitPort;
+if (port === null) {
+  for (let candidate = DEFAULT_PORT; candidate < DEFAULT_PORT + PORT_SCAN; candidate += 1) {
+    if ((await portFree(candidate)) && !(await portAnswering(candidate))) { port = candidate; break; }
+  }
+  if (port === null) {
+    console.error(`[dev] ${DEFAULT_PORT}–${DEFAULT_PORT + PORT_SCAN - 1} 都被占用，没有可用端口。`);
+    process.exit(1);
+  }
+  if (port !== DEFAULT_PORT) console.log(`[dev] ${DEFAULT_PORT} 被占用，改用 ${port}`);
+} else if (!(await portFree(port)) || (await portAnswering(port))) {
+  console.error(`[dev] 端口 ${port} 已被占用。`);
+  console.error(`[dev] 请换一个端口，或先停掉占用它的进程。`);
+  process.exit(1);
+}
+if (explicitPort === null) args.push('-p', String(port));
+console.log(`[dev] 前端地址 http://localhost:${port}`);
 devChild = spawn(process.execPath, [nextBin, ...args], { cwd: frontend, stdio: 'inherit' });
 devChild.on('exit', (code) => shutdown(code ?? 0));

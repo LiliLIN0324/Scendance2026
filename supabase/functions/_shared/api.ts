@@ -24,6 +24,7 @@ import { briefExtractRequestSchema, briefConversationRequestSchema, parseBriefCo
 import { parseBriefModelJson } from './brief-model-json.ts';
 import { assistantChatRequestSchema } from './assistant-chat-contract.ts';
 import { answerAssistantChat } from './assistant-chat.ts';
+import { conversationTurnBatchSchema, conversationTurnPayload, type ConversationTurn } from './conversation-turn-contract.ts';
 import { readSceneResources } from './scene-resources.ts';
 import { prepareGenerationRequest } from './generation-input.ts';
 import { generationCapabilities } from './generation-contract.ts';
@@ -36,6 +37,17 @@ const name=z.string().trim().min(1).max(120);
 const displayName=z.string().trim().min(1).max(80);
 const messageBody=z.string().trim().min(1).max(2000);
 const projectBody=(body:unknown,id:string)=>({...z.record(z.string(),z.unknown()).parse(body),projectId:uuid.parse(id)});
+
+/** 留痕永不反向影响对话：默认开，CONVERSATION_TRACE=0 时整体关闭。 */
+const conversationTraceOn=(env:Env)=>env('CONVERSATION_TRACE')!=='0';
+/** 凭据形状的输入沿用既有规则拒收；其余原样留痕。 */
+async function traceTurn(backend:Backend,env:Env,actor:string|null,turn:ConversationTurn):Promise<boolean>{
+  if(!conversationTraceOn(env)||!backend.conversation||!actor)return false;
+  if(containsSensitiveInput(turn.userText))return false;
+  try{await backend.conversation(actor,'turn.put',conversationTurnPayload(turn));return true;}
+  catch(error){console.warn(JSON.stringify({event:'conversation_trace_failed',surface:turn.surface,message:error instanceof Error?error.message:'unknown'}));return false;}
+}
+const traceKey=(trace:{turnKey:string}|undefined)=>trace?.turnKey??crypto.randomUUID();
 const savedScene=z.strictObject({...leaseSchema.shape,scene:sceneSchema});
 // 数据库行是 snake_case，上传口对客户端固定成 camelCase；storage_path 永不出网。
 const uploadedAssetView=(row:Record<string,unknown>)=>{
@@ -115,13 +127,24 @@ function publicReconstructionJob(input:Record<string,unknown>):Record<string,unk
   const issues=Array.isArray(input.issues)?input.issues.filter((issue:unknown)=>!!issue&&typeof issue==='object'&&(issue as {code?:unknown}).code!=='MODEL_RAW_NOTE').map((issue:unknown)=>({code:safeReviewCodes.has(String((issue as {code?:unknown}).code))?String((issue as {code:unknown}).code):'REVIEW_REQUIRED',message:'需要人工核验的事项。',...((issue as {targetId?:unknown}).targetId?{targetId:(issue as {targetId:unknown}).targetId}:{})})):[];
   return {...input,...(input.candidate!==undefined?{candidate:blocked?null:candidate}:{}),issues,...(proposal?{proposal:blocked?null:safeProposal}:{}),...(blocked?{state:'failed',error_code:'MODEL_TEXT_REVIEW_REQUIRED'}:{}),modelText:MODEL_TEXT_NOTICE,projection:{status:'read_only',changed:blocked,requiresOriginalSceneForWrite:blocked},sceneObjectCounts:counts,sceneObjectCountsScope:'candidate_objects_only',safetyChecklist:reconstructionSafetyChecklist(blocked?null:scene)};
 }
-/** Exact env entries, the production site, and this project's Pages preview hosts. */
+/**
+ * 允许来源：env 精确条目、生产站与本页面的 Pages 预览域名，以及**本机回环地址的任意端口**。
+ *
+ * 本机 dev 端口不是固定的：next dev 在 3000 被占用时会自己顺延到 3001。
+ * 旧名单只写死 3000，于是换个端口打开页面，跨域预检在正式请求发出前就被拒，
+ * 浏览器只给出 "Failed to fetch"，面板上只剩一句看不懂的报错，排查成本极高。
+ * 回环地址是开发者自己的机器，放行其任意端口不扩大对外攻击面：鉴权走
+ * Authorization 头，其它页面的脚本拿不到用户的 token；对外与局域网地址仍不放行。
+ */
 function originPermitted(origin:string,allowed:string[]):boolean {
   if(allowed.includes(origin)||origin==='https://scendance.lilicoding.space')return true;
   let url:URL;
   try { url=new URL(origin); } catch { return false; }
-  if(url.protocol!=='https:'||url.username||url.password||url.port||url.pathname!=='/'||url.search||url.hash)return false;
+  if(url.username||url.password||url.pathname!=='/'||url.search||url.hash)return false;
   const host=url.hostname.toLowerCase();
+  // 本机回环：http/https 都放行，端口不限（dev 端口会顺延，写死必然再踩）。
+  if(host==='localhost'||host==='127.0.0.1'||host==='[::1]'||host==='::1')return true;
+  if(url.protocol!=='https:'||url.port)return false;
   return host==='scendance-scene-planner-ewz.pages.dev'||/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.scendance-scene-planner-ewz\.pages\.dev$/.test(host);
 }
 export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUntil?:(task:Promise<unknown>)=>void) {
@@ -200,9 +223,18 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(env('ASSISTANT_CHAT_ENABLED')!=='1')return streamResponse(async emit=>{emit('done',{status:'disabled',answer:null});});
         const input=assistantChatRequestSchema.safeParse(await json());
         if(!input.success)return streamResponse(async emit=>{emit('done',{status:'invalid',answer:null});});
+        const traceStart=Date.now();
         return streamResponse(async emit=>{
           const result=await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default',
             onDelta:(text)=>{emit(input.data.includeThought?'thought':'delta',{text});}});
+          void traceTurn(backend,env,actor,{
+            turnKey:traceKey(input.data.trace),sessionId:input.data.trace?.sessionId??'unknown',turnIndex:input.data.trace?.turnIndex??0,
+            surface:'assistant',userText:input.data.message,provider:input.data.provider??'default',
+            ...(result.answer?{assistantText:result.answer}:{}),
+            outcome:result.status==='ok'?'answered':'failed',
+            ...(result.status==='ok'?{}:{errorCode:result.status}),
+            latencyMs:Date.now()-traceStart,
+          });
           emit('done',{status:result.status,answer:result.answer});
         });
       }
@@ -214,7 +246,27 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         if(env('ASSISTANT_CHAT_ENABLED')!=='1')return respond({status:'disabled',answer:null});
         const input=assistantChatRequestSchema.safeParse(await json());
         if(!input.success)return respond({status:'invalid',answer:null});
-        return respond(await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default'}));
+        const traceStart=Date.now();
+        const result=await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default'});
+        await traceTurn(backend,env,actor,{
+          turnKey:traceKey(input.data.trace),sessionId:input.data.trace?.sessionId??'unknown',turnIndex:input.data.trace?.turnIndex??0,
+          surface:'assistant',userText:input.data.message,provider:input.data.provider??'default',
+          ...(result.answer?{assistantText:result.answer}:{}),
+          outcome:result.status==='ok'?'answered':'failed',
+          ...(result.status==='ok'?{}:{errorCode:result.status}),
+          latencyMs:Date.now()-traceStart,
+        });
+        return respond(result);
+      }
+      if(path==='/conversation/turns' && method==='POST') {
+        // 本机命令没有后端请求可挂：前端按轮批量补记，服务端只做校验与写入。
+        const input=conversationTurnBatchSchema.parse(await json());
+        let stored=0,skipped=0;
+        for(const turn of input.turns){
+          if(containsSensitiveInput(turn.userText)){skipped++;continue;}
+          if(await traceTurn(backend,env,actor,turn))stored++;
+        }
+        return respond({stored,skipped});
       }
       if(path==='/brief/extract' && method==='POST') {
         // Guarded dispatch is deliberately unavailable until the real provider
@@ -227,6 +279,9 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const isConversation=!!raw && typeof raw==='object' && !Array.isArray(raw) && (raw as Record<string,unknown>).responseMode==='conversation_v1';
         const input=isConversation?briefConversationRequestSchema.parse(raw):briefExtractRequestSchema.parse(raw);
         const conversation='responseMode' in input;
+        const briefTraceStart=Date.now();
+        let briefAnswer:string|undefined;
+        let briefModel:string|undefined;
         const emptyConversation={reply:null,unhandled:[],factEvidence:[]} as const;
         if(conversation && env('BRIEF_CONVERSATION_ENABLED')!=='1')return respond({enabled:false,extraction:null,...emptyConversation});
         // 2026-11-14：OpenAI Next 为默认均衡槽时只打该槽，不静默串 MiniMax/网关。
@@ -304,7 +359,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             const content = choice.message.content;
             if (!content || /<\/?think>/i.test(content)) throw new ApiError('MODEL_INVALID_RESPONSE', 502);
             const model=parseBriefModelJson(content);
-            briefReply=respond({enabled:true,...(conversation?parseBriefConversation(model,input.message):{extraction:parseModelBrief(model,input.message)})});
+            const conversationReply=conversation?parseBriefConversation(model,input.message):null;
+            briefAnswer=conversationReply?.reply??undefined;
+            briefModel=selfModel;
+            briefReply=respond({enabled:true,...(conversationReply??{extraction:parseModelBrief(model,input.message)})});
             break;
           }catch(error){
             briefReasons.push(briefFailure(error));
@@ -315,8 +373,16 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             continue;
           }
         }
-        if(briefReply)return briefReply;
-        return respond({enabled:true,extraction:null,...(conversation?emptyConversation:{}),reason:briefReasons[0]??'MODEL_REQUEST_FAILED'});
+        const briefTraceTurn:Omit<ConversationTurn,'outcome'>={
+          turnKey:traceKey(input.trace),sessionId:input.trace?.sessionId??'unknown',turnIndex:input.trace?.turnIndex??0,
+          surface:'brief',userText:input.message,provider:requestedProvider,
+          ...(briefAnswer?{assistantText:briefAnswer}:{}),...(briefModel?{model:briefModel}:{}),
+          latencyMs:Date.now()-briefTraceStart,
+        };
+        if(briefReply){await traceTurn(backend,env,actor,{...briefTraceTurn,outcome:'answered'});return briefReply;}
+        const reason=briefReasons[0]??'MODEL_REQUEST_FAILED';
+        await traceTurn(backend,env,actor,{...briefTraceTurn,outcome:'failed',errorCode:reason});
+        return respond({enabled:true,extraction:null,...(conversation?emptyConversation:{}),reason});
       }
       if(['/assets/import','/assets/floorplan','/assets/glb','/assets/sources','/catalog/recommendations'].includes(path) && !(await backend.scene(actor,'studios')).length) throw new ApiError('FORBIDDEN',403);
       if(path==='/preferences' && method==='GET') return respond(await backend.scene(actor,'preferences.get'));
@@ -490,6 +556,11 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             baseHash:activity?await sha256(canonical(input.activityContext)):await sceneHash(input.scene),
             executionMode:activity||miniMaxPreview||env('DEEPSEEK_AGENT_MODE')==='legacy'?'preview':agentExecutionMode(input)});
           if(!stored.reused){
+            await traceTurn(backend,env,actor,{
+              turnKey:input.requestId,sessionId:'sessionId' in input?input.sessionId:'unknown',turnIndex:0,
+              surface:activity?'activity':'agent',userText:input.instruction,outcome:'queued',
+              agentRunId:stored.id,projectId,
+            });
             const task=(activity?executeActivityTaskRun(backend,actor,projectId,stored.id,env,fetcher):executeAgentRun(backend,actor,projectId,stored.id,env,fetcher)).catch(()=>{});
             if(waitUntil)waitUntil(task);else await task;
           }

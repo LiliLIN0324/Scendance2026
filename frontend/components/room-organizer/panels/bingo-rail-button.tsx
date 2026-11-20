@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState, type RefObject } from 'react';
-import { countOpenFeedbackPins, readBingoPlanFeedback } from '../lib/bingo-feedback';
+import { listReviewPinsCloud } from '../../review-share-page/review-pins-cloud';
+import {
+  countOpenFeedbackPins,
+  mergeBingoCloudPins,
+  readBingoPlanFeedback,
+  reviewPlanKeysForBingoPlan,
+} from '../lib/bingo-feedback';
 import {
   emptyBingoSnapshot,
   readBingoSnapshot,
@@ -15,6 +21,7 @@ import {
   bingoVisualLabel,
   useBingoSending,
 } from './bingo-status-mark';
+import type { ReviewPin } from '../lib/review-pins';
 
 export {
   BINGO_D4,
@@ -58,12 +65,30 @@ export function BingoRailButton({ open, retained = false, onOpen, buttonRef }: {
 
   const storage = typeof window === 'undefined' ? null : window.localStorage;
   const plans = snapshot.plans;
+  // 远端钉异步并进本机汇总，跨设备评审的已处理状态也能校正入口未读数；云端不可用时回落本机。
+  const cloudKey = plans.map(plan => plan.reviewPlanKey).join('|');
+  const [cloudByKey, setCloudByKey] = useState<Record<string, ReviewPin[]>>({});
+  useEffect(() => {
+    let alive = true;
+    const keys = [...new Set(plans.flatMap(plan => reviewPlanKeysForBingoPlan(plan)).filter(key => key.startsWith('review-v2:')))];
+    if (keys.length === 0) { setCloudByKey({}); return () => { alive = false; }; }
+    void Promise.all(keys.map(async key => [key, await listReviewPinsCloud(key)] as const)).then(rows => {
+      if (!alive) return;
+      const next: Record<string, ReviewPin[]> = {};
+      for (const [key, result] of rows) next[key] = result.ok ? result.value : [];
+      setCloudByKey(next);
+    });
+    return () => { alive = false; };
+  }, [cloudKey, plans]);
   // L：尚未回执的评审链接份数；P：这些方案下未闭环画内钉总数。
   const linkCount = plans.filter(plan => !plan.returned).length;
-  const pinCount = plans.reduce(
-    (sum, plan) => sum + countOpenFeedbackPins(readBingoPlanFeedback(plan, storage)),
-    0,
-  );
+  const pinCount = plans.reduce((sum, plan) => {
+    const feedback = mergeBingoCloudPins(
+      readBingoPlanFeedback(plan, storage),
+      reviewPlanKeysForBingoPlan(plan).flatMap(key => cloudByKey[key] ?? []),
+    );
+    return sum + countOpenFeedbackPins(feedback);
+  }, 0);
 
   const phase = snapshot.phase;
   const sending = sendingNow && phase !== 'returned';

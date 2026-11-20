@@ -18,6 +18,7 @@
  * 只改 `putObjectToStorage` 一处，并在 B 报告里同步。
  */
 
+import { describeCloudFailure } from './cloud-transport';
 import type { ArchiveUpload, ArchiveJob } from './archive-queue';
 
 /** A 契约 v1：GET /cloud/capabilities 的返回。 */
@@ -172,6 +173,9 @@ export function archiveErrorText(error: unknown): string {
     if (code === 'DEPENDENCY_INCOMPLETE') return '依赖还没有全部归档，服务器拒绝这次完整保存。请先补传缺的文件。';
     if (code === 'REVISION_CONFLICT' || code === 'LEASE_LOST') return '云端版本或编辑权已变化，这次保存没有覆盖服务器。请核对后重试。';
   }
+  // 传输层连不上时浏览器只给 "Failed to fetch"；按共用口径说清原因和下一步。
+  const described = describeCloudFailure(error);
+  if (described) return `${described.message}${described.hint}`;
   if (error instanceof Error && error.message) return error.message;
   return '归档失败，原文件保留，可重试。';
 }

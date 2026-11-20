@@ -93,6 +93,16 @@ const LOCAL_SEARCH_TIMEOUT_MS = 20000;
 const REMOTE_SEARCH_TIMEOUT_MS = 12000;
 
 /**
+ * 本机双源软汇合窗口（ms）。
+ *
+ * 高德通常 0.3s 内回，天地图正常 0.3–4.6s；但天地图上游会间歇挂起
+ * （实测 2026-11-20：单请求可挂 56s 才 404）。窗口一过就不再等慢源，
+ * 用已到手的源先出结果——之前双源用同一个 20s 超时硬等，挂起时会连带把
+ * 已经 fetch 成功的高德响应体一起中止（body 读在 allSettled 之后），两个源都空。
+ */
+const LOCAL_SOFT_JOIN_MS = 6000;
+
+/**
  * 天地图/高德对整句口语化查询很容易 0 命中：「杭州适合婚礼的地点」不如「杭州 婚礼」。
  * 只在第一次检索为空时兜底重试，不改变正常查询的排序与结果。
  */
@@ -139,25 +149,36 @@ export async function searchPlaces(keywords: string, options: PlaceSearchOptions
       }
       // 本机双源合并（2026-11-13）：新 POI（如「潮乐之城」）天地图常不收录，高德才有——
       // 两源都打，高德在前、天地图补位，按「名字+坐标」去重；任一源 404/503/超时只丢该源。
+      // 2026-11-20：fetch 与读 body 收进各自源内完成——之前 body 留到 allSettled 之后才读，
+      // 天地图挂起时会等满 20s 超时，同一个 AbortSignal 连带中止已成功的高德响应体，双源全空。
+      // 再加软汇合窗口：慢源超过 LOCAL_SOFT_JOIN_MS 不再等，快源结果立即返回。
+      const fetchSource = async (url: string): Promise<PlaceSuggestion[]> => {
+        const response = await doFetch(url, { signal });
+        if (!response.ok) throw new Error(`source HTTP ${response.status}`);
+        return parsePlaces(await response.json());
+      };
+      const softJoin = <T,>(source: Promise<T>): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error('soft join deadline')), LOCAL_SOFT_JOIN_MS);
+        });
+        return Promise.race([source, deadline]).finally(() => clearTimeout(timer));
+      };
       const settled = await Promise.allSettled([
-        doFetch(localAmapPlaceUrl(searchText, limit), { signal }),
-        doFetch(placeSearchUrl(searchText, limit, true, options.center ?? null), { signal }),
+        softJoin(fetchSource(localAmapPlaceUrl(searchText, limit))),
+        softJoin(fetchSource(placeSearchUrl(searchText, limit, true, options.center ?? null))),
       ]);
       const seen = new Set<string>();
       const merged: PlaceSuggestion[] = [];
       let succeeded = false;
       for (const entry of settled) {
-        if (entry.status !== 'fulfilled' || !entry.value.ok) continue;
+        if (entry.status !== 'fulfilled') continue;
         succeeded = true;
-        try {
-          for (const place of parsePlaces(await entry.value.json())) {
-            const key = `${normalizeText(place.name)}|${place.lng.toFixed(4)},${place.lat.toFixed(4)}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            merged.push(place);
-          }
-        } catch {
-          // 坏响应体（HTML 错误页等）只丢该源，不影响另一源
+        for (const place of entry.value) {
+          const key = `${normalizeText(place.name)}|${place.lng.toFixed(4)},${place.lat.toFixed(4)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(place);
         }
       }
       return { places: rankPlaces(merged, searchText), failed: !succeeded };

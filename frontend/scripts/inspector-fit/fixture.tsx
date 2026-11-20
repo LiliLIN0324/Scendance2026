@@ -9,6 +9,7 @@
  * 量出来的宽度与命中栈顶就是组件在生产里的真实表现。
  */
 import { createRoot } from 'react-dom/client';
+import { PLANNING_LAYER_COLORS } from '@/lib/outdoor-plan-tokens';
 import {
   FACILITY_MODEL_ACTION_ROW_STYLE,
   FACILITY_MODEL_STRIP_STYLE,
@@ -19,6 +20,12 @@ import {
 } from '@/components/room-organizer/components/outdoor-inspector-layout';
 
 const CANDIDATES = 24;
+
+/** 标注浮卡定宽（与生产同一份常量口径）：2026-11-20 用户「这个标注为什么搞那么宽」。 */
+const ANNOTATE_CARD_WIDTH = 286;
+
+/** 一行长文本标注：真实场景里备注能写很长，正是它把标注卡撑开的那一行。 */
+const LONG_NOTE = '文本：仪式与观景优先；人数按已提供需求；入场方向为南侧假设；景观方向未知，保留假设。占位件尺寸是估计，路线与真实门的关系需要核实。';
 
 function CandidateStrip() {
   return (
@@ -66,15 +73,54 @@ function InspectorCard() {
   );
 }
 
+/** 标注浮卡：贴着底条「标注」钮上浮的 popover，宽度必须定死，长文本在卡内省略。 */
+function AnnotateCard() {
+  return (
+    <section
+      data-testid="outdoor-inspector-annotate"
+      className="sc-outdoor-toolcard sc-outdoor-toolcard--annotate"
+      data-anchored="above-tool"
+      style={inspectorCardStyle({ key: 'annotate', annotateAnchor: { left: 640, bottom: 120 }, fixedWidth: ANNOTATE_CARD_WIDTH })}
+    >
+      <div style={inspectorCardBodyStyle({ key: 'annotate' })}>
+        <div
+          role="button"
+          tabIndex={0}
+          data-testid="annotate-row"
+          style={{
+            all: 'unset',
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            width: '100%',
+            padding: '5px 6px',
+            paddingLeft: 30,
+          }}
+        >
+          <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: PLANNING_LAYER_COLORS.annotate }} />
+          <span data-testid="annotate-row-label" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {LONG_NOTE}
+          </span>
+          <button type="button" className="sc-danger-quiet" style={{ cursor: 'pointer', fontSize: 12 }}>删除</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** 3D 接管态的宿主是整块覆盖层（room-organizer.tsx 的 #outdoor-inspector-host，inset:0）。 */
 export function mountInspectorFit() {
   const host = document.getElementById('outdoor-inspector-host');
   if (!host) throw new Error('缺少宿主节点');
   const root = createRoot(host);
   root.render(
-    <div data-testid="outdoor-inspector-stack" style={inspectorStackStyle(null)}>
-      <InspectorCard />
-    </div>,
+    <>
+      <div data-testid="outdoor-inspector-stack" style={inspectorStackStyle(null)}>
+        <InspectorCard />
+      </div>
+      <AnnotateCard />
+    </>,
   );
   return root;
 }

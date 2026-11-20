@@ -129,6 +129,27 @@ describe('Bingo scene delivery panel',()=>{
     expect(tasks.open).toBe(false);
     expect(tasks.textContent).toContain('0 项');
   });
+  it('review tab aggregates read-only gaps from tasks and work orders', () => {
+    const current = { ...workLayout(), id: checkinProject,
+      eventOperations: eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [{ id: itemId, title: '签到台布置', phase: 'event' }] }),
+      floors: [makeFloor({ items: [makeItem({ id: itemId, name: '签到椅', handoff: { ownerName: '', dueDate: '', acceptance: '', status: 'todo', evidenceUrls: [], evidenceNote: '' } })] })],
+    };
+    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={vi.fn()} onUpdateItem={vi.fn()} />);
+    openInternalTools();
+    fireEvent.click(screen.getByRole('tab', { name: /^核对/ }));
+    const reviewPanel = document.getElementById('delivery-review') as HTMLElement;
+    expect(within(reviewPanel).getByText('活动任务 · 1')).toBeTruthy();
+    expect(within(reviewPanel).getAllByText('缺负责人').length).toBeGreaterThanOrEqual(2);
+    expect(within(reviewPanel).getByText('缺完成条件')).toBeTruthy();
+    expect(within(reviewPanel).getByText('缺验收条件')).toBeTruthy();
+    expect(within(reviewPanel).getByText('物件工作单 · 1')).toBeTruthy();
+  });
+  it('review tab shows a neutral note when there are no local gaps', () => {
+    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateEventOperations={vi.fn()} />);
+    openInternalTools();
+    fireEvent.click(screen.getByRole('tab', { name: /^核对/ }));
+    expect(screen.getByText('当前台账暂无待核对缺口；仍需对照现场条件与对话需求逐项确认。')).toBeTruthy();
+  });
   it('matches the cold-stone empty delivery surface: header, folds, task form and hairline chips', async () => {
     const suggestions = <ActivityTaskSuggestionView layout={workLayout()} selection={{ briefText: '', taskIds: [], objectIds: [] }} instruction=""
       onSelection={() => undefined} onInstruction={() => undefined} context={null} proposal={null} selectedSuggestionIds={[]}
@@ -631,7 +652,8 @@ describe('Bingo scene delivery panel',()=>{
     const view=render(<SceneDeliveryPanel {...props} deliveryViewRequest={initialMaterialsRequest}/>);
     expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
     view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={operationsRequest}/>);
-    const taskSummary=screen.getByText('未关联制作计划的主持任务');fireEvent.click(taskSummary);taskSummary.closest('details')!.open=true;
+    const opsPanel=screen.getByRole('tabpanel',{name:'活动安排'});
+    const taskSummary=within(opsPanel).getByText('未关联制作计划的主持任务');fireEvent.click(taskSummary);taskSummary.closest('details')!.open=true;
     const taskTitle=within(screen.getByRole('tabpanel',{name:'活动安排'})).getByLabelText('任务标题') as HTMLInputElement;
     fireEvent.change(taskTitle,{target:{value:'未保存的演练主持说明'}});
     view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={materialsRequest}/>);

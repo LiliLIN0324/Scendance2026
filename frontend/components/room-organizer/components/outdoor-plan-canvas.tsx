@@ -3991,6 +3991,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
     }
     // H3-a 固定测量标注（测量图层在最上层；隐藏测量层不影响数据与统计）。
+    // 2026-11-20 用户：「双击确认之后这些尺寸反而消失了」「停下来之后尺寸应该还在我的线段上面」——
+    // 编辑态也画线上标尺（累计刻度 + 总长）与面积读数。早先的 DOM 读数贴片已不存在，
+    // 再把画布文字关掉就只剩底部会话卡片，双击确认后线上一片空白。
     if (isLayerVisible(vis, 'measure')) {
       drawMeasureLayer(
         { ctx: planCtx, viewport, dark: darkBasemap },
@@ -3999,8 +4002,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           // 拖动中的预览几何优先（松手才进 plan，一条 undo）。
           ...(measurementDragPreviewRef.current?.id === m.id ? { points: measurementDragPreviewRef.current.points } : {}),
           selected: m.id === selectedMeasurementRef.current,
-          // 可编辑时读数走图上贴片（带 ×），画布不再重复画一遍文字。
-          showLabel: readOnly,
         })),
       );
     }
@@ -14792,7 +14793,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                   className={`sc-outdoor-toolcard${card.key === 'annotate' ? ' sc-outdoor-toolcard--annotate' : ''}`}
                   data-anchored={card.key === 'annotate' && annotateAnchor ? 'above-tool' : undefined}
                   onWheel={stopPanelWheel}
-                  style={inspectorCardStyle({ key: card.key, annotateAnchor })}
+                  // 2026-11-20 用户：「这个标注为什么搞那么宽」——标注浮卡按 286 定宽（ANNOTATE_CARD_WIDTH），
+                  // 不再被列表里的长文本行撑到近满屏；长文本在卡内省略号收尾。
+                  style={inspectorCardStyle({ key: card.key, annotateAnchor, fixedWidth: card.key === 'annotate' ? ANNOTATE_CARD_WIDTH : undefined })}
                   onMouseDown={stopPanelMouse}
                   onPointerDown={stopPanelMouse}
                   onMouseUp={stopPanelMouse}

@@ -252,8 +252,8 @@ export function ReviewSiteMap(props: Props): JSX.Element {
               onPointerDown={(event) => event.stopPropagation()}
               onPointerUp={(event) => { event.stopPropagation(); props.onFocusPin(pin.id); }}
             >
-              <circle cx={spot.x} cy={spot.y} r={active ? 13 : 11} fill="#141416" stroke="#ffffff" strokeWidth={2} />
-              <text x={spot.x} y={spot.y + 4} textAnchor="middle" fill="#ffffff" fontSize={11} fontFamily="system-ui, sans-serif">{number}</text>
+              <circle className="rsp-pin-dot" cx={spot.x} cy={spot.y} r={active ? 13 : 11} fill="#141416" stroke="#ffffff" strokeWidth={2} />
+              <text className="rsp-pin-num" x={spot.x} y={spot.y + 4} textAnchor="middle" fill="#ffffff" fontSize={11} fontWeight={600} fontFamily="system-ui, sans-serif">{number}</text>
             </g>
           );
         })}

@@ -19,6 +19,8 @@ export interface Backend {
   agentGuardReady?: Rpc;
   /** Optional bounded observations; absent/unavailable storage never blocks a run. */
   agentEvents?: Rpc;
+  /** 全链路对话留痕（public.conversation_rpc）；不可用时不影响任何对话。 */
+  conversation?: Rpc;
   /** Optional in-memory hook provided only by an explicitly isolated local trial. */
   agentTrialDiagnostic?(actor:string,projectId:string,runId:string,value:AgentTrialDiagnostic):void;
   /** Injectable monotonic clock for deadline-budget tests; defaults to Date.now in production. */
@@ -55,7 +57,7 @@ export function createBackend(env:Env):Backend {
   const scene=rpc(client,'scene_rpc'),studios=rpc(client,'studio_rpc'),agent=rpc(client,'agent_rpc'),guardedAgent=rpc(client,'agent_steering_guard_rpc');
   return {
     async user(token) { const {data,error}=await client.auth.getUser(token); if(error||!data.user) throw new ApiError('UNAUTHENTICATED',401); return data.user.id; },
-    scene:(actor,action,data)=>(action.startsWith('studios.')?studios:scene)(actor,action,data),cloud:rpc(client,'cloud_storage_rpc'),jobs:rpc(client,'job_rpc'),reconstruction:rpc(client,'reconstruction_rpc'),originalSceneReview:rpc(client,'original_scene_review_rpc'),agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:agent)(actor,action,data),agentGuardReady:guardedAgent,agentEvents:rpc(client,'agent_run_events_rpc'),
+    scene:(actor,action,data)=>(action.startsWith('studios.')?studios:scene)(actor,action,data),cloud:rpc(client,'cloud_storage_rpc'),jobs:rpc(client,'job_rpc'),reconstruction:rpc(client,'reconstruction_rpc'),originalSceneReview:rpc(client,'original_scene_review_rpc'),agent:(actor,action,data)=>(['note','take_notes','checkpoint','finish'].includes(action)?guardedAgent:agent)(actor,action,data),agentGuardReady:guardedAgent,agentEvents:rpc(client,'agent_run_events_rpc'),conversation:rpc(client,'conversation_rpc'),
     async upload(path,bytes,mime) {
       const {error}=await client.storage.from('scene-assets').upload(path,new Uint8Array(bytes),{contentType:mime,upsert:false});
       // Retry after a worker crash reuses a content-addressed immutable path.

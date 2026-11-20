@@ -822,6 +822,56 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }
     await refreshProjects(); showNotice(`新项目已保存。${controller.getSnapshot().writeBlocked ? '这份暂时只读，需要改动时在卡片上取回编辑权。' : ''}${sourceNotice}`);
   }
+  /**
+   * P1（恢复入口，2026-11-20）：发布预检的阻塞动作落到项目卡里既有的真实链路，不新造保存通道。
+   * - save-changes → saveBoundSceneQuiet：素材先上云 → controller.saveScene → 统一状态机结算（与自动保存同一条链）；
+   * - save-project → saveDraftAsProject：草稿卡上的「存为方案」（创建真实云项目）；
+   * - grant-edit  → acquireCurrentEdit：当前项目卡在只读态点开时走的取回编辑权。
+   * 三条都只落盘或取权，**绝不触发发布**：发布仍要用户自己在发布页再点一次。
+   */
+  async function runPublishRecovery(action: string): Promise<void> {
+    if (action === 'save-changes') {
+      // 没挂云项目时没有可保存的目标：如实说明并指向「保存为云项目」，不假装已保存。
+      if (!bound) throw new Error('这份方案还没挂到云项目上；请先点「保存为云项目」把它挂上去，再保存修改。');
+      await saveBoundSceneQuiet();
+      showNotice('当前修改已保存到云端。回到发布页重新点一次「发布」，会按新版本重新核对。');
+      return;
+    }
+    if (action === 'save-project') {
+      await saveDraftAsProject();
+      return;
+    }
+    if (action === 'grant-edit') {
+      await acquireCurrentEdit(layoutRef.current);
+      showNotice(controller.getSnapshot().writeBlocked
+        ? '编辑权还没拿到（可能有人在改），当前仍是只读。'
+        : '编辑权已取回。回到发布页重新点一次「发布」，会重新核对授权与版本。');
+      return;
+    }
+    throw new Error('这个恢复动作还没有接到真实链路，请按提示手动处理。');
+  }
+  /**
+   * P1（恢复入口）：宿主（room-organizer）把发布预检的阻塞动作请求转到这里，
+   * 与登录卡同款的事件通道（scendance:request-account-login），不新开并行契约。
+   * 监听器只注册一次；动作体走 ref（每次渲染刷新），避免把首帧闭包钉死。
+   */
+  const publishRecoveryRef = useRef<(action: string) => void>(() => undefined);
+  publishRecoveryRef.current = (action: string): void => {
+    // 动作在账户浮窗里执行：用户看得见成功或失败原因，不装作没发生。
+    setSection('projects');
+    setMenuOpen(false);
+    if (!dialog.current?.open) { setAccountOpen(true); dialog.current?.showModal(); }
+    void run(() => runPublishRecovery(action));
+  };
+  useEffect(() => {
+    const onRecovery = (event: Event): void => {
+      const action = (event as CustomEvent<{ action?: string }>).detail?.action;
+      if (action !== 'save-changes' && action !== 'save-project' && action !== 'grant-edit') return;
+      publishRecoveryRef.current(action);
+    };
+    window.addEventListener('scendance:publish-recovery-action', onRecovery);
+    return () => window.removeEventListener('scendance:publish-recovery-action', onRecovery);
+  }, []);
   /** 丢弃本机草稿：换一个新的空白本机活动，不触碰任何云端项目。 */
   async function discardLocalDraft(): Promise<void> {
     if (!window.confirm('删除当前本机活动？\n\n· 归档与封面\n· 地图规划\n· 活动需求、点验与图纸\n· 这段对话\n都会一并清除，删除后无法恢复。')) return;

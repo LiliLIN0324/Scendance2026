@@ -125,6 +125,40 @@ try {
     };
   });
 
+  // 2026-11-20 用户：「这个标注为什么搞那么宽」——标注浮卡定宽，长文本在卡内省略。
+  const annotate = await page.evaluate(() => {
+    const card = document.querySelector('[data-testid="outdoor-inspector-annotate"]');
+    const label = document.querySelector('[data-testid="annotate-row-label"]');
+    if (!card || !label) return null;
+    const r = card.getBoundingClientRect();
+    // 对照组：把定宽摘掉（等同 2026-11-20 之前的卡片），量它按内容会撑到多宽。
+    const inlineWidth = card.style.width;
+    card.style.width = 'auto';
+    const autoWidth = card.getBoundingClientRect().width;
+    card.style.width = inlineWidth;
+    return {
+      cardWidth: r.width,
+      autoWidth,
+      cardLeft: r.left,
+      cardRight: r.right,
+      labelClient: label.clientWidth,
+      labelScroll: label.scrollWidth,
+    };
+  });
+  if (!annotate) {
+    failures.push('标注卡没有渲染出来');
+  } else {
+    if (annotate.cardWidth > 288) {
+      failures.push(`标注卡宽 ${annotate.cardWidth.toFixed(1)}px 超过定宽 286px（长文本把卡撑开了）`);
+    }
+    if (annotate.labelScroll <= annotate.labelClient) {
+      failures.push('标注长文本没有被省略号截断——说明它仍在给卡片贡献宽度');
+    }
+    if (annotate.cardLeft < -1 || annotate.cardRight > viewport.width + 1) {
+      failures.push(`标注卡越出视口：left ${annotate.cardLeft.toFixed(1)} / right ${annotate.cardRight.toFixed(1)}`);
+    }
+  }
+
   const cardWidth = measured.card.width;
   if (cardWidth > measured.host.width + 1) {
     failures.push(`属性卡宽 ${cardWidth.toFixed(1)}px 超出宿主 ${measured.host.width.toFixed(1)}px`);
@@ -157,6 +191,12 @@ try {
     card: measured.card,
     strip: measured.strip,
     buttons: measured.buttons.map((b) => ({ label: b.label, hit: b.hit, width: Number(b.rect.width.toFixed(1)), top: Number(b.rect.y.toFixed(1)) })),
+    annotate: annotate ? {
+      cardWidth: Number(annotate.cardWidth.toFixed(1)),
+      widthWithoutFixed: Number(annotate.autoWidth.toFixed(1)),
+      labelClient: annotate.labelClient,
+      labelScroll: annotate.labelScroll,
+    } : null,
     failures,
   }, null, 1));
 

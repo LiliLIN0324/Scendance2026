@@ -6,6 +6,7 @@ import {inspectReviewFeedbackReceipt,type ReceiptPin} from '@/components/review-
 import {importReviewFeedback,readImportedReviewFeedback} from '@/components/review-share-page/review-feedback-storage';
 import {readReviewLink,reviewCodeFromHash} from '@/components/review-share-page/review-link-cloud';
 import {readShareHash} from '../lib/share';
+import {projectSessionScope} from '../lib/project-session-scope';
 import { violationCodeLabel, type BingoScore } from '../../../lib/bingo-score';
 import {
   countOpenFeedbackPins,
@@ -14,9 +15,11 @@ import {
   mergeBingoCloudPins,
   readBingoPlanFeedback,
   reviewPlanKeysForBingoPlan,
+  type BingoFeedbackPin,
   type BingoPlanFeedback,
 } from '../lib/bingo-feedback';
-import { listReviewPinsCloud } from '../../review-share-page/review-pins-cloud';
+import { listReviewPinsCloud, setReviewPinStatusCloud } from '../../review-share-page/review-pins-cloud';
+import { setReviewSharePinStatus } from '../../review-share-page/share-pins';
 import type { ReviewPin } from '../lib/review-pins';
 import {
   bingoPhaseLabel,
@@ -258,7 +261,8 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
     ),
   }));
   const feedbackRows = plansWithFeedback.flatMap(({ feedback }) => feedback.pins);
-  const pinCount = plansWithFeedback.reduce((sum, entry) => sum + entry.feedback.pinCount, 0);
+  // 顶层「对方的修改」只列待处理钉；已处理钉在方案展开详情里回看，计数与状态行口径一致。
+  const openFeedbackRows = feedbackRows.filter(pin => pin.pinStatus !== 'resolved');
   const openPinCount = plansWithFeedback.reduce((sum, entry) => sum + countOpenFeedbackPins(entry.feedback), 0);
   // 系统问题只算能落到这张图上、且还没收尾的；被拒件也是我要处理的事。
   const todoCount = issues.length + refusedList.length;
@@ -269,7 +273,7 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   const layers = settledLayers(settled);
   const issueGroups = reviewIssueGroups(issues);
   const reviewHref = usableReviewHref(snapshot.plans);
-  const shownFeedback = feedbackRows.slice(0, REVIEW_ROW_PREVIEW);
+  const shownFeedback = openFeedbackRows.slice(0, REVIEW_ROW_PREVIEW);
   const copyReviewLink = () => {
     if (!reviewHref) return;
     void navigator.clipboard.writeText(new URL(reviewHref, window.location.origin).toString()).then(() => {
@@ -387,9 +391,9 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
       onToggle={() => setFeedbackOpen(value => !value)}
       mark={<MessageSquare size={14} aria-hidden="true"/>}
       title="对方的修改"
-      count={pinCount}
+      count={openPinCount}
     >
-      {pinCount === 0
+      {openPinCount === 0
         ? <p className="ap-review-empty"><MessageSquare size={14} aria-hidden="true"/>还没有对方的修改</p>
         : <>
           {shownFeedback.map(pin => {
@@ -402,7 +406,7 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
               </button>
               : <div key={pin.id} className="ap-review-row">{mark}<span className="ap-review-title">{title}</span></div>;
           })}
-          {feedbackRows.length > shownFeedback.length && <p className="ap-review-more">还有 {feedbackRows.length - shownFeedback.length} 处，点开一条飞到地图</p>}
+          {openFeedbackRows.length > shownFeedback.length && <p className="ap-review-more">还有 {openFeedbackRows.length - shownFeedback.length} 处，点开一条飞到地图</p>}
         </>}
     </ReviewGroup>
 
@@ -425,8 +429,8 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
   useEffect(()=>{alive.current=true;return ()=>{alive.current=false;sequence.current++;};},[]);
   useEffect(()=>{sequence.current++;setPreview(null);setSaved(null);setPending(false);setUnknown(false);setNotice('');},[plan.clientHref,plan.projectKey,scopeKey]);
   const capture=()=>{const captured={url:plan.clientHref,project:plan.projectKey,scope:scopeKey,guard:isCurrent};
-    return ()=>{try{return alive.current&&!!captured.guard&&captured.guard()&&captured.scope===`activity:${captured.project}`&&latest.current.scopeKey===captured.scope&&latest.current.plan.clientHref===captured.url&&latest.current.plan.projectKey===captured.project&&readBingoSnapshot(window.localStorage).plans.some(p=>p.projectKey===captured.project&&p.clientHref===captured.url);}catch{return false;}};};
-  const eligible=!!isCurrent&&scopeKey===`activity:${plan.projectKey}`&&plan.projectKey!=='local-draft'&&plan.linkStatus==='needs-verification';
+    return ()=>{try{return alive.current&&!!captured.guard&&captured.guard()&&captured.scope===projectSessionScope(captured.project)&&latest.current.scopeKey===captured.scope&&latest.current.plan.clientHref===captured.url&&latest.current.plan.projectKey===captured.project&&readBingoSnapshot(window.localStorage).plans.some(p=>p.projectKey===captured.project&&p.clientHref===captured.url);}catch{return false;}};};
+  const eligible=!!isCurrent&&scopeKey===projectSessionScope(plan.projectKey)&&plan.projectKey!=='local-draft'&&plan.linkStatus==='needs-verification';
   async function shareHash():Promise<string> {
     const hash=new URL(plan.clientHref,window.location.origin).hash;
     if(hash.startsWith('#layout='))return hash;
@@ -470,16 +474,37 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
 
   // G4：远端钉异步并进本机汇总，跨设备评审也能在 Bingo 里看到。
   const [cloudPins, setCloudPins] = useState<ReviewPin[]>([]);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const reloadCloud = useCallback(async (): Promise<ReviewPin[]> => {
+    const keys = reviewPlanKeysForBingoPlan(plan).filter(key => key.startsWith('review-v2:'));
+    const results = await Promise.all(keys.map(key => listReviewPinsCloud(key)));
+    return results.flatMap(result => result.ok ? result.value : []);
+  }, [plan]);
   useEffect(() => {
     let alive = true;
-    const keys = reviewPlanKeysForBingoPlan(plan).filter(key => key.startsWith('review-v2:'));
-    void Promise.all(keys.map(key => listReviewPinsCloud(key))).then(results => {
-      if (!alive) return;
-      setCloudPins(results.flatMap(result => result.ok ? result.value : []));
-    });
+    void reloadCloud().then(pins => { if (alive) setCloudPins(pins); });
     return () => { alive = false; };
-  }, [plan.projectKey, plan.shareId, plan.reviewPlanKey, plan.clientHref]);
+  }, [reloadCloud]);
   const feedback = mergeBingoCloudPins(readBingoPlanFeedback(plan), cloudPins);
+  async function resolvePin(pin: BingoFeedbackPin): Promise<void> {
+    if (resolvingId) return;
+    const valid = capture();
+    if (!valid()) { setNotice('活动或分享记录已变化，请重新打开后再标记。'); return; }
+    setResolvingId(pin.id); setNotice('');
+    try {
+      const keys = reviewPlanKeysForBingoPlan(plan);
+      for (const key of keys) setReviewSharePinStatus(window.localStorage, key, pin.id, 'resolved');
+      for (const key of keys.filter(k => k.startsWith('review-v2:'))) {
+        await setReviewPinStatusCloud({ shareKey: key, pinId: pin.id, status: 'resolved' });
+      }
+      const fresh = await reloadCloud();
+      if (alive.current) setCloudPins(fresh);
+    } catch {
+      if (alive.current) setNotice('标记已处理未完成，请重试。');
+    } finally {
+      if (alive.current) setResolvingId(null);
+    }
+  }
   const [open, setOpen] = useState(feedback.pinCount > 0);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
@@ -508,7 +533,7 @@ function AuditPlan({ plan, ordinal, scopeKey, isCurrent }: { plan: BingoPlan;ord
       {copied ? <Check size={13} aria-hidden="true"/> : <Copy size={13} aria-hidden="true"/>}{copied ? '已复制' : '复制链接'}
     </button>
     <a className="ap-audit-link" href={plan.clientHref} aria-label="打开评审页"><ExternalLink size={13} aria-hidden="true"/>查看评审页</a></div>}
-    {open && <AuditPins feedback={feedback}/>}
+    {open && <AuditPins feedback={feedback} onResolve={pin => void resolvePin(pin)} resolvingId={resolvingId} />}
     {eligible?<label>导入反馈文件 <input type="file" accept="application/json,.json" disabled={pending||unknown} onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';void inspect(file);}}/></label>:<p>{plan.linkStatus==='unavailable'?'原分享链接不完整，无法核验，请重新分享。':'此历史分享未关联当前活动，或缺少可核对的活动身份，暂不能导入。'}</p>}
     {preview&&<section aria-label="待导入反馈预览"><p>反馈文件声明：{preview.completed?'已完成':'未完成'}；已有 {preview.duplicates} 条相同意见。</p><FeedbackPins pins={preview.pins} floorNames={preview.floorNames}/><button type="button" disabled={pending||unknown} onClick={()=>void applyFeedback()}>确认导入反馈</button><button type="button" disabled={pending} onClick={()=>setPreview(null)}>取消导入</button></section>}
     {saved&&<section aria-label="已导入反馈"><p>文件声明：{saved.reportedCompleted?'已完成':'未完成'}；来源和身份仍需核对。</p><FeedbackPins pins={saved.pins} floorNames={saved.floorNames}/></section>}
@@ -526,7 +551,11 @@ function FeedbackPins({pins,floorNames}:{pins:readonly ReceiptPin[];floorNames:R
   return <ol>{pins.map(pin=><li key={pin.id}><p>{pin.text}</p><p>{floorNames[pin.floorId]??'楼层待核对'} · 位置 {fmtCoord(pin.x)}，{fmtCoord(pin.z)} 米 · {pin.status==='resolved'?'文件标记已处理':'文件标记待处理'}</p></li>)}</ol>;
 }
 
-function AuditPins({ feedback }: { feedback: BingoPlanFeedback }): JSX.Element {
+function AuditPins({ feedback, onResolve, resolvingId }: {
+  feedback: BingoPlanFeedback;
+  onResolve?: (pin: BingoFeedbackPin) => void;
+  resolvingId?: string | null;
+}): JSX.Element {
   if (feedback.pins.length === 0) return <p className="ap-audit-empty">本机暂无评审意见</p>;
   return <ol className="ap-audit-pins">
     {feedback.pins.map(pin => <li key={pin.id}>
@@ -539,6 +568,13 @@ function AuditPins({ feedback }: { feedback: BingoPlanFeedback }): JSX.Element {
       <p>{pin.body}</p>
       {typeof pin.x === 'number' && typeof pin.z === 'number' && (
         <button type="button" className="ap-audit-link" aria-label={`定位意见「${pin.body}」`} onClick={() => requestOutdoorPlanPointFocus(pin.x as number, pin.z as number)}>定位</button>
+      )}
+      {pin.source === 'share-pin' && pin.pinStatus !== 'resolved' && (
+        <button type="button" className="ap-audit-link" disabled={resolvingId === pin.id}
+          aria-label={`标记意见「${pin.body}」已处理`}
+          onClick={() => onResolve?.(pin)}>
+          {resolvingId === pin.id ? '标记中…' : '标已处理'}
+        </button>
       )}
       {pin.replies.length > 0 && <ul>
         {pin.replies.map((reply, index) => <li key={`${pin.id}-${index}`}>

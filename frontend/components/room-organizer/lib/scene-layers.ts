@@ -29,6 +29,40 @@ export function switchDesign(base: RoomLayout, id: string): RoomLayout {
     variants: book.variants.map(v => v.id === book.activeId ? { ...v, layout: designSnapshot(base) } : v) } };
 }
 
+/** 变体快照：剥离 designBook 与属整场活动的 eventProfile（schema 要求变体 layout 不带活动档案）。 */
+function variantSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook' | 'eventProfile'> {
+  const { designBook: _book, eventProfile: _profile, ...rest } = layout;
+  return rest;
+}
+
+/** 把当前整包布局另存为一个手动过程态快照，不切换当前方案。 */
+export function saveDesignSnapshot(base: RoomLayout, input: { name: string; note?: string; savedAt?: string }): RoomLayout {
+  base = syncDesignWorkOrders(base);
+  const book = base.designBook ?? { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: variantSnapshot(base) }] };
+  if (book.variants.length >= MAX_DESIGNS) throw new Error('本机已保留 20 个方案，请先移除不再需要的过程态。');
+  const note = input.note?.trim();
+  const id = crypto.randomUUID();
+  const fallback = `过程态 ${book.variants.length}`;
+  return { ...base, designBook: { activeId: book.activeId, variants: [...book.variants, {
+    id,
+    name: input.name.trim() || fallback,
+    layout: variantSnapshot(base),
+    origin: 'manual',
+    savedAt: input.savedAt ?? new Date().toISOString(),
+    ...(note ? { note } : {}),
+  }] } };
+}
+
+/** 移除一个非当前、非基线的过程态快照；当前态与「原始方案」保留。 */
+export function removeDesignVariant(base: RoomLayout, id: string): RoomLayout {
+  const book = base.designBook;
+  if (!book || id === book.activeId || id === 'original') return base;
+  const target = book.variants.find(variant => variant.id === id);
+  if (!target) return base;
+  return { ...base, designBook: { activeId: book.activeId, variants: book.variants.filter(variant => variant.id !== id) } };
+}
+
+
 export function materialLayers(items: readonly FurnitureItem[]): { id: string; name: string; itemIds: string[] }[] {
   const groups = new Map<string, string[]>();
   for (const item of items) {

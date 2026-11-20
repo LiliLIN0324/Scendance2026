@@ -1215,9 +1215,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       )}
       {/* 搜地点（用户 m04938 / m05472）：左上角，和地图 App 一样。
           选中只把视图飞过去并落一枚定位钉，不改 plan / anchor。
-          2026-11-19 提交 76f6fed7 把这条浮条连同 portal 槽一起删了，任务卡「搜索地点」的
-          focusPlaceSearch 因此找不到 outdoor-place-search-input，点了空转；按用户指令挂回。
-          portal 宿主 #outdoor-place-search-slot 已随该提交移除，这里直接画在覆盖层里。
+          2026-11-19 提交 76f6fed7 删过一次（任务卡「搜索地点」点了空转），3ea1471d 挂回；
+          2026-11-20 提交 a0252ea5 批量收口时又删掉了一次（连对话同步/交接一起），这里再挂回。
+          portal 宿主 #outdoor-place-search-slot 已随 76f6fed7 移除，这里直接画在覆盖层里。
           只压 2D：dormant / 3D 接管时画布层已 visibility:hidden，浮条也要一起退场。 */}
       {plan && !canvasHidden && (
         <div style={{ pointerEvents: 'auto' }}>

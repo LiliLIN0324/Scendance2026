@@ -746,7 +746,7 @@ describe('ScendanceViewTools outdoor Google Maps rail', () => {
     expect(screen.getByRole('button', { name: '展开工具条' }).getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: '展开工具条' }));
     expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy();
-    // 展开态只有工具这一行，末尾的小 × 负责收起；Esc 只是快捷键。
+    // 展开态只有工具这一行，收起交给左端岛核（⌄）；Esc 只是快捷键。
     expect(screen.queryByRole('button', { name: '展开工具条' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /收起工具条/ }));
     expect(screen.queryByRole('button', { name: '撤销' })).toBeNull();
@@ -758,7 +758,7 @@ describe('ScendanceViewTools outdoor Google Maps rail', () => {
     expect(within(stack).getByRole('button', { name: '放大' })).toBeTruthy();
   });
 
-  it('keeps the planning dock open on outside pointerdown; only explicit × / Esc close it', () => {
+  it('keeps the planning dock open on outside pointerdown; only the island core / Esc close it', () => {
     const values = contexts();
     const outdoor = outdoorActions();
     render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} outdoorActions={outdoor} /></Providers>);
