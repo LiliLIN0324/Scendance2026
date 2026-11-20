@@ -22,16 +22,16 @@ import type { SitePlanData } from '../../../supabase/functions/_shared/site-plan
 export const REVIEW_SHARE_PATH = '/review/';
 
 export const REVIEW_PLAN_NOTICES = {
-  link: '这是分享链接里的方案快照。此页只读，可在平面上落钉评审。',
-  local: '这是这台浏览器当前保存的布置。对方要看同一份，请让分享者发评审链接。',
-  sample: '没有分享快照，也没有本机布置。先展示示例场地，方便试用落钉评审。',
+  link: '分享链接里的方案快照，只读。',
+  local: '这台浏览器当前保存的布置。',
+  sample: '示例场地，可试用落钉。',
 } as const;
 
 export const REVIEW_PLAN_ERRORS = {
-  'too-large': '这条评审链接太长，页面没有打开其中的方案。请让分享者重新生成链接。',
-  unreadable: '这条评审链接里的方案读不出来。请让分享者重新复制完整链接。',
-  'not-found': '这条评审短链已失效或不存在。请让分享者重新发一次。',
-  offline: '暂时读不到这条评审短链。请检查网络后重试，或让分享者发完整链接。',
+  'too-large': '链接太长，没打开方案，请重新生成。',
+  unreadable: '方案读不出来，请复制完整链接。',
+  'not-found': '短链已失效，请重新获取。',
+  offline: '暂时读不到，请检查网络后重试。',
 } as const;
 
 export type ReviewPlanSource = keyof typeof REVIEW_PLAN_NOTICES;
@@ -146,12 +146,12 @@ export async function loadReviewPlan(input: {
   const example=query.get('example');
   if(example==='sharing') {
     const layout=createSharingExample({...INITIAL_LAYOUT,name:'分享会示例（虚构）'});
-    return {ok:true,plan:{source:'sample',layout,planKey:'sample:sharing',notice:'虚构的 12 × 10 米场地示例，仅供查看；场地轮廓、门与物料均为示意，不代表消防或无障碍验收。',identity:null,shareHash:null,reviewAccess:parseReviewAccess(undefined)}};
+    return {ok:true,plan:{source:'sample',layout,planKey:'sample:sharing',notice:'虚构示例场地，轮廓与物料均为示意。',identity:null,shareHash:null,reviewAccess:parseReviewAccess(undefined)}};
   }
   if(example==='hall-d5') {
     const layout:RoomLayout={name:'Hall D5 尺寸参考（示意）',width:16.5,height:17.2,
       floors:[{id:'hall-d5-example',name:'场地轮廓（示意）',floorColor:'#f5f6f7',items:[]}]};
-    return {ok:true,plan:{source:'sample',layout,planKey:'sample:hall-d5',notice:'尺寸 16.5 × 17.2 米参考东京国际论坛官网标称；矩形轮廓仅为示意。门位、门宽、开启方向、通道及现场条件未知，未作消防或无障碍验收。',identity:null,shareHash:null,reviewAccess:parseReviewAccess(undefined)}};
+    return {ok:true,plan:{source:'sample',layout,planKey:'sample:hall-d5',notice:'尺寸参考官网标称，轮廓仅为示意。门位、门宽、开启方向、通道及现场条件未知，未作消防或无障碍验收。',identity:null,shareHash:null,reviewAccess:parseReviewAccess(undefined)}};
   }
   const demo = query.get('demo') === '1';
   if (!demo && input.localLayout) {

@@ -310,7 +310,7 @@ export function ReviewSharePage(): JSX.Element {
         <p className="rsp-mast-status">{exampleOnly?'示例预览 · 只读':'客户评审 · 只读'}</p>
       </header>
       {phase.kind === 'loading' ? (
-        <section className="rsp-state" role="status"><h1>正在打开方案</h1><p>正在读取平面。</p></section>
+        <section className="rsp-state" role="status"><h1>正在打开方案</h1><p>正在读取…</p></section>
       ) : phase.kind === 'error' ? (
         <section className="rsp-state" role="alert"><h1>评审链接没有打开</h1><p>{phase.message}</p></section>
       ) : plan && floor ? (
@@ -319,18 +319,14 @@ export function ReviewSharePage(): JSX.Element {
             <div className="rsp-intro-main">
               <p className="rsp-kicker">方案评审</p>
               <h1 id="rsp-plan-title">{plan.layout.name}</h1>
-              {!outdoorMode && <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · 平面上 {placedCount(floor.items)} 件</p>}
+              {!outdoorMode && <p className="rsp-meta">{metres(plan.layout.width)} × {metres(plan.layout.height)} 米 · {floor.name} · {placedCount(floor.items)} 件</p>}
             </div>
             <div className="rsp-intro-side">
               {plan.identity && (
                 <p className="rsp-version" data-delivery-version={plan.identity.deliveryVersion} data-snapshot-id={plan.identity.snapshotId}>
                   <b>{plan.identity.deliveryVersion}</b>
                   <span>{plan.identity.status === 'confirmed' ? '已确认的交付版' : '草案版'}</span>
-                  <small>
-                    快照 {plan.identity.snapshotId} · {plan.identity.verified
-                      ? '内容与快照一致，旧链接一直指着这一版'
-                      : '内容与快照对不上，请让分享者重新生成链接'}
-                  </small>
+                  <small>{plan.identity.verified ? '旧链接一直指着这一版' : '版本对不上，请重新生成链接'}</small>
                 </p>
               )}
               <p className="rsp-notice">{plan.notice}</p>
@@ -347,13 +343,13 @@ export function ReviewSharePage(): JSX.Element {
                   </div>
                 )}
                 {!exampleOnly && !outdoorMode && (
-                  <p className="rsp-stage-tip" role="status">{pins.length === 0 ? '点平面任意位置，落一条意见' : '点钉查看意见'}</p>
+                  <p className="rsp-stage-tip" role="status">{pins.length === 0 ? '点平面落钉' : '点钉看意见'}</p>
                 )}
               </div>
               {plan.planKey==='sample:hall-d5' && <p className="rsp-source"><a href="https://www.t-i-forum.co.jp/en/facilities/d5/" target="_blank" rel="noopener noreferrer">查看场地方官方资料</a></p>}
             {shownOutdoor && (
               <section className="rsp-outdoor" aria-label="户外方案">
-                {canPin && <p className="rsp-review-hint" role="status">点地图落一条意见。滚轮缩放，拖拽平移。</p>}
+                {canPin && <p className="rsp-review-hint" role="status">点地图落意见</p>}
                 <ReviewSiteMap
                   plan={shownOutdoor}
                   levelId={activeLevelId}
@@ -395,7 +391,7 @@ export function ReviewSharePage(): JSX.Element {
             </div>}
             {!outdoorMode && <div className="rsp-legend">
               <h2>场内物件</h2>
-              {legend.rows.length === 0 ? <p>这一层平面上还没有物件。</p> : (
+              {legend.rows.length === 0 ? <p>暂无物件</p> : (
                 <ul>
                   {legend.rows.map((row) => (
                     <li key={`${row.name}-${row.color}`}>
@@ -405,7 +401,7 @@ export function ReviewSharePage(): JSX.Element {
                   ))}
                 </ul>
               )}
-              {legend.hidden > 0 && <p className="rsp-zones">还有 {legend.hidden} 种物件，都画在平面上。</p>}
+              {legend.hidden > 0 && <p className="rsp-zones">另有 {legend.hidden} 种</p>}
               {(floor.zones ?? []).length > 0 && (
                 <p className="rsp-zones">分区：{(floor.zones ?? []).map((zone) => zone.name).join('、')}</p>
               )}
@@ -416,13 +412,13 @@ export function ReviewSharePage(): JSX.Element {
               <div className="rsp-rail-title"><h2 id="rsp-comments-title">意见</h2><span>{pins.length}</span></div>
               <label className="rsp-author">
                 <span>你的称呼</span>
-                <input value={author} maxLength={24} placeholder="选填，方便对方知道是谁" onChange={event => { const value = event.currentTarget.value; setAuthor(value); try { window.localStorage.setItem('scendance-review-author', value); } catch { /* 忽略 */ } }} />
+                <input value={author} maxLength={24} placeholder="选填称呼" onChange={event => { const value = event.currentTarget.value; setAuthor(value); try { window.localStorage.setItem('scendance-review-author', value); } catch { /* 忽略 */ } }} />
               </label>
-              <p className="rsp-persist">{syncNote || (plan.source === 'link' ? '意见会回到方案的审校里。' : '这是本机预览。发给客户的短链上，意见才会回到审校。')}</p>
+              {syncNote && <p className="rsp-persist">{syncNote}</p>}
             </div>
             <div className="rsp-rail-list">
               {pins.length === 0 ? (
-                <p className="rsp-empty">还没有意见。在左侧平面上点一下，写下要改的地方。</p>
+                <p className="rsp-empty">还没有意见，点平面落第一条</p>
               ) : (
                 <ol className="rsp-pin-list">
                   {pins.map((pin) => {
@@ -446,7 +442,7 @@ export function ReviewSharePage(): JSX.Element {
                   })}
                 </ol>
               )}
-              {(viewOnly || access?.pins === false) && <p className="rsp-form-note" role="status">这是只看链接：可以查看方案与已有意见，不能新增。</p>}
+              {(viewOnly || access?.pins === false) && <p className="rsp-form-note" role="status">只看链接，不能新增</p>}
               {pinError && <p className="rsp-form-error" role="alert">{pinError}</p>}
             </div>
             <div className="rsp-rail-foot">
@@ -455,13 +451,14 @@ export function ReviewSharePage(): JSX.Element {
                 <button type="button" className="rsp-backup" onClick={exportFeedback} disabled={!planVersion||!pinsUsable}>导出备份</button>
               </div>
               {exportNote && <p className="rsp-status" role="status">{exportNote}</p>}
-              <p className="rsp-status" role="status">{returnNote || (plan.source==='link' ? '意见会回到方案的审校里。' : '这是本机预览，意见不会送到审校。')}</p>
+              {returnNote && <p className="rsp-status" role="status">{returnNote}</p>}
+              {!returnNote && plan.source !== 'link' && <p className="rsp-status" role="status">本机预览，意见不送审校</p>}
             </div>
           </aside>}
           </div>
         </div>
       ) : (
-        <section className="rsp-state" role="alert"><h1>方案没有可看的楼层</h1><p>这份快照里没有楼层，平面没有展开。</p></section>
+        <section className="rsp-state" role="alert"><h1>方案没有可看的楼层</h1><p>这份快照没有楼层。</p></section>
       )}
     </main>
   );
