@@ -858,11 +858,14 @@ describe('ScendanceViewTools 户外漫游入口', () => {
   });
 
   it('漫游悬停只拎起图标，按钮色保持 #fbbc04，没有 walk-v7 光和踏步', () => {
-    const globals = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
+    // autocrlf 检出时磁盘是 CRLF，读原始字节会让所有含换行的断言永远失配——先归一化。
+    const globals = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8').replace(/\r\n/g, '\n');
     expect(globals).toContain('button.is-walk > svg { transition: transform .18s ease; }');
     expect(globals).toContain('button.is-walk:hover > svg { transform: translateY(-2px) rotate(-9deg); }');
-    expect(globals).toContain('button.oc-gm-walk {\n  border-radius: 50%; color: #fbbc04;\n}');
-    expect(globals).toContain('button.oc-gm-walk.is-active { color: #fbbc04; }');
+    // 左轨收窄批次给选择器补了祖先前缀（.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps），
+    // 断言跟上前缀；验的仍是同一件事：50% 圆 + #fbbc04、激活同色、未与 oc-gm-round 合并。
+    expect(globals).toContain('.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk {\n  border-radius: 50%; color: #fbbc04;\n}');
+    expect(globals).toContain('.sc-workbench .sc-tool-column .oc-cluster.oc-gmaps button.oc-gm-walk.is-active { color: #fbbc04; }');
     expect(globals).not.toContain('walk-figure');
     expect(globals).not.toContain('button.oc-gm-round.oc-gm-walk');
     expect(globals).not.toMatch(/button\.is-walk:hover,\s*\n[^}]*translateY\(-2px\);/);
