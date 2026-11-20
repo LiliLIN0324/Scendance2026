@@ -436,3 +436,40 @@ describe('groupConflictIssues（同一条线的问题合并成一枚徽章）', 
     expect(groupConflictIssues([])).toEqual([]);
   });
 });
+
+// 2026-11-20 审计 K7：物料压物料也要进问题清单，但允许叠放的类别不报。
+describe('facility overlap (K7)', () => {
+  const tent = (id: string, x: number, overrides: Partial<PlanFacility> = {}): PlanFacility => ({
+    id,
+    templateId: 'oneplan:scale:tent',
+    name: id,
+    position: { x, y: 10 },
+    rotationDeg: 0,
+    size: { width: 3, depth: 3 },
+    notes: '',
+    ...overrides,
+  } as PlanFacility);
+
+  it('两顶完全叠在一起的帐篷：按冲突报，可定位到设施', () => {
+    const issues = issuesFor([], { facilities: [tent('帐篷 A', 10), tent('帐篷 B', 10)] });
+    const overlaps = byCategory(issues, 'facility-overlap');
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0]!.status).toBe('conflict');
+    expect(overlaps[0]!.facilityId).toBe('帐篷 A');
+    expect(overlaps[0]!.message).toContain('几乎完全重合');
+  });
+
+  it('部分重叠只算待核实提示', () => {
+    const issues = issuesFor([], { facilities: [tent('帐篷 A', 10), tent('帐篷 B', 12)] });
+    const overlaps = byCategory(issues, 'facility-overlap');
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0]!.status).toBe('unverified');
+  });
+
+  it('贴边、地毯铺在帐篷下都不算重叠', () => {
+    expect(byCategory(issuesFor([], { facilities: [tent('帐篷 A', 10), tent('帐篷 B', 13)] }), 'facility-overlap')).toHaveLength(0);
+    expect(byCategory(issuesFor([], {
+      facilities: [tent('帐篷 A', 10), tent('活动地毯', 10, { templateId: 'oneplan:icon:rug', size: { width: 6, depth: 6 } })],
+    }), 'facility-overlap')).toHaveLength(0);
+  });
+});

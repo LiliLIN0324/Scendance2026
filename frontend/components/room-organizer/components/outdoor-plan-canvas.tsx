@@ -220,6 +220,7 @@ import {
   type PlanRect,
 } from '../lib/site-plan-facilities';
 import { resolveFacilityTemplate } from '../lib/plan-facility-catalog';
+import { facilityOverlapPairs } from '../lib/plan-facility-overlap';
 import { clearPlanFacilityDrag, consumePlanFacilityDrag, getPlanFacilityDrag, setPlanFacilityDrag } from '../lib/plan-facility-drag';
 import { consumePlanCatalogDrag, getPlanCatalogDrag, PLAN_CATALOG_DRAG_MIME, PLAN_CATALOG_TEXT_PREFIX, readPlanCatalogDrag, type PlanCatalogDrag } from '../lib/plan-catalog-drag';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
@@ -6929,6 +6930,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     return true;
   }
 
+  /**
+   * 2026-11-20 审计 K7：落点压到既有设施时的软提示（不拦放置）。
+   * 口径与问题清单一致：允许叠放的类别（地毯/桌布/桌椅/隔离栏）不提示，贴边相邻不算重叠。
+   */
+  function facilityOverlapNotice(facility: PlanFacility, facilities: readonly PlanFacility[]): string | null {
+    const others = facilities.filter(f => f.id !== facility.id);
+    const pair = facilityOverlapPairs([...others, facility])
+      .find(p => p.a.id === facility.id || p.b.id === facility.id);
+    if (!pair) return null;
+    const other = pair.a.id === facility.id ? pair.b : pair.a;
+    return `它和「${other.name}」占地重叠（约 ${Math.round(pair.ratio * 100)}%），问题清单已记一条，挪开就消失`;
+  }
+
   function placeFacilityAt(pt: PlanPoint, explicitModelSlug?: string) {
     const templateId = facilityTemplateRef.current;
     if (!templateId) {
@@ -7026,7 +7040,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     selectFacility(result.value.id);
     const hint = result.issues && result.issues.length > 0 ? `，注意：${result.issues.map(i => i.message).join('；')}` : '';
     const angle = rotationDeg;
-    setEditMessage(`已放置「${result.value.name}」${angle ? `（${Math.round(angle)}°）` : ''}，继续单击放置或 Esc 结束${hint}`);
+    // 2026-11-20 审计 K7：压到别的设施时补一句软提示（问题清单里也会记一条，挪开就消失）。
+    const overlap = facilityOverlapNotice(result.value, [...current.facilities, result.value]);
+    setEditMessage(`已放置「${result.value.name}」${angle ? `（${Math.round(angle)}°）` : ''}，继续单击放置或 Esc 结束${hint}${overlap ? `；${overlap}` : ''}`);
     // 2026-11-16 落位后清掉跟随幽灵：否则 3D 预览模型会和刚落地的真模型叠在同一位置。
     ghostPointRef.current = null;
     draw();

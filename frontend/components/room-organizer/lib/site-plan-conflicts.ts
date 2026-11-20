@@ -35,6 +35,8 @@ import {
   type PlanRoute,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+// 2026-11-20 审计 K7：设施互相重叠（允许叠放的类别已在那个模块里排除）。
+import { facilityOverlapPairs } from './plan-facility-overlap';
 import {
   planPointDistanceM,
   planPointInRing,
@@ -56,7 +58,9 @@ export type PlanConflictCategory =
   | 'route-collinear'
   | 'route-facility-collision'
   | 'route-missing-width'
-  | 'capacity-unverified';
+  | 'capacity-unverified'
+  // 2026-11-20 审计 K7：物料压物料（两顶帐篷、两个展位叠在一起）。
+  | 'facility-overlap';
 
 export type PlanConflictStatus = 'conflict' | 'missing' | 'unverified';
 
@@ -81,6 +85,7 @@ export const PLAN_CONFLICT_CATEGORY_LABELS: Record<PlanConflictCategory, string>
   'route-facility-collision': '通行带压设施',
   'route-missing-width': '缺宽度',
   'capacity-unverified': '容量待核实',
+  'facility-overlap': '设施重叠',
 };
 
 /**
@@ -400,6 +405,23 @@ export function planConflictIssues(plan: PlanConflictInput): PlanConflictIssue[]
       routeIds: [],
       zoneId: zone.id,
       zoneName: zone.name,
+    });
+  }
+
+  // 7) 设施互相重叠（K7）：允许叠放的类别（地毯/桌布/桌椅/隔离栏）不报；
+  //    其余真重叠按「待核实」提示，「几乎完全重合」按冲突报（看起来像重复摆放）。
+  for (const pair of facilityOverlapPairs(plan.facilities)) {
+    const percent = Math.round(pair.ratio * 100);
+    issues.push({
+      key: `overlap:${pair.a.id}:${pair.b.id}`,
+      category: 'facility-overlap',
+      status: pair.nearDuplicate ? 'conflict' : 'unverified',
+      message: pair.nearDuplicate
+        ? `「${pair.a.name}」与「${pair.b.name}」几乎完全重合（约 ${percent}%），像是重复摆放。`
+        : `「${pair.a.name}」与「${pair.b.name}」占地重叠（约 ${percent}%），确认是否真的要叠着摆。`,
+      at: pair.at,
+      routeIds: [],
+      facilityId: pair.a.id,
     });
   }
 
