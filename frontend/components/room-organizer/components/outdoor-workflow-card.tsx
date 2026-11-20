@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, RotateCw, Search, Sparkles, TriangleAlert } from "@/components/solid-icons";
+import { Check, ClipboardList, Info, LayoutGrid, Map as MapIcon, PenTool, RotateCcw, RotateCw, Search, Sparkles, TriangleAlert, Upload, X } from "@/components/solid-icons";
 import {
   OUTDOOR_STAGE_LABELS,
   type OutdoorCardRecord,
@@ -934,42 +934,46 @@ export function OutdoorWorkflowCard({
         >
           <header className="ap-card-head">
             <strong>缺物料？导入或生成</strong>
+            {/* 2026-11-20 用户：右上角「× 收起」是一行文字，和卡里的按钮抢注意力；改成一个 24px 的图标钮。 */}
             <button
               type="button"
-              className="ap-task-dismiss"
+              className="ap-card-dismiss"
               aria-label="收起这张卡"
+              title="收起这张卡"
               onClick={() => setMaterialsAuxDismissed(true)}
             >
-              × 收起
+              <X size={14} aria-hidden="true" />
             </button>
           </header>
-          <label className="ap-glb-import" data-testid="outdoor-glb-import">
-            原位导入 GLB（≤10MB，仅本会话，不上传不收费）
-            {/* 2026-11-14 用户反馈：原生文件选择器裸露在流程卡里不合适——视觉隐藏（点击 label 仍弹文件框）。 */}
-            <input
-              type="file"
-              aria-label="当前活动导入GLB物料"
-              accept=".glb,model/gltf-binary"
-              disabled={flow.busy}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void flow.importLibraryGlb(file);
-              }}
-              style={{
-                position: "absolute",
-                width: 1,
-                height: 1,
-                opacity: 0,
-                overflow: "hidden",
-                clip: "rect(0 0 0 0)",
-                whiteSpace: "nowrap",
-              }}
-            />
-          </label>
-          {/* 2026-11-18：生成链已经有了（额度确认/回执锁都在 generation-sheet），缺的是对话主路径的入口。
-              物件阶段给一颗明确动作；和上面「一句话布置 / 目录落位预览」分开写，不混成同一颗按钮。 */}
+          {/* 2026-11-20 用户：两条路都是「点一下就有结果」的动作，所以长得一样——同高、同宽、都有边。
+              原来 GLB 那条只有一行灰字，看不出能点；两处图标也重复（Sparkles + ✨）。 */}
           <div className="ap-card-actions ap-lux3d-entry" data-testid="outdoor-lux3d-entry">
+            <label className="ap-glb-import" data-testid="outdoor-glb-import">
+              <Upload size={13} aria-hidden="true" />
+              导入 GLB
+              {/* 2026-11-14 用户反馈：原生文件选择器裸露在流程卡里不合适——视觉隐藏（点击 label 仍弹文件框）。 */}
+              <input
+                type="file"
+                aria-label="当前活动导入GLB物料"
+                accept=".glb,model/gltf-binary"
+                disabled={flow.busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void flow.importLibraryGlb(file);
+                }}
+                style={{
+                  position: "absolute",
+                  width: 1,
+                  height: 1,
+                  opacity: 0,
+                  overflow: "hidden",
+                  clip: "rect(0 0 0 0)",
+                  whiteSpace: "nowrap",
+                }}
+              />
+            </label>
+            {/* 2026-11-18：生成链已经有了（额度确认/回执锁都在 generation-sheet），缺的是对话主路径的入口。 */}
             <button
               type="button"
               className="btn-outline"
@@ -978,12 +982,14 @@ export function OutdoorWorkflowCard({
               onClick={() => flow.startLux3dGeneration()}
             >
               <Sparkles size={13} aria-hidden="true" />
-              ✨ 用 Aholo Lux3D 生成道具
+              用 Aholo Lux3D 生成道具
             </button>
-            <p className="ap-task-caption">
-              由 Aholo Lux3D 生成三维模型：区别于「一句话布置 / 目录落位预览」——这里造的是新模型，不是把现成物料摆上去。提交前仍需在面板里勾选额度。
-            </p>
           </div>
+          {/* 2026-11-20：原来这里是一段三行的「区别于落位预览」比较句——它不改变用户是否花钱或是否提交，
+              砍掉；只留会改变决定的三件事：多大、在哪生效、生成要先勾额度。 */}
+          <p className="ap-task-caption ap-materials-aux-note">
+            GLB ≤10MB，只在本会话生效、不上传；生成是新建模型，提交前需在面板里勾选额度。
+          </p>
         </section>
       ) : null}
       {flow.loginRequired && !flow.loginSatisfied && (

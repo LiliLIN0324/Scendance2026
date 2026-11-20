@@ -83,7 +83,11 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .ap-stage-bar i.is-on { background: var(--ap-deep); }
 
 /* ── 对话流 ── */
-.ap-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+.ap-feed { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 18px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+/* 2026-11-20 用户：卡片内容超出栏宽就会被裁在面板边上（文字断在半个字、右上角按钮露一半）。
+   flex 子项默认 min-width: auto（= 内容最小宽度），任何一段 nowrap 文案都能把整张卡撑出栏外。
+   这里把对话流的直接子项钉在栏宽内：能缩就缩，缩不下的自己折行，不再横向溢出。 */
+.ap-feed > * { min-width: 0; max-width: 100%; }
 .ap-divider { text-align: center; font-size: var(--fs-cap); color: var(--wk-muted); margin: 0; display: flex; align-items: center; gap: 8px; }
 .ap-divider::before, .ap-divider::after { content: ''; flex: 1; height: 1px; background: var(--wk-hair); }
 /* 回话是短气泡，不是左侧发丝线上的一整段记录。 */
@@ -241,6 +245,27 @@ button.mascot-slot { position: relative; display: inline-flex; width: 48px; heig
 .sc-agent-panel .ap-card-history-actions { margin: 4px 0 0; color: var(--faint); }
 .sc-agent-panel .ap-card-history-more { margin-top: 3px; }
 .sc-agent-panel .ap-card-history-more summary { font-size: 11px; line-height: 1.4; color: var(--faint); cursor: pointer; list-style: none; }
+/* 2026-11-20 用户：执行权限原来是一行裸 <details> 贴在面板左缘——无折叠标记、无内距、和输入区不在一条竖线上。
+   现在它是输入区自带的一颗设置胶囊：右对齐、标题自己说出当前档位、展开成浮层（不把输入框顶下去）。 */
+.ap-supervision-fold { position: relative; display: flex; justify-content: flex-end; margin: 0 0 2px; }
+.ap-supervision-fold > summary {
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
+  border-radius: 999px; color: var(--wk-muted); font-size: var(--fs-cap); line-height: 1;
+  list-style: none; cursor: pointer; user-select: none;
+  transition: color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec);
+}
+.ap-supervision-fold > summary::-webkit-details-marker { display: none; }
+.ap-supervision-fold > summary svg { transition: transform var(--dur-1) var(--ease-spec); }
+.ap-supervision-fold > summary:hover,
+.ap-supervision-fold[open] > summary { color: var(--wk-ink); background: var(--wk-plane); }
+.ap-supervision-fold > summary:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
+.ap-supervision-fold[open] > summary svg { transform: rotate(180deg); }
+.ap-supervision-fold[open] > .ap-supervision {
+  position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 6;
+  width: min(264px, calc(100vw - 40px)); padding: 10px 12px;
+  border: 1px solid var(--wk-hair); border-radius: 10px;
+  background: var(--wk-paper); box-shadow: var(--e1);
+}
 /* 次要动作统一外观（方案卡的撤回/换排法，与 place 阶段的手画同一个语言）。 */
 .sc-agent-panel .ap-quiet-action { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 6px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font-size: var(--fs-cap); font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
 .sc-agent-panel .ap-quiet-action:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane-deep); color: var(--wk-ink); }
@@ -1204,9 +1229,67 @@ button.ap-ghost {
 /* 2026-11-19 体检：拦截项合卡——每行保留自己的 region 名，行间发丝线分隔。 */
 .ap-intercept-row { display: grid; gap: 8px; padding: 10px 0 2px; }
 .ap-intercept-row + .ap-intercept-row { border-top: 1px solid var(--wk-hair); margin-top: 10px; padding-top: 14px; }
-/* 2026-11-18 用户指令：缺物料的导入/生成两条路挪成可叉掉的独立卡。 */
+/* 2026-11-18 用户指令：缺物料的导入/生成两条路挪成可叉掉的独立卡。
+   2026-11-20 用户：两条路要长得一样——同高、同宽、都有边；GLB 导入不再是一行灰字。
+   窄栏放不下两颗时整颗折行（各占一行），不用 nowrap 硬撑，也不裁字。 */
+.ap-materials-aux {
+  gap: 12px;
+  /* 2026-11-20 视觉：整块只留一层框——卡片自己一道发丝线，里面的两颗入口改成无边浅底控件。
+     “卡框 + 按钮框”叠在一起的叠框感是这一块之前显脏的主因。 */
+  background: var(--wk-paper);
+  border: 1px solid var(--wk-hair);
+  box-shadow: none;
+}
+.ap-materials-aux .ap-card-head > strong { font-size: 13px; }
+/* 右上角收起：24px 图标钮，不再用「× 收起」这行字和卡里的按钮抢读。 */
+.ap-materials-aux .ap-card-dismiss {
+  flex: none; display: grid; place-items: center;
+  width: 24px; height: 24px; margin: -3px -6px 0 0; padding: 0;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--wk-ink-faint); cursor: pointer;
+  transition: color var(--dur-1) var(--ease-spec), background var(--dur-1) var(--ease-spec);
+}
+.ap-materials-aux .ap-card-dismiss:hover { color: var(--wk-ink); background: var(--wk-hair-soft); }
+.ap-materials-aux .ap-card-dismiss:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
 .ap-materials-aux .ap-task-dismiss { font-size: var(--fs-p2); }
-.ap-glb-import { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; opacity: .8; font-size: var(--fs-cap); color: var(--wk-ink-soft); position: relative; }
+.ap-materials-aux .ap-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-materials-aux .ap-card-actions > .btn-outline,
+.ap-glb-import {
+  flex: 1 1 12rem;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  /* 注意：--wk-plane 就是 #FFF，拿它当控件底色等于没底色（之前那颗“空框”就是这么没的）。 */
+  background: var(--wk-plane-deep);
+  color: var(--wk-ink-soft);
+  font: inherit;
+  font-size: var(--fs-p2);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec);
+}
+.ap-glb-import > svg,
+.ap-materials-aux .ap-card-actions > .btn-outline > svg { flex: none; color: var(--wk-muted); }
+.ap-materials-aux .ap-card-actions > .btn-outline:hover:not(:disabled),
+.ap-glb-import:hover { background: var(--wk-hair); color: var(--wk-ink); }
+.ap-materials-aux .ap-card-actions > .btn-outline:hover:not(:disabled) > svg,
+.ap-glb-import:hover > svg { color: var(--wk-ink-soft); }
+.ap-materials-aux .ap-card-actions > .btn-outline:active:not(:disabled),
+.ap-glb-import:active { background: var(--wk-hair); }
+.ap-materials-aux .ap-card-actions > .btn-outline:focus-visible,
+.ap-glb-import:focus-within { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; }
+.ap-materials-aux .ap-card-actions > .btn-outline:disabled { opacity: .55; cursor: not-allowed; }
+.ap-materials-aux-note { margin: 0; display: block; font-size: var(--fs-cap); line-height: 1.6; color: var(--wk-muted); }
 /* 2026-11-19 用户指令：确认卡（流线/区域提案）的三个决定横排、图标+短词，不再三行全句。 */
 .ap-confirm-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .ap-confirm-choice { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid var(--wk-hair); border-radius: var(--r-sm); background: var(--wk-paper); color: var(--wk-ink-soft); font: inherit; font-size: var(--fs-p2); font-weight: 500; white-space: nowrap; cursor: pointer; }

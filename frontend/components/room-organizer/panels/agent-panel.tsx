@@ -11,8 +11,8 @@ import { sameRecoveryFormValue } from '@/lib/recovery-form-value';
 import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { agentErrorView } from '@/lib/agent-error-view';
 import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
-import { gateAction } from '../lib/agent-supervision';
-import { getAgentSupervision } from '../lib/agent-supervision-store';
+import { gateAction, supervisionLevelInfo } from '../lib/agent-supervision';
+import { getAgentSupervision, useAgentSupervision } from '../lib/agent-supervision-store';
 import { layoutActionRisk, lockedLayoutChange } from '../lib/agent-action-risk';
 import { addDesign } from '../lib/scene-layers';
 import { AgentSupervisionPicker } from './agent-supervision-picker';
@@ -4646,6 +4646,8 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const loginLocalCommand = loginBlocked && matchesLocalOutdoorCommand(draft.trim(), null);
   const composerEnabled = !loginBlocked || loginLocalCommand;
   const suggestion = useSuggestion(placePending ? PLACE_INPUT_SUGGESTIONS : activeAgent === 'door' && agent.banquetChat ? BANQUET_INPUT_SUGGESTIONS : AGENT_INPUT_SUGGESTIONS[activeAgent]);
+  // 2026-11-20 用户：执行权限是常驻设置，不是一行裸文字——折行标题要自己说出当前档位。
+  const supervisionLevel = useAgentSupervision();
   // 引导层与 placeholder 只能出现一个，否则两层灰字会叠在一起。
   // 待确认 / 暂停 / 圈选态让位给状态专属 placeholder，不再打例句。
   const proposed = agent.state === 'planProposed';
@@ -5021,8 +5023,16 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         {mode === 'layout' && activity && <AgentSuggestionSlot open={capabilitiesOpen} onToggle={toggleCapabilities} placeFirst={placePending} showExample={showTaskExamples && !draft.trim() && placePending} onPickExample={pickTaskExample} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <AgentResearchSources research={agent.venueResearch}/>
         <AgentDocumentSources documents={agent.documents}/>
-        {activity && mode === 'layout' && <details className="ap-card-history-more"><summary>执行权限</summary><AgentSupervisionPicker /></details>}
         <form id="composer" className="ap-composer ap-composer-panel" onSubmit={event => { event.preventDefault(); submitComposer(); }}>
+        {/* 2026-11-20 用户：这行原来贴在面板左缘、无折叠标记、和输入区不在一条竖线上。现在它挂在输入区自己的一块，
+            右对齐成一颗设置胶囊（标题带当前档位），展开是向上开的浮层，不把输入框顶下去。 */}
+        {activity && mode === 'layout' && <details className="ap-supervision-fold">
+          <summary>
+            执行权限 · {supervisionLevelInfo(supervisionLevel).label}
+            <ChevronDown size={12} aria-hidden="true" />
+          </summary>
+          <AgentSupervisionPicker />
+        </details>}
         {showOutdoorSuggestion && <OutdoorStageSuggestion key={agent.outdoorWorkflow.state.stage} stage={agent.outdoorWorkflow.state.stage} onPick={pickTaskExample} />}
         <label className="sr-only" htmlFor="ap-input">告诉 Agent 要改的</label>
         <div className="ap-composer-field ap-panel-field">
