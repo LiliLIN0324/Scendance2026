@@ -266,7 +266,7 @@ describe('fetchCloudCapabilities（权限探测的错误口径）', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('unreachable');
     expect(result.error.message).toContain('没能连上云端服务');
-    expect(result.error.hint).toContain('localhost:3000');
+    expect(result.error.hint).toContain('127.0.0.1');
     expect(JSON.stringify(result.error)).not.toContain('Failed to fetch');
   });
 

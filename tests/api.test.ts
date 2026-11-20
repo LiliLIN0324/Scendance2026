@@ -17,6 +17,21 @@ describe('HTTP request -> validation -> PostgreSQL -> response',()=>{
     expect((await req('/projects','GET',undefined,owner,'https://evil.test')).status).toBe(403);
     expect((await req('/projects','POST',{studioId:studio,name:'x',scene:scene(),actor:outsider})).status).toBe(400);
   });
+  it('allows any loopback port for local dev and still refuses LAN and unknown origins',async()=>{
+    // 本机 dev 端口会顺延（3000 被占用时 next 自动开 3001），名单写死端口必然再踩。
+    for(const origin of ['http://localhost:3000','http://localhost:3001','http://127.0.0.1:3026','http://[::1]:3000']){
+      const response=await req('/projects','GET',undefined,owner,origin);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('access-control-allow-origin')).toBe(origin);
+    }
+    // 对外与局域网地址不放行：鉴权走 Authorization 头，别处拿不到用户的 token。
+    for(const origin of ['http://192.168.1.10:3000','https://evil.test','http://localhost.evil.test:3000','http://user:pass@localhost:3000']){
+      expect((await req('/projects','GET',undefined,owner,origin)).status).toBe(403);
+    }
+    const preflight=await api(new Request('https://backend.example/functions/v1/scene-api/projects',{method:'OPTIONS',headers:{Origin:'http://localhost:3001','Access-Control-Request-Method':'GET'}}));
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('http://localhost:3001');
+  });
   it('lists authorized studios and projects for the frontend entry page',async()=>{
     expect(await f.rpc(outsider,'studios')).toEqual([]);
     expect((await f.rpc(owner,'studios'))[0].id).toBe(studio);

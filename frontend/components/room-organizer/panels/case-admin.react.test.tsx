@@ -72,7 +72,7 @@ describe('CaseAdminSection', () => {
     expect(alert.textContent).toContain('案例管理权限没有确认');
     expect(alert.textContent).toContain('没能连上云端服务');
     expect(alert.textContent).not.toContain('Failed to fetch');
-    expect(screen.getByTestId('case-admin-error-hint').textContent).toContain('localhost:3000');
+    expect(screen.getByTestId('case-admin-error-hint').textContent).toContain('127.0.0.1');
     expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
   });
 

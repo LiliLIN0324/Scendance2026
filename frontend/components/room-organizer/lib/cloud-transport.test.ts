@@ -7,7 +7,8 @@ describe('describeCloudFailure', () => {
     const described = describeCloudFailure(new TypeError('Failed to fetch'));
     expect(described?.kind).toBe('unreachable');
     expect(described?.message).toContain('没能连上云端服务');
-    expect(described?.hint).toContain('localhost:3000');
+    expect(described?.hint).toContain('127.0.0.1');
+    expect(described?.hint).toContain('局域网 IP');
     expect(described?.hint).not.toContain('Failed to fetch');
   });
 

@@ -115,13 +115,24 @@ function publicReconstructionJob(input:Record<string,unknown>):Record<string,unk
   const issues=Array.isArray(input.issues)?input.issues.filter((issue:unknown)=>!!issue&&typeof issue==='object'&&(issue as {code?:unknown}).code!=='MODEL_RAW_NOTE').map((issue:unknown)=>({code:safeReviewCodes.has(String((issue as {code?:unknown}).code))?String((issue as {code:unknown}).code):'REVIEW_REQUIRED',message:'需要人工核验的事项。',...((issue as {targetId?:unknown}).targetId?{targetId:(issue as {targetId:unknown}).targetId}:{})})):[];
   return {...input,...(input.candidate!==undefined?{candidate:blocked?null:candidate}:{}),issues,...(proposal?{proposal:blocked?null:safeProposal}:{}),...(blocked?{state:'failed',error_code:'MODEL_TEXT_REVIEW_REQUIRED'}:{}),modelText:MODEL_TEXT_NOTICE,projection:{status:'read_only',changed:blocked,requiresOriginalSceneForWrite:blocked},sceneObjectCounts:counts,sceneObjectCountsScope:'candidate_objects_only',safetyChecklist:reconstructionSafetyChecklist(blocked?null:scene)};
 }
-/** Exact env entries, the production site, and this project's Pages preview hosts. */
+/**
+ * 允许来源：env 精确条目、生产站与本页面的 Pages 预览域名，以及**本机回环地址的任意端口**。
+ *
+ * 本机 dev 端口不是固定的：next dev 在 3000 被占用时会自己顺延到 3001。
+ * 旧名单只写死 3000，于是换个端口打开页面，跨域预检在正式请求发出前就被拒，
+ * 浏览器只给出 "Failed to fetch"，面板上只剩一句看不懂的报错，排查成本极高。
+ * 回环地址是开发者自己的机器，放行其任意端口不扩大对外攻击面：鉴权走
+ * Authorization 头，其它页面的脚本拿不到用户的 token；对外与局域网地址仍不放行。
+ */
 function originPermitted(origin:string,allowed:string[]):boolean {
   if(allowed.includes(origin)||origin==='https://scendance.lilicoding.space')return true;
   let url:URL;
   try { url=new URL(origin); } catch { return false; }
-  if(url.protocol!=='https:'||url.username||url.password||url.port||url.pathname!=='/'||url.search||url.hash)return false;
+  if(url.username||url.password||url.pathname!=='/'||url.search||url.hash)return false;
   const host=url.hostname.toLowerCase();
+  // 本机回环：http/https 都放行，端口不限（dev 端口会顺延，写死必然再踩）。
+  if(host==='localhost'||host==='127.0.0.1'||host==='[::1]'||host==='::1')return true;
+  if(url.protocol!=='https:'||url.port)return false;
   return host==='scendance-scene-planner-ewz.pages.dev'||/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.scendance-scene-planner-ewz\.pages\.dev$/.test(host);
 }
 export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUntil?:(task:Promise<unknown>)=>void) {
