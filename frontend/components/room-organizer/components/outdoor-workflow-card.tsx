@@ -245,6 +245,11 @@ export function OutdoorWorkflowCard({
   const pendingPlan = flow.pendingPlan;
   // 手画范围已有完整的图示、说明和按钮，不再叠加通用阶段缩略与同义提示。
   const showScopeGuide = !flow.proposal && flow.state.stage === "scope" && !flow.boundaryReady;
+  // 2026-11-21 文案纪律：阶段图注全卡只渲染一处。
+  // 真实红线缩略不受 showCaption 影响；图注本体在 ToolCallTrace 已显示状态时（showCaption=false）不再重复，
+  // 但真异常（notice / 未登录 / 地图缺失）仍要露出，不能被一起去掉。
+  const showStageCaption =
+    showCaption || !!flow.notice || flow.loginRequired || (flow.state.stage === "place" && flow.mapGap);
   if (pendingPlan) return (
     <>
       {thoughtRecord}
@@ -253,7 +258,6 @@ export function OutdoorWorkflowCard({
           <strong><ClipboardList size={16} aria-hidden="true" />计划</strong>
           <span>{pendingPlan.steps.length} 个步骤</span>
         </header>
-        <p className="ap-task-caption">批准后开始执行本轮计划。</p>
         <ol className="ap-outdoor-plan-steps">
           {pendingPlan.steps.map(step => <li key={step}>{step}</li>)}
         </ol>
@@ -334,9 +338,11 @@ export function OutdoorWorkflowCard({
           )}
         </div>
       )}
-      {!flow.proposal && !showScopeGuide && (flow.boundaryRing && flow.boundaryRing.length >= 3
-        ? <BoundaryThumb ring={flow.boundaryRing} />
-        : showCaption ? <p className="ap-task-caption ap-stage-caption">{STAGE_CAPTIONS[flow.state.stage]}</p> : null)}
+      {/* 2026-11-21 文案纪律：阶段图注只留下面那条带图标的；这里原有一段 ap-stage-caption
+          渲染同一句，同一张卡把一句话印了两遍。 */}
+      {!flow.proposal && !showScopeGuide && flow.boundaryRing && flow.boundaryRing.length >= 3 && (
+        <BoundaryThumb ring={flow.boundaryRing} />
+      )}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         flow.noticeView ? (
           <section
@@ -395,7 +401,7 @@ export function OutdoorWorkflowCard({
             )}
           </div>
         )
-      ) : flow.proposal || showScopeGuide ? null : (
+      ) : flow.proposal || showScopeGuide || !showStageCaption ? null : (
         <p className="ap-task-caption">
           <MapIcon size={13} aria-hidden="true" />
           {flow.loginRequired
@@ -519,7 +525,7 @@ export function OutdoorWorkflowCard({
           </div>
           <p className="ap-scope-guide-title">先在图上圈出这次活动用的地</p>
           <p className="ap-scope-guide-text">
-            沿场地边缘逐点单击，点回起点就闭合；闭合后红线就是设计范围，分区、流线、物件都按它排。
+            沿场地边逐点点，回到起点闭合。
           </p>
           <button
             type="button"
@@ -676,7 +682,7 @@ export function OutdoorWorkflowCard({
           </div>
         ) : (
           <p className="ap-task-caption">
-            在 3D 视图里选中一个设施（如主舞台），或对我说「给主舞台换个模型」，我再给比较、上传、生成的动作；不选就先收着。
+            先在 3D 里选中一个设施，或说「给主舞台换个模型」。
           </p>
         )
       )}
@@ -798,11 +804,8 @@ export function OutdoorWorkflowCard({
           >
             <header className="ap-card-head">
               <strong>核对入口通行</strong>
-              <span>核完这一版就按你的判断排</span>
             </header>
-            <p className="ap-access-question">
-              “{n.name}”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。
-            </p>
+            <p className="ap-access-question">“{n.name}”怎么走？</p>
             {/* 2026-11-17：原来三颗都叫「我已核对…预览标记」，只有后半句不同，用户分不清点哪个；
                 而且是三颗裸 button，渲染出来就是三行左对齐的长句（线上截图就是这样）。
                 改成三个等宽选项：大字号说方向，小字说记成什么。 */}
@@ -849,8 +852,8 @@ export function OutdoorWorkflowCard({
             <strong>已画分区 · {flow.drawnZones.length}</strong>
             <span>
               {flow.drawingMode === "zone"
-                ? "在地图上闭合一个轮廓，这里就多一张卡"
-                : "改完直接生效，画布同步；预览按这里的用途和室内外排"}
+                ? "闭合一个轮廓就多一张卡"
+                : "改完即生效，预览按这里的用途排"}
             </span>
           </header>
           {flow.drawnZones.map((zone) => (
@@ -989,7 +992,7 @@ export function OutdoorWorkflowCard({
           {/* 2026-11-20：原来这里是一段三行的「区别于落位预览」比较句——它不改变用户是否花钱或是否提交，
               砍掉；只留会改变决定的三件事：多大、在哪生效、生成要先勾额度。 */}
           <p className="ap-task-caption ap-materials-aux-note">
-            GLB ≤10MB，只在本会话生效、不上传；生成是新建模型，提交前需在面板里勾选额度。
+            GLB ≤10MB，不上传、仅本次会话有效；生成要先勾额度。
           </p>
         </section>
       ) : null}

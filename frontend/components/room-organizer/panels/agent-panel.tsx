@@ -5119,8 +5119,8 @@ useEffect(() => {
           if (event.key === 'Tab' && !agent.outdoorBridgeReady && mode === 'layout' && !draft.trim()) { event.preventDefault(); setDraft(suggestion.full); return; }
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
         }}/>
-        {/* 2026-11-21 docs/50 I6：PetitMaker 同款常驻诚实声明——agent 可能出错也可能改坏设计，重要改动会先问。 */}
-        <p className="ap-field-note ap-honesty-note">我会出错，也可能破坏你的设计。重要改动会先问你。</p>
+        {/* 2026-11-21 文案纪律：输入框下方只放条件性状态行（排队 / 没存上 / 结果未知）。
+            常驻免责已按用户否决删除，见 AGENTS.md 第八节；别再换句话加回来。 */}
         {outdoorSendQueue.length>0&&<p role="status" className="ap-field-note">已排队 {outdoorSendQueue.length} 条，当前任务结束后自动发送。</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">排队 {agent.generationQueued} 条，按顺序处理中。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上次结果未知，可能还在计费。再发可能重复收费。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}

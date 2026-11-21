@@ -4030,6 +4030,17 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
       expect(screen.getByLabelText('告诉 Agent 要改的').getAttribute('aria-describedby')).toBeNull();
     } finally { vi.unstubAllEnvs(); }
   });
+  it('输入框下方按位置设限：空闲时不许有任何常驻小字（换话术也拦得住）', () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
+    try {
+      render(ui(makeLayout()));
+      const composer = document.getElementById('composer');
+      expect(composer).toBeTruthy();
+      // 钉位置不钉句子：这个槽位只允许排队 / 没存上 / 结果未知这类带条件的 status。
+      // 空闲态一条都不该有——任何人再往 composer 里塞常驻小字都会红，与具体措辞无关。
+      expect(composer!.querySelectorAll('.ap-field-note, .ap-field-alert')).toHaveLength(0);
+    } finally { vi.unstubAllEnvs(); }
+  });
   it('会话头展示标题，能力芯片与输入框可用', () => {
     render(ui(makeLayout()));
     expandCapabilityCards();
