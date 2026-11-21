@@ -4,6 +4,54 @@
 > 配套台账：`2026-11-21-indoor-decommission-goal.md`（里程碑状态）、`2026-11-21-b1-session-scope-decouple.md`（B1 现状）、`2026-11-17-decouple-execution-plan.md`（门禁）。
 > 硬约束不变：绞杀者模式先建新接住再拆旧；每卡 tsc + 定向测试 + build + 全量对照 + 真机走查；冻结面（routeBridge 签名、`SitePlanData` 既有字段、`OutdoorTaskProgress`、物料入参）不动。
 
+## 0. 全完成总目标（One-shot 收口定义）
+
+### 0.1 一句话目标
+从「室内宴会厅壳体 + 户外方案投影双态并存」收敛为**以 `SitePlanData` 为唯一状态正源、以 projectId 为唯一身份源的户外场地策划编辑器**：旧室内壳体及其影子转换、回写、双源全部退役；户外本质件与在途线完整保留；测试与真机走查证明现役语义无丢失。
+
+### 0.2 全完成的四个不可再减条件
+由 §1.1 四样不可再删内核逐一落到正源推出，缺一不算完成：
+
+| 内核 | 完成条件 | 可核验判据 |
+| --- | --- | --- |
+| 方案状态 | **状态正源单一** | 现役所有读写落 `SitePlanData`；`RoomLayout` 不再作为现役状态被读/写/持久化（类型引用最后清扫） |
+| 方案身份 | **身份单一** | 会话/简报/库存/草稿围栏/归档/偏好/评审链接同一 projectId scope；无 `layout.id ??` 裸回退、无第二身份源 |
+| 呈现与交互 | **呈现只留地图侧** | 2D/地图/3D 预览编辑句柄只挂地图侧 ref；室内 three/2D 保活容器退役 |
+| 出入通路 | **通路 plan 化** | 云端读写、本地备份恢复、导出全部消费 plan；写权限走 capability + 项目级 lease + revision |
+
+### 0.3 三股工作线与收口时点
+主线按硬门禁串行；夹具债随里程碑配套；并行遗留不阻塞主线，终态后一次清。
+
+| 工作线 | 构成 | 收口时点 |
+| --- | --- | --- |
+| **主线解耦** | B1（含 B1-d 散落键归位、B1-e 验收）→ B2 历史快照换 plan → B3 导出/写守卫 plan 化 → B4 回写镜像退役 → E1 立壳入口 → E2 卸保活/室内 three/2D → E3 删 layoutStore/室内墙模型 → E4 删二分概念 | 前一套验收合入才开下一套，不跳卡 |
+| **测试夹具债** | 壳体两套件（`canvas-session`/`session-generation`）解锁；剩余纯 storage 套件续接；G1 基线锚点重采；G2 工程卫生 | 壳体夹具在 B1-e 前解锁；G1 在 B 线合入后重采新锚点；G2 终态一次清 |
+| **并行/遗留** | 安全批次（死簇/户型重建面板/旧 run 残留）；旧 79 backlog #4/#7/#8/#9/#10/#11；C1/C2 画布图纸接 `plan.walls`、D1/D2 plan 级 DXF/SVG、F1/F2 走廊占带与 OFM 证据线 | 不阻塞主线；E4 收口后排一次清 |
+
+### 0.4 终态对抗核验清单（可逐条 grep / 走查）
+
+**退役清零（现役 0 引用，白名单除外）**：
+- `RoomLayout` 作为状态类型被读写；`layoutStore` / `use-layout-store` / `layout-reducer`；室内墙模型 / 开门 / 碰撞 / 吸附；`interiorWalls`
+- 室内 three renderer/scene/camera 保活容器 `.sc-scene-viewport`；`render.ts`；`use-canvas-2d-interaction`；室内场景特效驻留
+- plan→layout 回写镜像（`shellVenuePatchFromPlanBoundary`、地面底图/锚点写 layout）
+- `isOutdoorProject` 恒真分支、`seededPlanFromLayout` 投影适配器、`outdoorPlanState` 的 layout.id 回退
+- 身份第二源：`layout.id ??` scope 拼接、`'local'` / `'local-draft'` 裸回退
+
+**保留白名单（不得随退役误删）**：
+- 户外围墙 `walls`、出入口节点、lawn/market 预设、座位/桌排/群演/漫游/车流、宴会道具（吊灯/帷幔/屏风/桌花/桌牌）
+- D 层字段 `indoorOutdoor` / `venueIO`；活跃 `AgentRunPanel` 时间线；旧云项目「只读 + 复制为 plan 草稿」降级通路
+- 人物/漫游线 8 文件；`replica-*` 案例伪 id 通路
+
+### 0.5 反例：哪些表象不算「全完成」
+- **假绿**：套件全绿但壳体靠空返回的桩/假 controller 撑起，未对照真实会话与拖拽语义。
+- **影子残留**：旧分支删了，仍有未梳理的现役读取者。
+- **身份迁移漂移**：会话键换名，但旧存量偏好/草稿无一次性迁移，丢失已存场地偏好。
+- **保留件误删**：退役顺手删掉户外保留件或在途人物/漫游线。
+- **未走查**：全量测试无增量，但关键 flow 未经真机走查。
+
+### 0.6 收口验收（叠加 §2.5 / §5 门禁）
+根 + 前端 `tsc --noEmit` exit 0；相关定向 vitest 绿；全量对照新锚点台账无台账外增量失败；`npm run build` exit 0；关键 flow 真机走查（切项目不串会话、新建活动各落各槽、刷新续开符合方案 B）；§0.4 对抗 grep 在白名单外 0 命中。
+
 ## 1. 第一性拆解：剥到不可再删的内核
 
 ### 1.1 系统本质在做什么

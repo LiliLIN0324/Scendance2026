@@ -6,6 +6,8 @@
 
 ## 1. 终态目标（完成定义）
 
+> 全完成的 one-shot 收口定义、四不可再减条件、三股工作线收口时点与对抗核验清单，见 `2026-11-21-first-principles-endstate.md` §0；本节是里程碑侧的对应展开。
+
 1. **地图 `SitePlanData` 是唯一正源**：会话身份、历史快照、导出、写守卫、场地事实全部消费 plan；不再以室内 `RoomLayout` 正源读写。
 2. **室内壳体整组退役**：保活 Viewport、室内 three renderer/scene/camera、2D 编辑态、`layoutStore`/`layout-reducer`、室内墙模型/开门/碰撞/吸附、室内 `use-npcs`/`use-walkthrough` 段、二分概念与回写镜像全部删除或归并到地图侧。
 3. **身份统一到项目/草稿槽 projectId**：会话槽、简报、库存、草稿围栏、归档键、环境偏好、评审链接全部按同一 projectId scope；无散落 `layout.id ?? 'local'` 裸回退。
