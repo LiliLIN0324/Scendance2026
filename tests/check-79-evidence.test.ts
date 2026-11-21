@@ -8,6 +8,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 type CountKey = 'pass' | 'partial' | 'blocked' | 'fail' | 'na';
 type Status = CountKey | 'blocked';
 
+interface RiskAccepted {
+  decidedAt: string;
+  decidedBy: string;
+  mode: string;
+  accepted: string[];
+  residualRisks: string[];
+}
+
 interface Row {
   case: number;
   label: string;
@@ -17,6 +25,7 @@ interface Row {
   readings: string;
   gap?: string;
   evidence: string;
+  riskAccepted?: RiskAccepted;
 }
 
 interface Ledger {
@@ -30,7 +39,12 @@ interface Ledger {
     resolvedCases: number[];
     remainingCases: number[];
   };
-  signoff: { status: string; signedBy?: string; signedAt?: string };
+  signoff: {
+    status: string;
+    signedBy?: string;
+    signedAt?: string;
+    riskAcceptance?: { status: string; signedBy?: string; signedAt?: string; cases: number[] };
+  };
   ledger: Row[];
 }
 
@@ -39,6 +53,7 @@ interface FixtureOptions {
   mutate?: (rows: Row[]) => void;
   duplicateEvidence?: boolean;
   sharedEvidence?: boolean;
+  addRiskAccepted?: boolean;
   mutateLedger?: (ledger: Ledger) => void;
 }
 
@@ -50,7 +65,7 @@ function pad(id: number): string {
 }
 
 function ledgerFor(options: FixtureOptions = {}): Ledger {
-  const { passIds = [2, 7], mutate, duplicateEvidence = false, sharedEvidence = false } = options;
+  const { passIds = [2, 7], mutate, duplicateEvidence = false, sharedEvidence = false, addRiskAccepted = false } = options;
   const rows: Row[] = Array.from({ length: 11 }, (_, index) => {
     const id = index + 1;
     const pass = passIds.includes(id);
@@ -63,6 +78,15 @@ function ledgerFor(options: FixtureOptions = {}): Ledger {
       readings: `case ${id} readings`,
       ...(pass ? {} : { gap: `case ${id} gap` }),
       evidence: `docs/evidence/79/${pad(id)}/case${pad(id)}.json`,
+      ...(addRiskAccepted && !pass ? {
+        riskAccepted: {
+          decidedAt: '2026-11-21T18:04:41+08:00',
+          decidedBy: 'fixture',
+          mode: 'risk-accepted',
+          accepted: ['fixture 接受项'],
+          residualRisks: ['fixture 残余风险'],
+        },
+      } : {}),
     };
   });
   if (duplicateEvidence) {
@@ -305,5 +329,82 @@ describe('check-79-evidence', () => {
     const result = run(root, ['--strict']);
     expect(result.status).toBe(0);
     expect(result.output).toContain('发布闸门 PASS');
+  });
+
+  function persist(root: string, evidenceDir: string, ledger: Ledger) {
+    writeFileSync(join(evidenceDir, 'walkthrough.json'), JSON.stringify(ledger, null, 2));
+  }
+
+  function exemptCases(ledger: Ledger): number[] {
+    return ledger.ledger.filter(row => row.conclusion !== 'pass').map(row => row.case).sort((a, b) => a - b);
+  }
+
+  it('通道 B：可豁免用例逐条留痕且 owner 签署后 strict 放行', () => {
+    const { root, ledger, evidenceDir } = makeFixture({ addRiskAccepted: true });
+    ledger.signoff.riskAcceptance = {
+      status: 'signed',
+      signedBy: 'fixture',
+      signedAt: '2026-11-21T18:28:50+08:00',
+      cases: exemptCases(ledger),
+    };
+    persist(root, evidenceDir, ledger);
+    const result = run(root, ['--strict']);
+    expect(result.status).toBe(0);
+    expect(result.output).toContain('风险签署通道放行');
+  });
+
+  it('通道 B：fail 结论不可经风险签署豁免', () => {
+    const { root, ledger, evidenceDir } = makeFixture({ addRiskAccepted: true });
+    const row = ledger.ledger[0];
+    row.conclusion = 'fail';
+    row.cloud = 'fail';
+    const counts: Record<CountKey, number> = { pass: 0, partial: 0, blocked: 0, fail: 0, na: 0 };
+    for (const item of ledger.ledger) counts[item.conclusion] += 1;
+    ledger.counts = { ...counts, note: ledger.counts.note };
+    ledger.deployGap = {
+      blockedCases: ledger.ledger.filter(item => item.conclusion === 'blocked').map(item => item.case),
+      partialCases: ledger.ledger.filter(item => item.conclusion === 'partial').map(item => item.case),
+      resolvedCases: ledger.ledger.filter(item => item.conclusion === 'pass').map(item => item.case),
+      remainingCases: ledger.ledger.filter(item => item.conclusion !== 'pass').map(item => item.case),
+    };
+    ledger.signoff.riskAcceptance = {
+      status: 'signed',
+      signedBy: 'fixture',
+      signedAt: '2026-11-21T18:28:50+08:00',
+      cases: exemptCases(ledger),
+    };
+    persist(root, evidenceDir, ledger);
+    const result = run(root, ['--strict']);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('不可经风险接受豁免');
+  });
+
+  it('通道 B：可豁免用例缺 riskAccepted 时不放行', () => {
+    const { root, ledger, evidenceDir } = makeFixture({ addRiskAccepted: true });
+    delete ledger.ledger[0].riskAccepted;
+    ledger.signoff.riskAcceptance = {
+      status: 'signed',
+      signedBy: 'fixture',
+      signedAt: '2026-11-21T18:28:50+08:00',
+      cases: exemptCases(ledger),
+    };
+    persist(root, evidenceDir, ledger);
+    const result = run(root, ['--strict']);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('缺 riskAccepted');
+  });
+
+  it('通道 B：风险签署缺 signedBy/signedAt 不放行', () => {
+    const { root, ledger, evidenceDir } = makeFixture({ addRiskAccepted: true });
+    ledger.signoff.riskAcceptance = {
+      status: 'signed',
+      signedBy: '',
+      signedAt: '',
+      cases: exemptCases(ledger),
+    };
+    persist(root, evidenceDir, ledger);
+    const result = run(root, ['--strict']);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('风险签署 signed，但缺 signedBy');
   });
 });
