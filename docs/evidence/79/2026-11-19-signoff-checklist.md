@@ -95,7 +95,7 @@ node docs/evidence/79/tools/case-06-notlogged.mjs        # #6 未登录分支
 ## 八、基线与线上版本说明（2026-11-21 重建）
 
 - **取证基线**：多数真机 / 云端证据录于旧基线 `d5b5eac7`；远端 `main` 被强推重写后历史无共同祖先，收尾分支已基于新 `main` `cd344d2a` 重建（见台账 `baseline` 字段），未做整树 merge。
-- **线上前端版本（只读核对）**：线上 `pages.dev` 产物不含 2026-11-21 新 main 的 I1-lite 插话排队、I6 常驻诚实声明三条独有中文串，对照串（`quota_exhausted` / `provider_error`）正常命中，判定线上为**旧一代构建**，不是最新 main。证据 `00/2026-11-21-live-frontend-version.json`。
+- **线上前端版本（只读核对）**：旧首屏 chunk 检索曾判定线上为旧一代构建；2026-11-21 补抓运行时懒加载大 chunk `402.01f2…js`（3,178,109B，不在首屏 HTML 清单）后实测，I6 常驻诚实声明与 I1-lite 插话/排队三条文案明文 HIT，旧判定被推翻。app router 首页未暴露可解析 buildId，产物无法精确对应到某个 main commit。证据 `00/2026-11-21-live-chunk-402-recheck.json`；旧首屏检索件 `00/2026-11-21-live-frontend-version.json` 仅作审计痕迹。
 - **Edge Functions 待核**：前端打包产物不携带函数体版本；`7090dfda` 注明函数须另行重发。`scene-api` / `conversation-api` 是否随该提交重发，本轮只读探活无法判定，需管理端部署记录或下一次真实对话回合核对 trace 上行字段（sessionId / turnIndex / projectId / turnKey）。
 - **新基线复核**：workflow 守卫断言已在新 main 套件复核（123 绿 / 1 条上游既有文案红）；人数「无边界只改人数不挂红卡」已有等价覆盖，旧 zones 留存断言与新 main 现行「无边界 zones 挂红卡」行为冲突，未照搬。证据 `00/2026-11-21-workflow-guard-recheck.json`。
 - 在新构建上线、Functions 重发状态核实之前，台账「真实浏览器 + 真实云端」证据对应的线上代码版本存疑；本节不据此把任何用例升 `pass`。
