@@ -21,8 +21,8 @@ const ROOT = process.cwd();
 const OUT = join(ROOT, 'docs', 'DOC-MAP.md');
 const SKIP_DIRS = new Set([
   'node_modules', '.next', 'out', '.git', 'vendor', '.turbo',
-  // 本地草稿/产物目录：被 .gitignore 排除，也不该进台账（否则 .tmp/ 里的临时比对文件会被当成文档）
-  '.tmp', '.temp', '.cache', '.reports', 'coverage', 'artifacts', 'output', 'exports',
+  // 本地草稿/产物目录：被 .gitignore 排除，也不该进台账（否则 .local/ 里的临时比对文件会被当成文档）
+  '.local', '.tmp', '.temp', '.cache', '.reports', 'coverage', 'artifacts', 'output', 'exports',
 ]);
 const AGENT_DIRS = ['.zwork', '.zcode', '.trae', '.agents', '.memsearch'];
 const SUMMARY_MAX = 64;
@@ -133,7 +133,6 @@ function bucketOf(rel) {
     if (sub === 'research') return 'docs/research/';
     return 'docs/ 其他子目录';
   }
-  if (top === 'flow') return 'flow/';
   if (top === 'frontend') return 'frontend/';
   if (top === 'tools') return 'tools/';
   return '其他模块';
@@ -146,7 +145,6 @@ const BUCKET_ORDER = [
   'docs/evidence/',
   'docs/research/',
   'docs/ 其他子目录',
-  'flow/',
   'frontend/',
   'tools/',
   '其他模块',
@@ -216,7 +214,6 @@ const BUCKET_NOTE = {
   'docs/evidence/': '实测证据（回执、截图说明、探针记录）',
   'docs/research/': '调研长文',
   'docs/ 其他子目录': 'contracts / quality / oneplan-icons / release-notes',
-  'flow/': '任务卡、决策、进展流水',
   'frontend/': '前端模块自带说明',
   'tools/': '离线工具说明',
   '其他模块': 'assets / data / deliverables / supabase / learning-library 等',
@@ -240,7 +237,6 @@ const SECTION_TITLE = {
   'docs/evidence/': '`docs/evidence/`（证据）',
   'docs/research/': '`docs/research/`（调研长文）',
   'docs/ 其他子目录': '`docs/` 其余子目录',
-  'flow/': '`flow/`（任务卡与流水）',
   'frontend/': '`frontend/`',
   'tools/': '`tools/`',
   '其他模块': '其他模块',
@@ -279,7 +275,7 @@ lines.push(`5. **体量最大**：${heaviest.map(r => `\`${r.rel}\` ${kb(r.bytes
 lines.push('');
 lines.push('## 生成口径');
 lines.push('');
-lines.push('- 扫描整个工作副本，排除 `node_modules` / `.next` / `out` / `.git` / `vendor` / `.turbo`；`.zwork`、`.zcode`、`.trae`、`.agents`、`.memsearch` 单列为 agent 草稿。');
+lines.push('- 扫描整个工作副本，排除 `node_modules` / `.next` / `out` / `.git` / `vendor` / `.turbo`；`.zwork`、`.zcode`、`.trae`、`.agents`、`.memsearch` 单列为 agent 草稿，`.local/` 为统一临时区（整目录跳过）。');
 lines.push('- `最后改动` = 该文件最近一次 git 提交日期（一次 `git log` 全量解析）；无记录写「未入库」。');
 lines.push('- `首句` = 文件首个一级标题；无标题则取首个非空正文行；截断 64 字。是文件自述，不是评审结论。');
 lines.push('- 本页不写结论、不替代 INDEX。要改本页格式，改 `scripts/doc-scan.mjs` 后重跑，不要直接编辑。');

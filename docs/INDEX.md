@@ -143,22 +143,22 @@
 
 > 已修（2026-11-21）：`scripts/check-changelog.mjs`、`scripts/sync-tag-notes.mjs`、`scripts/sync-github-releases.mjs` 原先指向已删除的 `docs/43-版本更新文案规范.md`，现统一指向 [65-版本更新文案规范](65-版本更新文案规范.md)；该规范已从 `archive/legacy` 升回主目录，残本删除。
 
-## 三、子目录（11 个）
+## 三、子目录（11 个 docs 子目录 + 仓外夹具）
 
 > 计数口径：文件数=该目录下全部文件（含图片/HTML/JSON），md 数单独标注；2026-11-21 全盘实测，与旧版差异见 §五。
 
 | 子目录 | 文件数 | 收什么 |
 | --- | --- | --- |
-| [`archive/`](archive/) | 121 | 历史方案、验收、调研、旧运维文档（md 117）；report 46 / plan 41 / research 28 / legacy 1 / example 4 + 根散件 1。归档仍在收敛，计数以 [DOC-MAP](DOC-MAP.md) 为准 |
-| [`plans/`](plans/) | 174（md 126） | 在建方案与批次交付记录（散文件 + 专题包 + 配图）；含 40 份无日期前缀文件，按 `git log` 判新旧 |
-| [`evidence/`](evidence/) | 1226（入库 515） | 实测证据（截图、探针输出、Aholo 产物）；2.87 GB，其中 `aholo/` 2.37 GB 是重建素材（`.glb/.spz`）而非验收证据；`.gitignore` 按目录白名单部分入库 |
+| [`archive/`](archive/) | 120 | 历史方案、验收、调研（md 116）；report 46 / plan 41 / research 28 / example 4 + 根散件 1。`legacy/` 已于 2026-11-21 清空。归档仍在收敛，计数以 [DOC-MAP](DOC-MAP.md) 为准 |
+| [`plans/`](plans/) | 105（md 100） | 在建方案与批次交付记录（散文件 + 专题包 + 配图）；含 40 份无日期前缀文件，按 `git log` 判新旧 |
+| [`evidence/`](evidence/) | 971（入库 485） | 实测证据（截图、探针输出、Aholo 产物）；391 MB，其中 `aholo/` 150 MB 是重建素材而非验收证据；2.37 GB 重建产物已于 2026-11-21 清出工作树，清单见 `evidence/_purged-2026-11-21.txt` |
 | [`research/`](research/) | 25（md 21） | 调研稿；仅 `research/generation/README.md` 是范围内索引 |
-| [`figures/`](figures/) | 27 | 阶段页 HTML 与配图 |
+| [`figures/`](figures/) | 5 | 阶段页 HTML 与配图 |
 | [`contracts/`](contracts/) | 5 | 与 `supabase/functions/_shared/*-contract.ts` 对应的契约文档 |
 | [`tests/fixtures/`](../tests/fixtures/) | 8 | 被测试直接读取的样例数据（原 `docs/examples/` 于 2026-11-21 删除，机读夹具停在仓外这一层） |
 | [`quality/`](quality/) | 4 | 质量口径与检查记录 |
 | [`oneplan-icons/`](oneplan-icons/) | 4 | OnePlan 图标资源与说明 |
-| [`visual-2026/`](visual-2026/) | 63 | 2026 视觉稿与交付 HTML（10.9 MB） |
+| [`visual-2026/`](visual-2026/) | 47 | 2026 视觉稿与交付 HTML（10.5 MB） |
 | [`images/`](images/) | 1 | 单篇文档配图（如 `petitmaker-20261121/`） |
 | [`release-notes/`](release-notes/) | 1 | 版本说明 |
 
