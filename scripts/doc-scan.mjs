@@ -19,7 +19,11 @@ import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const OUT = join(ROOT, 'docs', 'DOC-MAP.md');
-const SKIP_DIRS = new Set(['node_modules', '.next', 'out', '.git', 'vendor', '.turbo']);
+const SKIP_DIRS = new Set([
+  'node_modules', '.next', 'out', '.git', 'vendor', '.turbo',
+  // 本地草稿/产物目录：被 .gitignore 排除，也不该进台账（否则 .tmp/ 里的临时比对文件会被当成文档）
+  '.tmp', '.temp', '.cache', '.reports', 'coverage', 'artifacts', 'output', 'exports',
+]);
 const AGENT_DIRS = ['.zwork', '.zcode', '.trae', '.agents', '.memsearch'];
 const SUMMARY_MAX = 64;
 
@@ -284,10 +288,18 @@ lines.push('');
 const output = `${lines.join('\n')}`;
 const previous = existsSync(OUT) ? readFileSync(OUT, 'utf8') : '';
 
+// 自引用两处会让 --check 永远不通过：生成时间每分钟变，本页自身那行的 KB 也随
+// 文件大小浮动（改了时间戳就改字节数）。比对时统一剔除这两行。
+const normalize = s =>
+  s
+    .split('\n')
+    .filter(l => !l.startsWith('> 生成时间：') && !l.startsWith('| [DOC-MAP.md]'))
+    .join('\n');
+
 if (args.has('--stdout')) {
   process.stdout.write(output);
 } else if (args.has('--check')) {
-  if (previous !== output) {
+  if (normalize(previous) !== normalize(output)) {
     console.error('docs/DOC-MAP.md 与扫盘结果不一致，请重跑 node scripts/doc-scan.mjs');
     process.exit(1);
   }
