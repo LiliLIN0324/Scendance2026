@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { consume, createOrder, getOrder, release } from './client';
+import { MemoryStorage } from '../test-support-memory-storage';
 
 /**
  * 本地 mock 通道：PAY_MOCK=1（或没配 NEXT_PUBLIC_PAY_API_BASE）时，
  * 下单直接到账、扣次与返还都只写 localStorage，用来验证整条前端闭环。
  */
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   window.localStorage.clear();
 });
 

@@ -7,8 +7,10 @@ import {
   rememberLocalAutoLogin,
   shouldAttemptLocalAutoLogin,
 } from './local-auto-login';
+import { MemoryStorage } from './test-support-memory-storage';
 
 const ENV_KEY = 'NEXT_PUBLIC_SCENDANCE_LOCAL_LOGIN';
+let mem: MemoryStorage;
 
 function candidates(...accounts: Array<[string, string, ('local' | 'cloud')?]>): string {
   return JSON.stringify(accounts.map(([email, password, scope]) => ({ email, password, ...(scope ? { scope } : {}) })));
@@ -51,8 +53,8 @@ describe('isLocalDevHostname', () => {
 });
 
 describe('auto-login attempt bookkeeping', () => {
-  beforeEach(() => { sessionStorage.clear(); localStorage.clear(); vi.stubEnv(ENV_KEY, candidates(['local@scendance.test', 'local-pw'], ['cloud@scendance.test', 'cloud-pw'])); });
-  afterEach(() => { vi.unstubAllEnvs(); sessionStorage.clear(); localStorage.clear(); });
+  beforeEach(() => { mem = new MemoryStorage(); vi.stubGlobal('Storage', MemoryStorage); vi.stubGlobal('localStorage', mem); window.localStorage = mem; sessionStorage.clear(); localStorage.clear(); vi.stubEnv(ENV_KEY, candidates(['local@scendance.test', 'local-pw'], ['cloud@scendance.test', 'cloud-pw'])); });
+  afterEach(() => { vi.unstubAllEnvs(); sessionStorage.clear(); mem?.clear(); vi.unstubAllGlobals(); });
 
   it('starts without a cooldown and prefers the credential order from the build', () => {
     expect(shouldAttemptLocalAutoLogin()).toBe(true);

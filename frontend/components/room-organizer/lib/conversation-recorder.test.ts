@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {conversationProjectId,conversationTurnKey,recordConversationTurn,type ConversationTraceTransport} from './conversation-recorder';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 
 const turn=(overrides:Partial<Parameters<typeof recordConversationTurn>[1]>={})=>({
   turnKey:conversationTurnKey(),sessionId:'ses-1',turnIndex:0,surface:'local_command' as const,
@@ -8,8 +9,9 @@ const turn=(overrides:Partial<Parameters<typeof recordConversationTurn>[1]>={})=
 });
 
 describe('conversation recorder',()=>{
-  beforeEach(()=>{window.localStorage.clear();});
-  afterEach(()=>{vi.restoreAllMocks();});
+  let mem:MemoryStorage;
+  beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;window.localStorage.clear();});
+  afterEach(()=>{mem?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
   it('flushes a local-only turn to the transport',async()=>{
     const recordConversationTurns=vi.fn<(turns:unknown[])=>Promise<unknown>>(async()=>null);

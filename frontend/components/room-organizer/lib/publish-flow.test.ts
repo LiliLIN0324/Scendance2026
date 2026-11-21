@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluatePublishBlockers, hasUnpublishedChanges, type PublishBlocker } from './publish-flow';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import type { PublishGateSnapshot } from './project-manifest';
 import type { RoomLayout } from './types';
 import type { BackendSnapshot } from '@/lib/backend-session';
@@ -53,10 +54,16 @@ function layout(overrides: Partial<RoomLayout> = {}): RoomLayout {
 }
 
 describe('evaluatePublishBlockers（发布预检求值，接口约定 §2）', () => {
+  let mem: MemoryStorage;
   beforeEach(() => {
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     localStorage.clear();
     setAssetCloudScope(null, null);
   });
+  afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
   it('可发布时返回空清单', () => {
     const blockers = evaluatePublishBlockers({ snapshot: snapshot(), gate: gate(), layout: layout() });

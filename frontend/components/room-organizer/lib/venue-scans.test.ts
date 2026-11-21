@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { rememberAholoAsset } from './aholo-assets';
 import { listScannedVenues } from './venue-scans';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const day = (month: number, date: number) => Date.UTC(2026, month - 1, date);
 
 /** 2026-11-19 用户：「线上可以看到这种莫名其妙的形式。改掉。没有其他和我的区分。」 */
 describe('真实场地列表的命名口径', () => {
-  beforeEach(() => localStorage.clear());
+  let mem: MemoryStorage;
+  beforeEach(() => { mem = new MemoryStorage(); vi.stubGlobal('Storage', MemoryStorage); vi.stubGlobal('localStorage', mem); window.localStorage = mem; localStorage.clear(); });
+  afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
   it('一份列表装下所有扫描，名字里没有来源前缀与资产号', () => {
     rememberAholoAsset({ assetId: id(1), kind: 'spz', name: '云端高斯 48245ba8', bytes: 10, savedAt: day(11, 8) });

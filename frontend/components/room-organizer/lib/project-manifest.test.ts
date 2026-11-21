@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildCompleteManifest, manifestCompletenessLabel, publishGateBlockReason, publishGateSnapshot, registerPublishGateProvider, type PublishGateSnapshot } from './project-manifest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import type { RoomLayout } from './types';
 import type { StoredSource } from '@/lib/source-storage';
 
@@ -32,10 +33,16 @@ function source(partial: Partial<StoredSource> & { id: string }): StoredSource {
   return { scope: 'project-1', name: partial.id, kind: 'photo', width: 10, height: 10, ...partial } as StoredSource;
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   localStorage.clear();
   registerPublishGateProvider(null);
 });
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 describe('complete project manifest (C06)', () => {
   it('registers dependencies with real cloud ids and reports completeness', () => {

@@ -4,6 +4,7 @@ import {createLocalWriteLeaseManager} from './local-write-lease';
 import {originalReviewReceiptKey,type OriginalReviewReceipt} from './original-review-commit';
 import {auditOriginalReviewStartup} from './original-review-completion';
 import {createOriginalReviewLedger} from './original-review-ledger-idb';
+import {MemoryStorage} from './test-support-memory-storage';
 const account='11111111-1111-4111-8111-111111111111',project='22222222-2222-4222-8222-222222222222';
 const key=originalReviewReceiptKey(account,project);
 const receipt:OriginalReviewReceipt={version:1,projectId:project,reviewId:'33333333-3333-4333-8333-333333333333',baseHash:'a'.repeat(64),candidateHash:'b'.repeat(64),baseRevision:4};
@@ -32,8 +33,9 @@ function fakeDb(){
  vi.stubGlobal('indexedDB',{open(){const req={result:db,onsuccess:null as null|(()=>void),onerror:null,onblocked:null,onupgradeneeded:null};queueMicrotask(()=>req.onsuccess?.());return req;}});
  return {data,onPut(fn:()=>void){beforePut=fn;}};
 }
-beforeEach(async()=>{localStorage.clear();vi.stubGlobal('navigator',{locks});lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();});
-afterEach(async()=>{await lease.release();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
+let mem:MemoryStorage;
+beforeEach(async()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;localStorage.clear();vi.stubGlobal('navigator',{locks});lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();});
+afterEach(async()=>{await lease.release();mem?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('isolated original-review completion IDB ledger',()=>{
  it('preserves exact values and uses transaction CAS instead of replacing a third value',async()=>{
   const fake=fakeDb(),ledger=createOriginalReviewLedger(lease.capability,account);

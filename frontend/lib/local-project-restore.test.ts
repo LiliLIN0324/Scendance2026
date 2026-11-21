@@ -8,9 +8,18 @@ import { parseLayoutJson } from '../components/room-organizer/lib/persistence';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from './local-project-backup';
 import { commitLocalRestoreLayout, localRestoreAvailable, prepareLocalRestoreLayout } from './local-project-restore';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
+import { MemoryStorage } from './test-support-memory-storage';
 
-beforeEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
-afterEach(() => { vi.unstubAllGlobals(); });
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+  localStorage.clear();
+  vi.restoreAllMocks();
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 describe.skipIf(!localRestoreAvailable())('complete local layout restore domain', () => {
   const before = makeLayout({ id: 'activity-a', name: '演练原活动' });
