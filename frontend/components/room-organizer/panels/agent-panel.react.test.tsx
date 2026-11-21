@@ -158,7 +158,7 @@ describe('research map activity scope', () => {
       expect(researchArea.lookupPlace).toHaveBeenCalledOnce();
       expect(research.release).not.toHaveBeenCalled();
       await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
-      expect(screen.getByText(/调研查询超时/)).toBeTruthy();
+      expect(screen.getByText(/调研超时了/)).toBeTruthy();
       expect(research.release).toHaveBeenCalledOnce();
       await act(async () => { research.resolve(place); await Promise.resolve(); });
       expect(research.onApplyResearchArea).not.toHaveBeenCalled();
@@ -170,7 +170,7 @@ describe('research map activity scope', () => {
     const release = vi.fn(), onApplyResearchArea = vi.fn();
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyResearchArea={onApplyResearchArea} onDialogueTurnStart={() => release}><AgentPanel/></LayoutAgentProvider>);
     send('调研西湖');
-    expect(await screen.findByText(/调研查询暂时不可用/)).toBeTruthy();
+    expect(await screen.findByText(/调研暂时用不了/)).toBeTruthy();
     expect(onApplyResearchArea).not.toHaveBeenCalled();
     await waitFor(() => expect(release).toHaveBeenCalledOnce());
   });
@@ -183,7 +183,7 @@ describe('research map activity scope', () => {
     send('调研西湖');
     await waitFor(() => expect(researchArea.lookupPlace).toHaveBeenCalledOnce());
     send('你好');
-    expect(await screen.findByText(/你好，我可以帮你/)).toBeTruthy();
+    expect(await screen.findByText(/你好，说说需求就行/)).toBeTruthy();
     await waitFor(() => expect(secondRelease).toHaveBeenCalledOnce());
     expect(firstRelease).not.toHaveBeenCalled();
     await act(async () => { resolve(null); await Promise.resolve(); });
@@ -356,7 +356,7 @@ describe('research map activity scope', () => {
       });
       await act(async () => { research.resolve(place); await Promise.resolve(); });
       expect(research.onApplyResearchArea).not.toHaveBeenCalled();
-      expect(await screen.findByText(/底图或场景锚点已变化/)).toBeTruthy();
+      expect(await screen.findByText(/场地变了/)).toBeTruthy();
     } finally { view.unmount(); act(() => { layoutStore.setState({ layout: saved }); }); }
   });
   it('does not reject research when only unrelated furniture changes', async () => {
@@ -373,7 +373,7 @@ describe('research map activity scope', () => {
       act(() => { layoutStore.setState({ layout: { ...initial, floors } }); });
       await act(async () => { research.resolve(place); await Promise.resolve(); });
       await waitFor(() => expect(research.onApplyResearchArea).toHaveBeenCalledOnce());
-      expect(screen.queryByText(/底图或场景锚点已变化/)).toBeNull();
+      expect(screen.queryByText(/场地变了/)).toBeNull();
     } finally { view.unmount(); act(() => { layoutStore.setState({ layout: saved }); }); }
   });
   it.each(['scan', 'width', 'height', 'venue', 'scan-aba', 'width-aba', 'venue-aba'] as const)(
@@ -397,7 +397,7 @@ describe('research map activity scope', () => {
         });
         await act(async () => { research.resolve(place); await Promise.resolve(); });
         expect(research.onApplyResearchArea).not.toHaveBeenCalled();
-        expect(await screen.findByText(/场地、底图或场景锚点已变化/)).toBeTruthy();
+        expect(await screen.findByText(/场地变了/)).toBeTruthy();
       } finally { view.unmount(); act(() => { layoutStore.setState({ layout: saved }); }); }
     },
   );
@@ -726,7 +726,7 @@ describe('dialogue export in-flight fence',()=>{
   send('30人');await waitFor(()=>expect(studioMock.controller.briefConversation).toHaveBeenCalledTimes(2));
   state.layout={...state.layout,width:20,height:15,venueScan:{assetId:'new',name:'新场'}};
   await act(async()=>{finish({enabled:true,extraction:{headcount:30},reply:'已记录人数。',unhandled:[],factEvidence:[{key:'headcount',evidence:'30人'}]});await Promise.resolve();});
-  expect(await screen.findByText(/场地在理解需求期间发生变化/)).toBeTruthy();
+  expect(await screen.findByText(/场地变了/)).toBeTruthy();
   expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy();
  });
  it('clears only the same request when the model really understands it',async()=>{
@@ -754,7 +754,7 @@ describe('dialogue export in-flight fence',()=>{
   const original=Storage.prototype.setItem;
   const spy=vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key,value){if(key==='scendance.assistant-brief-memory.v1')throw new Error('storage unavailable');return original.call(this,key,value);});
   try {
-    send('30人');expect(await screen.findByText(/暂时无法保存在本机/)).toBeTruthy();
+    send('30人');expect(await screen.findByText(/本机存不下/)).toBeTruthy();
     expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('30人')).toBeTruthy();
   } finally {spy.mockRestore();}
  });
@@ -854,7 +854,7 @@ describe('explicit local-only seating draft',()=>{
   const readAnnotations=()=>structuredClone(annotationSnapshot);
   function configureLocalController(){
     const controller=studioMock.controller as typeof studioMock.controller & {getSnapshot?:()=>unknown;canCreateUnboundLocalDraft?:()=>boolean;localDraftAuthorityVersion?:()=>string};
-    controller.getSnapshot=()=>({project:null,geometryBinding:null});controller.canCreateUnboundLocalDraft=fence;controller.localDraftAuthorityVersion=()=> '0:0';fence.mockReset().mockReturnValue(true);annotationSnapshot={draft:null,revision:0};
+    controller.getSnapshot=()=>({project:null,geometryBinding:null,user:{id:'local-draft-designer'}});controller.canCreateUnboundLocalDraft=fence;controller.localDraftAuthorityVersion=()=> '0:0';fence.mockReset().mockReturnValue(true);annotationSnapshot={draft:null,revision:0};
   }
   afterEach(()=>{const controller=studioMock.controller as typeof studioMock.controller & {getSnapshot?:()=>unknown;canCreateUnboundLocalDraft?:()=>boolean;localDraftAuthorityVersion?:()=>string;subscribe?:(callback:()=>void)=>()=>void};delete controller.getSnapshot;delete controller.canCreateUnboundLocalDraft;delete controller.localDraftAuthorityVersion;delete controller.subscribe;});
   it('allows a fully checked hand-drawn centreline as an unverified exploration draft',async()=>{
@@ -1037,20 +1037,20 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/每人一桌：本次探索假设，用户尚未指定/,{},{timeout:15000})).toBeTruthy();
+    expect(await screen.findByText(/每人一桌是这次试排的假设/,{},{timeout:15000})).toBeTruthy();
   },20000);
   it('allows an explicit correction from shared desks to one per person',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('每2人一桌');await screen.findByText('每2人一桌');send('改成每人一桌');await screen.findByText('改成每人一桌');
     send('30人，室内20×20，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/每人一桌：用户明确选择/,{},{timeout:15000})).toBeTruthy();
+    expect(await screen.findByText(/每人一桌/,{},{timeout:15000})).toBeTruthy();
   },20000);
   it('does not generate the one-per-desk draft after the user negates it',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     const onPreview=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={onPreview} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('不要每人一桌');await screen.findByText('不要每人一桌');send('30人，室内20×20，采用课桌椅，生成本地草案');
-    expect(await screen.findByText(/每桌人数尚不明确/)).toBeTruthy();expect(onPreview.mock.calls.some(([candidate])=>!!candidate)).toBe(false);
+    expect(await screen.findByText(/每桌坐几人/)).toBeTruthy();expect(onPreview.mock.calls.some(([candidate])=>!!candidate)).toBe(false);
   });
   it('preserves an explicitly stated desk width across turns rather than using the default',async()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
@@ -1160,7 +1160,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});studioMock.connection='项目已连接';
     const onApply=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" getPlanAnnotationSnapshot={readAnnotations} callbacks={callbacks} onPreview={vi.fn()} onApply={onApply}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，按一人一套课桌椅生成本地草案');
-    expect(await screen.findByText(/本地草案需要独立的本机活动/)).toBeTruthy();
+    expect(await screen.findByText(/先断开云端才能出本地草案/)).toBeTruthy();
     expect(studioMock.generate).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
   it('displays a partial draft and its missing number without claiming venue capacity',async()=>{
@@ -1262,7 +1262,7 @@ describe('explicit local-only seating draft',()=>{
     configureLocalController();state.layout=makeLayout({id:'local-seating',width:20,height:20});
     const onPreview=vi.fn();render(<LayoutAgentProvider sessionScope="activity:local-seating" callbacks={callbacks} onPreview={onPreview} onApply={vi.fn()}><AgentPanel/></LayoutAgentProvider>);
     send('30人，室内20×20，按一人一套课桌椅生成本地草案');
-    expect(await screen.findByText(/路线与区域标注无法完整读取/)).toBeTruthy();
+    expect(await screen.findByText(/路线或区域读不全/)).toBeTruthy();
     expect(onPreview.mock.calls.some(([value])=>!!value)).toBe(false);
   });
 });
@@ -1635,7 +1635,7 @@ describe('T-03 review in the Agent panel', () => {
     await reviewAndFix();
     expect(await screen.findByText('改法预览')).toBeTruthy();
     send('再看看哪里有问题');
-    expect(await screen.findByText(/还有一版没确认：先点「确认布置」或「撤回」/)).toBeTruthy();
+    expect(await screen.findByText(/先确认或撤回这一版/)).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();
   });
 });
@@ -1851,7 +1851,7 @@ describe('T-UI visible interaction', () => {
       send('12×9米');await waitFor(()=>expect(studioMock.controller.briefExtract).toHaveBeenCalledOnce());
       state.layout={...state.layout,width:20,height:15,venueScan:{assetId:'new',name:'新场'}};
       await act(async()=>{finish({enabled:true,extraction:{lengthM:12,widthM:9}});await Promise.resolve();});
-      expect(await screen.findByText(/场地在理解需求期间发生变化/)).toBeTruthy();
+      expect(await screen.findByText(/场地变了/)).toBeTruthy();
       expect(onMemory.mock.calls.at(-1)?.[0].lengthM).toBeNull();
     } finally {vi.unstubAllEnvs();}
   });
@@ -1894,7 +1894,7 @@ describe('T-UI visible interaction', () => {
     const confirmVenueSource=vi.fn(async()=>{if(mode==='failure')throw new Error('读取失败');return mode==='unknown'?{status:'unknown' as const}:{status:'observed' as const,scope:mode==='invalid-digest'?'A':'B',digest:mode==='invalid-digest'?'short':'a'.repeat(64)};});
     render(<LayoutAgentProvider sessionScope="activity:A" confirmVenueSource={confirmVenueSource} callbacks={callbacks} onApply={vi.fn()} onPreview={onPreview} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
     await waitFor(()=>expect(onMemory).toHaveBeenCalled());const before=structuredClone(onMemory.mock.calls.at(-1)?.[0]);
-    send('12人，12×9米，圆桌');expect(await screen.findByText(/场地来源暂时无法核对/)).toBeTruthy();
+    send('12人，12×9米，圆桌');expect(await screen.findByText(/场地来源没核对上/)).toBeTruthy();
     expect(onMemory.mock.calls.at(-1)?.[0]).toEqual(before);expect(onPreview.mock.calls.every(([v])=>v===null)).toBe(true);
   });
   it('does not bind a source result after the venue changes while reading',async()=>{
@@ -2510,7 +2510,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     const chair=makeItem({id:'only-chair',type:'chair',name:'椅子',position:{x:0,z:0},width:.5,depth:.5});
     render(<LocalHarness initial={makeLayout({width:24,height:16,floors:[makeFloor({items:[chair]})]})} onApply={onApply} onPreview={onPreview}/>);
     send('把椅子往左挪1毫米');
-    expect(await screen.findByText(/画布精度无法准确完成/)).toBeTruthy();
+    expect(await screen.findByText(/画布做不到/)).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();
     expect(onPreview.mock.calls.every(([value])=>value===null)).toBe(true);
   });
@@ -2518,7 +2518,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     const onApply=vi.fn(),onPreview=vi.fn();
     render(<LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview}/>);
     send(message);
-    expect(await screen.findByText(/移动距离或要求不明确/)).toBeTruthy();
+    expect(await screen.findByText(/说清物件和距离/)).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();
     expect(onPreview.mock.calls.every(([value])=>value===null)).toBe(true);
     expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
@@ -2558,7 +2558,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   },20000);
   it.each(['把椅子顺时针旋转90度但不要旋转','把椅子顺时针旋转90度，暂时不要转','把椅子顺时针旋转90度到180度','把椅子顺时针旋转90弧度','把椅子旋转90度','把椅子顺时针旋转0.0001度','把椅子顺时针旋转90度，再删掉桌子'])('rejects incomplete or contradictory rotation %s',async message=>{
     const onApply=vi.fn(),onPreview=vi.fn();render(<LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview}/>);
-    send(message);expect(await screen.findByText(/旋转方向、角度或要求不明确/)).toBeTruthy();
+    send(message);expect(await screen.findByText(/说清物件和角度/)).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();expect(onPreview.mock.calls.every(([value])=>value===null)).toBe(true);
     expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
   });
@@ -2580,7 +2580,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   },20000);
   it.each(['把椅子换成蓝色但不要蓝色','把椅子换成蓝色，暂时不要改色','把椅子换成紫色','把椅子换成蓝色，再删除桌子'])('rejects ambiguous recoloring %s',async message=>{
     const onApply=vi.fn(),onPreview=vi.fn();render(<LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview}/>);
-    send(message);expect(await screen.findByText(/颜色或要求不明确/)).toBeTruthy();expect(onApply).not.toHaveBeenCalled();
+    send(message);expect(await screen.findByText(/说清物件和颜色/)).toBeTruthy();expect(onApply).not.toHaveBeenCalled();
     expect(onPreview.mock.calls.every(([value])=>value===null)).toBe(true);expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
   });
   it('asks for attendance before creating an activity layout, without disabling direct edits',async()=>{
@@ -2628,7 +2628,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     const onApply = vi.fn(), onPreview = vi.fn();
     render(<LocalHarness initial={makeLayout()} onApply={onApply} onPreview={onPreview} />);
     send(message);
-    expect(await screen.findByText(/物料增减的意思尚不明确/)).toBeTruthy();
+    expect(await screen.findByText(/说要加什么/)).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();
     expect(onPreview.mock.calls.every(([value]) => value === null)).toBe(true);
     expect(screen.queryByRole('button', { name: '确认布置' })).toBeNull();
@@ -2638,7 +2638,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     state.layout = makeLayout();
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={onPreview} onApply={onApply} onBriefMemoryChange={onMemory}><AgentPanel/></LayoutAgentProvider>);
     send(message);
-    expect(await screen.findByText(/同时包含物件修改和活动需求，请分开发送/)).toBeTruthy();
+    expect(await screen.findByText(/改动和需求请分开发/)).toBeTruthy();
     expect(onApply).not.toHaveBeenCalled();
     expect(onPreview.mock.calls.every(([value]) => value === null)).toBe(true);
     expect(onMemory.mock.calls.every(([memory]) => memory.headcount !== 80)).toBe(true);
@@ -2702,7 +2702,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     send('需要签到区'); const button = await screen.findByRole('button', { name: '好，帮我圈' });
     fireEvent.click(button); fireEvent.click(button);
     expect(applyZones).toHaveBeenCalledOnce();
-    expect(await screen.findByText(/这条区域建议已过期/)).toBeTruthy();
+    expect(await screen.findByText(/这条区域建议过期了/)).toBeTruthy();
   });
   it('consumes the same suggestion when accepted in text and refuses its old button', async () => {
     const applyZones = vi.fn(() => '签到区'); state.layout = makeLayout();
@@ -2710,7 +2710,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     send('需要签到区');const button=await screen.findByRole('button',{name:'好，帮我圈'});
     send('好');await waitFor(()=>expect(applyZones).toHaveBeenCalledOnce());
     fireEvent.click(button);expect(applyZones).toHaveBeenCalledOnce();
-    expect(await screen.findByText(/这条区域建议已过期/)).toBeTruthy();
+    expect(await screen.findByText(/这条区域建议过期了/)).toBeTruthy();
   });
   it('invalidates an area suggestion if the independent annotation draft changes', async () => {
     const applyZones = vi.fn(() => '签到区'); state.layout = makeLayout();
@@ -2718,13 +2718,13 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     const view=render(component(1)); send('需要签到区');
     const button=await screen.findByRole('button',{name:'好，帮我圈'});
     view.rerender(component(2));fireEvent.click(button);
-    expect(applyZones).not.toHaveBeenCalled();expect(await screen.findByText(/这条区域建议已过期/)).toBeTruthy();
+    expect(applyZones).not.toHaveBeenCalled();expect(await screen.findByText(/这条区域建议过期了/)).toBeTruthy();
   });
   it('explains a failed draw and does not consume the suggestion on failure', async () => {
     const applyZones = vi.fn().mockReturnValueOnce(null).mockReturnValueOnce('签到区'); state.layout = makeLayout();
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onApplyZoneRects={applyZones}><AgentPanel/></LayoutAgentProvider>);
     send('需要签到区');const button=await screen.findByRole('button',{name:'好，帮我圈'});
-    fireEvent.click(button);expect(await screen.findByText(/这次没有圈区/)).toBeTruthy();
+    fireEvent.click(button);expect(await screen.findByText(/没圈出区域/)).toBeTruthy();
     fireEvent.click(button);expect(applyZones).toHaveBeenCalledTimes(2);
     expect(await screen.findByText(/已经在 2D 上圈好签到区/)).toBeTruthy();
   });
@@ -2741,7 +2741,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     view.rerender(renderWith({ ...initial, width: initial.width + 1 }));
     if (action === 'button') fireEvent.click(button); else send('好');
     expect(applyZones).not.toHaveBeenCalled();
-    expect(await screen.findByText(/场地或需求已变化，这条区域建议已过期/)).toBeTruthy();
+    expect(await screen.findByText(/场地或需求已变化，这条区域建议过期了/)).toBeTruthy();
   });
 
   it('refuses a stored area card after the requirement changes away and back', async () => {
@@ -2756,7 +2756,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: '好，帮我圈' }).length).toBeGreaterThan(1));
     fireEvent.click(old);
     expect(applyZones).not.toHaveBeenCalled();
-    expect(await screen.findByText(/场地或需求已变化，这条区域建议已过期/)).toBeTruthy();
+    expect(await screen.findByText(/场地或需求已变化，这条区域建议过期了/)).toBeTruthy();
   });
   it('does not turn an uncertain stage mention into a stage in the preview', async () => {
     const onPreview = vi.fn();
@@ -3106,10 +3106,10 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     fireEvent.click(screen.getByRole('button',{name:'模拟其他确认入口'}));expect(studioMock.applyPreview).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
   it.each([
-    ['把椅子往左挪','移动距离或要求不明确'],
-    ['把椅子放大','缩放倍数或要求不明确'],
+    ['把椅子往左挪','说清物件和距离'],
+    ['把椅子放大','说清物件和倍数'],
     ['加0把椅子','单次支持'],
-    ['加两把椅子和一张桌子','物料增减的意思尚不明确'],
+    ['加两把椅子和一张桌子','说要加什么'],
   ])('withdraws a previous preview when a local modification is unresolved: %s',async(message,hint)=>{
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','0');vi.stubEnv('NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED','1');
     studioMock.connection='项目已连接';studioMock.generate.mockImplementation(async()=>{studioMock.preview=cloudPreview();});
@@ -3121,8 +3121,8 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   });
   it('lets the user explicitly withdraw one unresolved requirement without clearing the other',async()=>{
     render(ui(makeLayout({width:12,height:9})));
-    send('把椅子往左挪');await screen.findByText(/移动距离或要求不明确/);
-    send('把椅子放大');await screen.findByText(/缩放倍数或要求不明确/);
+    send('把椅子往左挪');await screen.findByText(/说清物件和距离/);
+    send('把椅子放大');await screen.findByText(/说清物件和倍数/);
     let list=screen.getByRole('region',{name:'尚未处理的要求'});
     expect(within(list).getByText('把椅子往左挪')).toBeTruthy();expect(within(list).getByText('把椅子放大')).toBeTruthy();
     fireEvent.click(within(list).getByRole('button',{name:'撤回：把椅子往左挪'}));
@@ -3131,7 +3131,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
   });
   it('does not show unresolved requests from a different conversation',async()=>{
     render(ui(makeLayout({width:12,height:9})));
-    send('把椅子往左挪');await screen.findByText(/移动距离或要求不明确/);
+    send('把椅子往左挪');await screen.findByText(/说清物件和距离/);
     expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('把椅子往左挪')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'新开会话'}));
     await waitFor(()=>expect(screen.queryByRole('region',{name:'尚未处理的要求'})).toBeNull());
@@ -3234,7 +3234,7 @@ describe('T-05 生成完再亮确认 + 座位不够给改方案', () => {
     const review=vi.fn(()=>true);state.layout=makeLayout({width:12,height:9});studioMock.preview=cloudPreview();
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()} onDialogueHistoryReview={review}><AgentPanel/></LayoutAgentProvider>);
     await screen.findByRole('region',{name:'历史需求待核对'});
-    send('把椅子往左挪');await screen.findByText(/移动距离或要求不明确/);
+    send('把椅子往左挪');await screen.findByText(/说清物件和距离/);
     const action=screen.getByRole('button',{name:'按当前记录重新开始'}) as HTMLButtonElement;
     expect(action.disabled).toBe(true);fireEvent.click(action);expect(review).not.toHaveBeenCalled();
     expect(within(screen.getByRole('region',{name:'尚未处理的要求'})).getByText('把椅子往左挪')).toBeTruthy();
@@ -3868,12 +3868,12 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
   it('does not apply a smaller venue when an existing zone would be outside it',async()=>{
     const onApply=vi.fn(),zone={id:'outside-zone',name:'原有区域',color:'#4A7C59',x:4,z:0,w:2,d:2};
     render(<LocalHarness initial={makeLayout({width:12,height:9,floors:[makeFloor({items:[],zones:[zone]})]})} onApply={onApply}/>);
-    send('改成 6×6');expect(await screen.findByText(/现有区域超出新场地范围/)).toBeTruthy();expect(onApply).not.toHaveBeenCalled();
+    send('改成 6×6');expect(await screen.findByText(/区域超出新场地/)).toBeTruthy();expect(onApply).not.toHaveBeenCalled();
   });
   it('does not propose a smaller venue when an existing zone would be outside it',async()=>{
     const onApply=vi.fn(),onPreview=vi.fn(),zone={id:'outside-zone',name:'原有区域',color:'#4A7C59',x:4,z:0,w:2,d:2};
     render(<LocalHarness initial={makeLayout({width:12,height:9,floors:[makeFloor({items:[],zones:[zone]})]})} onApply={onApply} onPreview={onPreview}/>);
-    send('8 人，室内 6×6，圆桌');expect(await screen.findByText(/现有区域超出新场地范围/)).toBeTruthy();
+    send('8 人，室内 6×6，圆桌');expect(await screen.findByText(/区域超出新场地/)).toBeTruthy();
     expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();expect(onApply).not.toHaveBeenCalled();expect(onPreview.mock.calls.every(([value])=>value===null)).toBe(true);
   });
 
@@ -3997,7 +3997,7 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
     send('60人');
     await waitFor(() => expect(onMemory.mock.calls.at(-1)?.[0].headcount).toBe(60));
     expect(localStorage.getItem(key)).toBe(before);
-    expect(await screen.findByText(/这次需求暂时无法保存在本机/)).toBeTruthy();
+    expect(await screen.findByText(/本机存不下/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '会话历史' }));
     fireEvent.click(screen.getByRole('button', { name: /^删除 / }));
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
@@ -4018,7 +4018,7 @@ describe('活动在左侧工作台（S1 后默认脸）', () => {
     send('60人');
     await waitFor(() => expect(onMemory.mock.calls.at(-1)?.[0].headcount).toBe(60));
     expect(localStorage.getItem(key)).toBe(before);
-    expect(await screen.findByText(/这次需求暂时无法保存在本机/)).toBeTruthy();
+    expect(await screen.findByText(/本机存不下/)).toBeTruthy();
   });
   it('输入卡不再挂离机说明行，也不留悬空的 aria-describedby', () => {
     vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED', '1');
