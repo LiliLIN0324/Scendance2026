@@ -173,7 +173,7 @@ describe('resolveFacilityModels', () => {
     it('shares the reviewed model with an aliased pack entry before and after registration', () => {
       registerPackEntries([]);
       const screen = resolveFacilityModels('oneplan:icon:large-screen');
-      expect(screen).toHaveLength(2);
+      expect(screen).toHaveLength(3);
       expect(resolveFacilityModels('pack:biathlon:led-screen')).toEqual(screen);
       registerPackEntries([packEntry('biathlon', 'led-screen', 'large-screen')]);
       expect(resolveFacilityModels('pack:biathlon:led-screen')).toEqual(screen);
