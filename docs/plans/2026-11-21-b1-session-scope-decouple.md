@@ -185,7 +185,16 @@
 
 **验证（Node26）**：`tsc --noEmit` exit 0；lib 会话/身份纯函数组 56 passed / 1 failed（唯一红为 `case-activity-alignment` 基线存量红）；壳体 react 四套件 23 failed，与基线合计 23 持平，失败根因均为 `localStorage.clear()` 占位 undefined 的存量夹具债，84ms 快速失败、无挂起。**未取得壳体绿测保护与真机走查**，去回退过渡态留待 B1-e 验收。
 
-**B1-d 下一轮接入点（已勘察，未动码）**：`CreativeStudioProvider`（panels/creative-studio.tsx:275）Props 目前**不收 scope/projectId**；内部 `:334 scope = layout.id ?? 'local'`、`:290 briefStorage` 初始 scope、`:516` 订阅 `activity:${layout.id}`、`:643` effect 依赖、`:752 useMaterialCheckins({projectId: layout.id})`、`:623/:628` 库存 chatScope 连锁读 layout.id。壳体渲染点 room-organizer.tsx:4942 已传 `sessionToken`/`isSessionCurrent`，下一步在此补传 `scope={sessionScope}`，Provider 新增 scope prop 并把上述触点从 layout.id 切到传入 scope；点验/备份域（:752/:833/:844）归属 B3/B4，成套时再分。
+**B1-d 下一轮接入点（已勘察，未动码；成套不可拆两半）**：`CreativeStudioProvider`（panels/creative-studio.tsx:275）Props 目前**不收 scope/projectId**。壳体渲染点 room-organizer.tsx:4942 已传 `sessionToken`/`isSessionCurrent`，未传会话 scope 字符串。
+
+*键空间分裂事实（2026-11-21 核实）*：`LayoutAgentProvider`（agent-panel.tsx:706）`useAssistantSessions(requireSessionWrite, sessionScope)` 把会话仓建在 `project:<activeProjectId>` 键空间（壳体 :392 `sessionScope = projectSessionScope(activeProjectId)`）；而 creative-studio 面板仍读旧 `activity:` 前缀键——:516 `subscribeActiveAssistantSession(\`activity:${layout.id??''}\`)`、:1908 `chatScope=\`activity:${selected.layout.id??''}\``。`scopedStores` 按 scope 字符串分仓，两前缀是两个仓，会话订阅/活跃会话读取存在裂缝。**改订阅前须先核旧 `activity:` 仓是否仍有写入方**（旧 house 活动路径），避免切仓后失效监听丢失。
+
+*触点三类归属*：
+- 当前活动会话订阅（B1-d 身份域）：:516 订阅；:518/:643 effect 依赖 layout.id。
+- 候选方案会话（跨项目语义，成套时细校）：:1908 用 `selected.layout.id`（候选 proposal 的 id，非当前活动），不能直接换当前 sessionScope。
+- 面板内部裸 id 存储（自洽局部 scope，B1-d 成套 / B3-B4 分域）：:290 briefStorage.scope、:334 `scope=layout.id??'local'`、:333 preservingPreparation 比对、:335 scopeWriteGuards、:336 scopeRef、:340/:347 readonly draft reader、:355 coordinator.scope 比对、:362 editorLease；:752 `useMaterialCheckins({projectId: layout.id})`；:833/:836/:844 备份域；:1026/:1029 恢复；:2077/:2222/:2449/:2511 库存/几何/源冲刷比对。点验/备份/几何域归 B3/B4。
+
+*测试现状与保护缺口（门禁前置）*：面板 320 套件把 `subscribeActiveAssistantSession`/`getActiveAssistantSessionId` 整体 mock，**不校验传入 scope 字符串**，故改键名面板单测仍绿；但真实仓连通性（订阅谁的仓、活跃会话是否同仓）没有壳体绿测、也没有真机兜底。B1-d 成套改造前必须先：① 解除壳体两套件（canvas-session 7、session-generation 6）夹具挂起、取得壳体绿测保护；② 同步更新面板测试的 scope 构造（现靠 rerender 换 layout.id 构造活动隔离）；③ 真机核对切项目不串会话、新建活动记忆各落各槽。未满足前不在面板上硬拆 scope 链路。
 
 ### 11.8.2 基座推广：可控套件转绿，壳体全渲染套件挂起判定（2026-11-21，未提交）
 
