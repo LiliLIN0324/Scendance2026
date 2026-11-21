@@ -16,6 +16,10 @@ const STATES = new Set(['pass', 'partial', 'blocked', 'fail', 'n/a']);
 const CONCLUSIONS = new Set(['pass', 'partial', 'blocked', 'fail']);
 const DIMENSIONS = ['browser', 'cloud'];
 const CASE_IDS = Array.from({ length: 11 }, (_, index) => index + 1);
+// 可由 owner 签署风险接受后豁免 strict 闸门的结论；fail / blocked 任何通道都不可豁免。
+const EXEMPTIBLE = new Set(['partial', 'n/a']);
+const NON_EXEMPTIBLE = new Set(['blocked', 'fail']);
+const RISK_MODES = new Set(['risk-accepted', 'scope-excluded']);
 
 function argsOf(argv) {
   const flags = new Set();
@@ -96,6 +100,16 @@ function validateCasShape(file, data, root, issues) {
   }
 }
 
+function validateRiskAccepted(row, id, issues) {
+  const ra = row?.riskAccepted;
+  if (!ra) return;
+  if (!Number.isFinite(Date.parse(ra.decidedAt ?? ''))) issues.push(`case #${id} riskAccepted.decidedAt 不可解析`);
+  if (!String(ra.decidedBy ?? '').trim()) issues.push(`case #${id} riskAccepted.decidedBy 为空`);
+  if (!Array.isArray(ra.accepted) || !ra.accepted.length) issues.push(`case #${id} riskAccepted.accepted 必须是非空数组`);
+  if (!Array.isArray(ra.residualRisks)) issues.push(`case #${id} riskAccepted.residualRisks 必须是数组`);
+  if (ra.mode !== undefined && !RISK_MODES.has(ra.mode)) issues.push(`case #${id} riskAccepted.mode 非法：${JSON.stringify(ra.mode)}`);
+}
+
 function evidencePaths(text, evidenceDir, root) {
   const found = [];
   let lastDir = evidenceDir;
@@ -160,6 +174,7 @@ function validate(root) {
       if (!STATES.has(row[dimension])) issues.push(`case #${id} ${dimension} 状态非法：${JSON.stringify(row[dimension])}`);
     }
     if (!CONCLUSIONS.has(row.conclusion)) issues.push(`case #${id} conclusion 状态非法：${JSON.stringify(row.conclusion)}`);
+    validateRiskAccepted(row, id, issues);
     if (!String(row.readings ?? '').trim()) issues.push(`case #${id} 缺 readings（不能只写维度不写读数）`);
     if (row.conclusion !== 'pass' && !String(row.gap ?? '').trim()) issues.push(`case #${id} 不是 pass，却没有写 gap`);
     if (!String(row.evidence ?? '').trim()) {
@@ -307,7 +322,38 @@ function validate(root) {
     if (!Number.isFinite(Date.parse(signoff.signedAt ?? ''))) issues.push('signoff=signed，但 signedAt 不可解析');
     if (!allPass) issues.push(`signoff=signed，但全绿只有 ${calculated.pass}/11；签字不能替代未完成证据`);
   }
-  if (!allPass) warnings.push(`发布未就绪：${calculated.pass}/11 全绿（partial ${calculated.partial}，blocked ${calculated.blocked}）`);
+
+  // 通道 B：owner 签署风险接受后豁免 strict。可豁免结论仅 partial / n-a；fail / blocked 不可豁免。
+  const byCase = (value) => rows.filter(row => EXEMPTIBLE.has(row.conclusion) === value).map(row => row.case).sort((a, b) => a - b);
+  const exemptibleCases = byCase(true);
+  const nonExemptibleOpen = rows.filter(row => NON_EXEMPTIBLE.has(row.conclusion)).map(row => row.case).sort((a, b) => a - b);
+  const missingRisk = rows.filter(row => EXEMPTIBLE.has(row.conclusion) && !row.riskAccepted).map(row => row.case).sort((a, b) => a - b);
+
+  const riskAcceptance = signoff.riskAcceptance ?? {};
+  const riskStatus = String(riskAcceptance.status ?? 'pending-human');
+  if (!['pending-human', 'signed'].includes(riskStatus)) {
+    issues.push(`signoff.riskAcceptance.status 非法：${JSON.stringify(riskStatus)}（只能是 pending-human / signed）`);
+  }
+  const riskCases = Array.isArray(riskAcceptance.cases) ? [...riskAcceptance.cases].sort((a, b) => a - b) : null;
+  const riskCasesMatch = JSON.stringify(riskCases) === JSON.stringify(exemptibleCases);
+  if (!riskCasesMatch) {
+    issues.push(`riskAcceptance.cases 与台账可豁免用例不一致：声明 ${JSON.stringify(riskCases)}，重算 ${JSON.stringify(exemptibleCases)}`);
+  }
+  const riskSignerPresent = String(riskAcceptance.signedBy ?? '').trim() && Number.isFinite(Date.parse(riskAcceptance.signedAt ?? ''));
+  if (riskStatus === 'signed') {
+    if (!String(riskAcceptance.signedBy ?? '').trim()) issues.push('风险签署 signed，但缺 signedBy（须由 owner 本人填写，agent 不代签）');
+    if (!Number.isFinite(Date.parse(riskAcceptance.signedAt ?? ''))) issues.push('风险签署 signed，但 signedAt 不可解析');
+    if (nonExemptibleOpen.length) issues.push(`fail / blocked 结论不可经风险接受豁免：${nonExemptibleOpen.join(', ')}`);
+    if (missingRisk.length) issues.push(`可豁免用例缺 riskAccepted：${missingRisk.join(', ')}`);
+  }
+  const riskSigned = riskStatus === 'signed' && riskCasesMatch && riskSignerPresent
+    && nonExemptibleOpen.length === 0 && missingRisk.length === 0;
+
+  if (!allPass && !riskSigned) warnings.push(`发布未就绪：${calculated.pass}/11 全绿（partial ${calculated.partial}，blocked ${calculated.blocked}）；风险签署：${riskStatus}`);
+
+  const gateA = allPass && signoff.status === 'signed';
+  const gateB = riskSigned;
+  const gateOpen = gateA || gateB;
 
   return {
     root,
@@ -318,6 +364,14 @@ function validate(root) {
     cases: rows.map(row => ({ case: row.case, conclusion: row.conclusion, browser: row.browser, cloud: row.cloud })),
     allPass,
     signoff: signoff.status,
+    exemptibleCases,
+    nonExemptibleOpen,
+    missingRisk,
+    riskStatus,
+    riskSigned,
+    gateOpen,
+    gateA,
+    gateB,
     issues,
     warnings,
   };
@@ -337,15 +391,20 @@ function printHuman(result, strict) {
   }
   console.log('[79] 证据台账自洽：计数、维度、路径、指纹、读数、签字边界均通过');
   if (strict) {
-    if (!result.allPass) {
-      console.error('[79] 发布闸门 FAIL：证据未齐 11/11，不能进入发布签字');
-      return 1;
+    if (result.gateOpen) {
+      console.log(result.gateA
+        ? '[79] 发布闸门 PASS：11/11 全绿且已签字'
+        : '[79] 发布闸门 PASS：owner 风险签署通道放行（fail/blocked 为 0，可豁免用例均留痕并已签署）');
+      return 0;
     }
-    if (result.signoff !== 'signed') {
+    if (result.allPass) {
       console.error('[79] 发布闸门 FAIL：证据已齐，但还没有人签字');
-      return 1;
+    } else {
+      console.error('[79] 发布闸门 FAIL：证据未齐 11/11，且风险签署通道未生效');
+      console.error(`[79] 风险签署：${result.riskStatus}；可豁免 ${result.exemptibleCases.join(',') || '无'}`
+        + `；缺留痕 ${result.missingRisk.join(',') || '无'}；不可豁免 ${result.nonExemptibleOpen.join(',') || '无'}`);
     }
-    console.log('[79] 发布闸门 PASS：11/11 全绿且已签字');
+    return 1;
   }
   return 0;
 }
@@ -359,7 +418,7 @@ const root = resolve(values.get('root') ?? DEFAULT_ROOT);
 const result = validate(root);
 const strict = flags.has('strict');
 if (flags.has('json')) {
-  const jsonBlocked = result.issues.length > 0 || (strict && (!result.allPass || result.signoff !== 'signed'));
+  const jsonBlocked = result.issues.length > 0 || (strict && !result.gateOpen);
   console.log(JSON.stringify({ ...result, strict }, null, 2));
   process.exitCode = jsonBlocked ? 1 : 0;
 } else {

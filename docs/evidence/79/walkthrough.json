@@ -96,7 +96,8 @@
       "gap": "2026-11-20 在已应用方案（zones4/边界12/入口1）基线上复跑路线小改：模型回合 200 但停在「摆放物料」阶段，未回路线提案，routes 0→0、planLen 2589 不变，仍没有可比的路线候选前后对照；云端 revision 已复跑（rev13→14 例行副本同步，counts 不变）。阻塞点已定位到本地指令匹配：路线提案只劫持「排流线/自动排入口」等固定词表，「改主通道走向/别沿某条路/留宽通道」这类路线小改措辞不命中，句子进模型主链后被并入物料/场地核验；且路线提案要求已有锚点+边界≥3+可读路网。剩余缺口：① v2 已拿到 routes0→8/nodes1→5/rev14→15 的真机前后对照，但未核对 8 条流线几何与候选入口是否满足「走北侧、避湖滨路、宽通道连通两出入口」的意图，走向符合度未逐条比对。② 模型主链回合直接把流线/入口应用进 plan、未出路线预览确认卡，与本地提案链路「先虚线预览、用户确认再 applyRoutes」的交互口径不一致，是否符合产品预期待人工定性。③ 触发口径决策（扩展本地词表或让模型把走向句路由到路线提案）已剥离本轮门禁，见顶层 backlog #3。路线意图符合度与交互口径未核完前，#3 不升 pass。",
       "riskAccepted": {
         "decidedAt": "2026-11-21T18:04:41+08:00",
-        "decidedBy": "owner 对话拍板（待最终 signoff 签字追认；agent 未代签、未改结论档位）",
+        "decidedBy": "endTree（owner 对话拍板；agent 未代签、未改结论档位，conclusion 仍 partial）",
+        "mode": "risk-accepted",
         "accepted": [
           "模型主链回合直接把流线与候选入口应用进 plan、未出本地路线预览确认卡，按现状交互接受",
           "路线小改触发口径（扩展本地词表或让模型把走向句路由到路线提案）按 §七 backlog 剥离，不占本轮门禁"
@@ -296,16 +297,19 @@
       "2026-11-19 已部署 scene-api 本轮 v64（当前 v65），仅应用 20261117180000 / 20261117190000 两条迁移；其余 8 条未动"
     ],
     "riskAcceptance": {
+      "status": "pending-human",
       "reviewedBy": "endTree",
       "reviewedAt": "2026-11-21T18:04:41+08:00",
+      "signedBy": "",
+      "signedAt": "",
       "cases": [3, 4, 5, 6, 8, 9, 10, 11],
-      "note": "owner endTree 对话拍板：上述用例的残余风险与剥离项按各 case 的 riskAccepted 字段留痕接受。这是风险接受记录，不等同 signed 签字；各 case conclusion 仍按真实证据计 partial，未据此转 pass。strict 闸门仍要求 11/11 浏览器+云端双维度齐并填 signedBy/signedAt，当前 3/11，门禁未解除。"
+      "note": "owner endTree 对话拍板：上述用例的残余风险与剥离项按各 case 的 riskAccepted 字段留痕接受。这是风险接受记录，在 status=signed 且填写 signedBy/signedAt 之前不等同放行签字；各 case conclusion 仍按真实证据计 partial，未据此转 pass。门禁两条放行通道：A 11/11 双维度齐且主 signoff=signed；B 无 fail/blocked、每条可豁免用例均有 riskAccepted、本字段 status=signed 并由 owner 本人填 signedBy/signedAt。签署值只能由本人填，agent 不代签。"
     },
     "blockingItems": [
       "补齐 #3/#4/#5/#8/#9/#10/#11 本轮既有链路的剩余证据（当前 3/11 全绿）；列入顶层 backlog 的产品/口径待办不计入本轮门禁",
       "#3/#5/#9/#10 剩余真机样本依赖模型当轮回包（前三轮被上游选址未回候选挡在锚定段），本轮不硬造竞态窗口、不把 partial 顶成 pass；挂「待模型回合」，下次真实链路出对应回合再补前后对照",
       "#6 额度不足 / 网络超时异常分支按清单 §六 豁免口径，以离线单测 + 源码走查为准；豁免是否生效、#6 档位可否转 pass 待人工确认（不再要求改云端环境变量搭公网桩）",
-      "在 walkthrough.json 上签字（status=signed 需 11/11 双维度齐；当前仅风险接受留痕，未签）"
+      "放行两条通道二选一：A 补齐证据到 11/11 双维度齐并主 signoff=signed；B 由 owner 本人在 riskAcceptance 填 signedBy/signedAt 并置 status=signed（fail/blocked 不可豁免，可豁免用例须逐条有 riskAccepted）。当前两条均未签"
     ]
   },
   "backlog": [
@@ -344,6 +348,12 @@
       "item": "旧云 Agent Run 回看：后端 GET agent-runs 列表端点 + 前端项目墙可双击卡片",
       "owner": "产品 / 后端",
       "note": "当前旧 run 只能 DB 读、UI 无入口；本轮门禁不要求该入口交付"
+    },
+    {
+      "case": 11,
+      "item": "室内布局态（视角/画质/机位册选项弹窗、室内 PDF 打印另存）是保留功能，代码不驱除；本轮户外门禁仅剥离其真机证据，后续在有既有室内方案的环境单立室内走查门禁",
+      "owner": "产品 / 前端",
+      "note": "本轮走查账号无既有室内方案、无回切室内壳体入口；不删室内代码、不在本轮补室内证据"
     }
   ]
 }

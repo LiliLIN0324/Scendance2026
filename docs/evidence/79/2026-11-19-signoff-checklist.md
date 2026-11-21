@@ -40,7 +40,7 @@
 | --- | --- | --- | --- |
 | 1 | ~~部署 `scene-api` + 2 条迁移~~ **已完成 2026-11-19** | 已按最小范围执行：`scene-api` v64（当前 v65）；只应用 `20261117180000` / `20261117190000`；其余 8 条缺失迁移未动 | #7 已转 pass；#8b 已见 2 条写请求（`outdoor-history` 1 + `outdoor-plans` 1）；#9 该轮两次 404、部署后未重跑（#8b 的 CAS 不计入）。剩余是复跑 #1/#3/#4/#5 和补 #9 同轮 revision，不是部署 |
 | 2 | ~~准备 402 / 慢响应公网桩取证额度不足、超时~~ **按 §六 豁免口径取消** | 这两类属兜底分类分支，以离线分支单测 + 源码走查为准，不再要求在真实云端制造受控故障 | #6 额度/超时分支证据已由离线单测覆盖；档位转 pass 随 §六 豁免一并由人工复核 |
-| 3 | **在 `walkthrough.json` 上签字** | 门禁解除只能由人签字，agent 不能代签 | 11 条全绿才算解除；现在是 3/11（全绿 #1、#2、#7） |
+| 3 | **在 `walkthrough.json` 上签字** | 门禁解除只能由人签字，agent 不能代签 | 两条通道二选一（见 §九）：A 11 条全绿后主 signoff 签字；B 可豁免用例逐条留痕后由 owner 填风险签署 `signedBy/signedAt`。现在是 3/11 全绿、风险签署 `pending-human`，两条均未签 |
 
 ## 四、本轮**没有**做的事（如实列出）
 
@@ -53,8 +53,8 @@
 ## 五、复跑命令
 
 ```bash
-npm run check:79   # 台账自洽（当前 3/11 应为 0 门禁问题）
-npm run gate:79    # 发布闸门（当前应 exit 1，提示未齐 11/11）
+node scripts/check-79-evidence.mjs          # 台账自洽（当前 3/11 应为 0 自洽问题）
+node scripts/check-79-evidence.mjs --strict # 发布闸门（当前应 exit 1，通道 A/B 均未签）
 node docs/evidence/79/tools/case-07-08-09-chain-v2.mjs          # #7 / #8b 链路
 node docs/evidence/79/tools/case-07-08-09-cloud-revision.mjs   # 云端 revision / 冲突读数
 node docs/evidence/79/tools/case-01-09-blank-undo.mjs           # #1 空白项目 + #9 撤销再应用
@@ -99,3 +99,18 @@ node docs/evidence/79/tools/case-06-notlogged.mjs        # #6 未登录分支
 - **Edge Functions 待核**：前端打包产物不携带函数体版本；`7090dfda` 注明函数须另行重发。`scene-api` / `conversation-api` 是否随该提交重发，本轮只读探活无法判定，需管理端部署记录或下一次真实对话回合核对 trace 上行字段（sessionId / turnIndex / projectId / turnKey）。
 - **新基线复核**：workflow 守卫断言已在新 main 套件复核（123 绿 / 1 条上游既有文案红）；人数「无边界只改人数不挂红卡」已有等价覆盖，旧 zones 留存断言与新 main 现行「无边界 zones 挂红卡」行为冲突，未照搬。证据 `00/2026-11-21-workflow-guard-recheck.json`。
 - 在新构建上线、Functions 重发状态核实之前，台账「真实浏览器 + 真实云端」证据对应的线上代码版本存疑；本节不据此把任何用例升 `pass`。
+
+## 九、放行通道：全绿签字 与 owner 风险签署（2026-11-21 拟定，生效需人填签署值）
+
+strict 闸门（`node scripts/check-79-evidence.mjs --strict`）有两条互不为前提的放行通道，满足其一即放行：
+
+- **通道 A · 全绿签字**：11/11 浏览器 + 云端双维度齐、`conclusion=pass`，且主 `signoff.status=signed` 并填 `signedBy/signedAt`。
+- **通道 B · owner 风险签署**：允许证据未齐但由 owner 明示接受残余风险后放行，条件全部满足才算数：
+  1. 结论里没有 `fail` / `blocked`——这两类任何通道都不可经风险接受豁免；
+  2. 每条可豁免用例（`partial` / `n/a`）都在台账写有 `riskAccepted`（`mode` 为 `risk-accepted` 或 `scope-excluded`，含接受项与残余风险）；
+  3. 顶层 `signoff.riskAcceptance.status=signed`，由 **owner 本人**填 `signedBy` / `signedAt`；`cases` 必须与台账可豁免用例集合一致；
+  4. 签署值只能人填，agent 不代签、不回填时间戳。
+
+**不放宽的部分**：通道 B 只豁免「发布是否放行」，不放宽分类正确性——各用例 `browser` / `cloud` / `conclusion` 仍按真实证据记档，不得把 `partial` 顶成 `pass`；`riskAccepted` 里的残余风险随发布留痕，后续仍要按 backlog 跟进。
+
+**室内功能边界**：#11 室内布局态（视角/画质/机位册选项弹窗、室内 PDF）是保留功能，代码不驱除；本轮只是把室内真机证据剥离出户外门禁，后续在有既有室内方案的环境单立室内走查，不在本轮补室内样本。
