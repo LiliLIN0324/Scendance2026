@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { saveOutdoorProjectRecord, clearOutdoorProjectRecord } from './outdoor-project-store';
 import { caseActivityAlignment } from './case-activity-alignment';
 import type { RoomLayout } from './types';
@@ -15,8 +16,17 @@ function layout(id: string, name = '新活动 11-17 23:37'): RoomLayout {
   } as unknown as RoomLayout;
 }
 
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
 afterEach(() => {
   clearOutdoorProjectRecord(replicaId);
+  mem?.clear();
+  vi.unstubAllGlobals();
 });
 
 describe('caseActivityAlignment（经典案例 × 活动身份对齐）', () => {

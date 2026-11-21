@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { appendReviewComment } from '../../review-share-page/comments';
 import { appendReviewSharePin } from '../../review-share-page/share-pins';
 import { addReviewComment, issueReviewShare } from './review-share';
@@ -28,6 +29,15 @@ function bucket(seed: Record<string, string> = {}) {
     setItem(key: string, value: string) { map.set(key, value); },
   } satisfies Pick<Storage, 'getItem' | 'setItem'>;
 }
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 describe('readBingoPlanFeedback', () => {
   it('prefers PR #37 share pins keyed by reviewPlanKey', () => {

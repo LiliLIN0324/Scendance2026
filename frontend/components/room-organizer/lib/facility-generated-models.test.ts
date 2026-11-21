@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import {
   beginGenerationSubmission,
   clearGeneratedFacilityModelsForTests,
@@ -52,10 +53,16 @@ function seedLink(taskid = '4475964'): void {
   expect(consumeFacilityGenerateLink(taskid, '舞台')).toBe(true);
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   clearGeneratedFacilityModelsForTests();
   vi.mocked(loadAholoCatalogItem).mockReset();
 });
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 describe('生成模型注册表（V-5b/c 候选回填）', () => {
   it('注册后按设施列出、按 slug 命中；未注册的 slug 返 null', () => {

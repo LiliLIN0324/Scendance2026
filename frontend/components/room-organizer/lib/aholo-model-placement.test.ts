@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { packGltf } from '../../../../supabase/functions/_shared/models';
 import { tetrahedron } from '../../../../tests/model-fixture';
 import { clearGlbAssetCache, getGlbAssetState } from '../three/glb-assets';
@@ -50,16 +51,21 @@ function stubProxy(reply: { kind?: string; bytes?: Uint8Array } = {}) {
   return { calls, bytes };
 }
 
+let mem: MemoryStorage;
 describe('Aholo 产物摆进布置场景 (#66)', () => {
   beforeEach(() => {
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     localStorage.clear();
     clearGlbAssetCache();
   });
 
   afterEach(() => {
+    mem?.clear();
     vi.unstubAllGlobals();
     clearGlbAssetCache();
-    localStorage.clear();
   });
 
   it('落盘换成本机地址，并按模型真实包围盒给出宽高深', async () => {

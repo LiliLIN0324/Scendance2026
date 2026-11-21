@@ -196,7 +196,7 @@ export function buildPlanLegend(plan: SitePlanData): PlanLegendGroup[] {
           swatch: bucket.color ?? PLANNING_LAYER_COLORS.facility,
           label: templateName,
           count: bucket.count,
-          detail: sizes.length === 1 ? `${sizes[0]!} m` : `${sizes.length} 种尺寸`,
+          detail: sizes.length === 1 ? sizes[0]! : `${sizes.length} 种尺寸`,
           sticker: facilitySticker(templateId),
         };
       }),

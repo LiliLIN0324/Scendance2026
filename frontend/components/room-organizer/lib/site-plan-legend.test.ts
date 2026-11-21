@@ -193,7 +193,7 @@ describe('buildPlanLegend (H3-c 图例生成器)', () => {
     expect(facilities.entries.map(e => e.label)).toEqual(['市集摊位', '后勤帐篷', 'custom-gate-4x1']);
     expect(facilities.entries.map(e => e.count)).toEqual([2, 1, 1]);
     expect(facilities.entries[0]!.swatch).toBe(PLANNING_LAYER_COLORS.facility);
-    expect(facilities.entries[0]!.detail).toBe('2×2 m');
+    expect(facilities.entries[0]!.detail).toBe('2 × 2 m');
   });
 
   it('aggregates routes by carrier with dedicated colors and length totals', () => {
