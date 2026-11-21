@@ -3,7 +3,7 @@
 > 与 [`README.md`](README.md) 的分工：README 讲「为什么这么分、旧号怎么查」，本页讲「现在到底有哪些文件」。
 > **2026-11-13 起本页手工维护**（2026-11-08「脚本扫盘生成」的说法作废：脚本没有留存）。口径：**主目录只留现行规格/计划/参考**；一次性记录、回执、已实现提案、历史备忘一律移 [`archive/`](archive/)——保留原编号文件名，`git log --follow` 可查。
 > 本次整理：主目录 43 份编号文档 → 33 份（归档 12 份，明细见 §二），并补收此前漏收的 39–43 号。★ = [README](README.md)「核心 5 份」。
-> **全量逐份清单见 [DOC-MAP.md](DOC-MAP.md)**（`node scripts/doc-scan.mjs` 生成：仓库内 508 份 md 的路径、体量、最后改动与自述首句）。本页只做「按用途归类 + 什么时候读」，不重复登记每份文件的元数据。
+> **全量逐份清单见 [DOC-MAP.md](DOC-MAP.md)**（`node scripts/doc-scan.mjs` 生成：仓库内每份 md 的路径、体量、最后改动与自述首句；具体份数以该页为准）。本页只做「按用途归类 + 什么时候读」，不重复登记每份文件的元数据。
 
 ## 当前长期任务入口（2026-11-17）
 
@@ -14,7 +14,6 @@
 - [云端存储、保存、共享与国内案例：跨 AI 执行计划](plans/2026-11-20-cloud-storage-sharing-cases-execution.md)：主链已实现并于 2026-11-20 定向部署；两位管理员、官方工作室与 12 个国内案例已配置。当前真实验证范围及未覆盖项见[验收报告](plans/2026-11-20-cloud-storage-integration-acceptance.md) §0，运维步骤见 [runbook](plans/2026-11-20-cloud-storage-deployment-runbook.md)；不代表 V01–V14 全部验收完成。
 - [Agent T2/T3 接手记录](archive/plan/2026-11-19-agent-t2-t3-handoff.md)：可配置网页搜索、附件读取与来源、自动范围及聊天改范围；未配置搜索服务，T3 按用户要求未验收，未部署。
 - [聊天驱动完整活动设计：跨 AI 执行任务书](plans/2026-11-19-chat-first-event-agent-execution.md)：Chat/附件完成选址到物料与个人安排；含卡片删补、T0–T8、婚礼/公益双案例、目标网站截图与 main 交付要求。待实施，不代表已完成。
-- [最新 main 长期任务分派计划](plans/2026-11-17-main-long-horizon-agent-plan.md)：以 af748a6d 核对，五条开发线与独立验收责任、P0 数据条件、阶段终点和文件归属。本次仅规划，产品检查与发布仍未完成。
 - [对照 Event Producer Bot 的能力差距与提升计划 v3](plans/2026-11-17-event-producer-bot-gap-plan.md)：P0–P3 分层、「只陈述证据、不推导状态」口径，含 P1-0 材料起草与 P0-5 只读聚合；九条口径已拍板。
 - [eventProfile P0 契约草案 v2](plans/2026-11-17-event-profile-p0-contract.md)：字段表、标注不变量、9 个迁移面、`eventBrief` 契约与 T1–T18 验收。**点卡前先对这份**。
 - [生成物可见性与权限分层研究](plans/2026-11-20-生成物可见性权限分层研究.md)：逐类盘点物料 / 项目 / 快照链接 / 团队 / 个人私有现状规则，对照「公开 / 团队 / 开发者私有」三层给出归属建议与待拍板问题；未拍板，改 migration 前先看这份。
@@ -27,9 +26,9 @@
 - [61 号 · 真实档案抽取](61-真实场地档案抽取-20261118.md)：5 份自有档案抽成布局后 0 条判据可算；档案是演练件，验不了间距。**别拿「跑过」当「验过」**。
 - [62 号 · OSM 建筑轮廓](62-OSM建筑轮廓与真实数据判据-20261118.md)：补上建筑足迹后 GEN-07 首次在真实数据上算出 9.8 m；顺带记下 Overpass 镜像可用性与 ODbL 要求。
 
-## 一、主目录（50 份编号文档）
+## 一、主目录（53 份编号文档）
 
-> 编号占用：01–63 共 50 份，缺 8/10/17/18/20/30/31/34/35/38/51/52/53/54（多数已在 §二 归档）；**46 号重号两份**——`46-Agent运行卫生上线手册-20261116.md` 与 `46-虚拟场地纸面模式规格-20261117.md`，两份内容无关，均保留原文件名（改写会打断既有引用）。编号自本轮起冻结，新文档改用 `YYYY-MM-DD-主题.md`，不再占号。
+> 编号占用：01–66 共 53 份，缺 8/10/17/18/20/30/31/34/35/38/51/52/53/54（多数已在 §二 归档）；**46 号重号两份**——`46-Agent运行卫生上线手册-20261116.md` 与 `46-虚拟场地纸面模式规格-20261117.md`，两份内容无关，均保留原文件名（改写会打断既有引用）。空号不复用；55 号之后按实际需要继续顺延取号（最近新增 64–66：部署与发布三件）。
 
 ### 1. 产品钉与叙事（6 份）
 
@@ -106,7 +105,15 @@
 | 04 | [04-Golden-Path-规格与实测.md](04-Golden-Path-规格与实测.md) ★ | 对投资人/客户讲进度、定本周做什么（G1–G7 排序） |
 | 32 | [32-SC19-容量边界复验.md](32-SC19-容量边界复验.md) | 容量边界回归网——4 个测试文件的回归注释钉着此文件，暂留主目录 |
 
-### 6. 无编号根文件（4 份）
+### 6. 部署与发布（3 份）——上线、迁移、发版前对照
+
+| 编号 | 文件 | 什么时候读 |
+| --- | --- | --- |
+| 64 | [64-部署与发布手册.md](64-部署与发布手册.md) | 起本地服务、推迁移、部署五个 Edge Functions、写 Secrets 与供应商、配 Auth/OTP、处理未知任务与回滚 |
+| 65 | [65-版本更新文案规范.md](65-版本更新文案规范.md) | 写 CHANGELOG、打 tag、同步 GitHub Release 前（`npm run check:changelog` 的门槛出自这份） |
+| 66 | [66-Cloudflare部署.md](66-Cloudflare部署.md) | 改构建设置、根目录、`NEXT_PUBLIC_*` 内联、`CARTO_KEY`/高德 key 运行时位置、自定义域名与 Worker 路由 |
+
+### 7. 无编号根文件（4 份）
 
 | 文件 | 什么时候读 |
 | --- | --- |
@@ -134,21 +141,21 @@
 | archive/plan/ | [reconstruction-edit-review-design](archive/plan/reconstruction-edit-review-design.md) | 零引用实验稿（受控版本草案，自述不得作为上线依据） |
 | archive/research/ | [38-Taste与IA备忘录](archive/research/38-Taste与IA备忘录.md) | 2026-10-29 设计备忘，自带取代声明 |
 
-> 顺手项（未修，与本页无关）：`scripts/check-changelog.mjs`、`scripts/sync-github-releases.mjs`、`scripts/sync-tag-notes.mjs`、`CHANGELOG.md:40` 引用的 `docs/43-版本更新文案规范.md` 在 2026-11-05 重排时已删除，现残本疑似 `archive/legacy/2026-11-02-版本更新文案.md`——下次动发布链脚本时一并改。
+> 已修（2026-11-21）：`scripts/check-changelog.mjs`、`scripts/sync-tag-notes.mjs`、`scripts/sync-github-releases.mjs` 原先指向已删除的 `docs/43-版本更新文案规范.md`，现统一指向 [65-版本更新文案规范](65-版本更新文案规范.md)；该规范已从 `archive/legacy` 升回主目录，残本删除。
 
-## 三、子目录（12 个）
+## 三、子目录（11 个）
 
 > 计数口径：文件数=该目录下全部文件（含图片/HTML/JSON），md 数单独标注；2026-11-21 全盘实测，与旧版差异见 §五。
 
 | 子目录 | 文件数 | 收什么 |
 | --- | --- | --- |
-| [`archive/`](archive/) | 134 | 历史方案、验收、视觉稿、调研、旧运维文档；report 44 / plan 37 / visual 24 / research 15 / legacy 9 / example 4 + 根散件 1 |
+| [`archive/`](archive/) | 121 | 历史方案、验收、调研、旧运维文档（md 117）；report 46 / plan 41 / research 28 / legacy 1 / example 4 + 根散件 1。归档仍在收敛，计数以 [DOC-MAP](DOC-MAP.md) 为准 |
 | [`plans/`](plans/) | 174（md 126） | 在建方案与批次交付记录（散文件 + 专题包 + 配图）；含 40 份无日期前缀文件，按 `git log` 判新旧 |
 | [`evidence/`](evidence/) | 1226（入库 515） | 实测证据（截图、探针输出、Aholo 产物）；2.87 GB，其中 `aholo/` 2.37 GB 是重建素材（`.glb/.spz`）而非验收证据；`.gitignore` 按目录白名单部分入库 |
 | [`research/`](research/) | 25（md 21） | 调研稿；仅 `research/generation/README.md` 是范围内索引 |
 | [`figures/`](figures/) | 27 | 阶段页 HTML 与配图 |
 | [`contracts/`](contracts/) | 5 | 与 `supabase/functions/_shared/*-contract.ts` 对应的契约文档 |
-| [`examples/`](examples/) | 3 | 被测试直接读取的样例数据 |
+| [`tests/fixtures/`](../tests/fixtures/) | 8 | 被测试直接读取的样例数据（原 `docs/examples/` 于 2026-11-21 删除，机读夹具停在仓外这一层） |
 | [`quality/`](quality/) | 4 | 质量口径与检查记录 |
 | [`oneplan-icons/`](oneplan-icons/) | 4 | OnePlan 图标资源与说明 |
 | [`visual-2026/`](visual-2026/) | 63 | 2026 视觉稿与交付 HTML（10.9 MB） |
@@ -193,3 +200,4 @@
 - 子目录从 **8 个修正为 12 个**（补 `quality/`、`oneplan-icons/`、`visual-2026/`、`images/`），并按全盘实测改计数：`plans/` 68→174、`evidence/` 440→1226、`research/` 11→25。
 - 新增 [DOC-MAP.md](DOC-MAP.md)：全仓 513 份 md 的逐份清单（路径/体量/最后提交/自述首句），与本页分工——本页管分类与阅读时机，DOC-MAP 管实物台账。
 - 未做：未改任何文件名、未搬动文件；46 号重号只在两侧加注，`README.md` §四 的旧号表未动。
+- **2026-11-21 删除一条指空链接**：「最新 main 长期任务分派计划」（`plans/2026-11-17-main-long-horizon-agent-plan.md`）在 `git log --all` 与 `git ls-files` 里都不存在，从未入过 git；本页是文档入口，留断链比少一条更误导，故整条移除。该计划的内容（五条开发线与验收责任）若仍要做，需重新成文再挂回本节。
