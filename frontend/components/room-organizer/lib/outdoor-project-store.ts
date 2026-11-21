@@ -266,6 +266,51 @@ export function latestOutdoorProjectId(storage?: KeyValueStorage | null): string
   }
 }
 
+/** 枚举存储里的键：优先标准 Storage 的 `length`/`key()`；否则退回对象自有可枚举键。 */
+function listStorageKeys(store: KeyValueStorage): string[] {
+  const indexed = store as KeyValueStorage & { length?: number; key?: (index: number) => string | null };
+  if (typeof indexed.length === 'number' && typeof indexed.key === 'function') {
+    const keys: string[] = [];
+    for (let i = 0; i < indexed.length; i++) {
+      const key = indexed.key(i);
+      if (key) keys.push(key);
+    }
+    return keys;
+  }
+  return Object.keys(store);
+}
+
+/**
+ * 列出本机全部 plan 草稿记录（按 `updatedAt` 降序，同时间按 id 字典序）。
+ *
+ * 这是 plan 侧草稿索引身份恢复的地基（B1-b 解除条件）：本机活动 `house-*` 刻意不顶
+ * 最近指针，无参刷新时不能只靠 `latestOutdoorProjectId` 召回；恢复身份应从这份 plan
+ * 草稿索引取，而不是借室内 layout 单槽反推。当前只提供枚举读取，shell 恢复策略另立。
+ * 非本前缀的指针/接管标记等元键自然被过滤；坏信封宽容跳过。
+ */
+export function listOutdoorProjectRecords(storage?: KeyValueStorage | null): OutdoorProjectRecord[] {
+  const store = storage ?? safeDefaultStorage();
+  if (!store) return [];
+  const prefix = outdoorPlanStorageKey('');
+  const records: OutdoorProjectRecord[] = [];
+  let keys: string[];
+  try {
+    keys = listStorageKeys(store);
+  } catch {
+    return [];
+  }
+  for (const key of keys) {
+    if (!key.startsWith(prefix)) continue;
+    const projectId = key.slice(prefix.length);
+    if (!projectId) continue;
+    const record = readOutdoorProjectRecord(projectId, store);
+    if (record) records.push(record);
+  }
+  records.sort((a, b) =>
+    Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.projectId.localeCompare(b.projectId));
+  return records;
+}
+
 /**
  * 默认户外工作台 id（2026-11-11 用户拍板：`/` 无参数时直接进户外 2D 规划，
  * 起步概览西湖区，找场地是工作台里的"搜地点"能力，不该挡在入口前面）。

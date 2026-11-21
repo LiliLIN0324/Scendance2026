@@ -383,23 +383,25 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     if (aligned) actions.applyLayout(aligned);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [explicitOutdoorProject, outdoorProjectIdProp, layout.id]);
-  // 2026-11-13 用户指令：聊天历史要「服从于不同的项目」——会话槽跟当前活动走
-  // （活动身份 = 当前布局 id，切换/新建活动即变），外壳 projectId 只在外壳还没注水时兜底。
-  // 旧版本用 projectSessionScope(outdoorProjectIdProp)，一个 id 全活动共享，历史才会全摊在一起。
+  // 2026-11-13 用户指令：聊天历史要「服从于不同的项目」——会话槽跟当前活动走。
+  // B1-b（方案 B）：身份纯取外壳 projectId，不再借室内 layout.id 兜底反推。
+  // 无参刷新回默认草稿 / 最近云项目；本机 house-* 活动只在从列表 / 链接进入时按指定 id 解析。
+  // 主会话 scope、store scope、activity tracker 源三者同取这一个派生值，消除口径分裂。
+  const activeProjectId = outdoorProjectIdProp ?? DEFAULT_OUTDOOR_PROJECT_ID;
   const legacySessionScope = projectSessionScope(outdoorProjectIdProp);
-  const sessionScope = projectSessionScope(layout.id ?? outdoorProjectIdProp);
+  const sessionScope = projectSessionScope(activeProjectId);
   // 外壳 id 槽里的旧历史（升级前那份合并会话）整体搬给当前活动一次；同时把活动名记进名录，
   // 历史浮层按项目分组时才有名字可显示。
   useEffect(() => {
     adoptScopeHistory(legacySessionScope, sessionScope);
     rememberScopeName(sessionScope, layout.name);
   }, [legacySessionScope, sessionScope, layout.name]);
-  // M3a：活动会话身份源绑地图 projectId（props），不再订阅室内 layout.id；
-  // projectId 变化由 React 重渲染重建 source，旧会话 token 随之失效。
+  // B1-b：activity tracker 源与主 sessionScope 同源（activeProjectId）；身份变化由 React
+  // 重渲染重建 source，旧会话 token 随之失效。
   const activityScopeSource = useMemo<ActivityScopeSource>(() => ({
-    getScope: () => projectSessionScope(outdoorProjectIdProp),
+    getScope: () => projectSessionScope(activeProjectId),
     subscribe: () => () => undefined,
-  }), [outdoorProjectIdProp]);
+  }), [activeProjectId]);
   const activitySession = useActivitySessionTracker(layoutStore, activityScopeSource);
   const sessionToken = activitySession.token;
   const pendingCandidateRegistry=useMemo(()=>createPendingCandidateRegistry(),[]);
@@ -454,7 +456,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [agentBriefRecord, setAgentBriefRecord] = useState<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
   const agentBriefRef = useRef<{ scope: string; epoch: number; chatEpoch:number; sessionId:string|null; memory: BriefMemory } | null>(null);
   const agentBriefMemory = agentBriefRecord?.scope === sessionScope && agentBriefRecord.epoch === sessionToken?.epoch && agentBriefRecord.chatEpoch===chatTransitionEpoch.current && agentBriefRecord.sessionId!==null && agentBriefRecord.sessionId===getActiveAssistantSessionId(sessionScope) ? agentBriefRecord.memory : null;
-  const getStoreSessionScope = () => projectSessionScope(layout.id ?? outdoorProjectIdProp);
+  const getStoreSessionScope = () => projectSessionScope(activeProjectId);
   const getActiveBrief = () => {
     const scope = getStoreSessionScope();
     return activitySession.isCurrent(sessionToken) && agentBriefRef.current?.scope === scope && agentBriefRef.current.epoch === sessionToken?.epoch && agentBriefRef.current.chatEpoch===chatTransitionEpoch.current && agentBriefRef.current.sessionId!==null && agentBriefRef.current.sessionId===getActiveAssistantSessionId(scope)
@@ -4114,13 +4116,16 @@ useEffect(() => {
     initiallyFramed.current = false;
     if (isOutdoorProject) {
       const now = new Date().toISOString();
+      // 活动级规划不顶「最近项目」指针（与 overlay `!activityScopedPlan`、store 测试口径一致）：
+      // 活动不是续开项目，刷新无参数时回到最近云项目或默认草稿，本机活动从列表切回。
       saveOutdoorProjectRecord({ v: 1, projectId: created.id!, name: created.name || '未命名活动',
-        createdAt: now, updatedAt: now, plan: createStarterOutdoorPlan() });
+        createdAt: now, updatedAt: now, plan: createStarterOutdoorPlan() }, undefined, false);
       // 本机活动保持本机入口，刷新无参数时由最近项目指针续开新草稿。
       const url = new URL(window.location.href);
       url.searchParams.delete('project');
       window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
-      setOutdoorProjectId(DEFAULT_OUTDOOR_PROJECT_ID);
+      // B1-a：活动身份上提到壳体 prop（新活动 id），与 plan 槽、layout.id 对齐；仍不写 URL / 最近指针。
+      setOutdoorProjectId(created.id ?? DEFAULT_OUTDOOR_PROJECT_ID);
     }
   }, [actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards, flushPendingBeforeSwitch, activitySession.isCurrent, sessionToken, controller, isOutdoorProject]);
 
@@ -4644,6 +4649,8 @@ useEffect(() => {
     if(before.id!==projectId)flushPendingBeforeSwitch();
     if(layoutStore.getState().layout!==before)throw new Error('保存期间活动已变化，未绑定项目。');
     actions.applyLayout({ ...before, id: projectId });
+    // B1-a：绑定成功后把壳体项目身份同步到 prop，与 layout.id 对齐，为会话 scope 正源去回退铺路。
+    setOutdoorProjectId(projectId);
   }, [actions,activitySession.isCurrent,sessionToken,flushPendingBeforeSwitch]);
   // 无感挂云（设计规范 v2.5.2 §二.4）：登录态摆上第一件物料时静默建云项目并接上保存链。
   useSilentCloudAttach({ controller, layout, onBindProject });
