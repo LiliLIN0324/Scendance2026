@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>callback({}));}} as unknown as LockManager;
-beforeEach(()=>{vi.resetModules();vi.stubGlobal('navigator',{locks});});
-afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();vi.resetModules();});
+let mem: MemoryStorage;
+beforeEach(()=>{vi.resetModules();vi.stubGlobal('navigator',{locks});mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;});
+afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();mem?.clear();vi.resetModules();});
 async function setup(){const leases=await import('@/lib/local-write-lease');const chat=await import('./agent-chat-store');
   const manager=leases.createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage});return {manager,chat};}
 it('does not revert to legacy or delete stored messages after session closes',async()=>{

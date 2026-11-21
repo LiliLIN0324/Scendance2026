@@ -81,7 +81,7 @@ describe('workspace management', () => {
     fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
     // 2026-11-11 新主线：工作台里就有搜地点的能力，不该先过一个找场地页；
     // 直接跳 /editor/ → workspace-shell 写 default-outdoor 起步草稿（平湖秋月）→ 并入同一 RoomOrganizer（外壳 A 已下线）。
-    expect(mocks.replace).toHaveBeenCalledWith('/editor/');
+    expect(mocks.replace).toHaveBeenCalledWith('/editor/?new=1');
     expect(mocks.push).not.toHaveBeenCalled();
     expect(mocks.createProject).not.toHaveBeenCalled();
     // F-05：换机后停在项目页也能恢复，不必先进工作台。

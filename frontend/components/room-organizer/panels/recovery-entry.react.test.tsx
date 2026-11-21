@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { makeItem, makeFloor, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { RECOVERY_STORAGE_KEY } from '../lib/persistence';
 import { RecoveryEntry } from './recovery-entry';
@@ -11,12 +12,18 @@ vi.mock('./plan-thumb', () => ({ PlanThumb: () => null }));
 const busyHouse = makeLayout({ name: 'Busy', floors: [makeFloor({ items: [makeItem({ id: 'sofa' })] })] });
 
 describe('RecoveryEntry (#336)', () => {
+  let mem: MemoryStorage;
   beforeEach(() => {
-    window.localStorage.clear();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
   });
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    mem?.clear();
   });
 
   it('renders nothing when there is no recovery copy', () => {

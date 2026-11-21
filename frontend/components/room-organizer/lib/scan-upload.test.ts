@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { DIRECT_BASE, findAholoAsset, listAholoAssets } from './aholo-assets';
+
+let mem: MemoryStorage;
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  mem?.clear();
+});
 import {
   EMPTY_SCAN_MESSAGE,
   NOT_SCAN_MESSAGE,
@@ -107,8 +115,11 @@ describe('实景包上传：同名 LOD 目录按约定自动挂上', () => {
 
 describe('实景包上传：落到本机资产代理并登记', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.unstubAllGlobals();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
   });
 
   it('字节直传 /asset/upload，回源地址仍是本机 <uuid>.spz', async () => {

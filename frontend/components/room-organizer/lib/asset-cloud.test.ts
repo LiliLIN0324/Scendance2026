@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import type { RoomLayout } from './types';
 
 const localA = '11111111-1111-4111-8111-111111111111';
@@ -25,14 +26,19 @@ function localFetch() {
   return vi.fn(async () => new Response(new Uint8Array(32), { status: 200 }));
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
   vi.resetModules();
-  localStorage.clear();
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  mem?.clear();
 });
 
 describe('local asset cloud state and retry', () => {

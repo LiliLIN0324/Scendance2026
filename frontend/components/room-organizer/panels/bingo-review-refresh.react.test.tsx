@@ -2,6 +2,7 @@
 import {webcrypto} from 'node:crypto';
 import {act,cleanup,render,screen} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {BingoAuditCard} from './bingo-audit-card';
 import {makeFloor,makeLayout} from '../lib/__testfixtures__/fixtures';
 import {rememberReviewLinkMark,REVIEW_MARK_CHANGED_EVENT} from '../lib/review-share';
@@ -10,8 +11,9 @@ const layout=makeLayout({id:'project',name:'真实活动',floors:[makeFloor({id:
 const hash=`#layout=${Buffer.from(JSON.stringify(layout)).toString('base64url')}`;
 const input={projectKey:'project',title:'真实活动',shareId:'project',clientUrl:`http://localhost/review/${hash}`,reviewPlanKey:'unused'};
 const lock=(available=true)=>Object.defineProperty(navigator,'locks',{configurable:true,value:{request:(_n:string,_o:unknown,fn:(lock:object|null)=>unknown)=>Promise.resolve(fn(available?{}:null))}});
-beforeEach(()=>{localStorage.clear();vi.stubGlobal('crypto',webcrypto);lock();});
-afterEach(()=>{cleanup();localStorage.clear();vi.unstubAllGlobals();vi.restoreAllMocks();});
+let mem: MemoryStorage;
+beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;localStorage.clear();vi.stubGlobal('crypto',webcrypto);lock();});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();mem?.clear();});
 it('refreshes an already mounted card after same-tab durable save',async()=>{
  render(<BingoAuditCard/>);expect(screen.queryByText('本机评审记录')).toBeNull();
  const onChange=vi.fn();window.addEventListener(REVIEW_MARK_CHANGED_EVENT,onChange);

@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { AgentSupervisionPicker } from './agent-supervision-picker';
 import { AGENT_SUPERVISION_KEY, getAgentSupervision, setAgentSupervision } from '../lib/agent-supervision-store';
 
-beforeEach(()=>{localStorage.clear();setAgentSupervision('key-points');});
-afterEach(()=>{cleanup();vi.restoreAllMocks();});
+let mem: MemoryStorage;
+beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;localStorage.clear();setAgentSupervision('key-points');});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();mem?.clear();});
 
 it('多个入口共用一份生效设置，选择后立即写入并同步执行器读数',()=>{
   render(<><AgentSupervisionPicker/><AgentSupervisionPicker/></>);

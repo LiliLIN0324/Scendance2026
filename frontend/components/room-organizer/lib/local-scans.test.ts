@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { metersFromForwardBox } from './splat-meters';
+
+let mem: MemoryStorage;
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  mem?.clear();
+});
 
 const LOCAL_PROXY = 'http://127.0.0.1:3199';
 const REMOTE_RELAY = 'https://relay.example.test';
@@ -27,9 +35,12 @@ function stubProbe(answer: (url: string) => boolean) {
 
 describe('本机扫描登记', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     vi.resetModules();
   });
 
@@ -104,9 +115,12 @@ describe('本机扫描登记', () => {
 
 describe('云端扫描登记', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     vi.resetModules();
   });
 
@@ -150,9 +164,12 @@ describe('云端扫描登记', () => {
 
 describe('本机地址失效回退云端', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     vi.resetModules();
   });
 
@@ -183,9 +200,12 @@ describe('本机地址失效回退云端', () => {
 
 describe('清单删除的资产退注册表（墓碑同步）', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     vi.resetModules();
   });
 
