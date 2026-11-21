@@ -61,7 +61,7 @@ async function hydrateWithEditor() {
 it('keeps the entire workspace and editor unmounted until a pending marker is cleared and rechecked', async () => {
   localStorage.setItem(RESTORE_JOURNAL_MARKER, JSON.stringify({ version: 1, id: 'pending-restore' }));
   await hydrateWithEditor();
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('上次恢复尚未核对完成');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('上次恢复还没核对完');
   expect(mounts.workspace).not.toHaveBeenCalled(); expect(mounts.editor).not.toHaveBeenCalled();
   expect(localStorage.getItem(RESTORE_JOURNAL_MARKER)).not.toBeNull();
   localStorage.removeItem(RESTORE_JOURNAL_MARKER);
@@ -73,7 +73,7 @@ it('keeps the entire workspace and editor unmounted until a pending marker is cl
 it('keeps workspace and editor unmounted on storage failure until a successful recheck', async () => {
   const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage blocked'); });
   await hydrateWithEditor();
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('无法读取或识别');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('读不到本机恢复记录');
   expect(mounts.workspace).not.toHaveBeenCalled(); expect(mounts.editor).not.toHaveBeenCalled();
   read.mockRestore();
   await act(async () => { [...document.querySelectorAll('button')].find(button => button.textContent === '重新检查')!.click(); });
