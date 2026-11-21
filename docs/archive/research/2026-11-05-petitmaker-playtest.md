@@ -127,4 +127,4 @@
 
 但这一轮从页面内拦截到了**完整请求体**，拿到了比"跑成功一次"更可复用的东西：系统提示词全文（39,266 字符）、39 个工具 schema（47,715 字符）、每轮注入的 `<map_context>`、以及解压后的存档结构（含溯源账本与会话级 AI 披露标记）。
 
-详见 `docs/plans/2026-11-05-petitmaker-agent-teardown.md`，其中第 8 节给出了这些结论落到幕景的具体改动。
+详见 `docs/archive/research/2026-11-05-petitmaker-agent-teardown.md`，其中第 8 节给出了这些结论落到幕景的具体改动。

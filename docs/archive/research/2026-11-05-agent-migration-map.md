@@ -4,7 +4,7 @@
 - 仓库：`C:/幕景/Scendance2026`（commit `f0402ac`，TypeScript + Supabase Edge Functions + Next.js 前端）
 - 性质：**只读分析**，未修改任何代码
 - 目的：把谷地工坊（petitmaker）的 10 项做法逐条映射到本仓库的**真实文件 / 函数 / 行号**，并给出最小改动落点
-- 相关既有文档：`docs/plans/2026-11-05-petitmaker-agent-teardown.md`（逆向原文）、`docs/plans/2026-11-05-batch10-agent-steering-delivery.md`、`docs/plans/2026-11-05-batch11-agent-phase-progress-delivery.md`、`docs/plans/2026-11-05-batch13-agent-phase-persist-delivery.md`
+- 相关既有文档：`docs/archive/research/2026-11-05-petitmaker-agent-teardown.md`（逆向原文）、`docs/plans/2026-11-05-batch10-agent-steering-delivery.md`、`docs/plans/2026-11-05-batch11-agent-phase-progress-delivery.md`、`docs/plans/2026-11-05-batch13-agent-phase-persist-delivery.md`
 
 ---
 
