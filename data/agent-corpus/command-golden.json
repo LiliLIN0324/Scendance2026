@@ -1,0 +1,33 @@
+{
+  "comment": "文本→命令 golden set（docs/63 断点5）。target=解析函数名；expectOps 按子集匹配（先按 kind 找 op，再逐字段 toEqual，实际输出允许多出字段）；expectNull=必须解析为 null。反例（对冲词、不确定语气、无操作）与正例同等重要：解析器不许把犹豫当命令。docs/02 §1.2 点名的两个缺陷（缩放10%、两盏）在此以 scale-* / add-lamp-* 条目判决。",
+  "cases": [
+    { "id": "move-west-meters", "target": "parseRevisionRequest", "utterance": "把舞台往西挪1.5米", "expectOps": [{ "kind": "move", "role": "舞台", "delta": { "x": -1.5, "z": 0 } }] },
+    { "id": "move-west-cn-number", "target": "parseRevisionRequest", "utterance": "把舞台往西挪两米", "expectOps": [{ "kind": "move", "role": "舞台", "delta": { "x": -2, "z": 0 } }] },
+    { "id": "move-vague-left", "target": "parseRevisionRequest", "utterance": "把舞台往左挪一点", "expectOps": [{ "kind": "move", "role": "舞台", "delta": { "x": -0.3, "z": 0 } }] },
+    { "id": "move-to-coords", "target": "parseRevisionRequest", "utterance": "把签到台挪到5,10", "expectOps": [{ "kind": "move", "role": "签到台", "to": { "x": 5, "z": 10 } }] },
+    { "id": "move-reject-hedged", "target": "parseRevisionRequest", "utterance": "舞台大概往西挪2米左右", "expectNull": true, "note": "大约/左右是犹豫不是指令" },
+    { "id": "rotate-clockwise", "target": "parseRevisionRequest", "utterance": "把舞台顺时针旋转15度", "expectOps": [{ "kind": "rotate", "role": "舞台", "deltaDeg": 15 }] },
+    { "id": "rotate-ccw-deg-symbol", "target": "parseRevisionRequest", "utterance": "舞台逆时针转90°", "expectOps": [{ "kind": "rotate", "role": "舞台", "deltaDeg": -90 }] },
+    { "id": "scale-percent-increase", "target": "parseRevisionRequest", "utterance": "把舞台放大10%", "expectOps": [{ "kind": "scale", "role": "舞台", "factor": 1.1 }], "note": "docs/02 §1.2 点名缺陷①判决条目" },
+    { "id": "scale-set-percent", "target": "parseRevisionRequest", "utterance": "把舞台放大到150%", "expectOps": [{ "kind": "scale", "role": "舞台", "factor": 1.5 }] },
+    { "id": "scale-percent-decrease", "target": "parseRevisionRequest", "utterance": "把舞台缩小20%", "expectOps": [{ "kind": "scale", "role": "舞台", "factor": 0.8 }] },
+    { "id": "scale-multiple", "target": "parseRevisionRequest", "utterance": "把舞台放大2倍", "expectOps": [{ "kind": "scale", "role": "舞台", "factor": 2 }] },
+    { "id": "scale-void-no-number", "target": "parseRevisionRequest", "utterance": "舞台放大一点", "expectNull": true },
+    { "id": "recolor-basic", "target": "parseRevisionRequest", "utterance": "把椅子换成蓝色", "expectOps": [{ "kind": "recolor", "role": "椅子", "color": "#3b6fd4" }] },
+    { "id": "recolor-reject-uncertain", "target": "parseRevisionRequest", "utterance": "可能把椅子换成红色", "expectNull": true },
+    { "id": "remove-side-role", "target": "parseRevisionRequest", "utterance": "删掉左边的签到台", "expectOps": [{ "kind": "remove", "role": "签到台" }], "note": "方位词吞掉后不得把「的」残留在角色名里" },
+    { "id": "add-lamp-both-sides-each", "target": "parseRevisionRequest", "utterance": "在舞台两侧各加一盏灯", "expectOps": [{ "kind": "add", "assetId": "lamp", "count": 1, "anchor": { "role": "舞台", "sides": "both" } }], "note": "两侧各一盏的「每侧几件」语义由 revisePlan 的 bothSides 分支决定（固定 2 件），解析层只出 count=1+sides=both" },
+    { "id": "add-lamp-two", "target": "parseRevisionRequest", "utterance": "加两盏灯", "expectOps": [{ "kind": "add", "assetId": "lamp", "count": 2 }], "note": "docs/02 §1.2 点名缺陷②判决条目（两盏）" },
+    { "id": "add-lamp-warm-light", "target": "parseRevisionRequest", "utterance": "加两盏暖色灯光", "expectOps": [{ "kind": "add", "assetId": "lamp", "count": 2 }] },
+    { "id": "add-lamp-after-move", "target": "parseRevisionRequest", "utterance": "挪2米再加一盏灯", "expectOps": [{ "kind": "add", "assetId": "lamp", "count": 1 }] },
+    { "id": "add-tree-both-sides", "target": "parseRevisionRequest", "utterance": "在入口两侧各加一棵树", "expectOps": [{ "kind": "add", "assetId": "tree", "count": 1, "anchor": { "role": "入口", "sides": "both" } }] },
+    { "id": "bands-with-move", "target": "parseRevisionRequest", "utterance": "把舞台往西挪1.5米，湖边西侧3米别压", "expectOps": [{ "kind": "move", "role": "舞台", "delta": { "x": -1.5, "z": 0 } }], "expectBands": [{ "side": "west", "depth": 3, "label": "西侧景观带" }] },
+    { "id": "bands-standalone-void", "target": "parseRevisionRequest", "utterance": "湖边西侧3米别压", "expectNull": true, "note": "已知限制：纯保留带指令不带其他操作时返回 null，bands 只随 revise 请求一起出" },
+    { "id": "multi-clause-move-and-add", "target": "parseRevisionRequest", "utterance": "把舞台往西挪1.5米，在舞台两侧各加一盏灯", "expectOps": [{ "kind": "move", "role": "舞台", "delta": { "x": -1.5, "z": 0 } }, { "kind": "add", "assetId": "lamp", "count": 1, "anchor": { "role": "舞台", "sides": "both" } }] },
+    { "id": "no-op-smalltalk", "target": "parseRevisionRequest", "utterance": "今天天气不错", "expectNull": true },
+    { "id": "no-op-dont-touch", "target": "parseRevisionRequest", "utterance": "不要动舞台", "expectNull": true },
+    { "id": "material-two-chairs", "target": "parseMaterialRequest", "utterance": "再加两把椅子", "expect": { "materialId": "chair", "count": 2 } },
+    { "id": "material-classifier-only", "target": "parseMaterialRequest", "utterance": "加把椅子", "expect": { "materialId": "chair", "count": 1 } },
+    { "id": "material-unknown-void", "target": "parseMaterialRequest", "utterance": "加十个麦克风", "expectNull": true, "note": "目录外物料不冒充可加" }
+  ]
+}

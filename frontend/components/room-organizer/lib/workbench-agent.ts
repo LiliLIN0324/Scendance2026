@@ -349,8 +349,10 @@ function parseTarget(raw: string): { role: string; ordinal?: number; side?: 'lef
   const index = ordinal?.[2] ? Math.max(1, parseCount(ordinal[2])) : undefined;
   if (ordinal) text = text.replace(ordinal[0], '');
   const sideOnly = text.match(/^(左边|左面|左侧|右边|右面|右侧)/);
+  // 方位词吞掉后残留的「的」不进角色名：「左边的签到台」→ 签到台，不是「的签到台」（golden remove-side-role）。
+  const bare = (sideOnly ? text.replace(sideOnly[0], '') : text).replace(/^的/, '');
   return {
-    role: cleanRole(sideOnly ? text.replace(sideOnly[0], '') : text),
+    role: cleanRole(bare),
     ...(index ? { ordinal: index } : {}),
     ...(side ? { side } : sideOnly ? { side: /右/.test(sideOnly[0]) ? 'right' as const : 'left' as const } : {}),
   };

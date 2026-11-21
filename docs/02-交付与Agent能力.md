@@ -57,6 +57,7 @@
 | `replace` / `reserve` | 未落地：`PlanRevisionOp` 无替换与预留带 op | `lib/agent-proposal.ts:613` |
 
 **口径**：上表 1.1 是**审计时点**的缺口，按当前代码应收窄为"缺 `plan.check`/`space.inspect` 与 `replace`/`reserve`，且增量命令未过验收（缩放 10% 实为 0.2×、'两盏'只加 1 盏）"。"第④步缺 `plan.revise`"的原始结论只保留在 §1.1（第 3、5 行），§五 不再复述，一句指回本条。
+**2026-11-21 判决更新**：上面两个增量命令缺陷出自未跑测试的抽查；golden set（`data/agent-corpus/command-golden.json`，28 条，驱动测试 `workbench-command-golden.test.ts`）实测**解析层均未复现**（「放大10%」→factor 1.1、「两盏灯」→count 2）。当场抓到并已修复的真缺陷是方位词残留（「左边的签到台」解析成「的签到台」）；**应用层**另有两处已记录未修：`bothSides` 固定摆 2 件无视 count、锚点物件缺失时整个 op 失败（0 件）——详见 `docs/63` 断点 5 状态块。
 
 ---
 
