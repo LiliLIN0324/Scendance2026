@@ -6,6 +6,26 @@
   "account": "walkthrough-79@scendance.test（本轮新建的走查专用账号；不碰团队账号数据）",
   "harness": "docs/evidence/79/tools/（Playwright + HAR + CDP 级离线 + Supabase 管理 API 只读 SQL）",
   "note": "本文件是走查记录本的归档快照，不是发布结论。判定口径：固定数据 && 真实浏览器 == 'pass' && 真实云端 == 'pass' 三类齐才过；partial 不算过；n/a 不能顶 pass。2026-11-19 部署缺口已修复：scene-api v64（当前 v65）+ 两条迁移，PUT /outdoor-plans 已 200；#7 因此转为 pass。#9 的云端仍为 blocked：该轮 house-7jblibyk / 1438B 两次 PUT 均 404，部署后未重跑；08/cloud-revision 的 revision 3→4 是 #8b 的 house-3ik2jdf2 / 1440B，不计入 #9。#8b 的可复跑读数是 0→2 / 574→1440B，写请求 2 条。2026-11-19 11:23 复跑 #1 时，分区用途回合被上游判 invalid（输入需调整），未出分区预览；空白项目 / 组合需求 / 6 候选 / 红线 12 点已复现。#3/#4/#5/#8 待复跑；#10 缺服务端日志权限。门禁解除只能由人签字，agent 不能代签。范围边界：本台账是既有户外策划链路的发布门禁走查收尾，不是新功能立项、不发展室内模块；8 条 partial 是证据未齐待人工签字，不是待排期开发需求；文中“室内”字样仅为核对既有功能的对照项；#3 路由口径、#11 旧 run 入口、#8c 活动热切换入口、#10 trace 同号接线属产品待办 backlog，另立决策。",
+  "baseline": {
+    "evidenceCapturedOn": "d5b5eac7de9d09317b26d977497b62267ad52064（旧基线；台账多数真机/云端证据录于该版本）",
+    "rebuiltFrom": "cd344d2adb997ccbd8d7a7a3bb33a5e8fd4d27a7（远端被强推重写后的新 main，与旧基线无共同祖先）",
+    "rebuildCommit": "766be5f6cc97a021cc5576fcd0a92bafb668a5cd",
+    "rebuiltAt": "2026-11-21T15:50:00+08:00",
+    "note": "新 main 已重写 agent-panel / workflow / understanding，旧源码行号旁证可能漂移；路线口径测试已随新基线复跑 18 绿；recover 可选 title/description props 底座未随重建（上游组件已回到 4 参签名、无调用方接入）；workflow「无边界先发设计句」守卫断言待新基线套件复核。线上 pages.dev 部署版本与 Edge Functions 是否重发仍待核对，在此之前证据对应的线上代码版本存疑。",
+    "carriedOver": [
+      "docs/evidence/79 台账/清单/证据/探针",
+      "docs/plans 三份 79 计划",
+      "route-proposal.test.ts 两条 #3 口径断言"
+    ],
+    "droppedOnRebuild": [
+      "outdoor-cloud-recover.tsx 可选 props 底座",
+      "outdoor-cloud-recover.test.tsx 语境切换断言"
+    ],
+    "pendingRebase": [
+      "workflow react.test 守卫断言在新 main 夹具下复核",
+      "线上站部署版本与 Functions 重发核对"
+    ]
+  },
   "deployGap": {
     "summary": "2026-11-19 已修复：scene-api 本轮部署到 v64，当前线上 v65（01:46:40Z，非本轮操作，未核对函数体）；迁移 20261117180000 / 20261117190000 已应用；PUT /outdoor-plans 由 404 变 200，GET 返回 200 []，revision 可读写。历史缺口见 00/2026-11-19-deploy-gap.md，解决读数见 00/2026-11-19-deploy-resolution.md。",
     "evidence": "docs/evidence/79/00/2026-11-19-deploy-gap.md",
