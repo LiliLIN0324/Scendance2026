@@ -13,21 +13,22 @@ export interface AvatarTone {
   ink: string;
 }
 
-/** 统一规格：256×256 圆形裁切、同一人物骨架、扁平纸感插画，不含照片人像。 */
+/** 统一规格：256×256 圆形底色 + 圆内动物脸，纯矢量（Kenney Animal Pack，CC0 1.0）。
+ *  脸宽按 176/256 缩放；兔子耳朵、长颈鹿角特别高，按圆内收窄到 147 / 166，避免被容器圆裁掉。 */
 export const AVATAR_PRESETS: AvatarPreset[] = [
-  { id: '01', name: '陶土 · 短发', src: '/assets/avatars/preset/01.svg' },
-  { id: '02', name: '雾蓝 · 中分', src: '/assets/avatars/preset/02.svg' },
-  { id: '03', name: '沙金 · 丸子头', src: '/assets/avatars/preset/03.svg' },
-  { id: '04', name: '石墨 · 鸭舌帽', src: '/assets/avatars/preset/04.svg' },
-  { id: '05', name: '梅子 · 长波波', src: '/assets/avatars/preset/05.svg' },
-  { id: '06', name: '橄榄 · 卷发', src: '/assets/avatars/preset/06.svg' },
-  { id: '07', name: '砖红 · 齐刘海', src: '/assets/avatars/preset/07.svg' },
-  { id: '08', name: '松烟 · 贝雷帽', src: '/assets/avatars/preset/08.svg' },
-  { id: '09', name: '赭石 · 双马尾', src: '/assets/avatars/preset/09.svg' },
-  { id: '10', name: '麦色 · 圆框', src: '/assets/avatars/preset/10.svg' },
+  { id: '01', name: '熊猫', src: '/assets/avatars/preset/01.svg' },
+  { id: '02', name: '兔子', src: '/assets/avatars/preset/02.svg' },
+  { id: '03', name: '企鹅', src: '/assets/avatars/preset/03.svg' },
+  { id: '04', name: '小猪', src: '/assets/avatars/preset/04.svg' },
+  { id: '05', name: '猴子', src: '/assets/avatars/preset/05.svg' },
+  { id: '06', name: '大象', src: '/assets/avatars/preset/06.svg' },
+  { id: '07', name: '长颈鹿', src: '/assets/avatars/preset/07.svg' },
+  { id: '08', name: '河马', src: '/assets/avatars/preset/08.svg' },
+  { id: '09', name: '鹦鹉', src: '/assets/avatars/preset/09.svg' },
+  { id: '10', name: '小蛇', src: '/assets/avatars/preset/10.svg' },
 ];
 
-/** 首字母圆片的十档色，逐档取自同名插画里那件衣服的颜色；沙金太亮，字用墨色，其余用纸白。 */
+/** 首字母圆片的十档色，沿用原十档人物插画的衣服配色；沙金太亮，字用墨色，其余用纸白。 */
 export const AVATAR_TONES: AvatarTone[] = [
   { id: '01', name: '陶土', bg: '#B25B44', ink: '#FFFFFF' },
   { id: '02', name: '雾蓝', bg: '#46657A', ink: '#FFFFFF' },

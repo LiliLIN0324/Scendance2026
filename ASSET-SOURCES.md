@@ -49,3 +49,12 @@ Total download size: **262,516 bytes** (256.4 KiB); **5,638 triangles** across t
 新模型逐项核对 `https://3dassets.dev/api/v1/assets/<slug>` 返回的 CC0 1.0 许可，记录于 [model200.json](assets/library/model200.json)。原始英文标题、原站链接、尺寸和 SHA-256 保留于 [merged.json](assets/library/merged.json)；中文名称和分类见 [labels.zh.json](assets/library/labels.zh.json)。完整对账与修复记录见 [merge-report.json](assets/library/merge-report.json)。
 
 GLB 合计 48,104,156 字节。压缩包使用中文分类目录和文件名，附预览图、来源清单。复杂的巧克力工坊整场景保留文件，作为下载资源使用。新增 294 项可用模型已通过既有 RPC 登记，保留原有 234 项云资产身份；网页和 Agent 统一使用 528 项目录。超限整场景不进入可调用索引。实际发布与验证状态见 [整合验收](docs/archive/report/2026-10-09-中文模型库整合.md)。
+
+## 2026-11-21 账户预设头像（Kenney Animal Pack）
+
+账户中心的 10 张预设头像换为 Kenney 的 Animal Pack 动物头像，替换掉原先自绘的人物插画。矢量路径取自该包的 `Vector/round.svg`（5 列 × 2 行共 10 只），按表内网格逐只提取到 `frontend/public/assets/avatars/preset/01.svg`–`10.svg`：只做等比缩放、平移，并在 256×256 画布上补一层低饱和底色圆；Kenney 原始路径数据与配色未改动，不含位图，任意放大不糊。
+
+- 来源：[Kenney Animal Pack](https://www.kenney.nl/assets/animal-pack)（作者 Kenney Vleugels，<https://www.kenney.nl>）
+- 许可：**CC0 1.0 Universal**（公共领域奉献），允许商用、修改与再分发，署名非必需；随包 `License.txt` 原文见本地素材目录的 `animal-pack/License.txt`
+- 溯源：本地原始素材来自用户桌面 `kenney/animal-pack/`；上述 10 个 ID 与动物的对应为 01 熊猫、02 兔子、03 企鹅、04 小猪、05 猴子、06 大象、07 长颈鹿、08 河马、09 鹦鹉、10 小蛇
+- 未做的事：未改动 `Vector/` 里其余 7 个样式文件（square 与 round 的 outline / nodetails 变体），也未引入 UI 中尚未使用的第 11 张素材（该包 `PNG/` 下每套图形均为 10 只，已全部对应到预设）

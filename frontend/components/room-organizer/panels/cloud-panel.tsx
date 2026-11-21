@@ -224,6 +224,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [avatar, setAvatar] = useState<AvatarPreset>(() => avatarForSeed('guest'));
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  /** 选择器宽 236px，比左栏（188px、overflow:auto）宽，绝对定位会被裁掉最后一列，所以按视口坐标固定定位。 */
+  const [avatarPickerPos, setAvatarPickerPos] = useState<{ left: number; top: number } | null>(null);
+  const avatarPickerAnchorRef = useRef<HTMLButtonElement>(null);
   // 2026-11-18 用户：「团队也应该可以任意新建团队」——后端 POST /studios 早就支持，补上左栏入口。
   const [teamFormOpen, setTeamFormOpen] = useState(false);
   const [teamName, setTeamName] = useState('');
@@ -1280,13 +1283,24 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       <aside className="sc-account-side" aria-label="账户与团队">
       <div className="sc-account-studio">
         {cloud.user
-          ? <button className="sc-account-avatar" type="button" title={`更换头像 · ${avatar.name}`} aria-label={`更换头像，当前 ${avatar.name}`} aria-expanded={avatarPickerOpen} onClick={() => setAvatarPickerOpen(open => !open)}><img src={avatar.src} alt=""/></button>
+          ? <button ref={avatarPickerAnchorRef} className="sc-account-avatar" type="button" title={`更换头像 · ${avatar.name}`} aria-label={`更换头像，当前 ${avatar.name}`} aria-expanded={avatarPickerOpen} onClick={() => {
+              if (avatarPickerOpen) { setAvatarPickerOpen(false); return; }
+              const rect = avatarPickerAnchorRef.current?.getBoundingClientRect();
+              // 选择器宽 236px，比左栏（165px 内容宽、overflow:auto）宽，留在左栏会被裁掉最后一列；
+              // 改成相对对话框定位。模态 <dialog> 在顶层，fixed 的包含块就是对话框本身，所以坐标减掉对话框原点再夹回框内。
+              const host = dialog.current?.getBoundingClientRect();
+              setAvatarPickerPos(rect ? {
+                left: Math.max(8, Math.min(rect.left - (host?.left ?? 0), (host?.width ?? window.innerWidth) - 244)),
+                top: rect.bottom - (host?.top ?? 0) + 6,
+              } : null);
+              setAvatarPickerOpen(true);
+            }}><img src={avatar.src} alt=""/></button>
           : <span className="sc-account-avatar" aria-hidden="true"><UserRound size={20}/></span>}
         <div>
           <strong title={activeStudio?.name || accountIdentity}>{activeStudio?.name || accountIdentity}</strong>
           <span>{activeStudio ? studioRoleLabel(activeStudio.role) : '当前账户'}</span>
         </div>
-        {avatarPickerOpen && cloud.user && <div className="sc-account-avatar-picker" role="group" aria-label="预设头像">
+        {avatarPickerOpen && cloud.user && <div className="sc-account-avatar-picker" style={avatarPickerPos ? { position: 'fixed', left: avatarPickerPos.left, top: avatarPickerPos.top } : undefined} role="group" aria-label="预设头像">
           <span className="sc-account-avatar-picker-title">选择头像</span>
           {AVATAR_PRESETS.map(item => <button key={item.id} type="button" title={item.name} aria-label={item.name} aria-pressed={avatar.id === item.id} onClick={() => { setAvatar(item); saveAvatar(userId, item.id); setAvatarPickerOpen(false); }}><img src={item.src} alt=""/></button>)}
         </div>}
