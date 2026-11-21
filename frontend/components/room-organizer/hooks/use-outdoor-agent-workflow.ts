@@ -877,6 +877,56 @@ export function useOutdoorAgentWorkflow(input: {
     };
   }, [state.stage, proposal, busy, drawingMode, supervisionLevel]);
 
+  // 2026-11-21 用户实测：范围确认后在画布上重画红线，任务卡却停在下一阶段——重画的
+  // 边界没人收（画布轮询只在 place/scope 活着），画布上只剩孤零零的新红线，流程卡死。
+  // 这里补一个 scope 之后的全阶段看护：非绘制态下红线键与已确认键不一致，就把任务卡
+  // 轮回「核对活动范围」并签发确认卡；下游已完成阶段一并作废（重画场地意味着分区、
+  // 流线都要按新范围重来）。同一份边界只签一次（autoScopeSig 去重）；happy path
+  // 红线不变时不触发，「stage 单调前进」不变量不受影响。
+  useEffect(() => {
+    if (state.stage === "place" || state.stage === "scope") return undefined;
+    // 旧提案不挡看护：offer() 对被替换的提案自带 recordCard("replaced")，重画的红线
+    // 要能顶掉手上的旧卡（否则旧卡永远占位、重画没人收）。
+    if (busy || drawingMode) return undefined;
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      const planNow = callbacks.current.bridge()?.getPlan() ?? null;
+      if (!planNow || !checkBoundaryRing(planNow.boundary).ok) return;
+      // 只看护「曾确认过范围」的状态：没有已确认键就谈不上「重画」，
+      // 未确认态交给 scope 轮询，避免把手工构造/中途状态误判成重画。
+      if (!stateRef.current.confirmedBoundary) return;
+      if (stateRef.current.confirmedBoundary === boundaryKey(planNow)) return;
+      const sig = JSON.stringify({ anchor: planNow.anchor, boundary: planNow.boundary });
+      if (autoScopeSig.current === sig) return;
+      autoScopeSig.current = sig;
+      const job = start();
+      persist({
+        ...stateRef.current,
+        stage: "scope",
+        confirmedBoundary: null,
+        completed: stateRef.current.completed.filter((s) => s === "place"),
+      });
+      // offer 自带几何/schema 闸门：拒收时轮转已生效（stage=scope），
+      // 由 scope 轮询接管收尾（自动档静默确认/严格档出核对卡），这里不重复报错。
+      try {
+        offer(planNow, "scope", "确认重画的活动范围", job, [
+          "画布上的红线变了；确认后分区、流线、物件都按新范围重排。",
+        ]);
+      } catch {
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+    };
+    tick();
+    const timer = setInterval(tick, 800);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [state.stage, proposal, busy, drawingMode]);
+
   // 2026-11-19 T1-d2：真实用地红线同步（任务卡画真轮廓用，不再画示意地图）。
   // 与分区清单同口径：800ms 读一次 bridge 快照，只有合法闭合环才交给卡；不变不重渲染。
   useEffect(() => {

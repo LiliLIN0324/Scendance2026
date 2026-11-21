@@ -460,6 +460,30 @@ it("严格档下候选点选仍停在核对卡", async () => {
   expect(apply).toHaveBeenCalledTimes(1);
   expect(flow.state.stage).toBe("zones");
 });
+it("自动档下范围确认后重画红线：新范围直接生效，流程继续不卡死", async () => {
+  // 2026-11-21 用户实测：范围确认后想重画场地，画布轮询只在 place/scope 活着，
+  // 重画的边界没人收——任务卡停在「分区用途」，画布上只剩孤零零的新红线，流程卡死。
+  // 自动档：重画的红线是用户亲手画的，走「候选点选直接落地」同款口径直接生效；
+  // 严格档仍停在核对卡（见「当前规划改变后重画红线」那条）。
+  supervision = "auto";
+  await action("scope");
+  expect(flow.state.stage).toBe("zones");
+  // 画布上出现重画的新红线（键与已确认键不一致）
+  const ring2 = [
+    { x: 10, y: 5 },
+    { x: 90, y: 5 },
+    { x: 90, y: 75 },
+    { x: 10, y: 75 },
+  ];
+  plan = { ...plan, boundary: ring2 };
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  });
+  expect(flow.proposal).toBeNull();
+  expect(flow.state.confirmedBoundary).not.toBeNull();
+  expect(plan.boundary).toEqual(ring2);
+  expect(flow.state.stage).toBe("zones");
+});
 it("判据13·状态机不变量：确认链上 stage 单调前进、completed 只增、happy path 无 blocked", async () => {
   // docs/63 判据 #13：这条不变量曾在 950c6dd8 被打破（nextStage 原地不动，用户循环确认同一范围）。
   // 走一遍完整 happy path，在每个检查点核对四条不变量；编排抽离前后各跑一遍当行为等价裁判。
@@ -949,7 +973,7 @@ it("改口新任务后迟到旧模型结果不复活；取消与项目切换均�
   expect(flow.state.brief.event).toBeUndefined();
   expect(plan.zones).toHaveLength(0);
 });
-it("当前规划改变后的确认拒绝旧提案，不覆盖手工草稿", async () => {
+it("当前规划改变后重画红线：旧提案被新范围核对卡替换，画布不被覆盖", async () => {
   await confirmScope();
   await turn(
     "室外展览区",
@@ -969,9 +993,14 @@ it("当前规划改变后的确认拒绝旧提案，不覆盖手工草稿", asyn
     boundary: [...ring.slice(0, 2), { x: 70, y: 65 }, ring[3]!],
   };
   const snapshot = JSON.stringify(plan);
-  await action("confirm");
+  // 2026-11-21：重画红线不再等用户点旧提案的确认才报「失效」——看护 800ms 内把任务卡
+  // 轮回「核对活动范围」并签发新确认卡，画布原样保留等用户确认新范围。
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  });
   expect(JSON.stringify(plan)).toBe(snapshot);
-  expect(flow.notice).toContain("失效");
+  expect(flow.proposal?.kind).toBe("scope");
+  expect(flow.notice).toContain("确认重画的活动范围");
 });
 it("提案后用户新加的实体不让提案失效，确认时并回且不丢用户内容", async () => {
   await confirmScope();
