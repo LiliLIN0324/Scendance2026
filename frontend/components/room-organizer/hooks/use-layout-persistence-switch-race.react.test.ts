@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {act,cleanup,renderHook} from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {makeLayout} from '../lib/__testfixtures__/fixtures';
 import {STORAGE_KEY} from '../lib/constants';
 import * as persistence from '../lib/persistence';
@@ -12,6 +13,15 @@ import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { seededPlanFromLayout, sceneAnchorFromOutdoorPlan } from '../lib/outdoor-venue-sync';
 import { DEFAULT_OUTDOOR_PLAN_ANCHOR } from '../lib/outdoor-project-store';
 import { applyOutdoorShellVenuePatch, shellVenuePatchFromPlanBoundary } from '../lib/outdoor-venue-sync';
+
+let mem: MemoryStorage;
+beforeEach(()=>{
+  mem=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);
+  vi.stubGlobal('localStorage',mem);
+  window.localStorage=mem;
+});
+afterEach(()=>{mem?.clear();vi.unstubAllGlobals();});
 
 describe('activity transition and pending autosave observation',()=>{
  beforeEach(()=>{localStorage.clear();window.history.replaceState(null,'','/');vi.useFakeTimers();});

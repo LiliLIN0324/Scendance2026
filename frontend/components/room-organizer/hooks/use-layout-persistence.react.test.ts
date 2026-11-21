@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { createLocalWriteLeaseManager } from '@/lib/local-write-lease';
 import { createLayoutPersistenceCapability } from '../lib/layout-capability-persistence';
@@ -20,6 +21,15 @@ import { useLayoutPersistence } from './use-layout-persistence';
 import { useLayoutState } from './use-layout-state';
 import { layoutStore } from './use-layout-store';
 import type { RoomLayout } from '../lib/types';
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 describe('useLayoutPersistence — guarded task save and readback', () => {
   beforeEach(() => { localStorage.clear(); window.history.replaceState(null, '', '/'); vi.useFakeTimers(); });

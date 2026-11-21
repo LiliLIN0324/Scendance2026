@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../lib/constants';
 import { subscribeNotices } from '../lib/editor-notices';
@@ -9,6 +10,15 @@ import { VERSION_HISTORY_STORAGE_KEY, recordSnapshot } from '../lib/version-hist
 import { useLayoutPersistence } from './use-layout-persistence';
 import type { Notice } from '../lib/editor-notices';
 import type { RoomLayout } from '../lib/types';
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 describe('useLayoutPersistence — an oversized share link (#332)', () => {
   beforeEach(() => {

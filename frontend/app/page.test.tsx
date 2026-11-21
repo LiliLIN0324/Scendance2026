@@ -4,6 +4,7 @@ import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { usePathname } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { backendSceneToLayout } from '@/components/room-organizer/lib/backend-adapter';
 import { requestOutdoorProjectSwitch } from '@/components/room-organizer/lib/outdoor-project-switch';
 import { WorkspaceShell } from '@/components/workspace-shell';
@@ -106,7 +107,12 @@ function restore(object: object, key: string, descriptor: PropertyDescriptor | u
   else Reflect.deleteProperty(object, key);
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   vi.stubGlobal('crypto',webcrypto);
   const held=new Set<string>();
   Object.defineProperty(navigator,'locks',{configurable:true,value:{
@@ -138,6 +144,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  mem?.clear();
   activeController.dispose();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();

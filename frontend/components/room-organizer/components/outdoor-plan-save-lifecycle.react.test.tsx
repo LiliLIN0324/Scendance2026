@@ -9,6 +9,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import type { ComponentProps } from 'react';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { BackendSession } from '@/lib/backend-session';
@@ -74,7 +75,12 @@ function edit(next: SitePlanData) {
   act(() => { state.canvas!.onPlanChange!(next); });
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   localStorage.clear();
   resetMapSlotsCacheForTest();
   resetSaveStatusForTests();
@@ -86,6 +92,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  mem?.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   // 恢复真实的 navigator.locks（jsdom 默认没有）。

@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { clearSupabaseBrowserCookies } from '@/lib/supabase/client';
 import { AuthCard } from './auth-card';
@@ -23,7 +24,12 @@ function submitCredentials(): void {
   fireEvent.click(screen.getByRole('button', { name: '登录并进入工作台' }));
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   // @supabase/ssr 把会话落在 document.cookie 上：跨用例残留会让下一个 client 先走恢复流程，
   // 打乱 mockFetch 的响应队列，所以每个用例都从干净的存储开始。
   clearSupabaseBrowserCookies();
@@ -34,6 +40,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  mem?.clear();
   for (const session of sessions.splice(0)) session.dispose();
   vi.unstubAllGlobals();
 });

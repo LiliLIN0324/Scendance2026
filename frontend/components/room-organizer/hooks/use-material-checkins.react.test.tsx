@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { mergeStoredMaterialCheckins, readMaterialCheckins } from '../../../lib/material-checkin-storage';
 import { useMaterialCheckins, type MaterialCheckinState } from './use-material-checkins';
@@ -21,13 +22,18 @@ function View({ projectId = 'house-a', enabled = true, capability }: { projectId
   state = useMaterialCheckins({ projectId, enabled, prepareWrite: prepare, ...(capability ? {writeCapability:capability} : {}) });
   return <output>{state.ready ? state.ledger?.projectId ?? '无点验' : state.error ?? '读取中'}</output>;
 }
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   vi.clearAllMocks(); channels.length = 0; vi.stubGlobal('BroadcastChannel', Channel);
   prepare.mockResolvedValue(() => {});
   vi.mocked(readMaterialCheckins).mockImplementation(async projectId => ledger(projectId));
   vi.mocked(mergeStoredMaterialCheckins).mockImplementation(async (_projectId, value, guard) => { guard?.(); return value; });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { mem?.clear(); cleanup(); vi.unstubAllGlobals(); });
 
 describe('material checkin view lifecycle', () => {
   it('ignores a previous project read arriving after another project is active', async () => {

@@ -8,6 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { MemoryStorage } from "@/lib/test-support-memory-storage";
 import { createRef, type ComponentProps } from "react";
 import type { OutdoorAgentBridge, OutdoorMapEditHighlight } from "../lib/outdoor-agent-contract";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
@@ -95,7 +96,12 @@ vi.mock("./plan-place-search", () => ({
   },
 }));
 vi.mock("../lib/site-plan-csv", () => ({ downloadPlanCsv: state.csv }));
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal("Storage", MemoryStorage);
+  vi.stubGlobal("localStorage", mem);
+  window.localStorage = mem;
   localStorage.clear();
   // 槽位 store 同样有模块级缓存（面板用 useSyncExternalStore 消费），用例间手动复位。
   resetMapSlotsCacheForTest();
@@ -118,6 +124,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  mem?.clear();
   vi.unstubAllGlobals();
 });
 it("空白项目默认以西湖区全域概览起步，用户选址仍保留自己的位置", () => {

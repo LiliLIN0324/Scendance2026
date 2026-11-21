@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import {
   HelpRailButton,
   ONBOARDING_STORAGE_KEY,
@@ -52,15 +53,22 @@ function buttonInReel(name: string): HTMLButtonElement {
   return screen.getByRole('button', { name }) as HTMLButtonElement;
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   window.localStorage.clear();
   resetHelpCenterForTests();
 });
 
 afterEach(() => {
   cleanup();
+  mem?.clear();
   closeHelpCenter();
   resetHelpCenterForTests();
+  vi.unstubAllGlobals();
 });
 
 describe('OnboardingHost（2026-11-20 全局引导）', () => {

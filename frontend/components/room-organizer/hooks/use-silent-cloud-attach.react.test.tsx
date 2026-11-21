@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { consumeSelfAttachedProject } from '@/lib/workspace-api';
 import { makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { useSilentCloudAttach } from './use-silent-cloud-attach';
@@ -51,7 +52,12 @@ function Probe({ layout, onBind }: { layout: RoomLayout; onBind: (id: string) =>
   return null;
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   vi.resetAllMocks();
   localStorage.clear();
   window.history.replaceState(null, '', '/');
@@ -61,7 +67,7 @@ beforeEach(() => {
   mocks.acquireLease.mockResolvedValue({});
 });
 
-afterEach(cleanup);
+afterEach(() => { mem?.clear(); cleanup(); vi.unstubAllGlobals(); });
 
 describe('无感挂云', () => {
   it('keeps the local canvas unbound and does not retry after creating a read-only projected project',async()=>{

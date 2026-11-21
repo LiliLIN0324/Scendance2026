@@ -3,6 +3,7 @@ import { act } from "react";
 import { waitFor } from '@testing-library/react';
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, it, expect, vi, type Mock } from "vitest";
+import { MemoryStorage } from "@/lib/test-support-memory-storage";
 import type { BackendSession } from "@/lib/backend-session";
 import { assistantChatRequestSchema } from "../../../../supabase/functions/_shared/assistant-chat-contract";
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
@@ -165,7 +166,12 @@ async function confirmScope() {
   expect(plan.boundary).toEqual(ring);
   await action("confirm");
 }
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   (
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
@@ -208,7 +214,9 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  mem?.clear();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 it("户外问答跟随面板所选 provider 与 model 透传到对话请求", async () => {
   providerOverride = () => "tokendance";

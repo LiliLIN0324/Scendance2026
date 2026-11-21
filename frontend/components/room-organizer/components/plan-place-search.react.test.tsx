@@ -1,12 +1,21 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import PlanPlaceSearch from './plan-place-search';
 import type { PlaceSuggestion } from '../lib/place-search';
 
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
 afterEach(() => {
   cleanup();
-  localStorage.clear();
+  mem?.clear();
+  vi.unstubAllGlobals();
 });
 
 const westLake: PlaceSuggestion = {

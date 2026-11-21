@@ -1,14 +1,22 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 import { inspectRestoreStartup } from '@/lib/restore-startup';
 import { RestoreStartupGate } from './restore-startup-gate';
 const pathState=vi.hoisted(()=>({path:'/'}));
 vi.mock('next/navigation',()=>({usePathname:()=>pathState.path}));
 
-afterEach(()=>{cleanup();localStorage.clear();pathState.path='/';});
+let mem: MemoryStorage;
+beforeEach(()=>{
+  mem=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);
+  vi.stubGlobal('localStorage',mem);
+  window.localStorage=mem;
+});
+afterEach(()=>{mem?.clear();cleanup();vi.unstubAllGlobals();pathState.path='/';});
 function Editor({mounted}:{mounted:()=>void}) { mounted();return <div>编辑器与自动保存</div>; }
 
 describe('restore startup gate',()=>{

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {cleanup,renderHook,waitFor} from '@testing-library/react';
-import {afterEach,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {createLocalWriteLeaseManager} from '@/lib/local-write-lease';
 import {VERSION_HISTORY_PENDING_KEY} from '@/lib/version-history-pending';
 import {STORAGE_KEY} from '../lib/constants';
@@ -9,7 +10,14 @@ import {decodeShareUrl} from '../lib/share';
 import {useLayoutPersistence} from './use-layout-persistence';
 import {applyGuardedWorkspaceReplacement} from '../lib/workspace-write-guards';
 vi.mock('../lib/share',()=>({isShareHash:(hash:string)=>hash.startsWith('#layout='),isShareHashWithinBudget:()=>true,decodeShareUrl:vi.fn()}));
-afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();history.replaceState(null,'','/');});
+let mem: MemoryStorage;
+beforeEach(()=>{
+  mem=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);
+  vi.stubGlobal('localStorage',mem);
+  window.localStorage=mem;
+});
+afterEach(()=>{mem?.clear();cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();history.replaceState(null,'','/');});
 const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>callback({}));}} as unknown as LockManager;
 it('does not open a share when the guarded snapshot marker cannot be saved',async()=>{
  vi.stubGlobal('navigator',{locks});const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();

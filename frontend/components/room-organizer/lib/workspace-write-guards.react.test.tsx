@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { createLocalWriteLeaseManager } from '@/lib/local-write-lease';
 import { copySourceScope, deleteSource, deleteSourceForm, flushSourceScope, storeSource, storeSourceForm, updateSourceForm } from '@/lib/source-storage';
 import { makeLayout } from './__testfixtures__/fixtures';
@@ -13,7 +14,14 @@ import { useWorkspaceWriteGuards } from './workspace-write-guards';
 import { applyGuardedWorkspaceReplacement } from './workspace-write-guards';
 import * as restorePoint from './restore-point';
 
-afterEach(()=>{cleanup();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
+let mem: MemoryStorage;
+beforeEach(()=>{
+  mem=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);
+  vi.stubGlobal('localStorage',mem);
+  window.localStorage=mem;
+});
+afterEach(()=>{cleanup();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();mem?.clear();});
 
 describe('optional workspace lease composition',()=>{
   it('does not alter legacy callers that did not supply a capability',()=>{

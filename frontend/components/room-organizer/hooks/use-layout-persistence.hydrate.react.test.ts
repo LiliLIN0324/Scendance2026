@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../lib/constants';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
@@ -21,6 +22,15 @@ vi.mock('../lib/share', () => ({
 }));
 
 const mockedDecode = vi.mocked(decodeShareUrl);
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 const keptRaws = (): string[] => readRecoveryCopies().map(({ raw }) => raw);
 

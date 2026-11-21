@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import ProjectsPage from './page';
 
 const mocks = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), listStudios: vi.fn(), businessRequest: vi.fn(), createProject: vi.fn(), deleteProject: vi.fn() }));
@@ -19,14 +20,19 @@ async function ready() { await screen.findByText('这个工作室还没有项目
 function openPanel(name: string) { fireEvent.click(within(screen.getByRole('navigation', { name: '工作室管理' })).getByRole('button', { name: new RegExp(name) })); }
 function changeStudio(value: string) { fireEvent.change(screen.getByLabelText('工作室'), { target: { value } }); }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   vi.resetAllMocks(); localStorage.clear();
   snapshot.user = { id: 'my-account' }; snapshot.writeBlocked = true; snapshot.project = null;
   projects = [];
   mocks.listStudios.mockResolvedValue(studios);
   mocks.businessRequest.mockImplementation(path => Promise.resolve(read(path)));
 });
-afterEach(cleanup);
+afterEach(() => { mem?.clear(); cleanup(); vi.unstubAllGlobals(); });
 
 describe('workspace management', () => {
   it('requires handing off the current lease before linking to another project', async () => {

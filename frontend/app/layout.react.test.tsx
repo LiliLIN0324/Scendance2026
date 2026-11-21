@@ -2,7 +2,8 @@
 import { act } from '@testing-library/react';
 import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import RootLayout from './layout';
 import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 import type { ReactNode } from 'react';
@@ -12,12 +13,19 @@ vi.mock('@/components/workspace-shell', () => ({ BootSkeleton: () => <p>骨架�
 vi.mock('@/lib/auth-provider', () => ({ AuthProvider: ({ children }: { children: ReactNode }) => children }));
 
 let root: Root | undefined;
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = undefined;
   document.open(); document.write('<!doctype html><html><head></head><body></body></html>'); document.close();
   vi.restoreAllMocks();
-  localStorage.clear(); mounts.workspace.mockClear(); mounts.editor.mockClear();
+  mem?.clear(); vi.unstubAllGlobals(); mounts.workspace.mockClear(); mounts.editor.mockClear();
 });
 
 it.each([false, true])('hydrates the real root with extension injection=%s and preserves button interaction', async injected => {

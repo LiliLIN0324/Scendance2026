@@ -1,13 +1,21 @@
 // @vitest-environment jsdom
 import {act,cleanup,renderHook} from '@testing-library/react';
-import {afterEach,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {createLocalWriteLeaseManager} from '@/lib/local-write-lease';
 import {groundFromHeight,SITE_CALIBRATION_STORAGE_KEY} from '../lib/site-capture';
 const mock=vi.hoisted(()=>({apply:vi.fn(),hud:vi.fn(),start:vi.fn(async()=>({splats:1,meters:{width:10,depth:8,height:3}}))}));
 vi.mock('../three/splat-preview',()=>({paintSplatLayers:vi.fn(),createSplatPreview:()=>({shownId:'already',start:mock.start,applyCalibration:mock.apply,dispose:vi.fn(),setPosition:vi.fn(),setRoofCutoff:vi.fn(),setVisible:vi.fn(),setDisplayMode:vi.fn()})}));
 vi.mock('../three/calibration-hud',()=>({createCalibrationHud:mock.hud}));
 import {useSplatPreview} from './use-splat-preview';
-afterEach(()=>{cleanup();vi.restoreAllMocks();localStorage.clear();mock.apply.mockReset();mock.hud.mockReset();mock.start.mockClear();vi.unstubAllGlobals();});
+let mem: MemoryStorage;
+beforeEach(()=>{
+  mem=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);
+  vi.stubGlobal('localStorage',mem);
+  window.localStorage=mem;
+});
+afterEach(()=>{mem?.clear();cleanup();vi.restoreAllMocks();mock.apply.mockReset();mock.hud.mockReset();mock.start.mockClear();vi.unstubAllGlobals();});
 it('blocks all calibration writes and stays read-only after the flag disappears',async()=>{
  const locks={request(_n:string,_o:unknown,cb:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>cb({}));}} as unknown as LockManager;vi.stubGlobal('navigator',{locks});
  const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();

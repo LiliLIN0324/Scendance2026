@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import type { BackendSession } from '@/lib/backend-session';
 import { OutdoorFacilityGenerate } from './outdoor-facility-generate';
 import { submitMaterialGenerate } from '../lib/material-generate';
@@ -12,8 +13,9 @@ vi.mock('../lib/facility-generated-models', () => ({ attachFacilityGenerateTask:
 vi.mock('../lib/lux3d-import', () => ({ fetchLux3dTask: vi.fn(), glbOutputOf: () => null }));
 let host: HTMLDivElement; let root: Root;
 const target = { facilityId: 'stage-test', facilityName: '舞台', kind: 'text' as const };
-beforeEach(() => { sessionStorage.clear(); localStorage.clear(); vi.clearAllMocks(); host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
-afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); });
+let mem: MemoryStorage;
+beforeEach(() => { mem = new MemoryStorage(); vi.stubGlobal('Storage', MemoryStorage); vi.stubGlobal('localStorage', mem); window.localStorage = mem; sessionStorage.clear(); localStorage.clear(); vi.clearAllMocks(); host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
+afterEach(() => { act(() => root.unmount()); host.remove(); mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 function show(projectId = 'project-a', controller?: BackendSession) { act(() => root.render(<OutdoorFacilityGenerate key={projectId} target={target} projectId={projectId} controller={controller} onClose={vi.fn()} />)); }
 async function submit() {
   act(() => (document.querySelector('[aria-label="确认扣额度后才会提交"]') as HTMLInputElement).click());

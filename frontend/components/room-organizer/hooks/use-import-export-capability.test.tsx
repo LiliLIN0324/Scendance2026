@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 import {act,renderHook} from '@testing-library/react';
-import {afterEach,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {createLocalWriteLeaseManager} from '@/lib/local-write-lease';
 import {VERSION_HISTORY_PENDING_KEY} from '@/lib/version-history-pending';
 import {makeFloor,makeItem,makeLayout} from '../lib/__testfixtures__/fixtures';
 import {useImportExport} from './use-import-export';
 vi.mock('../lib/file-io',()=>({readLayoutFromFile:vi.fn(async()=>makeLayout({name:'导入'})),downloadDataUrlAsPng:vi.fn()}));
-afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
+let mem: MemoryStorage;
+beforeEach(()=>{
+  mem=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);
+  vi.stubGlobal('localStorage',mem);
+  window.localStorage=mem;
+});
+afterEach(()=>{mem?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('does not replace the canvas if the guarded snapshot cannot be saved',async()=>{
  const locks={request(_n:string,_o:unknown,cb:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>cb({}));}} as unknown as LockManager;
  vi.stubGlobal('navigator',{locks});vi.spyOn(window,'confirm').mockReturnValue(true);

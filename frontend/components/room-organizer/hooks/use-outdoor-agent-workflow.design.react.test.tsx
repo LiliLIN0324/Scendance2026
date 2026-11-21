@@ -8,6 +8,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryStorage } from "@/lib/test-support-memory-storage";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import { useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import type { SitePlanData } from "../../../../supabase/functions/_shared/site-plan";
@@ -91,7 +92,12 @@ function Harness() {
 
 const byId = (id: string) => plan.facilities.find((facility) => facility.id === id)!;
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
   plan = seededPlan();
@@ -123,7 +129,9 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  mem?.clear();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("场地局部调整闭环", () => {

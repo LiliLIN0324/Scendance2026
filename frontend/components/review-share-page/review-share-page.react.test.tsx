@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 const LOCAL_LAYOUT_KEY = 'scendance-editor-local-v1';
 import { INITIAL_LAYOUT } from '../room-organizer/lib/initial-layout';
 import { makeItem } from '../room-organizer/lib/__testfixtures__/fixtures';
@@ -54,9 +55,16 @@ function layoutHash(layout: RoomLayout): string {
   return `#layout=${encoded}`;
 }
 
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
 afterEach(() => {
   cleanup();
-  localStorage.clear();
+  mem?.clear();
   window.history.replaceState(null, '', '/review/');
   vi.unstubAllGlobals();vi.restoreAllMocks();
 });

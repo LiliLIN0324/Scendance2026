@@ -3,11 +3,21 @@ import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';
 import { RECOVERY_STORAGE_KEY, readRecoveryCopies } from '../components/room-organizer/lib/persistence';
 import { VERSION_HISTORY_STORAGE_KEY } from '../components/room-organizer/lib/version-history';
 import ErrorBoundaryPage from './error';
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 const renderBoundary = (error: Error & { digest?: string }) =>
   render(createElement(ErrorBoundaryPage, { error, reset: () => {} }));

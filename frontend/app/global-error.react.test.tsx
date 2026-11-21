@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';
 import { isRecoveryKey } from '../components/room-organizer/lib/persistence';
 import GlobalError from './global-error';
 
-afterEach(()=>{cleanup();localStorage.clear();vi.restoreAllMocks();});
+let mem: MemoryStorage;
+beforeEach(()=>{
+  mem=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);
+  vi.stubGlobal('localStorage',mem);
+  window.localStorage=mem;
+});
+afterEach(()=>{mem?.clear();cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('全局错误页配额不足时保留原始草稿并提示可下载',()=>{
   const raw='原始未修复内容\r\n{bytes}';localStorage.setItem(STORAGE_KEY,raw);
   const original=Storage.prototype.setItem;

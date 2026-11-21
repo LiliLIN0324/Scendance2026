@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import * as THREE from 'three';
 const mock = vi.hoisted(() => ({ controllers: [] as any[] }));
 vi.mock('../three/splat-preview', () => ({
@@ -18,7 +19,14 @@ vi.mock('../three/splat-preview', () => ({
   },
 }));
 import { useSplatPreview } from './use-splat-preview';
-afterEach(() => { cleanup(); mock.controllers.length = 0; localStorage.clear(); });
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); cleanup(); mock.controllers.length = 0; vi.unstubAllGlobals(); });
 const source = (assetId: string) => ({ assetId, name: assetId, url: `/${assetId}.spz` });
 function setup() {
   const deps = {
