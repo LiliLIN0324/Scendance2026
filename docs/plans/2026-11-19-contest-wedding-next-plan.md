@@ -63,7 +63,7 @@
 | G4 | **绑骨角色未接到人群组配置**：NPC 目前用程序化人形兜底（`HumanFigureRig`），人群侧按角色分配动作清单的配置与数据契约还没有 | `hooks/use-npcs.ts`、`three/people-model.ts` |
 | G5 | **成熟动画组合待定位复用**：会议提到此前那套动画组合（口述称「Rigol/月饼」），本地落点尚未定位，需先找出资产再谈重定向复用 | 待检索人物 GLB / clips 资产 |
 | G6 | **参赛能力说明素材未整理**：平台能力清单（3D 重建、骨骼动画、动画组合、图生 3D）尚未逐项标注来源（平台提供 / 本仓自研） | — |
-| G7 | **工程卫生与基线待复测**：本地大量 `.tmp-*` / `.verify-*` / 备份目录未跟踪；`main` 领先 origin 1 个提交（`db8e9952`，左轨气泡文案）；#79 走查仍有多项 partial/blocked，发布门禁未由人解除 | `git status --porcelain`、`docs/plans/2026-11-18-79-handoff-next-agent.md` |
+| G7 | **工程卫生与基线待复测**：本地大量 `.tmp-*` / `.verify-*` / 备份目录未跟踪；`main` 领先 origin 1 个提交（`db8e9952`，左轨气泡文案）；#79 走查仍有多项 partial/blocked，发布门禁未由人解除 | `git status --porcelain`、`docs/archive/plan/2026-11-18-79-handoff-next-agent.md` |
 
 ## 三、下一步任务拆解
 
