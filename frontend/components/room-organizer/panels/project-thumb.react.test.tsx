@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readLocalActivity } from '@/lib/local-activities';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { outdoorPlanStorageKey } from '../lib/outdoor-project-store';
 import type { RoomLayout } from '../lib/types';
 import { ProjectThumb } from './project-thumb';
@@ -42,11 +43,17 @@ const planWithBoundary = {
 const fallback = <span data-testid="mark"/>;
 
 describe('ProjectThumb', () => {
+  let mem: MemoryStorage;
   beforeEach(() => {
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     localStorage.clear();
     readActivity.mockReset();
     readActivity.mockRejectedValue(new Error('没有本机归档'));
   });
+  afterEach(() => { mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
   it('先用本机真实定格', async () => {
     readActivity.mockResolvedValue({ layout: layoutWithZonesAndDoor } as never);

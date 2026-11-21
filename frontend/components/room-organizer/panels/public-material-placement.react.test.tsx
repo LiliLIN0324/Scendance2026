@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import catalogue from '../../../../assets/library/merged.json';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { normalizeOnlineModels, buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { OnlineModelLibrary } from './online-model-library';
@@ -16,7 +17,14 @@ vi.mock('../lib/online-models', async importOriginal => ({
   loadOnlineModels: vi.fn(),
 }));
 
-afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { cleanup(); mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('clicking the reported floodlight arms placement even when cloud authorization would return ASSET_NOT_FOUND', async () => {
   const lamp = normalizeOnlineModels(catalogue).find(model => model.name === '四头泛光照明灯杆')!;

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { BackendSession, SceneApiError, getBackendConfig, type GenerationJob } from '@/lib/backend-session';
 import { GenerationSheetHost } from './generation-sheet';
 import { closeGenerationSheet, openGenerationSheet, resetGenerationSheetForTests } from '../lib/generation-sheet';
@@ -23,9 +24,14 @@ const job: GenerationJob = {
 };
 
 let controller: BackendSession;
+let mem: MemoryStorage;
 let create: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   resetGenerationSheetForTests();
   clearStagedMaterialGenerateForTests();
   sessionStorage.clear();
@@ -50,7 +56,7 @@ beforeEach(() => {
   Object.assign(controller, { createGenerationJob: create });
 });
 
-afterEach(() => { cleanup(); controller.dispose(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); controller.dispose(); mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('统一生成面板', () => {
   it('创作入口：同一页两张卡片，文生和图生在卡片上切换，不打开第二层窗口', () => {

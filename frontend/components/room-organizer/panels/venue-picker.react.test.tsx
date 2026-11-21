@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { AgentPanel, LayoutAgentProvider, VenuePickerOverlay } from './agent-panel';
 import { VenuePicker } from './venue-picker';
@@ -67,7 +68,12 @@ function harness(onApply = vi.fn()) {
   return onApply;
 }
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   vi.resetAllMocks(); localStorage.clear();
   snapshot.user = { id: 'me' };
   state.view = makeViewSettings();
@@ -77,7 +83,7 @@ beforeEach(() => {
   mocks.createProject.mockResolvedValue({ id: 'p-new', name: '新方案', studio_id: 'studio-1', revision: 1, scene });
 });
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('VenuePicker（换场地 / 新建）', () => {
   it('空白开始：登录态建云项目并写本机地图草稿，整页进地图', async () => {

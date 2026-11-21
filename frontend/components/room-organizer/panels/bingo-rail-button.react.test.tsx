@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { REVIEW_SHARE_PIN_STORAGE_KEY, appendReviewSharePin } from '../../review-share-page/share-pins';
 import { BINGO_MARK_KEY, BINGO_RETURN_KEY } from '../lib/bingo-status';
 import { BINGO_D4, BingoRailButton, bingoBeadCenter, bingoRingPath } from './bingo-rail-button';
@@ -55,8 +56,15 @@ function seedPin(planKey: string, status: 'open' | 'resolved' = 'open') {
   }
 }
 
-afterEach(cleanup);
-beforeEach(() => localStorage.clear());
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+  localStorage.clear();
+});
+afterEach(() => { cleanup(); mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Bingo 左轨入口 · D4 开口环', () => {
   it('待发且选中：仍是东北开口环，实心圆盘不盖住缺口', () => {

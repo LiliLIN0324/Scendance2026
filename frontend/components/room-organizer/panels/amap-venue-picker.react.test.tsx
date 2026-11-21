@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 // 高德脚本加载走网络，测试里直接放行；Key 从 localStorage 来。
 vi.mock('../lib/amap-script', async (original) => ({
@@ -9,6 +10,15 @@ vi.mock('../lib/amap-script', async (original) => ({
 }));
 
 import { AmapVenuePicker } from './amap-venue-picker';
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 type Cb = (status: string, result: unknown) => void;
 

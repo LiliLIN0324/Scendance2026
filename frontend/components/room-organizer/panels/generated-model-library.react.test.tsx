@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { intentStorageKey } from '@/lib/assets-api';
 import { BackendSession, getBackendConfig, type GenerationCapabilities, type GenerationJob } from '@/lib/backend-session';
 import { ensureGlbAsset } from '../three/glb-assets';
@@ -20,9 +21,14 @@ function job(state: GenerationJob['state'] = 'queued', updatedAt = '2026-10-03T0
     provider_usage: null, created_at: '2026-10-03T03:00:00Z', updated_at: updatedAt };
 }
 let controller: BackendSession;
+let mem: MemoryStorage;
 let list: MockInstance<BackendSession['listGenerationJobs']>;
 let create: MockInstance<BackendSession['createGenerationJob']>;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   sessionStorage.clear(); localStorage.clear();
   controller = new BackendSession(getBackendConfig({ url: '', anonKey: '' }));
   const snapshot = { ...controller.getSnapshot(), user: { id: 'member' },
@@ -33,7 +39,7 @@ beforeEach(() => {
   create = vi.spyOn(controller, 'createGenerationJob').mockResolvedValue(job());
   vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
 });
-afterEach(() => { cleanup(); controller.dispose(); vi.useRealTimers(); vi.restoreAllMocks(); vi.mocked(ensureGlbAsset).mockReset(); });
+afterEach(() => { cleanup(); controller.dispose(); mem?.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.mocked(ensureGlbAsset).mockReset(); });
 
 describe('single object generation UI', () => {
   it('retires all new HY3 creation controls and never resubmits saved legacy intents', async()=>{

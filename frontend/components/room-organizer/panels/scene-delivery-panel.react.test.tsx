@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { executionTimetableHtml } from '@/lib/execution-timetable-export';
 import { serializeLocalProjectBackup, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
@@ -49,6 +50,7 @@ vi.mock('@/lib/execution-timetable-export',async importOriginal=>{
   return {...original,executionTimetableHtml:vi.fn(original.executionTimetableHtml)};
 });
 let controller:BackendSession;
+let mem: MemoryStorage;
 const layout=makeLayout({roof:{style:'none'}});
 const itemId='30000000-0000-4000-8000-000000000001';
 function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor({items:[makeItem({id:itemId,name:'签到椅',materialId:'chair'})]})]}); }
@@ -89,8 +91,8 @@ function deferred<T>() {
   const promise=new Promise<T>(done=>{resolve=done;});
   return {promise,resolve};
 }
-beforeEach(()=>{vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
-afterEach(()=>{cleanup();controller.dispose();vi.clearAllMocks();vi.unstubAllGlobals();});
+beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;vi.stubGlobal('crypto',webcrypto);window.history.replaceState({},'', '/');controller=new BackendSession(getBackendConfig({url:'',anonKey:''}));vi.mocked(exportDeliveryGlb).mockResolvedValue({buffer:new ArrayBuffer(8),objectCount:2});vi.mocked(sceneDeliveryCsv).mockReturnValue('csv');vi.mocked(sceneExecutionCsv).mockResolvedValue('execution');vi.mocked(eventOperationsCsv).mockResolvedValue('operations');vi.mocked(sceneDeliveryJson).mockResolvedValue('{}');});
+afterEach(()=>{cleanup();controller.dispose();mem?.clear();vi.clearAllMocks();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function openInternalTools(): void {
   const details = screen.getByText('内部资料').closest('details') as HTMLDetailsElement | null;
   if (details && !details.open) fireEvent.click(details.querySelector('summary')!);

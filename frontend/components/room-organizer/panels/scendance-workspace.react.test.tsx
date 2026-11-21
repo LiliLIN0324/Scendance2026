@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, type ComponentProps, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from '../contexts/selection-context';
 import { layoutStore } from '../hooks/use-layout-store';
@@ -54,10 +55,15 @@ const GENERATED: CatalogItem = {
   materialId: 'asset', assetId: GENERATED_ID, glbUrl: `http://127.0.0.1:3199/asset/${GENERATED_ID}.glb`,
 };
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   vi.mocked(loadOnlineModels).mockResolvedValue(buildOnlineModelIndex(MODELS));
   vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
-});afterEach(() => { cleanup(); vi.resetAllMocks(); });
+});afterEach(() => { cleanup(); mem?.clear(); vi.resetAllMocks(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function contexts(layout = makeLayout(), view = makeViewSettings()) {
   const selectOnly = vi.fn();

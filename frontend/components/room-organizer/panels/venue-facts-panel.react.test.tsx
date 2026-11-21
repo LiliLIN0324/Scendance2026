@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
-import {afterEach,describe,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {readVenueFacts,venueFactsStorageKey} from '../lib/venue-facts-storage';
 import {VenueFactsPanel} from './venue-facts-panel';
 
-afterEach(()=>{cleanup();localStorage.clear();vi.unstubAllGlobals();});
+let mem: MemoryStorage;
+beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;});
+afterEach(()=>{cleanup();mem?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('local venue notes',()=>{
  it('records user-provided dimensions with their source while keeping the independence notice',async()=>{
   vi.stubGlobal('navigator',{locks:{request:async(_name:string,_options:unknown,callback:()=>Promise<void>)=>callback()}});

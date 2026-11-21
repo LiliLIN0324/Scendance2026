@@ -2,6 +2,7 @@
 import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { activityTaskRequestStorageKey, type ActivityTaskRequestIdentity, type ActivityTaskRequestMarker } from '@/lib/activity-task-proposal-storage';
 import { BackendSession, getBackendConfig, SceneApiError, type ActivityTaskRunInput, type BackendSnapshot } from '@/lib/backend-session';
 import { readMaterialCheckins } from '@/lib/material-checkin-storage';
@@ -175,13 +176,18 @@ async function chooseAndSave() {
   await prepared(); fireEvent.click(screen.getByLabelText('建议签到通道核对布场'));
   fireEvent.click(screen.getByRole('button', { name: '保存勾选任务' }));
 }
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   vi.stubGlobal('crypto', webcrypto); window.history.replaceState({}, '', '/?local=1'); window.localStorage.clear();
   boundary.records.clear(); boundary.events.length = 0; boundary.failCommit = false; boundary.failNextRead = false; boundary.failReadbackState = null;
   layoutStore.getState().actions.applyLayout(fixture());
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layoutStore.getState().layout));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('ActivityTaskWorkspace disclosure and durable request', () => {
   it('clears an unsent disclosure on activity switch so invisible old task and object IDs cannot enter the next activity summary', async () => {

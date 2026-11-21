@@ -2,6 +2,7 @@
 import {webcrypto} from 'node:crypto';
 import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {BingoAuditCard} from './bingo-audit-card';
 import {BINGO_MARK_KEY} from '../lib/bingo-status';
 import {makeFloor,makeItem,makeLayout} from '../lib/__testfixtures__/fixtures';
@@ -14,8 +15,9 @@ const hash=`#layout=${Buffer.from(JSON.stringify(layout)).toString('base64url')}
 const pin:ReceiptPin={id:'p',floorId:'f',text:'舞台向左',itemId:'chair',x:0,y:0,z:0,offset:[0,0,0],camera:{position:[2,3,2],target:[0,0,0]},status:'open'};
 const mark=()=>localStorage.setItem(BINGO_MARK_KEY,JSON.stringify([{saved:true,status:'needs-review',projectKey:project,title:'活动',shareId:'one',markedAt:'2026-11-07T00:00:00Z',clientUrl:`http://localhost/review/${hash}`,versionBinding:'sha256-v1'} ]));
 const upload=(content:string,size=content.length)=>fireEvent.change(screen.getByLabelText('导入反馈文件'),{target:{files:[{size,text:async()=>content}]}});
-beforeEach(()=>{localStorage.clear();mark();vi.stubGlobal('crypto',webcrypto);Object.defineProperty(navigator,'locks',{configurable:true,value:{request:(_n:string,_o:unknown,fn:(lock:object)=>unknown)=>Promise.resolve(fn({}))}});});
-afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
+let mem: MemoryStorage;
+beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;localStorage.clear();mark();vi.stubGlobal('crypto',webcrypto);Object.defineProperty(navigator,'locks',{configurable:true,value:{request:(_n:string,_o:unknown,fn:(lock:object)=>unknown)=>Promise.resolve(fn({}))}});});
+afterEach(()=>{cleanup();mem?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('previews exact shared version then imports only on explicit confirmation and reloads it',async()=>{
  const json=createReviewFeedbackReceipt(await reviewVersionForHash(hash),[pin],true),check=()=>true;
  const view=render(<BingoAuditCard scopeKey={`project:${project}`} isCurrent={check}/>);

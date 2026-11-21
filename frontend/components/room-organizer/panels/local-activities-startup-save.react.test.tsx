@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { archiveLocalActivity, listLocalActivities } from '@/lib/local-activities';
 import { parseLocalProjectBackupJson, serializeLocalProjectBackupV3 } from '@/lib/local-project-backup';
 import type { LocalProjectBackupActions } from './creative-studio';
@@ -14,8 +15,9 @@ import { useLayoutPersistence } from '../hooks/use-layout-persistence';
 import { applyOutdoorShellVenuePatch, seededPlanFromLayout, shellVenuePatchFromPlanBoundary } from '../lib/outdoor-venue-sync';
 import type { RoomLayout } from '../lib/types';
 vi.mock('@/lib/local-activities',async original=>({...await original<typeof import('@/lib/local-activities')>(),archiveLocalActivity:vi.fn(),listLocalActivities:vi.fn()}));
-beforeEach(()=>{localStorage.clear();window.history.replaceState(null,'','/');vi.mocked(listLocalActivities).mockResolvedValue({activities:[],unreadableProjectIds:[]});vi.mocked(archiveLocalActivity).mockImplementation(async(text)=>JSON.parse(text));});
-afterEach(()=>{cleanup();vi.restoreAllMocks();});
+let mem: MemoryStorage;
+beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;localStorage.clear();window.history.replaceState(null,'','/');vi.mocked(listLocalActivities).mockResolvedValue({activities:[],unreadableProjectIds:[]});vi.mocked(archiveLocalActivity).mockImplementation(async(text)=>JSON.parse(text));});
+afterEach(()=>{cleanup();mem?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function backup(layout:RoomLayout){const scope=layout.id!;return serializeLocalProjectBackupV3(layout,{state:'ready',scope,brief:{status:'absent'}},{state:'ready',scope,materialCheckins:{status:'absent'}},'2026-11-13T00:00:00Z');}
 it.each([false,true])('real startup save guard + new-activity form: diagnostic contamination=%s preserves old activity on refusal, otherwise opens dedicated blank project',async contaminated=>{
  const initial={...structuredClone(INITIAL_LAYOUT),id:'public-original'};

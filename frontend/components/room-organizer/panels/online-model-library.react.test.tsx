@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { RoomEditorProvider, SelectionProvider, useRoomEditor, useSelection, type RoomEditorContextValue } from '../contexts';
 import { layoutStore, useActiveFloor, useActiveFloorIndex, useLayout } from '../hooks/use-layout-store';
@@ -100,7 +101,12 @@ function setup({ disabled = false } = {}) {
 
 const tiles = (): HTMLElement[] => screen.getAllByRole('button', { name: /^添加/ });
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   // 最近用过 / 收藏 / 风格套都走 localStorage；每个用例从干净状态起，避免上一条用例的落盘记录串到下一条。
   localStorage.clear();
   layoutStore.setState({ layout: makeLayout({ id: 'rehearsal-activity-a' }), activeFloorIndex: 0 });
@@ -111,6 +117,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   layoutStore.setState(originalLayoutState);
+  mem?.clear();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.mocked(loadOnlineModels).mockReset();
   vi.mocked(ensureGlbAsset).mockReset();
 });

@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { saveAvatar } from './account-avatars';
 import { AccountTeamPanel } from './account-team-panel';
 
@@ -10,6 +11,7 @@ const studioId = '50000000-0000-4000-8000-000000000001';
 const owner = { userId: 'user-a', role: 'owner' as const, displayName: '丽丽', email: 'lily@example.com' };
 const editor = { userId: 'user-b', role: 'editor' as const, displayName: '终树', email: 'zhongshu@example.com' };
 let controller: BackendSession;
+let mem: MemoryStorage;
 
 function respond(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 
@@ -25,6 +27,10 @@ function stubTeamRoutes(unread: unknown = []) {
 }
 
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   localStorage.clear();
   window.history.replaceState(null, '', '/');
   stubTeamRoutes();
@@ -34,6 +40,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   controller.dispose();
+  mem?.clear();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -117,7 +125,7 @@ describe('account team panel', () => {
   it('says why the panel is empty before login and adds no placeholder people', async () => {
     render(<AccountTeamPanel controller={controller}/>);
     expect(await screen.findByText('登录后才能看到团队成员。')).toBeTruthy();
-    expect(screen.getByText('在账户中心登录后，这里会显示你所在团队的成员。')).toBeTruthy();
+    expect(screen.getByText('登录后这里会列出成员。')).toBeTruthy();
     expect(screen.queryByText('林雨舟')).toBeNull();
   });
 });

@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { AssetsPanel } from '@/components/business/assets-panel';
 import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
 import { readSourceRecord, registerSourceFlush } from '@/lib/source-storage';
@@ -64,6 +65,7 @@ const mockFetch = vi.fn<typeof fetch>();
 const pointRecords = new Map<string, unknown>();
 const unreadablePointScopes = new Set<string>();
 let controller: BackendSession;
+let mem: MemoryStorage;
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
@@ -98,6 +100,10 @@ function openProjectMenu(projectName: string): void {
 }
 
 beforeEach(async () => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   localStorage.clear();
   window.history.replaceState(null, '', '/');
   mockFetch.mockReset();
@@ -303,6 +309,7 @@ describe('CloudPanel with a locally drawn zone', () => {
 afterEach(() => {
   cleanup();
   controller.dispose();
+  mem?.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

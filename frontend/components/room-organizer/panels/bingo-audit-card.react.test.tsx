@@ -2,7 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import type { BingoScore } from '../../../lib/bingo-score';
 import { BINGO_MARK_KEY, BINGO_RETURN_KEY } from '../lib/bingo-status';
 import { __resetGenerationOutcome, setGenerationOutcome } from '../lib/use-generation-outcome';
@@ -36,7 +37,12 @@ const SCORE: BingoScore = {
   summary: '发现 3 处堵点已自动挪开，1 处挪不动已标红（请手动调整）',
 };
 
+let mem: MemoryStorage;
 beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   localStorage.clear();
   __resetGenerationOutcome();
 });
@@ -44,6 +50,9 @@ afterEach(() => {
   cleanup();
   __resetGenerationOutcome();
   clearOutdoorPlanIssues();
+  mem?.clear();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('BingoAuditCard', () => {

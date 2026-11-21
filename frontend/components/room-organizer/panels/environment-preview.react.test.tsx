@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { rememberAholoAsset } from '../lib/aholo-assets';
 import { EnvironmentPreview } from './environment-preview';
 import type { SplatPreviewState } from '../hooks/use-splat-preview';
@@ -28,12 +29,18 @@ function props(overrides: Partial<Parameters<typeof EnvironmentPreview>[0]> = {}
 
 /** 2026-11-19 用户：「没有其他和我的区分，这些都是我们的云资产」。 */
 describe('项目中的场景：旧存货名字也走同一套可读名', () => {
+  let mem: MemoryStorage;
   beforeEach(() => {
     cleanup();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     localStorage.clear();
     rememberAholoAsset({ assetId: LEGACY, kind: 'spz', name: '云端高斯 48245ba8', bytes: 10, savedAt: SAVED_AT });
     rememberAholoAsset({ assetId: NAMED, kind: 'spz', name: '西湖 0233 · 标准档', bytes: 10, savedAt: SAVED_AT });
   });
+  afterEach(() => { mem?.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
   it('gallery：存下来的「云端高斯 48245ba8」显示成日期名，点开也回传这个名', () => {
     const onSelect = vi.fn();
