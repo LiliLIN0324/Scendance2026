@@ -297,11 +297,11 @@
       "2026-11-19 已部署 scene-api 本轮 v64（当前 v65），仅应用 20261117180000 / 20261117190000 两条迁移；其余 8 条未动"
     ],
     "riskAcceptance": {
-      "status": "pending-human",
+      "status": "signed",
       "reviewedBy": "endTree",
       "reviewedAt": "2026-11-21T18:04:41+08:00",
-      "signedBy": "",
-      "signedAt": "",
+      "signedBy": "endTree",
+      "signedAt": "2026-11-21T18:28:50+08:00",
       "cases": [3, 4, 5, 6, 8, 9, 10, 11],
       "note": "owner endTree 对话拍板：上述用例的残余风险与剥离项按各 case 的 riskAccepted 字段留痕接受。这是风险接受记录，在 status=signed 且填写 signedBy/signedAt 之前不等同放行签字；各 case conclusion 仍按真实证据计 partial，未据此转 pass。门禁两条放行通道：A 11/11 双维度齐且主 signoff=signed；B 无 fail/blocked、每条可豁免用例均有 riskAccepted、本字段 status=signed 并由 owner 本人填 signedBy/signedAt。签署值只能由本人填，agent 不代签。"
     },
