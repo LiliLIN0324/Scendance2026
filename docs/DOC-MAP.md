@@ -1,7 +1,7 @@
 # Scendance 文档地图（DOC-MAP）
 
 > **本页由脚本生成，不要手改。** 重新生成：`node scripts/doc-scan.mjs`（Node ≥ 20，无依赖）。
-> 生成时间：2026-11-21 15:24；扫描口径见页尾「生成口径」。
+> 生成时间：2026-11-21 15:28；扫描口径见页尾「生成口径」。
 > 分工：本页只回答「有哪些文件、多大、什么时候动过」；**要读什么看 [README.md](README.md)**，按用途归类看 [INDEX.md](INDEX.md)。
 
 ## 一、全景
@@ -35,9 +35,9 @@
 | [50-谷地工坊交互逻辑拆解与落地卡-20261121.md](<50-谷地工坊交互逻辑拆解与落地卡-20261121.md>) | 8.7 | 2026-11-21 | 谷地工坊交互逻辑拆解与落地卡（2026-11-21） |
 | [57-Agent底座语料-场地证据与判据集-20261118.md](<57-Agent底座语料-场地证据与判据集-20261118.md>) | 11.6 | 2026-11-21 | 57 · Agent 底座语料：场地证据 × 判据集 × 场景模板 × 物料参数（2026-11-18） |
 | [63-Agent合格度与断点审计-20261121.md](<63-Agent合格度与断点审计-20261121.md>) | 24.3 | 2026-11-21 | 63 · 什么算一个合格的 AI Agent：三层判据与幕景实测断点 |
-| [DOC-MAP.md](<DOC-MAP.md>) | 80.2 | 2026-11-21 | Scendance 文档地图（DOC-MAP） |
+| [DOC-MAP.md](<DOC-MAP.md>) | 76.3 | 2026-11-21 | Scendance 文档地图（DOC-MAP） |
 | [INDEX.md](<INDEX.md>) | 23.7 | 2026-11-21 | 文档索引（2026-11-13 手工整理版） |
-| [README.md](<README.md>) | 11.1 | 2026-11-21 | Scendance 文档总览 |
+| [README.md](<README.md>) | 11.2 | 2026-11-21 | Scendance 文档总览 |
 | [05-设计规范.md](<05-设计规范.md>) | 40.1 | 2026-11-20 | Scendance 2026 设计规范 v2.5.18 |
 | [47-户外Agent设计智能升级计划-20261117.md](<47-户外Agent设计智能升级计划-20261117.md>) | 36.9 | 2026-11-20 | 户外 Agent 设计智能升级计划（2026-11-17） |
 | [58-成熟案例库与物料参考-20261118.md](<58-成熟案例库与物料参考-20261118.md>) | 10.4 | 2026-11-20 | 58 · 成熟案例库与物料参考（2026-11-18） |
@@ -89,6 +89,7 @@
 | [2026-11-04-ia-role-rework-ledger.md](<plans/2026-11-04-ia-role-rework-ledger.md>) | 31.9 | 2026-11-21 | 四角色 IA 重划导演台账 — 活动 / 审校 Bingo / 空间 / 物料 |
 | [2026-11-05-activity-space-norms.md](<plans/2026-11-05-activity-space-norms.md>) | 34.3 | 2026-11-21 | 活动场景量化空间规范表 |
 | [2026-11-05-smart-build-next-phase.md](<plans/2026-11-05-smart-build-next-phase.md>) | 35.2 | 2026-11-21 | 智能建造下一程升级计划：M1–M5 活接深度与 Agent 机制补课 |
+| [2026-11-08-幕景总体架构与产品演进路线.md](<plans/2026-11-08-幕景总体架构与产品演进路线.md>) | 7.5 | 2026-11-21 | 幕景总体技术架构与产品演进路线 |
 | [2026-11-08-brief-request-guard-draft.md](<plans/2026-11-08-brief-request-guard-draft.md>) | 2.1 | 2026-11-21 | 单轮简报请求防重与限频草案 |
 | [2026-11-08-minimax-brief-first-sample-runbook.md](<plans/2026-11-08-minimax-brief-first-sample-runbook.md>) | 4.0 | 2026-11-21 | MiniMax 单条简报首次实测：待核对方案 |
 | [2026-11-08-minimax-budget-transaction-design.md](<plans/2026-11-08-minimax-budget-transaction-design.md>) | 6.9 | 2026-11-21 | MiniMax 整趟预留：未部署设计与放行条件 |
@@ -179,7 +180,6 @@
 | [2026-11-07-幕景智能建造闭环图.md](<plans/2026-11-07-幕景智能建造闭环图.md>) | 7.9 | 2026-11-08 | 幕景智能建造：从想法到可审阅方案 |
 | [2026-11-07-智能Chat验收清单.md](<plans/2026-11-07-智能Chat验收清单.md>) | 10.0 | 2026-11-08 | 智能 Chat 连续对话与建造验收 |
 | [2026-11-07-智能Chat主计划.md](<plans/2026-11-07-智能Chat主计划.md>) | 11.2 | 2026-11-08 | 幕景智能 Chat 与活动智能建造主计划 |
-| [2026-11-08-幕景总体架构与产品演进路线.md](<plans/2026-11-08-幕景总体架构与产品演进路线.md>) | 7.5 | 2026-11-08 | 幕景总体技术架构与产品演进路线 |
 | [2026-11-06-智能建造计划-评审版.md](<plans/2026-11-06-智能建造计划-评审版.md>) | 8.3 | 2026-11-06 | Scendance2026 智能建造计划（评审版）｜2026-11-06 |
 | [2026-11-06-智能建造究极计划-v2.md](<plans/2026-11-06-智能建造究极计划-v2.md>) | 10.0 | 2026-11-06 | 智能建造究极计划 v2：可托付的智能建造（2026-11-06） |
 | [v340-alignment-audit.md](<plans/ia-next-prep-2026-11-04/v340-alignment-audit.md>) | 1.8 | 2026-11-05 | v3.4.0 与 IA 四角色重划对齐审计 |
@@ -204,7 +204,7 @@
 | [20-场地资产地理底图提案.md](<archive/plan/20-场地资产地理底图提案.md>) | 10.1 | 2026-11-13 | 50 · 场地资产地理底图提案（待拍板） |
 | [2026-10-07-分阶段产品计划.md](<archive/plan/2026-10-07-分阶段产品计划.md>) | 6.2 | 2026-11-05 | 幕景分阶段产品计划 |
 | [2026-10-07-工作区模式.md](<archive/plan/2026-10-07-工作区模式.md>) | 13.8 | 2026-11-05 | Binggo 工作区：目标、模式与执行路径 |
-| [2026-10-07-活动执行契约.md](<archive/plan/2026-10-07-活动执行契约.md>) | 15.7 | 2026-11-05 | 活动执行安排：最小契约建议 |
+| [2026-10-07-活动执行契约.md](<archive/plan/2026-10-07-活动执行契约.md>) | 15.8 | 2026-11-05 | 活动执行安排：最小契约建议 |
 | [2026-10-07-交付恢复核查.md](<archive/plan/2026-10-07-交付恢复核查.md>) | 3.6 | 2026-11-05 | 本地执行与恢复链路核查 |
 | [2026-10-07-最小交付契约.md](<archive/plan/2026-10-07-最小交付契约.md>) | 30.7 | 2026-11-21 | 幕景最小交付契约 |
 | [2026-10-07-Agent开源参考.md](<archive/plan/2026-10-07-Agent开源参考.md>) | 19.4 | 2026-11-05 | Agent 开源参考与幕景接入记录 |
@@ -301,20 +301,20 @@
 | [2026-11-04-协作模式调研.md](<archive/research/2026-11-04-协作模式调研.md>) | 21.7 | 2026-11-05 | 中国同类产品「项目管理与协作」调研及 Scendance 落地方案 |
 | [2026-11-04-Agent与人协作.md](<archive/research/2026-11-04-Agent与人协作.md>) | 22.3 | 2026-11-05 | Mirasim「Agent 与人」协作模式研究 + Scendance 落地改造清单 |
 | [2026-11-04-GoldenPath缺口.md](<archive/research/2026-11-04-GoldenPath缺口.md>) | 16.3 | 2026-11-05 | 04 结论与路线图：Golden Path 差距地图（2026-11-04） |
-| [2026-11-05-activity-case-studies.md](<archive/research/2026-11-05-activity-case-studies.md>) | 15.6 | 未入库 | 活动场景案例研究：可迁移的空间手法 |
-| [2026-11-05-agent-migration-map.md](<archive/research/2026-11-05-agent-migration-map.md>) | 30.1 | 未入库 | AI 智能建造 / 场地规划智能体 —— 代码落点与迁移地图 |
-| [2026-11-05-ai-spatial-agents-deep-dive.md](<archive/research/2026-11-05-ai-spatial-agents-deep-dive.md>) | 6.9 | 未入库 | AI 空间/布局生成智能体深度调研（2026-11-05） |
-| [2026-11-05-ai-spatial-agents-survey.md](<archive/research/2026-11-05-ai-spatial-agents-survey.md>) | 10.0 | 未入库 | AI 生成/编辑空间布局 · 项目调研（2026-11-05） |
-| [2026-11-05-intergenerational-and-constrained.md](<archive/research/2026-11-05-intergenerational-and-constrained.md>) | 8.4 | 未入库 | 代际共融与受限场地降级：配方库判据增量 |
-| [2026-11-05-m1-m5-gap-roadmap.md](<archive/research/2026-11-05-m1-m5-gap-roadmap.md>) | 7.1 | 未入库 | M1–M5 移植差距清单：幕景「智能建造」骨架对标 PetitMaker（谷地工坊） |
-| [2026-11-05-petitmaker-agent-teardown.md](<archive/research/2026-11-05-petitmaker-agent-teardown.md>) | 18.5 | 未入库 | 谷地工坊智能体逆向：协议、提示词与可迁移设计 |
-| [2026-11-05-petitmaker-playtest.md](<archive/research/2026-11-05-petitmaker-playtest.md>) | 13.8 | 未入库 | PetitMaker 真机实操记录（2026-11-05） |
-| [2026-11-05-playtest-matrix.md](<archive/research/2026-11-05-playtest-matrix.md>) | 17.7 | 未入库 | 谷地工坊多场景实操：4 组实验与迁移清单 |
-| [2026-11-07-Agent能力与工具盘点.md](<archive/research/2026-11-07-Agent能力与工具盘点.md>) | 9.0 | 未入库 | 幕景 Agent 能力、工具与验证盘点 |
-| [2026-11-08-单Agent工具矩阵.md](<archive/research/2026-11-08-单Agent工具矩阵.md>) | 6.1 | 未入库 | 幕景单 Agent 与工具矩阵 |
-| [2026-11-08-智能建造验证记录.md](<archive/research/2026-11-08-智能建造验证记录.md>) | 34.6 | 未入库 | 智能建造验证记录（2026-11-08） |
-| [2026-11-08-isometric-sf-拆解与复刻差异诊断.md](<archive/research/2026-11-08-isometric-sf-拆解与复刻差异诊断.md>) | 25.9 | 未入库 | Isometric SF 拆解 × hangzhou-map-lab 复刻差异诊断 |
-| [2026-11-10-hangzhou-isometric-map-research.md](<archive/research/2026-11-10-hangzhou-isometric-map-research.md>) | 8.0 | 未入库 | 杭州等距像素地图可行性调研 |
+| [2026-11-05-activity-case-studies.md](<archive/research/2026-11-05-activity-case-studies.md>) | 15.6 | 2026-11-21 | 活动场景案例研究：可迁移的空间手法 |
+| [2026-11-05-agent-migration-map.md](<archive/research/2026-11-05-agent-migration-map.md>) | 30.1 | 2026-11-21 | AI 智能建造 / 场地规划智能体 —— 代码落点与迁移地图 |
+| [2026-11-05-ai-spatial-agents-deep-dive.md](<archive/research/2026-11-05-ai-spatial-agents-deep-dive.md>) | 6.9 | 2026-11-21 | AI 空间/布局生成智能体深度调研（2026-11-05） |
+| [2026-11-05-ai-spatial-agents-survey.md](<archive/research/2026-11-05-ai-spatial-agents-survey.md>) | 10.0 | 2026-11-21 | AI 生成/编辑空间布局 · 项目调研（2026-11-05） |
+| [2026-11-05-intergenerational-and-constrained.md](<archive/research/2026-11-05-intergenerational-and-constrained.md>) | 8.4 | 2026-11-21 | 代际共融与受限场地降级：配方库判据增量 |
+| [2026-11-05-m1-m5-gap-roadmap.md](<archive/research/2026-11-05-m1-m5-gap-roadmap.md>) | 7.1 | 2026-11-21 | M1–M5 移植差距清单：幕景「智能建造」骨架对标 PetitMaker（谷地工坊） |
+| [2026-11-05-petitmaker-agent-teardown.md](<archive/research/2026-11-05-petitmaker-agent-teardown.md>) | 18.5 | 2026-11-21 | 谷地工坊智能体逆向：协议、提示词与可迁移设计 |
+| [2026-11-05-petitmaker-playtest.md](<archive/research/2026-11-05-petitmaker-playtest.md>) | 13.8 | 2026-11-21 | PetitMaker 真机实操记录（2026-11-05） |
+| [2026-11-05-playtest-matrix.md](<archive/research/2026-11-05-playtest-matrix.md>) | 17.7 | 2026-11-21 | 谷地工坊多场景实操：4 组实验与迁移清单 |
+| [2026-11-07-Agent能力与工具盘点.md](<archive/research/2026-11-07-Agent能力与工具盘点.md>) | 9.0 | 2026-11-21 | 幕景 Agent 能力、工具与验证盘点 |
+| [2026-11-08-单Agent工具矩阵.md](<archive/research/2026-11-08-单Agent工具矩阵.md>) | 6.1 | 2026-11-21 | 幕景单 Agent 与工具矩阵 |
+| [2026-11-08-智能建造验证记录.md](<archive/research/2026-11-08-智能建造验证记录.md>) | 34.6 | 2026-11-21 | 智能建造验证记录（2026-11-08） |
+| [2026-11-08-isometric-sf-拆解与复刻差异诊断.md](<archive/research/2026-11-08-isometric-sf-拆解与复刻差异诊断.md>) | 25.9 | 2026-11-21 | Isometric SF 拆解 × hangzhou-map-lab 复刻差异诊断 |
+| [2026-11-10-hangzhou-isometric-map-research.md](<archive/research/2026-11-10-hangzhou-isometric-map-research.md>) | 8.0 | 2026-11-21 | 杭州等距像素地图可行性调研 |
 | [38-Taste与IA备忘录.md](<archive/research/38-Taste与IA备忘录.md>) | 18.9 | 2026-11-21 | Scendance（幕景）Taste & IA Memo — 2026-10-29 |
 | [2026-10-31-视觉方向.md](<archive/visual/2026-10-31-视觉方向.md>) | 3.8 | 2026-11-05 | 幕景工作台 · 2026 视觉方向 v1 |
 | [2026-11-03-视觉稿说明.md](<archive/visual/2026-11-03-视觉稿说明.md>) | 1.3 | 2026-11-05 | 幕景工作台 · 2026 最终视觉稿 |
@@ -541,7 +541,7 @@
 | [AGENTS.md](<../AGENTS.md>) | 9.3 | 2026-11-21 | 幕景 Scendance · 项目规范（AI 与人共同必读） |
 | [ASSET-SOURCES.md](<../ASSET-SOURCES.md>) | 7.7 | 2026-11-21 | 3D asset sources |
 | [CHANGELOG.md](<../CHANGELOG.md>) | 275.7 | 2026-11-21 | 更新记录 |
-| [HANDOFF.md](<../HANDOFF.md>) | 699.4 | 2026-11-21 | HANDOFF.md — Scendance2026 跨会话交接 |
+| [HANDOFF.md](<../HANDOFF.md>) | 699.5 | 2026-11-21 | HANDOFF.md — Scendance2026 跨会话交接 |
 | [MEMORY.md](<../MEMORY.md>) | 2.8 | 2026-11-21 | Project memory |
 | [SUPABASE-EGRESS-AUDIT.md](<../SUPABASE-EGRESS-AUDIT.md>) | 2.6 | 2026-11-20 | Supabase 出网清单（只读审计，2026-11-20） |
 | [README.md](<../README.md>) | 7.7 | 2026-11-19 | 幕景 Scendance |
@@ -559,8 +559,8 @@
 1. **编号占用**：`docs/` 根 50 份编号文档，占用 01–63；缺号 14 个（08/10/17/18/20/30/31/34/35/38/51/52/53/54）。
 2. **重号**：46 号 2 份（`46-Agent运行卫生上线手册-20261116.md` / `46-虚拟场地纸面模式规格-20261117.md`）。
 3. **`docs/plans/` 命名**：9 份无日期前缀（文件名看不出新旧，只能看本表的时间列）。
-4. **未入库**：39 份 md 没有 git 记录（含 agent 草稿）；这些只在本机，别处 checkout 拿不到。
-5. **体量最大**：`HANDOFF.md` 699.4 KB、`CHANGELOG.md` 275.7 KB、`docs/plans/2026-11-16-outdoor-agent-progress.md` 233.5 KB、`flow/进展.md` 191.5 KB、`docs/plans/2026-11-13-delivery-frontend.md` 151.9 KB、`docs/plans/2026-11-19-huajia-material-bom.md` 94.7 KB。
+4. **未入库**：25 份 md 没有 git 记录（含 agent 草稿）；这些只在本机，别处 checkout 拿不到。
+5. **体量最大**：`HANDOFF.md` 699.5 KB、`CHANGELOG.md` 275.7 KB、`docs/plans/2026-11-16-outdoor-agent-progress.md` 233.5 KB、`flow/进展.md` 191.5 KB、`docs/plans/2026-11-13-delivery-frontend.md` 151.9 KB、`docs/plans/2026-11-19-huajia-material-bom.md` 94.7 KB。
 
 ## 生成口径
 
