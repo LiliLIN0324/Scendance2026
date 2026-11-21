@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-21T17:50:00+08:00",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "method": "匿名加载站点 12s，从 performance resource 取已加载 JS；对懒加载大 chunk 402 直连 GET 汇总检索 marker；未登录、未发对话、不写库。",
+  "conclusion": "线上前端产物包含 2026-11-21 的 I6 常驻诚实声明与 I1-lite 插话/排队三条文案，均在懒加载 chunk 402 内；旧证据 2026-11-21-live-frontend-version.json「线上属旧一代构建、不含 I1-lite/I6」的判定被本件推翻。旧探针只检索首屏 HTML <script src> 列出的 chunk，402 不在该清单（inHtmlReferenced=false），故漏抓。",
+  "boundary": "buildId 仍无法从 app router 首页解析，本件只能证明线上产物含这些文案，不能把产物精确对应到某个 main commit；Edge Functions 函数体版本仍 undetermined；本件不对任何用例升 pass。",
+  "candidate": "402.01f2e6332397bac8.js",
+  "status": 200,
+  "bytes": 3178109,
+  "inPerf": true,
+  "inHtmlReferenced": false,
+  "markers": {
+    "I6 常驻诚实声明": "HIT",
+    "I1-lite busy 占位（带括号）": "HIT",
+    "I1-lite generating 裸占位": "HIT",
+    "I1-lite 排队提示": "HIT"
+  },
+  "controls": {
+    "quota_exhausted": "HIT",
+    "provider_error": "absent"
+  },
+  "perfChunkCount": 42,
+  "htmlChunkRefs": [
+    "696-2ab75b6f4399535e.js",
+    "1255-2b555c90a0cb7eeb.js",
+    "30001-0be73d50aff2989d.js",
+    "4058-e88d43b0920247d9.js",
+    "7636-29d26d08a8341eb2.js",
+    "5016-192dbc3d53c98f0c.js",
+    "5352-ad027507d362e828.js",
+    "2145-a3723e3f1ea4533b.js",
+    "2805-23cbb568bdd1f38e.js",
+    "6888-6930fccc9a2a1bfd.js",
+    "3609-df4d5375a3246940.js",
+    "226-78d311ccee4e90ea.js",
+    "7871-4269eac04c9f2b66.js",
+    "2619-04bc32f026a0d946.js"
+  ]
+}

@@ -1,0 +1,327 @@
+{
+  "ranAt": "2026-11-21T09:25:50.703Z",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "turn": "主通道改走场地北侧，别沿湖滨路走，留一条宽通道连通两个出入口。",
+  "steps": [],
+  "cloudBefore": {
+    "status": 200,
+    "found": true,
+    "revision": 14,
+    "counts": {
+      "zones": 4,
+      "boundary": 12,
+      "nodes": 1,
+      "routes": 0,
+      "planLen": 2589
+    }
+  },
+  "aCloudRevision": 14,
+  "recoverRows": [
+    {
+      "i": 0,
+      "text": "户外规划 版本 1 · 11/21 00:10 打开"
+    },
+    {
+      "i": 1,
+      "text": "户外规划 版本 1 · 11/21 00:07 打开"
+    },
+    {
+      "i": 2,
+      "text": "户外规划 版本 1 · 11/21 00:05 打开"
+    },
+    {
+      "i": 3,
+      "text": "新活动场地 版本 1 · 11/20 20:39 打开"
+    },
+    {
+      "i": 4,
+      "text": "户外规划 版本 1 · 11/20 18:47 打开"
+    },
+    {
+      "i": 5,
+      "text": "户外规划 版本 1 · 11/20 18:42 打开"
+    },
+    {
+      "i": 6,
+      "text": "户外规划 版本 1 · 11/20 17:25 打开"
+    },
+    {
+      "i": 7,
+      "text": "新活动场地 版本 14 · 11/20 16:32 打开"
+    },
+    {
+      "i": 8,
+      "text": "新活动场地 版本 1 · 11/20 16:31 打开"
+    },
+    {
+      "i": 9,
+      "text": "新活动场地 版本 1 · 11/20 16:25 打开"
+    },
+    {
+      "i": 10,
+      "text": "新活动场地 版本 1 · 11/20 16:21 打开"
+    },
+    {
+      "i": 11,
+      "text": "新活动场地 版本 1 · 11/20 16:20 打开"
+    }
+  ],
+  "picked": {
+    "testid": "outdoor-cloud-recover-open",
+    "disabled": false,
+    "row": "新活动场地 版本 14 · 11/20 16:32 打开"
+  },
+  "localBaseline": {
+    "detail": {
+      "scendance-outdoor-plan-v1:house-8v1m6re9": {
+        "remoteActivityId": null,
+        "remoteRevision": null,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0,
+          "routes": 0
+        },
+        "routeCount": 0,
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "remoteActivityId": null,
+        "remoteRevision": null,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0,
+          "routes": 0
+        },
+        "routeCount": 0,
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+        "remoteRevision": 14,
+        "counts": {
+          "zones": 4,
+          "boundary": 12,
+          "nodes": 1,
+          "routes": 0
+        },
+        "routeCount": 0,
+        "planLen": 2589
+      },
+      "last": "house-8z42f0xm"
+    },
+    "state": {
+      "scendance-outdoor-plan-v1:house-8v1m6re9": {
+        "projectId": "house-8v1m6re9",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-21T09:26:01.616Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-21T09:25:55.463Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "projectId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-21T09:26:08.655Z",
+        "counts": {
+          "zones": 4,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 2589
+      },
+      "scendance-outdoor-last-v1": "house-8z42f0xm"
+    }
+  },
+  "chatSent": true,
+  "afterTurn": {
+    "text": "当前物料 0 件 · 场地容量待核验  主通道改走场地北侧，别沿湖滨路走，留一条宽通道连…    周末共创工作坊 1 个  主通道改走场地北侧，别沿湖滨路走，留一条宽通道连通两个出入口。   主通道改走场地北侧，别沿湖滨路走，留一条宽通道连通两个出入口。 思考记录 · 1 条 已读画布 4 个分区 · 0 项设施 当前任务 · 摆放物料 已确认 主要流线与待核对入口 按画布真实用地红线：12 个点 · 341.2 × 550.5 m · 99936 ㎡ 已应用「主要流线与待核对入口」。路线和候选入口可拖动微调。 收起 预览摆放物料 从我的物料库查找 检索真实库 核对入口通行 核完这一版就按你的判断排 “入口 1”能不能走、是只进、只出还是双向？选一个，我按你的判断出预览。 只能进 入口 只能出 出口 双向 入口 + 出口 缺物料？导入或生成  导入 GLB  用 Aholo Lux3D 生成道具 GLB ≤10MB，只在本会话生效、不上传；生成是新建模型，提交前需在面板里勾选额度。 执行权限 · 关键节点  也可以先从舞台配套开始。 按区域说清要摆什么和数量。 告诉 Agent 要改的 我会出错，也可能破坏你的设计。重要改动会先问你。 默认（按服务端配置） 图例 图层 2D    工具 1/5 这是你的场地 × 底图是真地图瓦片，红实线是你圈的活动范围。拖动平移、滚轮缩放；左上方能直接搜地点。 以后不再提示 跳过这一步 下一步",
+    "summary": {
+      "cards": [],
+      "buttons": [
+        {
+          "t": "周末共创工作坊",
+          "d": false,
+          "cls": "sc-activity-island-main"
+        },
+        {
+          "t": "1 个 ",
+          "d": false,
+          "cls": "sc-activity-island-toggle"
+        },
+        {
+          "t": "已确认 主要流线与待核对入口",
+          "d": false,
+          "cls": "ap-card-history-row"
+        },
+        {
+          "t": "收起",
+          "d": false,
+          "cls": "ap-task-dismiss"
+        },
+        {
+          "t": "预览摆放物料",
+          "d": false,
+          "cls": "btn-primary"
+        },
+        {
+          "t": "检索真实库",
+          "d": true,
+          "cls": "btn-outline"
+        },
+        {
+          "t": "只能进 入口",
+          "d": false,
+          "cls": "ap-access-choice"
+        },
+        {
+          "t": "只能出 出口",
+          "d": false,
+          "cls": "ap-access-choice"
+        },
+        {
+          "t": "双向 入口 + 出口",
+          "d": false,
+          "cls": "ap-access-choice"
+        },
+        {
+          "t": "也可以先从舞台配套开始。 按区域说清要摆什么和数量。",
+          "d": false,
+          "cls": "ap-stage-suggestion-pick"
+        },
+        {
+          "t": "默认（按服务端配置）",
+          "d": false,
+          "cls": "ap-provider-summary"
+        },
+        {
+          "t": "图例",
+          "d": false,
+          "cls": ""
+        },
+        {
+          "t": "图层",
+          "d": false,
+          "cls": "oc-layer-entry"
+        },
+        {
+          "t": "2D",
+          "d": false,
+          "cls": "oc-gm-round oc-gm-mode"
+        },
+        {
+          "t": "以后不再提示",
+          "d": false,
+          "cls": "sc-tour-mute"
+        },
+        {
+          "t": "跳过这一步",
+          "d": false,
+          "cls": "sc-tour-secondary"
+        },
+        {
+          "t": "下一步",
+          "d": false,
+          "cls": "sc-tour-primary"
+        }
+      ]
+    },
+    "detail": {
+      "scendance-outdoor-plan-v1:house-8v1m6re9": {
+        "remoteActivityId": null,
+        "remoteRevision": null,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0,
+          "routes": 0
+        },
+        "routeCount": 0,
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "remoteActivityId": null,
+        "remoteRevision": null,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0,
+          "routes": 0
+        },
+        "routeCount": 0,
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+        "remoteRevision": 15,
+        "counts": {
+          "zones": 4,
+          "boundary": 12,
+          "nodes": 5,
+          "routes": 8
+        },
+        "routeCount": 8,
+        "planLen": 7936
+      },
+      "last": "house-8z42f0xm"
+    },
+    "writes": [
+      "POST 200 /functions/v1/conversation-api/assistant/chat/stream",
+      "PUT 200 /functions/v1/scene-api/outdoor-history",
+      "PUT 200 /functions/v1/scene-api/outdoor-plans"
+    ],
+    "modelCalls": [
+      "req POST  /functions/v1/conversation-api/assistant/chat/stream",
+      "res POST 200 /functions/v1/conversation-api/assistant/chat/stream"
+    ]
+  },
+  "cloudAfter": {
+    "status": 200,
+    "found": true,
+    "revision": 15,
+    "counts": {
+      "zones": 4,
+      "boundary": 12,
+      "nodes": 5,
+      "routes": 8,
+      "planLen": 7936
+    }
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

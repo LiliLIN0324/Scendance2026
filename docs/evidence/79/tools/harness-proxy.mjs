@@ -246,7 +246,7 @@ export async function planState(page) {
 export async function chat(page, text, { wait = 2500 } = {}) {
   await dismissCloudRecover(page);
   const ta = page.locator('textarea').first();
-  await ta.click();
+  // 诚实声明浮层（ap-honesty-note）会拦截 pointer events，不做点击聚焦，直接 fill。
   await ta.fill(text);
   await ta.press('Enter');
   await page.waitForTimeout(wait);

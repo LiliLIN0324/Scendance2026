@@ -1,0 +1,33 @@
+{
+  "ranAt": "2026-11-21T09:21:16.578Z",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "v12：当轮应用入栈后聚焦撤销/重做。四时点槽指纹 + 按钮态 + 写入时序，区分 H1 栈帧同态 / H2 回灌覆盖；栈帧不暴露，不伪造计数。",
+  "timeline": [
+    {
+      "label": "anchor-guard-fail",
+      "plan": null,
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream :: event: thought\ndata: {\"text\":\"用户\"}\n\nevent: thought\ndata: {\"text\":\"要\"}\n\nevent: thought\ndata: {\"text\":\"查找\"}\n\nevent: thought\ndata: {\"text\":\"杭州\"}\n\nevent: thought\nda",
+        "POST 200 /functions/v1/conversation-api/conversation/turns :: {\"stored\":1,\"skipped\":0}"
+      ]
+    }
+  ],
+  "guard": "anchor-fail",
+  "guardText": "当前物料 0 件 · 场地容量待核验\n\n先找杭州湖滨银泰in77，核对本次可用的活动范围\n\n\n\n周末共创工作坊\n1 个\n\n先找杭州湖滨银泰in77，核对本次可用的活动范围\n\n\n这一步没做成 · 搜索目标地点\n\n请核对活动实际范围，自动为你框选项目区域\n\n\n智能理解\n\n这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。\n\n重试这次请求\n改一句再说\n设计过程 1 步\n地图依据只有一部分，缺失的位置需要核对。\n搜索地点\n\n在地图上手画活动范围\n执行权限 · 关键节点\n\n告诉 Agent 要改的\n\n我会出错，也可能破坏你的设计。重要改动会先问你。\n\n默认（按服务端配置）\n图层\n2D\n\n\n\n工具\n1/5\n这是你的场地\n×\n\n底图是真地图瓦片，红实线是你圈的活动范围。拖动平移、滚轮缩放；左上方能直接搜地点。\n\n以后不再提示\n跳过这一步\n下一步",
+  "cloud-after-anchor": {
+    "status": 200,
+    "listLen": 109
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

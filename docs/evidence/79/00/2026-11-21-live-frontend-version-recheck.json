@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-21T09:40:21.333Z",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "status": "superseded-audit-only",
+  "method": "匿名加载站点 12s，从 performance resource 收集已加载 JS；逐个 fetch 汇总检索；未登录、未发对话、不写库。",
+  "auditNote": "本件是中间复核件，结论已被 2026-11-21-live-chunk-402-recheck.json 推翻，不得作为线上版本判定依据。汇总时懒加载大 chunk 402.01f2e6332397bac8.js（3,178,109B）未被纳入本次文本汇总，导致四条中文 marker 误判 absent；该 chunk 直连 GET 200 后逐条 HIT（见 402 复核件）。英文对照串 quota_exhausted/provider_error 落在 3609 chunk，HIT 不受影响。",
+  "jsCount": 60,
+  "fetched": 60,
+  "fetchFailed": [],
+  "totalBytes": 4613832,
+  "domMarkers": {
+    "I6 常驻诚实声明": false,
+    "I1-lite busy 占位（带括号）": false,
+    "I1-lite generating 裸占位": false,
+    "I1-lite 排队提示": false
+  },
+  "markers": {
+    "I6 常驻诚实声明": "absent-superseded",
+    "I1-lite busy 占位（带括号）": "absent-superseded",
+    "I1-lite generating 裸占位": "absent-superseded",
+    "I1-lite 排队提示": "absent-superseded"
+  },
+  "controls": {
+    "quota_exhausted": "HIT",
+    "provider_error": "HIT"
+  },
+  "hits": {
+    "quota_exhausted": ["3609-df4d5375a3246940.js"],
+    "provider_error": ["3609-df4d5375a3246940.js"]
+  }
+}
