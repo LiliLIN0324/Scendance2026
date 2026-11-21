@@ -179,3 +179,8 @@ frontend/.next.bak-*/
 
 # 幕录 stage-reel · 演示片产物（成片/唯一帧/音频体积大，不入库）
 /tools/demo-video/out/
+# 自动化临时产物：AI 会话草稿 / aria 快照 / 审计截图与补丁 / Trae 会话文件
+/draft_*_folder/
+/.tmp-audit/
+/.trae/
+/snap-*.yml
