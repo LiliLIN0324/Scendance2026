@@ -5,6 +5,8 @@ import {layoutStore} from './hooks/use-layout-store';
 import {makeFloor,makeLayout} from './lib/__testfixtures__/fixtures';
 import {INITIAL_LAYOUT} from './lib/initial-layout';
 import {STORAGE_KEY} from './lib/constants';
+import {projectSessionScope} from './lib/project-session-scope';
+import {readonlyComposerDrafts,resetVolatileAssistantMemoriesForTests,seedVolatileComposerDraftForTests} from './panels/agent-panel';
 import type {UsePlanAnnotationsResult} from './hooks/use-plan-annotations';
 import type {ActivitySwitchGuard} from './lib/local-activity-switch-guard';
 
@@ -18,7 +20,7 @@ beforeEach(()=>{vi.stubGlobal('matchMedia',()=>({matches:false,addEventListener(
  Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute('open');}});
  Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute('open','');}});
 });
-afterEach(()=>{cleanup();captured.annotation=null;captured.guard=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();captured.annotation=null;captured.guard=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});localStorage.clear();resetVolatileAssistantMemoriesForTests();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('exposes the real workbench draft guard to the activity gallery and refuses an unsaved zone',async()=>{
  const layout=makeLayout({id:'guard-integration',name:'本地活动',width:12,height:9,roof:{style:'none'},floors:[makeFloor({id:'f',items:[]})]});
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));render(<RoomOrganizer/>);
@@ -27,4 +29,19 @@ it('exposes the real workbench draft guard to the activity gallery and refuses a
  expect(()=>captured.guard!.capture()).toThrow('未应用的规划草稿');
  expect(captured.annotation!.getSnapshot().draft?.annotations[0]?.label).toBe('未应用区域');
  expect(layoutStore.getState().layout.id).toBe('guard-integration');
+});
+ it('输入框里未发送的文本不再拦切换：拦项清单里不再出现「未发送的活动对话」',async()=>{
+  const layout=makeLayout({id:'guard-composer',name:'本地活动',width:12,height:9,roof:{style:'none'},floors:[makeFloor({id:'f',items:[]})]});
+  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));
+  const scope=projectSessionScope('guard-composer');
+  seedVolatileComposerDraftForTests(scope,null,'把签到区往门口挪一米');
+  render(<RoomOrganizer/>);
+  await waitFor(()=>expect(captured.guard).not.toBeNull());
+  let thrown='';
+  try{captured.guard!.capture();}catch(error){thrown=error instanceof Error?error.message:String(error);}
+  // jsdom 裸渲染里持久化栈与 brief 载入各有一批环境性拦项，抛哪条都可能；
+  // 但只要有人把「未发送的活动对话」重新拦回切换守卫，这里必挂——本测试钉的就是这个回归。
+  expect(thrown).not.toContain('未发送的活动对话');
+  // 拦截从未发生时草稿必须原样留在本活动：切走再切回，输入框要能填回这段话（还原路径由 zone-race 测试覆盖）。
+  expect(readonlyComposerDrafts(scope)[0]?.text).toBe('把签到区往门口挪一米');
 });

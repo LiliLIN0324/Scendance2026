@@ -170,7 +170,7 @@ import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { XIHU_LOCAL_CENTER, XIHU_LOCAL_NAME, XIHU_LOCAL_SPAN_M } from './lib/research-area';
-import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, readonlyComposerDrafts, type AgentId } from './panels/agent-panel';
+import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, type AgentId } from './panels/agent-panel';
 import { settlePlacement } from '@/lib/settle-placement';
 import { cloudSeatingAllocation, cloudSeatingSpecs, type BriefMemory } from './lib/brief-agent';
 import { projectDialogueHandoff } from './lib/dialogue-handoff';
@@ -4836,7 +4836,8 @@ useEffect(() => {
     blocker:scope=>{
       if(pendingEnvironmentPositionRef.current)return '场地位置尚待核对，请先保留并处理候选，再切换活动。';
       if(unsavedSourceDrafts(scope).length)return '有未保存的图片原件，请先保存或导出，再切换活动。';
-      if(readonlyComposerDrafts(sessionScope).length)return '有未发送的活动对话，请先发送或保留草稿，再切换活动。';
+      // 输入框里未发送的文本不拦切换：草稿按「活动+会话」留在本机内存（agent-panel 的 volatileComposerDrafts），
+      // 切走再切回会原样填回输入框，本来就是「保留草稿」；再拦只会提示一个不存在的按键，变成死路。
       for(const [kind,label] of [['brief','活动需求'],['creative-conversation','未发送对话']] as const){
         const draft=readLiveReadonlyDraft(scope,kind);
         if(draft.status==='unavailable')return `${label}当前无法完整核对，未切换活动。`;
