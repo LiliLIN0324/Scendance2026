@@ -4495,6 +4495,10 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     };
   }, [providerMenuOpen]);
   const draft=draftState.key===draftKey ? draftState.value : volatileComposerDrafts.get(draftKey)??'';
+// 2026-11-21 docs/50 I1-lite：户外任务运行中的排队发送（PetitMaker「为下一步添加备注」同款体验）。
+const [outdoorSendQueue, setOutdoorSendQueue] = useState<string[]>([]);
+const outdoorSendQueueRef = useRef<string[]>([]);
+outdoorSendQueueRef.current = outdoorSendQueue;
   const setDraft=(value:string)=>{ if(value)volatileComposerDrafts.set(draftKey,value);else volatileComposerDrafts.delete(draftKey);setDraftState({key:draftKey,value}); };
   // 2026-11-14 用户指令：历史整层接管对话区时，输入框里直接回车 = 在当前项目开一个新会话，
   // 并把这句话发进新会话（对齐 VS Code chat）。openSession 的绑定在 provider effect 里完成，
@@ -4507,13 +4511,22 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     if (!agent.isSessionCurrent() || agent.isUnderstanding(draft)) return;
     // 云端布局运行中：Enter 不是新指令，是「为下一步添加备注」——塞进运行账本，
     // 由工作线程在下一轮思考前取走（creative-studio deliverSteerNotes）。可撤回。
-    if (runState.scope === 'layout' && runState.isRunning) {
-      if (!draft.trim()) return;
-      pushAgentSteerNote(draft);
-      setDraft('');
-      inputRef.current?.focus();
-      return;
-    }
+  if (runState.scope === 'layout' && runState.isRunning) {
+    if (!draft.trim()) return;
+    pushAgentSteerNote(draft);
+    setDraft('');
+    inputRef.current?.focus();
+    return;
+  }
+  // 2026-11-21 docs/50 I1-lite（PetitMaker 同款）：户外任务运行中回车不是新指令也不是吞掉，
+  // 是排队——任务结束后自动按顺序发出。此前 busy 中发送会并发第二个 job 把前一个 abort 掉。
+  if (agent.outdoorWorkflow.busy) {
+    if (!draft.trim()) return;
+    setOutdoorSendQueue((queue) => [...queue, draft]);
+    setDraft('');
+    inputRef.current?.focus();
+    return;
+  }
     if (draft.trim() && showHistory) {
       const created = assistantSessions.openSession();
       if (created?.verifiedFresh) agent.acceptFreshSession(created.id);
@@ -4534,9 +4547,22 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
       if (!agent.isSessionCurrent()) pendingFreshSendRef.current = null;
       return;
     }
-    pendingFreshSendRef.current = null;
-    void agent.send(pending.text);
-  }, [agent]);
+  pendingFreshSendRef.current = null;
+  void agent.send(pending.text);
+}, [agent]);
+// 2026-11-21 docs/50 I1-lite：户外任务结束后自动按序发出排队指令（600ms 轮询，任务不忙才发）。
+useEffect(() => {
+  if (!outdoorSendQueue.length) return undefined;
+  const timer = setInterval(() => {
+    if (agent.outdoorWorkflow.busy || agent.understanding || loginBlocked || !agent.isSessionCurrent()) return;
+    const first = outdoorSendQueueRef.current[0];
+    if (!first) return;
+    outdoorSendQueueRef.current = outdoorSendQueueRef.current.slice(1);
+    setOutdoorSendQueue(outdoorSendQueueRef.current);
+    void agent.send(first);
+  }, 600);
+  return () => clearInterval(timer);
+}, [outdoorSendQueue.length, agent]);
   // 2026-11-14 用户指令：历史列表四态——已读(无点)/错误(红点)/未读(蓝点)/进行中(绿点)。
   // 未读=本机 seen 时间戳晚于会话最后更新；切走的会话补记 seen，避免自己刚看过的内容亮蓝。
   const resolveSessionStatus = (session: { id: string; updatedAt: number }): SessionStatus => {
@@ -4698,7 +4724,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   const ghostVisible = !agent.outdoorBridgeReady && !loginBlocked && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
   const composerPlaceholder = loginBlocked && !loginLocalCommand ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
-    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对可用范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区 2 名保安，表演区 3 名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
+    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.busy?'为下一步添加备注（当前任务结束后自动发送）':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对可用范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区 2 名保安，表演区 3 名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : placePending ? '先说地点：城市、场馆或地址'
     : generating ? '为下一步添加备注'
@@ -5095,6 +5121,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
         }}/>
         {/* 2026-11-21 docs/50 I6：PetitMaker 同款常驻诚实声明——agent 可能出错也可能改坏设计，重要改动会先问。 */}
         <p className="ap-field-note ap-honesty-note">我会出错，也可能破坏你的设计。重要改动会先问你。</p>
+        {outdoorSendQueue.length>0&&<p role="status" className="ap-field-note">已排队 {outdoorSendQueue.length} 条，当前任务结束后自动发送。</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">排队 {agent.generationQueued} 条，按顺序处理中。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上次结果未知，可能还在计费。再发可能重复收费。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}
         {agent.sessionSaveFailed && <p role="status" className="ap-field-note">本机没存上，内容还在页面上。</p>}
