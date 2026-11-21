@@ -583,6 +583,7 @@ export function OutdoorWorkflowCard({
         !flow.proposal && (
           <div aria-label="当前分区物料候选">
             <form
+              className="ap-library-search-form"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (libraryQuery.trim())
@@ -594,7 +595,7 @@ export function OutdoorWorkflowCard({
                   );
               }}
             >
-              <label>
+              <label className="ap-library-search-label">
                 从我的物料库查找
                 <input
                   aria-label="物料名称或用途"

@@ -1195,6 +1195,27 @@ button.ap-ghost {
 .ap-zones-ask-form > .btn-outline { border: 1px solid var(--wk-hair); background: var(--wk-paper); color: var(--wk-ink-soft); }
 .ap-zones-ask-form > .btn-outline:hover:not(:disabled) { border-color: var(--faint); background: var(--wk-plane); color: var(--wk-ink); }
 .ap-zones-ask-form > .btn-outline:disabled { opacity: .55; cursor: not-allowed; }
+/* 2026-11-21 物料库反问卡：旧版裸 label + 无类 input，UA 默认白底在暗色下压不住；
+   跟分区用途反问卡同一套 token 口径：标签在上、整行输入框、检索钮同高。 */
+.ap-library-search-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ap-library-search-label { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-cap); color: var(--wk-ink-soft); }
+.ap-library-search-label > input {
+  min-width: 0; height: 36px; padding: 0 12px; margin: 0;
+  border: 1px solid var(--wk-hair); border-radius: var(--r-sm);
+  background: var(--wk-paper); color: var(--wk-ink);
+  font-family: inherit; font-size: var(--fs-p1); line-height: 1;
+  -webkit-appearance: none; appearance: none;
+}
+.ap-library-search-label > input::placeholder { color: var(--faint); }
+.ap-library-search-label > input:focus-visible { outline: 2px solid var(--wk-ink-soft); outline-offset: 1px; border-color: var(--wk-ink-soft); }
+.ap-library-search-form > .btn-outline {
+  height: 36px; min-width: 0; padding: 0 10px; margin: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm); font-family: inherit; font-size: var(--fs-p2); font-weight: 500;
+  white-space: nowrap; cursor: pointer; -webkit-appearance: none; appearance: none;
+  transition: background var(--dur-1) var(--ease-spec), border-color var(--dur-1) var(--ease-spec), color var(--dur-1) var(--ease-spec);
+}
+.ap-library-search-form > .btn-outline:disabled { opacity: .55; cursor: not-allowed; }
 /* 2026-11-19 用户：卡里的折叠行（审校更多动作 / 现有物料改动）之前是裸 <details>，
    默认黑三角 + 正文黑字，和同一张卡里的说明行不像一套。统一成一行小字 + ▸ 指示。 */
 .ap-audit-more-actions > summary,

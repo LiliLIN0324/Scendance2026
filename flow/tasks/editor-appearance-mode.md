@@ -232,6 +232,15 @@
 - **各车道 retained 图标口径复核**：空间 / 物料 active 取 `isLaneOpen(id)`（被盖 false 走描边 dim）；创作 active 只取 `generationOpen`（captureOpen 次级 retained 下 false）；户外 active 上一轮已补 `!businessCardOpen`；品牌脸按设计始终实心、retained 只变环；Bingo 状态珠由 phase 驱动、retained 只变环。无第二处与户外钮同型的 stale active 缺陷。
 - **门禁**：typecheck exit 0；定向 rail-side-panels / workbench-rail-head / workbench-brand-toggle / bingo-rail-button 4 套件 21 例通过；lint 0 error（1664 条既有 import/order warning）。本轮仅测试断言 + 文档，未动生产代码。
 
+### 第十六轮（2026-11-21）：物料库检索表单暗色白底补修；本地基线对齐远端重写 main
+
+- **远端对齐**：fetch 后发现远端历史已重写，本地旧谱系与 origin/main 无共同祖先；此前四笔 theme/rail 改动已以新 SHA 落在远端（`50d5466d` / `449c33bc` / `3c2984fd` / `9e7f0538`），逐文件核对 account-menu / appearance.ts / globals.css / brand-toggle / bingo / 轨钮测试均与远端一致，唯一差异是远端新功能「切换活动不被未发送对话死路拦住」（c590827f）。经确认后 `git reset --hard origin/main`（f892d7ce）退役旧谱系，untracked 证据与 .tmp 临时文件未动。
+- **问题（用户实测截图）**：户外工作流 objects 阶段「从我的物料库查找」表单，裸 `<label><input>` 无样式钩子；页面未声明 `color-scheme: dark`，输入框回退 UA 默认白底，灰占位字压在暗面板上；「检索真实库」钮也没走卡内 token。同卡「分区用途反问」表单（`.ap-zones-ask-form`）有完整 token 样式，唯独这处漏了。
+- **修补**：`outdoor-workflow-card.tsx` 表单挂 `ap-library-search-form`、标签挂 `ap-library-search-label`；`agent-panel.css` 按 zones-ask-form 同口径补块——标签 `--wk-ink-soft` 小字；输入框 36px、`--wk-paper` 底 + `--wk-hair` 边 + `--ink` 字，占位 `--faint`，focus 描边 `--wk-ink-soft`；检索钮 36px token 化，空输入禁用 0.55 透明度。
+- **真机回读（暗色，探针挂 `.sc-agent-panel` 内）**：输入框底 `rgb(28,31,36)` #1C1F24、字 `rgb(237,240,242)` #EDF0F2、边 `rgb(54,58,66)` #363A42、高 36px；占位 `rgb(107,112,120)` #6B7078；标签 `rgb(201,206,214)` #C9CED6；钮底 #1C1F24、字 #C9CED6、边 #363A42、高 36px；禁用态 opacity .55。7 条新规则已进运行时 CSSOM。
+- **门禁**：typecheck exit 0（v4.18.3）；lint 0 error（1672 条既有 import/order warning 基线）；定向 outdoor-workflow-card + use-outdoor-agent-workflow 4 文件 155/156 通过。唯一失败「缺分区要追问时，提示条里也带上后置活」在 stash 掉本轮改动后的干净基线上同样复现（notice 文案业务流断言，与 class/CSS 无关），属远端既有基线失败，未修。
+- **未做**：浅色档未重放该表单链路（token 与 zones-ask-form 同套，沿用前轮浅色结论）；未走真实 objects 阶段真机目视（本地对话为桩）；未改迁移/Edge 契约/根依赖/CI。
+
 ### 真机/浏览器验收清单（待人工跑）
 
 - 三档切换即时重绘无刷新；`system` 跟随系统深浅切换；刷新后保留本机档位。
