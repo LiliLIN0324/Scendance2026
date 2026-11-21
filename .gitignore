@@ -42,13 +42,12 @@ output/model-library/
 /production-snapshot/
 
 # Scratch / heavy local assets (2026-10-28)
-.temp/
 frontend/.temp-pw/
 .cache/
 .temp-cloud.txt
 frontend/.preview/
 
-# docs/evidence: default NO (COLLAB §三 提交纪律); only whitelisted dirs may be
+# docs/evidence: default NO (AGENTS.md 第六节 提交纪律); only whitelisted dirs may be
 # committed on purpose, heavy rebuild products stay excluded everywhere.
 # To admit a new evidence dir: add `!docs/evidence/<sub>/` after the `aholo/*`
 # re-ignore line, and re-ignore any heavy payloads it contains.
@@ -162,16 +161,11 @@ frontend/public/_internal-learning/
 # 内嵌 base64 底图/参考图的单文件核对报告（20 MB 级，仅本地看，不入仓；2026-11-18 摘出索引）
 /deliverables/classic-event-case-basemap-audit-*.html
 
-# 会话临时目录（日志、一次性脚本；2026-11-18）
-/.tmp/
-
 # 2026-11-19 清工作树：以下都是本机产物/一次性文件，不入仓
 # 构建备份（`.next-*` 匹配不到 `.next.bak-*`，两处合计约 2.1 GB）
 frontend/.next.bak-*/
 # lux3d 代理落盘的本机场景包（约 222 MB）
 /aholo-downloads/
-# 会话级检索索引
-/.memsearch/
 # 交付目录里的一次性产物：验收截图 / 报告备份 / 临时脚本
 /deliverables/*.png
 /deliverables/**/*.bak*
@@ -180,7 +174,21 @@ frontend/.next.bak-*/
 # 幕录 stage-reel · 演示片产物（成片/唯一帧/音频体积大，不入库）
 /tools/demo-video/out/
 # 自动化临时产物：AI 会话草稿 / aria 快照 / 审计截图与补丁 / Trae 会话文件
-/draft_*_folder/
 /.tmp-audit/
 /.trae/
 /snap-*.yml
+
+# ── 本机临时产物统一入口（2026-11-21 用户拍板，合并分散的临时目录）──────────
+# 会话级草稿 / 日志 / 截图 / 索引统一落 .local/，不再在仓库根各占一个目录：
+#   .local/tmp/        通用临时区（原 .tmp/ 与根目录 .tmp-* 文件）
+#   .local/logs/       dev 与后台作业日志（原 .dev-logs/）
+#   .local/drafts/     演示 / 导出草稿（原 draft_*_folder/）
+#   .local/memsearch/  会话检索索引（原 .memsearch/）
+/.local/
+# 旧名兜底：外部工具与并行会话仍会在仓库根重建这些目录，重建了也不入库、不弄脏 git status
+/.tmp/
+/.dev-logs/
+/.memsearch/
+/draft_*_folder/
+# .temp/ 不限层级：supabase CLI 在 supabase/.temp 自建；根 .temp/ 仍可能被并行会话写入
+.temp/
