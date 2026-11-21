@@ -1,0 +1,192 @@
+{
+  "ranAt": "2026-11-20T09:19:12.905Z",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "枚举 scendance.assistant-* 三类槽，按 activeId 关联 brief-memory 字段；对照 planState 与云端写。",
+  "stages": [
+    {
+      "stage": "first-design-sentence",
+      "storage": {
+        "scendance.assistant-session-bodies.v1.scope.project%3Ahouse-qnoens4p": {
+          "key": "scendance.assistant-session-bodies.v1.scope.project%3Ahouse-qnoens4p",
+          "bodies": {
+            "ses-ebf0d225-44a9-40a7-b56f-5b33b0e5521b": [
+              {
+                "role": "user",
+                "text": "做 200 人发布会，签到台放西侧入口，留出通道",
+                "warn": null,
+                "alertStamp": null
+              }
+            ]
+          }
+        },
+        "scendance.assistant-sessions.v1.scope.project%3Ahouse-qnoens4p": {
+          "key": "scendance.assistant-sessions.v1.scope.project%3Ahouse-qnoens4p",
+          "activeId": "ses-ebf0d225-44a9-40a7-b56f-5b33b0e5521b",
+          "sessions": [
+            {
+              "id": "ses-ebf0d225-44a9-40a7-b56f-5b33b0e5521b",
+              "title": "做 200 人发布会，签到台放西侧入口，留出通道",
+              "updatedAt": 1795166390366
+            }
+          ]
+        },
+        "scendance.assistant-scope-names.v1": {
+          "key": "scendance.assistant-scope-names.v1",
+          "raw": {
+            "project:house-qnoens4p": "周末共创工作坊"
+          }
+        }
+      },
+      "plan": {
+        "scendance-outdoor-plan-v1:house-qnoens4p": {
+          "projectId": "house-qnoens4p",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T09:19:19.908Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-plan-v1:default-outdoor": {
+          "projectId": "default-outdoor",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T09:19:16.694Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-last-v1": "default-outdoor"
+      },
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream"
+      ],
+      "bodyHints": [
+        "当前物料 0 件 · 场地容量待核验",
+        "做 200 人发布会，签到台放西侧入口，留出通道",
+        "做 200 人发布会，签到台放西侧入口，留出通道",
+        "做 200 人发布会，签到台放西侧入口，留出通道",
+        "已读画布 0 个分区 · 0 项设施",
+        "这一步没做成 · 核对具体活动范围",
+        "地图上还没有可核对的活动边界；请点「在地图上手画活动范围」，或在左上角重新搜索地点并选择候选。",
+        "沿场地边缘逐点单击，点回起点就闭合；闭合后红线就是设计范围，分区、流线、物件都按它排。",
+        "在地图上手画活动范围"
+      ]
+    },
+    {
+      "stage": "headcount-change",
+      "storage": {
+        "scendance.assistant-session-bodies.v1.scope.project%3Ahouse-qnoens4p": {
+          "key": "scendance.assistant-session-bodies.v1.scope.project%3Ahouse-qnoens4p",
+          "bodies": {
+            "ses-ebf0d225-44a9-40a7-b56f-5b33b0e5521b": [
+              {
+                "role": "user",
+                "text": "做 200 人发布会，签到台放西侧入口，留出通道",
+                "warn": null,
+                "alertStamp": null
+              },
+              {
+                "role": "user",
+                "text": "人数改 150，保持现有分区",
+                "warn": null,
+                "alertStamp": null
+              },
+              {
+                "role": "agent",
+                "text": "收到，人数改为150、现有分区保持不动。不过当前还没有已生成的分区或活动边界，需要先确认场地范围（或指定用哪块开放空间）才能继续排布。",
+                "warn": null,
+                "alertStamp": null
+              }
+            ]
+          }
+        },
+        "scendance.assistant-sessions.v1.scope.project%3Ahouse-qnoens4p": {
+          "key": "scendance.assistant-sessions.v1.scope.project%3Ahouse-qnoens4p",
+          "activeId": "ses-ebf0d225-44a9-40a7-b56f-5b33b0e5521b",
+          "sessions": [
+            {
+              "id": "ses-ebf0d225-44a9-40a7-b56f-5b33b0e5521b",
+              "title": "做 200 人发布会，签到台放西侧入口，留出通道",
+              "updatedAt": 1795166433549
+            }
+          ]
+        },
+        "scendance.assistant-scope-names.v1": {
+          "key": "scendance.assistant-scope-names.v1",
+          "raw": {
+            "project:house-qnoens4p": "周末共创工作坊"
+          }
+        }
+      },
+      "plan": {
+        "scendance-outdoor-plan-v1:house-qnoens4p": {
+          "projectId": "house-qnoens4p",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T09:19:19.908Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-plan-v1:default-outdoor": {
+          "projectId": "default-outdoor",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T09:19:16.694Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-last-v1": "default-outdoor"
+      },
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream"
+      ],
+      "bodyHints": [
+        "当前物料 0 件 · 场地容量待核验",
+        "做 200 人发布会，签到台放西侧入口，留出通道",
+        "做 200 人发布会，签到台放西侧入口，留出通道",
+        "人数改 150，保持现有分区",
+        "已读画布 0 个分区 · 0 项设施",
+        "收到，人数改为150、现有分区保持不动。不过当前还没有已生成的分区或活动边界，需要先确认场地范围（或指定用哪块开放空间）才能继续排布。"
+      ]
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

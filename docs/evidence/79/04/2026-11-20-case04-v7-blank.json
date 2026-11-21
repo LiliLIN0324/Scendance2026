@@ -1,0 +1,151 @@
+{
+  "ranAt": "2026-11-20T02:50:59.170Z",
+  "account": "",
+  "sessionUser": "c4f27bf0-671a-4749-8ecd-b0192d4893ad",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "initial": {
+    "slot": "scendance-outdoor-plan-v1:house-igl8ywtl",
+    "projectId": "house-igl8ywtl",
+    "name": "新活动场地",
+    "updatedAt": "2026-11-20T02:51:06.873Z",
+    "counts": {
+      "zones": 0,
+      "routes": 0,
+      "entrances": 0,
+      "workers": 0,
+      "facilities": 0,
+      "objects": 0,
+      "boundary": 0
+    },
+    "planLen": 167
+  },
+  "turn1": {
+    "taskText": "当前物料 0 件 · 场地容量待核验 · 做200人发布会，签到台放西侧入口，留出通道 执行资料    周末共创工作坊 1 个  做200人发布会，签到台放西侧入口，留出通道   还没定在哪。先在地图上定地点、圈出可用范围，或直接说出城市/场馆/地址；地点定了再谈布置、动线和分区。这句我先留着。 下一步：在地图上选地点。  当前任务 · 搜索目标地点 请核对活动实际范围，自动为你框选项目区域 请核对活动实际范围，自动为你框选项目区域 搜索地点  在地图上手画活动范围 执行权限 告诉 Agent 要改的 默认（按服务端配置） 图层 2D    工具",
+    "summary": {
+      "cards": [],
+      "buttons": [
+        {
+          "t": "执行资料",
+          "d": false,
+          "cls": "ap-delivery-entry"
+        },
+        {
+          "t": "周末共创工作坊",
+          "d": false,
+          "cls": "sc-activity-island-main"
+        },
+        {
+          "t": "1 个 ",
+          "d": false,
+          "cls": "sc-activity-island-toggle"
+        },
+        {
+          "t": "搜索地点",
+          "d": false,
+          "cls": "btn-primary"
+        },
+        {
+          "t": "默认（按服务端配置）",
+          "d": false,
+          "cls": "ap-provider-summary"
+        },
+        {
+          "t": "图层",
+          "d": false,
+          "cls": "oc-layer-entry"
+        },
+        {
+          "t": "2D",
+          "d": false,
+          "cls": "oc-gm-round oc-gm-mode"
+        }
+      ]
+    },
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-igl8ywtl",
+      "projectId": "house-igl8ywtl",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T02:51:06.873Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "writes": [],
+    "redCard": false,
+    "flow": {}
+  },
+  "turn2": {
+    "taskText": "当前物料 0 件 · 场地容量待核验 · 做200人发布会，签到台放西侧入口，留出通道 执行资料    周末共创工作坊 1 个  做200人发布会，签到台放西侧入口，留出通道  还没定在哪。先在地图上定地点、圈出可用范围，或直接说出城市/场馆/地址；地点定了再谈布置、动线和分区。这句我先留着。 下一步：在地图上选地点。  人数改为 150 人，保持现有分区。   还没定在哪。先在地图上定地点、圈出可用范围，或直接说出城市/场馆/地址；地点定了再谈布置、动线和分区。这句我先留着。 下一步：在地图上选地点。  当前任务 · 搜索目标地点 请核对活动实际范围，自动为你框选项目区域 请核对活动实际范围，自动为你框选项目区域 搜索地点  在地图上手画活动范围 执行权限 告诉 Agent 要改的 默认（按服务端配置） 图层 2D    工具",
+    "summary": {
+      "cards": [],
+      "buttons": [
+        {
+          "t": "执行资料",
+          "d": false,
+          "cls": "ap-delivery-entry"
+        },
+        {
+          "t": "周末共创工作坊",
+          "d": false,
+          "cls": "sc-activity-island-main"
+        },
+        {
+          "t": "1 个 ",
+          "d": false,
+          "cls": "sc-activity-island-toggle"
+        },
+        {
+          "t": "搜索地点",
+          "d": false,
+          "cls": "btn-primary"
+        },
+        {
+          "t": "默认（按服务端配置）",
+          "d": false,
+          "cls": "ap-provider-summary"
+        },
+        {
+          "t": "图层",
+          "d": false,
+          "cls": "oc-layer-entry"
+        },
+        {
+          "t": "2D",
+          "d": false,
+          "cls": "oc-gm-round oc-gm-mode"
+        }
+      ]
+    },
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-igl8ywtl",
+      "projectId": "house-igl8ywtl",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T02:51:06.873Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "writes": [],
+    "redCard": false,
+    "flow": {}
+  },
+  "writes": [
+    "PUT 200 /functions/v1/scene-api/outdoor-plans"
+  ],
+  "ok": true,
+  "consoleErrors": []
+}

@@ -1,0 +1,151 @@
+{
+  "ranAt": "2026-11-20T10:38:33.766Z",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "两段式：A 段观察收集瓦片 host；B 段仅拦瓦片 image，放行 amap-place/supabase/同源静态。提示文案逐字，方案 counts 不变、云端写单独记账。",
+  "observedImageHosts": [
+    "scendance-scene-planner-ewz.pages.dev",
+    "webrd01.is.autonavi.com",
+    "wkhfvnzgopjdzxlmycks.supabase.co"
+  ],
+  "stages": [
+    {
+      "stage": "A-observe",
+      "mapHints": {
+        "hintLines": [
+          "在地图上手画活动范围",
+          "底图是真地图瓦片，红实线是你圈的活动范围。拖动平移、滚轮缩放；左上方能直接搜地点。",
+          "以后不再提示"
+        ],
+        "errorEls": []
+      },
+      "plan": {
+        "scendance-outdoor-plan-v1:house-92pnj81d": {
+          "projectId": "house-92pnj81d",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T10:38:39.491Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-plan-v1:default-outdoor": {
+          "projectId": "default-outdoor",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T10:38:36.697Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-last-v1": "default-outdoor"
+      },
+      "writes": [],
+      "imageHosts": [
+        "scendance-scene-planner-ewz.pages.dev",
+        "webrd01.is.autonavi.com",
+        "wkhfvnzgopjdzxlmycks.supabase.co"
+      ]
+    },
+    {
+      "stage": "B-blocked-tiles",
+      "blockedCount": 118,
+      "blockedSample": [
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=54628&y=26993&z=16",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1707&y=843&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1706&y=843&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1707&y=844&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1707&y=842&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1706&y=844&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1706&y=842&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1708&y=843&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1705&y=843&z=11",
+        "webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x=1708&y=844&z=11"
+      ],
+      "mapHints": {
+        "hintLines": [
+          "在地图上手画活动范围",
+          "底图是真地图瓦片，红实线是你圈的活动范围。拖动平移、滚轮缩放；左上方能直接搜地点。",
+          "以后不再提示"
+        ],
+        "errorEls": []
+      },
+      "plan": {
+        "scendance-outdoor-plan-v1:house-92pnj81d": {
+          "projectId": "house-92pnj81d",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T10:38:39.491Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-plan-v1:default-outdoor": {
+          "projectId": "default-outdoor",
+          "name": "新活动场地",
+          "updatedAt": "2026-11-20T10:38:36.697Z",
+          "counts": {
+            "zones": 0,
+            "routes": 0,
+            "entrances": 0,
+            "workers": 0,
+            "facilities": 0,
+            "objects": 0,
+            "boundary": 0
+          },
+          "planLen": 167
+        },
+        "scendance-outdoor-last-v1": "default-outdoor"
+      },
+      "writes": []
+    }
+  ],
+  "cloudList": {
+    "status": 200,
+    "listLen": 103
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "ranAt": "2026-11-20T07:53:00+08:00",
+  "case": 10,
+  "note": "匿名（不注入会话 cookie）在线基线：观察登录门禁与本机操作同窗云端写请求。未调模型、未主动保存。",
+  "identity": "anonymous-no-cookie",
+  "gate": {
+    "loginCard": false,
+    "textareaDisabled": false,
+    "loginTextHits": []
+  },
+  "localEditTrace": {
+    "railOutdoorCount": 1,
+    "subgroupCount": 1,
+    "entryToolCount": 1,
+    "canvasRect": { "w": 1206, "h": 980, "x": 386, "y": 10 },
+    "nodePlacementResult": "入口节点未落到本机槽（entrances=0、planLen=167B）；匿名草稿无真实边界，入口节点放置要求落在边界环内，落点被拒。",
+    "netAfterLocalEdit": []
+  },
+  "localSlots": {
+    "default-outdoor": { "counts": { "zones": 0, "boundary": 0, "entrances": 0 }, "planLen": 167 },
+    "house-c4f19o57": { "counts": { "zones": 0, "boundary": 0, "entrances": 0 }, "planLen": 167 }
+  },
+  "consoleErrors": [],
+  "finding": "匿名访客可进入工作台，无「前往登录」门禁、聊天框未禁用；展开户外素材库 → 选入口工具 → 画布点击阶段，同窗 0 条 supabase 请求、0 consoleError。但入口节点因无真实边界未落位，尚不能算作一次成功的纯本机编辑。",
+  "openGaps": [
+    "一次落位生效的纯本机成功编辑 + 同窗 0 云端写样本（需不依赖边界的本机物件，或先有本机边界）",
+    "01:54 同轮 UI 失败卡逐字对照（依赖真实模型失败触发，与 #6 限流/错误桩同源）",
+    "turnId 不出浏览器，只能时间窗 + 分类弱关联"
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-20T02:21:00.000Z",
+  "account": "walkthrough-79@scendance.test",
+  "command": "npx vitest run tests/assistant-chat.test.ts tests/http-quota.test.ts（node v24.15.0）",
+  "scope": "零云端、零密钥的离线分支验证；只证明分类与日志事件的代码路径未漂，不等于 #6 要求的真实浏览器 + 真实云端取证。",
+  "result": {
+    "total": 39,
+    "passed": 38,
+    "failed": 1,
+    "files": "1 failed | 1 passed (2)"
+  },
+  "passedChecks": [
+    {
+      "branch": "quota_exhausted",
+      "test": "assistant-chat.test.ts reports out-of-quota as quota_exhausted, stops before another slot, and does not leak the body",
+      "assertions": "上游 402 → {status:'quota_exhausted', answer:null}；只调用一次、不跨槽重试；console.warn('assistant_chat_failure', {slot:'custom', reason:'quota_exhausted', httpStatus:402})；warning 参数不含上游 body。"
+    },
+    {
+      "branch": "timeout",
+      "test": "assistant-chat.test.ts timeout branch（timeoutMs:5，fetcher 永不 resolve）",
+      "assertions": "{status:'timeout', answer:null}；fetcher 只调用一次；与 provider_error 分档。"
+    },
+    {
+      "branch": "quota transport",
+      "test": "http-quota.test.ts",
+      "assertions": "fetchJson 抛 PROVIDER_QUOTA_EXHAUSTED，details 不带上游 body。"
+    }
+  ],
+  "baselineFailure": {
+    "test": "assistant-chat.test.ts routes the product opt-in independently of an old MiniMax profile and never falls back",
+    "assertion": "delete BAILIAN_PRODUCT_KEY 后期望 status='unavailable' 且不调 fetcher，实际 status='provider_error'。",
+    "note": "本轮未改任何后端代码（git 仅前端测试 + 文档/证据），该失败来自 main 基线，不在 #79 走查范围内修复，如实记录。"
+  },
+  "secretInventory": {
+    "source": "Management API GET /v1/projects/{ref}/secrets，200；只列键名，未读取、未回显任何 value",
+    "present": ["CONVERSATION_API_ENABLED", "AGENT_CHAT_BASE_URL", "AGENT_CHAT_KEY", "AGENT_CHAT_MODEL", "AGENT_CHAT_PROFILE", "BAILIAN_PRODUCT_BASE_URL", "BAILIAN_PRODUCT_ENABLED", "BAILIAN_PRODUCT_KEY", "BAILIAN_PRODUCT_MODEL", "BRIEF_CONVERSATION_ENABLED"],
+    "absent": ["ASSISTANT_CHAT_ENABLED", "BRIEF_REQUEST_GUARD"],
+    "functions": [{"slug": "conversation-api", "status": "ACTIVE", "version": 56}]
+  },
+  "cloudBlockers": [
+    {
+      "branch": "功能关闭（A1 关 CONVERSATION_API_ENABLED=0）",
+      "status": "blocked",
+      "reason": "管理 API secrets 通道可达，但前端取证链路依赖项目域 *.supabase.co（本轮 TLS 被 RST，不通）；且关闭线上对话函数会影响真实用户，当前无法回验。授权已记录，待项目域通、有可观察窗口后执行并随即改回 1。"
+    },
+    {
+      "branch": "额度不足（B1 换槽位指向 402 桩）",
+      "status": "blocked",
+      "reason": "需要一个公网可达、稳定返 402 的桩；本机桩线上 Edge Function 不可达。改 AGENT_CHAT_BASE_URL/KEY/MODEL 或 BAILIAN_PRODUCT_* 会让线上所有用户看到额度不足，需独立窗口。"
+    },
+    {
+      "branch": "网络超时（C1 指向慢地址）",
+      "status": "blocked",
+      "reason": "同上，需要公网可达的慢响应地址；本地慢桩分支已由离线 timeout 单测覆盖（C2），浏览器断网走 NETWORK_ERROR 档，不能冒充 timeout。"
+    }
+  ],
+  "notDone": [
+    "未改任何云端 secret、未部署、未重新构建/发布前端",
+    "未读取或打印任何 secret value / token",
+    "未在浏览器重跑未登录分支（沿用 2026-11-19-case06-not-logged-in 证据）"
+  ]
+}

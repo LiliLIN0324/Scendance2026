@@ -1,0 +1,1349 @@
+{
+  "ranAt": "2026-11-20T07:29:03.200Z",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "8c 第一段：recover 活动列表顺序 ↔ 云端 list 映射；打开 A 复核指纹。",
+  "steps": [],
+  "cloudList": {
+    "status": 200,
+    "len": 96,
+    "rows": [
+      {
+        "activityId": "54849008-45f9-4f18-b47f-6bcabb2b556c",
+        "localActivityId": "house-9khj6llb",
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T07:29:12.138219+00:00"
+      },
+      {
+        "activityId": "13c5f6ac-3129-4e11-89ea-58df8f5bf10d",
+        "localActivityId": "house-cdzvodao",
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T07:27:26.690822+00:00"
+      },
+      {
+        "activityId": "5d355aaf-302e-44ff-a226-902c9212a72f",
+        "localActivityId": "house-rftguqd8",
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T07:23:07.654496+00:00"
+      },
+      {
+        "activityId": "f2a35aa5-4a8d-4ae7-8536-0dd4fb8c490a",
+        "localActivityId": "house-soqg6ja2",
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T07:20:35.501611+00:00"
+      },
+      {
+        "activityId": "44a83b7f-ad4e-483c-ad85-12747b5fbc10",
+        "localActivityId": "house-e4dqnu56",
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T07:12:34.106165+00:00"
+      },
+      {
+        "activityId": "0fef3faa-93bf-4c9a-8d8c-d2888e0a4411",
+        "localActivityId": "house-vwb5rb28",
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T07:09:29.579726+00:00"
+      },
+      {
+        "activityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+        "localActivityId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "revision": 11,
+        "updatedAt": "2026-11-20T06:59:45.329791+00:00"
+      },
+      {
+        "activityId": "449dcc61-bb49-43bb-98eb-b747ca6016a4",
+        "localActivityId": "house-zsymux87",
+        "name": "新活动场地",
+        "revision": 13,
+        "updatedAt": "2026-11-20T06:44:59.010383+00:00"
+      },
+      {
+        "activityId": "3210dea4-2310-426b-bb54-0b10ae30bec8",
+        "localActivityId": "house-47o5l5tp",
+        "name": "新活动场地",
+        "revision": 17,
+        "updatedAt": "2026-11-20T06:34:13.555699+00:00"
+      },
+      {
+        "activityId": "b99a3d23-9a61-4403-87f0-efc72196fa10",
+        "localActivityId": "house-kd0bfl0d",
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T05:44:48.806931+00:00"
+      },
+      {
+        "activityId": "1add59f4-f340-4313-8e57-bb5d97054880",
+        "localActivityId": "house-yg4me5ik",
+        "name": "新活动场地",
+        "revision": 12,
+        "updatedAt": "2026-11-20T05:35:08.693267+00:00"
+      },
+      {
+        "activityId": "78b5f886-337a-4326-bac7-a1415b50a67d",
+        "localActivityId": "house-vb5f3okg",
+        "name": "新活动场地",
+        "revision": 3,
+        "updatedAt": "2026-11-20T05:25:16.145792+00:00"
+      },
+      {
+        "activityId": "97c3ab1e-4dd2-48ca-b527-e8b19834896e",
+        "localActivityId": "house-tf35a3tj",
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-20T05:20:03.635616+00:00"
+      },
+      {
+        "activityId": "5beb66cc-77bf-4bfd-85d5-7fe2cca24760",
+        "localActivityId": "house-psqshyp7",
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-20T05:17:10.024532+00:00"
+      },
+      {
+        "activityId": "f9c372d8-fd43-4846-9229-1ffe842236a5",
+        "localActivityId": "house-90dujwwn",
+        "name": "新活动场地",
+        "revision": 9,
+        "updatedAt": "2026-11-20T04:31:22.495176+00:00"
+      }
+    ]
+  },
+  "aCloudIdx": 6,
+  "recoverVisible": true,
+  "recoverRows": [
+    {
+      "i": 0,
+      "text": "新活动场地 版本 1 · 11/20 15:27 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 1,
+      "text": "新活动场地 版本 1 · 11/20 15:23 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 2,
+      "text": "新活动场地 版本 1 · 11/20 15:20 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 3,
+      "text": "新活动场地 版本 1 · 11/20 15:12 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 4,
+      "text": "新活动场地 版本 1 · 11/20 15:09 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 5,
+      "text": "新活动场地 版本 11 · 11/20 14:59 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 6,
+      "text": "新活动场地 版本 13 · 11/20 14:44 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 7,
+      "text": "新活动场地 版本 17 · 11/20 14:34 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 8,
+      "text": "新活动场地 版本 1 · 11/20 13:44 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 9,
+      "text": "新活动场地 版本 12 · 11/20 13:35 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 10,
+      "text": "新活动场地 版本 3 · 11/20 13:25 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 11,
+      "text": "新活动场地 版本 2 · 11/20 13:20 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 12,
+      "text": "新活动场地 版本 2 · 11/20 13:17 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 13,
+      "text": "新活动场地 版本 9 · 11/20 12:31 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 14,
+      "text": "新活动场地 版本 2 · 11/20 12:16 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 15,
+      "text": "新活动场地 版本 1 · 11/20 12:09 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 16,
+      "text": "新活动场地 版本 1 · 11/20 12:06 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 17,
+      "text": "新活动场地 版本 9 · 11/20 00:27 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 18,
+      "text": "新活动场地 版本 1 · 11/20 00:23 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 19,
+      "text": "新活动场地 版本 1 · 11/20 00:22 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 20,
+      "text": "新活动场地 版本 1 · 11/20 00:03 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 21,
+      "text": "新活动场地 版本 1 · 11/19 23:58 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 22,
+      "text": "新活动场地 版本 1 · 11/19 23:55 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 23,
+      "text": "新活动场地 版本 3 · 11/19 23:53 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 24,
+      "text": "新活动场地 版本 1 · 11/19 23:52 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 25,
+      "text": "新活动场地 版本 5 · 11/19 23:50 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 26,
+      "text": "新活动场地 版本 1 · 11/19 23:49 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 27,
+      "text": "新活动场地 版本 1 · 11/19 23:47 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 28,
+      "text": "新活动场地 版本 1 · 11/19 23:46 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 29,
+      "text": "新活动场地 版本 1 · 11/19 23:45 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 30,
+      "text": "新活动场地 版本 1 · 11/19 23:43 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 31,
+      "text": "新活动场地 版本 1 · 11/19 23:39 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 32,
+      "text": "新活动场地 版本 1 · 11/19 23:38 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 33,
+      "text": "新活动场地 版本 1 · 11/19 23:28 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 34,
+      "text": "新活动场地 版本 1 · 11/19 23:25 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 35,
+      "text": "新活动场地 版本 1 · 11/19 23:11 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 36,
+      "text": "新活动场地 版本 2 · 11/19 23:01 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 37,
+      "text": "新活动场地 版本 1 · 11/19 22:34 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 38,
+      "text": "新活动场地 版本 2 · 11/19 22:33 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 39,
+      "text": "新活动场地 版本 1 · 11/19 22:28 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 40,
+      "text": "新活动场地 版本 1 · 11/19 19:23 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 41,
+      "text": "#4 local 版本 1 · 11/19 19:17 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 42,
+      "text": "新活动场地 版本 1 · 11/19 19:03 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 43,
+      "text": "新活动场地 版本 1 · 11/19 18:36 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 44,
+      "text": "新活动场地 版本 2 · 11/19 18:34 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 45,
+      "text": "新活动场地 版本 1 · 11/19 18:33 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 46,
+      "text": "新活动场地 版本 4 · 11/19 18:00 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 47,
+      "text": "新活动场地 版本 1 · 11/19 18:00 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 48,
+      "text": "新活动场地 版本 2 · 11/19 17:58 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 49,
+      "text": "新活动场地 版本 1 · 11/19 17:57 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 50,
+      "text": "新活动场地 版本 2 · 11/19 17:41 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 51,
+      "text": "新活动场地 版本 1 · 11/19 17:33 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 52,
+      "text": "新活动场地 版本 1 · 11/19 17:31 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 53,
+      "text": "新活动场地 版本 1 · 11/19 17:28 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 54,
+      "text": "新活动场地 版本 1 · 11/19 17:25 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 55,
+      "text": "新活动场地 版本 1 · 11/19 17:21 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 56,
+      "text": "新活动场地 版本 4 · 11/19 16:46 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 57,
+      "text": "新活动场地 版本 4 · 11/19 16:32 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 58,
+      "text": "新活动场地 版本 1 · 11/19 16:16 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 59,
+      "text": "新活动场地 版本 1 · 11/19 16:11 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 60,
+      "text": "新活动场地 版本 1 · 11/19 16:07 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 61,
+      "text": "新活动场地 版本 1 · 11/19 16:01 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 62,
+      "text": "新活动场地 版本 1 · 11/19 15:58 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 63,
+      "text": "新活动场地 版本 1 · 11/19 15:56 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 64,
+      "text": "新活动场地 版本 1 · 11/19 15:53 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 65,
+      "text": "新活动场地 版本 1 · 11/19 15:35 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 66,
+      "text": "新活动场地 版本 1 · 11/19 15:32 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 67,
+      "text": "新活动场地 版本 1 · 11/19 15:25 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 68,
+      "text": "新活动场地 版本 1 · 11/19 15:23 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 69,
+      "text": "新活动场地 版本 1 · 11/19 15:21 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 70,
+      "text": "新活动场地 版本 3 · 11/19 14:16 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 71,
+      "text": "新活动场地 版本 1 · 11/19 13:41 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 72,
+      "text": "新活动场地 版本 1 · 11/19 13:39 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 73,
+      "text": "新活动场地 版本 1 · 11/19 13:35 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 74,
+      "text": "新活动场地 版本 1 · 11/19 13:13 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 75,
+      "text": "新活动场地 版本 1 · 11/19 13:10 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 76,
+      "text": "新活动场地 版本 1 · 11/19 13:09 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 77,
+      "text": "新活动场地 版本 1 · 11/19 13:07 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 78,
+      "text": "新活动场地 版本 1 · 11/19 13:05 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 79,
+      "text": "新活动场地 版本 1 · 11/19 13:02 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 80,
+      "text": "新活动场地 版本 1 · 11/19 12:54 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 81,
+      "text": "新活动场地 版本 1 · 11/19 12:52 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 82,
+      "text": "新活动 11-19 11:23 版本 2 · 11/19 11:24 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 83,
+      "text": "新活动场地 版本 1 · 11/19 11:23 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 84,
+      "text": "新活动 11-19 11:17 版本 2 · 11/19 11:18 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 85,
+      "text": "新活动场地 版本 1 · 11/19 11:17 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 86,
+      "text": "新活动 11-19 11:11 版本 2 · 11/19 11:12 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 87,
+      "text": "新活动场地 版本 1 · 11/19 11:11 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 88,
+      "text": "新活动 11-19 11:04 版本 2 · 11/19 11:05 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 89,
+      "text": "新活动场地 版本 1 · 11/19 11:04 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 90,
+      "text": "新活动 11-19 10:51 版本 1 · 11/19 10:51 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 91,
+      "text": "新活动场地 版本 1 · 11/19 10:51 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 92,
+      "text": "新活动场地 版本 4 · 11/19 10:01 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 93,
+      "text": "新活动场地 版本 2 · 11/19 09:54 打开",
+      "disabled": false,
+      "label": null
+    },
+    {
+      "i": 94,
+      "text": "新活动场地 版本 1 · 11/19 09:49 打开",
+      "disabled": false,
+      "label": null
+    }
+  ],
+  "orderMatch": [
+    {
+      "row": 0,
+      "rowText": "新活动场地 版本 1 · 11/20 15:27 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "54849008-45f9-4f18-b47f-6bcabb2b556c"
+    },
+    {
+      "row": 1,
+      "rowText": "新活动场地 版本 1 · 11/20 15:23 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "13c5f6ac-3129-4e11-89ea-58df8f5bf10d"
+    },
+    {
+      "row": 2,
+      "rowText": "新活动场地 版本 1 · 11/20 15:20 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "5d355aaf-302e-44ff-a226-902c9212a72f"
+    },
+    {
+      "row": 3,
+      "rowText": "新活动场地 版本 1 · 11/20 15:12 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "f2a35aa5-4a8d-4ae7-8536-0dd4fb8c490a"
+    },
+    {
+      "row": 4,
+      "rowText": "新活动场地 版本 1 · 11/20 15:09 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "44a83b7f-ad4e-483c-ad85-12747b5fbc10"
+    },
+    {
+      "row": 5,
+      "rowText": "新活动场地 版本 11 · 11/20 14:59 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "0fef3faa-93bf-4c9a-8d8c-d2888e0a4411"
+    },
+    {
+      "row": 6,
+      "rowText": "新活动场地 版本 13 · 11/20 14:44 打开",
+      "cloudRevision": 11,
+      "cloudActivity": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94"
+    },
+    {
+      "row": 7,
+      "rowText": "新活动场地 版本 17 · 11/20 14:34 打开",
+      "cloudRevision": 13,
+      "cloudActivity": "449dcc61-bb49-43bb-98eb-b747ca6016a4"
+    },
+    {
+      "row": 8,
+      "rowText": "新活动场地 版本 1 · 11/20 13:44 打开",
+      "cloudRevision": 17,
+      "cloudActivity": "3210dea4-2310-426b-bb54-0b10ae30bec8"
+    },
+    {
+      "row": 9,
+      "rowText": "新活动场地 版本 12 · 11/20 13:35 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "b99a3d23-9a61-4403-87f0-efc72196fa10"
+    },
+    {
+      "row": 10,
+      "rowText": "新活动场地 版本 3 · 11/20 13:25 打开",
+      "cloudRevision": 12,
+      "cloudActivity": "1add59f4-f340-4313-8e57-bb5d97054880"
+    },
+    {
+      "row": 11,
+      "rowText": "新活动场地 版本 2 · 11/20 13:20 打开",
+      "cloudRevision": 3,
+      "cloudActivity": "78b5f886-337a-4326-bac7-a1415b50a67d"
+    },
+    {
+      "row": 12,
+      "rowText": "新活动场地 版本 2 · 11/20 13:17 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "97c3ab1e-4dd2-48ca-b527-e8b19834896e"
+    },
+    {
+      "row": 13,
+      "rowText": "新活动场地 版本 9 · 11/20 12:31 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "5beb66cc-77bf-4bfd-85d5-7fe2cca24760"
+    },
+    {
+      "row": 14,
+      "rowText": "新活动场地 版本 2 · 11/20 12:16 打开",
+      "cloudRevision": 9,
+      "cloudActivity": "f9c372d8-fd43-4846-9229-1ffe842236a5"
+    },
+    {
+      "row": 15,
+      "rowText": "新活动场地 版本 1 · 11/20 12:09 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "e437f058-d605-44e9-9177-5f167c232f76"
+    },
+    {
+      "row": 16,
+      "rowText": "新活动场地 版本 1 · 11/20 12:06 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "73535465-30e9-451c-b497-78a8b4291fa5"
+    },
+    {
+      "row": 17,
+      "rowText": "新活动场地 版本 9 · 11/20 00:27 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "8a09e24d-4f93-4aab-888c-00d5d658f9a4"
+    },
+    {
+      "row": 18,
+      "rowText": "新活动场地 版本 1 · 11/20 00:23 打开",
+      "cloudRevision": 9,
+      "cloudActivity": "e7cbba49-ff53-46bb-9112-5faebbe8f929"
+    },
+    {
+      "row": 19,
+      "rowText": "新活动场地 版本 1 · 11/20 00:22 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "f1248be3-b934-4eff-96db-9156fd3a7f97"
+    },
+    {
+      "row": 20,
+      "rowText": "新活动场地 版本 1 · 11/20 00:03 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "b37c9907-ded1-4011-a711-fc78e7568cb7"
+    },
+    {
+      "row": 21,
+      "rowText": "新活动场地 版本 1 · 11/19 23:58 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "4e2ed813-6692-4084-8e73-0eaf502a13c6"
+    },
+    {
+      "row": 22,
+      "rowText": "新活动场地 版本 1 · 11/19 23:55 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "a95ca85c-bb13-4ae1-a17c-b1ed5054edb5"
+    },
+    {
+      "row": 23,
+      "rowText": "新活动场地 版本 3 · 11/19 23:53 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "b04e69c3-6b06-42e8-abf5-40f30a29a5c6"
+    },
+    {
+      "row": 24,
+      "rowText": "新活动场地 版本 1 · 11/19 23:52 打开",
+      "cloudRevision": 3,
+      "cloudActivity": "53e3a03a-d2f1-4166-b941-d472b7a265b4"
+    },
+    {
+      "row": 25,
+      "rowText": "新活动场地 版本 5 · 11/19 23:50 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "21535c3c-c214-4b58-bcbe-995c81666877"
+    },
+    {
+      "row": 26,
+      "rowText": "新活动场地 版本 1 · 11/19 23:49 打开",
+      "cloudRevision": 5,
+      "cloudActivity": "b57e4904-196d-46bf-865c-971c4cbef266"
+    },
+    {
+      "row": 27,
+      "rowText": "新活动场地 版本 1 · 11/19 23:47 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "9ae9df84-804a-4280-9937-bb2a9c1c94b7"
+    },
+    {
+      "row": 28,
+      "rowText": "新活动场地 版本 1 · 11/19 23:46 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "4eb20d86-5600-4756-814a-ee80087b12bd"
+    },
+    {
+      "row": 29,
+      "rowText": "新活动场地 版本 1 · 11/19 23:45 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "93c42c8b-c006-4dc5-ad31-a70b0ccec79c"
+    },
+    {
+      "row": 30,
+      "rowText": "新活动场地 版本 1 · 11/19 23:43 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "13c7e5a0-cbef-40f7-bbe5-8302f634c5ce"
+    },
+    {
+      "row": 31,
+      "rowText": "新活动场地 版本 1 · 11/19 23:39 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "359101b3-f027-41b4-976b-2cdb16b37a87"
+    },
+    {
+      "row": 32,
+      "rowText": "新活动场地 版本 1 · 11/19 23:38 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "50a07fc4-0bd9-49bb-ad4c-c447dcd1a75a"
+    },
+    {
+      "row": 33,
+      "rowText": "新活动场地 版本 1 · 11/19 23:28 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "d331bb73-3d8f-4ee3-a704-43b47415c322"
+    },
+    {
+      "row": 34,
+      "rowText": "新活动场地 版本 1 · 11/19 23:25 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "48cece3f-6444-49fa-8ff7-81fc3cd18e70"
+    },
+    {
+      "row": 35,
+      "rowText": "新活动场地 版本 1 · 11/19 23:11 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "8204312c-ec79-4cd8-a19d-deecc99513cd"
+    },
+    {
+      "row": 36,
+      "rowText": "新活动场地 版本 2 · 11/19 23:01 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "ec67cbf7-7a7e-4c91-84e5-6d45a19dc38f"
+    },
+    {
+      "row": 37,
+      "rowText": "新活动场地 版本 1 · 11/19 22:34 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "2117379a-cb2d-4548-9a36-64e185a00c67"
+    },
+    {
+      "row": 38,
+      "rowText": "新活动场地 版本 2 · 11/19 22:33 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "d979f550-20e8-497d-aba8-630590ce4b68"
+    },
+    {
+      "row": 39,
+      "rowText": "新活动场地 版本 1 · 11/19 22:28 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "2bb1b37f-c211-4086-8208-aad3c3294bbe"
+    },
+    {
+      "row": 40,
+      "rowText": "新活动场地 版本 1 · 11/19 19:23 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "3a4ffaaa-da9e-4d2c-bb94-7eace76d1916"
+    },
+    {
+      "row": 41,
+      "rowText": "#4 local 版本 1 · 11/19 19:17 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "167705df-8d44-427c-9a13-bb5b72b90a82"
+    },
+    {
+      "row": 42,
+      "rowText": "新活动场地 版本 1 · 11/19 19:03 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "a5799685-9fdc-4caa-9bab-8480c2a84a37"
+    },
+    {
+      "row": 43,
+      "rowText": "新活动场地 版本 1 · 11/19 18:36 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "f1fbc302-70a5-4b3f-9d46-0098c9fec335"
+    },
+    {
+      "row": 44,
+      "rowText": "新活动场地 版本 2 · 11/19 18:34 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "1b34d874-ec89-4c6c-b5e0-d40a7621c571"
+    },
+    {
+      "row": 45,
+      "rowText": "新活动场地 版本 1 · 11/19 18:33 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "7031f4ab-0782-4911-a355-ef6b8240d88c"
+    },
+    {
+      "row": 46,
+      "rowText": "新活动场地 版本 4 · 11/19 18:00 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "5db910a4-c84f-4593-a19e-845be91479c1"
+    },
+    {
+      "row": 47,
+      "rowText": "新活动场地 版本 1 · 11/19 18:00 打开",
+      "cloudRevision": 4,
+      "cloudActivity": "6929a1a0-ec53-4217-89e6-5b0989c18094"
+    },
+    {
+      "row": 48,
+      "rowText": "新活动场地 版本 2 · 11/19 17:58 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "5ad7cff7-cf19-43d3-9e87-30ae6db2fdba"
+    },
+    {
+      "row": 49,
+      "rowText": "新活动场地 版本 1 · 11/19 17:57 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "055365be-d101-4516-be14-229da4b6d28a"
+    },
+    {
+      "row": 50,
+      "rowText": "新活动场地 版本 2 · 11/19 17:41 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "4185d8f7-b856-4d5f-8100-38eda196a7a7"
+    },
+    {
+      "row": 51,
+      "rowText": "新活动场地 版本 1 · 11/19 17:33 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "7dde756f-f60a-40bf-9203-36012ad0aca3"
+    },
+    {
+      "row": 52,
+      "rowText": "新活动场地 版本 1 · 11/19 17:31 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "23935a08-b394-4b71-9c63-892eeab43cde"
+    },
+    {
+      "row": 53,
+      "rowText": "新活动场地 版本 1 · 11/19 17:28 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "196913d3-a654-4f38-801b-147d0a0084d1"
+    },
+    {
+      "row": 54,
+      "rowText": "新活动场地 版本 1 · 11/19 17:25 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "c7909f24-73ac-43f7-99ac-b361d07497fa"
+    },
+    {
+      "row": 55,
+      "rowText": "新活动场地 版本 1 · 11/19 17:21 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "eb5bc1c9-4d84-45f7-bf9d-def69efc9b86"
+    },
+    {
+      "row": 56,
+      "rowText": "新活动场地 版本 4 · 11/19 16:46 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "05646f8b-dc56-440f-af10-94bf40fb51b2"
+    },
+    {
+      "row": 57,
+      "rowText": "新活动场地 版本 4 · 11/19 16:32 打开",
+      "cloudRevision": 4,
+      "cloudActivity": "ba670675-0bb8-4160-a941-6e70d3b2249f"
+    },
+    {
+      "row": 58,
+      "rowText": "新活动场地 版本 1 · 11/19 16:16 打开",
+      "cloudRevision": 4,
+      "cloudActivity": "c58f9c08-1cf7-4f4c-91f6-d1768fd2a7b5"
+    },
+    {
+      "row": 59,
+      "rowText": "新活动场地 版本 1 · 11/19 16:11 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "aec24053-a2b0-48e0-a578-757b14af5c82"
+    },
+    {
+      "row": 60,
+      "rowText": "新活动场地 版本 1 · 11/19 16:07 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "1317a3f5-0600-45cb-8188-daa294e5b319"
+    },
+    {
+      "row": 61,
+      "rowText": "新活动场地 版本 1 · 11/19 16:01 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "494ac7b9-bd24-4c97-8a6c-964b68bf4c6e"
+    },
+    {
+      "row": 62,
+      "rowText": "新活动场地 版本 1 · 11/19 15:58 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "7e975c63-4891-47e0-b6b5-3902c6383d6c"
+    },
+    {
+      "row": 63,
+      "rowText": "新活动场地 版本 1 · 11/19 15:56 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "a7446ed9-6edd-445d-919c-4e41129186b4"
+    },
+    {
+      "row": 64,
+      "rowText": "新活动场地 版本 1 · 11/19 15:53 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "eae9a026-19e2-41be-af33-7ee592e6f645"
+    },
+    {
+      "row": 65,
+      "rowText": "新活动场地 版本 1 · 11/19 15:35 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "b14b07ef-f97a-400d-b9bc-5cb8b82b9a57"
+    },
+    {
+      "row": 66,
+      "rowText": "新活动场地 版本 1 · 11/19 15:32 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "39efd4d2-2731-45bd-bc9f-39cb09a65593"
+    },
+    {
+      "row": 67,
+      "rowText": "新活动场地 版本 1 · 11/19 15:25 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "d22ef518-6efc-4373-846e-f0ba688af7ef"
+    },
+    {
+      "row": 68,
+      "rowText": "新活动场地 版本 1 · 11/19 15:23 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "e7401d18-4ad9-43be-aa47-6fd74741d07f"
+    },
+    {
+      "row": 69,
+      "rowText": "新活动场地 版本 1 · 11/19 15:21 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "17586e2a-c338-456d-83a5-665a19efc3c4"
+    },
+    {
+      "row": 70,
+      "rowText": "新活动场地 版本 3 · 11/19 14:16 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "71d34321-e9cf-49f5-8980-256ea3f1a54b"
+    },
+    {
+      "row": 71,
+      "rowText": "新活动场地 版本 1 · 11/19 13:41 打开",
+      "cloudRevision": 3,
+      "cloudActivity": "3e7b22fc-6d48-4c88-b628-deaad5258991"
+    },
+    {
+      "row": 72,
+      "rowText": "新活动场地 版本 1 · 11/19 13:39 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "c3da6134-4a1c-4fc3-85c5-59f0605ba96b"
+    },
+    {
+      "row": 73,
+      "rowText": "新活动场地 版本 1 · 11/19 13:35 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "bcbd4144-1db6-4c86-977c-3afea92a42ae"
+    },
+    {
+      "row": 74,
+      "rowText": "新活动场地 版本 1 · 11/19 13:13 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "a2a18661-dcf0-4aba-812f-029a268706ac"
+    },
+    {
+      "row": 75,
+      "rowText": "新活动场地 版本 1 · 11/19 13:10 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "5d5bc506-19f0-4a1d-8d92-b7e964cec2f2"
+    },
+    {
+      "row": 76,
+      "rowText": "新活动场地 版本 1 · 11/19 13:09 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "a7f13891-9196-4015-b20b-d54f722edabe"
+    },
+    {
+      "row": 77,
+      "rowText": "新活动场地 版本 1 · 11/19 13:07 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "c46832d6-41aa-4f30-9d74-4488b70e60ff"
+    },
+    {
+      "row": 78,
+      "rowText": "新活动场地 版本 1 · 11/19 13:05 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "65088584-a1c3-482f-b9b3-6c4da50e605c"
+    },
+    {
+      "row": 79,
+      "rowText": "新活动场地 版本 1 · 11/19 13:02 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "5096da44-980d-421c-b2ef-183f46171de9"
+    },
+    {
+      "row": 80,
+      "rowText": "新活动场地 版本 1 · 11/19 12:54 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "614227b3-49cc-461a-a3e1-89154f507241"
+    },
+    {
+      "row": 81,
+      "rowText": "新活动场地 版本 1 · 11/19 12:52 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "91eec30e-0b2c-4304-988b-cded33a23298"
+    },
+    {
+      "row": 82,
+      "rowText": "新活动 11-19 11:23 版本 2 · 11/19 11:24 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "b0cfbfdf-486d-4455-b319-6b7e8c8bc234"
+    },
+    {
+      "row": 83,
+      "rowText": "新活动场地 版本 1 · 11/19 11:23 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "db7eb641-22eb-46eb-875e-1c3e0a3c3d1b"
+    },
+    {
+      "row": 84,
+      "rowText": "新活动 11-19 11:17 版本 2 · 11/19 11:18 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "eb733f12-39a1-4c5c-92e5-b4476d92d1be"
+    },
+    {
+      "row": 85,
+      "rowText": "新活动场地 版本 1 · 11/19 11:17 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "371bc293-8d62-4f4d-8f98-96df76384233"
+    },
+    {
+      "row": 86,
+      "rowText": "新活动 11-19 11:11 版本 2 · 11/19 11:12 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "9291b931-477c-413b-a8c9-457c49c76de8"
+    },
+    {
+      "row": 87,
+      "rowText": "新活动场地 版本 1 · 11/19 11:11 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "17781523-c5a4-4b26-8579-a2bcf7a5fa25"
+    },
+    {
+      "row": 88,
+      "rowText": "新活动 11-19 11:04 版本 2 · 11/19 11:05 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "f783e114-f97e-4088-b1ff-f958725063f9"
+    },
+    {
+      "row": 89,
+      "rowText": "新活动场地 版本 1 · 11/19 11:04 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "8bebc407-c24a-4880-8add-2a4449963e41"
+    },
+    {
+      "row": 90,
+      "rowText": "新活动 11-19 10:51 版本 1 · 11/19 10:51 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "2e2625ff-3152-4139-8e0a-886e74c4e53e"
+    },
+    {
+      "row": 91,
+      "rowText": "新活动场地 版本 1 · 11/19 10:51 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "0bed775f-95e3-44b4-96b2-772072e09e41"
+    },
+    {
+      "row": 92,
+      "rowText": "新活动场地 版本 4 · 11/19 10:01 打开",
+      "cloudRevision": 1,
+      "cloudActivity": "ff9fa1da-2160-41ed-b468-583caf04fa00"
+    },
+    {
+      "row": 93,
+      "rowText": "新活动场地 版本 2 · 11/19 09:54 打开",
+      "cloudRevision": 4,
+      "cloudActivity": "ee07ebcf-77f9-41f1-89f9-1163b3fe0e60"
+    },
+    {
+      "row": 94,
+      "rowText": "新活动场地 版本 1 · 11/19 09:49 打开",
+      "cloudRevision": 2,
+      "cloudActivity": "71f17554-55bf-497a-a7fb-1c59ff9e17f9"
+    }
+  ],
+  "pickedIdx": 5,
+  "pickedRowText": "新活动场地 版本 11 · 11/20 14:59 打开",
+  "pickedBtn": {
+    "testid": "outdoor-cloud-recover-open",
+    "disabled": false
+  },
+  "afterA": {
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-9khj6llb",
+      "projectId": "house-9khj6llb",
+      "remoteActivityId": "54849008-45f9-4f18-b47f-6bcabb2b556c",
+      "remoteRevision": 1,
+      "counts": {
+        "zones": 0,
+        "boundary": 0,
+        "nodes": 0,
+        "facilities": 0,
+        "objects": 0
+      },
+      "zoneNames": [],
+      "entrance": [],
+      "planLen": 167
+    },
+    "slots": {
+      "scendance-outdoor-plan-v1:house-9khj6llb": {
+        "projectId": "house-9khj6llb",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T07:29:11.257Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T07:29:06.559Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "projectId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T07:29:54.245Z",
+        "counts": {
+          "zones": 4,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 2589
+      },
+      "scendance-outdoor-last-v1": "house-8z42f0xm"
+    },
+    "writes": [
+      "PUT 200 /functions/v1/scene-api/outdoor-plans"
+    ]
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

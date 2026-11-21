@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-20T01:54:41.749Z",
+  "account": "walkthrough-79@scendance.test",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "channel": "Supabase Management API — https://api.supabase.com/v1/projects/wkhfvnzgopjdzxlmycks/database/query",
+  "access": "read-only SELECT only; no write to cloud DB",
+  "scopeNote": "事后库存读：反映取证时刻 DB 现状，不能替代 #3/#9/#10/#11 要求的同轮浏览器写读对照或 UI 打开路径。项目直连域 *.supabase.co 本轮仍不通，前端真机交互未跑。",
+  "legacyRuns20261111": [
+    {
+      "id": "0abae089-a28f-4ef1-8802-be176f654852",
+      "state": "failed",
+      "phase": "survey",
+      "error_code": "AGENT_DEADLINE",
+      "execution_mode": "preview",
+      "call_count": 1,
+      "created_at": "2026-11-11 14:23:26.957344+00",
+      "project_id": "99acd050-6b07-47a6-bec8-0b1f14aafe39",
+      "project_name": "自动验证-确认循环"
+    },
+    {
+      "id": "8dbf5e69-25a4-4ba1-807d-3cb9e68672ca",
+      "state": "complete",
+      "phase": "deliver",
+      "error_code": null,
+      "execution_mode": "preview",
+      "call_count": 3,
+      "created_at": "2026-11-11 14:32:55.741838+00",
+      "project_id": "99acd050-6b07-47a6-bec8-0b1f14aafe39",
+      "project_name": "自动验证-确认循环"
+    },
+    {
+      "id": "871162ed-0f65-458f-a3c3-792a512db7bf",
+      "state": "complete",
+      "phase": "deliver",
+      "error_code": null,
+      "execution_mode": "preview",
+      "call_count": 3,
+      "created_at": "2026-11-11 15:20:35.31007+00",
+      "project_id": "99acd050-6b07-47a6-bec8-0b1f14aafe39",
+      "project_name": "自动验证-确认循环"
+    },
+    {
+      "id": "6a42a69d-abf6-40f0-a5f8-552b332fee90",
+      "state": "complete",
+      "phase": "deliver",
+      "error_code": null,
+      "execution_mode": "preview",
+      "call_count": 3,
+      "created_at": "2026-11-11 15:21:48.681177+00",
+      "project_id": "9a889d2b-0e71-45bd-90b7-d9f36f7b665d",
+      "project_name": "周末共创工作坊"
+    }
+  ],
+  "runTotalsByState": [
+    {
+      "state": "complete",
+      "n": 8
+    },
+    {
+      "state": "failed",
+      "n": 6
+    }
+  ],
+  "walkthroughPlanCount": {
+    "n": 78,
+    "max_revision": 9
+  },
+  "failureEventsLast14dInAgentRunEvents": {
+    "n": 0
+  },
+  "planSummaries": [
+    {
+      "local_activity_id": "house-da2w2xf6",
+      "note": "#1 地点/范围留存",
+      "present": true,
+      "revision": 3,
+      "plan_bytes": 870,
+      "zones": 0,
+      "boundary": 12,
+      "facilities": 0,
+      "routes": 0,
+      "created_at": "2026-11-19 15:42:17.87926+00",
+      "updated_at": "2026-11-19 15:53:44.177228+00"
+    },
+    {
+      "local_activity_id": "house-lrvrntin",
+      "note": "#4 云端草稿 4 分区",
+      "present": true,
+      "revision": 5,
+      "plan_bytes": 2529,
+      "zones": 4,
+      "boundary": 4,
+      "facilities": 0,
+      "routes": 0,
+      "created_at": "2026-11-19 08:52:38.329297+00",
+      "updated_at": "2026-11-19 15:50:07.733221+00"
+    },
+    {
+      "local_activity_id": "house-3ik2jdf2",
+      "note": "#8b 双点确认留存",
+      "present": true,
+      "revision": 4,
+      "plan_bytes": 1595,
+      "zones": 2,
+      "boundary": 12,
+      "facilities": 0,
+      "routes": 0,
+      "created_at": "2026-11-19 01:41:52.670446+00",
+      "updated_at": "2026-11-19 02:01:55.162359+00"
+    },
+    {
+      "local_activity_id": "house-7jblibyk",
+      "note": "#9 两次 PUT 404（预期不存在）",
+      "present": false
+    },
+    {
+      "local_activity_id": "house-qko3r251",
+      "note": "#9 v3 zones 4 候选",
+      "present": true,
+      "revision": 4,
+      "plan_bytes": 1583,
+      "zones": 2,
+      "boundary": 4,
+      "facilities": 0,
+      "routes": 0,
+      "created_at": "2026-11-19 09:45:06.170093+00",
+      "updated_at": "2026-11-19 10:00:46.143303+00"
+    },
+    {
+      "local_activity_id": "house-u9a9yl9g",
+      "note": "最新草稿",
+      "present": true,
+      "revision": 9,
+      "plan_bytes": 2529,
+      "zones": 4,
+      "boundary": 4,
+      "facilities": 0,
+      "routes": 0,
+      "created_at": "2026-11-19 16:18:19.073193+00",
+      "updated_at": "2026-11-19 16:27:03.598828+00"
+    },
+    {
+      "local_activity_id": "house-sco5f6pi",
+      "note": "#4 真实 turn 空白草稿",
+      "present": true,
+      "revision": 1,
+      "plan_bytes": 189,
+      "zones": 0,
+      "boundary": 0,
+      "facilities": 0,
+      "routes": 0,
+      "created_at": "2026-11-19 15:58:46.514985+00",
+      "updated_at": "2026-11-19 15:58:46.514985+00"
+    },
+    {
+      "local_activity_id": "house-local4v9",
+      "note": "#4 本机标记草稿",
+      "present": true,
+      "revision": 1,
+      "plan_bytes": 2529,
+      "zones": 4,
+      "boundary": 4,
+      "facilities": 0,
+      "routes": 0,
+      "created_at": "2026-11-19 11:17:03.904231+00",
+      "updated_at": "2026-11-19 11:17:03.904231+00"
+    }
+  ]
+}

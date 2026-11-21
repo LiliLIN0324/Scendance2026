@@ -1,0 +1,30 @@
+{
+  "ranAt": "2026-11-20T07:48:00+08:00",
+  "case": 5,
+  "note": "只读在线旁证（未触发编辑）：核对 /studios 及工作室子端点在线状态与加载期请求基线。离线窗口缓存命中、地图部分路网、Agent 失败文案仍未在此轮取证。",
+  "actor": { "email": "walkthrough-79@scendance.test", "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c" },
+  "studios": {
+    "endpoint": "GET /functions/v1/scene-api/studios",
+    "status": 200,
+    "count": 1,
+    "sample": [{ "id": "2d1cdc92-0207-4ed8-bde9-3ae95860575e", "name": "走查账号的工作室", "role": "owner" }]
+  },
+  "studioSubEndpoints": [
+    "GET /studios/2d1cdc92-.../members 200",
+    "GET /studios/2d1cdc92-.../settings 200",
+    "GET /studios/2d1cdc92-.../messages/unread 200（轮询 6 次）",
+    "GET /notices/unread 404"
+  ],
+  "loadBaseline": {
+    "getEndpoints200": ["auth/v1/user", "outdoor-plans", "preferences", "assets", "projects", "outdoor-history", "chat/capabilities", "studios", "studios/{id}/members", "studios/{id}/settings", "studios/{id}/messages/unread"],
+    "nonGetCloud": ["PUT 200 /functions/v1/scene-api/outdoor-plans（默认空白草稿例行同步，house-b75u8n3l / 167B）"],
+    "note": "登录态加载即有 1 条例行 PUT；纯本地 0 请求样本须在匿名/离线 context 取，不能用登录态加载基线冒充。"
+  },
+  "consoleErrors": ["3 条资源/端点 404（notices/unread 与缺图），无未捕获 JS 异常"],
+  "openGaps": [
+    "离线窗口内 GET /studios 是否缓存命中（需断网场景真机观察）",
+    "地图部分覆盖 / 无路网场景的本机行为",
+    "Agent 回合失败文案逐字对照",
+    "带边界草稿云端 revision 复跑"
+  ]
+}

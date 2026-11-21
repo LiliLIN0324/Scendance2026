@@ -1,0 +1,1246 @@
+{
+  "ranAt": "2026-11-20T04:23:49.390Z",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "v6：有效登录会话（admin 签发，凭据不写入证据）；进入先点「新会话」清空旧草稿；setupSite 锚定地点与红线 → 分区提案；apply 前守卫 zones>0；逐次记录 PUT body 与云端 list revision。",
+  "steps": [
+    {
+      "step": 1,
+      "name": "anchorVenue 锚定地点/红线",
+      "setup": {
+        "picked": "1. 杭州湖滨银泰in77",
+        "confirmBtn": "就定这个场地（杭州湖滨银泰in77）",
+        "rangeButton": " 确认并应用这一版",
+        "plan": {
+          "scendance-outdoor-plan-v1:house-90dujwwn": {
+            "projectId": "house-90dujwwn",
+            "name": "新活动场地",
+            "updatedAt": "2026-11-20T04:25:22.272Z",
+            "counts": {
+              "zones": 0,
+              "routes": 0,
+              "entrances": 0,
+              "workers": 0,
+              "facilities": 0,
+              "objects": 0,
+              "boundary": 12
+            },
+            "planLen": 766
+          },
+          "scendance-outdoor-plan-v1:default-outdoor": {
+            "projectId": "default-outdoor",
+            "name": "新活动场地",
+            "updatedAt": "2026-11-20T04:23:52.830Z",
+            "counts": {
+              "zones": 0,
+              "routes": 0,
+              "entrances": 0,
+              "workers": 0,
+              "facilities": 0,
+              "objects": 0,
+              "boundary": 0
+            },
+            "planLen": 167
+          },
+          "scendance-outdoor-last-v1": "default-outdoor"
+        }
+      },
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream :: event: thought\ndata: {\"text\":\"用户\"}\n\nevent: thought\ndata: {\"text\":\"要求\"}\n\nevent: thought\ndata: {\"text\":\"搜索\"}\n\nevent: thought\ndata: {\"text\":\"杭州\"}\n\nevent: thought\nd",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795148721230,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":2,\"activityId\":\"f9c372d8-fd43-4846-9229-1ffe842236a5\"}"
+      ],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-90dujwwn",
+        "projectId": "house-90dujwwn",
+        "name": "新活动场地",
+        "remoteActivityId": "f9c372d8-fd43-4846-9229-1ffe842236a5",
+        "remoteRevision": 2,
+        "counts": {
+          "zones": 0,
+          "boundary": 12,
+          "facilities": 0,
+          "objects": 0
+        },
+        "planLen": 766
+      }
+    }
+  ],
+  "initialPlan": {
+    "slot": "scendance-outdoor-plan-v1:house-90dujwwn",
+    "projectId": "house-90dujwwn",
+    "name": "新活动场地",
+    "remoteActivityId": "f9c372d8-fd43-4846-9229-1ffe842236a5",
+    "remoteRevision": 1,
+    "counts": {
+      "zones": 0,
+      "boundary": 0,
+      "facilities": 0,
+      "objects": 0
+    },
+    "planLen": 167
+  },
+  "cloud-initial": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T04:23:59.106148+00:00",
+        "activityId": "f9c372d8-fd43-4846-9229-1ffe842236a5",
+        "localActivityId": "house-90dujwwn"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-20T04:16:24.424196+00:00",
+        "activityId": "e437f058-d605-44e9-9177-5f167c232f76",
+        "localActivityId": "house-asfbo434"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T04:09:20.744758+00:00",
+        "activityId": "73535465-30e9-451c-b497-78a8b4291fa5",
+        "localActivityId": "house-31rdzfxf"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T04:06:25.256275+00:00",
+        "activityId": "8a09e24d-4f93-4aab-888c-00d5d658f9a4",
+        "localActivityId": "house-ib33eido"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 9,
+        "updatedAt": "2026-11-19T16:27:03.598828+00:00",
+        "activityId": "e7cbba49-ff53-46bb-9112-5faebbe8f929",
+        "localActivityId": "house-u9a9yl9g"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T16:23:57.336899+00:00",
+        "activityId": "f1248be3-b934-4eff-96db-9156fd3a7f97",
+        "localActivityId": "house-uy5zli44"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T16:22:14.207356+00:00",
+        "activityId": "b37c9907-ded1-4011-a711-fc78e7568cb7",
+        "localActivityId": "house-jr4eix77"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T16:03:29.298494+00:00",
+        "activityId": "4e2ed813-6692-4084-8e73-0eaf502a13c6",
+        "localActivityId": "house-2em04rlt"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:58:46.514985+00:00",
+        "activityId": "a95ca85c-bb13-4ae1-a17c-b1ed5054edb5",
+        "localActivityId": "house-sco5f6pi"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:55:26.500305+00:00",
+        "activityId": "b04e69c3-6b06-42e8-abf5-40f30a29a5c6",
+        "localActivityId": "house-de25s1la"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 3,
+        "updatedAt": "2026-11-19T15:53:44.177228+00:00",
+        "activityId": "53e3a03a-d2f1-4166-b941-d472b7a265b4",
+        "localActivityId": "house-da2w2xf6"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:52:50.766455+00:00",
+        "activityId": "21535c3c-c214-4b58-bcbe-995c81666877",
+        "localActivityId": "house-urrf2dx4"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 5,
+        "updatedAt": "2026-11-19T15:50:07.733221+00:00",
+        "activityId": "b57e4904-196d-46bf-865c-971c4cbef266",
+        "localActivityId": "house-lrvrntin"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:49:27.402012+00:00",
+        "activityId": "9ae9df84-804a-4280-9937-bb2a9c1c94b7",
+        "localActivityId": "house-axgk7j1n"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:47:31.95546+00:00",
+        "activityId": "4eb20d86-5600-4756-814a-ee80087b12bd",
+        "localActivityId": "house-v7naahqx"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:46:18.11801+00:00",
+        "activityId": "93c42c8b-c006-4dc5-ad31-a70b0ccec79c",
+        "localActivityId": "house-cekctx06"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:45:38.283243+00:00",
+        "activityId": "13c7e5a0-cbef-40f7-bbe5-8302f634c5ce",
+        "localActivityId": "house-bzws8b94"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:43:20.107916+00:00",
+        "activityId": "359101b3-f027-41b4-976b-2cdb16b37a87",
+        "localActivityId": "house-qnvibw3w"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:39:30.33999+00:00",
+        "activityId": "50a07fc4-0bd9-49bb-ad4c-c447dcd1a75a",
+        "localActivityId": "house-mygvput8"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:38:07.781037+00:00",
+        "activityId": "d331bb73-3d8f-4ee3-a704-43b47415c322",
+        "localActivityId": "house-ml9hix35"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:28:55.90079+00:00",
+        "activityId": "48cece3f-6444-49fa-8ff7-81fc3cd18e70",
+        "localActivityId": "house-raic774r"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:25:30.238352+00:00",
+        "activityId": "8204312c-ec79-4cd8-a19d-deecc99513cd",
+        "localActivityId": "house-acsbfnnm"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:11:54.248198+00:00",
+        "activityId": "ec67cbf7-7a7e-4c91-84e5-6d45a19dc38f",
+        "localActivityId": "house-4h664dj0"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T15:01:41.727965+00:00",
+        "activityId": "2117379a-cb2d-4548-9a36-64e185a00c67",
+        "localActivityId": "house-9mdm2en8"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T14:34:56.235346+00:00",
+        "activityId": "d979f550-20e8-497d-aba8-630590ce4b68",
+        "localActivityId": "house-0xtl1ym4"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T14:33:10.438668+00:00",
+        "activityId": "2bb1b37f-c211-4086-8208-aad3c3294bbe",
+        "localActivityId": "house-yxudn1vk"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T14:28:19.196623+00:00",
+        "activityId": "3a4ffaaa-da9e-4d2c-bb94-7eace76d1916",
+        "localActivityId": "house-2v2gzxzp"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T11:23:06.262129+00:00",
+        "activityId": "167705df-8d44-427c-9a13-bb5b72b90a82",
+        "localActivityId": "house-r5fxqqx7"
+      },
+      {
+        "name": "#4 local",
+        "revision": 1,
+        "updatedAt": "2026-11-19T11:17:03.904231+00:00",
+        "activityId": "a5799685-9fdc-4caa-9bab-8480c2a84a37",
+        "localActivityId": "house-local4v9"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T11:03:21.275654+00:00",
+        "activityId": "f1fbc302-70a5-4b3f-9d46-0098c9fec335",
+        "localActivityId": "house-qvbyxzie"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T10:36:25.626746+00:00",
+        "activityId": "1b34d874-ec89-4c6c-b5e0-d40a7621c571",
+        "localActivityId": "house-wdyzz9nb"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T10:34:39.359088+00:00",
+        "activityId": "7031f4ab-0782-4911-a355-ef6b8240d88c",
+        "localActivityId": "house-jguucp1b"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T10:33:52.821047+00:00",
+        "activityId": "5db910a4-c84f-4593-a19e-845be91479c1",
+        "localActivityId": "house-b0l330my"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T10:00:46.143303+00:00",
+        "activityId": "6929a1a0-ec53-4217-89e6-5b0989c18094",
+        "localActivityId": "house-qko3r251"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T10:00:10.064733+00:00",
+        "activityId": "5ad7cff7-cf19-43d3-9e87-30ae6db2fdba",
+        "localActivityId": "house-6nrjnh65"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T09:58:31.958803+00:00",
+        "activityId": "055365be-d101-4516-be14-229da4b6d28a",
+        "localActivityId": "house-oh3ixuaw"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:57:46.607611+00:00",
+        "activityId": "4185d8f7-b856-4d5f-8100-38eda196a7a7",
+        "localActivityId": "house-o6c6k3nb"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T09:41:47.564368+00:00",
+        "activityId": "7dde756f-f60a-40bf-9203-36012ad0aca3",
+        "localActivityId": "house-xfyzqrg9"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:33:14.749018+00:00",
+        "activityId": "23935a08-b394-4b71-9c63-892eeab43cde",
+        "localActivityId": "house-ab22t80k"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:31:28.935764+00:00",
+        "activityId": "196913d3-a654-4f38-801b-147d0a0084d1",
+        "localActivityId": "house-b8y4ckta"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:28:34.444806+00:00",
+        "activityId": "c7909f24-73ac-43f7-99ac-b361d07497fa",
+        "localActivityId": "house-jem5ga0y"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:25:39.046367+00:00",
+        "activityId": "eb5bc1c9-4d84-45f7-bf9d-def69efc9b86",
+        "localActivityId": "house-1zmocfw8"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:21:55.700641+00:00",
+        "activityId": "05646f8b-dc56-440f-af10-94bf40fb51b2",
+        "localActivityId": "house-72iu4r4i"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T08:46:33.285859+00:00",
+        "activityId": "ba670675-0bb8-4160-a941-6e70d3b2249f",
+        "localActivityId": "house-v7e5b7cb"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T08:32:59.426688+00:00",
+        "activityId": "c58f9c08-1cf7-4f4c-91f6-d1768fd2a7b5",
+        "localActivityId": "house-puwntelf"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:16:27.066037+00:00",
+        "activityId": "aec24053-a2b0-48e0-a578-757b14af5c82",
+        "localActivityId": "house-tfbbu59p"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:11:07.711414+00:00",
+        "activityId": "1317a3f5-0600-45cb-8188-daa294e5b319",
+        "localActivityId": "house-nu160mpm"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:07:10.06149+00:00",
+        "activityId": "494ac7b9-bd24-4c97-8a6c-964b68bf4c6e",
+        "localActivityId": "house-zagllnpn"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:01:13.45438+00:00",
+        "activityId": "7e975c63-4891-47e0-b6b5-3902c6383d6c",
+        "localActivityId": "house-yip150ut"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:58:14.064253+00:00",
+        "activityId": "a7446ed9-6edd-445d-919c-4e41129186b4",
+        "localActivityId": "house-j3l3d9ms"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:56:05.420498+00:00",
+        "activityId": "eae9a026-19e2-41be-af33-7ee592e6f645",
+        "localActivityId": "house-0sc6wmc3"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:53:33.488332+00:00",
+        "activityId": "b14b07ef-f97a-400d-b9bc-5cb8b82b9a57",
+        "localActivityId": "house-xucw2gpr"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:35:19.26898+00:00",
+        "activityId": "39efd4d2-2731-45bd-bc9f-39cb09a65593",
+        "localActivityId": "house-d0p9m9dx"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:32:48.088975+00:00",
+        "activityId": "d22ef518-6efc-4373-846e-f0ba688af7ef",
+        "localActivityId": "house-dkxphiw1"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:25:18.625118+00:00",
+        "activityId": "e7401d18-4ad9-43be-aa47-6fd74741d07f",
+        "localActivityId": "house-6r40nd9u"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:23:35.814898+00:00",
+        "activityId": "17586e2a-c338-456d-83a5-665a19efc3c4",
+        "localActivityId": "house-d0kul707"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:21:38.624025+00:00",
+        "activityId": "71d34321-e9cf-49f5-8980-256ea3f1a54b",
+        "localActivityId": "house-wrrjdva4"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 3,
+        "updatedAt": "2026-11-19T06:16:12.329178+00:00",
+        "activityId": "3e7b22fc-6d48-4c88-b628-deaad5258991",
+        "localActivityId": "house-v5m9rchk"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:41:10.66659+00:00",
+        "activityId": "c3da6134-4a1c-4fc3-85c5-59f0605ba96b",
+        "localActivityId": "house-absww77y"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:39:34.157358+00:00",
+        "activityId": "bcbd4144-1db6-4c86-977c-3afea92a42ae",
+        "localActivityId": "house-svlsxsfp"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:35:59.067736+00:00",
+        "activityId": "a2a18661-dcf0-4aba-812f-029a268706ac",
+        "localActivityId": "house-jx9ojj1c"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:13:17.194892+00:00",
+        "activityId": "5d5bc506-19f0-4a1d-8d92-b7e964cec2f2",
+        "localActivityId": "house-vns08uq6"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:10:46.178263+00:00",
+        "activityId": "a7f13891-9196-4015-b20b-d54f722edabe",
+        "localActivityId": "house-obvtaoha"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:09:32.404015+00:00",
+        "activityId": "c46832d6-41aa-4f30-9d74-4488b70e60ff",
+        "localActivityId": "house-18tl0gqw"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:07:17.670676+00:00",
+        "activityId": "65088584-a1c3-482f-b9b3-6c4da50e605c",
+        "localActivityId": "house-hdrivpob"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:05:34.638142+00:00",
+        "activityId": "5096da44-980d-421c-b2ef-183f46171de9",
+        "localActivityId": "house-j8lsk33h"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:02:09.627628+00:00",
+        "activityId": "614227b3-49cc-461a-a3e1-89154f507241",
+        "localActivityId": "house-ompx5t9q"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T04:54:02.730343+00:00",
+        "activityId": "91eec30e-0b2c-4304-988b-cded33a23298",
+        "localActivityId": "house-n5yevwlp"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T04:52:13.152941+00:00",
+        "activityId": "b0cfbfdf-486d-4455-b319-6b7e8c8bc234",
+        "localActivityId": "house-qlms0bnb"
+      },
+      {
+        "name": "新活动 11-19 11:23",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:24:53.627282+00:00",
+        "activityId": "db7eb641-22eb-46eb-875e-1c3e0a3c3d1b",
+        "localActivityId": "house-d44d658a-cb08-440d-85c6-1a6724e524e0"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:23:20.450951+00:00",
+        "activityId": "eb733f12-39a1-4c5c-92e5-b4476d92d1be",
+        "localActivityId": "house-0x17lb16"
+      },
+      {
+        "name": "新活动 11-19 11:17",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:18:57.727318+00:00",
+        "activityId": "371bc293-8d62-4f4d-8f98-96df76384233",
+        "localActivityId": "house-8d1e5a27-8a5f-4f08-a019-b0e5d2c9966c"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:17:25.226343+00:00",
+        "activityId": "9291b931-477c-413b-a8c9-457c49c76de8",
+        "localActivityId": "house-w0tnm5ku"
+      },
+      {
+        "name": "新活动 11-19 11:11",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:12:46.873237+00:00",
+        "activityId": "17781523-c5a4-4b26-8579-a2bcf7a5fa25",
+        "localActivityId": "house-8566f42a-38de-44ae-a082-6149564f5778"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:11:21.741691+00:00",
+        "activityId": "f783e114-f97e-4088-b1ff-f958725063f9",
+        "localActivityId": "house-5l0e49r5"
+      },
+      {
+        "name": "新活动 11-19 11:04",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:05:28.284131+00:00",
+        "activityId": "8bebc407-c24a-4880-8add-2a4449963e41",
+        "localActivityId": "house-c677b626-01df-418b-be7f-c71cc5fddc87"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:04:02.726408+00:00",
+        "activityId": "2e2625ff-3152-4139-8e0a-886e74c4e53e",
+        "localActivityId": "house-6fzd13xl"
+      },
+      {
+        "name": "新活动 11-19 10:51",
+        "revision": 1,
+        "updatedAt": "2026-11-19T02:51:48.406327+00:00",
+        "activityId": "0bed775f-95e3-44b4-96b2-772072e09e41",
+        "localActivityId": "house-ec5ed93b-67e6-48e9-8b17-8edd912dbd94"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T02:51:43.418228+00:00",
+        "activityId": "ff9fa1da-2160-41ed-b468-583caf04fa00",
+        "localActivityId": "house-12o1wnis"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T02:01:55.162359+00:00",
+        "activityId": "ee07ebcf-77f9-41f1-89f9-1163b3fe0e60",
+        "localActivityId": "house-3ik2jdf2"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T01:54:23.212272+00:00",
+        "activityId": "71f17554-55bf-497a-a7fb-1c59ff9e17f9",
+        "localActivityId": "house-i58nf74s"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T01:49:03.079841+00:00",
+        "activityId": "08141296-9f45-4e57-ad8f-3d69d716503d",
+        "localActivityId": "house-ote585su"
+      }
+    ]
+  },
+  "cloud-after-setup": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-20T04:25:23.047119+00:00",
+        "activityId": "f9c372d8-fd43-4846-9229-1ffe842236a5",
+        "localActivityId": "house-90dujwwn"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-20T04:16:24.424196+00:00",
+        "activityId": "e437f058-d605-44e9-9177-5f167c232f76",
+        "localActivityId": "house-asfbo434"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T04:09:20.744758+00:00",
+        "activityId": "73535465-30e9-451c-b497-78a8b4291fa5",
+        "localActivityId": "house-31rdzfxf"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T04:06:25.256275+00:00",
+        "activityId": "8a09e24d-4f93-4aab-888c-00d5d658f9a4",
+        "localActivityId": "house-ib33eido"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 9,
+        "updatedAt": "2026-11-19T16:27:03.598828+00:00",
+        "activityId": "e7cbba49-ff53-46bb-9112-5faebbe8f929",
+        "localActivityId": "house-u9a9yl9g"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T16:23:57.336899+00:00",
+        "activityId": "f1248be3-b934-4eff-96db-9156fd3a7f97",
+        "localActivityId": "house-uy5zli44"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T16:22:14.207356+00:00",
+        "activityId": "b37c9907-ded1-4011-a711-fc78e7568cb7",
+        "localActivityId": "house-jr4eix77"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T16:03:29.298494+00:00",
+        "activityId": "4e2ed813-6692-4084-8e73-0eaf502a13c6",
+        "localActivityId": "house-2em04rlt"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:58:46.514985+00:00",
+        "activityId": "a95ca85c-bb13-4ae1-a17c-b1ed5054edb5",
+        "localActivityId": "house-sco5f6pi"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:55:26.500305+00:00",
+        "activityId": "b04e69c3-6b06-42e8-abf5-40f30a29a5c6",
+        "localActivityId": "house-de25s1la"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 3,
+        "updatedAt": "2026-11-19T15:53:44.177228+00:00",
+        "activityId": "53e3a03a-d2f1-4166-b941-d472b7a265b4",
+        "localActivityId": "house-da2w2xf6"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:52:50.766455+00:00",
+        "activityId": "21535c3c-c214-4b58-bcbe-995c81666877",
+        "localActivityId": "house-urrf2dx4"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 5,
+        "updatedAt": "2026-11-19T15:50:07.733221+00:00",
+        "activityId": "b57e4904-196d-46bf-865c-971c4cbef266",
+        "localActivityId": "house-lrvrntin"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:49:27.402012+00:00",
+        "activityId": "9ae9df84-804a-4280-9937-bb2a9c1c94b7",
+        "localActivityId": "house-axgk7j1n"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:47:31.95546+00:00",
+        "activityId": "4eb20d86-5600-4756-814a-ee80087b12bd",
+        "localActivityId": "house-v7naahqx"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:46:18.11801+00:00",
+        "activityId": "93c42c8b-c006-4dc5-ad31-a70b0ccec79c",
+        "localActivityId": "house-cekctx06"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:45:38.283243+00:00",
+        "activityId": "13c7e5a0-cbef-40f7-bbe5-8302f634c5ce",
+        "localActivityId": "house-bzws8b94"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:43:20.107916+00:00",
+        "activityId": "359101b3-f027-41b4-976b-2cdb16b37a87",
+        "localActivityId": "house-qnvibw3w"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:39:30.33999+00:00",
+        "activityId": "50a07fc4-0bd9-49bb-ad4c-c447dcd1a75a",
+        "localActivityId": "house-mygvput8"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:38:07.781037+00:00",
+        "activityId": "d331bb73-3d8f-4ee3-a704-43b47415c322",
+        "localActivityId": "house-ml9hix35"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:28:55.90079+00:00",
+        "activityId": "48cece3f-6444-49fa-8ff7-81fc3cd18e70",
+        "localActivityId": "house-raic774r"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:25:30.238352+00:00",
+        "activityId": "8204312c-ec79-4cd8-a19d-deecc99513cd",
+        "localActivityId": "house-acsbfnnm"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T15:11:54.248198+00:00",
+        "activityId": "ec67cbf7-7a7e-4c91-84e5-6d45a19dc38f",
+        "localActivityId": "house-4h664dj0"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T15:01:41.727965+00:00",
+        "activityId": "2117379a-cb2d-4548-9a36-64e185a00c67",
+        "localActivityId": "house-9mdm2en8"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T14:34:56.235346+00:00",
+        "activityId": "d979f550-20e8-497d-aba8-630590ce4b68",
+        "localActivityId": "house-0xtl1ym4"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T14:33:10.438668+00:00",
+        "activityId": "2bb1b37f-c211-4086-8208-aad3c3294bbe",
+        "localActivityId": "house-yxudn1vk"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T14:28:19.196623+00:00",
+        "activityId": "3a4ffaaa-da9e-4d2c-bb94-7eace76d1916",
+        "localActivityId": "house-2v2gzxzp"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T11:23:06.262129+00:00",
+        "activityId": "167705df-8d44-427c-9a13-bb5b72b90a82",
+        "localActivityId": "house-r5fxqqx7"
+      },
+      {
+        "name": "#4 local",
+        "revision": 1,
+        "updatedAt": "2026-11-19T11:17:03.904231+00:00",
+        "activityId": "a5799685-9fdc-4caa-9bab-8480c2a84a37",
+        "localActivityId": "house-local4v9"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T11:03:21.275654+00:00",
+        "activityId": "f1fbc302-70a5-4b3f-9d46-0098c9fec335",
+        "localActivityId": "house-qvbyxzie"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T10:36:25.626746+00:00",
+        "activityId": "1b34d874-ec89-4c6c-b5e0-d40a7621c571",
+        "localActivityId": "house-wdyzz9nb"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T10:34:39.359088+00:00",
+        "activityId": "7031f4ab-0782-4911-a355-ef6b8240d88c",
+        "localActivityId": "house-jguucp1b"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T10:33:52.821047+00:00",
+        "activityId": "5db910a4-c84f-4593-a19e-845be91479c1",
+        "localActivityId": "house-b0l330my"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T10:00:46.143303+00:00",
+        "activityId": "6929a1a0-ec53-4217-89e6-5b0989c18094",
+        "localActivityId": "house-qko3r251"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T10:00:10.064733+00:00",
+        "activityId": "5ad7cff7-cf19-43d3-9e87-30ae6db2fdba",
+        "localActivityId": "house-6nrjnh65"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T09:58:31.958803+00:00",
+        "activityId": "055365be-d101-4516-be14-229da4b6d28a",
+        "localActivityId": "house-oh3ixuaw"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:57:46.607611+00:00",
+        "activityId": "4185d8f7-b856-4d5f-8100-38eda196a7a7",
+        "localActivityId": "house-o6c6k3nb"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T09:41:47.564368+00:00",
+        "activityId": "7dde756f-f60a-40bf-9203-36012ad0aca3",
+        "localActivityId": "house-xfyzqrg9"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:33:14.749018+00:00",
+        "activityId": "23935a08-b394-4b71-9c63-892eeab43cde",
+        "localActivityId": "house-ab22t80k"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:31:28.935764+00:00",
+        "activityId": "196913d3-a654-4f38-801b-147d0a0084d1",
+        "localActivityId": "house-b8y4ckta"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:28:34.444806+00:00",
+        "activityId": "c7909f24-73ac-43f7-99ac-b361d07497fa",
+        "localActivityId": "house-jem5ga0y"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:25:39.046367+00:00",
+        "activityId": "eb5bc1c9-4d84-45f7-bf9d-def69efc9b86",
+        "localActivityId": "house-1zmocfw8"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T09:21:55.700641+00:00",
+        "activityId": "05646f8b-dc56-440f-af10-94bf40fb51b2",
+        "localActivityId": "house-72iu4r4i"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T08:46:33.285859+00:00",
+        "activityId": "ba670675-0bb8-4160-a941-6e70d3b2249f",
+        "localActivityId": "house-v7e5b7cb"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T08:32:59.426688+00:00",
+        "activityId": "c58f9c08-1cf7-4f4c-91f6-d1768fd2a7b5",
+        "localActivityId": "house-puwntelf"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:16:27.066037+00:00",
+        "activityId": "aec24053-a2b0-48e0-a578-757b14af5c82",
+        "localActivityId": "house-tfbbu59p"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:11:07.711414+00:00",
+        "activityId": "1317a3f5-0600-45cb-8188-daa294e5b319",
+        "localActivityId": "house-nu160mpm"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:07:10.06149+00:00",
+        "activityId": "494ac7b9-bd24-4c97-8a6c-964b68bf4c6e",
+        "localActivityId": "house-zagllnpn"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T08:01:13.45438+00:00",
+        "activityId": "7e975c63-4891-47e0-b6b5-3902c6383d6c",
+        "localActivityId": "house-yip150ut"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:58:14.064253+00:00",
+        "activityId": "a7446ed9-6edd-445d-919c-4e41129186b4",
+        "localActivityId": "house-j3l3d9ms"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:56:05.420498+00:00",
+        "activityId": "eae9a026-19e2-41be-af33-7ee592e6f645",
+        "localActivityId": "house-0sc6wmc3"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:53:33.488332+00:00",
+        "activityId": "b14b07ef-f97a-400d-b9bc-5cb8b82b9a57",
+        "localActivityId": "house-xucw2gpr"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:35:19.26898+00:00",
+        "activityId": "39efd4d2-2731-45bd-bc9f-39cb09a65593",
+        "localActivityId": "house-d0p9m9dx"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:32:48.088975+00:00",
+        "activityId": "d22ef518-6efc-4373-846e-f0ba688af7ef",
+        "localActivityId": "house-dkxphiw1"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:25:18.625118+00:00",
+        "activityId": "e7401d18-4ad9-43be-aa47-6fd74741d07f",
+        "localActivityId": "house-6r40nd9u"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:23:35.814898+00:00",
+        "activityId": "17586e2a-c338-456d-83a5-665a19efc3c4",
+        "localActivityId": "house-d0kul707"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T07:21:38.624025+00:00",
+        "activityId": "71d34321-e9cf-49f5-8980-256ea3f1a54b",
+        "localActivityId": "house-wrrjdva4"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 3,
+        "updatedAt": "2026-11-19T06:16:12.329178+00:00",
+        "activityId": "3e7b22fc-6d48-4c88-b628-deaad5258991",
+        "localActivityId": "house-v5m9rchk"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:41:10.66659+00:00",
+        "activityId": "c3da6134-4a1c-4fc3-85c5-59f0605ba96b",
+        "localActivityId": "house-absww77y"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:39:34.157358+00:00",
+        "activityId": "bcbd4144-1db6-4c86-977c-3afea92a42ae",
+        "localActivityId": "house-svlsxsfp"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:35:59.067736+00:00",
+        "activityId": "a2a18661-dcf0-4aba-812f-029a268706ac",
+        "localActivityId": "house-jx9ojj1c"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:13:17.194892+00:00",
+        "activityId": "5d5bc506-19f0-4a1d-8d92-b7e964cec2f2",
+        "localActivityId": "house-vns08uq6"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:10:46.178263+00:00",
+        "activityId": "a7f13891-9196-4015-b20b-d54f722edabe",
+        "localActivityId": "house-obvtaoha"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:09:32.404015+00:00",
+        "activityId": "c46832d6-41aa-4f30-9d74-4488b70e60ff",
+        "localActivityId": "house-18tl0gqw"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:07:17.670676+00:00",
+        "activityId": "65088584-a1c3-482f-b9b3-6c4da50e605c",
+        "localActivityId": "house-hdrivpob"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:05:34.638142+00:00",
+        "activityId": "5096da44-980d-421c-b2ef-183f46171de9",
+        "localActivityId": "house-j8lsk33h"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T05:02:09.627628+00:00",
+        "activityId": "614227b3-49cc-461a-a3e1-89154f507241",
+        "localActivityId": "house-ompx5t9q"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T04:54:02.730343+00:00",
+        "activityId": "91eec30e-0b2c-4304-988b-cded33a23298",
+        "localActivityId": "house-n5yevwlp"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T04:52:13.152941+00:00",
+        "activityId": "b0cfbfdf-486d-4455-b319-6b7e8c8bc234",
+        "localActivityId": "house-qlms0bnb"
+      },
+      {
+        "name": "新活动 11-19 11:23",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:24:53.627282+00:00",
+        "activityId": "db7eb641-22eb-46eb-875e-1c3e0a3c3d1b",
+        "localActivityId": "house-d44d658a-cb08-440d-85c6-1a6724e524e0"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:23:20.450951+00:00",
+        "activityId": "eb733f12-39a1-4c5c-92e5-b4476d92d1be",
+        "localActivityId": "house-0x17lb16"
+      },
+      {
+        "name": "新活动 11-19 11:17",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:18:57.727318+00:00",
+        "activityId": "371bc293-8d62-4f4d-8f98-96df76384233",
+        "localActivityId": "house-8d1e5a27-8a5f-4f08-a019-b0e5d2c9966c"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:17:25.226343+00:00",
+        "activityId": "9291b931-477c-413b-a8c9-457c49c76de8",
+        "localActivityId": "house-w0tnm5ku"
+      },
+      {
+        "name": "新活动 11-19 11:11",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:12:46.873237+00:00",
+        "activityId": "17781523-c5a4-4b26-8579-a2bcf7a5fa25",
+        "localActivityId": "house-8566f42a-38de-44ae-a082-6149564f5778"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:11:21.741691+00:00",
+        "activityId": "f783e114-f97e-4088-b1ff-f958725063f9",
+        "localActivityId": "house-5l0e49r5"
+      },
+      {
+        "name": "新活动 11-19 11:04",
+        "revision": 2,
+        "updatedAt": "2026-11-19T03:05:28.284131+00:00",
+        "activityId": "8bebc407-c24a-4880-8add-2a4449963e41",
+        "localActivityId": "house-c677b626-01df-418b-be7f-c71cc5fddc87"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T03:04:02.726408+00:00",
+        "activityId": "2e2625ff-3152-4139-8e0a-886e74c4e53e",
+        "localActivityId": "house-6fzd13xl"
+      },
+      {
+        "name": "新活动 11-19 10:51",
+        "revision": 1,
+        "updatedAt": "2026-11-19T02:51:48.406327+00:00",
+        "activityId": "0bed775f-95e3-44b4-96b2-772072e09e41",
+        "localActivityId": "house-ec5ed93b-67e6-48e9-8b17-8edd912dbd94"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T02:51:43.418228+00:00",
+        "activityId": "ff9fa1da-2160-41ed-b468-583caf04fa00",
+        "localActivityId": "house-12o1wnis"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 4,
+        "updatedAt": "2026-11-19T02:01:55.162359+00:00",
+        "activityId": "ee07ebcf-77f9-41f1-89f9-1163b3fe0e60",
+        "localActivityId": "house-3ik2jdf2"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-19T01:54:23.212272+00:00",
+        "activityId": "71f17554-55bf-497a-a7fb-1c59ff9e17f9",
+        "localActivityId": "house-i58nf74s"
+      },
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-19T01:49:03.079841+00:00",
+        "activityId": "08141296-9f45-4e57-ad8f-3d69d716503d",
+        "localActivityId": "house-ote585su"
+      }
+    ]
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-20T01:58:48.964Z",
+  "window": {
+    "start": "2026-11-19T01:58:46.025Z",
+    "end": "2026-11-20T01:58:46.025Z"
+  },
+  "account": "walkthrough-79@scendance.test",
+  "channel": "Management API analytics/endpoints/logs (ClickHouse unified logs)",
+  "access": "read-only SELECT; token held in memory only, not written to evidence",
+  "scopeNote": "服务端分类事件旁证。assistant_chat_failure 不带 turnId/user id，无法指回某张 UI 失败卡；#10 同轮 UI 逐字对照与纯本地成功样本仍缺，浏览器项目域未通。",
+  "total": 16,
+  "byReason": {
+    "invalid_shape": 14,
+    "http_error": 2
+  },
+  "events": [
+    {
+      "timestamp": "2026-11-19T07:34:03.952000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T08:11:39.563000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T08:12:42.805000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T08:17:18.091000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T08:49:02.873000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T08:53:02.622000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T09:43:13.774000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T10:12:59.818000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T10:14:48.562000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T10:17:11.902000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T14:33:12.141000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "http_error",
+      "httpStatus": 503,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"http_error\", httpStatus: 503 }"
+    },
+    {
+      "timestamp": "2026-11-19T15:01:43.088000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "http_error",
+      "httpStatus": 503,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"http_error\", httpStatus: 503 }"
+    },
+    {
+      "timestamp": "2026-11-19T16:21:20.373000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-19T16:23:16.145000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-20T01:33:39.180000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    },
+    {
+      "timestamp": "2026-11-20T01:36:24.225000",
+      "source": "function_logs",
+      "slot": "openai-next",
+      "reason": "invalid_shape",
+      "httpStatus": null,
+      "raw": "assistant_chat_failure { slot: \"openai-next\", reason: \"invalid_shape\" }"
+    }
+  ]
+}

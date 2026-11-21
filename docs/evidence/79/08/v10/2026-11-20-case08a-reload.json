@@ -1,0 +1,444 @@
+{
+  "ranAt": "2026-11-20T06:52:04.124Z",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "8a：应用提案后刷新页面，对照刷新前后本地全槽 counts/planLen/last 指针与云端 revision；边界/分区/节点留存与 revision 一致性为取证目标。in-flight 竞态（PUT 未落库时刷新）本轮未刻意制造。",
+  "steps": [
+    {
+      "step": 1,
+      "name": "anchorVenue 锚定边界",
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+        "projectId": "house-8z42f0xm",
+        "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+        "remoteRevision": 2,
+        "counts": {
+          "zones": 0,
+          "boundary": 12,
+          "nodes": 0,
+          "facilities": 0,
+          "objects": 0
+        },
+        "zones": [],
+        "nodes": [],
+        "planLen": 766
+      },
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream :: event: thought\ndata: {\"text\":\"用户\"}\n\nevent: thought\ndata: {\"text\":\"要\"}\n\nevent: thought\ndata: {\"text\":\"搜索\"}\n\nevent: thought\ndata: {\"text\":\"杭州\"}\n\nevent: thought\nda",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":2,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}"
+      ]
+    },
+    {
+      "step": 2,
+      "name": "placeEntrance 边界内入口节点",
+      "entrance": {
+        "rx": 0.62,
+        "ry": 0.5,
+        "inRing": true,
+        "node": {
+          "kind": "entry",
+          "name": "入口 1",
+          "position": {
+            "x": 68.27208872009089,
+            "y": 17.679616665995315
+          }
+        }
+      },
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+        "projectId": "house-8z42f0xm",
+        "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+        "remoteRevision": 3,
+        "counts": {
+          "zones": 0,
+          "boundary": 12,
+          "nodes": 1,
+          "facilities": 0,
+          "objects": 0
+        },
+        "zones": [],
+        "nodes": [
+          {
+            "kind": "entry",
+            "name": "入口 1",
+            "position": {
+              "x": 68.27208872009089,
+              "y": 17.679616665995315
+            }
+          }
+        ],
+        "planLen": 909
+      },
+      "writes": [
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":3,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}"
+      ]
+    },
+    {
+      "step": 3,
+      "name": "分区需求 → 提案",
+      "drive1": {
+        "ok": false,
+        "trace": [
+          {
+            "round": 0,
+            "action": "make-preview",
+            "button": "生成分区预览"
+          },
+          {
+            "round": 1,
+            "action": "make-preview",
+            "button": "生成分区预览"
+          },
+          {
+            "round": 2,
+            "action": "make-preview",
+            "button": "生成分区预览"
+          },
+          {
+            "round": 3,
+            "action": "make-preview",
+            "button": "生成分区预览"
+          },
+          {
+            "round": 4,
+            "action": "make-preview",
+            "button": "生成分区预览"
+          },
+          {
+            "round": 5,
+            "action": "make-preview",
+            "button": "生成分区预览"
+          },
+          {
+            "round": 6,
+            "action": "final-check",
+            "button": null
+          }
+        ]
+      },
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+        "projectId": "house-8z42f0xm",
+        "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+        "remoteRevision": 10,
+        "counts": {
+          "zones": 4,
+          "boundary": 12,
+          "nodes": 1,
+          "facilities": 0,
+          "objects": 0
+        },
+        "zones": [
+          {
+            "name": "摊位区",
+            "semantic": "reserved",
+            "purpose": "market"
+          },
+          {
+            "name": "舞台表演区",
+            "semantic": "stage",
+            "purpose": "performance"
+          },
+          {
+            "name": "签到服务区",
+            "semantic": "reserved",
+            "purpose": "service"
+          },
+          {
+            "name": "观众区",
+            "semantic": "audience",
+            "purpose": "audience"
+          }
+        ],
+        "nodes": [
+          {
+            "kind": "entry",
+            "name": "入口 1",
+            "position": {
+              "x": 68.27208872009089,
+              "y": 17.679616665995315
+            }
+          }
+        ],
+        "planLen": 2589
+      },
+      "writes": [
+        "POST 200 /functions/v1/conversation-api/assistant/chat/stream :: event: thought\ndata: {\"text\":\"用户\"}\n\nevent: thought\ndata: {\"text\":\"要做\"}\n\nevent: thought\ndata: {\"text\":\"200\"}\n\nevent: thought\ndata: {\"text\":\"人\"}\n\nevent: thought\nd",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":4,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":5,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":6,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":7,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":8,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":9,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}",
+        "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":10,\"activityId\":\"3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94\"}",
+        "PUT 200 /functions/v1/scene-api/outdoor-history :: [{\"at\":1795157611939,\"kind\":\"scope\",\"notes\":[\"仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。\",\"换场地已清空旧内容，确认后整批可撤销。\",\"结构化地图覆盖不完整；已知障碍参与检查，未知门/室内连接仍需用户核对。\"],\"stag"
+      ]
+    }
+  ],
+  "cloud-after-anchor": {
+    "status": 200,
+    "current": {
+      "name": "新活动场地",
+      "revision": 2,
+      "updatedAt": "2026-11-20T06:53:33.534139+00:00",
+      "activityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+      "localActivityId": "house-8z42f0xm"
+    },
+    "listLen": 90
+  },
+  "entrance": {
+    "rx": 0.62,
+    "ry": 0.5,
+    "inRing": true,
+    "node": {
+      "kind": "entry",
+      "name": "入口 1",
+      "position": {
+        "x": 68.27208872009089,
+        "y": 17.679616665995315
+      }
+    }
+  },
+  "cloud-after-entrance": {
+    "status": 200,
+    "current": {
+      "name": "新活动场地",
+      "revision": 3,
+      "updatedAt": "2026-11-20T06:53:55.28513+00:00",
+      "activityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+      "localActivityId": "house-8z42f0xm"
+    },
+    "listLen": 90
+  },
+  "cloud-before-reload": {
+    "status": 200,
+    "current": {
+      "name": "新活动场地",
+      "revision": 10,
+      "updatedAt": "2026-11-20T06:59:06.647774+00:00",
+      "activityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+      "localActivityId": "house-8z42f0xm"
+    },
+    "listLen": 90
+  },
+  "beforeReload": {
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+      "projectId": "house-8z42f0xm",
+      "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+      "remoteRevision": 10,
+      "counts": {
+        "zones": 4,
+        "boundary": 12,
+        "nodes": 1,
+        "facilities": 0,
+        "objects": 0
+      },
+      "zones": [
+        {
+          "name": "摊位区",
+          "semantic": "reserved",
+          "purpose": "market"
+        },
+        {
+          "name": "舞台表演区",
+          "semantic": "stage",
+          "purpose": "performance"
+        },
+        {
+          "name": "签到服务区",
+          "semantic": "reserved",
+          "purpose": "service"
+        },
+        {
+          "name": "观众区",
+          "semantic": "audience",
+          "purpose": "audience"
+        }
+      ],
+      "nodes": [
+        {
+          "kind": "entry",
+          "name": "入口 1",
+          "position": {
+            "x": 68.27208872009089,
+            "y": 17.679616665995315
+          }
+        }
+      ],
+      "planLen": 2589
+    },
+    "slots": {
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T06:52:07.523Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "projectId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T06:59:05.643Z",
+        "counts": {
+          "zones": 4,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 2589
+      },
+      "scendance-outdoor-last-v1": "default-outdoor"
+    }
+  },
+  "cloud-after-reload": {
+    "status": 200,
+    "current": {
+      "name": "新活动场地",
+      "revision": 11,
+      "updatedAt": "2026-11-20T06:59:45.329791+00:00",
+      "activityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+      "localActivityId": "house-8z42f0xm"
+    },
+    "listLen": 90
+  },
+  "afterReload": {
+    "plan": {
+      "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+      "projectId": "house-8z42f0xm",
+      "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+      "remoteRevision": 11,
+      "counts": {
+        "zones": 4,
+        "boundary": 12,
+        "nodes": 1,
+        "facilities": 0,
+        "objects": 0
+      },
+      "zones": [
+        {
+          "name": "摊位区",
+          "semantic": "reserved",
+          "purpose": "market"
+        },
+        {
+          "name": "舞台表演区",
+          "semantic": "stage",
+          "purpose": "performance"
+        },
+        {
+          "name": "签到服务区",
+          "semantic": "reserved",
+          "purpose": "service"
+        },
+        {
+          "name": "观众区",
+          "semantic": "audience",
+          "purpose": "audience"
+        }
+      ],
+      "nodes": [
+        {
+          "kind": "entry",
+          "name": "入口 1",
+          "position": {
+            "x": 68.27208872009089,
+            "y": 17.679616665995315
+          }
+        }
+      ],
+      "planLen": 2589
+    },
+    "slots": {
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T06:52:07.523Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "projectId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T06:59:43.809Z",
+        "counts": {
+          "zones": 4,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 2589
+      },
+      "scendance-outdoor-last-v1": "default-outdoor"
+    }
+  },
+  "afterReloadWrites": [],
+  "comparison": {
+    "boundaryKept": true,
+    "zonesKept": true,
+    "nodesKept": true,
+    "planLenKept": true,
+    "revisionBefore": 10,
+    "revisionAfter": 11,
+    "revisionConsistent": false,
+    "slotBefore": "scendance-outdoor-plan-v1:house-8z42f0xm",
+    "slotAfter": "scendance-outdoor-plan-v1:house-8z42f0xm",
+    "slotConsistent": true
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

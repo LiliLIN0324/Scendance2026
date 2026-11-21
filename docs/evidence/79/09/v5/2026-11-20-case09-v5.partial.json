@@ -1,0 +1,96 @@
+{
+  "ranAt": "2026-11-20T03:18:25.727Z",
+  "actor": "1a8a9bd7-2acc-4238-9688-5f1ad70e72b3",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "v5：新匿名会话；先 setupSite 锚定地点与红线，再推进分区提案；apply 前守卫 zones>0；逐次记录 PUT body 与云端 list revision。",
+  "steps": [
+    {
+      "step": 1,
+      "name": "setupSite 锚定地点/红线",
+      "setup": {
+        "candidates": [
+          "1 杭州湖滨银泰in77 有轮廓 延安路258号(龙翔桥地铁站C口步行200米)",
+          "2 杭州湖滨银泰in77 A区 东坡路7号",
+          "3 杭州湖滨银泰in77 E区 延安路与邮电路交叉口西南100米",
+          "4 杭州湖滨银泰in77 C3区 延安路258号银泰百货(龙翔桥地铁站D口步行330米)",
+          "5 杭州湖滨银泰广场 延安路245号杭州湖滨银泰in77B区F3层",
+          "6 杭州湖滨in77B区 延安路245号"
+        ],
+        "rangeButton": null,
+        "plan": {
+          "scendance-outdoor-plan-v1:house-f6sf644u": {
+            "projectId": "house-f6sf644u",
+            "name": "新活动场地",
+            "updatedAt": "2026-11-20T03:18:32.436Z",
+            "counts": {
+              "zones": 0,
+              "routes": 0,
+              "entrances": 0,
+              "workers": 0,
+              "facilities": 0,
+              "objects": 0,
+              "boundary": 0
+            },
+            "planLen": 167
+          },
+          "scendance-outdoor-plan-v1:default-outdoor": {
+            "projectId": "default-outdoor",
+            "name": "新活动场地",
+            "updatedAt": "2026-11-20T03:18:28.871Z",
+            "counts": {
+              "zones": 0,
+              "routes": 0,
+              "entrances": 0,
+              "workers": 0,
+              "facilities": 0,
+              "objects": 0,
+              "boundary": 0
+            },
+            "planLen": 167
+          },
+          "scendance-outdoor-last-v1": "default-outdoor"
+        }
+      },
+      "writes": [],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-f6sf644u",
+        "projectId": "house-f6sf644u",
+        "name": "新活动场地",
+        "remoteActivityId": "c39e18bc-8221-4f27-bca9-66d0c59a0955",
+        "remoteRevision": 1,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "facilities": 0,
+          "objects": 0
+        },
+        "planLen": 167
+      }
+    }
+  ],
+  "cloud-initial": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T03:18:33.143608+00:00",
+        "activityId": "c39e18bc-8221-4f27-bca9-66d0c59a0955",
+        "localActivityId": "house-f6sf644u"
+      }
+    ]
+  },
+  "cloud-after-setup": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T03:18:33.143608+00:00",
+        "activityId": "c39e18bc-8221-4f27-bca9-66d0c59a0955",
+        "localActivityId": "house-f6sf644u"
+      }
+    ]
+  }
+}

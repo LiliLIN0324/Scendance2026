@@ -1,0 +1,264 @@
+{
+  "ranAt": "2026-11-20T03:09:41.056Z",
+  "account": "",
+  "actor": "e3b4fba9-a9b9-40c2-b1ef-ef7c186c4912",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "v4：新匿名会话（不读旧 session 文件）；逐次记录 PUT /outdoor-plans 请求 body（activityId/localActivityId/baseRevision）与云端 list revision；撤销先点画布移焦点，再点 plan-undo 按钮，未回退再 Ctrl+Z。",
+  "steps": [
+    {
+      "step": 1,
+      "name": "组合需求",
+      "writes": [],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+        "projectId": "house-qlauux32",
+        "name": "新活动场地",
+        "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "remoteRevision": 1,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "facilities": 0,
+          "objects": 0
+        },
+        "planLen": 167
+      }
+    },
+    {
+      "step": 2,
+      "name": "补齐边界/入口/分区",
+      "writes": [],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+        "projectId": "house-qlauux32",
+        "name": "新活动场地",
+        "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "remoteRevision": 1,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "facilities": 0,
+          "objects": 0
+        },
+        "planLen": 167
+      }
+    },
+    {
+      "step": 3,
+      "name": "手画闭合边界",
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+        "projectId": "house-qlauux32",
+        "name": "新活动场地",
+        "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "remoteRevision": 2,
+        "counts": {
+          "zones": 0,
+          "boundary": 4,
+          "facilities": 0,
+          "objects": 0
+        },
+        "planLen": 568
+      }
+    },
+    {
+      "step": 4,
+      "name": "重试出预览",
+      "writes": [],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+        "projectId": "house-qlauux32",
+        "name": "新活动场地",
+        "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "remoteRevision": 2,
+        "counts": {
+          "zones": 0,
+          "boundary": 4,
+          "facilities": 0,
+          "objects": 0
+        },
+        "planLen": 568
+      }
+    },
+    {
+      "step": 5,
+      "name": "推进到可应用预览",
+      "writes": [],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+        "projectId": "house-qlauux32",
+        "name": "新活动场地",
+        "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "remoteRevision": 2,
+        "counts": {
+          "zones": 0,
+          "boundary": 4,
+          "facilities": 0,
+          "objects": 0
+        },
+        "planLen": 568
+      }
+    }
+  ],
+  "cloud-initial": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 1,
+        "updatedAt": "2026-11-20T03:09:49.646863+00:00",
+        "activityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "localActivityId": "house-qlauux32"
+      }
+    ]
+  },
+  "drive": {
+    "ok": true,
+    "trace": [
+      {
+        "round": 0,
+        "action": "proposal-ready",
+        "button": " 确认并应用这一版"
+      }
+    ]
+  },
+  "cloud-before-apply": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-20T03:12:21.588482+00:00",
+        "activityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "localActivityId": "house-qlauux32"
+      }
+    ]
+  },
+  "apply1": {
+    "before": {
+      "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+      "projectId": "house-qlauux32",
+      "name": "新活动场地",
+      "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+      "remoteRevision": 2,
+      "counts": {
+        "zones": 0,
+        "boundary": 4,
+        "facilities": 0,
+        "objects": 0
+      },
+      "planLen": 568
+    },
+    "after": {
+      "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+      "projectId": "house-qlauux32",
+      "name": "新活动场地",
+      "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+      "remoteRevision": 2,
+      "counts": {
+        "zones": 0,
+        "boundary": 4,
+        "facilities": 0,
+        "objects": 0
+      },
+      "planLen": 568
+    },
+    "writes": [],
+    "puts": []
+  },
+  "cloud-after-apply": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 2,
+        "updatedAt": "2026-11-20T03:12:21.588482+00:00",
+        "activityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "localActivityId": "house-qlauux32"
+      }
+    ]
+  },
+  "undo": {
+    "button": {
+      "exists": false,
+      "disabled": null,
+      "label": null
+    },
+    "method": "ctrl-z",
+    "after": {
+      "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+      "projectId": "house-qlauux32",
+      "name": "新活动场地",
+      "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+      "remoteRevision": 3,
+      "counts": {
+        "zones": 0,
+        "boundary": 0,
+        "facilities": 0,
+        "objects": 0
+      },
+      "planLen": 167
+    },
+    "writes": [
+      "PUT 200 /functions/v1/scene-api/outdoor-plans :: {\"conflict\":false,\"revision\":3,\"activityId\":\"ff678442-1ee1-4d71-9677-2f714dc24097\"}"
+    ],
+    "puts": [
+      {
+        "t": "req",
+        "method": "PUT",
+        "body": "{\"activityId\":\"ff678442-1ee1-4d71-9677-2f714dc24097\",\"localActivityId\":\"house-qlauux32\",\"baseRevision\":2,\"name\":\"新活动场地\",\"plan\":{\"schemaVersion\":1,\"anchor\":{\"lng\":120.085,\"lat\":30.215,\"crs\":\"gcj-02\",\"source\":\"preset\"},\"boundary\":[],\"zones\":[],\"facilities\":[],\"routes\":[],\"nodes\":[],\"workers\":[]}}"
+      },
+      {
+        "t": "res",
+        "method": "PUT",
+        "status": 200,
+        "body": "{\"conflict\":false,\"revision\":3,\"activityId\":\"ff678442-1ee1-4d71-9677-2f714dc24097\"}"
+      }
+    ]
+  },
+  "cloud-after-undo": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 3,
+        "updatedAt": "2026-11-20T03:14:35.647719+00:00",
+        "activityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "localActivityId": "house-qlauux32"
+      }
+    ]
+  },
+  "reapply": {
+    "button": "重试",
+    "after": {
+      "slot": "scendance-outdoor-plan-v1:house-qlauux32",
+      "projectId": "house-qlauux32",
+      "name": "新活动场地",
+      "remoteActivityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+      "remoteRevision": 3,
+      "counts": {
+        "zones": 0,
+        "boundary": 0,
+        "facilities": 0,
+        "objects": 0
+      },
+      "planLen": 167
+    },
+    "writes": [],
+    "puts": []
+  },
+  "cloud-after-reapply": {
+    "status": 200,
+    "body": [
+      {
+        "name": "新活动场地",
+        "revision": 3,
+        "updatedAt": "2026-11-20T03:14:35.647719+00:00",
+        "activityId": "ff678442-1ee1-4d71-9677-2f714dc24097",
+        "localActivityId": "house-qlauux32"
+      }
+    ]
+  },
+  "consoleErrors": []
+}

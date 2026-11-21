@@ -1,0 +1,44 @@
+{
+  "ranAt": "2026-11-20T07:29:00+08:00",
+  "case": "8c",
+  "note": "8c 隔离对照旁证：直连 scene-api 读 A 云端快照，与前端 recover adopt 真机行为对照。",
+  "actor": { "email": "walkthrough-79@scendance.test", "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c" },
+  "target": {
+    "activityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+    "localActivityId": "house-8z42f0xm",
+    "role": "方案 A（8a 留存基线）"
+  },
+  "directApi": {
+    "endpoint": "GET /functions/v1/scene-api/outdoor-plans/3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+    "status": 200,
+    "found": true,
+    "revision": 11,
+    "name": "新活动场地",
+    "counts": { "zones": 4, "boundary": 12, "nodes": 1, "objects": 0 },
+    "zoneNames": ["摊位区", "舞台表演区", "签到服务区", "观众区"],
+    "planLen": 2589
+  },
+  "realDeviceObservation": {
+    "recoverDialogVisible": true,
+    "recoverRowCount": 92,
+    "rowTargeted": "新活动场地 版本 11 · 11/20 14:59 打开（= A，按 revision 11 唯一命中）",
+    "attempts": [
+      { "round": 1, "result": "复合 Playwright locator 在重排行上超时 30s，open 按钮未点中" },
+      { "round": 2, "result": "嵌套 locator 超时 10s，open 按钮未点中" },
+      { "round": 3, "result": "DOM 级 evaluate 按索引点击，命中 open 按钮（testid=outdoor-cloud-recover-open，disabled=false），触发 adopt" }
+    ],
+    "afterAdoptLocalSlots": {
+      "house-8z42f0xm": { "counts": { "zones": 4, "boundary": 12 }, "planLen": 2589, "role": "A 槽，adopt 成功落盘，last 指针指向它" },
+      "house-9khj6llb": { "remoteActivityId": "54849008-45f9-4f18-b47f-6bcabb2b556c", "remoteRevision": 1, "counts": { "zones": 0, "boundary": 0, "nodes": 0 }, "planLen": 167, "role": "默认空白草稿并行同步出的新副槽，PUT 200，未覆盖 A 槽" },
+      "default-outdoor": { "counts": { "zones": 0, "boundary": 0, "nodes": 0 }, "planLen": 167 }
+    },
+    "lastPointer": "house-8z42f0xm",
+    "nonGetWrites": ["PUT 200 /functions/v1/scene-api/outdoor-plans"],
+    "finding": "recover「打开」可把 A 云端快照拉回本机分槽并留存，指纹与 8a 基线一致（zones4/boundary12/2589）。隔离判断须以 planState 全槽读数为准；台架 readPlan() 遍历首槽会先命中空白副槽，造成误读。"
+  },
+  "openQuestions": [
+    "未做 B 对照：切到另一活动 B 后核对 B 槽不写 A 四分区指纹、回 A 后 A 槽仍留存",
+    "同上下文 A→B→A 热切换在当前 UI 无入口；只能清本机槽后 reload 经 recover 重选",
+    "默认空白草稿为何在 adopt A 的同轮并行 PUT 出一条新 rev1 副槽，是否应抑制"
+  ]
+}

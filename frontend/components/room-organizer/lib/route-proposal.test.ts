@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRouteProposal, matchRouteCommand, routeIntentNote } from './route-proposal';
+import { buildRouteProposal, matchRouteCommand, roadIntentFromRequest, routeIntentNote } from './route-proposal';
 import type { RoadSegment } from './road-network';
 
 /** 测试用确定性 id。 */
@@ -71,6 +71,13 @@ describe('matchRouteCommand（V-2 意图）', () => {
   it('复合规划不走单独的自动流线指令', () => {
     expect(matchRouteCommand('请帮我画出流线和入口。', true)).toBe('auto');
     expect(matchRouteCommand('排流线，先划室外展览区和室外表演区', true)).toBeNull();
+  });
+
+  it('#3 现场改口句（改走向/别沿某路/留宽通道）不命中本地指令词表', () => {
+    // 台账 2026-11-20 v3 探针原话：本地触发器不劫持，句子进模型主理解链。
+    const sentence = '主通道改走场地北侧，别沿湖滨路走，留一条宽通道连通两个出入口';
+    expect(matchRouteCommand(sentence)).toBeNull();
+    expect(matchRouteCommand(sentence, true)).toBeNull();
   });
 });
 
@@ -267,5 +274,19 @@ describe('buildRouteProposal（#3 改口落到选路口径）', () => {
     expect(proposal.intent?.keptExcluded).toEqual(['湖滨路']);
     expect(proposal.intent?.excluded).toEqual([]);
     expect(routeIntentNote(proposal.intent)).toContain('你想排除');
+  });
+
+  it('#3 现场改口句：未点名具体替代路时，排除湖滨路、prefer 为空、不误判没找到', () => {
+    const sentence = '主通道改走场地北侧，别沿湖滨路走，留一条宽通道连通两个出入口';
+    const intent = roadIntentFromRequest(sentence, ['湖滨路', '仁和路']);
+    expect([...intent.avoid]).toEqual(['湖滨路']);
+    expect([...intent.prefer]).toEqual([]);
+    expect(intent.notFound).toBe(false);
+
+    const proposal = buildRouteProposal({ boundary: BOUNDARY, anchor: ANCHOR, roads, request: sentence }, ids)!;
+    // 湖滨路被排除；替代路未点名，路网里其余道路按长度兜底，不把湖滨路塞回。
+    expect(proposal.routes.some(route => route.name.includes('湖滨路'))).toBe(false);
+    expect(proposal.intent?.excluded).toEqual(['湖滨路']);
+    expect(proposal.intent?.preferred).toEqual([]);
   });
 });

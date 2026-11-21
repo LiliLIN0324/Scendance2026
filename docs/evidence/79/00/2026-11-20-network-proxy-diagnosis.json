@@ -1,0 +1,46 @@
+{
+  "capturedAt": "2026-11-20T02:55:00+08:00",
+  "purpose": "记录 #79 走查本机到 Supabase 项目域的连通分层诊断与可复跑通道配置；供网络恢复后复跑真机用例。",
+  "projectRef": "wkhfvnzgopjdzxlmycks",
+  "projectBase": "https://wkhfvnzgopjdzxlmycks.supabase.co",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "proxy": {
+    "controller": "http://127.0.0.1:39798",
+    "mixedPort": 7897,
+    "process": "com.vortex.helper.exe PID 10324（mihomo Meta 1.10.0 封装）",
+    "initialMode": "direct",
+    "workingMode": "rule",
+    "stableNode": "🇲🇾|马来西亚-IEPL 01",
+    "note": "初始 mihomo mode=direct：所有流量直连，代理组不生效；项目子域在直连链路上被定向 RST。PATCH /configs {\"mode\":\"rule\"} 后兜底 MATCH→「节点选择」，锁定马来西亚-IEPL 01，项目域 health 12/12 经代理 401 稳定可达。"
+  },
+  "reachabilityMatrix": {
+    "capturedVia": "curl 直连 --noproxy '*' 与经代理 --proxy http://127.0.0.1:7897 各一次，max-time 6s",
+    "rows": [
+      { "domain": "wkhfvnzgopjdzxlmycks.supabase.co/auth/v1/health", "direct": "000/0.29s RST", "proxy": "401/0.44s", "meaning": "401 是 health 端点无 apikey 的预期响应，TLS 握手与 HTTP 已通" },
+      { "domain": "api.supabase.com/platform/profile", "direct": "401", "proxy": "401", "meaning": "平台中转直连可达" },
+      { "domain": "supabase.com", "direct": "200", "proxy": "200", "meaning": "控制台前端可达" },
+      { "domain": "scendance-scene-planner-ewz.pages.dev/", "direct": "200", "proxy": "000", "meaning": "前端站点必须直连，Playwright 代理需 bypass 该域" },
+      { "domain": "www.gstatic.com/generate_204", "direct": "204", "proxy": "204", "meaning": "Google 路径通" },
+      { "domain": "www.cloudflare.com/cdn-cgi/trace", "direct": "000/6s 超时", "proxy": "200", "meaning": "Cloudflare 栈走代理可达" }
+    ]
+  },
+  "failureFingerprint": {
+    "direct": "TCP 连上 Cloudflare IP，ClientHello 后 Recv failure: Connection was reset；schannel failed to receive handshake",
+    "proxy": "CONNECT 隧道 200 建立成功，隧道内 TLS ClientHello 后 RST；快速 0.11–0.33s",
+    "isolation": "同一 Cloudflare 段的 api.supabase.com / supabase.com / pages.dev 直连放行，仅项目子域 wkhfvnzgopjdzxlmycks.supabase.co 被定向重置；阻断按子域 SNI/主机名触发，非 IP 段封禁",
+    "nodeRotation": "轮换 香港-IEPL01/02、香港-中转02、日本-IEPL01、新加坡-IEPL01、美国-IEPL01、马来西亚-IEPL01：仅马来西亚节点在 rule 模式下对项目域稳定；其余节点到 Cloudflare 栈间歇 RST 或超时",
+    "dns": "DNS 解析正常，未污染到坏 IP；hosts 无 supabase 条目"
+  },
+  "channelConfig": {
+    "nodeFetch": "Node 24 只认 CLI flag `--use-env-proxy`；环境变量 NODE_USE_ENV_PROXY 无效。启动：`node --use-env-proxy <script>`，并设 HTTPS_PROXY=http://127.0.0.1:7897、HTTP_PROXY=http://127.0.0.1:7897",
+    "playwright": "context 传 proxy: { server: 'http://127.0.0.1:7897', bypass: 'scendance-scene-planner-ewz.pages.dev,*.pages.dev,localhost,127.0.0.1' }；launch args: --disable-http2 --disable-quic",
+    "browserBu": "内置浏览器走系统代理（注册表 127.0.0.1:7897）；项目直连域在 bu 内仍见 ERR_CONNECTION_CLOSED / inflight 挂起，平台中转 api.supabase.com 全 ok",
+    "harness": "docs/evidence/79/tools/harness-proxy.mjs 的 launch 读 SCENT_PROXY || HTTPS_PROXY，支持 proxyBypass；harness.mjs 为旧版"
+  },
+  "verifiedThroughChannel": [
+    "匿名 signup 成功（新用户 bearer 3600s），GET /outdoor-plans 200 []（3/3）",
+    "Playwright 真机打开正式站：auth/v1/user 200、outdoor-plans 200、studios 200、assets 200、projects 200、outdoor-history 200、chat/capabilities 200，consoleErrors 空"
+  ],
+  "residualRisk": "代理节点到 Cloudflare 栈存在间歇 RST/超时；cloudFetch 已有 3 次退避重试，真机脚本遇单次网络失败应重试而非判功能失败。若 mihomo 节点到期/切换，需先重测项目域 health 成功率再跑用例。",
+  "notDone": "未改任何 secret、未部署、未发布、未打 tag/release；未还原 mihomo mode（当前 rule，初始为 direct）；节点选择当前停在马来西亚-IEPL 01。"
+}

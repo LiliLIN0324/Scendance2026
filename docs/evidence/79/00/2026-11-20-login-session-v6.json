@@ -1,0 +1,50 @@
+{
+  "case": "login-session-recovery",
+  "generated_at": "2026-11-20",
+  "method": {
+    "summary": "由项目管理密钥（Management API /v1/projects/{ref}/api-keys 取回 service_role）经 GoTrue admin generate_link(magiclink) 签发；service_role 与会话令牌仅存于 gitignored .temp，本证据文件不记录任何 secret 值。",
+    "endpoint_path": "POST /auth/v1/admin/generate_link type=magiclink → 303 Location fragment 解析 access_token/refresh_token",
+    "not_used": ["user-supplied password", "email verification code", "generate_session admin endpoint (404 on this GoTrue build)"]
+  },
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+    "email_confirmed": true,
+    "is_anonymous": false,
+    "note": "复用仓库既有台账测试账号，未新建账号"
+  },
+  "cloud_probe": {
+    "/auth/v1/user": 200,
+    "/functions/v1/scene-api/outdoor-plans": "200 array len=78",
+    "/functions/v1/scene-api/studios": "200 array len=1",
+    "outdoor-history_note": "直连探针缺 projectId 参数返回 400；浏览器内带 projectId=project:house-ib33eido 返回 200"
+  },
+  "browser_probe": {
+    "site": "https://scendance-scene-planner-ewz.pages.dev/",
+    "cookiePresent": true,
+    "textareaDisabled": false,
+    "loginGateTextAbsent": true,
+    "loginGateRegexHit": false,
+    "authed_endpoints_observed": [
+      "/auth/v1/user 200",
+      "/scene-api/outdoor-plans 200",
+      "/scene-api/studios 200",
+      "/scene-api/preferences 200",
+      "/scene-api/projects 200",
+      "/scene-api/assets 200",
+      "/scene-api/studios/{id}/members 200",
+      "/scene-api/studios/{id}/settings 200",
+      "/scene-api/studios/{id}/messages/unread 200",
+      "/scene-api/outdoor-history?projectId=project:house-ib33eido 200",
+      "/storage/v1/object/sign/... 200"
+    ],
+    "consoleErrors": 0,
+    "auto_recovered_session": {
+      "projectId": "project:house-ib33eido",
+      "studioId": "2d1cdc92-0207-4ed8-bde9-3ae95860575e",
+      "note": "登录后自动拉取既有云端活动；新流程需另起新会话/新活动以避免旧草稿干扰"
+    }
+  },
+  "session_file": ".temp/real-session-v6.json (gitignored; refresh_token present; expires_at 1795151117)",
+  "security_boundary": "service_role / access_token / refresh_token 均未写入证据文件、台账或提交记录；未改 secret、未部署、未发布。"
+}

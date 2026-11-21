@@ -1,0 +1,186 @@
+{
+  "ranAt": "2026-11-20T10:47:09.882Z",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "户外方案态：核对 #tool-export 选项弹窗是否渲染；分享面板导出条目；效果图 download 帧 + 同窗云端写旁证。不存二进制。",
+  "steps": [
+    {
+      "step": 1,
+      "name": "baseline",
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+        "projectId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "counts": {
+          "zones": 4,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 2589
+      }
+    },
+    {
+      "step": 2,
+      "name": "rail-export-state",
+      "state": {
+        "exportButtonExists": false,
+        "exportButtonDisabled": null,
+        "exportPanelExists": false,
+        "shareButtonExists": true
+      }
+    },
+    {
+      "step": 3,
+      "name": "share-export-entries",
+      "entries": [
+        {
+          "label": "效果图",
+          "disabled": false
+        },
+        {
+          "label": "物料清单",
+          "disabled": false
+        },
+        {
+          "label": "场地范围文件",
+          "disabled": false
+        },
+        {
+          "label": "演示稿",
+          "disabled": false
+        }
+      ],
+      "panelOpen": 1
+    },
+    {
+      "step": 4,
+      "name": "render-effect-image",
+      "method": "button-.sc-share-export[效果图]",
+      "downloads": [
+        {
+          "suggestedFilename": "outdoor-2d-1795171683659.png",
+          "sizeBytes": 597871,
+          "kind": "data:image/png"
+        }
+      ],
+      "writes": [],
+      "plan": {
+        "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+        "projectId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "counts": {
+          "zones": 4,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 2589
+      }
+    }
+  ],
+  "recover": {
+    "rows": [
+      {
+        "i": 0,
+        "text": "户外规划 版本 1 · 11/20 18:42 打开"
+      },
+      {
+        "i": 1,
+        "text": "户外规划 版本 1 · 11/20 17:25 打开"
+      },
+      {
+        "i": 2,
+        "text": "新活动场地 版本 14 · 11/20 16:32 打开"
+      },
+      {
+        "i": 3,
+        "text": "新活动场地 版本 1 · 11/20 16:31 打开"
+      },
+      {
+        "i": 4,
+        "text": "新活动场地 版本 1 · 11/20 16:25 打开"
+      },
+      {
+        "i": 5,
+        "text": "新活动场地 版本 1 · 11/20 16:21 打开"
+      },
+      {
+        "i": 6,
+        "text": "新活动场地 版本 1 · 11/20 16:20 打开"
+      },
+      {
+        "i": 7,
+        "text": "新活动场地 版本 4 · 11/20 16:16 打开"
+      },
+      {
+        "i": 8,
+        "text": "新活动场地 版本 1 · 11/20 16:16 打开"
+      },
+      {
+        "i": 9,
+        "text": "新活动场地 版本 1 · 11/20 15:48 打开"
+      },
+      {
+        "i": 10,
+        "text": "新活动场地 版本 1 · 11/20 15:29 打开"
+      },
+      {
+        "i": 11,
+        "text": "新活动场地 版本 1 · 11/20 15:27 打开"
+      }
+    ],
+    "idx": 2,
+    "rowText": "新活动场地 版本 14 · 11/20 16:32 打开",
+    "picked": {
+      "testid": "outdoor-cloud-recover-open",
+      "disabled": false
+    }
+  },
+  "adopt": {
+    "target": {
+      "activityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+      "local": "house-8z42f0xm",
+      "revision": 14
+    },
+    "after": {
+      "slot": "scendance-outdoor-plan-v1:house-8z42f0xm",
+      "projectId": "house-8z42f0xm",
+      "name": "新活动场地",
+      "counts": {
+        "zones": 4,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 2589
+    },
+    "writes": [
+      "PUT 200 /functions/v1/scene-api/outdoor-plans"
+    ]
+  },
+  "cloudList": {
+    "status": 200,
+    "listLen": 105
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

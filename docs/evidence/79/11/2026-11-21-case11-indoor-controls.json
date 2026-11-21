@@ -1,0 +1,228 @@
+{
+  "ranAt": "2026-11-20T16:10:12.216Z",
+  "actor": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "#11 纯室内态既有导出控件对照：清户外槽 reload 后读右轨 #tool-export 面板条目与分享面板导出条目；核对户外专属三枚入口（物料清单/场地范围文件/演示稿）在室内态不渲染。不下载。",
+  "steps": [
+    {
+      "step": 1,
+      "name": "rail-state-after-clear",
+      "rail": {
+        "outdoorSlots": 2,
+        "lastPointer": "default-outdoor",
+        "tools": {
+          "export": {
+            "exists": false
+          },
+          "undo": {
+            "exists": true,
+            "disabled": true,
+            "visible": true,
+            "label": "撤销"
+          },
+          "redo": {
+            "exists": true,
+            "disabled": true,
+            "visible": true,
+            "label": "重做"
+          },
+          "share": {
+            "exists": true,
+            "disabled": false,
+            "visible": true,
+            "label": "分享"
+          },
+          "walk": {
+            "exists": true,
+            "disabled": false,
+            "visible": true,
+            "label": "第一人称漫游"
+          },
+          "zoomOut": {
+            "exists": true,
+            "disabled": false,
+            "visible": true,
+            "label": "缩小"
+          },
+          "zoomIn": {
+            "exists": true,
+            "disabled": false,
+            "visible": true,
+            "label": "放大"
+          }
+        }
+      }
+    },
+    {
+      "step": 2,
+      "name": "export-panel",
+      "exportPanel": {
+        "panelExists": false,
+        "reason": "#tool-export 按钮不存在"
+      }
+    },
+    {
+      "step": 3,
+      "name": "share-export-entries",
+      "sharePanel": {
+        "menuExists": true,
+        "tabs": [
+          {
+            "id": "share-tab-share",
+            "label": "分享"
+          },
+          {
+            "id": "share-tab-publish",
+            "label": "发布"
+          },
+          {
+            "id": "share-tab-cases",
+            "label": "案例"
+          },
+          {
+            "id": "share-tab-export",
+            "label": "导出"
+          }
+        ],
+        "entries": [
+          {
+            "testid": "export-row-render",
+            "label": "效果图\n当前镜头，按画布现况出 PNG",
+            "disabled": false
+          },
+          {
+            "testid": "export-row-materials",
+            "label": "物料清单\n全部楼层物件与数量，CSV",
+            "disabled": false
+          },
+          {
+            "testid": "export-row-site",
+            "label": "场地范围文件\n场地轮廓与户外分区，GeoJSON",
+            "disabled": false
+          },
+          {
+            "testid": "export-row-deck",
+            "label": "演示稿\n当前方案的分页排版，PDF",
+            "disabled": false
+          }
+        ]
+      }
+    }
+  ],
+  "rail": {
+    "outdoorSlots": 2,
+    "lastPointer": "default-outdoor",
+    "tools": {
+      "export": {
+        "exists": false
+      },
+      "undo": {
+        "exists": true,
+        "disabled": true,
+        "visible": true,
+        "label": "撤销"
+      },
+      "redo": {
+        "exists": true,
+        "disabled": true,
+        "visible": true,
+        "label": "重做"
+      },
+      "share": {
+        "exists": true,
+        "disabled": false,
+        "visible": true,
+        "label": "分享"
+      },
+      "walk": {
+        "exists": true,
+        "disabled": false,
+        "visible": true,
+        "label": "第一人称漫游"
+      },
+      "zoomOut": {
+        "exists": true,
+        "disabled": false,
+        "visible": true,
+        "label": "缩小"
+      },
+      "zoomIn": {
+        "exists": true,
+        "disabled": false,
+        "visible": true,
+        "label": "放大"
+      }
+    }
+  },
+  "exportPanel": {
+    "panelExists": false,
+    "reason": "#tool-export 按钮不存在"
+  },
+  "sharePanel": {
+    "menuExists": true,
+    "tabs": [
+      {
+        "id": "share-tab-share",
+        "label": "分享"
+      },
+      {
+        "id": "share-tab-publish",
+        "label": "发布"
+      },
+      {
+        "id": "share-tab-cases",
+        "label": "案例"
+      },
+      {
+        "id": "share-tab-export",
+        "label": "导出"
+      }
+    ],
+    "entries": [
+      {
+        "testid": "export-row-render",
+        "label": "效果图\n当前镜头，按画布现况出 PNG",
+        "disabled": false
+      },
+      {
+        "testid": "export-row-materials",
+        "label": "物料清单\n全部楼层物件与数量，CSV",
+        "disabled": false
+      },
+      {
+        "testid": "export-row-site",
+        "label": "场地范围文件\n场地轮廓与户外分区，GeoJSON",
+        "disabled": false
+      },
+      {
+        "testid": "export-row-deck",
+        "label": "演示稿\n当前方案的分页排版，PDF",
+        "disabled": false
+      }
+    ]
+  },
+  "comparison": {
+    "enteredIndoor": false,
+    "indoorEditing": false,
+    "note": "清槽 reload 后页面自动重建 default-outdoor 户外草稿（outdoorSlots=2/last=default-outdoor），仍处户外地图态；当前走查账号无既有室内布局方案，UI 无回切纯室内壳体入口，故未进入室内态。下列条目出现是户外态正确表现（onExportCsv/GeoJson/PrintDeck 户外挂载），不是缺陷；室内 #tool-export 面板与室内 PDF 路径本轮未能真机对照。",
+    "outdoorCsvPresent": true,
+    "outdoorGeoJsonPresent": true,
+    "outdoorDeckPdfPresent": true,
+    "renderEntryPresent": true,
+    "entryIds": [
+      "export-row-render",
+      "export-row-materials",
+      "export-row-site",
+      "export-row-deck"
+    ]
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

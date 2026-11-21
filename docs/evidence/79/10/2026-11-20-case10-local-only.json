@@ -1,0 +1,86 @@
+{
+  "case": 10,
+  "scenario": "匿名访客 · 地点待定 · 纯设计句本地退回选址",
+  "ranAt": "2026-11-20T13:00:23.679Z",
+  "identity": {
+    "cookieKeys": []
+  },
+  "baselinePlan": {
+    "scendance-outdoor-plan-v1:house-9zwnddeh": {
+      "projectId": "house-9zwnddeh",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T13:00:29.239Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T13:00:26.443Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-last-v1": "default-outdoor"
+  },
+  "sentence": "把舞台摆到东侧，再加两排座椅",
+  "bounceHits": {
+    "placeFirst": true,
+    "keptDraft": true,
+    "nextStep": true
+  },
+  "bodyTail": "当前物料 0 件 · 场地容量待核验\n\n把舞台摆到东侧，再加两排座椅\n\n\n\n周末共创工作坊\n1 个\n\n把舞台摆到东侧，再加两排座椅\n\n\n还没定在哪。先在地图上定地点、圈出可用范围，或直接说出城市/场馆/地址；地点定了再谈布置、动线和分区。这句我先留着。 下一步：在地图上选地点。\n\n当前任务 · 搜索目标地点\n\n请核对活动实际范围，自动为你框选项目区域\n\n请核对活动实际范围，自动为你框选项目区域\n\n搜索地点\n\n在地图上手画活动范围\n执行权限\n告诉 Agent 要改的\n默认（按服务端配置）\n\n图层\n2D\n\n\n\n工具\n1/5\n这是你的场地\n×\n\n底图是真地图瓦片，红实线是你圈的活动范围。拖动平移、滚轮缩放；左上方能直接搜地点。\n\n以后不再提示\n跳过这一步\n下一步",
+  "afterSlice": [],
+  "chatRequests": [],
+  "planWrites": [],
+  "planState": {
+    "scendance-outdoor-plan-v1:house-9zwnddeh": {
+      "projectId": "house-9zwnddeh",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T13:00:29.239Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T13:00:26.443Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-last-v1": "default-outdoor"
+  },
+  "consoleErrors": [],
+  "finding": "匿名设计句本地退回选址：bounce={\"placeFirst\":true,\"keptDraft\":true,\"nextStep\":true}；新增 chat 请求 0 条；方案写 0 条。"
+}

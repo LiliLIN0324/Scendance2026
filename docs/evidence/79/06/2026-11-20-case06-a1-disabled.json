@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-20T19:35:00+08:00",
+  "account": "walkthrough-79@scendance.test",
+  "accountId": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c",
+  "projectRef": "wkhfvnzgopjdzxlmycks",
+  "branch": "功能关闭（A1：CONVERSATION_API_ENABLED=0）",
+  "scope": "真实云端 conversation-api 函数的开关分支取证；直连带登录态请求，未走浏览器 UI 录制。只验证开关关闭后函数如实退回 503，不调模型、不写方案。",
+  "channel": {
+    "method": "Supabase CLI 2.119.0 经 Management API（PAT Bearer）读写 secrets；Node fetch 带登录 access_token 调函数。",
+    "writePermissionVerified": true,
+    "note": "历史记录（2026-11-09-production-conversation.md §阻塞）曾记账号无 secrets 写权限；本轮 PAT 写/删均返回 200，临时探测键 SEVENNINE_PROBE 写入后已 unset，复核不存在。"
+  },
+  "digestFingerprint": {
+    "algorithm": "SHA256(value)，Management API list 只回 digest，不回明文；本证据只存 digest，不存任何 secret value。",
+    "baseline": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b（= sha256('1')，改前 CONVERSATION_API_ENABLED 为 1）",
+    "baselineOtherWatchedKeys": "AGENT_CHAT_BASE_URL / AGENT_CHAT_KEY / AGENT_CHAT_MODEL / BAILIAN_PRODUCT_KEY 等改前 digest 存 .temp/secrets-baseline.json（gitignored），回滚后逐项复核匹配。",
+    "postRestoreRecheck": "2026-11-20 恢复在线后只读复核：线上 32 个键与离线前全量快照逐条比对，watch 基线 digest 全部匹配、无增删、无漂移，SEVENNINE_PROBE 不存在（.temp/verify-secrets.json）。"
+  },
+  "recoverableValues": {
+    "note": "非密钥原值已用候选值算 SHA256 对照基线 digest 反推确认；可用于回滚。两个随机 KEY 不可反推，桩方案全程不动它们。",
+    "matched": [
+      { "key": "AGENT_CHAT_BASE_URL", "value": "https://api.minimax.cn/v1", "digest": "f187eb1fd92d7491512d61800148917365a8ebc4a53cb6ead2d2ee59ae3e314b" },
+      { "key": "AGENT_CHAT_MODEL", "value": "MiniMax-M3.1-Flash", "digest": "1ee719c4d26a144a45b28a393f492d08b063c78a88cd6c19d4ab9348cbb8cd2d" },
+      { "key": "AGENT_CHAT_PROFILE", "value": "minimax", "digest": "e1517be14d06cdb72af7bb52a289a0d5eab667e8b52ec4bac02914e1245f8a40" },
+      { "key": "BAILIAN_PRODUCT_BASE_URL", "value": "https://dashscope.aliyuncs.com/compatible-mode/v1", "digest": "5891aed827c4e67b2d7c0c73ea819327ce3f2b6ef72213cd79669486a26b1ead" },
+      { "key": "BAILIAN_PRODUCT_MODEL", "value": "qwen3.8-max", "digest": "bc33b81a67813da0dfd8575c51a19be04fb85737e5df6e29a2f054aa3d620b7e" }
+    ],
+    "unrecoverable": ["AGENT_CHAT_KEY", "BAILIAN_PRODUCT_KEY"],
+    "unrecoverableNote": "随机密钥，digest 不可反推；B/C 桩方案不修改这两个键，故不依赖其原值备份。"
+  },
+  "sequence": [
+    "1. list secrets 取改前 digest 基线（.temp/secrets-baseline.json）。",
+    "2. secrets set CONVERSATION_API_ENABLED=0（exit 0）。",
+    "3. 带有效登录会话 POST /functions/v1/conversation-api/assistant/chat，body {message}，观察返回。",
+    "4. 立即 secrets set CONVERSATION_API_ENABLED=1（exit 0）。",
+    "5. list 复核 digest 与改前基线一致；临时探测键不存在；其余受关注键 digest 未变。"
+  ],
+  "probe": {
+    "endpoint": "/functions/v1/conversation-api/assistant/chat",
+    "httpStatus": 503,
+    "bodyCode": "CONVERSATION_API_DISABLED",
+    "bodyKeys": ["error"],
+    "contentType": "application/json; charset=utf-8",
+    "modelCalled": false,
+    "planWritten": false,
+    "note": "conversation-api.ts:33-38：开关 !=='1' 时先走已认证探针（disabledApi 内 ASSISTANT_CHAT_ENABLED 覆盖 0，/assistant/chat 早退 200 disabled），探针通过后包 503 + {error:{code:CONVERSATION_API_DISABLED}}；不进入上游模型层，故无 assistant_chat_failure 事件。"
+  },
+  "restore": {
+    "switchRestoredTo": "1",
+    "digestMatchesBaseline": true,
+    "probeKeyPresent": false,
+    "otherWatchedKeysUnchanged": true
+  },
+  "boundary": [
+    "本条是云端 503 路径（CONVERSATION_API_DISABLED），不是前端 {status:'disabled'}「活动问答暂未启用」卡；两者开关与文案不同，取证不混为一谈。",
+    "本轮为直连 fetch 取证，未在浏览器录制关闭后的界面兜底卡文案；UI 兜底文案由 agent-error-view.ts 代码路径定性，另需浏览器窗口补录。",
+    "未读取、未打印任何 secret value / token；未部署、未重新构建或发布前端；未写任何方案数据。"
+  ],
+  "stillBlocked": [
+    {
+      "branch": "额度不足（B1）",
+      "status": "blocked",
+      "reason": "阻塞已细化，非密钥原值可回滚：① 请求带 provider:'minimax' 钉死槽位（pinned 时 rest=[]，不跨槽重试；quota_exhausted 不在兜底重试之列）。② 只把 AGENT_CHAT_BASE_URL 指向公网 https 桩，AGENT_CHAT_KEY / AGENT_CHAT_MODEL / AGENT_CHAT_PROFILE 保留线上原值不动；桩在鉴权/调用前返回 HTTP 402 或命中额度词（isUpstreamQuotaExhausted），桩不校验、不回显 KEY。③ 回滚把 base 写回已指纹反推的原值 https://api.minimax.cn/v1，并 list digest 复核基线。源码口径：assistant-chat.ts:92-97 选槽、:111-114 三件齐全/URL 校验、:202-206 quota_exhausted 不跨槽不泄漏 body；providers.ts:223-224 URL 拼 /chat/completions、Bearer customKey；chat-provider.ts:41-42 minimax 判定 profile=minimax 且三件齐全。真正剩余前置：一个 Supabase Edge Function 出口可达的公网 https 桩（路径兼容 /chat/completions，返 402）。vm 云主机为隔离沙箱，端口绑回环、无公网入站域名/证书、无隧道、出站受限，不能充当公网桩。离线 quota_exhausted 分支断言已由单测覆盖，不冒充真实云端取证。"
+    },
+    {
+      "branch": "网络超时（C1）",
+      "status": "blocked",
+      "reason": "同 B1 桩路径：只换 AGENT_CHAT_BASE_URL 指向公网 https 慢桩，桩在 /chat/completions 路径挂住超过服务端 timeoutMs（默认 25000ms）不响应，触发 AbortController 截断 → status timeout（assistant-chat.ts:85,201,219）；KEY/MODEL/PROFILE 不动，回滚写回反推 base 原值并 digest 复核。真正剩余前置同上：Edge Function 出口可达的公网 https 慢桩；vm 沙箱不能充当。浏览器断网走 NETWORK_ERROR 另一档，不能冒充服务端 timeout；本地慢桩 timeout 分支已由离线单测覆盖，不冒充真实云端。"
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "ranAt": "2026-11-20T13:05:22.333Z",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "500 端点归属补录；adopt A 一次。",
+  "cloudA": {
+    "status": 200,
+    "revision": 14,
+    "found": true
+  },
+  "recoverRows": [
+    {
+      "k": 0,
+      "text": "新活动场地 版本 1 · 11/20 20:39 打开"
+    },
+    {
+      "k": 1,
+      "text": "户外规划 版本 1 · 11/20 18:47 打开"
+    },
+    {
+      "k": 2,
+      "text": "户外规划 版本 1 · 11/20 18:42 打开"
+    },
+    {
+      "k": 3,
+      "text": "户外规划 版本 1 · 11/20 17:25 打开"
+    },
+    {
+      "k": 4,
+      "text": "新活动场地 版本 14 · 11/20 16:32 打开"
+    },
+    {
+      "k": 5,
+      "text": "新活动场地 版本 1 · 11/20 16:31 打开"
+    },
+    {
+      "k": 6,
+      "text": "新活动场地 版本 1 · 11/20 16:25 打开"
+    },
+    {
+      "k": 7,
+      "text": "新活动场地 版本 1 · 11/20 16:21 打开"
+    },
+    {
+      "k": 8,
+      "text": "新活动场地 版本 1 · 11/20 16:20 打开"
+    },
+    {
+      "k": 9,
+      "text": "新活动场地 版本 4 · 11/20 16:16 打开"
+    },
+    {
+      "k": 10,
+      "text": "新活动场地 版本 1 · 11/20 16:16 打开"
+    },
+    {
+      "k": 11,
+      "text": "新活动场地 版本 1 · 11/20 15:48 打开"
+    },
+    {
+      "k": 12,
+      "text": "新活动场地 版本 1 · 11/20 15:29 打开"
+    },
+    {
+      "k": 13,
+      "text": "新活动场地 版本 1 · 11/20 15:27 打开"
+    }
+  ],
+  "adopted": {
+    "rowText": "新活动场地 版本 14 · 11/20 16:32 打开",
+    "pick": {
+      "testid": "outdoor-cloud-recover-open",
+      "disabled": false
+    }
+  },
+  "badResponses": [
+    {
+      "method": "GET",
+      "status": 404,
+      "rtype": "fetch",
+      "url": "/functions/v1/scene-api/notices/unread",
+      "body": "{\"error\":{\"code\":\"PROJECT_NOT_FOUND\"}}"
+    },
+    {
+      "method": "GET",
+      "status": 404,
+      "rtype": "fetch",
+      "url": "/functions/v1/scene-api/notices/unread",
+      "body": "{\"error\":{\"code\":\"PROJECT_NOT_FOUND\"}}"
+    }
+  ],
+  "apiEndpoints": [
+    "GET 200 /auth/v1/user",
+    "GET 200 /functions/v1/scene-api/outdoor-plans",
+    "GET 200 /functions/v1/scene-api/studios",
+    "GET 200 /functions/v1/scene-api/preferences",
+    "GET 404 /functions/v1/scene-api/notices/unread",
+    "GET 200 /functions/v1/scene-api/projects",
+    "GET 200 /functions/v1/scene-api/chat/capabilities",
+    "GET 200 /functions/v1/scene-api/outdoor-history?projectId=project%3Ahouse-s5tvk5rx",
+    "GET 200 /functions/v1/scene-api/assets",
+    "GET 200 /functions/v1/scene-api/studios/2d1cdc92-0207-4ed8-bde9-3ae95860575e/members",
+    "GET 200 /functions/v1/scene-api/studios/2d1cdc92-0207-4ed8-bde9-3ae95860575e/settings",
+    "GET 200 /functions/v1/scene-api/studios/2d1cdc92-0207-4ed8-bde9-3ae95860575e/messages/unread",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/8c4257f1-bd9c-4035-b26a-553db34217d2/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/b8e01366-ac62-493d-a19b-1dc55cf16a15/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/9e31b8e7-590a-4e36-bb0a-59e33f34d73f/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/bf6aac70-f314-45ec-bc21-03820e428617/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/69513b81-14ee-4935-b515-d46ecffdd5b6/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/df5cdeb5-a893-4717-8b88-724e50f928bc/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/417ca120-8913-417d-ae21-27c50442b1a4/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/13dd8827-79d9-4569-b8ad-ad46361c243d/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/1fb6f4b0-3d1f-41cc-8488-70130d2b70cd/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/3122e6c6-eb90-407e-b7a2-a2e297c29311/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/cb293f67-912b-4b0b-ac98-d0f38b9be787/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/709ae5c9-c685-4538-b6e4-1a11b1947c71/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/6ba6af9a-871a-4500-be20-536db5bd1b01/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/87221ce6-aab3-4cf3-89a0-0a8a651ee004/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/ee6e392d-3ac0-4ee8-b005-9304ad8bb627/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/4923657e-af62-4469-98d3-dedbf45db633/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/2b0e506e-bd1c-4a32-bfb4-6bb4f28bfcb4/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/e5e16370-d57d-414a-8b22-5c2dd8fa3c17/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/17ca104e-689e-4fe8-91c1-fa2a83ecf262/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/cf868de5-a05d-4d9b-9a89-3505d36586df/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/1ce4bbe0-76a0-40b3-b435-9530c4c7b27d/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/53cbb011-92b8-4c1a-a074-f7390b5ae29c/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/74808c30-b72b-41f6-89f5-c3b83cfa499f/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/c8d2b6ee-e308-483f-a349-dacd159b585d/preview.png?token=***",
+    "GET 200 /functions/v1/scene-api/outdoor-plans/3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/4136fdcf-e0e4-4f87-a0c9-0088056570d1/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/2a09ecd3-a1a6-4235-8ad1-d5df722319d1/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/b15a34fc-f3f2-4c7c-965c-30998ae7487f/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/0bc698c6-d2c9-4091-8483-6039113061e4/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/c13220f0-68cf-4f95-af80-3e5b04eaad2f/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/554f02af-c0df-4c42-92b9-aa1b954ba29a/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/cd1c284e-40df-4e8b-bcfb-d5347512a4c9/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/be385dc7-8927-487b-8dbd-7efc8f126a13/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/a620ce00-c82a-498f-8204-1cb28d8343e6/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/f78f294f-1663-4e49-b197-3c7f8dc48a4f/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/5a624a1c-f0db-402c-9833-f527a4b9b0df/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/7ad8cafa-78ec-4555-8fa8-8232a4aec7ea/preview.png?token=***",
+    "GET 200 /storage/v1/object/sign/scene-assets/56356f34-a34f-4745-b418-29e16e1de728/9ccaf007-7398-4c63-933b-4f4e910b75b9/preview.png?token=***"
+  ],
+  "planState": {
+    "scendance-outdoor-plan-v1:house-s5tvk5rx": {
+      "projectId": "house-s5tvk5rx",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T13:05:02.891Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-plan-v1:default-outdoor": {
+      "projectId": "default-outdoor",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T13:04:59.600Z",
+      "counts": {
+        "zones": 0,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 0
+      },
+      "planLen": 167
+    },
+    "scendance-outdoor-plan-v1:house-8z42f0xm": {
+      "projectId": "house-8z42f0xm",
+      "name": "新活动场地",
+      "updatedAt": "2026-11-20T13:05:11.116Z",
+      "counts": {
+        "zones": 4,
+        "routes": 0,
+        "entrances": 0,
+        "workers": 0,
+        "facilities": 0,
+        "objects": 0,
+        "boundary": 12
+      },
+      "planLen": 2589
+    },
+    "scendance-outdoor-last-v1": "house-8z42f0xm"
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "netlog500": []
+}

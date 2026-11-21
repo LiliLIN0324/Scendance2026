@@ -93,11 +93,12 @@ export async function outdoorPlanReadings(actor) {
 }
 
 /** 拉起浏览器：注入会话 + 录 HAR + 全量请求/响应记账 */
-export async function launch({ session, har = null, headless = true, viewport = { width: 1600, height: 1000 } } = {}) {
+export async function launch({ session, har = null, headless = true, viewport = { width: 1600, height: 1000 }, proxy = null } = {}) {
   const browser = await chromium.launch({ headless, executablePath: CHROME, args: ['--disable-http2', '--disable-quic'] });
   const context = await browser.newContext({
     viewport, locale: 'zh-CN', timezoneId: 'Asia/Shanghai',
     recordHar: har ? { path: har, content: 'embed' } : undefined,
+    ...(proxy ? { proxy } : {}),
   });
   const netlog = [];
   const consoleErrors = [];

@@ -1,0 +1,361 @@
+{
+  "ranAt": "2026-11-20T08:15:53.673Z",
+  "identity": {
+    "email": "walkthrough-79@scendance.test",
+    "id": "38d7722a-4ff5-49a6-9e0b-3212ca4ea52c"
+  },
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "ref": "wkhfvnzgopjdzxlmycks",
+  "note": "8c B 对照：adopt B → 清槽重载 → adopt A；云端快照旁证。",
+  "steps": [
+    {
+      "label": "adopt-B",
+      "rows": [
+        {
+          "i": 0,
+          "text": "新活动场地 版本 1 · 11/20 15:48 打开"
+        },
+        {
+          "i": 1,
+          "text": "新活动场地 版本 12 · 11/20 15:29 打开"
+        },
+        {
+          "i": 2,
+          "text": "新活动场地 版本 1 · 11/20 15:29 打开"
+        },
+        {
+          "i": 3,
+          "text": "新活动场地 版本 1 · 11/20 15:27 打开"
+        },
+        {
+          "i": 4,
+          "text": "新活动场地 版本 1 · 11/20 15:23 打开"
+        },
+        {
+          "i": 5,
+          "text": "新活动场地 版本 1 · 11/20 15:20 打开"
+        },
+        {
+          "i": 6,
+          "text": "新活动场地 版本 1 · 11/20 15:12 打开"
+        },
+        {
+          "i": 7,
+          "text": "新活动场地 版本 1 · 11/20 15:09 打开"
+        },
+        {
+          "i": 8,
+          "text": "新活动场地 版本 13 · 11/20 14:44 打开"
+        },
+        {
+          "i": 9,
+          "text": "新活动场地 版本 17 · 11/20 14:34 打开"
+        },
+        {
+          "i": 10,
+          "text": "新活动场地 版本 1 · 11/20 13:44 打开"
+        },
+        {
+          "i": 11,
+          "text": "新活动场地 版本 12 · 11/20 13:35 打开"
+        }
+      ],
+      "idx": 12,
+      "rowText": "新活动场地 版本 3 · 11/20 13:25 打开",
+      "picked": {
+        "testid": "outdoor-cloud-recover-open",
+        "disabled": false
+      }
+    },
+    {
+      "label": "adopt-A",
+      "rows": [
+        {
+          "i": 0,
+          "text": "新活动场地 版本 4 · 11/20 16:16 打开"
+        },
+        {
+          "i": 1,
+          "text": "新活动场地 版本 1 · 11/20 16:16 打开"
+        },
+        {
+          "i": 2,
+          "text": "新活动场地 版本 1 · 11/20 15:48 打开"
+        },
+        {
+          "i": 3,
+          "text": "新活动场地 版本 12 · 11/20 15:29 打开"
+        },
+        {
+          "i": 4,
+          "text": "新活动场地 版本 1 · 11/20 15:29 打开"
+        },
+        {
+          "i": 5,
+          "text": "新活动场地 版本 1 · 11/20 15:27 打开"
+        },
+        {
+          "i": 6,
+          "text": "新活动场地 版本 1 · 11/20 15:23 打开"
+        },
+        {
+          "i": 7,
+          "text": "新活动场地 版本 1 · 11/20 15:20 打开"
+        },
+        {
+          "i": 8,
+          "text": "新活动场地 版本 1 · 11/20 15:12 打开"
+        },
+        {
+          "i": 9,
+          "text": "新活动场地 版本 1 · 11/20 15:09 打开"
+        },
+        {
+          "i": 10,
+          "text": "新活动场地 版本 13 · 11/20 14:44 打开"
+        },
+        {
+          "i": 11,
+          "text": "新活动场地 版本 17 · 11/20 14:34 打开"
+        }
+      ],
+      "idx": 3,
+      "rowText": "新活动场地 版本 12 · 11/20 15:29 打开",
+      "picked": {
+        "testid": "outdoor-cloud-recover-open",
+        "disabled": false
+      }
+    }
+  ],
+  "cloud_A": {
+    "status": 200,
+    "found": true,
+    "revision": 12,
+    "counts": {
+      "zones": 4,
+      "boundary": 12,
+      "nodes": 1,
+      "planLen": 2589
+    },
+    "zoneNames": [
+      "摊位区",
+      "舞台表演区",
+      "签到服务区",
+      "观众区"
+    ]
+  },
+  "cloud_B": {
+    "status": 200,
+    "found": true,
+    "revision": 3,
+    "counts": {
+      "zones": 0,
+      "boundary": 12,
+      "nodes": 1,
+      "planLen": 909
+    },
+    "zoneNames": []
+  },
+  "afterB": {
+    "detail": {
+      "scendance-outdoor-plan-v1:house-lvnnqqzh": {
+        "projectId": "house-lvnnqqzh",
+        "remoteActivityId": "7399c1f8-db5b-44d8-b648-bf8e766bb4b7",
+        "remoteRevision": 1,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0
+        },
+        "zoneNames": [],
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "remoteActivityId": null,
+        "remoteRevision": null,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0
+        },
+        "zoneNames": [],
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-vb5f3okg": {
+        "projectId": "house-vb5f3okg",
+        "remoteActivityId": "78b5f886-337a-4326-bac7-a1415b50a67d",
+        "remoteRevision": 4,
+        "counts": {
+          "zones": 0,
+          "boundary": 12,
+          "nodes": 1
+        },
+        "zoneNames": [],
+        "planLen": 909
+      },
+      "scendance-outdoor-last-v1": "house-vb5f3okg"
+    },
+    "state": {
+      "scendance-outdoor-plan-v1:house-lvnnqqzh": {
+        "projectId": "house-lvnnqqzh",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T08:16:04.466Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T08:15:59.932Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-vb5f3okg": {
+        "projectId": "house-vb5f3okg",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T08:16:44.932Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 909
+      },
+      "scendance-outdoor-last-v1": "house-vb5f3okg"
+    },
+    "writes": [
+      "PUT 200 /functions/v1/scene-api/outdoor-plans"
+    ],
+    "bHasAZones": false
+  },
+  "afterA": {
+    "detail": {
+      "scendance-outdoor-plan-v1:house-lvnnqqzh": {
+        "projectId": "house-lvnnqqzh",
+        "remoteActivityId": null,
+        "remoteRevision": null,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0
+        },
+        "zoneNames": [],
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "remoteActivityId": null,
+        "remoteRevision": null,
+        "counts": {
+          "zones": 0,
+          "boundary": 0,
+          "nodes": 0
+        },
+        "zoneNames": [],
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "projectId": "house-8z42f0xm",
+        "remoteActivityId": "3eb2bbdb-8e8f-4fb5-b0ee-060836ffaf94",
+        "remoteRevision": 13,
+        "counts": {
+          "zones": 4,
+          "boundary": 12,
+          "nodes": 1
+        },
+        "zoneNames": [
+          "摊位区",
+          "舞台表演区",
+          "签到服务区",
+          "观众区"
+        ],
+        "planLen": 2589
+      },
+      "scendance-outdoor-last-v1": "house-8z42f0xm"
+    },
+    "state": {
+      "scendance-outdoor-plan-v1:house-lvnnqqzh": {
+        "projectId": "house-lvnnqqzh",
+        "name": "户外规划",
+        "updatedAt": "2026-11-20T08:16:59.620Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:default-outdoor": {
+        "projectId": "default-outdoor",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T08:16:57.554Z",
+        "counts": {
+          "zones": 0,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 0
+        },
+        "planLen": 167
+      },
+      "scendance-outdoor-plan-v1:house-8z42f0xm": {
+        "projectId": "house-8z42f0xm",
+        "name": "新活动场地",
+        "updatedAt": "2026-11-20T08:17:42.753Z",
+        "counts": {
+          "zones": 4,
+          "routes": 0,
+          "entrances": 0,
+          "workers": 0,
+          "facilities": 0,
+          "objects": 0,
+          "boundary": 12
+        },
+        "planLen": 2589
+      },
+      "scendance-outdoor-last-v1": "house-8z42f0xm"
+    },
+    "writes": [
+      "PUT 200 /functions/v1/scene-api/outdoor-plans"
+    ],
+    "aHasAZones": true
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}
