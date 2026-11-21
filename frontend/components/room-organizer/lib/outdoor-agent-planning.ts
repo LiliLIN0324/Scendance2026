@@ -1384,9 +1384,11 @@ export function validateWorkflowPlan(
 ): void {
   sitePlanDataSchema.parse(next);
   if (!checkBoundaryRing(next.boundary).ok) throw new Error("活动边界无效。");
-  for (const zone of next.zones)
-    if (facilityPlacementIssues(zone.polygon, next.boundary).length)
-      throw new Error("分区越出已确认活动边界。");
+  // 点名越界分区：只报「分区越出」用户没法知道是谁、该挪谁。
+  const offendingZones = [...new Set(next.zones
+    .filter((zone) => facilityPlacementIssues(zone.polygon, next.boundary).length)
+    .map((zone) => zone.name))];
+  if (offendingZones.length) throw new Error(`分区越出已确认活动边界：${offendingZones.join("、")}。`);
   const changedZones = new Set(
     next.zones
       .filter(

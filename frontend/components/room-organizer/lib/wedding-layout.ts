@@ -221,6 +221,26 @@ interface WeddingSite {
 }
 
 /**
+ * 把连续区域矩形钳回红线内：以矩形中心等比收缩，取能完整落进红线的最大比例。
+ * 缩到 0.4 仍放不下返回 null，调用方按「这块不可用」处理，不硬塞出界矩形。
+ */
+function clampRectWithinBoundary(rect: PlanRect, boundary: readonly PlanPoint[]): PlanRect | null {
+  if (!facilityPlacementIssues(rectRing(rect), boundary).length) return rect;
+  const cx = (rect.w + rect.e) / 2;
+  const cy = (rect.s + rect.n) / 2;
+  const spanW = rect.e - rect.w;
+  const spanD = rect.n - rect.s;
+  for (const scale of [0.94, 0.88, 0.82, 0.76, 0.7, 0.64, 0.58, 0.52, 0.46, 0.4]) {
+    const candidate: PlanRect = {
+      w: cx - spanW * scale / 2, e: cx + spanW * scale / 2,
+      s: cy - spanD * scale / 2, n: cy + spanD * scale / 2,
+    };
+    if (!facilityPlacementIssues(rectRing(candidate), boundary).length) return candidate;
+  }
+  return null;
+}
+
+/**
  * 场地依据：可布置域（边界 − 建筑 − 禁放 − 保留分区）+ 已确认入口 + 景观方向。
  * 只读现有数据；不把未核验的节点当已知入口，也不猜景观。
  */
@@ -238,11 +258,23 @@ function readWeddingSite(input: WeddingLayoutInput, preservedRings: PlanPoint[][
   }
   if (!domain) throw failure instanceof Error ? failure : new Error('可布置域计算失败，未生成婚礼分区。');
 
+  const warnings: string[] = [];
+  // 可布置域按行中心线采样、矩形沿格边拼装：斜边/锯齿处格块会外扩最多一个格距，
+  // 分区矩形继承后会在应用阶段撞「分区越出已确认活动边界」整轮拦死。先把每块钳回
+  // 红线内再当连续区域用——钳不动的整块放弃，宁可少一块也不出界。
+  let clampedCount = 0;
   const rects = domain.rects
-    .map(rect => rectFromRing(rect.polygon))
-    .filter(rect => rectArea(rect) >= WEDDING_DEFAULTS.minZoneAreaM2
+    .map(rect => {
+      const base = rectFromRing(rect.polygon);
+      const fit = clampRectWithinBoundary(base, input.plan.boundary);
+      if (!fit) return null;
+      if (fit !== base) clampedCount += 1;
+      return fit;
+    })
+    .filter((rect): rect is PlanRect => rect !== null && rectArea(rect) >= WEDDING_DEFAULTS.minZoneAreaM2
       && Math.min(rectWidth(rect), rectDepth(rect)) >= WEDDING_DEFAULTS.minZoneSideM)
     .sort((a, b) => rectArea(b) - rectArea(a));
+  if (clampedCount) warnings.push(`${clampedCount} 块连续区域按红线内缩后计入：可布置域网格在斜边与锯齿处会外扩，分区以完整落进红线的矩形为准。`);
 
   const nodes = input.plan.nodes ?? [];
   // 只有明确「用户确认」或「地图证据」的节点才算已知入口；缺 verification 视为未核验。
@@ -250,8 +282,9 @@ function readWeddingSite(input: WeddingLayoutInput, preservedRings: PlanPoint[][
     .filter(node => node.kind !== 'exit' && (node.verification === 'user-confirmed' || node.verification === 'map-evidenced'))
     .sort((a, b) => (a.verification === 'user-confirmed' ? 0 : 1) - (b.verification === 'user-confirmed' ? 0 : 1) || a.name.localeCompare(b.name))[0];
   const boundary = rectFromRing(input.plan.boundary);
-  const assumed = { x: (boundary.w + boundary.e) / 2, y: boundary.s + Math.min(2, Math.max(0.5, rectDepth(boundary) * 0.03)) };
-  const warnings: string[] = [];
+  const bboxAssumed = { x: (boundary.w + boundary.e) / 2, y: boundary.s + Math.min(2, Math.max(0.5, rectDepth(boundary) * 0.03)) };
+  // 包围盒南沿可能在红线外（凹形场地）：假设接驳点吸附到红线上，入场锚点不出界。
+  const assumed = planPointInRing(bboxAssumed, input.plan.boundary) ? bboxAssumed : closestPointOnRing(input.plan.boundary, bboxAssumed);
   const entrance: WeddingSite['entrance'] = confirmed
     ? { confirmed: true, source: 'node', name: confirmed.name, position: confirmed.position, verification: confirmed.verification!, nodeId: confirmed.id }
     : { confirmed: false, source: 'assumption', name: '南侧建议接驳点（假设）', position: assumed, verification: 'unverified' };

@@ -33,6 +33,18 @@ describe('场景驱动的婚礼空间规划',()=>{
     expect(base.facilities).toHaveLength(0);
   });
 
+  it('凹形斜边场地：分区矩形全部落进红线，不在应用阶段被「分区越出」拦死',async()=>{
+    // 斜边 (100,60)→(64,100)（斜率 0.9，与 0.5m 网格错位）：可布置域按行中心线采样、
+    // 格块按格心收录并沿格边拼装，斜边处合并矩形角点戳出红线——修复前必现
+    // 「分区越出已确认活动边界」整轮拦死；修复后每块连续区域先钳回红线内。
+    const jagged=[{x:0,y:0},{x:100,y:0},{x:100,y:60},{x:64,y:100},{x:0,y:100}];
+    const plan:SitePlanData={schemaVersion:1,boundary:jagged,zones:[],facilities:[],routes:[],nodes:[],workers:[]};
+    const report=await draft(plan);
+    expect(report.plan.zones.length).toBeGreaterThan(0);
+    for(const zone of report.plan.zones)expect(facilityPlacementIssues(zone.polygon,jagged),'分区 '+zone.name).toHaveLength(0);
+    expect(()=>validateWorkflowPlan(plan,report.plan)).not.toThrow();
+  });
+
   it('拥挤旧分区重排会尝试替代组织，完整保留原方案',async()=>{
     const plan=venue();plan.zones=[{id:crypto.randomUUID(),name:'仪式区',purpose:'audience',semantic:'audience',environment:'outdoor',polygon:rect(1,1,3,3),notes:''}];
     plan.facilities=[{id:crypto.randomUUID(),templateId:'old-chair',name:'旧观礼椅',zoneId:plan.zones[0].id,position:{x:2,y:2},rotationDeg:0,size:{width:0.5,depth:0.55},notes:''}];

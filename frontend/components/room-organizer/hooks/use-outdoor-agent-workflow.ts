@@ -6,7 +6,7 @@ import { requestsWeddingOptimization, weddingDesignRequest } from "../lib/weddin
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
 import { getActiveAssistantSessionId } from "./use-assistant-sessions";
-import { conversationProjectId, conversationTurnKey } from "../lib/conversation-recorder";
+import { conversationProjectId, conversationTurnKey, recordConversationTurn, type ConversationTraceTransport } from "../lib/conversation-recorder";
 import { isVenueResearchRequest } from "../lib/venue-research";
 import { gateAction, type SupervisionLevel } from "../lib/agent-supervision";
 import { getAgentSupervision, useAgentSupervision } from "../lib/agent-supervision-store";
@@ -165,6 +165,8 @@ export interface OutdoorWorkflowProposal {
   preserveOriginal?: boolean;
   approvalReason?: string;
   actorId?: string | null;
+  /** 发起这条提案的用户原话：应用阶段失败留痕时作 userText，没有就留空（不拿卡片标签冒充）。 */
+  requestText?: string;
   afterConfirm?: "main-routes" | "objects" | "design-event";
   afterConfirmRequest?: { turn: OutdoorTurn; message: string; documents: AgentDocument[]; imageCount: number };
 }
@@ -981,14 +983,26 @@ export function useOutdoorAgentWorkflow(input: {
     warnings: string[] = [],
     afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
     afterConfirmRequest?: OutdoorWorkflowProposal["afterConfirmRequest"],
-    preserveOriginal = false,
-    directApply = false,
-  ): void | Promise<void> {
-    // 有了一版可看的预览就不再记账：追问预算只数“毫无进展”的那几轮。
-    askStreakRef.current = 0;
-    const base = callbacks.current.bridge()?.getPlan();
-    if (!base || !live(job)) return;
+  preserveOriginal = false,
+  directApply = false,
+  requestText?: string,
+): void | Promise<void> {
+  // 有了一版可看的预览就不再记账：追问预算只数“毫无进展”的那几轮。
+  askStreakRef.current = 0;
+  const base = callbacks.current.bridge()?.getPlan();
+  if (!base || !live(job)) return;
+  try {
     validateWorkflowPlan(base, next);
+  } catch (error) {
+    // 预览生成即被几何闸门拦下（如分区越出）：有用户原话就留一行失败留痕，再原样抛给任务卡。
+    if (requestText?.trim()) recordConversationTurn(callbacks.current.controller() as unknown as ConversationTraceTransport | null, {
+      turnKey: conversationTurnKey(), sessionId: getActiveAssistantSessionId(input.scope) ?? 'unknown', turnIndex: 0,
+      surface: 'assistant', userText: requestText.trim(),
+      assistantText: error instanceof Error ? error.message : '几何闸门未通过，未生成预览。',
+      outcome: 'failed', errorCode: 'PREVIEW_BLOCKED',
+    });
+    throw error;
+  }
     // 地图证据类警告（"证据没取到"）只在真靠证据做判断的阶段给：scope 阶段边界还没定，
     // 证据必然对不上，摆上去就是噪声。validateMapPlan 该 throw 的阻断一如既往保留。
     const mapWarnings = callbacks.current.bridge()?.validateMapPlan?.(base, next) ?? [];
@@ -1010,21 +1024,22 @@ export function useOutdoorAgentWorkflow(input: {
     const approvalReason = gate.required ? gate.why : checkpoint
       ? kind === 'verify-access' ? '真实出入口的通行状态需要你核对。' : kind === 'scope' ? '请核对本次活动要使用的场地范围。' : '这版采用了压缩通道的摆放方式，需要核对。'
       : '';
-    const p = {
-      kind,
-      label,
-      base: JSON.stringify(base),
-      mapVersion: kind === "scope" ? "map:unavailable" : mapRef.current.version,
-      epoch: job.epoch,
-      next,
-      warnings,
-      references: [...refsRef.current],
-      preserveOriginal: preserveOriginal || risk.kind === 'destructive',
-      approvalReason,
-      actorId: job.actorId??null,
-      ...(afterConfirm ? { afterConfirm } : {}),
-      ...(afterConfirmRequest ? { afterConfirmRequest } : {}),
-    };
+  const p = {
+    kind,
+    label,
+    base: JSON.stringify(base),
+    mapVersion: kind === "scope" ? "map:unavailable" : mapRef.current.version,
+    epoch: job.epoch,
+    next,
+    warnings,
+    references: [...refsRef.current],
+    preserveOriginal: preserveOriginal || risk.kind === 'destructive',
+    approvalReason,
+    actorId: job.actorId??null,
+    ...(requestText?.trim() ? { requestText: requestText.trim() } : {}),
+    ...(afterConfirm ? { afterConfirm } : {}),
+    ...(afterConfirmRequest ? { afterConfirmRequest } : {}),
+  };
     const replaced = proposalRef.current;
     if (replaced && replaced.base !== p.base) recordCard(replaced, "replaced");
     proposalRef.current = p;
@@ -1164,12 +1179,14 @@ export function useOutdoorAgentWorkflow(input: {
     } catch (error) {
       setProposal(null);
       proposalRef.current = null;
-      status(
-        error instanceof Error
-          ? error.message
-          : "当前几何依据无法核对，未应用。",
-        "blocked",
-      );
+      const reason = error instanceof Error ? error.message : "当前几何依据无法核对，未应用。";
+      // 应用阶段失败也留痕：设计轮已 answered，另起一行记失败与卡片原话（新 turnKey，不覆盖已答复行）。
+      if (p.requestText?.trim()) recordConversationTurn(callbacks.current.controller() as unknown as ConversationTraceTransport | null, {
+        turnKey: conversationTurnKey(), sessionId: getActiveAssistantSessionId(input.scope) ?? 'unknown', turnIndex: 0,
+        surface: 'assistant', userText: p.requestText.trim(), assistantText: reason,
+        outcome: 'failed', errorCode: 'APPLY_BLOCKED',
+      });
+      status(reason, "blocked");
       return;
     }
     if (!owns()) return;
@@ -1850,7 +1867,7 @@ export function useOutdoorAgentWorkflow(input: {
           return;
         }
         await offer(report.plan,'objects','婚礼联合布置：分区、物料与流线',job,[...report.notes,
-          ...report.quantities.map(quantity=>`${quantity.zone} · ${quantity.role}：${quantity.placed} 件${quantity.placeholder?'，占位待选型':''}`)],undefined,undefined,optimize);
+          ...report.quantities.map(quantity=>`${quantity.zone} · ${quantity.role}：${quantity.placed} 件${quantity.placeholder?'，占位待选型':''}`)],undefined,undefined,optimize,undefined,message);
         return;
       }
       const designingObjects = turn.action === "objects";
