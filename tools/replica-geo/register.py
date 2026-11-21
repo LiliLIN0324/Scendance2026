@@ -9,7 +9,7 @@ Usage:
   python tools/replica-geo/register.py start-on-the-street \
       --lat 42.268872 --lng -71.817042 --z 18
 
-Outputs (under .tmp/replica-geo/<slug>/):
+Outputs (under .local/tmp/replica-geo/<slug>/):
   satellite.jpg        stitched mosaic
   registration.json    matrix, rotationDeg, fitMpp, anchorPlanPx, inlier stats
   matches.jpg          SIFT inlier visualisation
@@ -61,9 +61,9 @@ def main() -> None:
     ap.add_argument("--match-ratio", type=float, default=0.73)
     args = ap.parse_args()
 
-    out = ROOT / ".tmp" / "replica-geo" / args.slug
+    out = ROOT / ".local" / "tmp" / "replica-geo" / args.slug
     out.mkdir(parents=True, exist_ok=True)
-    ref_path = Path(args.ref) if args.ref else ROOT / ".tmp" / "oneplan-hd" / f"{args.slug}.png"
+    ref_path = Path(args.ref) if args.ref else ROOT / ".local" / "tmp" / "oneplan-hd" / f"{args.slug}.png"
     ref = cv2.imread(str(ref_path))
     if ref is None:
         raise SystemExit(f"reference not found: {ref_path}")

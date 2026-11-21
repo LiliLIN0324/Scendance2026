@@ -3,7 +3,7 @@ from pathlib import Path
 import cv2, numpy as np
 
 ROOT = Path(r'C:\Users\13266\.dsh\bot\workspace\Scendance2026')
-fit = json.loads((ROOT / '.tmp/replica-geo/start-on-the-street/google-fit.json').read_text())
+fit = json.loads((ROOT / '.local/tmp/replica-geo/start-on-the-street/google-fit.json').read_text())
 M = np.array(fit['matrix'])
 x0, y0 = fit['tileOrigin']
 world = 256 * 2 ** fit['z']
@@ -106,10 +106,10 @@ spec = dict(slug='start-on-the-street', title='stART on the Street', category='F
             anchor=dict(lng=ALNG, lat=ALAT), rotationDeg=0,
             locationNote='2026-11-18 原图复核：0.1036 m/px，SIFT 2410 内点，RMSE 0.052 m；几何按原图色块重描，坐标已为真 ENU（rotation 0）。',
             zones=zones_out, facilities=[dict(**f) for f in facilities], routes=routes, nodes=nodes)
-(ROOT / '.tmp/replica-geo/start-on-the-street/spec.json').write_text(json.dumps(spec, indent=1), encoding='utf-8')
+(ROOT / '.local/tmp/replica-geo/start-on-the-street/spec.json').write_text(json.dumps(spec, indent=1), encoding='utf-8')
 
 # debug: draw the converted polygons back onto the reference
-img = cv2.imread(str(ROOT / '.tmp/oneplan-hd/start-on-the-street.png'))
+img = cv2.imread(str(ROOT / '.local/tmp/oneplan-hd/start-on-the-street.png'))
 A = M[:, :2]
 t = M[:, 2]
 invA = np.linalg.inv(A)
@@ -125,6 +125,6 @@ for z in zones_out:
 for f in facilities:
     px, py = enu_to_ref(f['placement']['x'], f['placement']['y'])
     cv2.circle(img, (px, py), 6, (255, 0, 255), 2)
-cv2.imwrite(str(ROOT / '.temp/trace-check.jpg'), img)
+cv2.imwrite(str(ROOT / '.local/tmp/trace-check.jpg'), img)
 print('zones', len(zones_out), 'facilities', len(facilities), 'routes', len(routes))
 print('extent m', round(max(p['x'] for p in routes[0]['points']), 1), 'to', round(min(p['x'] for p in routes[0]['points']), 1))

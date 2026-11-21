@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import rehearsal from '../docs/examples/30-person-rehearsal-operations.json';
+import rehearsal from './fixtures/event-operations-sample.json';
 import { activityTaskContextSchema, validateActivityTaskResult } from '../supabase/functions/_shared/activity-task-contract.ts';
 import { eventOperationsSchema } from '../supabase/functions/_shared/event-operations-contract.ts';
 import { buildActivityTaskContext, prepareActivityTaskSuggestions } from '../frontend/lib/activity-task-suggestions.ts';

@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 ROOT = Path(r'C:\Users\13266\.dsh\bot\workspace\Scendance2026')
-img = cv2.imread(str(ROOT / '.tmp/oneplan-hd/start-on-the-street.png'))
+img = cv2.imread(str(ROOT / '.local/tmp/oneplan-hd/start-on-the-street.png'))
 H, W = img.shape[:2]
 hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
@@ -38,8 +38,8 @@ for name, (hexv, lo, hi) in colors.items():
     for b in boxes[:40]:
         cv2.rectangle(debug, (b['x'], b['y']), (b['x'] + b['w'], b['y'] + b['h']), (0, 0, 255), 2)
 
-(ROOT / '.temp/overlay-boxes.json').write_text(json.dumps(out, indent=1), encoding='utf-8')
-cv2.imwrite(str(ROOT / '.temp/overlay-boxes.jpg'), debug)
+(ROOT / '.local/tmp/overlay-boxes.json').write_text(json.dumps(out, indent=1), encoding='utf-8')
+cv2.imwrite(str(ROOT / '.local/tmp/overlay-boxes.jpg'), debug)
 print(json.dumps({k: len(v['boxes']) for k, v in out.items()}, indent=2))
 for k, v in out.items():
     print(k, [(b['x'], b['y'], b['w'], b['h']) for b in v['boxes'][:8]])

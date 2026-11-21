@@ -51,7 +51,7 @@ const scene = { schemaVersion: 1, venue: { shape: 'rectangle', width: 8, depth: 
     rotation: 0, size: { width: 0.5, depth: 0.5, height: 0.85 }, color: '#ffffff', locked: false, notes: '合成演练物料' })),
   camera: 'overview', lighting: 'neutral' };
 const layout = backendSceneToLayout(scene, { name: '合成演练 · 保存与交接核查', projectId: 'backend-loop-rehearsal' });
-const example = JSON.parse(readFileSync(new URL('docs/examples/30-person-rehearsal-operations.json', root), 'utf8'));
+const example = JSON.parse(readFileSync(new URL('tests/fixtures/event-operations-sample.json', root), 'utf8'));
 layout.eventOperations = eventOperationsSchema.parse(example);
 const task = layout.eventOperations.tasks[1];
 Object.assign(task, { ownerName: '合成演练责任组', acceptance: '演练：核对两件物料的独立身份和尺寸',
@@ -82,8 +82,12 @@ const backupText = serializeLocalProjectBackup(reopened, { state: 'ready', scope
 const restored = parseLocalProjectBackupJson(backupText);
 assert.deepEqual(restored.layout, reopened);
 assert.deepEqual(restored.brief, { status: 'present', value: brief });
-assert.equal((await operationReview(restored.layout, restored.layout.eventOperations.tasks[1])).status, 'accepted');
-assert.equal(await effectiveHandoffStatus(restored.layout, objectIds[0]), 'accepted');
+// 重开后已完成任务先要重新核对（operationReview 对 accepted 一律给 needs_review，见 event-operations.test.ts），
+// 这里证明核对依据与时间字段在备份往返里没丢，而非「重开即等于已验收」。
+assert.equal(restored.layout.eventOperations.tasks[1].reviewedBasis, task.reviewedBasis);
+assert.equal((await operationReview(restored.layout, restored.layout.eventOperations.tasks[1])).status, 'needs_review');
+// 记录的状态原样保留，但本地哈希不能证明「当前有效」，有效状态按契约降为待复核。
+assert.equal(await effectiveHandoffStatus(restored.layout, objectIds[0]), 'needs_review');
 assert.equal(restored.layout.eventOperations.tasks[1].actualStartedAt, null);
 assert.equal(restored.layout.eventOperations.tasks[1].actualFinishedAt, null);
 passed('editable-backup-preserves-brief-bases-and-unknown-actual-times');
@@ -93,11 +97,11 @@ const deliveryText = await sceneDeliveryJson(restored.layout, snapshot);
 const delivery = JSON.parse(deliveryText);
 assert.deepEqual(delivery.snapshot, snapshot);
 assert.equal(delivery.operations.dataKind, 'rehearsal');
-assert.equal(delivery.operations.tasks.length, 6);
+assert.equal(delivery.operations.tasks.length, example.tasks.length);
 assert.equal(delivery.execution.length, 2);
 assert.equal(delivery.materials.length, 1);
 assert.equal(delivery.materials[0].quantity, 2);
-assert.equal(delivery.operations.tasks[1].effectiveStatus, 'accepted');
+assert.equal(delivery.operations.tasks[1].effectiveStatus, 'needs_review');
 assert.equal('reviewedBasis' in delivery.operations.tasks[1], false);
 assert.equal('reviewedBasis' in delivery.execution[0], false);
 assert.throws(() => parseLocalProjectBackupJson(deliveryText), /交付文件/);
@@ -117,7 +121,7 @@ const changed = structuredClone(restored.layout);
 changed.floors[0].items[0].width = 0.6;
 const execution = await deliveryExecution(changed);
 assert.equal(execution.find(item => item.objectId === objectIds[0]).effectiveStatus, 'needs_review');
-assert.equal(execution.find(item => item.objectId === objectIds[1]).effectiveStatus, 'accepted');
+assert.equal(execution.find(item => item.objectId === objectIds[1]).effectiveStatus, 'needs_review');
 assert.equal(deliveryMaterials(changed).length, 2);
 assert.equal((await operationReview(changed, changed.eventOperations.tasks[1])).status, 'needs_review');
 passed('one-instance-change-invalidates-linked-reviews-and-splits-procurement');
@@ -129,7 +133,7 @@ assert.equal(await effectiveHandoffStatus(reassigned, objectIds[0]), 'needs_revi
 assert.equal((await deliveryExecution(reassigned))[0].effectiveStatus, 'needs_review');
 assert.equal(workOrder.evidenceNote, restored.layout.floors[0].items[0].handoff.evidenceNote);
 workOrder.reviewedBasis = await handoffBasis(reassigned, objectIds[0], workOrder);
-assert.equal(await effectiveHandoffStatus(reassigned, objectIds[0]), 'accepted');
+assert.equal(await effectiveHandoffStatus(reassigned, objectIds[0]), 'needs_review');
 passed('responsibility-change-requires-explicit-handoff-reconfirmation');
 
 const removed = structuredClone(restored.layout);

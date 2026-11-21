@@ -65,7 +65,7 @@ function closeRing(points) {
 }
 
 function loadEvaluator() {
-  const tempDir = path.join(root, '.temp', 'agent-corpus-runtime');
+  const tempDir = path.join(root, '.local', 'tmp', 'agent-corpus-runtime');
   mkdirSync(tempDir, { recursive: true });
   const require = createRequire(import.meta.url);
   const tsModule = require('typescript');

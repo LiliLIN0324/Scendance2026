@@ -21,7 +21,7 @@ import ts from 'typescript';
 
 const root = process.cwd();
 const corpusDir = path.join(root, 'data', 'agent-corpus');
-const tempDir = path.join(root, '.temp', 'agent-corpus-runtime');
+const tempDir = path.join(root, '.local', 'tmp', 'agent-corpus-runtime');
 
 function loadEvaluator() {
   mkdirSync(tempDir, { recursive: true });

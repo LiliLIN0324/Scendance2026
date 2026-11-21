@@ -3,8 +3,8 @@ from pathlib import Path
 
 ROOT = Path(r'C:\Users\13266\.dsh\bot\workspace\Scendance2026')
 SLUG = 'start-on-the-street'
-spec = json.loads((ROOT / '.tmp/replica-geo' / SLUG / 'spec.json').read_text())
-fit = json.loads((ROOT / '.tmp/replica-geo' / SLUG / 'google-fit.json').read_text())
+spec = json.loads((ROOT / '.local/tmp/replica-geo' / SLUG / 'spec.json').read_text())
+fit = json.loads((ROOT / '.local/tmp/replica-geo' / SLUG / 'google-fit.json').read_text())
 
 # ---------- 1. product spec block ----------
 target = ROOT / 'frontend/components/room-organizer/lib/replica-specs-festivals-3.ts'
@@ -77,7 +77,7 @@ section = f'''<section class="case" id="c-{SLUG}">
   </tbody></table>
   <table><thead><tr><th>拟合点</th><th>原图 px</th><th>影像 px</th><th>残差 m</th></tr></thead><tbody>{fitrows}</tbody></table>
   <table><thead><tr><th>独立抽查点</th><th>原图 px</th><th>残差 m</th><th>尺度 m/px</th></tr></thead><tbody>{chkrows}</tbody></table>
-  <p class="sub">抽查点与拟合点不重叠，但同属一次 SIFT 变换的内点，只能证明几何一致，不等于地面实测。原图 SHA256：{hashlib.sha256((ROOT / '.tmp/oneplan-hd' / (SLUG + '.png')).read_bytes()).hexdigest()}。</p>
+  <p class="sub">抽查点与拟合点不重叠，但同属一次 SIFT 变换的内点，只能证明几何一致，不等于地面实测。原图 SHA256：{hashlib.sha256((ROOT / '.local/tmp/oneplan-hd' / (SLUG + '.png')).read_bytes()).hexdigest()}。</p>
   </details>
   <p class="links">
     <a href="https://www.oneplan.io/inspiration/{SLUG}/" target="_blank" rel="noreferrer">OnePlan 案例页</a> ·

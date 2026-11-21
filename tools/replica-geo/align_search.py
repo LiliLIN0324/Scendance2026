@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def build_mosaic(slug: str, lat: float, lng: float, z: int, r: int):
-    out = ROOT / ".tmp" / "replica-geo" / slug
+    out = ROOT / ".local" / "tmp" / "replica-geo" / slug
     out.mkdir(parents=True, exist_ok=True)
     world = 256 * 2 ** z
     cx = (lng + 180) / 360 * world
@@ -102,7 +102,7 @@ def main() -> None:
     ap.add_argument("--scales", default="0.60,1.00,0.05")
     args = ap.parse_args()
 
-    ref = cv2.imread(str(ROOT / ".tmp" / "oneplan-hd" / f"{args.slug}.png"))
+    ref = cv2.imread(str(ROOT / ".local" / "tmp" / "oneplan-hd" / f"{args.slug}.png"))
     sat, origin, anchor_px = build_mosaic(args.slug, args.lat, args.lng, args.z, args.radius)
     edges = ref_edges(ref)
     sat_edges = cv2.Canny(cv2.cvtColor(sat, cv2.COLOR_BGR2GRAY), 40, 110)
@@ -164,7 +164,7 @@ def main() -> None:
                 anchor=[args.lng, args.lat], anchorSatellitePx=list(anchor_px),
                 anchorPlanPx=p0.tolist(), mpp=mpp, fitMpp=float(sc * mpp),
                 tileOrigin=list(origin), z=args.z)
-    out = ROOT / ".tmp" / "replica-geo" / args.slug
+    out = ROOT / ".local" / "tmp" / "replica-geo" / args.slug
     (out / "align.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     print(json.dumps({k: v for k, v in data.items() if k != "matrix"}, indent=2))
 

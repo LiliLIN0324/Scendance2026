@@ -14,12 +14,12 @@
 
 ```powershell
 # 项目根目录
-python -m http.server 8099 --bind 127.0.0.1 --directory .temp/walkthrough-site
+python -m http.server 8099 --bind 127.0.0.1 --directory .local/tmp/walkthrough-site
 # 浏览器打开
 # http://127.0.0.1:8099/tools/aholo/walkthrough/
 ```
 
-`.temp/walkthrough-site` 是给静态服务器用的最小根目录：`tools/aholo/walkthrough` 是页面本体，
+`.local/tmp/walkthrough-site` 是给静态服务器用的最小根目录：`tools/aholo/walkthrough` 是页面本体，
 另外两个目录是指向 `frontend/node_modules`、`frontend/public` 的 junction，避免把整个仓库
 （含 `.env.local`、`.git`）暴露到 localhost。页面不在产品构建里，正式漫游入口是工作台的
 「走一遍给客户看」。
