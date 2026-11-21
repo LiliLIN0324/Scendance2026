@@ -43,10 +43,7 @@ IoU **0.9779**，不匹配 215 px（**1.31%**），残差集中在四个圆角�
 
 | 角色 | 运行时文件 | 实测 | 引用方 |
 | --- | --- | --- | --- |
-| 主标志 | `frontend/public/assets/rail/door.png` | 128×128，5.2 KB，绿色 `#35624A` | `frontend/app/icon.svg`、`frontend/components/brand-mark.tsx` |
-| Agent 四形体 | `frontend/public/assets/rail/ball.png` | 128×128，`#4A7C59` | `frontend/components/room-organizer/panels/rail-avatar.tsx` |
-| | `frontend/public/assets/rail/pyramid.png` | 128×128，`#6A8C5D` | 同上 |
-| | `frontend/public/assets/rail/cube.png` | 128×128，`#7B9A67` | 同上 |
+| 主标志 | `frontend/public/assets/rail/door.png` | 128×128，5.2 KB，绿色 `#35624A` | `frontend/app/icon.svg`、`frontend/components/brand-mark.tsx`、`frontend/components/room-organizer/panels/rail-avatar.tsx`（唯一一张脸） |
 | favicon | `frontend/app/icon.svg` | 内嵌 `/assets/rail/door.png` + 两只白眼睛 rect（`viewBox 48`） | 浏览器标签页 |
 | 页头标志组件 | `frontend/components/brand-mark.tsx` | 同一个 `door.png` + 同一套两只白眼睛 | 页头 / 左上角 |
 | 分享图与交付物 | `frontend/components/room-organizer/lib/plan-export/print.ts`、`shot-list.ts` | 文字字标「幕景 Scendance」+ `#4A7C59` 绿圆点，**不嵌位图** | 打印/导出页 |
