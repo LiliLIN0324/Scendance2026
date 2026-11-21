@@ -1,7 +1,7 @@
 /**
  * 第 7.5 批「规划标注层」纯数据与纯函数。
  *
- * 设计红线（见 docs/plans/smart-build-next-phase-2026-11-05.md §10.2）：
+ * 设计红线（见 docs/plans/2026-11-05-smart-build-next-phase.md §10.2）：
  * - 标注与阶段计划独立在 LayoutPlanDraft 里，**不进 RoomLayout 主树、不进必填 wire**；
  * - 纯函数、不可变更新，便于「换一版计划」时整份撤销并断言 RoomLayout 未被改动；
  * - 坐标一律米制、房间中心为原点（与 FurnitureItem.position 同一套约定）。

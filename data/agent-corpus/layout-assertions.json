@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "source": {
-    "doc": "docs/plans/activity-space-norms-2026-11-05.md",
+    "doc": "docs/plans/2026-11-05-activity-space-norms.md",
     "docDate": "2026-11-05",
     "note": "本文件的数值、来源等级、优先级逐条对应该文档 §1–§7。改数值先改文档，再同步这里；tests/agent-corpus.test.ts 会核对 id 与格数换算。"
   },

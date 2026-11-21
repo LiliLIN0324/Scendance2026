@@ -31,7 +31,7 @@
 | 交互负责人（新模块，未跟踪） | `components/outdoor-design-result-card.tsx` / `.css`、`lib/outdoor-plan-change.ts`、`lib/outdoor-local-adjust.ts`、`lib/outdoor-design-summary.ts`、`components/plan-inline-text-input.tsx` 及各自 `*.test.ts(x)` |
 | 交互负责人（已跟踪改动） | `components/outdoor-plan-canvas.tsx`（+86/−22）、`hooks/use-outdoor-agent-workflow.ts`（+4） |
 | 规划负责人 | `lib/wedding-layout.ts`（+1079/−251）、`lib/wedding-layout.test.ts`（+149/−1）、`lib/wedding-spatial.ts`（+275/−23）、`lib/wedding-request.ts`（+1/−1） |
-| Qoder 引导批（已在 COLLAB.md 登记） | `onboarding/*`（新）、`lib/site-plan-guide.ts` / `.test.ts`、`app/globals.css`、`room-organizer.tsx`、`tsconfig.json`、`COLLAB.md`；删除 `components/outdoor-plan-interactions.tsx`、`hooks/use-f3-coach-bubble.ts`、`panels/f3-coach-bubble.tsx` |
+| Qoder 引导批（已在《协作区变更登记》登记） | `onboarding/*`（新）、`lib/site-plan-guide.ts` / `.test.ts`、`app/globals.css`、`room-organizer.tsx`、`tsconfig.json`、`COLLAB.md`（已并入 `AGENTS.md`）；删除 `components/outdoor-plan-interactions.tsx`、`hooks/use-f3-coach-bubble.ts`、`panels/f3-coach-bubble.tsx` |
 | 与本轮无关的未跟踪物 | `.tmp-audit/`（本次审计笔记）、`deliverables/*.mp4`、`snap-*.yml` |
 
 ---
@@ -232,7 +232,7 @@ Test Files 1 passed (1) | Tests 9 passed (9)
 | 画布交互适配：`outdoor-plan-canvas.tsx`、`outdoor-plan-3d.tsx` | 交互负责人 | canvas 有在途改动；3d 已提交 `f52adc3a` | 只读，不编辑 |
 | `use-outdoor-agent-workflow.ts` 集成 | 交互负责人 | 有在途改动，`tsc` 3 条错 | 只读，不编辑 |
 | 布局纯函数与算法测试：`wedding-layout.ts`、`wedding-spatial.ts`、`wedding-request.ts`、`wedding-layout.test.ts` | 规划负责人 | 大改在途（+1079 等） | 只读；**未运行中的结论不作缺陷定论** |
-| 新手引导批（`onboarding/*` 等） | Qoder（COLLAB.md 已登记） | 未提交，等复核 | 只读 |
+| 新手引导批（`onboarding/*` 等） | Qoder（已登记独占区变更） | 未提交，等复核 | 只读 |
 | 基线、验收记录、跨模块回归、收口 | 本对话 | 本文件 | 仅新增本文件与计划状态行 |
 
 **待确认（需两位负责人各回一句）**：

@@ -244,7 +244,7 @@ useEffect(() => {
 |---|---|
 | `docs/design-spec-2026.md` | 3 |
 | `docs/SCENDANCE-AI-HANDOFF-v2.0-2026-10-29.md` | 2 |
-| `docs/plans/ia-role-rework-ledger-2026-11-04.md` | 6 |
+| `docs/plans/2026-11-04-ia-role-rework-ledger.md` | 6 |
 | `docs/research/ia-2026-11-04/index.html` | 1 |
 | `docs/SPACE-MATERIAL-CHAT-DESIGN.md` | 2 |
 | `docs/visual-2026/design-spec-2026.html` | 7 |

@@ -3,7 +3,7 @@
 - 审计日期：2026-11-04
 - 审计基线：工作树实读（本审计执行时主线程 S1.0 已部分落地，非台账基线 a87c156 的纯改造前快照；凡与台账行号不一致处均就地注明漂移）
 - 口径：只读静态审计，未跑 vitest / build / dev server；所有 file:line 相对仓库根 `C:\mujing\Scendance2026`
-- 关联台账：`docs/plans/ia-role-rework-ledger-2026-11-04.md`（S2 任务书第 4 节、Q3 第 6 节）
+- 关联台账：`docs/plans/2026-11-04-ia-role-rework-ledger.md`（S2 任务书第 4 节、Q3 第 6 节）
 - 关联灵感板：`docs/research/ia-2026-11-04/review-bingo-canvas-annotation-2026-11-04.md`
 
 ---

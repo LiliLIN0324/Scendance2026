@@ -4,7 +4,7 @@
 |---|---|
 | 对标对象 | Stry233/PetitMaker（petitmaker.com.cn，本地副本 Release v2.0.673） |
 | 证据底稿 | `docs/research/generation/petitmaker-construction-logic-2026-11-01.md`（12 张机制卡，源码行号） |
-| 前序清单 | `docs/plans/m1-m5-gap-roadmap-2026-11-05.md` |
+| 前序清单 | `docs/plans/2026-11-05-m1-m5-gap-roadmap.md` |
 | 基线 commit | 9b3143a（M4/M5 已活接） |
 | 日期 | 2026-11-05 |
 | 官网补查结论 | petitmaker.com.cn 本体即 SPA 工具（引导页：山体→智能建造），无独立营销/文档页；机制证据仍以 12 卡源码为准 |

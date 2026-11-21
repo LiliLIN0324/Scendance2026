@@ -1,6 +1,6 @@
 # 去室内化后续执行计划（成文锚点 main @ `8446b33f`，2026-11-17）
 
-> 用途：分派给执行 agent 的可落地切片计划。依据 `outdoor-map-decommission-2026-11-13.md` 退役框架与 `2026-11-17-g1-closure-status.md` 收口现状。
+> 用途：分派给执行 agent 的可落地切片计划。依据 `2026-11-13-outdoor-map-decommission.md` 退役框架与 `2026-11-17-g1-closure-status.md` 收口现状。
 > 锚点：成文时 main `8446b33f`；代码现状以开工时 `origin/main` 为准，文中行号/路径仅作参考。
 > 本计划只排切片、前置、验收门禁与禁止事项；§C 六项口径**待用户拍板**，执行 agent 不得替定。
 
@@ -23,7 +23,7 @@
 - 不引入新红；既有 jsdom/localStorage 债与计时 flaky 归 #12，不计入本切片回归。
 
 ### 0.4 提交纪律
-- 本地攒好 tsc + 定向测试 +（涉及交互的）真机验收后，**按 `AGENTS.md §六` 开 PR 到 main**，由人评审合并；不直推 main，不为小改动拆多个 PR。
+- 本地攒好 tsc + 定向测试 +（涉及交互的）真机验收后，**按 `AGENTS.md §七` 开 PR 到 main**，由人评审合并；不直推 main，不为小改动拆多个 PR。
 - 提交前 `git diff --cached --name-only` 与 `git show --stat HEAD` 双核对；不夹带他人在途文件。
 - 不主动 push main；不触发付费生成。
 - 文档先行：代码切片对应的口径/现状先写进 `docs/plans/`，再落码。

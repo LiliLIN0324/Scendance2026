@@ -60,7 +60,7 @@
 | 2-5 不比人贵 | ⏳ | 需人工 3 版对照计时 |
 
 **产品入口未接**：目前是纯函数层（`generateStylePlans`），工作台仍出「松/适中/密」三档密度；
-把风格 brief 接进方案卡需要改独占区 `room-organizer.tsx`，按 COLLAB §四先登记再动。
+把风格 brief 接进方案卡需要改独占区 `room-organizer.tsx`，按 `AGENTS.md` 第六节先登记再动。
 
 ## 6. 代码入口
 

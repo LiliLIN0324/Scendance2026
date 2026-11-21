@@ -1,7 +1,7 @@
 # Scendance 文档地图（DOC-MAP）
 
 > **本页由脚本生成，不要手改。** 重新生成：`node scripts/doc-scan.mjs`（Node ≥ 20，无依赖）。
-> 生成时间：2026-11-21 14:50；扫描口径见页尾「生成口径」。
+> 生成时间：2026-11-21 15:17；扫描口径见页尾「生成口径」。
 > 分工：本页只回答「有哪些文件、多大、什么时候动过」；**要读什么看 [README.md](README.md)**，按用途归类看 [INDEX.md](INDEX.md)。
 
 ## 一、全景
@@ -18,9 +18,9 @@
 | frontend/ | 20 | 0.1 MB | 前端模块自带说明 |
 | tools/ | 7 | 0.0 MB | 离线工具说明 |
 | 其他模块 | 24 | 0.2 MB | assets / data / deliverables / supabase / learning-library 等 |
-| 仓库根 | 10 | 1.0 MB | 协作、交接、变更、记忆 |
+| 仓库根 | 9 | 1.0 MB | 协作、交接、变更、记忆 |
 | agent 草稿（未入库） | 26 | 0.5 MB | agent 运行产物与会话草稿，不参与文档体系 |
-| **合计** | **508** | **7.7 MB** | 其中可读文档 482 份（7.2 MB），agent 草稿 26 份 |
+| **合计** | **507** | **7.7 MB** | 其中可读文档 481 份（7.2 MB），agent 草稿 26 份 |
 
 ## 二、`docs/` 根目录（55 份）
 
@@ -29,10 +29,11 @@
 | [02-交付与Agent能力.md](<02-交付与Agent能力.md>) | 45.9 | 2026-11-21 | 02 · 交付与 Agent 能力：缺什么、按什么优先级补、怎么验收 |
 | [48-PetitMaker-Agent对标实测-20261121.md](<48-PetitMaker-Agent对标实测-20261121.md>) | 8.0 | 2026-11-21 | PetitMaker（谷地工坊）Agent 对标实测报告（2026-11-21） |
 | [49-Agent工具循环与双交付形态-对标收敛卡-20261121.md](<49-Agent工具循环与双交付形态-对标收敛卡-20261121.md>) | 8.6 | 2026-11-21 | Agent 工具循环与双交付形态——PetitMaker 对标收敛卡（2026-11-21） |
-| [50-谷地工坊交互逻辑拆解与落地卡-20261121.md](<50-谷地工坊交互逻辑拆解与落地卡-20261121.md>) | 8.1 | 2026-11-21 | 谷地工坊交互逻辑拆解与落地卡（2026-11-21） |
+| [50-谷地工坊交互逻辑拆解与落地卡-20261121.md](<50-谷地工坊交互逻辑拆解与落地卡-20261121.md>) | 8.7 | 2026-11-21 | 谷地工坊交互逻辑拆解与落地卡（2026-11-21） |
 | [63-Agent合格度与断点审计-20261121.md](<63-Agent合格度与断点审计-20261121.md>) | 24.3 | 2026-11-21 | 63 · 什么算一个合格的 AI Agent：三层判据与幕景实测断点 |
-| [DOC-MAP.md](<DOC-MAP.md>) | 82.7 | 2026-11-21 | Scendance 文档地图（DOC-MAP） |
+| [DOC-MAP.md](<DOC-MAP.md>) | 82.9 | 2026-11-21 | Scendance 文档地图（DOC-MAP） |
 | [INDEX.md](<INDEX.md>) | 23.7 | 2026-11-21 | 文档索引（2026-11-13 手工整理版） |
+| [README.md](<README.md>) | 11.1 | 2026-11-21 | Scendance 文档总览 |
 | [05-设计规范.md](<05-设计规范.md>) | 40.1 | 2026-11-20 | Scendance 2026 设计规范 v2.5.18 |
 | [47-户外Agent设计智能升级计划-20261117.md](<47-户外Agent设计智能升级计划-20261117.md>) | 36.9 | 2026-11-20 | 户外 Agent 设计智能升级计划（2026-11-17） |
 | [58-成熟案例库与物料参考-20261118.md](<58-成熟案例库与物料参考-20261118.md>) | 10.4 | 2026-11-20 | 58 · 成熟案例库与物料参考（2026-11-18） |
@@ -49,7 +50,7 @@
 | [medium-layout-fix-list.md](<medium-layout-fix-list.md>) | 11.8 | 2026-11-16 | 中等尺寸布局（769–1080）改造记录 |
 | [19-西湖户外重建接力.md](<19-西湖户外重建接力.md>) | 10.5 | 2026-11-13 | 49 - 西湖户外重建接力（scene-3d-outdoor → Aholo World） |
 | [21-双端入口与统一任务表.md](<21-双端入口与统一任务表.md>) | 37.1 | 2026-11-13 | 51 · 双端入口与统一任务表（2026-11-05） |
-| [25-Scendance需求清单.md](<25-Scendance需求清单.md>) | 15.3 | 2026-11-13 | Scendance 需求清单与分批执行计划 |
+| [25-Scendance需求清单.md](<25-Scendance需求清单.md>) | 15.4 | 2026-11-13 | Scendance 需求清单与分批执行计划 |
 | [29-重建样本归档.md](<29-重建样本归档.md>) | 15.6 | 2026-11-13 | 29 · 重建样本归档（SC-25，2026-11-07） |
 | [32-SC19-容量边界复验.md](<32-SC19-容量边界复验.md>) | 27.8 | 2026-11-13 | SC-19 · P1 复验容量边界 — 交付记录 |
 | [43-Agent场地理解与自动排布P0计划-20261112.md](<43-Agent场地理解与自动排布P0计划-20261112.md>) | 28.7 | 2026-11-13 | 43 · Agent 场地理解与自动排布 P0 计划（V-1～V-5，2026-11-12） |
@@ -57,7 +58,6 @@
 | [45-户外Agent-V1-V5对话主链重构矩阵-20261113.md](<45-户外Agent-V1-V5对话主链重构矩阵-20261113.md>) | 42.8 | 2026-11-13 | 45 · 户外 Agent V1–V5 对话主链重构矩阵 |
 | [55-小程序上线路线与主体约束.md](<55-小程序上线路线与主体约束.md>) | 15.9 | 2026-11-13 | 55 · 小程序上线路线与主体约束（2026-11-05） |
 | [56-小程序定位重构.md](<56-小程序定位重构.md>) | 15.5 | 2026-11-13 | 56 · 小程序定位重构：从「采集工具」到「微信里的 Scendance 窗口」（2026-11-05） |
-| [README.md](<README.md>) | 11.1 | 2026-11-13 | Scendance 文档总览 |
 | [42-地理优先主线改造清单-20261111.md](<42-地理优先主线改造清单-20261111.md>) | 13.3 | 2026-11-12 | 42 · 地理优先主线改造清单（2026-11-11） |
 | [39-Aholo能力与用途评估-20261108.md](<39-Aholo能力与用途评估-20261108.md>) | 15.5 | 2026-11-10 | 39 · Aholo 能力评估与用途（2026-11-08） |
 | [40-地标高度清单-20261109.md](<40-地标高度清单-20261109.md>) | 33.2 | 2026-11-10 | 40 · 西湖地标建筑高度清单（核对版） |
@@ -86,9 +86,14 @@
 
 | 文件 | KB | 最后改动 | 首句 |
 | --- | ---: | --- | --- |
+| [2026-11-16-outdoor-evidence-matrix.md](<plans/2026-11-16-outdoor-evidence-matrix.md>) | 35.6 | 2026-11-21 | 三类证据对照表（M7.1） |
+| [2026-11-18-79-walkthrough-checklist.md](<plans/2026-11-18-79-walkthrough-checklist.md>) | 20.9 | 2026-11-21 | 79 六条真机走查清单（2026-11-18） |
+| [2026-11-19-chat-first-event-agent-progress.md](<plans/2026-11-19-chat-first-event-agent-progress.md>) | 22.3 | 2026-11-21 | 执行进度台账：聊天驱动完整活动设计 |
+| [2026-11-19-contest-wedding-next-plan.md](<plans/2026-11-19-contest-wedding-next-plan.md>) | 88.1 | 2026-11-21 | 3D 赛事参赛方案 · 下一步规划（2026-11-19） |
 | [2026-11-20-79-closure-runbook.md](<plans/2026-11-20-79-closure-runbook.md>) | 22.3 | 2026-11-21 | 79 门禁走查 · 逐条收尾方案（手把手版，2026-11-20） |
 | [2026-11-20-79-closure-snapshot.md](<plans/2026-11-20-79-closure-snapshot.md>) | 35.5 | 2026-11-21 | 79 解局 · 2026-11-20 本轮进度快照（交接用，非发布结论） |
 | [2026-11-20-79-jieyu-handoff-plan.md](<plans/2026-11-20-79-jieyu-handoff-plan.md>) | 21.9 | 2026-11-21 | 79 解隅（解局）接手计划 |
+| [2026-11-20-editor-copy-cut-review.md](<plans/2026-11-20-editor-copy-cut-review.md>) | 32.5 | 2026-11-21 | 编辑器文案删改评审稿（2026-11-20） |
 | [2026-11-20-权限体系建设方案.md](<plans/2026-11-20-权限体系建设方案.md>) | 16.5 | 2026-11-20 | 权限体系建设方案：成熟产品对照与分期落地（2026-11-20） |
 | [2026-11-20-生成物可见性权限分层研究.md](<plans/2026-11-20-生成物可见性权限分层研究.md>) | 14.6 | 2026-11-20 | 生成物可见性与权限分层研究（2026-11-20） |
 | [2026-11-20-cloud-storage-deployment-runbook.md](<plans/2026-11-20-cloud-storage-deployment-runbook.md>) | 13.3 | 2026-11-20 | 云存储能力上线 runbook |
@@ -98,8 +103,7 @@
 | [2026-11-20-cloud-storage-task-b.md](<plans/2026-11-20-cloud-storage-task-b.md>) | 12.7 | 2026-11-20 | B 上传归档与完整保存（实施记录） |
 | [2026-11-20-cloud-storage-task-c.md](<plans/2026-11-20-cloud-storage-task-c.md>) | 8.2 | 2026-11-20 | 任务 C：案例库与共享实施记录 |
 | [2026-11-20-cross-loop-inbox-plan.md](<plans/2026-11-20-cross-loop-inbox-plan.md>) | 10.7 | 2026-11-20 | 三线合流计划：执行资料 × Bingo 评审 × 消息收件箱（2026-11-20） |
-| [2026-11-20-editor-copy-cut-review.md](<plans/2026-11-20-editor-copy-cut-review.md>) | 29.7 | 2026-11-20 | 编辑器文案删改评审稿（2026-11-20） |
-| [2026-11-20-execution-data-agent-mapping.md](<plans/2026-11-20-execution-data-agent-mapping.md>) | 14.6 | 2026-11-20 | 执行资料 × Agent 落地对照表（2026-11-20） |
+| [2026-11-20-execution-data-agent-mapping.md](<plans/2026-11-20-execution-data-agent-mapping.md>) | 14.7 | 2026-11-20 | 执行资料 × Agent 落地对照表（2026-11-20） |
 | [2026-11-20-people-registry-unification.md](<plans/2026-11-20-people-registry-unification.md>) | 21.9 | 2026-11-20 | 人物登记表统一：不同人群去重与性别化（大改计划） |
 | [2026-11-20-publish-flow-closure-plan.md](<plans/2026-11-20-publish-flow-closure-plan.md>) | 20.8 | 2026-11-20 | 右上角发布：流程闭环与交互改进计划 |
 | [2026-11-20-publish-flow-interface-contract.md](<plans/2026-11-20-publish-flow-interface-contract.md>) | 14.1 | 2026-11-20 | 右上角发布改造 · A/B/集成 共同接口约定 |
@@ -109,14 +113,10 @@
 | [2026-11-20-venue-agent-interaction-design-plan.md](<plans/2026-11-20-venue-agent-interaction-design-plan.md>) | 12.9 | 2026-11-20 | 场地自主规划交互与设计提升计划 |
 | [2026-11-20-venue-agent-interaction-handoff.md](<plans/2026-11-20-venue-agent-interaction-handoff.md>) | 16.3 | 2026-11-20 | 场地自主规划交互 P1 · 交接说明（2026-11-20） |
 | [2026-11-08-单Agent工具矩阵.md](<plans/2026-11-08-单Agent工具矩阵.md>) | 6.1 | 2026-11-19 | 幕景单 Agent 与工具矩阵 |
-| [2026-11-16-outdoor-evidence-matrix.md](<plans/2026-11-16-outdoor-evidence-matrix.md>) | 35.6 | 2026-11-19 | 三类证据对照表（M7.1） |
-| [2026-11-18-79-walkthrough-checklist.md](<plans/2026-11-18-79-walkthrough-checklist.md>) | 20.9 | 2026-11-19 | 79 六条真机走查清单（2026-11-18） |
 | [2026-11-19-chat-first-event-agent-cutoff-report.md](<plans/2026-11-19-chat-first-event-agent-cutoff-report.md>) | 5.4 | 2026-11-19 | 15:00 截止报告（2026-11-19 15:00:08） |
 | [2026-11-19-chat-first-event-agent-execution.md](<plans/2026-11-19-chat-first-event-agent-execution.md>) | 18.9 | 2026-11-19 | 聊天驱动完整活动设计：跨 AI 执行任务书 |
-| [2026-11-19-chat-first-event-agent-progress.md](<plans/2026-11-19-chat-first-event-agent-progress.md>) | 22.3 | 2026-11-19 | 执行进度台账：聊天驱动完整活动设计 |
 | [2026-11-19-chat-first-event-agent-t0-baseline.md](<plans/2026-11-19-chat-first-event-agent-t0-baseline.md>) | 10.4 | 2026-11-19 | T0 现状与范围（2026-11-19 14:18） |
 | [2026-11-19-chat-first-event-agent-t1-plan.md](<plans/2026-11-19-chat-first-event-agent-t1-plan.md>) | 8.4 | 2026-11-19 | T1 施工方案（2026-11-19 14:40） |
-| [2026-11-19-contest-wedding-next-plan.md](<plans/2026-11-19-contest-wedding-next-plan.md>) | 88.1 | 2026-11-19 | 3D 赛事参赛方案 · 下一步规划（2026-11-19） |
 | [2026-11-19-huajia-material-bom.md](<plans/2026-11-19-huajia-material-bom.md>) | 94.7 | 2026-11-19 | 花家山庄室外草坪 · 物料清单与 BOM |
 | [2026-11-19-huajia-plan-handover.md](<plans/2026-11-19-huajia-plan-handover.md>) | 10.5 | 2026-11-19 | 花家山庄婚礼 · 户外布置起稿 —— 交接说明 |
 | [2026-11-19-zero-photo-lane.md](<plans/2026-11-19-zero-photo-lane.md>) | 45.4 | 2026-11-19 | 零照片链路 · 产品化文案与口径（2026-11-19） |
@@ -143,29 +143,10 @@
 | [2026-11-16-outdoor-agent-upgrade.md](<plans/2026-11-16-outdoor-agent-upgrade.md>) | 28.8 | 2026-11-16 | 户外 Agent 强化执行计划 |
 | [2026-11-16-outdoor-release-rollback.md](<plans/2026-11-16-outdoor-release-rollback.md>) | 6.6 | 2026-11-16 | 户外 Agent 回退手册与发布阻断条件（M7.3） |
 | [2026-11-16-people-asset-pipeline.md](<plans/2026-11-16-people-asset-pipeline.md>) | 14.1 | 2026-11-16 | 人物 / 载具 GLB 资产管线（2026-11-16） |
-| [indoor-decouple-targets-2026-11-14.md](<plans/indoor-decouple-targets-2026-11-14.md>) | 25.0 | 2026-11-16 | 室内去耦合 · 目标落点登记（main 基底，2026-11-14） |
-| [outdoor-map-decommission-2026-11-13.md](<plans/outdoor-map-decommission-2026-11-13.md>) | 56.0 | 2026-11-16 | 室内壳体退役 × 地图能力迁建：详细规划（2026-11-13） |
-| [outdoor-walk-roadmap-2026-11-14.md](<plans/outdoor-walk-roadmap-2026-11-14.md>) | 32.8 | 2026-11-16 | 户外人物漫游 · 远景路线图（素材 / 对应 / 动线 / 视角交互 / 权限对话）（2026-11-14） |
-| [tool-rail-unification-2026-11-13.md](<plans/tool-rail-unification-2026-11-13.md>) | 23.5 | 2026-11-16 | 左右工具轨 × 地图控件统一重设计方案（2026-11-13） |
-| [outdoor-first-person-walk-2026-11-13.md](<plans/outdoor-first-person-walk-2026-11-13.md>) | 10.7 | 2026-11-14 | 户外规划 3D · 第一人称漫游一期（裸步行）设计与验收记录（2026-11-13） |
-| [outdoor-walk-avatar-third-person-2026-11-14.md](<plans/outdoor-walk-avatar-third-person-2026-11-14.md>) | 14.3 | 2026-11-14 | 户外人物漫游 · 三期落点设计（avatar / 视角 / 坐姿）（2026-11-14） |
-| [commercial-agreements.md](<plans/commercial-agreements.md>) | 7.9 | 2026-11-13 | 幕景的报价、合同与履约流程 |
-| [delivery-frontend.md](<plans/delivery-frontend.md>) | 151.9 | 2026-11-13 | 场景物料到执行交接：前端实施方案 |
-| [discussion-and-sketch-review.md](<plans/discussion-and-sketch-review.md>) | 12.8 | 2026-11-13 | 幕景工作区优化分析 |
-| [executor-readback-review.md](<plans/executor-readback-review.md>) | 9.2 | 2026-11-13 | 已下载交接材料：执行方回读验收 |
-| [hangzhou-isometric-map-research.md](<plans/hangzhou-isometric-map-research.md>) | 8.0 | 2026-11-13 | 杭州等距像素地图可行性调研 |
-| [outdoor-map-unification-2026-11-13.md](<plans/outdoor-map-unification-2026-11-13.md>) | 56.0 | 2026-11-13 | 户外地图收敛：唯一一套可 2D↔3D 直切的地图（2026-11-13） |
-| [playtest-matrix-2026-11-05.md](<plans/playtest-matrix-2026-11-05.md>) | 17.7 | 2026-11-13 | 谷地工坊多场景实操：4 组实验与迁移清单 |
-| [reliability-loop.md](<plans/reliability-loop.md>) | 48.2 | 2026-11-13 | 幕景持续改进目标与检查记录 |
-| [sidebar-entry-unification-2026-11-12.md](<plans/sidebar-entry-unification-2026-11-12.md>) | 27.4 | 2026-11-13 | 侧边栏入口统一设计方案（讨论稿 · 2026-11-12，11-13 复核校正） |
 | [2026-11-11-people05-crowd-uniform-batch.md](<plans/2026-11-11-people05-crowd-uniform-batch.md>) | 2.4 | 2026-11-12 | PEOPLE-05 活动岗位制服批次 |
 | [2026-11-11-演示回放系统.md](<plans/2026-11-11-演示回放系统.md>) | 4.4 | 2026-11-11 | 演示回放系统（tour-reel）· 幕景前端升级规格 |
 | [2026-11-08-isometric-sf-拆解与复刻差异诊断.md](<plans/2026-11-08-isometric-sf-拆解与复刻差异诊断.md>) | 25.9 | 2026-11-10 | Isometric SF 拆解 × hangzhou-map-lab 复刻差异诊断 |
 | [2026-11-10-outdoor-event-planning.md](<plans/2026-11-10-outdoor-event-planning.md>) | 53.2 | 2026-11-10 | Scendance 真实场地活动规划升级 |
-| [circle-draw-save-fix-2026-11-08.md](<plans/circle-draw-save-fix-2026-11-08.md>) | 7.1 | 2026-11-10 | 圈画保存断点 · 根因与修复记录（P0-1） |
-| [hangzhou-city-art-execution.md](<plans/hangzhou-city-art-execution.md>) | 5.9 | 2026-11-10 | 杭州真实结构与等距城市画风执行计划 |
-| [hangzhou-iso-hubin-capture.md](<plans/hangzhou-iso-hubin-capture.md>) | 3.5 | 2026-11-10 | 湖滨三公园至东坡路 · 等距样片采集 |
-| [outdoor-2d-one-flow-2026-11-10.md](<plans/outdoor-2d-one-flow-2026-11-10.md>) | 9.9 | 2026-11-10 | 一条链：2D 规划 ↔ 3D 场景 ↔ 交付（P4 计划） |
 | [2026-11-08-智能建造验证记录.md](<plans/2026-11-08-智能建造验证记录.md>) | 34.6 | 2026-11-09 | 智能建造验证记录（2026-11-08） |
 | [2026-11-09-标注候选应用边界.md](<plans/2026-11-09-标注候选应用边界.md>) | 5.3 | 2026-11-09 | 标注候选应用边界（本地实验） |
 | [2026-11-09-正式站闭环验收清单.md](<plans/2026-11-09-正式站闭环验收清单.md>) | 7.4 | 2026-11-09 | 正式站闭环验收清单 |
@@ -176,37 +157,56 @@
 | [2026-11-07-智能Chat主计划.md](<plans/2026-11-07-智能Chat主计划.md>) | 11.2 | 2026-11-08 | 幕景智能 Chat 与活动智能建造主计划 |
 | [2026-11-07-Agent能力与工具盘点.md](<plans/2026-11-07-Agent能力与工具盘点.md>) | 9.0 | 2026-11-08 | 幕景 Agent 能力、工具与验证盘点 |
 | [2026-11-08-幕景总体架构与产品演进路线.md](<plans/2026-11-08-幕景总体架构与产品演进路线.md>) | 7.4 | 2026-11-08 | 幕景总体技术架构与产品演进路线 |
-| [brief-request-guard-draft.md](<plans/brief-request-guard-draft.md>) | 2.1 | 2026-11-08 | 单轮简报请求防重与限频草案 |
-| [minimax-brief-first-sample-runbook.md](<plans/minimax-brief-first-sample-runbook.md>) | 4.0 | 2026-11-08 | MiniMax 单条简报首次实测：待核对方案 |
-| [minimax-budget-transaction-design.md](<plans/minimax-budget-transaction-design.md>) | 6.9 | 2026-11-08 | MiniMax 整趟预留：未部署设计与放行条件 |
 | [2026-11-06-智能建造计划-评审版.md](<plans/2026-11-06-智能建造计划-评审版.md>) | 8.3 | 2026-11-06 | Scendance2026 智能建造计划（评审版）｜2026-11-06 |
 | [2026-11-06-智能建造究极计划-v2.md](<plans/2026-11-06-智能建造究极计划-v2.md>) | 10.0 | 2026-11-06 | 智能建造究极计划 v2：可托付的智能建造（2026-11-06） |
-| [activity-case-studies-2026-11-05.md](<plans/activity-case-studies-2026-11-05.md>) | 15.6 | 2026-11-05 | 活动场景案例研究：可迁移的空间手法 |
-| [activity-space-norms-2026-11-05.md](<plans/activity-space-norms-2026-11-05.md>) | 34.3 | 2026-11-05 | 活动场景量化空间规范表 |
-| [agent-migration-map-2026-11-05.md](<plans/agent-migration-map-2026-11-05.md>) | 30.1 | 2026-11-05 | AI 智能建造 / 场地规划智能体 —— 代码落点与迁移地图 |
-| [ai-spatial-agents-deep-dive-2026-11-05.md](<plans/ai-spatial-agents-deep-dive-2026-11-05.md>) | 6.9 | 2026-11-05 | AI 空间/布局生成智能体深度调研（2026-11-05） |
-| [ai-spatial-agents-survey-2026-11-05.md](<plans/ai-spatial-agents-survey-2026-11-05.md>) | 10.0 | 2026-11-05 | AI 生成/编辑空间布局 · 项目调研（2026-11-05） |
-| [batch10-agent-steering-delivery-2026-11-05.md](<plans/batch10-agent-steering-delivery-2026-11-05.md>) | 3.1 | 2026-11-05 | 第 10 批交付：运行中改道（steering）全链路 |
-| [batch11-agent-phase-progress-delivery-2026-11-05.md](<plans/batch11-agent-phase-progress-delivery-2026-11-05.md>) | 2.2 | 2026-11-05 | 第 11 批交付：阶段化进度 |
-| [batch12-validate-receipt-delivery-2026-11-05.md](<plans/batch12-validate-receipt-delivery-2026-11-05.md>) | 4.1 | 2026-11-05 | 第 12 批交付：校验回执从「通过/不通过」升级为「差多少、哪一条」 |
-| [batch13-agent-phase-persist-delivery-2026-11-05.md](<plans/batch13-agent-phase-persist-delivery-2026-11-05.md>) | 3.6 | 2026-11-05 | 第 13 批交付：阶段落库 + 运行条主标题换成阶段 |
-| [batch7-outcome-audit-delivery-2026-11-05.md](<plans/batch7-outcome-audit-delivery-2026-11-05.md>) | 13.5 | 2026-11-05 | 第 7 批收尾交付：让「本次结果」真的出现在审校台上 |
-| [batch8-agent-run-timeline-delivery-2026-11-05.md](<plans/batch8-agent-run-timeline-delivery-2026-11-05.md>) | 11.2 | 2026-11-05 | 第 8 批前端接线交付：活动脸显示真实运行过程（第 8 批 · 第一段） |
 | [v340-alignment-audit.md](<plans/ia-next-prep-2026-11-04/v340-alignment-audit.md>) | 1.8 | 2026-11-05 | v3.4.0 与 IA 四角色重划对齐审计 |
-| [intergenerational-and-constrained-2026-11-05.md](<plans/intergenerational-and-constrained-2026-11-05.md>) | 8.4 | 2026-11-05 | 代际共融与受限场地降级：配方库判据增量 |
-| [m1-m5-gap-roadmap-2026-11-05.md](<plans/m1-m5-gap-roadmap-2026-11-05.md>) | 7.1 | 2026-11-05 | M1–M5 移植差距清单：幕景「智能建造」骨架对标 PetitMaker（谷地工坊） |
-| [petitmaker-agent-teardown-2026-11-05.md](<plans/petitmaker-agent-teardown-2026-11-05.md>) | 18.5 | 2026-11-05 | 谷地工坊智能体逆向：协议、提示词与可迁移设计 |
-| [petitmaker-playtest-2026-11-05.md](<plans/petitmaker-playtest-2026-11-05.md>) | 13.8 | 2026-11-05 | PetitMaker 真机实操记录（2026-11-05） |
-| [smart-build-next-phase-2026-11-05.md](<plans/smart-build-next-phase-2026-11-05.md>) | 35.1 | 2026-11-05 | 智能建造下一程升级计划：M1–M5 活接深度与 Agent 机制补课 |
 | [index.md](<plans/ia-next-prep-2026-11-04/index.md>) | 9.5 | 2026-11-04 | S2/S3/S4 第二轮并行施工前审 · 总索引（hub） |
 | [s2-playbook-and-decisions.md](<plans/ia-next-prep-2026-11-04/s2-playbook-and-decisions.md>) | 24.0 | 2026-11-04 | S2「Bingo 转审校台」可执行任务书 + 待拍板决策简报（分片 B 第二刀） |
 | [s3-entry-audit.md](<plans/ia-next-prep-2026-11-04/s3-entry-audit.md>) | 36.0 | 2026-11-04 | S3「空间/物料面板化」入口审计 + 施工卡（分片 A，只读前置） |
 | [s4-execution-pack.md](<plans/ia-next-prep-2026-11-04/s4-execution-pack.md>) | 37.5 | 2026-11-04 | S4 清理与回归 — 执行包（分片 C · 第二轮只读前置审计） |
-| [ia-role-rework-ledger-2026-11-04.md](<plans/ia-role-rework-ledger-2026-11-04.md>) | 31.9 | 2026-11-04 | 四角色 IA 重划导演台账 — 活动 / 审校 Bingo / 空间 / 物料 |
 | [index.md](<plans/ia-s1-prep-2026-11-04/index.md>) | 14.1 | 2026-11-04 | IA 重划 S1 前置只读审计 · 总索引（hub） |
 | [s11-gallery-card.md](<plans/ia-s1-prep-2026-11-04/s11-gallery-card.md>) | 27.2 | 2026-11-04 | S1.1「活动开场画廊」审计 + 施工卡（分片 A） |
 | [s2-review-audit.md](<plans/ia-s1-prep-2026-11-04/s2-review-audit.md>) | 32.0 | 2026-11-04 | S2「Bingo 转审校台」静态链路审计（分片 B） |
 | [s4-cleanup-inventory.md](<plans/ia-s1-prep-2026-11-04/s4-cleanup-inventory.md>) | 25.3 | 2026-11-04 | S4 清理与全量回归 — 盘点清单（分片 C · 只读前置审计） |
+| [2026-11-04-ia-role-rework-ledger.md](<plans/2026-11-04-ia-role-rework-ledger.md>) | 31.9 | 未入库 | 四角色 IA 重划导演台账 — 活动 / 审校 Bingo / 空间 / 物料 |
+| [2026-11-05-activity-case-studies.md](<plans/2026-11-05-activity-case-studies.md>) | 15.6 | 未入库 | 活动场景案例研究：可迁移的空间手法 |
+| [2026-11-05-activity-space-norms.md](<plans/2026-11-05-activity-space-norms.md>) | 34.3 | 未入库 | 活动场景量化空间规范表 |
+| [2026-11-05-agent-migration-map.md](<plans/2026-11-05-agent-migration-map.md>) | 30.1 | 未入库 | AI 智能建造 / 场地规划智能体 —— 代码落点与迁移地图 |
+| [2026-11-05-ai-spatial-agents-deep-dive.md](<plans/2026-11-05-ai-spatial-agents-deep-dive.md>) | 6.9 | 未入库 | AI 空间/布局生成智能体深度调研（2026-11-05） |
+| [2026-11-05-ai-spatial-agents-survey.md](<plans/2026-11-05-ai-spatial-agents-survey.md>) | 10.0 | 未入库 | AI 生成/编辑空间布局 · 项目调研（2026-11-05） |
+| [2026-11-05-batch10-agent-steering-delivery.md](<plans/2026-11-05-batch10-agent-steering-delivery.md>) | 3.1 | 未入库 | 第 10 批交付：运行中改道（steering）全链路 |
+| [2026-11-05-batch11-agent-phase-progress-delivery.md](<plans/2026-11-05-batch11-agent-phase-progress-delivery.md>) | 2.2 | 未入库 | 第 11 批交付：阶段化进度 |
+| [2026-11-05-batch12-validate-receipt-delivery.md](<plans/2026-11-05-batch12-validate-receipt-delivery.md>) | 4.1 | 未入库 | 第 12 批交付：校验回执从「通过/不通过」升级为「差多少、哪一条」 |
+| [2026-11-05-batch13-agent-phase-persist-delivery.md](<plans/2026-11-05-batch13-agent-phase-persist-delivery.md>) | 3.6 | 未入库 | 第 13 批交付：阶段落库 + 运行条主标题换成阶段 |
+| [2026-11-05-batch7-outcome-audit-delivery.md](<plans/2026-11-05-batch7-outcome-audit-delivery.md>) | 13.5 | 未入库 | 第 7 批收尾交付：让「本次结果」真的出现在审校台上 |
+| [2026-11-05-batch8-agent-run-timeline-delivery.md](<plans/2026-11-05-batch8-agent-run-timeline-delivery.md>) | 11.2 | 未入库 | 第 8 批前端接线交付：活动脸显示真实运行过程（第 8 批 · 第一段） |
+| [2026-11-05-intergenerational-and-constrained.md](<plans/2026-11-05-intergenerational-and-constrained.md>) | 8.4 | 未入库 | 代际共融与受限场地降级：配方库判据增量 |
+| [2026-11-05-m1-m5-gap-roadmap.md](<plans/2026-11-05-m1-m5-gap-roadmap.md>) | 7.1 | 未入库 | M1–M5 移植差距清单：幕景「智能建造」骨架对标 PetitMaker（谷地工坊） |
+| [2026-11-05-petitmaker-agent-teardown.md](<plans/2026-11-05-petitmaker-agent-teardown.md>) | 18.5 | 未入库 | 谷地工坊智能体逆向：协议、提示词与可迁移设计 |
+| [2026-11-05-petitmaker-playtest.md](<plans/2026-11-05-petitmaker-playtest.md>) | 13.8 | 未入库 | PetitMaker 真机实操记录（2026-11-05） |
+| [2026-11-05-playtest-matrix.md](<plans/2026-11-05-playtest-matrix.md>) | 17.7 | 未入库 | 谷地工坊多场景实操：4 组实验与迁移清单 |
+| [2026-11-05-smart-build-next-phase.md](<plans/2026-11-05-smart-build-next-phase.md>) | 35.1 | 未入库 | 智能建造下一程升级计划：M1–M5 活接深度与 Agent 机制补课 |
+| [2026-11-08-brief-request-guard-draft.md](<plans/2026-11-08-brief-request-guard-draft.md>) | 2.1 | 未入库 | 单轮简报请求防重与限频草案 |
+| [2026-11-08-circle-draw-save-fix.md](<plans/2026-11-08-circle-draw-save-fix.md>) | 7.1 | 未入库 | 圈画保存断点 · 根因与修复记录（P0-1） |
+| [2026-11-08-minimax-brief-first-sample-runbook.md](<plans/2026-11-08-minimax-brief-first-sample-runbook.md>) | 4.0 | 未入库 | MiniMax 单条简报首次实测：待核对方案 |
+| [2026-11-08-minimax-budget-transaction-design.md](<plans/2026-11-08-minimax-budget-transaction-design.md>) | 6.9 | 未入库 | MiniMax 整趟预留：未部署设计与放行条件 |
+| [2026-11-10-hangzhou-city-art-execution.md](<plans/2026-11-10-hangzhou-city-art-execution.md>) | 5.9 | 未入库 | 杭州真实结构与等距城市画风执行计划 |
+| [2026-11-10-hangzhou-iso-hubin-capture.md](<plans/2026-11-10-hangzhou-iso-hubin-capture.md>) | 3.5 | 未入库 | 湖滨三公园至东坡路 · 等距样片采集 |
+| [2026-11-10-hangzhou-isometric-map-research.md](<plans/2026-11-10-hangzhou-isometric-map-research.md>) | 8.0 | 未入库 | 杭州等距像素地图可行性调研 |
+| [2026-11-10-outdoor-2d-one-flow.md](<plans/2026-11-10-outdoor-2d-one-flow.md>) | 9.9 | 未入库 | 一条链：2D 规划 ↔ 3D 场景 ↔ 交付（P4 计划） |
+| [2026-11-12-sidebar-entry-unification.md](<plans/2026-11-12-sidebar-entry-unification.md>) | 27.4 | 未入库 | 侧边栏入口统一设计方案（讨论稿 · 2026-11-12，11-13 复核校正） |
+| [2026-11-13-commercial-agreements.md](<plans/2026-11-13-commercial-agreements.md>) | 7.9 | 未入库 | 幕景的报价、合同与履约流程 |
+| [2026-11-13-delivery-frontend.md](<plans/2026-11-13-delivery-frontend.md>) | 151.9 | 未入库 | 场景物料到执行交接：前端实施方案 |
+| [2026-11-13-discussion-and-sketch-review.md](<plans/2026-11-13-discussion-and-sketch-review.md>) | 12.8 | 未入库 | 幕景工作区优化分析 |
+| [2026-11-13-executor-readback-review.md](<plans/2026-11-13-executor-readback-review.md>) | 9.2 | 未入库 | 已下载交接材料：执行方回读验收 |
+| [2026-11-13-outdoor-first-person-walk.md](<plans/2026-11-13-outdoor-first-person-walk.md>) | 10.7 | 未入库 | 户外规划 3D · 第一人称漫游一期（裸步行）设计与验收记录（2026-11-13） |
+| [2026-11-13-outdoor-map-decommission.md](<plans/2026-11-13-outdoor-map-decommission.md>) | 56.0 | 未入库 | 室内壳体退役 × 地图能力迁建：详细规划（2026-11-13） |
+| [2026-11-13-outdoor-map-unification.md](<plans/2026-11-13-outdoor-map-unification.md>) | 56.0 | 未入库 | 户外地图收敛：唯一一套可 2D↔3D 直切的地图（2026-11-13） |
+| [2026-11-13-reliability-loop.md](<plans/2026-11-13-reliability-loop.md>) | 48.2 | 未入库 | 幕景持续改进目标与检查记录 |
+| [2026-11-13-tool-rail-unification.md](<plans/2026-11-13-tool-rail-unification.md>) | 23.5 | 未入库 | 左右工具轨 × 地图控件统一重设计方案（2026-11-13） |
+| [2026-11-14-indoor-decouple-targets.md](<plans/2026-11-14-indoor-decouple-targets.md>) | 25.0 | 未入库 | 室内去耦合 · 目标落点登记（main 基底，2026-11-14） |
+| [2026-11-14-outdoor-walk-avatar-third-person.md](<plans/2026-11-14-outdoor-walk-avatar-third-person.md>) | 14.3 | 未入库 | 户外人物漫游 · 三期落点设计（avatar / 视角 / 坐姿）（2026-11-14） |
+| [2026-11-14-outdoor-walk-roadmap.md](<plans/2026-11-14-outdoor-walk-roadmap.md>) | 32.8 | 未入库 | 户外人物漫游 · 远景路线图（素材 / 对应 / 动线 / 视角交互 / 权限对话）（2026-11-14） |
 
 ## 四、`docs/archive/`（历史，原文不改写）（115 份）
 
@@ -228,7 +228,7 @@
 | [2026-10-07-工作区模式.md](<archive/plan/2026-10-07-工作区模式.md>) | 13.8 | 2026-11-05 | Binggo 工作区：目标、模式与执行路径 |
 | [2026-10-07-活动执行契约.md](<archive/plan/2026-10-07-活动执行契约.md>) | 15.7 | 2026-11-05 | 活动执行安排：最小契约建议 |
 | [2026-10-07-交付恢复核查.md](<archive/plan/2026-10-07-交付恢复核查.md>) | 3.6 | 2026-11-05 | 本地执行与恢复链路核查 |
-| [2026-10-07-最小交付契约.md](<archive/plan/2026-10-07-最小交付契约.md>) | 30.6 | 2026-11-05 | 幕景最小交付契约 |
+| [2026-10-07-最小交付契约.md](<archive/plan/2026-10-07-最小交付契约.md>) | 30.7 | 2026-11-05 | 幕景最小交付契约 |
 | [2026-10-07-Agent开源参考.md](<archive/plan/2026-10-07-Agent开源参考.md>) | 19.4 | 2026-11-05 | Agent 开源参考与幕景接入记录 |
 | [2026-10-08-场景对话同屏.md](<archive/plan/2026-10-08-场景对话同屏.md>) | 4.6 | 2026-11-05 | 场景与对话同屏的工作台 |
 | [2026-10-08-场景活动备份.md](<archive/plan/2026-10-08-场景活动备份.md>) | 41.3 | 2026-11-05 | 场景与活动备份 |
@@ -257,11 +257,11 @@
 | [2026-11-04-新手指引重写.md](<archive/plan/2026-11-04-新手指引重写.md>) | 12.1 | 2026-11-05 | 新手指引重写规格（2026-11-04） |
 | [2026-11-04-Agent空间能力.md](<archive/plan/2026-11-04-Agent空间能力.md>) | 25.1 | 2026-11-05 | 03 · Golden Path 第④步设计：Agent 空间操作与「预览—确认—执行」 |
 | [2026-11-04-GoldenPath规格.md](<archive/plan/2026-11-04-GoldenPath规格.md>) | 10.3 | 2026-11-05 | 07 · Golden Path 规格与验收（2026-11-04） |
-| [2026-11-16-handoff-v5-generation.md](<archive/plan/2026-11-16-handoff-v5-generation.md>) | 9.2 | 未入库 | 幕景 V5 生成安全切片交接（2026-11-16） |
-| [2026-11-18-79-handoff-next-agent.md](<archive/plan/2026-11-18-79-handoff-next-agent.md>) | 9.0 | 未入库 | 79 剩余工作交接单（2026-11-18 晚 · 交给下一个 agent） |
-| [2026-11-18-lux3d-generation-closure.md](<archive/plan/2026-11-18-lux3d-generation-closure.md>) | 9.7 | 未入库 | Lux3D 生成闭环复核与最小补齐（2026-11-18） |
-| [2026-11-19-agent-t2-t3-handoff.md](<archive/plan/2026-11-19-agent-t2-t3-handoff.md>) | 3.9 | 未入库 | T2 / T3 接手记录 |
-| [HANDOFF-CONVERSATION-DEPLOY.md](<archive/plan/HANDOFF-CONVERSATION-DEPLOY.md>) | 2.7 | 未入库 | 对话接入收尾交接（2026-11-09，代码已进 PR 86） |
+| [2026-11-16-handoff-v5-generation.md](<archive/plan/2026-11-16-handoff-v5-generation.md>) | 9.2 | 2026-11-21 | 幕景 V5 生成安全切片交接（2026-11-16） |
+| [2026-11-18-79-handoff-next-agent.md](<archive/plan/2026-11-18-79-handoff-next-agent.md>) | 9.0 | 2026-11-21 | 79 剩余工作交接单（2026-11-18 晚 · 交给下一个 agent） |
+| [2026-11-18-lux3d-generation-closure.md](<archive/plan/2026-11-18-lux3d-generation-closure.md>) | 9.7 | 2026-11-21 | Lux3D 生成闭环复核与最小补齐（2026-11-18） |
+| [2026-11-19-agent-t2-t3-handoff.md](<archive/plan/2026-11-19-agent-t2-t3-handoff.md>) | 3.9 | 2026-11-21 | T2 / T3 接手记录 |
+| [HANDOFF-CONVERSATION-DEPLOY.md](<archive/plan/HANDOFF-CONVERSATION-DEPLOY.md>) | 2.7 | 2026-11-21 | 对话接入收尾交接（2026-11-09，代码已进 PR 86） |
 | [original-scene-edit-design.md](<archive/plan/original-scene-edit-design.md>) | 1.9 | 2026-11-13 | 含未核验原文的云场景：授权编辑设计 |
 | [reconstruction-edit-review-design.md](<archive/plan/reconstruction-edit-review-design.md>) | 3.9 | 2026-11-13 | 重建候选人工修改：受控版本设计草案 |
 | [08-Aholo资产与3DGS预览.md](<archive/report/08-Aholo资产与3DGS预览.md>) | 8.9 | 2026-11-13 | 任务一 · 任务二：GLB 本机资产与 3DGS 环境预览（2026-10-30） |
@@ -452,7 +452,7 @@
 | [editor-appearance-mode.md](<../flow/tasks/editor-appearance-mode.md>) | 49.9 | 2026-11-21 | 工作台外观模式（跟随系统 / 浅色 / 深色） |
 | [进展.md](<../flow/进展.md>) | 191.5 | 2026-11-13 | 协作进展 |
 | [decisions.md](<../flow/decisions.md>) | 8.3 | 2026-11-13 | 产品与协作决策 |
-| [plan.md](<../flow/plan.md>) | 9.8 | 2026-11-13 | 幕景长期开发计划 |
+| [plan.md](<../flow/plan.md>) | 9.9 | 2026-11-13 | 幕景长期开发计划 |
 | [activity-task-api-implementation.md](<../flow/tasks/activity-task-api-implementation.md>) | 5.0 | 2026-11-13 | 活动任务建议：真实服务端接线 |
 | [activity-task-suggestions.md](<../flow/tasks/activity-task-suggestions.md>) | 5.1 | 2026-11-13 | 活动上下文与任务建议：先接同一业务真源 |
 | [aihot-code-learning.md](<../flow/tasks/aihot-code-learning.md>) | 4.0 | 2026-11-13 | AIHOT源码学习与幕景优化 |
@@ -544,17 +544,16 @@
 | [reconstruction-development.md](<../supabase/ops/reconstruction-development.md>) | 6.6 | 2026-10-10 | Reconstruction development runbook |
 | [README.md](<../learning-library/oneplan-siteplans/README.md>) | 5.6 | 未入库 | OnePlan 经典案例学习库（Site plans we love） |
 
-## 十二、仓库根（10 份）
+## 十二、仓库根（9 份）
 
 | 文件 | KB | 最后改动 | 首句 |
 | --- | ---: | --- | --- |
+| [AGENTS.md](<../AGENTS.md>) | 9.3 | 2026-11-21 | 幕景 Scendance · 项目规范（AI 与人共同必读） |
 | [ASSET-SOURCES.md](<../ASSET-SOURCES.md>) | 7.7 | 2026-11-21 | 3D asset sources |
 | [CHANGELOG.md](<../CHANGELOG.md>) | 275.7 | 2026-11-21 | 更新记录 |
-| [MEMORY.md](<../MEMORY.md>) | 2.0 | 2026-11-21 | Project memory |
-| [COLLAB.md](<../COLLAB.md>) | 31.8 | 2026-11-20 | COLLAB.md — 与 Qoder（账号 LiliLIN0324）的文件所有权边界 |
-| [HANDOFF.md](<../HANDOFF.md>) | 696.7 | 2026-11-20 | HANDOFF.md — Scendance2026 跨会话交接 |
+| [MEMORY.md](<../MEMORY.md>) | 2.8 | 2026-11-21 | Project memory |
+| [HANDOFF.md](<../HANDOFF.md>) | 699.3 | 2026-11-20 | HANDOFF.md — Scendance2026 跨会话交接 |
 | [SUPABASE-EGRESS-AUDIT.md](<../SUPABASE-EGRESS-AUDIT.md>) | 2.6 | 2026-11-20 | Supabase 出网清单（只读审计，2026-11-20） |
-| [AGENTS.md](<../AGENTS.md>) | 5.2 | 2026-11-19 | 幕景 Scendance · 项目规范（AI 与人共同必读） |
 | [README.md](<../README.md>) | 7.7 | 2026-11-19 | 幕景 Scendance |
 | [CONTRIBUTING.md](<../CONTRIBUTING.md>) | 2.3 | 2026-11-18 | 贡献与自动化约定 |
 | [BACKEND.md](<../BACKEND.md>) | 2.3 | 2026-11-05 | 场景规划 Agent 后端 |
@@ -594,9 +593,9 @@
 
 1. **编号占用**：`docs/` 根 50 份编号文档，占用 01–63；缺号 14 个（08/10/17/18/20/30/31/34/35/38/51/52/53/54）。
 2. **重号**：46 号 2 份（`46-Agent运行卫生上线手册-20261116.md` / `46-虚拟场地纸面模式规格-20261117.md`）。
-3. **`docs/plans/` 命名**：48 份无日期前缀（文件名看不出新旧，只能看本表的时间列）。
-4. **未入库**：56 份 md 没有 git 记录（含 agent 草稿）；这些只在本机，别处 checkout 拿不到。
-5. **体量最大**：`HANDOFF.md` 696.7 KB、`CHANGELOG.md` 275.7 KB、`.zwork/artifacts/fd70728f-d78a-4513-936b-d951e6478c78/CHANGELOG.md` 262.8 KB、`docs/plans/2026-11-16-outdoor-agent-progress.md` 233.5 KB、`flow/进展.md` 191.5 KB、`docs/plans/delivery-frontend.md` 151.9 KB。
+3. **`docs/plans/` 命名**：9 份无日期前缀（文件名看不出新旧，只能看本表的时间列）。
+4. **未入库**：90 份 md 没有 git 记录（含 agent 草稿）；这些只在本机，别处 checkout 拿不到。
+5. **体量最大**：`HANDOFF.md` 699.3 KB、`CHANGELOG.md` 275.7 KB、`.zwork/artifacts/fd70728f-d78a-4513-936b-d951e6478c78/CHANGELOG.md` 262.8 KB、`docs/plans/2026-11-16-outdoor-agent-progress.md` 233.5 KB、`flow/进展.md` 191.5 KB、`docs/plans/2026-11-13-delivery-frontend.md` 151.9 KB。
 
 ## 生成口径
 

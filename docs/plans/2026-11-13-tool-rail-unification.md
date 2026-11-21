@@ -1,7 +1,7 @@
 # 左右工具轨 × 地图控件统一重设计方案（2026-11-13）
 
 > 状态：方案阶段，未改代码。按既定偏好：本地分支攒改动 → tsc + 定向测试 + 真机验收通过后再一次性推 main，不逐小改开 PR。
-> 基线：`main` 工作树实读（右轨 `scendance-workspace.tsx`、覆盖层 `outdoor-plan-overlay.tsx`、样式 `globals.css`）。既有互补文档：`sidebar-entry-unification-2026-11-12.md`（左轨入口与图标族，已定稿）、`outdoor-map-unification-2026-11-13.md`（外壳与去室内化路线）、`outdoor-map-decommission-2026-11-13.md`（M/R 切片路线）。
+> 基线：`main` 工作树实读（右轨 `scendance-workspace.tsx`、覆盖层 `outdoor-plan-overlay.tsx`、样式 `globals.css`）。既有互补文档：`2026-11-12-sidebar-entry-unification.md`（左轨入口与图标族，已定稿）、`2026-11-13-outdoor-map-unification.md`（外壳与去室内化路线）、`2026-11-13-outdoor-map-decommission.md`（M/R 切片路线）。
 > 配套草图：`docs/visual-2026/tool-rail-unification-sketch-2026-11-13.html`。
 
 ## 0. 问题与结论先行
@@ -238,4 +238,4 @@
 - 样式：`frontend/app/globals.css`（左轨 1097–1326；右轨 1645–1756）
 - 图标映射：`components/outdoor-tool-icons.ts`、`components/solid-icons.tsx`、`panels/material-symbol.tsx`；IconPark 缩放 `frontend/public/icon-park/`
 - 地图控件：`components/geo-scale-compass.tsx`、`components/outdoor-view-switch.tsx`
-- 关联计划：`sidebar-entry-unification-2026-11-12.md`、`outdoor-map-unification-2026-11-13.md`、`outdoor-map-decommission-2026-11-13.md`
+- 关联计划：`2026-11-12-sidebar-entry-unification.md`、`2026-11-13-outdoor-map-unification.md`、`2026-11-13-outdoor-map-decommission.md`

@@ -1,6 +1,6 @@
 # 第 11 批交付：阶段化进度
 
-日期 2026-11-05｜依据 `docs/plans/petitmaker-agent-teardown-2026-11-05.md` §10 第 1 条
+日期 2026-11-05｜依据 `docs/plans/2026-11-05-petitmaker-agent-teardown.md` §10 第 1 条
 
 ## 为什么要它
 

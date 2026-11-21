@@ -1,7 +1,7 @@
 # 室内去耦合 · 目标落点登记（main 基底，2026-11-14）
 
 > 基底：本地 `main` HEAD `492dcc8b`（远端 `origin/main` `f6409fb6`，仅差一个 `.dsh/skills` 手册 commit，非前端业务代码）。
-> 本文是退役规划 `outdoor-map-decommission-2026-11-13.md` 的**当前实读盘点**：把残留耦合按域登记到切片、标清门禁与可达性，供后续切片接手。**本轮只定目标，不拆 blocked 旧链、不合 wip 隔离切片。**
+> 本文是退役规划 `2026-11-13-outdoor-map-decommission.md` 的**当前实读盘点**：把残留耦合按域登记到切片、标清门禁与可达性，供后续切片接手。**本轮只定目标，不拆 blocked 旧链、不合 wip 隔离切片。**
 > 口径：行号随合并可能微移；路径除标注 `frontend/lib` 外均相对 `frontend/components/room-organizer/`。
 
 ## 1. 终局目标（沿用退役规划 §1，完成定义）

@@ -2,7 +2,7 @@
 
 > 日期：2026-11-04 ｜ 分片：B（审校 Bingo）｜ 基线分支：`feat/smart-build-scene-script`（台账 `a87c156` 口径）
 > 任务定义：Bingo 回归审校本意——画面钉点 → 意见线程 → 标记解决 → 回流制作者台账，对标 Figma / Frame.io 类画布锚点评审，**不承担布置生成对话**（台账 D3）。
-> 纪律：本文所有产品事实均经官方 URL 实际打开核实（见各节 URL）；幕景代码事实只引用导演台账已核验的 `file:line`（`docs/plans/ia-role-rework-ledger-2026-11-04.md` §3-B / S2），不脑补实现。
+> 纪律：本文所有产品事实均经官方 URL 实际打开核实（见各节 URL）；幕景代码事实只引用导演台账已核验的 `file:line`（`docs/plans/2026-11-04-ia-role-rework-ledger.md` §3-B / S2），不脑补实现。
 > 视觉与文案遵守 `docs/SCENDANCE-TASTE-IA-MEMO-2026-10-29.md`（顶部 2026-11-04 取代声明）：冷石 + 品牌绿，surface 文案不用禁词。
 
 ---

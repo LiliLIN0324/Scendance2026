@@ -27,7 +27,7 @@
 2. **模式切换**：没有「在线走 ⇄ 在区内走」的状态，也没有「进区点 / 出区点」的概念。
 3. **自主落座**：`setSeated(true)` 的唯一调用点是玩家接管的那个 avatar（`components/outdoor-plan-3d.tsx` 的 `useOutdoorWalk.onWalkFrame` → `control.setSeated(frame.seated, frame.seatHeight)`）。**没有任何 NPC 自己坐下**。
 4. **座椅占用**：无互斥。多人同时选到同一把椅子会叠在一起。
-5. **决策层**：没有感知、目标选择、避让 steering。`docs/plans/outdoor-walk-roadmap-2026-11-14.md` 把 steering + NavMesh（yuka / recast-navigation）列为后续方案，未落地。
+5. **决策层**：没有感知、目标选择、避让 steering。`docs/plans/2026-11-14-outdoor-walk-roadmap.md` 把 steering + NavMesh（yuka / recast-navigation）列为后续方案，未落地。
 
 ### 1.3 结论
 

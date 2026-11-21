@@ -90,7 +90,7 @@ mouseTool.on('draw', (data) => { ... setBbox(...) ... });
 ## 遗留
 
 1. **真实高德环境的前台实测未做。** 本轮验证在 jsdom + 假 AMap 下完成，真实浏览器里手点一圈、闭合、保存后刷新重开核对地点/顶点/轮廓（计划验收项）仍需在有 Key 的前台窗口补一轮，并留选址、绘制中、已保存三张图。
-2. **COLLAB 登记已补。** 本次只改 `amap-venue-picker.tsx` 与新增 `lib/venue-drawing.ts`（均非独占区），未触及五个独占文件；已在 COLLAB.md「待协商」表登记一行。
+2. **独占区登记已补。** 本次只改 `amap-venue-picker.tsx` 与新增 `lib/venue-drawing.ts`（均非独占区），未触及五个独占文件；已在《协作区变更登记》（`HANDOFF.md`）登记一行。
 3. **P0-2 未开始。** XH-03 实景落位（0233 与平湖秋月的地理对应、两个控制点、尺度核对）需要先解析 DJI 遥测 GPS，本轮已并行派出，结论见 `docs/evidence/xh03-0233-telemetry/REPORT.md`。
 
 ## 附：与计划的关系

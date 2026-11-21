@@ -63,10 +63,10 @@ eslint（发布链 6 个文件）              → 0 errors，49 warnings（既�
 为什么不能按「功能模块」无限切：
 
 1. **文件是热点，不是模块。** 剩余三块工作全压在 `share-menu.tsx`、`share-panel.tsx`、`room-organizer.tsx` 上。本轮已观测：改 `share-menu` 的预检状态，`room-organizer-publish` 4 条用例连带失败；再改 `share-panel` 的主按钮显隐，又触发同一批 4 条。上一轮的三方分工（A=share-menu、B=share-panel+view、集成=room-organizer）就是按文件所有权切出来的，本文沿用。
-2. **一台机器只有一条构建与验证通道。** COLLAB 已记：全量 765 文件并发跑出 16 个失败，其中 6 个隔离复跑 145 例全绿，属内存抖动。多个执行者同时跑 build + vitest，等于互相制造假失败。
+2. **一台机器只有一条构建与验证通道。** 此前已记：全量 765 文件并发跑出 16 个失败，其中 6 个隔离复跑 145 例全绿，属内存抖动。多个执行者同时跑 build + vitest，等于互相制造假失败。
 3. **云端按数据串行。** v4 与 v5 不能并发发布到同一项目，CAS 会互相拒绝。
 
-**其他任务的在途改动必须原样保留。** 当前工作树里还有「全局新手引导」任务的未提交改动（`onboarding/`、`COLLAB.md`、`HANDOFF.md`、`app/globals.css`、`frontend/tsconfig.json`、`site-plan-guide*`、若干删除的截图、`.tmp-audit/`、`snap-*.yml`、`deliverables/*.mp4`）。任何计划的提交都不得 `git add -A`，也不得借这次提交把它们带进去；`room-organizer.tsx` 若同时含两类改动，需按 hunk 分离（`083b6975` 已按此做）。
+**其他任务的在途改动必须原样保留。** 当前工作树里还有「全局新手引导」任务的未提交改动（`onboarding/`、`COLLAB.md`（已并入 `AGENTS.md`）、`HANDOFF.md`、`app/globals.css`、`frontend/tsconfig.json`、`site-plan-guide*`、若干删除的截图、`.tmp-audit/`、`snap-*.yml`、`deliverables/*.mp4`）。任何计划的提交都不得 `git add -A`，也不得借这次提交把它们带进去；`room-organizer.tsx` 若同时含两类改动，需按 hunk 分离（`083b6975` 已按此做）。
 
 ## 5. 验收矩阵映射
 

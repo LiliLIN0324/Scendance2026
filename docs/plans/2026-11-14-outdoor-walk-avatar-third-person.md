@@ -1,7 +1,7 @@
 # 户外人物漫游 · 三期落点设计（avatar / 视角 / 坐姿）（2026-11-14）
 
 > 基底：main 已含一期「裸第一人称步行」（`21a05ef8`）与视觉收口（`ff800d28`）。
-> 本文是一期设计稿 `outdoor-first-person-walk-2026-11-13.md` 的后续切片，不改动其验收结论。
+> 本文是一期设计稿 `2026-11-13-outdoor-first-person-walk.md` 的后续切片，不改动其验收结论。
 > 目标：在一期户外步行控制器之上**独立层叠**人物 avatar、首/三/肩视角、坐姿；一行不碰室内旧 walkthrough / avatar / 座椅分配链路。
 > 路径口径：除明确写 `frontend/lib/...` 外，下文 `hooks/`、`components/`、`lib/`、`three/`、`panels/` 均相对 `frontend/components/room-organizer/`。
 

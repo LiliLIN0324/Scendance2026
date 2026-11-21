@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "source": {
-    "norms": "docs/plans/activity-space-norms-2026-11-05.md §1–§7",
+    "norms": "docs/plans/2026-11-05-activity-space-norms.md §1–§7",
     "code": "frontend/components/room-organizer/lib/outdoor-event-logic.ts",
     "note": "capacity 与 layoutDefaults 全部有出处；status=spec-only 表示只有规范、代码尚未支持，Agent 不得宣称能排。"
   },

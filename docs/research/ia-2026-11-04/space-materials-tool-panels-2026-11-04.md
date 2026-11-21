@@ -2,7 +2,7 @@
 
 > 日期：2026-11-04
 > 范围：幕景 S3「空间 / 物料面板化」的对标调研与可执行原则。空间＝场与壳的工具面板；物料＝道具库与生成工具面板。两者**不是人格**，不维持对称式聊天窗。
-> 代码事实口径：只引用导演台账 `docs/plans/ia-role-rework-ledger-2026-11-04.md` 已核实行号，以及本分片 2026-11-04 当天在活枝（`feat/smart-build-scene-script` 工作树）实测的 grep 结果；未实测的标「待核验」。
+> 代码事实口径：只引用导演台账 `docs/plans/2026-11-04-ia-role-rework-ledger.md` 已核实行号，以及本分片 2026-11-04 当天在活枝（`feat/smart-build-scene-script` 工作树）实测的 grep 结果；未实测的标「待核验」。
 > 文案纪律：界面建议文案遵守 2026-10-29 备忘录禁词（重建、高斯、splat、WorldGen、Object、Composer、模式库不上界面）；内部管线名只出现在本文分析区。
 > 配套灵感板：同目录 `space-materials-tool-panels-2026-11-04.html`。
 

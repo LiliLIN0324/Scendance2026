@@ -6,7 +6,7 @@
  * 2) 结构类型让 `SitePlanData` 与测试夹具都能直接传进来，不需要先 zod 解析。
  *
  * 坐标系：与 site-plan 一致，单位米，1 格 = 1 m。旋转只支持 0/90/180/270
- * （`docs/plans/activity-space-norms-2026-11-05.md` §0.2）。
+ * （`docs/plans/2026-11-05-activity-space-norms.md` §0.2）。
  */
 
 export type Point = { x: number; y: number };

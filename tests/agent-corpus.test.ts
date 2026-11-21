@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
  * Agent 底座语料的守门测试（2026-11-18）。
  *
  * 目标不是验证「布局对不对」，而是保证四份机读件：
- * ① 与规范文档 `docs/plans/activity-space-norms-2026-11-05.md` 不脱节；
+ * ① 与规范文档 `docs/plans/2026-11-05-activity-space-norms.md` 不脱节；
  * ② 内部交叉引用不断（模板→判据、物料→判据、示例→判据）；
  * ③ 格数换算与文档声明一致（min 向上取整、max 向下取整）。
  *
@@ -124,7 +124,7 @@ describe('layout-assertions.json', () => {
   });
 
   it('每条判据的编号在规范文档里存在（防止语料自造规则）', () => {
-    const doc = readFileSync(path.join(root, 'docs', 'plans', 'activity-space-norms-2026-11-05.md'), 'utf8');
+    const doc = readFileSync(path.join(root, 'docs', 'plans', '2026-11-05-activity-space-norms.md'), 'utf8');
     const documented = new Set(
       [...doc.matchAll(/\|\s*((?:GEN|KID|ELD|MKT|STG|CMP|EXH)-\d{2})\s*\|/g)].map((match) => match[1]),
     );

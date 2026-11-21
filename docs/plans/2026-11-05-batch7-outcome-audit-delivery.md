@@ -4,7 +4,7 @@
 |---|---|
 | 分支 | `feat/continue-20261105`（基于 `origin/main` d27cd7d） |
 | 提交 | `feat(bingo): 让本次结果真的出现在审校台上（第 7 批收尾）` |
-| 路线图 | `docs/plans/smart-build-next-phase-2026-11-05.md`（第 7 批 / 第 10 章 Z8） |
+| 路线图 | `docs/plans/2026-11-05-smart-build-next-phase.md`（第 7 批 / 第 10 章 Z8） |
 | 日期 | 2026-11-05 |
 
 ---

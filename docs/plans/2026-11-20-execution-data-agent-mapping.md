@@ -147,7 +147,7 @@
 
 | 对照表条目 | 落点层 | 说明 |
 |---|---|---|
-| P0 入口收拢：砍抬头常驻 pill，布置卡保留一个触发点 | `panels/agent-panel.tsx`；左轨入口在 `room-organizer.tsx`（COLLAB 第一节我方独占） | 只改入口挂载与可见性；不碰 paintFrame、导出档位、点云合成顺序 |
+| P0 入口收拢：砍抬头常驻 pill，布置卡保留一个触发点 | `panels/agent-panel.tsx`；左轨入口在 `room-organizer.tsx`（`AGENTS.md` 第六节独占区） | 只改入口挂载与可见性；不碰 paintFrame、导出档位、点云合成顺序 |
 | P0 核对视图 B1–B4 缺口聚合 | 前端只读本机 operations / handoff / production / checkin | 规则复用现有契约校验：缺负责人 / 期限 / 验收条件 / 证据、任务与物件引用缺失或歧义、预算超限、点验争议；不新增录入 |
 | 现有表单字段展示、状态流转 UI、门禁提示文案 | 各台账面板 | 不改字段含义 |
 | 交付段产物分组、入口、缺件提示 | `scene-delivery-panel.tsx` | 不改成图合成链路 |
@@ -176,5 +176,5 @@
 
 ### 8.5 我方不直接动的区域
 
-- COLLAB 第一节渲染 / 导出闭环五文件、第二节几何基线两文件；确需改动先在 COLLAB「待协商」登记，不直改。
+- 根 `AGENTS.md` 第六节：渲染 / 导出闭环五文件、几何基线两文件；确需改动先在 `HANDOFF.md`《协作区变更登记》登记，不直改。
 - 不另起并行 wire schema；不把本机台账混上云端。

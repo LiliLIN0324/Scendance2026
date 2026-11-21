@@ -60,9 +60,9 @@ C4 存储事实：plan 草稿按 project 单键（`scendance-outdoor-plan-v1:<pr
 
 ## 4. 治理冲突已修正（2026-11-18）
 
-`2026-11-17-decouple-execution-plan.md §0.4` 原写「一次性推 main；不为小改动开 PR」，与 `AGENTS.md §六`「`main` 必须走 PR，不得直推」冲突。已按下面这句改掉：
+`2026-11-17-decouple-execution-plan.md §0.4` 原写「一次性推 main；不为小改动开 PR」，与 `AGENTS.md §七`「`main` 必须走 PR，不得直推」冲突。已按下面这句改掉：
 
-> 本地攒好 tsc + 定向测试 +（涉及交互的）真机验收后，**按 `AGENTS.md §六` 开 PR 到 main**，由人评审合并；不直推 main，不为小改动拆多个 PR。
+> 本地攒好 tsc + 定向测试 +（涉及交互的）真机验收后，**按 `AGENTS.md §七` 开 PR 到 main**，由人评审合并；不直推 main，不为小改动拆多个 PR。
 
 同轮一并更新：计划 §0.3、`g1-closure-status.md`、`2026-11-17-b1-b4-execution-cards.md` 的台账锚点已从 `0a59f7b0` 换成 `63b11ae1`（116 失败文件）。
 

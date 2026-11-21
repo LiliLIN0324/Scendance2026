@@ -3,7 +3,7 @@
 > 审计日期：2026-11-04（快照口径，见下「活体漂移警告」）
 > 审计员：分片 C 只读审计；全程未改任何代码、未跑任何命令（vitest / tsc / build / dev / git 一律未执行）。
 > 仓库根：`C:\mujing\Scendance2026`；下文 file:line 均相对此根。
-> 依据台账：`docs/plans/ia-role-rework-ledger-2026-11-04.md`（下称「台账」），S4 任务书见台账第 4 节、回归门见同节、:341 报错见第 3 节 E 组。
+> 依据台账：`docs/plans/2026-11-04-ia-role-rework-ledger.md`（下称「台账」），S4 任务书见台账第 4 节、回归门见同节、:341 报错见第 3 节 E 组。
 
 ---
 
@@ -108,7 +108,7 @@
 |---|---|
 | `docs/design-spec-2026.md` | 3 |
 | `docs/SCENDANCE-AI-HANDOFF-v2.0-2026-10-29.md` | 2 |
-| `docs/plans/ia-role-rework-ledger-2026-11-04.md` | 6（台账自身引用新旧口径） |
+| `docs/plans/2026-11-04-ia-role-rework-ledger.md` | 6（台账自身引用新旧口径） |
 | `docs/research/ia-2026-11-04/index.html` | 1 |
 | `docs/SPACE-MATERIAL-CHAT-DESIGN.md` | 2 |
 | `docs/visual-2026/design-spec-2026.html` | 7 |

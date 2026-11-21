@@ -1,6 +1,6 @@
 # G1 纯函数地基收口状态 × 剩余前置清单（2026-11-17）
 
-> 口径：只读盘点 `origin/main`，不改代码、不拆旧链。对照 `docs/plans/outdoor-map-decommission-2026-11-13.md` 的 M/R 切片路线与 §7.5 合入梯度。
+> 口径：只读盘点 `origin/main`，不改代码、不拆旧链。对照 `docs/plans/2026-11-13-outdoor-map-decommission.md` 的 M/R 切片路线与 §7.5 合入梯度。
 > 基线锚点：main `c9706da5`（含 walls 图例切片 `84849e66`；`10a54bec` 标注工具条线已随 M7 合入，不属退役重构；M7 只动 outdoor 状态卡/标注工具，不涉及 G1 稳定面）。
 > 冻结面（G1 稳定面，动 M3 前不得改）：routeBridge 九方法签名、`SitePlanData` 既有字段、`OutdoorTaskProgress`、物料生成链路入参、会话 scope 现状。
 

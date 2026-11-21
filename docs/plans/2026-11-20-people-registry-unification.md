@@ -35,7 +35,7 @@
 
 ### 1.3 为什么当时会这样合
 
-[outdoor-walk-roadmap-2026-11-14.md](outdoor-walk-roadmap-2026-11-14.md) §P1 写的是「统一角色登记表：人群类型 + 性别 → 首选 Aholo 槽位 / walk 模型 / 低模 / 占位」，把 `walk-roles` 与 `CROWD_TYPE_MODELS` 两套登记合并、接 16 槽与 `modelSource` 三态。实际落地是「16 槽并进 11 条」——登记表没建，两套语义靠 `spread` 拼在一起。`crowd-types.ts` 里「每个 slug 只属于一类，避免同一模型在多处重复出现」只在低模层生效，角色层没有对应约束。
+[2026-11-14-outdoor-walk-roadmap.md](2026-11-14-outdoor-walk-roadmap.md) §P1 写的是「统一角色登记表：人群类型 + 性别 → 首选 Aholo 槽位 / walk 模型 / 低模 / 占位」，把 `walk-roles` 与 `CROWD_TYPE_MODELS` 两套登记合并、接 16 槽与 `modelSource` 三态。实际落地是「16 槽并进 11 条」——登记表没建，两套语义靠 `spread` 拼在一起。`crowd-types.ts` 里「每个 slug 只属于一类，避免同一模型在多处重复出现」只在低模层生效，角色层没有对应约束。
 
 ### 1.4 已经影响到行为，不只是观感
 

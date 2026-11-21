@@ -6,7 +6,7 @@
 
 | 文件 | 内容 | 上游真源 |
 |---|---|---|
-| `layout-assertions.json` | 80 条布局判据 + 12 条规范冲突，含优先级、来源等级、判据表达式、格数 | `docs/plans/activity-space-norms-2026-11-05.md` |
+| `layout-assertions.json` | 80 条布局判据 + 12 条规范冲突，含优先级、来源等级、判据表达式、格数 | `docs/plans/2026-11-05-activity-space-norms.md` |
 | `event-templates.json` | 7 类活动模板：识别词、容量公式、必备设施、关键判据、代码支持状态 | 同上 §1–§7；代码 `outdoor-event-logic.ts` |
 | `site-evidence.schema.json` | 场地证据摘要的目标 schema（要素类型、确定性、来源、布局权重） | `frontend/lib/site-intelligence/types.ts` 的实际枚举 |
 | `site-evidence.example.json` | 按上述 schema 手写的一个最小样例（合成场地，非真实项目） | —— |

@@ -3,7 +3,7 @@
 - 审计日期：2026-11-04
 - 审计基线：活仓库 `C:\mujing\Scendance2026` 工作树（S1.0 已完工后的状态；行号全部本轮字符串匹配重新钉死，未跑 git/vitest/build/dev）
 - 口径：只读静态审计；所有 `file:line` 相对仓库根；代码标识符原文保留，用户可见建议文案不含「高斯/WorldGen」等内部管线名
-- 关联：导演台账 `docs/plans/ia-role-rework-ledger-2026-11-04.md`（§3-C/D、§4-S3）；上一轮 `docs/plans/ia-s1-prep-2026-11-04/s2-review-audit.md`（§3.1 口令函数表，本轮已逐行复核无漂移）；对标调研 `docs/research/ia-2026-11-04/space-materials-tool-panels-2026-11-04.md`（下称 C 板）
+- 关联：导演台账 `docs/plans/2026-11-04-ia-role-rework-ledger.md`（§3-C/D、§4-S3）；上一轮 `docs/plans/ia-s1-prep-2026-11-04/s2-review-audit.md`（§3.1 口令函数表，本轮已逐行复核无漂移）；对标调研 `docs/research/ia-2026-11-04/space-materials-tool-panels-2026-11-04.md`（下称 C 板）
 
 ---
 

@@ -2,7 +2,7 @@
 
 > 日期：2026-11-04
 > 范围：只读前置审计。审计对象 `frontend/components/room-organizer/panels/local-activities-panel.tsx` 及其 CSS、测试、数据流 lib、全仓挂载点。
-> 证据口径：全部行号为本次实读工作树的真实行号（Windows，`C:\mujing\Scendance2026` 活仓库）。导演台账 `docs/plans/ia-role-rework-ledger-2026-11-04.md` 的锚点已发生漂移，漂移清单见 §5 与 §8。
+> 证据口径：全部行号为本次实读工作树的真实行号（Windows，`C:\mujing\Scendance2026` 活仓库）。导演台账 `docs/plans/2026-11-04-ia-role-rework-ledger.md` 的锚点已发生漂移，漂移清单见 §5 与 §8。
 > 重要前提：审计进行期间主线程正在同树实施 S1.0，`agent-panel.tsx` 被实时改写（同一 grep 间隔内 `talkTo` 从有到无）。凡受 S1.0 影响的判断均已标注「待 S1.0 落地后复核」。
 
 ---

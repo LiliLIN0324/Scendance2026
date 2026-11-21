@@ -6,7 +6,7 @@
  *  2. `renderRecipes` —— 把选中的配方压成可直接塞进系统提示词的中文短文本。
  *
  * 不拼提示词、不调模型、不读 IO、不用随机。
- * 数值全部来自 docs/plans/activity-space-norms-2026-11-05.md，1 格 = 1 米；
+ * 数值全部来自 docs/plans/2026-11-05-activity-space-norms.md，1 格 = 1 米；
  * 每条规则的 note 开头标明来源级别（A 国标 / B 地方或公安口径 / C 经验值）。
  */
 

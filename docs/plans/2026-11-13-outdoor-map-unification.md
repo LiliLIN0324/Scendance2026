@@ -325,4 +325,4 @@
 
 - 分流：`workspace-shell.tsx:136-169`、`lib/outdoor-project-store.ts:137-155`
 - B 状态：`room-organizer.tsx:536-565`；`outdoor3dTakeover` 派生 :2423；overlay 挂载 :4507-4548；inspectorHost :4554；视图胶囊 :4562-4571；室内 Viewport :4573；接管层 :4665-4684；户外钮 :4273-4312；`showAgent` :831；`toggleAgent` :953。
-- 既有对齐计划：`docs/plans/outdoor-2d-one-flow-2026-11-10.md`（D1 一份 SitePlanData、D2 一张画布）；`docs/plans/sidebar-entry-unification-2026-11-12.md`（左轨视觉，与本计划互补）。
+- 既有对齐计划：`docs/plans/2026-11-10-outdoor-2d-one-flow.md`（D1 一份 SitePlanData、D2 一张画布）；`docs/plans/2026-11-12-sidebar-entry-unification.md`（左轨视觉，与本计划互补）。

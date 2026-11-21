@@ -1,6 +1,6 @@
 # 户外人物漫游 · 远景路线图（素材 / 对应 / 动线 / 视角交互 / 权限对话）（2026-11-14）
 
-> 基底：三期落点文档 `outdoor-walk-avatar-third-person-2026-11-14.md`（avatar / 三视角 / 坐姿设计，文档已进 main；对应代码切片按三期 §7 顺序落地）。
+> 基底：三期落点文档 `2026-11-14-outdoor-walk-avatar-third-person.md`（avatar / 三视角 / 坐姿设计，文档已进 main；对应代码切片按三期 §7 顺序落地）。
 > 本文是三期下游的**远景切片规划**，不替代三期已排定的验收口径；三期没做完的部分不在本文重复展开。
 > 讨论结论（2026-11-14 夜，用户拍板）：五步走——素材生成化、2D↔3D 对应打通、动线三类流、视角与 E 交互、分权限对话接微信。
 > 路径口径：除明确写 `frontend/lib/...` 外，下文 `hooks/`、`components/`、`lib/`、`three/` 均相对 `frontend/components/room-organizer/`。

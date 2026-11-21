@@ -2,7 +2,7 @@
 
 对象：petitmaker.com.cn（用户接入 MiniMax M3.1 Flash 自定义端点后首次真跑）
 方式：内置浏览器实机操作，接受主动建议（铺路任务）→ 观察运行态/完成态 → 不可能任务 → 中断 → 设置面板。全程截图存 artifacts。
-本文只记「前端可抄的模式」，协议层见 `petitmaker-agent-teardown-2026-11-05.md`。
+本文只记「前端可抄的模式」，协议层见 `2026-11-05-petitmaker-agent-teardown.md`。
 
 ---
 
