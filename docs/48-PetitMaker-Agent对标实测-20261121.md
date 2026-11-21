@@ -6,7 +6,7 @@
 
 ## 一、实测轮次一览
 
-画布实况截图：[images/petitmaker-20261121/04-zoning-proposal-preview.png](images/petitmaker-20261121/04-zoning-proposal-preview.png)（轮 4 收尾态：9 个自创分区标记 + 「已撤销 · 未改动地图」+ 「按这个方案开工」提示词；composer 四形态与其余状态的截图清单见 docs/50 补拍清单）。
+画布实况截图（原 `docs/images/petitmaker-20261121/04-zoning-proposal-preview.png`，已于 2026-11-22 删除）：轮 4 收尾态 —— 9 个自创分区标记 + 「已撤销 · 未改动地图」+ 「按这个方案开工」提示词；composer 四形态与其余状态的截图清单见 docs/50 补拍清单（图同样已删，内容以文字记录）。
 
 | 轮 | 用户输入（要点） | Agent 行为 | 量级 |
 | --- | --- | --- | --- |
