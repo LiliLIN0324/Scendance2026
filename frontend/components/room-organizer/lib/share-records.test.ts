@@ -1,6 +1,19 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appendShareRecord, mergeShareRows, readShareRecords, type ServerShare } from './share-records';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
+
+let memStorage: MemoryStorage;
+beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+});
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
+});
 
 const serverShare = (patch: Partial<ServerShare>): ServerShare => ({
   shareId: patch.shareId ?? 'sh-1',

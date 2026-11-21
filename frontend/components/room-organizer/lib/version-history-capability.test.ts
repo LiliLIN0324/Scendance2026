@@ -4,10 +4,12 @@ import {createLocalWriteLeaseManager} from '@/lib/local-write-lease';
 import {VERSION_HISTORY_PENDING_KEY} from '@/lib/version-history-pending';
 import {makeLayout} from './__testfixtures__/fixtures';
 import {clearSnapshots,evictOldestSnapshot,listSnapshots,recordSnapshot,recoverVersionHistoryChange,VERSION_HISTORY_STORAGE_KEY,VERSION_HISTORY_META_KEY} from './version-history';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>callback({name:'history'}));}} as unknown as LockManager;
 const manager=()=>createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage});
-beforeEach(()=>vi.stubGlobal('navigator',{locks}));
-afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();window.localStorage.clear();});
+let memStorage: MemoryStorage;
+beforeEach(()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;vi.stubGlobal('navigator',{locks});});
+afterEach(()=>{memStorage?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('retains an undo record when a lease is lost after writing the ring and recovers on a fresh lease',async()=>{
   expect(recordSnapshot(makeLayout({width:8}),{force:true})).toBe(true);
   const before=window.localStorage.getItem(VERSION_HISTORY_STORAGE_KEY),meta=window.localStorage.getItem(VERSION_HISTORY_META_KEY);

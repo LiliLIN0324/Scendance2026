@@ -53,6 +53,7 @@ import { clearUnsavedSourceDraftsForTests } from './unsaved-source-drafts';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
@@ -1085,6 +1086,11 @@ function upload(container: HTMLElement, files: File[]): void {
 beforeEach(() => {
   mockBrowserLocks();
   vi.stubGlobal('crypto',webcrypto);
+  const memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+  window.Storage = MemoryStorage as unknown as typeof Storage;
   localStorage.clear(); sessionStorage.clear();
   routerPush.mockReset();
   onApply.mockReset();

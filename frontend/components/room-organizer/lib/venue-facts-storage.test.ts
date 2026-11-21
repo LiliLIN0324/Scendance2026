@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { emptyVenueFacts, updateVenueFact } from './venue-facts';
 import { initializeUnknownVenueFacts, readVenueFacts, writeVenueFacts } from './venue-facts-storage';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 const scope='activity:sample';
 const change=(value:number)=>({value,source:'user_statement' as const,status:'pending' as const,uncertainty:null,sourceRef:null,updatedBy:'小林',updatedAt:'2026-11-07T00:00:00.000Z'});
 let tail:Promise<unknown>;
 const locks={request(_name:string,_options:unknown,callback:()=>Promise<unknown>){const result=tail.then(callback);tail=result.catch(()=>{});return result;}} as unknown as LockManager;
-beforeEach(()=>{localStorage.clear();tail=Promise.resolve();});
+let memStorage: MemoryStorage;
+beforeEach(()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;localStorage.clear();tail=Promise.resolve();});
+afterEach(()=>{memStorage?.clear();vi.unstubAllGlobals();});
 it('writes and reloads only the matching activity, rejecting old or concurrent updates',async()=>{
   const initial=emptyVenueFacts(scope),first=updateVenueFact(initial,'venue_width',change(12),0),other=updateVenueFact(initial,'venue_width',change(14),0);
   const outcomes=await Promise.allSettled([writeVenueFacts(scope,first,0,localStorage,locks),writeVenueFacts(scope,other,0,localStorage,locks)]);

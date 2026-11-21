@@ -1,12 +1,25 @@
 // @vitest-environment jsdom
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { initialBriefMemory } from './brief-agent';
 import { pruneBriefMemories, readBriefMemory, writeBriefMemory } from './assistant-brief-memory';
 import { resolveBriefTurn } from '@/lib/agent-resolver';
 import {makeFloor,makeItem,makeLayout} from './__testfixtures__/fixtures';
 import {captureOriginalPreservation,reviewOriginalPreservation} from './original-preservation';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
-beforeEach(() => localStorage.clear());
+let memStorage: MemoryStorage;
+beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+  localStorage.clear();
+});
+
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
+});
 
 it('restores the original-object constraint only in its own conversation and activity',()=>{
   const layout=makeLayout({id:'activity-a',floors:[makeFloor({items:[makeItem({id:'original'})]})]});

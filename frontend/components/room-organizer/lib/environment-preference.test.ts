@@ -1,8 +1,20 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearEnvironment, environmentPreferenceKey, readEnvironment, writeEnvironment } from './environment-preference';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
-afterEach(() => localStorage.clear());
+let memStorage: MemoryStorage;
+beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+  localStorage.clear();
+});
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
+});
 
 describe('environment preference', () => {
   it('remembers one environment per project and keeps the draft separate', () => {

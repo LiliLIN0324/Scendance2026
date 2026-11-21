@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { materialCheckinLedgerSchema } from '../../supabase/functions/_shared/material-checkin-contract';
 import { makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { STORAGE_KEY } from '../components/room-organizer/lib/constants';
@@ -13,6 +13,7 @@ import {
 } from './local-project-restore';
 import { readSourceRecord, readSourceRecordSnapshot, readSourceScopeSnapshot, updateSourceForm, type SourceRecordSnapshot, type SourceScopeSnapshot } from './source-storage';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
+import { MemoryStorage } from './test-support-memory-storage';
 
 const records = new Map<string, unknown>();
 const drawings = new Map<string, { sources: unknown[]; form?: unknown }>();
@@ -64,7 +65,12 @@ function access(layout: RoomLayout) {
   };
 }
 
+let memStorage: MemoryStorage;
 beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
   records.clear(); drawings.clear(); localStorage.clear();
   vi.stubGlobal('crypto', webcrypto);
   vi.mocked(updateSourceForm).mockReset().mockImplementation(async (key: unknown, update: (current: unknown) => unknown) => {
@@ -91,6 +97,11 @@ beforeEach(() => {
       form: drawing && 'form' in drawing ? structuredClone(drawing.form) : undefined,
     };
   });
+});
+
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
 });
 
 it('archives the original activity, writes a fresh empty one, and reads both back without enabling file restore', async () => {

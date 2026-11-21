@@ -415,8 +415,6 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
       {snapshot.receipt && <><button type="button" className="ap-icon-btn ap-audit-clear" aria-label="清回执" title="清回执" onClick={onClearReceipt}><Trash2 size={14} aria-hidden="true"/></button><p className="ap-audit-receipt"><Check size={14} aria-hidden="true"/>本机旧回执，未核对当前版本 · <time dateTime={snapshot.receipt.at}>{formatBingoTime(snapshot.receipt.at) || snapshot.receipt.at}</time></p></>}
       {snapshot.plans.map((plan, index) => <AuditPlan key={`${plan.shareId}-${index}`} plan={plan} ordinal={index + 1} scopeKey={scopeKey} isCurrent={isCurrent}/>)}
     </details>}
-
-    <p className="ap-audit-disclaimer">我会出错，也可能破坏你的设计。请在交付前亲自巡场一遍。</p>
   </section>;
 }
 

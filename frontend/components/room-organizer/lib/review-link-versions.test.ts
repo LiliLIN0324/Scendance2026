@@ -6,15 +6,17 @@ import {BINGO_MARK_KEY,readBingoSnapshot} from './bingo-status';
 import {createActivitySessionTracker} from './activity-session-epoch';
 import {createFloorSessionTracker} from './floor-session-epoch';
 import {createLayoutStore} from '../hooks/use-layout-store';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 
+let memStorage: MemoryStorage;
 function link(name:string){
  const items=Array.from({length:12},(_,index)=>makeItem({id:`chair-${index}`,name:`第 ${index} 把椅子`,position:{x:index/10,z:1}}));
  const layout=makeLayout({name,floors:[makeFloor({id:'floor-a',items})]});
  return `https://example.test/review/#layout=${Buffer.from(JSON.stringify(layout)).toString('base64url')}`;
 }
 const input=(clientUrl:string)=>({projectKey:'local-project',title:'活动',shareId:'local-project',clientUrl,reviewPlanKey:'legacy'});
-beforeEach(()=>{localStorage.clear();vi.stubGlobal('navigator',{locks:{request:async (_name:string,_options:unknown,callback:(lock:unknown)=>unknown)=>callback({})}});});
-afterEach(()=>{localStorage.clear();vi.unstubAllGlobals();});
+beforeEach(()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;localStorage.clear();vi.stubGlobal('navigator',{locks:{request:async (_name:string,_options:unknown,callback:(lock:unknown)=>unknown)=>callback({})}});});
+afterEach(()=>{memStorage?.clear();vi.unstubAllGlobals();});
 describe('review link version preservation',()=>{
  it('keeps a complete long link and two snapshots of the same activity',async()=>{
   const first=link('第一版'),second=link('第二版');expect(first.length).toBeGreaterThan(512);

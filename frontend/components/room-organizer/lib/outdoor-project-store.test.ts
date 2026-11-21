@@ -4,8 +4,10 @@ import {
   clearOutdoorProjectRecord,
   createStarterOutdoorPlan,
   DEFAULT_OUTDOOR_PLAN_ANCHOR,
+  DEFAULT_OUTDOOR_PROJECT_ID,
   hasOutdoorPlanDraft,
   latestOutdoorProjectId,
+  listOutdoorProjectRecords,
   OUTDOOR_LAST_PROJECT_KEY,
   outdoorPlanStorageKey,
   outdoorSaveScope,
@@ -18,6 +20,7 @@ import {
   type OutdoorProjectRecord,
 } from './outdoor-project-store';
 import { sitePlanDataSchema, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 /** node 环境的 Map 版 localStorage mock（够 KeyValueStorage 三个方法）。 */
 function memoryStorage(): KeyValueStorage & { dump(): Record<string, string> } {
@@ -400,5 +403,29 @@ describe('outdoorSaveScope（与云面板订阅同口径）', () => {
     expect(outdoorSaveScope(null)).toBe('local');
     expect(outdoorSaveScope(undefined)).toBe('local');
     expect(outdoorSaveScope('   ')).toBe('local');
+  });
+});
+
+describe('plan 草稿索引枚举（B1-b 身份恢复地基）', () => {
+  it('按 updatedAt 降序列出全部 plan 记录，过滤指针键与坏信封', () => {
+    const storage = new MemoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-a',
+      createdAt: '2026-11-10T07:00:00.000Z', updatedAt: '2026-11-10T08:00:00.000Z' }, storage);
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-b',
+      createdAt: '2026-11-11T08:00:00.000Z', updatedAt: '2026-11-11T09:00:00.000Z' }, storage);
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: DEFAULT_OUTDOOR_PROJECT_ID,
+      createdAt: '2026-11-09T06:00:00.000Z', updatedAt: '2026-11-09T07:00:00.000Z' }, storage);
+    storage.setItem(OUTDOOR_LAST_PROJECT_KEY, PID);
+    storage.setItem(outdoorPlanStorageKey('broken'), 'not-valid-json');
+
+    const listed = listOutdoorProjectRecords(storage);
+    expect(listed.map(item => item.projectId)).toEqual(['house-b', 'house-a', DEFAULT_OUTDOOR_PROJECT_ID]);
+    for (const item of listed) expect(item.plan).toEqual(samplePlan());
+  });
+
+  it('存储不提供枚举能力时安静返回空，不抛错', () => {
+    const storage = memoryStorage();
+    saveOutdoorProjectRecord(record(samplePlan()), storage);
+    expect(listOutdoorProjectRecords(storage)).toEqual([]);
   });
 });

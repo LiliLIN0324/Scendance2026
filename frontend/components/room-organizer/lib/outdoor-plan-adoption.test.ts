@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStarterOutdoorPlan, readOutdoorProjectRecord } from './outdoor-project-store';
 import {
   adoptOutdoorActivity,
@@ -7,8 +7,21 @@ import {
   listAdoptableActivities,
   localIdForActivity,
 } from './outdoor-plan-adoption';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
-beforeEach(() => localStorage.clear());
+let memStorage: MemoryStorage;
+beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+  localStorage.clear();
+});
+
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
+});
 
 describe('换设备找回活动', () => {
   it('没登录/失败/空都安静返回空列表', async () => {

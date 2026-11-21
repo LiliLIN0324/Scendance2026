@@ -3,10 +3,12 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {createLocalWriteLeaseManager} from '@/lib/local-write-lease';
 import {defaultSiteCalibration,SITE_CALIBRATION_STORAGE_KEY as KEY} from './site-capture';
 import {readSiteCalibrationStrict,writeSiteCalibrationStrict,reconcileSiteCalibration,exportCalibrationCandidate} from './site-calibration-capability';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 const locks={request(_name:string,_options:unknown,cb:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>cb({}));}} as unknown as LockManager;
 let lease:Awaited<ReturnType<ReturnType<typeof createLocalWriteLeaseManager>['acquire']>>;
-beforeEach(async()=>{localStorage.clear();vi.stubGlobal('navigator',{locks});lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();});
-afterEach(async()=>{await lease.release();vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
+let memStorage: MemoryStorage;
+beforeEach(async()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;localStorage.clear();vi.stubGlobal('navigator',{locks});lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();});
+afterEach(async()=>{await lease.release();memStorage?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('reads and updates a whole-map snapshot without changing unrelated assets',()=>{
  const a=defaultSiteCalibration('a'),b=defaultSiteCalibration('b');localStorage.setItem(KEY,JSON.stringify({a,b}));
  const initial=readSiteCalibrationStrict(lease.capability);expect(initial.status).toBe('ready');if(initial.status!=='ready')return;

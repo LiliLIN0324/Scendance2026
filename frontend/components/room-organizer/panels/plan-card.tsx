@@ -169,13 +169,6 @@ const inputStyle: CSSProperties = {
   outline: 'none',
 };
 
-const footerStyle: CSSProperties = {
-  color: '#9ca3af',
-  fontSize: 11,
-  textAlign: 'center',
-  marginTop: 2,
-};
-
 /* ---------- 第 12 批：三版分数条 / AI 建议样式 ---------- */
 
 const variantsBlockStyle: CSSProperties = {
@@ -651,7 +644,6 @@ export function PlanCard({
         }}
       />
 
-      <footer style={footerStyle}>我会出错，也可能破坏你的设计。</footer>
     </section>
   );
 }

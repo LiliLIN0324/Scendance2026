@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
-import {afterEach,describe,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {emptyVenueFacts,updateVenueFact} from './venue-facts';
 import {venueFactsStorageKey} from './venue-facts-storage';
 import {unlinkedVenueNotes,withUnlinkedVenueNotes} from './unlinked-venue-export';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 
 const scope='activity:fixture';
+let memStorage: MemoryStorage;
 const locks={request:vi.fn(async(_name:string,options:{mode:string},callback:()=>Promise<unknown>)=>{expect(options.mode).toBe('shared');return callback();})} as unknown as LockManager;
 function recorded(){return updateVenueFact(emptyVenueFacts(scope),'door_width',{value:1.2,source:'site_measurement',status:'confirmed',uncertainty:.02,sourceRef:'private-source',updatedBy:'private-person',updatedAt:'2026-11-08T00:00:00Z'},0);}
 function save(value:unknown){localStorage.setItem(venueFactsStorageKey(scope)!,JSON.stringify(value));}
-afterEach(()=>{localStorage.clear();vi.clearAllMocks();});
+beforeEach(()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;});
+afterEach(()=>{memStorage?.clear();vi.clearAllMocks();vi.unstubAllGlobals();});
 
 describe('unlinked venue records in local export',()=>{
  it('includes only selected facts, retaining provenance while excluding identity and source text',()=>{

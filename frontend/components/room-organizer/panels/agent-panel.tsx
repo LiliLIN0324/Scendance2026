@@ -4663,7 +4663,12 @@ useEffect(() => {
       if (!el) return false;
       const pin = () => { el.scrollTo?.({ top: el.scrollHeight }); };
       pin();
-      const resize = new ResizeObserver(pin);
+      const resize = new ResizeObserver(entries => {
+        // 用户主动展开/收起的折叠区（顶部活动画廊胶囊等）高度变化不抢滚动；
+        // 只有对话内容自身追加或容器尺寸变化才钉回最新消息。
+        if (entries.some(entry => entry.target instanceof Element && entry.target.closest?.('[data-pin-exempt]'))) return;
+        pin();
+      });
       resize.observe(el);
       for (const child of Array.from(el.children)) resize.observe(child);
       // 子节点增删（卡片/气泡挂载卸载）后重新跟踪新的内容元素。
@@ -5120,7 +5125,7 @@ useEffect(() => {
           if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(); }
         }}/>
         {/* 2026-11-21 文案纪律：输入框下方只放条件性状态行（排队 / 没存上 / 结果未知）。
-            常驻免责已按用户否决删除，见 AGENTS.md 第八节；别再换句话加回来。 */}
+            常驻免责已按用户否决删除，见 AGENTS.md 第九节；别再换句话加回来。 */}
         {outdoorSendQueue.length>0&&<p role="status" className="ap-field-note">已排队 {outdoorSendQueue.length} 条，当前任务结束后自动发送。</p>}
         {agent.generationQueued>0&&<p role="status" className="ap-field-note">排队 {agent.generationQueued} 条，按顺序处理中。</p>}
         {agent.retryUncertain && <div role="alert" className="ap-field-alert"><p>上次结果未知，可能还在计费。再发可能重复收费。</p><button type="button" onClick={agent.confirmUncertainRetry}>确认再次发送</button><button type="button" onClick={agent.dismissUncertainRetry}>暂不发送</button></div>}

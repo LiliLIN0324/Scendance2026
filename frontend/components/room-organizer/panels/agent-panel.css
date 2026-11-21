@@ -982,7 +982,6 @@ button.ap-ghost {
 .ap-audit-refused-row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-p2); }
 .ap-audit-refused-id { padding: 1px 6px; border-radius: 4px; background: var(--plane); color: var(--ink); font-size: var(--fs-cap); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ap-audit-refused-reason { color: var(--err); font-size: var(--fs-cap); }
-.ap-audit-disclaimer { margin: 4px 0 0; padding-top: 8px; border-top: 1px solid var(--wk-hair); font-size: var(--fs-p2); color: var(--ap-grey); line-height: var(--lh-p2); }
 
 /* Bingo 审校层次（按设计规范 §一.2 收口）：
    字号只用面板里的三档——分组标题 14/22·500、正文与问题行 14/22·400、元信息 12/20·400；
@@ -1016,7 +1015,7 @@ button.ap-ghost {
 .ap-review-empty { display: flex; align-items: center; gap: 8px; min-height: 40px; margin: 0; padding: 0 16px 0 40px; color: var(--wk-muted); font-size: var(--fs-p2); line-height: var(--lh-p2); }
 .ap-review-more { margin: 0; padding: 4px 16px 8px 64px; color: var(--wk-muted); font-size: var(--fs-p2); line-height: var(--lh-p2); }
 .ap-review-detail { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 12px 40px; }
-.ap-review .ap-audit-disclaimer, .ap-review .ap-audit-records { margin: 8px 16px 0; }
+.ap-review .ap-audit-records { margin: 8px 16px 0; }
 
 /* 空间 / 物料对话：与 Bingo 同一条输入条，不再压内边距做“紧凑版”。 */
 .ap-chat .ap-composer-tool { display:grid; place-items:center; width:26px; height:26px; padding:0; border:none; border-radius:var(--r-sm); background:transparent; color:var(--wk-muted); }

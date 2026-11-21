@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearPendingBrief,
   normalizeBriefText,
@@ -7,14 +7,25 @@ import {
   shouldResumeBrief,
   writePendingBrief,
 } from "./pending-brief";
+import { MemoryStorage } from "@/lib/test-support-memory-storage";
 
 const SCOPE = "activity:probe-a";
 const OTHER = "activity:probe-b";
 const TEXT = "在杭州植物园玉泉鱼跃周边做两日市集，六个摊位，签到集章放进摊区，园路留 4 米贯通。";
+let memStorage: MemoryStorage;
 
 describe("无地点设计句的待恢复槽", () => {
-  beforeEach(() => localStorage.clear());
-  afterEach(() => localStorage.clear());
+  beforeEach(() => {
+    memStorage = new MemoryStorage();
+    vi.stubGlobal("Storage", MemoryStorage);
+    vi.stubGlobal("localStorage", memStorage);
+    window.localStorage = memStorage;
+    localStorage.clear();
+  });
+  afterEach(() => {
+    memStorage?.clear();
+    vi.unstubAllGlobals();
+  });
 
   it("原话按活动写进去，读回来一字不改", () => {
     const written = writePendingBrief(SCOPE, TEXT, "place", 1_000);

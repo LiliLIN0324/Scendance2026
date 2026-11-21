@@ -8,7 +8,8 @@
  *   否则上排「卫星」格里会被塞进街道图，语义就废了；
  * - 脏 localStorage / 跨用途残值一律回落缺省，不污染上排。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import {
   DEFAULT_MAP_SLOTS,
   MAP_SLOT_STORAGE_KEY,
@@ -20,9 +21,18 @@ import {
   writeMapSlot,
 } from './map-source-slots';
 
+let memStorage: MemoryStorage;
 beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
   localStorage.clear();
   resetMapSlotsCacheForTest();
+});
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
 });
 
 describe('地图槽位缺省', () => {

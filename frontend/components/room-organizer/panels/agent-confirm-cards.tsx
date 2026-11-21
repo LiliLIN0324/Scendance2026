@@ -28,7 +28,7 @@ export function VenueConfirmCard({ state, onPick, onPreview, onDismiss, onManual
   const browsed = topThree.find((place) => place.name === browsing) ?? null;
   return <section className="ap-card ap-venue-card" aria-label="场地确认">
     <p className="ap-lead-title">我理解为「{state.query}」，设为场地？</p>
-    <p className="ap-lead-body">点一个标题，右侧地图先预览它的位置；1/2/3 可随意切换，看好再确认。确认后我会立壳、铺底图并把边界框出来。其余候选带门牌地址，按 1/2/3… 编号排在地图左上角的搜索下拉里。</p>
+    <p className="ap-lead-body">点标题先在地图预览，看好再确认。</p>
     {state.loading && <p className="ap-agent-line" role="status">正在找「{state.query}」的候选场地…</p>}
     {!state.loading && state.candidates.length === 0 && <>
       <p className="ap-agent-line">没搜到匹配「{state.query}」的场地。当前方案没有改动：已确认的场地、边界和分区都原样保留。</p>
@@ -37,7 +37,7 @@ export function VenueConfirmCard({ state, onPick, onPreview, onDismiss, onManual
         在地图上手动圈画
       </button>}
     </>}
-    {state.picking && <p role="status">正在查找真实边界（最多约 85 秒）；超时将转为手画，不会编造边界。</p>}
+    {state.picking && <p role="status">正在查找真实边界…</p>}
     {topThree.length > 0 && <div className="ap-option-pick">
       {topThree.map((place, index) => (
         <button
