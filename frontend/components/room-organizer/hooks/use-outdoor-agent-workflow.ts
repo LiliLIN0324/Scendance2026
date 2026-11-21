@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentDocument } from "../lib/agent-documents";
 import { AGENT_RANGE_BASIS_NOTE, reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
-import { proposeWeddingLayout, WEDDING_LIBRARY_QUERIES, type WeddingCandidateMetrics } from "../lib/wedding-layout";
+import { applyModelPlaceSteps, proposeWeddingLayout, WEDDING_LIBRARY_QUERIES, type WeddingCandidateMetrics } from "../lib/wedding-layout";
 import { requestsWeddingOptimization, weddingDesignRequest } from "../lib/wedding-request";
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
@@ -1904,14 +1904,23 @@ export function useOutdoorAgentWorkflow(input: {
         const report=await proposeWeddingLayout({plan,brief:designBrief,library,optimize,strategy:turn.designStrategy??'ceremony-first',hardBlocks,signal:job.controller.signal,
           onPhase:text=>{if(live(job)){status(text,'working',{stopLabel:'停止布置'});designStep(text);}}});
         if(!live(job)||JSON.stringify(bridge.getPlan())!==original)return;
-        for(const quantity of report.quantities)designStep(`${quantity.zone}：${quantity.role} ${quantity.placed}/${quantity.requested}${quantity.placeholder?'（尺寸占位件）':''}`);
-        // 2026-11-20 P1：结果摘要 + 本轮输入快照（比较另一版时按同一份边界/物料重算）。
-        const designSummary=buildDesignSummary({plan:report.plan,quantities:report.quantities,checks:report.checks,notes:report.notes,reachability:report.reachability,
+          for(const quantity of report.quantities)designStep(`${quantity.zone}：${quantity.role} ${quantity.placed}/${quantity.requested}${quantity.placeholder?'（尺寸占位件）':''}`);
+          // 2026-11-21 F1（docs/49）：模型放置步骤——design-event 响应里的格子级落位意图
+          // 逐条过安全门（红线钳制/占地冲突/物料解析）后落进方案；被拒的如实进设计过程，
+          // 不重试。落位在摘要计算之前，预览、确认卡与设计摘要看到的就是含模型步置的完整方案。
+          if (turn.placeSteps?.length) {
+            const stepReport = applyModelPlaceSteps({ plan: report.plan, steps: turn.placeSteps, library });
+            report.plan = stepReport.plan;
+            for (const line of stepReport.applied) designStep(`模型步置：${line}`);
+            if (stepReport.rejected.length) designStep(`模型步置被拒 ${stepReport.rejected.length} 条：${stepReport.rejected.map((r) => `${r.note}（${r.reason}）`).join('；')}。`);
+          }
+          // 2026-11-20 P1：结果摘要 + 本轮输入快照（比较另一版时按同一份边界/物料重算）。
+          const designSummary=buildDesignSummary({plan:report.plan,quantities:report.quantities,checks:report.checks,notes:report.notes,reachability:report.reachability,
           strategy:turn.designStrategy??'ceremony-first',...(designBrief.guests?{guests:designBrief.guests}:{})});
-        designInput.current={plan,brief:designBrief,library,hardBlocks,...(designBrief.guests?{guests:designBrief.guests}:{})};
-        setDesign({title:designSummary.title,summary:designSummary,state:'proposal',change:null,undoBefore:null,appliedVersion:null});
-        setDesignCompare(null);setDesignPending(null);setCompareNote(null);setLocateNote(null);
-        objectsLayoutRef.current=null;
+          designInput.current={plan,brief:designBrief,library,hardBlocks,...(designBrief.guests?{guests:designBrief.guests}:{})};
+          setDesign({title:designSummary.title,summary:designSummary,state:'proposal',change:null,undoBefore:null,appliedVersion:null});
+          setDesignCompare(null);setDesignPending(null);setCompareNote(null);setLocateNote(null);
+          objectsLayoutRef.current=null;
         if (report.checks.hardConflicts > 0) {
           status(`本版存在硬冲突，尚未写入画布：${designSummary.issues.join("；")}。先调整冲突后重新规划。`, "blocked");
           return;

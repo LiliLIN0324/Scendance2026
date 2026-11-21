@@ -3,14 +3,14 @@ import { clearForObject, proposeInventoryObjects, proposeUseZones } from './outd
 import { outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
 import { computePlaceableDomain, type PlaceableDomain } from './outdoor-placeable-domain';
 import { checkBoundaryRing, planPointInRing } from './site-plan-editing';
-import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
+import { facilityFootprintRing, facilityPlacementIssues, facilitiesFootprintsIntersect } from './site-plan-facilities';
 import {
   axisDepth, axisToward, axisUnit, axisWidth, bandRect, banquetCenters, ceremonyFocus, ceremonySeats,
   directionOfAxis, directionParts, estimateBanquetTables, estimateCeremonySeats, isDiagonalDirection, pointInRectAt,
   rectArea, rectCenter, rectDepth, rectFromRing, rectRing, rectWidth, snapAxis, splitAcross, WEDDING_DEFAULTS,
   type PlanRect, type WeddingAxis, type WeddingDirection,
 } from './wedding-spatial';
-import type { OutdoorBrief, OutdoorLibraryItem } from './outdoor-agent-contract';
+import type { OutdoorBrief, OutdoorLibraryItem, OutdoorTurn } from './outdoor-agent-contract';
 import type { PlanFacility, PlanPoint, PlanRoute, PlanZone, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 type Role = 'arch' | 'ceremony-chair' | 'banquet-table' | 'banquet-chair' | 'welcome-table' | 'sign' | 'photo' | 'rest-chair' | 'service-table';
@@ -1180,6 +1180,83 @@ async function buildWeddingCandidate(context: CandidateContext): Promise<BuiltCa
       reachability: describeReachability(plan),
     },
   };
+}
+
+// ------------------------------------------------------------------ model place steps
+
+export type ModelPlaceStep = NonNullable<OutdoorTurn["placeSteps"]>[number];
+
+export interface ModelPlaceStepReport {
+  plan: SitePlanData;
+  /** 已落位步骤的人话清单（「仪式背景→(x, y)：为什么」），逐条进设计过程留痕。 */
+  applied: string[];
+  /** 被安全门拒掉的步骤与原因：如实上报，不由模型重试（docs/48 PetitMaker 同款）。 */
+  rejected: Array<{ note: string; reason: string }>;
+}
+
+/**
+ * 2026-11-21 F1（docs/49）：模型放置步骤执行器。
+ * design-event 响应里的 placeSteps 逐条过确定性安全门后落位：
+ * ① 角色必须命中引擎物料解析（materialFor），物料的真实库条目由引擎决定；
+ * ② 落点必须完整落进已确认边界（facilityPlacementIssues）；
+ * ③ 不得与既有物件占地相交（facilitiesFootprintsIntersect）。
+ * 被拒步骤不改画布、不重试，拒因原样进设计过程——PetitMaker 的「被拒→如实报告」同款。
+ */
+export function applyModelPlaceSteps(input: {
+  plan: SitePlanData;
+  steps: ReadonlyArray<ModelPlaceStep>;
+  library: OutdoorLibraryItem[];
+}): ModelPlaceStepReport {
+  const plan = structuredClone(input.plan);
+  const applied: string[] = [];
+  const rejected: Array<{ note: string; reason: string }> = [];
+  input.steps.forEach((step, index) => {
+    const spec = specs[step.role];
+    if (!spec) {
+      rejected.push({ note: step.note, reason: `未知物料角色 ${step.role}` });
+      return;
+    }
+    const zone = (step.zone ? plan.zones.find((z) => z.name === step.zone) : undefined)
+      ?? plan.zones.find((z) => spec.match.test(z.name))
+      ?? plan.zones[0];
+    if (!zone) {
+      rejected.push({ note: step.note, reason: "画布上没有可落位的分区" });
+      return;
+    }
+    const material = materialFor(step.role, input.library);
+    const size = { width: material?.width ?? spec.width, depth: material?.depth ?? spec.depth };
+    const rotationDeg = step.rotationDeg ?? 0;
+    const facility: PlanFacility = {
+      id: crypto.randomUUID(),
+      templateId: material ? `oneplan:${material.id}`.slice(0, 64) : `wedding-placeholder:${step.role}`,
+      name: `${spec.label}（模型步置 ${index + 1}）`,
+      zoneId: zone.id,
+      position: step.position,
+      rotationDeg,
+      size,
+      allocationKey: `wedding:${zone.id}:${step.role}:model-step:${index}`,
+      ...(material ? { sourceAssetId: material.id, modelOverride: material.modelSlug } : {}),
+      notes: `模型放置步骤：${step.note}（依据：${step.evidence}）；落点已过红线与占地冲突门，实物库存未确认。`,
+    };
+    if (facilityPlacementIssues(facilityFootprintRing(facility), plan.boundary).length) {
+      rejected.push({ note: step.note, reason: "落点越出已确认活动边界" });
+      return;
+    }
+    const box = { position: facility.position, rotationDeg: facility.rotationDeg, size: facility.size };
+    const clash = plan.facilities.some((other) =>
+      facilitiesFootprintsIntersect(
+        box,
+        { position: other.position, rotationDeg: other.rotationDeg, size: other.size },
+        0.1,
+      ));
+    if (clash) {
+      rejected.push({ note: step.note, reason: "与既有物件占地冲突" });
+      return;
+    }
+    plan.facilities.push(facility);
+    applied.push(`${spec.label}→(${Math.round(step.position.x * 10) / 10}, ${Math.round(step.position.y * 10) / 10})：${step.note}`);
+  });
+  return { plan, applied, rejected };
 }
 
 // ------------------------------------------------------------------ diff + pick

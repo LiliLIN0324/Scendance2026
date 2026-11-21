@@ -4,7 +4,7 @@ import { validateWorkflowPlan } from './outdoor-agent-planning';
 import { outdoorCorridorStrips, outdoorRingsOverlap } from './outdoor-event-logic';
 import { planRingsOverlap } from './site-plan-editing';
 import { facilityFootprintRing, facilityPlacementIssues } from './site-plan-facilities';
-import { proposeWeddingLayout } from './wedding-layout';
+import { applyModelPlaceSteps, proposeWeddingLayout } from './wedding-layout';
 import { weddingDesignRequest } from './wedding-request';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -43,6 +43,25 @@ describe('场景驱动的婚礼空间规划',()=>{
     expect(report.plan.zones.length).toBeGreaterThan(0);
     for(const zone of report.plan.zones)expect(facilityPlacementIssues(zone.polygon,jagged),'分区 '+zone.name).toHaveLength(0);
     expect(()=>validateWorkflowPlan(plan,report.plan)).not.toThrow();
+  });
+
+  it('模型放置步骤：界内步落位、越界步被拒如实上报、界内冲突步被拒',async()=>{
+    // docs/49 F1：placeSteps 逐条过安全门（红线/占地冲突），被拒不改画布、如实上报。
+    const plan:SitePlanData={schemaVersion:1,boundary:rect(0,0,70,70),zones:[{id:crypto.randomUUID(),name:'仪式观礼区',purpose:'performance',semantic:'stage',environment:'outdoor',polygon:rect(5,5,60,60),notes:''}],facilities:[],routes:[],nodes:[],workers:[]};
+    const steps=[
+      { note:'花拱门放仪式区中心偏北', role:'arch' as const, zone:'仪式观礼区', position:{x:30,y:20}, evidence:'用户要求仪式为主' },
+      { note:'越界的签到台', role:'welcome-table' as const, position:{x:200,y:200}, evidence:'压测' },
+      { note:'与拱门重叠的合影背景', role:'photo' as const, zone:'仪式观礼区', position:{x:30,y:20}, evidence:'压测' },
+    ];
+    const result=applyModelPlaceSteps({ plan, steps, library: [] });
+    expect(result.applied).toHaveLength(1);
+    expect(result.rejected).toHaveLength(2);
+    expect(result.rejected[0]!.reason).toContain('越出');
+    expect(result.rejected[1]!.reason).toContain('冲突');
+    const placed=result.plan.facilities.at(-1)!;
+    expect(facilityPlacementIssues(facilityFootprintRing(placed),plan.boundary)).toHaveLength(0);
+    expect(placed.notes).toContain('模型放置步骤');
+    expect(()=>validateWorkflowPlan(plan,result.plan)).not.toThrow();
   });
 
   it('拥挤旧分区重排会尝试替代组织，完整保留原方案',async()=>{
