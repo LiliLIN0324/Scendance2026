@@ -180,7 +180,7 @@ import {
   useAssistantSessions, scopedAssistantStorage,
 } from '../hooks/use-assistant-sessions';
 import { SessionHistoryOverlay, markSessionSeen, sessionUnreadSince, type SessionStatus } from './session-history-panel';
-import { RailAvatar, type RailForm } from './rail-avatar';
+import { RailAvatar } from './rail-avatar';
 import type { RoomLayout } from '../lib/types';
 import type { ScaleOrigin } from '../lib/venue-shell';
 import type { WorkbenchMode } from '../lib/workbench-mode';
@@ -4363,11 +4363,11 @@ function MicIcon({ size = 18, 'aria-hidden': ariaHidden }: { size?: number; 'ari
  */
 export type AgentId = 'door' | 'bingo' | 'space' | 'material';
 
-export const AGENT_META: Record<AgentId, { name: string; form: RailForm; role: string }> = {
-  door: { name: '活动', form: 'door', role: '活动需求、布置生成与方案确认' },
-  bingo: { name: 'Bingo', form: 'ball', role: '方案审校、问题钉与客户评审' },
-  space: { name: '空间', form: 'cube', role: '选址后的场地结构、图纸与环境' },
-  material: { name: '物料', form: 'pyramid', role: '物件规格、模型与生成' },
+export const AGENT_META: Record<AgentId, { name: string; role: string }> = {
+  door: { name: '活动', role: '活动需求、布置生成与方案确认' },
+  bingo: { name: 'Bingo', role: '方案审校、问题钉与客户评审' },
+  space: { name: '空间', role: '选址后的场地结构、图纸与环境' },
+  material: { name: '物料', role: '物件规格、模型与生成' },
 };
 
 /** 状态头小计时器（对标谷地工坊「施工中 0:XX」）：1s 心跳自走，卸载即停。 */
@@ -4817,7 +4817,7 @@ useEffect(() => {
             Bingo / 空间 / 物料 用 display:none 的零尺寸锚点占位，头像飞行测不到盒会自动不跑。 */}
         {activeAgent === 'door' ? (
           <span ref={headerAvatarRef} className={`ap-session-avatar-slot${headerAvatarVisible ? ' is-visible' : ''}`}>
-            <RailAvatar key={activeAgent} form={meta.form} size={36} />
+            <RailAvatar key={activeAgent} size={36} />
           </span>
         ) : (
           <span

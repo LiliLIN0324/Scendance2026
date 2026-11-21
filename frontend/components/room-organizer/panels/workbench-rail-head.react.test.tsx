@@ -96,9 +96,7 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(bingoSource).not.toContain('sc-bingo-corner');
     expect(brandSource).toContain('<RailHall size={28}');
     expect(brandSource).not.toContain('<RailAvatar');
-    for (const icon of ['door', 'ball', 'pyramid', 'cube']) {
-      expect(existsSync(join(here, '../../../public/assets/rail', `${icon}.png`))).toBe(true);
-    }
+    expect(existsSync(join(here, '../../../public/assets/rail', 'door.png'))).toBe(true);
     expect(css).not.toMatch(/span\.sc-rail-word\s*\{[^}]*display:\s*block/);
     expect(css).not.toMatch(/button\.is-active\[data-tip\]::after\s*\{\s*opacity:\s*1/);
     expect(css).toMatch(/--sc-nav-rail-width:\s*56px/);

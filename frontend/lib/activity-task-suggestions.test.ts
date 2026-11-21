@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import rehearsalExample from '../../docs/examples/30-person-rehearsal-operations.json';
+import rehearsalExample from '../../tests/fixtures/event-operations-sample.json';
 import { canonical } from '../../supabase/functions/_shared/domain';
 import {
   eventOperationsLimits,

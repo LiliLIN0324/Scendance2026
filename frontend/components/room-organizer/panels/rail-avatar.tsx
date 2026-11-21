@@ -2,21 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 
-export type RailForm = 'door' | 'ball' | 'pyramid' | 'cube';
+/** 门厅形体是唯一保留的 Agent 脸；两只眼的位置按百分比写，供眼睛层定位。 */
+export const RAIL_DOOR_EYES: [number, number][] = [
+  [42.8, 36.2],
+  [61.6, 34.2],
+];
 
-export const RAIL_EYES: Record<RailForm, [number, number][]> = {
-  door: [[42.8, 36.2], [61.6, 34.2]],
-  ball: [[42.8, 42.5], [61.6, 40.5]],
-  pyramid: [[42.8, 60.8], [61.6, 58.8]],
-  cube: [[42.8, 42.6], [61.6, 40.6]],
-};
-
-const FORMS: Record<RailForm, { src: string; eyes: [number, number][] }> = {
-  door: { src: '/assets/rail/door.png', eyes: RAIL_EYES.door },
-  ball: { src: '/assets/rail/ball.png', eyes: RAIL_EYES.ball },
-  pyramid: { src: '/assets/rail/pyramid.png', eyes: RAIL_EYES.pyramid },
-  cube: { src: '/assets/rail/cube.png', eyes: RAIL_EYES.cube },
-};
+export const RAIL_DOOR_SRC = '/assets/rail/door.png';
 
 /** 眼睛跟着鼠标走：只写 CSS 变量，不触发 React 重渲染。 */
 export function useEyeFollow(ref: React.RefObject<HTMLSpanElement>) {
@@ -63,17 +55,20 @@ export function useEyeFollow(ref: React.RefObject<HTMLSpanElement>) {
   }, [ref]);
 }
 
-/** 左轨形体：手绘软形体 + 两只白眼睛，眼睛随鼠标轻微移动。 */
-export function RailAvatar({ form, size = 28 }: { form: RailForm; size?: number }): JSX.Element {
+/**
+ * 门厅形体：手绘软形体 + 两只白眼睛，眼睛随鼠标轻微移动。
+ * 2026-11-21 用户：只保留门厅这一张脸，ball / cube / pyramid 三张已删除；
+ * Bingo、空间、物料的轨钮与手机端对话条一律改用线性图标，不再有第二张脸。
+ */
+export function RailAvatar({ size = 28 }: { size?: number }): JSX.Element {
   const ref = useRef<HTMLSpanElement>(null);
   useEyeFollow(ref);
-  const { src, eyes } = FORMS[form];
   return (
-    <span ref={ref} className={`sc-rail-avatar is-${form}`} style={{ width: size, height: size }}>
+    <span ref={ref} className="sc-rail-avatar" style={{ width: size, height: size }}>
       <span className="sc-rail-avatar-tilt">
-        <img src={src} alt="" width={size} height={size} draggable={false} />
+        <img src={RAIL_DOOR_SRC} alt="" width={size} height={size} draggable={false} />
         <span className="sc-rail-avatar-face" aria-hidden="true">
-          {eyes.map(([x, y], index) => (
+          {RAIL_DOOR_EYES.map(([x, y], index) => (
             <i key={index} className={`sc-rail-eye is-${index === 0 ? 'left' : 'right'}`} style={{ left: `${x}%`, top: `${y}%` }} />
           ))}
         </span>

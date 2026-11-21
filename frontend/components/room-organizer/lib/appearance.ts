@@ -1,6 +1,6 @@
 import { safeGetItem, safeSetItem } from './safe-storage';
 
-/** 外观模式：跟随系统 / 浅色 / 深色。「跟随底图」不进本期（见 flow/tasks/editor-appearance-mode.md）。 */
+/** 外观模式：跟随系统 / 浅色 / 深色。「跟随底图」不进本期（见 docs/plans/2026-11-19-editor-appearance-mode.md）。 */
 export type AppearanceMode = 'system' | 'light' | 'dark';
 
 /** 解析后的实际明度，供 CSS 作用域与画布外 chrome 判断使用。 */

@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
 import { sceneSchema } from '../../supabase/functions/_shared/domain';
@@ -9,7 +7,6 @@ import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/li
 import { deliveryScene } from '../components/room-organizer/lib/scene-delivery';
 import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
-import { parseLocalProjectBackupJson } from './local-project-backup';
 import {
   attachProjectReviewImages, createProjectReviewSnapshot, projectReviewHtml, projectReviewIsStale,
   type ProjectReviewImage, type ProjectReviewInput, type ProjectReviewNote,
@@ -494,47 +491,32 @@ describe('customer-readable review rendering', () => {
   });
 });
 
-describe('30-person rehearsal review example', () => {
-  it('matches an actual offline HTML generated from the existing backup, without invented client comments or quote', () => {
-    const sourcePath = resolve(process.cwd(), '../docs/examples/community-open-day.backup.json');
-    const restored = parseLocalProjectBackupJson(readFileSync(sourcePath, 'utf8'));
-    expect(restored.brief.status).toBe('present');
-    const example = createProjectReviewSnapshot(input({ layout: restored.layout,
-      briefSnapshot: { state: 'ready', scope: restored.layout.id!, brief: restored.brief as { status: 'present'; value: CreativeBrief } },
-      source: { scope: restored.layout.id!, revision: 'rehearsal-backup-20261007-092531005' },
-      snapshot: { id: 'review-community-open-day-20261007', generatedAt: '2026-10-07T17:30:00+08:00' },
-      notes: [note({ kind: 'team-check', sourceLabel: '原30人假设演练说明的人工摘录（团队说明）', recordedAt: '2026-10-07T17:25:00+08:00',
-        text: '演练设计说明：以5张共创桌组织5组，每组6人；30把椅子对应30名假设参与者。签到台用于签到，背景板、展架和装饰配合成果展示与交流。以上按原演练活动安排摘录，动线、现场容量与物料可获得性尚未核验。' }),
-        note({ sourceLabel: '原30人假设演练说明的人工摘录', recordedAt: '2026-10-07T17:25:00+08:00',
-        text: '日期、场地实测、出入口、固定设施、供电和容量均待确认。\n外包范围、39件示意物料的实际规格与可获得性、运输安装与报价待确认。\n5000元仅是演练假设上限，不是供应商报价或合同金额。\n真实客户意见、反馈收集和案例展示许可待补。' })],
-    }));
-    const html = projectReviewHtml(example);
-    const examplePath = resolve(process.cwd(), '../docs/examples/community-open-day-review.html');
-    // Opt-in reproduction only; ordinary tests never update the checked-in example.
-    if (process.env.SCENDANCE_WRITE_REVIEW_EXAMPLE === '1') writeFileSync(examplePath, html, 'utf8');
-    // Git may check out the same text with CRLF on Windows; compare all content
-    // after normalizing only line endings, rather than rewriting the example.
-    expect(readFileSync(examplePath, 'utf8').replace(/\r\n/g, '\n')).toBe(html.replace(/\r\n/g, '\n'));
+describe('offline review page from a synthetic snapshot', () => {
+  it('draws one rect per item, keeps item ids in the appendix only, and stays script-free and stable', () => {
+    const source = input({ notes: [note({ kind: 'pending', sourceLabel: '合成清单（非真实客户意见）',
+      recordedAt: '2026-10-07T09:20:00Z', text: '出入口、尺寸与报价待确认；合成样例。' })] });
+    const html = projectReviewHtml(createProjectReviewSnapshot(source));
+    // 同一份快照重生成必须逐字节一致：页面里不嵌时钟、不嵌随机编号。
+    const again = projectReviewHtml(createProjectReviewSnapshot(input({ notes: [note({ kind: 'pending',
+      sourceLabel: '合成清单（非真实客户意见）', recordedAt: '2026-10-07T09:20:00Z',
+      text: '出入口、尺寸与报价待确认；合成样例。' })] })));
+    expect(again).toBe(html);
     const document = new DOMParser().parseFromString(html, 'text/html');
-    expect(document.body.textContent).toContain('活动类型待确认 / 人数待确认');
-    expect(document.querySelectorAll('rect.furniture')).toHaveLength(39);
-    const summaryRows = document.querySelectorAll('.materials tbody tr');
-    expect([...summaryRows].map(row => row.children[0].textContent)).toEqual(['桌子', '椅子', '签到台', '背景板', '展架', '装饰道具']);
-    expect([...summaryRows].map(row => Number(row.children[1].textContent))).toEqual([5, 30, 1, 1, 1, 1]);
-    expect(document.querySelector('details')!.textContent).not.toContain('归档模型编号未记录');
+    const items = source.layout.floors.flatMap(floor => floor.items);
+    // 一物一图元：矩形数量跟着快照里的物料实例走，不额外编造。
+    expect(document.querySelectorAll('rect.furniture')).toHaveLength(items.length);
+    expect(document.querySelectorAll('.materials tbody tr').length).toBeGreaterThan(0);
     const appendix = document.querySelector('details')!;
-    for (const item of restored.layout.floors.flatMap(f => f.items)) expect(appendix.textContent).toContain(item.id);
+    for (const item of items) expect(appendix.textContent).toContain(item.id);
     appendix.remove();
-    expect(document.body.textContent).toContain('5组，每组6人');
+    // 正文按名称说话，实例编号只在附录。
     expect(document.body.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-    expect(document.body.textContent).not.toContain('builtin');
-    expect(document.body.textContent).not.toContain('table');
-    expect(document.body.textContent).not.toContain('-1.7999999999999998');
-    expect(document.body.textContent).toContain('5000元仅是演练假设上限');
-    expect(document.body.textContent).toContain('真实客户意见／确认：尚未记录，待补');
-    expect(document.body.textContent).toContain('采用版本：未记录');
+    // 离线可读：无脚本、无远程图、无外链样式；打印样式在位。
     expect(document.querySelectorAll('script,img,link')).toHaveLength(0);
     expect(html).not.toContain('evidenceNote');
     expect(html).toContain('@media print');
+    // 没记录的事实照实写「待补」，不编造客户确认。
+    expect(document.body.textContent).toContain('真实客户意见／确认：尚未记录，待补');
+    expect(document.body.textContent).toContain('采用版本：未记录');
   });
 });

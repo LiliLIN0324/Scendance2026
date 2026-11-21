@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { RAIL_EYES, type RailForm } from './rail-avatar';
+import { RAIL_DOOR_EYES, RAIL_DOOR_SRC } from './rail-avatar';
 import './bingo-avatar-flight.css';
 
 const FLIGHT_MS = 260;
@@ -21,15 +21,13 @@ function rectOf(el: Element | null | undefined): FlightFrame | null {
   return { left: box.left, top: box.top, width: box.width, height: box.height };
 }
 
-/** Bingo 的门洞头像在左轨与对话顶栏之间飞入/飞出（FLIP 固定层）。 */
+/** 门厅头像在左轨与对话顶栏之间飞入/飞出（FLIP 固定层）。只有门厅有脸，其余车道走线性图标。 */
 export function BingoAvatarFlight({
   open,
-  form,
   railRef,
   headerAvatarRef,
 }: {
   open: boolean;
-  form: RailForm;
   railRef: RefObject<HTMLElement | null>;
   headerAvatarRef: RefObject<HTMLElement | null>;
 }): JSX.Element | null {
@@ -87,9 +85,9 @@ export function BingoAvatarFlight({
 
   return createPortal(
     <span className="sc-bingo-avatar-flight" style={style} aria-hidden="true">
-      <img src={`/assets/rail/${form}.png`} alt="" draggable={false} />
+      <img src={RAIL_DOOR_SRC} alt="" draggable={false} />
       <span className="sc-rail-avatar-face">
-        {RAIL_EYES[form].map(([x, y], index) => (
+        {RAIL_DOOR_EYES.map(([x, y], index) => (
           <i key={index} className={`sc-rail-eye is-${index === 0 ? 'left' : 'right'}`} style={{ left: `${x}%`, top: `${y}%` }} />
         ))}
       </span>

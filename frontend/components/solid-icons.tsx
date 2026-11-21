@@ -280,6 +280,20 @@ export const RailCrate = makeCustomIcon((size, active) => (
   </svg>
 ));
 
+/** Bingo：与左轨同一枚圆环。选中填墨，空态只描一圈。 */
+export const RailBingo = makeCustomIcon((size, active) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle
+      cx={12}
+      cy={12}
+      r={9.05}
+      {...(active
+        ? { fill: RAIL_SELECTED, stroke: 'none' }
+        : { fill: 'none', stroke: 'currentColor', strokeWidth: RAIL_STROKE })}
+    />
+  </svg>
+));
+
 /** 场地：圆角方块加完整加号。选中方块填墨，加号留纸色。 */
 export const RAIL_PLUS_MARK = 'M12 8.15 V15.85 M8.15 12 H15.85';
 

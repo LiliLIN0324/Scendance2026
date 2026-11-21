@@ -3,7 +3,7 @@ import { webcrypto } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSourceScope } from '@/lib/source-storage';
-import rehearsalExample from '../../../../docs/examples/30-person-rehearsal-operations.json';
+import rehearsalExample from '../../../../tests/fixtures/event-operations-sample.json';
 import { eventOperationsSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
@@ -229,10 +229,10 @@ describe('activity operations in the delivery panel', () => {
     await screen.findByRole('alert');expect(ui.updates).not.toHaveBeenCalled();expect(screen.getByRole('alert').textContent).toContain('制作计划');
     expect(ui.layout.productionPlan).toBe(plan);expect(ui.layout.productionPlan!.acquisitions[0].objectIds).toEqual([itemId]);
   });
-  it('puts all six rehearsal task summaries before the folded creation form and requirement details', async () => {
+  it('puts every sample task summary before the folded creation form and requirement details', async () => {
     const layout = makeLayout({ eventOperations: eventOperationsSchema.parse(rehearsalExample) });
     render(<EventOperationsPanel layout={layout} disabled={false} onUpdate={vi.fn()} onOpenBrief={vi.fn()} briefState={{ brief: { ...INITIAL_BRIEF, description: '已保存的完整需求说明' }, ready: true, error: null, hasSavedBrief: true }}/>);
-    expect(screen.getByText('演练安排 · 6 项')).toBeDefined();
+    expect(screen.getByText(`演练安排 · ${layout.eventOperations!.tasks.length} 项`)).toBeDefined();
     const add = screen.getByText('新增任务').closest('details')!;
     expect(add.open).toBe(false);
     expect(screen.getByRole('button', { name: '添加任务' }).closest('details')).toBe(add);

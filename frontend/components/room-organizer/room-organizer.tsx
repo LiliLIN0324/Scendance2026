@@ -1,6 +1,6 @@
 'use client';
 /*
- * COLLAB.md 独占区（Qoder 侧只提需求）。本次唯一目的是接手 HANDOFF 第七节第 3 步：
+ * 独占区文件（规则见根 AGENTS.md 第六节；改动先登记再动手）。本次唯一目的是接手 HANDOFF 第七节第 3 步：
  * 整景区视距下点云退化成锚点 POI，进到 100 m 内再挂/显示 splat。
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
@@ -170,7 +170,7 @@ import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
 import { XIHU_LOCAL_CENTER, XIHU_LOCAL_NAME, XIHU_LOCAL_SPAN_M } from './lib/research-area';
-import { AGENT_META, AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, type AgentId } from './panels/agent-panel';
+import { AgentCanvasOverlay, AgentPanel, LayoutAgentProvider, MapVenueOverlay, VenuePickerOverlay, type AgentId } from './panels/agent-panel';
 import { settlePlacement } from '@/lib/settle-placement';
 import { cloudSeatingAllocation, cloudSeatingSpecs, type BriefMemory } from './lib/brief-agent';
 import { projectDialogueHandoff } from './lib/dialogue-handoff';
@@ -5360,7 +5360,7 @@ useEffect(() => {
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
               } : {})}spaceSlot={<SpacePanel variant="card" controller={controller} onOpenCapture={openCapturePanel} onAddSampleScene={addSampleScene} onMoveScan={(assetId) => { const scan = environmentsRef.current.find(entry => entry.assetId === assetId); if (!scan) return; try { selectEnvironment(assetId, scan.name, { restoreItems: false }); } catch (error) { notify(error instanceof Error ? error.message : String(error), 'error'); return; } setScanArming(null); setSplatDisplayMode('gaussian'); setIsolatedScanId(assetId); if (outdoorPlanState) handleOutdoorViewSwitch('3d'); else setView(current => current.view2D || current.walkthroughMode ? { ...current, view2D: false, walkthroughMode: false } : current); setSplatTransformModeState('gizmo'); }} layout={layout} workflow={spaceWorkflow} onPlaceScan={placeScanOnSite} failedScanIds={Object.keys(failedScans)} {...(canTryHanfuWalk ? { onTryHanfuWalk: startWalk, ...(hanfuWalkDisabledReason ? { hanfuWalkDisabledReason } : {}) } : {})} {...(scanIsolated ? { onShowScanContext: hasMapVenue ? focusMapVenue : () => setIsolatedScanId(undefined) } : {})} currentScanId={environment?.assetId} environment={{ preview: splatState, current: environment, environments, floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })), onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }), onRemove: removeEnvironment, onSetFloor: setEnvironmentFloor, onClear: dropEnvironment, thumbnails: projectSceneThumbnails, onPreview: previewProjectScene }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
-          <BingoAvatarFlight open={agentPanelOpen} form={AGENT_META[activeAgent].form} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
+          <BingoAvatarFlight open={agentPanelOpen} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
           <div className={`sc-canvas-stage ${selectedItem ? 'has-selection' : ''}${workbenchMode === 'review' ? ' is-review' : ''}${chromeHidden ? ' is-chrome-hidden' : ''}`} onPointerEnter={() => { if (previewCandidate) setCaptionEpoch(value => value + 1); }} onPointerDownCapture={event => {

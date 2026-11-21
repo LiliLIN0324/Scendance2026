@@ -30,10 +30,10 @@ describe('BingoAvatarFlight', () => {
     const railRef = createRef<HTMLButtonElement>();
     const headerAvatarRef = createRef<HTMLSpanElement>();
     const view = render(
-      <BingoAvatarFlight open={false} form="door" railRef={railRef} headerAvatarRef={headerAvatarRef} />,
+      <BingoAvatarFlight open={false} railRef={railRef} headerAvatarRef={headerAvatarRef} />,
     );
     expect(document.querySelector('.sc-bingo-avatar-flight')).toBeNull();
-    view.rerender(<BingoAvatarFlight open form="door" railRef={railRef} headerAvatarRef={headerAvatarRef} />);
+    view.rerender(<BingoAvatarFlight open railRef={railRef} headerAvatarRef={headerAvatarRef} />);
     expect(document.querySelector('.sc-bingo-avatar-flight')).toBeNull();
   });
 
@@ -50,14 +50,14 @@ describe('BingoAvatarFlight', () => {
       <>
         <button ref={railRef} type="button"><img alt="" /></button>
         <span ref={headerAvatarRef} />
-        <BingoAvatarFlight open={false} form="door" railRef={railRef} headerAvatarRef={headerAvatarRef} />
+        <BingoAvatarFlight open={false} railRef={railRef} headerAvatarRef={headerAvatarRef} />
       </>,
     );
     view.rerender(
       <>
         <button ref={railRef} type="button"><img alt="" /></button>
         <span ref={headerAvatarRef} />
-        <BingoAvatarFlight open form="door" railRef={railRef} headerAvatarRef={headerAvatarRef} />
+        <BingoAvatarFlight open railRef={railRef} headerAvatarRef={headerAvatarRef} />
       </>,
     );
     const flight = document.querySelector<HTMLElement>('.sc-bingo-avatar-flight');

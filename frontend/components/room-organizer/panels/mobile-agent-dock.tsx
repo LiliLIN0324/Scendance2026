@@ -1,9 +1,20 @@
 'use client';
 
-import { ArrowUp, Maximize2 } from '@/components/solid-icons';
+import { ArrowUp, Maximize2, RailBingo, RailCrate, RailSpace } from '@/components/solid-icons';
 import { AGENT_META, useAgent, type AgentId } from './agent-panel';
 import { RailAvatar } from './rail-avatar';
 import './mobile-shell.css';
+
+/**
+ * 对话条左侧只保留一张门厅脸；Bingo / 空间 / 物料改用与左轨一致的线性图标，
+ * 不再各自带一张实体头像（ball / cube / pyramid 已于 2026-11-21 删除）。
+ */
+function AgentGlyph({ agentId, size }: { agentId: AgentId; size: number }): JSX.Element {
+  if (agentId === 'door') return <RailAvatar size={size} />;
+  if (agentId === 'bingo') return <RailBingo size={size} />;
+  if (agentId === 'space') return <RailSpace size={size} />;
+  return <RailCrate size={size} />;
+}
 
 /**
  * 手机端对话收起条：一条最新消息 + 一行输入。
@@ -24,7 +35,9 @@ export function MobileAgentDock({ agentId, onOpen }: { agentId: AgentId; onOpen(
       onClick={onOpen}
     >
       <span className="sc-mobile-dock-msg">
-        <RailAvatar form={meta.form} size={22} />
+        <span className="sc-mobile-dock-glyph" style={{ display: 'inline-flex', alignItems: 'center', flex: 'none' }}>
+          <AgentGlyph agentId={agentId} size={22} />
+        </span>
         <span>{line}</span>
         <Maximize2 size={16} aria-hidden="true" />
       </span>

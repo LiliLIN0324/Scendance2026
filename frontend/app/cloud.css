@@ -489,7 +489,7 @@
 .sc-about-dialog{width:min(320px,calc(100vw - 48px));text-align:center;padding-top:28px}
 
 /* ================================================================
-   外观模式 · 深色作用域补遗（flow/tasks/editor-appearance-mode.md）
+   外观模式 · 深色作用域补遗（docs/plans/2026-11-19-editor-appearance-mode.md）
    对话框 portal 到 body，随 body.is-theme-dark 一起进暗色。
    ================================================================ */
 body.is-theme-dark .sc-cloud-dialog {

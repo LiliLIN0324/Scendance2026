@@ -147,7 +147,7 @@ body {
 }
 
 /* ================================================================
-   外观模式 · 深色作用域（flow/tasks/editor-appearance-mode.md）
+   外观模式 · 深色作用域（docs/plans/2026-11-19-editor-appearance-mode.md）
    只重映射 L1 语义 token 与 shadcn HSL 三元组；组件层零分支。
    作用域 = body.is-theme-dark 下的工作台外壳与 portal 对话框；
    画布渲染、导出产物、官网 / 登录 / 分享页不在此作用域。

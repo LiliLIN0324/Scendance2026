@@ -130,7 +130,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-public-publishable-key
 
 仅放公开 anon / publishable key；不要放 service-role、模型 API key、worker secret。公开配置在构建时写入前端，修改后要重启开发服务或重新构建。账号密码在登录框输入，Auth access/refresh token 只在内存，刷新后重新登录；本地草稿保留。
 
-B 按 [后端部署说明](../docs/archive/legacy/2026-10-02-本地运行与维护.md) 部署、迁移并准备工作室账号；将实际前端 Origin 加入后端 `ALLOWED_ORIGINS`。`http://localhost:3000` 与 `http://127.0.0.1:3018` 是不同 Origin，应按实际地址配置。
+B 按 [部署与发布手册](../docs/64-部署与发布手册.md) 部署、迁移并准备工作室账号；将实际前端 Origin 加入后端 `ALLOWED_ORIGINS`。`http://localhost:3000` 与 `http://127.0.0.1:3018` 是不同 Origin，应按实际地址配置。
 
 验证顺序：登录 → 把当前画布创建为项目 → 获取编辑权 → 移动物件 → 保存 → 刷新、登录并打开项目 → 检查数据 → 释放编辑权 → 第二个账号接手。获取编辑权始终采用服务端最新场景并清空旧撤销历史；保存失败、断网或版本冲突不会丢弃当前草稿。
 
