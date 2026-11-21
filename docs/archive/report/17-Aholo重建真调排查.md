@@ -44,7 +44,7 @@ FAILED 统一形态：`status=FAILED, progress=1, assets.splats.urls 全 null, i
 
 1. **ousToken 一次性会话凭证被进程级缓存**：多文件上传第 2 张起必报「OUS 拒绝：Token已被使用」。这是 D1/D2 干跑从未暴露、真调第一枪就炸的阻断级 bug。修复：每次 `ousUpload` 取新 token，同一次上传（含状态轮询）内保持同 token（代理 379 行注释的约束）。
 2. **aholo() 吞掉上游状态码与报文**：一切上游失败都变成「Aholo 上游请求失败」，违反「失败返回真实错误码」硬钉，也使本次排查一度无法定位。修复：透传 HTTP status + 响应报文（截断 300 字符）。
-3. **token 端点改走国内网关**（`${worldBase}/asset/v1/token`，对齐官方 SDK region:'cn' 与 `ous-status-probe.mjs` 先例）。
+3. **token 端点改走国内网关**（`${worldBase}/asset/v1/token`，对齐官方 SDK region:'cn' 与 OUS 直连实测先例；当时用的探针脚本 `ous-status-probe.mjs` 已于 2026-11-21 清理，结论保留）。
 
 配套发现（未改码，供 Trae 的 T 卡与官方反馈）：OUS 同 md5 上传任务结束后重传报「上传任务已结束」；素材上传后资产索引存在 **0–12 分钟不定的传播窗口**，窗口内建任务报「文件链接不对」。
 

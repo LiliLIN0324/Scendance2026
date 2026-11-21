@@ -252,7 +252,7 @@ node tools/aholo/r2-upload.mjs --hero .cache/aholo/hero --far .cache/aholo/far -
   需要：属于该桶账号的 R2 API Token（Access Key ID / Secret），或换到拥有该桶的账号登录。
 - **默认汉服 GLB 404（已定位，但**不是**运行时故障）**：`9b9bb4da-3f30-4cfa-8e15-483038000001`
   在公开基址返回 404（6 个候选路径 + 8 个 ID 变体全探过），全仓历史、18 个 worktree、主工作区都没有这个文件；
-  唯一的汉服产物 `docs/evidence/aholo/people02-hanfu/g1/model-2.glb`（16.64 MB）是 **0 骨骼 / 0 动画**的静态模型，当不了漫游角色。
+  唯一的汉服产物 `docs/evidence/aholo/people02-hanfu/g1/model-2.glb`（16.64 MB，2026-11-21 已清出 `docs/`，登记见 `docs/evidence/_purged-2026-11-21.txt`）是 **0 骨骼 / 0 动画**的静态模型，当不了漫游角色。
   代码里它只出现在 `LOCAL_WALK_ASSET_IDS` 的 48 MB 白名单，`WALK_ROLES` 的 11 个角色全是 `a001`–`a00b` 且全部在线，
   所以去掉或重指这个 ID 都不会影响漫游。另外 `walk-roles.ts` 注释指向的
   `docs/evidence/aholo/people04-hanfu-batch/_merge-walk.mjs` 从未进过 git、任何 worktree 里也没有——

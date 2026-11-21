@@ -1,6 +1,7 @@
 # Cloudflare Pages 与 GitHub 自动部署
 
-记录日期：2026-10-07（Asia/Seoul）。
+> 记录日期 2026-10-07（Asia/Seoul）；2026-11-16 补 Carto 运行时 key；2026-11-21 从 `archive/legacy/` 升为现行文档并改掉内部链接。
+> 本页只管**前端静态产物的构建与发布**。数据库迁移、Edge Functions、Secrets、Auth 见 [64-部署与发布手册](64-部署与发布手册.md)。
 
 ## 当前连接
 
@@ -97,7 +98,7 @@ curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/workers/ro
 3. 检查构建日志中的 `clone_repo`、`build` 和 `deploy` 阶段均为成功。
 4. 访问 `https://scendance-scene-planner-ewz.pages.dev/` 与 `https://scendance.lilicoding.space/`，确认页面正常。若自定义域名只返回正文 `disabled`，见上一节的 Worker 路由说明。
 
-Cloudflare 只构建和发布前端静态产物。Supabase 数据库迁移和 Edge Functions 仍按 [37-自建Supabase教程.md](2026-11-04-自建Supabase教程.md) 单独部署。
+Cloudflare 只构建和发布前端静态产物。Supabase 数据库迁移和 Edge Functions 仍按 [64-部署与发布手册](64-部署与发布手册.md) 单独部署。
 
 ## 卫星参考底图 `/api/amap-static`
 

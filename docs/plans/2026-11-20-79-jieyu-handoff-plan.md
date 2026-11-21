@@ -276,7 +276,6 @@ npm --prefix frontend run test -- --run \
 
 ```text
 docs/evidence/79/09/v7/2026-11-20-case09-v7.json
-docs/evidence/79/09/v7/2026-11-20-case09-v7.md
 docs/evidence/79/09/v7/*.png
 ```
 

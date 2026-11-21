@@ -200,7 +200,7 @@ resolveWorkerPerson(worker: { role: string; assetId?: string }): PersonSlot | nu
 ### P3 清理与护栏
 
 - 删掉 `walk-roles.ts` 里 `...LABOR_WALK_ROLES` 的直拼与 `crowd-types` 里的双写过滤；补 §3.5 不变量；`glb-limits` 补注释。
-- CHANGELOG 追加一版（按 [43-版本更新文案规范](../archive/legacy/2026-11-02-版本更新文案.md)：≥10 条、三节标题、≥1200 字），跑 `npm run check:changelog`。
+- CHANGELOG 追加一版（按 [版本更新文案规范](../65-版本更新文案规范.md)：≥10 条、三节标题、≥1200 字），跑 `npm run check:changelog`。
 - **完成判据**：`npm --prefix frontend run typecheck` + 全量 `npm --prefix frontend run test` 与 P0 基线对比，无新增红条；`npm run check` 通过。
 
 ### P4 真机验收
