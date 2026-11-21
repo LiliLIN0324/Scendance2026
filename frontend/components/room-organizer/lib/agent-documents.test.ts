@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { strToU8, zipSync } from 'fflate';
 import { agentDocumentContext, extractAgentDocument, parseDelimitedRows, readAgentDocuments, rememberAgentDocuments } from './agent-documents';
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 const file = (name: string, bytes: Uint8Array): File => ({ name, size: bytes.byteLength,
   arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }) as File;

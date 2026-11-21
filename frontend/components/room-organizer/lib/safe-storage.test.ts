@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { safeGetItem, safeRemoveItem, safeSetItem } from './safe-storage';
 
 function throwingStorage(): Storage {
@@ -16,13 +17,20 @@ function throwingStorage(): Storage {
   };
 }
 
+let mem: MemoryStorage;
 describe('safe-storage (#396)', () => {
   beforeEach(() => {
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     window.localStorage.clear();
   });
 
   afterEach(() => {
+    mem?.clear();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('reads, writes and removes through window.localStorage by default', () => {

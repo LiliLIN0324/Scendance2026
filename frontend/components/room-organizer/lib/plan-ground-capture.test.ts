@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import {
   boundsSpanMeters,
   latToTileY,
@@ -14,6 +15,15 @@ import { isPlanGroundSource, readPlanGroundSource, writePlanGroundSource } from 
 
 // 杭州平湖秋月一带：约 100 m × 80 m 的场地。
 const BOUNDS = { west: 120.1472, south: 30.2455, east: 120.14825, north: 30.24622 };
+
+let mem: MemoryStorage;
+beforeEach(() => {
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
+});
+afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
 describe('plan-ground-capture 投影', () => {
   it('各图源的贴地拼图上限跟公共常量表一致：Carto / 高德到 z18，OSM 到 z19', () => {

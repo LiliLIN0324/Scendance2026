@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import {
   DIRECT_BASE,
   aholoAssetUrl,
@@ -31,11 +32,17 @@ function stubFetch(handler: (init?: RequestInit) => unknown) {
 
 const stashed = () => ({ assetId: ID, kind: 'glb' as const, bytes: 6_433_368, url: `/asset/${ID}.glb` });
 
+let mem: MemoryStorage;
 describe('Aholo 资产注册表', () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.unstubAllGlobals();
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
+    localStorage.clear();
   });
+  afterEach(() => { mem?.clear(); vi.unstubAllGlobals(); });
 
   it('落盘只把待换的签名链接交给代理，换回本机稳定地址', async () => {
     const calls = stubFetch(() => jsonResponse(stashed()));

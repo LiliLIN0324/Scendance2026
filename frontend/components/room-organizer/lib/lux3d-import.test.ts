@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { packGltf } from '../../../../supabase/functions/_shared/models';
 import { tetrahedron } from '../../../../tests/model-fixture';
 import { clearGlbAssetCache } from '../three/glb-assets';
@@ -62,8 +63,13 @@ function clearPending() {
   for (const card of listPendingMaterials()) removePendingMaterial(card.id);
 }
 
+let mem: MemoryStorage;
 describe('Lux3D 生成结果自动取回', () => {
   beforeEach(() => {
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
     localStorage.clear();
     clearPending();
     clearGlbAssetCache();
@@ -71,6 +77,7 @@ describe('Lux3D 生成结果自动取回', () => {
 
   afterEach(() => {
     clearPending();
+    mem?.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     clearGlbAssetCache();

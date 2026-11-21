@@ -1,14 +1,23 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import * as glbAssets from '../three/glb-assets';
 import { loadGeneratedCatalogItem, loadStoredAholoCatalogItem } from './aholo-model-placement';
 
 const ASSET_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
+let mem: MemoryStorage;
 describe('云端生成物落位', () => {
+  beforeEach(() => {
+    mem = new MemoryStorage();
+    vi.stubGlobal('Storage', MemoryStorage);
+    vi.stubGlobal('localStorage', mem);
+    window.localStorage = mem;
+  });
   afterEach(() => {
+    mem?.clear();
     vi.restoreAllMocks();
-    localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   it('本机没有这份 GLB 时，向账户授权一次再摆，不另开生成', async () => {
