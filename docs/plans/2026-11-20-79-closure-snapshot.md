@@ -2,6 +2,8 @@
 
 > 配套交接计划：`docs/plans/2026-11-20-79-jieyu-handoff-plan.md`。本快照只记本轮真实状态、已验证命令输出与阻塞，不替代台账签字；partial 不算过，agent 不能代签。
 
+> **2026-11-21 重建注记**：下列 §1 工作区与基线为 2026-11-20 历史状态；远端 main 强推重写后，收尾分支已重建到新 `main` `cd344d2a`，工作树 `.worktrees/79-closure-v2`（旧 `.worktrees/79-closure` 仅备份）。现行基线以台账 `walkthrough.json` 的 `baseline` 字段与清单 §八 为准。
+
 ## 1. 工作区与基线
 
 - 工作目录：`.worktrees/79-closure`（新干净 worktree，主工作树 `C:\幕景\Scendance2026` 的在途 WIP 原地保留，未触碰）。

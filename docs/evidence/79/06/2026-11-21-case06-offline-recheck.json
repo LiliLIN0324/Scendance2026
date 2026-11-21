@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-21T16:22:00+08:00",
+  "case": 6,
+  "baseline": "cd344d2a 重建分支",
+  "method": "新 main 源码走查 + 离线单测复跑；未搭公网受控故障桩、未改线上 secret。",
+  "source": "frontend/lib/agent-error-view.ts: agentErrorView(status) 按后端 fail 枚举出四档视图。",
+  "offlineCoverage": {
+    "testFile": "frontend/lib/agent-error-view.test.ts",
+    "result": "6 passed",
+    "covered": [
+      "disabled / unavailable → 暂未启用（muted），文案「活动问答暂未启用，问题已保留。」",
+      "quota_exhausted → 额度不足（warn）",
+      "timeout → 响应超时（warn），不与 provider_error 共用兜底",
+      "provider_error / 未知 / null → 智能理解（warn）兜底",
+      "invalid → 请求未通过校验（muted）",
+      "四类阻塞落点互不撞档"
+    ]
+  },
+  "stillMissing": [
+    "浏览器窗口内 {status:'disabled'} 兜底卡的真机录制：需真实功能关闭 / 503 环境触发，本轮不搭公网故障桩，未取该 UI 样本。"
+  ],
+  "exemption": "按 signoff-checklist §六 异常分支豁免口径：分类与事件正确性以离线单测 + 源码走查为证据，不要求真实云端受控故障样本。豁免是否生效、#6 可否转 pass，待人工签字；agent 不代签。"
+}

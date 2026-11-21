@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-21T15:55:00+08:00",
+  "site": "https://scendance-scene-planner-ewz.pages.dev/",
+  "method": "只读 GET 首页 HTML + 首页引用的全部 _next JS chunk；未登录、未发对话回合、未写库、未改 secret。",
+  "homeStatus": 200,
+  "htmlBytes": 17163,
+  "chunksFetched": 21,
+  "chunkBytes": 2182011,
+  "buildId": null,
+  "buildIdNote": "Next app router 首页未暴露可解析的构建 buildId；以 chunk 内中文文案标记对照为准。",
+  "markers": {
+    "I6 常驻诚实声明（2ef2a645，agent-panel 全句「我会出错，也可能破坏你的设计。重要改动会先问你。」）": "absent",
+    "I1-lite 插话排队占位（ed69df8f，「为下一步添加备注（当前任务结束后自动发送）」）": "absent",
+    "I1-lite 排队提示（「已排队 N 条，当前任务结束后自动发送」）": "absent"
+  },
+  "controls": {
+    "quota_exhausted": "hit",
+    "provider_error": "hit"
+  },
+  "controlNote": "两条对照串在旧基线与新 main 都存在，HIT 说明 chunk 抓取完整、标记 absent 不是抓取遗漏。",
+  "conclusion": "线上前端产物不含 2026-11-21 新 main（cd344d2a）的 I1-lite 插话排队与 I6 常驻诚实声明改动，属旧一代构建，不是最新 main。",
+  "edgeFunctions": {
+    "status": "undetermined",
+    "reason": "前端打包产物不携带 Edge Functions 函数体版本；7090dfda 提交注明本次 push 只触发 CF 前端构建、函数须另行重发。scene-api / conversation-api 是否随该提交重发，本轮只读探活无法判定函数体，需管理端部署记录，或下一次真实对话回合核对 trace 上行字段（sessionId/turnIndex/projectId/turnKey）是否透传。"
+  },
+  "evidenceBoundary": "仅前端静态产物版本对照；不对函数体行为下结论，不据此把任何用例升 pass。"
+}

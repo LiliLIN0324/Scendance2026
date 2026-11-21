@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-21T16:18:00+08:00",
+  "scope": "#24 新基线 workflow 守卫断言复核（基于 cd344d2a 重建分支）",
+  "suite": "frontend/components/room-organizer/hooks/use-outdoor-agent-workflow.react.test.tsx",
+  "baselineResult": { "passed": 123, "failed": 1, "total": 124 },
+  "preexistingFailure": {
+    "test": "缺分区要追问时，提示条里也带上后置活",
+    "line": 2620,
+    "expected": "提示含「要分哪些用途」",
+    "received": "分区用途与室内外属性预览已就绪；核对后确认才写入，可整批撤销。",
+    "note": "新 main 自带的提示文案漂移，非本轮改动引入；不在本轮修前端逻辑。"
+  },
+  "legacyAssertion": {
+    "origin": "旧基线 d5b5eac7 分支：「无边界时先发设计句：句子与人数/意向留存为简报，不挂范围红卡」",
+    "parts": {
+      "guests 留存 + 人数变更不挂范围红卡 + boundary 不变": "新 main 已有等价覆盖：用例「无边界时只改人数不触发范围红卡，简报记下人数」(line 2588-2599)，断言 brief.guests=150、notice 不含「地图上还没有可核对的活动边界」、noticeKind 非 error、plan.boundary 仍为空。",
+      "zones 留存 2 条且不挂红卡": "未搬。新 main 现行行为：无边界时 zones 提案会挂范围红卡（用例 line 2601-2607，notice 含「地图上还没有可核对的活动边界」），与旧断言期望「不含红卡、brief.zones 留存」冲突，属行为漂移，不照搬旧基线断言。"
+    },
+    "decision": "旧守卫断言不整体迁入新基线；人数口径已被上游覆盖，zones 口径以新 main 现行红卡行为为准。"
+  },
+  "boundary": "仅离线套件复核与源码对照；未改前端实现，不据此把任何台账用例升 pass。"
+}

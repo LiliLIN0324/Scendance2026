@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-21T16:35:00+08:00",
+  "case": 4,
+  "method": "新 main（cd344d2a）源码走查，未造新会话回合、未写库。",
+  "store": {
+    "key": "scendance.assistant-brief-memory.v1",
+    "shape": "{ version: 1, byId: Record<sessionId, BriefMemory> }",
+    "read": "readBriefMemory(id) 按 byId[id] 取；缺 id 条目返回 null。",
+    "writeEntry": "agent-panel.tsx saveMemory(memory) (line 1101) → writeBriefMemory(id, memory, scopedAssistantStorage(sessionScope), requireSessionWrite) (line 1108)"
+  },
+  "writeFalseBranches": [
+    { "cause": "scope 守卫提前返回", "location": "agent-panel.tsx:1102 sessionScopeIsCurrent() === false → return false", "userVisible": "无提示；不更新写槽" },
+    { "cause": "id 空短路", "location": "agent-panel.tsx:1106 id=boundSessionId.current；1108 !!id && writeBriefMemory(...)，id 为空（未绑定会话/匿名草稿）则不进入写槽", "userVisible": "1109 amber 提示要求 id && !saved，id 空时不提示用户" },
+    { "cause": "fence 拦", "location": "assistant-brief-memory.ts:63 isWorkspaceWriteFenceRequired() → return false" },
+    { "cause": "schema 拒", "location": "assistant-brief-memory.ts:64 !memorySchema.safeParse(memory).success → return false" },
+    { "cause": "store 坏", "location": "assistant-brief-memory.ts:66 read() 解析失败返回 null → return false" },
+    { "cause": "assertWrite 抛", "location": "assistant-brief-memory.ts:67 requireSessionWrite 抛「活动会话已切换/凭证失效」→ catch return false" },
+    { "cause": "setItem 败", "location": "assistant-brief-memory.ts:74 safeSetItem 返回 false" }
+  ],
+  "writeFailUserNotice": "agent-panel.tsx:1109 仅当 id 非空且 !saved 时发 amber「本机存不下，输入还留在页面上。」",
+  "separateCause": {
+    "name": "抽取未填（独立于写槽成败）",
+    "note": "memory 的 headcount/event/zoneNeeds 由模型回合抽取回填；抽取分支未填时，即使写槽成功，槽内这些字段仍为空/默认，读不到不等于写槽被拒。"
+  },
+  "runtimeEvidenceStillMissing": "要判定空白无范围首句实际落在哪条分支，需浏览器内读取 localStorage 槽 byId 键、boundSessionId.current 与当轮 memoryRef；本轮不造新会话回合，未取该旁证。",
+  "conclusion": "源码层面已定位写槽链路与全部不写/写失败分支；真机 reload 后意向是否留存仍未证，#4 维持 partial，不据此升 pass。"
+}

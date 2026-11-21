@@ -3,6 +3,8 @@
 > 目标：把台账从 **3/11 全绿** 推到 **11/11**，最后由人签字。本方案逐条写清：判据、现状、还差什么、谁来做、人工照点步骤、证据落点。
 > 纪律：固定数据 ✅ **且** 真实浏览器 pass **且** 真实云端 pass 三类齐才 pass；partial 不算过；n/a 不顶 pass；agent 不代签、不伪造证据。
 
+> **2026-11-21 定稿口径（先于下文）**：分支已重建到新 `main` `cd344d2a`，工作树 `.worktrees/79-closure-v2`，旧 `.worktrees/79-closure` 仅备份。本轮可控项已清完；#3/#5/#9/#10 真机样本挂「待模型回合」，产品项入 backlog；台账 3 pass / 8 partial、`pending-human`。下文旧路径、Node24 前置与逐条 B/C/D 路线为 2026-11-20 历史记录，现状以台账 `baseline`、清单 §八 为准。
+
 ## 1. 当前看板（`walkthrough.json`，`npm run check:79` 自洽）
 
 | # | 用例 | 浏览器 | 云端 | 结论 | 路线 |
@@ -23,8 +25,8 @@
 
 ## 2. 前置环境（每轮开工先核）
 
-- 工作树：`C:\幕景\Scendance2026\.worktrees\79-closure`，分支 `feat/79-jieyu-closure`。
-- Node24：前置 `C:\幕景\Scendance2026\.tmp-node24\node-v24.15.0-win-x64` 到 `PATH`；脚本只认 CLI flag `--use-env-proxy`（`NODE_USE_ENV_PROXY` 无效）。
+- 工作树：`C:\幕景\Scendance2026\.worktrees\79-closure-v2`，分支 `feat/79-closure-v2`（旧 `.worktrees/79-closure` / `feat/79-jieyu-closure` 为备份）。
+- Node：旧 `.tmp-node24` 目录已不存在；系统 `node` v22.23.2 在线，纯 JS / 门禁 / 探测脚本直接用系统 `node`，前端测试在 `frontend/` 下 `npx vitest run`；脚本只认 CLI flag `--use-env-proxy`（`NODE_USE_ENV_PROXY` 无效）。
 - 代理：mixed `http://127.0.0.1:7897`，control `http://127.0.0.1:39798`；当前节点 🇭🇰香港-IEPL 03；`*.pages.dev` 直连 bypass。
 - 会话：走查账号 `walkthrough-79@scendance.test`；access 约 1 小时，过期用 `.temp/refresh-session.mjs` 一次性换新（旧 refresh 作废），换新后复核 `/auth/v1/user` 200。
 - 站点：`https://scendance-scene-planner-ewz.pages.dev/`；项目 REF `wkhfvnzgopjdzxlmycks`。
