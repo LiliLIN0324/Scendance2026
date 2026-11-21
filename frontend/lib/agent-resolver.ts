@@ -25,7 +25,7 @@ export interface BriefExtractTransport {
   briefConversation?(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId,model?:string|null,trace?:ConversationTrace):Promise<BriefConversationResponse>;
 }
 /** 服务端留痕的轮次标识；同一轮重试复用同一 turnKey。 */
-export interface ConversationTrace { turnKey: string; sessionId: string; turnIndex: number }
+export interface ConversationTrace { turnKey: string; sessionId: string; turnIndex: number; projectId?: string }
 
 export type BriefResolution = 'model' | 'confirmation' | 'local_command' | 'disabled' | 'not_connected' | 'unavailable' | 'failed';
 /** Stable category for logs and tests. Production chat copy stays in modelNotice. */

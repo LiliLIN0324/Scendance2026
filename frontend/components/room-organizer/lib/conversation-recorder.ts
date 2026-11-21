@@ -18,6 +18,8 @@ export interface ConversationTurnPayload {
   outcome: ConversationOutcome;
   errorCode?: string;
   latencyMs?: number;
+  /** 云端项目 id：只在活动已挂到云项目时带上；本地活动不传，由服务端留空。 */
+  projectId?: string;
 }
 
 export interface ConversationTraceTransport {
@@ -37,6 +39,12 @@ export function conversationTurnKey(): string {
       return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);
     });
   }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** trace 契约是 strictObject：projectId 只收真 uuid；本地活动的 scope 字符串一律不留。 */
+export function conversationProjectId(value: unknown): string | undefined {
+  return typeof value === 'string' && UUID_RE.test(value) ? value : undefined;
 }
 
 function readQueue(): ConversationTurnPayload[] {

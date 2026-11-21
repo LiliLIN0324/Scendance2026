@@ -14,6 +14,7 @@ import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat
 import { rebuiltSceneRefs } from "./wedding-venue-catalog";
 import { compactResearchCitations, isVenueResearchRequest, readVenueResearch, rememberVenueResearch, researchVenues, venueResearchContext, venueResearchSources } from "./venue-research";
 import { agentDocumentContext, type AgentDocument } from "./agent-documents";
+import { conversationTurnKey, recordConversationTurn, type ConversationTraceTransport } from "./conversation-recorder";
 
 export function outdoorClarificationQuestion(
   message: string,
@@ -82,6 +83,8 @@ export async function understandOutdoorTurn(input: {
   model?: string | null | undefined;
   /** 2026-11-19 试点：用户附的现场截图（data URL），随理解请求发给 deepseek-flash 多模态。 */
   images?: string[] | undefined;
+  /** 留痕锚点：随请求带给后端，失败时本模块用同一 turnKey 补写人话；缺省由调用方自补。 */
+  trace?: { turnKey: string; sessionId: string; turnIndex: number; projectId?: string } | undefined;
 }): Promise<OutdoorTurn> {
   if (!input.controller)
     throw new Error(
@@ -365,16 +368,24 @@ export async function understandOutdoorTurn(input: {
   }
   const provider = input.provider && input.provider !== "default" ? input.provider : undefined;
   const model = input.model ?? null;
+  const trace = input.trace ?? { turnKey: conversationTurnKey(), sessionId: "unknown", turnIndex: 0 };
   input.onRequest?.();
   const response = input.onThought && input.controller.assistantChatStream
-    ? await input.controller.assistantChatStream(input.message, chosen.history, input.signal, input.onThought, provider, model, "outdoor_v1", input.images)
-    : await input.controller.assistantChat(input.message, chosen.history, input.signal, "outdoor_v1", provider, model, true, input.images);
+    ? await input.controller.assistantChatStream(input.message, chosen.history, input.signal, input.onThought, provider, model, "outdoor_v1", input.images, trace)
+    : await input.controller.assistantChat(input.message, chosen.history, input.signal, "outdoor_v1", provider, model, true, input.images, trace);
   if (response.status !== "ok") {
-    const error = new Error(
-      response.status === "disabled"
-        ? "当前环境未开启 Agent 理解模型（本机未配置 AGENT_CHAT），规划未变；可用当前任务卡继续，或为本机配置模型后重试。"
-        : `当前Agent理解不可用（${response.status}），规划未变；点「重试」再试一次，或用当前任务卡选择下一步。`,
-    ) as Error & { code?: string; status?: string };
+    const failureMessage = response.status === "disabled"
+      ? "当前环境未开启 Agent 理解模型（本机未配置 AGENT_CHAT），规划未变；可用当前任务卡继续，或为本机配置模型后重试。"
+      : `当前Agent理解不可用（${response.status}），规划未变；点「重试」再试一次，或用当前任务卡选择下一步。`;
+    // 失败轮也留人话：用同一 turnKey 补写，服务端 upsert 只补已有行、不覆盖结局。
+    recordConversationTurn(input.controller as unknown as ConversationTraceTransport | null, {
+      turnKey: trace.turnKey, sessionId: trace.sessionId, turnIndex: trace.turnIndex,
+      ...(trace.projectId ? { projectId: trace.projectId } : {}),
+      surface: "assistant", userText: input.message,
+      assistantText: failureMessage,
+      outcome: "failed", errorCode: response.status,
+    });
+    const error = new Error(failureMessage) as Error & { code?: string; status?: string };
     // 透出后端失败状态，供工作流按四档错误卡归类；机器码只在内部流转，不再裸进用户文案。
     error.status = response.status;
     // 2026-11-14 用户指令：模型未配置不是登录问题——打标记码让工作流把登录卡摘掉，终止「登录→重试→还不行」循环。

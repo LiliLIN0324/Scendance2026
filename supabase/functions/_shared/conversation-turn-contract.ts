@@ -13,6 +13,8 @@ export const conversationTraceSchema = z.strictObject({
   turnKey: z.string().uuid(),
   sessionId: z.string().trim().min(1).max(120),
   turnIndex: z.number().int().min(0).max(100000),
+  /** 云端项目 id：只在活动已挂到云项目时由前端带上，本地活动留空（不得编造）。 */
+  projectId: z.string().uuid().optional(),
 });
 
 export const conversationToolSummarySchema = z.strictObject({

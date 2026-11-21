@@ -36,7 +36,7 @@ import { createPortal } from 'react-dom';
 import { AgentTaskExamples } from '@/components/agent-task-examples';
 import { ArrowUp, Check, ChevronDown, Clock, Download, FileImage, HelpCircle, Loader2, Lock, Map as MapIcon, Maximize2, MessageCirclePlus, Minimize2, RotateCw, Sparkles, Square, TriangleAlert, X } from '@/components/solid-icons';
 import { modelEnabled, resolveBriefTurn } from '../../../lib/agent-resolver';
-import { conversationTurnKey, recordConversationTurn, type ConversationTraceTransport } from '../lib/conversation-recorder';
+import { conversationProjectId, conversationTurnKey, recordConversationTurn, type ConversationTraceTransport } from '../lib/conversation-recorder';
 import { turnHadServerCall } from '@/lib/conversation-turn-activity';
 import { incompleteUpdateForOutcome, resolvedTurnOutcome, samePersistedHeadcount, sofaOnlyUnhandled } from '../lib/agent-turn-outcome';
 import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } from '../lib/turn-process';
@@ -3108,6 +3108,11 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const session=boundSessionId.current,sequence=briefTurnSequence.current,prior=briefTurnTail.current;
     if(!session||getActiveAssistantSessionId(sessionScope)!==session){say({role:'agent',amber:true,text:'会话正在切换，请在当前会话重新发送。'});return;}
     const history=chatUserHistory(bubblesRef.current.slice(0,-1),text);
+    // 留痕锚点：入口已保证 session 绑定就绪；本句用户气泡已入列，轮次号从气泡数减一（0 基）。
+    const questionProjectId=conversationProjectId(routeBridgeRef.current?.projectId?.());
+    const trace={ turnKey: conversationTurnKey(), sessionId: session,
+      turnIndex: Math.max(0, bubblesRef.current.filter(item=>item.role==='user').length-1),
+      ...(questionProjectId?{projectId:questionProjectId}:{}) };
     pendingModelInputs.current.add(text);
     let release!:()=>void;
     briefTurnTail.current=new Promise<void>(resolve=>{release=resolve;});
@@ -3121,8 +3126,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       // 流式优先：可见内容边到边上屏。旧后端没有该路由时，assistantChatStream 内部退回一次性请求。
       const streamFn=typeof controller.assistantChatStream==='function'?controller.assistantChatStream.bind(controller):null;
       const streamed=streamFn
-        ? streamFn(text,history,request.controller.signal,(delta)=>setStreamPreview(prev=>(prev??'')+delta),provider&&provider!=='default'?provider:undefined,selectedModel)
-        : controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined,selectedModel);
+        ? streamFn(text,history,request.controller.signal,(delta)=>setStreamPreview(prev=>(prev??'')+delta),provider&&provider!=='default'?provider:undefined,selectedModel,undefined,undefined,trace)
+        : controller.assistantChat(text,history,request.controller.signal,undefined,provider&&provider!=='default'?provider:undefined,selectedModel,undefined,undefined,trace);
       const result=await Promise.race([streamed,cancelled]);
       if(!current())return;
       if(result.status==='ok')say({role:'agent',text:result.answer,modelConversation:true});
@@ -3131,13 +3136,26 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         if(retryable)uncertainInputs.current.add(text);
         const status=result.status;
         const view=agentErrorView(status);
+        // 失败轮也留人话：同 turnKey 补写 assistantText，服务端 upsert 只补不覆盖结局。
+        recordConversationTurn(studioRef.current?.controller as unknown as ConversationTraceTransport | undefined, {
+          turnKey: trace.turnKey, sessionId: trace.sessionId, turnIndex: trace.turnIndex,
+          ...(trace.projectId?{projectId:trace.projectId}:{}),
+          surface:'assistant', userText:text, assistantText:view.message, outcome:'failed',
+        });
         // 按既定口径：所有错误卡都保留「重试云端理解 / 改一句再说」；重试是手动重发同一句，不会自动换到其它模型。
         const retry = () => { if (!briefRequest.current) void send(text, true); };
         const alert = { stamp: view.stamp, tone: view.tone, retry };
         say({role:'agent',amber:true,text:view.message,alert});
       }
     } catch {
-      if(current()){uncertainInputs.current.add(text);say({role:'agent',amber:true,text:'问答没完成，可能还在计费。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text,true);}}});}
+      if(current()){uncertainInputs.current.add(text);
+        // 网络层失败：后端多半没写上（或写了 failed 不带文案）；不带 errorCode，让服务端已有的分类保留。
+        recordConversationTurn(studioRef.current?.controller as unknown as ConversationTraceTransport | undefined, {
+          turnKey: trace.turnKey, sessionId: trace.sessionId, turnIndex: trace.turnIndex,
+          ...(trace.projectId?{projectId:trace.projectId}:{}),
+          surface:'assistant', userText:text, assistantText:'问答没完成，可能还在计费。', outcome:'failed',
+        });
+        say({role:'agent',amber:true,text:'问答没完成，可能还在计费。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text,true);}}});}
     } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}setStreamPreview(null);release();}
   }
 
@@ -3166,9 +3184,16 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const trimmed = text.trim();
     if (!trimmed && !attachment) return;
     // 先占一个留痕锚点：本机命令直接答完时由 say 补记；进入模型链路前把锚点清空。
+    // 2026-11-21 修正：绑定 effect 与发送之间有窗口，此前全部落到 unknown 占位（留痕实证）；
+    // 会话 id 兜底读会话当前活跃 id，轮次号用本会话已入列的用户气泡数（此刻本句还没入列），
+    // projectId 只在活动已挂云项目时带上（本地活动没有云端 id，不得编造）。
+    const traceProjectId = conversationProjectId(routeBridgeRef.current?.projectId?.());
     const turnTrace = trimmed ? {
-      turnKey: conversationTurnKey(), sessionId: boundSessionId.current ?? 'unknown',
-      turnIndex: briefTurnSequence.current, userText: trimmed, startedAt: Date.now(),
+      turnKey: conversationTurnKey(),
+      sessionId: boundSessionId.current ?? getActiveAssistantSessionId(sessionScope) ?? 'unknown',
+      turnIndex: bubblesRef.current.filter(item => item.role === 'user').length,
+      ...(traceProjectId ? { projectId: traceProjectId } : {}),
+      userText: trimmed, startedAt: Date.now(),
     } : null;
     localTurnRef.current = turnTrace;
     // 2026-11-16 用户口径：地图优先。地点没定就发布置/动线/分区，本地退回选址，
@@ -3295,7 +3320,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         if(chosen){await handleVenuePick(chosen);return;}
         if(isAffirmativeIntent(trimmed)){if(venuePick.candidates.length===1)await handleVenuePick(venuePick.candidates[0]!);else say({role:'agent',text:'有多个地点，说名称或第几个。'});return;}
       }
-      await outdoorWorkflow.handle(trimmed,clarification,undefined,readAgentDocuments(`${sessionScope}:${boundSessionId.current ?? 'local'}`));return;
+      // 契约 trace 是 strictObject：只传 turnKey/sessionId/turnIndex/projectId，多余键会被整包拒收。
+      await outdoorWorkflow.handle(trimmed,clarification,undefined,readAgentDocuments(`${sessionScope}:${boundSessionId.current ?? 'local'}`),turnTrace?{turnKey:turnTrace.turnKey,sessionId:turnTrace.sessionId,turnIndex:turnTrace.turnIndex,...(turnTrace.projectId?{projectId:turnTrace.projectId}:{})}:undefined);return;
     }
     if (!attachment && isExplicitProposalConfirmation(trimmed)) {
       if(!queued)say({role:'user',text:trimmed});
@@ -3630,7 +3656,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       const selectedModel=provider&&provider!=='default'?studioRef.current?.activeModel??null:null;
       turn = await resolveBriefTurn(trimmed, resolverMemory, {
         venueUp, scaleTyped: lengthCheck.ok && widthCheck.ok, hasBase, command,
-      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined, provider&&provider!=='default'?provider:undefined, selectedModel, turnTrace ?? undefined);
+      }, studioRef.current?.controller ?? null, activeRequest.controller.signal, unifiedConversation ? {history:turnHistory} : undefined, provider&&provider!=='default'?provider:undefined, selectedModel, turnTrace ? {turnKey:turnTrace.turnKey,sessionId:turnTrace.sessionId,turnIndex:turnTrace.turnIndex,...(turnTrace.projectId?{projectId:turnTrace.projectId}:{})} : undefined);
       if(turn.modelNotice?.includes('可能仍会计费'))uncertainInputs.current.add(trimmed);
       if(briefRequest.current===activeRequest){briefRequest.current=null;setUnderstanding(false);}
     } catch (error) { setProcessFailed('understanding'); releaseTurn(); if(activeRequest.controller.signal.aborted)return;throw error; }
@@ -4531,7 +4557,11 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   }, [assistantSessions.activeId]);
   const restoredCancellation=useRef<number|null>(null);
   useEffect(()=>{const cancelled=agent.cancelledInput;if(!cancelled||restoredCancellation.current===cancelled.id)return;restoredCancellation.current=cancelled.id;if(!draft.trim())setDraft(cancelled.text);},[agent.cancelledInput]);
-  // 语音转文字：点一下开始拾音、再点停止；结果 append 到现有 draft 后，不覆盖。
+  // 语音转文字：点一下开始拾音、再点停止；识别稿并入现有 draft，不覆盖已有内容。
+  // 2026-11-21 修正：interimResults 开着时每个中间态都会触发 onresult，此前逐条 append
+  // 会把草稿拼成「我 我想 我想举…」的全量中间态（对话留痕实证）；改为拾音起步时记下
+  // 基稿，之后每次用「基稿 + 当前识别稿（final + 未定稿）」整体替换。
+  const speechBaseRef = useRef('');
   const toggleMic = useCallback(() => {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) return;
@@ -4540,13 +4570,20 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
     recognition.lang = 'zh-CN';
     recognition.continuous = false;
     recognition.interimResults = true;
+    speechBaseRef.current = volatileComposerDrafts.get(draftKey) ?? '';
     recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) transcript += event.results[i][0]?.transcript ?? '';
-      const text = transcript.trim();
-      if (!text) return;
-      const current = volatileComposerDrafts.get(draftKey) ?? '';
-      setDraft(current.trim() ? `${current.trim()} ${text}` : text);
+      let finalText = '';
+      let interimText = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const alt = event.results[i][0];
+        if (!alt?.transcript) continue;
+        if (event.results[i].isFinal) finalText += alt.transcript;
+        else interimText += alt.transcript;
+      }
+      const spoken = `${finalText.trim()}${finalText.trim() && interimText.trim() ? ' ' : ''}${interimText.trim()}`.trim();
+      const base = speechBaseRef.current.trim();
+      if (!spoken && !base) return;
+      setDraft(spoken ? (base ? `${base} ${spoken}` : spoken) : base);
     };
     recognition.onend = () => { recognitionRef.current = null; setListening(false); };
     recognition.onerror = () => { recognitionRef.current = null; setListening(false); };

@@ -229,6 +229,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             onDelta:(text)=>{emit(input.data.includeThought?'thought':'delta',{text});}});
           void traceTurn(backend,env,actor,{
             turnKey:traceKey(input.data.trace),sessionId:input.data.trace?.sessionId??'unknown',turnIndex:input.data.trace?.turnIndex??0,
+            ...(input.data.trace?.projectId?{projectId:input.data.trace.projectId}:{}),
             surface:'assistant',userText:input.data.message,provider:input.data.provider??'default',
             ...(result.answer?{assistantText:result.answer}:{}),
             outcome:result.status==='ok'?'answered':'failed',
@@ -250,6 +251,7 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
         const result=await answerAssistantChat({...input.data,enabled:true,env,fetcher,signal:request.signal,provider:input.data.provider??'default'});
         await traceTurn(backend,env,actor,{
           turnKey:traceKey(input.data.trace),sessionId:input.data.trace?.sessionId??'unknown',turnIndex:input.data.trace?.turnIndex??0,
+          ...(input.data.trace?.projectId?{projectId:input.data.trace.projectId}:{}),
           surface:'assistant',userText:input.data.message,provider:input.data.provider??'default',
           ...(result.answer?{assistantText:result.answer}:{}),
           outcome:result.status==='ok'?'answered':'failed',
@@ -373,9 +375,10 @@ export function createApi(backend:Backend,env:Env,fetcher:Fetcher=fetch,waitUnti
             continue;
           }
         }
-        const briefTraceTurn:Omit<ConversationTurn,'outcome'>={
-          turnKey:traceKey(input.trace),sessionId:input.trace?.sessionId??'unknown',turnIndex:input.trace?.turnIndex??0,
-          surface:'brief',userText:input.message,provider:requestedProvider,
+    const briefTraceTurn:Omit<ConversationTurn,'outcome'>={
+      turnKey:traceKey(input.trace),sessionId:input.trace?.sessionId??'unknown',turnIndex:input.trace?.turnIndex??0,
+      ...(input.trace?.projectId?{projectId:input.trace.projectId}:{}),
+      surface:'brief',userText:input.message,provider:requestedProvider,
           ...(briefAnswer?{assistantText:briefAnswer}:{}),...(briefModel?{model:briefModel}:{}),
           latencyMs:Date.now()-briefTraceStart,
         };

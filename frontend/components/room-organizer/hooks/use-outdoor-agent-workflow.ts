@@ -6,6 +6,7 @@ import { requestsWeddingOptimization, weddingDesignRequest } from "../lib/weddin
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
 import { getActiveAssistantSessionId } from "./use-assistant-sessions";
+import { conversationProjectId, conversationTurnKey } from "../lib/conversation-recorder";
 import { isVenueResearchRequest } from "../lib/venue-research";
 import { gateAction, type SupervisionLevel } from "../lib/agent-supervision";
 import { getAgentSupervision, useAgentSupervision } from "../lib/agent-supervision-store";
@@ -2755,7 +2756,7 @@ export function useOutdoorAgentWorkflow(input: {
     return true;
   }
 
-  async function handle(message: string, clarification?: OutdoorClarification, images?: string[], documents?: AgentDocument[]): Promise<boolean> {
+  async function handle(message: string, clarification?: OutdoorClarification, images?: string[], documents?: AgentDocument[], trace?: { turnKey: string; sessionId: string; turnIndex: number; projectId?: string }): Promise<boolean> {
     if (!callbacks.current.bridge()?.applyPlan) return false;
     const waiting = pendingPlanRef.current;
     if (waiting && (explicitProposalApproval(message) || /^批准(?:这(?:份|个))?计划[。！!]?$/u.test(message.trim()))) {
@@ -2890,6 +2891,17 @@ export function useOutdoorAgentWorkflow(input: {
       const turn = await understandOutdoorTurn({
         message,
         documents,
+        // 留痕锚点：优先用发送方传来的（含真实 turnIndex / projectId）；
+        // 钩子内部重试（登录补发、重试卡）没有上游锚点，按当前会话自补。
+        trace: trace ?? (() => {
+          const fallbackProjectId = conversationProjectId(callbacks.current.bridge()?.projectId?.());
+          return {
+            turnKey: conversationTurnKey(),
+            sessionId: getActiveAssistantSessionId(input.scope) ?? 'unknown',
+            turnIndex: 0,
+            ...(fallbackProjectId ? { projectId: fallbackProjectId } : {}),
+          };
+        })(),
         researchScope: `${input.scope}:${getActiveAssistantSessionId(input.scope) ?? 'local'}`,
         ...(images?.length ? { images } : {}),
         clarification: waiting

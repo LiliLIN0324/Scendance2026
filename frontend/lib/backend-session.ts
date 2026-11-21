@@ -1839,7 +1839,7 @@ export class BackendSession {
     return this.activityRunRequest(`/projects/${projectId}/agent-runs`, 'POST', check => this.client.startActivityTaskRun(projectId, body,check));
   }
   /** 简报槽位提取：只读、不占租约，模型 key 在 Supabase secrets，浏览器不接触。未启用返回 enabled:false。 */
-  async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId, model?: string | null, trace?: { turnKey: string; sessionId: string; turnIndex: number }): Promise<BriefExtractResponse> {
+  async briefExtract(message: string, signal?: AbortSignal, provider?: ChatProviderId, model?: string | null, trace?: { turnKey: string; sessionId: string; turnIndex: number; projectId?: string }): Promise<BriefExtractResponse> {
     const input = briefExtractRequestSchema.parse({ message, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(trace ? { trace } : {}) });
     noteServerCall();
     const dispatch=this.scopedDispatchGuard(false);
@@ -1847,7 +1847,7 @@ export class BackendSession {
     dispatch();return briefExtractResponseSchema.parse(result);
   }
   /** One opt-in call returns a reply and proposed facts; it never executes actions. */
-  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId,model?:string|null,trace?:{turnKey:string;sessionId:string;turnIndex:number}):Promise<BriefConversationResponse> {
+  async briefConversation(message:string,history:Array<{role:'user'|'assistant';text:string}>,signal?:AbortSignal,provider?:ChatProviderId,model?:string|null,trace?:{turnKey:string;sessionId:string;turnIndex:number;projectId?:string}):Promise<BriefConversationResponse> {
     const input=briefConversationRequestSchema.parse({message,responseMode:'conversation_v1',history,...(provider?{provider}:{}),...(model?{model}:{}),...(trace?{trace}:{})});
     const client=this.conversationClient();
     if(!client)return {enabled:false,extraction:null,reply:null,unhandled:[],factEvidence:[]};
@@ -1875,7 +1875,7 @@ export class BackendSession {
     finally{dispatch();}
   }
   /** Explicitly enabled read-only conversation; does not execute scene actions. */
-  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true, images?: string[], trace?: { turnKey: string; sessionId: string; turnIndex: number }): Promise<AssistantChatResult> {
+  async assistantChat(message: string, history: Array<{role:'user'|'assistant';text:string}>, signal?: AbortSignal, responseMode?: "outdoor_v1", provider?: ChatProviderId, model?: string | null, includeThought?: true, images?: string[], trace?: { turnKey: string; sessionId: string; turnIndex: number; projectId?: string }): Promise<AssistantChatResult> {
     const input = assistantChatRequestSchema.parse({ message, history, ...(responseMode ? { responseMode } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(includeThought ? { includeThought } : {}), ...(images?.length ? { images } : {}), ...(trace ? { trace } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
@@ -1890,7 +1890,7 @@ export class BackendSession {
    * 旧部署没有流式路由时（404/405/非 SSE）退回一次性请求，不把「不支持流」当成问答失败。
    * 取消只会停掉这一条请求；不会把已生成的部分当成完整答案。
    */
-  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1', images?:string[], trace?:{turnKey:string;sessionId:string;turnIndex:number}):Promise<AssistantChatResult> {
+  async assistantChatStream(message:string, history:Array<{role:'user'|'assistant';text:string}>, signal:AbortSignal|undefined, onDelta:(text:string)=>void, provider?:ChatProviderId, model?:string|null, responseMode?:'outdoor_v1', images?:string[], trace?:{turnKey:string;sessionId:string;turnIndex:number;projectId?:string}):Promise<AssistantChatResult> {
     const input = assistantChatRequestSchema.parse({ message, history, ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(responseMode ? { responseMode, includeThought:true } : {}), ...(images?.length ? { images } : {}), ...(trace ? { trace } : {}) });
     const client=this.conversationClient();
     if(!client)return {status:'disabled',answer:null};
@@ -1903,7 +1903,7 @@ export class BackendSession {
     }catch(error){
       dispatch();
       if(error instanceof SceneApiError&&(error.status===404||error.status===405||error.code==='STREAM_UNAVAILABLE'||error.code==='NON_JSON_RESPONSE')){
-        return this.assistantChat(message,history,signal,responseMode,provider,model,responseMode?true:undefined,images);
+        return this.assistantChat(message,history,signal,responseMode,provider,model,responseMode?true:undefined,images,trace);
       }
       throw error;
     }
