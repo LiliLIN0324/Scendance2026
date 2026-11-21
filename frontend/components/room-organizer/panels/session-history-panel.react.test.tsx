@@ -17,6 +17,7 @@ import {
 } from '../lib/assistant-sessions';
 import { resetAssistantSessionsStoreForTests } from '../hooks/use-assistant-sessions';
 import { AssistantSessionDock, SessionHistoryPanel } from './session-history-panel';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 const NOW = Date.parse('2026-10-31T09:40:00');
 
@@ -54,16 +55,22 @@ function list(): HTMLElement {
   return screen.getByRole('list', { name: '方案会话列表' });
 }
 
+let memStorage: MemoryStorage;
+
 beforeEach(() => {
   vi.stubGlobal('crypto', webcrypto);
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
   localStorage.clear();
   resetAssistantSessionsStoreForTests();
 });
 
 afterEach(() => {
   cleanup();
+  memStorage?.clear();
   vi.unstubAllGlobals();
-  localStorage.clear();
   resetAssistantSessionsStoreForTests();
 });
 

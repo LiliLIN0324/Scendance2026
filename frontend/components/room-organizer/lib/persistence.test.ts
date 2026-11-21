@@ -30,6 +30,20 @@ import {
 } from './persistence';
 import { VERSION_HISTORY_STORAGE_KEY } from './version-history';
 import type { RawStore } from './persistence';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
+
+let memStorage: MemoryStorage;
+beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+});
+afterEach(() => {
+  memStorage?.clear();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function domError(name: string, code = 0): Error {
   const error = new Error(name);

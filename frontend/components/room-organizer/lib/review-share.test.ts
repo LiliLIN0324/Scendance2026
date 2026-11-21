@@ -1,7 +1,20 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addReviewComment, forgetReviewLinkMark, issueReviewShare, listReviewComments, readReviewShare, reviewMarkFor, REVIEW_SHARE_STORAGE } from './review-share';
 import type { RoomLayout } from './types';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
+
+let memStorage: MemoryStorage;
+beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+});
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
+});
 
 function layout(): RoomLayout {
   return {

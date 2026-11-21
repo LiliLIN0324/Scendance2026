@@ -4,13 +4,15 @@ import { createLocalWriteLeaseManager, type LocalWriteCapability } from '@/lib/l
 import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 import { readEnvironmentsStrict, type EnvironmentScope } from './environment-preference';
 import { createPendingEnvironmentWrite, reconcilePendingEnvironmentWrite } from './environment-write-reconciliation';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 const key='scendance:environment:v1',scope:EnvironmentScope={kind:'project',id:'A'},other:EnvironmentScope={kind:'project',id:'B'};
 const old=[{assetId:'old',name:'原场地'}],target=[{assetId:'new',name:'新场地'}];
 let lease:Awaited<ReturnType<ReturnType<typeof createLocalWriteLeaseManager>['acquire']>>;
-beforeEach(async()=>{localStorage.clear();const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
+let memStorage: MemoryStorage;
+beforeEach(async()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;localStorage.clear();const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
   vi.stubGlobal('navigator',{locks});lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();});
-afterEach(async()=>{await lease.release();localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
+afterEach(async()=>{await lease.release();memStorage?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function read(s:EnvironmentScope=scope){return readEnvironmentsStrict(s,lease.capability);}
 function pending(){localStorage.setItem(key,JSON.stringify({A:old,B:[{assetId:'b',name:'B项目'}]}));const result=read();if(!result.ok)throw new Error(result.reason);return createPendingEnvironmentWrite(scope,7,result.snapshot,target);}
 describe('strict environment read and unknown outcome reconciliation',()=>{

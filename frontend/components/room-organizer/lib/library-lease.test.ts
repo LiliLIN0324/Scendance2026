@@ -4,6 +4,7 @@ import { createLocalWriteLeaseManager } from '@/lib/local-write-lease';
 import { makeLayout } from './__testfixtures__/fixtures';
 import { saveNamedLayout, deleteNamedLayout, loadNamedLayout, listSavedLayouts, recoverNamedLayoutChange } from './library';
 import { listSnapshots, recordSnapshot } from './version-history';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 const INDEX = 'standalone-room-organizer-library:_index';
 const PENDING = 'standalone-room-organizer-library:_guarded_pending';
@@ -12,8 +13,9 @@ const locks = { request(_name: string, _options: unknown, callback: (lock: unkno
   return Promise.resolve().then(() => callback({ name: 'local' }));
 } } as unknown as LockManager;
 const manager = () => createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage});
-beforeEach(()=>vi.stubGlobal('navigator',{locks}));
-afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();window.localStorage.clear();});
+let memStorage: MemoryStorage;
+beforeEach(()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;vi.stubGlobal('navigator',{locks});});
+afterEach(()=>{memStorage?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 it('rejects forged and released capabilities without touching existing data',async()=>{
   expect(saveNamedLayout(makeLayout({name:'old'}),'example')).not.toBeNull();

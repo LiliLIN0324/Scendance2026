@@ -3,14 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLocalWriteLeaseManager, type LocalWriteCapability } from '@/lib/local-write-lease';
 import { RESTORE_JOURNAL_MARKER } from '@/lib/restore-journal';
 import { clearEnvironmentStrict, readEnvironments, writeEnvironmentsStrict } from './environment-preference';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 const key='scendance:environment:v1';
 let lease:Awaited<ReturnType<ReturnType<typeof createLocalWriteLeaseManager>['acquire']>>;
+let memStorage: MemoryStorage;
 beforeEach(async()=>{
+  memStorage=new MemoryStorage();
+  vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;
   localStorage.clear();
   const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
   vi.stubGlobal('navigator',{locks});lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
 });
-afterEach(async()=>{await lease.release();localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
+afterEach(async()=>{await lease.release();memStorage?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('strict environment persistence',()=>{
   it('writes and reads exact bytes and retains other projects; clear persists tombstone',()=>{
     const existing=JSON.stringify({'other':{assetId:'b',name:'其他'}});localStorage.setItem(key,existing);

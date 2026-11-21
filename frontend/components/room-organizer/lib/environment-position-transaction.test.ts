@@ -4,13 +4,15 @@ import { createLocalWriteLeaseManager } from '@/lib/local-write-lease';
 import { readEnvironmentsStrict, type EnvironmentScope, type StoredEnvironment } from './environment-preference';
 import { persistEnvironmentPosition } from './environment-position-transaction';
 import { reconcilePendingEnvironmentWrite } from './environment-write-reconciliation';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 const key='scendance:environment:v1',scope:EnvironmentScope={kind:'project',id:'activity-a'};
 const original:StoredEnvironment[]=[{assetId:'venue',name:'原场地',position:{x:0,y:0,z:0}}];
 let lease:Awaited<ReturnType<ReturnType<typeof createLocalWriteLeaseManager>['acquire']>>;
-beforeEach(async()=>{localStorage.clear();const locks={request(_name:string,_opts:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
+let memStorage: MemoryStorage;
+beforeEach(async()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;localStorage.clear();const locks={request(_name:string,_opts:unknown,callback:(lock:unknown)=>Promise<unknown>){return callback({name:'writer'});}} as unknown as LockManager;
   vi.stubGlobal('navigator',{locks});lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
   localStorage.setItem(key,JSON.stringify({'activity-a':original,'activity-b':[{assetId:'b',name:'另一活动'}]}));});
-afterEach(async()=>{await lease.release();localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
+afterEach(async()=>{await lease.release();memStorage?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function run(overrides:Partial<Parameters<typeof persistEnvironmentPosition>[0]>={}) {return persistEnvironmentPosition({scope,generation:1,environments:original,assetId:'venue',position:{x:2,y:0,z:3},capability:lease.capability,assertCurrent:()=>{},...overrides});}
 describe('one-domain environment position transaction',()=>{
   it('persists metre calibration for one venue without scaling the others',()=>{

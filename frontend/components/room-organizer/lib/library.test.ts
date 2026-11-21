@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { makeLayout } from './__testfixtures__/fixtures';
 import {
   countUnreadableSavedLayouts,
@@ -13,6 +14,18 @@ import {
   slugify,
 } from './library';
 import { listSnapshots, recordSnapshot } from './version-history';
+
+let memStorage: MemoryStorage;
+beforeEach(() => {
+  memStorage = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', memStorage);
+  window.localStorage = memStorage;
+});
+afterEach(() => {
+  memStorage?.clear();
+  vi.unstubAllGlobals();
+});
 
 describe('slugify', () => {
   it('keeps short names unchanged (existing library saves keep their ids)', () => {

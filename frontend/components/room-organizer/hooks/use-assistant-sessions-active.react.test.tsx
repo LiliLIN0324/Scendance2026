@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import {act,cleanup,renderHook} from '@testing-library/react';
-import {afterEach,beforeEach,describe,expect,it} from 'vitest';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {resetAssistantSessionsStoreForTests,scopedAssistantStorage,subscribeActiveAssistantSession,useAssistantSessions} from './use-assistant-sessions';
+import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
-beforeEach(()=>{localStorage.clear();resetAssistantSessionsStoreForTests();});
-afterEach(()=>{cleanup();resetAssistantSessionsStoreForTests();localStorage.clear();});
+let memStorage: MemoryStorage;
+beforeEach(()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;localStorage.clear();resetAssistantSessionsStoreForTests();});
+afterEach(()=>{cleanup();memStorage?.clear();vi.unstubAllGlobals();resetAssistantSessionsStoreForTests();});
 describe('active conversation subscription',()=>{
  it('observes an away-and-back change in the same React batch without conflating scopes',()=>{
   const scope='activity:queue-test',other='activity:other';

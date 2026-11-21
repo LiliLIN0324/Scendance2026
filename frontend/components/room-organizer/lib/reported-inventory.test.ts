@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
-import {afterEach,describe,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {parseModelBrief,parseBriefConversation} from '../../../../supabase/functions/_shared/brief-extract-contract';
 import {resolveBriefTurn} from '@/lib/agent-resolver';
 import {initialBriefMemory,parseBriefTurn} from './brief-agent';
 import {readBriefMemory,writeBriefMemory} from './assistant-brief-memory';
 import {scopedAssistantStorage} from '../hooks/use-assistant-sessions';
 import type {BriefExtraction} from './workbench-agent';
+import {MemoryStorage} from '@/lib/test-support-memory-storage';
 
 const context={venueUp:false,scaleTyped:false,hasBase:false,command:null} as const;
 const empty:BriefExtraction={event:null,headcount:null,venueIO:null,lengthM:null,widthM:null,areaM2:null,timeOfDay:null};
-afterEach(()=>{localStorage.clear();vi.unstubAllEnvs();});
+let memStorage: MemoryStorage;
+beforeEach(()=>{memStorage=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',memStorage);window.localStorage=memStorage;});
+afterEach(()=>{memStorage?.clear();vi.unstubAllGlobals();vi.unstubAllEnvs();});
 describe('物料原话只作用户提及',()=>{
  it('keeps attendance separate and preserves the exact statement through storage and sessions',async()=>{
   vi.stubEnv('NEXT_PUBLIC_AGENT_ENABLED','1');
