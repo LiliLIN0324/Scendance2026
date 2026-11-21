@@ -4663,7 +4663,12 @@ useEffect(() => {
       if (!el) return false;
       const pin = () => { el.scrollTo?.({ top: el.scrollHeight }); };
       pin();
-      const resize = new ResizeObserver(pin);
+      const resize = new ResizeObserver(entries => {
+        // 用户主动展开/收起的折叠区（顶部活动画廊胶囊等）高度变化不抢滚动；
+        // 只有对话内容自身追加或容器尺寸变化才钉回最新消息。
+        if (entries.some(entry => entry.target instanceof Element && entry.target.closest?.('[data-pin-exempt]'))) return;
+        pin();
+      });
       resize.observe(el);
       for (const child of Array.from(el.children)) resize.observe(child);
       // 子节点增删（卡片/气泡挂载卸载）后重新跟踪新的内容元素。

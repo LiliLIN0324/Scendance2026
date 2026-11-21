@@ -284,7 +284,7 @@ export function LocalActivitiesPanel({ layout, actions, disabled = false, mode =
     </li>)}
   </ul>;
 
-  return <section ref={sectionRef} className="sc-local-activities" aria-label="本机活动">
+  return <section ref={sectionRef} className="sc-local-activities" aria-label="本机活动" data-pin-exempt="">
     {/* 2026-11-13 用户指令：「已有活动暂不可打开 ⓘ」整条删掉——恢复保障没就绪时归档卡自己就是禁用态，不再在上面叠一行提示。 */}
     {identityMissing && <p className="sc-handoff-error" role="alert">请先保存有明确编号的当前活动，再新建或打开其他活动。</p>}
     {showCreate && <div className="sc-activity-group">
