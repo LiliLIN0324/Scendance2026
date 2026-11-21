@@ -143,7 +143,6 @@ export function ActivityTaskSuggestionView(props: ActivityTaskSuggestionViewProp
 
       {proposal && <section className="ats-proposal" aria-label="本次任务建议">
         <h3>本次任务建议 · {proposal.tasks.length} 项</h3>
-        <p className="ats-note">建议仅包含任务标题、阶段、完成条件和关联物件。负责人、时间与现场记录由你在活动安排中补充。</p>
         <ul className="ats-records">{proposal.tasks.map(task => <li key={task.id}>
           <label className="ats-pick"><input type="checkbox" checked={props.selectedSuggestionIds.includes(task.id)} disabled={phase !== 'prepared' || busy || stale}
             onChange={event => props.onSelectedSuggestionIds(toggled(props.selectedSuggestionIds, task.id, event.target.checked))}/>
@@ -151,14 +150,14 @@ export function ActivityTaskSuggestionView(props: ActivityTaskSuggestionViewProp
           <dl className="ats-facts"><dt>完成条件</dt><dd>{task.acceptance}</dd><dt>关联物件</dt><dd>{objectNames(task.objectIds)}</dd></dl>
         </li>)}</ul>
         {phase === 'prepared' && <div className="ats-actions">
-          <p className="ats-note">已勾选 {chosen.length} 项。勾选任务保存后，本批建议结束。</p>
+          <p className="ats-note">已勾选 {chosen.length} 项。</p>
           <button type="button" className="sc-button ats-primary" disabled={!readyToAccept} onClick={props.onAccept}>保存勾选任务</button>
         </div>}
       </section>}
 
       <div className="ats-actions ats-result-actions">
         {(phase === 'requested' || phase === 'failed') && <>
-          <p className="ats-note">查询同一次请求，不会再次生成。查询结果仍需你勾选保存。</p>
+          <p className="ats-note">结果仍需勾选保存。</p>
           <button type="button" className="sc-button" disabled={busy} onClick={props.onRecover}>查询原请求</button>
         </>}
         {phase === 'saving' && <>

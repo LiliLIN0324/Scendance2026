@@ -175,7 +175,7 @@ export function ProposalCard({ plan, cloudBusy, recovering, inventoryBlocked, in
       {plan.functionalWarnings?.map(message => <p className="ap-note" key={message}>{message}</p>)}
       {!!plan.existingChanges?.length && <details className="ap-existing-changes">
         <summary>对现有物料的改动（{plan.existingChanges.length} 件）</summary>
-        <p>确认后将修改现有物料；目前仅为预览，尚未应用。位置以场地中心为原点。</p>
+        <p>目前仅为预览，确认后才修改现有物料。</p>
         <ul>{plan.existingChanges.map(change=><li key={change.id}>{change.text}</li>)}</ul>
       </details>}
     </div>}
