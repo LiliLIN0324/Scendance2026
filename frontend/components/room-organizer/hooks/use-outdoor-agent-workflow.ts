@@ -788,11 +788,15 @@ export function useOutdoorAgentWorkflow(input: {
     [],
   );
   function nextStage(stage: OutdoorStage) {
+    // 2026-11-21 恢复被 950c6dd8 误删的阶段推进：这个函数的本意是「标记本阶段完成并进入下一阶段」，
+    // 11-19 那次提交把 `stages[i + 1]` 改成了原地不动，范围确认完任务卡还停在「核对具体活动范围」，
+    // 于是同一份红线被反复要求确认（用户实测「更早的引导·8」）。按创建时的语义恢复。
+    const i = stages.indexOf(stage);
     const completed = [...new Set([...stateRef.current.completed, stage])];
     persist({
       ...stateRef.current,
       completed,
-      stage,
+      stage: stages[Math.min(stages.length - 1, i + 1)]!,
     });
   }
   function requireScope(plan: SitePlanData): boolean {
@@ -977,6 +981,7 @@ export function useOutdoorAgentWorkflow(input: {
     afterConfirm?: OutdoorWorkflowProposal["afterConfirm"],
     afterConfirmRequest?: OutdoorWorkflowProposal["afterConfirmRequest"],
     preserveOriginal = false,
+    directApply = false,
   ): void | Promise<void> {
     // 有了一版可看的预览就不再记账：追问预算只数“毫无进展”的那几轮。
     askStreakRef.current = 0;
@@ -992,7 +997,15 @@ export function useOutdoorAgentWorkflow(input: {
     ];
     const risk = outdoorActionRisk(base, next, label);
     const gate = gateAction(currentSupervision(), risk);
-    const checkpoint = (kind === 'scope' && !afterConfirmRequest) || kind === 'verify-access' || !!objectsLayoutRef.current?.packed;
+    // 2026-11-21 用户实测：画布上已有同一条红线时，任务卡「确认活动范围」点完还会弹一张
+    // 「确认并应用这一版」，两击确认的是同一份数据（核对阶段对有效红线就是原样重发一份提案）。
+    // 提案与画布完全一致且监督档不另要求复核时不再立检查点，点一下就落地推进；
+    // 边界/锚点真变了（搜索候选、手画重画、按尺寸改线）或监督档要求时，照常停在预览卡上。
+    const unchangedScope = kind === "scope" && !afterConfirmRequest && JSON.stringify(next) === JSON.stringify(base);
+    // 2026-11-21 用户拍板「候选点选直接落地」：候选是用户刚亲手选的，锚定写入不再单独立核对卡；
+    // 严格档仍由 gate 拦下核对。
+    const pickedScope = kind === "scope" && directApply && !afterConfirmRequest;
+    const checkpoint = ((kind === 'scope' && !afterConfirmRequest) || kind === 'verify-access' || !!objectsLayoutRef.current?.packed) && !unchangedScope && !pickedScope;
     const approvalReason = gate.required ? gate.why : checkpoint
       ? kind === 'verify-access' ? '真实出入口的通行状态需要你核对。' : kind === 'scope' ? '请核对本次活动要使用的场地范围。' : '这版采用了压缩通道的摆放方式，需要核对。'
       : '';
@@ -1026,7 +1039,11 @@ export function useOutdoorAgentWorkflow(input: {
     liveTurn.current.markPreview();
     liveTurn.current.log();
     if (!checkpoint && !gate.required) {
-      return confirm(p, true);
+      // 直接落地没有核对卡：范围类的提醒（如超界淘汰）改走设计过程留痕，不静默丢。
+      if (kind === "scope") for (const w of warnings) designStep(w);
+      // unchangedScope/pickedScope 都是「用户刚亲手确认」的落地，不是监督档代跑：按手动确认走收尾文案，
+      // 不多念「已按监督档自动执行」。
+      return confirm(p, !(unchangedScope || pickedScope));
     }
   }
   async function confirm(expected?: OutdoorWorkflowProposal, automatic = false) {
@@ -1206,14 +1223,23 @@ export function useOutdoorAgentWorkflow(input: {
       setMapGap(false);
       nextStage("scope");
     } else if (p.kind === "verify-access") {
+      // 2026-11-21 恢复被 950c6dd8 一并简化掉的深阶段保护：入口核对发生在物件/人员等后段时，
+      // 任务卡不该被拽回「摆放物料」（创建时的原语义）。
       persist({
         ...stateRef.current,
-        stage: "objects",
+        stage: ["sub-routes", "people", "refine-3d"].includes(stateRef.current.stage)
+          ? stateRef.current.stage
+          : "objects",
       });
     } else if (p.kind === "style") {
       // Cosmetic only: do not advance or confirm any venue/layout stage.
     } else if (p.kind === "model") {
       persist({ ...stateRef.current, stage: "refine-3d" });
+    } else if (p.kind === "objects") {
+      // 2026-11-21 用户拍板：支线已并入路线预览，物件确认直接进「岗位、人数与活动路径」，
+      // 不再单独停「子入口与支线」停靠卡（路线按需排，主通道+支线一次出齐）。
+      const completed = [...new Set([...stateRef.current.completed, "objects" as const])];
+      persist({ ...stateRef.current, completed, stage: "people" });
     } else nextStage(p.kind);
     const mapEditHint = MAP_EDIT_HINTS[p.kind];
     // 2026-11-17 断点修复：硬挤预览确认后，回话必须把「需求没变、画布已到物理上限」说清，
@@ -1244,6 +1270,7 @@ export function useOutdoorAgentWorkflow(input: {
     name: string,
     basis?: VenueRangeBasis,
     continuation?: OutdoorWorkflowProposal["afterConfirmRequest"],
+    directApply = false,
   ): void | Promise<void> {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base) return;
@@ -1284,6 +1311,8 @@ export function useOutdoorAgentWorkflow(input: {
         ],
         continuation ? 'design-event' : undefined,
         continuation,
+        false,
+        directApply,
       );
       if(completion)return completion.catch(error=>{
         status(error instanceof Error?error.message:'范围候选无法核对，未修改规划。','blocked');
@@ -1903,7 +1932,9 @@ export function useOutdoorAgentWorkflow(input: {
         persist({ ...stateRef.current, stage: "zones" });
         // 2026-11-18 用户口径「先设计，用户会告诉你他的想法」：分区确认后直接接一版物件预览，
         // 不再先停到「核对主通道」；只有用户自己点名要主通道时才接主通道。
-        const afterConfirm = designingRoutes ? "main-routes" : undefined;
+        // 2026-11-21 用户拍板：这条链此前断着（普通分区 afterConfirm 传空，确认后停在主通道阶段），
+        // 现在补上——确认分区即出物件预览。
+        const afterConfirm = designingRoutes ? "main-routes" : "objects";
         designStep(needsZones
           ? `先按已知用途划分区域，让${designingRoutes ? "主通道" : "物料"}有明确的服务范围。`
           : "根据已知用途和室内外条件，在活动边界内安排分区。");
@@ -1983,12 +2014,19 @@ export function useOutdoorAgentWorkflow(input: {
           verification: "unverified" as const,
           notes: `${n.notes}；道路交点推断，门口/通行权限待核对。`,
         }));
+        // 2026-11-21 用户拍板：主通道与摊位间支线一次出齐、一次确认，不再分「主通道」「子入口」
+        // 两个阶段各核一遍。物件已排时支线按这份提案的布局现算；排不出去就如实说，不硬造。
+        const proposedPlan = { ...plan, routes: [...plan.routes, ...clipped], nodes: [...plan.nodes, ...nodes] };
+        const sub = plan.facilities.length ? buildSubEntranceProposal(proposedPlan) : null;
+        const subNote = !plan.facilities.length
+          ? null
+          : sub
+            ? `摊位间支线已一并排出（${sub.routes.length} 条）；观众接人行主线。`
+            : "主通道先出；物件间这版没有可行支线（会穿展位/表演区），要调就挪物件后再说一声。";
         await offer(
-          {
-            ...plan,
-            routes: [...plan.routes, ...clipped],
-            nodes: [...plan.nodes, ...nodes],
-          },
+          sub
+            ? { ...proposedPlan, routes: [...proposedPlan.routes, ...sub.routes], nodes: [...proposedPlan.nodes, ...sub.nodes] }
+            : proposedPlan,
           "main-routes",
           "主要流线与待核对入口",
           job,
@@ -1997,6 +2035,7 @@ export function useOutdoorAgentWorkflow(input: {
             routeIntentNote(proposal.intent) ??
               "这些线是按道路等级挑的到场候选；哪个口真能走，等你核对后写进规划。",
             "界外段是到场流线候选（怎么来的），与边界的交点即待核对入口；写入后可画布编辑。",
+            ...(subNote ? [subNote] : []),
           ],
         );
         return;

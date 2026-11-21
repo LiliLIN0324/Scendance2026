@@ -417,6 +417,86 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(flow.appliedHighlight).toEqual({ kind: "scope" });
   expect(host.textContent).toContain("不贴合就拖顶点调整，改完重新核对");
 });
+it("自动档下画布已有同一条红线时「确认活动范围」一次落地，不再弹第二张确认卡", async () => {
+  // 2026-11-21 用户实测：核对阶段对有效红线原样重发提案，两击确认的是同一份数据。
+  // 提案与画布完全一致且监督档不另要求复核时，点一下就直接应用并推进到分区。
+  supervision = "auto";
+  await action("scope");
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.proposal).toBeNull();
+  expect(flow.state.confirmedBoundary).not.toBeNull();
+  expect(flow.state.stage).toBe("zones");
+  expect(flow.notice).toContain("已应用");
+});
+it("严格档下同一条红线仍停在核对卡，一次一确认不变", async () => {
+  await action("scope");
+  expect(flow.proposal?.kind).toBe("scope");
+  expect(apply).not.toHaveBeenCalled();
+  await action("confirm");
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(flow.state.stage).toBe("zones");
+});
+it("自动档下搜索候选点选直接落地：不再弹范围核对卡", async () => {
+  // 2026-11-21 用户拍板「候选点选直接落地」：候选是用户刚亲手选的，锚定写入不再立核对卡。
+  supervision = "auto";
+  plan = { ...plan, boundary: [] };
+  await act(async () => {
+    await flow.offerBoundary({ ...plan.anchor!, lng: 120.1 }, ring, "IN77", undefined, undefined, true);
+  });
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(plan.boundary).toEqual(ring);
+  expect(flow.proposal).toBeNull();
+  expect(flow.state.stage).toBe("zones");
+});
+it("严格档下候选点选仍停在核对卡", async () => {
+  plan = { ...plan, boundary: [] };
+  await act(async () => {
+    await flow.offerBoundary({ ...plan.anchor!, lng: 120.2 }, ring, "IN77", undefined, undefined, true);
+  });
+  expect(apply).not.toHaveBeenCalled();
+  expect(flow.proposal?.kind).toBe("scope");
+  await action("confirm");
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(flow.state.stage).toBe("zones");
+});
+it("判据13·状态机不变量：确认链上 stage 单调前进、completed 只增、happy path 无 blocked", async () => {
+  // docs/63 判据 #13：这条不变量曾在 950c6dd8 被打破（nextStage 原地不动，用户循环确认同一范围）。
+  // 走一遍完整 happy path，在每个检查点核对四条不变量；编排抽离前后各跑一遍当行为等价裁判。
+  const stages = ["place", "scope", "zones", "main-routes", "objects", "sub-routes", "people", "refine-3d"];
+  let prevIdx = -1;
+  let prevCompleted = 0;
+  const checkpoint = (label: string, mustAdvance = false) => {
+    const idx = stages.indexOf(flow.state.stage);
+    const completed = flow.state.completed.length;
+    expect(idx, `${label} · stage 不得回退（停在 ${flow.state.stage}）`).toBeGreaterThanOrEqual(prevIdx);
+    if (mustAdvance) expect(idx, `${label} · 确认后必须前进（停在 ${flow.state.stage}）`).toBeGreaterThan(prevIdx);
+    expect(completed, `${label} · completed 只增`).toBeGreaterThanOrEqual(prevCompleted);
+    expect(flow.noticeKind, `${label} · happy path 不得出现 blocked`).not.toBe("blocked");
+    expect(flow.noticeKind, `${label} · happy path 不得出现 error`).not.toBe("error");
+    prevIdx = idx;
+    prevCompleted = completed;
+  };
+  // scope：画布已有红线，严格档两步确认
+  await action("scope");
+  checkpoint("范围核对卡就绪");
+  await action("confirm");
+  checkpoint("范围确认后", true);
+  // zones：登记需求 → 给用途 → 预览 → 确认（链上直接接物件预览）
+  bridge.readLibrary = vi.fn(async () => [
+    { id: "my-stall", name: "市集摊位", source: "personal" as const, width: 3, depth: 3, height: 2.5, modelSlug: "generated:library-my-stall", available: true },
+  ]);
+  await turn("做户外市集60人", response("ask", { event: { value: "户外市集", evidence: "户外市集" }, guests: { value: 60, evidence: "60人" } }));
+  checkpoint("需求登记");
+  await turn("展览区在室外", response("zones", { zones: [{ name: "展览区", purpose: "exhibition", environment: "outdoor", evidence: "展览区在室外" }] }));
+  checkpoint("分区预览就绪");
+  await action("confirm");
+  checkpoint("分区确认后（链上到物件）", true);
+  // 链上的物件预览（严格档停卡）→ 确认 → 直达岗位阶段
+  await action("confirm");
+  checkpoint("物件确认后（直达 people）", true);
+  expect(flow.state.stage).toBe("people");
+});
 it("范围依据不再贴到画布：提案不生成说明注记，旧注记随手清掉", () => {
   const anchor = { ...plan.anchor!, lng: 120.44 };
   plan = {

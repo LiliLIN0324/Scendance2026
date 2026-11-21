@@ -1781,7 +1781,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (pickBase !== JSON.stringify(bridge.getPlan())) {
         setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '方案变了，旧范围没用上。', steps: [] }); return;
       }
-      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis);
+      // 2026-11-21 用户拍板「候选点选直接落地」：候选是用户刚选的，锚定写入不再单独立核对卡
+      // （严格档仍由监督档拦下核对）。超界淘汰等提醒由 offer 直接落地路径写进设计过程。
+      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis, undefined, true);
       // 2026-11-20 用户拍板：范围来源不用念给用户，只留下一步能做什么。
       say({ role: 'agent', text: '直接说「长40米宽30米」这类，我来更新范围。' });
       return;
