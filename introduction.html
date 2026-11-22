@@ -27,6 +27,33 @@
   --sc-accent:#6f8f52; --sc-accent-ink:#465c33; --sc-accent-soft:#e7ecd7;
   --sc-accent-glow:#6f8f5247; --sc-accent-mute:#a9bf8d;
   --sc-surface:rgba(255,255,255,.76);
+  /* ---- 首屏切片色板（2026-11-22 抽 token；值与原字面量逐字节相同，仅便于换材质） ---- */
+  --hero-ink:#fff;
+  --hero-ink-2:#c6ccb8;
+  --hero-ink-3:#a9b49c;
+  --hero-ink-4:#cfd8c4;
+  --hero-ink-5:#e7ead9;
+  --hero-ground-1:#333b2a;
+  --hero-ground-2:#262c1f;
+  --hero-ground-3:#1a1e15;
+  --hero-veil-1:#1a1e15eb;
+  --hero-veil-2:#1a1e15bd;
+  --hero-veil-3:#1a1e1538;
+  --hero-veil-4:#1a1e1500;
+  --hero-plate:#1f2a2061;
+  --hero-plate-line:#ffffff2e;
+  --hero-plate-soft:#ffffff1f;
+  --hero-plate-wash:#ffffff14;
+  --hero-plate-strong:#ffffff2b;
+  --hero-rule:#ffffff24;
+  --hero-rule-link:#ffffff3d;
+  --hero-chip:#10160ead;
+  --hero-chip-line:#ffffff26;
+  --hero-shadow:#10160e33;
+  --hero-dot:#66705c;
+  --hero-brand-dot:#4a7c59;
+  --hero-loading-bg:#f7f5ede6;
+
   --sc-glass-shadow:0 12px 36px #2f3a2610,inset 0 1px 0 #fff;
   --sc-ease:cubic-bezier(.22,1,.36,1); --sc-fast:160ms; --sc-enter:280ms;
   --sc-font:SimHei,"Heiti SC","Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
@@ -87,12 +114,12 @@ input,select,textarea,code{font-family:inherit}
 }
 /* Brand Lockup — 对齐设计规范（详见 docs/05-设计规范.md §2）
    深底 hero 场景：父级 .brand { color:#fff } 控 path 和中文，英文单独调 rgba(.55) */
-.brand{display:flex;align-items:center;gap:6px;color:#fff;flex:none}
-.brand-cn{font-family:var(--sc-font);font-size:15px;font-weight:600;letter-spacing:0;line-height:1.2;color:#fff}
-.brand-dot{width:4px;height:4px;border-radius:50%;background:#4A7C59;flex:none}
+.brand{display:flex;align-items:center;gap:6px;color:var(--hero-ink);flex:none}
+.brand-cn{font-family:var(--sc-font);font-size:15px;font-weight:600;letter-spacing:0;line-height:1.2;color:var(--hero-ink)}
+.brand-dot{width:4px;height:4px;border-radius:50%;background:var(--hero-brand-dot);flex:none}
 .brand-en i{font-style:italic;font-weight:500}
 .brand-en{font-family:var(--sc-font);font-size:10px;font-weight:500;letter-spacing:.01em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-left:0}
-.brand-mark{width:29px;height:31px;display:grid;place-items:center;flex:none;color:#fff}
+.brand-mark{width:29px;height:31px;display:grid;place-items:center;flex:none;color:var(--hero-ink)}
 @media (max-width:760px){
   .brand{gap:6px}
   .brand-cn{font-size:13px;letter-spacing:-.01em}
@@ -112,7 +139,7 @@ input,select,textarea,code{font-family:inherit}
   padding:11px clamp(16px,1.7vw,22px); border-radius:10px;
   background:#2d3d32;
 }
-.nav-pill a{position:relative;z-index:2;color:#e7ead9;font-size:13px;white-space:nowrap;opacity:.86;transition:opacity var(--sc-nav-hover) ease}
+.nav-pill a{position:relative;z-index:2;color:var(--hero-ink-5);font-size:13px;white-space:nowrap;opacity:.86;transition:opacity var(--sc-nav-hover) ease}
 @media (hover:hover) and (pointer:fine){ .nav-pill a:hover{opacity:1} }
 /* 编号索引：对齐参考站的 About01 / Programs02 / Approach03 / Technology04 */
 .nav-pill a[aria-current="true"]{opacity:1}
@@ -150,7 +177,7 @@ input,select,textarea,code{font-family:inherit}
 .q-slashes{display:flex;gap:5px;margin-top:14px}
 .q-slashes i{width:4px;height:15px;background:var(--sc-accent);transform:skewX(-20deg)}
 .quote-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(12px,1.5vw,20px);margin-top:clamp(24px,4svh,46px)}
-.quote{margin:0;display:flex;flex-direction:column;padding:16px 16px 18px;border-radius:14px;background:#fff;box-shadow:0 16px 40px #2f3a261f}
+.quote{margin:0;display:flex;flex-direction:column;padding:16px 16px 18px;border-radius:14px;background:var(--hero-ink);box-shadow:0 16px 40px #2f3a261f}
 /* height:auto 不能省：img 的 width/height 属性会变成最低优先级的 CSS 高度，
    不写 height 的话属性里的 559px 会盖掉 aspect-ratio 算出来的高度，卡片被拉长 */
 .q-art{width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;border-radius:8px;margin:0 0 14px;background:var(--sc-canvas)}
@@ -182,31 +209,31 @@ input,select,textarea,code{font-family:inherit}
 .team a:hover{color:var(--sc-accent); border-bottom-color:currentColor}
 
 /* 深色页脚：照参考站收尾那一段 */
-.site-foot{margin-inline:calc(50% - 50vw);width:100vw;margin-top:clamp(40px,7vh,90px);background:#1a1e15;color:#fff;padding:clamp(40px,7vh,80px) clamp(20px,4.5%,64px) 28px}
+.site-foot{margin-inline:calc(50% - 50vw);width:100vw;margin-top:clamp(40px,7vh,90px);background:var(--hero-ground-3);color:var(--hero-ink);padding:clamp(40px,7vh,80px) clamp(20px,4.5%,64px) 28px}
 .foot-inner{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(0,1fr));gap:clamp(24px,4vw,64px);align-items:start}
 .foot-brand{display:flex;align-items:center;gap:11px;font-size:23px;font-weight:600;letter-spacing:2px}
 .foot-brand small{font-size:12px;letter-spacing:2.5px;font-weight:600}
 .foot-col h3{margin:0 0 14px;font-size:11px;letter-spacing:.16em;font-weight:600;color:#ffffff8f;text-transform:uppercase}
 .foot-col a,.foot-col p{display:block;margin:0 0 10px;font-size:14px;color:#ffffffd9}
-.foot-col a:hover{color:#fff}
-.foot-note{margin:clamp(30px,5vh,56px) 0 0;padding-top:18px;border-top:1px solid #ffffff26;font-size:12px;color:#ffffff8f}
+.foot-col a:hover{color:var(--hero-ink)}
+.foot-note{margin:clamp(30px,5vh,56px) 0 0;padding-top:18px;border-top:1px solid var(--hero-chip-line);font-size:12px;color:#ffffff8f}
 
 /* 首屏底部不再做透明度渐变，硬切到下一页白 */
 .hero-veil{background:none}
 /* 每个分类的浅色类别底：段落色以 14% 叠上去（先铺在白底上更干净） */
-.offers{background:#fff}
+.offers{background:var(--hero-ink)}
 .offers::before{content:'';position:absolute;inset:0;z-index:0;background:var(--row);opacity:.14}
 
 /* 首屏之后的一页白：整屏满铺（左右出血 + 一屏高），只留一句短句做正式内容前的呼吸。
    它同时是盖住钉住的首屏的那块「板」：不透明 + z-index 高一层，从下往上推过去。 */
-.band.blank{margin-inline:calc(50% - 50vw);width:100vw;min-height:min(100svh,900px);max-height:min(100svh,900px);display:grid;place-items:center;text-align:center;background:#fff;padding:0 6%;position:relative;z-index:1}
+.band.blank{margin-inline:calc(50% - 50vw);width:100vw;min-height:min(100svh,900px);max-height:min(100svh,900px);display:grid;place-items:center;text-align:center;background:var(--hero-ink);padding:0 6%;position:relative;z-index:1}
 .band.blank p{margin:0;max-width:24em;font-size:clamp(19px,2.2vw,32px);line-height:1.5;letter-spacing:-.012em;color:var(--sc-ink)}
 .band.blank p b{display:block;margin-top:14px;font-size:.44em;font-weight:500;letter-spacing:.16em;color:var(--sc-muted);text-transform:uppercase}
 
 /* ---- 已删除：场景类别（七类行业做法）段落 —— 数据与渲染还留在文件末尾，容器不在时不执行 ---- */
 .offers-stack{margin-inline:calc(50% - 50vw);width:100vw}
 /* 不要渐变底色：每段就用页面自己的底，颜色只留在卡片与 tab 上 */
-.offers{position:relative;isolation:isolate;display:flex;flex-direction:column;justify-content:space-between;min-height:var(--offers-min);max-height:var(--offers-max);overflow:hidden;background:#fff}
+.offers{position:relative;isolation:isolate;display:flex;flex-direction:column;justify-content:space-between;min-height:var(--offers-min);max-height:var(--offers-max);overflow:hidden;background:var(--hero-ink)}
 /* 不要渐变底色（原：linear-gradient(170deg,var(--row),#ffffff) opacity .34） */
 /* 落地影：给左下角的模型一个重心 */
 .offers::after{content:'';position:absolute;left:4%;bottom:0;z-index:1;width:46%;height:64px;background:radial-gradient(ellipse at 50% 100%,#2f3a2626,#0000 72%);pointer-events:none}
@@ -228,10 +255,10 @@ input,select,textarea,code{font-family:inherit}
 /* 卡片视觉：白面 + 顶部类别色规线 + 类别色徽标与字段标签；投影把它从浅底上抬起来 */
 .offers-panel{width:min(620px,100%);filter:drop-shadow(0 22px 48px #2f3a261c)}
 .offers-tabs{display:flex}
-.offers-tabs button{flex:1 1 0;min-width:0;border:0;border-top:2px solid transparent;background:rgba(0,0,0,.15);color:#fff;font:inherit;font-size:clamp(15px,2.05vw,30px);font-weight:600;line-height:1.25;letter-spacing:.02em;padding:clamp(14px,1.7vw,26px) clamp(10px,1vw,16px);text-align:left;cursor:pointer;transition:background var(--sc-fast) var(--sc-ease),color var(--sc-fast) var(--sc-ease)}
+.offers-tabs button{flex:1 1 0;min-width:0;border:0;border-top:2px solid transparent;background:rgba(0,0,0,.15);color:var(--hero-ink);font:inherit;font-size:clamp(15px,2.05vw,30px);font-weight:600;line-height:1.25;letter-spacing:.02em;padding:clamp(14px,1.7vw,26px) clamp(10px,1vw,16px);text-align:left;cursor:pointer;transition:background var(--sc-fast) var(--sc-ease),color var(--sc-fast) var(--sc-ease)}
 .offers-tabs button:hover{background:#ffffffea;color:var(--sc-ink)}
-.offers-tabs button[aria-selected="true"]{background:#fff;border-top-color:var(--row);color:var(--row);font-weight:700}
-.offers-card{position:relative;background:#fff;padding:26px 28px 18px;overflow:hidden}
+.offers-tabs button[aria-selected="true"]{background:var(--hero-ink);border-top-color:var(--row);color:var(--row);font-weight:700}
+.offers-card{position:relative;background:var(--hero-ink);padding:26px 28px 18px;overflow:hidden}
 .offers-card::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:var(--row);z-index:2}
 /* 卡片里补回类别色：头部一层极淡的色洗 */
 .offers-card::after{content:'';position:absolute;inset:3px 0 auto 0;height:88px;background:var(--row);opacity:.07;pointer-events:none}
@@ -239,7 +266,7 @@ input,select,textarea,code{font-family:inherit}
 .offers-card-head h3{margin:0;font-size:clamp(21px,2vw,28px);line-height:1.04;font-weight:600;letter-spacing:-.025em;color:var(--sc-ink)}
 .offers-sub{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 .offers-sub p{margin:0;font-size:12px;color:var(--sc-muted);line-height:1.5;text-align:right}
-.offers-no{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--row);color:#fff;font-size:11px;font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.offers-no{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--row);color:var(--hero-ink);font-size:11px;font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums}
 .offers-cells{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 30px;margin:20px 0 0;padding:0}
 .offers-cells>div{padding:13px 0 12px;border-top:1px solid #eceee6}
 .offers-cells dt{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--row);margin-bottom:6px}
@@ -262,8 +289,8 @@ input,select,textarea,code{font-family:inherit}
   font-size:var(--sc-btn-fs);font-weight:600;white-space:nowrap;
   transition:background var(--sc-fast) var(--sc-ease),transform var(--sc-fast) var(--sc-ease);
 }
-.pill-dark{background:#242a1c;color:#fff;border:1px solid #ffffff26}
-.pill-light{background:#fff;color:var(--sc-ink)}
+.pill-dark{background:#242a1c;color:var(--hero-ink);border:1px solid var(--hero-chip-line)}
+.pill-light{background:var(--hero-ink);color:var(--sc-ink)}
 
 /* ============================================================
    3. Hero · 视差 Y −8%→25% + 遮罩 .12→1，由滚动进度驱动
@@ -276,9 +303,9 @@ input,select,textarea,code{font-family:inherit}
    首屏顶部那条 fixed 的顶栏会被关进这一层里，之后 .wrap 里任何定位元素都能盖住它。 */
 .hero-stack{position:relative}
 .hero{
-  position:sticky; top:0; overflow:hidden; color:#fff; min-height:min(100svh,940px); max-height:min(104svh,1060px);
+  position:sticky; top:0; overflow:hidden; color:var(--hero-ink); min-height:min(100svh,940px); max-height:min(104svh,1060px);
   display:flex; flex-direction:column;
-  background:linear-gradient(160deg,#333b2a 0%,#262c1f 58%,#1a1e15 100%);
+  background:linear-gradient(160deg,var(--hero-ground-1) 0%,var(--hero-ground-2) 58%,var(--hero-ground-3) 100%);
 }
 /* 首屏背景轮播：每张场景图一层，靠 opacity 交叉淡入淡出。
    层与数据都由页面末尾的 module 按 SCENES[].image 生成（见「首屏：背景轮播 + 浮动方案卡」）。 */
@@ -286,10 +313,10 @@ input,select,textarea,code{font-family:inherit}
 .hero-shot{position:absolute;inset:0;background-position:center;background-size:cover;background-repeat:no-repeat;opacity:0;transition:opacity 1.2s var(--sc-ease)}
 .hero-shot.is-on{opacity:1}
 .hero-mask{position:absolute;inset:0;z-index:1;pointer-events:none;
-  background:linear-gradient(100deg,#1a1e15eb 0%,#1a1e15bd 40%,#1a1e1538 70%,#1a1e1500 100%)}
+  background:linear-gradient(100deg,var(--hero-veil-1) 0%,var(--hero-veil-2) 40%,var(--hero-veil-3) 70%,var(--hero-veil-4) 100%)}
 .hero-shot-name{position:absolute;z-index:3;right:clamp(16px,4.5%,72px);bottom:clamp(18px,4vh,42px);margin:0;
   display:flex;align-items:center;gap:9px;padding:7px 15px;border-radius:999px;font-size:12px;
-  background:#10160ead;border:1px solid #ffffff26;color:#e7ead9;letter-spacing:.06em;
+  background:var(--hero-chip);border:1px solid var(--hero-chip-line);color:var(--hero-ink-5);letter-spacing:.06em;
   backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 /* JS 在场时背景是真实卫星影像，静态场景名「体育馆」会变成错误信息；仅在无 JS 回退时展示 */
 .js .hero-shot-name{display:none}
@@ -321,26 +348,26 @@ input,select,textarea,code{font-family:inherit}
   font-weight:600; margin-bottom:22px;
 }
 .display .block{
-  display:inline-block; background:var(--sc-accent); color:#fff;
+  display:inline-block; background:var(--sc-accent); color:var(--hero-ink);
   padding:.02em .16em .1em; border-radius:.05em;
 }
-.hero .sub{max-width:30em; color:#c6ccb8; font-size:16px}
+.hero .sub{max-width:30em; color:var(--hero-ink-2); font-size:16px}
 .hero-cta{margin-top:36px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .cta-btn{
   display:inline-flex;align-items:center;gap:10px;
   height:var(--sc-btn-h);padding:0 var(--sc-btn-px);border-radius:var(--sc-btn-r);
-  background:var(--sc-accent);color:#fff;font-size:var(--sc-btn-fs);font-weight:600;
+  background:var(--sc-accent);color:var(--hero-ink);font-size:var(--sc-btn-fs);font-weight:600;
   box-shadow:0 14px 34px var(--sc-accent-glow);
 }
 .hero-meta{
   grid-column:1 / -1; margin:clamp(24px,3.4vh,40px) 0 0; padding-top:16px;
-  border-top:1px solid #ffffff24;
+  border-top:1px solid var(--hero-rule);
   display:flex; align-items:center; gap:clamp(9px,1.1vw,16px); flex-wrap:wrap;
-  font-size:12px; color:#c6ccb8;
+  font-size:12px; color:var(--hero-ink-2);
 }
 .hero-meta span{white-space:nowrap}   /* 一条标签不要被拆到两行 */
-.hero-meta i{width:4px;height:4px;border-radius:50%;background:#66705c;display:block;flex:none}
-.hero-meta a{color:#c6ccb8;border-bottom:1px solid #ffffff3d;padding-bottom:2px}
+.hero-meta i{width:4px;height:4px;border-radius:50%;background:var(--hero-dot);display:block;flex:none}
+.hero-meta a{color:var(--hero-ink-2);border-bottom:1px solid var(--hero-rule-link);padding-bottom:2px}
 
 /* 右侧舞台：真实的 canvas#venue（主内容区，不删）+ 半透明数据卡 */
 .hero-stage{position:relative;min-width:0}
@@ -349,7 +376,7 @@ input,select,textarea,code{font-family:inherit}
    把它当成一块“屏”而不是一块背景 */
 .stage-frame{
   position:relative; border-radius:4px; overflow:hidden; height:min(58svh,600px);
-  border:1px solid #ffffff2b; box-shadow:0 30px 70px #0000004d, inset 0 1px 0 #ffffff1a;
+  border:1px solid var(--hero-plate-strong); box-shadow:0 30px 70px #0000004d, inset 0 1px 0 #ffffff1a;
 }
 /* 首屏浮动信息卡（照设计稿）：直接浮在背景渲染图上，不再装在一个画布窗口里。
    尺度按“卡片占首屏大约五分之一宽”定，之前是挂在 469px 宽的小画布里、
@@ -361,29 +388,29 @@ input,select,textarea,code{font-family:inherit}
   padding:14px 16px 12px; border-radius:6px;
   /* 玻璃感：底色压得很淡，靠 backdrop blur + 顶部高光撑出「一块玻璃」的层次；
      文字保持不透明，不然会糊在背景图上读不出来 */
-  background:#1f2a2061; border:1px solid #ffffff2e; color:#fff;
-  box-shadow:0 18px 44px #10160e33, inset 0 1px 0 #ffffff24;
+  background:var(--hero-plate); border:1px solid var(--hero-plate-line); color:var(--hero-ink);
+  box-shadow:0 18px 44px var(--hero-shadow), inset 0 1px 0 var(--hero-rule);
   backdrop-filter:blur(20px) saturate(150%); -webkit-backdrop-filter:blur(20px) saturate(150%);
 }
-.stage-card .sc-head{display:flex; align-items:center; gap:8px; margin:0; color:#cfd8c4}
+.stage-card .sc-head{display:flex; align-items:center; gap:8px; margin:0; color:var(--hero-ink-4)}
 .stage-card .sc-close{margin-left:auto; flex:none; width:20px; height:20px; border-radius:50%;
   display:flex; align-items:center; justify-content:center; font-size:13px; line-height:1; cursor:pointer;
-  color:#cfd8c4; background:#ffffff14; border:1px solid #ffffff1f}
-.stage-card .sc-close:hover{color:#fff; background:#ffffff2b}
+  color:var(--hero-ink-4); background:var(--hero-plate-wash); border:1px solid var(--hero-plate-soft)}
+.stage-card .sc-close:hover{color:var(--hero-ink); background:var(--hero-plate-strong)}
 .stage-card .sc-head i{width:6px; height:6px; border-radius:50%; background:var(--sc-accent-mute); display:block; flex:none}
 .stage-card .sc-title{margin:8px 0 0; font-weight:600; letter-spacing:-.02em; line-height:1.25}
 /* 数据与场景库面板里的 .nv-stats 同源同排版：粗体数值 + 小单位，下面一行浅色说明 */
-.stage-card .sc-stats{display:flex; gap:22px; margin:14px 0 0; padding-top:12px; border-top:1px solid #ffffff1f}
+.stage-card .sc-stats{display:flex; gap:22px; margin:14px 0 0; padding-top:12px; border-top:1px solid var(--hero-plate-soft)}
 .stage-card .sc-stats>div{display:flex; flex-direction:column; gap:3px; min-width:0}
 .stage-card .sc-stats strong{font-size:17px; font-weight:600; line-height:1.1; letter-spacing:-.02em}
-.stage-card .sc-stats strong small{font-size:10px; font-weight:400; color:#cfd8c4}
-.stage-card .sc-stats span{font-size:10px; letter-spacing:.02em; color:#a9b49c}
+.stage-card .sc-stats strong small{font-size:10px; font-weight:400; color:var(--hero-ink-4)}
+.stage-card .sc-stats span{font-size:10px; letter-spacing:.02em; color:var(--hero-ink-3)}
 @media (max-width:900px){.stage-card{display:none}}
 #venue{display:block;width:100%;height:100%}
 .loading{
   position:absolute; inset:0; z-index:3; display:grid; place-items:center; text-align:center;
   padding:20px; color:var(--sc-muted); font-size:12px; letter-spacing:.06em;
-  background:#f7f5ede6; transition:opacity var(--sc-enter) var(--sc-ease);
+  background:var(--hero-loading-bg); transition:opacity var(--sc-enter) var(--sc-ease);
 }
 .loading[hidden]{display:none}
 /* 三维视口内的浮动数据卡已按评审意见移除。 */
