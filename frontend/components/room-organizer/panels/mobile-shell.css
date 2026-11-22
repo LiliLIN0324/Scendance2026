@@ -8,8 +8,7 @@
 
 /* 入口按钮只在手机出现，桌面为零影响。 */
 .sc-mobile-agent-entry,
-.sc-mobile-dock,
-.sc-mobile-capture-entry { display: none; }
+.sc-mobile-dock { display: none; }
 
 /* “拍场”只在手机弹层里占一格；桌面左轨恢复四格（品牌 + 三个 agent 钮），这里默认收起。
    它是链接而不是按钮，去掉默认下划线，其余沿用 sc-rail-tool。 */
@@ -304,16 +303,4 @@
     background: var(--wk-green); color: #fff;
   }
 
-  /* 常驻“拍场”入口：贴在右下角，与左下角的左轨入口同一高度，不压对话条 */
-  .sc-mobile-capture-entry {
-    position: fixed; right: 12px; bottom: var(--sc-mobile-fab-bottom);
-    display: inline-flex; align-items: center; gap: 6px;
-    height: 44px; padding: 0 14px;
-    border: 1px solid var(--wk-hair); border-radius: 22px;
-    background: var(--wk-paper); color: var(--wk-green-deep);
-    font: inherit; font-size: 13px; text-decoration: none;
-    box-shadow: var(--e1);
-    z-index: 77;
-  }
-  .sc-mobile-capture-entry span { white-space: nowrap; }
 }

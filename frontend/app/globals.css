@@ -116,11 +116,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 手机端专属入口（助理菜单 / 拍摄场地 / 底部对话坞）桌面默认隐藏。
+/* 手机端专属入口（助理菜单 / 底部对话坞）桌面默认隐藏。
    基础隐藏放在常驻全局表，避免依赖后加载的组件 CSS 分片导致桌面泄漏；
    ≤768px 的展开样式仍由 mobile-shell.css 的媒体查询接管。 */
 .sc-mobile-agent-entry,
-.sc-mobile-capture-entry,
 .sc-mobile-dock { display: none; }
 
 /* ================================================================

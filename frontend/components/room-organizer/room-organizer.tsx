@@ -5190,13 +5190,10 @@ useEffect(() => {
             </svg>
           </button>
           {!columnExpanded && <MobileAgentDock agentId={activeAgent} onOpen={() => toggleAgent(activeAgent)} />}
-          {!captureOpen && <button type="button" className="sc-mobile-capture-entry" onClick={openCapturePanel} aria-expanded={false} aria-label="拍摄场地：拍完出 3D">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.1-1.7a1 1 0 0 1 .84-.46h4.72a1 1 0 0 1 .84.46L16.3 7h2.2A1.5 1.5 0 0 1 20 8.5v8A1.5 1.5 0 0 1 18.5 18h-13A1.5 1.5 0 0 1 4 16.5v-8Z" stroke="currentColor" strokeWidth="1.8" />
-              <circle cx="12" cy="12.5" r="3.1" stroke="currentColor" strokeWidth="1.8" />
-            </svg>
-            <span>拍摄场地</span>
-          </button>}
+          {/* 2026-11-22 用户拍板：撤掉右下角这颗常驻「拍摄场地」胶囊。它和弹层第五格「创作」
+              是同一处入口的两枚按钮（都进拍摄/创作卡），且它用的是自绘描边相机，与左轨
+              字形族不一致。拍摄场地入口只留：助理菜单 → 创作（手机）、左轨创作（桌面）、
+              空间面板「真实场地」空态按钮。 */}
           <div id="workbench-nav-column" ref={leftStackColumnRef} className={`sc-left-column${sidebarCollapsed ? '' : ' has-tool'}${dockColumnOccupied ? '' : ' is-empty-dock'}${leftStackDragging && leftStackDockHover ? ' is-dock-hover' : ''}`}>
           {leftStackDragging && leftStackDockHover && !dockColumnOccupied && <div className="sc-dock-ghost" aria-hidden="true">放回左栏</div>}
           {/* 2026-11-15 统一生成面板：左栏卡片（同拍摄场地/户外规划），不是弹窗。
