@@ -15,7 +15,9 @@ import type { BackendSession } from '@/lib/backend-session';
 // 2026-11-19：上传走本机代理，单测里只验「面板把选中的文件交给上传口、并把结果/错误写回界面」。
 const uploadScanFile = vi.hoisted(() => vi.fn());
 const findScanLodUrl = vi.hoisted(() => vi.fn());
-vi.mock('../lib/scan-upload', () => ({ uploadScanFile, findScanLodUrl }));
+// 2026-11-22：上传后探活。默认放行，个别用例改成取不到。
+const probeUploadedScan = vi.hoisted(() => vi.fn());
+vi.mock('../lib/scan-upload', () => ({ uploadScanFile, findScanLodUrl, probeUploadedScan }));
 // 空间卡现在常驻结构入口；这里只要给它一份最小壳体，不验证结构交互。
 const structureContext = vi.hoisted(() => ({
   layout: { name: '普通壳体', width: 10, height: 8, floors: [{ id: 'ground', name: '活动场地', height: 3, items: [] }] },
@@ -31,6 +33,8 @@ beforeEach(() => {
   uploadScanFile.mockReset();
   findScanLodUrl.mockReset();
   findScanLodUrl.mockResolvedValue(undefined);
+  probeUploadedScan.mockReset();
+  probeUploadedScan.mockResolvedValue(true);
 });
 
 function environment(preview: SplatPreviewState = { status: 'idle', assetId: '', name: '' }, current: StoredEnvironment | null = null, thumbnails?: Readonly<Record<string, string>>) {
@@ -239,6 +243,50 @@ describe('SpacePanel', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('连不上本机资产代理');
     expect(group.open).toBe(true);
+  });
+
+  // 2026-11-22：落盘≠取得到。上传成功但本机代理探不到时，回执当场给结论，卡片标红，
+  // 不让人点卡片落位、加载之后才发现文件是坏的。
+  it('card：上传成功但探活取不到时当场标失败，卡片带加载失败', async () => {
+    probeUploadedScan.mockResolvedValue(false);
+    const asset = {
+      assetId: '00000000-0000-4000-8000-0000000000ff', kind: 'spz' as const, name: '坏包',
+      bytes: 1024, savedAt: Date.now(),
+    };
+    uploadScanFile.mockImplementation(async () => {
+      rememberAholoAsset({ ...asset, kind: 'spz' });
+      return asset;
+    });
+    render(<SpacePanel layout={makeLayout()} variant="card"/>);
+    const input = screen.getByTestId('scan-upload-input') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [new File([new Uint8Array([0x1f, 0x8b, 0x08, 0x00])], '坏包.spz')], configurable: true,
+    });
+    fireEvent.change(input);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('本机代理取不到这个文件');
+    const card = await screen.findByLabelText('重试加载真实场地 坏包');
+    expect(card.textContent).toContain('加载失败');
+  });
+
+  it('card：探活通过时回执维持「已加入」，卡片不标红', async () => {
+    const asset = {
+      assetId: '00000000-0000-4000-8000-0000000000fe', kind: 'spz' as const, name: '好包',
+      bytes: 2048, savedAt: Date.now(),
+    };
+    uploadScanFile.mockImplementation(async () => {
+      rememberAholoAsset({ ...asset, kind: 'spz' });
+      return asset;
+    });
+    render(<SpacePanel layout={makeLayout()} variant="card" onPlaceScan={vi.fn()}/>);
+    const input = screen.getByTestId('scan-upload-input') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [new File([new Uint8Array([0x1f, 0x8b, 0x08, 0x00])], '好包.spz')], configurable: true,
+    });
+    fireEvent.change(input);
+    expect((await screen.findByRole('status')).textContent).toContain('已加入「好包」');
+    const card = await screen.findByLabelText('放置真实场地 好包');
+    expect(card.textContent).not.toContain('加载失败');
   });
 
   it('shelf：列表上方也有上传入口与后缀提示', () => {

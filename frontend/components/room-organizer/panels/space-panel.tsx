@@ -8,7 +8,7 @@ import { forgetRemovedScans, registerCloudScans, registerLocalScans, repairStale
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { CN_REPLICA_CASES, REPLICA_CASES, type ReplicaCase } from '../lib/replica-cases';
-import { findScanLodUrl, uploadScanFile } from '../lib/scan-upload';
+import { findScanLodUrl, probeUploadedScan, uploadScanFile } from '../lib/scan-upload';
 import { listShippedAssets, shippedImageUrl } from '../lib/shipped-assets';
 import { listScannedVenues, type ScannedVenue } from '../lib/venue-scans';
 import { CaseCards } from './case-cards';
@@ -180,6 +180,9 @@ export function SpacePanel({
   const scansRef = useRef<HTMLDetailsElement>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [upload, setUpload] = useState<{ status: 'idle' | 'uploading' | 'done' | 'error'; percent: number; message: string }>({ status: 'idle', percent: 0, message: '' });
+  // 2026-11-22：上传后探活失败的资产号——落盘成功但浏览器取不到（代理重启/文件被清）。
+  // 与 room-organizer 的 failedScanIds 合并判红，两种来源在卡片上同一个读法。
+  const [probeFailures, setProbeFailures] = useState<string[]>([]);
   const uploading = upload.status === 'uploading';
   const submitScanFile = async (file: File): Promise<void> => {
     // 这一段默认收起，进度与错误都在里面；先展开，不然传着传着看不见任何反应。
@@ -194,7 +197,14 @@ export function SpacePanel({
         onProgress: (loaded, total) => setUpload({ status: 'uploading', percent: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0, message: '' }),
       });
       refreshScanList(value => value + 1);
-      setUpload({ status: 'done', percent: 100, message: `已加入「${asset.name}」${asset.lodUrl ? '（多档 LOD）' : ''}，点它就能在 3D 里看。` });
+      // 回执先说结论：探得到才算「能点开看」，探不到当场标失败，不让人落位后才发现。
+      const reachable = await probeUploadedScan(asset);
+      setProbeFailures(current => reachable
+        ? current.filter(id => id !== asset.assetId)
+        : (current.includes(asset.assetId) ? current : [...current, asset.assetId]));
+      setUpload(reachable
+        ? { status: 'done', percent: 100, message: `已加入「${asset.name}」${asset.lodUrl ? '（多档 LOD）' : ''}，点它就能在 3D 里看。` }
+        : { status: 'error', percent: 100, message: `「${asset.name}」已落盘，但本机代理取不到这个文件。先确认 npm run dev 起的 3199 代理在跑，再重传一次。` });
       // 私有云归档（2026-11-20 集成接通）：代理落盘 ≠ 云端归档，原件补进归档队列；
       // 已登录且通道接通时自动续传，状态在账户面板「归档」页如实展示。
       void scanArchive.enqueueFile({ localId: asset.assetId, name: file.name, kind: 'scan', file })
@@ -289,7 +299,8 @@ export function SpacePanel({
         const active = venue.assetId === currentScanId;
         const preview = active && environment?.preview.assetId === venue.assetId ? environment.preview : undefined;
         // 实时报错和「以前失败过」都算坏文件；后者让没被选中的卡也能一眼看出问题。
-        const failed = (!!active && preview?.status === 'error') || !!failedScanIds?.includes(venue.assetId);
+        const failed = (!!active && preview?.status === 'error') || !!failedScanIds?.includes(venue.assetId)
+          || probeFailures.includes(venue.assetId);
         const loading = !!active && preview?.status === 'loading';
         const inProject = environment?.environments.some(entry => entry.assetId === venue.assetId);
         // 空态分两种：没打开过（只是没图）对坏文件（加载失败）。有图的卡不再标注。

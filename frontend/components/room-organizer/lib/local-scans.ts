@@ -73,6 +73,15 @@ async function reachable(url: string): Promise<boolean> {
 }
 
 /**
+ * 上传回执用的探活出口：与 registerLocalScans / repairScanFallback 同一套 HEAD 口径，
+ * 不另立第二套判定。落盘成功不等于浏览器取得到（代理重启、文件被清都会 404），
+ * 所以面板在上传完当下就要问一句，而不是等用户点卡片落位才暴露。
+ */
+export async function probeScanUrl(url: string): Promise<boolean> {
+  return reachable(url);
+}
+
+/**
  * 把索引里的本机扫描登记进资产注册表。
  *
  * 注册表存在浏览器本地且按来源隔离：127.0.0.1 与 localhost 各存各的，换浏览器更是从零开始。

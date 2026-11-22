@@ -1,4 +1,5 @@
 import { DIRECT_BASE, rememberAholoAsset, type AholoAsset } from './aholo-assets';
+import { probeScanUrl } from './local-scans';
 
 /**
  * 实景包上传：把用户从 Aholo Reality 下载的 .spz / .ply 收进本机资产库。
@@ -201,4 +202,16 @@ export async function uploadScanFile(
   });
   if (!saved) throw new Error(STORAGE_FULL_MESSAGE);
   return saved;
+}
+
+/**
+ * 上传后立刻验活（2026-11-22）：落盘 ≠ 取得到。
+ *
+ * 以前坏文件要等用户点卡片、落位、加载时才暴露，回执却说「点它就能在 3D 里看」。
+ * 这里按同一套 HEAD 口径探一次（经 `probeScanUrl`，不另立判定），面板据此在
+ * 回执里当场给结论，并把该卡片标成「加载失败」。
+ */
+export async function probeUploadedScan(asset: Pick<AholoAsset, 'assetId' | 'kind'>): Promise<boolean> {
+  if (asset.kind !== 'spz' && asset.kind !== 'ply') return true;
+  return probeScanUrl(`${DIRECT_BASE}/asset/${asset.assetId}.${asset.kind}`);
 }
