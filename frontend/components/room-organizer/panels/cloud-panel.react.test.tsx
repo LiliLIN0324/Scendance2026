@@ -69,8 +69,8 @@ let mem: MemoryStorage;
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
 function queue(body: unknown) { mockFetch.mockResolvedValueOnce(json(body)); }
-/** 后端业务错误：面板应把 code 翻成中文提示，而不是把码丢给用户。 */
-function queueError(code: string, status: number) { mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code, details: {} } }), { status, headers: { 'Content-Type': 'application/json' } })); }
+/** 后端业务错误 Response：面板应把 code 翻成中文提示，而不是把码丢给用户。 */
+function errorBody(code: string, status = 409) { return new Response(JSON.stringify({ error: { code, details: {} } }), { status, headers: { 'Content-Type': 'application/json' } }); }
 
 function openAvatarMenu(): void {
   const button = screen.getByRole('button', { name: '账户菜单' });
@@ -685,7 +685,7 @@ describe('CloudPanel delayed project replacement', () => {
     expect(JSON.parse(String(post![1]!.body))).toMatchObject({ name: '第二团队', displayName: '第二团队' });
   });
 
-  it('deletes the current team and falls back to the remaining one', async () => {
+  it('deletes the current team from the team section danger zone and falls back to the remaining one', async () => {
     const secondStudioId = '20000000-0000-4000-8000-000000000002';
     let studiosNow = [
       { id: studioId, name: '工作室', role: 'owner', displayName: 'A' },
@@ -694,10 +694,19 @@ describe('CloudPanel delayed project replacement', () => {
     vi.spyOn(controller, 'listProjects').mockResolvedValue([original] as never);
     vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
     vi.spyOn(controller, 'listStudios').mockImplementation(async () => studiosNow as never);
+    // 团队分区的取数顺序在父子 effect 间有竞态，队列式 stub 对顺序敏感；这里按地址路由，顺序无关。
+    mockFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'DELETE' && url.includes('/studios/')) return json({ removed: true });
+      if (/\/studios\/[^/]+\/settings/.test(url)) return json({});
+      if (/\/studios\/[^/]+\/members/.test(url)) return json([{ userId: 'user-a', role: 'owner', displayName: 'A' }]);
+      return json({});
+    });
     const notices = watchNotices();
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
     openAccount();
-    queue({ removed: true });
+    fireEvent.click(within(screen.getByRole('navigation', { name: '账户分区' })).getByRole('button', { name: '团队' }));
     const button = await screen.findByRole('button', { name: '删除团队工作室' });
     // 服务端删掉后，下一次 listStudios 就不该再返回它（测试里手动摹一份真实后端的收敛）。
     studiosNow = [studiosNow[1]];
@@ -713,35 +722,59 @@ describe('CloudPanel delayed project replacement', () => {
     vi.spyOn(controller, 'listProjects').mockResolvedValue([original] as never);
     vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
     vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }] as never);
+    mockFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'DELETE' && url.includes('/studios/')) return errorBody('STUDIO_NOT_EMPTY');
+      if (/\/studios\/[^/]+\/settings/.test(url)) return json({});
+      if (/\/studios\/[^/]+\/members/.test(url)) return json([{ userId: 'user-a', role: 'owner', displayName: 'A' }]);
+      return json({});
+    });
     const notices = watchNotices();
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
     openAccount();
-    queueError('STUDIO_NOT_EMPTY', 409);
+    fireEvent.click(within(screen.getByRole('navigation', { name: '账户分区' })).getByRole('button', { name: '团队' }));
     fireEvent.click(await screen.findByRole('button', { name: '删除团队工作室' }));
     await screen.findByText('工作室中仍有项目，请先处理其中的项目后再删除。');
     expect(screen.getByRole('button', { name: '工作室' })).toBeTruthy();
     notices.stop();
   });
 
-  it('renames the current team from the rail with Enter and refreshes both places', async () => {
-    queue([original]);
-    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+  it('renames the current team from the team section header and refreshes both places', async () => {
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([original] as never);
+    vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
+    // 改名成功后面板会经 notifyTeamChanged 重拉名单：spy 必须跟真实后端一样返回新名。
+    let studiosNow = [{ id: studioId, name: '工作室', role: 'owner' as const, displayName: 'A' }];
+    vi.spyOn(controller, 'listStudios').mockImplementation(async () => studiosNow as never);
+    mockFetch.mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'PATCH' && url.includes('/studios/')) {
+        const next = JSON.parse(String(init?.body)).name as string;
+        studiosNow = [{ id: studioId, name: next, role: 'owner', displayName: 'A' }];
+        return json({ id: studioId, name: next, role: 'owner', displayName: 'A' });
+      }
+      if (/\/studios\/[^/]+\/settings/.test(url)) return json({});
+      if (/\/studios\/[^/]+\/members/.test(url)) return json([{ userId: 'user-a', role: 'owner', displayName: 'A' }]);
+      return json({});
+    });
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
     openAccount();
-    fireEvent.click(await screen.findByRole('button', { name: '工作室' }));
-    expect(screen.getByTitle('当前团队').textContent).toBe('工作室');
+    fireEvent.click(within(screen.getByRole('navigation', { name: '账户分区' })).getByRole('button', { name: '团队' }));
+    fireEvent.click(await screen.findByRole('button', { name: '重命名团队工作室' }));
     const input = screen.getByLabelText('团队新名称') as HTMLInputElement;
     expect(input.value).toBe('工作室');
     fireEvent.change(input, { target: { value: '  幕景工作室  ' } });
-    queue({ id: studioId, name: '幕景工作室', role: 'owner', displayName: 'A' });
     // 只有一个输入框：回车即提交，不另放确认钮。
     fireEvent.submit(input.closest('form')!);
-    expect(await screen.findByRole('button', { name: '幕景工作室' })).toBeTruthy();
+    // onStudioRenamed 回填同一份 studios：侧栏按钮与面板头同时换名。
+    expect(await screen.findByRole('button', { name: '重命名团队幕景工作室' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '幕景工作室' }).getAttribute('aria-pressed')).toBe('true');
     const patch = mockFetch.mock.calls.find(call => call[1]?.method === 'PATCH' && String(call[1]?.body).includes('幕景工作室'));
     expect(patch).toBeTruthy();
     // 前后空白在客户端先 trim，提交给服务端的只有名字本体。
     expect(JSON.parse(String(patch![1]!.body))).toEqual({ name: '幕景工作室' });
-    expect(screen.getByText('团队已改名为「幕景工作室」。')).toBeTruthy();
+    expect(screen.getByText('团队名已更新。')).toBeTruthy();
     expect(screen.getByTitle('当前团队').textContent).toBe('幕景工作室');
   });
 
@@ -1074,9 +1107,10 @@ describe('CloudPanel preferences section', () => {
     openAvatarMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: '设置' }));
     expect(screen.getByRole('dialog', { name: '个人' })).toBeTruthy();
-    // 弹窗左栏现在也有一级「团队」钮；设置里的二级页签要圈在「设置分区」导航里查，避免同名互撞。
+    // 2026-11-22 分区化：设置只剩「个人 / 本方案」两页，团队是一级分区（弹窗导航里的「团队」钮）。
     const settingsNav = within(screen.getByRole('navigation', { name: '设置分区' }));
     expect(settingsNav.getByRole('button', { name: '个人' }).getAttribute('aria-pressed')).toBe('true');
+    expect(settingsNav.queryByRole('button', { name: '团队' })).toBeNull();
     expect(screen.queryByRole('tab', { name: '快捷键' })).toBeNull();
     expect(screen.queryByText('项目设置')).toBeNull();
     expect(screen.queryByText('换算示例')).toBeNull();
@@ -1093,24 +1127,25 @@ describe('CloudPanel preferences section', () => {
     fireEvent.click(settingsNav.getByRole('button', { name: '本方案' }));
     expect(screen.getByRole('heading', { name: '本方案' })).toBeTruthy();
     expect(screen.getByRole('spinbutton', { name: '网格间距' })).toBeTruthy();
-    fireEvent.click(settingsNav.getByRole('button', { name: '团队' }));
-    expect(screen.getByRole('heading', { name: '团队' })).toBeTruthy();
+    // 报价抬头并入本方案：来源徽标 + 跟随团队回退都在这里。
+    expect(screen.getByText('报价抬头')).toBeTruthy();
+    expect(screen.getByLabelText('本方案公司名')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
   });
 
-  it('reaches team management in one click from the dialog nav and keeps the pressed states truthful', async () => {
+  it('reaches team management as its own top-level section from the dialog nav', async () => {
     queue([]);
     queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
     openAccount();
     const accountNav = within(screen.getByRole('navigation', { name: '账户分区' }));
-    // 一级「团队」钮：一点直达团队页，两个一级钮的按下态互斥且与实际页签一致。
+    // 一级「团队」钮：一点直达团队分区；两个一级钮的按下态就是 section 本身。
     fireEvent.click(accountNav.getByRole('button', { name: '团队' }));
     expect(screen.getByRole('dialog', { name: '团队' })).toBeTruthy();
     expect(accountNav.getByRole('button', { name: '团队' }).getAttribute('aria-pressed')).toBe('true');
     expect(accountNav.getByRole('button', { name: '设置' }).getAttribute('aria-pressed')).toBe('false');
-    expect(within(screen.getByRole('navigation', { name: '设置分区' })).getByRole('button', { name: '团队' }).getAttribute('aria-pressed')).toBe('true');
-    // 「设置」固定开个人页，不再记住上次的团队页，名符其实。
+    expect(screen.getByRole('region', { name: '团队' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: '团队成员' })).toBeTruthy();
     fireEvent.click(accountNav.getByRole('button', { name: '设置' }));
     expect(screen.getByRole('dialog', { name: '个人' })).toBeTruthy();
     expect(accountNav.getByRole('button', { name: '团队' }).getAttribute('aria-pressed')).toBe('false');
@@ -1134,7 +1169,7 @@ describe('CloudPanel section entry points', () => {
     expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(false);
     fireEvent.click(screen.getByRole('menuitem', { name: '所有方案' }));
     expect(screen.getByRole('region', { name: '我的项目' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: '团队' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: '团队切换' })).toBeTruthy();
     openAccount('物料');
     expect(screen.getByRole('region', { name: '账户物料' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '所有方案' })).toBeTruthy();
@@ -1154,6 +1189,7 @@ describe('CloudPanel section entry points', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '团队' }));
     expect(screen.getByRole('dialog', { name: '团队' })).toBeTruthy();
     expect(screen.getByRole('region', { name: '团队' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: '团队成员' })).toBeTruthy();
   });
 
   it('lists the site and repository in support and keeps them on 关于', () => {

@@ -159,6 +159,13 @@
 .sc-account-settings .sc-settings-shell{flex:1;min-height:0;max-height:none}
 .sc-account-main:has(.sc-account-settings:not([hidden])) .sc-account-body{display:flex;flex-direction:column;overflow:hidden;padding:0}
 .sc-account-main:has(.sc-account-settings:not([hidden])) .sc-account-settings{flex:1;min-height:0;margin:0}
+/* 团队分区：与设置同一套满高布局（team-section.tsx），内容行共用 sc-settings-* 样式。 */
+.sc-account-team-page{display:flex;flex-direction:column;min-height:100%;margin:-16px -32px -28px}
+.sc-account-main:has(.sc-account-team-page) .sc-account-body{display:flex;flex-direction:column;overflow:hidden;padding:0}
+.sc-account-main:has(.sc-account-team-page) .sc-account-team-page{flex:1;min-height:0;margin:0}
+.sc-team-danger{margin-top:18px}
+.sc-team-danger .sc-settings-outline{color:#b4413a;border-color:color-mix(in srgb,#b4413a 38%,var(--wk-hair,#E4E4E7))}
+.sc-team-danger .sc-settings-outline:hover:not([disabled]){background:color-mix(in srgb,#b4413a 8%,var(--wk-paper,#fff))}
 .sc-account-side-links{display:grid;gap:2px;margin-top:auto;padding-top:12px}
 .sc-cloud-dialog .sc-account-side-links button{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:7px 8px;border:0;border-radius:8px;background:none;box-shadow:none;color:var(--sc-muted);font-size:12px;font-weight:500;text-align:left}
 .sc-cloud-dialog .sc-account-side-links button[aria-pressed=true]{background:var(--wk-plane);color:var(--sc-ink);font-weight:600}
@@ -209,9 +216,7 @@
 .sc-account-team-form input{flex:1;min-width:0;height:26px;padding:0 6px;border:1px solid var(--wk-hair);border-radius:3px;background:var(--paper,#fff);color:var(--sc-ink);font:400 12px var(--sc-font)}
 .sc-cloud-dialog .sc-account-team-form button{flex:none;height:26px;padding:0 8px;border:1px solid var(--wk-hair);border-radius:3px;background:var(--wk-plane);color:var(--sc-ink);font-size:11px}
 .sc-cloud-dialog .sc-account-team-form button:disabled{opacity:.5;cursor:default}
-/* 2026-11-18：建团队有了，删团队也得有——只在 owner 下出现，平常弱化，不抢项目的视线。 */
-.sc-cloud-dialog button.sc-account-team-remove{width:100%;margin-top:2px;padding:4px 8px;border:0;border-radius:2px;background:none;box-shadow:none;color:var(--wk-muted);font-size:11px;font-weight:400;text-align:left;cursor:pointer}
-.sc-cloud-dialog button.sc-account-team-remove:hover{color:#b4413a;background:var(--wk-plane-deep)}
+/* 删团队入口随 2026-11-22 分区化搬进「团队」分区危险区（.sc-team-danger），左栏不再放。 */
 /* 项目页：物料 / 团队缩进「更多」；次级页用一条细返回栏。 */
 .sc-account-more{position:relative;flex:none}
 .sc-account-more>summary{list-style:none;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:12px;font-weight:500;color:var(--sc-muted);user-select:none}

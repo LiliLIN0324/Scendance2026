@@ -41,11 +41,16 @@ export function roleLabel(role: StudioMember['role']): string {
   return role === 'owner' ? '负责人' : '编辑成员';
 }
 
-/** 当前工作室的团队：登录者自己的账号优先取项目所属工作室，其次取本机记住的那一个。 */
-export function useTeam(controller: BackendSession): TeamSnapshot & { refresh(): void } {
+/**
+ * 当前工作室的团队：登录者自己的账号优先取项目所属工作室，其次取本机记住的那一个。
+ * 传 studioIdOverride 时以调用方给的为准（账户弹窗跟着左栏选中的团队走，不再自己猜）；
+ * 覆盖的 id 不在名单里（刚被删等）就落回原推断。
+ */
+export function useTeam(controller: BackendSession, studioIdOverride?: string): TeamSnapshot & { refresh(): void } {
   const session = useBackendSession(controller);
   const userId = session.user?.id ?? '';
   const projectStudioId = session.project?.studio_id ?? '';
+  const override = studioIdOverride ?? '';
   const [team, setTeam] = useState<TeamSnapshot>(EMPTY);
   const [revision, setRevision] = useState(0);
   const requestRef = useRef(0);
@@ -60,7 +65,8 @@ export function useTeam(controller: BackendSession): TeamSnapshot & { refresh():
       try {
         const studios = await controller.listStudios();
         if (request !== requestRef.current) return;
-        const studioId = preferredStudio(userId, studios, projectStudioId);
+        const fallbackId = preferredStudio(userId, studios, projectStudioId);
+        const studioId = override && studios.some(item => item.id === override) ? override : fallbackId;
         const studio = studios.find(item => item.id === studioId) ?? null;
         const members = studio ? await listMembers(controller, studio.id) : [];
         if (request !== requestRef.current) return;
@@ -70,7 +76,7 @@ export function useTeam(controller: BackendSession): TeamSnapshot & { refresh():
         setTeam({ ...EMPTY, userId, error: teamLoadError(error) });
       }
     })();
-  }, [controller, userId, projectStudioId, revision]);
+  }, [controller, userId, projectStudioId, revision, override]);
 
   const refresh = useCallback(() => setRevision(current => current + 1), []);
   return { ...team, refresh };

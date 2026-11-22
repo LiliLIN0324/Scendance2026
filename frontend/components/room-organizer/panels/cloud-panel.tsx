@@ -42,7 +42,7 @@ import { ensureGlbAsset } from '../three/glb-assets';
 import { copyAssistantScope } from '../lib/assistant-scope-registry';
 import { projectSessionScope } from '../lib/project-session-scope';
 import { copyOutdoorProjectRecord } from '../lib/outdoor-project-store';
-import { AccountTeamPanel } from './account-team-panel';
+import { TeamSection } from './team-section';
 import { AVATAR_PRESETS, avatarForSeed, loadAvatar, saveAvatar, type AvatarPreset } from './account-avatars';
 import { InfoTip } from './info-tip';
 import { ProjectThumb } from './project-thumb';
@@ -61,7 +61,7 @@ export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): voi
   if (!inside) event.currentTarget.close();
 }
 
-type AccountSection = 'projects' | 'assets' | 'settings' | 'archive';
+type AccountSection = 'projects' | 'assets' | 'team' | 'archive' | 'settings';
 
 const PREVIEW_LIMIT = 12;
 const ORIGINAL_SCENE_SUBMISSION_ENABLED:boolean=false;
@@ -213,8 +213,6 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const projectedCreation=useRef<{base:RoomLayout;projectId:string}|null>(null);
   const [section, setSection] = useState<AccountSection>('projects');
   const [settingsPaneRequest, setSettingsPaneRequest] = useState<{ serial: number; pane: SettingsPane }>({ serial: 0, pane: 'personal' });
-  // 团队升级为左栏一级入口后，弹窗导航需要知道设置里当前停在哪个页签，才能把「团队 / 设置」的按下态标对。
-  const [settingsPane, setSettingsPane] = useState<SettingsPane>('personal');
   const [menuOpen, setMenuOpen] = useState(false);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
   const [studioSettings, setStudioSettings] = useState<StudioSettings | null>(null);
@@ -232,9 +230,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   // 2026-11-18 用户：「团队也应该可以任意新建团队」——后端 POST /studios 早就支持，补上左栏入口。
   const [teamFormOpen, setTeamFormOpen] = useState(false);
   const [teamName, setTeamName] = useState('');
-  // 2026-11-18：左栏当前团队名点一下就地改名（走 PATCH /studios/:id），不弹新面板。
-  const [renamingStudio, setRenamingStudio] = useState('');
-  const [studioName, setStudioName] = useState('');
+  // 2026-11-22 用户拍板：改名暗门撤掉，改名收进「团队」分区面板顶部；左栏只留切换与新建。
   // 2026-11-18 项目卡预览：本机真实定格（画布翻拍）优先，见 project-thumb.tsx。
   const [projectCovers, setProjectCovers] = useState<Record<string, string>>({});
   // 云项目 → 原本机活动 id（同一个内容两个身份时，规划与封面先按旧 id 找）。
@@ -263,8 +259,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   },[controller,localWriteCapability,originalReview,originalReviewCurrent]);
   const previewRequested = useRef(new Set<string>());
   const [accountOpen, setAccountOpen] = useState(false);
+  // 团队默认在团队分区与设置的本方案报价抬头都要用：两处进弹窗都加载。
   useEffect(() => {
-    if (section !== 'settings' || !accountOpen) return undefined;
+    if ((section !== 'settings' && section !== 'team') || !accountOpen) return undefined;
     if (!cloud.user || cloud.user.is_anonymous) {
       setStudioSettingsStatus('signed-out');
       return undefined;
@@ -365,12 +362,12 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }).catch(() => { if (!cancelled) showNotice('项目加载失败，请点击刷新重试。', true); }).finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
   }, [controller, userId]);
-  // 消息钮未登录时打开「设置」；团队成员管理仍在账户窗的团队页里。
+  // 消息钮未登录时打开「设置」；团队成员管理在账户窗的一级团队分区里。
   const openedOpenRequest = useRef(0);
   useEffect(() => {
     if (!openRequest || openRequest.serial <= 0 || openedOpenRequest.current === openRequest.serial) return;
     openedOpenRequest.current = openRequest.serial;
-    if (openRequest.section === 'team' || openRequest.section === 'settings') {
+    if (openRequest.section === 'team') {
       if (!controller.getSnapshot().user) {
         setSection('projects');
         setAccountOpen(true);
@@ -379,7 +376,21 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         return;
       }
       setMenuOpen(false);
-      setSettingsPaneRequest(current => ({ serial: current.serial + 1, pane: openRequest.section === 'team' ? 'team' : 'personal' }));
+      setSection('team');
+      setAccountOpen(true);
+      if (!dialog.current?.open) dialog.current?.showModal();
+      return;
+    }
+    if (openRequest.section === 'settings') {
+      if (!controller.getSnapshot().user) {
+        setSection('projects');
+        setAccountOpen(true);
+        if (!dialog.current?.open) dialog.current?.showModal();
+        focusAuthEmail();
+        return;
+      }
+      setMenuOpen(false);
+      setSettingsPaneRequest(current => ({ serial: current.serial + 1, pane: 'personal' }));
       setSection('settings');
       setAccountOpen(true);
       if (!dialog.current?.open) dialog.current?.showModal();
@@ -1156,7 +1167,6 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   function openStudioProjects(nextStudioId: string): void {
     setStudioId(nextStudioId);
     if (userId) rememberStudio(userId, nextStudioId);
-    setRenamingStudio(''); setStudioName('');
     setSection('projects');
   }
   /** 新建团队：随便建多少个都行，建完直接切过去（后端 studios.create 返回 owner 角色）。 */
@@ -1172,21 +1182,13 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     showNotice(`团队「${created.name}」已创建。`);
   }
   /**
-   * 2026-11-18 闭环：团队改名。左栏当前团队名点一下变输入框，回车走 PATCH /studios/:id
-   * （api.ts 只收 {name}，trim 后 1–120 字；回执就是改完的团队），拿回执回填本地便立即生效。
-   * 不再重拉项目列表：项目体不改，左栏与项目页标题都从同一份 studios 派生，改一处两处都跟着变。
+   * 2026-11-18 闭环：团队改名收进「团队」分区（面板顶部点团队名），左栏不再留第二套点名字改名的暗门；
+   * 左栏只管切换与新建。点当前团队 = 回到它的项目列表（再点一次不切走语义）。
    */
-  async function renameStudio(studio: Studio): Promise<void> {
-    const name = studioName.trim();
-    if (!name || name === studio.name) { setRenamingStudio(''); setStudioName(''); return; }
-    const renamed = await controller.businessRequest<Studio>(`/studios/${encodeURIComponent(studio.id)}`, 'PATCH', { name });
-    setRenamingStudio(''); setStudioName('');
-    setStudios(current => current.map(item => item.id === studio.id ? { ...item, name: renamed.name } : item));
-    showNotice(`团队已改名为「${renamed.name}」。`);
-  }
   /**
    * 2026-11-18 闭环：能建就要能删。服务端 DELETE /studios/:id 早就有（非空团队抛 STUDIO_NOT_EMPTY，
-   * 文案已在 backend-session 里翻成中文），但前端一直没接，于是空团队删不掉、只能永久堆在左栏。
+   * 文案已在 backend-session 里翻成中文）。删除入口在「团队」分区的危险区（team-section.tsx 管确认框），
+   * 这里只管删完后的状态收尾：换到剩下的第一个团队并回到项目列表。
    */
   async function removeStudio(studio: Studio): Promise<void> {
     await controller.businessRequest(`/studios/${encodeURIComponent(studio.id)}`, 'DELETE');
@@ -1200,20 +1202,11 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     setSection('projects');
     showNotice(`团队「${studio.name}」已删除。`);
   }
-  const teamNav = <nav className="sc-account-teams" aria-label="团队">
-    <p className="sc-account-teams-label">工作室</p>
+  const teamNav = <nav className="sc-account-teams" aria-label="团队切换">
+    <p className="sc-account-teams-label">我的团队</p>
     {studios.length > 0 && <ul>{studios.map(studio => {
       const isActive = studio.id === studioId;
-      if (renamingStudio === studio.id) return <li key={studio.id}>
-        <form className="sc-account-team-form" aria-label={`重命名团队${studio.name}`} onSubmit={event => { event.preventDefault(); void run(async () => { await renameStudio(studio); }); }}>
-          <input aria-label="团队新名称" type="text" maxLength={120} value={studioName} autoFocus
-            onChange={event => setStudioName(event.target.value)}
-            onKeyDown={event => { if (event.key === 'Escape') { setRenamingStudio(''); setStudioName(''); } }}/>
-        </form>
-      </li>;
-      return <li key={studio.id}><button type="button" className="sc-account-team" aria-label={studio.name} aria-pressed={isActive} title={isActive && studio.role === 'owner' ? '点一下改名' : studio.name} onClick={() => {
-        // 点当前团队名 = 改名（已是这个团队，再切一次没意义）；点其他团队 = 切过去。
-        if (isActive && studio.role === 'owner') { setRenamingStudio(studio.id); setStudioName(studio.name); return; }
+      return <li key={studio.id}><button type="button" className="sc-account-team" aria-label={studio.name} aria-pressed={isActive} title={studio.name} onClick={() => {
         openStudioProjects(studio.id);
       }}><span className="sc-account-team-mark" aria-hidden="true">{studio.name.slice(0, 1).toUpperCase()}</span><span className="sc-account-team-name">{studio.name}</span><span className="sc-account-team-role" aria-hidden="true">{studioRoleLabel(studio.role)}</span></button></li>;
     })}</ul>}
@@ -1225,7 +1218,6 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         onKeyDown={event => { if (event.key === 'Escape') { setTeamFormOpen(false); setTeamName(''); } }}/>
       <button type="button" disabled={busy} onClick={() => { setTeamFormOpen(false); setTeamName(''); }}>取消</button>
     </form>}
-    {activeStudio?.role === 'owner' && <button type="button" className="sc-account-team-remove" aria-label={`删除团队${activeStudio.name}`} title={activeStudio.name} disabled={busy} onClick={() => { if (!window.confirm(`删除团队「${activeStudio.name}」？\n\n· 团队里还有项目时会拦下，先把项目移入「最近删除」\n· 删除后成员立即失去访问权，需要重新邀请`)) return; void run(async () => { await removeStudio(activeStudio); }); }}>删除团队</button>}
   </nav>;
 
   function openAccountSection(next: AccountSection): void {
@@ -1270,7 +1262,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       busy={busy}
       onOpenProjects={() => openAccountSection('projects')}
       onOpenAssets={() => openAccountSection('assets')}
-      onOpenTeam={() => openSettings('team')}
+      onOpenTeam={() => openAccountSection('team')}
       onOpenSettings={() => openSettings('personal')}
       onSignOut={signOutFromMenu}
       appearanceMode={appearance?.mode ?? 'system'}
@@ -1278,7 +1270,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       {...(planContext ? { plan: planContext } : {})}
       {...(onCapturePlan ? { onCapturePlan } : {})}
     />
-    {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className={`sc-cloud-dialog sc-account-dialog${cloud.user ? '' : ' is-auth'}`} aria-labelledby={cloud.user && section === 'settings' ? 'sc-settings-title' : 'cloud-title'} onClose={() => { setAccountOpen(false); onClose?.(); }} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>
+    {typeof document === 'undefined' ? null : createPortal(<dialog ref={dialog} className={`sc-cloud-dialog sc-account-dialog${cloud.user ? '' : ' is-auth'}`} aria-labelledby={cloud.user && section === 'team' ? 'sc-team-title' : cloud.user && section === 'settings' ? 'sc-settings-title' : 'cloud-title'} onClose={() => { setAccountOpen(false); onClose?.(); }} onClick={closeDialogOnBackdrop} onKeyDown={event => event.stopPropagation()}>
       {cloud.user ? <div className="sc-account-scroll">
       <h2 id="cloud-title" className="sc-account-title-hidden">账户中心</h2>
       <button className="sc-cloud-close sc-account-close-float" type="button" aria-label="关闭账户面板" autoFocus onClick={() => dialog.current?.close()}><X size={18}/></button>
@@ -1313,10 +1305,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         <button type="button" aria-pressed={section === 'projects'} onClick={() => setSection('projects')}><FolderOpen size={15} aria-hidden="true"/>所有方案</button>
         <button type="button" aria-pressed={section === 'assets'} onClick={() => setSection('assets')}><Images size={15} aria-hidden="true"/>物料</button>
         <button type="button" aria-pressed={section === 'archive'} onClick={() => setSection('archive')}><Box size={15} aria-hidden="true"/>归档</button>
-        {/* 2026-11-22 用户拍板：成员管理不该藏在「设置 → 团队」两钻深（11-18 对标结论本来就要求团队留一级分区）。
-            这里直开设置的团队页签；两个钮的按下态由 SettingsPage 上报的当前页签决定，避免同亮或全灭。 */}
-        <button type="button" aria-pressed={section === 'settings' && settingsPane === 'team'} onClick={() => openSettings('team')}><UsersRound size={15} aria-hidden="true"/>团队</button>
-        <button type="button" aria-pressed={section === 'settings' && settingsPane !== 'team'} onClick={() => openSettings('personal')}><Settings size={15} aria-hidden="true"/>设置</button>
+        {/* 2026-11-22 用户拍板：团队是一级分区（11-18 对标结论「不把成员管理搬进设置页」），不是设置里的页签。 */}
+        <button type="button" aria-pressed={section === 'team'} onClick={() => openAccountSection('team')}><UsersRound size={15} aria-hidden="true"/>团队</button>
+        <button type="button" aria-pressed={section === 'settings'} onClick={() => openSettings('personal')}><Settings size={15} aria-hidden="true"/>设置</button>
       </nav>
       {teamNav}
       </aside>
@@ -1670,16 +1661,13 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
           </>}
         </>}
       </section>
-      <section hidden={section !== 'settings'} className="sc-account-settings" aria-label="账户设置">
-        <SettingsPage
-          preferences={preferences}
-          onPreferenceChange={onPreferenceChange}
-          preferenceStatus={cloud.user && !cloud.user.is_anonymous ? '已登录：本机先记下，再同步到账号。云端失败不挡画布。' : '未登录：只存在这台设备。'}
-          layout={layout}
-          {...(onPlanSettingsChange ? { onPlanSettingsChange } : {})}
-          {...(siteQuote ? { siteQuote } : {})}
+      {cloud.user && section === 'team' ? <section className="sc-account-team-page" aria-label="团队">
+        <TeamSection
+          controller={controller}
+          studioId={studioId}
+          {...(activeStudio ? { studioName: activeStudio.name } : {})}
+          owner={activeStudio?.role === 'owner'}
           signedIn={!!cloud.user && !cloud.user.is_anonymous}
-          studioRole={studios.find(item => item.id === studioId)?.role ?? null}
           studioSettings={studioSettings}
           studioStatus={cloud.user && !cloud.user.is_anonymous ? studioSettingsStatus : 'signed-out'}
           {...(studioSettingsError ? { studioError: studioSettingsError } : {})}
@@ -1690,9 +1678,20 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             rememberStudioSettings(studioId, saved);
             setStudioSettingsStatus('ready');
           }}
+          onStudioRenamed={(targetId, name) => setStudios(current => current.map(item => item.id === targetId ? { ...item, name } : item))}
+          {...(activeStudio?.role === 'owner' ? { onDeleteStudio: () => { void run(async () => { await removeStudio(activeStudio); }); } } : {})}
+        />
+      </section> : null}
+      <section hidden={section !== 'settings'} className="sc-account-settings" aria-label="账户设置">
+        <SettingsPage
+          preferences={preferences}
+          onPreferenceChange={onPreferenceChange}
+          preferenceStatus={cloud.user && !cloud.user.is_anonymous ? '已登录：本机先记下，再同步到账号。云端失败不挡画布。' : '未登录：只存在这台设备。'}
+          layout={layout}
+          {...(onPlanSettingsChange ? { onPlanSettingsChange } : {})}
+          {...(siteQuote ? { siteQuote } : {})}
+          studioSettings={studioSettings}
           paneRequest={settingsPaneRequest}
-          onPaneChange={setSettingsPane}
-          teamPanel={<AccountTeamPanel key={`team-${userId ?? 'local'}`} controller={controller} onStudioRenamed={(targetId, name) => setStudios(current => current.map(item => item.id === targetId ? { ...item, name } : item))} />}
           onOpenShortcuts={openShortcutCoach}
         />
       </section>
@@ -1700,7 +1699,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       {section === 'projects' && conversionError && <p className="sc-account-error" role="alert">{conversionError}</p>}
       {section === 'projects' && floorplanOnlyLocal && <p className="sc-account-footnote">底图只保留在本机，云端方案不包含底图；本机草稿仍保留原图。</p>}
       {section === 'projects' && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-account-error" role="alert">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
-      {section === 'projects' && notice && <p className={noticeError ? 'sc-account-error' : 'sc-account-footnote'} role={noticeError ? 'alert' : 'status'}>{notice}</p>}
+      {/* 通用操作回执（删除 / 改名失败等 run() 的结果）在项目页与团队分区都要看得见；其余项目提示仍只挂项目页。 */}
+      {(section === 'projects' || section === 'team') && notice && <p className={noticeError ? 'sc-account-error' : 'sc-account-footnote'} role={noticeError ? 'alert' : 'status'}>{notice}</p>}
       {section === 'projects' && cloud.error && cloud.error.code !== 'ROUTE_NOT_FOUND' && notice !== cloud.error.message && <p className="sc-account-error" role="alert">{cloud.error.message}</p>}
       {section === 'projects' && cloud.error?.code==='CANVAS_PROJECT_MISMATCH' && cloud.lease && <button type="button" disabled={busy} onClick={()=>void run(async()=>{await controller.releaseLeaseAfterCanvasMismatch(cloud.lease!.projectId);showNotice('原编辑权已释放；请保留当前草稿，重新打开活动核对。');})}>重试释放原编辑权</button>}
       </div>

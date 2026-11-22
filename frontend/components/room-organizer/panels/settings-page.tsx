@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Ruler, UserRound, UsersRound } from '@/components/solid-icons';
+import { Ruler, UserRound } from '@/components/solid-icons';
 import {
   DEFAULT_AISLE_CLEAR_M,
   DEFAULT_ANGLE_SNAP_DEG,
@@ -19,7 +19,6 @@ import {
   type PlanEditorSettings,
   type SettingSource,
   type StudioSettings,
-  type StudioSettingsPatch,
 } from '../../../../supabase/functions/_shared/plan-editor';
 import { isValidTimeZone } from '../../../lib/event-profile';
 import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
@@ -34,7 +33,8 @@ export interface SettingsPreferences {
   snapToItems?: boolean;
 }
 
-export type SettingsPane = 'personal' | 'plan' | 'team';
+/** 设置里只剩「个人」和「本方案」两页：团队在账户弹窗是一级分区（team-section.tsx），不再是设置的页签。 */
+export type SettingsPane = 'personal' | 'plan';
 
 const SOURCE_LABEL: Record<SettingSource, string> = {
   plan: '本方案',
@@ -57,7 +57,8 @@ const TIME_ZONES = [
   'UTC',
 ];
 
-const CURRENCY_OPTIONS: { value: CurrencyCode; label: string }[] = [
+/** 货币清单：本方案报价抬头与团队默认（team-section）共用同一份，避免两处各写各的。 */
+export const CURRENCY_OPTIONS: { value: CurrencyCode; label: string }[] = [
   { value: 'CNY', label: '人民币 CNY' },
   { value: 'USD', label: '美元 USD' },
   { value: 'EUR', label: '欧元 EUR' },
@@ -103,16 +104,9 @@ export function SettingsPage({
   layout,
   onPlanSettingsChange,
   siteQuote,
-  signedIn,
-  studioRole,
   studioSettings,
-  studioStatus,
-  studioError,
-  onSaveStudioSettings,
   paneRequest,
-  teamPanel,
   onOpenShortcuts,
-  onPaneChange,
 }: {
   preferences: SettingsPreferences;
   onPreferenceChange: (patch: Partial<SettingsPreferences>) => void;
@@ -120,17 +114,10 @@ export function SettingsPage({
   layout?: RoomLayout;
   onPlanSettingsChange?: (next: PlanEditorSettings | undefined) => void;
   siteQuote?: PlanQuote | undefined;
-  signedIn: boolean;
-  studioRole?: 'owner' | 'editor' | null;
+  /** 团队默认值只用来标来源徽标和占位符；团队默认的编辑在 team-section.tsx。 */
   studioSettings: StudioSettings | null;
-  studioStatus: 'idle' | 'loading' | 'ready' | 'error' | 'signed-out';
-  studioError?: string;
-  onSaveStudioSettings?: (patch: StudioSettingsPatch) => Promise<void>;
   paneRequest?: { serial: number; pane: SettingsPane };
-  teamPanel?: ReactNode;
   onOpenShortcuts?: () => void;
-  /** 当前页签上报：弹窗左栏的「团队 / 设置」一级钮按下态靠它标对。 */
-  onPaneChange?: (pane: SettingsPane) => void;
 }): JSX.Element {
   const hasPlan = !!layout && !!onPlanSettingsChange;
   const [pane, setPane] = useState<SettingsPane>(paneRequest?.pane ?? 'personal');
@@ -140,12 +127,8 @@ export function SettingsPage({
     seenPane.current = paneRequest.serial;
     setPane(paneRequest.pane);
   }, [paneRequest]);
-  useEffect(() => { onPaneChange?.(pane); }, [pane, onPaneChange]);
-  const [teamDraft, setTeamDraft] = useState<StudioSettingsPatch>({});
-  const [teamMessage, setTeamMessage] = useState('');
   const plan = sanitizePlanEditor(layout?.planSettings) ?? {};
   const precision = preferences.lengthPrecisionM ?? 0.01;
-  const owner = studioRole === 'owner';
 
   const writePlan = (next: PlanEditorSettings | undefined) => {
     onPlanSettingsChange?.(next && Object.keys(next).length > 0 ? next : undefined);
@@ -189,18 +172,8 @@ export function SettingsPage({
   const timeZoneValue = plan.timeZone && isValidTimeZone(plan.timeZone) ? plan.timeZone : undefined;
   const timeZone = resolveSetting(timeZoneValue, undefined, DEFAULT_PLAN_TIME_ZONE, 'personal');
   const zones = TIME_ZONES.includes(timeZone.value) ? TIME_ZONES : [timeZone.value, ...TIME_ZONES];
-
-  const saveTeam = async (patch: StudioSettingsPatch) => {
-    if (!onSaveStudioSettings) return;
-    setTeamMessage('');
-    try {
-      await onSaveStudioSettings(patch);
-      setTeamDraft({});
-      setTeamMessage('已写入团队默认。已有方案不追溯。');
-    } catch (error) {
-      setTeamMessage(error instanceof Error ? error.message : '团队默认没有写上。');
-    }
-  };
+  /** 报价抬头里标志超 60KB 等写不进去的回执，挂在报价抬头组下面。 */
+  const [quoteMessage, setQuoteMessage] = useState('');
 
   const navButton = (id: SettingsPane, label: string, icon: ReactNode) => (
     <button type="button" aria-pressed={pane === id} onClick={() => setPane(id)}>{icon}{label}</button>
@@ -211,7 +184,6 @@ export function SettingsPage({
       <nav className="sc-settings-nav" aria-label="设置分区">
         {navButton('personal', '个人', <UserRound size={15} aria-hidden="true" />)}
         {navButton('plan', '本方案', <Ruler size={15} aria-hidden="true" />)}
-        {navButton('team', '团队', <UsersRound size={15} aria-hidden="true" />)}
       </nav>
 
       {pane === 'personal' ? (
@@ -308,22 +280,7 @@ export function SettingsPage({
             <NumberRow title="通道净宽" source={plan.aisleClearM !== undefined ? 'plan' : 'builtin'} detail="米。句子里写了「留 N 米通道」时，以句子为准。" value={plan.aisleClearM ?? DEFAULT_AISLE_CLEAR_M} min={0.6} max={12} step={0.1} onChange={value => patchPlan({ aisleClearM: value })} onReset={plan.aisleClearM !== undefined ? () => clearPlan('aisleClearM') : undefined} />
             <NumberRow title="摊位间距" source={plan.boothSpacingM !== undefined ? 'plan' : 'builtin'} detail="米。沿通道方向，相邻摊位之间的空隙。" value={plan.boothSpacingM ?? DEFAULT_BOOTH_SPACING_M} min={0} max={5} step={0.1} onChange={value => patchPlan({ boothSpacingM: value })} onReset={plan.boothSpacingM !== undefined ? () => clearPlan('boothSpacingM') : undefined} />
           </div>
-          </> : null}
-        </div>
-      ) : null}
-
-      {pane === 'team' ? (
-        <div className="sc-settings-main">
-          <div className="sc-settings-main-head">
-            <h2 id="sc-settings-title">团队</h2>
-            <p>成员、报价抬头和新项目默认都在这里。抬头给新报价单，本方案仍可覆盖。单位、通道和摊位间距只写入之后新建的方案。</p>
-          </div>
-          {teamPanel}
           <p className="sc-settings-kicker">报价抬头</p>
-          {!signedIn ? <p className="sc-account-footnote">登录后才能读写团队默认。个人偏好仍留在本机。</p> : null}
-          {studioStatus === 'loading' ? <p className="sc-account-footnote">正在读取团队默认…</p> : null}
-          {studioStatus === 'error' ? <p className="sc-account-error" role="alert">{studioError || '团队默认没有读到。画布不受影响。'}</p> : null}
-          {signedIn && studioRole && studioRole !== 'owner' ? <p className="sc-account-footnote">你能查看团队默认。只有负责人能修改。</p> : null}
           <div className="sc-settings-group">
             <Row title="公司名" source={company.source} detail={company.value ? company.value : '还没有公司名。'} action={company.source === 'plan' ? <button type="button" className="sc-settings-outline" onClick={() => writeQuote({}, ['companyName'])}>跟随团队</button> : null}>
               <input aria-label="本方案公司名" value={plan.quote?.companyName ?? ''} placeholder={studioSettings?.companyName || '本方案覆盖'} onChange={event => {
@@ -354,7 +311,7 @@ export function SettingsPage({
                 const file = event.target.files?.[0];
                 if (!file) return;
                 if (file.size > 60_000) {
-                  setTeamMessage('标志需要小于 60KB。');
+                  setQuoteMessage('标志需要小于 60KB。');
                   return;
                 }
                 const reader = new FileReader();
@@ -366,60 +323,8 @@ export function SettingsPage({
               }} />
             </Row>
           </div>
-          <div className="sc-settings-group">
-            <p className="sc-settings-scope">团队默认 · 只影响之后新建</p>
-            <label className="sc-settings-row">
-              <span className="sc-settings-row-main"><strong>团队公司名</strong><small>{studioSettings?.companyName || '未设置'}</small></span>
-              <input aria-label="团队公司名" disabled={!owner} value={teamDraft.companyName ?? studioSettings?.companyName ?? ''} onChange={event => setTeamDraft(current => ({ ...current, companyName: event.target.value }))} />
-            </label>
-            <label className="sc-settings-row">
-              <span className="sc-settings-row-main"><strong>团队报价人</strong><small>{studioSettings?.quoteContact || '未设置'}</small></span>
-              <input aria-label="团队报价人" disabled={!owner} value={teamDraft.quoteContact ?? studioSettings?.quoteContact ?? ''} onChange={event => setTeamDraft(current => ({ ...current, quoteContact: event.target.value }))} />
-            </label>
-            <label className="sc-settings-row">
-              <span className="sc-settings-row-main"><strong>团队货币</strong><small>{studioSettings?.currency || '未设置，报价单按人民币'}</small></span>
-              <select aria-label="团队货币" disabled={!owner} value={teamDraft.currency ?? studioSettings?.currency ?? ''} onChange={event => setTeamDraft(current => ({ ...current, currency: (event.target.value || null) as CurrencyCode | null }))}>
-                <option value="">不指定</option>
-                {CURRENCY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label className="sc-settings-row">
-              <span className="sc-settings-row-main"><strong>团队标志</strong><small>{studioSettings?.logoUrl ? '已有' : '未设置'}</small></span>
-              <input aria-label="团队标志" type="file" accept="image/png,image/jpeg,image/webp" disabled={!owner} onChange={event => {
-                const file = event.target.files?.[0];
-                if (!file || file.size > 60_000) {
-                  if (file) setTeamMessage('标志需要小于 60KB。');
-                  return;
-                }
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const url = typeof reader.result === 'string' ? reader.result : '';
-                  if (url) setTeamDraft(current => ({ ...current, logoUrl: url }));
-                };
-                reader.readAsDataURL(file);
-              }} />
-            </label>
-            <label className="sc-settings-row">
-              <span className="sc-settings-row-main"><strong>新方案单位</strong><small>{studioSettings?.defaultUnit === 'ft' ? '英尺' : studioSettings?.defaultUnit === 'm' ? '米' : '不指定，跟随个人'}</small></span>
-              <select aria-label="新方案单位" disabled={!owner} value={teamDraft.defaultUnit ?? studioSettings?.defaultUnit ?? ''} onChange={event => setTeamDraft(current => ({ ...current, defaultUnit: (event.target.value || null) as 'm' | 'ft' | null }))}>
-                <option value="">不指定</option>
-                <option value="m">米</option>
-                <option value="ft">英尺</option>
-              </select>
-            </label>
-            <label className="sc-settings-row">
-              <span className="sc-settings-row-main"><strong>新方案通道净宽</strong><small>{studioSettings?.defaultAisleClearM !== undefined ? `${studioSettings.defaultAisleClearM} m` : '不指定，用 2.4 m'}</small></span>
-              <input aria-label="新方案通道净宽" disabled={!owner} type="number" min={0.6} max={12} step={0.1} value={teamDraft.defaultAisleClearM ?? studioSettings?.defaultAisleClearM ?? ''} placeholder="米" onChange={event => setTeamDraft(current => ({ ...current, defaultAisleClearM: event.target.value === '' ? null : Number(event.target.value) }))} />
-            </label>
-            <label className="sc-settings-row">
-              <span className="sc-settings-row-main"><strong>新方案摊位间距</strong><small>{studioSettings?.defaultBoothSpacingM !== undefined ? `${studioSettings.defaultBoothSpacingM} m` : '不指定，用 0.6 m'}</small></span>
-              <input aria-label="新方案摊位间距" disabled={!owner} type="number" min={0} max={5} step={0.1} value={teamDraft.defaultBoothSpacingM ?? studioSettings?.defaultBoothSpacingM ?? ''} placeholder="米" onChange={event => setTeamDraft(current => ({ ...current, defaultBoothSpacingM: event.target.value === '' ? null : Number(event.target.value) }))} />
-            </label>
-            <div className="sc-settings-row">
-              <div className="sc-settings-row-main"><strong>保存团队默认</strong><small>{teamMessage || '只影响之后的新报价和新方案。'}</small></div>
-              <button type="button" className="sc-settings-outline" disabled={!owner || studioStatus === 'loading'} onClick={() => { void saveTeam(teamDraft); }}>保存</button>
-            </div>
-          </div>
+          {quoteMessage ? <p className="sc-account-error" role="alert">{quoteMessage}</p> : null}
+          </> : null}
         </div>
       ) : null}
     </div>

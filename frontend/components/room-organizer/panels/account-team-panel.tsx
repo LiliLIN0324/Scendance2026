@@ -7,9 +7,13 @@ import { notifyTeamChanged, useTeam } from '../lib/team-data';
 import { avatarToneStyle, avatarTonesFor, useAvatarPresetsFor } from './account-avatars';
 import { InfoTip } from './info-tip';
 
-/** 与消息面板同一份取数：面板改完成员，消息列表跟着换。 */
-export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: BackendSession; /** 改名后把新名字交给上层（左栏 / 项目页标题同属同一份 studios 状态）。 */ onStudioRenamed?(studioId: string, name: string): void }): JSX.Element {
-  const team = useTeam(controller);
+/**
+ * 与消息面板同一份取数：面板改完成员，消息列表跟着换。
+ * studioId：账户弹窗把左栏当前选中的团队传进来，名单跟着侧栏上下文走；
+ * 不传（消息面板等）保持原推断——项目所属工作室优先，其次本机记住的。
+ */
+export function AccountTeamPanel({ controller, studioId, onStudioRenamed }: { controller: BackendSession; studioId?: string; /** 改名后把新名字交给上层（左栏 / 项目页标题同属同一份 studios 状态）。 */ onStudioRenamed?(studioId: string, name: string): void }): JSX.Element {
+  const team = useTeam(controller, studioId);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -111,7 +115,7 @@ export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: 
 function TeamFrame({ title, notice, alert = false, busy, onRefresh, onInvite, inviteOpen, children }: {
   title?: ReactNode; notice: string; alert?: boolean; busy: boolean; onRefresh?(): void; onInvite?(): void; inviteOpen?: boolean; children: ReactNode;
 }): JSX.Element {
-  return <section className="sc-settings" aria-label="团队">
+  return <section className="sc-settings" aria-label="团队成员">
     <header className="sc-settings-head">
       <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>团队名点一下就能改</strong><span>用邮箱加人：填写对方已注册的登录邮箱即可，对方需先有账号。消息面板里的成员与这份名单同源。</span></InfoTip></div>
       <div className="sc-settings-tools">
