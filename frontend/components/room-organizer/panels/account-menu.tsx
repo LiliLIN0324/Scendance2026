@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Check, FolderOpen, HelpCircle, Home, Images, Info, MessageSquare, Palette, Settings, UserRound } from '@/components/solid-icons';
+import { BookOpen, Check, FolderOpen, HelpCircle, Home, Images, Info, MessageSquare, Palette, Settings, UserRound, UsersRound } from '@/components/solid-icons';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { APPEARANCE_LABELS, APPEARANCE_MODE_ORDER, type AppearanceMode } from '../lib/appearance';
@@ -87,6 +87,7 @@ export function AccountMenu({
   noticeError,
   onOpenProjects,
   onOpenAssets,
+  onOpenTeam,
   onOpenSettings,
   onSignOut,
   appearanceMode,
@@ -105,6 +106,7 @@ export function AccountMenu({
   noticeError?: boolean;
   onOpenProjects: () => void;
   onOpenAssets: () => void;
+  onOpenTeam: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
   appearanceMode?: AppearanceMode;
@@ -247,6 +249,7 @@ export function AccountMenu({
       </div>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenProjects(); }}><FolderOpen size={15} aria-hidden="true"/>所有方案</button>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenAssets(); }}><Images size={15} aria-hidden="true"/>物料</button>
+      <button type="button" role="menuitem" onClick={() => { onClose(); onOpenTeam(); }}><UsersRound size={15} aria-hidden="true"/>团队</button>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenSettings(); }}><Settings size={15} aria-hidden="true"/>设置</button>
       {onAppearanceModeChange ? (
         <div

@@ -112,6 +112,7 @@ export function SettingsPage({
   paneRequest,
   teamPanel,
   onOpenShortcuts,
+  onPaneChange,
 }: {
   preferences: SettingsPreferences;
   onPreferenceChange: (patch: Partial<SettingsPreferences>) => void;
@@ -128,6 +129,8 @@ export function SettingsPage({
   paneRequest?: { serial: number; pane: SettingsPane };
   teamPanel?: ReactNode;
   onOpenShortcuts?: () => void;
+  /** 当前页签上报：弹窗左栏的「团队 / 设置」一级钮按下态靠它标对。 */
+  onPaneChange?: (pane: SettingsPane) => void;
 }): JSX.Element {
   const hasPlan = !!layout && !!onPlanSettingsChange;
   const [pane, setPane] = useState<SettingsPane>(paneRequest?.pane ?? 'personal');
@@ -137,6 +140,7 @@ export function SettingsPage({
     seenPane.current = paneRequest.serial;
     setPane(paneRequest.pane);
   }, [paneRequest]);
+  useEffect(() => { onPaneChange?.(pane); }, [pane, onPaneChange]);
   const [teamDraft, setTeamDraft] = useState<StudioSettingsPatch>({});
   const [teamMessage, setTeamMessage] = useState('');
   const plan = sanitizePlanEditor(layout?.planSettings) ?? {};

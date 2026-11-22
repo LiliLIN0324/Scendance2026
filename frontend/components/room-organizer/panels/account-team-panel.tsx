@@ -60,6 +60,7 @@ export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: 
   if (team.loading && !team.members.length) return <TeamFrame notice="" busy><p className="sc-account-empty" role="status">正在加载成员…</p></TeamFrame>;
   if (!team.studioId) return <TeamFrame notice="" busy><p className="sc-account-empty">还没有团队。左栏「＋ 新建团队」建一个。</p></TeamFrame>;
 
+  // 2026-11-22 用户拍板：邀请钮只给负责人——非负责人此前点了才报「只有负责人可以邀请成员」，不能用就不该渲染。
   return <TeamFrame title={!isOwner
     ? <h3>{team.teamName}</h3>
     : renaming
@@ -69,7 +70,7 @@ export function AccountTeamPanel({ controller, onStudioRenamed }: { controller: 
           onKeyDown={event => { if (event.key === 'Escape') { setRenaming(false); setDraftName(''); } }}/>
       </form>
       : <button type="button" className="sc-settings-title-name" aria-label={`重命名团队${team.teamName}`} onClick={() => { setDraftName(team.teamName); setRenaming(true); }}>{team.teamName}</button>}
-    notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} onInvite={() => { if (!isOwner) { say('只有负责人可以邀请成员。', true); return; } setInviteOpen(open => !open); }} inviteOpen={inviteOpen}>
+    notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} {...(isOwner ? { onInvite: () => setInviteOpen(open => !open) } : {})} inviteOpen={inviteOpen}>
     <div className="sc-settings-columns" aria-hidden="true"><span>团队名称</span><span>角色</span></div>
     {team.members.map(member => { const tone = tones.get(member.userId); const preset = presets.get(member.userId); return <div className="sc-settings-row" key={member.userId}>
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">

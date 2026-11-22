@@ -13,7 +13,7 @@ import { rememberStudioSettings } from '../lib/studio-settings-cache';
 import { sanitizeStudioSettings, type StudioSettings, type StudioSettingsPatch } from '../../../../supabase/functions/_shared/plan-editor';
 import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
 import type { PlanQuote } from '../../../../supabase/functions/_shared/site-plan';
-import { Box, FileImage, FolderOpen, Images, MapPin, MoreHorizontal, Mountain, RefreshCw, Settings, Trash2, UserRound, X } from '@/components/solid-icons';
+import { Box, FileImage, FolderOpen, Images, MapPin, MoreHorizontal, Mountain, RefreshCw, Settings, Trash2, UserRound, UsersRound, X } from '@/components/solid-icons';
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
@@ -213,6 +213,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   const projectedCreation=useRef<{base:RoomLayout;projectId:string}|null>(null);
   const [section, setSection] = useState<AccountSection>('projects');
   const [settingsPaneRequest, setSettingsPaneRequest] = useState<{ serial: number; pane: SettingsPane }>({ serial: 0, pane: 'personal' });
+  // 团队升级为左栏一级入口后，弹窗导航需要知道设置里当前停在哪个页签，才能把「团队 / 设置」的按下态标对。
+  const [settingsPane, setSettingsPane] = useState<SettingsPane>('personal');
   const [menuOpen, setMenuOpen] = useState(false);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
   const [studioSettings, setStudioSettings] = useState<StudioSettings | null>(null);
@@ -1268,6 +1270,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       busy={busy}
       onOpenProjects={() => openAccountSection('projects')}
       onOpenAssets={() => openAccountSection('assets')}
+      onOpenTeam={() => openSettings('team')}
       onOpenSettings={() => openSettings('personal')}
       onSignOut={signOutFromMenu}
       appearanceMode={appearance?.mode ?? 'system'}
@@ -1310,7 +1313,10 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         <button type="button" aria-pressed={section === 'projects'} onClick={() => setSection('projects')}><FolderOpen size={15} aria-hidden="true"/>所有方案</button>
         <button type="button" aria-pressed={section === 'assets'} onClick={() => setSection('assets')}><Images size={15} aria-hidden="true"/>物料</button>
         <button type="button" aria-pressed={section === 'archive'} onClick={() => setSection('archive')}><Box size={15} aria-hidden="true"/>归档</button>
-        <button type="button" aria-pressed={section === 'settings'} onClick={() => openSettings(settingsPaneRequest.pane)}><Settings size={15} aria-hidden="true"/>设置</button>
+        {/* 2026-11-22 用户拍板：成员管理不该藏在「设置 → 团队」两钻深（11-18 对标结论本来就要求团队留一级分区）。
+            这里直开设置的团队页签；两个钮的按下态由 SettingsPage 上报的当前页签决定，避免同亮或全灭。 */}
+        <button type="button" aria-pressed={section === 'settings' && settingsPane === 'team'} onClick={() => openSettings('team')}><UsersRound size={15} aria-hidden="true"/>团队</button>
+        <button type="button" aria-pressed={section === 'settings' && settingsPane !== 'team'} onClick={() => openSettings('personal')}><Settings size={15} aria-hidden="true"/>设置</button>
       </nav>
       {teamNav}
       </aside>
@@ -1685,6 +1691,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             setStudioSettingsStatus('ready');
           }}
           paneRequest={settingsPaneRequest}
+          onPaneChange={setSettingsPane}
           teamPanel={<AccountTeamPanel key={`team-${userId ?? 'local'}`} controller={controller} onStudioRenamed={(targetId, name) => setStudios(current => current.map(item => item.id === targetId ? { ...item, name } : item))} />}
           onOpenShortcuts={openShortcutCoach}
         />

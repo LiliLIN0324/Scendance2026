@@ -1074,7 +1074,9 @@ describe('CloudPanel preferences section', () => {
     openAvatarMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: '设置' }));
     expect(screen.getByRole('dialog', { name: '个人' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '个人' }).getAttribute('aria-pressed')).toBe('true');
+    // 弹窗左栏现在也有一级「团队」钮；设置里的二级页签要圈在「设置分区」导航里查，避免同名互撞。
+    const settingsNav = within(screen.getByRole('navigation', { name: '设置分区' }));
+    expect(settingsNav.getByRole('button', { name: '个人' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByRole('tab', { name: '快捷键' })).toBeNull();
     expect(screen.queryByText('项目设置')).toBeNull();
     expect(screen.queryByText('换算示例')).toBeNull();
@@ -1088,12 +1090,31 @@ describe('CloudPanel preferences section', () => {
     expect(onPreferenceChange).toHaveBeenLastCalledWith({ showMeasurements: true });
     expect(screen.getByRole('button', { name: '查看速查' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: '建造画布 · 编辑' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '本方案' }));
+    fireEvent.click(settingsNav.getByRole('button', { name: '本方案' }));
     expect(screen.getByRole('heading', { name: '本方案' })).toBeTruthy();
     expect(screen.getByRole('spinbutton', { name: '网格间距' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '团队' }));
+    fireEvent.click(settingsNav.getByRole('button', { name: '团队' }));
     expect(screen.getByRole('heading', { name: '团队' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
+  });
+
+  it('reaches team management in one click from the dialog nav and keeps the pressed states truthful', async () => {
+    queue([]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+    openAccount();
+    const accountNav = within(screen.getByRole('navigation', { name: '账户分区' }));
+    // 一级「团队」钮：一点直达团队页，两个一级钮的按下态互斥且与实际页签一致。
+    fireEvent.click(accountNav.getByRole('button', { name: '团队' }));
+    expect(screen.getByRole('dialog', { name: '团队' })).toBeTruthy();
+    expect(accountNav.getByRole('button', { name: '团队' }).getAttribute('aria-pressed')).toBe('true');
+    expect(accountNav.getByRole('button', { name: '设置' }).getAttribute('aria-pressed')).toBe('false');
+    expect(within(screen.getByRole('navigation', { name: '设置分区' })).getByRole('button', { name: '团队' }).getAttribute('aria-pressed')).toBe('true');
+    // 「设置」固定开个人页，不再记住上次的团队页，名符其实。
+    fireEvent.click(accountNav.getByRole('button', { name: '设置' }));
+    expect(screen.getByRole('dialog', { name: '个人' })).toBeTruthy();
+    expect(accountNav.getByRole('button', { name: '团队' }).getAttribute('aria-pressed')).toBe('false');
+    expect(accountNav.getByRole('button', { name: '设置' }).getAttribute('aria-pressed')).toBe('true');
   });
 });
 
@@ -1123,6 +1144,16 @@ describe('CloudPanel section entry points', () => {
     expect(screen.getByRole('dialog', { name: '团队' })).toBeTruthy();
     expect(screen.getByRole('region', { name: '团队' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '团队与权限' })).toBeNull();
+  });
+
+  it('opens team management from the avatar menu, one click like 所有方案 and 物料', async () => {
+    queue([]);
+    queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene)} onLoadLayout={vi.fn()} />);
+    openAvatarMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: '团队' }));
+    expect(screen.getByRole('dialog', { name: '团队' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: '团队' })).toBeTruthy();
   });
 
   it('lists the site and repository in support and keeps them on 关于', () => {

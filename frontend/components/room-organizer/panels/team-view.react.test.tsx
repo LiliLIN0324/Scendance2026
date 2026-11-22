@@ -64,6 +64,27 @@ describe('account team panel', () => {
     expect(screen.queryByText('许知夏')).toBeNull();
   });
 
+  it('hides the invite and remove controls from non-owners instead of erroring on click', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (/\/messages\/unread/.test(url)) return respond([]);
+      if (/\/studios\/[^/]+\/members/.test(url)) return respond([owner, editor]);
+      if (/\/studios\/?$/.test(url)) return respond([{ id: studioId, name: '幕景', role: 'owner', displayName: '丽丽' }]);
+      return respond({ access_token: 'access-test', refresh_token: 'refresh-test', expires_in: 3600, user: { id: 'user-b', aud: 'authenticated', email: 'zhongshu@example.com' } });
+    }));
+    await controller.signIn('zhongshu@example.com', 'password');
+    render(<AccountTeamPanel controller={controller}/>);
+    expect(await screen.findByText('终树 · 你')).toBeTruthy();
+    // 2026-11-22 用户拍板：不能用就不渲染。非负责人不再出现点了才报错的「邀请」钮。
+    expect(screen.queryByRole('button', { name: '邀请' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '移除成员丽丽' })).toBeNull();
+    // 改名同样只属于负责人：非负责人看到纯标题。
+    expect(screen.queryByRole('button', { name: '重命名团队幕景' })).toBeNull();
+    expect(screen.getByRole('heading', { name: '幕景' })).toBeTruthy();
+    // 刷新对谁都可用。
+    expect(screen.getByRole('button', { name: '刷新成员' })).toBeTruthy();
+  });
+
   it('shows the avatar picked on this device on my own row', async () => {
     await controller.signIn('test@example.com', 'password');
     render(<AccountTeamPanel controller={controller}/>);

@@ -19,6 +19,7 @@ function mountMenu(): void {
       busy={false}
       onOpenProjects={() => {}}
       onOpenAssets={() => {}}
+      onOpenTeam={() => {}}
       onOpenSettings={() => {}}
       onSignOut={() => {}}
     />,
@@ -120,6 +121,7 @@ describe('AccountMenu appearance flyout', () => {
         busy={false}
         onOpenProjects={() => {}}
         onOpenAssets={() => {}}
+        onOpenTeam={() => {}}
         onOpenSettings={() => {}}
         onSignOut={() => {}}
         appearanceMode="dark"
