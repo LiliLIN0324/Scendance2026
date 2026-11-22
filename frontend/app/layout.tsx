@@ -7,7 +7,6 @@ import type { Metadata } from 'next';
 import './globals.css';
 import './cloud.css';
 import './auth.css';
-import './workspace.css';
 import './assets.css';
 import './share.css';
 

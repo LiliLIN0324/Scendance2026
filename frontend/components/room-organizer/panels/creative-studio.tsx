@@ -2,7 +2,7 @@
 import { isFreshActivityId, localRestoreAvailable, proveFreshActivityScopeUnused, requireLocalRestoreAvailable, withActivitySwitch, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 
 import { ArrowLeft, ArrowUp, Check, Loader2, Maximize2, Minimize2, RefreshCw, SlidersHorizontal, Sparkles, Trash2, X } from '@/components/solid-icons';
-import { useRouter } from 'next/navigation';
+
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { buildAgentContext } from '@/lib/assistant-context';
@@ -2219,7 +2219,6 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   const seatAdvisory=seatAdvisoryState?.preview===studio.preview?seatAdvisoryState?.text:null;
   // 编辑权被接手时画布只是按钮变灰，不重渲染就看不见——这里单独订阅云端会话。
   const leaseState=useBackendSession(studio.controller);
-  const router=useRouter();
   const [projectsError,setProjectsError]=useState('');
   /** 画布上这份就是那个云项目，可你手上没有编辑权——改动只进本机。 */
   const leaseLost=!!leaseState.user&&!!leaseState.project&&leaseState.writeBlocked&&leaseState.project.id===studio.layout.id;
@@ -2508,12 +2507,12 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
     if(toolsOpenRequest===handledToolsRequest.current)return;handledToolsRequest.current=toolsOpenRequest;
     openToolsRef.current();
   },[toolsOpenRequest]);
-  /** 被抢权后唯一的去处是项目页；走之前先把本机图纸落盘，落不了就不走。 */
+  /** 被抢权后唯一的去处是账户弹窗的「所有方案」卡片墙（独立项目页路由已删）；走之前先把本机图纸落盘，落不了就不走。 */
   async function goProjects():Promise<void> {
     setProjectsError('');
     try{await flushSourceScope(studio.layout.id??'local',studio.sourceWriteGuard);}
     catch{setProjectsError('本机图纸未能落盘，请稍后重试或先导出备份。');return;}
-    router.push('/projects/');
+    window.dispatchEvent(new Event('scendance:open-account-projects'));
   }
   function openChat():void {
     if(docked){if(narrow())resizeWorkspace(false);if(studio.expanded)queueMicrotask(()=>messageInput.current?.focus());else{focusChat.current=true;setExpanded(true);}return;}
@@ -2600,7 +2599,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
           {docked&&<div><button type="button" onClick={()=>resizeWorkspace(false)}><ArrowLeft size={16}/>返回素材</button></div>}
         </header>}
         {studio.briefError&&<p className="cr-agent-notice" role="alert">{studio.briefError}<button type="button" onClick={studio.retryBrief}>{studio.briefReady?'重试保存需求':'重试读取需求'}</button></p>}
-        {leaseLost&&<p className="cr-agent-notice" role={projectsError?'alert':'status'}>{projectsError||'这个项目现在由别人编辑，你的改动只保留在本机。'}{!projectsError&&<button type="button" onClick={()=>void goProjects()}>去项目页接手编辑</button>}</p>}
+        {leaseLost&&<p className="cr-agent-notice" role={projectsError?'alert':'status'}>{projectsError||'这个项目现在由别人编辑，你的改动只保留在本机。'}{!projectsError&&<button type="button" onClick={()=>void goProjects()}>去所有方案接手编辑</button>}</p>}
         {businessMode==='commercial'&&workbenchMode==='layout'&&<p className="cr-hint" role="status">合同与约定已放入「更多」。深度商业档案仍保留，不占主流程。</p>}
         <section id="agent-panel-plan" aria-label="场景策划" hidden={businessMode!=='plan'}><details ref={briefDetails} className="cr-agent-brief" open><summary>{planCategory==='reference'?'图纸与照片':planCategory==='rebuild'?'场地重建':'活动需求与场地资料'}</summary><CreativeBriefPanel view={planCategory} showNotice={false} forcePreview={docked&&suppressAgentLauncher} descriptionRef={briefDescription} referenceOpenRequest={referenceOpenRequest+localReferenceRequest} referencePanelRef={referencePanel} referencePanel={referenceImagePanel} onSkip={()=>{resizeWorkspace(false);}} onBackToChat={()=>openChatRef.current()} onSwitchView={value=>{if(value==='rebuild')openRebuild();else if(value==='reference')openReference();else openBrief();}}/></details></section>
         <section id="agent-panel-model" aria-label="物料生成" hidden={businessMode!=='model'}>

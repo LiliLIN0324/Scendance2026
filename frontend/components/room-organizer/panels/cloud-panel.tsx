@@ -341,6 +341,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     dialog.current?.querySelector<HTMLInputElement>('#sc-auth-email')?.focus();
   };
   useEffect(()=>{const openLogin=()=>{loginRequested.current=true;setSection('projects');setAccountOpen(true);if(!dialog.current?.open)dialog.current?.showModal();focusAuthEmail();};window.addEventListener('scendance:request-account-login',openLogin);return()=>window.removeEventListener('scendance:request-account-login',openLogin);},[]);
+  // 被抢权后的接手入口（creative-studio 的 lease-lost 提示广播）：开「所有方案」卡片墙接手编辑。
+  // 独立 /projects 项目页已于 2026-11-22 删除，收进这张卡墙；事件模式沿用上面的登录引导。
+  useEffect(()=>{const openProjectsWall=()=>{setSection('projects');setAccountOpen(true);if(!dialog.current?.open)dialog.current?.showModal();focusAuthEmail();};window.addEventListener('scendance:open-account-projects',openProjectsWall);return()=>window.removeEventListener('scendance:open-account-projects',openProjectsWall);},[]);
 
   useEffect(() => {
     setProjects([]); setTrash([]); setTrashOpen(false); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setMenuOpen(false);

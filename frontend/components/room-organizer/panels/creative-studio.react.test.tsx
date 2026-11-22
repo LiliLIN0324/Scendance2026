@@ -2710,12 +2710,20 @@ describe('creative brief and assistant interaction', () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
-  it('takes a lost edit right to the projects page in one step', async () => {
+  it('takes a lost edit to the account dialog project wall in one step', async () => {
     connected();
     snapshot = { ...snapshot, writeBlocked: true };
-    render(ui());
-    fireEvent.click(await screen.findByRole('button', { name: '去项目页接手编辑' }));
-    await waitFor(() => expect(routerPush).toHaveBeenCalledWith('/projects/'));
+    // 项目页路由已删（2026-11-22）：被抢权后广播打开账户弹窗的「所有方案」卡片墙。
+    const opened = vi.fn();
+    window.addEventListener('scendance:open-account-projects', opened);
+    try {
+      render(ui());
+      fireEvent.click(await screen.findByRole('button', { name: '去所有方案接手编辑' }));
+      await waitFor(() => expect(opened).toHaveBeenCalledOnce());
+      expect(routerPush).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('scendance:open-account-projects', opened);
+    }
   });
 
   it('preserves the canvas when the controller reports acceptedLocally false', async () => {
