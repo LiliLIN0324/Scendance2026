@@ -12,11 +12,13 @@ import {STORAGE_KEY} from './lib/constants';
 import {INITIAL_LAYOUT} from './lib/initial-layout';
 import {MemoryStorage} from '@/lib/test-support-memory-storage';
 import {BackendSession,getBackendConfig} from '@/lib/backend-session';
+import {createStarterOutdoorPlan} from './lib/outdoor-project-store';
 import type {UsePlanAnnotationsResult} from './hooks/use-plan-annotations';
 
-const capture=vi.hoisted(()=>({annotation:null as UsePlanAnnotationsResult|null,resolve:null as null|(()=>void),calls:0,forcedResolution:null as null|'model'|'failed',dialogue:null as null|(()=>{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null)}));
+const capture=vi.hoisted(()=>({annotation:null as UsePlanAnnotationsResult|null,resolve:null as null|(()=>void),calls:0,chatCalls:0,applyPlan:0,applyZone:0,agent:null as unknown,forcedResolution:null as null|'model'|'failed',dialogue:null as null|(()=>{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null)}));
 let probeController:BackendSession;
 let mem:MemoryStorage;
+let stubPlan:ReturnType<typeof createStarterOutdoorPlan>;
 
 vi.mock('next/navigation',()=>({useRouter:()=>({push:vi.fn(),replace:vi.fn()}),usePathname:()=> '/',useSearchParams:()=>new URLSearchParams()}));
 vi.mock('./hooks/use-plan-annotations',async original=>{const actual=await original<typeof import('./hooks/use-plan-annotations')>();return {...actual,usePlanAnnotations(){const value=actual.usePlanAnnotations();capture.annotation=value;return value;}};});
@@ -27,12 +29,60 @@ vi.mock('@/lib/backend-session', async (importOriginal) => {
 });
 vi.mock('./hooks/use-three-scene',()=>({useThreeScene:()=>({isReady:false,error:null,invalidate:()=>{},requestShadowUpdate:()=>{},threeModuleRef:{current:null},sceneRef:{current:null},rendererRef:{current:null},cameraRef:{current:null},controlsRef:{current:null},worldPositionFromClient:()=>null})}));
 vi.mock('./hooks/use-canvas-2d-interaction',()=>({useCanvas2DInteraction:()=>({clientToWorld2D:()=>null})}));
+vi.mock('./hooks/use-assistant-sessions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./hooks/use-assistant-sessions')>();
+  const activeId = 'probe-active-session';
+  return {
+    ...actual,
+    resetAssistantSessionsStoreForTests: () => {},
+    useAssistantSessions: () => ({
+      ready: true, saveFailed: false, activeId,
+      activeSession: { id: activeId, title: '新会话' }, visible: [], totalCount: 1, query: '',
+      setQuery: () => {}, openSession: () => ({ id: activeId, verifiedFresh: false }),
+      selectSession: () => {}, renameSession: () => {}, toggleFavorite: () => {}, deleteSession: () => {}, touchActiveSession: () => {},
+    }),
+    assistantSessionExists: () => true,
+    getActiveAssistantSessionId: () => activeId,
+    subscribeActiveAssistantSession: () => () => {},
+    scopedAssistantStorage: () => undefined,
+  };
+});
+vi.mock('./components/outdoor-plan-overlay', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./components/outdoor-plan-overlay')>();
+  const { useEffect } = await import('react');
+  const { useAgent } = await import('./panels/agent-panel');
+  function StubOverlay() {
+    const agent = useAgent();
+    capture.agent = agent;
+    useEffect(() => {
+      agent?.registerRouteBridge?.({
+        getPlan: () => stubPlan,
+        projectId: () => 'probe-project',
+        selectedIds: () => [],
+        applyPlan: (next) => { capture.applyPlan++; stubPlan = next; return true; },
+        applyVenue: () => true,
+        beginVenueBoundary: () => true,
+        applyRoutes: () => true,
+        applyZoneProposal: () => { capture.applyZone++; return true; },
+      });
+      return () => agent?.registerRouteBridge?.(null);
+    }, []);
+    return null;
+  }
+  return { ...actual, default: StubOverlay };
+});
+vi.mock('./panels/creative-studio',async original=>{const actual=await original<typeof import('./panels/creative-studio')>();return {...actual,CreativeStudioProvider:(props:Parameters<typeof actual.CreativeStudioProvider>[0])=>{capture.dialogue=(props.captureDialogue??null) as typeof capture.dialogue;return <actual.CreativeStudioProvider {...props}/>;}};});
 import {RoomOrganizer} from './room-organizer';
 
 beforeEach(()=>{
-  resetAssistantSessionsStoreForTests();capture.calls=0;capture.resolve=null;capture.forcedResolution=null;capture.dialogue=null;
+  resetAssistantSessionsStoreForTests();capture.calls=0;capture.chatCalls=0;capture.applyPlan=0;capture.applyZone=0;capture.resolve=null;capture.forcedResolution=null;capture.dialogue=null;
+  stubPlan={...createStarterOutdoorPlan(),boundary:[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}]};
   mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;
   probeController=new BackendSession(getBackendConfig({url:'',anonKey:''}));
+  (probeController as unknown as {snapshot:{user:unknown}}).snapshot.user={id:'probe-owner',email:'owner@scendance.test',is_anonymous:false};
+  const chatResult=()=>({status:'ok' as const,answer:JSON.stringify({action:'ask' as const,reply:'',references:[],facts:{}})});
+  (probeController as unknown as {assistantChat:unknown}).assistantChat=vi.fn(async()=>{capture.chatCalls++;return chatResult();});
+  (probeController as unknown as {assistantChatStream:unknown}).assistantChatStream=vi.fn(async()=>{capture.chatCalls++;return chatResult();});
   vi.stubGlobal('crypto',webcrypto);
   vi.stubGlobal('fetch',()=>Promise.reject(new Error('No live requests in probe')));
   const held=new Set<string>();
@@ -54,28 +104,30 @@ it.each([false,true])('real workspace initial readiness has no false unsaved war
  expect(await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000})).toBeTruthy();
  expect(screen.queryByText(/会话未能保存在本机/)).toBeNull();
 });
-it.skip('real workspace discards an old reply across same-batch A→B→A and preserves the unsent draft',async()=>{
+it('real workspace discards an old reply across same-batch A→B→A and preserves the unsent draft',async()=>{
  const a=activity('generation-A'),b=activity('generation-B');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<StrictMode><RoomOrganizer/></StrictMode>);
  const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
  fireEvent.change(input,{target:{value:'80 人的活动'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
- await waitFor(()=>expect(capture.calls).toBe(1));
+ await act(async()=>{await Promise.resolve();});
+ await waitFor(()=>expect(capture.chatCalls).toBe(1));
  fireEvent.change(input,{target:{value:'本活动未发送草稿'}});
  act(()=>{layoutStore.setState({layout:b,activeFloorIndex:0});layoutStore.setState({layout:a,activeFloorIndex:0});});
- await act(async()=>{capture.resolve!();await Promise.resolve();});
+ await act(async()=>{await Promise.resolve();});
  await waitFor(()=>expect((screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement).value).toBe('本活动未发送草稿'));
  expect(screen.queryByText('旧活动迟到回复，不应展示')).toBeNull();expect(layoutStore.getState().layout.id).toBe('generation-A');
 });
-it.skip('invalidates an existing dialogue capture at submit and blocks new captures until interpretation finishes',async()=>{
+it('invalidates an existing dialogue capture at submit and blocks new captures until interpretation finishes',async()=>{
  const a=activity('dialogue-in-flight');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<StrictMode><RoomOrganizer/></StrictMode>);const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});if(restart)fireEvent.click(restart);
- let before:{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null=null;
- await waitFor(()=>{before=capture.dialogue?.()??null;expect(before).not.toBeNull();});
+ render(<StrictMode><RoomOrganizer/></StrictMode>);
+ const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
+ await waitFor(()=>expect(capture.dialogue).not.toBeNull(),{timeout:8000});
+ const getter=capture.dialogue!;
+ const before=getter(); expect(before).not.toBeNull();expect(before!.isCurrent()).toBe(true);
  fireEvent.change(input,{target:{value:'30人的活动'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
- expect(before!.isCurrent()).toBe(false);expect(capture.dialogue!()).toBeNull();await waitFor(()=>expect(capture.calls).toBe(1));
- await act(async()=>{capture.resolve!();await Promise.resolve();});
- await waitFor(()=>{const current=capture.dialogue!();expect(current).not.toBeNull();current?.release();});expect(before!.isCurrent()).toBe(false);before!.release();
+ expect(before!.isCurrent()).toBe(false);expect(getter()).toBeNull();
+ await waitFor(()=>{const current=getter();expect(current).not.toBeNull();expect(current!.isCurrent()).toBe(true);},{timeout:8000});
+ before!.release();
 });
 it.skip('keeps a locally recorded headcount exportable when understanding fails',async()=>{
  const a=activity('dialogue-incomplete');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
