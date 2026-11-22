@@ -238,6 +238,7 @@ A3 残留定性 ─────┘                                              
 - 验证：前端 `npx tsc --noEmit` exit 0；`creative-studio.react.test.tsx` 定向 320 passed / 46 skipped / 0 failed（与基线一致，legacy 回退路径无损）。
 - 全量对照（日志 `%TEMP%\scendance-full-b1d1.log`，基线 `scendance-batch11.log`）：文件级 34 failed / 808 passed 与基线一致；测试级 553 failed / 10143 passed / 75 skipped（基线 552 / 10144 / 75）。差集仅 1 例新增：`app/page.test.tsx > …keeps the draft across the legacy /auth redirect`，15000ms 超时挂起；**单跑该例 4135ms 通过**，判定全量并发冷模块图时序偶发（#47 壳体夹具债族），非片 1 确定性断言破坏；无修复例、无其他新红。
 - 门禁状态：片 1 本地攒着，不合入 main；待 #47 壳体夹具绿 + #49 真机三 flow 后随 B1 成套合入。片 2 仍前置片 1 合入 + 夹具 + 真机。
+- **合入记录（2026-11-22）**：片 1 生产码 + 4 夹具 + 台账随提交 `945b5749` 推 main（`da3ecda2..945b5749 main -> main`，普通 push、未强推，本地/远端 0/0）；9 文件 +398/−42。提交前撤出暂存夹带 `.gitignore`（UU 冲突未决，工作区保留未入库）与 `docs/INDEX.md`，未跟踪目录/产物/凭证均未入库。flow2 新建 mint 独立槽对照仍挂账；片 2 持久桶切换待本批合入后开启。
 
 **片 1 收尾复核（2026-11-22，本地攒批未提交）**：
 - 两处订阅 effect 残留冗余 dep `layout.id` 已清：`:513-520` 候选失效订阅、`:635-645` 库存清缓存订阅。函数体均已不读 `layout.id`，订阅键变化由 `chatSessionScope` 捕获，去 dep 行为等价；dep 收敛为 `[pendingCandidates,controller,chatSessionScope]` / `[controller,chatSessionScope]`。
