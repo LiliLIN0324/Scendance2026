@@ -8,10 +8,10 @@ import {
   reloadOnceForChunkError,
 } from '@/components/room-organizer/lib/chunk-reload';
 import {
-  ensureDefaultOutdoorProject,
   latestLocalActivityRecord,
   latestOutdoorProjectId,
   LOCAL_ACTIVITY_ID_PREFIX,
+  resolveFallbackOutdoorProject,
   resolveOutdoorProjectId,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import { onOutdoorProjectSwitch } from '@/components/room-organizer/lib/outdoor-project-switch';
@@ -91,17 +91,14 @@ export function BootSkeleton(): JSX.Element {
 
 /**
  * 根路径无参数时决定挂哪个项目（2026-11-11 用户拍板；2026-11-22 补本机活动兜底）：
- * - 有最近指针（云项目 / 案例副本）→ 续那个 projectId；
- * - 指针缺失 → 从草稿索引找回最近编辑的本机活动 `house-*`（否则刷新后会话槽漂移、历史接不回）；
+ * - 有最近指针且指向云项目 / 案例副本 / 本机活动 → 续那个 projectId；
+ * - 指针缺失、或指向纯起步草稿 `default-outdoor` → 从草稿索引找回最近编辑的本机活动 `house-*`
+ *   （空草稿不该把更近编辑过的本机活动短路掉，否则刷新会话槽漂移、历史接不回）；
  * - 都没有 → 新建纯本机默认草稿（`default-outdoor`，起步锚点平湖秋月）。
  * 找场地是工作台里的"搜地点"，不再先跳独立页。
  */
 function decideDefaultOutdoorProject(): string {
-  const last = latestOutdoorProjectId();
-  if (last) return last;
-  const local = latestLocalActivityRecord();
-  if (local) return local.projectId;
-  return ensureDefaultOutdoorProject();
+  return resolveFallbackOutdoorProject();
 }
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX.Element {
@@ -149,8 +146,16 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
       return;
     }
     // 带参但无本机草稿（旧链接/登录回跳/恢复备份）也统一落默认地图草稿，不再回退室内壳体。
-    setOutdoorProjectId(resolveOutdoorProjectId(window.location.search) ?? decideDefaultOutdoorProject());
+    const resolvedId = resolveOutdoorProjectId(window.location.search) ?? decideDefaultOutdoorProject();
+    setOutdoorProjectId(resolvedId);
     setEditorStarted(true);
+    // 兜底枚举到本机活动时同样把身份写进 URL：二次刷新走带参解析，不依赖最近指针与枚举。
+    if (resolvedId.startsWith(LOCAL_ACTIVITY_ID_PREFIX)) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('project', resolvedId);
+      url.searchParams.set('mode', 'outdoor');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
   }, [workspacePath, ready, pathname, controller]);
 
   /** 选一份云端活动：拉回整份并落本机，然后直接打开它。 */

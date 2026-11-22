@@ -39,6 +39,25 @@ B1 会话/身份解耦 → B2 历史快照换 plan → B3 导出与写守卫 pla
 
 > 并行支线（不阻塞退役主线）：C1 画布消费 `plan.walls`、C2 图纸墙线；D1 plan 级 DXF、D2 plan 级 SVG；F1 走廊占带相交、F2 OFM 证据线；G1 基线债、G2 工程卫生验收后一次清。
 
+### 2.1 全完成收口路线与现状（2026-11-22）
+
+终态判据沿用终态书 §0.2 四条件（状态正源单一 / 身份单一 / 呈现只留地图侧 / 通路 plan 化）与 §0.6 验收门禁；本节只标当前位置与剩余缺口，不跳卡。
+
+| 卡 | 全完成判据 | 当前现状 | 剩余缺口 / 阻塞 |
+| --- | --- | --- | --- |
+| **B1** 会话/身份解耦 | 会话/简报/库存/草稿/归档/偏好/评审同一 projectId scope；无 `layout.id ??` 裸回退；B1-e 三 flow 真机通过 | 🟡 片 1 会话仓 + 片 2 记忆桶已切；A1 夹具 5 passed / 1 skipped；静态门禁（根/前端 tsc、底座套件）无增量回归；真机 flow1 ✅、flow3 ✅；flow2 写租约竞态突破后已能切到新槽 | ① flow2 已切新槽（裸 uuid `2538691c…`），但非预期 `house-*` 本机槽；槽轨道归属（云端 mint vs 本机槽）与保存→回写→独立本机槽 mint 全链属 B2/B3 口径，待拍板。② 例3 理解失败人数导出，两份 brief 打通归 B2/B3。③ 去 layout 回退随 B2/B4 成套 |
+| **B2** 历史快照换 plan | `useHistory` 快照 `RoomLayout`→`SitePlanData`；undo/redo 回写 plan；两份 brief 打通 | ⬜ 阻塞于 B1 合入 | 例3 brief 打通在此卡落地 |
+| **B3** 导出与写守卫 plan 化 | CSV/GeoJSON/PNG/PDF 消费 plan；`assertLayoutWrite`→plan 写权限；checkin/note scope 转 plan | ⬜ 阻塞 B2 | scene-delivery checkin、note scope |
+| **B4** 回写镜像退役 | 删 false 侧 layout patch；地面底图/锚点写 plan/视图记忆；清镜像分支；草稿/偏好键退役 | ⬜ 阻塞 B1–B3 | 未发送草稿/恢复锁/run marker/图片源键；环境偏好键一次性迁移（C2） |
+| **E1** 立壳入口并入地图草稿 | 删 `startBlankVenue`/加号菜单/`space-panel`/`scene-presets`；新建落 `createStarterOutdoorPlan` | ⬜ 阻塞 B1 草稿通路 | space-panel 入口退役 |
+| **E2** 卸保活/室内 three/2D | 断 `.sc-scene-viewport`；`render.ts`/`use-canvas-2d`/场景特效；句柄改派地图 ref | ⬜ 阻塞 B2/B3 + M1 | floor tracker 随此移除 |
+| **E3** 删 layoutStore/室内墙模型 | schema 室内分支/`layout-reducer`/`use-layout-store`/墙/开门/碰撞/吸附/室内 hooks | ⬜ 阻塞 M2 + E2 | activity epoch 派生随此清 |
+| **E4** 删二分概念与回写 | `isOutdoorProject` 恒真分支/`seededPlanFromLayout`/`outdoorPlanState` 回退 | ⬜ 阻塞 E3 | — |
+
+**待拍板口径**（到决策点停住，不代推）：C1 无参刷新草稿索引恢复档位；C2 旧 `activity:` 存量会话/偏好迁移或只读承接、环境偏好键换键一次性迁移；C3 165 例语义红逐条产品口径判定（身份前置落定后复核）；flow2 新槽裸 uuid 走云端 mint 还是本机 `house-*` 槽，随 B2/B3 身份口径拍板。
+
+**夹具债与并行遗留**：A1 例3 skip 转 B2/B3；G1 基线锚点 B 线合入后重采；G2 工程卫生终态一次清。安全批次 #37、旧 79 backlog #4/#7/#9/#10/#11、C/D/F 线不阻塞主线，E4 后排一次清。
+
 ## 3. B1 内部切片与本轮状态
 
 | 切片 | 内容 | 状态 |
@@ -127,7 +146,7 @@ B1 会话/身份解耦 → B2 历史快照换 plan → B3 导出与写守卫 pla
 | 触点 | scope/键现状 | 配对存储/守卫 | 归属卡 | 本轮动作 |
 | --- | --- | --- | --- | --- |
 | `panels/bingo-audit-card.tsx:416/:431/:433` | `scopeKey` 由 agent-panel 传 `agent.sessionScope`；内部 `projectSessionScope(plan.projectKey)` 比对 | 评审快照回执 | B1 ✅ 已跟随主 scope | 无需改 |
-| `panels/creative-studio.tsx:290/:334/:337/:340-352/:516/:579/:617-628/:634` | 内部 `scope = layout.id ?? 'local'`；brief 存储、未发送草稿、候选库存、恢复锁、订阅频道全挂这套 | briefStorage / unsentMessageDrafts / applyRecoveryKey / sourceCoordinator | B1-d | ⬜ 待壳体下传 `activeProjectId` 成套改；测试夹具不全，先补定向测试再动 |
+| `panels/creative-studio.tsx:290/:334/:337/:340-352/:516/:579/:617-628/:634` | 内部 `scope = layout.id ?? 'local'`；片1 已切会话仓 `chatSessionScope`（`:336`）、片2 已切候选库存（`inventoryScope` 跟 chatScope，`:626/:631`）；剩余 brief 存储、未发送草稿、恢复锁、图片源仍挂 `layout.id` | briefStorage（B2/B3，随两份 brief 打通，同例3 挂账）/ unsentMessageDrafts·applyRecoveryKey·sourceCoordinator 图片源（B4，未发送草稿/恢复锁/run marker 不跨身份搬）/ material-checkin（B3，见 :133） | B1-d 余线拆到 B2/B3/B4 | ✅ 会话仓/库存段片1/片2 已归位；剩余不在 B1 成套硬切。壳体仅下传 `sessionScope`，未下传 plan 槽 id；换键需带一次性迁移防丢存量，随对应卡成套处理 |
 | `panels/venue-facts-panel.tsx:15-40` | `scope = activity:${activityId}`，activityId 由调用方传入 | `venue-facts-storage` 键；面板当前休眠 | B1-c/E2 | 随 venue tracker 与休眠面板，E 线一起清；不单独改 |
 | `panels/space-panel.tsx:244-272` | replica 案例创建 / 项目切换入口 | outdoor-project-store | **E1** | 不属 B1；随立壳入口退役整组删 |
 | `panels/scene-delivery-panel.tsx:129/:297/:298/:595/:596` | `layout.id` 用于本地备份恢复比对、云绑定判定、checkin 面板 `projectId` | 本地备份 / material-checkin | **B3** | 导出/checkin plan 化时改；note `scope:'activity'` 是 HTML 标注字面量，非身份键 |
@@ -302,6 +321,8 @@ A3 残留定性 ─────┘                                              
   - 结论：双项目间会话不串、切回不丢，片 1 会话仓按身份槽隔离的真机判据通过。
 - **flow 1 残留观察（归 B1-a 几何绑定 / 身份上提域，非片 1 会话仓回归，挂 #55 复核）**：B 的云 uuid 在本机无草稿绑定，壳层 `resolveOutdoorProjectId` 对无 mode 的 `?project=<云uuid>` 嗅探 `hasOutdoorPlanDraft` 不中 → 按方案 B `decideDefaultOutdoorProject()` 续到最近本机草稿 A（`house-gc5xt47q`）；`outdoor-history` 仍打 A 槽，而云项目 lease/sources/快照走 B——**本机草稿身份与云项目身份在打开无绑定云项目时分裂**。另 A 视图活动名短暂残留 B（云绑定身份未随 URL 重载重置）。这套跨身份口径统一属片 2 持久桶切换 / B1-a 绑定域，不在片 1 会话仓范围内修。
 - **flow 2 新建活动各落各槽（仍未走通，挂账）**：前端「新建项目」按钮落 `/editor/?new=1`，壳层嗅探不到新草稿仍续最近 A，未 mint 独立第二 `house-*` 槽；完整「选场地 → mint `house-*` → 保存云项目 + 几何绑定」链在当前桩内未取得独立槽。新建路径隔离正确性由 `project-session-scope` 单测（`project:<id>`、空 → `default-outdoor`、不含 `activity:`）+ 片 1 五触点换 `chatSessionScope` 静态 diff 覆盖；真机新建 mint 对照待具备多项目/预览环境再补。
+  - *flow 2 第十轮真机卡点（2026-11-22 晚，本地桩 54329 + dev 3210，owner 已登录）*：活动页 `?project=0dff1114…`（云 A），点面板内「新建活动」（`local-activities-panel` fresh activity 路径）后**未落新槽**——URL 仍云 uuid、本机列表仍 2 个、当前活动名「新活动 11-22 20:46」未变；页面落通知「本机存档尚待核对，未切换活动。」守卫定位 `use-layout-persistence.ts:534 flushPendingBeforeSwitch`：`mainSaveHeldRef.current || verifiedWriteRef.current || externalConflictRef.current` 任一置位即拦；三类细分文案见 :561（外部冲突）/:562（主保存挂起）/:563（任务存档待核对）。页面无显式冲突卡、无保存失败红，当前草稿容量待核验、物料 0 件；React ref 运行态不暴露、localStorage 按门禁不检视，**三选一未在只读条件下钉死**。定性：卡点在「切换/新建前当前活动存档须先保存核对」的既有围栏，**不是 mint 发号或身份槽逻辑**；放行需先处置当前草稿存档状态（保存核对 / 清冲突或待验证写），属状态处置决策，停住未代清。回写链路旁证：工作区在途未提交改动 `creative-studio.tsx:1013` 新建后经 `requestOutdoorProjectSwitch(proposedId)` 回写，`workspace-shell.tsx:171` 接住后 `replaceState` + `setOutdoorProjectId` + epoch 重挂；对应套件 :3238 断言 `switched=[current.id]` 单跑 1 例绿。本次真机未走到回写步，**未验成 mint 独立槽**，不冒充通过。
+  - *flow 2 第十一轮真机卡点定位与突破（2026-11-22 晚，本地桩 54329 + dev 3210）*：先澄清环境——3210 实为 `next dev -p 3210`（pid 1420 → 子进程 6348，`dev-with-amap-proxy.mjs` 起；日志 `scendance-dev-3210.log` 大量 `Compiled`，watcher 实时活跃），**不是生产 `next start`**；`.next/BUILD_ID` 与 hash chunk 是 App Router dev 同样会写的产物，先前据此误判为生产构建。根因修正：页面常驻文案「另一个窗口正在编辑这份活动；本窗口暂不保存，避免两边互相覆盖…」来自 `lib/outdoor-write-guard.ts:125 blockedDetail()`，是 **Web Lock 写租约 blocked**，并非第十轮怀疑的 persistence 三 ref。guard 在 `outdoor-plan-overlay.tsx:638-656` 按 `slotId` 建独占锁（`scendance:outdoor-plan:writer:v1:<slotId>`）；槽/壳体重挂载瞬间旧锁 cleanup 异步未释放、新 guard `ifAvailable` 拿不到 → 判 blocked，`waitForTurn` 排队，稍后拿到锁翻 granted。persistence `flushPendingBeforeSwitch:534` 三 ref 围栏是叠加层，本轮页面无冲突卡、无保存失败红，主拦路者是写租约。突破动作：硬刷新释放本上下文残留锁后，点「新建活动」走通——URL 由云 A `0dff1114-a35b-4619-880b-723d7f0dac9e` 切到新槽 `2538691c-4de8-4c90-9062-f19a5da72bcd`，任务回初始「搜索目标地点」；新槽锁排队后自愈翻 granted，`outdoor-write-blocked` 瞬态后为 NONE，无「本机存档尚待核对」通知。遗留（决策点悬置，未代推）：新槽是**裸 uuid**，不是预期 `house-*` 本机槽；方案列表出现「他人编辑中 · 新活动 11-22 21:27 刚刚更新」；槽轨道归属（云端 mint vs 本机槽）属 B2/B3 身份口径，待拍板；保存→回写→独立本机槽 mint 全链本轮未验完，不冒充通过。诊断用 `window.__b1Diag/__b1Module` 探针已干净回退，hook 源码 0 残留；备用 dev 3211 未占端口、无残留 node 进程。
 - **桩环境债（非片 1 回归，挂 #55）**：`outdoor-history` GET 返 500 `DATABASE_ERROR`（两个 projectId 均 500，PGlite 缺 `outdoor_card_history` 迁移/grant；前端按设计降级本机，不阻塞编辑器）；realtime websocket 握手 404（桩不支持 realtime，既有噪音）。
 
 

@@ -232,7 +232,7 @@ export function clearOutdoorProjectRecord(projectId: string, storage?: KeyValueS
  * 项目解析（workspace-shell 开工前调用）：所有项目统一进地图工作台，不再区分室内/户外。
  * - `?project=<id>&mode=outdoor` 或 `?project=<id>&start=outdoor` → 显式地图入口；
  * - `?project=<id>` 过渡期按本机草稿嗅探（旧链接兼容）；
- * - 其余（无参数）→ null，由 shell 续最近项目或起步默认草稿。
+ * - 其余（无参数 / 仅 mode=outdoor）→ null，由 shell 续最近项目、枚举本机活动或起步默认草稿。
  */
 export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorage | null): string | null {
   // 归一化：调用方可能传 window.location.search（"?project=…"）、完整 URL 或路径带参——
@@ -242,9 +242,9 @@ export function resolveOutdoorProjectId(search: string, storage?: KeyValueStorag
   const explicitMode = params.get('mode');
   const projectId = params.get('project')?.trim() ?? '';
   if (explicitMode === 'outdoor') {
-    // 显式地图入口——没给 project 就用默认本机草稿（起步概览西湖区），
-    // 不再强依赖 URL 上 project=。workspace-shell 根路径无参数时也这么走。
-    return projectId || ensureDefaultOutdoorProject(storage);
+    // 显式地图入口：没给 project 时不在这里越权起默认草稿，交回壳体兜底——
+    // 否则壳体的最近项目 / 本机活动枚举会被这份 default-outdoor 短路，刷新续不回旧活动。
+    return projectId || null;
   }
   if (!projectId) return null;
   if (params.get('start') === 'outdoor') return projectId;
@@ -327,6 +327,22 @@ export function latestLocalActivityRecord(storage?: KeyValueStorage | null): Out
     if (record.projectId.startsWith(LOCAL_ACTIVITY_ID_PREFIX)) return record;
   }
   return null;
+}
+
+/**
+ * 无参 / 弱参刷新的兜底身份选取（壳体开工前调用）。
+ *
+ * - 最近指针指向云项目 / 案例副本 / 本机活动 → 续那个 projectId；
+ * - 指针缺失，或指针只是纯起步草稿 `default-outdoor` → 让位给最近编辑的本机 `house-*` 活动；
+ *   空草稿不该把更近编辑过的本机活动短路掉，否则刷新会话槽漂移、历史接不回；
+ * - 都没有 → 起步默认草稿。
+ */
+export function resolveFallbackOutdoorProject(storage?: KeyValueStorage | null): string {
+  const last = latestOutdoorProjectId(storage);
+  if (last && last !== DEFAULT_OUTDOOR_PROJECT_ID) return last;
+  const local = latestLocalActivityRecord(storage);
+  if (local) return local.projectId;
+  return ensureDefaultOutdoorProject(storage);
 }
 
 /**

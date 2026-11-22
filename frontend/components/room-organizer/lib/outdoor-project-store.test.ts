@@ -15,6 +15,7 @@ import {
   patchOutdoorProjectRemote,
   readOutdoorProjectRecord,
   renameOutdoorProject,
+  resolveFallbackOutdoorProject,
   resolveOutdoorProjectId,
   saveOutdoorProjectRecord,
   type KeyValueStorage,
@@ -192,6 +193,13 @@ describe('outdoor-project-store', () => {
       expect(resolveOutdoorProjectId('/editor/', storage)).toBeNull();
       expect(resolveOutdoorProjectId('/', storage)).toBeNull();
       expect(resolveOutdoorProjectId('/editor/?restore=backup', storage)).toBeNull();
+    });
+
+    it('仅 mode=outdoor、无 project → null，不在解析层越权起默认草稿', () => {
+      const storage = memoryStorage();
+      expect(resolveOutdoorProjectId('/editor/?mode=outdoor', storage)).toBeNull();
+      expect(resolveOutdoorProjectId('/?mode=outdoor', storage)).toBeNull();
+      expect(readOutdoorProjectRecord(DEFAULT_OUTDOOR_PROJECT_ID, storage)).toBeNull();
     });
 
     it('start=outdoor 之外的 start 值不直接命中', () => {
@@ -456,5 +464,40 @@ describe('latestLocalActivityRecord（无参刷新兜底找回本机活动）', 
 
   it('空存储返回 null', () => {
     expect(latestLocalActivityRecord(new MemoryStorage())).toBeNull();
+  });
+});
+
+describe('resolveFallbackOutdoorProject（弱参 / 无参刷新兜底身份）', () => {
+  it('指针指向云项目时续指针，不被本机活动顶掉', () => {
+    const storage = new MemoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-a', updatedAt: '2026-11-11T09:00:00.000Z' }, storage, false);
+    storage.setItem(OUTDOOR_LAST_PROJECT_KEY, PID);
+    expect(resolveFallbackOutdoorProject(storage)).toBe(PID);
+  });
+
+  it('指针只是默认草稿时让位最近的本机 house 活动', () => {
+    const storage = new MemoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: DEFAULT_OUTDOOR_PROJECT_ID }, storage, true);
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-a', updatedAt: '2026-11-11T09:00:00.000Z' }, storage, false);
+    expect(latestOutdoorProjectId(storage)).toBe(DEFAULT_OUTDOOR_PROJECT_ID);
+    expect(resolveFallbackOutdoorProject(storage)).toBe('house-a');
+  });
+
+  it('指针指向本机 house 时续该 house', () => {
+    const storage = new MemoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-a' }, storage, true);
+    expect(resolveFallbackOutdoorProject(storage)).toBe('house-a');
+  });
+
+  it('没有指针时枚举最近 house 活动', () => {
+    const storage = new MemoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-b', updatedAt: '2026-11-11T09:00:00.000Z' }, storage, false);
+    expect(resolveFallbackOutdoorProject(storage)).toBe('house-b');
+  });
+
+  it('空存储起步默认草稿并落盘', () => {
+    const storage = new MemoryStorage();
+    expect(resolveFallbackOutdoorProject(storage)).toBe(DEFAULT_OUTDOOR_PROJECT_ID);
+    expect(readOutdoorProjectRecord(DEFAULT_OUTDOOR_PROJECT_ID, storage)).not.toBeNull();
   });
 });

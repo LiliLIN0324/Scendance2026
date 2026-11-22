@@ -577,6 +577,28 @@ it("卡确认/撤回后留在历史里，不随下一张卡消失", async () => 
   expect(flow.cardRecords.at(-1)?.decision).toBe("withdrawn");
   expect(host.textContent).toContain("已撤回");
 });
+it("卡确认后写进本机 cards 槽，刷新重挂从本机槽读回", async () => {
+  const anchor = { ...plan.anchor!, lng: 120.25 };
+  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  const confirm = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent?.includes("确认并应用这一版"),
+  )!;
+  await act(async () => {
+    confirm.click();
+  });
+  expect(flow.cardRecords).toHaveLength(1);
+  const cardKey = `scendance:outdoor-cards:${scope}`;
+  const stored = JSON.parse(localStorage.getItem(cardKey) ?? "[]") as Array<{ decision: string }>;
+  expect(Array.isArray(stored)).toBe(true);
+  expect(stored).toHaveLength(1);
+  expect(stored[0].decision).toBe("confirmed");
+  // 刷新 = 卸载后同一本机存储重挂；历史卡片应从本机槽接回，不落回空态。
+  act(() => root.unmount());
+  root = createRoot(host);
+  mount();
+  expect(flow.cardRecords).toHaveLength(1);
+  expect(flow.cardRecords.at(-1)!.title).toContain("活动范围");
+});
 it("卡的历史会推到后端副本，换设备首屏从后端接回", async () => {
   const save = vi.fn().mockResolvedValue([]);
   const load = vi.fn().mockResolvedValue([
