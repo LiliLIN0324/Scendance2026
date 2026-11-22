@@ -8,12 +8,11 @@
 <link rel="stylesheet" href="./assets/site-case-analysis.css">
 <script>document.documentElement.className = 'js';</script>
 <script>if(new URLSearchParams(location.search).get('embed')==='map')document.documentElement.classList.add('map-embed');</script>
-<!-- 复用仓库内本地 vendor/three，零外部请求；renderer-webgl.js 用 import.meta.url 定位素材。 -->
+<!-- 复用仓库内本地 vendor/three，零外部请求。 -->
 <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}</script>
 <!--
   幕景 Scendance 首页。
-  · 首屏右侧 canvas#venue 走透视视角；场景库段落用自建查看器展示十套归档场景。
-    两个视口共用 renderer-webgl.js 与同一套分区数据，点任一处都会同步选中。
+  · 三维视口已下线（renderer-webgl.js 已删除），本页不挂载任何 Three 画布。
   · 样式与动效目前内联在本文件，后续可拆为 style.css + ui-motion.js。
   · 全站零外部请求、零第三方库，符合 PLAN.md 冻结的「访问地区：中国大陆」。
 -->
@@ -1526,10 +1525,8 @@ html{scroll-snap-type:y proximity}
     </div>
 
   <!-- 首屏浮动信息卡：按设计稿，它直接浮在背景渲染图上。
-       这里原来还有一个 .stage-frame 装着 canvas#venue，但那个画布自带浅灰底
-       （renderer-webgl.js 里 scene.background = #e4e9e5），压在深色场地图上
-       会变成一块亮矩形，和卡片互相打架，所以整个窗口去掉了。
-       实时三维演示请见下方「场景库」段落。 -->
+       这里原有的 .stage-frame（三维画布视口）已按设计稿移除；
+       官网不再挂载任何实时三维视口，场景模板库已独立到 scendance-scene-library。 -->
   <div class="stage-card">
     <p class="sc-head"><i aria-hidden="true"></i>活动场景 · 方案预览<button class="sc-close" type="button" aria-label="关闭方案预览">×</button></p>
     <p class="sc-title">48 小时，<br>一座体育馆。</p>
@@ -2054,13 +2051,10 @@ function selectZone(id) {
   const z = ZONES[id];
   if (!z) return;
   selectedZone = id;
-  /* 分区说明 UI 随 #scene 段落一起下线，这里只保留三维视口的高亮 */
-  renderers.forEach(r => r.setSelectedZone(id));
 }
 
 function setTime(h) {
   hours = Math.max(0, Math.min(48, h));
-  renderers.forEach(r => r.setTime(hours));
 }
 
 function toast(msg) {
@@ -2149,62 +2143,8 @@ function applyMode() {
   pointerGlass();
 }
 
-/* ---- 9. 真实三维场景：复用 renderer-webgl.js，挂两个视口 ----
-   上方 #venue 保留透视（perspective）；场景库段落走自带视角控制。
-   两个实例共用同一套场景与分区数据，点击任一处都会同步选中另一处。 ---- */
-const renderers = [];
-
-async function mountView({ canvasId, loadingId, view }) {
-  const canvas = document.getElementById(canvasId);
-  /* 首屏那个视口已按设计稿移除（只有背景图 + 浮动卡），
-     没有画布就跳过，不能让它把整个 scene() 拖抄。 */
-  if (!canvas) return null;
-  const loading = document.getElementById(loadingId);
-  const { VenueRenderer } = await import('./renderer-webgl.js');
-
-  const renderer = new VenueRenderer(canvas, {
-    /* 点击场地分区 → 同步侧栏说明与图例（selectZone 内部会同步两个视口） */
-    onSelect: (id) => { if (ZONES[id]) selectZone(id); },
-    /* 载入状态写回现有的 #asset-state 素材条 */
-    onStatus: (s) => {
-      if (!s) return;
-      const el = document.getElementById('asset-state');
-      if (el) {
-        el.dataset.state = s.state;
-        el.dataset.loaded = s.loaded;
-        el.dataset.total = s.total;
-        el.textContent = s.state === 'ready'
-          ? `3DAssets · ${s.loaded}/${s.total} 款模型已载入`
-          : (s.message || '正在加载三维素材…');
-      }
-      if (s.state === 'ready' || s.state === 'partial' || s.state === 'error') {
-        if (loading) loading.hidden = true;
-      }
-    }
-  });
-  renderer.setFlows(true);
-  renderer.setPlaying(false);
-  renderer.setView(view);
-  renderer.setSelectedZone('teams');
-  renderers.push(renderer);
-  await renderer.ready;
-  if (loading) loading.hidden = true;
-  /* 调试钩子：方便在控制台核对两个视口的选中态是否同步 */
-  window.__scendance = { renderers, ZONES };
-  return renderer;
-}
-
-/* 首屏那个视口已按设计稿移除，唯一的旧版场馆演示画布也已下线，
-   mountView 在没有画布时会直接返回，这里保留调用只为兼容旧结构。 */
-async function scene() {
-  try {
-    await mountView({ canvasId: 'venue', loadingId: 'loading', view: 'perspective' });
-  } catch (error) {
-    const l = document.getElementById('loading');
-    if (l) l.textContent = '三维场景加载失败：' + error.message;
-    console.error(error);
-  }
-}
+/* ---- 9. 三维视口已下线：官网不再挂载任何 Three 视口，
+   renderer-webgl.js（体育馆/看台/桌椅的程序化几何）已随本次删除移出仓库。 ---- */
 
 /* ---- 启动 ---- */
 applyMode();
@@ -2216,7 +2156,8 @@ functionalPage();
 if (!reduced()) { parallax(); pointerGlass(); }
 reveal();
 /* 三维挂载完成后，把初始阶段与分区同步进去 */
-scene().then(() => { setTime(hours); selectZone(selectedZone); });
+setTime(hours);
+selectZone(selectedZone);
 addEventListener('load', () => { if (!reduced()) parallax(); });
 </script>
 <script>

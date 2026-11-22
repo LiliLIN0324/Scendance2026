@@ -17,7 +17,7 @@ argument-hint: '要处理的三维环节：参数化模型 / HY-3D 云生成 / �
 | 精选模型库 | `assets/library/catalogue.json`、`tools/catalog/`、`scripts/import-model-library.ts` | 30 个**手工挑选**的 CC0 模型；`build_catalog.py verify/fetch/corpus`；记录 sha256 |
 | Blender 离线 | `tools/blender/`（`build_parametric.py`、`verify-parametric.ts`） | 几何与 TS 生成器等价，但 **~2.7 s / 913 MB**，只允许离线/异步预生成，不得进请求路径 |
 
-质量与契约层：`_shared/models.ts`（`validateModel`）、`_shared/generation-quality.ts`（`requireTextureSource`、`compareTextureGeometry` 要求纹理通道几何与 UV 逐 accessor 一致）、`_shared/asset-customization-contract.ts`、`client/scene-client.ts`（前后端唯一 wire 契约）、`renderer-webgl.js` + `scene/`（three.js 查看/客户页）。
+质量与契约层：`_shared/models.ts`（`validateModel`）、`_shared/generation-quality.ts`（`requireTextureSource`、`compareTextureGeometry` 要求纹理通道几何与 UV 逐 accessor 一致）、`_shared/asset-customization-contract.ts`、`client/scene-client.ts`（前后端唯一 wire 契约）、`frontend/components/room-organizer/three/`（three.js 编辑/查看；根目录 `renderer-webgl.js` 已删除，官网不再挂载三维视口）。
 
 升级路线与验收标准见 `docs/3D-GENERATION-UPGRADE-PLAN.md`；动手前先读它，完成一步就更新它。
 

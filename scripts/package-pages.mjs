@@ -19,7 +19,7 @@ const blockedFiles = new Set(library.models.filter(model => model.blockedReason)
 // 之前迭代留下的图片（例如改名前的 show.png / house.jpg）会一直被打进产物。
 await rm(showcase, { recursive: true, force: true });
 await mkdir(showcase, { recursive: true });
-for (const path of ['assets', 'vendor', 'renderer-webgl.js']) {
+for (const path of ['assets', 'vendor']) {
   await cp(new URL(path, root), new URL(path, showcase), {
     recursive: true,
     filter: source => !blockedFiles.has(resolve(source)),
@@ -31,7 +31,6 @@ const introduction = (await readFile(new URL('introduction.html', root), 'utf8')
   .replaceAll('http://localhost:3000/', '/auth')
   .replaceAll('./assets/', '/showcase/assets/')
   .replaceAll('./vendor/', '/showcase/vendor/')
-  .replaceAll('./renderer-webgl.js', '/showcase/renderer-webgl.js')
   .replaceAll('./${a.localPath}', '/showcase/${a.localPath}');
 await writeFile(new URL('introduction.html', publicDir), introduction);
 const guide = (await readFile(new URL('guide.html', root), 'utf8'))
