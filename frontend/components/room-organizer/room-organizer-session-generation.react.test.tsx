@@ -11,11 +11,12 @@ import {layoutStore} from './hooks/use-layout-store';
 import {STORAGE_KEY} from './lib/constants';
 import {INITIAL_LAYOUT} from './lib/initial-layout';
 import {MemoryStorage} from '@/lib/test-support-memory-storage';
+import {AGENT_SUPERVISION_KEY} from './lib/agent-supervision-store';
 import {BackendSession,getBackendConfig} from '@/lib/backend-session';
 import {createStarterOutdoorPlan} from './lib/outdoor-project-store';
 import type {UsePlanAnnotationsResult} from './hooks/use-plan-annotations';
 
-const capture=vi.hoisted(()=>({annotation:null as UsePlanAnnotationsResult|null,resolve:null as null|(()=>void),calls:0,chatCalls:0,applyPlan:0,applyZone:0,agent:null as unknown,forcedResolution:null as null|'model'|'failed',dialogue:null as null|(()=>{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null)}));
+const capture=vi.hoisted(()=>({annotation:null as UsePlanAnnotationsResult|null,resolve:null as null|(()=>void),calls:0,chatCalls:0,applyPlan:0,applyZone:0,responses:[] as Array<{action:'scope'|'zones'|'ask';facts?:Record<string,unknown>}>,agent:null as unknown,forcedResolution:null as null|'model'|'failed',dialogue:null as null|(()=>{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null)}));
 let probeController:BackendSession;
 let mem:MemoryStorage;
 let stubPlan:ReturnType<typeof createStarterOutdoorPlan>;
@@ -75,12 +76,12 @@ vi.mock('./panels/creative-studio',async original=>{const actual=await original<
 import {RoomOrganizer} from './room-organizer';
 
 beforeEach(()=>{
-  resetAssistantSessionsStoreForTests();capture.calls=0;capture.chatCalls=0;capture.applyPlan=0;capture.applyZone=0;capture.resolve=null;capture.forcedResolution=null;capture.dialogue=null;
+  resetAssistantSessionsStoreForTests();capture.calls=0;capture.chatCalls=0;capture.applyPlan=0;capture.applyZone=0;capture.resolve=null;capture.forcedResolution=null;capture.dialogue=null;capture.responses=[];
   stubPlan={...createStarterOutdoorPlan(),boundary:[{x:0,y:0},{x:80,y:0},{x:80,y:70},{x:0,y:70}]};
-  mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;
+  mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;mem.setItem(AGENT_SUPERVISION_KEY,'strict');
   probeController=new BackendSession(getBackendConfig({url:'',anonKey:''}));
   (probeController as unknown as {snapshot:{user:unknown}}).snapshot.user={id:'probe-owner',email:'owner@scendance.test',is_anonymous:false};
-  const chatResult=()=>({status:'ok' as const,answer:JSON.stringify({action:'ask' as const,reply:'',references:[],facts:{}})});
+  const chatResult=()=>{const next=capture.responses.shift()??{action:'ask' as const,facts:{}};return {status:'ok' as const,answer:JSON.stringify({action:next.action,reply:'',references:[],facts:next.facts??{}})};};
   (probeController as unknown as {assistantChat:unknown}).assistantChat=vi.fn(async()=>{capture.chatCalls++;return chatResult();});
   (probeController as unknown as {assistantChatStream:unknown}).assistantChatStream=vi.fn(async()=>{capture.chatCalls++;return chatResult();});
   vi.stubGlobal('crypto',webcrypto);
@@ -138,12 +139,26 @@ it.skip('keeps a locally recorded headcount exportable when understanding fails'
  await submit('40人','failed',2);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('available');expect(current?.project().fields.headcount.value).toBe(40);current?.release();});
  await submit('40人','model',3);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('available');expect(current?.project().fields.headcount.value).toBe(40);current?.release();});
 });
-it.skip('real workspace rejects an old zone preview after same-batch A→B→A without changing the draft or canvas',async()=>{
- const a=activity('preview-A'),b=activity('preview-B');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<StrictMode><RoomOrganizer/></StrictMode>);await waitFor(()=>expect(capture.annotation).not.toBeNull());
- act(()=>capture.annotation!.addZoneRects([{zoneType:'desk',label:'保留的座席区',rect:{x:0,z:0,width:8,depth:6}}]));
- const button=await screen.findByRole('button',{name:'应用布置'}),before=structuredClone(layoutStore.getState().layout);
- act(()=>{layoutStore.setState({layout:b,activeFloorIndex:0});layoutStore.setState({layout:a,activeFloorIndex:0});fireEvent.click(button);});
- expect(layoutStore.getState().layout).toEqual(before);
- expect(capture.annotation!.getSnapshot().draft?.annotations.map(item=>item.label)).toContain('保留的座席区');
+it('rejects an old zone workflow preview after same-batch A→B→A without writing the plan',async()=>{
+ const a=activity('preview-A');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
+ capture.responses.push(
+  {action:'scope',facts:{}},
+  {action:'zones',facts:{event:{value:'户外市集',evidence:'户外市集'},guests:{value:45,evidence:'45人'},zones:[{name:'展览区',purpose:'exhibition',environment:'outdoor',evidence:'室外展览区'}]}},
+ );
+ const view=render(<StrictMode><RoomOrganizer outdoorProjectId="probe-project-a"/></StrictMode>);
+ const input=await screen.findByLabelText('告诉 Agent 要改的',{},{timeout:15000});
+ const wf=()=>capture.agent as unknown as {outdoorWorkflow:{proposal:{kind:string}|null;scopeConfirmed:()=>boolean}};
+ fireEvent.change(input,{target:{value:'帮我核对这次的实际活动场地'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
+ await waitFor(()=>expect(wf().outdoorWorkflow.proposal?.kind).toBe('scope'),{timeout:8000});
+ fireEvent.click(screen.getByRole('button',{name:'确认并应用这一版'}));
+ await waitFor(()=>expect(wf().outdoorWorkflow.scopeConfirmed()).toBe(true),{timeout:8000});
+ fireEvent.change(input,{target:{value:'户外市集45人，划室外展览区'}});fireEvent.click(screen.getByRole('button',{name:'发送'}));
+ await waitFor(()=>expect(wf().outdoorWorkflow.proposal?.kind).toBe('zones'),{timeout:8000});
+ const zonesBefore=stubPlan.zones.length;const applyBefore=capture.applyPlan;
+ await act(async()=>{view.rerender(<StrictMode><RoomOrganizer outdoorProjectId="probe-project-b"/></StrictMode>);});
+ await act(async()=>{view.rerender(<StrictMode><RoomOrganizer outdoorProjectId="probe-project-a"/></StrictMode>);});
+ expect(wf().outdoorWorkflow.proposal).toBeNull();
+ expect(stubPlan.zones.length).toBe(zonesBefore);
+ expect(capture.applyPlan).toBe(applyBefore);
+ expect(capture.applyZone).toBe(0);
 });
