@@ -1,12 +1,13 @@
-import { cp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { cp, readFile, mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// 幕景 官网页面的源文件已经在 frontend/public/introduction.html，next dev 与
-// next build 都直接消费它，不再复制一份——历史上「根文件 + public 副本」两份
-// 内容不同步过（改了根文件，浏览器还在看旧副本）。
-// 新手指引 guide.html 仍在仓库根，这里镜像进 frontend/public/，让一份产物同时服务两种模式：
-//   next dev            → /guide 与 /showcase/* 直接由 public/ 提供
+// 官网 introduction.html 与新手指引 guide.html 的源文件都在 frontend/public/，
+// next dev 与 next build 直接消费它们，不再复制任何页面——历史上「根文件 + public
+// 副本」两份不同步过（改了根文件，浏览器还在看旧副本）。
+// 本脚本只做一件事：把仓库根的 assets/ 与 vendor/ 镜像进 frontend/public/showcase/，
+// 供页面里 /showcase/… 绝对路径取用。两种模式共用这一份产物：
+//   next dev            → /showcase/* 直接由 public/ 提供
 //   next build (export) → public/ 会被复制进 frontend/out/
 // 由 frontend 的 npm 脚本（`dev` / `build`）调用，不要手工跑。
 const root = new URL('../', import.meta.url);
@@ -26,8 +27,4 @@ for (const path of ['assets', 'vendor']) {
     filter: source => !blockedFiles.has(resolve(source)),
   });
 }
-// introduction.html 不再改写：源文件就在 public/ 里，资源一律写 /showcase/ 绝对路径。
-const guide = (await readFile(new URL('guide.html', root), 'utf8'))
-  .replaceAll('./assets/', '/showcase/assets/');
-await writeFile(new URL('guide.html', publicDir), guide);
-console.log(`Packaged /guide and /showcase in ${fileURLToPath(publicDir)}`);
+console.log(`Packaged /showcase in ${fileURLToPath(publicDir)}`);
