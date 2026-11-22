@@ -33,6 +33,17 @@ describe('local activity and remote scene boundaries', () => {
       expect(isLocalActivityWorkspace(session())).toBe(false);
     } finally { vi.unstubAllGlobals(); }
   });
+  it('house- 本机活动与默认草稿不被当成云项目', () => {
+    const cases = ['house-abc12345-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'default-outdoor'];
+    for (const id of cases) {
+      const location = { href: `http://localhost/editor/?project=${id}&mode=outdoor` };
+      vi.stubGlobal('window', { location, localStorage: { getItem: () => null } });
+      try {
+        expect(hasRequestedCloudProject()).toBe(false);
+        expect(isLocalActivityWorkspace(session())).toBe(true);
+      } finally { vi.unstubAllGlobals(); }
+    }
+  });
   it('keeps valid scene bindings local, including before switching to another local activity, but respects cloud URLs', () => {
     expect(isLocalActivityWorkspace(session(), false)).toBe(true);
     expect(isLocalActivityWorkspace(session('geometry'), false)).toBe(true);

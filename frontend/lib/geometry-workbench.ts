@@ -3,14 +3,25 @@ import { isRoomLayout, parseLayoutEventOperations } from '../components/room-org
 import { readMaterialCheckins } from './material-checkin-storage';
 import type { BackendSession } from './backend-session';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
-import { readOutdoorProjectRecord } from '../components/room-organizer/lib/outdoor-project-store';
+import { readOutdoorProjectRecord, LOCAL_ACTIVITY_ID_PREFIX, DEFAULT_OUTDOOR_PROJECT_ID } from '../components/room-organizer/lib/outdoor-project-store';
 
-/** 案例链接指向本机规划，并非待加载的云项目。 */
+/**
+ * URL 里的 project id 哪些属于本机身份（不是待加载的云项目）。
+ * - `house-*`：本机新建活动，发号前缀固定；
+ * - `default-outdoor`：纯本机默认草稿；
+ * - `replica-*`：经典案例副本，有本机记录时才是本机，缺记录按旧链接/云处理。
+ */
+function isLocalProjectParam(id: string): boolean {
+  if (id.startsWith(LOCAL_ACTIVITY_ID_PREFIX) || id === DEFAULT_OUTDOOR_PROJECT_ID) return true;
+  return id.startsWith('replica-') && !!readOutdoorProjectRecord(id);
+}
+
+/** 案例链接 / 本机活动指向本机规划，并非待加载的云项目。 */
 export function hasRequestedCloudProject(): boolean {
   if (typeof window === 'undefined') return false;
   const id = new URL(window.location.href).searchParams.get('project');
   if (id === null) return false;
-  return !(id.startsWith('replica-') && readOutdoorProjectRecord(id));
+  return !isLocalProjectParam(id);
 }
 
 /** A scene-service binding does not turn the local activity into a full cloud project. */

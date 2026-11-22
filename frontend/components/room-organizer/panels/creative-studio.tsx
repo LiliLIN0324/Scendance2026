@@ -10,6 +10,7 @@ import { useBackendSession, SceneApiError, type BackendSession, type Studio, typ
 import { humanRecipeId } from '@/lib/recipe-display';
 import { deriveSeededVariants, recipeHash as promptRecipeHash } from '@/lib/recipe-proposal';
 import { assertGeometryActionSource, geometryProjectId, hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import { defaultAttachName } from '../hooks/use-silent-cloud-attach';
 import {localWriteCapabilityGuard,type LocalWriteCapability} from '@/lib/local-write-lease';
@@ -1006,6 +1007,12 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
         });
       });
     } finally {endBackupOperation();}
+    // 新建本机活动后，经同页切换通道把新活动 id 补回 URL 与壳体身份。
+    // commit 内部只更新了画布 prop、删掉了 project 参数；若不补回，弱参（仅 mode=outdoor）
+    // 刷新会被壳体兜底回 default-outdoor 空槽，气泡 / 任务卡 / 流程读不回。
+    if (!requestOutdoorProjectSwitch(proposedId)) {
+      window.location.assign(`/editor/?project=${encodeURIComponent(proposedId)}&mode=outdoor`);
+    }
   }
   async function restoreBackup(candidate:LocalProjectRestoreCandidate,assertSwitchCurrent?:()=>void,purpose?:'activity-switch'):Promise<void> {
     // 活动互相切换走单独的放行闸门（读的是本机归档，不是用户挑的备份文件）；

@@ -23,6 +23,7 @@ import {createSourceEditorCoordinator} from '@/lib/source-editor-coordinator';
 import {prepareLegacyBriefPreservation} from '../lib/legacy-brief';
 import { readLocalActivity } from '@/lib/local-activities';
 import { commitFreshLocalActivityLayout, localRestoreAvailable } from '@/lib/local-project-restore';
+import { onOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { createLocalWriteLeaseManager, localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
 import * as sourceStorage from '@/lib/source-storage';
 import { readMaterialCheckins } from '@/lib/material-checkin-storage';
@@ -3207,6 +3208,8 @@ describe('complete local backup transactions', () => {
   it('creates an empty activity while file restore stays paused, and a refresh can read the new layout', async () => {
     expect(localRestoreAvailable()).toBe(false);
     const complete=vi.fn(),original=ledger();forms.set(checkinKey(),original);
+    const switched: string[] = [];
+    const off = onOutdoorProjectSwitch(id => { switched.push(id); return true; });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
     renderUI(<Trial activitiesCompleted={complete}/>);await waitFor(()=>expect(briefState().ready).toBe(true));
     // 2026-11-13 用户指令：暂停提示已从面板删掉，只保留「新建可用」这条行为。
@@ -3231,6 +3234,9 @@ describe('complete local backup transactions', () => {
     await expect(actions.restoreBackup(file('different-local-activity'))).rejects.toThrow('备份恢复暂不可用');
     expect(commit).toHaveBeenCalledOnce();
     expect(JSON.parse(screen.getByTestId('backup-layout').textContent!).id).toBe(current.id);
+    // 新建本机活动后经同页切换通道把新 house id 报给外壳补回 URL；弱参刷新才能续到这条活动。
+    expect(switched).toEqual([current.id]);
+    off();
   });
   it('keeps the original activity when archiving it fails or the new scope is already occupied', async () => {
     expect(localRestoreAvailable()).toBe(false);
