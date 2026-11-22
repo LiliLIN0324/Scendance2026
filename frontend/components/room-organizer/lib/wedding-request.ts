@@ -19,3 +19,30 @@ export function weddingDesignRequest(message: string, event: string | undefined,
 }
 
 export const requestsWeddingOptimization = (message:string):boolean => /重新|重排|优化|挤|调整.*(?:分区|位置|形状)|允许.*(?:评估|调整)/u.test(message);
+
+/**
+ * design-event 只产婚礼联合布置，所以入口先问一句：这轮到底是不是婚礼。
+ *
+ * 2026-11-22 用户实测（幕景Agent Test S4/S5）：瑜伽疗愈的活动被婚礼路径顶掉，
+ * 分区用途卡刚出现就被一张「这条联合布置工具当前用于婚礼」的反问卡取代。
+ * 口径：**有明确事件名时只看事件名**，历史消息里出现过「婚礼」不算数；
+ * 事件名还没定（空）时才回退到原话里找，避免把「按婚礼布置」这类句子误判成非婚礼。
+ */
+export function isWeddingEvent(event: string | null | undefined, message = ''): boolean {
+  const name = (event ?? '').trim();
+  return /婚礼|婚宴|结婚/u.test(name || message);
+}
+
+/**
+ * 「继续执行 / 无需等待 / 自主规划」+ 当前活动名是婚礼 = 授权我自主起一版婚礼。
+ *
+ * 2026-11-22 用户拍板：这里**只看活动名**，不再看用户这句话。
+ * 修前是 `婚礼|婚宴|结婚` 命中「句子 + 活动名」就触发：用户聊瑜伽时提一句「之前看过一个婚礼案例」
+ * 也会被当成婚礼授权，多绕一道。现在句子里的「婚礼」不参与这个判断；
+ * 真正的婚礼请求仍由 weddingDesignRequest（在理解模型之前跑）认领，不会丢能力。
+ */
+export function authorizesAutonomousWedding(event: string | null | undefined, message: string): boolean {
+  const name = (event ?? '').trim();
+  if (!/婚礼|婚宴|结婚/u.test(name)) return false;
+  return /继续执行|不需要等待|无需等待|自主.{0,8}规划/u.test(message);
+}

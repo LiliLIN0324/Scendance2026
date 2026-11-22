@@ -478,6 +478,18 @@ export function OutdoorWorkflowCard({
                   在地图上重画实际活动范围
                 </button>
               )}
+              {flow.proposal.kind === "scope" && (
+                <button
+                  type="button"
+                  className="ap-quiet-action"
+                  disabled={flow.busy}
+                  onClick={() =>
+                    flow.proposal && void flow.confirmScopeAndRoutes(flow.proposal)
+                  }
+                >
+                  确认范围并排流线
+                </button>
+              )}
               {/* 2026-11-14 用户指令「给我几个方案」：物件排布方案循环切换（行列/居中/沿边）。 */}
               {flow.proposal.kind === "objects" && (
                 <button

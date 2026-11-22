@@ -55,6 +55,18 @@ const RENHE_ROAD = road('way-renhe', 'primary', '仁和路', [
   [ANCHOR.lng + 0.002, ANCHOR.lat + 0.004],
 ]);
 
+describe('G 主流线：出入口命名（2026-11-22 补）', () => {
+  it('同一条路两个穿界口不重名，位置也分开', () => {
+    const proposal = buildRouteProposal({ boundary: BOUNDARY, anchor: ANCHOR, roads: [EAST_WEST_FOOTWAY] }, ids)!;
+    expect(proposal).not.toBeNull();
+    expect(proposal.nodes).toHaveLength(2);
+    const names = proposal.nodes.map((node) => node.name);
+    expect(new Set(names).size, names.join(' / ')).toBe(names.length);
+    expect(names[0]).toBe('滨海步道口');
+    expect(proposal.nodes[0]!.position).not.toEqual(proposal.nodes[1]!.position);
+  });
+});
+
 describe('matchRouteCommand（V-2 意图）', () => {
   it('排流线类说法命中 auto', () => {
     expect(matchRouteCommand('排一下流线')).toBe('auto');

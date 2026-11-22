@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentDocument } from "../lib/agent-documents";
 import { AGENT_RANGE_BASIS_NOTE, reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
 import { applyModelPlaceSteps, proposeWeddingLayout, WEDDING_LIBRARY_QUERIES, type WeddingCandidateMetrics } from "../lib/wedding-layout";
-import { requestsWeddingOptimization, weddingDesignRequest } from "../lib/wedding-request";
+import { authorizesAutonomousWedding, isWeddingEvent, requestsWeddingOptimization, weddingDesignRequest } from "../lib/wedding-request";
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { outdoorCorridorStrips } from "../lib/outdoor-event-logic";
 import { getActiveAssistantSessionId } from "./use-assistant-sessions";
@@ -1704,8 +1704,9 @@ export function useOutdoorAgentWorkflow(input: {
       );
     }
     if (turn.action === "ask") {
-      const autonomousWedding=/婚礼|婚宴|结婚/u.test(`${message} ${stateRef.current.brief.event??''}`)
-        &&/继续执行|不需要等待|无需等待|自主.{0,8}规划/u.test(message);
+      // 2026-11-22 用户拍板：这条只看 brief.event，不再拿句子里的「婚礼」当授权——
+      // 瑜伽活动里提一句婚礼案例不该把整轮改成婚礼流程。
+      const autonomousWedding = authorizesAutonomousWedding(stateRef.current.brief.event, message);
       if(autonomousWedding){
         designStep('已授权自主婚礼规划：缺失桌位与尺寸采用标记的默认参数，场地依据缺口仍待核对。');
         await act({...turn,action:'design-event'},message,continueDesign,documents,imageCount);
@@ -1885,8 +1886,14 @@ export function useOutdoorAgentWorkflow(input: {
           ...(suppliedZones.length?{zones:suppliedZones}:{}),
           ...(suppliedItems.length?{items:suppliedItems}:{}),
         };
-        if(!/婚礼|婚宴|结婚/u.test(designBrief.event??message)){
-          askForDetails('这条联合布置工具当前用于婚礼。请说明婚礼的场地与已有要求；其他活动仍可按分区和物料分别安排。');return;
+        if(!isWeddingEvent(designBrief.event, message)){
+          // 2026-11-22 用户实测（幕景Agent Test S4/S5）：瑜伽活动被判成 design-event，
+          // 分区用途卡刚出现就被一张「这条联合布置工具当前用于婚礼」的反问卡顶掉。
+          // 不进婚礼联合布置，也不弹这张卡：按分区→物料往下走，原本该问的用途由分区步自己问。
+          const target = designBrief.zones.length ? 'objects' as const : 'zones' as const;
+          designStep(`「${designBrief.event ?? '这类活动'}」按分区与物料排，不用婚礼联合布置。`);
+          await act({ ...turn, action: target, reply: '', references: [], facts: turn.facts }, message, continueDesign, documents, imageCount);
+          return;
         }
         persist({...stateRef.current,brief:designBrief,stage:'objects'});
         status('正在把婚礼分区、通道和物料安排成同一份布局。','working',{stopLabel:'停止布置'});
@@ -4064,6 +4071,16 @@ export function useOutdoorAgentWorkflow(input: {
       onAdoptCandidate: adoptDesignCandidate,
     },
     confirmProposal: confirm,
+    /**
+     * 2026-11-22 用户拍板：范围确认后不再自己排流线，改由卡上这颗按钮显式触发。
+     * 只有范围真的写进画布（confirmedBoundary 与提案一致）才接流线，
+     * 写失败时停在原来那条提示上，不抢着开新提案。
+     */
+    confirmScopeAndRoutes: async (p: OutdoorWorkflowProposal) => {
+      await confirm(p);
+      if (stateRef.current.confirmedBoundary !== boundaryKey(p.next)) return;
+      await action("main-routes");
+    },
     previewStyle,
     offerBoundary,
     manualBoundary,

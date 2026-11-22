@@ -1156,6 +1156,67 @@ describe("docs/47 A3 排布引擎吃证据", () => {
 });
 
 
+describe("F 分区草案：方位与面积按用户说的落位（2026-11-22 补）", () => {
+  type Pt = { x: number; y: number };
+  const ringArea = (ring: Pt[]) =>
+    Math.abs(
+      ring.reduce((sum, p, i) => {
+        const q = ring[(i + 1) % ring.length]!;
+        return sum + p.x * q.y - q.x * p.y;
+      }, 0),
+    ) / 2;
+  const centroid = (ring: Pt[]): Pt => ({
+    x: ring.reduce((s, p) => s + p.x, 0) / ring.length,
+    y: ring.reduce((s, p) => s + p.y, 0) / ring.length,
+  });
+  const zoneOf = (plan: SitePlanData, name: string) => plan.zones.find((z) => z.name === name)!;
+
+  it("四个显式方位各落进自己那一格，互不重叠且都在红线内", () => {
+    const plan = proposeUseZones(base(), {
+      ...brief,
+      zones: [
+        { name: "展览区", purpose: "exhibition", environment: "outdoor", position: "west", evidence: "展览在西侧" },
+        { name: "表演区", purpose: "performance", environment: "outdoor", position: "north", evidence: "舞台在北" },
+        { name: "市集区", purpose: "market", environment: "outdoor", position: "south-east", evidence: "市集在东南角" },
+        { name: "签到区", purpose: "service", environment: "outdoor", position: "north-east", evidence: "签到在东北角" },
+      ],
+    });
+    const c = (name: string) => centroid(zoneOf(plan, name).polygon as Pt[]);
+    expect(c("展览区").x).toBeLessThan(80 / 3);
+    expect(c("表演区").y).toBeGreaterThan((70 * 2) / 3);
+    expect(c("市集区").x).toBeGreaterThan((80 * 2) / 3);
+    expect(c("市集区").y).toBeLessThan(70 / 3);
+    expect(c("签到区").x).toBeGreaterThan((80 * 2) / 3);
+    expect(c("签到区").y).toBeGreaterThan((70 * 2) / 3);
+    for (const zone of plan.zones) {
+      for (const p of zone.polygon) expect(planPointInRing(p, square() as Pt[])).toBe(true);
+    }
+    const rings = plan.zones.map((z) => z.polygon as Pt[]);
+    for (let i = 0; i < rings.length; i += 1)
+      for (let j = i + 1; j < rings.length; j += 1)
+        expect(outdoorRingsOverlap(rings[i]!, rings[j]!)).toBe(false);
+  });
+
+  it("800 人活动：人数只决定观众区，展厅不被顶成整格；观众区按人数给足", () => {
+    const plan = proposeUseZones(base(), {
+      ...brief,
+      guests: 800,
+      zones: [
+        { name: "展览区", purpose: "exhibition", environment: "outdoor", position: "west", evidence: "展览在西侧" },
+        { name: "表演区", purpose: "performance", environment: "outdoor", position: "north", evidence: "舞台在北" },
+        { name: "观众区", purpose: "audience", environment: "outdoor", position: "center", evidence: "观众在中间" },
+      ],
+    });
+    const exhibition = ringArea(zoneOf(plan, "展览区").polygon as Pt[]);
+    const audience = ringArea(zoneOf(plan, "观众区").polygon as Pt[]);
+    // 展览区下限 90㎡，人数不该把它推到上千平（修前：2000㎡ 撞 45% 上限，整格铺满）。
+    expect(exhibition).toBeGreaterThanOrEqual(90);
+    expect(exhibition).toBeLessThan(400);
+    // 观众区 2㎡/人 × 1.25 通行余量 = 2000㎡，一格装不下时必须能跨格。
+    expect(audience).toBeGreaterThanOrEqual(800 * 2);
+  });
+});
+
 it("无分区物件依旧校验边界、碰撞与悬空分区引用", async () => {
   const original = base();
   const result = await proposeInventoryObjects(original, { zones: [], people: [], items: [{ zone: "", query: "椅子", count: 2, evidence: "2把椅子" }] }, [{ id: "chair", name: "椅子", source: "built-in", modelSlug: "oneplan:chair", available: true, width: 1, depth: 1, height: 1 }]);

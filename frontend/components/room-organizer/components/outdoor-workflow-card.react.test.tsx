@@ -49,6 +49,7 @@ function makeFlow(stage = 'place') {
     handle: noop,
     action: noop,
     confirmProposal: noop,
+    confirmScopeAndRoutes: noop,
     chooseLibrary: noop,
     importLibraryGlb: noop,
     cycleObjectsLayout: noop,
@@ -104,5 +105,28 @@ describe('OutdoorWorkflowCard 上幅（T1-d）', () => {
     const withRing = render(<OutdoorWorkflowCard flow={flow as never} showCaption={false} />);
     expect(withRing.container.querySelector('.ap-boundary-thumb polygon')).not.toBeNull();
     expect(withRing.container.textContent).toContain('按画布真实用地红线');
+  });
+});
+
+/**
+ * 2026-11-22 用户拍板（幕景Agent Test 锁定区域）：范围确认完不要自己排流线，
+ * 卡上多一颗「确认范围并排流线」，点了才接。
+ */
+describe('范围确认卡的流线入口', () => {
+  it('范围卡给「确认范围并排流线」，点它才把范围与排流线接上', () => {
+    const flow = makeFlow('scope');
+    const confirmScopeAndRoutes = vi.fn();
+    flow.proposal = {
+      kind: 'scope',
+      label: '确认“水上森林”的活动范围',
+      warnings: [],
+      next: { boundary: [], zones: [], facilities: [], routes: [], nodes: [], workers: [], vehicles: [], annotations: [], measurements: [], walls: [], designScope: [] },
+    } as never;
+    flow.confirmScopeAndRoutes = confirmScopeAndRoutes as never;
+
+    const { getByRole } = render(<OutdoorWorkflowCard flow={flow as never} />);
+    getByRole('button', { name: '确认范围并排流线' }).click();
+
+    expect(confirmScopeAndRoutes).toHaveBeenCalledOnce();
   });
 });

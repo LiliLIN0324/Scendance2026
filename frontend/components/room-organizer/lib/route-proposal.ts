@@ -347,6 +347,19 @@ export function buildRouteProposal(
   const routes: PlanRoute[] = [];
   const nodes: PlanNode[] = [];
   const usedNames = new Set<string>();
+  // 2026-11-22 G 步：同一条路穿界两次会得到两个同名入口（「滨海步道口」×2），
+  // 画布上分不清哪个是哪个。重名时按出现顺序加序号，第一个保持原名。
+  const usedNodeNames = new Set<string>();
+  const uniqueNodeName = (base: string): string => {
+    let name = base.slice(0, 60);
+    let suffix = 2;
+    while (usedNodeNames.has(name)) {
+      name = `${base.slice(0, 56)}${suffix}`;
+      suffix += 1;
+    }
+    usedNodeNames.add(name);
+    return name;
+  };
   let crossingsTotal = 0;
   for (const { road, enu, routeClass } of picked) {
     const runs = clipRunsToBBox(enu, bbox);
@@ -379,7 +392,7 @@ export function buildRouteProposal(
         nodes.push({
           id: idFactory(),
           kind: 'both',
-          name: nodeName.slice(0, 60),
+          name: uniqueNodeName(nodeName),
           position: { x: Math.round(crossing.x * 10) / 10, y: Math.round(crossing.y * 10) / 10 },
           notes: 'AI 提案出入口：道路与用地红线交点',
         });
@@ -417,7 +430,7 @@ export function buildRouteProposal(
       nodes.push({
         id: idFactory(),
         kind: 'both',
-        name: `${bestRoad.road.name || label}口`,
+        name: uniqueNodeName(`${bestRoad.road.name || label}口`),
         position: { x: Math.round(bestRoad.vertex.x * 10) / 10, y: Math.round(bestRoad.vertex.y * 10) / 10 },
         notes: 'AI 提案出入口：接驳线落点',
       });

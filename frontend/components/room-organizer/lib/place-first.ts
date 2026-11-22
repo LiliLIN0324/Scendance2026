@@ -48,3 +48,35 @@ export function placeStillPending(input: { hasOutdoorPlan: boolean; stage?: stri
   if (input.hasOutdoorPlan && input.rangeConfirmed !== undefined) return !input.rangeConfirmed;
   return input.hasOutdoorPlan ? input.stage === 'place' : !input.venueUp;
 }
+
+/**
+ * 复合设计句但没有人数：先问人数，别的都不做。
+ *
+ * 用户口径（2026-11-22 幕景Agent Test A 行）：「默认先找场地，没问人数多少」——
+ * 场地检索会把「找哪里」和「做多大规模」绑在一起，人数不明时先查出候选只是把问题往后推。
+ * 返回 true 时调用方只问人数：不写 pending brief、不发起候选检索。
+ */
+export function needsHeadcountFirst(text: string, venueName: string | null | undefined, knownHeadcount: number | null | undefined): boolean {
+  if (typeof knownHeadcount === 'number' && Number.isFinite(knownHeadcount) && knownHeadcount >= 1) return false;
+  return isCompositeDesignBrief(text, venueName);
+}
+
+/** 地名词里已经带了城市/省份：不再补默认城市。 */
+const CITY_IN_QUERY = /(?:北京|上海|天津|重庆|杭州|南京|苏州|宁波|绍兴|嘉兴|湖州|金华|温州|台州|丽水|衢州|舟山|广州|深圳|成都|武汉|西安|长沙|合肥|福州|厦门|青岛|济南|郑州|昆明|南昌|贵阳|太原|石家庄|沈阳|大连|长春|哈尔滨|兰州|西宁|银川|乌鲁木齐|呼和浩特|南宁|海口|拉萨|香港|澳门|台北)/;
+const PROVINCE_IN_QUERY = /(?:省|自治区)/;
+/** 检索兜底城市：还没信号说过别的城市时用它，与产品当前主场景一致。 */
+export const DEFAULT_VENUE_CITY = '杭州';
+
+/**
+ * 没搜到候选时给回填的那句「在 X 做设计」用的城市。
+ *
+ * 2026-11-22 幕景Agent Test B-1：原来这里是写死的 `在杭州${query}做设计`，
+ * 用户已经说了「杭州临安青山湖水上森林」还会再补一个杭州。现在只在地名里没有城市/省份时才补，
+ * 且不改写 query 本身——「临安」是区不是市，仍然补「杭州」，但「青山」这些字一个都不能丢。
+ */
+export function outdoorQueryWithCity(query: string, city: string = DEFAULT_VENUE_CITY): string {
+  const trimmed = query.trim();
+  if (!trimmed) return trimmed;
+  if (CITY_IN_QUERY.test(trimmed) || PROVINCE_IN_QUERY.test(trimmed)) return trimmed;
+  return `${city}${trimmed}`;
+}

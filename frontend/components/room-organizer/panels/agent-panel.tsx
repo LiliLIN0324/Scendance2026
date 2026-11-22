@@ -148,7 +148,7 @@ import { aholoChatStep } from '../lib/cloud-tool-connection';
 import { layoutChatHint, revisionRefusalText } from '../lib/layout-feedback';
 import { isLux3dLocalProxy } from '../lib/aholo-assets';
 import { stageMaterialGenerate } from '../lib/material-generate';
-import { isCompositeDesignBrief, looksLikeDesignInstruction, PLACE_FIRST_BOUNCE, placeStillPending } from '../lib/place-first';
+import { isCompositeDesignBrief, looksLikeDesignInstruction, needsHeadcountFirst, outdoorQueryWithCity, PLACE_FIRST_BOUNCE, placeStillPending } from '../lib/place-first';
 import { clearPendingBrief, readPendingBrief, shouldResumeBrief, writePendingBrief } from '../lib/pending-brief';
 import { describeModelFailure } from '../lib/turn-failure-diag';
 import { absorbLayeredInstruction, layeredBounceText } from '../lib/outdoor-layered-task';
@@ -761,6 +761,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     candidates: PlaceSuggestion[];
     loading: boolean;
     picking: string | null;
+    /** 检索本身失败（网络/服务）与「确实没搜到」分开，避免把失败说成没这个场地。 */
+    failed?: boolean;
   } | null>(null);
   const venuePickSeq = useRef(0);
   // V-2d：流线提案（预览态）——虚线画在画布上（overlay 经 context 读到），确认才写入（可撤销）。
@@ -1721,12 +1723,16 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     })
       .then(candidates => {
         if (seq !== venuePickSeq.current || !currentOutdoorTask(epoch, 'venue') || controller.signal.aborted) return;
-        setVenuePick(current => (current && current.query === query ? { ...current, candidates, loading: false } : current));
-        setOutdoorTask({ intent: `在「${query}」做设计`, state: candidates.length ? 'confirm' : 'blocked', action: candidates.length ? '选择真实场地，确认后才锚定' : '没有候选，请补充城市或地址', steps: ['理解场地名', '检索候选地点'], prompts: candidates.length ? [] : [`在杭州${query}做设计`] });
+        // 2026-11-22 测试记录（幕景Agent Test B-1）：长名字带括号的度假别墅排到第一条，压过目标景区。
+        // 用户没点名住宿类时，别墅/酒店/民宿/度假排到最后，其余保持原有相关度顺序。
+        const asksLodging = /别墅|酒店|民宿|度假/u.test(query);
+        const ranked = asksLodging ? candidates : [...candidates].sort((a, b) => Number(/别墅|酒店|民宿|度假/u.test(a.name)) - Number(/别墅|酒店|民宿|度假/u.test(b.name)));
+        setVenuePick(current => (current && current.query === query ? { ...current, candidates: ranked, loading: false, failed: false } : current));
+        setOutdoorTask({ intent: `在「${query}」做设计`, state: ranked.length ? 'confirm' : 'blocked', action: ranked.length ? '选择真实场地，确认后才锚定' : '没有候选，请补充城市或地址', steps: ['理解场地名', '检索候选地点'], prompts: ranked.length ? [] : [`在${outdoorQueryWithCity(query)}做设计`] });
       })
       .catch(() => {
         if (seq !== venuePickSeq.current || !currentOutdoorTask(epoch, 'venue') || controller.signal.aborted) return;
-        setVenuePick(current => (current && current.query === query ? { ...current, candidates: [], loading: false } : current));
+        setVenuePick(current => (current && current.query === query ? { ...current, candidates: [], loading: false, failed: true } : current));
       });
   }, [venuePick?.loading, venuePick?.query, venuePick?.epoch]);
 
@@ -1781,11 +1787,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (pickBase !== JSON.stringify(bridge.getPlan())) {
         setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '方案变了，旧范围没用上。', steps: [] }); return;
       }
-      // 2026-11-21 用户拍板「候选点选直接落地」：候选是用户刚选的，锚定写入不再单独立核对卡
-      // （严格档仍由监督档拦下核对）。超界淘汰等提醒由 offer 直接落地路径写进设计过程。
-      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis, undefined, true);
+      // 2026-11-22 用户改口（幕景Agent Test S4「确认场地后直接给我默认定了」）：
+      // 候选点选后不再直接写入范围，改成出草案等确认——确认卡上写清这是哪块地，点了才落红线。
+      // 这覆盖 2026-11-21 的「候选点选直接落地」拍板；追溯链：测试记录 S4 → 本次改口。
+      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis);
       // 2026-11-20 用户拍板：范围来源不用念给用户，只留下一步能做什么。
-      say({ role: 'agent', text: '直接说「长40米宽30米」这类，我来更新范围。' });
+      say({ role: 'agent', text: '范围草案在卡上，确认后才写入红线。' });
       return;
     }
     if (!boundary) {
@@ -3276,6 +3283,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         || (!venuePick.loading && !venuePick.picking && venuePick.candidates.length === 0);
       if (canReplaceVenuePick && localVenueName && localVenueName !== 'ask'
         && placeStillPending({ hasOutdoorPlan: Boolean(routeBridgeRef.current?.applyPlan), stage: outdoorWorkflow.state.stage, venueUp, rangeConfirmed: outdoorWorkflow.scopeConfirmed() })) {
+        // 2026-11-22 幕景Agent Test A 行：复合设计句但人数没定，先问人数。
+        // 不写 pending brief、不发起候选检索——先把「做多大规模」定下来，再谈在哪。
+        const knownHeadcount = parseBriefSentence(trimmed).headcount ?? memoryRef.current.headcount;
+        if (needsHeadcountFirst(trimmed, localVenueName, knownHeadcount)) {
+          setOutdoorTask({ intent: `在「${localVenueName}」做设计`, state: 'blocked', action: '需要人数，才能判断场地承载力', steps: ['理解场地名'], prompts: [`约 80 人在${localVenueName}做设计`] });
+          say({ role: 'agent', text: `「${localVenueName}」这一场按多少人做？人数定了我才好判断场地够不够。` });
+          return;
+        }
         if (isCompositeDesignBrief(trimmed, localVenueName)) {
           writePendingBrief(outdoorWorkflow.state.scope, trimmed, outdoorWorkflow.state.stage);
         }
@@ -4729,7 +4744,7 @@ useEffect(() => {
   const ghostVisible = !agent.outdoorBridgeReady && !loginBlocked && mode === 'layout' && !draft.trim() && !generating && !proposed && !paused && !agent.mapPickerOpen;
   // 输入框 placeholder 随状态五套切换；review/delivery/banquet 既有分支保留在后。
   const composerPlaceholder = loginBlocked && !loginLocalCommand ? loginBlockedPlaceholder({ rangeConfirmed: agent.outdoorWorkflow.scopeConfirmed() })
-    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.busy?'为下一步添加备注（当前任务结束后自动发送）':agent.outdoorWorkflow.state.stage==='place'?'例如：先找杭州 IN77，核对可用范围':agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区 2 名保安，表演区 3 名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
+    : agent.outdoorBridgeReady ? (agent.outdoorWorkflow.pendingPlan?'可以批准计划，或补充新的要求':agent.outdoorWorkflow.proposal?'可直接确认、补充要求或修改这版预览':agent.outdoorWorkflow.busy?'为下一步添加备注（当前任务结束后自动发送）':agent.outdoorWorkflow.state.stage==='place'?(agent.venuePick?.query?`「${agent.venuePick.query}」在哪个区，或换个说法再搜`:'例如：先找某个场馆或景区，核对可用范围'):agent.outdoorWorkflow.state.stage==='objects'?'告诉我各区所需设施与数量，也可先查我的物料库':agent.outdoorWorkflow.state.stage==='people'?'例如：展览区 2 名保安，表演区 3 名工作人员':agent.outdoorWorkflow.state.stage==='refine-3d'?'选中或说出设施：调整、换模型、原位上传/生成':'继续说明当前分区、入口/通道的实际情况或变更要求') : agent.mapPickerOpen
     ? '请在地图上圈选范围'
     : placePending ? '先说地点：城市、场馆或地址'
     : generating ? '为下一步添加备注'
@@ -4915,6 +4930,7 @@ useEffect(() => {
         onInspectFacility={agent.inspectOutdoorFacility} onStop={agent.stopOutdoorTask} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}>
       {agent.venuePick && <VenueConfirmCard
         state={agent.venuePick}
+        scopeConfirmed={agent.outdoorWorkflow.scopeConfirmed()}
         onPick={place => agent.handleVenuePick(place)}
         onPreview={place => agent.previewVenueCandidate(place)}
         onManual={() => agent.startMapVenuePicker()}

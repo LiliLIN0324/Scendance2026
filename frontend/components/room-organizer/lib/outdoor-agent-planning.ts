@@ -171,7 +171,12 @@ function zoneAreaNeed(
   const count = brief.items
     .filter((item) => item.zone === need.name)
     .reduce((n, item) => n + item.count, 0);
-  return Math.max(floor, byGuest * 1.25, count * ZONE_M2_PER_OBJECT[need.purpose] * 1.25);
+  // 2026-11-22 F 步（分区草案）：人数只决定观众区。
+  // 修前这里每个非观众用途都吃满 brief.guests×2×1.25——800 人的活动连展览区也要 2000㎡，
+  // 撞上 45% 上限后整格铺满、把通道和别的区一起挤掉。非观众区按用途下限的两倍封顶：
+  // 人数在这里只体现「通行余量要多留一点」，不决定展厅/市集本身多大。
+  const guestShare = Math.min(byGuest * 1.25, floor * 2);
+  return Math.max(floor, guestShare, count * ZONE_M2_PER_OBJECT[need.purpose] * 1.25);
 }
 
 /** 矩形与用地轮廓求交：四个半平面依次裁，凹口跨接的结果由后续校验拒掉。 */
@@ -191,19 +196,20 @@ function ringAreaM2(ring: readonly PlanPoint[]): number {
   return Math.abs(sum) / 2;
 }
 
-/** 按需要的面积在格位里取一块矩形：先按格位长宽比定形，再夹回格位与可用范围。 */
+/** 按需要的面积在给定中心取一块矩形：先按用地长宽比定形，再夹回可用范围。 */
 function fitZoneRect(
   area: number,
   usable: ZoneRect,
-  slotW: number,
-  slotH: number,
-  slot: ZoneSlotName,
+  center: { x: number; y: number },
   gutter: number,
   purpose: NonNullable<PlanZone["purpose"]>,
 ): ZoneRect {
-  const { col, row } = ZONE_SLOTS[slot];
-  const maxW = Math.max(1, slotW - gutter);
-  const maxH = Math.max(1, slotH - gutter);
+  // 2026-11-22 F 步：尺寸由面积定，能长到多大只受用地内缩线限制。
+  // 修前上限是单格 slotW/slotH——面积需求超过一格时（800 人活动的观众区要 2000㎡）
+  // 会被夹成整格就停，人数再大也只给一格。现在大区可以跨格；中心点由调用方
+  // 按「目标格位 → 整片内缩区」两轮给，重叠仍由调用方拒掉。
+  const maxW = Math.max(1, usable.e - usable.w - gutter);
+  const maxH = Math.max(1, usable.n - usable.s - gutter);
   const aspect = maxW / maxH;
   let width = Math.min(maxW, Math.sqrt(Math.max(area, 1) * aspect));
   let height = Math.min(maxH, Math.max(area, 1) / Math.max(width, 0.5));
@@ -213,8 +219,8 @@ function fitZoneRect(
   if (height < minSide) height = Math.min(maxH, minSide);
   width = Math.min(width, maxW);
   height = Math.min(height, maxH);
-  const cx = usable.w + (col + 0.5) * slotW;
-  const cy = usable.n - (row + 0.5) * slotH;
+  const cx = center.x;
+  const cy = center.y;
   let w = cx - width / 2;
   let s = cy - height / 2;
   // 夹回可用范围（靠边格位不越出用地内缩线）。
@@ -230,6 +236,34 @@ function zoneSlotOrder(wanted: ZoneSlotName): ZoneSlotName[] {
     .map((name) => ({ name, d: Math.hypot(ZONE_SLOTS[name].col - target.col, ZONE_SLOTS[name].row - target.row) }))
     .sort((a, b) => a.d - b.d)
     .map((slot) => slot.name);
+}
+
+/**
+ * 2026-11-22 F 步：候选落位中心按两轮给。
+ * 第一轮是九个格位中心（方位被占了就贴过去）；第二轮按 1/3 格步长扫整片内缩区，
+ * 顺序仍按「离目标格位近的先用」。第二轮是跨格大区之后留出的不规则边带的兜底：
+ * 只看九宫格中心会把「左边还剩 13m 宽带」误判成划不出来。
+ */
+function zoneCenters(
+  wanted: ZoneSlotName,
+  usable: ZoneRect,
+  slotW: number,
+  slotH: number,
+): { x: number; y: number }[] {
+  const centers: { x: number; y: number }[] = zoneSlotOrder(wanted).map((slot) => {
+    const { col, row } = ZONE_SLOTS[slot];
+    return { x: usable.w + (col + 0.5) * slotW, y: usable.n - (row + 0.5) * slotH };
+  });
+  const target = centers[0]!;
+  const stepX = Math.max(1, slotW / 3);
+  const stepY = Math.max(1, slotH / 3);
+  const grid: { x: number; y: number }[] = [];
+  for (let y = usable.s; y <= usable.n + 1e-6; y += stepY)
+    for (let x = usable.w; x <= usable.e + 1e-6; x += stepX) grid.push({ x, y });
+  grid.sort(
+    (a, b) => Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y),
+  );
+  return [...centers, ...grid];
 }
 
 /** 分区现在按用户方位与用途面积落位；已有同名分区仍沿用它的轮廓（不擅自挪用户画过的区）。 */
@@ -292,17 +326,16 @@ export function proposeUseZones(
       continue;
     }
     const wanted = item.need.position ?? ZONE_DEFAULT_SLOT[item.need.purpose];
+    const centers = zoneCenters(wanted, usable, slotW, slotH);
     let found: PlanPoint[] | null = null;
     // 面积一次不够就缩一档再试（0.85/0.7），仍放不下才判这块场地划不出来。
     for (const scale of [1, 0.85, 0.7]) {
       if (found) break;
-      for (const slot of zoneSlotOrder(wanted)) {
+      for (const center of centers) {
         const rect = fitZoneRect(
           Math.min(item.area * scale, zoneRectArea(usable) * 0.45),
           usable,
-          slotW,
-          slotH,
-          slot,
+          center,
           gutter,
           item.need.purpose,
         );

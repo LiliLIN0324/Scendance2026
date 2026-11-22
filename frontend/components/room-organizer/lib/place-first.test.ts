@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isCompositeDesignBrief, looksLikeDesignInstruction, placeStillPending } from './place-first';
+import { isCompositeDesignBrief, looksLikeDesignInstruction, needsHeadcountFirst, outdoorQueryWithCity, placeStillPending } from './place-first';
 
 describe('地图优先：无地点设计句的本地守卫', () => {
   it('把布置 / 动线 / 分区句认成设计句', () => {
@@ -68,4 +68,32 @@ describe('地图优先：无地点设计句的本地守卫', () => {
 
 it('已有活动范围时不因旧阶段仍是place而拦回选址', () => {
   expect(placeStillPending({hasOutdoorPlan:true,stage:'place',venueUp:true,rangeConfirmed:true})).toBe(false);
+});
+
+describe('幕景Agent Test A / B-1（2026-11-22）', () => {
+  it('复合设计句没有人时就先问人数，不把问题往后推', () => {
+    const text = '我想在临安青山湖水上森林办一场下午的瑜伽疗愈活动：签到领手环，然后做瑜伽和冥想，最后大合影。';
+    expect(needsHeadcountFirst(text, '临安青山湖水上森林', null)).toBe(true);
+    expect(needsHeadcountFirst(text, '临安青山湖水上森林', 0)).toBe(true);
+    expect(needsHeadcountFirst(text, '临安青山湖水上森林', 80)).toBe(false);
+  });
+
+  it('只找场地、不排设计的句子不问人数', () => {
+    expect(needsHeadcountFirst('先找临安青山湖水上森林，核对可用范围', '临安青山湖水上森林', null)).toBe(false);
+    expect(needsHeadcountFirst('这块场地在哪', '临安青山湖水上森林', null)).toBe(false);
+  });
+
+  it('回填城市：区名不是市名，仍补杭州且一个字都不删', () => {
+    expect(outdoorQueryWithCity('临安青山湖水上森林')).toBe('杭州临安青山湖水上森林');
+  });
+
+  it('已经带了城市或省份就不再补一个', () => {
+    expect(outdoorQueryWithCity('杭州临安青山湖水上森林')).toBe('杭州临安青山湖水上森林');
+    expect(outdoorQueryWithCity('上海市徐汇区西岸艺术中心')).toBe('上海市徐汇区西岸艺术中心');
+    expect(outdoorQueryWithCity('浙江省人民大会堂')).toBe('浙江省人民大会堂');
+  });
+
+  it('空 query 不凭空造一个城市出来', () => {
+    expect(outdoorQueryWithCity('   ')).toBe('');
+  });
 });
