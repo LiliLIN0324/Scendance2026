@@ -45,7 +45,7 @@ B1 会话/身份解耦 → B2 历史快照换 plan → B3 导出与写守卫 pla
 
 | 卡 | 全完成判据 | 当前现状 | 剩余缺口 / 阻塞 |
 | --- | --- | --- | --- |
-| **B1** 会话/身份解耦 | 会话/简报/库存/草稿/归档/偏好/评审同一 projectId scope；无 `layout.id ??` 裸回退；B1-e 三 flow 真机通过 | 🟡 片 1 会话仓 + 片 2 记忆桶已切；A1 夹具 5 passed / 1 skipped；静态门禁（根/前端 tsc、底座套件）无增量回归；真机 flow1 ✅、flow3 ✅；flow2 写租约竞态突破后已能切到新槽 | ① flow2 已切新槽（裸 uuid `2538691c…`），但非预期 `house-*` 本机槽；槽轨道归属（云端 mint vs 本机槽）与保存→回写→独立本机槽 mint 全链属 B2/B3 口径，待拍板。② 例3 理解失败人数导出，两份 brief 打通归 B2/B3。③ 去 layout 回退随 B2/B4 成套 |
+| **B1** 会话/身份解耦 | 会话/简报/库存/草稿/归档/偏好/评审同一 projectId scope；无 `layout.id ??` 裸回退；B1-e 三 flow 真机通过 | 🟡 片 1 会话仓 + 片 2 记忆桶已切；A1 夹具 5 passed / 1 skipped；静态门禁（根/前端 tsc、底座套件）无增量回归；真机 flow1 ✅、flow3 ✅；flow2 写租约竞态突破后已能切到新槽 | ① flow2 已切新槽（裸 uuid `2538691c…`），但非预期 `house-*` 本机槽；终态方向已定 C4 云为主（不允许第三身份前缀），槽轨道落地与保存→回写→独立槽 mint 全链仍属 B2/B3 口径，待后端就绪后定稿。② 例3 理解失败人数导出，两份 brief 打通归 B2/B3。③ 去 layout 回退随 B2/B4 成套 |
 | **B2** 历史快照换 plan | `useHistory` 快照 `RoomLayout`→`SitePlanData`；undo/redo 回写 plan；两份 brief 打通 | ⬜ 阻塞于 B1 合入 | 例3 brief 打通在此卡落地 |
 | **B3** 导出与写守卫 plan 化 | CSV/GeoJSON/PNG/PDF 消费 plan；`assertLayoutWrite`→plan 写权限；checkin/note scope 转 plan | ⬜ 阻塞 B2 | scene-delivery checkin、note scope |
 | **B4** 回写镜像退役 | 删 false 侧 layout patch；地面底图/锚点写 plan/视图记忆；清镜像分支；草稿/偏好键退役 | ⬜ 阻塞 B1–B3 | 未发送草稿/恢复锁/run marker/图片源键；环境偏好键一次性迁移（C2） |
@@ -54,7 +54,9 @@ B1 会话/身份解耦 → B2 历史快照换 plan → B3 导出与写守卫 pla
 | **E3** 删 layoutStore/室内墙模型 | schema 室内分支/`layout-reducer`/`use-layout-store`/墙/开门/碰撞/吸附/室内 hooks | ⬜ 阻塞 M2 + E2 | activity epoch 派生随此清 |
 | **E4** 删二分概念与回写 | `isOutdoorProject` 恒真分支/`seededPlanFromLayout`/`outdoorPlanState` 回退 | ⬜ 阻塞 E3 | — |
 
-**待拍板口径**（到决策点停住，不代推）：C1 无参刷新草稿索引恢复档位；C2 旧 `activity:` 存量会话/偏好迁移或只读承接、环境偏好键换键一次性迁移；C3 165 例语义红逐条产品口径判定（身份前置落定后复核）；flow2 新槽裸 uuid 走云端 mint 还是本机 `house-*` 槽，随 B2/B3 身份口径拍板。
+**待拍板口径**（到决策点停住，不代推）：C1 无参刷新草稿索引恢复档位；C2 旧 `activity:` 存量会话/偏好迁移或只读承接、环境偏好键换键一次性迁移；C3 165 例语义红逐条产品口径判定（身份前置落定后复核）；flow2 新槽裸 uuid 走云端 mint 还是本机 `house-*` 槽，随 B2/B3 身份口径拍板（方向已挂 C4）。
+
+**已拍板口径（2026-11-22，用户定）C4 云为主**：终态以**云端为方案唯一权威正源**，本机 localStorage / IndexedDB 仅作离线缓存与待同步副本，不再作为并列第二正源；对齐在线设计 SaaS 主流形态——云权威 + 本地自动草稿兜底 + 联网补推 + 版本号 / 写锁冲突校验，不静默覆盖。过渡阶段（后端仍为本地桩 54329、B1-e 未验收、B2/B3 未做）维持「本机草稿 + 显式存为云项目」现状，**本轮不跳卡硬切生产码**；新建即时归属（后端即时发号 vs 临时本机草稿后换绑云 id）与保存→回写→mint 全链，归 B2/B3 设计时定稿。flow2 裸 uuid `2538691c…` 按此口径复核：终态不允许存在既非云项目号、又非 `house-*` 本机草稿前缀的第三身份。
 
 **夹具债与并行遗留**：A1 例3 skip 转 B2/B3；G1 基线锚点 B 线合入后重采；G2 工程卫生终态一次清。安全批次 #37、旧 79 backlog #4/#7/#9/#10/#11、C/D/F 线不阻塞主线，E4 后排一次清。
 

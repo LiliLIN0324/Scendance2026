@@ -64,7 +64,7 @@
 | **方案状态** | 场地几何 + 图层 + 五类实体 + 测量/标注/墙 | `SitePlanData`（`supabase/functions/_shared/site-plan.ts:384`：boundary/designScope/levels/zones/facilities/routes/nodes/workers/vehicles/measurements/buildings/annotations/walls/anchor） |
 | **方案身份** | 隔离不同方案的会话、简报、草稿、库存、归档、偏好、历史 | 项目/草稿槽 `projectId`（云项目 id、`replica-*` 案例伪 id、本机草稿槽 `house-*`、`default-outdoor` 空草稿） |
 | **呈现与交互** | 2D 平面、地图底图、3D 预览的渲染与编辑句柄 | 地图侧 `outdoorPlan3DRef` / `canvasApiRef` / outdoor plan overlay |
-| **出入通路** | 云端读取/提交、本地备份与恢复、导出 | controller / source-storage / plan-export |
+| **出入通路** | 云端读取/提交、本地备份与恢复、导出；**云端为唯一权威正源，本地仅离线缓存/待同步副本**（C4，2026-11-22 拍板） | controller / source-storage / plan-export |
 
 ### 1.2 历史层（可退役，不是本质）
 
