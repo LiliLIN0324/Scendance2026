@@ -125,3 +125,21 @@ it('uses the same checked position write for the numeric control',async()=>{
  await waitFor(()=>expect(JSON.parse(localStorage.getItem(KEY)!)['env-a'][0].position.x).toBe(4));
  expect(JSON.parse(localStorage.getItem(KEY)!)['env-b'][0].name).toBe('场地 B');await lease.release();
 });
+
+// 2026-11-22 用户拍板「新项目完全空场」：以前这里硬写一条 DEMO 场景并落盘，
+// 表现就是「一打开网页就默认放进来实景」，而且写进去之后每次打开都复挂。
+// 断言按位置（localStorage 实际内容）而非文案：新项目必须写墓碑，且不启动点云。
+it('starts a new project empty and keeps it empty after reopening',async()=>{
+ const a=makeLayout({id:'env-empty',name:'空场起步',floors:[makeFloor({id:'floor',items:[]})]});
+ layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
+ const first=render(<RoomOrganizer/>);
+ await waitFor(()=>expect(JSON.parse(localStorage.getItem(KEY)!)??{}).toHaveProperty('env-empty'));
+ expect(JSON.parse(localStorage.getItem(KEY)!)['env-empty']).toBeNull();
+ expect(mock.start).not.toHaveBeenCalled();
+ first.unmount();
+ layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
+ render(<RoomOrganizer/>);
+ await waitFor(()=>expect(scanStateBridge.writePosition).not.toBeNull());
+ expect(JSON.parse(localStorage.getItem(KEY)!)['env-empty']).toBeNull();
+ expect(mock.start).not.toHaveBeenCalled();
+});

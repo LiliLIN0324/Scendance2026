@@ -3205,11 +3205,13 @@ useEffect(() => {
       setEnvironments(carried);
       return;
     }
-    const defaults: StoredEnvironment[] = [{ assetId: DEMO_WORLD_SCENE_ID, name: 'World 高斯空间 · 宴会厅 A', floorIndex: 0,
-      position: { x: 0, y: 0, z: 0 } }];
-    writeEnvironments(layout.id, defaults);
-    environmentsRef.current = defaults;
-    setEnvironments(defaults);
+    // 2026-11-22 用户拍板「新项目完全空场」：这里以前硬写一条 DEMO 场景并落盘，
+    // 表现就是「一打开网页就默认给我放进来一套实景」，写进去之后每次打开都复挂。
+    // 改为写墓碑（与 clearEnvironment 同义）：下次读到的偏好是空列表，保持空场；
+    // 想看样例仍可从空间面板手动挂（hangDemoEnvironment 未动，D5 演示照旧）。
+    clearEnvironment(layout.id);
+    environmentsRef.current = [];
+    setEnvironments([]);
   }, [environmentKey, hasMapVenue, layout.id, workspaceWriteGuards]);
   const removeEnvironment = useCallback((assetId: string) => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
