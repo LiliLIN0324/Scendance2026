@@ -118,6 +118,7 @@ import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
 import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, readEnvironmentsStrict, writeEnvironments, type EnvironmentScope, type StoredEnvironment } from './lib/environment-preference';
 import { persistEnvironmentPosition } from './lib/environment-position-transaction';
+import { venueIdentityPatch } from './lib/venue-identity';
 import { registerReadonlyDraftReader,readLiveReadonlyDraft } from './lib/readonly-draft-registry';
 import {createLocalActivitySwitchGuard,LocalActivitySwitchGuardProvider} from './lib/local-activity-switch-guard';
 import {unsavedSourceDrafts} from './panels/unsaved-source-drafts';
@@ -4448,6 +4449,13 @@ useEffect(() => {
       const base = environmentsRef.current[0]?.position ?? ZERO_SPLAT_POSITION;
       onSplatPositionChange({ ...base, x: world.x, z: world.z });
       setScanArming(null);
+      // 2026-11-22：落位只定位置、不同步尺寸（宽深仍须人工核验）；但场地身份要写回布局——
+      // 导出/分享/发布闸门/项目清单读的都是 layout.venueScan，只写本机环境偏好换浏览器就丢。
+      const placed = venueIdentityPatch(layoutStore.getState().layout, arming.venue);
+      if (placed) {
+        try { scopedApply(placed, { preserveProvenance: true }); }
+        catch (error) { notify(`场地身份没写进方案：${error instanceof Error ? error.message : String(error)}`, 'error'); }
+      }
       notify(`已把「${arming.venue.name}」放在你点的位置，可在卡片上点「编辑」调整。`, 'info');
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
