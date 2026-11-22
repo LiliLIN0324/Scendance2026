@@ -251,11 +251,13 @@ A3 残留定性 ─────┘                                              
 - `agent-panel.tsx:2509` `localDraftAllowed`：`sessionScope.startsWith('activity:')` 为第一条件。新源本地活动键已是 `project:house-<uuid>`，该条件恒 false；本地/云区分实际由 `isLocalActivityWorkspace(owner)` + `canCreateUnboundLocalDraft()` 承担。疑似误关本地课桌椅草案通路（`runLocalSeatingDraft` 入口 :2521 与守卫 :2338/:2348/:2572/:2684/:2735），待真机本地草稿 flow 核对后定夺：删冗余前缀条件还是换 `project:` 判定。
 - `lib/agent-annotation-observation.ts:18` binding schema refine 要求 `activityScope` `startsWith('activity:')`。壳体 :4704/:4716 绑入 `activityScope:sessionScope`（`project:`）→ zod 校验失败回 `unavailable`，标注观察可能读不出；待复核是放宽前缀还是字段随 plan 槽正源改名。
 - `lib/venue-facts-storage.ts:6` 本地键派生按 `activity:` 前缀分流，非该前缀返回 null；venue facts 面板休眠，随 B1-c/E2 域一起清，不单独改。
+- **2026-11-22 源码复核（#55，只读定性，未改码）**：三处闸门行号未漂移、定性维持。`LayoutAgentProvider` 的 `sessionScope` prop 默认 `'legacy'`，壳体 `:4998` 传 `projectSessionScope(activeProjectId)=project:<id>`（片 1 已接）；`:2509` 前缀条件在新源下恒 false，本地/云区分仍由 `isLocalActivityWorkspace(owner)` + `canCreateUnboundLocalDraft()` 承担，前缀条是冗余旧闸；annotation-observation zod refine 与 venue-facts 键分流现状同上。三处均待 B1 身份口径落定后随退役成套处理，不在无保护下改。
 
 **静态门禁对照（2026-11-22，Node26，本地攒批）**：
 - `npm run build` **exit 0**：编译成功、类型/lint 检查过、静态导出完成、`check-oneplan-artifacts` 扫描 3466 产物文件违规 0、postbuild 剥除完成。
 - 全量 `vitest run` 对照基线 batch11（34 failed / 808 passed 文件级；552 failed / 10144 passed / 75 skipped）：本轮 **33 failed / 810 passed** 文件级，**543 failed / 10158 passed / 79 skipped** 测试级。差集：基线红本轮转绿 2（canvas-session、session-generation，路线 2 兜底预期内）；本轮新红 1 个文件 `three/glb-anim-verify.test.ts`。
-- 新红定性：`plays the baked clip…` 例 `ENOENT: …docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.glb`；该目录仅入库 `.blend` 源与 png/json，`.glb` 是未入库的本机导出产物（untracked、未 ignore），测试硬读本机产物。单跑复现同 ENOENT，与本轮会话 scope/dep 改动路径无关；基线两次绿是当时本机留有该 glb。**不伪造资产、不提交证据产物**；归测试资产夹具债（#55），后续应让该例在缺 glb 时 skip 或改用入库 `assets/models/table.glb` 通路。无其他台账外确定性代码回归。
+- 新红定性：`plays the baked clip…` 例 `ENOENT: …docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.glb`；该目录仅入库 `.blend` 源与 png/json，`.glb` 是未入库的本机导出产物（untracked、未 ignore），测试硬读本机产物。单跑复现同 ENOENT，与本轮会话 scope/dep 改动路径无关；基线两次绿是当时本机留有该 glb。**不伪造资产、不提交证据产物**；归测试资产夹具债（#55）。无其他台账外确定性代码回归。
+- **2026-11-22 复现取证（Node26，定向 `three/glb-anim-verify.test.ts`）**：结果 1 failed / 3 passed（共 4）；失败即蒙皮动画例 `plays the baked clip…`，ENOENT 读 `sculpture-local-rig.glb`（测试 :23 `readFileSync`、:75 喂给 `texturelessGlb`）；同文件 table（无 clip 旧三轴缩放）、legacy 三轴对照、临时目录读写 3 例均绿。目录 `sculpture-rig-local/` 仅入库 `.blend` 源 + png/json/py，无 glb；`assets/models/` 入库 5 个 glb（chair/laptop/plant/speaker/table）均为无蒙皮静态件，**替代不了蒙皮骨骼 + 烘焙 clip + 贴地/统一缩放断言（:107–126）**。处置选项挂账：① 缺 RIGGED 时该例按 `existsSync` 门控 `it.skip`；② 把导出门控的 rigged glb 作为受控测试夹具入库——需人拍板是否放松「证据产物不入库」口径。当前不提交证据 glb，不换静态件冒充动画通路。
 - 静态门禁（tsc / build / 全量对照）本地已过；#49 真机三 flow 现状：flow 3 刷新续开 ✅、flow 1 双项目不串不丢 ✅（见下，附绑定域残留观察）、flow 2 新建 mint 独立槽挂账待多项目环境。
 
 **真机走查（2026-11-22，本地桩 54329 + dev 3210）**：
