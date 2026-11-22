@@ -290,6 +290,24 @@ A3 残留定性 ─────┘                                              
 
 **测试断言改动点（片 2，待落码时同步）**：`:1175` 附近 run 键 `scendance:agent-run:${apiUrl}:anonymous:${layout.id}`；各 probe `scope="legacy"`；320 例 scope 构造需同步传 `sessionScope` 对齐。
 
+**片 2 落码切口分类（2026-11-22 静态，行号对应当前 main，漂移以符号检索为准）**：
+- **派生现状**：`scope=layout.id??'local'`（:334，A/C 类线）；`chatSessionScope=sessionScope??activity:${layout.id}`（:336，片 1 已切会话仓）；`agentScope=${apiUrl}:${user??'anonymous'}:${scope}`（:339，第三段复用 A 类 `scope`）。
+- **B 类记忆桶键（第三段待切会话源）**：run marker `runStorageKey(agentScopeRef.current)`（:1331/:1405/:1485/:1697）；本机 applyRecovery `applyRecoveryKey(agentScope)`（:120/:149/:162/:177/:377/:1405/:1406/:1463）；unsent drafts `unsentMessageDrafts(agentScope)`（:350/:2228/:2230）。云侧 recovery 已独立走 `projectRecoveryScope(apiUrl,projectId)`（:117/:1398/:1406/:1877/:1936/:1944），不依赖本机 agentScope。
+- **候选指纹（与记忆桶键同源换，围栏比对逻辑不变）**：`Preview.scope` 生成时记 agentScope（:111）；连续围栏 `agentScopeRef.current===selected.scope`（:666）、stale `preview.scope!==agentScope`（:1217）、各 in-flight 围栏 `agentScopeRef.current===submittedScope/selected.scope`（:1446/:1489/:1503/:1523/:1669/:1780/:1882/:1943/:1959/:2004 等）。身份切换后残留旧候选被围栏拒、不续跑，符合跨身份隔离预期。
+- **保留 layout.id（C 类几何/云绑定，不随 B1 切）**：`scopeRef` 喂 brief/source/checkins/备份/restore scope（:409/:771/:810/:835/:846/:1028/:1031/:1193/:1198/:1207/:1210）；`geometryProjectId(controller, scope|layout.id)`（:1188/:1340/:1694/:1707/:1710/:1790/:1830/:1850/:2451）；`leaseLost`（:2224）；`cloudMaterialDraftAvailable`（:2079）。
+- **建议切口**：新派生字段与会话身份段同源（`chatSessionScope`/projectId 源），记忆桶键与候选指纹走新段；几何线仍用 `scope`(layout.id)，两条线解耦。`StudioValue.scope=agentScope`（:2079）暴露给下游，落码前须再核 `studio.scope` 消费方（drafts :2228 等）是否混入几何用途，避免换段带偏 C 类。
+- **遗留口径**：旧桶内 run marker / recovery / unsent drafts 是会话临时物，不跨身份搬迁，退役时清；inventoryScope 身份段 `[apiUrl,actor,activity=layoutRef.current.id,chatId]`（:620）第三段同批评估。
+
+**片 2 本地攒批落码记录（2026-11-22，未合入 main）**：
+- 生产改动（`creative-studio.tsx`，仅 2 处派生）：
+  - `agentScope` 第三段 `scope`(layout.id) → `chatSessionScope`；run marker / 本机 recovery / unsent drafts / 候选指纹同源换段。
+  - `inventoryScope` 第三段 `layoutRef.current.id` → `chatSessionScope`。
+  - 几何/云绑定线 `scope`(layout.id)、`geometryProjectId`、leaseLost、cloudMaterialDraftAvailable、source-storage 读写保持不动；`layoutRef` 其余围栏/几何消费保留。
+  - 已核 `StudioValue.scope=agentScope` 下游仅 drafts（:2228/:2230/:2357/:2362/:2467）与会话围栏，无几何用途混入。
+- 测试同步（`creative-studio.react.test.tsx`，10 处硬编码 run 键第三段补 `activity:` legacy 回退段；动态 startsWith/find 断言未动）。
+- 本地门禁证据（Node26）：前端 `tsc --noEmit` exit 0；creative-studio 320 绿/46 skip；agent-panel 165 红/292 绿/1 skip（与基线持平，#55 挂账）；outdoor-store/canvas-session/session-generation 51 绿/4 skip；全量 250 红/10454 绿/79 skip，失败清单双向差集 NEW 为空（仅 share.test 1 例 deflate-bomb flaky 由红转绿，不触记忆桶）；`npm run build` exit 0，20/20 静态页导出。
+- **未过门禁、未合入**：壳体对话链整渲染保护仍缺（#47 路线 1 阻塞于 B4 plan 域）；flow2 多项目/本机草稿态新建第二 house 活动真机对照未闭环；旧桶 run/recovery/drafts 临时物不搬迁。合入 main 前必须补齐 #49 真机走查。
+
 **落码门禁**：片 1/片 2 代码可本地先写、本地面板定向 + tsc + 全量对照攒着；合入 main 前必须过 #47 壳体夹具绿测与 #49 真机走查，不在无保护下声称解耦完成。
 
 ### 7.7 全完成作战图（2026-11-22）

@@ -1172,7 +1172,7 @@ describe('dialogue export capture',()=>{
   it('does not discard an unknown stored run before history review',()=>{
     let outcome:boolean|undefined;
     function Probe(){const studio=useStudioAgent();return <button onClick={()=>{outcome=studio?.discardPreviewForHistoryReview();}}>核对任务记录</button>;}
-    const key=`scendance:agent-run:${controller.config.apiUrl}:anonymous:${layout.id??'local'}`;
+    const key=`scendance:agent-run:${controller.config.apiUrl}:anonymous:activity:${layout.id??''}`;
     localStorage.setItem(key,JSON.stringify({requestId:'unknown',baseKey:'old',briefKey:'old'}));
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply}><Probe/></CreativeStudioProvider>);
     fireEvent.click(screen.getByRole('button',{name:'核对任务记录'}));
@@ -4374,7 +4374,7 @@ describe('retained Agent partial results', () => {
       requestId = vi.mocked(controller.startAgentRun).mock.calls[0]![0].requestId;
       vi.mocked(controller.getAgentRunByRequest).mockResolvedValueOnce({ ...partialRun(), requestId }); fireEvent.click(recover);
     } else {
-      localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`, JSON.stringify({ requestId, runId, projectId, baseKey: canonical(scene), briefKey: JSON.stringify({ brief: INITIAL_BRIEF, images: [] }) }));
+      localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`, JSON.stringify({ requestId, runId, projectId, baseKey: canonical(scene), briefKey: JSON.stringify({ brief: INITIAL_BRIEF, images: [] }) }));
       let finish!: (run: AgentRun) => void;
       vi.mocked(controller.getAgentRun).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
       vi.stubGlobal('innerWidth', 390); view = renderUI(<DockedTrial/>);
@@ -4393,7 +4393,7 @@ describe('retained Agent partial results', () => {
       expect(controller.getAgentRun).toHaveBeenCalledOnce(); expect(controller.getAgentRun).toHaveBeenCalledWith(runId);
       expect(controller.getAgentRunByRequest).not.toHaveBeenCalled();
     }
-    const marker = JSON.parse(localStorage.getItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`)!);
+    const marker = JSON.parse(localStorage.getItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`)!);
     expect(marker.requestId).toBe(requestId); expect(marker.runId).toBe(runId);
     expect(screen.queryByRole('button', { name: '查询原任务' })).toBeNull();
     fireEvent.change(screen.getByRole('textbox', { name: '告诉助手你的想法' }), { target: { value: '演练：核对后继续的新输入' } });
@@ -4724,7 +4724,7 @@ describe('same local activity with a remote scene connection',()=>{
   it('restores only the original scene connection and queries the saved run after reopening',async()=>{
     installBindingCheck();snapshot={...snapshot,configured:true,user:{id:'test-user'}};const local=activity();
     const requestId='86000000-0000-4000-8000-000000000001',runId='87000000-0000-4000-8000-000000000001';
-    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${localId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(candidate),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]})}));
+    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${localId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(candidate),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]})}));
     const resume=vi.spyOn(controller,'resumeGeometryWorkbench').mockImplementation(async()=>{bind();return snapshot.project!;});
     const ensure=vi.spyOn(controller,'ensureGeometryWorkbenchReady');
     vi.mocked(controller.getAgentRun).mockResolvedValue({...runFrom(proposal),id:runId,state:'cancelled',candidates:[]});
@@ -4769,7 +4769,7 @@ describe('scoped seating constraints in deep generation', () => {
     connected();vi.mocked(controller.startAgentRun).mockRejectedValueOnce(new SceneApiError(code,503,null)).mockResolvedValueOnce(runFrom(proposal));
     const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
-    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`;
+    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`;
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
     await waitFor(()=>{expect(controller.startAgentRun).toHaveBeenCalledTimes(1);expect(localStorage.getItem(key)).toBeNull();expect(screen.queryByRole('button',{name:'查询原任务'})).toBeNull();});
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
@@ -4779,7 +4779,7 @@ describe('scoped seating constraints in deep generation', () => {
     connected();vi.mocked(controller.startAgentRun).mockRejectedValueOnce(new TypeError('network unknown'));
     const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
-    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`;
+    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`;
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));await screen.findByRole('button',{name:'查询原任务'});
     expect(JSON.parse(localStorage.getItem(key)!).annotationSnapshot).toBe(true);
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));expect(controller.startAgentRun).toHaveBeenCalledTimes(1);
@@ -4789,7 +4789,7 @@ describe('scoped seating constraints in deep generation', () => {
     vi.mocked(controller.getAgentRun).mockRejectedValueOnce(new SceneApiError('AGENT_ANNOTATION_UNAVAILABLE',503,null));
     const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/></CreativeStudioProvider>);
-    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`;
+    const key=`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`;
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));await screen.findByRole('button',{name:'查询原任务'},{timeout:6000});
     expect(JSON.parse(localStorage.getItem(key)!).runId).toBe(runFrom(proposal).id);
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));expect(controller.startAgentRun).toHaveBeenCalledTimes(1);
@@ -4937,14 +4937,14 @@ describe('scoped seating constraints in deep generation', () => {
   });
   it('keeps an old run read-only rather than attaching a new annotation snapshot',async()=>{
     connected();const requestId='70000000-0000-4000-8000-000000000002',runId=runFrom(proposal).id;
-    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(scene),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]}),seatingToken:'chat-a'}));
+    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(scene),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]}),seatingToken:'chat-a'}));
     vi.mocked(controller.getAgentRun).mockResolvedValueOnce({...runFrom(proposal),requestId});
     const capture=()=>({status:'ready' as const,value:undefined,token:'chat-a',annotationObservation,isCurrent:()=>true});
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><IntentGenerationProbe/><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);
     await waitFor(()=>expect(controller.getAgentRun).toHaveBeenCalledWith(runId));fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
     expect(await screen.findByText(/原标注快照无法重新核对/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'测试生成'}));
-    expect(localStorage.getItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`)).not.toBeNull();
+    expect(localStorage.getItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`)).not.toBeNull();
     expect(controller.startAgentRun).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'左侧确认'})).toBeNull();expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
   });
   it('passes selected user-stated furniture sizes and evidence through the deep entry',async()=>{
@@ -5023,7 +5023,7 @@ describe('scoped seating constraints in deep generation', () => {
   });
   it('does not recover an old candidate without its seating identity', async () => {
     connected(); const requestId='70000000-0000-4000-8000-000000000001';const runId=runFrom(proposal).id;
-    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:${projectId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(scene),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]})}));
+    localStorage.setItem(`scendance:agent-run:${controller.config.apiUrl}:test-user:activity:${projectId}`,JSON.stringify({requestId,runId,projectId,baseKey:canonical(scene),briefKey:JSON.stringify({brief:INITIAL_BRIEF,images:[]})}));
     vi.mocked(controller.getAgentRun).mockResolvedValueOnce({...runFrom(proposal),requestId});
     const capture = () => ({status:'ready' as const,value:allocation,token:'chat-a-1',isCurrent:()=>true});
     renderUI(<CreativeStudioProvider controller={controller} layout={layout} onApply={onApply} captureSeatingAllocation={capture}><CreativeAssistant/><SecondaryConfirm/></CreativeStudioProvider>);

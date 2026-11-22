@@ -336,7 +336,8 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const chatSessionScope=sessionScope ?? `activity:${layout.id ?? ''}`;
   const scopeWriteGuards=useRef(new Map<string,SourceWriteGuard|undefined>());scopeWriteGuards.current.set(scope,sourceWriteGuard);
   const scopeRef=useRef(scope); scopeRef.current=scope;
-  const agentScope=`${controller.config.apiUrl}:${cloud.user?.id??'anonymous'}:${scope}`;
+  // 片 2：记忆桶身份段跟会话仓同源（chatSessionScope），脱离裸 layout.id；几何/云绑定线仍用上面的 scope。
+  const agentScope=`${controller.config.apiUrl}:${cloud.user?.id??'anonymous'}:${chatSessionScope}`;
   const agentScopeRef=useRef(agentScope);agentScopeRef.current=agentScope;
   useEffect(()=>{
     const removeBrief=registerReadonlyDraftReader(scope,'brief',()=>{
@@ -617,7 +618,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const inventoryGeneration=useRef(0);
   const sessionInventory=useRef<SessionCandidateInventory|null>(null);
   function inventoryScope(chatScope:string,chatId:string|null):string|null {
-    const owner=controllerRef.current,actor=owner.getSnapshot().user?.id,activity=layoutRef.current.id;
+    const owner=controllerRef.current,actor=owner.getSnapshot().user?.id,activity=chatSessionScope;
     if(!actor||!activity||chatScope!==chatSessionScope||!chatId||getActiveAssistantSessionId(chatScope)!==chatId)return null;
     return JSON.stringify([owner.config.apiUrl,actor,activity,chatId]);
   }
