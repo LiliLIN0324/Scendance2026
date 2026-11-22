@@ -273,11 +273,20 @@ A3 残留定性 ─────┘                                              
 
 
 **片 2 · 持久桶身份切换（成套，不可半拆）**：
-- source-storage brief 桶、候选库存、editor lease、apply-recovery、agent-run marker、unsent drafts 键从裸 `layout.id` 派生切到 projectId 源。
-- 触点：`:290` briefStorage、`:334` scope、`:335` guards、`:340`/`:347` readonly reader、`:355` coordinator、`:362` lease、`:395`/`:439` source record、`:116` applyRecoveryKey、`:93` runStorageKey、`:266` unsent drafts、`:617-631` inventory。
-- 前置：片 1 合入 + 壳体夹具绿 + 真机核对切项目各落各槽；旧桶 legacy 只读承接至退役。
+目标：会话/记忆/资料桶身份键从裸 `layout.id` 双源收敛到 projectId 源。2026-11-22 静态图谱按存储后端与耦合域三分类（行号对应当前 main，漂移以符号检索为准）：
 
-**测试断言改动点（片 2）**：`:1175` run 键 `scendance:agent-run:${apiUrl}:anonymous:${layout.id}`；各 probe `scope="legacy"`；320 例 scope 构造需同步传 `sessionScope` 对齐。
+- **A 类 · source-storage IDB 域（归 B3/B4，本轮不动）**：键落 IndexedDB `sources.scope` / `forms`，与云项目几何绑定、备份/恢复、点验围栏强耦合。触点：`:290` briefStorage.scope、`:334` `scope=layout.id??'local'`、`:337` scopeWriteGuards、`:342/:349` readonly draft reader(brief)、`:357/:359` sourceCoordinator、`:364` registerSourceEditor(lease)、`:396/:397/:441` source record `${scope}:brief`、`:754` useMaterialCheckins(projectId=layout.id)、`:835/:838/:846` 备份、`:1028/:1031` 恢复 targetScope；迁移 `copySourceScope(previous,next)`（source-storage.ts:626）在云绑定/新建时整 scope 复制。这一片随 B3 导出/守卫 plan 化、B4 镜像退役一起切，不在 B1 单独拆。
+- **B 类 · 会话/记忆 localStorage + 内存域（B1 片 2 候选，受门禁阻塞）**：
+  - `:93` runStorageKey(agentScope)：agent-run marker（localStorage，:1331/:1405/:1485/:1697）。
+  - `:116` applyRecoveryKey(agentScope | projectRecoveryScope)：应用恢复标记（localStorage + withApplyLock 独占锁，:118-180/:1398/:1463/:1967）；云项目走 `projectRecoveryScope(apiUrl, cloud.project.id)`，本机活动走 agentScope。
+  - `:262/:266` unsentMessageDrafts(agentScope)：未发送消息草稿（模块内存 Map，:350/:2228/:2360/:2465）。
+  - `:619-622` inventoryScope：候选库存内存绑定键 `[apiUrl,actor,activity=layoutRef.current.id,chatId]`；lib `session-candidate-inventory.ts` 纯内存、scope 由调用方传入，自身无 layout.id 耦合。
+  - 派生链：`agentScope=${apiUrl}:${user??'anonymous'}:${scope}`（:339），第三段复用 A 类 `scope`；切 B 类需把会话身份段换到 sessionScope/project 源，并与 A 类 scope 解耦。
+- **C 类 · 几何/云绑定域（保留 layout.id，不随 B1 切）**：`:1217` proposal.project_id/base_revision/local_revision/session_id/generation 比对、`:1234` layout.id 漂移检查、`:2224` leaseLost `project.id===layout.id`、`:2451` geometryProjectId、`:2079` cloudMaterialDraftAvailable `layout.id===cloud.project.id`；备份序列化 scope、restore targetScope。
+
+**门禁判定（2026-11-22）**：B 类虽属会话域，但键与 A 类共享 `scope` 变量，且 run/recovery/inventory 新鲜度核对依赖 sessionToken/lease/revision/epoch。当前前置未齐：① 壳体对话链 4 例仍 skip（session-generation），inventory/恢复链路无壳体绿测保护；② 真机 flow2 新建活动各落各槽未闭环（桩单云项目）；③ A 类迁移/备份/点验口径属 B3/B4。按 §11.8:197 口径，未满足前不在面板硬拆 scope 链路；旧桶 legacy 只读承接至退役。
+
+**测试断言改动点（片 2，待落码时同步）**：`:1175` 附近 run 键 `scendance:agent-run:${apiUrl}:anonymous:${layout.id}`；各 probe `scope="legacy"`；320 例 scope 构造需同步传 `sessionScope` 对齐。
 
 **落码门禁**：片 1/片 2 代码可本地先写、本地面板定向 + tsc + 全量对照攒着；合入 main 前必须过 #47 壳体夹具绿测与 #49 真机走查，不在无保护下声称解耦完成。
 
