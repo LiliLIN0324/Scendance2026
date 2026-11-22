@@ -31,7 +31,7 @@ tests/                       后端测试（根 npm test）
 docs/                        文档，入口 docs/README.md
 miniprogram/                 小程序端
 tools/                       平面图、单位预览、Blender 等离线工具
-introduction.html            官网（构建时复制进 public/）
+frontend/public/introduction.html  官网源文件（dev/build 直接消费，不再复制）
 ```
 
 ## 四、常用命令（不要自造命令，全部来自 package.json）

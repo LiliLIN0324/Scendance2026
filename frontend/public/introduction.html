@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#262c1f">
 <title>幕景 Scendance · 活动布局工作台</title>
-<link rel="stylesheet" href="./assets/site-case-analysis.css">
+<link rel="stylesheet" href="/showcase/assets/site-case-analysis.css">
 <script>document.documentElement.className = 'js';</script>
 <script>if(new URLSearchParams(location.search).get('embed')==='map')document.documentElement.classList.add('map-embed');</script>
 <!-- 复用仓库内本地 vendor/three，零外部请求。 -->
-<script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}</script>
+<script type="importmap">{"imports":{"three":"/showcase/vendor/three/three.module.js","three/addons/":"/showcase/vendor/three/addons/"}}</script>
 <!--
   幕景 Scendance 首页。
   · 三维视口已下线（renderer-webgl.js 已删除），本页不挂载任何 Three 画布。
@@ -1270,7 +1270,7 @@ html{scroll-snap-type:y proximity}
 @media(prefers-reduced-motion:reduce){#guide-tail{display:none}}
 @media (hover:hover) and (pointer:fine){
   body.has-xiaojing-cursor,body.has-xiaojing-cursor :where(a,button,summary,[role=button]){
-    cursor:url("./assets/site-xiaojing-cursor.svg") 5 5, auto;
+    cursor:url("/showcase/assets/site-xiaojing-cursor.svg") 5 5, auto;
   }
   body.has-xiaojing-cursor #site-agent{cursor:auto}
   body.has-xiaojing-cursor #site-agent :is(a,button),body.has-xiaojing-cursor [data-guide-pin],body.has-xiaojing-cursor [data-guide-cursor]{cursor:pointer}
@@ -1509,7 +1509,7 @@ html{scroll-snap-type:y proximity}
        这里只留第 0 层，保证无 JS 时也有图、首屏也能立刻出图；其余层等脚本按需补。
        文案区在左、浮动卡在右上，所以场景名放右下角。 -->
   <div class="hero-bg" aria-hidden="true">
-    <div class="hero-shot is-on" style="background-image:url('./assets/scenes/01体育馆.png')"></div>
+    <div class="hero-shot is-on" style="background-image:url('/showcase/assets/scenes/01体育馆.png')"></div>
   </div>
   <div id="hero-site-image" aria-hidden="true"></div>
   <div class="hero-mask" aria-hidden="true"></div>
@@ -1518,7 +1518,7 @@ html{scroll-snap-type:y proximity}
     <svg class="hero-atlas" aria-hidden="true" preserveAspectRatio="xMidYMid meet"></svg>
     <div class="site-agent-anchor">
       <button class="agent-launch" id="agent-launch" type="button" aria-haspopup="dialog" aria-controls="site-agent" aria-expanded="false">
-        <img src="./assets/brand/logo-2026/motion/door-blink.svg" alt="" width="34" height="34">
+        <img src="/showcase/assets/brand/logo-2026/motion/door-blink.svg" alt="" width="34" height="34">
         <span>小景</span>
       </button>
       <div id="site-agent" role="dialog" aria-labelledby="site-agent-title" hidden>
@@ -1801,7 +1801,7 @@ html{scroll-snap-type:y proximity}
     </div>
     <div class="quote-grid">
       <figure class="quote rv">
-        <img class="q-art" src="./assets/quotes/market.jpg" alt="市集活动的三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <img class="q-art" src="/showcase/assets/quotes/market.jpg" alt="市集活动的三维场景" width="1000" height="559" loading="lazy" decoding="async">
         <blockquote>把现场照片丢进去，十分钟就有一个能坐下来讨论的布置。</blockquote>
         <figcaption>
           <span class="q-ava" aria-hidden="true">李</span>
@@ -1810,7 +1810,7 @@ html{scroll-snap-type:y proximity}
         <ul class="q-tags"><li>市集活动</li><li>场地布置</li></ul>
       </figure>
       <figure class="quote rv">
-        <img class="q-art" src="./assets/quotes/popup.jpg" alt="品牌快闪三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <img class="q-art" src="/showcase/assets/quotes/popup.jpg" alt="品牌快闪三维场景" width="1000" height="559" loading="lazy" decoding="async">
         <blockquote>客户不用装软件，打开链接就能看清桌椅往哪摆。</blockquote>
         <figcaption>
           <span class="q-ava" aria-hidden="true">陈</span>
@@ -1819,7 +1819,7 @@ html{scroll-snap-type:y proximity}
         <ul class="q-tags"><li>品牌快闪</li><li>客户沟通</li></ul>
       </figure>
       <figure class="quote rv">
-        <img class="q-art" src="./assets/quotes/campus.jpg" alt="校园学术交流活动的三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <img class="q-art" src="/showcase/assets/quotes/campus.jpg" alt="校园学术交流活动的三维场景" width="1000" height="559" loading="lazy" decoding="async">
         <blockquote>以前要画三版草图才能讲清楚，现在一份三维场景就对了。</blockquote>
         <figcaption>
           <span class="q-ava" aria-hidden="true">周</span>
@@ -1828,7 +1828,7 @@ html{scroll-snap-type:y proximity}
         <ul class="q-tags"><li>校园活动</li><li>方案汇报</li></ul>
       </figure>
       <figure class="quote rv">
-        <img class="q-art" src="./assets/quotes/cafe.jpg" alt="室内空间的三维场景" width="1000" height="559" loading="lazy" decoding="async">
+        <img class="q-art" src="/showcase/assets/quotes/cafe.jpg" alt="室内空间的三维场景" width="1000" height="559" loading="lazy" decoding="async">
         <blockquote>场地方、搭建方各看一遍，争议全在图上说清楚。</blockquote>
         <figcaption>
           <span class="q-ava" aria-hidden="true">吴</span>
@@ -2139,7 +2139,7 @@ function dialogs() {
 async function showAssetSources() {
   const list = $id('asset-list');
   try {
-    const res = await fetch('./assets/catalogue.json');
+    const res = await fetch('/showcase/assets/catalogue.json');
     const cat = await res.json();
     list.innerHTML = cat.assets.map(a => {
       const size = Array.isArray(a.sizeMeters) ? a.sizeMeters.map(v => v.toFixed(2) + ' m').join(' × ') : '';
@@ -2148,7 +2148,7 @@ async function showAssetSources() {
         <div style="color:var(--sc-muted);margin-top:2px">
           ${size} · ${a.license?.slug || ''} · ${a.bytes ? Math.round(a.bytes / 1024) + ' KB' : ''}
           · <a href="${a.sourceUrl}" target="_blank" rel="noreferrer">来源 ↗</a>
-          · <a href="./${a.localPath}" download>下载 GLB</a>
+          · <a href="/showcase/${a.localPath}" download>下载 GLB</a>
         </div>
       </div>`;
     }).join('');
@@ -3337,7 +3337,7 @@ syncAutoplay();
    第 0 层写在 HTML 的 style 里（无 JS 也能看到、首屏立刻出图），其余层这里补；
    每张图等到快轮到它时才设 background-image，避免首屏一次拉十张大图。
    和场景库的自动切换同一套口径：首屏还在视口里才走，开了「减少动态效果」不走。 */
-const HERO_BASE = './assets/scenes/';
+const HERO_BASE = '/showcase/assets/scenes/';
 const HERO_HOLD = 3000;      /* 每张停留时长 */
 const HERO_FADE = 1300;      /* 略大于 CSS 的 1.2s 淡入，等淡完再撤掉下面那层 */
 
@@ -3435,13 +3435,13 @@ if (heroCard) {
   if (heroClose) heroClose.addEventListener('click', () => { heroCard.hidden = true; });
 }
 </script>
-<script type="module" src="./assets/site-cases.mjs"></script>
+<script type="module" src="/showcase/assets/site-cases.mjs"></script>
 <div id="site-entry-transition" role="status" hidden>
-  <img src="./assets/brand/logo-2026/motion/door-blink.svg" alt="" width="46" height="46">
+  <img src="/showcase/assets/brand/logo-2026/motion/door-blink.svg" alt="" width="46" height="46">
   <p>为相聚，留一方空间</p>
   <span class="entry-track" aria-hidden="true"></span>
 </div>
-<script type="module" src="./assets/site-capabilities.mjs"></script>
+<script type="module" src="/showcase/assets/site-capabilities.mjs"></script>
 <div id="guide-tail" aria-hidden="true"></div>
 </body>
 </html>
