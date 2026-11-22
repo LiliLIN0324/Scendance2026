@@ -311,6 +311,24 @@ export function listOutdoorProjectRecords(storage?: KeyValueStorage | null): Out
   return records;
 }
 
+/** 本机新建活动的 id 前缀（`withHouseId` 发号，见 `lib/ids.ts`）。 */
+export const LOCAL_ACTIVITY_ID_PREFIX = 'house-';
+
+/**
+ * 无参刷新兜底选取：最近编辑的本机活动草稿。
+ *
+ * 本机活动 `house-*` 刻意不顶「最近项目」指针、URL 也不带 `project=`；指针缺失时
+ * 从草稿索引里把它找回来，会话槽 / 卡片槽才能接回同一份历史。只认 `house-*`：
+ * `replica-*` 案例副本与云项目走指针 / URL 兜底，不在这里抢续。枚举已按 updatedAt
+ * 降序，取首条命中即可。
+ */
+export function latestLocalActivityRecord(storage?: KeyValueStorage | null): OutdoorProjectRecord | null {
+  for (const record of listOutdoorProjectRecords(storage)) {
+    if (record.projectId.startsWith(LOCAL_ACTIVITY_ID_PREFIX)) return record;
+  }
+  return null;
+}
+
 /**
  * 默认户外工作台 id（2026-11-11 用户拍板：`/` 无参数时直接进户外 2D 规划，
  * 起步概览西湖区，找场地是工作台里的"搜地点"能力，不该挡在入口前面）。

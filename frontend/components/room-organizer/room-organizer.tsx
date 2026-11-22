@@ -4956,7 +4956,7 @@ useEffect(() => {
       const decision=!basis.needsClarification&&(requirement?.decision==='needed'||requirement?.decision==='not_needed')?requirement.decision:null;
       const width=extractMobilityWidth(requirement,basis.needsClarification);
       return {decision,width,isCurrent:()=>activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&sameRecoveryFormValue(snapshot(),basis)};
-    }} sourceWriteGuard={workspaceWriteGuards?.source} writeCapability={workspaceWriteGuards?.capability} onUpdateProductionPlan={value=>{if(!activitySession.isCurrent(sessionToken)||getStoreSessionScope()!==sessionScope)throw new Error('活动已切换，请重新核对。');commitHistoryNow();actions.setProductionPlan(value);}} reviewContext={reviewContext} controller={controller} layout={layout} getCurrentLayout={() => layoutStore.getState().layout} onApply={scopedApply} validateGenerationIntent={() => {
+    }} sourceWriteGuard={workspaceWriteGuards?.source} writeCapability={workspaceWriteGuards?.capability} onUpdateProductionPlan={value=>{if(!activitySession.isCurrent(sessionToken)||getStoreSessionScope()!==sessionScope)throw new Error('活动已切换，请重新核对。');commitHistoryNow();actions.setProductionPlan(value);}} reviewContext={reviewContext} sessionScope={sessionScope} controller={controller} layout={layout} getCurrentLayout={() => layoutStore.getState().layout} onApply={scopedApply} validateGenerationIntent={() => {
       const brief = getActiveBrief();
       if (!brief) return '活动需求正在切换，请稍后再试。';
       if (brief.headcount === null) return '请先确认本场活动人数，再生成方案。';

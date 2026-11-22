@@ -151,3 +151,235 @@ B1 会话/身份解耦 → B2 历史快照换 plan → B3 导出与写守卫 pla
 - 未删除任何室内壳体文件；未换历史快照；未改导出/写守卫；未动镜像回写。
 - 遗留本地改动（非本轮，不夹带提交）：`.gitignore`、`docs/INDEX.md`；未跟踪产物 `deliverables/`、`design-drafts/`、`design-sketches/`、`flow/tasks/`、`frontend/public/scene-presets/`、`tools/`、`.worktrees/` 等不入库。
 - 旧 79 backlog（#4/#7/#8/#9/#10/#11）与并行安全批次（死簇/户型重建面板/旧 run 残留）不阻塞本主线，另行排期。
+
+## 7. 终态达成度与阻塞突破路线（2026-11-22，「全部完成、突破阻塞」定标）
+
+> 本节把终态四条件逐项盘点到当前代码状态，把阻塞分成「本地可攻坚 / 必须外部条件 / 必须拍板 / 串行门禁」四类，标清每一类的解锁条件与本轮可执行边界。对照终态书 `2026-11-21-first-principles-endstate.md` §0.2/§0.5。
+
+### 7.1 四条件达成度盘点（对照终态书 §0.2）
+
+| 条件 | 当前达成 | 差距归属 |
+| --- | --- | --- |
+| ① 状态正源单一 `SitePlanData` | **未达成**：`layoutStore` 仍是现役读写源；历史快照、物料/选中/墙操作、导出链路走 `RoomLayout` | B2 历史快照换 plan；B4 回写镜像退役 |
+| ② 身份单一 projectId | **部分**：会话域（主 `sessionScope`/`getStoreSessionScope`/activity tracker 源）已收敛到 `activeProjectId` 同源（B1-a、B1-b 已落地提交 `e0620221`）；简报/候选库存/草稿围栏/订阅/归档/环境偏好仍挂 `layout.id` 或旧 `activity:` 仓 | B1-d 成套归位；B4 归档/发布域 |
+| ③ 呈现只留地图侧 | **未达成**：保活 Viewport、室内 three renderer/scene/camera、2D 编辑态与驻留 hooks 仍在 | E2 卸保活/室内 three/2D；E3 删室内墙模型与 hooks |
+| ④ 通路 plan 化 | **未达成**：云端读写、本地备份恢复、导出仍消费 layout；写守卫基于 layout 身份 | B3 导出与写守卫 plan 化 |
+
+> B1-b 去回退已落地但属「待验收过渡态」：无壳体绿测保护、无真机走查；在 B1-e 验收合入前不算身份条件闭合。
+
+### 7.2 阻塞分层（四类，解锁条件互不替代）
+
+- **A 本地可攻坚**（夹具 / 静态 / 类型，不依赖真机与拍板）
+  - **A1 壳体整渲染夹具（#47，阻塞 B1-e）**：`canvas-session`(7) / `session-generation`(6) + `agent-panel` 簇。分层补：① 假 controller prop 注入（壳体 `:324` 收 `controller`，`:331` `providedController ?? createBackendSession()`，传桩绕开真实 IDB 账本、`navigator.locks`、30s 可见轮询）；② 会话/Agent 仓桩；③ 场景 hooks 返回空/静止态，不留 rAF/定时器；④ 地图/物料 stub；⑤ `./contexts` provider 注入。就绪信号换稳定锚点（壳体容器或 hook capture 回填），不依赖 AgentPanel 输入框；afterEach 清轮询/订阅/rAF。
+    - *假控制器桩实测必须面（2026-11-22 按壳体 33 处调用点去重钉出，对照 `BackendSession` 公开签名 `backend-session.ts:422-515/979/1258`）*：字段 `config.apiUrl`；`retain(): () => void`（`:355`）；`getSnapshot(): {project?:{id},user?:{id}}`（`:381/:726/:1190/:1213/:1253/:3690/:3713/:3757/:3774/:4074/:4100/:4140/:4682/:4690/:4934`）；`subscribe(fn): () => void`（`:1324/:3747/:3775`）；`businessRequest<T>(path,method)`（`:1224/:1255/:1260`）；`savePreferences(prefs)`（`:3696`）；`getPreferences()`（`:3731`）；`listStudios()`（`:3761`）；`getStudioSettings(id)`（`:3764`）；`localDraftAuthorityVersion(): string`（`:4683/:4690`）；`authorizeAsset(assetId)`（`:5535`）。`canCreateUnboundLocalDraft()`/`isGeometryBound()` 按面板实际调用补。参照现成桩模式 `app/page.test.tsx:78` mock `createBackendSession` 返回桩对象。
+  - **A2 旧 `activity:` 仓写方图谱（#54，#48 前置）**：列全生产代码读写方，判定现役会话仓是否已全在 `project:` 前缀、旧仓残留是否仅只读兼容分支。纯静态读取，不动码。
+  - **A3 ④ 语义/夹具残留定性（#55）**：batch11 残留 ④ 红逐条对照产品口径，定性源码 bug / 过时断言 / 真实产品语义；证据足才对齐断言或报 bug，不足挂账。
+- **B 必须外部条件**（真机 / 账号，本环境不能伪造）
+  - **B1-e 真机走查（#49 前置）**：切项目不串会话、新建活动各落各槽、无参刷新续开符合方案 B；需浏览器有效登录态。当前 in-app 浏览器登录状态以现场为准，不伪造账号或会话。
+- **C 必须产品口径拍板**（到决策点停住等用户，不代补需求、不代确认路径、不代选候选）
+  - **C1** 无参刷新草稿索引恢复档位/优先级：`listOutdoorProjectRecords` 读取地基已就位，是否自动续最近本机草稿未定。
+  - **C2** 旧 `activity:` 存量会话/偏好的迁移或只读承接口径；环境偏好键换键的一次性迁移方案（防丢已存场地偏好，终态书 §0.5「身份迁移漂移」反例）。
+  - **C3** ④ 语义红逐条产品口径判定（追问 notice、控件门控、几何计数/摘要口径等）。
+- **D 串行门禁**（不跳卡）
+  - B1-e 验收合入 → B2 → B3 → B4 → E1 → E2 → E3 → E4；前一套验收合入才开下一套。
+
+### 7.3 解锁链条
+
+```
+A1 壳体绿测保护 ─┐
+A2 旧仓图谱 ─────┼→ B1-d 成套归位（#48）→ B1-e 验收（#49：A3 定性 + B 真机 + C1/C2 口径）→ 合入
+A3 残留定性 ─────┘                                                                      │
+                                                                                        ▼
+                                                              B2 → B3 → B4 → E1 → E2 → E3 → E4
+```
+
+### 7.4 本轮可执行边界
+
+- 本地先推 A1 最小探针：传假 controller prop + 已识别 mock 层，取渲染期第一个真实崩点与缺失模块清单；不追求一次全绿；探针结论落台账，不入库半成品桩（避免终态书 §0.5「假绿」反例）。
+- 不跳卡：B2–E4 不动码；不伪造登录态/降级路径；C 类口径停住等拍板；不触发付费生成。
+
+### 7.5 旧 `activity:` 仓生产代码触点初表（2026-11-22 静态核查，A2 进行中）
+
+| 触点 | 现状 | 归属 |
+| --- | --- | --- |
+| `panels/creative-studio.tsx:516/:579/:619/:634/:1908` | 订阅/读取旧 `activity:${layout.id}` 仓（brief 候选库存、未发送草稿、恢复锁比对、清缓存订阅、候选读取） | B1-d 切仓对象 |
+| `lib/activity-session-epoch.ts:7/:20`、`lib/floor-session-epoch.ts:18` | `activityScope(layout.id)` epoch 派生 | 室内语义，E3 随 epoch 退役 |
+| `lib/agent-annotation-review.ts:55`、`lib/agent-annotation-observation.ts:18` | `binding.activityScope` 校验 `startsWith('activity:')` 与尺度比对 | 标注 epoch 域，随退役成套评估 |
+| `panels/agent-panel.tsx:2509` | `sessionScope.startsWith('activity:')` 旧仓只读兼容判断 | B1-d 后随旧仓退役评估 |
+| `panels/venue-facts-panel.tsx:15`、`lib/venue-facts-storage.ts:6` | 场地事实记忆键 `activity:<activityId>` | B1-c/E2，随休眠面板清 |
+| `panels/scene-delivery-panel.tsx:356` | note scope `activity:<id>` 字面量（导出时剥前缀） | B3 |
+
+> 待 #54 补齐：现役会话仓写入方是否已全部走 `project:<activeProjectId>`（`LayoutAgentProvider` 注入），旧 `activity:` 仓是否还存在写入方，还是仅剩上述只读/派生触点。
+>
+> **#54 初判（2026-11-22，静态）**：现役 Agent 会话写入方 `useAssistantSessions(requireSessionWrite, sessionScope)`（`agent-panel.tsx:706`）的键即 Provider 注入的 `sessionScope`，壳体 `:4988` 传 `projectSessionScope(activeProjectId)` = `project:<id>`（`project-session-scope.ts:11-13`）。**Agent 会话链已切到 `project:` 新仓，旧 `activity:` 仓在该链上无现役写入方。** 未跟随的裂缝是 `creative-studio.tsx` 仍订阅/读取 `activity:<layout.id>`（:516/:579/:619/:634/:1908）：它订阅的旧仓与 Agent 写入的新仓是两个仓——候选库存/未发送草稿/恢复锁比对读不到新仓会话。其余 `activity:` 触点为 epoch 派生、标注 binding 校验/比对、旧仓只读兼容判断、venue-facts 记忆键、导出 note 字面量，均非会话写入。完整写方图谱留到 #48 成套前复核。
+
+### 7.6 B1-d 第一性施工切片（2026-11-22 定标，待壳体夹具保护后落码）
+
+**第一性口径（终态书 §1.1/§4.2/§4.3）**：身份只认 plan 槽 projectId；旧 `layout.id` / `activity:` 仓是室内历史层，随影子退役，**不做专门数据迁移**。未发送消息、agent-run 标记、apply-recovery 锁是会话临时物，不跨身份迁移；已保存方案内容（brief）随 plan 仓承接（B2）。`legacySessionScope` 一次性承接读到退役。此口径回答 C2：旧仓不搬、不强制只读降级，退役时清。
+
+**会话仓裂缝实测证据**：
+- 会话仓 `scopedStore(scope)` 以 scope 字符串直接分桶（`use-assistant-sessions.ts:350-356`），与 source-storage 持久桶是两套独立命名空间。
+- 写入方 AgentPanel：Provider 注入 `sessionScope`（壳体 `:4988`）= `project:<id>`；壳体 `:449` 订阅同键。
+- `creative-studio.tsx` 却订阅/读取 `activity:<layout.id>`，命中空旧仓：收不到现役会话失效通知、读不到现役 chatId。
+
+**片 1 · 会话仓对齐（独立可落地，不碰持久桶）**：
+- Props 加 `sessionScope?: string`；壳体 `:4942` 下传 `sessionScope={sessionScope}`。
+- Provider 内派生 `chatSessionScope = sessionScope ?? \`activity:${layout.id ?? ''}\``（legacy 回退，测试路径不变）。
+- 会话仓键触点逐点（2026-11-22 追全来源链）：
+  1. `:516` 候选失效订阅 `subscribeActiveAssistantSession(\`activity:${layout.id??''}\`, …)`；effect dep `[pendingCandidates,controller,layout.id]` → 换 `chatSessionScope`，dep 补 `chatSessionScope`。
+  2. `:579` 导出围栏 `chatScope=\`activity:${base.id}\``（base=layoutRef 快照）；`:585`/`:593`/`:596` 同围栏 `getActiveAssistantSessionId(chatScope)`/`subscribeActiveAssistantSession(chatScope,…)` 同源换键。
+  3. `:617-621` `inventoryScope`：比对 `chatScope!==\`activity:${activity}\``（activity=layoutRef.current.id）→ 比对换 `chatSessionScope`；库存身份键 JSON `[apiUrl,actor,activity,chatId]`（`:620`）暂留 `activity=layout.id`，归片 2 持久桶切换。
+  4. `:634` 清缓存订阅 `chatScope=\`activity:${layoutRef.current.id??''}\``；effect dep `[controller,layout.id]` → 换 `chatSessionScope`，dep 补 `chatSessionScope`。
+  5. `:1908` `applyCandidate`：`chatScope=\`activity:${selected.layout.id??''}\``（**候选方案 id，不是当前会话源**）→ 片 1 必须改用当前 `chatSessionScope`，不得沿用候选 `selected.layout.id`；否则候选影子 id 会读错会话仓。
+- 保护：面板 320 测试不传 `sessionScope`，走 legacy 回退；`project:` 新路径待壳体夹具 + 真机覆盖。
+
+**片 1 本地落码记录（2026-11-22，未提交、未推 main）**：
+- 改动文件：`panels/creative-studio.tsx`（Props 加 `sessionScope?`；解构；派生 `chatSessionScope`；上述 5 组键切换 + 2 处 effect 依赖补 `chatSessionScope`）；`room-organizer.tsx:4946` Provider 下传 `sessionScope={sessionScope}`。diff +12/−10，未触持久桶 `scope`/`agentScope`（片 2 范畴）。
+- 验证：前端 `npx tsc --noEmit` exit 0；`creative-studio.react.test.tsx` 定向 320 passed / 46 skipped / 0 failed（与基线一致，legacy 回退路径无损）。
+- 全量对照（日志 `%TEMP%\scendance-full-b1d1.log`，基线 `scendance-batch11.log`）：文件级 34 failed / 808 passed 与基线一致；测试级 553 failed / 10143 passed / 75 skipped（基线 552 / 10144 / 75）。差集仅 1 例新增：`app/page.test.tsx > …keeps the draft across the legacy /auth redirect`，15000ms 超时挂起；**单跑该例 4135ms 通过**，判定全量并发冷模块图时序偶发（#47 壳体夹具债族），非片 1 确定性断言破坏；无修复例、无其他新红。
+- 门禁状态：片 1 本地攒着，不合入 main；待 #47 壳体夹具绿 + #49 真机三 flow 后随 B1 成套合入。片 2 仍前置片 1 合入 + 夹具 + 真机。
+
+**片 1 收尾复核（2026-11-22，本地攒批未提交）**：
+- 两处订阅 effect 残留冗余 dep `layout.id` 已清：`:513-520` 候选失效订阅、`:635-645` 库存清缓存订阅。函数体均已不读 `layout.id`，订阅键变化由 `chatSessionScope` 捕获，去 dep 行为等价；dep 收敛为 `[pendingCandidates,controller,chatSessionScope]` / `[controller,chatSessionScope]`。
+- 片 1 五触点复核到位：`:518` 候选订阅、`:581/:587/:595/:598` 导出围栏、`:621` 库存仓比对、`:643` 清缓存订阅、`:1910` applyCandidate 均取当前 `chatSessionScope`；`:1908` 不再沿用候选 `selected.layout.id`。库存身份键 JSON `[apiUrl,actor,activity,chatId]` 的 `activity=layoutRef.current.id` 仍留片 2 持久桶切换。
+- 面板外触点核对：`bingo-audit-card` 的 `scopeKey` 由 agent-panel 传 `agent.sessionScope`（壳体注入的 `project:` 正源），内部 `projectSessionScope(plan.projectKey)` 比对一致，✅ 无 layout.id 残留；`original-scene-review-panel` 的 `scopeKey=${projectId}:${token.epoch}` 是旧云项目只读降级通路本地作用域键，属白名单保留。
+- 验证（Node26）：`tsc --noEmit` exit 0；定向三套件 EXIT=0——canvas-session 7 passed、session-generation 2 passed/4 skipped、creative-studio 320 passed/46 skipped（合计 329/50，与基线持平，无回归）。
+- **方案 B 本机活动兜底（同批落码，配套单测）**：`outdoor-project-store.ts` 加 `LOCAL_ACTIVITY_ID_PREFIX='house-'` 与 `latestLocalActivityRecord()`（枚举草稿索引取 updatedAt 最新的 `house-*`，跳过 `replica-*` 副本与 `default-outdoor`）；`workspace-shell.tsx` `decideDefaultOutdoorProject()` 优先级改为「最近指针（云项目/案例副本）→ 最近本机 `house-*` 活动 → 默认草稿」，无参兜底续回本机活动时把身份写进 URL（`project=<house-*>&mode=outdoor`），二次刷新走带参解析；`fresh` 判定同时要求指针与本机活动都缺失才弹云端找回。`outdoor-project-store.test.ts` 补 3 例（最新 house- 命中 / 仅 replica+默认返 null / 空存储返 null）。
+
+**旧 `activity:` 前缀闸门挂账（A3 #55 / B1-d 成套复核，本轮不改码）**：新会话源统一 `project:<id>`（`projectSessionScope`），下列闸门仍按旧 `activity:` 前缀判定，在新源下语义需路线 1 真实挂载 + 真机逐条定性，不在无保护下动：
+- `agent-panel.tsx:2509` `localDraftAllowed`：`sessionScope.startsWith('activity:')` 为第一条件。新源本地活动键已是 `project:house-<uuid>`，该条件恒 false；本地/云区分实际由 `isLocalActivityWorkspace(owner)` + `canCreateUnboundLocalDraft()` 承担。疑似误关本地课桌椅草案通路（`runLocalSeatingDraft` 入口 :2521 与守卫 :2338/:2348/:2572/:2684/:2735），待真机本地草稿 flow 核对后定夺：删冗余前缀条件还是换 `project:` 判定。
+- `lib/agent-annotation-observation.ts:18` binding schema refine 要求 `activityScope` `startsWith('activity:')`。壳体 :4704/:4716 绑入 `activityScope:sessionScope`（`project:`）→ zod 校验失败回 `unavailable`，标注观察可能读不出；待复核是放宽前缀还是字段随 plan 槽正源改名。
+- `lib/venue-facts-storage.ts:6` 本地键派生按 `activity:` 前缀分流，非该前缀返回 null；venue facts 面板休眠，随 B1-c/E2 域一起清，不单独改。
+
+**静态门禁对照（2026-11-22，Node26，本地攒批）**：
+- `npm run build` **exit 0**：编译成功、类型/lint 检查过、静态导出完成、`check-oneplan-artifacts` 扫描 3466 产物文件违规 0、postbuild 剥除完成。
+- 全量 `vitest run` 对照基线 batch11（34 failed / 808 passed 文件级；552 failed / 10144 passed / 75 skipped）：本轮 **33 failed / 810 passed** 文件级，**543 failed / 10158 passed / 79 skipped** 测试级。差集：基线红本轮转绿 2（canvas-session、session-generation，路线 2 兜底预期内）；本轮新红 1 个文件 `three/glb-anim-verify.test.ts`。
+- 新红定性：`plays the baked clip…` 例 `ENOENT: …docs/evidence/aholo/sculpture-rig-local/sculpture-local-rig.glb`；该目录仅入库 `.blend` 源与 png/json，`.glb` 是未入库的本机导出产物（untracked、未 ignore），测试硬读本机产物。单跑复现同 ENOENT，与本轮会话 scope/dep 改动路径无关；基线两次绿是当时本机留有该 glb。**不伪造资产、不提交证据产物**；归测试资产夹具债（#55），后续应让该例在缺 glb 时 skip 或改用入库 `assets/models/table.glb` 通路。无其他台账外确定性代码回归。
+- 静态门禁（tsc / build / 全量对照）本地已过；#49 真机三 flow 现状：flow 3 刷新续开 ✅、flow 1 双项目不串不丢 ✅（见下，附绑定域残留观察）、flow 2 新建 mint 独立槽挂账待多项目环境。
+
+**真机走查（2026-11-22，本地桩 54329 + dev 3210）**：
+- 环境：本地后端 `dev:agent`（agent-model-stub，PGlite，退出重置，预置 1 个云项目「智能建造联调项目」uuid `0dff1114-a35b-4619-880b-723d7f0dac9e`，house 槽 `house-gc5xt47q`）；前端 dev 起在 CORS 白名单端口 3210（3000 被转塘艺讯占用顺延；首落到 3002 不在后端 origins 白名单、预检被 CORS 拦，换 3210 后通）。owner 桩账号 password grant 200 发证，浏览器登录进 `/projects`。
+- **已验证**：登录态编辑器正常打开；左侧会话面板按当前项目归属渲染（「当前活动 · 智能建造联调项目」）；**flow 3 刷新续开**——无参 `/editor` 刷新由 `latestOutdoorProjectId()` 续到 A（`house-gc5xt47q`），A 会话「新会话 14:53」保留在 A 槽、未串入默认草稿槽，符合方案 B「无参刷新回最近云项目，house-* 不顶最近指针外的自动续开」。
+- **flow 1 切项目不串会话（真机对照，补第二 seed 后已走通）**：桩仅预置 1 个云项目 A，遂不碰生产码、在桩侧经 HTTP `POST /functions/v1/scene-api/projects`（owner password grant 200 发证，body `{studioId, name, scene:sceneSchema 空场}`）补建项目 B `782df575-33ef-4bac-9978-d1a5cd6c49b7`「走查对照项目 B」，列表 A/B 并存。对照取证：
+  - A 基线：槽 `house-gc5xt47q`，归属「当前项目 · 智能建造联调项目」，会话列表一条「新会话 14:53」。
+  - 开 B（`?project=782df575…`）：云层 `projects/782df…/lease/acquire`、`/sources`、`GET projects/782df…` 均走 B；会话列表为空，**A 的「新会话 14:53」未串入 B**；归属文案「当前项目 · 走查对照项目 B」。
+  - 切回 A：归属回到「智能建造联调项目」，**会话「新会话 14:53」仍在、未被 B 覆盖或丢失**。
+  - 结论：双项目间会话不串、切回不丢，片 1 会话仓按身份槽隔离的真机判据通过。
+- **flow 1 残留观察（归 B1-a 几何绑定 / 身份上提域，非片 1 会话仓回归，挂 #55 复核）**：B 的云 uuid 在本机无草稿绑定，壳层 `resolveOutdoorProjectId` 对无 mode 的 `?project=<云uuid>` 嗅探 `hasOutdoorPlanDraft` 不中 → 按方案 B `decideDefaultOutdoorProject()` 续到最近本机草稿 A（`house-gc5xt47q`）；`outdoor-history` 仍打 A 槽，而云项目 lease/sources/快照走 B——**本机草稿身份与云项目身份在打开无绑定云项目时分裂**。另 A 视图活动名短暂残留 B（云绑定身份未随 URL 重载重置）。这套跨身份口径统一属片 2 持久桶切换 / B1-a 绑定域，不在片 1 会话仓范围内修。
+- **flow 2 新建活动各落各槽（仍未走通，挂账）**：前端「新建项目」按钮落 `/editor/?new=1`，壳层嗅探不到新草稿仍续最近 A，未 mint 独立第二 `house-*` 槽；完整「选场地 → mint `house-*` → 保存云项目 + 几何绑定」链在当前桩内未取得独立槽。新建路径隔离正确性由 `project-session-scope` 单测（`project:<id>`、空 → `default-outdoor`、不含 `activity:`）+ 片 1 五触点换 `chatSessionScope` 静态 diff 覆盖；真机新建 mint 对照待具备多项目/预览环境再补。
+- **桩环境债（非片 1 回归，挂 #55）**：`outdoor-history` GET 返 500 `DATABASE_ERROR`（两个 projectId 均 500，PGlite 缺 `outdoor_card_history` 迁移/grant；前端按设计降级本机，不阻塞编辑器）；realtime websocket 握手 404（桩不支持 realtime，既有噪音）。
+
+
+
+**片 2 · 持久桶身份切换（成套，不可半拆）**：
+- source-storage brief 桶、候选库存、editor lease、apply-recovery、agent-run marker、unsent drafts 键从裸 `layout.id` 派生切到 projectId 源。
+- 触点：`:290` briefStorage、`:334` scope、`:335` guards、`:340`/`:347` readonly reader、`:355` coordinator、`:362` lease、`:395`/`:439` source record、`:116` applyRecoveryKey、`:93` runStorageKey、`:266` unsent drafts、`:617-631` inventory。
+- 前置：片 1 合入 + 壳体夹具绿 + 真机核对切项目各落各槽；旧桶 legacy 只读承接至退役。
+
+**测试断言改动点（片 2）**：`:1175` run 键 `scendance:agent-run:${apiUrl}:anonymous:${layout.id}`；各 probe `scope="legacy"`；320 例 scope 构造需同步传 `sessionScope` 对齐。
+
+**落码门禁**：片 1/片 2 代码可本地先写、本地面板定向 + tsc + 全量对照攒着；合入 main 前必须过 #47 壳体夹具绿测与 #49 真机走查，不在无保护下声称解耦完成。
+
+### 7.7 全完成作战图（2026-11-22）
+
+**终态验收（终态书 §0.4/§0.6）**：四条件达成；对抗 grep 白名单外 0 命中；根 + 前端 `tsc --noEmit` exit 0、定向 vitest 绿、全量对照新锚点无台账外增量失败、`npm run build` exit 0；真机走查三 flow 通过；户外保留件与在途人物/漫游线完整。
+
+**真机条件现状（2026-11-22 线上实测）**：线上站 `https://scendance-scene-planner-ewz.pages.dev/` 当前为**活登录态**——账户中心加载出团队「endTree的工作室」「幕景」，项目列表可见当前草稿、「新活动 11-18 07:46」「自动验证-确认循环」。登录前置当前满足。注意：线上为旧部署，本地未推的 B1 改动须在本地 dev 站或重新部署后走查，不能用线上旧版验收新代码。会话若过期，按浏览器操控门禁由用户接管登录，不接收/转发明文密码、一次性码或凭证。
+
+**串行卡剩余量与阻塞**：
+
+| 卡 | 剩余代码任务 | 前置 | 当前阻塞 |
+| --- | --- | --- | --- |
+| B1 会话身份 | B1-d 片 1 会话仓对齐 + 片 2 持久桶切换（§7.6）；B1-e 验收 | #47 壳体夹具绿 + 面板定向 + 真机三 flow | #47 夹具挂起；#49 待改动落码后走查 |
+| B2 历史快照换 plan | `useHistory` 快照 `RoomLayout`→`SitePlanData`；物料/选中/墙操作挂 plan；undo/redo 回写 plan | B1 验收合入 | 串行门禁 |
+| B3 导出/守卫 plan 化 | CSV/GeoJSON/PNG/PDF 全消费 plan；`assertLayoutWrite`→plan 写权限（capability + 项目级 lease + revision） | B2 + C5=A（已拍板 A） | 串行门禁 |
+| B4 镜像退役 | 删 plan→layout false 侧 patch；底图/锚点写 plan/视图记忆；清残留镜像分支 | B1–B3 验收合入 | 串行门禁 |
+| E1 立壳入口退役 | 删 `startBlankVenue`、加号空白/模板、`space-panel`、`scene-presets-panel`；新建落 starter plan | B1 草稿通路 | 串行门禁 |
+| E2 卸保活/室内 three/2D | 断保活容器；室内 renderer/scene/camera、`render.ts`、2D 交互、场景特效；句柄先改派地图 ref | B2/B3 + M1 | 串行门禁 |
+| E3 删 layoutStore/墙模型 | schema 室内分支、`layout-reducer`、`use-layout-store`、室内墙/开门/碰撞/吸附、室内 hooks；残留逐一改 plan 或删 | E2 + M2 | 串行门禁 |
+| E4 删二分概念 | `isOutdoorProject` 恒真分支、`outdoorPlanState` layout.id 回退、false 侧回写、`seededPlanFromLayout` | E3 | 串行门禁 |
+
+**夹具债（随卡配套）**：#47 壳体两套件 + agent-panel 簇整渲染 mock；#55 ④ 语义残留逐条定性；G1 里程碑后重采基线锚点；G2 工程卫生终态一次清。
+
+**并行遗留（不阻塞主线）**：#37 安全批次死簇/户型面板/旧 run 残留；旧 79 backlog #4/#7/#8/#9/#10/#11；C1/C2 画布图纸接 `plan.walls`、D1/D2 plan 级 DXF/SVG、F1/F2 走廊占带与 OFM 证据线。
+
+**全完成不可省的外部条件**：
+- 真机三 flow：切项目不串会话；新建活动各落各槽；无参刷新续开符合方案 B。
+- 待拍板口径：C1 无参刷新草稿索引恢复档位；C3 ④ 语义红逐条产品口径。C2 旧仓承接口径第一性已定（§7.6：不迁临时会话物，旧桶 legacy 承接至退役，方案内容随 plan）。
+- 每卡合入前：tsc + 定向测试 + 全量对照 + build；不 `git add -A`、不强推、不夹带在途文件、不触发付费生成。
+
+### 7.8 #47 壳体夹具探针取证（2026-11-22，canvas-session 套件）
+
+探针落点：`components/room-organizer/room-organizer-canvas-session.react.test.tsx`（改前原样备份 `$env:TEMP\canvas-session.bak.tsx`，未提交，取证后定保留/回退）。
+
+**已接桩（越过 setup/存储/后端构造层）**：
+- MemoryStorage 基座（`test-support-memory-storage.ts`），beforeEach 注入 `Storage`/`localStorage`/`window.localStorage`，afterEach `mem.clear()` 在 unstub 前。
+- 未配置态 BackendSession 桩：`probeController = new BackendSession(getBackendConfig({url:'',anonKey:''}))`；`vi.mock('@/lib/backend-session', importOriginal => ({...actual, createBackendSession: () => probeController}))`（importOriginal 保留真实 `BackendSession`/`getBackendConfig`，否则类导出被 mock 抹掉）。
+- `vi.stubGlobal('crypto', webcrypto)`（`webcrypto` 从 `node:crypto` 导入，jsdom 无全局 `webcrypto`）；fetch 桩返回 `Promise.reject`（不能同步 throw，否则冲出 promise 链）。
+
+**取证结论**：
+- 越过构造层后整棵 Provider 树挂载成功：AppearanceProvider → RoomEditorProvider → SelectionProvider → CreativeStudioProvider → LayoutAgentProvider → OutdoorPlanOverlay → OutdoorPlanCanvas。
+- 第一片缺口：`outdoor-plan-canvas.tsx:4308/4310` 拉 `/oneplan-icons/manifest.json` 与 `packs.json`。`libraryPanelHostId` 由 `outdoor-plan-overlay.tsx:1194` 固定传 `"outdoor-panel-host-library"`，effect（`:4305`）不早退；fetch reject 后由生产 `.catch` 静默回落 `setLibraryStatus('failed')`，不崩。
+- 兜住 manifest 后无同步异常，进入整渲染挂起：`findByLabelText('告诉 Agent 要改的')` 始终不出现（15s 超时），worker 无新增报错。挂起源候选：AgentPanel interval（`agent-panel.tsx:4377` 理解秒数、`:4556` 会话轮询）；canvas interval（`outdoor-plan-canvas.tsx:2303` facility 生成轮询、`:4273`）；rAF paint/ghost/loop；地图瓦片/物料订阅；会话仓 pending promise。
+
+**套件断言真实依赖（夹具可裁剪边界）**：`capture.two/three` gesture handlers（来自已 mock 的 `use-three-scene`/`use-canvas-2d-interaction` 回调 options）；Agent 输入框 label（`agent-panel.tsx:5109`）；真实 `<canvas>` + ResizeObserver（已 mock）；`layoutStore` 写入。地图瓦片、three 渲染、manifest 物料、会话轮询对这 7 例断言非必需。
+
+**下一步夹具两条路线（未选定，防假绿）**：
+1. 逐 hook mock 常驻副作用（interval/rAF/地图/物料/会话轮询），保留真实挂载；工作量大、回归面小。
+2. 重型 canvas/3D/地图/物料子树整体占位 mock，只留 Provider 壳 + Agent 输入 + canvas 占位 + gesture 归属；省 mock 但测试不再覆盖真实挂载，须在台账标注覆盖降级，不能据此声称壳体集成已保护。
+
+**第二轮探针（门控排除）**：把首例行 `findByLabelText` 换成渲染后 `setTimeout(1200ms)` dump DOM，dump 回调未执行。据此排除「AgentPanel 被 workbenchMode/loginBlocked 门控 return null 导致 label 缺失」这一假设。注意：vitest 日志/console 全缓冲到进程结束，单凭 dump 回调未跑**不足以判定为同步死循环**，「同步卡死 vs worker 常驻句柄残留」二者尚未区分。
+
+**第三轮二分（2026-11-22，临时探针已删、基线套件回退干净）**：
+- 可越过 setup/构造层的探针基座：MemoryStorage、未配置态 `BackendSession(getBackendConfig({url:'',anonKey:''}))`（`importOriginal` 保留真实类，仅覆写 `createBackendSession`）、`webcrypto` from `node:crypto`、fetch 返回 `Promise.reject`。
+- 补 `next/dynamic` 桩（react `lazy`+`Suspense` 占位，参照 `app/page.test.tsx:65-75`；壳体唯一直连 `dynamic()` 在 `room-organizer.tsx:276` `WorkbenchCaptureGuide`，常驻 `Suspense` 内 `:5233`）→ **未解除挂起**，排除 dynamic 懒加载边界。
+- 摘除 `outdoor-plan-overlay` / `outdoor-plan-3d` 为占位组件 → **仍挂起**，排除这两个子树本身。
+- 上轮 error boundary 栈已证树挂载到 `OutdoorPlanCanvas`；结合本轮，挂起点落在 Canvas 挂载之后：Canvas 内部 draw/rAF/interval、顶层 hooks 常驻句柄（模块单例订阅/轮询/pending promise），或 Provider 链 effect。尚未定位到具体 hook。
+
+**第四轮二分（2026-11-22，同步/句柄定性 + 子树定位）**：
+- **import 阶段挂起源锁定**：剥除 `@/lib/source-storage` 与 `@/lib/material-checkin-storage` 两个 `importOriginal`（展开真实模块再覆写函数）mock 后，进程正常 EXIT=1 退出、worker 不再常驻；确认这两个 mock 的循环依赖/求值副作用是 import 阶段挂起元凶。后续夹具若需挡持久层，改用「纯 Map/桩函数全量导出，不 `importOriginal` 展开」写法（参照 `use-reference-image.react.test.tsx:11`）。
+- **render 阶段定性：同步阻塞，非 effect 句柄残留**：render 前挂 `setTimeout(0)` tick marker，render 同步返回后 tick 才会落盘；实测 marker 停在 `BEFORE_RENDER`、tick 未执行 → 事件循环在 `render()` 同步调用内被卡死，推翻此前「同步死循环 vs 常驻句柄」悬而未判的状态（第二轮 dump 回调未跑不足以区分，本轮 0ms timer 给出区分证据）。
+- **子树定位：CreativeStudio / Agent 耦合族**：把 `./panels/agent-panel`（`AgentPanel`/`LayoutAgentProvider`/`AgentCanvasOverlay`/`MapVenueOverlay`/`VenuePickerOverlay`）与 `./panels/creative-studio`（`CreativeStudioProvider`/`CreativeAssistant`）整体占位为空组件/透传 Provider 后，render 203ms 返回、进程退出。再单独只占位 creative-studio、保留 agent-panel 真实：进程仍退出（不挂起），但 `LayoutAgentProvider` 报 `No "useStudioAgent" export` —— 二者经 `StudioContext` 耦合：Provider 提供 context，`useStudioAgent`/`useCreativeBrief`/`useLocalProjectBackup`/`useMaterialCheckinState` 等 hook 取值，`LayoutAgentProvider` 消费。挂起点在这条 Studio Provider→Agent 消费链上，不能对两棵子树独立二分。
+- 占位剥 context 后出现的 `Cannot read properties of undefined (reading 'form')`、缺导出报错均为 mock 副作用，非原始卡点；320 绿的 `creative-studio.react.test.tsx` 是自包 Provider 的独立渲染，未接壳体 `LayoutAgentProvider`，故不复现整壳体挂起。
+- **反向二分修正（2026-11-22）**：只占位 `agent-panel` 族、保留 `creative-studio` 真实挂载 → render 98ms 返回、进程退出（不挂起），仅在占位缺失 AgentContext 后抛 `'form'` undefined 副作用。三组对照：摘双侧=退出；摘 Studio 留 Agent=退出（缺 `useStudioAgent` 导出，Agent 侧没跑到真实阻塞）；摘 Agent 留 Studio=退出。**结论：阻塞不在 Studio Provider/Assistant 自身，落在 `agent-panel` 消费侧**（`LayoutAgentProvider` 内部 hook 链或 `AgentPanel` 面板 body）。静态排查 `useAssistantSessions`（`useSyncExternalStore` 返回稳定 `snapshot` 对象引用，`replaceSnapshot` 才换对象）与 `useVenueFactTracker`（`capture` 返回稳定 token 引用），snapshot 引用均稳定，未见 getSnapshot 不稳定导致的同步重渲染循环；具体同步阻塞点仍未定位到 hook。
+- 下一轮（路线 1）重点转向 `agent-panel` 模块内二分：`LayoutAgentProvider`（`:689`，内部 `useRoomEditor`/`useStudioAgent`/`useVenueFactTracker`/`useAssistantSessions`/场地事实/预览派生）与 `AgentPanel`（`:4383`）body 逐段隔离；优先在 Node inspector 下抓同步栈定位死循环位置，其次逐 hook mock 常驻/派生。`useLayoutPersistence`/`useSilentCloudAttach`/Canvas interval/rAF 作为并列候选。
+
+**下一轮 #47 起步**：① 在 Node inspector 下抓挂起同步栈（区分死循环 vs 句柄残留）；② 逐 hook mock 常驻句柄（`use-layout-persistence`/`use-silent-cloud-attach`/`use-team`/会话仓订阅/Canvas `:2303` 与 `:4273` interval、`:4243` rAF）；③ 路线 1 保留真实挂载优先，路线 2 整体占位仅作兜底并标注覆盖降级。
+
+**第五轮探针（2026-11-22，路线 1 复现证伪）**：临时探针 `room-organizer-route1-probe.react.test.tsx`（取证后删），**双侧 `./panels/agent-panel` 与 `./panels/creative-studio` 均不 mock、真实挂载**，沿用探针基座（MemoryStorage、未配置态 `BackendSession`、`webcrypto`、fetch reject、自写 `navigator.locks`、matchMedia/ResizeObserver/canvas.getContext/Dialog 桩、next/navigation、next/dynamic、three-scene/2d-interaction 桩）。
+- 结果：render 555ms / 复跑 811ms 同步返回，真实 `AgentPanel` 输入框（`agent-panel.tsx:5109` label，生产码唯一来源）2.5s 内找到，**两次 EXIT=0，不再挂起**；同步 fs 打点 `BEFORE_RENDER→RENDER_CALL_BEGIN→RENDER_CALL_RETURNED→INPUT_FOUND` 顺序完整。
+- **结论修正**：第四轮「同步阻塞落在 agent-panel 消费侧」未在当前基座复现。静态复核 Provider 链四 hook（`useRoomEditor`/`useStudioAgent`/`useAssistantSessions`/`useVenueFactTracker`）均为纯 context 取值或模块级稳定 snapshot，body hook 为常规 useState/useContext，未见 render 期同步 while/for 死循环。挂起更可能源自 #47 两套件自筑重型基座的桩组合（`importOriginal` 展开持久层 mock 的循环依赖/求值副作用、双侧占位 Provider 经 StudioContext 耦合），**非壳体固有同步死循环**。
+- 对照：`zone-race`/`annotation-capture`/`dialogue-review`/`map-preservation`/`route-provenance` 等既有壳体套件在基线 batch11 同为红，但失败例仅 2–18ms 快速报错（缺 controller/crypto/fetch/locks 等桩），不是 15s 超时挂起。
+- **路线 1 新方向**：不再走 inspector 抓栈；以第五轮探针基座为底，去掉双侧 panel 占位 mock、保留真实挂载，逐例恢复 #47 两套件断言（先 readiness，再对话链）。探针临时文件待改造完成后删除、不入库。
+
+**路线 1 落地（2026-11-22，两套件真实挂载恢复）**：
+- 去掉 `./panels/agent-panel`、`./panels/creative-studio` 整体占位 mock，保留 three-scene/2d-interaction 捕获桩、next 路由/动态导入桩、未配置 controller、MemoryStorage、webcrypto/fetch/locks/全局桩。临时探针取证后已删，桩已并入两套件。
+- `canvas-session`：**7 例全部真实挂载通过**（two/three ×3 手势归属守卫 + observer 重连），不再依赖 Agent/Studio 占位。
+- `session-generation`：readiness 2 例（strict=false/true）真实挂载通过；对话链 4 例仍 `it.skip`。
+- **对话链例阻塞定性**：真实壳体挂载后，发送在 `sendCore:3204` 被地点闸门拦下——设计指令在地点未定、无 outdoor plan 时退回选址写 pendingBrief，不发起模型调用，resolver `capture.calls=0`。agent-panel 单元测试是直挂 `LayoutAgentProvider` 并自传 callbacks/bridge 桩绕过该闸门；壳体套件整渲染时闸门由真实 outdoorWorkflow/bridge 驱动。恢复对话链例需二选一：① 壳体套件补「地点已定、可发模型」的 bridge/plan 前置桩；② 分层——对话链断言归 agent-panel 单元测试覆盖，壳体套件只保 readiness + 手势守卫。此分层口径待拍板。
+- 验证（Node26）：`tsc --noEmit` exit 0；定向三套件 EXIT=0——canvas 7 passed、session 2 passed/4 skipped、creative-studio 320 passed/46 skipped，与基线持平无回归。
+
+**第七期（2026-11-22，分层口径拍板 + agent-panel 大套件基座解锁）**：
+- 口径拍板：补前置桩能恢复的就恢复，补不上的分层归单测，以突破为准。
+- **对话链 4 例壳体层不可行（复核到第二道硬阻塞）**：除 `sendCore:3204` 地点闸外，`outdoorWorkflow.handle:2836/2853` 开头即要求 `callbacks.current.bridge()?.applyPlan` 存在且 `getPlan()` 返回有效 `SitePlanData`，否则直接 `return false`，到不了 `resolveBriefTurn`。jsdom 壳体无户外 plan，`routeBridgeRef.current` 为 null；补齐需在测试里重搭合法 `OutdoorAgentBridge` + 有效 SitePlanData + 非匿名登录态 + provider/model 全套前置，接口面见 `outdoor-agent-contract.ts:325`，耦合尚未完成的 B4 plan 域，脆弱且越界。**分层结论**：4 例断言意图归 agent-panel 直挂 `LayoutAgentProvider` 单测覆盖（该侧自传 callbacks/bridge/controller 桩，绕过户外闸门），壳体套件只保 readiness + 手势守卫。
+- **覆盖映射（agent-panel.react.test.tsx，标题定位）**：例 2 迟到回复丢弃+草稿保留 → `:1859` 同批 A→B→A 丢弃迟到回复、`:1931` 会话间草稿隔离、`:1943` epoch 过期草稿保留、`:1741` 迟到结果不写回已切活动、`:2460` 同批切会话切回旧生成不续跑；例 3 提交作废既有对话捕获/理解完成前阻断新捕获 → `dialogue export in-flight fence` 组 `:573/:592/:622/:630/:639` + `dialogue-review` 套件 isCurrent 切换作废；例 4 理解失败本地人数留存 → `:1359` 保留前轮人数、`:598` 理解失败丢弃 seating 请求、`:747/:761/:776` fact 留存组；例 5 旧 zone 预览 A→B→A 被拒不改画布 → `:1180` 切活动后不套本地预览、`:1198` 账号 A→B→A 旧预览作废、`:1755` store 变更后即时拒 stale event、`:2011/:2022/:2034` 楼层/样式 stale candidate 组。
+- **底座突破：agent-panel 大套件接入 #45 MemoryStorage 基座**。该套件 458 例此前整批炸在全局 `localStorage.clear()`（jsdom 在当前 Node 运行时下只注入 sessionStorage、`window.localStorage` 为 undefined 占位），漏接 #45 基座；与业务断言无关。按标准模式套件内注入 `MemoryStorage`（`Storage`/`localStorage`/`window.localStorage`），beforeEach 新建、afterEach `mem.clear()`。结果：**457 failed → 165 failed / 292 passed / 1 skipped**，基座成片解锁 292 例。
+- **165 例失败聚类（日志 `%TEMP%\agent-panel-r1.log`）**：`TestingLibraryElementError` 125（找不到/多命中文本，产物未出现或查询歧义）、`AssertionError` 31、`TypeError`/`Cannot read` 5（均为测试侧拿到 null DOM 再读属性的前序连锁，非缺全局桩）、`ReferenceError` 0；**无成片公共桩缺口**（crypto/fetch/locks/matchMedia 主链路已被 studioMock/Provider mock 隔离）。剩余 156 例断言级红归 #55 语义/夹具残留，待产品口径逐条核对，本轮不盲改。
+- 验证（Node26）：`tsc --noEmit` exit 0；agent-panel 定向 292 passed / 165 failed / 1 skipped；生产代码 0 改动，夹具套件内隔离。
+- **全量对照（日志 `%TEMP%\scendance-full-b1d3.log`，对照基线 `scendance-full-b1d2.log`）**：文件级 **33 failed / 810 passed (843)**，与基线 33/810 一致；测试级 **251 failed / 10450 passed / 79 skipped (10780)**，基线 543 failed / 10158 passed / 79 skipped。失败文件清单双向差集皆空——**新入列 0、出列 0**，无台账外新增确定性代码回归；测试级失败 -292、通过 +292、skipped 持平，恰为 agent-panel 基座成片解锁的 292 例。剩余 251 = agent-panel 165 断言红（挂账 #55）+ 外部既有红 86（基线 543 - agent-panel 457），均为挂账既有红，本轮不盲改。
+- **后置决策（2026-11-22 拍板）**：165 例断言红中凡属旧 `activity:` 口径/滞后文案/旧仓语义的，当前身份前置（B1 片 2、B2 快照）尚未落定，现在逐条抠是白弄；一律挂账 #55，随 B1 身份口径与 B2 plan 槽落定后复核，本轮不硬改、不阻塞 B1 合入门禁。本地精力转推 B1 验收前置（全量对照 + 真机三 flow），B2/B3/B4/E 按串行门禁不跳卡。
+
+
+**处置**：临时探针文件已删，基线套件从 `$env:TEMP\canvas-session.bak.tsx` 回退原样（5955 字节），`git status` 壳体目录仅剩片 1 两文件改动，探针未提交、未入库。
+
+**两套件同族对照（#47）**：`session-generation.react.test.tsx`（6 例）与 canvas-session 同属整渲染真实 `RoomOrganizer`、同以 `findByLabelText('告诉 Agent 要改的')` 等待。它已 mock：`next/navigation`、`use-plan-annotations`、`@/lib/agent-resolver`（pending promise）、`creative-studio` Provider 包装；**同缺**：MemoryStorage 基座（`:25` 裸 `localStorage.clear`）、未配置 controller 桩、`use-three-scene`/`use-canvas-2d-interaction`、`next/dynamic`、fetch/crypto 桩。一套件的基座+桩+挂起二分跑通后，另一套可复用同一套夹具。
+
+### 7.8.1 路线 2 兜底夹具落地（2026-11-22，先出结果，真实保护留路线 1）
+
+- **决策**：路线 1（逐 hook 补桩、保留真实挂载）尚未定位到同步阻塞 hook；用户拍板先做**路线 2**——把 Studio/Agent 重型子树整体占位降级，先让两套件跑出结果；整壳体真实挂载保护留待路线 1 再补。
+- **复用基座与桩集**：两套件均接入共享 `lib/test-support-memory-storage.ts`；未配置态 `BackendSession(getBackendConfig({url:'',anonKey:''}))` + `importOriginal` 覆写 `createBackendSession`；`webcrypto` from `node:crypto`；`fetch` reject；自写 `navigator.locks`；`matchMedia`/`ResizeObserver`/`HTMLCanvasElement.getContext`/`HTMLDialogElement` 桩；`next/navigation`、`next/dynamic` 桩；`use-three-scene`/`use-canvas-2d-interaction` 桩并经 hoisted `capture` 回填 options。`./panels/agent-panel` 与 `./panels/creative-studio` 整体 mock：AgentPanel 渲染供 `findByLabelText` 的 `<textarea aria-label="告诉 Agent 要改的" />`，Provider 透传 children，Overlay 返回 null，`useAgentOptional` 返回 null、`useAgent` 返回宽松桩；Studio Provider 透传、Assistant null、`useStudioAgent` 空桩。
+- **canvas-session（7 例）**：**7 passed**。保留壳体手势归属竞态（two/three ×3）与 observer 重连真实路径；Agent 输入框仅作挂载探针，Agent/Studio 内部行为不在覆盖范围。
+- **session-generation（6 例）**：**2 passed / 4 skipped**。例 1 `real workspace initial readiness has no false unsaved warning`（it.each strict=false/true）保留壳体路径，在占位下无「会话未能保存在本机」误警；例 2–5（A→B→A 迟到回复丢弃与草稿保留、提交时作废既有对话捕获、人数导出在理解失败时留存、旧 zone 预览被拒）依赖真实对话链，占位下不成立，标 `it.skip`，待路线 1 恢复真实挂载后逐条补回。
+- **验证（Node 26.2.0）**：前端 `tsc --noEmit` exit 0；定向三套件 `vitest run` EXIT=0——canvas-session 7 passed、session-generation 2 passed/4 skipped、`creative-studio.react.test.tsx` 320 passed/46 skipped（对照基线 320/46 无回归）。
+- **覆盖降级口径（勿误读为整壳体保护）**：路线 2 下 canvas-session 只覆盖壳体手势守卫与 observer 重连；session-generation 只覆盖 readiness 一例。Agent 对话链、Studio Assistant、持久仓交互均未在真实挂载下断言。两套件头注释已标注该降级；夹具改动本地攒批，未提交、未推 main（连同片 1 生产码，待 tsc+测试+真机验收后一次性提交）。
+

@@ -9,7 +9,9 @@ import {
 } from '@/components/room-organizer/lib/chunk-reload';
 import {
   ensureDefaultOutdoorProject,
+  latestLocalActivityRecord,
   latestOutdoorProjectId,
+  LOCAL_ACTIVITY_ID_PREFIX,
   resolveOutdoorProjectId,
 } from '@/components/room-organizer/lib/outdoor-project-store';
 import { onOutdoorProjectSwitch } from '@/components/room-organizer/lib/outdoor-project-switch';
@@ -88,14 +90,17 @@ export function BootSkeleton(): JSX.Element {
 }
 
 /**
- * 根路径无参数时决定挂哪个项目（2026-11-11 用户拍板）：
- * - 有最近的户外项目 → 续那个 projectId（上次的规划继续）；
- * - 没有 → 新建纯本机默认草稿（`default-outdoor`，起步锚点平湖秋月）。
+ * 根路径无参数时决定挂哪个项目（2026-11-11 用户拍板；2026-11-22 补本机活动兜底）：
+ * - 有最近指针（云项目 / 案例副本）→ 续那个 projectId；
+ * - 指针缺失 → 从草稿索引找回最近编辑的本机活动 `house-*`（否则刷新后会话槽漂移、历史接不回）；
+ * - 都没有 → 新建纯本机默认草稿（`default-outdoor`，起步锚点平湖秋月）。
  * 找场地是工作台里的"搜地点"，不再先跳独立页。
  */
 function decideDefaultOutdoorProject(): string {
   const last = latestOutdoorProjectId();
   if (last) return last;
+  const local = latestLocalActivityRecord();
+  if (local) return local.projectId;
   return ensureDefaultOutdoorProject();
 }
 
@@ -121,12 +126,20 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): JSX
     // 工作台无任何参数（`/` 或 `/editor` 别名）：续最近户外项目或起步默认户外 2D。
     // 带参进入（登录回跳 ?login=1、?restore=backup、?project=…）视为明确意图。
     if (!window.location.search) {
-      // 无参数：续最近地图项目，没有则起步默认地图草稿。所有项目统一进地图工作台。
-      const fresh = latestOutdoorProjectId() === null;
-      setOutdoorProjectId(current => current ?? decideDefaultOutdoorProject());
+      // 无参数：续最近指针（云项目 / 案例副本）；指针缺失则找回最近本机活动；都没有才起步默认草稿。
+      const fallbackId = decideDefaultOutdoorProject();
+      setOutdoorProjectId(current => current ?? fallbackId);
       setEditorStarted(true);
+      // 枚举兜底续回的本机活动：把身份写进 URL，二次刷新走带参解析，不依赖最近指针。
+      if (fallbackId.startsWith(LOCAL_ACTIVITY_ID_PREFIX)) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('project', fallbackId);
+        url.searchParams.set('mode', 'outdoor');
+        window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+      }
       // 2026-11-17：这台设备上什么都没有、云端却有活动 → 问一次要不要接着编。
       // 失败/空列表一律安静退回默认草稿（云端只是副本，不该拦着开工）。
+      const fresh = latestOutdoorProjectId() === null && latestLocalActivityRecord() === null;
       if (fresh && controller && !recoverAskedRef.current) {
         recoverAskedRef.current = true;
         void listAdoptableActivities(controller).then(list => {

@@ -181,7 +181,7 @@ export async function withApplyLock<T>(scope: string, run: () => Promise<T>): Pr
 }
 const sameCheckins = (left: MaterialCheckinLedger | undefined, right: MaterialCheckinLedger | undefined) => canonical(left ?? null) === canonical(right ?? null);
 export type SeatingAllocationCapture={status:'ready';value:AgentRunInput['context']['seatingAllocation'];specs?:AgentRunInput['context']['seatingSpecs']|undefined;defaults?:{desk?:string|undefined;chair?:string|undefined}|undefined;token:string;annotationObservation?:AgentRunInput['context']['annotationObservation'];annotationProvenance?:readonly AnnotationProof[];readAnnotationReview?:()=>{observation:NonNullable<AgentRunInput['context']['annotationObservation']>;provenance:readonly AnnotationProof[]}|null;isCurrent:()=>boolean}|{status:'unavailable'};
-interface Props { pendingCandidates?:PendingCandidateAccess|undefined; reviewContext?: string; controller: BackendSession; layout: RoomLayout; captureImage?: DeliveryCapture | undefined; sourceCoordinator?: ReturnType<typeof createSourceEditorCoordinator> | undefined; venueSourceGuard?: VenueSourceGuard | undefined; sessionToken?: ActivitySessionToken | null | undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean) | undefined; floorToken?:FloorSessionToken|null|undefined; isFloorCurrent?:((token:FloorSessionToken|null|undefined)=>boolean)|undefined; captureMobility?:(()=>MobilityExportCapture)|undefined; captureDialogue?:(()=>DialogueExportCapture|null)|undefined; captureSeatingAllocation?:(()=>SeatingAllocationCapture)|undefined; captureOutdoorPlan?:(()=>OutdoorPlanCapture|undefined)|undefined; getCurrentLayout?: (() => RoomLayout) | undefined; onApply(layout: RoomLayout, options?: {expectedBase:RoomLayout;expectedFloor?:FloorSessionToken}): void; sourceWriteGuard?: SourceWriteGuard | undefined; writeCapability?: LocalWriteCapability | undefined; preflightApply?(base: RoomLayout, candidate: RoomLayout): string | null; validateGenerationIntent?(): string | null; validateCandidateRequirements?(base: RoomLayout, candidate: RoomLayout): string | null; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; commitFreshActivityLayout?(next: RoomLayout, clearance: FreshActivityScopeClearance): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
+interface Props { pendingCandidates?:PendingCandidateAccess|undefined; reviewContext?: string; sessionScope?: string; controller: BackendSession; layout: RoomLayout; captureImage?: DeliveryCapture | undefined; sourceCoordinator?: ReturnType<typeof createSourceEditorCoordinator> | undefined; venueSourceGuard?: VenueSourceGuard | undefined; sessionToken?: ActivitySessionToken | null | undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean) | undefined; floorToken?:FloorSessionToken|null|undefined; isFloorCurrent?:((token:FloorSessionToken|null|undefined)=>boolean)|undefined; captureMobility?:(()=>MobilityExportCapture)|undefined; captureDialogue?:(()=>DialogueExportCapture|null)|undefined; captureSeatingAllocation?:(()=>SeatingAllocationCapture)|undefined; captureOutdoorPlan?:(()=>OutdoorPlanCapture|undefined)|undefined; getCurrentLayout?: (() => RoomLayout) | undefined; onApply(layout: RoomLayout, options?: {expectedBase:RoomLayout;expectedFloor?:FloorSessionToken}): void; sourceWriteGuard?: SourceWriteGuard | undefined; writeCapability?: LocalWriteCapability | undefined; preflightApply?(base: RoomLayout, candidate: RoomLayout): string | null; validateGenerationIntent?(): string | null; validateCandidateRequirements?(base: RoomLayout, candidate: RoomLayout): string | null; prepareRestoreLayout?(next: RoomLayout): RoomLayout; commitRestoredLayout?(next: RoomLayout): void; commitFreshActivityLayout?(next: RoomLayout, clearance: FreshActivityScopeClearance): void; onUpdateItem?: ((id: string, patch: Partial<FurnitureItem>) => void) | undefined; onUpdateEventOperations?: ((value: EventOperations | undefined) => void) | undefined; onUpdateProductionPlan?: ((value: ProductionPlan | undefined) => void) | undefined; onBindProject?(projectId: string): void; onPreview?: ((layout: RoomLayout | null) => void) | undefined; children: ReactNode }
 export interface CreativeBriefState { brief: CreativeBrief; ready: boolean; error: string | null; hasSavedBrief: boolean }
 function serializeReadonlyBrief(scope:string,kind:'original'|'draft',value:unknown):string {
   const envelope={format:'scendance-readonly-brief-v1',scope,kind,notice:kind==='original'?'原始本机保存记录；来源及确认状态均需独立核对。':'当前未保存的页面草稿；不代表已保存或已确认。',value};
@@ -272,7 +272,7 @@ export function clearUnsentMessageDraftsForTests(){unsentMessageDrafts.clear();i
 const PARTIAL_RUN_NOTICE='后续处理中断，已保留通过检查的方案，请核对后继续。';
 const ANNOTATION_BLOCK='新布置占用了已标路线或预留区，请调整后重新生成。';
 
-export function CreativeStudioProvider({ pendingCandidates, reviewContext, controller, layout, sourceCoordinator, venueSourceGuard, sessionToken, isSessionCurrent, floorToken, isFloorCurrent, captureImage, captureMobility, captureDialogue, captureSeatingAllocation, captureOutdoorPlan, getCurrentLayout, onApply, sourceWriteGuard, writeCapability, preflightApply, validateGenerationIntent, validateCandidateRequirements, prepareRestoreLayout, commitRestoredLayout, commitFreshActivityLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
+export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessionScope, controller, layout, sourceCoordinator, venueSourceGuard, sessionToken, isSessionCurrent, floorToken, isFloorCurrent, captureImage, captureMobility, captureDialogue, captureSeatingAllocation, captureOutdoorPlan, getCurrentLayout, onApply, sourceWriteGuard, writeCapability, preflightApply, validateGenerationIntent, validateCandidateRequirements, prepareRestoreLayout, commitRestoredLayout, commitFreshActivityLayout, onUpdateItem, onUpdateEventOperations, onUpdateProductionPlan, onBindProject, onPreview, children }: Props): JSX.Element {
   const applyAuthority=useRef<{capability:LocalWriteCapability|undefined;source:SourceWriteGuard|undefined;revoked:boolean;abort:AbortController}|null>(null);
   if(!applyAuthority.current&&(writeCapability||sourceWriteGuard))applyAuthority.current={capability:writeCapability,source:sourceWriteGuard,revoked:false,abort:new AbortController()};
   else if(applyAuthority.current&&(writeCapability!==applyAuthority.current.capability||sourceWriteGuard!==applyAuthority.current.source)){
@@ -332,6 +332,8 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   const preservingPreparation=useRef(false);
   preservingPreparation.current=!!preparation.current&&(preparation.current.layout===layout||!!preparation.current.projectId&&preparation.current.projectId===layout.id)&&(!preparation.current.userId||preparation.current.userId===cloud.user?.id);
   const scope=layout.id??'local';
+  // B1-d 片 1：会话仓身份跟壳体 projectId 源（sessionScope）；未传时回退旧 activity:<layout.id> 仓，测试路径不变。
+  const chatSessionScope=sessionScope ?? `activity:${layout.id ?? ''}`;
   const scopeWriteGuards=useRef(new Map<string,SourceWriteGuard|undefined>());scopeWriteGuards.current.set(scope,sourceWriteGuard);
   const scopeRef=useRef(scope); scopeRef.current=scope;
   const agentScope=`${controller.config.apiUrl}:${cloud.user?.id??'anonymous'}:${scope}`;
@@ -513,9 +515,9 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const identity=()=>{const s=controller.getSnapshot();return JSON.stringify([s.user?.id,s.project?.id,s.sessionId,s.lease?.generation]);};
     let previous=identity();
     const unowner=controller.subscribe(()=>{const next=identity();if(next!==previous){previous=next;pendingCandidates.invalidate();}});
-    const unchat=subscribeActiveAssistantSession(`activity:${layout.id??''}`,()=>pendingCandidates.invalidate());
+    const unchat=subscribeActiveAssistantSession(chatSessionScope,()=>pendingCandidates.invalidate());
     return()=>{unowner();unchat();};
-  },[pendingCandidates,controller,layout.id]);
+  },[pendingCandidates,controller,chatSessionScope]);
   const [expired,setExpired]=useState(false);
   const layoutRef=useRef(layout); layoutRef.current=layout;
   const materialDraftExportPending=useRef(false);
@@ -576,7 +578,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   function captureLocalDraftExport():ReturnType<typeof captureLocalDraftIntegrityFence> {
     const owner=controllerRef.current,base=layoutRef.current,activityToken=sessionToken,selectedFloor=floorToken;
     if(!base.id||!activityToken||!selectedFloor||!sessionGuardRequired.current||!floorGuardRequired.current||!currentLayoutGetter.current)return null;
-    const state=layoutStore.getState(),session=owner.getSnapshot(),scope=scopeRef.current,chatScope=`activity:${base.id}`;
+    const state=layoutStore.getState(),session=owner.getSnapshot(),scope=scopeRef.current,chatScope=chatSessionScope;
     const identity={user:session.user?.id,sessionId:session.sessionId,project:session.project?.id,revision:session.revision,
       localRevision:session.localRevision,lease:session.lease?.generation,writeBlocked:session.writeBlocked,
       recoveryReady:session.recoveryReady,status:session.status};
@@ -616,7 +618,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   const sessionInventory=useRef<SessionCandidateInventory|null>(null);
   function inventoryScope(chatScope:string,chatId:string|null):string|null {
     const owner=controllerRef.current,actor=owner.getSnapshot().user?.id,activity=layoutRef.current.id;
-    if(!actor||!activity||chatScope!==`activity:${activity}`||!chatId||getActiveAssistantSessionId(chatScope)!==chatId)return null;
+    if(!actor||!activity||chatScope!==chatSessionScope||!chatId||getActiveAssistantSessionId(chatScope)!==chatId)return null;
     return JSON.stringify([owner.config.apiUrl,actor,activity,chatId]);
   }
   function getSessionInventory(candidate:RoomLayout,chatScope:string,chatId:string|null):CandidateInventory|undefined {
@@ -631,7 +633,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     sessionInventory.current=next;
   }
   useEffect(()=>{
-    const owner=controllerRef.current,chatScope=`activity:${layoutRef.current.id??''}`;
+    const owner=controllerRef.current,chatScope=chatSessionScope;
     let actor=owner.getSnapshot().user?.id??null;
     const clear=()=>{
       if(sessionInventory.current||sharedInventory.current){setTrackedPreview(null);setCandidates([]);}
@@ -640,7 +642,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
     const unowner=owner.subscribe(()=>{const next=owner.getSnapshot().user?.id??null;if(next!==actor){actor=next;clear();}});
     const unchat=subscribeActiveAssistantSession(chatScope,clear);
     return ()=>{unowner();unchat();clear();};
-  },[controller,layout.id]);
+  },[controller,chatSessionScope]);
   const sharedInventory=useRef<{proposalId:string;preview:Preview;candidate:RoomLayout;value:CandidateInventory;fence:ReturnType<typeof captureLocalDraftIntegrityFence>;continuity:ReturnType<typeof captureLocalDraftIntegrityFence>}|null>(null);
   function getBoundCandidateInventory(selected:Preview):CandidateInventory|undefined {
     const record=sharedInventory.current;
@@ -1905,7 +1907,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, contr
   async function applyCandidate(selected:Preview,options?:{auto?:boolean}):Promise<void> {
     if(!options?.auto&&previewRef.current!==selected)throw new Error('候选已变化，请重新核对。');
     if(isUnchangedProposal(selected.proposal))throw new Error('这版与当前场景一致，无需应用；请继续核对是否满足需求。');
-    const chatScope=`activity:${selected.layout.id??''}`,chatId=getActiveAssistantSessionId(chatScope);
+    const chatScope=chatSessionScope,chatId=getActiveAssistantSessionId(chatScope);
     const briefEpoch=briefEditEpoch.current;
     let automaticWriteStarted=false;
     const dialogue=captureDialogue?.()??null;

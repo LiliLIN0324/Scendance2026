@@ -26,6 +26,7 @@ import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from '../li
 import { clearStagedMaterialGenerateForTests } from '../lib/material-generate';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider, MapVenueOverlay, resetVolatileAssistantMemoriesForTests, useAgent, type BriefTool } from './agent-panel';
 import type { RoomLayout } from '../lib/types';
+import { MemoryStorage } from '../../../lib/test-support-memory-storage';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
 import type { WorkbenchMode } from '../lib/workbench-mode';
 
@@ -39,6 +40,7 @@ const state = vi.hoisted(() => ({
 }));
 const realLayoutStoreGetState = layoutStore.getState.bind(layoutStore);
 let useRealLayoutStore = false;
+let mem: MemoryStorage;
 
 const studioMock = vi.hoisted(() => ({
   exportActivity: vi.fn(async () => {}),
@@ -1464,6 +1466,11 @@ async function reviewAndFix(): Promise<void> {
 }
 
 beforeEach(() => {
+  // #45 基座：jsdom 在部分 Node 运行时下 localStorage 为 undefined 占位，先注入标准内存 Storage。
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   // jsdom 30 没有 Element.scrollTo / ResizeObserver；对话区钉底 effect 会在挂载时用到。
   if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollTo !== 'function') {
     Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, writable: true, value() {} });
@@ -1514,7 +1521,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
 });
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllEnvs(); clearStagedMaterialGenerateForTests(); });
+afterEach(() => { cleanup(); mem?.clear(); vi.restoreAllMocks(); vi.unstubAllEnvs(); clearStagedMaterialGenerateForTests(); });
 
 /** 例句行末的 ⌄ 把输入框上方这一格换成能力卡。要用能力卡的用例先点它。 */
 const expandCapabilityCards = () => { fireEvent.click(screen.getByRole('button', { name: '展开你可以做什么' })); };

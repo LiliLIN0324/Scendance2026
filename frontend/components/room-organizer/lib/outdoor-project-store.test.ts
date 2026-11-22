@@ -7,6 +7,7 @@ import {
   DEFAULT_OUTDOOR_PROJECT_ID,
   hasOutdoorPlanDraft,
   latestOutdoorProjectId,
+  latestLocalActivityRecord,
   listOutdoorProjectRecords,
   OUTDOOR_LAST_PROJECT_KEY,
   outdoorPlanStorageKey,
@@ -427,5 +428,33 @@ describe('plan 草稿索引枚举（B1-b 身份恢复地基）', () => {
     const storage = memoryStorage();
     saveOutdoorProjectRecord(record(samplePlan()), storage);
     expect(listOutdoorProjectRecords(storage)).toEqual([]);
+  });
+});
+
+describe('latestLocalActivityRecord（无参刷新兜底找回本机活动）', () => {
+  it('返回 updatedAt 最新的 house-* 草稿，跳过 replica 副本与默认草稿', () => {
+    const storage = new MemoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-a',
+      createdAt: '2026-11-10T07:00:00.000Z', updatedAt: '2026-11-10T08:00:00.000Z' }, storage);
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'house-b',
+      createdAt: '2026-11-11T08:00:00.000Z', updatedAt: '2026-11-11T09:00:00.000Z' }, storage);
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'replica-garden',
+      createdAt: '2026-11-12T08:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' }, storage);
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: DEFAULT_OUTDOOR_PROJECT_ID,
+      createdAt: '2026-11-09T06:00:00.000Z', updatedAt: '2026-11-09T07:00:00.000Z' }, storage);
+
+    const picked = latestLocalActivityRecord(storage);
+    expect(picked?.projectId).toBe('house-b');
+  });
+
+  it('只有 replica 副本 / 默认草稿时返回 null，不抢续非本机活动', () => {
+    const storage = new MemoryStorage();
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: 'replica-garden' }, storage);
+    saveOutdoorProjectRecord({ ...record(samplePlan()), projectId: DEFAULT_OUTDOOR_PROJECT_ID }, storage);
+    expect(latestLocalActivityRecord(storage)).toBeNull();
+  });
+
+  it('空存储返回 null', () => {
+    expect(latestLocalActivityRecord(new MemoryStorage())).toBeNull();
   });
 });
