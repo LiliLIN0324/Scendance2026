@@ -1441,7 +1441,22 @@ html{scroll-snap-type:y proximity}
 .map-embed .site-map-dock{bottom:36px}
 .map-embed .site-map-dock button{font-size:11px!important}
 .map-embed{scroll-snap-type:none}
-</style>
+
+/* ============================================================
+   页脚 · 窄屏（2026-11-22）
+   原来 ≤900px 只有一句 .foot-inner{grid-template-columns:1fr}，
+   三组链接就竖着堆成一条 ~650px 的长列，右边整片空着。
+   这里改成按可用宽度自动分栏 + 收窄行距，页脚不再占掉大半屏。
+   只作用于 ≤900px，桌面版式不受影响。
+   ============================================================ */
+@media (max-width:900px){
+  .site-foot{min-height:0;padding-top:clamp(28px,5vh,40px)}
+  .foot-inner{grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:24px 16px;align-items:start}
+  .foot-col{min-width:0}
+  .foot-col h3{margin:0 0 8px}
+  .foot-col a{margin:0;padding:5px 0}
+  .foot-note{margin-top:22px;padding-top:14px;line-height:1.7}
+}</style>
 <script>
   if (new URLSearchParams(location.search).get('view') === 'inspiration') {
     document.documentElement.classList.add('inspiration-page');
