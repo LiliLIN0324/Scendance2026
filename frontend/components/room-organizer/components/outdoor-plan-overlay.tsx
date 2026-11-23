@@ -12,7 +12,7 @@ import { downloadOutdoorPlanDraft } from '../lib/outdoor-plan-handoff';
  * 开关由左轨「户外规划」钮 toggle；活动名/保存态归主产品原位（左栏活动卡/左轨 foot）。
  */
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties } from 'react';
 import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
@@ -21,7 +21,8 @@ import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { REPLICA_CASES } from '../lib/replica-cases';
 import { planBoundaryFromSearchArea } from '@/components/room-organizer/lib/outdoor-venue-sync';
-import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, writePlanGroundMode, writePlanGroundSource } from '@/components/room-organizer/lib/plan-basemap-source';
+import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, subscribePlanGroundSource, writePlanGroundMode, writePlanGroundSource, writeRecordedBasemapStyle } from '@/components/room-organizer/lib/plan-basemap-source';
+import { WORKBENCH_BASEMAP_LABEL, WORKBENCH_BASEMAP_SOURCE, styleFromProvider, type WorkbenchImageryStyle } from '@/components/room-organizer/lib/basemap-style';
 import { downloadPlanCsv } from '@/components/room-organizer/lib/site-plan-csv';
 import { downloadPlanPng, composePlanPng } from '@/components/room-organizer/lib/site-plan-png';
 import { printPlanDeck } from '@/components/room-organizer/lib/site-plan-pdf';
@@ -29,17 +30,6 @@ import { downloadPlanGeoJson } from '@/components/room-organizer/lib/site-plan-g
 import PlanPlaceSearch from '@/components/room-organizer/components/plan-place-search';
 import { normalizePlanFacilityFootprints } from '@/components/room-organizer/lib/facility-footprint-lock';
 import { usePlaceShapeLookup } from '../hooks/use-place-shape-lookup';
-import { isOverseasLocation } from '../lib/basemap-alignment';
-import {
-  MAP_SLOT_GROUP_LABELS,
-  MAP_SLOT_LABELS,
-  MAP_SLOT_ROLES,
-  pinMapSource,
-  readMapSlots,
-  slotRoleForSource,
-  subscribeMapSlots,
-  type MapSlotRole,
-} from '../lib/map-source-slots';
 import type { BackendSession } from '@/lib/backend-session';
 import { createOutdoorMapContext,type OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import { restoreOutdoorLibraryModels } from '../lib/outdoor-personal-library';
@@ -49,7 +39,7 @@ import { loadFacilityModelCandidates } from '../lib/plan-facility-models';
 import { findGeneratedFacilityModel,listGeneratedFacilityModels } from '../lib/facility-generated-models';
 import { openGenerationSheet } from '../lib/generation-sheet';
 import { useAgentOptional } from '@/components/room-organizer/panels/agent-panel';
-import { Layers3, LayoutGrid, X } from 'lucide-react';
+import { Layers3 } from 'lucide-react';
 import {
   adoptLegacyOutdoorPlanForActivity,
   createStarterOutdoorPlan,
@@ -72,201 +62,12 @@ import type { SitePlanData } from '../../../../supabase/functions/_shared/site-p
 import type { DisplayUnit } from '../lib/types';
 import type { PlanSceneObject } from '@/components/room-organizer/lib/plan-item-bridge';
 
-/** 图源循环顺序（左下「图层」入口选图源）。方格内为示意地图画面（非真实瓦片预览）。 */
-const SOURCE_CYCLE: { id: CanvasBasemapSource; label: string; featured?: boolean }[] = [
-  { id: 'osm', label: 'OSM 街道' },
-  { id: 'carto-light', label: 'Carto 浅色' },
-  { id: 'carto-dark', label: 'Carto 深色', featured: true },
-  { id: 'amap-satellite', label: '高德卫星', featured: true },
-  { id: 'amap-streets', label: '高德街道', featured: true },
-  { id: 'amap-streets-labels', label: '高德街道注记' },
-  { id: 'esri-satellite', label: '全球卫星' },
-  { id: 'vec', label: '天地图矢量' },
-  { id: 'img', label: '天地图影像' },
+/** 图层条只给四种记下的底图。每种对应唯一瓦片源，见 basemap-style。 */
+const BASEMAP_CHOICES: { style: WorkbenchImageryStyle; label: string }[] = [
+  { style: 'map', label: WORKBENCH_BASEMAP_LABEL.map },
+  { style: 'satellite', label: WORKBENCH_BASEMAP_LABEL.satellite },
+  { style: 'light', label: WORKBENCH_BASEMAP_LABEL.light },
 ];
-
-/** 面板清单短名：268px 宽、一格约 72px，长名会被省略号截断，这里统一给短名。 */
-const LIST_SOURCE_LABELS: Record<string, string> = {
-  osm: 'OSM 街道',
-  'carto-light': 'Carto 浅色',
-  'carto-dark': 'Carto 深色',
-  'amap-satellite': '高德卫星',
-  'amap-streets': '高德街道',
-  'amap-streets-labels': '高德注记',
-  'esri-satellite': '全球卫星',
-  vec: '天地图矢量',
-  img: '天地图影像',
-};
-
-/** 面板里图源的人话名（短名优先；查不到退循环表的名字，再不行用 id）。 */
-function sourceDisplayName(id: CanvasBasemapSource): string {
-  return LIST_SOURCE_LABELS[id] ?? SOURCE_CYCLE.find(option => option.id === id)?.label ?? id;
-}
-
-/**
- * 2026-11-17 用户指令：下方清单按用途分组（街道类 / 卫星类 / 视觉类），与上排四个槽位一一对应。
- * 分组直接由 map-source-slots 的用途表推出，新增图源只需在那边表态，这里自动归位。
- */
-const SOURCE_GROUPS = MAP_SLOT_ROLES.map(role => ({
-  role,
-  label: MAP_SLOT_GROUP_LABELS[role],
-  items: SOURCE_CYCLE.filter(option => slotRoleForSource(option.id) === role).map(option => ({
-    id: option.id,
-    label: LIST_SOURCE_LABELS[option.id] ?? option.label,
-  })),
-}));
-
-/** 悬停竖列里的高频底图（上一版结构）：地图 / 卫星 / 深色，其余走「展开」。 */
-const FEATURED_SOURCES: { id: CanvasBasemapSource; label: string }[] = [
-  { id: 'amap-streets', label: '地图' },
-  { id: 'amap-satellite', label: '卫星' },
-  { id: 'carto-dark', label: '深色' },
-];
-
-function MapDetailsPanel({ source, geoHidden, showPaperMode = true, lngLat, onPickSource, onTogglePaper, onClose }: {
-  source: CanvasBasemapSource;
-  geoHidden: boolean;
-  /** 2026-11-17 docs/46 V-P1：纸面升为一等形态（3D 地面也认），默认渲染；保留参数只为将来按需隐藏。 */
-  showPaperMode?: boolean;
-  /** 真瓦片缩略图取图中心（plan.anchor，GCJ-02）；null 时缩略图回落手绘示意。 */
-  lngLat: { lng: number; lat: number } | null;
-  onPickSource: (id: CanvasBasemapSource) => void;
-  onTogglePaper: () => void;
-  onClose: () => void;
-}) {
-  // 2026-11-17 用户指令「上面留四个、下面的可以置顶」：上排四格读槽位 store，
-  // 置顶写入后立刻重绘（模块级 store + useSyncExternalStore）。
-  const slots = useSyncExternalStore(subscribeMapSlots, readMapSlots, readMapSlots);
-  const overseas = isOverseasLocation(lngLat?.lng, lngLat?.lat);
-
-  /** 上排格：标题是用途（卫星/街道/单色），底下小字是置顶进来的具体图源。 */
-  const slotTile = (role: MapSlotRole) => {
-    const pinned = slots[role] as CanvasBasemapSource;
-    const active = !geoHidden && pinned === source;
-    return (
-      <button
-        key={role}
-        type="button"
-        role="radio"
-        aria-checked={active}
-        aria-label={`底图：${MAP_SLOT_LABELS[role]}（${sourceDisplayName(pinned)}）`}
-        data-testid={`map-slot-${role}`}
-        onClick={() => onPickSource(pinned)}
-        className="oc-map-details__source"
-      >
-        <span className="oc-map-details__thumb" aria-hidden="true">
-          <RealSourceThumb id={pinned} lngLat={lngLat} />
-        </span>
-        <span className="oc-map-details__name">{MAP_SLOT_LABELS[role]}</span>
-        <span className="oc-map-details__sub">{sourceDisplayName(pinned)}</span>
-      </button>
-    );
-  };
-
-  /** 下排清单项：点方格选图源；「置顶」只换上面同类槽位，不改当前底图（可预期）。 */
-  const sourceItem = ({ id, label }: { id: CanvasBasemapSource; label: string }) => {
-    const active = !geoHidden && id === source;
-    const role = slotRoleForSource(id);
-    const pinnedHere = slots[role] === id;
-    const slotName = MAP_SLOT_LABELS[role];
-    return (
-      <div key={id} className="oc-map-details__item">
-        <button
-          type="button"
-          role="radio"
-          aria-checked={active}
-          aria-label={`底图：${label}`}
-          data-testid={`map-source-${id}`}
-          onClick={() => onPickSource(id)}
-          className="oc-map-details__source"
-        >
-          <span className="oc-map-details__thumb" aria-hidden="true">
-            <RealSourceThumb id={id} lngLat={lngLat} />
-          </span>
-          <span className="oc-map-details__name">{label}</span>
-        </button>
-        <button
-          type="button"
-          className="oc-map-details__pin"
-          data-testid={`map-pin-${id}`}
-          aria-label={pinnedHere ? `${label}已在${slotName}槽位` : `把${label}置顶到${slotName}`}
-          title={pinnedHere ? `已在${slotName}槽位` : `置顶到${slotName}`}
-          disabled={pinnedHere}
-          onClick={() => pinMapSource(id)}
-        >
-          {pinnedHere ? '已置顶' : '置顶'}
-        </button>
-      </div>
-    );
-  };
-
-  return (
-    <div
-      id="outdoor-map-details"
-      data-testid="outdoor-map-picker-panel"
-      role="dialog"
-      aria-label="地图详情"
-      className="oc-map-details"
-    >
-      <div className="oc-map-details__head">
-        <span className="oc-map-details__title">地图详情</span>
-        <button
-          type="button"
-          data-testid="map-picker-close"
-          aria-label="关闭地图详情"
-          className="oc-map-details__close"
-          onClick={onClose}
-        >
-          <X size={18} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-      </div>
-      <div className="oc-map-details__body">
-      <div className="oc-map-details__section">
-        <div className="oc-map-details__label">地图类型</div>
-        <div className="oc-map-details__grid" role="radiogroup" aria-label="地图类型">
-          {MAP_SLOT_ROLES.map(slotTile)}
-          {/* 第四格「无」= 纸面（虚拟场地）：走 ground-mode store，不铺瓦片。 */}
-          {showPaperMode && (
-            <button
-              type="button"
-              role="radio"
-              aria-checked={geoHidden}
-              aria-label="底图：无（纸面）"
-              data-testid="map-picker-toggle-geo"
-              onClick={onTogglePaper}
-              className="oc-map-details__source"
-            >
-              <span className="oc-map-details__thumb oc-map-details__thumb--paper" aria-hidden="true" />
-              <span className="oc-map-details__name">无</span>
-              <span className="oc-map-details__sub">纸面</span>
-            </button>
-          )}
-        </div>
-        <div className="oc-map-details__hint">下面任一图源可「置顶」到上面同类型的格子。</div>
-        {/* 2026-11-17 用户反馈「海外的地图怎么全改了」：境外换源不再一刀切，按类别映射
-            （街道类→OSM、卫星类→全球卫星），并在面板里明说。 */}
-        {overseas && (
-          <div
-            data-testid="map-details-overseas-hint"
-            style={{ margin: '6px 4px 0', fontSize: 11, lineHeight: 1.5, color: 'var(--sc-ink-muted, #8a8f98)' }}
-          >
-            海外场地：高德/天地图在境外无瓦片，街道类已用 OSM、卫星类已用全球卫星替代。
-          </div>
-        )}
-      </div>
-      {/* 2026-11-17 用户指令：下排按类型分组（街道 / 卫星 / 视觉），每项可置顶。 */}
-      {SOURCE_GROUPS.map(group => (
-        <div className="oc-map-details__section" key={group.role}>
-          <div className="oc-map-details__label">{group.label}</div>
-          <div className="oc-map-details__grid" role="radiogroup" aria-label={group.label}>
-            {group.items.map(sourceItem)}
-          </div>
-        </div>
-      ))}
-      </div>
-    </div>
-  );
-}
 
 /** 本机落盘失败时给人看的一句话（不出现「已保存」这种模糊说法）。 */
 function localSaveFailureMessage(reason: 'unavailable' | 'quota' | 'unknown'): string {
@@ -519,12 +320,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const catchUpPushedRef = useRef<string | null>(null);
   // 2026-11-20：这里的三步气泡由全局引导（onboarding/）接管；本覆盖层不再挂第二套引导状态，
   // 也不再挂 window 捕获阶段的「点外面就永久消失」监听——那会让引导一次跳过就回不来。
-  // 底图选择面板：对齐 OnePlan 的 Select a map —— 画布右下角一枚「底图」钮 + 弹出列表，
-  // 不再把「OSM」这种图源缩写塞进室内工具排里让人猜。
-  const [mapPickerOpen, setMapPickerOpen] = useState(false);
-  // 2026-11-16 用户指令（参考高德）：点图层钮开合紧凑弹层（地图/卫星/深色/展开），
-  // 单击即切即关；「展开」才进完整「地图详情」面板，X 关掉后回到图层钮。
-  // 悬停竖列手感太低效（误触开、移开即关），拆除 hover 计时器；点外部/Esc 收起走下方 effect。
+  // 图层钮点开四选一：地图 / 卫星 / 浅色 / 纸面。点外部或 Esc 收起。
   const [layerStripOpen, setLayerStripOpen] = useState(false);
   const layerDockRef = useRef<HTMLDivElement | null>(null);
   // 2026-11-11 用户拍板：户外默认铺真地图（起步计划自带预置锚点）；纸面格网降级为
@@ -564,7 +360,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     const flow = agent?.outdoorWorkflow;
     if (flow?.proposal?.kind === 'scope') flow.cancel();
   };
-  // P4-d：把平面选的底图记成「三维地面也用这张」的偏好，切图源时同步。
+  // 平面选的底图记成三维地面也用的那一个图源。旧 id（全球卫星等）在写入时收成唯一源。
   useEffect(() => {
     writePlanGroundSource(source);
   }, [source]);
@@ -576,6 +372,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // V-P2：Agent 侧（虚拟场地意图）也会写 ground-mode store——订阅回来，2D 覆盖层跟随切换。
   useEffect(() => subscribePlanGroundMode(() => {
     setGeoHidden(readPlanGroundMode() === 'paper');
+  }), []);
+  useEffect(() => subscribePlanGroundSource(() => {
+    const next = readPlanGroundSource();
+    setSource(current => (current === next ? current : next));
   }), []);
 
   // 载入本机草稿：室内活动第一次开户外面用起步矩形（同户外项目口径）。
@@ -1021,26 +821,6 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [layerStripOpen]);
-  // 完整「地图详情」是模态浮层：Esc 或点画布都能关；标题与 X 固定，不随面板内容滚动。
-  useEffect(() => {
-    if (!mapPickerOpen) return;
-    const closeOnOutside = (event: PointerEvent) => {
-      if (layerDockRef.current?.contains(event.target as Node)) return;
-      setMapPickerOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.isComposing) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setMapPickerOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutside, true);
-    document.addEventListener('keydown', closeOnEscape, true);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutside, true);
-      document.removeEventListener('keydown', closeOnEscape, true);
-    };
-  }, [mapPickerOpen]);
   useEffect(() => {
     onSaveStateChange?.({
       state: saveState,
@@ -1130,7 +910,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     );
   }
 
-  const currentSource = SOURCE_CYCLE.find(s => s.id === source) ?? SOURCE_CYCLE[0];
+  const recordedStyle = geoHidden ? 'paper' : styleFromProvider(source);
+  const recordedLabel = WORKBENCH_BASEMAP_LABEL[recordedStyle];
   // 真瓦片缩略图的取图中心：plan.anchor（GCJ-02，铺瓦片同口径）；plan 未载入时回落手绘示意。
   const thumbAnchor = plan?.anchor ?? null;
   // 3D 接管态（dormant）下本覆盖层只是「保活的编辑桥」：2D 画面、浮层、切换钮全部不出镜；
@@ -1261,106 +1042,82 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       {/* 2026-11-15 旧独立分享/导出钮退役：分享、导出、发布统一收进右上工具簇的 ShareMenu 面板，
           本覆盖层不再自摆快捷钮。2026-11-18：旧 OutdoorDeliveryPanel 与其导出宿主接线一并删除，
           评审/导出只保留 ShareMenu 一条路径。 */}
-      {/* 2026-11-16 用户指令：左下只保留一枚「图层」缩略钮；点开是「地图详情」面板，
-          面板盖住地图和入口，关闭只走右上角 X，关掉后回到这一枚图层钮。
-          2026-11-16 用户指令「这个在 3D 的时候也补上」：接管态（dormant）下整层 visibility:hidden，
-          但图层 dock 单独翻回 visible（CSS visibility 子元素可覆盖；同 inspector 卡出镜手法）——
-          换图源写 writePlanGroundSource、纸面写 writePlanGroundMode（docs/46 V-P1），3D 地面经 useSyncExternalStore 自动跟随。 */}
+      {/* 左下图层钮：地图 / 卫星 / 浅色 / 纸面。每种选择只记一个瓦片源。
+          接管态（dormant）下整层 visibility:hidden，图层 dock 单独翻回 visible。 */}
       <div
         ref={layerDockRef}
         className="oc-layer-dock"
-        style={{ position: 'absolute', left: 24, bottom: 'var(--oc-layer-bottom, 20px)', zIndex: mapPickerOpen ? 20 : 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, ...(dormant ? { visibility: 'visible' as const, pointerEvents: 'auto' as const } : {}) }}
+        style={{ position: 'absolute', left: 24, bottom: 'var(--oc-layer-bottom, 20px)', zIndex: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, ...(dormant ? { visibility: 'visible' as const, pointerEvents: 'auto' as const } : {}) }}
       >
-        {mapPickerOpen ? (
-          <MapDetailsPanel
-            source={source}
-            geoHidden={geoHidden}
-            lngLat={thumbAnchor}
-            onPickSource={id => { setSource(id); setGeoHidden(false); }}
-            onTogglePaper={() => setGeoHidden(value => !value)}
-            onClose={() => setMapPickerOpen(false)}
-          />
-        ) : (
-          <>
+        <button
+          type="button"
+          id="tool-outdoor-source"
+          data-testid="outdoor-source-cycle"
+          aria-label={`图层，当前底图 ${recordedLabel}`}
+          aria-expanded={layerStripOpen}
+          aria-controls="outdoor-layer-strip"
+          onClick={() => setLayerStripOpen(value => !value)}
+          className="oc-layer-entry"
+        >
+          <span className="oc-layer-entry__thumb" aria-hidden="true">
+            {geoHidden
+              ? <span className="oc-layer-entry__thumb--paper" />
+              : <RealSourceThumb id={WORKBENCH_BASEMAP_SOURCE[styleFromProvider(source)]} lngLat={thumbAnchor} />}
+          </span>
+          <span className="oc-layer-entry__caption">
+            <Layers3 size={16} strokeWidth={1.8} aria-hidden="true" />
+            <span>图层</span>
+          </span>
+        </button>
+        {layerStripOpen && (
+          <div
+            id="outdoor-layer-strip"
+            data-testid="outdoor-layer-strip"
+            role="group"
+            aria-label="底图"
+            className="oc-layer-strip"
+          >
+            {BASEMAP_CHOICES.map(choice => {
+              const provider = WORKBENCH_BASEMAP_SOURCE[choice.style];
+              const active = !geoHidden && source === provider;
+              return (
+                <button
+                  key={choice.style}
+                  type="button"
+                  data-testid={choice.style === 'map' ? 'map-strip-current' : `map-strip-${choice.style}`}
+                  aria-label={`底图：${choice.label}`}
+                  aria-pressed={active}
+                  className="oc-layer-strip__row"
+                  onClick={() => {
+                    writeRecordedBasemapStyle(choice.style);
+                    setSource(provider);
+                    setGeoHidden(false);
+                    setLayerStripOpen(false);
+                  }}
+                >
+                  <span className="oc-layer-strip__thumb" aria-hidden="true">
+                    <RealSourceThumb id={provider} lngLat={thumbAnchor} />
+                  </span>
+                  <span className="oc-layer-strip__label">{choice.label}</span>
+                </button>
+              );
+            })}
             <button
               type="button"
-              id="tool-outdoor-source"
-              data-testid="outdoor-source-cycle"
-              aria-label={`图层，当前底图 ${currentSource.label}${geoHidden ? '（纸面）' : ''}`}
-              aria-expanded={layerStripOpen}
-              aria-controls="outdoor-layer-strip"
-              data-tip="图层 · 点按快速换底图"
-              onClick={() => setLayerStripOpen(value => !value)}
-              className="oc-layer-entry"
+              data-testid="map-strip-paper"
+              aria-label="底图：纸面"
+              aria-pressed={geoHidden}
+              className="oc-layer-strip__row"
+              onClick={() => {
+                writeRecordedBasemapStyle('paper');
+                setGeoHidden(true);
+                setLayerStripOpen(false);
+              }}
             >
-              {/* 2026-11-16 用户指令：缩略图跟当前图源走（原来写死 amap-satellite）；纸面态给纸面格。 */}
-              <span className="oc-layer-entry__thumb" aria-hidden="true">
-                {geoHidden
-                  ? <span className="oc-layer-entry__thumb--paper" />
-                  : <RealSourceThumb id={source} lngLat={thumbAnchor} />}
-              </span>
-              <span className="oc-layer-entry__caption">
-                <Layers3 size={16} strokeWidth={1.8} aria-hidden="true" />
-                <span>图层</span>
-              </span>
+              <span className="oc-layer-strip__thumb oc-layer-strip__thumb--paper" aria-hidden="true" />
+              <span className="oc-layer-strip__label">{WORKBENCH_BASEMAP_LABEL.paper}</span>
             </button>
-            {layerStripOpen && (
-              <div
-                id="outdoor-layer-strip"
-                data-testid="outdoor-layer-strip"
-                role="group"
-                aria-label="快速切换底图"
-                className="oc-layer-strip"
-              >
-                {FEATURED_SOURCES.map(option => {
-                  const active = !geoHidden && source === option.id;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      data-testid={option.id === 'amap-streets' ? 'map-strip-current' : `map-strip-${option.id}`}
-                      aria-label={`底图：${option.label}`}
-                      aria-pressed={active}
-                      className="oc-layer-strip__row"
-                      onClick={() => { setSource(option.id); setGeoHidden(false); setLayerStripOpen(false); }}
-                    >
-                      <span className="oc-layer-strip__thumb" aria-hidden="true">
-                        <RealSourceThumb id={option.id} lngLat={thumbAnchor} />
-                      </span>
-                      <span className="oc-layer-strip__label">{option.label}</span>
-                    </button>
-                  );
-                })}
-                {/* 2026-11-17 用户指令：纸面进快速弹层（虚拟场地主形态）；docs/46 V-P1 后 3D 也认纸面，接管态照常给。 */}
-                <button
-                  type="button"
-                  data-testid="map-strip-paper"
-                  aria-label="底图：纸面"
-                  aria-pressed={geoHidden}
-                  className="oc-layer-strip__row"
-                  onClick={() => { setGeoHidden(true); setLayerStripOpen(false); }}
-                >
-                  <span className="oc-layer-strip__thumb oc-layer-strip__thumb--paper" aria-hidden="true" />
-                  <span className="oc-layer-strip__label">纸面</span>
-                </button>
-                {/* 2026-11-17 用户指令：展开不再占一格缩略钮——缩成底部一小行文字。 */}
-                <button
-                  type="button"
-                  data-testid="map-strip-expand"
-                  aria-label="展开地图详情"
-                  aria-haspopup="dialog"
-                  aria-controls="outdoor-map-details"
-                  className="oc-layer-strip__row oc-layer-strip__row--slim"
-                  onClick={() => { setLayerStripOpen(false); setMapPickerOpen(true); }}
-                >
-                  <span className="oc-layer-strip__label oc-layer-strip__label--with-icon">
-                    <LayoutGrid size={12} strokeWidth={1.8} aria-hidden="true" />
-                    <span>展开</span>
-                  </span>
-                </button>
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
     </div>

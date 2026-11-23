@@ -4,10 +4,11 @@
  * 否则杭州一带会偏大约 500 米。没有锚点时不假装这是一张真实地图。
  */
 
-import { alignedTileCenter, sourceForLocation } from '../room-organizer/lib/basemap-alignment';
+import { alignedTileCenter } from '../room-organizer/lib/basemap-alignment';
+import { tileSourceForBasemapStyle } from '../room-organizer/lib/basemap-style';
 import { basemapNativeMaxZoom, type BasemapNativeSource } from '../room-organizer/lib/basemap-zoom-caps';
 import { enuToLngLat, planMetersPerPixel, planPixelToPoint, planPointToPixel, type PlanViewport } from '../room-organizer/lib/outdoor-plan-canvas';
-import { PROBE_PUBLIC_SOURCES, publicSourceTileUrl, type ProbePublicSource } from '../room-organizer/lib/tdt-probe';
+import { publicSourceTileUrl, type ProbePublicSource } from '../room-organizer/lib/tdt-probe';
 import type { PlanPoint, SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 import type { ReviewBasemap } from './review-access';
 
@@ -30,10 +31,7 @@ export interface ReviewTile {
 }
 
 export function reviewTileSource(style: ReviewBasemap, lng: number, lat: number): ProbePublicSource | null {
-  if (style === 'paper') return null;
-  const requested = style === 'satellite' ? 'amap-satellite' : style === 'light' ? 'carto-light' : 'amap-streets';
-  const resolved = sourceForLocation(requested, lng, lat);
-  return (PROBE_PUBLIC_SOURCES as readonly string[]).includes(resolved) ? resolved as ProbePublicSource : 'amap-streets';
+  return tileSourceForBasemapStyle(style, lng, lat);
 }
 
 export function reviewViewport(input: {

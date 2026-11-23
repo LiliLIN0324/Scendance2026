@@ -50,25 +50,24 @@ describe('地图槽位缺省', () => {
   });
 });
 
-describe('置顶：只能进同类槽位', () => {
-  it('街道源进街道格：天地图矢量置顶后替换高德街道', () => {
+describe('置顶：只能进同类槽位，且每格只有一个源', () => {
+  it('街道类置顶不换成天地图，街道格保持高德街道', () => {
     expect(pinMapSource('vec')).toBe('streets');
-    expect(readMapSlots().streets).toBe('vec');
-    // 另外两格不动。
+    expect(readMapSlots().streets).toBe('amap-streets');
     expect(readMapSlots().satellite).toBe('amap-satellite');
     expect(readMapSlots().tone).toBe('carto-light');
   });
 
-  it('卫星源进卫星格：全球卫星 / 天地图影像都能替换高德卫星', () => {
+  it('卫星类置顶不换成全球卫星或天地图影像', () => {
     expect(pinMapSource('esri-satellite')).toBe('satellite');
-    expect(readMapSlots().satellite).toBe('esri-satellite');
+    expect(readMapSlots().satellite).toBe('amap-satellite');
     expect(pinMapSource('img')).toBe('satellite');
-    expect(readMapSlots().satellite).toBe('img');
+    expect(readMapSlots().satellite).toBe('amap-satellite');
   });
 
-  it('视觉源进单色格：Carto 深色替换白底缺省', () => {
+  it('视觉类置顶不把深色写成第二种单色源', () => {
     expect(pinMapSource('carto-dark')).toBe('tone');
-    expect(readMapSlots().tone).toBe('carto-dark');
+    expect(readMapSlots().tone).toBe('carto-light');
   });
 
   it('跨用途写入被拒绝，不改任何一格', () => {
@@ -87,22 +86,25 @@ describe('置顶：只能进同类槽位', () => {
 });
 
 describe('持久化与脏数据', () => {
-  it('置顶写进 localStorage，重新读（清缓存）仍生效', () => {
-    pinMapSource('carto-dark');
-    expect(JSON.parse(localStorage.getItem(MAP_SLOT_STORAGE_KEY)!).tone).toBe('carto-dark');
+  it('旧的置顶（深色 / 全球卫星 / OSM）重新读仍是每格唯一源', () => {
+    localStorage.setItem(
+      MAP_SLOT_STORAGE_KEY,
+      JSON.stringify({ satellite: 'esri-satellite', streets: 'osm', tone: 'carto-dark' }),
+    );
+    expect(readMapSlots()).toEqual(DEFAULT_MAP_SLOTS);
     resetMapSlotsCacheForTest();
-    expect(readMapSlots().tone).toBe('carto-dark');
+    expect(readMapSlots()).toEqual(DEFAULT_MAP_SLOTS);
   });
 
-  it('跨用途残值（街道源被手改进卫星格）回落缺省，不污染上排语义', () => {
+  it('跨用途残值回落缺省，不污染上排语义', () => {
     localStorage.setItem(
       MAP_SLOT_STORAGE_KEY,
       JSON.stringify({ satellite: 'amap-streets', streets: 'osm', tone: 'carto-dark' }),
     );
     const slots = readMapSlots();
     expect(slots.satellite).toBe('amap-satellite');
-    expect(slots.streets).toBe('osm');
-    expect(slots.tone).toBe('carto-dark');
+    expect(slots.streets).toBe('amap-streets');
+    expect(slots.tone).toBe('carto-light');
   });
 
   it('坏 JSON / 未知 id 一律回落缺省', () => {
@@ -119,10 +121,10 @@ describe('持久化与脏数据', () => {
     const off = subscribeMapSlots(() => {
       calls += 1;
     });
-    pinMapSource('amap-satellite'); // 已是缺省，不通知
+    pinMapSource('amap-satellite');
     expect(calls).toBe(0);
     pinMapSource('esri-satellite');
-    expect(calls).toBe(1);
+    expect(calls).toBe(0);
     off();
   });
 });

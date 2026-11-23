@@ -108,8 +108,10 @@ describe('全球卫星源（Esri World Imagery）', () => {
     expect(needsWgs84Alignment('esri-satellite')).toBe(true);
   });
 
-  it('图源偏好接受全球卫星档（图源面板能选中并存进偏好）', () => {
+  it('Esri 仍是境外卫星的铺图源，不是记下来的第二种卫星选择', () => {
     expect(PLAN_GROUND_SOURCES).toContain('esri-satellite');
+    expect(sourceForLocation('amap-satellite', VICTORIA.lng, VICTORIA.lat)).toBe('esri-satellite');
+    expect(sourceForLocation('amap-satellite', HANGZHOU.lng, HANGZHOU.lat)).toBe('amap-satellite');
   });
 });
 

@@ -17,9 +17,12 @@ import Overlay, { type OutdoorPlanOverlayHandle } from "./outdoor-plan-overlay";
 import { createStarterOutdoorPlan, readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import {
   readPlanGroundSource,
+  readRecordedBasemapStyle,
+  resetPlanBasemapSourceCacheForTest,
+  writePlanGroundMode,
   writePlanGroundSource,
 } from "../lib/plan-basemap-source";
-import { readMapSlots, resetMapSlotsCacheForTest } from "../lib/map-source-slots";
+import { resetMapSlotsCacheForTest } from "../lib/map-source-slots";
 import { buildScotiabankReplicaPlan } from "../lib/replica-cases";
 type CanvasProps = ComponentProps<
   typeof import("./outdoor-plan-canvas").default
@@ -106,7 +109,9 @@ beforeEach(() => {
   // 槽位 store 同样有模块级缓存（面板用 useSyncExternalStore 消费），用例间手动复位。
   resetMapSlotsCacheForTest();
   // 模块级图源缓存不随 localStorage 清，复位回缺省街道，避免上一条用例写入跨用例残留。
+  resetPlanBasemapSourceCacheForTest();
   writePlanGroundSource("amap-streets");
+  writePlanGroundMode("map");
   agent.outdoorWorkflow.proposal = null;
   agent.outdoorWorkflow.appliedHighlight = null;
   state.bridge = null;
@@ -166,35 +171,20 @@ it("keeps outside clicks through and exposes a clean map details panel", () => {
     outsideTool.remove();
   }
 
-  // 点图层钮弹出紧凑快捷卡（高德范式）；点末尾「展开」才进完整「地图详情」，弹层随之收起。
+  // 点图层钮弹出四档底图，再点一次收起。没有第二套图源目录。
   const layerBtn = screen.getByTestId("outdoor-source-cycle");
   fireEvent.click(layerBtn);
   expect(screen.getByTestId("outdoor-layer-strip")).toBeTruthy();
-  // 再点一次图层钮收起（点按开合）。
-  fireEvent.click(layerBtn);
-  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
-  fireEvent.click(layerBtn);
-  fireEvent.click(screen.getByTestId("map-strip-expand"));
-  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
-  const details = screen.getByRole("dialog", { name: "地图详情" });
-  expect(screen.queryByTestId("map-picker-restart-guide")).toBeNull();
-  // 标题与 X 在固定头里，滚动只发生在 body，不会把关闭按钮滚走。
-  const close = screen.getByTestId("map-picker-close");
-  expect(details.querySelector(".oc-map-details__head")?.contains(close)).toBe(true);
-  expect(details.querySelector(".oc-map-details__body .oc-map-details__section")).toBeTruthy();
-  fireEvent.click(close);
+  expect(screen.queryByTestId("map-strip-expand")).toBeNull();
   expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
-  // 关闭不只靠 X：Esc 和点画布也要能关。重新查询图层钮——面板开着时它不在 DOM 里。
-  const openDetails = () => {
-    fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
-    fireEvent.click(screen.getByTestId("map-strip-expand"));
-  };
-  openDetails();
+  fireEvent.click(layerBtn);
+  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
+  fireEvent.click(layerBtn);
   fireEvent.keyDown(document, { key: "Escape" });
-  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
-  openDetails();
+  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
+  fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
   fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
-  expect(screen.queryByRole("dialog", { name: "地图详情" })).toBeNull();
+  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
 });
 it("地图左上挂回搜索浮条：组件已挂载，focusPlaceSearch 找得到输入框", () => {
   render(<Overlay projectId="floating-search" seedPlan={createStarterOutdoorPlan()} />);
@@ -283,16 +273,12 @@ it("切换图源不改规划，且把同一份计划和图源偏好交给壳层3
       onPlanChange={onPlan}
     />,
   );
-  // 手机点图层入口也能展开快捷条；选图源只换底图，面板保持到用户点 X。
   fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
-  fireEvent.click(screen.getByTestId("map-strip-expand"));
-  fireEvent.click(screen.getByTestId("map-source-carto-dark"));
-  expect(state.canvas?.source).toBe("carto-dark");
-  expect(readPlanGroundSource()).toBe("carto-dark");
-  expect(screen.getByRole("dialog", { name: "地图详情" })).toBeTruthy();
-  // 点地图空白处也能关，不再只能找面板上的 X。
-  fireEvent.pointerDown(screen.getByTestId("merge-canvas"));
-  expect(screen.queryByTestId("outdoor-map-picker-panel")).toBeNull();
+  fireEvent.click(screen.getByTestId("map-strip-light"));
+  expect(state.canvas?.source).toBe("carto-light");
+  expect(readPlanGroundSource()).toBe("carto-light");
+  expect(readRecordedBasemapStyle()).toBe("light");
+  expect(screen.queryByTestId("outdoor-layer-strip")).toBeNull();
   expect(screen.getByTestId("outdoor-source-cycle")).toBeTruthy();
   expect(JSON.stringify(state.bridge!.getPlan())).toBe(before);
   expect(state.three).toBeNull();
@@ -392,34 +378,26 @@ it("冲突时选「用服务器那版」：本机换成服务器版本并记住�
   expect(saveOutdoorPlan.mock.calls.every((call) => call[0].force !== true)).toBe(true);
 });
 
-it("地图详情是「上排四格 + 下方分组清单」：下方图源能置顶进同类槽位", () => {
+it("图层只给出地图、卫星、浅色、纸面，点选记下同一种底图", () => {
   render(<Overlay projectId="map-slots" seedPlan={createStarterOutdoorPlan()} />);
   fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
-  fireEvent.click(screen.getByTestId("map-strip-expand"));
+  expect(screen.getByRole("button", { name: "底图：地图" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "底图：卫星" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "底图：浅色" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "底图：纸面" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /全球卫星|天地图|展开地图详情/ })).toBeNull();
 
-  // 上排四格：卫星 / 街道 / 单色 / 无，缺省按用户点名的顺序填好。
-  expect(screen.getByTestId("map-slot-satellite").textContent).toContain("高德卫星");
-  expect(screen.getByTestId("map-slot-streets").textContent).toContain("高德街道");
-  expect(screen.getByTestId("map-slot-tone").textContent).toContain("Carto 浅色");
-  expect(screen.getByTestId("map-picker-toggle-geo").textContent).toContain("无");
+  fireEvent.click(screen.getByRole("button", { name: "底图：卫星" }));
+  expect(state.canvas?.source).toBe("amap-satellite");
+  expect(readPlanGroundSource()).toBe("amap-satellite");
+  expect(readRecordedBasemapStyle()).toBe("satellite");
+  expect(screen.getByTestId("outdoor-source-cycle").getAttribute("aria-label")).toBe("图层，当前底图 卫星");
 
-  // 下排按类型分组，三组都在。
-  expect(screen.getByRole("radiogroup", { name: "街道类" })).toBeTruthy();
-  expect(screen.getByRole("radiogroup", { name: "卫星类" })).toBeTruthy();
-  expect(screen.getByRole("radiogroup", { name: "视觉类" })).toBeTruthy();
-
-  // 置顶 Carto 深色 → 单色格换成它；当前底图不变（置顶只改上面那格）。
-  const before = state.canvas?.source;
-  fireEvent.click(screen.getByTestId("map-pin-carto-dark"));
-  expect(readMapSlots().tone).toBe("carto-dark");
-  expect(screen.getByTestId("map-slot-tone").textContent).toContain("Carto 深色");
-  expect((screen.getByTestId("map-pin-carto-dark") as HTMLButtonElement).disabled).toBe(true);
-  expect(state.canvas?.source).toBe(before);
-
-  // 点格子才真正换底图，并同步给三维地面。
-  fireEvent.click(screen.getByTestId("map-slot-tone"));
-  expect(state.canvas?.source).toBe("carto-dark");
-  expect(readPlanGroundSource()).toBe("carto-dark");
+  fireEvent.click(screen.getByTestId("outdoor-source-cycle"));
+  fireEvent.click(screen.getByRole("button", { name: "底图：纸面" }));
+  expect(state.canvas?.base).toBe("floor");
+  expect(readRecordedBasemapStyle()).toBe("paper");
+  expect(screen.getByTestId("outdoor-source-cycle").getAttribute("aria-label")).toBe("图层，当前底图 纸面");
 });
 
 it("云端副本传不上去时不出任何提示（本机照常保存）", async () => {

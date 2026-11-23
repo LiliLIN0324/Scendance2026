@@ -1,16 +1,14 @@
 /**
- * 2026-11-17 用户指令：地图详情面板改成「上面四个固定槽位 + 下面按类型分组的清单」。
+ * 地图类型槽位：卫星 / 街道 / 单色，外加「无」= 纸面（纸面走 plan-basemap-source
+ * 的 ground-mode，不归这里）。
  *
- * 上面四格是**用途位**：卫星 / 街道 / 单色（外加「无」= 纸面，走 plan-basemap-source
- * 的 ground-mode，不归这里）。下面清单里的每一项都能「置顶」——把该源换进**同用途**
- * 的槽位：街道源只能进街道格、卫星源只能进卫星格、视觉源只能进单色格。这样上排四格
- * 的语义永远成立，不会出现「卫星」格里摆着一张街道图。
- *
- * 缺省：卫星 = 高德卫星、街道 = 高德街道、单色 = Carto 白底（Carto 走直连、最稳，
- * 境外也有瓦片）。槽位记的是**用户选了什么**；境外场地真正铺哪套瓦片仍由
- * `basemap-alignment` 的 `sourceForLocation` 按类别换源（街道类→OSM、卫星类→全球卫星）。
+ * 2026-11-23：每一格只保留一个瓦片源，和记下的底图选择对齐
+ * （卫星 = 高德卫星、街道 = 高德街道、单色 = Carto 浅色）。
+ * 旧的「置顶全球卫星 / 天地图 / Carto 深色」不再写成第二套源——那会让图层写着
+ * 全球卫星、瓦片却混进另一套影像。境外换源仍只发生在 `tileSourceForBasemapStyle`。
  */
 
+import { WORKBENCH_BASEMAP_SOURCE } from './basemap-style';
 import type { PlanGroundSource } from './plan-ground-capture';
 import type { ProbePublicSource, TdtProbeLayer } from './tdt-probe';
 
@@ -44,9 +42,9 @@ export type MapSlotPicks = Record<MapSlotRole, MapSourceId>;
  * 就回落到这里。
  */
 export const DEFAULT_MAP_SLOTS: Record<MapSlotRole, PlanGroundSource> = {
-  satellite: 'amap-satellite',
-  streets: 'amap-streets',
-  tone: 'carto-light',
+  satellite: WORKBENCH_BASEMAP_SOURCE.satellite,
+  streets: WORKBENCH_BASEMAP_SOURCE.map,
+  tone: WORKBENCH_BASEMAP_SOURCE.light,
 };
 
 /**
@@ -91,36 +89,29 @@ export function subscribeMapSlots(listener: () => void): () => void {
  * 读槽位。返回值是模块级缓存对象——`useSyncExternalStore` 要求同一快照恒等，
  * 所以只在真正写入时换新对象。
  */
-export function readMapSlots(): MapSlotPicks {
-  if (cached) return cached;
-  const next: MapSlotPicks = { ...DEFAULT_MAP_SLOTS };
+function persistSlots(slots: MapSlotPicks): void {
   try {
-    const raw = globalThis.localStorage?.getItem(MAP_SLOT_STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
-    for (const role of MAP_SLOT_ROLES) {
-      const value = parsed?.[role];
-      // 只认同用途的源：脏值、跨用途残值（比如手改 localStorage 把街道源塞进卫星格）
-      // 一律回落缺省，别让上排格子的语义被写坏。
-      if (isMapSourceId(value) && ROLE_OF_SOURCE[value] === role) next[role] = value;
-    }
-  } catch {
-    // 隐私模式 / 坏 JSON：用缺省。
-  }
-  cached = next;
-  return next;
-}
-
-/** 把某个源换进它所属的槽位。源与槽位用途不符时拒绝（返回 false）。 */
-export function writeMapSlot(role: MapSlotRole, source: MapSourceId): boolean {
-  if (ROLE_OF_SOURCE[source] !== role) return false;
-  const current = readMapSlots();
-  if (current[role] === source) return true;
-  cached = { ...current, [role]: source };
-  try {
-    globalThis.localStorage?.setItem(MAP_SLOT_STORAGE_KEY, JSON.stringify(cached));
+    globalThis.localStorage?.setItem(MAP_SLOT_STORAGE_KEY, JSON.stringify(slots));
   } catch {
     // 存不下就算了，本会话内仍然生效。
   }
+}
+
+export function readMapSlots(): MapSlotPicks {
+  if (cached) return cached;
+  // 不回放旧的置顶：卫星格里的全球卫星 / 天地图、单色格里的深色都会变成第二套瓦片。
+  cached = { ...DEFAULT_MAP_SLOTS };
+  persistSlots(cached);
+  return cached;
+}
+
+/** 用途相符时槽位保持该选择的唯一源；跨用途拒绝。 */
+export function writeMapSlot(role: MapSlotRole, source: MapSourceId): boolean {
+  if (ROLE_OF_SOURCE[source] !== role) return false;
+  const current = readMapSlots();
+  if (current[role] === DEFAULT_MAP_SLOTS[role]) return true;
+  cached = { ...current, [role]: DEFAULT_MAP_SLOTS[role] };
+  persistSlots(cached);
   listeners.forEach((listener) => listener());
   return true;
 }

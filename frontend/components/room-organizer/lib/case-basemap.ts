@@ -14,12 +14,10 @@
  * 3. 拿不到锚点 / 几何退化时返回 null，调用方保留原来的浅色底，不开天窗。
  */
 
-import { alignedTileCenter, sourceForLocation } from './basemap-alignment';
+import { alignedTileCenter } from './basemap-alignment';
+import { tileSourceForBasemapStyle } from './basemap-style';
 import { enuToLngLat, lngLatToEnu } from './outdoor-plan-canvas';
 import { publicSourceTileUrl, type ProbePublicSource } from './tdt-probe';
-
-/** 案例卡固定用卫星影像：线稿压影像，才看得出来方案落在地面哪儿。 */
-const CASE_BASEMAP_SOURCE = 'amap-satellite' as const satisfies ProbePublicSource;
 
 /**
  * 一张卡最多铺几块瓦片：4 = 2×2。
@@ -99,7 +97,8 @@ export function caseBasemapTiles(input: {
   if (![minX, minY, maxX, maxY].every(Number.isFinite)) return null;
   if (maxX <= minX || maxY <= minY) return null;
 
-  const source = sourceForLocation(CASE_BASEMAP_SOURCE, anchor.lng, anchor.lat);
+  const source = tileSourceForBasemapStyle('satellite', anchor.lng, anchor.lat);
+  if (!source) return null;
   const spanX = maxX - minX;
   const spanY = maxY - minY;
   const padX = spanX * PAD_RATIO;

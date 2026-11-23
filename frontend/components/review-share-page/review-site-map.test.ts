@@ -35,6 +35,8 @@ describe('review site map', () => {
     expect(tiles.some(tile => tile.url.includes('webrd') && tile.url.includes('autonavi.com'))).toBe(true);
     const satellite = reviewTiles({ style: 'satellite', camera, width: 960, height: 640 });
     expect(satellite.some(tile => tile.url.includes('style=6'))).toBe(true);
+    expect(new Set(satellite.map(tile => new URL(tile.url).host)).size).toBe(1);
+    expect(satellite.every(tile => !tile.url.includes('arcgisonline') && !tile.url.includes('tianditu'))).toBe(true);
     expect(reviewTiles({ style: 'paper', camera, width: 960, height: 640 })).toEqual([]);
   });
 

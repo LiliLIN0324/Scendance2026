@@ -686,16 +686,17 @@ describe('ScendanceViewTools 地图切换四槽位', () => {
     expect(screen.getByTestId('ground-slot-tone').textContent).toContain('Carto 浅色');
     expect(screen.getByTestId('ground-slot-none').textContent).toContain('无');
 
-    // 2D 面板那边置顶 Carto 深色（同一个 store）→ 三维「单色」行当场换成深色。
+    // 置顶深色不再变成第二种单色源；单色格保持浅色，点下去写下的也是这一份。
     act(() => {
       pinMapSource('carto-dark');
     });
-    expect(readMapSlots().tone).toBe('carto-dark');
-    expect(screen.getByTestId('ground-slot-tone').textContent).toContain('Carto 深色');
+    expect(readMapSlots().tone).toBe('carto-light');
+    expect(screen.getByTestId('ground-slot-tone').textContent).toContain('Carto 浅色');
+    expect(screen.getByTestId('ground-slot-tone').textContent).not.toContain('Carto 深色');
 
     // 点格子真正换底面：写图源 + 地图形态（从纸面回来也认）。
     fireEvent.click(screen.getByTestId('ground-slot-tone'));
-    expect(readPlanGroundSource()).toBe('carto-dark');
+    expect(readPlanGroundSource()).toBe('carto-light');
     expect(readPlanGroundMode()).toBe('map');
 
     // 「无」= 纸面：不铺瓦片，与 2D 面板的「无」同一份偏好。
@@ -706,7 +707,7 @@ describe('ScendanceViewTools 地图切换四槽位', () => {
     expect(document.getElementById('tool-ground-source')!.getAttribute('aria-label')).toContain('纸面（无底图）');
   });
 
-  it('槽位里置顶了天地图（2D 专用）时，三维回落到该格缺省并明说', () => {
+  it('置顶天地图影像不会把卫星格换成第二套影像', () => {
     act(() => {
       pinMapSource('img');
     });
@@ -714,7 +715,8 @@ describe('ScendanceViewTools 地图切换四槽位', () => {
     fireEvent.click(document.getElementById('tool-ground-source')!);
     const row = screen.getByTestId('ground-slot-satellite');
     expect(row.textContent).toContain('高德卫星');
-    expect(row.textContent).toContain('三维用缺省');
+    expect(row.textContent).not.toContain('三维用缺省');
+    expect(row.textContent).not.toContain('全球卫星');
     fireEvent.click(row);
     expect(readPlanGroundSource()).toBe('amap-satellite');
   });

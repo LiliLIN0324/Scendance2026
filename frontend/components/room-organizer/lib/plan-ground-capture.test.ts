@@ -11,7 +11,7 @@ import {
   zoomForGroundSpan,
   PLAN_GROUND_BACKDROP,
 } from './plan-ground-capture';
-import { isPlanGroundSource, readPlanGroundSource, writePlanGroundSource } from './plan-basemap-source';
+import { isPlanGroundSource, readPlanGroundSource, resetPlanBasemapSourceCacheForTest, writePlanGroundSource } from './plan-basemap-source';
 
 // 杭州平湖秋月一带：约 100 m × 80 m 的场地。
 const BOUNDS = { west: 120.1472, south: 30.2455, east: 120.14825, north: 30.24622 };
@@ -99,13 +99,14 @@ describe('planGroundTiles', () => {
 describe('plan-basemap-source', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    resetPlanBasemapSourceCacheForTest();
   });
 
-  it('缺省是高德街道，写进去能读回来', () => {
+  it('缺省是高德街道；深色写入收成浅色这一个源', () => {
     expect(readPlanGroundSource()).toBe('amap-streets');
     writePlanGroundSource('carto-dark');
-    expect(readPlanGroundSource()).toBe('carto-dark');
-    expect(window.localStorage.getItem('scendance-plan-basemap-source-v1')).toBe('carto-dark');
+    expect(readPlanGroundSource()).toBe('carto-light');
+    expect(window.localStorage.getItem('scendance-plan-basemap-source-v1')).toBe('carto-light');
   });
 
   it('只认 OSM / Carto 三档，天地图与脏值忽略', () => {

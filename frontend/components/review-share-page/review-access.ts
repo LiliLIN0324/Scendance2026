@@ -6,6 +6,8 @@
  * 权限跟短链载荷走，不改方案哈希，长短链仍对齐同一组钉。
  */
 
+import { styleFromGround } from '../room-organizer/lib/basemap-style';
+
 export const REVIEW_BASEMAPS = ['map', 'satellite', 'light', 'paper'] as const;
 export type ReviewBasemap = (typeof REVIEW_BASEMAPS)[number];
 
@@ -52,12 +54,9 @@ export function parseReviewAccess(value: unknown): ReviewAccess {
   };
 }
 
-/** 工作台当前地面：纸面优先，其余按图源归到评审页的四档。 */
+/** 工作台当前地面：与记下的底图选择同一条归类（纸面优先，其余按图源收成四档）。 */
 export function reviewBasemapFromGround(mode: string | null | undefined, source: string | null | undefined): ReviewBasemap {
-  if (mode === 'paper') return 'paper';
-  if (source === 'amap-satellite' || source === 'esri-satellite' || source === 'img') return 'satellite';
-  if (source === 'carto-light') return 'light';
-  return 'map';
+  return styleFromGround(mode, source);
 }
 
 export function reviewLinkFailureCopy(reason: string): string {
