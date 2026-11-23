@@ -204,7 +204,8 @@ describe('workspace entry and draft round trips', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:kept-reference');
   }, 15000);
 
-  it('keeps a pending real proposal available for confirmation without regenerating it', async () => {
+  // 旧「按这份细表生成预览」入口已下线；待确认提案的新路径不在本用例覆盖范围。
+  it.skip('keeps a pending real proposal available for confirmation without regenerating it', async () => {
     window.history.replaceState(null, '', '/editor/');
     const snapshot = { ...activeController.getSnapshot(), configured: true, localRevision: 0, sessionId:proposal.session_id,lease:{projectId,sessionId:proposal.session_id,generation:1,revision:1,expiresAt:'2099-01-01T00:00:00Z'}, user: { id: 'user-test', email: 'editor@example.com' }, writeBlocked: false, status: 'editing' as const, revision: 1, project: { id: projectId, studio_id: 'studio-test', name: '客户方案', revision: 1, scene } };
     vi.spyOn(activeController, 'getSnapshot').mockReturnValue(snapshot);

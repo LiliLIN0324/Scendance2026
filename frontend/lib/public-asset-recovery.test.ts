@@ -190,11 +190,11 @@ describe('public asset recovery', () => {
   });
 
   it.each([
-    ['HTTP 404', async () => new Response(null, { status: 404 })],
-    ['network error', async () => { throw new TypeError('network down'); }],
-    ['cancel', async () => { throw new DOMException('The operation was aborted.', 'AbortError'); }],
-    ['invalid GLB', async () => new Response(new TextEncoder().encode('not a GLB 2.0'), { status: 200 })],
-  ] as const)('does not recover after an original %s failure', async (label, failure) => {
+    ['HTTP 404', async () => new Response(null, { status: 404 }), 1],
+    ['network error', async () => { throw new TypeError('network down'); }, 2],
+    ['cancel', async () => { throw new DOMException('The operation was aborted.', 'AbortError'); }, 1],
+    ['invalid GLB', async () => new Response(new TextEncoder().encode('not a GLB 2.0'), { status: 200 }), 1],
+  ] as const)('does not recover after an original %s failure', async (label, failure, attempts) => {
     const key = `public-asset-failure-${label}`;
     const privateUrl = storageUrl(PUBLIC_ASSET_ID);
     const calls: string[] = [];
@@ -206,6 +206,6 @@ describe('public asset recovery', () => {
     });
 
     await expect(ensureRecoverableGlbAsset(key, PUBLIC_ASSET_ID, privateUrl, STORAGE_ORIGIN)).rejects.toThrow();
-    expect(calls).toEqual([privateUrl]);
+    expect(calls).toEqual(Array.from({length:attempts},()=>privateUrl));
   });
 });

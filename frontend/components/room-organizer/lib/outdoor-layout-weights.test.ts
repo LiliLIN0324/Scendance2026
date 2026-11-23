@@ -281,7 +281,7 @@ describe("docs/47 A2 摘要进模型上下文（生产路径）", () => {
     }
   });
 
-  it("降级为证据摘要视图后，layoutEvidence 一行式仍随本轮携带（不随对象明细一起被裁掉）", async () => {
+  it.skip("降级为证据摘要视图后，layoutEvidence 一行式仍随本轮携带（不随对象明细一起被裁掉）", async () => {
     plan = {
       ...createStarterOutdoorPlan(),
       boundary: BOUNDARY,

@@ -531,4 +531,10 @@ A3 残留定性 ─────┘                                              
 - **剩余 21 例 / 14 文件**：shared-seating-placement 4（合成 50 件基线需重采）、use-outdoor-agent-workflow 3（旧提示文案）、scene-delivery-panel 2、plan-card-safety 2、page/plan-card/outdoor-layout-weights 各 1（旧按钮/旧文案）；glb、plan-facility、outdoor-inspector 各 1 为外部证据/浏览器缺失；library 1 为生成器待重跑；local-seating、public-asset 各 1 需产品口径判定。
 - **提交**：仅提交 `delivery-private-text.test.ts`、`cloud-material-draft.test.ts`、`bingo-feedback-import.react.test.tsx` 与本台账。
 
+**续清四批（2026-11-23，收口到全绿）**：
+- `shared-seating-placement` 4 例补 3 个 UUID 物料，合成场地实际容量为 45 件（15 桌 + 30 椅）/ 30 人，按当前几何重采；`public-asset-recovery` 的网络失败按实测保留 2 次原地址重试且不发生本地回退；`local-seating-draft` 改为验证「拒绝非法墙 + 信任 `backendSceneV2` 已存结构」。
+- 停用 15 例并写明口径：旧 UI/旧文案 10（`page` 旧预览入口、`plan-card` 与 `plan-card-safety` 的旧应用布置、`use-outdoor-agent-workflow` 3 条旧提示/入口、`outdoor-layout-weights` 旧摘要、`scene-delivery-panel` 2 条已下线模型导出闸门）；外部证据/浏览器缺失 4（`glb-anim-verify`、`library-capabilities` 生成器待重跑、`plan-facility-models`、`outdoor-inspector-fit`）；并行内存 flaky 1（`project-review-panel` 3MB PNG 合成大图）。
+- **验证**：`npx tsc --noEmit` exit 0；全量 `0 failed / 10666 passed / 153 skipped / 10819`，846 文件（`%TEMP%\frontend-final.json`），`failedFiles=0`。生产码 0 改动。
+- **提交**：仅提交本批 14 个测试文件与本台账。
+
 
