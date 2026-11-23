@@ -2001,6 +2001,11 @@ body.is-theme-dark .sc-material-tagpin {
 }
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:hover::after,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail [data-tip]:focus-visible::after { opacity: 1; }
+/* Bingo 展开后，轨钮的「Bingo」气泡会盖住面板状态行。名字已在标题上，展开时不再留这颗气泡。 */
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo.is-active[data-tip]::after,
+.sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail button.sc-rail-bingo[aria-expanded="true"][data-tip]::after {
+  opacity: 0; transition: none;
+}
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-top,
 .sc-workbench .is-docked-layout.is-mode-rail .sc-mode-rail .sc-mode-rail-foot {
   display: flex; flex-direction: column; align-items: center; gap: 2px;

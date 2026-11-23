@@ -83,6 +83,35 @@ export function bingoPhaseLabel(phase: BingoPhase): string {
   return '待发';
 }
 
+function wholeCount(count: number): number {
+  if (!Number.isFinite(count) || count <= 0) return 0;
+  return Math.floor(count);
+}
+
+/**
+ * Bingo 面板顶栏的短句。每句单独成行内块，换行只发生在句与句之间。
+ *
+ * 左轨环内数字是未回执的评审链接份数，不是画内钉。待评时第一句把这个数说出来，
+ * 避免和「对方的修改 0」看成同一个数。没有钉时不再重复空状态那句「还没有对方的修改」。
+ */
+export function bingoReviewStatusPhrases(input: {
+  phase: BingoPhase;
+  pendingLinkCount: number;
+  todoCount: number;
+  openPinCount: number;
+}): string[] {
+  const pendingLinks = wholeCount(input.pendingLinkCount);
+  const todo = wholeCount(input.todoCount);
+  const openPins = wholeCount(input.openPinCount);
+  const phaseLabel = bingoPhaseLabel(input.phase);
+  const head = input.phase === 'awaiting' && pendingLinks > 0
+    ? `${phaseLabel} ${pendingLinks} 份链接等回执`
+    : phaseLabel;
+  const phrases = [head, todo > 0 ? `还剩 ${todo} 件要收尾` : '我要收尾的已处理完'];
+  if (openPins > 0) phrases.push(`对方提了 ${openPins} 条修改`);
+  return phrases;
+}
+
 export function bingoBallLabel(snapshot: BingoSnapshot): string {
   if (snapshot.phase === 'returned') return '收反馈，已回执';
   if (snapshot.phase === 'awaiting') return `收反馈，待评，${snapshot.plans.length} 份链接`;

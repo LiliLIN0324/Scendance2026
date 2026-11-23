@@ -93,6 +93,10 @@ describe('Bingo 左轨入口 · D4 开口环', () => {
     expect(badge?.textContent ?? '').toBe('');
     expect(button.getAttribute('data-tip')).toBe('Bingo');
     expect(button.querySelector('.sc-rail-label')?.textContent).toBe('Bingo');
+    const css = readFileSync(join(here, '../../../app/globals.css'), 'utf8');
+    expect(css).toMatch(/button\.sc-rail-bingo\.is-active\[data-tip\]::after[\s\S]*?opacity:\s*0/);
+    expect(css).toMatch(/button\.sc-rail-bingo\[aria-expanded="true"\]\[data-tip\]::after[\s\S]*?opacity:\s*0/);
+    expect(css).not.toMatch(/button\.is-active\[data-tip\]::after\s*\{\s*opacity:\s*1/);
 
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledOnce();
