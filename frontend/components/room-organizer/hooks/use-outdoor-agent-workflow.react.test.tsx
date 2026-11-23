@@ -786,6 +786,38 @@ it("只有搜索选区时继续设计会先核对这块可见范围，不退回�
   expect(host.textContent).not.toContain("搜索目标地点");
   expect(plan.boundary).toEqual([]);
 });
+it("只有默认西湖锚点、没有任何场地内容时，不把锚点当场地重置任务", async () => {
+  plan = { ...plan, boundary: [] };
+  mountAtFlowState({ stage: "place" });
+  act(() => flow.reconcileCanvasStage());
+  expect(flow.state.stage).toBe("place");
+  expect(host.textContent).toContain("搜索目标地点");
+  expect(plan.anchor?.source).toBe("preset");
+  expect(plan.boundary).toEqual([]);
+});
+it("重开已有分区的命名方案：任务接回分区核对，不退回搜索目标地点", async () => {
+  plan = {
+    ...plan,
+    boundary: [],
+    zones: [{
+      id: "zone-existing",
+      name: "展览区",
+      purpose: "audience",
+      semantic: "audience",
+      environment: "outdoor",
+      polygon: [{ x: 1, y: 1 }, { x: 9, y: 1 }, { x: 9, y: 9 }, { x: 1, y: 9 }],
+      notes: "",
+    }],
+  };
+  const before = structuredClone(plan);
+  mountAtFlowState({ stage: "place" });
+  act(() => flow.reconcileCanvasStage());
+  expect(flow.state.stage).toBe("zones");
+  expect(host.textContent).not.toContain("搜索目标地点");
+  // 只对账阶段：不自动确认、不改写边界与锚点。
+  expect(plan).toEqual(before);
+  expect(flow.state.confirmedBoundary).toBeNull();
+});
 it("已有可见范围时 search 不把任务卡打回搜索目标地点；没有任何范围时仍回去", async () => {
   plan = { ...plan, boundary: [] };
   bridge.visibleActivityRange = () => ({
