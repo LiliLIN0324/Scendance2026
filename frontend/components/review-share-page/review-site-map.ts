@@ -1,15 +1,23 @@
 /**
  * 评审页地图：与户外工作台同一套 ENU → 屏幕投影、同一套瓦片对齐。
- * 锚点是 GCJ-02。高德瓦片直接铺；浅色（Carto）先把视点换到 WGS-84，
- * 否则杭州一带会偏大约 500 米。没有锚点时不假装这是一张真实地图。
+ * 锚点仍是方案里的 GCJ-02，这里不改坐标。
+ * 四档底图跟工作台正在用的源，不另起一套：
+ * - 地图：街道槽缺省（高德街道；境外由 sourceForLocation 换成 OSM）
+ * - 卫星：全球卫星 Esri World Imagery。发出时 esri-satellite 被收成
+ *   basemapStyle=satellite；写死高德卫星会让评审页挂「© 高德地图 · 卫星影像」，
+ *   和工作台右下角的 Esri 不是同一张图。
+ * - 浅色：单色槽缺省（Carto 浅色）
+ * - 纸面：不铺瓦片
+ * 非高德源先把视点换到该源网格（alignedTileCenter），否则杭州一带会偏大约 500 米。
  */
 
-import { alignedTileCenter, sourceForLocation } from '../room-organizer/lib/basemap-alignment';
+import { alignedTileCenter, GLOBAL_SATELLITE_SOURCE, sourceForLocation } from '../room-organizer/lib/basemap-alignment';
 import { basemapNativeMaxZoom, type BasemapNativeSource } from '../room-organizer/lib/basemap-zoom-caps';
+import { DEFAULT_MAP_SLOTS } from '../room-organizer/lib/map-source-slots';
 import { enuToLngLat, planMetersPerPixel, planPixelToPoint, planPointToPixel, type PlanViewport } from '../room-organizer/lib/outdoor-plan-canvas';
 import { PROBE_PUBLIC_SOURCES, publicSourceTileUrl, type ProbePublicSource } from '../room-organizer/lib/tdt-probe';
-import type { PlanPoint, SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 import type { ReviewBasemap } from './review-access';
+import type { PlanPoint, SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 
 export const REVIEW_TILE_PX = 256;
 const MIN_ZOOM = 12;
@@ -31,9 +39,13 @@ export interface ReviewTile {
 
 export function reviewTileSource(style: ReviewBasemap, lng: number, lat: number): ProbePublicSource | null {
   if (style === 'paper') return null;
-  const requested = style === 'satellite' ? 'amap-satellite' : style === 'light' ? 'carto-light' : 'amap-streets';
+  const requested = style === 'satellite'
+    ? GLOBAL_SATELLITE_SOURCE
+    : style === 'light'
+      ? DEFAULT_MAP_SLOTS.tone
+      : DEFAULT_MAP_SLOTS.streets;
   const resolved = sourceForLocation(requested, lng, lat);
-  return (PROBE_PUBLIC_SOURCES as readonly string[]).includes(resolved) ? resolved as ProbePublicSource : 'amap-streets';
+  return (PROBE_PUBLIC_SOURCES as readonly string[]).includes(resolved) ? resolved as ProbePublicSource : DEFAULT_MAP_SLOTS.streets;
 }
 
 export function reviewViewport(input: {
