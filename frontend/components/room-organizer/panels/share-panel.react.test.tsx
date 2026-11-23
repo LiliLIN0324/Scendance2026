@@ -5,6 +5,9 @@
  * 不传 props 时必须保持旧版发布页渲染（普通发布与完整分享历史兼容）。
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { formatShareTime, SharePanel, type PublishPrecheckState, type PublishRecordsState, type ShareExportEntry, type ShareTab } from './share-panel';
@@ -399,6 +402,44 @@ describe('P4（V17）：进入／送出／待评／回执', () => {
     render(<SharePanel {...panelProps({ tab: 'share', bingoStatus: '待发' })} />);
     expect(screen.getByTestId('review-send-status').textContent).toContain('送出状态：待发');
     expect(screen.getByRole('button', { name: '进入 Bingo 审校台，暂无待评' })).toBeTruthy();
+  });
+});
+
+describe('短链行不被工具弹层按钮撑满（2026-11-23）', () => {
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../app/globals.css'), 'utf8')
+    .replace(/\r\n/g, '\n');
+
+  it('行内小键按文字收窄，短链仍占满剩余宽度并可省略', () => {
+    const rule = css.match(/\.sc-workbench \.sc-tool-pop\.sc-share-panel button\.sc-share-key \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('flex: none');
+    expect(rule).toContain('width: auto !important;');
+    expect(rule).toContain('min-width: 0 !important;');
+    expect(rule).not.toContain('width: 100%');
+    expect(css).toMatch(/\.sc-share-link-text \{[^}]*flex: 1 1 auto;[^}]*min-width: 0;[^}]*text-overflow: ellipsis;/);
+  });
+
+  it('复制与二维码保持固定宽度，打开 / 作废不再吃满整行', () => {
+    expect(css).toMatch(/button\.sc-share-copy \{\s*width: 48px !important; min-width: 48px !important;/);
+    expect(css).toMatch(/button\.sc-share-qr \{\s*width: 24px !important; min-width: 24px !important;/);
+  });
+
+  it('评审短链行的四个键都走 sc-share-key，打开与作废不另起整宽按钮', () => {
+    render(<SharePanel {...panelProps({
+      tab: 'share',
+      reviewLink: 'https://studio.example/r/2685e83336d1fa668c22e634',
+      onOpenReview: () => undefined,
+      onCopyReview: () => undefined,
+      onRevokeReview: () => undefined,
+    })} />);
+    const row = screen.getByTestId('review-link-row');
+    expect(row.textContent).toMatch(/^studio\.example\/r\/2685e83336d1fa6…/);
+    expect(row.querySelector('.sc-share-link-text')?.getAttribute('title'))
+      .toBe('https://studio.example/r/2685e83336d1fa668c22e634');
+    for (const name of ['复制', '打开']) {
+      expect(screen.getByRole('button', { name }).className).toContain('sc-share-key');
+    }
+    expect(screen.getByRole('button', { name: '作废这条评审链接' }).className).toContain('sc-share-key');
+    expect(screen.getByRole('button', { name: '评审二维码' }).className).toContain('sc-share-key');
   });
 });
 

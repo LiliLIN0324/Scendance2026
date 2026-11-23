@@ -75,7 +75,7 @@ export function AccountTeamPanel({ controller, studioId, onStudioRenamed }: { co
       </form>
       : <button type="button" className="sc-settings-title-name" aria-label={`重命名团队${team.teamName}`} onClick={() => { setDraftName(team.teamName); setRenaming(true); }}>{team.teamName}</button>}
     notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} {...(isOwner ? { onInvite: () => setInviteOpen(open => !open) } : {})} inviteOpen={inviteOpen}>
-    <div className="sc-settings-columns" aria-hidden="true"><span>团队名称</span><span>角色</span></div>
+    <div className="sc-settings-columns" aria-hidden="true"><span>成员</span><span>角色</span></div>
     {team.members.map(member => { const tone = tones.get(member.userId); const preset = presets.get(member.userId); return <div className="sc-settings-row" key={member.userId}>
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">
         {preset ? <img src={preset.src} alt=""/> : member.displayName.slice(0, 1)}
@@ -117,7 +117,7 @@ function TeamFrame({ title, notice, alert = false, busy, onRefresh, onInvite, in
 }): JSX.Element {
   return <section className="sc-settings" aria-label="团队成员">
     <header className="sc-settings-head">
-      <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>团队名点一下就能改</strong><span>用邮箱加人：填写对方已注册的登录邮箱即可，对方需先有账号。消息面板里的成员与这份名单同源。</span></InfoTip></div>
+      <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>只有负责人能改团队名、邀请或移除成员</strong><span>邀请用对方注册时的登录邮箱，对方需先有账号。消息面板里的成员与这份名单同源。</span></InfoTip></div>
       <div className="sc-settings-tools">
         {onRefresh && <button className="sc-settings-icon-button" type="button" aria-label="刷新成员" title="刷新" disabled={busy} onClick={onRefresh}><RefreshCw size={15} aria-hidden="true"/></button>}
         {onInvite && <button className="sc-settings-outline" type="button" aria-expanded={inviteOpen} onClick={onInvite}>邀请</button>}

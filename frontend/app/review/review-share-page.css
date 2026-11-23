@@ -1,39 +1,36 @@
 /**
- * 客户评审页：对齐生产站只读浅色页（/site、/view、/pricing）同一套纸面语言——
- * 暖白纸面、纯白卡片发丝边、主视觉一圈轻投影、深绿主行动钮。不另起一套配色。
+ * 客户评审页：冷石画廊。
+ * 纯白卡片、发丝线、近黑墨字。墨色只做「完成评审」；
+ * 品牌绿留给发送 / 发布，不铺在这页的主按钮上。
  */
 
 body:has(.rsp) {
   margin: 0;
-  background: var(--ground, #f6f5f0);
+  background: var(--ground, #f4f5f7);
 }
 
 .rsp {
-  /* 中性阶（对齐 /site 暖白只读页） */
-  --ground: #f6f5f0;
+  --ground: #f4f5f7;
   --paper: #ffffff;
   --plane: #f4f5f7;
   --plane-deep: #ecedef;
   --hair-soft: #efeff1;
-  --hair: #e4e3db;
-  --ink: #20241f;
+  --hair: #e4e4e7;
+  --ink: #141416;
   --ink-soft: #55585f;
-  --muted: #6a7168;
+  --muted: #71767e;
   --faint: #a6aab2;
-  /* 品牌绿：只做主行动钮、选中指示与小面积点睛 */
-  --brand: #35624a;
-  --brand-deep: #2a4f3b;
+  /* 绿只留给选中指示。主按钮用墨色。 */
   --green: #4a7c59;
+  --green-deep: #35624a;
   --green-pale: #eef3ef;
   --warning: #96651f;
   --err: #b4443c;
-  /* 圆角：卡片 r-md 12，按钮/小控件 r-sm 10 */
   --r-sm: 10px;
-  --r-md: 12px;
-  --r-lg: 14px;
-  /* 主视觉轻投影（/site、/view 先例）；浮层小钮只用一层小影 */
-  --stage-shadow: 0 16px 40px #30353012;
-  --float-shadow: 0 2px 8px #30353008;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --e1: 0 6px 18px rgba(20, 20, 22, .10);
+  --float-shadow: var(--e1);
   --ease: cubic-bezier(.2, 0, 0, 1);
   min-height: 100dvh;
   background: var(--ground);
@@ -190,7 +187,7 @@ body:has(.rsp) {
   border: 1px solid var(--hair);
   border-radius: var(--r-lg);
   background: var(--paper);
-  box-shadow: var(--stage-shadow);
+  box-shadow: var(--e1);
   overflow: hidden;
 }
 
@@ -333,7 +330,7 @@ body:has(.rsp) {
 }
 
 .rsp-source a {
-  color: var(--brand);
+  color: var(--ink);
   text-underline-offset: 3px;
 }
 
@@ -397,8 +394,13 @@ body:has(.rsp) {
   border: 1px solid var(--hair);
   border-radius: var(--r-lg);
   background: var(--paper);
-  box-shadow: var(--stage-shadow);
+  box-shadow: var(--e1);
   overflow: hidden;
+}
+
+.rsp-rail-head,
+.rsp-rail-foot {
+  flex-shrink: 0;
 }
 
 .rsp-rail-head {
@@ -528,7 +530,7 @@ body:has(.rsp) {
 }
 
 .rsp-pin-list li.is-on .rsp-pin-go b {
-  background: var(--brand);
+  background: var(--green);
   color: #fff;
 }
 
@@ -554,45 +556,69 @@ body:has(.rsp) {
 }
 
 .rsp-actions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
 }
 
-.rsp-actions button {
-  height: 34px;
+.rsp-primary {
+  height: 36px;
+  border: 1px solid var(--ink);
   border-radius: var(--r-sm);
-  font: 500 13px/1 var(--font-sans, system-ui, sans-serif);
+  background: var(--ink);
+  color: var(--paper);
+  font: 500 14px/22px var(--font-sans, system-ui, sans-serif);
   cursor: pointer;
   transition: background 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease);
 }
 
-.rsp-primary {
-  border: 1px solid var(--brand);
-  background: var(--brand);
-  color: var(--paper);
+.rsp-primary:hover:not(:disabled) {
+  background: #2a2c31;
+  border-color: #2a2c31;
 }
 
-.rsp-primary:hover:not(:disabled) {
-  background: var(--brand-deep);
-  border-color: var(--brand-deep);
+.rsp-primary:active:not(:disabled) {
+  background: #3d3f45;
+  border-color: #3d3f45;
 }
 
 .rsp-backup {
-  border: 1px solid var(--hair);
-  background: var(--paper);
+  align-self: center;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
   color: var(--ink-soft);
+  font: 500 14px/22px var(--font-sans, system-ui, sans-serif);
+  cursor: pointer;
+  transition: color 120ms var(--ease);
 }
 
 .rsp-backup:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ink);
+}
+
+.rsp-backup:active:not(:disabled) {
+  color: var(--faint);
+}
+
+.rsp-primary:disabled,
+.rsp-backup:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.rsp-primary:disabled {
+  border-color: transparent;
   background: var(--plane);
 }
 
-.rsp-actions button:disabled {
-  border-color: var(--hair);
-  background: var(--plane);
-  color: var(--faint);
-  cursor: not-allowed;
+.rsp-backup:disabled {
+  background: transparent;
+  border: 0;
 }
 
 .rsp-status {
@@ -689,6 +715,55 @@ body:has(.rsp) {
 
   .rsp-legend {
     padding: 10px 12px;
+  }
+}
+
+/* 桌面首屏：地图和意见栏吃掉标题以下的高度，完成评审和导出备份留在视口里。 */
+@media (min-width: 981px) {
+  .rsp:has(.rsp-workspace) {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .rsp:has(.rsp-workspace) .rsp-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 16px;
+    padding-bottom: 16px;
+  }
+
+  .rsp:has(.rsp-workspace) .rsp-workspace {
+    min-height: 0;
+    height: 100%;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .rsp:has(.rsp-workspace) .rsp-stage,
+  .rsp:has(.rsp-workspace) .rsp-rail {
+    min-height: 0;
+    max-height: none;
+    height: 100%;
+  }
+
+  .rsp:has(.rsp-workspace) .rsp-outdoor,
+  .rsp:has(.rsp-workspace) .rsp-sheet-interactive {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  .rsp:has(.rsp-workspace) .rsp-map {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .rsp:has(.rsp-workspace) .rsp-outdoor svg {
+    height: 100% !important;
   }
 }
 
@@ -837,5 +912,5 @@ body:has(.rsp) {
 }
 
 .rsp-map g.is-on .rsp-pin-dot {
-  fill: var(--brand);
+  fill: var(--green);
 }

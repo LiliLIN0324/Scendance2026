@@ -124,7 +124,7 @@
 .sc-account-dialog{width:900px;height:750px;min-width:min(880px,calc(100vw - 48px));min-height:min(720px,calc(100dvh - 48px));max-width:min(920px,calc(100vw - 48px));max-height:min(760px,calc(100dvh - 48px));padding:0;background:var(--wk-paper);overflow:hidden;border-radius:16px;box-shadow:0 6px 18px rgba(20,20,22,.10)}
 .sc-account-dialog::backdrop{background:rgba(20,20,22,.28);backdrop-filter:none;-webkit-backdrop-filter:none}
 .sc-account-dialog[open]{display:flex;flex-direction:column}
-.sc-account-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-radius:inherit;display:flex;flex-direction:column}
+.sc-account-scroll{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;border-radius:inherit;display:flex;flex-direction:column}
 .sc-account-scroll::-webkit-scrollbar{width:10px;height:10px}
 .sc-account-scroll::-webkit-scrollbar-track{background:transparent;border-radius:999px;margin-block:14px}
 .sc-account-scroll::-webkit-scrollbar-thumb{background:var(--wk-hair);border:3px solid var(--wk-paper);border-radius:999px;background-clip:padding-box}
@@ -133,7 +133,7 @@
 @supports not selector(::-webkit-scrollbar){.sc-account-scroll{scrollbar-width:thin;scrollbar-color:var(--wk-hair) transparent}}
 .sc-account-dialog .sc-cloud-heading{padding:28px 32px 0;margin:0}
 .sc-account-dialog .sc-cloud-heading h2{font-size:26px;margin:0 0 14px;letter-spacing:-.045em}
-.sc-account-title-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sc-account-title-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;border:0}
 .sc-account-dialog{position:relative}
 .sc-cloud-dialog button.sc-account-close-float{position:absolute;top:10px;right:12px;z-index:8;padding:6px;border-radius:8px}
 /* 未登录：同一个账户浮窗收成 400px 窄卡渲染登录注册，登录成功后就地展开为已有的两栏账户中心。 */
@@ -146,7 +146,7 @@
 /* 两栏：左栏只说"现在是谁、在哪个团队"，右栏放项目与素材。分隔线绝对定位画满两栏高度。 */
 .sc-account-shell{--acct-side:188px;position:relative;flex:1;min-height:0;display:grid;grid-template-columns:var(--acct-side) minmax(0,1fr);align-items:stretch}
 .sc-account-shell::before{content:none}
-.sc-account-side{align-self:stretch;display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;padding:16px 10px 16px 12px;overflow:auto;background:color-mix(in srgb,var(--wk-plane) 55%,var(--wk-paper));border-right:1px solid var(--sc-line)}
+.sc-account-side{align-self:stretch;display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0;padding:16px 10px 16px 12px;overflow-x:hidden;overflow-y:auto;background:color-mix(in srgb,var(--wk-plane) 55%,var(--wk-paper));border-right:1px solid var(--sc-line)}
 .sc-account-studio{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr);align-items:center;gap:8px;min-width:0;padding:2px 6px 8px}
 .sc-account-studio>div:not(.sc-account-avatar-picker){display:grid;gap:1px;min-width:0}
 .sc-account-studio strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:1.3;font-weight:650;color:var(--ink,#141416)}
@@ -230,7 +230,7 @@
 .sc-cloud-dialog .sc-account-subnav button:hover{color:var(--sc-ink)}
 .sc-account-subnav-current{font-size:12px;font-weight:600;color:var(--sc-ink)}
 @media(hover:hover) and (pointer:fine){.sc-cloud-dialog button.sc-account-team[aria-pressed=true]:not(:disabled):hover{background:var(--wk-green-pale);border-color:transparent;color:var(--wk-green-deep)}}
-.sc-account-body{flex:1;min-height:0;overflow:auto;padding:16px 32px 28px}
+.sc-account-body{flex:1;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;padding:16px 32px 28px}
 .sc-account-body [hidden]{display:none!important}
 .sc-cloud-content{min-height:100%;display:flex;flex-direction:column}
 .sc-account-section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}

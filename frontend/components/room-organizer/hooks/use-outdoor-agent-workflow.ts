@@ -824,9 +824,27 @@ export function useOutdoorAgentWorkflow(input: {
    */
   function reconcileCanvasStage() {
     const plan = callbacks.current.bridge()?.getPlan();
-    if (!plan || !checkBoundaryRing(plan.boundary).ok) return;
+    if (!plan) return;
     if (stateRef.current.stage !== "place") return;
-    persist({ ...stateRef.current, stage: "scope" });
+    if (checkBoundaryRing(plan.boundary).ok) {
+      persist({ ...stateRef.current, stage: "scope" });
+      return;
+    }
+    // 2026-11-23 重开命名方案实测：流程草稿缺失时阶段回到 place，任务卡就变成
+    // 「搜索目标地点」——可方案里已经有分区/物件/流线了。默认或缺失的西湖锚点不算场地，
+    // 不能仅凭 anchor 判定已选址；只有真实内容才把阶段接回对应一步。
+    // 只对账，不确认/改写边界与锚点。
+    const hasZones = plan.zones.length > 0;
+    const hasFacilities = plan.facilities.length > 0;
+    const hasRoutes = plan.routes.length > 0 || plan.nodes.length > 0;
+    const hasWorkers = plan.workers.length > 0;
+    if (!hasZones && !hasFacilities && !hasRoutes && !hasWorkers) return;
+    const stage = hasZones ? "zones" : hasFacilities ? "objects" : hasRoutes ? "main-routes" : "people";
+    persist({
+      ...stateRef.current,
+      stage,
+      completed: [...new Set([...stateRef.current.completed, "place"] as typeof stateRef.current.completed)],
+    });
   }
   /**
    * 2026-11-18 用户拍板：场地已经有用地红线时，任务卡就该直接是「待你核对」这张，
