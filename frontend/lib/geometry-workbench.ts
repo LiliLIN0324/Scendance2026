@@ -16,6 +16,15 @@ function isLocalProjectParam(id: string): boolean {
   return projectLinkKind(id) === 'local-draft';
 }
 
+/**
+ * 账户深链可以静默跳过的本机身份。
+ * `house-*` / `default-outdoor` 从来不是云端项目；`replica-*` 是经典案例副本，
+ * 即使本机记录还没落盘，它也不是可打开的云端 uuid。
+ */
+export function isEditorLocalProjectLink(id: string): boolean {
+  return projectLinkKind(id) === 'local-draft';
+}
+
 /** 案例链接 / 本机活动指向本机规划，并非待加载的云项目。 */
 export function hasRequestedCloudProject(): boolean {
   if (typeof window === 'undefined') return false;

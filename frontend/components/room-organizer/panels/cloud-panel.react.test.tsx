@@ -615,6 +615,58 @@ describe('CloudPanel delayed project replacement', () => {
     expect(controller.getSnapshot()).toMatchObject({ draft, dirty: true, writeBlocked: false });
   });
 
+  it.each(['house-carnival', 'default-outdoor'])('keeps a local unpublished draft (%s) off the deleted-project alerts', async (localId) => {
+    window.history.replaceState(null, '', `/editor/?project=${localId}&mode=outdoor`);
+    const local = backendSceneToLayout(scene, { projectId: localId, name: '浙音第六届生涯嘉年华（试画）' });
+    const getProject = vi.spyOn(controller, 'getProject');
+    const opened = getProject.mock.calls.length;
+    mockFetch.mockResolvedValueOnce(errorBody('PROJECT_NOT_FOUND', 404));
+    await controller.businessRequest(`/projects/${otherId}`).catch(() => undefined);
+    expect(controller.getSnapshot().error?.code).toBe('PROJECT_NOT_FOUND');
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([other] as never);
+    vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }] as never);
+    vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
+    const seen: string[] = [];
+    const stop = subscribeNotices(notice => seen.push(notice.message));
+    const view = render(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()} />);
+    openProjects(view.container);
+    expect(await screen.findByText('本机 · 未上传')).toBeTruthy();
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+    expect(screen.queryByText('项目链接无效。')).toBeNull();
+    expect(screen.queryByText('项目已不存在或已被删除，当前画布仍是本机草稿，可继续编辑。')).toBeNull();
+    expect(screen.queryByText(/链接中的项目已不存在或已被删除/)).toBeNull();
+    fireEvent.click(within(screen.getByRole('navigation', { name: '账户分区' })).getByRole('button', { name: '团队' }));
+    expect(await screen.findByRole('region', { name: '团队成员' })).toBeTruthy();
+    expect(screen.queryByText('项目链接无效。')).toBeNull();
+    expect(screen.queryByText('项目已不存在或已被删除，当前画布仍是本机草稿，可继续编辑。')).toBeNull();
+    expect(getProject.mock.calls.length).toBe(opened);
+    expect(seen.some(message => message.includes('项目链接无效') || message.includes('已被删除'))).toBe(false);
+    stop();
+  });
+
+  it('still says a real cloud project is missing when that project was opened and is gone', async () => {
+    const local = backendSceneToLayout(scene, { projectId: 'house-carnival', name: '本机草稿' });
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([other] as never);
+    vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }] as never);
+    vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
+    vi.spyOn(controller, 'getProject').mockRejectedValue(Object.assign(new Error('PROJECT_NOT_FOUND'), { code: 'PROJECT_NOT_FOUND' }));
+    const view = render(<CloudPanel controller={controller} layout={local} onLoadLayout={vi.fn()} />);
+    openProjects(view.container);
+    await screen.findByText(other.name);
+    enterListedProject();
+    expect(await screen.findByText('项目已不存在或已被删除，当前画布仍是本机草稿，可继续编辑。')).toBeTruthy();
+  });
+
+  it('still rejects a project link that is neither local nor a cloud id', async () => {
+    window.history.replaceState(null, '', '/editor/?project=not-a-project');
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const notices = watchNotices();
+    render(<CloudPanel layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    const notice = await notices.next(/项目链接无效/);
+    notices.stop();
+    expect(notice.message).toBe('项目链接无效。');
+  });
+
   it('skips cloud binding for a classic-case (replica-) deep link without an invalid-link notice', async () => {
     // 经典案例在本机是合法项目（space-panel 用 replica- 伪 id 占住 ?project=），
     // 深链到这里只跳过云端绑定：不报「项目链接无效」，也不发任何打开项目的请求。

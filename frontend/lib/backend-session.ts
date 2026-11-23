@@ -1395,7 +1395,8 @@ export class BackendSession {
    * 打开/替换画布请用 getProject。
    */
   async peekProject(projectId: string): Promise<BackendProject> {
-    const project = await this.businessRequest<BackendProject>(`/projects/${encodeURIComponent(projectId)}`);
+    // 卡片预览失败只交给调用方；不要写成会话级「当前项目已删除」，否则本机草稿会被这句误伤。
+    const project = await this.request<BackendProject>(`/projects/${encodeURIComponent(projectId)}`, "GET", undefined, this.captureRequestScope(), "business", undefined, undefined, undefined, true);
     return { ...project, scene: sceneSchema.parse(project.scene) };
   }
   /** A read-only authority is invalidated by sign-in/out, project or lease changes. */

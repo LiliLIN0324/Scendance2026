@@ -17,7 +17,7 @@ import { Box, FileImage, FolderOpen, Images, MapPin, MoreHorizontal, Mountain, R
 import { safeReturnPath } from '@/lib/auth-provider';
 import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
-import { isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { isEditorLocalProjectLink, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { readProjectCache } from '@/lib/project-cache';
 import { captureStageCover } from '@/lib/stage-cover';
@@ -320,9 +320,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     if (!userId || busy) return;
     const id = requestedProjectId;
     if (!id || openedRequest.current === `${userId}:${id}`) return;
-    // 本机草稿（house-* / default-outdoor）和经典案例（replica-）不是云端项目行。
-    // 静默跳过云端绑定：不报「项目链接无效」，也不把本机号查成「已删除」。
-    if (projectLinkKind(id) === 'local-draft') { openedRequest.current = `${userId}:${id}`; return; }
+    // 本机草稿写在 ?project= 上（house-*、default-outdoor、经典案例 replica-）。
+    // 云端没有这条身份：静默跳过，不要把它说成「项目链接无效」或已删除的云项目。
+    if (isEditorLocalProjectLink(id)) { openedRequest.current = `${userId}:${id}`; return; }
     // 无感挂云自己同步的 ?project=：项目刚建好、画布已是内容本体，重开会清掉撤销历史，凭标记跳过。
     if (consumeSelfAttachedProject(userId, id)) { openedRequest.current = `${userId}:${id}`; return; }
     // 2026-11-18 用户：「能不能稍微早期不要设定这么复杂的门槛」——深链打开不再先要手动释放编辑权，
@@ -933,6 +933,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }, [studioProjects, query]);
   // 画布尚未对应某个已打开的云端项目时，用「草稿」卡占位（类似 Figma Drafts）。
   const draftOnCanvas = !sceneConnection && (!cloud.project || layout.id !== cloud.project.id);
+  // 会话里残留的 PROJECT_NOT_FOUND 只在「当前画布就是那个云项目」时才说项目被删。
+  // 本机未上传草稿的 id 对不上云端项目，不能把别人的 404 或背景预览失败说成这份草稿已删除。
+  const missingProjectIsThisCanvas = cloud.error?.code === 'PROJECT_NOT_FOUND' && !!layout.id && cloud.project?.id === layout.id;
   const floorplanOnlyLocal = !layout.backendSceneV2 && !!(layout.floorPlanImage || layout.backendVenue?.floorplanAssetId);
   const draftCardName = (layout.name || '').trim() || '未命名草稿';
   const showDraftCard = draftOnCanvas && (!query.trim() || draftCardName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
@@ -1706,7 +1709,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       {section === 'projects' && localHandoff && !sceneConnection && notice !== LOCAL_HANDOFF_CLOUD_MESSAGE && <p className="sc-account-error" role="alert">{LOCAL_HANDOFF_CLOUD_MESSAGE}</p>}
       {/* 通用操作回执（删除 / 改名失败等 run() 的结果）在项目页与团队分区都要看得见；其余项目提示仍只挂项目页。 */}
       {(section === 'projects' || section === 'team') && notice && <p className={noticeError ? 'sc-account-error' : 'sc-account-footnote'} role={noticeError ? 'alert' : 'status'}>{notice}</p>}
-      {section === 'projects' && cloud.error && cloud.error.code !== 'ROUTE_NOT_FOUND' && notice !== cloud.error.message && <p className="sc-account-error" role="alert">{cloud.error.message}</p>}
+      {section === 'projects' && cloud.error && cloud.error.code !== 'ROUTE_NOT_FOUND' && (cloud.error.code !== 'PROJECT_NOT_FOUND' || missingProjectIsThisCanvas) && notice !== cloud.error.message && <p className="sc-account-error" role="alert">{cloud.error.message}</p>}
       {section === 'projects' && cloud.error?.code==='CANVAS_PROJECT_MISMATCH' && cloud.lease && <button type="button" disabled={busy} onClick={()=>void run(async()=>{await controller.releaseLeaseAfterCanvasMismatch(cloud.lease!.projectId);showNotice('原编辑权已释放；请保留当前草稿，重新打开活动核对。');})}>重试释放原编辑权</button>}
       </div>
       </div>
