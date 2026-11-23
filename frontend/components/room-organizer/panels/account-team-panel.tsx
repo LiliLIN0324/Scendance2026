@@ -117,7 +117,7 @@ function TeamFrame({ title, notice, alert = false, busy, onRefresh, onInvite, in
 }): JSX.Element {
   return <section className="sc-settings" aria-label="团队成员">
     <header className="sc-settings-head">
-      <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>团队名点一下就能改</strong><span>用邮箱加人：填写对方已注册的登录邮箱即可，对方需先有账号。消息面板里的成员与这份名单同源。</span></InfoTip></div>
+      <div className="sc-settings-title">{title ?? <h3>成员</h3>}<InfoTip key="team" label="团队说明"><strong>只有负责人能改团队名、邀请或移除成员</strong><span>邀请用对方注册时的登录邮箱，对方需先有账号。消息面板里的成员与这份名单同源。</span></InfoTip></div>
       <div className="sc-settings-tools">
         {onRefresh && <button className="sc-settings-icon-button" type="button" aria-label="刷新成员" title="刷新" disabled={busy} onClick={onRefresh}><RefreshCw size={15} aria-hidden="true"/></button>}
         {onInvite && <button className="sc-settings-outline" type="button" aria-expanded={inviteOpen} onClick={onInvite}>邀请</button>}

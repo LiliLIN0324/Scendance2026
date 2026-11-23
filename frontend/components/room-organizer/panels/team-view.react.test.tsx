@@ -87,8 +87,19 @@ describe('account team panel', () => {
     expect(screen.getByRole('button', { name: '刷新成员' })).toBeTruthy();
   });
 
-  it('shows the avatar picked on this device on my own row', async () => {
+  it('tells the team note that only the owner can invite or remove', async () => {
     await controller.signIn('test@example.com', 'password');
+    render(<AccountTeamPanel controller={controller}/>);
+    await screen.findByText('丽丽 · 你');
+    fireEvent.click(screen.getByRole('button', { name: '团队说明' }));
+    const note = screen.getByRole('note');
+    expect(note.textContent).toContain('只有负责人能改团队名、邀请或移除成员');
+    expect(note.textContent).toContain('对方需先有账号');
+    // 只改文案，不扩大邀请权限。
+    expect(screen.getByRole('button', { name: '邀请' })).toBeTruthy();
+  });
+
+  it('shows the avatar picked on this device on my own row', async () => {    await controller.signIn('test@example.com', 'password');
     render(<AccountTeamPanel controller={controller}/>);
     await screen.findByText('丽丽 · 你');
     act(() => { saveAvatar('user-a', '07'); });
