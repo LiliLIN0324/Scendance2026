@@ -3780,14 +3780,19 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 14px; line-height: 22px; color: var(--ink, #141416);
 }
+/* 2026-11-23 短链行溢出：工具弹层的 `button{width:100%}` 是给菜单行用的，
+   行内小键（打开 / 作废）必须按文字收窄；否则每个键各占满整行，
+   `flex:1` 的短链被挤成 0 宽、二维码被顶出面板约 400px。
+   复制 / 二维码仍由下面两条固定宽度，其余键只吃文字 + 8px 内边距。 */
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-key {
   flex: none; display: inline-flex !important; align-items: center; justify-content: center;
   box-sizing: border-box !important;
-  height: 24px !important; min-height: 0 !important; padding: 0 !important;
+  width: auto !important; min-width: 0 !important; max-width: none !important;
+  height: 24px !important; min-height: 0 !important; padding: 0 8px !important;
   border-radius: 6px !important; border: 0.6px solid var(--hair, #E4E4E7) !important;
   background: var(--paper, #FFFFFF) !important; box-shadow: none !important;
   color: var(--ink, #141416) !important;
-  font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer;
 }
 .sc-workbench .sc-tool-pop.sc-share-panel button.sc-share-copy {
   width: 48px !important; min-width: 48px !important; padding: 0 !important; text-align: center !important;
