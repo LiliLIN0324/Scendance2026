@@ -22,7 +22,7 @@ import { listReviewPinsCloud, setReviewPinStatusCloud } from '../../review-share
 import { setReviewSharePinStatus } from '../../review-share-page/share-pins';
 import type { ReviewPin } from '../lib/review-pins';
 import {
-  bingoPhaseLabel,
+  bingoReviewStatusPhrases,
   clearBingoReceipt,
   emptyBingoSnapshot,
   formatBingoTime,
@@ -266,10 +266,14 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   const openPinCount = plansWithFeedback.reduce((sum, entry) => sum + countOpenFeedbackPins(entry.feedback), 0);
   // 系统问题只算能落到这张图上、且还没收尾的；被拒件也是我要处理的事。
   const todoCount = issues.length + refusedList.length;
-  const phaseLabel = bingoPhaseLabel(snapshot.phase);
-  const statusTail = todoCount > 0 ? `还剩 ${todoCount} 件要收尾` : '我要收尾的已处理完';
-  const statusOther = openPinCount > 0 ? `对方提了 ${openPinCount} 条修改` : '还没有对方的修改';
-  const statusText = `${phaseLabel} ${statusTail} · ${statusOther}`;
+  // 与左轨环内数字同一口径：未回执链接份数。钉数另算，不拿来解释这个数字。
+  const pendingLinkCount = snapshot.plans.filter(plan => !plan.returned).length;
+  const statusPhrases = bingoReviewStatusPhrases({
+    phase: snapshot.phase,
+    pendingLinkCount,
+    todoCount,
+    openPinCount,
+  });
   const layers = settledLayers(settled);
   const issueGroups = reviewIssueGroups(issues);
   const reviewHref = usableReviewHref(snapshot.plans);
@@ -293,7 +297,11 @@ export function BingoAuditCard(props: BingoAuditCardProps = {}): JSX.Element | n
   return <section className="ap-review" aria-label="我的完成与对方的修改">
     <p className="ap-review-status" data-testid="bingo-review-status">
       <BingoStatusMark phase={snapshot.phase} sending={sendingNow && snapshot.phase !== 'returned'} size={14} armed={armed} />
-      <span>{statusText}</span>
+      <span className="ap-review-status-text">
+        {statusPhrases.map((phrase, index) => (
+          <span key={phrase} className="ap-review-status-phrase">{phrase}{index < statusPhrases.length - 1 ? ' ·' : ''}</span>
+        ))}
+      </span>
     </p>
     {reviewActions && <div className="ap-review-toolbar" aria-label="审校动作">
       <button type="button" className="ap-review-tool" onClick={reviewActions.onRecheck}>

@@ -4,6 +4,7 @@ import {
   BINGO_RETURN_KEY,
   bingoBallLabel,
   bingoPhase,
+  bingoReviewStatusPhrases,
   clearBingoReceipt,
   formatBingoTime,
   readBingoSnapshot,
@@ -143,6 +144,35 @@ describe('clearBingoReceipt', () => {
     const storage = bucket();
     clearBingoReceipt(storage satisfies BingoClearable);
     expect(readBingoSnapshot(storage).phase).toBe('to-send');
+  });
+});
+
+describe('bingoReviewStatusPhrases', () => {
+  it('待评把环内数字说成未回执链接，没有钉时不重复空状态那句', () => {
+    expect(bingoReviewStatusPhrases({
+      phase: 'awaiting', pendingLinkCount: 1, todoCount: 0, openPinCount: 0,
+    })).toEqual(['待评 1 份链接等回执', '我要收尾的已处理完']);
+  });
+
+  it('待评同时写出链接份数和对方修改条数，两个数各说各的', () => {
+    expect(bingoReviewStatusPhrases({
+      phase: 'awaiting', pendingLinkCount: 1, todoCount: 2, openPinCount: 3,
+    })).toEqual(['待评 1 份链接等回执', '还剩 2 件要收尾', '对方提了 3 条修改']);
+  });
+
+  it('待发和已回执不拿链接份数冒充环内数字', () => {
+    expect(bingoReviewStatusPhrases({
+      phase: 'to-send', pendingLinkCount: 0, todoCount: 6, openPinCount: 0,
+    })).toEqual(['待发', '还剩 6 件要收尾']);
+    expect(bingoReviewStatusPhrases({
+      phase: 'returned', pendingLinkCount: 1, todoCount: 0, openPinCount: 0,
+    })).toEqual(['已回执', '我要收尾的已处理完']);
+  });
+
+  it('没有未回执链接时待评只留相位，不写 0 份', () => {
+    expect(bingoReviewStatusPhrases({
+      phase: 'awaiting', pendingLinkCount: 0, todoCount: 0, openPinCount: 0,
+    })[0]).toBe('待评');
   });
 });
 

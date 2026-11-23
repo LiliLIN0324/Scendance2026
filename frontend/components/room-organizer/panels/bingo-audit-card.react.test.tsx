@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +15,7 @@ import { BingoAuditCard } from './bingo-audit-card';
 import {layoutStore} from '../hooks/use-layout-store';
 import { appendReviewSharePin, setReviewSharePinStatus } from '../../review-share-page/share-pins';
 
+const here = dirname(fileURLToPath(import.meta.url));
 const SHARE = '11111111-1111-4111-8111-111111111111';
 
 const pinDraft = {
@@ -61,6 +65,10 @@ describe('BingoAuditCard', () => {
     expect(screen.queryByText('本机评审记录')).toBeNull();
     expect(screen.getByText('我的完成')).toBeTruthy();
     expect(screen.getByText('还没有对方的修改')).toBeTruthy();
+    const idle = screen.getByTestId('bingo-review-status');
+    expect(idle.textContent).toContain('待发');
+    expect(idle.textContent).not.toContain('份链接');
+    expect(idle.textContent).not.toContain('还没有对方的修改');
   });
 
   it('shows the plan, 待评 phase and pin count from the local review record', () => {
@@ -78,6 +86,12 @@ describe('BingoAuditCard', () => {
     expect(screen.getByRole('region', { name: '我的完成与对方的修改' })).toBeTruthy();
     expect(screen.getByText('我的完成')).toBeTruthy();
     expect(screen.getByText('还没有对方的修改')).toBeTruthy();
+    const status = screen.getByTestId('bingo-review-status');
+    expect(status.textContent).toContain('待评 1 份链接等回执');
+    expect(status.textContent).not.toContain('还没有对方的修改');
+    expect(status.querySelectorAll('.ap-review-status-phrase')).toHaveLength(2);
+    const css = readFileSync(join(here, 'agent-panel.css'), 'utf8');
+    expect(css).toMatch(/\.ap-review-status-phrase\s*\{[^}]*white-space:\s*nowrap/);
     expect(screen.getByText('记录 1')).toBeTruthy();
     expect(screen.getByText('发布会')).toBeTruthy();
     expect(screen.getByLabelText('打开评审页').getAttribute('href')).toBe(`/review/${SHARE}`);
@@ -273,7 +287,13 @@ describe('BingoAuditCard', () => {
     const seen: string[] = [];
     const off = onOutdoorPlanIssueFocus(key => seen.push(key));
     render(<BingoAuditCard reviewActions={{ onRecheck: () => undefined, onSendReview: () => undefined }}/>);
-    expect(screen.getByText(/待发 还剩 6 件要收尾/)).toBeTruthy();
+    const status = screen.getByTestId('bingo-review-status');
+    expect(status.textContent).toContain('待发');
+    expect(status.textContent).toContain('还剩 6 件要收尾');
+    expect([...status.querySelectorAll('.ap-review-status-phrase')].map(node => node.textContent)).toEqual([
+      '待发 ·',
+      '还剩 6 件要收尾',
+    ]);
     expect(screen.getByRole('button', { name: '发给客户评审' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '重新检查' })).toBeTruthy();
     expect(screen.getByText('红线 · 分区 8 · 动线 3')).toBeTruthy();
@@ -298,7 +318,7 @@ describe('BingoAuditCard', () => {
     expect(screen.queryByRole('button', { name: '发给客户评审' })).toBeNull();
     expect(screen.getByRole('button', { name: '复制评审链接' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '查看评审页' }).getAttribute('href')).toBe(`/review/${SHARE}`);
-    expect(screen.getByText(/待评 /)).toBeTruthy();
+    expect(screen.getByTestId('bingo-review-status').textContent).toContain('待评 1 份链接等回执');
   });
 
   it('top feedback group counts only open pins; resolved pins stay out of the preview', () => {
@@ -318,5 +338,9 @@ describe('BingoAuditCard', () => {
     expect(group?.querySelector('.ap-review-count')?.textContent).toBe('1');
     expect(within(group!).getByText('入口要加指示牌')).toBeTruthy();
     expect(within(group!).queryByText('通道加宽')).toBeNull();
+    const status = screen.getByTestId('bingo-review-status');
+    expect(status.textContent).toContain('待评 1 份链接等回执');
+    expect(status.textContent).toContain('对方提了 1 条修改');
+    expect([...status.querySelectorAll('.ap-review-status-phrase')].some(node => node.textContent === '对方提了 1 条修改')).toBe(true);
   });
 });

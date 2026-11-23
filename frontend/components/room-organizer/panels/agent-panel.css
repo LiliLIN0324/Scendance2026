@@ -988,8 +988,11 @@ button.ap-ghost {
    不再出现 16 / 13px 这类私有值。行高走 4px 步进：分组 36、问题行 40、工具栏 32（触达区下限）。
    绿只留给「发给客户评审」。 */
 .ap-review { display: flex; flex-direction: column; margin: 0 -16px; min-width: 0; }
-.ap-review-status { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 16px 0; color: var(--ink); font-size: var(--fs-p1); line-height: var(--lh-p1); }
-.ap-review-status > span { min-width: 0; }
+.ap-review-status { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 4px 16px 0; color: var(--ink); font-size: var(--fs-p1); line-height: var(--lh-p1); }
+.ap-review-status > .sc-bingo-badge { margin-top: 4px; }
+/* 换行只落在句与句之间，避免「对方的修改」被拆成「对 / 方的修改」。 */
+.ap-review-status-text { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.35em; min-width: 0; }
+.ap-review-status-phrase { white-space: nowrap; }
 .ap-review-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 12px 16px 4px; }
 .ap-review-tool { display: inline-flex; align-items: center; gap: 4px; height: 32px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--hair); border-radius: var(--r-sm); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--fs-p1); font-weight: 500; line-height: 1; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .ap-review-tool:hover { background: var(--hair-soft); }
