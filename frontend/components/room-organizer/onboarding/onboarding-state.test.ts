@@ -12,6 +12,7 @@ import {
   readOnboardingState,
   restartTour,
   shouldAutoStart,
+  shouldAutoStartOnArrival,
   stepVisible,
   tourSummary,
   writeOnboardingState,
@@ -82,6 +83,16 @@ describe('onboarding state (2026-11-20 全局引导)', () => {
     expect(shouldAutoStart(oneStep, 'first-run')).toBe(false);
     // 一条线的静音不影响另一条线。
     expect(shouldAutoStart(muteTour(oneStep, 'delivery'), 'canvas-basics')).toBe(true);
+  });
+
+  it('does not auto-start over an existing named plan', () => {
+    const state = initialOnboardingState();
+    // 打开既有具名方案 = 回访，不再盖一层「1/5」；手动从帮助中心仍可开始。
+    expect(shouldAutoStartOnArrival(state, 'first-run', { hasBoundary: false, hasItems: false, hasNamedPlan: true })).toBe(false);
+    // 空白起步草稿（没有具名方案）照旧自动开始。
+    expect(shouldAutoStartOnArrival(state, 'first-run', { hasBoundary: false, hasItems: false, hasNamedPlan: false })).toBe(true);
+    // 已看/已静音的判断不被具名信号绕过。
+    expect(shouldAutoStartOnArrival(state, 'first-run', { hasBoundary: true, hasItems: true })).toBe(true);
   });
 
   it('marks seen idempotently and keeps step order as written', () => {
