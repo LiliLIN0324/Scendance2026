@@ -1,7 +1,7 @@
 # Scendance 文档地图（DOC-MAP）
 
 > **本页由脚本生成，不要手改。** 重新生成：`node scripts/doc-scan.mjs`（Node ≥ 20，无依赖）。
-> 生成时间：2026-11-21 17:20；扫描口径见页尾「生成口径」。
+> 生成时间：2026-11-23 09:41；扫描口径见页尾「生成口径」。
 > 分工：本页只回答「有哪些文件、多大、什么时候动过」；**要读什么看 [README.md](README.md)**，按用途归类看 [INDEX.md](INDEX.md)。
 
 ## 一、全景
@@ -9,17 +9,17 @@
 | 位置 | md | 体量 | 收什么 |
 | --- | ---: | ---: | --- |
 | docs/（根目录） | 59 | 1.0 MB | 现行规格 / 计划 / 参考：编号文档 + 无编号页 |
-| docs/plans/ | 103 | 2.4 MB | 在建方案、交接、批次交付记录 |
+| docs/plans/ | 104 | 2.5 MB | 在建方案、交接、批次交付记录 |
 | docs/archive/ | 116 | 1.4 MB | 历史：report / plan / research / visual / legacy / example |
 | docs/evidence/ | 69 | 0.3 MB | 实测证据（回执、截图说明、探针记录） |
 | docs/research/ | 21 | 0.3 MB | 调研长文 |
 | docs/ 其他子目录 | 10 | 0.1 MB | contracts / quality / oneplan-icons / release-notes |
-| frontend/ | 20 | 0.1 MB | 前端模块自带说明 |
+| frontend/ | 19 | 0.1 MB | 前端模块自带说明 |
 | tools/ | 8 | 0.0 MB | 离线工具说明 |
 | 其他模块 | 24 | 0.2 MB | assets / data / deliverables / supabase / learning-library 等 |
 | 仓库根 | 9 | 0.8 MB | 协作、交接、变更、记忆 |
 | agent 草稿（未入库） | 1 | 0.0 MB | agent 运行产物与会话草稿，不参与文档体系 |
-| **合计** | **440** | **6.7 MB** | 其中可读文档 439 份（6.7 MB），agent 草稿 1 份 |
+| **合计** | **440** | **6.8 MB** | 其中可读文档 439 份（6.8 MB），agent 草稿 1 份 |
 
 ## 二、`docs/` 根目录（59 份）
 
@@ -37,7 +37,7 @@
 | [65-版本更新文案规范.md](<65-版本更新文案规范.md>) | 8.3 | 2026-11-22 | 版本更新文案规范 |
 | [66-Cloudflare部署.md](<66-Cloudflare部署.md>) | 8.4 | 2026-11-22 | Cloudflare Pages 与 GitHub 自动部署 |
 | [ARCHITECTURE.md](<ARCHITECTURE.md>) | 60.8 | 2026-11-22 | 幕景 Scendance · 产品架构设计 |
-| [DOC-MAP.md](<DOC-MAP.md>) | 71.1 | 2026-11-22 | Scendance 文档地图（DOC-MAP） |
+| [DOC-MAP.md](<DOC-MAP.md>) | 71.8 | 2026-11-22 | Scendance 文档地图（DOC-MAP） |
 | [INDEX.md](<INDEX.md>) | 24.7 | 2026-11-22 | 文档索引（2026-11-13 手工整理版） |
 | [README.md](<README.md>) | 12.0 | 2026-11-22 | Scendance 文档总览 |
 | [02-交付与Agent能力.md](<02-交付与Agent能力.md>) | 45.9 | 2026-11-21 | 02 · 交付与 Agent 能力：缺什么、按什么优先级补、怎么验收 |
@@ -85,10 +85,11 @@
 | [24-Web端三个产品问题.md](<24-Web端三个产品问题.md>) | 9.2 | 2026-11-05 | 54 · Web 端三个产品问题（2026-11-05） |
 | [03-测试与构建健康度.md](<03-测试与构建健康度.md>) | 11.6 | 2026-11-04 | 03 · 测试与构建健康度（只读盘点） |
 
-## 三、`docs/plans/`（在建，按最后改动倒序）（103 份）
+## 三、`docs/plans/`（在建，按最后改动倒序）（104 份）
 
 | 文件 | KB | 最后改动 | 首句 |
 | --- | ---: | --- | --- |
+| [2026-11-23-boundary-vertex-dom-handle-plan.md](<plans/2026-11-23-boundary-vertex-dom-handle-plan.md>) | 8.5 | 2026-11-23 | 边界顶点 DOM 手柄层方案（A 档 · 自动命中手段） |
 | [2026-11-13-commercial-agreements.md](<plans/2026-11-13-commercial-agreements.md>) | 7.9 | 2026-11-22 | 幕景的报价、合同与履约流程 |
 | [2026-11-13-delivery-frontend.md](<plans/2026-11-13-delivery-frontend.md>) | 152.0 | 2026-11-22 | 场景物料到执行交接：前端实施方案 |
 | [2026-11-13-reliability-loop.md](<plans/2026-11-13-reliability-loop.md>) | 48.3 | 2026-11-22 | 幕景持续改进目标与检查记录 |
@@ -98,6 +99,8 @@
 | [2026-11-20-79-jieyu-handoff-plan.md](<plans/2026-11-20-79-jieyu-handoff-plan.md>) | 21.9 | 2026-11-22 | 79 解隅（解局）接手计划 |
 | [2026-11-20-people-registry-unification.md](<plans/2026-11-20-people-registry-unification.md>) | 22.2 | 2026-11-22 | 人物登记表统一：不同人群去重与性别化（大改计划） |
 | [2026-11-21-b1-session-scope-decouple.md](<plans/2026-11-21-b1-session-scope-decouple.md>) | 27.7 | 2026-11-22 | B1 会话 scope 解耦 · 现状与切片口径（2026-11-21） |
+| [2026-11-21-first-principles-endstate.md](<plans/2026-11-21-first-principles-endstate.md>) | 18.0 | 2026-11-22 | 去室内化 · 第一性原理终态目标书（2026-11-21） |
+| [2026-11-21-indoor-decommission-goal.md](<plans/2026-11-21-indoor-decommission-goal.md>) | 119.2 | 2026-11-22 | 去室内化终态目标与里程碑台账（2026-11-21） |
 | [2026-11-04-ia-role-rework-ledger.md](<plans/2026-11-04-ia-role-rework-ledger.md>) | 31.9 | 2026-11-21 | 四角色 IA 重划导演台账 — 活动 / 审校 Bingo / 空间 / 物料 |
 | [2026-11-05-activity-space-norms.md](<plans/2026-11-05-activity-space-norms.md>) | 34.3 | 2026-11-21 | 活动场景量化空间规范表 |
 | [2026-11-05-smart-build-next-phase.md](<plans/2026-11-05-smart-build-next-phase.md>) | 35.2 | 2026-11-21 | 智能建造下一程升级计划：M1–M5 活接深度与 Agent 机制补课 |
@@ -133,8 +136,6 @@
 | [2026-11-20-execution-data-agent-mapping.md](<plans/2026-11-20-execution-data-agent-mapping.md>) | 14.7 | 2026-11-21 | 执行资料 × Agent 落地对照表（2026-11-20） |
 | [2026-11-20-publish-remaining-acceptance-plan.md](<plans/2026-11-20-publish-remaining-acceptance-plan.md>) | 16.7 | 2026-11-21 | 右上角发布：剩余验收与并行执行计划 |
 | [2026-11-20-venue-agent-baseline-and-acceptance.md](<plans/2026-11-20-venue-agent-baseline-and-acceptance.md>) | 38.8 | 2026-11-21 | 场地自主规划 · 本轮基线与验收记录 |
-| [2026-11-21-first-principles-endstate.md](<plans/2026-11-21-first-principles-endstate.md>) | 13.7 | 2026-11-21 | 去室内化 · 第一性原理终态目标书（2026-11-21） |
-| [2026-11-21-indoor-decommission-goal.md](<plans/2026-11-21-indoor-decommission-goal.md>) | 20.1 | 2026-11-21 | 去室内化终态目标与里程碑台账（2026-11-21） |
 | [s2-playbook-and-decisions.md](<plans/ia-next-prep-2026-11-04/s2-playbook-and-decisions.md>) | 24.0 | 2026-11-21 | S2「Bingo 转审校台」可执行任务书 + 待拍板决策简报（分片 B 第二刀） |
 | [s3-entry-audit.md](<plans/ia-next-prep-2026-11-04/s3-entry-audit.md>) | 36.0 | 2026-11-21 | S3「空间/物料面板化」入口审计 + 施工卡（分片 A，只读前置） |
 | [s4-execution-pack.md](<plans/ia-next-prep-2026-11-04/s4-execution-pack.md>) | 37.5 | 2026-11-21 | S4 清理与回归 — 执行包（分片 C · 第二轮只读前置审计） |
@@ -429,12 +430,11 @@
 | [2026-10-14-DeepSeek-Agent契约.md](<contracts/2026-10-14-DeepSeek-Agent契约.md>) | 3.5 | 2026-11-05 | DeepSeek 场景 Agent |
 | [2026-11-04-Supabase业务契约.md](<contracts/2026-11-04-Supabase业务契约.md>) | 3.5 | 2026-11-05 | Supabase 业务接入契约 |
 
-## 八、`frontend/`（20 份）
+## 八、`frontend/`（19 份）
 
 | 文件 | KB | 最后改动 | 首句 |
 | --- | ---: | --- | --- |
 | [README.md](<../frontend/README.md>) | 15.6 | 2026-11-22 | 幕景 Scendance · 活动场地工作台 |
-| [SCENE-PRESETS.md](<../frontend/docs/SCENE-PRESETS.md>) | 1.7 | 2026-11-19 | 场景模板库（已移出本仓） |
 | [README.md](<../frontend/lib/site-intelligence/README.md>) | 11.1 | 2026-11-13 | Site intelligence integration contract (implemented module; Chat… |
 | [README.md](<../frontend/evals/brief/README.md>) | 4.2 | 2026-11-09 | 活动需求离线评测（合成样本） |
 | [agent-eval-baseline.README.md](<../frontend/scripts/agent-eval-baseline.README.md>) | 1.2 | 2026-11-08 | 幕景 Agent 离线基线 |
@@ -448,7 +448,7 @@
 | [AGENTS.md](<../frontend/AGENTS.md>) | 1.0 | 2026-10-10 | Frontend ownership |
 | [ASSET-SOURCES.md](<../frontend/ASSET-SOURCES.md>) | 1.6 | 2026-10-10 | Frontend model provenance |
 | [README.md](<../frontend/public/showcase/assets/brand/logo-2026/README.md>) | 6.2 | 未入库 | logo-2026 · 「AI 的门」品牌留档 |
-| [README.md](<../frontend/public/showcase/assets/brand/README.md>) | 6.2 | 未入库 | 幕景品牌资产 · 总索引 |
+| [README.md](<../frontend/public/showcase/assets/brand/README.md>) | 6.0 | 未入库 | 幕景品牌资产 · 总索引 |
 | [README.md](<../frontend/public/showcase/assets/generated/README.md>) | 1.0 | 未入库 | 生成素材存档 |
 | [README.md](<../frontend/public/showcase/assets/library/README.md>) | 3.0 | 未入库 | 统一模型库 |
 | [README.md](<../frontend/public/showcase/assets/models/README.md>) | 4.4 | 未入库 | assets/models/ —— 精选 fixture，不是物料库 |
@@ -471,6 +471,7 @@
 
 | 文件 | KB | 最后改动 | 首句 |
 | --- | ---: | --- | --- |
+| [3d-expert.agent.md](<../.github/agents/3d-expert.agent.md>) | 6.1 | 2026-11-22 | --- |
 | [README.md](<../assets/brand/README.md>) | 6.0 | 2026-11-22 | 幕景品牌资产 · 总索引 |
 | [README.md](<../data/agent-corpus/README.md>) | 4.1 | 2026-11-21 | Agent 底座语料（agent-corpus） |
 | [63-飞书版-Agent合格度与断点.md](<../deliverables/63-飞书版-Agent合格度与断点.md>) | 11.0 | 2026-11-21 | 什么样的 AI Agent 才算合格？ |
@@ -490,7 +491,6 @@
 | [pull_request_template.md](<../.github/pull_request_template.md>) | 0.7 | 2026-11-04 | - [ ] 验收标准 1： |
 | [README.md](<../assets/models/README.md>) | 4.4 | 2026-11-04 | assets/models/ —— 精选 fixture，不是物料库 |
 | [README.md](<../assets/generated/README.md>) | 1.0 | 2026-10-30 | 生成素材存档 |
-| [3d-expert.agent.md](<../.github/agents/3d-expert.agent.md>) | 6.0 | 2026-10-22 | --- |
 | [README.md](<../assets/library/README.md>) | 3.0 | 2026-10-10 | 统一模型库 |
 | [README.md](<../assets/scenes/README.md>) | 1.5 | 2026-10-10 | 场景类别建筑图 |
 | [reconstruction-development.md](<../supabase/ops/reconstruction-development.md>) | 6.6 | 2026-10-10 | Reconstruction development runbook |
@@ -500,11 +500,11 @@
 
 | 文件 | KB | 最后改动 | 首句 |
 | --- | ---: | --- | --- |
+| [HANDOFF.md](<../HANDOFF.md>) | 534.1 | 2026-11-23 | HANDOFF.md — Scendance2026 跨会话交接 |
+| [AGENTS.md](<../AGENTS.md>) | 9.4 | 2026-11-22 | 幕景 Scendance · 项目规范（AI 与人共同必读） |
 | [BACKEND.md](<../BACKEND.md>) | 2.3 | 2026-11-22 | 场景规划 Agent 后端 |
-| [HANDOFF.md](<../HANDOFF.md>) | 532.5 | 2026-11-22 | HANDOFF.md — Scendance2026 跨会话交接 |
-| [AGENTS.md](<../AGENTS.md>) | 9.3 | 2026-11-21 | 幕景 Scendance · 项目规范（AI 与人共同必读） |
+| [CHANGELOG.md](<../CHANGELOG.md>) | 279.1 | 2026-11-22 | 更新记录 |
 | [ASSET-SOURCES.md](<../ASSET-SOURCES.md>) | 7.7 | 2026-11-21 | 3D asset sources |
-| [CHANGELOG.md](<../CHANGELOG.md>) | 275.7 | 2026-11-21 | 更新记录 |
 | [MEMORY.md](<../MEMORY.md>) | 2.8 | 2026-11-21 | Project memory |
 | [SUPABASE-EGRESS-AUDIT.md](<../SUPABASE-EGRESS-AUDIT.md>) | 2.6 | 2026-11-20 | Supabase 出网清单（只读审计，2026-11-20） |
 | [README.md](<../README.md>) | 7.7 | 2026-11-19 | 幕景 Scendance |
@@ -522,7 +522,7 @@
 2. **重号**：46 号 2 份（`46-Agent运行卫生上线手册-20261116.md` / `46-虚拟场地纸面模式规格-20261117.md`）。
 3. **`docs/plans/` 命名**：9 份无日期前缀（文件名看不出新旧，只能看本表的时间列）。
 4. **未入库**：26 份 md 没有 git 记录（含 agent 草稿）；这些只在本机，别处 checkout 拿不到。
-5. **体量最大**：`HANDOFF.md` 532.5 KB、`CHANGELOG.md` 275.7 KB、`docs/plans/2026-11-16-outdoor-agent-progress.md` 233.5 KB、`docs/plans/2026-11-13-delivery-frontend.md` 152.0 KB、`docs/plans/2026-11-19-huajia-material-bom.md` 94.7 KB、`docs/plans/2026-11-19-contest-wedding-next-plan.md` 88.1 KB。
+5. **体量最大**：`HANDOFF.md` 534.1 KB、`CHANGELOG.md` 279.1 KB、`docs/plans/2026-11-16-outdoor-agent-progress.md` 233.5 KB、`docs/plans/2026-11-13-delivery-frontend.md` 152.0 KB、`docs/plans/2026-11-21-indoor-decommission-goal.md` 119.2 KB、`docs/plans/2026-11-19-huajia-material-bom.md` 94.7 KB。
 
 ## 生成口径
 
