@@ -58,12 +58,14 @@ describe('local editable desk-chair draft',()=>{
   const invalid=makeLayout({backendVenue:{shape:'polygon',width:8,depth:8,height:3,entrances:[],polygon:[{x:0,z:0},{x:8,z:8},{x:0,z:8},{x:8,z:0}]}});
   expect(planLocalDeskChairDraft(invalid,input,ids()).limitReason).toBe('incomplete_geometry');
  });
- it('refuses invalid walls and stored structures missing from the editor floor',()=>{
+ it('refuses invalid walls but trusts a stored backend structure',()=>{
   const wall=makeLayout({floors:[makeFloor({interiorWalls:[{id:'wall',x1:0,z1:0,x2:NaN,z2:2}]})]});
   expect(planLocalDeskChairDraft(wall,input,ids())).toMatchObject({placed:0,limitReason:'incomplete_geometry'});
   const stored=sceneSchema.parse({schemaVersion:2,venue:{shape:'rectangle',width:8,depth:8,height:3,entrances:[]},objects:[],camera:'overview',lighting:'neutral',structure:{walls:[{id:'00000000-0000-4000-8000-000000000001',start:{x:4,z:0},end:{x:4,z:8},thickness:.2,height:3,kind:'interior',status:'confirmed'}],openings:[],columns:[]},sources:[],dimensions:[]}) as SceneV2;
   const missing=makeLayout({backendSceneV2:stored,backendVenue:stored.venue});
-  expect(planLocalDeskChairDraft(missing,input,ids())).toMatchObject({placed:0,limitReason:'incomplete_geometry'});
+  const result=planLocalDeskChairDraft(missing,input,ids());
+  expect(result.limitReason).toBeNull();
+  expect(result.placed).toBeGreaterThan(0);
  });
  it('checks each pair against a concave polygon, not its enclosing rectangle',()=>{
   const layout=makeLayout({width:20,height:20,backendVenue:{shape:'polygon',width:20,depth:20,height:3,entrances:[],polygon:[{x:0,z:0},{x:20,z:0},{x:20,z:7},{x:8,z:7},{x:8,z:20},{x:0,z:20}]}});

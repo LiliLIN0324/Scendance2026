@@ -23,6 +23,7 @@ import type { Scene } from '../../../supabase/functions/_shared/domain';
 import { STORAGE_KEY } from './lib/constants';
 import type { PublishGateSnapshot } from './lib/project-manifest';
 import type { BackendProject, BackendSnapshot } from '@/lib/backend-session';
+import { MemoryStorage } from '../../lib/test-support-memory-storage';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
 // jsdom 没有 IndexedDB：本机点验账册读不出来会被当成「无法确认云转换不丢资料」而挡住保存链。
@@ -48,6 +49,7 @@ import { RoomOrganizer } from './room-organizer';
 const captured = vi.hoisted(() => ({
   requests: [] as Array<{ path: string; body: unknown }>,
 }));
+let mem: MemoryStorage;
 
 function makeGate(scopeId: string, overrides: Partial<PublishGateSnapshot> = {}): PublishGateSnapshot {
   return {
@@ -106,6 +108,8 @@ function stubController(overrides: {
     localDraftAuthorityVersion: () => '0:0',
     isGeometryBound: () => false,
     businessRequest,
+    listStudios: async () => [],
+    listProjects: async () => [],
     ...(overrides.methods ?? {}),
   };
   const cache = new Map<string, unknown>();
@@ -131,6 +135,10 @@ beforeEach(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute('open'); } });
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute('open', ''); } });
   captured.requests = [];
+  mem = new MemoryStorage();
+  vi.stubGlobal('Storage', MemoryStorage);
+  vi.stubGlobal('localStorage', mem);
+  window.localStorage = mem;
   localStorage.clear();
   Object.assign(navigator, { clipboard: { writeText: vi.fn(async () => undefined) } });
 });
@@ -139,9 +147,9 @@ afterEach(() => {
   cleanup();
   registerPublishGateProvider(null);
   layoutStore.setState({ layout: INITIAL_LAYOUT, activeFloorIndex: 0 });
+  mem.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  localStorage.clear();
 });
 
 function primeLayout(id: string) {
@@ -269,7 +277,7 @@ it('V01: 未登录的预检给「去登录」；登录回来只重查，不会�
   const login = await screen.findByRole('button', { name: '去登录' });
   await act(async () => { fireEvent.click(login); });
   // 走既有登录入口：账户中心登录浮窗打开，登录表单在。
-  await waitFor(() => expect(document.querySelector('dialog')?.hasAttribute('open')).toBe(true));
+  await waitFor(() => expect([...document.querySelectorAll('dialog')].some(d => d.hasAttribute('open'))).toBe(true));
   expect(screen.getAllByRole('button', { name: '登录并进入工作台' }).length).toBeGreaterThan(0);
   // 登录动作不触发发布。
   expect(captured.requests.filter(r => r.path.includes('/publish'))).toHaveLength(0);

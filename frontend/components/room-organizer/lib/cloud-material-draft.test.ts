@@ -2,10 +2,12 @@ import {describe,expect,it,vi} from 'vitest';
 import {INITIAL_LAYOUT} from './initial-layout';
 import {exportCloudMaterialDraft} from './cloud-material-draft';
 import * as delivery from './scene-delivery';
+import {makeItem} from './__testfixtures__/fixtures';
 
 describe('cloud material draft',()=>{
  it('exports only a labelled unverified editor snapshot and redacts private text',async()=>{
   const layout=structuredClone(INITIAL_LAYOUT);layout.name='测试 <script> 密钥=private';
+  layout.floors[0]!.items=[makeItem({id:'11111111-1111-4111-8111-111111111111',name:'椅子一'})];
   layout.floors[0]!.items[0]!.name='<img src=x> 密钥=private';
   const download=vi.fn();
   await exportCloudMaterialDraft({layout,dirty:true,stillCurrent:()=>true,load:async()=>({deliveryMaterials:delivery.deliveryMaterials,downloadSceneDelivery:download})});

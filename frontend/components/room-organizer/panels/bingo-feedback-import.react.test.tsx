@@ -47,6 +47,7 @@ it('does not write when the session is invalidated while the file is read',async
  let finish!:(s:string)=>void,current=true;const json=createReviewFeedbackReceipt(await reviewVersionForHash(hash),[pin],false);
  render(<BingoAuditCard scopeKey={`project:${project}`} isCurrent={()=>current}/>);
  fireEvent.change(screen.getByLabelText('导入反馈文件'),{target:{files:[{size:100,text:()=>new Promise<string>(resolve=>{finish=resolve;})}]}});
+ await waitFor(()=>expect(typeof finish).toBe('function'));
  current=false;finish(json);await waitFor(()=>expect(screen.queryByRole('region',{name:'待导入反馈预览'})).toBeNull());
  expect(localStorage.getItem(REVIEW_SHARE_PIN_STORAGE_KEY_V2)).toBeNull();
 });

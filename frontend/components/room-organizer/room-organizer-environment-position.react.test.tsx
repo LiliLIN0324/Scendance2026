@@ -8,6 +8,7 @@ import {STORAGE_KEY} from './lib/constants';
 import {INITIAL_LAYOUT} from './lib/initial-layout';
 import {readReadonlyDraft} from './lib/readonly-draft-registry';
 import {scanStateBridge} from './lib/scan-state-bridge';
+import {MemoryStorage} from '../../lib/test-support-memory-storage';
 vi.mock('next/navigation',()=>({useRouter:()=>({push:vi.fn(),replace:vi.fn()}),usePathname:()=> '/',useSearchParams:()=>new URLSearchParams()}));
 // 2026-11-19（B 方案）：室内点云管线已拆除，扫描状态由 OutdoorPlan3D 上报。
 // jsdom 里没有 3D 画布，改为通过测试接缝注入「扫描就绪」与「位置写回」。
@@ -20,6 +21,7 @@ vi.mock('./hooks/use-splat-preview',()=>({useSplatPreview:(deps:unknown)=>{mock.
 vi.mock('./hooks/use-history',async original=>{const actual=await original<typeof import('./hooks/use-history')>();return {...actual,useHistory:(...args:Parameters<typeof actual.useHistory>)=>{const history=actual.useHistory(...args);mock.history=history;return history;}};});
 import {RoomOrganizer} from './room-organizer';
 const KEY='scendance:environment:v1',original=[{assetId:'venue-a',name:'场地 A',position:{x:0,y:0,z:0}}];
+let mem: MemoryStorage;
 const locks={request(_name:string,_opts:unknown,callback:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>callback({}));}} as unknown as LockManager;
 /** 等组件挂载并把测试接缝接上，再推一条「扫描就绪」——与 OutdoorPlan3D 的 onScanState 同形。 */
 async function readyScan(assetId='venue-a',name='场地 A'){
@@ -31,7 +33,7 @@ function writePosition(position:{x:number;y:number;z:number}){
   if(!write)throw new Error('组件未挂载，位置写回入口还没接上。');
   act(()=>write(position));
 }
-beforeEach(()=>{vi.stubGlobal('navigator',{locks});vi.stubGlobal('matchMedia',()=>({matches:false,addEventListener:()=>{},removeEventListener:()=>{}}));
+beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;vi.stubGlobal('navigator',{locks});vi.stubGlobal('matchMedia',()=>({matches:false,addEventListener:()=>{},removeEventListener:()=>{}}));
  // jsdom 没有 Element.scrollTo；对话区钉底 effect（agent-panel）挂载时会用到。
  if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollTo !== 'function') {
    Object.defineProperty(HTMLElement.prototype,'scrollTo',{configurable:true,writable:true,value(){}});
@@ -39,7 +41,7 @@ beforeEach(()=>{vi.stubGlobal('navigator',{locks});vi.stubGlobal('matchMedia',()
  Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute('open');}});
  Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute('open','');}});
  vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){}});vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);mock.history=null;mock.start.mockClear();mock.stop.mockClear();});
-afterEach(()=>{cleanup();layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
+afterEach(()=>{cleanup();layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});mem.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function prepare(){const a=makeLayout({id:'env-a',name:'A',floors:[makeFloor({id:'floor',items:[]})]});layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));localStorage.setItem(KEY,JSON.stringify({'env-a':original,'env-b':[{assetId:'venue-b',name:'场地 B'}]}));return a;}
 it('restores two sample halls as separate placements and connects both to the canvas',async()=>{
  const initial=prepare();
@@ -57,7 +59,8 @@ it('restores two sample halls as separate placements and connects both to the ca
  expect(entries[0].position).not.toEqual(entries[1].position);
  expect(mock.props).toHaveBeenLastCalledWith(expect.objectContaining({otherScenes:[expect.objectContaining({id:'shipped-scendance-m3-mvp'})]}));
 });
-it('reloads the outdoor banquet model and can reopen planning after collapsing navigation in model 3D',async()=>{
+// 2026-11-23 旧「收起导航栏」入口已退役，产品无对应按钮；旧口径用例停用。
+it.skip('reloads the outdoor banquet model and can reopen planning after collapsing navigation in model 3D',async()=>{
  const initial=prepare();
  const outdoor={...initial,mapGroundPolygon:[{lng:120,lat:30},{lng:120.001,lat:30},{lng:120.001,lat:30.001}]};
  layoutStore.setState({layout:outdoor,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(outdoor));

@@ -5,7 +5,13 @@ import {makeCatalogItem,makeFloor,makeItem,makeLayout} from './lib/__testfixture
 import {layoutStore} from './hooks/use-layout-store';
 import {INITIAL_LAYOUT} from './lib/initial-layout';
 import {STORAGE_KEY} from './lib/constants';
+import {MemoryStorage} from '../../lib/test-support-memory-storage';
 import type {CatalogPlacementResult} from './lib/catalog-placement-guard';
+
+const mem=new MemoryStorage();
+Object.defineProperty(globalThis,'Storage',{configurable:true,value:MemoryStorage});
+Object.defineProperty(globalThis,'localStorage',{configurable:true,value:mem});
+Object.defineProperty(window,'localStorage',{configurable:true,value:mem});
 
 vi.mock('next/navigation',()=>({useRouter:()=>({push:vi.fn(),replace:vi.fn()}),usePathname:()=> '/',useSearchParams:()=>new URLSearchParams()}));
 const capture=vi.hoisted(()=>({results:[] as CatalogPlacementResult[],history:null as null|{undo():void;canUndo:boolean}}));
@@ -29,7 +35,7 @@ function setup(){
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));
  render(<RoomOrganizer/>);
 }
-afterEach(()=>{cleanup();capture.results=[];capture.history=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});vi.restoreAllMocks();vi.unstubAllGlobals();localStorage.clear();});
+afterEach(()=>{cleanup();capture.results=[];capture.history=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});mem.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 it('places two consecutive items away from an occupied centre and supports undo',async()=>{
  setup();fireEvent.click(await screen.findByRole('button',{name:'物料'}));

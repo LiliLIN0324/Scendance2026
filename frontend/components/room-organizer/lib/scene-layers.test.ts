@@ -6,10 +6,23 @@ import { INITIAL_LAYOUT } from './initial-layout';
 import { blankHandoff, handoffBasis, effectiveHandoffStatus } from './scene-handoff';
 import { addDesign, switchDesign, saveDesignSnapshot, removeDesignVariant, materialLayers, batchLayerEdit } from './scene-layers';
 import { parseStoredLayout } from './schema';
+import { makeItem } from './__testfixtures__/fixtures';
+
+/** 2026-11-11 起 INITIAL_LAYOUT 是空场地；本套件验证桌椅层/工作单，需自带 2 桌 2 椅。 */
+function seededLayout() {
+  const base = structuredClone(INITIAL_LAYOUT);
+  base.floors[0]!.items = [
+    makeItem({ id: '11111111-1111-4111-8111-111111111111', name: '椅子 A' }),
+    makeItem({ id: '22222222-2222-4222-8222-222222222222', type: 'table', name: '桌子 A' }),
+    makeItem({ id: '33333333-3333-4333-8333-333333333333', name: '椅子 B' }),
+    makeItem({ id: '44444444-4444-4444-8444-444444444445', type: 'table', name: '桌子 B' }),
+  ];
+  return base;
+}
 
 describe('scene layers', () => {
   it('retains an absent object’s work order across design switching and reload', () => {
-    const base = structuredClone(INITIAL_LAYOUT);
+    const base = seededLayout();
     const item = base.floors[0]!.items[0]!;
     item.handoff = { ...blankHandoff(), ownerName: '演练搭建甲', evidenceNote: '演练工作单' };
     const other = addDesign(base, { ...base, floors: [{ ...base.floors[0]!, items: [] }] });
@@ -19,7 +32,7 @@ describe('scene layers', () => {
   });
 
   it.each([false, true])('keeps latest edits or explicit removal after deletion, clear=%s', clear => {
-    const base = structuredClone(INITIAL_LAYOUT), item = base.floors[0]!.items[0]!;
+    const base = seededLayout(), item = base.floors[0]!.items[0]!;
     item.handoff = { ...blankHandoff(), ownerName: '演练旧负责人' };
     const store = createLayoutStore({ layout: addDesign(base, base), activeFloorIndex: 0 });
     const handoff = clear ? undefined : { ...blankHandoff(), ownerName: '演练新负责人', evidenceNote: '最新说明' };
@@ -32,7 +45,7 @@ describe('scene layers', () => {
   });
 
   it.each(['removeItem', 'clearItems', 'replaceItems', 'preset'] as const)('checkpoints imported current records before %s removes objects', action => {
-    const base = structuredClone(INITIAL_LAYOUT), item = base.floors[0]!.items[0]!;
+    const base = seededLayout(), item = base.floors[0]!.items[0]!;
     item.handoff = { ...blankHandoff(), ownerName: '演练旧负责人' };
     const imported = structuredClone(addDesign(base, base));
     imported.floors[0]!.items[0]!.handoff = { ...blankHandoff(), ownerName: '演练当前负责人' };
@@ -46,7 +59,7 @@ describe('scene layers', () => {
   });
 
   it('adopts undo and restore snapshots without borrowing current work orders', () => {
-    const base = structuredClone(INITIAL_LAYOUT), item = base.floors[0]!.items[0]!;
+    const base = seededLayout(), item = base.floors[0]!.items[0]!;
     item.handoff = { ...blankHandoff(), ownerName: '演练原负责人' };
     const original = addDesign(base, base);
     const store = createLayoutStore({ layout: original, activeFloorIndex: 0 });
@@ -60,7 +73,7 @@ describe('scene layers', () => {
   });
 
   it('does not import work orders or saved books from external candidates', () => {
-    const foreign = structuredClone(INITIAL_LAYOUT);
+    const foreign = seededLayout();
     foreign.floors[0]!.items[0]!.id = 'foreign-object';
     foreign.floors[0]!.items[0]!.handoff = { ...blankHandoff(), ownerName: '不应导入的负责人' };
     const candidate = addDesign(foreign, foreign);
@@ -70,9 +83,10 @@ describe('scene layers', () => {
   });
 
   it('roundtrips latest work orders through V3 backup and requires review against different geometry', async () => {
-    const base = structuredClone(INITIAL_LAYOUT);
-    base.id = 'design-work-order-rehearsal';
+    const base = seededLayout();
+    base.id = '55555555-5555-4555-8555-555555555555';
     const item = base.floors[0]!.items[0]!;
+    item.position = { x: 1, z: 2 };
     const candidate = structuredClone(base);
     candidate.floors[0]!.items[0]!.position = { x: 0, z: 0 };
     const added = addDesign(base, candidate);
@@ -106,7 +120,7 @@ describe('scene layers', () => {
   });
 
   it('selects all chairs and tables and atomically skips locked objects in batch edits', () => {
-    const items = INITIAL_LAYOUT.floors[0]!.items;
+    const items = seededLayout().floors[0]!.items;
     expect(materialLayers(items).find(l => l.name === '全部桌子')?.itemIds).toHaveLength(2);
     expect(materialLayers(items).find(l => l.name === '全部椅子')?.itemIds).toHaveLength(2);
     const locked = { ...items[0]!, locked: true };
@@ -123,7 +137,7 @@ describe('scene layers', () => {
   });
 
   it('preserves custom layers and rejects nested snapshots or invalid member IDs', () => {
-    const layout = { ...INITIAL_LAYOUT, itemLayers: [{ id: 'layer-a', name: '舞台区', itemIds: [INITIAL_LAYOUT.floors[0]!.items[0]!.id] }] };
+    const layout = { ...seededLayout(), itemLayers: [{ id: 'layer-a', name: '舞台区', itemIds: [seededLayout().floors[0]!.items[0]!.id] }] };
     expect(parseStoredLayout(layout)?.itemLayers).toEqual(layout.itemLayers);
     expect(parseStoredLayout({ ...layout, itemLayers: [{ id: 'bad', name: 'bad', itemIds: [123] }] })).toBeNull();
     const saved = addDesign(layout, INITIAL_LAYOUT);

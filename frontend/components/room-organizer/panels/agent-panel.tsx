@@ -2697,7 +2697,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       say({ role: 'agent', text: '先不改布置，回布置对话再说。' });
       return;
     }
-    if(proposal.current&&!checkProposalFloor())return;
+    if((proposal.current||styleProposal.current)&&!checkProposalFloor())return;
     if ((proposal.current?.kind !== 'review' && !styleProposal.current && memoryRef.current.layoutModeConfirmed !== true) || memoryRef.current.pendingBasicFacts?.length || memoryRef.current.layoutModeUnresolved || memoryRef.current.pendingActivityNeeds.length || memoryRef.current.unresolvedActivityNeeds.length || memoryRef.current.mobilityNeedsClarification || memoryRef.current.mobilityRequirement?.decision==='unknown') {
       say({ role: 'agent', amber: true, text: '还有需求待确认，请先核对后再确认布置。' });
       return;
@@ -5108,7 +5108,7 @@ useEffect(() => {
             onPick={bundle => agent.placeStyleBundle(bundle)}
           />
         )}
-        {mode === 'layout' && activity && <AgentSuggestionSlot open={capabilitiesOpen} onToggle={toggleCapabilities} placeFirst={placePending} showExample={showTaskExamples && !draft.trim() && placePending} onPickExample={pickTaskExample} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
+        {mode === 'layout' && activity && <AgentSuggestionSlot open={capabilitiesOpen} onToggle={toggleCapabilities} placeFirst={placePending} showExample={showTaskExamples && !draft.trim()} onPickExample={pickTaskExample} onPrefill={text => { setDraft(text); requestAnimationFrame(() => inputRef.current?.focus()); }}/>}
         <AgentResearchSources research={agent.venueResearch}/>
         <AgentDocumentSources documents={agent.documents}/>
         <form id="composer" className="ap-composer ap-composer-panel" onSubmit={event => { event.preventDefault(); submitComposer(); }}>

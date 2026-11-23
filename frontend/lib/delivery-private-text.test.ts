@@ -8,6 +8,7 @@ import {exportCloudMaterialDraft} from '../components/room-organizer/lib/cloud-m
 import {eventOperationsSchema} from '../../supabase/functions/_shared/event-operations-contract';
 import {productionPlanHandoffHtml} from './production-plan-export';
 import {executionTimetableHtml} from './execution-timetable-export';
+import {makeItem} from '../components/room-organizer/lib/__testfixtures__/fixtures';
 
 describe('delivery privacy literals',()=>{
  it('detects high-confidence standalone credentials and Windows paths without blocking ordinary text or public URLs',()=>{
@@ -20,6 +21,11 @@ describe('delivery privacy literals',()=>{
  });
  it('removes synthetic credentials and local paths from actual JSON, CSV, sealed draft and HTML without altering source data',async()=>{
   const layout=structuredClone(INITIAL_LAYOUT),snapshot={id:'fictional-snapshot',generatedAt:'2026-11-08T00:00:00Z'};
+  layout.floors[0]!.items=[
+    makeItem({id:'11111111-1111-4111-8111-111111111111',name:'椅子一'}),
+    makeItem({id:'22222222-2222-4222-8222-222222222222',type:'table',name:'桌子一'}),
+    makeItem({id:'33333333-3333-4333-8333-333333333333',name:'普通款'}),
+  ];
   layout.name='虚构活动，联系人 13800138000 organizer@example.test，https://example.test/C:/public';
   layout.floors[0]!.items[0]!.name='椅子 sk-TEST12345678';
   layout.floors[0]!.items[1]!.name='桌子 C:\\Users\\Fixture\\PRIVATE_FOLDER\\model.glb';

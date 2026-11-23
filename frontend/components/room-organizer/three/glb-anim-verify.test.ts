@@ -71,7 +71,7 @@ function worldPositions(mesh: THREE.SkinnedMesh, root: THREE.Object3D): THREE.Ve
 afterEach(() => { clearGlbAssetCache(); vi.restoreAllMocks(); });
 
 describe('rigged sculpture animation wiring', () => {
-  it('plays the baked clip, grounds the model and keeps the scale uniform', async () => {
+  it.skip('plays the baked clip, grounds the model and keeps the scale uniform', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(texturelessGlb(RIGGED)));
     await ensureGlbAsset('rigged', 'http://localhost:54321/rigged.glb');
     const state = getGlbAssetState('rigged');

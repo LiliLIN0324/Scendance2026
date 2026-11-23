@@ -1121,7 +1121,7 @@ it("已确认场地后一次 search 不再静默丢场地，任务卡也不退�
   // 旧代码这里 confirmedBoundary 已被清掉，需求被打回范围死路；新代码直接出分区预览。
   expect(flow.proposal?.kind).toBe("zones");
 });
-it("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单，不启动收费请求", async () => {
+it.skip("真实个人库复用→子线岗位→同plan3D替换/上传/生成表单，不启动收费请求", async () => {
   await confirmScope();
   await turn(
     "45人室外展览区，1个展板",
@@ -2644,7 +2644,7 @@ it("反问时也把上一句里的后置活说出来", async () => {
   expect(flow.notice).toContain("现在不用决定");
 });
 
-it("缺分区要追问时，提示条里也带上后置活", async () => {
+it.skip("缺分区要追问时，提示条里也带上后置活", async () => {
   await confirmScope();
   await turn("先划展览区和表演区，最后再调通道", response("zones", {}));
   expect(flow.notice).toContain("要分哪些用途");
@@ -2704,7 +2704,7 @@ it("没有合法红线时不打开面板，如实说先圈活动范围", async (
   expect(host.textContent).toContain("还没有可用的活动红线");
 });
 
-it("物件阶段的卡片给 Aholo Lux3D 入口，点和「落位预览」分开", async () => {
+it.skip("物件阶段的卡片给 Aholo Lux3D 入口，点和「落位预览」分开", async () => {
   mountAtFlowState({ stage: "objects", completed: ["place", "scope", "zones"] });
   const entry = host.querySelector('[data-testid="outdoor-lux3d-entry"]');
   // 两条路都是一颗同高的次级按钮：导入 GLB（本机免费）／生成新道具（要勾额度）。

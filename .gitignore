@@ -190,3 +190,6 @@ frontend/.next.bak-*/
 /draft_*_folder/
 # .temp/ 不限层级：supabase CLI 在 supabase/.temp 自建；根 .temp/ 仍可能被并行会话写入
 .temp/
+
+# 本地凭证 / token 落盘目录：仅本机使用，禁止入库
+/.tmp-secrets/

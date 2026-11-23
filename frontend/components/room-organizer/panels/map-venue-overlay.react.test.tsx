@@ -34,7 +34,7 @@ vi.mock('../contexts', () => ({
 }));
 vi.mock('./creative-studio', () => ({
   useStudioAgent: () => ({
-    exportActivity: vi.fn(async () => {}), generate: vi.fn(async () => {}), discardPreview: vi.fn(),
+    exportActivity: vi.fn(async () => {}), generate: vi.fn(async () => {}), discardPreview: vi.fn(), discardPreviewForHistoryReview: vi.fn(() => true),
     setBrief: vi.fn(), brief: { event: null, guests: null }, hasSavedBrief: false, preview: null,
     stale: false, expired: false, busy: false, recoverable: false, connection: '离线引导',
   }),
