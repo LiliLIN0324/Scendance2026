@@ -35,6 +35,7 @@ import { sharedArchiveQueue, type ArchiveJob } from '../lib/archive-queue';
 import { useCloudArchive } from '../hooks/use-cloud-archive';
 import { listStoredSources, type StoredSource } from '@/lib/source-storage';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { projectLinkKind } from '../lib/project-identity';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
@@ -563,7 +564,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }
 
   openRequested.current = id => run(async () => {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    if (projectLinkKind(id) === 'local-draft') return;
+    if (projectLinkKind(id) !== 'cloud') {
       softProjectNotice('项目链接无效。', 'error'); throw new Error('项目链接无效。');
     }
     const openingFrom = layoutRef.current;

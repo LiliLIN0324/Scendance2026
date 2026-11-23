@@ -1,19 +1,19 @@
 import { assertNoLocalRecordsCloudTransition } from '../components/room-organizer/lib/handoff-cloud-guard';
+import { readOutdoorProjectRecord } from '../components/room-organizer/lib/outdoor-project-store';
+import { projectLinkKind } from '../components/room-organizer/lib/project-identity';
 import { isRoomLayout, parseLayoutEventOperations } from '../components/room-organizer/lib/schema';
 import { readMaterialCheckins } from './material-checkin-storage';
 import type { BackendSession } from './backend-session';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
-import { readOutdoorProjectRecord, LOCAL_ACTIVITY_ID_PREFIX, DEFAULT_OUTDOOR_PROJECT_ID } from '../components/room-organizer/lib/outdoor-project-store';
 
 /**
  * URL 里的 project id 哪些属于本机身份（不是待加载的云项目）。
- * - `house-*`：本机新建活动，发号前缀固定；
- * - `default-outdoor`：纯本机默认草稿；
- * - `replica-*`：经典案例副本，有本机记录时才是本机，缺记录按旧链接/云处理。
+ * `house-*` 与 `default-outdoor` 跟账户、评审链接用同一套 `projectLinkKind`。
+ * `replica-*` 有本机记录时才是本机；缺记录按旧链接/云处理。账户侧则一律不把 replica 当云项目打开。
  */
 function isLocalProjectParam(id: string): boolean {
-  if (id.startsWith(LOCAL_ACTIVITY_ID_PREFIX) || id === DEFAULT_OUTDOOR_PROJECT_ID) return true;
-  return id.startsWith('replica-') && !!readOutdoorProjectRecord(id);
+  if (id.startsWith('replica-')) return !!readOutdoorProjectRecord(id);
+  return projectLinkKind(id) === 'local-draft';
 }
 
 /**
@@ -22,7 +22,7 @@ function isLocalProjectParam(id: string): boolean {
  * 即使本机记录还没落盘，它也不是可打开的云端 uuid。
  */
 export function isEditorLocalProjectLink(id: string): boolean {
-  return id.startsWith(LOCAL_ACTIVITY_ID_PREFIX) || id === DEFAULT_OUTDOOR_PROJECT_ID || id.startsWith('replica-');
+  return projectLinkKind(id) === 'local-draft';
 }
 
 /** 案例链接 / 本机活动指向本机规划，并非待加载的云项目。 */

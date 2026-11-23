@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 客户评审看到的场地：工作台同一张底图（高德街道 / 卫星，境外自动换全球图源），
+ * 客户评审看到的场地：工作台同一套底图（地图 / 卫星 / 浅色 / 纸面），
  * 方案按 ENU 叠在锚点上。评审人不能改红线、分区或物件。
  */
 
@@ -75,6 +75,10 @@ export function ReviewSiteMap(props: Props): JSX.Element {
     observer.observe(host);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    setTilesDown(0);
+  }, [props.basemap]);
 
   useEffect(() => {
     if (!anchor || size.width < 8) return;
