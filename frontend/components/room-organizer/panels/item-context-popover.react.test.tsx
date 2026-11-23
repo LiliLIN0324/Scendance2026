@@ -224,7 +224,7 @@ describe('manual selected item dimensions', () => {
 
   it.each([
     { source: 'public_library', assetId: '11111111-1111-4111-8111-111111111111', glbUrl: 'https://cdn.example.com/a.glb' },
-    { source: 'local_sample', glbUrl: '/scene-presets/gym/gym.glb', glbNode: 'Preset_Object_0' },
+    { source: 'local_sample', glbUrl: '/test-fixtures/local-sample.glb', glbNode: 'Preset_Object_0' },
   ] as const)('resizes a GLB instance while preserving its model reference (%j)', references => {
     const selected = placed(references), editor = setup(selected), original = JSON.stringify(editor.layout);
     fireEvent.change(screen.getByRole('spinbutton', { name: '高 / 米' }), { target: { value: '1.3' } });

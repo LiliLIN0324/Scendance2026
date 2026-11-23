@@ -64,7 +64,7 @@ describe('the shared backend scene adapter', () => {
   it('rejects archived preset nodes now that the template library moved out', () => {
     const layout = backendSceneToLayout(scene());
     const item = layout.floors[0].items[0];
-    Object.assign(item, { type: 'glb-asset', materialId: 'asset', glbUrl: '/scene-presets/gym/gym.glb', glbNode: 'Preset_Object_0' });
+    Object.assign(item, { type: 'glb-asset', materialId: 'asset', glbUrl: '/test-fixtures/local-sample.glb', glbNode: 'Preset_Object_0' });
     expect(() => layoutToBackendScene(layout)).toThrow('模板节点物件');
     delete item.glbNode;
     expect(() => layoutToBackendScene(layout)).toThrow('本地模型尚未归档到云端');
