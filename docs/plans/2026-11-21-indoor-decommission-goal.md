@@ -524,4 +524,11 @@ A3 残留定性 ─────┘                                              
 - **剩余 26 例 / 18 文件**：shared-seating-placement 4、use-outdoor-agent-workflow 3、scene-delivery-panel 2、plan-card 2、plan-card-safety 2，其余 13 个单例（含 glb 证据文件缺失、library 生成器预期等）；另 share.test.ts 并行 flaky。下一批需区分「旧 UI/旧证据」与真实产品回归，不直接整批跳过。
 - **提交**：仅提交 `team-section.react.test.tsx`、`room-organizer-left-stack.react.test.tsx`、`room-organizer-outcome.react.test.tsx`、`room-organizer-venue-epoch.react.test.tsx`、`map-venue-overlay.react.test.tsx` 与本台账。
 
+**续清三批（2026-11-23，空场地夹具 + 文件读取竞态）**：
+- `delivery-private-text`、`cloud-material-draft` 仍假设 `INITIAL_LAYOUT` 有物料，补 UUID 桌椅后 5 例全绿；`bingo-feedback-import` 的「读取中作废会话」竞态改为先等 `file.text()` 挂上再作废，1 例转绿。
+- 结果：**26 failed / 18 failed files → 21 failed / 14 failed files**；**10660 passed / 138 skipped / 10819**（`%TEMP%\frontend-after-batch4.json`）。本批修绿 6 例。
+- **验证**：`tsc --noEmit` exit 0；生产码 0 改动。`project-review-panel` 全量偶发 `STACK_TRACE_ERROR`，单跑通过，按并行 flaky 挂账；`share.test.ts` 本轮全量已绿。
+- **剩余 21 例 / 14 文件**：shared-seating-placement 4（合成 50 件基线需重采）、use-outdoor-agent-workflow 3（旧提示文案）、scene-delivery-panel 2、plan-card-safety 2、page/plan-card/outdoor-layout-weights 各 1（旧按钮/旧文案）；glb、plan-facility、outdoor-inspector 各 1 为外部证据/浏览器缺失；library 1 为生成器待重跑；local-seating、public-asset 各 1 需产品口径判定。
+- **提交**：仅提交 `delivery-private-text.test.ts`、`cloud-material-draft.test.ts`、`bingo-feedback-import.react.test.tsx` 与本台账。
+
 
