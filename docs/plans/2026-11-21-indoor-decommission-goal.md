@@ -537,4 +537,10 @@ A3 残留定性 ─────┘                                              
 - **验证**：`npx tsc --noEmit` exit 0；全量 `0 failed / 10666 passed / 153 skipped / 10819`，846 文件（`%TEMP%\frontend-final.json`），`failedFiles=0`。生产码 0 改动。
 - **提交**：仅提交本批 14 个测试文件与本台账。
 
+**阶段 0.3（2026-11-23，A1–A7 DOM 手柄对抗断言）**：
+- 在 `outdoor-plan-canvas.dom-handles.react.test.tsx` 原有 6 例基础上补 5 例：A1 面积压到 4㎡ 以下拒绝；A4 顶点顶出白框后设计范围按新红线外扩 20m 重置；A5 已有内容时换锚点被公共写句柄拒绝；A6 双击顶点删到剩 2 点拒绝；A7 锁定态拖顶点被图层锁拦截并提示解锁。加上原有 A2/A3，A1–A7 均有组件级拒绝/保留断言。
+- **验证**：定向 `11 passed / 11`；`tsc --noEmit` exit 0；全量 `0 failed / 10671 passed / 153 skipped / 10824`，846 文件（`%TEMP%\frontend-domhandles-full.json`），`failedFiles=0`。生产码 0 改动。
+- **边界**：A7-G 锁钮引导/tooltip 仍按路线图留阶段 0.5，不在本批；未跑真机浏览器验收（jsdom 舞台宽高为 0）。
+- **提交**：仅提交 `outdoor-plan-canvas.dom-handles.react.test.tsx` 与本台账。
+
 

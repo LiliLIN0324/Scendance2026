@@ -233,3 +233,114 @@ it('A3 拖出穿边：自相交被拒，原环保留，松手不提交', () => {
   expect(commit).not.toHaveBeenCalled();
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
 });
+
+/** 6 m² 小矩形：先合法落地，再把一个角压进 4 m² 下限。 */
+const SMALL: PlanPoint[] = [
+  { x: -1.5, y: -1 },
+  { x: 1.5, y: -1 },
+  { x: 1.5, y: 1 },
+  { x: -1.5, y: 1 },
+];
+
+it('A1 拖顶点把面积压到 4㎡ 以下：拒绝「面积太小」，原环保留，松手不提交', () => {
+  const { ref, commit, container, canvas } = mount();
+  applyEditableVenue(ref, SMALL, commit);
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+
+  const from = pxOf(ref, SMALL[0]!);
+  // 1.75 × 2 = 3.5 m²，低于用地红线 4 m² 下限；相邻顶点间距仍大于 0.5 m。
+  const to = pxOf(ref, { x: -0.25, y: -1 });
+  const handle = container.querySelector('[data-vertex-index="0"]') as HTMLElement;
+
+  fireEvent.pointerDown(handle, { clientX: from.x, clientY: from.y, pointerId: 13, button: 0, buttons: 1 });
+  fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 13, buttons: 1 });
+
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(SMALL);
+  expect(screen.getAllByRole('status').map(node => node.textContent ?? '').join(' | ')).toMatch(/面积太小/);
+
+  fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 13, button: 0 });
+  expect(commit).not.toHaveBeenCalled();
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(SMALL);
+});
+
+it('A4 顶点顶出白框：不拒几何，设计范围按新红线外扩 20m 重置', () => {
+  const { ref, commit, container, canvas } = mount();
+  applyEditableVenue(ref, BASE, commit);
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+  const oldScope = ref.current!.getEditVisuals().plan.designScope!;
+
+  const from = pxOf(ref, BASE[0]!);
+  const to = pxOf(ref, { x: -50, y: -30 });
+  const handle = container.querySelector('[data-vertex-index="0"]') as HTMLElement;
+
+  fireEvent.pointerDown(handle, { clientX: from.x, clientY: from.y, pointerId: 14, button: 0, buttons: 1 });
+  fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 14, buttons: 1 });
+  fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 14, button: 0 });
+
+  expect(commit).toHaveBeenCalled();
+  const last = commit.mock.calls.at(-1)![0];
+  expect(last.boundary[0]).not.toEqual(BASE[0]);
+  expect(last.designScope).not.toEqual(oldScope);
+  // 新红线外接矩形四边各外扩 20 m。
+  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.x))).toBeCloseTo(-70, 6);
+  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.y))).toBeCloseTo(-50, 6);
+});
+
+it('A5 已有内容时换锚点：公共写句柄拒绝，原方案与锚点不动', () => {
+  const { ref, commit } = mount();
+  applyEditableVenue(ref, BASE, commit);
+  act(() => {
+    expect(ref.current!.addFacility({
+      id: '77777777-7777-4777-8777-777777777777',
+      templateId: 'oneplan:scale:tent',
+      name: '帐篷',
+      position: { x: 4, y: 4 },
+      rotationDeg: 0,
+      size: { width: 3, depth: 3 },
+      notes: '',
+    })).toBe(true);
+  });
+  commit.mockClear();
+  const current = ref.current!.getEditVisuals().plan;
+  const next = { ...current, anchor: { ...current.anchor!, lng: current.anchor!.lng + 0.1 } };
+
+  act(() => {
+    expect(ref.current!.applyWorkflowPlan(next, JSON.stringify(current))).toBe(false);
+  });
+  expect(commit).not.toHaveBeenCalled();
+  expect(ref.current!.getEditVisuals().plan.anchor).toEqual(current.anchor);
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
+});
+
+it('A6 双击顶点删到剩 2 点：拒绝「至少 3 个顶点」，原环保留', () => {
+  const { ref, commit, container } = mount();
+  applyEditableVenue(ref, TRIANGLE, commit);
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+
+  const at = pxOf(ref, TRIANGLE[1]!);
+  const handle = container.querySelector('[data-vertex-index="1"]') as HTMLElement;
+  fireEvent.doubleClick(handle, { clientX: at.x, clientY: at.y });
+
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(TRIANGLE);
+  expect(screen.getAllByRole('status').map(node => node.textContent ?? '').join(' | ')).toMatch(/至少.*3/);
+  expect(commit).not.toHaveBeenCalled();
+});
+
+it('A7 锁定态拖顶点：图层锁拦截，提示先解锁，不提交', () => {
+  const { ref, commit, canvas } = mount();
+  act(() => {
+    expect(ref.current!.applyVenue(ANCHOR, BASE)).toBe(true);
+  });
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+  commit.mockClear();
+
+  const from = pxOf(ref, BASE[0]!);
+  const to = pxOf(ref, { x: -16, y: -12 });
+  fireEvent.pointerDown(canvas, { clientX: from.x, clientY: from.y, pointerId: 15, button: 0, buttons: 1 });
+  fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 15, buttons: 1 });
+  fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 15, button: 0 });
+
+  expect(commit).not.toHaveBeenCalled();
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
+  expect(screen.getAllByRole('status').map(node => node.textContent ?? '').join(' | ')).toMatch(/已锁定.*解锁/);
+});
