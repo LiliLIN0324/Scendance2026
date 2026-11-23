@@ -510,4 +510,11 @@ A3 残留定性 ─────┘                                              
 - **验证**：`tsc --noEmit` exit 0；`npm --prefix frontend run build` exit 0；前端全量 **33 failed files / 813 passed files（846）**，测试 **92 failed / 10608 passed / 119 skipped（10819）**（`%TEMP%\frontend-final.json`）。失败文件数与上一基线 33 持平，agent-panel 不在失败清单；剩余 92 例为既有非本套件红，本套件未新增失败。
 - **提交**：仅提交 `agent-panel.react.test.tsx`、`agent-panel.tsx`、本台账三个路径，不使用 `git add -A`。
 
+**续清（2026-11-23，全量 localStorage 基座批次）**：
+- 用户确认继续后，按「旧口径可跳过/重写」清理全量 92 红。先把 10 个缺 `localStorage` 基座的壳体套件接入 `MemoryStorage`，并给 `stubController` 补 `listStudios/listProjects` 空数组；`scene-layers` 夹具补 2 桌 2 椅、节点 UUID 与非零几何基线。
+- 结果：**92 failed / 33 failed files → 38 failed / 22 failed files**；测试总数 **10819**，**10645 passed / 136 skipped**（`%TEMP%\frontend-after-batch2.json`）。本批修绿 37 例（publish 9、environment-position 6、localStorage 批 10、scene-layers 12），停用 17 例旧 UI/旧闸门（environment-position 1 + 批 16，`画路线`/`画区域`/`应用布置`/历史需求卡等）。
+- **验证**：`tsc --noEmit` exit 0；生产码 0 改动，本批仅测试文件，沿用上一轮 `npm --prefix frontend run build` exit 0。
+- **剩余 38 例 / 22 文件**：map-venue-overlay 6、team-section 5、shared-seating-placement 4、use-outdoor-agent-workflow 3、scene-delivery-panel 2、plan-card 2、plan-card-safety 2，其余为零散单例；均未在本批动过，挂账下一批。
+- **提交**：仅提交 10 个测试文件与本台账，不含 `.gitignore`、`docs/INDEX.md` 及未跟踪目录。
+
 

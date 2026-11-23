@@ -7,8 +7,14 @@ import {INITIAL_LAYOUT} from './lib/initial-layout';
 import {STORAGE_KEY} from './lib/constants';
 import {projectSessionScope} from './lib/project-session-scope';
 import {readonlyComposerDrafts,resetVolatileAssistantMemoriesForTests,seedVolatileComposerDraftForTests} from './panels/agent-panel';
+import {MemoryStorage} from '../../lib/test-support-memory-storage';
 import type {UsePlanAnnotationsResult} from './hooks/use-plan-annotations';
 import type {ActivitySwitchGuard} from './lib/local-activity-switch-guard';
+
+const mem=new MemoryStorage();
+Object.defineProperty(globalThis,'Storage',{configurable:true,value:MemoryStorage});
+Object.defineProperty(globalThis,'localStorage',{configurable:true,value:mem});
+Object.defineProperty(window,'localStorage',{configurable:true,value:mem});
 
 vi.mock('next/navigation',()=>({useRouter:()=>({push:vi.fn(),replace:vi.fn()}),usePathname:()=> '/',useSearchParams:()=>new URLSearchParams()}));
 const captured=vi.hoisted(()=>({annotation:null as UsePlanAnnotationsResult|null,guard:null as ActivitySwitchGuard|null}));
@@ -20,7 +26,7 @@ beforeEach(()=>{vi.stubGlobal('matchMedia',()=>({matches:false,addEventListener(
  Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:function(this:HTMLDialogElement){this.removeAttribute('open');}});
  Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value:function(this:HTMLDialogElement){this.setAttribute('open','');}});
 });
-afterEach(()=>{cleanup();captured.annotation=null;captured.guard=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});localStorage.clear();resetVolatileAssistantMemoriesForTests();vi.restoreAllMocks();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();captured.annotation=null;captured.guard=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});mem.clear();resetVolatileAssistantMemoriesForTests();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('exposes the real workbench draft guard to the activity gallery and refuses an unsaved zone',async()=>{
  const layout=makeLayout({id:'guard-integration',name:'本地活动',width:12,height:9,roof:{style:'none'},floors:[makeFloor({id:'f',items:[]})]});
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));render(<RoomOrganizer/>);
