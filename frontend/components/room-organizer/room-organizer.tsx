@@ -39,6 +39,7 @@ import { encodeStageCover, registerStageCover } from '@/lib/stage-cover';
 import { localPlanKey, reviewPlanKeyForClientUrl, reviewShareHref } from '../review-share-page/load-plan';
 import { publishReviewLink, revokeReviewLink } from '../review-share-page/review-link-cloud';
 import { reviewBasemapFromGround, reviewLinkFailureCopy, reviewLinkRevokeFailureCopy, type ReviewAccess } from '../review-share-page/review-access';
+import { cloudLedgerProjectId, reviewLinkProjectKey } from './lib/project-identity';
 import { AppearanceProvider } from './contexts/appearance-context';
 import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
@@ -1141,11 +1142,18 @@ useEffect(() => {
     if(!sameRecoveryFormValue(layout,initial.layout))throw new Error('当前方案无法完整核对，未生成评审链接。');
     const isCurrent=()=>activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&layoutStore.getState().revision===initial.revision&&sameRecoveryFormValue(layoutStore.getState().layout,layout);
     const check=()=>{if(!isCurrent())throw new Error('活动、楼层或方案已变化；旧评审记录如已写入会保留，链接未复制。');};
+    // 短链绑定的项目号必须和账户正在解析的是同一个：本机草稿绑本机号，云项目只绑已打开的那份。
+    const binding = reviewLinkProjectKey({
+      layoutId: layout.id,
+      activeProjectId: outdoorProjectIdProp,
+      cloudProjectId: controller.getSnapshot().project?.id,
+    });
+    if (!binding.ok) throw new Error(binding.reason);
+    const projectKey = binding.projectKey;
     // 户外优先：评审链接同时携带当前户外规划，评审页不再只拿到室内楼层。
     const encoded = await encodeShareUrl(layout, window.location.origin, outdoorFullPlanRef.current);
     check();
     const longHash = new URL(encoded.url).hash;
-    const projectKey = (layout.id ?? '').trim() || 'local-draft';
     // 评审键永远按规范长哈希算，这样长短链打开的是同一版钉与回执。
     const reviewPlanKey = reviewPlanKeyForClientUrl(encoded.url) ?? localPlanKey(layout);
     const reviewAccess: ReviewAccess = {
@@ -1171,7 +1179,7 @@ useEffect(() => {
     },{isCurrent});
     check();
     return { url,isCurrent };
-  }, [activitySession.isCurrent,sessionToken,floorSession.isCurrent,floorToken]);
+  }, [activitySession.isCurrent,sessionToken,floorSession.isCurrent,floorToken,outdoorProjectIdProp,controller]);
   // G3：右上角分享弹窗的「允许钉评」链接与 Bingo 用同一个生成器，不再各造一套。
   // 2026-11-18：旧 OutdoorDeliveryPanel 已退役，Bingo 只打开右上角同一份 ShareMenu。
   // 先生成（写入本机评审标记）再打开，ShareMenu 打开时才能从标记恢复这条链接。
@@ -1251,12 +1259,18 @@ useEffect(() => {
   }, [controller, activitySession.isCurrent, sessionToken, floorSession.isCurrent, floorToken]);
   // 分享记录：版本 / 时间 / 撤回状态以服务端为准；链接 token 只在生成时返回一次，URL 由卡片记在本机日志里。
   const listProjectShares = useCallback(async (): Promise<ServerShare[]> => {
-    const projectId = controller.getSnapshot().project?.id ?? layoutStore.getState().layout.id;
-    if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
+    const projectId = cloudLedgerProjectId({
+      layoutId: layoutStore.getState().layout.id,
+      cloudProjectId: controller.getSnapshot().project?.id,
+    });
+    if (!projectId) return [];
     return controller.businessRequest<ServerShare[]>(`/projects/${encodeURIComponent(projectId)}/shares`, 'GET');
   }, [controller]);
   const revokeProjectShare = useCallback(async (shareId: string) => {
-    const projectId = controller.getSnapshot().project?.id ?? layoutStore.getState().layout.id;
+    const projectId = cloudLedgerProjectId({
+      layoutId: layoutStore.getState().layout.id,
+      cloudProjectId: controller.getSnapshot().project?.id,
+    });
     if (!projectId) throw new Error('这份方案还没挂到项目上，稍后再试。');
     await controller.businessRequest(`/projects/${encodeURIComponent(projectId)}/shares/${encodeURIComponent(shareId)}`, 'DELETE');
   }, [controller]);

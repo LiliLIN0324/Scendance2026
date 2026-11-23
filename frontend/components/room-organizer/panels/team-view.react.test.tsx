@@ -50,6 +50,8 @@ describe('account team panel', () => {
     await controller.signIn('test@example.com', 'password');
     render(<AccountTeamPanel controller={controller}/>);
     expect(await screen.findByRole('heading', { name: '成员' })).toBeTruthy();
+    expect(screen.queryByText('团队名称')).toBeNull();
+    expect(screen.getAllByText('成员').length).toBeGreaterThan(1);
     expect(screen.getByText('丽丽 · 你')).toBeTruthy();
     expect(screen.getByText('lily@example.com')).toBeTruthy();
     expect(screen.getByText('zhongshu@example.com')).toBeTruthy();

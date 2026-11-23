@@ -75,7 +75,7 @@ export function AccountTeamPanel({ controller, studioId, onStudioRenamed }: { co
       </form>
       : <button type="button" className="sc-settings-title-name" aria-label={`重命名团队${team.teamName}`} onClick={() => { setDraftName(team.teamName); setRenaming(true); }}>{team.teamName}</button>}
     notice={notice} alert={noticeError} busy={busy} onRefresh={team.refresh} {...(isOwner ? { onInvite: () => setInviteOpen(open => !open) } : {})} inviteOpen={inviteOpen}>
-    <div className="sc-settings-columns" aria-hidden="true"><span>团队名称</span><span>角色</span></div>
+    <div className="sc-settings-columns" aria-hidden="true"><span>成员</span><span>角色</span></div>
     {team.members.map(member => { const tone = tones.get(member.userId); const preset = presets.get(member.userId); return <div className="sc-settings-row" key={member.userId}>
       <span className={`sc-settings-avatar is-rail${preset ? ' is-image' : ''}`} data-tone={tone?.id} style={avatarToneStyle(tone)} aria-hidden="true">
         {preset ? <img src={preset.src} alt=""/> : member.displayName.slice(0, 1)}

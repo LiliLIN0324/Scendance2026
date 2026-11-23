@@ -11,6 +11,7 @@
 
 | 日期 | 提出方 | 涉及文件 / 范围 | 状态 |
 | --- | --- | --- | --- |
+| 2026-11-23 | 本机草稿身份 | `room-organizer.tsx` 仅 `issueReviewLink` / `listProjectShares` / `revokeProjectShare`：评审短链与云端分享清单改走 `lib/project-identity.ts`，不改渲染导出。账户解析在 `cloud-panel.tsx`（非独占）。 | 用户本任务指定身份逻辑并要求修，本轮落码 |
 | 2026-11-23 | 审校修复 B | `room-organizer.tsx` 仅 `<OnboardingHost signals>` 增加一个 `hasNamedPlan` 信号（不碰渲染/导出/相机） | 用户本任务点名要求修「已有命名方案不再盖首访引导」，本轮落码 |
 | 2026-11-10 | TeleAgent 会话 | `room-organizer.tsx` 户外规划覆盖层挂载（约 4 处小 hunk） | 用户拍板执行，待复核 |
 | 2026-11-10 | Qoder（LiliLIN0324） | `room-organizer.tsx` 人物漫游资产上云（3 处 hunk，零删除） | 用户确认改，待复核 |
