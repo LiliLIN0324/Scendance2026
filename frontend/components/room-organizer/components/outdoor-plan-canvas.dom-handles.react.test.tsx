@@ -179,3 +179,57 @@ it('拖到非法位置松手：拒绝提交、原环保留；move 阶段复验�
   expect(commit).not.toHaveBeenCalled();
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(TRIANGLE);
 });
+
+/** 凸矩形基准（40×30 m，合法）。 */
+const BASE: PlanPoint[] = [
+  { x: -20, y: -15 },
+  { x: 20, y: -15 },
+  { x: 20, y: 15 },
+  { x: -20, y: 15 },
+];
+
+// A1（面积 <4㎡）、A6（删到 2 点）的拒绝码由纯函数层 site-plan-editing.test.ts 钉住；
+// 组件层此处只覆盖「经 DOM 手柄拖拽进入既有链路 → 拒绝、原环保留、不提交」这一条行为。
+
+it('A2 拖到相邻顶点：重合顶点被拒，原环保留，松手不提交', () => {
+  const { ref, commit, container, canvas } = mount();
+  applyEditableVenue(ref, BASE, commit);
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+
+  const from = pxOf(ref, BASE[0]!);
+  // 顶点 0 拖到顶点 1 位置：相邻顶点重合。
+  const to = pxOf(ref, BASE[1]!);
+  const handle = container.querySelector('[data-vertex-index="0"]') as HTMLElement;
+
+  fireEvent.pointerDown(handle, { clientX: from.x, clientY: from.y, pointerId: 11, button: 0, buttons: 1 });
+  fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 11, buttons: 1 });
+
+  // move 阶段即被复验拦下：预览不更新、给重合回执。
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
+  expect(screen.getAllByRole('status').map(node => node.textContent ?? '').join(' | ')).toMatch(/重合顶点/);
+
+  fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 11, button: 0 });
+  expect(commit).not.toHaveBeenCalled();
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
+});
+
+it('A3 拖出穿边：自相交被拒，原环保留，松手不提交', () => {
+  const { ref, commit, container, canvas } = mount();
+  applyEditableVenue(ref, BASE, commit);
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+
+  const from = pxOf(ref, BASE[0]!);
+  // 顶点 0 越过右边落到外侧：边 3→0 穿边 1→2，形成自交。
+  const to = pxOf(ref, { x: 30, y: -20 });
+  const handle = container.querySelector('[data-vertex-index="0"]') as HTMLElement;
+
+  fireEvent.pointerDown(handle, { clientX: from.x, clientY: from.y, pointerId: 12, button: 0, buttons: 1 });
+  fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 12, buttons: 1 });
+
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
+  expect(screen.getAllByRole('status').map(node => node.textContent ?? '').join(' | ')).toMatch(/自相交/);
+
+  fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 12, button: 0 });
+  expect(commit).not.toHaveBeenCalled();
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
+});
