@@ -3284,7 +3284,7 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#to
 
 /* 我们自己的隐藏工具栏：贴底居中，收起后只剩一颗小把手。 */
 .sc-workbench .sc-tool-column .oc-dock {
-  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%);
   z-index: 35; display: flex; flex-direction: column; align-items: center; gap: 0;
   pointer-events: none;
 }
@@ -3319,13 +3319,13 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#to
 .sc-workbench .sc-tool-column .oc-dock .oc-cluster.oc-bb.oc-island {
   position: static; left: auto; right: auto; bottom: auto; transform: none;
   display: flex; align-items: center; flex-wrap: nowrap; justify-content: flex-start;
-  gap: 6px; padding: 3px; height: 42px;
-  width: max-content; max-width: 42px;
+  gap: 6px; padding: 3px 10px 3px 3px; height: 42px;
+  width: max-content; max-width: 84px;
   border-radius: 999px; overflow: visible; animation: none;
   transition: max-width .36s cubic-bezier(.32, 1.25, .48, 1);
 }
 .sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover {
-  max-width: 90px;
+  max-width: 96px;
 }
 .sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb.oc-island {
   max-width: min(92vw, 820px);
@@ -3341,15 +3341,16 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#to
 .sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-toggle:hover {
   background: var(--plane, #F7F5F0); box-shadow: none;
 }
-/* 「工具」二字是独立的一截胶囊：收起时宽度归零，悬停才张开。 */
+/* 「工具」二字常驻：收起时是「⌃ 工具」小胶囊，不再只剩一个箭头。
+   展开后工具行已经说明一切，文字让位给按钮。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-label {
   flex: 0 0 auto;
-  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
+  max-width: 40px; overflow: hidden; white-space: nowrap; opacity: 1;
   font-size: 11px; font-weight: 500; letter-spacing: .02em; line-height: 1;
   transition: max-width .36s cubic-bezier(.32, 1.25, .48, 1), opacity .2s ease;
 }
-.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover .oc-island-label {
-  max-width: 40px; opacity: 1;
+.sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb.oc-island .oc-island-label {
+  max-width: 0; opacity: 0;
 }
 /* 工具行：收起时藏起来；展开要等宽度几乎到位才亮，免得先溢出胶囊。 */
 .sc-workbench .sc-tool-column .oc-cluster.oc-bb.oc-island .oc-island-tools {
@@ -3364,7 +3365,7 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#to
 }
 @media (max-width: 760px) {
   .sc-workbench .sc-tool-column .oc-cluster.oc-br.oc-gmaps { right: 12px; bottom: 14px; }
-  .sc-workbench .sc-tool-column .oc-dock { bottom: 14px; }
+  .sc-workbench .sc-tool-column .oc-dock { bottom: 54px; }
 }.sc-workbench .sc-tool-pop {
   position: absolute; right: calc(100% + 8px); top: 0; z-index: 60;
   display: flex; flex-direction: column; gap: 2px; min-width: 72px;

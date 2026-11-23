@@ -54,6 +54,8 @@ export interface OnboardingState {
 export interface OnboardingSignals {
   hasBoundary: boolean;
   hasItems: boolean;
+  /** 已经有具名方案（打开的是既有活动，而不是空白起步草稿）：不再自动盖首访引导。 */
+  hasNamedPlan?: boolean;
 }
 
 export const NO_SIGNALS: OnboardingSignals = { hasBoundary: false, hasItems: false };
@@ -124,6 +126,20 @@ export function tourSummary(
 export function shouldAutoStart(state: OnboardingState, tour: TourId): boolean {
   const progress = progressOf(state, tour);
   return !progress.muted && progress.done.length === 0;
+}
+
+/**
+ * 进入工作台时是否自动开首访引导。
+ * 已经打开一份具名方案时不再盖一层「1/5」：那是回访，不是第一次上手；
+ * 帮助中心里仍可手动开始。空白起步草稿不受影响。
+ */
+export function shouldAutoStartOnArrival(
+  state: OnboardingState,
+  tour: TourId,
+  signals: OnboardingSignals = NO_SIGNALS,
+): boolean {
+  if (signals.hasNamedPlan) return false;
+  return shouldAutoStart(state, tour);
 }
 
 /** 宽容解析：结构不符一律回落初始态，引导不能挡住工作台。 */

@@ -5868,6 +5868,9 @@ useEffect(() => {
               hasBoundary: (outdoorPlan?.boundary?.length ?? 0) >= 3,
               hasItems: (outdoorPlan?.zones?.length ?? 0) + (outdoorPlan?.facilities?.length ?? 0) > 0
                 || layout.floors.some(floor => floor.items.length > 0),
+              // 已有具名方案（house-* / replica-* / 云项目）算回访：不再自动盖首访 1/5；
+              // 只有 default-outdoor 这份空白起步草稿仍会自动开始。
+              hasNamedPlan: explicitOutdoorProject,
             }}
           />
       </div>

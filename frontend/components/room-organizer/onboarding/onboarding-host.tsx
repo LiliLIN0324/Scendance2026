@@ -20,7 +20,7 @@ import {
   ONBOARDING_STORAGE_KEY,
   readOnboardingState,
   restartTour,
-  shouldAutoStart,
+  shouldAutoStartOnArrival,
   stepVisible,
   writeOnboardingState,
   type OnboardingSignals,
@@ -135,7 +135,7 @@ export function OnboardingHost({ signals = NO_SIGNALS }: OnboardingHostProps): J
     if (isTest) return undefined;
     const timer = window.setTimeout(() => {
       const script = TOUR_SCRIPTS.find(item => item.auto);
-      if (!script || !shouldAutoStart(stateRef.current, script.id)) return;
+      if (!script || !shouldAutoStartOnArrival(stateRef.current, script.id, signalsRef.current)) return;
       const index = firstVisibleIndex(script.steps, signalsRef.current);
       if (index >= 0) setActive({ id: script.id, index });
     }, 1200);
