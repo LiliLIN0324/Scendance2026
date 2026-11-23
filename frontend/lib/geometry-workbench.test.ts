@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendSceneToLayout, layoutToBackendScene } from '../components/room-organizer/lib/backend-adapter';
-import { assertGeometryActionSource, geometryProjectId, hasRequestedCloudProject, isLocalActivityWorkspace } from './geometry-workbench';
+import { assertGeometryActionSource, geometryProjectId, hasRequestedCloudProject, isEditorLocalProjectLink, isLocalActivityWorkspace } from './geometry-workbench';
 import { readSourceRecord } from './source-storage';
 import type { BackendSession, BackendSnapshot } from './backend-session';
 
@@ -32,6 +32,13 @@ describe('local activity and remote scene boundaries', () => {
       expect(hasRequestedCloudProject()).toBe(true);
       expect(isLocalActivityWorkspace(session())).toBe(false);
     } finally { vi.unstubAllGlobals(); }
+  });
+  it('本机草稿链接不是云端项目 id', () => {
+    expect(isEditorLocalProjectLink('house-abc12345')).toBe(true);
+    expect(isEditorLocalProjectLink('default-outdoor')).toBe(true);
+    expect(isEditorLocalProjectLink('replica-banbury')).toBe(true);
+    expect(isEditorLocalProjectLink('10000000-0000-4000-8000-000000000001')).toBe(false);
+    expect(isEditorLocalProjectLink('not-a-project')).toBe(false);
   });
   it('house- 本机活动与默认草稿不被当成云项目', () => {
     const cases = ['house-abc12345-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'default-outdoor'];
