@@ -128,6 +128,9 @@ import {
   planMetersPerPixel,
   planPixelToPoint,
   planPointToPixel,
+  boundaryVertexHandleLayout,
+  boundaryVertexHandlesEnabled,
+  BOUNDARY_VERTEX_HANDLE_HOT_PX,
   formatPlanObjectSize,
   planCanvasLabel,
   hitScopeLockButton,
@@ -2055,6 +2058,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   // 2026-11-18：缩放角标删除后组件不再读 view（视图真值在 viewRef，绘制自持）。
   const [, setView] = useState<View>({ ...viewRef.current });
+  /** 舞台尺寸变化时轻量 bump 一次，让 DOM 手柄层按新 CSS 尺寸重算；不在 paint / move 每帧 setState。 */
+  const [, setOverlayTick] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [layerState, setLayerState] = useState<LayerVisibility>(visibility ?? defaultLayerVisibility());
   /** P2-i 图层锁定（UI 状态；命中过滤读 lockedLayersRef，避免闭包过期）。 */
@@ -4382,7 +4387,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const stage = stageRef.current;
     if (!stage) return;
     draw();
-    const observer = new ResizeObserver(() => draw());
+    const observer = new ResizeObserver(() => { draw(); setOverlayTick(t => t + 1); });
     observer.observe(stage);
     return () => observer.disconnect();
   }, [draw]);
@@ -8947,7 +8952,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 舞台里还挂着属性卡/清单/浮条/控件，它们各自拦了 pointer 事件；这里再兜一层，
     // 免得某个没拦住的控件按下时被当成画布手势（更糟的是把指针捕获走，控件按不动）。
     const downTarget = event.target;
-    if (downTarget instanceof Element && downTarget !== baseCanvasRef.current && downTarget !== stageRef.current) return;
+    // 边界顶点 DOM 热区钮是舞台内的锚点子元素：冒泡到本处理器后仍走既有像素命中链路，
+    // 不再按「非画布/非舞台即控件」挡掉；热区层之外的其余浮层仍由本门禁拦下。
+    const downInVertexHandleLayer = downTarget instanceof Element
+      && downTarget.closest('[data-vertex-handle-layer]') !== null;
+    if (downTarget instanceof Element && downTarget !== baseCanvasRef.current && downTarget !== stageRef.current && !downInVertexHandleLayer) return;
     // 2026-11-20 审计 K6：按下即捕获指针。此后指针移出画布（掠过右侧属性卡/左栏）
     // 画布仍持续收到 move/up，物件跟着手走，松手才落位——不再是「拖出画布＝取消」。
     captureStagePointer(event);
@@ -13138,6 +13147,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       })()
     : null;
 
+  // 2026-11-23 边界顶点 DOM 透明热区层：只作自动化/测试可按引用命中的锚点，视觉顶点仍由
+  // canvas 绘制；命中/拖拽/提交全走既有 nearestBoundaryVertexIndex → moveRingVertex → checkBoundaryRing。
+  // 数据源与命中一致：拖拽预览阶段跟随预览环，其余取已提交边界。
+  const boundaryHandleRing = previewRingRef.current ?? planRef.current.boundary;
+  const boundaryHandlesEnabledNow = boundaryVertexHandlesEnabled({
+    visible: layerVisible('boundary'),
+    locked: layerLocked('boundary'),
+    mode,
+  });
+  const boundaryHandleLayouts = boundaryHandlesEnabledNow
+    ? boundaryVertexHandleLayout(boundaryHandleRing, currentViewport())
+    : [];
+
   return (
     <div
       ref={stageRef}
@@ -13218,6 +13240,34 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {scanError && <div role="alert" className="sc-scan-error-toast" style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 10, maxWidth: 440, padding: '12px 16px', background: '#fff', border: '1px solid #e4e4e7', borderRadius: 8, color: '#b4443c' }}>{scanError}</div>}
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {boundaryHandleLayouts.length > 0 && (
+        <div
+          data-vertex-handle-layer
+          aria-hidden="true"
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}
+        >
+          {boundaryHandleLayouts.map(handle => (
+            <button
+              key={handle.index}
+              type="button"
+              tabIndex={-1}
+              data-vertex-index={handle.index}
+              style={{
+                position: 'absolute',
+                left: handle.left,
+                top: handle.top,
+                width: BOUNDARY_VERTEX_HANDLE_HOT_PX,
+                height: BOUNDARY_VERTEX_HANDLE_HOT_PX,
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                pointerEvents: 'auto',
+                cursor: 'inherit',
+              }}
+            />
+          ))}
+        </div>
+      )}
       {arrangePreview && (
         <div
           role="group"

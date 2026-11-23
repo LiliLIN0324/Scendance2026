@@ -15,7 +15,7 @@
  * - 派生量（面积/长度）仍从 site-plan 的米制几何现算，画布只做投影不产生真值。
  */
 
-import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_BOUNDARY_LINE_COLOR, PLANNING_CONFLICT_COLORS, PLANNING_LAYER_COLORS, PLANNING_MEASURE_COLORS, PLANNING_NODE_KIND_COLORS, PLANNING_ROUTE_KIND_COLORS, type PlanningEditMode, type PlanningLayerKind, type PlanningRouteKind } from '@/lib/outdoor-plan-tokens';
 import { axisToScreen, screenToAxis } from './outdoor-canvas-rotation';
 import { annotationRectRing, type PlanShapeKind } from './site-plan-annotate';
 import { planZoneFillAlpha, defaultZoneColor } from './site-plan-editing';
@@ -2516,6 +2516,54 @@ export function ringCenterPixel(
     }
   }
   return best ?? centroid;
+}
+
+/**
+ * 边界顶点 DOM 热区边长（CSS px）：方形热区居中盖住 10px 命中半径，纯透明、不画视觉。
+ * 视觉顶点仍由 canvas 绘制，DOM 层只作自动化/测试可按引用命中的锚点。
+ */
+export const BOUNDARY_VERTEX_HANDLE_HOT_PX = 20;
+
+/** 单个边界顶点热区的布局结果（CSS 像素，相对舞台左上角）。 */
+export interface BoundaryVertexHandleLayout {
+  index: number;
+  /** 热区左上角 x（CSS 像素）。 */
+  left: number;
+  /** 热区左上角 y（CSS 像素）。 */
+  top: number;
+  /** 热区中心 x（= 顶点投影像素，与命中判定同源）。 */
+  centerX: number;
+  /** 热区中心 y（= 顶点投影像素，与命中判定同源）。 */
+  centerY: number;
+}
+
+/**
+ * 边界顶点 DOM 热区布局纯函数：环顶点 + viewport + 热区边长 → 每顶点居中的 CSS 像素坐标。
+ * 只封装 `planPointToPixel` 的居中偏移，不改投影真值；顶点数 < 3 返回空数组。
+ */
+export function boundaryVertexHandleLayout(
+  ring: readonly PlanPoint[],
+  viewport: PlanViewport,
+  hotPx: number = BOUNDARY_VERTEX_HANDLE_HOT_PX,
+): BoundaryVertexHandleLayout[] {
+  if (ring.length < 3) return [];
+  const half = hotPx / 2;
+  return ring.map((point, index) => {
+    const { x, y } = planPointToPixel(point, viewport);
+    return { index, left: x - half, top: y - half, centerX: x, centerY: y };
+  });
+}
+
+/**
+ * 边界顶点 DOM 热区是否启用：与 canvas 绘制可拖顶点的口径一致——
+ * 图层可见 ∧ 未锁定 ∧ 浏览 / 编辑边界模式。不新增第二套锁定/可见性规则。
+ */
+export function boundaryVertexHandlesEnabled(input: {
+  visible: boolean;
+  locked: boolean;
+  mode: PlanningEditMode;
+}): boolean {
+  return input.visible && !input.locked && (input.mode === 'view' || input.mode === 'boundary-vertex');
 }
 
 /**
