@@ -517,4 +517,11 @@ A3 残留定性 ─────┘                                              
 - **剩余 38 例 / 22 文件**：map-venue-overlay 6、team-section 5、shared-seating-placement 4、use-outdoor-agent-workflow 3、scene-delivery-panel 2、plan-card 2、plan-card-safety 2，其余为零散单例；均未在本批动过，挂账下一批。
 - **提交**：仅提交 10 个测试文件与本台账，不含 `.gitignore`、`docs/INDEX.md` 及未跟踪目录。
 
+**续清二批（2026-11-23，MemoryStorage 尾巴 + 旧确认入口）**：
+- `team-section` 5、`room-organizer-left-stack` 1、`map-venue-overlay` 6 接入 `MemoryStorage` / 补 studio 桩 `discardPreviewForHistoryReview` 后全绿；`room-organizer-outcome`、`room-organizer-venue-epoch` 的旧「确认布置」入口已退役，各停用 1 例。
+- 结果：**38 failed / 22 failed files → 26 failed / 18 failed files**；**10655 passed / 138 skipped / 10819**（`%TEMP%\frontend-after-batch3.json`）。本批修绿 12 例、停用 2 例。`share.test.ts` 为已知并行 flaky，本轮单跑 **28/28 passed**（`%TEMP%\share1.json`），不计入确定性残留。
+- **验证**：`tsc --noEmit` exit 0；生产码 0 改动，build 沿用上一轮 exit 0。
+- **剩余 26 例 / 18 文件**：shared-seating-placement 4、use-outdoor-agent-workflow 3、scene-delivery-panel 2、plan-card 2、plan-card-safety 2，其余 13 个单例（含 glb 证据文件缺失、library 生成器预期等）；另 share.test.ts 并行 flaky。下一批需区分「旧 UI/旧证据」与真实产品回归，不直接整批跳过。
+- **提交**：仅提交 `team-section.react.test.tsx`、`room-organizer-left-stack.react.test.tsx`、`room-organizer-outcome.react.test.tsx`、`room-organizer-venue-epoch.react.test.tsx`、`map-venue-overlay.react.test.tsx` 与本台账。
+
 

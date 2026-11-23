@@ -7,12 +7,18 @@ import { STORAGE_KEY } from './lib/constants';
 import { resetGenerationSheetForTests } from './lib/generation-sheet';
 import { INITIAL_LAYOUT } from './lib/initial-layout';
 import { RoomOrganizer } from './room-organizer';
+import { MemoryStorage } from '../../lib/test-support-memory-storage';
+
+const mem = new MemoryStorage();
+Object.defineProperty(globalThis, 'Storage', { configurable: true, value: MemoryStorage });
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: mem });
+Object.defineProperty(window, 'localStorage', { configurable: true, value: mem });
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
 
 beforeEach(() => {
   resetGenerationSheetForTests();
-  window.localStorage.clear();
+  mem.clear();
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
@@ -29,7 +35,7 @@ afterEach(() => {
   cleanup();
   resetGenerationSheetForTests();
   layoutStore.setState({ layout: INITIAL_LAYOUT, activeFloorIndex: 0 });
-  window.localStorage.clear();
+  mem.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

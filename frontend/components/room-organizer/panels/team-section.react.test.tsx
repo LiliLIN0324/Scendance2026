@@ -4,6 +4,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { TeamSection } from './team-section';
+import { MemoryStorage } from '../../../lib/test-support-memory-storage';
+
+const mem = new MemoryStorage();
+Object.defineProperty(globalThis, 'Storage', { configurable: true, value: MemoryStorage });
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: mem });
+Object.defineProperty(window, 'localStorage', { configurable: true, value: mem });
 
 const studioId = '50000000-0000-4000-8000-000000000002';
 const owner = { userId: 'user-a', role: 'owner' as const, displayName: '丽丽', email: 'lily@example.com' };
@@ -33,7 +39,7 @@ function stubRoutes(settings: unknown = {}) {
 }
 
 beforeEach(() => {
-  localStorage.clear();
+  mem.clear();
   window.history.replaceState(null, '', '/');
   stubRoutes();
   controller = new BackendSession(getBackendConfig({ url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' }));
