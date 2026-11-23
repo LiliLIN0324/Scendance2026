@@ -633,6 +633,26 @@ describe('CloudPanel delayed project replacement', () => {
     expect(onLoadLayout).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'house-9f0d18c5-d595-481c-9245-4d4dba223419',
+    'default-outdoor',
+  ])('keeps a local unpublished draft (%s) out of cloud open', async (localId) => {
+    window.history.replaceState(null, '', `/editor/?project=${localId}&mode=outdoor`);
+    queue([original]); queue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }]);
+    const getProject = vi.spyOn(controller, 'getProject');
+    const onLoadLayout = vi.fn();
+    const seen: string[] = [];
+    const stop = subscribeNotices(notice => seen.push(notice.message));
+    render(<CloudPanel layout={backendSceneToLayout(scene, { projectId: localId, name: '浙音第六届生涯嘉年华（试画）' })} onLoadLayout={onLoadLayout} />);
+    await waitFor(() => expect(mockFetch.mock.calls.length).toBeGreaterThanOrEqual(4));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+    stop();
+    expect(seen.some(message => message.includes('项目链接无效') || message.includes('已被删除'))).toBe(false);
+    expect(getProject).not.toHaveBeenCalled();
+    expect(onLoadLayout).not.toHaveBeenCalled();
+    expect(new URLSearchParams(window.location.search).get('project')).toBe(localId);
+  });
+
   it('reauthorizes restored private models without replacing unsaved placements', async () => {
     const assetId = '30000000-0000-4000-8000-000000000001';
     const draft: Scene = { ...scene, lighting: 'warm', objects: [{ id: '40000000-0000-4000-8000-000000000001', materialId: 'asset', assetId, position: { x: 2, z: 3 }, size: { width: 1, depth: 1, height: 1 }, rotation: 0, color: '#ffffff', locked: false, notes: '本地备注' }] };

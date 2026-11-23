@@ -35,6 +35,7 @@ import { sharedArchiveQueue, type ArchiveJob } from '../lib/archive-queue';
 import { useCloudArchive } from '../hooks/use-cloud-archive';
 import { listStoredSources, type StoredSource } from '@/lib/source-storage';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { projectLinkKind } from '../lib/project-identity';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
@@ -319,9 +320,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     if (!userId || busy) return;
     const id = requestedProjectId;
     if (!id || openedRequest.current === `${userId}:${id}`) return;
-    // 经典案例是本机户外项目（space-panel 用 replica- 伪 id 占住 ?project=，刷新靠本机记录复原），
-    // 云端没有它：静默跳过云端绑定，不报「项目链接无效」。
-    if (id.startsWith('replica-')) { openedRequest.current = `${userId}:${id}`; return; }
+    // 本机草稿（house-* / default-outdoor）和经典案例（replica-）不是云端项目行。
+    // 静默跳过云端绑定：不报「项目链接无效」，也不把本机号查成「已删除」。
+    if (projectLinkKind(id) === 'local-draft') { openedRequest.current = `${userId}:${id}`; return; }
     // 无感挂云自己同步的 ?project=：项目刚建好、画布已是内容本体，重开会清掉撤销历史，凭标记跳过。
     if (consumeSelfAttachedProject(userId, id)) { openedRequest.current = `${userId}:${id}`; return; }
     // 2026-11-18 用户：「能不能稍微早期不要设定这么复杂的门槛」——深链打开不再先要手动释放编辑权，
@@ -563,7 +564,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }
 
   openRequested.current = id => run(async () => {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    if (projectLinkKind(id) === 'local-draft') return;
+    if (projectLinkKind(id) !== 'cloud') {
       softProjectNotice('项目链接无效。', 'error'); throw new Error('项目链接无效。');
     }
     const openingFrom = layoutRef.current;
