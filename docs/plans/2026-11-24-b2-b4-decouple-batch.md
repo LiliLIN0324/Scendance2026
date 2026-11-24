@@ -18,6 +18,17 @@ B1 会话/身份解耦 ✅ 合入 main
 - **换键必须带一次性迁移**：旧 `layout.id` 键存量（偏好 / 未发送草稿 / 库存 / 评审回执）直接换键会丢存量；迁移或只读承接口径见 §4 待拍板。
 - **独占 / 基线硬边界不变**：动 `room-organizer.tsx`、`scendance-workspace.tsx`、`use-import-export.ts`、`use-splat-preview.ts`、`splat-preview.ts` 或 `scan-placement.ts`、`furniture-builders.ts` 前，先在 `HANDOFF.md`《协作区变更登记》加一行，人确认后动手。
 
+### 0.1 长期目标与自主执行序（2026-11-24 用户全权授权）
+
+**终态**：去室内化 C4——云端为唯一权威正源，本机仅离线缓存/待同步副本；B1–B4 成套落地后解除 #38 R 线壳体退役阻塞。授权范围：按成熟案例默认口径推进，决策点不再逐项停顿；**未解除的底线**：不删云端项目/不软删、不编造降级路径、不改 DB 迁移/后端契约/CI 治理配置、旧键换迁移必须防丢存量、独占/基线文件先登记。
+
+**执行序（依赖驱动，本地攒批，不达标不推 main）**：
+1. **B2-a 例3 打通（#63/#69）**：夹具补 workflow 非匿名 controller + turn facts 桩；断言从 legacy capture.project().headcount 改读 `outdoorWorkflow.state.brief.guests`；核对失败轮保留已录人数语义。
+2. **B2-b 画布历史栈抽接**：先补 commit 去重/截断/redo 清空/undo-redo 乒乓/prune 纯函数测试，再把内联双栈换成 `plan-history.ts` 地基，保留 K2/zoneUndoRef/prune 旁路；真机 2D undo/redo 验收。
+3. **B2-c 壳体 history 换型**：`useHistory<RoomLayout>` → `SitePlanData`，30+ `commitHistoryNow` 提交点逐一核对挂 plan 还是 layout；独占壳体，先登记 HANDOFF，成套验收。
+4. **B3 导出/checkin plan 化（#41）**：导出读源、checkin scope、note scope 切 plan；写守卫已基于 capability/lease/revision 就位。
+5. **B4 镜像退役 + 旧键归位（#42）**：false 侧 layout patch 退役、底图/锚点改写 plan/视图记忆；持久桶旧键退役配一次性迁移防丢存量。
+
 ## 1. 门禁基线（每卡复用）
 
 - Node v26.2.0（`C:\Program Files\nodejs`，命令前置 PATH）；Node22 禁跑全量 / build。
@@ -48,7 +59,13 @@ B1 会话/身份解耦 ✅ 合入 main
 - 例3（#63）：理解失败时本地人数仍可导出；新通路 `availability='available'`、`headcount={status:'unknown',value:null}` 两份 brief 未打通。headcount 兜底数据源待 B2/B3 定稿。
   - 2026-11-24 实测基线：套件 5 passed / 1 skipped；临时取消 skip 单跑例3，第一次 submit 后 `capture.calls===0`（resolver mock `resolveBriefTurn` 根本未被调用），并非失败轮人数丢失。
   - **根因定位（通路分流错配，非会话围栏）**：默认 `workbenchMode='layout'`（`workbench-mode.ts:14`），测试 StubOverlay 注册了 `applyPlan`（夹具 :63），故 `agent-panel.tsx:3242` 条件 `!queued && workbenchMode==='layout' && bridge.applyPlan` 成立；句子在 `:3339` 整句交 `outdoorWorkflow.handle(...)` 后 `return`，legacy resolver `:3672` 不可达。`resolveBriefTurn` mock 自然调用数为 0。例3 断言却读 legacy `capture.dialogue().project().fields.headcount`（resolver 通路产物），与当前默认新通路（`outdoorWorkflow.state.brief.guests`）错配——这正是「两份 brief 未打通」的测试表现。此前怀疑的会话围栏（`sessionScopeIsCurrent`/`boundSessionId`/`briefTurnSequence`）不是首因。
-  - **转绿路径（按 §5 默认口径：优先 `plan.brief.guests`，缺省回退本机 brief）**：例3 需重写为新通路断言——读 `capture.agent.outdoorWorkflow.state.brief.guests`，而非 legacy capture.project().headcount。注意 `forcedResolution='failed'` 桩只作用于 `agent-resolver`，对 workflow 通路无效；「理解失败轮保留已录人数」的语义要在 `use-outdoor-agent-workflow` 的 state.brief 写入/失败分支里核对，不能沿用 resolver 的 failed 轮模型。属测试口径对齐 + workflow 通路失败语义核对，不孤立改生产码。
+  - **转绿路径（按 §5 默认口径：优先 `plan.brief.guests`，缺省回退本机 brief）**：例3 需重写为新通路断言——读 workflow brief.guests，而非 legacy capture.project().headcount。注意 `forcedResolution='failed'` 桩只作用于 `agent-resolver`，对 workflow 通路无效；「理解失败轮保留已录人数」的语义要在 `use-outdoor-agent-workflow` 的 state.brief 写入/失败分支里核对，不能沿用 resolver 的 failed 轮模型。属测试口径对齐 + workflow 通路失败语义核对，不孤立改生产码。
+  - **2026-11-24 续勘（观测出口与桩缺口，动手前复核行号）**：
+    - workflow 返回对象（`use-outdoor-agent-workflow.ts:3950-4109`）**未直接暴露 `state`**；`brief.guests` 存在 `stateRef.current` 并由 `persist`(:634-647) 写入 `localStorage scendance:outdoor-flow:${scope}`。测试观测出口二选一：① 给 workflow 补只读 getter（生产码改动，须成套 + 测试 + 真机核对，不孤立加）；② jsdom 内经 `MemoryStorage` 读回该 scope 键 JSON 的 `brief.guests`（纯只读观测，不改生产码；scope 值需按 agent-panel 传入的 `sessionScope` 复算）。
+    - 纯人数句落 brief 两条路径：`headcountOnlyAdjustment`(:1696/:1703-1704) 命中时只更新 `brief.guests`；否则 `mergeOutdoorFacts`(`outdoor-agent-contract.ts:114`) 过 proven（evidence 被本句/上句归一化包含，:130-133）与 `evidencedCount`（evidence 数字与 value 一致，:153）守门后，:231 落 `brief.guests`。
+    - 失败轮语义：`handle` catch(:3125-3188) 除 UNAUTHENTICATED 落 pendingLogin(:3139)、DISABLED 摘登录卡(:3159) 外，其余失败分支只挂红卡 `status`，**不 persist**，`state.brief` 保留上一轮值。即新通路是「理解失败不清空已录人数、保留上一轮」，与原 legacy 测试期望「失败轮保留本句刚说的 40」有口径差——重写断言时对齐「保留上一轮已录」，不要沿用本句 40 的旧期望。
+    - 桩缺口：夹具 `chatResult`(:84) 恒返回 `status:'ok'`，例3 失败轮需扩展 response 项支持 `status:'failed'`（或 DISABLED code）；response 形状 `{action, reply, references:[], facts}`，action 取枚举内值（`/search|scope|zones|objects|adjust|ask|…/`，见 `outdoor-agent-response-contract.ts:18`），`facts.guests` 为 `{value:int 1..100000, evidence}`，evidence 须逐字来自本句且数量一致。
+    - 触发条件：例4 传 `outdoorProjectId="probe-project-a"` 走 workflow；例3 当前未传该 prop，重写时对照例4(:142-164) 的壳体挂载与 `capture.agent` 取法。
 - 历史裸 UUID 本机槽迁移到 `house-*`：成熟案例口径下本轮只失效隔离、不迁；是否补「打开本机备份」入口见 §4。
 
 ## 3. B3 导出与写守卫 plan 化（#41，阻塞 B2）
@@ -63,8 +80,12 @@ B1 会话/身份解耦 ✅ 合入 main
 
 | 触点 | 现状 | 归属 |
 | --- | --- | --- |
-| `panels/scene-delivery-panel.tsx:129/:297/:298/:595/:596` | `layout.id` 用于本地备份恢复比对、云绑定判定、checkin 面板 `projectId` | checkin scope 转 plan |
-| 导出读源：`lib/execution-timetable-export.ts:161`、`lib/production-plan-export.ts:131/:388` | 追溯附录读 `layout.id` / layout 快照 | 导出改读 plan；PDF/CSV/GeoJSON/PNG 逐一核对读源 |
+| `panels/scene-delivery-panel.tsx:129/:375` | `saved.layout.id !== layout.id` 本地备份恢复比对 | checkin/备份 scope 转 plan |
+| `panels/scene-delivery-panel.tsx:297/:298` | `requestedCloud` 比 URL `project` 参数；`cloudBound = cloud.project?.id === layout.id || requestedCloud` | 云绑定判定换 activeProjectId / plan 正源，不再比 layout.id |
+| `panels/scene-delivery-panel.tsx:595/:596` | checkin 面板 `projectId={layout.id}` | checkin scope 转 plan |
+| 导出读源：`frontend/lib/production-plan-export.ts:91` | `ledger.projectId !== layout.id` 账册一致性校验 | projectId 比对换 plan 正源 |
+| 导出读源：`frontend/lib/production-plan-export.ts:130-133` | `createLocalProjectBackup` scope 用 `layout.id ?? 'local'`；人数读 `brief.value.guestsConfirmed/guests`（legacy brief） | 人数读源补 `plan.brief.guests` 兜底（口径见 §5）；plan 化后 scope 换正源 |
+| 导出读源：`frontend/lib/production-plan-export.ts:388`、`frontend/lib/execution-timetable-export.ts:69/:155/:161` | 追溯附录/来源读 `layout.id`、`layout.name`；timetable :69 同账册校验 | 追溯编号/名称读 plan；PDF/CSV/GeoJSON/PNG 逐一核对读源 |
 | note scope | `scope:'activity'` 是 HTML 标注字面量，非身份键，不动 | — |
 | `panels/material-customization.tsx:31` | scope 拼 `apiUrl:user:layout.id` | 库存/定制键随 B4 成套 |
 
