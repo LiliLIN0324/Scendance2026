@@ -34,8 +34,8 @@ import { collectArchiveInventory, enqueuePendingInventoryItems, inventoryActionH
 import { sharedArchiveQueue, type ArchiveJob } from '../lib/archive-queue';
 import { useCloudArchive } from '../hooks/use-cloud-archive';
 import { listStoredSources, type StoredSource } from '@/lib/source-storage';
-import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
-import { projectLinkKind, reachabilityFromError } from '../lib/project-identity';
+import { listOutdoorProjectRecords, readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
+import { localSlotNeedsCloudCheck, projectLinkKind, reachabilityFromError } from '../lib/project-identity';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
@@ -240,6 +240,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   // 2026-11-24（B1/P2）：云卡回读失效隔离。只记「确定性失效」（不存在 / 无权 / 已软删）；
   // 网络抖动与未定性的 5xx 不落永久失效；重试入口只放在「刷新」按钮，预检不自动重发。
   const [unreachableProjects,setUnreachableProjects]=useState<Record<string,boolean>>({});
+  // 2026-11-24（B2 第一步）：本机裸 uuid 槽的云端归属。确认云端已失效的，只在本机留备份。
+  const [orphanLocalSlots,setOrphanLocalSlots]=useState<Array<{projectId:string;name:string;updatedAt:string}>>([]);
+  const localProbeRequested = useRef(new Set<string>());
   const [originalReview,setOriginalReview]=useState<{projectId:string;userId:string;activeProjectId:string|null;token:ActivitySessionToken;authority:()=>boolean}|null>(null);
   const originalReviewRef=useRef(originalReview);originalReviewRef.current=originalReview;
   const originalReviewCurrent=useCallback(()=>{
@@ -315,7 +318,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     setProjects(current => current.some(project => project.id === id) ? current : [...current, { id, name, studio_id, revision }]);
   }, [sceneConnection, cloud.project, projectsLoaded]);
   useEffect(() => {
-    setReadOnlyProjects({});setUnreachableProjects({});originalReviewRef.current=null;setOriginalReview(null);
+    setReadOnlyProjects({});setUnreachableProjects({});setOrphanLocalSlots([]);localProbeRequested.current=new Set();originalReviewRef.current=null;setOriginalReview(null);
     previewRequested.current = new Set();
   }, [studioId]);
   useEffect(() => controller.retain(), [controller]);
@@ -351,7 +354,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
 
   useEffect(() => {
     setProjects([]); setTrash([]); setTrashOpen(false); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setMenuOpen(false);
-    setReadOnlyProjects({});setUnreachableProjects({});setCachedProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
+    setReadOnlyProjects({});setUnreachableProjects({});setOrphanLocalSlots([]);localProbeRequested.current=new Set();setCachedProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
     if (!userId) {
       openedRequest.current = ''; showNotice(''); setLoadingProjects(false);
       // 会话从「未恢复」变成「匿名」也会走这里；?login=1 要求开着登录浮窗，别把它关掉。
@@ -985,6 +988,28 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     }
     return () => { active = false; };
   }, [accountOpen, cloud.user, section, filteredProjects, cloud.project?.id, cloud.project?.scene, controller]);
+  // 2026-11-24（B2 第一步）：本机裸 uuid 槽的云端归属核对。
+  // 清单里没有、当前画布也没挂的裸 uuid 槽，逐个回读确认；只有明确失效（不存在 / 无权）才记入
+  // 「失效 · 本机备份」，本机记录原样保留、不删不改 id；网络抖动 / 5xx 不动它。
+  useEffect(() => {
+    if (!accountOpen || !cloud.user || section !== 'projects' || !projectsLoaded) return undefined;
+    let active = true;
+    let records: ReturnType<typeof listOutdoorProjectRecords> = [];
+    try { records = listOutdoorProjectRecords(window.localStorage); } catch { records = []; }
+    const known = new Set(studioProjects.map(project => project.id.toLowerCase()));
+    for (const record of records.slice(0, PREVIEW_LIMIT * 2)) {
+      if (!localSlotNeedsCloudCheck(record.projectId, cloud.project?.id)) continue;
+      if (known.has(record.projectId.toLowerCase())) continue;
+      if (localProbeRequested.current.has(record.projectId)) continue;
+      localProbeRequested.current.add(record.projectId);
+      void controller.peekProject(record.projectId).catch((error: unknown) => {
+        if (!active || reachabilityFromError(error) !== 'unreachable') return;
+        setOrphanLocalSlots(prev => prev.some(slot => slot.projectId === record.projectId) ? prev
+          : [...prev, { projectId: record.projectId, name: record.name, updatedAt: record.updatedAt }]);
+      });
+    }
+    return () => { active = false; };
+  }, [accountOpen, cloud.user, section, projectsLoaded, studioProjects, cloud.project?.id, controller]);
   // 2026-11-18：面板打开时把当前画布那一版真实定格存成本机封面（元数据旁边存，不进导出包）。
   // 封面是装饰：拍不到（无 WebGL / 二维未就绪）就继续用本机户外规划线稿，不报错也不拦打开。
   const canvasCoverId = layout.id ?? 'local-draft';
@@ -1510,9 +1535,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             </button>
           </li>}
         </ul>
-        {/* 回读失效的云卡：不删除、不冒充可打开，折在「失效」区里；有本机副本的仍可离线查看。 */}
-        {!!invalidProjects.length && <details className="sc-account-invalid">
-          <summary>{`失效 · 无法访问（${invalidProjects.length}）`}</summary>
+        {/* 回读失效的云卡与本机残余槽：不删除、不冒充可打开，折在「失效」区里；有本机副本的仍可离线查看。 */}
+        {(!!invalidProjects.length || !!orphanLocalSlots.length) && <details className="sc-account-invalid">
+          <summary>{`失效（${invalidProjects.length + orphanLocalSlots.length}）`}</summary>
           <ul className="sc-file-grid">
             {invalidProjects.map(project => {
               const aliasId = projectAliases[project.id];
@@ -1536,6 +1561,15 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 </details>}
               </li>;
             })}
+            {orphanLocalSlots.map(slot => <li key={`orphan-${slot.projectId}`} className="sc-file-card is-invalid">
+              <button type="button" className="sc-file-hit" disabled aria-label={`${slot.name || '未命名活动'} 失效，仅保留本机备份`}>
+                <span className="sc-file-thumb" aria-hidden="true">
+                  {coverMark()}
+                  <span className="sc-file-state">失效 · 本机备份</span>
+                </span>
+                <span className="sc-file-info"><strong>{slot.name || '未命名活动'}</strong><small>{updatedLabel(slot.updatedAt)}</small></span>
+              </button>
+            </li>)}
           </ul>
         </details>}
         {trashOpen && activeStudio?.role === 'owner' && <section aria-label="最近删除" className="sc-account-trash">

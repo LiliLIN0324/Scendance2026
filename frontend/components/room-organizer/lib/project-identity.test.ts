@@ -5,6 +5,7 @@ import {
   REVIEW_LINK_UNBOUND_CLOUD,
   classifyProjectIdentity,
   cloudLedgerProjectId,
+  localSlotNeedsCloudCheck,
   projectLinkKind,
   reachabilityFromError,
   reviewLinkProjectKey,
@@ -147,6 +148,22 @@ describe('classifyProjectIdentity', () => {
     const states = inputs.map(input => classifyProjectIdentity(input));
     expect(states).toEqual(['bound-cloud', 'local-draft', 'cache-copy', 'orphan']);
     expect(new Set(states).size).toBe(states.length);
+  });
+});
+
+describe('localSlotNeedsCloudCheck', () => {
+  it('裸 uuid 且不是当前画布，才需要去云端核对归属', () => {
+    expect(localSlotNeedsCloudCheck(cloud)).toBe(true);
+    expect(localSlotNeedsCloudCheck(cloud, otherCloud)).toBe(true);
+    expect(localSlotNeedsCloudCheck(` ${cloud} `, cloud)).toBe(false);
+  });
+
+  it('本机前缀与杂串从不去云端查', () => {
+    expect(localSlotNeedsCloudCheck(house)).toBe(false);
+    expect(localSlotNeedsCloudCheck('default-outdoor')).toBe(false);
+    expect(localSlotNeedsCloudCheck('replica-banbury-town-council')).toBe(false);
+    expect(localSlotNeedsCloudCheck('')).toBe(false);
+    expect(localSlotNeedsCloudCheck('not-a-project')).toBe(false);
   });
 });
 

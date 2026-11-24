@@ -1356,7 +1356,7 @@ describe('B1：云卡回读失效隔离', () => {
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
     openAccount();
     expect(await screen.findByRole('button', { name: '打开 失效云项目，双击进入' })).toBeTruthy();
-    expect(screen.queryByText(/^失效 · 无法访问（/)).toBeNull();
+    expect(screen.queryByText(/^失效（/)).toBeNull();
   });
 
   it('网络错误不把卡判成永久失效，保留在活跃卡片墙', async () => {
@@ -1368,7 +1368,26 @@ describe('B1：云卡回读失效隔离', () => {
     render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
     openAccount();
     expect(await screen.findByRole('button', { name: '打开 失效云项目，双击进入' })).toBeTruthy();
-    expect(screen.queryByText(/^失效 · 无法访问（/)).toBeNull();
+    expect(screen.queryByText(/^失效（/)).toBeNull();
+  });
+
+  it('云端已失效的历史裸 uuid 槽：标失效移出活跃列表，本机备份原样保留', async () => {
+    const orphanId = '10000000-0000-4000-8000-0000000000c1';
+    const key = `scendance-outdoor-plan-v1:${orphanId}`;
+    localStorage.setItem(key, JSON.stringify({ v: 1, projectId: orphanId, name: '历史裸槽',
+      createdAt: '2026-11-19T00:00:00Z', updatedAt: '2026-11-19T00:00:00Z', plan: null }));
+    listWithBroken();
+    vi.spyOn(controller, 'peekProject').mockImplementation(async (id: string) => {
+      if (id === brokenId || id === orphanId) throw new SceneApiError('PROJECT_NOT_FOUND', 404, null);
+      return other as never;
+    });
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    const backup = await screen.findByRole('button', { name: '历史裸槽 失效，仅保留本机备份' });
+    expect(backup.hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: '打开 历史裸槽，双击进入' })).toBeNull();
+    // 只读保留：本机记录不动，id 不改、不删。
+    expect(JSON.parse(localStorage.getItem(key)!).projectId).toBe(orphanId);
   });
 });
 

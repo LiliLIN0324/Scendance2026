@@ -96,6 +96,18 @@ export function reachabilityFromError(error: unknown): ProjectReachability {
   return 'unknown';
 }
 
+/**
+ * 本机槽需不需要去云端核对归属。
+ * 只看两个事实：它是裸 uuid（可能是云项目本机副本），且不是当前画布正挂着的那份。
+ * 本机前缀（`house-*` / `default-outdoor` / `replica-*`）从不去云端查。
+ */
+export function localSlotNeedsCloudCheck(id: string, mountedProjectId?: string | null): boolean {
+  const value = id?.trim() ?? '';
+  if (!value) return false;
+  if (projectLinkKind(value) !== 'cloud') return false;
+  return value !== (mountedProjectId?.trim() ?? '');
+}
+
 export const REVIEW_LINK_SPLIT_DRAFT = '当前画布和打开的本机草稿不是同一份，评审链接未生成。';
 export const REVIEW_LINK_UNBOUND_CLOUD = '这份编号在账户里对不上已打开的项目，评审链接未生成。';
 export const REVIEW_LINK_NO_IDENTITY = '这份方案还没有可分享的项目身份，评审链接未生成。';

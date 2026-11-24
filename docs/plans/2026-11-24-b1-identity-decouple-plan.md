@@ -167,4 +167,15 @@ npm --prefix frontend run build          → BUILD_EXIT=0（oneplan-artifacts �
 - 未删 / 软删云端项目，未清本机裸槽，未动 IndexedDB / localStorage 存量。
 - 未做 B2 迁移、B3 写守卫 plan 化、B4 镜像退役。
 - 未碰 7 个独占 / 基线文件。
-- 仍待拍板：orphan 本机槽处置、离线缓存副本可见性档位、新建即时归属、5 张 NOT_FOUND 的后端数据层复核。
+- 仍待拍板：离线缓存副本可见性档位、新建即时归属、5 张 NOT_FOUND 的后端数据层复核。
+- 已拍板（2026-11-24）：orphan 本机槽按「标失效移出、只读保留备份」处理，落码见 §6。
+
+## 6. B2 第一步：本机裸槽隔离（2026-11-24）
+
+口径（用户拍板）：**标失效移出活跃列表、只读保留备份**；不删、不迁移、不改 id。
+
+- **识别**：`localSlotNeedsCloudCheck()`——裸 uuid 且不是当前画布。云端清单里已有的跳过；剩下的逐个 `peekProject`，只有 `PROJECT_NOT_FOUND` / `FORBIDDEN` / `STUDIO_NOT_FOUND` 记入失效，网络抖动与 5xx 不动它。每次开面板每个槽最多探一次（`localProbeRequested`），不随渲染重发。
+- **展示**：并入既有「失效」折叠区（标题改为「失效（N）」），卡面标「失效 · 本机备份」，禁用进入；不提供删除 / 迁移入口。
+- **保留**：本机 envelope 原样不动（id、名称、规划、时间戳），不写盘、不清槽。
+- **未做**：迁移到 `house-*`、换绑、旧键退役；跨团队归属仍只看回读结果，不拿「当前团队清单里没有」推断。
+- **验证**：前端 tsc 0；frontend 全量 842 文件 / 10722 条通过；`cloud-panel` 99 条、`project-identity` 21 条；build 0。新增用例：裸 uuid 槽探活失效后落失效区且本机记录不变、网络错误不误判、纯函数前缀判定。
