@@ -112,6 +112,7 @@ B1 会话/身份解耦 ✅ 合入 main
 - ✅ **读方 ① 2D 卫星贴图已接**（本片）：`render2DTopDown` 新增 `ground?: ResolvedGround`，`paintAlignedSatellite` / 参考图判定 / 透明度三处改读它；`use-scene-effects` 的 2D 重绘按 `resolveGround(layout, outdoorPlan)` 传入。**验收方式换成 node 级逐调用比对**（不依赖浏览器截图）：同一份盐官古城夹具，只读 layout 与读 `ground` 的 `drawImage` 参数序列逐项相等；并且把 `layout.floorPlanImage` 删掉、只剩 `ground` 时序列仍相等——等于证明了「删镜像后 2D 照画」。`render.test.ts` 31 passed。
 - ✅ **读方 ② 评审截图已接**（本片）：`useReviewCapture` 的 `Inputs` 增 `ground`，底图判定与 2D 重绘都改用它；壳体按 `resolveGround(layout, outdoorPlan)` 传入。新例证明「把 `layout.floorPlanImage` 删掉、只剩 `ground`」时，截图仍会等 `ensureFloorPlanImageDecoded(ground.image)` 并带上正源渲染（`use-review-capture.react.test.tsx` 20 passed）。
 - ⏳ **读方 ③–④** 未做，按「输出逐调用比对」推进：③ 交付快照与清单哈希；④ `agent-panel` 需求记忆；⑤ 室内壳体（随 #38 消失）。
+- ⚠️ **③ 不是纯 no-op**：`lib/event-operations.ts:72-74` 的 `operationBasis` 把 `floorPlanImage` 与 `mapGroundPolygon` 计入 canonical 串再做 SHA-256，这个摘要就是交付核对的「通过/不通过」回执。换读源＝改核对语义，已通过的旧回执会对不上；必须按版本化决策（同摘要兼容 or 显式升版重算），不静默换。同理 ④ `agent-panel:2454` 的「场地已记录」判定影响模型上下文，换源前要先定口径。
 - ⏳ **镜像删除**未做：`floorPlanImage` 等 6 个 layout 字段仍有 52 个消费方（2D `canvas-2d/render.ts`、3D `structure-builder.ts`/`room-builder.ts`、`agent-panel` 需求记忆、评审截图、云卡缩略图、交付导出）。换读源要逐簇真机验收，与 #38 一起做才有意义（#38 之前 layout 仍是云存档载体）。
 - ⏳ **false 侧 patch 删除**未做：3D 地面/外墙仍靠 `shellVenuePatchFromPlanBoundary` 长尺寸，删了会断，随 #38。
 - ⏳ **旧键迁移**未做：等 §5 的 C2 口径（旧 `activity:` 存量），按「防丢存量」底线不在无口径时动。
