@@ -12,6 +12,7 @@ import {
   seededPlanFromVenue,
   trueFootprintBoundary,
   planBoundaryFromSearchArea,
+  sceneAnchorFromOutdoorPlan,
   SHELL_RING_LIMIT,
   SHELL_SIZE_LIMIT_M,
 } from './outdoor-venue-sync';
@@ -425,5 +426,31 @@ describe('planBoundaryFromSearchArea · 搜索选区收成红线', () => {
     expect(planBoundaryFromSearchArea({ polygon: polygon.slice(0, 2) }, anchor)).toBeNull();
     expect(planBoundaryFromSearchArea({ polygon }, null)).toBeNull();
     expect(planBoundaryFromSearchArea(null, anchor)).toBeNull();
+  });
+});
+
+describe('sceneAnchorFromOutdoorPlan', () => {
+  it('合法边界 + 锚点：投影出壳体锚点，来源透传、朝向为 0', () => {
+    const plan = { anchor: { lng: 120.1413, lat: 30.2545, crs: 'gcj-02' as const, source: 'asset-geo' as const }, boundary: square };
+    const result = sceneAnchorFromOutdoorPlan(plan);
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('asset-geo');
+    expect(result!.orientationDeg).toBe(0);
+    expect(result!.lng).toBeCloseTo(120.1413, 6);
+    expect(result!.lat).toBeCloseTo(30.2545 + 10 / 111132.92, 6);
+    expect(result!.metersPerUnit).toBeGreaterThan(0);
+  });
+
+  it('缺锚点时不编造壳体锚点，返回 null', () => {
+    expect(sceneAnchorFromOutdoorPlan({ anchor: undefined, boundary: square })).toBeNull();
+  });
+
+  it('边界不足 3 点时返回 null', () => {
+    expect(
+      sceneAnchorFromOutdoorPlan({
+        anchor: { lng: 120.1413, lat: 30.2545, crs: 'gcj-02' as const, source: 'asset-geo' as const },
+        boundary: square.slice(0, 2),
+      }),
+    ).toBeNull();
   });
 });
