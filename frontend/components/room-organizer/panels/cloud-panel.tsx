@@ -1398,7 +1398,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             const editingElsewhere = !current && project.current_editor && project.lease_expires && Date.parse(project.lease_expires) > Date.now();
             const status = current
               ? `当前 · ${saveStatus}`
-              : cachedProjects[project.id] ? '本机缓存' : readOnlyStudio ? '只读' : editingElsewhere ? '他人编辑中' : '';
+              : cachedProjects[project.id] ? '本机缓存副本' : readOnlyStudio ? '只读' : editingElsewhere ? '他人编辑中' : '';
             // 本机活动升上云的项目：封面/规划留在旧活动 id 上，卡上先按旧 id 找一遍。
             const aliasId = projectAliases[project.id];
             const cover = projectCovers[project.id] ?? (aliasId ? projectCovers[aliasId] : undefined);
