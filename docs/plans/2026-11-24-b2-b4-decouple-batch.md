@@ -44,6 +44,11 @@ B1 会话/身份解耦 ✅ 合入 main
 - 地基纯函数 `lib/plan-history.ts`：`commitPlanHistory` / `undoPlanHistory` / `redoPlanHistory` / `planSnapshotsEqual` / `emptyPlanHistory`，30 步截断、栈顶去重、redo 分叉清空；`plan-history.test.ts` 9/9 绿。
 - 2D 画布 `components/outdoor-plan-canvas.tsx` 已有内联双栈：`historyRef`/`redoRef`（:1851/:1853），提交 `commitPlan`（:2876）、撤销 `undoPlan`（:2925）、重做 `redoPlan`（:2943）、另一处 redo push（:3196）、prune（:8344）；`UNDO_LIMIT=30`（:1090）。
 - 壳体 3D 历史仍是 `useHistory<RoomLayout>`：`room-organizer.tsx:1939`，`commitHistoryNow` 在 30+ 处提交点调用（物料摆放 / 选中 / 墙体 / 光照 / 运营计划 / 事件操作等）。
+  - **2026-11-24 B2-c 施工地图（只读勘察，行号以动手前 Grep 复核为准）**：
+    - 历史链路三要素（:1939-1956）：快照源 `layout`（RoomLayout）；apply 回调 `applyVenueHistorySnapshot(...)` → `actions.applyLayout` 回写 layoutStore；`canApply` 守卫依次过 `workspaceWriteGuards.assertLayoutWrite`、`environmentPreferenceReadyRef`/`pendingEnvironmentPositionRef`、场地 `venue.assetId` 比对。换型 SitePlanData 时这三处都要 plan 化，不能只改泛型。
+    - `commitHistoryNow` 提交点（按操作域初分，逐点复核挂 plan 还是 layout）：物料摆放/选中/拖拽/复制/删除/旋转 :2122/:2140/:2162/:2197/:2266/:2375/:2389/:3823/:3847/:3851/:5646/:5816；墙体 :3847/:3851 邻近；恢复快照 `beforeReplace` :4106/:4128；生产计划/运营/事件操作 :4242/:4339/:4973(`onUpdateProductionPlan`)/:5007(`onUpdateItem`)/:5010(`onUpdateEventOperations`)/:5864(`onCommitOperations`)；光照 :5849；outdoor false 侧镜像 patch :2057（归 B4 退役，不在 B2-c 挂 plan）。
+    - undo/redo 对外暴露 :3885/:3886、:3959/:3960；`clearHistory` 在切换/恢复流程 :4112/:4147 调用。
+    - **阻塞**：室内物料编辑 undo 随 E2/E3 壳体退役成套；过渡阶段历史双轨，不能硬把 30+ 室内提交点全切到 SitePlanData，否则废掉室内物料撤销。独占壳体，动手前先在 HANDOFF.md 登记。
 
 ### 2.2 剩余触点（待核行号）
 
