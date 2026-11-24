@@ -141,3 +141,25 @@ B1 会话/身份解耦 ✅ 合入 main
 - 不动 7 个独占 / 基线文件；不删 / 软删云端项目；不清本机裸槽；不动 IndexedDB / localStorage 存量。
 - 不改后端 RPC / 迁移 / 契约；生产 4 笔落后迁移（130→140→150→160）补跑属部署治理决策。
 - 不孤立撤 B4 镜像；不把 B2/B3/B4 跳卡硬切生产码。
+
+### 6.1 B2-c / B3 结构性阻塞（2026-11-25 实测缺口，需拍板后继续）
+
+**事实**（`Grep RoomLayout.*SitePlanData` 全 frontend 仅 2 处命中：`lib/outdoor-venue-sync.ts:382 sceneAnchorFromOutdoorPlan` 的单字段投影、`lib/share.ts:34` 的返回类型联合）。**全仓没有 layout ↔ plan 的整包互转函数**；`SitePlanData` 没有 `brief` 字段（brief 属 `OutdoorFlowState`，落 `localStorage scendance:outdoor-flow:<scope>`）。因此：
+
+- **B2-c「`useHistory<RoomLayout>` → `SitePlanData`」不是换泛型那么简单**：壳体 30+ 提交点写的是 layout（floors / items / venueScan），换成 plan 快照就得在提交时 layout→plan、撤销时 plan→layout。plan 里没有家具层语义，反向投影不成立——除非新增一层投影并承担「plan 表达不了的字段在撤销时丢失」的风险。
+- **B3「导出按 `plan.brief.guests` 读源」**：plan 上根本没有 brief；要把 brief 挂到 plan 就得改 `supabase/functions/_shared/domain.ts` 的 plan 契约（属禁改项，须人 review）。
+
+**三个可选路径（成本与本轮影响）**：
+
+| 路径 | 做法 | 代价 / 风险 |
+| --- | --- | --- |
+A 造互转层 | 新增 `logic`：layout→plan 提交快照、plan→layout 撤销回填 | 30+ 提交点逐个复核；plan 无家具层 → 家具撤销会失真；属新架构，须先定投影语义再动独占壳体
+B plan 挂 brief | 给 `SitePlanData` 增 `brief`，brief 唯一权威源=plan，layout 侧只读镜像 | 改前后端共享契约（禁改项）；迁移历史 plan 缺字段；但最贴「C4 云端唯一正源」
+C 只切读源（推荐） | 不动泛型与契约：layout 快照继续只当 3D 壳体视图缓存（随 #38 退役），brief/人数统一经读侧桥 `readBriefForExport(projectId)` 取（plan 侧 > flow 桶 > legacy brief），导出与例3 的可导出断言都走它 | 纯前端读侧改动，不触碰独占链路；须定**优先级**（谁盖谁）并补「两源不一致时不虚报」的测试；B2-c 从「换型」降级为「读源归一 + 随 R 线退役」
+
+**建议**：走 C。理由：终态是壳体退役，为一座要拆的房子先造双向投影，等于给退休件加维护成本；而导出真正需要的只是「人数/需求从哪个权威源读」这一个决定。C 落地后 B3 的导出读源、checkin scope、例3 导出断言可一并收口，B4 镜像退役才不会被 brief 问题继续卡住。
+
+**C 自身的一个硬约束（不拍板不能落码）**：flow 桶键是 `scendance:outdoor-flow:project:<id>`，其中本机草稿一律落 `project:${DEFAULT_OUTDOOR_PROJECT_ID}`——**所有本机草稿共用一个桶**。若导出对「无 layout.id 的草稿」也读这个桶，就可能把另一份草稿的人数当成这单的，等于虚报。所以 C 必须同时定：本机草稿是「只读自己那份草稿的 brief」还是「标 unknown」。这正是不该由我代选的那一刀。
+
+**拍板需要的输入**：① 选 A/B/C；② 若 C，优先级是否「plan.brief > flow 桶 > legacy brief」，以及本机草稿无自有桶时是否标 unknown；③ 若 B，是否授权改 `domain.ts` 与迁移。
+
