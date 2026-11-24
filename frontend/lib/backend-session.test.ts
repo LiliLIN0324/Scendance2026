@@ -970,6 +970,33 @@ describe("workspace business requests", () => {
     expect(after.project?.id).toBe(before.project?.id);
     expect(after.lease).toEqual(before.lease);
   });
+
+  it("keeps preference, studio, outdoor-history and outdoor-plan reads auxiliary so one 404 cannot mark the project missing", async () => {
+    const controller = await editing();
+    const reads: [string, () => Promise<unknown>][] = [
+      ['/preferences', () => controller.getPreferences()],
+      ['/studios/x/settings', () => controller.getStudioSettings('probe-studio')],
+      ['/outdoor-history', () => controller.getOutdoorCardHistory(projectId)],
+      ['/outdoor-plans', () => controller.listOutdoorPlans()],
+      ['/outdoor-plans/:id', () => controller.getOutdoorPlan(projectId)],
+      ['/cloud/capabilities', () => controller.getCloudCapabilities()],
+    ];
+    for (const [label, read] of reads) {
+      queue({ error: { code: 'PROJECT_NOT_FOUND' } }, 404);
+      await expect(read(), label).rejects.toMatchObject({ code: 'PROJECT_NOT_FOUND' });
+      const after = controller.getSnapshot();
+      expect(after.error, label).toBeNull();
+      expect(after.writeBlocked, label).toBe(false);
+      expect(after.project?.id, label).toBe(projectId);
+    }
+  });
+
+  it("keeps outdoor-history and outdoor-plan writes as business requests that still surface in the session error", async () => {
+    const controller = await editing();
+    queue({ error: { code: 'PROJECT_NOT_FOUND' } }, 404);
+    await expect(controller.saveOutdoorCardHistory(projectId, [])).rejects.toMatchObject({ code: 'PROJECT_NOT_FOUND' });
+    expect(controller.getSnapshot().error).toMatchObject({ code: 'PROJECT_NOT_FOUND' });
+  });
 });
 
 describe('Agent run client contract',()=>{

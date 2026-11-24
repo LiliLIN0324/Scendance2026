@@ -978,17 +978,19 @@ export class BackendSession {
   }
   listStudios(): Promise<Studio[]> { return this.request("/studios"); }
   listProjects(): Promise<ProjectSummary[]> { return this.request("/projects"); }
-  /** 读取当前账号的界面偏好；未登录或服务不可用时由调用方回退本机默认值。 */
+  /** 读取当前账号的界面偏好；未登录或服务不可用时由调用方回退本机默认值。
+   *  辅助读：失败只抛给调用方，不写会话级 error（一条偏好 404 不该把已挂云项目判成「已不存在」）。 */
   async getPreferences(): Promise<AccountPreferences> {
-    return this.businessRequest<AccountPreferences>("/preferences", "GET");
+    return this.auxRequest<AccountPreferences>("/preferences", "GET");
   }
   /** 回写当前账号的界面偏好；只提交白名单字段，不触碰项目 / 租约状态。 */
   async savePreferences(prefs: AccountPreferences): Promise<AccountPreferences> {
     return this.businessRequest<AccountPreferences>("/preferences", "PATCH", prefs);
   }
-  /** 工作室默认（报价抬头、新建方案的单位和通道）。未登录时由调用方停在本机个人偏好。 */
+  /** 工作室默认（报价抬头、新建方案的单位和通道）。未登录时由调用方停在本机个人偏好。
+   *  辅助读：工作室默认拿不到不该污染会话 error。 */
   async getStudioSettings(studioId: string): Promise<StudioSettings> {
-    return this.businessRequest<StudioSettings>(`/studios/${encodeURIComponent(studioId)}/settings`, "GET");
+    return this.auxRequest<StudioSettings>(`/studios/${encodeURIComponent(studioId)}/settings`, "GET");
   }
   async saveStudioSettings(studioId: string, patch: {
     companyName?: string | null | undefined;
@@ -1006,7 +1008,7 @@ export class BackendSession {
    * 只读写决策流水；未登录或服务不可用时由调用方回退本机记录，不当成错误。
    */
   async getOutdoorCardHistory(projectId: string): Promise<unknown[]> {
-    return this.businessRequest<unknown[]>(
+    return this.auxRequest<unknown[]>(
       `/outdoor-history?projectId=${encodeURIComponent(projectId)}`,
       "GET",
     );
@@ -1019,10 +1021,10 @@ export class BackendSession {
    * 保存必须带 `baseRevision`，不匹配时后端返回 `conflict` 且不落库。
    */
   listOutdoorPlans(): Promise<OutdoorPlanSummary[]> {
-    return this.businessRequest<OutdoorPlanSummary[]>("/outdoor-plans", "GET");
+    return this.auxRequest<OutdoorPlanSummary[]>("/outdoor-plans", "GET");
   }
   getOutdoorPlan(activityId: string): Promise<OutdoorPlanSnapshot> {
-    return this.businessRequest<OutdoorPlanSnapshot>(
+    return this.auxRequest<OutdoorPlanSnapshot>(
       `/outdoor-plans/${encodeURIComponent(activityId)}`,
       "GET",
     );
@@ -1040,9 +1042,10 @@ export class BackendSession {
   }
   // ---- 云存储 / 完整保存 / 官方案例（Task A · 2026-11-20 草案；B/C 统一从这里接）----
   // 后端未部署审核 SQL 时所有方法抛 503 CLOUD_STORAGE_UNAVAILABLE；不提供本机 mock 降级。
-  /** 服务端角色真相：每次实时查询，撤权即时生效；结果不缓存、不落盘。 */
+  /** 服务端角色真相：每次实时查询，撤权即时生效；结果不缓存、不落盘。
+   *  辅助读：能力探测失败只影响本机入口档位，不写会话 error。 */
   async getCloudCapabilities(): Promise<CloudCapabilities> {
-    return cloudCapabilitiesSchema.parse(await this.businessRequest("/cloud/capabilities", "GET"));
+    return cloudCapabilitiesSchema.parse(await this.auxRequest("/cloud/capabilities", "GET"));
   }
   /** 登记归档上传意图并取直传地址；requestId 幂等，重试拿到同一 uploadId/storagePath。 */
   async prepareArchiveUpload(input: ArchiveUploadInput): Promise<ArchiveUploadReceipt> {
