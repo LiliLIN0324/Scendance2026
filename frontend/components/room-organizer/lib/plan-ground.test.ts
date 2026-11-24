@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planGroundSchema } from '../../../../supabase/functions/_shared/site-plan';
 import { rememberPlanGroundBounds } from './amap-venue';
-import { layoutGroundPatch, PLAN_GROUND_OPACITY, planGroundFromLayout, planGroundSync, stripPlanGroundImage } from './plan-ground';
+import { layoutGroundPatch, PLAN_GROUND_OPACITY, planGroundFromLayout, planGroundSync, resolveGround, stripPlanGroundImage } from './plan-ground';
 import type { RoomLayout } from './types';
 
 const POLYGON = [
@@ -98,6 +98,35 @@ describe('plan.ground → layout 视图缓存投影', () => {
     const patch = layoutGroundPatch({ image: IMAGE, center: { lng: 1, lat: 2 } });
     expect(patch).toEqual({ floorPlanImage: IMAGE, floorPlanOpacity: PLAN_GROUND_OPACITY, mapLngLat: { lng: 1, lat: 2 } });
     expect('satelliteGroundRef' in (patch ?? {})).toBe(false);
+  });
+});
+
+describe('读源单源化（resolveGround）：plan 优先，layout 只兜底', () => {
+  it('plan 有图时以正源为准，即使 layout 缓存还是旧图', () => {
+    const resolved = resolveGround(groundLayout(), { ground: { image: 'data:image/png;base64,NEW', frame: FRAME } });
+    expect(resolved?.source).toBe('plan');
+    expect(resolved?.image).toBe('data:image/png;base64,NEW');
+  });
+
+  it('旧项目 plan 没有 ground 时退回 layout 缓存，并沿用其透明度/定位', () => {
+    const resolved = resolveGround(groundLayout(), {});
+    expect(resolved).toMatchObject({ source: 'layout', image: IMAGE, opacity: 0.9, polygon: POLYGON, frame: FRAME });
+  });
+
+  it('两边都没有可读底图 → null（不虚构）', () => {
+    expect(resolveGround({}, {})).toBeNull();
+    expect(resolveGround({}, null)).toBeNull();
+    // 用户上传的户型图纸（无贴地框/多边形）不算贴地底图
+    expect(resolveGround({ floorPlanImage: 'data:image/png;base64,PLAN' }, null)).toBeNull();
+  });
+
+  it('layout 侧 satelliteGroundRef=false（显式关掉贴地）不被兜底读成底图', () => {
+    expect(resolveGround(groundLayout({ satelliteGroundRef: false }), {})).toBeNull();
+  });
+
+  it('plan 给的值直接生效：透明度与 satelliteRef 不再被 layout 覆盖', () => {
+    const resolved = resolveGround(groundLayout(), { ground: { image: IMAGE, opacity: 0.5, satelliteRef: false } });
+    expect(resolved).toMatchObject({ source: 'plan', opacity: 0.5, satelliteRef: false });
   });
 });
 

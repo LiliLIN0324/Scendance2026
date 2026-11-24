@@ -92,6 +92,51 @@ export function stripPlanGroundImage<T extends { ground?: PlanGround | undefined
 }
 
 /**
+ * 底图读源：`plan.ground` 优先，layout 那份只作兜底（B4 读侧单源化，2026-11-25）。
+ *
+ * 这是「删 layout 那 6 个字段」的前置：读方先统一从这里取，等全部接上之后，
+ * 删字段就是纯删除，不会出现「删了不知道哪里断成图」。
+ * `source` 只为排查用：`plan` = 读的正源，`layout` = 旧项目还没迁进 plan。
+ */
+export interface ResolvedGround {
+  image: string;
+  opacity: number;
+  satelliteRef: boolean;
+  polygon: PlanGround['polygon'];
+  center: PlanGround['center'];
+  frame: PlanGround['frame'];
+  source: 'plan' | 'layout';
+}
+
+export function resolveGround(
+  layout: LayoutGroundSource,
+  plan: { ground?: PlanGround | undefined } | null | undefined,
+): ResolvedGround | null {
+  const source = plan?.ground;
+  if (source?.image) {
+    return {
+      image: source.image,
+      opacity: source.opacity ?? PLAN_GROUND_OPACITY,
+      satelliteRef: source.satelliteRef ?? true,
+      polygon: source.polygon,
+      center: source.center,
+      frame: source.frame,
+      source: 'plan',
+    };
+  }
+  if (!isGroundImage(layout)) return null;
+  return {
+    image: layout.floorPlanImage!,
+    opacity: layout.floorPlanOpacity ?? PLAN_GROUND_OPACITY,
+    satelliteRef: layout.satelliteGroundRef ?? true,
+    polygon: layout.mapGroundPolygon,
+    center: layout.mapLngLat,
+    frame: layout.mapGroundFrame,
+    source: 'layout',
+  };
+}
+
+/**
  * 打开一份方案时该往哪个方向同步底图（两个方向都只补缺，不覆盖更新的一侧）：
  * - `to-plan`：旧项目只有 layout 缓存 → 迁进正源；
  * - `to-layout`：正源有图而视图缓存没有（或还是旧图）→ 用正源补齐 3D 读的缓存；
