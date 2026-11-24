@@ -44,6 +44,7 @@ B1 会话/身份解耦 ✅ 合入 main
 
 - 地基纯函数 `lib/plan-history.ts`：`commitPlanHistory` / `undoPlanHistory` / `redoPlanHistory` / `planSnapshotsEqual` / `emptyPlanHistory`，30 步截断、栈顶去重、redo 分叉清空；`plan-history.test.ts` 9/9 绿。
 - 2D 画布 `components/outdoor-plan-canvas.tsx` 已有内联双栈：`historyRef`/`redoRef`（:1851/:1853），提交 `commitPlan`（:2876）、撤销 `undoPlan`（:2925）、重做 `redoPlan`（:2943）、另一处 redo push（:3196）、prune（:8344）；`UNDO_LIMIT=30`（:1090）。
+  - **2026-11-25 已接地基（B2-b 完成）**：`UNDO_LIMIT` 改为 `PLAN_HISTORY_LIMIT`（单源）；新增组件侧 `historyStacks()`/`adoptHistoryStacks()` 两栈唯一读写口；`commitPlan` → `commitPlanHistory`（**显式传 `() => false` 关掉栈顶去重**，理由见代码注释：一键收进撤销会把 `planRef` 回填成 past 栈顶同一引用，此时再编辑仍必须压栈，否则撤销少一格）、`undoPlan`/`redoPlan` → `undoPlanHistory`/`redoPlanHistory`、`undoZonePull` → 新增纯函数 `pushPlanHistoryFuture`、`dropSessionMeasurementsFromHistory` → `prunePlanHistoryStack`。组件侧保留：`samePlanContent` 的 next-vs-current 守门、`refusePlanWrite`、`mergeCommitRef`(K2)、`zoneUndoRef`、选中清除、`draw()`、文案与计数上报。`plan-history.test.ts` 13→15 例（补 `pushPlanHistoryFuture` 两条：past 原样/超限丢最旧 + 后续重做按栈顶取）。
 - 壳体 3D 历史仍是 `useHistory<RoomLayout>`：`room-organizer.tsx:1939`，`commitHistoryNow` 在 30+ 处提交点调用（物料摆放 / 选中 / 墙体 / 光照 / 运营计划 / 事件操作等）。
   - **2026-11-24 B2-c 施工地图（只读勘察，行号以动手前 Grep 复核为准）**：
     - 历史链路三要素（:1939-1956）：快照源 `layout`（RoomLayout）；apply 回调 `applyVenueHistorySnapshot(...)` → `actions.applyLayout` 回写 layoutStore；`canApply` 守卫依次过 `workspaceWriteGuards.assertLayoutWrite`、`environmentPreferenceReadyRef`/`pendingEnvironmentPositionRef`、场地 `venue.assetId` 比对。换型 SitePlanData 时这三处都要 plan 化，不能只改泛型。

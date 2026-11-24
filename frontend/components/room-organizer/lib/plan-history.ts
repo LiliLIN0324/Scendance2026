@@ -90,6 +90,19 @@ export function redoPlanHistory<T>(
   };
 }
 
+/**
+ * 只把当前快照记进 future（past 原样不动）：用于「回填一份调用方自己保存的快照」，
+ * 例如画布一键收进分区后，撤销收进要能重做回收进后的坐标。
+ * 与 `undoPlanHistory` 的区别是 past 不弹栈——回填的那份快照不在 past 里。
+ */
+export function pushPlanHistoryFuture<T>(
+  history: PlanHistoryStacks<T>,
+  current: T,
+  limit: number = PLAN_HISTORY_LIMIT,
+): PlanHistoryStacks<T> {
+  return { past: history.past, future: trimToLimit([...history.future, current], limit) };
+}
+
 /** 规范化：对象键排序、数组保序、undefined 键省略（与 JSON 序列化口径一致）。 */
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);

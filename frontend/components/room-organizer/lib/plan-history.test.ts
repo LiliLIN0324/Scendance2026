@@ -6,6 +6,7 @@ import {
   emptyPlanHistory,
   planSnapshotsEqual,
   prunePlanHistoryStack,
+  pushPlanHistoryFuture,
   redoPlanHistory,
   undoPlanHistory,
 } from './plan-history';
@@ -71,6 +72,22 @@ describe('plan-history（M3b 纯函数地基）', () => {
     const step = redoPlanHistory(history, plan(9));
     expect(step.snapshot).toBeUndefined();
     expect(step.history).toBe(history);
+  });
+
+  it('只记 future（一键收进后的撤销）：past 原样不动，当前快照进 future', () => {
+    const history = { past: [plan(1), plan(2)], future: [] };
+    const after = pushPlanHistoryFuture(history, plan(3), 5);
+    expect(after.past).toBe(history.past);
+    expect(after.future).toEqual([plan(3)]);
+  });
+
+  it('只记 future：超上限丢最旧，之后的重做仍按栈顶取', () => {
+    const history = { past: [], future: [plan(1), plan(2), plan(3)] };
+    const after = pushPlanHistoryFuture(history, plan(4), 3);
+    expect(after.future).toEqual([plan(2), plan(3), plan(4)]);
+    const step = redoPlanHistory(after, plan(5), 3);
+    expect(step.snapshot).toEqual(plan(4));
+    expect(step.history.future).toEqual([plan(2), plan(3)]);
   });
 
   it('规范化 JSON：对象键序无关，数组顺序有关', () => {

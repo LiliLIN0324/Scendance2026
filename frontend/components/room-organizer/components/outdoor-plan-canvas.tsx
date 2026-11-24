@@ -1,5 +1,15 @@
 'use client';
 import { samePlanContent } from '../lib/outdoor-project-store';
+import {
+  commitPlanHistory,
+  PLAN_HISTORY_LIMIT,
+  prunePlanHistoryStack,
+  pushPlanHistoryFuture,
+  redoPlanHistory,
+  undoPlanHistory,
+  type PlanHistoryStacks,
+} from '../lib/plan-history';
+
 import { validateWorkflowPlan } from '../lib/outdoor-agent-planning';
 import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIssues, publishOutdoorPlanSettled } from '../lib/outdoor-plan-issues';
 import { firstModelSlug } from '../lib/asset-namespace';
@@ -1086,8 +1096,9 @@ function drawMarqueeRect(ctx: CanvasRenderingContext2D, marquee: { startPx: { x:
   ctx.strokeRect(x, y, w, h);
   ctx.restore();
 }
-/** undo 栈深度上限（评审稿「撤销和恢复均保留有效引用」；快照体积小，30 步足够）。 */
-const UNDO_LIMIT = 30;
+/** undo 栈深度上限（评审稿「撤销和恢复均保留有效引用」；快照体积小，30 步足够）。
+ *  值与 `lib/plan-history.ts` 的 PLAN_HISTORY_LIMIT 同源，不再各写一份。 */
+const UNDO_LIMIT = PLAN_HISTORY_LIMIT;
 
 /* ---------------- P2-i 摆设手感：设施手柄 / 图层锁定 / 比例尺指北针 ---------------- */
 
@@ -1851,6 +1862,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const historyRef = useRef<SitePlanData[]>([]);
   /** P2-g 重做栈：撤销时把当前快照推进来，任何新编辑清空（与 historyRef 对称，同样 30 步）。 */
   const redoRef = useRef<SitePlanData[]>([]);
+  /**
+   * 两栈的唯一读写口：栈的加减法交给 `lib/plan-history.ts` 纯函数，这里只负责把结果
+   * 写回 ref 并同步按钮可用态的计数。组件侧仍管写守卫、合并键、选中清除与绘制。
+   */
+  function historyStacks(): PlanHistoryStacks<SitePlanData> {
+    return { past: historyRef.current, future: redoRef.current };
+  }
+  function adoptHistoryStacks(next: PlanHistoryStacks<SitePlanData>) {
+    historyRef.current = next.past as SitePlanData[];
+    redoRef.current = next.future as SitePlanData[];
+    setHistoryCount(historyRef.current.length);
+    setRedoCount(redoRef.current.length);
+  }
   // H3-a 测量：类型、草稿、指针（临时读数）。
   const measureKindRef = useRef<PlanMeasureToolKind>('distance');
   const measureDraftRef = useRef<PlanPoint[]>([]);
@@ -2878,14 +2902,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     // 拖了一圈又拖回原位，都不应该占掉 30 步撤销里的一格。
     if (samePlanContent(next, planRef.current)) return false;
     if (refusePlanWrite(next)) return false;
-    historyRef.current.push(planRef.current);
-    if (historyRef.current.length > UNDO_LIMIT) historyRef.current.shift();
-    setHistoryCount(historyRef.current.length);
-    // 新编辑分叉历史：重做栈作废（与编辑器通例一致）。
-    if (redoRef.current.length > 0) {
-      redoRef.current = [];
-      setRedoCount(0);
-    }
+    // 旧快照入 past、redo 作废（新编辑分叉历史，与编辑器通例一致）。
+    // 合并键去重仍在 mergeCommitRef（见 commitPlanMerged），不进地基。
+    // 这里关掉地基的「栈顶 vs 上一版」去重：画布已在上面用 next-vs-current 把关，
+    // 而一键收进撤销会把 planRef 回填成 past 栈顶的那一份引用，此时用户再编辑仍必须
+    // 能把它压进栈（否则再按撤销会跳到更早一步，少一格）。
+    adoptHistoryStacks(commitPlanHistory(historyStacks(), planRef.current, UNDO_LIMIT, () => false));
     planRef.current = next;
     onPlanChangeRef.current?.(next);
     return true;
@@ -2922,36 +2944,30 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** 撤销（Ctrl+Z / 面板按钮）：弹出栈顶恢复；选中实体可能随撤销消失，全清选中。 */
   function undoPlan() {
-    const prev = historyRef.current.pop();
-    if (!prev) return;
-    redoRef.current.push(planRef.current);
-    if (redoRef.current.length > UNDO_LIMIT) redoRef.current.shift();
-    setRedoCount(redoRef.current.length);
-    setHistoryCount(historyRef.current.length);
+    const step = undoPlanHistory(historyStacks(), planRef.current, UNDO_LIMIT);
+    if (step.snapshot === undefined) return;
+    adoptHistoryStacks(step.history);
     selectFacility(null);
     selectRoute(null);
     selectNode(null);
     selectWorker(null);
-    planRef.current = prev;
-    onPlanChange?.(prev);
+    planRef.current = step.snapshot;
+    onPlanChange?.(step.snapshot);
     setEditMessage('已撤销上一步。');
     draw();
   }
 
   /** P2-g 重做：把刚撤销的快照放回去（不新增历史项，避免与 undo 打乒乓）。 */
   function redoPlan() {
-    const next = redoRef.current.pop();
-    if (!next) return;
-    historyRef.current.push(planRef.current);
-    if (historyRef.current.length > UNDO_LIMIT) historyRef.current.shift();
-    setHistoryCount(historyRef.current.length);
-    setRedoCount(redoRef.current.length);
+    const step = redoPlanHistory(historyStacks(), planRef.current, UNDO_LIMIT);
+    if (step.snapshot === undefined) return;
+    adoptHistoryStacks(step.history);
     selectFacility(null);
     selectRoute(null);
     selectNode(null);
     selectWorker(null);
-    planRef.current = next;
-    onPlanChange?.(next);
+    planRef.current = step.snapshot;
+    onPlanChange?.(step.snapshot);
     setEditMessage('已重做。');
     draw();
   }
@@ -3193,9 +3209,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   function undoZonePull() {
     const snapshot = zoneUndoRef.current;
     if (!snapshot) return;
-    redoRef.current.push(planRef.current);
-    if (redoRef.current.length > UNDO_LIMIT) redoRef.current.shift();
-    setRedoCount(redoRef.current.length);
+    adoptHistoryStacks(pushPlanHistoryFuture(historyStacks(), planRef.current, UNDO_LIMIT));
     planRef.current = snapshot;
     onPlanChange?.(snapshot);
     zoneUndoRef.current = null;
@@ -8332,19 +8346,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (ids.length === 0) return;
     const strip = (snapshot: SitePlanData) => planWithMeasurements(snapshot,
       (snapshot.measurements ?? []).filter(item => !ids.includes(item.id)));
-    const prune = (stack: SitePlanData[]): SitePlanData[] => {
-      const result: SitePlanData[] = [];
-      for (const snapshot of stack) {
-        const clean = strip(snapshot);
-        if (!result.length || !samePlanContent(result.at(-1), clean)) result.push(clean);
-      }
-      while (result.length && samePlanContent(result.at(-1), next)) result.pop();
-      return result;
-    };
-    historyRef.current = prune(historyRef.current);
-    redoRef.current = prune(redoRef.current);
-    setHistoryCount(historyRef.current.length);
-    setRedoCount(redoRef.current.length);
+    adoptHistoryStacks({
+      past: prunePlanHistoryStack(historyRef.current, next, strip),
+      future: prunePlanHistoryStack(redoRef.current, next, strip),
+    });
   }
 
   /** 删除固定测量标注（测量不是实体，删了就没了；不参与冲突判定，无需剥离引用）。 */
