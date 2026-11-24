@@ -23,10 +23,10 @@ B1 会话/身份解耦 ✅ 合入 main
 **终态**：去室内化 C4——云端为唯一权威正源，本机仅离线缓存/待同步副本；B1–B4 成套落地后解除 #38 R 线壳体退役阻塞。授权范围：按成熟案例默认口径推进，决策点不再逐项停顿；**未解除的底线**：不删云端项目/不软删、不编造降级路径、不改 DB 迁移/后端契约/CI 治理配置、旧键换迁移必须防丢存量、独占/基线文件先登记。
 
 **执行序（依赖驱动，本地攒批，不达标不推 main）**：
-1. **B2-a 例3 打通（#63/#69）**：夹具补 workflow 非匿名 controller + turn facts 桩；断言从 legacy capture.project().headcount 改读 `outdoorWorkflow.state.brief.guests`；核对失败轮保留已录人数语义。
-2. **B2-b 画布历史栈抽接**：先补 commit 去重/截断/redo 清空/undo-redo 乒乓/prune 纯函数测试，再把内联双栈换成 `plan-history.ts` 地基，保留 K2/zoneUndoRef/prune 旁路；真机 2D undo/redo 验收。
-3. **B2-c 壳体 history 换型**：`useHistory<RoomLayout>` → `SitePlanData`，30+ `commitHistoryNow` 提交点逐一核对挂 plan 还是 layout；独占壳体，先登记 HANDOFF，成套验收。
-4. **B3 导出/checkin plan 化（#41）**：导出读源、checkin scope、note scope 切 plan；写守卫已基于 capability/lease/revision 就位。
+1. **B2-a 例3 打通（#63）**：夹具补 workflow 非匿名 controller + turn facts 桩；断言从 legacy capture.project().headcount 改读 workflow brief.guests；核对失败轮保留已录人数语义。**夜间卡点（已落档 §2.3）**：workflow 返回对象未暴露 `state`，`brief.guests` 存持久桶 `scendance:outdoor-flow:${scope}`，brief 属 `OutdoorFlowState` 不在 `SitePlanData` 上——白天先定观测出口（补只读 getter 成套改造，或 jsdom 内经 MemoryStorage 读回 scope 键），再扩非 ok response 桩、对齐「保留上一轮已录」语义。
+2. **B2-b 画布历史栈抽接**：**地基已备**——`plan-history.ts` 的 commit/undo/redo/equals/prune 纯函数均落并测（13 例，含 prune 相邻合并/尾部弹出/空栈/引用比较）；待组件接线：把内联双栈换成地基，保留 K2 合并键/zoneUndoRef/写守卫/选中清除/draw 旁路，补组件测试后真机 2D undo/redo 验收。
+3. **B2-c 壳体 history 换型**：`useHistory<RoomLayout>` → `SitePlanData`，30+ `commitHistoryNow` 提交点逐一核对挂 plan 还是 layout；提交点施工地图已落档 §2.2；独占壳体，先登记 HANDOFF，成套验收。
+4. **B3 导出/checkin plan 化（#41）**：导出读源、checkin scope、note scope 切 plan；写守卫已基于 capability/lease/revision 就位，**守卫替换成功路径与快照失败拒绝边界用例已补（7 例）**；触点行号已复核落档 §3.2。
 5. **B4 镜像退役 + 旧键归位（#42）**：false 侧 layout patch 退役、底图/锚点改写 plan/视图记忆；持久桶旧键退役配一次性迁移防丢存量。
 
 ## 1. 门禁基线（每卡复用）
