@@ -1435,6 +1435,11 @@ export interface OutdoorPlanCanvasHandle {
   applyWorkflowPlan(next:SitePlanData,expected:string):boolean;
   openFacilityUpload(id:string):boolean;
   applyVenue(anchor: NonNullable<SitePlanData['anchor']>, boundary: SitePlanData['boundary']): boolean;
+  /**
+   * B4（2026-11-25）：贴地底图正源写进 plan.ground。
+   * 底图是取景缓存不是用户编辑动作，**不进撤销栈**；内容没变返回 false。
+   */
+  applyGround(ground: NonNullable<SitePlanData['ground']>): boolean;
   inspectFacility(id: string): boolean;
   /**
    * 2026-11-20 P1：把一组设施整组塞进视口（结果卡「定位到分区 / 取回这组」用）。
@@ -5088,6 +5093,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       } else {
         setEditMessage(`红线已更新，设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成。要微调就直接拖白框的边或角。`);
       }
+      return true;
+    },
+    /**
+     * B4：贴地底图正源写 plan（不进撤销栈）。底图由 3D 壳按边界拼出来，
+     * 不是用户手动编辑，压进历史会让撤销栈里多出一堆「换底图」。
+     */
+    applyGround: ground => {
+      const current = planRef.current;
+      let same = false;
+      try { same = JSON.stringify(current.ground) === JSON.stringify(ground); } catch { same = false; }
+      if (same) return false;
+      adoptPlan({ ...current, ground });
       return true;
     },
     /** V-2d：应用流线提案（合并进 plan，走 commitPlan 可撤销）；成功返回 true。 */

@@ -186,7 +186,7 @@ import { isVenueScaleCurrent, venueDimensionsMismatch } from './lib/venue-scale-
 import { extractPlanSizeFacts } from '@/lib/plan-size-facts';
 import { readAgentAnnotationObservation } from '@/lib/agent-annotation-observation';
 import { agentAnnotationObservationSchema } from '../../../supabase/functions/_shared/agent-contract';
-import type { SitePlanData } from '../../../supabase/functions/_shared/site-plan';
+import type { PlanGround, SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 import {
   nextOutdoorBoundarySync,
   seededPlanFromLayout,
@@ -195,6 +195,7 @@ import {
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
 import { filterPlanByLevel } from './lib/plan-levels';
+import { layoutGroundPatch, planGroundFromLayout } from './lib/plan-ground';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
   METERS_PER_DEGREE_LAT,
@@ -2009,16 +2010,24 @@ useEffect(() => {
       if (current.floorPlanImage && !isPlanGroundImage(current.floorPlanImage)) return;
       outdoorGroundKeyRef.current = key;
       rememberPlanGroundBounds(capture.dataUrl, capture.bounds);
-      // 贴地多边形也写进 layout：3D 进场自动补图（ensurePlanGround / isMapOutdoorLayout）
-      // 靠它定场地位置，不再向高德按场地名 geocode（Key 失效，那条链路已不可用）。
+      const ground: PlanGround = {
+        image: capture.dataUrl,
+        opacity: 0.94,
+        satelliteRef: true,
+        polygon,
+        center: { lng: (lng0 + Math.max(...lngs)) / 2, lat: (latSouth + latNorth) / 2 },
+        frame,
+        source: capture.source,
+        capturedAt: new Date().toISOString(),
+      };
+      // B4：贴地底图正源是 plan.ground（随方案落库、跨设备一致）。
+      // 2D 画布没挂载时拿不到句柄：这一轮只写视图缓存，下次打开 2D 由 handleOutdoorPlanChange 的迁移补写，
+      // 条件只看「plan.ground 缺图」，不会用旧图覆盖更新的缓存。
+      outdoorOverlayRef.current?.getCanvasApi()?.applyGround(ground);
+      // layout 降为视图缓存：3D 卫星 UV、进场补图仍读这几个字段，随 #38 壳体退役一起消失。
       actions.applyLayout({
         ...current,
-        floorPlanImage: capture.dataUrl,
-        floorPlanOpacity: 0.94,
-        satelliteGroundRef: true,
-        mapGroundPolygon: polygon,
-        mapLngLat: { lng: (lng0 + Math.max(...lngs)) / 2, lat: (latSouth + latNorth) / 2 },
-        mapGroundFrame: frame,
+        ...layoutGroundPatch(ground),
         // 已经有场景锚点就别动：锚点是世界定位的正源，自动补图不该把 3D 场景挪走。
         ...(current.sceneAnchor
           ? {}
@@ -2076,6 +2085,23 @@ useEffect(() => {
     },
     [layout.id, outdoorPlanState, isOutdoorProject, outdoorPlanSlotId],
   );
+  // B4 底图正源迁移（2026-11-25）：两个方向都只「补缺」，不覆盖更新的那一侧。
+  // 旧项目只有 layout 镜像 → 迁进 plan.ground（正源）；新设备/清过缓存 → 用 plan.ground 把 3D 读的视图缓存补回来。
+  // 只在 outdoorPlan 变化时跑一次；applyGround 不再回调进撤销栈，也不会把取景缓存写进历史。
+  useEffect(() => {
+    if (!outdoorPlan) return;
+    const layoutNow = layoutStore.getState().layout;
+    if (!outdoorPlan.ground) {
+      const legacy = planGroundFromLayout(layoutNow);
+      if (legacy) outdoorOverlayRef.current?.getCanvasApi()?.applyGround(legacy);
+      return;
+    }
+    if (!outdoorPlan.ground.image || layoutNow.floorPlanImage === outdoorPlan.ground.image) return;
+    const patch = layoutGroundPatch(outdoorPlan.ground);
+    if (!patch) return;
+    try { workspaceWriteGuards?.assertLayoutWrite(); } catch { return; }
+    actions.applyLayout({ ...layoutStore.getState().layout, ...patch });
+  }, [outdoorPlan, actions, workspaceWriteGuards]);
   // V-5 生成/上传由 OutdoorPlanOverlay 原位承接，不跳转旧物料 Agent 或另一工作台。
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
   // 首次进户外先让 2D 卡落地（首帧/首交互优先），0.7s 后再把 3D 建好并停在隐藏态。
