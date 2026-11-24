@@ -48,6 +48,19 @@ describe('optional workspace lease composition',()=>{
     expect(()=>applyGuardedWorkspaceReplacement(original,guard,apply)).toThrow('失锁');expect(apply).not.toHaveBeenCalled();
     expect(()=>applyGuardedWorkspaceReplacement(original,guard,apply)).toThrow('失锁');expect(apply).not.toHaveBeenCalled();
   });
+  it('applies once after the pre and post checks both pass and the snapshot confirms',()=>{
+    const apply=vi.fn(),guard=vi.fn();
+    vi.spyOn(restorePoint,'snapshotBeforeReplace').mockReturnValue(true);
+    applyGuardedWorkspaceReplacement(makeLayout(),guard,apply);
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(apply).toHaveBeenCalledOnce();
+  });
+  it('refuses to apply when the restore point cannot be confirmed',()=>{
+    const apply=vi.fn();
+    vi.spyOn(restorePoint,'snapshotBeforeReplace').mockReturnValue(false);
+    expect(()=>applyGuardedWorkspaceReplacement(makeLayout(),undefined,apply)).toThrow('恢复点未能确认保存');
+    expect(apply).not.toHaveBeenCalled();
+  });
   it('does not resume layout or source writes when capability prop disappears',async()=>{
     vi.useFakeTimers();const locks={request(_name:string,_options:unknown,callback:(lock:unknown)=>Promise<unknown>){return Promise.resolve().then(()=>callback({}));}} as unknown as LockManager;
     const previous=Object.getOwnPropertyDescriptor(navigator,'locks');Object.defineProperty(navigator,'locks',{configurable:true,value:locks});
