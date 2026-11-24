@@ -10,6 +10,7 @@ import { hasCollisions } from '../lib/geometry';
 import { sourceForLocation } from '../lib/basemap-alignment';
 import { mountBand } from '../lib/mount-band';
 import { readPlanGroundMode, readPlanGroundSource, subscribePlanGroundMode, subscribePlanGroundSource } from '../lib/plan-basemap-source';
+import { resolveGround } from '../lib/plan-ground';
 import { planFootprintShapes } from '../lib/plan-footprint-geometry';
 import { planShellFrame } from '../lib/plan-footprint-geometry';
 import { mapVenueFootprint } from '../lib/scene-anchor';
@@ -1427,6 +1428,9 @@ export function useSceneEffects({
 
     const keepOut = floorKeepOut(entranceBuilding, activeFloorIndex);
     const paint = () => {
+      // B4 读源单源化：贴地底图先问 plan.ground，没有才退回 layout 缓存；
+      // 两边都没有时 ground 为 null，渲染完全走旧路径（成图不变）。
+      const ground = resolveGround(layout, outdoorPlanRef.current);
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
       if (width === 0 || height === 0) return;
@@ -1451,6 +1455,7 @@ export function useSceneEffects({
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
         ...(referenceImage ? { referenceImage } : {}),
+        ...(ground ? { ground } : {}),
         showFloorPlan: view.showReferenceImage !== false,
         ...(view.referenceImageOpacity !== undefined ? { floorPlanOpacity: view.referenceImageOpacity } : {}),
         hasCollision: (item) => structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls }),

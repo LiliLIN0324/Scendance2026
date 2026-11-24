@@ -195,7 +195,7 @@ import {
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
 import { filterPlanByLevel } from './lib/plan-levels';
-import { layoutGroundPatch, planGroundSync } from './lib/plan-ground';
+import { layoutGroundPatch, planGroundSync, resolveGround } from './lib/plan-ground';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
   METERS_PER_DEGREE_LAT,
@@ -4824,10 +4824,13 @@ useEffect(() => {
     ceilingHeight: previewCandidate?.floors[0]?.height ?? activeStoreyHeight,
     ...(sceneLighting ? { sceneLighting } : {}) });
 
+  // B4 读源单源化：评审截图的底图也先问 plan.ground；两边都没有就是 null（旧路径不变）。
+  const reviewGround = outdoorPlan ? resolveGround(layout, outdoorPlan) : null;
   const captureReview=useReviewCapture({layout,getLayout:()=>layoutStore.getState().layout,view,activeFloorIndex,
     ready:isReady||view.view2D,peopleReady:peopleModelReady,selectedItemId,extraSelectedIds,
     hasCollision:item=>structuralItemCollides(item,layout,activeFloorIndex)||hasCollisions(item,activeFloor.items,layout.width,layout.height,{keepOut,structureValidated:!!layout.backendSceneV2,interiorWalls:layout.backendSceneV2?[]:activeFloor.interiorWalls}),
     ...(referenceImage.layer?{referenceImage:referenceImage.layer}:{}),
+    ...(reviewGround?{ground:reviewGround}:{}),
     canvas:canvasRef,canvas2D:canvas2DRef,scene:sceneRef,renderer:rendererRef,camera:cameraRef,
     pendingPreview:!!previewCandidate,isInteracting:()=>isDragActive()||!!wallDraft||!!placingId||!!pendingCatalog});
   // 活动封面取当前画面（户外 2D 地图=瓦片合成图；三维=渲染帧）；归档面板通过注册表取图，不直接持有 WebGL 场景。

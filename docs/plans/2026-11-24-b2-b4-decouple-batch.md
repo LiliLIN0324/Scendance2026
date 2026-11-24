@@ -109,7 +109,9 @@ B1 会话/身份解耦 ✅ 合入 main
 - ✅ **底图正源落 plan**（`8fecbd53`）：`plan.ground` 契约 + `applyGround` 句柄 + 正源写入 + layout 降为视图缓存 + 双向迁移补缺 + 分享剥字节。`applyOutdoorGroundBasemap` 已不再「只写 layout」。
 - ✅ **同步方向单一答案**（本片）：迁移判定从壳体 effect 里抽成纯函数 `planGroundSync(plan, layout)`（`to-plan` / `to-layout` / `none` 三态），壳体只执行；6 例单测钉住「旧项目迁正源、正源覆盖旧缓存、图同但缺框仍补缓存、只有定位不动、两边都无不动」。另补 `outdoor-project-store` 往返例，证明 `plan.ground` 不被 store 的 `sitePlanDataSchema` 校验吞掉。
 - ✅ **读源单源化入口**（本片）：`resolveGround(layout, plan)` → `{image, opacity, satelliteRef, polygon, center, frame, source}`，plan 优先、layout 兜底、两边都无返回 null。5 例单测钉住优先级与「上传户型图不算贴地底图」「layout 显式关贴地不兜底」。**这是删 6 个 layout 字段的真正前置**：读方逐个从这里取，接完再删字段就是纯删除。
-- ⏳ **读方接 `resolveGround`** 未做，按「成图不变」逐簇推进，顺序：① 2D `canvas-2d/render.ts` 的 `paintAlignedSatellite`；② 评审截图 / 云卡缩略图；③ 交付快照与清单哈希；④ `agent-panel` 需求记忆；⑤ 室内壳体（随 #38 消失）。每簇验收＝导出图与改前逐像素 diff = 0。
+- ✅ **读方 ① 2D 卫星贴图已接**（本片）：`render2DTopDown` 新增 `ground?: ResolvedGround`，`paintAlignedSatellite` / 参考图判定 / 透明度三处改读它；`use-scene-effects` 的 2D 重绘按 `resolveGround(layout, outdoorPlan)` 传入。**验收方式换成 node 级逐调用比对**（不依赖浏览器截图）：同一份盐官古城夹具，只读 layout 与读 `ground` 的 `drawImage` 参数序列逐项相等；并且把 `layout.floorPlanImage` 删掉、只剩 `ground` 时序列仍相等——等于证明了「删镜像后 2D 照画」。`render.test.ts` 31 passed。
+- ✅ **读方 ② 评审截图已接**（本片）：`useReviewCapture` 的 `Inputs` 增 `ground`，底图判定与 2D 重绘都改用它；壳体按 `resolveGround(layout, outdoorPlan)` 传入。新例证明「把 `layout.floorPlanImage` 删掉、只剩 `ground`」时，截图仍会等 `ensureFloorPlanImageDecoded(ground.image)` 并带上正源渲染（`use-review-capture.react.test.tsx` 20 passed）。
+- ⏳ **读方 ③–④** 未做，按「输出逐调用比对」推进：③ 交付快照与清单哈希；④ `agent-panel` 需求记忆；⑤ 室内壳体（随 #38 消失）。
 - ⏳ **镜像删除**未做：`floorPlanImage` 等 6 个 layout 字段仍有 52 个消费方（2D `canvas-2d/render.ts`、3D `structure-builder.ts`/`room-builder.ts`、`agent-panel` 需求记忆、评审截图、云卡缩略图、交付导出）。换读源要逐簇真机验收，与 #38 一起做才有意义（#38 之前 layout 仍是云存档载体）。
 - ⏳ **false 侧 patch 删除**未做：3D 地面/外墙仍靠 `shellVenuePatchFromPlanBoundary` 长尺寸，删了会断，随 #38。
 - ⏳ **旧键迁移**未做：等 §5 的 C2 口径（旧 `activity:` 存量），按「防丢存量」底线不在无口径时动。

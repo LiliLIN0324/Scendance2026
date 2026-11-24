@@ -14,6 +14,7 @@ import type { LengthPrecisionM } from '../../../../supabase/functions/_shared/pl
 import type { FloorLayout, FloorPlanFitMode, FurnitureItem, RoomLayout, WallId } from '../lib/types';
 import type { DisplayUnit } from '../lib/types';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
+import type { ResolvedGround } from '../lib/plan-ground';
 
 export interface Render2DOptions {
   canvas: HTMLCanvasElement;
@@ -37,6 +38,11 @@ export interface Render2DOptions {
   showFloorPlan?: boolean;
   floorPlanOpacity?: number;
   referenceImage?: ReferenceImageLayer;
+  /**
+   * 贴地底图读源（B4 读侧单源化）：由 `resolveGround(layout, plan)` 算好传进来。
+   * 缺省时保持旧行为——只读 layout 那 6 个字段，所以尚未接线的调用点成图不变。
+   */
+  ground?: ResolvedGround | null;
   /** The zone rectangle being dragged out, drawn over everything as a dashed outline (#155). */
   zoneDraft?: ZoneRect | null;
   /** The 2D marquee being dragged out — a light green selection rectangle (#P0-3). */
@@ -462,12 +468,19 @@ function paintAlignedSatellite(
   offsetX: number,
   offsetY: number,
   scale: number,
-  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage'>,
+  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage' | 'ground'>,
 ): boolean {
   if (options.showFloorPlan === false || options.referenceImage || !isGroundFloor(layout, floor)) return false;
-  if (layout.satelliteGroundRef === false) return false;
-  const url = layout.floorPlanImage;
-  const frame = layout.mapGroundFrame;
+  // 读源：接线的调用点给 plan.ground；没接线时仍读 layout 那份（成图不变）。
+  const ground = options.ground;
+  const satelliteRef = ground ? ground.satelliteRef : layout.satelliteGroundRef;
+  if (satelliteRef === false) return false;
+  const url = ground?.image ?? layout.floorPlanImage;
+  // 缺 latSign 的旧数据不投影（宁可无框，不按错朝向贴图），退回 layout 那份。
+  const groundFrame = ground?.frame?.latSign !== undefined
+    ? { ...ground.frame, latSign: ground.frame.latSign }
+    : undefined;
+  const frame = groundFrame ?? layout.mapGroundFrame;
   const bounds = url ? parseSatelliteImageBounds(url) : null;
   if (!url || !frame || !bounds || !isSatelliteGroundImage(url)) return false;
   const cached = floorPlanImageCache;
@@ -478,7 +491,7 @@ function paintAlignedSatellite(
     const dw = rect.width * scale;
     const dh = rect.depth * scale;
     ctx.save();
-    ctx.globalAlpha = options.floorPlanOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY;
+    ctx.globalAlpha = options.floorPlanOpacity ?? ground?.opacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY;
     if (rect.northAtTop) ctx.drawImage(cached.image, dx, dy, dw, dh);
     else ctx.drawImage(cached.image, dx, dy + dh, dw, -dh);
     ctx.restore();
@@ -537,7 +550,7 @@ function drawFloor(
   offsetX: number,
   offsetY: number,
   scale: number,
-  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage'>,
+  options: Pick<Render2DOptions, 'showFloorPlan' | 'floorPlanOpacity' | 'referenceImage' | 'ground'>,
   satellitePainted = false,
 ): void {
   if (satellitePainted) return;
@@ -545,10 +558,11 @@ function drawFloor(
   // (use-scene-effects keys it on floor index 0) — painting it under every
   // storey put the ground-floor scan in upstairs blueprints (#218). Derived
   // here from data both callers already pass, so no caller can forget it.
-  const ground = isGroundFloor(layout, floor);
-  const referenceImage = ground ? options.referenceImage : undefined;
-  const url = ground && options.showFloorPlan !== false
-    ? referenceImage?.url ?? (layout.backendSceneV2 ? undefined : layout.floorPlanImage) : undefined;
+  const onGroundFloor = isGroundFloor(layout, floor);
+  const referenceImage = onGroundFloor ? options.referenceImage : undefined;
+  // 贴地读源优先于 layout 镜像：上传图纸（referenceImage）仍最高优先，其后才是底图。
+  const url = onGroundFloor && options.showFloorPlan !== false
+    ? referenceImage?.url ?? options.ground?.image ?? (layout.backendSceneV2 ? undefined : layout.floorPlanImage) : undefined;
   if (url) {
     // Fill the floor colour first so there's a base while (or if) the image is
     // still decoding — avoids a flash of the raw canvas background.
@@ -561,7 +575,7 @@ function drawFloor(
     if (floorPlanImageCache?.url === url && floorPlanImageCache.image.complete) {
       const img = floorPlanImageCache.image;
       if (img.naturalWidth > 0) {
-        const opacity = options.floorPlanOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY;
+        const opacity = options.floorPlanOpacity ?? options.ground?.opacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY;
         if (referenceImage) {
           const [a, b, c, d, e, f] = referenceImage.imageToWorld;
           ctx.save();

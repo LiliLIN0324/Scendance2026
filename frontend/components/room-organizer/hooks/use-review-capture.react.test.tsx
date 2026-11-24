@@ -101,6 +101,18 @@ describe('editor review capture binding',()=>{
     await result.current(f.snapshot,{includeReference:true},()=>f.source);
     expect(render2DTopDown).toHaveBeenCalledWith(expect.objectContaining({showFloorPlan:true}));
   });
+  it('以 plan.ground 当评审底图：layout 那份镜像删掉后仍等待解码并带上正源',async()=>{
+    const f=fixture();
+    const {floorPlanImage:_image,...layoutWithoutMirror}=f.inputs.layout;
+    f.inputs.layout=layoutWithoutMirror as typeof f.inputs.layout;
+    f.inputs.getLayout=()=>f.inputs.layout;
+    f.inputs.ground={image:png,opacity:0.94,satelliteRef:true,polygon:undefined,center:undefined,frame:undefined,source:'plan'};
+    const {result}=renderHook(()=>useReviewCapture(f.inputs));
+    const captured=await result.current(f.snapshot,{includeReference:true},()=>f.source);
+    expect(ensureFloorPlanImageDecoded).toHaveBeenCalledWith(png);
+    expect(render2DTopDown).toHaveBeenCalledWith(expect.objectContaining({ground:expect.objectContaining({image:png})}));
+    expect(captured.dataUrl).toBe(png);
+  });
   it('does not finish capture after unmount',async()=>{
     const f=fixture(),{result,unmount}=renderHook(()=>useReviewCapture(f.inputs));
     const pending=result.current(f.snapshot,{includeReference:false},()=>f.source);
