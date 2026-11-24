@@ -163,3 +163,12 @@ C 只切读源（推荐） | 不动泛型与契约：layout 快照继续只当 3
 
 **拍板需要的输入**：① 选 A/B/C；② 若 C，优先级是否「plan.brief > flow 桶 > legacy brief」，以及本机草稿无自有桶时是否标 unknown；③ 若 B，是否授权改 `domain.ts` 与迁移。
 
+### 6.2 B3 读侧地基已落（2026-11-25，未接线）
+
+`frontend/components/room-organizer/lib/handoff-brief.ts` + 7 例单测：
+
+- `resolveBriefHeadcount({legacy?, conversation?})` → `{value, source}`，优先级：本机 brief 已确认 > 对话 brief > 本机未确认 > `unknown`。理由写进文件头：人的显式确认压过推断，对话里的是这单当场说的、比更早草稿可信；两边都没有就如实 unknown。
+- `flowBriefScopeForExport(projectId)` → 有真实项目 id 才返回 `project:<id>`，本机草稿返回 `null`。这是 C 路径那个虚报风险的闸门——没有 id 就不许读全体草稿共用的那个桶。
+- 数值守门：0 / 负数 / NaN / Infinity 一律当没说（避免 0 人被当成真实人数导出），小数四舍五入。
+- **尚未接线**：导出（`production-plan-export.ts` / `scene-delivery-panel.tsx`）与例3 的「可导出」断言都还没消费它；接线要改 HTML 里「预计人数」的呈现（现在只有 `guestsConfirmed===true` 才出数字，直接标 true 会把「未确认」伪装成「已确认」，属虚报），这一步等 §6.1 拍板。
+
