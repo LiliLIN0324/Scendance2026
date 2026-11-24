@@ -25,9 +25,9 @@ B1 会话/身份解耦 ✅ 合入 main
 **执行序（依赖驱动，本地攒批，不达标不推 main）**：
 1. **B2-a 例3 打通（#63）**：夹具补 workflow 非匿名 controller + turn facts 桩；断言从 legacy capture.project().headcount 改读 workflow brief.guests；核对失败轮保留已录人数语义。**✅ 2026-11-25 已转绿**（观测出口取持久桶 `scendance:outdoor-flow:${scope}` 只读读回，生产码零改动；6 passed/0 skipped，详见 §2.3 末条）。剩余：导出可导出性断言等 B3 读源切换后补。
 2. **B2-b 画布历史栈抽接**：**地基已备**——`plan-history.ts` 的 commit/undo/redo/equals/prune 纯函数均落并测（13 例，含 prune 相邻合并/尾部弹出/空栈/引用比较）；待组件接线：把内联双栈换成地基，保留 K2 合并键/zoneUndoRef/写守卫/选中清除/draw 旁路，补组件测试后真机 2D undo/redo 验收。
-3. **B2-c 壳体 history 换型**：`useHistory<RoomLayout>` → `SitePlanData`，30+ `commitHistoryNow` 提交点逐一核对挂 plan 还是 layout；提交点施工地图已落档 §2.2；独占壳体，先登记 HANDOFF，成套验收。
-4. **B3 导出/checkin plan 化（#41）**：导出读源、checkin scope、note scope 切 plan；写守卫已基于 capability/lease/revision 就位，**守卫替换成功路径与快照失败拒绝边界用例已补（7 例）**；触点行号已复核落档 §3.2。
-5. **B4 镜像退役 + 旧键归位（#42）**：false 侧 layout patch 退役、底图/锚点改写 plan/视图记忆；持久桶旧键退役配一次性迁移防丢存量。
+3. **B2-c 壳体 history 换型**：`useHistory<RoomLayout>` → `SitePlanData`，30+ `commitHistoryNow` 提交点逐一核对挂 plan 还是 layout；提交点施工地图已落档 §2.2；独占壳体，先登记 HANDOFF，成套验收。**2026-11-25 结论（路径 C）：不做换型**——plan 表达不了家具层，换型收益为负；layout 快照继续当壳体视图缓存，随 #38 一并退役。
+4. **B3 导出/checkin plan 化（#41）**：导出读源、checkin scope、note scope 切 plan；写守卫已基于 capability/lease/revision 就位，**守卫替换成功路径与快照失败拒绝边界用例已补（7 例）**；触点行号已复核落档 §3.2。**2026-11-25 收口（路径 C）**：能切的是读侧——人数导出已归一（`d7ad6813`，见 §6.2）；其余 `layout.id` 比对（备份一致性、账册一致性、checkin scope、云绑定、追溯编号）都是「同一份文档自校」，换成 plan 身份需 plan 带项目身份字段（改 `_shared/site-plan.ts` 契约，禁改项），留待 B4/#38 一并决定。
+5. **B4 镜像退役 + 旧键归位（#42）**：false 侧 layout patch 退役、底图/锚点改写 plan/视图记忆；持久桶旧键退役配一次性迁移防丢存量。**2026-11-25 实测阻塞**：`SitePlanData` 只有 `anchor`，没有底图/贴地截图字段（`floorPlanImage`/`satelliteGroundRef`/`mapGroundPolygon`/`mapLngLat`/`mapGroundFrame` 全在 layout 侧），删 layout 镜像等于丢底图；且 false 侧 patch 在独占壳体 `room-organizer.tsx`，须先登记+人确认。**B4 不满足「纯前端可落」条件，本轮停在此，等拍板。**
 
 ## 1. 门禁基线（每卡复用）
 
@@ -174,4 +174,13 @@ C 只切读源（推荐） | 不动泛型与契约：layout 快照继续只当 3
   - 导出侧**不改「预计人数」行**（仍只认 `guestsConfirmed===true`），对话里的人数另起一行「对话记录人数 = `N 人（尚未确认，请核对）`」，仅 `source==='conversation'` 时出现。这样未确认数不会被塞进确认行，也不虚报。
   - 测试：`production-plan-export.test.ts` +2 例（对话数独立成行且不污染「预计人数」/ 无数字不出该行，74 例）；`handoff-brief.test.ts` +3 例（读桶 / 本机草稿无 id 不读统一桶 / 合成优先级，10 例）；`scene-delivery-panel.react.test.tsx` 改断言第 4 参数 + 新增「对话人数独立成行」端到端一例（101 passed）。
   - 仍未做：例3 用例本身只断言持久桶 `brief.guests`，其「可导出」半段未再追加导出断言；本机草稿（无 id）按 C 的闸门一律 unknown。
+
+### 6.3 B4 的硬阻塞（2026-11-25 实测，需人拍板）
+
+C 路径把 B3 能做的读侧做完了，但 **B4 不能顺着 C 落下**，两条硬约束各自独立成立：
+
+1. **底图无处可迁**：`sitePlanDataSchema` 字段为 `anchor / boundary / designScope / levels / zones / facilities / routes / nodes / workers / vehicles / measurements / buildings / annotations / walls / priceBook / quote / editor`（`_shared/site-plan.ts:384-439`），**没有贴地截图 / 卫星底图 / 地图多边形 / 经纬框**。B4 要求「底图/锚点改落 plan」：锚点有 `plan.anchor` 可落，底图必须新增 plan 字段 → 改前后端共享契约（禁改项，须人 review + 迁移）。
+2. **false 侧 patch 在独占壳体**：`room-organizer.tsx` `handleOutdoorPlanChange` 的 `shellVenuePatchFromPlanBoundary` 分支是五文件独占区，AGENTS.md §六 要求先登记 + 人确认才能动；且该分支是室内 3D 场地联动通路，E 线壳体未退前删掉会断 3D 贴地/外墙。
+
+**若要继续 B4，需要两个决定**：① 是否授权给 `site-plan.ts` 增底图字段（含迁移与历史数据缺省）；② 是否授权在本轮改独占壳体 `room-organizer.tsx`（登记后动 false 侧 patch）。两个决定任一为否，B4 与 #38 都只能等 C4 的存储层一起做。
 
