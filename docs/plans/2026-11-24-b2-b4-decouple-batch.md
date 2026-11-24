@@ -40,11 +40,13 @@ B1 会话/身份解耦 ✅ 合入 main
 | --- | --- | --- |
 | 壳体 `useHistory` 泛型 | `RoomLayout` 快照 | plan 化后改挂 `SitePlanData`；30+ `commitHistoryNow` 提交点逐一核对挂 plan 还是 layout |
 | 画布内联双栈 | `useRef<SitePlanData[]>` 手写 | 可先抽接 `plan-history.ts` 纯函数（行为等价重构，地基已测）；保留 `commitPlan` 入口 `samePlanContent` 内容守门与 K2 合并键 |
+  - 2026-11-24 同构核对（`outdoor-plan-canvas.tsx`）：undo(:2925)/redo(:2943) 出栈+对侧入栈+30 步截断，与 `undoPlanHistory`/`redoPlanHistory` 同构；commit(:2876) 的 `samePlanContent(next,current)` 与 `refusePlanWrite` 守门在组件侧，地基只管入栈。**口径差异**：画布 commit 用「next vs current」守门，地基 `commitPlanHistory` 另有「栈顶 vs previous」去重——抽接时 equals 传 `Object.is` 或不启用栈顶去重，避免连续相同快照被额外跳过入栈。旁路须留在组件侧：K2 合并键 `commitPlanMerged`(:2901)、`zoneUndoRef` 一键回退(:3153/:3179/:3194)、`prune` 两栈内容剔除(:8344)。`samePlanContent`(`outdoor-project-store.ts:94`) 与 `planSnapshotsEqual` 口径等价（键序无关、数组保序、undefined 省略）。**前置缺口**：该画布历史栈无栈级单测兜底，抽接前先补 commit 去重/截断/redo 清空/undo-redo 乒乓/prune 的纯函数测试，再换内联数组操作；属组件内 ref + React count 联动，需真机 2D undo/redo 验收。
 | 两份 brief | workflow 把人数存 `plan.brief.guests`（`use-outdoor-agent-workflow.ts:1685/:1884/:1919`），不回写 legacy `agentBriefRef`/`memoryRef`；导出 / 捕获读 `getActiveBrief()`（`creative-studio.tsx` briefStorage :291、scope :335） | 打通：legacy 读取侧兜底读 `plan.brief.guests`，或写侧回写；**兜底从哪份 brief 读见 §4** |
 
 ### 2.3 阻塞口径
 
 - 例3（#63）：理解失败时本地人数仍可导出；新通路 `availability='available'`、`headcount={status:'unknown',value:null}` 两份 brief 未打通。headcount 兜底数据源待 B2/B3 定稿。
+  - 2026-11-24 实测基线：套件 5 passed / 1 skipped；临时取消 skip 单跑例3，第一次 submit 后 `capture.calls===0`（resolver mock `resolveBriefTurn` 根本未被调用），并非失败轮人数丢失。提交在到达 `agent-panel.tsx:3672` resolver 前被前置分流或会话围栏 return：`sessionScopeIsCurrent()`(:709) 走壳体 `isSessionCurrent` 回调；`boundSessionId`(:1140) 由 `assistantSessions.activeId` 经 effect 绑定；`:3638` 围栏 `!sessionScopeIsCurrent() || boundSessionId.current!==turnSessionId || briefTurnSequence 漂移` 任一不满足即 `releaseTurn();return`。例3 夹具比已转绿的例2 多一步「按当前记录重新开始」点击（测试 :136），疑似重置 activitySession 令牌，使后续提交被判非当前会话。**转绿前置**：先在夹具侧补齐/核对会话令牌（activitySession token、boundSessionId、briefTurnSequence、chatEpoch）围栏桩，使提交能到达 resolver；之后才是失败轮 memory 人数保留与 legacy capture 读取打通。属 #68/#69/#70 补桩批次深链路，不孤立改生产码。
 - 历史裸 UUID 本机槽迁移到 `house-*`：成熟案例口径下本轮只失效隔离、不迁；是否补「打开本机备份」入口见 §4。
 
 ## 3. B3 导出与写守卫 plan 化（#41，阻塞 B2）
