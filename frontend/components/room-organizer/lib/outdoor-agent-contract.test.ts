@@ -8,6 +8,13 @@ const turnOf = (items: NonNullable<OutdoorTurn["facts"]["items"]>): OutdoorTurn 
   facts: { items },
 });
 
+const guestsTurn = (value: number, evidence: string): OutdoorTurn => ({
+  action: "ask",
+  reply: "",
+  references: [],
+  facts: { guests: { value, evidence } },
+});
+
 describe("mergeOutdoorFacts —— 数量依据只看「用户到底说没说」", () => {
   it("补答上一问（「放在摆摊区」）不把上一句的 1000 张抹掉：上一轮原话仍算依据", () => {
     const state = emptyOutdoorFlow("s1");
@@ -136,5 +143,34 @@ describe("mergeOutdoorFacts —— 数量依据只看「用户到底说没说」
       "摊位都撤了",
     );
     expect(next.brief.items[0]).toMatchObject({ query: "市集摊位", count: 0 });
+  });
+
+  it("人数：本句原话带数字且一致，落 brief.guests", () => {
+    const state = emptyOutdoorFlow("g1");
+    const next = mergeOutdoorFacts(state, guestsTurn(30, "30人"), "现场来30人");
+    expect(next.brief.guests).toBe(30);
+  });
+
+  it("人数：两句话里都没有该数字，拒编依据", () => {
+    const state = emptyOutdoorFlow("g2");
+    expect(() =>
+      mergeOutdoorFacts(state, guestsTurn(500, "500人"), "安排休息区", "先圈范围"),
+    ).toThrow("模型提取缺少本句原文依据");
+  });
+
+  it("人数：证据数字与模型取值不一致，拒绝猜测值", () => {
+    const state = emptyOutdoorFlow("g3");
+    expect(() =>
+      mergeOutdoorFacts(state, guestsTurn(500, "30人"), "现场来30人"),
+    ).toThrow("人数与本句原文数量不一致");
+  });
+
+  it("人数：沿用已确认人数（carried）时不要求本句再带数字", () => {
+    const state = {
+      ...emptyOutdoorFlow("g4"),
+      brief: { ...emptyOutdoorFlow("g4").brief, guests: 30 },
+    };
+    const next = mergeOutdoorFacts(state, guestsTurn(30, "30人"), "把休息区再调大些");
+    expect(next.brief.guests).toBe(30);
   });
 });
