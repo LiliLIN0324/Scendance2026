@@ -17,7 +17,7 @@
 
 /** 读源一侧：本机 brief 的人数与确认态。 */
 export interface LegacyBriefHeadcount {
-  readonly guests: number;
+  readonly guests?: number | undefined;
   readonly confirmed?: boolean | undefined;
 }
 
@@ -64,4 +64,61 @@ export function resolveBriefHeadcount(input: {
 export function flowBriefScopeForExport(projectId: string | null | undefined): string | null {
   const id = typeof projectId === 'string' ? projectId.trim() : '';
   return id ? `project:${id}` : null;
+}
+
+/** 只读存储接口：测试可注入内存实现，生产传 `window.localStorage`。 */
+export interface BriefStorage {
+  getItem(key: string): string | null;
+}
+
+/**
+ * 从对话工作流落盘的桶里取人数。取不到（无项目 id / 无记录 / JSON 坏 / 数值不可用）
+ * 一律返回 undefined，由 `resolveBriefHeadcount` 退回 unknown。
+ *
+ * 注意：这里只认 `project:<真实 id>`；本机草稿一律返回 undefined（见
+ * `flowBriefScopeForExport` 的注释——所有草稿共用同一个桶）。
+ */
+export function readConversationGuests(
+  projectId: string | null | undefined,
+  storage: BriefStorage | null | undefined,
+): number | undefined {
+  const key = flowBriefScopeForExport(projectId);
+  if (!key || !storage) return undefined;
+  let record: unknown;
+  try {
+    const raw = storage.getItem(`scendance:outdoor-flow:${key}`);
+    if (!raw) return undefined;
+    record = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (record === null || typeof record !== 'object') return undefined;
+  const brief = (record as { brief?: unknown }).brief;
+  if (brief === null || typeof brief !== 'object') return undefined;
+  return usableGuests((brief as { guests?: unknown }).guests as number | undefined) ?? undefined;
+}
+
+/** 本机备份里的 brief 快照（只需要人数与确认态两个字段）。 */
+export interface SavedBriefLike {
+  readonly status: string;
+  readonly value?: { readonly guests?: number | undefined; readonly guestsConfirmed?: boolean | undefined } | undefined;
+}
+
+/**
+ * 活动交接导出用的人数：把「本机备份里的 brief」与「对话桶」合成一个答案。
+ * 接线点只需调它，优先级规则与防虚报闸门都在这一个地方。
+ */
+export function resolveActivityHeadcount(input: {
+  brief: SavedBriefLike | null | undefined;
+  projectId: string | null | undefined;
+  storage?: BriefStorage | null | undefined;
+}): ResolvedBriefHeadcount {
+  const legacy = input.brief?.status === 'present' && input.brief.value
+    ? { guests: input.brief.value.guests, confirmed: input.brief.value.guestsConfirmed === true }
+    : null;
+  const guests = readConversationGuests(input.projectId, input.storage);
+  return resolveBriefHeadcount({
+    legacy,
+    conversation: guests === undefined ? null : { guests },
+  });
 }

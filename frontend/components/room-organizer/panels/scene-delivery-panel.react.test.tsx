@@ -390,7 +390,11 @@ describe('Bingo scene delivery panel',()=>{
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce();
-    expect(productionPlanHandoffHtml).toHaveBeenCalledWith(expect.objectContaining({id:checkinProject}),expect.anything(),undefined,{scope:'activity',brief:f.briefSnapshot.brief});
+    expect(productionPlanHandoffHtml).toHaveBeenCalledOnce();
+    const handoffOptions=vi.mocked(productionPlanHandoffHtml).mock.calls[0]![3] as {scope:string;brief:unknown;headcount?:{value:number|null;source:string}};
+    expect(handoffOptions).toMatchObject({scope:'activity',brief:f.briefSnapshot.brief});
+    // 本机 brief 只有未确认的 30 人、对话桶里没有这条项目 → 读侧给出 legacy-unconfirmed，不冒充已确认。
+    expect(handoffOptions.headcount).toEqual({value:30,source:'legacy-unconfirmed'});
     const [html,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls[0];
     expect(html).toContain('未关联制作计划的主持任务');expect(html).toContain('保存的活动目标');
     expect(html).toContain('活动需求来自执行页已保存的手工需求记录');
@@ -399,6 +403,21 @@ describe('Bingo scene delivery panel',()=>{
     expect(await screen.findByText(/对话需求未完整包含，请核对手工记录与当前对话后交付/)).toBeTruthy();
     expect(mime).toBe('text/html;charset=utf-8');expect(name).toContain('内部活动交接');expect(extension).toBe('html');
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
+  });
+  it('carries a conversation headcount into the handoff file on its own labelled row',async()=>{
+    const f=completeActivity();
+    const key=`scendance:outdoor-flow:project:${checkinProject}`;
+    window.localStorage.setItem(key,JSON.stringify({brief:{guests:45}}));
+    try{
+      render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+      openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+      await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+      const [html]=vi.mocked(downloadSceneDelivery).mock.calls[0];
+      expect(html).toContain('对话记录人数');
+      expect(html).toContain('45 人（尚未确认，请核对）');
+      const handoffOptions=vi.mocked(productionPlanHandoffHtml).mock.calls.at(-1)![3] as {headcount?:{value:number|null;source:string}};
+      expect(handoffOptions.headcount).toEqual({value:45,source:'conversation'});
+    }finally{window.localStorage.removeItem(key);}
   });
   it.each(['error','wrong-project','incomplete'] as const)('does not substitute partial activity data when preparation returns %s',async kind=>{
     const f=completeActivity();

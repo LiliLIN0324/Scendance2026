@@ -875,6 +875,32 @@ describe('complete internal activity handoff HTML', () => {
     expect(confirmed.textContent).toContain('活动类型品牌快闪');expect(confirmed.textContent).toContain('预计人数24');
   });
 
+  it('lists a conversation headcount on its own labelled row and never promotes it to a confirmed figure', async () => {
+    const source = layout();
+    const unconfirmed: BackupBrief = { status: 'present', value: { event: '品牌快闪', eventConfirmed: false, guests: 24, guestsConfirmed: false, description: '', mustHave: '', allowIdeas: false } };
+    const html = await productionPlanHandoffHtml(source, snapshot, undefined,
+      { scope: 'activity', brief: unconfirmed, headcount: { value: 40, source: 'conversation' } });
+    const needs = section(new DOMParser().parseFromString(html, 'text/html'), '活动需求与现场条件');
+    expect(needs.textContent).toContain('对话记录人数');
+    expect(needs.textContent).toContain('40 人（尚未确认，请核对）');
+    // 预计人数那行仍然只认用户显式确认，未确认的 24 不能借对话数混进去。
+    expect(needs.textContent).toContain('预计人数待确认');
+    expect(needs.textContent).not.toContain('预计人数24');
+    const confirmedHtml = await productionPlanHandoffHtml(source, snapshot, undefined,
+      { scope: 'activity', brief: unconfirmed, headcount: { value: 24, source: 'legacy-confirmed' } });
+    const confirmed = section(new DOMParser().parseFromString(confirmedHtml, 'text/html'), '活动需求与现场条件');
+    expect(confirmed.textContent).not.toContain('对话记录人数');
+  });
+
+  it('omits the conversation headcount row when nothing was recorded, keeping the unknown state honest', async () => {
+    const source = layout();
+    const html = await productionPlanHandoffHtml(source, snapshot, undefined,
+      { scope: 'activity', brief: { status: 'absent' }, headcount: { value: null, source: 'unknown' } });
+    const needs = section(new DOMParser().parseFromString(html, 'text/html'), '活动需求与现场条件');
+    expect(needs.textContent).not.toContain('对话记录人数');
+    expect(needs.textContent).toContain('当前未记录活动需求');
+  });
+
   it('retains non-rectangular structure restrictions in activity mode', async () => {
     const source = layout(); source.entrance = { width: 2, depth: 1 };
     const document = await activityDoc(source);

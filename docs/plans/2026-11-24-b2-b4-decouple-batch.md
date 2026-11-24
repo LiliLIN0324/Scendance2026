@@ -163,12 +163,15 @@ C 只切读源（推荐） | 不动泛型与契约：layout 快照继续只当 3
 
 **拍板需要的输入**：① 选 A/B/C；② 若 C，优先级是否「plan.brief > flow 桶 > legacy brief」，以及本机草稿无自有桶时是否标 unknown；③ 若 B，是否授权改 `domain.ts` 与迁移。
 
-### 6.2 B3 读侧地基已落（2026-11-25，未接线）
+### 6.2 B3 读侧地基已落并接线（2026-11-25）
 
 `frontend/components/room-organizer/lib/handoff-brief.ts` + 7 例单测：
 
 - `resolveBriefHeadcount({legacy?, conversation?})` → `{value, source}`，优先级：本机 brief 已确认 > 对话 brief > 本机未确认 > `unknown`。理由写进文件头：人的显式确认压过推断，对话里的是这单当场说的、比更早草稿可信；两边都没有就如实 unknown。
 - `flowBriefScopeForExport(projectId)` → 有真实项目 id 才返回 `project:<id>`，本机草稿返回 `null`。这是 C 路径那个虚报风险的闸门——没有 id 就不许读全体草稿共用的那个桶。
 - 数值守门：0 / 负数 / NaN / Infinity 一律当没说（避免 0 人被当成真实人数导出），小数四舍五入。
-- **尚未接线**：导出（`production-plan-export.ts` / `scene-delivery-panel.tsx`）与例3 的「可导出」断言都还没消费它；接线要改 HTML 里「预计人数」的呈现（现在只有 `guestsConfirmed===true` 才出数字，直接标 true 会把「未确认」伪装成「已确认」，属虚报），这一步等 §6.1 拍板。
+- **已接线（2026-11-25，同日）**：`resolveBriefHeadcount` → 骨架，`resolveActivityHeadcount({brief, projectId, storage})` 负责把「本机备份 brief」与「对话桶」合成一个答案，`scene-delivery-panel.tsx` 的 `exportActivityHandoff` 动态 import 它并按 `saved.brief` + `saved.layout.id` + `window.localStorage` 取值，作为第 4 参数 `headcount` 传给 `production-plan-handoff`。
+  - 导出侧**不改「预计人数」行**（仍只认 `guestsConfirmed===true`），对话里的人数另起一行「对话记录人数 = `N 人（尚未确认，请核对）`」，仅 `source==='conversation'` 时出现。这样未确认数不会被塞进确认行，也不虚报。
+  - 测试：`production-plan-export.test.ts` +2 例（对话数独立成行且不污染「预计人数」/ 无数字不出该行，74 例）；`handoff-brief.test.ts` +3 例（读桶 / 本机草稿无 id 不读统一桶 / 合成优先级，10 例）；`scene-delivery-panel.react.test.tsx` 改断言第 4 参数 + 新增「对话人数独立成行」端到端一例（101 passed）。
+  - 仍未做：例3 用例本身只断言持久桶 `brief.guests`，其「可导出」半段未再追加导出断言；本机草稿（无 id）按 C 的闸门一律 unknown。
 

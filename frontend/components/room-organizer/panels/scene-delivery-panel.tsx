@@ -134,7 +134,15 @@ export async function exportActivityHandoff({ layout, prepareBackup, stillCurren
   check();const dialogueSnapshot=dialogue?.project(reference)??null;check();
   const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
   check();
-  let html = await productionPlanHandoffHtml(saved.layout, metadata, ledger, { scope: 'activity', brief: saved.brief });
+  // 读侧合成人数：本机备份已确认 > 对话记录 > 本机未确认 > unknown。
+  // 本机草稿没有真实项目 id 时不读共用的对话桶（否则会把别人的人数当这单的）。
+  const { resolveActivityHeadcount } = await import('../lib/handoff-brief');
+  const headcount = resolveActivityHeadcount({
+    brief: saved.brief,
+    projectId: saved.layout.id,
+    storage: typeof window === 'undefined' ? null : window.localStorage,
+  });
+  let html = await productionPlanHandoffHtml(saved.layout, metadata, ledger, { scope: 'activity', brief: saved.brief, headcount });
   check();
   if(!html.includes('<main>'))throw new Error('交接文件无法核对，未导出。');
   html=html.replace('<main>', `<main>${dialogueSection(dialogueSnapshot)}`);
