@@ -54,7 +54,7 @@ export interface TeamMessage {
 export interface TeamUnread { userId: string; count: number }
 
 export function listTeamMessages(controller: BackendSession, studioId: string, peerId: string): Promise<TeamMessage[]> {
-  return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages?peerId=${encodeURIComponent(peerId)}`);
+  return controller.auxRequest(`/studios/${encodeURIComponent(studioId)}/messages?peerId=${encodeURIComponent(peerId)}`);
 }
 
 export function sendTeamMessage(controller: BackendSession, studioId: string, input: { requestId: string; peerId: string; body: string }): Promise<TeamMessage> {
@@ -62,11 +62,11 @@ export function sendTeamMessage(controller: BackendSession, studioId: string, in
 }
 
 export function markTeamMessagesRead(controller: BackendSession, studioId: string, peerId: string): Promise<{ marked: number }> {
-  return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages/read`, 'POST', { peerId });
+  return controller.auxRequest(`/studios/${encodeURIComponent(studioId)}/messages/read`, 'POST', { peerId });
 }
 
 export function listTeamUnread(controller: BackendSession, studioId: string): Promise<TeamUnread[]> {
-  return controller.businessRequest(`/studios/${encodeURIComponent(studioId)}/messages/unread`);
+  return controller.auxRequest(`/studios/${encodeURIComponent(studioId)}/messages/unread`);
 }
 
 /** 官方通知：平台/运营向登录用户推送的只读广播（公告 / 版本 / 活动 / 系统）。 */
@@ -83,15 +83,15 @@ export interface OfficialNotice {
 }
 
 export function listOfficialNotices(controller: BackendSession): Promise<OfficialNotice[]> {
-  return controller.businessRequest('/notices');
+  return controller.auxRequest('/notices');
 }
 
 export function listOfficialUnread(controller: BackendSession): Promise<{ count: number }> {
-  return controller.businessRequest('/notices/unread');
+  return controller.auxRequest('/notices/unread');
 }
 
 export function markOfficialNoticeRead(controller: BackendSession, noticeId: string): Promise<{ marked: number }> {
-  return controller.businessRequest('/notices/read', 'POST', { noticeId });
+  return controller.auxRequest('/notices/read', 'POST', { noticeId });
 }
 
 /** 通知外链只放行 http/https；其他 scheme（javascript:、data: 等）前端不渲染成链接。 */

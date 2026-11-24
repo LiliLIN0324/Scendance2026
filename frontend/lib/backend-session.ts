@@ -1258,6 +1258,14 @@ export class BackendSession {
   businessRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
     return this.request<T>(path, method, body, this.captureRequestScope(), "business");
   }
+  /**
+   * 非项目域的辅助 / 轮询请求（官方通知、未读数等）：失败只抛给调用方，
+   * 不写会话级 error、不阻断画布；错误呈现由调用方的局部状态承担，
+   * 避免一条与当前项目无关的 404 把已挂云项目误判成「已不存在」。
+   */
+  auxRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+    return this.request<T>(path, method, body, this.captureRequestScope(), "business", undefined, undefined, undefined, true);
+  }
   async deleteProject(projectId: string, expectedRevision: number): Promise<void> {
     this.ensureCanSwitch();
     this.operationPending = true;

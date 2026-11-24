@@ -951,6 +951,25 @@ describe("workspace business requests", () => {
     await expect(controller.businessRequest('/assets')).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
     expect(controller.getSnapshot()).toMatchObject({ writeBlocked: true, dirty: true, draft: { lighting: 'warm' } });
   });
+
+  it("records a business request failure in the session error for the panel to surface", async () => {
+    const controller = await editing();
+    queue({ error: { code: "PROJECT_NOT_FOUND" } }, 404);
+    await expect(controller.businessRequest('/notices/unread')).rejects.toMatchObject({ code: 'PROJECT_NOT_FOUND' });
+    expect(controller.getSnapshot()).toMatchObject({ writeBlocked: false, error: { code: 'PROJECT_NOT_FOUND' } });
+  });
+
+  it("keeps the session error clean on an auxiliary poll failure; the caller owns the local notice state", async () => {
+    const controller = await editing();
+    const before = controller.getSnapshot();
+    queue({ error: { code: "PROJECT_NOT_FOUND" } }, 404);
+    await expect(controller.auxRequest('/notices/unread')).rejects.toMatchObject({ code: 'PROJECT_NOT_FOUND' });
+    const after = controller.getSnapshot();
+    expect(after.error).toBeNull();
+    expect(after.writeBlocked).toBe(false);
+    expect(after.project?.id).toBe(before.project?.id);
+    expect(after.lease).toEqual(before.lease);
+  });
 });
 
 describe('Agent run client contract',()=>{
