@@ -33,6 +33,7 @@ B1 会话/身份解耦 ✅ 合入 main
 
 - Node v26.2.0（`C:\Program Files\nodejs`，命令前置 PATH）；Node22 禁跑全量 / build。
 - 根 `tsc --noEmit`、前端 `tsc --noEmit` exit 0；定向 vitest 转绿；前端全量无增量回归；`npm --prefix frontend run build` exit 0。
+- 2026-11-24 全量实测基线：10727 passed / 153 skipped / 1 failed；唯一失败 `lib/share.test.ts` deflate bomb 解压耗时断言（1716ms > 1000ms），全量并发高负载下抖动，**复跑单文件 28/28 绿**，非本轮改动链路（与 plan-history 无 import 交集）。
 - 本地攒批：tsc + 测试 + 真机走查全绿后一次性推 main；只按明确路径 `git add`，不用 `-A`/`.`/`commit -a`。
 
 ## 2. B2 历史快照换 SitePlanData（#40，阻塞解除：B1 已合入）
