@@ -16,7 +16,7 @@ import {BackendSession,getBackendConfig} from '@/lib/backend-session';
 import {createStarterOutdoorPlan} from './lib/outdoor-project-store';
 import type {UsePlanAnnotationsResult} from './hooks/use-plan-annotations';
 
-const capture=vi.hoisted(()=>({annotation:null as UsePlanAnnotationsResult|null,resolve:null as null|(()=>void),calls:0,chatCalls:0,applyPlan:0,applyZone:0,responses:[] as Array<{action:'scope'|'zones'|'ask';facts?:Record<string,unknown>}>,agent:null as unknown,forcedResolution:null as null|'model'|'failed',dialogue:null as null|(()=>{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null)}));
+const capture=vi.hoisted(()=>({annotation:null as UsePlanAnnotationsResult|null,resolve:null as null|(()=>void),calls:0,chatCalls:0,applyPlan:0,applyZone:0,responses:[] as Array<{action:'scope'|'zones'|'ask';facts?:Record<string,unknown>;status?:'ok'|'failed'|'disabled'|'offline'|'rate-limited'}>,agent:null as unknown,forcedResolution:null as null|'model'|'failed',dialogue:null as null|(()=>{isCurrent():boolean;release():void;project():{availability:'available'|'unavailable';fields:{headcount:{value:number|null}}}}|null)}));
 let probeController:BackendSession;
 let mem:MemoryStorage;
 let stubPlan:ReturnType<typeof createStarterOutdoorPlan>;
@@ -81,7 +81,7 @@ beforeEach(()=>{
   mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;mem.setItem(AGENT_SUPERVISION_KEY,'strict');
   probeController=new BackendSession(getBackendConfig({url:'',anonKey:''}));
   (probeController as unknown as {snapshot:{user:unknown}}).snapshot.user={id:'probe-owner',email:'owner@scendance.test',is_anonymous:false};
-  const chatResult=()=>{const next=capture.responses.shift()??{action:'ask' as const,facts:{}};return {status:'ok' as const,answer:JSON.stringify({action:next.action,reply:'',references:[],facts:next.facts??{}})};};
+  const chatResult=()=>{const next=capture.responses.shift()??{action:'ask' as const,facts:{}};return {status:(next.status??'ok') as 'ok'|'failed'|'disabled'|'offline'|'rate-limited',answer:JSON.stringify({action:next.action,reply:'',references:[],facts:next.facts??{}})};};
   (probeController as unknown as {assistantChat:unknown}).assistantChat=vi.fn(async()=>{capture.chatCalls++;return chatResult();});
   (probeController as unknown as {assistantChatStream:unknown}).assistantChatStream=vi.fn(async()=>{capture.chatCalls++;return chatResult();});
   vi.stubGlobal('crypto',webcrypto);
@@ -130,14 +130,30 @@ it('invalidates an existing dialogue capture at submit and blocks new captures u
  await waitFor(()=>{const current=getter();expect(current).not.toBeNull();expect(current!.isCurrent()).toBe(true);},{timeout:8000});
  before!.release();
 });
-it.skip('keeps a locally recorded headcount exportable when understanding fails',async()=>{
+it('keeps the last recorded headcount when understanding fails, and only adopts a new number after a successful turn',async()=>{
  const a=activity('dialogue-incomplete');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<StrictMode><RoomOrganizer/></StrictMode>);const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
+ capture.responses.push(
+  {action:'ask',facts:{guests:{value:30,evidence:'30人'}}},
+  {action:'ask',status:'failed',facts:{}},
+  {action:'ask',facts:{guests:{value:40,evidence:'40人'}}},
+ );
+ render(<StrictMode><RoomOrganizer outdoorProjectId="dialogue-incomplete"/></StrictMode>);
+ const input=await screen.findByLabelText('告诉 Agent 要改的',{},{timeout:15000});
  const restart=screen.queryByRole('button',{name:'按当前记录重新开始'});if(restart)fireEvent.click(restart);
- async function submit(text:string,resolution:'model'|'failed',call:number){capture.forcedResolution=resolution;fireEvent.change(input,{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'发送'}));await waitFor(()=>expect(capture.calls).toBe(call));await act(async()=>{capture.resolve!();await Promise.resolve();});}
- await submit('30人','model',1);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().fields.headcount.value).toBe(30);current?.release();});
- await submit('40人','failed',2);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('available');expect(current?.project().fields.headcount.value).toBe(40);current?.release();});
- await submit('40人','model',3);await waitFor(()=>{const current=capture.dialogue?.();expect(current?.project().availability).toBe('available');expect(current?.project().fields.headcount.value).toBe(40);current?.release();});
+ // 人数落在工作流持久桶（不是 legacy 简报 capture）：键随项目 scope 派生。
+ const flowBrief=()=>{const raw=mem.getItem('scendance:outdoor-flow:project:dialogue-incomplete');return raw?JSON.parse(raw) as {brief:{guests?:number}}:null;};
+ async function submit(text:string,call:number){fireEvent.change(input,{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'发送'}));await waitFor(()=>expect(capture.chatCalls).toBe(call),{timeout:8000});await act(async()=>{await new Promise(r=>setTimeout(r,80));});}
+ await submit('30人',1);
+ await waitFor(()=>expect(flowBrief()?.brief.guests).toBe(30));
+ // 理解失败轮：用户看到失败卡，但已录人数不被清空、也不被本句猜出的数字覆盖。
+ await submit('40人',2);
+ expect(await screen.findByText(/这一步没做成/)).toBeTruthy();
+ expect(flowBrief()?.brief.guests).toBe(30);
+ expect(capture.applyPlan).toBe(0);
+ // 重试成功后新人数才生效。
+ await submit('40人',3);
+ await waitFor(()=>expect(flowBrief()?.brief.guests).toBe(40));
+ expect(capture.applyPlan).toBe(0);
 });
 it('rejects an old zone workflow preview after same-batch A→B→A without writing the plan',async()=>{
  const a=activity('preview-A');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
