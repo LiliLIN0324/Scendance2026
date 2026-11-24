@@ -105,6 +105,12 @@ B1 会话/身份解耦 ✅ 合入 main
 
 **全完成判据**（goal §2.1 :51）：删 false 侧 layout patch；地面底图 / 锚点写 plan / 视图记忆；清镜像分支；草稿 / 偏好键退役。
 
+**进度（2026-11-25，用户拍板选项 1 后）**：
+- ✅ **底图正源落 plan**（`8fecbd53`）：`plan.ground` 契约 + `applyGround` 句柄 + 正源写入 + layout 降为视图缓存 + 双向迁移补缺 + 分享剥字节。`applyOutdoorGroundBasemap` 已不再「只写 layout」。
+- ⏳ **镜像删除**未做：`floorPlanImage` 等 6 个 layout 字段仍有 52 个消费方（2D `canvas-2d/render.ts`、3D `structure-builder.ts`/`room-builder.ts`、`agent-panel` 需求记忆、评审截图、云卡缩略图、交付导出）。换读源要逐簇真机验收，与 #38 一起做才有意义（#38 之前 layout 仍是云存档载体）。
+- ⏳ **false 侧 patch 删除**未做：3D 地面/外墙仍靠 `shellVenuePatchFromPlanBoundary` 长尺寸，删了会断，随 #38。
+- ⏳ **旧键迁移**未做：等 §5 的 C2 口径（旧 `activity:` 存量），按「防丢存量」底线不在无口径时动。
+
 ### 4.1 镜像回写触点（壳体独占，须先登记）
 
 | 触点 | 现状 | 动作 |
@@ -175,12 +181,14 @@ C 只切读源（推荐） | 不动泛型与契约：layout 快照继续只当 3
   - 测试：`production-plan-export.test.ts` +2 例（对话数独立成行且不污染「预计人数」/ 无数字不出该行，74 例）；`handoff-brief.test.ts` +3 例（读桶 / 本机草稿无 id 不读统一桶 / 合成优先级，10 例）；`scene-delivery-panel.react.test.tsx` 改断言第 4 参数 + 新增「对话人数独立成行」端到端一例（101 passed）。
   - 仍未做：例3 用例本身只断言持久桶 `brief.guests`，其「可导出」半段未再追加导出断言；本机草稿（无 id）按 C 的闸门一律 unknown。
 
-### 6.3 B4 的硬阻塞（2026-11-25 实测，需人拍板）
+### 6.3 B4 的硬阻塞与已解部分（2026-11-25 用户拍板选项 1 后更新）
 
-C 路径把 B3 能做的读侧做完了，但 **B4 不能顺着 C 落下**，两条硬约束各自独立成立：
+拍板结果：用户选「授权扩 plan 契约 + 改独占壳体」，B4 不再是「等 C4 再说」。
 
-1. **底图无处可迁**：`sitePlanDataSchema` 字段为 `anchor / boundary / designScope / levels / zones / facilities / routes / nodes / workers / vehicles / measurements / buildings / annotations / walls / priceBook / quote / editor`（`_shared/site-plan.ts:384-439`），**没有贴地截图 / 卫星底图 / 地图多边形 / 经纬框**。B4 要求「底图/锚点改落 plan」：锚点有 `plan.anchor` 可落，底图必须新增 plan 字段 → 改前后端共享契约（禁改项，须人 review + 迁移）。
-2. **false 侧 patch 在独占壳体**：`room-organizer.tsx` `handleOutdoorPlanChange` 的 `shellVenuePatchFromPlanBoundary` 分支是五文件独占区，AGENTS.md §六 要求先登记 + 人确认才能动；且该分支是室内 3D 场地联动通路，E 线壳体未退前删掉会断 3D 贴地/外墙。
+**已解**：`plan.ground` 契约落地（`8fecbd53`），底图正源写 plan，layout 那 6 个字段降级为视图缓存；旧项目/新设备迁移双向补缺；分享剥字节。§6.3 原来两条硬约束里的第 1 条（契约）已按授权解决，第 2 条的「登记」已补（HANDOFF 2026-11-25 行）。
 
-**若要继续 B4，需要两个决定**：① 是否授权给 `site-plan.ts` 增底图字段（含迁移与历史数据缺省）；② 是否授权在本轮改独占壳体 `room-organizer.tsx`（登记后动 false 侧 patch）。两个决定任一为否，B4 与 #38 都只能等 C4 的存储层一起做。
+**仍不能一次做完的原因（都不是授权问题，是工程前置）**：
+1. **删 layout 字段要先换 52 个读方**：2D 渲染 `canvas-2d/render.ts`、3D `three/structure-builder.ts` / `room-builder.ts`、`panels/agent-panel.tsx`（需求记忆）、`hooks/use-review-capture.ts`、`panels/cloud-panel.tsx`（缩略图）、交付导出；换完要逐簇真机比对贴地/截图/缩略图，且 #38 之前 layout 仍是云存档载体，先删字段会丢云回读。
+2. **false 侧 patch 删不得**：`shellVenuePatchFromPlanBoundary` 是室内 3D 地面/外墙尺寸来源，E 线壳体未退前删掉会断 3D 贴地。
+3. **旧键迁移等 C2 口径**：旧 `activity:` / `layout.id` 键的存量承接方案（只读承接 or 一次性迁移）还是 §5 的未决项，按「防丢存量」底线不在无口径时动。
 
