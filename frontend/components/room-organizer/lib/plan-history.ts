@@ -114,3 +114,28 @@ export function canonicalPlanJson(value: unknown): string {
 export function planSnapshotsEqual(a: unknown, b: unknown): boolean {
   return canonicalPlanJson(a) === canonicalPlanJson(b);
 }
+
+/**
+ * 按谓词变换清理一条历史栈（对应 `outdoor-plan-canvas.tsx` 退出测量时从撤销/
+ * 重做栈剥离临时线的内联逻辑）：
+ * 1. 每条快照经 `transform` 剥离指定临时项；
+ * 2. 变换后相邻且内容相同的快照合并为一条，避免一次空撤销；
+ * 3. 末尾与当前方案 `next` 相同的快照逐条弹出。
+ *
+ * `transform` 负责把临时项从快照中去掉（具体剥什么由调用方定义）；本函数不
+ * 读取 plan 结构，只做栈级去重与尾部裁剪。两栈（past/future）分别调用一次。
+ */
+export function prunePlanHistoryStack<T>(
+  stack: readonly T[],
+  next: T,
+  transform: (snapshot: T) => T,
+  equals: (a: T, b: T) => boolean = planSnapshotsEqual,
+): T[] {
+  const result: T[] = [];
+  for (const snapshot of stack) {
+    const clean = transform(snapshot);
+    if (result.length === 0 || !equals(result.at(-1)!, clean)) result.push(clean);
+  }
+  while (result.length > 0 && equals(result.at(-1)!, next)) result.pop();
+  return result;
+}

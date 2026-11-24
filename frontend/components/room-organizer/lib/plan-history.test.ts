@@ -5,11 +5,17 @@ import {
   commitPlanHistory,
   emptyPlanHistory,
   planSnapshotsEqual,
+  prunePlanHistoryStack,
   redoPlanHistory,
   undoPlanHistory,
 } from './plan-history';
 
 const plan = (n: number) => ({ revision: n, zones: [], anchor: { lng: 120, lat: 30 } });
+const measured = (n: number, temp: string[] = []) => ({
+  revision: n,
+  measurements: temp,
+  anchor: { lng: 120, lat: 30 },
+});
 
 describe('plan-history（M3b 纯函数地基）', () => {
   it('提交：旧快照入 past、redo 清空', () => {
@@ -78,5 +84,32 @@ describe('plan-history（M3b 纯函数地基）', () => {
     const b = { revision: 2, data: { notes: '', zones: [{ name: '观众区', id: 'z1' }] } };
     expect(planSnapshotsEqual(a, b)).toBe(true);
     expect(planSnapshotsEqual(a, { ...b, revision: 3 })).toBe(false);
+  });
+
+  it('裁剪栈：剥离临时项后相邻相同快照合并为一条', () => {
+    const strip = (s: ReturnType<typeof measured>, ids: readonly string[]) =>
+      ({ ...s, measurements: s.measurements.filter((x) => !ids.includes(x)) });
+    const stack = [measured(1, ['t']), measured(2, ['t']), measured(2, ['t'])];
+    const pruned = prunePlanHistoryStack(stack, measured(99), (s) => strip(s, ['t']));
+    expect(pruned).toEqual([measured(1), measured(2)]);
+  });
+
+  it('裁剪栈：末尾与当前方案相同的快照逐条弹出', () => {
+    const strip = (s: ReturnType<typeof measured>) => ({ ...s, measurements: [] });
+    const next = measured(2);
+    const stack = [measured(1, ['t']), measured(2, ['t'])];
+    const pruned = prunePlanHistoryStack(stack, next, strip);
+    expect(pruned).toEqual([measured(1)]);
+  });
+
+  it('裁剪栈：空栈原样返回空数组', () => {
+    expect(prunePlanHistoryStack([], measured(1), (s) => s)).toEqual([]);
+  });
+
+  it('裁剪栈：equals 传引用比较时不按内容合并', () => {
+    const a = measured(2);
+    const b = measured(2);
+    const pruned = prunePlanHistoryStack([a, b], measured(3), (s) => s, Object.is);
+    expect(pruned).toEqual([a, b]);
   });
 });
