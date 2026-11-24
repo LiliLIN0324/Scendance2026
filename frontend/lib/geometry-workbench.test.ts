@@ -40,6 +40,32 @@ describe('local activity and remote scene boundaries', () => {
     expect(isEditorLocalProjectLink('10000000-0000-4000-8000-000000000001')).toBe(false);
     expect(isEditorLocalProjectLink('not-a-project')).toBe(false);
   });
+  it('裸 uuid 挂着本机信封时按本机工作区处理，挂着云项目仍是云通道', () => {
+    const record = JSON.stringify({ v: 1, projectId: remoteId, name: '历史裸槽',
+      createdAt: '2026-11-19T00:00:00Z', updatedAt: '2026-11-19T00:00:00Z', plan: null });
+    const location = { href: `http://localhost/editor/?project=${remoteId}` };
+    vi.stubGlobal('window', { location, localStorage: { getItem: () => record } });
+    try {
+      // 裸 uuid 仍是「云号长相」，但本机存着这个 scope 的信封、controller 没挂云项目：按本机草稿干活。
+      expect(hasRequestedCloudProject()).toBe(true);
+      expect(isLocalActivityWorkspace(session())).toBe(true);
+      // 一旦 controller 真挂上了云项目，就是云通道，不因本机副本降级。
+      expect(isLocalActivityWorkspace(session('cloud'))).toBe(false);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('裸 uuid + 本机信封：走本机资料核对，不被「已是团队项目」守卫拦下', async () => {
+    const record = JSON.stringify({ v: 1, projectId: remoteId, name: '历史裸槽',
+      createdAt: '2026-11-19T00:00:00Z', updatedAt: '2026-11-19T00:00:00Z', plan: null });
+    const location = { href: `http://localhost/editor/?project=${remoteId}` };
+    vi.stubGlobal('window', { location, localStorage: { getItem: () => record } });
+    try {
+      // 带本地执行信息的裸槽草稿：以前会被当成云项目，在云守卫那里拒绝；现在按本机核对本机记录。
+      const layout = { ...backendSceneToLayout(scene, { projectId: remoteId }),
+        eventOperations: { schemaVersion: 1 as const, dataKind: 'rehearsal' as const, tasks: [] } };
+      await expect(assertGeometryActionSource(layout, session())).resolves.toBeUndefined();
+      expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins', remoteId]);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('house- 本机活动与默认草稿不被当成云项目', () => {
     const cases = ['house-abc12345-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'default-outdoor'];
     for (const id of cases) {

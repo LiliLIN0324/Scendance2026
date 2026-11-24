@@ -35,7 +35,7 @@ import { sharedArchiveQueue, type ArchiveJob } from '../lib/archive-queue';
 import { useCloudArchive } from '../hooks/use-cloud-archive';
 import { listStoredSources, type StoredSource } from '@/lib/source-storage';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
-import { projectLinkKind } from '../lib/project-identity';
+import { projectLinkKind, reachabilityFromError } from '../lib/project-identity';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { notify } from '../lib/editor-notices';
 import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
@@ -237,6 +237,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   // 云项目 → 原本机活动 id（同一个内容两个身份时，规划与封面先按旧 id 找）。
   const [projectAliases, setProjectAliases] = useState<Record<string, string>>({});
   const [readOnlyProjects,setReadOnlyProjects]=useState<Record<string,boolean>>({});
+  // 2026-11-24（B1/P2）：云卡回读失效隔离。只记「确定性失效」（不存在 / 无权 / 已软删）；
+  // 网络抖动与未定性的 5xx 不落永久失效；重试入口只放在「刷新」按钮，预检不自动重发。
+  const [unreachableProjects,setUnreachableProjects]=useState<Record<string,boolean>>({});
   const [originalReview,setOriginalReview]=useState<{projectId:string;userId:string;activeProjectId:string|null;token:ActivitySessionToken;authority:()=>boolean}|null>(null);
   const originalReviewRef=useRef(originalReview);originalReviewRef.current=originalReview;
   const originalReviewCurrent=useCallback(()=>{
@@ -312,7 +315,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     setProjects(current => current.some(project => project.id === id) ? current : [...current, { id, name, studio_id, revision }]);
   }, [sceneConnection, cloud.project, projectsLoaded]);
   useEffect(() => {
-    setReadOnlyProjects({});originalReviewRef.current=null;setOriginalReview(null);
+    setReadOnlyProjects({});setUnreachableProjects({});originalReviewRef.current=null;setOriginalReview(null);
     previewRequested.current = new Set();
   }, [studioId]);
   useEffect(() => controller.retain(), [controller]);
@@ -348,7 +351,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
 
   useEffect(() => {
     setProjects([]); setTrash([]); setTrashOpen(false); setStudios([]); setStudioId(''); setQuery(''); setProjectsLoaded(false); setSection('projects'); setMenuOpen(false);
-    setReadOnlyProjects({});setCachedProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
+    setReadOnlyProjects({});setUnreachableProjects({});setCachedProjects({});originalReviewRef.current=null;setOriginalReview(null); previewRequested.current = new Set();
     if (!userId) {
       openedRequest.current = ''; showNotice(''); setLoadingProjects(false);
       // 会话从「未恢复」变成「匿名」也会走这里；?login=1 要求开着登录浮窗，别把它关掉。
@@ -931,6 +934,13 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     const needle = query.trim().toLocaleLowerCase();
     return needle ? studioProjects.filter(project => project.name.toLocaleLowerCase().includes(needle)) : studioProjects;
   }, [studioProjects, query]);
+  // 2026-11-24（B1/P2）：回读失效的云卡单列到「失效」区，活跃卡片墙只留可打开项。
+  // 当前画布那一张始终留在活跃区：一次预检失败不该把「当前」也藏起来。
+  const currentProjectId = cloud.project?.id;
+  const activeProjects = useMemo(() => filteredProjects.filter(project =>
+    !unreachableProjects[project.id] || project.id === currentProjectId), [filteredProjects, unreachableProjects, currentProjectId]);
+  const invalidProjects = useMemo(() => filteredProjects.filter(project =>
+    !!unreachableProjects[project.id] && project.id !== currentProjectId), [filteredProjects, unreachableProjects, currentProjectId]);
   // 画布尚未对应某个已打开的云端项目时，用「草稿」卡占位（类似 Figma Drafts）。
   const draftOnCanvas = !sceneConnection && (!cloud.project || layout.id !== cloud.project.id);
   // 会话里残留的 PROJECT_NOT_FOUND 只在「当前画布就是那个云项目」时才说项目被删。
@@ -962,10 +972,15 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
         .then(full => {
           if (!active) { previewRequested.current.delete(project.id); return; }
           setCachedProjects(prev => { const next = { ...prev }; delete next[project.id]; return next; });
+          // 回读成功就是可达：清掉可能残留的失效标记。
+          setUnreachableProjects(prev => { if (!prev[project.id]) return prev; const next = { ...prev }; delete next[project.id]; return next; });
           if(full.projection?.requiresOriginalSceneForWrite||projectUnverifiedScene(full.scene).projection.requiresOriginalSceneForWrite)setReadOnlyProjects(prev=>({...prev,[project.id]:true}));
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (!active) { previewRequested.current.delete(project.id); return; }
+          // 确定性失效（不存在 / 无权 / 已软删）才隔离；网络抖动、5xx 未定性不置永久失效，
+          // 也不在此自动重试（重试会破坏「守卫后不再发云请求」的不变量）：下次点刷新再探。
+          if (reachabilityFromError(error) === 'unreachable') setUnreachableProjects(prev => prev[project.id] ? prev : { ...prev, [project.id]: true });
         });
     }
     return () => { active = false; };
@@ -1160,7 +1175,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   // C05：待同步数跟会话 dirty 真值走；「已保存」后面缀上素材归档缺口，不把「场景保存」说成「全部归档」。
   const outstandingArchive = archive.counts.pending + archive.counts.failed + archive.counts.needsFile;
   const archiveSuffix = outstandingArchive > 0 ? ` · 素材待归档 ${outstandingArchive}` : '';
-  const saveStatus = conversionError ? '本机草稿' : sceneConnection ? '场景已连接' : !cloud.user || !bound ? '草稿' : cloud.writeBlocked ? '只读' : dirty ? `待同步${archiveSuffix}` : `场景已保存 · v${cloud.revision ?? '—'}${archiveSuffix}`;
+  const saveStatus = conversionError ? '本机草稿' : missingProjectIsThisCanvas ? '失效 · 本机草稿' : sceneConnection ? '场景已连接' : !cloud.user || !bound ? '草稿' : cloud.writeBlocked ? '只读' : dirty ? `待同步${archiveSuffix}` : `场景已保存 · v${cloud.revision ?? '—'}${archiveSuffix}`;
   const activeStudio = studios.find(studio => studio.id === studioId) ?? studios[0];
   // 左上角只认身份：有邮箱就写邮箱，没有再用显示名 / 访客。角色和团队名在下面列表里已有。
   const signedInAccount = !!cloud.user && !cloud.user.is_anonymous;
@@ -1340,7 +1355,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             <h3>项目</h3>
             {/* 标题带当前团队名：改完名这一行跟着变，不用回左栏确认。 */}
             {activeStudio && <span className="sc-account-team-current" title="当前团队">{activeStudio.name}</span>}
-            <button type="button" className="sc-account-icon-btn" disabled={busy || loadingProjects} aria-label="刷新" title="刷新" onClick={() => void run(refreshProjects)}><RefreshCw size={15}/></button>
+            <button type="button" className="sc-account-icon-btn" disabled={busy || loadingProjects} aria-label="刷新" title="刷新" onClick={() => { previewRequested.current = new Set(); void run(refreshProjects); }}><RefreshCw size={15}/></button>
             {activeStudio?.role === 'owner' && <button type="button" className="sc-account-icon-btn" disabled={busy} aria-label="最近删除" title="最近删除（保留 7 天）" aria-pressed={trashOpen} onClick={() => {
               const next = !trashOpen;
               setTrashOpen(next);
@@ -1378,7 +1393,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
               </div>
             </details>
           </li>}
-          {filteredProjects.map(project => {
+          {activeProjects.map(project => {
             const current = project.id === cloud.project?.id;
             const editingElsewhere = !current && project.current_editor && project.lease_expires && Date.parse(project.lease_expires) > Date.now();
             const status = current
@@ -1387,7 +1402,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             // 本机活动升上云的项目：封面/规划留在旧活动 id 上，卡上先按旧 id 找一遍。
             const aliasId = projectAliases[project.id];
             const cover = projectCovers[project.id] ?? (aliasId ? projectCovers[aliasId] : undefined);
-            const canEnter = !busy && !readOnlyStudio && !editingBlocked(project, current);
+            const canEnter = !busy && !readOnlyStudio && !(unreachableProjects[project.id] && !current) && !editingBlocked(project, current);
             return <li key={project.id} className={`sc-file-card${current ? ' is-current' : ''}`}>
               <button
                 type="button"
@@ -1495,6 +1510,34 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
             </button>
           </li>}
         </ul>
+        {/* 回读失效的云卡：不删除、不冒充可打开，折在「失效」区里；有本机副本的仍可离线查看。 */}
+        {!!invalidProjects.length && <details className="sc-account-invalid">
+          <summary>{`失效 · 无法访问（${invalidProjects.length}）`}</summary>
+          <ul className="sc-file-grid">
+            {invalidProjects.map(project => {
+              const aliasId = projectAliases[project.id];
+              const cover = projectCovers[project.id] ?? (aliasId ? projectCovers[aliasId] : undefined);
+              return <li key={`invalid-${project.id}`} className="sc-file-card is-invalid">
+                <button type="button" className="sc-file-hit" disabled aria-label={`${project.name} 失效，无法访问`}>
+                  <span className={`sc-file-thumb${cover ? ' has-preview' : ''}`} aria-hidden="true">
+                    <ProjectThumb projectId={project.id} aliasId={aliasId} cover={cover} fallback={coverMark()}/>
+                    <span className="sc-file-state">失效 · 无法访问</span>
+                  </span>
+                  <span className="sc-file-info"><strong>{project.name}</strong><small>{updatedLabel(project.updated_at)}</small></span>
+                </button>
+                {cachedProjects[project.id] && !sceneConnection && !readOnlyStudio && <details className="sc-file-more">
+                  <summary aria-label={`${project.name} 更多操作`} title="更多"><MoreHorizontal size={16} aria-hidden="true"/></summary>
+                  <div className="sc-file-more-menu" role="group" aria-label={`${project.name} 操作`}>
+                    <button type="button" disabled={busy} onClick={event => {
+                      (event.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
+                      void run(async () => { await openCachedProject(project); });
+                    }}>打开本机缓存</button>
+                  </div>
+                </details>}
+              </li>;
+            })}
+          </ul>
+        </details>}
         {trashOpen && activeStudio?.role === 'owner' && <section aria-label="最近删除" className="sc-account-trash">
           <div className="sc-account-section-heading"><div className="sc-account-section-title"><h4>最近删除</h4></div><span className="sc-note">保留 7 天 · 只恢复项目本体，分享需重新发布</span></div>
           {!trash.length && <p className="sc-account-empty">回收站为空，项目保留 7 天。</p>}
@@ -1506,7 +1549,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
           </ul>
         </section>}
         {originalReview&&originalReviewCurrent()&&<OriginalSceneReviewPanel key={`${originalReview.projectId}:${originalReview.token.epoch}`} scopeKey={`${originalReview.projectId}:${originalReview.token.epoch}`} isCurrent={originalReviewCurrent} loadOriginal={loadOriginal} enableLocalPreview allowLocalConfirm={ORIGINAL_SCENE_SUBMISSION_ENABLED&&!!localWriteCapability} onConfirmLocal={confirmOriginal}/>}
-        {!loadingProjects && !!studioProjects.length && !filteredProjects.length && !showDraftCard && <div className="sc-account-empty"><p>没有匹配的项目</p>{query && <button type="button" onClick={() => { setQuery(''); }}>清除筛选</button>}</div>}
+        {!loadingProjects && !!studioProjects.length && !activeProjects.length && !invalidProjects.length && !showDraftCard && <div className="sc-account-empty"><p>没有匹配的项目</p>{query && <button type="button" onClick={() => { setQuery(''); }}>清除筛选</button>}</div>}
         </section>
       </div>}
       </section>
