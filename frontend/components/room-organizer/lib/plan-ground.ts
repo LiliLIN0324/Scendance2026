@@ -90,3 +90,35 @@ export function stripPlanGroundImage<T extends { ground?: PlanGround | undefined
   }
   return { ...plan, ground: rest };
 }
+
+/**
+ * 打开一份方案时该往哪个方向同步底图（两个方向都只补缺，不覆盖更新的一侧）：
+ * - `to-plan`：旧项目只有 layout 缓存 → 迁进正源；
+ * - `to-layout`：正源有图而视图缓存没有（或还是旧图）→ 用正源补齐 3D 读的缓存；
+ * - `none`：不用动。
+ * 放在这里而不是散在壳体 effect 里，是因为「谁覆盖谁」必须只有一个答案，且要能单测。
+ */
+export type PlanGroundSync =
+  | { direction: 'to-plan'; ground: PlanGround }
+  | { direction: 'to-layout'; patch: Partial<RoomLayout> }
+  | { direction: 'none'; reason: 'no-plan' | 'no-ground-anywhere' | 'already-current' };
+
+export function planGroundSync(
+  plan: { ground?: PlanGround | undefined } | null | undefined,
+  layout: LayoutGroundSource,
+): PlanGroundSync {
+  if (!plan) return { direction: 'none', reason: 'no-plan' };
+  if (!plan.ground) {
+    const legacy = planGroundFromLayout(layout);
+    return legacy ? { direction: 'to-plan', ground: legacy } : { direction: 'none', reason: 'no-ground-anywhere' };
+  }
+  const ground = plan.ground;
+  if (!ground.image) return { direction: 'none', reason: 'already-current' };
+  const sameImage = layout.floorPlanImage === ground.image;
+  const cacheMissingShape = !sameImage
+    || (!!ground.polygon && (layout.mapGroundPolygon?.length ?? 0) < 3)
+    || (!!ground.frame && !layout.mapGroundFrame);
+  if (!cacheMissingShape) return { direction: 'none', reason: 'already-current' };
+  const patch = layoutGroundPatch(ground);
+  return patch ? { direction: 'to-layout', patch } : { direction: 'none', reason: 'already-current' };
+}

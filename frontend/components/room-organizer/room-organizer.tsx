@@ -195,7 +195,7 @@ import {
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
 import { filterPlanByLevel } from './lib/plan-levels';
-import { layoutGroundPatch, planGroundFromLayout } from './lib/plan-ground';
+import { layoutGroundPatch, planGroundSync } from './lib/plan-ground';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
   METERS_PER_DEGREE_LAT,
@@ -2085,22 +2085,18 @@ useEffect(() => {
     },
     [layout.id, outdoorPlanState, isOutdoorProject, outdoorPlanSlotId],
   );
-  // B4 底图正源迁移（2026-11-25）：两个方向都只「补缺」，不覆盖更新的那一侧。
-  // 旧项目只有 layout 镜像 → 迁进 plan.ground（正源）；新设备/清过缓存 → 用 plan.ground 把 3D 读的视图缓存补回来。
-  // 只在 outdoorPlan 变化时跑一次；applyGround 不再回调进撤销栈，也不会把取景缓存写进历史。
+  // B4 底图正源迁移（2026-11-25）：方向判定收在 `planGroundSync` 里（单一答案、可单测），
+  // 两个方向都只「补缺」，不覆盖更新的那一侧。`applyGround` 不进撤销栈，取景缓存不写进历史。
   useEffect(() => {
     if (!outdoorPlan) return;
-    const layoutNow = layoutStore.getState().layout;
-    if (!outdoorPlan.ground) {
-      const legacy = planGroundFromLayout(layoutNow);
-      if (legacy) outdoorOverlayRef.current?.getCanvasApi()?.applyGround(legacy);
+    const sync = planGroundSync(outdoorPlan, layoutStore.getState().layout);
+    if (sync.direction === 'to-plan') {
+      outdoorOverlayRef.current?.getCanvasApi()?.applyGround(sync.ground);
       return;
     }
-    if (!outdoorPlan.ground.image || layoutNow.floorPlanImage === outdoorPlan.ground.image) return;
-    const patch = layoutGroundPatch(outdoorPlan.ground);
-    if (!patch) return;
+    if (sync.direction !== 'to-layout') return;
     try { workspaceWriteGuards?.assertLayoutWrite(); } catch { return; }
-    actions.applyLayout({ ...layoutStore.getState().layout, ...patch });
+    actions.applyLayout({ ...layoutStore.getState().layout, ...sync.patch });
   }, [outdoorPlan, actions, workspaceWriteGuards]);
   // V-5 生成/上传由 OutdoorPlanOverlay 原位承接，不跳转旧物料 Agent 或另一工作台。
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。

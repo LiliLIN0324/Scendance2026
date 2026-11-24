@@ -107,6 +107,7 @@ B1 会话/身份解耦 ✅ 合入 main
 
 **进度（2026-11-25，用户拍板选项 1 后）**：
 - ✅ **底图正源落 plan**（`8fecbd53`）：`plan.ground` 契约 + `applyGround` 句柄 + 正源写入 + layout 降为视图缓存 + 双向迁移补缺 + 分享剥字节。`applyOutdoorGroundBasemap` 已不再「只写 layout」。
+- ✅ **同步方向单一答案**（本片）：迁移判定从壳体 effect 里抽成纯函数 `planGroundSync(plan, layout)`（`to-plan` / `to-layout` / `none` 三态），壳体只执行；6 例单测钉住「旧项目迁正源、正源覆盖旧缓存、图同但缺框仍补缓存、只有定位不动、两边都无不动」。另补 `outdoor-project-store` 往返例，证明 `plan.ground` 不被 store 的 `sitePlanDataSchema` 校验吞掉。
 - ⏳ **镜像删除**未做：`floorPlanImage` 等 6 个 layout 字段仍有 52 个消费方（2D `canvas-2d/render.ts`、3D `structure-builder.ts`/`room-builder.ts`、`agent-panel` 需求记忆、评审截图、云卡缩略图、交付导出）。换读源要逐簇真机验收，与 #38 一起做才有意义（#38 之前 layout 仍是云存档载体）。
 - ⏳ **false 侧 patch 删除**未做：3D 地面/外墙仍靠 `shellVenuePatchFromPlanBoundary` 长尺寸，删了会断，随 #38。
 - ⏳ **旧键迁移**未做：等 §5 的 C2 口径（旧 `activity:` 存量），按「防丢存量」底线不在无口径时动。

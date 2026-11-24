@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planGroundSchema } from '../../../../supabase/functions/_shared/site-plan';
 import { rememberPlanGroundBounds } from './amap-venue';
-import { layoutGroundPatch, PLAN_GROUND_OPACITY, planGroundFromLayout, stripPlanGroundImage } from './plan-ground';
+import { layoutGroundPatch, PLAN_GROUND_OPACITY, planGroundFromLayout, planGroundSync, stripPlanGroundImage } from './plan-ground';
 import type { RoomLayout } from './types';
 
 const POLYGON = [
@@ -98,6 +98,45 @@ describe('plan.ground → layout 视图缓存投影', () => {
     const patch = layoutGroundPatch({ image: IMAGE, center: { lng: 1, lat: 2 } });
     expect(patch).toEqual({ floorPlanImage: IMAGE, floorPlanOpacity: PLAN_GROUND_OPACITY, mapLngLat: { lng: 1, lat: 2 } });
     expect('satelliteGroundRef' in (patch ?? {})).toBe(false);
+  });
+});
+
+describe('打开方案时的同步方向（planGroundSync）', () => {
+  it('旧项目：plan 没有 ground、layout 有 → 迁进正源', () => {
+    const sync = planGroundSync({}, groundLayout());
+    expect(sync.direction).toBe('to-plan');
+    expect(sync.direction === 'to-plan' && sync.ground.image).toBe(IMAGE);
+  });
+
+  it('两边都没有底图 → 不动（不虚构 empty ground）', () => {
+    expect(planGroundSync({}, {})).toEqual({ direction: 'none', reason: 'no-ground-anywhere' });
+    expect(planGroundSync(null, groundLayout())).toEqual({ direction: 'none', reason: 'no-plan' });
+  });
+
+  it('正源有图但缓存是旧图 → 用正源覆盖缓存', () => {
+    const sync = planGroundSync({ ground: { image: 'data:image/jpeg;base64,NEW' } }, groundLayout());
+    expect(sync.direction).toBe('to-layout');
+    if (sync.direction === 'to-layout') expect(sync.patch.floorPlanImage).toBe('data:image/jpeg;base64,NEW');
+  });
+
+  it('正源与缓存同一张图，且框/多边形都在 → already-current（不重复写 layout）', () => {
+    const ground = planGroundFromLayout(groundLayout())!;
+    expect(planGroundSync({ ground }, groundLayout())).toEqual({ direction: 'none', reason: 'already-current' });
+  });
+
+  it('图相同但缓存缺多边形/框 → 仍补一次缓存（3D 卫星 UV 靠它）', () => {
+    const ground = planGroundFromLayout(groundLayout())!;
+    const sync = planGroundSync({ ground }, { floorPlanImage: IMAGE });
+    expect(sync.direction).toBe('to-layout');
+    if (sync.direction === 'to-layout') {
+      expect(sync.patch.mapGroundPolygon).toEqual(POLYGON);
+      expect(sync.patch.mapGroundFrame).toEqual(FRAME);
+    }
+  });
+
+  it('正源只有定位没有图 → 不动（没有可视底图可补）', () => {
+    expect(planGroundSync({ ground: { polygon: POLYGON, frame: FRAME } }, {}))
+      .toEqual({ direction: 'none', reason: 'already-current' });
   });
 });
 

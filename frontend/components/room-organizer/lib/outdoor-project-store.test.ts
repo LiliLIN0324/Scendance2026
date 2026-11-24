@@ -86,6 +86,29 @@ describe('outdoor-project-store', () => {
     expect(hasOutdoorPlanDraft(PID, storage)).toBe(true);
   });
 
+  it('贴地底图（plan.ground）随本机草稿往返，不被 store 校验吞掉（B4）', () => {
+    const storage = memoryStorage();
+    const plan: SitePlanData = {
+      ...samplePlan(),
+      ground: {
+        image: `data:image/jpeg;base64,${'B'.repeat(32)}`,
+        opacity: 0.94,
+        satelliteRef: true,
+        polygon: [
+          { lng: 120.1443, lat: 30.2465 }, { lng: 120.1463, lat: 30.2465 },
+          { lng: 120.1463, lat: 30.2445 }, { lng: 120.1443, lat: 30.2445 },
+        ],
+        center: { lng: 120.1453, lat: 30.2455 },
+        frame: { lng0: 120.1443, lat0: 30.2465, latMid: 30.2455, scale: 1, latSign: -1 },
+        source: 'amap-satellite',
+        capturedAt: '2026-11-25T06:00:00.000Z',
+      },
+    };
+    saveOutdoorProjectRecord(record(plan), storage);
+    const loaded = readOutdoorProjectRecord(PID, storage);
+    expect(loaded!.plan!.ground).toEqual(plan.ground);
+  });
+
   it('单价、价格书和报价抬头随本机草稿往返', () => {
     const storage = memoryStorage();
     const plan: SitePlanData = {
