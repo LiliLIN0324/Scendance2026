@@ -1,7 +1,7 @@
 # B1 身份正源解耦 · 执行计划（2026-11-24）
 
 > 承接 `2026-11-24-identity-source-decouple-proposal.md` §0 目标。本计划只覆盖 **B1 身份判定层收口**；B2 迁移、B3 写守卫、B4 镜像退役不在范围内。
-> 状态：**P0–P3 已落码并合入 origin/main；#81 辅助轮询 error 隔离修复 `e89e951c` 已推 main 并由 Pages 自动部署，生产真机复核误标消失（§7.5）**。前端门禁全绿（根 / 前端 tsc 0、定向 216、全量 10724 passed / 0 failed、build 0 违规）。缺口③内存快照、flow1 A→B→A / flow3 回读对照、生产迁移债仍在 §7.4 挂账。执行回执见 §5，门禁复跑见 §7.1。
+> 状态：**P0–P3 已落码并合入 origin/main；#81 辅助轮询 error 隔离修复 `e89e951c` 已推 main 并由 Pages 自动部署，生产真机复核误标消失（§7.5）**。前端门禁全绿（根 / 前端 tsc 0、定向 216、全量 10724 passed / 0 failed、build 0 违规）。flow1 A→B→A 不串、flow3 刷新续开已真机对照闭合（§7.5）；缺口③内存快照、生产迁移债、其余辅助 GET 通道评估仍在 §7.4 挂账。执行回执见 §5，门禁复跑见 §7.1。
 
 ## 0. 计划边界
 
@@ -215,7 +215,7 @@ npm --prefix frontend run build                  → BUILD_EXIT=0（oneplan-arti
 
 ### 7.4 仍阻塞 / 待拍板
 
-- **真机六卡复核 — 后端已取证排除，前端误判待定性 / BLOCKED（2026-11-24 晚）**：生产站已是含新口径的构建。项目墙 6 云卡全在活跃列表，`.sc-account-invalid` 失效折叠区未收纳任何卡；本机 9 槽留本机列未误判。`394e2174` 进入后复现 `PROJECT_NOT_FOUND` 回执「项目已不存在…当前画布仍是本机草稿」，草稿未删未覆盖（符合失效只读保留口径）。**后端旁证已收口**（walkthrough §2.9 DB、§2.10 Function 日志）：六卡行在、未软删、owner 为 endTree、scene 合法；24h 内六卡 `GET /projects/<uuid>` 全部 200、无 4xx/5xx，`394e` JWT sub=endTree owner、acquire 200/renew 24 次。「会话 actor 错配」「Function/DB 契约异常」两后端候选均排除；能打开的 `583dbff1` 与被判失效的 `80c3158d` 后端日志形态一致。前端静态落点已定性（walkthrough §2.11）：`PROJECT_NOT_FOUND` 唯一来源是后端非 2xx 响应体 `error.code`，前端不编造；进入链路裸 GET 200 不产该码，peek 200 不置失效，成功选项目会清残留 error；本地守卫/scope 失配抛的是 INVALID_RESPONSE / ORIGINAL_SCENE_REVIEW_REQUIRED / SESSION_CHANGED / NETWORK_ERROR，均非该码。**第三轮登录态探针（2026-11-24 晚，#80）**：附着生产站帧包装只读 fetch 抓包。缺口①**已闭合**：真实非 2xx 是 `GET /scene-api/notices/unread` → 404 `{"error":{"code":"PROJECT_NOT_FOUND"}}`（轮询 19 次全 404），同窗口 `messages/unread` 200 `[]`。该 404 属平台官方通知未读数轮询，与项目本体无关；静态根因链：`20261120140000_official_notices.sql` 未上生产，旧 `scene_rpc` 通用项目锁段（`scene_core.sql:201-202`）按 `projectId` 取项目，notices 请求 `p_data={}` 无 projectId → `not found` 抛 PROJECT_NOT_FOUND。缺口②**真机证伪旧静态结论、根因已定位并落码修复，部署后生产复核闭合（见 §7.5）**：逐卡进入复核（登录态，confirm 已按用户本轮授权放行）六卡项目链路全 200，但 notices/unread 404 经 `businessRequest` 串进了会话 `snapshot.error`——此前「hook 局部消化、不写 controller.error」的静态判断被真机推翻；修复上线后误标「失效 · 本机草稿」在网格不再出现。缺口③**仍未闭合**：`cloud.project.id ↔ layout.id ↔ geometryBinding.cloudProjectId` 内存快照取不到（生产构建无 fiber 键、controller 未挂全局、DOM 无 data-id）。原候选①（peek 可达、get 才失败）、候选②（peek 错误码非白名单）在后端层均不成立——peek/get 日志都是 200。flow1 云端可写 A→B→A 样本、flow3 权威回读对照仍缺。
+- **真机六卡复核 — 后端已取证排除，前端误判待定性 / BLOCKED（2026-11-24 晚）**：生产站已是含新口径的构建。项目墙 6 云卡全在活跃列表，`.sc-account-invalid` 失效折叠区未收纳任何卡；本机 9 槽留本机列未误判。`394e2174` 进入后复现 `PROJECT_NOT_FOUND` 回执「项目已不存在…当前画布仍是本机草稿」，草稿未删未覆盖（符合失效只读保留口径）。**后端旁证已收口**（walkthrough §2.9 DB、§2.10 Function 日志）：六卡行在、未软删、owner 为 endTree、scene 合法；24h 内六卡 `GET /projects/<uuid>` 全部 200、无 4xx/5xx，`394e` JWT sub=endTree owner、acquire 200/renew 24 次。「会话 actor 错配」「Function/DB 契约异常」两后端候选均排除；能打开的 `583dbff1` 与被判失效的 `80c3158d` 后端日志形态一致。前端静态落点已定性（walkthrough §2.11）：`PROJECT_NOT_FOUND` 唯一来源是后端非 2xx 响应体 `error.code`，前端不编造；进入链路裸 GET 200 不产该码，peek 200 不置失效，成功选项目会清残留 error；本地守卫/scope 失配抛的是 INVALID_RESPONSE / ORIGINAL_SCENE_REVIEW_REQUIRED / SESSION_CHANGED / NETWORK_ERROR，均非该码。**第三轮登录态探针（2026-11-24 晚，#80）**：附着生产站帧包装只读 fetch 抓包。缺口①**已闭合**：真实非 2xx 是 `GET /scene-api/notices/unread` → 404 `{"error":{"code":"PROJECT_NOT_FOUND"}}`（轮询 19 次全 404），同窗口 `messages/unread` 200 `[]`。该 404 属平台官方通知未读数轮询，与项目本体无关；静态根因链：`20261120140000_official_notices.sql` 未上生产，旧 `scene_rpc` 通用项目锁段（`scene_core.sql:201-202`）按 `projectId` 取项目，notices 请求 `p_data={}` 无 projectId → `not found` 抛 PROJECT_NOT_FOUND。缺口②**真机证伪旧静态结论、根因已定位并落码修复，部署后生产复核闭合（见 §7.5）**：逐卡进入复核（登录态，confirm 已按用户本轮授权放行）六卡项目链路全 200，但 notices/unread 404 经 `businessRequest` 串进了会话 `snapshot.error`——此前「hook 局部消化、不写 controller.error」的静态判断被真机推翻；修复上线后误标「失效 · 本机草稿」在网格不再出现。缺口③**仍未闭合**：`cloud.project.id ↔ layout.id ↔ geometryBinding.cloudProjectId` 内存快照取不到（生产构建无 fiber 键、controller 未挂全局、DOM 无 data-id）。原候选①（peek 可达、get 才失败）、候选②（peek 错误码非白名单）在后端层均不成立——peek/get 日志都是 200。flow1 A→B→A 不串、flow3 刷新续开对照已于部署后真机闭合（§7.5）；仅余缺口③内存三源快照取不到。
 - **后端数据层根因 — 已只读复核，未发现项目本体缺陷**：5 张 NOT_FOUND 的行 / 成员 / `deleted_at` / 场景字段已核（§2.9），Function 日志已核（§2.10）；六卡 `projects/<uuid>` 裸 GET 全 200。**新定位**：DB 迁移落后于本地 main 直接导致了 `notices/unread` 404——`20261120140000_official_notices`（头注「未部署到云端」）未上生产，旧 RPC 不认该 action 兜底抛 PROJECT_NOT_FOUND；此错误已被前端局部隔离，不构成六卡进入失败的成因。生产是否缺 `official_notifications` 表与替换版 `scene_rpc`，待 DB 只读复核。迁移补跑属部署治理决策，本轮不跑、不删、不迁。
 - **观察项（待拍板，未擅改）**：失效本机备份槽当前只有 disabled 展示卡，没有「打开本机备份 / 只读查看」入口；失效云卡有「打开本机缓存」。是否给备份槽补一个只读本机查看入口，属产品口径。
 - B2 迁移（哪些槽值得迁 `house-*`）、B3 写守卫、B4 旧键退役仍挂账。
@@ -236,5 +236,16 @@ npm --prefix frontend run build                  → BUILD_EXIT=0（oneplan-arti
 
 **生产真机复核（部署后，登录态）**：硬刷新穿透缓存后，线上 3609 chunk 已含 `auxRequest`。探针 55 条请求，非 2xx 仅剩 7 条 `notices/unread` 404 `PROJECT_NOT_FOUND`（后端迁移未上，噪音仍在），`messages/unread` 全 200，项目链路 `projects/<uuid>` / `lease/acquire` / `sources` 全 200。网格六卡：五张非当前卡无身份档位、无错误条；当前挂载卡正常显示「当前 · 场景已保存 · v0」或「当前 · 只读」；上一轮被误标的 `73b1a823`（Flow C 直径测试）回到网格后**不再标「失效 · 本机草稿」**，DOM 无 `PROJECT_NOT_FOUND` 文案、`.sc-account-error` 无该错误行。切到 `9a889d2b`（周末共创工作坊）后项目链路 200、账户错误条清空。期间出现过一条 `NETWORK_ERROR`「连接失败…云端写入已暂停」，定性为前一项目会话切换 / 恢复时的一次性残留（非 notices 404，探针 fetch 层无 net:ERR），成功选项目后即被清除，未复现。
 
-**未验证 / 刻意没做**：本地 dev 无云凭据登录态，未在本地复现生产登录态；未跑 / 补生产迁移（`official_notices` 等仍落后），未动 DB、后端契约；根后端既有红未触碰。其余辅助 GET（preferences / settings / outdoor-plans / capabilities 等一次性加载）本次未切通道，留待后续按同类口径评估。flow1 云端可写 A→B→A 回写对照、flow3 权威回读 vs 缓存续开对照本轮未做。
+**flow1 / flow3 真机对照（2026-11-24 晚，部署后登录态）**：
+- **flow1 A→B→A 不串数据**：A=`9a889d2b`（周末共创工作坊，5 件，只读）→ B=`394e2174`（新活动 11-23，0 件，场景已保存 v0）→ 回 A。回 A 后物料仍 **5 件**、标题周末共创、URL 回到 `9a889d2b`、项目链路 200；A 的场景未被 B 的 0 件覆盖。旧项目迟到 `lease/renew` 409 `LEASE_LOST` 为释放竞态，非故障。
+- **flow3 刷新续开**：硬刷新（穿透缓存）后续开同一云端项目 `9a889d2b`，物料 5 件与云端一致，当前卡「当前 · 只读」，未退回本机草稿、未串到 B。错误条为 `LEASE_BUSY`「另一编辑会话正在使用此项目」，属写守卫 / lease 层（B3 范畴），非身份误判。
+- **flow2 清单排他（旁证级）**：网格六卡标题与 DB 只读核对的六卡 UUID 矩阵一一对应，无第七张云卡；orphan 裸槽 `2538691c` 不在云列，已软删 `d4f8…` / `7751…` 不在。`listProjects` 原始 JSON 响应体观测受限（生产探针注入晚于首屏请求，controller 未挂全局、DOM 无 data-id），未取到裸 `/projects` 响应体 UUID 清单。
+
+**未验证 / 刻意没做**：本地 dev 无云凭据登录态，未在本地复现生产登录态；未跑 / 补生产迁移（`official_notices` 等仍落后），未动 DB、后端契约；根后端既有红未触碰。其余辅助 GET（preferences / settings / outdoor-plans / capabilities 等一次性加载）本次未切通道，静态分类见下，留待后续按同类口径评估。flow2 云工作区新建活动属 B2「新建即时归属」口径，本轮未在生产建项。
+
+**其余辅助 GET 静态分类（未切通道，2026-11-24 评估）**：
+- 项目域清单（保留现状，失败应提示 / 阻断）：`listStudios` `/studios`、`listProjects` `/projects`，走 `request()` 默认 blocksWrites。
+- 账号 / 工作室辅助读取（候选切 `auxRequest`，调用方多有库级兜底，切前需逐个核 catch 链不泄漏 unhandled rejection）：`getPreferences` `/preferences` GET、`getStudioSettings` `/studios/<id>/settings` GET、`getOutdoorCardHistory` `/outdoor-history` GET。
+- 户外规划域（独立于云项目身份，另案评估）：`listOutdoorPlans` / `getOutdoorPlan`。
+- 能力探测（包装层已转 `{ok:false}` / 错误对象）：`getCloudCapabilities` `/cloud/capabilities` GET。
 

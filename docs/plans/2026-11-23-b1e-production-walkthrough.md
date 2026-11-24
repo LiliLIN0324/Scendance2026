@@ -362,3 +362,10 @@
 **已落码修复（#81，提交 `e89e951c` 推 main，Pages 自动部署）**：`backend-session.ts` 新增 `auxRequest`（`suppressProjectFailure=true`），辅助 / 轮询请求失败只抛调用方、不写会话 error、不阻断画布，401 清登录分支保留；`workspace-api.ts` 将 notices 三函数与 team 未读数 / 私信列表 / 标已读切到 `auxRequest`，主动发信保留 `businessRequest`；`backend-session.test.ts` 补 business / aux 对照用例。门禁：根 / 前端 tsc 0、定向 216 绿、全量 10724 passed / 0 failed、build 0 违规。
 
 **部署后生产复核（登录态，硬刷新穿透缓存）**：线上 3609 chunk 已含 `auxRequest`；探针 55 条，非 2xx 仅剩 `notices/unread` 404 `PROJECT_NOT_FOUND`（迁移未上，噪音仍在），`messages/unread` 全 200，项目链路 `projects/<uuid>` / `lease/acquire` / `sources` 全 200。网格五张非当前卡无身份档位、无错误条；当前卡显「当前 · 场景已保存 · v0」或「当前 · 只读」；上一轮被误标的 `73b1a823`（Flow C 直径测试）回网格后**不再标「失效 · 本机草稿」**，无 `PROJECT_NOT_FOUND` 文案、账户错误行清空。切到 `9a889d2b` 后链路 200、错误条清空。期间一条 `NETWORK_ERROR`「连接失败…写入暂停」为前一项目会话切换一次性残留（非 notices 404，fetch 层无 net:ERR），成功选项目后清除、未复现。生产迁移落后（notices `20261120140000` 未上生产）仍是该 404 的后端成因，属部署治理挂账，本轮未跑迁移。
+
+### 8.7 2026-11-24 晚部署后 flow1 / flow3 / flow2 真机对照
+
+- **flow1 A→B→A 不串数据**：A=`9a889d2b`（周末共创工作坊，5 件，只读）→ B=`394e2174`（新活动 11-23 18:38，0 件，场景已保存 v0）→ 回 A。回 A 后物料仍 5 件、标题周末共创、URL 回到 `9a889d2b`、`projects/<uuid>` / `sources` / `lease/acquire` 全 200；A 场景未被 B 的 0 件覆盖。旧项目迟到 `lease/renew` 409 `LEASE_LOST` 为释放竞态。
+- **flow3 刷新续开**：硬刷新穿透缓存后续开同一云端项目 `9a889d2b`，物料 5 件与云端一致，当前卡「当前 · 只读」，未退回本机草稿、未串到 B。错误条 `LEASE_BUSY`「另一编辑会话正在使用此项目」属写守卫 / lease 层（B3 范畴），非身份误判。
+- **flow2 清单排他（旁证级）**：网格六卡标题与 DB 只读核对的六卡 UUID 矩阵一一对应，无第七张云卡；orphan 裸槽 `2538691c` 不在云列，已软删 `d4f8…` / `7751…` 不在。`listProjects` 裸 `/projects` 原始 JSON 响应体观测受限（探针注入晚于首屏、controller 未挂全局、DOM 无 data-id），未取到响应体 UUID 清单。
+- **未做**：flow2 云工作区新建活动属 B2「新建即时归属」口径，本轮未在生产建项；其余辅助 GET（preferences / settings / outdoor-plans / capabilities）通道延伸静态分类见 plan §7.5，未切 `auxRequest`。
