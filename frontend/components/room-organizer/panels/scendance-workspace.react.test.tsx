@@ -13,8 +13,6 @@ import { rememberAholoAsset } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
-import { readPlanGroundMode, readPlanGroundSource, writePlanGroundMode, writePlanGroundSource } from '../lib/plan-basemap-source';
-import { pinMapSource, readMapSlots, resetMapSlotsCacheForTest } from '../lib/map-source-slots';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
 import type { OnlineModel } from '../lib/online-models';
 import type { CatalogItem } from '../lib/types';
@@ -77,12 +75,6 @@ function contexts(layout = makeLayout(), view = makeViewSettings()) {
   return { editor, selection, actions, history, setView, toggle, selectOnly };
 }
 
-/** 取一次 setView 的 updater 返回值，用来断言工具开关切换后的 view。 */
-function applyView(values: ReturnType<typeof contexts>, base: ReturnType<typeof makeViewSettings>) {
-  expect(values.setView).toHaveBeenCalledTimes(1);
-  const updater = values.setView.mock.calls[0]![0] as (view: ReturnType<typeof makeViewSettings>) => ReturnType<typeof makeViewSettings>;
-  return updater(base);
-}
 
 function Providers({ values, children }: { values: ReturnType<typeof contexts>; children: ReactNode }): JSX.Element {
   return <RoomEditorProvider value={values.editor}><SelectionProvider value={values.selection}>{children}</SelectionProvider></RoomEditorProvider>;
@@ -218,181 +210,16 @@ describe('ScendanceLibrary shelf lifecycle', () => {
 
 
 describe('ScendanceViewTools design column', () => {
-  function renderTools(view = makeViewSettings(), onExportImage = vi.fn(), onExportAlbum?: (options: { scale: number }) => Promise<{ ok: boolean; count: number }>) {
-    const values = contexts(makeLayout(), view), onZoom = vi.fn();
-    render(<Providers values={values}><ScendanceViewTools onZoom={onZoom} onExportImage={onExportImage} {...(onExportAlbum ? { onExportAlbum } : {})}/></Providers>);
-    return { values, onZoom, onExportImage, rail: screen.getByRole('navigation', { name: '工具' }) };
-  }
 
-  it('renders one right-edge island of flat round tools with no more-ellipsis', () => {
-    const { values, rail } = renderTools();
-    expect(rail.id).toBe('tool-column');
-    // 楼层切换另有两个按钮；其余工具保持可访问。
-    expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
-    // 室内常驻：分享 / 画布工具（抓手·选择）/ 2D·3D / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 + 楼层切换上下两钮。
-    // 氛围条（天气/时段/灯光）已于 2026-11-25 随室内光照退役，不再占位。
-    expect(within(rail).getAllByRole('button')).toHaveLength(11);
-    expect(within(rail).queryByRole('button', { name: /氛围/ })).toBeNull();
-    expect(within(rail).getAllByRole('button', { name: '分享' })).toHaveLength(1);
-    // 2026-11-13 定稿：户外 2D/3D 走左下胶囊，右轨这颗只在纯室内兜底平面/立体，aria-label 报「当前 2D 平面 / 3D 场景」。
-    for (const name of ['分享', '选择工具', /当前 (2D 平面|3D 场景)/, '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
-      expect(within(rail).getByRole('button', { name })).toBeTruthy();
-    }
-    // 选择是开关而不是禁用：默认激活，但按钮可点，菜单里切抓手/选择。
-    const selectButton = within(rail).getByRole('button', { name: '选择工具' }) as HTMLButtonElement;
-    expect(selectButton.disabled).toBe(false);
-    expect(selectButton.getAttribute('aria-pressed')).toBe('true');
-    expect(rail.querySelector('#tool-satellite')).toBeNull();
-    expect(rail.querySelector('#tool-map-type')).toBeNull();
-    // 省略号没了：撤销/重做/缩放/导出全是一级圆钮；看全场也删掉了。
-    expect(rail.querySelector('#tool-more')).toBeNull();
-    expect(rail.querySelector('#tool-fit')).toBeNull();
-    for (const id of ['tool-undo', 'tool-redo', 'tool-zoom-out', 'tool-zoom-in', 'tool-export']) {
-      expect(rail.querySelector(`#${id}`)).toBeTruthy();
-    }
-    expect(rail.querySelector('#tool-grid')).toBeTruthy();
-    expect(rail.querySelector('#tool-dims')).toBeNull();
-    // 视角轮换钮已移除，机位只保留在导出选项与机位册里。
-    expect(rail.querySelector('#tool-preset')).toBeNull();
-    // 机位不再拆成两颗一级钮。
-    expect(rail.querySelector('#tool-top')).toBeNull();
-    expect(rail.querySelector('#tool-front')).toBeNull();
-    // 室内漫游已退役：右轨不再有 #tool-walk（户外漫游钮在画布右下工具簇）。
-    expect(rail.querySelector('#tool-walk')).toBeNull();
-    const order = [...rail.querySelectorAll('button')].map(button => button.id);
-    // 撤销/重做在工具组之后，缩小/放大在导出前面。
-    expect(order.indexOf('tool-undo')).toBeGreaterThan(order.indexOf('tool-grid'));
-    expect(order.indexOf('tool-zoom-in')).toBeLessThan(order.indexOf('tool-export'));
-    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
-    expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
-    // 氛围条已退役：右轨不再有「氛围」钮，也没有那组弹层。
-    expect(screen.queryByRole('button', { name: /氛围/ })).toBeNull();
-    expect(rail.querySelector('.sc-atmosphere-group')).toBeNull();
-    expect(rail.querySelector('#tool-atmosphere')).toBeNull();
-    expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
-    const dimension = within(rail).getByRole('button', { name: /当前 (2D 平面|3D 场景)/ });
-    // 图标体系已迁到 Material Symbol 蒙版 span（sc-material-symbol），不再是 svg。
-    expect(dimension.querySelector('.sc-material-symbol')).toBeTruthy();
-    expect(dimension.textContent).not.toMatch(/2D|3D/);
-    fireEvent.click(dimension);
-    expect(values.toggle).toHaveBeenCalledWith('view2D');
-  });
 
-  // 2026-11-11 OnePlan 画布工具菜单：抓手 H / 选择 S。
-  it('2026-11-11 OnePlan 画布工具菜单：抓手 H / 选择 S', () => {
-    const { values, rail } = renderTools();
-    const select = within(rail).getByRole('button', { name: '选择工具' }) as HTMLButtonElement;
-    expect(select.disabled).toBe(false);
-    expect(select.getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(select);
-    const handItem = screen.getByRole('menuitemradio', { name: /抓手工具/ });
-    expect(handItem.getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByRole('menuitemradio', { name: /选择工具/ }).getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(handItem);
-    expect(applyView(values, makeViewSettings())).toMatchObject({ selectMode: false });
-  });
 
   // 2026-11-12 统一 2D/3D 后沿用菜单语义：抓手/选择仍是一把真开关，只是经由菜单切换。
-  it('toggles 选择工具 via the canvas-tool menu instead of disabling it', () => {
-    const { values, rail } = renderTools();
-    const select = within(rail).getByRole('button', { name: '选择工具' }) as HTMLButtonElement;
-    expect(select.disabled).toBe(false);
-    expect(select.getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(select);
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /抓手工具/ }));
-    expect(applyView(values, makeViewSettings())).toMatchObject({ selectMode: false });
-    cleanup();
-    // 关掉之后是「抓手浏览」：仍然可点，菜单里再点「选择工具」就是重新启用。
-    const off = contexts(makeLayout(), makeViewSettings({ selectMode: false }));
-    render(<Providers values={off}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const offSelect = screen.getByRole('button', { name: '抓手工具' }) as HTMLButtonElement;
-    expect(offSelect.disabled).toBe(false);
-    expect(offSelect.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(offSelect);
-    const selectItem = screen.getByRole('menuitemradio', { name: /选择工具/ });
-    expect(selectItem.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(selectItem);
-    expect(applyView(off, makeViewSettings({ selectMode: false }))).toMatchObject({ selectMode: true });
-  });
 
-  it('keeps 撤销 / 重做 / 缩放 / 导出 on the rail and closes the export popover on Escape', () => {
-    const { values, rail, onZoom, onExportImage } = renderTools();
-    fireEvent.click(within(rail).getByRole('button', { name: '网格吸附' }));
-    expect(values.toggle).toHaveBeenCalledWith('snapToGrid');
-    fireEvent.click(within(rail).getByRole('button', { name: '撤销' }));
-    fireEvent.click(within(rail).getByRole('button', { name: '重做' }));
-    fireEvent.click(within(rail).getByRole('button', { name: '缩小' }));
-    fireEvent.click(within(rail).getByRole('button', { name: '放大' }));
-    expect(values.history.undo).toHaveBeenCalledTimes(1);
-    expect(values.history.redo).toHaveBeenCalledTimes(1);
-    expect(onZoom.mock.calls).toEqual([['-'], ['+']]);
-    expect(values.toggle.mock.calls).toEqual([['snapToGrid']]);
-    expect(onExportImage).not.toHaveBeenCalled();
-    // 导出是一级钮，点开只有一层选项弹层；Esc 收起。
-    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
-    expect(within(rail).getByRole('button', { name: '导出效果图' }).getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('dialog', { name: '导出效果图选项' })).toBeTruthy();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: '导出效果图选项' })).toBeNull();
-    expect(within(rail).getByRole('button', { name: '导出效果图' }).getAttribute('aria-expanded')).toBe('false');
-  });
 
-  it('exports a render from the 导出 popover with the chosen frame and quality', async () => {
-    const onExportImage = vi.fn().mockResolvedValue(true);
-    const { rail } = renderTools(makeViewSettings(), onExportImage);
-    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
-    const dialog = screen.getByRole('dialog', { name: '导出效果图选项' });
-    expect(dialog.textContent).toContain('导出效果图');
-    fireEvent.click(screen.getByRole('button', { name: '整体' }));
-    // 画质钮 aria-label = 提示（档位）：EXPORT_SCALES 三档 1080p/4K/6K。
-    fireEvent.click(screen.getByRole('button', { name: '5760×3240（6K）' }));
-    fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
-    await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'iso', scale: 3 }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '导出效果图选项' })).toBeNull());
-  });
 
-  it('defaults to the current view at 1080p and marks the choices active', async () => {
-    const onExportImage = vi.fn().mockResolvedValue(true);
-    const { rail } = renderTools(makeViewSettings(), onExportImage);
-    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
-    expect((screen.getByRole('button', { name: '跟随当前' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
-    // 交付默认档改为 1080p（1×），4K/6K 是加档而不是默认。
-    expect((screen.getByRole('button', { name: '1920×1080（1080p）' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '导出 PNG' }));
-    await waitFor(() => expect(onExportImage).toHaveBeenCalledWith({ view: 'current', scale: 1 }));
-  });
 
-  it('exports the album of stable camera angles once and keeps it out of 2D', async () => {
-    const onExportAlbum = vi.fn().mockResolvedValue({ ok: true, count: 4 });
-    const { rail } = renderTools(makeViewSettings(), vi.fn(), onExportAlbum);
-    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
-    const album = screen.getByRole('button', { name: '机位册' });
-    expect(album.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(album);
-    expect(album.getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '导出机位册' }));
-    await waitFor(() => expect(onExportAlbum).toHaveBeenCalledWith({ scale: 1 }));
-  });
 
-  it('keeps the album out of the 2D plan', () => {
-    const onExportAlbum = vi.fn(async (_options: { scale: number }) => ({ ok: true, count: 0 }));
-    const { rail } = renderTools(makeViewSettings({ view2D: true }), vi.fn(), onExportAlbum);
-    fireEvent.click(within(rail).getByRole('button', { name: '导出效果图' }));
-    expect((screen.getByRole('button', { name: '机位册' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(onExportAlbum).not.toHaveBeenCalled();
-  });
 
-  it('disables zoom in 2D and hides atmosphere when requested', () => {
-    const values = contexts(makeLayout(), makeViewSettings({ view2D: true }));
-    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const rail = screen.getByRole('navigation', { name: '工具' });
-    for (const name of ['缩小', '放大']) {
-      expect((within(rail).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
-    }
-    expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    // 室内漫游随 Viewport 退役，右轨不再有「第一人称漫游」钮。
-    expect(within(rail).queryByRole('button', { name: '第一人称漫游' })).toBeNull();
-  });
 
   it('改过天气也不会再长出氛围条（该 UI 已退役）', () => {
     // 旧行为是「开了雨就不许藏」，前提是 UI 还在。现在整条退役：任何 view 状态都不再渲染它。
@@ -449,58 +276,6 @@ describe('ScendanceViewTools 底图开关已退役（#38）', () => {
   });
 });
 
-describe('ScendanceViewTools 地图切换四槽位', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    resetMapSlotsCacheForTest();
-    writePlanGroundSource('amap-streets');
-    writePlanGroundMode('map');
-  });
-
-  it('四个快捷位与 2D 面板共用 map-source-slots：2D 置顶后 3D 菜单立刻同步', () => {
-    render(<Providers values={contexts()}><ScendanceViewTools onZoom={vi.fn()} geoGroundActive /></Providers>);
-    fireEvent.click(document.getElementById('tool-ground-source')!);
-
-    const list = screen.getByRole('listbox', { name: '地理瓦片图源' });
-    expect(within(list).getAllByRole('option')).toHaveLength(4);
-    expect(screen.getByTestId('ground-slot-satellite').textContent).toContain('高德卫星');
-    expect(screen.getByTestId('ground-slot-streets').textContent).toContain('高德街道');
-    expect(screen.getByTestId('ground-slot-tone').textContent).toContain('Carto 浅色');
-    expect(screen.getByTestId('ground-slot-none').textContent).toContain('无');
-
-    // 2D 面板那边置顶 Carto 深色（同一个 store）→ 三维「单色」行当场换成深色。
-    act(() => {
-      pinMapSource('carto-dark');
-    });
-    expect(readMapSlots().tone).toBe('carto-dark');
-    expect(screen.getByTestId('ground-slot-tone').textContent).toContain('Carto 深色');
-
-    // 点格子真正换底面：写图源 + 地图形态（从纸面回来也认）。
-    fireEvent.click(screen.getByTestId('ground-slot-tone'));
-    expect(readPlanGroundSource()).toBe('carto-dark');
-    expect(readPlanGroundMode()).toBe('map');
-
-    // 「无」= 纸面：不铺瓦片，与 2D 面板的「无」同一份偏好。
-    fireEvent.click(document.getElementById('tool-ground-source')!);
-    fireEvent.click(screen.getByTestId('ground-slot-none'));
-    expect(readPlanGroundMode()).toBe('paper');
-    // 纸面态下触发钮标题改成「纸面（无底图）」，不再冒充某个图源。
-    expect(document.getElementById('tool-ground-source')!.getAttribute('aria-label')).toContain('纸面（无底图）');
-  });
-
-  it('槽位里置顶了天地图（2D 专用）时，三维回落到该格缺省并明说', () => {
-    act(() => {
-      pinMapSource('img');
-    });
-    render(<Providers values={contexts()}><ScendanceViewTools onZoom={vi.fn()} geoGroundActive /></Providers>);
-    fireEvent.click(document.getElementById('tool-ground-source')!);
-    const row = screen.getByTestId('ground-slot-satellite');
-    expect(row.textContent).toContain('高德卫星');
-    expect(row.textContent).toContain('三维用缺省');
-    fireEvent.click(row);
-    expect(readPlanGroundSource()).toBe('amap-satellite');
-  });
-});
 
 describe('ScendanceViewTools outdoor Google Maps rail', () => {
   function outdoorActions() {
