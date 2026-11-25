@@ -3,8 +3,10 @@ import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, eventOperationTaskSchema, type EventOperations, type EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionReferenceKey, productionTaskBasis, productionTaskObjectIds } from '../../../lib/production-plan';
 import { materialCheckinTaskBasis } from '../../../lib/material-checkin-basis';
-import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import { resolveGround } from './plan-ground';
 import type { FurnitureItem, RoomLayout } from './types';
+import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
+import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 
 export const OPERATION_PHASE_LABELS: Record<EventOperationTask['phase'], string> = {
   preparation: '准备', setup: '布场', event: '活动', teardown: '撤场',
@@ -56,9 +58,19 @@ export function operationObjectReview(layout: RoomLayout, task: EventOperationTa
   return operationObjectScope(layout,task).review;
 }
 
-/** Local physical references also work for text-only tasks and non-exportable venues. */
-export async function operationBasis(layout: RoomLayout, task: EventOperationTask, checkins?: MaterialCheckinLedger): Promise<string> {
+/**
+ * 交付核对基（B4 读方 ③，口径 A：字节兼容）。
+ *
+ * `reviewedBasis` 存的是 SHA-256 摘要，用户看到的是「核对通过 / 需复核」；摘要一变，
+ * 已通过的老记录就会集体翻成「需复核」。所以这里换读源**不改算法、不改字段顺序**，
+ * 只把取值换成 `resolveGround` 的结果，逐字段回落 layout：两边同步时摘要一个字节都不变。
+ * 等 #38 真删 layout 镜像那天，同一份场地仍算出同一摘要。
+ * `operationBasis` 之外还有 `activity-task-suggestions` 的同源调用，接线随 #38 那批触点一起做。
+ */
+export async function operationBasis(layout: RoomLayout, task: EventOperationTask, checkins?: MaterialCheckinLedger,
+  plan?: { ground?: PlanGround | undefined } | null): Promise<string> {
   const scope = operationObjectScope(layout,task);
+  const ground = resolveGround(layout, plan);
   const production = productionTaskBasis(layout.productionPlan, task.id, task.objectIds);
   const materialCheckins = materialCheckinTaskBasis(layout, task, checkins);
   const basis = canonical({
@@ -70,8 +82,9 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
       ownerName: task.ownerName.trim(), contractorName: task.contractorName.trim(), acceptance: task.acceptance.trim(),
       objectIds: [...task.objectIds].sort() },
     venue: { width: layout.width, depth: layout.height,
-      venueScan: layout.venueScan ?? null, sceneAnchor: layout.sceneAnchor ?? null, mapGroundPolygon: layout.mapGroundPolygon ?? null,
-      floorPlanImage: layout.floorPlanImage ?? null, sources: layout.backendSceneV2?.sources ?? null, dimensions: layout.backendSceneV2?.dimensions ?? null,
+      venueScan: layout.venueScan ?? null, sceneAnchor: layout.sceneAnchor ?? null,
+      mapGroundPolygon: ground?.polygon ?? layout.mapGroundPolygon ?? null,
+      floorPlanImage: ground?.image ?? layout.floorPlanImage ?? null, sources: layout.backendSceneV2?.sources ?? null, dimensions: layout.backendSceneV2?.dimensions ?? null,
       backendVenue: layout.backendVenue ?? null, storedStructure: layout.backendSceneV2?.structure ?? null,
       entrance: layout.entrance ?? null, terrain: layout.terrain ?? null, roof: layout.roof ?? null,
       floors: layout.floors.map(floor => ({ id: floor.id, height: floor.height ?? 3,

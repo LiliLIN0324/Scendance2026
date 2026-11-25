@@ -111,7 +111,9 @@ B1 会话/身份解耦 ✅ 合入 main
 - ✅ **读源单源化入口**（本片）：`resolveGround(layout, plan)` → `{image, opacity, satelliteRef, polygon, center, frame, source}`，plan 优先、layout 兜底、两边都无返回 null。5 例单测钉住优先级与「上传户型图不算贴地底图」「layout 显式关贴地不兜底」。**这是删 6 个 layout 字段的真正前置**：读方逐个从这里取，接完再删字段就是纯删除。
 - ✅ **读方 ① 2D 卫星贴图已接**（本片）：`render2DTopDown` 新增 `ground?: ResolvedGround`，`paintAlignedSatellite` / 参考图判定 / 透明度三处改读它；`use-scene-effects` 的 2D 重绘按 `resolveGround(layout, outdoorPlan)` 传入。**验收方式换成 node 级逐调用比对**（不依赖浏览器截图）：同一份盐官古城夹具，只读 layout 与读 `ground` 的 `drawImage` 参数序列逐项相等；并且把 `layout.floorPlanImage` 删掉、只剩 `ground` 时序列仍相等——等于证明了「删镜像后 2D 照画」。`render.test.ts` 31 passed。
 - ✅ **读方 ② 评审截图已接**（本片）：`useReviewCapture` 的 `Inputs` 增 `ground`，底图判定与 2D 重绘都改用它；壳体按 `resolveGround(layout, outdoorPlan)` 传入。新例证明「把 `layout.floorPlanImage` 删掉、只剩 `ground`」时，截图仍会等 `ensureFloorPlanImageDecoded(ground.image)` 并带上正源渲染（`use-review-capture.react.test.tsx` 20 passed）。
-- ⏳ **读方 ③–④** 未做，按「输出逐调用比对」推进：③ 交付快照与清单哈希；④ `agent-panel` 需求记忆；⑤ 室内壳体（随 #38 消失）。
+- ✅ **读方 ③ 交付核对哈希（口径 A：字节兼容）**：`operationBasis` 增可选 `plan` 参数，`floorPlanImage` / `mapGroundPolygon` 改从 `resolveGround` 取、逐字段回落 layout，算法与字段顺序不动。3 例钉死：plan 与镜像同值时摘要逐字节相等；删掉镜像只剩 `plan.ground` 时摘要仍相等；上传户型图（不是贴地底图）仍按旧口径计入摘要。这三例就是「#38 删字段那天，老回执不会集体翻成需复核」的护栏。
+- ⏳ **③ 的调用点接线并入 #38**：`scene-delivery-panel → EventOperationsPanel → OperationEditor` 深链、`activity-task-suggestions` 同源调用都还没有 plan 在手；现在接线是零行为变化（同摘要），而删镜像那一刻必然同时改这批触点，所以不单独铺一遍 prop。
+- ⏳ **读方 ④** 未做：`agent-panel` 需求记忆/地图比对；⑤ 室内壳体（随 #38 消失）。
 - ⚠️ **③ 不是纯 no-op**：`lib/event-operations.ts:72-74` 的 `operationBasis` 把 `floorPlanImage` 与 `mapGroundPolygon` 计入 canonical 串再做 SHA-256，这个摘要就是交付核对的「通过/不通过」回执。换读源＝改核对语义，已通过的旧回执会对不上；必须按版本化决策（同摘要兼容 or 显式升版重算），不静默换。同理 ④ `agent-panel:2454` 的「场地已记录」判定影响模型上下文，换源前要先定口径。
 - ⏳ **镜像删除**未做：`floorPlanImage` 等 6 个 layout 字段仍有 52 个消费方（2D `canvas-2d/render.ts`、3D `structure-builder.ts`/`room-builder.ts`、`agent-panel` 需求记忆、评审截图、云卡缩略图、交付导出）。换读源要逐簇真机验收，与 #38 一起做才有意义（#38 之前 layout 仍是云存档载体）。
 - ⏳ **false 侧 patch 删除**未做：3D 地面/外墙仍靠 `shellVenuePatchFromPlanBoundary` 长尺寸，删了会断，随 #38。
