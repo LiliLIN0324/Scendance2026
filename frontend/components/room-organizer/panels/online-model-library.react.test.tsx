@@ -78,7 +78,7 @@ function PlacementWorkspace({ hidden = false }: { hidden?: boolean }) {
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<RoomEditorContextValue['gameMode']>('build');
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
-  const editor: RoomEditorContextValue = { layout, activeFloor, activeFloorIndex, actions: layoutStore.getState().actions,
+  const editor: RoomEditorContextValue = { projectId: layout.id ?? 'test-project', layout, activeFloor, activeFloorIndex, actions: layoutStore.getState().actions,
     view, setView, toggle: key => setView(current => ({ ...current, [key]: !current[key] })),
     collidingIds: new Set(), highlightedIds: new Set(), catalogQuery, setCatalogQuery,
     recentColors: [], pushColor: () => {}, playCue: () => {},

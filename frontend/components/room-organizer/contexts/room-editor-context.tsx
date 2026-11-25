@@ -7,6 +7,10 @@ import type { SoundCue } from '../lib/sounds';
 import type { FloorLayout, GameMode, RoomLayout, ViewSettings } from '../lib/types';
 
 export interface RoomEditorContextValue {
+  // Session/project identity: single source derived at the editor entry.
+  // Persistent buckets and consistency checks read this, not `layout.id` with a `'local'` fallback.
+  readonly projectId: string;
+
   // Layout state
   readonly layout: RoomLayout;
   readonly activeFloor: FloorLayout;
@@ -63,6 +67,7 @@ export function RoomEditorProvider({ value, children }: RoomEditorProviderProps)
   // this memo a no-op; the enumerated fields are the real invalidation keys.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const memoised = useMemo(() => value, [
+    value.projectId,
     value.layout,
     value.activeFloor,
     value.activeFloorIndex,

@@ -683,7 +683,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   useEffect(() => {
     registerPublishGateProvider(async () => {
       const currentLayout = layoutStore.getState().layout;
-      const scopeId = currentLayout.id ?? 'local';
+      const scopeId = activeProjectId;
       const session = controller.getSnapshot();
       const user = session.user;
       const archiveAssetIds: Record<string, string> = {};
@@ -724,7 +724,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
       };
     });
     return () => registerPublishGateProvider(null);
-  }, [controller]);
+  }, [controller, activeProjectId]);
 /** 主画布接管态（户外项目非漫游 3D）挂的 OutdoorPlan3D 实例：右轨缩放/导出效果图改派用。 */
 const outdoorPlan3DRef = useRef<OutdoorPlan3DApi | null>(null);
 // 2026-11-16 用户：「3D 下的放大/缩小按钮没有交互」——右轨缩放原来只转发给 2D 画布，
@@ -1165,13 +1165,13 @@ useEffect(() => {
         : '还有改动没保存，保存后再发布。');
     }
     const capturedRevision = snapshot.revision as number;
-    const capturedScope = initial.layout.id ?? 'local';
+    const capturedScope = activeProjectId;
     const capturedName = initial.layout.name?.trim() || snapshot.project?.name?.trim() || '未命名场地';
     const capturedOutdoorPlan = outdoorFullPlanRef.current;
     // 服务端 expectedRevision 是版本保护的最后一道；这里的活动性核对负责防「切项目后旧回执串台」。
     const sameActivity = () => activitySession.isCurrent(token)
       && floorSession.isCurrent(floor)
-      && (layoutStore.getState().layout.id ?? 'local') === capturedScope
+      && activeProjectId === capturedScope
       && controller.getSnapshot().project?.id === projectId;
     // 2026-11-20 集成接通（主计划 §5.2）：发布前核对完整依赖清单——扫描/资料图/附件
     // 这几类不在既有 dirty 检查的覆盖里，未归档就发布会产出引用本机代理的公开版本。
@@ -1209,7 +1209,7 @@ useEffect(() => {
       // 供分享卡按项目绑定回执（接口约定 §1.2）：活动已切换时不把旧回执记进新项目。
       isCurrent: sameActivity,
     };
-  }, [controller, activitySession.isCurrent, sessionToken, floorSession.isCurrent, floorToken]);
+  }, [controller, activitySession.isCurrent, sessionToken, floorSession.isCurrent, floorToken, activeProjectId]);
   // 分享记录：版本 / 时间 / 撤回状态以服务端为准；链接 token 只在生成时返回一次，URL 由卡片记在本机日志里。
   const listProjectShares = useCallback(async (): Promise<ServerShare[]> => {
     const projectId = cloudLedgerProjectId({
@@ -3388,6 +3388,7 @@ useEffect(() => {
 
   const roomEditorValue = useMemo<RoomEditorContextValue>(
     () => ({
+      projectId: activeProjectId,
       layout,
       activeFloor,
       activeFloorIndex,
@@ -3411,7 +3412,7 @@ useEffect(() => {
       setAutoCycleLighting,
     }),
     [
-      layout, activeFloor, activeFloorIndex, actions,
+      activeProjectId, layout, activeFloor, activeFloorIndex, actions,
       view, setView, toggle,
       collidingIds, highlightedIds, catalogQuery, setCatalogQuery,
       recentColors, pushColor, playCue,
