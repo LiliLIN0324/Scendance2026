@@ -113,3 +113,49 @@
   这与 ①②③④ 的做法同源，不需要浏览器。
 - 室内 `room-builder` 随 #38 删；`structure-builder` 已接 `options.ground`，#38 动工前先跑一次
   `npm --prefix frontend run build` + 壳体 15 套件作为基线。
+
+## 八、S2 / S3 目标与验收口径（2026-11-25 用户拍板「都定目标完成」）
+
+### S2（`mapGround*` 定位字段退役）
+
+**目标**：layout 不再是定位的存放处，`mapGroundPolygon` / `mapGroundFrame` / `mapLngLat`
+（以及他们的布尔开关 `satelliteGroundRef`）全部以 `plan.ground` 为唯一正源。
+
+**验收（三条同时成立才算 S2 完成）**：
+1. 静态：写侧 0 处——`grep` 上述标识符在**赋值**位置（`xxx.mapGroundPolygon =`、对象字面量里出现、`applyLayout({...mapGround...})`）应为 0；
+   允许剩下的只有「读 layout 兜底」形态。
+2. 读侧：所有读点要么走 `resolveGround(layout, plan)`，要么函数显式收 `ground` 入参；兜底分支保留，
+   但每条兜底在代码里标明「旧 JSON 兼容，迁移后删」。
+3. 数据：一次性迁移把旧 layout 的定位四件套写进 `plan.ground`（幂等、只在 plan 缺字段时写、可重跑），
+   跑过之后兜底分支可整段删除。
+
+### S3（贴地字节字段退役）
+
+**目标**：`lib/types.ts` / `lib/schema.ts` 里不再有 `floorPlanImage` / `floorPlanOpacity`；
+那个存着 4 万字节 data URL 的字段从 RoomLayout 上消失，底图只活在 `plan.ground.image`。
+
+**验收**：
+1. `grep -r floorPlanImage | floorPlanOpacity` 在 `frontend/` 与 `supabase/` 的非测试源码里为 **0**；
+   唯一例外是迁移脚本，且只在 `LegacyRoomLayout` 类型下读旧 JSON。
+2. `plan-ground.ts` 的 `layoutGroundPatch()` 只剩定位投影，且**不再有**任何字节字段；
+   `lib/amap-venue.ts` 的 `applySatelliteGroundPatch` 不再产出字节。
+3. 旧数据：迁移脚本把 `floorPlanImage` → `plan.ground.image`（`floorPlanOpacity` → `opacity`），
+   与 S2 迁移同一支脚本、同一遍扫描完成。
+4. 3D/2D 成图对照：迁移前（有字节）与迁移后（只剩 plan）在**非户外 + 有卫星/纸面底图**的草稿上各导一张，
+   像素差 0（因为读点早已改读 `resolveGround`；这条是对「改读改对了」的反证）。
+
+### 分批（静态计数来自 2026-11-25 实测，非测试文件）
+
+| 批 | 文件（命中数） | 状态 |
+| --- | --- | --- |
+| 1 | `lib/scene-anchor.ts`（5）、`lib/outdoor-venue-sync.ts`（6）、`room-organizer.tsx` 反向播种、`use-scene-effects` 蓝色边界环 | **本轮已落**（函数加可选 `ground` 入参，没给就回退 layout，行为等价） |
+| 2 | `lib/venue-scale-basis.ts`（2）+ `lib/venue-fact-epoch.ts` + `agent-panel.tsx:1642` | **待做，唯一需要新 accessor 的簇**：三方共用同一个「场地事实基线」字符串，plan 现在只活在 `room-organizer` 组件里，得先有一个模块级 `readCurrentPlanGround(projectId)`，否则 epoch 会因两侧口径不同而假跳（误报「请重新确认场地尺寸」） |
+| 3 | `lib/amap-venue.ts`（73）+ `panels/scendance-workspace.tsx`（28） | 与 #38 同批：旧卫星开关整簇随壳体退役 |
+| 4 | `canvas-2d/render.ts`（24，已有 `ground?`，剩兜底）、`three/room-builder.ts`（20）、`use-review-capture.ts`（6）、`layout-reducer.ts`（6）、`west-lake-basemap.ts`（19） | 读点收尾 |
+| 5 | `lib/types.ts`（7）、`lib/schema.ts`（22）、`plan-ground.ts`（27）、`version-history.ts`（4） | **S3 收口**：删字段 + 迁移脚本 + 旧版本历史兼容 |
+
+**两条硬边界（动 S3 前必须先处理）**：
+- `three/scan-placement.ts`（3 处命中）是 AGENTS.md §六 的**禁改几何基线**：里面调用 `sceneAnchorOf(layout)`。
+  删字段必须同时给它换形参或改成显式 `ground`，属「动基线」，要先在 `HANDOFF.md` 登记并说明不改数学、只换取值来源。
+- 云端存量方案：`sitePlanDataSchema` 的 `ground` 是可选的，迁移脚本要能处理「plan 里没有 ground、layout 里有字节」的老方案；
+  任何一步都不能让老方案在迁移中途变空白地（底线：防丢存量）。

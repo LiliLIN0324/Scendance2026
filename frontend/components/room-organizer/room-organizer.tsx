@@ -1008,8 +1008,8 @@ useEffect(() => {
   // 只在覆盖层没有既有草稿时生效；锚点取活动点位，2D 边界才落得回真实经纬度。
   // 模板场景没有 backendVenue，但 layout.width/height 就是 3D 壳体的权威尺寸。
   const outdoorSeedPlan = useMemo(
-    () => seededPlanFromLayout(layout),
-    [layout],
+    () => seededPlanFromLayout(layout, outdoorPlanState?.plan.ground ?? null),
+    [layout, outdoorPlanState?.plan.ground],
   );
   // 手机端：抽屉一打开（任一路 lane 或私信），入口弹层就收起，避免两层叠着。
   // （columnExpanded 在接管态定义之后才能算出，本 effect 搬到那边同置。）

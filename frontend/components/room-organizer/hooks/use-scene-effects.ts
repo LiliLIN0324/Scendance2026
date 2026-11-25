@@ -780,7 +780,8 @@ export function useSceneEffects({
   useEffect(() => {
     const scene = sceneRef.current;
     if (!isReady || !scene || !showBasemap || view.view2D || view.walkthroughMode) return;
-    const points = mapVenueFootprint(layout);
+    // S2（2026-11-25）：圈的经纬度环与锚点都从正源取，layout 上的旧定位字段只兜底。
+    const points = mapVenueFootprint(layout, resolveGround(layout, outdoorPlanRef.current));
     if (points.length < 3) return;
     const geometry = new LineGeometry();
     geometry.setPositions([...points, points[0]!].flatMap(point => [point.x, 0.05, point.z]));

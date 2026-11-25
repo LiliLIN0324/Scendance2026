@@ -1,4 +1,4 @@
-import type { PlanPoint, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanGround, PlanPoint, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout } from './types';
 import { metersPerDegreeLng } from './tdt-probe-scale';
 import { DEFAULT_SCOPE_MARGIN_M, expandRect } from './outdoor-design-scope';
@@ -282,12 +282,13 @@ export function seededPlanFromLayout(layout: {
   sceneAnchor?: { lng: number; lat: number } | null | undefined;
   mapLngLat?: { lng: number; lat: number } | null | undefined;
   mapGroundPolygon?: readonly { lng: number; lat: number }[] | null | undefined;
-}): SitePlanData | null {
+}, ground?: Pick<PlanGround, 'center' | 'polygon'> | null): SitePlanData | null {
   const width = layout.width;
   const depth = layout.height;
   if (!Number.isFinite(width) || !Number.isFinite(depth) || width < 2 || depth < 2) return null;
-  const anchor = layout.sceneAnchor ?? layout.mapLngLat ?? null;
-  const footprint = layout.mapGroundPolygon;
+  // S2（2026-11-25）：有 plan.ground 时锚点与真实足迹都取正源；没有才读 layout 旧缓存字段。
+  const anchor = layout.sceneAnchor ?? ground?.center ?? layout.mapLngLat ?? null;
+  const footprint = ground ? ground.polygon : layout.mapGroundPolygon;
   if (anchor && Number.isFinite(anchor.lng) && Number.isFinite(anchor.lat)
     && Array.isArray(footprint) && footprint.length >= 3) {
     const boundary = trueFootprintBoundary(footprint, anchor);
