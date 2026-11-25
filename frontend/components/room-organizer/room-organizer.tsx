@@ -82,7 +82,6 @@ import { layoutStore } from './hooks/use-layout-store';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
-import { useSceneEffects } from './hooks/use-scene-effects';
 import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
 import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
@@ -1303,9 +1302,7 @@ useEffect(() => {
   useEffect(()=>{const pending=pendingPlacement.current;if(!pending)return;try{pending.guard.assertCurrent();}catch{clearPendingPlacement();notify('场景、楼层或登录状态已变化，待放置物料已取消，请重新选择。','info');}},[layout,activeFloorIndex,isActive,clearPendingPlacement]);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
-  const [measurementPoints, setMeasurementPoints] = useState<ReadonlyArray<{ x: number; z: number }>>([]);
   const [wallDraft, setWallDraft] = useState<{ x: number; z: number } | null>(null);
-  const [pointerWorld, setPointerWorld] = useState<{ x: number; z: number } | null>(null);
   // 人物路线布点（PEOPLE-04）：画布点击喂给选中人物的 walkRoute。首个路点先落
   // 草稿（单点路线过不了 schema 校验，不能提前写进 item），第二个点起直接提交。
   const [routeDrawItemId, setRouteDrawItemId] = useState<string | null>(null);
@@ -1319,17 +1316,6 @@ useEffect(() => {
   const splatWalkBoundsRef = useRef<SplatWalkBounds | null>(null);
   // Active transform tool: move (plain drag), rotate or scale dial (#P0-3).
   const [gizmoMode, setGizmoMode] = useState<GizmoMode>('move');
-
-  const wallSnapResult = useMemo(() => {
-    if (!view.drawWallMode || !pointerWorld) return null;
-    return snapWallEndpoint({
-      point: pointerWorld,
-      existingWalls: activeFloor.interiorWalls ?? [],
-      fromPoint: wallDraft,
-      roomWidth: layout.width,
-      roomDepth: layout.height,
-    });
-  }, [view.drawWallMode, pointerWorld, activeFloor.interiorWalls, wallDraft, layout.width, layout.height]);
 
   const highlightedIds = useMemo(() => {
     const normalised = catalogQuery.trim().toLowerCase();
@@ -1432,15 +1418,8 @@ useEffect(() => {
         setWallDraft(snapped.point);
         return;
       }
-      if (view.measurementMode) {
-        setMeasurementPoints((current) => {
-          if (current.length >= 2) return [{ x, z }];
-          return [...current, { x, z }];
-        });
-      }
     },
     [
-      view.measurementMode,
       view.drawWallMode,
       wallDraft,
       actions,
@@ -1451,14 +1430,6 @@ useEffect(() => {
       routeDraft,
     ]
   );
-
-  const handleFloorPointerMove = useCallback((x: number, z: number) => {
-    setPointerWorld({ x, z });
-  }, []);
-
-  const handleFloorPointerLeave = useCallback(() => {
-    setPointerWorld(null);
-  }, []);
 
   const stopRouteDraw = useCallback(() => {
     setRouteDrawItemId(null);
@@ -1537,7 +1508,6 @@ useEffect(() => {
     if (!view.drawWallMode) {
       setWallDraft(null);
       setSelectedWall(null);
-      setPointerWorld(null);
     }
   }, [view.drawWallMode]);
 
@@ -1548,9 +1518,6 @@ useEffect(() => {
     setSelectedItemId(null);
     setSelectedWall(null);
     setExtraSelectedIds(new Set());
-    // Points are floor-plane coordinates; kept, they'd float on the new floor
-    // showing a distance measured on the old one (#224).
-    setMeasurementPoints([]);
     // activeFloor.id: removing floor 0 (or reordering) can change WHICH floor
     // is active while the index stays 0 — keying on the index alone carried
     // the deleted floor's selection onto its replacement (#117).
@@ -1640,7 +1607,6 @@ useEffect(() => {
   const clearTransientSelection = useCallback(() => {
     selectOnly(null);
     setSelectedWall(null);
-    setMeasurementPoints([]);
   }, [selectOnly]);
 
   // Plain reads + flat setter calls. The previous version computed the
@@ -2579,11 +2545,6 @@ useEffect(() => {
       onWallSelect: ({ wallId, kind }) => {
         setSelectedWall({ id: wallId, kind });
       },
-      // Only track the floor pointer while wall-draw mode consumes it — the
-      // handler writes React state per mousemove, re-rendering the whole tree,
-      // and the hook skips the floor raycast when the handler is absent.
-      ...(view.drawWallMode ? { onFloorPointerMove: handleFloorPointerMove } : {}),
-      onFloorPointerLeave: handleFloorPointerLeave,
       snapPosition,
       getDragPlaneY,
       transformMode: gizmoMode,
@@ -3168,35 +3129,6 @@ useEffect(() => {
     return () => window.removeEventListener('keydown', onOutdoorKey);
   }, [outdoorWalkActive, cycleOutdoorWalkView]);
 
-  useSceneEffects({
-    showBasemap: true,
-    outdoorWorkspace: !!outdoorPlan || !!environment,
-    modelPosition: environment?.position,
-    outdoorPlan,
-    isReady,
-    invalidate,
-    requestShadowUpdate,
-    threeModuleRef,
-    sceneRef,
-    rendererRef,
-    cameraRef,
-    controlsRef,
-    canvas2DRef,
-    layout,
-    activeFloor,
-    activeFloorIndex,
-    ...(splatWalkBounds ? { personRouteBounds: splatWalkBounds } : {}),
-    view,
-    ...(referenceImage.layer ? { referenceImage: referenceImage.layer } : {}),
-    selectedItemId,
-    extraSelectedIds,
-    highlightedIds,
-    selectedWall,
-    wallDraft,
-    wallSnapResult,
-    measurementPoints,
-  });
-
   useWeather({
     weather: view.weather,
     enabled: isReady && !view.view2D,
@@ -3436,11 +3368,6 @@ useEffect(() => {
     }, 250);
     return () => window.clearInterval(intervalId);
   }, [autoCycleLighting]);
-
-  // Reset measurements whenever the user exits the mode.
-  useEffect(() => {
-    if (!view.measurementMode) setMeasurementPoints([]);
-  }, [view.measurementMode]);
 
   const toggle = useCallback(<K extends keyof ViewSettings>(key: K) => {
     setView((previous) => ({ ...previous, [key]: !previous[key] }));
