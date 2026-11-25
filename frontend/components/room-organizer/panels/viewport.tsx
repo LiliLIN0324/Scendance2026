@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -15,15 +14,17 @@ import {
   Move,
   RotateCw,
 } from 'lucide-react';
-import type { AlignEdge, DistributeAxis } from '../lib/alignment';
-import { formatReading } from '../lib/display-units';
+import { useEffect, useState } from 'react';
 import { CATALOG_DRAG_MIME } from '../lib/catalog-drag';
 import { MAX_CUSTOM_SET_NAME_LENGTH } from '../lib/custom-sets';
+import { formatReading } from '../lib/display-units';
 import { WALK_CANVAS_ID } from '../lib/walk-engage';
 import { Icon, iconForItem } from '../plotcraft/icon';
 import { ChipButton, ChipNameField } from './chip-controls';
 import { Minimap } from './minimap';
 import type { WalkthroughPhase } from '../hooks/use-walkthrough';
+import type { AlignEdge, DistributeAxis } from '../lib/alignment';
+import type { ResolvedGround } from '../lib/plan-ground';
 import type { GizmoMode } from '../lib/transform';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import type { FloorLayout } from '../lib/types';
@@ -62,6 +63,8 @@ export interface ViewportProps {
   lengthUnit?: import('../lib/types').DisplayUnit;
   lengthPrecisionM?: import('../../../../supabase/functions/_shared/plan-editor').LengthPrecisionM;
   showMinimap: boolean;
+  /** 贴地正源（S2 批 4）：小地图缩略图优先读它；不给则与改前等价。 */
+  ground?: ResolvedGround | null | undefined;
   walkthroughActive?: boolean;
   /** Pointer-lock progress for the eye-level walk hint. */
   walkthroughPhase?: WalkthroughPhase;
@@ -385,6 +388,7 @@ function ViewportOverlays(props: ViewportProps): JSX.Element {
           layout={props.layout}
           floor={props.activeFloor}
           selectedItemId={props.selectedItem?.id ?? null}
+          ground={props.ground}
         />
       )}
 

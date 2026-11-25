@@ -2,6 +2,7 @@
 
 import { PlanThumb } from './plan-thumb';
 import type { FloorLayout, RoomLayout } from '../lib/types';
+import type { ResolvedGround } from '../lib/plan-ground';
 
 const MINIMAP_WIDTH = 180;
 const MINIMAP_HEIGHT = 130;
@@ -10,9 +11,11 @@ export interface MinimapProps {
   layout: RoomLayout;
   floor: FloorLayout;
   selectedItemId: string | null;
+  /** 贴地正源（S2 批 4）：小地图画的底图优先读正源，缺字段回退 layout 旧缓存。 */
+  ground?: ResolvedGround | null | undefined;
 }
 
-export function Minimap({ layout, floor, selectedItemId }: MinimapProps): JSX.Element {
+export function Minimap({ layout, floor, selectedItemId, ground }: MinimapProps): JSX.Element {
   return (
     // Offset below the top-right pill stack (FloorPill + WallDisplayPill, at
     // top:16) so the minimap no longer overlaps them or the measurement /
@@ -29,6 +32,7 @@ export function Minimap({ layout, floor, selectedItemId }: MinimapProps): JSX.El
         layout={layout}
         floor={floor}
         selectedItemId={selectedItemId}
+        ground={ground}
         width={MINIMAP_WIDTH}
         height={MINIMAP_HEIGHT}
         showFloorPlan

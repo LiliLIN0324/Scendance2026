@@ -20,6 +20,7 @@ import { dragThresholdPx, keepsSelectionOnPress } from '../three/drag-handlers';
 import { useLayoutActions } from './use-layout-store';
 import type { DragCancelOptions } from './use-item-drag';
 import type { FloorLayout, FurnitureItem, RoomLayout, ViewSettings } from '../lib/types';
+import type { ResolvedGround } from '../lib/plan-ground';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
 
 /**
@@ -75,6 +76,11 @@ export interface UseCanvas2DInteractionParams {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   layout: RoomLayout;
   activeFloor: FloorLayout;
+  /**
+   * 贴地正源（S2 批 4）：2D 渲染的底图/不透明度/贴地框优先读它，缺字段才回退 layout。
+   * 不给就与改前逐字等价（旧缓存仍是唯一来源）。
+   */
+  ground?: ResolvedGround | null | undefined;
   referenceImage?: ReferenceImageLayer;
   view: Pick<ViewSettings, 'showMeasurements' | 'lengthUnit' | 'lengthPrecisionM' | 'showWiFiSignals' | 'showHeatmap' | 'drawZoneMode' | 'showReferenceImage' | 'referenceImageOpacity'>;
   selectedItemId: string | null;
@@ -249,6 +255,7 @@ export function useCanvas2DInteraction(
         showWiFiSignals: view.showWiFiSignals,
         showHeatmap: view.showHeatmap,
         ...(referenceImage ? { referenceImage } : {}),
+        ...(params.ground ? { ground: params.ground } : {}),
         showFloorPlan: view.showReferenceImage !== false,
         ...(view.referenceImageOpacity !== undefined ? { floorPlanOpacity: view.referenceImageOpacity } : {}),
         zoneDraft: draft,

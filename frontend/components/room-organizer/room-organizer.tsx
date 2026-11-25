@@ -2463,11 +2463,16 @@ useEffect(() => {
   // 2D plan select/drag (#219). Reuses use-item-drag's session, so the commit
   // semantics (single dispatch, lock-on-release, wall settling, isDragActive
   // keyboard gate) are identical to a 3D drag.
+  // S2 批 4：2D 两处读点（交互重绘的 render options、小地图缩略图）统一拿这一份贴地正源。
+  // 没有 plan.ground 时 resolveGround 回退 layout 旧缓存，与改前逐字等价。
+  const viewGround = useMemo(() => resolveGround(layout, outdoorPlanState?.plan ?? null), [layout, outdoorPlanState?.plan]);
+
   const { clientToWorld2D } = useCanvas2DInteraction({
     enabled: view.view2D,
     canvasRef: canvas2DRef,
     layout,
     activeFloor,
+    ground: viewGround,
     view,
     ...(referenceImage.layer ? { referenceImage: referenceImage.layer } : {}),
     selectedItemId,
@@ -5533,6 +5538,7 @@ useEffect(() => {
         lengthUnit={layout.planSettings?.displayUnit ?? view.lengthUnit}
         lengthPrecisionM={view.lengthPrecisionM ?? 0.01}
         showMinimap={view.showMinimap}
+        ground={viewGround}
         walkthroughActive={walkthroughActive}
         walkthroughPhase={walkthroughPhase}
         walkthroughSeat={walkNearSeat?.name ?? null}

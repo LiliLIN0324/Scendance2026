@@ -151,7 +151,7 @@
 | 1 | `lib/scene-anchor.ts`（5）、`lib/outdoor-venue-sync.ts`（6）、`room-organizer.tsx` 反向播种、`use-scene-effects` 蓝色边界环 | **本轮已落**（函数加可选 `ground` 入参，没给就回退 layout，行为等价） |
 | 2 | `lib/venue-scale-basis.ts`（2）+ `lib/venue-fact-epoch.ts` + `agent-panel.tsx:1642` | **本轮落了一半**：`venueScaleBasis(layout, ground?)` 已加可选正源入参，并有用例钉住「换源后字符串逐字相同」（`venue-scale-basis.test.ts`）；三个调用点仍走 layout 单参，留到批 5 连删字段一起翻。用户选 C：先靠迁移消除失配风险，再换源 |
 | 3 | `lib/amap-venue.ts`（73）+ `panels/scendance-workspace.tsx`（28） | 与 #38 同批：旧卫星开关整簇随壳体退役 |
-| 4 | `canvas-2d/render.ts`（24，已有 `ground?`，剩兜底）、`three/room-builder.ts`（20）、`use-review-capture.ts`（6）、`layout-reducer.ts`（6）、`west-lake-basemap.ts`（19） | 读点收尾 |
+| 4 | `canvas-2d/render.ts`（24，已有 `ground?`，剩兜底）、`three/room-builder.ts`（20）、`use-review-capture.ts`（6）、`layout-reducer.ts`（6）、`west-lake-basemap.ts`（19） | **2D 渲染读点已接（`f20c9e31` 之后）**：`render.ts` 本来就收 `ResolvedGround`，真正缺的是「谁把正源递进来」——本轮补上 `use-canvas-2d-interaction`（入参 + 重绘选项）、`plan-thumb`（新增可选 `ground`）、`minimap`（透传）、`viewport`（`ViewportProps.ground`），并在 `room-organizer.tsx` 用一份 `useMemo(() => resolveGround(layout, plan))` 同时喂给 2D 交互重绘与 `<Viewport>`。`use-review-capture` / `use-scene-effects` 早已递 ground。**`three/room-builder.ts` 不接 ground**：它是随 #38 退役的旧室内壳体，接了也没有可达路径；`layout-reducer.ts` 的 6 处是「删字节」的写侧动作，属 S3；`west-lake-basemap.ts` 的 19 处是旧 JSON 清理与 `satelliteGroundRef=false` 落写，随 S3 改吃 plan.ground |
 | 5 | `lib/types.ts`（7）、`lib/schema.ts`（22）、`plan-ground.ts`（27）、`version-history.ts`（4） | **S3 收口**：删字段 + 迁移脚本 + 旧版本历史兼容 |
 
 **用户口径（2026-11-25，选 C）**：先靠迁移把值搬进 `plan.ground`，再换基线来源，用迁移消掉「换源导致旧记忆失配 → 误报重新确认场地尺寸」的风险。迁移这一半代码里已经存在：`planGroundSync` 判 `to-plan` 就交给画布 `applyGround` 写正源（`plan-ground.test.ts` 有用例），这里只是把「换源等价」这条也钉住，等批 5 一起翻调用点。
@@ -192,3 +192,27 @@
 **这条实测覆盖不到的**：`adoptPlan → onPlanChange → 保存` 那段 React 接线只在代码上核对
 （`outdoor-plan-canvas.tsx:5102 applyGround` → `2876 adoptPlan` → `2879 onPlanChange`），没有走真浏览器；
 以及「老方案自动迁移后刷新页面，2D/3D 底图是否还画得出来」这一条成图对照，仍要等 S3 收口时在真机补。
+
+## 十、S2 写侧赋值位清单（2026-11-25 实测，验收第 1 条的自证）
+
+§八 验收第 1 条写的是「写侧 0 处」。按代码逐条数下来，S2 阶段**做不到字面 0**，只剩三类，各有去处：
+
+| 位置 | 形态 | 判定 |
+| --- | --- | --- |
+| `lib/plan-ground.ts:70-76` `layoutGroundPatch` | 把 ground 投影回 layout（`satelliteGroundRef` / `mapGroundPolygon` / `mapLngLat` / `mapGroundFrame` 四处） | **设计保留**：这是 `to-layout` 方向唯一的写点，也是 3D 卫星 UV 与室内进场的视图缓存来源；S1 起它已不投影字节。S3 删字段时一并删除，删前 3D 必须全部改读 `resolveGround` |
+| `lib/amap-venue.ts`（474/727/766-769/779-780/818-823/849-852/859/901/905/923/926） | 地图选址 / 旧卫星开关写 `mapGround*` 与 `satelliteGroundRef` | **随 #38 同批（批 3）**：入口门禁是「地图选址 venue + 非户外编辑 + 非 GeoGround」，户外渲染不到 |
+| `panels/scendance-workspace.tsx`（835/839/861/870） | `applyLayout({ satelliteGroundRef: true, ... })` | **随 #38 同批（批 3）**：同一簇旧卫星开关 |
+| `lib/west-lake-basemap.ts:129` | `next.satelliteGroundRef = false` | **S3 批 5**：旧 JSON 清理器改吃 `plan.ground` 时一并改 |
+
+读侧（不是写）另有 `structure-builder.ts:188/233`（Three 材质 `userData` 标记）、`use-scene-effects.ts:441`（传给壳体的开关，不是 layout）、`event-operations.ts:86` / `scene-handoff.ts:28` / `venue-scale-basis.ts:30-31` / `agent-panel.tsx:1643-1644`（全是读兜底）。
+
+结论：**S2 可做的部分已做完**——读侧 2D 两处补上正源、其余读点早已递 ground 或走 `resolveGround`；
+剩下三类写点分别等 #38（批 3）与 S3（批 5），不是遗漏。
+
+验证（本轮亲测原始输出）：`npx tsc --noEmit` 0；`eslint` 六个改动文件 0 error（存量 warning 不动）；
+新增 `panels/plan-thumb.react.test.tsx` 3 例（给 ground 时递到渲染器 / 不给时选项无该键 / 小地图原样透传）；
+全量前端 `845 passed | 6 skipped`（1 例 `app/page.test.tsx` 15s 超时红，单跑 9 passed | 1 skipped 绿，判并发抖动）；
+`npm --prefix frontend run build` 静态导出成功、oneplan 产物违规 0。
+
+未覆盖：`use-canvas-2d-interaction` 这条没有单测（它要 `useLayoutActions` store 上下文，起一个 hook 测试成本高于收益），
+只经 tsc + 代码核对；`three/room-builder.ts` 刻意没接 ground。
