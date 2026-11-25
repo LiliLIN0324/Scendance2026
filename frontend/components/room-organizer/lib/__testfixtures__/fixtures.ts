@@ -84,7 +84,6 @@ export function makeViewSettings(overrides: Partial<ViewSettings> = {}): ViewSet
     drawZoneMode: false,
     showHeatmap: false,
     showItemLabels: false,
-    showNpcs: false,
     showCameraVision: true,
     ...overrides,
   };

@@ -566,7 +566,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const [atmosphereOpen, setAtmosphereOpen] = useState(false);
   // 氛围条默认收起成一颗「氛围」：真开了人群/雨雪/非正午就展开，别让人找不到关掉它的地方。
   // 第一人称漫游是右轨一级圆钮，不收进氛围，也不收进省略号。
-  const atmosphereShown = atmosphereOpen || view.showNpcs || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
+  const atmosphereShown = atmosphereOpen || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
   // #38（2026-11-25）：卫星贴地开关与「地图类型」菜单已整簇退役。理由见
   // docs/plans/2026-11-25-ground-mirror-retirement-map.md §十二：两处门禁都要求 `!outdoorEditing`，
   // 而地图选址项目只有 `mode=outdoor` 一条生产路径，故这一簇在现行路由下不可达。
@@ -1024,8 +1024,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         </button>
         {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-pop sc-more-pop sc-atmosphere-group" role="menu" aria-label="氛围">
           <span className="sc-tool-menu-label" role="presentation">氛围</span>
-          <button type="button" id="tool-crowd" role="menuitemcheckbox" title="约 3 人从主入口沿通道走进场，避开家具。不移动相机" aria-checked={view.showNpcs} className={view.showNpcs ? 'is-active' : ''} disabled={view.view2D} onClick={() => toggle('showNpcs')}><MaterialSymbol name="groups" size={16}/><span>人群</span></button>
-          <span className="sc-more-sep" aria-hidden="true"/>
           <button type="button" id="tool-weather" role="menuitem" aria-haspopup="listbox" aria-expanded={weatherOpen} onClick={() => { setWeatherOpen(open => !open); setTimeOpen(false); }}>
             <MaterialSymbol name={view.weather === 'clear' ? 'sunny' : 'rainy'} size={16}/>
             <span>{WEATHER_OPTIONS.find(option => option.id === view.weather)?.label ?? '天气'}</span>

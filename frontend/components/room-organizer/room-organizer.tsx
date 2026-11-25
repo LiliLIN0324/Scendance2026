@@ -81,7 +81,6 @@ import {
 import type { LocalWriteCapability } from '@/lib/local-write-lease';
 import { useLayoutState } from './hooks/use-layout-state';
 import { layoutStore } from './hooks/use-layout-store';
-import { useNpcs } from './hooks/use-npcs';
 import { usePeopleModel } from './hooks/use-people-model';
 import { useProposalPreview } from './hooks/use-proposal-preview';
 import { useRecentColors } from './hooks/use-recent-colors';
@@ -110,7 +109,6 @@ import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlac
 import { resolveCatalogPosition } from './lib/catalog-placement-position';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
 import { CAMERA_BRACKET_ARM } from './lib/constants';
-import { crowdHintsFromLayout } from './lib/crowd-route';
 import { notify } from './lib/editor-notices';
 import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, readEnvironmentsStrict, writeEnvironments, type EnvironmentScope, type StoredEnvironment } from './lib/environment-preference';
 import { persistEnvironmentPosition } from './lib/environment-position-transaction';
@@ -300,7 +298,6 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   selectMode: true,
   showHeatmap: false,
   showItemLabels: false,
-  showNpcs: false,
   showCameraVision: false,
 };
 
@@ -3227,22 +3224,6 @@ useEffect(() => {
     isReady,
     rendererRef,
     invalidate,
-  });
-
-  const crowdHints = crowdHintsFromLayout(layout);
-  useNpcs({
-    enabled: isReady && view.showNpcs && !view.view2D,
-    invalidate,
-    requestShadowUpdate,
-    threeModuleRef,
-    sceneRef,
-    roomWidth: layout.width,
-    roomDepth: layout.height,
-    floorY: activeFloorY,
-    items: activeFloor.items,
-    ...(activeFloor.interiorWalls ? { interiorWalls: activeFloor.interiorWalls } : {}),
-    ...(crowdHints.polygon ? { polygon: crowdHints.polygon } : {}),
-    ...(crowdHints.mainEntranceId ? { mainEntranceId: crowdHints.mainEntranceId } : {}),
   });
 
   useWeather({

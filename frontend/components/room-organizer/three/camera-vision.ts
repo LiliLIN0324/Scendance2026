@@ -48,7 +48,7 @@ const UNDETECTABLE_TYPES: ReadonlySet<string> = new Set([
   'window',
   'rug',
 ]);
-/** Tag used by use-npcs for wandering pedestrians. */
+/** Tag for pedestrian bodies in the camera-vision collector. */
 const NPC_TAG = 'npc';
 
 interface VisionConeUserData {

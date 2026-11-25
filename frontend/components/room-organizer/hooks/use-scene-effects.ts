@@ -974,7 +974,7 @@ export function useSceneEffects({
     return () => setPersonWalkContext(null);
   }, [activeFloor, activeFloor.interiorWalls, layout.width, layout.height, personRouteBounds]);
 
-  // 行走中的人物是动态投影体：把静态阴影图的重算入口递给注册表（与 use-npcs 同款）。
+  // 行走中的人物是动态投影体：把静态阴影图的重算入口递给注册表。
   useEffect(() => {
     setPeopleShadowRefresher(requestShadowUpdate);
     return () => setPeopleShadowRefresher(null);

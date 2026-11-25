@@ -411,14 +411,13 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 人群 / 天气 / 时段 in 氛围', () => {
+  it('wires 天气 / 时段 in 氛围（人群已随室内 NPC 退役）', () => {
     const values = contexts();
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
     expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
-    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '人群' }));
-    expect(values.toggle).toHaveBeenCalledWith('showNpcs');
+    expect(screen.queryByRole('menuitemcheckbox', { name: '人群' })).toBeNull();
     // 天气弹层嵌在氛围弹层里：先点天气按钮展开子弹层（默认显示「晴朗」）
     fireEvent.click(screen.getByRole('menuitem', { name: '晴朗' }));
     fireEvent.click(screen.getByRole('option', { name: '降雨' }));

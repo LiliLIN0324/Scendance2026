@@ -172,9 +172,8 @@ export function setPersonWalkContext(ctx: RouteStepContext | null, owner = 'loca
 }
 
 /**
- * 行走中的人物是动态阴影投影体，静态阴影图必须跟着重算（与 use-npcs 同款
- * 约束）。由 use-scene-effects 注入 requestShadowUpdate；每帧只在真的有人
- * 在走时调用一次。
+ * 行走中的人物是动态阴影投影体，静态阴影图必须跟着重算。由 use-scene-effects
+ * 注入 requestShadowUpdate；每帧只在真的有人在走时调用一次。
  */
 export function setPeopleShadowRefresher(fn: (() => void) | null): void {
   shadowRefresher = fn;

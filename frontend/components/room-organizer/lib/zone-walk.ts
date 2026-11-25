@@ -294,7 +294,7 @@ function insideBounds(point: Vec2, bounds: NonNullable<ZoneWalkOptions['bounds']
   return point.x >= bounds.minX && point.x <= bounds.maxX && point.z >= bounds.minZ && point.z <= bounds.maxZ;
 }
 
-/** 原地推挤为 0 = 这个点站得下人（与 crowd-route 的 `cellFree` 同口径）。 */
+/** 原地推挤为 0 = 这个点站得下人。 */
 function freeAt(point: Vec2, colliders: readonly WalkCollider[], clearance: number): boolean {
   if (colliders.length === 0) return true;
   const out = { x: point.x, z: point.z };
