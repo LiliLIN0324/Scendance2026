@@ -362,11 +362,15 @@ export function useSceneEffects({
 
     removeTagged(scene, ROOM_OBJECT_TAGS.Floor, ROOM_OBJECT_TAGS.Wall);
     if (outdoorWorkspace) { clearRoomDimensions(scene); requestShadowUpdate(); return; }
+    // B4/S1（2026-11-25）：3D 地面贴图改读 `resolveGround`（plan.ground 优先、layout 只兜底）。
+    // 缓存里不再写字节，读方必须走这里，否则删字段那一刻 3D 地面会静默变素板。
+    const ground = resolveGround(layout, outdoorPlanRef.current);
     if (layout.backendSceneV2) {
       buildStructureShell(THREE, scene, layout, {
         onTextureLoaded: invalidate,
         activeFloorIndex,
         showAllFloors: view.showAllFloors,
+        ground,
       });
       const camera = cameraRef.current;
       if (camera) applyWallDisplay(scene, camera.position.x, camera.position.z, view.wallDisplay, layout.width, layout.height);
@@ -374,9 +378,7 @@ export function useSceneEffects({
       return;
     }
 
-    // B4/S1（2026-11-25）：3D 地面贴图改读 `resolveGround`（plan.ground 优先、layout 只兜底）。
-    // 缓存里不再写字节，读方必须走这里，否则删字段那一刻 3D 地面会静默变素板。
-    const ground = resolveGround(layout, outdoorPlanRef.current);
+    // B4/S1（2026-11-25）：`ground` 已在本 effect 顶部算出（上面壳体分支同用）。
     // `resolveGround` 只认「像贴地底图」的地址（data: / 代理卫星 / 底图标记）；
     // 户型图这类普通参考图它不下判，所以这里再退一层到 layout 原字段，
     // 保持「有图就描地、不建入口墙」的旧语义不变。

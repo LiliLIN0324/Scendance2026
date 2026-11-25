@@ -801,6 +801,9 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   }, [actions, releaseBusy, setView]);
   useEffect(() => () => { window.clearTimeout(busyTimer.current); }, []);
   useEffect(() => {
+    // B4/S1（2026-11-25）：GeoGround 态（户外有锚点的地图地面）不吃这层贴地缓存——
+    // 它的地面由地图瓦片铺，这里再拉一张卫星塞 layout 只会白写一份字节进方案缓存。
+    if (geoGroundActive) return undefined;
     // 窄边旧图虽然对齐，但只盖住场地中间一块。没铺满户外地面就重拉。
     if (!satelliteOn || (satelliteImageAligned(layout.floorPlanImage) && basemapCoversGroundPlane(layout))) return undefined;
     // 已经有一张非卫星的底图时不要自动盖掉；人点开卫星开关才换。
@@ -818,7 +821,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       window.clearTimeout(busyTimer.current);
       setSatelliteBusy(false);
     };
-  }, [satelliteOn, layout.id, layout.name, layout.floorPlanImage, layout.mapGroundPolygon, fillSatellite]);
+  }, [geoGroundActive, satelliteOn, layout.id, layout.name, layout.floorPlanImage, layout.mapGroundPolygon, fillSatellite]);
   const turnSatellite = () => {
     const current = layoutRef.current;
     satelliteRequest.current += 1;

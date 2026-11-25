@@ -90,9 +90,26 @@
 顺带记一笔待查项：户外「效果图」导出空白，是否 MapLibre 画布没开 `preserveDrawingBuffer`
 导致导出取不到地图层——与本镜像无关，但属于同一条渲染/导出链路，动 #38 前先确认。
 
-## 六、下一步（可立即接）
+## 六、S1 第二刀（2026-11-25，写侧封到「只剩随 #38 退役的那一处」）
+
+用户拍板「现在就退役 S1 字节」。这一刀把生产可达的写侧收掉，并给 3D 壳体加正源入参：
+
+| 位置 | 之前 | 现在 |
+| --- | --- | --- |
+| `panels/scendance-workspace.tsx` 自动补图 effect（803–821） | 只要 `satelliteOn` 就拉图并 `applySatelliteGroundPatch` 写 `floorPlanImage`/`floorPlanOpacity` | `geoGroundActive`（户外有锚点的 GeoGround 地图地面）直接不进，返回 `undefined`；deps 加 `geoGroundActive` |
+| `three/structure-builder.ts` `buildStructureShell` | 贴地图、渐隐、描地判定读 `layout.floorPlanImage / floorPlanOpacity / satelliteGroundRef / mapGroundPolygon / mapGroundFrame` | 新增可选 `options.ground`（`ResolvedGround`）；给了就以它为准（`resolveGround` 结果），没给才回退 layout 旧字段（`scene-delivery` / `proposal-preview` 两个预览路径不传，行为不变） |
+| `hooks/use-scene-effects.ts` | 壳体分支不传 ground | 在本 effect 顶部算出 `ground = resolveGround(layout, plan)`，壳体与 `buildRoom` 两路共用同一份 |
+
+**为什么没有一并改 `fillSatellite` / `turnSatellite` / `chooseBasemap`**：那三处的入口在旧「卫星贴地」开关里，
+门禁是 `satelliteVenue && !outdoorEditing && !geoGroundActive`（`scendance-workspace.tsx:1173/1196`），
+户外项目根本渲染不到；可达的只有「地图选址 venue」这一条室内遗线，随 #38 壳体一起消失。
+所以 `amap-venue.ts` 的 `applySatelliteGroundPatch` 仍会产生带字节的 layout patch，
+**删它必须和 `lib/types.ts` / `lib/schema.ts` 的字段删除同批（S3）**——先删字段会在这三处直接编译失败，
+而先删这三处又会把旧卫星开关变成「点了没反应」。这一点写进 §六 是给下一个动 S3 的人看的边界。
+
+## 七、下一步（可立即接）
 
 - 按 S2 的五个文件逐个出「读点 → 改读 plan 后的等价性」清单，每个文件配一组纯函数级夹具；
   这与 ①②③④ 的做法同源，不需要浏览器。
-- 室内 `room-builder` / `structure-builder` 不接线，随 #38 删；#38 动工前先跑一次
+- 室内 `room-builder` 随 #38 删；`structure-builder` 已接 `options.ground`，#38 动工前先跑一次
   `npm --prefix frontend run build` + 壳体 15 套件作为基线。
