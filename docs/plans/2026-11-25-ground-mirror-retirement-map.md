@@ -247,3 +247,33 @@
 
 **已拍板的部分**：`applySatelliteGroundPatch` 不再产字节必须与 `types.ts` / `schema.ts` 字段删除同批（S3），不能提前拆——
 这条已在 HANDOFF 2026-11-25「B4/S1 停写续」里记过，本轮复核仍然成立。
+## 十二、真机可达性复核（2026-11-25，本机草稿经用户批准改造后实测）
+
+**门禁实况**：两处 UI 门禁都写死 `satelliteVenue && !outdoorEditing && !geoGroundActive`
+（`scendance-workspace.tsx:1190` 地图类型菜单、`:1213` 卫星贴地），而 `outdoorEditing = outdoor != null`（`:575`）
+——只要户外画布挂上，这一簇就连同撤销/重做一起被隐藏。
+
+**本机三次构造尝试（全部走 3002 真机）**：
+
+1. 把 layout 改成选址形状：name「西湖文化广场 · 规划区 30×20m」、`mapGroundPolygon` 4 点、`mapLngLat`、
+   `satelliteGroundRef:false`、删掉 `floorPlanImage/floorPlanOpacity/mapGroundFrame`、删 `sceneAnchor` → 打开后仍被改回 `mode=outdoor`。
+2. 把 layout `id` 改成 `venue-probe-1125` 并删该项目的户外计划槽（`scendance-outdoor-plan-v1:venue-probe-1125`）→
+   路由依旧落到 `?project=house-y4ry0n56&mode=outdoor`。
+3. 清 `scendance-outdoor-last-v1` / `scendance-outdoor-plan-activity-adopted-v1`，并新开标签走
+   `?project=venue-probe-1125&mode=indoor` → URL 保住 indoor，但 `document.getElementById('tool-satellite')`
+   与 `tool-map-type` 三次读 DOM 均为 `null`；展开「工具」工具条后仍无。
+
+**结构性结论**：venue 项目只有一条生产路径——`venue-picker.tsx` 与 `space-panel.tsx` 一律
+`window.location.assign('/editor/?project=<id>&mode=outdoor')`，因此必然挂户外画布、`outdoorEditing=true`；
+唯一可能放行的是「室内项目 + layout 带卫星字段」这一组合，而现行 UI 已无生产该组合的入口。
+也就是说 `fillSatellite` / `turnSatellite` / `chooseBasemap` 现在是**不可达代码**，删掉不改任何用户可见行为。
+这把 #38 的「有没有行为回归风险」问题关掉了，但**「venue 卫星贴地能力是否保留」仍是要人拍板的那一问**（见 §十一 第 1 条）。
+
+**存储复原**：实验期间改过的 `scendance-editor-local-v1` / `scendance-outdoor-last-v1` /
+`scendance-outdoor-plan-activity-adopted-v1` 已按 `docs/evidence/2026-11-25-ground-read/storage-backup-house-y4ry0n56.json`
+的原值写回（读回自证：`id=house-y4ry0n56`、`name=周末共创工作坊`、`poly=0`、有 `sceneAnchor`、`satelliteGroundRef=false`）；
+实验里自建的 `scendance-outdoor-plan-v1:venue-probe-1125` 槽属本轮临时产物，未回写。
+
+**证据帧**：`docs/evidence/2026-11-25-ground-read/s3c-venue-indoor.png`（829×870）：室内视图打开
+「西湖文化广场 · 规划区 30×20m」、左侧显示「搜索地点 / 在地图上手画活动范围」、右下 2D/3D 与「工具」，
+而 `tool-satellite` 不在 DOM——即上文结论的现场帧。
