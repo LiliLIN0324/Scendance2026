@@ -1,12 +1,13 @@
-import { outdoorGroundSize } from './site';
-import type { RoomLayout, SceneAnchor } from './types';
 import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from './amap-script';
-import { capturePlanGround, type PlanGroundSource } from './plan-ground-capture';
 import { GLOBAL_SATELLITE_SOURCE } from './basemap-alignment';
 import { isInGcjOffsetRegion } from './geo-coords';
-import { publicSourceTileUrl } from './tdt-probe';
+import { capturePlanGround, type PlanGroundSource } from './plan-ground-capture';
+import { outdoorGroundSize } from './site';
 import { RECON_MATERIAL_BAN } from './site-recon-mock';
+import { publicSourceTileUrl } from './tdt-probe';
+import type { RoomLayout, SceneAnchor } from './types';
+import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 
 export type AmapPoint = { lng: number; lat: number };
 export type LocalPoint = { x: number; z: number };
@@ -731,6 +732,30 @@ export interface SatelliteGroundPatch {
   mapGroundFrame?: MapGroundFrame;
   /** 场景锚点（docs/19）：与 mapGroundFrame 同源推出，锚点是正源、frame 是派生旧字段。 */
   sceneAnchor?: SceneAnchor;
+  /**
+   * 这张图是谁给的（S3 收口，2026-11-25）。旧 patch 不带它会落回 `amap-satellite`，
+   * 与改前一致；自绘拼图路径按实际图源填（carto-light / carto-dark / osm / esri-satellite …）。
+   */
+  source?: PlanGroundSource;
+}
+
+/**
+ * 写侧唯一出口（S3 前置，2026-11-25）：一张卫星/自绘 patch 只在这里变成 `plan.ground`，
+ * 不再由调用方拼 `applyLayout({...floorPlanImage})`。
+ *
+ * 只做字段搬家，不读不写 layout，也不编造定位：patch 里没有的字段就不出现在 ground 里。
+ * `capturedAt` 不在这里造——纯函数不该拿当前时间当输入，需要就地记时间的调用方自己补。
+ */
+export function groundFromSatellitePatch(patch: SatelliteGroundPatch): PlanGround {
+  return {
+    image: patch.floorPlanImage,
+    opacity: patch.floorPlanOpacity,
+    satelliteRef: true,
+    ...(patch.mapGroundPolygon ? { polygon: patch.mapGroundPolygon } : {}),
+    ...(patch.mapLngLat ? { center: patch.mapLngLat } : {}),
+    ...(patch.mapGroundFrame ? { frame: patch.mapGroundFrame } : {}),
+    source: patch.source ?? 'amap-satellite',
+  };
 }
 
 /**
@@ -766,6 +791,7 @@ export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 
         satelliteGroundRef: true,
         mapGroundPolygon: located,
         mapLngLat: centroid(located),
+        source: 'amap-satellite',
         ...(anchored ? {} : { mapGroundFrame: frame, sceneAnchor: { ...anchorFromMapFrame(frame, layout.width, layout.height), source: 'picker' } }),
       };
     }
@@ -777,6 +803,7 @@ export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 
     floorPlanImage: makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height),
     floorPlanOpacity: 0.78,
     satelliteGroundRef: true,
+    source: 'amap-satellite',
     ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located), ...(layout.mapGroundFrame ? { mapGroundFrame: layout.mapGroundFrame } : {}) } : {}),
   };
 }
@@ -818,6 +845,7 @@ export async function ensurePlanGround(
     satelliteGroundRef: true,
     mapGroundPolygon: polygon,
     mapLngLat: centroid(polygon),
+    source,
     ...(anchored
       ? {}
       : { mapGroundFrame: frame, sceneAnchor: { ...anchorFromMapFrame(frame, layout.width, layout.height), source: 'picker' } }),
