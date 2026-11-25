@@ -220,7 +220,7 @@ describe('ScendanceLibrary shelf lifecycle', () => {
 describe('ScendanceViewTools design column', () => {
   function renderTools(view = makeViewSettings(), onExportImage = vi.fn(), onExportAlbum?: (options: { scale: number }) => Promise<{ ok: boolean; count: number }>) {
     const values = contexts(makeLayout(), view), onZoom = vi.fn();
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={onZoom} onExportImage={onExportImage} {...(onExportAlbum ? { onExportAlbum } : {})}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools onZoom={onZoom} onExportImage={onExportImage} {...(onExportAlbum ? { onExportAlbum } : {})}/></Providers>);
     return { values, onZoom, onExportImage, rail: screen.getByRole('navigation', { name: '工具' }) };
   }
 
@@ -229,8 +229,10 @@ describe('ScendanceViewTools design column', () => {
     expect(rail.id).toBe('tool-column');
     // 楼层切换另有两个按钮；其余工具保持可访问。
     expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
-    // 室内常驻：分享 / 画布工具（抓手·选择）/ 2D·3D / 第一人称漫游 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。尺寸标注收进账户中心设置分区；卫星只在户外。
-    expect(within(rail).getAllByRole('button')).toHaveLength(12);
+    // 室内常驻：分享 / 画布工具（抓手·选择）/ 2D·3D / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 + 楼层切换上下两钮。
+    // 氛围条（天气/时段/灯光）已于 2026-11-25 随室内光照退役，不再占位。
+    expect(within(rail).getAllByRole('button')).toHaveLength(11);
+    expect(within(rail).queryByRole('button', { name: /氛围/ })).toBeNull();
     expect(within(rail).getAllByRole('button', { name: '分享' })).toHaveLength(1);
     // 2026-11-13 定稿：户外 2D/3D 走左下胶囊，右轨这颗只在纯室内兜底平面/立体，aria-label 报「当前 2D 平面 / 3D 场景」。
     for (const name of ['分享', '选择工具', /当前 (2D 平面|3D 场景)/, '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
@@ -263,11 +265,10 @@ describe('ScendanceViewTools design column', () => {
     expect(order.indexOf('tool-zoom-in')).toBeLessThan(order.indexOf('tool-export'));
     expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
-    expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('false');
-    fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
-    expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('true');
-    // 氛围四条在竖列 rail 的弹出菜单里。
-    expect(rail.querySelector('.sc-atmosphere-group')).toBeTruthy();
+    // 氛围条已退役：右轨不再有「氛围」钮，也没有那组弹层。
+    expect(screen.queryByRole('button', { name: /氛围/ })).toBeNull();
+    expect(rail.querySelector('.sc-atmosphere-group')).toBeNull();
+    expect(rail.querySelector('#tool-atmosphere')).toBeNull();
     expect(screen.queryByRole('button', { name: /物料库|素材架/ })).toBeNull();
     const dimension = within(rail).getByRole('button', { name: /当前 (2D 平面|3D 场景)/ });
     // 图标体系已迁到 Material Symbol 蒙版 span（sc-material-symbol），不再是 svg。
@@ -303,7 +304,7 @@ describe('ScendanceViewTools design column', () => {
     cleanup();
     // 关掉之后是「抓手浏览」：仍然可点，菜单里再点「选择工具」就是重新启用。
     const off = contexts(makeLayout(), makeViewSettings({ selectMode: false }));
-    render(<Providers values={off}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={off}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const offSelect = screen.getByRole('button', { name: '抓手工具' }) as HTMLButtonElement;
     expect(offSelect.disabled).toBe(false);
     expect(offSelect.getAttribute('aria-pressed')).toBe('false');
@@ -383,7 +384,7 @@ describe('ScendanceViewTools design column', () => {
 
   it('disables zoom in 2D and hides atmosphere when requested', () => {
     const values = contexts(makeLayout(), makeViewSettings({ view2D: true }));
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere={false} onZoom={vi.fn()}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
     const rail = screen.getByRole('navigation', { name: '工具' });
     for (const name of ['缩小', '放大']) {
       expect((within(rail).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
@@ -393,13 +394,14 @@ describe('ScendanceViewTools design column', () => {
     expect(within(rail).queryByRole('button', { name: '第一人称漫游' })).toBeNull();
   });
 
-  it('keeps the atmosphere controls in view once something is actually changed', () => {
-    // 收起只收「没在用的」：开了雨就不许藏，否则找不到地方关掉。
-    const values = contexts(makeLayout(), makeViewSettings({ weather: 'rain' }));
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
-    expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('true');
-    // 天气按钮嵌在氛围弹层里，显示当前天气「降雨」
-    expect(screen.getByRole('menuitem', { name: '降雨' })).toBeTruthy();
+  it('改过天气也不会再长出氛围条（该 UI 已退役）', () => {
+    // 旧行为是「开了雨就不许藏」，前提是 UI 还在。现在整条退役：任何 view 状态都不再渲染它。
+    const values = contexts(makeLayout(), makeViewSettings({ weather: 'rain', timeOfDay: 21 }));
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
+    expect(screen.queryByRole('button', { name: /氛围/ })).toBeNull();
+    expect(document.getElementById('tool-weather')).toBeNull();
+    expect(document.getElementById('tool-time')).toBeNull();
+    expect(document.getElementById('tool-lighting')).toBeNull();
   });
 
   it('keeps rail wheel browsing from reaching the canvas zoom handler', () => {
@@ -407,27 +409,6 @@ describe('ScendanceViewTools design column', () => {
     render(<Providers values={values}><div onWheel={onCanvasWheel}><ScendanceViewTools onZoom={vi.fn()}/></div></Providers>);
     fireEvent.wheel(screen.getByRole('navigation', { name: '工具' }), { deltaY: 80 });
     expect(onCanvasWheel).not.toHaveBeenCalled();
-  });
-});
-
-describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 天气 / 时段 in 氛围（人群已随室内 NPC 退役）', () => {
-    const values = contexts();
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
-    expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
-    expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
-    expect(screen.queryByRole('menuitemcheckbox', { name: '人群' })).toBeNull();
-    // 天气弹层嵌在氛围弹层里：先点天气按钮展开子弹层（默认显示「晴朗」）
-    fireEvent.click(screen.getByRole('menuitem', { name: '晴朗' }));
-    fireEvent.click(screen.getByRole('option', { name: '降雨' }));
-    const weather = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
-    expect(weather(makeViewSettings()).weather).toBe('rain');
-    // 时段子弹层（默认显示「正午」，弹层还开着所以不用重开）
-    fireEvent.click(screen.getByRole('menuitem', { name: '正午' }));
-    fireEvent.click(screen.getByRole('option', { name: /黄昏/ }));
-    const time = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
-    expect(time(makeViewSettings()).timeOfDay).toBe(18);
   });
 });
 
@@ -619,7 +600,7 @@ describe('ScendanceViewTools 户外漫游入口', () => {
       walkActive: false, walkIn3D: true, toggleWalk,
       ...overrides,
     };
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={onZoom} outdoorActions={outdoorActions}/></Providers>);
+    render(<Providers values={values}><ScendanceViewTools onZoom={onZoom} outdoorActions={outdoorActions}/></Providers>);
     return { toggleWalk };
   }
 

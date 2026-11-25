@@ -34,7 +34,7 @@ import { OUTDOOR_TOOL_ICONS } from '../components/outdoor-tool-icons';
 import { OnlineModelLibrary } from './online-model-library';
 import { ShareMenu, type ShareMenuActions } from './share-menu';
 import type { CatalogPlacementBatchGuard, CatalogPlacementGuard, CatalogPlacementResult } from '../lib/catalog-placement-guard';
-import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
+import type { CameraPreset, CatalogItem, FurnitureItem } from '../lib/types';
 import { MAX_FLOORS } from '../lib/constants';
 import type { SplatDisplayMode } from '../three/splat-preview';
 import type { BackendSession } from '@/lib/backend-session';
@@ -225,9 +225,6 @@ interface ViewToolsProps {
   materialsOpen?: boolean;
   onToggleMaterials?(): void;
   materialsButtonRef?: RefObject<HTMLButtonElement>;
-  /** Layout mode only: 足迹 / 人群 / 天气 / 时间 / 现场灯光 (design group 4). */
-  showAtmosphere?: boolean;
-  onLighting?(value: NonNullable<RoomLayout['backendLighting']>): void;
   /** Gaussian scenes can be moved as one unit, separately from item selection. */
   sceneMoveEnabled?: boolean;
   sceneMoveMode?: 'off' | 'gizmo' | 'numeric';
@@ -326,22 +323,6 @@ interface ViewToolsProps {
   geoGroundActive?: boolean;
 }
 
-const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
-  { id: 'clear', label: '晴朗' },
-  { id: 'rain', label: '降雨' },
-  { id: 'snow', label: '降雪' },
-];
-
-const LIGHTING_OPTIONS = [
-  { id: 'neutral' as const, label: '明亮自然' },
-  { id: 'warm' as const, label: '温暖聚会' },
-  { id: 'cool' as const, label: '冷调展览' },
-];
-const TIME_PRESETS: ReadonlyArray<{ label: string; hour: number; title: string }> = [
-  { label: '日', hour: 12, title: '正午' },
-  { label: '昏', hour: 18, title: '黄昏' },
-  { label: '夜', hour: 21, title: '夜晚' },
-];
 /**
  * 成图可选的固定机位：顺序按「先看整体、再看平面、最后看立面」排。
  * 只用于导出效果图的视角选择与机位册，右轨不再放轮换按钮。
@@ -534,7 +515,7 @@ function groundThumbAnchor(polygon: readonly { lng: number; lat: number }[] | un
 }
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false, controller }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false, controller }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
@@ -550,9 +531,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   // 2026-11-13 定稿：户外 2D/3D 胶囊挪到画布左下动作簇（room-organizer 独立挂载），右轨不再放户外切换钮；
   // 这里只剩纯室内场景的平面/立体兜底切换。
   const showing3D = !view.view2D;
-  const [weatherOpen, setWeatherOpen] = useState(false);
-  const [timeOpen, setTimeOpen] = useState(false);
-  const [lightingOpen, setLightingOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportView, setExportView] = useState<'current' | CameraPreset>('current');
   const [exportScale, setExportScale] = useState(1);
@@ -563,10 +541,9 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const previewToken = useRef(0);
   const [shareClose, setShareClose] = useState(0);
   const quietShare = () => setShareClose(value => value + 1);
-  const [atmosphereOpen, setAtmosphereOpen] = useState(false);
-  // 氛围条默认收起成一颗「氛围」：真开了人群/雨雪/非正午就展开，别让人找不到关掉它的地方。
-  // 第一人称漫游是右轨一级圆钮，不收进氛围，也不收进省略号。
-  const atmosphereShown = atmosphereOpen || view.weather !== 'clear' || (view.timeOfDay ?? 12) !== 12;
+  // 2026-11-25：氛围条（天气/时段/灯光）随室内光照与场景引擎退役。
+  // 生产上它恒为不可见（showAtmosphere 只在旧室内路径为真），留着就是死源码；
+  // 户外 3D 的天气只作观感预览，不从这里改 layout 字节。
   // #38（2026-11-25）：卫星贴地开关与「地图类型」菜单已整簇退役。理由见
   // docs/plans/2026-11-25-ground-mirror-retirement-map.md §十二：两处门禁都要求 `!outdoorEditing`，
   // 而地图选址项目只有 `mode=outdoor` 一条生产路径，故这一簇在现行路由下不可达。
@@ -700,7 +677,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
   const exportMenuRef = useRef<HTMLDivElement>(null);
-  const atmosphereMenuRef = useRef<HTMLDivElement>(null);
   // 2026-11-12 用户指令：GeoGround 态补回「地图切换」——主 3D 瓦片图源与户外 2D 同一份偏好联动。
   const groundSource = useSyncExternalStore(subscribePlanGroundSource, readPlanGroundSource, () => 'amap-streets' as PlanGroundSource);
   const groundMode = useSyncExternalStore(subscribePlanGroundMode, readPlanGroundMode, () => 'map' as const);
@@ -774,7 +750,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
     setView(current => ({ ...current, selectMode: true, measurementMode: false, drawWallMode: false, drawZoneMode: false }));
   };
   // 进出漫游统一走 room-organizer 的入口；室内漫游已随 Viewport 退役，没有回调就不动作。
-  const activeTime = TIME_PRESETS.find(entry => Math.abs(entry.hour - view.timeOfDay) < 0.6);
   // 打开导出卡先抓同一帧做预览；换机位再抓一次。画质只影响确认后的成图，预览不重抓。
   useEffect(() => {
     if (!exportOpen || !onCaptureImage) {
@@ -816,30 +791,21 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
     }
   };
   useEffect(() => {
-    if (!exportOpen && !atmosphereShown && !weatherOpen && !timeOpen && !lightingOpen && !groundSourceOpen && !selectMenuOpen && !measureMenuOpen) return undefined;
+    if (!exportOpen && !groundSourceOpen && !selectMenuOpen && !measureMenuOpen) return undefined;
     const onPointer = (event: MouseEvent) => {
       const target = event.target as Node;
-      const el = event.target as HTMLElement | null;
       if (exportOpen && exportMenuRef.current && !exportMenuRef.current.contains(target)) setExportOpen(false);
       if (groundSourceOpen && groundSourceMenuRef.current && !groundSourceMenuRef.current.contains(target)) setGroundSourceOpen(false);
       if (selectMenuOpen && selectMenuRef.current && !selectMenuRef.current.contains(target)) setSelectMenuOpen(false);
       if (measureMenuOpen && measureMenuRef.current && !measureMenuRef.current.contains(target)) setMeasureMenuOpen(false);
-      if (atmosphereMenuRef.current && !atmosphereMenuRef.current.contains(target)) {
-        setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false);
-      } else if (atmosphereMenuRef.current) {
-        const inAtmo = atmosphereMenuRef.current.contains(target);
-        if (weatherOpen && inAtmo && el && !(el.closest('#tool-weather') || el.closest('[aria-label="室外天气选项"]'))) setWeatherOpen(false);
-        if (timeOpen && inAtmo && el && !(el.closest('#tool-time') || el.closest('[aria-label="室外时段选项"]'))) setTimeOpen(false);
-        if (lightingOpen && inAtmo && el && !(el.closest('#tool-lighting') || el.closest('[aria-label="现场灯光选项"]'))) setLightingOpen(false);
-      }
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); setExportOpen(false); setSelectMenuOpen(false); setMeasureMenuOpen(false); }
+      if (event.key === 'Escape') { setExportOpen(false); setSelectMenuOpen(false); setMeasureMenuOpen(false); }
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onPointer); document.removeEventListener('keydown', onKey); };
-  }, [exportOpen, weatherOpen, timeOpen, lightingOpen, atmosphereShown, selectMenuOpen, measureMenuOpen]);
+  }, [exportOpen, selectMenuOpen, measureMenuOpen, groundSourceOpen]);
 
   // 2026-11-11 画布工具快捷键（OnePlan 同款）：H 抓手 / S 选择；漫游 WASD 与输入框中不抢键。
   // 每次渲染重挂（无 deps），保证闭包拿到最新的 view/choose 函数，开销可忽略。
@@ -885,7 +851,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       {/* 2026-11-11 用户指令：OnePlan 画布工具菜单——按钮图标随当前工具（抓手/选择），
           点开弹层两行（图标 + 名称 + 快捷键徽标 + ✓ 当前项），H/S 快捷键直达。 */}
       {!outdoorEditing && (<div className="sc-tool-menu" ref={selectMenuRef}>
-        <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolLabel} aria-pressed={selectActive} aria-haspopup="menu" aria-expanded={selectMenuOpen} aria-controls="tool-select-panel" className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { setSelectMenuOpen(open => !open); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+        <button type="button" id="tool-select" data-tip={canvasToolTip} aria-label={canvasToolLabel} aria-pressed={selectActive} aria-haspopup="menu" aria-expanded={selectMenuOpen} aria-controls="tool-select-panel" className={selectActive ? 'is-active' : canvasSelectOn ? '' : 'is-off'} onClick={() => { setSelectMenuOpen(open => !open); setExportOpen(false); }}>
           {canvasSelectOn ? <MaterialSymbol name="near_me" /> : <HandStopIcon size={20} />}
         </button>
         {selectMenuOpen && <div id="tool-select-panel" className="sc-tool-pop" role="menu" aria-label="画布工具">
@@ -929,7 +895,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           aria-expanded={groundSourceOpen}
           aria-controls="tool-ground-source-panel"
           className={groundSourceOpen ? 'is-active' : ''}
-          onClick={() => { quietShare(); setGroundSourceOpen(open => !open); setExportOpen(false); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}
+          onClick={() => { quietShare(); setGroundSourceOpen(open => !open); setExportOpen(false); }}
         >
           <MaterialSymbol name="map" />
         </button>
@@ -997,7 +963,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         <MaterialSymbol name="iconpark_zoom_in_solid" />
       </button>)}
       {onExportImage && !outdoorEditing && <div className="sc-tool-menu" ref={exportMenuRef}>
-        <button type="button" id="tool-export" data-tip="导出效果图" aria-label="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} aria-controls="tool-export-panel" className={exportOpen ? 'is-active' : ''} onClick={() => { quietShare(); setExportOpen(open => !open); setAtmosphereOpen(false); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
+        <button type="button" id="tool-export" data-tip="导出效果图" aria-label="导出效果图" aria-haspopup="dialog" aria-expanded={exportOpen} aria-controls="tool-export-panel" className={exportOpen ? 'is-active' : ''} onClick={() => { quietShare(); setExportOpen(open => !open); }}>
           <MaterialSymbol name="photo_camera" />
         </button>
         {exportOpen && <div id="tool-export-panel" className="sc-tool-pop sc-export-pop" role="dialog" aria-label="导出效果图选项">
@@ -1015,38 +981,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
           <button type="button" className="sc-export-cta" disabled={exporting} onClick={() => { void runExport(); }}>
             {exporting ? '正在导出…' : exportMode === 'album' ? '导出机位册' : '导出 PNG'}
           </button>
-        </div>}
-      </div>}
-      {showAtmosphere && <span className="sc-tool-sep" aria-hidden="true"/>}
-      {showAtmosphere && <div className="sc-tool-menu" ref={atmosphereMenuRef}>
-        <button type="button" id="tool-atmosphere" data-tip="氛围" aria-label="氛围：人群、天气与时段" aria-haspopup="menu" aria-expanded={atmosphereShown} aria-controls="sc-atmosphere-group" className={atmosphereShown ? 'is-active' : ''} onClick={() => { quietShare(); setAtmosphereOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); setLightingOpen(false); }}>
-          <MaterialSymbol name="sunny" />
-        </button>
-        {atmosphereShown && <div id="sc-atmosphere-group" className="sc-tool-pop sc-more-pop sc-atmosphere-group" role="menu" aria-label="氛围">
-          <span className="sc-tool-menu-label" role="presentation">氛围</span>
-          <button type="button" id="tool-weather" role="menuitem" aria-haspopup="listbox" aria-expanded={weatherOpen} onClick={() => { setWeatherOpen(open => !open); setTimeOpen(false); }}>
-            <MaterialSymbol name={view.weather === 'clear' ? 'sunny' : 'rainy'} size={16}/>
-            <span>{WEATHER_OPTIONS.find(option => option.id === view.weather)?.label ?? '天气'}</span>
-          </button>
-          {weatherOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="室外天气选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
-            {WEATHER_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={view.weather === option.id} className={view.weather === option.id ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, weather: option.id })); setWeatherOpen(false); }}>{option.label}</button>)}
-          </div>}
-          <button type="button" id="tool-time" role="menuitem" aria-haspopup="listbox" aria-expanded={timeOpen} onClick={() => { setTimeOpen(open => !open); setWeatherOpen(false); }}>
-            <MaterialSymbol name="light_mode" size={16}/>
-            <span>{activeTime?.title ?? '时段'}</span>
-          </button>
-          {timeOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="室外时段选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
-            {TIME_PRESETS.map(entry => <button type="button" key={entry.label} role="option" aria-label={`室外时段 ${entry.title}`} aria-selected={activeTime?.label === entry.label} className={activeTime?.label === entry.label ? 'is-active' : ''} onClick={() => { setView(current => ({ ...current, timeOfDay: entry.hour })); setTimeOpen(false); }}>{entry.title}</button>)}
-          </div>}
-
-          <span className="sc-more-sep" aria-hidden="true"/>
-          <button type="button" id="tool-lighting" role="menuitem" aria-haspopup="listbox" aria-expanded={lightingOpen} onClick={() => { setLightingOpen(open => !open); setWeatherOpen(false); setTimeOpen(false); }}>
-            <MaterialSymbol name="wb_sunny" size={16}/>
-            <span>{LIGHTING_OPTIONS.find(option => option.id === (layout.backendLighting ?? 'neutral'))?.label ?? '现场灯光'}</span>
-          </button>
-          {lightingOpen && <div className="sc-tool-pop sc-more-pop" role="listbox" aria-label="现场灯光选项" style={{ top: 'auto', right: 'calc(100% + 8px)' }}>
-            {LIGHTING_OPTIONS.map(option => <button type="button" key={option.id} role="option" aria-selected={(layout.backendLighting ?? 'neutral') === option.id} className={(layout.backendLighting ?? 'neutral') === option.id ? 'is-active' : ''} onClick={() => { onLighting?.(option.id); setLightingOpen(false); }}>{option.label}</button>)}
-          </div>}
         </div>}
       </div>}
       {outdoorEditing && (<>
