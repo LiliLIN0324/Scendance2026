@@ -28,8 +28,7 @@ vi.mock('@/lib/backend-session', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/backend-session')>();
   return { ...actual, createBackendSession: () => probeController };
 });
-vi.mock('./hooks/use-three-scene',()=>({useThreeScene:(options:unknown)=>{
-  capture.three=options;
+vi.mock('./hooks/use-dormant-three-shell',()=>({useDormantThreeShell:()=>{
   return {isReady:false,error:null,invalidate:()=>{},requestShadowUpdate:()=>{},threeModuleRef:{current:null},sceneRef:{current:null},rendererRef:{current:null},cameraRef:{current:null},controlsRef:{current:null},worldPositionFromClient:()=>null};
 }}));
 vi.mock('./hooks/use-canvas-2d-interaction',()=>({useCanvas2DInteraction:(options:unknown)=>{capture.two=options;return {clientToWorld2D:()=>null};}}));
@@ -58,7 +57,7 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});mem?.clear();probeController?.dispose();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
-it.each(['two','three'] as const)('allows a current %s gesture to update the active activity',async source=>{
+it.each(['two'] as const)('allows a current %s gesture to update the active activity',async source=>{
  const a=activity(`current-${source}`);layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
  const handlers=capture[source];expect(handlers).toBeTruthy();
@@ -66,7 +65,7 @@ it.each(['two','three'] as const)('allows a current %s gesture to update the act
  expect(layoutStore.getState().layout.floors[0]!.items[0]!.position).toEqual({x:3,z:3});
 });
 
-it.each(['two','three'] as const)('rejects an old %s drag ending after an activity switch before React cleanup',async source=>{
+it.each(['two'] as const)('rejects an old %s drag ending after an activity switch before React cleanup',async source=>{
  const a=activity(`drag-${source}-A`),b=activity(`drag-${source}-B`);layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
  const handlers=capture[source];expect(handlers).toBeTruthy();
@@ -75,7 +74,7 @@ it.each(['two','three'] as const)('rejects an old %s drag ending after an activi
  expect(layoutStore.getState().layout.floors[0]!.items[0]!.position).toEqual({x:0,z:0});
 });
 
-it.each(['two','three'] as const)('rejects a stale %s gesture after same-batch A→B→A',async source=>{
+it.each(['two'] as const)('rejects a stale %s gesture after same-batch A→B→A',async source=>{
  const a=activity(`aba-${source}-A`),b=activity(`aba-${source}-B`);layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
  render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
  const handlers=capture[source];

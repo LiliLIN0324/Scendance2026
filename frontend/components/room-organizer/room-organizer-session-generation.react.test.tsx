@@ -28,7 +28,7 @@ vi.mock('@/lib/backend-session', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/backend-session')>();
   return { ...actual, createBackendSession: () => probeController };
 });
-vi.mock('./hooks/use-three-scene',()=>({useThreeScene:()=>({isReady:false,error:null,invalidate:()=>{},requestShadowUpdate:()=>{},threeModuleRef:{current:null},sceneRef:{current:null},rendererRef:{current:null},cameraRef:{current:null},controlsRef:{current:null},worldPositionFromClient:()=>null})}));
+vi.mock('./hooks/use-dormant-three-shell',()=>({useDormantThreeShell:()=>({isReady:false,error:null,invalidate:()=>{},requestShadowUpdate:()=>{},threeModuleRef:{current:null},sceneRef:{current:null},rendererRef:{current:null},cameraRef:{current:null},controlsRef:{current:null},worldPositionFromClient:()=>null})}));
 vi.mock('./hooks/use-canvas-2d-interaction',()=>({useCanvas2DInteraction:()=>({clientToWorld2D:()=>null})}));
 vi.mock('./hooks/use-assistant-sessions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./hooks/use-assistant-sessions')>();

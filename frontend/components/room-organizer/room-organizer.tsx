@@ -84,7 +84,7 @@ import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
 import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
 import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three/splat-preview';
-import { useThreeScene } from './hooks/use-three-scene';
+import { useDormantThreeShell } from './hooks/use-dormant-three-shell';
 import { useSplatPreview } from './hooks/use-splat-preview';
 import type { SplatPaint } from './three/splat-preview';
 import { paintModelOnPlan } from './three/paint-model-on-plan';
@@ -146,9 +146,6 @@ import { scanStateBridge } from './lib/scan-state-bridge';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
 import { canApplyLayoutGeometry, structuralItemCollides, materialCount, isEvidenceProtectedWall } from './lib/structural-layout';
-import { snapWallEndpoint } from './lib/wall-snap';
-import { ROUTE_WAYPOINT_CLEARANCE_WARN_M, routePointError, routePointErrorInRect } from './lib/person-route';
-import { buildWalkColliders, walkerClearanceAt } from './lib/walk-collision';
 import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
@@ -1339,97 +1336,6 @@ useEffect(() => {
     return matches;
   }, [activeFloor.items, activeFloor.interiorWalls, layout, activeFloorIndex, keepOut]);
 
-  const handleEmptyClick = useCallback(
-    (x: number, z: number) => {
-      if (routeDrawItemId) {
-        // 人物路线布点（PEOPLE-04）：与画墙同款「点击布点」。第一个点存草稿，
-        // 第二个点起写进 item.walkRoute（路线可视化随布局重建自动出现）。
-        // 撤销边界由 useHistory 的自动快照负责（同 addInteriorWall）。
-        const item = activeFloor.items.find((candidate) => candidate.id === routeDrawItemId);
-        if (!item) {
-          setRouteDrawItemId(null);
-          setRouteDraft(null);
-          setRouteDrawHint(null);
-          return;
-        }
-        const points = routeDraft?.itemId === routeDrawItemId
-          ? routeDraft.points
-          : item.walkRoute?.points ?? [];
-        // 真实景（点云就绪）按点云实测四至校验，与巡游夹取框同一围栏；
-        // 无实景退回布局名义矩形（房间中心原点）。
-        const problem = splatWalkBoundsRef.current
-          ? routePointErrorInRect(points, { x, z }, splatWalkBoundsRef.current)
-          : routePointError(points, { x, z }, { width: layout.width, depth: layout.height });
-        if (problem) {
-          setRouteDrawHint(problem);
-          return;
-        }
-        // 贴障预检（PEOPLE-04 E2E 实踩：距桌沿 0.2m 的路线点会被碰撞推挤钉死、
-        // 来回徘徊）：途经点离障碍太近时提示但不阻断——1.2s 受阻掉头仍兜底，
-        // 用户可能就是想要贴着桌边走。排除本人（首点尚无路线时自己是静态碰撞盒）。
-        const colliders = buildWalkColliders(
-          activeFloor.items.filter((candidate) => candidate.id !== routeDrawItemId),
-          activeFloor.interiorWalls ?? [],
-          { roomWidth: layout.width, roomDepth: layout.height }
-        );
-        const clearance = walkerClearanceAt(colliders, { x, z }, { roomWidth: layout.width, roomDepth: layout.height });
-        setRouteDrawHint(
-          clearance < ROUTE_WAYPOINT_CLEARANCE_WARN_M
-            ? `途经点距最近障碍约 ${clearance.toFixed(1)}m，行走时可能被推挤折返徘徊，建议离障碍 ${ROUTE_WAYPOINT_CLEARANCE_WARN_M}m 以上。`
-            : null
-        );
-        const next = [...points, { x, z }];
-        if (next.length >= 2) {
-          actions.updateItem(routeDrawItemId, { walkRoute: { ...(item.walkRoute ?? {}), points: next } });
-          setRouteDraft(null);
-        } else {
-          setRouteDraft({ itemId: routeDrawItemId, points: next });
-        }
-        return;
-      }
-      if (view.drawWallMode) {
-        const snapped = snapWallEndpoint({
-          point: { x, z },
-          existingWalls: activeFloor.interiorWalls ?? [],
-          fromPoint: wallDraft,
-          roomWidth: layout.width,
-          roomDepth: layout.height,
-        });
-        if (!wallDraft) {
-          setWallDraft(snapped.point);
-          return;
-        }
-        // Reject zero-length walls (two clicks on the same vertex).
-        const length = Math.hypot(snapped.point.x - wallDraft.x, snapped.point.z - wallDraft.z);
-        if (length < 0.1) {
-          setWallDraft(null);
-          return;
-        }
-        const id = crypto.randomUUID();
-        actions.addInteriorWall({
-          id,
-          x1: wallDraft.x,
-          z1: wallDraft.z,
-          x2: snapped.point.x,
-          z2: snapped.point.z,
-        });
-        // Chain: keep the just-placed endpoint as the start of the next wall.
-        setWallDraft(snapped.point);
-        return;
-      }
-    },
-    [
-      view.drawWallMode,
-      wallDraft,
-      actions,
-      activeFloor.interiorWalls,
-      layout.width,
-      layout.height,
-      routeDrawItemId,
-      routeDraft,
-    ]
-  );
-
   const stopRouteDraw = useCallback(() => {
     setRouteDrawItemId(null);
     setRouteDraft(null);
@@ -2160,7 +2066,7 @@ useEffect(() => {
     [layout.floors]
   );
 
-  const { snapPosition, getDragPlaneY, placeCatalogItem } = useItemPlacement({
+  const { snapPosition, placeCatalogItem } = useItemPlacement({
     layout,
     activeFloor,
     activeFloorY,
@@ -2521,33 +2427,7 @@ useEffect(() => {
   const environmentSelectionRef = useRef<((assetId: string) => void) | null>(null);
 
   const { isReady: rendererReady, error, invalidate, requestShadowUpdate, threeModuleRef, sceneRef, rendererRef, cameraRef, controlsRef, worldPositionFromClient } =
-    useThreeScene({
-      canvasRef,
-      renderFrame: (renderer, scene, camera) => {
-        const paint = splatPaintRef.current;
-        if (paint) paint(renderer, scene, camera, { guides: false });
-        else renderer.render(scene, camera);
-      },
-      onViewportResize: () => frameViewportRef.current(),
-      // The distance tool measures across furniture, so its clicks go to the floor (#341).
-      // 人物路线布点同理：绘制中所有点击都落到地面坐标（PEOPLE-04）。
-      floorPickOnly: view.drawWallMode || view.measurementMode || routeDrawItemId !== null,
-      onItemSelect: handleSelect,
-      onItemDoubleClick: openPropertiesForItem,
-      selectedIds: allSelectedIds,
-      onItemDragStart: scopedDragStart,
-      onItemDrag: scopedDragMove,
-      onItemDragEnd: handleDragEndWithHistory,
-      onItemDragCancel: scopedDragCancel,
-      onEmptyClick: handleEmptyClick,
-      editingLocked: workbenchMode !== 'layout',
-      onWallSelect: ({ wallId, kind }) => {
-        setSelectedWall({ id: wallId, kind });
-      },
-      snapPosition,
-      getDragPlaneY,
-      transformMode: gizmoMode,
-    });
+    useDormantThreeShell();
 
   // `rendererReady` can briefly describe the previous, now detached canvas
   // while the session-scoped ref has not yet bound to its replacement.
