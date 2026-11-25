@@ -216,3 +216,34 @@
 
 未覆盖：`use-canvas-2d-interaction` 这条没有单测（它要 `useLayoutActions` store 上下文，起一个 hook 测试成本高于收益），
 只经 tsc + 代码核对；`three/room-builder.ts` 刻意没接 ground。
+## 十一、#38 整簇退役前置图谱（2026-11-25 静态核对）
+
+批 3 与 #38 必须同时动，理由是把「旧卫星开关」这一簇当整体看：它写的是 layout 字节与定位，
+读的是同两个字段，UI 只挂在同一对门禁上。拆开动会返工两次。
+
+**簇内成员（非测试源码，行号取 2026-11-25 现状）**
+
+| 成员 | 位置 | 门禁 |
+| --- | --- | --- |
+| `satelliteVenue` | `scendance-workspace.tsx:595` | `isMapOutdoorLayout(layout) \|\| layout.satelliteGroundRef !== undefined \|\| isSatelliteGroundImage(layout.floorPlanImage)` |
+| `satelliteOn` | `scendance-workspace.tsx:596` | `satelliteGroundWanted(layout)` |
+| 自动补图 effect | `scendance-workspace.tsx:805-824` | `geoGroundActive` 早退（S1 已加）→ `satelliteOn` → 缓存里没有对齐的卫星图 |
+| `turnSatellite` / `chooseBasemap` | `:825` / `:842` | 两者都只在下面两个 UI 上可达 |
+| 地图类型菜单 | `:1176-1197` | `satelliteVenue && !outdoorEditing && !geoGroundActive` |
+| 卫星贴地开关 | `:1199-1201` | 同上 |
+| `amap-venue.ts` 写侧族 | `applySatelliteGroundPatch` / `ensureSatelliteGround` / `ensurePlanGround` / `hideSatelliteGround`（474/727/766-770/779-780/818-823/849-852/859/901/905/923/926） | 只被上面三处调用 |
+
+**户外为什么够不到**：户外是 `geoGroundActive`（MapLibre + GeoGround 瓦片），两个按钮都被第三重门禁挡住，
+自动补图在第一重就早退。所以这一簇现在只服务「地图选址的 venue 项目」——即曾经的室内遗线。
+
+**退役后谁会用不到**：这类项目的 `plan.ground` 由迁移补齐（S2 已实测），3D 壳体与 2D 都改读 `resolveGround`，
+所以**已经有过卫星底图的老方案不会变空白**；变的是「新画一块地图选址场地时不再自动拉卫星图」。
+
+**三处要人拍板，我不代决**：
+
+1. 「地图选址 venue」项目还要不要卫星贴地这个能力？取消 = 整簇连 `amap-venue` 三个函数一起删；保留 = 收进户外侧新实现，不能留在旧壳里。
+2. 老方案的那些 `ground.image` 是留（只读展示）还是随清理一并清掉？留的话 `west-lake` 那种坐标清理器要改吃 plan。
+3. 自动补图取消后，新场地拿底图靠哪条路径？（户外 GeoGround 已自带；纸面档要不要保留一次手动截取？）
+
+**已拍板的部分**：`applySatelliteGroundPatch` 不再产字节必须与 `types.ts` / `schema.ts` 字段删除同批（S3），不能提前拆——
+这条已在 HANDOFF 2026-11-25「B4/S1 停写续」里记过，本轮复核仍然成立。
