@@ -49,7 +49,6 @@ import { useCameraPresets } from './hooks/use-dormant-camera';
 import { useFloorKeepOut } from './hooks/use-floor-keep-out';
 import { useHistory } from './hooks/use-history';
 import { useImportExport } from './hooks/use-import-export';
-import { useItemDrag } from './hooks/use-item-drag';
 import { useItemPlacement } from './hooks/use-item-placement';
 import { useKeyboardPlacement } from './hooks/use-keyboard-placement';
 import { useSilentCloudAttach } from './hooks/use-silent-cloud-attach';
@@ -183,7 +182,7 @@ import { planCatalogDragFor } from './lib/plan-catalog-drag';
 import { publicSourceTileUrl, basemapSourceAttribution } from './lib/tdt-probe';
 import { isVenueFactMemoryCurrent, useVenueFactTracker } from './lib/venue-fact-epoch';
 import { createRouteDrawingSession } from './lib/route-drawing-session';
-import { useActivitySessionTracker, type ActivityScopeSource, type ActivitySessionToken } from './lib/activity-session-epoch';
+import { useActivitySessionTracker, type ActivityScopeSource, } from './lib/activity-session-epoch';
 import { projectSessionScope } from './lib/project-session-scope';
 import { adoptScopeHistory, rememberScopeName } from './lib/assistant-scope-registry';
 import { useFloorSessionTracker, type FloorSessionToken } from './lib/floor-session-epoch';
@@ -1311,7 +1310,8 @@ useEffect(() => {
   // 布点校验经 ref 读现值（每渲染同步），渲染进 useSceneEffects 时直接传值。
   const splatWalkBoundsRef = useRef<SplatWalkBounds | null>(null);
   // Active transform tool: move (plain drag), rotate or scale dial (#P0-3).
-  const [gizmoMode, setGizmoMode] = useState<GizmoMode>('move');
+  // 2026-11-25 S1：拖拽壳退役后当前值已无人读取，仅保留选择器的写入端。
+  const [, setGizmoMode] = useState<GizmoMode>('move');
 
   const highlightedIds = useMemo(() => {
     const normalised = catalogQuery.trim().toLowerCase();
@@ -1531,39 +1531,10 @@ useEffect(() => {
     [lotWidth, lotDepth, terrain, entrance, floors, activeFloorIndex]
   );
 
-  const {
-    sceneBoxRef,
-    invalidateBoxRef,
-    handleDragCancel,
-    isDragActive,
-  } = useItemDrag({
-    layout,
-    activeFloor,
-    activeFloorIndex,
-    roomWidth: layout.width,
-    roomDepth: layout.height,
-    keepOut,
-    frontGap,
-    actions,
-    allSelectedIds,
-    gizmoMode,
-    onScaleLimit: (limit) =>
-      notify(
-        limit === 'max'
-          ? '已到放大上限（5×），继续拖动不会再变大。'
-          : '已到缩小下限（0.2×），继续拖动不会再变小。'
-      ),
-  });
 
-  // Canvas gestures can outlive the DOM node until React effect cleanup.
-  // Never let a late pointer event from a previous activity/floor reach the
-  // state-changing drag callbacks, even before the next render is committed.
-  const dragAuthority=useRef<{id:string;activity:ActivitySessionToken;floor:FloorSessionToken}|null>(null);
-  const dragCancelRef=useRef(handleDragCancel);dragCancelRef.current=handleDragCancel;
-  useEffect(()=>{
-    const token=sessionToken;
-    return ()=>{const authority=dragAuthority.current;if(!token||!authority||authority.activity.scope!==token.scope||authority.activity.epoch!==token.epoch)return;dragAuthority.current=null;dragCancelRef.current(authority.id);};
-  },[sessionToken?.scope,sessionToken?.epoch]);
+  // 2026-11-25 S1 收尾：室内 pointer 拖拽壳（useItemDrag）随壳体退役——没有画布，
+  // 拖拽的 pointerdown 永不发生，返回值只剩这几个只读缝；取消 latch 一并删除。
+  const isDragActive = useCallback(() => false, []);
 
   // Re-seat a wall-mounted camera against its wall. A flush camera's body moves
   // to whichever side it faces (so the body + cone start at the wall surface
@@ -2837,9 +2808,6 @@ useEffect(() => {
     window.addEventListener('scendance:focus-object', focusObject);
     return () => window.removeEventListener('scendance:focus-object', focusObject);
   }, [layout.id, cameraRef, controlsRef, invalidate]);
-
-  sceneBoxRef.current = sceneRef;
-  invalidateBoxRef.current = invalidate;
 
   // 环境预览就绪时，围栏换成点云真实范围：1:1 实景漫游（不再被 12×9 的场地板困住）。
   const splatWalkBounds = showGaussianInCanvas && splatState.status === 'ready' ? splatState.walkBounds ?? null : null;
