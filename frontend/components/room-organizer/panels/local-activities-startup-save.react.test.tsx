@@ -12,7 +12,6 @@ import { STORAGE_KEY } from '../lib/constants';
 import { layoutStore } from '../hooks/use-layout-store';
 import { useLayoutState } from '../hooks/use-layout-state';
 import { useLayoutPersistence } from '../hooks/use-layout-persistence';
-import { applyOutdoorShellVenuePatch, seededPlanFromLayout, shellVenuePatchFromPlanBoundary } from '../lib/outdoor-venue-sync';
 import type { RoomLayout } from '../lib/types';
 vi.mock('@/lib/local-activities',async original=>({...await original<typeof import('@/lib/local-activities')>(),archiveLocalActivity:vi.fn(),listLocalActivities:vi.fn()}));
 let mem: MemoryStorage;
@@ -29,8 +28,9 @@ it.each([false,true])('real startup save guard + new-activity form: diagnostic c
   return <LocalActivitySwitchGuardProvider guard={{capture:()=>persistence.flushPendingBeforeSwitch()}}><LocalActivitiesPanel mode="create" layout={state.layout} actions={actions}/></LocalActivitySwitchGuardProvider>;
  }
  render(<Harness/>);
- const base=layoutStore.getState().layout;const patch=shellVenuePatchFromPlanBoundary(base,seededPlanFromLayout(base)!.boundary)!;
- act(()=>layoutStore.getState().actions.applyLayout(contaminated?{...base,...patch}:applyOutdoorShellVenuePatch(base,patch)));
+ const base=layoutStore.getState().layout;
+ // 诊断字段（scaled/simplified）不是 RoomLayout 的持久字段：写进状态后保存读回必然对不上。
+ act(()=>layoutStore.getState().actions.applyLayout(contaminated?({...base,scaled:false,simplified:false} as RoomLayout):base));
  fireEvent.change(screen.getByRole('textbox',{name:'新活动名称'}),{target:{value:'公网验收-户外讲座测试'}});
  fireEvent.submit(screen.getByRole('form',{name:'新建活动'}));
  if(contaminated){
