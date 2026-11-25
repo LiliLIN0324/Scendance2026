@@ -291,9 +291,12 @@ describe('main canvas reference image', () => {
         { lng, lat: lat + dLat },
       ];
       const image = satelliteProxyUrl(polygon, 'secret-key')!;
-      const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-        name: '盐官古城', location: '潮乐之城', polygon, satelliteGround: true, satelliteGroundImage: image,
+      const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+        name: '盐官古城', location: '潮乐之城', polygon,
       });
+
+      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
       const floor = layout.floors[0]!;
       const lineTo: number[][] = [];
       const drawImage = vi.fn();
@@ -343,9 +346,12 @@ describe('main canvas reference image', () => {
         { lng, lat: lat + dLat },
       ];
       const image = satelliteProxyUrl(polygon, 'secret-key')!;
-      const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-        name: '盐官古城', location: '潮乐之城', polygon, satelliteGround: true, satelliteGroundImage: image,
+      const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+        name: '盐官古城', location: '潮乐之城', polygon,
       });
+
+      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
       const floor = layout.floors[0]!;
       const calls: unknown[][] = [];
       const drawImage = vi.fn((...args: unknown[]) => { calls.push(args); });

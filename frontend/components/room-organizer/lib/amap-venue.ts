@@ -305,21 +305,6 @@ export function satelliteBoundsForFrame(
   };
 }
 
-/** 现有贴地地址是否已经盖住整片户外地面。窄边旧图返回 false，调用方再拉一张对齐的图。 */
-export function basemapCoversGroundPlane(layout: Pick<RoomLayout, 'floorPlanImage' | 'mapGroundFrame' | 'width' | 'height'>): boolean {
-  const frame = layout.mapGroundFrame;
-  const url = layout.floorPlanImage ?? '';
-  // 自绘底图：范围记在内存缓存里，拿不到就当没盖住，重拼一张即可。
-  const bounds = isPlanGroundImage(url) ? planGroundBoundsOf(url) : parseSatelliteImageBounds(url);
-  if (!frame || !bounds || !(layout.width > 0) || !(layout.height > 0)) return false;
-  const needed = satelliteBoundsForFrame([], frame, layout.width, layout.height);
-  const slop = 1e-5;
-  return bounds.west <= needed.west + slop
-    && bounds.east >= needed.east - slop
-    && bounds.south <= needed.south + slop
-    && bounds.north >= needed.north - slop;
-}
-
 /** 壳体米（x=0 西缘，z=0 为 frame.lat0）→ 卫星图像素比例。v 向北为 1，配合贴图 flipY。 */
 export function shellMetersToSatelliteUv(
   localX: number,
@@ -605,16 +590,6 @@ export function isMapOutdoorLayout(layout: RoomLayout): boolean {
   return venue.shape === 'polygon';
 }
 
-/**
- * 上面这些场地默认要看卫星贴地。`false` 是人关掉的，重新打开前不再自动拉。
- * `true` 是打开。缺省则按 isMapOutdoorLayout。
- */
-export function satelliteGroundWanted(layout: RoomLayout): boolean {
-  if (layout.satelliteGroundRef === false) return false;
-  if (layout.satelliteGroundRef === true) return true;
-  return isMapOutdoorLayout(layout);
-}
-
 export function isPlaceholderSatellite(url: string | undefined | null): boolean {
   return !!url && url.startsWith('data:image/svg') && isMapReferenceImage(url);
 }
@@ -638,16 +613,6 @@ export function hasFetchedSatellite(url: string | undefined | null): boolean {
   if (!usesLocalAmapProxy() && !!url && (url.includes('127.0.0.1:3199') || url.includes('localhost:3199'))) return false;
   if (isOverseasAmapStaticUrl(url)) return false;
   return true;
-}
-
-/**
- * 图的经纬度范围必须和壳体是同一套，才能按 UV 对齐。
- * 旧的 location/zoom 方形瓦片没有这个范围，不能当成已经贴准。
- */
-export function satelliteImageAligned(url: string | undefined | null): boolean {
-  // P4-d 自绘底图的范围记在内存里，不走 URL 里的 bounds 参数。
-  if (isPlanGroundImage(url)) return true;
-  return !!url && hasFetchedSatellite(url) && parseSatelliteImageBounds(url) !== null;
 }
 
 export async function geocodeAmapPlace(query: string, key: string, security: string): Promise<AmapPoint | null> {
@@ -853,49 +818,20 @@ export async function ensurePlanGround(
 }
 
 /**
- * 演示圈画已经有 polygon / mapLngLat 时绝不能报「未定位」。
- * 只有既没有坐标、这次也没贴上真图，才区分缺 Key 和地点没搜到。
+ * 圈画 → 壳体（地图选址的落壳口）。
+ *
+ * #38 去字节（2026-11-25）：这里只写「场地是什么形状、在哪、多大」——polygon / mapLngLat /
+ * frame / 锚点，**不再写 `floorPlanImage` / `floorPlanOpacity` / `satelliteGroundRef` 任何一份字节**。
+ * 理由：地面图的正源是 `plan.ground`（由取图能力按需产出），而地图选址项目的 2D 走 MapLibre 活图层、
+ * 3D 走 GeoGround 瓦片，落壳瞬间本来就不需要一张快照。传图参数的入口一并撤掉，
+ * 避免调用方以为「传了就会贴上去」。
  */
-export function satelliteMissReason(
-  layout: Pick<RoomLayout, 'mapGroundPolygon' | 'mapLngLat'>,
-  patch: SatelliteGroundPatch | null,
-  keys: { key: string; staticKey: string },
-): 'key' | 'place' | null {
-  const hasLocation = (layout.mapGroundPolygon?.length ?? 0) >= 3
-    || (!!layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat));
-  if (hasLocation) return null;
-  if (patch && !isPlaceholderSatellite(patch.floorPlanImage)) return null;
-  if (!keys.staticKey && !keys.key) return 'key';
-  return patch ? null : 'place';
-}
-
-export function applySatelliteGroundPatch(layout: RoomLayout, patch: SatelliteGroundPatch): RoomLayout {
-  return {
-    ...layout,
-    floorPlanImage: patch.floorPlanImage,
-    floorPlanOpacity: patch.floorPlanOpacity,
-    satelliteGroundRef: true,
-    ...(patch.mapGroundPolygon ? { mapGroundPolygon: patch.mapGroundPolygon } : {}),
-    ...(patch.mapLngLat ? { mapLngLat: patch.mapLngLat } : {}),
-    ...(patch.mapGroundFrame ? { mapGroundFrame: patch.mapGroundFrame } : {}),
-    ...(patch.sceneAnchor ? { sceneAnchor: patch.sceneAnchor } : {}),
-  };
-}
-
-/** 关掉贴地：留下图和圈画点，下次打开不必重拉。素色地面由 satelliteGroundRef === false 决定。 */
-export function hideSatelliteGround(layout: RoomLayout): RoomLayout {
-  return { ...layout, satelliteGroundRef: false };
-}
-
 export function createVenueFromPick(
   before: RoomLayout,
   pick: {
     name: string;
     location: string;
     polygon: AmapPoint[];
-    satelliteGround?: boolean;
-    /** 已拉取的真实卫星参考 data URL；缺省则用占位 SVG。 */
-    satelliteGroundImage?: string;
   },
 ): { layout: RoomLayout; cleared: number } {
   const local = polygonToLocalMeters(pick.polygon);
@@ -925,35 +861,13 @@ export function createVenueFromPick(
   const name = [pick.name, pick.location].filter(Boolean).join(' · ') + scaleNote || before.name;
   // 圈画经纬度跟着场地走，方便 3D 里后补卫星图；不进场景线、不进采集上传。
   const registration = groundRegistration(pick.polygon);
-  let layout: RoomLayout = {
-    ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon),
-    ...(registration ? (() => {
-      // 锚点是正源；frame 由锚点推出，只留给立壳卫星贴图的 UV。
-      const anchor: SceneAnchor = { ...anchorFromMapFrame(registration.frame, safeWidth, safeDepth), source: 'picker' };
-      return { mapGroundFrame: frameFromAnchor(anchor, safeWidth, safeDepth), sceneAnchor: anchor };
-    })() : {}),
+  const extra = registration ? (() => {
+    // 锚点是正源；frame 由锚点推出，只留给立壳卫星贴图的 UV。
+    const anchor: SceneAnchor = { ...anchorFromMapFrame(registration.frame, safeWidth, safeDepth), source: 'picker' };
+    return { mapGroundFrame: frameFromAnchor(anchor, safeWidth, safeDepth), sceneAnchor: anchor };
+  })() : {};
+  const layout: RoomLayout = {
+    ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon), ...extra,
   };
-  if (pick.satelliteGround) {
-    const raw = pick.satelliteGroundImage?.trim() ?? '';
-    const image = raw && (
-      raw.startsWith('data:image/')
-      || raw.startsWith('http://127.0.0.1:3199/amap-static?')
-      || raw.startsWith('http://localhost:3199/amap-static?')
-      || raw.startsWith('/api/amap-static?')
-      || isMapReferenceImage(raw)
-    )
-      ? raw
-      : makeSatelliteGroundPlaceholder(safeWidth, safeDepth);
-    layout = {
-      ...layout,
-      floorPlanImage: image,
-      floorPlanOpacity: 0.78,
-      satelliteGroundRef: true,
-    };
-  } else if (pick.satelliteGround === false) {
-    const next = { ...layout, satelliteGroundRef: false as const };
-    if (isMapReferenceImage(next.floorPlanImage)) delete next.floorPlanImage;
-    layout = next;
-  }
   return { layout, cleared: plan.cleared };
 }

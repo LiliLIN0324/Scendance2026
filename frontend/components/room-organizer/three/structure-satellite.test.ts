@@ -103,9 +103,12 @@ describe('satellite floor texture', () => {
       { lng, lat: lat + dLat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-      name: '盐官古城', location: '潮乐之城', polygon, satelliteGround: true, satelliteGroundImage: image,
+    const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官古城', location: '潮乐之城', polygon,
     });
+
+      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, layout);
     const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh;
@@ -191,9 +194,12 @@ describe('satellite floor texture', () => {
       { lng, lat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-      name: '盐官', location: '手画', polygon, satelliteGround: true, satelliteGroundImage: image,
+    const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官', location: '手画', polygon,
     });
+
+      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, layout);
     const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
@@ -228,9 +234,12 @@ describe('satellite floor texture', () => {
       { lng, lat: lat + dLat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-      name: '盐官潮乐之城', location: '海宁盐官', polygon, satelliteGround: true, satelliteGroundImage: image,
+    const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '海宁盐官', polygon,
     });
+
+      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
     const framed = layout.mapGroundFrame!;
     const dropped = { ...layout };
     delete dropped.mapGroundFrame;

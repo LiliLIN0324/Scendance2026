@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 'use client';
 
-import { AlertTriangle, Check, Info, RotateCcw, Satellite, Search, X } from '@/components/solid-icons';
+import { AlertTriangle, Check, Info, RotateCcw, Search, X } from '@/components/solid-icons';
 import { useEffect, useRef, useState } from 'react';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript, type AmapAutoComplete } from '../lib/amap-script';
-import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters, fetchSatelliteGroundDataUrl } from '../lib/amap-venue';
+import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, polygonBboxMeters } from '../lib/amap-venue';
 import { defaultGuestFlow } from '../lib/site-capture';
 import { RECON_MATERIAL_BAN } from '../lib/site-recon-mock';
 import {
@@ -31,10 +31,6 @@ export interface VenuePickResult {
   polygon: { lng: number; lat: number }[];
   /** 圈内主客流线折点；缺省时上层用默认长轴流线加密站位。 */
   flow?: { lng: number; lat: number }[];
-  /** 卫星贴地参考底图（默认开）；仅观感，不可作重建素材。 */
-  satelliteGround?: boolean;
-  /** 已拉取的真实卫星参考 data URL（仅观感，不进重建上传）。 */
-  satelliteGroundImage?: string;
 }
 
 /** 正在画的图形种类。 */
@@ -64,7 +60,7 @@ function suggestionOf(raw: unknown, index: number): AmapSuggestion | null {
 }
 
 /**
- * 高德选址圈画：搜索/点选地点 → 卫星图上点选边界 → 显式「完成圈画」闭合 → 可选画主客流线 → 真轮廓壳体；卫星贴地参考默认开（仍仅观感）。key 只留在本机。
+ * 高德选址圈画：搜索/点选地点 → 卫星图上点选边界 → 显式「完成圈画」闭合 → 可选画主客流线 → 真轮廓壳体；只落形状/位置/大小，不再拉贴地底图（#38）。key 只留在本机。
  * grow = 交给浮层撑高度：圈一块地要能看清地块，左栏那条 260px 的窄缝圈不准。
  *
  * 圈画为什么自己收点、不用地图 SDK 的绘制插件：SDK 只在「双击/回到起点闭合」时抛一个事件，
@@ -89,8 +85,6 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
   const [bbox, setBbox] = useState<{ width: number; depth: number } | null>(null);
   const [flowMeters, setFlowMeters] = useState<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  /** 卫星贴地参考：地图立壳默认开；只贴观感底图，绝不进 Aholo 上传。 */
-  const [satelliteGround, setSatelliteGround] = useState(true);
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<AmapSuggestion[]>([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -400,26 +394,6 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
     setStatus(`主客流线约 ${meters} m。可点「生成户外场地」，或重画流线。`);
   }
 
-  function staticKey(): string {
-    // Next 只内联字面量 NEXT_PUBLIC_* 访问
-    return process.env.NEXT_PUBLIC_AMAP_STATIC_KEY || key;
-  }
-
-  async function resolveSatelliteImage(polygon: { lng: number; lat: number }[]): Promise<string | undefined> {
-    if (!satelliteGround) return undefined;
-    setStatus('正在拉取卫星参考底图…');
-    const image = await Promise.race([
-      fetchSatelliteGroundDataUrl(polygon, staticKey()),
-      new Promise<null>(resolve => setTimeout(() => resolve(null), 9000)),
-    ]);
-    if (!image) {
-      setStatus('卫星静态图暂不可用，已用参考占位底图（仍不可作重建素材）。');
-      return undefined;
-    }
-    setStatus('');
-    return image;
-  }
-
   async function generate() {
     if (busy) return;
     if (drawing) { setStatus('先把当前的圈画完成或放弃，再生成场地。'); return; }
@@ -427,22 +401,19 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
     setBusy(true);
     try {
       const flow = flowRef.current.length >= 2 ? flowRef.current : defaultGuestFlow(drawRef.current);
-      const satelliteGroundImage = await resolveSatelliteImage(drawRef.current);
       setSaved(true);
       onPick({
         name: pickName.trim() || '户外场地',
         location: pickLocation,
         polygon: drawRef.current,
         flow,
-        satelliteGround,
-        ...(satelliteGroundImage ? { satelliteGroundImage } : {}),
       });
     } finally {
       setBusy(false);
     }
   }
 
-  /** D3 演示：不手画也能立一块非矩形（L 轮廓）户外壳，并带默认长轴流线；可选卫星贴地。 */
+  /** D3 演示：不手画也能立一块非矩形（L 轮廓）户外壳，并带默认长轴流线。 */
   async function demoPick() {
     if (busy) return;
     setBusy(true);
@@ -460,15 +431,12 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
         { lng: lng + dLng * 0.45, lat: lat + dLat },
         { lng, lat: lat + dLat },
       ];
-      const satelliteGroundImage = await resolveSatelliteImage(polygon);
       setSaved(true);
       onPick({
         name: pickName.trim() || '盐官潮乐之城',
         location: pickLocation || '海宁盐官',
         polygon,
         flow: defaultGuestFlow(polygon),
-        satelliteGround,
-        ...(satelliteGroundImage ? { satelliteGroundImage } : {}),
       });
     } finally {
       setBusy(false);
@@ -567,12 +535,6 @@ export function AmapVenuePicker({ onPick, onClose, grow = false, savedPolygon }:
       {saved ? ' · 场地已保存' : ' · 尚未写入场地'}
     </p>}
     <div className="sc-satellite-row">
-      <label className="sc-satellite-toggle">
-        <input type="checkbox" checked={satelliteGround} disabled={busy} onChange={event => setSatelliteGround(event.target.checked)} aria-label="卫星贴地参考底图" />
-        <Satellite size={15} aria-hidden="true"/>
-        <span>卫星贴地参考</span>
-        <em className="sc-badge is-quiet">默认开</em>
-      </label>
       <span className="sc-badge is-quiet" title={RECON_MATERIAL_BAN}>仅参考</span>
       <InfoTip label="卫星底图能不能做重建素材">{RECON_MATERIAL_BAN}</InfoTip>
     </div>

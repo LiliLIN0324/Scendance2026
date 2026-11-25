@@ -629,7 +629,7 @@ interface AgentValue {
   startStylePicker(): void;
   closeStylePicker(): void;
   placeStyleBundle(bundle: StyleBundle): void;
-  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null;
+  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[] }): string | null;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
   /** 上一版云任务还在恢复：最后一帧没稳，不亮确认。 */
@@ -2014,7 +2014,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
 
   /** 场地圈画应用（原 value 内联体，V-1c 提为具名函数：chat 锚定链与地图选址共用同一落壳路径）。 */
-  function applyVenuePick(pick: { name: string; location: string; polygon: AmapPoint[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null {
+  function applyVenuePick(pick: { name: string; location: string; polygon: AmapPoint[] }): string | null {
     if (phase === 'generating') { const reason = '还在出这一版，先停一下。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
     const was2D = view.view2D;
     try {
@@ -2054,19 +2054,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       setVenueIO('outdoor');
       onVenueIOChange?.('outdoor');
       if (was2D) setView(current => ({ ...current, view2D: true }));
-      if (pick.satelliteGround) {
-        setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: layout.floorPlanOpacity ?? 0.55 }));
-      }
       const dims = polygonBboxMeters(pick.polygon);
       const clamped = dims.width > 100 || dims.depth > 100;
       const dropped = cleared ? `${cleared} 件物料放不下先撤了` : '物料照常摆';
       const polyNote = (layout.backendVenue?.shape === 'polygon' || layout.backendSceneV2?.venue.shape === 'polygon')
         ? '，壳体按圈画真轮廓（非仅外接矩形）'
         : '';
-      const satNote = withinWestLake
-        ? '。已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围'
-        : pick.satelliteGround ? '。已开启卫星参考底图'
-        : '';
+      const satNote = withinWestLake ? '。已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围' : '';
       say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步去「空间」看实景，或重新选址。` });
       return null;
     } catch (error) {

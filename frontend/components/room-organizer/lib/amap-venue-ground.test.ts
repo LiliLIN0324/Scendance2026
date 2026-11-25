@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RoomLayout } from './types';
 import {
-  applySatelliteGroundPatch,
   groundFromSatellitePatch,
   makeSatelliteGroundPlaceholder,
   type SatelliteGroundPatch,
@@ -28,15 +26,10 @@ function fullPatch(): SatelliteGroundPatch {
   };
 }
 
-function bareLayout(): RoomLayout {
-  return { id: 't', name: '测试场地', width: 30, height: 20 } as RoomLayout;
-}
-
 describe('groundFromSatellitePatch（写侧唯一出口）', () => {
-  it('定位成功的 patch 逐项搬进 ground，与旧 applySatelliteGroundPatch 等价', () => {
+  it('定位成功的 patch 逐项搬进 ground', () => {
     const patch = fullPatch();
     const ground = groundFromSatellitePatch(patch);
-    const legacy = applySatelliteGroundPatch(bareLayout(), patch);
 
     expect(ground.image).toBe(patch.floorPlanImage);
     expect(ground.opacity).toBe(patch.floorPlanOpacity);
@@ -45,13 +38,6 @@ describe('groundFromSatellitePatch（写侧唯一出口）', () => {
     expect(ground.center).toEqual(patch.mapLngLat);
     expect(ground.frame).toEqual(FRAME);
 
-    // 旧路径写进 layout 的每个值，都能在 ground 里找到同一份，不多不少。
-    expect(ground.image).toBe(legacy.floorPlanImage);
-    expect(ground.opacity).toBe(legacy.floorPlanOpacity);
-    expect(ground.satelliteRef).toBe(legacy.satelliteGroundRef);
-    expect(ground.polygon).toEqual(legacy.mapGroundPolygon);
-    expect(ground.center).toEqual(legacy.mapLngLat);
-    expect(ground.frame).toEqual(legacy.mapGroundFrame);
   });
 
   it('图源随 patch 走：缺省落回 amap-satellite，自绘拼图按实际来源记', () => {
