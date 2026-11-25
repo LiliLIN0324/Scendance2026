@@ -91,7 +91,6 @@ import { paintModelOnPlan } from './three/paint-model-on-plan';
 import type { PlanViewport } from './lib/outdoor-plan-canvas';
 import { nextWalkViewMode, type WalkViewMode as OutdoorWalkViewMode } from './lib/walk-view-modes';
 import { requestOutdoorWalkPointerLock } from './lib/walk-engage';
-import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
 import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, saveOutdoorProjectRecord } from './lib/outdoor-project-store';
@@ -539,7 +538,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [handoffExportRequest, setHandoffExportRequest] = useState(0);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
   // T3 封堵：制作侧画布钉（reviewPins/pinFilter/pinDraft/reviewCleared）整簇删除——门已封死，评审只走分享链接。
-  const [outdoorVenue, setOutdoorVenue] = useState(false);
   const [workbenchModeSerial, setWorkbenchModeSerial] = useState(0);
   const [environments, setEnvironments] = useState<StoredEnvironment[]>([]);
   const environment = environments[0] ?? null;
@@ -3129,17 +3127,6 @@ useEffect(() => {
     return () => window.removeEventListener('keydown', onOutdoorKey);
   }, [outdoorWalkActive, cycleOutdoorWalkView]);
 
-  useWeather({
-    weather: view.weather,
-    enabled: isReady && !view.view2D,
-    invalidate,
-    threeModuleRef,
-    sceneRef,
-    // v2.4 户外场地：不画顶（雨的干燥区清零），默认视角就能看到场地里在下雨。仅预览，不写入场景。
-    roomWidth: outdoorVenue ? 0 : layout.width,
-    roomDepth: outdoorVenue ? 0 : layout.height,
-  });
-
   // 调研底图在场时，取景框换成底图那片区域：底图铺在哪，镜头就框哪。
   const researchPlacement = researchBasemapPlacement(layout);
   const { applyPreset, focusOn, fitToRoom, ensureRoomInView, setSceneFocus } = useCameraPresets({
@@ -4687,7 +4674,7 @@ useEffect(() => {
         const record = { scope: sessionScope, epoch: sessionToken.epoch, chatEpoch:chatTransitionEpoch.current, sessionId, memory };
         agentBriefRef.current = record;
         setAgentBriefRecord(record);
-      }} onVenueIOChange={io => { if (activitySession.isCurrent(sessionToken) && getStoreSessionScope() === sessionScope) setOutdoorVenue(io === 'outdoor'); }}
+      }}
       onPreview={scopedPreview}
       onApply={scopedApply} onApplyResearchArea={area=>{if(!applyResearchArea(area))throw new Error('当前活动无法写入调研底图。');}} onApplyZoneRects={(zones) => {
         if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) { notify('活动已切换，请重新核对区域建议。', 'info'); return null; }
