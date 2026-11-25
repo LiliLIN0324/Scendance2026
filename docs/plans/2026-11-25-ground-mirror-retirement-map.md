@@ -149,10 +149,12 @@
 | 批 | 文件（命中数） | 状态 |
 | --- | --- | --- |
 | 1 | `lib/scene-anchor.ts`（5）、`lib/outdoor-venue-sync.ts`（6）、`room-organizer.tsx` 反向播种、`use-scene-effects` 蓝色边界环 | **本轮已落**（函数加可选 `ground` 入参，没给就回退 layout，行为等价） |
-| 2 | `lib/venue-scale-basis.ts`（2）+ `lib/venue-fact-epoch.ts` + `agent-panel.tsx:1642` | **待做，唯一需要新 accessor 的簇**：三方共用同一个「场地事实基线」字符串，plan 现在只活在 `room-organizer` 组件里，得先有一个模块级 `readCurrentPlanGround(projectId)`，否则 epoch 会因两侧口径不同而假跳（误报「请重新确认场地尺寸」） |
+| 2 | `lib/venue-scale-basis.ts`（2）+ `lib/venue-fact-epoch.ts` + `agent-panel.tsx:1642` | **本轮落了一半**：`venueScaleBasis(layout, ground?)` 已加可选正源入参，并有用例钉住「换源后字符串逐字相同」（`venue-scale-basis.test.ts`）；三个调用点仍走 layout 单参，留到批 5 连删字段一起翻。用户选 C：先靠迁移消除失配风险，再换源 |
 | 3 | `lib/amap-venue.ts`（73）+ `panels/scendance-workspace.tsx`（28） | 与 #38 同批：旧卫星开关整簇随壳体退役 |
 | 4 | `canvas-2d/render.ts`（24，已有 `ground?`，剩兜底）、`three/room-builder.ts`（20）、`use-review-capture.ts`（6）、`layout-reducer.ts`（6）、`west-lake-basemap.ts`（19） | 读点收尾 |
 | 5 | `lib/types.ts`（7）、`lib/schema.ts`（22）、`plan-ground.ts`（27）、`version-history.ts`（4） | **S3 收口**：删字段 + 迁移脚本 + 旧版本历史兼容 |
+
+**用户口径（2026-11-25，选 C）**：先靠迁移把值搬进 `plan.ground`，再换基线来源，用迁移消掉「换源导致旧记忆失配 → 误报重新确认场地尺寸」的风险。迁移这一半代码里已经存在：`planGroundSync` 判 `to-plan` 就交给画布 `applyGround` 写正源（`plan-ground.test.ts` 有用例），这里只是把「换源等价」这条也钉住，等批 5 一起翻调用点。
 
 **两条硬边界（动 S3 前必须先处理）**：
 - `three/scan-placement.ts`（3 处命中）是 AGENTS.md §六 的**禁改几何基线**：里面调用 `sceneAnchorOf(layout)`。
