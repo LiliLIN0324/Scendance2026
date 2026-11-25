@@ -87,7 +87,7 @@ import { useProposalPreview } from './hooks/use-proposal-preview';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
-import { useSceneEffects, measurementDistance } from './hooks/use-scene-effects';
+import { useSceneEffects } from './hooks/use-scene-effects';
 import { useSceneLighting } from './hooks/use-scene-lighting';
 import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
 import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
@@ -100,7 +100,7 @@ import type { PlanViewport } from './lib/outdoor-plan-canvas';
 import { useWalkthrough, type WalkViewMode } from './hooks/use-walkthrough';
 import { nextWalkViewMode, type WalkViewMode as OutdoorWalkViewMode } from './lib/walk-view-modes';
 import { useWalkAvatar } from './hooks/use-walk-avatar';
-import { requestOutdoorWalkPointerLock, requestWalkPointerLock } from './lib/walk-engage';
+import { requestOutdoorWalkPointerLock } from './lib/walk-engage';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
@@ -109,14 +109,11 @@ import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, saveOutdoorProjec
 import { writeGroundToPlan } from './lib/venue-ground-slot';
 import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
-import { findCatalogEntry } from './lib/catalog-drag';
-import { suggestDropPoint } from './lib/drop-zone';
 import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlacementGuard, type CatalogPlacementResult } from './lib/catalog-placement-guard';
 import { resolveCatalogPosition } from './lib/catalog-placement-position';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
-import { CAMERA_BRACKET_ARM, EVENT_CATALOG } from './lib/constants';
+import { CAMERA_BRACKET_ARM } from './lib/constants';
 import { crowdHintsFromLayout } from './lib/crowd-route';
-import { saveCustomSet } from './lib/custom-sets';
 import { notify } from './lib/editor-notices';
 import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, readEnvironmentsStrict, writeEnvironments, type EnvironmentScope, type StoredEnvironment } from './lib/environment-preference';
 import { persistEnvironmentPosition } from './lib/environment-position-transaction';
@@ -126,17 +123,13 @@ import {createLocalActivitySwitchGuard,LocalActivitySwitchGuardProvider} from '.
 import {unsavedSourceDrafts} from './panels/unsaved-source-drafts';
 import { reconcilePendingEnvironmentWrite, type PendingEnvironmentWrite } from './lib/environment-write-reconciliation';
 import { downloadTextFile } from './lib/plan-export/download';
-import { alignSelection, distributeSelection, type AlignEdge, type DistributeAxis } from './lib/alignment';
 import { hasCollisions, totalCost } from './lib/geometry';
-import { expandSelection, groupIdsIn, isWholeGroup } from './lib/groups';
+import { expandSelection } from './lib/groups';
 import type { GizmoMode } from './lib/transform';
 import { randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
 import { isNavExpanded, type RailSidePanel } from './lib/nav-chrome';
 import { noteVenueThreeIntent } from './lib/venue-library';
-import { loadOnlineCatalogItem } from './lib/online-model-placement';
-import { loadGeneratedCatalogItem } from './lib/aholo-model-placement';
-import { loadShippedOnlineModels } from './lib/online-models';
 import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap';
 import { snapshotBeforeReplace } from './lib/restore-point';
 import { EDITOR_ITEM_LIMIT } from './lib/item-limits';
@@ -257,8 +250,6 @@ import { SHARE_READ_ONLY_LINE, sharePublishReadOnly, type ShareMenuActions } fro
 import { type ServerShare } from './lib/share-records';
 import { StatusToastHost } from './panels/status-toast';
 import { EnvironmentLoad } from './panels/environment-load';
-import { Viewport } from './panels/viewport';
-import type { HoverInfo } from './hooks/use-three-scene';
 import type { GameMode } from './lib/types';
 import { ConfirmModal } from './components/ConfirmModal';
 import { usePlanAnnotations } from './hooks/use-plan-annotations';
@@ -518,7 +509,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedWall, setSelectedWall] = useState<{ id: string; kind: 'exterior' | 'interior' } | null>(null);
   const [extraSelectedIds, setExtraSelectedIds] = useState<ReadonlySet<string>>(new Set());
-  const [hover, setHover] = useState<HoverInfo | null>(null);
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   // 工具抽屉和 Bingo 列同时关着，左侧导航才算收起。logo 只写这两扇门。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -1692,7 +1682,6 @@ useEffect(() => {
   // promotion inside a nested setState updater and read the result back
   // synchronously — that only works on React's eager-evaluation path, and
   // StrictMode's double-invoked updaters ran the toggle twice (#117).
-  //
   // Persistent groups (#154) expand HERE, not in the canvas handlers: both
   // the 3D raycast and the 2D hit-test report the clicked id and modifier,
   // and this one place turns a grouped id into its whole group, so the two
@@ -1757,42 +1746,6 @@ useEffect(() => {
     if (selectedItemId) set.add(selectedItemId);
     return set;
   }, [selectedItemId, extraSelectedIds]);
-
-  // Persistent groups (#154). Group merges whatever is selected — members of
-  // other groups included — into one fresh group; Ungroup frees every
-  // selected item. The selection itself is untouched either way, so a
-  // freshly grouped set stays selected and draggable.
-  const selectionIsGroup = useMemo(
-    () => isWholeGroup(activeFloor.items, allSelectedIds),
-    [activeFloor.items, allSelectedIds]
-  );
-  const selectionHasGroups = useMemo(
-    () => groupIdsIn(activeFloor.items, allSelectedIds).size > 0,
-    [activeFloor.items, allSelectedIds]
-  );
-  const groupSelection = useCallback(() => {
-    if (allSelectedIds.size < 2) return;
-    actions.setGroup(allSelectedIds);
-  }, [actions, allSelectedIds]);
-  const ungroupSelection = useCallback(() => {
-    actions.clearGroup(allSelectedIds);
-  }, [actions, allSelectedIds]);
-
-  // Custom sets (#302): the selection, normalised around its centroid, under
-  // a name the user picks — typed into the selection chip (#374). Groups
-  // inside it are kept and come back as fresh groups when the set is placed.
-  const saveSelectionAsSet = useCallback((name: string) => {
-    const items = activeFloor.items.filter((item) => allSelectedIds.has(item.id));
-    if (items.length < 2 || !name.trim()) return false;
-    const saved = saveCustomSet(items, name, { idTag: randomSuffix() });
-    if (!saved) {
-      notify('浏览器本机存储已满，组合没能保存。', 'error');
-      return false;
-    }
-    notify(`已把「${saved.name}」存为组合。`, 'success');
-    playCue('success');
-    return true;
-  }, [activeFloor.items, allSelectedIds, playCue]);
 
   // The recess's span of the front wall on this storey; openings settle on
   // its piers (#394). Memoised on what the recess is fitted to.
@@ -2216,62 +2169,6 @@ useEffect(() => {
   // Align / distribute the current multi-select (#P0-3). Candidate geometry is
   // checked first so an align that would push a piece out of bounds fails
   // loudly instead of silently clipping it.
-  const applyAlignedPositions = useCallback(
-    (positions: Map<string, { x: number; z: number }>) => {
-      // Distribute only moves the in-between items, so a valid 3-item
-      // distribute yields a single entry; only an empty map means "nothing to
-      // do" (already evenly spaced).
-      if (positions.size === 0) return;
-      const candidate = {
-        ...layout,
-        floors: layout.floors.map((floor, index) =>
-          index === activeFloorIndex
-            ? {
-                ...floor,
-                items: floor.items.map((item) => {
-                  const next = positions.get(item.id);
-                  return next ? { ...item, position: next } : item;
-                }),
-              }
-            : floor
-        ),
-      };
-      if (!canApplyLayoutGeometry(layout, candidate)) {
-        notify('对齐后超出场地范围，已取消。', 'info');
-        return;
-      }
-      commitHistoryNow();
-      actions.bulkSetPositions(positions);
-    },
-    [layout, activeFloorIndex, commitHistoryNow, actions]
-  );
-
-  const alignSelected = useCallback(
-    (edge: AlignEdge) => {
-      const positions = alignSelection(activeFloor.items, allSelectedIds, edge);
-      applyAlignedPositions(positions);
-    },
-    [activeFloor.items, allSelectedIds, applyAlignedPositions]
-  );
-
-  const distributeSelected = useCallback(
-    (axis: DistributeAxis) => {
-      // The guard counts the selection, not the result: three items distribute
-      // to one moved (the middle), which used to be rejected as "too few".
-      const eligible = activeFloor.items.filter(
-        (item) => allSelectedIds.has(item.id) && item.position
-      ).length;
-      if (eligible < 3) {
-        notify('等距分布至少需要三件物料。', 'info');
-        return;
-      }
-      const positions = distributeSelection(activeFloor.items, allSelectedIds, axis);
-      // Already evenly spaced: don't open an undo entry that changes nothing.
-      if (positions.size === 0) return;
-      applyAlignedPositions(positions);
-    },
-    [activeFloor.items, allSelectedIds, applyAlignedPositions]
-  );
 
   // 2D marquee: enters through one call so the selection state stays in one
   // place (the same handleSelect path Shift-click uses).
@@ -2751,7 +2648,6 @@ useEffect(() => {
       onItemDrag: scopedDragMove,
       onItemDragEnd: handleDragEndWithHistory,
       onItemDragCancel: scopedDragCancel,
-      onItemHover: setHover,
       onEmptyClick: handleEmptyClick,
       editingLocked: workbenchMode !== 'layout',
       onWallSelect: ({ wallId, kind }) => {
@@ -2960,20 +2856,6 @@ useEffect(() => {
     const next = walkable[(index + 1) % walkable.length];
     if (next) setWalkRoleId(next.assetId);
   }, [walkRoleId]);
-  /** 进漫游只有这一条路：右侧按钮、场地卡里的入口都用它。 */
-  function startWalk() {
-    if (scanIsolated && (splatState.assetId !== isolatedScanId || splatState.status !== 'ready')) {
-      notify('等场景加载完成后再试走。', 'error');
-      return;
-    }
-    setWalkViewMode('third');
-    if (!scanIsolated && mappedWorkspace && !environment) {
-      tryMapVenue();
-      return;
-    }
-    requestWalkPointerLock();
-    setView(current => ({ ...current, view2D: false, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: true }));
-  }
   /** 退出漫游的唯一收口：关视图 + live→build；Esc、顶部胶囊、右轨按钮都走这里。 */
   const exitWalkthrough = useCallback(() => {
     setView(current => (current.walkthroughMode ? { ...current, walkthroughMode: false } : current));
@@ -3004,12 +2886,9 @@ useEffect(() => {
   }
 
   function toggleWalkthrough(on: boolean) {
-    if (!environment && !scanIsolated && (isOutdoorProject || outdoor2DOpen || outdoor3dTakeoverActive)) {
-      toggleOutdoorWalk(on);
-      return;
-    }
-    if (on) { startWalk(); return; }
-    exitWalkthrough();
+    // E2：室内 Viewport 已退役，漫游只剩户外 3D 这一条；没有户外 plan 时不进入，
+    // 否则会切到没有画面的空舞台。
+    toggleOutdoorWalk(on);
   }
 
   // 2026-11-12 统一 2D/3D：接管态（覆盖层隐藏保活）也保持转发——右轨撤销/测量/选择照常驱动 2D 画布。
@@ -3406,7 +3285,7 @@ useEffect(() => {
     return () => window.removeEventListener('keydown', onOutdoorKey);
   }, [outdoorWalkActive, cycleOutdoorWalkView]);
 
-  const { phase: walkthroughPhase, nearSeat: walkNearSeat, seated: walkSeated } = useWalkthrough({
+  useWalkthrough({
     enabled: isReady && walkthroughActive,
     ...(walkAvatarOn ? { viewMode: walkViewMode, onWalkFrame: walkAvatar.frame, walkSpeed: 1.2 } : {}),
     invalidate,
@@ -3590,10 +3469,6 @@ useEffect(() => {
   // 换场地时 splat 是异步加载的：等它就绪再 zoom（load 完成会先框一遍场地，zoom 随后带到定点机位）。
   const pendingVenueZoomRef = useRef<ScannedVenue | null>(null);
   const mapVenueTrialRef = useRef(false);
-  const tryMapVenue = () => {
-    mapVenueTrialRef.current = true;
-    setView(value => ({ ...value, view2D: false, walkthroughMode: true }));
-  };
   const focusMapVenue = useCallback(() => {
     const current = layoutStore.getState().layout;
     const points = mapVenueFootprint(current);
@@ -5565,97 +5440,7 @@ useEffect(() => {
                 原左下胶囊挂载不再渲染；OutdoorViewSwitch 组件文件已于 2026-11-17 零引用清理删除。 */}
       {/* Gaussian venues retain the original renderer and canvas in outdoor projects.
           The map borrows that renderer in 2D; 3D reveals the same loaded scene. */}
-      <div className="sc-scene-viewport" style={{ visibility: environment && !outdoor2DOpen && !outdoorPlan ? 'visible' : 'hidden', pointerEvents: environment && !outdoor2DOpen && !outdoorPlan ? 'auto' : 'none' }}><Viewport
-        isReady={isReady}
-        error={error}
-        view2D={view.view2D}
-        layout={layout}
-        activeFloor={activeFloor}
-        selectedItem={selectedItem}
-        selectionCount={allSelectedIds.size}
-        onCopySelection={copySelectionToClipboard}
-        selectionGrouped={selectionIsGroup}
-        onGroupSelection={selectionIsGroup ? undefined : groupSelection}
-        onUngroupSelection={selectionHasGroups ? ungroupSelection : undefined}
-        onSaveSelectionAsSet={saveSelectionAsSet}
-        gizmoMode={gizmoMode}
-        onGizmoModeChange={setGizmoMode}
-        onAlignSelection={alignSelected}
-        onDistributeSelection={distributeSelected}
-        showMeasurements={view.showMeasurements}
-        lengthUnit={layout.planSettings?.displayUnit ?? view.lengthUnit}
-        lengthPrecisionM={view.lengthPrecisionM ?? 0.01}
-        showMinimap={view.showMinimap}
-        ground={viewGround}
-        walkthroughActive={walkthroughActive}
-        walkthroughPhase={walkthroughPhase}
-        walkthroughSeat={walkNearSeat?.name ?? null}
-        walkthroughSeated={walkSeated}
-        walkthroughInEnvironment={environmentShown}
-        walkthroughMetric={splatWalkBounds !== null}
-        measurementDistance={measurementDistance(measurementPoints)}
-        {...(view.measurementMode ? { measurementPointsPlaced: measurementPoints.length } : {})}
-        wallDrawStatus={
-          view.drawWallMode
-            ? {
-                hasAnchor: wallDraft !== null,
-                ...(wallSnapResult ? { snapKind: wallSnapResult.kind } : {}),
-                currentLength:
-                  wallDraft && wallSnapResult
-                    ? Math.hypot(
-                        wallSnapResult.point.x - wallDraft.x,
-                        wallSnapResult.point.z - wallDraft.z
-                      )
-                    : null,
-              }
-            : null
-        }
-        canvasRef={canvasRef}
-        canvas2DRef={canvas2DRef}
-        hover={
-          hover &&
-          (() => {
-            const item = activeFloor.items.find((entry) => entry.id === hover.id);
-            return item ? { item, clientX: hover.clientX, clientY: hover.clientY } : null;
-          })()
-        }
-        onCatalogDrop={async (clientX, clientY, key) => {
-          if (workbenchMode !== 'layout' || !dropActive.current) return;
-          // 2026-11-12 统一放置流程：拖拽落点优先于「待放置」——带着待放置拖新物件进来，
-          // 自动取消待放置、落拖拽这件；拖的就是待放置这件也走同一条路。
-          if (pendingPlacement.current) clearPendingPlacement();
-          const base = layoutStore.getState();
-          const world = view.view2D
-            ? clientToWorld2D(clientX, clientY)
-            : worldPositionFromClient(clientX, clientY);
-          if (!world) return;
-          const placement = capturePlacement();
-          try {
-            let item = findCatalogEntry(EVENT_CATALOG, key);
-            if (key.startsWith('online:')) {
-              const model = (await loadShippedOnlineModels()).models.find(entry => entry.slug === key.slice(7));
-              if (!model) return;
-              item = await loadOnlineCatalogItem(model, controller);
-            } else if (key.startsWith('generated:')) {
-              // 2026-11-12 统一放置流程：「我的生成」物料也可拖入，拖哪落哪。
-              item = await loadGeneratedCatalogItem(key.slice('generated:'.length), assetId => controller.authorizeAsset(assetId));
-            }
-            if (!item) return;
-            if (!dropActive.current) return;
-            if (layoutStore.getState() !== base) throw new Error('下载期间画布已有变化，请重新拖入物料。');
-            placement.assertCurrent();
-            // F3 智能落点：拖到已有物件附近自动吸附到旁侧，避免重叠。
-            const anchors = activeFloor.items.filter(e => e.position).map(entry => ({ id: entry.id, name: entry.name, x: entry.position!.x, z: entry.position!.z, width: entry.width, depth: entry.depth }));
-            const suggested = suggestDropPoint(world, anchors, { width: item.width, depth: item.depth });
-            const newId = placeDiscrete(item, suggested.point);
-            if (newId) {
-              selectOnly(newId, { keepPanel: true });
-              if (suggested.anchor) notify(`已紧挨「${suggested.anchor.name}」摆放`, 'info');
-            }
-          } catch (error) { notify(error instanceof Error ? error.message : '模型加载失败，请重试。', 'error'); }
-          finally { placement.dispose(); }
-        }}
-      />
+      
             {/* 户外项目主画布 3D 接管：与户外卡内 3D 同一个组件（同一份渲染管线）。
                 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：组件**常驻不卸载**——切回 2D 时
                 只置 hidden（内层 active=false 停渲染、只推进瓦片 LOD），切回 3D 当帧就出画面，
@@ -5931,7 +5716,7 @@ useEffect(() => {
                 />
               </div>
             )}
-          </div>
+          
             <div className="sc-editor-dock">
             <GmCompassHost
               active={outdoorActions != null}

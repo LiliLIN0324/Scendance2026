@@ -84,7 +84,9 @@ it.each(['two','three'] as const)('rejects a stale %s gesture after same-batch A
  expect(layoutStore.getState().layout.floors[0]!.items[0]!.position).toEqual({x:0,z:0});
 });
 
-it('disconnects the old 2D canvas observer and observes the replacement after an activity switch',async()=>{
+// 2026-11-25 E2：室内 Viewport 已退役（面板与 #sc-viewport-3d 一并删除），
+// 这条断言针对的是室内画布的 2D 观察者；观察者随壳体关闭，保留记录不再执行。
+it.skip('disconnects the old 2D canvas observer and observes the replacement after an activity switch',async()=>{
  const a=activity('observer-A');layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
  // M3a：会话身份绑 projectId（prop），切换项目经 rerender 换 outdoorProjectId 驱动失效。
  const view=render(<RoomOrganizer outdoorProjectId="observer-A"/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
