@@ -56,9 +56,9 @@ grep -rn "isOutdoorProject\|seededPlanFromLayout" frontend
 - [x] E2 卸 Viewport 与室内 three/2D（含 E2-c）
 - [x] E3 二～七刀：人群 / 光照 / 摄像机预览 / 人物模型 / 场景效果引擎 / 天气
 - [x] 空间入口恢复 + 示例场景中性化
-- [ ] S1 死 3D 引擎退役（进行中）
-- [ ] S2 室内墙门楼层退役
-- [ ] S3 布局仓收口
-- [ ] S4 身份单源
-- [ ] S5 二分与镜像
-- [ ] S6 文案与残留
+- [ ] S1 死 3D 引擎退役（进行中）：`use-three-scene.ts` 395 行、`use-canvas-2d-interaction.ts` 653 行、`use-item-drag.ts` 476 行仍在挂载；`use-camera-presets.ts` 188 行、`use-scene-zoom.ts` 105 行仍被引用
+- [ ] S2 室内墙门楼层退役：`interiorWalls` 仍 324 处 / 84 文件，`snapToWall` 40 处 / 11 文件，`drawWallMode` 16 处 / 4 文件
+- [ ] S3 布局仓收口：`layoutStore` 仍 681 处 / 65 文件（最大一片）
+- [ ] S4 身份单源：`layout.id ?? 'local'` 仍 28 处
+- [ ] S5 二分与镜像：**符号已归零**（`isOutdoorProject`、`seededPlanFromLayout` 全仓 0 命中，E4 已落）；剩收尾：清旧注释（本轮已清 `outdoor-venue-sync.ts` 一处），并补 share / scene-delivery / manifest 套件与真机分享复验
+- [ ] S6 文案与残留：**首刀已落**（`bcd3bea3` 氛围条整条退役，workspace 套件 30 passed）；剩 `!outdoorEditing` 室内兜底块（楼层切换 / 分享 / 画布工具 / 2D-3D / 网格 / 底图 / 撤销重做 / 缩放 / 室内导出菜单）与支撑逻辑

@@ -5,9 +5,8 @@ import { checkBoundaryRing, planRingSelfIntersects } from './site-plan-editing';
 /**
  * 户外真实足迹 → SitePlan 用地红线（ENU 米，相对 `plan.anchor`）。
  *
- * 2026-11-25（E4）：2D ↔ 3D 壳体镜像整簇退役——`seededPlanFromLayout`、
- * `shellVenuePatchFromPlanBoundary`、`nextOutdoorBoundarySync`、
- * `sceneAnchorFromOutdoorPlan`、`applyOutdoorShellVenuePatch` 已删除。
+ * 2026-11-25（E4）：2D ↔ 3D 壳体镜像整簇退役——由 layout 播种 plan、
+ * 壳体边界补丁、双向边界同步、scene 锚点推导、壳体 venue 回写这五件已删。
  * `plan` 是唯一正源，壳体不再回写、也不再反向播种。
  *
  * 现在只剩「地图搜索选区 / 真实 GCJ 足迹 → 红线」这一条只读转换，
