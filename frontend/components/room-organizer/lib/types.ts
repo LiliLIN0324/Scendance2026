@@ -573,8 +573,6 @@ export interface ViewSettings {
   showHeatmap: boolean;
   /** When true, every placed item has a name label hovering above it in 3D. */
   showItemLabels: boolean;
-  /** When true, security cameras project an animated vision cone on the floor. */
-  showCameraVision: boolean;
 }
 
 export type ThemeKey = 'modern' | 'rustic' | 'minimalist' | 'cozy' | 'tropical';

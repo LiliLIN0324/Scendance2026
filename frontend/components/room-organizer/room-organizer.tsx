@@ -45,7 +45,6 @@ import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
 import { useCameraPresets } from './hooks/use-camera-presets';
-import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
 import { useFloorKeepOut } from './hooks/use-floor-keep-out';
 import { useHistory } from './hooks/use-history';
@@ -81,7 +80,6 @@ import type { LocalWriteCapability } from '@/lib/local-write-lease';
 import { useLayoutState } from './hooks/use-layout-state';
 import { layoutStore } from './hooks/use-layout-store';
 import { usePeopleModel } from './hooks/use-people-model';
-import { useProposalPreview } from './hooks/use-proposal-preview';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
@@ -295,7 +293,6 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   selectMode: true,
   showHeatmap: false,
   showItemLabels: false,
-  showCameraVision: false,
 };
 
 export function RoomOrganizer({ controller: providedController, isActive = true, localWriteCapability, outdoorProjectId: initialOutdoorProjectId }: { controller?: BackendSession; isActive?: boolean; localWriteCapability?: LocalWriteCapability; outdoorProjectId?: string | null } = {}): JSX.Element {
@@ -3221,13 +3218,6 @@ useEffect(() => {
     roomDepth: outdoorVenue ? 0 : layout.height,
   });
 
-  useCameraVision({
-    enabled: isReady && view.showCameraVision && !view.view2D,
-    invalidate,
-    threeModuleRef,
-    sceneRef,
-  });
-
   // 调研底图在场时，取景框换成底图那片区域：底图铺在哪，镜头就框哪。
   const researchPlacement = researchBasemapPlacement(layout);
   const { applyPreset, focusOn, fitToRoom, ensureRoomInView, setSceneFocus } = useCameraPresets({
@@ -4560,8 +4550,6 @@ useEffect(() => {
     const timer = window.setTimeout(() => setPreviewCaptionVisible(false), 2000);
     return () => window.clearTimeout(timer);
   }, [previewCandidate, captionEpoch]);
-  useProposalPreview({ isReady, threeModuleRef, sceneRef, layout,
-    candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
 
 
   // B4 读源单源化：评审截图的底图也先问 plan.ground；两边都没有就是 null（旧路径不变）。

@@ -21,7 +21,6 @@ import { ENTRANCE_WALL_ID, entranceGeometry, entranceWallCut } from '../lib/stre
 import { generateStreet } from '../lib/street-row';
 import { structuralItemCollides } from '../lib/structural-layout';
 import { disposeObject, removeAndDispose } from '../three/builder-utils';
-import { addVisionCones } from '../three/camera-vision';
 import { FURNITURE_REVISION_KEY } from '../three/drag-handlers';
 import {
   type SiteFrame,
@@ -1093,8 +1092,8 @@ export function useSceneEffects({
     layout.floors, view.showAllFloors, view.wallDisplay, peopleModelReady, glbAssetsRevision,
   ]);
 
-  // Wi-Fi rings + camera vision cones. Independently tagged overlays, so
-  // toggling them (or editing items) never touches the furniture meshes.
+  // Wi-Fi rings. Independently tagged overlay, so toggling it (or editing items)
+  // never touches the furniture meshes.
   useEffect(() => {
     invalidate();
     if (!isReady) return;
@@ -1102,8 +1101,8 @@ export function useSceneEffects({
     const scene = sceneRef.current;
     if (!THREE || !scene) return;
 
-    removeTagged(scene, ROOM_OBJECT_TAGS.Signal, ROOM_OBJECT_TAGS.CameraVision);
-    if (!view.showWiFiSignals && !view.showCameraVision) return;
+    removeTagged(scene, ROOM_OBJECT_TAGS.Signal);
+    if (!view.showWiFiSignals) return;
 
     const floorsToRender = view.showAllFloors
       ? layout.floors.map((floor, index) => ({ floor, index }))
@@ -1114,14 +1113,11 @@ export function useSceneEffects({
       if (view.showWiFiSignals) {
         addSignalOverlays(THREE, scene, floor.items, floorY);
       }
-      if (view.showCameraVision) {
-        addVisionCones(THREE, scene, floor.items, floorY, index, storeyHeight(floor));
-      }
     }
   }, [
     isReady, invalidate, threeModuleRef, sceneRef,
     layout.floors, activeFloor, activeFloorIndex,
-    view.showWiFiSignals, view.showCameraVision, view.showAllFloors,
+    view.showWiFiSignals, view.showAllFloors,
   ]);
 
   // Lighting
