@@ -74,7 +74,6 @@ import { layoutFurnishing } from '../lib/furnishing-select';
 import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
 import { mergeSeatingAllocation } from '../lib/seating-allocation';
-import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
 import { writeGroundToPlan } from '../lib/venue-ground-slot';
 import {
@@ -586,8 +585,6 @@ interface AgentValue {
   /** 还没确认的那版布置；null = 没有待确认的提案。只在预览已落稳（proposed）时给出。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
   inventoryWorkspace: ReactNode; inventoryBlocked: boolean; inventoryInvalid: boolean;
-  /** 左栏简报的空地文字链：不用先开物料库，一键立 12×8 空壳。 */
-  startBlankVenue(): void;
   /** 左轨常驻的地图入口：场地立起来也进得来，返回 null = 场地已换成圈画这块，否则是挡路的原因。 */
   mapPickerOpen: boolean;
   startMapVenuePicker(): void;
@@ -2451,38 +2448,6 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     say({ role: 'agent', text: sizeOnlyNote(venue) });
   }
 
-  /** 左栏简报的「空白场地」文字链：和模板轨首卡同一块 12×8 空壳，不用先开物料库。 */
-  function startBlankVenue(): void {
-    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再换空地。' }); return; }
-    const before = live.current;
-    const materialCount = before.floors.reduce((count, floor) => count + floor.items.filter(item => !isStructuralMarker(item)).length, 0);
-    const zoneCount = before.floors.reduce((count, floor) => count + (floor.zones?.length ?? 0), 0);
-    const recordedVenue = !!(before.venueScan || before.floorPlanImage || callbacks.groundRecorded?.() || before.researchArea || before.sceneAnchor ||
-      (before.backendVenue && !before.backendSceneV2) ||
-      before.floors.length > 1 || before.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind !== 'exterior')) ||
-      (before.backendSceneV2 && (before.backendSceneV2.sources.length || before.backendSceneV2.structure.columns.length ||
-        before.backendSceneV2.structure.walls.some(wall => wall.status !== 'inferred') ||
-        before.backendSceneV2.structure.openings.some(opening => opening.status !== 'inferred'))));
-    if (materialCount || zoneCount || recordedVenue) {
-      const details = [materialCount ? `${materialCount} 件物料` : null, zoneCount ? `${zoneCount} 个区域` : null,
-        recordedVenue ? '已有场地资料' : null].filter(Boolean).join('、');
-      say({ role: 'agent', amber: true, text: `当前场景包含${details}，直接换成空白空间会丢失这些内容，本次没有更改。请先备份并另建场景。` });
-      return;
-    }
-    runToken.current++;
-    if (proposal.current) dropProposal();
-    discardCloudPreview();
-    setPhase('idle'); setProgress(0);
-    const was2D = view.view2D;
-    try {
-      onApply(createBlankVenue(live.current));
-      if (was2D) setView(current => ({ ...current, view2D: true }));
-      say({ role: 'agent', text: `空白空间立好了：${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m，要调尺寸就说「改成 15×10」。` });
-    } catch (error) {
-      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '空白空间没立起来，再试一次。' });
-    }
-  }
-
   function readLocalDraftAnnotations():{revision:number;signature:string;hasUnmodelled:boolean;hasDoor:boolean;routes:LocalRouteInput[];routeSignature:string;routeReader:((id:string)=>UserRouteProvenance|null)|null;reader:()=>{draft:LayoutPlanDraft|null;revision:number}}|null {
     const reader=annotationSnapshotRef.current;if(!reader)return null;
     try{
@@ -3960,7 +3925,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
     proposal: phase === 'proposed' ? activeProposal : null, inventoryWorkspace, inventoryBlocked: inventoryCheck?.status==='violated'||!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput), inventoryInvalid:!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput),
     confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
-    cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
+    cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats,
     mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
     venuePickerOpen, startVenuePicker: () => setVenuePickerOpen(true), closeVenuePicker: () => setVenuePickerOpen(false),
     stylePickerOpen,

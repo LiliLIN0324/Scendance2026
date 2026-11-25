@@ -3,6 +3,7 @@
 // 不再按旧约定断言；用户已拍板先跳过，后续按当前行为重写。
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect,useState } from 'react';
+import { readFileSync } from 'node:fs';
 import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
@@ -5246,26 +5247,9 @@ describe('2026-11-23 当前口径',()=>{
   });
 });
 
-describe('2026-11-25 底图正源：空场地判定', () => {
-  it('只有 plan.ground 的场地仍算「已有场地资料」，不会静默换成空壳', () => {
-    // 删掉 layout.floorPlanImage 之后，光看 layout 会把这类场地当空白；
-    // 壳体用 callbacks.groundRecorded() 把 plan.ground 兜回来。
-    state.layout = makeLayout({ id: 'ground-only', width: 12, height: 8, floors: [makeFloor()] });
-    const onApply = vi.fn();
-    let agent!: ReturnType<typeof useAgent>;
-    function Probe() { agent = useAgent(); return null; }
-    render(<LayoutAgentProvider callbacks={{ ...callbacks, groundRecorded: () => true }} onPreview={vi.fn()} onApply={onApply}><AgentPanel/><Probe/></LayoutAgentProvider>);
-    act(() => agent.startBlankVenue());
-    expect(onApply).not.toHaveBeenCalled();
-    expect(screen.getByText(/已有场地资料/)).toBeTruthy();
-  });
-  it('没有底图也没有其他场地资料时，空场地判定不拦（既有行为不变）', () => {
-    state.layout = makeLayout({ id: 'truly-blank', width: 12, height: 8, floors: [makeFloor()] });
-    const onApply = vi.fn();
-    let agent!: ReturnType<typeof useAgent>;
-    function Probe() { agent = useAgent(); return null; }
-    render(<LayoutAgentProvider callbacks={{ ...callbacks, groundRecorded: () => false }} onPreview={vi.fn()} onApply={onApply}><AgentPanel/><Probe/></LayoutAgentProvider>);
-    act(() => agent.startBlankVenue());
-    expect(screen.queryByText(/已有场地资料/)).toBeNull();
+describe('2026-11-25 底图正源：空场地判定已随空白立壳入口退役', () => {
+  it('不再提供 startBlankVenue（场地选择弹层「从空白开始」是唯一起步口）', () => {
+    const source = readFileSync(`${process.cwd()}/components/room-organizer/panels/agent-panel.tsx`, 'utf8');
+    expect(source).not.toContain('function startBlankVenue');
   });
 });
