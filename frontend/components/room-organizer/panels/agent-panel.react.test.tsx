@@ -5245,3 +5245,27 @@ describe('2026-11-23 当前口径',()=>{
     expect(screen.queryByRole('region',{name:'历史需求待核对'})).toBeNull();
   });
 });
+
+describe('2026-11-25 底图正源：空场地判定', () => {
+  it('只有 plan.ground 的场地仍算「已有场地资料」，不会静默换成空壳', () => {
+    // 删掉 layout.floorPlanImage 之后，光看 layout 会把这类场地当空白；
+    // 壳体用 callbacks.groundRecorded() 把 plan.ground 兜回来。
+    state.layout = makeLayout({ id: 'ground-only', width: 12, height: 8, floors: [makeFloor()] });
+    const onApply = vi.fn();
+    let agent!: ReturnType<typeof useAgent>;
+    function Probe() { agent = useAgent(); return null; }
+    render(<LayoutAgentProvider callbacks={{ ...callbacks, groundRecorded: () => true }} onPreview={vi.fn()} onApply={onApply}><AgentPanel/><Probe/></LayoutAgentProvider>);
+    act(() => agent.startBlankVenue());
+    expect(onApply).not.toHaveBeenCalled();
+    expect(screen.getByText(/已有场地资料/)).toBeTruthy();
+  });
+  it('没有底图也没有其他场地资料时，空场地判定不拦（既有行为不变）', () => {
+    state.layout = makeLayout({ id: 'truly-blank', width: 12, height: 8, floors: [makeFloor()] });
+    const onApply = vi.fn();
+    let agent!: ReturnType<typeof useAgent>;
+    function Probe() { agent = useAgent(); return null; }
+    render(<LayoutAgentProvider callbacks={{ ...callbacks, groundRecorded: () => false }} onPreview={vi.fn()} onApply={onApply}><AgentPanel/><Probe/></LayoutAgentProvider>);
+    act(() => agent.startBlankVenue());
+    expect(screen.queryByText(/已有场地资料/)).toBeNull();
+  });
+});

@@ -508,6 +508,13 @@ export interface LayoutAgentCallbacks {
   onOpenLux3d?(kind?: 'world' | 'recon', prompt?: string): void;
   /** 生成轨、观感、重建等生成引擎能力是否露出（与 `NEXT_PUBLIC_LUX3D_RAIL` 一致） */
   luxToolsVisible?: boolean;
+  /**
+   * 「这个场地已经有底图」的判定（B4 读方 ④，2026-11-25）。
+   * 底图字节的正源在 `plan.ground`；layout 那份 `floorPlanImage` 会随 #38 删掉，
+   * 删掉之后光看 layout 会把「只有卫星底图的场地」当成空白场地，
+   * 换空壳时静默丢掉底图。壳体按 plan 兜这一句。
+   */
+  groundRecorded?(): boolean;
 }
 
 interface AgentValue {
@@ -2451,7 +2458,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const before = live.current;
     const materialCount = before.floors.reduce((count, floor) => count + floor.items.filter(item => !isStructuralMarker(item)).length, 0);
     const zoneCount = before.floors.reduce((count, floor) => count + (floor.zones?.length ?? 0), 0);
-    const recordedVenue = !!(before.venueScan || before.floorPlanImage || before.researchArea || before.sceneAnchor ||
+    const recordedVenue = !!(before.venueScan || before.floorPlanImage || callbacks.groundRecorded?.() || before.researchArea || before.sceneAnchor ||
       (before.backendVenue && !before.backendSceneV2) ||
       before.floors.length > 1 || before.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind !== 'exterior')) ||
       (before.backendSceneV2 && (before.backendSceneV2.sources.length || before.backendSceneV2.structure.columns.length ||

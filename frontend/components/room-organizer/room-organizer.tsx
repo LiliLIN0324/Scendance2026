@@ -5075,6 +5075,12 @@ useEffect(() => {
         onOpenRebuild: () => businessToolsRef.current?.openRebuild(),
         onOpenLux3d: openAholoWorkflow,
         luxToolsVisible: luxDirectVisible,
+        // B4 读方 ④：底图正源在 plan.ground；layout 镜像删掉后，只靠 layout 会把
+        // 「只有卫星底图的场地」误判成空场地，换空壳时静默丢掉底图。
+        groundRecorded: () => {
+          const ground = outdoorPlanState?.plan.ground;
+          return !!(ground && (ground.image || ground.polygon || ground.frame || ground.center));
+        },
       }}>
       <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive || outdoorWalkActive ? ' is-walkthrough' : ''}${outdoorWalkActive ? ' is-outdoor-walk' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
