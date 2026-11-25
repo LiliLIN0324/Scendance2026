@@ -11,7 +11,7 @@ import type * as THREE from 'three';
 
 interface Inputs {
   layout: RoomLayout; getLayout(): RoomLayout; view: ViewSettings; activeFloorIndex: number;
-  ready: boolean; peopleReady: boolean; referenceImage?: ReferenceImageLayer;
+  ready: boolean; referenceImage?: ReferenceImageLayer;
   /** 贴地底图读源（B4）：plan.ground 优先，layout 那份只兜底；缺省等于旧行为。 */
   ground?: ResolvedGround | null;
   selectedItemId: string|null; extraSelectedIds: ReadonlySet<string>;
@@ -88,7 +88,7 @@ export function useReviewCapture(inputs:Inputs):(
       return {source:getSource(),canvas:view2D?now.canvas2D.current:now.canvas.current,
         frameRevision:committedFrame?String(frame.revision):'',viewLabel:`${view2D?'二维平面':'三维场景'} · ${now.layout.floors[floorIndex]?.name??'当前楼层'}`,
         ready:now.ready&&committedFrame,assetsReady:modelsReady&&(!view2D||!referenceVisible||!!referenceUrl&&isFloorPlanImageReady(referenceUrl))&&(view2D||
-          !!now.scene.current&&reviewSceneAssetsReady(now.scene.current,referenceVisible&&now.referenceImage?now.referenceImage.url:undefined)&&(!items.some(item=>item.type==='person')||now.peopleReady)),
+          !!now.scene.current&&reviewSceneAssetsReady(now.scene.current,referenceVisible&&now.referenceImage?now.referenceImage.url:undefined)),
         pendingPreview:now.pendingPreview,interacting:now.isInteracting(),privateReferenceVisible:referenceVisible};
     };
     return captureProjectReviewCanvas(snapshot,{

@@ -79,7 +79,6 @@ import {
 import type { LocalWriteCapability } from '@/lib/local-write-lease';
 import { useLayoutState } from './hooks/use-layout-state';
 import { layoutStore } from './hooks/use-layout-store';
-import { usePeopleModel } from './hooks/use-people-model';
 import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
@@ -3169,21 +3168,12 @@ useEffect(() => {
     return () => window.removeEventListener('keydown', onOutdoorKey);
   }, [outdoorWalkActive, cycleOutdoorWalkView]);
 
-  // people.glb is fetched only once a person is placed; wandering NPCs keep
-  // their procedural, brightly coloured figures.
-  const layoutHasPeople = useMemo(
-    () => layout.floors.some((floor) => floor.items.some((item) => item.type === 'person')),
-    [layout.floors]
-  );
-  const peopleModelReady = usePeopleModel(threeModuleRef, isReady, layoutHasPeople);
-
   useSceneEffects({
     showBasemap: true,
     outdoorWorkspace: !!outdoorPlan || !!environment,
     modelPosition: environment?.position,
     outdoorPlan,
     isReady,
-    peopleModelReady,
     invalidate,
     requestShadowUpdate,
     threeModuleRef,
@@ -4555,7 +4545,7 @@ useEffect(() => {
   // B4 读源单源化：评审截图的底图也先问 plan.ground；两边都没有就是 null（旧路径不变）。
   const reviewGround = outdoorPlan ? resolveGround(layout, outdoorPlan) : null;
   const captureReview=useReviewCapture({layout,getLayout:()=>layoutStore.getState().layout,view,activeFloorIndex,
-    ready:isReady||view.view2D,peopleReady:peopleModelReady,selectedItemId,extraSelectedIds,
+    ready:isReady||view.view2D,selectedItemId,extraSelectedIds,
     hasCollision:item=>structuralItemCollides(item,layout,activeFloorIndex)||hasCollisions(item,activeFloor.items,layout.width,layout.height,{keepOut,structureValidated:!!layout.backendSceneV2,interiorWalls:layout.backendSceneV2?[]:activeFloor.interiorWalls}),
     ...(referenceImage.layer?{referenceImage:referenceImage.layer}:{}),
     ...(reviewGround?{ground:reviewGround}:{}),

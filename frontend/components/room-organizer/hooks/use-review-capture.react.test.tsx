@@ -18,7 +18,7 @@ function fixture(){
   const snapshot=createProjectReviewSnapshot({layout,source,briefSnapshot:{state:'ready',scope:source.scope,brief:{status:'absent'}},
     snapshot:{id:'capture-1',generatedAt:'2026-10-08T00:00:00Z'},dataState:'unsaved-draft',dataKind:'unspecified',disclosure:{brief:false,design:false}});
   const inputs:Parameters<typeof useReviewCapture>[0]={layout,getLayout:()=>layout,view,activeFloorIndex:0,
-    ready:true,peopleReady:true,selectedItemId:null,extraSelectedIds:new Set(),hasCollision:()=>false,
+    ready:true,selectedItemId:null,extraSelectedIds:new Set(),hasCollision:()=>false,
     canvas:{current:canvas},canvas2D:{current:canvas},scene:{current:new THREE.Scene()},renderer:{current:null},camera:{current:null},
     pendingPreview:false,isInteracting:()=>false};
   return {inputs,source,snapshot,canvas};
