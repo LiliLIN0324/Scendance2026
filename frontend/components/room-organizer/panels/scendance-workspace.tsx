@@ -28,7 +28,6 @@ import { basemapSourceAttribution, PUBLIC_SOURCE_SPECS } from '../lib/tdt-probe'
 import { RealSourceThumb } from '../components/map-source-thumb';
 import { EDITOR_ITEM_LIMIT } from '../lib/item-limits';
 import { materialCount } from '../lib/structural-layout';
-import { requestWalkPointerLock } from '../lib/walk-engage';
 import { LocalGlbImport } from './local-glb-import';
 import { MaterialSymbol } from './material-symbol';
 import { OUTDOOR_TOOL_ICONS } from '../components/outdoor-tool-icons';
@@ -263,8 +262,6 @@ interface ViewToolsProps {
    * 工具轨这一份隐藏，避免同一个动作两个入口（用户反馈「导出 分享 发布 应该是一起的」）。
    */
   publishHidden?: boolean;
-  /** 进出漫游的唯一入口（room-organizer 的 startWalk）；不传时退回本组件的开关。 */
-  onToggleWalkthrough?(on: boolean): void;
   /** 回到框选场地边界（右下回选址靶心）；不传时钮禁用。 */
   onFocusVenue?(): void;
   /**
@@ -537,7 +534,7 @@ function groundThumbAnchor(polygon: readonly { lng: number; lat: number }[] | un
 }
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false, controller }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false, controller }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
@@ -547,7 +544,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   // 一期户外漫游：只有户外 3D 接管视图可进；2D 平面保持旧禁用行为。按下态读独立信号，
   // 不翻室内 view.walkthroughMode。
   const outdoorWalkOn = outdoor?.walkActive ?? false;
-  const walkPressed = outdoorEditing ? outdoorWalkOn : view.walkthroughMode;
+  const walkPressed = outdoorEditing && outdoorWalkOn;
   // 2026-11-16 用户定稿「就是我的设计场地里面随便走」：漫游钮不再按室内/户外、2D/3D 分档置灰，
   // 一律可点；点下去由 toggleWalk 自己把视图切到能走的那台相机（户外 2D 会先接管 3D 场地再进第一人称）。
   // 2026-11-13 定稿：户外 2D/3D 胶囊挪到画布左下动作簇（room-organizer 独立挂载），右轨不再放户外切换钮；
@@ -733,7 +730,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   // 同一个下拉管两套画布，✓ 与图标跟随当前画布的真实模式。
   const outdoorSelectOn = outdoor?.canvasMode === 'select';
   const canvasSelectOn = outdoor != null ? outdoorSelectOn : view.selectMode;
-  const selectActive = canvasSelectOn && (outdoor != null || (!view.measurementMode && !view.drawWallMode && !view.drawZoneMode && !view.walkthroughMode));
+  const selectActive = canvasSelectOn && (outdoor != null || (!view.measurementMode && !view.drawWallMode && !view.drawZoneMode));
   const canvasToolState = outdoor != null ? (outdoorSelectOn ? '选择设施' : '抓手浏览') : view.selectMode ? '选择物体' : '抓手浏览';
   const canvasToolTip = canvasSelectOn ? `${canvasToolState} · 切到抓手` : `${canvasToolState} · 切到选择`;
   const canvasToolLabel = canvasSelectOn ? '选择工具' : '抓手工具';
@@ -774,21 +771,9 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       return;
     }
     onSceneMoveModeChange?.('off');
-    setView(current => ({ ...current, selectMode: true, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false }));
+    setView(current => ({ ...current, selectMode: true, measurementMode: false, drawWallMode: false, drawZoneMode: false }));
   };
-  const setWalkthrough = (on: boolean) => {
-    if (on) onSceneMoveModeChange?.('off');
-    setView(current => ({
-      ...current,
-      walkthroughMode: on,
-      ...(on ? { view2D: false, measurementMode: false, drawWallMode: false } : {}),
-    }));
-    // Same click as the button: the browser only grants pointer lock during
-    // this gesture. Waiting for the walk hook's effect drops the gesture.
-    if (on) requestWalkPointerLock();
-  };
-  // 进出漫游统一走 room-organizer 的入口（场景未就绪拦截、整景区自动进场地）；不传才退回本地开关。
-  const toggleWalk = onToggleWalkthrough ?? setWalkthrough;
+  // 进出漫游统一走 room-organizer 的入口；室内漫游已随 Viewport 退役，没有回调就不动作。
   const activeTime = TIME_PRESETS.find(entry => Math.abs(entry.hour - view.timeOfDay) < 0.6);
   // 打开导出卡先抓同一帧做预览；换机位再抓一次。画质只影响确认后的成图，预览不重抓。
   useEffect(() => {
@@ -863,7 +848,6 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       const key = event.key.toLowerCase();
       if (key !== 'h' && key !== 's') return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (view.walkthroughMode) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return;
       if (key === 'h') chooseHandTool();
@@ -923,17 +907,12 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       {/* 2026-11-13 定稿：户外 2D/3D 切换统一走左下动作簇胶囊（见 room-organizer），右轨这颗钮只在
           纯室内场景兜底平面/立体；有户外计划时不出镜。aria-pressed 如实报当前是否 3D。 */}
       {!outdoorEditing && (
-        <button type="button" id="tool-2d3d" data-tip={showing3D ? '当前 3D 场景 · 切到 2D 平面' : '当前 2D 平面 · 切到 3D 场景'} aria-label={showing3D ? '当前 3D 场景，点击切到 2D 平面' : '当前 2D 平面，点击切到 3D 场景'} aria-pressed={showing3D} className="is-active" onClick={() => { onSceneMoveModeChange?.('off'); if (view.walkthroughMode) setView(current => ({ ...current, walkthroughMode: false })); toggle('view2D'); }}>
+        <button type="button" id="tool-2d3d" data-tip={showing3D ? '当前 3D 场景 · 切到 2D 平面' : '当前 2D 平面 · 切到 3D 场景'} aria-label={showing3D ? '当前 3D 场景，点击切到 2D 平面' : '当前 2D 平面，点击切到 3D 场景'} aria-pressed={showing3D} className="is-active" onClick={() => { onSceneMoveModeChange?.('off'); toggle('view2D'); }}>
           <MaterialSymbol name={showing3D ? 'view_in_ar' : 'view_compact'} />
         </button>
       )}
       {/* 2026-11-15 用户指令：右上「高斯实景 / 识别轮廓」切换钮先撤掉（#tool-environment-view），
           两扇分隔线一并下线；environmentView / onEnvironmentViewChange 接口保留，后续要恢复再加回。 */}
-      {/* 室内第一人称漫游；户外漫游钮在右下工具簇（#tool-walk）。 */}
-      {!outdoorEditing && (<button type="button" id="tool-walk" aria-label={walkPressed ? '退出漫游' : '第一人称漫游'} aria-pressed={walkPressed} className={walkPressed ? 'is-active is-walk' : 'is-walk'} onClick={() => toggleWalk(!view.walkthroughMode)}>
-        <PegmanIcon size={20} />
-        <span className="sc-walk-label" aria-hidden="true">{walkPressed ? '退出漫游' : '第一人称漫游'}</span>
-      </button>)}
       {/* 2026-11-13 M1：户外画布放置时由纯函数按网格自动吸附，没有独立吸附开关；户外态禁用该钮。 */}
       {!outdoorEditing && (<button type="button" id="tool-grid" data-tip="网格吸附" aria-label="网格吸附" aria-pressed={view.snapToGrid} className={view.snapToGrid ? 'is-active' : ''} onClick={() => toggle('snapToGrid')}>
         <GridSnapIcon active={view.snapToGrid} />

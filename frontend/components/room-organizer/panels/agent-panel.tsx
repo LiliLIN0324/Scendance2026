@@ -133,7 +133,6 @@ import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { canApplyLayoutGeometry, isStructuralMarker, materialCount, structuralItemCollides, venueArea } from '../lib/structural-layout';
 import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import { venueBriefLine } from '../lib/venue-brief-line';
-import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
@@ -650,7 +649,7 @@ interface AgentValue {
   documents: AgentDocument[];
   venueResearch: VenueResearch | null;
   removePendingImage(index: number): void;
-  send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
+  send(text: string): void; rainOn: boolean; previewRain(): void;
   /** 面板自己也要能回话（场景库对话直接把结果说进这场会话），所以把说话口开放出来。 */
   say(bubble: Omit<Bubble, 'id'>): void;
 }
@@ -3987,10 +3986,6 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     removePendingImage: index => setPendingFiles(list => list.filter((_, i) => i !== index)),
     send, say, rainOn: view.weather === 'rain', streamPreview,
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
-    walkthrough: () => {
-      setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false }));
-      requestWalkPointerLock();
-    },
   };
   return <AgentContext.Provider value={value}>
     {children}
@@ -5037,7 +5032,6 @@ useEffect(() => {
             <div className="ap-chips">
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
-              <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>第一人称漫游</button>
               <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>导出与交接</button>
             </div>
           </div>
@@ -5342,32 +5336,8 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
 
 export function AgentCanvasOverlay(): JSX.Element | null {
   const agent = useAgent();
-  const { activeFloor, collidingIds, view, exitWalkthrough } = useRoomEditor();
-  const [fullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    const sync = () => setFullscreen(document.fullscreenElement !== null);
-    document.addEventListener('fullscreenchange', sync);
-    sync();
-    return () => document.removeEventListener('fullscreenchange', sync);
-  }, []);
-  const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement) { void document.exitFullscreen().catch(() => {}); return; }
-    if (typeof document.documentElement.requestFullscreen !== 'function') return;
-    void document.documentElement.requestFullscreen().catch(() => {});
-  }, []);
-  // 全屏是走动借来的：走出第一人称时一起还回去，不留一个找不到出口的全屏页面。
-  useEffect(() => {
-    if (view.walkthroughMode || !fullscreen) return;
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-  }, [view.walkthroughMode, fullscreen]);
+  const { activeFloor, collidingIds } = useRoomEditor();
   const overlapNames = useMemo(() => Array.from(new Set(activeFloor.items.filter(item => collidingIds.has(item.id)).map(item => item.name))), [activeFloor.items, collidingIds]);
-  // 漫游预览（只改视图，不写入场景）：退出时 use-walkthrough 会把相机放回进入前的位置。
-  if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><div className="ap-walk-controls">
-    <button id="walk-fullscreen" type="button" className="ap-canvas-pill" aria-pressed={fullscreen} title={fullscreen ? '退出全屏' : '全屏'} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 size={14} aria-hidden="true"/> : <Maximize2 size={14} aria-hidden="true"/>}{fullscreen ? '退出全屏' : '全屏'}</button>
-    <button id="walk-exit" type="button" className="ap-canvas-pill" onClick={exitWalkthrough}>
-      退出漫游 <span className="ap-walk-esc">· Esc</span>
-    </button>
-  </div></div>;
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const s = agent.state;
   return <div className="ap-canvas-layer" aria-live="polite">

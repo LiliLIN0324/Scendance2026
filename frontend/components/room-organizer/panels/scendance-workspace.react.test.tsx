@@ -230,10 +230,10 @@ describe('ScendanceViewTools design column', () => {
     // 楼层切换另有两个按钮；其余工具保持可访问。
     expect(within(screen.getByRole('group', { name: /楼层切换/ })).getAllByRole('button')).toHaveLength(2);
     // 室内常驻：分享 / 画布工具（抓手·选择）/ 2D·3D / 第一人称漫游 / 网格 / 撤销 / 重做 / 缩小 / 放大 / 导出 / 氛围 + 楼层切换上下两钮。尺寸标注收进账户中心设置分区；卫星只在户外。
-    expect(within(rail).getAllByRole('button')).toHaveLength(13);
+    expect(within(rail).getAllByRole('button')).toHaveLength(12);
     expect(within(rail).getAllByRole('button', { name: '分享' })).toHaveLength(1);
     // 2026-11-13 定稿：户外 2D/3D 走左下胶囊，右轨这颗只在纯室内兜底平面/立体，aria-label 报「当前 2D 平面 / 3D 场景」。
-    for (const name of ['分享', '选择工具', /当前 (2D 平面|3D 场景)/, '第一人称漫游', '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
+    for (const name of ['分享', '选择工具', /当前 (2D 平面|3D 场景)/, '网格吸附', '撤销', '重做', '缩小', '放大', '导出效果图'] as (string | RegExp)[]) {
       expect(within(rail).getByRole('button', { name })).toBeTruthy();
     }
     // 选择是开关而不是禁用：默认激活，但按钮可点，菜单里切抓手/选择。
@@ -255,14 +255,12 @@ describe('ScendanceViewTools design column', () => {
     // 机位不再拆成两颗一级钮。
     expect(rail.querySelector('#tool-top')).toBeNull();
     expect(rail.querySelector('#tool-front')).toBeNull();
-    expect(rail.querySelector('#tool-walk')).toBeTruthy();
-    // 第一人称在右轨一级；氛围菜单里不再重复。
+    // 室内漫游已退役：右轨不再有 #tool-walk（户外漫游钮在画布右下工具簇）。
+    expect(rail.querySelector('#tool-walk')).toBeNull();
     const order = [...rail.querySelectorAll('button')].map(button => button.id);
-    expect(order.indexOf('tool-walk')).toBeGreaterThan(-1);
     // 撤销/重做在工具组之后，缩小/放大在导出前面。
     expect(order.indexOf('tool-undo')).toBeGreaterThan(order.indexOf('tool-grid'));
     expect(order.indexOf('tool-zoom-in')).toBeLessThan(order.indexOf('tool-export'));
-    expect(rail.querySelector('#tool-walk .sc-walk-label')?.textContent).toBe('第一人称漫游');
     expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
     expect(screen.getByRole('button', { name: /氛围/ }).getAttribute('aria-expanded')).toBe('false');
@@ -314,13 +312,6 @@ describe('ScendanceViewTools design column', () => {
     expect(selectItem.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(selectItem);
     expect(applyView(off, makeViewSettings({ selectMode: false }))).toMatchObject({ selectMode: true });
-    cleanup();
-    // 在走动里它不是当前工具：菜单里点「选择工具」就是退出走动回到选择。
-    const walking = contexts(makeLayout(), makeViewSettings({ walkthroughMode: true }));
-    render(<Providers values={walking}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: '选择工具' }));
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /选择工具/ }));
-    expect(walking.setView).toHaveBeenCalledTimes(1);
   });
 
   it('keeps 撤销 / 重做 / 缩放 / 导出 on the rail and closes the export popover on Escape', () => {
@@ -398,7 +389,8 @@ describe('ScendanceViewTools design column', () => {
       expect((within(rail).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect(screen.queryByRole('group', { name: '氛围' })).toBeNull();
-    expect(within(rail).getByRole('button', { name: '第一人称漫游' })).toBeTruthy();
+    // 室内漫游随 Viewport 退役，右轨不再有「第一人称漫游」钮。
+    expect(within(rail).queryByRole('button', { name: '第一人称漫游' })).toBeNull();
   });
 
   it('keeps the atmosphere controls in view once something is actually changed', () => {
@@ -419,24 +411,12 @@ describe('ScendanceViewTools design column', () => {
 });
 
 describe('ScendanceViewTools atmosphere menus', () => {
-  it('wires 第一人称漫游 on the rail and 人群 / 天气 / 时段 in 氛围', () => {
+  it('wires 人群 / 天气 / 时段 in 氛围', () => {
     const values = contexts();
-    const canvas = document.createElement('canvas');
-    canvas.id = 'sc-viewport-3d';
-    const requestPointerLock = vi.fn(() => Promise.resolve());
-    canvas.requestPointerLock = requestPointerLock as HTMLCanvasElement['requestPointerLock'];
-    document.body.appendChild(canvas);
     render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={vi.fn()}/></Providers>);
-    const rail = screen.getByRole('navigation', { name: '工具' });
-    fireEvent.click(within(rail).getByRole('button', { name: '第一人称漫游' }));
-    const walk = values.setView.mock.calls.at(-1)![0] as (view: ViewSettings) => ViewSettings;
-    expect(walk(makeViewSettings()).walkthroughMode).toBe(true);
-    expect(walk(makeViewSettings()).view2D).toBe(false);
-    expect(requestPointerLock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: /氛围/ }));
     expect(screen.queryByRole('menuitemcheckbox', { name: '第一人称漫游' })).toBeNull();
     expect(screen.queryByRole('menuitemcheckbox', { name: '漫游' })).toBeNull();
-    canvas.remove();
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '人群' }));
     expect(values.toggle).toHaveBeenCalledWith('showNpcs');
     // 天气弹层嵌在氛围弹层里：先点天气按钮展开子弹层（默认显示「晴朗」）
@@ -628,38 +608,36 @@ describe('MaterialDrawerHandle', () => {
   });
 });
 
-// 2026-11-16 合并 ff63f8dc 回归：户外那颗 #tool-walk 丢了「只走 outdoor.toggleWalk 并就地返回」的分支，
-// 点了会外溢到共用 onToggleWalkthrough → 室内 startWalk()/tryMapVenue，在当前 OutdoorPlan 上直接报错。
+// 2026-11-16 合并 ff63f8dc 回归：户外那颗 #tool-walk 丢了「只走 outdoor.toggleWalk 并就地返回」的分支。
+// 室内漫游退役后共用 onToggleWalkthrough 已删除，只剩 outdoor.toggleWalk 一条出口。
 describe('ScendanceViewTools 户外漫游入口', () => {
   function renderOutdoorWalk(overrides: { walkIn3D?: boolean; walkActive?: boolean } = {}) {
     const values = contexts(makeLayout(), makeViewSettings());
-    const toggleWalk = vi.fn(), onToggleWalkthrough = vi.fn(), onZoom = vi.fn();
+    const toggleWalk = vi.fn(), onZoom = vi.fn();
     const outdoorActions = {
       canUndo: false, canRedo: false, undo: vi.fn(), redo: vi.fn(), zoomBy: vi.fn(),
       view: '2d' as const, onToggleView: vi.fn(), resetNorth: vi.fn(), focusVenue: vi.fn(),
       walkActive: false, walkIn3D: true, toggleWalk,
       ...overrides,
     };
-    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={onZoom} outdoorActions={outdoorActions} onToggleWalkthrough={onToggleWalkthrough}/></Providers>);
-    return { toggleWalk, onToggleWalkthrough };
+    render(<Providers values={values}><ScendanceViewTools showAtmosphere onZoom={onZoom} outdoorActions={outdoorActions}/></Providers>);
+    return { toggleWalk };
   }
 
   it('户外 2D 平面点漫游钮也直接调 toggleWalk，由它自己接管 3D 场地', () => {
-    const { toggleWalk, onToggleWalkthrough } = renderOutdoorWalk({ walkIn3D: false });
+    const { toggleWalk } = renderOutdoorWalk({ walkIn3D: false });
     const button = screen.getByRole('button', { name: '第一人称漫游' }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     fireEvent.click(button);
     expect(toggleWalk).toHaveBeenCalledWith(true);
-    expect(onToggleWalkthrough).not.toHaveBeenCalled();
   });
 
-  it('3D 接管态点漫游只调 outdoor.toggleWalk，不经过共用 onToggleWalkthrough', () => {
-    const { toggleWalk, onToggleWalkthrough } = renderOutdoorWalk({ walkIn3D: true });
+  it('3D 接管态点漫游只调 outdoor.toggleWalk', () => {
+    const { toggleWalk } = renderOutdoorWalk({ walkIn3D: true });
     const button = screen.getByRole('button', { name: '第一人称漫游' }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     fireEvent.click(button);
     expect(toggleWalk).toHaveBeenCalledWith(true);
-    expect(onToggleWalkthrough).not.toHaveBeenCalled();
   });
 
   it('漫游激活态再点一次交给同一个 toggleWalk 退出', () => {

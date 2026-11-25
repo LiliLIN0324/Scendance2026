@@ -784,7 +784,7 @@ export function useSceneEffects({
 
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!isReady || !scene || !showBasemap || view.view2D || view.walkthroughMode) return;
+    if (!isReady || !scene || !showBasemap || view.view2D) return;
     // S2（2026-11-25）：圈的经纬度环与锚点都从正源取，layout 上的旧定位字段只兜底。
     const points = mapVenueFootprint(layout, resolveGround(layout, outdoorPlanRef.current));
     if (points.length < 3) return;
@@ -802,7 +802,7 @@ export function useSceneEffects({
     };
   // The boundary depends on the saved ring and its coordinate frame, not furniture edits.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, sceneRef, showBasemap, view.view2D, view.walkthroughMode,
+  }, [isReady, sceneRef, showBasemap, view.view2D,
     legacyGroundOf(layout).mapGroundPolygon, layout.sceneAnchor,
     legacyGroundOf(layout).mapGroundFrame, legacyGroundOf(layout).mapLngLat, layout.width, layout.height, invalidate]);
 

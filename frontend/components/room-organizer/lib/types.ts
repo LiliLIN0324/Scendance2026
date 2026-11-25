@@ -545,10 +545,8 @@ export interface ViewSettings {
   timeOfDay: number;
   /** Rain or snow falling over the lot, with matching overcast lighting (#189). */
   weather: Weather;
-  walkthroughMode: boolean;
   showOutdoor: boolean;
   snapToItems: boolean;
-  showMinimap: boolean;
   /** When true, all floors are rendered together (lower floors translucent). */
   showAllFloors: boolean;
   /**

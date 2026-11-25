@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { PlanThumb } from './plan-thumb';
-import { Minimap } from './minimap';
 import type { ResolvedGround } from '../lib/plan-ground';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 
@@ -45,12 +44,5 @@ describe('PlanThumb 读贴地正源（S2 批 4）', () => {
     render(<PlanThumb layout={layout} width={180} height={130} showFloorPlan eager />);
     expect(calls).toHaveLength(1);
     expect('ground' in calls[0]!).toBe(false);
-  });
-
-  it('小地图把 ground 原样递给缩略图（3D 视图那一块也读正源）', () => {
-    const layout = makeLayout({ width: 10, height: 8 });
-    render(<Minimap layout={layout} floor={layout.floors[0]!} selectedItemId={null} ground={GROUND} />);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.ground).toBe(GROUND);
   });
 });

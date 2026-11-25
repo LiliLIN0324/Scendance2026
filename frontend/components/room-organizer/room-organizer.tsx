@@ -97,9 +97,7 @@ import { useSplatPreview } from './hooks/use-splat-preview';
 import type { SplatPaint } from './three/splat-preview';
 import { paintModelOnPlan } from './three/paint-model-on-plan';
 import type { PlanViewport } from './lib/outdoor-plan-canvas';
-import { useWalkthrough, type WalkViewMode } from './hooks/use-walkthrough';
 import { nextWalkViewMode, type WalkViewMode as OutdoorWalkViewMode } from './lib/walk-view-modes';
-import { useWalkAvatar } from './hooks/use-walk-avatar';
 import { requestOutdoorWalkPointerLock } from './lib/walk-engage';
 import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
@@ -297,11 +295,10 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   snapToGrid: false,
   snapToWall: false,
   snapToItems: false,
-  showMinimap: false,
   floorPlan3DEffect: false,
   timeOfDay: 12,
   weather: 'clear',
-  walkthroughMode: false,
+
   showOutdoor: false,
   showAllFloors: false,
   wallDisplay: 'cutaway',
@@ -495,10 +492,7 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     setView(current => { const { referenceImageOpacity: _opacity, ...rest } = current; return { ...rest, showReferenceImage: true }; });
   }, [layout.id]);
 
-  // First-person walkthrough only runs in the 3D view; the 2D top-down renderer
-  // has no PointerLockControls. This single signal gates walkthrough-aware
-  // behaviour: canvas select/drag/hover, single-key shortcuts and the hook.
-  const walkthroughActive = isActive && view.walkthroughMode && !view.view2D;
+  // 室内第一人称漫游已随 Viewport 退役；户外漫游由独立信号驱动。
 
   const playCue = useCallback(
     (cue: SoundCue) => {
@@ -1607,10 +1601,8 @@ useEffect(() => {
     // target and clamps it back into the polar cone (#114/#216). Walkthrough
     // owns its own eye height.
     controls.target.y = newTargetY;
-    if (!walkthroughActive) {
-      camera.position.y += dy;
-      controls.update();
-    }
+    camera.position.y += dy;
+    controls.update();
     // Defer painting to the next frame via invalidate(): a synchronous
     // renderer.render here ran BEFORE the scene effects rebuilt the new
     // floor, flashing the old floor's contents from the new camera (#216).
@@ -1618,7 +1610,7 @@ useEffect(() => {
     // The scene refs/invalidate are declared below (useThreeScene) so they
     // can't appear in this dep array without a TDZ error; they're stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraTargetY, walkthroughActive]);
+  }, [cameraTargetY]);
 
   // Ghost-selection guard: whenever the floor's items change (undo/redo,
   // import, clear floor, deletes from any path), drop selected ids that no
@@ -2637,7 +2629,6 @@ useEffect(() => {
         else renderer.render(scene, camera);
       },
       onViewportResize: () => frameViewportRef.current(),
-      walkthroughActive,
       // The distance tool measures across furniture, so its clicks go to the floor (#341).
       // 人物路线布点同理：绘制中所有点击都落到地面坐标（PEOPLE-04）。
       floorPickOnly: view.drawWallMode || view.measurementMode || routeDrawItemId !== null,
@@ -2730,7 +2721,7 @@ useEffect(() => {
   // 现在实景隔离强制走 3D 接管（点云就是在 OutdoorPlan3D 里画的），漫游仍不接管。
   // 2026-11-25 E2 先搬后删：实景扫描改由 OutdoorPlan3D 自己画（它本来就带 scan 通道），
   // 不再因为「当前有 environment」把 3D 让回室内 Viewport。室内渲染器退成非户外兜底。
-  const outdoor3dTakeover = (outdoor3dTakeoverActive || scanIsolated) && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive;
+  const outdoor3dTakeover = (outdoor3dTakeoverActive || scanIsolated) && !outdoor2DOpen && !!outdoorPlan;
   // 右轨放大/缩小按当前视图分派：3D 接管交给 OutdoorPlan3D 的相机；2D 等其余仍走覆盖层里的 2D 画布。
   outdoorZoomRef.current = (direction) => {
     if (outdoor3dTakeover) {
@@ -2757,8 +2748,8 @@ useEffect(() => {
       setSplatTransformModeState('off');
       setOutdoor2DOpen(false);
       setOutdoor3dTakeoverActive(true);
-      setView(current => current.view2D || current.walkthroughMode
-        ? { ...current, view2D: false, walkthroughMode: false }
+      setView(current => current.view2D
+        ? { ...current, view2D: false }
         : current);
       return;
     }
@@ -2844,23 +2835,6 @@ useEffect(() => {
   const [walkRoleId, setWalkRoleId] = useState(DEFAULT_WALK_ROLE_ID);
   const walkRole = findWalkRole(walkRoleId);
   const walkRoleUrl = walkRoleGlbUrl(walkRole.assetId);
-  const walkRoleReady = walkRole.walkable;
-  const [walkViewMode, setWalkViewMode] = useState<WalkViewMode>('third');
-  const cycleWalkView = useCallback(() => {
-    setWalkViewMode(mode => mode === 'third' ? 'shoulder' : mode === 'shoulder' ? 'first' : 'third');
-  }, []);
-  // 漫游时左侧物料库是收起的，控制条上留一个换人键，走的时候也能切角色。
-  const cycleWalkRole = useCallback(() => {
-    const walkable = WALK_ROLES.filter(role => role.walkable);
-    const index = walkable.findIndex(role => role.assetId === walkRoleId);
-    const next = walkable[(index + 1) % walkable.length];
-    if (next) setWalkRoleId(next.assetId);
-  }, [walkRoleId]);
-  /** 退出漫游的唯一收口：关视图 + live→build；Esc、顶部胶囊、右轨按钮都走这里。 */
-  const exitWalkthrough = useCallback(() => {
-    setView(current => (current.walkthroughMode ? { ...current, walkthroughMode: false } : current));
-    setGameMode(mode => (mode === 'live' ? 'build' : mode));
-  }, [setView, setGameMode]);
   function toggleOutdoorWalk(on: boolean) {
     // 漫游是显式开关：只要已经在走或角色选择框开着，再按一次就收口——
     // 不依赖按钮闭包里的 outdoorWalkOn，避免状态晚一帧时又弹一次角色框。
@@ -2883,12 +2857,6 @@ useEffect(() => {
     setOutdoorWalkChooserOpen(false);
     setOutdoorWalkView(viewMode);
     setOutdoorWalkActive(true);
-  }
-
-  function toggleWalkthrough(on: boolean) {
-    // E2：室内 Viewport 已退役，漫游只剩户外 3D 这一条；没有户外 plan 时不进入，
-    // 否则会切到没有画面的空舞台。
-    toggleOutdoorWalk(on);
   }
 
   // 2026-11-12 统一 2D/3D：接管态（覆盖层隐藏保活）也保持转发——右轨撤销/测量/选择照常驱动 2D 画布。
@@ -3087,7 +3055,7 @@ useEffect(() => {
     setSplatDisplayMode('gaussian');
     setIsolatedScanId(assetId);
     if (outdoorPlanState) handleOutdoorViewSwitch('3d');
-    else setView(current => current.view2D || current.walkthroughMode ? { ...current, view2D: false, walkthroughMode: false } : current);
+    else setView(current => current.view2D ? { ...current, view2D: false } : current);
     setSplatTransformModeState('gizmo');
   };
   const addSampleScene = (assetId: string) => {
@@ -3251,27 +3219,7 @@ useEffect(() => {
       toWorld: point => worldFromPlanPoint(layout, anchor, point) });
   }, [environment, isReady, outdoorPlan?.anchor, loadedSplatState.status, loadedSplatState.assetId, layout, paintSplatFrame, rendererRef, sceneRef]);
 
-  // 进漫游就带当前角色；左侧换人时 url 变了，这里会热切到新模型。
-  const walkAvatarOn = walkthroughActive && walkRoleReady;
-  const walkAvatar = useWalkAvatar(walkAvatarOn, walkRoleUrl, sceneRef, walkRole.name);
-  const greetRef = useRef(walkAvatar.greet);
-  greetRef.current = walkAvatar.greet;
-  useEffect(() => {
-    if (!walkAvatarOn) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.repeat || (event.target instanceof HTMLElement && event.target.matches('input, textarea, [contenteditable=true]'))) return;
-      if (event.code === 'F5') {
-        event.preventDefault();
-        cycleWalkView();
-      } else if (event.code === 'KeyE') {
-        greetRef.current();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [walkAvatarOn, cycleWalkView]);
-
-  // 户外漫游 F5：循环四档视角（与室内 F5 链路互斥，仅户外激活态绑定）。
+  // 户外漫游 F5：循环四档视角，仅户外激活态绑定。
   useEffect(() => {
     if (!outdoorWalkActive) return;
     const onOutdoorKey = (event: KeyboardEvent) => {
@@ -3284,25 +3232,6 @@ useEffect(() => {
     window.addEventListener('keydown', onOutdoorKey);
     return () => window.removeEventListener('keydown', onOutdoorKey);
   }, [outdoorWalkActive, cycleOutdoorWalkView]);
-
-  useWalkthrough({
-    enabled: isReady && walkthroughActive,
-    ...(walkAvatarOn ? { viewMode: walkViewMode, onWalkFrame: walkAvatar.frame, walkSpeed: 1.2 } : {}),
-    invalidate,
-    canvasRef,
-    threeModuleRef,
-    cameraRef,
-    orbitRef: controlsRef,
-    // Eye level, ducking under a low ceiling (a 1.1 m loft, #277).
-    eyeHeight: activeFloorY + Math.min(1.6, activeStoreyHeight - 0.2),
-    roomWidth: layout.width,
-    roomDepth: layout.height,
-    floorY: activeFloorY,
-    ...(splatWalkBounds ? { walkBounds: splatWalkBounds } : {}),
-    items: activeFloor.items,
-    ...(activeFloor.interiorWalls ? { interiorWalls: activeFloor.interiorWalls } : {}),
-    onExit: exitWalkthrough,
-  });
 
   // people.glb is fetched only once a person is placed; wandering NPCs keep
   // their procedural, brightly coloured figures.
@@ -3442,7 +3371,6 @@ useEffect(() => {
   const { zoomToScene } = useSceneZoom({ cameraRef, controlsRef, invalidate });
   const [focusedVenueId, setFocusedVenueId] = useState<string | null>(null);
   const zoomToVenue = useCallback((venue: ScannedVenue, closer: boolean) => {
-    if (view.walkthroughMode) return; // 漫游里相机归第一人称，不抢
     const controls = controlsRef.current;
     if (!controls) return;
     const current = layoutStore.getState().layout;
@@ -3465,10 +3393,9 @@ useEffect(() => {
       distance: Math.max(8, longest * 2.5),
       clamp: cameraDistanceClamp(width, depth),
     });
-  }, [view.walkthroughMode, controlsRef, setSceneFocus, zoomToScene]);
+  }, [controlsRef, setSceneFocus, zoomToScene]);
   // 换场地时 splat 是异步加载的：等它就绪再 zoom（load 完成会先框一遍场地，zoom 随后带到定点机位）。
   const pendingVenueZoomRef = useRef<ScannedVenue | null>(null);
-  const mapVenueTrialRef = useRef(false);
   const focusMapVenue = useCallback(() => {
     const current = layoutStore.getState().layout;
     const points = mapVenueFootprint(current);
@@ -3480,7 +3407,7 @@ useEffect(() => {
     pendingVenueZoomRef.current = null;
     setIsolatedScanId(undefined);
     setFocusedVenueId(null);
-    setView(value => ({ ...value, view2D: false, walkthroughMode: false }));
+    setView(value => ({ ...value, view2D: false }));
     setSceneFocus({ width: east - west, depth: south - north, centerX: (west + east) / 2, centerZ: (north + south) / 2 });
     setPendingMapVenueFrame(viewGround?.polygon);
   }, [setView, setSceneFocus]);
@@ -3505,11 +3432,6 @@ useEffect(() => {
     }
     focusMapVenue();
   }, [environment, outdoor2DOpen, outdoor3dTakeover, outdoorPlan, focusMapVenue, framePrimaryScene]);
-  useEffect(() => {
-    if (walkthroughActive || !mapVenueTrialRef.current) return;
-    mapVenueTrialRef.current = false;
-    focusMapVenue();
-  }, [focusMapVenue, walkthroughActive]);
   useEffect(() => {
     const pending = pendingVenueZoomRef.current;
     if (!pending) return;
@@ -3910,9 +3832,7 @@ useEffect(() => {
     ]
   );
 
-  const shortcutCoachMode: ShortcutCoachMode = walkthroughActive
-    ? 'walk'
-    : workbenchMode !== 'layout'
+  const shortcutCoachMode: ShortcutCoachMode = workbenchMode !== 'layout'
       ? workbenchMode
       : planAnnot.drawMode !== 'off'
         ? 'annotate'
@@ -3939,7 +3859,6 @@ useEffect(() => {
     selectedItem,
     selectedWall,
     hasSignalItems,
-    walkthroughActive,
     layoutLocked: workbenchMode !== 'layout',
     isDragActive,
     onBlocked: handleShortcutBlocked,
@@ -3984,7 +3903,6 @@ useEffect(() => {
       setGameMode,
       autoCycleLighting,
       setAutoCycleLighting,
-      exitWalkthrough,
     }),
     [
       layout, activeFloor, activeFloorIndex, actions,
@@ -3993,7 +3911,6 @@ useEffect(() => {
       recentColors, pushColor, playCue,
       history, isReady, error,
       gameMode, setGameMode, autoCycleLighting, setAutoCycleLighting,
-      exitWalkthrough,
     ]
   );
 
@@ -4459,7 +4376,7 @@ useEffect(() => {
     // 不再要求它必须处于隔离查看状态。
     const assetId = splatState.assetId;
     // 2D 地图盖在最前面时抓到的是底图，不是这套点云——别拿地图冒充封面。
-    if (!assetId || splatState.status !== 'ready' || view.view2D || walkthroughActive
+    if (!assetId || splatState.status !== 'ready' || view.view2D
       || (outdoor2DOpen && !outdoor3dTakeover) || projectSceneThumbnails[assetId]) return;
     let cancelled = false;
     // Let the preview camera finish framing the scan before saving the cover.
@@ -4472,7 +4389,7 @@ useEffect(() => {
       });
     }, 1000);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [view.view2D, walkthroughActive, outdoor2DOpen, outdoor3dTakeover, splatState.status, splatState.assetId, projectSceneThumbnails, captureSceneThumb]);
+  }, [view.view2D, outdoor2DOpen, outdoor3dTakeover, splatState.status, splatState.assetId, projectSceneThumbnails, captureSceneThumb]);
 
   /**
    * 2026-11-19 用户：「到底文件好没好？」——卡片以前只有一种空态，坏文件看不出来。
@@ -4601,7 +4518,7 @@ useEffect(() => {
   };
   const setSplatTransformMode = useCallback((mode: SplatTransformMode) => {
     setSplatTransformModeState(mode);
-    if (mode !== 'off') setView(current => ({ ...current, selectMode: false, measurementMode: false, drawWallMode: false, drawZoneMode: false, walkthroughMode: false }));
+    if (mode !== 'off') setView(current => ({ ...current, selectMode: false, measurementMode: false, drawWallMode: false, drawZoneMode: false }));
   }, [setView]);
   useEffect(() => {
     if (environment) return;
@@ -5001,7 +4918,7 @@ useEffect(() => {
           return !!(ground && (ground.image || ground.polygon || ground.frame || ground.center));
         },
       }}>
-      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${walkthroughActive || outdoorWalkActive ? ' is-walkthrough' : ''}${outdoorWalkActive ? ' is-outdoor-walk' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
+      <div className={`sc-workbench${conversationOpen ? ' has-conversation' : ''}${outdoorWalkActive ? ' is-walkthrough is-outdoor-walk' : ''}${leftCardResizing ? ' is-left-resizing' : ''}`}>
         <div ref={headerRef} className="sc-header">
           <button ref={conversationEntryRef} type="button" hidden aria-hidden tabIndex={-1} aria-label={conversationOpen ? '关闭助手' : '打开助手'} onClick={()=>{if(conversationOpen)setConversationCloseRequest(value=>value+1);else setConversationOpenRequest(value=>value+1);}}/>
           <span
@@ -5083,7 +5000,7 @@ useEffect(() => {
                       setOutdoorPanel('library');
                       // 仅当地图已不在出镜形态（异常兜底）时把它带回 2D；正常常驻态这里不动地图。
                       if (!outdoor2DOpen && !outdoor3dTakeoverActive) {
-                        setView(viewCurrent => ({ ...viewCurrent, view2D: false, walkthroughMode: false }));
+                        setView(viewCurrent => ({ ...viewCurrent, view2D: false }));
                         applyPresetRef.current('iso');
                         if (agentPanelOpen && !agentCollapsed) closeBingo();
                         setOutdoor3dTakeoverActive(false);
@@ -5445,7 +5362,7 @@ useEffect(() => {
                 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：组件**常驻不卸载**——切回 2D 时
                 只置 hidden（内层 active=false 停渲染、只推进瓦片 LOD），切回 3D 当帧就出画面，
                 镜头保持上一次的位置，不再重建 three 场景/重抓瓦片/重放顶部俯冲倾斜动画。 */}
-            {outdoorPlan && (outdoor3dTakeover || outdoor3dWarm) && !walkthroughActive && (
+            {outdoorPlan && (outdoor3dTakeover || outdoor3dWarm) && (
               <div
                 className="sc-outdoor-takeover"
                 data-testid="outdoor-takeover"
@@ -5484,16 +5401,6 @@ useEffect(() => {
                 />
               </div>
             )}
-            {walkAvatarOn && <div className="sc-walk-avatar-controls" aria-label="漫游角色">
-              <button type="button" onClick={cycleWalkView}>{walkViewMode === 'third' ? '第三人称' : walkViewMode === 'shoulder' ? '近肩视角' : '第一人称'} · F5 切换</button>
-              <button type="button" onClick={cycleWalkRole} title="和左侧「漫游角色」是同一份选择">{walkRole.name} · 换角色</button>
-              <span>WASD 行走 · F 坐下 · 左侧「漫游角色」可换人</span>
-              {walkAvatar.loading && <span className="sc-walk-avatar-state" role="status"><Loader2 size={12} className="cr-spin" aria-hidden="true"/>{walkRole.name}加载中…</span>}
-              {!walkAvatar.loading && !walkAvatar.error && !walkAvatar.near && !walkAvatar.greeted && <span className="sc-walk-avatar-state">走近游客按 E 打招呼</span>}
-              {walkAvatar.error && <><span role="alert">{walkAvatar.error}</span><button type="button" onClick={walkAvatar.retry}>重试</button></>}
-              {walkAvatar.near && <button type="button" onClick={walkAvatar.greet}>E 打招呼</button>}
-              {walkAvatar.greeted && <span role="status">游客：你好！也来逛西湖呀？</span>}
-            </div>}
             <EnvironmentLoad active={splatState.status === 'loading'} name={splatState.name} {...(splatState.progress === undefined ? {} : { progress: splatState.progress })} />
             <AgentCanvasOverlay/>
             <MapVenueOverlay onVenueSaved={() => {
@@ -5724,7 +5631,7 @@ useEffect(() => {
               plan3dRef={outdoorPlan3DRef}
               overlayRef={outdoorOverlayRef}
             />
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} controller={controller} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && scanIsolated && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} controller={controller} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && scanIsolated && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);
