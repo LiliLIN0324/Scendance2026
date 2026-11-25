@@ -277,3 +277,29 @@
 **证据帧**：`docs/evidence/2026-11-25-ground-read/s3c-venue-indoor.png`（829×870）：室内视图打开
 「西湖文化广场 · 规划区 30×20m」、左侧显示「搜索地点 / 在地图上手画活动范围」、右下 2D/3D 与「工具」，
 而 `tool-satellite` 不在 DOM——即上文结论的现场帧。
+
+## 十三、S3 收口第一刀真机实测（2026-11-25，`house-y4ry0n56` 夹具改造后复原）
+
+**这一刀做了什么**：`planGroundSync` 只剩 `to-plan` / `none`，删掉 `to-layout` 反向投影；迁完当刻调 `stripLayoutGroundBytes`，把 layout 的 `floorPlanImage` / `floorPlanOpacity` / `satelliteGroundRef` 擦掉（`mapGroundPolygon` / `mapLngLat` / `mapGroundFrame` 三项定位仍留在 layout，因为禁改基线 `three/scan-placement.ts` 还在读）。落正源优先走画布 `applyGround`；画布还没挂载（首开即迁移）就直接 `writeGroundToPlan` + 同步 `outdoorPlanState`，两条路径任一落成才擦镜像。
+
+**真机步骤（3002，单标签，先关掉重复标签防止双窗互相覆盖）**：
+
+1. 在 `introduction.html`（同源静态页、不落盘）写夹具到 `scendance-editor-local-v1`：512×384 绿底斜纹 PNG 的 data URL（23,938 字符）、`floorPlanOpacity:0.94`、`satelliteGroundRef:true`、4 点 `mapGroundPolygon`、`mapLngLat`、合法 `mapGroundFrame{lng0:120.14972, lat0:30.27496, latMid:30.27456, scale:1, latSign:-1}`；同时清空三个 plan 记录的 `ground`。
+2. 打开 `http://localhost:3002/editor`，等 9s 读回。
+
+**读回结果（迁移成功）**：
+
+- `layout`：`floorPlanImage` 0、`floorPlanOpacity` null、`satelliteGroundRef` null —— 三项镜像已擦；`mapGroundPolygon` 仍是 4 点、`mapGroundFrame` 原样保留 —— 定位留给基线。
+- `plan.ground`（`scendance-outdoor-plan-v1:house-y4ry0n56`）：`image` 23,938、`polygon` 4 点、`satelliteRef:true` —— 图只存在正源这一份。
+- `layout.id` 仍是 `house-y4ry0n56`，没被重建。
+
+**踩到的两个坑（记下来，别重复）**：
+
+- **夹具字段形状写错 = 整份 layout 被判损坏**：第一版 `mapGroundFrame` 写成 `{west,south,east,north}`，`isMapGroundFrame` 拒收 → 编辑器把草稿存进 `scendance-editor-local-v1-recovery-*` 并新建一份随机 id 的空 layout。真机上「id 每次打开都变」先查 `parseStoredLayout` 是不是把写进去的东西判坏了。
+- **编辑器标签未卸载时写 localStorage 会被覆盖**：在 editor 页面里 `bu.js` 写夹具再 `navigate` 重载，旧页面卸载时把内存态写回，夹具当场没了。正确做法是先去同源静态页（`introduction.html`）写，再进编辑器。
+
+**复原自证**：`layout` 回到 `id=house-y4ry0n56`、`floorPlanImage` 无、`satelliteGroundRef=false`、`mapGroundPolygon` 无；`plan.ground` 回到备份态（`img0 … poly4`）；实验里新建的三个 plan 槽（`house-h01slbx3` / `house-xkx33scp` / `house-wmv5mouy`）、`scendance-editor-local-v1-recovery-*` 与 `__s3bak_*` 备份键全部删除，读回 `keys: []`。
+
+**证据帧**：`docs/evidence/2026-11-25-ground-read/s3d-migrate-real-2d.png`（迁移后现场）、`s3d-restored-2d.png`（复原后现场）。
+
+**这一刀没证明的**：擦镜像后 2D/3D 是否还画得出那张图。夹具塞在户外 `geoGroundActive` 档，现场 2D 显示的是 MapLibre 地图地面（图被地图层盖住，属预期），这一帧不能用来断言成图；仍按 §九 的记号留待「一次性显式取图」或非地图档再验。

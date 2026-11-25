@@ -106,6 +106,7 @@ import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-
 import { findAholoAsset } from './lib/aholo-assets';
 import { sceneAnchorFromOutdoorPlan } from './lib/outdoor-venue-sync';
 import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, saveOutdoorProjectRecord } from './lib/outdoor-project-store';
+import { writeGroundToPlan } from './lib/venue-ground-slot';
 import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { findCatalogEntry } from './lib/catalog-drag';
@@ -195,7 +196,7 @@ import {
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
 import { filterPlanByLevel } from './lib/plan-levels';
-import { layoutGroundPatch, planGroundSync, resolveGround } from './lib/plan-ground';
+import { layoutGroundPatch, planGroundSync, resolveGround, stripLayoutGroundBytes } from './lib/plan-ground';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
   METERS_PER_DEGREE_LAT,
@@ -2090,19 +2091,32 @@ useEffect(() => {
     },
     [layout.id, outdoorPlanState, isOutdoorProject, outdoorPlanSlotId],
   );
-  // B4 底图正源迁移（2026-11-25）：方向判定收在 `planGroundSync` 里（单一答案、可单测），
-  // 两个方向都只「补缺」，不覆盖更新的那一侧。`applyGround` 不进撤销栈，取景缓存不写进历史。
+  // B4 底图正源迁移（2026-11-25）：方向判定收在 `planGroundSync` 里（单一答案、可单测）。
+  // S3：只补正源，不再反向投影 layout；迁完当刻就把 layout 的字节镜像擦掉（图/透明度/开关），
+  // 让「贴地底图」在盘上也只有 plan.ground 一份。`applyGround` 不进撤销栈。
   useEffect(() => {
     if (!outdoorPlan) return;
     const sync = planGroundSync(outdoorPlan, layoutStore.getState().layout);
-    if (sync.direction === 'to-plan') {
-      outdoorOverlayRef.current?.getCanvasApi()?.applyGround(sync.ground);
-      return;
-    }
-    if (sync.direction !== 'to-layout') return;
+    if (sync.direction !== 'to-plan') return;
+    const current = layoutStore.getState().layout;
+    // 先落正源，落成了才允许擦 layout 里的字节镜像。
+    // ① 2D 画布已挂载 → 走画布的 `applyGround`（正源写入、不进撤销栈）；
+    // ② 画布还没挂载（迁移在首帧之前跑）→ 直接写户外记录的 `plan.ground` 并同步状态，
+    //    否则「首开即迁移」会被画布时序卡住，字节永远擦不掉。
+    const landed = outdoorOverlayRef.current?.getCanvasApi()?.applyGround(sync.ground) === true
+      || (() => {
+        const boundId = isOutdoorProject ? outdoorPlanSlotId : (current.id ?? null);
+        const written = boundId ? writeGroundToPlan(boundId, sync.ground, { name: current.name }) : { ok: false as const };
+        if (!written.ok) return false;
+        setOutdoorPlanState({ projectId: boundId, plan: written.record.plan ?? createStarterOutdoorPlan() });
+        return true;
+      })();
+    if (!landed) return;
+    const { layout: stripped, stripped: changed } = stripLayoutGroundBytes(current);
+    if (!changed) return;
     try { workspaceWriteGuards?.assertLayoutWrite(); } catch { return; }
-    actions.applyLayout({ ...layoutStore.getState().layout, ...sync.patch });
-  }, [outdoorPlan, actions, workspaceWriteGuards]);
+    actions.applyLayout(stripped);
+  }, [outdoorPlan, actions, workspaceWriteGuards, isOutdoorProject, outdoorPlanSlotId]);
   // V-5 生成/上传由 OutdoorPlanOverlay 原位承接，不跳转旧物料 Agent 或另一工作台。
   // 2026-11-12 用户反馈「点 2D/立体切换不丝滑」：3D 场景在后台预热一次，之后切换只做显隐。
   // 首次进户外先让 2D 卡落地（首帧/首交互优先），0.7s 后再把 3D 建好并停在隐藏态。

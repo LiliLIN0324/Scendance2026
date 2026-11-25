@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planGroundSchema } from '../../../../supabase/functions/_shared/site-plan';
 import { rememberPlanGroundBounds } from './amap-venue';
-import { layoutGroundPatch, planGroundFromLayout, planGroundSync, resolveGround, stripPlanGroundImage } from './plan-ground';
+import { planGroundFromLayout, planGroundSync, resolveGround, stripLayoutGroundBytes, stripPlanGroundImage } from './plan-ground';
 import type { RoomLayout } from './types';
 
 const POLYGON = [
@@ -77,27 +77,37 @@ describe('plan.ground 正源 ← layout 视图缓存', () => {
   });
 });
 
-describe('plan.ground → layout 视图缓存投影', () => {
-  it('只投影定位形状，不投影字节（S1：图只活在正源）', () => {
-    const patch = layoutGroundPatch({ image: IMAGE, polygon: POLYGON, frame: FRAME });
-    expect(patch).toEqual({ mapGroundPolygon: POLYGON, mapGroundFrame: FRAME });
-    expect('floorPlanImage' in (patch ?? {})).toBe(false);
-    expect('floorPlanOpacity' in (patch ?? {})).toBe(false);
+describe('迁移落地后擦掉 layout 的底图字节镜像（stripLayoutGroundBytes）', () => {
+  function layoutOf(extra: Partial<RoomLayout>): RoomLayout {
+    return { id: 't', name: '擦镜像夹具', width: 30, height: 20, floors: [], ...extra } as unknown as RoomLayout;
+  }
+  const framedImage = groundLayout();
+
+  it('贴地底图：图、透明度、贴地开关三项一起擦，定位三类暂时保留给基线读', () => {
+    const { layout, stripped } = stripLayoutGroundBytes(layoutOf(framedImage));
+    expect(stripped).toBe(true);
+    expect(layout.floorPlanImage).toBeUndefined();
+    expect(layout.floorPlanOpacity).toBeUndefined();
+    expect(layout.satelliteGroundRef).toBeUndefined();
+    expect(layout.mapGroundPolygon).toEqual(POLYGON);
+    expect(layout.mapGroundFrame).toEqual(FRAME);
   });
 
-  it('没有 ground / 空 ground 时返回 null，不当成「清空底图」', () => {
-    expect(layoutGroundPatch(undefined)).toBeNull();
-    expect(layoutGroundPatch({ opacity: 0.5 })).toBeNull();
+  it('用户上传的参考图纸（没有贴地框/多边形）只擦开关，图与透明度保留', () => {
+    const reference = { floorPlanImage: 'data:image/png;base64,PLAN', floorPlanOpacity: 0.6, satelliteGroundRef: true as const };
+    const { layout, stripped } = stripLayoutGroundBytes(layoutOf(reference));
+    expect(stripped).toBe(true);
+    expect(layout.floorPlanImage).toBe(reference.floorPlanImage);
+    expect(layout.floorPlanOpacity).toBe(0.6);
+    expect(layout.satelliteGroundRef).toBeUndefined();
   });
 
-  it('只有一张图、什么形状都没有 → null（缓存没东西可写）', () => {
-    expect(layoutGroundPatch({ image: IMAGE, opacity: 0.5 })).toBeNull();
-  });
-
-  it('只投影 ground 里真有的字段，不补 satelliteRef=false 这类假信息', () => {
-    const patch = layoutGroundPatch({ image: IMAGE, center: { lng: 1, lat: 2 } });
-    expect(patch).toEqual({ mapLngLat: { lng: 1, lat: 2 } });
-    expect('satelliteGroundRef' in (patch ?? {})).toBe(false);
+  it('本来就没有镜像 → 原样返回同一引用，不制造无意义写入', () => {
+    const bare = layoutOf({});
+    const result = stripLayoutGroundBytes(bare);
+    expect(result.stripped).toBe(false);
+    expect(result.layout).toBe(bare);
+    expect(stripLayoutGroundBytes(layoutOf({ floorPlanImage: 'data:image/png;base64,PLAN' })).stripped).toBe(false);
   });
 });
 
@@ -137,47 +147,18 @@ describe('打开方案时的同步方向（planGroundSync）', () => {
     expect(sync.direction === 'to-plan' && sync.ground.image).toBe(IMAGE);
   });
 
+  it('正源已经有 ground → 不再投影回 layout，只报 already-current', () => {
+    expect(planGroundSync({ ground: { image: 'data:image/jpeg;base64,NEW', polygon: POLYGON, frame: FRAME } }, {})).toEqual({ direction: 'none', reason: 'already-current' });
+  });
+
   it('两边都没有底图 → 不动（不虚构 empty ground）', () => {
     expect(planGroundSync({}, {})).toEqual({ direction: 'none', reason: 'no-ground-anywhere' });
     expect(planGroundSync(null, groundLayout())).toEqual({ direction: 'none', reason: 'no-plan' });
   });
 
-  it('正源有图但缓存没有定位形状 → 补一次形状（补丁里没有字节）', () => {
-    const sync = planGroundSync({ ground: { image: 'data:image/jpeg;base64,NEW', polygon: POLYGON, frame: FRAME } }, {});
-    expect(sync.direction).toBe('to-layout');
-    if (sync.direction === 'to-layout') {
-      expect(sync.patch.mapGroundPolygon).toEqual(POLYGON);
-      expect('floorPlanImage' in sync.patch).toBe(false);
-    }
-  });
-
-  it('形状已齐（多边形+框+开关一致）→ already-current，即使缓存里没有字节', () => {
-    const ground = planGroundFromLayout(groundLayout())!;
-    const cache = groundLayout();
-    delete (cache as Partial<typeof cache>).floorPlanImage;
-    expect(planGroundSync({ ground }, cache)).toEqual({ direction: 'none', reason: 'already-current' });
-  });
-
-  it('多边形对不上（缓存是旧轮廓）→ 用正源补齐', () => {
-    const ground = planGroundFromLayout(groundLayout())!;
-    const sync = planGroundSync({ ground }, groundLayout({ mapGroundPolygon: [{ lng: 1, lat: 1 }, { lng: 2, lat: 2 }, { lng: 3, lat: 3 }] }));
-    expect(sync.direction).toBe('to-layout');
-    if (sync.direction === 'to-layout') expect(sync.patch.mapGroundPolygon).toEqual(POLYGON);
-  });
-
   it('正源与缓存同一张图，且框/多边形都在 → already-current（不重复写 layout）', () => {
     const ground = planGroundFromLayout(groundLayout())!;
     expect(planGroundSync({ ground }, groundLayout())).toEqual({ direction: 'none', reason: 'already-current' });
-  });
-
-  it('图相同但缓存缺多边形/框 → 仍补一次缓存（3D 卫星 UV 靠它）', () => {
-    const ground = planGroundFromLayout(groundLayout())!;
-    const sync = planGroundSync({ ground }, { floorPlanImage: IMAGE });
-    expect(sync.direction).toBe('to-layout');
-    if (sync.direction === 'to-layout') {
-      expect(sync.patch.mapGroundPolygon).toEqual(POLYGON);
-      expect(sync.patch.mapGroundFrame).toEqual(FRAME);
-    }
   });
 
   it('正源只有定位没有图 → 不动（没有可视底图可补）', () => {

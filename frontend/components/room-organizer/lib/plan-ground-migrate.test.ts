@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord, type KeyValueStorage } from './outdoor-project-store';
-import { planGroundSync, planGroundFromLayout } from './plan-ground';
+import { planGroundSync, planGroundFromLayout, stripLayoutGroundBytes } from './plan-ground';
 import type { RoomLayout } from './types';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -87,7 +87,7 @@ describe('贴地底图迁移实测（layout 缓存 → plan 正源）', () => {
     expect(back?.plan?.ground?.polygon?.length).toBe(4);
   });
 
-  it('迁移完第二次打开不再写（already-current），layout 缓存仍是原样', () => {
+  it('迁移完第二次打开不再写（already-current），layout 字节镜像已被擦掉', () => {
     const storage = memoryStorage();
     const layout = legacyLayout();
     storage.setItem('scendance-editor-local-v1', JSON.stringify(layout));
@@ -95,15 +95,17 @@ describe('贴地底图迁移实测（layout 缓存 → plan 正源）', () => {
     expect(first.direction).toBe('to-plan');
     const ground = first.direction === 'to-plan' ? first.ground : null;
     saveOutdoorProjectRecord({ v: 1, projectId: PID, name: '迁移夹具', createdAt: 'x', updatedAt: 'x', plan: { ...emptyPlan(), ground: ground! } }, storage, false);
+    // 组件侧迁移落地后的擦镜像动作（S3）：只擦字节/开关，定位三类留给基线读。
+    const { layout: stripped } = stripLayoutGroundBytes(layout);
+    storage.setItem('scendance-editor-local-v1', JSON.stringify(stripped));
 
-    const again = planGroundSync(readOutdoorProjectRecord(PID, storage)?.plan, layoutSource(layout));
+    const again = planGroundSync(readOutdoorProjectRecord(PID, storage)?.plan, layoutSource(stripped));
     expect(again.direction).toBe('none');
     expect(again.direction === 'none' && again.reason).toBe('already-current');
 
-    // 迁移这一遍只写 plan（`to-plan` 走 applyGround），layout 缓存必须原样留着——
-    // 存量字节要等 S3 收口那一步才允许动，任何一步都不许让老方案丢图。
     const kept = JSON.parse(storage.getItem('scendance-editor-local-v1')!) as RoomLayout;
-    expect(kept.floorPlanImage).toBe(BYTES);
+    expect(kept.floorPlanImage).toBeUndefined();
+    expect(kept.satelliteGroundRef).toBeUndefined();
     expect(kept.mapGroundPolygon?.length).toBe(4);
   });
 
