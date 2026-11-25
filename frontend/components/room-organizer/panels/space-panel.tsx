@@ -348,7 +348,7 @@ export function SpacePanel({
         aria-label={`加入示例场景 ${asset.name}`}>
         {asset.image && <img src={shippedImageUrl(asset)} alt="" loading="lazy" />}
         <strong>{asset.name}</strong>
-        {asset.estimatedHeightMeters && <small>估算层高 {asset.estimatedHeightMeters} 米</small>}
+        {asset.estimatedHeightMeters && <small>比例基准 {asset.estimatedHeightMeters} 米</small>}
       </button>
     </li>)}
   </ul> : null;

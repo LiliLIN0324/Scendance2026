@@ -37,9 +37,9 @@ describe('场地重建干跑', () => {
 });
 
 describe('D2 本场包与额度闸文案', () => {
-  it('缺本场包文案点名宴会厅样例与观感层', () => {
+  it('缺本场包文案点名小场地样例与观感层', () => {
     expect(VENUE_PACKAGE_MISSING).toMatch(/仍缺本场包/);
-    expect(VENUE_PACKAGE_MISSING).toMatch(/宴会厅/);
+    expect(VENUE_PACKAGE_MISSING).toMatch(/小场地样例/);
     expect(VENUE_PACKAGE_MISSING).toMatch(/观感/);
   });
 

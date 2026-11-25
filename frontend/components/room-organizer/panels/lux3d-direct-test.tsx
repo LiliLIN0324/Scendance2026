@@ -396,7 +396,7 @@ function DirectTaskPanel({ kind, online, resume, reconPreset, reconFilesSeed, mo
     <input id={`${prefix}-name`} type="text" maxLength={100} value={name} disabled={busy || (kind === 'recon' ? (!mockRecon && online !== true) : online !== true)} onChange={event => setName(event.target.value)} />
     {kind === 'recon' && <>
       <p className="sc-note" role="status">{mockRecon
-        ? '本场包状态：仍缺本场包（干跑只挂宴会厅样例作观感演示）。'
+        ? '本场包状态：仍缺本场包（干跑只挂小场地样例作观感演示）。'
         : creditConfirmed
           ? '本场包状态：待真调上传 → 成功后可挂本场 .spz 替换样例。'
           : '本场包状态：仍缺本场包；关干跑后须勾选扣额度确认闸再真调。'}</p>
@@ -577,7 +577,7 @@ export function Lux3dDirectTest({ onPlace, onPreviewScene, onHangMockScene, onPr
     {!localProxy && <div className="sc-aholo-cloud-surface" role="region" aria-label="线上观感入口">
       <p className="sc-note">线上不走本机代理。可直接挂已发布观感层；场地重建仍可干跑挂样例。物料生成在 Bingo 的「物料生成」里。</p>
       <div className="sc-aholo-cloud-actions">
-        <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂宴会厅观感</button>
+        <button type="button" className="sc-button" onClick={() => onPreviewShippedScene?.(CLOUD_E2E_WORLD_SCENE_ID)}>挂小场地观感</button>
         <button type="button" className="sc-button" onClick={() => { if (onPreviewShippedScene) onPreviewShippedScene(DEMO_WORLD_SCENE_ID); else onHangMockScene?.(); }}>挂样例环境预览</button>
       </div>
       <div className="sc-aholo-cloud-actions" role="group" aria-label="已发布物件">

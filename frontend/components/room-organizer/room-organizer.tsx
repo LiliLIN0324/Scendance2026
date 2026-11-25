@@ -5309,7 +5309,7 @@ useEffect(() => {
                   onSplatPositionChange(environment?.position ?? ZERO_SPLAT_POSITION, scale);
                 }}/></label>}
               </div>
-              {splatState.meters && <span className="sc-splat-transform-hint">当前尺寸 {splatState.meters.width.toFixed(1)} × {splatState.meters.depth.toFixed(1)} × {splatState.meters.height.toFixed(1)} 米（宽 × 深 × 高）{findShippedAsset(environment?.assetId)?.estimatedHeightMeters ? '；示例默认层高按 3.6 米估算，可修改' : ''}</span>}
+              {splatState.meters && <span className="sc-splat-transform-hint">当前尺寸 {splatState.meters.width.toFixed(1)} × {splatState.meters.depth.toFixed(1)} × {splatState.meters.height.toFixed(1)} 米（宽 × 深 × 高）{findShippedAsset(environment?.assetId)?.estimatedHeightMeters ? '；示例按 3.6 米比例基准估算，可修改' : ''}</span>}
               <span className="sc-splat-transform-hint">{splatTransformMode === 'gizmo' ? '拖动红 X、绿 Y、蓝 Z 轴调整位置' : '用上方数值调整位置，场景中不显示坐标轴'}</span>
             </div>}
             {pendingEnvironmentPosition && <div className="sc-local-conflict" role="status"><span>场地位置保存结果待核对，候选暂留本页；关闭前请导出，核对前不能重复保存。</span><button type="button" onClick={()=>downloadTextFile('场地位置待核对草稿.json','application/json;charset=utf-8',JSON.stringify({version:1,scope:pendingEnvironmentPosition.scope,candidate:pendingEnvironmentPosition.intended},null,2))}>导出候选</button><button type="button" onClick={()=>{
