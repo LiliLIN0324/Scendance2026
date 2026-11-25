@@ -1790,7 +1790,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       // 2026-11-22 用户改口（幕景Agent Test S4「确认场地后直接给我默认定了」）：
       // 候选点选后不再直接写入范围，改成出草案等确认——确认卡上写清这是哪块地，点了才落红线。
       // 这覆盖 2026-11-21 的「候选点选直接落地」拍板；追溯链：测试记录 S4 → 本次改口。
-      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis);
+      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis, undefined, false, range.waterLines);
       // 2026-11-20 用户拍板：范围来源不用念给用户，只留下一步能做什么。
       say({ role: 'agent', text: '范围草案在卡上，确认后才写入红线。' });
       return;

@@ -360,6 +360,41 @@ it("在地图上手画分区按钮直接进入绘制模式", async () => {
   expect(host.textContent).not.toContain("说一句用途和室内外");
   expect([...host.querySelectorAll("button")].some(button => button.textContent?.trim() === "在地图上手画分区")).toBe(false);
 });
+it("分区预览带水体核对：压水指名分区与红线，缺水体数据标待核（P0-A 2026-11-25）", async () => {
+  await confirmScope();
+  apply.mockClear();
+  // 掩膜盖住整块场地：红线与每个预览分区都压水 → 设计过程与预览卡都点名。
+  bridge.mapContext = vi.fn(async (): Promise<OutdoorMapContext> => ({
+    version: "map:ready",
+    status: "ready",
+    text: "已取到结构化地图依据",
+    featureIds: [],
+    unknowns: [],
+    water: () => [{ id: "ofm:water/lake", name: "湖面", points: [{ x: -200, y: -200 }, { x: 300, y: -200 }, { x: 300, y: 200 }, { x: -200, y: 200 }], closed: true }],
+  }));
+  await turn("办一场市集，全部室外", response("zones", {}));
+  expect(flow.proposal?.kind, flow.notice).toBe("zones");
+  expect(flow.proposal?.warnings.join("\n")).toContain("活动红线压到水面。");
+  expect(flow.proposal?.warnings.join("\n")).toContain("压到水面的分区：");
+  expect(host.textContent).toContain("活动红线压到水面。");
+  expect(apply).not.toHaveBeenCalled();
+  // 确认仍照常走：核对回执不拦流程，只补事实。
+  await action("confirm");
+  expect(plan.zones.length).toBeGreaterThan(0);
+});
+
+it("没有水体数据时分区分区预览标一句待核，不静默当无事（P0-A 2026-11-25）", async () => {
+  await confirmScope();
+  apply.mockClear();
+  // 不挂 mapContext：mapRef 停在 unknownMap，water() 缺失 → 掩膜为空。
+  await turn("办一场市集，全部室外", response("zones", {}));
+  expect(flow.proposal?.kind, flow.notice).toBe("zones");
+  expect(flow.proposal?.warnings.join("\n")).toContain("水体数据未取得");
+  expect(flow.proposal?.warnings.join("\n")).toContain("待核");
+  expect(apply).not.toHaveBeenCalled();
+  await action("confirm");
+  expect(plan.zones.length).toBeGreaterThan(0);
+});
 it.each([true, false])("缺分区时先预览分区，按确认结果处理后续主通道（确认=%s）", async (approved) => {
   await confirmScope();
   apply.mockClear();
@@ -407,7 +442,8 @@ it.each([true, false])("缺分区时先预览分区，按确认结果处理后�
 });
 it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", async () => {
   const anchor = { ...plan.anchor!, lng: 120.1 };
-  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  act(() => flow.offerBoundary(anchor, ring, "IN77", undefined, undefined, false, ["候选范围压到水面。"]));
+  expect(host.textContent).toContain("候选范围压到水面。");
   expect(apply).not.toHaveBeenCalled();
   expect(flow.appliedHighlight).toBeNull();
   expect(host.textContent).toContain("确认“IN77”的活动范围");
