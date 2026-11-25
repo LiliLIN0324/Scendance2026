@@ -71,7 +71,26 @@
 验证：`west-lake-basemap.test.ts` 12 / `outdoor-project-store.test.ts` 50 / `plan-ground.test.ts` 24，
 3 文件 86 passed；`npm --prefix frontend run typecheck` 通过；两文件 eslint 无输出。
 
-## 五、下一步（可立即接）
+## 五、S1 真机对照（已做一次，结论：户外画面上没有镜像的可见读点）
+
+用户授权后新建了临时草稿 `s1-ground-fixture`（陆家嘴 121.4737/31.2304，30×20 m），
+底图用本机 3199 代理真拉的卫星 JPEG（43,980 B，HTTP 200），`plan.ground` 与 layout 镜像
+同时写全（`floorPlanImage` / `floorPlanOpacity` / `mapGroundPolygon` / `mapLngLat` / `mapGroundFrame`）。
+
+实测结果（证据 `docs/evidence/2026-11-25-ground-read/`，该目录被 .gitignore 排除）：
+- 户外 2D 是 MapLibre 活图层（OSM 街道），**不画**镜像字节；
+- 户外 3D 地面是 GeoGround 实时瓦片，同样不画镜像字节；
+- 「效果图：按画布现况出 PNG」导出的是一张空白平面（只有范围框 + 锁图标 + 比例尺），
+  底图一个像素都没进来。
+
+也就是说：户外路径上，贴地字节字段已经没有任何可见读点；S1 的「改前/改后成图对照」
+在户外做不出差异，真读点只剩室内壳体的 3D 地面纹理（`three/room-builder.ts`，
+随 #38 退役）和 2D 画布渲染器（只有非户外项目可达，而它拿不到 plan 的 ground）。
+
+顺带记一笔待查项：户外「效果图」导出空白，是否 MapLibre 画布没开 `preserveDrawingBuffer`
+导致导出取不到地图层——与本镜像无关，但属于同一条渲染/导出链路，动 #38 前先确认。
+
+## 六、下一步（可立即接）
 
 - 按 S2 的五个文件逐个出「读点 → 改读 plan 后的等价性」清单，每个文件配一组纯函数级夹具；
   这与 ①②③④ 的做法同源，不需要浏览器。
