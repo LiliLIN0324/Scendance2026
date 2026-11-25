@@ -2034,7 +2034,7 @@ useEffect(() => {
     return {status:'failed',message:pendingPlacement.current?'请先放置或取消当前待放置物料。':'物料未添加，请检查场地后重试。'};
   },[placeFromCatalog]);
 
-  // 2D plan select/drag (#219). Reuses use-item-drag's session, so the commit
+  // 2D plan select/drag (#219). Reuses the (retired) drag session contract, so the commit
   // semantics (single dispatch, lock-on-release, wall settling, isDragActive
   // keyboard gate) are identical to a 3D drag.
   // S2 批 4：2D 两处读点（交互重绘的 render options、小地图缩略图）统一拿这一份贴地正源。
@@ -2886,7 +2886,7 @@ useEffect(() => {
   }, [setSceneFocus, fitOverviewAfterFocusClear, requestFitToRoom]);
 
   // docs/19 需求A：点场景 → 600ms 平滑 zoom 到该场景。目标=包围盒中心，
-  // 距离=max(8m, 包围盒最长边×2.5)，俯角 42.5°；打断与推近规则在 use-scene-zoom 里。
+  // 距离=max(8m, 包围盒最长边×2.5)，俯角 42.5°；打断与推近规则已随 use-scene-zoom 退役（现为空壳 use-dormant-camera）。
   const { zoomToScene } = useSceneZoom({ cameraRef, controlsRef, invalidate });
   const [focusedVenueId, setFocusedVenueId] = useState<string | null>(null);
   const zoomToVenue = useCallback((venue: ScannedVenue, closer: boolean) => {

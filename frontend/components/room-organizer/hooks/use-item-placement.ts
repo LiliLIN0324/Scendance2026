@@ -98,7 +98,7 @@ export function useItemPlacement({
         };
       }
       if (view.snapToItems && item) {
-        // Same membership as use-item-drag's session: locked co-selected
+        // Same membership as the retired drag session: locked co-selected
         // items stay put, so they remain valid targets.
         const group =
           allSelectedIds && allSelectedIds.size > 1 && allSelectedIds.has(itemId)

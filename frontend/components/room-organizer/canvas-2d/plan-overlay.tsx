@@ -33,7 +33,7 @@ export interface PlanOverlayProps {
  * 第 7.5 批「规划标注层」2D 覆盖渲染。
  *
  * 纯展示组件：不接事件、不改状态，交互全部由 use-plan-annotations 与
- * use-canvas-2d-interaction 完成。坐标映射与 render.ts 同源——
+ * 已退役的 2D 交互壳完成。坐标映射与 render.ts 同源——
  * 通过 worldToScreen 把世界米制坐标投影到 CSS px，与家具 / 网格严格重合。
  *
  * - zone：半透明绿底 + 1px 虚线框，左上角 label + stageNo 徽章；

@@ -44,7 +44,7 @@ import type * as ThreeNS from 'three';
  *  - item 被删 → group 脱离场景，tick 顺手把表项摘掉并释放 mixer。
  *
  * 渲染循环每帧调 advancePeopleAnimations；返回活跃数 >0 时调用方置脏，
- * 否则编辑器空闲时照旧整帧早退（render-on-demand，见 use-three-scene tick）。
+ * 否则编辑器空闲时照旧整帧早退（render-on-demand，3D 壳体已退役为 use-dormant-three-shell）。
  */
 
 export interface PersonClips {

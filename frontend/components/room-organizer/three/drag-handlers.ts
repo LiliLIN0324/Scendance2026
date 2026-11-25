@@ -50,7 +50,7 @@ export interface SceneEventHandlers {
   /**
    * Rotate/scale dial the item under the pointer instead of translating it:
    * the drag plane stays put (no position write), only the pointer point is
-   * forwarded so use-item-drag can derive the angle/radius (#P0-3).
+   * forwarded so the (retired) drag shell derived the angle/radius (#P0-3).
    */
   transformMode?: 'move' | 'rotate' | 'scale';
   onItemDragEnd?: (id: string) => void;
