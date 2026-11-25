@@ -1,0 +1,64 @@
+# 贴地底图镜像退役（#38 ⑤）执行地图
+
+日期：2026-11-25。范围：`layout` 的 6 个贴地字段（`floorPlanImage` / `floorPlanOpacity` /
+`satelliteGroundRef` / `mapGroundPolygon` / `mapLngLat` / `mapGroundFrame`）何时能真正删掉。
+
+## 一、先摆事实：读方不止「室内壳体」
+
+`Select-String` 统计（`frontend/components/room-organizer`，排除 `*.test.*`）：
+**43 个文件、456 处命中**。前 12 名：
+
+| 文件 | 命中 | 这一处是什么 |
+| --- | --- | --- |
+| `lib/amap-venue.ts` | 97 | 高德选址/拼图：写镜像 + 判「这是不是地图贴地」 |
+| `lib/plan-ground.ts` | 42 | 正源↔缓存换算本体（B4 新增） |
+| `panels/scendance-workspace.tsx` | 41 | 档位与触发（独占文件） |
+| `lib/schema.ts` | 35 | 持久化 schema 里的字段定义 |
+| `hooks/use-scene-effects.ts` | 31 | 2D/3D 重绘；户外分支已短路、2D 已接 ground |
+| `canvas-2d/render.ts` | 28 | 2D 卫星贴图（已接 ground） |
+| `lib/west-lake-basemap.ts` | 26 | 西湖范围内的底图清理（按经纬判范围） |
+| `three/room-builder.ts` | 20 | 室内壳体地面纹理 |
+| `panels/agent-panel.tsx` | 18 | 场地记忆 / 空场地判定（④ 已接 `groundRecorded`） |
+| `room-organizer.tsx` | 16 | 壳体写镜像 + 同步（独占文件） |
+| `three/structure-builder.ts` | 14 | 室内壳体卫星 UV |
+| `hooks/layout-reducer.ts` | 8 | reducer 里清/写缓存 |
+
+**结论：不是「室内壳体删了就完事」**。`amap-venue` / `west-lake-basemap` / `ground-basemap`
+这些是**户外**仍在用的地图子系统，读的是经纬多边形与框（`mapGroundPolygon` / `mapLngLat` /
+`mapGroundFrame`），不是底图字节。删字段会同时打穿户外选址与西湖清理，所以字段退役必须
+按「字节」与「定位」分开处理。
+
+## 二、三段式（每段独立可验，不攒大招）
+
+**S1 字节退役（只删 `floorPlanImage` / `floorPlanOpacity`）**
+- 前置已具备：2D 卫星贴图、评审截图、交付核对基、空场地判定四处已改读 `plan.ground`。
+- 仍需处理：`three/room-builder.ts`、`three/structure-builder.ts`（室内 3D 地面纹理与 UV）——
+  这两个随 #38 室内壳体退役一起消失，不该单独接线。
+- 验收：同一份「盐官古城」夹具，2D 出图 `drawImage` 参数序列与改前逐项相等；
+  室内壳体的成图对照只在壳体退役那一笔做。
+
+**S2 定位退役（`mapGroundPolygon` / `mapLngLat` / `mapGroundFrame` / `satelliteGroundRef`）**
+- 前置：`amap-venue`、`west-lake-basemap`、`ground-basemap`、`scene-anchor`、`venue-scale-basis`
+  全部改读 `plan.ground.polygon / center / frame`。
+- 这一段的语义风险最高：西湖清理与贴地判定都靠这些字段，读错会把用户底图误删或按错朝向贴图。
+- 验收：经纬夹具下逐函数「改前/改后返回的 patch 或布尔值相等」。
+
+**S3 契约与类型收口**
+- `lib/schema.ts` 与 `lib/types.ts` 里删字段定义（35 + 7 处），`lib/plan-ground.ts`
+  去掉 layout 兜底分支，`planGroundSync` 从三态收成两态。
+- 验收：`typecheck` 全绿 + `build` exit 0 + 存量数据迁移脚本（旧项目 layout → plan 一次）。
+
+## 三、卡点（为什么我现在不往下删）
+
+1. **没有视觉证据**：本机 bu 视口 `w=0/h=0`，`screenshot` 报 `BUA page viewport is unavailable`，
+   3D 成图取不到画面。AGENTS.md §六已写明：渲染/导出链路改坏了 `typecheck` 与 `build` 照样通过，
+   只有真出图才发现。
+2. **S2 会改「通过 / 不通过」之外的语义**：西湖清理是删除动作，判错就是删用户图。
+3. **S1 的真验收在 #38 壳体退役那一笔**，两件事同一批触点，拆开做等于同一处改两遍。
+
+## 四、下一步（可立即接）
+
+- 按 S2 的五个文件逐个出「读点 → 改读 plan 后的等价性」清单，每个文件配一组纯函数级夹具；
+  这与 ①②③④ 的做法同源，不需要浏览器。
+- 室内 `room-builder` / `structure-builder` 不接线，随 #38 删；#38 动工前先跑一次
+  `npm --prefix frontend run build` + 壳体 15 套件作为基线。
