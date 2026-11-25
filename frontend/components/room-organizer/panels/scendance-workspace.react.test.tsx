@@ -13,7 +13,6 @@ import { rememberAholoAsset } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
-import { createVenueFromPick } from '../lib/amap-venue';
 import { readPlanGroundMode, readPlanGroundSource, writePlanGroundMode, writePlanGroundSource } from '../lib/plan-basemap-source';
 import { pinMapSource, readMapSlots, resetMapSlotsCacheForTest } from '../lib/map-source-slots';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
@@ -453,174 +452,24 @@ describe('ScendanceViewTools atmosphere menus', () => {
   });
 });
 
-describe('ScendanceViewTools satellite ground', () => {
+describe('ScendanceViewTools 底图开关已退役（#38）', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
-  function legacySaltShell() {
-    const polygon = [
-      { lng: 120.53, lat: 30.40 },
-      { lng: 120.548, lat: 30.40 },
-      { lng: 120.548, lat: 30.409 },
-      { lng: 120.53, lat: 30.409 },
-    ];
-    const { layout } = createVenueFromPick(makeLayout(), {
-      name: '盐官潮乐之城', location: '海宁盐官', polygon,
-    });
-    const legacy = { ...layout };
-    delete legacy.satelliteGroundRef;
-    delete legacy.floorPlanImage;
-    delete legacy.mapGroundPolygon;
-    return legacy;
-  }
-
-  it('does not put a satellite button on an ordinary indoor room', () => {
+  it('普通室内房间本来就没有这两颗钮', () => {
     render(<Providers values={contexts()}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    expect(screen.queryByRole('button', { name: /卫星贴地/ })).toBeNull();
+    expect(document.getElementById('tool-satellite')).toBeNull();
+    expect(document.getElementById('tool-map-type')).toBeNull();
   });
 
-  it('shows tool-satellite for a planning-zone title even when the shell is not a polygon', async () => {
-    vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
-    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
-    const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' });
-    const values = contexts(layout);
-    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const button = screen.getByRole('button', { name: /卫星贴地，已打开/ });
-    expect(button.id).toBe('tool-satellite');
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-    await waitFor(() => expect(values.actions.applyLayout).toHaveBeenCalled());
-    const applied = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
-    expect(applied.satelliteGroundRef).toBe(true);
-    expect(String(applied.floorPlanImage)).toContain('satellite-ground-ref');
-  });
-
-  it('given onGroundChange it hands the patch over as plan.ground and stops writing layout bytes', async () => {
-    vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
-    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
-    const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' });
-    const values = contexts(layout);
-    const onGroundChange = vi.fn();
-    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} onGroundChange={onGroundChange} /></Providers>);
-    await waitFor(() => expect(onGroundChange).toHaveBeenCalled());
-    const ground = onGroundChange.mock.calls.at(-1)![0] as { image?: string; satelliteRef?: boolean; source?: string };
-    expect(String(ground.image)).toContain('satellite-ground-ref');
-    expect(ground.satelliteRef).toBe(true);
-    expect(ground.source).toBe('amap-satellite');
-    // 旧口径会把这张图写进 layout；接上正源之后不该再出现。
-    for (const call of values.actions.applyLayout.mock.calls) {
-      expect(String((call[0] as typeof layout).floorPlanImage ?? '')).not.toContain('satellite-ground-ref');
-    }
-  });
-
-  it('turns the satellite button off immediately while a fetch is still hanging', async () => {
-    vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
-    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
-    vi.stubGlobal('fetch', () => new Promise(() => {}));
-    const layout = makeLayout({
-      name: '盐官潮乐之城 · 规划区 12×8m',
-      mapGroundPolygon: [
-        { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
-      ],
-    });
-    const values = contexts(layout);
-    const view = render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const button = await screen.findByRole('button', { name: /卫星贴地，已打开/ });
-    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('false'));
-    fireEvent.click(button);
-    expect(button.getAttribute('aria-busy')).toBe('false');
-    const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
-    expect(hidden.satelliteGroundRef).toBe(false);
-    const offValues = contexts(hidden);
-    view.rerender(<Providers values={offValues}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const offButton = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
-    expect(offButton.getAttribute('aria-busy')).toBe('false');
-    fireEvent.click(offButton);
-    const opened = offValues.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
-    expect(opened.satelliteGroundRef).toBe(true);
-    expect(offButton.getAttribute('aria-busy')).toBe('true');
-    view.rerender(<Providers values={contexts(opened)}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    expect(screen.getByRole('button', { name: /卫星贴地，已打开/ }).getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('keeps tool-satellite visible when the layer was explicitly turned off', () => {
-    const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m', satelliteGroundRef: false });
-    render(<Providers values={contexts(layout)}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const button = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
-    expect(button.id).toBe('tool-satellite');
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-  });
-
-  it('defaults the satellite toggle on for a map shell and fills a missing image', async () => {
+  // 退役前这一组是「地图选址场地 → 自动补卫星图 → 写 layout 字节」的主路。
+  // 现在两钮整体删掉，且不应再有任何自动拉图请求：图只从 `plan.ground` 读。
+  it('地图选址场地既不出钮，也不再自动拉图写 layout', () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', 'js-key');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', 'test-static');
-    const bytes = new Uint8Array(120);
-    bytes[0] = 0xff;
-    bytes[1] = 0xd8;
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'image/jpeg' },
-      arrayBuffer: async () => bytes.buffer,
-    }));
-    const previousAmap = window.AMap;
-    window.AMap = {
-      PlaceSearch: class {
-        search(_query: string, cb: (status: string, result: unknown) => void) {
-          cb('complete', { poiList: { pois: [{ location: { lng: 120.54, lat: 30.405 } }] } });
-        }
-      },
-    };
-    try {
-    const values = contexts(legacySaltShell());
-    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const button = screen.getByRole('button', { name: /卫星贴地，已打开/ });
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.classList.contains('is-active')).toBe(true);
-    await waitFor(() => expect(values.actions.applyLayout).toHaveBeenCalled());
-    const applied = values.actions.applyLayout.mock.calls.at(-1)![0] as ReturnType<typeof legacySaltShell>;
-    expect(applied.satelliteGroundRef).toBe(true);
-    expect(applied.floorPlanImage).toContain('127.0.0.1:3199/amap-static');
-    expect(applied.floorPlanImage).toContain('satellite-ground-ref');
-    expect(applied.floorPlanImage).not.toContain('test-static');
-    expect(applied.mapGroundPolygon?.length).toBeGreaterThanOrEqual(3);
-    } finally {
-      if (previousAmap) window.AMap = previousAmap;
-      else delete window.AMap;
-    }
-  });
-
-  it('turns satellite off to a plain ground flag and back on without dropping the image', () => {
-    const image = 'http://127.0.0.1:3199/amap-static?west=120.5300000&south=30.4000000&east=120.5400000&north=30.4100000&x-ref=satellite-ground-ref';
-    const on = { ...legacySaltShell(), satelliteGroundRef: true as const, floorPlanImage: image, mapGroundPolygon: [
-      { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
-    ] };
-    const values = contexts(on);
-    const { rerender } = render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: /卫星贴地，已打开/ }));
-    const hidden = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof on;
-    expect(hidden.satelliteGroundRef).toBe(false);
-    expect(hidden.floorPlanImage).toBe(image);
-    const offValues = contexts(hidden);
-    rerender(<Providers values={offValues}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const offButton = screen.getByRole('button', { name: /卫星贴地，已关闭/ });
-    expect(offButton.getAttribute('aria-pressed')).toBe('false');
-    expect(offButton.classList.contains('is-active')).toBe(false);
-    fireEvent.click(offButton);
-    const restored = offValues.actions.applyLayout.mock.calls.at(-1)![0] as typeof on;
-    expect(restored.satelliteGroundRef).toBe(true);
-    expect(restored.floorPlanImage).toBe(image);
-  });
-
-  it('opens 地图类型 on the right rail and switches the venue ground to 高德街道', async () => {
-    const bytes = new Uint8Array(120);
-    bytes[0] = 0xff;
-    bytes[1] = 0xd8;
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'image/jpeg' },
-      arrayBuffer: async () => bytes.buffer,
-    });
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const image = 'http://127.0.0.1:3199/amap-static?west=120.5300000&south=30.4000000&east=120.5400000&north=30.4100000&x-ref=satellite-ground-ref';
     const layout = makeLayout({
@@ -630,58 +479,13 @@ describe('ScendanceViewTools satellite ground', () => {
       mapGroundPolygon: [
         { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
       ],
-      researchArea: {
-        name: '盐官',
-        address: '海宁',
-        center: { lng: 120.535, lat: 30.405 },
-        radiusM: 800,
-        bounds: { west: 120.52, south: 30.39, east: 120.55, north: 30.42 },
-        widthM: 1600,
-        depthM: 1600,
-        imageUrl: 'http://127.0.0.1:3199/amap-static?west=120.5200000&south=30.3900000&east=120.5500000&north=30.4200000&style=6&x-ref=map-basemap',
-        style: 6,
-      },
     });
     const values = contexts(layout);
     render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    const opener = screen.getByRole('button', { name: /地图类型：卫星/ });
-    expect(opener.id).toBe('tool-map-type');
-    fireEvent.click(opener);
-    expect(screen.getByRole('dialog', { name: '地图类型' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: /街道 1/ }).getAttribute('aria-selected')).toBe('false');
-    expect(screen.getByRole('option', { name: /卫星/ }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByRole('option', { name: /街道 1/ }));
-    await waitFor(() => {
-      const applied = values.actions.applyLayout.mock.calls.at(-1)![0] as typeof layout;
-      expect(String(applied.floorPlanImage)).toContain('style=7');
-      expect(applied.satelliteGroundRef).toBe(true);
-      expect(applied.researchArea?.style).toBe(7);
-      expect(applied.researchArea?.imageUrl).toContain('style=7');
-      expect(applied.researchArea?.imageUrl).toContain('x-ref=map-basemap');
-    });
-    // 多次补图是并发的（进场补图可能比人点选更晚返回），只要确实用 style=7 的档位拉过图即可。
-    const requested = fetchMock.mock.calls.map(call => String(call[0] ?? ''));
-    expect(requested.some(url => url.includes('style=7') && url.includes('satellite-ground-ref'))).toBe(true);
-  });
-
-  it('keeps the previous ground when a basemap layer cannot be fetched', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, headers: { get: () => 'text/plain' }, arrayBuffer: async () => new ArrayBuffer(0) }));
-    const image = 'http://127.0.0.1:3199/amap-static?west=120.5300000&south=30.4000000&east=120.5400000&north=30.4100000&style=6&x-ref=satellite-ground-ref';
-    const layout = makeLayout({
-      name: '盐官潮乐之城 · 规划区 12×8m',
-      satelliteGroundRef: true,
-      floorPlanImage: image,
-      mapGroundPolygon: [
-        { lng: 120.53, lat: 30.40 }, { lng: 120.54, lat: 30.40 }, { lng: 120.54, lat: 30.41 },
-      ],
-    });
-    const values = contexts(layout);
-    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()}/></Providers>);
-    fireEvent.click(screen.getByRole('button', { name: /地图类型/ }));
-    fireEvent.click(screen.getByRole('option', { name: /街道 2/ }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /这一层暂时拉不到/ })).toBeTruthy());
-    const images = values.actions.applyLayout.mock.calls.map(call => (call[0] as typeof layout).floorPlanImage);
-    expect(images.every(url => url === image)).toBe(true);
+    expect(screen.queryByRole('button', { name: /卫星贴地/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /地图类型/ })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(values.actions.applyLayout).not.toHaveBeenCalled();
   });
 });
 
