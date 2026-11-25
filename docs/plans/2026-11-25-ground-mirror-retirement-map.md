@@ -56,7 +56,22 @@
 2. **S2 会改「通过 / 不通过」之外的语义**：西湖清理是删除动作，判错就是删用户图。
 3. **S1 的真验收在 #38 壳体退役那一笔**，两件事同一批触点，拆开做等于同一处改两遍。
 
-## 四、下一步（可立即接）
+## 四、S2 第一刀（已完成：西湖清理搬到正源侧）
+
+`lib/west-lake-basemap.ts` 新增 `purgeWestLakePlanGround(plan)`，`lib/outdoor-project-store.ts`
+的 `readOutdoorProjectRecord` 读 plan 记录时下沉执行。原因：只剥 layout 缓存，`planGroundSync`
+会在下一次同步时从正源把底图补回来，等于没删。
+
+**判据收窄（实测踩到的坑）**：最初按经纬 / 多边形 / URL 判「在西湖界内就删」，直接把
+`outdoor-project-store.test.ts` 既有的 `plan.ground` 往返用例打红——那组坐标 120.1443 / 30.2465
+正好落在西湖界内。这说明按坐标判会删掉**用户自己选的**西湖一带底图，是数据丢失。
+按 2026-11-11 的口径（「默认进来那套不要」不等于「西湖范围内底图都不许存在」），
+判据收窄为**只认旧预设图 `xihu-scenic-z15`**。
+
+验证：`west-lake-basemap.test.ts` 12 / `outdoor-project-store.test.ts` 50 / `plan-ground.test.ts` 24，
+3 文件 86 passed；`npm --prefix frontend run typecheck` 通过；两文件 eslint 无输出。
+
+## 五、下一步（可立即接）
 
 - 按 S2 的五个文件逐个出「读点 → 改读 plan 后的等价性」清单，每个文件配一组纯函数级夹具；
   这与 ①②③④ 的做法同源，不需要浏览器。

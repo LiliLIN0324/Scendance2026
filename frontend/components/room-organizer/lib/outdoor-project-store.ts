@@ -18,6 +18,7 @@ import {
   type PlanAnchor,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { purgeWestLakePlanGround } from './west-lake-basemap';
 
 /** 最小存储面：测试用 Map mock 即可满足。 */
 export type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -131,7 +132,8 @@ export function readOutdoorProjectRecord(projectId: string, storage?: KeyValueSt
       let plan: SitePlanData | null = null;
       if (record.plan != null) {
         const verified = sitePlanDataSchema.safeParse(record.plan);
-        plan = verified.success ? verified.data : null;
+        // 正源侧也剥西湖底图：只剥 layout 缓存的话，下次按正源同步会把图补回来。
+        plan = verified.success ? purgeWestLakePlanGround(verified.data).plan : null;
       }
       return { ...record, plan };
     }

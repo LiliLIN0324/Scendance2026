@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isWestLakeBasemapLayout, purgeWestLakeBasemap, urlPointsIntoWestLake, withinWestLake } from './west-lake-basemap';
+import { isWestLakeBasemapLayout, purgeWestLakeBasemap, purgeWestLakePlanGround, urlPointsIntoWestLake, withinWestLake } from './west-lake-basemap';
 import type { RoomLayout } from './types';
 
 function layoutWith(overrides: Partial<RoomLayout>): RoomLayout {
@@ -125,5 +125,25 @@ describe('purgeWestLakeBasemap', () => {
     const result = purgeWestLakeBasemap(layout);
     expect(result.changed).toBe(false);
     expect(result.layout.floorPlanImage).toBe(layout.floorPlanImage);
+  });
+});
+
+describe('purgeWestLakePlanGround', () => {
+  it('strips the old preset image from plan.ground and keeps everything else on the plan', () => {
+    const plan = { zones: [{ id: 'z1' }], ground: { image: '/basemap/xihu-scenic-z15.jpg', opacity: 0.94, satelliteRef: true } };
+    const result = purgeWestLakePlanGround(plan as never);
+    expect(result.changed).toBe(true);
+    expect((result.plan as { ground?: unknown }).ground).toBeUndefined();
+    expect((result.plan as { zones: unknown[] }).zones).toEqual([{ id: 'z1' }]);
+  });
+
+  it('keeps a user-picked basemap inside the West Lake bounds', () => {
+    // 2026-11-25 实测：按经纬判会删掉用户在平湖秋月一带自己选的底图，所以只认旧预设。
+    const picked = { ground: { image: 'data:image/jpeg;base64,Zm9v', center: { lng: 120.1460368, lat: 30.2521924 } } };
+    expect(purgeWestLakePlanGround(picked as never)).toMatchObject({ changed: false });
+  });
+
+  it('leaves a plan without ground untouched', () => {
+    expect(purgeWestLakePlanGround({ zones: [] } as never)).toMatchObject({ changed: false });
   });
 });
