@@ -161,3 +161,34 @@
   删字段必须同时给它换形参或改成显式 `ground`，属「动基线」，要先在 `HANDOFF.md` 登记并说明不改数学、只换取值来源。
 - 云端存量方案：`sitePlanDataSchema` 的 `ground` 是可选的，迁移脚本要能处理「plan 里没有 ground、layout 里有字节」的老方案；
   任何一步都不能让老方案在迁移中途变空白地（底线：防丢存量）。
+
+## 九、迁移实测（2026-11-25，`plan-ground-migrate.test.ts`）
+
+用户要求「你来实测」，即由我跑一遍真迁移而不是只给方案。浏览器里写 localStorage 造夹具这条路已经否决：
+本机 19 个标签、前台是 Supabase SQL 编辑器，`bu.js()` / `page_info()` 取的是「当时附着的标签」，
+同一 cell 内会漂移（上一轮已因此把夹具键误写进 supabase 域，事后按 `location.origin` 守卫清掉）。
+所以改成**跑真函数、真落盘、真读回**，环境用 `memoryStorage()`（与 `outdoor-project-store.test.ts` 同一套 `KeyValueStorage`）。
+
+`frontend/components/room-organizer/lib/plan-ground-migrate.test.ts` 四条：
+
+1. **旧方案打开一次就长出正源**：layout 有 40 字节级 data URL + 四角多边形 + frame + center，plan 无 `ground`
+   → `planGroundSync` 判 `to-plan` → ground 的 `image` / `polygon` / `center` / `frame` 与 layout 逐项相同
+   → 按画布 `applyGround` 的动作挂上 plan → `saveOutdoorProjectRecord`（真 `sitePlanDataSchema`）落盘
+   → `readOutdoorProjectRecord` 读回，`ground.image` 仍在。
+2. **第二次打开不再写**（`already-current`），且 layout 缓存原样留着（`floorPlanImage` / `mapGroundPolygon` 都在盘上）——
+   S2 迁移只动 plan，不动 layout；删缓存要等 S3。
+3. **正源已有别的图不被 layout 覆盖**（防丢存量）：`plan.ground.image` 仍是那张新图。
+4. **layout 只有定位没有字节**时，迁过去的 ground 也只有定位，不造空图。
+
+另跑了一次**真机备份**（`docs/evidence/2026-11-25-ground-read/storage-backup-house-y4ry0n56.json` 原值，
+一次性 temp 测试、跑完即删）：`house-y4ry0n56` 的 layout 既无字节也无 `mapGround*`
+→ `planGroundFromLayout` 返回 null → `planGroundSync` 判 `no-ground-anywhere`。
+即真机上「没底图的方案」迁移不会凭空造 ground，符合「只补不缺」。
+
+**验证口径（亲测原始输出）**：`npx tsc --noEmit` 0；`eslint plan-ground-migrate.test.ts` 0（无 warning）；
+定向 5 例 + 4 套件 93 passed；全量前端 `845 passed | 6 skipped`（10801 passed / 152 skipped / 0 failed）。
+另：全量首跑有 1 例 App 渲染红（`render(<App />)` 附近），同命令复跑两遍全绿，判环境抖动、非本改动引入。
+
+**这条实测覆盖不到的**：`adoptPlan → onPlanChange → 保存` 那段 React 接线只在代码上核对
+（`outdoor-plan-canvas.tsx:5102 applyGround` → `2876 adoptPlan` → `2879 onPlanChange`），没有走真浏览器；
+以及「老方案自动迁移后刷新页面，2D/3D 底图是否还画得出来」这一条成图对照，仍要等 S3 收口时在真机补。
