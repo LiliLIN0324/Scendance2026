@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react';
-import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeLayout } from '../lib/__testfixtures__/fixtures';
 import { useImportExport, type UseImportExportResult } from './use-import-export';
@@ -8,7 +7,7 @@ import { useImportExport, type UseImportExportResult } from './use-import-export
 /**
  * 2026-11-19 用户：「把 captureRenderImage / exportRenderImage 换成 OutdoorPlan3D 的 captureImage」。
  * 可见画面只有 OutdoorPlan3D（室内 Viewport 退役隐藏），抓帧必须先问它要；
- * 这里把这条优先级钉住，避免以后又退回隐藏渲染器、导出成空白图。
+ * 2026-11-25 S1 收口后旧渲染器兜底整段删除，取图只有这一条来源。
  */
 const layout = makeLayout();
 const actions = { applyLayout: vi.fn() } as never;
@@ -16,7 +15,6 @@ const actions = { applyLayout: vi.fn() } as never;
 function mountCapture(options: {
   capture3D?: (input: { view: unknown; scale: number }) => Promise<string | null>;
   view2D?: boolean;
-  flat?: string;
 }) {
   let api: UseImportExportResult | null = null;
   function Probe() {
@@ -24,11 +22,6 @@ function mountCapture(options: {
       layout,
       actions,
       view2D: options.view2D ?? false,
-      canvasRef: useRef(null) as never,
-      canvas2DRef: useRef(options.flat ? ({ toDataURL: () => options.flat } as unknown as HTMLCanvasElement) : null) as never,
-      rendererRef: useRef(null) as never,
-      sceneRef: useRef(null) as never,
-      cameraRef: useRef(null) as never,
       ...(options.capture3D ? { capture3D: options.capture3D as never } : {}),
       onImported: vi.fn(),
     });
@@ -61,13 +54,12 @@ describe('captureRenderImage 取图来源', () => {
     expect(result).toBeNull();
   });
 
-  it('2D 平铺图仍走 2D 画布，不惊动 3D 抓帧', async () => {
-    const flat = 'data:image/png;base64,FLAT';
+  it('2D 平铺画布已无绑定时直接返回 null，不惊动 3D 抓帧', async () => {
     const capture3D = vi.fn(async () => 'data:image/png;base64,OUTDOOR');
-    const api = mountCapture({ view2D: true, flat, capture3D });
-    let result: string | null = null;
+    const api = mountCapture({ view2D: true, capture3D });
+    let result: string | null = 'x';
     await act(async () => { result = await api().captureRenderImage({ view: 'current', scale: 1 }); });
     expect(capture3D).not.toHaveBeenCalled();
-    expect(result).toBe(flat);
+    expect(result).toBeNull();
   });
 });

@@ -2582,9 +2582,6 @@ useEffect(() => {
     calibrationCapability: workspaceWriteGuards?.capability, primaryVisible: !!environment && (environment.floorIndex ?? 0) === activeFloorIndex,
   });
   splatPaintRef.current = paintSplatFrame;
-  const paintCleanSplatFrame = useCallback<SplatPaint>((renderer, scene, camera) => {
-    paintSplatFrame(renderer, scene, camera, { guides: false });
-  }, [paintSplatFrame]);
   const [reportedSplatState, setSplatState] = useState<SplatScanState>({ assetId: '', name: '', status: 'idle' });
   // 逐字段比对后写入：进度事件很密，没变就不重渲染（避免 3D 那边反复重跑）。
   const handleScanState = useCallback((next: SplatScanState) => {
@@ -3031,14 +3028,6 @@ useEffect(() => {
     layout,
     actions,
     view2D: view.view2D,
-    canvasRef,
-    canvas2DRef,
-    rendererRef,
-    sceneRef,
-    cameraRef,
-    controlsRef,
-    applyPreset,
-    paintFrame: paintCleanSplatFrame,
     ...(outdoor3dTakeover ? { capture3D: async () => outdoorPlan3DRef.current?.captureImage() ?? null } : {}),
     onImported: clearTransientSelection,
   });
