@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-describe('左轨三形与共用 Agent 面板', () => {
-  it('keeps 门厅 / Bingo / 物料 as three rail controls over one agent panel', () => {
+describe('左轨四形与共用 Agent 面板', () => {
+  it('keeps 门厅 / Bingo / 空间 / 物料 as four rail controls over one agent panel', () => {
     const source = readFileSync(join(here, '../room-organizer.tsx'), 'utf8');
     const brand = source.indexOf('<WorkbenchBrandToggle');
     const primaryStart = source.indexOf('sc-mode-rail-primary');
@@ -27,7 +27,7 @@ describe('左轨三形与共用 Agent 面板', () => {
     expect(primary).not.toContain('<Boxes');
     // 物料、创作、户外规划共用圆钮。创作钮打开同一页两张卡片。
     // 标签不再写「拍摄场地」——否则用户会以为点开只有拍摄。
-    expect(primary.match(/sc-rail-disc/g)).toHaveLength(3);
+    expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
     expect(primary).toContain('aria-label="创作：重建真实场地、文生 3D 或图生 3D"');
     expect(primary).not.toContain('生成新场景');
     expect(primary).toContain('sc-rail-3d-tag');
@@ -39,7 +39,7 @@ describe('左轨三形与共用 Agent 面板', () => {
     expect(primary).toContain('>创作</span>');
     expect(primary).not.toContain('data-tip="场地"');
     expect(primary).not.toContain('>场地</span>');
-    expect(primary).not.toContain('>空间</span>');
+    expect(primary).toContain('>空间</span>');
     expect(primary).toContain('>物料</span>');
     // 被占栏盖住的车道进次级「待切回」态，和空钮区分。
     expect(primary).toContain('is-retained');
@@ -111,10 +111,11 @@ describe('左轨三形与共用 Agent 面板', () => {
     expect(css).not.toContain('sc-rail-agent-brand-slot');
     expect(css).not.toContain('sc-bingo-ball');
     expect(source).not.toContain('<VenueLibraryPanel');
-    // E2：扫描库不再挂在 Agent 面板的「空间」轨，搬进户外规划卡的「场地扫描」页签。
-    expect(source).toContain('id="outdoor-panel-host-scan"');
+    // 2026-11-25 用户拍板：恢复左轨「空间」入口，扫描库回到空间页；户外卡只剩物件与清单。
+    expect(source).toContain('aria-label="空间"');
+    expect(source).not.toContain('id="outdoor-panel-host-scan"');
     expect(source).toContain('<SpacePanel variant="card"');
-    expect(source).not.toContain('spaceSlot={');
+    expect(source).toContain('spaceSlot={');
     expect(source).toContain('<ScendanceLibrary variant="card"');
     expect(source).toContain("onToggle={() => toggleAgent('door')}");
     expect(source).not.toContain('<MapRailButton />');

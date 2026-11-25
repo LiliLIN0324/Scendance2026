@@ -378,7 +378,7 @@ export function SpacePanel({
   </details>;
 
   return (
-    <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="场地扫描">
+    <aside ref={hostRef} className={`sc-library sc-compact-shelf sc-space-panel${card ? ' is-card' : ''}`} aria-label="空间">
       {/* 选文件框整页只挂一份：分类行与列表两处的「上传」按钮都点它。 */}
       <input ref={scanInputRef} type="file" accept=".spz,.ply" hidden data-testid="scan-upload-input" aria-label="选择实景包"
         onChange={event => {

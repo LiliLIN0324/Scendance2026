@@ -5,7 +5,7 @@
  * 只做必要接线（LOD hook、primaryVisible、自动挂载门、一个 POI 标记），未重构其他部分。
  */
 
-import { ArrowUpDown, Loader2, Minimize2, PanelLeftClose, RailCrate, RailMap, RailPlus, Scan, X } from '@/components/solid-icons';
+import { ArrowUpDown, Loader2, Minimize2, PanelLeftClose, RailCrate, RailMap, RailPlus, RailSpace, Scan, X } from '@/components/solid-icons';
 import dynamic from 'next/dynamic';
 import '@/components/capture-guide/capture-guide.css';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -204,7 +204,7 @@ import OutdoorPlan3D, { type OutdoorPlan3DApi, type SplatScanState } from './com
 import type { OutdoorPlanCanvasHandle } from './components/outdoor-plan-canvas';
 import { GeoScaleCompass } from './components/geo-scale-compass';
 /** 户外左栏一张卡三个页签：添加物件 / 已放置物件 / 清单。Bingo 不再挂规划信息。 */
-type OutdoorPanelKind = 'layers' | 'library' | 'inventory' | 'scan';
+type OutdoorPanelKind = 'layers' | 'library' | 'inventory';
 import { MemberChat } from './panels/member-chat';
 import { RailMessagesButton } from './panels/rail-messages-button';
 import { MessagesPanel } from './panels/messages-panel';
@@ -979,8 +979,9 @@ useEffect(() => {
   businessOpenRef.current = businessOpen;
   const businessToolsRef = useRef<BusinessToolsApi | null>(null);
   const toolsEntryRef = useRef<HTMLButtonElement>(null);
-  // 空间轨退役（E2）：轨道上只剩活动/Bingo/物料，旧的「空间」入口与 outdoor 扫描页签同指向户外卡。
-  const agentRailRefs = { door: brandRailRef, bingo: bingoRailRef, space: toolsEntryRef, material: toolsEntryRef } as const;
+  // 2026-11-25 用户拍板：恢复左轨独立「空间」入口；扫描库从户外卡搬回空间页，户外卡只留物件/清单。
+  const spaceEntryRef = useRef<HTMLButtonElement>(null);
+  const agentRailRefs = { door: brandRailRef, bingo: bingoRailRef, space: spaceEntryRef, material: toolsEntryRef } as const;
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
     const media = window.matchMedia('(max-width:1080px)');
@@ -2966,7 +2967,7 @@ useEffect(() => {
   /** D0：地图立壳后自动挂历史 World .spz（只读 shipped，不扣额度）。 */
   const hangDemoEnvironment = useCallback(() => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
-    setOutdoorPanel('scan');
+    showAgent('space');
     try {
       const source = storedAholoSceneSource(DEMO_WORLD_SCENE_ID);
       selectEnvironment(DEMO_WORLD_SCENE_ID, source.name);
@@ -4266,7 +4267,7 @@ useEffect(() => {
   /** 场景生成/真重建「取回并预览」：先落盘再切到 3D；真成功挂本场 .spz 时同步打开环境预览抽屉，替换当前观感层。 */
   const openScenePreview = useCallback(async (source: { url: string; name?: string; taskid?: string; metaUrl?: string }) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
-    setOutdoorPanel('scan');
+    showAgent('space');
     const loaded = await loadAholoSceneSource(source);
     selectEnvironment(loaded.assetId, loaded.name, { restoreItems: false });
     setOutdoor2DOpen(false);
@@ -4740,8 +4741,23 @@ useEffect(() => {
           <div className="sc-mode-rail" id="sc-agent-rail" data-mobile-open={mobileRailOpen ? 'true' : 'false'}>
             <div className="sc-rail-head">
               <WorkbenchBrandToggle open={isLaneOpen('door')} retained={isLaneRetained('door')} onToggle={() => toggleAgent('door')} buttonRef={brandRailRef} />
-              <nav className="sc-mode-rail-primary" aria-label="活动、Bingo、物料">
+              <nav className="sc-mode-rail-primary" aria-label="活动、Bingo、空间、物料">
                 <BingoRailButton open={isLaneOpen('bingo')} retained={isLaneRetained('bingo')} onOpen={() => toggleAgent('bingo')} buttonRef={bingoRailRef} />
+                <button
+                  type="button"
+                  ref={spaceEntryRef}
+                  className={`sc-rail-tool sc-rail-disc${isLaneOpen('space') ? ' is-active' : isLaneRetained('space') ? ' is-retained' : ''}`}
+                  aria-pressed={isLaneOpen('space') || isLaneRetained('space')}
+                  aria-expanded={isLaneOpen('space')}
+                  aria-controls="agent-panel"
+                  aria-label="空间"
+                  data-tour="nav-space"
+                  data-tip={isLaneRetained('space') ? '空间：切回当前面板' : '空间'}
+                  onClick={() => toggleAgent('space')}
+                >
+                  <RailSpace size={28} active={isLaneOpen('space')} aria-hidden="true" />
+                  <span className="sc-rail-label" aria-hidden="true">空间</span>
+                </button>
                 <button
                   type="button"
                   ref={toolsEntryRef}
@@ -4992,7 +5008,6 @@ useEffect(() => {
               <nav className="sc-left-context is-oneplan-tabs" aria-label="户外规划面板">
                 <button type="button" aria-pressed={outdoorPanel === 'library'} onClick={() => setOutdoorPanel('library')}>添加物件</button>
                 <button type="button" aria-pressed={outdoorPanel === 'layers'} onClick={() => setOutdoorPanel('layers')}>已放置物件</button>
-                <button type="button" aria-pressed={outdoorPanel === 'scan'} onClick={() => setOutdoorPanel('scan')}>场地扫描</button>
                 <button type="button" aria-pressed={outdoorPanel === 'inventory'} onClick={() => setOutdoorPanel('inventory')}>清单</button>
               </nav>
               <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
@@ -5000,29 +5015,6 @@ useEffect(() => {
 
                 <div id="outdoor-panel-host-library" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: 10, display: outdoorPanel === 'library' ? 'flex' : 'none', flexDirection: 'column', gap: 10 }} />
                 <div id="outdoor-panel-host-inventory" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 12px 12px', display: outdoorPanel === 'inventory' ? 'block' : 'none' }} />
-                {/* 场地扫描（E2）：实景/示例/上传/案例从「空间」轨搬进户外卡，室内不再单独拥有入口。 */}
-                <div id="outdoor-panel-host-scan" style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', padding: 0, display: outdoorPanel === 'scan' ? 'block' : 'none' }}>
-                  <SpacePanel variant="card" controller={controller} layout={layout}
-                    onOpenCapture={openCapturePanel}
-                    onAddSampleScene={addSampleScene}
-                    onMoveScan={moveScanTo3d}
-                    onPlaceScan={placeScanOnSite}
-                    workflow={spaceWorkflow}
-                    failedScanIds={Object.keys(failedScans)}
-                    currentScanId={environment?.assetId}
-                    environment={{
-                      preview: splatState,
-                      current: environment,
-                      environments,
-                      floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })),
-                      onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }),
-                      onRemove: removeEnvironment,
-                      onSetFloor: setEnvironmentFloor,
-                      onClear: dropEnvironment,
-                      thumbnails: projectSceneThumbnails,
-                      onPreview: previewProjectScene,
-                    }}/>
-                </div>
               </div>
               {isLeftStackDetached(leftStack, 'outdoor') && <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'outdoor', event)} />}
             </aside>
@@ -5059,7 +5051,26 @@ useEffect(() => {
                   </div>
                 ),
                 floatFooter: <div className="sc-float-resize" role="separator" aria-label="调整独立窗口大小" onPointerDown={event => beginLeftStackDrag('resize', 'bingo', event)} />,
-              } : {})}materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
+              } : {})}spaceSlot={<SpacePanel variant="card" controller={controller} layout={layout}
+                onOpenCapture={openCapturePanel}
+                onAddSampleScene={addSampleScene}
+                onMoveScan={moveScanTo3d}
+                onPlaceScan={placeScanOnSite}
+                workflow={spaceWorkflow}
+                failedScanIds={Object.keys(failedScans)}
+                currentScanId={environment?.assetId}
+                environment={{
+                  preview: splatState,
+                  current: environment,
+                  environments,
+                  floors: layout.floors.map(floor => ({ id: floor.id, name: floor.name })),
+                  onSelect: (assetId, name) => selectEnvironment(assetId, name, { restoreItems: false }),
+                  onRemove: removeEnvironment,
+                  onSetFloor: setEnvironmentFloor,
+                  onClear: dropEnvironment,
+                  thumbnails: projectSceneThumbnails,
+                  onPreview: previewProjectScene,
+                }}/>} materialSlot={<ScendanceLibrary variant="card" dimPlanIcons={outdoor3dTakeover} capturePlacement={capturePlacement} capturePlacementBatch={capturePlacementBatch} controller={controller} placeCatalogItem={placeFromCatalog} placeCatalogItemResult={placeCatalogItemResult} onArmCatalogItem={armCatalogFromLibrary} walkRoles={WALK_ROLES.map(role => ({ id: role.assetId, name: role.name, image: role.image, walkable: role.walkable, ...(role.note ? { note: role.note } : {}), ...(role.crowdType ? { crowdType: role.crowdType } : {}), selected: role.assetId === walkRoleId, onSelect: () => setWalkRoleId(role.assetId) }))}/>} chatSlot={<AgentChat agent={activeAgent}/>} headerAvatarRef={bingoHeaderAvatarRef} headerAvatarVisible={bingoHeaderAvatarVisible}/>}
           <BingoAvatarFlight open={agentPanelOpen} railRef={agentRailRefs[activeAgent]} headerAvatarRef={bingoHeaderAvatarRef} />
           <LeftCardResizer width={leftColumnWidth} onWidth={rememberLeftCardWidth} onDragging={setLeftCardResizing} />
           </div>
