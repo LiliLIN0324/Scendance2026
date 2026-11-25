@@ -16,7 +16,6 @@ Object.defineProperty(window,'localStorage',{configurable:true,value:mem});
 vi.mock('next/navigation',()=>({useRouter:()=>({push:vi.fn(),replace:vi.fn()}),usePathname:()=> '/',useSearchParams:()=>new URLSearchParams()}));
 const captures=vi.hoisted(()=>({dialogue:null as null|(()=>{isCurrent():boolean;release():void}|null)}));
 vi.mock('./hooks/use-dormant-three-shell',()=>({useDormantThreeShell:()=>({isReady:false,error:null,invalidate:()=>{},requestShadowUpdate:()=>{},threeModuleRef:{current:null},sceneRef:{current:null},rendererRef:{current:null},cameraRef:{current:null},controlsRef:{current:null},worldPositionFromClient:()=>null})}));
-vi.mock('./hooks/use-canvas-2d-interaction',()=>({useCanvas2DInteraction:()=>({clientToWorld2D:()=>null})}));
 vi.mock('./panels/creative-studio',async original=>{
  const actual=await original<typeof import('./panels/creative-studio')>();
  return {...actual,CreativeStudioProvider:(props:Parameters<typeof actual.CreativeStudioProvider>[0])=>{

@@ -31,7 +31,6 @@ vi.mock('@/lib/backend-session', async (importOriginal) => {
 vi.mock('./hooks/use-dormant-three-shell',()=>({useDormantThreeShell:()=>{
   return {isReady:false,error:null,invalidate:()=>{},requestShadowUpdate:()=>{},threeModuleRef:{current:null},sceneRef:{current:null},rendererRef:{current:null},cameraRef:{current:null},controlsRef:{current:null},worldPositionFromClient:()=>null};
 }}));
-vi.mock('./hooks/use-canvas-2d-interaction',()=>({useCanvas2DInteraction:(options:unknown)=>{capture.two=options;return {clientToWorld2D:()=>null};}}));
 import {RoomOrganizer} from './room-organizer';
 
 const observed:Array<{targets:Element[];disconnected:boolean}>=[];
@@ -57,31 +56,9 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});mem?.clear();probeController?.dispose();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
-it.each(['two'] as const)('allows a current %s gesture to update the active activity',async source=>{
- const a=activity(`current-${source}`);layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- const handlers=capture[source];expect(handlers).toBeTruthy();
- act(()=>{handlers.onItemDragStart('same-chair');handlers.onItemDrag('same-chair',3,3);handlers.onItemDragEnd('same-chair');});
- expect(layoutStore.getState().layout.floors[0]!.items[0]!.position).toEqual({x:3,z:3});
-});
-
-it.each(['two'] as const)('rejects an old %s drag ending after an activity switch before React cleanup',async source=>{
- const a=activity(`drag-${source}-A`),b=activity(`drag-${source}-B`);layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- const handlers=capture[source];expect(handlers).toBeTruthy();
- act(()=>{handlers.onItemDragStart('same-chair');handlers.onItemDrag('same-chair',3,3);layoutStore.setState({layout:b,activeFloorIndex:0});handlers.onItemDragEnd('same-chair');});
- expect(layoutStore.getState().layout.id).toBe(b.id);
- expect(layoutStore.getState().layout.floors[0]!.items[0]!.position).toEqual({x:0,z:0});
-});
-
-it.each(['two'] as const)('rejects a stale %s gesture after same-batch A→B→A',async source=>{
- const a=activity(`aba-${source}-A`),b=activity(`aba-${source}-B`);layoutStore.setState({layout:a,activeFloorIndex:0});mem.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<RoomOrganizer/>);await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});
- const handlers=capture[source];
- act(()=>{handlers.onItemDragStart('same-chair');handlers.onItemDrag('same-chair',3,3);layoutStore.setState({layout:b,activeFloorIndex:0});layoutStore.setState({layout:a,activeFloorIndex:0});handlers.onItemDragEnd('same-chair');});
- expect(layoutStore.getState().layout.id).toBe(a.id);
- expect(layoutStore.getState().layout.floors[0]!.items[0]!.position).toEqual({x:0,z:0});
-});
+// 2026-11-25 S1-c：室内 2D 手势壳（use-canvas-2d-interaction）已整体退役，
+// 三条「两个视图手势」用例失去被测对象（capture.two 恒为 null），
+// 会话作用域校验的等值覆盖由壳体与 plan 侧套件承担，这里不再复制。
 
 // 2026-11-25 E2：室内 Viewport 已退役（面板与 #sc-viewport-3d 一并删除），
 // 这条断言针对的是室内画布的 2D 观察者；观察者随壳体关闭，保留记录不再执行。

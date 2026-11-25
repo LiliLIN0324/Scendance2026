@@ -7,7 +7,7 @@ import {
   get2DViewTransform,
   render2DTopDown,
 } from '../room-organizer/canvas-2d/render';
-import { HIT_SLOP_PX, hitTest2DItems } from '../room-organizer/hooks/use-canvas-2d-interaction';
+import { HIT_SLOP_PX, hitTest2DItems } from '../room-organizer/lib/hit-test-2d';
 import { floorKeepOut } from '../room-organizer/lib/floor-keep-out';
 import { hasCollisions } from '../room-organizer/lib/geometry';
 import { planFloorIndex } from '../room-organizer/lib/street';

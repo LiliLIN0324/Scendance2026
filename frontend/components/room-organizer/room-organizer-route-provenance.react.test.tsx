@@ -22,8 +22,6 @@ vi.mock('./hooks/use-plan-annotations',async original=>{
  const actual=await original<typeof import('./hooks/use-plan-annotations')>();
  return {...actual,usePlanAnnotations(){const result=actual.usePlanAnnotations();captured.annotation=result;return result;}};
 });
-const worldPoint=vi.hoisted(()=>(x:number,y:number)=>({x:x/100,z:y/100}));
-vi.mock('./hooks/use-canvas-2d-interaction',()=>({useCanvas2DInteraction:()=>({clientToWorld2D:worldPoint})}));
 import {RoomOrganizer} from './room-organizer';
 
 beforeEach(()=>{

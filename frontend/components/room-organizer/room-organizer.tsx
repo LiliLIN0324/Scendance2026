@@ -45,7 +45,7 @@ import { RoomEditorProvider, type RoomEditorContextValue } from './contexts/room
 import { SelectionProvider, type SelectionContextValue } from './contexts/selection-context';
 import { layoutReducer } from './hooks/layout-reducer';
 import { useCameraPresets } from './hooks/use-dormant-camera';
-import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
+
 import { useFloorKeepOut } from './hooks/use-floor-keep-out';
 import { useHistory } from './hooks/use-history';
 import { useImportExport } from './hooks/use-import-export';
@@ -111,7 +111,7 @@ import {unsavedSourceDrafts} from './panels/unsaved-source-drafts';
 import { reconcilePendingEnvironmentWrite, type PendingEnvironmentWrite } from './lib/environment-write-reconciliation';
 import { downloadTextFile } from './lib/plan-export/download';
 import { hasCollisions, totalCost } from './lib/geometry';
-import { expandSelection } from './lib/groups';
+
 import type { GizmoMode } from './lib/transform';
 import { randomSuffix } from './lib/ids';
 import { LEFT_CARD_WIDTH_DEFAULT, LEFT_CARD_WIDTH_KEY, parseLeftCardWidth } from './lib/left-card-width';
@@ -1497,14 +1497,6 @@ useEffect(() => {
 
   // 双击画布里的物料才打开属性面板：先把这件设成唯一选中（双击落在多选里时，
   // 面板要显示的是被点的那一件），再掀左栏。两个视图的命中都由拾取层报上来。
-  const openPropertiesForItem = useCallback((id: string) => {
-    if (!view.selectMode) return;
-    selectOnly(id);
-    setLeftMode('properties');
-    setSidebarCollapsed(true);
-    setSidePanel(null);
-    setAgentCollapsed(false);
-  }, [selectOnly, view.selectMode]);
 
   // A whole-layout replacement (import, share/local hydration, adopting
   // another tab's save) invalidates every piece of transient selection state,
@@ -1524,58 +1516,6 @@ useEffect(() => {
   // views can't drift. 'replace' selects the group with the clicked member
   // as primary; 'toggle' adds or removes the whole group; 'single'
   // (Alt+click) is the escape hatch that picks one member on its own.
-  const handleSelect = useCallback(
-    (id: string, mode: 'replace' | 'toggle' | 'single') => {
-      // 选择工具被关掉时画布只浏览，不抓物料。
-      if (!view.selectMode) return;
-      const members = mode === 'single' ? new Set([id]) : expandSelection(activeFloor.items, id);
-      if (mode !== 'toggle') {
-        if (members.size === 1) {
-          selectOnly(id, { keepPanel: true });
-          return;
-        }
-        setSelectedItemId(id);
-        const extras = new Set(members);
-        extras.delete(id);
-        setExtraSelectedIds(extras);
-        return;
-      }
-      if (selectedItemId === null) {
-        setSelectedItemId(id);
-        const extras = new Set(members);
-        extras.delete(id);
-        setExtraSelectedIds(extras);
-        return;
-      }
-      const allIn = Array.from(members).every(
-        (member) => member === selectedItemId || extraSelectedIds.has(member)
-      );
-      const next = new Set(extraSelectedIds);
-      if (allIn) {
-        // Toggling off: drop every member. If the primary was among them,
-        // promote a surviving extra (keeping the rest of the multi-select
-        // intact) or clear the selection entirely.
-        for (const member of members) next.delete(member);
-        if (members.has(selectedItemId)) {
-          const [promoted] = next;
-          if (promoted === undefined) {
-            setSelectedItemId(null);
-            setExtraSelectedIds(new Set());
-            return;
-          }
-          next.delete(promoted);
-          setSelectedItemId(promoted);
-        }
-        setExtraSelectedIds(next);
-        return;
-      }
-      for (const member of members) {
-        if (member !== selectedItemId) next.add(member);
-      }
-      setExtraSelectedIds(next);
-    },
-    [activeFloor.items, selectedItemId, extraSelectedIds, selectOnly, view.selectMode]
-  );
 
   const allSelectedIds = useMemo(() => {
     const set = new Set(extraSelectedIds);
@@ -1594,9 +1534,6 @@ useEffect(() => {
   const {
     sceneBoxRef,
     invalidateBoxRef,
-    handleDragStart,
-    handleDrag,
-    handleDragEnd,
     handleDragCancel,
     isDragActive,
   } = useItemDrag({
@@ -1623,23 +1560,6 @@ useEffect(() => {
   // state-changing drag callbacks, even before the next render is committed.
   const dragAuthority=useRef<{id:string;activity:ActivitySessionToken;floor:FloorSessionToken}|null>(null);
   const dragCancelRef=useRef(handleDragCancel);dragCancelRef.current=handleDragCancel;
-  const scopedDragStart=useCallback((id:string)=>{
-    const floor=floorSession.capture();
-    if(!sessionToken||!activitySession.isCurrent(sessionToken)||!floor||!floorSession.isCurrent(floor))return;
-    dragAuthority.current={id,activity:sessionToken,floor};handleDragStart(id);
-  },[sessionToken,activitySession.isCurrent,floorSession.capture,floorSession.isCurrent,handleDragStart]);
-  const scopedDragMove=useCallback((id:string,x:number,z:number)=>{
-    const authority=dragAuthority.current;if(!authority||authority.id!==id)return;
-    if(!activitySession.isCurrent(authority.activity)||!floorSession.isCurrent(authority.floor)){
-      dragAuthority.current=null;handleDragCancel(id);return;
-    }
-    handleDrag(id,x,z);
-  },[activitySession.isCurrent,floorSession.isCurrent,handleDrag,handleDragCancel]);
-  const scopedDragCancel=useCallback((id:string,options?:Parameters<typeof handleDragCancel>[1])=>{
-    const authority=dragAuthority.current;if(!authority||authority.id!==id)return;
-    const current=activitySession.isCurrent(authority.activity)&&floorSession.isCurrent(authority.floor);
-    dragAuthority.current=null;handleDragCancel(id,current?options:undefined);
-  },[activitySession.isCurrent,floorSession.isCurrent,handleDragCancel]);
   useEffect(()=>{
     const token=sessionToken;
     return ()=>{const authority=dragAuthority.current;if(!token||!authority||authority.activity.scope!==token.scope||authority.activity.epoch!==token.epoch)return;dragAuthority.current=null;dragCancelRef.current(authority.id);};
@@ -1970,45 +1890,10 @@ useEffect(() => {
 
   // 2D marquee: enters through one call so the selection state stays in one
   // place (the same handleSelect path Shift-click uses).
-  const handleMarqueeSelect = useCallback(
-    (ids: string[], additive: boolean) => {
-      if (ids.length === 0) {
-        if (!additive) {
-          setSelectedItemId(null);
-          setExtraSelectedIds(new Set());
-        }
-        return;
-      }
-      if (additive && selectedItemId) {
-        if (ids.includes(selectedItemId)) return;
-        setExtraSelectedIds((extras) => {
-          const next = new Set(extras);
-          for (const id of ids) next.add(id);
-          return next;
-        });
-        return;
-      }
-      selectOnly(ids[0]!, { keepPanel: true });
-      setExtraSelectedIds(new Set(ids.slice(1)));
-    },
-    [selectedItemId, selectOnly]
-  );
 
   // Every gesture ends with its own undo step: the pre-gesture snapshot is
   // forced before the committed change lands. That keeps a quick drag right
   // after placing from merging with the placement (#P0-3).
-  const handleDragEndWithHistory = useCallback(
-    (id: string) => {
-      const authority=dragAuthority.current;if(!authority||authority.id!==id)return;
-      if(!activitySession.isCurrent(authority.activity)||!floorSession.isCurrent(authority.floor)){
-        dragAuthority.current=null;handleDragCancel(id);return;
-      }
-      dragAuthority.current=null;
-      commitHistoryNow();
-      handleDragEnd(id);
-    },
-    [activitySession.isCurrent,floorSession.isCurrent,commitHistoryNow,handleDragEnd,handleDragCancel]
-  );
 
   const { lastSavedAt, saving: isSaving, saveError, remoteLayout, clearRemoteLayout, reopenRemoteLayout, externalConflict, hasRemoteCandidate, acknowledgeRestoredLayout, ensurePersistentIdentity, persistVerifiedLayout, flushPendingBeforeSwitch, interruptedDrafts, downloadInterruptedDraft } = useLayoutPersistence({
     layout,
@@ -2066,7 +1951,7 @@ useEffect(() => {
     [layout.floors]
   );
 
-  const { snapPosition, placeCatalogItem } = useItemPlacement({
+  const { placeCatalogItem } = useItemPlacement({
     layout,
     activeFloor,
     activeFloorY,
@@ -2080,7 +1965,6 @@ useEffect(() => {
     frontGap,
   });
 
-  const deselectAll = useCallback(() => selectOnly(null), [selectOnly]);
 
   const placeDiscrete = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }): string => {
@@ -2186,29 +2070,9 @@ useEffect(() => {
   // 没有 plan.ground 时 resolveGround 回退 layout 旧缓存，与改前逐字等价。
   const viewGround = useMemo(() => resolveGround(layout, outdoorPlanState?.plan ?? null), [layout, outdoorPlanState?.plan]);
 
-  const { clientToWorld2D } = useCanvas2DInteraction({
-    enabled: view.view2D,
-    canvasRef: canvas2DRef,
-    layout,
-    activeFloor,
-    ground: viewGround,
-    view,
-    ...(referenceImage.layer ? { referenceImage: referenceImage.layer } : {}),
-    selectedItemId,
-    extraSelectedIds,
-    allSelectedIds,
-    editingLocked: workbenchMode !== 'layout',
-    onItemSelect: handleSelect,
-    onItemDoubleClick: openPropertiesForItem,
-    onDeselect: deselectAll,
-    snapPosition,
-    onItemDragStart: scopedDragStart,
-    onItemDrag: scopedDragMove,
-    onItemDragEnd: handleDragEndWithHistory,
-    onItemDragCancel: scopedDragCancel,
-    gizmoMode,
-    onMarqueeSelect: handleMarqueeSelect,
-  });
+  // 2026-11-25 S1-c：2D 画布交互退役——室内 canvas 已不存在（E2 撤 Viewport），
+  // 标注/落点等旧路径保留一个恒 null 的坐标换算，行为与退役前一致：换不出点。
+  const clientToWorld2D = (_clientX: number, _clientY: number): { x: number; z: number } | null => null;
 
   // 第 10 批「批注→施工」：drawMode != 'off' 时在 2D canvas 上以 capture 阶段接管指针事件。
   // 只在 2D 视图 + 非 off 模式下挂监听；其它时候完全不影响现有点选 / 拖放。
