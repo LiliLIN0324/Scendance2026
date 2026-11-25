@@ -2832,16 +2832,18 @@ useEffect(() => {
   // 2026-11-19 用户：「实景模式是不是重新画了地图啊？」——以前实景隔离会把接管踢掉，
   // 3D 不接管就没人画那团点云，屏幕上只剩底图重铺（看着像“重新画了地图”）。
   // 现在实景隔离强制走 3D 接管（点云就是在 OutdoorPlan3D 里画的），漫游仍不接管。
-  const outdoor3dTakeover = (outdoor3dTakeoverActive || scanIsolated) && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive && !environment;
+  // 2026-11-25 E2 先搬后删：实景扫描改由 OutdoorPlan3D 自己画（它本来就带 scan 通道），
+  // 不再因为「当前有 environment」把 3D 让回室内 Viewport。室内渲染器退成非户外兜底。
+  const outdoor3dTakeover = (outdoor3dTakeoverActive || scanIsolated) && !outdoor2DOpen && !!outdoorPlan && !walkthroughActive;
   // 右轨放大/缩小按当前视图分派：3D 接管交给 OutdoorPlan3D 的相机；2D 等其余仍走覆盖层里的 2D 画布。
   outdoorZoomRef.current = (direction) => {
+    if (outdoor3dTakeover) {
+      outdoorPlan3DRef.current?.zoomBy(direction);
+      return;
+    }
     if (environment && !outdoor2DOpen) {
       if (cameraRef.current && controlsRef.current) zoomCamera(cameraRef.current, controlsRef.current, direction === 1 ? '+' : '-');
       invalidate();
-      return;
-    }
-    if (outdoor3dTakeover) {
-      outdoorPlan3DRef.current?.zoomBy(direction);
       return;
     }
     outdoorOverlayRef.current?.zoomBy(direction);
@@ -3048,6 +3050,7 @@ useEffect(() => {
     onToggleView: () => handleOutdoorViewSwitch(outdoor3dTakeoverActive && !outdoor2DOpen ? '2d' : '3d'),
     // 指北针：3D 接管回正相机朝向正北；2D 平面把地图方位角转回 0（罗盘拖转后用）。
     resetNorth: () => {
+      if (outdoor3dTakeoverActive && !outdoor2DOpen) { outdoorPlan3DRef.current?.resetNorth(); return; }
       if (environment && !outdoor2DOpen && cameraRef.current && controlsRef.current) {
         const camera = cameraRef.current, controls = controlsRef.current;
         const radius = Math.hypot(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
@@ -3055,18 +3058,18 @@ useEffect(() => {
         camera.position.z = controls.target.z + radius;
         controls.update(); invalidate(); return;
       }
-      if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.resetNorth();
-      else outdoorOverlayRef.current?.resetNorth();
+      outdoorOverlayRef.current?.resetNorth();
     },
     // 大罗盘：3D 接管读相机方位；2D 读画布 bearing（罗盘拖转 2D，2026-11-16 用户指令）。
     bearingRad: () => {
+      if (outdoor3dTakeoverActive && !outdoor2DOpen) return outdoorPlan3DRef.current?.getBearing() ?? 0;
       if (environment && !outdoor2DOpen && cameraRef.current && controlsRef.current) {
         return Math.atan2(-(cameraRef.current.position.x - controlsRef.current.target.x), cameraRef.current.position.z - controlsRef.current.target.z);
       }
-      if (outdoor3dTakeoverActive && !outdoor2DOpen) return outdoorPlan3DRef.current?.getBearing() ?? 0;
       return outdoorOverlayRef.current?.getBearing() ?? 0;
     },
     orbitByDelta: (deltaTheta: number) => {
+      if (outdoor3dTakeoverActive && !outdoor2DOpen) { outdoorPlan3DRef.current?.orbitByDelta(deltaTheta); return; }
       if (environment && !outdoor2DOpen && cameraRef.current && controlsRef.current) {
         const camera = cameraRef.current, controls = controlsRef.current;
         const dx = camera.position.x - controls.target.x, dz = camera.position.z - controls.target.z;
@@ -3074,8 +3077,7 @@ useEffect(() => {
         camera.position.z = controls.target.z - dx * Math.sin(deltaTheta) + dz * Math.cos(deltaTheta);
         controls.update(); invalidate(); return;
       }
-      if (outdoor3dTakeoverActive && !outdoor2DOpen) outdoorPlan3DRef.current?.orbitByDelta(deltaTheta);
-      else outdoorOverlayRef.current?.orbitByDelta(deltaTheta);
+      outdoorOverlayRef.current?.orbitByDelta(deltaTheta);
     },
   } : null;
   const { state: loadedSplatState, renderFrame: paintSplatFrame, start: startSplat, stop: stopSplat,
@@ -3108,13 +3110,13 @@ useEffect(() => {
   }, []);
   const splatState = loadedSplatState.status === 'idle' ? reportedSplatState : loadedSplatState;
   useEffect(() => {
-    if (!environment?.assetId) { stopSplat(); return; }
+    if (!environment?.assetId || !!outdoorPlan) { stopSplat(); return; }
     try { void startSplat(storedAholoSceneSource(environment.assetId)).catch(failure => notify(failure instanceof Error ? failure.message : String(failure), 'error')); }
     catch (failure) { notify(failure instanceof Error ? failure.message : String(failure), 'error'); }
-  }, [environment?.assetId, startSplat, stopSplat, notify]);
+  }, [environment?.assetId, outdoorPlan, startSplat, stopSplat, notify]);
   useEffect(() => {
-    if (!outdoor2DOpen && loadedSplatState.status === 'ready') framePrimaryScene();
-  }, [outdoor2DOpen, loadedSplatState.assetId, loadedSplatState.status, framePrimaryScene]);
+    if (!outdoorPlan && !outdoor2DOpen && loadedSplatState.status === 'ready') framePrimaryScene();
+  }, [outdoorPlan, outdoor2DOpen, loadedSplatState.assetId, loadedSplatState.status, framePrimaryScene]);
   // 测试接缝：jsdom 里没有 3D 画布，扫描上报与位置写回只能由测试注入（见 lib/scan-state-bridge.ts）。
   useEffect(() => {
     scanStateBridge.pushScanState = setSplatState;
@@ -3600,11 +3602,11 @@ useEffect(() => {
   // 只调 focusMapVenue 会「点了没反应」）。
   // 实景隔离：维持原来的场地取景。只动视图、不改 plan。
   const focusScopeOrVenue = useCallback(() => {
-    if (environment && !outdoor2DOpen) { framePrimaryScene(); return; }
     if (outdoor3dTakeover) {
       outdoorPlan3DRef.current?.focusVenue();
       return;
     }
+    if (environment && !outdoor2DOpen) { framePrimaryScene(); return; }
     if (outdoor2DOpen) {
       if ((outdoorPlan?.designScope ?? []).length >= 3) {
         outdoorOverlayRef.current?.focusDesignScope();
@@ -4554,12 +4556,12 @@ useEffect(() => {
    * 所以抓出来是空/黑，缓存里一个都没落。改成和分享卡预览同一套口子：谁在出镜就抓谁。
    */
   const captureSceneThumb = useCallback(async (): Promise<string | null> => {
-    if (environment && !outdoor2DOpen) return captureRenderImage({ view: 'current', scale: 1, resolution: { width: 320, height: 200 } });
     if (outdoor3dTakeover) {
       // 封面要的是这套高斯重建本身：框住它、带高斯层抓帧；整机位抓出来只有底图。
       const api = outdoorPlan3DRef.current;
       return api?.captureScanImage() ?? api?.captureImage() ?? null;
     }
+    if (environment && !outdoor2DOpen) return captureRenderImage({ view: 'current', scale: 1, resolution: { width: 320, height: 200 } });
     if (outdoor2DOpen) return outdoorOverlayRef.current?.captureImage() ?? null;
     return captureRenderImage({ view: 'current', scale: 1, resolution: { width: 320, height: 200 } });
   }, [environment, outdoor3dTakeover, outdoor2DOpen, captureRenderImage]);
@@ -5541,7 +5543,7 @@ useEffect(() => {
                 原左下胶囊挂载不再渲染；OutdoorViewSwitch 组件文件已于 2026-11-17 零引用清理删除。 */}
       {/* Gaussian venues retain the original renderer and canvas in outdoor projects.
           The map borrows that renderer in 2D; 3D reveals the same loaded scene. */}
-      <div className="sc-scene-viewport" style={{ visibility: environment && !outdoor2DOpen ? 'visible' : 'hidden', pointerEvents: environment && !outdoor2DOpen ? 'auto' : 'none' }}><Viewport
+      <div className="sc-scene-viewport" style={{ visibility: environment && !outdoor2DOpen && !outdoorPlan ? 'visible' : 'hidden', pointerEvents: environment && !outdoor2DOpen && !outdoorPlan ? 'auto' : 'none' }}><Viewport
         isReady={isReady}
         error={error}
         view2D={view.view2D}
@@ -5650,6 +5652,14 @@ useEffect(() => {
                   plan={outdoorPlan}
                   source={geoGroundSource}
                   groundMode={groundMode}
+                  // 2026-11-25：实景扫描搬进户外 3D——位置本来就是落位时写的 plan 米坐标。
+                  scan={environment ? {
+                    assetId: environment.assetId,
+                    name: environment.name,
+                    x: environment.position?.x ?? 0,
+                    z: environment.position?.z ?? 0,
+                    ...(splatState.meters ? { meters: splatState.meters } : {}),
+                  } : undefined}
                   sceneObjects={isOutdoorProject ? [] : outdoorSceneObjects}
                   apiRef={outdoorPlan3DRef}
                   onScanState={handleScanState}
