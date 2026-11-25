@@ -47,7 +47,6 @@ import { layoutReducer } from './hooks/layout-reducer';
 import { useCameraPresets } from './hooks/use-camera-presets';
 import { useCameraVision } from './hooks/use-camera-vision';
 import { useCanvas2DInteraction } from './hooks/use-canvas-2d-interaction';
-import { useEventAtmosphere } from './hooks/use-event-atmosphere';
 import { useFloorKeepOut } from './hooks/use-floor-keep-out';
 import { useHistory } from './hooks/use-history';
 import { useImportExport } from './hooks/use-import-export';
@@ -87,9 +86,7 @@ import { useRecentColors } from './hooks/use-recent-colors';
 import { useReferenceImage } from './hooks/use-reference-image';
 import { useReviewCapture } from './hooks/use-review-capture';
 import { useSceneEffects } from './hooks/use-scene-effects';
-import { useSceneLighting } from './hooks/use-scene-lighting';
 import { researchBasemapPlacement, researchGeoToWorld } from './three/research-basemap';
-import { DEFAULT_EVENT_LIGHTING } from './three/render-look';
 import type { SplatPosition, SplatTransformMode, SplatWalkBounds } from './three/splat-preview';
 import { useThreeScene } from './hooks/use-three-scene';
 import { useSplatPreview } from './hooks/use-splat-preview';
@@ -3213,19 +3210,6 @@ useEffect(() => {
     measurementPoints,
   });
 
-  // 只有点云就绪且当前展示的就是它时，才用实拍光照覆盖预设光照。
-  const sceneLightingAssetId = showGaussianInCanvas && isReady && !view.view2D && environment !== null &&
-    splatState.status === 'ready' && splatState.assetId === environment.assetId
-    ? environment.assetId
-    : '';
-  const { sceneLighting } = useSceneLighting({
-    enabled: sceneLightingAssetId !== '',
-    assetId: sceneLightingAssetId,
-    isReady,
-    rendererRef,
-    invalidate,
-  });
-
   useWeather({
     weather: view.weather,
     enabled: isReady && !view.view2D,
@@ -4579,10 +4563,6 @@ useEffect(() => {
   useProposalPreview({ isReady, threeModuleRef, sceneRef, layout,
     candidate: isActive ? previewCandidate : null, activeFloorIndex, invalidate, requestShadowUpdate });
 
-  useEventAtmosphere({ isReady, threeModuleRef, sceneRef, rendererRef, invalidate,
-    lighting: previewCandidate?.backendLighting ?? layout.backendLighting ?? DEFAULT_EVENT_LIGHTING, width: previewCandidate?.width ?? layout.width, depth: previewCandidate?.height ?? layout.height,
-    ceilingHeight: previewCandidate?.floors[0]?.height ?? activeStoreyHeight,
-    ...(sceneLighting ? { sceneLighting } : {}) });
 
   // B4 读源单源化：评审截图的底图也先问 plan.ground；两边都没有就是 null（旧路径不变）。
   const reviewGround = outdoorPlan ? resolveGround(layout, outdoorPlan) : null;
