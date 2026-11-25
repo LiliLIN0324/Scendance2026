@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentDocument } from "../lib/agent-documents";
-import { AGENT_RANGE_BASIS_NOTE, reviseVenueRange, type VenueRangeBasis } from "../lib/agent-venue-range";
+import { AGENT_RANGE_BASIS_NOTE, reviseVenueRange, waterCheckLines, type VenueRangeBasis } from "../lib/agent-venue-range";
 import { applyModelPlaceSteps, proposeWeddingLayout, WEDDING_LIBRARY_QUERIES, type WeddingCandidateMetrics } from "../lib/wedding-layout";
 import { authorizesAutonomousWedding, isWeddingEvent, requestsWeddingOptimization, weddingDesignRequest } from "../lib/wedding-request";
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
@@ -1357,6 +1357,7 @@ export function useOutdoorAgentWorkflow(input: {
     basis?: VenueRangeBasis,
     continuation?: OutdoorWorkflowProposal["afterConfirmRequest"],
     directApply = false,
+    waterWarnings: readonly string[] = [],
   ): void | Promise<void> {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base) return;
@@ -1392,6 +1393,7 @@ export function useOutdoorAgentWorkflow(input: {
         job,
         [
           // 2026-11-20 用户拍板：范围来源、可用聊天缩小这类交代全部不再进卡；卡上只留“换场后发生了什么”。
+          ...waterWarnings,
           ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
           ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],
@@ -2053,6 +2055,15 @@ export function useOutdoorAgentWorkflow(input: {
           const names = next.zones.slice(0, 4).map(zone => zone.name).join("、");
           designStep(`分区预览包含 ${next.zones.length} 个区域：${names}${next.zones.length > 4 ? "等" : ""}。`);
         }
+        // P0-A（2026-11-25 幕景Agent Test「锁定区域」）：候选范围在 proposeAutomaticVenueRange
+        // 出草案时已按水体掩膜过滤；这里补后两个层次——确认后的红线与本版分区。有掩膜就指名
+        // 压到水的层（随预览卡给确认人）；缺数据就一句待核，不静默当无事。
+        const waterLines = waterCheckLines(
+          plan.boundary,
+          next.zones.map(zone => ({ name: zone.name, ring: zone.polygon })),
+          mapRef.current.water?.() ?? [],
+          mapRef.current.status === "ready",
+        );
         await offer(
           next,
           "zones",
@@ -2060,6 +2071,7 @@ export function useOutdoorAgentWorkflow(input: {
           job,
           [
             "室内边界必须由用户图纸或已有手画分区确认；地图不提供室内通道事实。",
+            ...waterLines,
           ],
           afterConfirm,
         );

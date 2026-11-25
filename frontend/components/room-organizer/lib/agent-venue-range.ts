@@ -20,6 +20,8 @@ export interface VenueRangeBasis {
 export interface VenueRangeProposal {
   boundary: SitePlanData['boundary'];
   basis: VenueRangeBasis;
+  /** P0-A：候选层的水体核对结论（压水 / 数据未取全待核），随草案回给范围确认卡。空数组 = 取全且不压水。 */
+  waterLines: string[];
 }
 const rectangle = (width: number, depth: number): SitePlanData['boundary'] => rectangleAt(0, 0, width, depth);
 const rectangleAt = (cx: number, cy: number, width: number, depth: number): SitePlanData['boundary'] => [
@@ -153,6 +155,29 @@ export function largestWaterFreeRect(
   return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 }
 
+/**
+ * P0-A（2026-11-25 幕景Agent Test「锁定区域」）：水体核对的三层口径——候选范围、确认后的红线、分区。
+ * 掩膜取全时指名压到水的层；没取全（地图依据缺失或不完整）就补一句待核（状态回执），
+ * 不把「不知道」说成「没事」。返回空数组 = 掩膜取全且都不压水，不需要说话。
+ *
+ * `complete` 必须如实传：地图依据就绪但附近本来就没有水，不等于缺数据——
+ * 只有 load 取全（map.status === 'ready'）才允许下「不压水」的结论。
+ */
+export function waterCheckLines(
+  boundary: readonly PlanPointLike[],
+  zones: ReadonlyArray<{ name: string; ring: readonly PlanPointLike[] }>,
+  waters: readonly WaterRing[],
+  complete: boolean,
+  boundaryLabel = '活动红线',
+): string[] {
+  const lines: string[] = [];
+  if (ringTouchesWater(boundary, waters)) lines.push(`${boundaryLabel}压到水面。`);
+  const pressing = zones.filter(zone => ringTouchesWater(zone.ring, waters)).map(zone => zone.name);
+  if (pressing.length) lines.push(`压到水面的分区：${pressing.join('、')}。`);
+  if (!complete) lines.push(`水体数据未取得或不完整：活动范围${zones.length ? '与分区' : ''}是否压水待核。`);
+  return lines;
+}
+
 /** The probe rectangle only bounds evidence retrieval; it is never presented as a mapped lawn. */
 export async function proposeAutomaticVenueRange(input: {
   plan: SitePlanData; anchor: NonNullable<SitePlanData['anchor']>; name: string;
@@ -163,10 +188,15 @@ export async function proposeAutomaticVenueRange(input: {
     zones: [], facilities: [], routes: [], nodes: [], workers: [], vehicles: [], annotations: [], measurements: [], walls: [], designScope: rectangle(500, 500) };
   /** 水体几何与证据同一次 load 取回：不额外发请求，也不拿底图像素去猜水在哪。 */
   let waters: WaterRing[] = [];
+  let complete = false;
+  const proposal = (boundary: SitePlanData['boundary'], basis: VenueRangeBasis): VenueRangeProposal => ({
+    boundary, basis, waterLines: waterCheckLines(boundary, [], waters, complete, '候选范围'),
+  });
   try {
     const map = await adapter.load(`venue-probe:${input.name}`, probe, [], false, input.signal);
     input.signal.throwIfAborted();
     waters = ((map as { water?: () => WaterRing[] }).water?.() ?? []);
+    complete = map.status === 'ready';
     const grass = (map.openAreas?.() ?? []).filter(area => area.tags.landuse === 'grass'
       && !['private', 'no'].includes(area.tags.access ?? '') && area.ring.length <= 200 && checkBoundaryRing(area.ring).ok)
       .filter(area => planRingAreaM2(area.ring) >= 100 && planRingAreaM2(area.ring) <= 30000)
@@ -174,17 +204,15 @@ export async function proposeAutomaticVenueRange(input: {
       // A：压到水面的草地候选不当作可用场地，换下一个；没剩的就走兜底。
       .filter(area => !ringTouchesWater(area.ring, waters))
       .sort((a, b) => centerDistance(a.ring) - centerDistance(b.ring));
-    if (grass[0]) return { boundary: grass[0].ring,
-      basis: { kind: 'mapped-grass', location: 'mapped', scale: 'mapped', detail: `地图草地候选：${grass[0].name || input.name}（${grass[0].id}）；地图标记不代表已获活动使用许可。` } };
+    if (grass[0]) return proposal(grass[0].ring, { kind: 'mapped-grass', location: 'mapped', scale: 'mapped', detail: `地图草地候选：${grass[0].name || input.name}（${grass[0].id}）；地图标记不代表已获活动使用许可。` });
   } catch { input.signal.throwIfAborted(); }
   if (input.footprint && checkBoundaryRing(input.footprint).ok) {
     // B：地点轮廓本身就把湖/河包在里面（水上森林、沿河公园都是这种），收缩到轮廓内最大无水区块。
     const cleared = waters.length ? largestWaterFreeRect(input.footprint, waters) : null;
-    return { boundary: cleared ?? input.footprint,
-      basis: { kind: 'place-outline', location: 'mapped', scale: 'mapped',
+    return proposal(cleared ?? input.footprint, { kind: 'place-outline', location: 'mapped', scale: 'mapped',
         detail: cleared
           ? '仅取得地点整体轮廓（含水面），已收缩到轮廓内最大的无水区块；这是范围候选，可用聊天缩小，不能当作实测活动用地。'
-          : '仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。' } };
+          : '仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。' });
   }
   const concept = rectangle(40, 30);
   const nearby = waters.length && ringTouchesWater(concept, waters)
@@ -195,12 +223,11 @@ export async function proposeAutomaticVenueRange(input: {
     const depth = Math.min(30, nearby[2].y - nearby[0].y);
     const centerX = (nearby[0].x + nearby[1].x) / 2;
     const centerY = (nearby[0].y + nearby[2].y) / 2;
-    return { boundary: rectangleAt(centerX, centerY, width, depth),
-      basis: { kind: 'concept', location: 'assumed', scale: 'assumed',
-        detail: '未取得真实用地边界，且锤点附近压到水面，已改在最近的无水区块按 40×30 内建概念草案；尺寸与位置均为待核对假设，可直接说长宽或上传带尺寸图纸调整。' } };
+    return proposal(rectangleAt(centerX, centerY, width, depth), { kind: 'concept', location: 'assumed', scale: 'assumed',
+        detail: '未取得真实用地边界，且锤点附近压到水面，已改在最近的无水区块按 40×30 内建概念草案；尺寸与位置均为待核对假设，可直接说长宽或上传带尺寸图纸调整。' });
   }
-  return { boundary: concept, basis: { kind: 'concept', location: 'assumed', scale: 'assumed',
-    detail: '未取得真实用地边界，先按 40×30 米建立概念草案；地点定位已保留，尺寸和草坪实际位置均为待核对假设。可直接说长宽或上传带尺寸图纸调整。' } };
+  return proposal(concept, { kind: 'concept', location: 'assumed', scale: 'assumed',
+    detail: '未取得真实用地边界，先按 40×30 米建立概念草案；地点定位已保留，尺寸和草坪实际位置均为待核对假设。可直接说长宽或上传带尺寸图纸调整。' });
 }
 
 function centerDistance(ring: SitePlanData['boundary']): number {
