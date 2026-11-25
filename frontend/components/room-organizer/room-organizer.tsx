@@ -105,7 +105,8 @@ import { useWeather } from './hooks/use-weather';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
 import { sceneAnchorFromOutdoorPlan } from './lib/outdoor-venue-sync';
-import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, saveOutdoorProjectRecord } from './lib/outdoor-project-store';
+import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, readOutdoorProjectRecord, saveOutdoorProjectRecord } from './lib/outdoor-project-store';
+import { writeGroundToPlan } from './lib/venue-ground-slot';
 import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { findCatalogEntry } from './lib/catalog-drag';
@@ -2076,6 +2077,26 @@ useEffect(() => {
     const boundId = isOutdoorProject ? outdoorPlanSlotId : (layoutStore.getState().layout.id ?? null);
     setOutdoorPlanState({ projectId: boundId, plan: filterPlanByLevel(full, levelId) });
   }, [isOutdoorProject, outdoorPlanSlotId]);
+  /**
+   * S3 写侧唯一接线点（2026-11-25）：卫星/自绘拿到的图从 workspace 交过来，这里决定落哪。
+   * ① 户外 2D 已挂载 → 画布 `applyGround`（正源写入，不进撤销栈）；
+   * ② 没句柄（地图选址 venue / 室内）→ 写同一份 outdoor 记录的 `plan.ground`，并把状态同步给 3D；
+   * ③ layout 视图缓存投影也收在这一处（3D 卫星 UV、旧读点仍看它），随 #38 整块删。
+   */
+  const handleGroundChange = useCallback((ground: PlanGround) => {
+    const base = layoutStore.getState().layout;
+    const canvas = outdoorOverlayRef.current?.getCanvasApi();
+    if (canvas) {
+      canvas.applyGround(ground);
+    } else {
+      const boundId = isOutdoorProject ? outdoorPlanSlotId : (base.id ?? null);
+      const currentPlan = boundId ? readOutdoorProjectRecord(boundId)?.plan ?? null : null;
+      setOutdoorPlanState({ projectId: boundId, plan: { ...(currentPlan ?? createStarterOutdoorPlan()), ground } });
+      if (boundId) writeGroundToPlan(boundId, ground, { name: base.name });
+    }
+    try { workspaceWriteGuards?.assertLayoutWrite(); } catch { return; }
+    actions.applyLayout({ ...base, ...layoutGroundPatch(ground) });
+  }, [actions, isOutdoorProject, outdoorPlanSlotId, workspaceWriteGuards]);
   /** 切回 3D 也保留平面图层（这才是「2D 策划的东西 3D 里也在」）；只丢掉别的活动的残留。 */
   const outdoorPlan = useMemo(
     () => {
@@ -5883,7 +5904,7 @@ useEffect(() => {
               plan3dRef={outdoorPlan3DRef}
               overlayRef={outdoorOverlayRef}
             />
-            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} controller={controller} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && scanIsolated && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
+            <ScendanceViewTools outdoorActions={outdoorActions} geoGroundActive={!!outdoorPlan?.anchor} onGroundChange={handleGroundChange} controller={controller} environmentView={splatDisplayMode} environmentViewEnabled={environmentShown && !view.view2D} onEnvironmentViewChange={mode => { if (mode === 'footprint') setSplatTransformMode('off'); setSplatDisplayMode(mode); }} sceneMoveEnabled={environmentShown && scanIsolated && splatDisplayMode === 'gaussian' && !view.view2D} sceneMoveMode={splatTransformMode} onSceneMoveModeChange={setSplatTransformMode} layoutLocked={workbenchMode !== 'layout'} showAtmosphere={false} shareOpenRequest={shareOpenRequest} shareActions={shareActions} onExportImage={outdoor3dTakeover ? handleOutdoor3dExport : handleExportImage} onCaptureImage={outdoor2DOpen ? async () => outdoorOverlayRef.current?.captureImage() ?? null : outdoor3dTakeover ? async () => outdoorPlan3DRef.current?.captureImage() ?? null : captureRenderImage} {...(outdoor2DOpen ? {} : { onExportAlbum: handleExportAlbum })} onLighting={value=>{ if (workbenchMode !== 'layout') return; commitHistoryNow();actions.applyLayout({...layoutStore.getState().layout,backendLighting:value});setView(current=>({...current,view2D:false}));}} onToggleWalkthrough={toggleWalkthrough} onFocusVenue={focusScopeOrVenue} focusVenueTip={(outdoor2DOpen || outdoor3dTakeover) && (outdoorPlan?.designScope ?? []).length >= 3 ? '定位到设计范围' : undefined} chromeHidden={chromeHidden} onToggleChrome={() => setChromeHidden(v => !v)} onZoom={direction => {
               // 接管态：主画布 3D 是 OutdoorPlan3D，缩放改派给它（主相机此刻无内容）。
               if (outdoor3dTakeover) {
                 outdoorPlan3DRef.current?.zoomBy(direction === '+' ? 1 : -1);

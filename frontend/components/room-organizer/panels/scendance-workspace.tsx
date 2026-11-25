@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Boxes, ChevronUp, Loader2, X } from '@/components/solid-icons';
 import { Check } from 'lucide-react';
@@ -11,6 +11,7 @@ import {
   basemapCoversGroundPlane,
   ensurePlanGround,
   ensureSatelliteGround,
+  groundFromSatellitePatch,
   hideSatelliteGround,
   isMapOutdoorLayout,
   isPlaceholderSatellite,
@@ -60,6 +61,7 @@ import type { CatalogPlacementBatchGuard, CatalogPlacementGuard, CatalogPlacemen
 import type { CameraPreset, CatalogItem, FurnitureItem, RoomLayout, Weather } from '../lib/types';
 import { MAX_FLOORS } from '../lib/constants';
 import type { SplatDisplayMode } from '../three/splat-preview';
+import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 import type { BackendSession } from '@/lib/backend-session';
 import './workbench-shelf.css';
 
@@ -349,6 +351,11 @@ interface ViewToolsProps {
    * （且会显示「未定位」误导），与户外态同一扇门隐藏。
    */
   geoGroundActive?: boolean;
+  /**
+   * 地面正源写入口（S3 前置，2026-11-25）：给了之后，卫星/自绘拿到的图只经这里变成
+   * `plan.ground`，组件内不再拼 `floorPlanImage` 等 layout 字节；不给则维持旧口径。
+   */
+  onGroundChange?: ((ground: PlanGround) => void) | undefined;
 }
 
 const WEATHER_OPTIONS: ReadonlyArray<{ id: Weather; label: string }> = [
@@ -559,7 +566,7 @@ function groundThumbAnchor(polygon: readonly { lng: number; lat: number }[] | un
 }
 
 /** Design: canvas-right vertical 14-key circular column (v2.4). */
-export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false, controller }: ViewToolsProps): JSX.Element {
+export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onExportAlbum, showAtmosphere = true, onLighting, sceneMoveEnabled = false, sceneMoveMode = 'off', onSceneMoveModeChange, layoutLocked = false, shareActions, shareOpenRequest = 0, publishHidden = false, onToggleWalkthrough, onFocusVenue, focusVenueTip, chromeHidden = false, onToggleChrome, outdoorActions = null, geoGroundActive = false, onGroundChange, controller }: ViewToolsProps): JSX.Element {
   // P2-g：户外模式＝这四组通用钮改派给规划画布；室内历史/相机一概不动。
   // 3D 场地只是同一份规划的倾斜视角，不是预览，撤销/缩放/导出仍走规划。
   const outdoor = outdoorActions;
@@ -789,6 +796,13 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
         return;
       }
       setMapMiss(false);
+      // S3（2026-11-25）：有正源写入口时，图只交给调用方落进 `plan.ground`，
+      // 组件不再自己拼 `floorPlanImage/floorPlanOpacity/satelliteGroundRef` 三处字节。
+      if (onGroundChange) {
+        onGroundChange(groundFromSatellitePatch(patch));
+        setView(viewNext => ({ ...viewNext, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
+        return;
+      }
       let next = applySatelliteGroundPatch(current, patch);
       // 调研底图铺在壳体下面。人换了地图类型时一起换，避免圈内是路网、圈外仍是卫星。
       // 静态预置图与像素一一对应，researchAreaWith 会原样返回。
@@ -798,7 +812,7 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
       actions.applyLayout(next);
       setView(viewNext => ({ ...viewNext, showReferenceImage: true, referenceImageOpacity: patch.floorPlanOpacity }));
     }).finally(() => { if (showBusy) releaseBusy(mine); });
-  }, [actions, releaseBusy, setView]);
+  }, [actions, onGroundChange, releaseBusy, setView]);
   useEffect(() => () => { window.clearTimeout(busyTimer.current); }, []);
   useEffect(() => {
     // B4/S1（2026-11-25）：GeoGround 态（户外有锚点的地图地面）不吃这层贴地缓存——

@@ -496,6 +496,24 @@ describe('ScendanceViewTools satellite ground', () => {
     expect(String(applied.floorPlanImage)).toContain('satellite-ground-ref');
   });
 
+  it('given onGroundChange it hands the patch over as plan.ground and stops writing layout bytes', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
+    vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
+    const layout = makeLayout({ name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' });
+    const values = contexts(layout);
+    const onGroundChange = vi.fn();
+    render(<Providers values={values}><ScendanceViewTools onZoom={vi.fn()} onGroundChange={onGroundChange} /></Providers>);
+    await waitFor(() => expect(onGroundChange).toHaveBeenCalled());
+    const ground = onGroundChange.mock.calls.at(-1)![0] as { image?: string; satelliteRef?: boolean; source?: string };
+    expect(String(ground.image)).toContain('satellite-ground-ref');
+    expect(ground.satelliteRef).toBe(true);
+    expect(ground.source).toBe('amap-satellite');
+    // 旧口径会把这张图写进 layout；接上正源之后不该再出现。
+    for (const call of values.actions.applyLayout.mock.calls) {
+      expect(String((call[0] as typeof layout).floorPlanImage ?? '')).not.toContain('satellite-ground-ref');
+    }
+  });
+
   it('turns the satellite button off immediately while a fetch is still hanging', async () => {
     vi.stubEnv('NEXT_PUBLIC_AMAP_KEY', '');
     vi.stubEnv('NEXT_PUBLIC_AMAP_STATIC_KEY', '');
