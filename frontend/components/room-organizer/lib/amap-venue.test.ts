@@ -1,4 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
+import { legacyGroundOf } from './legacy-ground';
 import {
   polygonBboxMeters,
   polygonToLocalMeters,
@@ -97,7 +98,7 @@ describe('amap venue pick', () => {
 
   it('builds an outdoor polygon shell named after the place, clamping oversized sites into a planning zone', () => {
     const before = INITIAL_LAYOUT as RoomLayout;
-    const { layout, cleared } = createVenueFromPick(before, { name: '盐官潮乐之城', location: '海宁盐官', polygon: [
+    const { layout, cleared, ground } = createVenueFromPick(before, { name: '盐官潮乐之城', location: '海宁盐官', polygon: [
       { lng: 120.53, lat: 30.40 }, { lng: 120.548, lat: 30.40 }, { lng: 120.548, lat: 30.409 }, { lng: 120.53, lat: 30.409 },
     ] });
     expect(layout.name).toContain('盐官潮乐之城');
@@ -108,29 +109,26 @@ describe('amap venue pick', () => {
     expect(layout.name).toMatch(/真实范围 \d+×\d+m/);
     expect(layout.backendSceneV2?.venue.shape).toBe('polygon');
     expect(layout.backendSceneV2?.venue.polygon?.length).toBeGreaterThanOrEqual(3);
-    expect(layout.satelliteGroundRef).toBeUndefined();
+    expect(legacyGroundOf(layout).satelliteGroundRef).toBeUndefined();
     expect(layout.floorPlanImage).toBeUndefined();
-    expect(layout.mapGroundPolygon).toHaveLength(4);
+    expect(ground.polygon).toHaveLength(4);
+    expect(ground.center).toBeTruthy();
   });
 
-  it('keeps the drawn vertices through a save/reopen round trip', () => {
+  it('keeps the drawn vertices in plan.ground through a save/reopen round trip', () => {
     // 平湖秋月那种非矩形轮廓：保存后刷新重开，地点、顶点、轮廓都要还在。
     const before = INITIAL_LAYOUT as RoomLayout;
     const polygon = lShapePolygon();
-    const { layout } = createVenueFromPick(before, {
+    const { layout, ground } = createVenueFromPick(before, {
       name: '平湖秋月', location: '浙江省杭州市西湖区孤山路1号', polygon,
     });
-    expect(layout.mapGroundPolygon).toHaveLength(polygon.length);
-    expect(layout.mapLngLat).toBeTruthy();
+    expect(ground.polygon).toHaveLength(polygon.length);
+    expect(ground.center).toBeTruthy();
 
-    // 走一遍真实的存储往返（schema 校验 + 往返白名单）
+    // 走一遍真实的存储往返（schema 校验 + 往返白名单）：layout 不再带圈画字节。
     const reopened = parseStoredLayout(JSON.parse(JSON.stringify(layout)) as unknown);
     expect(reopened).toBeTruthy();
-    expect(reopened!.mapGroundPolygon).toHaveLength(polygon.length);
-    reopened!.mapGroundPolygon!.forEach((point, index) => {
-      expect(point.lng).toBeCloseTo(polygon[index]!.lng, 9);
-      expect(point.lat).toBeCloseTo(polygon[index]!.lat, 9);
-    });
+    expect(legacyGroundOf(reopened!).mapGroundPolygon).toBeUndefined();
     // 名称里的地点也跟着存下来了
     expect(reopened!.name).toContain('平湖秋月');
   });
@@ -152,11 +150,11 @@ describe('amap venue pick', () => {
 
   it('#38: 圈画只写形状/位置/大小，不写底图字节', () => {
     const before = INITIAL_LAYOUT as RoomLayout;
-    const { layout } = createVenueFromPick(before, { name: '盐官潮乐之城', location: '海宁盐官', polygon: lShapePolygon() });
+    const { layout, ground } = createVenueFromPick(before, { name: '盐官潮乐之城', location: '海宁盐官', polygon: lShapePolygon() });
     expect(layout.floorPlanImage).toBeUndefined();
-    // 透明度只是壳体自带的观感值，这里断言「没有新贴图写进来」即可。
-    expect(layout.satelliteGroundRef).toBeUndefined();
-    expect(layout.mapGroundPolygon?.length).toBeGreaterThanOrEqual(3);
+    // 圈画已进正源 `plan.ground`，layout 上不再留旧字段。
+    expect(legacyGroundOf(layout).satelliteGroundRef).toBeUndefined();
+    expect(ground.polygon?.length).toBeGreaterThanOrEqual(3);
     expect(layout.sceneAnchor).toBeDefined();
   });
 
@@ -175,9 +173,10 @@ describe('satellite ground backfill', () => {
 
   it('shows satellite for a planning-zone name or an outdoor brief even when the shell is not a polygon', () => {
     const named = { ...(INITIAL_LAYOUT as RoomLayout), name: '盐官潮乐之城 · 规划区 84.6×100m（真实范围 846×1000m）' };
-    delete named.mapGroundPolygon;
-    delete named.satelliteGroundRef;
-    delete named.floorPlanImage;
+    const rawNamed = named as unknown as Record<string, unknown>;
+    delete rawNamed.mapGroundPolygon;
+    delete rawNamed.satelliteGroundRef;
+    delete rawNamed.floorPlanImage;
     expect(named.backendVenue?.shape).not.toBe('polygon');
     expect(isMapOutdoorLayout(named)).toBe(true);
 
@@ -187,7 +186,7 @@ describe('satellite ground backfill', () => {
       backendVenue: { shape: 'rectangle' as const, width: 40, depth: 20, height: 4, entrances: [], site: { indoorOutdoor: 'outdoor' as const } },
     };
     expect(isMapOutdoorLayout(outdoor)).toBe(true);
-    expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '盐官潮乐之城', mapLngLat: { lng: 120.54, lat: 30.4 } })).toBe(true);
+    expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '盐官潮乐之城', mapLngLat: { lng: 120.54, lat: 30.4 } } as unknown as RoomLayout)).toBe(true);
     expect(isMapOutdoorLayout({ ...(INITIAL_LAYOUT as RoomLayout), name: '室内宴会厅' })).toBe(false);
   });
 
@@ -199,11 +198,12 @@ describe('satellite ground backfill', () => {
       height: 80,
       sceneAnchor: { lng: 120.141306, lat: 30.2545, orientationDeg: 0, metersPerUnit: 1 },
     };
-    delete legacy.mapGroundPolygon;
-    delete legacy.mapLngLat;
-    delete legacy.researchArea;
-    delete legacy.floorPlanImage;
-    delete legacy.satelliteGroundRef;
+    const rawLegacy = legacy as unknown as Record<string, unknown>;
+    delete rawLegacy.mapGroundPolygon;
+    delete rawLegacy.mapLngLat;
+    delete rawLegacy.researchArea;
+    delete rawLegacy.floorPlanImage;
+    delete rawLegacy.satelliteGroundRef;
     const polygon = (await resolveSatellitePolygon(legacy))!;
     expect(polygon).toHaveLength(4);
     expect(polygon[0].lat).toBeCloseTo(30.2545 - 80 / 2 / METERS_PER_DEGREE_LAT, 6);
@@ -292,11 +292,12 @@ describe('satellite ground backfill', () => {
       name: '盐官潮乐之城', location: '', polygon: lShapePolygon(),
     });
     const legacy = { ...layout };
-    delete legacy.mapGroundPolygon;
-    delete legacy.mapLngLat;
-    delete legacy.sceneAnchor;
-    delete legacy.satelliteGroundRef;
-    delete legacy.floorPlanImage;
+    const rawLegacy = legacy as unknown as Record<string, unknown>;
+    delete rawLegacy.mapGroundPolygon;
+    delete rawLegacy.mapLngLat;
+    delete rawLegacy.sceneAnchor;
+    delete rawLegacy.satelliteGroundRef;
+    delete rawLegacy.floorPlanImage;
     const patch = await ensureSatelliteGround(legacy);
     expect(mapVenuePlaceQuery(legacy.name)).toContain('盐官潮乐之城');
     expect(patch?.mapGroundPolygon).toHaveLength(4);
@@ -333,11 +334,11 @@ describe('satellite ground backfill', () => {
     const parsed = parseSatelliteImageBounds(url!);
     expect(parsed?.west).toBeCloseTo(registration!.bounds.west, 6);
     expect(parsed?.north).toBeCloseTo(registration!.bounds.north, 6);
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+    const { layout, ground: pickedGround } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
       name: '盐官古城', location: '潮乐之城', polygon,
     });
-    expect(layout.mapGroundFrame?.lng0).toBeCloseTo(registration!.frame.lng0, 6);
-    expect(layout.mapGroundFrame?.scale).toBe(registration!.frame.scale);
+    expect(pickedGround.frame?.lng0).toBeCloseTo(registration!.frame.lng0, 6);
+    expect(pickedGround.frame?.scale).toBe(registration!.frame.scale);
     const shape = satellitePhotoShapeRect(registration!.shellWidth, registration!.shellDepth, registration!.frame, registration!.bounds);
     const cornerUv = (x: number, y: number) => shellMetersToSatelliteUv(
       x + registration!.shellWidth / 2,
@@ -389,12 +390,15 @@ describe('satellite ground backfill', () => {
       backendSceneV2: layout.backendSceneV2
         ? { ...layout.backendSceneV2, venue: { ...layout.backendSceneV2.venue, polygon: flipped } }
         : layout.backendSceneV2,
-    };
+      // 老存档的圈画/帧仍在盘上（迁移前），用来覆盖「打开时把旧朝向翻正」这条路径。
+      mapGroundPolygon: polygon,
+      mapGroundFrame: registration!.frame,
+    } as unknown as RoomLayout;
     const restored = parseStoredLayout(JSON.parse(JSON.stringify(stale)));
-    expect(restored?.mapGroundPolygon).toEqual(layout.mapGroundPolygon);
+    expect(legacyGroundOf(restored!).mapGroundPolygon).toHaveLength(polygon.length);
     const restoredNorth = restored!.backendVenue!.polygon!.reduce((best, point) => point.z < best.z ? point : best);
     expect(restoredNorth.z).toBeLessThan(0.2);
-    expect(restored?.mapGroundFrame?.latSign).toBe(-1);
+    expect(legacyGroundOf(restored!).mapGroundFrame?.latSign).toBe(-1);
     expect(orientMapShellNorthUp(restored!)).toBe(restored);
   });
 
@@ -447,10 +451,10 @@ describe('satellite ground backfill', () => {
     expect(east.u).toBeGreaterThan(west.u);
     expect(east.u).toBeLessThan(0.95);
     expect(west.u).toBeGreaterThan(0.05);
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+    const { layout, ground } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
       name: '盐官潮乐之城', location: '海宁盐官', polygon,
     });
-    expect(layout.mapGroundFrame?.scale).toBeCloseTo(registration!.frame.scale, 6);
+    expect(ground.frame?.scale).toBeCloseTo(registration!.frame.scale, 6);
     expect(layout.width).toBe(registration!.shellWidth);
     expect(layout.height).toBe(registration!.shellDepth);
   });
@@ -479,6 +483,6 @@ describe('satellite ground backfill', () => {
     expect(patch?.floorPlanImage).toContain(SATELLITE_GROUND_MARK);
     expect(patch?.floorPlanImage?.startsWith('data:image/svg')).toBe(true);
     expect(patch?.mapGroundPolygon).toBeUndefined();
-    expect(await ensureSatelliteGround({ ...named, floorPlanImage: patch!.floorPlanImage, satelliteGroundRef: true })).toBeNull();
+    expect(await ensureSatelliteGround({ ...named, floorPlanImage: patch!.floorPlanImage, satelliteGroundRef: true } as unknown as RoomLayout)).toBeNull();
   });
 });

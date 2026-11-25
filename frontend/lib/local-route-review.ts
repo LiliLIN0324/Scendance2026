@@ -2,6 +2,7 @@ import { venueSchema, type Point } from '../../supabase/functions/_shared/domain
 import { pointInPolygon } from '../../supabase/functions/_shared/structural-geometry';
 import { isLowProfile, isTabletopType } from '../components/room-organizer/lib/geometry';
 import { mountBand } from '../components/room-organizer/lib/mount-band';
+import { legacyGroundOf } from '../components/room-organizer/lib/legacy-ground';
 import { isStructuralMarker, layoutGeometryScene } from '../components/room-organizer/lib/structural-layout';
 import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 import type { PlanAnnotation, PlanPoint } from './plan-annotation';
@@ -84,7 +85,7 @@ export function reviewLocalRoutes(base:RoomLayout|undefined,candidate:RoomLayout
   const before=base.floors.filter(floor=>floor.id===floorId),after=candidate.floors.filter(floor=>floor.id===floorId);
   if(before.length!==1||after.length!==1||!Array.isArray(before[0]!.items)||!Array.isArray(after[0]!.items)){unknown.push('路线对应楼层无法唯一确定');return result;}
   if(![base.width,base.height,candidate.width,candidate.height].every(n=>Number.isFinite(n)&&n>0)||base.width!==candidate.width||base.height!==candidate.height){unknown.push('候选与原场地尺度不同，无法比较');return result;}
-  if(base.mapGroundPolygon?.length&&!base.backendVenue?.polygon||candidate.mapGroundPolygon?.length&&!candidate.backendVenue?.polygon){unknown.push('地图范围尚未转换为场地轮廓');return result;}
+  if(legacyGroundOf(base).mapGroundPolygon?.length&&!base.backendVenue?.polygon||legacyGroundOf(candidate).mapGroundPolygon?.length&&!candidate.backendVenue?.polygon){unknown.push('地图范围尚未转换为场地轮廓');return result;}
   let polygon:Point[];
   try{
     for(const layout of [base,candidate]){

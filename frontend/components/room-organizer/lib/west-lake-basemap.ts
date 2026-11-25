@@ -1,4 +1,5 @@
 import type { RoomLayout } from './types';
+import { legacyGroundOf } from './legacy-ground';
 import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 
 /**
@@ -64,18 +65,20 @@ export function isWestLakeBasemapLayout(layout: RoomLayout): boolean {
     if (withinWestLake(area.center?.lng, area.center?.lat)) return true;
     if (urlPointsIntoWestLake(area.imageUrl)) return true;
   }
-  if (withinWestLake(layout.mapLngLat?.lng, layout.mapLngLat?.lat)) return true;
-  if (layout.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
-  if (withinWestLake(layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0)) return true;
+  const legacy = legacyGroundOf(layout);
+  if (withinWestLake(legacy.mapLngLat?.lng, legacy.mapLngLat?.lat)) return true;
+  if (legacy.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
+  if (withinWestLake(legacy.mapGroundFrame?.lng0, legacy.mapGroundFrame?.lat0)) return true;
   if (urlPointsIntoWestLake(layout.floorPlanImage)) return true;
   return false;
 }
 
 /** 这份布置的贴地/圈画元数据是否指向西湖。 */
-function groundMetadataInWestLake(layout: RoomLayout): boolean {
-  if (withinWestLake(layout.mapLngLat?.lng, layout.mapLngLat?.lat)) return true;
-  if (layout.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
-  if (withinWestLake(layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0)) return true;
+function groundMetadataInWestLake(layout: object): boolean {
+  const legacy = legacyGroundOf(layout);
+  if (withinWestLake(legacy.mapLngLat?.lng, legacy.mapLngLat?.lat)) return true;
+  if (legacy.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
+  if (withinWestLake(legacy.mapGroundFrame?.lng0, legacy.mapGroundFrame?.lat0)) return true;
   return false;
 }
 
@@ -106,10 +109,11 @@ export function purgeWestLakeBasemap(layout: RoomLayout): { layout: RoomLayout; 
     changed = true;
   }
 
+  const legacy = legacyGroundOf(next);
   const westLakeGround = groundMetadataInWestLake(next);
   const mapReferenceImage =
     next.floorPlanImage !== undefined &&
-    (urlPointsIntoWestLake(next.floorPlanImage) || (westLakeGround && next.satelliteGroundRef === true));
+    (urlPointsIntoWestLake(next.floorPlanImage) || (westLakeGround && legacy.satelliteGroundRef === true));
 
   if (mapReferenceImage) {
     delete next.floorPlanImage;
@@ -118,15 +122,16 @@ export function purgeWestLakeBasemap(layout: RoomLayout): { layout: RoomLayout; 
     changed = true;
   }
 
+  const raw = next as unknown as Record<string, unknown>;
   if (westLakeGround) {
-    delete next.mapGroundPolygon;
-    delete next.mapLngLat;
-    delete next.mapGroundFrame;
+    delete raw.mapGroundPolygon;
+    delete raw.mapLngLat;
+    delete raw.mapGroundFrame;
     changed = true;
   }
 
-  if (next.satelliteGroundRef) {
-    next.satelliteGroundRef = false;
+  if (legacy.satelliteGroundRef) {
+    raw.satelliteGroundRef = false;
     changed = true;
   }
 

@@ -3,6 +3,7 @@ import type { RoomLayout } from './types';
 import type { BriefMemory } from './brief-agent';
 import {venueSchema} from '../../../../supabase/functions/_shared/domain';
 import {venueArea} from './structural-layout';
+import {legacyGroundOf} from './legacy-ground';
 
 /**
  * Structural identity uses exact data, never a lossy image or geometry hash.
@@ -27,8 +28,8 @@ export function venueScaleBasis(layout: RoomLayout, ground?: Pick<PlanGround, 'i
           rotation:item.rotation ?? 0,elevation:item.elevation ?? null,sillHeight:item.sillHeight ?? null}))
         .sort((left,right)=>left.id < right.id ? -1 : left.id > right.id ? 1 : 0)})),
     floorPlanImage:(ground?.image ?? layout.floorPlanImage) ?? null,
-    mapGroundPolygon:(ground?.polygon ?? layout.mapGroundPolygon) ?? null,
-    mapLngLat:(ground?.center ?? layout.mapLngLat) ?? null,sceneAnchor:layout.sceneAnchor ?? null,
+    mapGroundPolygon:(ground?.polygon ?? legacyGroundOf(layout).mapGroundPolygon) ?? null,
+    mapLngLat:(ground?.center ?? legacyGroundOf(layout).mapLngLat) ?? null,sceneAnchor:layout.sceneAnchor ?? null,
     researchBounds:layout.researchArea?.bounds ?? null});
 }
 export function isVenueScaleCurrent(memory: BriefMemory | null | undefined, layout: RoomLayout): boolean {

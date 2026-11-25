@@ -179,7 +179,7 @@ describe('operation basis reads the ground through plan.ground', () => {
   /** 壳体写出来的贴地场地：layout 镜像齐全。 */
   function grounded(): RoomLayout {
     return { ...venue(), floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true,
-      mapGroundPolygon: polygon, mapLngLat: { lng: 120.105, lat: 30.205 } };
+      mapGroundPolygon: polygon, mapLngLat: { lng: 120.105, lat: 30.205 } } as unknown as RoomLayout;
   }
   const ground = { image, opacity: 0.94, satelliteRef: true, polygon };
 
@@ -191,10 +191,13 @@ describe('operation basis reads the ground through plan.ground', () => {
   it('still computes the same digest after the layout mirror is deleted and only plan.ground remains', async () => {
     const layout = grounded(), task = createOperation('演练签到', 'event');
     const before = await operationBasis(layout, task);
-    const { floorPlanImage: _image, mapGroundPolygon: _polygon, mapLngLat: _center, ...bare } = layout;
-    expect(await operationBasis(bare as RoomLayout, task, undefined, { ground })).toBe(before);
+    const bare = { ...layout } as unknown as Record<string, unknown>;
+    delete bare.floorPlanImage;
+    delete bare.mapGroundPolygon;
+    delete bare.mapLngLat;
+    expect(await operationBasis(bare as unknown as RoomLayout, task, undefined, { ground })).toBe(before);
     // 没有 plan 又没有镜像时确实退化成「无底图」，证明上面相等不是巧合。
-    expect(await operationBasis(bare as RoomLayout, task)).not.toBe(before);
+    expect(await operationBasis(bare as unknown as RoomLayout, task)).not.toBe(before);
   });
 
   it('keeps counting an uploaded floor plan that is not a ground basemap', async () => {

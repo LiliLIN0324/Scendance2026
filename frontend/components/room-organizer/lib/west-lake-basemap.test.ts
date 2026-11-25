@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { isWestLakeBasemapLayout, purgeWestLakeBasemap, purgeWestLakePlanGround, urlPointsIntoWestLake, withinWestLake } from './west-lake-basemap';
 import type { RoomLayout } from './types';
+import type { LegacyLayoutGround } from './legacy-ground';
+import { legacyGroundOf } from './legacy-ground';
 
-function layoutWith(overrides: Partial<RoomLayout>): RoomLayout {
+function layoutWith(overrides: Partial<RoomLayout> & LegacyLayoutGround): RoomLayout {
   return {
     name: '草稿',
     width: 10,
@@ -70,9 +72,10 @@ describe('purgeWestLakeBasemap', () => {
     expect(result.layout.researchArea).toBeUndefined();
     expect(result.layout.floorPlanImage).toBeUndefined();
     expect(result.layout.floorPlanOpacity).toBeUndefined();
-    expect(result.layout.mapLngLat).toBeUndefined();
-    expect(result.layout.mapGroundPolygon).toBeUndefined();
-    expect(result.layout.satelliteGroundRef).toBe(false);
+    const kept = legacyGroundOf(result.layout);
+    expect(kept.mapLngLat).toBeUndefined();
+    expect(kept.mapGroundPolygon).toBeUndefined();
+    expect(kept.satelliteGroundRef).toBe(false);
     // The house itself stays.
     expect(result.layout.name).toBe('草稿');
   });
@@ -90,10 +93,11 @@ describe('purgeWestLakeBasemap', () => {
     expect(result.changed).toBe(true);
     expect(result.layout.floorPlanImage).toBeUndefined();
     expect(result.layout.floorPlanOpacity).toBeUndefined();
-    expect(result.layout.mapLngLat).toBeUndefined();
-    expect(result.layout.mapGroundPolygon).toBeUndefined();
-    expect(result.layout.mapGroundFrame).toBeUndefined();
-    expect(result.layout.satelliteGroundRef).toBe(false);
+    const cropped = legacyGroundOf(result.layout);
+    expect(cropped.mapLngLat).toBeUndefined();
+    expect(cropped.mapGroundPolygon).toBeUndefined();
+    expect(cropped.mapGroundFrame).toBeUndefined();
+    expect(cropped.satelliteGroundRef).toBe(false);
   });
 
   it('keeps a plan image the user uploaded themselves', () => {

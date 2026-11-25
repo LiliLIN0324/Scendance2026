@@ -1,3 +1,4 @@
+import { legacyGroundOf } from './legacy-ground';
 import type { RoomLayout } from './types';
 
 /**
@@ -52,11 +53,10 @@ export function groundBasemapLayerByStyle(style: GroundBasemapStyle): GroundBase
  * 的结果传进来；不传时退回读 layout 旧字段（老项目缓存仍可读，删字段前不断档）。
  */
 export function activeGroundBasemap(
-  layout: Pick<RoomLayout, 'floorPlanImage' | 'satelliteGroundRef' | 'researchArea'>,
+  layout: Pick<RoomLayout, 'floorPlanImage' | 'researchArea'>,
   ground?: { image?: string; satelliteRef?: boolean } | null,
 ): GroundBasemapLayer | null {
-  const satelliteRef = ground ? (ground.satelliteRef ?? true) : layout.satelliteGroundRef;
-  if (satelliteRef === false) return null;
+  const satelliteRef = ground ? (ground.satelliteRef ?? true) : legacyGroundOf(layout).satelliteGroundRef;  if (satelliteRef === false) return null;
   const url = ground ? ground.image : layout.floorPlanImage;
   const style = url
     ? groundBasemapStyleOf(url)

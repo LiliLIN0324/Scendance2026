@@ -4,6 +4,7 @@ import { eventOperationsSchema, eventOperationTaskSchema, type EventOperations, 
 import { productionReferenceKey, productionTaskBasis, productionTaskObjectIds } from '../../../lib/production-plan';
 import { materialCheckinTaskBasis } from '../../../lib/material-checkin-basis';
 import { resolveGround } from './plan-ground';
+import { legacyGroundOf } from './legacy-ground';
 import type { FurnitureItem, RoomLayout } from './types';
 import type { MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
@@ -83,7 +84,7 @@ export async function operationBasis(layout: RoomLayout, task: EventOperationTas
       objectIds: [...task.objectIds].sort() },
     venue: { width: layout.width, depth: layout.height,
       venueScan: layout.venueScan ?? null, sceneAnchor: layout.sceneAnchor ?? null,
-      mapGroundPolygon: ground?.polygon ?? layout.mapGroundPolygon ?? null,
+      mapGroundPolygon: ground?.polygon ?? legacyGroundOf(layout).mapGroundPolygon ?? null,
       floorPlanImage: ground?.image ?? layout.floorPlanImage ?? null, sources: layout.backendSceneV2?.sources ?? null, dimensions: layout.backendSceneV2?.dimensions ?? null,
       backendVenue: layout.backendVenue ?? null, storedStructure: layout.backendSceneV2?.structure ?? null,
       entrance: layout.entrance ?? null, terrain: layout.terrain ?? null, roof: layout.roof ?? null,

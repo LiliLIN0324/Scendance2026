@@ -1,4 +1,5 @@
 import type { CatalogItem, FloorLayout, FurnitureItem, RoomLayout, ViewSettings } from '../types';
+import type { LegacyLayoutGround } from '../legacy-ground';
 
 /** Build a valid FurnitureItem with sane defaults; override any field. */
 export function makeItem(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
@@ -49,7 +50,7 @@ export function makeFloor(overrides: Partial<FloorLayout> = {}): FloorLayout {
   };
 }
 
-export function makeLayout(overrides: Partial<RoomLayout> = {}): RoomLayout {
+export function makeLayout(overrides: Partial<RoomLayout> & LegacyLayoutGround = {}): RoomLayout {
   return {
     name: 'My Home',
     width: 8,

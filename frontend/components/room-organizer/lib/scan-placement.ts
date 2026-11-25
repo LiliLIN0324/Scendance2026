@@ -2,6 +2,7 @@ import { anchorGeoToWorld, sceneAnchorOf } from './scene-anchor';
 import { lngLatToEnu } from './outdoor-plan-canvas';
 import { researchGeoToWorld } from '../three/research-basemap';
 import type { PlanAnchor, PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
+import { legacyGroundOf } from './legacy-ground';
 import type { RoomLayout } from './types';
 import type { ScannedVenue } from './venue-scans';
 
@@ -35,7 +36,7 @@ export function planPointFromGeo(anchor: PlanAnchor, lng: number, lat: number): 
 }
 
 /** 环的几何中心：顶点平均值（小场地几十米量级，和面积形心的差别远小于落位误差）。 */
-function polygonGeoCenter(polygon: RoomLayout['mapGroundPolygon']): { lng: number; lat: number } | null {
+function polygonGeoCenter(polygon: readonly { lng: number; lat: number }[] | undefined): { lng: number; lat: number } | null {
   if (!polygon || polygon.length < 3) return null;
   const lng = polygon.reduce((sum, point) => sum + point.lng, 0) / polygon.length;
   const lat = polygon.reduce((sum, point) => sum + point.lat, 0) / polygon.length;
@@ -113,8 +114,10 @@ export function defaultScanPlacement(input: {
   layout: RoomLayout;
   venue: ScannedVenue;
   planAnchor: PlanAnchor | null;
+  /** 正源 `plan.ground`（B4）。没给时只借盘上老字段兜底，迁完擦掉后自然失效。 */
+  ground?: { polygon?: readonly { lng: number; lat: number }[] | undefined } | null;
 }): ScanPlacement {
-  const { layout, venue, planAnchor } = input;
+  const { layout, venue, planAnchor, ground } = input;
   const pinOf = (lng: number, lat: number): PlanPoint | null => (planAnchor ? planPointFromGeo(planAnchor, lng, lat) : null);
 
   const telemetry = venue.geo;
@@ -129,7 +132,7 @@ export function defaultScanPlacement(input: {
     return { world, pin: pinOf(area.center.lng, area.center.lat), source: 'research-area' };
   }
 
-  const center = polygonGeoCenter(layout.mapGroundPolygon);
+  const center = polygonGeoCenter(ground?.polygon ?? legacyGroundOf(layout).mapGroundPolygon);
   if (center) {
     const world = planWorldPosition(layout, center.lng, center.lat) ?? { x: 0, z: 0 };
     return { world, pin: pinOf(center.lng, center.lat), source: 'polygon' };

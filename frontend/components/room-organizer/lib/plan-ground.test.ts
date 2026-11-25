@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { planGroundSchema } from '../../../../supabase/functions/_shared/site-plan';
 import { rememberPlanGroundBounds } from './amap-venue';
 import { planGroundFromLayout, planGroundSync, resolveGround, stripLayoutGroundBytes, stripPlanGroundImage } from './plan-ground';
-import type { RoomLayout } from './types';
+import type { LegacyLayoutGround } from './legacy-ground';
 
 const POLYGON = [
   { lng: 120.1413, lat: 30.2489 },
@@ -13,8 +13,7 @@ const POLYGON = [
 const FRAME = { lng0: 120.1413, lat0: 30.2489, latMid: 30.2479, scale: 1, latSign: -1 as const };
 const IMAGE = `data:image/png;base64,${'A'.repeat(120)}`;
 
-function groundLayout(extra: Partial<RoomLayout> = {}): Pick<RoomLayout,
-  'floorPlanImage' | 'floorPlanOpacity' | 'satelliteGroundRef' | 'mapGroundPolygon' | 'mapLngLat' | 'mapGroundFrame'> {
+function groundLayout(extra: Partial<LegacyLayoutGround> = {}): LegacyLayoutGround {
   return {
     floorPlanImage: IMAGE,
     floorPlanOpacity: 0.9,
@@ -78,19 +77,20 @@ describe('plan.ground 正源 ← layout 视图缓存', () => {
 });
 
 describe('迁移落地后擦掉 layout 的底图字节镜像（stripLayoutGroundBytes）', () => {
-  function layoutOf(extra: Partial<RoomLayout>): RoomLayout {
-    return { id: 't', name: '擦镜像夹具', width: 30, height: 20, floors: [], ...extra } as unknown as RoomLayout;
+  function layoutOf(extra: Partial<LegacyLayoutGround>): LegacyLayoutGround & { id: string; name: string; width: number; height: number; floors: never[] } {
+    return { id: 't', name: '擦镜像夹具', width: 30, height: 20, floors: [], ...extra };
   }
   const framedImage = groundLayout();
 
-  it('贴地底图：图、透明度、贴地开关三项一起擦，定位三类暂时保留给基线读', () => {
+  it('贴地底图：图、透明度、开关、定位三类一起擦，layout 不剩第二份', () => {
     const { layout, stripped } = stripLayoutGroundBytes(layoutOf(framedImage));
     expect(stripped).toBe(true);
     expect(layout.floorPlanImage).toBeUndefined();
     expect(layout.floorPlanOpacity).toBeUndefined();
     expect(layout.satelliteGroundRef).toBeUndefined();
-    expect(layout.mapGroundPolygon).toEqual(POLYGON);
-    expect(layout.mapGroundFrame).toEqual(FRAME);
+    expect(layout.mapGroundPolygon).toBeUndefined();
+    expect(layout.mapLngLat).toBeUndefined();
+    expect(layout.mapGroundFrame).toBeUndefined();
   });
 
   it('用户上传的参考图纸（没有贴地框/多边形）只擦开关，图与透明度保留', () => {

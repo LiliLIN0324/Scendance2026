@@ -1,26 +1,19 @@
 import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 import { isPlanGroundImage } from './amap-venue';
-import type { RoomLayout } from './types';
+import { LEGACY_GROUND_KEYS, legacyGroundOf, type LegacyLayoutGround } from './legacy-ground';
 
 /**
- * 贴地底图的「正源 ↔ 视图缓存」换算（B4，2026-11-25）。
+ * 贴地底图的「正源 ↔ 旧字段」换算（B4，2026-11-25）。
  *
  * 正源：`plan.ground`（随 plan 落库、跨设备一致）。
- * 视图缓存：`layout.floorPlanImage / floorPlanOpacity / satelliteGroundRef /
- * mapGroundPolygon / mapLngLat / mapGroundFrame`（3D 卫星 UV 与进场补图仍读它，
- * 随 #38 壳体退役一起消失）。
+ * 旧字段：layout 上那六个键——已从 `RoomLayout` 类型删除，只在盘上的老方案里存在，
+ * 由 `lib/legacy-ground.ts` 这一个口读出来、迁进正源，随后整键擦掉。
  *
- * 只做纯换算，不读写存储；旧项目只有 layout 那一份时，`planGroundFromLayout`
- * 负责把存量读成正源，调用方再落 plan。
+ * 只做纯换算，不读写存储。
  */
 
 /** 贴地底图默认不透明度：与旧 `applyLayout` 写入值保持一致。 */
 export const PLAN_GROUND_OPACITY = 0.94;
-
-type LayoutGroundSource = Pick<
-  RoomLayout,
-  'floorPlanImage' | 'floorPlanOpacity' | 'satelliteGroundRef' | 'mapGroundPolygon' | 'mapLngLat' | 'mapGroundFrame'
->;
 
 /**
  * 这张图能被当成贴地底图吗？
@@ -29,25 +22,26 @@ type LayoutGroundSource = Pick<
  * 旧项目重开时图还在、登记没了，只看登记表会把存量当成「没有底图」而丢掉。
  * 因此「data:image + 有贴地框/经纬多边形」也算；用户自己上传的户型图没有这两个字段，不会被误认。
  */
-function isGroundImage(layout: LayoutGroundSource): boolean {
-  const url = layout.floorPlanImage;
+function isGroundImage(legacy: LegacyLayoutGround): boolean {
+  const url = legacy.floorPlanImage;
   if (!url) return false;
-  if (layout.satelliteGroundRef === false) return false;
+  if (legacy.satelliteGroundRef === false) return false;
   if (isPlanGroundImage(url)) return true;
-  return url.startsWith('data:image/') && (!!layout.mapGroundFrame || (layout.mapGroundPolygon?.length ?? 0) >= 3);
+  return url.startsWith('data:image/') && (!!legacy.mapGroundFrame || (legacy.mapGroundPolygon?.length ?? 0) >= 3);
 }
 
-/** 旧项目（只有 layout 镜像）读成 plan.ground；一份定位都没有就返回 null，不虚构。 */
-export function planGroundFromLayout(layout: LayoutGroundSource): PlanGround | null {
-  const image = isGroundImage(layout) ? layout.floorPlanImage : undefined;
-  const polygon = layout.mapGroundPolygon && layout.mapGroundPolygon.length >= 3 ? layout.mapGroundPolygon : undefined;
-  const center = layout.mapLngLat;
-  const frame = layout.mapGroundFrame;
+/** 旧项目（只有 layout 那六个键）读成 plan.ground；一份定位都没有就返回 null，不虚构。 */
+export function planGroundFromLayout(layout: object | null | undefined): PlanGround | null {
+  const legacy = legacyGroundOf(layout);
+  const image = isGroundImage(legacy) ? legacy.floorPlanImage : undefined;
+  const polygon = legacy.mapGroundPolygon && legacy.mapGroundPolygon.length >= 3 ? legacy.mapGroundPolygon : undefined;
+  const center = legacy.mapLngLat;
+  const frame = legacy.mapGroundFrame;
   if (!image && !polygon && !center && !frame) return null;
   return {
     ...(image ? { image } : {}),
-    ...(layout.floorPlanOpacity === undefined ? {} : { opacity: layout.floorPlanOpacity }),
-    ...(layout.satelliteGroundRef === undefined ? {} : { satelliteRef: layout.satelliteGroundRef }),
+    ...(legacy.floorPlanOpacity === undefined ? {} : { opacity: legacy.floorPlanOpacity }),
+    ...(legacy.satelliteGroundRef === undefined ? {} : { satelliteRef: legacy.satelliteGroundRef }),
     ...(polygon ? { polygon } : {}),
     ...(center ? { center } : {}),
     ...(frame ? { frame } : {}),
@@ -55,51 +49,29 @@ export function planGroundFromLayout(layout: LayoutGroundSource): PlanGround | n
 }
 
 /**
- * 由 plan.ground 投影出 layout 的**地理定位缓存**（只剩形状三类）。
+ * 迁移落地后把 layout 上的**旧字段**整键擦掉（S3，2026-11-25）。
  *
- * S3（2026-11-25）：连 `satelliteGroundRef` 也不再投影——贴地开关的正源是
- * `plan.ground.satelliteRef`，读方一律 `resolveGround` 后取，不再往 layout 写。
- * 这三项定位缓存仍留着，是因为 `three/scan-placement.ts`（禁改基线）与
- * `isMapOutdoorLayout` 还在读 layout 的定位字段；等基线解禁后再整簇删。
- */
-export function layoutGroundPatch(ground: PlanGround | undefined | null): Partial<RoomLayout> | null {
-  if (!ground) return null;
-  if (!ground.image && !ground.polygon && !ground.center && !ground.frame) return null;
-  const patch: Partial<RoomLayout> = {};
-  if (ground.polygon) patch.mapGroundPolygon = ground.polygon;
-  if (ground.center) patch.mapLngLat = ground.center;
-  // layout 的 mapGroundFrame 要求 latSign 必填（壳体卫星 UV 靠它定朝向）；
-  // plan.ground 里缺 latSign 的旧数据先不投影——宁可退回无框，也不要按错误朝向贴图。
-  if (ground.frame && ground.frame.latSign !== undefined) {
-    patch.mapGroundFrame = { ...ground.frame, latSign: ground.frame.latSign };
-  }
-  return Object.keys(patch).length ? patch : null;
-}
-
-/**
- * 迁移落地后把 layout 上的**底图字节镜像**擦掉（S3，2026-11-25）：
- * 图、透明度、贴地开关三样只准活在 `plan.ground`。
+ * 贴地底图的图、透明度、开关、定位（多边形/中心/框）只准活在 `plan.ground`；
+ * 老方案迁完当刻就把这六个键从 layout 删掉，盘上不再留第二份。
  *
- * 只擦「像贴地底图」的那张图（`isGroundImage`）；用户自己上传的参考图纸
- * （data:image 但没有贴地框/多边形）原样保留——那是另一项能力，不是镜像。
- * 定位三类（多边形/中心/框）暂时留给基线文件读，等基线解禁再一起删。
+ * 例外：用户自己上传的参考图纸（data:image 但没有贴地框/多边形）是另一项能力，
+ * 只擦定位与开关，图与透明度保留（`floorPlanImage` 在类型里也留着这一义）。
  *
  * 返回的新对象用 delete 构造，避免 exactOptionalPropertyTypes 下写 undefined。
  */
-export function stripLayoutGroundBytes(layout: RoomLayout): { layout: RoomLayout; stripped: boolean } {
-  if (!layout.floorPlanImage && layout.satelliteGroundRef === undefined) return { layout, stripped: false };
-  if (layout.floorPlanImage && !isGroundImage(layout)) {
-    // 参考图纸：只擦贴地开关，不动图与透明度。
-    if (layout.satelliteGroundRef === undefined) return { layout, stripped: false };
-    const next = { ...layout };
-    delete next.satelliteGroundRef;
-    return { layout: next, stripped: true };
+export function stripLayoutGroundBytes<T extends object>(layout: T): { layout: T; stripped: boolean } {
+  const legacy = legacyGroundOf(layout);
+  if (!Object.keys(legacy).length) return { layout, stripped: false };
+  const next = { ...layout } as T & Record<string, unknown>;
+  const referenceOnly = !!legacy.floorPlanImage && !isGroundImage(legacy);
+  let changed = false;
+  for (const key of LEGACY_GROUND_KEYS) {
+    if (referenceOnly && (key === 'floorPlanImage' || key === 'floorPlanOpacity')) continue;
+    if (!(key in next)) continue;
+    delete next[key];
+    changed = true;
   }
-  const next = { ...layout };
-  delete next.floorPlanImage;
-  delete next.floorPlanOpacity;
-  delete next.satelliteGroundRef;
-  return { layout: next, stripped: true };
+  return changed ? { layout: next as T, stripped: true } : { layout, stripped: false };
 }
 
 /**
@@ -118,10 +90,8 @@ export function stripPlanGroundImage<T extends { ground?: PlanGround | undefined
 }
 
 /**
- * 底图读源：`plan.ground` 优先，layout 那份只作兜底（B4 读侧单源化，2026-11-25）。
- *
- * 这是「删 layout 那 6 个字段」的前置：读方先统一从这里取，等全部接上之后，
- * 删字段就是纯删除，不会出现「删了不知道哪里断成图」。
+ * 底图读源：`plan.ground` 优先，盘上老字段只作兜底（B4 读侧单源化，2026-11-25）。
+ * 老字段走 `legacyGroundOf` 这一个口；迁移擦掉之后兜底自然失效，读方只剩正源。
  * `source` 只为排查用：`plan` = 读的正源，`layout` = 旧项目还没迁进 plan。
  */
 export interface ResolvedGround {
@@ -135,7 +105,7 @@ export interface ResolvedGround {
 }
 
 export function resolveGround(
-  layout: LayoutGroundSource,
+  layout: object,
   plan: { ground?: PlanGround | undefined } | null | undefined,
 ): ResolvedGround | null {
   const source = plan?.ground;
@@ -150,25 +120,25 @@ export function resolveGround(
       source: 'plan',
     };
   }
-  if (!isGroundImage(layout)) return null;
+  const legacy = legacyGroundOf(layout);
+  if (!isGroundImage(legacy)) return null;
   return {
-    image: layout.floorPlanImage!,
-    opacity: layout.floorPlanOpacity ?? PLAN_GROUND_OPACITY,
-    satelliteRef: layout.satelliteGroundRef ?? true,
-    polygon: layout.mapGroundPolygon,
-    center: layout.mapLngLat,
-    frame: layout.mapGroundFrame,
+    image: legacy.floorPlanImage!,
+    opacity: legacy.floorPlanOpacity ?? PLAN_GROUND_OPACITY,
+    satelliteRef: legacy.satelliteGroundRef ?? true,
+    polygon: legacy.mapGroundPolygon,
+    center: legacy.mapLngLat,
+    frame: legacy.mapGroundFrame,
     source: 'layout',
   };
 }
 
 /**
  * 打开一份方案时该怎么补底图正源：
- * - `to-plan`：旧项目只有 layout 缓存 → 迁进正源（随后由调用方擦掉 layout 字节镜像）；
+ * - `to-plan`：旧项目只有 layout 老字段 → 迁进正源（随后调用方把老字段整键擦掉）；
  * - `none`：不用动。
  *
- * S3（2026-11-25）：删掉了 `to-layout` 方向。正源已经是唯一事实，没有理由再把
- * plan.ground 反向投影回 layout；layout 侧的定位缓存只由取图当下的捕获路径更新。
+ * 正源已经是唯一事实，没有反向投影。
  */
 export type PlanGroundSync =
   | { direction: 'to-plan'; ground: PlanGround }
@@ -176,7 +146,7 @@ export type PlanGroundSync =
 
 export function planGroundSync(
   plan: { ground?: PlanGround | undefined } | null | undefined,
-  layout: LayoutGroundSource,
+  layout: object,
 ): PlanGroundSync {
   if (!plan) return { direction: 'none', reason: 'no-plan' };
   if (!plan.ground) {

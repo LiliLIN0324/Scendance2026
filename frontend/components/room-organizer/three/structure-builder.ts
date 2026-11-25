@@ -3,6 +3,7 @@ import { outdoorGroundSize } from '../lib/site';
 import { groundBasemapOpacity, groundBasemapStyleOf } from '../lib/ground-basemap';
 import { canvasFloor } from '../lib/floor-reading';
 import { layoutGeometryScene } from '../lib/structural-layout';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import { buildGridPlane } from './grid';
 import { buildFloorMaterial } from './floor-patterns';
 import { buildExtrudedWallGeometry } from './interior-walls';
@@ -47,12 +48,15 @@ function writeNormalizedUv(
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
+/** 贴地帧：正源 `plan.ground.frame` 与盘上老 `mapGroundFrame` 的公共形状。 */
+type GroundFrame = { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
+
 function writeGeographicUv(
   THREE: typeof import('three'),
   geometry: import('three').BufferGeometry,
   width: number,
   depth: number,
-  frame: NonNullable<RoomLayout['mapGroundFrame']>,
+  frame: GroundFrame,
   bounds: { west: number; south: number; east: number; north: number },
 ): void {
   const pos = geometry.getAttribute('position');
@@ -132,10 +136,11 @@ export function buildStructureShell(
   shape.closePath();
   // S1：调用方给了 ground 就以它为准（plan.ground 正源）；没给才退回 layout 旧字段。
   const ground = options.ground;
+  const legacy = legacyGroundOf(layout);
   const groundImage = ground ? ground.image : layout.floorPlanImage;
-  const groundSatellite = ground ? (ground.satelliteRef ?? true) : !!layout.satelliteGroundRef;
-  const groundPolygon = ground ? ground.polygon : layout.mapGroundPolygon;
-  const groundFrame = ground ? ground.frame : layout.mapGroundFrame;
+  const groundSatellite = ground ? (ground.satelliteRef ?? true) : !!legacy.satelliteGroundRef;
+  const groundPolygon = ground ? ground.polygon : legacy.mapGroundPolygon;
+  const groundFrame = ground ? ground.frame : legacy.mapGroundFrame;
   const useSat = !!(groundSatellite && groundImage);
   const floorMat = buildFloorMaterial(THREE, {
     pattern: floor.floorPattern ?? 'solid', color: floor.floorColor, roomWidth: layout.width, roomDepth: layout.height });
@@ -156,7 +161,7 @@ export function buildStructureShell(
       : null;
     // plan.ground.frame 的 latSign 在契约里是可选的（`1 | -1 | undefined`），
     // layout 的老 MapGroundFrame 是 `latSign?`；这里补成 layout 口径，避免 exactOptionalPropertyTypes 穿透到下面几个 UV 函数。
-    const frame: RoomLayout['mapGroundFrame'] = rawFrame
+    const frame: GroundFrame | undefined = rawFrame
       ? {
         lng0: rawFrame.lng0,
         lat0: rawFrame.lat0,

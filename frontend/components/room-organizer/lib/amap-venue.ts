@@ -2,6 +2,7 @@ import { raiseVenue, replaceVenueWithShell } from './agent-proposal';
 import { AMAP_KEY_STORAGE, AMAP_SECURITY_STORAGE, loadAmapScript } from './amap-script';
 import { GLOBAL_SATELLITE_SOURCE } from './basemap-alignment';
 import { isInGcjOffsetRegion } from './geo-coords';
+import { legacyGroundOf } from './legacy-ground';
 import { capturePlanGround, type PlanGroundSource } from './plan-ground-capture';
 import { outdoorGroundSize } from './site';
 import { RECON_MATERIAL_BAN } from './site-recon-mock';
@@ -433,7 +434,7 @@ export function frameFromAnchor(
  * 打开存档时把顶点翻到北在上，并换成同一套帧。已经朝北的原样返回。
  */
 export function orientMapShellNorthUp(layout: RoomLayout): RoomLayout {
-  const geo = layout.mapGroundPolygon;
+  const geo = legacyGroundOf(layout).mapGroundPolygon;
   const shell = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
   if (!geo || geo.length < 3 || !shell || shell.length < 3) return layout;
   const cov = latZCovariance(geo, shell);
@@ -578,8 +579,9 @@ export function rectangleAroundMeters(center: AmapPoint, widthM: number, depthM:
  * 场地简报的户外，或已经贴过的卫星图，都算。明确标成室内、又没有这些痕迹的矩形不算。
  */
 export function isMapOutdoorLayout(layout: RoomLayout): boolean {
-  if ((layout.mapGroundPolygon?.length ?? 0) >= 3) return true;
-  if (layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat)) return true;
+  const legacy = legacyGroundOf(layout);
+  if ((legacy.mapGroundPolygon?.length ?? 0) >= 3) return true;
+  if (legacy.mapLngLat && Number.isFinite(legacy.mapLngLat.lng) && Number.isFinite(legacy.mapLngLat.lat)) return true;
   if (isMapReferenceImage(layout.floorPlanImage)) return true;
   if (layout.researchArea) return true;
   // 缺圈画点列也要露出钮：规划区 / 真实范围只会出现在地图立壳的名字里。
@@ -660,10 +662,11 @@ async function geocodeViaSameOrigin(query: string): Promise<AmapPoint | null> {
 export async function resolveSatellitePolygon(layout: RoomLayout): Promise<AmapPoint[] | null> {
   // 调研底图已经定了位置：场地脚下一律跟着这个中心铺，旧场地的圈画点不能把贴地拽回去。
   if (layout.researchArea) return rectangleAroundMeters(layout.researchArea.center, layout.width, layout.height);
-  const stored = layout.mapGroundPolygon;
+  const legacy = legacyGroundOf(layout);
+  const stored = legacy.mapGroundPolygon;
   if (stored && stored.length >= 3) return stored.map(point => ({ lng: point.lng, lat: point.lat }));
-  if (layout.mapLngLat && Number.isFinite(layout.mapLngLat.lng) && Number.isFinite(layout.mapLngLat.lat)) {
-    return rectangleAroundMeters(layout.mapLngLat, layout.width, layout.height);
+  if (legacy.mapLngLat && Number.isFinite(legacy.mapLngLat.lng) && Number.isFinite(legacy.mapLngLat.lat)) {
+    return rectangleAroundMeters(legacy.mapLngLat, layout.width, layout.height);
   }
   // 旧户外场地：没有圈画点、也没有调研范围，但立壳时留下过地理锚点。
   // 按锚点 + 壳体尺寸摊一块矩形，重开项目直接进 3D 也能补上同源地图，不必先回 2D 再画边界（用户 m00001）。
@@ -747,7 +750,7 @@ export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 
     const anchored = !!layout.researchArea && !!layout.sceneAnchor;
     const frame = anchored
       ? registration?.frame
-      : layout.mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
+      : legacyGroundOf(layout).mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
     const fetched = await fetchSatelliteGroundDataUrl(located, undefined, frame, { width: layout.width, depth: layout.height }, style);
     if (fetched && frame) {
       return {
@@ -764,12 +767,13 @@ export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 
   // 已经有真图（哪怕还是旧的方形瓦片）或占位时，拉取失败不要改掉它，避免钮一开就变空白。
   if (isPlaceholderSatellite(layout.floorPlanImage) || hasFetchedSatellite(layout.floorPlanImage)) return null;
   const bbox = located ? polygonBboxMeters(located) : { width: layout.width, depth: layout.height };
+  const legacyFrame = legacyGroundOf(layout).mapGroundFrame;
   return {
     floorPlanImage: makeSatelliteGroundPlaceholder(bbox.width || layout.width, bbox.depth || layout.height),
     floorPlanOpacity: 0.78,
     satelliteGroundRef: true,
     source: 'amap-satellite',
-    ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located), ...(layout.mapGroundFrame ? { mapGroundFrame: layout.mapGroundFrame } : {}) } : {}),
+    ...(located ? { mapGroundPolygon: located, mapLngLat: centroid(located), ...(legacyFrame ? { mapGroundFrame: legacyFrame } : {}) } : {}),
   };
 }
 
@@ -792,7 +796,7 @@ export async function ensurePlanGround(
   const anchored = !!layout.researchArea && !!layout.sceneAnchor;
   const frame = anchored
     ? registration?.frame
-    : layout.mapGroundFrame ?? frameForExistingShell(polygon, shell) ?? registration?.frame;
+    : legacyGroundOf(layout).mapGroundFrame ?? frameForExistingShell(polygon, shell) ?? registration?.frame;
   if (!frame) return null;
   const bounds = satelliteBoundsForFrame(polygon, frame, layout.width, layout.height);
   // 768 px：3D 地面在屏幕上一般不超过这个尺寸，再大只是把 data URL 撑进 localStorage。
@@ -833,7 +837,7 @@ export function createVenueFromPick(
     location: string;
     polygon: AmapPoint[];
   },
-): { layout: RoomLayout; cleared: number } {
+): { layout: RoomLayout; cleared: number; ground: PlanGround } {
   const local = polygonToLocalMeters(pick.polygon);
   const fitted = fitPolygonToShellLimit(local);
   const bbox = polygonBboxMeters(pick.polygon);
@@ -859,15 +863,20 @@ export function createVenueFromPick(
   const plan = (before.backendSceneV2 ? replaceVenueWithShell(input) : null) ?? raiseVenue(input);
   if (!plan) throw new Error('这块场地是有内墙或图纸证据的真实结构，先在结构里清出一块空地，再来圈画。');
   const name = [pick.name, pick.location].filter(Boolean).join(' · ') + scaleNote || before.name;
-  // 圈画经纬度跟着场地走，方便 3D 里后补卫星图；不进场景线、不进采集上传。
+  // 圈画经纬度进正源 `plan.ground`（贴地底图唯一事实源，B4）；layout 上不再留镜像字节。
   const registration = groundRegistration(pick.polygon);
-  const extra = registration ? (() => {
-    // 锚点是正源；frame 由锚点推出，只留给立壳卫星贴图的 UV。
-    const anchor: SceneAnchor = { ...anchorFromMapFrame(registration.frame, safeWidth, safeDepth), source: 'picker' };
-    return { mapGroundFrame: frameFromAnchor(anchor, safeWidth, safeDepth), sceneAnchor: anchor };
-  })() : {};
-  const layout: RoomLayout = {
-    ...plan.layout, name, mapGroundPolygon: pick.polygon, mapLngLat: centroid(pick.polygon), ...extra,
+  const center = centroid(pick.polygon);
+  const anchor: SceneAnchor | null = registration
+    ? { ...anchorFromMapFrame(registration.frame, safeWidth, safeDepth), source: 'picker' }
+    : null;
+  const ground: PlanGround = {
+    polygon: pick.polygon,
+    center,
+    satelliteRef: false,
+    ...(registration ? { frame: registration.frame } : {}),
   };
-  return { layout, cleared: plan.cleared };
+  const layout: RoomLayout = {
+    ...plan.layout, name, ...(anchor ? { sceneAnchor: anchor } : {}),
+  };
+  return { layout, cleared: plan.cleared, ground };
 }

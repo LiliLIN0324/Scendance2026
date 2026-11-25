@@ -76,6 +76,7 @@ import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from 
 import { mergeSeatingAllocation } from '../lib/seating-allocation';
 import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
+import { writeGroundToPlan } from '../lib/venue-ground-slot';
 import {
   boundsAround,
   createResearchArea,
@@ -120,6 +121,7 @@ import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } fro
 import { localPlan } from '../lib/local-plan';
 import { readBriefMemory, writeBriefMemory } from '../lib/assistant-brief-memory';
 import { isVenueScaleCurrent, venueDimensionsMismatch, venueScaleBasis } from '../lib/venue-scale-basis';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import { useVenueFactTracker } from '../lib/venue-fact-epoch';
 import {useFloorSessionTracker,type FloorSessionToken} from '../lib/floor-session-epoch';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from '../lib/seat-requirement';
@@ -1639,9 +1641,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       // store event. The monotonic flag catches A→B→A.
       const mapKey = (value: RoomLayout) => {
         const {floorPlanImage:_image,...withoutImage}=value;
+        const legacy = legacyGroundOf(value);
         return JSON.stringify({venue:venueScaleBasis(withoutImage),researchArea:value.researchArea ?? null,sceneAnchor:value.sceneAnchor ?? null,
-          mapGroundPolygon:value.mapGroundPolygon ?? null,mapLngLat:value.mapLngLat ?? null,mapGroundFrame:value.mapGroundFrame ?? null,
-          satelliteGroundRef:value.satelliteGroundRef ?? null,floorPlanFitMode:value.floorPlanFitMode ?? null});
+          mapGroundPolygon:legacy.mapGroundPolygon ?? null,mapLngLat:legacy.mapLngLat ?? null,mapGroundFrame:legacy.mapGroundFrame ?? null,
+          satelliteGroundRef:legacy.satelliteGroundRef ?? null,floorPlanFitMode:value.floorPlanFitMode ?? null});
       };
       const initialLayout = layoutStore.getState().layout;
       const baseline = mapKey(initialLayout), baselineImage = initialLayout.floorPlanImage ?? null;
@@ -2020,7 +2023,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     try {
       const base = layoutStore.getState().layout;
       if (base.floors.length !== 1) throw new Error('当前方案有多个楼层，圈场地会丢失已有内容。请保留原方案并先核对。');
-      const { layout, cleared } = createVenueFromPick(base, pick);
+      const { layout, cleared, ground } = createVenueFromPick(base, pick);
       const preservation = validateCandidateApply(base, layout, activeFloorIndex);
       if (!preservation.ok) throw new Error(preservation.reason);
       for (const floor of base.floors) for (const item of floor.items) {
@@ -2037,10 +2040,12 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
           : createResearchArea(XIHU_LOCAL_PLACE, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE)
         : layout.researchArea;
       onApply(researchArea ? { ...layout, researchArea } : layout, { expectedBase: base });
+      // B4 #38：圈画边界跟着 ground 走，唯一落盘口是 plan.ground（layout 不再存底图/多边形字节）。
+      writeGroundToPlan(base.id ?? layout.id, ground, { name: layout.name });
       // 2026-11-16 用户定稿：选址即换场——新锚点 + 新用地红线推进户外规划，
       // 旧草稿由 applyVenue 按「换锚点=新场地」删掉（同锚点重画边界则保留内容）。
       // 第一人称漫游的围栏读的就是这份 boundary，接上以后直接站在新场地上。
-      const sitePoint = layout.sceneAnchor ?? layout.mapLngLat ?? null;
+      const sitePoint = layout.sceneAnchor ?? legacyGroundOf(layout).mapLngLat ?? null;
       const siteBoundary = sitePoint
         ? trueFootprintBoundary(pick.polygon, { lng: sitePoint.lng, lat: sitePoint.lat })
         : null;
@@ -4234,7 +4239,7 @@ export function MapVenueOverlay({ onReconUpload, onVenueSaved }: {
       <button type="button" className="sc-button" aria-label="关闭" data-tip="关闭" title="关闭" onClick={agent.closeMapVenuePicker}><X size={16} aria-hidden="true"/></button>
     </div>
     {blocked && <p className="sc-map-blocked" role="alert">{blocked}</p>}
-    <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} {...(layout.mapGroundPolygon ? { savedPolygon: layout.mapGroundPolygon } : {})} onPick={pick => {
+    <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} {...(legacyGroundOf(layout).mapGroundPolygon ? { savedPolygon: legacyGroundOf(layout).mapGroundPolygon } : {})} onPick={pick => {
       const reason = agent.applyMapVenuePick(pick);
       setBlocked(reason);
       // 场地没立起来就不出采集单——那份站位对应的地块并不存在。

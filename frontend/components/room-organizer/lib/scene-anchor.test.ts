@@ -3,10 +3,11 @@ import { anchorFromMapFrame, frameFromAnchor, METERS_PER_DEGREE_LAT, metersPerDe
 import { anchorBasemapYawRad, anchorGeoToWorld, sceneAnchorOf } from './scene-anchor';
 import { researchBasemapPlacement, researchGeoToWorld } from '../three/research-basemap';
 import type { RoomLayout, SceneAnchor } from './types';
+import type { LegacyLayoutGround } from './legacy-ground';
 
 const XIHU = { lng: 120.121358, lat: 30.222692 };
 
-function layoutWith(patch: Partial<RoomLayout>): RoomLayout {
+function layoutWith(patch: Partial<RoomLayout> & LegacyLayoutGround): RoomLayout {
   return { name: '测试', width: 11.7, height: 3.7, floors: [], ...patch } as unknown as RoomLayout;
 }
 

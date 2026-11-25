@@ -6,6 +6,7 @@ import { addFloorPlanRepaintHandler, render2DTopDown } from '../canvas-2d/render
 import { DEFAULT_FLOOR_PLAN_OPACITY } from '../lib/constants';
 import { floorKeepOut, type KeepOutBuilding } from '../lib/floor-keep-out';
 import { isMapReferenceImage } from '../lib/amap-venue';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import { hasCollisions } from '../lib/geometry';
 import { sourceForLocation } from '../lib/basemap-alignment';
 import { mountBand } from '../lib/mount-band';
@@ -439,7 +440,7 @@ export function useSceneEffects({
         ...(index === 0 && skipGroundFloor ? { skipFloor: true, skipWalls: true } : {}),
         floorPlanImage: index === 0 && !legacyGroundMap && !skipGroundFloor ? groundImage ?? null : null,
           satelliteGroundRef: index === 0 && !legacyGroundMap && !skipGroundFloor
-            ? (ground ? ground.satelliteRef : !!layout.satelliteGroundRef) : false,
+            ? (ground ? ground.satelliteRef : !!legacyGroundOf(layout).satelliteGroundRef) : false,
         floorPlanOpacity: view.referenceImageOpacity ?? ground?.opacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
         floorPlanFitMode: layout.floorPlanFitMode ?? 'stretch',
         floorPlan3DEffect: view.floorPlan3DEffect,
@@ -489,10 +490,14 @@ export function useSceneEffects({
     // when interior walls do — without this dep a door claimed by a new
     // interior wall stays double-cut into the exterior wall (#119).
     outdoorWorkspace, layout.backendSceneV2, layout.width, layout.height, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
-    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef, !!layout.researchArea, geoGroundShellActive,
+    layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, !!layout.researchArea, geoGroundShellActive,
+    // 旧字段（盘上才有的那六个）只经 `legacyGroundOf` 一个口读，迁完擦掉后这些 dep 恒为空。
+    legacyGroundOf(layout).satelliteGroundRef,
     outdoorPlan?.ground?.image, outdoorPlan?.ground?.opacity, outdoorPlan?.ground?.satelliteRef,
-    layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0, layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale, layout.mapGroundFrame?.latSign,
-    layout.mapGroundPolygon?.length,
+    legacyGroundOf(layout).mapGroundFrame?.lng0, legacyGroundOf(layout).mapGroundFrame?.lat0,
+    legacyGroundOf(layout).mapGroundFrame?.latMid, legacyGroundOf(layout).mapGroundFrame?.scale,
+    legacyGroundOf(layout).mapGroundFrame?.latSign,
+    legacyGroundOf(layout).mapGroundPolygon?.length,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,
     view.showReferenceImage, view.referenceImageOpacity,
     activeFloorIndex,
@@ -797,8 +802,9 @@ export function useSceneEffects({
     };
   // The boundary depends on the saved ring and its coordinate frame, not furniture edits.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, sceneRef, showBasemap, view.view2D, view.walkthroughMode, layout.mapGroundPolygon, layout.sceneAnchor,
-    layout.mapGroundFrame, layout.mapLngLat, layout.width, layout.height, invalidate]);
+  }, [isReady, sceneRef, showBasemap, view.view2D, view.walkthroughMode,
+    legacyGroundOf(layout).mapGroundPolygon, layout.sceneAnchor,
+    legacyGroundOf(layout).mapGroundFrame, legacyGroundOf(layout).mapLngLat, layout.width, layout.height, invalidate]);
 
   // 调研底图单独一层：壳体照旧按米建，底图是这一片区域的路网，铺在壳体下方。
   // 换范围只重铺这张图，不动壳体与物料。
@@ -809,8 +815,8 @@ export function useSceneEffects({
       layout.researchArea.bounds.west, layout.researchArea.bounds.south,
       layout.researchArea.bounds.east, layout.researchArea.bounds.north,
       layout.width, layout.height,
-      layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0,
-      layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale,
+      legacyGroundOf(layout).mapGroundFrame?.lng0, legacyGroundOf(layout).mapGroundFrame?.lat0,
+      legacyGroundOf(layout).mapGroundFrame?.latMid, legacyGroundOf(layout).mapGroundFrame?.scale,
       layout.sceneAnchor?.lng, layout.sceneAnchor?.lat,
       layout.sceneAnchor?.orientationDeg, layout.sceneAnchor?.metersPerUnit,
       view.view2D,

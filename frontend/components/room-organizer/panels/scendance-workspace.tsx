@@ -5,6 +5,7 @@ import { Check } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { useRoomEditor, useSelection } from '../contexts';
 import { listMyItems, subscribeMyItems } from '../lib/my-items';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import {
   isPlanGroundSource,
   readPlanGroundMode,
@@ -719,7 +720,11 @@ export function ScendanceViewTools({ onZoom, onExportImage, onCaptureImage, onEx
   };
   const groundLabel = groundMode === 'paper' ? '纸面（无底图）' : PUBLIC_SOURCE_SPECS[groundSource].label;
   // 2026-11-17 用户指令：四行带上和 2D 地图详情同一套缩略图（oc-map-details__thumb）。
-  const thumbLngLat = groundThumbAnchor(layout.mapGroundPolygon);
+  // B4/S3：圈画已进 `plan.ground`，盘上老字段只作兜底；迁完之后用场景锚点当缩略图中心，
+  // 缩略图不至于因为擦字段而失去定位。
+  const legacyGround = legacyGroundOf(layout);
+  const thumbLngLat = groundThumbAnchor(legacyGround.mapGroundPolygon)
+    ?? (layout.sceneAnchor ? { lng: layout.sceneAnchor.lng, lat: layout.sceneAnchor.lat } : null);
   const [groundSourceOpen, setGroundSourceOpen] = useState(false);
   const groundSourceMenuRef = useRef<HTMLDivElement>(null);
   const selectMenuRef = useRef<HTMLDivElement>(null);

@@ -3,6 +3,7 @@ import { defaultScanPlacement, planPointFromGeo, planPointFromWorld, scanPlaceme
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng } from './amap-venue';
 import type { PlanAnchor } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout, SceneAnchor } from './types';
+import type { LegacyLayoutGround } from './legacy-ground';
 
 /**
  * 2026-11-19 用户：「为什么点了还是没有落在场地上？」
@@ -14,7 +15,7 @@ const XIHU = { lng: 120.121358, lat: 30.222692 };
 const anchor: SceneAnchor = { ...XIHU, orientationDeg: 0, metersPerUnit: 1 };
 const planAnchor: PlanAnchor = { ...XIHU, crs: 'gcj-02', source: 'preset' };
 
-function layoutWith(patch: Partial<RoomLayout>): RoomLayout {
+function layoutWith(patch: Partial<RoomLayout> & LegacyLayoutGround): RoomLayout {
   return { name: '测试场地', width: 60, height: 40, floors: [], ...patch } as unknown as RoomLayout;
 }
 

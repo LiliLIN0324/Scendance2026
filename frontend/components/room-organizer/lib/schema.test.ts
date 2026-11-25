@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { legacyGroundOf } from './legacy-ground';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, ROOM_TEMPLATES } from './constants';
 import { createResearchArea, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE, XIHU_LOCAL_PLACE } from './research-area';
 import {
@@ -226,7 +227,7 @@ describe('isRoomLayout', () => {
     const layout = makeLayout({ floorPlanImage: image, satelliteGroundRef: true, mapGroundPolygon: polygon });
     expect(isRoomLayout(layout)).toBe(true);
     expect(parseStoredLayout(layout)?.floorPlanImage).toBe(image);
-    expect(parseStoredLayout(layout)?.mapGroundPolygon).toEqual(polygon);
+    expect(legacyGroundOf(parseStoredLayout(layout)!).mapGroundPolygon).toEqual(polygon);
     expect(isRoomLayout(makeLayout({ floorPlanImage: 'http://127.0.0.1:3199/amap-static?location=120.5,30.4&x-ref=other' }))).toBe(false);
     expect(isRoomLayout(makeLayout({ floorPlanImage: 'https://127.0.0.1:3199/amap-static?x-ref=satellite-ground-ref' }))).toBe(false);
     const sameOrigin = '/api/amap-static?location=120.5,30.4&zoom=16&size=768*768&scale=2&x-ref=satellite-ground-ref';
@@ -239,7 +240,7 @@ describe('isRoomLayout', () => {
     expect(isRoomLayout(makeLayout({ mapGroundPolygon: [{ lng: 999, lat: 0 }, { lng: 1, lat: 1 }, { lng: 2, lat: 2 }] }))).toBe(false);
     const bounded = '/api/amap-static?west=120.5300000&south=30.4000000&east=120.5400000&north=30.4100000&x-ref=satellite-ground-ref';
     const frame = { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 0.5 };
-    expect(parseStoredLayout(makeLayout({ floorPlanImage: bounded, mapGroundFrame: frame }))?.mapGroundFrame).toEqual(frame);
+    expect(legacyGroundOf(parseStoredLayout(makeLayout({ floorPlanImage: bounded, mapGroundFrame: frame })!)!).mapGroundFrame).toEqual(frame);
     expect(isRoomLayout(makeLayout({ mapGroundFrame: { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 2 } }))).toBe(false);
   });
 

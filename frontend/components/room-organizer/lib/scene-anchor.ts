@@ -1,4 +1,5 @@
 import { anchorFromMapFrame, METERS_PER_DEGREE_LAT, metersPerDegreeLng } from './amap-venue';
+import { legacyGroundOf } from './legacy-ground';
 import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout, SceneAnchor } from './types';
 
@@ -18,9 +19,9 @@ export { anchorFromMapFrame };
 
 /** 读取布局的场景锚点：优先用显式 sceneAnchor；旧存档没有就从 mapGroundFrame 反推（同一套数学的逆）。 */
 export function sceneAnchorOf(
-  layout: Pick<RoomLayout, 'sceneAnchor' | 'mapGroundFrame' | 'mapLngLat' | 'width' | 'height'>,
-  // S2（2026-11-25）：调用方能给 `resolveGround(layout, plan)` 的结果时，定位字段以正源为准；
-  // 不给才读 layout 上的旧缓存字段（`scan-placement` 这条几何基线仍走单参形态，行为不变）。
+  layout: Pick<RoomLayout, 'sceneAnchor' | 'width' | 'height'>,
+  // S2（2026-11-25）：调用方能给 `resolveGround(layout, plan)` 的结果时，定位以正源为准；
+  // 不给才读盘上旧字段（由 `legacyGroundOf` 一个口读，迁完擦掉后自然失效）。
   ground?: GroundAnchor | null,
 ): SceneAnchor | null {
   const anchor = layout.sceneAnchor;
@@ -32,11 +33,12 @@ export function sceneAnchorOf(
   ) {
     return anchor;
   }
-  const rawFrame = ground ? ground.frame : layout.mapGroundFrame;
+  const legacy = legacyGroundOf(layout);
+  const rawFrame = ground ? ground.frame : legacy.mapGroundFrame;
   if (rawFrame && Number.isFinite(rawFrame.lng0) && Number.isFinite(rawFrame.lat0)) {
     // plan.ground.frame 的 latSign 在契约里可选（`1 | -1 | undefined`），壳体侧的 MapGroundFrame 是 `latSign?`——
     // 在这里补成 layout 口径，免得 exactOptionalPropertyTypes 一路穿透到 anchorFromMapFrame。
-    const frame: NonNullable<RoomLayout['mapGroundFrame']> = {
+    const frame: Parameters<typeof anchorFromMapFrame>[0] = {
       lng0: rawFrame.lng0,
       lat0: rawFrame.lat0,
       latMid: rawFrame.latMid,
@@ -45,7 +47,7 @@ export function sceneAnchorOf(
     };
     return anchorFromMapFrame(frame, layout.width, layout.height);
   }
-  const center = ground ? ground.center : layout.mapLngLat;
+  const center = ground ? ground.center : legacy.mapLngLat;
   if (center && Number.isFinite(center.lng) && Number.isFinite(center.lat)) {
     return { lng: center.lng, lat: center.lat, orientationDeg: 0, metersPerUnit: 1 };
   }
@@ -68,7 +70,7 @@ export function mapVenueFootprint(
   layout: RoomLayout,
   ground?: GroundRing | null,
 ): { x: number; z: number }[] {
-  const polygon = ground ? ground.polygon : layout.mapGroundPolygon;
+  const polygon = ground ? ground.polygon : legacyGroundOf(layout).mapGroundPolygon;
   if (!polygon || polygon.length < 3) return [];
   const anchor = sceneAnchorOf(layout, ground);
   return anchor ? [...polygon].map(point => anchorGeoToWorld(anchor, point.lng, point.lat)) : [];

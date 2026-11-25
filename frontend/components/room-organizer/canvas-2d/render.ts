@@ -1,6 +1,7 @@
 import { isSatelliteGroundImage, parseSatelliteImageBounds, satelliteImageShellRect } from '../lib/amap-venue';
 import { CURRENCY_SYMBOL, DEFAULT_FLOOR_PLAN_OPACITY, GRID_SIZE_METERS } from '../lib/constants';
 import { rotatedHalfExtents } from '../lib/geometry';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import { planDrawOrder } from '../lib/plan-order';
 import { isPlanCut, planSymbol, type PlanSymbol } from '../lib/plan-style';
 import { isRoundTable } from '../lib/table-shape';
@@ -473,14 +474,15 @@ function paintAlignedSatellite(
   if (options.showFloorPlan === false || options.referenceImage || !isGroundFloor(layout, floor)) return false;
   // 读源：接线的调用点给 plan.ground；没接线时仍读 layout 那份（成图不变）。
   const ground = options.ground;
-  const satelliteRef = ground ? ground.satelliteRef : layout.satelliteGroundRef;
+  const legacy = legacyGroundOf(layout);
+  const satelliteRef = ground ? ground.satelliteRef : legacy.satelliteGroundRef;
   if (satelliteRef === false) return false;
-  const url = ground?.image ?? layout.floorPlanImage;
+  const url = ground?.image ?? legacy.floorPlanImage;
   // 缺 latSign 的旧数据不投影（宁可无框，不按错朝向贴图），退回 layout 那份。
   const groundFrame = ground?.frame?.latSign !== undefined
     ? { ...ground.frame, latSign: ground.frame.latSign }
     : undefined;
-  const frame = groundFrame ?? layout.mapGroundFrame;
+  const frame = groundFrame ?? legacy.mapGroundFrame;
   const bounds = url ? parseSatelliteImageBounds(url) : null;
   if (!url || !frame || !bounds || !isSatelliteGroundImage(url)) return false;
   const cached = floorPlanImageCache;

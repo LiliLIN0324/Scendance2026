@@ -7,6 +7,7 @@ import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { outdoorGroundSize } from '../lib/site';
 import { buildStructureShell } from './structure-builder';
 import type { RoomLayout } from '../lib/types';
+import type { ResolvedGround } from '../lib/plan-ground';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -103,17 +104,18 @@ describe('satellite floor texture', () => {
       { lng, lat: lat + dLat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+    const { layout: bare, ground: pickedGround } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
       name: '盐官古城', location: '潮乐之城', polygon,
     });
 
-      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
-      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
+      // #38 落壳不再写底图字节；底图读正源 `plan.ground`，这里把 ground 显式传给壳体。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94 };
+    const ground = { ...pickedGround, image, opacity: 0.94, satelliteRef: true, source: 'plan' as const } as ResolvedGround;
     const scene = new THREE.Scene();
-    buildStructureShell(THREE, scene, layout);
+    buildStructureShell(THREE, scene, layout, { ground });
     const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh;
     const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
-    const frame = layout.mapGroundFrame!;
+    const frame = { ...ground.frame!, latSign: ground.frame!.latSign ?? -1 };
     const bounds = parseSatelliteImageBounds(layout.floorPlanImage!)!;
     const shell = layout.backendVenue?.polygon ?? [];
     const pos = floor.geometry.getAttribute('position');
@@ -234,17 +236,18 @@ describe('satellite floor texture', () => {
       { lng, lat: lat + dLat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+    const { layout: bare, ground: pickedGround } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
       name: '盐官潮乐之城', location: '海宁盐官', polygon,
     });
 
-      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
-      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
-    const framed = layout.mapGroundFrame!;
-    const dropped = { ...layout };
-    delete dropped.mapGroundFrame;
+      // #38 落壳不再写底图字节；底图读正源 `plan.ground`。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94 };
+    const ground = { ...pickedGround, image, opacity: 0.94, satelliteRef: true, source: 'plan' as const } as ResolvedGround;
+    const framed = { ...ground.frame!, latSign: ground.frame!.latSign ?? -1 };
+    const { frame: _frame, ...groundNoFrame } = ground;
     const scene = new THREE.Scene();
-    buildStructureShell(THREE, scene, dropped);
+    // 没有 frame：不做地理 UV，退回归一化方片。
+    buildStructureShell(THREE, scene, layout, { ground: groundNoFrame as unknown as ResolvedGround });
     const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
     const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh;
     const bounds = parseSatelliteImageBounds(layout.floorPlanImage!)!;

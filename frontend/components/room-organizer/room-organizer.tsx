@@ -196,7 +196,7 @@ import {
   type OutdoorBoundarySyncState,
 } from './lib/outdoor-venue-sync';
 import { filterPlanByLevel } from './lib/plan-levels';
-import { layoutGroundPatch, planGroundSync, resolveGround, stripLayoutGroundBytes } from './lib/plan-ground';
+import { planGroundSync, resolveGround, stripLayoutGroundBytes } from './lib/plan-ground';
 import { planSceneObjects, type PlanSceneObject } from './lib/plan-item-bridge';
 import {
   METERS_PER_DEGREE_LAT,
@@ -2022,17 +2022,22 @@ useEffect(() => {
         capturedAt: new Date().toISOString(),
       };
       // B4：贴地底图正源是 plan.ground（随方案落库、跨设备一致）。
-      // 2D 画布没挂载时拿不到句柄：这一轮只写视图缓存，下次打开 2D 由 handleOutdoorPlanChange 的迁移补写，
-      // 条件只看「plan.ground 缺图」，不会用旧图覆盖更新的缓存。
-      outdoorOverlayRef.current?.getCanvasApi()?.applyGround(ground);
-      // layout 降为视图缓存：3D 卫星 UV、进场补图仍读这几个字段，随 #38 壳体退役一起消失。
+      // 2D 画布挂载着就走画布；没句柄（首帧未挂/室内）就直接写这份 plan，layout 一个字节都不写。
+      const canvas = outdoorOverlayRef.current?.getCanvasApi();
+      if (canvas) {
+        canvas.applyGround(ground);
+      } else {
+        const recordId = current.id ?? null;
+        if (recordId) {
+          const written = writeGroundToPlan(recordId, ground, { name: current.name });
+          if (written.ok) setOutdoorPlanState({ projectId: recordId, plan: written.record.plan ?? createStarterOutdoorPlan() });
+        }
+      }
+      // 已经有场景锚点就别动：锚点是世界定位的正源，自动补图不该把 3D 场景挪走。
+      if (current.sceneAnchor) return;
       actions.applyLayout({
         ...current,
-        ...layoutGroundPatch(ground),
-        // 已经有场景锚点就别动：锚点是世界定位的正源，自动补图不该把 3D 场景挪走。
-        ...(current.sceneAnchor
-          ? {}
-          : { sceneAnchor: { ...anchorFromMapFrame(frame, current.width, current.height), source: 'picker' as const } }),
+        sceneAnchor: { ...anchorFromMapFrame(frame, current.width, current.height), source: 'picker' as const },
       });
     }).catch(() => undefined);
   }, [actions]);
@@ -2786,7 +2791,7 @@ useEffect(() => {
   },[layout.id]);
   // Map geometry and project-library scene positions use different coordinate frames.
   // The library stores display offsets, with no verified map registration yet.
-  const mappedWorkspace = !!layout.researchArea || (layout.mapGroundPolygon?.length ?? 0) >= 3;
+  const mappedWorkspace = !!layout.researchArea || (viewGround?.polygon?.length ?? 0) >= 3;
   const onSplatPositionChange = useCallback((position: SplatPosition, scale?: number) => {
     const current=environmentsRef.current, active=current[0];
     if(!active)return;
@@ -3225,7 +3230,7 @@ useEffect(() => {
   // 本场环境按项目记住：新项目首次用 World 高斯样例起步，后续沿用项目选择；
   // 草稿刚绑上云项目时，把草稿里选的那条带过去，不让刚选完就丢。
   const environmentKey = environmentPreferenceKey(layout.id);
-  const hasMapVenue = (layout.mapGroundPolygon?.length ?? 0) >= 3;
+  const hasMapVenue = (viewGround?.polygon?.length ?? 0) >= 3;
   environmentsRef.current = environments;
   const environmentKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -3515,7 +3520,7 @@ useEffect(() => {
   // 而不是全湖。回概览/底图重置统一走 ref+rAF，等焦点态真的清掉再取景。
   const fitToRoomRef = useRef(fitToRoom);
   fitToRoomRef.current = fitToRoom;
-  const [pendingMapVenueFrame, setPendingMapVenueFrame] = useState<RoomLayout['mapGroundPolygon']>();
+  const [pendingMapVenueFrame, setPendingMapVenueFrame] = useState<{ lng: number; lat: number }[] | undefined>();
   // 取景请求：焦点框是 useCameraPresets 的内部 state，setSceneFocus 之后立刻调 fitToRoom
   // 读到的仍是旧闭包（会框到全湖）。这里把「该取景了」当成一次状态提交，等新焦点真正
   // 渲染完再取景，别用 rAF 抢在 React 提交之前跑。
@@ -3587,7 +3592,7 @@ useEffect(() => {
     setFocusedVenueId(null);
     setView(value => ({ ...value, view2D: false, walkthroughMode: false }));
     setSceneFocus({ width: east - west, depth: south - north, centerX: (west + east) / 2, centerZ: (north + south) / 2 });
-    setPendingMapVenueFrame(current.mapGroundPolygon);
+    setPendingMapVenueFrame(viewGround?.polygon);
   }, [setView, setSceneFocus]);
   // 2026-11-16 用户指令：左栏那行「定位到设计范围」去掉，功能改到右轨焦点钮。
   // 2D 户外画布：优先框设计范围；没有圈设计范围时回到地块边界/锚点（不落到 3D 场地取景，2D 下无足迹会静默失效）。
@@ -3633,7 +3638,7 @@ useEffect(() => {
     if (lastResearchAreaRef.current === area) return undefined;
     lastResearchAreaRef.current = area;
     setFocusedVenueId(null);
-    if (pendingMapVenueFrame === layout.mapGroundPolygon && pendingMapVenueFrame) return undefined;
+    if (pendingMapVenueFrame === viewGround?.polygon && pendingMapVenueFrame) return undefined;
     // 焦点清掉后下一帧再取景（同步调 fitToRoom 会读到旧焦点闭包，停在场地框）。
     if (!area) return fitOverviewAfterFocusClear();
     // 平湖秋月这一片底图只作垫图，默认取景收在这一小片，不摊全湖。
@@ -3641,11 +3646,11 @@ useEffect(() => {
     if (!area.scanAssetId) return fitOverviewAfterFocusClear();
     setSceneFocus(null);
     return undefined;
-  }, [layout.researchArea, layout.mapGroundPolygon, pendingMapVenueFrame, setSceneFocus, fitOverviewAfterFocusClear, framePinghuQiuYue]);
+  }, [layout.researchArea, viewGround?.polygon, pendingMapVenueFrame, setSceneFocus, fitOverviewAfterFocusClear, framePinghuQiuYue]);
 
   useEffect(() => {
     if (!pendingMapVenueFrame || !isReady || view.view2D) return;
-    if (pendingMapVenueFrame !== layout.mapGroundPolygon) {
+    if (pendingMapVenueFrame !== viewGround?.polygon) {
       setPendingMapVenueFrame(undefined);
       return;
     }
@@ -3654,7 +3659,7 @@ useEffect(() => {
       setPendingMapVenueFrame(undefined);
     });
     return () => cancelAnimationFrame(raf);
-  }, [pendingMapVenueFrame, layout.mapGroundPolygon, isReady, view.view2D]);
+  }, [pendingMapVenueFrame, viewGround?.polygon, isReady, view.view2D]);
 
   const { captureRenderImage, exportRenderImage, exportRenderAlbum, handleShareLink } = useImportExport({
     layout,
@@ -4643,7 +4648,7 @@ useEffect(() => {
       return world ? [{ id: venue.assetId, name: venue.name, x: world.x, z: world.z }] : [];
     });
     // 只看影响投影的字段：锚点/底图/场地尺寸。
-  }, [view.view2D, layout.researchArea, layout.sceneAnchor, layout.mapGroundFrame, layout.mapLngLat, layout.width, layout.height]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view.view2D, layout.researchArea, layout.sceneAnchor, viewGround?.frame, viewGround?.center, layout.width, layout.height]); // eslint-disable-line react-hooks/exhaustive-deps
   const pickSceneGeoDot = useCallback((assetId: string) => {
     const venue = listScannedVenues().find(item => item.assetId === assetId);
     if (venue) applyRealVenue(venue, true);
@@ -5485,7 +5490,7 @@ useEffect(() => {
               ref={outdoorOverlayRef}
               projectId={outdoorPlanSlotId}
               legacyPlanProjectId={legacyOutdoorPlanProjectId}
-              anchor={isOutdoorProject ? null : (layout.sceneAnchor ?? layout.mapLngLat ?? null)}
+              anchor={isOutdoorProject ? null : (layout.sceneAnchor ?? viewGround?.center ?? null)}
               activityName={isOutdoorProject ? null : layout.name}
               onSaveStateChange={handleOutdoorSaveState}
               onHistoryChange={handleOutdoorHistory} onInspectorChange={handleOutdoorInspectorChange}

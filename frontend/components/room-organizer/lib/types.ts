@@ -462,32 +462,19 @@ export interface RoomLayout {
   height: number;
   floors: FloorLayout[];
   roof?: RoofSpec;
+  /**
+   * 底图字节：只服务 v1 旧项目的「参考图纸/户型图」（`use-reference-image` 的回退链）。
+   * 贴地卫星底图已搬到 `plan.ground`（B4/S3），不再从这里读；不再写新值。
+   * 摆位、尺寸一律以场地/场景锚点为准，这张图只是观看参考。
+   */
   floorPlanImage?: string;
+  /** 参考图纸的透明度（同上，仅 v1 参考图；贴地底图透明度在 `plan.ground`）。 */
   floorPlanOpacity?: number;
   floorPlanFitMode?: FloorPlanFitMode;
   /**
-   * 卫星/高德贴地参考底图开关：仅观感辅助，与 RECON_MATERIAL_BAN 一致，
-   * 不得进入 Aholo 上传/重建素材列表。
-   * `true` 打开；`false` 是人关掉的（不再自动补图）；缺省则规划区 / 户外简报 / 地图壳默认打开。
-   */
-  satelliteGroundRef?: boolean;
-  /**
-   * 地图圈画的经纬度，只为再拉卫星参考底图。本地编辑元数据，不进场景线、不进 Aholo 上传。
-   */
-  mapGroundPolygon?: { lng: number; lat: number }[];
-  /**
-   * 地图场地中心经纬度。旧项目可能只有这一点、没有圈画点列。同样只用于卫星参考，不进上传。
-   */
-  mapLngLat?: { lng: number; lat: number };
-  /**
-   * 圈画经纬度换到壳体米制时用的原点与缩放。卫星 UV 靠它对齐，不进场景线、不进上传。
-   * lng0 是西缘，lat0 是壳体 z=0 的纬度。latSign 为 -1 时 z 向南（北在平面图上沿）。
-   */
-  mapGroundFrame?: { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
-  /**
    * 场景锚点：场景坐标 ↔ 地理坐标的唯一变换（docs/19 架构定案）。
    * 地图是 3D 场景里的一个渲染层，没有自己的定位，只能跟着它走。
-   * 底图与场景点位一律按它投影；mapGroundFrame 是由它派生的旧字段，仅为壳体卫星 UV 保留。
+   * 底图与场景点位一律按它投影；贴地底图的地理定位在 `plan.ground`（polygon / center / frame）。
    */
   sceneAnchor?: SceneAnchor;
   /**

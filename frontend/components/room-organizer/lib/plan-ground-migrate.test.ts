@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord, type KeyValueStorage } from './outdoor-project-store';
 import { planGroundSync, planGroundFromLayout, stripLayoutGroundBytes } from './plan-ground';
+import { legacyGroundOf } from './legacy-ground';
 import type { RoomLayout } from './types';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -105,8 +106,10 @@ describe('贴地底图迁移实测（layout 缓存 → plan 正源）', () => {
 
     const kept = JSON.parse(storage.getItem('scendance-editor-local-v1')!) as RoomLayout;
     expect(kept.floorPlanImage).toBeUndefined();
-    expect(kept.satelliteGroundRef).toBeUndefined();
-    expect(kept.mapGroundPolygon?.length).toBe(4);
+    const keptLegacy = legacyGroundOf(kept);
+    expect(keptLegacy.satelliteGroundRef).toBeUndefined();
+    expect(keptLegacy.mapGroundPolygon).toBeUndefined();
+    expect(keptLegacy.mapGroundFrame).toBeUndefined();
   });
 
   it('正源已有别的图时不被 layout 覆盖（防丢存量）', () => {
