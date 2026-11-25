@@ -86,7 +86,7 @@ const STEPS: Record<string, TourStep> = {
   outdoorPanel: {
     id: 'outdoorPanel',
     title: '左栏是物件库和清单',
-    body: '点左轨「户外规划」，左栏一张卡三个页签：「添加物件」点一行就带上对应工具，「已放置物件」是清单树、点击定位、右键删除，「清单」看这份活动的台账。',
+    body: '点左轨「户外规划」，左栏一张卡四个页签：「添加物件」点一行就带上对应工具，「已放置物件」是清单树、点击定位、右键删除，「场地扫描」加入实景或示例场地，「清单」看这份活动的台账。',
     target: TOUR_ANCHORS.outdoorNav,
   },
   draw: {
