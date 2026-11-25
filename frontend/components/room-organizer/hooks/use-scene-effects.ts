@@ -374,10 +374,17 @@ export function useSceneEffects({
       return;
     }
 
+    // B4/S1（2026-11-25）：3D 地面贴图改读 `resolveGround`（plan.ground 优先、layout 只兜底）。
+    // 缓存里不再写字节，读方必须走这里，否则删字段那一刻 3D 地面会静默变素板。
+    const ground = resolveGround(layout, outdoorPlanRef.current);
+    // `resolveGround` 只认「像贴地底图」的地址（data: / 代理卫星 / 底图标记）；
+    // 户型图这类普通参考图它不下判，所以这里再退一层到 layout 原字段，
+    // 保持「有图就描地、不建入口墙」的旧语义不变。
+    const groundImage = ground?.image ?? layout.floorPlanImage;
     // The building no longer has a floor plan: release the decoded multi-MB
     // image. (Only here — see clearFloorPlanImageCache for why buildRoom must
     // not drop it per image-less call.)
-    if (!layout.floorPlanImage) clearFloorPlanImageCache();
+    if (!groundImage) clearFloorPlanImageCache();
 
     const floorsToRender = view.showAllFloors
       ? layout.floors.map((floor, index) => ({ floor, index }))
@@ -395,7 +402,7 @@ export function useSceneEffects({
 
     // 调研底图已在 3D 地面铺一张连续地图；旧的卫星贴地是另一套坐标，
     // 继续当地板贴图会盖住扫描场地，这里只停用它、不删用户数据。
-    const legacyGroundMap = !!layout.researchArea && isMapReferenceImage(layout.floorPlanImage);
+    const legacyGroundMap = !!layout.researchArea && isMapReferenceImage(groundImage);
     // GeoGround 瓦片在场（户外计划有锚点）：0 层素色地板与地基让位给瓦片地面。
     const skipGroundFloor = geoGroundShellActive;
     for (const { floor, index } of floorsToRender) {
@@ -428,9 +435,10 @@ export function useSceneEffects({
         floorOpenings,
         ...(layout.planSettings?.gridSizeM ? { gridSizeM: layout.planSettings.gridSizeM } : {}),
         ...(index === 0 && skipGroundFloor ? { skipFloor: true, skipWalls: true } : {}),
-        floorPlanImage: index === 0 && !legacyGroundMap && !skipGroundFloor ? layout.floorPlanImage ?? null : null,
-          satelliteGroundRef: index === 0 && !legacyGroundMap && !skipGroundFloor ? !!layout.satelliteGroundRef : false,
-        floorPlanOpacity: view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
+        floorPlanImage: index === 0 && !legacyGroundMap && !skipGroundFloor ? groundImage ?? null : null,
+          satelliteGroundRef: index === 0 && !legacyGroundMap && !skipGroundFloor
+            ? (ground ? ground.satelliteRef : !!layout.satelliteGroundRef) : false,
+        floorPlanOpacity: view.referenceImageOpacity ?? ground?.opacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY,
         floorPlanFitMode: layout.floorPlanFitMode ?? 'stretch',
         floorPlan3DEffect: view.floorPlan3DEffect,
         showFloorPlan: view.showReferenceImage !== false,
@@ -444,7 +452,7 @@ export function useSceneEffects({
       // exactly when that wall is: not on the traced ground floor (buildRoom
       // builds no walls there) and not when the north wall is hidden — the
       // plan dashes the recess then, like the rest of the wall (#392).
-      const tracedGround = index === 0 && !!layout.floorPlanImage && !legacyGroundMap;
+      const tracedGround = index === 0 && !!groundImage && !legacyGroundMap;
       if (entrance && index === entrance.floorIndex && !tracedGround) {
         const northHidden = floor.hiddenWalls?.includes('north') ?? false;
         for (const group of buildEntrance(THREE, {
@@ -480,6 +488,7 @@ export function useSceneEffects({
     // interior wall stays double-cut into the exterior wall (#119).
     outdoorWorkspace, layout.backendSceneV2, layout.width, layout.height, glbAssetsRevision, shellFinishesKey, wallOpeningsKey, interiorWallsKey, storeyHeightsKey, layout.terrain, layout.entrance,
     layout.floorPlanImage, layout.floorPlanOpacity, layout.floorPlanFitMode, layout.satelliteGroundRef, !!layout.researchArea, geoGroundShellActive,
+    outdoorPlan?.ground?.image, outdoorPlan?.ground?.opacity, outdoorPlan?.ground?.satelliteRef,
     layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0, layout.mapGroundFrame?.latMid, layout.mapGroundFrame?.scale, layout.mapGroundFrame?.latSign,
     layout.mapGroundPolygon?.length,
     view.floorPlan3DEffect, view.showAllFloors, view.wallDisplay,

@@ -57,14 +57,16 @@ export function planGroundFromLayout(layout: LayoutGroundSource): PlanGround | n
 /**
  * 由 plan.ground 投影出 layout 视图缓存补丁。
  * 没有可用的定位或图时返回 null；调用方不要把 null 当成「清空底图」。
+ *
+ * S1（2026-11-25）：**不再投影 `floorPlanImage` / `floorPlanOpacity`**。
+ * 字节只活在正源 `plan.ground`，layout 只剩定位形状（多边形/中心/框/开关）当视图缓存；
+ * 3D 地面与 2D 画布都改从 `resolveGround(layout, plan)` 取图，删这两个字段时不会断成图。
+ * 旧项目盘上已有的镜像仍然可读（`resolveGround` 的 layout 兜底），不做数据迁移。
  */
 export function layoutGroundPatch(ground: PlanGround | undefined | null): Partial<RoomLayout> | null {
   if (!ground) return null;
   if (!ground.image && !ground.polygon && !ground.center && !ground.frame) return null;
-  const patch: Partial<RoomLayout> = {
-    ...(ground.image ? { floorPlanImage: ground.image } : {}),
-    floorPlanOpacity: ground.opacity ?? PLAN_GROUND_OPACITY,
-  };
+  const patch: Partial<RoomLayout> = {};
   if (ground.satelliteRef !== undefined) patch.satelliteGroundRef = ground.satelliteRef;
   if (ground.polygon) patch.mapGroundPolygon = ground.polygon;
   if (ground.center) patch.mapLngLat = ground.center;
@@ -73,7 +75,7 @@ export function layoutGroundPatch(ground: PlanGround | undefined | null): Partia
   if (ground.frame && ground.frame.latSign !== undefined) {
     patch.mapGroundFrame = { ...ground.frame, latSign: ground.frame.latSign };
   }
-  return patch;
+  return Object.keys(patch).length ? patch : null;
 }
 
 /**
@@ -159,11 +161,23 @@ export function planGroundSync(
   }
   const ground = plan.ground;
   if (!ground.image) return { direction: 'none', reason: 'already-current' };
-  const sameImage = layout.floorPlanImage === ground.image;
-  const cacheMissingShape = !sameImage
-    || (!!ground.polygon && (layout.mapGroundPolygon?.length ?? 0) < 3)
-    || (!!ground.frame && !layout.mapGroundFrame);
+  // S1（2026-11-25）：缓存里不再有字节，比较基准换成「定位形状」——
+  // 多边形、框、开关三项都齐了就算已同步；否则补一次（补的补丁里也没有字节）。
+  const cacheMissingShape = !samePolygon(ground.polygon, layout.mapGroundPolygon)
+    || (!!ground.frame && !layout.mapGroundFrame)
+    || (ground.satelliteRef !== undefined && layout.satelliteGroundRef !== ground.satelliteRef);
   if (!cacheMissingShape) return { direction: 'none', reason: 'already-current' };
   const patch = layoutGroundPatch(ground);
   return patch ? { direction: 'to-layout', patch } : { direction: 'none', reason: 'already-current' };
+}
+
+function samePolygon(
+  source: PlanGround['polygon'],
+  cache: { lng: number; lat: number }[] | undefined,
+): boolean {
+  if (!source) return true; // 正源只有图、没有多边形：没有可比的形状。
+  if (!cache || cache.length !== source.length) return false;
+  return source.every((point, index) =>
+    Math.abs(point.lng - cache[index]!.lng) < 1e-9 && Math.abs(point.lat - cache[index]!.lat) < 1e-9,
+  );
 }
