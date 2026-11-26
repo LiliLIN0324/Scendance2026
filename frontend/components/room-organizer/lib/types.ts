@@ -303,8 +303,10 @@ export interface RoofSpec {
 }
 
 /**
- * One level of a building. Shares the building's footprint (width × depth)
- * but has its own items, finishes, and wall colors.
+ * A wall segment in room-centred world metres. The active write path only
+ * carries the recess entrance's back wall (`ENTRANCE_WALL_ID`); ordinary
+ * interior partition walls from older saved layouts are read back for
+ * compatibility but no new code appends them.
  */
 export interface InteriorWall {
   thickness?: number;
@@ -346,6 +348,11 @@ export interface FloorLayout {
   wallPattern?: WallPattern;
   wallColors?: Partial<Record<WallId, string>>;
   hiddenWalls?: WallId[];
+  /**
+   * Holds the entrance recess back wall (`ENTRANCE_WALL_ID`). Partition walls
+   * from legacy layouts are retained read-only for compatibility; the write
+   * path no longer adds ordinary interior partitions.
+   */
   interiorWalls?: InteriorWall[];
   /** Room zones drawn on this floor (#155). */
   zones?: RoomZone[];
