@@ -355,6 +355,52 @@ describe('parseStoredLayout', () => {
     expect('floors' in legacy).toBe(false);
   });
 
+  it('reads a current-shape snapshot carrying retired shell fields without crashing, keeping them read-only off the draft', () => {
+    const raw = makeLayout({
+      roof: { style: 'gable', color: '#5d3a23' },
+      terrain: { frontY: 2.5, backY: 0 },
+      neighbours: { east: true, street: true },
+      entrance: { width: 1.4, depth: 1.2 },
+      frontage: 'pavement',
+      floors: [makeFloor({ items: [makeItem({ id: 'sofa' })] })],
+    });
+    const parsed = parseStoredLayout(JSON.parse(JSON.stringify(raw)));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.floors[0]!.items.map((item) => item.id)).toEqual(['sofa']);
+    // The parse returns an independent normalized object; the raw snapshot is not the live draft being written back.
+    expect(parsed).not.toBe(raw);
+    // Parse layer still carries the retired fields read-only; the 3D lot no longer renders them (T1).
+    // Stripping the reducer/schema write side is T3.
+    expect(parsed!.roof).toEqual(raw.roof);
+    expect(parsed!.terrain).toEqual(raw.terrain);
+    expect(parsed!.neighbours).toEqual(raw.neighbours);
+    expect(parsed!.entrance).toEqual(raw.entrance);
+    expect(parsed!.frontage).toBe('pavement');
+  });
+
+  it('drops shell fields when migrating a legacy single-floor snapshot', () => {
+    const legacy = {
+      name: 'Old',
+      width: 6,
+      height: 7,
+      floorColor: '#fff',
+      items: [makeItem({ id: 'sofa' })],
+      roof: { style: 'gable', color: '#555555' },
+      terrain: { frontY: 1, backY: 0 },
+      neighbours: { west: true },
+      entrance: { width: 1.4, depth: 1.2 },
+      frontage: 'pavement',
+    };
+    const parsed = parseStoredLayout(legacy);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.floors[0]!.items.map((item) => item.id)).toEqual(['sofa']);
+    expect(parsed).not.toHaveProperty('roof');
+    expect(parsed).not.toHaveProperty('terrain');
+    expect(parsed).not.toHaveProperty('neighbours');
+    expect(parsed).not.toHaveProperty('entrance');
+    expect(parsed).not.toHaveProperty('frontage');
+  });
+
   it('migrates a legacy layout but drops an unsafe (non-data-URL) floorPlanImage', () => {
     const legacy = {
       name: 'Legacy Home',
