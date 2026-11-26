@@ -33,7 +33,7 @@ export interface ProjectThumbProps {
 
 function layoutHasContent(layout: RoomLayout): boolean {
   return layout.floors.some(floor =>
-    (floor.zones?.length ?? 0) > 0 || floor.items.length > 0 || (floor.interiorWalls?.length ?? 0) > 0);
+    (floor.zones?.length ?? 0) > 0 || floor.items.length > 0);
 }
 
 function planHasContent(plan: SitePlanData | null): plan is SitePlanData {

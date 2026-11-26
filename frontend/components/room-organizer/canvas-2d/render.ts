@@ -66,8 +66,6 @@ export interface Render2DOptions {
 }
 
 const PADDING = 60;
-// Matches the 0.16 m thickness modelled in three/interior-walls.ts.
-const INTERIOR_WALL_THICKNESS_M = 0.16;
 
 /** The world→canvas mapping the 2D renderer draws with (CSS-pixel space). */
 export interface View2DTransform {
@@ -231,7 +229,6 @@ export function render2DTopDown(options: Render2DOptions): void {
   if (layout.backendSceneV2) drawMeasuredStructure(ctx, layout, offsetX, offsetY, scale);
   else {
     drawRoomOutline(ctx, layout, floor, offsetX, offsetY, scale);
-    drawInteriorWalls(ctx, layout, floor, offsetX, offsetY, scale);
   }
   drawZoneLabels(ctx, layout, floor, offsetX, offsetY, scale, options.showMeasurements, displayUnit);
 
@@ -722,31 +719,6 @@ function drawRoomOutline(
     ctx.stroke();
     ctx.restore();
   }
-}
-
-function drawInteriorWalls(
-  ctx: CanvasRenderingContext2D,
-  layout: RoomLayout,
-  floor: FloorLayout,
-  offsetX: number,
-  offsetY: number,
-  scale: number
-): void {
-  const walls = floor.interiorWalls ?? [];
-  if (walls.length === 0) return;
-  const halfW = layout.width / 2;
-  const halfD = layout.height / 2;
-  ctx.save();
-  ctx.strokeStyle = PLAN_INK;
-  ctx.lineCap = 'butt';
-  ctx.lineWidth = Math.max(2, INTERIOR_WALL_THICKNESS_M * scale);
-  for (const wall of walls) {
-    ctx.beginPath();
-    ctx.moveTo(offsetX + (wall.x1 + halfW) * scale, offsetY + (wall.z1 + halfD) * scale);
-    ctx.lineTo(offsetX + (wall.x2 + halfW) * scale, offsetY + (wall.z2 + halfD) * scale);
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
 function drawSignalRings(

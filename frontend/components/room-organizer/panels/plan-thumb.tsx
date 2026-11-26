@@ -129,7 +129,7 @@ export function PlanThumb({
         showMeasurements: false,
         showWiFiSignals: false,
         hasCollision: (item) =>
-          hasCollisions(item, shown.items, building.width, building.height, { keepOut, interiorWalls: shown.interiorWalls }),
+          hasCollisions(item, shown.items, building.width, building.height, { keepOut }),
         ...(ground ? { ground } : {}),
         padding,
       });

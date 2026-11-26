@@ -18,7 +18,6 @@ function makeFixture() {
       makeItem({ id: 'door-1', type: 'door', name: 'Door', icon: '🚪', width: 0.9, depth: 0.1, position: { x: 0, z: -4 }, rotation: 0 }),
       makeItem({ id: 'win-1', type: 'window', name: 'Window', icon: '🪟', width: 0.9, depth: 0.1, position: { x: 4, z: 0 }, rotation: -Math.PI / 2 }),
     ],
-    interiorWalls: [{ id: 'iw-1', x1: -2, z1: -4, x2: -2, z2: 0 }],
     hiddenWalls: ['south'],
   });
   return { layout: makeLayout({ floors: [floor] }), floor };
@@ -71,10 +70,9 @@ describe('layoutToSvg', () => {
     // The half-metre snap grid stays in the editor; it is not drawn here.
     expect(count(grid![1]!, 'M ')).toBe(18);
     expect(count(svg, 'class="wall"')).toBe(4);
-    expect(count(svg, 'data-layer="WALLS"')).toBe(5); // 4 shell edges + 1 partition
+    expect(count(svg, 'data-layer="WALLS"')).toBe(4); // 4 shell edges
     // Only the hidden south wall is dashed.
     expect(count(svg, 'stroke-dasharray="6 4"')).toBe(1);
-    expect(count(svg, 'class="interior-wall"')).toBe(1);
   });
 
   it('honours layer switches without restoring edge lengths or a half-metre grid', () => {

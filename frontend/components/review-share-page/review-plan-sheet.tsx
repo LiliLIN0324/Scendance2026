@@ -98,7 +98,7 @@ export function ReviewPlanSheet({
         showHeatmap: false,
         showFloorPlan: Boolean(layout.floorPlanImage && planFloorIndex(layout.floors, floor) === 0),
         hasCollision: (item) =>
-          hasCollisions(item, floor.items, layout.width, layout.height, { keepOut, interiorWalls: floor.interiorWalls }),
+          hasCollisions(item, floor.items, layout.width, layout.height, { keepOut }),
       });
     };
 

@@ -25,10 +25,6 @@ export function PlanPreview({ layout, ariaLabel }: { layout: RoomLayout; ariaLab
     {(floor?.zones ?? []).map(zone => <rect key={zone.id} x={zone.x + width / 2} y={zone.z + depth / 2} width={Math.max(zone.w, 0.02)} height={Math.max(zone.d, 0.02)} fill={zone.color} opacity={0.18}/>)}
     <rect x={unit} y={unit} width={Math.max(width - unit * 2, 0.01)} height={Math.max(depth - unit * 2, 0.01)} fill="none" stroke="#3F453F" strokeWidth={unit * 2.4}/>
     <rect x={unit * 2.4} y={unit * 2.4} width={Math.max(width - unit * 4.8, 0.01)} height={Math.max(depth - unit * 4.8, 0.01)} fill="none" stroke="#A9B0A6" strokeWidth={unit * 0.8}/>
-    {(floor?.interiorWalls ?? []).map(wall => <line key={wall.id}
-      x1={wall.x1 + width / 2} y1={wall.z1 + depth / 2}
-      x2={wall.x2 + width / 2} y2={wall.z2 + depth / 2}
-      stroke="#3F453F" strokeWidth={Math.max(unit * 2.2, wall.thickness ?? 0)} strokeLinecap="butt"/>)}
     {items.map(item => <PlanPreviewItem key={item.id} item={item} width={width} depth={depth} unit={unit}/>)}
   </svg>;
 }
