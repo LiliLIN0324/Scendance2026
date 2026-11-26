@@ -3351,6 +3351,7 @@ useEffect(() => {
       activeFloor,
       activeFloorIndex,
       actions,
+      outdoorPlan,
       view,
       setView,
       toggle,
@@ -3370,7 +3371,7 @@ useEffect(() => {
       setAutoCycleLighting,
     }),
     [
-      activeProjectId, layout, activeFloor, activeFloorIndex, actions,
+      activeProjectId, layout, activeFloor, activeFloorIndex, actions, outdoorPlan,
       view, setView, toggle,
       collidingIds, highlightedIds, catalogQuery, setCatalogQuery,
       recentColors, pushColor, playCue,

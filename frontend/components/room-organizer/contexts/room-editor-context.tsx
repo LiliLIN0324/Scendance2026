@@ -5,6 +5,7 @@ import type { UseHistoryResult } from '../hooks/use-history';
 import type { LayoutActions } from '../hooks/use-layout-state';
 import type { SoundCue } from '../lib/sounds';
 import type { FloorLayout, GameMode, RoomLayout, ViewSettings } from '../lib/types';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 export interface RoomEditorContextValue {
   // Session/project identity: single source derived at the editor entry.
@@ -16,6 +17,10 @@ export interface RoomEditorContextValue {
   readonly activeFloor: FloorLayout;
   readonly activeFloorIndex: number;
   readonly actions: LayoutActions;
+
+  // Outdoor plan positive source (S3): the plan the outdoor canvas edits.
+  // `null` for the legacy local draft without a bound plan record.
+  readonly outdoorPlan: SitePlanData | null;
 
   // View settings
   readonly view: ViewSettings;
@@ -72,6 +77,7 @@ export function RoomEditorProvider({ value, children }: RoomEditorProviderProps)
     value.activeFloor,
     value.activeFloorIndex,
     value.actions,
+    value.outdoorPlan,
     value.view,
     value.setView,
     value.collidingIds,
