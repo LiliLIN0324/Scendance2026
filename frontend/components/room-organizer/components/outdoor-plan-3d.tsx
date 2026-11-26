@@ -267,6 +267,31 @@ const MAP_TILT_MS = 650;
 // 场地点云挂点未就绪时的有界重试：短间隔、有限次；不新起轮询器，不无限重试。
 const VENUE_SPLAT_READY_RETRY_MAX = 5;
 const VENUE_SPLAT_READY_RETRY_MS = 120;
+// dev-only 探针：console / localStorage / 角标三通道同源；生产构建整体不出现。
+const PROBE_STORAGE_KEY = 'scendance:3d-probe';
+
+type VenueSplatProbeStatus = 'idle' | 'loading' | 'ready' | 'error';
+type VenueSplatProbeBits = Readonly<{
+  scene: boolean | null;
+  scan: boolean;
+  splat: VenueSplatProbeStatus;
+}>;
+
+function venueSplatProbeRecord(patch: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === 'production') return;
+  let previous: Record<string, unknown> = {};
+  try {
+    const raw = window.localStorage.getItem(PROBE_STORAGE_KEY);
+    previous = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+  } catch {
+    previous = {};
+  }
+  try {
+    window.localStorage.setItem(PROBE_STORAGE_KEY, JSON.stringify({ ...previous, ...patch, ts: Date.now() }));
+  } catch {
+    // 存储不可用（隐私模式等）不影响另外两条通道。
+  }
+}
 
 function cameraPose(target: THREE.Vector3, span: number, polar: number, fovDeg: number): THREE.Vector3 {
   const dist = (span * 0.55) / Math.tan((fovDeg * Math.PI) / 360);
@@ -468,6 +493,8 @@ export default function OutdoorPlan3D({
   const viewModeRef = useRef(viewMode);
   viewModeRef.current = viewMode;
   const [walkCanvas, setWalkCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [probeBits, setProbeBits] = useState<VenueSplatProbeBits>({ scene: null, scan: false, splat: 'idle' });
+  const probeProgressRef = useRef<{ progress: number | undefined; bytes: number | undefined }>({ progress: undefined, bytes: undefined });
   const walkChooserRef = useRef<HTMLDialogElement>(null);
   const [walkActors, setWalkActors] = useState<WalkActor[]>([]);
   /** 接管面板只列用户自己放的人：派生路人（`plan-crowd-route:`）是示意用的，不能拿来当化身。 */
@@ -2062,6 +2089,8 @@ export default function OutdoorPlan3D({
             controls: !controls,
             assetId: request.assetId,
           });
+          venueSplatProbeRecord({ step: 'guard-b', missing: { renderer: !renderer, controls: !controls }, scanAssetId: request.assetId });
+          setProbeBits(bits => ({ ...bits, splat: 'error' }));
         }
         return;
       }
@@ -2079,6 +2108,9 @@ export default function OutdoorPlan3D({
       });
       const asset = findAholoAsset(assetId);
       onScanState?.({ assetId, name, status: 'loading', ...(asset?.meters ? { meters: asset.meters } : {}) });
+      probeProgressRef.current = { progress: undefined, bytes: asset?.bytes };
+      setProbeBits(bits => ({ ...bits, scan: true, splat: 'loading' }));
+      venueSplatProbeRecord({ step: 'start', scanAssetId: assetId, url, bytes: asset?.bytes });
       const calibration = readSiteCalibration(assetId) ?? defaultSiteCalibration(assetId);
       // 落点口径与 patch / outline 同一条链路（壳体 → three 世界）。
       const target = new THREE.Vector3(world.x, 0, world.z);
@@ -2110,6 +2142,7 @@ export default function OutdoorPlan3D({
             ...(ratio === undefined ? {} : { progress: ratio }),
             ...(asset?.meters ? { meters: asset.meters } : {}),
           });
+          probeProgressRef.current.progress = ratio;
           if (typeof requestAnimationFrame === 'function') requestAnimationFrame(emit);
           else emit();
         },
@@ -2145,6 +2178,8 @@ export default function OutdoorPlan3D({
           // 高斯重建起来了就把地面轮廓收掉，避免两层标记叠着。
           patch.visible = false;
           outline.visible = false;
+          setProbeBits(bits => ({ ...bits, splat: 'ready' }));
+          venueSplatProbeRecord({ step: 'ready', scanAssetId: assetId, splats: result.splats, meters: result.meters, progress: probeProgressRef.current.progress });
           onScanState?.({ assetId, name, status: 'ready', meters: result.meters, ...(result.walkBounds ? { walkBounds: result.walkBounds } : {}) });
         })
         .catch((error: unknown) => {
@@ -2152,6 +2187,8 @@ export default function OutdoorPlan3D({
           preview.dispose();
           const entry = venueSplatRef.current;
           if (entry?.preview === preview) entry.preview = null;
+          setProbeBits(bits => ({ ...bits, splat: 'error' }));
+          venueSplatProbeRecord({ step: 'error', scanAssetId: assetId, error: error instanceof Error ? error.message : String(error) });
           onScanState?.({
             assetId, name, status: 'error',
             ...(error instanceof Error ? { error: error.message } : {}),
@@ -3237,6 +3274,13 @@ export default function OutdoorPlan3D({
           assetId: current?.assetId ?? null,
           attempt: splatReadyAttemptRef.current,
         });
+        setProbeBits(bits => ({ scene: scene !== null, scan: current !== null, splat: bits.splat }));
+        venueSplatProbeRecord({
+          step: 'guard-a',
+          missing: { api: !api, scene: !scene, scanRef: !current },
+          scanAssetId: current?.assetId ?? null,
+          attempt: splatReadyAttemptRef.current,
+        });
       }
       if (splatReadyAttemptRef.current < VENUE_SPLAT_READY_RETRY_MAX) {
         splatReadyAttemptRef.current += 1;
@@ -3403,6 +3447,16 @@ export default function OutdoorPlan3D({
       data-testid="outdoor-plan-3d"
       style={{ position: 'absolute', inset: 0, background: '#d9e3ea', overflow: 'hidden' }}
     >
+      {process.env.NODE_ENV !== 'production' && (
+        <div
+          data-testid="venue-splat-probe"
+          style={{ position: 'absolute', right: 16, bottom: 16, zIndex: 3, padding: '4px 10px', borderRadius: 8, background: 'rgba(18, 20, 26, 0.72)', color: '#fff', fontSize: 12, lineHeight: '18px', pointerEvents: 'none' }}
+        >
+          <div>scene {probeBits.scene === null ? '·' : probeBits.scene ? '✓' : '✗'}</div>
+          <div>scan {probeBits.scan ? '✓' : '✗'}</div>
+          <div>splat {{ idle: '○', loading: '◐', ready: '●', error: '✗' }[probeBits.splat]}</div>
+        </div>
+      )}
       {groundState === 'loading' && (
         <div
           style={{
