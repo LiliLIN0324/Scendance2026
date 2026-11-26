@@ -2,7 +2,7 @@
 
 import { Blob as NodeBlob, Buffer as NodeBuffer } from 'node:buffer';
 import { webcrypto } from 'node:crypto';
-import { act, cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as testingRender, screen, waitFor, within } from '@testing-library/react';
 import {getAgentRun} from './agent-chat-store';
 import { StrictMode, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,12 +54,17 @@ import { clearUnsavedSourceDraftsForTests } from './unsaved-source-drafts';
 import type { MaterialCustomizationSeed } from './material-customization';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
+import { LEGACY_LOCAL_SCOPE } from '@/lib/project-scope';
 import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
 vi.mock('../three/glb-assets', async original => ({ ...(await original<typeof import('../three/glb-assets')>()), ensureGlbAsset: vi.fn().mockResolvedValue(undefined) }));
 const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: routerPush }) }));
-vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
+vi.mock('../contexts', async original => {
+  const actual = await original<typeof import('../contexts')>();
+  return { ...actual, useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) };
+});
 const sourceMocks = vi.hoisted(() => ({ readSourceForm: vi.fn(), readSourceRecord: vi.fn(), readSourceRecordSnapshot: vi.fn(), listSourceRecords: vi.fn().mockResolvedValue([]), updateSourceForm: vi.fn(), storeSourceForm: vi.fn(), deleteSourceForm: vi.fn(), copySourceScope: vi.fn(), listStoredSources: vi.fn(), readSourceScopeSnapshot: vi.fn(), restoreSourceScopeIfUnchanged: vi.fn() }));
 vi.mock('@/lib/source-storage', async original => ({ ...(await original<typeof import('@/lib/source-storage')>()), ...sourceMocks }));
 vi.mock('@/lib/material-checkin-storage', async original => {
@@ -128,6 +133,17 @@ function restoreProperty(object: object, key: string, descriptor: PropertyDescri
   else Reflect.deleteProperty(object, key);
 }
 
+/** 夹具：外壳 projectId 与本机 layout 同身份；生产 ProjectId 取自 context，面板不再借 layout.id 反推。 */
+function editorValue(layoutValue: RoomLayout): RoomEditorContextValue {
+  return { projectId: layoutValue.id ?? LEGACY_LOCAL_SCOPE, layout: layoutValue } as unknown as RoomEditorContextValue;
+}
+function renderUI(element: React.ReactElement, scopeLayout: RoomLayout = layout) {
+  const view = testingRender(<RoomEditorProvider value={editorValue(scopeLayout)}>{element}</RoomEditorProvider>);
+  const rerender = view.rerender.bind(view);
+  // rerender 传入裸 Provider JSX 时同样重包，避免根组件类型切换卸载整棵树、丢失预览/租约状态。
+  view.rerender = (next: React.ReactNode) => rerender(<RoomEditorProvider value={editorValue(scopeLayout)}>{next}</RoomEditorProvider>);
+  return view;
+}
 function ui(current = layout) {
   return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} onPreview={onPreview}>
     <CreativeAssistant/>

@@ -13,6 +13,7 @@ import { BackendSession, getBackendConfig, type Scene, type SceneProposal } from
 import AuthPage from './auth/page';
 import Page from './page';
 import type { RoomLayout } from '@/components/room-organizer/lib/types';
+import type { RoomEditorContextValue } from '@/components/room-organizer/contexts/room-editor-context';
 import type { ComponentType } from 'react';
 
 type EditorProps = { controller: BackendSession };
@@ -78,15 +79,17 @@ vi.mock('@/lib/backend-session', async (importOriginal) => {
   return { ...actual, createBackendSession: () => activeController };
 });
 vi.mock('@/components/room-organizer', async () => {
-  const { SelectionProvider } = await import('@/components/room-organizer/contexts');
+  const { SelectionProvider, RoomEditorProvider } = await import('@/components/room-organizer/contexts');
   const { CreativeStudioProvider, CreativeAssistant } = await import('@/components/room-organizer/panels/creative-studio');
   return {
     RoomOrganizer: ({ controller, startOutdoor, outdoorProjectId }: EditorProps & { startOutdoor?: boolean; outdoorProjectId?: string | null }) => <SelectionProvider value={{ selectedItemId: null, selectedItem: null, setSelectedItemId: () => {}, extraSelectedIds: new Set(), setExtraSelectedIds: () => {}, allSelectedIds: new Set(), selectOnly: () => {} }}>
-      <div data-testid="workspace-shell" data-start-outdoor={startOutdoor ? '1' : '0'} data-outdoor-project={outdoorProjectId ?? ''} />
-      <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
-        <button onClick={() => navigation.push('/auth')}>返回登录页</button>
-        <CreativeAssistant />
-      </CreativeStudioProvider>
+      <RoomEditorProvider value={{ projectId: activeLayout.id ?? 'local', layout: activeLayout } as unknown as RoomEditorContextValue}>
+        <div data-testid="workspace-shell" data-start-outdoor={startOutdoor ? '1' : '0'} data-outdoor-project={outdoorProjectId ?? ''} />
+        <CreativeStudioProvider controller={controller} layout={activeLayout} onApply={onApply}>
+          <button onClick={() => navigation.push('/auth')}>返回登录页</button>
+          <CreativeAssistant />
+        </CreativeStudioProvider>
+      </RoomEditorProvider>
     </SelectionProvider>,
   };
 });
