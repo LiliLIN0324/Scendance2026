@@ -1400,7 +1400,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
           {showDraftCard && <li className="sc-file-card is-current is-draft">
             <button type="button" className="sc-file-hit" disabled aria-current="true" aria-label={`当前草稿 ${draftCardName}`}>
               <span className={`sc-file-thumb${projectCovers[canvasCoverId] ? ' has-preview' : ''}`} aria-hidden="true">
-                <ProjectThumb projectId={canvasCoverId} cover={projectCovers[canvasCoverId]} fallback={coverMark()} eager/>
+                <ProjectThumb projectId={canvasCoverId} cover={projectCovers[canvasCoverId]} fallback={coverMark()}/>
                 <span className="sc-file-state">当前 · 本机</span>
               </span>
               <span className="sc-file-info"><strong>{draftCardName}</strong><small>本机 · 未上传</small></span>
