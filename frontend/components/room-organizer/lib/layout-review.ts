@@ -104,7 +104,6 @@ function collisionContext(layout: RoomLayout, floorIndex: number): CollisionCont
     // 边界、墙体、柱子统一交给 structuralViolations；这里只查互相碰撞与门前留空。
     structureValidated: true,
     keepOut: floorKeepOut(layout, floorIndex),
-    interiorWalls: layout.backendSceneV2 ? [] : floorOf(layout, floorIndex)?.interiorWalls ?? [],
   };
 }
 

@@ -1,7 +1,6 @@
 import { isWallHung, mountBand } from './mount-band';
 import { isOpening, isWallMounted } from './opening-snap';
-import { buildWalkColliders, type WalkCollider } from './walk-collision';
-import type { FurnitureItem, InteriorWall, Vec2 } from './types';
+import type { FurnitureItem, Vec2 } from './types';
 
 export function boundingRadius(item: Pick<FurnitureItem, 'width' | 'depth'>): number {
   return Math.hypot(item.width / 2, item.depth / 2);
@@ -251,33 +250,12 @@ function keepsOut(item: FurnitureItem, rect: KeepOutRect): boolean {
   return itemEntersRect(item, rect);
 }
 
-/** Whether a floor item stands inside one of the storey's partitions (#368). */
-function straddlesInteriorWall(
-  item: FurnitureItem,
-  allItems: readonly FurnitureItem[],
-  interiorWalls: readonly InteriorWall[],
-  roomWidth: number,
-  roomDepth: number
-): boolean {
-  // The walker's wall boxes, door gaps included. Wall-plane items never
-  // become item colliders, so passing only them returns just the walls.
-  const walls: readonly WalkCollider[] = buildWalkColliders(
-    allItems.filter((other) => isWallMounted(other.type)),
-    interiorWalls,
-    { roomWidth, roomDepth }
-  );
-  const box = toObb(item);
-  return walls.some((wall) => obbOverlap(box, wall));
-}
-
 /** What else on the storey an item may not overlap, besides other items. */
 export interface CollisionContext {
   /** Measured geometry already owns polygon bounds and mounted-wall exceptions. */
   structureValidated?: boolean;
   /** Porch and stairwell rects (`floorKeepOut`). */
   keepOut?: readonly KeepOutRect[] | undefined;
-  /** The storey's partitions. */
-  interiorWalls?: readonly InteriorWall[] | undefined;
 }
 
 export function hasCollisions(
@@ -289,7 +267,6 @@ export function hasCollisions(
 ): boolean {
   if (!item.position) return false;
   const keepOut = context.keepOut ?? [];
-  const interiorWalls = context.interiorWalls ?? [];
   const overlapsAnother = (): boolean =>
     allItems.some((other) => other.id !== item.id && pairCollides(item, other));
   // Wall-plane items (doors, windows, cameras) live in — or on the exterior
@@ -309,16 +286,6 @@ export function hasCollisions(
   // The porch is outside too, just inside the footprint (#285); a stairwell
   // is a hole in the floor (#372).
   if (keepOut.some((rect) => keepsOut(item, rect))) return true;
-  // Rugs run under a partition's baseboard and decor hangs on it; anything
-  // else standing inside one is impassable in the walkthrough too (#368).
-  if (
-    interiorWalls.length > 0 &&
-    !isLowProfile(item) &&
-    !isWallHung(item.type) &&
-    straddlesInteriorWall(item, allItems, interiorWalls, roomWidth, roomDepth)
-  ) {
-    return true;
-  }
   return overlapsAnother();
 }
 

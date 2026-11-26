@@ -267,12 +267,11 @@ export function countOverlaps(layout: RoomLayout, floorIndex: number): { count: 
   const floor = layout.floors[floorIndex];
   if (!floor) return { count: 0, names: [] };
   const keepOut = floorKeepOut(layout, floorIndex);
-  const interiorWalls = layout.backendSceneV2 ? [] : floor.interiorWalls;
   const names: string[] = [];
   for (const item of floor.items) {
     if (isStructuralMarker(item)) continue;
     const hit = structuralItemCollides(item, layout, floorIndex)
-      || hasCollisions(item, floor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls });
+      || hasCollisions(item, floor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2 });
     if (hit) names.push(item.name);
   }
   return { count: names.length, names };
@@ -295,8 +294,7 @@ function addExtraSeats(input: {
   const chairBase = FURNITURE_CATALOG.find(entry => entry.type === 'dining-chair');
   if (!chairBase) return { layout: current, added };
   const keepOut = floorKeepOut(base, floorIndex);
-  const interiorWalls = base.backendSceneV2 ? [] : (base.floors[floorIndex]?.interiorWalls ?? []);
-  const options = { keepOut, structureValidated: !!base.backendSceneV2, interiorWalls };
+  const options = { keepOut, structureValidated: !!base.backendSceneV2 };
   const currentItems = (): FurnitureItem[] => current.floors[floorIndex]?.items ?? [];
   const enough = (): boolean => seatCountIn(currentItems()) >= target;
   const tryPlace = (position: Vec2, rotation: number): boolean => {
@@ -576,7 +574,6 @@ function findAdditionSpot(layout: RoomLayout, floorIndex: number, item: Furnitur
   const floor = layout.floors[floorIndex];
   if (!floor) return null;
   const keepOut = floorKeepOut(layout, floorIndex);
-  const interiorWalls = layout.backendSceneV2 ? [] : floor.interiorWalls;
   const inset = 0.25;
   const room = usableSeatingRect(layout, floorIndex) ?? { x: -layout.width / 2, z: -layout.height / 2, w: layout.width, d: layout.height };
   const step = Math.max(1, Math.ceil(Math.max(item.width, item.depth)));
@@ -594,7 +591,7 @@ function findAdditionSpot(layout: RoomLayout, floorIndex: number, item: Furnitur
   }))).sort((a, b) => a.score - b.score);
   for (const slot of slots) {
     const placed = { ...item, position: { x: slot.x, z: slot.z } };
-    if (hasCollisions(placed, items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls })) continue;
+    if (hasCollisions(placed, items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2 })) continue;
     if (!canApplyLayoutGeometry(layout, withItems(layout, floorIndex, [...items, placed]))) continue;
     return placed.position;
   }
@@ -889,9 +886,8 @@ function placementProblem(input: {
   const floor = layout.floors[floorIndex];
   if (!floor) return { code: 'NO_SPOT', message: '这层楼不存在' };
   const keepOut = floorKeepOut(layout, floorIndex);
-  const interiorWalls = layout.backendSceneV2 ? [] : floor.interiorWalls;
   if (hasCollisions(candidate, [...others], layout.width, layout.height, {
-    keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls,
+    keepOut, structureValidated: !!layout.backendSceneV2,
   })) {
     return { code: 'STRUCTURAL', message: '压到墙体、立柱或保留区' };
   }

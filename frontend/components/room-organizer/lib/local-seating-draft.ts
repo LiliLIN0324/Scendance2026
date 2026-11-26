@@ -140,7 +140,7 @@ function planDraft(original:RoomLayout,input:LocalDeskChairInput|LocalSharedDesk
       const chairs:FurnitureItem[]=Array.from({length:numberOfChairs},(_,index)=>({id:tempId(`chair_${index}`),type:'chair',name:'座椅（示意）',...input.chair,color:'#ffffff',icon:'',category:'seating',source:'builtin',position:{x:x+(numberOfChairs===2?(index===0?-1:1)*(input.chair.width+(shared?input.chairGap:0))/2:0),z:z+input.desk.depth+input.deskChairGap+input.chair.depth/2},rotation:Math.PI}));
       const group=[desk,...chairs];
       if(chairs.some(chair=>itemsOverlap(desk,chair))||group.some(item=>!boundaryClear(item,polygon,input.edgeClearance,layout.width,layout.height)))continue;
-      if(group.some(item=>hasCollisions(item,objects,layout.width,layout.height,{interiorWalls:floor.interiorWalls,keepOut})))continue;
+      if(group.some(item=>hasCollisions(item,objects,layout.width,layout.height,{keepOut})))continue;
       if(objects.some(item=>occupies(item)&&group.some(candidate=>itemsOverlap(candidate,item))))continue;
       const world=(item:FurnitureItem)=>({id:item.id,materialId:item.type==='desk'?'table' as const:'chair' as const,position:{x:item.position!.x+layout.width/2,z:item.position!.z+layout.height/2},size:{width:item.width,depth:item.depth,height:item.height},rotation:-(item.rotation??0)*180/Math.PI,color:item.color,locked:false,notes:''});
       if(structuralViolations({...model,objects:group.map(world)}).length)continue;

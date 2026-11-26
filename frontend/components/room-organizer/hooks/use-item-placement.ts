@@ -211,7 +211,7 @@ export function useItemPlacement({
         others: activeFloor.items,
         roomWidth,
         roomDepth,
-        context: { interiorWalls: activeFloor.interiorWalls ?? [] },
+        context: {},
       });
       if (!resolved) return '';
       const candidateItem = { ...catalogItem, id: '__placement_preview__', position: resolved, rotation: 0 };

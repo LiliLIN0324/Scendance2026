@@ -1326,12 +1326,12 @@ useEffect(() => {
   const collidingIds = useMemo(() => {
     const matches = new Set<string>();
     for (const item of activeFloor.items) {
-      if (structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })) {
+      if (structuralItemCollides(item, layout, activeFloorIndex) || hasCollisions(item, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2 })) {
         matches.add(item.id);
       }
     }
     return matches;
-  }, [activeFloor.items, activeFloor.interiorWalls, layout, activeFloorIndex, keepOut]);
+  }, [activeFloor.items, layout, activeFloorIndex, keepOut]);
 
   const stopRouteDraw = useCallback(() => {
     setRouteDrawItemId(null);
@@ -4126,7 +4126,7 @@ useEffect(() => {
   const reviewGround = outdoorPlan ? resolveGround(layout, outdoorPlan) : null;
   const captureReview=useReviewCapture({layout,getLayout:()=>layoutStore.getState().layout,view,activeFloorIndex,
     ready:isReady||view.view2D,selectedItemId,extraSelectedIds,
-    hasCollision:item=>structuralItemCollides(item,layout,activeFloorIndex)||hasCollisions(item,activeFloor.items,layout.width,layout.height,{keepOut,structureValidated:!!layout.backendSceneV2,interiorWalls:layout.backendSceneV2?[]:activeFloor.interiorWalls}),
+    hasCollision:item=>structuralItemCollides(item,layout,activeFloorIndex)||hasCollisions(item,activeFloor.items,layout.width,layout.height,{keepOut,structureValidated:!!layout.backendSceneV2}),
     ...(referenceImage.layer?{referenceImage:referenceImage.layer}:{}),
     ...(reviewGround?{ground:reviewGround}:{}),
     canvas:canvasRef,canvas2D:canvas2DRef,scene:sceneRef,renderer:rendererRef,camera:cameraRef,
@@ -4893,7 +4893,7 @@ useEffect(() => {
             </aside>}
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded
-                hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2, interiorWalls: layout.backendSceneV2 ? [] : activeFloor.interiorWalls })}
+                hasCollision={structuralItemCollides(selectedItem, layout, activeFloorIndex) || hasCollisions(selectedItem, activeFloor.items, layout.width, layout.height, { keepOut, structureValidated: !!layout.backendSceneV2 })}
                 routeDrawing={routeDrawItemId !== null && routeDrawItemId === selectedItem.id}
                 routeDrawHint={routeDrawHint}
                 onToggleRouteDrawing={toggleRouteDraw}

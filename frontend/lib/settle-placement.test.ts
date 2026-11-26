@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FurnitureItem, InteriorWall, RoomLayout } from '../components/room-organizer/lib/types';
+import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 import { settlePlacement } from './settle-placement';
 
 /** 造一件家具，缺省 0.5m × 0.5m、高 0.45m 的椅子。 */
@@ -23,7 +23,7 @@ function makeItem(
 function makeLayout(opts: {
   width?: number;
   height?: number;
-  floors?: Array<{ id: string; items: FurnitureItem[]; interiorWalls?: InteriorWall[] }>;
+  floors?: Array<{ id: string; items: FurnitureItem[] }>;
 }): RoomLayout {
   const width = opts.width ?? 4;
   const height = opts.height ?? 6;
@@ -39,7 +39,6 @@ function makeLayout(opts: {
         items: f.items,
         floorColor: '#ffffff',
       };
-      if (f.interiorWalls) floor.interiorWalls = f.interiorWalls;
       return floor;
     }),
   };
@@ -304,27 +303,6 @@ describe('settlePlacement — BFS / 几何细节', () => {
     // 椅子的 AISLE_TOUCH 应被收敛掉
     const aisle = report.remainingViolations.filter((v) => v.kind === 'AISLE_TOUCH');
     expect(aisle).toHaveLength(0);
-  });
-
-  it('16. 椅子与内墙相交 → WALL 违规被识别', () => {
-    const wall: InteriorWall = {
-      id: 'w1',
-      x1: -1.0,
-      z1: 0.5,
-      x2: 1.0,
-      z2: 0.5,
-    };
-    // 椅子在 z=0.5 与内墙重叠
-    const chair = makeItem({ id: 'c1', name: '椅', position: { x: 0, z: 0.5 } });
-    const layout = makeLayout({
-      floors: [{ id: 'f0', items: [chair], interiorWalls: [wall] }],
-    });
-    const report = settlePlacement(layout);
-    // 初始违规里应含 WALL
-    const firstStep = report.steps[0];
-    expect(firstStep).toBeDefined();
-    const wallViolation = firstStep.violations.filter((v) => v.kind === 'WALL');
-    expect(wallViolation.length).toBeGreaterThanOrEqual(1);
   });
 
   it('17. 收敛器把通道带内的椅子推出时不引入 OVERLAP', () => {
