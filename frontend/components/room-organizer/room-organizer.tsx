@@ -1687,11 +1687,13 @@ useEffect(() => {
       } else {
         const recordId = current.id ?? null;
         if (recordId) {
+          // S3-3 mirror g1（positive-source-ground）：只写 plan.ground，id/name 透传身份，不回写几何。
           const written = writeGroundToPlan(recordId, ground, { name: current.name });
           if (written.ok) setOutdoorPlanState({ projectId: recordId, plan: written.record.plan ?? createStarterOutdoorPlan() });
         }
       }
       // 已经有场景锚点就别动：锚点是世界定位的正源，自动补图不该把 3D 场景挪走。
+      // S3-3 mirror m1（retire-with-shell）：plan.anchor 派生 sceneAnchor 回写 layout，随壳整刀删，勿新增同类回写。
       if (current.sceneAnchor) return;
       actions.applyLayout({
         ...current,
@@ -1745,6 +1747,7 @@ useEffect(() => {
     const landed = outdoorOverlayRef.current?.getCanvasApi()?.applyGround(sync.ground) === true
       || (() => {
         const boundId = outdoorPlanSlotId;
+        // S3-3 mirror g2（positive-source-ground）：旧 layout 底图迁进 plan.ground，方向只 to-plan，无反向投影。
         const written = boundId ? writeGroundToPlan(boundId, sync.ground, { name: current.name }) : { ok: false as const };
         if (!written.ok) return false;
         setOutdoorPlanState({ projectId: boundId, plan: written.record.plan ?? createStarterOutdoorPlan() });
@@ -3647,6 +3650,7 @@ useEffect(() => {
       const existing = sceneAnchorOf(current);
       // 静态底图是「给已有锚点的场景垫一张大图」：锚点必须留在原扫描位置，
       // 底图中心由 bounds 经 anchorGeoToWorld 投出来，不能把锚点搬到 bbox 中心去。
+      // S3-3 mirror m2（retire-with-shell）：研究区选址回写 sceneAnchor + researchArea 进 layout，随壳整刀删。
       const sceneAnchor: SceneAnchor = {
         lng: area.center.lng,
         lat: area.center.lat,

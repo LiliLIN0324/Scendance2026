@@ -457,6 +457,7 @@ export function orientMapShellNorthUp(layout: RoomLayout): RoomLayout {
     ...(scene ? { backendSceneV2: scene } : {}),
     ...(registration ? (() => {
       // 锚点是正源；frame 由锚点推出，只留给立壳卫星贴图的 UV。
+      // S3-3 mirror m3（retire-with-shell）：登记帧派生壳体 mapGroundFrame/sceneAnchor 回写，随壳整刀删。
       const anchor = anchorFromMapFrame(registration.frame, layout.width, layout.height);
       return { mapGroundFrame: frameFromAnchor(anchor, layout.width, layout.height), sceneAnchor: anchor };
     })() : {}),
@@ -753,6 +754,7 @@ export async function ensureSatelliteGround(layout: RoomLayout, style?: 6 | 7 | 
       : legacyGroundOf(layout).mapGroundFrame ?? frameForExistingShell(located, shell) ?? registration?.frame;
     const fetched = await fetchSatelliteGroundDataUrl(located, undefined, frame, { width: layout.width, depth: layout.height }, style);
     if (fetched && frame) {
+      // S3-3 mirror m4（retire-with-shell，ensureSatelliteGround）：壳体底图补丁附帧与 sceneAnchor，随壳整刀删。
       return {
         floorPlanImage: fetched,
         floorPlanOpacity: 0.78,
@@ -808,6 +810,7 @@ export async function ensurePlanGround(
   });
   if (!capture) return null;
   rememberPlanGroundBounds(capture.dataUrl, capture.bounds);
+  // S3-3 mirror m4（retire-with-shell，ensurePlanGround）：壳体底图补丁附帧与 sceneAnchor，随壳整刀删。
   return {
     floorPlanImage: capture.dataUrl,
     floorPlanOpacity: 0.94,
@@ -875,6 +878,7 @@ export function createVenueFromPick(
     satelliteRef: false,
     ...(registration ? { frame: registration.frame } : {}),
   };
+  // S3-3 mirror m5（retire-with-shell）：落壳展开壳体 plan.layout 后附 sceneAnchor，随壳整刀删；地面定位另走 plan.ground。
   const layout: RoomLayout = {
     ...plan.layout, name, ...(anchor ? { sceneAnchor: anchor } : {}),
   };

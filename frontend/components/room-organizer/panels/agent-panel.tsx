@@ -2037,6 +2037,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
         : layout.researchArea;
       onApply(researchArea ? { ...layout, researchArea } : layout, { expectedBase: base });
       // B4 #38：圈画边界跟着 ground 走，唯一落盘口是 plan.ground（layout 不再存底图/多边形字节）。
+      // S3-3 mirror g3（positive-source-ground）：只写 plan.ground，id/name 透传身份，不回写几何。
       writeGroundToPlan(base.id ?? layout.id, ground, { name: layout.name });
       // 2026-11-16 用户定稿：选址即换场——新锚点 + 新用地红线推进户外规划，
       // 旧草稿由 applyVenue 按「换锚点=新场地」删掉（同锚点重画边界则保留内容）。
