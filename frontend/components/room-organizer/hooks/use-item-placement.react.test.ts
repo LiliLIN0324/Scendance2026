@@ -45,7 +45,6 @@ describe('useItemPlacement — wall-aligned catalog placement', () => {
       itemWidth: door.width,
       roomWidth: width,
       roomDepth: height,
-      interiorWalls: [],
     });
     expect(expected.rotation).not.toBe(0);
 
@@ -66,7 +65,6 @@ describe('useItemPlacement — wall-aligned catalog placement', () => {
       itemDepth: camera.depth,
       roomWidth: width,
       roomDepth: height,
-      interiorWalls: [],
     });
     expect(expected.rotation).not.toBe(0);
 

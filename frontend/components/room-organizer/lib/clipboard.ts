@@ -9,7 +9,7 @@
 import { rotatedHalfExtents } from './geometry';
 import { remapGroupIds } from './groups';
 import { settleWallMountedItem } from './opening-snap';
-import type { FurnitureItem, InteriorWall, Vec2 } from './types';
+import type { FurnitureItem, Vec2 } from './types';
 
 export interface CentroidArrangement {
   /** Deep copies with `position` rewritten as the offset from the centroid. */
@@ -59,7 +59,6 @@ export function clearClipboard(): void {
 export interface PasteOptions {
   roomWidth: number;
   roomDepth: number;
-  interiorWalls?: readonly InteriorWall[];
   /** Unique tag mixed into the pasted ids (caller supplies randomness — keeps this pure). */
   idTag: string;
   /**
@@ -89,7 +88,6 @@ export interface PasteOptions {
 export function buildPasteItems(options: PasteOptions): FurnitureItem[] {
   if (!content) return [];
   const { roomWidth, roomDepth, idTag } = options;
-  const interiorWalls = options.interiorWalls ?? [];
   const target = options.target ?? {
     x: content.sourceCentroid.x + 0.5,
     z: content.sourceCentroid.z + 0.5,
@@ -107,7 +105,7 @@ export function buildPasteItems(options: PasteOptions): FurnitureItem[] {
     delete copy.locked;
     delete copy.handoff;
 
-    const settled = settleWallMountedItem(copy, copy.position!, roomWidth, roomDepth, interiorWalls);
+    const settled = settleWallMountedItem(copy, copy.position!, roomWidth, roomDepth);
     if (settled) return { ...copy, ...settled };
     if (copy.category === 'outdoor') return copy;
 

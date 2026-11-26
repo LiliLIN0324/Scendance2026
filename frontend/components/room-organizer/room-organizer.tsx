@@ -1529,13 +1529,12 @@ useEffect(() => {
         itemDepth: item.depth,
         roomWidth: layout.width,
         roomDepth: layout.height,
-        interiorWalls: activeFloor.interiorWalls ?? [],
         rotation,
         ...(bracketed ? { bracketArm: CAMERA_BRACKET_ARM } : {}),
       });
       actions.moveItem(id, pos.x, pos.z);
     },
-    [activeFloor.items, activeFloor.interiorWalls, layout.width, layout.height, actions]
+    [activeFloor.items, layout.width, layout.height, actions]
   );
 
   // Locked items are immune to rotation — group rotates orbit items around
@@ -3157,7 +3156,6 @@ useEffect(() => {
     const built = buildPasteItems({
       roomWidth: layout.width,
       roomDepth: layout.height,
-      interiorWalls: activeFloor.interiorWalls ?? [],
       idTag: randomSuffix(),
       floorIndex: activeFloorIndex,
     });
@@ -3174,7 +3172,7 @@ useEffect(() => {
     }
     playCue('place');
     return true;
-  }, [layout, activeFloor.interiorWalls, activeFloor.items, activeFloorIndex, actions, commitHistoryNow, selectOnly, playCue]);
+  }, [layout, activeFloor.items, activeFloorIndex, actions, commitHistoryNow, selectOnly, playCue]);
 
   const shortcutHandlers = useMemo(
     () => ({
@@ -3217,7 +3215,6 @@ useEffect(() => {
               { x, z },
               layout.width,
               layout.height,
-              activeFloor.interiorWalls ?? [],
               frontGap
             )
           : null;
@@ -3281,7 +3278,6 @@ useEffect(() => {
       allSelectedIds,
       actions,
       activeFloor.items,
-      activeFloor.interiorWalls,
       activeFloorIndex,
       activeFloorY,
       layout.floors.length,

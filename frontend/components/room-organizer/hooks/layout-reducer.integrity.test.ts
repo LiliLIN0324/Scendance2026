@@ -126,18 +126,6 @@ describe('layoutReducer — resizeItem re-seats wall-mounted items (#408)', () =
     expect(item(next, 'cam').position!.z).toBeCloseTo(-4 + 0.25 + 0.02);
   });
 
-  it('a door widened past the end of its interior wall slides back onto it', () => {
-    const wall = { id: 'w1', x1: 0, z1: 0, x2: 2, z2: 0 };
-    const door = makeItem({ id: 'door', type: 'door', width: 0.8, position: { x: 1.5, z: 0 }, rotation: 0 });
-    const next = layoutReducer(stateWith([door], { interiorWalls: [wall] }), {
-      type: 'resizeItem',
-      id: 'door',
-      dimension: 'width',
-      value: 1.4,
-    });
-    expect(item(next, 'door').position).toEqual({ x: 1.3, z: 0 });
-  });
-
   it('a height change never moves the item', () => {
     const camera = makeItem({ id: 'cam', type: 'security-camera', depth: 0.2, position: { x: 0, z: -3.88 }, rotation: 0 });
     const next = layoutReducer(stateWith([camera]), { type: 'resizeItem', id: 'cam', dimension: 'height', value: 0.6 });

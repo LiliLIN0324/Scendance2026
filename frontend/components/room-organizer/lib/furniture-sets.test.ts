@@ -79,13 +79,6 @@ describe('buildFurnitureSet — placement rules of a saved set (#384)', () => {
     expect(chair!.position).toEqual({ x: 0, z: 2 });
   });
 
-  it('settles onto an interior wall when given the floor’s partitions', () => {
-    const set = custom([{ type: 'door', offset: { x: 0, z: 0.2 }, rotation: 0, snapshot: snapshot('door') }]);
-    const interiorWalls = [{ id: 'p', x1: -2, z1: 0, x2: 2, z2: 0 }];
-    const [door] = buildFurnitureSet(set, { idPrefix: 's', roomWidth: 8, roomDepth: 8, interiorWalls });
-    expect(door!.position).toEqual({ x: 0, z: 0 });
-  });
-
   it('keeps a garden set outside the house', () => {
     const set = custom([
       { type: 'tree', offset: { x: -1.5, z: 0 }, snapshot: snapshot('tree') },

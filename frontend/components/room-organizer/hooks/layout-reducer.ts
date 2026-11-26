@@ -498,7 +498,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
           offset,
           state.layout.width,
           state.layout.height,
-          floor.interiorWalls ?? [],
           activeFrontGap(state)
         );
         const copy: FurnitureItem = settled
@@ -544,7 +543,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
               item.position,
               state.layout.width,
               state.layout.height,
-              activeInteriorWalls(state),
               activeFrontGap(state)
             )
           : null;
@@ -560,7 +558,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
           position,
           state.layout.width,
           state.layout.height,
-          activeInteriorWalls(state),
           activeFrontGap(state)
         );
         return settled ?? { position };
@@ -583,7 +580,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
                 item.position,
                 state.layout.width,
                 state.layout.height,
-                activeInteriorWalls(state),
                 activeFrontGap(state)
               )
             : null;
@@ -670,7 +666,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
             position,
             state.layout.width,
             state.layout.height,
-            floor.interiorWalls ?? [],
             activeFrontGap(state)
           );
           const moved = { ...item, ...(settled ?? { position }) };
@@ -730,7 +725,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
             position,
             state.layout.width,
             state.layout.height,
-            floor.interiorWalls ?? [],
             activeFrontGap(state)
           );
           return { ...item, rotation: nextRotation, ...(settled ?? { position }) };
@@ -1193,12 +1187,11 @@ interface Footprint {
 }
 
 function refitFloor(floor: FloorLayout, from: Footprint, to: Footprint): FloorLayout {
-  const walls = floor.interiorWalls ?? [];
   let itemsChanged = false;
   const items = floor.items.map((item) => {
     if (item.id === ENTRANCE_DOOR_ID || !item.position || !isWallMounted(item.type)) return item;
-    const position = followExteriorWall(item, item.position, from, to, walls);
-    const settled = settleWallMountedItem(item, position, to.width, to.depth, walls);
+    const position = followExteriorWall(item, item.position, from, to);
+    const settled = settleWallMountedItem(item, position, to.width, to.depth);
     if (!settled) return item;
     const next = { ...item, ...settled };
     if (sameItem(item, next)) return item;
@@ -1241,17 +1234,14 @@ function followExteriorWall(
   item: FurnitureItem,
   position: { x: number; z: number },
   from: Footprint,
-  to: Footprint,
-  interiorWalls: readonly InteriorWall[]
+  to: Footprint
 ): { x: number; z: number } {
   const snap = snapOpeningToWall({
     position,
     itemWidth: item.width,
     roomWidth: from.width,
     roomDepth: from.depth,
-    interiorWalls,
   });
-  if (snap.wallKind !== 'exterior') return position;
   const dx = (to.width - from.width) / 2;
   const dz = (to.depth - from.depth) / 2;
   // snapOpeningToWall's exterior candidates: north 0, south π, east −π/2, west π/2.
@@ -1259,11 +1249,6 @@ function followExteriorWall(
   if (snap.rotation === Math.PI) return { x: position.x, z: position.z + dz };
   if (snap.rotation === -Math.PI / 2) return { x: position.x + dx, z: position.z };
   return { x: position.x - dx, z: position.z };
-}
-
-/** Interior walls of the active floor — what wall-mounted items settle against. */
-function activeInteriorWalls(state: LayoutState): readonly InteriorWall[] {
-  return state.layout.floors[state.activeFloorIndex]?.interiorWalls ?? [];
 }
 
 /** The recessed entrance's span of the front wall on the active storey: openings settle on its piers (#394). */
