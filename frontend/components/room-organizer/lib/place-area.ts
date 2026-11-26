@@ -24,6 +24,8 @@ export interface PlaceArea {
   polygon: [number, number][];
   /** line=道路等开放折线（画布画粗线高亮）；缺省=闭合面选区。 */
   kind?: 'area' | 'line';
+  /** stock=本地库存命中；online=网上现查。缺省（旧缓存）当库存，不额外报错。 */
+  source?: 'stock' | 'online';
 }
 
 export interface AreaSearchOptions {
@@ -218,7 +220,7 @@ export async function fetchPlaceShape(
     // 服务端总预算 20s；客户端只留传输余量，不再为镜像串行轮换等待 85s。
     const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(21000)]) : AbortSignal.timeout(21000) });
     if (!response.ok) return null;
-    const body = await response.json() as { shape?: { id?: string; name?: string; kind?: string; polygon?: [number, number][]; bounds?: number[] } | null };
+    const body = await response.json() as { shape?: { id?: string; name?: string; kind?: string; source?: string; polygon?: [number, number][]; bounds?: number[] } | null };
     const raw = body?.shape;
     if (!raw || !Array.isArray(raw.polygon) || raw.polygon.length < 3) return null;
     const polygon: [number, number][] = [];
@@ -249,6 +251,7 @@ export async function fetchPlaceShape(
       bounds,
       polygon,
       ...(raw.kind === 'line' ? { kind: 'line' as const } : {}),
+      ...(raw.source === 'online' ? { source: 'online' as const } : raw.source === 'stock' ? { source: 'stock' as const } : {}),
     };
     // 3 点 kind:line 等垃圾几何不当占地：不写缓存，调用方保留定位钉。
     if (!isDisplayablePlaceShape(area)) return null;

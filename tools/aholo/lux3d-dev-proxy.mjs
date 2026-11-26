@@ -2098,25 +2098,79 @@ function shapeInHangzhou(shape) {
   return w >= PLACE_STOCK_HZ[0] && s >= PLACE_STOCK_HZ[1] && e <= PLACE_STOCK_HZ[2] && n <= PLACE_STOCK_HZ[3];
 }
 
+/*
+ * 库存匹配口径：与 functions/api/place-shape.ts 的 lookupPlaceStock 同口径。
+ * 改一处必须同步另一处，否则本地 dev 与线上会给出不同的框。
+ */
+const STOCK_CITY_PREFIX = /^(?:杭州市|杭州|浙江省|浙江)/u;
+/** 同一个地点可能带的后缀白名单；不在表里的一律不当同一地点（「西湖」不能命中「西湖国宾馆」）。 */
+const SAME_PLACE_SUFFIXES = [
+  '主楼', '大楼', '分楼', '新楼', '主馆', '分馆', '展馆', '馆', '店', '分店', '门店', '中心', '广场', '园区', '景区',
+];
+
+function withoutStockCity(value) {
+  return String(value ?? '').replace(STOCK_CITY_PREFIX, '');
+}
+
+/** 放宽召回用的核心名：去城市前缀与一个常见后缀；短于 3 字不放宽。 */
+function stockCoreName(nameNorm) {
+  const base = withoutStockCity(nameNorm);
+  for (const suffix of SAME_PLACE_SUFFIXES) {
+    const cut = base.length - suffix.length;
+    if (cut >= 3 && base.endsWith(suffix)) return base.slice(0, cut);
+  }
+  return base;
+}
+
+/** 同一地点等级：0 完全相同，1 只差一个白名单后缀，null 不是同一个地点。 */
+function samePlaceRank(query, canonical) {
+  if (canonical === query) return 0;
+  if (canonical.startsWith(query) && SAME_PLACE_SUFFIXES.includes(canonical.slice(query.length))) return 1;
+  if (query.startsWith(canonical) && SAME_PLACE_SUFFIXES.includes(query.slice(canonical.length))) return 1;
+  return null;
+}
+
 async function lookupPlaceStock(nameNorm, near) {
   const key = await placeStockKey();
   if (!key) return null;
+  const query = withoutStockCity(nameNorm);
+  if (!query) return null;
+  // 一次取回「精确 + 去城市名 + 核心名包含」三路候选：同名多行不再整体放弃。
+  const filters = [`name_norm.eq.${nameNorm}`];
+  if (query !== nameNorm) filters.push(`name_norm.eq.${query}`);
+  const pattern = stockCoreName(nameNorm).replace(/[%*,()]/g, '');
+  if (pattern.length >= 3) filters.push(`name_norm.ilike.*${pattern}*`);
   try {
-    const res = await shapeFetch(`${PLACE_STOCK_DB}/rest/v1/place_shapes?name_norm=eq.${encodeURIComponent(nameNorm)}&select=id,name,kind,polygon,bounds`, {
+    const params = new URLSearchParams({
+      or: `(${filters.join(',')})`,
+      select: 'id,name,kind,polygon,bounds',
+      limit: '20',
+    });
+    const res = await shapeFetch(`${PLACE_STOCK_DB}/rest/v1/place_shapes?${params}`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return null;
     const rows = await res.json();
-    const row = rows?.[0];
-    if (!row || !Array.isArray(row.polygon)) return null;
-    const hit = { id: row.id, name: row.name, kind: row.kind === 'line' ? 'line' : 'area', polygon: row.polygon, bounds: row.bounds };
-    // 库存里若已误写入垃圾几何（杭州大厦 3 点 line），当作未命中，走主链路重挖，绝不回喂。
-    const target = nameNorm.replace(/^(?:杭州市|杭州)/u, '');
-    const canonical = normalizeShapeName(hit.name).replace(/^(?:杭州市|杭州)/u, '');
-    const matches = target === canonical || (/^[a-z]+[0-9]+$/i.test(target) && canonical.endsWith(target));
-    if (near && Array.isArray(hit.bounds) && (near.lng < hit.bounds[0] - 0.01 || near.lng > hit.bounds[2] + 0.01 || near.lat < hit.bounds[1] - 0.01 || near.lat > hit.bounds[3] + 0.01)) return null;
-    return matches && isPersistablePlaceShape(hit) ? hit : null;
+    if (!Array.isArray(rows)) return null;
+    const scored = [];
+    for (const row of rows) {
+      if (!row || typeof row.id !== 'string' || typeof row.name !== 'string' || !Array.isArray(row.polygon)) continue;
+      const hit = { id: row.id, name: row.name, kind: row.kind === 'line' ? 'line' : 'area', polygon: row.polygon, bounds: row.bounds };
+      // 库存里若已误写入垃圾几何（杭州大厦 3 点 line），当作未命中，走主链路重挖，绝不回喂。
+      if (!isPersistablePlaceShape(hit)) continue;
+      const canonical = withoutStockCity(normalizeShapeName(hit.name));
+      const rank = samePlaceRank(query, canonical)
+        ?? (/^[a-z]+[0-9]+$/i.test(query) && canonical.endsWith(query) ? 2 : null);
+      if (rank === null) continue;
+      const [west, south, east, north] = Array.isArray(hit.bounds) ? hit.bounds : [];
+      if (!(west < east && south < north)) continue;
+      // near 是硬门：库里有同名但隔了几公里的行，不能拿来当这个点位的轮廓。
+      if (near && (near.lng < west - 0.01 || near.lng > east + 0.01 || near.lat < south - 0.01 || near.lat > north + 0.01)) continue;
+      scored.push({ hit, rank, area: (east - west) * (north - south), points: hit.polygon.length });
+    }
+    scored.sort((a, b) => a.rank - b.rank || b.area - a.area || b.points - a.points);
+    return scored[0]?.hit ?? null;
   } catch {
     return null;
   }

@@ -24,6 +24,9 @@ export interface PlaceShape {
   kind?: 'area' | 'line';
   polygon: [number, number][];
   bounds: [number, number, number, number];
+  /** stock=本地库存命中（298k 行，快）；online=网上现查（Overpass 等，慢且可能不准）。
+   *  前端据此只对 online 给一句「联网现查」提示，不把兜底结果当权威。 */
+  source?: 'stock' | 'online';
 }
 
 const PHOTON_TIMEOUT_MS = 6000;
@@ -756,7 +759,13 @@ export async function handlePlaceShape(
   const cached = shapeCache.get(cacheKey);
   if (cached && isDisplayablePlaceShape(cached)) return json({ shape: cached }, 200);
   if (cached) shapeCache.delete(cacheKey); // 缓存里的垃圾几何（如 3 点 line）丢掉，重新挖
-  const stockRequest = lookupPlaceStock(nameNorm, near, env, fetchImpl);
+  // stockBox 记下库存那一路真实答了什么，末尾用来判 source：
+  // 900ms 抢答窗口超时后，库存仍可能在后面几轮里追上并胜出，不能一律当 online。
+  const stockBox: { shape: PlaceShape | null } = { shape: null };
+  const stockRequest = lookupPlaceStock(nameNorm, near, env, fetchImpl).then(shape => {
+    if (shape) stockBox.shape = shape;
+    return shape;
+  });
   // 库存抢答窗口：库里的回答是毫秒级（实测 298k 行 + name_norm 索引后 
   // EXPLAIN ANALYZE 为 0.42ms），但 Cloudflare 到 Supabase 的往返偶尔会超过 150ms。
   // 150ms 太窄：一旦超时就被当成「库里没有」，转头去 Overpass 现查，
@@ -765,7 +774,7 @@ export async function handlePlaceShape(
   let stockGrace: ReturnType<typeof setTimeout> | undefined;
   const stocked = await Promise.race([stockRequest, new Promise<null>(resolve => { stockGrace = setTimeout(() => resolve(null), 900); })]);
   clearTimeout(stockGrace);
-  if (stocked) return json({ shape: cacheShape(cacheKey, stocked) }, 200);
+  if (stocked) return json({ shape: cacheShape(cacheKey, { ...stocked, source: 'stock' }) }, 200);
   // 五路抢答（2026-11-13「点哪儿框哪儿」改造）：空间命中是主路径——点的坐标就在
   // 建筑/园区里，按点查面不看名字，结构上保证「点建筑=建筑选区」；way/rel 按名兜底；
   // 全落空再查最近道路段画线型选区（点道路=道路选区）。
@@ -785,7 +794,11 @@ export async function handlePlaceShape(
   }
   if (!shape && near && !budget.aborted) shape = acceptShape(await spatialAreaStage(queryName, near, fetchImpl));
   if (!shape && near && !budget.aborted) shape = acceptShape(await highwayLineStage(near, queryName, fetchImpl));
-  if (shape) cacheShape(cacheKey, shape);
+  if (shape) {
+    const fromStock = stockBox.shape;
+    shape = { ...shape, source: fromStock && fromStock === shape ? 'stock' : 'online' };
+    cacheShape(cacheKey, shape);
+  }
   completed.abort();
   // 未命中不写进程缓存、HTTP no-store：避免把 Overpass 抖动期间的 null 缓存一天。
   return shape ? json({ shape }, 200) : json({ shape: null }, 200, false);
