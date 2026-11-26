@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ANONYMOUS_DRAFT_SCOPE } from '@/lib/project-scope';
 import {
   REVIEW_LINK_NO_IDENTITY,
   REVIEW_LINK_SPLIT_DRAFT,
@@ -22,6 +23,8 @@ describe('projectLinkKind', () => {
     expect(projectLinkKind('house-abcdwxyz')).toBe('local-draft');
     expect(projectLinkKind(' default-outdoor ')).toBe('local-draft');
     expect(projectLinkKind('replica-banbury-town-council')).toBe('local-draft');
+    // 匿名 draft 槽是一等本机草稿，不去云端查，不判 invalid。
+    expect(projectLinkKind(ANONYMOUS_DRAFT_SCOPE)).toBe('local-draft');
   });
 
   it('裸 uuid 才是云项目号，空串和杂串无效', () => {
@@ -104,7 +107,7 @@ describe('classifyProjectIdentity', () => {
   });
 
   it('本机前缀从不去云端查，也不算云项目', () => {
-    for (const id of [house, 'default-outdoor', 'replica-banbury-town-council']) {
+    for (const id of [house, 'default-outdoor', 'replica-banbury-town-council', ANONYMOUS_DRAFT_SCOPE]) {
       expect(classifyProjectIdentity({ id })).toBe('local-draft');
       expect(classifyProjectIdentity({ id, reachability: 'reachable' })).toBe('local-draft');
       // 本机号即使真被探活成不可达，也不会被推到 orphan。
@@ -162,6 +165,7 @@ describe('localSlotNeedsCloudCheck', () => {
     expect(localSlotNeedsCloudCheck(house)).toBe(false);
     expect(localSlotNeedsCloudCheck('default-outdoor')).toBe(false);
     expect(localSlotNeedsCloudCheck('replica-banbury-town-council')).toBe(false);
+    expect(localSlotNeedsCloudCheck(ANONYMOUS_DRAFT_SCOPE)).toBe(false);
     expect(localSlotNeedsCloudCheck('')).toBe(false);
     expect(localSlotNeedsCloudCheck('not-a-project')).toBe(false);
   });
