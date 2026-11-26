@@ -18,6 +18,19 @@
 //   • React Context is retained as a passthrough: `use-layout-state.ts` is now a
 //     thin adapter that reads from this store, so the ~30 not-yet-migrated panels
 //     keep working UNCHANGED. Migration can proceed panel-by-panel.
+//
+// ---------------------------------------------------------------------------
+// 退役状态（2026-11-26 批4 判定：条件②未完成）
+//
+// 本 store 仍是编辑器内家具 / 分区 / 场地 / 入口的**临时状态正源**；plan（SitePlanData）
+// 目前只接管地面、锚点与快照，尚未接管编辑器摆放态。整链退役前置：plan 正源接管
+// 摆放 / 分区 / 碰撞 / 评分之后，再按清单逐面板切走，最后删本 store、layout-reducer、
+// use-layout-state 适配层。在此之前不得硬删——会崩掉整个工作台。
+//
+// 冻结口径：
+// - 不再新增 layout action 或面板写入口；多楼层写入已拆（批1）；plan↔layout 双向
+//   镜像写点冻结（`lib/layout-plan-mirror.ts`），新增跨双源写点必须先登记。
+// - 剩余生产消费点清单与角色：`docs/evidence/decouple-2026-11-26/s2-indoor-render-retirement.md` §11.18。
 // ---------------------------------------------------------------------------
 
 import { createStore, useStore } from 'zustand';
