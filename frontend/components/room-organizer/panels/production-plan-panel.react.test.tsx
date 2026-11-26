@@ -8,8 +8,14 @@ import { eventOperationsSchema } from '../../../../supabase/functions/_shared/ev
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { createOperation } from '../lib/event-operations';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { ProductionPlanPanel } from './production-plan-panel';
 import type { RoomLayout } from '../lib/types';
+
+/** 夹具：外壳 projectId 与本机 layout 同身份；生产路径 ProjectId 取自 context，面板不再借 layout.id 反推。 */
+function editorValue(layout: RoomLayout): RoomEditorContextValue {
+  return { projectId: layout.id ?? 'local', layout } as unknown as RoomEditorContextValue;
+}
 
 const taskId = '10000000-0000-4000-8000-000000000001';
 const missingTaskId = '10000000-0000-4000-8000-000000000002';
@@ -51,7 +57,11 @@ function livePanel(initial: RoomLayout, writable = true) {
     } else current = { ...current, productionPlan: value };
     view.rerender(element());
   }
-  const element = () => <ProductionPlanPanel layout={current} disabled={disabled} onUpdate={writable ? update : undefined}/>;
+  const element = () => (
+    <RoomEditorProvider value={editorValue(current)}>
+      <ProductionPlanPanel layout={current} disabled={disabled} onUpdate={writable ? update : undefined}/>
+    </RoomEditorProvider>
+  );
   view = render(element());
   return {
     updates, get layout() { return current; },
@@ -97,15 +107,15 @@ describe('local production plan draft UI', () => {
 
   it('isolates source guards by project scope and unregisters them on scope change and unmount', async () => {
     const firstLayout = trialLayout(plan()), secondLayout = { ...trialLayout(plan()), id: 'second-production-trial' };
-    const first = render(<ProductionPlanPanel layout={firstLayout} onUpdate={vi.fn()}/>);
-    const second = render(<ProductionPlanPanel layout={secondLayout} onUpdate={vi.fn()}/>);
+    const first = render(<RoomEditorProvider value={editorValue(firstLayout)}><ProductionPlanPanel layout={firstLayout} onUpdate={vi.fn()}/></RoomEditorProvider>);
+    const second = render(<RoomEditorProvider value={editorValue(secondLayout)}><ProductionPlanPanel layout={secondLayout} onUpdate={vi.fn()}/></RoomEditorProvider>);
     fireEvent.click(within(first.container).getByRole('button', { name: '编辑制作计划' }));
     await expect(flushSourceScope(firstLayout.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
     await expect(flushSourceScope(secondLayout.id!)).resolves.toBeUndefined();
     first.unmount();
     await expect(flushSourceScope(firstLayout.id!)).resolves.toBeUndefined();
     const nextLayout = { ...secondLayout, id: 'next-production-trial' };
-    second.rerender(<ProductionPlanPanel layout={nextLayout} onUpdate={vi.fn()}/>);
+    second.rerender(<RoomEditorProvider value={editorValue(nextLayout)}><ProductionPlanPanel layout={nextLayout} onUpdate={vi.fn()}/></RoomEditorProvider>);
     fireEvent.click(within(second.container).getByRole('button', { name: '编辑制作计划' }));
     await expect(flushSourceScope(secondLayout.id!)).resolves.toBeUndefined();
     await expect(flushSourceScope(nextLayout.id!)).rejects.toThrow('请先保存或取消制作计划编辑');
@@ -121,7 +131,7 @@ describe('local production plan draft UI', () => {
       useLayoutEffect(() => {
         if (layout.id === next.id) previousScopeFlush = flushSourceScope(initial.id!);
       }, [layout.id]);
-      return <ProductionPlanPanel layout={layout} disabled={disabled} onUpdate={update}/>;
+      return <RoomEditorProvider value={editorValue(layout)}><ProductionPlanPanel layout={layout} disabled={disabled} onUpdate={update}/></RoomEditorProvider>;
     }
     const view = render(<ScopeTransition layout={initial}/>);edit();
     change(row('演练签到岗').getByLabelText('班次'), 'A 项目未保存班次');

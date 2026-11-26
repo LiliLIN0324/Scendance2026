@@ -12,7 +12,20 @@ import { eventOperationsSchema } from '../../../../supabase/functions/_shared/ev
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { RoomLayout } from '../lib/types';
 import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { LocalProjectBackupPanel } from './local-project-backup-panel';
+
+/** 夹具：外壳 projectId 与本机 layout 同身份；生产路径 ProjectId 取自 context，面板不再借 layout.id 反推。 */
+function editorValue(layout: RoomLayout): RoomEditorContextValue {
+  return { projectId: layout.id ?? 'local', layout } as unknown as RoomEditorContextValue;
+}
+function tree(layout: RoomLayout, actions: LocalProjectBackupActions, briefState: CreativeBriefState, onComplete?: () => void) {
+  return (
+    <RoomEditorProvider value={editorValue(layout)}>
+      <LocalProjectBackupPanel layout={layout} briefState={briefState} actions={actions} onComplete={onComplete}/>
+    </RoomEditorProvider>
+  );
+}
 
 vi.mock('../lib/scene-delivery', async importOriginal => ({
   ...await importOriginal<typeof import('../lib/scene-delivery')>(), downloadSceneDelivery: vi.fn(),
@@ -44,7 +57,7 @@ function select(chosen: File): void { fireEvent.change(screen.getByLabelText('�
 function setup(overrides: Partial<LocalProjectBackupActions> = {}) {
   const actions: LocalProjectBackupActions = { prepareBackup: vi.fn().mockResolvedValue(fileText()), restoreBackup: vi.fn().mockResolvedValue(undefined),
     undoRestore: vi.fn().mockResolvedValue(undefined), backupPending: false, canUndoRestore: false, ...overrides };
-  const view = render(<LocalProjectBackupPanel layout={layout} briefState={briefState} actions={actions}/>);
+  const view = render(tree(layout, actions, briefState));
   fireEvent.click(screen.getByText('场景与活动备份'));
   return { actions, view };
 }
@@ -107,7 +120,7 @@ describe('local scene and activity backup', () => {
   it('shows V1 provenance and warns before replacing a current production plan with an older file',async()=>{
     const {actions,view}=setup();
     const current={...layout,productionPlan:productionPlanSchema.parse({})};
-    view.rerender(<LocalProjectBackupPanel layout={current} briefState={briefState} actions={actions}/>);
+    view.rerender(tree(current, actions, briefState));
     const older=JSON.parse(fileText());older.version=1;delete older.coverage.productionPlan;
     select(file(JSON.stringify(older)));await screen.findByText('完整项目备份 V1');
     expect(screen.getByText('当前方案未记录制作计划')).toBeTruthy();
@@ -223,10 +236,13 @@ describe('local scene and activity backup', () => {
   it.each(['layout edit', 'brief edit', 'A→B→A'] as const)('discards a read after %s even when the scope returns', async change => {
     const { actions, view } = setup(); const read = deferred<string>(); select(file('', () => read.promise));
     if (change === 'A→B→A') {
-      view.rerender(<LocalProjectBackupPanel layout={{ ...layout, id: 'backup-review-b' }} briefState={briefState} actions={actions}/>);
-      view.rerender(<LocalProjectBackupPanel layout={layout} briefState={briefState} actions={actions}/>);
-    } else view.rerender(<LocalProjectBackupPanel layout={change === 'layout edit' ? { ...layout, width: 10 } : layout}
-      briefState={change === 'brief edit' ? { ...briefState, brief: { ...brief, description: '新编辑' } } : briefState} actions={actions}/>);
+      view.rerender(tree({ ...layout, id: 'backup-review-b' }, actions, briefState));
+      view.rerender(tree(layout, actions, briefState));
+    } else view.rerender(tree(
+      change === 'layout edit' ? { ...layout, width: 10 } : layout,
+      actions,
+      change === 'brief edit' ? { ...briefState, brief: { ...brief, description: '新编辑' } } : briefState,
+    ));
     await act(async () => { read.resolve(fileText()); });
     expect(screen.queryByLabelText('备份预检')).toBeNull(); expect(screen.queryByRole('alert')).toBeNull();
   });
@@ -266,7 +282,7 @@ describe('local scene and activity backup', () => {
 
   it('resets source document inclusion when switching projects', () => {
     const { actions, view } = setup(); fireEvent.click(screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }));
-    view.rerender(<LocalProjectBackupPanel layout={{ ...layout, id: 'backup-review-b' }} briefState={briefState} actions={actions}/>);
+    view.rerender(tree({ ...layout, id: 'backup-review-b' }, actions, briefState));
     expect((screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }) as HTMLInputElement).checked).toBe(false);
   });
 
@@ -274,7 +290,7 @@ describe('local scene and activity backup', () => {
     const pending = deferred<string>(); const { actions, view } = setup({ prepareBackup: vi.fn(() => pending.promise) });
     if (reason === 'download') vi.mocked(downloadSceneDelivery).mockImplementationOnce(() => { throw new Error('下载被阻止'); });
     fireEvent.click(screen.getByRole('button', { name: '下载场景与活动备份' }));
-    if (reason === 'changed baseline') view.rerender(<LocalProjectBackupPanel layout={{ ...layout, name: '新布局' }} actions={actions} briefState={briefState}/>);
+    if (reason === 'changed baseline') view.rerender(tree({ ...layout, name: '新布局' }, actions, briefState));
     await act(async () => { if (reason === 'prepare') pending.reject(new Error('活动需求保存失败')); else pending.resolve(fileText()); });
     if (reason !== 'changed baseline') expect((await screen.findByRole('alert')).textContent).toContain(reason === 'prepare' ? '保存失败' : '下载被阻止');
     else expect(downloadSceneDelivery).not.toHaveBeenCalled();
@@ -297,19 +313,19 @@ describe('local scene and activity backup', () => {
     select(file(fileText())); await screen.findByText('A-文件布局');
     fireEvent.click(screen.getByRole('button', { name: '确认替换布局与活动需求' }));
     const restored = { ...layout, name: 'A-文件布局' };
-    view.rerender(<LocalProjectBackupPanel layout={restored} actions={{ ...actions, canUndoRestore: true }} briefState={{ ...briefState, brief: { ...brief, description: 'A-文件恢复' } }}/>);
+    view.rerender(tree(restored, { ...actions, canUndoRestore: true }, { ...briefState, brief: { ...brief, description: 'A-文件恢复' } }));
     await act(async () => { restore.resolve(); }); expect(screen.getByRole('status').textContent).toContain('已保存并核实');
     fireEvent.click(screen.getByRole('button', { name: '撤销本次恢复' })); fireEvent.click(screen.getByRole('button', { name: '正在撤销并核实保存…' }));
     expect(actions.undoRestore).toHaveBeenCalledOnce();
     await act(async () => { undo.reject(new Error('恢复后已有新编辑，不能撤销覆盖。')); });
     expect(screen.getByRole('alert').textContent).toContain('已有新编辑'); expect(screen.queryByRole('status')).toBeNull();
-    view.rerender(<LocalProjectBackupPanel layout={restored} actions={actions} briefState={briefState}/>);
+    view.rerender(tree(restored, actions, briefState));
     expect(screen.queryByRole('button', { name: '撤销本次恢复' })).toBeNull();
   });
 
   it('disables changes during a provider transaction', async () => {
     const { actions, view } = setup(); select(file(fileText())); await screen.findByText('A-文件布局');
-    view.rerender(<LocalProjectBackupPanel layout={layout} actions={{ ...actions, backupPending: true }} briefState={briefState}/>);
+    view.rerender(tree(layout, { ...actions, backupPending: true }, briefState));
     for (const name of ['下载场景与活动备份', localRestoreAvailable() ? '确认替换布局与活动需求' : '恢复暂不可用', '取消恢复']) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('选择备份文件') as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole('checkbox', { name: '包含图纸、照片与对应点' }) as HTMLInputElement).disabled).toBe(true);
@@ -319,7 +335,7 @@ describe('local scene and activity backup', () => {
     const pending = deferred<void>(); const { actions, view } = setup({ canUndoRestore: true, undoRestore: vi.fn(() => pending.promise) });
     fireEvent.click(screen.getByRole('button', { name: '撤销本次恢复' }));
     expect(screen.queryByRole('status')).toBeNull();
-    view.rerender(<LocalProjectBackupPanel layout={{ ...layout, name: '原布局' }} briefState={{ ...briefState, brief: { ...brief } }} actions={{ ...actions, canUndoRestore: false }}/>);
+    view.rerender(tree({ ...layout, name: '原布局' }, { ...actions, canUndoRestore: false }, { ...briefState, brief: { ...brief } }));
     await act(async () => { pending.resolve(); });
     expect(screen.getByRole('status').textContent).toContain('原布局与活动需求已保存并核实');
     expect(screen.queryByRole('button', { name: '撤销本次恢复' })).toBeNull();
@@ -328,10 +344,10 @@ describe('local scene and activity backup', () => {
   it.skipIf(!localRestoreAvailable()).each(['restore', 'undo'] as const)('suppresses a canceled %s and its old candidate after a human switches project', async kind => {
     const pending = deferred<void>(), onComplete = vi.fn();
     const { actions, view } = setup({ restoreBackup: vi.fn(() => pending.promise), undoRestore: vi.fn(() => pending.promise), canUndoRestore: kind === 'undo' });
-    view.rerender(<LocalProjectBackupPanel layout={layout} actions={actions} briefState={briefState} onComplete={onComplete}/>);
+    view.rerender(tree(layout, actions, briefState, onComplete));
     if (kind === 'restore') { select(file(fileText())); await screen.findByText('A-文件布局'); }
     fireEvent.click(screen.getByRole('button', { name: kind === 'restore' ? '确认替换布局与活动需求' : '撤销本次恢复' }));
-    view.rerender(<LocalProjectBackupPanel layout={{ ...layout, id: 'backup-review-b', name: 'B-原布局' }} actions={actions} briefState={briefState} onComplete={onComplete}/>);
+    view.rerender(tree({ ...layout, id: 'backup-review-b', name: 'B-原布局' }, actions, briefState, onComplete));
     await act(async () => { pending.reject(new Error('A-项目已切换，旧恢复停止。')); });
     expect(screen.queryByRole('alert')).toBeNull(); expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByLabelText('备份预检')).toBeNull(); expect(onComplete).not.toHaveBeenCalled();
@@ -340,14 +356,14 @@ describe('local scene and activity backup', () => {
   it.skipIf(!localRestoreAvailable())('returns to delivery only after successful restore and undo even when their own commits change scope', async () => {
     const restored = deferred<void>(), undone = deferred<void>(), onComplete = vi.fn();
     const { actions, view } = setup({ restoreBackup: vi.fn(() => restored.promise), undoRestore: vi.fn(() => undone.promise) });
-    view.rerender(<LocalProjectBackupPanel layout={layout} actions={actions} briefState={briefState} onComplete={onComplete}/>);
+    view.rerender(tree(layout, actions, briefState, onComplete));
     select(file(fileText({ ...layout, id: 'backup-review-b', name: 'B-文件布局' }))); await screen.findByText('B-文件布局');
     expect(onComplete).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '确认替换布局与活动需求' }));
-    view.rerender(<LocalProjectBackupPanel layout={{ ...layout, id: 'backup-review-b', name: 'B-文件布局' }} actions={{ ...actions, canUndoRestore: true }} briefState={briefState} onComplete={onComplete}/>);
+    view.rerender(tree({ ...layout, id: 'backup-review-b', name: 'B-文件布局' }, { ...actions, canUndoRestore: true }, briefState, onComplete));
     expect(onComplete).not.toHaveBeenCalled(); await act(async () => { restored.resolve(); }); expect(onComplete).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: '撤销本次恢复' }));
-    view.rerender(<LocalProjectBackupPanel layout={layout} actions={actions} briefState={briefState} onComplete={onComplete}/>);
+    view.rerender(tree(layout, actions, briefState, onComplete));
     expect(onComplete).toHaveBeenCalledOnce(); await act(async () => { undone.resolve(); }); expect(onComplete).toHaveBeenCalledTimes(2);
   });
 });
