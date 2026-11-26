@@ -93,6 +93,8 @@ import { requestOutdoorWalkPointerLock } from './lib/walk-engage';
 import { loadAholoSceneSource, storedAholoSceneSource } from './lib/aholo-model-placement';
 import { findAholoAsset } from './lib/aholo-assets';
 import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, saveOutdoorProjectRecord } from './lib/outdoor-project-store';
+import { isLegacyIndoorDraft, prepareOutdoorSaveAs } from './lib/legacy-indoor-draft';
+import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from './lib/initial-layout';
 import { writeGroundToPlan } from './lib/venue-ground-slot';
 import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
@@ -1732,6 +1734,9 @@ useEffect(() => {
     },
     [outdoorPlanState, outdoorPlanSlotId],
   );
+  // S3-4：旧纯室内草稿只读。云项目 / 请求挂云项目不进只读判定（有自己的 plan 记录链）。
+  const boundCloudProject = !!controller.getSnapshot().project || hasRequestedCloudProject();
+  const legacyIndoorReadOnly = !boundCloudProject && isLegacyIndoorDraft(layout, outdoorPlan);
   // B4 底图正源迁移（2026-11-25）：方向判定收在 `planGroundSync` 里（单一答案、可单测）。
   // S3：只补正源，不再反向投影 layout；迁完当刻就把 layout 的字节镜像擦掉（图/透明度/开关），
   // 让「贴地底图」在盘上也只有 plan.ground 一份。`applyGround` 不进撤销栈。
@@ -4002,6 +4007,25 @@ useEffect(() => {
     // B1-a：绑定成功后把壳体项目身份同步到 prop，与 layout.id 对齐，为会话 scope 正源去回退铺路。
     setOutdoorProjectId(projectId);
   }, [actions,activitySession.isCurrent,sessionToken,flushPendingBeforeSwitch]);
+
+  // S3-4：另存为户外新场地——起空白户外草稿，只迁方案名；旧壳物件/墙体/楼层/室内分区不进入。
+  const handleSaveAsOutdoor = useCallback(() => {
+    if (!legacyIndoorReadOnly) return;
+    const current = layoutStore.getState().layout;
+    const { record } = prepareOutdoorSaveAs(current);
+    const saved = saveOutdoorProjectRecord(record, undefined, false);
+    if (!saved.ok) { notify('另存为户外新场地失败，本地存储不可用或配额已满，请重试。', 'error'); return; }
+    flushPendingBeforeSwitch();
+    const nextLayout: RoomLayout = {
+      ...INITIAL_LAYOUT,
+      id: record.projectId,
+      name: record.name,
+      floors: [{ ...INITIAL_GROUND_FLOOR, items: [] }],
+    };
+    actions.applyLayout(nextLayout);
+    setOutdoorPlanState({ projectId: record.projectId, plan: record.plan ?? createStarterOutdoorPlan() });
+    setOutdoorProjectId(record.projectId);
+  }, [legacyIndoorReadOnly, actions, flushPendingBeforeSwitch]);
   // 无感挂云（设计规范 v2.5.2 §二.4）：登录态摆上第一件物料时静默建云项目并接上保存链。
   useSilentCloudAttach({ controller, layout, onBindProject });
 
@@ -4940,6 +4964,7 @@ useEffect(() => {
             />
             {previewCandidate && <div className={`sc-preview-caption${previewCaptionVisible ? '' : ' is-faded'}`} role="status" aria-hidden={!previewCaptionVisible}>AI 修改预览 · 尚未加入场景{view.view2D ? ' · 切回整体视角查看' : ' · 半透明为候选，线框为原位置'}</div>}
             {workspaceWriteGuards && environmentShown && <div className="sc-local-conflict" role="status"><span>当前编辑权模式暂不支持修改场地标定；标定结果仍需现场核对。</span></div>}
+            {legacyIndoorReadOnly && <div className="sc-local-conflict" role="status"><span>此项目为旧室内版本，暂不支持编辑</span><button type="button" onClick={handleSaveAsOutdoor}>另存为户外新场地</button></div>}
             {showSplatBanner && !(agentPanelVisible && activeAgent === 'space' && environmentShown) && <div className="sc-local-conflict" role="status"><span>{splatBannerText}</span>
               {environmentShown
                 ? <button type="button" aria-label="收起场地提示" onClick={() => setSplatShellKeptFor('')}>收起</button>
