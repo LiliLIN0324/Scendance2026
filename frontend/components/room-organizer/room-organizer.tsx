@@ -19,6 +19,7 @@ import { hasRequestedCloudProject, isLocalActivityWorkspace } from '@/lib/geomet
 import { commitFreshLocalActivityLayout, commitLocalRestoreLayout, prepareLocalRestoreLayout, proveFreshActivityScopeUnused, type FreshActivityScopeClearance } from '@/lib/local-project-restore';
 import { createLocalActivityBackup, deleteLocalActivityData } from '@/lib/local-activities';
 import { parseLocalProjectBackupJson } from '@/lib/local-project-backup';
+import { ANONYMOUS_DRAFT_SCOPE } from '@/lib/project-scope';
 import { publicationSchema, shareErrorMessage, type Publication } from '@/lib/share-api';
 import { siteShareLink } from '@/lib/site-share';
 import { snapshotPreviewContext, decideOnApply, type PreviewContext } from '@/lib/preview-guard';
@@ -358,9 +359,11 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   }, [explicitOutdoorProject, outdoorProjectIdProp, layout.id]);
   // 2026-11-13 用户指令：聊天历史要「服从于不同的项目」——会话槽跟当前活动走。
   // B1-b（方案 B）：身份纯取外壳 projectId，不再借室内 layout.id 兜底反推。
-  // 无参刷新回默认草稿 / 最近云项目；本机 house-* 活动只在从列表 / 链接进入时按指定 id 解析。
+  // 批6b 两分岔：显式项目（云项目 / 经典案例 replica-* / 本机 house-*）取外壳 id 正源；
+  // 入口没有显式项目时落独立匿名 `draft` 槽——不再回退 `default-outdoor` 顶替真项目，
+  // 也不借 `layout.id` 反推。匿名草稿对旧桶属「不同身份」，按只读隔离 + 另存，不并入。
   // 主会话 scope、store scope、activity tracker 源三者同取这一个派生值，消除口径分裂。
-  const activeProjectId = outdoorProjectIdProp ?? DEFAULT_OUTDOOR_PROJECT_ID;
+  const activeProjectId = explicitOutdoorProject ? outdoorProjectIdProp! : ANONYMOUS_DRAFT_SCOPE;
   const legacySessionScope = projectSessionScope(outdoorProjectIdProp);
   const sessionScope = projectSessionScope(activeProjectId);
   // 外壳 id 槽里的旧历史（升级前那份合并会话）整体搬给当前活动一次；同时把活动名记进名录，

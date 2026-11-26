@@ -30,6 +30,13 @@ export const SCOPE_READONLY_PREFIX = 'scendance:scope-readonly:';
 /** 旧槽缺省：未绑定外壳 projectId 的本机草稿槽。 */
 export const LEGACY_LOCAL_SCOPE = 'local';
 
+/**
+ * 匿名草稿槽：入口没有显式项目 id 时落这里的新草稿身份。
+ * 与 `LEGACY_LOCAL_SCOPE='local'` 刻意分开：`local` 是旧数据键族（身份/交付键），
+ * 新匿名草稿没有 id，对任何旧桶都属「不同身份 → 只读隔离 + 另存」，不能并进同一桶互相覆盖。
+ */
+export const ANONYMOUS_DRAFT_SCOPE = 'draft';
+
 export interface ScopeEnvelope {
   v: 1;
   /** 信封所属项目正源 id；与当前 scope 不符即不同 id，不迁移。 */
