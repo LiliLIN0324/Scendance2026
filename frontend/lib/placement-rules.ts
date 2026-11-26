@@ -1,4 +1,4 @@
-import type { FurnitureItem, InteriorWall, RoomLayout } from '../components/room-organizer/lib/types';
+import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 import { isStructuralMarker } from '../components/room-organizer/lib/structural-layout';
 
 /** 几何判据容差（米）。所有数字与相交判断都用同一把尺子。 */
@@ -137,50 +137,6 @@ function polygonsOverlap(a: Pt[], b: Pt[]): boolean {
   return true;
 }
 
-/** 2D 叉积 (a × b)。 */
-function cross(ax: number, az: number, bx: number, bz: number): number {
-  return ax * bz - az * bx;
-}
-
-/** 线段 p1p2 与线段 q1q2 是否严格相交（共线/端点接触不算）。 */
-function segmentsIntersect(p1: Pt, p2: Pt, q1: Pt, q2: Pt): boolean {
-  const d1 = cross(q2.x - q1.x, q2.z - q1.z, p1.x - q1.x, p1.z - q1.z);
-  const d2 = cross(q2.x - q1.x, q2.z - q1.z, p2.x - q1.x, p2.z - q1.z);
-  const d3 = cross(p2.x - p1.x, p2.z - p1.z, q1.x - p1.x, q1.z - p1.z);
-  const d4 = cross(p2.x - p1.x, p2.z - p1.z, q2.x - p1.x, q2.z - p1.z);
-  const p1Side = d1 > EPS ? 1 : d1 < -EPS ? -1 : 0;
-  const p2Side = d2 > EPS ? 1 : d2 < -EPS ? -1 : 0;
-  const q1Side = d3 > EPS ? 1 : d3 < -EPS ? -1 : 0;
-  const q2Side = d4 > EPS ? 1 : d4 < -EPS ? -1 : 0;
-  return p1Side !== p2Side && q1Side !== q2Side && p1Side !== 0 && p2Side !== 0 && q1Side !== 0 && q2Side !== 0;
-}
-
-/** 点是否在凸多边形内部（含边上，按容差处理）。 */
-function pointInConvexPoly(p: Pt, poly: Pt[]): boolean {
-  let sign: number | null = null;
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
-    const c = cross(b.x - a.x, b.z - a.z, p.x - a.x, p.z - a.z);
-    if (Math.abs(c) < EPS) continue;
-    const s = c > 0 ? 1 : -1;
-    if (sign === null) sign = s;
-    else if (sign !== s) return false;
-  }
-  return true;
-}
-
-/** 线段 p1p2 是否穿过凸多边形 poly（端点在内或与任一边相交）。 */
-function segmentHitsPolygon(p1: Pt, p2: Pt, poly: Pt[]): boolean {
-  if (pointInConvexPoly(p1, poly) || pointInConvexPoly(p2, poly)) return true;
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
-    if (segmentsIntersect(p1, p2, a, b)) return true;
-  }
-  return false;
-}
-
 /** 低矮件（地毯/地垫/台阶等）：不参与 BBOX_OVERLAP 判据，但仍要查越界。 */
 function isLowProfile(item: FurnitureItem): boolean {
   return item.height <= 0.05 || item.type === 'rug';
@@ -232,23 +188,7 @@ function checkAgainstFloor(
     });
   }
 
-  // 2. 穿内墙
-  const walls: InteriorWall[] = floor.interiorWalls ?? [];
-  for (const wall of walls) {
-    const w1: Pt = { x: wall.x1, z: wall.z1 };
-    const w2: Pt = { x: wall.x2, z: wall.z2 };
-    if (segmentHitsPolygon(w1, w2, poly)) {
-      violations.push({
-        code: 'WALL_INTERSECTION',
-        itemId: candidate.id,
-        itemName: candidate.name,
-        detail: `「${candidate.name}」与内墙「${wall.id}」相交`,
-        targetId: wall.id,
-      });
-    }
-  }
-
-  // 3. 包围盒重叠（低矮件 / structural 占位件豁免）
+  // 2. 包围盒重叠（低矮件 / structural 占位件豁免）
   if (!isLowProfile(candidate) && !isStructural(candidate)) {
     for (const other of floor.items) {
       if (other.id === candidate.id) continue;

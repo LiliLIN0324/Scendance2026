@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FurnitureItem, InteriorWall, RoomLayout } from '../components/room-organizer/lib/types';
+import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 import { computeBingoScore, violationCodeLabel } from './bingo-score';
 import type { SettleReport } from './settle-placement';
 
@@ -25,7 +25,6 @@ function makeLayout(opts: {
   width?: number;
   height?: number;
   items?: FurnitureItem[];
-  interiorWalls?: InteriorWall[];
 }): RoomLayout {
   const width = opts.width ?? 5;
   const height = opts.height ?? 5;
@@ -35,7 +34,6 @@ function makeLayout(opts: {
     items: opts.items ?? [],
     floorColor: '#ffffff',
   };
-  if (opts.interiorWalls) floor.interiorWalls = opts.interiorWalls;
   return {
     name: 'test-layout',
     width,
@@ -64,16 +62,6 @@ describe('computeBingoScore', () => {
     expect(score.breakdown.bounds).toBe(100);
     expect(score.breakdown.wall).toBe(100);
     expect(score.summary).toContain('仍需核验');
-  });
-
-  it('一件压内墙 → wall 分项扣分、failedCount=1', () => {
-    // 一道横向内墙在 z=0；桌子压上去 → WALL_INTERSECTION。
-    const wall: InteriorWall = { id: 'w1', x1: -2, z1: 0, x2: 2, z2: 0 };
-    const table = makeItem({ id: 't1', name: '桌', position: { x: 1.8, z: 0 } });
-    const layout = makeLayout({ items: [table], interiorWalls: [wall] });
-    const score = computeBingoScore(layout);
-    expect(score.breakdown.wall).toBeLessThan(100);
-    expect(score.failedCount).toBe(1);
   });
 
   it('一件越界 → bounds 分项扣分', () => {
