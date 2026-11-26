@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { formatMoneyMinor, parseMoneyMinor } from '@/lib/production-plan';
 import { registerSourceFlush } from '@/lib/source-storage';
+import { resolveProjectScope } from '@/lib/project-scope';
 import { uuid } from '../../../../supabase/functions/_shared/domain';
 import { productionAcquisitionMethods, productionStaffSources, productionPlanLimits, productionPlanSchema,
   productionEstimateSummary, resolveProductionPlanReferences, type ProductionPlan, type ProductionReferenceReview } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -69,7 +70,7 @@ export function ProductionPlanPanel({layout,disabled=false,onUpdate,onExport,exp
   const [notice,setNotice]=useState<{scope:string;planKey:string;text:string}|null>(null);
   const state=useRef({layout,epoch:0});if(state.current.layout!==layout)state.current={layout,epoch:state.current.epoch+1};
   const baseline=useRef<{epoch:number;scope:string;planKey:string}|null>(null);
-  const sourceKey=key(layout.productionPlan),scope=layout.id??'local';
+  const sourceKey=key(layout.productionPlan),scope=resolveProjectScope(layout.id);
   useEffect(()=>{setNotice(previous=>previous&&(previous.scope!==scope||previous.planKey!==sourceKey)?null:previous);},[scope,sourceKey]);
   const latest=useRef({layout,disabled,onUpdate,scope,sourceKey,draft,epoch:state.current.epoch});latest.current={layout,disabled,onUpdate,scope,sourceKey,draft,epoch:state.current.epoch};
   useEffect(()=>registerSourceFlush(scope,async()=>{

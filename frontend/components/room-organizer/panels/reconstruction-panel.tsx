@@ -13,6 +13,7 @@ import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace
 import { updateReviewedWall, reviewedWallMoveBlocked, openingLine, imageRegistration, mergeRecognizedDimensions } from '@/lib/reconstruction-review';
 import { referenceSceneBasis, referenceStructure, resolveReferenceImage, type ReferenceRegistration } from '@/lib/reference-image';
 import { containedImagePoint, parseDimensionText, readSourceForm, readSourceRecordSnapshot, storeSourceForm, registerSourceFlush, type ImagePoint, type SourceWriteGuard } from '@/lib/source-storage';
+import { resolveProjectScope } from '@/lib/project-scope';
 import { FloorPlanRuler, type RulerConfirmation } from './floor-plan-ruler';
 import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
@@ -144,7 +145,7 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[opacity,setOpacity]=useState(.55);
   const [pixelPoint,setPixelPoint]=useState({x:'',z:''}),[pointError,setPointError]=useState('');
   const pointInput=useRef<HTMLInputElement>(null),uploadInput=useRef<HTMLInputElement>(null);
-  const scope=layout.id??'local',basis=applied?referenceSceneBasis(layout):canonical({venue:scene.venue,structure:scene.structure,sources:scene.sources});
+  const scope=resolveProjectScope(layout.id),basis=applied?referenceSceneBasis(layout):canonical({venue:scene.venue,structure:scene.structure,sources:scene.sources});
   const choices=images.filter(image=>image.blob instanceof Blob&&image.width&&image.height&&
     (!image.assetId||scene.sources.filter(source=>source.assetId===image.assetId&&source.kind==='floorplan'&&source.width===image.width&&source.height===image.height).length===1));
   const source=choices.find(image=>image.id===selected&&image.kind==='floorplan')??choices.find(image=>image.id===registration?.sourceId&&image.kind==='floorplan')??choices.find(image=>image.kind==='floorplan');
@@ -237,7 +238,7 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
 export interface ReconstructionZones { site:JSX.Element; rebuild:JSX.Element; notice:JSX.Element|null }
 export function useReconstructionPanel({controller,layout,getCurrentLayout,sourceCoordinator,onDrawingRecheckReader,onApply,onPreview,images,updateImage,brief,sourceWriteGuard,openReferenceRequest=0,autoGenerateRequest=0,sourcesRestoring=false,onAddReferenceImages,onBackToChat}:Props):ReconstructionZones {
   const cloud=useBackendSession(controller),selection=useSelection();
-  const scope=layout.id??'local';
+  const scope=resolveProjectScope(layout.id);
   const drawingWriter=useRef<ReturnType<ReturnType<typeof createSourceEditorCoordinator>['register']>|null>(null);
   useLayoutEffect(()=>{
     if(!sourceCoordinator||sourceCoordinator.scope!==scope)return;

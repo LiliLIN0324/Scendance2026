@@ -20,6 +20,7 @@ import { decodeSourceDocuments } from '@/lib/source-backup';
 import { readSourceScopeSnapshot, sameSourceScopeSnapshot, readSourceScopeSnapshotV2, sameSourceScopeSnapshotV2, readSourceRecordSnapshot, restoreSourceScopeIfUnchanged, type SourceScopeSnapshot } from '@/lib/source-storage';
 import {recheckSourceEditors,type SourceRecheckReader} from '@/lib/source-editor-recheck';
 import { listStoredSources, storeSource, deleteSource, suggestSourceKind, readSourceForm, storeSourceForm, updateSourceForm, deleteSourceForm, registerSourceFlush, flushSourceScope, copySourceScope, registerSourceEditor, withSourceRestoreLock, type SourceEditorLease, type SourceWriteGuard } from '@/lib/source-storage';
+import { resolveProjectScope } from '@/lib/project-scope';
 import { canonical, sceneHash } from '../../../../supabase/functions/_shared/domain';
 import { agentSeatingAllocationSchema, agentSeatingSpecsSchema } from '../../../../supabase/functions/_shared/agent-contract';
 import { mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
@@ -288,7 +289,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const [briefLoadAttempt,setBriefLoadAttempt]=useState(0);
   const briefValueRef=useRef(brief);briefValueRef.current=brief;
   const briefHydration=useRef<Promise<void>>(Promise.resolve());
-  const briefStorage=useRef({scope:layout.id??'local',ready:false,dirty:false,revision:0,error:null as string|null,edits:{} as Partial<CreativeBrief>,legacyOriginal:null as unknown});
+  const briefStorage=useRef({scope:resolveProjectScope(layout.id),ready:false,dirty:false,revision:0,error:null as string|null,edits:{} as Partial<CreativeBrief>,legacyOriginal:null as unknown});
   const briefCapability=useRef(writeCapability);briefCapability.current=writeCapability;
   const briefDrafts=useRef(new Map<string,{brief:CreativeBrief;storage:typeof briefStorage.current}>());
   const briefSaveQueue=useRef<Promise<void>>(Promise.resolve());
@@ -332,7 +333,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const preparation=useRef<{layout:RoomLayout;userId:string|undefined;projectId:string|undefined;cancelled:boolean}|null>(null);
   const preservingPreparation=useRef(false);
   preservingPreparation.current=!!preparation.current&&(preparation.current.layout===layout||!!preparation.current.projectId&&preparation.current.projectId===layout.id)&&(!preparation.current.userId||preparation.current.userId===cloud.user?.id);
-  const scope=layout.id??'local';
+  const scope=resolveProjectScope(layout.id);
   // B1-d 片 1：会话仓身份跟壳体 projectId 源（sessionScope）；未传时回退旧 activity:<layout.id> 仓，测试路径不变。
   const chatSessionScope=sessionScope ?? `activity:${layout.id ?? ''}`;
   const scopeWriteGuards=useRef(new Map<string,SourceWriteGuard|undefined>());scopeWriteGuards.current.set(scope,sourceWriteGuard);
@@ -868,7 +869,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
       let saved:RoomLayout|null=null;
       try{const stored=localStorageOrNull()?.getItem(STORAGE_KEY);saved=stored?parseLayoutJson(stored):null;}catch{/* A valid in-memory review remains explicitly a draft. */}
       return {layout:operation.base.layout,briefSnapshot:{state:'ready',scope:source.scope,brief:brief===undefined?{status:'absent'}:{status:'present',value:brief}},source,
-        dataState:saved&&(saved.id??'local')===source.scope&&sameLayoutContent(saved,operation.base.layout)?'saved':'unsaved-draft',
+        dataState:saved&&resolveProjectScope(saved.id)===source.scope&&sameLayoutContent(saved,operation.base.layout)?'saved':'unsaved-draft',
         dataKind:operation.base.layout.eventOperations?.dataKind??'unspecified'};
     }finally{endBackupOperation();}
   }
@@ -1033,7 +1034,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
     if(undoRecovery.current)throw new Error('上次撤销恢复的资料回退尚未完成，请先重试撤销；当前所选文件仍保留。');
     // File provenance remains meaningful even for programmatic restore callers.
     const priorId=preparedRestoreIds.current.get(candidate);
-    const next=prepareRestoreLayout!(!checked.layout.id&&priorId?{...checked.layout,id:priorId}:checked.layout),targetScope=next.id??'local';
+    const next=prepareRestoreLayout!(!checked.layout.id&&priorId?{...checked.layout,id:priorId}:checked.layout),targetScope=resolveProjectScope(next.id);
     const incomingSources=checked.sourceDocuments?.status==='present'?{scope:targetScope,...await decodeSourceDocuments(checked.sourceDocuments,targetScope)}:undefined;
     assertSwitchCurrent?.();
     if(!candidate.layout.id&&next.id)preparedRestoreIds.current.set(candidate,next.id);
@@ -1104,7 +1105,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
     assertLocalRestore();
     const point=undoPointRef.current;
     if(!point||point.afterLayout!==layoutRef.current||point.afterEdits!==briefEditEpoch.current)throw new Error('恢复后项目或需求已有新编辑，不能覆盖这些编辑；请保留当前页面和原备份，核对后再处理。');
-    const next=prepareRestoreLayout!(point.beforeLayout),nextScope=next.id??'local';
+    const next=prepareRestoreLayout!(point.beforeLayout),nextScope=resolveProjectScope(next.id);
     const operation=beginBackupOperation();
     try {
       await flushBackupBase(operation);
@@ -1792,14 +1793,14 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
       if(!alive.current||epoch!==runEpoch.current||submittedScope!==agentScopeRef.current)return;
       const assertGenerationIntent=()=>{taskGuard?.assertStillHeld();if(taskGuard?.signal.aborted)throw new Error('本机写入租约已失效。');if(!seatingCurrent(seatingCapture))throw new Error(seatingCapture?.annotationObservation?'活动需求或规划标注已变化，本次没有提交。':'活动会话或桌椅配比已变化，本次没有提交。');const error=validateGenerationIntent?.();if(error)throw new Error(error);};
       assertGenerationIntent();
-      if(!briefStorage.current.ready||briefStorage.current.scope!==(base.id??'local'))throw new Error(briefStorage.current.error??'活动需求尚未读取完成，请稍后重试。');
+      if(!briefStorage.current.ready||briefStorage.current.scope!==resolveProjectScope(base.id))throw new Error(briefStorage.current.error??'活动需求尚未读取完成，请稍后重试。');
       if(layoutRef.current!==base)throw new Error('生成期间方案或需求已变化，旧提案未应用。请根据最新内容重新生成。');
       requestedBrief=JSON.stringify({brief:briefValueRef.current,images:imageRef.current.map(image=>({id:image.id,kind:image.kind}))});
       if(!cloud.user||cloud.writeBlocked||!geometryProjectId(controller,base.id)){
         const localGeometry=!!base.id&&isLocalActivityWorkspace(controller);
         const pending={layout:base,userId:cloud.user?.id,cancelled:false,projectId:undefined as string|undefined};
         ownPreparation=pending;preparation.current=pending;
-        await flushSourceScope(base.id??'local',taskGuard);
+        await flushSourceScope(resolveProjectScope(base.id),taskGuard);
         if(!alive.current||pending.cancelled||epoch!==runEpoch.current)return;
         if(!floorValid(turnFloor))throw new Error('楼层已变化，本次生成尚未提交。');
         await assertCurrentLocalRecords(layoutRef.current);
@@ -1816,7 +1817,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
         pending.userId=controller.getSnapshot().user?.id;pending.projectId=project.id;
         let copied:ReferenceImage[]|undefined;
         if(!localGeometry&&base.id!==project.id){
-          try{await copySourceScope(base.id??'local',project.id,taskGuard);const sources=await listStoredSources(project.id);copied=sources.map(source=>({...source,url:URL.createObjectURL(source.blob!)}));}
+          try{await copySourceScope(resolveProjectScope(base.id),project.id,taskGuard);const sources=await listStoredSources(project.id);copied=sources.map(source=>({...source,url:URL.createObjectURL(source.blob!)}));}
           catch{
             let releaseNotice='';
             const preparedCloud=controller.getSnapshot();
@@ -2517,7 +2518,7 @@ export function CreativeAssistant({ generationPanel, commercialPanel, referenceI
   /** 被抢权后唯一的去处是账户弹窗的「所有方案」卡片墙（独立项目页路由已删）；走之前先把本机图纸落盘，落不了就不走。 */
   async function goProjects():Promise<void> {
     setProjectsError('');
-    try{await flushSourceScope(studio.layout.id??'local',studio.sourceWriteGuard);}
+    try{await flushSourceScope(resolveProjectScope(studio.layout.id),studio.sourceWriteGuard);}
     catch{setProjectsError('本机图纸未能落盘，请稍后重试或先导出备份。');return;}
     window.dispatchEvent(new Event('scendance:open-account-projects'));
   }
