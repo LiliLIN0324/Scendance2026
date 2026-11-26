@@ -20,6 +20,7 @@ import { CAR_ROW_LABEL, PLAN_VEHICLE_ROW_LABEL, VEHICLE_TYPES } from '../lib/veh
 import { vehicleLabelOf } from '../lib/vehicle-entities';
 
 import type { BackendSession } from '@/lib/backend-session';
+import { resolveProjectScope } from '@/lib/project-scope';
 
 /**
  * 户外 2D 规划满铺画布组件（H2-a 基础 + H2-b 编辑交互 + H2-c 设施 + H2-d 动线/节点/人员）。
@@ -11906,7 +11907,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                     </div>
                     <label style={zoneRowStyle} title="这条分区服务哪场活动，填了就显示在图上。">
                       事件
-                      <ZoneEventInput key={`${generationProjectId ?? 'local'}:${zone.id}`} name={zone.name}
+                      <ZoneEventInput key={`${resolveProjectScope(generationProjectId)}:${zone.id}`} name={zone.name}
                         value={zone.event}
                         onCommit={value => updateZone(zone.id, { event: value })}
                         style={{ flex: 1, minWidth: 0, fontSize: PLANNING_TYPOGRAPHY.row }} />

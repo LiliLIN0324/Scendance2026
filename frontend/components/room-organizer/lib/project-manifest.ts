@@ -137,7 +137,7 @@ export function manifestCompletenessLabel(result: ManifestBuildResult): string {
 // ---------------------------------------------------------------------------
 
 export interface PublishGateSnapshot {
-  /** 当前画布对应的 scope（layout.id ?? 'local'）。 */
+  /** 当前画布对应的 scope（外壳 projectId 正源）。 */
   scopeId: string;
   /** 绑定的云端项目 id；未绑定为 null。 */
   projectId: string | null;
