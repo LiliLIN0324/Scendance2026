@@ -52,10 +52,10 @@ describe('shared place shape inventory', () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => Response.json([stocked]));
     const params = new URLSearchParams({ name: '浙江展览馆 | 杭州', near: '120.163,30.249' });
     const response = await handlePlaceShape(new Request(`https://example.test/api/place-shape?${params}`), fetchImpl, env);
-    expect(await response.json()).toEqual({ shape: stocked });
+    expect(await response.json()).toEqual({ shape: { ...stocked, source: 'stock' } });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [input, init] = fetchImpl.mock.calls[0]!;
-    expect(new URL(String(input)).searchParams.get('name_norm')).toBe('eq.浙江展览馆');
+    expect(new URL(String(input)).searchParams.get('or')).toContain('name_norm.eq.浙江展览馆');
     expect(init?.headers).toEqual({ apikey: env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY });
   });
 
@@ -72,6 +72,34 @@ describe('shared place shape inventory', () => {
     expect(await response.json()).toEqual({ shape: null });
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(fetchImpl.mock.calls.some(([input]) => String(input).includes('overpass'))).toBe(true);
+  });
+  it('同名多行不再整体放弃：取面积最大的那条', async () => {
+    const base = { ...stocked, name: '同名展厅' };
+    const big = { ...base, id: 'stock:big', bounds: [120.10, 30.20, 120.20, 30.30],
+      polygon: [[120.10, 30.20], [120.20, 30.20], [120.20, 30.30], [120.10, 30.30]] };
+    const small = { ...base, id: 'stock:small', bounds: [120.160, 30.245, 120.166, 30.251],
+      polygon: [[120.160, 30.245], [120.166, 30.245], [120.166, 30.251], [120.160, 30.251]] };
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json([small, big]));
+    const params = new URLSearchParams({ name: '同名展厅', near: '120.163,30.249' });
+    const response = await handlePlaceShape(new Request(`https://example.test/api/place-shape?${params}`), fetchImpl, env);
+    expect((await response.json()).shape.id).toBe('stock:big');
+  });
+  it('检索名与库存名只差一个白名单后缀时仍命中（黄龙饭店 → 杭州黄龙饭店主楼）', async () => {
+    const stored = { id: 'stock:huanglong', name: '杭州黄龙饭店主楼', kind: 'area',
+      bounds: [120.137, 30.268, 120.139, 30.270],
+      polygon: [[120.137, 30.268], [120.139, 30.268], [120.139, 30.270], [120.137, 30.270]] };
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json([stored]));
+    const params = new URLSearchParams({ name: '黄龙饭店', near: '120.138,30.269' });
+    const response = await handlePlaceShape(new Request(`https://example.test/api/place-shape?${params}`), fetchImpl, env);
+    expect((await response.json()).shape.id).toBe('stock:huanglong');
+  });
+  it('包含关系不算同一地点：「西湖」不命中「西湖国宾馆」', async () => {
+    const stored = { ...stocked, id: 'stock:xihu', name: '西湖国宾馆' };
+    const fetchImpl = vi.fn<typeof fetch>(async input => String(input).includes('/rest/v1/place_shapes')
+      ? Response.json([stored]) : Response.json({ elements: [] }));
+    const params = new URLSearchParams({ name: '西湖', near: '120.163,30.249' });
+    const response = await handlePlaceShape(new Request(`https://example.test/api/place-shape?${params}`), fetchImpl, env);
+    expect(await response.json()).toEqual({ shape: null });
   });
 });
 

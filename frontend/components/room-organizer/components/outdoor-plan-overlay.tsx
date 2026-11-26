@@ -541,7 +541,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
-  const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line' } | null>(null);
+  const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line'; source?: 'stock' | 'online' } | null>(null);
   // 桥在 effect 里注册一次；核对要读到最新选区，不能闭上注册那一帧的 state。
   const placeAreaRef = useRef(placeArea);
   placeAreaRef.current = placeArea;
@@ -549,7 +549,9 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     const [west, south, east, north] = shape.bounds;
     setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: name });
     setPlaceArea({ polygon: shape.polygon, label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
-      ...(shape.kind === 'line' ? { kind: 'line' as const } : {}) });
+      ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
+      // 线上现查的范围写进选区自己身上：选区一撤（清除/采纳方案/换地点）提示自动跟着没，不另维护一份状态。
+      ...(shape.source === 'online' ? { source: 'online' as const } : {}) });
     canvasApiRef.current?.focusBounds(shape.bounds);
   }, JSON.stringify(plan?.boundary ?? []));
   /**
@@ -1249,13 +1251,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       )}
       {/* 查询真实轮廓有总预算；未命中如实提示手画，不自动重复请求。
           与画布白底名称胶囊同范式；只压 2D 画面，3D/接管态不出镜。 */}
-      {(shapeLoading || shapeUnavailable) && !canvasHidden && (
+      {(shapeLoading || shapeUnavailable || placeArea?.source === 'online') && !canvasHidden && (
         <div
           data-testid="outdoor-shape-loading"
           className="sc-shape-loading-pill"
           style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 4 }}
         >
-          {shapeLoading ? '正在圈范围…' : '暂未取得真实范围，可在地图上手画'}
+          {shapeLoading ? '正在圈范围…' : shapeUnavailable ? '暂未取得真实范围，可在地图上手画' : '范围来自联网现查'}
         </div>
       )}
       {/* 2026-11-15 旧独立分享/导出钮退役：分享、导出、发布统一收进右上工具簇的 ShareMenu 面板，
