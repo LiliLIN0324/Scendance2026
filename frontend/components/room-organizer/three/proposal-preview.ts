@@ -1,5 +1,5 @@
 import { mountBand } from '../lib/mount-band';
-import { floorElevation, itemForStorey } from '../lib/storeys';
+import { itemForStorey } from '../lib/storeys';
 import { disposeObject } from './builder-utils';
 import { footprintEdges } from './footprint-outline';
 import { createFurnitureModel } from './furniture-builders';
@@ -12,7 +12,9 @@ type LocatedItem = { item: FurnitureItem; floorIndex: number };
 export type ProposalDifference = { id: string; kind: 'added' | 'removed' | 'changed'; before?: LocatedItem; after?: LocatedItem };
 
 function itemsById(layout: RoomLayout): Map<string, LocatedItem> {
-  return new Map(layout.floors.flatMap((floor, floorIndex) => floor.items.map(item => [item.id, { item, floorIndex }] as const)));
+  // Single-floor editor: every item sits on the ground floor. Legacy multi-floor
+  // snapshots are read-only; their upper-floor items are not mapped to a storey here.
+  return new Map(layout.floors.flatMap((floor) => floor.items.map(item => [item.id, { item, floorIndex: 0 }] as const)));
 }
 
 function visibleValues({ item, floorIndex }: LocatedItem) {
@@ -65,15 +67,15 @@ export function createProposalPreview(
   let disposed = false;
   const structureChanged = !!candidate.backendSceneV2 && JSON.stringify([before.backendVenue, before.floors.map(f=>[f.interiorWalls,f.floorColor,f.floorPattern,f.items.filter(i=>i.structuralOpeningId)])]) !== JSON.stringify([candidate.backendVenue, candidate.floors.map(f=>[f.interiorWalls,f.floorColor,f.floorPattern,f.items.filter(i=>i.structuralOpeningId)])]);
 
-  function position(group: ThreeNS.Object3D, located: LocatedItem, layout: RoomLayout): void {
-    group.position.set(located.item.position?.x ?? 0, floorElevation(layout.floors, located.floorIndex), located.item.position?.z ?? 0);
+  function position(group: ThreeNS.Object3D, located: LocatedItem): void {
+    group.position.set(located.item.position?.x ?? 0, 0, located.item.position?.z ?? 0);
     group.rotation.y = located.item.rotation ?? 0;
     if (located.item.mirrored) group.scale.x = -1;
     group.userData.proposalItemId = located.item.id;
   }
 
   function outline(located: LocatedItem, layout: RoomLayout, color: number, role: string): void {
-    const floor = layout.floors[located.floorIndex];
+    const floor = layout.floors[0];
     const band = mountBand(located.item.structuralOpeningId || located.item.structuralColumnId ? located.item : itemForStorey(located.item, floor));
     const pad = 0.02;
     const edges = footprintEdges(
@@ -92,7 +94,7 @@ export function createProposalPreview(
     group.name = role;
     group.userData.previewRole = role;
     group.add(line);
-    position(group, located, layout);
+    position(group, located);
     root.add(group);
   }
 
@@ -113,9 +115,9 @@ export function createProposalPreview(
       const old = difference.before, next = difference.after;
       if (old?.floorIndex === visibleFloorIndex) outline(old, before, difference.kind === 'removed' ? 0xea6868 : 0xe6ac50, difference.kind === 'removed' ? 'removed' : 'original-position');
       if (next?.floorIndex === visibleFloorIndex && next.item.position) {
-        const model = createFurnitureModel(THREE, next.item.structuralOpeningId || next.item.structuralColumnId ? next.item : itemForStorey(next.item, candidate.floors[next.floorIndex]), false);
+        const model = createFurnitureModel(THREE, next.item.structuralOpeningId || next.item.structuralColumnId ? next.item : itemForStorey(next.item, candidate.floors[0]), false);
         model.userData.previewRole = 'candidate';
-        position(model, next, candidate);
+        position(model, next);
         model.traverse(node => {
           const mesh = node as ThreeNS.Mesh;
           if (mesh.isMesh) {
@@ -135,7 +137,7 @@ export function createProposalPreview(
       }
       if (old?.floorIndex === visibleFloorIndex && next?.floorIndex === visibleFloorIndex && old.item.position && next.item.position &&
           (old.item.position.x !== next.item.position.x || old.item.position.z !== next.item.position.z)) {
-        const height = floorElevation(before.floors, old.floorIndex) + 0.06;
+        const height = 0.06;
         const points = [new THREE.Vector3(old.item.position.x, height, old.item.position.z), new THREE.Vector3(next.item.position.x, height, next.item.position.z)];
         const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: 0x62b5fb, transparent: true, opacity: 0.9, depthTest: false, dashSize: 0.14, gapSize: 0.08 }));
         line.computeLineDistances();

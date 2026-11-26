@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { makeFloor, makeItem } from '../lib/__testfixtures__/fixtures';
 import { backendSceneToLayout } from '../lib/backend-adapter';
 import { createFurnitureModel } from './furniture-builders';
 import { clearGlbAssetCache, disposeOwnedModel, ensureGlbAsset } from './glb-assets';
@@ -146,6 +147,20 @@ describe('proposal render overlay', () => {
       if (mesh.isMesh && mesh.userData.part === 'round-top' && mesh.geometry.type === 'CylinderGeometry') cylinder = true;
     });
     expect(cylinder).toBe(true);
+    preview.dispose();
+  });
+
+  it('reads a legacy multi-floor snapshot without crashing and keeps the preview on the ground datum', () => {
+    const legacyBefore = layout([item]);
+    legacyBefore.floors.push(makeFloor({ id: 'upper', items: [makeItem({ id: 'upper-chair', position: { x: 2, z: 2 } })] }));
+    const legacyAfter = layout([{ ...item, position: { x: 3, z: 1 } }]);
+    legacyAfter.floors.push(makeFloor({ id: 'upper', items: [] }));
+    const scene = new THREE.Scene();
+    const preview = createProposalPreview(THREE, scene, legacyBefore, legacyAfter);
+    const root = scene.getObjectByName(PROPOSAL_PREVIEW_TAG)!;
+    const candidate = root.children.find(object => object.userData.previewRole === 'candidate')!;
+    // Group sits on Y=0; the item's own elevation (if any) still comes from the model.
+    expect(candidate.position.toArray()).toEqual([3, 0, 1]);
     preview.dispose();
   });
 

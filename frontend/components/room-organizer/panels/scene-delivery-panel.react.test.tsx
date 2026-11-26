@@ -551,13 +551,14 @@ describe('Bingo scene delivery panel',()=>{
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('具体通道尺寸未随包提供');expect(html).not.toContain('data-source="user_statement"');
   });
-  it.each(['activity','floor'] as const)('does not export when %s switches away and back during preparation',async kind=>{
+  // T2 单层化：楼层往返不再是失效维度，只剩活动 scope 切换。楼层守卫接线留 B5 收敛。
+  it('does not export when the activity switches away and back during preparation',async()=>{
     const f=completeActivity(),store=createLayoutStore({layout:f.current,activeFloorIndex:0}),activity=createActivitySessionTracker(store),floor=createFloorSessionTracker(store);
     activity.start();floor.start();const token=activity.capture(),floorToken=floor.capture();let finish!:(value:string)=>void;
     f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
     render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',isCurrent:()=>activity.isCurrent(token)&&floor.isCurrent(floorToken)})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
-    act(()=>{if(kind==='activity'){store.setState({layout:{...f.current,id:'another-activity'}});store.setState({layout:f.current});}else{store.setState({activeFloorIndex:1});store.setState({activeFloorIndex:0});}});
+    act(()=>{store.setState({layout:{...f.current,id:'another-activity'}});store.setState({layout:f.current});});
     await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();activity.stop();floor.stop();
   });
   it('keeps local checkins and production editing available when the scene service lease is blocked',async()=>{

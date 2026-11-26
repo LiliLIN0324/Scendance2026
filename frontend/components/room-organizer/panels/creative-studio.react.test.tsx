@@ -2377,7 +2377,8 @@ describe('creative brief and assistant interaction', () => {
     view.rerender(tree());expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();
     await waitFor(()=>expect(onPreview.mock.calls.at(-1)?.[0]).toBeNull());tracker.stop();
   });
-  it('does not apply an old candidate after same-batch floor A → B → A',async()=>{
+  // T2：楼层 ABA 已非失效维度，旧候选不再因楼层往返被拒；活动 scope ABA 路径由 2370 用例覆盖，楼层守卫收敛留 B5。
+  it.skip('does not apply an old candidate after same-batch floor A → B → A',async()=>{
     connected();const store=createLayoutStore({layout,activeFloorIndex:0}),tracker=createFloorSessionTracker(store);tracker.start();
     const tree=()=> <CreativeStudioProvider controller={controller} layout={layout} getCurrentLayout={()=>store.getState().layout} floorToken={tracker.capture()} isFloorCurrent={tracker.isCurrent} onApply={onApply} onPreview={onPreview}><CreativeAssistant/></CreativeStudioProvider>;
     const view=render(tree());await generatePreview();
@@ -2385,7 +2386,8 @@ describe('creative brief and assistant interaction', () => {
     expect(await screen.findByText(/楼层已切换，旧候选不能应用/)).toBeTruthy();expect(controller.applySceneProposal).not.toHaveBeenCalled();expect(onApply).not.toHaveBeenCalled();
     view.rerender(tree());expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();tracker.stop();
   });
-  it('retains a cloud-committed reminder if the floor changes before the response',async()=>{
+  // T2：楼层切换已非失效维度；活动 scope 往返期间的云端回执保留由 2421 用例覆盖，楼层守卫收敛留 B5。
+  it.skip('retains a cloud-committed reminder if the floor changes before the response',async()=>{
     connected();const store=createLayoutStore({layout,activeFloorIndex:0}),tracker=createFloorSessionTracker(store);tracker.start();
     let finish!:(value:{id:string;revision:number;scene:Scene;previousScene:Scene;updatedAt:string;undoGroup:string;acceptedLocally:boolean})=>void;
     vi.mocked(controller.applySceneProposal).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
@@ -2395,7 +2397,8 @@ describe('creative brief and assistant interaction', () => {
     await act(async()=>{finish({id:projectId,revision:2,scene:candidate,previousScene:scene,updatedAt:'2026-10-02T10:00:00Z',undoGroup:'undo-test',acceptedLocally:true});});
     expect(onApply).not.toHaveBeenCalled();expect((await screen.findByRole('alert')).textContent).toContain('云端已提交第 2 版');tracker.stop();
   });
-  it('keeps the original run for review when the floor changes during generation',async()=>{
+  // T2：楼层切换已非失效维度；生成期间 scope/图纸变更保留原任务的路径另有套件覆盖，楼层守卫收敛留 B5。
+  it.skip('keeps the original run for review when the floor changes during generation',async()=>{
     connected();const store=createLayoutStore({layout,activeFloorIndex:0}),tracker=createFloorSessionTracker(store);tracker.start();
     let finish!:(value:AgentRun)=>void;vi.mocked(controller.startAgentRun).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
     render(<CreativeStudioProvider controller={controller} layout={layout} getCurrentLayout={()=>store.getState().layout} floorToken={tracker.capture()} isFloorCurrent={tracker.isCurrent} onApply={onApply}><CreativeAssistant/></CreativeStudioProvider>);

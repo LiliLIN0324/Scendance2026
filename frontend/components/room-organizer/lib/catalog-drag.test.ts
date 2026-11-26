@@ -25,9 +25,8 @@ describe('catalogTileBlockedReason', () => {
   const tree = { category: 'outdoor' };
   const sofa = { category: 'seating' };
 
-  it('blocks garden items on an upper floor only (#347)', () => {
-    expect(catalogTileBlockedReason(tree, 0)).toBeNull();
-    expect(catalogTileBlockedReason(tree, 1)).toMatch(/ground floor/);
-    expect(catalogTileBlockedReason(sofa, 1)).toBeNull();
+  it('no longer refuses garden items once the multi-floor stacking retired (#347)', () => {
+    expect(catalogTileBlockedReason(tree)).toBeNull();
+    expect(catalogTileBlockedReason(sofa)).toBeNull();
   });
 });

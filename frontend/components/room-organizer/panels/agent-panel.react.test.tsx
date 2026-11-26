@@ -2018,7 +2018,9 @@ describe('T-UI visible interaction', () => {
     expect((screen.getByLabelText('告诉 Agent 要改的') as HTMLTextAreaElement).value).toBe('需要签到');
   });
 
-  it.each(['switch','ABA'])('refuses a local candidate after a same-batch floor %s while preserving its preview',async mode=>{
+  // T2 单层化：切楼层不再使楼层 token 失效，旧候选不会因楼层往返被拒。
+  // 活动 scope 往返的拒入路径由「does not apply a local preview after switching activities」覆盖；楼层守卫收敛留 B5。
+  it.skip.each(['switch','ABA'])('refuses a local candidate after a same-batch floor %s while preserving its preview',async mode=>{
     useRealLayoutStore=true;const onApply=vi.fn(),onPreview=vi.fn();
     const base=makeLayout({width:12,height:9,floors:[makeFloor({id:'floor-a',items:[]}),makeFloor({id:'floor-b',items:[]})]});
     state.layout=base;layoutStore.setState({layout:base,activeFloorIndex:0});
@@ -2031,7 +2033,8 @@ describe('T-UI visible interaction', () => {
     useRealLayoutStore=false;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});
   },20000);
 
-  it('refuses a review-fix candidate after switching floors without clearing it',async()=>{
+  // T2：楼层切换已非失效维度，该拒入路径退役；活动/草稿变更的拒入另有套件覆盖，楼层守卫收敛留 B5。
+  it.skip('refuses a review-fix candidate after switching floors without clearing it',async()=>{
     useRealLayoutStore=true;const onApply=vi.fn(),onPreview=vi.fn();
     const existing=seatLayout(),base={...existing,floors:[{...existing.floors[0]!,id:'floor-a'},makeFloor({id:'floor-b'})]};
     state.layout=base;layoutStore.setState({layout:base,activeFloorIndex:0});
@@ -2042,7 +2045,8 @@ describe('T-UI visible interaction', () => {
     useRealLayoutStore=false;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});
   });
 
-  it('refuses a locally revised object after changing the current floor',async()=>{
+  // T2：楼层切换已非失效维度，该拒入路径退役；楼层守卫收敛留 B5。
+  it.skip('refuses a locally revised object after changing the current floor',async()=>{
     useRealLayoutStore=true;const onApply=vi.fn(),onPreview=vi.fn(),onMemory=vi.fn();
     const chair=makeItem({id:'only-chair',type:'chair',name:'椅子',color:'#112233',position:{x:0,z:0},width:.5,depth:.5});
     const base=makeLayout({width:24,height:16,floors:[makeFloor({id:'floor-a',items:[chair]}),makeFloor({id:'floor-b'})]});
@@ -2054,7 +2058,8 @@ describe('T-UI visible interaction', () => {
     expect(onApply).not.toHaveBeenCalled();expect(await screen.findByText(/楼层换了，这版只能回原楼层用/)).toBeTruthy();expect(onPreview.mock.calls.at(-1)?.[0]).toBe(previous);
     useRealLayoutStore=false;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});
   },20000);
-  it('refuses a style candidate after a same-batch floor ABA',async()=>{
+  // T2：楼层 ABA 已非失效维度，该拒入路径退役；楼层守卫收敛留 B5。
+  it.skip('refuses a style candidate after a same-batch floor ABA',async()=>{
     useRealLayoutStore=true;const onApply=vi.fn(),onPreview=vi.fn();
     const base=makeLayout({width:12,height:9,backendVenue:{shape:'rectangle',entrances:[],width:12,depth:9,height:3},floors:[makeFloor({id:'floor-a'}),makeFloor({id:'floor-b'})]});state.layout=base;layoutStore.setState({layout:base,activeFloorIndex:0});
     render(<LayoutAgentProvider callbacks={callbacks} onApply={onApply} onPreview={onPreview}><AgentPanel/></LayoutAgentProvider>);
@@ -4194,7 +4199,8 @@ describe('S2 Bingo 审校台：单一分享主入口', () => {
     expect(callbacks.onIssueReviewLink).toHaveBeenCalledOnce();
   });
 
-  it.each(['floor','floor-aba','layout','layout-aba'])('does not claim an old link is ready after same-batch %s changes',async mode=>{
+  // T2：floor / floor-aba 楼层往返不再失效，只保留 layout 草稿变更两条变体；楼层守卫收敛留 B5。
+  it.each(['layout','layout-aba'])('does not claim an old link is ready after same-batch %s changes',async mode=>{
     useRealLayoutStore=true;const base=makeLayout({id:'review-scope',floors:[makeFloor({id:'floor-a'}),makeFloor({id:'floor-b'})]});
     state.layout=base;layoutStore.setState({layout:base,activeFloorIndex:0});
     let finish!:(value:{url:string;isCurrent:()=>boolean})=>void;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeLayout } from '../lib/__testfixtures__/fixtures';
+import { makeFloor, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { SATELLITE_GROUND_LABEL, createVenueFromPick, parseSatelliteImageBounds, satelliteProxyUrl, shellMetersToSatelliteUv } from '../lib/amap-venue';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { outdoorGroundSize } from '../lib/site';
@@ -365,5 +365,20 @@ describe('satellite floor texture', () => {
     }));
     expect(scene.children.some(child => child.userData.satelliteSurroundFade)).toBe(false);
     expect(scene.children.some(child => child.userData.satelliteGroundRef)).toBe(false);
+  });
+});
+
+describe('single-floor slab baseline (T2)', () => {
+  it('builds only the ground slab; a legacy multi-floor snapshot adds no upper storey mesh', () => {
+    const legacy = makeLayout({ floors: [makeFloor({ id: 'ground' }), makeFloor({ id: 'upper', floorColor: '#888888' })] });
+    const scene = new THREE.Scene();
+    buildStructureShell(THREE, scene, legacy);
+
+    const slabs = scene.children.filter(child => child.userData.type === 'floor');
+    expect(slabs.length).toBeGreaterThan(0);
+    // The retired loop tagged upper slabs with floorIndex > 0; none survive.
+    expect(slabs.filter(slab => Number(slab.userData.floorIndex) > 0)).toHaveLength(0);
+    // Ground datum: every retained floor mesh sits at Y ≈ 0 (the -0.01 surround only appears on satellite captures).
+    for (const slab of slabs) expect(Math.abs((slab as THREE.Mesh).position.y)).toBeLessThan(0.02);
   });
 });

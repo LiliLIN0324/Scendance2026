@@ -32,15 +32,15 @@ describe('route provenance with live activity, floor and venue trackers',()=>{
   f.update({...f.getState(),layout:{...f.getState().layout,width:9}});
   expect(result.current.getUserRouteProvenance(id)).toBeNull();unmount();f.close();
  });
- it.each(['activity','floor','venue'] as const)('cancels a partially drawn route on synchronous %s A→B→A',kind=>{
+ // T2 单层化：楼层往返不再使 floor token 失效，去掉 floor 变体；activity/venue 路径保留。
+ it.each(['activity','venue'] as const)('cancels a partially drawn route on synchronous %s A→B→A',kind=>{
   const f=setup(),commit=vi.fn(()=>true),route=createRouteDrawingSession(()=>{
    const activity=f.activity.capture(),floor=f.floor.capture(),venue=f.venue.capture();if(!activity||!floor||!venue)return null;
    return {floorId:floor.floorId,isCurrent:()=>f.activity.isCurrent(activity)&&f.floor.isCurrent(floor)&&f.venue.isCurrent(venue)};
   },commit);
   const unsub=f.store.subscribe(()=>route.revalidate());const initial=f.getState();
   route.add({x:0,z:0});
-  const altered=kind==='activity'?{...initial,layout:{...initial.layout,id:'activity-b'}}:
-   kind==='floor'?{...initial,activeFloorIndex:1}:{...initial,layout:{...initial.layout,width:9}};
+  const altered=kind==='activity'?{...initial,layout:{...initial.layout,id:'activity-b'}}:{...initial,layout:{...initial.layout,width:9}};
   f.update(altered);f.update(initial);
   expect(route.finish()).toBe('closed');expect(commit).not.toHaveBeenCalled();unsub();f.close();
  });

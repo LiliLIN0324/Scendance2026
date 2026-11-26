@@ -17,10 +17,10 @@ export function findCatalogEntry<T extends { type: string; name: string }>(
 }
 
 /**
- * Why a catalogue tile can't place on the active floor, or null when it can.
- * Placement refuses garden items above the ground floor, so the tiles say so
- * instead of silently doing nothing (#347).
+ * Why a catalogue tile can't place, or null when it can. The garden-items-above-the-ground-floor
+ * block (#347) retired with the multi-floor stacking: the editor is single-floor now, so no tile
+ * is refused for being on an upper storey.
  */
-export function catalogTileBlockedReason(item: { category: string }, activeFloorIndex: number): string | null {
-  return item.category === 'outdoor' && activeFloorIndex > 0 ? 'Garden items go on the ground floor' : null;
+export function catalogTileBlockedReason(_item: { category: string }): string | null {
+  return null;
 }
