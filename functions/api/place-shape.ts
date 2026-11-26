@@ -639,6 +639,38 @@ function acceptShape(shape: PlaceShape | null): PlaceShape | null {
   return shape && isDisplayablePlaceShape(shape) ? shape : null;
 }
 
+/** 城市前缀：存库名与检索名都可能带，比较前统一剥掉。 */
+const STOCK_CITY_PREFIX = /^(?:杭州市|杭州|浙江省|浙江)/u;
+/**
+ * 同一个地点在库存里可能带的后缀（「黄龙饭店」存成「杭州黄龙饭店主楼」）。
+ * 只有白名单里的尾巴才算同一地点——「西湖」不能因此匹配到「西湖国宾馆」。
+ */
+const SAME_PLACE_SUFFIXES: readonly string[] = [
+  '主楼', '大楼', '分楼', '新楼', '主馆', '分馆', '展馆', '馆', '店', '分店', '门店', '中心', '广场', '园区', '景区',
+];
+
+function withoutStockCity(value: string): string {
+  return value.replace(STOCK_CITY_PREFIX, '');
+}
+
+/** 放宽召回用的核心名（去城市前缀与一个常见后缀）；短于 3 字不放宽，避免两个字扫全城。 */
+export function stockCoreName(nameNorm: string): string {
+  const base = withoutStockCity(nameNorm);
+  for (const suffix of SAME_PLACE_SUFFIXES) {
+    const cut = base.length - suffix.length;
+    if (cut >= 3 && base.endsWith(suffix)) return base.slice(0, cut);
+  }
+  return base;
+}
+
+/** 库存名与检索名的同一地点等级：0 完全相同，1 只差一个白名单后缀，null 不是同一个地点。 */
+export function samePlaceRank(query: string, canonical: string): number | null {
+  if (canonical === query) return 0;
+  if (canonical.startsWith(query) && SAME_PLACE_SUFFIXES.includes(canonical.slice(query.length))) return 1;
+  if (query.startsWith(canonical) && SAME_PLACE_SUFFIXES.includes(query.slice(canonical.length))) return 1;
+  return null;
+}
+
 async function lookupPlaceStock(
   nameNorm: string,
   near: ReturnType<typeof parseNear>,
@@ -647,14 +679,18 @@ async function lookupPlaceStock(
 ): Promise<PlaceShape | null> {
   const stock = placeStockConfig(env);
   if (!stock || !nameNorm) return null;
-  const withoutCity = (value: string) => value.replace(/^(?:杭州市|杭州)/u, '');
-  const query = withoutCity(nameNorm);
+  const query = withoutStockCity(nameNorm);
   if (!query) return null;
+  // 一次取回「精确 + 核心名包含」两路候选：重复行不再整体放弃，交给下面的排序择优。
+  const filters = [`name_norm.eq.${nameNorm}`];
+  if (query !== nameNorm) filters.push(`name_norm.eq.${query}`);
+  const pattern = stockCoreName(nameNorm).replace(/[%*,()]/g, '');
+  if (pattern.length >= 3) filters.push(`name_norm.ilike.*${pattern}*`);
   try {
     const params = new URLSearchParams({
-      name_norm: `eq.${nameNorm}`,
+      or: `(${filters.join(',')})`,
       select: 'id,name,kind,polygon,bounds',
-      limit: '10',
+      limit: '20',
     });
     const response = await fetchImpl(`${stock.url}?${params}`, {
       headers: stock.headers,
@@ -663,17 +699,31 @@ async function lookupPlaceStock(
     if (!response.ok) return null;
     const rows: unknown = await response.json();
     if (!Array.isArray(rows)) return null;
-    const matches = rows.filter((row): row is PlaceShape => {
+    const scored: { row: PlaceShape; rank: number; area: number; points: number }[] = [];
+    for (const row of rows) {
       if (typeof row?.id !== 'string' || typeof row.name !== 'string' || row.kind !== 'area'
         || !isPersistablePlaceShape(row) || !Array.isArray(row.bounds) || row.bounds.length !== 4
-        || !row.bounds.every(Number.isFinite)) return false;
-      const canonical = withoutCity(normalizeShapeName(row.name));
-      if (canonical !== query && !(/^[a-z]+[0-9]+$/i.test(query) && canonical.endsWith(query))) return false;
-      const [west, south, east, north] = row.bounds;
-      return west < east && south < north && (!near ||
-        (near.lng >= west - 0.01 && near.lng <= east + 0.01 && near.lat >= south - 0.01 && near.lat <= north + 0.01));
-    });
-    return matches.length === 1 ? matches[0]! : null;
+        || !row.bounds.every(Number.isFinite)) continue;
+      const canonical = withoutStockCity(normalizeShapeName(row.name));
+      const rank = samePlaceRank(query, canonical)
+        // 编号类店名（in77）按包含算同一地点，与既有口径一致。
+        ?? (/^[a-z]+[0-9]+$/i.test(query) && canonical.endsWith(query) ? 2 : null);
+      if (rank === null) continue;
+      const [west, south, east, north] = row.bounds as [number, number, number, number];
+      if (!(west < east && south < north)) continue;
+      // near 是硬门：库里有同名但隔了几公里的行，不能拿来当这个点位的轮廓。
+      if (near && !(near.lng >= west - 0.01 && near.lng <= east + 0.01 && near.lat >= south - 0.01 && near.lat <= north + 0.01)) continue;
+      scored.push({
+        row: row as PlaceShape,
+        rank,
+        // 同名多行（in77 在库里重复 7 条）取面积大的那条：大面更可能是整块场地，
+        // 而不是某一翼楼；面积相同再比顶点数，保留细节多的那份。
+        area: (east - west) * (north - south),
+        points: Array.isArray(row.polygon) ? row.polygon.length : 0,
+      });
+    }
+    scored.sort((a, b) => a.rank - b.rank || b.area - a.area || b.points - a.points);
+    return scored[0]?.row ?? null;
   } catch {
     return null;
   }
@@ -707,8 +757,13 @@ export async function handlePlaceShape(
   if (cached && isDisplayablePlaceShape(cached)) return json({ shape: cached }, 200);
   if (cached) shapeCache.delete(cacheKey); // 缓存里的垃圾几何（如 3 点 line）丢掉，重新挖
   const stockRequest = lookupPlaceStock(nameNorm, near, env, fetchImpl);
+  // 库存抢答窗口：库里的回答是毫秒级（实测 298k 行 + name_norm 索引后 
+  // EXPLAIN ANALYZE 为 0.42ms），但 Cloudflare 到 Supabase 的往返偶尔会超过 150ms。
+  // 150ms 太窄：一旦超时就被当成「库里没有」，转头去 Overpass 现查，
+  // 单次变成 8～20 秒。放到 900ms 后，有库存的稳定在几百毫秒；
+  // 真没有的场地只多等 0.75 秒（它们本来就要 8～20 秒）。
   let stockGrace: ReturnType<typeof setTimeout> | undefined;
-  const stocked = await Promise.race([stockRequest, new Promise<null>(resolve => { stockGrace = setTimeout(() => resolve(null), 150); })]);
+  const stocked = await Promise.race([stockRequest, new Promise<null>(resolve => { stockGrace = setTimeout(() => resolve(null), 900); })]);
   clearTimeout(stockGrace);
   if (stocked) return json({ shape: cacheShape(cacheKey, stocked) }, 200);
   // 五路抢答（2026-11-13「点哪儿框哪儿」改造）：空间命中是主路径——点的坐标就在
