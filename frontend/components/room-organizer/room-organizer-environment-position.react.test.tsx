@@ -51,7 +51,7 @@ it('restores two sample halls as separate placements and connects both to the ca
   {assetId:'shipped-cloud-e2e-banquet',name:'宴会厅 B',position:{x:30,y:0,z:0},scale:2},
   {assetId:'shipped-scendance-m3-mvp',name:'宴会厅 A',position:{x:0,y:0,z:0},scale:1},
  ]}));
- render(<RoomOrganizer/>);
+ render(<RoomOrganizer outdoorProjectId="env-a"/>);
  await waitFor(()=>expect(mock.start).toHaveBeenCalledWith(expect.objectContaining({assetId:'shipped-cloud-e2e-banquet'})));
  await waitFor(()=>expect(JSON.parse(localStorage.getItem(KEY)!)['env-a']).toHaveLength(2));
  const entries=JSON.parse(localStorage.getItem(KEY)!)['env-a'];
@@ -86,14 +86,14 @@ it.skip('reloads the outdoor banquet model and can reopen planning after collaps
 });
 it('saves a position only after real capability and readback checks',async()=>{
  prepare();const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
- render(<RoomOrganizer localWriteCapability={lease.capability}/>);await readyScan();
+ render(<RoomOrganizer localWriteCapability={lease.capability} outdoorProjectId="env-a"/>);await readyScan();
  writePosition({x:2,y:0,z:3});
  await waitFor(()=>expect(JSON.parse(localStorage.getItem(KEY)!)['env-a'][0].position).toEqual({x:2,y:0,z:3}));
  expect(JSON.parse(localStorage.getItem(KEY)!)['env-b'][0].name).toBe('场地 B');await lease.release();
 });
 it('keeps an uncertain candidate visible and rejects repeated writes or a later scope switch',async()=>{
  prepare();const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
- const view=render(<RoomOrganizer localWriteCapability={lease.capability}/>);await readyScan();
+ const view=render(<RoomOrganizer localWriteCapability={lease.capability} outdoorProjectId="env-a"/>);await readyScan();
  const write=Storage.prototype.setItem;let attempts=0;vi.spyOn(Storage.prototype,'setItem').mockImplementation(function(this:Storage,key,value){if(key===KEY){attempts++;throw new DOMException('quota','QuotaExceededError');}write.call(this,key,value);});
  writePosition({x:2,y:0,z:3});expect(await screen.findByText(/场地位置保存结果待核对，候选暂留本页/)).toBeTruthy();
  writePosition({x:8,y:0,z:0});expect(attempts).toBe(1);
@@ -108,7 +108,7 @@ it('refuses a cross-venue undo before changing the live layout or consuming hist
  const initial=prepare();const prior={...initial,venueScan:{assetId:'venue-b',name:'场地 B'}};
  layoutStore.setState({layout:prior,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(prior));
  const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
- render(<RoomOrganizer localWriteCapability={lease.capability}/>);await readyScan();
+ render(<RoomOrganizer localWriteCapability={lease.capability} outdoorProjectId="env-a"/>);await readyScan();
  const current={...prior,venueScan:{assetId:'venue-a',name:'场地 A'}};
  act(()=>layoutStore.setState({layout:current,activeFloorIndex:0}));
  await waitFor(()=>expect(mock.history?.canUndo).toBe(true),{timeout:3000});
@@ -119,7 +119,7 @@ it('refuses a cross-venue undo before changing the live layout or consuming hist
 
 it('uses the same checked position write for the numeric control',async()=>{
  prepare();const lease=await createLocalWriteLeaseManager({getLocks:()=>locks,getStorage:()=>window.localStorage}).acquire();
- render(<RoomOrganizer localWriteCapability={lease.capability}/>);await readyScan();
+ render(<RoomOrganizer localWriteCapability={lease.capability} outdoorProjectId="env-a"/>);await readyScan();
  // 只读编辑权下，场地标定要显式标出来（数值控件与拖拽共用这份判定）。
  expect(await screen.findByText('当前编辑权模式暂不支持修改场地标定；标定结果仍需现场核对。')).toBeTruthy();
  // 2026-11-19：三维接管入口要真实的 OutdoorPlan，jsdom 里进不去；
@@ -135,13 +135,13 @@ it('uses the same checked position write for the numeric control',async()=>{
 it('starts a new project empty and keeps it empty after reopening',async()=>{
  const a=makeLayout({id:'env-empty',name:'空场起步',floors:[makeFloor({id:'floor',items:[]})]});
  layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
- const first=render(<RoomOrganizer/>);
+ const first=render(<RoomOrganizer outdoorProjectId="env-empty"/>);
  await waitFor(()=>expect(JSON.parse(localStorage.getItem(KEY)!)??{}).toHaveProperty('env-empty'));
  expect(JSON.parse(localStorage.getItem(KEY)!)['env-empty']).toBeNull();
  expect(mock.start).not.toHaveBeenCalled();
  first.unmount();
  layoutStore.setState({layout:a,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(a));
- render(<RoomOrganizer/>);
+ render(<RoomOrganizer outdoorProjectId="env-empty"/>);
  await waitFor(()=>expect(scanStateBridge.writePosition).not.toBeNull());
  expect(JSON.parse(localStorage.getItem(KEY)!)['env-empty']).toBeNull();
  expect(mock.start).not.toHaveBeenCalled();

@@ -101,7 +101,7 @@ import { resolveCatalogPosition } from './lib/catalog-placement-position';
 import { buildPasteItems, copyToClipboard } from './lib/clipboard';
 import { CAMERA_BRACKET_ARM } from './lib/constants';
 import { notify } from './lib/editor-notices';
-import { clearEnvironment, environmentPreferenceKey, hasEnvironmentPreference, readEnvironments, readEnvironmentsStrict, writeEnvironments, type EnvironmentScope, type StoredEnvironment } from './lib/environment-preference';
+import { clearEnvironment, environmentScopeKey, hasEnvironmentPreference, readEnvironments, readEnvironmentsStrict, writeEnvironments, type EnvironmentScope, type StoredEnvironment } from './lib/environment-preference';
 import { persistEnvironmentPosition } from './lib/environment-position-transaction';
 import { venueIdentityPatch } from './lib/venue-identity';
 import { registerReadonlyDraftReader,readLiveReadonlyDraft } from './lib/readonly-draft-registry';
@@ -329,6 +329,12 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
   // 2026-11-17 补：显式项目（云项目、经典案例 replica-*）仍按外壳 id 取规划——那份规划就存
   // 在项目名下，跟本机活动 id 不是一回事；只有本机默认壳体才落到当前活动。
   const explicitOutdoorProject = outdoorProjectIdProp != null && outdoorProjectIdProp !== '' && outdoorProjectIdProp !== DEFAULT_OUTDOOR_PROJECT_ID;
+  // 环境位置偏好桶的项目正源 scope：显式项目按外壳 id 分桶，本机默认/匿名草稿落 draft 槽。
+  // 不借 layout.id 反推（裁定一）；activeProjectId 空时回落 default-outdoor，与 draft 槽不是一回事，故在此按 explicitOutdoorProject 判定。
+  const environmentScope: EnvironmentScope = explicitOutdoorProject
+    ? { kind: 'project', id: outdoorProjectIdProp! }
+    : { kind: 'draft' };
+  const environmentScopeKeyText = environmentScopeKey(environmentScope) ?? 'draft';
   const outdoorPlanSlotId = explicitOutdoorProject
     ? outdoorProjectIdProp
     : (outdoorProjectIdProp ?? null);
@@ -2254,14 +2260,14 @@ useEffect(() => {
 
   const [pendingEnvironmentPosition,setPendingEnvironmentPosition]=useState<PendingEnvironmentWrite|null>(null);
   useEffect(()=>{
-    const scope=layout.id??'local';
+    const scope=environmentScopeKeyText;
     return registerReadonlyDraftReader(scope,'environment',()=>{
       const pending=pendingEnvironmentPositionRef.current;
       if(!pending)return {status:'none'};
-      const pendingScope=pending.scope.kind==='project'?pending.scope.id:'local';
+      const pendingScope=pending.scope.kind==='project'?pending.scope.id:'draft';
       return pendingScope===scope?{status:'captured',value:pending.intended}:{status:'none'};
     });
-  },[layout.id]);
+  },[environmentScopeKeyText]);
   // Map geometry and project-library scene positions use different coordinate frames.
   // The library stores display offsets, with no verified map registration yet.
   const mappedWorkspace = !!layout.researchArea || (viewGround?.polygon?.length ?? 0) >= 3;
@@ -2270,17 +2276,17 @@ useEffect(() => {
     if(!active)return;
     if(!workspaceWriteGuards){
       const next=[{...active,position,...(scale !== undefined ? {scale} : {})},...current.slice(1)];environmentsRef.current=next;setEnvironments(next);
-      writeEnvironments(layoutStore.getState().layout.id,next);return;
+      writeEnvironments(environmentScopeKeyText,next);return;
     }
     if(pendingEnvironmentPositionRef.current){
       notify('上次场地位置保存结果尚待核对，请先保留候选，不能重复写入。','error');return;
     }
-    const id=layoutStore.getState().layout.id;
-    const scope:EnvironmentScope=id?{kind:'project',id}:{kind:'draft'};
+    const scope:EnvironmentScope=environmentScope;
+    const currentLayoutId=layoutStore.getState().layout.id;
     const token=sessionToken;
     const assertCurrent=()=>{
       workspaceWriteGuards.assertLayoutWrite();
-      if(!token||!activitySession.isCurrent(token)||layoutStore.getState().layout.id!==id)throw new Error('活动已变化');
+      if(!token||!activitySession.isCurrent(token)||layoutStore.getState().layout.id!==currentLayoutId)throw new Error('活动已变化');
     };
     const result=persistEnvironmentPosition({scope,generation:token?.epoch ?? -1,environments:current,assetId:active.assetId,
       position,...(scale !== undefined ? {scale} : {}),capability:workspaceWriteGuards.capability,assertCurrent});
@@ -2293,7 +2299,7 @@ useEffect(() => {
       notify('场地位置保存结果待核对，已保留候选，暂不重复写入。','error');return;
     }
     notify(result.reason,'error');
-  }, [workspaceWriteGuards,sessionToken,activitySession.isCurrent]);
+  }, [workspaceWriteGuards,sessionToken,activitySession.isCurrent,environmentScopeKeyText,environmentScope]);
   // 第 3 步：整景区视距 LOD 已随室内管线退役（2026-11-19）。
   const [isolatedScanId, setIsolatedScanId] = useState<string>();
   const scanIsolated = !!environment && environment.assetId === isolatedScanId;
@@ -2611,9 +2617,9 @@ useEffect(() => {
     actions.setActiveFloorIndex(floorIndex);
     environmentsRef.current = next;
     setEnvironments(next);
-    writeEnvironments(liveLayout.id, next);
+    writeEnvironments(environmentScopeKeyText, next);
     restoredEnvironmentRef.current = '';
-  }, [actions, activeFloorIndex, layout.floors, layout.height, layout.width, setView, workspaceWriteGuards]);
+  }, [actions, activeFloorIndex, layout.floors, layout.height, layout.width, setView, workspaceWriteGuards, environmentScopeKeyText]);
   const startStoredScene = useCallback((assetId: string) => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
     try {
@@ -2674,7 +2680,7 @@ useEffect(() => {
 
   // 本场环境按项目记住：新项目首次用 World 高斯样例起步，后续沿用项目选择；
   // 草稿刚绑上云项目时，把草稿里选的那条带过去，不让刚选完就丢。
-  const environmentKey = environmentPreferenceKey(layout.id);
+  const environmentKey = environmentScopeKeyText;
   const hasMapVenue = (viewGround?.polygon?.length ?? 0) >= 3;
   environmentsRef.current = environments;
   const environmentKeyRef = useRef<string | null>(null);
@@ -2685,7 +2691,7 @@ useEffect(() => {
     if (previousKey === environmentKey) return;
     const carried = previousKey === 'draft' ? environmentsRef.current : [];
     if(workspaceWriteGuards){
-      const scope:EnvironmentScope=layout.id?{kind:'project',id:layout.id}:{kind:'draft'};
+      const scope:EnvironmentScope=environmentScope;
       const result=readEnvironmentsStrict(scope,workspaceWriteGuards.capability);
       if(!result.ok){notify('本机场地资料暂时无法核对，原资料已保留。','error');return;}
       environmentPreferenceReadyRef.current=true;
@@ -2694,13 +2700,13 @@ useEffect(() => {
       environmentsRef.current=list;setEnvironments(list);
       return;
     }
-    const hasPreference = hasEnvironmentPreference(layout.id);
+    const hasPreference = hasEnvironmentPreference(environmentScopeKeyText);
     restoredEnvironmentRef.current = '';
     deferredEnvironmentRef.current = null;
     if (hasPreference) {
-      const saved = readEnvironments(layout.id);
+      const saved = readEnvironments(environmentScopeKeyText);
       const stored = saved;
-      if (stored.length !== saved.length) writeEnvironments(layout.id, stored);
+      if (stored.length !== saved.length) writeEnvironments(environmentScopeKeyText, stored);
       environmentsRef.current = stored;
       setEnvironments(stored);
       return;
@@ -2711,7 +2717,7 @@ useEffect(() => {
       return;
     }
     if (carried.length) {
-      writeEnvironments(layout.id, carried);
+      writeEnvironments(environmentScopeKeyText, carried);
       environmentsRef.current = carried;
       setEnvironments(carried);
       return;
@@ -2720,10 +2726,10 @@ useEffect(() => {
     // 表现就是「一打开网页就默认给我放进来一套实景」，写进去之后每次打开都复挂。
     // 改为写墓碑（与 clearEnvironment 同义）：下次读到的偏好是空列表，保持空场；
     // 想看样例仍可从空间面板手动挂（hangDemoEnvironment 未动，D5 演示照旧）。
-    clearEnvironment(layout.id);
+    clearEnvironment(environmentScopeKeyText);
     environmentsRef.current = [];
     setEnvironments([]);
-  }, [environmentKey, hasMapVenue, layout.id, workspaceWriteGuards]);
+  }, [environmentKey, hasMapVenue, workspaceWriteGuards, environmentScopeKeyText]);
   const removeEnvironment = useCallback((assetId: string) => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
     const next = environmentsRef.current.filter(entry => entry.assetId !== assetId);
@@ -2731,19 +2737,19 @@ useEffect(() => {
     setEnvironments(next);
     restoredEnvironmentRef.current = '';
     if (deferredEnvironmentRef.current?.assetId === assetId) deferredEnvironmentRef.current = null;
-    if (next.length) writeEnvironments(layoutStore.getState().layout.id, next);
+    if (next.length) writeEnvironments(environmentScopeKeyText, next);
     else {
-      clearEnvironment(layoutStore.getState().layout.id);
+      clearEnvironment(environmentScopeKeyText);
     }
-  }, [workspaceWriteGuards]);
+  }, [workspaceWriteGuards, environmentScopeKeyText]);
   const dropEnvironment = useCallback(() => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持删除场地，请保留现有资料。','error');return;}
     environmentsRef.current = [];
     setEnvironments([]);
-    clearEnvironment(layoutStore.getState().layout.id);
+    clearEnvironment(environmentScopeKeyText);
     restoredEnvironmentRef.current = '';
     deferredEnvironmentRef.current = null;
-  }, [workspaceWriteGuards]);
+  }, [workspaceWriteGuards, environmentScopeKeyText]);
   const setEnvironmentFloor = useCallback((assetId: string, floorIndex: number) => {
     if(workspaceWriteGuards){notify('当前编辑权模式暂不支持更换场地楼层，请保留现有资料。','error');return;}
     let current = environmentsRef.current;
@@ -2760,9 +2766,9 @@ useEffect(() => {
     const next = [{ ...entry, floorIndex, position }, ...updated.filter(value => value.assetId !== assetId)];
     environmentsRef.current = next;
     setEnvironments(next);
-    writeEnvironments(layoutStore.getState().layout.id, next);
+    writeEnvironments(environmentScopeKeyText, next);
     actions.setActiveFloorIndex(floorIndex);
-  }, [actions, selectEnvironment, workspaceWriteGuards]);
+  }, [actions, selectEnvironment, workspaceWriteGuards, environmentScopeKeyText]);
   useEffect(() => {
     if (workspaceWriteGuards || (environment?.floorIndex ?? 0) === activeFloorIndex) return;
     const match = environments.find(entry => (entry.floorIndex ?? 0) === activeFloorIndex);
@@ -4970,7 +4976,7 @@ useEffect(() => {
               if(!workspaceWriteGuards||!sessionToken)return;
               try { workspaceWriteGuards.assertLayoutWrite(); if(!activitySession.isCurrent(sessionToken))throw new Error(); }
               catch { notify('本机编辑权或活动已变化，请保留候选并重新核对。','error');return; }
-              const id=layoutStore.getState().layout.id,scope:EnvironmentScope=id?{kind:'project',id}:{kind:'draft'};
+              const scope:EnvironmentScope=environmentScope;
               const result=reconcilePendingEnvironmentWrite(pendingEnvironmentPosition,scope,sessionToken.epoch,readEnvironmentsStrict(scope,workspaceWriteGuards.capability));
               if(result.status==='confirmed'&&pendingEnvironmentPosition.intended){environmentsRef.current=pendingEnvironmentPosition.intended;setEnvironments(pendingEnvironmentPosition.intended);pendingEnvironmentPositionRef.current=null;setPendingEnvironmentPosition(null);notify('已核对本机场地位置。','success');}
               else notify(result.status==='retryable'?'候选尚未保存，请保留本页并重新核对。':'场地位置仍无法确认，请保留本页和原资料。','error');
