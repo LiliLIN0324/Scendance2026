@@ -29,16 +29,12 @@ const original = makeLayout({ id: originalId, name: '演练原活动', floors: [
 const target = makeLayout({ id: targetId, name: '演练目标活动', floors: [makeFloor({ items: [makeItem({ id: 'target-chair', name: '目标演练椅' })] })] });
 function backupText(layout: RoomLayout): string {
   const scope = layout.id!;
-  return serializeLocalProjectBackupV3(layout,
-    { state: 'ready', scope, brief: scope === originalId ? { status: 'present', value: brief } : { status: 'absent' } },
-    { state: 'ready', scope, materialCheckins: scope === originalId ? { status: 'present', value: materialCheckinLedgerSchema.parse({ projectId: scope, dataKind: 'rehearsal', sheets: [] }) } : { status: 'absent' } },
-    '2026-10-09T03:00:00Z');
+  return serializeLocalProjectBackupV3(layout, { state: 'ready', scope, brief: scope === originalId ? { status: 'present', value: brief } : { status: 'absent' } }, { state: 'ready', scope, materialCheckins: scope === originalId ? { status: 'present', value: materialCheckinLedgerSchema.parse({ projectId: scope, dataKind: 'rehearsal', sheets: [] }) } : { status: 'absent' } }, { projectId: layout.id! }, '2026-10-09T03:00:00Z');
 }
 function archiveResult(text: string, projectId: string, beforeWrite?: () => void) {
   beforeWrite?.();const candidate = parseLocalProjectBackupJson(text);
   if (candidate.layout.id !== projectId || candidate.brief.status === 'not-in-file' || candidate.materialCheckins.status === 'not-in-file') throw new Error('演练归档编号或覆盖不一致');
-  return createLocalProjectBackupV3(candidate.layout, { state: 'ready', scope: projectId, brief: candidate.brief },
-    { state: 'ready', scope: projectId, materialCheckins: candidate.materialCheckins }, candidate.createdAt!);
+  return createLocalProjectBackupV3(candidate.layout, { state: 'ready', scope: projectId, brief: candidate.brief }, { state: 'ready', scope: projectId, materialCheckins: candidate.materialCheckins }, { projectId: candidate.layout.id! }, candidate.createdAt!);
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;

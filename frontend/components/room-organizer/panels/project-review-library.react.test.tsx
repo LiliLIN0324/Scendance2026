@@ -20,6 +20,7 @@ const empty = (): ProjectReviewLibrary => ({ version: 1, draft: null, files: [] 
 let stored: ProjectReviewLibrary;
 function review(current: ProjectReviewSource = source, id = 'current-review') {
   const snapshot = createProjectReviewSnapshot({ layout: makeLayout({ id: current.scope, name: '30人方案', roof: { style: 'none' } }),
+    projectId: current.scope,
     source: current, briefSnapshot: { state: 'ready', scope: current.scope, brief: { status: 'absent' } },
     snapshot: { id, generatedAt: '2026-10-08T07:00:00.000Z' }, dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: false, design: false } });
   return { snapshot, html: projectReviewHtml(snapshot) };

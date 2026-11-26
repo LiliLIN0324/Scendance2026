@@ -58,12 +58,12 @@ function backupFromText(text: string, projectId: string): LocalActivityArchive {
   const checkinSnapshot = { state: 'ready' as const, scope: projectId, materialCheckins: candidate.materialCheckins };
   if (candidate.backupVersion === 5 && candidate.sourceDocuments.status === 'present') {
     return createLocalProjectBackupV5WithDocuments(candidate.layout, briefSnapshot, checkinSnapshot,
-      candidate.sourceDocuments, candidate.createdAt!);
+      candidate.sourceDocuments, { projectId }, candidate.createdAt!);
   }
   if (candidate.backupVersion === 6 || candidate.layout.eventProfile !== undefined) {
-    return createLocalProjectBackupV6(candidate.layout, briefSnapshot, checkinSnapshot, candidate.createdAt!);
+    return createLocalProjectBackupV6(candidate.layout, briefSnapshot, checkinSnapshot, { projectId }, candidate.createdAt!);
   }
-  return createLocalProjectBackupV3(candidate.layout, briefSnapshot, checkinSnapshot, candidate.createdAt!);
+  return createLocalProjectBackupV3(candidate.layout, briefSnapshot, checkinSnapshot, { projectId }, candidate.createdAt!);
 }
 
 function checkedArchive(value: unknown, projectId: string): LocalActivityArchive {
@@ -107,11 +107,12 @@ export async function archiveLocalActivity(text: string, expectedProjectId: stri
     const briefSnapshot = { state: 'ready' as const, scope: expectedProjectId, brief: proposal.brief };
     const checkinSnapshot = { state: 'ready' as const, scope: expectedProjectId, materialCheckins };
     if (sourceDocuments) {
-      return createLocalProjectBackupV5WithDocuments(layout, briefSnapshot, checkinSnapshot, sourceDocuments, proposal.createdAt);
+      return createLocalProjectBackupV5WithDocuments(layout, briefSnapshot, checkinSnapshot, sourceDocuments,
+        { projectId: expectedProjectId }, proposal.createdAt);
     }
     return profile === undefined
-      ? createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, proposal.createdAt)
-      : createLocalProjectBackupV6(layout, briefSnapshot, checkinSnapshot, proposal.createdAt);
+      ? createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, { projectId: expectedProjectId }, proposal.createdAt)
+      : createLocalProjectBackupV6(layout, briefSnapshot, checkinSnapshot, { projectId: expectedProjectId }, proposal.createdAt);
   });
   const readback = checkedArchive(await readSourceRecord<unknown>(key), expectedProjectId);
   if (canonical(written) !== canonical(readback)) {
@@ -195,7 +196,7 @@ function placementForNewActivity(source: RoomLayout): RoomLayout {
   const copy = createLocalProjectBackupV3(source,
     { state: 'ready', scope, brief: { status: 'absent' } },
     { state: 'ready', scope, materialCheckins: { status: 'absent' } },
-    undefined, { allowEventProfile: true }).layout;
+    { projectId: scope, allowEventProfile: true }).layout;
   // 新活动不继承上一场的日期、预算与分工。
   delete copy.eventProfile;
   delete copy.productionPlan;
@@ -233,5 +234,6 @@ export function createLocalActivityBackup(source: RoomLayout, name: string, mode
   layout.name = title;
   return createLocalProjectBackupV3(layout,
     { state: 'ready', scope: id, brief: { status: 'absent' } },
-    { state: 'ready', scope: id, materialCheckins: { status: 'absent' } });
+    { state: 'ready', scope: id, materialCheckins: { status: 'absent' } },
+    { projectId: id });
 }

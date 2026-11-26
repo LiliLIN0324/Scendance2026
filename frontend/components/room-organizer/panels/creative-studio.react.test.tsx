@@ -2895,17 +2895,14 @@ describe('complete local backup transactions', () => {
   }
   const file = (id = projectId, brief: 'present'|'absent'|'legacy' = 'present') => {
     const next = { ...layout, id, name: '文件布局', width: 14 };
-    return parseLocalProjectBackupJson(brief === 'legacy' ? JSON.stringify(next) : serializeLocalProjectBackup(next, { state: 'ready', scope: id, brief: brief === 'present' ? { status: 'present', value: fileBrief } : { status: 'absent' } }));
+    return parseLocalProjectBackupJson(brief === 'legacy' ? JSON.stringify(next) : serializeLocalProjectBackup(next, { state: 'ready', scope: id, brief: brief === 'present' ? { status: 'present', value: fileBrief } : { status: 'absent' } }, { projectId: next.id! }));
   };
   const checkinKey=()=>JSON.stringify(['material-checkins',projectId]);
   const ledger=(n=1)=>materialCheckinLedgerSchema.parse({projectId,dataKind:'rehearsal',sheets:[{
     id:`aa900000-0000-4000-8000-${String(n).padStart(12,'0')}`,acquisitionId:'aa900000-0000-4000-8000-000000000100',
     acquisitionSnapshot:{title:'演练租赁椅'},unit:'piece',agreements:[{id:`aa900000-0000-4000-8000-${String(n+1000).padStart(12,'0')}`,
       agreedQuantity:20,basisNote:'演练约定',recordedAt:'2026-10-09T00:00:00+08:00',recordedBy:'演练统筹'}],events:[]}]});
-  const checkinFile=(value:ReturnType<typeof ledger>|undefined)=>parseLocalProjectBackupJson(serializeLocalProjectBackupV3(
-    {...layout,id:projectId,name:'点验文件布局'}, {state:'ready',scope:projectId,brief:{status:'present',value:fileBrief}},
-    {state:'ready',scope:projectId,materialCheckins:value?{status:'present',value}:{status:'absent'}},
-  ));
+  const checkinFile=(value:ReturnType<typeof ledger>|undefined)=>parseLocalProjectBackupJson(serializeLocalProjectBackupV3({...layout,id:projectId,name:'点验文件布局'}, {state:'ready',scope:projectId,brief:{status:'present',value:fileBrief}}, {state:'ready',scope:projectId,materialCheckins:value?{status:'present',value}:{status:'absent'}}, { projectId: {...layout,id:projectId,name:'点验文件布局'}.id! }));
   async function mount(briefView: 'brief'|'reference' = 'brief') { const view = renderUI(<Trial briefView={briefView}/>); await waitFor(() => expect(briefState().ready).toBe(true)); return view; }
   beforeEach(() => {
     installBackupLocks(); commit.mockReset();prepare.mockReset().mockImplementation(next=>next);
@@ -3057,10 +3054,7 @@ describe('complete local backup transactions', () => {
   const oldDrawing = { width: '12', depth: '10', height: '3', text: '原图纸现场条件', constraints: [], adjustment: '' };
   const newDrawing = { ...oldDrawing, width: '14', text: '文件图纸现场条件' };
   async function sourceFile(id = 'file-image', options?: { form: unknown }) {
-    return parseLocalProjectBackupJson(await serializeLocalProjectBackupV4({ ...layout, name: '图纸文件布局', width: 14 },
-      { state: 'ready', scope: projectId, brief: { status: 'present', value: fileBrief } },
-      { state: 'ready', scope: projectId, materialCheckins: { status: 'absent' } },
-      { scope: projectId, sources: [imageFixture(id, '文件平面图.png', 'floorplan')], form: options ? options.form : newDrawing }));
+    return parseLocalProjectBackupJson(await serializeLocalProjectBackupV4({ ...layout, name: '图纸文件布局', width: 14 }, { state: 'ready', scope: projectId, brief: { status: 'present', value: fileBrief } }, { state: 'ready', scope: projectId, materialCheckins: { status: 'absent' } }, { scope: projectId, sources: [imageFixture(id, '文件平面图.png', 'floorplan')], form: options ? options.form : newDrawing }, { projectId: { ...layout, name: '图纸文件布局', width: 14 }.id! }));
   }
   function seedSources() {
     vi.stubGlobal('Blob', NodeBlob);

@@ -96,7 +96,7 @@ describe('creative brief boundaries', () => {
     const layout = backendSceneToLayout(scene, { projectId: 'brief-template-rehearsal' });
     const restored = parseLocalProjectBackupJson(serializeLocalProjectBackup(layout, {
       state: 'ready', scope: layout.id!, brief: { status: 'present', value: brief },
-    }));
+    }, { projectId: layout.id! }));
     expect(restored.brief).toEqual({ status: 'present', value: brief });
     expect(briefInstruction(brief, 12, 10)).toContain(brief.description);
     expect(Object.keys(brief)).toEqual(Object.keys(INITIAL_BRIEF));

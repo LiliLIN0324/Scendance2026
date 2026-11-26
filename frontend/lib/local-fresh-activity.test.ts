@@ -51,10 +51,7 @@ function originalLayout(): RoomLayout {
 }
 function backupText(layout: RoomLayout = originalLayout()): string {
   const ledger = materialCheckinLedgerSchema.parse({ projectId: layout.id, dataKind: 'rehearsal', sheets: [] });
-  return serializeLocalProjectBackupV3(layout,
-    { state: 'ready', scope: layout.id!, brief: { status: 'present', value: brief } },
-    { state: 'ready', scope: layout.id!, materialCheckins: { status: 'present', value: ledger } },
-    '2026-10-09T03:00:00Z');
+  return serializeLocalProjectBackupV3(layout, { state: 'ready', scope: layout.id!, brief: { status: 'present', value: brief } }, { state: 'ready', scope: layout.id!, materialCheckins: { status: 'present', value: ledger } }, { projectId: layout.id! }, '2026-10-09T03:00:00Z');
 }
 function access(layout: RoomLayout) {
   let current = layout;
@@ -128,7 +125,7 @@ it('archives the original activity, writes a fresh empty one, and reads both bac
   expect((await readLocalActivity(originalId)).layout.name).toBe('演练原活动');
   expect((await readLocalActivity(originalId)).materialCheckins).toMatchObject({ status: 'present' });
   const probe = { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() } as unknown as Storage;
-  expect(() => commitLocalRestoreLayout(created.layout, holder, probe)).toThrow('备份恢复暂不可用');
+  expect(() => commitLocalRestoreLayout(created.layout, holder, created.layout.id!, probe)).toThrow('备份恢复暂不可用');
   expect(probe.getItem).not.toHaveBeenCalled();
   expect(probe.setItem).not.toHaveBeenCalled();
   expect(localStorage.getItem(STORAGE_KEY)).toBe(json);

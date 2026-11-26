@@ -87,16 +87,16 @@ describe('活动档案的发布边界', () => {
 
 describe('备份版本与活动档案', () => {
   it('V2 备份拒绝夹带活动档案并指向 V5', () => {
-    expect(() => createLocalProjectBackup(profileLayout(), ready(), createdAt)).toThrow(/V5/);
+    expect(() => createLocalProjectBackup(profileLayout(), ready(), { projectId: scope }, createdAt)).toThrow(/V5/);
   });
 
   it('V4 备份同样不能冒充已覆盖活动档案', async () => {
-    await expect(serializeLocalProjectBackupV4(profileLayout(), ready(), noCheckins(), noSources, createdAt))
+    await expect(serializeLocalProjectBackupV4(profileLayout(), ready(), noCheckins(), noSources, { projectId: scope }, createdAt))
       .rejects.toThrow(/V5/);
   });
 
   it('V5 往返保留档案、点验状态与图片字段', async () => {
-    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, createdAt);
+    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, { projectId: scope }, createdAt);
     const parsed = parseLocalProjectBackupJson(text);
     expect(parsed.backupVersion).toBe(5);
     expect(parsed.layout.eventProfile).toEqual(profile());
@@ -105,14 +105,14 @@ describe('备份版本与活动档案', () => {
   });
 
   it('V5 文件缺少 eventProfile 覆盖声明时拒绝', async () => {
-    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, createdAt);
+    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, { projectId: scope }, createdAt);
     const document = JSON.parse(text);
     delete document.coverage.eventProfile;
     expect(() => parseLocalProjectBackupJson(JSON.stringify(document))).toThrow(/备份信息或活动需求字段无效/);
   });
 
   it('V4 文件里藏活动档案属于混版，一律拒绝', async () => {
-    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, createdAt);
+    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, { projectId: scope }, createdAt);
     const document = { ...JSON.parse(text), version: 4, coverage: LOCAL_PROJECT_BACKUP_V4_COVERAGE };
     expect(() => parseLocalProjectBackupJson(JSON.stringify(document))).toThrow(/V1–V4/);
   });
@@ -121,36 +121,36 @@ describe('备份版本与活动档案', () => {
     const nested = makeLayout({ id: scope, eventProfile: profile(), designBook: {
       activeId: 'v1', variants: [{ id: 'v1', name: '方案甲', layout: profileLayout() }],
     } });
-    await expect(serializeLocalProjectBackupV5(nested, ready(), noCheckins(), noSources, createdAt))
+    await expect(serializeLocalProjectBackupV5(nested, ready(), noCheckins(), noSources, { projectId: scope }, createdAt))
       .rejects.toThrow(/设计变体/);
   });
 
   it('V5 写入前仍校验档案字段', async () => {
     const invalid = { ...profileLayout(), eventProfile: { ...profile(), updatedBy: '   ' } };
-    await expect(serializeLocalProjectBackupV5(invalid as unknown as RoomLayout, ready(), noCheckins(), noSources, createdAt))
+    await expect(serializeLocalProjectBackupV5(invalid as unknown as RoomLayout, ready(), noCheckins(), noSources, { projectId: scope }, createdAt))
       .rejects.toThrow(/活动档案字段无效/);
   });
 
   it('V5 候选回填后仍保留档案', async () => {
-    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, createdAt);
+    const text = await serializeLocalProjectBackupV5(profileLayout(), ready(), noCheckins(), noSources, { projectId: scope }, createdAt);
     const candidate = validateLocalProjectRestoreCandidate(parseLocalProjectBackupJson(text));
     expect(candidate.backupVersion).toBe(5);
     expect(candidate.layout.eventProfile).toEqual(profile());
   });
 
   it('没有档案的项目也能生成 V5 备份', async () => {
-    const text = await serializeLocalProjectBackupV5(makeLayout({ id: scope }), ready(), noCheckins(), noSources, createdAt);
+    const text = await serializeLocalProjectBackupV5(makeLayout({ id: scope }), ready(), noCheckins(), noSources, { projectId: scope }, createdAt);
     expect(parseLocalProjectBackupJson(text).layout.eventProfile).toBeUndefined();
   });
 
   it('恢复准备阶段用旧版校验布局时不得丢掉档案', () => {
-    expect(prepareLocalRestoreLayout(profileLayout()).eventProfile).toEqual(profile());
+    expect(prepareLocalRestoreLayout(profileLayout(), scope).eventProfile).toEqual(profile());
   });
 });
 
 describe('本机归档 V6（含档案、不含图片）', () => {
   it('V6 往返保留档案与点验状态，并明确没有图片字段', () => {
-    const parsed = parseLocalProjectBackupJson(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), createdAt));
+    const parsed = parseLocalProjectBackupJson(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), { projectId: scope }, createdAt));
     expect(parsed.backupVersion).toBe(6);
     expect(parsed.layout.eventProfile).toEqual(profile());
     expect(parsed.materialCheckins).toEqual({ status: 'absent' });
@@ -158,19 +158,19 @@ describe('本机归档 V6（含档案、不含图片）', () => {
   });
 
   it('V6 缺档案覆盖声明时拒绝', () => {
-    const document = { ...JSON.parse(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), createdAt)) };
+    const document = { ...JSON.parse(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), { projectId: scope }, createdAt)) };
     delete document.coverage.eventProfile;
     expect(() => parseLocalProjectBackupJson(JSON.stringify(document))).toThrow(/备份信息或活动需求字段无效/);
   });
 
   it('V6 候选没有真实点验状态时拒绝，而不是当成 V3', () => {
-    const candidate = parseLocalProjectBackupJson(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), createdAt));
+    const candidate = parseLocalProjectBackupJson(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), { projectId: scope }, createdAt));
     expect(() => validateLocalProjectRestoreCandidate({ ...candidate, materialCheckins: { status: 'not-in-file' } })).toThrow(/V6 候选/);
   });
 
   it('V6 候选回填保留档案且图片仍为未携带', () => {
     const candidate = validateLocalProjectRestoreCandidate(
-      parseLocalProjectBackupJson(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), createdAt)));
+      parseLocalProjectBackupJson(serializeLocalProjectBackupV6(profileLayout(), ready(), noCheckins(), { projectId: scope }, createdAt)));
     expect(candidate.backupVersion).toBe(6);
     expect(candidate.layout.eventProfile).toEqual(profile());
     expect(candidate.sourceDocuments).toEqual({ status: 'not-in-file' });

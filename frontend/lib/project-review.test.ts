@@ -25,7 +25,7 @@ const layout = (): RoomLayout => makeLayout({ id: scope, name: '假设演练', r
   floors: [makeFloor({ items: [makeItem({ id: objectId, name: '同名椅' }), makeItem({ id: 'other-chair', name: '同名椅' })] })],
 });
 function input(overrides: Partial<ProjectReviewInput> = {}): ProjectReviewInput {
-  return { layout: layout(), briefSnapshot: { state: 'ready', scope, brief: { status: 'present', value: brief() } },
+  return { layout: layout(), projectId: scope, briefSnapshot: { state: 'ready', scope, brief: { status: 'present', value: brief() } },
     snapshot: { id: 'review-001', generatedAt }, source: { scope, revision: 'editor-17:brief-4:scope-2' },
     dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: true, design: true }, ...overrides };
 }

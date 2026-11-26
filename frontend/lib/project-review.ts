@@ -37,6 +37,8 @@ export type ProjectReviewNote = z.infer<typeof noteSchema>;
 export type ProjectReviewAdoption = z.infer<typeof adoptionSchema>;
 export interface ProjectReviewInput {
   layout: RoomLayout;
+  /** 必填：当前项目正源编号；与 source.scope 一致，不再借 layout.id 配 'local' 兜底。 */
+  projectId: string;
   briefSnapshot: BackupBriefSnapshot;
   snapshot: DeliverySnapshot;
   source: ProjectReviewSource;
@@ -238,12 +240,14 @@ function reviewBrief(brief: CreativeBrief): CreativeBrief {
 /** Synchronous, detached, immutable white-list snapshot. No save, model call, or resource loading. */
 export function createProjectReviewSnapshot(input: ProjectReviewInput): ProjectReviewSnapshot {
   assertData(input);
-  const { layout, briefSnapshot, ...rawOptions } = input;
+  const { layout, briefSnapshot, projectId: rawProjectId, ...rawOptions } = input;
+  const projectId = rawProjectId.trim();
+  if (!projectId) throw new Error('缺少项目编号，不能冻结评审快照。');
   const options = optionsSchema.parse(rawOptions);
   if ([...options.notes, ...(options.adoption ? [options.adoption] : [])].some(record =>
     Date.parse(record.recordedAt) > Date.parse(options.snapshot.generatedAt))) throw new Error('评审记录晚于冻结时间，请重新冻结。');
   if (briefSnapshot.state !== 'ready') throw new Error('需求读取或保存尚未完成，不能冻结评审快照。');
-  if (options.source.scope !== (layout.id ?? 'local') || briefSnapshot.scope !== options.source.scope) {
+  if (options.source.scope !== projectId || briefSnapshot.scope !== options.source.scope) {
     throw new Error('需求、布局与评审项目不一致，不能冻结快照。');
   }
   if (layout.eventOperations?.dataKind && layout.eventOperations.dataKind !== 'unspecified' &&

@@ -9,6 +9,7 @@ import {
   createLocalProjectBackup, createLocalProjectBackupV3, LOCAL_PROJECT_BACKUP_COVERAGE, LOCAL_PROJECT_BACKUP_V1_COVERAGE,
   LOCAL_PROJECT_BACKUP_V3_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_BYTES,
   parseLocalProjectBackupJson, readLocalProjectBackupFile, serializeLocalProjectBackup, serializeLocalProjectBackupV3, validateLocalProjectRestoreCandidate,
+  listLegacyEnvelopeHits,
   type BackupBriefSnapshot, type BackupMaterialCheckinSnapshot,
   serializeLocalProjectBackupV4, LOCAL_PROJECT_BACKUP_V4_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_V4_BYTES,
 } from './local-project-backup';
@@ -45,7 +46,7 @@ function layout(): RoomLayout {
     makeItem({ id: 'same-name-2', name: '相同名称' }),
   ] })] });
 }
-const backup = () => createLocalProjectBackup(layout(), ready(), createdAt);
+const backup = () => createLocalProjectBackup(layout(), ready(), { projectId: scope }, createdAt);
 const json = (value: unknown) => JSON.stringify(value);
 const plan = (): ProductionPlan => productionPlanSchema.parse({
   dataKind: 'rehearsal', budget: { limitMinor: null, scopeNote: '  布场与撤场\n范围待确认  ', basisNote: '' },
@@ -82,11 +83,11 @@ it('preserves a structured reserved zone through backup and rejects invalid sema
   const original=layout();
   original.floors[0]!.zones=[{id:'reserved-zone',name:'保留空间',color:'#4A7C59',x:0,z:0,w:1,d:1,zoneType:'reserved'},
     {id:'legacy-zone',name:'预留区',color:'#4A7C59',x:2,z:0,w:1,d:1}];
-  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(original,ready(),createdAt)).layout;
+  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(original, ready(), { projectId: scope }, createdAt)).layout;
   expect(restored.floors[0]!.zones).toEqual(original.floors[0]!.zones);
   expect(restored.floors[0]!.zones![1]).not.toHaveProperty('zoneType');
   const invalid=structuredClone(original);(invalid.floors[0]!.zones![0] as unknown as {zoneType:string}).zoneType='unknown';
-  expect(()=>serializeLocalProjectBackup(invalid,ready(),createdAt)).toThrow();
+  expect(()=>serializeLocalProjectBackup(invalid, ready(), { projectId: scope }, createdAt)).toThrow();
 });
 
 describe('explicit V3 material checkin backup', () => {
@@ -94,10 +95,10 @@ describe('explicit V3 material checkin backup', () => {
     const base = { ...layout(), productionPlan: plan() };
     const original = { ...base, designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '方案', layout: base }] } };
     const before = json(original), facts = checkinLedger(), factsBefore = json(facts);
-    const old = createLocalProjectBackup(original, ready(), createdAt);
+    const old = createLocalProjectBackup(original, ready(), { projectId: scope }, createdAt);
     expect(old.version).toBe(2); expect(old.coverage).not.toHaveProperty('materialCheckins');
     expect(old).not.toHaveProperty('materialCheckins');
-    const text = serializeLocalProjectBackupV3(original, ready(), readyCheckins(facts), createdAt);
+    const text = serializeLocalProjectBackupV3(original, ready(), readyCheckins(facts), { projectId: scope }, createdAt);
     const restored = await readLocalProjectBackupFile(new File([text], 'checkin-v3.json'));
     expect(JSON.parse(text)).toMatchObject({ version: 3, coverage: LOCAL_PROJECT_BACKUP_V3_COVERAGE });
     expect(restored).toMatchObject({ source: 'backup', backupVersion: 3, layout: original,
@@ -112,8 +113,8 @@ describe('explicit V3 material checkin backup', () => {
     const absent: BackupMaterialCheckinSnapshot = { state: 'ready', scope, materialCheckins: { status: 'absent' } };
     const emptyLedger = materialCheckinLedgerSchema.parse({ projectId: scope, dataKind: 'rehearsal', sheets: [] });
     const present = readyCheckins(emptyLedger);
-    expect(parseLocalProjectBackupJson(serializeLocalProjectBackupV3(layout(), ready(), absent)).materialCheckins).toEqual({ status: 'absent' });
-    expect(parseLocalProjectBackupJson(serializeLocalProjectBackupV3(layout(), ready(), present)).materialCheckins)
+    expect(parseLocalProjectBackupJson(serializeLocalProjectBackupV3(layout(), ready(), absent, { projectId: scope })).materialCheckins).toEqual({ status: 'absent' });
+    expect(parseLocalProjectBackupJson(serializeLocalProjectBackupV3(layout(), ready(), present, { projectId: scope })).materialCheckins)
       .toEqual({ status: 'present', value: emptyLedger });
     for (const text of [json({ ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE }), json(backup()), json(layout())]) {
       const candidate = parseLocalProjectBackupJson(text);
@@ -124,22 +125,21 @@ describe('explicit V3 material checkin backup', () => {
     expect(validateLocalProjectRestoreCandidate(olderCaller).materialCheckins).toEqual({ status: 'not-in-file' });
   });
   it.each(['loading', 'saving', 'error'] as const)('blocks V3 when checkin snapshot is %s instead of exporting absence', state => {
-    expect(() => createLocalProjectBackupV3(layout(), ready(), { state, scope })).toThrow('尚未完成');
+    expect(() => createLocalProjectBackupV3(layout(), ready(), { state, scope }, { projectId: scope })).toThrow('尚未完成');
   });
   it('binds both snapshots and ledger to a real persisted project ID, including non-UUID house IDs', () => {
     const id = 'house-checkin-甲'; const target = { ...layout(), id };
-    const result = createLocalProjectBackupV3(target, { ...ready(), scope: id }, readyCheckins(checkinLedger(id)));
+    const result = createLocalProjectBackupV3(target, { ...ready(), scope: id }, readyCheckins(checkinLedger(id)), { projectId: id });
     expect(result.materialCheckins).toMatchObject({ status: 'present', value: { projectId: id } });
-    expect(() => createLocalProjectBackupV3(layout(), ready(), { ...readyCheckins(), scope: 'other' })).toThrow('项目不一致');
-    expect(() => createLocalProjectBackupV3(layout(), { ...ready(), scope: 'other' }, readyCheckins())).toThrow('项目不一致');
-    expect(() => createLocalProjectBackupV3(layout(), ready(), { state: 'ready', scope, materialCheckins: { status: 'present', value: checkinLedger('other') } })).toThrow('编号不一致');
-    expect(() => createLocalProjectBackupV3(makeLayout(), { state: 'ready', scope: 'local', brief: { status: 'absent' } },
-      { state: 'ready', scope: 'local', materialCheckins: { status: 'absent' } })).toThrow('真实场景项目');
-    const file = createLocalProjectBackupV3(layout(), ready(), readyCheckins());
+    expect(() => createLocalProjectBackupV3(layout(), ready(), { ...readyCheckins(), scope: 'other' }, { projectId: scope })).toThrow('项目不一致');
+    expect(() => createLocalProjectBackupV3(layout(), { ...ready(), scope: 'other' }, readyCheckins(), { projectId: scope })).toThrow('项目不一致');
+    expect(() => createLocalProjectBackupV3(layout(), ready(), { state: 'ready', scope, materialCheckins: { status: 'present', value: checkinLedger('other') } }, { projectId: scope })).toThrow('编号不一致');
+    expect(() => createLocalProjectBackupV3(makeLayout(), { state: 'ready', scope: 'local', brief: { status: 'absent' } }, { state: 'ready', scope: 'local', materialCheckins: { status: 'absent' } }, { projectId: scope })).toThrow('真实场景项目');
+    const file = createLocalProjectBackupV3(layout(), ready(), readyCheckins(), { projectId: scope });
     expect(() => parseLocalProjectBackupJson(json({ ...file, materialCheckins: { status: 'present', value: checkinLedger('other') } }))).toThrow('编号不一致');
   });
   it('rejects missing or false V3 coverage and missing fact status rather than downgrading', () => {
-    const file = createLocalProjectBackupV3(layout(), ready(), readyCheckins());
+    const file = createLocalProjectBackupV3(layout(), ready(), readyCheckins(), { projectId: scope });
     for (const coverage of [LOCAL_PROJECT_BACKUP_COVERAGE, { ...LOCAL_PROJECT_BACKUP_V3_COVERAGE, materialCheckins: false }]) {
       expect(() => parseLocalProjectBackupJson(json({ ...file, coverage }))).toThrow('字段无效');
     }
@@ -165,22 +165,22 @@ describe('explicit V3 material checkin backup', () => {
       recordedAt: '2026-10-09T19:00:00+08:00', recordedBy: '演练复核人' },
     { ...receive, id: checkinId(7), batchRef: '', quantity: null, checkState: 'pending', occurredAt: null },
     { ...receive, id: checkinId(8), batchRef: '明确零', quantity: 0 });
-    const text = serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(facts));
+    const text = serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(facts), { projectId: scope });
     expect(parseLocalProjectBackupJson(text).materialCheckins).toEqual({ status: 'present', value: facts });
     expect(json(facts)).toContain('null');
   });
   it.each([
     { status: 'not-in-file' }, { status: 'loading' }, { status: 'absent', value: {} }, null,
   ])('rejects an illegal V3 fact state: %j', materialCheckins => {
-    const file = createLocalProjectBackupV3(layout(), ready(), readyCheckins());
+    const file = createLocalProjectBackupV3(layout(), ready(), readyCheckins(), { projectId: scope });
     expect(() => parseLocalProjectBackupJson(json({ ...file, materialCheckins }))).toThrow('点验账本');
   });
   it('refuses invalid ledgers and serializers while leaving supplied facts unchanged', () => {
     const facts = checkinLedger(), before = json(facts);
     const invalid = { ...facts, sheets: [{ ...facts.sheets[0]!, events: [{ ...facts.sheets[0]!.events[0]!, quantity: -1 }] }] };
-    expect(() => createLocalProjectBackupV3(layout(), ready(), readyCheckins(invalid as MaterialCheckinLedger))).toThrow('点验账本');
+    expect(() => createLocalProjectBackupV3(layout(), ready(), readyCheckins(invalid as MaterialCheckinLedger), { projectId: scope })).toThrow('点验账本');
     const serialize = vi.fn(() => ({ ...facts, projectId: 'other' }));
-    expect(() => createLocalProjectBackupV3(layout(), ready(), readyCheckins({ ...facts, toJSON: serialize } as MaterialCheckinLedger))).toThrow('不支持的 JSON');
+    expect(() => createLocalProjectBackupV3(layout(), ready(), readyCheckins({ ...facts, toJSON: serialize } as MaterialCheckinLedger), { projectId: scope })).toThrow('不支持的 JSON');
     expect(serialize).not.toHaveBeenCalled(); expect(json(facts)).toBe(before);
   });
   it('leaves older/newer facts separate for root merge, preserving current order and rejecting conflicts or forks', () => {
@@ -192,7 +192,7 @@ describe('explicit V3 material checkin backup', () => {
       replacement: { ...replacement, quantity: 16 }, recordedAt: '2026-10-09T18:00:00+08:00', recordedBy: '演练复核人' };
     current.sheets[0]!.events.push(correction);
     const original = json(current);
-    const candidate = parseLocalProjectBackupJson(serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(old)));
+    const candidate = parseLocalProjectBackupJson(serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(old), { projectId: scope }));
     if (candidate.materialCheckins?.status !== 'present') throw new Error('fixture');
     const merged = mergeMaterialCheckinLedgers(current, candidate.materialCheckins.value);
     expect(merged.sheets[0]!.events).toEqual(current.sheets[0]!.events);
@@ -209,11 +209,11 @@ describe('explicit V3 material checkin backup', () => {
   it('counts the separate ledger toward the same 8 MiB file budget', () => {
     const prefix = 'data:image/png;base64,';
     const base = { ...layout(), floorPlanImage: prefix };
-    const overhead = new TextEncoder().encode(serializeLocalProjectBackup(base, ready(), createdAt)).length;
+    const overhead = new TextEncoder().encode(serializeLocalProjectBackup(base, ready(), { projectId: scope }, createdAt)).length;
     const large = { ...base, floorPlanImage: prefix + 'a'.repeat(MAX_LOCAL_PROJECT_BACKUP_BYTES - overhead - 50) };
-    expect(() => serializeLocalProjectBackup(large, ready(), createdAt)).not.toThrow();
-    expect(() => serializeLocalProjectBackupV3(large, ready(), readyCheckins(), createdAt)).toThrow('8 MiB');
-    const mutable = parseLocalProjectBackupJson(serializeLocalProjectBackup(large, ready(), createdAt));
+    expect(() => serializeLocalProjectBackup(large, ready(), { projectId: scope }, createdAt)).not.toThrow();
+    expect(() => serializeLocalProjectBackupV3(large, ready(), readyCheckins(), { projectId: scope }, createdAt)).toThrow('8 MiB');
+    const mutable = parseLocalProjectBackupJson(serializeLocalProjectBackup(large, ready(), { projectId: scope }, createdAt));
     const enlargedCandidate = { ...mutable, backupVersion: 3,
       materialCheckins: { status: 'present', value: materialCheckinLedgerSchema.parse({ projectId: scope, sheets: [] }) } };
     expect(() => validateLocalProjectRestoreCandidate(enlargedCandidate)).toThrow('8 MiB');
@@ -222,7 +222,7 @@ describe('explicit V3 material checkin backup', () => {
     const sideEffect = vi.fn(() => { throw new Error('unexpected side effect'); });
     vi.stubGlobal('fetch', sideEffect);
     for (const name of ['indexedDB', 'localStorage', 'document']) vi.stubGlobal(name, new Proxy({}, { get: sideEffect }));
-    const text = serializeLocalProjectBackupV3(layout(), ready(), readyCheckins());
+    const text = serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(), { projectId: scope });
     expect(validateLocalProjectRestoreCandidate(parseLocalProjectBackupJson(text)).materialCheckins?.status).toBe('present');
     expect(sideEffect).not.toHaveBeenCalled();
   });
@@ -232,7 +232,7 @@ describe('scene and activity backup', () => {
   it('refuses misplaced checkin facts even in permissive legacy input instead of silently dropping them', () => {
     const misplaced = { ...layout(), materialCheckins: { status: 'absent' } };
     expect(() => parseLocalProjectBackupJson(json(misplaced))).toThrow('独立的 V3');
-    expect(() => createLocalProjectBackup(misplaced, ready())).toThrow('独立的 V3');
+    expect(() => createLocalProjectBackup(misplaced, ready(), { projectId: scope })).toThrow('独立的 V3');
     for (const version of [1, 2]) {
       const envelope = { ...backup(), version, coverage: version === 1 ? LOCAL_PROJECT_BACKUP_V1_COVERAGE : LOCAL_PROJECT_BACKUP_COVERAGE };
       expect(() => parseLocalProjectBackupJson(json({ ...envelope, materialCheckins: { status: 'absent' } }))).toThrow('字段无效');
@@ -274,7 +274,7 @@ describe('scene and activity backup', () => {
   });
 
   it('keeps V2 plans and supports old unversioned callers without inventing source provenance', () => {
-    const candidate = parseLocalProjectBackupJson(serializeLocalProjectBackup({ ...layout(), productionPlan: plan() }, ready(), createdAt));
+    const candidate = parseLocalProjectBackupJson(serializeLocalProjectBackup({ ...layout(), productionPlan: plan() }, ready(), { projectId: scope }, createdAt));
     expect(validateLocalProjectRestoreCandidate(candidate)).toEqual(candidate);
     const { backupVersion: _version, ...unversioned } = candidate;
     const checked = validateLocalProjectRestoreCandidate(unversioned);
@@ -325,7 +325,7 @@ describe('scene and activity backup', () => {
   it('writes V2 and round-trips the complete root and design-variant production plans without inventing facts', async () => {
     const base = { ...layout(), productionPlan: plan() };
     const original = { ...base, designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '计划方案', layout: base }] } };
-    const text = serializeLocalProjectBackup(original, ready(), createdAt);
+    const text = serializeLocalProjectBackup(original, ready(), { projectId: scope }, createdAt);
     const parsed = await readLocalProjectBackupFile(new File([text], 'production-v2.json'));
     expect(JSON.parse(text)).toMatchObject({ version: 2, coverage: { productionPlan: true } });
     expect(parsed.backupVersion).toBe(2);
@@ -341,12 +341,12 @@ describe('scene and activity backup', () => {
 
   it('keeps missing plans absent and distinguishes an explicitly recorded empty planning block', () => {
     const original = layout();
-    const noPlan = parseLocalProjectBackupJson(serializeLocalProjectBackup(original, ready(), createdAt));
+    const noPlan = parseLocalProjectBackupJson(serializeLocalProjectBackup(original, ready(), { projectId: scope }, createdAt));
     expect(noPlan.layout).not.toHaveProperty('productionPlan');
     const empty = { ...original, productionPlan: {} as ProductionPlan };
-    expect(createLocalProjectBackup(empty, ready(), createdAt).layout.productionPlan).toEqual(productionPlanSchema.parse({}));
+    expect(createLocalProjectBackup(empty, ready(), { projectId: scope }, createdAt).layout.productionPlan).toEqual(productionPlanSchema.parse({}));
     const nested = { ...original, designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '旧方案', layout: original }] } };
-    expect(createLocalProjectBackup(nested, ready()).layout.designBook!.variants[0]!.layout).not.toHaveProperty('productionPlan');
+    expect(createLocalProjectBackup(nested, ready(), { projectId: scope }).layout.designBook!.variants[0]!.layout).not.toHaveProperty('productionPlan');
   });
 
   it('explicitly reads strict old V1 backups and upgrades new writes to V2 without a default plan', () => {
@@ -355,7 +355,7 @@ describe('scene and activity backup', () => {
     expect(restored).toMatchObject({ source: 'backup', backupVersion: 1, createdAt,
       layout: layout(), brief: { status: 'present', value: brief() } });
     expect(restored.layout).not.toHaveProperty('productionPlan');
-    const upgraded = createLocalProjectBackup(restored.layout, ready(), createdAt);
+    const upgraded = createLocalProjectBackup(restored.layout, ready(), { projectId: scope }, createdAt);
     expect(upgraded.version).toBe(2);
     expect(upgraded.coverage.productionPlan).toBe(true);
     expect(upgraded.layout).toEqual(old.layout);
@@ -410,11 +410,11 @@ describe('scene and activity backup', () => {
   ])('refuses invalid plan data in V2 and legacy without mutating the source: %j', invalid => {
     const original = { ...layout(), productionPlan: invalid } as unknown as RoomLayout;
     const before = json(original);
-    expect(() => createLocalProjectBackup(original, ready())).toThrow('制作计划');
+    expect(() => createLocalProjectBackup(original, ready(), { projectId: scope })).toThrow('制作计划');
     expect(() => parseLocalProjectBackupJson(json({ ...backup(), layout: original }))).toThrow('制作计划');
     expect(() => parseLocalProjectBackupJson(before)).toThrow('制作计划');
     const nested = { ...layout(), designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '非法计划方案', layout: original }] } };
-    expect(() => createLocalProjectBackup(nested, ready())).toThrow('制作计划');
+    expect(() => createLocalProjectBackup(nested, ready(), { projectId: scope })).toThrow('制作计划');
     expect(json(original)).toBe(before);
   });
 
@@ -428,7 +428,7 @@ describe('scene and activity backup', () => {
         title: '布场', phase: 'setup', objectIds: ['seed-1'] }],
     }) };
     const snapshot: BackupBriefSnapshot = { state: 'ready', scope, brief: { status: 'absent' } };
-    const restored = parseLocalProjectBackupJson(serializeLocalProjectBackup(initial, snapshot, createdAt));
+    const restored = parseLocalProjectBackupJson(serializeLocalProjectBackup(initial, snapshot, { projectId: scope }, createdAt));
     expect(restored.layout).toEqual(initial);
     expect(restored.brief).toEqual({ status: 'absent' });
     expect(restored.layoutWasRepaired).toBe(false);
@@ -440,21 +440,21 @@ describe('scene and activity backup', () => {
       tasks: [{ phase: 'setup', title: '布场', id: 'a1000000-0000-4000-8000-000000000003' }],
     } } as RoomLayout;
     const snapshot: BackupBriefSnapshot = { state: 'ready', scope, brief: { status: 'absent' } };
-    const file = createLocalProjectBackup(initial, snapshot, createdAt);
+    const file = createLocalProjectBackup(initial, snapshot, { projectId: scope }, createdAt);
     expect(file.layout.eventOperations).toEqual(eventOperationsSchema.parse(initial.eventOperations));
     expect(parseLocalProjectBackupJson(json(file)).layout).toEqual(file.layout);
     expect(parseLocalProjectBackupJson(json({ ...file, layout: initial })).layout).toEqual(file.layout);
     const optional = { ...initial, floorPlanImage: undefined } as unknown as RoomLayout;
-    expect(createLocalProjectBackup(optional, snapshot, createdAt).layout).toEqual(file.layout);
+    expect(createLocalProjectBackup(optional, snapshot, { projectId: scope }, createdAt).layout).toEqual(file.layout);
     const handoffDefaults = { ...layout(), floors: [makeFloor({ items: [makeItem({
       handoff: {} as NonNullable<RoomLayout['floors'][number]['items'][number]['handoff']>,
     })] })] };
-    expect(createLocalProjectBackup(handoffDefaults, ready(), createdAt).layout.floors[0]!.items[0]!.handoff)
+    expect(createLocalProjectBackup(handoffDefaults, ready(), { projectId: scope }, createdAt).layout.floors[0]!.items[0]!.handoff)
       .toEqual(handoffSchema.parse({}));
     const changed = { ...initial, eventOperations: { tasks: [{
       ...initial.eventOperations!.tasks[0]!, title: '  布场  ',
     }] } } as RoomLayout;
-    expect(() => createLocalProjectBackup(changed, snapshot, createdAt)).toThrow('需要修复');
+    expect(() => createLocalProjectBackup(changed, snapshot, { projectId: scope }, createdAt)).toThrow('需要修复');
   });
 
   it('round-trips all editable records, stable IDs, original text and both review bases through a file', async () => {
@@ -463,7 +463,7 @@ describe('scene and activity backup', () => {
       { id: 'variant-1', name: '备用方案', layout: base },
     ] } };
     const input = ready();
-    const text = serializeLocalProjectBackup(original, input, createdAt);
+    const text = serializeLocalProjectBackup(original, input, { projectId: scope }, createdAt);
     const restored = await readLocalProjectBackupFile(new File([text], '场景与活动备份.json'));
     expect(JSON.parse(text)).toMatchObject({ format: 'scendance-local-project-backup', version: 2,
       createdAt, coverage: LOCAL_PROJECT_BACKUP_COVERAGE });
@@ -482,23 +482,23 @@ describe('scene and activity backup', () => {
 
   it('keeps a successful absent read distinct from loading, saving, failure and a stale scope', () => {
     const absent: BackupBriefSnapshot = { state: 'ready', scope, brief: { status: 'absent' } };
-    const result = parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(), absent, createdAt));
+    const result = parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(), absent, { projectId: scope }, createdAt));
     expect(result.brief).toEqual({ status: 'absent' });
     expect(result.layout).toEqual(layout());
     for (const state of ['loading', 'saving', 'error'] as const) {
-      expect(() => createLocalProjectBackup(layout(), { state, scope })).toThrow('尚未完成');
+      expect(() => createLocalProjectBackup(layout(), { state, scope }, { projectId: scope })).toThrow('尚未完成');
     }
-    expect(() => createLocalProjectBackup(layout(), { ...ready(), scope: 'another-project' })).toThrow('项目不一致');
-    expect(() => createLocalProjectBackup(makeLayout(), { ...absent, scope: 'local' }, createdAt)).not.toThrow();
+    expect(() => createLocalProjectBackup(layout(), { ...ready(), scope: 'another-project' }, { projectId: scope })).toThrow('项目不一致');
+    expect(() => createLocalProjectBackup(makeLayout(), { ...absent, scope: 'local' }, { projectId: 'local' }, createdAt)).not.toThrow();
   });
 
   it('preserves every actual brief field without generation limits, default people or text truncation', () => {
     const value = { ...brief(), guests: 0, description: '原'.repeat(14000), mustHave: '要'.repeat(1000),
       venueConditions: '现场'.repeat(1000), style: '风格'.repeat(150), palette: '', atmosphere: '' };
-    const result = parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(), ready(value), createdAt));
+    const result = parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(), ready(value), { projectId: scope }, createdAt));
     expect(result.brief).toEqual({ status: 'present', value });
     const minimal: CreativeBrief = { event: '', guests: -1, description: '', mustHave: '', allowIdeas: true };
-    expect(parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(), ready(minimal), createdAt)).brief)
+    expect(parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(), ready(minimal), { projectId: scope }, createdAt)).brief)
       .toEqual({ status: 'present', value: minimal });
   });
 
@@ -545,14 +545,14 @@ describe('scene and activity backup', () => {
   });
 
   it('rejects invalid metadata and lossy layout repairs, while showing legacy repair explicitly', () => {
-    expect(() => createLocalProjectBackup(layout(), ready({ ...brief(), guests: Number.NaN }))).toThrow('字段无效');
+    expect(() => createLocalProjectBackup(layout(), ready({ ...brief(), guests: Number.NaN }), { projectId: scope })).toThrow('字段无效');
     expect(() => parseLocalProjectBackupJson(json({ ...backup(), createdAt: '2026-02-30T12:00:00Z' }))).toThrow('字段无效');
     expect(() => parseLocalProjectBackupJson(json({ ...backup(), secret: 'unexpected' }))).toThrow('字段无效');
     const corrupt = { ...layout(), hidden: 'unrecognised' };
-    expect(() => createLocalProjectBackup(corrupt, ready())).toThrow('未知字段');
+    expect(() => createLocalProjectBackup(corrupt, ready(), { projectId: scope })).toThrow('未知字段');
     expect(() => parseLocalProjectBackupJson(json({ ...backup(), layout: corrupt }))).toThrow('未知字段');
     const tooLong = makeLayout({ id: scope, name: 'a'.repeat(201) });
-    expect(() => createLocalProjectBackup(tooLong, ready())).toThrow('需要修复');
+    expect(() => createLocalProjectBackup(tooLong, ready(), { projectId: scope })).toThrow('需要修复');
     expect(parseLocalProjectBackupJson(json(tooLong)).layoutWasRepaired).toBe(true);
     expect(() => parseLocalProjectBackupJson(json({ ...backup(), layout: { ...layout(), width: -1 } })))
       .toThrow('布局或执行资料无效');
@@ -563,20 +563,20 @@ describe('scene and activity backup', () => {
     const omitted = { ...original, floors: [makeFloor({ items: [
       { ...makeItem(), notes: () => 'lost text' } as unknown as FurnitureItem,
     ] })] } as unknown as RoomLayout;
-    expect(() => createLocalProjectBackup(omitted, ready())).toThrow('不支持的 JSON');
+    expect(() => createLocalProjectBackup(omitted, ready(), { projectId: scope })).toThrow('不支持的 JSON');
     const toJSON = vi.fn(() => ({ ...original, id: 'other-project' }));
-    expect(() => createLocalProjectBackup({ ...original, toJSON } as RoomLayout, ready()))
+    expect(() => createLocalProjectBackup({ ...original, toJSON } as RoomLayout, ready(), { projectId: scope }))
       .toThrow('不支持的 JSON');
     expect(toJSON).not.toHaveBeenCalled();
     const hiddenSerializer = Object.defineProperty({ ...original }, 'toJSON', { value: toJSON });
-    expect(() => createLocalProjectBackup(hiddenSerializer, ready())).toThrow('不支持的 JSON');
+    expect(() => createLocalProjectBackup(hiddenSerializer, ready(), { projectId: scope })).toThrow('不支持的 JSON');
     expect(toJSON).not.toHaveBeenCalled();
-    expect(() => createLocalProjectBackup({ ...original, floors: Array(1) } as RoomLayout, ready()))
+    expect(() => createLocalProjectBackup({ ...original, floors: Array(1) } as RoomLayout, ready(), { projectId: scope }))
       .toThrow('不支持的 JSON 数组');
     const cyclic = { ...original } as RoomLayout & { cycle?: unknown };
     cyclic.cycle = cyclic;
-    expect(() => createLocalProjectBackup(cyclic, ready())).toThrow('循环引用');
-    expect(() => createLocalProjectBackup({ ...original, hidden: undefined } as RoomLayout, ready()))
+    expect(() => createLocalProjectBackup(cyclic, ready(), { projectId: scope })).toThrow('循环引用');
+    expect(() => createLocalProjectBackup({ ...original, hidden: undefined } as RoomLayout, ready(), { projectId: scope }))
       .toThrow('未知字段');
     expect(original.id).toBe(scope);
   });
@@ -588,11 +588,11 @@ describe('scene and activity backup', () => {
     }
     const original = layout();
     const floors = new CustomFloors(...original.floors);
-    expect(() => createLocalProjectBackup({ ...original, floors }, ready())).toThrow('不支持的 JSON 对象');
+    expect(() => createLocalProjectBackup({ ...original, floors }, ready(), { projectId: scope })).toThrow('不支持的 JSON 对象');
     expect(serializer).not.toHaveBeenCalled();
     let deep: unknown = {};
     for (let index = 0; index < 10000; index++) deep = { next: deep };
-    expect(() => createLocalProjectBackup({ ...original, hidden: deep } as RoomLayout, ready())).toThrow('嵌套过深');
+    expect(() => createLocalProjectBackup({ ...original, hidden: deep } as RoomLayout, ready(), { projectId: scope })).toThrow('嵌套过深');
   });
 
   it('rejects illegal execution fields, ambiguous associations and repair-created task links', () => {
@@ -610,7 +610,7 @@ describe('scene and activity backup', () => {
     const badHandoff = { ...base, floors: [makeFloor({ items: [makeItem({ handoff: {
       ...base.floors[0]!.items[0]!.handoff!, reviewedBasis: '',
     } })] })] };
-    expect(() => createLocalProjectBackup(badHandoff, ready())).toThrow('执行资料无效');
+    expect(() => createLocalProjectBackup(badHandoff, ready(), { projectId: scope })).toThrow('执行资料无效');
   });
 
   it('cleans archive authorisations recursively, retains confirmed public IDs and leaves the source alone', () => {
@@ -622,7 +622,7 @@ describe('scene and activity backup', () => {
     ] })] });
     const original = { ...base, designBook: { activeId: 'v1', variants: [{ id: 'v1', name: '备选', layout: base }] } };
     const before = json(original);
-    const text = serializeLocalProjectBackup(original, ready(), createdAt);
+    const text = serializeLocalProjectBackup(original, ready(), { projectId: scope }, createdAt);
     expect(text).not.toContain('FAKE_BACKUP_TOKEN');
     const restored = parseLocalProjectBackupJson(text);
     for (const candidate of [restored.layout, restored.layout.designBook!.variants[0]!.layout]) {
@@ -644,7 +644,7 @@ describe('scene and activity backup', () => {
     expect(read).not.toHaveBeenCalled();
     const large = '字'.repeat(Math.floor(MAX_LOCAL_PROJECT_BACKUP_BYTES / 3) + 1);
     await expect(readLocalProjectBackupFile({ size: 1, text: async () => large })).rejects.toThrow('8 MiB');
-    expect(() => createLocalProjectBackup(layout(), ready({ ...brief(), description: large }))).toThrow('8 MiB');
+    expect(() => createLocalProjectBackup(layout(), ready({ ...brief(), description: large }), { projectId: scope })).toThrow('8 MiB');
     expect(() => parseLocalProjectBackupJson('{broken')).toThrow('有效的 JSON');
     await expect(readLocalProjectBackupFile({ size: 10, text: async () => { throw new Error('读取失败'); } }))
       .rejects.toThrow('读取失败');
@@ -670,7 +670,7 @@ describe('scene and activity backup', () => {
     }
     const original = layout();
     const originalText = json(original);
-    const text = serializeLocalProjectBackup(original, ready(), createdAt);
+    const text = serializeLocalProjectBackup(original, ready(), { projectId: scope }, createdAt);
     await readLocalProjectBackupFile({ size: new TextEncoder().encode(text).length, text: async () => text });
     expect(sideEffect).not.toHaveBeenCalled();
     expect(json(original)).toBe(originalText);
@@ -682,7 +682,7 @@ describe('V4 optional local source documents', () => {
   const sources = () => [{ id: 'local-floorplan', scope, name: '现场图.png', kind: 'floorplan' as const, width: 1, height: 1,
     blob: new Blob([imageBytes()], { type: 'image/png' }) }];
   const full = () => serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope, sources: sources(),
-    form: { width: '12', depth: '10', height: '3', text: '现场条件原文', constraints: [], adjustment: '', requestId: 'must-not-travel' } }, createdAt);
+    form: { width: '12', depth: '10', height: '3', text: '现场条件原文', constraints: [], adjustment: '', requestId: 'must-not-travel' } }, { projectId: scope }, createdAt);
 
   it('reuses V3 facts and exposes explicit attachment coverage with a detached pure candidate', async () => {
     const text = await full(), envelope = JSON.parse(text);
@@ -704,7 +704,7 @@ describe('V4 optional local source documents', () => {
 
   it('marks V1/V2/V3 and bare layouts as not containing source documents', () => {
     const v1 = { ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE };
-    for (const text of [json(v1), json(backup()), serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(), createdAt), json(layout())]) {
+    for (const text of [json(v1), json(backup()), serializeLocalProjectBackupV3(layout(), ready(), readyCheckins(), { projectId: scope }, createdAt), json(layout())]) {
       const candidate = parseLocalProjectBackupJson(text);
       expect(candidate.sourceDocuments).toEqual({ status: 'not-in-file' });
       expect(validateLocalProjectRestoreCandidate(candidate).sourceDocuments).toEqual({ status: 'not-in-file' });
@@ -729,15 +729,15 @@ describe('V4 optional local source documents', () => {
   });
 
   it('rejects cross-project source snapshots and missing local Blobs instead of fetching cloud references', async () => {
-    await expect(serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope: 'other', sources: [], form: undefined })).rejects.toThrow('项目范围');
+    await expect(serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope: 'other', sources: [], form: undefined }, { projectId: scope })).rejects.toThrow('项目范围');
     const { blob: _blob, ...withoutBytes } = sources()[0]!;
-    await expect(serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope, sources: [withoutBytes], form: undefined })).rejects.toThrow('缺少本机原图');
+    await expect(serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope, sources: [withoutBytes], form: undefined }, { projectId: scope })).rejects.toThrow('缺少本机原图');
   });
 
   it('allows an attachment package above 8 MiB without raising the old metadata limit', async () => {
     const data = new Uint8Array(MAX_SOURCE_BYTES); data.set(imageBytes());
     const packed = await serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope,
-      sources: [0, 1].map(index => ({ ...sources()[0]!, id: `large-${index}`, blob: new Blob([data], { type: 'image/png' }) })), form: undefined }, createdAt);
+      sources: [0, 1].map(index => ({ ...sources()[0]!, id: `large-${index}`, blob: new Blob([data], { type: 'image/png' }) })), form: undefined }, { projectId: scope }, createdAt);
     expect(new TextEncoder().encode(packed).length).toBeGreaterThan(MAX_LOCAL_PROJECT_BACKUP_BYTES);
     expect(new TextEncoder().encode(packed).length).toBeLessThan(MAX_LOCAL_PROJECT_BACKUP_V4_BYTES);
     expect(parseLocalProjectBackupJson(packed).backupVersion).toBe(4);
@@ -760,8 +760,7 @@ describe('V4 optional local source documents', () => {
   it('preserves applied reference fields and original source identity through local decoding', async () => {
     const original = sources(), registration = { sourceId: original[0]!.id, points: [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 0, z: 1 }],
       worldWidth: 12, worldDepth: 10, imageWidth: 1, imageHeight: 1, appliedBasis: 'original-scope-basis', confirmationId: 'original-confirmation' };
-    const candidate = parseLocalProjectBackupJson(await serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(),
-      { scope, sources: original, form: { registration } }, createdAt));
+    const candidate = parseLocalProjectBackupJson(await serializeLocalProjectBackupV4(layout(), ready(), readyCheckins(), { scope, sources: original, form: { registration } }, { projectId: scope }, createdAt));
     if (candidate.sourceDocuments.status !== 'present') throw new Error('fixture');
     vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 1, height: 1, close: vi.fn() }));
     const restored = await decodeSourceDocuments(candidate.sourceDocuments, scope);
@@ -772,6 +771,20 @@ describe('V4 optional local source documents', () => {
 it('round-trips the preserved legacy record without promoting it to a confirmed fact',()=>{
   const value:CreativeBrief={...brief(),event:'新活动',eventConfirmed:true,guests:60,guestsConfirmed:true,allowIdeas:false,ideasConfirmed:true,
     legacyBriefRecord:{event:'公益讲座',guests:80,allowIdeas:true}, unconfirmedSavedBrief:{event:'旧自定义活动',guests:75,allowIdeas:false}};
-  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(),ready(value),createdAt));
+  const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(layout(), ready(value), { projectId: scope }, createdAt));
   expect(restored.brief).toEqual({status:'present',value});
+});
+
+it('counts legacy envelopes missing the top-level projectId on both read chains, and does not count new envelopes', () => {
+  const before = listLegacyEnvelopeHits().length;
+  const fresh = backup();
+  const { projectId: _legacyProjectId, ...legacy } = fresh;
+  const candidate = parseLocalProjectBackupJson(json(legacy));
+  validateLocalProjectRestoreCandidate(candidate);
+  const hits = listLegacyEnvelopeHits().slice(before);
+  expect(hits.map(hit => hit.chain).sort()).toEqual(['parse-candidate', 'validate-candidate']);
+  expect(hits.every(hit => hit.layoutId === scope)).toBe(true);
+  const beforeNew = listLegacyEnvelopeHits().length;
+  parseLocalProjectBackupJson(json(backup()));
+  expect(listLegacyEnvelopeHits().length).toBe(beforeNew);
 });

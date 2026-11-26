@@ -15,7 +15,7 @@ function fixture(){
   const layout=makeLayout({id:'review-capture',roof:{style:'none'}}),view=makeViewSettings({view2D:true});
   const canvas=document.createElement('canvas');canvas.toDataURL=vi.fn(()=>png);
   const source={scope:layout.id!,revision:'epoch:1'};
-  const snapshot=createProjectReviewSnapshot({layout,source,briefSnapshot:{state:'ready',scope:source.scope,brief:{status:'absent'}},
+  const snapshot=createProjectReviewSnapshot({layout,projectId:source.scope,source,briefSnapshot:{state:'ready',scope:source.scope,brief:{status:'absent'}},
     snapshot:{id:'capture-1',generatedAt:'2026-10-08T00:00:00Z'},dataState:'unsaved-draft',dataKind:'unspecified',disclosure:{brief:false,design:false}});
   const inputs:Parameters<typeof useReviewCapture>[0]={layout,getLayout:()=>layout,view,activeFloorIndex:0,
     ready:true,selectedItemId:null,extraSelectedIds:new Set(),hasCollision:()=>false,

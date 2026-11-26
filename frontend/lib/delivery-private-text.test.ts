@@ -43,7 +43,7 @@ describe('delivery privacy literals',()=>{
   expect(JSON.parse(draft).scope.redactedFields).toBeGreaterThanOrEqual(2);
   const sceneJson=JSON.parse(await sceneDeliveryJson(layout,snapshot));expect(sceneJson.privacy.redactedFields).toBeGreaterThanOrEqual(2);
   expect(sceneJson.privacy.note).toContain('不能保证识别全部敏感信息');
-  for(const html of [await productionPlanHandoffHtml(layout,snapshot,undefined,{scope:'activity'}),await executionTimetableHtml(layout,snapshot)]){
+  for(const html of [await productionPlanHandoffHtml(layout,snapshot,{projectId: layout.id!,scope:'activity'}),await executionTimetableHtml(layout,snapshot)]){
     expect(html).not.toContain('sk-TEST12345678');expect(html).not.toContain('PRIVATE_FOLDER');
     expect(html).toContain('不能保证识别全部敏感信息');expect(html).toContain('13800138000');expect(html).toContain('organizer@example.test');
   }

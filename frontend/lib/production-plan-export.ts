@@ -80,11 +80,12 @@ type HandoffObject = z.infer<typeof objectSchema> & { label: string; handoff?: H
 
 /** Freeze current applied data before asynchronous task review; no storage writes or resource loading. */
 export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapshot: DeliverySnapshot,
-  sourceLedger?: MaterialCheckinLedger, options?: { scope: 'activity'; brief?: BackupBrief;
+  options: { projectId: string; scope?: 'activity'; brief?: BackupBrief;
     /** 读侧合成的人数（见 handoff-brief）：只用于「对话记录人数」一行，不把未确认的数字塞进「预计人数」。 */
-    headcount?: ResolvedBriefHeadcount }): Promise<string> {
+    headcount?: ResolvedBriefHeadcount },
+  sourceLedger?: MaterialCheckinLedger): Promise<string> {
   assertData(options);
-  const activityScope = options?.scope === 'activity';
+  const activityScope = options.scope === 'activity';
   const title = activityScope ? '内部活动交接' : '内部制作交接';
   assertData(sourceLayout); assertData(snapshot);
   const layout = structuredClone(sourceLayout);
@@ -130,11 +131,12 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
       objects[index].handoff = parsedHandoff.data;
     });
   }
-  const brief = activityScope && options?.brief !== undefined ? createLocalProjectBackup(layout,
-    { state: 'ready', scope: layout.id ?? 'local', brief: options.brief }, metadata.data.generatedAt).brief : undefined;
+  const brief = activityScope && options.brief !== undefined ? createLocalProjectBackup(layout,
+    { state: 'ready', scope: options.projectId, brief: options.brief },
+    { projectId: options.projectId }, metadata.data.generatedAt).brief : undefined;
   // 对话里说过的人数单独一行、明确标「尚未确认」：既不把未确认数字塞进「预计人数」
   // （那行只在用户显式确认后出数），也不让已录的人数在交接件里凭空消失。
-  const conversationHeadcount = options?.headcount?.source === 'conversation' && options.headcount.value !== null
+  const conversationHeadcount = options.headcount?.source === 'conversation' && options.headcount.value !== null
     ? options.headcount.value : null;
   const briefRows: unknown[][] = [
     ['活动类型', brief?.status === 'present' && brief.value.eventConfirmed === true ? unknown(brief.value.event) : '待确认'],

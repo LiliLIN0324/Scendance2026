@@ -845,13 +845,15 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
         if(!operation.base.layout.id)throw new Error('请先保存活动编号，再备份图纸。');
         const documents=await readSourceScopeSnapshot(operation.base.scope);operation.check();
         const text=await serializeLocalProjectBackupV4(operation.base.layout,briefSnapshot,{state:'ready',scope:operation.base.scope,
-          materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}},documents);
+          materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}},documents,
+          { projectId: operation.base.scope });
         const after=await readSourceScopeSnapshot(operation.base.scope);operation.check();
         if(!await sameSourceScopeSnapshot(documents,after))throw new Error('打包期间图纸已有改动，请重新下载。');
         operation.check();return text;
       }
       const text=operation.base.layout.id?serializeLocalProjectBackupV3(operation.base.layout,briefSnapshot,{state:'ready',scope:operation.base.layout.id,
-        materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}}):serializeLocalProjectBackup(operation.base.layout,briefSnapshot);
+        materialCheckins:ledger?{status:'present',value:ledger}:{status:'absent'}},{ projectId: operation.base.layout.id! })
+        :serializeLocalProjectBackup(operation.base.layout,briefSnapshot,{ projectId: operation.base.scope });
       operation.check();return text;
     } finally {endBackupOperation();}
   }
@@ -2063,7 +2065,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
     if(!isLocalActivityWorkspace(owner))throw new Error('云项目暂不支持此执行资料草案，请切换到本地活动后导出。');
     const mobility=captureMobility?.();
     const stillCurrent=()=>alive.current&&layoutRef.current===base&&scopeRef.current===scope&&controllerRef.current===owner&&(!candidateFence||candidateFence.isCurrent());
-    await exportActivityHandoff({layout:base,prepareBackup,stillCurrent,...(mobility?{mobility}:{}),...(captureDialogue?{captureDialogue:captureGuardedDialogue}: {})});
+    await exportActivityHandoff({layout:base,projectId:scope,prepareBackup,stillCurrent,...(mobility?{mobility}:{}),...(captureDialogue?{captureDialogue:captureGuardedDialogue}: {})});
   }
   async function exportCloudMaterialDraft():Promise<void> {
     if(materialDraftExportPending.current)throw new Error('物料草案正在准备，请稍候。');

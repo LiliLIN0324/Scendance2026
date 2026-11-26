@@ -17,7 +17,7 @@ vi.mock('@/lib/local-activities',async original=>({...await original<typeof impo
 let mem: MemoryStorage;
 beforeEach(()=>{mem=new MemoryStorage();vi.stubGlobal('Storage',MemoryStorage);vi.stubGlobal('localStorage',mem);window.localStorage=mem;localStorage.clear();window.history.replaceState(null,'','/');vi.mocked(listLocalActivities).mockResolvedValue({activities:[],unreadableProjectIds:[]});vi.mocked(archiveLocalActivity).mockImplementation(async(text)=>JSON.parse(text));});
 afterEach(()=>{cleanup();mem?.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
-function backup(layout:RoomLayout){const scope=layout.id!;return serializeLocalProjectBackupV3(layout,{state:'ready',scope,brief:{status:'absent'}},{state:'ready',scope,materialCheckins:{status:'absent'}},'2026-11-13T00:00:00Z');}
+function backup(layout:RoomLayout){const scope=layout.id!;return serializeLocalProjectBackupV3(layout, {state:'ready',scope,brief:{status:'absent'}}, {state:'ready',scope,materialCheckins:{status:'absent'}}, { projectId: layout.id! }, '2026-11-13T00:00:00Z');}
 it.each([false,true])('real startup save guard + new-activity form: diagnostic contamination=%s preserves old activity on refusal, otherwise opens dedicated blank project',async contaminated=>{
  const initial={...structuredClone(INITIAL_LAYOUT),id:'public-original'};
  localStorage.setItem(STORAGE_KEY,JSON.stringify(initial));layoutStore.setState({layout:initial,activeFloorIndex:0});

@@ -72,11 +72,11 @@ export async function proveFreshActivityScopeUnused(scope: string, outgoingId: s
 }
 
 /** File validation is separate from applying an AI suggestion or inheriting a design book. */
-export function prepareLocalRestoreLayout(layout: RoomLayout): RoomLayout {
+export function prepareLocalRestoreLayout(layout: RoomLayout, projectId: string): RoomLayout {
   // Reuse full V2 validation before assigning an identity or touching either storage domain.
   return withHouseId(createLocalProjectBackup(layout, {
-    state: 'ready', scope: layout.id ?? 'local', brief: { status: 'absent' },
-  }, undefined, { allowEventProfile: true }).layout);
+    state: 'ready', scope: projectId, brief: { status: 'absent' },
+  }, { projectId, allowEventProfile: true }).layout);
 }
 
 function matches(left: RoomLayout | null, right: RoomLayout): boolean {
@@ -90,11 +90,11 @@ type LayoutAccess = {
 };
 
 /** Writes only the current layout key, then reads it back. Restores the previous bytes if the page rejects it. */
-function commitLocalLayout(layout: RoomLayout, access: LayoutAccess, storage: Storage, kind: 'restore' | 'fresh'): string {
+function commitLocalLayout(layout: RoomLayout, access: LayoutAccess, storage: Storage, kind: 'restore' | 'fresh', projectId: string): string {
   const restoring = kind === 'restore';
   const candidate = createLocalProjectBackup(layout, {
-    state: 'ready', scope: layout.id ?? 'local', brief: { status: 'absent' },
-  }, undefined, { allowEventProfile: true }).layout;
+    state: 'ready', scope: projectId, brief: { status: 'absent' },
+  }, { projectId, allowEventProfile: true }).layout;
   const previous = access.current();
   let oldRaw: string | null;
   try { oldRaw = storage.getItem(STORAGE_KEY); }
@@ -139,10 +139,11 @@ function commitLocalLayout(layout: RoomLayout, access: LayoutAccess, storage: St
 }
 
 /** The Provider commits Brief first; this synchronous step verifies and compensates the main layout domain. */
-export function commitLocalRestoreLayout(layout: RoomLayout, access: LayoutAccess, storage: Storage | null = localStorageOrNull()): string {
+export function commitLocalRestoreLayout(layout: RoomLayout, access: LayoutAccess,
+  projectId: string, storage: Storage | null = localStorageOrNull()): string {
   requireLocalRestoreAvailable();
   if (!storage) throw new Error('本机布局存储不可用，恢复未完成。');
-  return commitLocalLayout(layout, access, storage, 'restore');
+  return commitLocalLayout(layout, access, storage, 'restore', projectId);
 }
 
 /**
@@ -168,5 +169,5 @@ export function commitFreshLocalActivityLayout(layout: RoomLayout, access: Layou
     if (parsed?.id === layout.id) throw new Error('新活动编号已是当前保存的活动，未覆盖。原活动已保留。');
     if (parsed && parsed.id !== outgoing.id) throw new Error('本机保存的活动与当前活动不一致，未新建。原活动已保留。');
   }
-  return commitLocalLayout(layout, access, storage, 'fresh');
+  return commitLocalLayout(layout, access, storage, 'fresh', layout.id!);
 }

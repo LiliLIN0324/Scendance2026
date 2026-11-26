@@ -35,17 +35,15 @@ const brief = { event: '恢复演练', guests: 0, description: 'A-旧草稿', mu
 const briefState: CreativeBriefState = { brief, ready: true, error: null, hasSavedBrief: true };
 function fileText(next: RoomLayout = { ...layout, name: 'A-文件布局' }, status: 'present' | 'absent' = 'present'): string {
   return serializeLocalProjectBackup(next, { state: 'ready', scope: next.id ?? 'local', brief: status === 'present'
-    ? { status, value: { ...brief, description: 'A-文件恢复' } } : { status } }, '2026-10-07T09:30:00.000Z');
+    ? { status, value: { ...brief, description: 'A-文件恢复' } } : { status } }, { projectId: next.id! }, '2026-10-07T09:30:00.000Z');
 }
 async function sourceFileText(withImages = true, withForm = true): Promise<string> {
   const next = { ...layout, id: layout.id!, name: 'A-图纸备份' };
   const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), value => value.charCodeAt(0));
-  return serializeLocalProjectBackupV4(next, { state: 'ready', scope: next.id, brief: { status: 'present', value: brief } },
-    { state: 'ready', scope: next.id, materialCheckins: { status: 'absent' } },
-    { scope: next.id, sources: withImages ? (['floorplan', 'photo'] as const).map((kind, index) => ({
+  return serializeLocalProjectBackupV4(next, { state: 'ready', scope: next.id, brief: { status: 'present', value: brief } }, { state: 'ready', scope: next.id, materialCheckins: { status: 'absent' } }, { scope: next.id, sources: withImages ? (['floorplan', 'photo'] as const).map((kind, index) => ({
       id: `source-${index}`, scope: next.id, name: `${kind}.png`, kind, width: 1, height: 1, blob: new Blob([png], { type: 'image/png' }),
     })) : [], form: withForm ? { width: '8', depth: '8', registration: { sourceId: 'source-0', points: [{ x: 0, z: 0 }] } } : undefined },
-    '2026-10-09T09:30:00.000Z');
+    { projectId: next.id! }, '2026-10-09T09:30:00.000Z');
 }
 function file(text: string, read?: () => Promise<string>, size?: number, name = '场景与活动备份.json'): File {
   const chosen = new File([text], name, { type: 'application/json' });
@@ -71,9 +69,7 @@ describe('local scene and activity backup', () => {
     const { actions } = setup();
     let text = fileText();
     if (version === 1) { const older = JSON.parse(text); older.version = 1; delete older.coverage.productionPlan; text = JSON.stringify(older); }
-    if (version === 3) text = serializeLocalProjectBackupV3({ ...layout, name: 'A-文件布局' },
-      { state: 'ready', scope: layout.id!, brief: { status: 'present', value: brief } },
-      { state: 'ready', scope: layout.id!, materialCheckins: { status: 'absent' } });
+    if (version === 3) text = serializeLocalProjectBackupV3({ ...layout, name: 'A-文件布局' }, { state: 'ready', scope: layout.id!, brief: { status: 'present', value: brief } }, { state: 'ready', scope: layout.id!, materialCheckins: { status: 'absent' } }, { projectId: { ...layout, name: 'A-文件布局' }.id! });
     if (version === 'legacy') text = JSON.stringify(layout);
     select(file(text)); await screen.findByLabelText('备份预检');
     expect(screen.getByText('文件未含图纸资料，保留目标项目已有图纸与对应点')).toBeTruthy();

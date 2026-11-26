@@ -3426,8 +3426,8 @@ useEffect(() => {
     if (controller.getSnapshot().project || new URL(window.location.href).searchParams.has('project')) {
       throw new Error('当前页面已连接或正在打开云项目，请在本地工作台恢复备份。');
     }
-    return prepareLocalRestoreLayout(next);
-  }, [controller]);
+    return prepareLocalRestoreLayout(next, activeProjectId);
+  }, [controller, activeProjectId]);
   const commitRestoredLayout = useCallback((candidate: RoomLayout): void => {
     workspaceWriteGuards?.assertLayoutWrite();
     if(!activitySession.isCurrent(sessionToken))throw new Error('活动已变化，未恢复备份。');
@@ -3439,12 +3439,12 @@ useEffect(() => {
       current: () => layoutStore.getState().layout,
       apply: value => actions.applyLayout(value),
       beforeReplace: () => { workspaceWriteGuards?.assertLayoutWrite(); commitHistoryNow(); snapshotBeforeReplace(before, workspaceWriteGuards?.assertLayoutWrite); workspaceWriteGuards?.assertLayoutWrite(); },
-    });
+    }, activeProjectId);
     const restored = layoutStore.getState().layout;
     acknowledgeRestoredLayout(restored, json);
     clearTransientSelection(); clearHistory(restored);
     initiallyFramed.current = false;
-  }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards,flushPendingBeforeSwitch,activitySession.isCurrent,sessionToken]);
+  }, [prepareRestoreLayout, actions, commitHistoryNow, acknowledgeRestoredLayout, clearTransientSelection, clearHistory, workspaceWriteGuards,flushPendingBeforeSwitch,activitySession.isCurrent,sessionToken,activeProjectId]);
 
   const commitFreshActivityLayout = useCallback((candidate: RoomLayout, clearance: FreshActivityScopeClearance): void => {
     workspaceWriteGuards?.assertLayoutWrite();

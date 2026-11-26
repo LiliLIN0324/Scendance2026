@@ -54,7 +54,7 @@ export async function prepareProjectReview(
     if (text.trim()) notes.push({ kind, text, sourceLabel: '本次评审的手工记录', recordedAt: generatedAt,
       dataKind: base.dataKind, target: 'current', objectIds: [] });
   }
-  const snapshot = createProjectReviewSnapshot({ layout: base.layout, briefSnapshot: base.briefSnapshot,
+  const snapshot = createProjectReviewSnapshot({ layout: base.layout, projectId: base.source.scope, briefSnapshot: base.briefSnapshot,
     source, dataState: base.dataState, dataKind: base.dataKind,
     snapshot: { id: crypto.randomUUID(), generatedAt }, disclosure: chosen.disclosure, notes });
   if (!current()) throw new ProjectReviewChangedError();

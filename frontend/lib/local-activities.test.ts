@@ -59,8 +59,7 @@ function ledger(quantity = 18): MaterialCheckinLedger {
   }] });
 }
 function backup(checkins: MaterialCheckinLedger | null = ledger(), timestamp = createdAt): LocalProjectBackupV3 {
-  return createLocalProjectBackupV3(sourceLayout(), { state: 'ready', scope: projectId, brief: { status: 'present', value: { ...INITIAL_BRIEF, description: rawText, guests: 0 } } },
-    { state: 'ready', scope: projectId, materialCheckins: checkins ? { status: 'present', value: checkins } : { status: 'absent' } }, timestamp);
+  return createLocalProjectBackupV3(sourceLayout(), { state: 'ready', scope: projectId, brief: { status: 'present', value: { ...INITIAL_BRIEF, description: rawText, guests: 0 } } }, { state: 'ready', scope: projectId, materialCheckins: checkins ? { status: 'present', value: checkins } : { status: 'absent' } }, { projectId: projectId }, timestamp);
 }
 function profile(): EventProfile {
   const unknown = { value: null, status: 'unknown', source: 'unavailable' } as const;
@@ -106,9 +105,7 @@ describe('complete local activity archives', () => {
 
   it('archives an activity carrying a local event profile as V6 and never lets an older V3 snapshot erase it', async () => {
     const base = backup();
-    const withProfile = createLocalProjectBackupV6({ ...base.layout, eventProfile: profile() },
-      { state: 'ready', scope: projectId, brief: base.brief },
-      { state: 'ready', scope: projectId, materialCheckins: base.materialCheckins }, createdAt);
+    const withProfile = createLocalProjectBackupV6({ ...base.layout, eventProfile: profile() }, { state: 'ready', scope: projectId, brief: base.brief }, { state: 'ready', scope: projectId, materialCheckins: base.materialCheckins }, { projectId: projectId }, createdAt);
     const archived = await archiveLocalActivity(JSON.stringify(withProfile), projectId);
     expect(archived.version).toBe(6);
     expect(archived.layout.eventProfile).toEqual(profile());
@@ -128,9 +125,7 @@ describe('complete local activity archives', () => {
       mimeType: 'image/png' as const,
       base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
     }] };
-    const v5 = createLocalProjectBackupV5WithDocuments({ ...base.layout, eventProfile: profile() },
-      { state: 'ready', scope: projectId, brief: base.brief },
-      { state: 'ready', scope: projectId, materialCheckins: base.materialCheckins }, documents, createdAt);
+    const v5 = createLocalProjectBackupV5WithDocuments({ ...base.layout, eventProfile: profile() }, { state: 'ready', scope: projectId, brief: base.brief }, { state: 'ready', scope: projectId, materialCheckins: base.materialCheckins }, documents, { projectId: projectId }, createdAt);
     const archived = await archiveLocalActivity(JSON.stringify(v5), projectId);
     expect(archived.version).toBe(5);
     const reopened = await readLocalActivity(projectId);
@@ -158,7 +153,7 @@ describe('complete local activity archives', () => {
   });
 
   it('refuses V1, V2, legacy layouts and V3 without an explicit checkin state before writing', async () => {
-    const old = createLocalProjectBackup(makeLayout({ id: projectId }), { state: 'ready', scope: projectId, brief: { status: 'absent' } }, createdAt);
+    const old = createLocalProjectBackup(makeLayout({ id: projectId }), { state: 'ready', scope: projectId, brief: { status: 'absent' } }, { projectId: projectId }, createdAt);
     const { materialCheckins: omitted, ...missingState } = backup(); expect(omitted.status).toBe('present');
     for (const candidate of [old, { ...old, version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE }, makeLayout({ id: projectId }), missingState,
       { ...backup(), materialCheckins: { status: 'not-in-file' } }, { ...backup(), materialCheckins: null }]) {
