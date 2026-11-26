@@ -92,7 +92,6 @@ function planDraft(original:RoomLayout,input:LocalDeskChairInput|LocalSharedDesk
     const id=item.id?.trim().toLowerCase();if(!id||ids.has(id))return unknownGeometry('物件编号缺失或重复');ids.add(id);
   }
   // Structure IDs share the backend scene namespace with furniture IDs.
-  for(const wall of layout.floors.flatMap(entry=>entry.interiorWalls??[]))if(wall.id)ids.add(wall.id.toLowerCase());
   for(const entrance of layout.backendVenue?.entrances??[])ids.add(entrance.id.toLowerCase());
   if(layout.backendSceneV2)for(const entity of [...layout.backendSceneV2.structure.walls,...layout.backendSceneV2.structure.openings,...layout.backendSceneV2.structure.columns])ids.add(entity.id.toLowerCase());
   const model=layoutGeometryScene(layout,input.floorIndex);

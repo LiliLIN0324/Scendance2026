@@ -347,7 +347,6 @@ export function reviewLayout(layout: RoomLayout, floorIndex = 0): ReviewReport {
     || floorKeepOut(layout, floorIndex).some(rect => !rect.hole);
   const notes: string[] = [];
   if (!entranceKnown) notes.push('这张场地没有可识别的入口或门，入口通道我不猜。');
-  if ((floor?.interiorWalls?.length ?? 0) > 0) notes.push('隔墙边的起身空间这版没量，只查了压墙。');
   if (items.length === 0) notes.push('画布上还没有可检查的物料。');
 
   const sorted = issues.sort((a, b) => ISSUE_ORDER[a.kind] - ISSUE_ORDER[b.kind]);

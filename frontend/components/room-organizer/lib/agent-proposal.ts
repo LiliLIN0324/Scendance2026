@@ -179,8 +179,7 @@ function rebuildableShell(layout: RoomLayout): boolean {
   const wallOk = scene.venue.shape === 'polygon'
     ? walls.every(wall => wall.kind === 'exterior')
     : walls.length <= 4 && walls.every(wall => wall.kind === 'exterior');
-  return columns.length === 0 && openings.length <= 1 && wallOk
-    && !layout.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind === 'interior'));
+  return columns.length === 0 && openings.length <= 1 && wallOk;
 }
 
 /**
