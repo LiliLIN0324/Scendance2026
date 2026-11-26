@@ -24,7 +24,8 @@ import { resolveProjectScope } from '@/lib/project-scope';
 import { canonical, sceneHash } from '../../../../supabase/functions/_shared/domain';
 import { agentSeatingAllocationSchema, agentSeatingSpecsSchema } from '../../../../supabase/functions/_shared/agent-contract';
 import { mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
-import { useSelection } from '../contexts';
+import { useSelection, useRoomEditor } from '../contexts';
+import { projectLinkKind } from '../lib/project-identity';
 import { useMaterialCheckins, type MaterialCheckinState } from '../hooks/use-material-checkins';
 import { layoutStore } from '../hooks/use-layout-store';
 import { getActiveAssistantSessionId, subscribeActiveAssistantSession } from '../hooks/use-assistant-sessions';
@@ -282,6 +283,8 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   }
   const cloud=useBackendSession(controller);
   const { allSelectedIds }=useSelection();
+  // 身份基准取 context 正源 projectId（入口两分岔），不再借 layout.id 反推；持久桶/租约/点验同此源。
+  const { projectId }=useRoomEditor();
   const [brief,setBriefValue]=useState<CreativeBrief>(INITIAL_BRIEF);
   const [briefReady,setBriefReady]=useState(false);
   const [briefError,setBriefError]=useState<string|null>(null);
@@ -289,7 +292,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const [briefLoadAttempt,setBriefLoadAttempt]=useState(0);
   const briefValueRef=useRef(brief);briefValueRef.current=brief;
   const briefHydration=useRef<Promise<void>>(Promise.resolve());
-  const briefStorage=useRef({scope:resolveProjectScope(layout.id),ready:false,dirty:false,revision:0,error:null as string|null,edits:{} as Partial<CreativeBrief>,legacyOriginal:null as unknown});
+  const briefStorage=useRef({scope:resolveProjectScope(projectId),ready:false,dirty:false,revision:0,error:null as string|null,edits:{} as Partial<CreativeBrief>,legacyOriginal:null as unknown});
   const briefCapability=useRef(writeCapability);briefCapability.current=writeCapability;
   const briefDrafts=useRef(new Map<string,{brief:CreativeBrief;storage:typeof briefStorage.current}>());
   const briefSaveQueue=useRef<Promise<void>>(Promise.resolve());
@@ -333,7 +336,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const preparation=useRef<{layout:RoomLayout;userId:string|undefined;projectId:string|undefined;cancelled:boolean}|null>(null);
   const preservingPreparation=useRef(false);
   preservingPreparation.current=!!preparation.current&&(preparation.current.layout===layout||!!preparation.current.projectId&&preparation.current.projectId===layout.id)&&(!preparation.current.userId||preparation.current.userId===cloud.user?.id);
-  const scope=resolveProjectScope(layout.id);
+  const scope=resolveProjectScope(projectId);
   // B1-d 片 1：会话仓身份跟壳体 projectId 源（sessionScope）；未传时回退旧 activity:<layout.id> 仓，测试路径不变。
   const chatSessionScope=sessionScope ?? `activity:${layout.id ?? ''}`;
   const scopeWriteGuards=useRef(new Map<string,SourceWriteGuard|undefined>());scopeWriteGuards.current.set(scope,sourceWriteGuard);
@@ -754,7 +757,8 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const checkinCapability=useRef<{value:LocalWriteCapability;revoked:boolean}|null>(null);
   if(!checkinCapability.current&&writeCapability)checkinCapability.current={value:writeCapability,revoked:false};
   else if(checkinCapability.current&&writeCapability!==checkinCapability.current.value)checkinCapability.current.revoked=true;
-  const checkins=useMaterialCheckins({projectId:layout.id,enabled:!!layout.id&&isLocalActivityWorkspace(controller,requestedCloudCheckins),
+  // checkins 是项目级协作/签核语义：仅真正云端项目启用；匿名草稿、旧只读桶与本机草稿号前缀族(house-/replica-/default-outdoor)一律不开。
+  const checkins=useMaterialCheckins({projectId,enabled:projectLinkKind(projectId)==='cloud'&&isLocalActivityWorkspace(controller,requestedCloudCheckins),
     ...(checkinCapability.current ? {writeCapability:checkinCapability.current.value} : {}),prepareWrite:async()=>{
     const target=scopeRef.current,owner=controllerRef.current,lease=editorLease.current,userId=owner.getSnapshot().user?.id;
     if(!lease||lease.scope!==target)throw new Error('项目资料尚未准备完成，请稍后保存点验。');

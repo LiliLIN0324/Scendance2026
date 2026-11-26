@@ -133,15 +133,24 @@ function restoreProperty(object: object, key: string, descriptor: PropertyDescri
   else Reflect.deleteProperty(object, key);
 }
 
-/** 夹具：外壳 projectId 与本机 layout 同身份；生产 ProjectId 取自 context，面板不再借 layout.id 反推。 */
+/** 夹具：外壳 projectId 与渲染树里的 layout 同身份；生产 ProjectId 取自 context，面板不再借 layout.id 反推。 */
+function layoutFromElement(element: React.ReactNode): RoomLayout {
+  if (!element || typeof element !== 'object') return layout;
+  const el = element as React.ReactElement<{ layout?: RoomLayout; current?: RoomLayout; children?: React.ReactNode }>;
+  const direct = el.props?.layout ?? el.props?.current;
+  if (direct) return direct;
+  const children = el.props?.children;
+  if (Array.isArray(children)) return children.map(layoutFromElement).find(Boolean) ?? layout;
+  return layoutFromElement(children);
+}
 function editorValue(layoutValue: RoomLayout): RoomEditorContextValue {
   return { projectId: layoutValue.id ?? LEGACY_LOCAL_SCOPE, layout: layoutValue } as unknown as RoomEditorContextValue;
 }
-function renderUI(element: React.ReactElement, scopeLayout: RoomLayout = layout) {
-  const view = testingRender(<RoomEditorProvider value={editorValue(scopeLayout)}>{element}</RoomEditorProvider>);
+function renderUI(element: React.ReactElement) {
+  const view = testingRender(<RoomEditorProvider value={editorValue(layoutFromElement(element))}>{element}</RoomEditorProvider>);
   const rerender = view.rerender.bind(view);
-  // rerender 传入裸 Provider JSX 时同样重包，避免根组件类型切换卸载整棵树、丢失预览/租约状态。
-  view.rerender = (next: React.ReactNode) => rerender(<RoomEditorProvider value={editorValue(scopeLayout)}>{next}</RoomEditorProvider>);
+  // rerender 传入裸 Provider JSX 时同样重包并按新 layout 同步 context，避免根组件类型切换卸载整棵树、丢失预览/租约状态。
+  view.rerender = (next: React.ReactNode) => rerender(<RoomEditorProvider value={editorValue(layoutFromElement(next))}>{next}</RoomEditorProvider>);
   return view;
 }
 function ui(current = layout) {
@@ -1643,7 +1652,7 @@ describe('creative brief and assistant interaction', () => {
     vi.mocked(controller.startAgentRun).mockImplementationOnce(async input=>({...runFrom(await prepareProposal(input),input),executionMode:'preview'}));
     function Harness(){
       const [value,setValue]=useState(local);
-      return <CreativeStudioProvider controller={controller} layout={value} onApply={onApply} onBindProject={id=>setValue(current=>({...current,id}))}><CreativeAssistant/></CreativeStudioProvider>;
+      return <RoomEditorProvider value={editorValue(value)}><CreativeStudioProvider controller={controller} layout={value} onApply={onApply} onBindProject={id=>setValue(current=>({...current,id}))}><CreativeAssistant/></CreativeStudioProvider></RoomEditorProvider>;
     }
     renderUI(<Harness/>);
     fireEvent.click(screen.getByRole('button',{name:'打开 Bingo Agent'}));
@@ -2873,14 +2882,16 @@ describe('complete local backup transactions', () => {
     const currentRef = useRef(layout);
     currentRef.current = current;
     const [reviewRequest,setReviewRequest]=useState(0);
-    return <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} {...(writeCapability?{writeCapability}:{})} prepareRestoreLayout={prepare} commitRestoredLayout={next => { commit(next); setCurrent(next); }} commitFreshActivityLayout={(next, clearance) => {
+    return <RoomEditorProvider value={editorValue(current)}>
+    <CreativeStudioProvider controller={controller} layout={current} onApply={onApply} {...(writeCapability?{writeCapability}:{})} prepareRestoreLayout={prepare} commitRestoredLayout={next => { commit(next); setCurrent(next); }} commitFreshActivityLayout={(next, clearance) => {
       commitFreshLocalActivityLayout(next, { current: () => currentRef.current, apply: value => { currentRef.current = value; setCurrent(value); } }, clearance);
       commit(next);
     }}>
       <CreativeBriefPanel view={briefView}/><Probe/><output data-testid="backup-layout">{JSON.stringify(current)}</output>
       {review&&<><button onClick={()=>setReviewRequest(value=>value+1)}>打开生产方案评审</button><CreativeAssistant reviewOpenRequest={reviewRequest}/></>}
       {activitiesCompleted&&<ActivityProbe current={current} onComplete={activitiesCompleted}/>}
-    </CreativeStudioProvider>;
+    </CreativeStudioProvider>
+  </RoomEditorProvider>;
   }
   const file = (id = projectId, brief: 'present'|'absent'|'legacy' = 'present') => {
     const next = { ...layout, id, name: '文件布局', width: 14 };
