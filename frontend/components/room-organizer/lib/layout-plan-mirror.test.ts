@@ -29,15 +29,20 @@ describe('layout-plan 镜像写冻结登记（S3-3）', () => {
     for (const point of retired) {
       expect(point.direction).toBe('plan-to-layout');
       expect(point.disposition).toBe('retire-with-shell');
+      expect(point.retireBatch).toBe('shell-whole-cut');
+      // 每处都还列着当前壳读消费方；无消费者的点才允许在整刀前先删。
+      expect(point.consumers.length).toBeGreaterThan(0);
     }
   });
 
-  it('ground 正源写入点保留在案，方向为 layout-to-plan', () => {
+  it('正源写入点不挂壳读消费方，保留在案', () => {
     const ground = MIRROR_WRITE_POINTS.filter(point => point.disposition === 'positive-source-ground');
     expect(ground).toHaveLength(3);
     for (const point of ground) {
       expect(point.direction).toBe('layout-to-plan');
       expect(point.fields).toEqual(['plan.ground']);
+      expect(point.retireBatch).toBe('keep');
+      expect(point.consumers).toEqual([]);
     }
   });
 });

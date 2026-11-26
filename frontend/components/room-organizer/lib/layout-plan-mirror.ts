@@ -33,6 +33,13 @@ export interface MirrorWritePoint {
   fields: readonly string[];
   disposition: MirrorDisposition;
   note: string;
+  /**
+   * 仍在读这份壳字段的消费方（文件:角色）。退役前不得删写侧——
+   * 提前切 plan 会显示陈旧数据。消费者本身也是壳，随整刀一起退役。
+   */
+  consumers: readonly string[];
+  /** 退役批次归属：retire-with-shell 点随壳整刀；正源点 keep。 */
+  retireBatch: 'shell-whole-cut' | 'keep';
 }
 
 /**
@@ -47,6 +54,16 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['sceneAnchor'],
     disposition: 'retire-with-shell',
     note: 'plan.anchor/边界拼出贴地帧后，派生 sceneAnchor 写回 layout；已有 sceneAnchor 则不动。',
+    consumers: [
+      'three/research-basemap.ts: 3D 调研底图取锚点',
+      'lib/scan-placement.ts: 放置锚点（几何基线，禁改）',
+      'lib/scene-anchor.ts: sceneAnchorOf 读取与世界投影',
+      'lib/venue-scale-basis.ts / event-operations.ts / scene-handoff.ts: 评审·导出·任务·交接读点',
+      'panels/agent-panel.tsx:2045: agent 提案场地尺度',
+      'room-organizer.tsx:1783: 读侧 outdoorPlan.anchor 回退到 layout.sceneAnchor',
+      'lib/schema.ts: 旧快照持久化校验',
+    ],
+    retireBatch: 'shell-whole-cut',
   },
   {
     id: 'm2-research-area-anchor',
@@ -56,6 +73,17 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['sceneAnchor', 'researchArea'],
     disposition: 'retire-with-shell',
     note: '研究区圈画后把 area.center 写成 sceneAnchor 并入 layout；锚点正源应是 plan.anchor。',
+    consumers: [
+      'three/research-basemap.ts: 3D 调研底图取 researchArea',
+      'lib/scan-placement.ts:129: 放置回退到 researchArea.center（几何基线，禁改）',
+      'lib/west-lake-basemap.ts: 西湖调研底图读写',
+      'lib/venue-scale-basis.ts / project-manifest.ts: 评审·导出·素材引用读点',
+      'panels/agent-panel.tsx:2033-2038: agent 提案回写 researchArea',
+      'lib/amap-venue.ts:587/665 + ground-basemap.ts: 地图定位矩形与底图样式',
+      'panels/space-panel.tsx:462: 返回地图按钮文案',
+      'lib/schema.ts: 旧快照持久化校验',
+    ],
+    retireBatch: 'shell-whole-cut',
   },
   {
     id: 'm3-orient-shell-north-up',
@@ -65,6 +93,11 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['mapGroundFrame', 'sceneAnchor'],
     disposition: 'retire-with-shell',
     note: '打开存档翻北时由登记帧派生壳体 mapGroundFrame 与 sceneAnchor。',
+    consumers: [
+      'lib/schema.ts:503: parseStoredLayout 清理管线调用 orientMapShellNorthUp（读侧兼容）',
+      'lib/scene-anchor.ts:28: mapGroundFrame 反推 sceneAnchor 的逆推读取',
+    ],
+    retireBatch: 'shell-whole-cut',
   },
   {
     id: 'm4-satellite-ground-patch',
@@ -74,6 +107,11 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['mapGroundFrame', 'sceneAnchor'],
     disposition: 'retire-with-shell',
     note: '旧地图取图返回的壳体底图补丁，未锚定时附壳体帧与 sceneAnchor。',
+    consumers: [
+      'lib/amap-venue.ts:754/772/778/798/801/823: legacyGroundOf.mapGroundFrame 回退与补丁落壳',
+      'lib/scene-anchor.ts: mapGroundFrame 逆推 sceneAnchor',
+    ],
+    retireBatch: 'shell-whole-cut',
   },
   {
     id: 'm5-venue-from-pick',
@@ -83,6 +121,11 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['sceneAnchor'],
     disposition: 'retire-with-shell',
     note: '圈画选址落壳：展开壳体 plan.layout 后附 sceneAnchor；地面定位另走 plan.ground 正源。',
+    consumers: [
+      'panels/agent-panel.tsx:2022: agent 选址落壳生产调用',
+      '产物 sceneAnchor 下游同 m1 读链（research-basemap / scan-placement / scene-anchor / 评审导出 / schema）',
+    ],
+    retireBatch: 'shell-whole-cut',
   },
   {
     id: 'g1-ground-basemap-write',
@@ -92,6 +135,8 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['plan.ground'],
     disposition: 'positive-source-ground',
     note: '只写 plan.ground；recordId/name 取 layout.id/name 作身份与元信息透传，不回写几何。',
+    consumers: [],
+    retireBatch: 'keep',
   },
   {
     id: 'g2-ground-sync-write',
@@ -101,6 +146,8 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['plan.ground'],
     disposition: 'positive-source-ground',
     note: '旧 layout 底图字节迁进 plan.ground 后整键擦除 layout 镜像；方向只 to-plan，无反向投影。',
+    consumers: [],
+    retireBatch: 'keep',
   },
   {
     id: 'g3-agent-ground-write',
@@ -110,6 +157,8 @@ export const MIRROR_WRITE_POINTS: readonly MirrorWritePoint[] = [
     fields: ['plan.ground'],
     disposition: 'positive-source-ground',
     note: 'writeGroundToPlan 只写 plan.ground；id/name 透传身份，不回写几何。',
+    consumers: [],
+    retireBatch: 'keep',
   },
 ];
 
