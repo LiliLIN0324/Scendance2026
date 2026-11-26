@@ -105,7 +105,7 @@ describe('CommercialWorkspace real panel identity boundary', () => {
       actions.setEventOperations(eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [{
         id: '20000000-0000-4000-8000-000000000001', title: '演练任务', phase: 'preparation',
       }] }));
-      actions.addFloor(); actions.setActiveFloorIndex(1); host.session.bindGeometry();
+      actions.setActiveFloorIndex(1); host.session.bindGeometry();
       host.session.update({ revision: 3, localRevision: 4 });
       expect(read.guard()).toBeUndefined();
     });

@@ -65,9 +65,6 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
   const dispatch = (action: LayoutAction): void => {
     set((state) => ({ ...layoutReducer(state, action), revision: state.revision + 1 }));
   };
-  // S3 单层封冻：当前（唯一）楼层 id，供封冻动作返回占位值。
-  const frozenFloorId = (): string =>
-    get().layout.floors[get().activeFloorIndex]?.id ?? get().layout.floors[0]?.id ?? '';
 
   const actions: LayoutActions = {
     setProductionPlan: (value) => {
@@ -148,13 +145,7 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
     clearItems: () => dispatch({ type: 'clearItems' }),
 
     setActiveFloorIndex: (index) => dispatch({ type: 'setActiveFloorIndex', index }),
-    // S3 单层封冻（第一刀）：多楼层能力退役，增 / 复制 / 删除 / 重排楼层一律不再派发，
-    // floors 恒 1 层；reducer 内对应 action case 保留以兼容旧快照与既有测试，读侧楼层切换入口暂留。
-    addFloor: () => frozenFloorId(),
-    duplicateFloor: () => frozenFloorId(),
-    removeFloor: () => {},
     renameFloor: (index, name) => dispatch({ type: 'renameFloor', index, name }),
-    reorderFloor: () => {},
 
     applyLayout: (next: RoomLayout) => dispatch({ type: 'applyLayout', layout: withHouseId(next) }),
 

@@ -80,7 +80,6 @@ describe('layoutReducer — no-op edits keep state identity (#416)', () => {
     ['rotateSelection of locked items only', { type: 'rotateSelection', ids: new Set(['sofa']), radians: Math.PI / 2 }],
     ['renameFloor with the same name', { type: 'renameFloor', index: 0, name: 'F0' }],
     ['renameFloor with an out-of-range index', { type: 'renameFloor', index: 7, name: 'X' }],
-    ['removeFloor with an out-of-range index', { type: 'removeFloor', index: 7 }],
     ['setActiveFloorIndex with the active index', { type: 'setActiveFloorIndex', index: 0 }],
   ];
 
@@ -279,31 +278,6 @@ describe('layoutReducer — a room resize re-fits openings and zones (#431)', ()
 });
 
 describe('layoutReducer — duplicates (#345, #353, #422)', () => {
-  it('cloning a floor leaves the garden on the ground', () => {
-    const state = stateWith([
-      makeItem({ id: 'sofa', type: 'sofa' }),
-      makeItem({ id: 'tree', type: 'tree', category: 'outdoor', position: { x: 0, z: 6 } }),
-    ]);
-    const next = layoutReducer(state, { type: 'duplicateFloor', sourceIndex: 0, newId: 'copy', idSuffix: 'x' });
-    expect(next.layout.floors[1]!.items.map((i) => i.type)).toEqual(['sofa']);
-  });
-
-  it('cloning a floor gives its zones and groups fresh ids', () => {
-    const state = stateWith(
-      [makeItem({ id: 'a', groupId: 'g1' }), makeItem({ id: 'b', groupId: 'g1' }), makeItem({ id: 'c' })],
-      { zones: [zone()] }
-    );
-    const next = layoutReducer(state, { type: 'duplicateFloor', sourceIndex: 0, newId: 'copy', idSuffix: 'x' });
-    const copy = next.layout.floors[1]!;
-    expect(copy.zones!.map((z) => z.id)).toEqual(['zone-x-0']);
-    const groups = copy.items.map((i) => i.groupId);
-    expect(groups[0]).toBeDefined();
-    expect(groups[0]).not.toBe('g1');
-    expect(groups[1]).toBe(groups[0]);
-    expect(groups[2]).toBeUndefined();
-    expect(reloads(next)).toBe(true);
-  });
-
   it('duplicating a locked item yields an unlocked copy', () => {
     const state = stateWith([makeItem({ id: 'sofa', locked: true })]);
     const next = layoutReducer(state, { type: 'duplicateItem', sourceId: 'sofa', newId: 'sofa-2' });

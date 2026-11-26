@@ -343,12 +343,6 @@ describe('layoutReducer — storey height (#202)', () => {
     expect(layoutReducer(state, { type: 'setStoreyHeight', height: 3 })).toBe(state);
   });
 
-  it('duplicating a floor keeps its storey height', () => {
-    let state = layoutReducer(stateWith([]), { type: 'setStoreyHeight', height: 2.4 });
-    state = layoutReducer(state, { type: 'duplicateFloor', sourceIndex: 0, newId: 'copy', idSuffix: 'x' });
-    expect(state.layout.floors[1]!.height).toBe(2.4);
-  });
-
   it('applyLayout clamps a storey height and leaves legacy floors without one', () => {
     const state: LayoutState = { layout: makeLayout(), activeFloorIndex: 0 };
     const applied = layoutReducer(state, {
@@ -417,15 +411,6 @@ describe('layoutReducer — entrance, frontage, sills (#204)', () => {
     expect(entranceDoor(state, 0)).toMatchObject({ type: 'door', locked: true, rotation: 0 });
   });
 
-  it('keeps the door when the street storey is removed from under it (#273)', () => {
-    let state = layoutReducer(stateWith([], 2), { type: 'setEntrance', entrance: { width: 1.4, depth: 1.2 } });
-    state = layoutReducer(state, { type: 'setColor', id: 'entrance-door', color: '#123456' });
-    state = layoutReducer(state, { type: 'removeFloor', index: 0 });
-    expect(state.layout.floors).toHaveLength(1);
-    expect(entranceWall(state, 0)).toBeDefined();
-    expect(entranceDoor(state, 0)?.color).toBe('#123456');
-  });
-
   it('records a deleted door as intent, so re-fits leave it deleted (#273)', () => {
     let state = layoutReducer(stateWith([], 1), { type: 'setEntrance', entrance: { width: 1.4, depth: 1.2 } });
     state = layoutReducer(state, { type: 'removeItem', id: 'entrance-door' });
@@ -464,16 +449,6 @@ describe('layoutReducer — entrance, frontage, sills (#204)', () => {
     state = layoutReducer(state, { type: 'setWidth', width: 10 });
     state = layoutReducer(state, { type: 'setEntrance', entrance: { width: 2, depth: 1.5 } });
     expect(entranceWall(state, 0)).toMatchObject({ color: '#abcdef', x1: -1, x2: 1 });
-  });
-
-  it('duplicating the street storey clones neither the back wall nor the door (#273)', () => {
-    let state = layoutReducer(stateWith([makeItem({ id: 'sofa' })], 1), { type: 'setEntrance', entrance: { width: 1.4, depth: 1.2 } });
-    state = layoutReducer(state, { type: 'duplicateFloor', sourceIndex: 0, newId: 'copy', idSuffix: 'x' });
-    const copy = state.layout.floors[1]!;
-    expect(copy.items.map((i) => i.type)).toEqual(['chair']);
-    expect(copy.interiorWalls ?? []).toHaveLength(0);
-    expect(entranceDoor(state, 0)).toBeDefined();
-    expect(entranceWall(state, 0)).toBeDefined();
   });
 
   it('keeps state identity for no-op edits, and other floors’ identity for real ones (#279)', () => {
@@ -681,133 +656,11 @@ describe('layoutReducer — floor / building operations', () => {
     expect(layoutReducer(state, { type: 'setActiveFloorIndex', index: -5 }).activeFloorIndex).toBe(0);
   });
 
-  it('addFloor appends and makes the new floor active', () => {
-    const state = layoutReducer(stateWith([], 1), {
-      type: 'addFloor',
-      floor: { id: 'f2', floorColor: '#fff', items: [] },
-    });
-    expect(state.layout.floors).toHaveLength(2);
-    expect(state.activeFloorIndex).toBe(1);
-    expect(state.layout.floors[1]!.name).toBe('First Floor');
-  });
-
-  it('addFloor is a no-op at MAX_FLOORS', () => {
-    const before = stateWith([], MAX_FLOORS);
-    const after = layoutReducer(before, {
-      type: 'addFloor',
-      floor: { id: 'over', floorColor: '#fff', items: [] },
-    });
-    expect(after).toBe(before);
-  });
-
-  it('duplicateFloor clones items with fresh ids and activates the copy', () => {
-    const base = stateWith([makeItem({ id: 'orig', type: 'chair' })], 1);
-    const state = layoutReducer(base, {
-      type: 'duplicateFloor',
-      sourceIndex: 0,
-      newId: 'copy',
-      idSuffix: 'aaaa',
-    });
-    expect(state.layout.floors).toHaveLength(2);
-    expect(state.activeFloorIndex).toBe(1);
-    const copy = state.layout.floors[1]!;
-    expect(copy.name).toBe('Floor 0 copy');
-    expect(copy.items).toHaveLength(1);
-    expect(copy.items[0]!.id).not.toBe('orig');
-  });
-
-  it('duplicateFloor keys cloned ids on the per-duplication idSuffix so same-millisecond copies never collide', () => {
-    const base = stateWith([makeItem({ id: 'orig', type: 'chair' })], 1);
-    const first = layoutReducer(base, {
-      type: 'duplicateFloor',
-      sourceIndex: 0,
-      newId: 'copy-a',
-      idSuffix: 'aaaa',
-    });
-    const second = layoutReducer(first, {
-      type: 'duplicateFloor',
-      sourceIndex: 0,
-      newId: 'copy-b',
-      idSuffix: 'bbbb',
-    });
-    const idsA = first.layout.floors[1]!.items.map((item) => item.id);
-    const idsB = second.layout.floors[2]!.items.map((item) => item.id);
-    expect(idsA[0]).toContain('aaaa');
-    expect(idsB[0]).toContain('bbbb');
-    // Even when both duplications land on the same Date.now() stamp, the
-    // suffix keeps every cloned id unique.
-    expect(new Set([...idsA, ...idsB]).size).toBe(idsA.length + idsB.length);
-  });
-
   it('renameFloor renames the target floor without changing the active one', () => {
     const state = stateWith([], 2, 1);
     const next = layoutReducer(state, { type: 'renameFloor', index: 0, name: 'Basement' });
     expect(next.layout.floors[0]!.name).toBe('Basement');
     expect(next.activeFloorIndex).toBe(1);
-  });
-
-  describe('removeFloor — activeFloorIndex correctness (fixed bug)', () => {
-    it('removing a floor below the active one shifts active down', () => {
-      // floors [0,1,2], active = 2; remove index 0 → active should follow to 1.
-      const state = stateWith([], 3, 2);
-      const next = layoutReducer(state, { type: 'removeFloor', index: 0 });
-      expect(next.layout.floors).toHaveLength(2);
-      expect(next.activeFloorIndex).toBe(1);
-    });
-
-    it('removing a floor above the active one keeps active unchanged', () => {
-      const state = stateWith([], 3, 0);
-      const next = layoutReducer(state, { type: 'removeFloor', index: 2 });
-      expect(next.activeFloorIndex).toBe(0);
-    });
-
-    it('removing the active floor keeps index in range (clamped)', () => {
-      const state = stateWith([], 3, 2);
-      const next = layoutReducer(state, { type: 'removeFloor', index: 2 });
-      // active was 2, index 2 is not < 2 so it stays 2, then clamped to len-1 = 1.
-      expect(next.activeFloorIndex).toBe(1);
-    });
-
-    it('is a no-op when only one floor remains', () => {
-      const before = stateWith([], 1, 0);
-      const after = layoutReducer(before, { type: 'removeFloor', index: 0 });
-      expect(after).toBe(before);
-    });
-  });
-
-  describe('reorderFloor — activeFloorIndex tracking', () => {
-    it('moving the active floor makes active follow to its new slot', () => {
-      const state = stateWith([], 3, 0);
-      const next = layoutReducer(state, { type: 'reorderFloor', from: 0, to: 2 });
-      expect(next.activeFloorIndex).toBe(2);
-    });
-
-    it('moving a floor from below the active up past it shifts active down', () => {
-      // active = 2; move floor 0 → 2. Item at 0 removed (active→1), inserted at 2 (2<=1? no) → 1.
-      const state = stateWith([], 3, 2);
-      const next = layoutReducer(state, { type: 'reorderFloor', from: 0, to: 2 });
-      expect(next.activeFloorIndex).toBe(1);
-    });
-
-    it('moving a floor from above the active down past it shifts active up', () => {
-      // active = 0; move floor 2 → 0. from(2) not < active(0); to(0) <= active(0) → active += 1 = 1.
-      const state = stateWith([], 3, 0);
-      const next = layoutReducer(state, { type: 'reorderFloor', from: 2, to: 0 });
-      expect(next.activeFloorIndex).toBe(1);
-    });
-
-    it('is a no-op for from === to or out-of-range indices', () => {
-      const before = stateWith([], 3, 1);
-      expect(layoutReducer(before, { type: 'reorderFloor', from: 1, to: 1 })).toBe(before);
-      expect(layoutReducer(before, { type: 'reorderFloor', from: 0, to: 9 })).toBe(before);
-      expect(layoutReducer(before, { type: 'reorderFloor', from: -1, to: 0 })).toBe(before);
-    });
-
-    it('actually reorders the floors array', () => {
-      const state = stateWith([], 3, 0);
-      const next = layoutReducer(state, { type: 'reorderFloor', from: 0, to: 2 });
-      expect(next.layout.floors.map((f) => f.id)).toEqual(['floor-1', 'floor-2', 'floor-0']);
-    });
   });
 });
 

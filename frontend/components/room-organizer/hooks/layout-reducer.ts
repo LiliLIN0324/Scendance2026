@@ -3,7 +3,6 @@ import { syncDesignWorkOrders } from '../../../lib/production-plan';
 import { DEFAULT_ROOF, FURNITURE_CATALOG, MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '../lib/constants';
 import { MAX_DORMERS, clampDormer, type DormerInput, type DormerPatch } from '../lib/dormers';
 import { rotatedHalfExtents } from '../lib/geometry';
-import { remapGroupIds } from '../lib/groups';
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from '../lib/initial-layout';
 import { isOpening, isWallMounted, settleWallMountedItem, snapOpeningToWall, type WallGap } from '../lib/opening-snap';
 import {
@@ -96,11 +95,7 @@ export type LayoutAction =
   | { type: 'clearItems' }
   // floor / building operations
   | { type: 'setActiveFloorIndex'; index: number }
-  | { type: 'addFloor'; floor: Omit<FloorLayout, 'name'> & { name?: string } }
-  | { type: 'duplicateFloor'; sourceIndex: number; newId: string; idSuffix: string }
-  | { type: 'removeFloor'; index: number }
   | { type: 'renameFloor'; index: number; name: string }
-  | { type: 'reorderFloor'; from: number; to: number }
   | { type: 'setFloorPlan'; image: string | null }
   | { type: 'setFloorPlanOpacity'; opacity: number }
   | { type: 'setFloorPlanFitMode'; mode: FloorPlanFitMode }
@@ -150,10 +145,6 @@ const ENTRANCE_RESYNC_ACTIONS: ReadonlySet<LayoutAction['type']> = new Set([
   'setHeight',
   'setTerrain',
   'setStoreyHeight',
-  'addFloor',
-  'duplicateFloor',
-  'removeFloor',
-  'reorderFloor',
 ]);
 
 /**
@@ -205,7 +196,7 @@ function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): Lay
     if(item?.structuralOpeningId||item?.structuralColumnId)return state;
   }
   // A measured outline cannot be resized by the legacy rectangle sliders.
-  if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'addFloor', 'duplicateFloor', 'removeFloor', 'reorderFloor'].includes(action.type)) return state;
+  if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight'].includes(action.type)) return state;
   let next = reduceLayout(state, action);
   if (next !== state && state.layout.backendSceneV2 && STRUCTURAL_ACTIONS.has(action.type)) {
     // Keep marker meshes on their owned wall and aligned after any edit path.
@@ -228,7 +219,7 @@ function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): Lay
   }
   if (!ENTRANCE_RESYNC_ACTIONS.has(action.type)) return next;
   // The pre-action layout is the fallback for the door and the wall's
-  // colour: removeFloor takes the street storey away with them on it.
+  // colour when a resync action strips them.
   const layout = syncEntrance(next.layout, entrance, state.layout);
   return layout === next.layout ? next : { ...next, layout };
 }
@@ -753,72 +744,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
       return activeFloorIndex === state.activeFloorIndex ? state : { ...state, activeFloorIndex };
     }
 
-    case 'addFloor': {
-      if (state.layout.floors.length >= MAX_FLOORS) return state;
-      const name = capName(action.floor.name ?? defaultFloorName(state.layout.floors));
-      const floor: FloorLayout = { ...action.floor, name };
-      const floors = [...state.layout.floors, floor];
-      return {
-        layout: { ...state.layout, floors },
-        activeFloorIndex: floors.length - 1,
-      };
-    }
-
-    case 'duplicateFloor': {
-      if (state.layout.floors.length >= MAX_FLOORS) return state;
-      const source = state.layout.floors[action.sourceIndex];
-      if (!source) return state;
-      // `action.idSuffix` is a per-duplication random tag generated OUTSIDE the
-      // reducer (see use-layout-store.ts): it alone makes the cloned ids
-      // unique, keeping the reducer fully deterministic in its inputs — the
-      // Date.now() stamp it used to mix in broke that purity for no extra
-      // collision protection (#122).
-      // The porch's back wall and door belong to the street storey only;
-      // cloned under fresh ids they would outlive every re-fit (#273). The
-      // garden stays on the ground: a cloned tree would float in the sky,
-      // where placement refuses outdoor items anyway (#345).
-      const clonedItems: FurnitureItem[] = remapGroupIds(
-        source.items
-          .filter((item) => item.id !== ENTRANCE_DOOR_ID && item.category !== 'outdoor')
-          .map((item, idx) => {
-            const { handoff: _handoff, ...copy } = item;
-            return { ...copy, id: `${item.type}-${action.idSuffix}-${idx}` };
-          }),
-        action.idSuffix
-      );
-      const clonedWalls: InteriorWall[] | undefined = source.interiorWalls
-        ?.filter((wall) => wall.id !== ENTRANCE_WALL_ID)
-        .map((wall, idx) => ({ ...wall, id: `wall-${action.idSuffix}-${idx}` }));
-      // Zone and group ids are fresh too, so nothing aliases across storeys (#422).
-      const clonedZones: RoomZone[] | undefined = source.zones?.map((zone, idx) => ({
-        ...zone,
-        id: `zone-${action.idSuffix}-${idx}`,
-      }));
-      const floor: FloorLayout = {
-        ...source,
-        id: action.newId,
-        name: capName(`${source.name} copy`),
-        items: clonedItems,
-        ...(clonedWalls ? { interiorWalls: clonedWalls } : {}),
-        ...(clonedZones ? { zones: clonedZones } : {}),
-      };
-      const floors = [...state.layout.floors, floor];
-      return { layout: { ...state.layout, floors }, activeFloorIndex: floors.length - 1 };
-    }
-
-    case 'removeFloor': {
-      if (state.layout.floors.length <= 1 || !state.layout.floors[action.index]) return state;
-      const floors = state.layout.floors.filter((_, index) => index !== action.index);
-      // Removing a floor below the active one shifts the active floor down a
-      // slot; without the adjustment the editor silently switches floors.
-      const nextActive =
-        action.index < state.activeFloorIndex ? state.activeFloorIndex - 1 : state.activeFloorIndex;
-      return {
-        layout: { ...state.layout, floors },
-        activeFloorIndex: clampActiveIndex(nextActive, floors.length),
-      };
-    }
-
     case 'renameFloor': {
       // An unedited rename commits on both Enter and blur (#416).
       const target = state.layout.floors[action.index];
@@ -826,28 +751,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
       if (!target || target.name === name) return state;
       const floors = state.layout.floors.map((floor, index) => (index === action.index ? { ...floor, name } : floor));
       return { ...state, layout: { ...state.layout, floors } };
-    }
-
-    case 'reorderFloor': {
-      const { from, to } = action;
-      if (from === to || from < 0 || to < 0) return state;
-      if (from >= state.layout.floors.length || to >= state.layout.floors.length) return state;
-      const floors = [...state.layout.floors];
-      const [moved] = floors.splice(from, 1);
-      if (moved !== undefined) floors.splice(to, 0, moved);
-      // The same floor stays active through the move — reordering a different
-      // floor must not jump the editor to it.
-      let active = state.activeFloorIndex;
-      if (from === active) {
-        active = to;
-      } else {
-        if (from < active) active -= 1;
-        if (to <= active) active += 1;
-      }
-      return {
-        layout: { ...state.layout, floors },
-        activeFloorIndex: clampActiveIndex(active, floors.length),
-      };
     }
 
     case 'applyLayout': {
@@ -1349,12 +1252,4 @@ function clampActiveIndex(index: number, floorCount: number): number {
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected action: ${JSON.stringify(value)}`);
-}
-
-const FLOOR_NAMES = ['First Floor', 'Second Floor', 'Third Floor', 'Fourth Floor'] as const;
-
-function defaultFloorName(existing: ReadonlyArray<FloorLayout>): string {
-  if (existing.length === 0) return 'Ground Floor';
-  const fallback = FLOOR_NAMES[existing.length - 1];
-  return fallback ?? `Floor ${existing.length + 1}`;
 }

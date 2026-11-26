@@ -48,14 +48,9 @@ describe('use-layout-store — wiring', () => {
     expect(moved?.position).toEqual({ x: 2, z: 2 });
   });
 
-  it('add/duplicate/remove/reorder floor are frozen to a single storey', () => {
-    const { addFloor, duplicateFloor, removeFloor, reorderFloor, setActiveFloorIndex } = layoutStore.getState().actions;
+  it('layout stays a single storey; floor index clamps back to 0', () => {
+    const { setActiveFloorIndex } = layoutStore.getState().actions;
     const groundId = layoutStore.getState().layout.floors[0]!.id;
-
-    expect(addFloor()).toBe(groundId);
-    expect(duplicateFloor(0)).toBe(groundId);
-    removeFloor(0);
-    reorderFloor(0, 0);
 
     const floors = layoutStore.getState().layout.floors;
     expect(floors).toHaveLength(1);

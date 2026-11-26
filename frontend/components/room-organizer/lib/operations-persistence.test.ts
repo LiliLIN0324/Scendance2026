@@ -93,10 +93,6 @@ describe('local activity operations lifecycle', () => {
     const duplicate = layoutReducer(before, { type: 'duplicateItem', sourceId: 'table-1', newId: 'copy-1' });
     expect(duplicate.layout.eventOperations).toBe(before.layout.eventOperations);
     expect(duplicate.layout.eventOperations!.tasks[0]!.objectIds).not.toContain('copy-1');
-    const floorCopy = layoutReducer(before, { type: 'duplicateFloor', sourceIndex: 0, newId: 'upper', idSuffix: 'fresh' });
-    expect(floorCopy.layout.eventOperations).toBe(before.layout.eventOperations);
-    expect(floorCopy.layout.eventOperations!.tasks).toHaveLength(2);
-    expect(floorCopy.layout.floors[1]!.items.map((item) => item.id)).not.toContain('table-1');
   });
 
   it('allows already-missing references but rejects ambiguous and repair-created links', () => {

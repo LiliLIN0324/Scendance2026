@@ -98,11 +98,7 @@ export interface LayoutActions {
   setLockAll(locked: boolean): void;
   clearItems(): void;
   setActiveFloorIndex(index: number): void;
-  addFloor(): string;
-  duplicateFloor(sourceIndex: number): string;
-  removeFloor(index: number): void;
   renameFloor(index: number, name: string): void;
-  reorderFloor(from: number, to: number): void;
   applyLayout(layout: RoomLayout): void;
   /** Room zones on the active floor (#155). `addZone` returns the new zone's id. */
   addZone(zone: Omit<RoomZone, 'id'>): string;
