@@ -267,8 +267,9 @@ const MAP_TILT_MS = 650;
 // 场地点云挂点未就绪时的有界重试：短间隔、有限次；不新起轮询器，不无限重试。
 const VENUE_SPLAT_READY_RETRY_MAX = 5;
 const VENUE_SPLAT_READY_RETRY_MS = 120;
-// dev-only 探针：console / localStorage / 角标三通道同源；生产构建整体不出现。
+// dev-only 探针：console / localStorage / window 全局键 / 角标同源；生产构建整体不出现。
 const PROBE_STORAGE_KEY = 'scendance:3d-probe';
+const PROBE_WINDOW_KEY = '__venueSplatProbe';
 
 type VenueSplatProbeStatus = 'idle' | 'loading' | 'ready' | 'error';
 type VenueSplatProbeBits = Readonly<{
@@ -286,10 +287,16 @@ function venueSplatProbeRecord(patch: Record<string, unknown>): void {
   } catch {
     previous = {};
   }
+  const record = { ...previous, ...patch, ts: Date.now() };
   try {
-    window.localStorage.setItem(PROBE_STORAGE_KEY, JSON.stringify({ ...previous, ...patch, ts: Date.now() }));
+    window.localStorage.setItem(PROBE_STORAGE_KEY, JSON.stringify(record));
   } catch {
     // 存储不可用（隐私模式等）不影响另外两条通道。
+  }
+  try {
+    (window as unknown as Record<string, unknown>)[PROBE_WINDOW_KEY] = record;
+  } catch {
+    // 全局键不可写时不影响 localStorage / console 通道。
   }
 }
 
@@ -3263,6 +3270,10 @@ export default function OutdoorPlan3D({
       readyScene.add(outline);
       readyApi.start({ patch, outline, assetId: readyScan.assetId, url, name: readyScan.name, world: { x: readyScan.x, z: readyScan.z } });
       startedApi = readyApi;
+      if (process.env.NODE_ENV !== 'production') {
+        setProbeBits(bits => ({ scene: readyScene !== null, scan: readyScan !== null, splat: bits.splat }));
+        venueSplatProbeRecord({ step: 'mounted', scanAssetId: readyScan.assetId, scene: true, scan: true });
+      }
     };
 
     if (!api || !scene || !current) {
