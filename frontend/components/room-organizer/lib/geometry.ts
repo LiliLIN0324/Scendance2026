@@ -474,6 +474,10 @@ export interface SnapToWallOptions {
  * outdoor items to the outer one (they live outside the footprint), and only
  * alongside the wall: an item far from the building is left alone (#380).
  * Uses the item's rotated axis-aligned half-extents.
+ *
+ * Note: the "wall" here is the rectangular venue boundary (roomWidth × roomDepth),
+ * not the legacy interior partition walls (`interiorWalls`); this snap is a
+ * retained edge-preference and must not be retired as indoor leftover.
  */
 export function snapToWall({
   position,

@@ -47,7 +47,6 @@ const setup = (
   renderHook(() =>
     useKeyboardShortcuts({
       selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
-      selectedWall: null,
       hasSignalItems,
       walkthroughActive,
       isDragActive: () => dragging,
@@ -211,7 +210,6 @@ describe('useKeyboardShortcuts — review lock', () => {
     renderHook(() => useKeyboardShortcuts({
       layoutLocked: true,
       selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
-      selectedWall: null,
       hasSignalItems: false,
       onBlocked,
       handlers: handlers as unknown as KeyboardShortcutHandlers,
@@ -225,7 +223,6 @@ describe('useKeyboardShortcuts — review lock', () => {
     renderHook(() => useKeyboardShortcuts({
       layoutLocked: true,
       selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
-      selectedWall: null,
       hasSignalItems: false,
       handlers: handlers as unknown as KeyboardShortcutHandlers,
     }));
@@ -251,7 +248,6 @@ describe('shortcut block reasons', () => {
     renderHook(() => useKeyboardShortcuts({
       walkthroughActive: true,
       selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
-      selectedWall: null,
       hasSignalItems: false,
       onBlocked,
       handlers: handlers as unknown as KeyboardShortcutHandlers,
@@ -266,7 +262,6 @@ describe('shortcut block reasons', () => {
     const onBlocked = vi.fn();
     renderHook(() => useKeyboardShortcuts({
       selectedItem: null,
-      selectedWall: null,
       hasSignalItems: false,
       onBlocked,
       handlers: handlers as unknown as KeyboardShortcutHandlers,
@@ -286,7 +281,6 @@ describe('shortcut block reasons', () => {
     try {
       renderHook(() => useKeyboardShortcuts({
         selectedItem: makeItem({ id: 'chair', position: { x: 0, z: 0 }, locked: false }),
-        selectedWall: null,
         hasSignalItems: false,
         handlers: handlers as unknown as KeyboardShortcutHandlers,
       }));
@@ -303,7 +297,7 @@ describe('hidden editor keyboard isolation', () => {
   it('ignores delete and undo while hidden and resumes on re-entry', () => {
     const handlers = makeHandlers();
     const hook = renderHook(({ enabled }) => useKeyboardShortcuts({ enabled, handlers: handlers as unknown as KeyboardShortcutHandlers,
-      selectedItem: makeItem({ id: 'selected' }), selectedWall: null, hasSignalItems: false,
+      selectedItem: makeItem({ id: 'selected' }), hasSignalItems: false,
     }), { initialProps: { enabled: false } });
     expect(press('Delete').defaultPrevented).toBe(false);
     expect(press('z', { metaKey: true }).defaultPrevented).toBe(false);

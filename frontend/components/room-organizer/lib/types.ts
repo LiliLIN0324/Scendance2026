@@ -560,8 +560,6 @@ export interface ViewSettings {
   measurementMode: boolean;
   /** When true, the UI plays short Web Audio cues on key actions. */
   soundsEnabled: boolean;
-  /** When true, clicking pairs of floor points draws an interior wall. */
-  drawWallMode: boolean;
   /** When true, dragging a rectangle on the 2D plan creates a room zone (#155). */
   drawZoneMode: boolean;
   /**

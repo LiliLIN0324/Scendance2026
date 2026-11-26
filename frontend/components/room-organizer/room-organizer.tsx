@@ -281,7 +281,6 @@ const INITIAL_VIEW_SETTINGS: ViewSettings = {
   wallDisplay: 'cutaway',
   measurementMode: false,
   soundsEnabled: false,
-  drawWallMode: false,
   drawZoneMode: false,
   selectMode: true,
   showHeatmap: false,
@@ -475,7 +474,6 @@ export function RoomOrganizer({ controller: providedController, isActive = true,
     [view.soundsEnabled]
   );
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [selectedWall, setSelectedWall] = useState<{ id: string; kind: 'exterior' | 'interior' } | null>(null);
   const [extraSelectedIds, setExtraSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [autoCycleLighting, setAutoCycleLighting] = useState(false);
   // 工具抽屉和 Bingo 列同时关着，左侧导航才算收起。logo 只写这两扇门。
@@ -1297,7 +1295,6 @@ useEffect(() => {
   useEffect(()=>{const pending=pendingPlacement.current;if(!pending)return;try{pending.guard.assertCurrent();}catch{clearPendingPlacement();notify('场景、楼层或登录状态已变化，待放置物料已取消，请重新选择。','info');}},[layout,activeFloorIndex,isActive,clearPendingPlacement]);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('build');
-  const [wallDraft, setWallDraft] = useState<{ x: number; z: number } | null>(null);
   // 人物路线布点（PEOPLE-04）：画布点击喂给选中人物的 walkRoute。首个路点先落
   // 草稿（单点路线过不了 schema 校验，不能提前写进 item），第二个点起直接提交。
   const [routeDrawItemId, setRouteDrawItemId] = useState<string | null>(null);
@@ -1408,20 +1405,10 @@ useEffect(() => {
     setView(current => (current.view2D ? { ...current, view2D: false } : current));
   }, [followPersonId]);
 
-  // Reset wall draft + wall selection whenever draw mode flips off.
-  useEffect(() => {
-    if (!view.drawWallMode) {
-      setWallDraft(null);
-      setSelectedWall(null);
-    }
-  }, [view.drawWallMode]);
-
-  // Floor switch: drop any in-progress wall draft and selection (those live on
+  // Floor switch: drop any in-progress item selection (those live on
   // the previous floor).
   useEffect(() => {
-    setWallDraft(null);
     setSelectedItemId(null);
-    setSelectedWall(null);
     setExtraSelectedIds(new Set());
     // activeFloor.id: removing floor 0 (or reordering) can change WHICH floor
     // is active while the index stays 0 — keying on the index alone carried
@@ -1470,15 +1457,6 @@ useEffect(() => {
     setExtraSelectedIds(new Set(liveExtras));
   }, [activeFloor.items, selectedItemId, extraSelectedIds]);
 
-  // Same guard for a selected interior wall: undo/redo past its creation (or
-  // any path that removes it) would otherwise leave the paint panel open and
-  // dispatching against a wall that no longer exists (#224).
-  useEffect(() => {
-    if (selectedWall?.kind !== 'interior') return;
-    const exists = (activeFloor.interiorWalls ?? []).some((wall) => wall.id === selectedWall.id);
-    if (!exists) setSelectedWall(null);
-  }, [activeFloor.interiorWalls, selectedWall]);
-
   // Make `id` the sole selection (null clears). The one way panels set a
   // primary — pairing the two setters at every call site is how stale extras
   // leaked into later group operations (#117).
@@ -1503,7 +1481,6 @@ useEffect(() => {
   // not just the item ids (#224).
   const clearTransientSelection = useCallback(() => {
     selectOnly(null);
-    setSelectedWall(null);
   }, [selectOnly]);
 
   // Plain reads + flat setter calls. The previous version computed the
@@ -3254,15 +3231,6 @@ useEffect(() => {
       undo: history.undo,
       redo: history.redo,
       deselect: () => {
-        if (wallDraft) {
-          setWallDraft(null);
-          return;
-        }
-        // A second Escape, with no draft pending, leaves wall-draw mode (#349).
-        if (view.drawWallMode) {
-          toggle('drawWallMode');
-          return;
-        }
         // Likewise for the distance tool (#341).
         if (view.measurementMode) {
           toggle('measurementMode');
@@ -3290,7 +3258,6 @@ useEffect(() => {
           return;
         }
         actions.removeInteriorWall(id);
-        setSelectedWall(null);
       },
       // Keep the selection (and the auto-opened paint panel) after hiding an
       // exterior wall so the Wall Visibility toggles stay reachable to restore it.
@@ -3331,8 +3298,6 @@ useEffect(() => {
       focusOn,
       rotateItemHandler,
       reseatCamera,
-      wallDraft,
-      view.drawWallMode,
       view.measurementMode,
       setGizmoMode,
     ]
@@ -3363,7 +3328,6 @@ useEffect(() => {
   useKeyboardShortcuts({
     enabled: isActive,
     selectedItem,
-    selectedWall,
     hasSignalItems,
     layoutLocked: workbenchMode !== 'layout',
     isDragActive,
@@ -3376,11 +3340,10 @@ useEffect(() => {
   useEffect(() => {
     if (workbenchMode === 'layout') return;
     selectOnly(null);
-    setSelectedWall(null);
     clearPendingPlacement();
     cancelPlacement();
-    setView(current => (current.drawWallMode || current.drawZoneMode || current.measurementMode)
-      ? { ...current, drawWallMode: false, drawZoneMode: false, measurementMode: false }
+    setView(current => (current.drawZoneMode || current.measurementMode)
+      ? { ...current, drawZoneMode: false, measurementMode: false }
       : current);
   }, [workbenchMode, selectOnly, cancelPlacement, setView,clearPendingPlacement]);
 
@@ -4023,7 +3986,7 @@ useEffect(() => {
   };
   const setSplatTransformMode = useCallback((mode: SplatTransformMode) => {
     setSplatTransformModeState(mode);
-    if (mode !== 'off') setView(current => ({ ...current, selectMode: false, measurementMode: false, drawWallMode: false, drawZoneMode: false }));
+    if (mode !== 'off') setView(current => ({ ...current, selectMode: false, measurementMode: false, drawZoneMode: false }));
   }, [setView]);
   useEffect(() => {
     if (environment) return;
@@ -4167,7 +4130,7 @@ useEffect(() => {
     ...(referenceImage.layer?{referenceImage:referenceImage.layer}:{}),
     ...(reviewGround?{ground:reviewGround}:{}),
     canvas:canvasRef,canvas2D:canvas2DRef,scene:sceneRef,renderer:rendererRef,camera:cameraRef,
-    pendingPreview:!!previewCandidate,isInteracting:()=>isDragActive()||!!wallDraft||!!placingId||!!pendingCatalog});
+    pendingPreview:!!previewCandidate,isInteracting:()=>isDragActive()||!!placingId||!!pendingCatalog});
   // 活动封面取当前画面（户外 2D 地图=瓦片合成图；三维=渲染帧）；归档面板通过注册表取图，不直接持有 WebGL 场景。
   useEffect(() => registerStageCover(() => {
     // 2026-11-14 封面随主画面：起步即 2D 地图，户外地图态拍「底图+业务层」合成图。

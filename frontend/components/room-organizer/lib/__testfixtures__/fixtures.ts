@@ -80,7 +80,6 @@ export function makeViewSettings(overrides: Partial<ViewSettings> = {}): ViewSet
     selectMode: true,
     measurementMode: false,
     soundsEnabled: false,
-    drawWallMode: false,
     drawZoneMode: false,
     showHeatmap: false,
     showItemLabels: false,
