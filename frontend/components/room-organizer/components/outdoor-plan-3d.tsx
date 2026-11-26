@@ -264,6 +264,9 @@ function addDraftOverlay(
 /** 从正上方向南侧斜看：北朝屏幕里，和 2D 地图上北下南一致。 */
 const MAP_TILT_POLAR = (58 * Math.PI) / 180;
 const MAP_TILT_MS = 650;
+// 场地点云挂点未就绪时的有界重试：短间隔、有限次；不新起轮询器，不无限重试。
+const VENUE_SPLAT_READY_RETRY_MAX = 5;
+const VENUE_SPLAT_READY_RETRY_MS = 120;
 
 function cameraPose(target: THREE.Vector3, span: number, polar: number, fovDeg: number): THREE.Vector3 {
   const dist = (span * 0.55) / Math.tan((fovDeg * Math.PI) / 360);
@@ -548,6 +551,7 @@ export default function OutdoorPlan3D({
   const venueSplatApiRef = useRef<{ start(request: VenueSplatRequest): void; dispose(): void } | null>(null);
   const scanRef = useRef(scan);
   scanRef.current = scan;
+  const splatReadyAttemptRef = useRef(0);
   const onScanStateRef = useRef(onScanState);
   onScanStateRef.current = onScanState;
   const disposeVenueSplat = useCallback((): void => {
@@ -2051,7 +2055,16 @@ export default function OutdoorPlan3D({
     // 预览器要 renderer + camera + 环绕控制器，所以等 controls 建好再起。
     // 一个预览器同一时刻只挂一份，因此只起第一块（场地那块）实景扫描。
     const startVenueSplat = (request: VenueSplatRequest): void => {
-      if (!renderer || !controls) return;
+      if (!renderer || !controls) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[venue-splat] 预览器挂点缺 renderer/controls：', {
+            renderer: !renderer,
+            controls: !controls,
+            assetId: request.assetId,
+          });
+        }
+        return;
+      }
       const { patch, outline, assetId, url, name, world } = request;
       const preview = createSplatPreview({
         renderer,
@@ -3174,37 +3187,89 @@ export default function OutdoorPlan3D({
     const api = venueSplatApiRef.current;
     const scene = sceneRef.current;
     const current = scanRef.current;
-    if (!api || !scene || !current) return undefined;
-    // 注册表里可能根本没有这条（扫描是别的机器落的盘），那就直接问本机代理要。
-    const localUrl = `${DIRECT_BASE}/asset/${current.assetId}.spz`;
-    const url = current.assetId.startsWith('shipped-')
-      ? storedAholoSceneSource(current.assetId).url
-      : resolveAholoAssetUrl(current.assetId) ?? localUrl;
-    const width = Math.max(0.5, current.meters?.width ?? 12);
-    const depth = Math.max(0.5, current.meters?.depth ?? 9);
-    const patch = new THREE.Mesh(
-      new THREE.PlaneGeometry(width, depth),
-      new THREE.MeshBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.12 }),
-    );
-    patch.rotation.x = -Math.PI / 2;
-    patch.position.set(current.x, 0.015, current.z);
-    patch.name = 'plan-scan-patch';
-    const outline = new THREE.LineLoop(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-width / 2, 0, -depth / 2),
-        new THREE.Vector3(width / 2, 0, -depth / 2),
-        new THREE.Vector3(width / 2, 0, depth / 2),
-        new THREE.Vector3(-width / 2, 0, depth / 2),
-      ]),
-      new THREE.LineBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.9 }),
-    );
-    outline.position.set(current.x, 0.03, current.z);
-    outline.name = 'plan-scan-outline';
-    // 占位标记直接挂世界系：sceneLayer 带场地中心平移，用世界坐标会偏一个场地。
-    scene.add(patch);
-    scene.add(outline);
-    api.start({ patch, outline, assetId: current.assetId, url, name: current.name, world: { x: current.x, z: current.z } });
-    return () => { api.dispose(); };
+    splatReadyAttemptRef.current = 0;
+    let retryTimer: number | undefined;
+    let startedApi: { start(request: VenueSplatRequest): void; dispose(): void } | null = null;
+
+    const mountVenueSplat = (
+      readyApi: NonNullable<typeof api>,
+      readyScene: NonNullable<typeof scene>,
+      readyScan: NonNullable<typeof current>,
+    ): void => {
+      // 注册表里可能根本没有这条（扫描是别的机器落的盘），那就直接问本机代理要。
+      const localUrl = `${DIRECT_BASE}/asset/${readyScan.assetId}.spz`;
+      const url = readyScan.assetId.startsWith('shipped-')
+        ? storedAholoSceneSource(readyScan.assetId).url
+        : resolveAholoAssetUrl(readyScan.assetId) ?? localUrl;
+      const width = Math.max(0.5, readyScan.meters?.width ?? 12);
+      const depth = Math.max(0.5, readyScan.meters?.depth ?? 9);
+      const patch = new THREE.Mesh(
+        new THREE.PlaneGeometry(width, depth),
+        new THREE.MeshBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.12 }),
+      );
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(readyScan.x, 0.015, readyScan.z);
+      patch.name = 'plan-scan-patch';
+      const outline = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-width / 2, 0, -depth / 2),
+          new THREE.Vector3(width / 2, 0, -depth / 2),
+          new THREE.Vector3(width / 2, 0, depth / 2),
+          new THREE.Vector3(-width / 2, 0, depth / 2),
+        ]),
+        new THREE.LineBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.9 }),
+      );
+      outline.position.set(readyScan.x, 0.03, readyScan.z);
+      outline.name = 'plan-scan-outline';
+      // 占位标记直接挂世界系：sceneLayer 带场地中心平移，用世界坐标会偏一个场地。
+      readyScene.add(patch);
+      readyScene.add(outline);
+      readyApi.start({ patch, outline, assetId: readyScan.assetId, url, name: readyScan.name, world: { x: readyScan.x, z: readyScan.z } });
+      startedApi = readyApi;
+    };
+
+    if (!api || !scene || !current) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[venue-splat] 挂点未就绪，跳过本次：', {
+          api: !api,
+          scene: !scene,
+          scanRef: !current,
+          assetId: current?.assetId ?? null,
+          attempt: splatReadyAttemptRef.current,
+        });
+      }
+      if (splatReadyAttemptRef.current < VENUE_SPLAT_READY_RETRY_MAX) {
+        splatReadyAttemptRef.current += 1;
+        retryTimer = window.setTimeout(() => {
+          const nextApi = venueSplatApiRef.current;
+          const nextScene = sceneRef.current;
+          const nextScan = scanRef.current;
+          if (nextApi && nextScene && nextScan) mountVenueSplat(nextApi, nextScene, nextScan);
+          else if (process.env.NODE_ENV !== 'production') {
+            console.info('[venue-splat] 重试后挂点仍缺：', {
+              api: !nextApi,
+              scene: !nextScene,
+              scanRef: !nextScan,
+              attempt: splatReadyAttemptRef.current,
+            });
+          }
+        }, VENUE_SPLAT_READY_RETRY_MS);
+        return () => {
+          if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+          if (startedApi) startedApi.dispose();
+        };
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[venue-splat] 重试耗尽，点云仍未挂上：', {
+          attempt: splatReadyAttemptRef.current,
+          assetId: current?.assetId ?? null,
+        });
+      }
+      return undefined;
+    }
+
+    mountVenueSplat(api, scene, current);
+    return () => { if (startedApi) startedApi.dispose(); };
   }, [walkCanvas, scan?.assetId]);
 
   // 挪落点：只平移已挂上的高斯重建与占位标记，不重新下载、不重新解码。
