@@ -3219,6 +3219,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(attachment){
         // 全部待发图（最多 10 张）一起送；超预算的按顺序留下，并如实说几张没带。
         const sessionId = boundSessionId.current;
+        // 会话作用域：boundSessionId 是助手会话 id，空值落匿名会话槽 'local'；
+        // sessionScope 已作项目前缀。这是会话维度兜底，不是项目 id，不并入项目桶，保留不改。
         const documentScope = `${sessionScope}:${sessionId ?? 'local'}`;
         const batch = staged.length ? staged : [attachment];
         const documentFiles = batch.filter(item => isAgentDocument(item.file));

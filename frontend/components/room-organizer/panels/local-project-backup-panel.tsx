@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { readLocalProjectBackupFile, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { resolveProjectScope } from '@/lib/project-scope';
 import type { RoomLayout } from '../lib/types';
 import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
 import './local-project-backup-panel.css';
@@ -27,9 +28,9 @@ export function LocalProjectBackupPanel({ layout, actions, briefState, onComplet
   const [working, setWorking] = useState<'read' | 'download' | 'restore' | 'undo' | null>(null);
   const mounted = useRef(true);
   const operation = useRef({ id: 0, kind: null as typeof working });
-  const baseline = useRef({ layout, scope: layout.id ?? 'local', brief: briefState?.brief, epoch: 0 });
-  if (baseline.current.layout !== layout || baseline.current.scope !== (layout.id ?? 'local') || baseline.current.brief !== briefState?.brief) {
-    baseline.current = { layout, scope: layout.id ?? 'local', brief: briefState?.brief, epoch: baseline.current.epoch + 1 };
+  const baseline = useRef({ layout, scope: resolveProjectScope(layout.id), brief: briefState?.brief, epoch: 0 });
+  if (baseline.current.layout !== layout || baseline.current.scope !== resolveProjectScope(layout.id) || baseline.current.brief !== briefState?.brief) {
+    baseline.current = { layout, scope: resolveProjectScope(layout.id), brief: briefState?.brief, epoch: baseline.current.epoch + 1 };
   }
   const epoch = baseline.current.epoch;
   useEffect(() => {

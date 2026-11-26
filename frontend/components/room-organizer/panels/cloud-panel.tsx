@@ -19,6 +19,7 @@ import {sameRecoveryFormValue} from '@/lib/recovery-form-value';
 import { backendFailureText, createBackendSession, useBackendSession, type BackendSession, type ProjectSummary, type Studio } from '@/lib/backend-session';
 import { isEditorLocalProjectLink, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
+import { resolveProjectScope } from '@/lib/project-scope';
 import { readProjectCache } from '@/lib/project-cache';
 import { captureStageCover } from '@/lib/stage-cover';
 import { readActivityCovers, saveActivityCover } from '@/lib/activity-cover';
@@ -182,10 +183,10 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     userId: cloud.user?.id ?? null,
     ...(studioId ? { studioId } : {}),
     enabled: !!cloud.user && !cloud.user.is_anonymous,
-    statusScope: layout.id ?? 'local',
+    statusScope: resolveProjectScope(layout.id),
   });
   // C05：统一保存状态（本机/上传中/同步中/云端已保存/失败/冲突）。
-  const saveStatusState = useSaveStatus(layout.id ?? 'local');
+  const saveStatusState = useSaveStatus(resolveProjectScope(layout.id));
   const [inventory, setInventory] = useState<InventoryReport | null>(null);
   // 盘点展示口径：内置示例不计入个人归档计数；其余按副本性质分五态。
   const inventoryView = useMemo(() => {
@@ -472,7 +473,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     check();
     await assertCloudTransition(openingFrom);
     check();
-    await flushSourceScope(openingFrom.id ?? 'local');
+    await flushSourceScope(resolveProjectScope(openingFrom.id));
     check();
     await assertCloudTransition(layoutRef.current);
     check();
@@ -635,7 +636,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }
   async function saveBoundSceneQuiet(): Promise<void> {
     const currentLayout = layoutRef.current;
-    const scopeKey = currentLayout.id ?? 'local';
+    const scopeKey = resolveProjectScope(currentLayout.id);
     // C05：先报「同步中」并拿序号；保存期间的新编辑由指纹口径保持 dirty，旧回执不清空它们。
     const seq = startCloudSync(scopeKey);
     try {
@@ -815,7 +816,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     checkSwitch();
     await assertCloudTransition(current);
     checkSwitch();
-    await flushSourceScope(current.id ?? 'local');
+    await flushSourceScope(resolveProjectScope(current.id));
     checkSwitch();
     await assertCloudTransition(layoutRef.current);
     checkSwitch();
@@ -835,7 +836,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
       await assertCloudTransition(layoutRef.current);
       checkSwitch();
       if (layoutRef.current !== current) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
-      try { await copySourceScope(current.id ?? 'local', created.id); }
+      try { await copySourceScope(resolveProjectScope(current.id), created.id); }
       catch { sourceNotice = ' 资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
       // 2026-11-19：存为方案后，这段对话和地图规划跟着新项目走；本机草稿保留一份原记录。
       try { copyAssistantScope(projectSessionScope(current.id), projectSessionScope(created.id)); } catch { /* 会话复制失败不影响建项目 */ }
@@ -1026,8 +1027,8 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }, [accountOpen, cloud.user, section, sceneConnection, canvasCoverId]);
   // C05：待同步数跟会话 dirty 真值走；未绑定项目没有云端同步，状态清零不残留。
   useEffect(() => {
-    if (!bound || sceneConnection) { setPendingCount(layout.id ?? 'local', 0); return; }
-    setPendingCount(layout.id ?? 'local', cloud.dirty ? 1 : 0);
+    if (!bound || sceneConnection) { setPendingCount(resolveProjectScope(layout.id), 0); return; }
+    setPendingCount(resolveProjectScope(layout.id), cloud.dirty ? 1 : 0);
   }, [bound, sceneConnection, cloud.dirty, layout.id]);
   // C14：本机存量盘点（队列任务 + 当前活动资料图 + 户外规划记录）。只读，不删任何本机副本。
   useEffect(() => {
@@ -1035,7 +1036,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     let cancelled = false;
     void (async () => {
       let sources: StoredSource[] = [];
-      try { sources = await listStoredSources(layout.id ?? 'local'); } catch { sources = []; }
+      try { sources = await listStoredSources(resolveProjectScope(layout.id)); } catch { sources = []; }
       let outdoorRecords: ReturnType<typeof readOutdoorInventoryRecords> = [];
       try { outdoorRecords = readOutdoorInventoryRecords(window.localStorage); } catch { outdoorRecords = []; }
       const report = collectArchiveInventory({ archiveJobs: archive.jobs, sources, outdoorRecords });
@@ -1061,7 +1062,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   async function checkCurrentManifest(): Promise<void> {
     const current = layoutRef.current;
     let sources: StoredSource[] = [];
-    try { sources = await listStoredSources(current.id ?? 'local'); } catch { sources = []; }
+    try { sources = await listStoredSources(resolveProjectScope(current.id)); } catch { sources = []; }
     let scene: ReturnType<typeof layoutToBackendScene> | null = null;
     try { scene = layoutToBackendScene(current, { assetIdMap: cloudAssetIdMap() }); } catch { scene = null; }
     const archiveAssetIds: Record<string, string> = {};
@@ -1082,7 +1083,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
    */
   async function buildCompleteManifestFor(current: RoomLayout): Promise<ManifestBuildResult> {
     let sources: StoredSource[] = [];
-    try { sources = await listStoredSources(current.id ?? 'local'); } catch { sources = []; }
+    try { sources = await listStoredSources(resolveProjectScope(current.id)); } catch { sources = []; }
     let scene: Scene | null = null;
     try { scene = layoutToBackendScene(current, { assetIdMap: cloudAssetIdMap() }); } catch { scene = null; }
     const archiveAssetIds: Record<string, string> = {};
@@ -1284,7 +1285,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
   }
   function signOutFromMenu(): void {
     void run(async () => {
-      await flushSourceScope(layoutRef.current.id ?? 'local');
+      await flushSourceScope(resolveProjectScope(layoutRef.current.id));
       await controller.signOut();
       setProjects([]);
       setStudios([]);
@@ -1499,7 +1500,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
               checkSwitch();
               await assertCloudTransition(current);
               checkSwitch();
-              await flushSourceScope(current.id ?? 'local');
+              await flushSourceScope(resolveProjectScope(current.id));
               checkSwitch();
               await assertCloudTransition(layoutRef.current);
               checkSwitch();
@@ -1519,7 +1520,7 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
                 await assertCloudTransition(layoutRef.current);
                 checkSwitch();
                 if (layoutRef.current !== current) throw new Error('加载期间画布有新改动，当前草稿已保留。请核对后重新打开云端项目。');
-                try { await copySourceScope(current.id ?? 'local', created.id); }
+                try { await copySourceScope(resolveProjectScope(current.id), created.id); }
                 catch { sourceNotice = ' 资料未能复制到新项目；请回到原草稿核对，或重新选择来源图片。'; }
                 let nextScene = created.scene;
                 try { nextScene = (await controller.acquireLease(created.id)).scene; } catch { /* 建完仍可只读打开，不阻断创建回执 */ }
