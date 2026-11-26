@@ -1,4 +1,5 @@
 import { localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
+import { LEGACY_LOCAL_SCOPE } from '@/lib/project-scope';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AUTOSAVE_DEBOUNCE_MS, STORAGE_KEY } from '../lib/constants';
 import { notify } from '../lib/editor-notices';
@@ -184,7 +185,8 @@ export function useLayoutPersistence({
       if(saved)return;
       let copy=outgoing;try{copy=structuredClone(outgoing);}catch{/* Retain the immutable old reference as a last resort. */}
       const key=(interruptedRef.current.at(-1)?.key??0)+1;
-      const entry={key,scope:outgoing.id??'local',name:outgoing.name||'未命名活动',layout:copy};
+      // 旧 outgoing 草稿身份槽：只进内存只读草稿注册表，不进持久键；identity 仍随壳体退役整刀删（批8），此处仅常量化旧键字面值，不派生当前 projectId。
+      const entry={key,scope:outgoing.id??LEGACY_LOCAL_SCOPE,name:outgoing.name||'未命名活动',layout:copy};
       interruptedRef.current=[...interruptedRef.current,entry];
       retainReadonlyDraft(entry.scope,'layout',{status:'captured',value:copy});
       setInterruptedDrafts(interruptedRef.current.map(({key:entryKey,scope,name})=>({key:entryKey,scope,name})));
