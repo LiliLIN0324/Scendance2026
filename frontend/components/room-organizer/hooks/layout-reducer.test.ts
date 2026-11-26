@@ -205,22 +205,6 @@ describe('layoutReducer — bulk item operations', () => {
     expect(activeItems(state).every((i) => i.locked === false)).toBe(true);
   });
 
-  it('setInteriorWallColor paints only the matching interior wall (#122)', () => {
-    const floor = makeFloor({
-      interiorWalls: [
-        { id: 'w1', x1: 0, z1: 0, x2: 1, z2: 0 },
-        { id: 'w2', x1: 1, z1: 0, x2: 1, z2: 1 },
-      ],
-    });
-    const state = layoutReducer(
-      { layout: makeLayout({ floors: [floor] }), activeFloorIndex: 0 },
-      { type: 'setInteriorWallColor', id: 'w1', color: '#123456' }
-    );
-    const walls = state.layout.floors[0]!.interiorWalls!;
-    expect(walls.find((w) => w.id === 'w1')!.color).toBe('#123456');
-    expect(walls.find((w) => w.id === 'w2')!.color).toBeUndefined();
-  });
-
   it('bulkSetPositions never moves locked items (#115)', () => {
     const state = layoutReducer(
       stateWith([
@@ -465,7 +449,18 @@ describe('layoutReducer — entrance, frontage, sills (#204)', () => {
 
   it('carries the back wall’s painted colour across re-fits (#273)', () => {
     let state = layoutReducer(stateWith([], 1), { type: 'setEntrance', entrance: { width: 1.4, depth: 1.2 } });
-    state = layoutReducer(state, { type: 'setInteriorWallColor', id: 'entrance-back', color: '#abcdef' });
+    // A colour carried over from a saved layout is kept when the entrance is re-fit.
+    state = {
+      ...state,
+      layout: {
+        ...state.layout,
+        floors: state.layout.floors.map((floor, i) =>
+          i === 0
+            ? { ...floor, interiorWalls: floor.interiorWalls!.map((w) => (w.id === 'entrance-back' ? { ...w, color: '#abcdef' } : w)) }
+            : floor
+        ),
+      },
+    };
     state = layoutReducer(state, { type: 'setWidth', width: 10 });
     state = layoutReducer(state, { type: 'setEntrance', entrance: { width: 2, depth: 1.5 } });
     expect(entranceWall(state, 0)).toMatchObject({ color: '#abcdef', x1: -1, x2: 1 });
@@ -650,55 +645,6 @@ describe('layoutReducer — floor-scoped finishes', () => {
     expect(state.layout.floors[0]!.hiddenWalls).toEqual(['east']);
     state = layoutReducer(state, { type: 'toggleExteriorWall', wallId: 'east' });
     expect(state.layout.floors[0]!.hiddenWalls).toEqual([]);
-  });
-
-  it('addInteriorWall / removeInteriorWall / clearInteriorWalls', () => {
-    let state = stateWith([]);
-    state = layoutReducer(state, {
-      type: 'addInteriorWall',
-      wall: { id: 'w1', x1: 0, z1: 0, x2: 1, z2: 0 },
-    });
-    expect(state.layout.floors[0]!.interiorWalls).toHaveLength(1);
-    state = layoutReducer(state, {
-      type: 'addInteriorWall',
-      wall: { id: 'w2', x1: 0, z1: 0, x2: 0, z2: 1 },
-    });
-    state = layoutReducer(state, { type: 'removeInteriorWall', id: 'w1' });
-    expect(state.layout.floors[0]!.interiorWalls!.map((w) => w.id)).toEqual(['w2']);
-    state = layoutReducer(state, { type: 'clearInteriorWalls' });
-    expect(state.layout.floors[0]!.interiorWalls).toEqual([]);
-  });
-
-  it('addInteriorWalls appends a batch in one dispatch (single undo entry)', () => {
-    let state = stateWith([]);
-    state = layoutReducer(state, {
-      type: 'addInteriorWall',
-      wall: { id: 'w0', x1: 0, z1: 0, x2: 1, z2: 0 },
-    });
-    const before = state;
-    state = layoutReducer(state, {
-      type: 'addInteriorWalls',
-      walls: [
-        { id: 'w1', x1: 1, z1: 0, x2: 1, z2: 1 },
-        { id: 'w2', x1: 1, z1: 1, x2: 0, z2: 1 },
-        { id: 'w3', x1: 0, z1: 1, x2: 0, z2: 0 },
-      ],
-    });
-    // One dispatch added all three segments (plus the pre-existing one).
-    expect(state.layout.floors[0]!.interiorWalls!.map((w) => w.id)).toEqual([
-      'w0',
-      'w1',
-      'w2',
-      'w3',
-    ]);
-    // Producing a new state object (so history captures one step).
-    expect(state).not.toBe(before);
-  });
-
-  it('addInteriorWalls with an empty batch is a no-op (returns the same state)', () => {
-    const state = stateWith([]);
-    const next = layoutReducer(state, { type: 'addInteriorWalls', walls: [] });
-    expect(next).toBe(state);
   });
 });
 

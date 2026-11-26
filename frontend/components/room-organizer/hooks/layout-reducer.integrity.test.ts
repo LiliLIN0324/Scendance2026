@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { MAX_ITEM_DIMENSION } from '../lib/constants';
 import { parseStoredLayout } from '../lib/schema';
-import { ENTRANCE_DOOR_ID, ENTRANCE_WALL_ID } from '../lib/street';
+import { ENTRANCE_DOOR_ID } from '../lib/street';
 import { layoutReducer, type LayoutAction, type LayoutState } from './layout-reducer';
 import type { FloorLayout, FurnitureItem, RoomLayout, RoomZone } from '../lib/types';
 
@@ -63,8 +63,6 @@ describe('layoutReducer — no-op edits keep state identity (#416)', () => {
     ['setWallPattern with the active pattern', { type: 'setWallPattern', pattern: 'brick' }],
     ['setWallColor with the same colour', { type: 'setWallColor', wall: 'north', color: '#222222' }],
     ['setWallColor resetting an unset wall', { type: 'setWallColor', wall: 'south', color: null }],
-    ['setInteriorWallColor with an unknown id', { type: 'setInteriorWallColor', id: 'nope', color: '#000000' }],
-    ['setInteriorWallColor with the same colour', { type: 'setInteriorWallColor', id: 'w1', color: '#333333' }],
     ['setFloorPlan clearing no image', { type: 'setFloorPlan', image: null }],
     ['setFloorPlanOpacity with the same value', { type: 'setFloorPlanOpacity', opacity: 0.5 }],
     ['setFloorPlanFitMode with the same mode', { type: 'setFloorPlanFitMode', mode: 'stretch' }],
@@ -80,7 +78,6 @@ describe('layoutReducer — no-op edits keep state identity (#416)', () => {
     ['moveItem to where the item already is', { type: 'moveItem', id: 'chair', x: 1, z: 1 }],
     ['bulkSetPositions to where the items already are', { type: 'bulkSetPositions', positions: new Map([['chair', { x: 1, z: 1 }]]) }],
     ['rotateSelection of locked items only', { type: 'rotateSelection', ids: new Set(['sofa']), radians: Math.PI / 2 }],
-    ['removeInteriorWall with an unknown id', { type: 'removeInteriorWall', id: 'nope' }],
     ['renameFloor with the same name', { type: 'renameFloor', index: 0, name: 'F0' }],
     ['renameFloor with an out-of-range index', { type: 'renameFloor', index: 7, name: 'X' }],
     ['removeFloor with an out-of-range index', { type: 'removeFloor', index: 7 }],
@@ -92,12 +89,11 @@ describe('layoutReducer — no-op edits keep state identity (#416)', () => {
     expect(layoutReducer(state, action)).toBe(state);
   });
 
-  it('setLockAll, clearItems and clearInteriorWalls are no-ops when there is nothing to change', () => {
+  it('setLockAll and clearItems are no-ops when there is nothing to change', () => {
     const locked = stateWith([makeItem({ id: 'a', locked: true })]);
     expect(layoutReducer(locked, { type: 'setLockAll', locked: true })).toBe(locked);
     const empty = stateWith([]);
     expect(layoutReducer(empty, { type: 'clearItems' })).toBe(empty);
-    expect(layoutReducer(empty, { type: 'clearInteriorWalls' })).toBe(empty);
   });
 
   it('setLockAll keeps the identity of items already in that state', () => {
@@ -152,17 +148,6 @@ describe('layoutReducer — values the schema rejects never reach the save (#418
     ['bulkSetPositions NaN', { type: 'bulkSetPositions', positions: new Map([['ap', { x: 0, z: Number.NaN }]]) }],
     ['rotateSelection NaN', { type: 'rotateSelection', ids: new Set(['ap']), radians: Number.NaN }],
     ['setFloorPlanOpacity NaN', { type: 'setFloorPlanOpacity', opacity: Number.NaN }],
-    ['addInteriorWall NaN', { type: 'addInteriorWall', wall: { id: 'w', x1: 0, z1: 0, x2: Number.NaN, z2: 1 } }],
-    [
-      'addInteriorWalls with one bad wall',
-      {
-        type: 'addInteriorWalls',
-        walls: [
-          { id: 'w', x1: 0, z1: 0, x2: 1, z2: 1 },
-          { id: 'v', x1: 0, z1: Number.POSITIVE_INFINITY, x2: 1, z2: 1 },
-        ],
-      },
-    ],
   ];
 
   it.each(refused)('%s is refused with the same state', (_label, action) => {
@@ -191,20 +176,6 @@ describe('layoutReducer — the porch wall and door belong to the entrance (#357
       type: 'setEntrance',
       entrance: { width: 1.4, depth: 1.2 },
     });
-  const porchWall = (state: LayoutState) => state.layout.floors[0]!.interiorWalls?.find((w) => w.id === ENTRANCE_WALL_ID);
-
-  it('removeInteriorWall refuses the back wall', () => {
-    const state = withEntrance();
-    expect(layoutReducer(state, { type: 'removeInteriorWall', id: ENTRANCE_WALL_ID })).toBe(state);
-  });
-
-  it('clearInteriorWalls keeps the back wall and is a no-op when it is the only wall', () => {
-    const state = withEntrance();
-    expect(layoutReducer(state, { type: 'clearInteriorWalls' })).toBe(state);
-    const drawn = layoutReducer(state, { type: 'addInteriorWall', wall: { id: 'w1', x1: 0, z1: 0, x2: 2, z2: 0 } });
-    const cleared = layoutReducer(drawn, { type: 'clearInteriorWalls' });
-    expect(cleared.layout.floors[0]!.interiorWalls).toEqual([porchWall(state)]);
-  });
 
   it('the door stays on the porch through every placement channel, locked or not', () => {
     let state = reduce(withEntrance(), { type: 'setLockAll', locked: false });

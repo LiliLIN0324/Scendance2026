@@ -7,7 +7,6 @@ import { useKeyboardShortcuts, type KeyboardShortcutHandlers } from './use-keybo
 function makeHandlers(): { [K in keyof KeyboardShortcutHandlers]: ReturnType<typeof vi.fn> } {
   return {
     removeItem: vi.fn(),
-    removeInteriorWall: vi.fn(),
     toggleExteriorWall: vi.fn(),
     duplicateItem: vi.fn(),
     copySelection: vi.fn(() => true),

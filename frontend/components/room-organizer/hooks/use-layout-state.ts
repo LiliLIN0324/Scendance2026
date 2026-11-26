@@ -22,7 +22,6 @@ import type {
   FloorPlanFitMode,
   Frontage,
   FurnitureItem,
-  InteriorWall,
   NeighbourFlag,
   RoofStyle,
   RoomLayout,
@@ -54,7 +53,6 @@ export interface LayoutActions {
   /** Active floor's storey height in metres; `null` restores the default 3 m (#202). */
   setStoreyHeight(height: number | null): void;
   setWallColor(wall: WallId, color: string | null): void;
-  setInteriorWallColor(id: string, color: string): void;
   setFloorPlan(image: string | null): void;
   setFloorPlanOpacity(opacity: number): void;
   setFloorPlanFitMode(mode: FloorPlanFitMode): void;
@@ -92,10 +90,6 @@ export interface LayoutActions {
   replaceItems(items: FurnitureItem[]): void;
   addItems(items: FurnitureItem[]): void;
   bulkSetPositions(positions: ReadonlyMap<string, { x: number; z: number }>): void;
-  addInteriorWall(wall: InteriorWall): void;
-  addInteriorWalls(walls: readonly InteriorWall[]): void;
-  removeInteriorWall(id: string): void;
-  clearInteriorWalls(): void;
   toggleExteriorWall(wallId: WallId): void;
   rotateSelection(ids: ReadonlySet<string>, radians: number): void;
   /** Persistent groups (#154). `setGroup` returns the new group's id. */

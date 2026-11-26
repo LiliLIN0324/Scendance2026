@@ -7,7 +7,6 @@ import { remapGroupIds } from '../lib/groups';
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from '../lib/initial-layout';
 import { isOpening, isWallMounted, settleWallMountedItem, snapOpeningToWall, type WallGap } from '../lib/opening-snap';
 import {
-  MAX_INTERIOR_WALLS_PER_FLOOR,
   MAX_ITEMS_PER_FLOOR,
   MAX_NAME_LENGTH,
   capText,
@@ -31,7 +30,7 @@ import {
   sameEntrance,
   streetLevel,
 } from '../lib/street';
-import { layoutGeometryIsAcceptable, isEvidenceProtectedWall, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
+import { layoutGeometryIsAcceptable, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
 import { MAX_ZONES, clampZoneRect, isValidZoneType, sameZone } from '../lib/zones';
 import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
 import { sanitizePlanEditor } from '../../../../supabase/functions/_shared/plan-editor';
@@ -74,7 +73,6 @@ export type LayoutAction =
   | { type: 'setWallPattern'; pattern: WallPattern }
   | { type: 'setStoreyHeight'; height: number | null }
   | { type: 'setWallColor'; wall: WallId; color: string | null }
-  | { type: 'setInteriorWallColor'; id: string; color: string }
   // floor-scoped items — target the active floor
   | { type: 'addCatalogItem'; catalogItem: CatalogItem; id: string; position?: { x: number; z: number } }
   | { type: 'removeItem'; id: string }
@@ -92,11 +90,7 @@ export type LayoutAction =
   | { type: 'replaceItems'; items: FurnitureItem[] }
   | { type: 'addItems'; items: FurnitureItem[] }
   | { type: 'bulkSetPositions'; positions: ReadonlyMap<string, { x: number; z: number }> }
-  | { type: 'addInteriorWall'; wall: InteriorWall }
-  | { type: 'addInteriorWalls'; walls: readonly InteriorWall[] }
-  | { type: 'removeInteriorWall'; id: string }
   | { type: 'toggleExteriorWall'; wallId: WallId }
-  | { type: 'clearInteriorWalls' }
   | { type: 'rotateSelection'; ids: ReadonlySet<string>; radians: number }
   | { type: 'setLockAll'; locked: boolean }
   | { type: 'clearItems' }
@@ -174,8 +168,8 @@ const DOOR_REMOVAL_ACTIONS: ReadonlySet<LayoutAction['type']> = new Set(['remove
 const STRUCTURAL_ACTIONS = new Set<LayoutAction['type']>([
   'addCatalogItem', 'updateItem', 'duplicateItem', 'rotateItem', 'moveItem', 'resizeItem',
   'setRotation', 'replaceItems', 'addItems', 'bulkSetPositions', 'rotateSelection',
-  'setWidth', 'setHeight', 'setStoreyHeight', 'addInteriorWall', 'addInteriorWalls',
-  'removeItem', 'removeInteriorWall', 'clearInteriorWalls', 'setSillHeight', 'clearItems',
+  'setWidth', 'setHeight', 'setStoreyHeight',
+  'removeItem', 'setSillHeight', 'clearItems',
 ]);
 export function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
   const next = reduceLayoutWithGeometry(state, action);
@@ -210,9 +204,6 @@ function reduceLayoutWithGeometry(state: LayoutState, action: LayoutAction): Lay
     const item=state.layout.floors[state.activeFloorIndex]?.items.find(value=>value.id===action.sourceId);
     if(item?.structuralOpeningId||item?.structuralColumnId)return state;
   }
-  if(state.layout.backendSceneV2 && action.type==='removeInteriorWall' && isEvidenceProtectedWall(state.layout,action.id))return state;
-  if(state.layout.backendSceneV2 && action.type==='clearInteriorWalls' &&
-    (state.layout.floors[state.activeFloorIndex]?.interiorWalls??[]).some(wall=>isEvidenceProtectedWall(state.layout,wall.id)))return state;
   // A measured outline cannot be resized by the legacy rectangle sliders.
   if (state.layout.backendSceneV2 && ['setWidth', 'setHeight', 'setStoreyHeight', 'addFloor', 'duplicateFloor', 'removeFloor', 'reorderFloor'].includes(action.type)) return state;
   let next = reduceLayout(state, action);
@@ -371,15 +362,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         if (action.color === null) delete next[action.wall];
         else next[action.wall] = action.color;
         return { ...floor, wallColors: next };
-      });
-    case 'setInteriorWallColor':
-      return withActiveFloor(state, (floor) => {
-        const walls = floor.interiorWalls;
-        if (!walls?.some((wall) => wall.id === action.id && wall.color !== action.color)) return floor;
-        return {
-          ...floor,
-          interiorWalls: walls.map((wall) => (wall.id === action.id ? { ...wall, color: action.color } : wall)),
-        };
       });
 
     // -- floor plan ---------------------------------------------------------
@@ -753,41 +735,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         return items.length === floor.items.length ? floor : { ...floor, items };
       });
 
-    // -- interior walls -----------------------------------------------------
-    // Endpoints must be finite, or the save fails validation on reload (#418).
-    case 'addInteriorWall': {
-      if (!isFiniteWall(action.wall)) return state;
-      const wall = clampWall(action.wall);
-      if (!wall) return state;
-      return withActiveFloor(state, (floor) =>
-        hasRoomFor(floor.interiorWalls, 1, MAX_INTERIOR_WALLS_PER_FLOOR, ENTRANCE_WALL_ID)
-          ? { ...floor, interiorWalls: [...(floor.interiorWalls ?? []), wall] }
-          : floor
-      );
-    }
-
-    // Batch insert — a room-shape stamp adds every segment in one dispatch so
-    // the whole stamp is a single history/undo entry rather than N of them.
-    case 'addInteriorWalls': {
-      if (action.walls.length === 0 || !action.walls.every(isFiniteWall)) return state;
-      const walls = action.walls.map(clampWall).filter((wall): wall is InteriorWall => wall !== null);
-      if (walls.length === 0) return state;
-      return withActiveFloor(state, (floor) =>
-        hasRoomFor(floor.interiorWalls, walls.length, MAX_INTERIOR_WALLS_PER_FLOOR, ENTRANCE_WALL_ID)
-          ? { ...floor, interiorWalls: [...(floor.interiorWalls ?? []), ...walls] }
-          : floor
-      );
-    }
-
-    // The porch's back wall belongs to the recess: it goes when the entrance
-    // does, never on its own (#357).
-    case 'removeInteriorWall':
-      return withActiveFloor(state, (floor) => {
-        const walls = floor.interiorWalls;
-        if (action.id === ENTRANCE_WALL_ID || !walls?.some((wall) => wall.id === action.id)) return floor;
-        return { ...floor, interiorWalls: walls.filter((wall) => wall.id !== action.id) };
-      });
-
     case 'toggleExteriorWall':
       return withActiveFloor(state, (floor) => {
         const hidden = floor.hiddenWalls ?? [];
@@ -799,13 +746,6 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
             : [...hidden, action.wallId],
         };
     });
-
-    case 'clearInteriorWalls':
-      return withActiveFloor(state, (floor) => {
-        const walls = floor.interiorWalls ?? [];
-        const kept = walls.filter((wall) => wall.id === ENTRANCE_WALL_ID);
-        return kept.length === walls.length ? floor : { ...floor, interiorWalls: kept };
-      });
 
     // -- floor / building operations ----------------------------------------
     case 'setActiveFloorIndex': {
@@ -1112,10 +1052,6 @@ function changesItem(item: FurnitureItem, fields: ItemPatch): boolean {
   return false;
 }
 
-function isFiniteWall(wall: InteriorWall): boolean {
-  return [wall.x1, wall.z1, wall.x2, wall.z2].every(Number.isFinite);
-}
-
 /*
  * The schema's caps, applied on the way in so the reducer's output always
  * parses back unchanged: a refused or repaired main save would cost the
@@ -1130,17 +1066,6 @@ function clampPosition(position: { x: number; z: number }): { x: number; z: numb
   const x = clampCoordinate(position.x);
   const z = clampCoordinate(position.z);
   return x === position.x && z === position.z ? position : { x, z };
-}
-
-/** Ends clamped like positions; null when that leaves no wall at all. */
-function clampWall(wall: InteriorWall): InteriorWall | null {
-  const x1 = clampCoordinate(wall.x1);
-  const z1 = clampCoordinate(wall.z1);
-  const x2 = clampCoordinate(wall.x2);
-  const z2 = clampCoordinate(wall.z2);
-  if (x1 === x2 && z1 === z2) return null;
-  const same = x1 === wall.x1 && z1 === wall.z1 && x2 === wall.x2 && z2 === wall.z2;
-  return same ? wall : { ...wall, x1, z1, x2, z2 };
 }
 
 /** An incoming item (paste, set, Surprise) with its position and name within the caps. */

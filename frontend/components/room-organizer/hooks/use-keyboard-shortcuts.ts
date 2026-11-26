@@ -3,7 +3,6 @@ import type { FurnitureItem } from '../lib/types';
 
 export interface KeyboardShortcutHandlers {
   removeItem(id: string): void;
-  removeInteriorWall(id: string): void;
   toggleExteriorWall(id: string): void;
   duplicateItem(id: string): void;
   /** Copy the selection to the furniture clipboard; true if anything was copied. */

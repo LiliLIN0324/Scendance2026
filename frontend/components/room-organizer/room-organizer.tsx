@@ -144,7 +144,7 @@ import { SceneGeoDots } from './panels/scene-geo-dots';
 import { scanStateBridge } from './lib/scan-state-bridge';
 import { buildingHeight, floorElevation, storeyHeight } from './lib/storeys';
 import { entrancePlanOutline } from './lib/street';
-import { canApplyLayoutGeometry, structuralItemCollides, materialCount, isEvidenceProtectedWall } from './lib/structural-layout';
+import { canApplyLayoutGeometry, structuralItemCollides, materialCount } from './lib/structural-layout';
 import { setPersonFollowTarget } from './three/person-follow';
 import { WORKBENCH_MODE_DEFAULT, demoteLegacyMode, type WorkbenchMode } from './lib/workbench-mode';
 import { ActivityTaskWorkspace } from './panels/activity-task-workspace';
@@ -3249,13 +3249,6 @@ useEffect(() => {
       },
       toggleSidebar: () => toggleAgent('material'),
       setGizmoMode: (next: GizmoMode) => setGizmoMode(next),
-      removeInteriorWall: (id: string) => {
-        if (isEvidenceProtectedWall(layoutStore.getState().layout, id)) {
-          notify('墙体有关联图纸或已确认依据，请先在结构面板重新核对。', 'info');
-          return;
-        }
-        actions.removeInteriorWall(id);
-      },
       // Keep the selection (and the auto-opened paint panel) after hiding an
       // exterior wall so the Wall Visibility toggles stay reachable to restore it.
       toggleExteriorWall: (id: string) => {
