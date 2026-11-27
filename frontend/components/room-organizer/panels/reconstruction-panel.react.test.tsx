@@ -15,7 +15,7 @@ import {makeItem} from '../lib/__testfixtures__/fixtures';
 import type { RoomLayout } from '../lib/types';
 vi.mock('@/lib/source-storage',async importOriginal=>({...await importOriginal<object>(),readSourceForm:vi.fn().mockResolvedValue(undefined),storeSourceForm:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('@/lib/material-checkin-storage',()=>({readMaterialCheckins:vi.fn().mockResolvedValue(undefined)}));
-vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:new Set<string>(),selectOnly:vi.fn()})}));
+vi.mock('../contexts',()=>({useSelection:()=>({allSelectedIds:new Set<string>(),selectOnly:vi.fn()}),useRoomEditorOptional:()=>null}));
 /** 分区后「图纸与照片」和「场地重建」各放一块；测试里两块同时挂载，覆盖跨区交互（改尺寸后直接生成、场地编辑时看差异提示）。 */
 type PanelProps = Parameters<typeof useReconstructionPanel>[0];
 function Panel(props:PanelProps):JSX.Element{const zones=useReconstructionPanel(props);return <>{zones.site}{zones.rebuild}{zones.notice}</>;}

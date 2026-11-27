@@ -5,6 +5,8 @@ import { createLayoutStore } from '../hooks/use-layout-store';
 import { INITIAL_LAYOUT } from './initial-layout';
 import { blankHandoff, handoffBasis, effectiveHandoffStatus } from './scene-handoff';
 import { addDesign, switchDesign, saveDesignSnapshot, removeDesignVariant, materialLayers, batchLayerEdit } from './scene-layers';
+import { summarizeVariant } from './variant-summary';
+import type { VariantSaveMeta } from './types';
 import { parseStoredLayout } from './schema';
 import { makeItem } from './__testfixtures__/fixtures';
 
@@ -193,5 +195,57 @@ describe('scene layers', () => {
     const snapshot = saved.designBook!.variants[saved.designBook!.variants.length - 1]!;
     expect(snapshot.layout.eventProfile).toBeUndefined();
     expect((saved as { eventProfile?: unknown }).eventProfile).toEqual({ schemaVersion: 1, revision: 0 });
+  });
+
+  it('attaches save metadata (refs, scan, summary) to the new addDesign variant only', () => {
+    const base = seededLayout();
+    const meta: VariantSaveMeta = {
+      operationsRef: '11111111-1111-4111-8111-111111111111',
+      planRef: '22222222-2222-4222-8222-222222222222',
+      scan: { assetId: 'scan-a', name: '场地扫描' },
+      summary: summarizeVariant(base),
+    };
+    const added = addDesign(base, base, meta);
+    const original = added.designBook!.variants[0]!;
+    const saved = added.designBook!.variants[1]!;
+    expect(saved.operationsRef).toBe(meta.operationsRef);
+    expect(saved.planRef).toBe(meta.planRef);
+    expect(saved.scan).toEqual(meta.scan);
+    expect(saved.summary).toEqual(meta.summary);
+    expect(original.operationsRef).toBeUndefined();
+    expect(original.planRef).toBeUndefined();
+    expect(original.scan).toBeUndefined();
+    expect(original.summary).toBeUndefined();
+  });
+
+  it('keeps legacy behavior unchanged when no meta is passed', () => {
+    const added = addDesign(seededLayout(), seededLayout());
+    const saved = added.designBook!.variants[1]!;
+    expect(saved.operationsRef).toBeUndefined();
+    expect(saved.planRef).toBeUndefined();
+    expect(saved.scan).toBeUndefined();
+    expect(saved.summary).toBeUndefined();
+  });
+
+  it('writes only the provided meta fields and omits the rest', () => {
+    const added = addDesign(seededLayout(), seededLayout(), { planRef: '33333333-3333-4333-8333-333333333333' });
+    const saved = added.designBook!.variants[1]!;
+    expect(saved.planRef).toBe('33333333-3333-4333-8333-333333333333');
+    expect(saved.operationsRef).toBeUndefined();
+    expect(saved.scan).toBeUndefined();
+    expect(saved.summary).toBeUndefined();
+  });
+
+  it('attaches save metadata to a manual snapshot variant', () => {
+    const base = structuredClone(INITIAL_LAYOUT);
+    const meta: VariantSaveMeta = {
+      operationsRef: '44444444-4444-4444-8444-444444444444',
+      summary: summarizeVariant(base),
+    };
+    const saved = saveDesignSnapshot(base, { name: '过程态', savedAt: '2026-11-27T00:00:00.000Z' }, meta);
+    const snapshot = saved.designBook!.variants[saved.designBook!.variants.length - 1]!;
+    expect(snapshot.operationsRef).toBe(meta.operationsRef);
+    expect(snapshot.planRef).toBeUndefined();
+    expect(snapshot.summary).toEqual(meta.summary);
   });
 });

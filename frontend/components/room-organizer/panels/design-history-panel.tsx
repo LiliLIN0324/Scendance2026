@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { MAX_DESIGNS, removeDesignVariant, saveDesignSnapshot, switchDesign } from '../lib/scene-layers';
+import { buildVariantSaveMeta } from '../lib/variant-summary';
 import type { DesignVariant, RoomLayout } from '../lib/types';
+import { useRoomEditorOptional } from '../contexts';
 import './design-history-panel.css';
 
 export interface DesignHistoryPanelProps {
@@ -26,6 +28,7 @@ function variantKind(variant: DesignVariant): string {
 
 /** 本机方案过程态存档：把当前整包布局另存、载入或移除。不跨设备、不替业务落盘。 */
 export function DesignHistoryPanel({ layout, onApply, disabled = false }: DesignHistoryPanelProps): JSX.Element {
+  const { outdoorPlan } = useRoomEditorOptional() ?? {};
   const book = layout.designBook;
   const variants = book?.variants ?? [];
   const activeId = book?.activeId;
@@ -38,7 +41,7 @@ export function DesignHistoryPanel({ layout, onApply, disabled = false }: Design
     setError('');
     if (disabled) return;
     try {
-      const next = saveDesignSnapshot(layout, { name, note });
+      const next = saveDesignSnapshot(layout, { name, note }, buildVariantSaveMeta(layout, outdoorPlan));
       onApply(next);
       setName('');
       setNote('');

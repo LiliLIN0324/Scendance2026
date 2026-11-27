@@ -1,4 +1,5 @@
-import type { RoomLayout, VariantSummary } from './types';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { RoomLayout, VariantSaveMeta, VariantSummary } from './types';
 
 /**
  * 椅/桌分类口径与 `scene-layers.ts` 的 `materialLayers` 保持同一组正则，
@@ -49,4 +50,21 @@ export function summarizeVariant(layout: RoomLayout): VariantSummary {
   };
   if (headcount !== undefined) summary.headcount = headcount;
   return summary;
+}
+
+/**
+ * 组装保存变体时挂接的元数据（refs + 扫描身份 + 冻结摘要）。
+ * `plan` 为空（legacy 草稿无绑定 plan 记录）时返回 `undefined`：调用方不传 meta，
+ * 沿用旧整包内嵌副本兼容，不挂悬空 ref，也不另造变体专属侧车桶。
+ */
+export function buildVariantSaveMeta(
+  layout: RoomLayout,
+  plan: SitePlanData | null | undefined,
+): VariantSaveMeta | undefined {
+  if (!plan) return undefined;
+  const meta: VariantSaveMeta = { summary: summarizeVariant(layout) };
+  if (plan.operationsRef) meta.operationsRef = plan.operationsRef;
+  if (plan.planRef) meta.planRef = plan.planRef;
+  if (plan.scan) meta.scan = plan.scan;
+  return meta;
 }

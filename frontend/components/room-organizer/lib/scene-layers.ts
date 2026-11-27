@@ -1,5 +1,5 @@
 import { preserveCurrentActivity, restoreDesignActivity, syncDesignWorkOrders } from '../../../lib/production-plan';
-import type { FurnitureItem, RoomLayout } from './types';
+import type { DesignVariant, FurnitureItem, RoomLayout, VariantSaveMeta } from './types';
 
 export const MAX_DESIGNS = 20;
 export function designSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook'> {
@@ -7,7 +7,17 @@ export function designSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook
   return snapshot;
 }
 
-export function addDesign(base: RoomLayout, candidate: RoomLayout): RoomLayout {
+/** 把保存元数据收敛成只含已定义键的变体片段；未传字段不写入，避免挂悬空 ref 或可选键带 undefined。 */
+function variantMeta(meta?: VariantSaveMeta): Partial<DesignVariant> {
+  return {
+    ...(meta?.operationsRef ? { operationsRef: meta.operationsRef } : {}),
+    ...(meta?.planRef ? { planRef: meta.planRef } : {}),
+    ...(meta?.scan ? { scan: meta.scan } : {}),
+    ...(meta?.summary ? { summary: meta.summary } : {}),
+  };
+}
+
+export function addDesign(base: RoomLayout, candidate: RoomLayout, meta?: VariantSaveMeta): RoomLayout {
   base = syncDesignWorkOrders(base);
   candidate = preserveCurrentActivity(base, candidate);
   const book = base.designBook ?? { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: designSnapshot(base) }] };
@@ -16,7 +26,7 @@ export function addDesign(base: RoomLayout, candidate: RoomLayout): RoomLayout {
   const id = crypto.randomUUID();
   let letter = 0;
   while (variants.some(v => v.name === `AI 方案 ${String.fromCharCode(65 + letter)}`)) letter++;
-  return { ...designSnapshot(candidate), designBook: { activeId: id, variants: [...variants, { id, name: `AI 方案 ${String.fromCharCode(65 + letter)}`, layout: designSnapshot(candidate) }] } };
+  return { ...designSnapshot(candidate), designBook: { activeId: id, variants: [...variants, { id, name: `AI 方案 ${String.fromCharCode(65 + letter)}`, layout: designSnapshot(candidate), ...variantMeta(meta) }] } };
 }
 
 export function switchDesign(base: RoomLayout, id: string): RoomLayout {
@@ -36,7 +46,7 @@ function variantSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook' | 'e
 }
 
 /** 把当前整包布局另存为一个手动过程态快照，不切换当前方案。 */
-export function saveDesignSnapshot(base: RoomLayout, input: { name: string; note?: string; savedAt?: string }): RoomLayout {
+export function saveDesignSnapshot(base: RoomLayout, input: { name: string; note?: string; savedAt?: string }, meta?: VariantSaveMeta): RoomLayout {
   base = syncDesignWorkOrders(base);
   const book = base.designBook ?? { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: variantSnapshot(base) }] };
   if (book.variants.length >= MAX_DESIGNS) throw new Error('本机已保留 20 个方案，请先移除不再需要的过程态。');
@@ -50,6 +60,7 @@ export function saveDesignSnapshot(base: RoomLayout, input: { name: string; note
     origin: 'manual',
     savedAt: input.savedAt ?? new Date().toISOString(),
     ...(note ? { note } : {}),
+    ...variantMeta(meta),
   }] } };
 }
 

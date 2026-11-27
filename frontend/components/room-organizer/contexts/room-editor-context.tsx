@@ -67,6 +67,11 @@ export function useRoomEditor(): RoomEditorContextValue {
   return ctx;
 }
 
+/** 面板在缺少 RoomEditorProvider 的测试壳/独立挂载下取用 context；返回 null 时按 legacy 草稿口径回落。 */
+export function useRoomEditorOptional(): RoomEditorContextValue | null {
+  return useContext(RoomEditorContext);
+}
+
 export interface RoomEditorProviderProps {
   value: RoomEditorContextValue;
   children: ReactNode;

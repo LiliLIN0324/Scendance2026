@@ -16,6 +16,7 @@ import { getAgentSupervision, useAgentSupervision } from '../lib/agent-supervisi
 import { layoutActionRisk, lockedLayoutChange } from '../lib/agent-action-risk';
 import { ringFitsFootprint, zoneArea, zoneCentroid, zoneContains } from '../lib/zones';
 import { addDesign } from '../lib/scene-layers';
+import { buildVariantSaveMeta } from '../lib/variant-summary';
 import { AgentSupervisionPicker } from './agent-supervision-picker';
 
 /**
@@ -691,7 +692,7 @@ function layoutMemoryIsBlank(memory: BriefMemory): boolean {
 }
 
 export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy', isSessionCurrent, confirmVenueSource, callbacks, onVenueIOChange, onPreview, onApply, onApplyResearchArea, onApplyZoneRects, onBriefMemoryChange, onDialogueTurnStart, onDialogueIncompleteChange, onDialogueHistoryReview, assertSessionWrite, zoneDraftRevision = 0, getPlanAnnotationSnapshot, getUserRouteProvenance, handoffExportRequest = 0, children }: { pendingCandidates?:PendingCandidateAccess|undefined; sessionScope?: string; isSessionCurrent?: (() => boolean) | undefined; confirmVenueSource?: ((scope: string) => Promise<{status:'observed';scope:string;digest:string}|{status:'unknown'}>) | undefined; callbacks: LayoutAgentCallbacks; onVenueIOChange?(value: VenueIO): void; onPreview(candidate: RoomLayout | null): void; onApply(next: RoomLayout, options?: { expectedBase?: RoomLayout; preserveProvenance?: boolean; expectedFloor?: FloorSessionToken }): void; onApplyResearchArea?(area: NonNullable<RoomLayout['researchArea']>): void; onBriefMemoryChange?(memory: BriefMemory,sessionId:string|null): void; onDialogueTurnStart?: (()=>()=>void)|undefined; onDialogueIncompleteChange?: ((sessionId:string|null,incomplete:boolean)=>void)|undefined; onDialogueHistoryReview?: ((sessionId:string)=>boolean)|undefined; assertSessionWrite?: (() => void) | undefined; zoneDraftRevision?: number; getPlanAnnotationSnapshot?: (()=>{draft:LayoutPlanDraft|null;revision:number}) | undefined; getUserRouteProvenance?: ((annotationId:string)=>UserRouteProvenance|null) | undefined; /** 「回好自动落区」：把提议的 zoneType 列表直接落到 2D 草案，返回拼好的中文标签串（如「签到区、休息区」）；null = 没接上。 */ onApplyZoneRects?(zones: readonly ZoneSemanticType[]): string | null; /** 分享菜单「导出交接」递增此值，打开既有确认卡，不切执行模式。 */ handoffExportRequest?: number; children: ReactNode }): JSX.Element {
-  const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds } = useRoomEditor();
+  const { layout, activeFloor, activeFloorIndex, actions, view, setView, collidingIds, outdoorPlan } = useRoomEditor();
   const studio = useStudioAgent();
   const venueFacts = useVenueFactTracker(layoutStore);
   const sessionCurrentRef = useRef(isSessionCurrent); sessionCurrentRef.current = isSessionCurrent;
@@ -2721,7 +2722,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const risk=layoutActionRisk(currentLayout,final);
     if(automaticConfirmation.current&&gateAction(getAgentSupervision(),risk).required)return;
     pushLocalLayoutStep('confirm', 'running');
-    try { onApply(automaticConfirmation.current&&risk.kind==='destructive'?addDesign(currentLayout,final):final, { expectedBase, preserveProvenance: true, expectedFloor:floor }); }
+    try { onApply(automaticConfirmation.current&&risk.kind==='destructive'?addDesign(currentLayout,final,buildVariantSaveMeta(final,outdoorPlan)):final, { expectedBase, preserveProvenance: true, expectedFloor:floor }); }
     catch (error) {
       const raw = error instanceof Error ? error.message : '这版放不下，先挪一下场地或物料再重出一版。';
       pushLocalLayoutStep('confirm', 'error', /包围盒重叠|件物料存在冲突/.test(raw) ? '椅子和圆桌叠在一起' : '这版没写上');

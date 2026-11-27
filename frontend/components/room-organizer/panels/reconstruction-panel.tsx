@@ -18,10 +18,11 @@ import { FloorPlanRuler, type RulerConfirmation } from './floor-plan-ruler';
 import { readEditableVenue, previewVenueEdit } from '@/lib/venue-edit';
 import { canonical, sceneV2Schema } from '../../../../supabase/functions/_shared/domain';
 import { reconstructionSafetyChecklist } from '../../../../supabase/functions/_shared/reconstruction-safety';
-import { useSelection } from '../contexts';
+import { useRoomEditorOptional, useSelection } from '../contexts';
 import { backendSceneToLayout, layoutToBackendScene } from '../lib/backend-adapter';
 import { mergeProposalPresentation, type CreativeBrief } from '../lib/creative-brief';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
+import { buildVariantSaveMeta } from '../lib/variant-summary';
 import { ensureGlbAsset } from '../three/glb-assets';
 import type { VenuePhoto } from './venue-photos-panel';
 import type { RoomLayout } from '../lib/types';
@@ -238,6 +239,7 @@ function ReferenceImageReview({scene,layout,images,registration,onChange,onConfi
 export interface ReconstructionZones { site:JSX.Element; rebuild:JSX.Element; notice:JSX.Element|null }
 export function useReconstructionPanel({controller,layout,getCurrentLayout,sourceCoordinator,onDrawingRecheckReader,onApply,onPreview,images,updateImage,brief,sourceWriteGuard,openReferenceRequest=0,autoGenerateRequest=0,sourcesRestoring=false,onAddReferenceImages,onBackToChat}:Props):ReconstructionZones {
   const cloud=useBackendSession(controller),selection=useSelection();
+  const { outdoorPlan }=useRoomEditorOptional()??{};
   const scope=resolveProjectScope(layout.id);
   const drawingWriter=useRef<ReturnType<ReturnType<typeof createSourceEditorCoordinator>['register']>|null>(null);
   useLayoutEffect(()=>{
@@ -598,7 +600,7 @@ export function useReconstructionPanel({controller,layout,getCurrentLayout,sourc
       const after=controller.getSnapshot();
       if(!result.acceptedLocally||after.lease?.sessionId!==lease?.sessionId||after.lease?.generation!==lease?.generation)throw new Error('应用期间本地有新修改，已保留草稿；请核对云端新版本。');
       const nextLayout=mergeProposalPresentation(base,backendSceneToLayout(result.scene,{projectId:base.id!,name:base.name,...selected.assets}));
-      onApply(addDesign(base,nextLayout));
+      onApply(addDesign(base,nextLayout,buildVariantSaveMeta(nextLayout,outdoorPlan)));
       setPreview(null);setJob(null);setReview(null);patch({jobId:undefined,requestId:undefined});
       setNotice('候选已应用并保存，可用一次撤销恢复应用前的本地方案。');setAppliedGuide(true);
     }catch(error){if(current())setNotice(errorText(error));}finally{pending.current=false;if(alive.current)setBusy(false);}

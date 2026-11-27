@@ -51,6 +51,7 @@ import { buildReviewReference } from '../lib/review-copy';
 import { appendAgentRunEvents, appendAgentThoughts, appendAgentStep, clearAgentSteerNotes, closeAgentStep, endAgentRun, getAgentRun, setAgentPhase, setAgentSteerDelivered, setAgentThoughtCount, startAgentRun } from './agent-chat-store';
 import { setBriefHeadcount } from './brief-headcount-store';
 import { addDesign, MAX_DESIGNS } from '../lib/scene-layers';
+import { buildVariantSaveMeta } from '../lib/variant-summary';
 import { materialCount, venueArea } from '../lib/structural-layout';
 import { HEADCOUNT_MAX, isDemoBackend, proposalWarningText, seatingShortfallText } from '../lib/workbench-agent';
 import { type WorkbenchMode } from '../lib/workbench-mode';
@@ -284,7 +285,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const cloud=useBackendSession(controller);
   const { allSelectedIds }=useSelection();
   // 身份基准取 context 正源 projectId（入口两分岔），不再借 layout.id 反推；持久桶/租约/点验同此源。
-  const { projectId }=useRoomEditor();
+  const { projectId, outdoorPlan }=useRoomEditor();
   const [brief,setBriefValue]=useState<CreativeBrief>(INITIAL_BRIEF);
   const [briefReady,setBriefReady]=useState(false);
   const [briefError,setBriefError]=useState<string|null>(null);
@@ -1961,7 +1962,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
     await assertCurrentLocalRecords(layoutRef.current);
     if(layoutRef.current!==selected.base || !baseIsCurrent(selected.base) || briefRef.current!==selected.briefKey) throw new Error('场景或需求已变化，请重新生成候选。');
     if ((selected.base.designBook?.variants.length ?? 0) >= MAX_DESIGNS) throw new Error('请先在图层面板移除不再需要的方案，再确认提案。');
-    const prepared=addDesign(selected.base,selected.layout);
+    const prepared=addDesign(selected.base,selected.layout,buildVariantSaveMeta(selected.layout,outdoorPlan));
     const preparedKey=canonical(prepared);
     const requirementError=candidateRequirementError(selected.base,prepared);
     if(requirementError)throw new Error(requirementError);

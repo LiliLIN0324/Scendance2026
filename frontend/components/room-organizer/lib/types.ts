@@ -565,6 +565,17 @@ export interface DesignVariant {
   summary?: VariantSummary;
 }
 
+/**
+ * 保存变体时挂到新变体上的可选元数据：独立记录引用 id、扫描身份与冻结摘要。
+ * 不传（或 legacy 草稿无绑定 plan）时行为与旧整包内嵌副本一致，不挂悬空 ref。
+ */
+export interface VariantSaveMeta {
+  operationsRef?: string;
+  planRef?: string;
+  scan?: PlanVenueScan;
+  summary?: VariantSummary;
+}
+
 /** Default floor-to-floor height of a storey in metres; see `FloorLayout.height`. */
 export const FLOOR_HEIGHT_METERS = 3;
 
