@@ -42,6 +42,30 @@ it.each(['timer','in-flight'])('project switch and unmount cancel %s work, with 
  if(mode==='in-flight') await act(async()=>finish(shape));
  await act(async()=>vi.advanceTimersByTimeAsync(30000));expect(fetchPlaceShape).toHaveBeenCalledTimes(2);expect(received).not.toHaveBeenCalled();
 });
+it('a cache hit never shows the network loading state', async()=>{
+  vi.mocked(fetchPlaceShape).mockResolvedValue(shape);
+  const hook=renderHook(()=>usePlaceShapeLookup('cache-hit',vi.fn()));
+  await act(async()=>hook.result.current.start('cached-place',near));
+  expect(fetchPlaceShape).toHaveBeenCalledWith('cached-place',expect.objectContaining({onRequestStart:expect.any(Function)}));
+  expect(hook.result.current.loading).toBe(false);
+  expect(hook.result.current.unavailable).toBe(false);
+});
+it('network lookup shows loading only after the request-start callback', async()=>{
+  let finish!:(value:typeof shape)=>void;
+  let readLoading = () => false;
+  vi.mocked(fetchPlaceShape).mockImplementation((_name, options) => new Promise(resolve => {
+    options?.onRequestStart?.();
+    expect(readLoading()).toBe(false);
+    finish=resolve;
+  }));
+  const hook=renderHook(()=>usePlaceShapeLookup('network-miss',vi.fn()));
+  readLoading=()=>hook.result.current.loading;
+  act(()=>hook.result.current.start('uncached-place',near));
+  expect(hook.result.current.loading).toBe(true);
+  await act(async()=>finish(shape));
+  expect(hook.result.current.loading).toBe(false);
+  expect(hook.result.current.unavailable).toBe(false);
+});
 it('a miss stops immediately without silently repeating the lookup', async()=>{
  vi.mocked(fetchPlaceShape).mockResolvedValue(null);const hook=renderHook(()=>usePlaceShapeLookup('a',vi.fn()));
  await act(async()=>hook.result.current.start('current',near));

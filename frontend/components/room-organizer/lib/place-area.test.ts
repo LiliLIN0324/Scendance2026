@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { fetchPlaceShape, parseAreaPayload, placeAreaUrl, searchAreas } from './place-area';
 
@@ -77,6 +78,25 @@ describe('placeAreaUrl / searchAreas（本地代理契约）', () => {
 });
 
 describe('fetchPlaceShape（POI 真实轮廓）', () => {
+  it('缓存命中不触发网络开始回调', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ shape: {
+      id: 'cached-shape', name: '缓存地点', polygon: [[120,30],[120.001,30],[120.001,30.001],[120,30.001]],
+    } }), { status: 200 }));
+    await fetchPlaceShape('缓存地点', { local: true, fetchImpl });
+    const onRequestStart = vi.fn();
+    const result = await fetchPlaceShape('缓存地点', { local: true, fetchImpl: vi.fn(), onRequestStart });
+    expect(result?.id).toBe('cached-shape');
+    expect(onRequestStart).not.toHaveBeenCalled();
+  });
+
+  it('真正开始网络请求后触发回调', async () => {
+    const onRequestStart = vi.fn();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ shape: null }), { status: 200 }));
+    await fetchPlaceShape('未缓存地点', { local: true, fetchImpl, onRequestStart });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(onRequestStart).toHaveBeenCalledOnce();
+  });
+
   it('拿到 shape → PlaceArea（level 标「占地范围」）', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       shape: {

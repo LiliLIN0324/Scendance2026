@@ -200,7 +200,7 @@ export function peekCachedPlaceShape(
  */
 export async function fetchPlaceShape(
   name: string,
-  options: { near?: { lng: number; lat: number } | null; signal?: AbortSignal; local?: boolean; fetchImpl?: typeof fetch; cache?: boolean } = {},
+  options: { near?: { lng: number; lat: number } | null; signal?: AbortSignal; local?: boolean; fetchImpl?: typeof fetch; cache?: boolean; onRequestStart?: () => void } = {},
 ): Promise<PlaceArea | null> {
   const query = name.trim();
   if (query.length < 2 || query.length > 60) return null;
@@ -218,7 +218,9 @@ export async function fetchPlaceShape(
     : `/api/place-shape?${params.toString()}`;
   try {
     // 服务端总预算 20s；客户端只留传输余量，不再为镜像串行轮换等待 85s。
-    const response = await doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(21000)]) : AbortSignal.timeout(21000) });
+    const request = doFetch(url, { signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(21000)]) : AbortSignal.timeout(21000) });
+    options.onRequestStart?.();
+    const response = await request;
     if (!response.ok) return null;
     const body = await response.json() as { shape?: { id?: string; name?: string; kind?: string; source?: string; polygon?: [number, number][]; bounds?: number[] } | null };
     const raw = body?.shape;

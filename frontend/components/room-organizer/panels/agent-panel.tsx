@@ -1752,7 +1752,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const pickBase = JSON.stringify(routeBridgeRef.current?.getPlan());
     const controller = new AbortController();
     outdoorRequestRef.current?.abort(); outdoorRequestRef.current = controller;
-    setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '查询地图轮廓与草地，自动提出活动范围', steps: ['理解场地名', '候选地点已确认'] });
+    setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '准备地点范围提案', steps: ['理解场地名', '候选地点已确认'] });
     setVenuePick(current => current ? { ...current, picking: place.name } : current);
     const near = { lng: place.lng, lat: place.lat };
     const spanMeters = (polygon: [number, number][]): number => {
@@ -1766,7 +1766,14 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     let polygon: [number, number][] | null = null;
     let source = 'rect';
     try {
-      const shape = await fetchPlaceShape(place.name, { near, signal: controller.signal });
+      const shape = await fetchPlaceShape(place.name, {
+        near,
+        signal: controller.signal,
+        onRequestStart: () => {
+          if (controller.signal.aborted || !currentOutdoorTask(epoch, 'venue') || pickSeq !== venuePickSeq.current) return;
+          setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '正在联网查询地点轮廓', steps: ['理解场地名', '候选地点已确认', '正在联网查询地点轮廓'] });
+        },
+      });
       if (shape && isPersistablePlaceShape(shape) && spanMeters(shape.polygon) <= 9000) { polygon = shape.polygon; source = 'osm'; }
     } catch { /* 静默降级 */ }
     if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
@@ -1781,7 +1788,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       return;
     }
     if (bridge.applyPlan && bridge.getPlan()) {
-      setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '识别草地候选。缺少真实范围时提出标注假设的概念草案', steps: ['地点已确认'] });
+      setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '根据地点轮廓准备范围提案；未取得轮廓时再给概念草案', steps: ['地点已确认', '准备范围提案'] });
       let range;
       try {
         range = await proposeAutomaticVenueRange({ plan: bridge.getPlan()!, anchor, name: place.name, footprint: boundary, signal: controller.signal });

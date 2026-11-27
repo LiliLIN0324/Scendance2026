@@ -4848,7 +4848,8 @@ describe('outdoor V1–V5 real task-state actions', () => {
     const plan = createStarterOutdoorPlan();
     const place = { id: 'qing-shan', name: '青山湖水上森林', address: '锦北街道科技大道青山湖风景区内', lng: 120.16, lat: 30.25 };
     const outline = [{ x: -80, y: -60 }, { x: 80, y: -60 }, { x: 80, y: 60 }, { x: -80, y: 60 }];
-    const fetchShape = vi.spyOn(placeArea, 'fetchPlaceShape').mockResolvedValue({ id: 'outline', name: place.name, level: '占地范围', lng: place.lng, lat: place.lat, kind: 'area', polygon: [[120.16,30.25],[120.161,30.25],[120.161,30.251],[120.16,30.251]], bounds: [120.16,30.25,120.161,30.251] });
+    let resolveShape!: (shape: placeArea.PlaceArea) => void;
+    const fetchShape = vi.spyOn(placeArea, 'fetchPlaceShape').mockImplementation(() => new Promise(resolve => { resolveShape = resolve as (shape: placeArea.PlaceArea) => void; }));
     const applyPlan = vi.fn(() => true);
     vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: outline, basis: { kind: 'place-outline', detail: 'test' }, waterLines: [] });
     let current!: NonNullable<ReturnType<typeof useAgent>>;
@@ -4856,7 +4857,11 @@ describe('outdoor V1–V5 real task-state actions', () => {
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
 
     act(() => current.confirmOutdoorVenue(place));
-    await waitFor(() => expect(fetchShape).toHaveBeenCalledWith(place.name, expect.objectContaining({ near: { lng: place.lng, lat: place.lat } })));
+    await waitFor(() => expect(fetchShape).toHaveBeenCalledWith(place.name, expect.objectContaining({ near: { lng: place.lng, lat: place.lat }, onRequestStart: expect.any(Function) })));
+    expect(current.outdoorTask?.action).toBe('准备地点范围提案');
+    act(() => vi.mocked(fetchShape).mock.calls[0]![1]!.onRequestStart?.());
+    expect(current.outdoorTask?.action).toBe('正在联网查询地点轮廓');
+    await act(async () => resolveShape({ id: 'outline', name: place.name, level: '占地范围', lng: place.lng, lat: place.lat, kind: 'area', polygon: [[120.16,30.25],[120.161,30.25],[120.161,30.251],[120.16,30.251]], bounds: [120.16,30.25,120.161,30.251] }));
     await waitFor(() => expect(current.venuePick).toBeNull());
     expect(screen.queryByRole('region', { name: '场地确认' })).toBeNull();
     await waitFor(() => expect(outdoorRange.proposeAutomaticVenueRange).toHaveBeenCalled());
