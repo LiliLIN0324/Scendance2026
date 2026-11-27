@@ -18,6 +18,7 @@ import OutdoorPlanCanvas, {
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import type { SearchCandidatePin } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { REPLICA_CASES } from '../lib/replica-cases';
 import { planBoundaryFromSearchArea } from '@/components/room-organizer/lib/outdoor-venue-sync';
@@ -539,6 +540,12 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
   // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
+  // 2026-11-27 用户指令（对齐百度地图）：搜索下拉的候选批量编号钉。
+  // PlanPlaceSearch 自报（序号与下拉 1/N 一致），列表在钉就在；对话侧点选候选只换成带名称的
+  // 定位钉，其余编号钉照常留图。场地落红线 / 候选被收回 / 换活动时递增令牌撤掉当前这一批——
+  // 只撤当前这次检索，下拉自己刷新同一批结果不会把钉带回来，新搜一次照常重新铺。
+  const [candidatePins, setCandidatePins] = useState<ReadonlyArray<SearchCandidatePin> | null>(null);
+  const [candidatePinRevoke, setCandidatePinRevoke] = useState(0);
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
   const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line'; source?: 'stock' | 'online' } | null>(null);
@@ -599,7 +606,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     catchUpPushedRef.current = null;
   },[slotId]);
   useEffect(() => {
-    cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
+    cancelPlaceShape(); setPlacePin(null); setPlaceArea(null); setCandidatePinRevoke(count => count + 1);
     // 2026-11-17：升级前整台设备只有一份规划，先交给当时打开的活动；之后新建活动不再继承。
     if (legacyPlanProjectId && activityScopedPlan) adoptLegacyOutdoorPlanForActivity(slotId, legacyPlanProjectId);
     const record = readOutdoorProjectRecord(slotId);
@@ -694,7 +701,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;
         // 摆物件等提案常常不带红线。只有这份方案自己写下了闭合红线，才撤掉搜索选区；
         // 否则地图上的可见范围会被抹掉，已放置面板却仍写「还没画红线」。
-        if(ok && next.boundary.length>=3){setPlacePin(null);setPlaceArea(null);}
+        if(ok && next.boundary.length>=3){setPlacePin(null);setPlaceArea(null);setCandidatePinRevoke(count=>count+1);}
         return ok;
       },
       selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
@@ -729,7 +736,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       applyVenue: (anchor, boundary) => {
         const applied = canvasApiRef.current?.applyVenue(anchor, boundary) ?? false;
         if (applied) {
-          setPlacePin(null); setPlaceArea(null);
+          setPlacePin(null); setPlaceArea(null); setCandidatePinRevoke(count => count + 1);
           const geos = boundary.map(point => enuToLngLat(point.x, point.y, anchor.lng, anchor.lat));
           canvasApiRef.current?.focusBounds([
             Math.min(...geos.map(p => p.lng)), Math.min(...geos.map(p => p.lat)),
@@ -739,7 +746,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         return applied;
       },
       previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name }); setPlaceArea(null); canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
-      clearVenuePreview: () => { setPlacePin(null); setPlaceArea(null); },
+      clearVenuePreview: () => { setCandidatePinRevoke(count => count + 1); setPlacePin(null); setPlaceArea(null); },
       cancelVenueBoundary: () => canvasApiRef.current?.setMode('view'),
       inspectFacility: id => canvasApiRef.current?.inspectFacility(id) ?? false,
       // 2026-11-20 P1：结果卡「定位到分区 / 取回这组」整组入镜；只动视图，不改 plan 与选中。
@@ -1202,6 +1209,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(scanPin ? { scanPin } : {})}
             renderScanPlan={renderScanPlan} scanError={scanError}
             {...(placePin ? { searchPin: placePin } : {})}
+            {...(candidatePins?.length ? { searchPins: candidatePins } : {})}
             {...(placeArea ? { searchArea: placeArea } : {})}
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
             workflowPreview={agent?.outdoorWorkflow?.proposal?.next??null}
@@ -1225,6 +1233,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         <div style={{ pointerEvents: 'auto' }}>
           <PlanPlaceSearch
             testIdPrefix="outdoor-place-search"
+            onCandidatesChange={setCandidatePins}
+            revokeCandidatePins={candidatePinRevoke}
             {...(venueSearchSync ? { sync: venueSearchSync } : {})}
             near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
             onPickArea={area => {

@@ -111,6 +111,7 @@ import {
   ringScaleHandlePoints,
   drawScopeLockButton,
   drawFlowSimulationLayer,
+  drawCandidatePins,
   drawSearchArea,
   drawSearchPin,
   drawSceneObjectsLayer,
@@ -137,6 +138,8 @@ import {
   scopeLockButtonRect,
   type LayerVisibility,
   type PlanViewport,
+  type SearchCandidatePin,
+  visibleCandidatePins,
 } from '../lib/outdoor-plan-canvas';
 import { planRightClickAction } from '../lib/plan-right-click';
 import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
@@ -563,6 +566,11 @@ export interface OutdoorPlanCanvasProps {
    * 名称标签；换地点/清空即重画，不参与统计、交付或冲突判定。
    */
   searchPin?: { lng: number; lat: number; label: string } | null;
+  /**
+   * 2026-11-27 用户指令（对齐百度地图）：搜地点候选的批量编号钉——`index` 与左上角
+   * 下拉的 1/N 序号一致。纯视图辅助，不写进 plan；点选候选后由 searchPin 单钉接管。
+   */
+  searchPins?: ReadonlyArray<SearchCandidatePin> | null;
   /**
    * 2026-11-19 用户：「点了还是没有落在场地上」——实景扫描的落位钉（plan ENU）。
    * 与搜地点钉同一支笔，但它是「这套点云落在哪」的只读标记：不写进 plan、不参与命中测试。
@@ -1661,6 +1669,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onInspectorChange,
   onModeChange,
   searchPin,
+  searchPins,
   scanPin, renderScanPlan, scanError,
   searchArea,
   routeProposal,
@@ -1743,6 +1752,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const drawRef = useRef<() => void>(() => {});
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
+  const searchPinsRef = useRef<ReadonlyArray<SearchCandidatePin> | null>(searchPins ?? null);
   // 2026-11-19：实景扫描落位钉（plan ENU），与搜钉同一条 props → ref → 重绘的路。
   const scanPinRef = useRef<OutdoorPlanCanvasProps['scanPin']>(scanPin ?? null);
   const scanPaintRef = useRef(renderScanPlan);
@@ -4118,6 +4128,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       });
     }
     const pin = searchPinRef.current;
+    // 7a-1) 2026-11-27 用户指令：候选批量编号钉（序号=左上角下拉的 1/N），画在选中钉之下；
+    // 已点选的那枚由白色定位钉代表，同一坐标不再叠一枚编号钉。
+    const candidatePins = searchPinsRef.current;
+    if (candidatePins?.length) {
+      drawCandidatePins({ ctx: planCtx, viewport }, visibleCandidatePins(candidatePins, pin).map(candidate => ({
+        point: lngLatToEnu(
+          candidate.lng,
+          candidate.lat,
+          current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
+          current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
+        ),
+        index: candidate.index,
+      })));
+    }
     if (pin) {
       const pinPoint = lngLatToEnu(
         pin.lng,
@@ -4234,6 +4258,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     searchPinRef.current = searchPin ?? null;
     drawRef.current();
   }, [searchPin]);
+  // 2026-11-27：候选编号钉变化（换一批/清空）同样立即重绘。
+  useEffect(() => {
+    searchPinsRef.current = searchPins ?? null;
+    drawRef.current();
+  }, [searchPins]);
   // 2026-11-19：实景扫描落位钉变化（含落位/清空）同样立即重绘。
   useEffect(() => {
     scanPinRef.current = scanPin ?? null;

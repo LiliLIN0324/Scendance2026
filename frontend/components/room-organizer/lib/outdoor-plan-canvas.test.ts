@@ -7,6 +7,7 @@ import {
   drawAccessLayer,
   accessRingRadiusPx,
   drawConflictMarkers,
+  drawCandidatePins,
   drawDraftLayer,
   drawArrangePreview,
   drawFacilityGhost,
@@ -33,6 +34,7 @@ import {
   planPixelToPoint,
   planPointToPixel,
   visiblePlanLayers,
+  visibleCandidatePins,
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
@@ -207,6 +209,7 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
     beginPath: () => {},
     moveTo: () => {},
     lineTo: () => {},
+    quadraticCurveTo: () => {},
     closePath: () => {},
     stroke: () => {},
     fill: () => {},
@@ -793,6 +796,37 @@ describe('measurement drawing (H3-a)', () => {
 });
 
 /* ---------------- H3-b 冲突/缺失可定位标记 ---------------- */
+
+// 2026-11-27 用户指令（对齐百度地图）：搜地点候选的批量编号钉——下拉第 N 条=地图上标 N 的钉。
+describe('candidate number pin drawing (2026-11-27)', () => {
+  it('paints one red pin per candidate with the dropdown number as white text', () => {
+    const { ctx, cap } = makeCtx();
+    drawCandidatePins({ ctx, viewport: view } as PlanCanvasContext, [
+      { point: { x: 0, y: 0 }, index: 0 },
+      { point: { x: 40, y: 0 }, index: 9 },
+    ]);
+    expect(cap.fills.filter(f => f === '#e5484d')).toHaveLength(2);
+    expect(cap.texts).toContain('1');
+    expect(cap.texts).toContain('10');
+    expect(cap.texts.every(t => t !== '0')).toBe(true);
+  });
+
+  it('draws nothing for an empty candidate batch', () => {
+    const { ctx, cap } = makeCtx();
+    drawCandidatePins({ ctx, viewport: view } as PlanCanvasContext, []);
+    expect(cap.texts).toHaveLength(0);
+    expect(cap.fills).toHaveLength(0);
+  });
+
+  it('lets the named pin stand in for the picked candidate instead of stacking two pins on one spot', () => {
+    const pins = [
+      { index: 0, lng: 120.1, lat: 30.2, name: '青山湖水上森林' },
+      { index: 1, lng: 120.2, lat: 30.3, name: '水上森林码头' },
+    ];
+    expect(visibleCandidatePins(pins, null)).toBe(pins);
+    expect(visibleCandidatePins(pins, { lng: 120.2, lat: 30.3 }).map(pin => pin.index)).toEqual([0]);
+  });
+});
 
 describe('conflict marker drawing (H3-b)', () => {
   const conflicts = [

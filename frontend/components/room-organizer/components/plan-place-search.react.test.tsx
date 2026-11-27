@@ -2,7 +2,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStorage } from '@/lib/test-support-memory-storage';
+import * as placeSearch from '../lib/place-search';
+import * as placeSearchOptions from '../lib/place-search-options';
 import PlanPlaceSearch from './plan-place-search';
+import type { SearchCandidatePin } from '../lib/outdoor-plan-canvas';
 import type { PlaceSuggestion } from '../lib/place-search';
 
 let mem: MemoryStorage;
@@ -25,6 +28,7 @@ const westLake: PlaceSuggestion = {
   lng: 120.146,
   lat: 30.252,
 };
+const dock: PlaceSuggestion = { id: 'dock', name: '水上森林码头', address: '青山湖景区', lng: 120.21, lat: 30.31 };
 
 function renderSearch() {
   render(
@@ -61,5 +65,136 @@ describe('PlanPlaceSearch Escape', () => {
 
     expect(host.getAttribute('data-expanded')).toBe('false');
     expect(input.value).toBe('西湖');
+  });
+});
+
+// 2026-11-27 用户指令（对齐百度地图）：下拉候选要按序号上报给画布落编号钉。
+// 序号必须与下拉渲染的 1/N 一致（「第 2 个」在地图上就是标 2 的钉）。
+describe('PlanPlaceSearch candidate pins', () => {
+  it('pins a new chat search after a previous dropdown selection', async () => {
+    const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
+    const props = { onPick: vi.fn(), onCandidatesChange: (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins) };
+    const view = render(<PlanPlaceSearch {...props} sync={{ query: '西湖', hits: [westLake] }} />);
+    await waitFor(() => expect(batches.at(-1)?.length).toBe(1));
+    fireEvent.click(screen.getByTestId('plan-place-search-option-0'));
+    await waitFor(() => expect(batches.at(-1)).toBeNull());
+
+    view.rerender(<PlanPlaceSearch {...props} sync={{ query: '水上森林', hits: [dock] }} />);
+    await waitFor(() => expect(batches.at(-1)).toEqual([
+      { index: 0, lng: dock.lng, lat: dock.lat, name: dock.name },
+    ]));
+  });
+
+  it('reports dropdown candidates with their dropdown indices and clears the batch after picking one', async () => {
+    const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
+    const onCandidatesChange = (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins);
+    render(
+      <PlanPlaceSearch
+        onPick={vi.fn()}
+        sync={{ query: '西湖', hits: [westLake, dock] }}
+        onCandidatesChange={onCandidatesChange}
+      />,
+    );
+
+    // 同步候选进来：两条带坐标的地点按合成序号上报。
+    await waitFor(() => {
+      const latest = batches.at(-1);
+      expect(latest).toEqual([
+        { index: 0, lng: 120.146, lat: 30.252, name: '西湖' },
+        { index: 1, lng: 120.21, lat: 30.31, name: '水上森林码头' },
+      ]);
+    });
+
+    // 点选第 1 条：整批候选钉收掉（null），剩下那枚由调用方的定位钉接管。
+    fireEvent.click(screen.getByTestId('plan-place-search-option-0'));
+    await waitFor(() => expect(batches.at(-1)).toBeNull());
+  });
+
+  it('clears the batch on unmount so pins do not outlive the search island', async () => {
+    const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
+    const onCandidatesChange = (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins);
+    const view = render(
+      <PlanPlaceSearch
+        onPick={vi.fn()}
+        sync={{ query: '西湖', hits: [westLake] }}
+        onCandidatesChange={onCandidatesChange}
+      />,
+    );
+    await waitFor(() => expect(batches.at(-1)?.length).toBe(1));
+    view.unmount();
+    expect(batches.at(-1)).toBeNull();
+  });
+
+  it('keeps pins when chat selection releases sync, but does not restore a revoked batch', async () => {
+    const searchSpy = vi.spyOn(placeSearch, 'searchPlaces').mockResolvedValue([westLake, dock]);
+    const hintsSpy = vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);
+    const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
+    const props = { onPick: vi.fn(), onCandidatesChange: (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins) };
+    const sync = { query: '西湖', hits: [westLake, dock] };
+    try {
+      const view = render(<PlanPlaceSearch {...props} sync={sync} />);
+      await waitFor(() => expect(batches.at(-1)?.length).toBe(2));
+      view.rerender(<PlanPlaceSearch {...props} sync={null} />);
+      await waitFor(() => expect(searchSpy).toHaveBeenCalledOnce(), { timeout: 3000 });
+      expect(batches.at(-1)?.length).toBe(2);
+
+      view.rerender(<PlanPlaceSearch {...props} revokeCandidatePins={1} />);
+      await waitFor(() => expect(batches.at(-1)).toBeNull());
+      view.rerender(<PlanPlaceSearch {...props} revokeCandidatePins={1} near={{ lng: 120, lat: 30 }} />);
+      await waitFor(() => expect(searchSpy).toHaveBeenCalledTimes(2), { timeout: 3000 });
+      expect(batches.at(-1)).toBeNull();
+
+      view.rerender(<PlanPlaceSearch {...props} revokeCandidatePins={1} sync={{ ...sync, hits: [...sync.hits] }} />);
+      await waitFor(() => expect(batches.at(-1)?.length).toBe(2));
+      fireEvent.click(screen.getByTitle('清除'));
+      await waitFor(() => expect(batches.at(-1)).toBeNull());
+    } finally {
+      searchSpy.mockRestore();
+      hintsSpy.mockRestore();
+    }
+  });
+
+  it('does not pin recent-only suggestions before any real query (工作台一加载不满图钉)', async () => {
+    const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
+    const onCandidatesChange = (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins);
+    render(<PlanPlaceSearch onPick={vi.fn()} onCandidatesChange={onCandidatesChange} />);
+    // 挂载 + 展开（最近列表出下拉）都不该铺钉：没有检索词就只有 null 批次。
+    fireEvent.focus(screen.getByTestId('plan-place-search-input'));
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(batches.every(batch => batch === null)).toBe(true);
+  });
+
+  // 场地落红线 / 候选被收回后，编号钉不能残留在图上；但下拉自己刷新同一批结果时也不能把钉带回来。
+  it('keeps a revoked batch gone while the same search refreshes, and pins again for a new search', async () => {
+    const searchSpy = vi.spyOn(placeSearch, 'searchPlaces').mockResolvedValue([westLake, dock]);
+    const hintsSpy = vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);
+    const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
+    const onCandidatesChange = (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins);
+    const props = { onPick: vi.fn(), onCandidatesChange };
+    const view = render(<PlanPlaceSearch {...props} />);
+    const input = screen.getByTestId('plan-place-search-input');
+    try {
+      // 在地图左上角手搜（不走对话侧同步）。
+      fireEvent.change(input, { target: { value: '青山湖' } });
+      await waitFor(() => expect(batches.at(-1)?.length).toBe(2), { timeout: 3000 });
+
+      // 场地落红线：调用方递增撤钉令牌 → 这批收掉。
+      view.rerender(<PlanPlaceSearch {...props} revokeCandidatePins={1} />);
+      await waitFor(() => expect(batches.at(-1)).toBeNull());
+
+      // 同一次检索的列表刷新（同步撤走后下拉自己重查）：钉不回来。
+      searchSpy.mockResolvedValue([dock, westLake]);
+      view.rerender(<PlanPlaceSearch {...props} revokeCandidatePins={1} near={{ lng: 120, lat: 30 }} />);
+      await waitFor(() => expect(searchSpy).toHaveBeenCalledTimes(2), { timeout: 3000 });
+      await waitFor(() => expect(screen.getAllByTestId(/plan-place-search-option-\d+/)).toHaveLength(2), { timeout: 3000 });
+      expect(batches.at(-1)).toBeNull();
+
+      // 新搜一次（换词）照常重新铺钉。
+      fireEvent.change(input, { target: { value: '水上森林' } });
+      await waitFor(() => expect(batches.at(-1)?.length).toBe(2), { timeout: 3000 });
+    } finally {
+      searchSpy.mockRestore();
+      hintsSpy.mockRestore();
+    }
   });
 });

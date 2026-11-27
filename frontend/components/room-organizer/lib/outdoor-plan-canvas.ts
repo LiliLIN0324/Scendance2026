@@ -2329,6 +2329,71 @@ export function drawFlowSimulationLayer(
 }
 
 /**
+ * 搜地点候选编号钉的数据：`index` 是左上角下拉里的序号（0 起，画布画 index+1），
+ * 保证「下拉第 2 条」和「地图上标 2 的钉」永远指向同一个候选（2026-11-27 用户指令，
+ * 对齐百度地图搜索结果的编号钉）。纯视图辅助，不写进 plan。
+ */
+export interface SearchCandidatePin {
+  index: number;
+  lng: number;
+  lat: number;
+  name: string;
+}
+
+/**
+ * 真正要画的候选钉：已被白色定位钉代表的那一个候选（同一坐标）不再叠一枚编号钉。
+ * 对话侧点选候选时列表还开着，其余编号钉照常留在图上，只有选中的那枚换成带名称的定位钉。
+ */
+export function visibleCandidatePins(
+  pins: ReadonlyArray<SearchCandidatePin>,
+  selected: { lng: number; lat: number } | null,
+): ReadonlyArray<SearchCandidatePin> {
+  if (!selected) return pins;
+  return pins.filter(pin => pin.lng !== selected.lng || pin.lat !== selected.lat);
+}
+
+/**
+ * 搜地点候选编号钉：红色水滴针 + 白字序号（百度/高德搜索结果同范式）。
+ * 与白色定位钉的分工：候选钉批量铺（只标序号，不带名称胶囊，避免互相遮挡），
+ * 用户点选后由白色定位钉单独接管（带名称）。只是视图辅助——不写进 plan，
+ * 不参与统计/交付/冲突判定，候选换批或点选后即收。
+ */
+export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ point: PlanPoint; index: number }>): void {
+  const { ctx, viewport } = c;
+  for (const pin of pins) {
+    const pt = planPointToPixel(pin.point, viewport);
+    const headY = pt.y - 9;
+    const r = 9;
+    ctx.save();
+    // 水滴形与 drawSearchPin 同款贝塞尔收针，整体放大一号给数字留位（尖端落在真实坐标上）。
+    ctx.beginPath();
+    ctx.moveTo(pt.x - 7.62, headY + 4.92);
+    ctx.arc(pt.x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
+    ctx.quadraticCurveTo(pt.x + 5.76, headY + 9.84, pt.x, pt.y + 10.2);
+    ctx.quadraticCurveTo(pt.x - 5.76, headY + 9.84, pt.x - 7.62, headY + 4.92);
+    ctx.closePath();
+    ctx.shadowColor = 'rgba(20,20,22,0.22)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 1.8;
+    ctx.fillStyle = '#e5484d';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    // 白描边把红钉从影像/暗色底图上托起来（同 drawSearchArea 的衬线思路）。
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    // 序号：白字居中在圆头，两位数略缩。
+    const text = String(pin.index + 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${text.length > 1 ? 9 : 10.5}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, pt.x, headY + 0.5);
+    ctx.restore();
+  }
+}
+
+/**
  * 搜地点定位钉：白色水滴针（细描边 + 轻投影 + 针心黑点）+ 白底名称标签。
  * 只是视图辅助——不写进 plan，不参与统计/交付/冲突判定，换搜索或关掉即消失。
  */

@@ -16,7 +16,7 @@
  * 不改 plan / anchor。组件只负责输入与建议条，落钉、画框由调用方交给画布。
  */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Search, X } from 'lucide-react';
 import {
   matchRecentPlaces,
@@ -33,6 +33,7 @@ import {
   type PlaceSearchOption,
 } from '@/components/room-organizer/lib/place-search-options';
 import { normalizeOutlineName } from '@/components/room-organizer/lib/place-shape-quality';
+import type { SearchCandidatePin } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -57,6 +58,19 @@ export interface PlanPlaceSearchProps {
    * 不用在地图框里重新输入一遍。传 null / 不传 = 不同步，保持原有独立检索。
    */
   sync?: { query: string; hits: readonly PlaceSuggestion[] } | null;
+  /**
+   * 2026-11-27 用户指令（对齐百度地图）：下拉候选批量上报给画布落编号钉——
+   * `index` 就是本下拉渲染的 1/N 序号（选区条目占号但无坐标，不落钉）。
+   * 在本下拉里选中一条 / 清除后整批收掉（列表已不在）。
+   * 传稳定引用（如 setState）以避免每次渲染重报。
+   */
+  onCandidatesChange?: (pins: ReadonlyArray<SearchCandidatePin> | null) => void;
+  /**
+   * 撤钉令牌：调用方每递增一次，当前这批候选钉立即收掉（场地已落红线 / 候选被收回 / 换活动）。
+   * 只对递增时的那次检索生效——下拉自己刷新同一批结果不会把钉铺回来；
+   * 换词重搜、或对话侧同步来新一批候选，照常重新铺钉。
+   */
+  revokeCandidatePins?: number;
 }
 
 /** 同一批候选判定：id / 名字 / 坐标一致就算没变，避免每次同步都重写 state。 */
@@ -74,6 +88,8 @@ export default function PlanPlaceSearch({
   onPickArea,
   near,
   onClear,
+  onCandidatesChange,
+  revokeCandidatePins,
   offset,
   width = 320,
   placeholder = '搜地点 / 场馆 / 地址，地图飞过去',
@@ -163,6 +179,7 @@ export default function PlanPlaceSearch({
     const keyword = syncQuery.trim();
     if (!keyword) return;
     setQuery(syncQuery);
+    setPicked(null);
     setHits(prev => (samePlaces(prev, syncHits ?? []) ? prev : [...(syncHits ?? [])]));
     setBusy(false);
     setOpen(true);
@@ -170,14 +187,61 @@ export default function PlanPlaceSearch({
   }, [syncQuery, syncHits]);
 
   const keyword = query.trim();
-  const recentMatches = keyword ? matchRecentPlaces(keyword) : recent;
-  const options: PlaceSearchOption[] = buildPlaceSearchOptions({
+  // 2026-11-27：候选编号钉要求 options 引用稳定（引用一变就重报钉），这里的合成
+  // 从渲染体挪进 useMemo——hover/focus 等无关 state 变化不再重建列表。
+  const recentMatches = useMemo(() => (keyword ? matchRecentPlaces(keyword) : recent), [keyword, recent]);
+  const options: PlaceSearchOption[] = useMemo(() => buildPlaceSearchOptions({
     query: keyword,
     areas,
     places: hits,
     recent: recentMatches,
     outlinedNames,
-  });
+  }), [keyword, areas, hits, recentMatches, outlinedNames]);
+
+  // 2026-11-27 用户指令：把带坐标的候选按下拉序号上报，画布落「百度式」编号钉。
+  // 选区条目占号但无单点坐标，不落钉；选中（picked 非空）后整批收掉——
+  // 剩下那枚由调用方的定位钉接管，和地图 App「点选后只剩选中钉」同一观感。
+  // 只有真实检索词（或对话侧同步候选）才铺钉：纯「最近搜过」的展开态不铺，
+  // 避免工作台一加载/一聚焦就满图编号钉（百度也只在有搜索词时铺）。
+  // 「一次检索」的标识，撤钉按它生效：换了词、或对话侧同步来一批新的非空候选，都算新的一次；
+  // 同步撤走（变 null）和下拉自己刷新同一批结果（hits 变、词没变），都还是同一次。
+  const lastSyncHitsRef = useRef(syncHits);
+  if (syncHits?.length) lastSyncHitsRef.current = syncHits;
+  const syncSessionKey = syncHits?.length ? syncHits : lastSyncHitsRef.current;
+  // 标识就是一个普通对象：同一个对象 = 同一次检索，换词 / 新一批同步候选 = 新对象。
+  const searchSession = useMemo(() => ({ keyword, syncHits: syncSessionKey }), [keyword, syncSessionKey]);
+  const [revokedSession, setRevokedSession] = useState<typeof searchSession | null>(null);
+  const sessionRef = useRef(searchSession);
+  sessionRef.current = searchSession;
+  const revokeToken = revokeCandidatePins ?? 0;
+  const appliedRevokeRef = useRef(revokeToken);
+  useEffect(() => {
+    // 挂载时拿到的令牌是历史值，不拿来撤当前这批；只响应挂载之后的递增。
+    if (appliedRevokeRef.current === revokeToken) return;
+    appliedRevokeRef.current = revokeToken;
+    setRevokedSession(sessionRef.current);
+  }, [revokeToken]);
+  const pinsRevoked = revokedSession === searchSession;
+
+  const placePins = useMemo<ReadonlyArray<SearchCandidatePin> | null>(() => {
+    if (picked || !keyword || pinsRevoked) return null;
+    const pins: SearchCandidatePin[] = [];
+    options.forEach((option, index) => {
+      if (option.kind !== 'place') return;
+      const { lng, lat } = option.place;
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+      pins.push({ index, lng, lat, name: option.place.name });
+    });
+    return pins;
+  }, [options, picked, keyword, pinsRevoked]);
+
+  // 清理函数先报 null 再报新值，同一次 commit 内连发、最终值正确；
+  // 组件卸载（3D 接管时整层退场）也经此把钉收干净。
+  const notifyCandidates = onCandidatesChange;
+  useEffect(() => {
+    notifyCandidates?.(placePins);
+    return () => notifyCandidates?.(null);
+  }, [notifyCandidates, placePins]);
 
   function chooseOption(option: PlaceSearchOption) {
     if (option.kind === 'area') {
