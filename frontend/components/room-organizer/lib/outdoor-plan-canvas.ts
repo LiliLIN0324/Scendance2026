@@ -2341,36 +2341,65 @@ export interface SearchCandidatePin {
 }
 
 /**
- * 真正要画的候选钉：已被白色定位钉代表的那一个候选（同一坐标）不再叠一枚编号钉。
- * 对话侧点选候选时列表还开着，其余编号钉照常留在图上，只有选中的那枚换成带名称的定位钉。
+ * 选中点属于候选时，由红色编号钉和名称标签表示，不再叠白色钉。
  */
-export function visibleCandidatePins(
+export function isCandidateSearchPin(
   pins: ReadonlyArray<SearchCandidatePin>,
   selected: { lng: number; lat: number } | null,
-): ReadonlyArray<SearchCandidatePin> {
-  if (!selected) return pins;
-  return pins.filter(pin => pin.lng !== selected.lng || pin.lat !== selected.lat);
+): boolean {
+  return !!selected && pins.some(pin => pin.lng === selected.lng && pin.lat === selected.lat);
+}
+
+/** 只错开屏幕标记，不改变地点坐标；相邻/同坐标的候选也要能读到各自编号。 */
+export function layoutCandidatePins(points: readonly PlanPoint[]): PlanPoint[] {
+  const placed: PlanPoint[] = [];
+  for (const point of points) {
+    let position = point;
+    let attempt = 0;
+    while (placed.some(other => Math.hypot(position.x - other.x, position.y - other.y) < 32)) {
+      const angle = ((attempt % 8) / 8) * Math.PI * 2 - Math.PI / 2;
+      const radius = (Math.floor(attempt / 8) + 1) * 34;
+      position = { x: point.x + Math.cos(angle) * radius, y: point.y + Math.sin(angle) * radius };
+      attempt++;
+    }
+    placed.push(position);
+  }
+  return placed;
 }
 
 /**
  * 搜地点候选编号钉：红色水滴针 + 白字序号（百度/高德搜索结果同范式）。
  * 与白色定位钉的分工：候选钉批量铺（只标序号，不带名称胶囊，避免互相遮挡），
- * 用户点选后由白色定位钉单独接管（带名称）。只是视图辅助——不写进 plan，
- * 不参与统计/交付/冲突判定，候选换批或点选后即收。
+ * 用户点选后仍保留红色编号，并加名称。只是视图辅助，不写进 plan，
+ * 不参与统计/交付/冲突判定；清除搜索或切换活动后收起。
  */
-export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ point: PlanPoint; index: number }>): void {
+export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ point: PlanPoint; index: number; label?: string }>): void {
   const { ctx, viewport } = c;
-  for (const pin of pins) {
-    const pt = planPointToPixel(pin.point, viewport);
-    const headY = pt.y - 9;
-    const r = 9;
+  const anchors = pins.map(pin => planPointToPixel(pin.point, viewport));
+  const positions = layoutCandidatePins(anchors);
+  for (const [index, pin] of pins.entries()) {
+    const anchor = anchors[index]!;
+    const pt = positions[index]!;
+    const headY = pt.y - 17;
+    const r = 12;
     ctx.save();
+    if (pt.x !== anchor.x || pt.y !== anchor.y) {
+      ctx.beginPath();
+      ctx.moveTo(anchor.x, anchor.y);
+      ctx.lineTo(pt.x, pt.y);
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.strokeStyle = '#e5484d';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
     // 水滴形与 drawSearchPin 同款贝塞尔收针，整体放大一号给数字留位（尖端落在真实坐标上）。
     ctx.beginPath();
-    ctx.moveTo(pt.x - 7.62, headY + 4.92);
+    ctx.moveTo(pt.x - r * 0.844, headY + r * 0.536);
     ctx.arc(pt.x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
-    ctx.quadraticCurveTo(pt.x + 5.76, headY + 9.84, pt.x, pt.y + 10.2);
-    ctx.quadraticCurveTo(pt.x - 5.76, headY + 9.84, pt.x - 7.62, headY + 4.92);
+    ctx.quadraticCurveTo(pt.x + 8, pt.y - 1, pt.x, pt.y);
+    ctx.quadraticCurveTo(pt.x - 8, pt.y - 1, pt.x - r * 0.844, headY + r * 0.536);
     ctx.closePath();
     ctx.shadowColor = 'rgba(20,20,22,0.22)';
     ctx.shadowBlur = 8;
@@ -2385,11 +2414,18 @@ export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ po
     // 序号：白字居中在圆头，两位数略缩。
     const text = String(pin.index + 1);
     ctx.fillStyle = '#ffffff';
-    ctx.font = `600 ${text.length > 1 ? 9 : 10.5}px Inter, system-ui, sans-serif`;
+    ctx.font = `600 ${text.length > 1 ? 11 : 12.5}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, pt.x, headY + 0.5);
     ctx.restore();
+  }
+  for (const [index, pin] of pins.entries()) {
+    if (pin.label) {
+      const pt = positions[index]!;
+      const top = Math.min(...positions.filter(other => Math.abs(other.x - pt.x) < 120).map(other => other.y));
+      drawMapLabelPill(ctx, pt.x, top - 35, pin.label, viewport.canvasW);
+    }
   }
 }
 

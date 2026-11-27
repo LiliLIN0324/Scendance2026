@@ -541,10 +541,11 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
   // 2026-11-27 用户指令（对齐百度地图）：搜索下拉的候选批量编号钉。
-  // PlanPlaceSearch 自报（序号与下拉 1/N 一致），列表在钉就在；对话侧点选候选只换成带名称的
-  // 定位钉，其余编号钉照常留图。场地落红线 / 候选被收回 / 换活动时递增令牌撤掉当前这一批——
-  // 只撤当前这次检索，下拉自己刷新同一批结果不会把钉带回来，新搜一次照常重新铺。
+  // 搜索结果与 Agent 预览独立：选场地、应用范围、开始新任务都不撤搜索编号。
+  // 只在清除搜索或换活动时收起，选中项仍是红色编号。
   const [candidatePins, setCandidatePins] = useState<ReadonlyArray<SearchCandidatePin> | null>(null);
+  const candidatePinsRef = useRef(candidatePins);
+  candidatePinsRef.current = candidatePins;
   const [candidatePinRevoke, setCandidatePinRevoke] = useState(0);
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
@@ -559,7 +560,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
       // 线上现查的范围写进选区自己身上：选区一撤（清除/采纳方案/换地点）提示自动跟着没，不另维护一份状态。
       ...(shape.source === 'online' ? { source: 'online' as const } : {}) });
-    canvasApiRef.current?.focusBounds(shape.bounds);
+    if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusBounds(shape.bounds);
   }, JSON.stringify(plan?.boundary ?? []));
   /**
    * 2026-11-16 线上实测卡点：对话停在「搜索目标地点」时，用户在画布左上角搜到的地点只会飞视图、落钉，
@@ -701,7 +702,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         const ok=canvasApiRef.current?.applyWorkflowPlan(next,expected)??false;
         // 摆物件等提案常常不带红线。只有这份方案自己写下了闭合红线，才撤掉搜索选区；
         // 否则地图上的可见范围会被抹掉，已放置面板却仍写「还没画红线」。
-        if(ok && next.boundary.length>=3){setPlacePin(null);setPlaceArea(null);setCandidatePinRevoke(count=>count+1);}
+        if(ok && next.boundary.length>=3){setPlacePin(null);setPlaceArea(null);}
         return ok;
       },
       selectedIds:()=>canvasApiRef.current?.getSelectedIds()??[],
@@ -736,7 +737,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       applyVenue: (anchor, boundary) => {
         const applied = canvasApiRef.current?.applyVenue(anchor, boundary) ?? false;
         if (applied) {
-          setPlacePin(null); setPlaceArea(null); setCandidatePinRevoke(count => count + 1);
+          setPlacePin(null); setPlaceArea(null);
           const geos = boundary.map(point => enuToLngLat(point.x, point.y, anchor.lng, anchor.lat));
           canvasApiRef.current?.focusBounds([
             Math.min(...geos.map(p => p.lng)), Math.min(...geos.map(p => p.lat)),
@@ -745,8 +746,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         }
         return applied;
       },
-      previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name }); setPlaceArea(null); canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
-      clearVenuePreview: () => { setCandidatePinRevoke(count => count + 1); setPlacePin(null); setPlaceArea(null); },
+      previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name }); setPlaceArea(null); if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
+      clearVenuePreview: () => { setPlacePin(null); setPlaceArea(null); },
       cancelVenueBoundary: () => canvasApiRef.current?.setMode('view'),
       inspectFacility: id => canvasApiRef.current?.inspectFacility(id) ?? false,
       // 2026-11-20 P1：结果卡「定位到分区 / 取回这组」整组入镜；只动视图，不改 plan 与选中。
@@ -1250,7 +1251,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
               clearPlaceRangePreview();
               setPlaceArea(null);
               setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
-              canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
+              if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
               // Pin immediately. Retries, abort, and the centered outline stay on this project/place.
               lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
               handOverPlaceToChat(place.name);

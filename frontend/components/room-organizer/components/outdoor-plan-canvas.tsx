@@ -150,7 +150,7 @@ import {
   type LayerVisibility,
   type PlanViewport,
   type SearchCandidatePin,
-  visibleCandidatePins,
+  isCandidateSearchPin,
 } from '../lib/outdoor-plan-canvas';
 import { planRightClickAction } from '../lib/plan-right-click';
 import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
@@ -579,7 +579,7 @@ export interface OutdoorPlanCanvasProps {
   searchPin?: { lng: number; lat: number; label: string } | null;
   /**
    * 2026-11-27 用户指令（对齐百度地图）：搜地点候选的批量编号钉——`index` 与左上角
-   * 下拉的 1/N 序号一致。纯视图辅助，不写进 plan；点选候选后由 searchPin 单钉接管。
+   * 下拉的 1/N 序号一致。纯视图辅助，不写进 plan；点选后仍保留全部红色编号。
    */
   searchPins?: ReadonlyArray<SearchCandidatePin> | null;
   /**
@@ -1770,6 +1770,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
   const searchPinsRef = useRef<ReadonlyArray<SearchCandidatePin> | null>(searchPins ?? null);
+  const candidateViewKeyRef = useRef('');
+  const focusCandidateBoundsRef = useRef(focusBounds);
+  focusCandidateBoundsRef.current = focusBounds;
   // 2026-11-19：实景扫描落位钉（plan ENU），与搜钉同一条 props → ref → 重绘的路。
   const scanPinRef = useRef<OutdoorPlanCanvasProps['scanPin']>(scanPin ?? null);
   const scanPaintRef = useRef(renderScanPlan);
@@ -4148,11 +4151,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       });
     }
     const pin = searchPinRef.current;
-    // 7a-1) 2026-11-27 用户指令：候选批量编号钉（序号=左上角下拉的 1/N），画在选中钉之下；
-    // 已点选的那枚由白色定位钉代表，同一坐标不再叠一枚编号钉。
+    // 搜索结果全部画红色编号，选中项保留编号并加名称，不换成白钉。
     const candidatePins = searchPinsRef.current;
     if (candidatePins?.length) {
-      drawCandidatePins({ ctx: planCtx, viewport }, visibleCandidatePins(candidatePins, pin).map(candidate => ({
+      drawCandidatePins({ ctx: planCtx, viewport }, candidatePins.map(candidate => ({
         point: lngLatToEnu(
           candidate.lng,
           candidate.lat,
@@ -4160,9 +4162,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
         ),
         index: candidate.index,
+        ...(pin && candidate.lng === pin.lng && candidate.lat === pin.lat ? { label: pin.label } : {}),
       })));
     }
-    if (pin) {
+    if (pin && !isCandidateSearchPin(candidatePins ?? [], pin)) {
       const pinPoint = lngLatToEnu(
         pin.lng,
         pin.lat,
@@ -4281,6 +4284,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // 2026-11-27：候选编号钉变化（换一批/清空）同样立即重绘。
   useEffect(() => {
     searchPinsRef.current = searchPins ?? null;
+    const pins = searchPins ?? [];
+    const key = pins.map(pin => `${pin.lng},${pin.lat}`).sort().join(';');
+    if (pins.length && key !== candidateViewKeyRef.current) {
+      const west = Math.min(...pins.map(pin => pin.lng));
+      const east = Math.max(...pins.map(pin => pin.lng));
+      const south = Math.min(...pins.map(pin => pin.lat));
+      const north = Math.max(...pins.map(pin => pin.lat));
+      const spanLng = Math.max(east - west, 0.001);
+      const spanLat = Math.max(north - south, 0.001);
+      // 左侧下拉盖住部分地图；向西留出空白，让候选整体出现在列表右侧。
+      focusCandidateBoundsRef.current([west - spanLng, south - spanLat * 0.2, east + spanLng * 0.2, north + spanLat * 0.2]);
+    }
+    candidateViewKeyRef.current = key;
     drawRef.current();
   }, [searchPins]);
   // 2026-11-19：实景扫描落位钉变化（含落位/清空）同样立即重绘。

@@ -77,7 +77,7 @@ describe('PlanPlaceSearch candidate pins', () => {
     const view = render(<PlanPlaceSearch {...props} sync={{ query: '西湖', hits: [westLake] }} />);
     await waitFor(() => expect(batches.at(-1)?.length).toBe(1));
     fireEvent.click(screen.getByTestId('plan-place-search-option-0'));
-    await waitFor(() => expect(batches.at(-1)).toBeNull());
+    await waitFor(() => expect(batches.at(-1)?.length).toBe(1));
 
     view.rerender(<PlanPlaceSearch {...props} sync={{ query: '水上森林', hits: [dock] }} />);
     await waitFor(() => expect(batches.at(-1)).toEqual([
@@ -85,7 +85,7 @@ describe('PlanPlaceSearch candidate pins', () => {
     ]));
   });
 
-  it('reports dropdown candidates with their dropdown indices and clears the batch after picking one', async () => {
+  it('keeps all dropdown numbers after selecting a result and reopening the list', async () => {
     const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
     const onCandidatesChange = (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins);
     render(
@@ -105,9 +105,13 @@ describe('PlanPlaceSearch candidate pins', () => {
       ]);
     });
 
-    // 点选第 1 条：整批候选钉收掉（null），剩下那枚由调用方的定位钉接管。
-    fireEvent.click(screen.getByTestId('plan-place-search-option-0'));
-    await waitFor(() => expect(batches.at(-1)).toBeNull());
+    const original = batches.at(-1);
+    // 点选第 2 条也不清结果、不换检索词、不把最近选中的结果排到第 1 条。
+    fireEvent.click(screen.getByTestId('plan-place-search-option-1'));
+    fireEvent.focus(screen.getByTestId('plan-place-search-input'));
+    await waitFor(() => expect(screen.getByTestId('plan-place-search-option-1').textContent).toContain(dock.name));
+    expect((screen.getByTestId('plan-place-search-input') as HTMLInputElement).value).toBe('西湖');
+    expect(batches.at(-1)).toEqual(original);
   });
 
   it('clears the batch on unmount so pins do not outlive the search island', async () => {
@@ -164,7 +168,7 @@ describe('PlanPlaceSearch candidate pins', () => {
     expect(batches.every(batch => batch === null)).toBe(true);
   });
 
-  // 场地落红线 / 候选被收回后，编号钉不能残留在图上；但下拉自己刷新同一批结果时也不能把钉带回来。
+  // 换活动后旧编号钉不能残留；下拉刷新同一批结果也不能把旧活动的钉带回来。
   it('keeps a revoked batch gone while the same search refreshes, and pins again for a new search', async () => {
     const searchSpy = vi.spyOn(placeSearch, 'searchPlaces').mockResolvedValue([westLake, dock]);
     const hintsSpy = vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);
@@ -178,7 +182,7 @@ describe('PlanPlaceSearch candidate pins', () => {
       fireEvent.change(input, { target: { value: '青山湖' } });
       await waitFor(() => expect(batches.at(-1)?.length).toBe(2), { timeout: 3000 });
 
-      // 场地落红线：调用方递增撤钉令牌 → 这批收掉。
+      // 换活动：调用方递增撤钉令牌 → 旧批次收掉。
       view.rerender(<PlanPlaceSearch {...props} revokeCandidatePins={1} />);
       await waitFor(() => expect(batches.at(-1)).toBeNull());
 

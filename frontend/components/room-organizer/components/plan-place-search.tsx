@@ -61,12 +61,12 @@ export interface PlanPlaceSearchProps {
   /**
    * 2026-11-27 用户指令（对齐百度地图）：下拉候选批量上报给画布落编号钉——
    * `index` 就是本下拉渲染的 1/N 序号（选区条目占号但无坐标，不落钉）。
-   * 在本下拉里选中一条 / 清除后整批收掉（列表已不在）。
+   * 选中后保留整批及原序号；清除搜索或切换活动时收掉。
    * 传稳定引用（如 setState）以避免每次渲染重报。
    */
   onCandidatesChange?: (pins: ReadonlyArray<SearchCandidatePin> | null) => void;
   /**
-   * 撤钉令牌：调用方每递增一次，当前这批候选钉立即收掉（场地已落红线 / 候选被收回 / 换活动）。
+   * 换活动令牌：调用方每递增一次，旧活动的这批候选钉立即收掉。
    * 只对递增时的那次检索生效——下拉自己刷新同一批结果不会把钉铺回来；
    * 换词重搜、或对话侧同步来新一批候选，照常重新铺钉。
    */
@@ -199,8 +199,7 @@ export default function PlanPlaceSearch({
   }), [keyword, areas, hits, recentMatches, outlinedNames]);
 
   // 2026-11-27 用户指令：把带坐标的候选按下拉序号上报，画布落「百度式」编号钉。
-  // 选区条目占号但无单点坐标，不落钉；选中（picked 非空）后整批收掉——
-  // 剩下那枚由调用方的定位钉接管，和地图 App「点选后只剩选中钉」同一观感。
+  // 选区条目占号但无单点坐标，不落钉；点选地点不改检索词和结果，保留全部编号。
   // 只有真实检索词（或对话侧同步候选）才铺钉：纯「最近搜过」的展开态不铺，
   // 避免工作台一加载/一聚焦就满图编号钉（百度也只在有搜索词时铺）。
   // 「一次检索」的标识，撤钉按它生效：换了词、或对话侧同步来一批新的非空候选，都算新的一次；
@@ -224,7 +223,7 @@ export default function PlanPlaceSearch({
   const pinsRevoked = revokedSession === searchSession;
 
   const placePins = useMemo<ReadonlyArray<SearchCandidatePin> | null>(() => {
-    if (picked || !keyword || pinsRevoked) return null;
+    if (!keyword || pinsRevoked) return null;
     const pins: SearchCandidatePin[] = [];
     options.forEach((option, index) => {
       if (option.kind !== 'place') return;
@@ -233,7 +232,7 @@ export default function PlanPlaceSearch({
       pins.push({ index, lng, lat, name: option.place.name });
     });
     return pins;
-  }, [options, picked, keyword, pinsRevoked]);
+  }, [options, keyword, pinsRevoked]);
 
   // 清理函数先报 null 再报新值，同一次 commit 内连发、最终值正确；
   // 组件卸载（3D 接管时整层退场）也经此把钉收干净。
@@ -257,11 +256,8 @@ export default function PlanPlaceSearch({
       return;
     }
     const place = option.place;
-    setQuery(place.name);
     setPicked(place.name);
-    setRecent(rememberPlace(place) ?? recentPlaces());
-    setHits([]);
-    setAreas([]);
+    rememberPlace(place);
     setOpen(false);
     setActive(-1);
     inputRef.current?.blur();

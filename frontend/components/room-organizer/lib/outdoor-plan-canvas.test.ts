@@ -8,6 +8,7 @@ import {
   accessRingRadiusPx,
   drawConflictMarkers,
   drawCandidatePins,
+  layoutCandidatePins,
   drawDraftLayer,
   drawArrangePreview,
   drawFacilityGhost,
@@ -34,7 +35,7 @@ import {
   planPixelToPoint,
   planPointToPixel,
   visiblePlanLayers,
-  visibleCandidatePins,
+  isCandidateSearchPin,
   type PlanCanvasContext,
   type PlanViewport,
 } from './outdoor-plan-canvas';
@@ -799,6 +800,16 @@ describe('measurement drawing (H3-a)', () => {
 
 // 2026-11-27 用户指令（对齐百度地图）：搜地点候选的批量编号钉——下拉第 N 条=地图上标 N 的钉。
 describe('candidate number pin drawing (2026-11-27)', () => {
+  it('separates all six colocated pin numbers without changing their input coordinates', () => {
+    const points = Array.from({ length: 6 }, () => ({ x: 500, y: 300 }));
+    const positions = layoutCandidatePins(points);
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        expect(Math.hypot(positions[i]!.x - positions[j]!.x, positions[i]!.y - positions[j]!.y)).toBeGreaterThanOrEqual(32);
+      }
+    }
+    expect(points).toEqual(Array.from({ length: 6 }, () => ({ x: 500, y: 300 })));
+  });
   it('paints one red pin per candidate with the dropdown number as white text', () => {
     const { ctx, cap } = makeCtx();
     drawCandidatePins({ ctx, viewport: view } as PlanCanvasContext, [
@@ -818,13 +829,25 @@ describe('candidate number pin drawing (2026-11-27)', () => {
     expect(cap.fills).toHaveLength(0);
   });
 
-  it('lets the named pin stand in for the picked candidate instead of stacking two pins on one spot', () => {
+  it('uses the numbered candidate rather than a white pin for the selected result', () => {
     const pins = [
       { index: 0, lng: 120.1, lat: 30.2, name: '青山湖水上森林' },
       { index: 1, lng: 120.2, lat: 30.3, name: '水上森林码头' },
     ];
-    expect(visibleCandidatePins(pins, null)).toBe(pins);
-    expect(visibleCandidatePins(pins, { lng: 120.2, lat: 30.3 }).map(pin => pin.index)).toEqual([0]);
+    expect(isCandidateSearchPin(pins, null)).toBe(false);
+    expect(isCandidateSearchPin(pins, { lng: 120.2, lat: 30.3 })).toBe(true);
+    expect(isCandidateSearchPin(pins, { lng: 120.5, lat: 30.3 })).toBe(false);
+  });
+
+  it('draws every number from 1 through 6, including the selected result', () => {
+    const { ctx, cap } = makeCtx();
+    Object.assign(ctx, { measureText: () => ({ width: 80 }), roundRect: () => {} });
+    drawCandidatePins({ ctx, viewport: view } as PlanCanvasContext, Array.from({ length: 6 }, (_, index) => ({
+      point: { x: index * 40, y: 0 }, index, ...(index === 1 ? { label: '水上森林码头' } : {}),
+    })));
+    expect(cap.fills.filter(fill => fill === '#e5484d')).toHaveLength(6);
+    for (let number = 1; number <= 6; number++) expect(cap.texts).toContain(String(number));
+    expect(cap.texts).toContain('水上森林码头');
   });
 });
 
