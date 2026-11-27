@@ -19,7 +19,7 @@ export interface AgentErrorView {
 }
 
 const FALLBACK_VIEW: AgentErrorView = {
-  message: '这次问答没有完成；服务商可能仍在处理或计费，请核对后再试。',
+  message: '这次没有拿到结果，原问题已保留。',
   stamp: '智能理解',
   tone: 'warn',
 };
@@ -49,6 +49,12 @@ export function agentErrorView(status: string | null | undefined): AgentErrorVie
       return {
         message: '服务商这次没在时限内返回，本次未执行；请稍后重试，或把这一句拆短一点再试。',
         stamp: '响应超时',
+        tone: 'warn',
+      };
+    case 'provider_error':
+      return {
+        message: '服务商未返回可用结果；本次结果未知，可能仍在处理或计费。',
+        stamp: '服务商异常',
         tone: 'warn',
       };
     default:

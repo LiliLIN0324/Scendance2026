@@ -52,6 +52,7 @@ const placeSearch = vi.hoisted(() => ({
 }));
 const agent = vi.hoisted(() => ({
   searchOutdoorVenue: vi.fn(),
+  confirmOutdoorVenue: vi.fn(),
   registerRouteBridge: vi.fn((bridge: OutdoorAgentBridge | null) => {
     state.bridge = bridge;
   }),
@@ -226,8 +227,9 @@ it('keeps search candidate numbers while agent previews are cleared and a bounda
   expect(placeSearch.props?.revokeCandidatePins).toBe(revokeToken);
   expect(state.canvas?.searchPins).toEqual(pins);
 });
-it('links marker and list selection, and only hands the place to the agent after confirmation', () => {
+it('hands the exact selected place to the agent on map confirmation without starting a second search', () => {
   agent.searchOutdoorVenue.mockClear();
+  agent.confirmOutdoorVenue.mockClear();
   render(<Overlay projectId="candidate-interaction" seedPlan={createStarterOutdoorPlan()} />);
   const place = { id: 'dock', name: '水上森林码头', address: '青山湖景区', lng: 120.01, lat: 30 };
   const pin = { index: 1, name: place.name, lng: place.lng, lat: place.lat, place };
@@ -235,9 +237,12 @@ it('links marker and list selection, and only hands the place to the agent after
   act(() => state.canvas!.onSearchCandidatePick!(pin));
   expect(state.canvas!.selectedSearchPlace).toEqual(place);
   expect(placeSearch.props!.selectedPlace).toEqual(place);
+  expect(agent.confirmOutdoorVenue).not.toHaveBeenCalled();
   expect(agent.searchOutdoorVenue).not.toHaveBeenCalled();
   act(() => state.canvas!.onSearchPlaceConfirm!());
-  expect(agent.searchOutdoorVenue).toHaveBeenCalledExactlyOnceWith(place.name);
+  expect(agent.confirmOutdoorVenue).toHaveBeenCalledExactlyOnceWith(place);
+  expect(agent.searchOutdoorVenue).not.toHaveBeenCalled();
+  expect(state.canvas!.selectedSearchPlace).toBeNull();
   act(() => state.canvas!.onSearchPlaceClose!());
   expect(state.canvas!.selectedSearchPlace).toBeNull();
   expect(state.canvas!.searchPins).toEqual([pin]);

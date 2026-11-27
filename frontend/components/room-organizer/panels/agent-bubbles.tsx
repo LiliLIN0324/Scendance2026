@@ -107,7 +107,12 @@ export function Bubbles({ bubbles, sessionKey, reviewOnly = false, beforeLatestQ
   onResendMessage?: (text: string) => void;
   onOpenMaterials: () => void;
 }): JSX.Element {
-  const list = reviewOnly ? bubbles.filter(bubble => bubble.review) : bubbles;
+  const seen = new Set<string>();
+  const list = bubbles.filter(bubble => {
+    if ((reviewOnly && !bubble.review) || seen.has(bubble.id)) return false;
+    seen.add(bubble.id);
+    return true;
+  });
   // 2026-11-14 用户指令：气泡 hover 出「复制 / 编辑」；编辑只给最近一条用户消息，
   // 且在原位变成 chat 框——发送即替换这句话并重新走理解管线（不回填底部输入框）。
   const [copiedId, setCopiedId] = useState<string | null>(null);

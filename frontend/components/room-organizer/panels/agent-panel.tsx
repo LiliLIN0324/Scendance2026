@@ -617,6 +617,7 @@ interface AgentValue {
   outdoorWorkflow: ReturnType<typeof useOutdoorAgentWorkflow>;
   outdoorBridgeReady:boolean;
   searchOutdoorVenue(query:string):void;
+  confirmOutdoorVenue(place: PlaceSuggestion):void;
   registerRouteBridge(bridge: OutdoorAgentBridge | null):void;
   /** 「换场地 / 新建」弹层：空白场地、我的云项目、新建项目同一个入口。 */
   venuePickerOpen: boolean;
@@ -1744,7 +1745,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   // V-1c：真实面→行政区→原位手画。只写同一份 SitePlan，不虚构矩形或重建另一张场地。
   async function handleVenuePick(place: PlaceSuggestion): Promise<void> {
-    if (!venuePick || venuePick.picking) return;
+    if (venuePick?.picking) return;
     const epoch = beginOutdoorTask('venue', true);
     routeBridgeRef.current?.previewVenuePoint?.(place);
     const pickSeq = ++venuePickSeq.current;
@@ -1752,7 +1753,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const controller = new AbortController();
     outdoorRequestRef.current?.abort(); outdoorRequestRef.current = controller;
     setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'working', action: '查询地图轮廓与草地，自动提出活动范围', steps: ['理解场地名', '候选地点已确认'] });
-    setVenuePick(current => (current ? { ...current, picking: place.name } : current));
+    setVenuePick(current => current ? { ...current, picking: place.name } : current);
     const near = { lng: place.lng, lat: place.lat };
     const spanMeters = (polygon: [number, number][]): number => {
       let west = Infinity; let east = -Infinity; let south = Infinity; let north = -Infinity;
@@ -3121,7 +3122,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
           surface:'assistant', userText:text, assistantText:view.message, outcome:'failed',
         });
         // 按既定口径：所有错误卡都保留「重试云端理解 / 改一句再说」；重试是手动重发同一句，不会自动换到其它模型。
-        const retry = () => { if (!briefRequest.current) void send(text, true); };
+        const retry = () => { if (!briefRequest.current) void send(text); };
         const alert = { stamp: view.stamp, tone: view.tone, retry };
         say({role:'agent',amber:true,text:view.message,alert});
       }
@@ -3133,7 +3134,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
           ...(trace.projectId?{projectId:trace.projectId}:{}),
           surface:'assistant', userText:text, assistantText:'问答没完成，可能还在计费。', outcome:'failed',
         });
-        say({role:'agent',amber:true,text:'问答没完成，可能还在计费。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text,true);}}});}
+        say({role:'agent',amber:true,text:'问答没完成，可能还在计费。',alert:{stamp:'智能理解',tone:'warn',retry:()=>{if(!briefRequest.current)void send(text);}}});}
     } finally {pendingModelInputs.current.delete(text);if(briefRequest.current===request){briefRequest.current=null;setUnderstanding(false);}setStreamPreview(null);release();}
   }
 
@@ -3936,6 +3937,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     placeStyleBundle: placeStyleBundleNow,
     applyMapVenuePick: applyVenuePick,
     venuePick,
+    confirmOutdoorVenue: place => { void handleVenuePick(place); },
     handleVenuePick: place => { void handleVenuePick(place); },
     previewVenueCandidate: place => { routeBridgeRef.current?.previewVenuePoint?.(place); },
     dismissVenuePick: stopOutdoorTask,
@@ -4746,8 +4748,9 @@ useEffect(() => {
   const waitingOutdoorReply = !bingo && agent.outdoorTask?.state === 'ask' && agent.bubbles.at(-1)?.outdoorQuestion === true;
   // 2026-11-17 用户：Bingo 底部那张「当前任务·搜索目标地点」是错误地加了素材图，整块收掉。
   // 活动脸的引导卡照旧；Bingo 只留审校统计与气泡，不再带任务缩略图。
+  const requestShownInChat = agent.bubbles.some(bubble => bubble.role === 'user' && !bubble.review && bubble.text === agent.outdoorWorkflow.thoughtRequest);
   const outdoorWorkflowCard = !bingo && agent.outdoorBridgeReady && (!agent.venuePick || waitingOutdoorReply || agent.outdoorWorkflow.pendingPlan) && (
-    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} replyPending={waitingOutdoorReply} showCaption={!traceActive} onSearchPlace={focusPlaceSearch} onAdjustPlan={() => inputRef.current?.focus()} onCancelPreview={() => {
+    <OutdoorWorkflowCard flow={agent.outdoorWorkflow} requestShownInChat={requestShownInChat} onRestoreRetryDraft={text => { if (!draft.trim()) setDraft(text); }} replyPending={waitingOutdoorReply} showCaption={!traceActive} onSearchPlace={focusPlaceSearch} onAdjustPlan={() => inputRef.current?.focus()} onCancelPreview={() => {
       agent.outdoorWorkflow.cancel();
       agent.sayDecisionBadge('rejected', '已撤回这版预览，画布保持原样。已确认的部分保留。');
     }}/>
@@ -4883,8 +4886,11 @@ useEffect(() => {
           ))}
         </div>
       )}
+      {activity && outdoorWorkflowCard && sessionTitle === '新会话' && !agent.bubbles.some(bubble => !bubble.review) &&
+        (agent.outdoorWorkflow.scopeConfirmed() || agent.outdoorWorkflow.proposal || agent.outdoorWorkflow.state.pendingBoundary) &&
+        <p className="ap-recap" role="status">沿用当前活动的画布与规划任务。</p>}
       {!waitingOutdoorReply && outdoorWorkflowCard}
-      {!outdoorWorkflowCard && !bingo && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} request={agent.outdoorWorkflow.thoughtRequest} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
+      {!outdoorWorkflowCard && !bingo && agent.outdoorBridgeReady && agent.venuePick && <OutdoorThoughtRecord thought={agent.outdoorWorkflow.thought} request={requestShownInChat ? null : agent.outdoorWorkflow.thoughtRequest} elapsedMs={agent.outdoorWorkflow.thoughtMs} />}
       {/* V-2d 流线提案确认卡（桥接模式）：旧任务卡只在非桥接态渲染，桥接态给一张独立确认卡。 */}
       {agent.outdoorBridgeReady && !agent.venuePick && agent.routeProposal && <RouteConfirmCard
         summary={agent.routeProposal.summary}

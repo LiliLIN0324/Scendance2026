@@ -1231,8 +1231,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             selectedSearchPlace={selectedSearchPlace}
             onSearchCandidatePick={pin => { if (pin.place) previewSearchPlace(pin.place); }}
             onSearchPlaceClose={closeSearchPlace}
-            {...(agent?.searchOutdoorVenue ? { onSearchPlaceConfirm: () => {
-              if (selectedSearchPlace) agent.searchOutdoorVenue(selectedSearchPlace.name);
+            {...(agent?.confirmOutdoorVenue ? { onSearchPlaceConfirm: () => {
+              if (!selectedSearchPlace) return;
+              agent.confirmOutdoorVenue(selectedSearchPlace);
+              closeSearchPlace();
             } } : {})}
             {...(placeArea ? { searchArea: placeArea } : {})}
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
