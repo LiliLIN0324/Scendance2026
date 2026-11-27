@@ -27,9 +27,17 @@ export function layoutForExport(layout: RoomLayout, stripHandoffs = false): Room
     ...(layout.designBook ? {
       designBook: {
         ...layout.designBook,
-        variants: layout.designBook.variants.map((variant) => ({
-          ...variant, layout: layoutForExport(variant.layout, stripHandoffs),
-        })),
+        variants: layout.designBook.variants.map((variant) => {
+          const copy = { ...variant, layout: layoutForExport(variant.layout, stripHandoffs) };
+          // 外发载荷（分享链接 / 客户投影）剥离变体侧车指针与扫描身份，目标机无对应记录；
+          // 冻结摘要的数字标签保留，供预览列规模。解码侧不按名称重新挂回 ref。
+          if (stripHandoffs) {
+            delete copy.operationsRef;
+            delete copy.planRef;
+            delete copy.scan;
+          }
+          return copy;
+        }),
       },
     } : {}),
   };
