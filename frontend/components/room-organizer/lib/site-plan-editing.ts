@@ -12,7 +12,7 @@
  */
 
 import { planRingAreaM2, planZoneSemanticLabels, type PlanPoint, type PlanZone } from '../../../../supabase/functions/_shared/site-plan';
-import { PLANNING_ZONE_COLORS, PLANNING_ZONE_OPACITY, type PlanningZoneSemantic } from '@/lib/outdoor-plan-tokens';
+import { PLANNING_ZONE_COLORS, PLANNING_ZONE_OPACITY, type PlanningZoneSemantic } from '../../../lib/outdoor-plan-tokens';
 
 /**
  * 场地边界最小面积（m²）：只用来挡「退化形状」（三点几乎共线、误点一下），不限制场地能画多小。
