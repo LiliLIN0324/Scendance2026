@@ -18,6 +18,7 @@ import * as stagePlatformPlan from '../lib/stage-platform-plan';
 import * as researchArea from '../lib/research-area';
 import * as placeSearch from '../lib/place-search';
 import * as placeArea from '../lib/place-area';
+import * as outdoorRange from '../lib/agent-venue-range';
 import * as placeSearchOptions from '../lib/place-search-options';
 import * as roadNetwork from '../lib/road-network';
 import * as mapBuildings from '../lib/openfreemap-buildings';
@@ -4846,8 +4847,10 @@ describe('outdoor V1–V5 real task-state actions', () => {
   it('地图已确认的地点直接进入范围识别，不再要求确认Agent候选卡', async () => {
     const plan = createStarterOutdoorPlan();
     const place = { id: 'qing-shan', name: '青山湖水上森林', address: '锦北街道科技大道青山湖风景区内', lng: 120.16, lat: 30.25 };
+    const outline = [{ x: -80, y: -60 }, { x: 80, y: -60 }, { x: 80, y: 60 }, { x: -80, y: 60 }];
     const fetchShape = vi.spyOn(placeArea, 'fetchPlaceShape').mockResolvedValue({ id: 'outline', name: place.name, level: '占地范围', lng: place.lng, lat: place.lat, kind: 'area', polygon: [[120.16,30.25],[120.161,30.25],[120.161,30.251],[120.16,30.251]], bounds: [120.16,30.25,120.161,30.251] });
     const applyPlan = vi.fn(() => true);
+    vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: outline, basis: { kind: 'place-outline', detail: 'test' }, waterLines: [] });
     let current!: NonNullable<ReturnType<typeof useAgent>>;
     function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyPlan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true }); return null; }
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
@@ -4856,6 +4859,12 @@ describe('outdoor V1–V5 real task-state actions', () => {
     await waitFor(() => expect(fetchShape).toHaveBeenCalledWith(place.name, expect.objectContaining({ near: { lng: place.lng, lat: place.lat } })));
     await waitFor(() => expect(current.venuePick).toBeNull());
     expect(screen.queryByRole('region', { name: '场地确认' })).toBeNull();
+    await waitFor(() => expect(outdoorRange.proposeAutomaticVenueRange).toHaveBeenCalled());
+    expect(outdoorRange.proposeAutomaticVenueRange).toHaveBeenCalledWith(expect.objectContaining({ footprint: expect.any(Array) }));
+    await waitFor(() => expect(current.outdoorWorkflow.proposal?.kind).toBe('scope'));
+    expect(current.outdoorWorkflow.proposal?.next.boundary).toEqual(outline);
+    expect(current.outdoorWorkflow.proposal?.kind).toBe('scope');
+    expect(screen.getByRole('button', { name: '确认并应用这一版' })).toBeTruthy();
     expect(applyPlan).not.toHaveBeenCalled();
   });
   it('说选第二个立即定位钉，轮廓晚到才写入，当前Agent自然确认候选', async () => {

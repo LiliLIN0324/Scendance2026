@@ -2,7 +2,6 @@ import type { SitePlanData } from '../../../../supabase/functions/_shared/site-p
 import type { OutdoorTurn } from './outdoor-agent-contract';
 import { createOutdoorMapContext } from './outdoor-map-context';
 import { checkBoundaryRing } from './site-plan-editing';
-import { planRingAreaM2 } from '../../../../supabase/functions/_shared/site-plan';
 
 /**
  * 旧版本把「范围依据」当成一条画布 note 贴在地图正中（2026-11-19 的实现）。
@@ -197,22 +196,11 @@ export async function proposeAutomaticVenueRange(input: {
     input.signal.throwIfAborted();
     waters = ((map as { water?: () => WaterRing[] }).water?.() ?? []);
     complete = map.status === 'ready';
-    const grass = (map.openAreas?.() ?? []).filter(area => area.tags.landuse === 'grass'
-      && !['private', 'no'].includes(area.tags.access ?? '') && area.ring.length <= 200 && checkBoundaryRing(area.ring).ok)
-      .filter(area => planRingAreaM2(area.ring) >= 100 && planRingAreaM2(area.ring) <= 30000)
-      .filter(area => !input.footprint || area.ring.every(point => pointInside(point, input.footprint!)))
-      // A：压到水面的草地候选不当作可用场地，换下一个；没剩的就走兜底。
-      .filter(area => !ringTouchesWater(area.ring, waters))
-      .sort((a, b) => centerDistance(a.ring) - centerDistance(b.ring));
-    if (grass[0]) return proposal(grass[0].ring, { kind: 'mapped-grass', location: 'mapped', scale: 'mapped', detail: `地图草地候选：${grass[0].name || input.name}（${grass[0].id}）；地图标记不代表已获活动使用许可。` });
   } catch { input.signal.throwIfAborted(); }
   if (input.footprint && checkBoundaryRing(input.footprint).ok) {
-    // B：地点轮廓本身就把湖/河包在里面（水上森林、沿河公园都是这种），收缩到轮廓内最大无水区块。
-    const cleared = waters.length ? largestWaterFreeRect(input.footprint, waters) : null;
-    return proposal(cleared ?? input.footprint, { kind: 'place-outline', location: 'mapped', scale: 'mapped',
-        detail: cleared
-          ? '仅取得地点整体轮廓（含水面），已收缩到轮廓内最大的无水区块；这是范围候选，可用聊天缩小，不能当作实测活动用地。'
-          : '仅取得地点整体轮廓，尚未识别具体可用草坪；这是范围候选，可用聊天缩小，不能当作实测活动用地。' });
+    // Keep the selected POI outline intact; water is reported for review, not used to invent an activity boundary.
+    return proposal(input.footprint, { kind: 'place-outline', location: 'mapped', scale: 'mapped',
+        detail: '地点整体轮廓作为范围候选；活动可用范围仍需核对。' });
   }
   const concept = rectangle(40, 30);
   const nearby = waters.length && ringTouchesWater(concept, waters)
@@ -230,9 +218,6 @@ export async function proposeAutomaticVenueRange(input: {
     detail: '未取得真实用地边界，先按 40×30 米建立概念草案；地点定位已保留，尺寸和草坪实际位置均为待核对假设。可直接说长宽或上传带尺寸图纸调整。' });
 }
 
-function centerDistance(ring: SitePlanData['boundary']): number {
-  return Math.hypot(ring.reduce((sum, p) => sum + p.x, 0) / ring.length, ring.reduce((sum, p) => sum + p.y, 0) / ring.length);
-}
 function pointInside(p: { x: number; y: number }, ring: SitePlanData['boundary']): boolean {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
