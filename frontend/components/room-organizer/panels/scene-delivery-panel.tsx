@@ -38,6 +38,7 @@ import { summarizeDeliveryGaps, type DeliveryGapGroup } from '../lib/delivery-re
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import type {PendingCandidateCapture} from '../lib/pending-candidate-registry';
 import { useRoomEditor } from '../contexts/room-editor-context';
+import { useSidecarResolution } from '../hooks/use-sidecar-resolution';
 import './scene-delivery-panel.css';
 
 interface Props {
@@ -235,7 +236,20 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 /** Delivery and local execution stay inside the existing Bingo Agent entry point. */
 export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel, captureMobility, captureDialogue, captureLocalDraftExport, capturePendingCandidates }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
-  const { projectId } = useRoomEditor();
+  const { projectId, outdoorPlan } = useRoomEditor();
+  // D6-2 读侧：ref → 独立记录；空 ref 回落旧整包只读；missing 不填旧值。
+  const operationsResolution = useSidecarResolution<EventOperations>({ projectId, kind: 'operations', refId: outdoorPlan?.operationsRef, legacyFallback: layout.eventOperations });
+  const planResolution = useSidecarResolution<ProductionPlan>({ projectId, kind: 'plan', refId: outdoorPlan?.planRef, legacyFallback: layout.productionPlan });
+  const resolvedOperations = operationsResolution.data;
+  const resolvedPlan = planResolution.data;
+  // 投影 layout 只用于把解析后的数据下传子面板；不回写整包，旧整包仅作回落兜底。
+  // 回落旧整包时数据引用与原 layout 一致，直接复用原对象，避免子面板基线 epoch 反复抖动。
+  const viewLayout = useMemo<RoomLayout>(() => {
+    const opsSame = resolvedOperations === layout.eventOperations;
+    const planSame = resolvedPlan === layout.productionPlan;
+    if (opsSame && planSame) return layout;
+    return { ...layout, eventOperations: resolvedOperations, productionPlan: resolvedPlan };
+  }, [layout, resolvedOperations, resolvedPlan]);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [includeVenueNotes, setIncludeVenueNotes] = useState(false);
   const [packageResult, setPackageResult] = useState<DeliveryPackageResult | null>(null);
@@ -270,7 +284,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       setVersionBusy(false);
     }
   }
-  const operationsAvailable = !!onUpdateEventOperations || !!layout.eventOperations;
+  const operationsAvailable = !!onUpdateEventOperations || !!resolvedOperations;
   const [view, setView] = useState<'review' | 'operations' | 'materials' | 'production' | 'checkins' | 'export' | 'backup'>(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials'));
   useEffect(() => { setView(deliveryViewRequest?.view ?? (operationsAvailable ? 'operations' : 'materials')); }, [deliveryViewRequest, layout.id, operationsAvailable]);
   // 物料、备份落在「内部资料」里。外部点进来时把这扇门掀开，否则落点在关着的门后面。
@@ -303,8 +317,8 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
   }, [layout]);
   // 核对段：只读聚合本机台账缺口，不产生新记录、不改状态。
   const reviewSummary = useMemo(
-    () => summarizeDeliveryGaps({ layout, checkins: localCheckins?.ledger }),
-    [layout, localCheckins?.ledger],
+    () => summarizeDeliveryGaps({ layout, operations: resolvedOperations, plan: resolvedPlan, checkins: localCheckins?.ledger }),
+    [layout, resolvedOperations, resolvedPlan, localCheckins?.ledger],
   );
   const requestedCloud = typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('project') === layout.id;
   const cloudBound = !checkinLocal && !!layout.id && (cloud.project?.id === layout.id || requestedCloud);
@@ -552,7 +566,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
     </div>}
     {/* 档案、需求、当天包、任务在门面上折起。六页执行台留在「内部资料」里。 */}
     <div role="tabpanel" id="delivery-operations" aria-labelledby="delivery-operations-tab" hidden={view !== 'operations'}>
-      <EventOperationsPanel compact suggestionsPanel={activityTaskPanel} layout={layout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins} delivery={version ? { version: version.deliveryVersion, status: version.status, confirmedVersion: version.confirmed?.deliveryVersion ?? null } : null}/>
+      <EventOperationsPanel compact suggestionsPanel={activityTaskPanel} layout={viewLayout} disabled={cloudBound || busy || !onUpdateEventOperations} onUpdate={onUpdateEventOperations ?? (() => undefined)} onLocate={onLocate} briefState={briefState} onOpenBrief={onOpenBrief} checkins={localCheckins} delivery={version ? { version: version.deliveryVersion, status: version.status, confirmedVersion: version.confirmed?.deliveryVersion ?? null } : null}/>
     </div>
     <details className="dl-tools dl-row" open={toolsOpen} onToggle={event => {
       const open = event.currentTarget.open;
@@ -577,6 +591,9 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       {view === 'operations' && <p className="dl-tools-foot">活动安排随当前场景保存在此浏览器。</p>}
     <div role="tabpanel" id="delivery-review" aria-labelledby="delivery-review-tab" hidden={view !== 'review'}>
       <p className="sc-note">以下只读汇总本机活动任务、工作单、制作计划与点验里尚未闭环的缺口；补齐请回到对应表单。列出缺口不等于现场安全或完成验收。</p>
+      {(operationsResolution.status === 'missing' || planResolution.status === 'missing') && (
+        <p className="sc-handoff-review" role="alert">原方案未找到 / 已变动，待核。</p>
+      )}
       {reviewSummary.total === 0 ? (
         <p className="sc-note">当前台账暂无待核对缺口；仍需对照现场条件与对话需求逐项确认。</p>
       ) : REVIEW_GROUPS.map(group => {
@@ -601,11 +618,11 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       })}
     </div>
     <div role="tabpanel" id="delivery-production" aria-labelledby="delivery-production-tab" hidden={view !== 'production'}>
-      <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy||checkinsUnavailable} onExport={()=>void download('production')}/>
+      <ProductionPlanPanel layout={viewLayout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy||checkinsUnavailable} onExport={()=>void download('production')}/>
     </div>
     <div role="tabpanel" id="delivery-checkins" aria-labelledby="delivery-checkins-tab" hidden={view!=='checkins'}>
       {localCheckins&&projectId?<>
-        <MaterialCheckinPanel layout={layout} projectId={projectId} ledger={localCheckins.ledger} loading={localCheckins.loading} error={localCheckins.error} disabled={busy||backupActions?.backupPending||!localCheckins.ready} onSave={localCheckins.onSave} exporting={busy} onExport={()=>void download('production')}/>
+        <MaterialCheckinPanel layout={viewLayout} projectId={projectId} ledger={localCheckins.ledger} loading={localCheckins.loading} error={localCheckins.error} disabled={busy||backupActions?.backupPending||!localCheckins.ready} onSave={localCheckins.onSave} exporting={busy} onExport={()=>void download('production')}/>
         {localCheckins.error&&<button className="sc-button" type="button" onClick={localCheckins.retry}>重新读取点验</button>}
       </>:<p className="sc-note">请在有明确编号的本地项目中记录数量点验。云项目暂不支持此项记录。</p>}
     </div>
@@ -638,11 +655,11 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       {backupActions && <>
         <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || briefUnavailable || backupActions.backupPending} onClick={() => void download('activity')}>导出活动执行资料草案 HTML</button>
         <p className="sc-note">包含执行页已保存的手工需求、活动任务、物件工作单、制作计划和点验。{captureDialogue?'可附当前对话已处理的部分结构化需求，并标示人数、活动类型与已确认手工记录的差异；刚发送或尚未处理的消息可能未包含，其他内容需人工核对。':'活动助手对话需求未完整包含，尚未比较差异。'}请先核对并保存各表单；照片和模型文件需另行提供。</p>
-        <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || briefUnavailable || backupActions.backupPending || !layout.eventOperations?.tasks.length} onClick={() => void download('timetable')}>导出执行时间表 HTML</button>
-        <p className="sc-note">{layout.eventOperations?.tasks.length ? '保留每项任务的计划与实际时间、负责人及复核信息。未定项保持待确认，文件冻结在本次生成时。' : '先在活动安排中保存任务，再导出执行时间表。'}</p>
+        <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || briefUnavailable || backupActions.backupPending || !resolvedOperations?.tasks.length} onClick={() => void download('timetable')}>导出执行时间表 HTML</button>
+        <p className="sc-note">{resolvedOperations?.tasks.length ? '保留每项任务的计划与实际时间、负责人及复核信息。未定项保持待确认，文件冻结在本次生成时。' : '先在活动安排中保存任务，再导出执行时间表。'}</p>
         {briefUnavailable && <p className="sc-note">活动需求尚未准备好，请在活动需求中重试读取。</p>}
       </>}
-      <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || !layout.eventOperations} onClick={() => void download('operations')}>导出活动安排 CSV</button>
+      <button className="sc-button sc-full" type="button" disabled={busy || checkinsUnavailable || !resolvedOperations} onClick={() => void download('operations')}>导出活动安排 CSV</button>
       <h3>图纸与交付清单</h3>
       {layout.floors.length > 1 && <p className="sc-note">平面打印和 DXF 仅包含首层“{layout.floors[0]?.name}”，其他 {layout.floors.length - 1} 层未包含，请另行提供。</p>}
       {planExportUnsupportedReason(layout) && <p className="sc-note" role="alert">{planExportUnsupportedReason(layout)}</p>}

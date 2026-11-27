@@ -1,7 +1,7 @@
 import { operationObjectReview } from './event-operations';
 import { resolveProductionPlanReferences, productionEstimateSummary, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { RoomLayout, FurnitureItem } from './types';
-import type { EventOperationTask } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { EventOperationTask, EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { MaterialCheckinLedger, MaterialCheckinIssueCode } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { materialCheckinSummary } from '../../../../supabase/functions/_shared/material-checkin-contract';
 
@@ -118,19 +118,27 @@ function reviewCheckins(ledger: MaterialCheckinLedger, gaps: DeliveryGap[]): voi
   }
 }
 
-export function summarizeDeliveryGaps(input: { layout: RoomLayout; checkins?: MaterialCheckinLedger | undefined }): DeliveryReviewSummary {
-  const { layout, checkins } = input;
+export function summarizeDeliveryGaps(input: {
+  layout: RoomLayout;
+  checkins?: MaterialCheckinLedger | undefined;
+  /** D6-2：读侧解析后的活动安排；缺省回落 layout 旧整包（只读兜底）。 */
+  operations?: EventOperations | undefined;
+  /** D6-2：读侧解析后的制作计划；缺省回落 layout 旧整包（只读兜底）。 */
+  plan?: ProductionPlan | undefined;
+}): DeliveryReviewSummary {
+  const { layout, checkins, operations, plan } = input;
   const gaps: DeliveryGap[] = [];
   const counts: Record<DeliveryGapGroup, number> = { operations: 0, workorders: 0, plan: 0, checkins: 0 };
 
-  const tasks = layout.eventOperations?.tasks ?? [];
+  const tasks = (operations ?? layout.eventOperations)?.tasks ?? [];
   for (const task of tasks) pushGap(gaps, 'operations', task.title, reviewTask(layout, task), task.id);
 
   const items = layout.floors.flatMap(floor => floor.items);
   for (const item of items) pushGap(gaps, 'workorders', item.name, reviewWorkorder(item), item.id, item.id);
 
-  if (layout.productionPlan) {
-    reviewPlan(layout.productionPlan, { taskIds: tasks.map(task => task.id), objectIds: items.map(item => item.id) }, gaps);
+  const resolvedPlan = plan ?? layout.productionPlan;
+  if (resolvedPlan) {
+    reviewPlan(resolvedPlan, { taskIds: tasks.map(task => task.id), objectIds: items.map(item => item.id) }, gaps);
   }
 
   if (checkins) reviewCheckins(checkins, gaps);
