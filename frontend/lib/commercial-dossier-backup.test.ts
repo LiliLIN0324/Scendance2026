@@ -254,7 +254,7 @@ describe('complete commercial originals package', () => {
 
 describe('same-project guarded restoration boundary', () => {
   function oldBackup(version: 1 | 2 | 3 | 4): unknown {
-    const base = createLocalProjectBackup(makeLayout({ id: projectId }), { state: 'ready', scope: projectId, brief: { status: 'absent' } }, generatedAt);
+    const base = createLocalProjectBackup(makeLayout({ id: projectId }), { state: 'ready', scope: projectId, brief: { status: 'absent' } }, { projectId: projectId }, generatedAt);
     if (version === 1) return { ...base, version, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE };
     if (version === 2) return base;
     const v3 = { ...base, version, coverage: LOCAL_PROJECT_BACKUP_V3_COVERAGE, materialCheckins: { status: 'absent' } };

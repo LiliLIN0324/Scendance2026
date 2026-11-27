@@ -130,8 +130,6 @@ describe('local handoff lifecycle', () => {
     const before = stateWith();
     const duplicate = layoutReducer(before, { type: 'duplicateItem', sourceId: 'table-1', newId: 'copy-1' });
     expect(duplicate.layout.floors[0]!.items[1]).not.toHaveProperty('handoff');
-    const copiedFloor = layoutReducer(before, { type: 'duplicateFloor', sourceIndex: 0, newId: 'upper', idSuffix: 'fresh' });
-    expect(copiedFloor.layout.floors[1]!.items[0]).not.toHaveProperty('handoff');
     copyToClipboard(before.layout.floors[0]!.items);
     const pasted = buildPasteItems({ roomWidth: 8, roomDepth: 8, idTag: 'fresh' });
     expect(pasted[0]).not.toHaveProperty('handoff');

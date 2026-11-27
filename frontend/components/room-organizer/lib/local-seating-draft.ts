@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {sizeSchema,venueSchema} from '../../../../supabase/functions/_shared/domain';
 import {footprint,structuralViolations} from '../../../../supabase/functions/_shared/structural-geometry';
 import {floorKeepOut} from './floor-keep-out';
+import {legacyGroundOf} from './legacy-ground';
 import {hasCollisions,isLowProfile,itemsOverlap} from './geometry';
 import {isStructuralMarker,layoutGeometryScene,materialCount} from './structural-layout';
 import {makeLocalSeatingWitness,type LocalSeatingWitness} from './local-seating-witness';
@@ -77,7 +78,7 @@ function planDraft(original:RoomLayout,input:LocalDeskChairInput|LocalSharedDesk
   if(!floor||!Number.isFinite(layout.width)||!Number.isFinite(layout.height)||layout.width<=0||layout.height<=0)return unknownGeometry('楼层或场地尺寸未能核对');
   // Scanned architecture may contain fixed geometry outside editable objects.
   if(layout.venueScan)return {...base,unknown:[...base.unknown,'扫描空间中的固定结构尚未完整展开'],limitReason:'preset_unverified'};
-  if(layout.mapGroundPolygon?.length&&!layout.backendVenue?.polygon)return unknownGeometry('地图范围尚未转换为可核对的场地轮廓');
+  if(legacyGroundOf(layout).mapGroundPolygon?.length&&!layout.backendVenue?.polygon)return unknownGeometry('地图范围尚未转换为可核对的场地轮廓');
   if(layout.backendSceneV2&&!layout.backendVenue)return unknownGeometry('场地结构与轮廓尚未建立一致的版本');
   if(layout.backendVenue&&(layout.backendVenue.width!==layout.width||layout.backendVenue.depth!==layout.height))return unknownGeometry('当前画布与场地轮廓的尺寸不一致');
   if(layout.backendSceneV2&&layout.backendVenue){
@@ -91,7 +92,6 @@ function planDraft(original:RoomLayout,input:LocalDeskChairInput|LocalSharedDesk
     const id=item.id?.trim().toLowerCase();if(!id||ids.has(id))return unknownGeometry('物件编号缺失或重复');ids.add(id);
   }
   // Structure IDs share the backend scene namespace with furniture IDs.
-  for(const wall of layout.floors.flatMap(entry=>entry.interiorWalls??[]))if(wall.id)ids.add(wall.id.toLowerCase());
   for(const entrance of layout.backendVenue?.entrances??[])ids.add(entrance.id.toLowerCase());
   if(layout.backendSceneV2)for(const entity of [...layout.backendSceneV2.structure.walls,...layout.backendSceneV2.structure.openings,...layout.backendSceneV2.structure.columns])ids.add(entity.id.toLowerCase());
   const model=layoutGeometryScene(layout,input.floorIndex);
@@ -139,7 +139,7 @@ function planDraft(original:RoomLayout,input:LocalDeskChairInput|LocalSharedDesk
       const chairs:FurnitureItem[]=Array.from({length:numberOfChairs},(_,index)=>({id:tempId(`chair_${index}`),type:'chair',name:'座椅（示意）',...input.chair,color:'#ffffff',icon:'',category:'seating',source:'builtin',position:{x:x+(numberOfChairs===2?(index===0?-1:1)*(input.chair.width+(shared?input.chairGap:0))/2:0),z:z+input.desk.depth+input.deskChairGap+input.chair.depth/2},rotation:Math.PI}));
       const group=[desk,...chairs];
       if(chairs.some(chair=>itemsOverlap(desk,chair))||group.some(item=>!boundaryClear(item,polygon,input.edgeClearance,layout.width,layout.height)))continue;
-      if(group.some(item=>hasCollisions(item,objects,layout.width,layout.height,{interiorWalls:floor.interiorWalls,keepOut})))continue;
+      if(group.some(item=>hasCollisions(item,objects,layout.width,layout.height,{keepOut})))continue;
       if(objects.some(item=>occupies(item)&&group.some(candidate=>itemsOverlap(candidate,item))))continue;
       const world=(item:FurnitureItem)=>({id:item.id,materialId:item.type==='desk'?'table' as const:'chair' as const,position:{x:item.position!.x+layout.width/2,z:item.position!.z+layout.height/2},size:{width:item.width,depth:item.depth,height:item.height},rotation:-(item.rotation??0)*180/Math.PI,color:item.color,locked:false,notes:''});
       if(structuralViolations({...model,objects:group.map(world)}).length)continue;

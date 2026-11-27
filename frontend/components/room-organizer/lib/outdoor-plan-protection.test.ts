@@ -3,7 +3,7 @@ import { createStarterOutdoorPlan } from './outdoor-project-store';
 import { checkBoundaryRing } from './site-plan-editing';
 import { lngLatToEnu } from './outdoor-plan-canvas';
 import { boundaryAtNewAnchor, canReanchorOutdoorPlan, clearPlanBoundary, planForPickedVenue } from './outdoor-plan-protection';
-import { sceneAnchorFromOutdoorPlan, trueFootprintBoundary } from './outdoor-venue-sync';
+import { trueFootprintBoundary } from './outdoor-venue-sync';
 it('空规划允许真实选址；已有入口/物料等不随新地名悄悄搬家，原对象不变', () => {
   const plan = createStarterOutdoorPlan(); const next = { ...plan.anchor!, lng: plan.anchor!.lng + 0.1 };
   expect(canReanchorOutdoorPlan(plan, next)).toBe(true);
@@ -32,13 +32,11 @@ it('旧 plan 不带 vehicles 字段不虚构车：空规划仍可换锤点', () 
   expect(canReanchorOutdoorPlan(plan, { ...plan.anchor!, lng: plan.anchor!.lng + 0.1 })).toBe(true);
 });
 
-it('真实面写米制坐标，场景西北原点与缩放可反映射到同一地理场地', () => {
+it('真实面写米制坐标，边界是街区尺度并过红线校验', () => {
   const anchor = { lng: 120.163, lat: 30.25, crs: 'gcj-02' as const, source: 'lookup' as const };
   const footprint = [{ lng: 120.163, lat: 30.25 }, { lng: 120.165, lat: 30.25 }, { lng: 120.165, lat: 30.251 }, { lng: 120.163, lat: 30.251 }];
   const boundary = trueFootprintBoundary([...footprint, footprint[0]!], anchor)!;
   expect(boundary).toHaveLength(4); expect(checkBoundaryRing(boundary).ok).toBe(true); expect(Math.max(...boundary.map(p => p.x))).toBeGreaterThan(150);
-  const mirror = sceneAnchorFromOutdoorPlan({ anchor, boundary });
-  expect(mirror).not.toBeNull(); expect(mirror!.lng).toBeCloseTo(120.163, 5); expect(mirror!.lat).toBeCloseTo(30.251, 5);
 });
 
 it('远处场地手画前不改锚点，闭合时一次转换旧视口坐标到新地理原点', () => {

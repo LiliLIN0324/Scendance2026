@@ -3,6 +3,7 @@ import { layoutToBackendScene } from '../components/room-organizer/lib/backend-a
 import type { RoomLayout } from '../components/room-organizer/lib/types';
 import { imageToWorldRegistration } from './reconstruction-review';
 import type { ImagePoint, StoredSource } from './source-storage';
+import { resolveProjectScope } from './project-scope';
 
 export interface ReferenceImageLayer {
   url: string; pixelWidth: number; pixelHeight: number;
@@ -30,7 +31,7 @@ export function referenceStructure(layout:RoomLayout):SceneV2|null {
 }
 export function referenceSceneBasis(layout: RoomLayout): string {
   if(layout.backendSceneV2?.schemaVersion!==2||![layout.width,layout.height].every(value=>Number.isFinite(value)&&value>0))return '';
-  return canonical({schemaVersion:2,frame:'corner-xz',scope:layout.id??'local',width:layout.width,depth:layout.height});
+  return canonical({schemaVersion:2,frame:'corner-xz',scope:resolveProjectScope(layout.id),width:layout.width,depth:layout.height});
 }
 function record(value:unknown):value is Record<string,unknown>{return typeof value==='object'&&value!==null&&!Array.isArray(value);}
 /** Resolve only a unique local image and an explicitly applied mapping; no network or URL creation. */
@@ -38,7 +39,7 @@ export function resolveReferenceImage(layout:RoomLayout,storedSources:readonly S
   const basis=referenceSceneBasis(layout),scene=layout.backendSceneV2;
   if(!basis||!scene)return {status:'unavailable',notice:'当前设计没有可核对的场地结构，请先按实测尺寸创建场地。'};
   const raw=record(form)&&record(form.registration)?form.registration:undefined;
-  const scope=layout.id??'local';
+  const scope=resolveProjectScope(layout.id);
   const eligible=storedSources.filter(source=>source&&source.scope===scope&&source.kind==='floorplan'&&
     typeof source.id==='string'&&source.id.length>0&&source.blob instanceof Blob&&source.blob.size>0&&
     [source.width,source.height].every(value=>Number.isInteger(value)&&value>0&&value<=4096)&&

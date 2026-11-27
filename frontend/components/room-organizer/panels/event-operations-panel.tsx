@@ -3,6 +3,7 @@
 import { ChevronRight, ClipboardList, Folder, ListChecks, Package } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { productionReferenceKey as objectKey } from '@/lib/production-plan';
+import { resolveProjectScope } from '@/lib/project-scope';
 import { registerSourceFlush } from '@/lib/source-storage';
 import { handoffLimits } from '../../../../supabase/functions/_shared/delivery-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
@@ -74,7 +75,7 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, checkin
   const [saving, setSaving] = useState(false);
   const pending = useRef(false), mounted = useRef(true);
   const taskSnapshot = JSON.stringify(task);
-  const scope = layout.id ?? 'local';
+  const scope = resolveProjectScope(layout.id);
   const savedTask = useRef(task);
   const dirty = canonical(draft) !== canonical(savedTask.current) || canonical(times) !== canonical(timeInputs(savedTask.current)) || links !== savedTask.current.evidenceUrls.join('\n') || badTimeFields.length > 0;
   const latest = useRef({ layout, task, disabled, checkins, dirty }); latest.current = { layout, task, disabled, checkins, dirty };
@@ -85,7 +86,7 @@ function OperationEditor({ layout, task, status, reviewFailed, disabled, checkin
     setDraft(restored); setTimes(timeInputs(restored)); setBadTimeFields([]); setLinks(restored.evidenceUrls.join('\n')); setError('');
   }, [taskSnapshot, scope]);
   useEffect(() => registerSourceFlush(scope, async () => {
-    if ((latest.current.layout.id ?? 'local') !== scope) return;
+    if (resolveProjectScope(latest.current.layout.id) !== scope) return;
     const message = pending.current ? '任务正在保存，请稍后重试。' : latest.current.dirty ? '任务有未保存修改，请先保存任务或放弃修改。' : '';
     if (message) { setError(message); throw new Error(message); }
   }), [scope]);
@@ -229,9 +230,9 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
   const [reviews, setReviews] = useState<{ layout: RoomLayout; checkins: MaterialCheckinLedger | undefined; statuses: Record<string, { status: ReviewStatus; failed: boolean }> } | null>(null);
   const checkinsUnavailable=!!checkins&&!checkins.ready;
   const latest = useRef({ layout, disabled, title }); latest.current = { layout, disabled, title };
-  const scope = layout.id ?? 'local';
+  const scope = resolveProjectScope(layout.id);
   useEffect(() => registerSourceFlush(scope, async () => {
-    if ((latest.current.layout.id ?? 'local') !== scope || !latest.current.title) return;
+    if (resolveProjectScope(latest.current.layout.id) !== scope || !latest.current.title) return;
     const message = '新任务尚未添加，请先添加任务或放弃新增任务。';
     setError(message); throw new Error(message);
   }), [scope]);
@@ -311,7 +312,7 @@ export function EventOperationsPanel({ layout, disabled, onUpdate, onLocate, bri
       {compact && <p className="dl-hint">先写标题即可，其他可以后补。</p>}
       {(compact ? title.length > 0 : true) && <div className="sc-handoff-actions">{discardNew}</div>}
     </form>;
-  const intake = <MaterialIntakePanel operations={operations} projectId={layout.id ?? 'local'} disabled={disabled} onAccept={next => onUpdate(next)} />;
+  const intake = <MaterialIntakePanel operations={operations} projectId={resolveProjectScope(layout.id)} disabled={disabled} onAccept={next => onUpdate(next)} />;
   const taskBlock = <>
     {compact && checkinAlert}
     {!compact && intake}

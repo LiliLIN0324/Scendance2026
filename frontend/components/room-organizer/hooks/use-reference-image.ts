@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { resolveProjectScope } from '@/lib/project-scope';
 import { resolveReferenceImage, type ReferenceImageLayer } from '@/lib/reference-image';
 import { listStoredSources, readSourceForm, subscribeSourceChanges, type StoredSource } from '@/lib/source-storage';
 import type { RoomLayout } from '../lib/types';
 
 export function useReferenceImage(layout: RoomLayout): { layer: ReferenceImageLayer | undefined; notice: string; ready: boolean; reload(): void } {
-  const scope = layout.id ?? 'local';
+  const scope = resolveProjectScope(layout.id);
   const [attempt, setAttempt] = useState(0);
   const [stored, setStored] = useState<{ scope: string; sources: StoredSource[]; form: unknown; error?: string }>();
   const [decoded, setDecoded] = useState<{ scope: string; blob: Blob; url?: string; error?: string }>();

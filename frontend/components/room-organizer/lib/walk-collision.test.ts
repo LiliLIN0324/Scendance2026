@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildWalkColliders, resolveWalkerPosition, resolveWalkerStep, walkerClearanceAt } from './walk-collision';
-import type { FurnitureCategory, FurnitureItem, InteriorWall } from './types';
+import type { FurnitureCategory, FurnitureItem } from './types';
 
 const RADIUS = 0.3;
 const ROOM = { roomWidth: 10, roomDepth: 10 };
-/** Half the interior-wall thickness (0.16 m) plus the walker radius. */
-const WALL_STANDOFF = 0.08 + RADIUS;
 
 function item(overrides: Partial<FurnitureItem> & { position: { x: number; z: number } }): FurnitureItem {
   return {
@@ -24,15 +22,13 @@ function item(overrides: Partial<FurnitureItem> & { position: { x: number; z: nu
 
 /** A 2 × 1 box centred at (0, -1.5): its near face is the line z = -1. */
 const BOX = item({ position: { x: 0, z: -1.5 } });
-const WALL: InteriorWall = { id: 'w', x1: -2, z1: 0, x2: 2, z2: 0 };
 
 const walk = (
   from: { x: number; z: number },
   to: { x: number; z: number },
   items: FurnitureItem[],
-  walls: InteriorWall[] = [],
   options = ROOM
-) => resolveWalkerPosition(from, to, RADIUS, items, walls, options);
+) => resolveWalkerPosition(from, to, RADIUS, items, options);
 
 describe('resolveWalkerPosition — furniture', () => {
   it('walking head-on into a box stops at its surface', () => {
@@ -110,7 +106,7 @@ describe('resolveWalkerPosition — furniture', () => {
   it('walks under wall-hung decor: it hangs above the path (#376)', () => {
     for (const type of ['painting', 'mirror', 'wall-shelf', 'wall-clock', 'curtains']) {
       const decor = item({ type, width: 2, depth: 1, height: 0.6, position: { x: 0, z: -1.5 } });
-      expect(buildWalkColliders([decor], [])).toEqual([]);
+      expect(buildWalkColliders([decor])).toEqual([]);
       expect(walk({ x: 0, z: 0 }, { x: 0, z: -3 }, [decor]).z).toBeCloseTo(-3, 3);
     }
   });
@@ -137,118 +133,14 @@ describe('resolveWalkerPosition — outdoor items', () => {
   });
 
   it('without room dimensions everything is solid', () => {
-    const result = walk({ x: 0, z: 0 }, { x: 0, z: -3 }, [tree({ x: 0, z: -1.5 })], [], {} as typeof ROOM);
+    const result = walk({ x: 0, z: 0 }, { x: 0, z: -3 }, [tree({ x: 0, z: -1.5 })], {} as typeof ROOM);
     expect(result.z).toBeCloseTo(-1 + RADIUS, 3);
-  });
-});
-
-describe('resolveWalkerPosition — interior walls', () => {
-  it('an interior wall segment blocks the walker at its thickness', () => {
-    const result = walk({ x: 0, z: 1 }, { x: 0, z: -1 }, [], [WALL]);
-    expect(result.x).toBeCloseTo(0, 5);
-    expect(result.z).toBeCloseTo(WALL_STANDOFF, 3);
-  });
-
-  it('slides along a wall segment', () => {
-    const result = walk({ x: 0, z: 1 }, { x: 1, z: -1 }, [], [WALL]);
-    expect(result.x).toBeCloseTo(1, 3);
-    expect(result.z).toBeCloseTo(WALL_STANDOFF, 3);
-  });
-
-  it('is blocked from either side', () => {
-    const result = walk({ x: 0, z: -1 }, { x: 0, z: 1 }, [], [WALL]);
-    expect(result.z).toBeCloseTo(-WALL_STANDOFF, 3);
-  });
-
-  it('walks around the end of a segment', () => {
-    const result = walk({ x: 3, z: 1 }, { x: 3, z: -1 }, [], [WALL]);
-    expect(result.z).toBeCloseTo(-1, 3);
-  });
-
-  it('respects a diagonal wall', () => {
-    const diagonal: InteriorWall = { id: 'd', x1: -2, z1: -2, x2: 2, z2: 2 };
-    const result = walk({ x: 1, z: -1 }, { x: -1, z: 1 }, [], [diagonal]);
-    // Perpendicular distance from the centreline stays at the standoff.
-    expect(Math.abs(result.x - result.z) / Math.SQRT2).toBeCloseTo(WALL_STANDOFF, 3);
-    expect(result.x).toBeGreaterThan(result.z);
-  });
-
-  it('never tunnels through a thin wall on a large step', () => {
-    const result = walk({ x: 0, z: 1 }, { x: 0, z: -4 }, [], [WALL]);
-    expect(result.z).toBeCloseTo(WALL_STANDOFF, 3);
-  });
-
-  it('ignores a degenerate zero-length wall', () => {
-    const dot: InteriorWall = { id: 'dot', x1: 0, z1: 0, x2: 0, z2: 0 };
-    expect(walk({ x: 0, z: 1 }, { x: 0, z: -1 }, [], [dot]).z).toBeCloseTo(-1, 3);
-  });
-});
-
-describe('resolveWalkerPosition — door gaps', () => {
-  const door = (position: { x: number; z: number }, id = 'door') =>
-    item({ id, type: 'door', position, width: 0.9, depth: 0.1, height: 2.05 });
-
-  it('a door on an interior wall is a passable gap', () => {
-    const result = walk({ x: 0, z: 1 }, { x: 0, z: -1 }, [door({ x: 0, z: 0 })], [WALL]);
-    expect(result.z).toBeCloseTo(-1, 3);
-  });
-
-  it('the wall stays solid either side of the door', () => {
-    const items = [door({ x: 0, z: 0 })];
-    expect(walk({ x: 1.5, z: 1 }, { x: 1.5, z: -1 }, items, [WALL]).z).toBeCloseTo(WALL_STANDOFF, 3);
-    expect(walk({ x: -1.5, z: 1 }, { x: -1.5, z: -1 }, items, [WALL]).z).toBeCloseTo(WALL_STANDOFF, 3);
-  });
-
-  it('a door snapped slightly off the centreline still cuts the gap', () => {
-    const result = walk({ x: 0, z: 1 }, { x: 0, z: -1 }, [door({ x: 0, z: 0.08 })], [WALL]);
-    expect(result.z).toBeCloseTo(-1, 3);
-  });
-
-  it('a door far from the wall does not cut it', () => {
-    const result = walk({ x: 0, z: 1 }, { x: 0, z: -1 }, [door({ x: 0, z: 1.5 })], [WALL]);
-    expect(result.z).toBeCloseTo(WALL_STANDOFF, 3);
-  });
-
-  it('a door owned by the exterior wall does not cut an abutting interior wall', () => {
-    // Interior wall runs from the north facade (z = -5) into the room.
-    const spine: InteriorWall = { id: 's', x1: 0, z1: -5, x2: 0, z2: -1 };
-    // Door sits on the facade right at the junction — nearer the exterior wall.
-    const items = [door({ x: 0.3, z: -5 })];
-    const colliders = buildWalkColliders(items, [spine], ROOM);
-    // One uncut run covering the whole 4 m spine.
-    expect(colliders).toHaveLength(1);
-    expect(colliders[0]!.hw).toBeCloseTo(2, 5);
-  });
-
-  it('a window is not a gap', () => {
-    const window = item({ id: 'win', type: 'window', position: { x: 0, z: 0 }, width: 1.2, depth: 0.1, height: 1.2 });
-    const result = walk({ x: 0, z: 1 }, { x: 0, z: -1 }, [window], [WALL]);
-    expect(result.z).toBeCloseTo(WALL_STANDOFF, 3);
-  });
-
-  it('a door owned by a wall but lying past its end cuts nothing, like the renderer (#399)', () => {
-    const stub: InteriorWall = { id: 'stub', x1: 0, z1: 0, x2: 2, z2: 0 };
-    const past = [{ ...door({ x: 2.3, z: 0 }), width: 0.5 }];
-    const colliders = buildWalkColliders(past, [stub], ROOM);
-    expect(colliders).toHaveLength(1);
-    expect(colliders[0]!.hw).toBeCloseTo(1, 5);
-    expect(walk({ x: 1.75, z: -1 }, { x: 1.75, z: 1 }, past, [stub]).z).toBeCloseTo(-WALL_STANDOFF, 3);
-  });
-
-  it('two doors leave three solid runs', () => {
-    const items = [door({ x: -1, z: 0 }, 'a'), door({ x: 1, z: 0 }, 'b')];
-    const colliders = buildWalkColliders(items, [WALL], ROOM);
-    expect(colliders).toHaveLength(3);
-    const widths = colliders.map((c) => c.hw * 2).sort((a, b) => a - b);
-    expect(widths[0]).toBeCloseTo(0.55, 5);
-    expect(widths[1]).toBeCloseTo(0.55, 5);
-    expect(widths[2]).toBeCloseTo(1.1, 5);
   });
 });
 
 describe('resolveWalkerStep', () => {
   it('writes into and returns the supplied output object', () => {
-    const colliders = buildWalkColliders([BOX], [], ROOM);
+    const colliders = buildWalkColliders([BOX]);
     const out = { x: NaN, z: NaN };
     const result = resolveWalkerStep(colliders, { x: 0, z: 0 }, { x: 0, z: -2 }, RADIUS, out, ROOM);
     expect(result).toBe(out);
@@ -256,7 +148,7 @@ describe('resolveWalkerStep', () => {
   });
 
   it('a no-op move with nothing nearby leaves the position untouched', () => {
-    const colliders = buildWalkColliders([BOX], [WALL], ROOM);
+    const colliders = buildWalkColliders([BOX]);
     const out = { x: 0, z: 0 };
     resolveWalkerStep(colliders, { x: 3, z: 3 }, { x: 3, z: 3 }, RADIUS, out, ROOM);
     expect(out).toEqual({ x: 3, z: 3 });
@@ -265,19 +157,19 @@ describe('resolveWalkerStep', () => {
 
 describe('walkerClearanceAt — 路线布点贴障预检', () => {
   it('measures the gap to a box face', () => {
-    const colliders = buildWalkColliders([BOX], [], ROOM);
+    const colliders = buildWalkColliders([BOX]);
     // BOX 近面在 z = -1，点在 z = -0.8。
     expect(walkerClearanceAt(colliders, { x: 0, z: -0.8 }, ROOM)).toBeCloseTo(0.2, 6);
   });
 
   it('is zero inside a box', () => {
-    const colliders = buildWalkColliders([BOX], [], ROOM);
+    const colliders = buildWalkColliders([BOX]);
     expect(walkerClearanceAt(colliders, { x: 0, z: -1.5 }, ROOM)).toBe(0);
   });
 
   it('honours rotation — a 90°-turned box swaps width/depth extents', () => {
     const rotated = item({ id: 'rot', position: { x: 0, z: 0 }, rotation: Math.PI / 2 });
-    const colliders = buildWalkColliders([rotated], [], ROOM);
+    const colliders = buildWalkColliders([rotated]);
     // 2×1 旋 90° 后占 z ∈ [-1, 1]、x ∈ [-0.5, 0.5]。
     expect(walkerClearanceAt(colliders, { x: 0, z: 1.6 }, ROOM)).toBeCloseTo(0.6, 6);
     expect(walkerClearanceAt(colliders, { x: 1.0, z: 0 }, ROOM)).toBeCloseTo(0.5, 6);
@@ -285,7 +177,7 @@ describe('walkerClearanceAt — 路线布点贴障预检', () => {
 
   it('picks the nearest of several boxes', () => {
     const far = item({ id: 'far', position: { x: 3, z: 0 }, width: 1, depth: 1 });
-    const colliders = buildWalkColliders([BOX, far], [], ROOM);
+    const colliders = buildWalkColliders([BOX, far]);
     // 点 (0.6, 0)：到 BOX 近面 1.0，到 far 盒 1.9。
     expect(walkerClearanceAt(colliders, { x: 0.6, z: 0 }, ROOM)).toBeCloseTo(1.0, 6);
   });
@@ -293,14 +185,14 @@ describe('walkerClearanceAt — 路线布点贴障预检', () => {
   it('ignores outdoor boxes inside the room and counts them outside', () => {
     // 1×1 盒贴在房间东边界外沿：占 x ∈ [5, 6]。
     const outdoor = item({ id: 'out', position: { x: 5.5, z: 0 }, width: 1, depth: 1, category: 'outdoor' as FurnitureCategory });
-    const colliders = buildWalkColliders([outdoor], [], ROOM);
+    const colliders = buildWalkColliders([outdoor]);
     expect(walkerClearanceAt(colliders, { x: 4.5, z: 0 }, ROOM)).toBe(Infinity);
     expect(walkerClearanceAt(colliders, { x: 6.2, z: 0 }, ROOM)).toBeCloseTo(0.2, 6);
   });
 
   it('returns Infinity with no colliders and without room bounds', () => {
     expect(walkerClearanceAt([], { x: 0, z: 0 })).toBe(Infinity);
-    const colliders = buildWalkColliders([BOX], [], {});
+    const colliders = buildWalkColliders([BOX]);
     expect(walkerClearanceAt(colliders, { x: 100, z: 100 })).toBeGreaterThan(90);
   });
 });

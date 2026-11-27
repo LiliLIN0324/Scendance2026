@@ -1,3 +1,4 @@
+import { legacyGroundOf } from './legacy-ground';
 import type { RoomLayout } from './types';
 
 /**
@@ -45,11 +46,20 @@ export function groundBasemapLayerByStyle(style: GroundBasemapStyle): GroundBase
   return GROUND_BASEMAP_LAYERS.find(layer => layer.style === style) ?? GROUND_BASEMAP_LAYERS[2]!;
 }
 
-/** 底图关着时没有当前层。开着时以贴地地址为准，没有图时再看调研底图。 */
-export function activeGroundBasemap(layout: Pick<RoomLayout, 'floorPlanImage' | 'satelliteGroundRef' | 'researchArea'>): GroundBasemapLayer | null {
-  if (layout.satelliteGroundRef === false) return null;
-  const style = layout.floorPlanImage
-    ? groundBasemapStyleOf(layout.floorPlanImage)
+/**
+ * 底图关着时没有当前层。开着时以贴地地址为准，没有图时再看调研底图。
+ *
+ * S1（2026-11-25）：贴地字节已不再写进 layout，调用点应把 `resolveGround(layout, plan)`
+ * 的结果传进来；不传时退回读 layout 旧字段（老项目缓存仍可读，删字段前不断档）。
+ */
+export function activeGroundBasemap(
+  layout: Pick<RoomLayout, 'floorPlanImage' | 'researchArea'>,
+  ground?: { image?: string; satelliteRef?: boolean } | null,
+): GroundBasemapLayer | null {
+  const satelliteRef = ground ? (ground.satelliteRef ?? true) : legacyGroundOf(layout).satelliteGroundRef;  if (satelliteRef === false) return null;
+  const url = ground ? ground.image : layout.floorPlanImage;
+  const style = url
+    ? groundBasemapStyleOf(url)
     : (layout.researchArea?.style ?? 6);
   return groundBasemapLayerByStyle(style);
 }

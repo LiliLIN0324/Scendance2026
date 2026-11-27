@@ -5,13 +5,22 @@ import type { UseHistoryResult } from '../hooks/use-history';
 import type { LayoutActions } from '../hooks/use-layout-state';
 import type { SoundCue } from '../lib/sounds';
 import type { FloorLayout, GameMode, RoomLayout, ViewSettings } from '../lib/types';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 
 export interface RoomEditorContextValue {
+  // Session/project identity: single source derived at the editor entry.
+  // Persistent buckets and consistency checks read this, not `layout.id` with a `'local'` fallback.
+  readonly projectId: string;
+
   // Layout state
   readonly layout: RoomLayout;
   readonly activeFloor: FloorLayout;
   readonly activeFloorIndex: number;
   readonly actions: LayoutActions;
+
+  // Outdoor plan positive source (S3): the plan the outdoor canvas edits.
+  // `null` for the legacy local draft without a bound plan record.
+  readonly outdoorPlan: SitePlanData | null;
 
   // View settings
   readonly view: ViewSettings;
@@ -43,9 +52,6 @@ export interface RoomEditorContextValue {
   setGameMode: Dispatch<SetStateAction<GameMode>>;
   readonly autoCycleLighting: boolean;
   setAutoCycleLighting: Dispatch<SetStateAction<boolean>>;
-
-  /** 退出第一人称漫游：关漫游视图，并把 live 模式回退到 build（Esc / 胶囊 / 右轨三条路径共用）。 */
-  exitWalkthrough: () => void;
 }
 
 const RoomEditorContext = createContext<RoomEditorContextValue | null>(null);
@@ -66,10 +72,12 @@ export function RoomEditorProvider({ value, children }: RoomEditorProviderProps)
   // this memo a no-op; the enumerated fields are the real invalidation keys.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const memoised = useMemo(() => value, [
+    value.projectId,
     value.layout,
     value.activeFloor,
     value.activeFloorIndex,
     value.actions,
+    value.outdoorPlan,
     value.view,
     value.setView,
     value.collidingIds,
@@ -87,7 +95,6 @@ export function RoomEditorProvider({ value, children }: RoomEditorProviderProps)
     value.autoCycleLighting,
     value.setAutoCycleLighting,
     value.toggle,
-    value.exitWalkthrough,
   ]);
   return <RoomEditorContext.Provider value={memoised}>{children}</RoomEditorContext.Provider>;
 }

@@ -1,5 +1,11 @@
 import { anchorFromMapFrame, METERS_PER_DEGREE_LAT, metersPerDegreeLng } from './amap-venue';
+import { legacyGroundOf } from './legacy-ground';
+import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout, SceneAnchor } from './types';
+
+/** 正源里与定位有关的两段（写成可选形态，`plan.ground` 与 `ResolvedGround` 都能直接传）。 */
+type GroundAnchor = Pick<PlanGround, 'frame' | 'center'>;
+type GroundRing = Pick<PlanGround, 'frame' | 'center' | 'polygon'>;
 
 /**
  * 场景锚点换算（docs/19 架构定案）。
@@ -13,7 +19,10 @@ export { anchorFromMapFrame };
 
 /** 读取布局的场景锚点：优先用显式 sceneAnchor；旧存档没有就从 mapGroundFrame 反推（同一套数学的逆）。 */
 export function sceneAnchorOf(
-  layout: Pick<RoomLayout, 'sceneAnchor' | 'mapGroundFrame' | 'mapLngLat' | 'width' | 'height'>,
+  layout: Pick<RoomLayout, 'sceneAnchor' | 'width' | 'height'>,
+  // S2（2026-11-25）：调用方能给 `resolveGround(layout, plan)` 的结果时，定位以正源为准；
+  // 不给才读盘上旧字段（由 `legacyGroundOf` 一个口读，迁完擦掉后自然失效）。
+  ground?: GroundAnchor | null,
 ): SceneAnchor | null {
   const anchor = layout.sceneAnchor;
   if (
@@ -24,11 +33,21 @@ export function sceneAnchorOf(
   ) {
     return anchor;
   }
-  const frame = layout.mapGroundFrame;
-  if (frame && Number.isFinite(frame.lng0) && Number.isFinite(frame.lat0)) {
+  const legacy = legacyGroundOf(layout);
+  const rawFrame = ground ? ground.frame : legacy.mapGroundFrame;
+  if (rawFrame && Number.isFinite(rawFrame.lng0) && Number.isFinite(rawFrame.lat0)) {
+    // plan.ground.frame 的 latSign 在契约里可选（`1 | -1 | undefined`），壳体侧的 MapGroundFrame 是 `latSign?`——
+    // 在这里补成 layout 口径，免得 exactOptionalPropertyTypes 一路穿透到 anchorFromMapFrame。
+    const frame: Parameters<typeof anchorFromMapFrame>[0] = {
+      lng0: rawFrame.lng0,
+      lat0: rawFrame.lat0,
+      latMid: rawFrame.latMid,
+      scale: rawFrame.scale,
+      ...(rawFrame.latSign === undefined ? {} : { latSign: rawFrame.latSign }),
+    };
     return anchorFromMapFrame(frame, layout.width, layout.height);
   }
-  const center = layout.mapLngLat;
+  const center = ground ? ground.center : legacy.mapLngLat;
   if (center && Number.isFinite(center.lng) && Number.isFinite(center.lat)) {
     return { lng: center.lng, lat: center.lat, orientationDeg: 0, metersPerUnit: 1 };
   }
@@ -47,11 +66,14 @@ export function anchorGeoToWorld(anchor: SceneAnchor, lng: number, lat: number):
 }
 
 /** The saved geographic ring in the same world coordinates as the basemap. */
-export function mapVenueFootprint(layout: RoomLayout): { x: number; z: number }[] {
-  const polygon = layout.mapGroundPolygon;
+export function mapVenueFootprint(
+  layout: RoomLayout,
+  ground?: GroundRing | null,
+): { x: number; z: number }[] {
+  const polygon = ground ? ground.polygon : legacyGroundOf(layout).mapGroundPolygon;
   if (!polygon || polygon.length < 3) return [];
-  const anchor = sceneAnchorOf(layout);
-  return anchor ? polygon.map(point => anchorGeoToWorld(anchor, point.lng, point.lat)) : [];
+  const anchor = sceneAnchorOf(layout, ground);
+  return anchor ? [...polygon].map(point => anchorGeoToWorld(anchor, point.lng, point.lat)) : [];
 }
 
 /** 底图网格绕世界 Y 轴的偏航（弧度）：纹理正北要指向 orientationDeg 方位，与 anchorGeoToWorld 的旋转互逆。 */

@@ -6,11 +6,14 @@ import { getGlbAssetRevision, getGlbAssetState, glbAssetKey } from '../three/glb
 import type { FurnitureItem, RoomLayout, ViewSettings } from '../lib/types';
 import type { ProjectReviewCapture, ProjectReviewSnapshot, ProjectReviewSource } from '@/lib/project-review';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
+import type { ResolvedGround } from '../lib/plan-ground';
 import type * as THREE from 'three';
 
 interface Inputs {
   layout: RoomLayout; getLayout(): RoomLayout; view: ViewSettings; activeFloorIndex: number;
-  ready: boolean; peopleReady: boolean; referenceImage?: ReferenceImageLayer;
+  ready: boolean; referenceImage?: ReferenceImageLayer;
+  /** 贴地底图读源（B4）：plan.ground 优先，layout 那份只兜底；缺省等于旧行为。 */
+  ground?: ResolvedGround | null;
   selectedItemId: string|null; extraSelectedIds: ReadonlySet<string>;
   hasCollision(item:FurnitureItem): boolean;
   canvas: RefObject<HTMLCanvasElement>; canvas2D: RefObject<HTMLCanvasElement|null>;
@@ -20,11 +23,11 @@ interface Inputs {
 }
 
 /** 2D shows one floor; all-floor 3D can show the ground image from upstairs. */
-function visibleReferenceUrl({ layout, view, activeFloorIndex, referenceImage }: Inputs): string | undefined {
+function visibleReferenceUrl({ layout, view, activeFloorIndex, referenceImage, ground }: Inputs): string | undefined {
   if (view.showReferenceImage === false ||
       (activeFloorIndex !== 0 && (view.view2D || !view.showAllFloors)) ||
-      (view.referenceImageOpacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY) <= 0) return undefined;
-  return referenceImage?.url ?? (!layout.backendSceneV2 ? layout.floorPlanImage : undefined);
+      (view.referenceImageOpacity ?? ground?.opacity ?? layout.floorPlanOpacity ?? DEFAULT_FLOOR_PLAN_OPACITY) <= 0) return undefined;
+  return referenceImage?.url ?? ground?.image ?? (!layout.backendSceneV2 ? layout.floorPlanImage : undefined);
 }
 
 /** Checks rendered resources, not just download completion or the presence of placeholder meshes. */
@@ -85,7 +88,7 @@ export function useReviewCapture(inputs:Inputs):(
       return {source:getSource(),canvas:view2D?now.canvas2D.current:now.canvas.current,
         frameRevision:committedFrame?String(frame.revision):'',viewLabel:`${view2D?'二维平面':'三维场景'} · ${now.layout.floors[floorIndex]?.name??'当前楼层'}`,
         ready:now.ready&&committedFrame,assetsReady:modelsReady&&(!view2D||!referenceVisible||!!referenceUrl&&isFloorPlanImageReady(referenceUrl))&&(view2D||
-          !!now.scene.current&&reviewSceneAssetsReady(now.scene.current,referenceVisible&&now.referenceImage?now.referenceImage.url:undefined)&&(!items.some(item=>item.type==='person')||now.peopleReady)),
+          !!now.scene.current&&reviewSceneAssetsReady(now.scene.current,referenceVisible&&now.referenceImage?now.referenceImage.url:undefined)),
         pendingPreview:now.pendingPreview,interacting:now.isInteracting(),privateReferenceVisible:referenceVisible};
     };
     return captureProjectReviewCanvas(snapshot,{
@@ -114,7 +117,7 @@ export function useReviewCapture(inputs:Inputs):(
           render2DTopDown({canvas:now.canvas2D.current,layout:now.layout,floor:now.layout.floors[floorIndex]!,selectedItemId:now.selectedItemId,extraSelectedIds:now.extraSelectedIds,
             hasCollision:now.hasCollision,
             showMeasurements:now.view.showMeasurements,showWiFiSignals:now.view.showWiFiSignals,showHeatmap:now.view.showHeatmap,
-            showFloorPlan:now.view.showReferenceImage!==false,...(now.referenceImage?{referenceImage:now.referenceImage}:{}),
+            showFloorPlan:now.view.showReferenceImage!==false,...(now.referenceImage?{referenceImage:now.referenceImage}:{}),...(now.ground?{ground:now.ground}:{}),
             ...(now.view.referenceImageOpacity!==undefined?{floorPlanOpacity:now.view.referenceImageOpacity}:{})});
         }else{
           if(!now.renderer.current||!now.scene.current||!now.camera.current)throw new Error('三维画面尚未准备好。');

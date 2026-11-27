@@ -94,11 +94,6 @@ describe('local editable desk-chair draft',()=>{
   expect(first).toEqual(second);expect(first.layout.floors[0]!.items.slice(1).every(item=>item.id!=='dup')).toBe(true);
   expect(()=>planLocalDeskChairDraft(layout,{...input,count:1},()=> 'dup')).toThrow('无法创建不重复的物件编号');
  });
- it('does not reuse an existing wall identity for a furniture instance',()=>{
-  const layout=makeLayout({width:10,height:10,floors:[makeFloor({interiorWalls:[{id:'wall',x1:0,z1:-5,x2:0,z2:5,thickness:.2,height:3,status:'confirmed'}]})]});
-  const values=['wall','desk','chair'];const result=planLocalDeskChairDraft(layout,{...input,count:1},()=>values.shift()??'');
-  expect(result.placed).toBe(1);expect(result.layout.floors[0]!.items.map(item=>item.id)).toEqual(['desk','chair']);
- });
  it('requires the explicit mode and source for every assumption',()=>{
   expect(()=>planLocalDeskChairDraft(makeLayout(),{...input,mode:'dining'} as unknown as LocalDeskChairInput,ids())).toThrow();
   expect(()=>planLocalDeskChairDraft(makeLayout(),{...input,assumptions:{...input.assumptions,count:undefined}} as unknown as LocalDeskChairInput,ids())).toThrow();

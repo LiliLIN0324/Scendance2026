@@ -86,6 +86,29 @@ describe('outdoor-project-store', () => {
     expect(hasOutdoorPlanDraft(PID, storage)).toBe(true);
   });
 
+  it('贴地底图（plan.ground）随本机草稿往返，不被 store 校验吞掉（B4）', () => {
+    const storage = memoryStorage();
+    const plan: SitePlanData = {
+      ...samplePlan(),
+      ground: {
+        image: `data:image/jpeg;base64,${'B'.repeat(32)}`,
+        opacity: 0.94,
+        satelliteRef: true,
+        polygon: [
+          { lng: 120.1443, lat: 30.2465 }, { lng: 120.1463, lat: 30.2465 },
+          { lng: 120.1463, lat: 30.2445 }, { lng: 120.1443, lat: 30.2445 },
+        ],
+        center: { lng: 120.1453, lat: 30.2455 },
+        frame: { lng0: 120.1443, lat0: 30.2465, latMid: 30.2455, scale: 1, latSign: -1 },
+        source: 'amap-satellite',
+        capturedAt: '2026-11-25T06:00:00.000Z',
+      },
+    };
+    saveOutdoorProjectRecord(record(plan), storage);
+    const loaded = readOutdoorProjectRecord(PID, storage);
+    expect(loaded!.plan!.ground).toEqual(plan.ground);
+  });
+
   it('单价、价格书和报价抬头随本机草稿往返', () => {
     const storage = memoryStorage();
     const plan: SitePlanData = {
@@ -499,5 +522,21 @@ describe('resolveFallbackOutdoorProject（弱参 / 无参刷新兜底身份）',
     const storage = new MemoryStorage();
     expect(resolveFallbackOutdoorProject(storage)).toBe(DEFAULT_OUTDOOR_PROJECT_ID);
     expect(readOutdoorProjectRecord(DEFAULT_OUTDOOR_PROJECT_ID, storage)).not.toBeNull();
+  });
+});
+
+describe('read strips the legacy West Lake preset ground from the plan (B4 read-side)', () => {
+  it('drops only the old preset image and keeps a user-picked West Lake basemap', () => {
+    const store = memoryStorage();
+    const pid = 'ground-purge';
+    const base = { opacity: 0.94, satelliteRef: true, center: { lng: 120.1453, lat: 30.2455 } };
+    // 用户自己在这一带选的卫星底图：必须留着（当年说的只是「默认进来那套不要」）。
+    saveOutdoorProjectRecord({ v: 1, projectId: pid, name: '平湖秋月', createdAt: '2026-11-25T00:00:00.000Z', updatedAt: '2026-11-25T00:00:00.000Z',
+      plan: { ...createStarterOutdoorPlan(), ground: { ...base, image: 'data:image/jpeg;base64,Zm9v' } } }, store);
+    expect(readOutdoorProjectRecord(pid, store)?.plan?.ground?.image).toBe('data:image/jpeg;base64,Zm9v');
+    // 旧预设那张：正源侧也要剥，否则 layout 剥完会被正源同步补回来。
+    saveOutdoorProjectRecord({ v: 1, projectId: pid, name: '旧预设', createdAt: '2026-11-25T00:00:00.000Z', updatedAt: '2026-11-25T00:00:00.000Z',
+      plan: { ...createStarterOutdoorPlan(), ground: { ...base, image: '/basemap/xihu-scenic-z15.jpg' } } }, store);
+    expect(readOutdoorProjectRecord(pid, store)?.plan?.ground).toBeUndefined();
   });
 });

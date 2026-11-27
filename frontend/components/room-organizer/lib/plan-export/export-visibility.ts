@@ -99,6 +99,5 @@ export function planFloorSummary(floor: FloorLayout): string {
     else props += 1;
   }
   const zones = floor.zones?.length ?? 0;
-  const partitions = floor.interiorWalls?.length ?? 0;
-  return `${zones} zones · ${partitions} partitions · ${doors} doors · ${windows} windows · ${props} props · ${stairs} stairs`;
+  return `${zones} zones · ${doors} doors · ${windows} windows · ${props} props · ${stairs} stairs`;
 }

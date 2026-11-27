@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FurnitureItem, InteriorWall, RoomLayout } from '../components/room-organizer/lib/types';
+import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 import { collectViolations, isPlacementLegal, itemCorners } from './placement-rules';
 
 /** 构造一件家具，缺省值是 1m × 1m、高 0.75m 的桌子，放在原点。 */
@@ -21,7 +21,7 @@ function makeItem(partial: Partial<FurnitureItem> & Pick<FurnitureItem, 'id' | '
 function makeLayout(opts: {
   width: number;
   height: number;
-  floors: Array<{ id: string; items: FurnitureItem[]; interiorWalls?: InteriorWall[] }>;
+  floors: Array<{ id: string; items: FurnitureItem[] }>;
 }): RoomLayout {
   return {
     name: 'test-layout',
@@ -34,7 +34,6 @@ function makeLayout(opts: {
         items: f.items,
         floorColor: '#ffffff',
       };
-      if (f.interiorWalls) floor.interiorWalls = f.interiorWalls;
       return floor;
     }),
   };
@@ -143,26 +142,6 @@ describe('collectViolations', () => {
     expect(vs.filter((v) => v.code === 'BBOX_OVERLAP')).toEqual([]);
     // 低矮件自身仍要查越界；此处没越界，整体应为空。
     expect(vs).toEqual([]);
-  });
-
-  it('穿内墙：家具压在 interiorWalls 线段上 → WALL_INTERSECTION，targetId = wall.id', () => {
-    const wall: InteriorWall = { id: 'wall-1', x1: -5, z1: 0, x2: 5, z2: 0 };
-    const layout = makeLayout({
-      width: 10,
-      height: 8,
-      floors: [
-        {
-          id: 'f0',
-          interiorWalls: [wall],
-          items: [makeItem({ id: 't1', name: '压墙桌', position: { x: 0, z: 0 } })],
-        },
-      ],
-    });
-    const vs = collectViolations(layout);
-    const hit = vs.filter((v) => v.code === 'WALL_INTERSECTION');
-    expect(hit.length).toBe(1);
-    expect(hit[0]?.itemId).toBe('t1');
-    expect(hit[0]?.targetId).toBe('wall-1');
   });
 
   it('旋转件：45° 桌在未旋转 AABB 内、但旋转后 AABB 出界时能正确识别（不按未旋转 AABB 误判）', () => {

@@ -591,7 +591,8 @@ function keysOf<T>(keys: Record<keyof T, true>): readonly string[] {
   return Object.keys(keys);
 }
 
-const LAYOUT_KEYS = keysOf<RoomLayout>({
+const LAYOUT_KEYS: readonly string[] = [
+  ...keysOf<RoomLayout>({
   planSettings: true,
   eventProfile: true,
   productionPlan: true,
@@ -612,17 +613,21 @@ const LAYOUT_KEYS = keysOf<RoomLayout>({
   floorPlanImage: true,
   floorPlanOpacity: true,
   floorPlanFitMode: true,
-  satelliteGroundRef: true,
-  mapGroundPolygon: true,
-  mapLngLat: true,
-  mapGroundFrame: true,
   sceneAnchor: true,
   researchArea: true,
   terrain: true,
   neighbours: true,
   entrance: true,
   frontage: true,
-});
+  }),
+  // 旧贴地底图字段（B4/S3，2026-11-25）：类型已从 `RoomLayout` 删除，但盘上老方案还带着。
+  // 读入时保留这几键交给迁移（`planGroundFromLayout` → `plan.ground`），落盘前后由
+  // `stripLayoutGroundBytes` 整键擦掉；新写入不再产生它们。
+  'satelliteGroundRef',
+  'mapGroundPolygon',
+  'mapLngLat',
+  'mapGroundFrame',
+];
 const FLOOR_KEYS = keysOf<FloorLayout>({
   id: true,
   name: true,

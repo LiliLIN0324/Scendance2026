@@ -13,7 +13,7 @@ export function resolveCatalogPosition(layout:RoomLayout,floorIndex:number,item:
   const floor=layout.floors[floorIndex];
   const trial={...item,id:trialId,position:position??{x:0,z:0},rotation:0} as FurnitureItem;
   if(!floor)return {ok:false,reason:'当前楼层无法读取，请重新选择。',code:'FLOOR_OUT_OF_RANGE',item:trial};
-  const context={interiorWalls:floor.interiorWalls??[],keepOut:floorKeepOut(layout,floorIndex)};
+  const context={keepOut:floorKeepOut(layout,floorIndex)};
   const check=(point:{x:number;z:number}):CatalogPositionResult=>{
     const positioned={...trial,position:point};
     if(hasCollisions(positioned,floor.items,layout.width,layout.height,context))return {ok:false,reason:'此位置与物件或保留区域冲突，请点击其他位置。',code:'POSITION_CONFLICT',item:positioned};

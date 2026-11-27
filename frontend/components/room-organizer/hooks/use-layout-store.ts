@@ -18,10 +18,23 @@
 //   • React Context is retained as a passthrough: `use-layout-state.ts` is now a
 //     thin adapter that reads from this store, so the ~30 not-yet-migrated panels
 //     keep working UNCHANGED. Migration can proceed panel-by-panel.
+//
+// ---------------------------------------------------------------------------
+// 退役状态（2026-11-26 批4 判定：条件②未完成）
+//
+// 本 store 仍是编辑器内家具 / 分区 / 场地 / 入口的**临时状态正源**；plan（SitePlanData）
+// 目前只接管地面、锚点与快照，尚未接管编辑器摆放态。整链退役前置：plan 正源接管
+// 摆放 / 分区 / 碰撞 / 评分之后，再按清单逐面板切走，最后删本 store、layout-reducer、
+// use-layout-state 适配层。在此之前不得硬删——会崩掉整个工作台。
+//
+// 冻结口径：
+// - 不再新增 layout action 或面板写入口；多楼层写入已拆（批1）；plan↔layout 双向
+//   镜像写点冻结（`lib/layout-plan-mirror.ts`），新增跨双源写点必须先登记。
+// - 剩余生产消费点清单与角色：`docs/evidence/decouple-2026-11-26/s2-indoor-render-retirement.md` §11.18。
 // ---------------------------------------------------------------------------
 
 import { createStore, useStore } from 'zustand';
-import { randomId, randomSuffix, withHouseId } from '../lib/ids';
+import { randomId, withHouseId } from '../lib/ids';
 import { parseLayoutEventOperations } from '../lib/schema';
 import { randomStreetSeed } from '../lib/street-row';
 import {
@@ -38,7 +51,6 @@ import type {
   FurnitureItem,
   FloorPattern,
   FloorPlanFitMode,
-  InteriorWall,
   RoofStyle,
   RoomLayout,
   SofaShape,
@@ -89,7 +101,6 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
     setWallPattern: (pattern: WallPattern) => dispatch({ type: 'setWallPattern', pattern }),
     setStoreyHeight: (height) => dispatch({ type: 'setStoreyHeight', height }),
     setWallColor: (wall: WallId, color: string | null) => dispatch({ type: 'setWallColor', wall, color }),
-    setInteriorWallColor: (id: string, color: string) => dispatch({ type: 'setInteriorWallColor', id, color }),
     setFloorPlan: (image) => dispatch({ type: 'setFloorPlan', image }),
     setFloorPlanOpacity: (opacity) => dispatch({ type: 'setFloorPlanOpacity', opacity }),
     setFloorPlanFitMode: (mode: FloorPlanFitMode) => dispatch({ type: 'setFloorPlanFitMode', mode }),
@@ -134,10 +145,6 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
     replaceItems: (items: FurnitureItem[]) => dispatch({ type: 'replaceItems', items }),
     addItems: (items: FurnitureItem[]) => dispatch({ type: 'addItems', items }),
     bulkSetPositions: (positions) => dispatch({ type: 'bulkSetPositions', positions }),
-    addInteriorWall: (wall: InteriorWall) => dispatch({ type: 'addInteriorWall', wall }),
-    addInteriorWalls: (walls: readonly InteriorWall[]) => dispatch({ type: 'addInteriorWalls', walls }),
-    removeInteriorWall: (id) => dispatch({ type: 'removeInteriorWall', id }),
-    clearInteriorWalls: () => dispatch({ type: 'clearInteriorWalls' }),
     toggleExteriorWall: (wallId: WallId) => dispatch({ type: 'toggleExteriorWall', wallId }),
     rotateSelection: (ids, radians) => dispatch({ type: 'rotateSelection', ids, radians }),
     // The group id is rolled here so the reducer stays pure (#154).
@@ -151,25 +158,7 @@ export const createLayoutStore = (initialState?: LayoutState) => createStore<Lay
     clearItems: () => dispatch({ type: 'clearItems' }),
 
     setActiveFloorIndex: (index) => dispatch({ type: 'setActiveFloorIndex', index }),
-    addFloor: () => {
-      const id = nextId('floor');
-      dispatch({
-        type: 'addFloor',
-        floor: { id, items: [], floorColor: '#f5f6f7', floorPattern: 'solid' },
-      });
-      return id;
-    },
-    duplicateFloor: (sourceIndex) => {
-      const newId = nextId('floor');
-      // Randomness lives here, not in the reducer: the reducer must stay pure
-      // (StrictMode double-invokes updaters), so the per-duplication suffix
-      // that de-collides cloned item/wall ids is passed in via the action.
-      dispatch({ type: 'duplicateFloor', sourceIndex, newId, idSuffix: randomSuffix() });
-      return newId;
-    },
-    removeFloor: (index) => dispatch({ type: 'removeFloor', index }),
     renameFloor: (index, name) => dispatch({ type: 'renameFloor', index, name }),
-    reorderFloor: (from, to) => dispatch({ type: 'reorderFloor', from, to }),
 
     applyLayout: (next: RoomLayout) => dispatch({ type: 'applyLayout', layout: withHouseId(next) }),
 

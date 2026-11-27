@@ -92,7 +92,7 @@ export function createTransformSession(item: FurnitureItem): TransformSession | 
 /**
  * Feed the pointer's world point to a rotate/scale session and return the
  * candidate transform. Pure except for the session's baseline fields — both
- * the 2D ghost repaint and use-item-drag call it with the same points so the
+ * the 2D ghost repaint and the (retired) drag shell call it with the same points so the
  * preview and the committed value always agree.
  */
 export function advanceTransformSession(

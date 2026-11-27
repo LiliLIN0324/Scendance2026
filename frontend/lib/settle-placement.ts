@@ -17,7 +17,7 @@
  *  - OPEN_HALF=0.5   场地南北边（z=±H/2）中点 1m 宽视为开口。
  */
 
-import type { FurnitureItem, InteriorWall, RoomLayout } from '../components/room-organizer/lib/types';
+import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
 
 const EPS = 1e-6;
 const EXPAND_M = 0.15;
@@ -231,7 +231,6 @@ function evaluateFloor(
   items: FurnitureItem[],
   w: number,
   h: number,
-  interiorWalls: InteriorWall[] | undefined,
 ): SettleViolation[] {
   const violations: SettleViolation[] = [];
 
@@ -257,25 +256,6 @@ function evaluateFloor(
         itemId: it.id,
         message: `「${it.name}」压住主通道带（|x|≤0.6）`,
       });
-    }
-
-    // WALL：与内墙线段相交（用线段 AABB 粗判）
-    if (interiorWalls && interiorWalls.length > 0) {
-      for (const wall of interiorWalls) {
-        const wAABB: AABB = {
-          minX: Math.min(wall.x1, wall.x2),
-          maxX: Math.max(wall.x1, wall.x2),
-          minZ: Math.min(wall.z1, wall.z2),
-          maxZ: Math.max(wall.z1, wall.z2),
-        };
-        if (aabbIntersect(a, wAABB)) {
-          violations.push({
-            kind: 'WALL',
-            itemId: it.id,
-            message: `「${it.name}」与内墙「${wall.id}」相交`,
-          });
-        }
-      }
     }
 
     // OVERLAP：与其他家具 AABB 重叠（低矮件豁免）
@@ -345,7 +325,6 @@ function candidateLegal(
   nz: number,
   w: number,
   h: number,
-  interiorWalls: InteriorWall[] | undefined,
 ): boolean {
   const idx = items.findIndex((i) => i.id === itemId);
   if (idx < 0) return false;
@@ -359,17 +338,6 @@ function candidateLegal(
   }
   if (a.minX < AISLE_HALF - EPS && a.maxX > -AISLE_HALF + EPS) {
     return false;
-  }
-  if (interiorWalls && interiorWalls.length > 0) {
-    for (const wall of interiorWalls) {
-      const wAABB: AABB = {
-        minX: Math.min(wall.x1, wall.x2),
-        maxX: Math.max(wall.x1, wall.x2),
-        minZ: Math.min(wall.z1, wall.z2),
-        maxZ: Math.max(wall.z1, wall.z2),
-      };
-      if (aabbIntersect(a, wAABB)) return false;
-    }
   }
   if (!isLowProfile(moved)) {
     for (const other of others) {
@@ -396,7 +364,7 @@ function candidateStillIsland(
   if (idx < 0) return true;
   const moved = moveItem(items[idx], nx, nz);
   const tmpItems = items.map((it, i) => (i === idx ? moved : it));
-  const vs = evaluateFloor(tmpItems, w, h, undefined);
+  const vs = evaluateFloor(tmpItems, w, h);
   return vs.some((v) => v.kind === 'ISLAND' && v.itemId === itemId);
 }
 
@@ -419,7 +387,6 @@ export function settlePlacement(layout: RoomLayout, floorIndex = 0): SettleRepor
 
   const w = layout.width;
   const h = layout.height;
-  const interiorWalls = floor.interiorWalls;
 
   // 座椅类件数 N：遍数上界 2N+4
   const seatingCount = floor.items.filter(isSeatingLike).length;
@@ -430,7 +397,7 @@ export function settlePlacement(layout: RoomLayout, floorIndex = 0): SettleRepor
   const steps: SettleStep[] = [];
 
   // 空场地 / 初始就无违规：直接 0 遍返回（不可变）。
-  const initialViolations = evaluateFloor(currentItems, w, h, interiorWalls);
+  const initialViolations = evaluateFloor(currentItems, w, h);
   if (initialViolations.length === 0) {
     return {
       layout,
@@ -445,7 +412,7 @@ export function settlePlacement(layout: RoomLayout, floorIndex = 0): SettleRepor
   let lastMovedSet = new Set<string>();
 
   for (let iter = 0; iter < maxIterations; iter++) {
-    const violations = evaluateFloor(currentItems, w, h, interiorWalls);
+    const violations = evaluateFloor(currentItems, w, h);
     const moved: SettleStep['moved'] = [];
     const nextMovedSet = new Set<string>();
 
@@ -486,7 +453,7 @@ export function settlePlacement(layout: RoomLayout, floorIndex = 0): SettleRepor
         const backKey = `${itemId}:${nx.toFixed(3)},${nz.toFixed(3)}->${fromX.toFixed(3)},${fromZ.toFixed(3)}`;
         if (lastMovedSet.has(backKey)) continue;
 
-        if (!candidateLegal(currentItems, itemId, nx, nz, w, h, interiorWalls)) continue;
+        if (!candidateLegal(currentItems, itemId, nx, nz, w, h)) continue;
 
         // 对 ISLAND 件还要求新位置不再 ISLAND
         const isIsland = violations.some((v) => v.kind === 'ISLAND' && v.itemId === itemId);
@@ -510,7 +477,7 @@ export function settlePlacement(layout: RoomLayout, floorIndex = 0): SettleRepor
     lastMovedSet = nextMovedSet;
 
     // 终止条件：本遍 moved 为空 且 当前 ISLAND 数 = 0
-    const afterViolations = evaluateFloor(currentItems, w, h, interiorWalls);
+    const afterViolations = evaluateFloor(currentItems, w, h);
     const islandCount = afterViolations.filter((v) => v.kind === 'ISLAND').length;
     if (moved.length === 0 && islandCount === 0) {
       currentLayout = replaceFloorItems(layout, floorIndex, currentItems);
@@ -526,7 +493,7 @@ export function settlePlacement(layout: RoomLayout, floorIndex = 0): SettleRepor
 
   // 达到上界：返回当前状态
   currentLayout = replaceFloorItems(layout, floorIndex, currentItems);
-  const finalViolations = evaluateFloor(currentItems, w, h, interiorWalls);
+  const finalViolations = evaluateFloor(currentItems, w, h);
   return {
     layout: currentLayout,
     steps,

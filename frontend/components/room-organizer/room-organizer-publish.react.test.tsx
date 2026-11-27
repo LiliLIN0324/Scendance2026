@@ -50,6 +50,8 @@ const captured = vi.hoisted(() => ({
   requests: [] as Array<{ path: string; body: unknown }>,
 }));
 let mem: MemoryStorage;
+// 身份正源是外壳 projectId（prop）；本机活动从链接/列表进入时由调用方带上，夹具补齐这一进入参数。
+let primedProjectId = '';
 
 function makeGate(scopeId: string, overrides: Partial<PublishGateSnapshot> = {}): PublishGateSnapshot {
   return {
@@ -153,6 +155,7 @@ afterEach(() => {
 });
 
 function primeLayout(id: string) {
+  primedProjectId = id;
   // 场地显式写成矩形：默认壳体是多边形地图（西湖），云端保存链按契约拒收多边形场地。
   // 这里把它压成矩形云场地，和「已挂云项目」的起点一致。
   const layout = makeLayout({
@@ -183,6 +186,7 @@ function cloudScene(): Scene {
 }
 
 function primeCloudLayout(id: string) {
+  primedProjectId = id;
   const scene = cloudScene();
   const layout = { ...backendSceneToLayout(scene, { projectId: id, name: '发布链测试活动' }), id, name: '发布链测试活动' };
   layoutStore.setState({ layout, activeFloorIndex: 0 });
@@ -206,7 +210,7 @@ async function clickPublish() {
 it('publishes with the captured revision and hands the server url (V08/PUB-06 主链)', async () => {
   primeLayout('pub-a');
   const controller = stubController();
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('pub-a'));
   await openPublishTab();
   await act(async () => { await clickPublish(); });
@@ -222,7 +226,7 @@ it('publishes with the captured revision and hands the server url (V08/PUB-06 �
 it('refuses publishing when the gate snapshot belongs to another activity (V07/PUB-05)', async () => {
   primeLayout('pub-b');
   const controller = stubController();
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   // 闸门快照的 scopeId 与当前活动不一致：模拟「发布等待中切了项目」的迟到状态。
   registerPublishGateProvider(async () => makeGate('pub-other'));
   await openPublishTab();
@@ -235,7 +239,7 @@ it('refuses publishing when the gate snapshot belongs to another activity (V07/P
 it('blocks publishing with gap names when the archive gate is incomplete (fail-closed)', async () => {
   primeLayout('pub-c');
   const controller = stubController();
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('pub-c', {
     complete: false,
     gaps: [{ localId: 'scan-1', kind: 'scan', name: '西湖 0233 · 极速档', reason: 'not-uploaded' }],
@@ -249,7 +253,7 @@ it('blocks publishing with gap names when the archive gate is incomplete (fail-c
 it('does not treat layout.id as a cloud project id when unbound (PUB-02)', async () => {
   primeLayout('pub-d');
   const controller = stubController({ snapshot: { project: null, lease: null, revision: null } });
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('pub-d'));
   await openPublishTab();
   await act(async () => { await clickPublish(); });
@@ -271,7 +275,7 @@ function stubSnapshot(controller: unknown): BackendSnapshot {
 it('V01: 未登录的预检给「去登录」；登录回来只重查，不会自动发布', async () => {
   primeLayout('pub-v01');
   const controller = stubController({ snapshot: { user: null, project: null, lease: null, revision: null } });
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('pub-v01'));
   await openPublishTab();
   const login = await screen.findByRole('button', { name: '去登录' });
@@ -294,7 +298,7 @@ it('V02: 本地草稿还没挂云项目时，预检给「保存为云项目」�
   const createProject = vi.fn(async (studioId: string, name: string, scene: unknown) => ({ id: 'proj-new', name, studio_id: studioId, revision: 1, scene, materials: [] }));
   const acquireLease = vi.fn(async (projectId: string) => ({ projectId, sessionId: 's1', generation: 1, expiresAt: new Date(Date.now() + 60_000).toISOString(), revision: 1, scene: layoutToBackendScene(layoutStore.getState().layout) }));
   const controller = stubController({ snapshot: { project: null, lease: null, revision: null, dirty: false }, methods: { createProject, acquireLease } });
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('pub-v02'));
   await openPublishTab();
   const saveProject = await screen.findByRole('button', { name: '保存为云项目' });
@@ -316,7 +320,7 @@ it('V03: 有未保存修改时，预检给「保存当前修改」；点它走�
   });
   const controller = stubController({ snapshot: { revision: null, dirty: false }, methods: { saveScene } });
   controllerRef = controller;
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('proj-1'));
   await openPublishTab();
   const save = await screen.findByRole('button', { name: '保存当前修改' });
@@ -351,7 +355,7 @@ it('V06: 编辑权被收回时，预检给「取回编辑权」；点它走既�
     methods: { acquireLease },
   });
   controllerRef = controller;
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('proj-1'));
   await openPublishTab();
   const grant = await screen.findByRole('button', { name: '取回编辑权' });
@@ -368,7 +372,7 @@ it('V06: 编辑权被收回时，预检给「取回编辑权」；点它走既�
 it('V06: 版本冲突时预检给「处理版本冲突」；点它只把户外提示露出来，不发布、不自动择一', async () => {
   primeLayout('proj-1');
   const controller = stubController({ snapshot: { dirty: false } });
-  render(<RoomOrganizer controller={controller} />);
+  render(<RoomOrganizer controller={controller} outdoorProjectId={primedProjectId} />);
   registerPublishGateProvider(async () => makeGate('proj-1', { conflict: { remoteRevision: 7, remoteName: '队友那版' } }));
   await openPublishTab();
   const conflict = await screen.findByRole('button', { name: '处理版本冲突' });

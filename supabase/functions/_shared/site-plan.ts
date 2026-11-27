@@ -380,6 +380,41 @@ export const planAnnotationSchema = z.strictObject({
 });
 export type PlanAnnotation = z.infer<typeof planAnnotationSchema>;
 
+/** 经纬度点（GCJ-02）：只用于贴地底图的边框与中心，不参与米制几何。 */
+export const planGeoPointSchema = z.strictObject({
+  lng: z.number().min(-180).max(180),
+  lat: z.number().min(-90).max(90),
+});
+
+/** 卫星 UV 对齐用的贴地框（旧 `mapGroundFrame` 的契约化版本）：lng0 西缘、lat0 壳体 z=0 纬度、latSign -1 表示 z 向南。 */
+export const planMapGroundFrameSchema = z.strictObject({
+  lng0: z.number().min(-180).max(180),
+  lat0: z.number().min(-90).max(90),
+  latMid: z.number().min(-90).max(90),
+  scale: z.number().positive().max(1_000_000),
+  latSign: z.union([z.literal(-1), z.literal(1)]).optional(),
+});
+
+/**
+ * 贴地底图（2026-11-25 B4「底图落 plan」）：底图的正源从 layout 镜像迁到 plan。
+ *
+ * - `image` 是拼好的贴地截图（data URL 或同源地址）；分享链接导出时必剥掉（体积），
+ *   由 `share.ts` 的 `stripGroundImage` 统一处理。
+ * - `polygon` / `center` / `frame` 是地理定位，3D 卫星 UV 靠它们对齐；米制几何仍只认 `boundary`。
+ * - 旧数据不带 `ground` 照常解析；缺省不等于「没有底图」，读取层可回退到 layout 视图缓存。
+ */
+export const planGroundSchema = z.strictObject({
+  image: z.string().min(1).max(8_000_000).optional(),
+  opacity: z.number().min(0).max(1).optional(),
+  satelliteRef: z.boolean().optional(),
+  polygon: z.array(planGeoPointSchema).min(3).max(64).optional(),
+  center: planGeoPointSchema.optional(),
+  frame: planMapGroundFrameSchema.optional(),
+  source: z.enum(['osm', 'carto-light', 'carto-dark', 'amap-satellite', 'amap-streets', 'amap-streets-labels', 'esri-satellite']).optional(),
+  capturedAt: z.string().min(1).max(40).optional(),
+});
+export type PlanGround = z.infer<typeof planGroundSchema>;
+
 /** 一份规划数据：边界 + 图层 + 五类实体 + 测量标注 + 自由标注，全部带 UUID。 */
 export const sitePlanDataSchema = z.strictObject({
   schemaVersion: z.literal(1),
@@ -437,6 +472,8 @@ export const sitePlanDataSchema = z.strictObject({
    * 旧数据不带照常解析；内部尺寸仍是米。
    */
   editor: planEditorSchema.optional(),
+  /** 贴地底图正源（可选）：旧数据不带照常解析，读取层可回退 layout 视图缓存。 */
+  ground: planGroundSchema.optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
     ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'], ['walls', '墙体'],

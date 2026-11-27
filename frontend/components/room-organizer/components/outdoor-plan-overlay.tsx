@@ -478,7 +478,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   }, [agent?.venuePick?.query, agent?.venuePick?.candidates, agent?.venuePick?.loading]);
   const canvasApiRef = useRef<OutdoorPlanCanvasHandle | null>(null);
   const slotId = projectId || LOCAL_DRAFT_SLOT;
-  // 保存态 scope 与云面板（`layout.id ?? 'local'`）同口径；slotId 只是存储槽。
+  // 保存态 scope 取外壳正源 projectId（与云面板同口径）；slotId 只是存储槽。
   const saveScope = outdoorSaveScope(projectId);
   const confirmedCaseView = useMemo(() => REPLICA_CASES.find(c => `replica-${c.id}` === slotId)?.confirmedView, [slotId]);
   // 本机活动：规划按活动存（草稿归属就是 layout.id），写入时不动「最近项目」指针。

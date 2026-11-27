@@ -15,22 +15,17 @@ describe('左轨四形与共用 Agent 面板', () => {
     const primaryEnd = source.indexOf('sc-mode-rail-foot');
     const primary = source.slice(primaryStart, primaryEnd);
     const bingo = source.indexOf('<BingoRailButton', primaryStart);
-    const space = source.indexOf('aria-label="空间"', primaryStart);
     const material = source.indexOf('aria-label="物料"', primaryStart);
     expect(brand).toBeGreaterThan(-1);
     expect(primaryStart).toBeGreaterThan(brand);
     expect(bingo).toBeGreaterThan(primaryStart);
-    expect(bingo).toBeLessThan(space);
-    expect(space).toBeGreaterThan(-1);
-    expect(material).toBeGreaterThan(space);
+    expect(material).toBeGreaterThan(bingo);
     expect(primary).not.toContain('aria-label="空间与物料"');
-    const spaceBlock = source.slice(space, material);
     const materialBlock = source.slice(material, primaryEnd);
-    expect(spaceBlock).toContain('<RailSpace size={28}');
     expect(materialBlock).toContain('<RailCrate size={28}');
     expect(primary).not.toContain('<House');
     expect(primary).not.toContain('<Boxes');
-    // 空间、物料、创作、户外规划共用圆钮。创作钮打开同一页两张卡片。
+    // 物料、创作、户外规划共用圆钮。创作钮打开同一页两张卡片。
     // 标签不再写「拍摄场地」——否则用户会以为点开只有拍摄。
     expect(primary.match(/sc-rail-disc/g)).toHaveLength(4);
     expect(primary).toContain('aria-label="创作：重建真实场地、文生 3D 或图生 3D"');
@@ -116,7 +111,11 @@ describe('左轨四形与共用 Agent 面板', () => {
     expect(css).not.toContain('sc-rail-agent-brand-slot');
     expect(css).not.toContain('sc-bingo-ball');
     expect(source).not.toContain('<VenueLibraryPanel');
+    // 2026-11-25 用户拍板：恢复左轨「空间」入口，扫描库回到空间页；户外卡只剩物件与清单。
+    expect(source).toContain('aria-label="空间"');
+    expect(source).not.toContain('id="outdoor-panel-host-scan"');
     expect(source).toContain('<SpacePanel variant="card"');
+    expect(source).toContain('spaceSlot={');
     expect(source).toContain('<ScendanceLibrary variant="card"');
     expect(source).toContain("onToggle={() => toggleAgent('door')}");
     expect(source).not.toContain('<MapRailButton />');

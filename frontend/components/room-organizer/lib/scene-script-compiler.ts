@@ -209,7 +209,6 @@ export function compileSceneScript(script: SceneScript, context: SceneScriptComp
   const collisionContext = (): CollisionContext => ({
     keepOut: floorKeepOut(base, floorIndex),
     structureValidated: !!base.backendSceneV2,
-    interiorWalls: base.backendSceneV2 ? [] : (base.floors[floorIndex]?.interiorWalls ?? []),
   });
   const itemsOnFloor = (layout: RoomLayout): FurnitureItem[] => layout.floors[floorIndex]?.items ?? [];
 
@@ -812,14 +811,12 @@ function countOverlaps(layout: RoomLayout, floorIndex: number): { count: number;
   const floor = layout.floors[floorIndex];
   if (!floor) return { count: 0, names: [] };
   const keepOut = floorKeepOut(layout, floorIndex);
-  const interiorWalls = layout.backendSceneV2 ? [] : floor.interiorWalls;
   const names: string[] = [];
   for (const item of floor.items) {
     if (isStructuralMarker(item) || !item.position) continue;
     const hit = hasCollisions(item, floor.items, layout.width, layout.height, {
       keepOut,
       structureValidated: !!layout.backendSceneV2,
-      interiorWalls,
     });
     if (hit) names.push(item.name);
   }

@@ -27,6 +27,7 @@ import {createActivitySessionTracker} from '../lib/activity-session-epoch';
 import {createFloorSessionTracker} from '../lib/floor-session-epoch';
 import { ActivityTaskSuggestionView } from './activity-task-suggestion-view';
 import { SceneDeliveryPanel } from './scene-delivery-panel';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import {captureLocalDraftIntegrityFence,verifyLocalDraft} from '../lib/local-draft-integrity';
 import {localDraftDeliveryJson} from '../lib/local-draft-delivery';
 import {emptyVenueFacts,updateVenueFact} from '../lib/venue-facts';
@@ -57,12 +58,13 @@ function workLayout() { return makeLayout({roof:{style:'none'},floors:[makeFloor
 /** 模板模型节点场景：过去用 scenePreset 表达，现在由物件上的 glbNode 表达同一道交付门槛。 */
 const templateNode=(source:RoomLayout):RoomLayout=>({...source,floors:source.floors.map(floor=>({...floor,items:floor.items.map(item=>({...item,glbNode:'Preset_Object_0'}))}))});
 const checkinProject='20000000-0000-4000-8000-000000000001';
+function editorValue(): RoomEditorContextValue { return { projectId: checkinProject, layout } as unknown as RoomEditorContextValue; }
 const checkinState=(ledger?:MaterialCheckinLedger):MaterialCheckinState=>({projectId:checkinProject,ledger,ready:true,loading:false,saving:false,error:null,onSave:vi.fn().mockResolvedValue(undefined),retry:vi.fn()});
 function completeActivity() {
   const current={...workLayout(),id:checkinProject,eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:itemId,title:'未关联制作计划的主持任务',phase:'event'}]})};
   const brief={event:'演练开放日',guests:30,description:'保存的活动目标',mustHave:'保留通道',allowIdeas:false};
   const briefSnapshot={state:'ready' as const,scope:checkinProject,brief:{status:'present' as const,value:brief}};
-  const text=serializeLocalProjectBackupV3(current,briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}});
+  const text=serializeLocalProjectBackupV3(current, briefSnapshot, {state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}, { projectId: current.id! });
   const backupActions={prepareBackup:vi.fn(async()=>text),restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
   return {current,brief,briefSnapshot,text,backupActions};
 }
@@ -82,7 +84,7 @@ function timetableActivity() {
     events:[{id:'b1700000-0000-4000-8000-000000000005',kind:'receive',quantity:18,checkState:'checked',batchRef:'演练实收批次',fromPartyName:'演练交出方',toPartyName:'演练接收方',evidenceNote:'独立假设收取核对',occurredAt:'2027-02-03T09:00:00+08:00',recordedAt:'2027-02-03T09:05:00+08:00',recordedBy:'演练记录人'},
       {id:'b1700000-0000-4000-8000-000000000006',kind:'return',quantity:18,checkState:'checked',batchRef:'演练归还批次',fromPartyName:'演练接收方',toPartyName:'演练交出方',evidenceNote:'独立假设归还核对',occurredAt:'2027-02-03T17:00:00+08:00',recordedAt:'2027-02-03T17:05:00+08:00',recordedBy:'演练记录人'}],
   }]});
-  const text=serializeLocalProjectBackupV3(current,f.briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'present',value:ledger}});
+  const text=serializeLocalProjectBackupV3(current, f.briefSnapshot, {state:'ready',scope:checkinProject,materialCheckins:{status:'present',value:ledger}}, { projectId: current.id! });
   f.backupActions.prepareBackup.mockResolvedValue(text);
   return {...f,current,ledger,text};
 }
@@ -112,7 +114,7 @@ function knownMobilityDialogue() {
 }
 describe('Bingo scene delivery panel',()=>{
   it('opens on version confirm and export, with an empty archive folded to one line', () => {
-    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateEventOperations={vi.fn()}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateEventOperations={vi.fn()}/></RoomEditorProvider>);
     expect(screen.getByRole('button', { name: '确认这一版' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '导出交付包' })).toBeTruthy();
     expect(screen.queryByText('未记录')).toBeNull();
@@ -136,7 +138,7 @@ describe('Bingo scene delivery panel',()=>{
       eventOperations: eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [{ id: itemId, title: '签到台布置', phase: 'event' }] }),
       floors: [makeFloor({ items: [makeItem({ id: itemId, name: '签到椅', handoff: { ownerName: '', dueDate: '', acceptance: '', status: 'todo', evidenceUrls: [], evidenceNote: '' } })] })],
     };
-    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={vi.fn()} onUpdateItem={vi.fn()} />);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={vi.fn()} onUpdateItem={vi.fn()} /></RoomEditorProvider>);
     openInternalTools();
     fireEvent.click(screen.getByRole('tab', { name: /^核对/ }));
     const reviewPanel = document.getElementById('delivery-review') as HTMLElement;
@@ -147,7 +149,7 @@ describe('Bingo scene delivery panel',()=>{
     expect(within(reviewPanel).getByText('物件工作单 · 1')).toBeTruthy();
   });
   it('review tab shows a neutral note when there are no local gaps', () => {
-    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateEventOperations={vi.fn()} />);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateEventOperations={vi.fn()} /></RoomEditorProvider>);
     openInternalTools();
     fireEvent.click(screen.getByRole('tab', { name: /^核对/ }));
     expect(screen.getByText('当前台账暂无待核对缺口；仍需对照现场条件与对话需求逐项确认。')).toBeTruthy();
@@ -158,7 +160,7 @@ describe('Bingo scene delivery panel',()=>{
       onSelectedSuggestionIds={() => undefined} approvedDisclosure={false} onApprovedDisclosure={() => undefined} busy={false}
       availabilityReason={null} stale={false} phase="selection" error={null} notice={null} onPreview={() => undefined} onSend={() => undefined}
       onRecover={() => undefined} onCancel={() => undefined} onAccept={() => undefined} onNewRequest={() => undefined} onVerifySave={() => undefined}/>;
-    render(<SceneDeliveryPanel layout={{ ...workLayout(), name: '  ' }} controller={controller} onUpdateEventOperations={vi.fn()} activityTaskPanel={suggestions}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={{ ...workLayout(), name: '  ' }} controller={controller} onUpdateEventOperations={vi.fn()} activityTaskPanel={suggestions}/></RoomEditorProvider>);
     expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();
     expect(screen.getByText('未确认')).toBeTruthy();
     expect(screen.getByText('确认后，分享链接会固定在这一版；再改会排到下一版。')).toBeTruthy();
@@ -224,7 +226,7 @@ describe('Bingo scene delivery panel',()=>{
   it('blocks direct delivery while either local or cloud candidate remains pending',async()=>{
     const registry=createPendingCandidateRegistry(),scope={},access=bindPendingCandidateRegistry(registry,scope,()=>true),local={},cloud={};
     access.register('local',local);access.register('cloud',cloud);
-    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} capturePendingCandidates={access.capture}/>);openExportTab();
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={workLayout()} controller={controller} capturePendingCandidates={access.capture}/></RoomEditorProvider>);openExportTab();
     fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
     expect(await screen.findByText(/当前有尚未应用的方案预览/)).toBeTruthy();expect(downloadSceneDelivery).not.toHaveBeenCalled();
     access.clear('local',local);
@@ -237,7 +239,7 @@ describe('Bingo scene delivery panel',()=>{
   it('cancels direct delivery if a candidate appears while the file is being prepared',async()=>{
     const registry=createPendingCandidateRegistry(),scope={},access=bindPendingCandidateRegistry(registry,scope,()=>true),candidate={};
     const pending=deferred<string>();vi.mocked(sceneDeliveryJson).mockReturnValueOnce(pending.promise);
-    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} capturePendingCandidates={access.capture}/>);openExportTab();
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={workLayout()} controller={controller} capturePendingCandidates={access.capture}/></RoomEditorProvider>);openExportTab();
     fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
     await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
     access.register('local',candidate);
@@ -252,7 +254,7 @@ describe('Bingo scene delivery panel',()=>{
     const old=Object.getOwnPropertyDescriptor(navigator,'locks');
     Object.defineProperty(navigator,'locks',{configurable:true,value:{request:async(_name:string,_options:unknown,callback:()=>Promise<unknown>)=>callback()}});
     try{
-      render(<SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={()=>captureLocalDraftIntegrityFence(()=>true,[])}/>);openExportTab();
+      render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={()=>captureLocalDraftIntegrityFence(()=>true,[])}/></RoomEditorProvider>);openExportTab();
       fireEvent.click(screen.getByRole('checkbox',{name:'在可校验草案中附上本机场地记录'}));
       fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
       await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
@@ -269,7 +271,7 @@ describe('Bingo scene delivery panel',()=>{
     const current=makeLayout({id:'missing-facts',roof:{style:'none'}}),old=Object.getOwnPropertyDescriptor(navigator,'locks');
     Object.defineProperty(navigator,'locks',{configurable:true,value:{request:async(_name:string,_options:unknown,callback:()=>Promise<unknown>)=>callback()}});
     try{
-      render(<SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={()=>captureLocalDraftIntegrityFence(()=>true,[])}/>);openExportTab();
+      render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={()=>captureLocalDraftIntegrityFence(()=>true,[])}/></RoomEditorProvider>);openExportTab();
       fireEvent.click(screen.getByRole('checkbox',{name:'在可校验草案中附上本机场地记录'}));fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
       expect(await screen.findByText(/尚无本机场地记录/)).toBeTruthy();expect(downloadSceneDelivery).not.toHaveBeenCalled();
     }finally{if(old)Object.defineProperty(navigator,'locks',old);else Reflect.deleteProperty(navigator,'locks');}
@@ -277,7 +279,7 @@ describe('Bingo scene delivery panel',()=>{
   it('exports an independently verifiable local snapshot without replacing existing JSON/CSV',async()=>{
     const current=makeLayout({id:'activity-test',roof:{style:'none'},floors:[makeFloor({items:Array.from({length:60},(_,index)=>makeItem({id:`item-${index}`,name:'示意物料'}))})]});
     const capture=()=>captureLocalDraftIntegrityFence(()=>true,[]);
-    render(<SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={capture}/>);openExportTab();
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} captureLocalDraftExport={capture}/></RoomEditorProvider>);openExportTab();
     expect(screen.getByRole('button',{name:'导出本地待核验草案 JSON'})).toBeTruthy();
     expect(screen.getByRole('button',{name:'导出本地物料草案 CSV'})).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
@@ -290,7 +292,7 @@ describe('Bingo scene delivery panel',()=>{
     let value='A',invalidate=()=>{};const digest=deferred<ArrayBuffer>();
     vi.stubGlobal('crypto',{randomUUID:()=>webcrypto.randomUUID(),subtle:{digest:vi.fn(()=>digest.promise)}});
     const capture=()=>captureLocalDraftIntegrityFence(()=>value==='A',[listener=>{invalidate=listener;return()=>{};}]);
-    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} captureLocalDraftExport={capture}/>);openExportTab();
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={workLayout()} controller={controller} captureLocalDraftExport={capture}/></RoomEditorProvider>);openExportTab();
     fireEvent.click(screen.getByRole('button',{name:'导出可校验本机草案'}));
     await waitFor(()=>expect(crypto.subtle.digest).toHaveBeenCalledOnce());
     value='B';invalidate();value='A';invalidate();
@@ -304,7 +306,7 @@ describe('Bingo scene delivery panel',()=>{
     const file=new File([text],'sample.json',{type:'application/json'});
     Object.defineProperty(file,'arrayBuffer',{value:async()=>new TextEncoder().encode(text).buffer});
     const before=JSON.stringify(source);
-    render(<SceneDeliveryPanel layout={source} controller={controller}/>);openExportTab();
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={source} controller={controller}/></RoomEditorProvider>);openExportTab();
     fireEvent.change(screen.getByLabelText('校验可校验草案文件'),{target:{files:[file]}});
     expect(await screen.findByText(/文件内容与所附摘要一致/)).toBeTruthy();
     expect(screen.getByText(/不证明文件来源、内容真实/)).toBeTruthy();
@@ -312,13 +314,13 @@ describe('Bingo scene delivery panel',()=>{
   });
   it('明确图纸仅覆盖首层及未包含的其他楼层',()=>{
     const current=makeLayout({roof:{style:'none'},floors:[makeFloor({id:'first',name:'一层'}),makeFloor({id:'second',name:'二层'})]});
-    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     openExportTab();
     expect(screen.getByText(/平面打印和 DXF 仅包含首层“一层”，其他 1 层未包含/)).toBeTruthy();
   });
   it('不允许对复杂结构导出伪造矩形图纸',()=>{
     const current={...layout,backendVenue:{width:8,depth:8,height:3,shape:'polygon' as const,polygon:[{x:0,z:0},{x:8,z:0},{x:0,z:8}],entrances:[]}};
-    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     openExportTab();
     expect(screen.getByText(/多边形场地暂不支持平面图导出/)).toBeTruthy();
     expect((screen.getByRole('button',{name:'打开按比例打印（另存 PDF）'}) as HTMLButtonElement).disabled).toBe(true);
@@ -327,7 +329,7 @@ describe('Bingo scene delivery panel',()=>{
   it('未定位物件允许打印警示但禁止 DXF',()=>{
     const {position:_position,...unplaced}=makeItem({id:'unplaced',name:'待定位椅'});
     const current=makeLayout({roof:{style:'none'},floors:[makeFloor({items:[unplaced]})]});
-    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     openExportTab();
     expect(screen.getByText(/部分物件位置待确认/)).toBeTruthy();
     expect((screen.getByRole('button',{name:'打开按比例打印（另存 PDF）'}) as HTMLButtonElement).disabled).toBe(false);
@@ -338,7 +340,7 @@ describe('Bingo scene delivery panel',()=>{
     current.backendSceneV2!.structure.walls[0]!.status='confirmed';
     current.floors[0]!.interiorWalls![0]!.status='confirmed';
     current.floors[0]!.interiorWalls![0]!.x1+=0.1;
-    render(<SceneDeliveryPanel layout={current} controller={controller}/>);openExportTab();
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);openExportTab();
     fireEvent.click(screen.getByRole('button',{name:label}));
     expect((await screen.findAllByText(/请保留原始完整备份/)).length).toBeGreaterThan(0);
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
@@ -350,7 +352,7 @@ describe('Bingo scene delivery panel',()=>{
       makeItem({id:'old',name:'旧椅'}),
       makeItem({id:'column',name:'结构柱',structuralColumnId:'col-1'}),
     ]})]});
-    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     const summary=screen.getByTestId('provenance-summary');
     expect(summary.textContent).toContain('AI 生成 1 件');
     expect(summary.textContent).toContain('系统生成 1 件');
@@ -364,7 +366,7 @@ describe('Bingo scene delivery panel',()=>{
       items:[makeItem({id:itemId,type:'bench',name:'休息长椅（示意）',category:'rest',width:1.4,depth:.4,height:.45,
         position:{x:-3,z:-2},glbUrl:'https://assets.example/sign/chair.glb?token=private-token'})],
     })]});
-    render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     openExportTab();
     expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button',{name:'导出本地待核验草案 JSON'}) as HTMLButtonElement).disabled).toBe(false);
@@ -385,12 +387,16 @@ describe('Bingo scene delivery panel',()=>{
   });
   it('exports full saved activity records without requiring a production plan or generating models',async()=>{
     const f=completeActivity();
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce();
-    expect(productionPlanHandoffHtml).toHaveBeenCalledWith(expect.objectContaining({id:checkinProject}),expect.anything(),undefined,{scope:'activity',brief:f.briefSnapshot.brief});
+    expect(productionPlanHandoffHtml).toHaveBeenCalledOnce();
+    const handoffOptions=vi.mocked(productionPlanHandoffHtml).mock.calls[0]![2] as {projectId:string;scope:string;brief:unknown;headcount?:{value:number|null;source:string}};
+    expect(handoffOptions).toMatchObject({scope:'activity',brief:f.briefSnapshot.brief});
+    // 本机 brief 只有未确认的 30 人、对话桶里没有这条项目 → 读侧给出 legacy-unconfirmed，不冒充已确认。
+    expect(handoffOptions.headcount).toEqual({value:30,source:'legacy-unconfirmed'});
     const [html,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls[0];
     expect(html).toContain('未关联制作计划的主持任务');expect(html).toContain('保存的活动目标');
     expect(html).toContain('活动需求来自执行页已保存的手工需求记录');
@@ -400,12 +406,27 @@ describe('Bingo scene delivery panel',()=>{
     expect(mime).toBe('text/html;charset=utf-8');expect(name).toContain('内部活动交接');expect(extension).toBe('html');
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
   });
+  it('carries a conversation headcount into the handoff file on its own labelled row',async()=>{
+    const f=completeActivity();
+    const key=`scendance:outdoor-flow:project:${checkinProject}`;
+    window.localStorage.setItem(key,JSON.stringify({brief:{guests:45}}));
+    try{
+      render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
+      openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
+      await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
+      const [html]=vi.mocked(downloadSceneDelivery).mock.calls[0];
+      expect(html).toContain('对话记录人数');
+      expect(html).toContain('45 人（尚未确认，请核对）');
+      const handoffOptions=vi.mocked(productionPlanHandoffHtml).mock.calls.at(-1)![2] as {headcount?:{value:number|null;source:string}};
+      expect(handoffOptions.headcount).toEqual({value:45,source:'conversation'});
+    }finally{window.localStorage.removeItem(key);}
+  });
   it.each(['error','wrong-project','incomplete'] as const)('does not substitute partial activity data when preparation returns %s',async kind=>{
     const f=completeActivity();
     if(kind==='error')f.backupActions.prepareBackup.mockRejectedValue(new Error('活动资料读取失败'));
     else if(kind==='wrong-project')f.backupActions.prepareBackup.mockResolvedValue(f.text.replaceAll(checkinProject,'20000000-0000-4000-8000-000000000002'));
-    else f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackup(f.current,f.briefSnapshot));
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    else f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackup(f.current, f.briefSnapshot, { projectId: f.current.id! }));
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await screen.findByText(kind==='error'?'活动资料读取失败':'活动资料未完整对应当前项目，请重新读取后导出。');
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
@@ -414,15 +435,15 @@ describe('Bingo scene delivery panel',()=>{
     const f=completeActivity();let finish!:(value:string)=>void;
     f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
     const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true};
-    const view=render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} briefState={briefState}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} briefState={briefState}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
-    view.rerender(<SceneDeliveryPanel layout={field==='layout'?{...f.current,name:'后续编辑'}:f.current} controller={controller} backupActions={f.backupActions} briefState={field==='brief'?{...briefState,brief:{...f.brief,description:'后续需求'}}:briefState}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={field==='layout'?{...f.current,name:'后续编辑'}:f.current} controller={controller} backupActions={f.backupActions} briefState={field==='brief'?{...briefState,brief:{...f.brief,description:'后续需求'}}:briefState}/></RoomEditorProvider>);
     await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
   it('exports only the current mobility decision, with no original evidence or compliance claim',async()=>{
     const f=completeActivity(),capture={decision:'needed' as const,isCurrent:()=>true,evidence:'私密原话 token=example-secret'};
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>capture} captureDialogue={knownMobilityDialogue}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>capture} captureDialogue={knownMobilityDialogue}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
@@ -433,7 +454,7 @@ describe('Bingo scene delivery panel',()=>{
     const f=completeActivity();const old={decision:'not_needed' as const,isCurrent:()=>true};
     const memory={...initialBriefMemory(),mobilityRequirement:{decision:(state==='contradictory'?'needed':'not_needed') as 'needed'|'not_needed',evidence:'私密旧依据'},mobilityNeedsClarification:state==='unresolved'};
     const capture=state==='missing'?undefined:()=>({project:()=>projectDialogueHandoff(state==='unavailable'?null:memory),isCurrent:()=>true,release:()=>{}});
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>old} captureDialogue={capture}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>old} captureDialogue={capture}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
     expect(html).toContain('当前会话没有已确认的行动辅助需求记录');expect(html).not.toContain('主办方说明本场不需要所述行动辅助需求');expect(html).not.toContain('私密旧依据');
@@ -441,10 +462,10 @@ describe('Bingo scene delivery panel',()=>{
   it('exports separately attributed structured dialogue and reports conflicts with confirmed manual values',async()=>{
     const f=completeActivity();
     const manual={...f.brief,event:'会议',eventConfirmed:true,guests:40,guestsConfirmed:true};
-    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(f.current,{state:'ready',scope:checkinProject,brief:{status:'present',value:manual}},{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(f.current, {state:'ready',scope:checkinProject,brief:{status:'present',value:manual}}, {state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}, { projectId: f.current.id! }));
     const memory={...initialBriefMemory(),event:'讲座',headcount:30,reportedInventory:[{evidence:'SECRET-INVENTORY',status:'reported' as const}],unresolvedActivityNeeds:['checkin' as const]};
     const release=vi.fn();
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release})}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
@@ -455,7 +476,7 @@ describe('Bingo scene delivery panel',()=>{
   it.each([false,true])('exports original preservation as a user requirement, not a completed field check: positions=%s',async keepPositions=>{
     const f=completeActivity(),evidence=keepPositions?'保留原有物件，位置不变':'保留原有物件';
     const memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(f.current,evidence,keepPositions)!};
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);
@@ -465,7 +486,7 @@ describe('Bingo scene delivery panel',()=>{
   it('does not export a different activity preservation list as if it were this activity',async()=>{
     const f=completeActivity(),other={...f.current,id:'different-activity'};
     const memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(other,'保留原有物件',false)!};
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('原物保留要求或名单暂无法核对');expect(html).not.toContain('对话要求保留 1 件原物');
@@ -473,18 +494,18 @@ describe('Bingo scene delivery panel',()=>{
   it('reports preservation conflicts rather than claiming the requirement has been satisfied',async()=>{
     const f=completeActivity(),memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(f.current,'保留原有物件',false)!};
     const current=structuredClone(f.current);current.floors[0]!.items=[];
-    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(current,f.briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
-    render(<SceneDeliveryPanel layout={current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/>);
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(current, f.briefSnapshot, {state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}, { projectId: current.id! }));
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>true,release:()=>{}})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('当前场景与该要求存在冲突，请先处理');expect(html).toContain('现场执行情况仍需核对');
   });
   it('escapes even malformed preservation values before HTML export',async()=>{
     const f=completeActivity();
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:()=>{
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:()=>{
       const result=projectDialogueHandoff(initialBriefMemory());
       result.fields.originalPreservation={status:'recorded',count:'<script>bad</script>' as unknown as number,keepPositions:false};return result;
-    },isCurrent:()=>true,release:()=>{}})}/>);
+    },isCurrent:()=>true,release:()=>{}})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('&lt;script&gt;bad&lt;/script&gt;');expect(html).not.toContain('<script>bad</script>');
@@ -493,7 +514,7 @@ describe('Bingo scene delivery panel',()=>{
     const f=completeActivity();let finish!:(value:string)=>void,revision=0;const release=vi.fn();
     f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
     const memory={...initialBriefMemory(),originalPreservation:captureOriginalPreservation(f.current,'保留原有物件',false)!};
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>{const captured=revision;return {project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>revision===captured,release};}}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>{const captured=revision;return {project:reference=>projectDialogueHandoff(memory,reference),isCurrent:()=>revision===captured,release};}}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
     revision++;await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(release).toHaveBeenCalledOnce();
     expect(await screen.findByText('活动或资料已变化，未生成交接文件。')).toBeTruthy();
@@ -501,42 +522,43 @@ describe('Bingo scene delivery panel',()=>{
   it('does not export stale or unavailable dialogue captures and always releases acquired captures',async()=>{
     const f=completeActivity();let finish!:(value:string)=>void,current=true;const release=vi.fn();
     f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:()=>projectDialogueHandoff(initialBriefMemory()),isCurrent:()=>current,release})}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>({project:()=>projectDialogueHandoff(initialBriefMemory()),isCurrent:()=>current,release})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
     current=false;await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(release).toHaveBeenCalledOnce();
     expect(await screen.findByText('活动或资料已变化，未生成交接文件。')).toBeTruthy();
   });
   it('does not silently export when a configured dialogue capture cannot be acquired',async()=>{
-    const f=completeActivity();render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>null}/>);
+    const f=completeActivity();render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureDialogue={()=>null}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));
     expect(await screen.findByText('当前对话或活动无法核对，未生成交接文件。')).toBeTruthy();expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();
   });
   it('does not export when the mobility snapshot becomes stale during preparation',async()=>{
     const f=completeActivity();let finish!:(value:string)=>void,current=true;f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',isCurrent:()=>current})}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',isCurrent:()=>current})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
     current=false;await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(await screen.findByText('活动或资料已变化，未生成交接文件。')).toBeTruthy();
   });
   it.each([['需要1.5米轮椅通道','1.5 米'],['需要轮椅通道净宽150厘米','150 厘米'],['需要轮椅通道净宽1500毫米','1500 毫米']] as const)('exports user-stated width and units from %s without the private original sentence',async(evidence,shown)=>{
     const f=completeActivity(),width=extractMobilityWidth({decision:'needed',evidence},false);
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',width,isCurrent:()=>true})} captureDialogue={knownMobilityDialogue}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',width,isCurrent:()=>true})} captureDialogue={knownMobilityDialogue}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain(shown);expect(html).toContain('data-source="user_statement"');expect(html).toContain('value="1.5"');
     expect(html).toContain('待核验');expect(html).not.toContain(evidence);
   });
   it('marks the width absent rather than guessing it from conflicting text',async()=>{
     const f=completeActivity(),width=extractMobilityWidth({decision:'needed',evidence:'需要1.5米轮椅通道，或2米轮椅通道'},false);
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',width,isCurrent:()=>true})} captureDialogue={knownMobilityDialogue}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',width,isCurrent:()=>true})} captureDialogue={knownMobilityDialogue}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=String(vi.mocked(downloadSceneDelivery).mock.calls[0]![0]);expect(html).toContain('具体通道尺寸未随包提供');expect(html).not.toContain('data-source="user_statement"');
   });
-  it.each(['activity','floor'] as const)('does not export when %s switches away and back during preparation',async kind=>{
+  // T2 单层化：楼层往返不再是失效维度，只剩活动 scope 切换。楼层守卫接线留 B5 收敛。
+  it('does not export when the activity switches away and back during preparation',async()=>{
     const f=completeActivity(),store=createLayoutStore({layout:f.current,activeFloorIndex:0}),activity=createActivitySessionTracker(store),floor=createFloorSessionTracker(store);
     activity.start();floor.start();const token=activity.capture(),floorToken=floor.capture();let finish!:(value:string)=>void;
     f.backupActions.prepareBackup.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',isCurrent:()=>activity.isCurrent(token)&&floor.isCurrent(floorToken)})}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} captureMobility={()=>({decision:'needed',isCurrent:()=>activity.isCurrent(token)&&floor.isCurrent(floorToken)})}/></RoomEditorProvider>);
     openExportTab();fireEvent.click(screen.getByRole('button',{name:'导出活动执行资料草案 HTML'}));await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
-    act(()=>{if(kind==='activity'){store.setState({layout:{...f.current,id:'another-activity'}});store.setState({layout:f.current});}else{store.setState({activeFloorIndex:1});store.setState({activeFloorIndex:0});}});
+    act(()=>{store.setState({layout:{...f.current,id:'another-activity'}});store.setState({layout:f.current});});
     await act(async()=>finish(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();activity.stop();floor.stop();
   });
   it('keeps local checkins and production editing available when the scene service lease is blocked',async()=>{
@@ -546,7 +568,7 @@ describe('Bingo scene delivery panel',()=>{
       project:{id:projectId,studio_id:'studio',name:'远端场景',revision:1,scene:{schemaVersion:1 as const,venue:{width:8,depth:6,height:3,shape:'rectangle' as const,entrances:[]},objects:[],camera:'overview' as const,lighting:'neutral' as const}},
       geometryBinding:{version:1 as const,localActivityId:checkinProject,cloudProjectId:projectId,userId:'user-a',apiUrl:controller.config.apiUrl}};
     vi.spyOn(controller,'getSnapshot').mockReturnValue(state);vi.spyOn(controller,'isGeometryBound').mockImplementation(id=>id===checkinProject);
-    render(<SceneDeliveryPanel layout={current} controller={controller} checkins={checkinState(materialCheckinLedgerSchema.parse({projectId:checkinProject}))} onUpdateItem={vi.fn()} onUpdateProductionPlan={vi.fn()}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} checkins={checkinState(materialCheckinLedgerSchema.parse({projectId:checkinProject}))} onUpdateItem={vi.fn()} onUpdateProductionPlan={vi.fn()}/></RoomEditorProvider>);
     fireEvent.click(screen.getByRole('tab',{name:'数量点验'}));
     expect(screen.getByRole('button',{name:'新建点验单'}).hasAttribute('disabled')).toBe(false);
     fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
@@ -558,13 +580,13 @@ describe('Bingo scene delivery panel',()=>{
     vi.mocked(productionPlanHandoffHtml).mockReturnValueOnce(pending);
     const current={...workLayout(),id:'20000000-0000-4000-8000-000000000001',productionPlan:productionPlanSchema.parse({})};
     const context=checkinState();
-    const view=render(<SceneDeliveryPanel layout={current} controller={controller} checkins={context}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} checkins={context}/></RoomEditorProvider>);
     fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
     fireEvent.click(screen.getByRole('button',{name:'导出制作交接单 HTML'}));
     await waitFor(()=>expect(productionPlanHandoffHtml).toHaveBeenCalledOnce());
     if(change==='unmount')view.unmount();
-    else if(change==='checkins'||change==='checkin-loading')view.rerender(<SceneDeliveryPanel layout={current} controller={controller} checkins={change==='checkins'?checkinState(materialCheckinLedgerSchema.parse({projectId:checkinProject})):{...context,ready:false,loading:true}}/>);
-    else view.rerender(<SceneDeliveryPanel layout={change==='project'?{...current,id:'20000000-0000-4000-8000-000000000002'}:{...current,name:'已经调整的场景'}} controller={controller}/>);
+    else if(change==='checkins'||change==='checkin-loading')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} checkins={change==='checkins'?checkinState(materialCheckinLedgerSchema.parse({projectId:checkinProject})):{...context,ready:false,loading:true}}/></RoomEditorProvider>);
+    else view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={change==='project'?{...current,id:'20000000-0000-4000-8000-000000000002'}:{...current,name:'已经调整的场景'}} controller={controller}/></RoomEditorProvider>);
     await act(async()=>{finish('<!doctype html><title>旧快照</title>');await pending;});
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
@@ -573,7 +595,7 @@ describe('Bingo scene delivery panel',()=>{
     const ledger=materialCheckinLedgerSchema.parse({projectId:checkinProject,dataKind:'rehearsal',sheets:[{
       id:'aa700000-0000-4000-8000-000000000001',acquisitionId:'aa700000-0000-4000-8000-000000000002',unit:'piece',
       acquisitionSnapshot:{title:'保留的演练点验单'},agreements:[{id:'aa700000-0000-4000-8000-000000000003',agreedQuantity:20,basisNote:'演练依据',recordedAt:'2026-10-09T00:00:00Z',recordedBy:'演练统筹'}],events:[]}]});
-    render(<SceneDeliveryPanel layout={current} controller={controller} checkins={checkinState(ledger)}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} checkins={checkinState(ledger)}/></RoomEditorProvider>);
     fireEvent.click(screen.getByRole('tab',{name:'数量点验'}));
     fireEvent.click(screen.getByRole('button',{name:'记录实收'}));
     expect((screen.getByRole('button',{name:'导出点验交接单 HTML'}) as HTMLButtonElement).disabled).toBe(true);
@@ -582,18 +604,18 @@ describe('Bingo scene delivery panel',()=>{
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     const html=vi.mocked(downloadSceneDelivery).mock.calls[0][0];
     expect(html).toContain('数量点验');expect(html).toContain('保留的演练点验单');expect(html).toContain('当前未记录');
-    expect(productionPlanHandoffHtml).toHaveBeenCalledWith(current,expect.objectContaining({id:expect.any(String)}),ledger);
+    expect(productionPlanHandoffHtml).toHaveBeenCalledWith(current,expect.objectContaining({id:expect.any(String)}),expect.objectContaining({projectId:expect.any(String)}),ledger);
   });
   it('does not export task status when the local checkin context is unavailable',()=>{
     const current={...workLayout(),id:checkinProject,eventOperations:eventOperationsSchema.parse({tasks:[createOperation('演练任务','setup')]})};
-    render(<SceneDeliveryPanel layout={current} controller={controller} checkins={{...checkinState(),ready:false,error:'点验读取失败'}}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} checkins={{...checkinState(),ready:false,error:'点验读取失败'}}/></RoomEditorProvider>);
     openExportTab(); expect((screen.getByRole('button',{name:'导出活动安排 CSV'}) as HTMLButtonElement).disabled).toBe(true);
     openExportTab(); expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
   it('blocks production export while editing and exports applied records after cancellation independently of model delivery',async()=>{
     const productionPlan=productionPlanSchema.parse({staffing:[{id:'40000000-0000-4000-8000-000000000001',roleName:'演练布场',headcount:2}]});
-    render(<SceneDeliveryPanel layout={{...templateNode(workLayout()),productionPlan}} controller={controller} onUpdateProductionPlan={vi.fn()}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={{...templateNode(workLayout()),productionPlan}} controller={controller} onUpdateProductionPlan={vi.fn()}/></RoomEditorProvider>);
     fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
     fireEvent.click(screen.getByRole('button',{name:'编辑制作计划'}));
     fireEvent.change(screen.getByLabelText('岗位名称'),{target:{value:'未保存的新岗位'}});
@@ -607,13 +629,13 @@ describe('Bingo scene delivery panel',()=>{
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
   });
   it('does not offer a production handoff before a plan is saved',()=>{
-    render(<SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateProductionPlan={vi.fn()}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={workLayout()} controller={controller} onUpdateProductionPlan={vi.fn()}/></RoomEditorProvider>);
     fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
     expect((screen.getByRole('button',{name:'导出制作交接单 HTML'}) as HTMLButtonElement).disabled).toBe(true);
   });
   it('edits production records in the third page through the parent update callback without the model export gate',async()=>{
     const current=templateNode(workLayout()),update=vi.fn();
-    function Harness():JSX.Element{const [saved,setSaved]=useState(current);return <SceneDeliveryPanel layout={saved} controller={controller} onUpdateProductionPlan={(value:ProductionPlan|undefined)=>{update(value);const {productionPlan:_previous,...base}=saved;setSaved({...base,...(value?{productionPlan:value}:{})});}}/>;}
+    function Harness():JSX.Element{const [saved,setSaved]=useState(current);return <RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={saved} controller={controller} onUpdateProductionPlan={(value:ProductionPlan|undefined)=>{update(value);const {productionPlan:_previous,...base}=saved;setSaved({...base,...(value?{productionPlan:value}:{})});}}/></RoomEditorProvider>;}
     render(<Harness/>);expect(update).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));expect(screen.getByRole('tab',{name:'制作计划'}).getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByRole('button',{name:'创建制作计划'}));expect(update).not.toHaveBeenCalled();
@@ -625,15 +647,15 @@ describe('Bingo scene delivery panel',()=>{
   });
   it('keeps the production page read-only for a cloud-bound project or a missing parent callback',()=>{
     const current={...workLayout(),id:'20000000-0000-4000-8000-000000000001'},update=vi.fn();window.history.replaceState({},'',`/?project=${current.id}`);
-    const view=render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateProductionPlan={update}/>);fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} onUpdateProductionPlan={update}/></RoomEditorProvider>);fireEvent.click(screen.getByRole('tab',{name:'制作计划'}));
     expect((screen.getByRole('button',{name:'创建制作计划'}) as HTMLButtonElement).disabled).toBe(true);expect(update).not.toHaveBeenCalled();
-    window.history.replaceState({},'', '/');view.rerender(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    window.history.replaceState({},'', '/');view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     expect((screen.getByRole('button',{name:'创建制作计划'}) as HTMLButtonElement).disabled).toBe(true);
   });
   it.skip('keeps backup in the existing delivery area and permits a full template backup without the model export gate', async () => {
     const prepareBackup=vi.fn().mockResolvedValue('{"format":"scendance-local-project-backup"}');
     const backupActions={prepareBackup,restoreBackup:vi.fn(),undoRestore:vi.fn(),backupPending:false,canUndoRestore:false};
-    const view=render(<SceneDeliveryPanel layout={templateNode(layout)} controller={controller} backupActions={backupActions}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={templateNode(layout)} controller={controller} backupActions={backupActions}/></RoomEditorProvider>);
     const summary=screen.getByText('场景与活动备份');
     expect(summary.closest('details')!.open).toBe(false);
     fireEvent.click(summary);
@@ -643,7 +665,7 @@ describe('Bingo scene delivery panel',()=>{
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(prepareBackup).toHaveBeenCalledOnce();
     expect(exportDeliveryGlb).not.toHaveBeenCalled();
-    view.rerender(<SceneDeliveryPanel layout={layout} controller={controller}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={layout} controller={controller}/></RoomEditorProvider>);
     expect(screen.queryByText('场景与活动备份')).toBeNull();
     openExportTab(); expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -651,37 +673,37 @@ describe('Bingo scene delivery panel',()=>{
     const f=completeActivity(),updateOperations=vi.fn(),updateItem=vi.fn();
     const props={layout:f.current,controller,backupActions:f.backupActions,onUpdateEventOperations:updateOperations,onUpdateItem:updateItem};
     const initialMaterialsRequest={serial:1,view:'materials' as const},operationsRequest={serial:2,view:'operations' as const},materialsRequest={serial:3,view:'materials' as const};
-    const view=render(<SceneDeliveryPanel {...props} deliveryViewRequest={initialMaterialsRequest}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} deliveryViewRequest={initialMaterialsRequest}/></RoomEditorProvider>);
     expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
-    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={operationsRequest}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} deliveryViewRequest={operationsRequest}/></RoomEditorProvider>);
     const opsPanel=screen.getByRole('tabpanel',{name:'活动安排'});
     const taskSummary=within(opsPanel).getByText('未关联制作计划的主持任务');fireEvent.click(taskSummary);taskSummary.closest('details')!.open=true;
     const taskTitle=within(screen.getByRole('tabpanel',{name:'活动安排'})).getByLabelText('任务标题') as HTMLInputElement;
     fireEvent.change(taskTitle,{target:{value:'未保存的演练主持说明'}});
-    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={materialsRequest}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} deliveryViewRequest={materialsRequest}/></RoomEditorProvider>);
     expect(screen.getByRole('tab',{name:'物料工作单'}).getAttribute('aria-selected')).toBe('true');
     const itemSummary=within(screen.getByRole('tabpanel',{name:'物料工作单'})).getByText('签到椅 · 1');fireEvent.click(itemSummary);itemSummary.closest('details')!.open=true;
     const acceptance=within(screen.getByRole('tabpanel',{name:'物料工作单'})).getByLabelText('验收条件') as HTMLTextAreaElement;
     fireEvent.change(acceptance,{target:{value:'未保存的演练摆放要求'}});
     fireEvent.click(screen.getByRole('tab',{name:'活动安排'}));
-    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={materialsRequest}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} deliveryViewRequest={materialsRequest}/></RoomEditorProvider>);
     expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
     expect(within(screen.getByRole('tabpanel',{name:'活动安排'})).getByLabelText('任务标题')).toBe(taskTitle);expect(taskTitle.value).toBe('未保存的演练主持说明');
-    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={{serial:4,view:'operations'}}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} deliveryViewRequest={{serial:4,view:'operations'}}/></RoomEditorProvider>);
     expect(within(screen.getByRole('tabpanel',{name:'活动安排'})).getByLabelText('任务标题')).toBe(taskTitle);expect(taskTitle.value).toBe('未保存的演练主持说明');
-    view.rerender(<SceneDeliveryPanel {...props} deliveryViewRequest={{serial:5,view:'materials'}}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} deliveryViewRequest={{serial:5,view:'materials'}}/></RoomEditorProvider>);
     expect(within(screen.getByRole('tabpanel',{name:'物料工作单'})).getByLabelText('验收条件')).toBe(acceptance);expect(acceptance.value).toBe('未保存的演练摆放要求');
     expect(updateOperations).not.toHaveBeenCalled();expect(updateItem).not.toHaveBeenCalled();expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
   // F-05：项目页把落点直接递到「本机备份」，折叠壳得替她掀开，否则落点在一扇关着的门后面。
   it('unfolds the internal tools straight onto the local backup tab',()=>{
     const f=completeActivity();
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} deliveryViewRequest={{serial:1,view:'backup'}}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions} deliveryViewRequest={{serial:1,view:'backup'}}/></RoomEditorProvider>);
     expect(screen.getByRole('tab',{name:'本机备份'}).getAttribute('aria-selected')).toBe('true');
     expect((screen.getByText('内部资料').closest('details') as HTMLDetailsElement).open).toBe(true);
   });
   it('only prepares and downloads after an explicit click',async()=>{
-    render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={layout} controller={controller}/></RoomEditorProvider>);
     expect(exportDeliveryGlb).not.toHaveBeenCalled();expect(downloadSceneDelivery).not.toHaveBeenCalled();
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
@@ -689,7 +711,7 @@ describe('Bingo scene delivery panel',()=>{
     expect(screen.getByRole('status').textContent).toContain('复检');
   });
   it('keeps JSON and CSV as separate explicit downloads',async()=>{
-    render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={layout} controller={controller}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));
     await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledWith(layout,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)}),undefined));
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出物料清单 CSV'}));
@@ -699,24 +721,24 @@ describe('Bingo scene delivery panel',()=>{
   it('does not download a stale snapshot after scene editing during verification',async()=>{
     let done!:(value:{buffer:ArrayBuffer;objectCount:number})=>void;
     vi.mocked(exportDeliveryGlb).mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));
-    const view=render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={layout} controller={controller}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
     await waitFor(()=>expect(exportDeliveryGlb).toHaveBeenCalledOnce());
-    view.rerender(<SceneDeliveryPanel layout={{...layout,name:'Changed'}} controller={controller}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={{...layout,name:'Changed'}} controller={controller}/></RoomEditorProvider>);
     await act(async()=>{done({buffer:new ArrayBuffer(8),objectCount:2});});
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
     expect(screen.getByRole('status').textContent).toContain('场景或账号已变化');
   });
   it('does not offer a file after geometry verification fails',async()=>{
     vi.mocked(exportDeliveryGlb).mockRejectedValueOnce(new Error('GLB 复检失败：物件数量不一致。'));
-    render(<SceneDeliveryPanel layout={layout} controller={controller}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={layout} controller={controller}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 GLB'}));
     await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('复检失败'));
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
   });
   it('validates, saves and locates an execution record with explicit acceptance evidence',async()=>{
     const current=workLayout(), update=vi.fn(), locate=vi.fn();
-    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update} onLocate={locate}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update} onLocate={locate}/></RoomEditorProvider>);
     fireEvent.click(screen.getByText('签到椅 · 1'));
     fireEvent.click(screen.getByRole('button',{name:'定位物件'})); expect(locate).toHaveBeenCalledWith(itemId);
     fireEvent.change(screen.getByLabelText('状态'),{target:{value:'accepted'}});
@@ -737,7 +759,7 @@ describe('Bingo scene delivery panel',()=>{
     const current=workLayout(), update=vi.fn(); const acceptance='按原图摆放';
     current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,{ownerName:'执行甲',dueDate:'2026-10-09',acceptance})};
     const previousBasis=current.floors[0].items[0].handoff!.reviewedBasis;
-    const view=render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/></RoomEditorProvider>);
     fireEvent.click(screen.getByText('签到椅 · 1'));
     await waitFor(()=>expect(screen.queryByText('正在核对…')).toBeNull());
     fireEvent.change(screen.getByLabelText(label),{target:{value}});
@@ -746,12 +768,12 @@ describe('Bingo scene delivery panel',()=>{
     expect(patch.handoff!.reviewedBasis).toBe(previousBasis);
     const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],...patch}]}]};
     expect(await effectiveHandoffStatus(changed,itemId)).toBe('needs_review');
-    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller} onUpdateItem={update}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={changed} controller={controller} onUpdateItem={update}/></RoomEditorProvider>);
     await waitFor(()=>expect(screen.getByText('需复核')).toBeDefined());
     fireEvent.click(screen.getByRole('button',{name:'重新记录验收'}));
     const nextBasis=await handoffBasis(changed,itemId,patch.handoff!); await waitFor(()=>expect(update.mock.calls[1][1].handoff.reviewedBasis).toBe(nextBasis));
     const confirmed={...changed,floors:[{...changed.floors[0],items:[{...changed.floors[0].items[0],...update.mock.calls[1][1]}]}]};
-    view.rerender(<SceneDeliveryPanel layout={confirmed} controller={controller} onUpdateItem={update}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={confirmed} controller={controller} onUpdateItem={update}/></RoomEditorProvider>);
     await waitFor(()=>expect(screen.getByText('已验收')).toBeDefined());
     expect(screen.getByRole('button',{name:'重新记录验收'})).toBeDefined();
     expect(await effectiveHandoffStatus(confirmed,itemId)).toBe('needs_review');
@@ -759,36 +781,36 @@ describe('Bingo scene delivery panel',()=>{
   it('rejects clearing the last evidence from an accepted record',async()=>{
     const current=workLayout(), update=vi.fn(); const acceptance='核对尺寸';
     current.floors[0].items[0].handoff={...blankHandoff(),ownerName:'执行甲',dueDate:'2026-10-09',acceptance,status:'accepted',evidenceNote:'已核对',reviewedBasis:await handoffBasis(current,itemId,{ownerName:'执行甲',dueDate:'2026-10-09',acceptance})};
-    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/></RoomEditorProvider>);
     fireEvent.click(screen.getByText('签到椅 · 1')); await waitFor(()=>expect(screen.queryByText('正在核对…')).toBeNull()); fireEvent.change(screen.getByLabelText('验收说明'),{target:{value:''}});
     fireEvent.click(screen.getByRole('button',{name:'保存工作单'}));
     expect(update).not.toHaveBeenCalled(); expect(screen.getByRole('alert').textContent).toContain('证据');
   });
   it('uses the same snapshot across export files and replaces it after editing execution fields',async()=>{
-    const current=workLayout(); const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    const current=workLayout(); const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
     const snapshot=vi.mocked(sceneDeliveryJson).mock.calls[0][1];
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出执行清单 CSV'})); await waitFor(()=>expect(sceneExecutionCsv).toHaveBeenCalledWith(current,snapshot));
     const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],handoff:{...blankHandoff(),ownerName:'执行乙'}}]}]};
-    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={changed} controller={controller}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'})); await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledTimes(2));
     expect(vi.mocked(sceneDeliveryJson).mock.calls[1][1]!.id).not.toBe(snapshot!.id);
   });
   it('disables execution editing for cloud projects and all exports for complete templates',()=>{
     const current={...workLayout(),id:'20000000-0000-4000-8000-000000000001'};
     window.history.replaceState({},'',`/?project=${current.id}`);
-    const update=vi.fn();const view=render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/>);
+    const update=vi.fn();const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} onUpdateItem={update}/></RoomEditorProvider>);
     fireEvent.click(screen.getByText('签到椅 · 1'));
     expect((screen.getByLabelText('负责人') as HTMLInputElement).closest('fieldset')!.disabled).toBe(true);
     fireEvent.submit(screen.getByLabelText('负责人').closest('form')!); expect(update).not.toHaveBeenCalled();
-    view.rerender(<SceneDeliveryPanel layout={templateNode(current)} controller={controller} onUpdateItem={update}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={templateNode(current)} controller={controller} onUpdateItem={update}/></RoomEditorProvider>);
     expect(screen.getByRole('alert').textContent).toContain('模板模型节点');
     openExportTab(); for(const name of ['导出场景 JSON','导出执行清单 CSV','导出物料清单 CSV','导出场景 GLB']) expect((screen.getByRole('button',{name}) as HTMLButtonElement).disabled).toBe(true);
   });
   it.skip('reuses the same direct panel for activity tasks without requiring material and preserves the model export gate', async () => {
     const current={...templateNode(layout),eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[createOperation('演练主持','event')]})};
     const update=vi.fn(), openBrief=vi.fn();
-    render(<SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={update} onOpenBrief={openBrief}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} onUpdateEventOperations={update} onOpenBrief={openBrief}/></RoomEditorProvider>);
     expect(screen.getByRole('tab',{name:'活动安排'}).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('region',{name:'活动安排'})).toBeDefined();
     openExportTab(); expect((screen.getByRole('button',{name:'导出场景 JSON'}) as HTMLButtonElement).disabled).toBe(true);
@@ -800,14 +822,14 @@ describe('Bingo scene delivery panel',()=>{
   });
   it('uses the same snapshot for activity and scene downloads, and discards in-flight activity output after editing', async () => {
     const current={...layout,eventOperations:eventOperationsSchema.parse({tasks:[createOperation('演练任务','preparation')]})};
-    const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出场景 JSON'}));await waitFor(()=>expect(sceneDeliveryJson).toHaveBeenCalledOnce());
     const snapshot=vi.mocked(sceneDeliveryJson).mock.calls[0][1];
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledWith(current,snapshot,undefined));
     let done!:(value:string)=>void;vi.mocked(eventOperationsCsv).mockImplementationOnce(()=>new Promise(resolve=>{done=resolve;}));
     const before=vi.mocked(downloadSceneDelivery).mock.calls.length;
     openExportTab(); fireEvent.click(screen.getByRole('button',{name:'导出活动安排 CSV'}));await waitFor(()=>expect(eventOperationsCsv).toHaveBeenCalledTimes(2));
-    view.rerender(<SceneDeliveryPanel layout={{...current,eventOperations:{...current.eventOperations,tasks:[{...current.eventOperations.tasks[0],title:'新演练任务'}]}}} controller={controller}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={{...current,eventOperations:{...current.eventOperations,tasks:[{...current.eventOperations.tasks[0],title:'新演练任务'}]}}} controller={controller}/></RoomEditorProvider>);
     await act(async()=>{done('old operations');});expect(downloadSceneDelivery).toHaveBeenCalledTimes(before);
   });
 });
@@ -817,7 +839,7 @@ describe('saved execution timetable delivery',()=>{
   it('exports the actual saved V3 tasks, unknown dates, owner links and 20/18/18 ledger without model delivery',async()=>{
     const f=timetableActivity();
     const live={...templateNode(f.current),name:'尚未保存的画面名称',eventOperations:eventOperationsSchema.parse({tasks:[{id:itemId,title:'画面中的其他任务',phase:'event'}]})};
-    render(<SceneDeliveryPanel layout={live} controller={controller} backupActions={f.backupActions} checkins={checkinState(f.ledger)}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={live} controller={controller} backupActions={f.backupActions} checkins={checkinState(f.ledger)}/></RoomEditorProvider>);
     expect(f.backupActions.prepareBackup).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();
     expect(exportButton().disabled).toBe(false);
     fireEvent.click(exportButton());
@@ -842,25 +864,25 @@ describe('saved execution timetable delivery',()=>{
   });
   it('accepts explicitly absent brief and ledger, preserving unknown quantities without a production plan',async()=>{
     const f=completeActivity();
-    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(f.current,{state:'ready',scope:checkinProject,brief:{status:'absent'}},{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(f.current, {state:'ready',scope:checkinProject,brief:{status:'absent'}}, {state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}, { projectId: f.current.id! }));
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(executionTimetableHtml).toHaveBeenCalledWith(f.current,expect.anything(),undefined);
     const html=vi.mocked(downloadSceneDelivery).mock.calls[0][0];expect(html).toContain('未关联制作计划的主持任务');expect(html).toContain('本次未提供点验账册，收退数量与差额待确认。');
   });
   it.each(['legacy-scene','legacy-v2','wrong-project'] as const)('rejects %s instead of treating uncovered saved records as absent',async kind=>{
     const f=completeActivity();
-    f.backupActions.prepareBackup.mockResolvedValue(kind==='legacy-scene'?JSON.stringify(f.current):kind==='legacy-v2'?serializeLocalProjectBackup(f.current,f.briefSnapshot):f.text.replaceAll(checkinProject,'20000000-0000-4000-8000-000000000002'));
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    f.backupActions.prepareBackup.mockResolvedValue(kind==='legacy-scene'?JSON.stringify(f.current):kind==='legacy-v2'?serializeLocalProjectBackup(f.current, f.briefSnapshot, { projectId: f.current.id! }):f.text.replaceAll(checkinProject,'20000000-0000-4000-8000-000000000002'));
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await screen.findByText('活动资料未完整对应当前项目，请重新读取后导出。');
     expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();expect(exportButton().disabled).toBe(false);
   });
   it.each(['empty','no-callback','backup-pending','brief-loading','brief-error','checkin-unreadable'] as const)('does not offer an actionable timetable for %s',kind=>{
     const f=completeActivity();
     const briefState={brief:f.brief,ready:kind!=='brief-loading',error:kind==='brief-error'?'需求读取失败':null,hasSavedBrief:true};
-    render(<SceneDeliveryPanel layout={kind==='empty'?{...f.current,eventOperations:eventOperationsSchema.parse({})}:f.current} controller={controller}
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={kind==='empty'?{...f.current,eventOperations:eventOperationsSchema.parse({})}:f.current} controller={controller}
       backupActions={kind==='no-callback'?undefined:{...f.backupActions,backupPending:kind==='backup-pending'}} briefState={briefState}
-      checkins={kind==='checkin-unreadable'?{...checkinState(),ready:false,error:'点验读取失败'}:checkinState()}/>);
+      checkins={kind==='checkin-unreadable'?{...checkinState(),ready:false,error:'点验读取失败'}:checkinState()}/></RoomEditorProvider>);
     if(kind==='no-callback')expect(screen.queryByRole('button',{name:'导出执行时间表 HTML'})).toBeNull();
     else{expect(exportButton().disabled).toBe(true);fireEvent.click(exportButton());}
     if(kind==='empty')expect(screen.getByText('先在活动安排中保存任务，再导出执行时间表。')).toBeDefined();
@@ -869,20 +891,20 @@ describe('saved execution timetable delivery',()=>{
   });
   it.each(['未保存的评审说明须先保存或放弃','点验账册无法读取'] as const)('keeps a failed preparation retryable without downloading: %s',async message=>{
     const f=completeActivity();f.backupActions.prepareBackup.mockRejectedValueOnce(new Error(message));
-    render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await screen.findByText(message);
     expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();expect(exportButton().disabled).toBe(false);
     fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());expect(f.backupActions.prepareBackup).toHaveBeenCalledTimes(2);
   });
   it('freezes each downloaded HTML and gives unchanged and subsequently saved exports independent file IDs',async()=>{
-    const f=completeActivity();const view=render(<SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/>);
+    const f=completeActivity();const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(1));
     const first=vi.mocked(downloadSceneDelivery).mock.calls[0],firstHtml=first[0];
     fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(2));
     const metadata=vi.mocked(executionTimetableHtml).mock.calls.map(call=>call[1]);expect(metadata[0].id).not.toBe(metadata[1].id);expect(first[2]).not.toBe(vi.mocked(downloadSceneDelivery).mock.calls[1][2]);
     const changed={...f.current,eventOperations:eventOperationsSchema.parse({dataKind:'rehearsal',tasks:[{id:itemId,title:'后续保存的主持安排',phase:'event'}]})};
-    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(changed,f.briefSnapshot,{state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}));
-    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller} backupActions={f.backupActions}/>);
+    f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(changed, f.briefSnapshot, {state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}, { projectId: changed.id! }));
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={changed} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledTimes(3));
     expect(vi.mocked(downloadSceneDelivery).mock.calls[2][0]).toContain('后续保存的主持安排');
     expect(first[0]).toBe(firstHtml);expect(firstHtml).toContain('未关联制作计划的主持任务');expect(firstHtml).not.toContain('后续保存的主持安排');
@@ -890,13 +912,13 @@ describe('saved execution timetable delivery',()=>{
   it.each(['layout','controller','account','unmount'] as const)('drops a late prepared timetable after %s changes',async change=>{
     const f=completeActivity(),held=deferred<string>();f.backupActions.prepareBackup.mockReturnValueOnce(held.promise);
     let snapshot=controller.getSnapshot();vi.spyOn(controller,'getSnapshot').mockImplementation(()=>snapshot);
-    const props={layout:f.current,controller,backupActions:f.backupActions};const view=render(<SceneDeliveryPanel {...props}/>);
+    const props={layout:f.current,controller,backupActions:f.backupActions};const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props}/></RoomEditorProvider>);
     fireEvent.click(exportButton());fireEvent.click(exportButton());await waitFor(()=>expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce());
     let other:BackendSession|undefined;
     if(change==='unmount')view.unmount();
-    else if(change==='layout')view.rerender(<SceneDeliveryPanel {...props} layout={{...f.current,name:'后续场景'}}/>);
-    else if(change==='controller'){other=new BackendSession(getBackendConfig({url:'',anonKey:''}));view.rerender(<SceneDeliveryPanel {...props} controller={other}/>);}
-    else{snapshot={...snapshot,user:{id:'后续账号'}};view.rerender(<SceneDeliveryPanel {...props}/>);}
+    else if(change==='layout')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} layout={{...f.current,name:'后续场景'}}/></RoomEditorProvider>);
+    else if(change==='controller'){other=new BackendSession(getBackendConfig({url:'',anonKey:''}));view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} controller={other}/></RoomEditorProvider>);}
+    else{snapshot={...snapshot,user:{id:'后续账号'}};view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props}/></RoomEditorProvider>);}
     await act(async()=>held.resolve(f.text));expect(downloadSceneDelivery).not.toHaveBeenCalled();expect(executionTimetableHtml).not.toHaveBeenCalled();
     other?.dispose();
   });
@@ -910,27 +932,27 @@ describe('saved execution timetable delivery',()=>{
     }
     vi.spyOn(controller,'getSnapshot').mockImplementation(()=>snapshot);
     const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true},checkins=checkinState(f.ledger);
-    const props={layout:f.current,controller,backupActions:f.backupActions,briefState,checkins};const view=render(<SceneDeliveryPanel {...props}/>);
+    const props={layout:f.current,controller,backupActions:f.backupActions,briefState,checkins};const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await waitFor(()=>expect(executionTimetableHtml).toHaveBeenCalledOnce());
     if(change==='unmount')view.unmount();
-    else if(change==='layout')view.rerender(<SceneDeliveryPanel {...props} layout={{...f.current,name:'后续场景'}}/>);
-    else if(change==='brief')view.rerender(<SceneDeliveryPanel {...props} briefState={{...briefState,brief:{...f.brief,description:'后续需求'}}}/>);
-    else if(change==='brief-loading')view.rerender(<SceneDeliveryPanel {...props} briefState={{...briefState,ready:false}}/>);
-    else if(change==='ledger')view.rerender(<SceneDeliveryPanel {...props} checkins={checkinState(materialCheckinLedgerSchema.parse({...f.ledger,sheets:[]}))}/>);
-    else if(change==='checkin-loading')view.rerender(<SceneDeliveryPanel {...props} checkins={{...checkins,ready:false,loading:true}}/>);
-    else{const remoteId='20000000-0000-4000-8000-000000000011';snapshot={...snapshot,project:project(remoteId),geometryBinding:{...snapshot.geometryBinding!,cloudProjectId:remoteId}};view.rerender(<SceneDeliveryPanel {...props}/>);expect(controller.isGeometryBound(checkinProject)).toBe(true);}
+    else if(change==='layout')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} layout={{...f.current,name:'后续场景'}}/></RoomEditorProvider>);
+    else if(change==='brief')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} briefState={{...briefState,brief:{...f.brief,description:'后续需求'}}}/></RoomEditorProvider>);
+    else if(change==='brief-loading')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} briefState={{...briefState,ready:false}}/></RoomEditorProvider>);
+    else if(change==='ledger')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} checkins={checkinState(materialCheckinLedgerSchema.parse({...f.ledger,sheets:[]}))}/></RoomEditorProvider>);
+    else if(change==='checkin-loading')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} checkins={{...checkins,ready:false,loading:true}}/></RoomEditorProvider>);
+    else{const remoteId='20000000-0000-4000-8000-000000000011';snapshot={...snapshot,project:project(remoteId),geometryBinding:{...snapshot.geometryBinding!,cloudProjectId:remoteId}};view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props}/></RoomEditorProvider>);expect(controller.isGeometryBound(checkinProject)).toBe(true);}
     await act(async()=>held.resolve('<html>原活动的迟到结果</html>'));expect(downloadSceneDelivery).not.toHaveBeenCalled();
     expect(screen.queryByText('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。')).toBeNull();
   });
   it.each(['brief-readiness','activity-scope'] as const)('does not revive a pending timetable after %s leaves and returns to the original references',async change=>{
     const f=timetableActivity(),held=deferred<string>();vi.mocked(executionTimetableHtml).mockReturnValueOnce(held.promise);
     const briefState={brief:f.brief,ready:true,error:null,hasSavedBrief:true},checkins=checkinState(f.ledger);
-    const props={layout:f.current,controller,backupActions:f.backupActions,briefState,checkins};const view=render(<SceneDeliveryPanel {...props}/>);
+    const props={layout:f.current,controller,backupActions:f.backupActions,briefState,checkins};const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await waitFor(()=>expect(executionTimetableHtml).toHaveBeenCalledOnce());
-    if(change==='brief-readiness')view.rerender(<SceneDeliveryPanel {...props} briefState={{...briefState,ready:false}}/>);
-    else view.rerender(<SceneDeliveryPanel {...props} layout={{...f.current,id:'20000000-0000-4000-8000-000000000002',name:'另一演练活动'}}/>);
+    if(change==='brief-readiness')view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} briefState={{...briefState,ready:false}}/></RoomEditorProvider>);
+    else view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props} layout={{...f.current,id:'20000000-0000-4000-8000-000000000002',name:'另一演练活动'}}/></RoomEditorProvider>);
     // Commit both transitions; the final render deliberately reuses every original source reference.
-    view.rerender(<SceneDeliveryPanel {...props}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel {...props}/></RoomEditorProvider>);
     await act(async()=>held.resolve('<html>往返切换前的时间表</html>'));
     expect(downloadSceneDelivery).not.toHaveBeenCalled();
     expect(screen.queryByText('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。')).toBeNull();
@@ -939,7 +961,7 @@ describe('saved execution timetable delivery',()=>{
   it('confirms a delivery version and reuses its snapshot id for later exports',async()=>{
     localStorage.clear();
     const current=workLayout();
-    const view=render(<SceneDeliveryPanel layout={current} controller={controller}/>);
+    const view=render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller}/></RoomEditorProvider>);
     expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();
     expect(screen.getByText('未确认')).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'确认这一版'}));
@@ -957,7 +979,7 @@ describe('saved execution timetable delivery',()=>{
     expect(vi.mocked(sceneDeliveryJson).mock.calls[0][1]!.id).toBe(stored[0].snapshotId);
 
     const changed={...current,floors:[{...current.floors[0],items:[{...current.floors[0].items[0],position:{x:2,z:1}}]}]};
-    view.rerender(<SceneDeliveryPanel layout={changed} controller={controller}/>);
+    view.rerender(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={changed} controller={controller}/></RoomEditorProvider>);
     expect(await screen.findByText(/v1\.1 草案 · 已确认的是 v1\.0/)).toBeTruthy();
     expect(screen.getByRole('button',{name:'确认这一版'})).toBeTruthy();
     expect((screen.getByRole('button',{name:'导出交付包'}) as HTMLButtonElement).disabled).toBe(true);
@@ -969,7 +991,7 @@ describe('saved execution timetable delivery',()=>{
     // 1×1 合法 PNG：交付包会校验效果图确实是 PNG，不能拿占位串糊过去。
     const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
     const captureImage=vi.fn(async()=>png);
-    render(<SceneDeliveryPanel layout={current} controller={controller} captureImage={captureImage}/>);
+    render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={current} controller={controller} captureImage={captureImage}/></RoomEditorProvider>);
     expect((await screen.findByRole('button',{name:'导出交付包'})).hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('确认后可导出')).toBeTruthy();
     expect(await screen.findByText('还没有确认过这一版')).toBeTruthy();

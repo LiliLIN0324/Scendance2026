@@ -1,79 +1,108 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { LOT_MARGIN, LOT_TO_PAVEMENT, PAVEMENT_DEPTH, ROAD_DEPTH } from '../lib/site';
 import { applyOutdoorWeather, outdoorGroundColor, setOutdoorVisible } from './outdoor';
 
 const WIDTH = 8;
 const DEPTH = 8;
 const outdoor = (scene: THREE.Scene) => scene.children.filter((obj) => obj.userData.type === 'outdoor');
 
-/** The road: the flat mesh furthest out on the street (north, −z) side. */
-function road(scene: THREE.Scene): THREE.Object3D {
-  return outdoor(scene)
-    .filter((obj) => obj instanceof THREE.Mesh && obj.geometry instanceof THREE.PlaneGeometry)
-    .reduce((a, b) => (b.position.z < a.position.z ? b : a));
-}
+const groundMesh = (scene: THREE.Scene) =>
+  outdoor(scene).find((obj) => obj.userData.role === 'ground') as THREE.Mesh<
+    THREE.PlaneGeometry,
+    THREE.MeshStandardMaterial
+  >;
+const planeMeshes = (scene: THREE.Scene) =>
+  outdoor(scene).filter(
+    (obj) => obj instanceof THREE.Mesh && !(obj instanceof THREE.InstancedMesh) && obj.geometry instanceof THREE.PlaneGeometry
+  );
+const groups = (scene: THREE.Scene) => outdoor(scene).filter((obj) => obj instanceof THREE.Group);
+const instanced = (scene: THREE.Scene) => outdoor(scene).filter((obj) => obj instanceof THREE.InstancedMesh);
 
-const trees = (scene: THREE.Scene) => outdoor(scene).filter((obj) => obj instanceof THREE.Group);
+const cylinderTopRadius = (mesh: THREE.InstancedMesh): number | undefined =>
+  (mesh.geometry as THREE.CylinderGeometry).parameters?.radiusTop;
+const sphereRadius = (mesh: THREE.InstancedMesh): number | undefined =>
+  (mesh.geometry as THREE.SphereGeometry).parameters?.radius;
 
-describe('outdoor scene on a sloped site (#202)', () => {
-  it('keeps the road at y≈0 without a terrain', () => {
+describe('flat lot baseline (T1 shell retirement)', () => {
+  it('builds a flat grass plane at ground datum, with no slope or excavation mesh', () => {
     const scene = new THREE.Scene();
     setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH);
-    expect(road(scene).position.y).toBeCloseTo(-0.025);
+
+    const grass = groundMesh(scene);
+    expect(grass.geometry).toBeInstanceOf(THREE.PlaneGeometry);
+    expect(grass.rotation.x).toBeCloseTo(-Math.PI / 2);
+    expect(grass.position.y).toBeCloseTo(-0.05);
+
+    // The only plane meshes are grass, sidewalk and road — no sloped terrain or cut-earth face.
+    expect(planeMeshes(scene)).toHaveLength(3);
   });
 
-  it('lifts the road to street level and plants trees on the ground line', () => {
+  it('keeps the outdoor landscaping: tufts, sidewalk, road, dashes, stones, trees, shrubs, flowers', () => {
     const scene = new THREE.Scene();
-    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH, { terrain: { frontY: 2.5, backY: 0 } });
-    expect(road(scene).position.y).toBeCloseTo(2.5 - 0.025);
-    for (const tree of trees(scene)) {
-      const { y, z } = tree.position;
-      const expected = z <= -DEPTH / 2 ? 2.5 : z >= DEPTH / 2 ? 0 : 2.5 * (1 - (z + DEPTH / 2) / DEPTH);
-      expect(y).toBeCloseTo(expected);
+    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH);
+
+    const meshes = instanced(scene);
+    // Grass tufts (0.18 sphere), road dashes (1.2 × 0.18 plane), stepping stones (0.32 cylinder),
+    // shrubs (0.45 sphere), flower blossoms (0.07 sphere) and stems (0.012 cylinder).
+    expect(meshes.some((m) => sphereRadius(m) === 0.18)).toBe(true);
+    expect(meshes.some((m) => m.geometry instanceof THREE.PlaneGeometry)).toBe(true);
+    expect(meshes.some((m) => cylinderTopRadius(m) === 0.32)).toBe(true);
+    expect(meshes.some((m) => sphereRadius(m) === 0.45)).toBe(true);
+    expect(meshes.some((m) => sphereRadius(m) === 0.07)).toBe(true);
+    expect(meshes.some((m) => cylinderTopRadius(m) === 0.012)).toBe(true);
+
+    expect(groups(scene).length).toBeGreaterThan(0);
+  });
+
+  it('spawns no roof, neighbour-house or entrance-porch shell meshes', () => {
+    const scene = new THREE.Scene();
+    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH);
+
+    const tags = outdoor(scene).map((obj) => obj.userData.type);
+    expect(tags).not.toContain('roof');
+    expect(tags).not.toContain('neighbour');
+    // The old porch reveals were tagged with the north wall id; the lot adds none.
+    expect(outdoor(scene).some((obj) => obj.userData.wallId === 'north')).toBe(false);
+  });
+
+  it('keeps a flat datum lot: trees sit on datum, garden frontage stays fixed', () => {
+    const scene = new THREE.Scene();
+    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH);
+
+    const grass = groundMesh(scene);
+    expect(grass.geometry).toBeInstanceOf(THREE.PlaneGeometry);
+    expect(outdoor(scene).some((obj) => obj.userData.type === 'roof' || obj.userData.type === 'neighbour')).toBe(false);
+
+    // Trees sit on the datum, not lifted onto a slope.
+    for (const tree of groups(scene)) {
+      expect(tree.position.y).toBeCloseTo(0);
     }
-  });
 
-  it('adds the excavation faces only when the house cuts into the ground', () => {
-    const flat = new THREE.Scene();
-    setOutdoorVisible(THREE, flat, true, WIDTH, DEPTH);
-    const hill = new THREE.Scene();
-    setOutdoorVisible(THREE, hill, true, WIDTH, DEPTH, { terrain: { frontY: 2.5, backY: 0 } });
-    expect(outdoor(hill).length).toBe(outdoor(flat).length + 1);
-  });
+    // Garden frontage is fixed: stepping stones and front flowers are still planted.
+    const meshes = instanced(scene);
+    expect(meshes.some((m) => cylinderTopRadius(m) === 0.32)).toBe(true);
+    expect(meshes.some((m) => sphereRadius(m) === 0.07)).toBe(true);
 
-  it('runs the pavement up to the front wall with no front garden (#204)', () => {
-    const scene = new THREE.Scene();
-    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH, { frontage: 'pavement' });
-    const planes = outdoor(scene).filter((obj) => obj instanceof THREE.Mesh && obj.geometry instanceof THREE.PlaneGeometry);
-    const nearest = planes.filter((p) => p.position.z < 0).reduce((a, b) => (b.position.z > a.position.z ? b : a));
-    expect(nearest.position.z).toBeCloseTo(-(DEPTH / 2 + 0.8)); // pavement, 1.6 m deep, from the wall
-    expect(road(scene).position.z).toBeCloseTo(-(DEPTH / 2 + 1.6 + 2.25));
-    // No stepping stones or front planting.
-    const stones = outdoor(scene).filter(
-      (obj) => obj instanceof THREE.InstancedMesh && obj.geometry instanceof THREE.CylinderGeometry && obj.count > 0 &&
-        (obj.geometry as THREE.CylinderGeometry).parameters.radiusTop === 0.32
-    );
-    expect(stones).toHaveLength(0);
-    expect(trees(scene).some((tree) => tree.position.z < -DEPTH / 2)).toBe(false);
-  });
-
-  it('plants no trees on a side with a neighbour', () => {
-    const scene = new THREE.Scene();
-    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH, { neighbours: { east: true } });
-    const all = trees(scene);
-    expect(all.length).toBeGreaterThan(0);
-    // East-side trees stand beside the lot (not the back row, which runs past it).
-    const beside = (tree: THREE.Object3D) => tree.position.z < DEPTH / 2 + 6;
-    expect(all.some((tree) => beside(tree) && tree.position.x > WIDTH / 2 + 6)).toBe(false);
-    expect(all.some((tree) => beside(tree) && tree.position.x < -(WIDTH / 2 + 6))).toBe(true);
+    // Road sits past the lot with a front garden, not flush to the front wall.
+    const halfD = DEPTH / 2;
+    const roadOffset = halfD + LOT_MARGIN + LOT_TO_PAVEMENT;
+    const roadZ = -(roadOffset + PAVEMENT_DEPTH + ROAD_DEPTH / 2);
+    const road = planeMeshes(scene)
+      .filter((p) => p.position.z < 0)
+      .reduce((a, b) => (b.position.z < a.position.z ? b : a));
+    expect(road.position.z).toBeCloseTo(roadZ);
   });
 });
 
 describe('weather ground tint (#189)', () => {
-  const grass = (scene: THREE.Scene) =>
-    outdoor(scene).find((obj) => obj.userData.role === 'ground') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+  const grass = (scene: THREE.Scene) => groundMesh(scene);
   const roadColor = (scene: THREE.Scene) => ((road(scene) as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
   const luma = (hex: number) => ((hex >> 16) & 0xff) + ((hex >> 8) & 0xff) + (hex & 0xff);
+
+  function road(scene: THREE.Scene): THREE.Object3D {
+    return planeMeshes(scene).filter((p) => p.position.z < 0).reduce((a, b) => (b.position.z < a.position.z ? b : a));
+  }
 
   it('the lot is built with the untouched grass colour by default', () => {
     const scene = new THREE.Scene();
@@ -98,7 +127,7 @@ describe('weather ground tint (#189)', () => {
     const scene = new THREE.Scene();
     setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH);
     applyOutdoorWeather(scene, 'snow');
-    setOutdoorVisible(THREE, scene, true, WIDTH + 2, DEPTH, { terrain: { frontY: 1, backY: 0 } });
+    setOutdoorVisible(THREE, scene, true, WIDTH + 2, DEPTH);
     expect(grass(scene).material.color.getHex()).toBe(outdoorGroundColor('snow'));
   });
 

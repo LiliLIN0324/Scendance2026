@@ -27,7 +27,7 @@ export function proposeStagePlatform(layout: RoomLayout, floorIndex: number):
       position: { x: entrance.position.x - width / 2, z: entrance.position.z - depth / 2 }, width: entrance.width,
     })),
   ];
-  const context = { keepOut: floorKeepOut(layout, floorIndex), interiorWalls: floor.interiorWalls ?? [] };
+  const context = { keepOut: floorKeepOut(layout, floorIndex) };
   const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${randomSuffix()}`;
   if (layout.floors.some(f => f.items.some(item => item.id === id))) return { ok: false, reason: '舞台物料编号冲突，请重试。' };
   for (let z = minZ; z <= maxZ + 1e-8; z += step) for (let x = minX; x <= maxX + 1e-8; x += step) {

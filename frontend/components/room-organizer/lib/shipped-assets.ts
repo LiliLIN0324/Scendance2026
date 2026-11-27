@@ -14,7 +14,7 @@ export type ShippedAsset = {
   bytes: number;
   /** 卡片上那张图：物件是渲染缩略图，场景是接口返回的全景图。 */
   image?: string;
-  /** Estimated indoor height for visual scale; not a surveyed dimension. */
+  /** 比例校准用的估算高度基准：只用来把扫描缩放到米制，不是测绘尺寸，也不再栏里写成「层高」。 */
   estimatedHeightMeters?: number;
 };
 
@@ -23,9 +23,11 @@ const BASE = '/showcase/assets/generated';
 export const SHIPPED_ASSETS: readonly ShippedAsset[] = [
   { assetId: 'shipped-chinese-wood-armchair', kind: 'glb', name: '中式木扶手椅', path: 'model/chinese-wood-armchair.glb', bytes: 6433368, image: 'thumb/chinese-wood-armchair.png' },
   { assetId: 'shipped-white-round-table', kind: 'glb', name: '白色圆桌', path: 'model/white-round-table.glb', bytes: 2784124, image: 'thumb/white-round-table.png' },
-  { assetId: 'shipped-scendance-m3-mvp', kind: 'spz', name: '宴会厅 A', path: 'scene/scendance-m3-mvp.spz', bytes: 4388248, image: 'scene/scendance-m3-mvp.panorama.jpg', estimatedHeightMeters: 3.6 },
-  { assetId: 'shipped-small-launch-hall', kind: 'spz', name: '发布会小厅', path: 'scene/small-launch-hall.spz', bytes: 4837840, image: 'scene/small-launch-hall.panorama.jpg', estimatedHeightMeters: 3.6 },
-  { assetId: 'shipped-cloud-e2e-banquet', kind: 'spz', name: '宴会厅 B', path: 'scene/cloud-e2e-banquet.spz', bytes: 4446785, image: 'scene/cloud-e2e-banquet.panorama.jpg', estimatedHeightMeters: 3.6 },
+  // 2026-11-25 用户拍板：示例场景去室内化。资产文件不动，命名改中性小场地，
+  // 估算高度只当比例基准用，界面不再写「层高」。
+  { assetId: 'shipped-scendance-m3-mvp', kind: 'spz', name: '小场地 A', path: 'scene/scendance-m3-mvp.spz', bytes: 4388248, image: 'scene/scendance-m3-mvp.panorama.jpg', estimatedHeightMeters: 3.6 },
+  { assetId: 'shipped-small-launch-hall', kind: 'spz', name: '小场地 B', path: 'scene/small-launch-hall.spz', bytes: 4837840, image: 'scene/small-launch-hall.panorama.jpg', estimatedHeightMeters: 3.6 },
+  { assetId: 'shipped-cloud-e2e-banquet', kind: 'spz', name: '小场地 C', path: 'scene/cloud-e2e-banquet.spz', bytes: 4446785, image: 'scene/cloud-e2e-banquet.panorama.jpg', estimatedHeightMeters: 3.6 },
 ];
 
 /**

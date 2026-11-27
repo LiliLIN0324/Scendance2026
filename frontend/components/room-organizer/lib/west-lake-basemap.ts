@@ -1,4 +1,6 @@
 import type { RoomLayout } from './types';
+import { legacyGroundOf } from './legacy-ground';
+import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 
 /**
  * 西湖风景名胜区（含平湖秋月一带）的外接范围。
@@ -63,18 +65,20 @@ export function isWestLakeBasemapLayout(layout: RoomLayout): boolean {
     if (withinWestLake(area.center?.lng, area.center?.lat)) return true;
     if (urlPointsIntoWestLake(area.imageUrl)) return true;
   }
-  if (withinWestLake(layout.mapLngLat?.lng, layout.mapLngLat?.lat)) return true;
-  if (layout.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
-  if (withinWestLake(layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0)) return true;
+  const legacy = legacyGroundOf(layout);
+  if (withinWestLake(legacy.mapLngLat?.lng, legacy.mapLngLat?.lat)) return true;
+  if (legacy.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
+  if (withinWestLake(legacy.mapGroundFrame?.lng0, legacy.mapGroundFrame?.lat0)) return true;
   if (urlPointsIntoWestLake(layout.floorPlanImage)) return true;
   return false;
 }
 
 /** 这份布置的贴地/圈画元数据是否指向西湖。 */
-function groundMetadataInWestLake(layout: RoomLayout): boolean {
-  if (withinWestLake(layout.mapLngLat?.lng, layout.mapLngLat?.lat)) return true;
-  if (layout.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
-  if (withinWestLake(layout.mapGroundFrame?.lng0, layout.mapGroundFrame?.lat0)) return true;
+function groundMetadataInWestLake(layout: object): boolean {
+  const legacy = legacyGroundOf(layout);
+  if (withinWestLake(legacy.mapLngLat?.lng, legacy.mapLngLat?.lat)) return true;
+  if (legacy.mapGroundPolygon?.some(point => withinWestLake(point.lng, point.lat))) return true;
+  if (withinWestLake(legacy.mapGroundFrame?.lng0, legacy.mapGroundFrame?.lat0)) return true;
   return false;
 }
 
@@ -105,10 +109,11 @@ export function purgeWestLakeBasemap(layout: RoomLayout): { layout: RoomLayout; 
     changed = true;
   }
 
+  const legacy = legacyGroundOf(next);
   const westLakeGround = groundMetadataInWestLake(next);
   const mapReferenceImage =
     next.floorPlanImage !== undefined &&
-    (urlPointsIntoWestLake(next.floorPlanImage) || (westLakeGround && next.satelliteGroundRef === true));
+    (urlPointsIntoWestLake(next.floorPlanImage) || (westLakeGround && legacy.satelliteGroundRef === true));
 
   if (mapReferenceImage) {
     delete next.floorPlanImage;
@@ -117,17 +122,38 @@ export function purgeWestLakeBasemap(layout: RoomLayout): { layout: RoomLayout; 
     changed = true;
   }
 
+  const raw = next as unknown as Record<string, unknown>;
   if (westLakeGround) {
-    delete next.mapGroundPolygon;
-    delete next.mapLngLat;
-    delete next.mapGroundFrame;
+    delete raw.mapGroundPolygon;
+    delete raw.mapLngLat;
+    delete raw.mapGroundFrame;
     changed = true;
   }
 
-  if (next.satelliteGroundRef) {
-    next.satelliteGroundRef = false;
+  if (legacy.satelliteGroundRef) {
+    raw.satelliteGroundRef = false;
     changed = true;
   }
 
   return { layout: changed ? next : layout, changed };
+}
+
+/**
+ * 正源侧的同一件事（B4 读方 ⑤-S2，2026-11-25）。
+ *
+ * `purgeWestLakeBasemap` 剥的是 layout 那份视图缓存；底图字节的正源已经搬到
+ * `plan.ground`，只剥 layout 等于没剥——下一次 `planGroundSync` 会按正源把图补回来。
+ *
+ * **只认旧预设那张图**（`xihu-scenic-z15`），不按经纬判：2026-11-25 实测发现按坐标判会把
+ * 用户自己在平湖秋月一带选的卫星底图一起删掉（`outdoor-project-store.test.ts` 的
+ * `plan.ground` 往返用例正好落在 120.1443/30.2465）。用户当年说的是「默认进来的那套不要」，
+ * 不是「西湖范围内的底图都不许存在」。
+ */
+export function purgeWestLakePlanGround<T extends { ground?: PlanGround | undefined }>(
+  plan: T,
+): { plan: T; changed: boolean } {
+  const ground = plan.ground;
+  if (!ground?.image || !ground.image.includes('xihu-scenic-z15')) return { plan, changed: false };
+  const { ground: _ground, ...rest } = plan;
+  return { plan: rest as T, changed: true };
 }

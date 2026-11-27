@@ -3,7 +3,6 @@ import type { FurnitureItem } from '../lib/types';
 
 export interface KeyboardShortcutHandlers {
   removeItem(id: string): void;
-  removeInteriorWall(id: string): void;
   toggleExteriorWall(id: string): void;
   duplicateItem(id: string): void;
   /** Copy the selection to the furniture clipboard; true if anything was copied. */
@@ -45,7 +44,6 @@ export type KeyboardBlockReason =
 export interface UseKeyboardShortcutsOptions {
   enabled?: boolean;
   selectedItem: FurnitureItem | null;
-  selectedWall: { id: string; kind: 'exterior' | 'interior' } | null;
   hasSignalItems: boolean;
   /**
    * When first-person walkthrough owns the keyboard (WASD/arrows drive the
@@ -113,7 +111,6 @@ function editsLayout(event: KeyboardEvent, placing: boolean): boolean {
 export function useKeyboardShortcuts({
   enabled = true,
   selectedItem,
-  selectedWall,
   hasSignalItems,
   walkthroughActive = false,
   layoutLocked = false,
@@ -223,7 +220,7 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      if ((event.key === 'Delete' || event.key === 'Backspace') && !selectedItem && !selectedWall) {
+      if ((event.key === 'Delete' || event.key === 'Backspace') && !selectedItem) {
         onBlocked?.('needs-selection');
         return;
       }
@@ -234,16 +231,6 @@ export function useKeyboardShortcuts({
         // selection, not just the primary — gating on the primary's lock here
         // blocked deleting unlocked extras and let locked extras through (#115).
         handlers.removeItem(selectedItem.id);
-        return;
-      }
-
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedWall) {
-        event.preventDefault();
-        if (selectedWall.kind === 'interior') {
-          handlers.removeInteriorWall(selectedWall.id);
-        } else {
-          handlers.toggleExteriorWall(selectedWall.id);
-        }
         return;
       }
 
@@ -343,7 +330,7 @@ export function useKeyboardShortcuts({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enabled, selectedItem, selectedWall, hasSignalItems, walkthroughActive, layoutLocked, isDragActive, onBlocked, nudgeStepM, angleSnapDeg, handlers]);
+  }, [enabled, selectedItem, hasSignalItems, walkthroughActive, layoutLocked, isDragActive, onBlocked, nudgeStepM, angleSnapDeg, handlers]);
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {

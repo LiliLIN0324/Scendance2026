@@ -5,11 +5,18 @@ import {
   commitPlanHistory,
   emptyPlanHistory,
   planSnapshotsEqual,
+  prunePlanHistoryStack,
+  pushPlanHistoryFuture,
   redoPlanHistory,
   undoPlanHistory,
 } from './plan-history';
 
 const plan = (n: number) => ({ revision: n, zones: [], anchor: { lng: 120, lat: 30 } });
+const measured = (n: number, temp: string[] = []) => ({
+  revision: n,
+  measurements: temp,
+  anchor: { lng: 120, lat: 30 },
+});
 
 describe('plan-history（M3b 纯函数地基）', () => {
   it('提交：旧快照入 past、redo 清空', () => {
@@ -67,6 +74,22 @@ describe('plan-history（M3b 纯函数地基）', () => {
     expect(step.history).toBe(history);
   });
 
+  it('只记 future（一键收进后的撤销）：past 原样不动，当前快照进 future', () => {
+    const history = { past: [plan(1), plan(2)], future: [] };
+    const after = pushPlanHistoryFuture(history, plan(3), 5);
+    expect(after.past).toBe(history.past);
+    expect(after.future).toEqual([plan(3)]);
+  });
+
+  it('只记 future：超上限丢最旧，之后的重做仍按栈顶取', () => {
+    const history = { past: [], future: [plan(1), plan(2), plan(3)] };
+    const after = pushPlanHistoryFuture(history, plan(4), 3);
+    expect(after.future).toEqual([plan(2), plan(3), plan(4)]);
+    const step = redoPlanHistory(after, plan(5), 3);
+    expect(step.snapshot).toEqual(plan(4));
+    expect(step.history.future).toEqual([plan(2), plan(3)]);
+  });
+
   it('规范化 JSON：对象键序无关，数组顺序有关', () => {
     expect(canonicalPlanJson({ b: 1, a: 2 })).toBe(canonicalPlanJson({ a: 2, b: 1 }));
     expect(canonicalPlanJson({ a: [1, 2] })).not.toBe(canonicalPlanJson({ a: [2, 1] }));
@@ -78,5 +101,32 @@ describe('plan-history（M3b 纯函数地基）', () => {
     const b = { revision: 2, data: { notes: '', zones: [{ name: '观众区', id: 'z1' }] } };
     expect(planSnapshotsEqual(a, b)).toBe(true);
     expect(planSnapshotsEqual(a, { ...b, revision: 3 })).toBe(false);
+  });
+
+  it('裁剪栈：剥离临时项后相邻相同快照合并为一条', () => {
+    const strip = (s: ReturnType<typeof measured>, ids: readonly string[]) =>
+      ({ ...s, measurements: s.measurements.filter((x) => !ids.includes(x)) });
+    const stack = [measured(1, ['t']), measured(2, ['t']), measured(2, ['t'])];
+    const pruned = prunePlanHistoryStack(stack, measured(99), (s) => strip(s, ['t']));
+    expect(pruned).toEqual([measured(1), measured(2)]);
+  });
+
+  it('裁剪栈：末尾与当前方案相同的快照逐条弹出', () => {
+    const strip = (s: ReturnType<typeof measured>) => ({ ...s, measurements: [] });
+    const next = measured(2);
+    const stack = [measured(1, ['t']), measured(2, ['t'])];
+    const pruned = prunePlanHistoryStack(stack, next, strip);
+    expect(pruned).toEqual([measured(1)]);
+  });
+
+  it('裁剪栈：空栈原样返回空数组', () => {
+    expect(prunePlanHistoryStack([], measured(1), (s) => s)).toEqual([]);
+  });
+
+  it('裁剪栈：equals 传引用比较时不按内容合并', () => {
+    const a = measured(2);
+    const b = measured(2);
+    const pruned = prunePlanHistoryStack([a, b], measured(3), (s) => s, Object.is);
+    expect(pruned).toEqual([a, b]);
   });
 });

@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeLayout } from '../lib/__testfixtures__/fixtures';
+import { makeFloor, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { SATELLITE_GROUND_LABEL, createVenueFromPick, parseSatelliteImageBounds, satelliteProxyUrl, shellMetersToSatelliteUv } from '../lib/amap-venue';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { outdoorGroundSize } from '../lib/site';
 import { buildStructureShell } from './structure-builder';
 import type { RoomLayout } from '../lib/types';
+import type { ResolvedGround } from '../lib/plan-ground';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -103,14 +104,18 @@ describe('satellite floor texture', () => {
       { lng, lat: lat + dLat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-      name: '盐官古城', location: '潮乐之城', polygon, satelliteGround: true, satelliteGroundImage: image,
+    const { layout: bare, ground: pickedGround } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官古城', location: '潮乐之城', polygon,
     });
+
+      // #38 落壳不再写底图字节；底图读正源 `plan.ground`，这里把 ground 显式传给壳体。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94 };
+    const ground = { ...pickedGround, image, opacity: 0.94, satelliteRef: true, source: 'plan' as const } as ResolvedGround;
     const scene = new THREE.Scene();
-    buildStructureShell(THREE, scene, layout);
+    buildStructureShell(THREE, scene, layout, { ground });
     const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh;
     const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
-    const frame = layout.mapGroundFrame!;
+    const frame = { ...ground.frame!, latSign: ground.frame!.latSign ?? -1 };
     const bounds = parseSatelliteImageBounds(layout.floorPlanImage!)!;
     const shell = layout.backendVenue?.polygon ?? [];
     const pos = floor.geometry.getAttribute('position');
@@ -191,9 +196,12 @@ describe('satellite floor texture', () => {
       { lng, lat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-      name: '盐官', location: '手画', polygon, satelliteGround: true, satelliteGroundImage: image,
+    const { layout: bare } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官', location: '手画', polygon,
     });
+
+      // #38 落壳不再写底图字节；读侧此刻仍读 layout，这里手工覆写造「带底图」布局。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true };
     const scene = new THREE.Scene();
     buildStructureShell(THREE, scene, layout);
     const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
@@ -228,14 +236,18 @@ describe('satellite floor texture', () => {
       { lng, lat: lat + dLat },
     ];
     const image = satelliteProxyUrl(polygon, 'secret-key')!;
-    const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-      name: '盐官潮乐之城', location: '海宁盐官', polygon, satelliteGround: true, satelliteGroundImage: image,
+    const { layout: bare, ground: pickedGround } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+      name: '盐官潮乐之城', location: '海宁盐官', polygon,
     });
-    const framed = layout.mapGroundFrame!;
-    const dropped = { ...layout };
-    delete dropped.mapGroundFrame;
+
+      // #38 落壳不再写底图字节；底图读正源 `plan.ground`。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94 };
+    const ground = { ...pickedGround, image, opacity: 0.94, satelliteRef: true, source: 'plan' as const } as ResolvedGround;
+    const framed = { ...ground.frame!, latSign: ground.frame!.latSign ?? -1 };
+    const { frame: _frame, ...groundNoFrame } = ground;
     const scene = new THREE.Scene();
-    buildStructureShell(THREE, scene, dropped);
+    // 没有 frame：不做地理 UV，退回归一化方片。
+    buildStructureShell(THREE, scene, layout, { ground: groundNoFrame as unknown as ResolvedGround });
     const surround = scene.children.find(child => child.userData.satelliteSurroundFade) as THREE.Mesh;
     const floor = scene.children.find(child => child.userData.satelliteGroundRef && !child.userData.satelliteSurroundFade) as THREE.Mesh;
     const bounds = parseSatelliteImageBounds(layout.floorPlanImage!)!;
@@ -353,5 +365,20 @@ describe('satellite floor texture', () => {
     }));
     expect(scene.children.some(child => child.userData.satelliteSurroundFade)).toBe(false);
     expect(scene.children.some(child => child.userData.satelliteGroundRef)).toBe(false);
+  });
+});
+
+describe('single-floor slab baseline (T2)', () => {
+  it('builds only the ground slab; a legacy multi-floor snapshot adds no upper storey mesh', () => {
+    const legacy = makeLayout({ floors: [makeFloor({ id: 'ground' }), makeFloor({ id: 'upper', floorColor: '#888888' })] });
+    const scene = new THREE.Scene();
+    buildStructureShell(THREE, scene, legacy);
+
+    const slabs = scene.children.filter(child => child.userData.type === 'floor');
+    expect(slabs.length).toBeGreaterThan(0);
+    // The retired loop tagged upper slabs with floorIndex > 0; none survive.
+    expect(slabs.filter(slab => Number(slab.userData.floorIndex) > 0)).toHaveLength(0);
+    // Ground datum: every retained floor mesh sits at Y ≈ 0 (the -0.01 surround only appears on satellite captures).
+    for (const slab of slabs) expect(Math.abs((slab as THREE.Mesh).position.y)).toBeLessThan(0.02);
   });
 });

@@ -3,19 +3,23 @@ import { outdoorGroundSize } from '../lib/site';
 import { groundBasemapOpacity, groundBasemapStyleOf } from '../lib/ground-basemap';
 import { canvasFloor } from '../lib/floor-reading';
 import { layoutGeometryScene } from '../lib/structural-layout';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import { buildGridPlane } from './grid';
 import { buildFloorMaterial } from './floor-patterns';
 import { buildExtrudedWallGeometry } from './interior-walls';
 import { buildWallMaterial } from './wall-patterns';
-import { floorElevation } from '../lib/storeys';
 import type { RoomLayout } from '../lib/types';
+import type { ResolvedGround } from '../lib/plan-ground';
 import type * as ThreeNS from 'three';
 
 export interface StructureShellOptions {
   /** 卫星参考底图贴上后触发重绘（与 buildRoom.onTextureLoaded 同角色）。 */
   onTextureLoaded?: () => void;
-  activeFloorIndex?: number;
-  showAllFloors?: boolean;
+  /**
+   * B4/S1（2026-11-25）：贴地底图改由调用方给（`resolveGround(layout, plan)` 的结果）。
+   * 不传时退回读 layout 上的旧字段，老项目与预览路径不受影响。
+   */
+  ground?: ResolvedGround | null | undefined;
 }
 
 /**
@@ -41,12 +45,15 @@ function writeNormalizedUv(
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
+/** 贴地帧：正源 `plan.ground.frame` 与盘上老 `mapGroundFrame` 的公共形状。 */
+type GroundFrame = { lng0: number; lat0: number; latMid: number; scale: number; latSign?: -1 | 1 };
+
 function writeGeographicUv(
   THREE: typeof import('three'),
   geometry: import('three').BufferGeometry,
   width: number,
   depth: number,
-  frame: NonNullable<RoomLayout['mapGroundFrame']>,
+  frame: GroundFrame,
   bounds: { west: number; south: number; east: number; north: number },
 ): void {
   const pos = geometry.getAttribute('position');
@@ -124,24 +131,42 @@ export function buildStructureShell(
     if (!i) shape.moveTo(x, y); else shape.lineTo(x, y);
   });
   shape.closePath();
-  const useSat = !!(layout.satelliteGroundRef && layout.floorPlanImage);
+  // S1：调用方给了 ground 就以它为准（plan.ground 正源）；没给才退回 layout 旧字段。
+  const ground = options.ground;
+  const legacy = legacyGroundOf(layout);
+  const groundImage = ground ? ground.image : layout.floorPlanImage;
+  const groundSatellite = ground ? (ground.satelliteRef ?? true) : !!legacy.satelliteGroundRef;
+  const groundPolygon = ground ? ground.polygon : legacy.mapGroundPolygon;
+  const groundFrame = ground ? ground.frame : legacy.mapGroundFrame;
+  const useSat = !!(groundSatellite && groundImage);
   const floorMat = buildFloorMaterial(THREE, {
     pattern: floor.floorPattern ?? 'solid', color: floor.floorColor, roomWidth: layout.width, roomDepth: layout.height });
   const floorMesh = new THREE.Mesh<ThreeNS.ShapeGeometry, ThreeNS.Material>(new THREE.ShapeGeometry(shape), floorMat);
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.receiveShadow = true;
   floorMesh.userData.type = 'floor';
-  const mappedVenue = (layout.mapGroundPolygon?.length ?? 0) >= 3;
+  const mappedVenue = (groundPolygon?.length ?? 0) >= 3;
   if (mappedVenue) floorMesh.userData.mapVenueGround = true;
   if (useSat) {
     // 贴地参考：半透明叠在壳体地面；文案标记保证不可当重建素材。
     // ShapeGeometry 默认 UV=米制坐标，须归一化到照片矩形，否则 Clamp 只采到边角并拉成线带。
     // 用 MeshBasicMaterial（同 room-builder）：不受光照/金属度影响，卫星色可见。
-    const imageBounds = parseSatelliteImageBounds(layout.floorPlanImage ?? '');
+    const imageBounds = parseSatelliteImageBounds(groundImage ?? '');
     const shellPolygon = layout.backendVenue?.polygon ?? layout.backendSceneV2?.venue.polygon;
-    const frame = imageBounds
-      ? layout.mapGroundFrame ?? (layout.mapGroundPolygon ? frameForExistingShell(layout.mapGroundPolygon, shellPolygon) : null)
+    const rawFrame = imageBounds
+      ? groundFrame ?? (groundPolygon ? frameForExistingShell([...groundPolygon], shellPolygon) : null)
       : null;
+    // plan.ground.frame 的 latSign 在契约里是可选的（`1 | -1 | undefined`），
+    // layout 的老 MapGroundFrame 是 `latSign?`；这里补成 layout 口径，避免 exactOptionalPropertyTypes 穿透到下面几个 UV 函数。
+    const frame: GroundFrame | undefined = rawFrame
+      ? {
+        lng0: rawFrame.lng0,
+        lat0: rawFrame.lat0,
+        latMid: rawFrame.latMid,
+        scale: rawFrame.scale,
+        ...(rawFrame.latSign === undefined ? {} : { latSign: rawFrame.latSign }),
+      }
+      : undefined;
     // 有经纬度就让网格外沿等于照片范围。照片本身铺满户外地面方片。
     // 没有经纬度时也铺同一张方片，UV 归一化到方片上，避免 Clamp 把边缘拉成线带。
     const groundHalf = outdoorGroundSize(layout.width, layout.height) / 2;
@@ -152,8 +177,8 @@ export function buildStructureShell(
     else writeNormalizedUv(THREE, floorMesh.geometry, photoRect.minX, photoRect.maxX, photoRect.minY, photoRect.maxY);
     floorMat.dispose();
     // 卫星：圈内清晰、圈外淡。路网同样一张图，圈内更实、圈外更淡，外沿仍停在照片矩形里。
-    const basemapStyle = groundBasemapStyleOf(layout.floorPlanImage);
-    const basemapFade = groundBasemapOpacity(basemapStyle, layout.floorPlanOpacity);
+    const basemapStyle = groundBasemapStyleOf(groundImage);
+    const basemapFade = groundBasemapOpacity(basemapStyle, ground?.opacity ?? layout.floorPlanOpacity);
     const satMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -170,7 +195,7 @@ export function buildStructureShell(
     // 但「地图选址/2D 户外画边界」抓来的底图（plan-ground 的 data:image 快照）只该铺场地本身：
     // 再往外铺一张大图会变成用户说的「只做了一个切片」，而他要的就是场地自己的 3D（m00274）。
     // data:image 一定是抓下来的整块场地快照（不是可解析经纬度的 AMap 静态图 URL），一律不外扩。
-    const planGroundCapture = (layout.floorPlanImage ?? '').startsWith('data:image/');
+    const planGroundCapture = (groundImage ?? '').startsWith('data:image/');
     let surroundMat: ThreeNS.MeshBasicMaterial | null = null;
     if (!planGroundCapture) {
       const surroundShape = new THREE.Shape();
@@ -214,7 +239,7 @@ export function buildStructureShell(
     }
     // HTMLImageElement 能解开 jpeg 瓦片和 SVG 占位。createImageBitmap 解不开 SVG，
     // 失败时曾经把地面涂成 0x445544（纯橄榄绿），网络里却是 200 的图。
-    const url = layout.floorPlanImage!;
+    const url = groundImage!;
     const applyMap = (texture: ThreeNS.Texture) => {
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -238,30 +263,6 @@ export function buildStructureShell(
     });
   }
   scene.add(floorMesh);
-  // Measured environments can still receive editable upper storeys. Keep
-  // their floor slabs on the measured footprint and at the same elevations
-  // used by furniture placement, while the scanned environment remains below.
-  for (let index = 1; index < layout.floors.length; index++) {
-    const upper = layout.floors[index];
-    if (!upper) continue;
-    const slabShape = new THREE.Shape();
-    points.forEach((p, pointIndex) => {
-      const x = p.x - layout.width / 2, y = -(p.z - layout.height / 2);
-      if (!pointIndex) slabShape.moveTo(x, y); else slabShape.lineTo(x, y);
-    });
-    slabShape.closePath();
-    const slab = new THREE.Mesh<ThreeNS.ShapeGeometry, ThreeNS.Material>(
-      new THREE.ShapeGeometry(slabShape),
-      buildFloorMaterial(THREE, { pattern: upper.floorPattern ?? 'solid', color: upper.floorColor, roomWidth: layout.width, roomDepth: layout.height })
-    );
-    slab.rotation.x = -Math.PI / 2;
-    slab.position.y = floorElevation(layout.floors, index);
-    slab.receiveShadow = true;
-    slab.userData.type = 'floor';
-    slab.userData.floorIndex = index;
-    slab.visible = options.showAllFloors === true || index === (options.activeFloorIndex ?? 0);
-    scene.add(slab);
-  }
   // v2 壳体（「确认布置」后走这条分支）也要 2D 同款 0.5 m 网格：
   // 单元对齐世界原点、只铺房间范围，id-less Wall 标签让 applyWallDisplay 任何模式都保留它。
   const grid = buildGridPlane(THREE, layout.width, layout.height, layout.planSettings?.gridSizeM);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { Box, Camera, Crown, Images, Loader2, Scan, TriangleAlert, Upload } from '@/components/solid-icons';
 import { useCloudArchive } from '../hooks/use-cloud-archive';
 import { detectCloudCaseSession, ensureCloudCaseCopyRecord } from '../lib/cloud-cases';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import { forgetRemovedScans, registerCloudScans, registerLocalScans, repairStaleScans } from '../lib/local-scans';
 import { readOutdoorProjectRecord, saveOutdoorProjectRecord } from '../lib/outdoor-project-store';
 import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
@@ -236,7 +237,9 @@ export function SpacePanel({
   const venueDay = (venue: ScannedVenue) => venue.savedAt
     ? new Date(venue.savedAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
     : '';
-  const hasBoundary = (layout.mapGroundPolygon?.length ?? 0) >= 3;
+  // 圈画本体已进 `plan.ground`（B4）；这里只判「场地范围有没有落成」，迁完之后看壳体轮廓。
+  const hasBoundary = (legacyGroundOf(layout).mapGroundPolygon?.length ?? 0) >= 3
+    || (layout.backendVenue?.polygon?.length ?? 0) >= 3;
   const samples = onAddSampleScene ? listShippedAssets('spz') : [];
   const pickScan = (venue: ScannedVenue) => {
     // 2026-11-19 用户拍板删掉「只看这一场」：卡片只剩一件事——落到场地上；
@@ -345,7 +348,7 @@ export function SpacePanel({
         aria-label={`加入示例场景 ${asset.name}`}>
         {asset.image && <img src={shippedImageUrl(asset)} alt="" loading="lazy" />}
         <strong>{asset.name}</strong>
-        {asset.estimatedHeightMeters && <small>估算层高 {asset.estimatedHeightMeters} 米</small>}
+        {asset.estimatedHeightMeters && <small>比例基准 {asset.estimatedHeightMeters} 米</small>}
       </button>
     </li>)}
   </ul> : null;

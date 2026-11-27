@@ -1,6 +1,7 @@
 import {agentAnnotationObservationSchema} from '../../supabase/functions/_shared/agent-contract';
 import {venueSchema,uuid} from '../../supabase/functions/_shared/domain';
 import {evaluateKeepOut} from './flow-constraints';
+import {legacyGroundOf} from '../components/room-organizer/lib/legacy-ground';
 import {reviewLocalRoutes,type LocalRouteInput,type LocalRouteReview} from './local-route-review';
 import {sameRecoveryFormValue} from './recovery-form-value';
 import {isLowProfile,isTabletopType} from '../components/room-organizer/lib/geometry';
@@ -67,7 +68,7 @@ export function reviewAgentAnnotations(input:AnnotationReviewInput):AnnotationRe
   if(old.some(item=>!validItem(item))||now.some(item=>!validItem(item)))unknown.push('原场景或候选存在无法核对的物件占地');
   const oldVenue=venueSchema.safeParse(layoutGeometryScene(base,base.floors.indexOf(before[0]!)).venue),newVenue=venueSchema.safeParse(layoutGeometryScene(candidate,candidate.floors.indexOf(after[0]!)).venue);
   const sameVenue=oldVenue.success&&newVenue.success&&oldVenue.data.width===base.width&&oldVenue.data.depth===base.height&&newVenue.data.width===candidate.width&&newVenue.data.depth===candidate.height&&oldVenue.data.shape===newVenue.data.shape&&sameRecoveryFormValue(oldVenue.data.polygon??null,newVenue.data.polygon??null)&&
-    sameRecoveryFormValue(base.mapGroundPolygon??null,candidate.mapGroundPolygon??null)&&sameRecoveryFormValue(base.backendSceneV2?.structure??null,candidate.backendSceneV2?.structure??null)&&sameRecoveryFormValue(before[0]!.interiorWalls??[],after[0]!.interiorWalls??[]);
+    sameRecoveryFormValue(legacyGroundOf(base).mapGroundPolygon??null,legacyGroundOf(candidate).mapGroundPolygon??null)&&sameRecoveryFormValue(base.backendSceneV2?.structure??null,candidate.backendSceneV2?.structure??null)&&sameRecoveryFormValue(before[0]!.interiorWalls??[],after[0]!.interiorWalls??[]);
   if(snapshot.annotations.filter(item=>item.kind==='zone'&&item.zoneType==='reserved').length*(old.length+now.length)>100_000)return unknownResult('预留区与物件组合超过本次检查范围');
   const beforeById=new Map(old.map(item=>[item.id.toLowerCase(),item]));
   const sameFootprint=(a:FurnitureItem,b:FurnitureItem)=>sameRecoveryFormValue({position:a.position,width:a.width,depth:a.depth,rotation:a.rotation??0},{position:b.position,width:b.width,depth:b.depth,rotation:b.rotation??0});
@@ -81,7 +82,7 @@ export function reviewAgentAnnotations(input:AnnotationReviewInput):AnnotationRe
     if(item.kind!=='zone'||item.zoneType!=='reserved')continue;
     const proof=proofs.get(item.id),g=item.geometry;
     if(proof?.source!=='user'||proof.floorId!==floorId){unknown.push('预留区来源或楼层未确认');continue;}
-    if(!sameVenue||base.backendVenue?.shape==='polygon'||candidate.backendVenue?.shape==='polygon'||base.mapGroundPolygon?.length||candidate.mapGroundPolygon?.length||
+    if(!sameVenue||base.backendVenue?.shape==='polygon'||candidate.backendVenue?.shape==='polygon'||legacyGroundOf(base).mapGroundPolygon?.length||legacyGroundOf(candidate).mapGroundPolygon?.length||
        g.x < -base.width/2||g.z < -base.height/2||g.x+g.width>base.width/2||g.z+g.depth>base.height/2||g.width<=2*CORE_INSET||g.depth<=2*CORE_INSET){unknown.push('预留区边界或场地轮廓未确认');continue;}
     const zone=asAnnotation(item);
     for(const object of now){

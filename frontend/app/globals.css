@@ -738,9 +738,7 @@ body.is-theme-dark [data-testid="plan-placement-bar"] > div:last-child { color: 
    HUD 直接挂在视口内、不在 .is-outdoor-card 作用域里，按 testid 单独覆盖；
    内联为普通样式，需 !important 压过。只重绘外壳与控件，不碰 3D 画布。 */
 body.is-theme-dark [data-testid="site-calibration-toggle"],
-body.is-theme-dark [data-testid="site-calibration-panel"],
-body.is-theme-dark [data-testid="scene-lighting-hud"] > button,
-body.is-theme-dark [data-testid="scene-lighting-hud"] > div {
+body.is-theme-dark [data-testid="site-calibration-panel"] {
   background-color: #1C1F24 !important;
   border-color: #363A42 !important;
   color: #EDF0F2 !important;
@@ -761,13 +759,7 @@ body.is-theme-dark [data-testid="site-calibration-panel"] button {
   border-color: #363A42 !important;
   color: #EDF0F2 !important;
 }
-body.is-theme-dark [data-testid="site-calibration-panel"] span,
-body.is-theme-dark [data-testid="scene-lighting-hud"] span { color: #C9CED6 !important; }
-body.is-theme-dark [data-testid="scene-lighting-hud"] button:not([data-role="trigger"]) {
-  background-color: transparent !important;
-  border-color: #363A42 !important;
-  color: #EDF0F2 !important;
-}
+body.is-theme-dark [data-testid="site-calibration-panel"] span { color: #C9CED6 !important; }
 
 /* 漫游角色选择对话框：Tailwind bg-white / neutral 字面量在暗色下回到纸面与墨字。 */
 body.is-theme-dark dialog[aria-labelledby="outdoor-walk-chooser-title"] {
@@ -3393,10 +3385,9 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#to
   color: var(--wk-muted, #71767e); cursor: pointer; transition: color 120ms ease;
 }
 .sc-danger-quiet:hover, .sc-danger-quiet:focus-visible { color: var(--err, #b4443c); }
-/* 户外 2D 覆盖层打开时隐藏室内 3D 的空间标定/光照 HUD（z400/401 高于覆盖层，
+/* 户外 2D 覆盖层打开时隐藏室内 3D 的空间标定 HUD（z400/401 高于覆盖层，
    会透到地图左下角跟比例尺叠在一起——2026-11-11 用户指令「按范式改」）。 */
-body:has([data-testid="outdoor-overlay"]) [data-testid="site-calibration-hud"],
-body:has([data-testid="outdoor-overlay"]) [data-testid="scene-lighting-hud"] {
+body:has([data-testid="outdoor-overlay"]) [data-testid="site-calibration-hud"] {
   display: none !important;
 }
 /* 搜地点挖形小提示（2026-11-12 用户拍板）：Overpass 忙时排队 30~50s，

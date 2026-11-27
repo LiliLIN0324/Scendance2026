@@ -3,7 +3,7 @@ import { itemsOverlap, rotatedHalfExtents } from './geometry';
 import { remapGroupIds } from './groups';
 import { randomSuffix } from './ids';
 import { isWallMounted, settleWallMountedItem, type WallGap } from './opening-snap';
-import type { FurnitureItem, InteriorWall, Vec2 } from './types';
+import type { FurnitureItem, Vec2 } from './types';
 
 /**
  * A placed item minus what a set can't carry: its id and floor position
@@ -100,8 +100,6 @@ interface BuildSetOptions {
   roomWidth?: number;
   /** Interior room depth (m). When given, the set is scaled to fit. */
   roomDepth?: number;
-  /** The active floor's partitions, so doors and windows settle onto them too. */
-  interiorWalls?: readonly InteriorWall[];
   /** The recessed entrance's cut in the north wall (`entrancePlanOutline`). */
   frontGap?: WallGap | null;
 }
@@ -306,7 +304,6 @@ export function buildFurnitureSet(set: FurnitureSet, options: BuildSetOptions = 
           position,
           room.width,
           room.depth,
-          options.interiorWalls ?? [],
           options.frontGap ?? null
         );
         return settled ? { ...item, ...settled } : item;

@@ -8,6 +8,7 @@
  * URL 同步前先打标记，CloudPanel 不会因此重开项目。
  */
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { resolveProjectScope } from '@/lib/project-scope';
 import type { BackendSession, Studio } from '@/lib/backend-session';
 import { copySourceScope, flushSourceScope } from '@/lib/source-storage';
 import { markSelfAttachedProject, preferredStudio, rememberStudio } from '@/lib/workspace-api';
@@ -76,7 +77,7 @@ export function useSilentCloudAttach({ controller, layout, onBindProject, enable
       const startedLayout = layoutRef.current;
       const capturedAuthority = permissionRef.current.isCurrent;
       const stillAuthorized = () => { try { return canAttach() && permissionRef.current.isCurrent === capturedAuthority && !!capturedAuthority?.(); } catch { return false; } };
-      const previousScope = startedLayout.id ?? 'local';
+      const previousScope = resolveProjectScope(startedLayout.id);
       let projectId: string;
       let attachStudioName: string | undefined;
       let submittedLayout: RoomLayout | undefined;

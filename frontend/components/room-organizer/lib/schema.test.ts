@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { legacyGroundOf } from './legacy-ground';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, ROOM_TEMPLATES } from './constants';
 import { createResearchArea, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE, XIHU_LOCAL_PLACE } from './research-area';
 import {
@@ -226,7 +227,7 @@ describe('isRoomLayout', () => {
     const layout = makeLayout({ floorPlanImage: image, satelliteGroundRef: true, mapGroundPolygon: polygon });
     expect(isRoomLayout(layout)).toBe(true);
     expect(parseStoredLayout(layout)?.floorPlanImage).toBe(image);
-    expect(parseStoredLayout(layout)?.mapGroundPolygon).toEqual(polygon);
+    expect(legacyGroundOf(parseStoredLayout(layout)!).mapGroundPolygon).toEqual(polygon);
     expect(isRoomLayout(makeLayout({ floorPlanImage: 'http://127.0.0.1:3199/amap-static?location=120.5,30.4&x-ref=other' }))).toBe(false);
     expect(isRoomLayout(makeLayout({ floorPlanImage: 'https://127.0.0.1:3199/amap-static?x-ref=satellite-ground-ref' }))).toBe(false);
     const sameOrigin = '/api/amap-static?location=120.5,30.4&zoom=16&size=768*768&scale=2&x-ref=satellite-ground-ref';
@@ -239,7 +240,7 @@ describe('isRoomLayout', () => {
     expect(isRoomLayout(makeLayout({ mapGroundPolygon: [{ lng: 999, lat: 0 }, { lng: 1, lat: 1 }, { lng: 2, lat: 2 }] }))).toBe(false);
     const bounded = '/api/amap-static?west=120.5300000&south=30.4000000&east=120.5400000&north=30.4100000&x-ref=satellite-ground-ref';
     const frame = { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 0.5 };
-    expect(parseStoredLayout(makeLayout({ floorPlanImage: bounded, mapGroundFrame: frame }))?.mapGroundFrame).toEqual(frame);
+    expect(legacyGroundOf(parseStoredLayout(makeLayout({ floorPlanImage: bounded, mapGroundFrame: frame })!)!).mapGroundFrame).toEqual(frame);
     expect(isRoomLayout(makeLayout({ mapGroundFrame: { lng0: 120.53, lat0: 30.4, latMid: 30.405, scale: 2 } }))).toBe(false);
   });
 
@@ -352,6 +353,52 @@ describe('parseStoredLayout', () => {
     expect(parsed!.floorPlanOpacity).toBe(0.4);
     // Legacy has no floors key.
     expect('floors' in legacy).toBe(false);
+  });
+
+  it('reads a current-shape snapshot carrying retired shell fields without crashing, keeping them read-only off the draft', () => {
+    const raw = makeLayout({
+      roof: { style: 'gable', color: '#5d3a23' },
+      terrain: { frontY: 2.5, backY: 0 },
+      neighbours: { east: true, street: true },
+      entrance: { width: 1.4, depth: 1.2 },
+      frontage: 'pavement',
+      floors: [makeFloor({ items: [makeItem({ id: 'sofa' })] })],
+    });
+    const parsed = parseStoredLayout(JSON.parse(JSON.stringify(raw)));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.floors[0]!.items.map((item) => item.id)).toEqual(['sofa']);
+    // The parse returns an independent normalized object; the raw snapshot is not the live draft being written back.
+    expect(parsed).not.toBe(raw);
+    // Parse layer still carries the retired fields read-only; the 3D lot no longer renders them (T1).
+    // Stripping the reducer/schema write side is T3.
+    expect(parsed!.roof).toEqual(raw.roof);
+    expect(parsed!.terrain).toEqual(raw.terrain);
+    expect(parsed!.neighbours).toEqual(raw.neighbours);
+    expect(parsed!.entrance).toEqual(raw.entrance);
+    expect(parsed!.frontage).toBe('pavement');
+  });
+
+  it('drops shell fields when migrating a legacy single-floor snapshot', () => {
+    const legacy = {
+      name: 'Old',
+      width: 6,
+      height: 7,
+      floorColor: '#fff',
+      items: [makeItem({ id: 'sofa' })],
+      roof: { style: 'gable', color: '#555555' },
+      terrain: { frontY: 1, backY: 0 },
+      neighbours: { west: true },
+      entrance: { width: 1.4, depth: 1.2 },
+      frontage: 'pavement',
+    };
+    const parsed = parseStoredLayout(legacy);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.floors[0]!.items.map((item) => item.id)).toEqual(['sofa']);
+    expect(parsed).not.toHaveProperty('roof');
+    expect(parsed).not.toHaveProperty('terrain');
+    expect(parsed).not.toHaveProperty('neighbours');
+    expect(parsed).not.toHaveProperty('entrance');
+    expect(parsed).not.toHaveProperty('frontage');
   });
 
   it('migrates a legacy layout but drops an unsafe (non-data-URL) floorPlanImage', () => {

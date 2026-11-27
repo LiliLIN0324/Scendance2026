@@ -1,4 +1,5 @@
 import type { CatalogItem, FloorLayout, FurnitureItem, RoomLayout, ViewSettings } from '../types';
+import type { LegacyLayoutGround } from '../legacy-ground';
 
 /** Build a valid FurnitureItem with sane defaults; override any field. */
 export function makeItem(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
@@ -49,7 +50,7 @@ export function makeFloor(overrides: Partial<FloorLayout> = {}): FloorLayout {
   };
 }
 
-export function makeLayout(overrides: Partial<RoomLayout> = {}): RoomLayout {
+export function makeLayout(overrides: Partial<RoomLayout> & LegacyLayoutGround = {}): RoomLayout {
   return {
     name: 'My Home',
     width: 8,
@@ -70,23 +71,18 @@ export function makeViewSettings(overrides: Partial<ViewSettings> = {}): ViewSet
     snapToGrid: false,
     snapToWall: false,
     snapToItems: false,
-    showMinimap: false,
     floorPlan3DEffect: false,
     timeOfDay: 12,
     weather: 'clear',
-    walkthroughMode: false,
     showOutdoor: true,
     showAllFloors: false,
     wallDisplay: 'cutaway',
     selectMode: true,
     measurementMode: false,
     soundsEnabled: false,
-    drawWallMode: false,
     drawZoneMode: false,
     showHeatmap: false,
     showItemLabels: false,
-    showNpcs: false,
-    showCameraVision: true,
     ...overrides,
   };
 }

@@ -13,8 +13,13 @@ export function createFloorSessionTracker(store:Store){
  let observed:{scope:string;floorIndex:number;floorId:string|null}|null=null;
  const listeners=new Set<()=>void>();
  function current(){
-  const state=store.getState(),floorIndex=state.activeFloorIndex;
-  const id=Number.isSafeInteger(floorIndex)&&floorIndex>=0?state.layout.floors[floorIndex]?.id:undefined;
+  const state=store.getState();
+  // Single-floor editor: the floor dimension is identity-equalized (index 0, ground floor id).
+  // The token still fingerprints the activity scope; floor-switch invalidation retires with the
+  // multi-floor stack. Module kept until the B5 identity/epoch convergence.
+  const floorIndex=0;
+  const first=state.layout.floors[0];
+  const id=first?.id;
   return {scope:activityScope(state.layout.id),floorIndex,floorId:typeof id==='string'&&id.trim()?id:null};
  }
  function update(force=false){

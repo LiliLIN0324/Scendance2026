@@ -7,7 +7,7 @@ import {
   get2DViewTransform,
   render2DTopDown,
 } from '../room-organizer/canvas-2d/render';
-import { HIT_SLOP_PX, hitTest2DItems } from '../room-organizer/hooks/use-canvas-2d-interaction';
+import { HIT_SLOP_PX, hitTest2DItems } from '../room-organizer/lib/hit-test-2d';
 import { floorKeepOut } from '../room-organizer/lib/floor-keep-out';
 import { hasCollisions } from '../room-organizer/lib/geometry';
 import { planFloorIndex } from '../room-organizer/lib/street';
@@ -98,7 +98,7 @@ export function ReviewPlanSheet({
         showHeatmap: false,
         showFloorPlan: Boolean(layout.floorPlanImage && planFloorIndex(layout.floors, floor) === 0),
         hasCollision: (item) =>
-          hasCollisions(item, floor.items, layout.width, layout.height, { keepOut, interiorWalls: floor.interiorWalls }),
+          hasCollisions(item, floor.items, layout.width, layout.height, { keepOut }),
       });
     };
 

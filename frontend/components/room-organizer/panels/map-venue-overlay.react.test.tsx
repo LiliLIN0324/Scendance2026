@@ -5,8 +5,18 @@ import { makeFloor, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { METERS_PER_DEGREE_LAT, metersPerDegreeLng, type AmapPoint } from '../lib/amap-venue';
 import { ActivityBrief, LayoutAgentProvider, MapRailButton, MapVenueOverlay } from './agent-panel';
 import { XIHU_LOCAL_NAME } from '../lib/research-area';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import type { RoomLayout } from '../lib/types';
 import type { WorkbenchMode } from '../lib/workbench-mode';
+
+/** 圈画后 ground 的去向：本套件只验「交给 plan 落盘口」，存储本身由 venue-ground-slot 套件覆盖。 */
+const groundWrites = vi.hoisted(() => ({ calls: [] as Array<{ id: string | undefined; polygon?: Array<{ lng: number; lat: number }> }> }));
+vi.mock('../lib/venue-ground-slot', () => ({
+  writeGroundToPlan: (id: string | undefined, ground: { polygon?: Array<{ lng: number; lat: number }> }) => {
+    groundWrites.calls.push({ id, ...(ground.polygon ? { polygon: ground.polygon } : {}) });
+    return { ok: false as const, reason: 'no-project' };
+  },
+}));
 
 /** 12 × 8 米的一块地，换成高德经纬度。 */
 function rect(w: number, d: number): AmapPoint[] {
@@ -61,7 +71,7 @@ function harness(opts?: {
   onReconUpload?: (preset: { name: string; hint: string }) => void;
   onVenueSaved?: () => void;
 }) {
-  state.layout = makeLayout({ floors: [makeFloor({ items: [] })] });
+  state.layout = makeLayout({ id: 'house-overlay-test', floors: [makeFloor({ items: [] })] });
   return render(<LayoutAgentProvider onApplyResearchArea={vi.fn()} callbacks={callbacks} onPreview={vi.fn()} onApply={next => { state.layout = next; }}>
     <ActivityBrief tools={[]}/>
     <MapVenueOverlay
@@ -74,12 +84,13 @@ function harness(opts?: {
 afterEach(() => { cleanup(); });
 
 describe('圈画 → 采集单 → 上传重建', () => {
-  it('在西湖选址后，同一份布局同时保存片区模型和活动边界', () => {
+  it('在西湖选址后，片区模型留在 layout，圈画边界落到 plan.ground', () => {
     harness();
     fireEvent.click(screen.getByRole('button', { name: /地图圈画/ }));
     fireEvent.click(screen.getByRole('button', { name: '圈选西湖场地' }));
     expect(state.layout.researchArea?.name).toBe(XIHU_LOCAL_NAME);
-    expect(state.layout.mapGroundPolygon).toHaveLength(4);
+    expect(groundWrites.calls.at(-1)?.polygon).toHaveLength(4);
+    expect(legacyGroundOf(state.layout).mapGroundPolygon).toBeUndefined();
     expect(state.layout.sceneAnchor?.source).toBe('picker');
   });
 

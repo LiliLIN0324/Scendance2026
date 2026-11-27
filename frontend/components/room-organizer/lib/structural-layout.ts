@@ -276,15 +276,6 @@ export function venueArea(layout: RoomLayout): number {
   if (!points) return layout.width * layout.height;
   return Math.abs(points.reduce((sum,p,i)=>{ const q=points[(i+1)%points.length]!;return sum+p.x*q.z-q.x*p.z; },0))/2;
 }
-/** Existing confirmed or source-linked walls require the dedicated review workflow. */
-export function isEvidenceProtectedWall(layout: RoomLayout, wallId: string): boolean {
-  const source=layout.backendSceneV2;
-  if(!source)return false;
-  const wall=source.structure.walls.find(value=>value.id===wallId);
-  return layout.floors.some(floor=>floor.interiorWalls?.some(value=>value.id===wallId&&value.status==='confirmed')) ||
-    wall?.status==='confirmed' || (wall?.evidence?.length??0)>0 ||
-    source.dimensions.some(value=>value.status==='confirmed'&&(value.targetId===wallId||value.targetEndId===wallId));
-}
 
 /** 门、柱、出入口的现场标记：它们是场地真相的一部分，不算物料。 */
 export function isStructuralMarker(item: Pick<FurnitureItem, 'structuralOpeningId' | 'structuralColumnId' | 'venueEntranceId'>): boolean {

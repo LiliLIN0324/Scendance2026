@@ -6,6 +6,7 @@ import {
   deliveryVersionState,
   snapshotIdFor,
 } from './delivery-version';
+import { stripPlanGroundImage } from './plan-ground';
 import { MAX_LAYOUT_JSON_BYTES, parseLayoutEventOperations, parseStoredLayout } from './schema';
 import { sitePlanDataSchema, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout } from './types';
@@ -72,7 +73,6 @@ export async function encodeShareUrl(
   origin: string,
   outdoor?: SitePlanData | null,
 ): Promise<EncodeShareUrlResult> {
-  const stripped = layout.floorPlanImage !== undefined;
   const checked = parseLayoutEventOperations(layout);
   if (!checked) throw new Error('制作计划或活动安排无效，请先核对后再分享。');
   const shareable = deliveryShareableLayout(checked);
@@ -81,11 +81,14 @@ export async function encodeShareUrl(
   // 户外方案是可选的同一份规划数据；带了就随快照走，评审页先看户外。
   const outdoorChecked = outdoor ? sitePlanDataSchema.safeParse(outdoor) : null;
   if (outdoorChecked && !outdoorChecked.success) throw new Error('户外方案无法核对，未生成评审链接。');
+  // B4：底图正源在 plan.ground，同样要剥掉字节；只留地理定位让接收方按自己的源重拼。
+  const outdoorShareable = outdoorChecked?.success ? stripPlanGroundImage(outdoorChecked.data) : null;
+  const stripped = layout.floorPlanImage !== undefined || !!outdoorChecked?.success && !!outdoorChecked.data.ground?.image;
   const payload: PlanSharePayload = {
     kind: PLAN_SHARE_KIND,
     identity,
     layout: shareable,
-    ...(outdoorChecked?.success ? { outdoor: outdoorChecked.data } : {}),
+    ...(outdoorShareable ? { outdoor: outdoorShareable } : {}),
   };
   const compressed = await deflateRaw(new TextEncoder().encode(JSON.stringify(payload)));
   const encoded = `${V2_PREFIX}${bytesToBase64Url(compressed)}`;

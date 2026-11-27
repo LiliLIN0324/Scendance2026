@@ -1,18 +1,16 @@
 /**
  * Walkthrough collision (#156): the first-person walker is a circle in the XZ
- * plane that must not pass through furniture or interior walls. Everything
- * solid is reduced to an oriented box — furniture via the same rotated-rect
- * convention as `lib/geometry`, an interior wall as a box along its segment
- * with the partition's thickness — and the walker is pushed out of whichever
- * boxes it overlaps, sliding along their faces rather than stopping dead.
+ * plane that must not pass through furniture. Everything solid is reduced to an
+ * oriented box, and the walker is pushed out of whichever boxes it overlaps,
+ * sliding along their faces rather than stopping dead.
  *
  * The footprint clamp in `hooks/use-walkthrough.ts` remains the outer guard:
  * exterior walls are never colliders here.
  */
 
 import { isWallHung } from './mount-band';
-import { interiorWallOpeningSpan, isWallMounted } from './opening-snap';
-import type { FurnitureItem, InteriorWall, Vec2 } from './types';
+import { isWallMounted } from './opening-snap';
+import type { FurnitureItem, Vec2 } from './types';
 
 /** One solid box in the XZ plane, in the `lib/geometry` OBB convention. */
 export interface WalkCollider {
@@ -49,27 +47,11 @@ export interface WalkCollisionOptions {
 }
 
 /**
- * Interior walls are modelled 0.16 m thick (three/interior-walls.ts owns the
- * authoritative constant); the walker must not sink into that slab.
- */
-const INTERIOR_WALL_THICKNESS = 0.16;
-
-/**
  * Anything at or under this height goes UNDER furniture by design (rugs are
  * 0.02 m) — the walker steps over it. Mirrors the collision indicator's
  * low-profile layer in `lib/geometry` (#120).
  */
 const LOW_PROFILE_MAX_HEIGHT = 0.05;
-
-/**
- * A door is a passable gap in the wall that owns it. Ownership follows the
- * renderer's cut rule (three/wall-openings.ts): the nearest wall within its
- * threshold, so a door at a junction is never cut from two walls.
- */
-const INTERIOR_DOOR_THRESHOLD = 0.4;
-const EXTERIOR_DOOR_THRESHOLD = 0.6;
-/** Solid wall runs shorter than this are dropped. */
-const MIN_RUN_LENGTH = 1e-3;
 
 /**
  * Overshoot on every push-out so the walker settles just clear of the surface
@@ -98,9 +80,7 @@ const RESOLVE_PASSES = 2;
  * the walker is inside the room.
  */
 export function buildWalkColliders(
-  items: readonly FurnitureItem[],
-  interiorWalls: readonly InteriorWall[],
-  options: WalkCollisionOptions = {}
+  items: readonly FurnitureItem[]
 ): WalkCollider[] {
   const colliders: WalkCollider[] = [];
   for (const item of items) {
@@ -120,25 +100,6 @@ export function buildWalkColliders(
         item.category === 'outdoor'
       )
     );
-  }
-
-  const doorOwners = classifyDoorOwners(items, interiorWalls, options);
-  for (const wall of interiorWalls) {
-    const length = Math.hypot(wall.x2 - wall.x1, wall.z2 - wall.z1);
-    if (length < MIN_RUN_LENGTH) continue;
-    const ux = (wall.x2 - wall.x1) / length;
-    const uz = (wall.z2 - wall.z1) / length;
-    const cx = (wall.x1 + wall.x2) / 2;
-    const cz = (wall.z1 + wall.z2) / 2;
-    // Three's rotY convention (see lib/geometry toObb): a wall running along
-    // (ux, uz) is an item rotated by -atan2(uz, ux).
-    const rotation = -Math.atan2(uz, ux);
-    for (const [from, to] of solidRuns(wall, length, items, doorOwners)) {
-      const mid = (from + to) / 2;
-      colliders.push(
-        boxCollider(cx + ux * mid, cz + uz * mid, to - from, INTERIOR_WALL_THICKNESS, rotation, false)
-      );
-    }
   }
   return colliders;
 }
@@ -175,84 +136,6 @@ export function boxCollider(
     aabbHalfD: halfD,
     outdoor,
   };
-}
-
-/** Door id → id of the interior wall that owns it (exterior-owned doors omitted). */
-function classifyDoorOwners(
-  items: readonly FurnitureItem[],
-  interiorWalls: readonly InteriorWall[],
-  options: WalkCollisionOptions
-): Map<string, string> {
-  const owners = new Map<string, string>();
-  const { roomWidth, roomDepth } = options;
-  for (const item of items) {
-    if (item.type !== 'door' || !item.position) continue;
-    const { x, z } = item.position;
-    let bestId: string | null = null;
-    let bestDistance = Infinity;
-    for (const wall of interiorWalls) {
-      const distance = distanceToSegment(x, z, wall.x1, wall.z1, wall.x2, wall.z2);
-      if (distance > INTERIOR_DOOR_THRESHOLD || distance >= bestDistance) continue;
-      bestId = wall.id;
-      bestDistance = distance;
-    }
-    if (bestId === null) continue;
-    if (roomWidth !== undefined && roomDepth !== undefined && Number.isFinite(roomWidth + roomDepth)) {
-      const hw = roomWidth / 2;
-      const hd = roomDepth / 2;
-      const exteriorDistance = Math.min(
-        distanceToSegment(x, z, -hw, -hd, hw, -hd),
-        distanceToSegment(x, z, -hw, hd, hw, hd),
-        distanceToSegment(x, z, -hw, -hd, -hw, hd),
-        distanceToSegment(x, z, hw, -hd, hw, hd)
-      );
-      if (exteriorDistance <= EXTERIOR_DOOR_THRESHOLD && exteriorDistance < bestDistance) continue;
-    }
-    owners.set(item.id, bestId);
-  }
-  return owners;
-}
-
-/**
- * The solid stretches of a wall, as `[from, to]` offsets from the segment
- * midpoint, once every door it owns has been cut out of it.
- */
-function solidRuns(
-  wall: InteriorWall,
-  length: number,
-  items: readonly FurnitureItem[],
-  doorOwners: ReadonlyMap<string, string>
-): Array<[number, number]> {
-  const half = length / 2;
-  const gaps: Array<[number, number]> = [];
-  if (doorOwners.size > 0) {
-    for (const item of items) {
-      if (doorOwners.get(item.id) !== wall.id || !item.position) continue;
-      // The renderer's cut exactly: a door lying past the end cuts nothing (#399).
-      const span = interiorWallOpeningSpan(wall, { width: item.width, position: item.position });
-      if (!span) continue;
-      gaps.push([span.centre - span.width / 2, span.centre + span.width / 2]);
-    }
-  }
-  if (gaps.length === 0) return [[-half, half]];
-  gaps.sort((a, b) => a[0] - b[0]);
-  const runs: Array<[number, number]> = [];
-  let cursor = -half;
-  for (const [gapFrom, gapTo] of gaps) {
-    if (gapFrom - cursor >= MIN_RUN_LENGTH) runs.push([cursor, gapFrom]);
-    cursor = Math.max(cursor, gapTo);
-  }
-  if (half - cursor >= MIN_RUN_LENGTH) runs.push([cursor, half]);
-  return runs;
-}
-
-function distanceToSegment(px: number, pz: number, x1: number, z1: number, x2: number, z2: number): number {
-  const vx = x2 - x1;
-  const vz = z2 - z1;
-  const lengthSquared = vx * vx + vz * vz;
-  if (lengthSquared < 1e-9) return Math.hypot(px - x1, pz - z1);
-  const t = Math.max(0, Math.min(1, ((px - x1) * vx + (pz - z1) * vz) / lengthSquared));
-  return Math.hypot(px - (x1 + t * vx), pz - (z1 + t * vz));
 }
 
 /**
@@ -296,17 +179,16 @@ export function resolveWalkerStep(
 
 /**
  * Convenience wrapper for callers that don't cache colliders: build them from
- * the floor's items and walls and resolve one move. Returns a new position.
+ * the floor's items and resolve one move. Returns a new position.
  */
 export function resolveWalkerPosition(
   from: Vec2,
   to: Vec2,
   radius: number,
   items: readonly FurnitureItem[],
-  interiorWalls: readonly InteriorWall[],
   options: WalkCollisionOptions = {}
 ): WalkerPosition {
-  const colliders = buildWalkColliders(items, interiorWalls, options);
+  const colliders = buildWalkColliders(items);
   return resolveWalkerStep(colliders, from, to, radius, { x: from.x, z: from.z }, options);
 }
 

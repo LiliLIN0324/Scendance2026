@@ -142,8 +142,6 @@
   }
   /* 画布左下角的空间标定角标：手机上让位给入口钮与工具条，同一条信息由对话输入区承接 */
   .sc-workbench .is-docked-layout.is-mode-rail [data-testid="site-calibration-hud"] { display: none !important; }
-  /* 光照 ⓘ 同样是左下角 24px 小钮，会压住工具条第一格；手机端收起，光照仍在桌面端可调 */
-  .sc-workbench .is-docked-layout.is-mode-rail [data-testid="scene-lighting-hud"] { display: none !important; }
 
   /* ── 左轨入口：默认只露一颗 48px 圆钮，展开成四格弹层 ── */
   .sc-mobile-agent-entry {

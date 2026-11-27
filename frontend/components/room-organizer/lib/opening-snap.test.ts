@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  interiorWallOpeningSpan,
   isWallMounted,
   reseatWallMountedItem,
   settleWallMountedItem,
   snapOpeningToWall,
-  snapWallMountedItem,
 } from './opening-snap';
 
 // 8×8 room throughout: walls at x = ±4, z = ±4.
@@ -20,7 +18,6 @@ describe('snapOpeningToWall — exterior walls (#123)', () => {
     ['west', { x: -3, z: -1 }, { x: -4, z: -1 }, Math.PI / 2],
   ])('snaps to the %s wall on-plane with the wall-aligned rotation', (_wall, cursor, position, rotation) => {
     const snap = snapOpeningToWall({ position: cursor, itemWidth: 1, roomWidth: W, roomDepth: D });
-    expect(snap.wallKind).toBe('exterior');
     expect(snap.position.x).toBeCloseTo(position.x, 10);
     expect(snap.position.z).toBeCloseTo(position.z, 10);
     expect(snap.rotation).toBeCloseTo(rotation, 10);
@@ -30,72 +27,6 @@ describe('snapOpeningToWall — exterior walls (#123)', () => {
     const snap = snapOpeningToWall({ position: { x: 3.9, z: -4.5 }, itemWidth: 1.2, roomWidth: W, roomDepth: D });
     expect(snap.position.x).toBeCloseTo(4 - 0.6, 10);
     expect(snap.position.z).toBe(-4);
-  });
-});
-
-describe('snapOpeningToWall — interior walls (#123)', () => {
-  const wall = { id: 'iw', x1: -2, z1: 0, x2: 2, z2: 0 };
-
-  it('prefers a nearby interior wall over a farther exterior wall', () => {
-    const snap = snapOpeningToWall({
-      position: { x: 0.5, z: 0.3 },
-      itemWidth: 0.9,
-      roomWidth: W,
-      roomDepth: D,
-      interiorWalls: [wall],
-    });
-    expect(snap.wallKind).toBe('interior');
-    expect(snap.position.z).toBeCloseTo(0, 10);
-    expect(snap.position.x).toBeCloseTo(0.5, 10);
-    // Wall direction (+x): rotation = -atan2(0, 4) = 0.
-    expect(snap.rotation).toBeCloseTo(0, 10);
-    expect(snap.interiorWall).toMatchObject({ x1: -2, z1: 0, x2: 2, z2: 0 });
-  });
-
-  it('insets the snap point so the opening cannot overflow the segment ends', () => {
-    const snap = snapOpeningToWall({
-      position: { x: 2.4, z: 0.05 },
-      itemWidth: 0.9,
-      roomWidth: W,
-      roomDepth: D,
-      interiorWalls: [wall],
-    });
-    expect(snap.wallKind).toBe('interior');
-    // Clamped to segment end minus the half-width inset: 2 − 0.45.
-    expect(snap.position.x).toBeCloseTo(2 - 0.45, 10);
-  });
-
-  it('ignores segments too short to hold the opening', () => {
-    const stub = { id: 's', x1: 0, z1: 0, x2: 0.5, z2: 0 };
-    const snap = snapOpeningToWall({
-      position: { x: 0.2, z: 0.1 },
-      itemWidth: 0.9,
-      roomWidth: W,
-      roomDepth: D,
-      interiorWalls: [stub],
-    });
-    expect(snap.wallKind).toBe('exterior');
-  });
-});
-
-describe('snapWallMountedItem — interior seating side (#123)', () => {
-  const wall = { id: 'iw', x1: -2, z1: 0, x2: 2, z2: 0 };
-
-  it.each([
-    ['cursor on +z side', 0.4, 1],
-    ['cursor on -z side', -0.4, -1],
-  ])('seats the camera on the side the cursor dropped (%s)', (_label, cursorZ, sideSign) => {
-    const snap = snapWallMountedItem({
-      position: { x: 0, z: cursorZ },
-      itemWidth: 0.3,
-      itemDepth: 0.2,
-      roomWidth: W,
-      roomDepth: D,
-      interiorWalls: [wall],
-    });
-    expect(snap.wallKind).toBe('interior');
-    // Inset = depth/2 + 0.02 + interior half-thickness (0.08) = 0.2.
-    expect(snap.position.z).toBeCloseTo(sideSign * 0.2, 10);
   });
 });
 
@@ -258,7 +189,7 @@ describe('snapOpeningToWall — porch recess and ranking (#394)', () => {
   });
 
   it('settles a recess-span opening onto a pier when given the gap', () => {
-    const settled = settleWallMountedItem({ type: 'window', width: 1, depth: 0.1, rotation: 0 }, { x: 0, z: -4 }, W, D, [], frontGap);
+    const settled = settleWallMountedItem({ type: 'window', width: 1, depth: 0.1, rotation: 0 }, { x: 0, z: -4 }, W, D, frontGap);
     expect(Math.abs(settled!.position.x)).toBeCloseTo(1.2, 10);
     expect(settled!.position.z).toBe(-4);
   });
@@ -269,26 +200,5 @@ describe('snapOpeningToWall — porch recess and ranking (#394)', () => {
     expect(snap.position.x).toBeCloseTo(1.55, 10);
     expect(snap.position.z).toBe(2);
     expect(snap.distance).toBeCloseTo(Math.hypot(0.55, 3), 10);
-  });
-});
-
-describe('interiorWallOpeningSpan (#399)', () => {
-  const wall = { x1: 0, z1: 0, x2: 2, z2: 0 };
-
-  it('cuts at the opening’s offset from the wall midpoint', () => {
-    const span = interiorWallOpeningSpan(wall, { width: 0.9, position: { x: 0.8, z: 0.05 } })!;
-    expect(span.centre).toBeCloseTo(-0.2, 10);
-    expect(span.width).toBe(0.9);
-  });
-
-  it('clamps an overhanging opening inside the wall, and a too-wide one to the wall', () => {
-    const span = interiorWallOpeningSpan(wall, { width: 0.9, position: { x: 1.9, z: 0 } })!;
-    expect(span.centre).toBeCloseTo(0.55, 10);
-    expect(interiorWallOpeningSpan(wall, { width: 3, position: { x: 1, z: 0 } })).toEqual({ centre: 0, width: 1.95 });
-  });
-
-  it('cuts nothing for an opening lying entirely past an end', () => {
-    expect(interiorWallOpeningSpan(wall, { width: 0.5, position: { x: 2.3, z: 0 } })).toBeNull();
-    expect(interiorWallOpeningSpan(wall, { width: 0.5, position: { x: -0.3, z: 0 } })).toBeNull();
   });
 });

@@ -48,16 +48,16 @@ describe('use-layout-store — wiring', () => {
     expect(moved?.position).toEqual({ x: 2, z: 2 });
   });
 
-  it('addFloor + setActiveFloorIndex append a floor and switch to it', () => {
-    const { addFloor, setActiveFloorIndex } = layoutStore.getState().actions;
-    const newFloorId = addFloor();
+  it('layout stays a single storey; floor index clamps back to 0', () => {
+    const { setActiveFloorIndex } = layoutStore.getState().actions;
+    const groundId = layoutStore.getState().layout.floors[0]!.id;
 
-    const { layout } = layoutStore.getState();
-    expect(layout.floors).toHaveLength(2);
-    expect(layout.floors[1]!.id).toBe(newFloorId);
-
+    const floors = layoutStore.getState().layout.floors;
+    expect(floors).toHaveLength(1);
+    expect(floors[0]!.id).toBe(groundId);
+    // 读侧楼层切换入口暂留：单层下越界 index 被 reducer clamp 回 0。
     setActiveFloorIndex(1);
-    expect(layoutStore.getState().activeFloorIndex).toBe(1);
+    expect(layoutStore.getState().activeFloorIndex).toBe(0);
   });
 });
 

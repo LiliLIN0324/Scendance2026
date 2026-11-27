@@ -153,7 +153,7 @@ function buildScopeNote(scope: { count: number; names: string[] }): string {
 }
 
 export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element {
-  const { layout, actions, pushColor, activeFloor, activeFloorIndex, history } = useRoomEditor();
+  const { projectId, layout, actions, pushColor, activeFloor, activeFloorIndex, history } = useRoomEditor();
   const { selectedItem: item, extraSelectedIds, allSelectedIds } = useSelection();
   // 名称草稿：与尺寸草稿同一套「回车/失焦才提交」的习惯（#P0-3）
   const [nameDraft, setNameDraft] = useState(item?.name ?? '');
@@ -252,7 +252,7 @@ export function ItemContextPopover(props: ItemContextPopoverProps): JSX.Element 
         </>}
       </section>
       <section><h3>物料尺寸</h3><div className="sc-dimension-grid">
-        {DIMENSIONS.map(dimension => <DimensionInput key={`${layout.id ?? 'local'}:${activeFloor.id}:${item.id}:${dimension.key}:${locked}`}
+        {DIMENSIONS.map(dimension => <DimensionInput key={`${projectId}:${activeFloor.id}:${item.id}:${dimension.key}:${locked}`}
           label={dimension.label} value={item[dimension.key]} min={dimension.min} disabled={locked || structuralSize || entranceSize} onCommit={value => {
             const current = layout.floors[activeFloorIndex]?.items.find(value => value.id === item.id);
             if (!current) throw new Error('所选物料已变化，请重新填写尺寸。');

@@ -17,7 +17,6 @@ function makeFixture() {
       makeItem({ id: 'door-1', type: 'door', name: 'Door', icon: '🚪', width: 0.9, depth: 0.1, position: { x: 0, z: -4 }, rotation: 0 }),
       makeItem({ id: 'win-1', type: 'window', name: 'Window', icon: '🪟', width: 0.9, depth: 0.1, position: { x: 4, z: 0 }, rotation: -Math.PI / 2 }),
     ],
-    interiorWalls: [{ id: 'iw-1', x1: -2, z1: -4, x2: -2, z2: 0 }],
   });
   return { layout: makeLayout({ floors: [floor] }), floor };
 }
@@ -99,10 +98,10 @@ describe('layoutToDxf', () => {
   it('emits door jambs at the recorded span without inventing a swing', () => {
     const { layout, floor } = makeFixture();
     const dxf = layoutToDxf(layout, floor);
-    // 1 partition on WALLS + 2 door jambs + 2 window jambs and 2 window lines.
-    expect(count(dxf, '0\nLINE')).toBe(7);
+    // 2 door jambs + 2 window jambs and 2 window lines.
+    expect(count(dxf, '0\nLINE')).toBe(6);
     expect(count(dxf, '0\nARC')).toBe(0);
-    expect(count(dxf, '8\nWALLS')).toBe(2); // shell polyline + partition
+    expect(count(dxf, '8\nWALLS')).toBe(1); // shell polyline
     expect(count(dxf, '8\nDOORS')).toBe(2); // two jambs
     expect(count(dxf, '8\nWINDOWS')).toBe(4);
     expect(dxf).not.toContain('8\nOPENINGS');

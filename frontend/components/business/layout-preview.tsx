@@ -21,7 +21,7 @@ import { SHARE_VIEW_LABELS, SHARE_VIEW_PRESETS, shareShotFilename, type ShareVie
 import { MaterialSymbol } from '../room-organizer/panels/material-symbol';
 import { acquireWebGLSurface } from '../room-organizer/lib/webgl-context';
 
-/** Mirrors the canvas presets in `use-camera-presets.ts` so the stills match the editor angles. */
+/** Mirrors the canvas presets of the retired `use-camera-presets` (2026-11-25 S1) so the stills match the editor angles. */
 const VIEWS: Record<ShareViewPreset, (size: number) => { position: [number, number, number]; target: [number, number, number] }> = {
   front: size => ({ position: [0, size * 0.4, size * 1.4], target: [0, size * 0.3, 0] }),
   iso: size => ({ position: [size * 0.8, size * 0.9, size * 0.8], target: [0, 0, 0] }),

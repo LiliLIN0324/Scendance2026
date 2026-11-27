@@ -54,7 +54,6 @@ export function layoutActionRisk(base: RoomLayout, next: RoomLayout, label = 'è¿
       const before = old!.items.find(other => other.id === item.id)!;
       return before.type !== item.type || before.assetId !== item.assetId || before.materialId !== item.materialId || before.glbNode !== item.glbNode;
     });
-    if (old && changed(old.interiorWalls, floor.interiorWalls)) { affectedCount++; destructive = true; }
   }
   if (base.width !== next.width || base.height !== next.height) { affectedCount++; destructive = true; }
   if (floors.removed.length) affectedCount += floors.removed.reduce((count, floor) => count + floor.items.length + (floor.zones?.length ?? 0), 0);

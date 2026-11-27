@@ -44,7 +44,7 @@ import type * as ThreeNS from 'three';
  *  - item 被删 → group 脱离场景，tick 顺手把表项摘掉并释放 mixer。
  *
  * 渲染循环每帧调 advancePeopleAnimations；返回活跃数 >0 时调用方置脏，
- * 否则编辑器空闲时照旧整帧早退（render-on-demand，见 use-three-scene tick）。
+ * 否则编辑器空闲时照旧整帧早退（render-on-demand，3D 壳体已退役为 use-dormant-three-shell）。
  */
 
 export interface PersonClips {
@@ -172,9 +172,8 @@ export function setPersonWalkContext(ctx: RouteStepContext | null, owner = 'loca
 }
 
 /**
- * 行走中的人物是动态阴影投影体，静态阴影图必须跟着重算（与 use-npcs 同款
- * 约束）。由 use-scene-effects 注入 requestShadowUpdate；每帧只在真的有人
- * 在走时调用一次。
+ * 行走中的人物是动态阴影投影体，静态阴影图必须跟着重算。由 use-scene-effects
+ * 注入 requestShadowUpdate；每帧只在真的有人在走时调用一次。
  */
 export function setPeopleShadowRefresher(fn: (() => void) | null): void {
   shadowRefresher = fn;

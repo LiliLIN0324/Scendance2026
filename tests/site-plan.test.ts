@@ -430,3 +430,50 @@ describe('site plan price book and quote (2026-11-17)', () => {
     expect(sitePlanDataSchema.safeParse({ ...plan, quote: { projectName: 'x'.repeat(121) } }).success).toBe(false);
   });
 });
+
+describe('site plan ground（B4 底图正源落 plan）', () => {
+  const polygon = [
+    { lng: 120.1413, lat: 30.2489 },
+    { lng: 120.1433, lat: 30.2489 },
+    { lng: 120.1433, lat: 30.2469 },
+  ];
+  const frame = { lng0: 120.1413, lat0: 30.2489, latMid: 30.2479, scale: 1, latSign: -1 as const };
+
+  it('旧快照不带 ground：解析成功且不虚构字段', () => {
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.ground).toBeUndefined();
+  });
+
+  it('带 ground 往返逐字段保留（图 / 透明度 / 定位 / 框 / 图源）', () => {
+    const withGround = {
+      ...samplePlan(),
+      ground: {
+        image: `data:image/png;base64,${'A'.repeat(64)}`,
+        opacity: 0.94,
+        satelliteRef: true,
+        polygon,
+        center: { lng: 120.1423, lat: 30.2479 },
+        frame,
+        source: 'amap-satellite' as const,
+        capturedAt: '2026-11-25T06:00:00.000Z',
+      },
+    };
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(withGround)));
+    expect(restored.ground).toEqual(withGround.ground);
+  });
+
+  it('只有定位没有图也合法（换设备重拼底图）', () => {
+    const located = { ...samplePlan(), ground: { polygon, frame } };
+    expect(sitePlanDataSchema.safeParse(located).success).toBe(true);
+    expect(sitePlanDataSchema.parse(located).ground?.image).toBeUndefined();
+  });
+
+  it('拒绝越界透明度、过短环、未知图源和未知字段', () => {
+    const base = { ...samplePlan() };
+    expect(sitePlanDataSchema.safeParse({ ...base, ground: { opacity: 1.2 } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, ground: { polygon: polygon.slice(0, 2) } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, ground: { source: 'baidu' } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, ground: { imageUrl: 'https://x' } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, ground: { image: 'x'.repeat(8_000_001) } }).success).toBe(false);
+  });
+});

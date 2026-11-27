@@ -1,6 +1,7 @@
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { productionObjectBasis } from '../../../lib/production-plan';
 import { layoutToBackendScene } from './backend-adapter';
+import { legacyGroundOf } from './legacy-ground';
 import type { RoomLayout } from './types';
 import type { Handoff } from '../../../../supabase/functions/_shared/delivery-contract';
 
@@ -25,7 +26,7 @@ export async function handoffBasis(layout: RoomLayout, itemId: string, criteria:
     itemId, type: item.type, materialId: object?.materialId ?? null, assetId: object?.assetId ?? null,
     floorId: floor.id, venue: scene.venue, structure: scene.schemaVersion === 2 ? scene.structure : null,
     venueScan: layout.venueScan ?? null, sceneAnchor: layout.sceneAnchor ?? null,
-    mapGroundPolygon: layout.mapGroundPolygon ?? null, floorPlanImage: layout.floorPlanImage ?? null,
+    mapGroundPolygon: legacyGroundOf(layout).mapGroundPolygon ?? null, floorPlanImage: layout.floorPlanImage ?? null,
     sources: scene.schemaVersion === 2 ? scene.sources : null, dimensions: scene.schemaVersion === 2 ? scene.dimensions : null,
     size: [item.width, item.depth, item.height], color: item.color,
     position: item.position ?? null, rotation: item.rotation ?? 0, elevation: item.elevation ?? 0,

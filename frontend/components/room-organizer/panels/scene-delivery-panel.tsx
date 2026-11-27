@@ -37,6 +37,7 @@ import type { MaterialCheckinState } from '../hooks/use-material-checkins';
 import { summarizeDeliveryGaps, type DeliveryGapGroup } from '../lib/delivery-review';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 import type {PendingCandidateCapture} from '../lib/pending-candidate-registry';
+import { useRoomEditor } from '../contexts/room-editor-context';
 import './scene-delivery-panel.css';
 
 interface Props {
@@ -110,8 +111,10 @@ const REVIEW_GROUPS: { key: DeliveryGapGroup; label: string }[] = [
  * 对话与执行页共用的本机活动资料导出；会话需求尚未完整接入。
  * 调用方负责给出「还是不是当前活动」的判断，导出前后各核对一次。
  */
-export async function exportActivityHandoff({ layout, prepareBackup, stillCurrent = () => true,mobility,captureDialogue }: {
+export async function exportActivityHandoff({ layout, projectId, prepareBackup, stillCurrent = () => true,mobility,captureDialogue }: {
   layout: RoomLayout;
+  /** 当前项目正源编号（context 派生）；不再借备份信封里的 layout.id 反推。 */
+  projectId: string;
   prepareBackup(): Promise<string>;
   stillCurrent?: () => boolean;
   mobility?:MobilityExportCapture|undefined;
@@ -134,7 +137,15 @@ export async function exportActivityHandoff({ layout, prepareBackup, stillCurren
   check();const dialogueSnapshot=dialogue?.project(reference)??null;check();
   const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
   check();
-  let html = await productionPlanHandoffHtml(saved.layout, metadata, ledger, { scope: 'activity', brief: saved.brief });
+  // 读侧合成人数：本机备份已确认 > 对话记录 > 本机未确认 > unknown。
+  // 本机草稿没有真实项目 id 时不读共用的对话桶（否则会把别人的人数当这单的）。
+  const { resolveActivityHeadcount } = await import('../lib/handoff-brief');
+  const headcount = resolveActivityHeadcount({
+    brief: saved.brief,
+    projectId,
+    storage: typeof window === 'undefined' ? null : window.localStorage,
+  });
+  let html = await productionPlanHandoffHtml(saved.layout, metadata, { projectId, scope: 'activity', brief: saved.brief, headcount }, ledger);
   check();
   if(!html.includes('<main>'))throw new Error('交接文件无法核对，未导出。');
   html=html.replace('<main>', `<main>${dialogueSection(dialogueSnapshot)}`);
@@ -224,6 +235,7 @@ function HandoffEditor({ layout, item, status, disabled, onUpdate }: {
 /** Delivery and local execution stay inside the existing Bingo Agent entry point. */
 export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateItem, onLocate, onUpdateEventOperations, onUpdateProductionPlan, briefState, onOpenBrief, backupActions, onBackupRestored, checkins, deliveryViewRequest, activityTaskPanel, captureMobility, captureDialogue, captureLocalDraftExport, capturePendingCandidates }: Props): JSX.Element {
   const cloud = useBackendSession(controller);
+  const { projectId } = useRoomEditor();
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [includeVenueNotes, setIncludeVenueNotes] = useState(false);
   const [packageResult, setPackageResult] = useState<DeliveryPackageResult | null>(null);
@@ -366,7 +378,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       } else if (kind === 'activity' || kind === 'timetable') {
         if (!backupActions) throw new Error('当前工作台尚未准备完整活动资料，未生成交接文件。');
         if (kind === 'activity') {
-          setNotice(await exportActivityHandoff({ layout: before.layout, prepareBackup: () => backupActions.prepareBackup(), stillCurrent,...(mobility?{mobility}:{}),...(captureDialogue?{captureDialogue}:{}) }));
+          setNotice(await exportActivityHandoff({ layout: before.layout, projectId, prepareBackup: () => backupActions.prepareBackup(), stillCurrent,...(mobility?{mobility}:{}),...(captureDialogue?{captureDialogue}:{}) }));
         } else {
           const { parseLocalProjectBackupJson } = await import('@/lib/local-project-backup');
           if (!stillCurrent()) return;
@@ -386,7 +398,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       } else if (kind === 'production') {
         const { productionPlanHandoffHtml } = await import('@/lib/production-plan-export');
         if (!stillCurrent()) return;
-        const html = await productionPlanHandoffHtml(layout, metadata, before.checkins);
+        const html = await productionPlanHandoffHtml(layout, metadata, { projectId }, before.checkins);
         if (!stillCurrent()) return;
         downloadSceneDelivery(html, 'text/html;charset=utf-8', `${layout.name}_内部制作交接_${metadata.id}`, 'html');
         setNotice('内部制作交接单已导出，可在浏览器打开并打印。请核对未确定的人员、供应方和费用。');

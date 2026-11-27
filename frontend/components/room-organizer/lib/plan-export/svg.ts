@@ -17,7 +17,6 @@ import {
   planExportUnsupportedReason,
   unplacedPlanItems,
   gridLinePositions,
-  INTERIOR_WALL_THICKNESS_M,
   isWallHidden,
   planBounds,
   splitPlanItems,
@@ -37,7 +36,6 @@ export interface SvgPlanTheme {
   grid: string;
   wall: string;
   hiddenWall: string;
-  interiorWall: string;
   furnitureStroke: string;
   label: string;
   /** Secondary type: overall size, zone area, scale caption. */
@@ -79,7 +77,6 @@ const DEFAULT_THEME: SvgPlanTheme = {
   grid: '#E4E4E7',
   wall: '#141416',
   hiddenWall: '#A6AAB2',
-  interiorWall: '#55585F',
   furnitureStroke: '#141416',
   label: '#141416',
   muted: '#71767E',
@@ -171,7 +168,6 @@ export function layoutToSvg(layout: RoomLayout, floor: FloorLayout, options: Svg
     renderGrid(layout, margin, scale, theme),
     renderZones(floor, px, py, scale, theme, layers.roomLabels),
     renderRoomOutline(layout, floor, margin, scale, theme, layers.walls),
-    renderInteriorWalls(floor, px, py, scale, theme, layers.walls),
     renderStairwellHoles(layout, floor, px, py, theme, layers.stairs),
     ...openings
       .filter((item) => (item.type === 'door' ? layers.doors : layers.windows))
@@ -309,24 +305,6 @@ function renderZones(
       ].join('');
     })
     .join('\n');
-}
-
-function renderInteriorWalls(
-  floor: FloorLayout,
-  px: (x: number) => string,
-  py: (z: number) => string,
-  scale: number,
-  theme: SvgPlanTheme,
-  showWalls: boolean
-): string {
-  const walls = floor.interiorWalls ?? [];
-  if (!showWalls || walls.length === 0) return '';
-  const width = fmt(Math.max(2, INTERIOR_WALL_THICKNESS_M * scale));
-  const lines = walls.map(
-    (wall) =>
-      `<line class="interior-wall" data-layer="WALLS" x1="${px(wall.x1)}" y1="${py(wall.z1)}" x2="${px(wall.x2)}" y2="${py(wall.z2)}" stroke="${theme.interiorWall}" stroke-width="${width}" stroke-linecap="butt"/>`
-  );
-  return lines.join('\n');
 }
 
 /**

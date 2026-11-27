@@ -344,3 +344,36 @@ it('A7 锁定态拖顶点：图层锁拦截，提示先解锁，不提交', () =
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(BASE);
   expect(screen.getAllByRole('status').map(node => node.textContent ?? '').join(' | ')).toMatch(/已锁定.*解锁/);
 });
+
+/** B4（2026-11-25）：贴地底图正源写 plan.ground，不进撤销栈。 */
+const GROUND = {
+  image: 'data:image/jpeg;base64,AAAA',
+  opacity: 0.94,
+  satelliteRef: true,
+  polygon: [
+    { lng: 120.1413, lat: 30.2489 }, { lng: 120.1433, lat: 30.2489 },
+    { lng: 120.1433, lat: 30.2469 }, { lng: 120.1413, lat: 30.2469 },
+  ],
+  center: { lng: 120.1423, lat: 30.2479 },
+  frame: { lng0: 120.1413, lat0: 30.2489, latMid: 30.2479, scale: 1, latSign: -1 as const },
+  source: 'amap-satellite' as const,
+};
+
+it('B4 applyGround：写进 plan.ground 并通知父级，撤销栈不变', () => {
+  const { ref, commit } = mount();
+  const undoBefore = ref.current!.canUndo();
+  act(() => {
+    expect(ref.current!.applyGround(GROUND)).toBe(true);
+  });
+  expect(ref.current!.getEditVisuals().plan.ground).toEqual(GROUND);
+  expect(commit).toHaveBeenCalledTimes(1);
+  expect(ref.current!.canUndo()).toBe(undoBefore);
+});
+
+it('B4 applyGround：同样的 ground 再来一次返回 false，不重复提交', () => {
+  const { ref, commit } = mount();
+  act(() => { expect(ref.current!.applyGround(GROUND)).toBe(true); });
+  act(() => { expect(ref.current!.applyGround({ ...GROUND })).toBe(false); });
+  expect(commit).toHaveBeenCalledTimes(1);
+  expect(ref.current!.getEditVisuals().plan.ground).toEqual(GROUND);
+});

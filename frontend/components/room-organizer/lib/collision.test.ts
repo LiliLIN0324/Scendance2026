@@ -4,63 +4,6 @@ import { floorKeepOut, stairwellKeepOut } from './floor-keep-out';
 import { autoOrganize, hasCollisions, itemsOverlap } from './geometry';
 import type { FloorLayout } from './types';
 
-describe('hasCollisions — interior walls (#368)', () => {
-  const W = 10;
-  const D = 10;
-  const walls = [{ id: 'w', x1: -3, z1: 0, x2: 3, z2: 0 }];
-  const sofa = (position: { x: number; z: number }) =>
-    makeItem({ id: 'sofa', type: 'sofa', width: 2, depth: 0.9, height: 0.8, position });
-
-  it('flags floor furniture straddling a partition, and only with the walls passed', () => {
-    const straddling = sofa({ x: 0, z: 0 });
-    expect(hasCollisions(straddling, [straddling], W, D)).toBe(false);
-    expect(hasCollisions(straddling, [straddling], W, D, { interiorWalls: walls })).toBe(true);
-    // Flush against the 0.16 m slab (0.08 + 0.45) is clear; past its end too.
-    const flush = sofa({ x: 0, z: 0.53 });
-    expect(hasCollisions(flush, [flush], W, D, { interiorWalls: walls })).toBe(false);
-    const beyondEnd = sofa({ x: 4, z: 0 });
-    expect(hasCollisions(beyondEnd, [beyondEnd], W, D, { interiorWalls: walls })).toBe(false);
-  });
-
-  it('tests rotated items against diagonal walls as oriented boxes', () => {
-    const diagonal = [{ id: 'd', x1: -3, z1: -3, x2: 3, z2: 3 }];
-    const near = makeItem({ id: 'a', width: 0.5, depth: 0.5, height: 0.8, position: { x: 0.3, z: 0 } });
-    expect(hasCollisions(near, [near], W, D, { interiorWalls: diagonal })).toBe(true);
-    const clear = makeItem({ id: 'b', width: 0.5, depth: 0.5, height: 0.8, position: { x: 1, z: -1 } });
-    expect(hasCollisions(clear, [clear], W, D, { interiorWalls: diagonal })).toBe(false);
-    // A bar turned parallel to the wall, 0.57 m off it, is clear; turned across it is not.
-    const parallel = makeItem({
-      id: 'c',
-      width: 2,
-      depth: 0.2,
-      height: 0.8,
-      rotation: -Math.PI / 4,
-      position: { x: 0.4, z: -0.4 },
-    });
-    expect(hasCollisions(parallel, [parallel], W, D, { interiorWalls: diagonal })).toBe(false);
-    const across = { ...parallel, rotation: Math.PI / 4 };
-    expect(hasCollisions(across, [across], W, D, { interiorWalls: diagonal })).toBe(true);
-  });
-
-  it('honours the gap a door cuts in its wall', () => {
-    const door = makeItem({ id: 'door', type: 'door', width: 1, depth: 0.1, height: 2.05, position: { x: 0, z: 0 } });
-    const inGap = makeItem({ id: 'chair', width: 0.6, depth: 0.6, height: 0.8, position: { x: 0, z: 0 } });
-    expect(hasCollisions(inGap, [door, inGap], W, D, { interiorWalls: walls })).toBe(false);
-    expect(hasCollisions(inGap, [inGap], W, D, { interiorWalls: walls })).toBe(true);
-    const besideGap = { ...inGap, position: { x: 1.5, z: 0 } };
-    expect(hasCollisions(besideGap, [door, besideGap], W, D, { interiorWalls: walls })).toBe(true);
-  });
-
-  it('exempts rugs, wall-hung decor and wall-plane items', () => {
-    const rug = makeItem({ id: 'rug', type: 'rug', width: 2, depth: 2, height: 0.02, position: { x: 0, z: 0 } });
-    expect(hasCollisions(rug, [rug], W, D, { interiorWalls: walls })).toBe(false);
-    const painting = makeItem({ id: 'p', type: 'painting', width: 0.8, depth: 0.05, height: 0.6, position: { x: 0, z: 0.1 } });
-    expect(hasCollisions(painting, [painting], W, D, { interiorWalls: walls })).toBe(false);
-    const window = makeItem({ id: 'win', type: 'window', width: 1, depth: 0.1, height: 1.2, position: { x: 1, z: 0 } });
-    expect(hasCollisions(window, [window], W, D, { interiorWalls: walls })).toBe(false);
-  });
-});
-
 describe('hasCollisions — stairwell holes (#372)', () => {
   const W = 10;
   const D = 10;

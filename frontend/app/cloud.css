@@ -41,6 +41,12 @@
 .sc-file-card.is-current{border-color:var(--hair,var(--wk-hair));box-shadow:none}
 .sc-file-card.is-draft .sc-file-thumb{background:var(--plane,var(--wk-plane))}
 .sc-file-card.is-new{border-style:dashed;background:transparent}
+/* 2026-11-24（B1/P2）：回读失效的云卡折在「失效」区，置灰但保留可读信息，不当作可打开项。 */
+.sc-file-card.is-invalid{opacity:.72}
+.sc-file-card.is-invalid:hover{border-color:var(--sc-line)}
+.sc-file-card.is-invalid .sc-file-state{border-color:var(--sc-line);color:var(--sc-muted)}
+.sc-account-invalid{margin-top:18px;padding-top:10px;border-top:1px solid var(--sc-line)}
+.sc-account-invalid>summary{cursor:pointer;color:var(--sc-muted);font-size:12px;user-select:none}
 .sc-cloud-dialog button.sc-file-hit{display:grid;grid-template-rows:auto 1fr;align-items:stretch;width:100%;min-width:0;margin:0;padding:0;border:0;border-radius:12px;background:transparent;box-shadow:none;text-align:left;color:inherit;cursor:pointer;overflow:hidden}
 .sc-cloud-dialog button.sc-file-hit:disabled{opacity:1;cursor:default;background:transparent;color:inherit}
 .sc-file-thumb{position:relative;display:grid;place-items:center;height:120px;background:var(--wk-plane);color:var(--sc-muted);overflow:hidden;border-radius:12px 12px 0 0}

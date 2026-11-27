@@ -97,9 +97,7 @@ describe('scene layers', () => {
     expect(await handoffBasis(store.getState().layout,item.id,handoff)).toBe(handoff.reviewedBasis);
     expect(await effectiveHandoffStatus(store.getState().layout, item.id)).toBe('needs_review');
     store.getState().actions.removeItem(item.id);
-    const saved = serializeLocalProjectBackupV3(store.getState().layout,
-      { state: 'ready', scope: base.id, brief: { status: 'absent' } },
-      { state: 'ready', scope: base.id, materialCheckins: { status: 'absent' } });
+    const saved = serializeLocalProjectBackupV3(store.getState().layout, { state: 'ready', scope: base.id, brief: { status: 'absent' } }, { state: 'ready', scope: base.id, materialCheckins: { status: 'absent' } }, { projectId: store.getState().layout.id! });
     const restored = switchDesign(parseLocalProjectBackupJson(saved).layout, 'original');
     expect(restored.floors[0]!.items[0]!.handoff).toEqual(handoff);
     expect(await handoffBasis(restored,item.id,handoff)).not.toBe(handoff.reviewedBasis);

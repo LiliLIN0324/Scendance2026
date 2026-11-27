@@ -19,7 +19,7 @@ export function countSingleSeats(layout: RoomLayout | undefined, floorIndex: num
     const halfDepth = (width * sin + depth * cos) / 2;
     const within = Math.abs(position.x) + halfWidth <= layout!.width / 2 + 1e-9 &&
       Math.abs(position.z) + halfDepth <= layout!.height / 2 + 1e-9;
-    if (!within || structuralItemCollides(item, layout!, floorIndex) || hasCollisions(item, floor.items.filter(other => !other.position || (Number.isFinite(other.position.x) && Number.isFinite(other.position.z))), layout!.width, layout!.height, { interiorWalls: floor.interiorWalls })) return false;
+    if (!within || structuralItemCollides(item, layout!, floorIndex) || hasCollisions(item, floor.items.filter(other => !other.position || (Number.isFinite(other.position.x) && Number.isFinite(other.position.z))), layout!.width, layout!.height, {})) return false;
     return !floor.items.some(other => other !== item && other.position && Number.isFinite(other.position.x) && Number.isFinite(other.position.z) &&
       Number.isFinite(other.width) && other.width > 0 && Number.isFinite(other.depth) && other.depth > 0 &&
       Number.isFinite(other.rotation ?? 0) && Number.isFinite(other.height) && !isLowProfile(other) && itemsOverlap(item, other));

@@ -80,7 +80,6 @@ export function useItemPlacement({
           itemWidth: item.width,
           roomWidth,
           roomDepth,
-          interiorWalls: activeFloor.interiorWalls ?? [],
           ...gap,
         });
         return snapped.position;
@@ -98,7 +97,7 @@ export function useItemPlacement({
         };
       }
       if (view.snapToItems && item) {
-        // Same membership as use-item-drag's session: locked co-selected
+        // Same membership as the retired drag session: locked co-selected
         // items stay put, so they remain valid targets.
         const group =
           allSelectedIds && allSelectedIds.size > 1 && allSelectedIds.has(itemId)
@@ -132,7 +131,6 @@ export function useItemPlacement({
       gridSizeM,
       activeFloor.items,
       layout,
-      activeFloor.interiorWalls,
       allSelectedIds,
       gap,
       roomWidth,
@@ -144,7 +142,7 @@ export function useItemPlacement({
 
   /**
    * Add an item from the catalog. For doors and windows, the requested
-   * position is force-snapped to the nearest wall (exterior or interior)
+   * position is force-snapped to the nearest exterior wall
    * and a default rotation aligned with that wall is applied — these
    * openings only make sense embedded in a wall.
    */
@@ -164,7 +162,6 @@ export function useItemPlacement({
           itemWidth: catalogItem.width,
           roomWidth,
           roomDepth,
-          interiorWalls: activeFloor.interiorWalls ?? [],
           ...gap,
         });
         const id = actions.addCatalogItem(catalogItem, snapped.position);
@@ -180,7 +177,6 @@ export function useItemPlacement({
           itemDepth: catalogItem.depth,
           roomWidth,
           roomDepth,
-          interiorWalls: activeFloor.interiorWalls ?? [],
           ...gap,
         });
         const id = actions.addCatalogItem(catalogItem, snapped.position);
@@ -211,7 +207,7 @@ export function useItemPlacement({
         others: activeFloor.items,
         roomWidth,
         roomDepth,
-        context: { interiorWalls: activeFloor.interiorWalls ?? [] },
+        context: {},
       });
       if (!resolved) return '';
       const candidateItem = { ...catalogItem, id: '__placement_preview__', position: resolved, rotation: 0 };

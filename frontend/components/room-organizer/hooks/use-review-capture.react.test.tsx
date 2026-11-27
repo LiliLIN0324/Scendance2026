@@ -15,10 +15,10 @@ function fixture(){
   const layout=makeLayout({id:'review-capture',roof:{style:'none'}}),view=makeViewSettings({view2D:true});
   const canvas=document.createElement('canvas');canvas.toDataURL=vi.fn(()=>png);
   const source={scope:layout.id!,revision:'epoch:1'};
-  const snapshot=createProjectReviewSnapshot({layout,source,briefSnapshot:{state:'ready',scope:source.scope,brief:{status:'absent'}},
+  const snapshot=createProjectReviewSnapshot({layout,projectId:source.scope,source,briefSnapshot:{state:'ready',scope:source.scope,brief:{status:'absent'}},
     snapshot:{id:'capture-1',generatedAt:'2026-10-08T00:00:00Z'},dataState:'unsaved-draft',dataKind:'unspecified',disclosure:{brief:false,design:false}});
   const inputs:Parameters<typeof useReviewCapture>[0]={layout,getLayout:()=>layout,view,activeFloorIndex:0,
-    ready:true,peopleReady:true,selectedItemId:null,extraSelectedIds:new Set(),hasCollision:()=>false,
+    ready:true,selectedItemId:null,extraSelectedIds:new Set(),hasCollision:()=>false,
     canvas:{current:canvas},canvas2D:{current:canvas},scene:{current:new THREE.Scene()},renderer:{current:null},camera:{current:null},
     pendingPreview:false,isInteracting:()=>false};
   return {inputs,source,snapshot,canvas};
@@ -100,6 +100,18 @@ describe('editor review capture binding',()=>{
     await expect(result.current(f.snapshot,{includeReference:false},()=>f.source)).rejects.toThrow('参考图');
     await result.current(f.snapshot,{includeReference:true},()=>f.source);
     expect(render2DTopDown).toHaveBeenCalledWith(expect.objectContaining({showFloorPlan:true}));
+  });
+  it('以 plan.ground 当评审底图：layout 那份镜像删掉后仍等待解码并带上正源',async()=>{
+    const f=fixture();
+    const {floorPlanImage:_image,...layoutWithoutMirror}=f.inputs.layout;
+    f.inputs.layout=layoutWithoutMirror as typeof f.inputs.layout;
+    f.inputs.getLayout=()=>f.inputs.layout;
+    f.inputs.ground={image:png,opacity:0.94,satelliteRef:true,polygon:undefined,center:undefined,frame:undefined,source:'plan'};
+    const {result}=renderHook(()=>useReviewCapture(f.inputs));
+    const captured=await result.current(f.snapshot,{includeReference:true},()=>f.source);
+    expect(ensureFloorPlanImageDecoded).toHaveBeenCalledWith(png);
+    expect(render2DTopDown).toHaveBeenCalledWith(expect.objectContaining({ground:expect.objectContaining({image:png})}));
+    expect(captured.dataUrl).toBe(png);
   });
   it('does not finish capture after unmount',async()=>{
     const f=fixture(),{result,unmount}=renderHook(()=>useReviewCapture(f.inputs));

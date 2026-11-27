@@ -81,7 +81,7 @@ describe('SpacePanel', () => {
       meters: { width: 12.4, depth: 8.6, height: 4.2 },
     }));
     // 演示场景仍留在环境切换里，不混进真实场地列表。
-    expect(screen.queryByLabelText(/应用真实场地 .*宴会厅 A/)).toBeNull();
+    expect(screen.queryByLabelText(/应用真实场地 .*小场地 A/)).toBeNull();
   });
 
   // 2026-11-19 用户：「实景扫描的卡片也做成多个卡片的形式」——多场并排成 2 列卡网，

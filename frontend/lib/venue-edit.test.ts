@@ -243,7 +243,7 @@ describe('manual venue editing with a fixed metre origin', () => {
     const next = preview(), wire = layoutToBackendScene(next);
     const reopened = parseStoredLayout(JSON.parse(JSON.stringify(next)));
     expect(reopened).not.toBeNull(); expect(layoutToBackendScene(reopened!)).toEqual(wire);
-    const text = serializeLocalProjectBackup(next, { state: 'ready', scope: id(50), brief: { status: 'absent' } }, '2026-10-08T00:00:00.000Z');
+    const text = serializeLocalProjectBackup(next, { state: 'ready', scope: id(50), brief: { status: 'absent' } }, { projectId: next.id! }, '2026-10-08T00:00:00.000Z');
     const restored = parseLocalProjectBackupJson(text);
     expect(restored.layoutWasRepaired).toBe(false);
     expect(layoutToBackendScene(restored.layout)).toEqual(wire);

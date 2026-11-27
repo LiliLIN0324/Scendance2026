@@ -6,6 +6,7 @@ import { floorKeepOut } from '../lib/floor-keep-out';
 import { hasCollisions } from '../lib/geometry';
 import { planFloorIndex } from '../lib/street';
 import type { FloorLayout, RoomLayout } from '../lib/types';
+import type { ResolvedGround } from '../lib/plan-ground';
 import type { CSSProperties } from 'react';
 
 /**
@@ -38,6 +39,11 @@ export interface PlanThumbProps {
    */
   showFloorPlan?: boolean;
   /**
+   * 贴地正源（S2 批 4）：底图/不透明度优先读它，缺字段回退 layout 旧缓存。
+   * 缩略图默认不传——历史列表/恢复入口手上没有 plan，给不给都与改前等价。
+   */
+  ground?: ResolvedGround | null | undefined;
+  /**
    * Paint on mount instead of when scrolled into view. For always-visible
    * consumers such as the minimap.
    */
@@ -62,6 +68,7 @@ export function PlanThumb({
   padding = THUMB_PADDING,
   selectedItemId = null,
   showFloorPlan = false,
+  ground = null,
   eager = false,
   className,
   style,
@@ -122,7 +129,8 @@ export function PlanThumb({
         showMeasurements: false,
         showWiFiSignals: false,
         hasCollision: (item) =>
-          hasCollisions(item, shown.items, building.width, building.height, { keepOut, interiorWalls: shown.interiorWalls }),
+          hasCollisions(item, shown.items, building.width, building.height, { keepOut }),
+        ...(ground ? { ground } : {}),
         padding,
       });
     };
@@ -130,7 +138,7 @@ export function PlanThumb({
     // Repaint when an async floor-plan decode lands — the minimap renders in
     // 3D view where the 2D view's handler isn't registered (#118).
     return showFloorPlan ? addFloorPlanRepaintHandler(paint) : undefined;
-  }, [visible, layout, floor, width, height, padding, selectedItemId, showFloorPlan]);
+  }, [visible, layout, floor, width, height, padding, selectedItemId, showFloorPlan, ground]);
 
   return (
     // CSS size is pinned here; the paint effect sizes the backing store to

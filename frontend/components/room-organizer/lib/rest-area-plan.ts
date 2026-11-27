@@ -46,7 +46,7 @@ export function proposeRestArea(layout: RoomLayout, floorIndex: number): RestAre
       position: { x: entrance.position.x - width / 2, z: entrance.position.z - depth / 2 }, width: entrance.width,
     })),
   ];
-  const context = { keepOut: floorKeepOut(layout, floorIndex), interiorWalls: floor.interiorWalls ?? [] };
+  const context = { keepOut: floorKeepOut(layout, floorIndex) };
   for (let z = minZ; z <= maxZ + 1e-8; z += step) {
     for (let x = minX; x <= maxX + 1e-8; x += step) {
       const rect = { x: x - REST_WIDTH / 2, z: z - REST_DEPTH / 2, w: REST_WIDTH, d: REST_DEPTH };

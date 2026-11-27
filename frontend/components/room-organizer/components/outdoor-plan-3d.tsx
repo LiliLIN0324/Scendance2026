@@ -264,6 +264,44 @@ function addDraftOverlay(
 /** 从正上方向南侧斜看：北朝屏幕里，和 2D 地图上北下南一致。 */
 const MAP_TILT_POLAR = (58 * Math.PI) / 180;
 const MAP_TILT_MS = 650;
+// 场地点云挂点未就绪时的有界重试：短间隔、有限次；不新起轮询器，不无限重试。
+const VENUE_SPLAT_READY_RETRY_MAX = 5;
+const VENUE_SPLAT_READY_RETRY_MS = 120;
+// dev-only 探针：console / localStorage / window 全局键 / 角标同源；生产构建整体不出现。
+const PROBE_STORAGE_KEY = 'scendance:3d-probe';
+const PROBE_WINDOW_KEY = '__venueSplatProbe';
+
+type VenueSplatProbeStatus = 'idle' | 'loading' | 'ready' | 'error';
+type VenueSplatProbeBits = Readonly<{
+  scene: boolean | null;
+  scan: boolean;
+  splat: VenueSplatProbeStatus;
+}>;
+
+function venueSplatProbeRecord(patch: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === 'production') return;
+  let previous: Record<string, unknown> = {};
+  try {
+    const raw = window.localStorage.getItem(PROBE_STORAGE_KEY);
+    previous = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+  } catch {
+    previous = {};
+  }
+  const record = { ...previous, ...patch, ts: Date.now() };
+  let windowKey: 'ok' | 'blocked' = 'ok';
+  try {
+    (window as unknown as Record<string, unknown>)[PROBE_WINDOW_KEY] = record;
+  } catch {
+    // 全局键不可写时不影响 localStorage / console 通道。
+    windowKey = 'blocked';
+  }
+  const out = windowKey === 'ok' ? record : { ...record, windowKey };
+  try {
+    window.localStorage.setItem(PROBE_STORAGE_KEY, JSON.stringify(out));
+  } catch {
+    // 存储不可用（隐私模式等）不影响另外两条通道。
+  }
+}
 
 function cameraPose(target: THREE.Vector3, span: number, polar: number, fovDeg: number): THREE.Vector3 {
   const dist = (span * 0.55) / Math.tan((fovDeg * Math.PI) / 360);
@@ -465,6 +503,8 @@ export default function OutdoorPlan3D({
   const viewModeRef = useRef(viewMode);
   viewModeRef.current = viewMode;
   const [walkCanvas, setWalkCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [probeBits, setProbeBits] = useState<VenueSplatProbeBits>({ scene: null, scan: false, splat: 'idle' });
+  const probeProgressRef = useRef<{ progress: number | undefined; bytes: number | undefined }>({ progress: undefined, bytes: undefined });
   const walkChooserRef = useRef<HTMLDialogElement>(null);
   const [walkActors, setWalkActors] = useState<WalkActor[]>([]);
   /** 接管面板只列用户自己放的人：派生路人（`plan-crowd-route:`）是示意用的，不能拿来当化身。 */
@@ -548,12 +588,26 @@ export default function OutdoorPlan3D({
   const venueSplatApiRef = useRef<{ start(request: VenueSplatRequest): void; dispose(): void } | null>(null);
   const scanRef = useRef(scan);
   scanRef.current = scan;
+  const splatReadyAttemptRef = useRef(0);
   const onScanStateRef = useRef(onScanState);
   onScanStateRef.current = onScanState;
-  const disposeVenueSplat = useCallback((): void => {
+  const disposeVenueSplat = useCallback((disposeTag: 'main-cleanup' | 'api-dispose' = 'main-cleanup'): void => {
     const entry = venueSplatRef.current;
-    if (!entry) return;
+    if (!entry) {
+      if (process.env.NODE_ENV !== 'production') {
+        venueSplatProbeRecord({ step: 'disposed', disposeTag, hadPreview: false });
+      }
+      return;
+    }
     venueSplatRef.current = null;
+    if (process.env.NODE_ENV !== 'production') {
+      venueSplatProbeRecord({
+        step: 'disposed',
+        disposeTag,
+        hadPreview: true,
+        shownId: entry.preview?.shownId ?? null,
+      });
+    }
     // 解码出来的 GPU 资源不会随场景 traverse 走，要显式释放。
     try {
       entry.preview?.dispose();
@@ -2051,7 +2105,18 @@ export default function OutdoorPlan3D({
     // 预览器要 renderer + camera + 环绕控制器，所以等 controls 建好再起。
     // 一个预览器同一时刻只挂一份，因此只起第一块（场地那块）实景扫描。
     const startVenueSplat = (request: VenueSplatRequest): void => {
-      if (!renderer || !controls) return;
+      if (!renderer || !controls) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[venue-splat] 预览器挂点缺 renderer/controls：', {
+            renderer: !renderer,
+            controls: !controls,
+            assetId: request.assetId,
+          });
+          venueSplatProbeRecord({ step: 'guard-b', missing: { renderer: !renderer, controls: !controls }, scanAssetId: request.assetId });
+          setProbeBits(bits => ({ ...bits, splat: 'error' }));
+        }
+        return;
+      }
       const { patch, outline, assetId, url, name, world } = request;
       const preview = createSplatPreview({
         renderer,
@@ -2066,6 +2131,9 @@ export default function OutdoorPlan3D({
       });
       const asset = findAholoAsset(assetId);
       onScanState?.({ assetId, name, status: 'loading', ...(asset?.meters ? { meters: asset.meters } : {}) });
+      probeProgressRef.current = { progress: undefined, bytes: asset?.bytes };
+      setProbeBits(bits => ({ ...bits, scan: true, splat: 'loading' }));
+      venueSplatProbeRecord({ step: 'start', scanAssetId: assetId, url, bytes: asset?.bytes });
       const calibration = readSiteCalibration(assetId) ?? defaultSiteCalibration(assetId);
       // 落点口径与 patch / outline 同一条链路（壳体 → three 世界）。
       const target = new THREE.Vector3(world.x, 0, world.z);
@@ -2097,6 +2165,7 @@ export default function OutdoorPlan3D({
             ...(ratio === undefined ? {} : { progress: ratio }),
             ...(asset?.meters ? { meters: asset.meters } : {}),
           });
+          probeProgressRef.current.progress = ratio;
           if (typeof requestAnimationFrame === 'function') requestAnimationFrame(emit);
           else emit();
         },
@@ -2132,6 +2201,8 @@ export default function OutdoorPlan3D({
           // 高斯重建起来了就把地面轮廓收掉，避免两层标记叠着。
           patch.visible = false;
           outline.visible = false;
+          setProbeBits(bits => ({ ...bits, splat: 'ready' }));
+          venueSplatProbeRecord({ step: 'ready', scanAssetId: assetId, splats: result.splats, meters: result.meters, progress: probeProgressRef.current.progress });
           onScanState?.({ assetId, name, status: 'ready', meters: result.meters, ...(result.walkBounds ? { walkBounds: result.walkBounds } : {}) });
         })
         .catch((error: unknown) => {
@@ -2139,13 +2210,15 @@ export default function OutdoorPlan3D({
           preview.dispose();
           const entry = venueSplatRef.current;
           if (entry?.preview === preview) entry.preview = null;
+          setProbeBits(bits => ({ ...bits, splat: 'error' }));
+          venueSplatProbeRecord({ step: 'error', scanAssetId: assetId, disposeTag: 'catch', error: error instanceof Error ? error.message : String(error) });
           onScanState?.({
             assetId, name, status: 'error',
             ...(error instanceof Error ? { error: error.message } : {}),
           });
         });
     };
-    venueSplatApiRef.current = { start: startVenueSplat, dispose: disposeVenueSplat };
+    venueSplatApiRef.current = { start: startVenueSplat, dispose: () => disposeVenueSplat('api-dispose') };
     // 当前扫描由独立 effect 按「扫描 + 落点」挂（见下），这里只起 2D 落点派生的场景物件。
     if (!scan) splatRequests.slice(0, 1).forEach(startVenueSplat);
 
@@ -3107,7 +3180,7 @@ export default function OutdoorPlan3D({
     renderer?.domElement.removeEventListener('contextmenu', onContextMenu);
       // 高斯重建预览器要显式释放：解码出来的 GPU 资源不会随场景 traverse 走。
       venueSplatApiRef.current = null;
-      disposeVenueSplat();
+      disposeVenueSplat('main-cleanup');
       controls?.dispose();
       cameraRef.current = null;
       controlsRef.current = null;
@@ -3174,37 +3247,100 @@ export default function OutdoorPlan3D({
     const api = venueSplatApiRef.current;
     const scene = sceneRef.current;
     const current = scanRef.current;
-    if (!api || !scene || !current) return undefined;
-    // 注册表里可能根本没有这条（扫描是别的机器落的盘），那就直接问本机代理要。
-    const localUrl = `${DIRECT_BASE}/asset/${current.assetId}.spz`;
-    const url = current.assetId.startsWith('shipped-')
-      ? storedAholoSceneSource(current.assetId).url
-      : resolveAholoAssetUrl(current.assetId) ?? localUrl;
-    const width = Math.max(0.5, current.meters?.width ?? 12);
-    const depth = Math.max(0.5, current.meters?.depth ?? 9);
-    const patch = new THREE.Mesh(
-      new THREE.PlaneGeometry(width, depth),
-      new THREE.MeshBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.12 }),
-    );
-    patch.rotation.x = -Math.PI / 2;
-    patch.position.set(current.x, 0.015, current.z);
-    patch.name = 'plan-scan-patch';
-    const outline = new THREE.LineLoop(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-width / 2, 0, -depth / 2),
-        new THREE.Vector3(width / 2, 0, -depth / 2),
-        new THREE.Vector3(width / 2, 0, depth / 2),
-        new THREE.Vector3(-width / 2, 0, depth / 2),
-      ]),
-      new THREE.LineBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.9 }),
-    );
-    outline.position.set(current.x, 0.03, current.z);
-    outline.name = 'plan-scan-outline';
-    // 占位标记直接挂世界系：sceneLayer 带场地中心平移，用世界坐标会偏一个场地。
-    scene.add(patch);
-    scene.add(outline);
-    api.start({ patch, outline, assetId: current.assetId, url, name: current.name, world: { x: current.x, z: current.z } });
-    return () => { api.dispose(); };
+    splatReadyAttemptRef.current = 0;
+    let retryTimer: number | undefined;
+    let startedApi: { start(request: VenueSplatRequest): void; dispose(): void } | null = null;
+
+    const mountVenueSplat = (
+      readyApi: NonNullable<typeof api>,
+      readyScene: NonNullable<typeof scene>,
+      readyScan: NonNullable<typeof current>,
+    ): void => {
+      // 注册表里可能根本没有这条（扫描是别的机器落的盘），那就直接问本机代理要。
+      const localUrl = `${DIRECT_BASE}/asset/${readyScan.assetId}.spz`;
+      const url = readyScan.assetId.startsWith('shipped-')
+        ? storedAholoSceneSource(readyScan.assetId).url
+        : resolveAholoAssetUrl(readyScan.assetId) ?? localUrl;
+      const width = Math.max(0.5, readyScan.meters?.width ?? 12);
+      const depth = Math.max(0.5, readyScan.meters?.depth ?? 9);
+      const patch = new THREE.Mesh(
+        new THREE.PlaneGeometry(width, depth),
+        new THREE.MeshBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.12 }),
+      );
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(readyScan.x, 0.015, readyScan.z);
+      patch.name = 'plan-scan-patch';
+      const outline = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-width / 2, 0, -depth / 2),
+          new THREE.Vector3(width / 2, 0, -depth / 2),
+          new THREE.Vector3(width / 2, 0, depth / 2),
+          new THREE.Vector3(-width / 2, 0, depth / 2),
+        ]),
+        new THREE.LineBasicMaterial({ color: '#c0392b', transparent: true, opacity: 0.9 }),
+      );
+      outline.position.set(readyScan.x, 0.03, readyScan.z);
+      outline.name = 'plan-scan-outline';
+      // 占位标记直接挂世界系：sceneLayer 带场地中心平移，用世界坐标会偏一个场地。
+      readyScene.add(patch);
+      readyScene.add(outline);
+      readyApi.start({ patch, outline, assetId: readyScan.assetId, url, name: readyScan.name, world: { x: readyScan.x, z: readyScan.z } });
+      startedApi = readyApi;
+      if (process.env.NODE_ENV !== 'production') {
+        setProbeBits(bits => ({ scene: readyScene !== null, scan: readyScan !== null, splat: bits.splat }));
+        venueSplatProbeRecord({ step: 'mounted', scanAssetId: readyScan.assetId, scene: true, scan: true });
+      }
+    };
+
+    if (!api || !scene || !current) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[venue-splat] 挂点未就绪，跳过本次：', {
+          api: !api,
+          scene: !scene,
+          scanRef: !current,
+          assetId: current?.assetId ?? null,
+          attempt: splatReadyAttemptRef.current,
+        });
+        setProbeBits(bits => ({ scene: scene !== null, scan: current !== null, splat: bits.splat }));
+        venueSplatProbeRecord({
+          step: 'guard-a',
+          missing: { api: !api, scene: !scene, scanRef: !current },
+          scanAssetId: current?.assetId ?? null,
+          attempt: splatReadyAttemptRef.current,
+        });
+      }
+      if (splatReadyAttemptRef.current < VENUE_SPLAT_READY_RETRY_MAX) {
+        splatReadyAttemptRef.current += 1;
+        retryTimer = window.setTimeout(() => {
+          const nextApi = venueSplatApiRef.current;
+          const nextScene = sceneRef.current;
+          const nextScan = scanRef.current;
+          if (nextApi && nextScene && nextScan) mountVenueSplat(nextApi, nextScene, nextScan);
+          else if (process.env.NODE_ENV !== 'production') {
+            console.info('[venue-splat] 重试后挂点仍缺：', {
+              api: !nextApi,
+              scene: !nextScene,
+              scanRef: !nextScan,
+              attempt: splatReadyAttemptRef.current,
+            });
+          }
+        }, VENUE_SPLAT_READY_RETRY_MS);
+        return () => {
+          if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+          if (startedApi) startedApi.dispose();
+        };
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[venue-splat] 重试耗尽，点云仍未挂上：', {
+          attempt: splatReadyAttemptRef.current,
+          assetId: current?.assetId ?? null,
+        });
+      }
+      return undefined;
+    }
+
+    mountVenueSplat(api, scene, current);
+    return () => { if (startedApi) startedApi.dispose(); };
   }, [walkCanvas, scan?.assetId]);
 
   // 挪落点：只平移已挂上的高斯重建与占位标记，不重新下载、不重新解码。
@@ -3338,6 +3474,16 @@ export default function OutdoorPlan3D({
       data-testid="outdoor-plan-3d"
       style={{ position: 'absolute', inset: 0, background: '#d9e3ea', overflow: 'hidden' }}
     >
+      {process.env.NODE_ENV !== 'production' && (
+        <div
+          data-testid="venue-splat-probe"
+          style={{ position: 'absolute', right: 16, bottom: 16, zIndex: 3, padding: '4px 10px', borderRadius: 8, background: 'rgba(18, 20, 26, 0.72)', color: '#fff', fontSize: 12, lineHeight: '18px', pointerEvents: 'none' }}
+        >
+          <div>scene {probeBits.scene === null ? '·' : probeBits.scene ? '✓' : '✗'}</div>
+          <div>scan {probeBits.scan ? '✓' : '✗'}</div>
+          <div>splat {{ idle: '○', loading: '◐', ready: '●', error: '✗' }[probeBits.splat]}</div>
+        </div>
+      )}
       {groundState === 'loading' && (
         <div
           style={{

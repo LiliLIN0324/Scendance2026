@@ -4,6 +4,7 @@ import { productionPlanSchema } from '../../supabase/functions/_shared/productio
 import { eventProfileSchema } from './event-profile';
 import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from '../components/room-organizer/lib/schema';
 import { layoutForExport } from './layout-export';
+import { LEGACY_LOCAL_SCOPE } from './project-scope';
 import { encodeSourceDocuments, sourceDocumentsSchema, type SourceBackupSnapshot, type SourceDocuments, type RestoredSourceDocuments } from './source-backup';
 import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
@@ -66,6 +67,8 @@ export interface LocalProjectBackup {
   version: typeof LOCAL_PROJECT_BACKUP_VERSION;
   createdAt: string;
   coverage: typeof LOCAL_PROJECT_BACKUP_COVERAGE;
+  /** 信封所属项目正源 id（写新信封时写入）。旧信封缺该字段，走显式旧键读取分支。 */
+  projectId: string;
   layout: RoomLayout;
   brief: BackupBrief;
 }
@@ -114,6 +117,8 @@ const envelopeFields = {
   createdAt: z.iso.datetime({ offset: true }).max(32).refine(value =>
     !value.startsWith('0000-') && !value.endsWith('-00:00') &&
     !/\.\d{4,}/.test(value) && Number.isFinite(Date.parse(value))),
+  // 写新信封时写入；旧信封缺该字段，由读侧走显式旧键读取分支并记命中计数。
+  projectId: z.string().min(1).optional(),
   layout: z.unknown(), brief: backupBriefSchema,
 };
 const coverageFields = {
@@ -157,6 +162,38 @@ const candidateSchema = z.discriminatedUnion('source', [
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** 旧信封命中记录：哪条链、哪份信封（版本/编号/名称/时间），供回答「还有多少旧信封在服役」。 */
+export interface LegacyEnvelopeHit {
+  chain: 'parse-candidate' | 'validate-candidate';
+  backupVersion: number | undefined;
+  layoutId: string | undefined;
+  layoutName: string | undefined;
+  createdAt: string | null;
+  hitAt: string;
+}
+
+const legacyEnvelopeHits: LegacyEnvelopeHit[] = [];
+
+/** 只读计数；不抛错、不弹 UI、不阻塞读取。 */
+export function listLegacyEnvelopeHits(): readonly LegacyEnvelopeHit[] {
+  return legacyEnvelopeHits;
+}
+
+/** 新信封在顶层写 `projectId`；旧信封缺该字段即判旧，记录一次命中。 */
+function recordLegacyEnvelopeIfAbsent(chain: LegacyEnvelopeHit['chain'], value: unknown): void {
+  if (!isRecord(value)) return;
+  if (typeof value.projectId === 'string' && value.projectId.trim()) return;
+  const layout = isRecord(value.layout) ? value.layout : {};
+  legacyEnvelopeHits.push({
+    chain,
+    backupVersion: typeof value.version === 'number' ? value.version : undefined,
+    layoutId: typeof layout.id === 'string' ? layout.id : undefined,
+    layoutName: typeof layout.name === 'string' ? layout.name : undefined,
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : null,
+    hitAt: new Date().toISOString(),
+  });
 }
 
 /** Only visit actual layout/variant slots; do not invent a parallel layout schema. */
@@ -335,68 +372,82 @@ function checkedLayout(value: unknown, strict: boolean, allowEventProfile = fals
   return { layout: layoutForExport(layout), repaired };
 }
 
+/** Write-chain options. `projectId` is required: a missing identity must fail at compile time,
+ *  not fall back to a silent `'local'` bucket. */
+export interface LocalProjectBackupOptions {
+  projectId: string;
+  allowEventProfile?: boolean;
+}
+
 /** Caller supplies a successfully flushed/read snapshot; this never reads storage. */
 export function createLocalProjectBackup(
-  layout: RoomLayout, snapshot: BackupBriefSnapshot, createdAt = new Date().toISOString(),
-  options: { allowEventProfile?: boolean } = {},
+  layout: RoomLayout, snapshot: BackupBriefSnapshot, options: LocalProjectBackupOptions,
+  createdAt = new Date().toISOString(),
 ): LocalProjectBackup {
   if (snapshot.state !== 'ready') throw new Error('活动需求尚未完成读取或保存，不能生成备份。');
-  if (snapshot.scope !== (layout.id ?? 'local')) throw new Error('活动需求与场景项目不一致，不能生成备份。');
+  const projectId = options.projectId.trim();
+  if (!projectId) throw new Error('缺少项目编号，不能生成备份。');
+  if (snapshot.scope !== projectId) throw new Error('活动需求与场景项目不一致，不能生成备份。');
   const parsed = backupSchema.safeParse({
     format: LOCAL_PROJECT_BACKUP_FORMAT, version: LOCAL_PROJECT_BACKUP_VERSION, createdAt,
-    coverage: LOCAL_PROJECT_BACKUP_COVERAGE, layout, brief: snapshot.brief,
+    coverage: LOCAL_PROJECT_BACKUP_COVERAGE, projectId, layout, brief: snapshot.brief,
   });
   if (!parsed.success) throw new Error('备份信息或活动需求字段无效，不能生成备份。');
   // Validate the live values before JSON can omit functions or call toJSON.
   assertJsonValues(parsed.data.layout);
   const checked = checkedLayout(parsed.data.layout, true, options.allowEventProfile === true);
-  const backup: LocalProjectBackup = { ...parsed.data, layout: checked.layout, brief: parsed.data.brief as BackupBrief };
+  const backup: LocalProjectBackup = { ...parsed.data, projectId, layout: checked.layout, brief: parsed.data.brief as BackupBrief };
   // The returned copy is detached and matches the actual file representation.
   return parseJson(encodeJson(backup)) as LocalProjectBackup;
 }
 
 /** UTF-8 JSON for the caller's existing download flow. No DOM or storage effects. */
 export function serializeLocalProjectBackup(
-  layout: RoomLayout, snapshot: BackupBriefSnapshot, createdAt?: string,
+  layout: RoomLayout, snapshot: BackupBriefSnapshot, options: LocalProjectBackupOptions,
+  createdAt?: string,
 ): string {
-  return encodeJson(createLocalProjectBackup(layout, snapshot, createdAt));
+  return encodeJson(createLocalProjectBackup(layout, snapshot, options, createdAt));
 }
 
 /** Explicit transition API: existing V2 callers do not silently claim checkin coverage. */
 export function createLocalProjectBackupV3(
   layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
-  createdAt?: string, options: { allowEventProfile?: boolean } = {},
+  options: LocalProjectBackupOptions, createdAt?: string,
 ): LocalProjectBackupV3 {
   if (checkinSnapshot.state !== 'ready') throw new Error('点验资料尚未完成读取或保存，不能生成 V3 备份。');
-  if (typeof layout.id !== 'string' || !layout.id.trim() || checkinSnapshot.scope !== layout.id) throw new Error('点验快照与真实场景项目不一致，不能生成 V3 备份。');
-  const base = createLocalProjectBackup(layout, briefSnapshot, createdAt, options);
-  const materialCheckins = checkedMaterialCheckins(checkinSnapshot.materialCheckins, base.layout.id);
+  const projectId = options.projectId.trim();
+  if (!projectId) throw new Error('缺少项目编号，不能生成 V3 备份。');
+  if (typeof layout.id !== 'string' || !layout.id.trim() || layout.id !== projectId ||
+      checkinSnapshot.scope !== projectId) throw new Error('点验快照与真实场景项目不一致，不能生成 V3 备份。');
+  const base = createLocalProjectBackup(layout, briefSnapshot, options, createdAt);
+  const materialCheckins = checkedMaterialCheckins(checkinSnapshot.materialCheckins, projectId);
   return parseJson(encodeJson({ ...base, version: LOCAL_PROJECT_BACKUP_V3_VERSION,
     coverage: LOCAL_PROJECT_BACKUP_V3_COVERAGE, materialCheckins })) as LocalProjectBackupV3;
 }
 
 export function serializeLocalProjectBackupV3(
   layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
-  createdAt?: string,
+  options: LocalProjectBackupOptions, createdAt?: string,
 ): string {
-  return encodeJson(createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt));
+  return encodeJson(createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, options, createdAt));
 }
 
 /** V6 = V3 archive plus the local event profile; no image documents, so it stays within the 8 MiB archive budget. */
 export function createLocalProjectBackupV6(
   layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
-  createdAt?: string,
+  options: LocalProjectBackupOptions, createdAt?: string,
 ): LocalProjectBackupV6 {
-  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt, { allowEventProfile: true });
+  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot,
+    { ...options, allowEventProfile: true }, createdAt);
   return parseJson(encodeJson({ ...base, version: LOCAL_PROJECT_BACKUP_V6_VERSION,
     coverage: LOCAL_PROJECT_BACKUP_V6_COVERAGE })) as LocalProjectBackupV6;
 }
 
 export function serializeLocalProjectBackupV6(
   layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
-  createdAt?: string,
+  options: LocalProjectBackupOptions, createdAt?: string,
 ): string {
-  return encodeJson(createLocalProjectBackupV6(layout, briefSnapshot, checkinSnapshot, createdAt));
+  return encodeJson(createLocalProjectBackupV6(layout, briefSnapshot, checkinSnapshot, options, createdAt));
 }
 
 function checkedV4Size(value: { sourceDocuments: SourceDocuments } & Record<string, unknown>): string {
@@ -410,10 +461,10 @@ function checkedV4Size(value: { sourceDocuments: SourceDocuments } & Record<stri
 
 export async function serializeLocalProjectBackupV4(
   layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
-  sourceSnapshot: SourceBackupSnapshot, createdAt?: string,
+  sourceSnapshot: SourceBackupSnapshot, options: LocalProjectBackupOptions, createdAt?: string,
 ): Promise<string> {
-  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt);
-  if (sourceSnapshot.scope !== base.layout.id) throw new Error('图片快照与场景项目范围不一致，未生成完整备份。');
+  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, options, createdAt);
+  if (sourceSnapshot.scope !== base.projectId) throw new Error('图片快照与场景项目范围不一致，未生成完整备份。');
   const sourceDocuments = await encodeSourceDocuments(sourceSnapshot);
   return checkedV4Size({ ...base, version: LOCAL_PROJECT_BACKUP_V4_VERSION, coverage: LOCAL_PROJECT_BACKUP_V4_COVERAGE, sourceDocuments });
 }
@@ -421,9 +472,10 @@ export async function serializeLocalProjectBackupV4(
 /** V5 with already-validated documents: archives rebuild the same bytes without re-encoding blobs. */
 export function createLocalProjectBackupV5WithDocuments(
   layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
-  sourceDocuments: SourceDocuments, createdAt?: string,
+  sourceDocuments: SourceDocuments, options: LocalProjectBackupOptions, createdAt?: string,
 ): LocalProjectBackupV5 {
-  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt, { allowEventProfile: true });
+  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot,
+    { ...options, allowEventProfile: true }, createdAt);
   const documents = sourceDocumentsSchema.parse(sourceDocuments);
   if (!retainsJson(sourceDocuments, documents)) throw new Error('图片附件需要改写，不能作为完整备份。');
   return parseJson(encodeJson({ ...base, version: LOCAL_PROJECT_BACKUP_V5_VERSION,
@@ -433,13 +485,14 @@ export function createLocalProjectBackupV5WithDocuments(
 /** V5 = V4 plus the local event profile; source images still need the V4-sized budget. */
 export async function serializeLocalProjectBackupV5(
   layout: RoomLayout, briefSnapshot: BackupBriefSnapshot, checkinSnapshot: BackupMaterialCheckinSnapshot,
-  sourceSnapshot: SourceBackupSnapshot, createdAt?: string,
+  sourceSnapshot: SourceBackupSnapshot, options: LocalProjectBackupOptions, createdAt?: string,
 ): Promise<string> {
-  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot, createdAt, { allowEventProfile: true });
-  if (sourceSnapshot.scope !== base.layout.id) throw new Error('图片快照与场景项目范围不一致，未生成完整备份。');
+  const base = createLocalProjectBackupV3(layout, briefSnapshot, checkinSnapshot,
+    { ...options, allowEventProfile: true }, createdAt);
+  if (sourceSnapshot.scope !== base.projectId) throw new Error('图片快照与场景项目范围不一致，未生成完整备份。');
   const sourceDocuments = await encodeSourceDocuments(sourceSnapshot);
   return checkedV4Size({ ...createLocalProjectBackupV5WithDocuments(layout, briefSnapshot, checkinSnapshot,
-    sourceDocuments, createdAt) });
+    sourceDocuments, options, createdAt) });
 }
 
 /** Revalidate mutable/direct candidates without silently upgrading an explicitly declared V1 source. */
@@ -453,6 +506,7 @@ export function validateLocalProjectRestoreCandidate(candidate: unknown): Valida
   if (!parsed.success || !isRecord(parsed.data.layout)) {
     throw new Error('备份候选格式无效，请重新选择文件。');
   }
+  recordLegacyEnvelopeIfAbsent('validate-candidate', candidate);
   const candidateLayout = parsed.data.layout;
   const input = parsed.data;
   if (input.backupVersion === 4 || input.backupVersion === 5) checkedText(JSON.stringify(candidateLayout));
@@ -476,7 +530,9 @@ export function validateLocalProjectRestoreCandidate(candidate: unknown): Valida
     throw new Error('V6 候选缺少点验字段，请重新生成归档。');
   }
   // Old callers may omit provenance. Validate current complete data, but do not fabricate a source version.
-  const scope = typeof candidateLayout.id === 'string' ? candidateLayout.id : 'local';
+  // 读旧信封：身份只能从文件内 layout.id 读；空号属 legacy 旧键槽（只读隔离，不并入当前草稿）。
+  const scope = typeof candidateLayout.id === 'string' && candidateLayout.id.trim()
+    ? candidateLayout.id : LEGACY_LOCAL_SCOPE;
   const briefSnapshot: BackupBriefSnapshot = {
     state: 'ready', scope,
     brief: input.brief.status === 'present' ? input.brief as BackupBrief : { status: 'absent' },
@@ -484,12 +540,13 @@ export function validateLocalProjectRestoreCandidate(candidate: unknown): Valida
   const backup = input.backupVersion === 6
     ? createLocalProjectBackupV6(candidateLayout as unknown as RoomLayout, briefSnapshot, {
       state: 'ready', scope, materialCheckins: input.materialCheckins as BackupMaterialCheckins,
-    }, input.createdAt ?? undefined)
+    }, { projectId: scope, allowEventProfile: true }, input.createdAt ?? undefined)
     : input.backupVersion === 3 || input.backupVersion === 4 || input.backupVersion === 5
       ? createLocalProjectBackupV3(candidateLayout as unknown as RoomLayout, briefSnapshot, {
         state: 'ready', scope, materialCheckins: input.materialCheckins as BackupMaterialCheckins,
-      }, input.createdAt ?? undefined, { allowEventProfile: input.backupVersion === 5 })
-      : createLocalProjectBackup(candidateLayout as unknown as RoomLayout, briefSnapshot, input.createdAt ?? undefined);
+      }, { projectId: scope, allowEventProfile: input.backupVersion === 5 }, input.createdAt ?? undefined)
+      : createLocalProjectBackup(candidateLayout as unknown as RoomLayout, briefSnapshot,
+        { projectId: scope }, input.createdAt ?? undefined);
   let sourceDocuments: RestoredSourceDocuments = { status: 'not-in-file' };
   if (input.backupVersion === 4 || input.backupVersion === 5) {
     assertJsonValues(input.sourceDocuments);
@@ -540,6 +597,7 @@ export function parseLocalProjectBackupJson(text: string): ValidatedLocalProject
       : value.version === 5 ? backupV5Schema.safeParse(value)
       : value.version === 4 ? backupV4Schema.safeParse(value) : value.version === 3 ? backupV3Schema.safeParse(value) : backupSchema.safeParse(value);
     if (!parsed.success) throw new Error('备份信息或活动需求字段无效，当前项目未改变。');
+    recordLegacyEnvelopeIfAbsent('parse-candidate', value);
     if (parsed.data.version === 1) validateProductionPlans(parsed.data.layout, true);
     const checked = checkedLayout(parsed.data.layout, true, parsed.data.version === 5 || parsed.data.version === 6);
     const materialCheckins: RestoredMaterialCheckins = parsed.data.version === 3 || parsed.data.version === 4 ||

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { formatMoneyMinor, parseMoneyMinor } from '@/lib/production-plan';
 import { registerSourceFlush } from '@/lib/source-storage';
+import { resolveProjectScope } from '@/lib/project-scope';
+import { useRoomEditor } from '../contexts/room-editor-context';
 import { uuid } from '../../../../supabase/functions/_shared/domain';
 import { productionAcquisitionMethods, productionStaffSources, productionPlanLimits, productionPlanSchema,
   productionEstimateSummary, resolveProductionPlanReferences, type ProductionPlan, type ProductionReferenceReview } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -64,12 +66,14 @@ function ReferenceNotice({review}:{review:ProductionReferenceReview|undefined}):
 }
 
 export function ProductionPlanPanel({layout,disabled=false,onUpdate,onExport,exporting=false}:Props):JSX.Element {
+  // 身份基准取 context 正源 projectId，不再借 layout.id 反推；flush 守卫与防串台基线同此源。
+  const { projectId } = useRoomEditor();
   const [draft,setDraft]=useState<Draft|null>(null),[error,setError]=useState('');
   const [badTimes,setBadTimes]=useState<string[]>([]);
   const [notice,setNotice]=useState<{scope:string;planKey:string;text:string}|null>(null);
   const state=useRef({layout,epoch:0});if(state.current.layout!==layout)state.current={layout,epoch:state.current.epoch+1};
   const baseline=useRef<{epoch:number;scope:string;planKey:string}|null>(null);
-  const sourceKey=key(layout.productionPlan),scope=layout.id??'local';
+  const sourceKey=key(layout.productionPlan),scope=resolveProjectScope(projectId);
   useEffect(()=>{setNotice(previous=>previous&&(previous.scope!==scope||previous.planKey!==sourceKey)?null:previous);},[scope,sourceKey]);
   const latest=useRef({layout,disabled,onUpdate,scope,sourceKey,draft,epoch:state.current.epoch});latest.current={layout,disabled,onUpdate,scope,sourceKey,draft,epoch:state.current.epoch};
   useEffect(()=>registerSourceFlush(scope,async()=>{

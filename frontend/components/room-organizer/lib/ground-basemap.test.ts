@@ -25,11 +25,10 @@ describe('ground basemap styles', () => {
   });
 
   it('treats a closed ground as having no active layer', () => {
-    expect(activeGroundBasemap({ satelliteGroundRef: false, floorPlanImage: '/api/amap-static?style=7&x-ref=satellite-ground-ref' })).toBeNull();
-    expect(activeGroundBasemap({
-      satelliteGroundRef: true,
-      floorPlanImage: '/api/amap-static?style=7&x-ref=satellite-ground-ref',
+    expect(activeGroundBasemap({}, { image: '/api/amap-static?style=7&x-ref=satellite-ground-ref', satelliteRef: false })).toBeNull();
+    expect(activeGroundBasemap({}, {
+      image: '/api/amap-static?style=7&x-ref=satellite-ground-ref', satelliteRef: true,
     })?.id).toBe('amap-streets');
-    expect(activeGroundBasemap({ satelliteGroundRef: true })?.id).toBe('amap-satellite');
+    expect(activeGroundBasemap({}, { satelliteRef: true })?.id).toBe('amap-satellite');
   });
 });

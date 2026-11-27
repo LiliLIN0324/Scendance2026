@@ -1,10 +1,21 @@
+import type { PlanGround } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout } from './types';
 import type { BriefMemory } from './brief-agent';
 import {venueSchema} from '../../../../supabase/functions/_shared/domain';
 import {venueArea} from './structural-layout';
+import {legacyGroundOf} from './legacy-ground';
 
-/** Structural identity uses exact data, never a lossy image or geometry hash. */
-export function venueScaleBasis(layout: RoomLayout): string {
+/**
+ * Structural identity uses exact data, never a lossy image or geometry hash.
+ *
+ * S2（2026-11-25）：底图三项（image / 多边形 / 中心）改由 `ground` 入参给，
+ * 取不到才回退 layout 上的视图缓存。**两者取值在迁移后逐字相同**（plan.ground 就是从
+ * layout 抄过去的，layout 侧那份又是 `layoutGroundPatch` 从 plan 投影回来的），
+ * 所以把来源从 layout 换成 plan 不会改变这个字符串——历史保存的 `venueScaleBasis`
+ * 不会因为换源而失配（换源失配会误报「请重新确认场地尺寸」）。
+ * 这一条由 `venue-scale-basis.test.ts` 的等价用例钉住。
+ */
+export function venueScaleBasis(layout: RoomLayout, ground?: Pick<PlanGround, 'image' | 'polygon' | 'center'> | null): string {
   return JSON.stringify({id:layout.id ?? null,width:layout.width,height:layout.height,
     venueScan:layout.venueScan ?? null,backendVenue:layout.backendVenue ?? null,
     venue:layout.backendSceneV2?.venue ?? null,structure:layout.backendSceneV2?.structure ?? null,
@@ -16,8 +27,9 @@ export function venueScaleBasis(layout: RoomLayout): string {
           wallId:item.wallId ?? null,position:item.position ?? null,width:item.width,depth:item.depth,height:item.height,
           rotation:item.rotation ?? 0,elevation:item.elevation ?? null,sillHeight:item.sillHeight ?? null}))
         .sort((left,right)=>left.id < right.id ? -1 : left.id > right.id ? 1 : 0)})),
-    floorPlanImage:layout.floorPlanImage ?? null,mapGroundPolygon:layout.mapGroundPolygon ?? null,
-    mapLngLat:layout.mapLngLat ?? null,sceneAnchor:layout.sceneAnchor ?? null,
+    floorPlanImage:(ground?.image ?? layout.floorPlanImage) ?? null,
+    mapGroundPolygon:(ground?.polygon ?? legacyGroundOf(layout).mapGroundPolygon) ?? null,
+    mapLngLat:(ground?.center ?? legacyGroundOf(layout).mapLngLat) ?? null,sceneAnchor:layout.sceneAnchor ?? null,
     researchBounds:layout.researchArea?.bounds ?? null});
 }
 export function isVenueScaleCurrent(memory: BriefMemory | null | undefined, layout: RoomLayout): boolean {

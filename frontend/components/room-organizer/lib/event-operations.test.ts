@@ -173,6 +173,44 @@ describe('explicit Shanghai time inputs', () => {
   });
 });
 
+describe('operation basis reads the ground through plan.ground', () => {
+  const image = 'data:image/jpeg;base64,Zm9v';
+  const polygon = [{ lng: 120.1, lat: 30.2 }, { lng: 120.11, lat: 30.2 }, { lng: 120.11, lat: 30.21 }];
+  /** 壳体写出来的贴地场地：layout 镜像齐全。 */
+  function grounded(): RoomLayout {
+    return { ...venue(), floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true,
+      mapGroundPolygon: polygon, mapLngLat: { lng: 120.105, lat: 30.205 } } as unknown as RoomLayout;
+  }
+  const ground = { image, opacity: 0.94, satelliteRef: true, polygon };
+
+  it('keeps the digest byte-identical when plan.ground carries the same ground as the layout mirror', async () => {
+    const layout = grounded(), task = createOperation('演练签到', 'event');
+    expect(await operationBasis(layout, task, undefined, { ground })).toBe(await operationBasis(layout, task));
+  });
+
+  it('still computes the same digest after the layout mirror is deleted and only plan.ground remains', async () => {
+    const layout = grounded(), task = createOperation('演练签到', 'event');
+    const before = await operationBasis(layout, task);
+    const bare = { ...layout } as unknown as Record<string, unknown>;
+    delete bare.floorPlanImage;
+    delete bare.mapGroundPolygon;
+    delete bare.mapLngLat;
+    expect(await operationBasis(bare as unknown as RoomLayout, task, undefined, { ground })).toBe(before);
+    // 没有 plan 又没有镜像时确实退化成「无底图」，证明上面相等不是巧合。
+    expect(await operationBasis(bare as unknown as RoomLayout, task)).not.toBe(before);
+  });
+
+  it('keeps counting an uploaded floor plan that is not a ground basemap', async () => {
+    const plain: RoomLayout = { ...venue(), floorPlanImage: image };
+    const task = createOperation('演练签到', 'event');
+    const empty = { ground: undefined };
+    const before = await operationBasis(plain, task, undefined, empty);
+    expect(before).toBe(await operationBasis(plain, task));
+    const other = { ...plain, floorPlanImage: 'data:image/png;base64,Zm9v' };
+    expect(await operationBasis(other, task, undefined, empty)).not.toBe(before);
+  });
+});
+
 describe('operations delivery snapshot', () => {
   it('keeps operations outside strict Scene and shares export identity without loading URLs', async () => {
     const layout = venue(); layout.eventOperations = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [createOperation('=演练签到', 'event')] });

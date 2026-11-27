@@ -45,7 +45,7 @@ function layout(): RoomLayout {
       objectIds: [id(30), id(31)], plannedStartAt: '2026-10-09T06:00:00+08:00', plannedEndAt: '2026-10-09T07:00:00+08:00' }] }),
   });
 }
-const doc = async (source: RoomLayout = layout(), ledger?: MaterialCheckinLedger) => new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, ledger), 'text/html');
+const doc = async (source: RoomLayout = layout(), ledger?: MaterialCheckinLedger) => new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, { projectId: source.id! }, ledger), 'text/html');
 beforeEach(() => { vi.stubGlobal('crypto', webcrypto); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 function section(document: Document, heading: string): HTMLElement {
@@ -120,7 +120,7 @@ describe('internal production-plan handoff HTML', () => {
   it('is detached output and neither mutates source nor automatically includes model URLs, prices, images or item notes', async () => {
     const source = layout(); source.floorPlanImage = 'data:image/png;base64,PRIVATE_PHOTO';
     Object.assign(source, { accessToken: 'PRIVATE_ACCOUNT_TOKEN' });
-    const before = JSON.stringify(source); const html = await productionPlanHandoffHtml(source, snapshot);
+    const before = JSON.stringify(source); const html = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id! });
     expect(JSON.stringify(source)).toBe(before);
     for (const privateValue of ['PRIVATE_', '98765', 'private.example', 'reviewedBasis']) expect(html).not.toContain(privateValue);
     source.productionPlan!.staffing[0].roleName = '后改岗位';
@@ -263,7 +263,7 @@ describe('internal production-plan handoff HTML', () => {
     source.name = payload; source.productionPlan!.acquisitions[0].supplierName = '<script>alert(1)</script>';
     source.productionPlan!.acquisitions[0].sourceNote = payload;
     source.eventOperations!.tasks[0].acceptance = payload;
-    const html = await productionPlanHandoffHtml(source, { ...snapshot, id: '"><iframe src="https://private.example"></iframe>' });
+    const html = await productionPlanHandoffHtml(source, { ...snapshot, id: '"><iframe src="https://private.example"></iframe>' }, { projectId: source.id! });
     const document = new DOMParser().parseFromString(html, 'text/html');
     expect(document.querySelectorAll('script,img,iframe,link,object,[onload],[onerror]')).toHaveLength(0);
     expect(document.body.textContent).toContain(payload);
@@ -274,29 +274,29 @@ describe('internal production-plan handoff HTML', () => {
 
   it('rejects absent/invalid plans, unsupported snapshot time and invalid tasks with readable errors', async () => {
     const source = layout(); delete source.productionPlan;
-    await expect(productionPlanHandoffHtml(source, snapshot)).rejects.toThrow('尚未记录制作计划');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id! })).rejects.toThrow('尚未记录制作计划');
     source.productionPlan = { ...plan(), currency: 'USD' } as never;
-    await expect(productionPlanHandoffHtml(source, snapshot)).rejects.toThrow('制作计划字段无效');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id! })).rejects.toThrow('制作计划字段无效');
     source.productionPlan = plan();
-    await expect(productionPlanHandoffHtml(source, { ...snapshot, generatedAt: '2026-10-09' })).rejects.toThrow('冻结时间无效');
+    await expect(productionPlanHandoffHtml(source, { ...snapshot, generatedAt: '2026-10-09' }, { projectId: source.id! })).rejects.toThrow('冻结时间无效');
     source.eventOperations!.tasks[0].plannedEndAt = '2026-10-09T05:00:00+08:00';
-    await expect(productionPlanHandoffHtml(source, snapshot)).rejects.toThrow('活动任务资料无效');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id! })).rejects.toThrow('活动任务资料无效');
   });
 
   it('rejects executable getters and serializers without calling them', async () => {
     const source = layout(); const callback = vi.fn(() => plan());
     Object.defineProperty(source, 'productionPlan', { enumerable: true, get: callback });
-    await expect(productionPlanHandoffHtml(source, snapshot)).rejects.toThrow('取值器');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id! })).rejects.toThrow('取值器');
     expect(callback).not.toHaveBeenCalled();
     const other = layout(); Object.assign(other.productionPlan!, { toJSON: callback });
-    await expect(productionPlanHandoffHtml(other, snapshot)).rejects.toThrow('非普通数据');
+    await expect(productionPlanHandoffHtml(other, snapshot, { projectId: other.id! })).rejects.toThrow('非普通数据');
     expect(callback).not.toHaveBeenCalled();
   });
 
   it('awaits internal review and does not depend on a Scene JSON/model gate, network, browser state or downloads', async () => {
     const source = layout(); source.floors[0].items[0].glbNode = 'Preset_Object_0';
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
-    try { expect(typeof await productionPlanHandoffHtml(source, snapshot)).toBe('string'); expect(fetch).not.toHaveBeenCalled(); }
+    try { expect(typeof await productionPlanHandoffHtml(source, snapshot, { projectId: source.id! })).toBe('string'); expect(fetch).not.toHaveBeenCalled(); }
     finally { vi.unstubAllGlobals(); }
   });
 
@@ -375,7 +375,7 @@ describe('internal production-plan handoff HTML', () => {
     source.floors[0].items[1].position = { x: 1.234567, z: -0.00000001 };
     source.floors[0].items[1].rotation = -Math.PI / 4;
     source.floorPlanImage = 'data:image/png;base64,PRIVATE_REFERENCE_PHOTO';
-    const html = await productionPlanHandoffHtml(source, snapshot);
+    const html = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id! });
     const document = new DOMParser().parseFromString(html, 'text/html');
     const planSection = section(document, '同快照摆位示意');
     expect(planSection.querySelectorAll('svg')).toHaveLength(1);
@@ -424,7 +424,7 @@ describe('internal production-plan handoff HTML', () => {
     const started = deferred<void>(), pending = deferred<Awaited<ReturnType<typeof operationReview>>>();
     // Controlled module delay tests export isolation; it does not prove real UI saving or canvas capture.
     const spy = vi.spyOn(operations, 'operationReview').mockImplementation(() => { started.resolve(); return pending.promise; });
-    const output = productionPlanHandoffHtml(source, snapshot);
+    const output = productionPlanHandoffHtml(source, snapshot, { projectId: source.id! });
     await started.promise;
     expect(spy.mock.calls[0][0]).not.toBe(source); expect(spy.mock.calls[0][1]).not.toBe(task);
     source.name = '后改项目'; source.productionPlan!.staffing[0].roleName = '后改岗位';
@@ -451,8 +451,7 @@ describe('material-checkin facts in internal handoff HTML', () => {
     movement(sheet, 'return').quantity = 18; movement(sheet, 'return').evidenceNote = '原退回18件说明';
     const before = JSON.stringify({ source, facts });
     expect(materialCheckinSummary(sheet)).toMatchObject({ issues: [], notReceivedQuantity: 2, notReturnedQuantity: 0 });
-    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, facts,
-      scope === 'activity' ? { scope: 'activity' } : undefined), 'text/html');
+    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, scope === 'activity' ? { projectId: source.id!, scope: 'activity' } : { projectId: source.id! }, facts), 'text/html');
     const article = quantityArticles(document)[0], followup = quantityValue(article, '异常与待核');
     expect(followup).toContain('数量校验：未发现已定义的数量校验异常');
     expect(followup).toContain('相对约定仍未收 2 件，需跟进');
@@ -589,7 +588,7 @@ describe('material-checkin facts in internal handoff HTML', () => {
     if (reason === 'cross project') facts.projectId = 'another-project';
     if (reason === 'idless local') { delete source.id; facts.projectId = 'local'; }
     if (reason === 'invalid ledger') movement(facts.sheets[0], 'receive').quantity = -1;
-    await expect(productionPlanHandoffHtml(source, snapshot, facts)).rejects.toThrow(reason === 'invalid ledger' ? '账册资料无效' : '项目不一致');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id! }, facts)).rejects.toThrow(reason === 'invalid ledger' ? '账册资料无效' : '项目不一致');
   });
 
   it('exports a same-project ledger after plan removal without creating a plan or reattaching its acquisition by name', async () => {
@@ -634,7 +633,7 @@ describe('material-checkin facts in internal handoff HTML', () => {
   it('freezes original ledger parties, agreement, quantities and evidence before a deferred operation review completes', async () => {
     const source = layout(), facts = checkLedger(), started = deferred<void>(), pending = deferred<Awaited<ReturnType<typeof operationReview>>>();
     const spy = vi.spyOn(operations, 'operationReview').mockImplementation(() => { started.resolve(); return pending.promise; });
-    const output = productionPlanHandoffHtml(source, snapshot, facts); await started.promise;
+    const output = productionPlanHandoffHtml(source, snapshot, { projectId: source.id! }, facts); await started.promise;
     const frozenLedger = spy.mock.calls[0][2]!;
     expect(frozenLedger).not.toBe(facts); expect(frozenLedger.sheets[0]).not.toBe(facts.sheets[0]);
     facts.dataKind = 'real'; facts.sheets[0].agreements[0].agreedQuantity = 999;
@@ -666,7 +665,7 @@ describe('material-checkin facts in internal handoff HTML', () => {
         recordedAt: '2026-10-09T09:15:00+08:00', recordedBy: payload });
     expect(materialCheckinLedgerSchema.safeParse(facts).success).toBe(true);
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
-    const html = await productionPlanHandoffHtml(layout(), snapshot, facts), document = new DOMParser().parseFromString(html, 'text/html');
+    const html = await productionPlanHandoffHtml(layout(), snapshot, { projectId: layout().id! }, facts), document = new DOMParser().parseFromString(html, 'text/html');
     expect(document.querySelectorAll('script,img,iframe,object,link,a[href],[onload],[onerror]')).toHaveLength(0);
     expect(document.body.textContent).toContain(payload);
     expect(document.querySelector('details')!.textContent).toContain('[私密链接或凭据已隐藏]');
@@ -684,7 +683,7 @@ describe('material-checkin facts in internal handoff HTML', () => {
 });
 
 const activityDoc = async (source: RoomLayout = layout(), brief?: BackupBrief) => new DOMParser().parseFromString(
-  await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', ...(brief ? { brief } : {}) }), 'text/html');
+  await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity', ...(brief ? { brief } : {}) }), 'text/html');
 const briefFixture = (): BackupBrief => ({ status: 'present', value: { event: '演练工作坊', guests: 0,
   description: '活动目的原记录', mustHave: '必须保留入口通道', allowIdeas: false, hasFloorplan: true,
   venueConditions: '现场供电待确认', style: '简洁', palette: '绿色', atmosphere: '交流' } });
@@ -709,8 +708,7 @@ describe('complete internal activity handoff HTML', () => {
   });
   it.each(['production', 'activity'] as const)('uses neutral task text for an empty object association in %s scope', async scope => {
     const source = layout(); source.eventOperations!.tasks[0].objectIds = [];
-    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, undefined,
-      scope === 'activity' ? { scope: 'activity' } : undefined), 'text/html');
+    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, scope === 'activity' ? { projectId: source.id!, scope: 'activity' } : { projectId: source.id! }), 'text/html');
     const task = section(document, scope === 'activity' ? '全部活动任务' : '明确关联的活动任务').querySelector('tbody tr')!;
     expect(task.children[4].textContent).toBe('未关联场景物件');
     expect(task.children[4].textContent).not.toContain('待确认');
@@ -719,14 +717,14 @@ describe('complete internal activity handoff HTML', () => {
 
   it('retains budgets, quantity calculations and the same object numbers in the expanded scope', async () => {
     const source = layout(), facts = checkLedger();
-    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, facts, { scope: 'activity' }), 'text/html');
+    const document = new DOMParser().parseFromString(await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity' }, facts), 'text/html');
     expect(section(document, '预算范围与人工估算').textContent).toContain('已知金额小计：¥1250.50');
     expect(quantityValue(quantityArticles(document)[0], '当前有效收取数量')).toBe('28 件');
     expect(quantityValue(quantityArticles(document)[0], '当前有效退回数量')).toBe('26 件');
     expect(section(document, '逐件物料工作单').textContent).toContain('物件2 · 同名椅');
     expect(document.querySelector('svg [aria-label="物件2"]')).not.toBeNull();
     Object.assign(source.floors[0].items[0], { futurePrivateField: 'PRIVATE_FUTURE_OBJECT_DATA' });
-    expect(await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' })).not.toContain('PRIVATE_FUTURE_OBJECT_DATA');
+    expect(await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity' })).not.toContain('PRIVATE_FUTURE_OBJECT_DATA');
   });
 
   it('includes every phase and unlinked task in source order while keeping the legacy and customer scopes unchanged', async () => {
@@ -748,7 +746,7 @@ describe('complete internal activity handoff HTML', () => {
     const old = await doc(source); old.querySelector('details')!.remove();
     expect(old.title).toContain('内部制作交接');
     for (const excluded of ['独立撤场任务', '物件工作单私有负责人', '逐件物料工作单']) expect(old.body.textContent).not.toContain(excluded);
-    const customer = projectReviewHtml(createProjectReviewSnapshot({ layout: source,
+    const customer = projectReviewHtml(createProjectReviewSnapshot({ layout: source, projectId: source.id!,
       briefSnapshot: { state: 'ready', scope: source.id!, brief: { status: 'absent' } }, snapshot,
       source: { scope: source.id!, revision: 'r1' }, dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: false, design: true } }));
     for (const excluded of ['独立撤场任务', '物件工作单私有负责人', '内部供应方乙', '逐件物料工作单']) expect(customer).not.toContain(excluded);
@@ -761,7 +759,7 @@ describe('complete internal activity handoff HTML', () => {
     expect(section(document, '逐件物料工作单').textContent).toContain('原现场核对证据');
     expect(document.querySelector('header')!.textContent).toContain('制作计划：当前未记录');
     expect([...document.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('数量点验');
-    await expect(productionPlanHandoffHtml(source, snapshot)).rejects.toThrow('尚未记录制作计划或点验账册');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id! })).rejects.toThrow('尚未记录制作计划或点验账册');
   });
 
   it('states missing tasks, unassigned objects, empty work sheets and missing briefs without manufacturing completion', async () => {
@@ -800,7 +798,7 @@ describe('complete internal activity handoff HTML', () => {
     const source = await acceptedObjectLayout();
     vi.spyOn(handoffs, 'effectiveHandoffStatus').mockRejectedValue(new Error('PRIVATE_HANDOFF_FAILURE'));
     vi.spyOn(operations, 'operationReview').mockRejectedValue(new Error('PRIVATE_TASK_FAILURE'));
-    const html = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' });
+    const html = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity' });
     const document = new DOMParser().parseFromString(html, 'text/html');
     expect(section(document, '逐件物料工作单').textContent).toContain('有效状态：待核对（复核未完成）');
     expect(section(document, '全部活动任务').textContent).toContain('有效状态：待核对（复核未完成）');
@@ -821,14 +819,14 @@ describe('complete internal activity handoff HTML', () => {
     if (reason === 'status') Object.assign(record, { status: 'accepted' });
     if (reason === 'url') record.evidenceUrls = ['javascript:alert(1)'];
     if (reason === 'unknown field') Object.assign(record, { futurePrivateData: 'PRIVATE_NEW_FIELD' });
-    await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' })).rejects.toThrow('物件1工作单资料无效');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity' })).rejects.toThrow('物件1工作单资料无效');
   });
 
   it('freezes layout, work sheets, brief and metadata before deferred review', async () => {
     const source = await acceptedObjectLayout(), brief = briefFixture(), meta = { ...snapshot };
     const started = deferred<void>(), pending = deferred<Awaited<ReturnType<typeof operationReview>>>();
     vi.spyOn(operations, 'operationReview').mockImplementation(() => { started.resolve(); return pending.promise; });
-    const output = productionPlanHandoffHtml(source, meta, undefined, { scope: 'activity', brief }); await started.promise;
+    const output = productionPlanHandoffHtml(source, meta, { projectId: source.id!, scope: 'activity', brief }); await started.promise;
     source.eventOperations!.tasks[0].title = '后改任务'; source.floors[0].items[0].notes = '后改备注'; source.floors[0].items[0].handoff!.ownerName = '后改负责人';
     source.floors[0].items[0].handoff!.evidenceNote = '后改证据'; source.floors[0].items[0].position = { x: 200, z: 0 };
     if (brief.status === 'present') brief.value.description = '后改活动目的';
@@ -844,7 +842,7 @@ describe('complete internal activity handoff HTML', () => {
     const payload = '<img src="https://evil.test/x" onerror="x()">&';
     const record = source.floors[0].items[0].handoff!; record.ownerName = payload; record.acceptance = payload; record.evidenceNote = payload;
     if (brief.status === 'present') brief.value.description = payload;
-    const html = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief });
+    const html = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity', brief });
     const document = new DOMParser().parseFromString(html, 'text/html');
     expect(document.querySelectorAll('script,img,iframe,object,link,[onload],[onerror]')).toHaveLength(0);
     const links = [...document.querySelectorAll('a[href]')];
@@ -861,7 +859,7 @@ describe('complete internal activity handoff HTML', () => {
     expect(section(document, '逐件物料工作单').textContent).toContain(source.floors[0].items[0].notes!);
     for (const excluded of ['allowIdeas', 'hasFloorplan', 'PRIVATE_TOKEN', 'PRIVATE_ACCOUNT_TOKEN', 'PRIVATE_FUTURE_OBJECT_DATA', 'PRIVATE_NEW_FIELD', '98765', 'sha256:', 'reviewedBasis']) expect(html).not.toContain(excluded);
     if (brief.status === 'present') Object.assign(brief.value, { internalToken: 'PRIVATE_NEW_FIELD' });
-    await expect(productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity', brief })).rejects.toThrow('活动需求字段无效');
+    await expect(productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity', brief })).rejects.toThrow('活动需求字段无效');
   });
 
   it('does not export unconfirmed manual defaults as established activity facts',async()=>{
@@ -873,6 +871,29 @@ describe('complete internal activity handoff HTML', () => {
     if(unconfirmed.status==='present'){unconfirmed.value.eventConfirmed=true;unconfirmed.value.guestsConfirmed=true;}
     const confirmed=section(await activityDoc(source,unconfirmed),'活动需求与现场条件');
     expect(confirmed.textContent).toContain('活动类型品牌快闪');expect(confirmed.textContent).toContain('预计人数24');
+  });
+
+  it('lists a conversation headcount on its own labelled row and never promotes it to a confirmed figure', async () => {
+    const source = layout();
+    const unconfirmed: BackupBrief = { status: 'present', value: { event: '品牌快闪', eventConfirmed: false, guests: 24, guestsConfirmed: false, description: '', mustHave: '', allowIdeas: false } };
+    const html = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity', brief: unconfirmed, headcount: { value: 40, source: 'conversation' } });
+    const needs = section(new DOMParser().parseFromString(html, 'text/html'), '活动需求与现场条件');
+    expect(needs.textContent).toContain('对话记录人数');
+    expect(needs.textContent).toContain('40 人（尚未确认，请核对）');
+    // 预计人数那行仍然只认用户显式确认，未确认的 24 不能借对话数混进去。
+    expect(needs.textContent).toContain('预计人数待确认');
+    expect(needs.textContent).not.toContain('预计人数24');
+    const confirmedHtml = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity', brief: unconfirmed, headcount: { value: 24, source: 'legacy-confirmed' } });
+    const confirmed = section(new DOMParser().parseFromString(confirmedHtml, 'text/html'), '活动需求与现场条件');
+    expect(confirmed.textContent).not.toContain('对话记录人数');
+  });
+
+  it('omits the conversation headcount row when nothing was recorded, keeping the unknown state honest', async () => {
+    const source = layout();
+    const html = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity', brief: { status: 'absent' }, headcount: { value: null, source: 'unknown' } });
+    const needs = section(new DOMParser().parseFromString(html, 'text/html'), '活动需求与现场条件');
+    expect(needs.textContent).not.toContain('对话记录人数');
+    expect(needs.textContent).toContain('当前未记录活动需求');
   });
 
   it('retains non-rectangular structure restrictions in activity mode', async () => {
@@ -889,7 +910,7 @@ describe('complete internal activity handoff HTML', () => {
     source.floors[0].items[0].notes = attack;
     source.floors[0].items[0].handoff = handoffSchema.parse({ ownerName: '原负责人', dueDate: '2027-02-03', acceptance: '逐件核对', status: 'todo' });
     const before = structuredClone(source);
-    const activityHtml = await productionPlanHandoffHtml(source, snapshot, undefined, { scope: 'activity' });
+    const activityHtml = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope: 'activity' });
     const activity = new DOMParser().parseFromString(activityHtml, 'text/html');
     const work = section(activity, '逐件物料工作单');
     expect(work.textContent).toContain(attack);
@@ -897,15 +918,15 @@ describe('complete internal activity handoff HTML', () => {
     expect(work.textContent).toContain('原负责人');
     expect(activity.querySelectorAll('script,img,iframe,object,embed,link,form,[onload],[onerror]')).toHaveLength(0);
     expect(activityHtml).not.toContain('<img');
-    const internalHtml = await productionPlanHandoffHtml(source, snapshot);
+    const internalHtml = await productionPlanHandoffHtml(source, snapshot, { projectId: source.id! });
     expect(internalHtml).not.toContain(attack);
     expect(internalHtml).not.toContain('原负责人');
-    const customer = projectReviewHtml(createProjectReviewSnapshot({ layout: source,
+    const customer = projectReviewHtml(createProjectReviewSnapshot({ layout: source, projectId: source.id!,
       briefSnapshot: { state: 'ready', scope: source.id!, brief: { status: 'absent' } }, snapshot,
       source: { scope: source.id!, revision: 'notes-disclosure-check' }, dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: false, design: true } }));
     expect(new DOMParser().parseFromString(customer, 'text/html').body.textContent).not.toContain(attack);
     const empty = layout(); empty.floors[0].items[0].notes = ' \t\n ';
-    const emptyActivity = new DOMParser().parseFromString(await productionPlanHandoffHtml(empty, snapshot, undefined, { scope: 'activity' }), 'text/html');
+    const emptyActivity = new DOMParser().parseFromString(await productionPlanHandoffHtml(empty, snapshot, { projectId: empty.id!, scope: 'activity' }), 'text/html');
     expect(section(emptyActivity, '逐件物料工作单').textContent).toMatch(/备注[：:]\s*未记录/);
     expect(source).toEqual(before);
   });
@@ -915,7 +936,7 @@ it('交接 HTML 隐藏签名和凭据，同时保留普通现场说明及公开�
   const source=layout();
   source.eventOperations!.tasks[0]!.evidenceNote='已现场核对\n凭据 token=TOP_SECRET';
   source.eventOperations!.tasks[0]!.evidenceUrls=['https://example.com/evidence?token=URL_SECRET','https://example.com/public.pdf'];
-  const html=await productionPlanHandoffHtml(source,snapshot,undefined,{scope:'activity'});
+  const html=await productionPlanHandoffHtml(source, snapshot, { projectId: source.id!, scope:'activity' });
   expect(html).not.toContain('TOP_SECRET'); expect(html).not.toContain('URL_SECRET');
   expect(html).toContain('已现场核对'); expect(html).toContain('https://example.com/public.pdf');
   expect(html).toContain('[私密链接或凭据已隐藏]'); expect(html).toContain('不能保证识别全部敏感信息');

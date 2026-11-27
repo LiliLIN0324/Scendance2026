@@ -1,11 +1,16 @@
 /**
  * 可评论方案页的存储。
  *
- * ★ 冻结（S2 T5，2026-11-04）：issueReviewShare/readReviewShare/listReviewComments/
- * addReviewComment 这串 UUID 孤儿链**生产无调用方**（评审链接已走 `/review/#layout=` hash 快照链）。
- * 保留本文件作为 **Q4 云化接口的 local-demo 实现演示**，禁止新增生产调用方；
- * 云化时由 ReviewShareRepository（见 §三 接口形状注释）替换实现，调用方签名不动。
- * MARK_KEY（rememberReviewLinkMark）是活链 A 在写，不在冻结范围。
+ * ★ 冻结（S2 T5，2026-11-04；批3 复核 2026-11-26）：这串 UUID 本地演示链与新评审
+ * `/review/#layout=` hash 快照链并行，**不造互转**，随壳体整刀退役。复核消费方：
+ * - `issueReviewShare` / `readReviewShare` / `addReviewComment` / `snapshotFromLayout` /
+ *   `reviewShareUrl` / `reviewSharePath`：生产无调用方，纯本地演示孤儿，仅测试在引；
+ *   禁止新增生产调用方，整刀随壳删。
+ * - `listReviewComments` / `isReviewShareId`：仍被 `lib/bingo-feedback.ts` 的
+ *   `readLegacyComments`/`threadFromShareComments` 读取旧 UUID 分享评论（legacy-comment
+ *   兼容回退）；这处读消费本身也属壳退役链，整刀时一并切到 hash 快照 / share-pins。
+ * - MARK_KEY（`rememberReviewLinkMark` / `readReviewMarks` / `forgetReviewLinkMark` /
+ *   `REVIEW_MARK_CHANGED_EVENT`）是活链 A 在写，不在冻结范围。
  *
  * 真链 vs 本机演示（本文件就是边界）：
  * - **本机演示**：`issueReviewShare` 把当时的平面摘要写入 `localStorage`

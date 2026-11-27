@@ -18,6 +18,7 @@ import {
   type PlanAnchor,
   type SitePlanData,
 } from '../../../../supabase/functions/_shared/site-plan';
+import { purgeWestLakePlanGround } from './west-lake-basemap';
 
 /** 最小存储面：测试用 Map mock 即可满足。 */
 export type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -76,7 +77,7 @@ export function outdoorPlanStorageKey(projectId: string): string {
 
 /**
  * 户外保存态上报/订阅 scope（2026-11-20 审计 B2）：必须和消费方同口径。
- * 云面板订阅的是 `layout.id ?? 'local'`（panels/cloud-panel.tsx）；
+ * 云面板订阅的是 `resolveProjectScope(layout.id)`（panels/cloud-panel.tsx，空 id 归一到本机槽）；
  * 覆盖层以前用存储槽 `projectId || 'local-draft'` 当 scope，没有 id 时两边就对不上，
  * 于是「本机存失败 / 云端未同步」只能写进一个没人订阅的分区。这里统一成同一个口径。
  * 注意：它只是状态机的 scope，不是存储 key——空 id 的草稿仍落在 LOCAL_DRAFT_SLOT。
@@ -131,7 +132,8 @@ export function readOutdoorProjectRecord(projectId: string, storage?: KeyValueSt
       let plan: SitePlanData | null = null;
       if (record.plan != null) {
         const verified = sitePlanDataSchema.safeParse(record.plan);
-        plan = verified.success ? verified.data : null;
+        // 正源侧也剥西湖底图：只剥 layout 缓存的话，下次按正源同步会把图补回来。
+        plan = verified.success ? purgeWestLakePlanGround(verified.data).plan : null;
       }
       return { ...record, plan };
     }

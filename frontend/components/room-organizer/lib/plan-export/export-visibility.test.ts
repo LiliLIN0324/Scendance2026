@@ -41,9 +41,8 @@ describe('plan export layers', () => {
         makeItem({ type: 'stairs' }),
         makeItem({ type: 'sofa' }),
       ],
-      interiorWalls: [{ id: 'iw', x1: 0, z1: 0, x2: 1, z2: 0 }],
       zones: [{ id: 'z', name: 'Stage', color: '#4A7C59', x: 0, z: 0, w: 2, d: 2 }],
     });
-    expect(planFloorSummary(floor)).toBe('1 zones · 1 partitions · 1 doors · 1 windows · 1 props · 1 stairs');
+    expect(planFloorSummary(floor)).toBe('1 zones · 1 doors · 1 windows · 1 props · 1 stairs');
   });
 });

@@ -14,7 +14,7 @@ const source = { scope: 'project-a', revision: 'revision-1' };
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/3ioAAAAASUVORK5CYII=';
 function snapshot(id = 'review-a', title = '静态客户评审', frozenAt = generatedAt) {
   return createProjectReviewSnapshot({ layout: makeLayout({ id: source.scope, name: title, roof: { style: 'none' },
-    floors: [makeFloor({ items: [makeItem()] })] }), briefSnapshot: { state: 'ready', scope: source.scope, brief: { status: 'absent' } },
+    floors: [makeFloor({ items: [makeItem()] })] }), projectId: source.scope, briefSnapshot: { state: 'ready', scope: source.scope, brief: { status: 'absent' } },
     snapshot: { id, generatedAt: frozenAt }, source, dataState: 'saved', dataKind: 'rehearsal', disclosure: { brief: false, design: true } });
 }
 const file = (id = 'review-a'): Omit<SavedReviewFile, 'savedAt'> => ({ id, title: '静态客户评审', generatedAt, source: { ...source }, html: projectReviewHtml(snapshot(id)) });

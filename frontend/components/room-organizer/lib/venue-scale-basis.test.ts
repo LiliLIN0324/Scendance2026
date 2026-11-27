@@ -71,4 +71,23 @@ describe('venue scale evidence',()=>{
    expect(isVenueScaleCurrent(memory,{...original,backendSceneV2:{...scene,sources:[{...scene.sources[0]!,name:'replacement'}]}})).toBe(false);
    expect(isVenueScaleCurrent(memory,{...original,backendSceneV2:{...scene,dimensions:[{...scene.dimensions[0]!,valueMeters:13}]}})).toBe(false);
  });
+ // S2（2026-11-25）：底图三项换源不失配。旧记忆里的 basis 是读 layout 缓存算出来的；
+ // 迁移把同一份值抄进 plan.ground 之后，改读正源必须给出逐字相同的字符串，
+ // 否则每次刷新都会误报「请重新确认场地尺寸」。
+ it('keeps the basis string identical when the ground source moves from layout to plan',()=>{
+   const polygon=[{lng:120.146,lng2:0,lat:30.252},{lng:120.147,lat:30.252},{lng:120.147,lat:30.253}]
+     .map(point=>({lng:point.lng,lat:point.lat}));
+   const frame={lng0:120.146,lat0:30.252,latMid:30.2525,scale:1,latSign:-1 as const};
+   const center={lng:120.1465,lat:30.2525};
+   const legacy={...base(),floorPlanImage:'https://example.com/satellite.jpg',floorPlanOpacity:0.94,
+     satelliteGroundRef:true,mapGroundPolygon:polygon,mapLngLat:center,mapGroundFrame:frame};
+   // 迁移后的正源：值一模一样，只是搬到了 plan.ground。
+   const ground={image:'https://example.com/satellite.jpg',opacity:0.94,satelliteRef:true,polygon,center,frame};
+   expect(venueScaleBasis(legacy,ground)).toBe(venueScaleBasis(legacy));
+   // 正源补齐、layout 已按 S1 停写字节（没有 image）时，仍应与迁移前一致。
+   const withoutBytes={...base(),mapGroundPolygon:polygon,mapLngLat:center,mapGroundFrame:frame};
+   expect(venueScaleBasis(withoutBytes,ground)).toBe(venueScaleBasis(legacy));
+   // 正源为空 → 必须原样回退 layout，不得把旧记忆挤成失配。
+   expect(venueScaleBasis(legacy,null)).toBe(venueScaleBasis(legacy));
+ });
 });

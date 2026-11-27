@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { AssetsPanel } from '@/components/business/assets-panel';
-import { BackendSession, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
+import { BackendSession, SceneApiError, createBackendSession, getBackendConfig, type Scene } from '@/lib/backend-session';
 import { readSourceRecord, registerSourceFlush } from '@/lib/source-storage';
 import { materialCheckinLedgerSchema } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import {canonical,sha256} from '../../../../supabase/functions/_shared/domain';
@@ -1313,6 +1313,81 @@ describe('CloudPanel section entry points', () => {
     view.rerender(<CloudPanel {...props} draftNote={{ label: '本机草稿保存失败', error: true, title: '磁盘写入失败' }} />);
     expect(screen.getByText('本机草稿保存失败')).toBeTruthy();
     expect(screen.getByText('当前 · 草稿')).toBeTruthy();
+  });
+});
+
+describe('B1：云卡回读失效隔离', () => {
+  const brokenId = '10000000-0000-4000-8000-0000000000ba';
+  const brokenProject = { ...original, id: brokenId, name: '失效云项目' };
+  function listWithBroken(): void {
+    vi.spyOn(controller, 'listProjects').mockResolvedValue([other, brokenProject] as never);
+    vi.spyOn(controller, 'listStudios').mockResolvedValue([{ id: studioId, name: '工作室', role: 'owner', displayName: 'A' }] as never);
+    mockFetch.mockImplementation(async input => {
+      const url = String(input);
+      if (/\/studios\/[^/]+\/members/.test(url)) return json([{ userId: 'user-a', role: 'owner', displayName: 'A' }]);
+      return json({});
+    });
+  }
+
+  it('回读 NOT_FOUND 的卡折进失效区并禁用进入，可达卡仍在活跃卡片墙', async () => {
+    listWithBroken();
+    vi.spyOn(controller, 'peekProject').mockImplementation(async (id: string) => {
+      if (id === brokenId) throw new SceneApiError('PROJECT_NOT_FOUND', 404, null);
+      return other as never;
+    });
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    // 可达卡照旧是可打开的云卡。
+    expect(await screen.findByRole('button', { name: '打开 另一个云项目，双击进入' })).toBeTruthy();
+    // 失效卡：不得再以「打开 …」的身份出现。
+    const broken = await screen.findByRole('button', { name: '失效云项目 失效，无法访问' });
+    expect(broken.hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: '打开 失效云项目，双击进入' })).toBeNull();
+    // 双击不发打开请求（只看得见一个刚建的 spy 调用计数）。
+    const getProject = vi.spyOn(controller, 'getProject');
+    fireEvent.doubleClick(broken);
+    await Promise.resolve();
+    expect(getProject).not.toHaveBeenCalled();
+  });
+
+  it('回读全部成功时不渲染失效区', async () => {
+    listWithBroken();
+    vi.spyOn(controller, 'peekProject').mockResolvedValue(other as never);
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    expect(await screen.findByRole('button', { name: '打开 失效云项目，双击进入' })).toBeTruthy();
+    expect(screen.queryByText(/^失效（/)).toBeNull();
+  });
+
+  it('网络错误不把卡判成永久失效，保留在活跃卡片墙', async () => {
+    listWithBroken();
+    vi.spyOn(controller, 'peekProject').mockImplementation(async (id: string) => {
+      if (id === brokenId) throw new SceneApiError('NETWORK_ERROR', 0, null);
+      return other as never;
+    });
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    expect(await screen.findByRole('button', { name: '打开 失效云项目，双击进入' })).toBeTruthy();
+    expect(screen.queryByText(/^失效（/)).toBeNull();
+  });
+
+  it('云端已失效的历史裸 uuid 槽：标失效移出活跃列表，本机备份原样保留', async () => {
+    const orphanId = '10000000-0000-4000-8000-0000000000c1';
+    const key = `scendance-outdoor-plan-v1:${orphanId}`;
+    localStorage.setItem(key, JSON.stringify({ v: 1, projectId: orphanId, name: '历史裸槽',
+      createdAt: '2026-11-19T00:00:00Z', updatedAt: '2026-11-19T00:00:00Z', plan: null }));
+    listWithBroken();
+    vi.spyOn(controller, 'peekProject').mockImplementation(async (id: string) => {
+      if (id === brokenId || id === orphanId) throw new SceneApiError('PROJECT_NOT_FOUND', 404, null);
+      return other as never;
+    });
+    render(<CloudPanel controller={controller} layout={backendSceneToLayout(scene, { projectId, name: original.name })} onLoadLayout={vi.fn()} />);
+    openAccount();
+    const backup = await screen.findByRole('button', { name: '历史裸槽 失效，仅保留本机备份' });
+    expect(backup.hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: '打开 历史裸槽，双击进入' })).toBeNull();
+    // 只读保留：本机记录不动，id 不改、不删。
+    expect(JSON.parse(localStorage.getItem(key)!).projectId).toBe(orphanId);
   });
 });
 

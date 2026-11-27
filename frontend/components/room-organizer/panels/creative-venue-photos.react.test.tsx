@@ -5,12 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendSession, getBackendConfig } from '@/lib/backend-session';
 import { flushSourceScope } from '@/lib/source-storage';
 import { backendSceneToLayout } from '../lib/backend-adapter';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { CreativeBriefPanel, CreativeStudioProvider } from './creative-studio';
 import {clearUnsavedSourceDraftsForTests,unsavedSourceDrafts} from './unsaved-source-drafts';
 
 const persisted = vi.hoisted(() => ({ sources: [] as Record<string, unknown>[], forms: new Map<string, unknown>() }));
 vi.mock('@/lib/source-storage', async importOriginal => ({...await importOriginal<object>(),listStoredSources:async()=>[],storeSource:async(value:Record<string,unknown>)=>{persisted.sources.push(value);},deleteSource:async()=>{},readSourceForm:async()=>undefined,readSourceRecordSnapshot:async(key:string)=>persisted.forms.has(key)?{present:true,value:persisted.forms.get(key)}:{present:false},storeSourceForm:async(scope:string,value:unknown)=>{persisted.forms.set(scope,value);}}));
-vi.mock('../contexts', () => ({ useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) }));
+vi.mock('../contexts', async original => {
+  const actual = await original<typeof import('../contexts')>();
+  return { ...actual, useSelection: () => ({ allSelectedIds: new Set<string>(), selectedItem: null }) };
+});
 
 const layout = backendSceneToLayout({ schemaVersion: 1, venue: { width: 12, depth: 10, height: 3, shape: 'rectangle', entrances: [] }, objects: [], camera: 'overview', lighting: 'warm' }, { projectId: '10000000-0000-4000-8000-000000000001' });
 let controller: BackendSession;
@@ -23,7 +27,12 @@ const file = (name: string) => new File(['image'], name, { type: 'image/png' });
 const bitmap = () => ({ width: 1024, height: 768, close: vi.fn() });
 
 function ui(id = layout.id!, hidden = false, view: 'brief'|'reference' = 'reference') {
-  return <div hidden={hidden}><CreativeStudioProvider controller={controller} layout={{ ...layout, id }} onApply={vi.fn()}><CreativeBriefPanel view={view}/></CreativeStudioProvider></div>;
+  const current = { ...layout, id };
+  return <div hidden={hidden}>
+    <RoomEditorProvider value={{ projectId: id, layout: current } as unknown as RoomEditorContextValue}>
+      <CreativeStudioProvider controller={controller} layout={current} onApply={vi.fn()}><CreativeBriefPanel view={view}/></CreativeStudioProvider>
+    </RoomEditorProvider>
+  </div>;
 }
 function renderUi() {
   return render(ui());

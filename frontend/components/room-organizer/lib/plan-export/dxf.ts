@@ -200,11 +200,6 @@ export function layoutToDxf(
       ],
       true
     );
-
-    // Interior partitions share WALLS. Thickness stays a render style.
-    for (const wall of floor.interiorWalls ?? []) {
-      line('WALLS', cx(wall.x1), cy(wall.z1), cx(wall.x2), cy(wall.z2));
-    }
   }
 
   if (layers.stairs) emitStairwellHoles(layout, floor, cx, cy, polyline);

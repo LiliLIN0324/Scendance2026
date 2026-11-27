@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { readLocalProjectBackupFile, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { resolveProjectScope } from '@/lib/project-scope';
+import { useRoomEditor } from '../contexts/room-editor-context';
 import type { RoomLayout } from '../lib/types';
 import type { CreativeBriefState, LocalProjectBackupActions } from './creative-studio';
 import './local-project-backup-panel.css';
@@ -20,6 +22,9 @@ function hasExternalModel(layout: RoomLayout): boolean {
 
 /** The file is only inspected here; the provider owns the complete restore transaction. */
 export function LocalProjectBackupPanel({ layout, actions, briefState, onComplete }: Props): JSX.Element {
+  // 身份基准取 context 正源 projectId（入口两分岔），不再借 layout.id 反推；防串台基线同此源。
+  const { projectId } = useRoomEditor();
+  const scope = resolveProjectScope(projectId);
   const [candidate, setCandidate] = useState<LocalProjectRestoreCandidate | null>(null);
   const [candidateFileName, setCandidateFileName] = useState('');
   const [includeSourceDocuments, setIncludeSourceDocuments] = useState(false);
@@ -27,9 +32,9 @@ export function LocalProjectBackupPanel({ layout, actions, briefState, onComplet
   const [working, setWorking] = useState<'read' | 'download' | 'restore' | 'undo' | null>(null);
   const mounted = useRef(true);
   const operation = useRef({ id: 0, kind: null as typeof working });
-  const baseline = useRef({ layout, scope: layout.id ?? 'local', brief: briefState?.brief, epoch: 0 });
-  if (baseline.current.layout !== layout || baseline.current.scope !== (layout.id ?? 'local') || baseline.current.brief !== briefState?.brief) {
-    baseline.current = { layout, scope: layout.id ?? 'local', brief: briefState?.brief, epoch: baseline.current.epoch + 1 };
+  const baseline = useRef({ layout, scope, brief: briefState?.brief, epoch: 0 });
+  if (baseline.current.layout !== layout || baseline.current.scope !== scope || baseline.current.brief !== briefState?.brief) {
+    baseline.current = { layout, scope, brief: briefState?.brief, epoch: baseline.current.epoch + 1 };
   }
   const epoch = baseline.current.epoch;
   useEffect(() => {

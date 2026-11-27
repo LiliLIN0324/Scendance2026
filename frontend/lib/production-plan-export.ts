@@ -16,6 +16,7 @@ import { operationReview, OPERATION_PHASE_LABELS, OPERATION_STATUS_LABELS, toSha
 import { DEFAULT_SVG_MARGIN, DEFAULT_SVG_PX_PER_METRE, layoutToSvg } from '../components/room-organizer/lib/plan-export/svg';
 import { effectiveHandoffStatus, HANDOFF_STATUS_LABELS } from '../components/room-organizer/lib/scene-handoff';
 import { isRoomLayout } from '../components/room-organizer/lib/schema';
+import type { ResolvedBriefHeadcount } from '../components/room-organizer/lib/handoff-brief';
 import { createLocalProjectBackup, type BackupBrief } from './local-project-backup';
 import { formatMoneyMinor } from './production-plan';
 import type { DeliverySnapshot } from '../components/room-organizer/lib/scene-delivery';
@@ -79,9 +80,12 @@ type HandoffObject = z.infer<typeof objectSchema> & { label: string; handoff?: H
 
 /** Freeze current applied data before asynchronous task review; no storage writes or resource loading. */
 export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapshot: DeliverySnapshot,
-  sourceLedger?: MaterialCheckinLedger, options?: { scope: 'activity'; brief?: BackupBrief }): Promise<string> {
+  options: { projectId: string; scope?: 'activity'; brief?: BackupBrief;
+    /** 读侧合成的人数（见 handoff-brief）：只用于「对话记录人数」一行，不把未确认的数字塞进「预计人数」。 */
+    headcount?: ResolvedBriefHeadcount },
+  sourceLedger?: MaterialCheckinLedger): Promise<string> {
   assertData(options);
-  const activityScope = options?.scope === 'activity';
+  const activityScope = options.scope === 'activity';
   const title = activityScope ? '内部活动交接' : '内部制作交接';
   assertData(sourceLayout); assertData(snapshot);
   const layout = structuredClone(sourceLayout);
@@ -127,13 +131,25 @@ export async function productionPlanHandoffHtml(sourceLayout: RoomLayout, snapsh
       objects[index].handoff = parsedHandoff.data;
     });
   }
-  const brief = activityScope && options?.brief !== undefined ? createLocalProjectBackup(layout,
-    { state: 'ready', scope: layout.id ?? 'local', brief: options.brief }, metadata.data.generatedAt).brief : undefined;
-  const briefDetails = activityScope ? `<section id="handoff-brief"><h2>活动需求与现场条件</h2>${brief?.status === 'present' ? table(['需求项目', '已保存记录'], [
-    ['活动类型', brief.value.eventConfirmed===true?unknown(brief.value.event):'待确认'], ['预计人数', brief.value.guestsConfirmed===true?brief.value.guests:'待确认'], ['活动描述', unknown(brief.value.description)],
-    ['必须包含', unknown(brief.value.mustHave)], ['现场条件', unknown(brief.value.venueConditions ?? '')],
-    ['风格', unknown(brief.value.style ?? '')], ['色彩', unknown(brief.value.palette ?? '')], ['氛围', unknown(brief.value.atmosphere ?? '')],
-  ], 'handoff-brief') : para(brief?.status === 'absent' ? '当前未记录活动需求，活动目的、人数与现场条件待确认。' : '本次未提供活动需求快照，活动目的、人数与现场条件待确认。')}${para('本文件仅含文字记录与可生成的摆位示意；照片、原图纸附件和模型文件需另行提供。')}</section>` : '';
+  const brief = activityScope && options.brief !== undefined ? createLocalProjectBackup(layout,
+    { state: 'ready', scope: options.projectId, brief: options.brief },
+    { projectId: options.projectId }, metadata.data.generatedAt).brief : undefined;
+  // 对话里说过的人数单独一行、明确标「尚未确认」：既不把未确认数字塞进「预计人数」
+  // （那行只在用户显式确认后出数），也不让已录的人数在交接件里凭空消失。
+  const conversationHeadcount = options.headcount?.source === 'conversation' && options.headcount.value !== null
+    ? options.headcount.value : null;
+  const briefRows: unknown[][] = [
+    ['活动类型', brief?.status === 'present' && brief.value.eventConfirmed === true ? unknown(brief.value.event) : '待确认'],
+    ['预计人数', brief?.status === 'present' && brief.value.guestsConfirmed === true ? brief.value.guests : '待确认'],
+    ...(conversationHeadcount === null ? [] : [['对话记录人数', `${conversationHeadcount} 人（尚未确认，请核对）`]]),
+    ['活动描述', brief?.status === 'present' ? unknown(brief.value.description) : '待确认'],
+    ['必须包含', brief?.status === 'present' ? unknown(brief.value.mustHave) : '待确认'],
+    ['现场条件', brief?.status === 'present' ? unknown(brief.value.venueConditions ?? '') : '待确认'],
+    ['风格', brief?.status === 'present' ? unknown(brief.value.style ?? '') : '待确认'],
+    ['色彩', brief?.status === 'present' ? unknown(brief.value.palette ?? '') : '待确认'],
+    ['氛围', brief?.status === 'present' ? unknown(brief.value.atmosphere ?? '') : '待确认'],
+  ];
+  const briefDetails = activityScope ? `<section id="handoff-brief"><h2>活动需求与现场条件</h2>${brief?.status === 'present' || conversationHeadcount !== null ? table(['需求项目', '已保存记录'], briefRows, 'handoff-brief') : para(brief?.status === 'absent' ? '当前未记录活动需求，活动目的、人数与现场条件待确认。' : '本次未提供活动需求快照，活动目的、人数与现场条件待确认。')}${para('本文件仅含文字记录与可生成的摆位示意；照片、原图纸附件和模型文件需另行提供。')}</section>` : '';
   const taskIndex = buckets(tasks), objectIndex = buckets(objects);
   const reviews = resolveProductionPlanReferences(plan, { taskIds: tasks.map(task => task.id), objectIds: objects.map(object => object.id) });
   const reviewIndex = new Map(reviews.map(review => [identity(review.id), review]));

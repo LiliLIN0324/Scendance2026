@@ -11,7 +11,7 @@ import type { Vec2, WalkRoute } from './types';
  */
 export const PERSON_WALK_SPEED_MPS = 1.05;
 export const PERSON_PAUSE_MS = 900;
-/** 与人群 NPC 同款半径（lib/crowd-route.ts CROWD_WALKER_RADIUS）。 */
+/** 行人半径与户外路径碰撞口径一致。 */
 export const PERSON_WALK_RADIUS = 0.28;
 /** 每帧最大转向速率：90° 转向约 0.17 s 完成，急转不瞬移也不拖影。 */
 const TURN_RATE_RAD_PER_S = 9;

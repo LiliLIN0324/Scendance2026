@@ -13,6 +13,11 @@ describe('candidate apply dry run',()=>{
     expect(validateCandidateApply(before,candidate,0)).toEqual({ok:true});
     expect(candidate).toEqual(expected);expect(before).toEqual(original);
   });
+  it('degrades an out-of-range floor index to the ground floor instead of rejecting (#T2)',()=>{
+    const before=base(),candidate=structuredClone(before);
+    expect(validateCandidateApply(before,candidate,1)).toEqual({ok:true});
+    expect(validateCandidateApply(before,candidate,9)).toEqual({ok:true});
+  });
   it('refuses removed or altered locked items on every floor, including non-geometric fields',()=>{
     const before=base();before.floors.push(makeFloor({id:'upper',items:[makeItem({id:'upper-chair',name:'锁定椅',locked:true,position:{x:2,z:1}})]}));
     for(const change of ['remove','move','metadata'] as const){const candidate=structuredClone(before);

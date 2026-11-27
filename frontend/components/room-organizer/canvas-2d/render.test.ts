@@ -3,6 +3,7 @@ import { makeFloor, makeItem, makeLayout, makeUnplacedItem } from '../lib/__test
 import { createVenueFromPick, parseSatelliteImageBounds, satelliteImageShellRect, satelliteProxyUrl } from '../lib/amap-venue';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { layoutGeometryScene } from '../lib/structural-layout';
+import type { ResolvedGround } from '../lib/plan-ground';
 import { computeFloorPlanPlacement, computeHeatmapCells, get2DViewTransform, HEATMAP_COLS, HEATMAP_ROWS, placeDimensionLabels, render2DTopDown, type DimensionLabel } from './render';
 import type { RoomLayout } from '../lib/types';
 
@@ -290,9 +291,12 @@ describe('main canvas reference image', () => {
         { lng, lat: lat + dLat },
       ];
       const image = satelliteProxyUrl(polygon, 'secret-key')!;
-      const { layout } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
-        name: '盐官古城', location: '潮乐之城', polygon, satelliteGround: true, satelliteGroundImage: image,
+      const { layout: bare, ground: pickerGround } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+        name: '盐官古城', location: '潮乐之城', polygon,
       });
+      // #38 落壳不再写底图字节；底图读正源 `plan.ground`，显式传进 2D 渲染。
+      const layout = { ...bare, floorPlanImage: image, floorPlanOpacity: 0.94 };
+      const ground = { ...pickerGround, satelliteRef: true, source: 'plan' as const } as unknown as ResolvedGround;
       const floor = layout.floors[0]!;
       const lineTo: number[][] = [];
       const drawImage = vi.fn();
@@ -302,11 +306,11 @@ describe('main canvas reference image', () => {
         measureText: () => ({ width: 12 }),
       }, { get: (target, key) => (target as Record<string, unknown>)[key as string] ?? (() => {}) });
       const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
-      const view = { canvas, layout, floor, selectedItemId: null, showMeasurements: false, showWiFiSignals: false, hasCollision: () => false };
+      const view = { canvas, layout, floor, selectedItemId: null, showMeasurements: false, showWiFiSignals: false, hasCollision: () => false, ground };
       render2DTopDown(view);
       render2DTopDown(view);
       const { scale, offsetX, offsetY } = get2DViewTransform(800, 600, layout);
-      const rect = satelliteImageShellRect(layout.mapGroundFrame!, parseSatelliteImageBounds(image)!);
+      const rect = satelliteImageShellRect({ ...ground.frame!, latSign: ground.frame!.latSign ?? -1 }, parseSatelliteImageBounds(image)!);
       const placed = drawImage.mock.lastCall as unknown[] | undefined;
       expect(placed?.[1]).toBeCloseTo(offsetX + rect.x * scale, 1);
       expect(placed?.[2]).toBeCloseTo(offsetY + rect.z * scale, 1);
@@ -319,6 +323,62 @@ describe('main canvas reference image', () => {
       expect(northY).toBeLessThan(southY);
       expect(lineTo.some(([, y]) => Math.abs(y - northY) < 0.6)).toBe(true);
       expect(lineTo.some(([, y]) => Math.abs(y - southY) < 0.6)).toBe(true);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('plan.ground 与 layout 镜像画同一张卫星图，且 layout 没图时靠正源也能画（接线不改像素）', () => {
+    vi.stubGlobal('Image', class {
+      complete = true;
+      naturalWidth = 320;
+      naturalHeight = 240;
+      onload: (() => void) | null = null;
+      set src(_value: string) { this.onload?.(); }
+    });
+    try {
+      const lat = 30.4049;
+      const lng = 120.5394;
+      const dLng = 12 / (111_320 * Math.cos((lat * Math.PI) / 180));
+      const dLat = 8 / 110_574;
+      const polygon = [
+        { lng, lat },
+        { lng: lng + dLng, lat },
+        { lng: lng + dLng, lat: lat + dLat },
+        { lng, lat: lat + dLat },
+      ];
+      const image = satelliteProxyUrl(polygon, 'secret-key')!;
+      const { layout: bare, ground: pickerGround } = createVenueFromPick(INITIAL_LAYOUT as RoomLayout, {
+        name: '盐官古城', location: '潮乐之城', polygon,
+      });
+
+      // 老存档形态（还带 layout 镜像）vs 正源形态：同一份数据画出来必须逐项一致。
+      const layout = {
+        ...bare, floorPlanImage: image, floorPlanOpacity: 0.94, satelliteGroundRef: true,
+        mapGroundPolygon: polygon, mapLngLat: { lng, lat }, mapGroundFrame: pickerGround.frame,
+      } as unknown as RoomLayout;
+      const floor = layout.floors[0]!;
+      const calls: unknown[][] = [];
+      const drawImage = vi.fn((...args: unknown[]) => { calls.push(args); });
+      const ctx = new Proxy({ drawImage, measureText: () => ({ width: 12 }) },
+        { get: (target, key) => (target as Record<string, unknown>)[key as string] ?? (() => {}) });
+      const canvas = { width: 800, height: 600, clientWidth: 800, getContext: () => ctx } as unknown as HTMLCanvasElement;
+      const view = { canvas, layout, floor, selectedItemId: null, showMeasurements: false, showWiFiSignals: false, hasCollision: () => false };
+      // 只读 layout 镜像
+      render2DTopDown(view);
+      const fromLayout = calls.map(value => value.slice(1));
+      expect(fromLayout.length).toBeGreaterThan(0);
+      // 接正源：同一份数据从 plan.ground 读，画出来的矩形/透明度必须逐项相同
+      const ground: ResolvedGround = {
+        image, opacity: 0.94, satelliteRef: true, polygon, center: { lng, lat },
+        frame: pickerGround.frame!, source: 'plan',
+      };
+      calls.length = 0;
+      render2DTopDown({ ...view, ground });
+      expect(calls.map(value => value.slice(1))).toEqual(fromLayout);
+      // layout 那 6 个字段将来删掉后，只剩正源也要照画
+      calls.length = 0;
+      const { floorPlanImage: _image, ...layoutWithoutMirror } = layout;
+      render2DTopDown({ ...view, layout: layoutWithoutMirror as RoomLayout, ground });
+      expect(calls.map(value => value.slice(1))).toEqual(fromLayout);
     } finally { vi.unstubAllGlobals(); }
   });
 });

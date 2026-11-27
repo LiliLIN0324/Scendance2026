@@ -1,5 +1,5 @@
 import { localWriteCapabilityGuard, type LocalWriteCapability } from '@/lib/local-write-lease';
-import { useCallback, useRef, type MutableRefObject, type RefObject } from 'react';
+import { useCallback, useRef } from 'react';
 import { notify } from '../lib/editor-notices';
 import { downloadDataUrlAsPng, readLayoutFromFile } from '../lib/file-io';
 import { downloadTextFile } from '../lib/plan-export/download';
@@ -8,8 +8,6 @@ import { confirmReplace, snapshotBeforeReplace } from '../lib/restore-point';
 import { encodeShareSnapshot, ShareSnapshotError } from '../../../lib/share-snapshot';
 import type { LayoutActions } from './use-layout-state';
 import type { CameraPreset, RoomLayout } from '../lib/types';
-import type * as ThreeNS from 'three';
-import type { OrbitControls as OrbitControlsType } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export interface UseImportExportParams {
   layout: RoomLayout;
@@ -17,24 +15,10 @@ export interface UseImportExportParams {
   /** Optional isolated ordinary-write authority; once supplied removal or replacement fails closed. */
   localWriteCapability?: LocalWriteCapability | undefined;
   view2D: boolean;
-  canvasRef: RefObject<HTMLCanvasElement>;
-  canvas2DRef: RefObject<HTMLCanvasElement | null>;
-  rendererRef: MutableRefObject<ThreeNS.WebGLRenderer | null>;
-  sceneRef: MutableRefObject<ThreeNS.Scene | null>;
-  cameraRef: MutableRefObject<ThreeNS.PerspectiveCamera | null>;
-  /** Restores the live camera framing after a preset capture. */
-  controlsRef?: MutableRefObject<OrbitControlsType | null>;
-  /** Frames the given preset before capture; the live camera is restored after. */
-  applyPreset?: (preset: CameraPreset) => void;
-  /**
-   * 与实时画面同一条渲染路径：开着 3DGS 环境预览时先铺点云再叠布置，
-   * 关掉时退回普通渲染。导出必须走它，否则成图里没有真实场地。
-   */
-  paintFrame?: (renderer: ThreeNS.WebGLRenderer, scene: ThreeNS.Scene, camera: ThreeNS.Camera) => void;
   /**
    * 2026-11-19 用户：「把 captureRenderImage / exportRenderImage 换成 OutdoorPlan3D 的 captureImage」。
-   * 可见画面已经是 OutdoorPlan3D（室内 Viewport 退役），取图必须问它要；
-   * 返回 null 时才退回下面那条旧渲染器通路（旧管线还在时保命用）。
+   * 可见画面已经是 OutdoorPlan3D（室内 Viewport 退役），取图必须问它要。
+   * 2026-11-25 S1 收口：旧的「renderer/scene/camera/paintFrame 兜底」通路整段删除。
    */
   capture3D?: (options: RenderExportOptions) => Promise<string | null>;
   /** Runs after a successful JSON import (e.g. clear the selection). */
@@ -92,14 +76,6 @@ export function useImportExport({
   actions,
   localWriteCapability,
   view2D,
-  canvasRef,
-  canvas2DRef,
-  rendererRef,
-  sceneRef,
-  cameraRef,
-  controlsRef,
-  applyPreset,
-  paintFrame,
   capture3D,
   onImported,
 }: UseImportExportParams): UseImportExportResult {
@@ -116,63 +92,12 @@ export function useImportExport({
   };
   const captureRenderImage = useCallback(
     async ({ view, scale, resolution }: RenderExportOptions) => {
-      if (view2D) {
-        const flat = canvas2DRef.current;
-        if (!flat) return null;
-        try { return flat.toDataURL('image/png'); } catch { return null; }
-      }
-      const canvas = canvasRef.current;
-      const renderer = rendererRef.current;
-      const scene = sceneRef.current;
-      const camera = cameraRef.current;
-      // 先问可见画布（OutdoorPlan3D）；拿不到再走旧渲染器。
-      if (capture3D) {
-        const shot = await capture3D({ view, scale, ...(resolution ? { resolution } : {}) });
-        if (shot) return shot;
-      }
-      if (!canvas || !renderer || !scene || !camera) return null;
-      const factor = Math.min(3, Math.max(1, Math.round(scale)));
-      // 交付尺寸固定从 1920×1080 起算，不再跟着画布 CSS 大小走：
-      // 同一个方案不管谁的窗口多大，导出都是同一张构图。
-      const targetWidth = resolution?.width ?? 1920 * factor;
-      const targetHeight = resolution?.height ?? 1080 * factor;
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      if (width < 2 || height < 2) return null;
-      const paint = paintFrame ?? ((target: ThreeNS.WebGLRenderer, paintScene: ThreeNS.Scene, paintCamera: ThreeNS.Camera) => target.render(paintScene, paintCamera));
-      const controls = controlsRef?.current ?? null;
-      const savedPosition = camera.position.clone();
-      const savedQuaternion = camera.quaternion.clone();
-      const savedAspect = camera.aspect;
-      const savedPixelRatio = renderer.getPixelRatio();
-      const savedTarget = controls ? controls.target.clone() : null;
-      try {
-        if (view !== 'current') applyPreset?.(view);
-        // 16:9 的竖向 FOV 保持不动，只放宽横向，画面不拉伸。
-        camera.aspect = targetWidth / targetHeight;
-        camera.updateProjectionMatrix();
-        // 1:1 像素比 + 目标尺寸，toDataURL 出来的就是这一张的原始像素。
-        renderer.setPixelRatio(1);
-        renderer.setSize(targetWidth, targetHeight, false);
-        paint(renderer, scene, camera);
-        return canvas.toDataURL('image/png');
-      } catch {
-        return null;
-      } finally {
-        camera.position.copy(savedPosition);
-        camera.quaternion.copy(savedQuaternion);
-        camera.aspect = savedAspect;
-        camera.updateProjectionMatrix();
-        if (controls && savedTarget) {
-          controls.target.copy(savedTarget);
-          controls.update();
-        }
-        renderer.setPixelRatio(savedPixelRatio);
-        renderer.setSize(width, height, false);
-        paint(renderer, scene, camera);
-      }
+      // 2026-11-25 S1 收口：室内渲染器通路（renderer/scene/camera/paintFrame/applyPreset）
+      // 已随壳体退役，取图只剩可见画布 OutdoorPlan3D 一条；2D 平铺画布同样已无绑定。
+      if (view2D || !capture3D) return null;
+      return await capture3D({ view, scale, ...(resolution ? { resolution } : {}) });
     },
-    [view2D, canvasRef, canvas2DRef, rendererRef, sceneRef, cameraRef, controlsRef, applyPreset, paintFrame, capture3D]
+    [view2D, capture3D]
   );
 
   const exportRenderImage = useCallback(

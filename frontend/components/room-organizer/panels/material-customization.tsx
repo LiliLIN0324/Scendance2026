@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { assetError } from '@/lib/assets-api';
 import { useBackendSession, type AuthorizedAssets, type BackendSession, type Scene, type SceneProposal } from '@/lib/backend-session';
 import { assertGeometryActionSource, geometryProjectId, isLocalActivityWorkspace } from '@/lib/geometry-workbench';
+import { resolveProjectScope } from '@/lib/project-scope';
 import { materialChangeSchema, materialInspectionSchema, materialVariantAssetSchema, type MaterialChange, type MaterialInspection } from '../../../../supabase/functions/_shared/asset-customization-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { ScenePreview } from '../../business/scene-preview';
@@ -28,7 +29,7 @@ interface Intent { customizeId: string; proposalId: string; proposalKey?: string
 export function MaterialCustomization({ controller, layout, onApply, seed, active=true }: Props): JSX.Element {
   const cloud=useBackendSession(controller);
   const {allSelectedIds}=useSelection();
-  const scope=`${controller.config.apiUrl}:${cloud.user?.id??'anonymous'}:${layout.id??'local'}`;
+  const scope=`${controller.config.apiUrl}:${cloud.user?.id??'anonymous'}:${resolveProjectScope(layout.id)}`;
   const projectId=geometryProjectId(controller,layout.id);
   const localWorkspace=isLocalActivityWorkspace(controller);
   const identityKey=canonical({scope,projectId,project:cloud.project?.id,binding:cloud.geometryBinding??null,sessionId:cloud.sessionId});
@@ -84,7 +85,7 @@ export function MaterialCustomization({ controller, layout, onApply, seed, activ
   const context=useCallback(():Context=>{const current=controller.getSnapshot();return {scope,targetKey,base:layout,projectId:geometryProjectId(controller,layout.id),bindingKey:canonical(current.geometryBinding??null),identityEpoch:identity.current.epoch,revision:current.revision,localRevision:current.localRevision,generation:current.lease?.generation,sessionId:current.sessionId};},[controller,scope,targetKey,layout]);
   const sameSource=useCallback((value:Context):boolean=>{
     const current=controller.getSnapshot();
-    return mounted.current&&identity.current.epoch===value.identityEpoch&&latest.current.scope===value.scope&&latest.current.targetKey===value.targetKey&&latest.current.layout===value.base&&`${controller.config.apiUrl}:${current.user?.id??'anonymous'}:${value.base.id??'local'}`===value.scope&&geometryProjectId(controller,value.base.id)===value.projectId&&canonical(current.geometryBinding??null)===value.bindingKey&&current.sessionId===value.sessionId;
+    return mounted.current&&identity.current.epoch===value.identityEpoch&&latest.current.scope===value.scope&&latest.current.targetKey===value.targetKey&&latest.current.layout===value.base&&`${controller.config.apiUrl}:${current.user?.id??'anonymous'}:${resolveProjectScope(value.base.id)}`===value.scope&&geometryProjectId(controller,value.base.id)===value.projectId&&canonical(current.geometryBinding??null)===value.bindingKey&&current.sessionId===value.sessionId;
   },[controller]);
   useEffect(()=>{const sequence=operation;mounted.current=true;return()=>{mounted.current=false;sequence.current++;};},[]);
   useEffect(()=>{

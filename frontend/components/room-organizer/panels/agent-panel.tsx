@@ -74,8 +74,8 @@ import { layoutFurnishing } from '../lib/furnishing-select';
 import { mergeBanquetTable } from '../lib/table-seat-plan';
 import { mergeLocalSeatingSpecs, type SeatingAxis, type SeatingItemFacts } from '../lib/local-seating-specs';
 import { mergeSeatingAllocation } from '../lib/seating-allocation';
-import { BLANK_VENUE, createBlankVenue } from '../lib/blank-venue';
 import { createVenueFromPick, polygonBboxMeters, type AmapPoint } from '../lib/amap-venue';
+import { writeGroundToPlan } from '../lib/venue-ground-slot';
 import {
   boundsAround,
   createResearchArea,
@@ -120,6 +120,7 @@ import { proposeReviewFix, reviewLayout, type ReviewIssue, type ReviewSkip } fro
 import { localPlan } from '../lib/local-plan';
 import { readBriefMemory, writeBriefMemory } from '../lib/assistant-brief-memory';
 import { isVenueScaleCurrent, venueDimensionsMismatch, venueScaleBasis } from '../lib/venue-scale-basis';
+import { legacyGroundOf } from '../lib/legacy-ground';
 import { useVenueFactTracker } from '../lib/venue-fact-epoch';
 import {useFloorSessionTracker,type FloorSessionToken} from '../lib/floor-session-epoch';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from '../lib/seat-requirement';
@@ -132,7 +133,6 @@ import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
 import { canApplyLayoutGeometry, isStructuralMarker, materialCount, structuralItemCollides, venueArea } from '../lib/structural-layout';
 import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import { venueBriefLine } from '../lib/venue-brief-line';
-import { requestWalkPointerLock } from '../lib/walk-engage';
 import {
   describeExtraction, classifyFile, fileSizeLabel, formatArea, GEN_STEPS, HEADCOUNT_MAX, MATERIAL_REQUEST_HINT, NON_IMAGE_MESSAGE,
   checkDim, CIRCLE_SEATING_NOTE, isClientReviewCommand, isCopyDraftCommand, isEstimateCommand, isExportCommand, isGenericMaterialRequest, isGenerateCommand,
@@ -508,6 +508,13 @@ export interface LayoutAgentCallbacks {
   onOpenLux3d?(kind?: 'world' | 'recon', prompt?: string): void;
   /** 生成轨、观感、重建等生成引擎能力是否露出（与 `NEXT_PUBLIC_LUX3D_RAIL` 一致） */
   luxToolsVisible?: boolean;
+  /**
+   * 「这个场地已经有底图」的判定（B4 读方 ④，2026-11-25）。
+   * 底图字节的正源在 `plan.ground`；layout 那份 `floorPlanImage` 会随 #38 删掉，
+   * 删掉之后光看 layout 会把「只有卫星底图的场地」当成空白场地，
+   * 换空壳时静默丢掉底图。壳体按 plan 兜这一句。
+   */
+  groundRecorded?(): boolean;
 }
 
 interface AgentValue {
@@ -577,8 +584,6 @@ interface AgentValue {
   /** 还没确认的那版布置；null = 没有待确认的提案。只在预览已落稳（proposed）时给出。 */
   proposal: ProposalView | null; confirmProposal(): void; withdrawProposal(): void;
   inventoryWorkspace: ReactNode; inventoryBlocked: boolean; inventoryInvalid: boolean;
-  /** 左栏简报的空地文字链：不用先开物料库，一键立 12×8 空壳。 */
-  startBlankVenue(): void;
   /** 左轨常驻的地图入口：场地立起来也进得来，返回 null = 场地已换成圈画这块，否则是挡路的原因。 */
   mapPickerOpen: boolean;
   startMapVenuePicker(): void;
@@ -622,7 +627,7 @@ interface AgentValue {
   startStylePicker(): void;
   closeStylePicker(): void;
   placeStyleBundle(bundle: StyleBundle): void;
-  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null;
+  applyMapVenuePick(pick: { name: string; location: string; polygon: { lng: number; lat: number }[]; flow?: { lng: number; lat: number }[] }): string | null;
   /** 云端还在写这一版：忙的时候不亮确认。 */
   cloudBusy: boolean;
   /** 上一版云任务还在恢复：最后一帧没稳，不亮确认。 */
@@ -644,7 +649,7 @@ interface AgentValue {
   documents: AgentDocument[];
   venueResearch: VenueResearch | null;
   removePendingImage(index: number): void;
-  send(text: string): void; rainOn: boolean; previewRain(): void; walkthrough(): void;
+  send(text: string): void; rainOn: boolean; previewRain(): void;
   /** 面板自己也要能回话（场景库对话直接把结果说进这场会话），所以把说话口开放出来。 */
   say(bubble: Omit<Bubble, 'id'>): void;
 }
@@ -1632,9 +1637,10 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       // store event. The monotonic flag catches A→B→A.
       const mapKey = (value: RoomLayout) => {
         const {floorPlanImage:_image,...withoutImage}=value;
+        const legacy = legacyGroundOf(value);
         return JSON.stringify({venue:venueScaleBasis(withoutImage),researchArea:value.researchArea ?? null,sceneAnchor:value.sceneAnchor ?? null,
-          mapGroundPolygon:value.mapGroundPolygon ?? null,mapLngLat:value.mapLngLat ?? null,mapGroundFrame:value.mapGroundFrame ?? null,
-          satelliteGroundRef:value.satelliteGroundRef ?? null,floorPlanFitMode:value.floorPlanFitMode ?? null});
+          mapGroundPolygon:legacy.mapGroundPolygon ?? null,mapLngLat:legacy.mapLngLat ?? null,mapGroundFrame:legacy.mapGroundFrame ?? null,
+          satelliteGroundRef:legacy.satelliteGroundRef ?? null,floorPlanFitMode:value.floorPlanFitMode ?? null});
       };
       const initialLayout = layoutStore.getState().layout;
       const baseline = mapKey(initialLayout), baselineImage = initialLayout.floorPlanImage ?? null;
@@ -2007,13 +2013,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
   }
 
   /** 场地圈画应用（原 value 内联体，V-1c 提为具名函数：chat 锚定链与地图选址共用同一落壳路径）。 */
-  function applyVenuePick(pick: { name: string; location: string; polygon: AmapPoint[]; satelliteGround?: boolean; satelliteGroundImage?: string }): string | null {
+  function applyVenuePick(pick: { name: string; location: string; polygon: AmapPoint[] }): string | null {
     if (phase === 'generating') { const reason = '还在出这一版，先停一下。'; say({ role: 'agent', amber: true, text: reason }); return reason; }
     const was2D = view.view2D;
     try {
       const base = layoutStore.getState().layout;
       if (base.floors.length !== 1) throw new Error('当前方案有多个楼层，圈场地会丢失已有内容。请保留原方案并先核对。');
-      const { layout, cleared } = createVenueFromPick(base, pick);
+      const { layout, cleared, ground } = createVenueFromPick(base, pick);
       const preservation = validateCandidateApply(base, layout, activeFloorIndex);
       if (!preservation.ok) throw new Error(preservation.reason);
       for (const floor of base.floors) for (const item of floor.items) {
@@ -2030,10 +2036,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
           : createResearchArea(XIHU_LOCAL_PLACE, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE)
         : layout.researchArea;
       onApply(researchArea ? { ...layout, researchArea } : layout, { expectedBase: base });
+      // B4 #38：圈画边界跟着 ground 走，唯一落盘口是 plan.ground（layout 不再存底图/多边形字节）。
+      // S3-3 mirror g3（positive-source-ground）：只写 plan.ground，id/name 透传身份，不回写几何。
+      writeGroundToPlan(base.id ?? layout.id, ground, { name: layout.name });
       // 2026-11-16 用户定稿：选址即换场——新锚点 + 新用地红线推进户外规划，
       // 旧草稿由 applyVenue 按「换锚点=新场地」删掉（同锚点重画边界则保留内容）。
       // 第一人称漫游的围栏读的就是这份 boundary，接上以后直接站在新场地上。
-      const sitePoint = layout.sceneAnchor ?? layout.mapLngLat ?? null;
+      const sitePoint = layout.sceneAnchor ?? legacyGroundOf(layout).mapLngLat ?? null;
       const siteBoundary = sitePoint
         ? trueFootprintBoundary(pick.polygon, { lng: sitePoint.lng, lat: sitePoint.lat })
         : null;
@@ -2047,19 +2056,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       setVenueIO('outdoor');
       onVenueIOChange?.('outdoor');
       if (was2D) setView(current => ({ ...current, view2D: true }));
-      if (pick.satelliteGround) {
-        setView(current => ({ ...current, showReferenceImage: true, referenceImageOpacity: layout.floorPlanOpacity ?? 0.55 }));
-      }
       const dims = polygonBboxMeters(pick.polygon);
       const clamped = dims.width > 100 || dims.depth > 100;
       const dropped = cleared ? `${cleared} 件物料放不下先撤了` : '物料照常摆';
       const polyNote = (layout.backendVenue?.shape === 'polygon' || layout.backendSceneV2?.venue.shape === 'polygon')
         ? '，壳体按圈画真轮廓（非仅外接矩形）'
         : '';
-      const satNote = withinWestLake
-        ? '。已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围'
-        : pick.satelliteGround ? '。已开启卫星参考底图'
-        : '';
+      const satNote = withinWestLake ? '。已铺上平湖秋月这一片的卫星底图，蓝线标出活动范围' : '';
       say({ role: 'agent', text: `户外场地已生成：${pick.name} · 真实范围 ${Math.round(dims.width)} × ${Math.round(dims.depth)} m（外接矩形报米）${polyNote}${clamped ? '，布置壳取其中一块规划区（等比缩轮廓）' : ''}，${dropped}${satNote}。下一步去「空间」看实景，或重新选址。` });
       return null;
     } catch (error) {
@@ -2443,38 +2446,6 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (sessionScope !== 'legacy' && (memoryRef.current.lengthM !== null || memoryRef.current.areaM2 !== null)) saveMemory({...memoryRef.current,venueScaleBasis:venueScaleBasis(venue.layout),venueFactToken:venueFacts.capture() ?? undefined,scaleNeedsReconfirmation:false});
     if (was2D) setView(current => ({ ...current, view2D: true }));
     say({ role: 'agent', text: sizeOnlyNote(venue) });
-  }
-
-  /** 左栏简报的「空白场地」文字链：和模板轨首卡同一块 12×8 空壳，不用先开物料库。 */
-  function startBlankVenue(): void {
-    if (phase === 'generating') { say({ role: 'agent', amber: true, text: '还在出这一版：先停一下，再换空地。' }); return; }
-    const before = live.current;
-    const materialCount = before.floors.reduce((count, floor) => count + floor.items.filter(item => !isStructuralMarker(item)).length, 0);
-    const zoneCount = before.floors.reduce((count, floor) => count + (floor.zones?.length ?? 0), 0);
-    const recordedVenue = !!(before.venueScan || before.floorPlanImage || before.researchArea || before.sceneAnchor ||
-      (before.backendVenue && !before.backendSceneV2) ||
-      before.floors.length > 1 || before.floors.some(floor => (floor.interiorWalls ?? []).some(wall => wall.kind !== 'exterior')) ||
-      (before.backendSceneV2 && (before.backendSceneV2.sources.length || before.backendSceneV2.structure.columns.length ||
-        before.backendSceneV2.structure.walls.some(wall => wall.status !== 'inferred') ||
-        before.backendSceneV2.structure.openings.some(opening => opening.status !== 'inferred'))));
-    if (materialCount || zoneCount || recordedVenue) {
-      const details = [materialCount ? `${materialCount} 件物料` : null, zoneCount ? `${zoneCount} 个区域` : null,
-        recordedVenue ? '已有场地资料' : null].filter(Boolean).join('、');
-      say({ role: 'agent', amber: true, text: `当前场景包含${details}，直接换成空白空间会丢失这些内容，本次没有更改。请先备份并另建场景。` });
-      return;
-    }
-    runToken.current++;
-    if (proposal.current) dropProposal();
-    discardCloudPreview();
-    setPhase('idle'); setProgress(0);
-    const was2D = view.view2D;
-    try {
-      onApply(createBlankVenue(live.current));
-      if (was2D) setView(current => ({ ...current, view2D: true }));
-      say({ role: 'agent', text: `空白空间立好了：${BLANK_VENUE.width} × ${BLANK_VENUE.depth} m，要调尺寸就说「改成 15×10」。` });
-    } catch (error) {
-      say({ role: 'agent', amber: true, text: error instanceof Error ? error.message : '空白空间没立起来，再试一次。' });
-    }
   }
 
   function readLocalDraftAnnotations():{revision:number;signature:string;hasUnmodelled:boolean;hasDoor:boolean;routes:LocalRouteInput[];routeSignature:string;routeReader:((id:string)=>UserRouteProvenance|null)|null;reader:()=>{draft:LayoutPlanDraft|null;revision:number}}|null {
@@ -3249,6 +3220,8 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(attachment){
         // 全部待发图（最多 10 张）一起送；超预算的按顺序留下，并如实说几张没带。
         const sessionId = boundSessionId.current;
+        // 会话作用域：boundSessionId 是助手会话 id，空值落匿名会话槽 'local'；
+        // sessionScope 已作项目前缀。这是会话维度兜底，不是项目 id，不并入项目桶，保留不改。
         const documentScope = `${sessionScope}:${sessionId ?? 'local'}`;
         const batch = staged.length ? staged : [attachment];
         const documentFiles = batch.filter(item => isAgentDocument(item.file));
@@ -3954,7 +3927,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     // 生成中与暂停在逐帧预览里：这一版还没长完，不给出可确认的卡片。
     proposal: phase === 'proposed' ? activeProposal : null, inventoryWorkspace, inventoryBlocked: inventoryCheck?.status==='violated'||!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput), inventoryInvalid:!!(inventoryTargetForRender&&inventoryFor(inventoryTargetForRender)?.invalidInput),
     confirmProposal, withdrawProposal, cloudBusy: !!studio?.busy, recovering: !!studio?.recoverable,
-    cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats, startBlankVenue,
+    cloudStale: !!(studio?.preview && (studio.stale || studio.expired)), addSeats,
     mapPickerOpen, startMapVenuePicker: () => { setMapPickerOpen(value => !value); }, closeMapVenuePicker: () => setMapPickerOpen(false),
     venuePickerOpen, startVenuePicker: () => setVenuePickerOpen(true), closeVenuePicker: () => setVenuePickerOpen(false),
     stylePickerOpen,
@@ -4016,10 +3989,6 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     removePendingImage: index => setPendingFiles(list => list.filter((_, i) => i !== index)),
     send, say, rainOn: view.weather === 'rain', streamPreview,
     previewRain: () => setView(current => ({ ...current, weather: 'rain', view2D: false })),
-    walkthrough: () => {
-      setView(current => ({ ...current, walkthroughMode: true, view2D: false, measurementMode: false, drawWallMode: false }));
-      requestWalkPointerLock();
-    },
   };
   return <AgentContext.Provider value={value}>
     {children}
@@ -4233,7 +4202,7 @@ export function MapVenueOverlay({ onReconUpload, onVenueSaved }: {
       <button type="button" className="sc-button" aria-label="关闭" data-tip="关闭" title="关闭" onClick={agent.closeMapVenuePicker}><X size={16} aria-hidden="true"/></button>
     </div>
     {blocked && <p className="sc-map-blocked" role="alert">{blocked}</p>}
-    <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} {...(layout.mapGroundPolygon ? { savedPolygon: layout.mapGroundPolygon } : {})} onPick={pick => {
+    <AmapVenuePicker grow onClose={agent.closeMapVenuePicker} {...(legacyGroundOf(layout).mapGroundPolygon ? { savedPolygon: legacyGroundOf(layout).mapGroundPolygon } : {})} onPick={pick => {
       const reason = agent.applyMapVenuePick(pick);
       setBlocked(reason);
       // 场地没立起来就不出采集单——那份站位对应的地块并不存在。
@@ -5066,7 +5035,6 @@ useEffect(() => {
             <div className="ap-chips">
               <button type="button" className="chip" onClick={() => agent.regenerate()}>换一版</button>
               <button type="button" className="chip" onClick={agent.callbacks.onOpenMaterials}>我来调</button>
-              <button type="button" className="chip btn-outline" onClick={agent.walkthrough}>第一人称漫游</button>
               <button type="button" className="chip btn-outline" onClick={agent.callbacks.onOpenDelivery}>导出与交接</button>
             </div>
           </div>
@@ -5371,32 +5339,8 @@ export function AgentReopenCard({ onOpen }: { onOpen(): void }): JSX.Element {
 
 export function AgentCanvasOverlay(): JSX.Element | null {
   const agent = useAgent();
-  const { activeFloor, collidingIds, view, exitWalkthrough } = useRoomEditor();
-  const [fullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    const sync = () => setFullscreen(document.fullscreenElement !== null);
-    document.addEventListener('fullscreenchange', sync);
-    sync();
-    return () => document.removeEventListener('fullscreenchange', sync);
-  }, []);
-  const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement) { void document.exitFullscreen().catch(() => {}); return; }
-    if (typeof document.documentElement.requestFullscreen !== 'function') return;
-    void document.documentElement.requestFullscreen().catch(() => {});
-  }, []);
-  // 全屏是走动借来的：走出第一人称时一起还回去，不留一个找不到出口的全屏页面。
-  useEffect(() => {
-    if (view.walkthroughMode || !fullscreen) return;
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-  }, [view.walkthroughMode, fullscreen]);
+  const { activeFloor, collidingIds } = useRoomEditor();
   const overlapNames = useMemo(() => Array.from(new Set(activeFloor.items.filter(item => collidingIds.has(item.id)).map(item => item.name))), [activeFloor.items, collidingIds]);
-  // 漫游预览（只改视图，不写入场景）：退出时 use-walkthrough 会把相机放回进入前的位置。
-  if (view.walkthroughMode && !view.view2D) return <div className="ap-canvas-layer"><div className="ap-walk-controls">
-    <button id="walk-fullscreen" type="button" className="ap-canvas-pill" aria-pressed={fullscreen} title={fullscreen ? '退出全屏' : '全屏'} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 size={14} aria-hidden="true"/> : <Maximize2 size={14} aria-hidden="true"/>}{fullscreen ? '退出全屏' : '全屏'}</button>
-    <button id="walk-exit" type="button" className="ap-canvas-pill" onClick={exitWalkthrough}>
-      退出漫游 <span className="ap-walk-esc">· Esc</span>
-    </button>
-  </div></div>;
   if (agent.callbacks.workbenchMode !== 'layout') return null;
   const s = agent.state;
   return <div className="ap-canvas-layer" aria-live="polite">
