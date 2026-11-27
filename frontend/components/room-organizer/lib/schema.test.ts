@@ -941,3 +941,54 @@ it('retains local layers and design history when reopening a stored layout', () 
   });
   expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
 });
+
+describe('variant sidecar slots on read-back (D6-4-0)', () => {
+  const summary = { taskCount: 3, acquisitionCount: 2, staffingCount: 1, estimateCount: 0, itemCount: 8, chairCount: 4, tableCount: 2, otherItemCount: 2, zoneCount: 1, headcount: 40 };
+
+  it('keeps operations/plan refs, scan identity and frozen summary after a round-trip', () => {
+    const variant = {
+      id: 'variant-1',
+      name: '提案一',
+      layout: makeLayout(),
+      operationsRef: '22222222-2222-4222-8222-222222222221',
+      planRef: '22222222-2222-4222-9222-222222222222',
+      scan: { assetId: 'scan-asset-1', name: '场地扫描' },
+      summary,
+    };
+    const layout = makeLayout({ designBook: { activeId: 'variant-1', variants: [variant] } });
+    const parsed = parseStoredLayout(JSON.parse(JSON.stringify(layout)));
+    expect(parsed).not.toBeNull();
+    const restored = parsed!.designBook!.variants[0]!;
+    expect(restored.operationsRef).toBe(variant.operationsRef);
+    expect(restored.planRef).toBe(variant.planRef);
+    expect(restored.scan).toEqual(variant.scan);
+    expect(restored.summary).toEqual(summary);
+  });
+
+  it('accepts a legacy variant that carries no ref or summary slots', () => {
+    const variant = { id: 'legacy', name: '旧方案', layout: makeLayout() };
+    const layout = makeLayout({ designBook: { activeId: 'legacy', variants: [variant] } });
+    const parsed = parseStoredLayout(JSON.parse(JSON.stringify(layout)));
+    expect(parsed).not.toBeNull();
+    const restored = parsed!.designBook!.variants[0]!;
+    expect(restored.operationsRef).toBeUndefined();
+    expect(restored.planRef).toBeUndefined();
+    expect(restored.scan).toBeUndefined();
+    expect(restored.summary).toBeUndefined();
+  });
+
+  it('does not resolve or validate a ref target, only its shape', () => {
+    const variant = { id: 'variant-1', name: '提案一', layout: makeLayout(), operationsRef: 'any-local-id' };
+    const layout = makeLayout({ designBook: { activeId: 'variant-1', variants: [variant] } });
+    expect(isRoomLayout(layout)).toBe(true);
+    expect(parseStoredLayout(JSON.parse(JSON.stringify(layout)))!.designBook!.variants[0]!.operationsRef).toBe('any-local-id');
+  });
+
+  it('rejects a non-string ref while a plain legacy variant still opens', () => {
+    const bad = makeLayout({ designBook: { activeId: 'variant-1', variants: [{ id: 'variant-1', name: '坏', layout: makeLayout(), operationsRef: 42 }] } });
+    expect(isRoomLayout(bad)).toBe(false);
+    const legacy = makeLayout({ designBook: { activeId: 'legacy', variants: [{ id: 'legacy', name: '旧', layout: makeLayout() }] } });
+    expect(isRoomLayout(legacy)).toBe(true);
+    expect(parseStoredLayout(legacy)).not.toBeNull();
+  });
+});

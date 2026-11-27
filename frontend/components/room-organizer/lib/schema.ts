@@ -222,6 +222,23 @@ function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === 'string';
 }
 
+/** Sidecar record id on a variant: optional non-empty string, length-capped; the ref target itself is not resolved here. */
+function optionalRefId(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_ID_LENGTH);
+}
+
+/** Variant scan identity: optional `{ assetId, name? }`; no whole scan snapshot is carried. */
+function optionalVariantScan(value: unknown): boolean {
+  return value === undefined || (isPlainObject(value) && typeof value.assetId === 'string' &&
+    value.assetId.trim().length > 0 && value.assetId.length <= MAX_ID_LENGTH &&
+    (value.name === undefined || (typeof value.name === 'string' && value.name.length <= MAX_NAME_LENGTH)));
+}
+
+/** Frozen summary slot: optional plain object; its counters are trusted as-is, re-derived on save instead. */
+function optionalVariantSummary(value: unknown): boolean {
+  return value === undefined || isPlainObject(value);
+}
+
 function isVec2(value: unknown): boolean {
   return isPlainObject(value) && isFiniteNumber(value.x) && isFiniteNumber(value.z);
 }
@@ -394,7 +411,9 @@ export function isRoomLayout(value: unknown): value is RoomLayout {
         variant.layout.designBook === undefined && variant.layout.eventProfile === undefined && isRoomLayout(variant.layout) &&
         (variant.origin === undefined || variant.origin === 'ai' || variant.origin === 'manual') &&
         (variant.savedAt === undefined || typeof variant.savedAt === 'string') &&
-        (variant.note === undefined || typeof variant.note === 'string')) ||
+        (variant.note === undefined || typeof variant.note === 'string') &&
+        optionalRefId(variant.operationsRef) && optionalRefId(variant.planRef) &&
+        optionalVariantScan(variant.scan) && optionalVariantSummary(variant.summary)) ||
       !book.variants.some(variant => variant.id === book.activeId) || new Set(book.variants.map(variant => variant.id)).size !== book.variants.length) return false;
   }
   if (v.backendSceneV2 !== undefined && (!sceneSchema.safeParse(v.backendSceneV2).success || (v.backendSceneV2 as { schemaVersion?: number }).schemaVersion !== 2)) return false;
@@ -935,12 +954,24 @@ function repairLayout(layout: RoomLayout): RoomLayout {
   };
   if (layout.id !== undefined) patch.id = capText(layout.id, MAX_ID_LENGTH);
   if (layout.itemLayers) patch.itemLayers = layout.itemLayers.map(({ id, name, itemIds }) => ({ id, name, itemIds: [...new Set(itemIds)] }));
-  if (layout.designBook) patch.designBook = { activeId: layout.designBook.activeId, variants: layout.designBook.variants.map(({ id, name, layout: snapshot, origin, savedAt, note }) => ({
-    id, name, layout: withUniqueIds(repairLayout(snapshot)),
-    ...(origin === 'ai' || origin === 'manual' ? { origin } : {}),
-    ...(typeof savedAt === 'string' && savedAt.length > 0 ? { savedAt: capText(savedAt, MAX_ID_LENGTH) } : {}),
-    ...(typeof note === 'string' && note.trim().length > 0 ? { note: capText(note, MAX_NAME_LENGTH) } : {}),
-  })) };
+  if (layout.designBook) patch.designBook = { activeId: layout.designBook.activeId, variants: layout.designBook.variants.map((variant) => {
+    const { id, name, layout: snapshot, origin, savedAt, note, operationsRef, planRef, scan, summary } = variant;
+    const keptRef = (value: string | undefined): string | undefined =>
+      typeof value === 'string' && value.trim() ? capText(value.trim(), MAX_ID_LENGTH) : undefined;
+    const keptScan = scan && optionalVariantScan(scan)
+      ? { assetId: capText(scan.assetId.trim(), MAX_ID_LENGTH), ...(typeof scan.name === 'string' && scan.name.trim() ? { name: capText(scan.name.trim(), MAX_NAME_LENGTH) } : {}) }
+      : undefined;
+    return {
+      id, name, layout: withUniqueIds(repairLayout(snapshot)),
+      ...(origin === 'ai' || origin === 'manual' ? { origin } : {}),
+      ...(typeof savedAt === 'string' && savedAt.length > 0 ? { savedAt: capText(savedAt, MAX_ID_LENGTH) } : {}),
+      ...(typeof note === 'string' && note.trim().length > 0 ? { note: capText(note, MAX_NAME_LENGTH) } : {}),
+      ...(keptRef(operationsRef) ? { operationsRef: keptRef(operationsRef)! } : {}),
+      ...(keptRef(planRef) ? { planRef: keptRef(planRef)! } : {}),
+      ...(keptScan ? { scan: keptScan } : {}),
+      ...(summary && optionalVariantSummary(summary) ? { summary: { ...summary } } : {}),
+    };
+  }) };
   if (layout.roof) patch.roof = repairRoof(layout.roof);
   if (layout.terrain) patch.terrain = pick(layout.terrain, TERRAIN_KEYS);
   if (layout.entrance) patch.entrance = pick(layout.entrance, ENTRANCE_KEYS);
