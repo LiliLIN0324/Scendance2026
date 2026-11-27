@@ -5,12 +5,8 @@ import {
   MIN_TERRAIN_Y,
   clampTerrainY,
   groundHeightAt,
-  hasNeighbourOn,
-  hasNeighbours,
   isStreetSeed,
   isTerrainY,
-  lowestGround,
-  neighbourSides,
   outdoorGroundSize,
   roadEdges,
 } from './site';
@@ -21,7 +17,6 @@ describe('site helpers (#202)', () => {
   it('is flat at the ground floor without a terrain', () => {
     expect(groundHeightAt(undefined, -10, 4)).toBe(0);
     expect(groundHeightAt(undefined, 3, 4)).toBe(0);
-    expect(lowestGround(undefined)).toBe(0);
   });
 
   it('holds street level in front, garden level behind, and slopes along the house', () => {
@@ -30,11 +25,6 @@ describe('site helpers (#202)', () => {
     expect(groundHeightAt(hill, 0, 4)).toBeCloseTo(1.25);
     expect(groundHeightAt(hill, 4, 4)).toBe(0);
     expect(groundHeightAt(hill, 20, 4)).toBe(0);
-  });
-
-  it('reports how deep a plinth must reach on a falling site', () => {
-    expect(lowestGround(hill)).toBe(0);
-    expect(lowestGround({ frontY: 0, backY: -1.5 })).toBe(-1.5);
   });
 
   it('validates and clamps ground heights', () => {
@@ -46,23 +36,6 @@ describe('site helpers (#202)', () => {
     expect(clampTerrainY(99)).toBe(MAX_TERRAIN_Y);
     expect(clampTerrainY(-99)).toBe(MIN_TERRAIN_Y);
     expect(clampTerrainY(Number.NaN)).toBe(0);
-  });
-
-  it('lists only the sides that have a neighbour', () => {
-    expect(neighbourSides(undefined)).toEqual([]);
-    expect(neighbourSides({ east: true })).toEqual(['east']);
-    expect(neighbourSides({ west: true, east: false })).toEqual(['west']);
-    expect(neighbourSides({ west: true, east: true })).toEqual(['west', 'east']);
-  });
-
-  it('knows when the street has anything on it, and which side a house stands on (#310)', () => {
-    expect(hasNeighbours(undefined)).toBe(false);
-    expect(hasNeighbours({ seed: 4 })).toBe(false);
-    expect(hasNeighbours({ across: true })).toBe(true);
-    expect(hasNeighbourOn({ east: true }, 'east')).toBe(true);
-    expect(hasNeighbourOn({ east: true }, 'west')).toBe(false);
-    expect(hasNeighbourOn({ street: true }, 'west')).toBe(true);
-    expect(hasNeighbourOn({ across: true }, 'west')).toBe(false);
   });
 
   it('accepts only whole seeds the PRNG can take', () => {

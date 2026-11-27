@@ -1,4 +1,4 @@
-import type { Frontage, NeighbourFlag, NeighbourSide, NeighbourSpec, TerrainSpec } from './types';
+import type { Frontage, NeighbourFlag, TerrainSpec } from './types';
 
 /**
  * Sloped sites and party-wall neighbours (#202).
@@ -12,8 +12,6 @@ import type { Frontage, NeighbourFlag, NeighbourSide, NeighbourSpec, TerrainSpec
  */
 export const MIN_TERRAIN_Y = -3;
 export const MAX_TERRAIN_Y = 6;
-
-export const NEIGHBOUR_SIDES: readonly NeighbourSide[] = ['west', 'east'];
 
 export function isTerrainY(value: unknown): value is number {
   return (
@@ -34,17 +32,6 @@ export function groundHeightAt(terrain: TerrainSpec | undefined, z: number, half
   return terrain.frontY + (terrain.backY - terrain.frontY) * t;
 }
 
-/** Lowest ground anywhere around the house — how deep its plinth must reach. */
-export function lowestGround(terrain: TerrainSpec | undefined): number {
-  return terrain ? Math.min(0, terrain.frontY, terrain.backY) : 0;
-}
-
-export function neighbourSides(neighbours: NeighbourSpec | undefined): NeighbourSide[] {
-  return NEIGHBOUR_SIDES.filter((side) => neighbours?.[side] === true);
-}
-
-export const NEIGHBOUR_FLAGS: readonly NeighbourFlag[] = ['west', 'east', 'street', 'across'];
-
 /** Seeds are 31-bit non-negative integers: what the mulberry32 stream consumes whole (#310). */
 export const MAX_STREET_SEED = 0x7fffffff;
 
@@ -52,15 +39,7 @@ export function isStreetSeed(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_STREET_SEED;
 }
 
-/** Whether anything at all stands along the street (#310). */
-export function hasNeighbours(neighbours: NeighbourSpec | undefined): boolean {
-  return NEIGHBOUR_FLAGS.some((flag) => neighbours?.[flag] === true);
-}
-
-/** A house stands on that side of ours — a party wall or the street row beyond it (#310). */
-export function hasNeighbourOn(neighbours: NeighbourSpec | undefined, side: NeighbourSide): boolean {
-  return neighbours?.[side] === true || neighbours?.street === true;
-}
+export const NEIGHBOUR_FLAGS: readonly NeighbourFlag[] = ['west', 'east', 'street', 'across'];
 
 /**
  * The lot scenery's dimensions (three/outdoor.ts draws to these; the street
