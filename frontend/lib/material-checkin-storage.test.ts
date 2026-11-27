@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { materialCheckinLedgerSchema } from '../../supabase/functions/_shared/material-checkin-contract';
-import { checkedMaterialCheckins, materialCheckinStorageKey, mergeStoredMaterialCheckins, readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from './material-checkin-storage';
-import { readSourceRecord, updateSourceForm } from './source-storage';
+import { checkedMaterialCheckins, ensureCheckinsMigrated, isLegacyCheckinReadOnly, materialCheckinStorageKey, mergeStoredMaterialCheckins, readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from './material-checkin-storage';
+import { readSourceRecord, updateSourceForm, listSourceRecords } from './source-storage';
 import { createLocalWriteLeaseManager, type LocalWriteCapability } from './local-write-lease';
 
-vi.mock('./source-storage', () => ({ readSourceRecord: vi.fn(), updateSourceForm: vi.fn() }));
+vi.mock('./source-storage', () => ({ readSourceRecord: vi.fn(), updateSourceForm: vi.fn(), listSourceRecords: vi.fn() }));
 const records = new Map<string, unknown>();
 const id = (n: number) => `ab900000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const projectId = 'house-checkin-rehearsal';
@@ -23,6 +23,16 @@ beforeEach(() => {
     guard?.assertStillHeld();
     if (next === undefined) records.delete(address); else records.set(address, structuredClone(next));
     return structuredClone(next) as never;
+  });
+  vi.mocked(listSourceRecords).mockImplementation(async (namespace: string) => {
+    const out: { key: [string, string]; value: unknown }[] = [];
+    for (const [address, value] of records) {
+      try {
+        const parsed = JSON.parse(address) as [string, string];
+        if (Array.isArray(parsed) && parsed[0] === namespace) out.push({ key: parsed, value: structuredClone(value) });
+      } catch { /* ignore non-form keys */ }
+    }
+    return out;
   });
 });
 
@@ -87,5 +97,65 @@ describe('project-bound material checkin storage', () => {
   it('rejects invalid future fields and never treats another ledger as an empty local one', () => {
     expect(() => checkedMaterialCheckins(projectId, { ...ledger(), futureData: [] })).toThrow('无法完整读取');
     expect(() => checkedMaterialCheckins(projectId, { ...ledger(), projectId: 'other' })).toThrow('另一个项目');
+  });
+});
+
+describe('D9-2 legacy check-in bucket lazy migration', () => {
+  const legacy = 'legacy-house-x';
+  const legacyKey = (id: string): [string, string] => ['material-checkins', id];
+
+  it('same id: copies the legacy ledger into the new key and writes marker + readonly flag', async () => {
+    const source = ledger();
+    records.set(JSON.stringify(legacyKey(legacy)), structuredClone(source));
+
+    const result = await ensureCheckinsMigrated(projectId);
+    expect(result).toEqual({ status: 'migrated', copied: true });
+    expect(await readMaterialCheckins(projectId)).toEqual(source);
+    expect(records.get(JSON.stringify(['material-checkins-migrated', projectId]))).toBe(legacy);
+    expect(records.get(JSON.stringify(['material-checkins-readonly', legacy]))).toBe('1');
+    expect(await isLegacyCheckinReadOnly(legacy)).toBe(true);
+  });
+
+  it('different id: foreign draft stays isolated and is never merged into the new key', async () => {
+    const foreign = materialCheckinLedgerSchema.parse({ projectId: 'other-project', dataKind: 'rehearsal', sheets: [] });
+    records.set(JSON.stringify(legacyKey(legacy)), structuredClone(foreign));
+
+    const result = await ensureCheckinsMigrated(projectId);
+    expect(result.status).toBe('different-id');
+    expect(result.copied).toBe(false);
+    expect(await readMaterialCheckins(projectId)).toBeUndefined();
+    expect(records.get(JSON.stringify(legacyKey(legacy)))).toEqual(foreign);
+    expect(await isLegacyCheckinReadOnly(legacy)).toBe(false);
+  });
+
+  it('repeated trigger is idempotent: an existing marker skips the copy', async () => {
+    const source = ledger();
+    records.set(JSON.stringify(legacyKey(legacy)), structuredClone(source));
+    expect((await ensureCheckinsMigrated(projectId)).copied).toBe(true);
+
+    const again = await ensureCheckinsMigrated(projectId);
+    expect(again.status).toBe('already-migrated');
+    expect(again.copied).toBe(false);
+    expect(await readMaterialCheckins(projectId)).toEqual(source);
+  });
+
+  it('target already has data: keep the new ledger, do not overwrite or merge the legacy copy', async () => {
+    const existing = ledger(2);
+    records.set(JSON.stringify(legacyKey(projectId)), structuredClone(existing));
+    const old = ledger(1);
+    records.set(JSON.stringify(legacyKey(legacy)), structuredClone(old));
+
+    const result = await ensureCheckinsMigrated(projectId);
+    expect(result.status).toBe('target-has-data');
+    expect(result.copied).toBe(false);
+    expect(await readMaterialCheckins(projectId)).toEqual(existing);
+    expect(records.get(JSON.stringify(legacyKey(legacy)))).toEqual(old);
+  });
+
+  it('no legacy record reports no-legacy and leaves the target empty', async () => {
+    const result = await ensureCheckinsMigrated(projectId);
+    expect(result.status).toBe('no-legacy');
+    expect(result.copied).toBe(false);
+    expect(await readMaterialCheckins(projectId)).toBeUndefined();
   });
 });
