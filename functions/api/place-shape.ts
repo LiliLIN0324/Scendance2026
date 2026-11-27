@@ -1,7 +1,13 @@
 import { wgs84ToGcj02 } from './geo-gcj';
+import { ingestBaiduAoi } from './baidu-aoi';
 import { placeStockConfig, type PlaceStockEnv } from './place-stock-config';
 
-type Context = { request: Request; env: PlaceStockEnv };
+type Context = {
+  request: Request;
+  env: PlaceStockEnv & { SUPABASE_SERVICE_ROLE_KEY?: string };
+  /** Pages 的异步收尾：响应发出后继续跑（补库走这里）。本地/测试可不给。 */
+  waitUntil?: (task: Promise<unknown>) => void;
+};
 
 /**
  * POI 真实轮廓：GET /api/place-shape?name=湖滨银泰in77&near=120.160119,30.25296
@@ -736,6 +742,8 @@ export async function handlePlaceShape(
   request: Request,
   fetchImpl: typeof fetch = fetch,
   env: PlaceStockEnv = {},
+  /** 异步收尾（Pages 的 `context.waitUntil`）：未命中时用来补库，不影响响应。 */
+  schedule?: (task: Promise<unknown>) => void,
 ): Promise<Response> {
   const completed = new AbortController();
   const budget = AbortSignal.any([request.signal, completed.signal, AbortSignal.timeout(20000)]);
@@ -799,6 +807,12 @@ export async function handlePlaceShape(
     shape = { ...shape, source: fromStock && fromStock === shape ? 'stock' : 'online' };
     cacheShape(cacheKey, shape);
   }
+  // 挖不到轮廓 = 这块地在 OSM 里没有面（青山湖水上森林就是）。顺手从百度 AOI 补一条
+  // 进共享库：waitUntil 异步跑，不占本次响应时间；只补库里还没有的同名行，
+  // 绝不覆盖人工描边。补进去之后，下一个用户搜同一场地就直接命中 stock。
+  if (!shape && near && !budget.aborted && schedule) {
+    schedule(ingestBaiduAoi(queryName, env, transport).catch(() => undefined));
+  }
   completed.abort();
   // 未命中不写进程缓存、HTTP no-store：避免把 Overpass 抖动期间的 null 缓存一天。
   return shape ? json({ shape }, 200) : json({ shape: null }, 200, false);
@@ -815,4 +829,10 @@ function json(body: unknown, status: number, cacheable = true): Response {
   });
 }
 
-export const onRequestGet = (context: Context): Promise<Response> => handlePlaceShape(context.request, fetch, context.env);
+export const onRequestGet = (context: Context): Promise<Response> =>
+  handlePlaceShape(
+    context.request,
+    fetch,
+    context.env,
+    context.waitUntil ? task => context.waitUntil!(task) : undefined,
+  );
