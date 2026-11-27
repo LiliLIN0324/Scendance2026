@@ -3,7 +3,7 @@ import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { consumeSelfAttachedProject } from '@/lib/workspace-api';
-import { makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
+import { makeItem, makeLayout, makeZone } from '../lib/__testfixtures__/fixtures';
 import { useSilentCloudAttach } from './use-silent-cloud-attach';
 import { subscribeNotices } from '../lib/editor-notices';
 import type { BackendSession } from '@/lib/backend-session';
@@ -114,7 +114,7 @@ describe('无感挂云', () => {
     const unsubscribe = subscribeNotices(notice => notices.push(notice.message));
     try {
       const base = cloudLayout();
-      const zone = { id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 };
+      const zone = makeZone({ id: 'rest', name: '休息区', color: '#4A7C59', rect: { x: -1, z: -1, w: 2, d: 2 } });
       const local = { ...base, floors: [{ ...base.floors[0]!, zones: [zone] }] };
       const onBind = vi.fn();
       render(<Probe layout={local} onBind={onBind}/>);
@@ -150,7 +150,7 @@ describe('无感挂云', () => {
       const onBind = vi.fn();
       const { rerender } = render(<Probe layout={base} onBind={onBind}/>);
       await waitFor(() => expect(mocks.createProject).toHaveBeenCalledOnce());
-      const local = { ...base, floors: [{ ...base.floors[0]!, zones: [{ id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 }] }] };
+      const local = { ...base, floors: [{ ...base.floors[0]!, zones: [makeZone({ id: 'rest', name: '休息区', color: '#4A7C59', rect: { x: -1, z: -1, w: 2, d: 2 } })] }] };
       rerender(<Probe layout={local} onBind={onBind}/>);
       finish(created);
       await waitFor(() => expect(notices.some(text => text.includes('未自动绑定'))).toBe(true));
@@ -171,7 +171,7 @@ describe('无感挂云', () => {
       const onBind = vi.fn();
       const { rerender } = render(<Probe layout={base} onBind={onBind}/>);
       await waitFor(() => expect(mocks.listStudios).toHaveBeenCalledOnce());
-      const local = { ...base, floors: [{ ...base.floors[0]!, zones: [{ id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 }] }] };
+      const local = { ...base, floors: [{ ...base.floors[0]!, zones: [makeZone({ id: 'rest', name: '休息区', color: '#4A7C59', rect: { x: -1, z: -1, w: 2, d: 2 } })] }] };
       rerender(<Probe layout={local} onBind={onBind}/>);
       finish([studio]);
       await waitFor(() => expect(notices.some(text => text.includes('未自动绑定'))).toBe(true));

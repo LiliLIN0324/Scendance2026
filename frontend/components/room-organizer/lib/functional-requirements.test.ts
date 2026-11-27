@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 import { checkFunctionalRequirements } from './functional-requirements';
 
 describe('explicit functional needs', () => {
@@ -30,7 +30,7 @@ describe('explicit functional needs', () => {
   it('reports conflicting unwanted features without deleting even locked items', () => {
     const desk = makeItem({ id: 'desk', type: 'counter', materialId: 'reception', name: '签到台', locked: true });
     const layout = makeLayout({ floors: [makeFloor({ items: [desk], zones: [
-      { id: 'stage-zone', name: '舞台区', color: '#4A7C59', x: 0, z: 0, w: 2, d: 2 },
+      makeZone({ id: 'stage-zone', name: '舞台区', color: '#4A7C59', rect: { x: 0, z: 0, w: 2, d: 2 } }),
     ] })] });
     const before = structuredClone(layout);
     const checks = checkFunctionalRequirements(layout, 0, { checkin: false, stage: false });
@@ -42,9 +42,9 @@ describe('explicit functional needs', () => {
 
   it('treats an empty stage zone as insufficient, and ignores invalid or negated labels', () => {
     const layout = makeLayout({ floors: [makeFloor({ items: [], zones: [
-      { id: 'stage-zone', name: '主舞台区域', color: '#4A7C59', x: 0, z: 0, w: 2, d: 2 },
-      { id: 'outside', name: '签到区', color: '#4A7C59', x: 40, z: 0, w: 2, d: 2 },
-      { id: 'no-checkin', name: '不需要签到区', color: '#4A7C59', x: 0, z: 0, w: 2, d: 2 },
+      makeZone({ id: 'stage-zone', name: '主舞台区域', color: '#4A7C59', rect: { x: 0, z: 0, w: 2, d: 2 } }),
+      makeZone({ id: 'outside', name: '签到区', color: '#4A7C59', rect: { x: 40, z: 0, w: 2, d: 2 } }),
+      makeZone({ id: 'no-checkin', name: '不需要签到区', color: '#4A7C59', rect: { x: 0, z: 0, w: 2, d: 2 } }),
     ] })] });
     const checks = checkFunctionalRequirements(layout, 0, { checkin: true, stage: true });
     expect(checks.map(check => check.status)).toEqual(['unknown', 'unknown']);
@@ -57,7 +57,7 @@ describe('explicit functional needs', () => {
   it('does not certify a rectangular marker against an unchecked polygonal venue', () => {
     const layout = makeLayout({ width: 10, height: 8, backendVenue: { width: 10, depth: 8, height: 3, shape: 'polygon',
       polygon: [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 3 }, { x: 3, z: 3 }, { x: 3, z: 8 }, { x: 0, z: 8 }], entrances: [] },
-    floors: [makeFloor({ items: [], zones: [{ id: 'checkin', name: '签到区', color: '#4A7C59', x: 0, z: 0, w: 2, d: 2 }] })] });
+    floors: [makeFloor({ items: [], zones: [makeZone({ id: 'checkin', name: '签到区', color: '#4A7C59', rect: { x: 0, z: 0, w: 2, d: 2 } })] })] });
     const [check] = checkFunctionalRequirements(layout, 0, { checkin: true, stage: null });
     expect(check!.status).toBe('unknown');
     expect(check!.zoneIds).toEqual(['checkin']);

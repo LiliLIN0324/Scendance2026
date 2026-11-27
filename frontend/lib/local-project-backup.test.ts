@@ -3,7 +3,7 @@ import { handoffSchema } from '../../supabase/functions/_shared/delivery-contrac
 import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
 import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
-import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { INITIAL_LAYOUT } from '../components/room-organizer/lib/initial-layout';
 import {
   createLocalProjectBackup, createLocalProjectBackupV3, LOCAL_PROJECT_BACKUP_COVERAGE, LOCAL_PROJECT_BACKUP_V1_COVERAGE,
@@ -81,8 +81,8 @@ const readyCheckins = (value = checkinLedger()): BackupMaterialCheckinSnapshot =
 
 it('preserves a structured reserved zone through backup and rejects invalid semantics',()=>{
   const original=layout();
-  original.floors[0]!.zones=[{id:'reserved-zone',name:'保留空间',color:'#4A7C59',x:0,z:0,w:1,d:1,zoneType:'reserved'},
-    {id:'legacy-zone',name:'预留区',color:'#4A7C59',x:2,z:0,w:1,d:1}];
+  original.floors[0]!.zones=[makeZone({id:'reserved-zone',name:'保留空间',color:'#4A7C59',rect:{x:0,z:0,w:1,d:1},zoneType:'reserved'}),
+    makeZone({id:'legacy-zone',name:'预留区',color:'#4A7C59',rect:{x:2,z:0,w:1,d:1}})];
   const restored=parseLocalProjectBackupJson(serializeLocalProjectBackup(original, ready(), { projectId: scope }, createdAt)).layout;
   expect(restored.floors[0]!.zones).toEqual(original.floors[0]!.zones);
   expect(restored.floors[0]!.zones![1]).not.toHaveProperty('zoneType');

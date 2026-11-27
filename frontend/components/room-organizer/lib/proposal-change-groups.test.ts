@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import type {ProposalDifference} from '../three/proposal-preview';
 import type {FurnitureItem, RoomLayout, RoomZone} from './types';
+import {rectToZoneRing} from './zones';
 import {
   changeGroupCounts,
   groupChangeItems,
@@ -15,7 +16,7 @@ const item=(id:string,name:string,x:number,z:number):FurnitureItem=>({
 });
 
 const zone=(id:string,x:number,z:number,w:number,d:number):RoomZone=>({
-  id,name:id,color:'#3b82f6',x,z,w,d,
+  id,name:id,color:'#3b82f6',polygon:rectToZoneRing({x,z,w,d})!,
 });
 
 const layout=(items:FurnitureItem[],zones:RoomZone[]=[]):RoomLayout=>({

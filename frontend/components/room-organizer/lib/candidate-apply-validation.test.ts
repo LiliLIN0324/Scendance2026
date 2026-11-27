@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 import { validateCandidateApply } from './candidate-apply-validation';
 
 const id='candidate-project';
@@ -28,7 +28,7 @@ describe('candidate apply dry run',()=>{
     }
   });
   it('refuses disappearing floors or zones regardless of furniture locks',()=>{
-    const before=base();before.floors[0]!.zones=[{id:'zone',name:'签到区',x:0,z:0,w:1,d:1,color:'#fff'}];
+    const before=base();before.floors[0]!.zones=[makeZone({id:'zone',name:'签到区',color:'#fff',rect:{x:0,z:0,w:1,d:1}})];
     before.floors.push(makeFloor({id:'upper',items:[]}));
     const removedFloor=structuredClone(before);removedFloor.floors.pop();
     expect(validateCandidateApply(before,removedFloor,0)).toMatchObject({ok:false,reason:expect.stringContaining('未保留楼层')});
@@ -47,7 +47,7 @@ describe('candidate apply dry run',()=>{
   it('rejects duplicate floors and duplicate zone IDs',()=>{
     const before=base(),candidate=structuredClone(before);candidate.floors.push(makeFloor({id:'floor-1'}));
     expect(validateCandidateApply(before,candidate,0)).toMatchObject({ok:false,reason:expect.stringContaining('重复编号')});
-    const other=base();other.floors[0]!.zones=[{id:'zone',name:'甲',x:0,z:0,w:1,d:1,color:'#fff'},{id:'zone',name:'乙',x:2,z:2,w:1,d:1,color:'#fff'}];
+    const other=base();other.floors[0]!.zones=[makeZone({id:'zone',name:'甲',color:'#fff',rect:{x:0,z:0,w:1,d:1}}),makeZone({id:'zone',name:'乙',color:'#fff',rect:{x:2,z:2,w:1,d:1}})];
     expect(validateCandidateApply(before,other,0)).toMatchObject({ok:false,reason:expect.stringContaining('重复编号')});
   });
   it('rejects missing identity and non-finite fields instead of normalizing silently',()=>{

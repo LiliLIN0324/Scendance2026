@@ -18,6 +18,7 @@ import { CloudPanel } from './cloud-panel';
 import {createActivitySessionTracker} from '../lib/activity-session-epoch';
 import {createLayoutStore} from '../hooks/use-layout-store';
 import type { RoomLayout } from '../lib/types';
+import { makeZone } from '../lib/__testfixtures__/fixtures';
 
 function watchNotices(): { next(match: RegExp | string): Promise<Notice>; stop(): void } {
   const pending: Notice[] = [];
@@ -291,7 +292,7 @@ describe('CloudPanel independent quantity ledger protection', () => {
 });
 
 describe('CloudPanel with a locally drawn zone', () => {
-  const zone = { id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 };
+  const zone = makeZone({ id: 'rest', name: '休息区', color: '#4A7C59', rect: { x: -1, z: -1, w: 2, d: 2 } });
   const withZone = (base: RoomLayout): RoomLayout => ({ ...base, floors: [{ ...base.floors[0]!, zones: [zone] }] });
 
   it('no longer calls a zoned draft unsaveable, and keeps the zone on the canvas', async () => {

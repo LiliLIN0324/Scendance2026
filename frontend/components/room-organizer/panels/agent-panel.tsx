@@ -14,6 +14,7 @@ import type {PendingCandidateAccess} from '../lib/pending-candidate-registry';
 import { gateAction, supervisionLevelInfo } from '../lib/agent-supervision';
 import { getAgentSupervision, useAgentSupervision } from '../lib/agent-supervision-store';
 import { layoutActionRisk, lockedLayoutChange } from '../lib/agent-action-risk';
+import { ringFitsFootprint, zoneArea, zoneCentroid, zoneContains } from '../lib/zones';
 import { addDesign } from '../lib/scene-layers';
 import { AgentSupervisionPicker } from './agent-supervision-picker';
 
@@ -384,10 +385,9 @@ function viewOfLocalPlan(plan: PlanProposal, base?: RoomLayout): ProposalView {
   const restPreview = base && candidate ? candidate.floors.flatMap(floor => (floor.zones ?? [])
     .filter(zone => !originalZones.has(zone.id) && zone.name.includes('休息'))
     .map(zone => {
-      const bench = floor.items.find(item => item.name === '休息长椅（示意）' && item.position
-        && item.position.x >= zone.x && item.position.x <= zone.x + zone.w
-        && item.position.z >= zone.z && item.position.z <= zone.z + zone.d);
-      return `${zone.name}：${formatArea(zone.w)} × ${formatArea(zone.d)} m，中心坐标 (${formatArea(zone.x + zone.w / 2)}, ${formatArea(zone.z + zone.d / 2)}) m（以场地中心为原点）${bench ? `；示意长椅 ${formatArea(bench.width)} × ${formatArea(bench.depth)} m` : ''}`;
+      const centroid = zoneCentroid(zone);
+      const bench = floor.items.find(item => item.name === '休息长椅（示意）' && item.position && zoneContains(zone, item.position));
+      return `${zone.name}：${formatArea(zoneArea(zone))} m²，中心坐标 (${formatArea(centroid.x)}, ${formatArea(centroid.z)}) m（以场地中心为原点）${bench ? `；示意长椅 ${formatArea(bench.width)} × ${formatArea(bench.depth)} m` : ''}`;
     })) : [];
   const movementPreview = base && candidate ? base.floors.flatMap((floor, floorIndex) => floor.items.flatMap(item => {
     const next = candidate.floors[floorIndex]?.items.find(value => value.id === item.id);
@@ -660,9 +660,8 @@ export function useAgent(): AgentValue { const value = useContext(AgentContext);
 export function useAgentOptional(): AgentValue | null { return useContext(AgentContext); }
 
 function hasInvalidRetainedZones(layout:RoomLayout):boolean {
-  return layout.floors.some(floor=>(floor.zones??[]).some(zone=>
-    ![zone.x,zone.z,zone.w,zone.d,layout.width,layout.height].every(Number.isFinite)||zone.w<=0||zone.d<=0||layout.width<=0||layout.height<=0||
-    zone.x < -layout.width/2 || zone.z < -layout.height/2 || zone.x+zone.w > layout.width/2 || zone.z+zone.d > layout.height/2));
+  if (!Number.isFinite(layout.width) || !Number.isFinite(layout.height) || layout.width<=0 || layout.height<=0) return true;
+  return layout.floors.some(floor=>(floor.zones??[]).some(zone=>!ringFitsFootprint(zone.polygon, layout.width, layout.height)));
 }
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const wait = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });

@@ -10,6 +10,7 @@ import {
   isZoneRect,
   itemsInZone,
   nextZoneColor,
+  rectToZoneRing,
   sameZone,
   zoneArea,
   zoneContains,
@@ -18,7 +19,10 @@ import {
 } from './zones';
 import type { RoomZone } from './types';
 
-const bedroom: RoomZone = { id: 'z1', name: 'Bedroom', color: '#3b82f6', x: -4, z: -3, w: 3, d: 2.5 };
+const bedroom: RoomZone = {
+  id: 'z1', name: 'Bedroom', color: '#3b82f6',
+  polygon: rectToZoneRing({ x: -4, z: -3, w: 3, d: 2.5 })!,
+};
 
 describe('zoneFromCorners (#155)', () => {
   it('normalises corners dragged in any direction into corner + size', () => {
@@ -53,6 +57,8 @@ describe('isZoneRect / isRoomZone (#155)', () => {
   it('accepts a finite, positive, bounded rectangle with the naming fields', () => {
     expect(isZoneRect({ x: 0, z: 0, w: 1, d: 1 })).toBe(true);
     expect(isRoomZone(bedroom)).toBe(true);
+    // 旧快照矩形仍可读（读侧水合展环，不回写）。
+    expect(isRoomZone({ id: 'z', name: 'R', color: '#000', x: 0, z: 0, w: 1, d: 1 })).toBe(true);
   });
 
   it('rejects NaN / infinite corners and non-positive or absurd sizes', () => {
@@ -80,11 +86,11 @@ describe('isZoneRect / isRoomZone (#155)', () => {
 
 describe('zone membership and stats (#155)', () => {
   it('zoneContains is inclusive on every edge', () => {
-    expect(zoneContains(bedroom, -4, -3)).toBe(true);
-    expect(zoneContains(bedroom, -1, -0.5)).toBe(true);
-    expect(zoneContains(bedroom, -2.5, -2)).toBe(true);
-    expect(zoneContains(bedroom, -0.9, -2)).toBe(false);
-    expect(zoneContains(bedroom, -2.5, -3.1)).toBe(false);
+    expect(zoneContains(bedroom, { x: -4, z: -3 })).toBe(true);
+    expect(zoneContains(bedroom, { x: -1, z: -0.5 })).toBe(true);
+    expect(zoneContains(bedroom, { x: -2.5, z: -2 })).toBe(true);
+    expect(zoneContains(bedroom, { x: -0.9, z: -2 })).toBe(false);
+    expect(zoneContains(bedroom, { x: -2.5, z: -3.1 })).toBe(false);
   });
 
   it('itemsInZone counts an item by its centre only, ignoring unplaced items', () => {
@@ -124,7 +130,8 @@ describe('zone defaults (#155)', () => {
   it('sameZone compares every field', () => {
     expect(sameZone(bedroom, { ...bedroom })).toBe(true);
     expect(sameZone(bedroom, { ...bedroom, name: 'Study' })).toBe(false);
-    expect(sameZone(bedroom, { ...bedroom, w: 3.1 })).toBe(false);
+    const moved = { ...bedroom, polygon: bedroom.polygon.map((point, index) => index === 0 ? { x: point.x + 0.1, z: point.z } : point) };
+    expect(sameZone(bedroom, moved)).toBe(false);
     expect(sameZone(bedroom, { ...bedroom, zoneType:'reserved' })).toBe(false);
   });
 });

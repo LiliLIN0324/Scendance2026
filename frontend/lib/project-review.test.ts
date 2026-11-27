@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
 import { sceneSchema } from '../../supabase/functions/_shared/domain';
 import { backendSceneToLayout } from '../components/room-organizer/lib/backend-adapter';
-import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from '../components/room-organizer/lib/__testfixtures__/fixtures';
 import { deliveryScene } from '../components/room-organizer/lib/scene-delivery';
 import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
@@ -42,7 +42,7 @@ function picture(overrides: Partial<ProjectReviewImage> = {}): ProjectReviewImag
 
 describe('project review snapshot', () => {
   it('preserves explicit planning purpose without inferring it from old zone names',()=>{
-    const source=input();source.layout.floors[0]!.zones=[{id:'typed-zone',name:'区域',color:'#4A7C59',x:0,z:0,w:1,d:1,zoneType:'reserved'},{id:'legacy-zone',name:'预留区',color:'#4A7C59',x:2,z:0,w:1,d:1}];
+    const source=input();source.layout.floors[0]!.zones=[makeZone({id:'typed-zone',name:'区域',color:'#4A7C59',rect:{x:0,z:0,w:1,d:1},zoneType:'reserved'}),makeZone({id:'legacy-zone',name:'预留区',color:'#4A7C59',rect:{x:2,z:0,w:1,d:1}})];
     const review=createProjectReviewSnapshot(source);
     expect(review.current.layout.floors[0]!.zones![0]!.zoneType).toBe('reserved');
     expect(review.current.layout.floors[0]!.zones![1]).not.toHaveProperty('zoneType');

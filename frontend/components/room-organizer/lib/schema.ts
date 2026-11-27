@@ -12,7 +12,7 @@ import { NEIGHBOUR_FLAGS, isStreetSeed, isTerrainY } from './site';
 import { isStairsLeadIn, isStairsShape } from './stairs';
 import { isStoreyHeight } from './storeys';
 import { ENTRANCE_DOOR_ID, ENTRANCE_WALL_ID, isEntranceSpec, isSillHeight } from './street';
-import { MAX_ZONES, isRoomZone } from './zones';
+import { MAX_ZONES, hydrateRoomZone, isRoomZone } from './zones';
 import type {
   DormerOpening,
   DormerSpec,
@@ -692,7 +692,6 @@ const ITEM_KEYS = keysOf<FurnitureItem>({
 });
 const VEC2_KEYS = ['x', 'z'] as const;
 const WALL_KEYS = keysOf<InteriorWall>({ id: true, x1: true, z1: true, x2: true, z2: true, color: true, thickness: true, height: true, kind: true, status: true });
-const ZONE_KEYS = keysOf<RoomZone>({ id: true, name: true, color: true, zoneType: true, x: true, z: true, w: true, d: true });
 const ROOF_KEYS = keysOf<RoofSpec>({ style: true, color: true, dormers: true });
 const DORMER_KEYS = keysOf<DormerSpec>({
   id: true,
@@ -876,15 +875,40 @@ function repairFloor(floor: FloorLayout): FloorLayout {
     );
   }
   if (floor.zones) {
-    patch.zones = mapSame(sliceTo(floor.zones, MAX_ZONES), (zone) =>
-      rebuild(zone, ZONE_KEYS, {
-        id: capText(zone.id, MAX_ID_LENGTH),
-        name: capText(zone.name, MAX_NAME_LENGTH),
-        color: capText(zone.color, MAX_COLOR_LENGTH),
-      })
-    );
+    const repaired = sliceTo(floor.zones, MAX_ZONES)
+      .map(repairZone)
+      .filter((zone): zone is RoomZone => zone !== null);
+    patch.zones = repaired;
   }
   return rebuild(floor, FLOOR_KEYS, patch);
+}
+
+/** 分区修复：旧矩形在水合阶段展成环；环点夹取坐标、剔重、截断 64 点，少于 3 点整条丢弃。 */
+function repairZone(zone: unknown): RoomZone | null {
+  if (!isRoomZone(zone)) return null;
+  const hydrated = hydrateRoomZone(zone);
+  if (!hydrated) return null;
+  const points: { x: number; z: number }[] = [];
+  for (const point of hydrated.polygon) {
+    const repaired = repairVec2(point);
+    const previous = points[points.length - 1];
+    if (previous && Math.hypot(repaired.x - previous.x, repaired.z - previous.z) < 1e-6) continue;
+    points.push(repaired);
+    if (points.length >= 64) break;
+  }
+  if (points.length > 1) {
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    if (Math.hypot(first.x - last.x, first.z - last.z) < 1e-6) points.pop();
+  }
+  if (points.length < 3) return null;
+  return {
+    id: capText(hydrated.id, MAX_ID_LENGTH),
+    name: capText(hydrated.name, MAX_NAME_LENGTH),
+    color: capText(hydrated.color, MAX_COLOR_LENGTH),
+    ...(hydrated.zoneType === undefined ? {} : { zoneType: hydrated.zoneType }),
+    polygon: points,
+  };
 }
 
 function repairRoof(roof: RoofSpec): RoofSpec {

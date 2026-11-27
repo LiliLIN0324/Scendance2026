@@ -9,9 +9,19 @@ import { mergeProposalPresentation } from './creative-brief';
 import { MAX_STOREY_HEIGHT, MIN_STOREY_HEIGHT } from './storeys';
 import { layoutGeometryScene, canApplyLayoutGeometry, stableMeasurement } from './structural-layout';
 import { pruneVenueSite } from './venue-shell';
+import { rectToZoneRing } from './zones';
 import type { FurnitureItem, RoomLayout, RoomZone } from './types';
 
 const publicLibraryIds = new Set(Object.values(libraryAssetIds));
+
+/** 环在房间中心帧的外接矩形 {x,z,w,d}（NW 角 + 边长）；仅用于 scene 矩形契约适配层。 */
+function ringBBox(ring: RoomZone['polygon']): { x: number; z: number; w: number; d: number } {
+  const xs = ring.map(point => point.x);
+  const zs = ring.map(point => point.z);
+  const minX = Math.min(...xs);
+  const minZ = Math.min(...zs);
+  return { x: minX, z: minZ, w: Math.max(...xs) - minX, d: Math.max(...zs) - minZ };
+}
 
 export class SceneAdapterError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -126,11 +136,21 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
   } else items.push(...scene.venue.entrances.map(e => entranceItem(e, scene.venue)));
   const planSettings = sanitizePlanEditor(scene.editor);
   // Wire zones are venue-absolute like object positions; the layout frame is room-centred.
-  const zones: RoomZone[] = (scene.zones ?? []).map(zone => ({
-    id: zone.id, name: zone.name, color: zone.color,
-    ...(zone.zoneType ? { zoneType: zone.zoneType } : {}),
-    x: zone.x - scene.venue.width / 2, z: zone.z - scene.venue.depth / 2, w: zone.w, d: zone.d,
-  }));
+  // 过渡适配层：sceneZoneSchema 仍是矩形契约（本批不改 schema），读入时矩形实时展成环。
+  const zones: RoomZone[] = (scene.zones ?? []).flatMap(zone => {
+    const polygon = rectToZoneRing({
+      x: zone.x - scene.venue.width / 2,
+      z: zone.z - scene.venue.depth / 2,
+      w: zone.w,
+      d: zone.d,
+    });
+    if (!polygon) return [];
+    return [{
+      id: zone.id, name: zone.name, color: zone.color,
+      ...(zone.zoneType ? { zoneType: zone.zoneType } : {}),
+      polygon,
+    } satisfies RoomZone];
+  });
   return {
     ...(planSettings ? { planSettings } : {}),
     ...(options.projectId ? { id: options.projectId } : {}),
@@ -250,14 +270,19 @@ export function layoutToBackendScene(layout: RoomLayout, options: Pick<BackendAd
     ...(originalFinishes?.wallColors !== undefined || Object.keys(wallColors).length ? { wallColors } : {}),
   };
   const storedScene = layout.backendSceneV2;
-  const zones = (floor.zones ?? []).map(zone => ({
+const zones = (floor.zones ?? []).map(zone => {
+  const bbox = ringBBox(zone.polygon);
+  const stored = storedScene?.zones?.find(item => item.id === zone.id);
+  return {
     id: zone.id, name: zone.name, color: zone.color,
     ...(zone.zoneType ? { zoneType: zone.zoneType } : {}),
+    // 过渡适配层：环外接矩形反解成 sceneZoneSchema 矩形（终刀批随 schema 退役）。
     // Keep an untouched zone byte-identical across saves instead of drifting on ±width/2.
-    x: stableMeasurement(zone.x + layout.width / 2, storedScene?.zones?.find(item => item.id === zone.id)?.x),
-    z: stableMeasurement(zone.z + layout.height / 2, storedScene?.zones?.find(item => item.id === zone.id)?.z),
-    w: zone.w, d: zone.d,
-  }));
+    x: stableMeasurement(bbox.x + layout.width / 2, stored?.x),
+    z: stableMeasurement(bbox.z + layout.height / 2, stored?.z),
+    w: bbox.w, d: bbox.d,
+  };
+});
   const { editor: _storedEditor, ...sceneBody } = storedScene ?? {};
   const editor = sanitizePlanEditor(layout.planSettings);
   const candidate = {

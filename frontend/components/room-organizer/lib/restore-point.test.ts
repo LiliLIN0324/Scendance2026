@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { INITIAL_LAYOUT as REDUCER_INITIAL_LAYOUT } from '../hooks/layout-reducer';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from './initial-layout';
 import { confirmReplace, snapshotBeforeReplace } from './restore-point';
 import { parseStoredLayout } from './schema';
@@ -92,7 +92,7 @@ describe('untouched means "the initial layout" (#346)', () => {
   });
 
   it.each([
-    ['room zones', withFloor({ zones: [{ id: 'z', name: 'Living', color: '#fff', x: 0, z: 0, w: 2, d: 2 }] })],
+    ['room zones', withFloor({ zones: [makeZone({ id: 'z', name: 'Living', color: '#fff', rect: { x: 0, z: 0, w: 2, d: 2 } })] })],
     ['a floor colour', withFloor({ floorColor: '#000000' })],
     ['a floor pattern', withFloor({ floorPattern: 'tile' })],
     ['wall colours', withFloor({ wallColors: { north: '#123456' } })],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 import { checkRequiredSeats, checkRestArea, countSingleSeats } from './seat-requirement';
 
 describe('independent seat count', () => {
@@ -70,8 +70,8 @@ describe('independent seat count', () => {
 it('does not treat a chair as an explicitly marked rest area', () => {
   const base = makeLayout({ floors: [makeFloor({ items: [makeItem({ id: 'one', type: 'chair', name: '椅子' })] })] });
   expect(checkRestArea(base, 0, true).status).toBe('unknown');
-  const withRest = { ...base, floors: [{ ...base.floors[0]!, zones: [{ id: 'rest', name: '休息区', color: '#fff', x: 0, z: 0, w: 2, d: 2 }] }] };
+  const withRest = { ...base, floors: [{ ...base.floors[0]!, zones: [makeZone({ id: 'rest', name: '休息区', color: '#fff', rect: { x: 0, z: 0, w: 2, d: 2 } })] }] };
   expect(checkRestArea(withRest, 0, true).status).toBe('present');
-  const outside = { ...base, floors: [{ ...base.floors[0]!, zones: [{ id: 'rest', name: '休息区', color: '#fff', x: 30, z: 0, w: 2, d: 2 }] }] };
+  const outside = { ...base, floors: [{ ...base.floors[0]!, zones: [makeZone({ id: 'rest', name: '休息区', color: '#fff', rect: { x: 30, z: 0, w: 2, d: 2 } })] }] };
   expect(checkRestArea(outside, 0, true).status).toBe('unknown');
 });

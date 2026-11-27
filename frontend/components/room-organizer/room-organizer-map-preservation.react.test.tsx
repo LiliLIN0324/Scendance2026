@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {makeFloor,makeItem,makeLayout} from './lib/__testfixtures__/fixtures';
+import {makeFloor,makeItem,makeLayout,makeZone} from './lib/__testfixtures__/fixtures';
 import {layoutStore} from './hooks/use-layout-store';
 import {STORAGE_KEY} from './lib/constants';
 import {INITIAL_LAYOUT} from './lib/initial-layout';
@@ -27,7 +27,7 @@ beforeEach(()=>{resetAssistantSessionsStoreForTests();vi.stubGlobal('matchMedia'
  vi.stubGlobal('ResizeObserver',class{observe(){} disconnect(){}});vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(null);});
 afterEach(()=>{cleanup();capture.pick=null;layoutStore.setState({layout:INITIAL_LAYOUT,activeFloorIndex:0});mem.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('refuses map replacement before changing a two-floor activity, locked upper chair, region or draft',async()=>{
- const layout=makeLayout({id:'map-multifloor',name:'活动',floors:[makeFloor({id:'ground',items:[],zones:[{id:'checkin',name:'签到区',x:0,z:0,w:1,d:1,color:'#fff'}]}),makeFloor({id:'upper',items:[makeItem({id:'locked',name:'锁定椅',locked:true})]})]});
+ const layout=makeLayout({id:'map-multifloor',name:'活动',floors:[makeFloor({id:'ground',items:[],zones:[makeZone({id:'checkin',name:'签到区',rect:{x:0,z:0,w:1,d:1},color:'#fff'})]}),makeFloor({id:'upper',items:[makeItem({id:'locked',name:'锁定椅',locked:true})]})]});
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));render(<RoomOrganizer/>);
  const input=await screen.findByLabelText('告诉 Agent 要改的',{}, {timeout:15000});fireEvent.change(input,{target:{value:'尚未发送的草稿'}});
  await waitFor(()=>expect(capture.pick).not.toBeNull());const before=structuredClone(layoutStore.getState().layout);let reason:string|null=null;
@@ -37,7 +37,7 @@ it('refuses map replacement before changing a two-floor activity, locked upper c
 });
 
 it.skip('keeps the user-drawn zone when a single-floor map selection is applied',async()=>{
- const layout=makeLayout({id:'map-single',name:'活动',floors:[makeFloor({id:'ground',items:[],zones:[{id:'zone',name:'签到区',x:0,z:0,w:1,d:1,color:'#fff'}]})]});
+ const layout=makeLayout({id:'map-single',name:'活动',floors:[makeFloor({id:'ground',items:[],zones:[makeZone({id:'zone',name:'签到区',rect:{x:0,z:0,w:1,d:1},color:'#fff'})]})]});
  layoutStore.setState({layout,activeFloorIndex:0});localStorage.setItem(STORAGE_KEY,JSON.stringify(layout));render(<RoomOrganizer/>);
  await waitFor(()=>expect(capture.pick).not.toBeNull());let reason:string|null='pending';
  act(()=>{reason=capture.pick!({name:'测试',location:'测试',polygon:[{lng:120.53,lat:30.40},{lng:120.531,lat:30.40},{lng:120.531,lat:30.401},{lng:120.53,lat:30.401}]});});

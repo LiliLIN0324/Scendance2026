@@ -1,5 +1,6 @@
 import { hasCollisions, itemsOverlap, isLowProfile } from './geometry';
 import { isStructuralMarker, structuralItemCollides } from './structural-layout';
+import { ringFitsFootprint } from './zones';
 import type { RoomLayout } from './types';
 
 /** 统一读取实际候选中的单人椅数量；不推断长椅或组合家具容量。 */
@@ -42,9 +43,7 @@ export function checkRestArea(layout: RoomLayout | undefined, floorIndex: number
   const zones = layout?.floors[floorIndex]?.zones ?? [];
   if (layout && Number.isFinite(layout.width) && layout.width > 0 && Number.isFinite(layout.height) && layout.height > 0 && zones.some(zone =>
     zone.name.includes('休息') && !/(不设|不需要|取消|禁止)/.test(zone.name)
-      && Number.isFinite(zone.x) && Number.isFinite(zone.z) && Number.isFinite(zone.w) && Number.isFinite(zone.d)
-      && zone.w > 0 && zone.d > 0 && zone.x >= -layout.width / 2 && zone.z >= -layout.height / 2
-      && zone.x + zone.w <= layout.width / 2 && zone.z + zone.d <= layout.height / 2)) {
+      && ringFitsFootprint(zone.polygon, layout.width, layout.height))) {
     return { status: 'present', message: null };
   }
   return { status: 'unknown', message: '这版还没有明确标注休息区；请先补充并核对休息区，或调整需求。' };

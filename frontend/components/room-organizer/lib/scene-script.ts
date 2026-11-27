@@ -6,7 +6,7 @@ import {
   type SceneScriptZone,
   type SceneScriptZoneRole,
 } from '../../../../supabase/functions/_shared/scene-script-contract';
-import { clampZoneRect, MIN_ZONE_SIZE, zoneArea, type ZoneRect } from './zones';
+import { clampZoneRect, MIN_ZONE_SIZE, type ZoneRect } from './zones';
 
 /**
  * The script layer between "what the event needs" and "which chair goes where".
@@ -188,7 +188,10 @@ export function validateSceneScript(script: SceneScript, venue: SceneScriptVenue
     }
   }
 
-  const seatingArea = zonesWithRole(script, 'seating').reduce((sum, zone) => sum + zoneArea(zoneRectOf(zone)), 0);
+  const seatingArea = zonesWithRole(script, 'seating').reduce((sum, zone) => {
+    const rect = zoneRectOf(zone);
+    return sum + rect.w * rect.d;
+  }, 0);
   if (script.guests && seatingArea === 0) {
     issues.push(
       issue('E_ROLE_UNFIT', 'error', 'guests', `${script.guests} 个人，但脚本里没有 seating 区。`, '加一块 seating 区，或者去掉 guests。')

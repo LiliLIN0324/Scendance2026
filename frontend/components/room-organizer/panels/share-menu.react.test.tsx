@@ -10,6 +10,7 @@ import { displayShareUrl, SHARE_READ_ONLY_LINE, SharePanel, type ShareExportEntr
 import { registerPublishGateProvider, type PublishGateSnapshot } from '../lib/project-manifest';
 import { appendShareRecord, type ServerShare } from '../lib/share-records';
 import type { RoomLayout } from '../lib/types';
+import { makeZone } from '../lib/__testfixtures__/fixtures';
 import type { BackendSession } from '@/lib/backend-session';
 
 let mem: MemoryStorage;
@@ -524,7 +525,7 @@ describe('项目大纲', () => {
       height: 6,
       designBook: { activeId: 'a', variants: [{ id: 'a', name: '方案 A', layout: sampleLayout() }, { id: 'b', name: '方案 B', layout: sampleLayout() }] },
       floors: [
-        { id: 'f1', name: '一层', floorColor: '#fff', zones: [{ id: 'z1', name: '签到区', color: '#c4a574', x: 0, z: 0, w: 4, d: 3 }], items: [
+        { id: 'f1', name: '一层', floorColor: '#fff', zones: [makeZone({ id: 'z1', name: '签到区', color: '#c4a574', rect: { x: 0, z: 0, w: 4, d: 3 } })], items: [
           { id: 'desk', type: 'table', category: 'checkin', name: '签到桌', width: 1.6, depth: 0.6, height: 0.75, color: '#c4a574', icon: 'table', position: { x: 0, z: 0 } },
           { id: 'chair', type: 'chair', category: 'seating', name: '椅子', width: 0.5, depth: 0.5, height: 0.8, color: '#8B4513', icon: '🪑', position: { x: 1, z: 1 } },
         ] },

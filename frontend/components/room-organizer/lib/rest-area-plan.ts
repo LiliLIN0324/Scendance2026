@@ -2,7 +2,7 @@ import { hasCollisions } from './geometry';
 import { floorKeepOut } from './floor-keep-out';
 import { randomSuffix } from './ids';
 import { structuralItemCollides } from './structural-layout';
-import { MAX_ZONES } from './zones';
+import { MAX_ZONES, rectToZoneRing, roomRingsOverlap, type ZoneRect } from './zones';
 import type { FurnitureItem, RoomLayout, RoomZone } from './types';
 
 /** 搜索尺度只是候选布置的尺寸假设，不代表通道规范或安全结论。 */
@@ -17,8 +17,9 @@ function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${randomSuffix()}`;
 }
 
-function overlapsZone(a: Pick<RoomZone, 'x' | 'z' | 'w' | 'd'>, b: RoomZone): boolean {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.z < b.z + b.d && a.z + a.d > b.z;
+function overlapsZone(rect: ZoneRect, b: RoomZone): boolean {
+  const ring = rectToZoneRing(rect);
+  return ring !== null && roomRingsOverlap(ring, b.polygon);
 }
 
 /** 在最终候选中找一块空区域，仅追加一把示意长椅和一个可编辑区域。 */
@@ -50,7 +51,8 @@ export function proposeRestArea(layout: RoomLayout, floorIndex: number): RestAre
   for (let z = minZ; z <= maxZ + 1e-8; z += step) {
     for (let x = minX; x <= maxX + 1e-8; x += step) {
       const rect = { x: x - REST_WIDTH / 2, z: z - REST_DEPTH / 2, w: REST_WIDTH, d: REST_DEPTH };
-      if ((floor.zones ?? []).some(zone => overlapsZone(rect, zone))) continue;
+      const polygon = rectToZoneRing(rect);
+      if (!polygon || (floor.zones ?? []).some(zone => overlapsZone(rect, zone))) continue;
       if (knownDoors.some(door => {
         const dx = Math.max(Math.abs(door.position.x - x) - REST_WIDTH / 2, 0);
         const dz = Math.max(Math.abs(door.position.z - z) - REST_DEPTH / 2, 0);
@@ -63,7 +65,7 @@ export function proposeRestArea(layout: RoomLayout, floorIndex: number): RestAre
       if (structuralItemCollides(probe, trial, floorIndex)) continue;
 
       const bench: FurnitureItem = { ...probe, id: newId(), type: 'bench', name: '休息长椅（示意）', width: 1.4, depth: 0.4, height: 0.45, icon: '椅' };
-      const zone: RoomZone = { id: newId(), name: '休息区（待核验）', color: '#4A7C59', ...rect };
+      const zone: RoomZone = { id: newId(), name: '休息区（待核验）', color: '#4A7C59', polygon };
       return { ok: true, layout: { ...layout, floors: layout.floors.map((f, index) => index === floorIndex
         ? { ...f, items: [...f.items, bench], zones: [...(f.zones ?? []), zone] } : f) } };
     }

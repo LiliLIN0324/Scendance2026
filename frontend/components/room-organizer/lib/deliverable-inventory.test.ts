@@ -8,6 +8,7 @@ import {
   summarizeInventory,
 } from './deliverable-inventory';
 import type { FloorLayout, FurnitureItem, RoomLayout, RoomZone } from './types';
+import { rectToZoneRing } from './zones';
 
 function floor(id: string, name: string, items: FurnitureItem[], zones?: RoomZone[]): FloorLayout {
   return { id, name, items, floorColor: '#f5f6f7', ...(zones ? { zones } : {}) };
@@ -69,7 +70,7 @@ describe('deliverable inventory', () => {
       item({ id: 'b', name: '椅子', position: { x: 4.5, z: 4.5 } }),
       item({ id: 'c', name: '椅子', position: { x: 8, z: 2 } }),
       item({ id: 'd', name: '椅子' }),
-    ], [{ id: 'left', name: '左区', color: '#eee', x: 3, z: 3, w: 3, d: 3 }]);
+    ], [{ id: 'left', name: '左区', color: '#eee', polygon: rectToZoneRing({ x: 3, z: 3, w: 3, d: 3 })! }]);
     const rows = floorInventory(scene);
     expect(rows).toHaveLength(2);
     expect(rows.find(row => row.zoneId === 'left')).toMatchObject({ zoneName: '左区', quantity: 1 });

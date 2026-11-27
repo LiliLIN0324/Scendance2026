@@ -8,6 +8,7 @@ import {
   parseStoredLayout,
 } from '../lib/schema';
 import { layoutReducer, type LayoutAction, type LayoutState } from './layout-reducer';
+import { rectToZoneRing } from '../lib/zones';
 import type { FurnitureItem, RoomLayout } from '../lib/types';
 
 /*
@@ -80,7 +81,7 @@ describe('reducer output always reloads unchanged (#332, #350)', () => {
       (state) => ({ type: 'rotateSelection', ids: new Set(floorItems(state).map((item) => item.id)), radians: random() * 6 }),
       (state) => ({ type: 'renameFloor', index: state.activeFloorIndex, name: LONG }),
       (state) => ({ type: 'setActiveFloorIndex', index: Math.floor(random() * state.layout.floors.length) }),
-      () => ({ type: 'addZone', zone: { id: id('zone'), name: LONG, color: '#abcdef', x: -2, z: -2, w: 4, d: 4 } }),
+      () => ({ type: 'addZone', zone: { id: id('zone'), name: LONG, color: '#abcdef', polygon: rectToZoneRing({ x: -2, z: -2, w: 4, d: 4 })! } }),
       (state) => {
         const zones = state.layout.floors[state.activeFloorIndex]!.zones ?? [];
         return { type: 'updateZone', id: zones[0]?.id ?? 'none', patch: { name: `${LONG}!` } };

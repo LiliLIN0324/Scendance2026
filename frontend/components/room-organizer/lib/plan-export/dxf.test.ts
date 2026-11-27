@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from '../__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from '../__testfixtures__/fixtures';
 import { DXF_LAYERS, layoutToDxf } from './dxf';
 import { layoutToSvg } from './svg';
 
@@ -230,7 +230,7 @@ describe('layoutToDxf', () => {
 
   it('writes zone name and area on ROOMS and omits them when room labels are off', () => {
     const floor = makeFloor({
-      zones: [{ id: 'z1', name: 'Bed & Bath', color: '#4A7C59', x: -4, z: -4, w: 3, d: 2 }],
+      zones: [makeZone({ id: 'z1', name: 'Bed & Bath', color: '#4A7C59', rect: { x: -4, z: -4, w: 3, d: 2 } })],
     });
     const layout = makeLayout({ floors: [floor] });
     const dxf = layoutToDxf(layout, floor);

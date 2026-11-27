@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { migrateLayoutToPlan } from './plan-layout-migration';
-import { makeFloor, makeItem, makeLayout, makeUnplacedItem } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeUnplacedItem, makeZone } from './__testfixtures__/fixtures';
 
 /** 10×8 m 平面边界（x 东、y 北）；壳体 20×16，两轴缩放 2。 */
 const BOUNDARY: PlanPoint[] = [
@@ -25,10 +25,10 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
       ...SHELL,
       floors: [makeFloor({
         zones: [
-          { id: 'z-checkin', name: '签到区', color: '#3d8fa8', zoneType: 'checkin', x: 2, z: 2, w: 4, d: 4 },
-          { id: 'z-round', name: '圆桌区', color: '#7fb69a', zoneType: 'roundtable', x: 2, z: 2, w: 4, d: 4 },
-          { id: 'z-photo', name: '打卡区', color: '#8b9aa6', zoneType: 'photo', x: 2, z: 2, w: 4, d: 4 },
-          { id: 'z-none', name: '无名类型区', color: '#8b9aa6', x: 2, z: 2, w: 4, d: 4 },
+          makeZone({ id: 'z-checkin', name: '签到区', color: '#3d8fa8', zoneType: 'checkin', rect: { x: 2, z: 2, w: 4, d: 4 } }),
+          makeZone({ id: 'z-round', name: '圆桌区', color: '#7fb69a', zoneType: 'roundtable', rect: { x: 2, z: 2, w: 4, d: 4 } }),
+          makeZone({ id: 'z-photo', name: '打卡区', color: '#8b9aa6', zoneType: 'photo', rect: { x: 2, z: 2, w: 4, d: 4 } }),
+          makeZone({ id: 'z-none', name: '无名类型区', color: '#8b9aa6', rect: { x: 2, z: 2, w: 4, d: 4 } }),
         ],
       })],
     });
@@ -151,7 +151,7 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
     const layout = makeLayout({
       ...SHELL,
       floors: [
-        makeFloor({ id: 'f1', zones: [{ id: 'z1', name: '一区', color: '#8b9aa6', zoneType: 'reserved', x: 2, z: 2, w: 3, d: 3 }] }),
+        makeFloor({ id: 'f1', zones: [makeZone({ id: 'z1', name: '一区', color: '#8b9aa6', zoneType: 'reserved', rect: { x: 2, z: 2, w: 3, d: 3 } })] }),
         makeFloor({ id: 'f2', items: [makeItem({ id: 'p1', type: 'person', name: '二层岗', position: { x: 2, z: 4 } })] }),
       ],
     });
@@ -246,7 +246,7 @@ describe('plan-layout-migration（旧室内布局 → plan 实体）', () => {
     const layout = makeLayout({
       ...SHELL,
       floors: [makeFloor({
-        zones: [{ id: 'z1', name: '一区', color: 'blue', zoneType: 'reserved', x: 2, z: 2, w: 3, d: 3 }],
+        zones: [makeZone({ id: 'z1', name: '一区', color: 'blue', zoneType: 'reserved', rect: { x: 2, z: 2, w: 3, d: 3 } })]
       })],
     });
 

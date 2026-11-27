@@ -12,7 +12,7 @@ import { zoneArea, type ZoneRect } from '../lib/zones';
 import { drawStairsSymbol, drawStairwellHoles } from './stairs-symbol';
 import { formatArea, formatReading } from '../lib/display-units';
 import type { LengthPrecisionM } from '../../../../supabase/functions/_shared/plan-editor';
-import type { FloorLayout, FloorPlanFitMode, FurnitureItem, RoomLayout, WallId } from '../lib/types';
+import type { FloorLayout, FloorPlanFitMode, FurnitureItem, RoomLayout, RoomZone, WallId } from '../lib/types';
 import type { DisplayUnit } from '../lib/types';
 import type { ReferenceImageLayer } from '@/lib/reference-image';
 import type { ResolvedGround } from '../lib/plan-ground';
@@ -275,7 +275,7 @@ function drawMarqueeDraft(
   offsetY: number,
   scale: number
 ): void {
-  const { x, y, w, h } = zoneCanvasRect(draft, layout, offsetX, offsetY, scale);
+  const { x, y, w, h } = draftCanvasRect(draft, layout, offsetX, offsetY, scale);
   ctx.save();
   ctx.fillStyle = 'rgba(74, 124, 89, 0.10)';
   ctx.fillRect(x, y, w, h);
@@ -308,19 +308,40 @@ export function withAlpha(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function zoneCanvasRect(
-  zone: ZoneRect,
+function draftCanvasRect(
+  draft: ZoneRect,
   layout: RoomLayout,
   offsetX: number,
   offsetY: number,
   scale: number
 ): { x: number; y: number; w: number; h: number } {
   return {
-    x: offsetX + (zone.x + layout.width / 2) * scale,
-    y: offsetY + (zone.z + layout.height / 2) * scale,
-    w: zone.w * scale,
-    h: zone.d * scale,
+    x: offsetX + (draft.x + layout.width / 2) * scale,
+    y: offsetY + (draft.z + layout.height / 2) * scale,
+    w: draft.w * scale,
+    h: draft.d * scale,
   };
+}
+
+function zoneCanvasPoints(
+  zone: RoomZone,
+  layout: RoomLayout,
+  offsetX: number,
+  offsetY: number,
+  scale: number
+): { x: number; y: number }[] {
+  return zone.polygon.map((point) => ({
+    x: offsetX + (point.x + layout.width / 2) * scale,
+    y: offsetY + (point.z + layout.height / 2) * scale,
+  }));
+}
+
+function canvasBBox(points: readonly { x: number; y: number }[]): { x: number; y: number; w: number; h: number } {
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return { x: minX, y: minY, w: Math.max(...xs) - minX, h: Math.max(...ys) - minY };
 }
 
 function drawZoneFills(
@@ -336,11 +357,17 @@ function drawZoneFills(
   ctx.save();
   ctx.lineWidth = 1.5;
   for (const zone of zones) {
-    const { x, y, w, h } = zoneCanvasRect(zone, layout, offsetX, offsetY, scale);
+    const points = zoneCanvasPoints(zone, layout, offsetX, offsetY, scale);
     ctx.fillStyle = withAlpha(zone.color, ZONE_FILL_ALPHA);
-    ctx.fillRect(x, y, w, h);
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fill();
     ctx.strokeStyle = withAlpha(zone.color, ZONE_STROKE_ALPHA);
-    ctx.strokeRect(x, y, w, h);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -366,7 +393,8 @@ function drawZoneLabels(
   ctx.lineWidth = 3;
   ctx.fillStyle = '#333';
   for (const zone of zones) {
-    const { x, y, w, h } = zoneCanvasRect(zone, layout, offsetX, offsetY, scale);
+    const points = zoneCanvasPoints(zone, layout, offsetX, offsetY, scale);
+    const { x, y, w, h } = canvasBBox(points);
     if (Math.min(w, h) < ZONE_MIN_LABEL_EDGE_PX) continue;
     // Along the top edge rather than the centre: the centre of a room is
     // where its bed or table sits, and the furniture paints over labels.
@@ -394,7 +422,7 @@ function drawZoneDraft(
   unit: DisplayUnit,
   precisionM: LengthPrecisionM = 0.01,
 ): void {
-  const { x, y, w, h } = zoneCanvasRect(draft, layout, offsetX, offsetY, scale);
+  const { x, y, w, h } = draftCanvasRect(draft, layout, offsetX, offsetY, scale);
   ctx.save();
   ctx.fillStyle = 'rgba(59, 130, 246, 0.12)';
   ctx.fillRect(x, y, w, h);

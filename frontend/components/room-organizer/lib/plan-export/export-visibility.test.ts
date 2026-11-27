@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem } from '../__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeZone } from '../__testfixtures__/fixtures';
 import {
   DEFAULT_PLAN_EXPORT_VISIBILITY,
   DXF_LAYER_COLOURS,
@@ -41,7 +41,7 @@ describe('plan export layers', () => {
         makeItem({ type: 'stairs' }),
         makeItem({ type: 'sofa' }),
       ],
-      zones: [{ id: 'z', name: 'Stage', color: '#4A7C59', x: 0, z: 0, w: 2, d: 2 }],
+      zones: [makeZone({ id: 'z', name: 'Stage', color: '#4A7C59', rect: { x: 0, z: 0, w: 2, d: 2 } })],
     });
     expect(planFloorSummary(floor)).toBe('1 zones · 1 doors · 1 windows · 1 props · 1 stairs');
   });

@@ -66,15 +66,9 @@ function mapZoneSemantic(zoneType: ZoneSemanticType | undefined): PlanningZoneSe
   return zoneType ? ZONE_SEMANTIC_MAP[zoneType] ?? ZONE_SEMANTIC_FALLBACK : ZONE_SEMANTIC_FALLBACK;
 }
 
-/** 矩形分区 {x,z,w,d} → 四点闭合环（NW → NE → SE → SW），逐点换平面坐标。 */
+/** RoomZone 房间中心帧环 → plan 帧环，逐点换平面坐标。 */
 function zonePolygon(frame: MigrationFrame, zone: RoomZone): PlanPoint[] {
-  const corners: readonly (readonly [number, number])[] = [
-    [zone.x, zone.z],
-    [zone.x + zone.w, zone.z],
-    [zone.x + zone.w, zone.z + zone.d],
-    [zone.x, zone.z + zone.d],
-  ];
-  return corners.map(([x, z]) => framePoint(frame, x, z));
+  return zone.polygon.map((point) => framePoint(frame, point.x, point.z));
 }
 
 function migrateRoute(

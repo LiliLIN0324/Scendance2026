@@ -4,6 +4,7 @@ import { MAX_ITEM_DIMENSION } from '../lib/constants';
 import { parseStoredLayout } from '../lib/schema';
 import { ENTRANCE_DOOR_ID } from '../lib/street';
 import { layoutReducer, type LayoutAction, type LayoutState } from './layout-reducer';
+import { rectToZoneRing, type ZoneRect } from '../lib/zones';
 import type { FloorLayout, FurnitureItem, RoomLayout, RoomZone } from '../lib/types';
 
 function stateWith(items: FurnitureItem[], floor: Partial<FloorLayout> = {}, layout: Partial<RoomLayout> = {}): LayoutState {
@@ -25,16 +26,16 @@ function reloads(state: LayoutState): boolean {
   return parseStoredLayout(JSON.parse(JSON.stringify(state.layout))) !== null;
 }
 
-const zone = (overrides: Partial<RoomZone> = {}): RoomZone => ({
-  id: 'z1',
-  name: 'Living',
-  color: '#ff0000',
-  x: -4,
-  z: -4,
-  w: 8,
-  d: 8,
-  ...overrides,
-});
+const zone = (overrides: Partial<Omit<RoomZone, 'polygon'>> & { rect?: ZoneRect } = {}): RoomZone => {
+  const { rect, ...rest } = overrides;
+  return {
+    id: 'z1',
+    name: 'Living',
+    color: '#ff0000',
+    polygon: rectToZoneRing(rect ?? { x: -1, z: -1, w: 2, d: 2 })!,
+    ...rest,
+  };
+};
 
 describe('layoutReducer — no-op edits keep state identity (#416)', () => {
   const base = (): LayoutState => {
@@ -218,7 +219,7 @@ describe('layoutReducer — a room resize re-fits openings and zones (#431)', ()
         makeItem({ id: 'window', type: 'window', width: 1.2, position: { x: -4, z: 0 }, rotation: Math.PI / 2 }),
         makeItem({ id: 'sofa', type: 'sofa', position: { x: 1, z: -1 } }),
       ],
-      { zones: [zone(), zone({ id: 'z2', x: 3, z: -3, w: 1, d: 1 })] },
+      { zones: [zone(), zone({ id: 'z2', rect: { x: 3, z: -3, w: 1, d: 1 } })] },
       { width: 8, height: 6 }
     );
     return {
@@ -259,11 +260,11 @@ describe('layoutReducer — a room resize re-fits openings and zones (#431)', ()
     expect(item(state, 'cam').position!.z).toBeCloseTo(4.88);
   });
 
-  it('clamps zones to the new footprint and drops the ones left outside', () => {
+  it('keeps rings inside the new footprint and drops those crossing the boundary', () => {
     const state = reduce(room(), { type: 'setWidth', width: 4 }, { type: 'setHeight', height: 4 });
-    expect(state.layout.floors[0]!.zones).toEqual([zone({ x: -2, z: -2, w: 4, d: 4 })]);
+    expect(state.layout.floors[0]!.zones).toEqual([zone()]);
     const gone = layoutReducer(
-      stateWith([], { zones: [zone({ x: 3, z: 3, w: 1, d: 1 })] }),
+      stateWith([], { zones: [zone({ rect: { x: 3, z: 3, w: 1, d: 1 } })] }),
       { type: 'setWidth', width: 4 }
     );
     expect('zones' in gone.layout.floors[0]!).toBe(false);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from '../components/room-organizer/lib/__testfixtures__/fixtures';
-import { MAX_ZONES } from '../components/room-organizer/lib/zones';
+import { makeFloor, makeItem, makeLayout, makeZone } from '../components/room-organizer/lib/__testfixtures__/fixtures';
+import { MAX_ZONES, zoneBBox } from '../components/room-organizer/lib/zones';
 import { parseStoredLayout } from '../components/room-organizer/lib/schema';
 import type { RoomLayout, RoomZone } from '../components/room-organizer/lib/types';
 import type { LayoutPlanDraft, PlanAnnotation } from './plan-annotation';
@@ -27,7 +27,12 @@ describe('appendPlanZones', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.addedZones).toHaveLength(2);
-    expect(result.addedZones[0]).toMatchObject({ name: '访客接待（签到区）', zoneType:'checkin', color: '#4A7C59', x: -4.2345, z: -3.1234, w: 1.2345, d: 1.3456 });
+    expect(result.addedZones[0]).toMatchObject({ name: '访客接待（签到区）', zoneType:'checkin', color: '#4A7C59' });
+    const bbox0 = zoneBBox(result.addedZones[0]!);
+    expect(bbox0.x).toBeCloseTo(-4.2345, 10);
+    expect(bbox0.z).toBeCloseTo(-3.1234, 10);
+    expect(bbox0.w).toBeCloseTo(1.2345, 10);
+    expect(bbox0.d).toBeCloseTo(1.3456, 10);
     expect(result.addedZones[0]!.id).toBe('plan-zone:draft-1:z1:2');
     expect(result.addedZones[1]!.name).toBe('饮水角（普通区域）');
     expect(result.addedZones[1]).not.toHaveProperty('zoneType');
@@ -45,7 +50,7 @@ describe('appendPlanZones', () => {
     const result=appendPlanZones(input,0,source);expect(result.ok).toBe(true);if(!result.ok)return;
     const parsed=parseStoredLayout(JSON.parse(JSON.stringify(result.layout)));
     expect(parsed?.floors[0]?.zones?.[0]?.zoneType).toBe('reserved');
-    const legacy=scene();legacy.floors[0]!.zones=[{id:'old',name:'预留区',color:'#4A7C59',x:0,z:0,w:1,d:1}];
+    const legacy=scene();legacy.floors[0]!.zones=[{id:'old',name:'预留区',color:'#4A7C59',x:0,z:0,w:1,d:1} as unknown as RoomZone];
     expect(parseStoredLayout(JSON.parse(JSON.stringify(legacy)))?.floors[0]?.zones?.[0]).not.toHaveProperty('zoneType');
     const needsRepair=JSON.parse(JSON.stringify(result.layout));needsRepair.floors[0].zones[0].unrecognized='discard';
     const repaired=parseStoredLayout(needsRepair);
@@ -55,7 +60,7 @@ describe('appendPlanZones', () => {
   });
 
   it('keeps existing areas and other floors without mutating them', () => {
-    const existing: RoomZone = { id: 'old', name: '已有区', color: '#fff', x: 3, z: 3, w: 1, d: 1 };
+    const existing: RoomZone = makeZone({ id: 'old', name: '已有区', color: '#fff', rect: { x: 3, z: 3, w: 1, d: 1 } });
     const other = makeFloor({ id: 'upper', zones: [{ ...existing, id: 'upper-zone' }] });
     const input = makeLayout({ width: 12, height: 10, floors: [makeFloor({ zones: [existing] }), other] });
     const result = appendPlanZones(input, 0, draft([zone('z1', -4, -3, '签到区')]));
@@ -103,7 +108,7 @@ describe('appendPlanZones', () => {
     if (overlapping.ok) expect(overlapping.warnings.join(' ')).toContain('共用空间');
     const collision = makeLayout({ width: 12, height: 10, floors: [makeFloor({ items: [makeItem({ id: 'plan-zone:draft-1:a:2' })] })] });
     expect(appendPlanZones(collision, 0, draft([a])).ok).toBe(false);
-    const existing: RoomZone = { id: 'existing', name: '已有', color: '#4A7C59', x: 0, z: 0, w: 2, d: 2 };
+    const existing: RoomZone = makeZone({ id: 'existing', name: '已有', color: '#4A7C59', rect: { x: 0, z: 0, w: 2, d: 2 } });
     const occupied = makeLayout({ width: 12, height: 10, floors: [makeFloor({ zones: [existing] })] });
     const result = appendPlanZones(occupied, 0, draft([a]));
     expect(result.ok).toBe(true);
@@ -116,7 +121,7 @@ describe('appendPlanZones', () => {
     expect(appendPlanZones(input, 0, { ...draft([zone('z', 0, 0)]), id: 'x'.repeat(150) }).ok).toBe(false);
     expect(appendPlanZones(input, 0, draft([{ ...zone('z', 0, 0), label: '区'.repeat(201) }])).ok).toBe(false);
     expect(appendPlanZones(input, 0, draft([zone('\ud800', 0, 0)])).ok).toBe(false);
-    const old: RoomZone = { id: 'duplicate', name: '已有', color: '#4A7C59', x: -5, z: -4, w: 1, d: 1 };
+    const old: RoomZone = makeZone({ id: 'duplicate', name: '已有', color: '#4A7C59', rect: { x: -5, z: -4, w: 1, d: 1 } });
     const duplicate = makeLayout({ width: 12, height: 10, floors: [makeFloor({ zones: [old, { ...old }] })] });
     expect(appendPlanZones(duplicate, 0, draft([zone('z', 0, 0)])).ok).toBe(false);
     const malformed = makeLayout({ width: 12, height: 10, floors: [makeFloor({ items: [null as unknown as ReturnType<typeof makeItem>] })] });
@@ -129,11 +134,11 @@ describe('appendPlanZones', () => {
       geometry: { kind: 'rect', x: 4, z: 3, width: 2, depth: 2 } };
     const result = appendPlanZones(input, 0, draft([edge]));
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.addedZones[0]).toMatchObject({ x: 4, z: 3, w: 2, d: 2 });
+    if (result.ok) expect(zoneBBox(result.addedZones[0]!)).toEqual({ x: 4, z: 3, w: 2, d: 2 });
   });
 
   it('permits exactly the zone limit and rejects overflow', () => {
-    const old = Array.from({ length: MAX_ZONES - 1 }, (_, i): RoomZone => ({ id: `old-${i}`, name: '旧区域', color: '#4A7C59', x: -5, z: -4, w: 0.3, d: 0.3 }));
+    const old = Array.from({ length: MAX_ZONES - 1 }, (_, i): RoomZone => makeZone({ id: `old-${i}`, name: '旧区域', color: '#4A7C59', rect: { x: -5, z: -4, w: 0.3, d: 0.3 } }));
     const input = makeLayout({ width: 12, height: 10, floors: [makeFloor({ zones: old })] });
     const accepted = appendPlanZones(input, 0, draft([zone('new', 1, 1)]));
     expect(accepted.ok).toBe(true);

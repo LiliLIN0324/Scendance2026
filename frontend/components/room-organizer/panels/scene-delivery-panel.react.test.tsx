@@ -13,7 +13,7 @@ import { productionPlanHandoffHtml } from '@/lib/production-plan-export';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { materialCheckinLedgerSchema, type MaterialCheckinLedger } from '../../../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
-import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from '../lib/__testfixtures__/fixtures';
 import { createOperation } from '../lib/event-operations';
 import { createMeasuredRoomLayout } from '../lib/backend-adapter';
 import { downloadSceneDelivery, exportDeliveryGlb, sceneDeliveryCsv, sceneDeliveryJson, sceneExecutionCsv, eventOperationsCsv } from '../lib/scene-delivery';
@@ -362,7 +362,7 @@ describe('Bingo scene delivery panel',()=>{
   });
   it('offers separate local draft exports for an unsupported cloud zone and bench without exporting their signed URL',async()=>{
     const current=makeLayout({name:'本地活动',roof:{style:'none'},floors:[makeFloor({
-      zones:[{id:'rest',name:'休息区（待核验）',color:'#4A7C59',x:-4,z:-3,w:2.2,d:1.6}],
+      zones:[makeZone({id:'rest',name:'休息区（待核验）',color:'#4A7C59',rect:{x:-4,z:-3,w:2.2,d:1.6}})],
       items:[makeItem({id:itemId,type:'bench',name:'休息长椅（示意）',category:'rest',width:1.4,depth:.4,height:.45,
         position:{x:-3,z:-2},glbUrl:'https://assets.example/sign/chair.glb?token=private-token'})],
     })]});

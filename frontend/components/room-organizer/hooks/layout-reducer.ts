@@ -30,7 +30,7 @@ import {
   streetLevel,
 } from '../lib/street';
 import { layoutGeometryIsAcceptable, materialCount, snapMeasuredOpening } from '../lib/structural-layout';
-import { MAX_ZONES, clampZoneRect, isValidZoneType, sameZone } from '../lib/zones';
+import { MAX_ZONES, isValidZoneType, ringFitsFootprint, sameZone } from '../lib/zones';
 import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
 import { sanitizePlanEditor } from '../../../../supabase/functions/_shared/plan-editor';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
@@ -798,16 +798,15 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
       });
 
     // -- room zones (#155) --------------------------------------------------
-    // The rectangle is normalised on the way in (rounded, clamped to the
-    // footprint) so a stored zone always fits its floor and passes schema
-    // validation on reload (#113); one that clamps to nothing is refused.
+    // The ring is checked against the footprint on the way in, so a stored
+    // zone always fits its floor and passes schema validation on reload
+    // (#113); one that doesn't fit is refused.
     case 'addZone':
       return withActiveFloor(state, (floor) => {
         const zones = floor.zones ?? [];
         if (!isValidZoneType(action.zone.zoneType) || zones.length >= MAX_ZONES || zones.some((zone) => zone.id === action.zone.id)) return floor;
-        const rect = clampZoneRect(action.zone, state.layout.width, state.layout.height);
-        if (!rect) return floor;
-        return { ...floor, zones: [...zones, { ...action.zone, ...rect, name: capName(action.zone.name) }] };
+        if (!ringFitsFootprint(action.zone.polygon, state.layout.width, state.layout.height)) return floor;
+        return { ...floor, zones: [...zones, { ...action.zone, name: capName(action.zone.name) }] };
       });
 
     case 'updateZone':
@@ -817,9 +816,8 @@ function reduceLayout(state: LayoutState, action: LayoutAction): LayoutState {
         const merged: RoomZone = { ...current, ...action.patch, id: current.id };
         if (!isValidZoneType(merged.zoneType)) return floor;
         merged.name = capName(merged.name);
-        const rect = clampZoneRect(merged, state.layout.width, state.layout.height);
-        if (!rect) return floor;
-        const next: RoomZone = { ...merged, ...rect };
+        if (!ringFitsFootprint(merged.polygon, state.layout.width, state.layout.height)) return floor;
+        const next: RoomZone = merged;
         // Re-typing a name or re-picking a colour keeps identity: no undo
         // entry, no autosave.
         if (sameZone(current, next)) return floor;
@@ -1029,15 +1027,11 @@ function refitFloor(floor: FloorLayout, from: Footprint, to: Footprint): FloorLa
 
   let zonesChanged = false;
   const zones = floor.zones?.flatMap((zone) => {
-    const rect = clampZoneRect(zone, to.width, to.depth);
-    if (!rect) {
+    if (!ringFitsFootprint(zone.polygon, to.width, to.depth)) {
       zonesChanged = true;
       return [];
     }
-    const next = { ...zone, ...rect };
-    if (sameZone(zone, next)) return [zone];
-    zonesChanged = true;
-    return [next];
+    return [zone];
   });
 
   if (!itemsChanged && !zonesChanged) return floor;

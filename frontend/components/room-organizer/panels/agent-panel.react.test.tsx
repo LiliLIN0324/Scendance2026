@@ -6,7 +6,7 @@ import { useEffect,useState } from 'react';
 import { readFileSync } from 'node:fs';
 import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeFloor, makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeViewSettings, makeZone } from '../lib/__testfixtures__/fixtures';
 import { backendSceneToLayout } from '../lib/backend-adapter';
 import * as localPlanModule from '../lib/local-plan';
 import { STORAGE_KEY } from '../lib/constants';
@@ -3883,7 +3883,7 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
 
   it('preserves a user-drawn zone that still fits after a size-only change', async () => {
     const onApply = vi.fn();
-    const zone = { id: 'user-zone', name: '原有区域', color: '#4A7C59', x: -2, z: -2, w: 2, d: 2 };
+    const zone = makeZone({ id: 'user-zone', name: '原有区域', color: '#4A7C59', rect: { x: -2, z: -2, w: 2, d: 2 } });
     render(<LocalHarness initial={makeLayout({ width: 12, height: 9, floors: [makeFloor({ items: [], zones: [zone] })] })} onApply={onApply}/>);
     send('改成 6×6');
     expect(await screen.findByText(/场地改成 6 × 6 m/)).toBeTruthy();
@@ -3892,12 +3892,12 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
   });
 
   it('does not apply a smaller venue when an existing zone would be outside it',async()=>{
-    const onApply=vi.fn(),zone={id:'outside-zone',name:'原有区域',color:'#4A7C59',x:4,z:0,w:2,d:2};
+    const onApply=vi.fn(),zone=makeZone({id:'outside-zone',name:'原有区域',color:'#4A7C59',rect:{x:4,z:0,w:2,d:2}});
     render(<LocalHarness initial={makeLayout({width:12,height:9,floors:[makeFloor({items:[],zones:[zone]})]})} onApply={onApply}/>);
     send('改成 6×6');expect(await screen.findByText(/区域超出新场地/)).toBeTruthy();expect(onApply).not.toHaveBeenCalled();
   });
   it('does not propose a smaller venue when an existing zone would be outside it',async()=>{
-    const onApply=vi.fn(),onPreview=vi.fn(),zone={id:'outside-zone',name:'原有区域',color:'#4A7C59',x:4,z:0,w:2,d:2};
+    const onApply=vi.fn(),onPreview=vi.fn(),zone=makeZone({id:'outside-zone',name:'原有区域',color:'#4A7C59',rect:{x:4,z:0,w:2,d:2}});
     render(<LocalHarness initial={makeLayout({width:12,height:9,floors:[makeFloor({items:[],zones:[zone]})]})} onApply={onApply} onPreview={onPreview}/>);
     send('8 人，室内 6×6，圆桌');expect(await screen.findByText(/区域超出新场地/)).toBeTruthy();
     expect(screen.queryByRole('button',{name:'确认布置'})).toBeNull();expect(onApply).not.toHaveBeenCalled();expect(onPreview.mock.calls.every(([value])=>value===null)).toBe(true);
@@ -3905,7 +3905,7 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
 
   it('preserves an existing zone in the generated venue candidate', async () => {
     const onApply = vi.fn(),onPreview=vi.fn();
-    const zone = { id: 'existing-zone', name: '原有区域', color: '#4A7C59', x: -2, z: -2, w: 2, d: 2 };
+    const zone = makeZone({ id: 'existing-zone', name: '原有区域', color: '#4A7C59', rect: { x: -2, z: -2, w: 2, d: 2 } });
     render(<LocalHarness initial={makeLayout({ width: 12, height: 9, floors: [makeFloor({ items: [], zones: [zone] })] })} onApply={onApply} onPreview={onPreview}/>);
     send('8 人，室内 6×6，圆桌');
     await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
@@ -3920,7 +3920,7 @@ describe('T-VENUE-FEEL 只改尺寸的手感', () => {
     send('8 人，室内 12×9，圆桌，需要休息区');
     await screen.findByRole('button', { name: '确认布置' }, { timeout: 15000 });
     expect(onApply).not.toHaveBeenCalled();
-    expect(screen.getByText(/休息区（待核验）：2.2 × 1.6 m，中心坐标/)).toBeTruthy();
+    expect(screen.getByText(/休息区（待核验）：\d+\.\d m²，中心坐标/)).toBeTruthy();
     expect(screen.getByText(/示意长椅 1.4 × 0.4 m.*通行和消防条件待核验/)).toBeTruthy();
   }, 25000);
 });

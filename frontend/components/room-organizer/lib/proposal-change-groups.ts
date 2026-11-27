@@ -76,7 +76,7 @@ function zoneIdOf(located: ProposalDifference['before'], layout: RoomLayout): st
   const floor = layout.floors[located.floorIndex];
   const position = located.item.position;
   if (!floor || !position) return null;
-  const hit = (floor.zones ?? []).find(zone => zoneContains(zone, position.x, position.z));
+  const hit = (floor.zones ?? []).find(zone => zoneContains(zone, position));
   return hit?.id ?? null;
 }
 

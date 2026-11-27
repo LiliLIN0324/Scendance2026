@@ -322,10 +322,14 @@ export interface InteriorWall {
 }
 
 /**
- * A named, coloured rectangle of a floor — "Bedroom", "Kitchen" — that the
+ * A named, coloured polygon of a floor — "Bedroom", "Kitchen" — that the
  * plan, the blueprint and the statistics panel measure and cost per room
- * (#155); see lib/zones.ts. `x`/`z` is the north-west corner in world metres
- * (room-centred, like item positions); `w`/`d` extend along +x / +z.
+ * (#155); see lib/zones.ts. The ring is in room-centred metres (like item
+ * positions), `Vec2{x,z}`; an item belongs to a zone when its centre lies
+ * inside the ring.
+ *
+ * D5-3 (2026-11-27): 旧快照的矩形 `x/z/w/d` 在读取/水合阶段实时展成四角环；
+ * 不回写旧快照、不做批量迁移；新写链路只产出环，不再保留矩形字段。
  */
 export interface RoomZone {
   id: string;
@@ -333,10 +337,7 @@ export interface RoomZone {
   color: string;
   /** Missing on older zones: the intended use is unknown, not inferred from the name. */
   zoneType?: ZoneSemanticType;
-  x: number;
-  z: number;
-  w: number;
-  d: number;
+  polygon: readonly Vec2[];
 }
 
 export interface FloorLayout {

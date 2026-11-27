@@ -5,6 +5,7 @@ import { corners, sceneSchema, type Scene } from '../../../../supabase/functions
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { layoutReducer, type LayoutState } from '../hooks/layout-reducer';
+import { makeZone } from '../lib/__testfixtures__/fixtures';
 import { backendSceneToLayout, createMeasuredRoomLayout, layoutToBackendScene, SceneAdapterError } from './backend-adapter';
 import { parseStoredLayout } from './schema';
 
@@ -25,11 +26,11 @@ function scene(): Scene {
 describe('the shared backend scene adapter', () => {
   it('carries a drawn room zone to the cloud instead of refusing to save', () => {
     const original = backendSceneToLayout(scene());
-    const zone = { id: 'rest-one', name: '休息区（待核验）', color: '#4A7C59', x: -2, z: -2, w: 2.2, d: 1.6 };
+    const zone = makeZone({ id: 'rest-one', name: '休息区（待核验）', color: '#4A7C59', rect: { x: -2, z: -2, w: 2.2, d: 1.6 } });
     original.floors[0].zones = [zone];
     const saved = layoutToBackendScene(original);
-    // 10×8 场地：编辑帧以房间中心为原点，云端帧以北西角为原点。
-    expect(saved.zones).toEqual([{ ...zone, color: '#4a7c59', x: 3, z: 2 }]);
+    // 10×8 场地：编辑帧以房间中心为原点，云端帧以北西角为原点；环外接框反解成 scene 矩形（过渡适配层）。
+    expect(saved.zones).toEqual([{ id: zone.id, name: zone.name, color: '#4a7c59', x: 3, z: 2, w: 2.2, d: 1.6 }]);
     const roundtrip = backendSceneToLayout(saved);
     expect(roundtrip.floors[0].zones).toEqual([{ ...zone, color: '#4a7c59' }]);
     expect(original.floors[0].zones).toEqual([zone]);
@@ -38,8 +39,8 @@ describe('the shared backend scene adapter', () => {
   it('rejects duplicate zone ids at the contract boundary', () => {
     const layout = backendSceneToLayout(scene());
     layout.floors[0].zones = [
-      { id: 'dup', name: '签到区', color: '#3b82f6', x: 0, z: 0, w: 1, d: 1 },
-      { id: 'dup', name: '休息区', color: '#4A7C59', x: 1, z: 0, w: 1, d: 1 },
+      makeZone({ id: 'dup', name: '签到区', color: '#3b82f6', rect: { x: 0, z: 0, w: 1, d: 1 } }),
+      makeZone({ id: 'dup', name: '休息区', color: '#4A7C59', rect: { x: 1, z: 0, w: 1, d: 1 } }),
     ];
     expect(() => layoutToBackendScene(layout)).toThrow(/区域 ID 不能重复/);
   });
@@ -55,7 +56,7 @@ describe('the shared backend scene adapter', () => {
   it('no longer refuses a layout because a saved variant still holds a zone', () => {
     const layout = backendSceneToLayout(scene());
     const variant = backendSceneToLayout(scene());
-    variant.floors[0].zones = [{ id: 'rest', name: '休息区', color: '#4A7C59', x: -1, z: -1, w: 2, d: 2 }];
+    variant.floors[0].zones = [makeZone({ id: 'rest', name: '休息区', color: '#4A7C59', rect: { x: -1, z: -1, w: 2, d: 2 } })];
     layout.designBook = { activeId: 'alternative', variants: [{ id: 'alternative', name: '另一版', layout: variant }] };
     // Only the active floor is the cloud scene; a variant's zones stay a local draft.
     expect(layoutToBackendScene(layout).zones ?? []).toEqual([]);

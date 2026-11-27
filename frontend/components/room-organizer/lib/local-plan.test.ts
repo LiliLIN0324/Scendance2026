@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 import { localPlan } from './local-plan';
 import type { FurnitureItem, RoomLayout } from './types';
 
@@ -71,7 +71,7 @@ describe('localPlan — 出方案只有一道门，里面可以是两条路', ()
     expect(base.floors[0]!.items).toEqual([locked]);
   });
   it('已有手绘休息区时复用，不再追加示意长椅或覆盖用户标注', () => {
-    const zone = { id: 'user-zone', name: '用户休息区', color: '#4A7C59', x: -5, z: -4, w: 2, d: 2 };
+    const zone = makeZone({ id: 'user-zone', name: '用户休息区', color: '#4A7C59', rect: { x: -5, z: -4, w: 2, d: 2 } });
     const base = makeLayout({ width: 12, height: 9, floors: [makeFloor({ items: [], zones: [zone] })] });
     const plan = localPlan({ base, floorIndex: 0, widthM: 12, depthM: 9, variant: 0, guests: 8, requireRest: true, stage: false, checkin: false });
     const final = plan.layouts.at(-1)!;

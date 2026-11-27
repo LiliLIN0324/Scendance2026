@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hasCollisions } from './geometry';
 import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { zoneBBox } from './zones';
 import { proposeRestArea } from './rest-area-plan';
 
 describe('rest area candidate', () => {
@@ -16,8 +17,9 @@ describe('rest area candidate', () => {
     const zone = floor.zones?.find(item => item.name === '休息区（待核验）')!;
     expect(bench).toBeTruthy();
     expect(zone).toBeTruthy();
-    expect(bench.position!.x).toBeGreaterThanOrEqual(zone.x);
-    expect(bench.position!.x).toBeLessThanOrEqual(zone.x + zone.w);
+    const bbox = zoneBBox(zone);
+    expect(bench.position!.x).toBeGreaterThanOrEqual(bbox.x);
+    expect(bench.position!.x).toBeLessThanOrEqual(bbox.x + bbox.w);
     expect(hasCollisions(bench, floor.items, layout.width, layout.height)).toBe(false);
     expect(layout.floors[0]!.items).toEqual([locked]);
     expect(layout.floors[0]!.zones ?? []).toEqual([]);
@@ -40,8 +42,9 @@ describe('rest area candidate', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const zone = result.layout.floors[0]!.zones![0]!;
-    const dx = Math.max(zone.x - door.position!.x, 0, door.position!.x - (zone.x + zone.w));
-    const dz = Math.max(zone.z - door.position!.z, 0, door.position!.z - (zone.z + zone.d));
+    const bbox = zoneBBox(zone);
+    const dx = Math.max(bbox.x - door.position!.x, 0, door.position!.x - (bbox.x + bbox.w));
+    const dz = Math.max(bbox.z - door.position!.z, 0, door.position!.z - (bbox.z + bbox.d));
     expect(Math.hypot(dx, dz)).toBeGreaterThanOrEqual(1 + door.width / 2);
   });
 
@@ -52,9 +55,10 @@ describe('rest area candidate', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const zone = result.layout.floors[0]!.zones![0]!;
+    const bbox = zoneBBox(zone);
     const x = entrance.position.x - layout.width / 2, z = entrance.position.z - layout.height / 2;
-    const dx = Math.max(zone.x - x, 0, x - (zone.x + zone.w));
-    const dz = Math.max(zone.z - z, 0, z - (zone.z + zone.d));
+    const dx = Math.max(bbox.x - x, 0, x - (bbox.x + bbox.w));
+    const dz = Math.max(bbox.z - z, 0, z - (bbox.z + bbox.d));
     expect(Math.hypot(dx, dz)).toBeGreaterThanOrEqual(1 + entrance.width / 2);
   });
 

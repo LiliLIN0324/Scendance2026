@@ -1,5 +1,6 @@
-import type { CatalogItem, FloorLayout, FurnitureItem, RoomLayout, ViewSettings } from '../types';
+import type { CatalogItem, FloorLayout, FurnitureItem, RoomLayout, RoomZone, ViewSettings } from '../types';
 import type { LegacyLayoutGround } from '../legacy-ground';
+import { rectToZoneRing, type ZoneRect } from '../zones';
 
 /** Build a valid FurnitureItem with sane defaults; override any field. */
 export function makeItem(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
@@ -22,6 +23,20 @@ export function makeItem(overrides: Partial<FurnitureItem> = {}): FurnitureItem 
 export function makeUnplacedItem(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
   const { position: _unplaced, ...item } = makeItem(overrides);
   return item;
+}
+
+/** Build a valid RoomZone ring. `rect` expands to a four-corner ring; pass `polygon` for an arbitrary ring. */
+export function makeZone(
+  overrides: Partial<Omit<RoomZone, 'polygon'>> & { rect?: ZoneRect; polygon?: RoomZone['polygon'] } = {}
+): RoomZone {
+  const { rect, polygon, ...rest } = overrides;
+  return {
+    id: 'zone-1',
+    name: 'Zone 1',
+    color: '#3b82f6',
+    polygon: polygon ?? rectToZoneRing(rect ?? { x: -1, z: -1, w: 2, d: 2 })!,
+    ...rest,
+  };
 }
 
 /** Build a valid CatalogItem (no id/position/rotation). */

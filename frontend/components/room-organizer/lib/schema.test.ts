@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 import { legacyGroundOf } from './legacy-ground';
 import { MAX_FLOORS, MAX_ITEM_DIMENSION, MAX_ROOM_DIMENSION, ROOM_TEMPLATES } from './constants';
 import { createResearchArea, DEFAULT_RESEARCH_RADIUS_M, RESEARCH_SATELLITE_STYLE, XIHU_LOCAL_PLACE } from './research-area';
@@ -555,7 +555,7 @@ describe('schema caps (#332)', () => {
               floorColor: '#'.repeat(MAX_COLOR_LENGTH + 1),
               wallColors: { north: '#'.repeat(MAX_COLOR_LENGTH + 1) },
               interiorWalls: [{ id: 'w'.repeat(MAX_ID_LENGTH + 1), x1: 0, z1: 0, x2: 1, z2: 0, color: '#'.repeat(MAX_COLOR_LENGTH + 1) }],
-              zones: [{ id: 'z', name: 'k'.repeat(MAX_NAME_LENGTH + 1), color: '#abcdef', x: 0, z: 0, w: 2, d: 2 }],
+              zones: [makeZone({ id: 'z', name: 'k'.repeat(MAX_NAME_LENGTH + 1), color: '#abcdef', rect: { x: 0, z: 0, w: 2, d: 2 } })],
             }),
           ],
         })
@@ -631,7 +631,7 @@ describe('schema caps (#332)', () => {
   });
 
   it('slices zones past MAX_ZONES instead of refusing the floor, and de-duplicates dormer ids', () => {
-    const zones = Array.from({ length: MAX_ZONES + 3 }, (_, i) => ({ id: `z${i}`, name: 'Z', color: '#123456', x: 0, z: 0, w: 1, d: 1 }));
+    const zones = Array.from({ length: MAX_ZONES + 3 }, (_, i) => makeZone({ id: `z${i}`, name: 'Z', color: '#123456', rect: { x: 0, z: 0, w: 1, d: 1 } }));
     const parsed = parseStoredLayout(makeLayout({ floors: [makeFloor({ zones })] }));
     expect(only(parsed).zones).toHaveLength(MAX_ZONES);
     const dormer = { id: 'd', side: 'south' as const, width: 1.6 };
@@ -849,7 +849,7 @@ describe('duplicate ids (#338)', () => {
   });
 
   it('suffixes repeated floor, wall and zone ids', () => {
-    const zone = { id: 'z', name: 'Room', color: '#abcdef', x: 0, z: 0, w: 2, d: 2 };
+    const zone = makeZone({ id: 'z', name: 'Room', color: '#abcdef', rect: { x: 0, z: 0, w: 2, d: 2 } });
     const wall = { id: 'w', x1: 0, z1: 0, x2: 1, z2: 0 };
     const layout = makeLayout({
       floors: [

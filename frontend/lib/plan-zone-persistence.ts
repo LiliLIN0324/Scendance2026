@@ -2,7 +2,7 @@ import { structuralViolations } from '../../supabase/functions/_shared/structura
 import { venueSchema, type Scene } from '../../supabase/functions/_shared/domain';
 import { MAX_ROOM_DIMENSION } from '../components/room-organizer/lib/constants';
 import { MAX_COLOR_LENGTH, MAX_ID_LENGTH, MAX_NAME_LENGTH } from '../components/room-organizer/lib/schema';
-import { isRoomZone, isZoneRect, MAX_ZONES, MIN_ZONE_SIZE } from '../components/room-organizer/lib/zones';
+import { isRoomZone, MAX_ZONES, MIN_ZONE_SIZE, rectToZoneRing, ringFitsFootprint, zoneBBox, zonesOverlap } from '../components/room-organizer/lib/zones';
 import type { RoomLayout, RoomZone } from '../components/room-organizer/lib/types';
 import { ZONE_SEMANTIC_LABELS, type LayoutPlanDraft, type PlanAnnotation, type ZoneSemanticType } from './plan-annotation';
 
@@ -13,7 +13,7 @@ export type PlanZonePersistenceResult =
 const COLOR = '#4A7C59';
 
 function overlaps(a: RoomZone, b: RoomZone): boolean {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.z < b.z + b.d && a.z + a.d > b.z;
+  return zonesOverlap(a, b);
 }
 
 /** 身份同时保留草案、原标注和阶段；超长或冲突时不能截断或覆盖。 */
@@ -26,12 +26,13 @@ function zoneId(draftId: string, annotation: PlanAnnotation): string | null {
 
 /** 与后端同一套多边形边界算法；不以矩形外接框代替凹形场地。 */
 function fitsPolygon(zone: RoomZone, venue: NonNullable<RoomLayout['backendVenue']>): boolean {
+  const bbox = zoneBBox(zone);
   const scene: Scene = {
     schemaVersion: 1,
     venue: { width: venue.width, depth: venue.depth, height: venue.height, shape: 'polygon', polygon: venue.polygon!, entrances: [] },
     objects: [{ id: '00000000-0000-4000-8000-000000000001', materialId: 'decoration',
-      position: { x: zone.x + zone.w / 2 + venue.width / 2, z: zone.z + zone.d / 2 + venue.depth / 2 },
-      size: { width: zone.w, depth: zone.d, height: 0.01 }, rotation: 0, color: COLOR, locked: false, notes: '' }],
+      position: { x: bbox.x + bbox.w / 2 + venue.width / 2, z: bbox.z + bbox.d / 2 + venue.depth / 2 },
+      size: { width: bbox.w, depth: bbox.d, height: 0.01 }, rotation: 0, color: COLOR, locked: false, notes: '' }],
     camera: 'overview', lighting: 'neutral',
   };
   return !structuralViolations(scene).some(violation => violation.code === 'OUT_OF_BOUNDS');
@@ -104,9 +105,11 @@ export function appendPlanZones(layout: RoomLayout, floorIndex: number, draft: L
     const id = zoneId(draft.id, annotation);
     if (!id || reservedIds.has(id)) return { ok: false, reason: '区域编号过长或与已有内容冲突，原布局没有改变。' };
     const g = annotation.geometry;
-    const zone: RoomZone = { id, name, color: COLOR, ...(type === undefined ? {} : {zoneType:type}), x: g.x, z: g.z, w: g.width, d: g.depth };
-    if (!isZoneRect(zone) || zone.w < MIN_ZONE_SIZE || zone.d < MIN_ZONE_SIZE) return { ok: false, reason: `「${annotation.label}」的区域尺寸无效或过小。` };
-    if (zone.x < -layout.width / 2 || zone.z < -layout.height / 2 || zone.x + zone.w > layout.width / 2 || zone.z + zone.d > layout.height / 2) {
+    const rect = { x: g.x, z: g.z, w: g.width, d: g.depth };
+    const polygon = rectToZoneRing(rect);
+    if (!polygon || rect.w < MIN_ZONE_SIZE || rect.d < MIN_ZONE_SIZE) return { ok: false, reason: `「${annotation.label}」的区域尺寸无效或过小。` };
+    const zone: RoomZone = { id, name, color: COLOR, ...(type === undefined ? {} : {zoneType:type}), polygon };
+    if (!ringFitsFootprint(polygon, layout.width, layout.height)) {
       return { ok: false, reason: `「${annotation.label}」超出场地边界，请先调整。` };
     }
     if (venue?.shape === 'polygon' && !fitsPolygon(zone, venue)) return { ok: false, reason: `「${annotation.label}」超出多边形场地边界，请先调整。` };

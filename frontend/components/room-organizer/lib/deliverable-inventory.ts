@@ -9,6 +9,7 @@ import assetIds from '../../../../assets/library/asset-ids.json';
 import catalogue from '../../../../assets/library/catalogue.json';
 import type { FloorLayout, FurnitureItem, RoomLayout } from './types';
 import { isStructuralMarker } from './structural-layout';
+import { zoneContains } from './zones';
 export type InventoryProcurement = '概念物料，采购待确认' | '规格与采购待确认';
 
 /** One normalised line input. Floor review snapshots can map into this too. */
@@ -83,9 +84,7 @@ const license = catalogue.license;
 
 function zoneOf(floor: FloorLayout, item: FurnitureItem) {
   if (!item.position) return { zoneId: null, zoneName: null };
-  const zone = (floor.zones ?? []).find(z =>
-    item.position!.x >= z.x && item.position!.x <= z.x + z.w &&
-    item.position!.z >= z.z && item.position!.z <= z.z + z.d);
+  const zone = (floor.zones ?? []).find(z => zoneContains(z, item.position!));
   return zone ? { zoneId: zone.id, zoneName: zone.name } : { zoneId: null, zoneName: null };
 }
 

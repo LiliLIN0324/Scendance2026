@@ -1,4 +1,5 @@
 import { isStructuralMarker } from './structural-layout';
+import { ringFitsFootprint } from './zones';
 import type { FurnitureItem, RoomLayout, RoomZone } from './types';
 import { STAGE_PLATFORM_ASSET_ID } from './stage-platform-plan';
 
@@ -46,10 +47,9 @@ function zoneMatches(zone: RoomZone, kind: FunctionalKind): boolean {
 }
 
 function zoneWithinBounds(zone: RoomZone, layout: RoomLayout): boolean {
-  if (![zone.x, zone.z, zone.w, zone.d, layout.width, layout.height].every(Number.isFinite)
-    || zone.w <= 0 || zone.d <= 0 || layout.width <= 0 || layout.height <= 0
-    || zone.x < -layout.width / 2 || zone.z < -layout.height / 2
-    || zone.x + zone.w > layout.width / 2 || zone.z + zone.d > layout.height / 2) return false;
+  if (![layout.width, layout.height].every(Number.isFinite)
+    || layout.width <= 0 || layout.height <= 0) return false;
+  if (!ringFitsFootprint(zone.polygon, layout.width, layout.height)) return false;
   // shortcut: 目前只验证矩形外框；多边形中的区域必须单独核验。
   return (layout.backendVenue?.shape ?? layout.backendSceneV2?.venue.shape) !== 'polygon';
 }

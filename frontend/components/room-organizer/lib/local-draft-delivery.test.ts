@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseLocalProjectBackupJson } from '@/lib/local-project-backup';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 import { localDraftDeliveryJson, localDraftMaterialsCsv, LOCAL_DRAFT_FORMAT } from './local-draft-delivery';
 import { backendSceneToLayout, createMeasuredRoomLayout } from './backend-adapter';
 import { extractPlanSizeFacts } from '@/lib/plan-size-facts';
@@ -8,7 +8,7 @@ import { sceneSchema, type SceneV2 } from '../../../../supabase/functions/_share
 import { sceneDeliveryJson } from './scene-delivery';
 
 const localLayout = () => makeLayout({ name: '场地草案', width: 12, height: 9, roof: { style: 'none' }, floors: [makeFloor({
-  zones: [{ id: 'rest-zone', name: '休息区（待核验）', color: '#4A7C59', x: -5, z: -3, w: 2.2, d: 1.6 }],
+  zones: [makeZone({ id: 'rest-zone', name: '休息区（待核验）', color: '#4A7C59', rect: { x: -5, z: -3, w: 2.2, d: 1.6 } })],
   items: [makeItem({ id: 'bench', type: 'bench', name: '休息长椅（示意）', category: 'rest', width: 1.4, depth: .4, height: .45, position: { x: -3.9, z: -2.2 }, rotation: 0 })],
 })] });
 

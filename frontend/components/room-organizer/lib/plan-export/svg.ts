@@ -11,7 +11,7 @@
 import { PLAN_SAFETY_DRAFT_LINES } from '@/lib/plan-safety-notice';
 import { planDrawOrder } from '../plan-order';
 import { entrancePlanOutline, planFloorIndex } from '../street';
-import { zoneArea } from '../zones';
+import { zoneArea, zoneBBox } from '../zones';
 import { planExportVisibility, type PlanExportVisibility } from './export-visibility';
 import {
   planExportUnsupportedReason,
@@ -166,7 +166,7 @@ export function layoutToSvg(layout: RoomLayout, floor: FloorLayout, options: Svg
     `<g class="plan" transform="translate(${fmt(rootX)} ${fmt(rootY)})">`,
     `<rect x="${fmt(margin)}" y="${fmt(margin)}" width="${fmt(roomW)}" height="${fmt(roomD)}" fill="${escapeXml(floor.floorColor)}"/>`,
     renderGrid(layout, margin, scale, theme),
-    renderZones(floor, px, py, scale, theme, layers.roomLabels),
+    renderZones(floor, px, py, theme, layers.roomLabels),
     renderRoomOutline(layout, floor, margin, scale, theme, layers.walls),
     renderStairwellHoles(layout, floor, px, py, theme, layers.stairs),
     ...openings
@@ -281,7 +281,6 @@ function renderZones(
   floor: FloorLayout,
   px: (x: number) => string,
   py: (z: number) => string,
-  scale: number,
   theme: SvgPlanTheme,
   showLabels: boolean
 ): string {
@@ -290,11 +289,17 @@ function renderZones(
   return zones
     .map((zone) => {
       const color = escapeXml(zone.color);
-      const cx = fmt(Number(px(zone.x)) + (zone.w * scale) / 2);
-      const top = fmt(Number(py(zone.z)) + 15);
+      const points = zone.polygon.map((point) => ({ x: Number(px(point.x)), y: Number(py(point.z)) }));
+      const polygonPoints = points.map((point) => `${fmt(point.x)},${fmt(point.y)}`).join(' ');
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      const cx = fmt(minX + (Math.max(...xs) - minX) / 2);
+      const top = fmt(minY + 15);
       return [
         `<g class="zone">`,
-        `<rect x="${px(zone.x)}" y="${py(zone.z)}" width="${fmt(zone.w * scale)}" height="${fmt(zone.d * scale)}" fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-opacity="0.45" stroke-width="1"/>`,
+        `<polygon points="${polygonPoints}" fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-opacity="0.45" stroke-width="1"/>`,
         showLabels
           ? `<text class="zone-label" data-layer="ROOMS" x="${cx}" y="${top}" font-size="12" font-weight="600" text-anchor="middle" fill="${theme.label}">${escapeXml(zone.name)}</text>`
           : '',
@@ -495,8 +500,9 @@ function zoneLabelBox(zone: NonNullable<FloorLayout['zones']>[number], layout: R
   const nameW = estimateLabelWidth(zone.name, 12);
   const areaW = estimateLabelWidth(`${zoneArea(zone).toFixed(1)} m²`, 10);
   const textW = Math.max(nameW, areaW);
-  const cx = margin + (zone.x + layout.width / 2) * scale + (zone.w * scale) / 2;
-  const baseline = margin + (zone.z + layout.height / 2) * scale + 15;
+  const bbox = zoneBBox(zone);
+  const cx = margin + (bbox.x + bbox.w / 2 + layout.width / 2) * scale;
+  const baseline = margin + (bbox.z + layout.height / 2) * scale + 15;
   return { x: cx - textW / 2, y: baseline - 12, w: textW, h: 28 };
 }
 

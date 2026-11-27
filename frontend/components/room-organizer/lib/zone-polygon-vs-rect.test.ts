@@ -7,7 +7,7 @@ import {
   zoneContainsRing,
   type RingPlacedItem,
 } from './zone-polygon';
-import { itemsInZone, zoneArea, zoneContains, zoneStats } from './zones';
+import { itemsInZone, zoneArea, zoneContains, zoneStats, rectToZoneRing } from './zones';
 import type { RoomZone } from './types';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 
@@ -23,7 +23,7 @@ import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan
  * 帧换算（z↔y、房间中心 ↔ plan 西北角）属适配层，本对照测试只做坐标映射，
  * 不在几何模块里反解矩形。
  */
-const rectZone: RoomZone = { id: 'r', name: '对照区', color: '#3b82f6', x: 0, z: 0, w: 4, d: 3 };
+const rectZone: RoomZone = { id: 'r', name: '对照区', color: '#3b82f6', polygon: rectToZoneRing({ x: 0, z: 0, w: 4, d: 3 })! };
 const ring: PlanPoint[] = [
   { x: 0, y: 0 },
   { x: 4, y: 0 },
@@ -52,7 +52,7 @@ function toRingItem(item: ReturnType<typeof makeItem>): RingPlacedItem {
 
 describe('D5-3 矩形/多边形归属口径对照', () => {
   it.each(points)('$label：矩形与多边形判定一致', ({ x, z, inside }) => {
-    expect(zoneContains(rectZone, x, z)).toBe(inside);
+    expect(zoneContains(rectZone, { x, z })).toBe(inside);
     expect(zoneContainsRing(ring, { x, y: z })).toBe(inside);
   });
 

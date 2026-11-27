@@ -25,7 +25,7 @@
 import { PLAN_SAFETY_DRAFT_LINES } from '@/lib/plan-safety-notice';
 import { planDrawOrder } from '../plan-order';
 import { entrancePlanOutline, planFloorIndex } from '../street';
-import { zoneArea } from '../zones';
+import { zoneArea, zoneBBox } from '../zones';
 import {
   DXF_LAYER_COLOURS,
   DXF_LAYER_NAMES,
@@ -235,10 +235,11 @@ export function layoutToDxf(
 
   if (layers.roomLabels) {
     for (const zone of floor.zones ?? []) {
-      const nameX = cx(zone.x + zone.w / 2);
-      const nameY = cy(zone.z + 0.3);
+      const bbox = zoneBBox(zone);
+      const nameX = cx(bbox.x + bbox.w / 2);
+      const nameY = cy(bbox.z + 0.3);
       text('ROOMS', nameX, nameY, LABEL_TEXT_HEIGHT, zone.name, true);
-      text('ROOMS', nameX, cy(zone.z + 0.55), 0.12, `${zoneArea(zone).toFixed(1)} m²`, true);
+      text('ROOMS', nameX, cy(bbox.z + 0.55), 0.12, `${zoneArea(zone).toFixed(1)} m²`, true);
     }
   }
 

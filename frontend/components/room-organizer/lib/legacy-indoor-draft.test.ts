@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createStarterOutdoorPlan } from './outdoor-project-store';
 import { isLegacyIndoorDraft, prepareOutdoorSaveAs } from './legacy-indoor-draft';
-import { makeFloor, makeItem, makeLayout } from './__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
 
 describe('旧纯室内草稿判定（S3-4）', () => {
   it('已绑户外 plan → 不是旧室内，按户外项目编辑', () => {
@@ -19,7 +19,7 @@ describe('旧纯室内草稿判定（S3-4）', () => {
   });
 
   it('无 plan 且有室内分区 → 旧纯室内，只读', () => {
-    const layout = makeLayout({ floors: [makeFloor({ zones: [{ id: 'z1', name: '区', color: '#333', x: 0, z: 0, w: 2, d: 2 }] })] });
+    const layout = makeLayout({ floors: [makeFloor({ zones: [makeZone({ id: 'z1', name: '区', color: '#333', rect: { x: 0, z: 0, w: 2, d: 2 } })] })] });
     expect(isLegacyIndoorDraft(layout, null)).toBe(true);
   });
 
@@ -43,7 +43,7 @@ describe('另存为户外新场地迁移（S3-4）', () => {
 
   it('不迁旧壳体物件 / 分区 / 隔墙：新 plan 的实体集合为空', () => {
     const layout = makeLayout({
-      floors: [makeFloor({ items: [makeItem()], zones: [{ id: 'z1', name: '区', color: '#333', x: 0, z: 0, w: 2, d: 2 }], interiorWalls: [{ id: 'w1', x1: 0, z1: 0, x2: 2, z2: 0, color: '#333' }] })],
+      floors: [makeFloor({ items: [makeItem()], zones: [makeZone({ id: 'z1', name: '区', color: '#333', rect: { x: 0, z: 0, w: 2, d: 2 } })], interiorWalls: [{ id: 'w1', x1: 0, z1: 0, x2: 2, z2: 0, color: '#333' }] })],
     });
     const { record } = prepareOutdoorSaveAs(layout);
     expect(record.plan?.facilities).toEqual([]);

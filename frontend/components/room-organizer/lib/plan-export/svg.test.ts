@@ -1,7 +1,7 @@
 import { createMeasuredRoomLayout } from '../backend-adapter';
 import { layoutToDxf } from './dxf';
 import { describe, expect, it } from 'vitest';
-import { makeFloor, makeItem, makeLayout } from '../__testfixtures__/fixtures';
+import { makeFloor, makeItem, makeLayout, makeZone } from '../__testfixtures__/fixtures';
 import { layoutToSvg, planSheetSize } from './svg';
 
 function count(haystack: string, needle: string): number {
@@ -232,12 +232,12 @@ describe('layoutToSvg', () => {
 
   it('draws room zones as tinted rects with name and area, under the walls (#155)', () => {
     const floor = makeFloor({
-      zones: [{ id: 'z1', name: 'Bed & Bath', color: '#3b82f6', x: -4, z: -4, w: 3, d: 2 }],
+      zones: [makeZone({ id: 'z1', name: 'Bed & Bath', color: '#3b82f6', rect: { x: -4, z: -4, w: 3, d: 2 } })],
     });
     const svg = layoutToSvg(makeLayout({ floors: [floor] }), floor);
     // Corner (−4, −4) in an 8×8 room at 50 px/m + 60 px margin → (60, 60), 150×100 px.
     expect(svg).toContain(
-      '<rect x="60" y="60" width="150" height="100" fill="#3b82f6" fill-opacity="0.12" stroke="#3b82f6" stroke-opacity="0.45"'
+      '<polygon points="60,60 210,60 210,160 60,160" fill="#3b82f6" fill-opacity="0.12" stroke="#3b82f6" stroke-opacity="0.45"'
     );
     expect(svg).toContain('data-layer="ROOMS"');
     expect(svg).toContain('Bed &amp; Bath</text>');
