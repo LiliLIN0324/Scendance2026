@@ -477,3 +477,41 @@ describe('site plan ground（B4 底图正源落 plan）', () => {
     expect(sitePlanDataSchema.safeParse({ ...base, ground: { image: 'x'.repeat(8_000_001) } }).success).toBe(false);
   });
 });
+
+describe('site plan refs and scan（D6-1 顶层可选引用字段）', () => {
+  it('旧快照不带 scan/operationsRef/planRef：解析成功且不虚构字段', () => {
+    const legacy = sitePlanDataSchema.parse(samplePlan());
+    expect(legacy.scan).toBeUndefined();
+    expect(legacy.operationsRef).toBeUndefined();
+    expect(legacy.planRef).toBeUndefined();
+  });
+
+  it('带三字段往返逐字段保留', () => {
+    const withRefs = {
+      ...samplePlan(),
+      scan: { assetId: 'scan-asset-001', name: '入口广场实景' },
+      operationsRef: 'op-record-001',
+      planRef: 'plan-record-001',
+    };
+    const restored = sitePlanDataSchema.parse(JSON.parse(JSON.stringify(withRefs)));
+    expect(restored.scan).toEqual(withRefs.scan);
+    expect(restored.operationsRef).toBe(withRefs.operationsRef);
+    expect(restored.planRef).toBe(withRefs.planRef);
+  });
+
+  it('scan 只有 assetId 也合法（name 可选）', () => {
+    const withScan = { ...samplePlan(), scan: { assetId: 'scan-asset-002' } };
+    const parsed = sitePlanDataSchema.parse(withScan);
+    expect(parsed.scan?.name).toBeUndefined();
+  });
+
+  it('拒绝非法引用 id、扫描字段长度与未知字段', () => {
+    const base = { ...samplePlan() };
+    expect(sitePlanDataSchema.safeParse({ ...base, operationsRef: '' }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, planRef: 'x'.repeat(161) }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, scan: { assetId: '' } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, scan: { assetId: 'x'.repeat(161) } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, scan: { assetId: 'a', name: 'x'.repeat(81) } }).success).toBe(false);
+    expect(sitePlanDataSchema.safeParse({ ...base, scan: { assetId: 'a', url: 'https://x' } }).success).toBe(false);
+  });
+});

@@ -429,6 +429,16 @@ export const planGroundSchema = z.strictObject({
 });
 export type PlanGround = z.infer<typeof planGroundSchema>;
 
+/**
+ * 场地扫描身份（D6-1，可选占位）：只登记扫描资产 id 与可选名称。
+ * 缺省 = 无扫描；读取层不兜底旧场地。本批不迁 layout.venueScan 写源，消费方读取归后续切片。
+ */
+export const planVenueScanSchema = z.strictObject({
+  assetId: z.string().min(1).max(160),
+  name: z.string().max(80).optional(),
+});
+export type PlanVenueScan = z.infer<typeof planVenueScanSchema>;
+
 /** 一份规划数据：边界 + 图层 + 五类实体 + 测量标注 + 自由标注，全部带 UUID。 */
 export const sitePlanDataSchema = z.strictObject({
   schemaVersion: z.literal(1),
@@ -488,6 +498,21 @@ export const sitePlanDataSchema = z.strictObject({
   editor: planEditorSchema.optional(),
   /** 贴地底图正源（可选）：旧数据不带照常解析，读取层可回退 layout 视图缓存。 */
   ground: planGroundSchema.optional(),
+  /**
+   * 场地扫描身份（可选，D6-1 占位）：缺省 = 无扫描，读取层不兜底旧场地。
+   * 只登记 `{ assetId, name? }`，不整包塞扫描副本；本批不迁 `layout.venueScan` 写源。
+   */
+  scan: planVenueScanSchema.optional(),
+  /**
+   * 活动安排独立契约记录 id（可选，D6-1 占位）。
+   * 指向独立持久化记录，plan 正源不整包塞 eventOperations；字段本轮只占位，消费方读取归 D6-2。
+   */
+  operationsRef: z.string().min(1).max(160).optional(),
+  /**
+   * 制作计划独立契约记录 id（可选，D6-1 占位）。
+   * 指向独立持久化记录，plan 正源不整包塞 productionPlan；字段本轮只占位，消费方读取归 D6-2。
+   */
+  planRef: z.string().min(1).max(160).optional(),
 }).superRefine((plan, ctx) => {
   const collections: [keyof typeof plan, string][] = [
     ['levels', '图层'], ['zones', '分区'], ['facilities', '设施'], ['routes', '路线'], ['nodes', '出入口'], ['workers', '人员'], ['vehicles', '车辆'], ['measurements', '测量'], ['annotations', '标注'], ['walls', '墙体'],
