@@ -1174,6 +1174,10 @@ export function drawFacilityLayer(
     strokeStyle?: 'solid' | 'dashed' | 'dotted' | 'none' | undefined;
     /** 2026-11-16 场景预设落成的小场地：带 `scene-preset:` 前缀，2D 用双虚线 + 名称标出来。 */
     templateId?: string | undefined;
+    /** 2026-11-27 档2 桌形：`round` 圆桌画椭圆，缺省 `rect` 方桌画矩形；非桌类不影响占地。 */
+    shape?: 'round' | 'rect' | undefined;
+    /** 2026-11-27 档2 桌面料：`linen` 桌布加内框标识，缺省 `bare` 裸面无内框。 */
+    finish?: 'linen' | 'bare' | undefined;
   }[],
   opts: { selectedId?: string | null; /** 2026-11-12 B3 组选：多选件同样画白圈（名称标签仍只给单选）。 */ selectedIds?: readonly string[] | null } = {},
 ): void {
@@ -1194,12 +1198,19 @@ export function drawFacilityLayer(
     // rotationDeg 以东为零、逆时针为正（+90° 时宽边从东转向北）。
     ctx.rotate(-f.rotationDeg * Math.PI / 180 - (viewport.bearing ?? 0));
     ctx.fillStyle = hexWithAlpha(own, fillAlpha);
-    ctx.fillRect(-w / 2, -h / 2, w, h);
+    const roundTop = f.shape === 'round';
+    const traceOutline = () => {
+      ctx.beginPath();
+      if (roundTop) ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+      else ctx.rect(-w / 2, -h / 2, w, h);
+    };
+    if (roundTop) { traceOutline(); ctx.fill(); } else ctx.fillRect(-w / 2, -h / 2, w, h);
     if (f.warning) {
       ctx.strokeStyle = '#c0392b';
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
-      ctx.strokeRect(-w / 2, -h / 2, w, h);
+      traceOutline();
+      ctx.stroke();
     } else if (sceneVenue) {
       // 小场地在 2D 里不是普通物料的一格：外圈双虚线，内圈再收一道，看起来像“摆进来的一整个馆”。
       ctx.strokeStyle = own;
@@ -1216,7 +1227,17 @@ export function drawFacilityLayer(
       ctx.lineWidth = 1.2;
       // 2026-11-12 描边三态+无描边：实线/虚线/点线；restore 会复位 dash。
       ctx.setLineDash(f.strokeStyle === 'dashed' ? [6, 4] : f.strokeStyle === 'dotted' ? [1.6, 3.2] : []);
-      ctx.strokeRect(-w / 2, -h / 2, w, h);
+      if (roundTop) { traceOutline(); ctx.stroke(); } else ctx.strokeRect(-w / 2, -h / 2, w, h);
+      // 2026-11-27 桌布饰面：内收一圈细内框标识；裸面（缺省）不画内框。
+      if (f.finish === 'linen') {
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        const inset = 3;
+        ctx.beginPath();
+        if (roundTop) ctx.ellipse(0, 0, Math.max(2, w / 2 - inset), Math.max(2, h / 2 - inset), 0, 0, Math.PI * 2);
+        else ctx.rect(-w / 2 + inset, -h / 2 + inset, w - inset * 2, h - inset * 2);
+        ctx.stroke();
+      }
     }
     ctx.restore();
     if (opts.selectedId && f.id === opts.selectedId) {

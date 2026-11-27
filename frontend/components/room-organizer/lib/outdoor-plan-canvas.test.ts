@@ -193,12 +193,16 @@ interface CtxCapture {
   fills: string[];
   /** 圆弧（`arc:x,y,r`）：用来锁「人员点位到底画的是圆点还是只有芯片」。 */
   arcs: string[];
+  /** 椭圆（`ellipse:x,y,rx,ry`）：用来锁圆桌桌形走圆形路径。 */
+  ellipses: string[];
+  /** `ctx.rect` 路径（`rect:x,y,w,h`）：用来锁桌布内框。 */
+  rectPaths: string[];
   /** 每次 `lineWidth` 赋值：用来锁「非法草稿只是加重，不是只换了个相近的红」。 */
   widths: number[];
 }
 
 function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
-  const cap: CtxCapture = { rects: [], dash: [], texts: [], haloTexts: [], strokes: [], fills: [], arcs: [], widths: [] };
+  const cap: CtxCapture = { rects: [], dash: [], texts: [], haloTexts: [], strokes: [], fills: [], arcs: [], ellipses: [], rectPaths: [], widths: [] };
   const ctx = {
     save: () => {},
     restore: () => {},
@@ -210,7 +214,9 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; cap: CtxCapture } {
     closePath: () => {},
     stroke: () => {},
     fill: () => {},
+    rect: (x: number, y: number, w: number, h: number) => cap.rectPaths.push(`rect:${x},${y},${w},${h}`),
     arc: (x: number, y: number, r: number) => cap.arcs.push(`arc:${x},${y},${r}`),
+    ellipse: (x: number, y: number, rx: number, ry: number) => cap.ellipses.push(`ellipse:${x},${y},${rx},${ry}`),
     setLineDash: (d: number[]) => cap.dash.push([...d]),
     strokeRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`stroke:${x},${y},${w},${h}`),
     fillRect: (x: number, y: number, w: number, h: number) => cap.rects.push(`fill:${x},${y},${w},${h}`),
@@ -338,6 +344,39 @@ describe('facility ghost & selection drawing (H2-c)', () => {
     );
     expect(cap.strokes).toContain('#c0392b');
     expect(cap.dash).toContainEqual([6, 4]);
+  });
+
+  it('round-table top traces an ellipse instead of a rectangular footprint', () => {
+    const { ctx, cap } = makeCtx();
+    drawFacilityLayer(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ id: 't1', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 2, depth: 2 }, shape: 'round' }],
+      {},
+    );
+    expect(cap.ellipses.length).toBeGreaterThanOrEqual(1);
+    expect(cap.rects.filter(r => r.startsWith('stroke:')).length).toBe(0);
+  });
+
+  it('linen finish draws an inset inner frame on the rectangular table', () => {
+    const { ctx, cap } = makeCtx();
+    drawFacilityLayer(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ id: 't2', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 2, depth: 2 }, finish: 'linen' }],
+      {},
+    );
+    // 主体走 strokeRect；桌布内框走 ctx.rect 内收一圈。
+    expect(cap.rects.some(r => r.startsWith('stroke:'))).toBe(true);
+    expect(cap.rectPaths.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('bare finish (default) keeps no inner finish frame', () => {
+    const { ctx, cap } = makeCtx();
+    drawFacilityLayer(
+      { ctx, viewport: view } as PlanCanvasContext,
+      [{ id: 't3', position: { x: 0, y: 0 }, rotationDeg: 0, size: { width: 2, depth: 2 } }],
+      {},
+    );
+    expect(cap.rectPaths).toHaveLength(0);
   });
 
   it('rotating the confirmed map view also rotates facility footprints and selected halos', () => {

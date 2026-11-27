@@ -2228,6 +2228,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [facilitySizeDraft, setFacilitySizeDraft] = useState<{ width: string; depth: string } | null>(null);
   // 2026-11-18 窗台/窗高：与宽深同一套「聚焦编辑、失焦或回车提交」。
   const [facilityWindowDraft, setFacilityWindowDraft] = useState<{ sill: string; height: string } | null>(null);
+  // 2026-11-27 档2：分组号 / 物件高度同一套草稿（失焦或回车提交；空值清回未分组 / 不写高度）。
+  const [facilityGroupDraft, setFacilityGroupDraft] = useState<string | null>(null);
+  const [facilityHeightDraft, setFacilityHeightDraft] = useState<string | null>(null);
   // V-5a 模型候选切换：选中设施的 3D 模型候选（loadFacilityModelCandidates：内置映射同步
   // + 在线物料库异步兜底，上限 5）。属性卡「模型」网格渲染；点候选写 facility.modelOverride。
   const [facilityModelCandidates, setFacilityModelCandidates] = useState<{
@@ -5211,6 +5214,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     removeFacility: (id: string) => {
       if (refuseEntityWrite('facility')) return false;
       if (!planRef.current.facilities.some(f => f.id === id)) return false;
+      if (facilityIsLocked(id)) return false;
       deleteFacility(id);
       return true;
     },
@@ -7188,6 +7192,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         : f.size;
       const rotationDeg = patch.rotationDeg !== undefined ? ((patch.rotationDeg % 360) + 360) % 360 : f.rotationDeg;
       const next = { ...f, ...patch, size, rotationDeg };
+      // 2026-11-27 档2：缺省不落键——开关关闭 / 清空草稿时显式 undefined 的可选字段从 plan 删掉，
+      // 不写 undefined 冒充真值（读取层兜底未锁 / 未分组 / 方桌裸面）。
+      for (const key of ['locked', 'groupId', 'shape', 'finish', 'heightM'] as const) {
+        if (Object.hasOwn(patch, key) && next[key] === undefined) delete next[key];
+      }
       // 换型号时单价跟价格书走：新款有价就带上，没有就清掉旧款的价。
       return modelChanged ? replaceModelPrice(next, current.priceBook, modelOverride) : next;
     });
@@ -7221,10 +7230,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     commitPlan(next);
   }
 
+  /** 2026-11-27 档2：单件锁定判定（`facility.locked === true`）。图层锁走 refuseEntityWrite，这里只判单件。 */
+  function facilityIsLocked(id: string): boolean {
+    return planRef.current.facilities.some(f => f.id === id && f.locked === true);
+  }
+
+  /** 2026-11-27 档2：桌类判定（name/templateId 关键词）。仅桌类出桌形/饰面控件；非桌类不渲染。 */
+  function facilityIsTable(f: PlanFacility): boolean {
+    const hay = `${f.name ?? ''} ${f.templateId ?? ''}`.toLowerCase();
+    return /table|桌/.test(hay);
+  }
+
   function deleteFacility(id: string) {
     if (refuseEntityWrite('facility')) return;
     const current = planRef.current;
     if (!current.facilities.some(f => f.id === id)) return;
+    if (facilityIsLocked(id)) {
+      setEditMessage('该设施已锁定，不可删除。');
+      return;
+    }
     if (!commitPlan({ ...current, facilities: current.facilities.filter(f => f.id !== id) })) return;
     // 2026-11-18 用户「门删掉之后并没有从场地消失」：删除后把这些“不是 plan 但在画布上”的状态一并收掉，
     // 并当场重绘一次——不能只等父级下一次传 plan 回来才刷。
@@ -7255,6 +7279,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
     const current = planRef.current;
     if (!current.facilities.some(f => f.id === id)) return;
+    if (facilityIsLocked(id)) {
+      setEditMessage('该设施已锁定，不可移动。');
+      return;
+    }
     // 2026-11-16 用户「物料要有归属意识」：位置变了归属重算——搬进哪个分区就归哪个区，
     // 搬出所有分区就是未归属（与人员/出入口的「按落点归属」同一口径）。
     if (!commitPlan({
@@ -7329,10 +7357,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     );
   }
 
+  /** 2026-11-27 档2：分组号提交。空串清回未分组（删键）；非空按 1–60 落 groupId。 */
+  function commitFacilityGroupDraft() {
+    const draft = facilityGroupDraft;
+    setFacilityGroupDraft(null);
+    if (!draft || !selectedFacility) return;
+    const groupId = draft.trim().slice(0, 60);
+    if (groupId.length === 0) {
+      updateFacility(selectedFacility.id, { groupId: undefined });
+      return;
+    }
+    updateFacility(selectedFacility.id, { groupId });
+  }
+
+  /** 2026-11-27 档2：物件高度（米）提交。空串清回不写高度；数值夹在 0–20 落 heightM。 */
+  function commitFacilityHeightDraft() {
+    const draft = facilityHeightDraft;
+    setFacilityHeightDraft(null);
+    if (!draft || !selectedFacility) return;
+    if (draft.trim().length === 0) {
+      updateFacility(selectedFacility.id, { heightM: undefined });
+      return;
+    }
+    const height = Number(draft);
+    if (!Number.isFinite(height)) return;
+    updateFacility(selectedFacility.id, { heightM: Math.max(0, Math.min(20, height)) });
+  }
+
   /** P2-i：方向键微调选中设施（1 m，Shift=10 m），共用一条 undo 记录。 */
   function nudgeFacility(id: string, dx: number, dy: number) {
     const current = planRef.current;
     if (!current.facilities.some(f => f.id === id)) return;
+    if (facilityIsLocked(id)) return;
     commitPlan({
       ...current,
       facilities: current.facilities.map(f => {
@@ -12312,6 +12368,132 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                           ))}
                         </select>
                       </label>
+                      {/* 2026-11-27 档2：锁定 / 分组号 / 物件高度。缺省态不落键：未锁不写 locked、空分组不写 groupId、空高度不写 heightM。 */}
+                      <div style={benchSectionTitleStyle}>摆放</div>
+                      <div style={benchSetupRowStyle}>
+                        <button
+                          type="button"
+                          aria-pressed={selectedFacility.locked === true}
+                          data-testid="facility-locked-toggle"
+                          className="sc-seg__btn"
+                          onClick={() => updateFacility(selectedFacility.id, { locked: selectedFacility.locked === true ? undefined : true })}
+                          style={{ flex: 1, ...benchPanelButtonStyle, opacity: selectedFacility.locked === true ? 1 : 0.6 }}
+                        >
+                          {selectedFacility.locked === true ? '已锁定' : '锁定'}
+                        </button>
+                        <label style={{ ...benchUnitBoxStyle, flex: 1, minWidth: 0 }} title="分组号（可选）">
+                          <span style={benchUnitLabelStyle}>分组</span>
+                          <input
+                            aria-label="选中设施分组号"
+                            type="text"
+                            value={facilityGroupDraft ?? selectedFacility.groupId ?? ''}
+                            onFocus={() => setFacilityGroupDraft(selectedFacility.groupId ?? '')}
+                            onChange={event => setFacilityGroupDraft(event.target.value)}
+                            onBlur={commitFacilityGroupDraft}
+                            onKeyDown={event => { if (event.key === 'Enter') commitFacilityGroupDraft(); }}
+                            style={benchUnitInputStyle}
+                          />
+                        </label>
+                        <label style={{ ...benchUnitBoxStyle, flex: 1, minWidth: 0 }} title="物件高度（米）；留空取目录默认高度">
+                          <span style={benchUnitLabelStyle}>高</span>
+                          <input
+                            aria-label="选中设施高度（米）"
+                            type="text"
+                            inputMode="decimal"
+                            value={facilityHeightDraft ?? (selectedFacility.heightM !== undefined ? selectedFacility.heightM.toFixed(2) : '')}
+                            onFocus={() => setFacilityHeightDraft(selectedFacility.heightM !== undefined ? selectedFacility.heightM.toFixed(2) : '')}
+                            onChange={event => setFacilityHeightDraft(event.target.value)}
+                            onBlur={commitFacilityHeightDraft}
+                            onKeyDown={event => { if (event.key === 'Enter') commitFacilityHeightDraft(); }}
+                            style={benchUnitInputStyle}
+                          />
+                          <span style={benchUnitSuffixStyle}>m</span>
+                        </label>
+                      </div>
+                      {facilityIsTable(selectedFacility) && (
+                        <>
+                          {(() => {
+                            const shapeOptions = [['round', '圆桌'], ['rect', '方桌']] as const;
+                            const currentShape = selectedFacility.shape ?? 'rect';
+                            const activeIndex = Math.max(0, shapeOptions.findIndex(([v]) => v === currentShape));
+                            const segGap = PLANNING_SPACING.xs;
+                            return (
+                              <div
+                                className="sc-seg"
+                                role="group"
+                                aria-label="桌形"
+                                data-testid="facility-shape-seg"
+                                style={{ marginTop: PLANNING_SPACING.xs, background: PLANNING_SURFACE.fieldBg }}
+                              >
+                                <span
+                                  aria-hidden
+                                  className="sc-seg__pill"
+                                  style={{
+                                    left: `calc((100% + ${segGap}px) * ${activeIndex / shapeOptions.length})`,
+                                    width: `calc((100% - ${segGap * (shapeOptions.length - 1)}px) / ${shapeOptions.length})`,
+                                    background: PLANNING_SURFACE.activeBg,
+                                    boxShadow: '0 1px 2px rgba(20, 24, 32, 0.10)',
+                                  }}
+                                />
+                                {shapeOptions.map(([value, label]) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    aria-pressed={currentShape === value}
+                                    aria-label={`桌形${label}`}
+                                    data-testid={`facility-shape-${value}`}
+                                    className="sc-seg__btn"
+                                    style={{ color: currentShape === value ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText }}
+                                    onClick={() => updateFacility(selectedFacility.id, { shape: value })}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                          {(() => {
+                            const finishOptions = [['linen', '桌布'], ['bare', '裸面']] as const;
+                            const currentFinish = selectedFacility.finish ?? 'bare';
+                            const activeIndex = Math.max(0, finishOptions.findIndex(([v]) => v === currentFinish));
+                            const segGap = PLANNING_SPACING.xs;
+                            return (
+                              <div
+                                className="sc-seg"
+                                role="group"
+                                aria-label="桌面料"
+                                data-testid="facility-finish-seg"
+                                style={{ marginTop: PLANNING_SPACING.xs, background: PLANNING_SURFACE.fieldBg }}
+                              >
+                                <span
+                                  aria-hidden
+                                  className="sc-seg__pill"
+                                  style={{
+                                    left: `calc((100% + ${segGap}px) * ${activeIndex / finishOptions.length})`,
+                                    width: `calc((100% - ${segGap * (finishOptions.length - 1)}px) / ${finishOptions.length})`,
+                                    background: PLANNING_SURFACE.activeBg,
+                                    boxShadow: '0 1px 2px rgba(20, 24, 32, 0.10)',
+                                  }}
+                                />
+                                {finishOptions.map(([value, label]) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    aria-pressed={currentFinish === value}
+                                    aria-label={`桌面料${label}`}
+                                    data-testid={`facility-finish-${value}`}
+                                    className="sc-seg__btn"
+                                    style={{ color: currentFinish === value ? PLANNING_SURFACE.selectedBorder : PLANNING_SURFACE.panelText }}
+                                    onClick={() => updateFacility(selectedFacility.id, { finish: value })}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </>
+                      )}
                       {/* 样式：色块 + 十六进制 + 透明度（对齐 Figma 的 Fill 行：色块在最左，数值成对排）。 */}
                       <div style={benchSectionTitleStyle}>样式</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

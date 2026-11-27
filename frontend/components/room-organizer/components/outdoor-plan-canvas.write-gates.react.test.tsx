@@ -154,3 +154,43 @@ it('默认红线锁不挡空白活动首次选址，但保护已存在的轮廓'
   });
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(boundary);
 });
+
+it('2026-11-27 档2：updateFacility 落分组/高度/桌形/饰面/锁定五字段', () => {
+  const { ref } = mount();
+  act(() => {
+    expect(ref.current!.updateFacility(facility.id, {
+      groupId: 'A', heightM: 1.2, shape: 'round', finish: 'linen', locked: true,
+    })).toBe(true);
+  });
+  const f = ref.current!.getEditVisuals().plan.facilities[0]!;
+  expect(f.groupId).toBe('A');
+  expect(f.heightM).toBeCloseTo(1.2);
+  expect(f.shape).toBe('round');
+  expect(f.finish).toBe('linen');
+  expect(f.locked).toBe(true);
+});
+
+it('2026-11-27 档2：清空草稿传 undefined，可选键从 plan 删除（不写 undefined 冒充真值）', () => {
+  const { ref } = mount();
+  act(() => {
+    ref.current!.updateFacility(facility.id, {
+      groupId: 'A', heightM: 1.2, shape: 'round', finish: 'linen', locked: true,
+    });
+    ref.current!.updateFacility(facility.id, {
+      groupId: undefined, heightM: undefined, shape: undefined, finish: undefined, locked: undefined,
+    });
+  });
+  const f = ref.current!.getEditVisuals().plan.facilities[0]!;
+  for (const key of ['groupId', 'heightM', 'shape', 'finish', 'locked'] as const) {
+    expect(Object.hasOwn(f, key)).toBe(false);
+  }
+});
+
+it('2026-11-27 档2：单件锁定后 removeFacility 拒绝写入且不提交', () => {
+  const { ref, commit } = mount();
+  act(() => { ref.current!.updateFacility(facility.id, { locked: true }); });
+  const committedBefore = commit.mock.calls.length;
+  act(() => { expect(ref.current!.removeFacility(facility.id)).toBe(false); });
+  expect(ref.current!.getEditVisuals().plan.facilities).toHaveLength(1);
+  expect(commit.mock.calls.length).toBe(committedBefore);
+});
