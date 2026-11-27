@@ -14,6 +14,8 @@
  * - 面积、命中测试、路径串，供画布与提示条共用同一套真值。
  */
 
+import { rectToRing } from './zone-polygon';
+
 export interface ScopePoint {
   x: number;
   y: number;
@@ -51,7 +53,9 @@ export function rectRing(a: ScopePoint, b: ScopePoint): ScopePoint[] {
   const x1 = Math.max(a.x, b.x);
   const y0 = Math.min(a.y, b.y);
   const y1 = Math.max(a.y, b.y);
-  return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+  // 四角顺序复用 D5-1 规范环；退化（零边长/非有限）回退原四角，行为不变。
+  const ring = rectToRing({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+  return ring ?? [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 }
 
 /**

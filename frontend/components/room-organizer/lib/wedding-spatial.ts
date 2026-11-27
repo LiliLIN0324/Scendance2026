@@ -1,3 +1,4 @@
+import { rectToRing } from './zone-polygon';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 
 /** Draft design parameters, not a building-code or egress certification. */
@@ -64,12 +65,16 @@ export const rectFromRing = (ring: readonly PlanPoint[]): PlanRect => ({
   n: Math.max(...ring.map((p) => p.y)),
 });
 
-export const rectRing = (rect: PlanRect): PlanPoint[] => [
-  { x: rect.w, y: rect.s },
-  { x: rect.e, y: rect.s },
-  { x: rect.e, y: rect.n },
-  { x: rect.w, y: rect.n },
-];
+export const rectRing = (rect: PlanRect): PlanPoint[] => {
+  // 四角顺序与 D5-1 规范环一致（NW→NE→SE→SW，不回写首点）；退化边界回退原四角，行为不变。
+  const ring = rectToRing({ x: rect.w, y: rect.s, w: rect.e - rect.w, h: rect.n - rect.s });
+  return ring ?? [
+    { x: rect.w, y: rect.s },
+    { x: rect.e, y: rect.s },
+    { x: rect.e, y: rect.n },
+    { x: rect.w, y: rect.n },
+  ];
+};
 
 export const rectWidth = (rect: PlanRect): number => rect.e - rect.w;
 export const rectDepth = (rect: PlanRect): number => rect.n - rect.s;

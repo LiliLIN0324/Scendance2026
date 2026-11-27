@@ -21,6 +21,7 @@ import {
   type PlanEditIssue,
   type PlanEditResult,
 } from './site-plan-editing';
+import { rectToRing } from './zone-polygon';
 
 export type PlanAnnotationKind = PlanAnnotation['kind'];
 /** 形状四类（note 是文本，不走形状草稿）。 */
@@ -58,7 +59,9 @@ export function annotationRectRing(a: PlanPoint, b: PlanPoint, square = false): 
   const x1 = Math.max(a.x, a.x + dx);
   const y0 = Math.min(a.y, a.y + dy);
   const y1 = Math.max(a.y, a.y + dy);
-  return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+  // 四角顺序复用 D5-1 规范环；退化（零边长/非有限）回退原四角，行为不变。
+  const ring = rectToRing({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+  return ring ?? [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
 }
 
 /** 标注几何校验：点位数随类型、相邻不重合、范围内、圆形带正半径、文本非空。 */
