@@ -36,3 +36,41 @@ export async function assertNoLocalRecordsCloudTransition(layout: RoomLayout, pr
   catch { throw new Error(LOCAL_RECORDS_READ_MESSAGE); }
   if (ledger !== undefined) throw new Error(LOCAL_CHECKIN_CLOUD_MESSAGE);
 }
+
+/** 未随云走的业务引用槽位。 */
+export type PendingRefKind = 'operations' | 'plan' | 'scan';
+
+export interface CloudGuardRefsInput {
+  operationsRef?: string;
+  planRef?: string;
+  scan?: { assetId?: string; name?: string };
+}
+
+export interface CloudGuardClassification {
+  /** 非空、待确认是否随云走的引用（本 helper 只按非空分类，可达性由上游判定）。 */
+  pendingRefs: PendingRefKind[];
+  /** 本机点验账册存在（布尔直传，或传账册数组按非空判定）。 */
+  hasLocalLedger: boolean;
+  /** 任一未上云引用或本机账册在 → 拦转云。 */
+  shouldBlock: boolean;
+}
+
+/**
+ * 云守卫分类纯 helper（T1 E5）：e 片写侧剥离内嵌副本后，守卫改认「有未上云的 ref
+ * 或本机点验账册」为拦。本轮只导出、不被现役调用；**切换点在 S1 读侧贯通之后**，
+ * 现役 `hasLocalHandoff` 过渡期双扫内嵌副本的行为不改。
+ *
+ * 口径：空 / 空白 ref 不算未上云；账册在即判未上云；两者都无放行。
+ */
+export function classifyCloudGuard(
+  refs: CloudGuardRefsInput,
+  localLedger: boolean | readonly unknown[],
+): CloudGuardClassification {
+  const pendingRefs: PendingRefKind[] = [];
+  if (refs.operationsRef?.trim()) pendingRefs.push('operations');
+  if (refs.planRef?.trim()) pendingRefs.push('plan');
+  if (refs.scan?.assetId?.trim()) pendingRefs.push('scan');
+  const hasLocalLedger = typeof localLedger === 'boolean' ? localLedger : localLedger.length > 0;
+  return { pendingRefs, hasLocalLedger, shouldBlock: pendingRefs.length > 0 || hasLocalLedger };
+}
+

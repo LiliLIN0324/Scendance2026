@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readSourceRecord } from '../../../lib/source-storage';
 import { backendSceneToLayout, layoutToBackendScene } from './backend-adapter';
-import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from './handoff-cloud-guard';
+import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, classifyCloudGuard, hasLocalHandoff, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from './handoff-cloud-guard';
 
 vi.mock('../../../lib/source-storage',()=>({readSourceRecord:vi.fn(),updateSourceForm:vi.fn()}));
 beforeEach(()=>{vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined);});
@@ -60,5 +60,46 @@ describe('local execution cloud boundary', () => {
   it('never looks up a public local fallback for a scene without a real ID',async()=>{
     await expect(assertNoLocalRecordsCloudTransition(backendSceneToLayout(scene))).resolves.toBeUndefined();
     expect(readSourceRecord).not.toHaveBeenCalled();
+  });
+});
+
+describe('cloud guard classification helper (T1 E5)', () => {
+  it('flags non-empty refs as pending and blocks', () => {
+    const result = classifyCloudGuard(
+      { operationsRef: 'op-1', planRef: 'plan-1', scan: { assetId: 'scan-1', name: '场地' } },
+      false,
+    );
+    expect(result.pendingRefs).toEqual(['operations', 'plan', 'scan']);
+    expect(result.hasLocalLedger).toBe(false);
+    expect(result.shouldBlock).toBe(true);
+  });
+
+  it('blocks when a local ledger is present, whether passed as boolean or array', () => {
+    expect(classifyCloudGuard({}, true).hasLocalLedger).toBe(true);
+    expect(classifyCloudGuard({}, true).shouldBlock).toBe(true);
+    expect(classifyCloudGuard({}, [{ sheet: 'a' }]).hasLocalLedger).toBe(true);
+    expect(classifyCloudGuard({}, []).hasLocalLedger).toBe(false);
+  });
+
+  it('passes when there are no refs and no local ledger', () => {
+    const result = classifyCloudGuard({}, false);
+    expect(result.pendingRefs).toEqual([]);
+    expect(result.hasLocalLedger).toBe(false);
+    expect(result.shouldBlock).toBe(false);
+  });
+
+  it('treats blank or whitespace refs as absent, never pending', () => {
+    const result = classifyCloudGuard(
+      { operationsRef: '', planRef: '   ', scan: { assetId: '  ', name: '' } },
+      false,
+    );
+    expect(result.pendingRefs).toEqual([]);
+    expect(result.shouldBlock).toBe(false);
+  });
+
+  it('mixes one pending ref with an empty ledger independently', () => {
+    const result = classifyCloudGuard({ planRef: 'plan-1' }, false);
+    expect(result.pendingRefs).toEqual(['plan']);
+    expect(result.shouldBlock).toBe(true);
   });
 });

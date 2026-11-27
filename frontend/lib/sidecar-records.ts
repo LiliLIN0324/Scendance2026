@@ -1,7 +1,7 @@
 import { uuid as uuidSchema } from '../../supabase/functions/_shared/domain';
 import { eventOperationsSchema, type EventOperations } from '../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
-import { listSourceRecords, readSourceRecord, updateSourceForm, type SourceFormKey } from './source-storage';
+import { listSourceRecords, readSourceRecord, updateSourceForm, deleteSourceForm, type SourceFormKey, type SourceWriteGuard } from './source-storage';
 
 /**
  * 侧车独立记录桶（D6-2 纯层）：活动安排 / 制作计划各为一条独立本机记录，
@@ -148,6 +148,29 @@ export async function listSidecarRecords(projectId: string, kind: SidecarKind): 
 }
 
 /**
+ * 删除一条侧车记录（T1 纯层）：先归属校验，通过再删 forms 桶本条 key。
+ * - 空/空白 id、记录不存在 → 幂等 resolve，不抛；
+ * - 信封属别 projectId 或 kind 不符 → 拒绝删除（不串台、不删别项目记录），抛结构化错误；
+ * - 信封损坏 / 编号无效 → 按读取错误抛出，不吞；
+ * - 只删本条 key，不连带同项目其他 kind 或其他记录。
+ */
+export async function deleteSidecarRecord(
+  projectId: string,
+  kind: SidecarKind,
+  recordId: string,
+  guard?: SourceWriteGuard,
+): Promise<void> {
+  const scopeId = requireProjectId(projectId);
+  const id = recordId?.trim();
+  if (!id) return;
+  const raw = await readSourceRecord<unknown>(sidecarKey(kind, id));
+  if (raw === undefined) return;
+  const envelope = parseEnvelope(raw, scopeId, kind);
+  if (!envelope) throw new Error('记录属别的项目或类型，不能删除，原资料已保留。');
+  await deleteSourceForm(sidecarKey(kind, id), guard);
+}
+
+/**
  * 解析 plan 引用：
  * - `record`：ref 命中独立记录；
  * - `fallback-legacy`：ref 为空 / 空白，用调用方传入的旧整包字段（只读语义由调用方保证）；
@@ -194,4 +217,47 @@ export function resolveBackupSidecar(input: BackupSidecarLookup): SidecarResolve
   if (matches(input.localRecord)) return { status: 'record', record: input.localRecord, data: input.localRecord.data };
   if (matches(input.packetRecord)) return { status: 'record', record: input.packetRecord, data: input.packetRecord.data };
   return { status: 'missing' };
+}
+
+/** 可注入当前草稿的侧车投影形状（T1 E2 纯层；接线到独占恢复编排归 S2，本轮不接）。 */
+export interface SidecarDraftProjection {
+  operations?: EventOperations;
+  plan?: ProductionPlan;
+  /** 记录缺失 / 属别项目的槽位：标「待核」，不塞空壳、不粗算条数。 */
+  missingKinds: SidecarKind[];
+  /** 是否有任一槽位回落自旧整包内嵌副本（只读语义，由上层标注）。 */
+  legacyUsed: boolean;
+}
+
+/**
+ * 把两个槽位的解析三态投影成草稿可消费的形状：
+ * - `record`：取独立记录数据；
+ * - `fallback-legacy`：取旧内嵌副本数据并标 `legacyUsed`（只读）；旧副本为空则不塞；
+ * - `missing`：进 `missingKinds`，不填数据、不替换成当前最新记录。
+ * 双读回落顺序（本机 > 包内冻结副本）仍由 `resolveBackupSidecar` 负责，本函数只消费三态。
+ */
+export function projectSidecarDraft(input: {
+  operations?: SidecarResolveResult;
+  plan?: SidecarResolveResult;
+}): SidecarDraftProjection {
+  const projection: SidecarDraftProjection = { missingKinds: [], legacyUsed: false };
+  const slots: Array<{ kind: SidecarKind; result?: SidecarResolveResult | undefined; key: 'operations' | 'plan' }> = [
+    { kind: 'operations', result: input.operations, key: 'operations' },
+    { kind: 'plan', result: input.plan, key: 'plan' },
+  ];
+  for (const slot of slots) {
+    const result = slot.result;
+    if (!result) continue;
+    if (result.status === 'record') {
+      projection[slot.key] = result.data as never;
+    } else if (result.status === 'fallback-legacy') {
+      if (result.data !== undefined) {
+        projection[slot.key] = result.data as never;
+        projection.legacyUsed = true;
+      }
+    } else {
+      projection.missingKinds.push(slot.kind);
+    }
+  }
+  return projection;
 }

@@ -351,7 +351,7 @@ async function updateSourceFormInternal<T>(scope: SourceFormKey, update: (curren
     return result;
   } finally { db.close(); }
 }
-export async function deleteSourceForm(scope: string, guard?: SourceWriteGuard): Promise<void> { await ordinaryWrite(guard,current=>withSourceScopeNotice(scope,async()=>{await transact('forms', 'readwrite', store => store.delete(scope), current);},()=>!!current||sessionEnforced)); changedSource(scope); }
+export async function deleteSourceForm(scope: SourceFormKey, guard?: SourceWriteGuard): Promise<void> { await ordinaryWrite(guard,current=>withSourceScopeNotice(typeof scope==='string'?scope:undefined,async()=>{await transact('forms', 'readwrite', store => store.delete(scope), current);},()=>!!current||sessionEnforced)); changedSource(scope); }
 
 /** Read images and their drawing form from the same native transaction. */
 export async function readSourceScopeSnapshot(scope: string): Promise<SourceScopeSnapshot> {

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventOperationsSchema, type EventOperations } from '../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
-import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-storage';
+import { listSourceRecords, readSourceRecord, updateSourceForm, deleteSourceForm } from './source-storage';
 import {
+  deleteSidecarRecord,
   listSidecarRecords,
+  projectSidecarDraft,
   readSidecarRecord,
   resolveBackupSidecar,
   resolveSidecarRef,
@@ -15,6 +17,7 @@ vi.mock('./source-storage', () => ({
   readSourceRecord: vi.fn(),
   updateSourceForm: vi.fn(),
   listSourceRecords: vi.fn(),
+  deleteSourceForm: vi.fn(),
 }));
 
 const records = new Map<string, unknown>();
@@ -48,6 +51,7 @@ beforeEach(() => {
     }
     return out;
   });
+  vi.mocked(deleteSourceForm).mockImplementation(async key => { records.delete(JSON.stringify(key)); });
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -189,5 +193,117 @@ describe('backup sidecar dual-read fallback (D6-4-2)', () => {
     const result = resolveBackupSidecar({ projectId, kind: 'operations', refId, localRecord: other, packetRecord: packet, legacyFallback: undefined });
     expect(result.status).toBe('record');
     if (result.status === 'record') expect(result.record).toBe(packet);
+  });
+});
+
+describe('sidecar delete (T1 E1)', () => {
+  it('deletes a matching record, which then reads back as absent', async () => {
+    const saved = await saveSidecarRecord(projectId, 'operations', ops());
+    await deleteSidecarRecord(projectId, 'operations', saved.recordId);
+    expect(await readSidecarRecord(projectId, 'operations', saved.recordId)).toBeUndefined();
+    expect(deleteSourceForm).toHaveBeenCalledWith(['event-operations-record', saved.recordId], undefined);
+  });
+
+  it('refuses to delete a record belonging to another project, leaving it intact', async () => {
+    const saved = await saveSidecarRecord(projectId, 'plan', plan());
+    await expect(deleteSidecarRecord(otherProject, 'plan', saved.recordId)).rejects.toThrow('别的项目');
+    expect(deleteSourceForm).not.toHaveBeenCalled();
+    expect((await readSidecarRecord(projectId, 'plan', saved.recordId))?.data).toEqual(saved.record.data);
+  });
+
+  it('refuses to delete a record under a mismatched kind, leaving it intact', async () => {
+    const id = crypto.randomUUID();
+    records.set(JSON.stringify(['production-plan-record', id]), envelope({ id, kind: 'operations', savedAt: '2026-11-20T01:00:00.000Z' }));
+    await expect(deleteSidecarRecord(projectId, 'plan', id)).rejects.toThrow('别的项目或类型');
+    expect(deleteSourceForm).not.toHaveBeenCalled();
+    const raw = await readSourceRecord(['production-plan-record', id]);
+    expect(raw).toBeDefined();
+  });
+
+  it('resolves idempotently for a blank or whitespace id without touching storage', async () => {
+    await expect(deleteSidecarRecord(projectId, 'operations', '')).resolves.toBeUndefined();
+    await expect(deleteSidecarRecord(projectId, 'operations', '   ')).resolves.toBeUndefined();
+    await expect(deleteSidecarRecord(projectId, 'operations', undefined as never)).resolves.toBeUndefined();
+    expect(deleteSourceForm).not.toHaveBeenCalled();
+  });
+
+  it('resolves idempotently when the record is already absent', async () => {
+    await expect(deleteSidecarRecord(projectId, 'operations', crypto.randomUUID())).resolves.toBeUndefined();
+    expect(deleteSourceForm).not.toHaveBeenCalled();
+  });
+
+  it('deletes only the targeted record, leaving other kinds and other records in the same project', async () => {
+    const first = await saveSidecarRecord(projectId, 'operations', ops());
+    const second = await saveSidecarRecord(projectId, 'operations', ops());
+    const planOne = await saveSidecarRecord(projectId, 'plan', plan());
+    await deleteSidecarRecord(projectId, 'operations', first.recordId);
+    expect(await readSidecarRecord(projectId, 'operations', first.recordId)).toBeUndefined();
+    expect((await readSidecarRecord(projectId, 'operations', second.recordId))?.id).toBe(second.recordId);
+    expect((await readSidecarRecord(projectId, 'plan', planOne.recordId))?.id).toBe(planOne.recordId);
+  });
+
+  it('does not swallow a damaged envelope: read error propagates, storage untouched', async () => {
+    const id = crypto.randomUUID();
+    records.set(JSON.stringify(['event-operations-record', id]), { broken: true });
+    await expect(deleteSidecarRecord(projectId, 'operations', id)).rejects.toThrow();
+    expect(deleteSourceForm).not.toHaveBeenCalled();
+  });
+});
+
+describe('sidecar draft projection (T1 E2)', () => {
+  it('record hit carries the independent record data, no legacy flag, no missing kinds', () => {
+    const data = ops();
+    const projection = projectSidecarDraft({
+      operations: { status: 'record', record: envelope({ id: crypto.randomUUID(), kind: 'operations', savedAt: '2026-11-20T01:00:00.000Z' }), data },
+    });
+    expect(projection.operations).toEqual(data);
+    expect(projection.plan).toBeUndefined();
+    expect(projection.legacyUsed).toBe(false);
+    expect(projection.missingKinds).toEqual([]);
+  });
+
+  it('fallback-legacy carries the bundled copy and marks legacy read-only use', () => {
+    const legacy = plan();
+    const projection = projectSidecarDraft({
+      plan: { status: 'fallback-legacy', data: legacy },
+    });
+    expect(projection.plan).toBe(legacy);
+    expect(projection.legacyUsed).toBe(true);
+    expect(projection.missingKinds).toEqual([]);
+  });
+
+  it('missing goes into missingKinds without stuffing an empty shell', () => {
+    const projection = projectSidecarDraft({
+      operations: { status: 'missing' },
+    });
+    expect(projection.operations).toBeUndefined();
+    expect(projection.missingKinds).toEqual(['operations']);
+    expect(projection.legacyUsed).toBe(false);
+  });
+
+  it('mixes record, missing and skipped slots independently', () => {
+    const data = ops();
+    const projection = projectSidecarDraft({
+      operations: { status: 'record', record: envelope({ id: crypto.randomUUID(), kind: 'operations', savedAt: '2026-11-20T01:00:00.000Z' }), data },
+      plan: { status: 'missing' },
+    });
+    expect(projection.operations).toEqual(data);
+    expect(projection.plan).toBeUndefined();
+    expect(projection.missingKinds).toEqual(['plan']);
+  });
+
+  it('an absent slot is skipped rather than reported missing', () => {
+    const projection = projectSidecarDraft({});
+    expect(projection.missingKinds).toEqual([]);
+    expect(projection.legacyUsed).toBe(false);
+  });
+
+  it('a fallback-legacy slot with no bundled data stays empty and does not flag legacy use', () => {
+    const projection = projectSidecarDraft({
+      operations: { status: 'fallback-legacy', data: undefined },
+    });
+    expect(projection.operations).toBeUndefined();
+    expect(projection.legacyUsed).toBe(false);
+    expect(projection.missingKinds).toEqual([]);
   });
 });

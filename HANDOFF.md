@@ -11,6 +11,7 @@
 
 | 日期 | 提出方 | 涉及文件 / 范围 | 状态 |
 | --- | --- | --- | --- |
+| 2026-11-28 | 本会话（T1 = S0 纯层补全） | 非独占：`frontend/lib/sidecar-records.ts`（`deleteSidecarRecord` :157-171、`SidecarDraftProjection`/`projectSidecarDraft` :222-263）、`frontend/lib/source-storage.ts:354`（`deleteSourceForm` 签名放宽到 `SourceFormKey`，存储行为不变）、`frontend/components/room-organizer/lib/variant-business-keys.ts`（新文件，`stripVariantBusinessKeys` :15-20）、`frontend/components/room-organizer/lib/handoff-cloud-guard.ts`（`classifyCloudGuard` :65-75；现役 `hasLocalHandoff:13-23` 双扫行为未改）+ `sidecar-records.test.ts` / `variant-business-keys.test.ts`（新）/ `handoff-cloud-guard.test.ts` + `panels/creative-studio.react.test.tsx:2932` mock 键字符串化 | 纯层四组函数 + 23 例新测试（定向三文件 47 绿），**未触独占五文件、未碰几何基线两文件**；未接生产编排、未改快照写入行为。剥离函数接线归 T2/S1，E2 备份注入投影与 E5 云守卫 helper 接线归 S2/S3（独占闸门）。闸：根 `npx tsc --noEmit` EXIT=0；前端 tsc 仅剩 golden 8 条基线红（本片 0 新错）；定向 vitest 47 passed；回归 263 + 97 绿；`npm --prefix frontend run build` EXIT=0、oneplan 违规 0。落点与原始输出见 `docs/evidence/decouple-2026-11-26/terminal-cut-plan.md` §5 |
 | 2026-11-23 | 本机草稿身份 | `room-organizer.tsx` 仅 `issueReviewLink` / `listProjectShares` / `revokeProjectShare`：评审短链与云端分享清单改走 `lib/project-identity.ts`，不改渲染导出。账户解析在 `cloud-panel.tsx`（非独占）。 | 用户本任务指定身份逻辑并要求修，本轮落码 |
 | 2026-11-23 | 审校修复 B | `room-organizer.tsx` 仅 `<OnboardingHost signals>` 增加一个 `hasNamedPlan` 信号（不碰渲染/导出/相机） | 用户本任务点名要求修「已有命名方案不再盖首访引导」，本轮落码 |
 | 2026-11-10 | TeleAgent 会话 | `room-organizer.tsx` 户外规划覆盖层挂载（约 4 处小 hunk） | 用户拍板执行，待复核 |

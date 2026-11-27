@@ -2929,7 +2929,7 @@ describe('complete local backup transactions', () => {
     });
     vi.mocked(readSourceForm).mockImplementation(async key => forms.get(key));
     vi.mocked(storeSourceForm).mockImplementation(async (key, value) => { forms.set(key, value); });
-    vi.mocked(deleteSourceForm).mockImplementation(async key => { forms.delete(key); });
+    vi.mocked(deleteSourceForm).mockImplementation(async key => { forms.delete(typeof key === 'string' ? key : JSON.stringify(key)); });
     vi.mocked(readSourceRecord).mockImplementation(async key=>structuredClone(forms.get(JSON.stringify(key))) as never);
     vi.mocked(updateSourceForm).mockImplementation(async(key,update)=>{
       const address=JSON.stringify(key),next=update(structuredClone(forms.get(address)));
