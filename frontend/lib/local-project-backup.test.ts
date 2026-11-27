@@ -9,7 +9,7 @@ import {
   createLocalProjectBackup, createLocalProjectBackupV3, LOCAL_PROJECT_BACKUP_COVERAGE, LOCAL_PROJECT_BACKUP_V1_COVERAGE,
   LOCAL_PROJECT_BACKUP_V3_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_BYTES,
   parseLocalProjectBackupJson, readLocalProjectBackupFile, serializeLocalProjectBackup, serializeLocalProjectBackupV3, validateLocalProjectRestoreCandidate,
-  listLegacyEnvelopeHits,
+  listLegacyEnvelopeHits, injectBackupSidecarDraft,
   type BackupBriefSnapshot, type BackupMaterialCheckinSnapshot,
   serializeLocalProjectBackupV4, LOCAL_PROJECT_BACKUP_V4_COVERAGE, MAX_LOCAL_PROJECT_BACKUP_V4_BYTES,
 } from './local-project-backup';
@@ -838,5 +838,116 @@ describe('backup embedded sidecar copies (D6-4-2)', () => {
     expect(restored.operationsRef).toBe(opsRecordId);
     expect(restored.planRef).toBe(planRecordId);
     expect(restored.summary).toEqual(summary);
+  });
+});
+
+describe('backup draft injection (T3 E2)', () => {
+  const opsRecordId = '44444444-4444-4444-8444-444444444401';
+  const planRecordId = '44444444-4444-4444-8444-444444444402';
+  const opsData = (title = '签到'): EventOperations => eventOperationsSchema.parse({ dataKind: 'rehearsal',
+    tasks: [{ id: opsRecordId, title, phase: 'event' }] });
+  const opsRecord = (projectId = scope, data = opsData()): SidecarRecord => ({
+    id: opsRecordId, projectId, kind: 'operations', data, savedAt: createdAt });
+  const planRecord = (projectId = scope, data = plan()): SidecarRecord => ({
+    id: planRecordId, projectId, kind: 'plan', data, savedAt: createdAt });
+  const emptyLayout = (): RoomLayout => makeLayout();
+
+  it('injects record data when the local same-project record hits', () => {
+    const localOps = opsRecord();
+    const localPlan = planRecord();
+    const { layout: next, projection } = injectBackupSidecarDraft({
+      layout: emptyLayout(), projectId: scope,
+      operations: { refId: opsRecordId, localRecord: localOps },
+      plan: { refId: planRecordId, localRecord: localPlan },
+    });
+    expect(next.eventOperations).toBe(localOps.data);
+    expect(next.productionPlan).toBe(localPlan.data);
+    expect(projection.missingKinds).toEqual([]);
+    expect(projection.legacyUsed).toBe(false);
+  });
+
+  it('prefers the local record over the packet frozen copy', () => {
+    const localOps = opsRecord(scope, opsData('本机安排'));
+    const packetOps = opsRecord(scope, opsData('包内副本'));
+    const { layout: next } = injectBackupSidecarDraft({
+      layout: emptyLayout(), projectId: scope,
+      operations: { refId: opsRecordId, localRecord: localOps, packetRecord: packetOps },
+    });
+    expect(next.eventOperations).toBe(localOps.data);
+    expect(next.eventOperations).not.toBe(packetOps.data);
+  });
+
+  it('falls back to the packet frozen copy when the local record is absent', () => {
+    const packetOps = opsRecord();
+    const { layout: next, projection } = injectBackupSidecarDraft({
+      layout: emptyLayout(), projectId: scope,
+      operations: { refId: opsRecordId, packetRecord: packetOps },
+    });
+    expect(next.eventOperations).toBe(packetOps.data);
+    expect(projection.missingKinds).toEqual([]);
+  });
+
+  it('rejects foreign-project or foreign-id records instead of merging them', () => {
+    const seeded: RoomLayout = { ...emptyLayout(), eventOperations: opsData('旧内嵌安排') };
+    const foreignLocal = opsRecord('other-project');
+    const foreignPacket = opsRecord('other-project');
+    const wrongId: SidecarRecord = { ...opsRecord(), id: '99999999-9999-4999-8999-999999999999' };
+    const { layout: next, projection } = injectBackupSidecarDraft({
+      layout: seeded, projectId: scope,
+      operations: { refId: opsRecordId, localRecord: foreignLocal, packetRecord: foreignPacket },
+      plan: { refId: planRecordId, localRecord: wrongId },
+    });
+    expect(projection.missingKinds).toEqual(['operations', 'plan']);
+    // 异项目 / 异 id 记录不顶替草稿旧内嵌业务；记录 data 不被并入。
+    expect(next.eventOperations).toBe(seeded.eventOperations);
+    expect(next.productionPlan).toBeUndefined();
+  });
+
+  it('reports missing slots without replacing them or stuffing empty shells', () => {
+    const { layout: next, projection } = injectBackupSidecarDraft({
+      layout: emptyLayout(), projectId: scope,
+      operations: { refId: opsRecordId },
+      plan: { refId: planRecordId },
+    });
+    expect(projection.missingKinds).toEqual(['operations', 'plan']);
+    expect(projection.operations).toBeUndefined();
+    expect(projection.plan).toBeUndefined();
+    expect(next.eventOperations).toBeUndefined();
+    expect(next.productionPlan).toBeUndefined();
+  });
+
+  it('falls back to the legacy embedded copy and marks it read-only', () => {
+    const legacyOps = opsData('旧整包安排');
+    const { layout: next, projection } = injectBackupSidecarDraft({
+      layout: emptyLayout(), projectId: scope,
+      operations: { legacyFallback: legacyOps },
+    });
+    expect(next.eventOperations).toBe(legacyOps);
+    expect(projection.legacyUsed).toBe(true);
+    expect(projection.missingKinds).toEqual([]);
+  });
+
+  it('does not overwrite existing draft business for slots without a lookup', () => {
+    const seeded: RoomLayout = { ...emptyLayout(), eventOperations: opsData('现役安排'), productionPlan: plan() };
+    const { layout: next } = injectBackupSidecarDraft({
+      layout: seeded, projectId: scope,
+      operations: { localRecord: opsRecord() },
+      // plan 槽位缺省：保留草稿现役制作计划，不清空。
+    });
+    expect(next.productionPlan).toBe(seeded.productionPlan);
+    expect(next).not.toBe(seeded);
+  });
+
+  it('never mutates the input layout and produces a detached copy', () => {
+    const seeded: RoomLayout = { ...emptyLayout(), eventOperations: opsData('现役安排'), productionPlan: plan() };
+    const beforeOps = seeded.eventOperations;
+    const beforePlan = seeded.productionPlan;
+    const { layout: next } = injectBackupSidecarDraft({
+      layout: seeded, projectId: scope,
+      operations: { legacyFallback: opsData('回落安排') },
+    });
+    expect(seeded.eventOperations).toBe(beforeOps);
+    expect(seeded.productionPlan).toBe(beforePlan);
+    expect(next).not.toBe(seeded);
   });
 });

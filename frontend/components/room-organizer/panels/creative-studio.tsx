@@ -14,7 +14,8 @@ import { requestOutdoorProjectSwitch } from '../lib/outdoor-project-switch';
 import { preferredStudio, rememberStudio } from '@/lib/workspace-api';
 import { defaultAttachName } from '../hooks/use-silent-cloud-attach';
 import {localWriteCapabilityGuard,type LocalWriteCapability} from '@/lib/local-write-lease';
-import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { validateLocalProjectRestoreCandidate, serializeLocalProjectBackup, serializeLocalProjectBackupV3, serializeLocalProjectBackupV4, injectBackupSidecarDraft, type LocalProjectRestoreCandidate } from '@/lib/local-project-backup';
+import { readSidecarRecord } from '@/lib/sidecar-records';
 import { readMaterialCheckins, restoreMaterialCheckinsIfUnchanged } from '@/lib/material-checkin-storage';
 import { decodeSourceDocuments } from '@/lib/source-backup';
 import { readSourceScopeSnapshot, sameSourceScopeSnapshot, readSourceScopeSnapshotV2, sameSourceScopeSnapshotV2, readSourceRecordSnapshot, restoreSourceScopeIfUnchanged, type SourceScopeSnapshot } from '@/lib/source-storage';
@@ -1042,6 +1043,20 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
     // File provenance remains meaningful even for programmatic restore callers.
     const priorId=preparedRestoreIds.current.get(candidate);
     const next=prepareRestoreLayout!(!checked.layout.id&&priorId?{...checked.layout,id:priorId}:checked.layout),targetScope=resolveProjectScope(next.id);
+    // E2（T3）：备份冻结副本 + 本机 IDB 记录经双读回落解析后注入恢复草稿业务槽位。
+    // 纯函数不碰存储；本机记录经既有 readSidecarRecord 读路径按 targetScope 隔离读取，
+    // 异 projectId / 异 id 记录不并入，missing 槽位留空待核、不拿现役草稿顶替。
+    const packetSidecar=checked.sidecarRecords;
+    const opsRefId=packetSidecar?.operations?.id;
+    const planRefId=packetSidecar?.plan?.id;
+    const localOperations=opsRefId?await readSidecarRecord(targetScope,'operations',opsRefId):undefined;
+    const localPlanRecord=planRefId?await readSidecarRecord(targetScope,'plan',planRefId):undefined;
+    const injectedDraft=injectBackupSidecarDraft({
+      layout:next,projectId:targetScope,
+      operations:{refId:opsRefId,localRecord:localOperations,packetRecord:packetSidecar?.operations,legacyFallback:next.eventOperations},
+      plan:{refId:planRefId,localRecord:localPlanRecord,packetRecord:packetSidecar?.plan,legacyFallback:next.productionPlan},
+    });
+    const restoredDraft=injectedDraft.layout;
     const incomingSources=checked.sourceDocuments?.status==='present'?{scope:targetScope,...await decodeSourceDocuments(checked.sourceDocuments,targetScope)}:undefined;
     assertSwitchCurrent?.();
     if(!candidate.layout.id&&next.id)preparedRestoreIds.current.set(candidate,next.id);
@@ -1076,7 +1091,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
           if(checkinChange){await restoreMaterialCheckinsIfUnchanged(targetScope,targetCheckins,desiredCheckins,operation.check);checkinsTouched=true;operation.check();}
           touched=true;
           const saved=await writeAndReadBrief(targetScope,desired,operation.check);assertLocalRestore();operation.check();
-          flushSync(()=>{operation.check();commitRestoredLayout!(next);adoptRestoredBrief(targetScope,saved);});
+          flushSync(()=>{operation.check();commitRestoredLayout!(restoredDraft);adoptRestoredBrief(targetScope,saved);});
           const afterLayout=layoutRef.current;
           const point={beforeLayout:operation.base.layout,beforeBrief,targetScope,targetBrief,targetDraft,afterLayout,afterEdits:briefEditEpoch.current,afterBrief:saved,...(checkinChange?{checkinChange}:{}),...(sourceChange?{sourceChange}:{})};
           undoPointRef.current=point;setUndoPoint(point);

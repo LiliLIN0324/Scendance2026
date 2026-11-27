@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { materialCheckinLedgerSchema, type MaterialCheckinLedger } from '../../supabase/functions/_shared/material-checkin-contract';
-import { productionPlanSchema } from '../../supabase/functions/_shared/production-plan-contract';
-import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
-import type { SidecarRecord } from './sidecar-records';
+import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
+import { eventOperationsSchema, type EventOperations } from '../../supabase/functions/_shared/event-operations-contract';
+import {
+  projectSidecarDraft, resolveBackupSidecar,
+  type SidecarDraftProjection, type SidecarRecord,
+} from './sidecar-records';
 import { eventProfileSchema } from './event-profile';
 import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from '../components/room-organizer/lib/schema';
 import { layoutForExport } from './layout-export';
@@ -707,4 +710,62 @@ export async function readLocalProjectBackupFile(
   const text = await file.text();
   if (!options?.allowSourceDocuments) checkedText(text);
   return parseLocalProjectBackupJson(text);
+}
+
+/**
+ * E2 备份冻结副本注入草稿（T3）：纯函数、不碰存储、不 async。
+ *
+ * 输入恢复草稿 layout + 两槽位（活动安排 / 制作计划）lookup + 项目正源 id；
+ * 双读回落（本机 IDB > 包内冻结副本 > 旧整包只读）与三态投影复用 `sidecar-records`。
+ * - `record`：业务事实取独立记录，写回草稿槽位；
+ * - `fallback-legacy`：取旧整包内嵌副本并标 `legacyUsed`（只读）；
+ * - `missing`：进 `missingKinds` 上报待核，不塞空壳、不粗算条数、不拿当前草稿 / 最新记录顶替；
+ * - 异 projectId / 异 id / 异槽位记录由 `resolveBackupSidecar` 视同缺失，不并入当前草稿。
+ * 输出 detached 草稿 layout 与投影；输入 layout 不被 mutate。
+ */
+export interface BackupDraftSlotLookup {
+  /** 侧车记录引用 id（包内副本 id 或变体 ref；缺省走旧整包回落）。 */
+  refId?: string | undefined;
+  /** 本机 IDB 已读出的同槽记录（或 undefined）。 */
+  localRecord?: SidecarRecord | undefined;
+  /** 备份信封内嵌冻结副本（或 undefined）。 */
+  packetRecord?: SidecarRecord | undefined;
+  /** 旧整包内嵌业务字段（只读回落）。 */
+  legacyFallback?: EventOperations | ProductionPlan | undefined;
+}
+
+export interface InjectedBackupDraft {
+  layout: RoomLayout;
+  projection: SidecarDraftProjection;
+}
+
+export function injectBackupSidecarDraft(input: {
+  layout: RoomLayout;
+  projectId: string;
+  operations?: BackupDraftSlotLookup;
+  plan?: BackupDraftSlotLookup;
+}): InjectedBackupDraft {
+  const scopeId = input.projectId.trim();
+  const operations = input.operations
+    ? resolveBackupSidecar({
+        projectId: scopeId, kind: 'operations', refId: input.operations.refId,
+        localRecord: input.operations.localRecord, packetRecord: input.operations.packetRecord,
+        legacyFallback: input.operations.legacyFallback,
+      })
+    : undefined;
+  const plan = input.plan
+    ? resolveBackupSidecar({
+        projectId: scopeId, kind: 'plan', refId: input.plan.refId,
+        localRecord: input.plan.localRecord, packetRecord: input.plan.packetRecord,
+        legacyFallback: input.plan.legacyFallback,
+      })
+    : undefined;
+  const projection = projectSidecarDraft({
+    ...(operations ? { operations } : {}),
+    ...(plan ? { plan } : {}),
+  });
+  const next: RoomLayout = { ...input.layout };
+  if (projection.operations !== undefined) next.eventOperations = projection.operations;
+  if (projection.plan !== undefined) next.productionPlan = projection.plan;
+  return { layout: next, projection };
 }
