@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import * as placeSearch from '../lib/place-search';
@@ -71,6 +71,73 @@ describe('PlanPlaceSearch Escape', () => {
 // 2026-11-27 用户指令（对齐百度地图）：下拉候选要按序号上报给画布落编号钉。
 // 序号必须与下拉渲染的 1/N 一致（「第 2 个」在地图上就是标 2 的钉）。
 describe('PlanPlaceSearch candidate pins', () => {
+  it('does not let a pending input blur hide the list opened by a map selection', () => {
+    vi.useFakeTimers();
+    try {
+      const props = { onPick: vi.fn(), sync: { query: '西湖', hits: [westLake, dock] } };
+      const view = render(<PlanPlaceSearch {...props} />);
+      fireEvent.blur(screen.getByRole('combobox'));
+      view.rerender(<PlanPlaceSearch {...props} selectedPlace={dock} />);
+      act(() => vi.advanceTimersByTime(150));
+      expect(screen.getByRole('listbox')).toBeTruthy();
+      expect(screen.getByTestId('plan-place-search-option-1').getAttribute('aria-selected')).toBe('true');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows an empty result only after a query and removes it when retry finds a place', async () => {
+    const searchSpy = vi.spyOn(placeSearch, 'searchPlaces').mockResolvedValue([]);
+    const hintsSpy = vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);
+    try {
+      render(<PlanPlaceSearch onPick={vi.fn()} />);
+      expect(screen.queryByRole('status')).toBeNull();
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: '西湖' } });
+      fireEvent.click(screen.getByRole('button', { name: '搜索地点' }));
+      await waitFor(() => expect(screen.getByRole('status').textContent).toBe('未找到地点'));
+      searchSpy.mockResolvedValue([westLake]);
+      fireEvent.click(screen.getByRole('button', { name: '搜索地点' }));
+      await screen.findByRole('option');
+      expect(screen.queryByRole('status')).toBeNull();
+    } finally {
+      searchSpy.mockRestore();
+      hintsSpy.mockRestore();
+    }
+  });
+
+  it('searches again on the search button and Enter, including an unchanged chat query', async () => {
+    const searchSpy = vi.spyOn(placeSearch, 'searchPlaces').mockResolvedValue([dock]);
+    const hintsSpy = vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);
+    const onPick = vi.fn();
+    try {
+      render(<PlanPlaceSearch onPick={onPick} sync={{ query: '西湖', hits: [westLake] }} />);
+      await screen.findByTestId('plan-place-search-option-0');
+      const submit = screen.getByRole('button', { name: '搜索地点' });
+      fireEvent.click(submit);
+      await waitFor(() => expect(searchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByTestId('plan-place-search-option-0').textContent).toContain(dock.name));
+      fireEvent.click(submit);
+      await waitFor(() => expect(searchSpy).toHaveBeenCalledTimes(2));
+      fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+      await waitFor(() => expect(searchSpy).toHaveBeenCalledTimes(3));
+      expect(onPick).not.toHaveBeenCalled();
+    } finally {
+      searchSpy.mockRestore();
+      hintsSpy.mockRestore();
+    }
+  });
+
+  it('opens and selects the matching list row after a map marker is picked without picking it again', async () => {
+    const onPick = vi.fn();
+    const sync = { query: '西湖', hits: [westLake, dock] };
+    const view = render(<PlanPlaceSearch onPick={onPick} sync={sync} />);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    view.rerender(<PlanPlaceSearch onPick={onPick} sync={sync} selectedPlace={dock} />);
+    await waitFor(() => expect(screen.getByTestId('plan-place-search-option-1').getAttribute('aria-selected')).toBe('true'));
+    expect(screen.getByTestId('plan-place-search').getAttribute('data-expanded')).toBe('true');
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
   it('pins a new chat search after a previous dropdown selection', async () => {
     const batches: Array<ReadonlyArray<SearchCandidatePin> | null> = [];
     const props = { onPick: vi.fn(), onCandidatesChange: (pins: ReadonlyArray<SearchCandidatePin> | null) => batches.push(pins) };
@@ -81,7 +148,7 @@ describe('PlanPlaceSearch candidate pins', () => {
 
     view.rerender(<PlanPlaceSearch {...props} sync={{ query: '水上森林', hits: [dock] }} />);
     await waitFor(() => expect(batches.at(-1)).toEqual([
-      { index: 0, lng: dock.lng, lat: dock.lat, name: dock.name },
+      { index: 0, lng: dock.lng, lat: dock.lat, name: dock.name, place: dock },
     ]));
   });
 
@@ -100,8 +167,8 @@ describe('PlanPlaceSearch candidate pins', () => {
     await waitFor(() => {
       const latest = batches.at(-1);
       expect(latest).toEqual([
-        { index: 0, lng: 120.146, lat: 30.252, name: '西湖' },
-        { index: 1, lng: 120.21, lat: 30.31, name: '水上森林码头' },
+        { index: 0, lng: 120.146, lat: 30.252, name: '西湖', place: westLake },
+        { index: 1, lng: 120.21, lat: 30.31, name: '水上森林码头', place: dock },
       ]);
     });
 
@@ -193,7 +260,10 @@ describe('PlanPlaceSearch candidate pins', () => {
       await waitFor(() => expect(screen.getAllByTestId(/plan-place-search-option-\d+/)).toHaveLength(2), { timeout: 3000 });
       expect(batches.at(-1)).toBeNull();
 
-      // 新搜一次（换词）照常重新铺钉。
+      // 同一个词点搜索按钮也算新检索，不能一直被换活动的撤钉令牌压住。
+      fireEvent.click(screen.getByRole('button', { name: '搜索地点' }));
+      await waitFor(() => expect(batches.at(-1)?.length).toBe(2), { timeout: 3000 });
+      // 换词同样照常重新铺钉。
       fireEvent.change(input, { target: { value: '水上森林' } });
       await waitFor(() => expect(batches.at(-1)?.length).toBe(2), { timeout: 3000 });
     } finally {

@@ -151,6 +151,7 @@ import {
   type PlanViewport,
   type SearchCandidatePin,
   isCandidateSearchPin,
+  layoutCandidatePins,
 } from '../lib/outdoor-plan-canvas';
 import { planRightClickAction } from '../lib/plan-right-click';
 import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
@@ -582,6 +583,10 @@ export interface OutdoorPlanCanvasProps {
    * 下拉的 1/N 序号一致。纯视图辅助，不写进 plan；点选后仍保留全部红色编号。
    */
   searchPins?: ReadonlyArray<SearchCandidatePin> | null;
+  selectedSearchPlace?: import('../lib/place-search').PlaceSuggestion | null;
+  onSearchCandidatePick?: (pin: SearchCandidatePin) => void;
+  onSearchPlaceClose?: () => void;
+  onSearchPlaceConfirm?: () => void;
   /**
    * 2026-11-19 用户：「点了还是没有落在场地上」——实景扫描的落位钉（plan ENU）。
    * 与搜地点钉同一支笔，但它是「这套点云落在哪」的只读标记：不写进 plan、不参与命中测试。
@@ -1687,6 +1692,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onModeChange,
   searchPin,
   searchPins,
+  selectedSearchPlace,
+  onSearchCandidatePick,
+  onSearchPlaceClose,
+  onSearchPlaceConfirm,
   scanPin, renderScanPlan, scanError,
   searchArea,
   routeProposal,
@@ -13228,6 +13237,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     ? boundaryVertexHandleLayout(boundaryHandleRing, currentViewport())
     : [];
 
+  // 与画笔使用同一套投影和避让坐标，缩放、平移、旋转后热区仍盖在编号上。
+  const searchCandidateViewport = currentViewport();
+  const searchCandidatePositions = layoutCandidatePins((searchPins ?? []).map(pin => planPointToPixel(
+    lngLatToEnu(pin.lng, pin.lat, searchCandidateViewport.anchorLng ?? DEFAULT_ANCHOR_LNG, searchCandidateViewport.anchorLat ?? DEFAULT_ANCHOR_LAT),
+    searchCandidateViewport,
+  )));
+  const selectedSearchIndex = selectedSearchPlace
+    ? (searchPins ?? []).findIndex(pin => pin.place?.id === selectedSearchPlace.id)
+    : -1;
+  const selectedSearchPosition = searchCandidatePositions[selectedSearchIndex];
+
   return (
     <div
       ref={stageRef}
@@ -13308,6 +13328,44 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {scanError && <div role="alert" className="sc-scan-error-toast" style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 10, maxWidth: 440, padding: '12px 16px', background: '#fff', border: '1px solid #e4e4e7', borderRadius: 8, color: '#b4443c' }}>{scanError}</div>}
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {onSearchCandidatePick && (mode === 'view' || mode === 'select') && (
+        <div aria-label="搜索地点标记" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }}>
+          {(searchPins ?? []).map((pin, index) => {
+            const position = searchCandidatePositions[index]!;
+            return <button
+              key={`${pin.index}-${pin.lng}-${pin.lat}`}
+              type="button"
+              className="sc-search-pin-hit"
+              aria-label={`${pin.index + 1}. ${pin.name}`}
+              aria-pressed={pin.place?.id === selectedSearchPlace?.id && !!selectedSearchPlace}
+              title={pin.name}
+              style={{ left: position.x - 16, top: position.y - 32 }}
+              onPointerDown={event => event.stopPropagation()}
+              onPointerUp={event => event.stopPropagation()}
+              onClick={event => { event.stopPropagation(); onSearchCandidatePick(pin); }}
+            />;
+          })}
+        </div>
+      )}
+      {selectedSearchPlace && selectedSearchPosition && (
+        <section
+          className="sc-map-place-card"
+          aria-label={`地点详情：${selectedSearchPlace.name}`}
+          style={{
+            left: Math.max(12, Math.min(selectedSearchPosition.x + 20, searchCandidateViewport.canvasW - 268)),
+            top: selectedSearchPosition.y < 220 ? selectedSearchPosition.y + 12 : selectedSearchPosition.y - 38,
+            transform: selectedSearchPosition.y < 220 ? undefined : 'translateY(-100%)',
+          }}
+          onPointerDown={event => event.stopPropagation()}
+          onPointerUp={event => event.stopPropagation()}
+          onWheel={event => event.stopPropagation()}
+        >
+          <button type="button" className="sc-map-place-close" aria-label="关闭地点详情" onClick={onSearchPlaceClose}>×</button>
+          <strong>{(searchPins ?? [])[selectedSearchIndex]!.index + 1}. {selectedSearchPlace.name}</strong>
+          {selectedSearchPlace.address && <p>{selectedSearchPlace.address}</p>}
+          {onSearchPlaceConfirm && <button type="button" className="sc-map-place-confirm" onClick={onSearchPlaceConfirm}>设为活动场地</button>}
+        </section>
+      )}
       {boundaryHandleLayouts.length > 0 && (
         <div
           data-vertex-handle-layer

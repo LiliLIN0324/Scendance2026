@@ -2338,6 +2338,7 @@ export interface SearchCandidatePin {
   lng: number;
   lat: number;
   name: string;
+  place?: import('./place-search').PlaceSuggestion;
 }
 
 /**
