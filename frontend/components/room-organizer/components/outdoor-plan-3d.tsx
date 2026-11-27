@@ -288,15 +288,18 @@ function venueSplatProbeRecord(patch: Record<string, unknown>): void {
     previous = {};
   }
   const record = { ...previous, ...patch, ts: Date.now() };
-  try {
-    window.localStorage.setItem(PROBE_STORAGE_KEY, JSON.stringify(record));
-  } catch {
-    // 存储不可用（隐私模式等）不影响另外两条通道。
-  }
+  let windowKey: 'ok' | 'blocked' = 'ok';
   try {
     (window as unknown as Record<string, unknown>)[PROBE_WINDOW_KEY] = record;
   } catch {
     // 全局键不可写时不影响 localStorage / console 通道。
+    windowKey = 'blocked';
+  }
+  const out = windowKey === 'ok' ? record : { ...record, windowKey };
+  try {
+    window.localStorage.setItem(PROBE_STORAGE_KEY, JSON.stringify(out));
+  } catch {
+    // 存储不可用（隐私模式等）不影响另外两条通道。
   }
 }
 
@@ -588,10 +591,23 @@ export default function OutdoorPlan3D({
   const splatReadyAttemptRef = useRef(0);
   const onScanStateRef = useRef(onScanState);
   onScanStateRef.current = onScanState;
-  const disposeVenueSplat = useCallback((): void => {
+  const disposeVenueSplat = useCallback((disposeTag: 'main-cleanup' | 'api-dispose' = 'main-cleanup'): void => {
     const entry = venueSplatRef.current;
-    if (!entry) return;
+    if (!entry) {
+      if (process.env.NODE_ENV !== 'production') {
+        venueSplatProbeRecord({ step: 'disposed', disposeTag, hadPreview: false });
+      }
+      return;
+    }
     venueSplatRef.current = null;
+    if (process.env.NODE_ENV !== 'production') {
+      venueSplatProbeRecord({
+        step: 'disposed',
+        disposeTag,
+        hadPreview: true,
+        shownId: entry.preview?.shownId ?? null,
+      });
+    }
     // 解码出来的 GPU 资源不会随场景 traverse 走，要显式释放。
     try {
       entry.preview?.dispose();
@@ -2195,14 +2211,14 @@ export default function OutdoorPlan3D({
           const entry = venueSplatRef.current;
           if (entry?.preview === preview) entry.preview = null;
           setProbeBits(bits => ({ ...bits, splat: 'error' }));
-          venueSplatProbeRecord({ step: 'error', scanAssetId: assetId, error: error instanceof Error ? error.message : String(error) });
+          venueSplatProbeRecord({ step: 'error', scanAssetId: assetId, disposeTag: 'catch', error: error instanceof Error ? error.message : String(error) });
           onScanState?.({
             assetId, name, status: 'error',
             ...(error instanceof Error ? { error: error.message } : {}),
           });
         });
     };
-    venueSplatApiRef.current = { start: startVenueSplat, dispose: disposeVenueSplat };
+    venueSplatApiRef.current = { start: startVenueSplat, dispose: () => disposeVenueSplat('api-dispose') };
     // 当前扫描由独立 effect 按「扫描 + 落点」挂（见下），这里只起 2D 落点派生的场景物件。
     if (!scan) splatRequests.slice(0, 1).forEach(startVenueSplat);
 
@@ -3164,7 +3180,7 @@ export default function OutdoorPlan3D({
     renderer?.domElement.removeEventListener('contextmenu', onContextMenu);
       // 高斯重建预览器要显式释放：解码出来的 GPU 资源不会随场景 traverse 走。
       venueSplatApiRef.current = null;
-      disposeVenueSplat();
+      disposeVenueSplat('main-cleanup');
       controls?.dispose();
       cameraRef.current = null;
       controlsRef.current = null;
