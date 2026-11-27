@@ -19,6 +19,7 @@ import { parseStoredLayout } from '../lib/schema';
 import { ActivityTaskSuggestionView } from './activity-task-suggestion-view';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { MaterialCheckinState } from '../hooks/use-material-checkins';
+import { useRoomEditor } from '../contexts';
 import type { CreativeBrief } from '../lib/creative-brief';
 import type { RoomLayout } from '../lib/types';
 
@@ -49,6 +50,7 @@ function readableError(cause: unknown): string {
 /** One current request, a reviewed disclosure and the original local task list; no generation or save queue. */
 export function ActivityTaskWorkspace(props: Props): JSX.Element {
   const cloud = useBackendSession(props.controller), latest = useRef(props); latest.current = props;
+  const { projectId } = useRoomEditor();
   const [, refresh] = useReducer(value => value + 1, 0);
   const [selection, setSelection] = useState<ActivityTaskSelection>(emptySelection);
   const [instruction, setInstruction] = useState('');
@@ -107,9 +109,9 @@ export function ActivityTaskWorkspace(props: Props): JSX.Element {
     const offLayout = layoutStore.subscribe(observe), offSession = props.controller.subscribe(observe);
     return () => { mounted.current = false; offLayout(); offSession(); invalidateActiveJob(); };
   }, [props.controller, invalidateActiveJob]);
-  useEffect(() => props.layout.id ? subscribeSourceRecordChanges(materialCheckinStorageKey(props.layout.id), () => {
+  useEffect(() => projectId ? subscribeSourceRecordChanges(materialCheckinStorageKey(projectId), () => {
     ++sourceEpoch.current; refresh();
-  }) : undefined, [props.layout.id]);
+  }) : undefined, [projectId]);
 
   function ticket(withSource = true, job?: number) {
     const captured = sampleRef.current().epoch, source = sourceEpoch.current, input = inputEpoch.current;
@@ -129,7 +131,7 @@ export function ActivityTaskWorkspace(props: Props): JSX.Element {
     guard();
     const layout = layoutStore.getState().layout;
     if (latest.current.checkins && (!latest.current.checkins.ready || latest.current.checkins.error)) throw new Error('点验资料尚未完整读取，请先核对后准备建议。');
-    const checkins = layout.id ? await readMaterialCheckins(layout.id) : undefined; guard();
+    const checkins = projectId ? await readMaterialCheckins(projectId) : undefined; guard();
     if (latest.current.checkins && canonical(checkins) !== canonical(latest.current.checkins.ledger)) throw new Error('点验资料已有变化，请重新读取后准备建议。');
     return { layout, selection: chosen, ...(checkins === undefined ? {} : { checkins }), dataKind: layout.eventOperations?.dataKind ?? 'unspecified' as const };
   }
@@ -138,16 +140,15 @@ export function ActivityTaskWorkspace(props: Props): JSX.Element {
     return { source: raw.source, summary: activityTaskContextSchema.parse(raw.summary) };
   }
   async function flush(guard: () => void) {
-    const id = layoutStore.getState().layout.id;
-    if (!id) throw new Error('请先保存活动编号。');
+    if (!projectId) throw new Error('请先保存活动编号。');
     skipOwnFlush.current = true;
-    try { await flushSourceScope(id); guard(); } finally { skipOwnFlush.current = false; }
+    try { await flushSourceScope(projectId); guard(); } finally { skipOwnFlush.current = false; }
   }
-  useEffect(() => registerSourceFlush(props.layout.id ?? '', async () => {
+  useEffect(() => registerSourceFlush(projectId, async () => {
     if (!skipOwnFlush.current && (working.current || inputs.current.marker?.state === 'saving' || storageUnconfirmed)) {
       throw new Error('任务建议尚在处理或待核保存，请先查询、取消或核对原保存结果。');
     }
-  }), [props.layout.id, storageUnconfirmed]);
+  }), [projectId, storageUnconfirmed]);
   useEffect(() => {
     setReady(false); setMarker(null); setContext(null); setApproved(false); setSelected([]); setStorageUnconfirmed(false); setError(null);
     sourceStamp.current = null; previewStamp.current = null;

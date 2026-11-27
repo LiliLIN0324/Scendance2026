@@ -15,6 +15,7 @@ import { makeFloor, makeItem, makeLayout, makeUnplacedItem } from '../lib/__test
 import { layoutToBackendScene } from '../lib/backend-adapter';
 import { STORAGE_KEY } from '../lib/constants';
 import { ActivityTaskWorkspace } from './activity-task-workspace';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import type { RoomLayout } from '../lib/types';
 
 const boundary = vi.hoisted(() => ({
@@ -145,9 +146,10 @@ function setup(session = new ReactiveSession()) {
     return <ActivityTaskWorkspace layout={layout} controller={session.controller()} isActive={isActive} disabled={false}
       ensurePersistentIdentity={ensure} persistVerifiedLayout={persist} onCommitOperations={commit}/>;
   }
-  const view = render(<Harness/>);
+  const element = () => <RoomEditorProvider value={{ projectId: localId } as unknown as RoomEditorContextValue}><Harness/></RoomEditorProvider>;
+  const view = render(element());
   return { session, ensure, persist, commit, renderedIds, view,
-    active(value: boolean) { isActive = value; view.rerender(<Harness/>); },
+    active(value: boolean) { isActive = value; view.rerender(element()); },
   };
 }
 async function selectionReady() {

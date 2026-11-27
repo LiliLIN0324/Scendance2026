@@ -293,12 +293,12 @@ describe('material quantity check-in UI', () => {
     expect(onSave).toHaveBeenCalledOnce();
   });
 
-  it('prevents writes for readonly, loading, read error, mismatched ledger or mismatched layout identity', async () => {
+  it('prevents writes for readonly, loading, read error, mismatched ledger identity', async () => {
     const current = layout(), empty = ledger(), onSave = vi.fn<(value: MaterialCheckinLedger) => Promise<void>>();
     const props = { layout: current, projectId, ledger: empty, loading: false, error: null as string | null, disabled: false, onSave };
     const view = render(<MaterialCheckinPanel {...props}/>);
     fireEvent.click(screen.getByRole('button', { name: '记录实收' }));fillBatch('18');
-    for (const override of [{ disabled: true }, { loading: true }, { error: '演练账册读取失败' }, { ledger: ledger([], 'house-checkin-trial-B') }, { layout: layout('house-checkin-trial-B') }]) {
+    for (const override of [{ disabled: true }, { loading: true }, { error: '演练账册读取失败' }, { ledger: ledger([], 'house-checkin-trial-B') }]) {
       view.rerender(<MaterialCheckinPanel {...props} {...override}/>);
       const active = screen.queryByRole('form', { name: '点验记录表单' });
       if (active) fireEvent.submit(active);

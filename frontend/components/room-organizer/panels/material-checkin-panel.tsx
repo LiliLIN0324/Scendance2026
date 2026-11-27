@@ -55,7 +55,7 @@ export function MaterialCheckinPanel({layout,projectId,ledger,loading,error,disa
     const message=pending.current?'点验记录正在保存，请稍后再试。':latest.current.input?'请先保存或取消点验记录，再继续。':'';
     if(message){setFormError(message);throw new Error(message);}
   }),[projectId]);
-  const identityProblem=projectId!==layout.id||!projectId.trim(),ledgerProblem=!!ledger&&ledger.projectId!==projectId;
+  const identityProblem=!projectId.trim(),ledgerProblem=!!ledger&&ledger.projectId!==projectId;
   const readOnly=disabled||loading||!!error||identityProblem||ledgerProblem||!onSave;
   const selected=currentLedger?.sheets.find(sheet=>sameId(sheet.id,selectedId))??currentLedger?.sheets[0];
   const acquisitions=layout.productionPlan?.acquisitions??[];
@@ -106,7 +106,7 @@ export function MaterialCheckinPanel({layout,projectId,ledger,loading,error,disa
   function cancel():void{if(pending.current)return;prepared.current=null;setInput(null);setBadTime(false);setFormError('');setNotice('');}
   async function submit(event:FormEvent):Promise<void>{
     event.preventDefault();const before=latest.current;
-    if(!input||readOnly||stale||pending.current||before.projectId!==before.layout.id||!before.onSave)return;
+    if(!input||readOnly||stale||pending.current||!before.onSave)return;
     if(badTime){setFormError('请检查发生时间，原时间与填写内容已保留。');return;}
     const token=++operation.current;
     pending.current=true;setBusy(true);setFormError('');setNotice('');

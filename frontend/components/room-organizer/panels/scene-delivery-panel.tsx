@@ -604,8 +604,8 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
       <ProductionPlanPanel layout={layout} disabled={cloudBound||busy||!onUpdateProductionPlan} onUpdate={onUpdateProductionPlan} exporting={busy||checkinsUnavailable} onExport={()=>void download('production')}/>
     </div>
     <div role="tabpanel" id="delivery-checkins" aria-labelledby="delivery-checkins-tab" hidden={view!=='checkins'}>
-      {localCheckins&&layout.id?<>
-        <MaterialCheckinPanel layout={layout} projectId={layout.id} ledger={localCheckins.ledger} loading={localCheckins.loading} error={localCheckins.error} disabled={busy||backupActions?.backupPending||!localCheckins.ready} onSave={localCheckins.onSave} exporting={busy} onExport={()=>void download('production')}/>
+      {localCheckins&&projectId?<>
+        <MaterialCheckinPanel layout={layout} projectId={projectId} ledger={localCheckins.ledger} loading={localCheckins.loading} error={localCheckins.error} disabled={busy||backupActions?.backupPending||!localCheckins.ready} onSave={localCheckins.onSave} exporting={busy} onExport={()=>void download('production')}/>
         {localCheckins.error&&<button className="sc-button" type="button" onClick={localCheckins.retry}>重新读取点验</button>}
       </>:<p className="sc-note">请在有明确编号的本地项目中记录数量点验。云项目暂不支持此项记录。</p>}
     </div>
