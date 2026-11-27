@@ -4,6 +4,7 @@ import type { EventOperations } from '../../../../supabase/functions/_shared/eve
 import type { PlanEditorSettings } from '../../../../supabase/functions/_shared/plan-editor';
 import type { EventProfile } from '../../../lib/event-profile';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import type { PlanVenueScan } from '../../../../supabase/functions/_shared/site-plan';
 import type { Provenance } from '../../../lib/rng';
 import type { ZoneSemanticType } from '../../../lib/plan-annotation';
 
@@ -514,8 +515,38 @@ export interface RoomLayout {
 }
 
 /**
+ * 变体保存那一刻摘入并冻结的不可变兜底统计：后续活动/计划/记录变更不回写这里，
+ * 仅在引用的独立记录缺失或已变动时，供界面认出这版方案的大致规模。
+ */
+export interface VariantSummary {
+  /** 预计人数，取自保存时活动档案；未知/未记录时省略。 */
+  headcount?: number;
+  /** 活动任务条数（eventOperations.tasks）。 */
+  taskCount: number;
+  /** 取得资料条数（productionPlan.acquisitions）。 */
+  acquisitionCount: number;
+  /** 岗位条数（productionPlan.staffing）。 */
+  staffingCount: number;
+  /** 人工估算条数（productionPlan.estimates）。 */
+  estimateCount: number;
+  /** 物料总件数（floors[].items）。 */
+  itemCount: number;
+  /** 椅类件数。 */
+  chairCount: number;
+  /** 桌类件数。 */
+  tableCount: number;
+  /** 其余物料件数。 */
+  otherItemCount: number;
+  /** 分区条数（floors[].zones）。 */
+  zoneCount: number;
+}
+
+/**
  * 方案过程态快照。整包布局存于 `layout`；`origin` 区分 AI 提案与手动存档，
  * `savedAt`/`note` 仅手动存档的本机元数据，不随候选快照上云。
+ *
+ * `operationsRef`/`planRef` 指向 D6-2 独立侧车记录 id；`scan` 只登记扫描身份。
+ * 旧变体没有这些字段，读取时回落内嵌 `layout` 副本（只读兼容）。
  */
 export interface DesignVariant {
   id: string;
@@ -524,6 +555,14 @@ export interface DesignVariant {
   origin?: 'ai' | 'manual';
   savedAt?: string;
   note?: string;
+  /** 活动安排侧车记录 id；缺省为旧变体，回落内嵌 layout。 */
+  operationsRef?: string;
+  /** 制作计划侧车记录 id；缺省为旧变体，回落内嵌 layout。 */
+  planRef?: string;
+  /** 扫描身份，形状对齐 plan 顶层 scan；不整包塞扫描副本。 */
+  scan?: PlanVenueScan;
+  /** 保存时冻结的不可变摘要兜底。 */
+  summary?: VariantSummary;
 }
 
 /** Default floor-to-floor height of a storey in metres; see `FloorLayout.height`. */
