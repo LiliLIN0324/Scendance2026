@@ -1972,6 +1972,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    *  想改几何得先在左侧「场地边界」行点锁图标；其他图层（含分区）默认不锁。
    *  2026-11-16 用户更正：「我不要分区锁定啊，我说的是那个绿色的总区域」——分区回到默认可编辑。 */
   const lockedLayersRef = useRef<LockedLayerMap>({ boundary: true });
+  // 红线初始锁只是保护普通编辑；Agent 经用户确认应用范围时可越过这层默认保护。
+  // 用户亲手锁/解锁后则视为明确权限，Agent 不得绕过。
+  const boundaryLockUserSetRef = useRef(false);
   /** P2-j 分区选中与顶点改形：选中的分区 id + 正在拖的顶点 + 拖动预览多边形。 */
   const selectedZoneRef = useRef<string | null>(null);
   const dragZoneVertexRef = useRef<{ zoneId: string; index: number; startPx: { x: number; y: number } } | null>(null);
@@ -5117,7 +5120,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const current = planRef.current;
       let baseline: unknown;
       try { baseline = JSON.parse(expected); } catch { return false; }
-      if (!samePlanContent(current, baseline) || !next.anchor || refusePlanWrite(next)) return false;
+      if (!samePlanContent(current, baseline) || !next.anchor || refusePlanWrite(next, true)) return false;
       // 2026-11-14「以第一个选区为准」：提案已不携带任何旧坐标系内容（换场清空）时允许换锚点——
       // 没有内容被静默搬动；内容存续时维持原有换锚保护。
       const frameBound=[next.zones,next.routes,next.nodes,next.facilities,next.workers,next.annotations,next.measurements].some(items=>items?.length);
@@ -5559,6 +5562,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁上时收掉该层选中。 */
   function setLayerLocked(kind: PlanningLayerKind, locked: boolean) {
+    if (kind === 'boundary') boundaryLockUserSetRef.current = true;
     setAccessNotice(null);
     const next: LockedLayerMap = { ...lockedLayersRef.current, [kind]: locked };
     lockedLayersRef.current = next;
@@ -5619,7 +5623,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 提交前再查一次所有变化的层，含级联删除、Agent 整批写入和已打开菜单的动作。 */
-  function refusePlanWrite(next: SitePlanData): boolean {
+  function refusePlanWrite(next: SitePlanData, allowDefaultBoundaryLock = false): boolean {
     if (!onPlanChangeRef.current) return true;
     const current = planRef.current;
     const fields: [keyof SitePlanData, PlanningLayerKind][] = [
@@ -5631,7 +5635,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     for (const [field, layer] of fields) {
       if (samePlanContent(current[field], next[field])) continue;
       const access = planLayerAccess(layer, layerStateRef.current, lockedLayersRef.current);
-      // 红线默认锁用于保护已有轮廓，不能挡住空白活动的首次选址/圈画。
+      // 红线默认锁用于保护普通编辑，但不应阻断用户在 Agent 确认卡上的明确应用。
+      // 一旦用户亲手操作过红线锁，恢复严格权限语义，避免绕过真实锁定。
+      if (layer === 'boundary' && allowDefaultBoundaryLock && !boundaryLockUserSetRef.current) access.locked = false;
+      // 红线锁对空白活动的首次选址/圈画也不应造成阻断。
       if (layer === 'boundary' && current.boundary.length < 3) access.locked = false;
       const reason = planLayerBlockReason(layer, access);
       if (reason) { setAccessNotice(reason); setEditMessage(reason); return true; }
