@@ -166,3 +166,32 @@ export async function resolveSidecarRef(input: {
   if (!record) return { status: 'missing' };
   return { status: 'record', record, data: record.data };
 }
+
+export interface BackupSidecarLookup {
+  projectId: string;
+  kind: SidecarKind;
+  refId: string | undefined;
+  /** 本机 IDB 已读出的记录（或 undefined）。 */
+  localRecord: SidecarRecord | undefined;
+  /** 备份信封内嵌的冻结副本（或 undefined）。 */
+  packetRecord: SidecarRecord | undefined;
+  legacyFallback: EventOperations | ProductionPlan | undefined;
+}
+
+/**
+ * 备份 / 离线恢复双读回落（D6-4-2，拍板 4.1）：纯函数、不碰存储。
+ * - ref 为空 → 旧整包字段回落（fallback-legacy）；
+ * - ref 存在 → 本机记录命中（同项目 / 同 id / 同槽位）先用本机，否则包内冻结副本命中用包内；
+ * - 两者都没有 → missing，由上层标「待核」，不阻断载入，绝不静默替换成当前最新记录。
+ * 异 projectId / 异 id / 异槽位的记录视同缺失，不并入当前草稿。
+ */
+export function resolveBackupSidecar(input: BackupSidecarLookup): SidecarResolveResult {
+  const scopeId = input.projectId.trim();
+  const refId = input.refId?.trim();
+  if (!refId) return { status: 'fallback-legacy', data: input.legacyFallback };
+  const matches = (record: SidecarRecord | undefined): record is SidecarRecord =>
+    !!record && record.projectId === scopeId && record.id === refId && record.kind === input.kind;
+  if (matches(input.localRecord)) return { status: 'record', record: input.localRecord, data: input.localRecord.data };
+  if (matches(input.packetRecord)) return { status: 'record', record: input.packetRecord, data: input.packetRecord.data };
+  return { status: 'missing' };
+}

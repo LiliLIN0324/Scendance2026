@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handoffSchema } from '../../supabase/functions/_shared/delivery-contract';
-import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
+import { eventOperationsSchema, type EventOperations } from '../../supabase/functions/_shared/event-operations-contract';
 import { materialCheckinLedgerSchema, mergeMaterialCheckinLedgers, type MaterialCheckinLedger } from '../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout, makeZone } from '../components/room-organizer/lib/__testfixtures__/fixtures';
@@ -16,6 +16,7 @@ import {
 import { decodeSourceDocuments, MAX_SOURCE_BYTES } from './source-backup';
 import type { CreativeBrief } from '../components/room-organizer/lib/creative-brief';
 import type { FurnitureItem, RoomLayout } from '../components/room-organizer/lib/types';
+import type { SidecarRecord } from './sidecar-records';
 
 const createdAt = '2026-10-07T09:30:00.000Z';
 const scope = 'rehearsal-project-1';
@@ -787,4 +788,55 @@ it('counts legacy envelopes missing the top-level projectId on both read chains,
   const beforeNew = listLegacyEnvelopeHits().length;
   parseLocalProjectBackupJson(json(backup()));
   expect(listLegacyEnvelopeHits().length).toBe(beforeNew);
+});
+
+describe('backup embedded sidecar copies (D6-4-2)', () => {
+  const opsRecordId = '33333333-3333-4333-8333-333333333301';
+  const planRecordId = '33333333-3333-4333-8333-333333333302';
+  const opsData = (): EventOperations => eventOperationsSchema.parse({ dataKind: 'rehearsal',
+    tasks: [{ id: opsRecordId, title: '签到', phase: 'event' }] });
+  const opsRecord = (projectId = scope): SidecarRecord => ({ id: opsRecordId, projectId, kind: 'operations', data: opsData(), savedAt: createdAt });
+  const planRecord = (projectId = scope): SidecarRecord => ({ id: planRecordId, projectId, kind: 'plan', data: plan(), savedAt: createdAt });
+
+  it('old envelopes without sidecar copies still decode with the slots undefined', () => {
+    for (const text of [json({ ...backup(), version: 1, coverage: LOCAL_PROJECT_BACKUP_V1_COVERAGE }), json(backup()), json(layout())]) {
+      expect(parseLocalProjectBackupJson(text).sidecarRecords).toBeUndefined();
+    }
+  });
+
+  it('embeds frozen operations/plan copies and round-trips them on restore', () => {
+    const packet = { operations: opsRecord(), plan: planRecord() };
+    const candidate = parseLocalProjectBackupJson(
+      serializeLocalProjectBackup(layout(), ready(), { projectId: scope, sidecarRecords: packet }, createdAt));
+    expect(candidate.sidecarRecords?.operations).toMatchObject({ id: opsRecordId, kind: 'operations', projectId: scope, savedAt: createdAt });
+    expect(candidate.sidecarRecords?.operations?.data).toEqual(packet.operations.data);
+    expect(candidate.sidecarRecords?.plan).toMatchObject({ id: planRecordId, kind: 'plan', projectId: scope });
+    expect(validateLocalProjectRestoreCandidate(candidate).sidecarRecords).toEqual(candidate.sidecarRecords);
+  });
+
+  it('rejects a foreign-project copy when writing the envelope', () => {
+    expect(() => createLocalProjectBackup(layout(), ready(),
+      { projectId: scope, sidecarRecords: { operations: opsRecord('other-project') } })).toThrow('编号不一致');
+  });
+
+  it('drops foreign-project or corrupt copies on read instead of merging them', () => {
+    const foreign = { ...backup(), sidecarRecords: { operations: opsRecord('other-project') } };
+    expect(parseLocalProjectBackupJson(json(foreign)).sidecarRecords).toBeUndefined();
+    const corrupt = { ...backup(), sidecarRecords: { plan: { id: planRecordId, projectId: scope, kind: 'plan',
+      savedAt: createdAt, data: { tasks: 'not-an-array' } } } };
+    expect(parseLocalProjectBackupJson(json(corrupt)).sidecarRecords).toBeUndefined();
+  });
+
+  it('keeps variant refs and frozen summary through a backup round-trip', () => {
+    const summary = { taskCount: 1, acquisitionCount: 0, staffingCount: 0, estimateCount: 0, itemCount: 1,
+      chairCount: 0, tableCount: 0, otherItemCount: 1, zoneCount: 0, headcount: 8 };
+    const variant = { id: 'variant-1', name: '提案一', layout: makeLayout(), operationsRef: opsRecordId, planRef: planRecordId, summary };
+    const withVariant = { ...layout(), designBook: { activeId: 'variant-1', variants: [variant] } };
+    const candidate = parseLocalProjectBackupJson(
+      serializeLocalProjectBackup(withVariant, ready(), { projectId: scope }, createdAt));
+    const restored = candidate.layout.designBook!.variants[0]!;
+    expect(restored.operationsRef).toBe(opsRecordId);
+    expect(restored.planRef).toBe(planRecordId);
+    expect(restored.summary).toEqual(summary);
+  });
 });

@@ -5,6 +5,7 @@ import { listSourceRecords, readSourceRecord, updateSourceForm } from './source-
 import {
   listSidecarRecords,
   readSidecarRecord,
+  resolveBackupSidecar,
   resolveSidecarRef,
   saveSidecarRecord,
   type SidecarRecord,
@@ -145,5 +146,48 @@ describe('sidecar resolve', () => {
     const saved = await saveSidecarRecord(projectId, 'plan', plan());
     const result = await resolveSidecarRef({ projectId: otherProject, kind: 'plan', refId: saved.recordId, legacyFallback: plan() });
     expect(result.status).toBe('missing');
+  });
+});
+
+describe('backup sidecar dual-read fallback (D6-4-2)', () => {
+  const refId = crypto.randomUUID();
+  const local = envelope({ id: refId, kind: 'operations', savedAt: '2026-11-20T01:00:00.000Z' });
+  const packet = envelope({ id: refId, kind: 'operations', savedAt: '2026-11-19T01:00:00.000Z' });
+
+  it('blank ref falls back to the legacy bundled field', () => {
+    const legacy = ops();
+    const result = resolveBackupSidecar({ projectId, kind: 'operations', refId: '', localRecord: undefined, packetRecord: undefined, legacyFallback: legacy });
+    expect(result.status).toBe('fallback-legacy');
+    if (result.status === 'fallback-legacy') expect(result.data).toBe(legacy);
+  });
+
+  it('prefers the local IDB record when it matches the ref', () => {
+    const result = resolveBackupSidecar({ projectId, kind: 'operations', refId, localRecord: local, packetRecord: packet, legacyFallback: undefined });
+    expect(result.status).toBe('record');
+    if (result.status === 'record') expect(result.record).toBe(local);
+  });
+
+  it('falls back to the frozen packet copy when the local record is absent', () => {
+    const result = resolveBackupSidecar({ projectId, kind: 'operations', refId, localRecord: undefined, packetRecord: packet, legacyFallback: undefined });
+    expect(result.status).toBe('record');
+    if (result.status === 'record') expect(result.record).toBe(packet);
+  });
+
+  it('resolves missing when neither source matches, never substituting the latest record', () => {
+    const result = resolveBackupSidecar({ projectId, kind: 'operations', refId, localRecord: undefined, packetRecord: undefined, legacyFallback: ops() });
+    expect(result.status).toBe('missing');
+  });
+
+  it('drops a foreign-project packet copy instead of merging it', () => {
+    const foreign = envelope({ id: refId, kind: 'operations', projectId: otherProject, savedAt: '2026-11-19T01:00:00.000Z' });
+    const result = resolveBackupSidecar({ projectId, kind: 'operations', refId, localRecord: undefined, packetRecord: foreign, legacyFallback: undefined });
+    expect(result.status).toBe('missing');
+  });
+
+  it('ignores a local record under a different id and uses only the matching packet copy', () => {
+    const other = envelope({ id: crypto.randomUUID(), kind: 'operations', savedAt: '2026-11-21T01:00:00.000Z' });
+    const result = resolveBackupSidecar({ projectId, kind: 'operations', refId, localRecord: other, packetRecord: packet, legacyFallback: undefined });
+    expect(result.status).toBe('record');
+    if (result.status === 'record') expect(result.record).toBe(packet);
   });
 });

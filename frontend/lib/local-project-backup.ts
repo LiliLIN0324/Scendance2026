@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { materialCheckinLedgerSchema, type MaterialCheckinLedger } from '../../supabase/functions/_shared/material-checkin-contract';
 import { productionPlanSchema } from '../../supabase/functions/_shared/production-plan-contract';
+import { eventOperationsSchema } from '../../supabase/functions/_shared/event-operations-contract';
+import type { SidecarRecord } from './sidecar-records';
 import { eventProfileSchema } from './event-profile';
 import { MAX_LAYOUT_JSON_BYTES, parseStoredLayout } from '../components/room-organizer/lib/schema';
 import { layoutForExport } from './layout-export';
@@ -49,6 +51,16 @@ const backupBriefSchema = z.discriminatedUnion('status', [
 export type BackupBrief = { status: 'present'; value: CreativeBrief } | { status: 'absent' };
 export type BackupMaterialCheckins = { status: 'present'; value: MaterialCheckinLedger } | { status: 'absent' };
 export type RestoredMaterialCheckins = BackupMaterialCheckins | { status: 'not-in-file' };
+
+/**
+ * 备份信封内嵌的侧车记录副本（D6-4-2，拍板 4.1 = A）：离线/换机恢复时先读包内冻结副本，
+ * 再回落本机 IDB；副本按信封 `projectId` 隔离，异 id 不并入当前草稿。无副本的旧信封照常可读。
+ */
+export interface BackupSidecarRecords {
+  operations?: SidecarRecord;
+  plan?: SidecarRecord;
+}
+export type RestoredSidecarRecords = BackupSidecarRecords | undefined;
 export type BackupMaterialCheckinSnapshot =
   | { state: 'ready'; scope: string; materialCheckins: BackupMaterialCheckins }
   | { state: 'loading' | 'saving' | 'error'; scope: string };
@@ -57,6 +69,54 @@ const materialCheckinsSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('absent') }),
 ]);
 const notInFileSchema = z.strictObject({ status: z.literal('not-in-file') });
+
+/** Sidecar record envelope carried inside a backup; data is re-validated against its kind contract. */
+const sidecarRecordEnvelopeSchema = z.strictObject({
+  id: z.string().uuid(),
+  projectId: z.string().min(1).max(160),
+  kind: z.union([z.literal('operations'), z.literal('plan')]),
+  data: z.unknown(),
+  savedAt: z.string().min(1),
+});
+
+/** Write-side: a copied sidecar record must match the envelope project, slot kind and its contract. */
+function checkedSidecarRecord(raw: unknown, expectedProjectId: string, expectedKind: 'operations' | 'plan'): SidecarRecord {
+  const parsed = sidecarRecordEnvelopeSchema.safeParse(raw);
+  if (!parsed.success) throw new Error('备份内嵌的侧车记录格式无效，当前项目未改变。');
+  const record = parsed.data;
+  if (record.projectId !== expectedProjectId) throw new Error('备份侧车记录与场景项目编号不一致，当前记录未改变。');
+  if (record.kind !== expectedKind) throw new Error('备份侧车记录类型与槽位不一致，当前记录未改变。');
+  const dataSchema = expectedKind === 'operations' ? eventOperationsSchema : productionPlanSchema;
+  const data = dataSchema.safeParse(record.data);
+  if (!data.success) throw new Error('备份侧车记录资料无效，当前项目未改变。');
+  return { ...record, data: data.data };
+}
+
+/** Write-side: validate the optional sidecar copies before they enter the envelope. */
+function checkedSidecarRecords(input: BackupSidecarRecords | undefined, projectId: string): BackupSidecarRecords | undefined {
+  if (!input) return undefined;
+  const out: BackupSidecarRecords = {};
+  if (input.operations !== undefined) out.operations = checkedSidecarRecord(input.operations, projectId, 'operations');
+  if (input.plan !== undefined) out.plan = checkedSidecarRecord(input.plan, projectId, 'plan');
+  return out;
+}
+
+/** Read-side: keep only same-project copies; foreign-id or corrupt entries drop out instead of merging. */
+function restoreSidecarRecords(raw: unknown, projectId: string | undefined): RestoredSidecarRecords {
+  if (!isRecord(raw)) return undefined;
+  const scope = projectId?.trim() || '';
+  const out: BackupSidecarRecords = {};
+  for (const kind of ['operations', 'plan'] as const) {
+    const entry = raw[kind];
+    if (entry === undefined) continue;
+    try {
+      out[kind] = checkedSidecarRecord(entry, scope, kind);
+    } catch {
+      // Foreign project / corrupt copy: treat as absent, never merge into the current draft.
+    }
+  }
+  return out.operations || out.plan ? out : undefined;
+}
 /** Only a completed read/save for this layout scope can be exported. */
 export type BackupBriefSnapshot =
   | { state: 'ready'; scope: string; brief: BackupBrief }
@@ -71,6 +131,8 @@ export interface LocalProjectBackup {
   projectId: string;
   layout: RoomLayout;
   brief: BackupBrief;
+  /** 内嵌侧车记录冻结副本（D6-4-2）；旧信封无此字段，回读为 undefined。 */
+  sidecarRecords?: BackupSidecarRecords;
 }
 
 export interface LocalProjectRestoreCandidate {
@@ -80,6 +142,8 @@ export interface LocalProjectRestoreCandidate {
   /** Parser/validator always return a status. Optional only for old programmatic callers. */
   materialCheckins?: RestoredMaterialCheckins;
   sourceDocuments?: RestoredSourceDocuments;
+  /** 包内侧车副本（同项目）；异项目/损坏条目不并入。 */
+  sidecarRecords?: RestoredSidecarRecords;
   createdAt: string | null;
   layout: RoomLayout;
   /** A legacy layout says nothing about the browser's current or former brief. */
@@ -120,6 +184,8 @@ const envelopeFields = {
   // 写新信封时写入；旧信封缺该字段，由读侧走显式旧键读取分支并记命中计数。
   projectId: z.string().min(1).optional(),
   layout: z.unknown(), brief: backupBriefSchema,
+  // 内嵌侧车冻结副本；结构与契约在写侧 checkedSidecarRecords / 读侧 restoreSidecarRecords 二次校验。
+  sidecarRecords: z.unknown().optional(),
 };
 const coverageFields = {
   layout: z.literal(true), creativeBrief: z.literal(true), eventOperations: z.literal(true),
@@ -150,7 +216,7 @@ const backupV6Schema = backupV3Schema.extend({ version: z.literal(LOCAL_PROJECT_
   coverage: z.strictObject({ ...coverageFields, productionPlan: z.literal(true), materialCheckins: z.literal(true),
     eventProfile: z.literal(true) }),
 });
-const candidateFields = { layout: z.unknown(), layoutWasRepaired: z.boolean(), materialCheckins: z.unknown().optional(), sourceDocuments: z.unknown().optional() };
+const candidateFields = { layout: z.unknown(), layoutWasRepaired: z.boolean(), materialCheckins: z.unknown().optional(), sourceDocuments: z.unknown().optional(), sidecarRecords: z.unknown().optional() };
 const candidateSchema = z.discriminatedUnion('source', [
   z.strictObject({ ...candidateFields, source: z.literal('backup'),
     backupVersion: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]).optional(),
@@ -377,6 +443,8 @@ function checkedLayout(value: unknown, strict: boolean, allowEventProfile = fals
 export interface LocalProjectBackupOptions {
   projectId: string;
   allowEventProfile?: boolean;
+  /** 内嵌进信封的侧车冻结副本；缺省（旧调用方）不带，旧信封照常可读。 */
+  sidecarRecords?: BackupSidecarRecords;
 }
 
 /** Caller supplies a successfully flushed/read snapshot; this never reads storage. */
@@ -396,7 +464,13 @@ export function createLocalProjectBackup(
   // Validate the live values before JSON can omit functions or call toJSON.
   assertJsonValues(parsed.data.layout);
   const checked = checkedLayout(parsed.data.layout, true, options.allowEventProfile === true);
-  const backup: LocalProjectBackup = { ...parsed.data, projectId, layout: checked.layout, brief: parsed.data.brief as BackupBrief };
+  const sidecarRecords = checkedSidecarRecords(options.sidecarRecords, projectId);
+  if (sidecarRecords) assertJsonValues(sidecarRecords);
+  const backup: LocalProjectBackup = {
+    format: parsed.data.format, version: parsed.data.version, createdAt: parsed.data.createdAt,
+    coverage: parsed.data.coverage, projectId, layout: checked.layout, brief: parsed.data.brief as BackupBrief,
+    ...(sidecarRecords ? { sidecarRecords } : {}),
+  };
   // The returned copy is detached and matches the actual file representation.
   return parseJson(encodeJson(backup)) as LocalProjectBackup;
 }
@@ -568,8 +642,10 @@ export function validateLocalProjectRestoreCandidate(candidate: unknown): Valida
   if (input.backupVersion === 1) validateProductionPlans(backup.layout, true);
   const materialCheckins: RestoredMaterialCheckins = 'materialCheckins' in backup
     ? backup.materialCheckins : { status: 'not-in-file' };
+  const sidecarRecords = restoreSidecarRecords(input.sidecarRecords, scope);
   return { source: input.source, ...(input.backupVersion === undefined ? {} : { backupVersion: input.backupVersion }),
-    createdAt: backup.createdAt, layout: backup.layout, brief: backup.brief, materialCheckins, sourceDocuments, layoutWasRepaired: input.layoutWasRepaired };
+    createdAt: backup.createdAt, layout: backup.layout, brief: backup.brief, materialCheckins, sourceDocuments,
+    sidecarRecords, layoutWasRepaired: input.layoutWasRepaired };
 }
 
 /** Validate everything before returning a detached candidate; do not apply it here. */
@@ -605,12 +681,14 @@ export function parseLocalProjectBackupJson(text: string): ValidatedLocalProject
       ? checkedMaterialCheckins(value.materialCheckins, parsed.data.projectId?.trim() || checked.layout.id) : { status: 'not-in-file' };
     const sourceDocuments: RestoredSourceDocuments = parsed.data.version === 4 || parsed.data.version === 5
       ? parsed.data.sourceDocuments : { status: 'not-in-file' };
+    const sidecarScope = parsed.data.projectId?.trim() || checked.layout.id;
+    const sidecarRecords = restoreSidecarRecords(parsed.data.sidecarRecords, sidecarScope);
     if ((parsed.data.version === 4 || parsed.data.version === 5) && materialCheckins.status !== 'not-in-file') {
       checkedV4Size({ ...parsed.data, layout: parsed.data.layout as RoomLayout,
         brief: parsed.data.brief as BackupBrief, materialCheckins });
     }
     return { source: 'backup', backupVersion: parsed.data.version, createdAt: parsed.data.createdAt, layout: checked.layout,
-      brief: parsed.data.brief as BackupBrief, materialCheckins, sourceDocuments, layoutWasRepaired: false };
+      brief: parsed.data.brief as BackupBrief, materialCheckins, sourceDocuments, sidecarRecords, layoutWasRepaired: false };
   }
   const checked = checkedLayout(value, false);
   return { source: 'legacy-layout', createdAt: null, layout: checked.layout,
