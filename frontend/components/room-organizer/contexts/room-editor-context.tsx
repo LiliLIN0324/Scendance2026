@@ -6,6 +6,7 @@ import type { LayoutActions } from '../hooks/use-layout-state';
 import type { SoundCue } from '../lib/sounds';
 import type { FloorLayout, GameMode, RoomLayout, ViewSettings } from '../lib/types';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { SidecarKind } from '../../../lib/sidecar-records';
 
 export interface RoomEditorContextValue {
   // Session/project identity: single source derived at the editor entry.
@@ -21,6 +22,10 @@ export interface RoomEditorContextValue {
   // Outdoor plan positive source (S3): the plan the outdoor canvas edits.
   // `null` for the legacy local draft without a bound plan record.
   readonly outdoorPlan: SitePlanData | null;
+
+  // D6-2：侧车独立记录保存成功后，把 recordId 挂回 plan 正源的 ref 字段。
+  // 写路收敛到 context 动作；独占壳是唯一 plan 写路，面板/Agent 不直写 plan 存储。
+  commitSidecarRef(kind: SidecarKind, recordId: string): void;
 
   // View settings
   readonly view: ViewSettings;
@@ -78,6 +83,7 @@ export function RoomEditorProvider({ value, children }: RoomEditorProviderProps)
     value.activeFloorIndex,
     value.actions,
     value.outdoorPlan,
+    value.commitSidecarRef,
     value.view,
     value.setView,
     value.collidingIds,

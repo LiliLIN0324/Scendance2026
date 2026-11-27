@@ -97,6 +97,8 @@ import { DEFAULT_OUTDOOR_PROJECT_ID, createStarterOutdoorPlan, saveOutdoorProjec
 import { isLegacyIndoorDraft, prepareOutdoorSaveAs } from './lib/legacy-indoor-draft';
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from './lib/initial-layout';
 import { writeGroundToPlan } from './lib/venue-ground-slot';
+import { writeSidecarRefToPlan } from './lib/sidecar-ref-slot';
+import { saveSidecarRecord, type SidecarKind } from '@/lib/sidecar-records';
 import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
 import { captureCatalogPlacement, captureCatalogPlacementBatch, type CatalogPlacementGuard, type CatalogPlacementResult } from './lib/catalog-placement-guard';
@@ -123,6 +125,8 @@ import { reseatWallMountedItem, settleWallMountedItem } from './lib/opening-snap
 import { snapshotBeforeReplace } from './lib/restore-point';
 import { EDITOR_ITEM_LIMIT } from './lib/item-limits';
 import { parseLayoutEventOperations } from './lib/schema';
+import type { EventOperations } from '../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../supabase/functions/_shared/production-plan-contract';
 import { assetCloudStateOf, cloudAssetIdMap, localAssetIdsInLayout } from './lib/asset-cloud';
 import { sharedArchiveQueue } from './lib/archive-queue';
 import { layoutToBackendScene } from './lib/backend-adapter';
@@ -1716,6 +1720,16 @@ useEffect(() => {
     // 户外项目没有室内壳体：方案只认 plan，边界/分区只镜像给 3D 地面图层。
     applyOutdoorGroundBasemap(plan);
   }, [applyOutdoorGroundBasemap, outdoorPlanSlotId]);
+  // D6-2：侧车独立记录保存成功后的 ref 写回口。独占壳是唯一 plan 写路，面板/Agent 不直写
+  // plan 存储。未绑定 plan 的 legacy 草稿（outdoorPlanState 为空 / 槽位不匹配）不发明 ref 通道，
+  // 沿用旧整包只读兼容；ref 落盘失败抛错，旧整包保留，不在 plan 上留悬空指针。
+  const commitSidecarRef = useCallback((kind: SidecarKind, recordId: string) => {
+    const bound = outdoorPlanState;
+    if (!bound || bound.projectId !== outdoorPlanSlotId) return;
+    const written = writeSidecarRefToPlan(bound.projectId, kind, recordId, { name: layout.name });
+    if (!written.ok) throw new Error('活动安排或制作计划引用未能保存到方案，请核对本机保存状态。');
+    setOutdoorPlanState({ projectId: bound.projectId, plan: written.record.plan ?? createStarterOutdoorPlan() });
+  }, [outdoorPlanState, outdoorPlanSlotId, layout.name]);
   const handleOutdoorActiveLevelChange = useCallback((levelId: string) => {
     outdoorLevelIdRef.current = levelId;
     const full = outdoorFullPlanRef.current;
@@ -1737,6 +1751,23 @@ useEffect(() => {
     },
     [outdoorPlanState, outdoorPlanSlotId],
   );
+  // D6-2 写侧编排：绑定户外 plan 的范围，先存独立侧车记录、成功后再把 ref 挂回 plan；
+  // 未绑定 plan 的 legacy 草稿，或显式移除（value === undefined），走旧整包通道——
+  // 侧车删除原语未就位，移除路径暂留 review，不发明删除通道。保存失败抛错，不挂 ref、旧整包保留。
+  const persistSidecar = useCallback(async (
+    kind: SidecarKind,
+    value: EventOperations | ProductionPlan | undefined,
+    legacyWrite: () => void,
+  ): Promise<void> => {
+    if (!outdoorPlan || value === undefined) { legacyWrite(); return; }
+    if (kind === 'operations') {
+      const { recordId } = await saveSidecarRecord(activeProjectId, 'operations', value as EventOperations);
+      commitSidecarRef('operations', recordId);
+    } else {
+      const { recordId } = await saveSidecarRecord(activeProjectId, 'plan', value as ProductionPlan);
+      commitSidecarRef('plan', recordId);
+    }
+  }, [outdoorPlan, activeProjectId, commitSidecarRef]);
   // S3-4：旧纯室内草稿只读。云项目 / 请求挂云项目不进只读判定（有自己的 plan 记录链）。
   const boundCloudProject = !!controller.getSnapshot().project || hasRequestedCloudProject();
   const legacyIndoorReadOnly = !boundCloudProject && isLegacyIndoorDraft(layout, outdoorPlan);
@@ -3363,6 +3394,7 @@ useEffect(() => {
       activeFloorIndex,
       actions,
       outdoorPlan,
+      commitSidecarRef,
       view,
       setView,
       toggle,
@@ -3382,7 +3414,7 @@ useEffect(() => {
       setAutoCycleLighting,
     }),
     [
-      activeProjectId, layout, activeFloor, activeFloorIndex, actions, outdoorPlan,
+      activeProjectId, layout, activeFloor, activeFloorIndex, actions, outdoorPlan, commitSidecarRef,
       view, setView, toggle,
       collidingIds, highlightedIds, catalogQuery, setCatalogQuery,
       recentColors, pushColor, playCue,
@@ -4320,7 +4352,7 @@ useEffect(() => {
       const decision=!basis.needsClarification&&(requirement?.decision==='needed'||requirement?.decision==='not_needed')?requirement.decision:null;
       const width=extractMobilityWidth(requirement,basis.needsClarification);
       return {decision,width,isCurrent:()=>activitySession.isCurrent(token)&&floorSession.isCurrent(selectedFloor)&&sameRecoveryFormValue(snapshot(),basis)};
-    }} sourceWriteGuard={workspaceWriteGuards?.source} writeCapability={workspaceWriteGuards?.capability} onUpdateProductionPlan={value=>{if(!activitySession.isCurrent(sessionToken)||getStoreSessionScope()!==sessionScope)throw new Error('活动已切换，请重新核对。');commitHistoryNow();actions.setProductionPlan(value);}} reviewContext={reviewContext} sessionScope={sessionScope} controller={controller} layout={layout} getCurrentLayout={() => layoutStore.getState().layout} onApply={scopedApply} validateGenerationIntent={() => {
+    }} sourceWriteGuard={workspaceWriteGuards?.source} writeCapability={workspaceWriteGuards?.capability} onUpdateProductionPlan={async value=>{if(!activitySession.isCurrent(sessionToken)||getStoreSessionScope()!==sessionScope)throw new Error('活动已切换，请重新核对。');commitHistoryNow();await persistSidecar('plan',value,()=>actions.setProductionPlan(value));}} reviewContext={reviewContext} sessionScope={sessionScope} controller={controller} layout={layout} getCurrentLayout={() => layoutStore.getState().layout} onApply={scopedApply} validateGenerationIntent={() => {
       const brief = getActiveBrief();
       if (!brief) return '活动需求正在切换，请稍后再试。';
       if (brief.headcount === null) return '请先确认本场活动人数，再生成方案。';
@@ -4354,10 +4386,10 @@ useEffect(() => {
       issues.push(...checkFunctionalRequirements(candidate, activeFloorIndex, { checkin: memory?.zoneNeeds.checkin ?? null, stage: memory?.zoneNeeds.stage ?? null })
         .filter(check => check.status === 'unknown' && memory?.zoneNeeds[check.kind] != null).map(check => check.message));
       return issues.length ? issues.join(' ') : null;
-    }} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} commitFreshActivityLayout={commitFreshActivityLayout} onBindProject={projectId => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); onBindProject(projectId); }} onPreview={scopedPreview} onUpdateItem={(id, patch) => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={value => {
+    }} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} commitFreshActivityLayout={commitFreshActivityLayout} onBindProject={projectId => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); onBindProject(projectId); }} onPreview={scopedPreview} onUpdateItem={(id, patch) => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={async value => {
       if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。');
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
-      commitHistoryNow(); actions.setEventOperations(value);
+      commitHistoryNow(); await persistSidecar('operations', value, () => actions.setEventOperations(value));
     }}>
       <LayoutAgentProvider pendingCandidates={pendingCandidates} key={`${sessionScope}:${sessionToken?.epoch ?? 'starting'}`} sessionScope={sessionScope} isSessionCurrent={isScopedSessionCurrent} onDialogueTurnStart={beginDialogueTurn} onDialogueIncompleteChange={setDialogueIncomplete} onDialogueHistoryReview={reviewDialogueHistory} assertSessionWrite={workspaceWriteGuards?.assertLayoutWrite} handoffExportRequest={handoffExportRequest} zoneDraftRevision={planAnnot.revision} getPlanAnnotationSnapshot={planAnnot.getSnapshot} getUserRouteProvenance={planAnnot.getUserRouteProvenance} onBriefMemoryChange={(memory,sessionId) => {
         if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope || !sessionToken) return;
@@ -5146,7 +5178,7 @@ useEffect(() => {
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             </div>
           </div>
-          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();actions.setEventOperations(operations);}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=EDITOR_ITEM_LIMIT} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
+          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={async operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();await persistSidecar('operations',operations,()=>actions.setEventOperations(operations));}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=EDITOR_ITEM_LIMIT} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
         </main>
           <OnboardingHost
             signals={{
