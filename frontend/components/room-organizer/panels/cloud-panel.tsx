@@ -39,7 +39,7 @@ import { listOutdoorProjectRecords, readOutdoorProjectRecord, saveOutdoorProject
 import { localSlotNeedsCloudCheck, projectLinkKind, reachabilityFromError } from '../lib/project-identity';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import { notify } from '../lib/editor-notices';
-import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
+import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, collectCloudGuardRefs, hasLocalHandoff, LOCAL_HANDOFF_CLOUD_MESSAGE } from '../lib/handoff-cloud-guard';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { copyAssistantScope } from '../lib/assistant-scope-registry';
 import { projectSessionScope } from '../lib/project-session-scope';
@@ -53,7 +53,7 @@ import type {LocalWriteCapability} from '@/lib/local-write-lease';
 import type {ActivitySessionToken} from '../lib/activity-session-epoch';
 import type { DisplayUnit, RoomLayout } from '../lib/types';
 
-interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onDeleteCurrentActivity?: () => Promise<string>; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: SettingsPreferences; onPreferenceChange?: (patch: Partial<SettingsPreferences>) => void; onPlanSettingsChange?: (next: PlanEditorSettings | undefined) => void; siteQuote?: PlanQuote | undefined; planContext?: FeedbackPlanContext; onCapturePlan?: () => Promise<string | null> | string | null }
+interface Props { controller?: BackendSession; layout: RoomLayout; sessionToken?: ActivitySessionToken|null|undefined; isSessionCurrent?: ((token:ActivitySessionToken|null|undefined)=>boolean)|undefined; localWriteCapability?:LocalWriteCapability|undefined; onBeforeActivitySwitch?:((expected?:RoomLayout)=>()=>void)|undefined; getCurrentLayout?:(()=>RoomLayout)|undefined; onLoadLayout(layout: RoomLayout): void; onApplyLayout?(layout: RoomLayout): void; onDeleteCurrentActivity?: () => Promise<string>; onClose?(): void; openRequest?: { serial: number; section: string }; triggerRef?: RefObject<HTMLButtonElement>; draftNote?: { label: string; error?: boolean; title?: string }; preferences?: SettingsPreferences; onPreferenceChange?: (patch: Partial<SettingsPreferences>) => void; onPlanSettingsChange?: (next: PlanEditorSettings | undefined) => void; siteQuote?: PlanQuote | undefined; outdoorPlan?: SitePlanData | null; planContext?: FeedbackPlanContext; onCapturePlan?: () => Promise<string | null> | string | null }
 
 /** 点在对话框边框外（背后遮罩）才关。面板里的点击、按钮都不关。 */
 export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>): void {
@@ -157,7 +157,7 @@ function InventoryRow({ item, Icon }: { item: InventoryItem; Icon: typeof Box })
 
 type TrashProjectSummary = { id: string; name: string; studio_id: string; revision: number; updated_at: string; deleted_at: string };
 
-export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onDeleteCurrentActivity, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp, onPlanSettingsChange, siteQuote, planContext, onCapturePlan }: Props): JSX.Element {
+export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteCapability, onBeforeActivitySwitch, getCurrentLayout, onLoadLayout, controller: providedController, onApplyLayout, onDeleteCurrentActivity, onClose, openRequest, triggerRef, draftNote, preferences: preferencesProp, onPreferenceChange: onPreferenceChangeProp, onPlanSettingsChange, siteQuote, outdoorPlan, planContext, onCapturePlan }: Props): JSX.Element {
   const [fallbackController] = useState(() => providedController ?? createBackendSession());
   const controller = providedController ?? fallbackController;
   const preferences = preferencesProp ?? { lengthUnit: 'm' as DisplayUnit, showMeasurements: true, lengthPrecisionM: 0.01 as const, snapToGrid: false, snapToWall: false, snapToItems: false };
@@ -459,8 +459,9 @@ export function CloudPanel({ layout, sessionToken, isSessionCurrent, localWriteC
     setStudioId(current => nextStudios.some(studio => studio.id === current) ? current : nextStudios[0]?.id ?? '');
   }
   async function assertCloudTransition(value: RoomLayout): Promise<void> {
+    const refs = collectCloudGuardRefs({ plan: outdoorPlan ?? null, variants: value.designBook?.variants });
     try {
-      await assertNoLocalRecordsCloudTransition(value);
+      await assertNoLocalRecordsCloudTransition(value, value.id, refs);
       setRecordsBlockedScope(current => current === value.id ? undefined : current);
     } catch(error) {
       if (value.id && value.id === layoutRef.current.id) setRecordsBlockedScope(value.id);

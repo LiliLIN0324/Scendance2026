@@ -1,4 +1,4 @@
-import { assertNoLocalRecordsCloudTransition } from '../components/room-organizer/lib/handoff-cloud-guard';
+import { assertNoLocalRecordsCloudTransition, collectCloudGuardRefs } from '../components/room-organizer/lib/handoff-cloud-guard';
 import { readOutdoorProjectRecord } from '../components/room-organizer/lib/outdoor-project-store';
 import { projectLinkKind } from '../components/room-organizer/lib/project-identity';
 import { isRoomLayout, parseLayoutEventOperations } from '../components/room-organizer/lib/schema';
@@ -65,7 +65,8 @@ export function geometryProjectId(controller: BackendSession, localId: string | 
 /** Read local facts before scene-only work, without returning or sending them as model context. */
 export async function assertGeometryActionSource(layout: RoomLayout, controller: BackendSession): Promise<void> {
   if (!isLocalActivityWorkspace(controller) || !layout.id) {
-    await assertNoLocalRecordsCloudTransition(layout);
+    const refs = collectCloudGuardRefs({ variants: layout.designBook?.variants });
+    await assertNoLocalRecordsCloudTransition(layout, layout.id, refs);
     return;
   }
   if (!layout.id.trim() || !isRoomLayout(layout) || !parseLayoutEventOperations(layout)) {

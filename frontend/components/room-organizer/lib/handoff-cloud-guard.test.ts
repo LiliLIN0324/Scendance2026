@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readSourceRecord } from '../../../lib/source-storage';
 import { backendSceneToLayout, layoutToBackendScene } from './backend-adapter';
-import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, classifyCloudGuard, hasLocalHandoff, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from './handoff-cloud-guard';
+import { assertNoLocalHandoffCloudTransition, assertNoLocalRecordsCloudTransition, classifyCloudGuard, collectCloudGuardRefs, hasLocalHandoff, LOCAL_CHECKIN_CLOUD_MESSAGE, LOCAL_HANDOFF_CLOUD_MESSAGE, LOCAL_RECORDS_READ_MESSAGE } from './handoff-cloud-guard';
 
 vi.mock('../../../lib/source-storage',()=>({readSourceRecord:vi.fn(),updateSourceForm:vi.fn()}));
 beforeEach(()=>{vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined);});
@@ -61,6 +61,29 @@ describe('local execution cloud boundary', () => {
     await expect(assertNoLocalRecordsCloudTransition(backendSceneToLayout(scene))).resolves.toBeUndefined();
     expect(readSourceRecord).not.toHaveBeenCalled();
   });
+  it('blocks a pending operations ref even with no local ledger',async()=>{
+    const layout=backendSceneToLayout(scene,{projectId:'house-guard-trial'});
+    await expect(assertNoLocalRecordsCloudTransition(layout,'house-guard-trial',{operationsRef:'op-1'})).rejects.toThrow(LOCAL_HANDOFF_CLOUD_MESSAGE);
+  });
+  it('blocks a pending plan ref and a pending scan ref independently',async()=>{
+    const layout=backendSceneToLayout(scene,{projectId:'house-guard-trial'});
+    await expect(assertNoLocalRecordsCloudTransition(layout,'house-guard-trial',{planRef:'plan-1'})).rejects.toThrow(LOCAL_HANDOFF_CLOUD_MESSAGE);
+    await expect(assertNoLocalRecordsCloudTransition(layout,'house-guard-trial',{scan:{assetId:'scan-1'}})).rejects.toThrow(LOCAL_HANDOFF_CLOUD_MESSAGE);
+  });
+  it('prefers the ledger message when both a pending ref and a local ledger are present',async()=>{
+    const layout=backendSceneToLayout(scene,{projectId:'house-guard-trial'});
+    vi.mocked(readSourceRecord).mockResolvedValue({schemaVersion:1,projectId:layout.id!,dataKind:'rehearsal',sheets:[]});
+    await expect(assertNoLocalRecordsCloudTransition(layout,'house-guard-trial',{operationsRef:'op-1'})).rejects.toThrow(LOCAL_CHECKIN_CLOUD_MESSAGE);
+  });
+  it('passes with neither pending refs nor a local ledger',async()=>{
+    const layout=backendSceneToLayout(scene,{projectId:'house-guard-trial'});
+    await expect(assertNoLocalRecordsCloudTransition(layout,'house-guard-trial',{})).resolves.toBeUndefined();
+  });
+  it('blocks pending refs on an ID-less draft without reading a ledger',async()=>{
+    vi.mocked(readSourceRecord).mockClear();
+    await expect(assertNoLocalRecordsCloudTransition(backendSceneToLayout(scene),undefined,{planRef:'plan-1'})).rejects.toThrow(LOCAL_HANDOFF_CLOUD_MESSAGE);
+    expect(readSourceRecord).not.toHaveBeenCalled();
+  });
 });
 
 describe('cloud guard classification helper (T1 E5)', () => {
@@ -101,5 +124,36 @@ describe('cloud guard classification helper (T1 E5)', () => {
     const result = classifyCloudGuard({ planRef: 'plan-1' }, false);
     expect(result.pendingRefs).toEqual(['plan']);
     expect(result.shouldBlock).toBe(true);
+  });
+});
+
+describe('collectCloudGuardRefs', () => {
+  it('collects plan refs first and fills empty slots from variants', () => {
+    const refs = collectCloudGuardRefs({
+      plan: { operationsRef: 'op-plan', scan: { assetId: 'scan-plan', name: '场地' } },
+      variants: [{ id: 'v1', name: '提案', layout: backendSceneToLayout(scene), planRef: 'plan-variant' }],
+    });
+    expect(refs).toEqual({ operationsRef: 'op-plan', planRef: 'plan-variant', scan: { assetId: 'scan-plan', name: '场地' } });
+  });
+
+  it('trims blank refs and drops whitespace-only slots', () => {
+    const refs = collectCloudGuardRefs({
+      plan: { operationsRef: '   ', planRef: '  plan-1  ', scan: { assetId: '  ', name: '' } },
+      variants: [{ id: 'v2', name: '提案', layout: backendSceneToLayout(scene), operationsRef: 'op-variant' }],
+    });
+    expect(refs).toEqual({ operationsRef: 'op-variant', planRef: 'plan-1' });
+  });
+
+  it('does not overwrite a plan slot from a variant when the plan already has it', () => {
+    const refs = collectCloudGuardRefs({
+      plan: { planRef: 'plan-plan' },
+      variants: [{ id: 'v3', name: '提案', layout: backendSceneToLayout(scene), planRef: 'plan-variant' }],
+    });
+    expect(refs.planRef).toBe('plan-plan');
+  });
+
+  it('returns an empty input when plan and variants carry no refs', () => {
+    expect(collectCloudGuardRefs({ plan: null, variants: [] })).toEqual({});
+    expect(collectCloudGuardRefs({})).toEqual({});
   });
 });
