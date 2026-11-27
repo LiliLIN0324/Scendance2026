@@ -50,7 +50,7 @@ function assertData(value: unknown, ancestors = new Set<object>(), depth = 0): v
 
 /** A frozen, standalone HTML view of every activity task; no storage, fetch, clock or generated IDs. */
 export async function executionTimetableHtml(sourceLayout: RoomLayout, snapshot: DeliverySnapshot,
-  sourceLedger?: MaterialCheckinLedger): Promise<string> {
+  sourceLedger?: MaterialCheckinLedger, projectId?: string): Promise<string> {
   assertData(sourceLayout); assertData(snapshot); assertData(sourceLedger);
   // Freeze all inputs synchronously: operationReview may await a geometry/production/ledger hash.
   const layout = structuredClone(sourceLayout), metadataSource = structuredClone(snapshot);
@@ -66,7 +66,8 @@ export async function executionTimetableHtml(sourceLayout: RoomLayout, snapshot:
   const parsedLedger = ledgerSource === undefined ? undefined : materialCheckinLedgerSchema.safeParse(ledgerSource);
   if (parsedLedger && !parsedLedger.success) throw new Error('点验账册资料无效，请核对原记录后再导出。');
   const ledger = parsedLedger?.success ? parsedLedger.data : undefined;
-  if (ledger && (!layout.id || ledger.projectId !== layout.id)) throw new Error('点验账册与当前项目不一致，未生成执行时间表。');
+  const anchorId = projectId?.trim() || layout.id;
+  if (ledger && (!anchorId || ledger.projectId !== anchorId)) throw new Error('点验账册与当前项目不一致，未生成执行时间表。');
 
   const tasks = operations.data.tasks.map((task, index) => ({ task, anchor: `task-${index + 1}`, index }));
   const duplicateIds = (ids: string[]) => new Set(ids.map(productionReferenceKey)).size !== ids.length;
@@ -158,7 +159,7 @@ export async function executionTimetableHtml(sourceLayout: RoomLayout, snapshot:
     <section id="chronology"><h2>按日期与计划时间</h2><p class="section-intro">保留全部任务，含无物件关联的安排与沟通任务。日期按计划开始的北京时间归组；开始未填写的任务单独列出。</p><nav class="date-nav" aria-label="日期定位">${[...days.keys()].map((day, index) => `<a href="#day-${index + 1}">${day === 'unknown' ? '日期待安排' : day}</a>`).join('')}</nav>${dayBlocks || '<p>当前未记录活动任务，计划与分工待安排。</p>'}</section>
     <section id="owners"><h2>按负责人读</h2><p class="section-intro">同一批任务的索引；点击标题回到完整时间表。任务数量不表示岗位人数或完成比例。</p><div class="owner-grid">${ownerBlocks || '<p>当前未记录活动任务，负责人待安排。</p>'}</div></section>
     <section id="checks"><h2>点验差额另列</h2><p class="section-intro">${ledger ? `账册资料：${kinds[ledger.dataKind]}。` : ''}每单按自己的单位与记录链计算，件与套不混计。差额不等于遗失、损耗、可用库存或合同结清；点验时间不替代任务实际时间。</p>${checkBlocks}</section>
-    <section id="provenance"><h2>来源与口径</h2><div class="provenance"><p>项目：${escape(layout.name)}\n项目原编号：${escape(layout.id ?? '未记录')}\n导出编号：${escape(metadata.data.id)}\n冻结时间：${escape(metadata.data.generatedAt)}（${escape(time(metadata.data.generatedAt, '未记录'))} 北京时间）</p>
+    <section id="provenance"><h2>来源与口径</h2><div class="provenance"><p>项目：${escape(layout.name)}\n项目原编号：${escape(anchorId ?? '未记录')}\n导出编号：${escape(metadata.data.id)}\n冻结时间：${escape(metadata.data.generatedAt)}（${escape(time(metadata.data.generatedAt, '未记录'))} 北京时间）</p>
       <p>制作计划：${layout.productionPlan === undefined ? '当前未记录' : kinds[production.data.dataKind]}\n点验账册：${ledger ? kinds[ledger.dataKind] : '本次未提供'}</p><p>没有回写任务、场景或账册。当前工作台变化后需重新导出；本文件不会自动更新，不是可编辑项目备份。</p></div></section>
   </main></body></html>`;
 }

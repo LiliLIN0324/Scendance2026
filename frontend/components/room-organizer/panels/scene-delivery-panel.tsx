@@ -390,7 +390,7 @@ export function SceneDeliveryPanel({ layout, controller, captureImage, onUpdateI
           const ledger = saved.materialCheckins.status === 'present' ? saved.materialCheckins.value : undefined;
           const { executionTimetableHtml } = await import('@/lib/execution-timetable-export');
           if (!stillCurrent()) return;
-          const html = await executionTimetableHtml(saved.layout, metadata, ledger);
+          const html = await executionTimetableHtml(saved.layout, metadata, ledger, projectId);
           if (!stillCurrent()) return;
           downloadSceneDelivery(html, 'text/html;charset=utf-8', `${saved.layout.name}_执行时间表_${metadata.id}`, 'html');
           setNotice('执行时间表已导出，可离线打开与打印。计划与实际分别保留，未定时间和复核事项请执行团队确认。');

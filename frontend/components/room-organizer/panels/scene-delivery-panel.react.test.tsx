@@ -845,7 +845,7 @@ describe('saved execution timetable delivery',()=>{
     fireEvent.click(exportButton());
     await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
     expect(f.backupActions.prepareBackup).toHaveBeenCalledOnce();
-    expect(executionTimetableHtml).toHaveBeenCalledWith(f.current,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)}),f.ledger);
+    expect(executionTimetableHtml).toHaveBeenCalledWith(f.current,expect.objectContaining({id:expect.any(String),generatedAt:expect.any(String)}),f.ledger,checkinProject);
     const [html,mime,name,extension]=vi.mocked(downloadSceneDelivery).mock.calls[0];
     expect(typeof html).toBe('string');
     const document=new DOMParser().parseFromString(html as string,'text/html');
@@ -867,7 +867,7 @@ describe('saved execution timetable delivery',()=>{
     f.backupActions.prepareBackup.mockResolvedValue(serializeLocalProjectBackupV3(f.current, {state:'ready',scope:checkinProject,brief:{status:'absent'}}, {state:'ready',scope:checkinProject,materialCheckins:{status:'absent'}}, { projectId: f.current.id! }));
     render(<RoomEditorProvider value={editorValue()}><SceneDeliveryPanel layout={f.current} controller={controller} backupActions={f.backupActions}/></RoomEditorProvider>);
     fireEvent.click(exportButton());await waitFor(()=>expect(downloadSceneDelivery).toHaveBeenCalledOnce());
-    expect(executionTimetableHtml).toHaveBeenCalledWith(f.current,expect.anything(),undefined);
+    expect(executionTimetableHtml).toHaveBeenCalledWith(f.current,expect.anything(),undefined,checkinProject);
     const html=vi.mocked(downloadSceneDelivery).mock.calls[0][0];expect(html).toContain('未关联制作计划的主持任务');expect(html).toContain('本次未提供点验账册，收退数量与差额待确认。');
   });
   it.each(['legacy-scene','legacy-v2','wrong-project'] as const)('rejects %s instead of treating uncovered saved records as absent',async kind=>{

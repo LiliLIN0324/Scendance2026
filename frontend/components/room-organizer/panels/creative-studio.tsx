@@ -839,7 +839,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
       const saved=await flushBackupBase(operation);
       if(checkinRecovery.current)throw new Error('上次点验恢复的回退尚未完成，请先重试恢复或撤销恢复，再下载备份。');
       const briefSnapshot={state:'ready' as const,scope:operation.base.scope,brief:saved===undefined?{status:'absent' as const}:{status:'present' as const,value:saved}};
-      const ledger=operation.base.layout.id?await readMaterialCheckins(operation.base.layout.id):undefined;operation.check();
+      const ledger=operation.base.layout.id?await readMaterialCheckins(operation.base.scope):undefined;operation.check();
       if(ledger&&!isLocalActivityWorkspace(controller))throw new Error('此项目还有本机点验记录，请切换到对应本地项目后备份，原记录已保留。');
       if(options?.includeSourceDocuments){
         if(!operation.base.layout.id)throw new Error('请先保存活动编号，再备份图纸。');

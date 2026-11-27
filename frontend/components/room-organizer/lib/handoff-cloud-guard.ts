@@ -22,11 +22,12 @@ export function assertNoLocalHandoffCloudTransition(layout: RoomLayout): void {
 }
 
 /** Independent facts are outside RoomLayout and must be read at each asynchronous cloud boundary. */
-export async function assertNoLocalRecordsCloudTransition(layout: RoomLayout): Promise<void> {
+export async function assertNoLocalRecordsCloudTransition(layout: RoomLayout, projectId?: string): Promise<void> {
   assertNoLocalHandoffCloudTransition(layout);
-  if (!layout.id) return;
+  const anchorId = projectId?.trim() || layout.id;
+  if (!anchorId) return;
   let ledger;
-  try { ledger = await readMaterialCheckins(layout.id); }
+  try { ledger = await readMaterialCheckins(anchorId); }
   catch { throw new Error(LOCAL_RECORDS_READ_MESSAGE); }
   if (ledger !== undefined) throw new Error(LOCAL_CHECKIN_CLOUD_MESSAGE);
 }

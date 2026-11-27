@@ -395,6 +395,18 @@ describe('execution timetable HTML', () => {
     expect(html).not.toContain('LATER_'); expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('uses the supplied projectId as provenance and ledger consistency anchor instead of layout.id', async () => {
+    const source = layout();
+    const facts = ledger(); facts.projectId = id(9);
+    const html = await executionTimetableHtml(source, snapshot, facts, id(9));
+    const document = documentOf(html);
+    expect(document.querySelector('#provenance')!.textContent).toContain(id(9));
+    expect(document.querySelector('#provenance')!.textContent).not.toContain(`项目原编号：${id(1)}`);
+
+    const mismatched = ledger(); mismatched.projectId = id(1);
+    await expect(executionTimetableHtml(source, snapshot, mismatched, id(9))).rejects.toThrow();
+  });
+
   it('is deterministic for identical frozen inputs and explicit metadata and does not mutate them', async () => {
     const source = await acceptedLayout(ledger()), facts = ledger(), before = JSON.stringify({ source, facts, snapshot });
     const first = await executionTimetableHtml(source, snapshot, facts);

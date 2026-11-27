@@ -602,7 +602,7 @@ export function parseLocalProjectBackupJson(text: string): ValidatedLocalProject
     const checked = checkedLayout(parsed.data.layout, true, parsed.data.version === 5 || parsed.data.version === 6);
     const materialCheckins: RestoredMaterialCheckins = parsed.data.version === 3 || parsed.data.version === 4 ||
         parsed.data.version === 5 || parsed.data.version === 6
-      ? checkedMaterialCheckins(value.materialCheckins, checked.layout.id) : { status: 'not-in-file' };
+      ? checkedMaterialCheckins(value.materialCheckins, parsed.data.projectId?.trim() || checked.layout.id) : { status: 'not-in-file' };
     const sourceDocuments: RestoredSourceDocuments = parsed.data.version === 4 || parsed.data.version === 5
       ? parsed.data.sourceDocuments : { status: 'not-in-file' };
     if ((parsed.data.version === 4 || parsed.data.version === 5) && materialCheckins.status !== 'not-in-file') {
