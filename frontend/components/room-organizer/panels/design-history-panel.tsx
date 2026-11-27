@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRoomEditorOptional } from '../contexts';
 import { useSidecarResolution } from '../hooks/use-sidecar-resolution';
 import { MAX_DESIGNS, removeDesignVariant, saveDesignSnapshot, switchDesign } from '../lib/scene-layers';
+import { prepareVariantSaveAs, type VariantSaveAsDraft } from '../lib/variant-save-as';
 import { buildVariantSaveMeta, formatVariantSummaryLine, variantHasReference } from '../lib/variant-summary';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
@@ -14,6 +15,9 @@ export interface DesignHistoryPanelProps {
   layout: RoomLayout;
   onApply: (next: RoomLayout) => void;
   disabled?: boolean;
+  /** E3：对单个变体显式另存为新场地。纯函数产出的草稿与待落侧车清单随回调上抛；
+   *  建项目 / 落记录 / 挂 ref 的编排由壳层承担。未提供时入口禁用。 */
+  onSaveAsVariant?: ((variant: DesignVariant, draft: VariantSaveAsDraft) => void) | undefined;
 }
 
 function formatSavedAt(iso?: string): string {
@@ -35,6 +39,7 @@ interface VariantHistoryRowProps {
   layout: RoomLayout;
   disabled?: boolean;
   onApply: (next: RoomLayout) => void;
+  onSaveAsVariant?: ((variant: DesignVariant, draft: VariantSaveAsDraft) => void) | undefined;
 }
 
 /**
@@ -42,7 +47,7 @@ interface VariantHistoryRowProps {
  * 不碰 IDB；带 ref 时按 D6-2 同型三态解析，记录找不到 / 异项目标为 missing，几何照常可载入，
  * 业务事实标待核，不拿当前最新记录顶替、不按名称重挂。
  */
-function VariantHistoryRow({ variant, activeId, layout, disabled = false, onApply }: VariantHistoryRowProps): JSX.Element {
+function VariantHistoryRow({ variant, activeId, layout, disabled = false, onApply, onSaveAsVariant }: VariantHistoryRowProps): JSX.Element {
   const { projectId } = useRoomEditorOptional() ?? {};
   const referenced = variantHasReference(variant);
   const operations = useSidecarResolution<EventOperations>({
@@ -66,6 +71,14 @@ function VariantHistoryRow({ variant, activeId, layout, disabled = false, onAppl
   const isActive = variant.id === activeId;
   const isOriginal = variant.id === 'original';
   const savedAt = formatSavedAt(variant.savedAt);
+  const hasGeometry = (variant.layout.floors ?? []).some(floor => (floor.items ?? []).length > 0);
+  const canSaveAs = Boolean(onSaveAsVariant) && !disabled && hasGeometry;
+
+  function handleSaveAs(): void {
+    if (!onSaveAsVariant || !canSaveAs) return;
+    const draft = prepareVariantSaveAs({ sourceProjectId: projectId ?? '', variant, operations, plan });
+    onSaveAsVariant(variant, draft);
+  }
 
   return (
     <li data-variant-id={variant.id} className={`dh-item${isActive ? ' is-active' : ''}`}>
@@ -91,6 +104,17 @@ function VariantHistoryRow({ variant, activeId, layout, disabled = false, onAppl
         )}
         {isActive && <span className="dh-current">当前方案</span>}
         {!isActive && !isOriginal && (
+          <button
+            type="button"
+            className="sc-button"
+            onClick={handleSaveAs}
+            disabled={!canSaveAs}
+            title={!hasGeometry ? '缺几何物料，无法另存' : undefined}
+          >
+            另存为新场地
+          </button>
+        )}
+        {!isActive && !isOriginal && (
           <button type="button" className="dh-remove" onClick={() => onApply(removeDesignVariant(layout, variant.id))} disabled={disabled}>
             移除
           </button>
@@ -101,7 +125,7 @@ function VariantHistoryRow({ variant, activeId, layout, disabled = false, onAppl
 }
 
 /** 本机方案过程态存档：把当前整包布局另存、载入或移除。不跨设备、不替业务落盘。 */
-export function DesignHistoryPanel({ layout, onApply, disabled = false }: DesignHistoryPanelProps): JSX.Element {
+export function DesignHistoryPanel({ layout, onApply, disabled = false, onSaveAsVariant }: DesignHistoryPanelProps): JSX.Element {
   const { outdoorPlan } = useRoomEditorOptional() ?? {};
   const book = layout.designBook;
   const variants = book?.variants ?? [];
@@ -166,6 +190,7 @@ export function DesignHistoryPanel({ layout, onApply, disabled = false }: Design
               layout={layout}
               disabled={disabled}
               onApply={onApply}
+              onSaveAsVariant={onSaveAsVariant}
             />
           ))}
         </ul>

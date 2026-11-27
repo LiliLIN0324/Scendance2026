@@ -6,6 +6,8 @@ import { resolveSidecarRef } from '@/lib/sidecar-records';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { designSnapshot } from '../lib/scene-layers';
+import { makeFloor, makeItem } from '../lib/__testfixtures__/fixtures';
+import type { VariantSaveAsDraft } from '../lib/variant-save-as';
 import { DesignHistoryPanel } from './design-history-panel';
 import type { DesignVariant, RoomLayout } from '../lib/types';
 
@@ -23,14 +25,25 @@ function snapshotLayout() {
   return designSnapshot(structuredClone(INITIAL_LAYOUT));
 }
 
+function geometryVariant(id: string, name: string): DesignVariant {
+  return {
+    id,
+    name,
+    origin: 'manual',
+    savedAt: '2026-11-20T09:00:00.000Z',
+    layout: { ...structuredClone(INITIAL_LAYOUT), floors: [makeFloor({ items: [makeItem({ name: '椅子 A' })] })] },
+  };
+}
+
 function renderWithProvider(layout: RoomLayout, projectId: string) {
   const onApply = vi.fn();
+  const onSaveAsVariant = vi.fn();
   const result = render(
     <RoomEditorProvider value={{ projectId } as unknown as RoomEditorContextValue}>
-      <DesignHistoryPanel layout={layout} onApply={onApply} />
+      <DesignHistoryPanel layout={layout} onApply={onApply} onSaveAsVariant={onSaveAsVariant} />
     </RoomEditorProvider>,
   );
-  return { onApply, ...result };
+  return { onApply, onSaveAsVariant, ...result };
 }
 
 function rowById(id: string) {
@@ -152,5 +165,45 @@ describe('D6-3-c 历史变体摘要兜底与引用待核', () => {
     const layout = layoutWith([baselineVariant(), noScan], 'original');
     renderWithProvider(layout, 'project-c-5');
     await waitFor(() => expect(rowById('snap-noscan').getByText('原方案未找到 / 已变动，待核')).toBeTruthy());
+  });
+});
+
+describe('T4 E3 逐变体另存入口', () => {
+  beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.mocked(resolveSidecarRef).mockReset(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it('clicking save-as builds a draft from geometry and hands it up with the variant', () => {
+    const variant = geometryVariant('snap-save', '另存测试');
+    const layout = layoutWith([baselineVariant(), variant], 'original');
+    const { onSaveAsVariant } = renderWithProvider(layout, 'project-save-1');
+
+    fireEvent.click(rowById('snap-save').getByRole('button', { name: '另存为新场地' }));
+
+    expect(onSaveAsVariant).toHaveBeenCalledTimes(1);
+    const [passedVariant, draft] = onSaveAsVariant.mock.calls[0]! as [DesignVariant, VariantSaveAsDraft];
+    expect(passedVariant.id).toBe('snap-save');
+    expect(draft.draft.name).toBe('另存测试');
+    expect(draft.draft.floors[0]!.items).toHaveLength(1);
+    expect(draft.draft.id).toBeUndefined();
+    expect(draft.draft.eventOperations).toBeUndefined();
+    expect(draft.draft.productionPlan).toBeUndefined();
+    // 旧变体无 ref：内嵌副本只读，不复制进新记录，两槽标待核。
+    expect(draft.sidecarEntries).toEqual([]);
+    expect(draft.missingKinds).toEqual(['operations', 'plan']);
+  });
+
+  it('keeps the save-as button disabled when no shell handler is bound', () => {
+    const variant = geometryVariant('snap-noop', '未接壳方案');
+    const layout = layoutWith([baselineVariant(), variant], 'original');
+    render(<DesignHistoryPanel layout={layout} onApply={vi.fn()} />);
+    expect((rowById('snap-noop').getByRole('button', { name: '另存为新场地' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('disables save-as for a variant with no placed geometry', () => {
+    const empty: DesignVariant = { id: 'snap-empty', name: '空几何方案', layout: snapshotLayout() };
+    const layout = layoutWith([baselineVariant(), empty], 'original');
+    const { onSaveAsVariant } = renderWithProvider(layout, 'project-save-2');
+    expect((rowById('snap-empty').getByRole('button', { name: '另存为新场地' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onSaveAsVariant).not.toHaveBeenCalled();
   });
 });
