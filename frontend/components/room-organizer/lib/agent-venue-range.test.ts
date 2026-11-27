@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { largestWaterFreeRect, ringTouchesWater, type WaterRing } from "./agent-venue-range";
+import { largestWaterFreeRect, ringTouchesWater, waterCheckLines, type WaterRing } from "./agent-venue-range";
 
 /**
  * 幕景Agent Test「锁定区域」（2026-11-22）：默认范围把河道包了进去（截图 E1/E2）。
@@ -55,6 +55,50 @@ describe("ringTouchesWater（范围压水判定）", () => {
     const ring = rect(-10, -10, 10, 10);
     const lake = waterArea(rect(-200, -200, 200, 200));
     expect(ringTouchesWater(ring, [lake])).toBe(true);
+  });
+});
+
+describe("waterCheckLines（P0-A：红线与分区两层核对，缺数据标待核）", () => {
+  const river = waterArea(rect(-100, -10, 100, 10));
+
+  it("没有水体数据：给一句待核，不静默当无事", () => {
+    const lines = waterCheckLines(rect(-50, -50, 50, 50), [{ name: "瑜伽区", ring: rect(-20, -20, 20, 20) }], [], false);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("待核");
+  });
+
+  it("红线和分区都不压水：不给任何一句（不需要说话）", () => {
+    const boundary = rect(-50, -50, 50, 50);
+    const lines = waterCheckLines(
+      boundary,
+      [{ name: "瑜伽区", ring: rect(-20, -20, 20, 20) }],
+      [waterArea(rect(200, 200, 300, 300))],
+      true,
+    );
+    expect(lines).toEqual([]);
+  });
+
+  it("确认后的红线压水：指名红线这一层", () => {
+    const lines = waterCheckLines(rect(-50, -50, 50, 50), [], [river], true);
+    expect(lines).toEqual(["活动红线压到水面。"]);
+  });
+
+  it("分区压水：指名分区名字（分区伸出红线够到红线外的水面）", () => {
+    const lines = waterCheckLines(
+      rect(0, 0, 50, 50),
+      [
+        { name: "签到区", ring: rect(5, 5, 25, 25) },
+        { name: "瑜伽冥想区", ring: rect(-20, 0, 20, 20) },
+      ],
+      [waterArea(rect(-100, -30, -10, 30))],
+      true,
+    );
+    expect(lines).toEqual(["压到水面的分区：瑜伽冥想区。"]);
+  });
+
+  it("红线和分区同时压水：两层都报", () => {
+    const lines = waterCheckLines(rect(-50, -50, 50, 50), [{ name: "兑奖区", ring: rect(-8, -8, 8, 8) }], [river], true);
+    expect(lines).toEqual(["活动红线压到水面。", "压到水面的分区：兑奖区。"]);
   });
 });
 
