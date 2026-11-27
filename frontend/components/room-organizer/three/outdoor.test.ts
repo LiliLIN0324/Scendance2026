@@ -66,19 +66,15 @@ describe('flat lot baseline (T1 shell retirement)', () => {
     expect(outdoor(scene).some((obj) => obj.userData.wallId === 'north')).toBe(false);
   });
 
-  it('treats legacy shell fields as read-only: no slope lift, no neighbour skip, garden frontage kept', () => {
+  it('keeps a flat datum lot: trees sit on datum, garden frontage stays fixed', () => {
     const scene = new THREE.Scene();
-    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH, {
-      terrain: { frontY: 2.5, backY: 0 },
-      neighbours: { east: true, street: true },
-      frontage: 'pavement',
-    });
+    setOutdoorVisible(THREE, scene, true, WIDTH, DEPTH);
 
     const grass = groundMesh(scene);
     expect(grass.geometry).toBeInstanceOf(THREE.PlaneGeometry);
     expect(outdoor(scene).some((obj) => obj.userData.type === 'roof' || obj.userData.type === 'neighbour')).toBe(false);
 
-    // Trees sit on the datum, not lifted onto the slope.
+    // Trees sit on the datum, not lifted onto a slope.
     for (const tree of groups(scene)) {
       expect(tree.position.y).toBeCloseTo(0);
     }

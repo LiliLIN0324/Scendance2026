@@ -1,6 +1,6 @@
 import { LOT_MARGIN, PAVEMENT_DEPTH, ROAD_DEPTH, outdoorGroundSize, roadEdges } from '../lib/site';
 import { removeAndDispose } from './builder-utils';
-import type { Frontage, NeighbourSpec, TerrainSpec, Weather } from '../lib/types';
+import type { Weather } from '../lib/types';
 import type * as ThreeNS from 'three';
 
 type ThreeModule = typeof import('three');
@@ -48,31 +48,17 @@ export function applyOutdoorWeather(scene: ThreeNS.Scene, weather: Weather): voi
  *  - a perimeter of trees (mixed birch + leafy) framing the lot
  *  - clusters of bushes and flower spots scattered around the grass
  *
- * Deterministic random so the layout doesn't shuffle every render.
- *
- * The retired shell inputs (`terrain` slope, `neighbours` party walls,
- * `frontage` pavement) are accepted read-only for old snapshots; the flat
- * lot no longer builds slope geometry, neighbour houses, or a flush-front
- * pavement from them.
+ * Deterministic random so the layout doesn't shuffle every render. The lot is
+ * flat at the datum; retired shell inputs (terrain slope, party-wall
+ * neighbours, pavement frontage) are no longer read by the renderer.
  */
-export interface OutdoorSite {
-  /** Legacy snapshot field, retained read-only; the flat lot no longer slopes from it. */
-  terrain?: TerrainSpec;
-  /** Legacy snapshot field, retained read-only; no neighbour houses are scattered from it. */
-  neighbours?: NeighbourSpec;
-  /** Legacy snapshot field, retained read-only; the garden frontage layout is fixed. */
-  frontage?: Frontage;
-}
-
 export function setOutdoorVisible(
   THREE: ThreeModule,
   scene: ThreeNS.Scene,
   visible: boolean,
   roomWidth: number,
-  roomDepth: number,
-  site: OutdoorSite = {}
+  roomDepth: number
 ): void {
-  void site;
   scene.children
     .filter((obj) => obj.userData.type === OUTDOOR_TAG)
     .forEach((obj) => {

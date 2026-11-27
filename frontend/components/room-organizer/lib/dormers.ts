@@ -3,14 +3,13 @@ import type { DormerOpening, DormerOpeningKind, DormerSpec, RoofStyle, WallId } 
 /**
  * Roof dormers (#203): loft boxes standing on a roof slope, with a vertical
  * face carrying real openings. Everything here is pure — the slope maths,
- * the clamping that keeps a dormer on its slope, and the opening layout —
- * so three/dormers.ts only turns the numbers into meshes.
+ * the clamping that keeps a dormer on its slope, and the opening layout.
  *
  * Local frame: every dormer is laid out as if its slope faced north (−z),
- * with x along the ridge; the builder rotates it onto its real side.
+ * with x along the ridge; the frame rotates it onto its real side.
  */
 
-/** Must match three/roof.ts — how far the roof overhangs the walls. */
+/** How far the roof overhangs the walls. */
 export const ROOF_EAVE_OVERHANG = 0.35;
 
 export const MAX_DORMERS = 6;
@@ -182,7 +181,7 @@ interface RoofSlope {
 /**
  * The slope on one side of the roof, or null when that side has none: flat
  * and absent roofs have no slopes, and a gable only slopes on its two long
- * sides (its ends are vertical gables). Mirrors three/roof.ts.
+ * sides (its ends are vertical gables).
  */
 export function roofSlope(style: RoofStyle, width: number, depth: number, side: WallId): RoofSlope | null {
   const northSouth = side === 'north' || side === 'south';

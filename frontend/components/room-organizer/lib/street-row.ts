@@ -7,7 +7,8 @@ import type { Frontage, NeighbourSpec, RoofStyle, TerrainSpec } from './types';
  * along both sides of ours and, optionally, a facing row across the road.
  *
  * Everything here is pure layout — where each house stands and what it is
- * made of. three/neighbours.ts turns the specs into meshes. The same seed
+ * made of. The specs describe the row; a renderer would turn them into
+ * meshes. The same seed
  * and site always give the same list, so a design shows the same street
  * after a reload or through a share link; "Shuffle street" re-rolls the seed.
  */
@@ -76,7 +77,7 @@ const FACING_FRONT_GARDEN = 1.2;
 /** Clearance between attached houses (and off our wall plane) so party walls never z-fight. */
 export const PARTY_WALL_GAP = 0.02;
 
-/** Window sizing rules shared by the builder and its tests (#280). */
+/** Window sizing rules shared by the row layout and its tests (#280). */
 export const WINDOW_WIDTH = 1.1;
 const WINDOW_MAX_HEIGHT = 1.4;
 const WINDOW_MIN_HEIGHT = 0.7;
