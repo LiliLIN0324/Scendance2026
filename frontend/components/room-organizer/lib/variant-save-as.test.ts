@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { eventOperationsSchema, type EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import { productionPlanSchema, type ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout, makeZone } from './__testfixtures__/fixtures';
-import { prepareVariantSaveAs, type VariantSaveAsDraft } from './variant-save-as';
+import { planVariantSaveAs, prepareVariantSaveAs, type VariantSaveAsDraft } from './variant-save-as';
 import type { DesignVariant, RoomLayout, VariantSummary } from './types';
 
 function ops(): EventOperations {
@@ -185,5 +185,61 @@ describe('prepareVariantSaveAs（T4 E3 逐变体另存纯函数）', () => {
     expect(result.draft.productionPlan).toBeUndefined();
     expect(result.draft.venueScan).toBeUndefined();
     expect(result.draft.floors[0]!.items[0]!.name).toBe('椅子 A');
+  });
+});
+
+const freshId = (): string => `house-${crypto.randomUUID()}`;
+
+describe('planVariantSaveAs（T5 落地批次计划纯函数）', () => {
+  it('候选草稿采用新活动编号，几何保留且不带旧 id/三键/旧 ref', () => {
+    const source = variant({
+      operationsRef: '22222222-2222-4222-8222-222222222222',
+      planRef: '33333333-3333-4333-8333-333333333333',
+    });
+    const result = prepareVariantSaveAs({ sourceProjectId: 'house-src', variant: source, operations: { status: 'record', data: ops() }, plan: { status: 'record', data: plan() } });
+    const fresh = freshId();
+
+    const launch = planVariantSaveAs(result, fresh, source.name);
+
+    expect(launch.candidate.id).toBe(fresh);
+    expect(launch.candidate.name).toBe('迎宾区先落位');
+    expect(launch.candidate.floors[0]!.items[0]!.name).toBe('椅子 A');
+    expect(launch.candidate.id).not.toBe('variant-source-id');
+    expect((launch.candidate as unknown as Record<string, unknown>).operationsRef).toBeUndefined();
+    expect((launch.candidate as unknown as Record<string, unknown>).planRef).toBeUndefined();
+  });
+
+  it('record 槽进入侧车写入批次；legacy / missing 不进批次', () => {
+    const source = variant();
+    const result = prepareVariantSaveAs({ sourceProjectId: 'house-src', variant: source, operations: { status: 'record', data: ops() }, plan: { status: 'fallback-legacy', data: plan() } });
+    const launch = planVariantSaveAs(result, freshId(), source.name);
+
+    expect(launch.sidecarWrites).toHaveLength(1);
+    expect(launch.sidecarWrites[0]!.kind).toBe('operations');
+    expect(launch.sidecarWrites[0]!.data).toBe(result.sidecarEntries[0]!.data);
+  });
+
+  it('planMeta 带扫描身份与名称；无 scan 时留空待核', () => {
+    const withScan = prepareVariantSaveAs({ sourceProjectId: 'house-src', variant: variant({ scan: { assetId: 'scan-1' } }), operations: { status: 'missing', data: undefined }, plan: { status: 'missing', data: undefined } });
+    const launch = planVariantSaveAs(withScan, freshId(), '迎宾区先落位');
+
+    expect(launch.planMeta.scan?.assetId).toBe('scan-1');
+    expect(launch.planMeta.name).toBe('迎宾区先落位');
+
+    const noScan = prepareVariantSaveAs({ sourceProjectId: 'house-src', variant: variant(), operations: { status: 'missing', data: undefined }, plan: { status: 'missing', data: undefined } });
+    const plan2 = planVariantSaveAs(noScan, freshId(), '另一稿');
+    expect(plan2.planMeta.scan).toBeUndefined();
+  });
+
+  it('名称回退到兜底名；不修改输入草稿', () => {
+    const bare = variant({ name: '', layout: makeLayout({ id: 'variant-source-id', name: '', floors: [makeFloor({ items: [makeItem({ name: '椅子 A' })] })] }) });
+    const result = prepareVariantSaveAs({ sourceProjectId: 'house-src', variant: bare, operations: { status: 'missing', data: undefined }, plan: { status: 'missing', data: undefined } });
+    const snapshot = JSON.stringify(result);
+
+    const launch = planVariantSaveAs(result, freshId(), '兜底场地');
+
+    expect(launch.planMeta.name).toBe('兜底场地');
+    expect(launch.candidate.name).toBe('兜底场地');
+    expect(JSON.stringify(result)).toBe(snapshot);
   });
 });

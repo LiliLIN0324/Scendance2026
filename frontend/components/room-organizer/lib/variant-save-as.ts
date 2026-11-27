@@ -113,3 +113,37 @@ export function prepareVariantSaveAs(input: VariantSaveAsInput): VariantSaveAsDr
     scan: variant.scan,
   };
 }
+
+/**
+ * 落地批次计划（T5）：把 `prepareVariantSaveAs` 产出的草稿，装配成壳可编排的
+ * 「新活动候选 + 待落侧车批次 + 新 plan meta」静态计划。
+ *
+ * - 候选草稿几何来自纯层 draft（已剥离旧 id / 业务三键 / 旧 ref），只补壳 mint 的新活动 id 与名称。
+ * - 侧车批次仅含 `record` 态条目；legacy / missing / pending 已在 draft 标待核，不进批次。
+ * - 扫描身份随附新 plan meta；冻结摘要无 plan 正源槽位，不落这里（保留在 draft.summary）。
+ * - 纯函数：不碰存储、不 async、不回写入参。新活动编号格式由壳 mint 后经
+ *   `proveFreshActivityScopeUnused` 校验，本层不重复判定，避免与 `lib/local-project-restore` 成环。
+ */
+export interface VariantSaveAsLaunchPlan {
+  /** 候选新活动草稿；`id` 为壳 mint 的新活动编号，`name` 已回退到兜底名称。 */
+  candidate: RoomLayout;
+  /** 待在新 projectId 下逐条落盘的侧车记录批次（仅 record 态）。 */
+  sidecarWrites: ReadonlyArray<VariantSaveAsSidecarEntry>;
+  /** 新 plan 初始 meta：扫描身份与方案名称；摘要不落 plan 正源。 */
+  planMeta: { scan?: PlanVenueScan | undefined; name: string };
+}
+
+export function planVariantSaveAs(
+  draft: VariantSaveAsDraft,
+  freshId: string,
+  fallbackName?: string,
+): VariantSaveAsLaunchPlan {
+  const name = draft.draft.name?.trim() || fallbackName?.trim() || '未命名活动';
+  const candidate: RoomLayout = { ...draft.draft, id: freshId, name };
+  const sidecarWrites = draft.sidecarEntries.map((entry) => ({ kind: entry.kind, data: entry.data }));
+  return {
+    candidate,
+    sidecarWrites,
+    planMeta: draft.scan ? { scan: draft.scan, name } : { name },
+  };
+}

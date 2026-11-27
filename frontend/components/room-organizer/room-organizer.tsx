@@ -98,6 +98,7 @@ import { isLegacyIndoorDraft, prepareOutdoorSaveAs } from './lib/legacy-indoor-d
 import { INITIAL_GROUND_FLOOR, INITIAL_LAYOUT } from './lib/initial-layout';
 import { writeGroundToPlan } from './lib/venue-ground-slot';
 import { writeSidecarRefToPlan } from './lib/sidecar-ref-slot';
+import { planVariantSaveAs, type VariantSaveAsDraft } from './lib/variant-save-as';
 import { saveSidecarRecord, type SidecarKind } from '@/lib/sidecar-records';
 import { caseActivityAlignment } from './lib/case-activity-alignment';
 import { DEFAULT_WALK_ROLE_ID, WALK_ROLES, findWalkRole, walkRoleGlbUrl } from './lib/walk-roles';
@@ -252,7 +253,7 @@ import { generateSuggestions, type ActivitySuggestion } from '@/lib/suggestions'
 
 const WorkbenchCaptureGuide = dynamic(() => import('@/components/capture-guide/capture-guide').then(module => module.CaptureGuide));
 const ZERO_SPLAT_POSITION: SplatPosition = Object.freeze({ x: 0, y: 0, z: 0 });
-import type { CatalogItem, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
+import type { CatalogItem, DesignVariant, FurnitureItem, RoomLayout, ViewSettings, WallId } from './lib/types';
 import { mergeRemotePreferences, readLocalPreferences, writeLocalPreferences, type LocalPreferences } from './lib/account-preferences';
 import { readStudioSettingsCache, rememberStudioSettings } from './lib/studio-settings-cache';
 import { sanitizeStudioSettings, seedPlanEditor } from '../../../supabase/functions/_shared/plan-editor';
@@ -4061,6 +4062,46 @@ useEffect(() => {
     setOutdoorPlanState({ projectId: record.projectId, plan: record.plan ?? createStarterOutdoorPlan() });
     setOutdoorProjectId(record.projectId);
   }, [legacyIndoorReadOnly, actions, flushPendingBeforeSwitch]);
+
+  // E3（T5）：历史面板「另存为新场地」——逐变体起新本机活动。几何用纯层 draft；
+  // record 态业务事实在新 projectId 下重落独立侧车记录、生成新 recordId 挂回；
+  // legacy / missing 槽标待核不复制；扫描身份随新 plan；旧活动原封不动，不后台迁移、不自动拆包。
+  const handleSaveVariantAsNew = useCallback(async (variant: DesignVariant, draft: VariantSaveAsDraft): Promise<void> => {
+    try {
+      workspaceWriteGuards?.assertLayoutWrite();
+      if (!activitySession.isCurrent(sessionToken)) throw new Error('活动已变化，未另存活动。');
+      if (controller.getSnapshot().project || hasRequestedCloudProject()) {
+        throw new Error('当前页面已连接或正在打开云项目，请在本地工作台另存活动。');
+      }
+      const before = layoutStore.getState().layout;
+      const freshId = `house-${crypto.randomUUID()}`;
+      const clearance = await proveFreshActivityScopeUnused(freshId, before.id ?? '');
+      const launch = planVariantSaveAs(draft, freshId, variant.name);
+      // 事务性：先落新活动（内部守卫 + clearance 一次性消费）；落地成功前不改旧活动。
+      commitFreshActivityLayout(launch.candidate, clearance);
+
+      let nextPlan: SitePlanData = createStarterOutdoorPlan();
+      const name = launch.planMeta.name;
+      for (const write of launch.sidecarWrites) {
+        let recordId: string;
+        if (write.kind === 'operations') {
+          ({ recordId } = await saveSidecarRecord(freshId, 'operations', write.data as EventOperations));
+        } else {
+          ({ recordId } = await saveSidecarRecord(freshId, 'plan', write.data as ProductionPlan));
+        }
+        // 记录保存成功才挂 ref；挂不回 plan 即抛错，不再挂后续悬空 ref，已落记录保留。
+        const written = writeSidecarRefToPlan(freshId, write.kind, recordId, { name });
+        if (!written.ok) throw new Error('活动安排或制作计划引用未能保存到新方案，请核对本机保存状态后重试。');
+        nextPlan = written.record.plan ?? nextPlan;
+      }
+      if (launch.planMeta.scan) nextPlan = { ...nextPlan, scan: launch.planMeta.scan };
+      const now = new Date().toISOString();
+      saveOutdoorProjectRecord({ v: 1, projectId: freshId, name, createdAt: now, updatedAt: now, plan: nextPlan }, undefined, false);
+      setOutdoorPlanState({ projectId: freshId, plan: nextPlan });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '另存为新场地失败，请保留原方案后重试。', 'error');
+    }
+  }, [workspaceWriteGuards, activitySession.isCurrent, sessionToken, controller, commitFreshActivityLayout, setOutdoorPlanState, notify]);
   // 无感挂云（设计规范 v2.5.2 §二.4）：登录态摆上第一件物料时静默建云项目并接上保存链。
   useSilentCloudAttach({ controller, layout, onBindProject });
 
@@ -4386,7 +4427,7 @@ useEffect(() => {
       issues.push(...checkFunctionalRequirements(candidate, activeFloorIndex, { checkin: memory?.zoneNeeds.checkin ?? null, stage: memory?.zoneNeeds.stage ?? null })
         .filter(check => check.status === 'unknown' && memory?.zoneNeeds[check.kind] != null).map(check => check.message));
       return issues.length ? issues.join(' ') : null;
-    }} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} commitFreshActivityLayout={commitFreshActivityLayout} onBindProject={projectId => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); onBindProject(projectId); }} onPreview={scopedPreview} onUpdateItem={(id, patch) => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={async value => {
+    }} prepareRestoreLayout={prepareRestoreLayout} commitRestoredLayout={commitRestoredLayout} commitFreshActivityLayout={commitFreshActivityLayout} onSaveAsVariant={handleSaveVariantAsNew} onBindProject={projectId => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); onBindProject(projectId); }} onPreview={scopedPreview} onUpdateItem={(id, patch) => { if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。'); commitHistoryNow(); actions.updateItem(id, patch); }} onUpdateEventOperations={async value => {
       if (!activitySession.isCurrent(sessionToken) || getStoreSessionScope() !== sessionScope) throw new Error('活动已切换，请重新核对。');
       if (!parseLayoutEventOperations({ ...layoutStore.getState().layout, eventOperations: value })) throw new Error('活动安排未保存，请核对任务内容及关联物料是否有重复编号。');
       commitHistoryNow(); await persistSidecar('operations', value, () => actions.setEventOperations(value));
