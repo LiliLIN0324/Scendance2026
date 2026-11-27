@@ -5,6 +5,11 @@ export const LOCAL_HANDOFF_CLOUD_MESSAGE = '当前草稿包含本地执行信息
 export const LOCAL_CHECKIN_CLOUD_MESSAGE = '当前项目有本机数量点验账册，暂不能作为完整云项目打开或保存。请先保留项目备份。原账册和场景已保留，点验记录不会迁移或发送给模型。';
 export const LOCAL_RECORDS_READ_MESSAGE = '本机点验记录未能完整读取，暂时不能确认云转换不会丢失资料。请先核对本机记录或备份，原场景和资料已保留。';
 
+/**
+ * D6-4-5（拍板 4.4）过渡期口径：当前仍扫内嵌 `productionPlan/eventOperations/handoff`
+ * 拦转云，判定行为本片不改。e 片剥离内嵌业务副本后，守卫须改认「有未上云的 ref
+ * 或本机点验账册」为判定——记录已随云走则不拦；届时再切，不在本片落地。
+ */
 export function hasLocalHandoff(layout: RoomLayout): boolean {
   const layouts = [layout], visited = new Set<RoomLayout>();
   while (layouts.length) {
