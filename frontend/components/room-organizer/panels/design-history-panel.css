@@ -17,6 +17,9 @@
 .dh-item-name { font-weight: 500; min-width: 0; }
 .dh-item-meta { flex: none; color: var(--sc-muted, #6f6f6f); font-size: 11px; }
 .dh-item-note { margin: 6px 0 0; }
+.dh-item-summary { margin: 6px 0 0; color: var(--sc-muted, #6f6f6f); font-size: 12px; line-height: 1.5; }
+.dh-item-summary.dh-pending { color: var(--sc-muted, #9a9a95); }
+.dh-stale { margin: 6px 0 0; color: #973e30; font-size: 12px; line-height: 1.5; }
 .dh-item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 .dh-current { color: var(--sc-muted, #6f6f6f); font-size: 12px; }
 .dh-remove { flex: none; border: 0; background: none; color: #973e30; font: inherit; font-size: 12px; cursor: pointer; padding: 4px 2px; }
@@ -33,4 +36,4 @@ body.is-theme-dark .dh-field input { background: var(--plane) !important; border
 body.is-theme-dark .dh-item { background: var(--paper) !important; border-color: var(--hair) !important; }
 body.is-theme-dark .dh-item.is-active { border-color: var(--ink) !important; }
 body.is-theme-dark .dh-item-name, body.is-theme-dark .dh-current { color: var(--ink) !important; }
-body.is-theme-dark .dh-item-meta, body.is-theme-dark .dh-note, body.is-theme-dark .dh-empty, body.is-theme-dark .dh-item-note { color: var(--ink-soft) !important; }
+body.is-theme-dark .dh-item-meta, body.is-theme-dark .dh-note, body.is-theme-dark .dh-empty, body.is-theme-dark .dh-item-note, body.is-theme-dark .dh-item-summary { color: var(--ink-soft) !important; }

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { makeItem, makeLayout, makeZone, makeFloor } from './__testfixtures__/fixtures';
+import { formatVariantSummaryLine, summarizeVariant, variantHasReference } from './variant-summary';
+import type { DesignVariant, RoomLayout, VariantSummary } from './types';
 import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
 import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { EventProfile } from '../../../lib/event-profile';
-import type { DesignVariant, RoomLayout } from './types';
-import { summarizeVariant } from './variant-summary';
-import { makeItem, makeLayout, makeZone, makeFloor } from './__testfixtures__/fixtures';
 
 function layoutWith(overrides: Partial<RoomLayout> = {}): RoomLayout {
   return makeLayout(overrides);
@@ -88,5 +88,46 @@ describe('summarizeVariant', () => {
     expect(legacy.scan).toBeUndefined();
     expect(() => summarizeVariant(legacy.layout)).not.toThrow();
     expect(summarizeVariant(legacy.layout).itemCount).toBe(0);
+  });
+});
+
+describe('formatVariantSummaryLine', () => {
+  it('returns undefined when summary is absent so the panel leaves stats pending, not recomputed', () => {
+    expect(formatVariantSummaryLine(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for an all-zero frozen summary with no headcount', () => {
+    const empty: VariantSummary = { taskCount: 0, acquisitionCount: 0, staffingCount: 0, estimateCount: 0, itemCount: 0, chairCount: 0, tableCount: 0, otherItemCount: 0, zoneCount: 0 };
+    expect(formatVariantSummaryLine(empty)).toBeUndefined();
+  });
+
+  it('joins headcount, item, chair, table and zone segments in order', () => {
+    const summary: VariantSummary = {
+      headcount: 120, taskCount: 3, acquisitionCount: 1, staffingCount: 2, estimateCount: 0,
+      itemCount: 7, chairCount: 3, tableCount: 2, otherItemCount: 2, zoneCount: 2,
+    };
+    expect(formatVariantSummaryLine(summary)).toBe('120 人 · 7 件物料 · 椅 3 · 桌 2 · 2 区');
+  });
+
+  it('skips zero chair/table/zone segments and an absent headcount', () => {
+    const summary: VariantSummary = {
+      taskCount: 0, acquisitionCount: 0, staffingCount: 0, estimateCount: 0,
+      itemCount: 4, chairCount: 4, tableCount: 0, otherItemCount: 0, zoneCount: 0,
+    };
+    expect(formatVariantSummaryLine(summary)).toBe('4 件物料 · 椅 4');
+  });
+});
+
+describe('variantHasReference', () => {
+  it('is false for a legacy variant with no refs and no scan identity', () => {
+    expect(variantHasReference({})).toBe(false);
+    expect(variantHasReference({ operationsRef: '', planRef: '   ', scan: { assetId: '  ' } })).toBe(false);
+  });
+
+  it('is true when any operations ref, plan ref, or scan asset id is present', () => {
+    expect(variantHasReference({ operationsRef: 'op-1' })).toBe(true);
+    expect(variantHasReference({ planRef: 'plan-1' })).toBe(true);
+    expect(variantHasReference({ scan: { assetId: 'scan-1' } })).toBe(true);
+    expect(variantHasReference({ operationsRef: 'op-1' })).toBe(true);
   });
 });

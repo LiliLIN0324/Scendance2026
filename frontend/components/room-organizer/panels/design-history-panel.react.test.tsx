@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { webcrypto } from 'node:crypto';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolveSidecarRef } from '@/lib/sidecar-records';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { designSnapshot } from '../lib/scene-layers';
 import { DesignHistoryPanel } from './design-history-panel';
 import type { DesignVariant, RoomLayout } from '../lib/types';
+
+vi.mock('@/lib/sidecar-records', () => ({ resolveSidecarRef: vi.fn() }));
 
 function layoutWith(variants: DesignVariant[], activeId: string): RoomLayout {
   return { ...structuredClone(INITIAL_LAYOUT), designBook: { activeId, variants } };
@@ -15,8 +19,26 @@ function baselineVariant(): DesignVariant {
   return { id: 'original', name: '原始方案', layout: designSnapshot(structuredClone(INITIAL_LAYOUT)) };
 }
 
+function snapshotLayout() {
+  return designSnapshot(structuredClone(INITIAL_LAYOUT));
+}
+
+function renderWithProvider(layout: RoomLayout, projectId: string) {
+  const onApply = vi.fn();
+  const result = render(
+    <RoomEditorProvider value={{ projectId } as unknown as RoomEditorContextValue}>
+      <DesignHistoryPanel layout={layout} onApply={onApply} />
+    </RoomEditorProvider>,
+  );
+  return { onApply, ...result };
+}
+
+function rowById(id: string) {
+  return within(document.querySelector(`[data-variant-id="${id}"]`)! as HTMLElement);
+}
+
 describe('DesignHistoryPanel', () => {
-  beforeEach(() => { vi.stubGlobal('crypto', webcrypto); });
+  beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.mocked(resolveSidecarRef).mockReset(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it('saves the current layout as a manual snapshot through onApply', () => {
@@ -38,7 +60,7 @@ describe('DesignHistoryPanel', () => {
   });
 
   it('loads a non-active snapshot and switches the active design', () => {
-    const manual = { id: 'snap-1', name: '过程态一', layout: designSnapshot(structuredClone(INITIAL_LAYOUT)), origin: 'manual' as const, savedAt: '2026-11-20T09:00:00.000Z' };
+    const manual = { id: 'snap-1', name: '过程态一', layout: snapshotLayout(), origin: 'manual' as const, savedAt: '2026-11-20T09:00:00.000Z' };
     const layout = layoutWith([baselineVariant(), manual], 'original');
     const onApply = vi.fn();
     render(<DesignHistoryPanel layout={layout} onApply={onApply} />);
@@ -48,7 +70,7 @@ describe('DesignHistoryPanel', () => {
   });
 
   it('removes a non-active, non-baseline snapshot', () => {
-    const manual = { id: 'snap-1', name: '过程态一', layout: designSnapshot(structuredClone(INITIAL_LAYOUT)), origin: 'manual' as const, savedAt: '2026-11-20T09:00:00.000Z' };
+    const manual = { id: 'snap-1', name: '过程态一', layout: snapshotLayout(), origin: 'manual' as const, savedAt: '2026-11-20T09:00:00.000Z' };
     const layout = layoutWith([baselineVariant(), manual], 'original');
     const onApply = vi.fn();
     render(<DesignHistoryPanel layout={layout} onApply={onApply} />);
@@ -58,11 +80,77 @@ describe('DesignHistoryPanel', () => {
   });
 
   it('marks the active design and hides load/remove for baseline and active rows', () => {
-    const active = { id: 'snap-active', name: '当前过程态', layout: designSnapshot(structuredClone(INITIAL_LAYOUT)), origin: 'manual' as const };
+    const active = { id: 'snap-active', name: '当前过程态', layout: snapshotLayout(), origin: 'manual' as const };
     const layout = layoutWith([baselineVariant(), active], 'snap-active');
     render(<DesignHistoryPanel layout={layout} onApply={vi.fn()} />);
     expect(screen.getAllByText('当前方案')).toHaveLength(1);
     expect(screen.queryByRole('button', { name: '载入这一版' })).toBeNull();
     expect(screen.queryByRole('button', { name: '移除' })).toBeNull();
+  });
+});
+
+describe('D6-3-c 历史变体摘要兜底与引用待核', () => {
+  beforeEach(() => { vi.stubGlobal('crypto', webcrypto); vi.mocked(resolveSidecarRef).mockReset(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it('legacy variant without refs falls back to the embedded copy: no IDB read, stats pending, not marked stale', () => {
+    const legacy: DesignVariant = { id: 'legacy-1', name: '旧方案', layout: snapshotLayout() };
+    const layout = layoutWith([baselineVariant(), legacy], 'original');
+    renderWithProvider(layout, 'project-c-1');
+    expect(resolveSidecarRef).not.toHaveBeenCalled();
+    expect(rowById('legacy-1').getByText('统计待核')).toBeTruthy();
+    expect(rowById('legacy-1').queryByText('原方案未找到 / 已变动，待核')).toBeNull();
+  });
+
+  it('shows the frozen summary line when present, no pending reference notice', () => {
+    const withSummary: DesignVariant = {
+      id: 'snap-summary', name: '带摘要方案', layout: snapshotLayout(), origin: 'manual',
+      summary: { headcount: 120, taskCount: 3, acquisitionCount: 1, staffingCount: 2, estimateCount: 0, itemCount: 7, chairCount: 3, tableCount: 2, otherItemCount: 2, zoneCount: 2 },
+    };
+    const layout = layoutWith([baselineVariant(), withSummary], 'original');
+    renderWithProvider(layout, 'project-c-2');
+    expect(rowById('snap-summary').getByText('120 人 · 7 件物料 · 椅 3 · 桌 2 · 2 区')).toBeTruthy();
+    expect(rowById('snap-summary').queryByText('统计待核')).toBeNull();
+  });
+
+  it('missing referenced record marks the business facts pending but keeps geometry loadable, no substitution', async () => {
+    vi.mocked(resolveSidecarRef).mockResolvedValue({ status: 'missing' } as never);
+    const referenced: DesignVariant = {
+      id: 'snap-missing', name: '引用已失方案', layout: snapshotLayout(), origin: 'manual',
+      operationsRef: '22222222-2222-4222-8222-222222222222',
+      planRef: '33333333-3333-4333-8333-333333333333',
+      scan: { assetId: 'scan-1' },
+    };
+    const layout = layoutWith([baselineVariant(), referenced], 'original');
+    const { onApply } = renderWithProvider(layout, 'project-c-3');
+    await waitFor(() => expect(rowById('snap-missing').getByText('原方案未找到 / 已变动，待核')).toBeTruthy());
+    // 几何仍可载入：按钮在、不被待核态挡死。
+    fireEvent.click(rowById('snap-missing').getByRole('button', { name: '载入这一版' }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply.mock.calls[0]![0].designBook!.activeId).toBe('snap-missing');
+  });
+
+  it('referenced record resolved cleanly shows no stale notice', async () => {
+    vi.mocked(resolveSidecarRef).mockResolvedValue({ status: 'record', record: { id: 'r-1', projectId: 'project-c-4', kind: 'operations', data: undefined, savedAt: '2026-11-27' }, data: undefined } as never);
+    const referenced: DesignVariant = {
+      id: 'snap-ok', name: '引用正常方案', layout: snapshotLayout(), origin: 'manual',
+      operationsRef: '22222222-2222-4222-8222-222222222222',
+      scan: { assetId: 'scan-1' },
+    };
+    const layout = layoutWith([baselineVariant(), referenced], 'original');
+    renderWithProvider(layout, 'project-c-4');
+    await waitFor(() => expect(resolveSidecarRef).toHaveBeenCalled());
+    expect(rowById('snap-ok').queryByText('原方案未找到 / 已变动，待核')).toBeNull();
+  });
+
+  it('references without scan identity are also marked pending when resolved sidecars are present', async () => {
+    vi.mocked(resolveSidecarRef).mockResolvedValue({ status: 'record', record: { id: 'r-2', projectId: 'project-c-5', kind: 'plan', data: undefined, savedAt: '2026-11-27' }, data: undefined } as never);
+    const noScan: DesignVariant = {
+      id: 'snap-noscan', name: '缺扫描方案', layout: snapshotLayout(), origin: 'manual',
+      planRef: '33333333-3333-4333-8333-333333333333',
+    };
+    const layout = layoutWith([baselineVariant(), noScan], 'original');
+    renderWithProvider(layout, 'project-c-5');
+    await waitFor(() => expect(rowById('snap-noscan').getByText('原方案未找到 / 已变动，待核')).toBeTruthy());
   });
 });

@@ -1,5 +1,5 @@
+import type { DesignVariant, RoomLayout, VariantSaveMeta, VariantSummary } from './types';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
-import type { RoomLayout, VariantSaveMeta, VariantSummary } from './types';
 
 /**
  * 椅/桌分类口径与 `scene-layers.ts` 的 `materialLayers` 保持同一组正则，
@@ -67,4 +67,30 @@ export function buildVariantSaveMeta(
   if (plan.planRef) meta.planRef = plan.planRef;
   if (plan.scan) meta.scan = plan.scan;
   return meta;
+}
+
+/**
+ * 变体是否带引用（operations / plan / scan 任一非空）。全空即旧变体，
+ * 读取回落内嵌 `layout` 副本只读兼容，不标待核挡读取。
+ */
+export function variantHasReference(variant: Pick<DesignVariant, 'operationsRef' | 'planRef' | 'scan'>): boolean {
+  return Boolean(variant.operationsRef?.trim() || variant.planRef?.trim() || variant.scan?.assetId?.trim());
+}
+
+/**
+ * 把冻结摘要格式成历史列表一行规模说明。纯函数：只读冻结数字，不碰存储、不现场粗算。
+ * 摘要缺省（旧变体）返回 `undefined`：上层留空提示待核，不从几何快照反推。
+ * 业务事实（任务/取得/岗位/估算）不进这一行，避免冻结兜底被当成实时台账。
+ */
+export function formatVariantSummaryLine(summary?: VariantSummary): string | undefined {
+  if (!summary) return undefined;
+  const parts: string[] = [];
+  if (typeof summary.headcount === 'number' && Number.isFinite(summary.headcount) && summary.headcount >= 0) {
+    parts.push(`${summary.headcount} 人`);
+  }
+  if (summary.itemCount > 0) parts.push(`${summary.itemCount} 件物料`);
+  if (summary.chairCount > 0) parts.push(`椅 ${summary.chairCount}`);
+  if (summary.tableCount > 0) parts.push(`桌 ${summary.tableCount}`);
+  if (summary.zoneCount > 0) parts.push(`${summary.zoneCount} 区`);
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }

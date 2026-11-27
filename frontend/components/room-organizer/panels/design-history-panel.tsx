@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { MAX_DESIGNS, removeDesignVariant, saveDesignSnapshot, switchDesign } from '../lib/scene-layers';
-import { buildVariantSaveMeta } from '../lib/variant-summary';
-import type { DesignVariant, RoomLayout } from '../lib/types';
 import { useRoomEditorOptional } from '../contexts';
+import { useSidecarResolution } from '../hooks/use-sidecar-resolution';
+import { MAX_DESIGNS, removeDesignVariant, saveDesignSnapshot, switchDesign } from '../lib/scene-layers';
+import { buildVariantSaveMeta, formatVariantSummaryLine, variantHasReference } from '../lib/variant-summary';
+import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
+import type { DesignVariant, RoomLayout } from '../lib/types';
 import './design-history-panel.css';
 
 export interface DesignHistoryPanelProps {
@@ -24,6 +27,77 @@ function variantKind(variant: DesignVariant): string {
   if (variant.id === 'original') return '原始方案';
   if (variant.origin === 'manual') return '过程态';
   return 'AI 提案';
+}
+
+interface VariantHistoryRowProps {
+  variant: DesignVariant;
+  activeId: string | undefined;
+  layout: RoomLayout;
+  disabled?: boolean;
+  onApply: (next: RoomLayout) => void;
+}
+
+/**
+ * 单个变体行。hook 必须在组件顶层无条件调用：空 ref 的旧变体由 hook 同步回落内嵌副本，
+ * 不碰 IDB；带 ref 时按 D6-2 同型三态解析，记录找不到 / 异项目标为 missing，几何照常可载入，
+ * 业务事实标待核，不拿当前最新记录顶替、不按名称重挂。
+ */
+function VariantHistoryRow({ variant, activeId, layout, disabled = false, onApply }: VariantHistoryRowProps): JSX.Element {
+  const { projectId } = useRoomEditorOptional() ?? {};
+  const referenced = variantHasReference(variant);
+  const operations = useSidecarResolution<EventOperations>({
+    projectId: projectId ?? '',
+    kind: 'operations',
+    refId: variant.operationsRef,
+    legacyFallback: variant.layout.eventOperations,
+  });
+  const plan = useSidecarResolution<ProductionPlan>({
+    projectId: projectId ?? '',
+    kind: 'plan',
+    refId: variant.planRef,
+    legacyFallback: variant.layout.productionPlan,
+  });
+  // 带引用但记录缺失、或登记了引用却缺扫描身份：业务事实待核；旧变体无引用不挡读取。
+  const stale = referenced && (
+    operations.status === 'missing' || plan.status === 'missing' || !variant.scan?.assetId?.trim()
+  );
+  const summaryLine = formatVariantSummaryLine(variant.summary);
+
+  const isActive = variant.id === activeId;
+  const isOriginal = variant.id === 'original';
+  const savedAt = formatSavedAt(variant.savedAt);
+
+  return (
+    <li data-variant-id={variant.id} className={`dh-item${isActive ? ' is-active' : ''}`}>
+      <div className="dh-item-head">
+        <span className="dh-item-name">{variant.name}</span>
+        <span className="dh-item-meta">
+          {variantKind(variant)}
+          {savedAt ? ` · ${savedAt}` : ''}
+        </span>
+      </div>
+      {variant.note && <p className="dh-item-note">{variant.note}</p>}
+      {summaryLine ? (
+        <p className="dh-item-summary">{summaryLine}</p>
+      ) : (
+        <p className="dh-item-summary dh-pending">统计待核</p>
+      )}
+      {stale && <p className="dh-stale" role="alert">原方案未找到 / 已变动，待核</p>}
+      <div className="dh-item-actions">
+        {!isActive && !isOriginal && (
+          <button type="button" className="sc-button" onClick={() => onApply(switchDesign(layout, variant.id))} disabled={disabled}>
+            载入这一版
+          </button>
+        )}
+        {isActive && <span className="dh-current">当前方案</span>}
+        {!isActive && !isOriginal && (
+          <button type="button" className="dh-remove" onClick={() => onApply(removeDesignVariant(layout, variant.id))} disabled={disabled}>
+            移除
+          </button>
+        )}
+      </div>
+    </li>
+  );
 }
 
 /** 本机方案过程态存档：把当前整包布局另存、载入或移除。不跨设备、不替业务落盘。 */
@@ -84,36 +158,16 @@ export function DesignHistoryPanel({ layout, onApply, disabled = false }: Design
         <p className="dh-empty">还没有存档。到阶段版本时存一次。</p>
       ) : (
         <ul className="dh-list">
-          {variants.map(variant => {
-            const isActive = variant.id === activeId;
-            const isOriginal = variant.id === 'original';
-            const savedAt = formatSavedAt(variant.savedAt);
-            return (
-              <li key={variant.id} className={`dh-item${isActive ? ' is-active' : ''}`}>
-                <div className="dh-item-head">
-                  <span className="dh-item-name">{variant.name}</span>
-                  <span className="dh-item-meta">
-                    {variantKind(variant)}
-                    {savedAt ? ` · ${savedAt}` : ''}
-                  </span>
-                </div>
-                {variant.note && <p className="dh-item-note">{variant.note}</p>}
-                <div className="dh-item-actions">
-                  {!isActive && !isOriginal && (
-                    <button type="button" className="sc-button" onClick={() => onApply(switchDesign(layout, variant.id))} disabled={disabled}>
-                      载入这一版
-                    </button>
-                  )}
-                  {isActive && <span className="dh-current">当前方案</span>}
-                  {!isActive && !isOriginal && (
-                    <button type="button" className="dh-remove" onClick={() => onApply(removeDesignVariant(layout, variant.id))} disabled={disabled}>
-                      移除
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
+          {variants.map(variant => (
+            <VariantHistoryRow
+              key={variant.id}
+              variant={variant}
+              activeId={activeId}
+              layout={layout}
+              disabled={disabled}
+              onApply={onApply}
+            />
+          ))}
         </ul>
       )}
     </div>
