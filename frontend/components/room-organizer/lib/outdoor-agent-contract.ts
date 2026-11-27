@@ -399,6 +399,11 @@ export interface OutdoorAgentBridge {
         | "outDate"
         | "outTime"
         | "electricKw"
+        | "heightM"
+        | "locked"
+        | "groupId"
+        | "shape"
+        | "finish"
       >
     > & { size?: { width: number; depth: number } },
   ): boolean;

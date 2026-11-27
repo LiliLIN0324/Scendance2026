@@ -113,6 +113,28 @@ describe('planSeatAnchors', () => {
   it('ignores non-seat facilities', () => {
     expect(planSeatAnchors([facility({ id: 'tent' })], boundary, metrics)).toEqual([]);
   });
+
+  it('clamps seat height from facility.heightM; missing heightM keeps the default', () => {
+    const low = planSeatAnchors([facility({
+      id: 'low-chair', name: '椅子', templateId: 'oneplan:scale:chair',
+      size: { width: 0.5, depth: 0.5 }, heightM: 0.3,
+    })], boundary, metrics);
+    expect(low[0]!.seatHeight).toBeCloseTo(0.28, 6);
+
+    const tall = planSeatAnchors([facility({
+      id: 'tall-chair', name: '椅子', templateId: 'oneplan:scale:chair',
+      size: { width: 0.5, depth: 0.5 }, heightM: 0.9,
+    })], boundary, metrics);
+    expect(tall[0]!.seatHeight).toBeCloseTo(0.45, 6);
+  });
+
+  it('matches a seat by template slug even when the name has no seat keyword', () => {
+    const [anchor] = planSeatAnchors([facility({
+      id: 'slug-chair', name: '通用物件', templateId: 'oneplan:scale:armchair',
+      size: { width: 0.5, depth: 0.5 },
+    })], boundary, metrics);
+    expect(anchor!.id).toBe('slug-chair');
+  });
 });
 
 describe('planZoneRings', () => {

@@ -1478,6 +1478,7 @@ export interface OutdoorPlanCanvasHandle {
   updateFacility(id: string, patch: Partial<Pick<PlanFacility,
     'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride'
     | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
+    | 'heightM' | 'locked' | 'groupId' | 'shape' | 'finish'
   >> & { size?: { width: number; depth: number } }): boolean;
   /** 当前 2D 视口（切 3D 时用来对着同一中心把地图斜起来）。 */
   getView(): PlanViewport;
@@ -7164,6 +7165,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       'name' | 'notes' | 'rotationDeg' | 'color' | 'opacity' | 'strokeStyle' | 'modelOverride' | 'zoneId'
       | 'vendorName' | 'vendorZone' | 'inDate' | 'inTime' | 'outDate' | 'outTime' | 'electricKw'
       | 'windowSillM' | 'windowHeightM'
+      | 'heightM' | 'locked' | 'groupId' | 'shape' | 'finish'
     >> & { size?: { width: number; depth: number } },
   ) {
     // 2026-11-20 审计 K3：属性卡写入口也要认图层锁，否则「锁了设施层还能改名/改尺寸」。

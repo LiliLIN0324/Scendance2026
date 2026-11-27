@@ -17,7 +17,7 @@
  */
 import { ROUTE_BOUNDARY_MARGIN_M } from './person-route';
 import { planShellFrame } from './plan-footprint-geometry';
-import { seatFacilityTargets } from './seat-placement';
+import { seatFacilityTargets, type SeatFacilityInput } from './seat-placement';
 import { boxCollider, type WalkCollider } from './walk-collision';
 import type { SeatAnchor } from './person-behavior';
 import type { PlanSiteMetrics } from './plan-scene-placement';
@@ -61,6 +61,23 @@ const MIN_SOLID_AREA_M2 = 0.25;
 const ROUTE_SAMPLE_STEP_M = 0.3;
 
 /**
+ * PlanFacility → 座高判定输入：`ref` 取 override slug / 模板 id 供可坐关键词命中；
+ * `height` 接标称高度 `heightM`，缺省不传，坐面高度由座高层按椅 / 沙发默认值兜底。
+ */
+function toSeatInput(f: PlanFacility): SeatFacilityInput {
+  const input: SeatFacilityInput = {
+    id: f.id,
+    name: f.name,
+    position: f.position,
+    rotationDeg: f.rotationDeg,
+  };
+  const ref = f.modelOverride ?? f.templateId;
+  if (ref) input.ref = ref;
+  if (f.heightM !== undefined) input.height = f.heightM;
+  return input;
+}
+
+/**
  * 设施 → 碰撞盒。
  *
  * @param routes 参与行走的流线（路线局部坐标）。落在这些线段上的设施会被排除，
@@ -73,7 +90,7 @@ export function planFacilityColliders(
   routes: readonly (readonly LocalPoint[])[] = []
 ): WalkCollider[] {
   const { toLocal } = planRouteFrame(boundary, metrics);
-  const seatIds = new Set(seatFacilityTargets(facilities).map((seat) => seat.id));
+  const seatIds = new Set(seatFacilityTargets(facilities.map(toSeatInput)).map((seat) => seat.id));
   const colliders: WalkCollider[] = [];
   for (const facility of facilities) {
     if (!facility?.position) continue;
@@ -101,7 +118,7 @@ export function planSeatAnchors(
   const { toLocal } = planRouteFrame(boundary, metrics);
   const hipBack = options.hipBackM ?? 0.12;
   const standoff = options.standoffM ?? 0.45;
-  return seatFacilityTargets(facilities).map((seat) => {
+  return seatFacilityTargets(facilities.map(toSeatInput)).map((seat) => {
     const center = toLocal(seat);
     // 与 `outdoor-plan-3d.tsx` 的 toggleSeatEntry 同一朝向口径：设施模型 rotation.y = -deg，
     // 人物正面 +Z，故人转 π - deg 才与座面同向、背靠椅背。
