@@ -1,5 +1,6 @@
 import { preserveCurrentActivity, restoreDesignActivity, syncDesignWorkOrders } from '../../../lib/production-plan';
 import type { DesignVariant, FurnitureItem, RoomLayout, VariantSaveMeta } from './types';
+import { stripVariantBusinessKeys, type VariantBusinessKey } from './variant-business-keys';
 
 export const MAX_DESIGNS = 20;
 export function designSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook'> {
@@ -20,13 +21,13 @@ function variantMeta(meta?: VariantSaveMeta): Partial<DesignVariant> {
 export function addDesign(base: RoomLayout, candidate: RoomLayout, meta?: VariantSaveMeta): RoomLayout {
   base = syncDesignWorkOrders(base);
   candidate = preserveCurrentActivity(base, candidate);
-  const book = base.designBook ?? { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: designSnapshot(base) }] };
+  const book = base.designBook ?? { activeId: 'original', variants: [{ id: 'original', name: '原始方案', layout: variantSnapshot(base) }] };
   if (book.variants.length >= MAX_DESIGNS) throw new Error('本机已保留 20 个方案，请先在图层面板移除不再需要的方案。');
-  const variants = book.variants.map(v => v.id === book.activeId ? { ...v, layout: designSnapshot(base) } : v);
+  const variants = book.variants.map(v => v.id === book.activeId ? { ...v, layout: variantSnapshot(base) } : v);
   const id = crypto.randomUUID();
   let letter = 0;
   while (variants.some(v => v.name === `AI 方案 ${String.fromCharCode(65 + letter)}`)) letter++;
-  return { ...designSnapshot(candidate), designBook: { activeId: id, variants: [...variants, { id, name: `AI 方案 ${String.fromCharCode(65 + letter)}`, layout: designSnapshot(candidate), ...variantMeta(meta) }] } };
+  return { ...designSnapshot(candidate), designBook: { activeId: id, variants: [...variants, { id, name: `AI 方案 ${String.fromCharCode(65 + letter)}`, layout: variantSnapshot(candidate), ...variantMeta(meta) }] } };
 }
 
 export function switchDesign(base: RoomLayout, id: string): RoomLayout {
@@ -36,13 +37,17 @@ export function switchDesign(base: RoomLayout, id: string): RoomLayout {
   const selected = book?.variants.find(v => v.id === id);
   if (!book || !selected || id === book.activeId) return base;
   return { ...restoreDesignActivity(base, selected.layout), ...(base.id ? { id: base.id } : {}), designBook: { activeId: id,
-    variants: book.variants.map(v => v.id === book.activeId ? { ...v, layout: designSnapshot(base) } : v) } };
+    variants: book.variants.map(v => v.id === book.activeId ? { ...v, layout: variantSnapshot(base) } : v) } };
 }
 
-/** 变体快照：剥离 designBook 与属整场活动的 eventProfile（schema 要求变体 layout 不带活动档案）。 */
-function variantSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook' | 'eventProfile'> {
+/**
+ * 变体条目快照：剥离 designBook、属整场活动的 eventProfile，以及业务副本三键
+ * （eventOperations/productionPlan/venueScan）。几何与物料状态原样保留；
+ * 顶层当前会话 layout 仍走 `designSnapshot`，保留现役业务字段，不由此函数剥离。
+ */
+function variantSnapshot(layout: RoomLayout): Omit<RoomLayout, 'designBook' | 'eventProfile' | VariantBusinessKey> {
   const { designBook: _book, eventProfile: _profile, ...rest } = layout;
-  return rest;
+  return stripVariantBusinessKeys(rest);
 }
 
 /** 把当前整包布局另存为一个手动过程态快照，不切换当前方案。 */

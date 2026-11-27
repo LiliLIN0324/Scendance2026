@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { serializeLocalProjectBackupV3, parseLocalProjectBackupJson } from '../../../lib/local-project-backup';
-import { preserveCurrentActivity } from '../../../lib/production-plan';
+import { preserveCurrentActivity, syncDesignWorkOrders } from '../../../lib/production-plan';
 import { createLayoutStore } from '../hooks/use-layout-store';
 import { INITIAL_LAYOUT } from './initial-layout';
 import { blankHandoff, handoffBasis, effectiveHandoffStatus } from './scene-handoff';
 import { addDesign, switchDesign, saveDesignSnapshot, removeDesignVariant, materialLayers, batchLayerEdit } from './scene-layers';
 import { summarizeVariant } from './variant-summary';
-import type { VariantSaveMeta } from './types';
+import type { RoomLayout, VariantSaveMeta } from './types';
 import { parseStoredLayout } from './schema';
 import { makeItem } from './__testfixtures__/fixtures';
 
@@ -20,6 +20,16 @@ function seededLayout() {
     makeItem({ id: '44444444-4444-4444-8444-444444444445', type: 'table', name: '桌子 B' }),
   ];
   return base;
+}
+
+/** 给顶层当前会话挂上现役业务副本字段（会话顶层正源；变体条目不应携带这些副本）。 */
+function withBusinessKeys(base: RoomLayout): RoomLayout {
+  return {
+    ...base,
+    eventOperations: { tasks: [] } as unknown as RoomLayout['eventOperations'],
+    productionPlan: {} as unknown as RoomLayout['productionPlan'],
+    venueScan: { assetId: 'scan-a', name: '场地扫描' },
+  };
 }
 
 describe('scene layers', () => {
@@ -247,5 +257,86 @@ describe('scene layers', () => {
     expect(snapshot.operationsRef).toBe(meta.operationsRef);
     expect(snapshot.planRef).toBeUndefined();
     expect(snapshot.summary).toEqual(meta.summary);
+  });
+
+  it('strips bundled business copies from addDesign variant entries while keeping top-level activity fields', () => {
+    const base = withBusinessKeys(seededLayout());
+    const added = addDesign(base, base);
+    // 顶层当前会话 layout 保留现役业务字段，不被边界剥离带走。
+    expect(added.eventOperations).toEqual(base.eventOperations);
+    expect(added.productionPlan).toEqual(base.productionPlan);
+    expect(added.venueScan).toEqual(base.venueScan);
+    for (const variant of added.designBook!.variants) {
+      expect(variant.layout).not.toHaveProperty('eventOperations');
+      expect(variant.layout).not.toHaveProperty('productionPlan');
+      expect(variant.layout).not.toHaveProperty('venueScan');
+    }
+    // 几何、物件 handoff 与楼层状态在变体条目里完整保留。
+    const entry = added.designBook!.variants[0]!.layout;
+    expect(entry.floors[0]!.items.map(item => item.id)).toEqual(base.floors[0]!.items.map(item => item.id));
+    expect(entry.floors[0]!.items[0]!.handoff).toEqual(base.floors[0]!.items[0]!.handoff);
+  });
+
+  it('strips bundled business copies from a manual snapshot variant while keeping the current scene fields', () => {
+    const base = withBusinessKeys(seededLayout());
+    const saved = saveDesignSnapshot(base, { name: '过程态', savedAt: '2026-11-28T00:00:00.000Z' });
+    expect(saved.eventOperations).toEqual(base.eventOperations);
+    expect(saved.productionPlan).toEqual(base.productionPlan);
+    expect(saved.venueScan).toEqual(base.venueScan);
+    const snapshot = saved.designBook!.variants[saved.designBook!.variants.length - 1]!;
+    expect(snapshot.layout).not.toHaveProperty('eventOperations');
+    expect(snapshot.layout).not.toHaveProperty('productionPlan');
+    expect(snapshot.layout).not.toHaveProperty('venueScan');
+  });
+
+  it('does not re-inject a legacy variant’s bundled business facts into the current scene on switch', () => {
+    const base = withBusinessKeys(seededLayout());
+    const added = addDesign(base, base);
+    // 模拟旧包：给变体条目手工塞回内嵌业务副本（只读回落形态，不挂 ref）。
+    const legacy = added.designBook!.variants[1]!;
+    legacy.layout = {
+      ...legacy.layout,
+      eventOperations: { tasks: [{ id: 'legacy-task' }], dataKind: 'real' } as unknown as RoomLayout['eventOperations'],
+      productionPlan: { dataKind: 'real' } as unknown as RoomLayout['productionPlan'],
+    };
+    const switched = switchDesign(added, legacy.id);
+    // 顶层仍是 base 现役业务，旧变体副本不回灌、不替换。
+    expect(switched.eventOperations).toEqual(base.eventOperations);
+    expect(switched.productionPlan).toEqual(base.productionPlan);
+    expect(switched.eventOperations?.dataKind).not.toBe('real');
+  });
+
+  it('roundtrips a legacy variant with bundled copies through backup parsing without dropping geometry', () => {
+    const base = seededLayout();
+    base.id = '66666666-6666-4666-8666-666666666666';
+    const added = addDesign(base, base);
+    const legacy = added.designBook!.variants[1]!;
+    legacy.layout = {
+      ...legacy.layout,
+      eventOperations: { tasks: [] } as unknown as RoomLayout['eventOperations'],
+      productionPlan: {} as unknown as RoomLayout['productionPlan'],
+      venueScan: { assetId: 'scan-legacy', name: '旧场地' },
+    };
+    const saved = serializeLocalProjectBackupV3(
+      added,
+      { state: 'ready', scope: base.id, brief: { status: 'absent' } },
+      { state: 'ready', scope: base.id, materialCheckins: { status: 'absent' } },
+      { projectId: base.id },
+    );
+    const restored = parseLocalProjectBackupJson(saved).layout;
+    const restoredLegacy = restored.designBook!.variants[1]!;
+    expect(restoredLegacy.layout.floors[0]!.items.map(item => item.id)).toEqual(base.floors[0]!.items.map(item => item.id));
+  });
+
+  it('syncs geometric handoff across variants that carry no bundled business copy', () => {
+    const base = seededLayout();
+    const item = base.floors[0]!.items[0]!;
+    item.handoff = { ...blankHandoff(), ownerName: '演练原负责人' };
+    const added = addDesign(base, base);
+    const source = structuredClone(added);
+    source.floors[0]!.items[0]!.handoff = { ...blankHandoff(), ownerName: '演练新负责人' };
+    const synced = syncDesignWorkOrders(added, source);
+    const variantItem = synced.designBook!.variants[0]!.layout.floors[0]!.items[0]!;
+    expect(variantItem.handoff?.ownerName).toBe('演练新负责人');
   });
 });
