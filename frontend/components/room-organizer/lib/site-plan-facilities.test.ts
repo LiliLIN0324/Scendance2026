@@ -249,6 +249,48 @@ describe('buildFacility (H2-c 放置)', () => {
     expect(planFacilitySchema.safeParse({ ...base, unitPrice: 1_000_001 }).success).toBe(false);
   });
 
+  /* 档2 摆放写侧五字段：可选直通，旧快照缺字段照常解析；枚举沿用目录取值。 */
+  it('parses legacy facilities without heightM/locked/groupId/shape/finish and round-trips them', () => {
+    const base = {
+      id: 'b5100000-0000-4000-8000-000000000001',
+      templateId: 'dining-table',
+      name: '圆桌',
+      position: { x: 10, y: 8 },
+      rotationDeg: 0,
+      size: { width: 1.4, depth: 1.4 },
+    };
+    const legacy = planFacilitySchema.parse(base);
+    expect(legacy.heightM).toBeUndefined();
+    expect(legacy.locked).toBeUndefined();
+    expect(legacy.groupId).toBeUndefined();
+    expect(legacy.shape).toBeUndefined();
+    expect(legacy.finish).toBeUndefined();
+
+    const filled = planFacilitySchema.parse({
+      ...base,
+      heightM: 0.75,
+      locked: true,
+      groupId: 'table-row-1',
+      shape: 'round',
+      finish: 'bare',
+    });
+    expect(filled.heightM).toBe(0.75);
+    expect(filled.locked).toBe(true);
+    expect(filled.groupId).toBe('table-row-1');
+    expect(filled.shape).toBe('round');
+    expect(filled.finish).toBe('bare');
+    const restored = planFacilitySchema.parse(JSON.parse(JSON.stringify(filled)));
+    expect(restored).toMatchObject({ heightM: 0.75, locked: true, groupId: 'table-row-1', shape: 'round', finish: 'bare' });
+
+    // 越界 / 非法枚举 / 空分组号一律拒绝。
+    expect(planFacilitySchema.safeParse({ ...base, heightM: -0.1 }).success).toBe(false);
+    expect(planFacilitySchema.safeParse({ ...base, heightM: 20.1 }).success).toBe(false);
+    expect(planFacilitySchema.safeParse({ ...base, groupId: '' }).success).toBe(false);
+    expect(planFacilitySchema.safeParse({ ...base, groupId: 'x'.repeat(61) }).success).toBe(false);
+    expect(planFacilitySchema.safeParse({ ...base, shape: 'oval' }).success).toBe(false);
+    expect(planFacilitySchema.safeParse({ ...base, finish: 'velvet' }).success).toBe(false);
+  });
+
   it('allows out-of-boundary placement but returns a warning issue', () => {
     const inside = buildFacility({ templateId: 'booth-2x2', position: { x: 60, y: 80 } }, BOUNDARY);
     expect(inside.ok && inside.issues?.length === 0).toBe(true);

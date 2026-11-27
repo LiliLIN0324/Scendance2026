@@ -76,6 +76,7 @@ const INDOOR_ONLY_FIELDS = [
   'structuralOpeningId',
   'structuralColumnId',
   'wallId',
+  'venueEntranceId',
   'elevation',
   'price',
   'isWiFiAccessPoint',
@@ -85,6 +86,7 @@ const INDOOR_ONLY_FIELDS = [
   'visionRange',
   'visionFov',
   'cctvModelId',
+  'cameraBracket',
   'wallRotation',
 ] as const satisfies readonly (keyof FurnitureItem)[];
 
@@ -149,6 +151,28 @@ function withModelReference(
   return next;
 }
 
+/** 竖向高度落契约：0 与非有限 / 超 20 m 不落键（纯平面件由读取层按 0 兜底）。 */
+function boundedHeightM(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value <= 0 || value > 20) return undefined;
+  return value;
+}
+
+/**
+ * 档2 摆放写侧五字段（heightM / locked / groupId / shape / finish）：
+ * 缺省由读取层兜底，不合法不落键、不虚构；`elevationM` 不补（户外贴地）。
+ */
+function withSpecFields(facility: PlanFacility, item: FurnitureItem): PlanFacility {
+  const next: PlanFacility = { ...facility };
+  const heightM = boundedHeightM(item.height);
+  if (heightM !== undefined) next.heightM = heightM;
+  if (item.locked === true) next.locked = true;
+  const groupId = boundedId(item.groupId, 60);
+  if (groupId) next.groupId = groupId;
+  if (item.tableShape === 'round' || item.tableShape === 'rect') next.shape = item.tableShape;
+  if (item.tableFinish === 'linen' || item.tableFinish === 'bare') next.finish = item.tableFinish;
+  return next;
+}
+
 export function migrateFacilities(
   layout: Pick<RoomLayout, 'width' | 'height' | 'floors'>,
   boundary: readonly PlanPoint[],
@@ -203,7 +227,7 @@ export function migrateFacilities(
     }, boundary, facilities);
 
     if (built.ok) {
-      facilities.push(withModelReference(built.value, item, options));
+      facilities.push(withSpecFields(withModelReference(built.value, item, options), item));
       const fields = indoorOnlyFields(item);
       if (fields.length > 0) lossy.push({ sourceId: item.id, fields });
     } else {

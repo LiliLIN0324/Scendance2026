@@ -131,6 +131,20 @@ export const planFacilitySchema = z.strictObject({
    */
   windowSillM: z.number().min(0).max(3).optional(),
   windowHeightM: z.number().min(0.2).max(3).optional(),
+  /**
+   * 2026-11-27 档2 摆放写侧：物件竖向高度（米），0–20。
+   * 可选——缺省由读取层取模板目录默认高度，纯平面件按 0 兜底；不写 default 冒充真值，
+   * 旧数据缺字段照常解析（无需迁移）。不补 `elevationM`：户外贴地，悬空挂放件以后再加。
+   */
+  heightM: z.number().min(0).max(20).optional(),
+  /** 锁定状态：可选，缺省 false（读取层兜底）；仅锁定实例写 true，旧数据缺字段照常解析。 */
+  locked: z.boolean().optional(),
+  /** 持久分组号（1–60）：可选，`undefined` = 未分组；旧数据缺字段照常解析。 */
+  groupId: z.string().min(1).max(60).optional(),
+  /** 宴席桌形态：沿用目录 `tableShape` 取值（round 圆桌 / rect 方桌）；缺省标准方桌，读取层兜底。 */
+  shape: z.enum(['round', 'rect']).optional(),
+  /** 宴席桌面料：沿用目录 `tableFinish` 取值（linen 桌布 / bare 裸面）；缺省裸面，读取层兜底。 */
+  finish: z.enum(['linen', 'bare']).optional(),
 });
 export type PlanFacility = z.infer<typeof planFacilitySchema>;
 

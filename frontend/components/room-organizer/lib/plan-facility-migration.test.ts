@@ -391,4 +391,74 @@ describe('plan-facility-migration（室内物件 → plan 设施）', () => {
 
     expect(result.lossy).toEqual([]);
   });
+
+  it('档2：heightM/locked/groupId/shape/finish 映射进 facility', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({
+          id: 't1', type: 'dining-table', name: '圆桌', position: { x: 2, z: 2 },
+          height: 0.75, locked: true, groupId: 'row-1', tableShape: 'round', tableFinish: 'linen',
+        })],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    const facility = result.facilities[0]!;
+    expect(facility.heightM).toBe(0.75);
+    expect(facility.locked).toBe(true);
+    expect(facility.groupId).toBe('row-1');
+    expect(facility.shape).toBe('round');
+    expect(facility.finish).toBe('linen');
+  });
+
+  it('档2：缺省与非法五字段不落键，不虚构兜底值', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [
+          makeItem({
+            id: 'x1', type: 'chair', position: { x: 2, z: 2 },
+            height: 0, locked: false, groupId: '   ',
+            tableShape: 'oval' as never, tableFinish: 'velvet' as never,
+          }),
+          makeItem({ id: 'x2', type: 'chair', position: { x: 6, z: 6 }, height: 21 }),
+          makeItem({ id: 'x3', type: 'chair', position: { x: 8, z: 8 }, height: 0, groupId: 'x'.repeat(61) }),
+        ],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.facilities).toHaveLength(3);
+    for (const facility of result.facilities) {
+      expect('heightM' in facility).toBe(false);
+      expect('locked' in facility).toBe(false);
+      expect('groupId' in facility).toBe(false);
+      expect('shape' in facility).toBe(false);
+      expect('finish' in facility).toBe(false);
+    }
+  });
+
+  it('D3/D4：挂墙标记与安防字段不进契约，如实标 lossy', () => {
+    const layout = makeLayout({
+      ...SHELL,
+      floors: [makeFloor({
+        items: [makeItem({
+          id: 'd1', type: 'chair', position: { x: 2, z: 2 },
+          venueEntranceId: 'ent-1', wallId: 'wall-1', cameraBracket: true,
+        })],
+      })],
+    });
+
+    const result = migrateFacilities(layout, BOUNDARY, sequentialIds());
+
+    expect(result.lossy).toHaveLength(1);
+    expect(result.lossy[0]!.fields).toEqual(expect.arrayContaining(['venueEntranceId', 'wallId', 'cameraBracket']));
+    const facility = result.facilities[0]!;
+    expect('venueEntranceId' in facility).toBe(false);
+    expect('wallId' in facility).toBe(false);
+    expect('cameraBracket' in facility).toBe(false);
+  });
 });
