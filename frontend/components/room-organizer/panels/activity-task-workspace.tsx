@@ -14,6 +14,7 @@ import { flushSourceScope, registerSourceFlush, subscribeSourceRecordChanges } f
 import { activityTaskContextSchema, type ActivityTaskRun } from '../../../../supabase/functions/_shared/activity-task-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { layoutStore } from '../hooks/use-layout-store';
+import { useSidecarResolution } from '../hooks/use-sidecar-resolution';
 import { STORAGE_KEY } from '../lib/constants';
 import { parseStoredLayout } from '../lib/schema';
 import { ActivityTaskSuggestionView } from './activity-task-suggestion-view';
@@ -50,7 +51,11 @@ function readableError(cause: unknown): string {
 /** One current request, a reviewed disclosure and the original local task list; no generation or save queue. */
 export function ActivityTaskWorkspace(props: Props): JSX.Element {
   const cloud = useBackendSession(props.controller), latest = useRef(props); latest.current = props;
-  const { projectId } = useRoomEditor();
+  const { projectId, outdoorPlan } = useRoomEditor();
+  // D6-2 读侧：活动安排走 ref→独立记录，空 ref 回落旧整包只读；missing 置空不顶替。
+  const operationsResolution = useSidecarResolution<EventOperations>({
+    projectId, kind: 'operations', refId: outdoorPlan?.operationsRef, legacyFallback: props.layout.eventOperations,
+  });
   const [, refresh] = useReducer(value => value + 1, 0);
   const [selection, setSelection] = useState<ActivityTaskSelection>(emptySelection);
   const [instruction, setInstruction] = useState('');
@@ -133,7 +138,9 @@ export function ActivityTaskWorkspace(props: Props): JSX.Element {
     if (latest.current.checkins && (!latest.current.checkins.ready || latest.current.checkins.error)) throw new Error('点验资料尚未完整读取，请先核对后准备建议。');
     const checkins = projectId ? await readMaterialCheckins(projectId) : undefined; guard();
     if (latest.current.checkins && canonical(checkins) !== canonical(latest.current.checkins.ledger)) throw new Error('点验资料已有变化，请重新读取后准备建议。');
-    return { layout, selection: chosen, ...(checkins === undefined ? {} : { checkins }), dataKind: layout.eventOperations?.dataKind ?? 'unspecified' as const };
+    const resolvedOperations = operationsResolution.data;
+    const projection = { ...layout, eventOperations: resolvedOperations };
+    return { layout: projection, selection: chosen, ...(checkins === undefined ? {} : { checkins }), dataKind: resolvedOperations?.dataKind ?? 'unspecified' as const };
   }
   async function captureContext(chosen: ActivityTaskSelection, guard: () => void) {
     const raw = await buildActivityTaskContext(await currentInput(chosen, guard)); guard();

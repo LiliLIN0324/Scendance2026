@@ -19,9 +19,13 @@ import {
 } from '../../../../supabase/functions/_shared/commercial-dossier-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { eventOperationsSchema } from '../../../../supabase/functions/_shared/event-operations-contract';
+import { productionPlanSchema } from '../../../../supabase/functions/_shared/production-plan-contract';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
+import type { RoomLayout } from '../lib/types';
 import { downloadTextFile } from '../lib/plan-export/download';
 import { CommercialDossierPanel, type CommercialDossierPanelHandle, type CommercialDossierPanelProps } from './commercial-dossier-panel';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
+import { resolveSidecarRef } from '@/lib/sidecar-records';
 
 vi.mock('@/lib/commercial-dossier-storage', async importOriginal => {
   const real = await importOriginal<typeof import('@/lib/commercial-dossier-storage')>();
@@ -34,6 +38,7 @@ vi.mock('@/lib/commercial-dossier-backup', async importOriginal => {
   return { ...real, serializeCommercialBackup: vi.fn(), preflightCommercialBackupJson: vi.fn(), restoreCommercialBackupJson: vi.fn() };
 });
 vi.mock('../lib/plan-export/download', () => ({ downloadTextFile: vi.fn() }));
+vi.mock('@/lib/sidecar-records', () => ({ resolveSidecarRef: vi.fn() }));
 
 const projectId = 'commercial-ui-project';
 const agreementId = '10000000-0000-4000-8000-000000000001';
@@ -119,7 +124,10 @@ function setup(overrides: Partial<CommercialDossierPanelProps> = {}, strict = fa
     layout: makeLayout({ id: projectId, name: '30人商务演练', eventOperations: eventOperationsSchema.parse({ dataKind: 'rehearsal' }),
       floors: [makeFloor({ items: [makeItem({ id: 'chair-1', name: '演练椅' })] })] }),
     guard: vi.fn(), onStateChange, ...overrides };
-  const element = () => strict ? <StrictMode><CommercialDossierPanel ref={ref} {...props}/></StrictMode> : <CommercialDossierPanel ref={ref} {...props}/>;
+  const element = () => {
+    const panel = strict ? <StrictMode><CommercialDossierPanel ref={ref} {...props}/></StrictMode> : <CommercialDossierPanel ref={ref} {...props}/>;
+    return <RoomEditorProvider value={{ projectId, outdoorPlan: null } as unknown as RoomEditorContextValue}>{panel}</RoomEditorProvider>;
+  };
   const view = render(element());
   return { ref, view, onStateChange, get props() { return props; },
     update(next: Partial<CommercialDossierPanelProps>) { props = { ...props, ...next }; view.rerender(element()); } };
@@ -822,5 +830,66 @@ describe('commercial dossier panel', () => {
     setup(); await ready(); chooseFile('选择商务包', oversized); await screen.findByRole('alert');
     expect(text).not.toHaveBeenCalled(); expect(preflightCommercialBackupJson).not.toHaveBeenCalled(); expect(readCommercialSnapshot).toHaveBeenCalledTimes(1);
     expect(restoreCommercialBackupJson).not.toHaveBeenCalled(); expect(snapshot().dossier).toEqual(before);
+  });
+});
+
+const LEGACY_TASK = '11111111-1111-4111-8111-111111111111';
+const REC_TASK = '22222222-2222-4222-8222-222222222222';
+const LEGACY_ACQ = '33333333-3333-4333-8333-333333333333';
+const REC_ACQ = '44444444-4444-4444-8444-444444444444';
+
+function sidecarLegacyLayout(): RoomLayout {
+  const eventOperations = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [{ id: LEGACY_TASK, title: '旧任务', phase: 'preparation' }] });
+  const productionPlan = productionPlanSchema.parse({ acquisitions: [{ id: LEGACY_ACQ, title: '旧取得', taskIds: [], objectIds: [] }] });
+  return { ...makeLayout({ id: projectId, name: '侧车读侧演练', eventOperations, productionPlan, floors: [makeFloor({ items: [makeItem({ id: 'chair-1', name: '演练椅' })] })] }) };
+}
+const sidecarRecordOps = eventOperationsSchema.parse({ dataKind: 'rehearsal', tasks: [{ id: REC_TASK, title: '记录任务', phase: 'event' }] });
+const sidecarRecordPlan = productionPlanSchema.parse({ acquisitions: [{ id: REC_ACQ, title: '记录取得', taskIds: [], objectIds: [] }] });
+
+function renderSidecar(outdoorPlan: { operationsRef?: string; planRef?: string } | null, layout: RoomLayout) {
+  const ref = createRef<CommercialDossierPanelHandle>();
+  const props: CommercialDossierPanelProps = { identity: { mode: 'local', projectId, epoch: 1 }, flushScope: projectId, layout, guard: vi.fn(), onStateChange: vi.fn() };
+  return render(<RoomEditorProvider value={{ projectId, outdoorPlan } as unknown as RoomEditorContextValue}><CommercialDossierPanel ref={ref} {...props}/></RoomEditorProvider>);
+}
+async function openSidecarReferences(): Promise<void> {
+  await waitFor(() => expect(button('新建客户委托').disabled).toBe(false));
+  fireEvent.click(button('新建客户委托'));
+  openSection(/关联资料/);
+}
+
+describe('D6-2 商务关联选项侧车读侧解析', () => {
+  it('空 ref 回落旧整包，选项来自 legacy 且不调 IDB', async () => {
+    renderSidecar(null, sidecarLegacyLayout());
+    await openSidecarReferences();
+    const tasks = within(screen.getByRole('group', { name: '关联活动任务' }));
+    const acqs = within(screen.getByRole('group', { name: '关联取得资料' }));
+    expect(tasks.getByText('旧任务')).toBeTruthy();
+    expect(acqs.getByText('旧取得')).toBeTruthy();
+    expect(resolveSidecarRef).not.toHaveBeenCalled();
+  });
+
+  it('ref 命中独立记录：选项来自记录，不混旧整包', async () => {
+    vi.mocked(resolveSidecarRef).mockImplementation(async ({ kind }) => (kind === 'operations'
+      ? { status: 'record', record: { id: 'r-op', projectId, kind: 'operations', data: sidecarRecordOps, savedAt: '2026-11-27' }, data: sidecarRecordOps }
+      : { status: 'record', record: { id: 'r-plan', projectId, kind: 'plan', data: sidecarRecordPlan, savedAt: '2026-11-27' }, data: sidecarRecordPlan }) as never);
+    renderSidecar({ operationsRef: 'r-op', planRef: 'r-plan' }, sidecarLegacyLayout());
+    await openSidecarReferences();
+    await waitFor(() => expect(screen.getByText('记录任务')).toBeTruthy());
+    const tasks = within(screen.getByRole('group', { name: '关联活动任务' }));
+    const acqs = within(screen.getByRole('group', { name: '关联取得资料' }));
+    expect(tasks.queryByText('旧任务')).toBeNull();
+    expect(acqs.queryByText('旧取得')).toBeNull();
+    expect(acqs.getByText('记录取得')).toBeTruthy();
+  });
+
+  it('missing：选项置空，不用旧整包顶替', async () => {
+    vi.mocked(resolveSidecarRef).mockResolvedValue({ status: 'missing' } as never);
+    renderSidecar({ operationsRef: 'gone', planRef: 'gone' }, sidecarLegacyLayout());
+    await openSidecarReferences();
+    await waitFor(() => expect(screen.queryByText('旧任务')).toBeNull());
+    const tasks = within(screen.getByRole('group', { name: '关联活动任务' }));
+    const acqs = within(screen.getByRole('group', { name: '关联取得资料' }));
+    expect(tasks.getByText('暂无可关联资料，可单独登记。')).toBeTruthy();
+    expect(acqs.getByText('暂无可关联资料，可单独登记。')).toBeTruthy();
   });
 });

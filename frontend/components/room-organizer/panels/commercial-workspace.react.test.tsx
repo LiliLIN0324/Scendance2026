@@ -10,6 +10,7 @@ import { layoutStore, useLayout } from '../hooks/use-layout-store';
 import { makeFloor, makeItem, makeLayout } from '../lib/__testfixtures__/fixtures';
 import { layoutToBackendScene } from '../lib/backend-adapter';
 import { CommercialWorkspace } from './commercial-workspace';
+import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 
 const backup = vi.hoisted(() => ({ backupPending: false }));
 vi.mock('./creative-studio', () => ({ useLocalProjectBackup: () => backup }));
@@ -59,8 +60,8 @@ function absent(id = localId): CommercialRead { return { status: 'absent', proje
 function setup(session = new ReactiveSession(), ensure = vi.fn(() => {})) {
   let controller = session.controller(), isActive = true;
   const renderedIds: (string | undefined)[] = [];
-  function Harness() { const layout = useLayout(); renderedIds.push(layout.id); return <CommercialWorkspace controller={controller} layout={layout}
-    isActive={isActive} ensurePersistentIdentity={ensure}/>; }
+  function Harness() { const layout = useLayout(); renderedIds.push(layout.id); return <RoomEditorProvider value={{ projectId: layout.id ?? '', outdoorPlan: null } as unknown as RoomEditorContextValue}><CommercialWorkspace controller={controller} layout={layout}
+    isActive={isActive} ensurePersistentIdentity={ensure}/></RoomEditorProvider>; }
   const view = render(<Harness/>);
   return { ensure, session, renderedIds,
     rerender() { view.rerender(<Harness/>); },

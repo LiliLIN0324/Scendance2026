@@ -16,6 +16,10 @@ import {
 } from '../../../../supabase/functions/_shared/commercial-dossier-contract';
 import { canonical } from '../../../../supabase/functions/_shared/domain';
 import { downloadTextFile } from '../lib/plan-export/download';
+import { useRoomEditor } from '../contexts';
+import { useSidecarResolution } from '../hooks/use-sidecar-resolution';
+import type { EventOperations } from '../../../../supabase/functions/_shared/event-operations-contract';
+import type { ProductionPlan } from '../../../../supabase/functions/_shared/production-plan-contract';
 import type { RoomLayout } from '../lib/types';
 import './commercial-dossier-panel.css';
 
@@ -95,6 +99,14 @@ function References({ label, selected, options, onChange, disabled }: {
 
 export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, CommercialDossierPanelProps>(function CommercialDossierPanel(props, ref) {
   const latest = useRef(props); latest.current = props;
+  const { projectId, outdoorPlan } = useRoomEditor();
+  // D6-2 读侧：活动安排/制作计划走 ref→独立记录，空 ref 回落旧整包只读；missing 选项置空不顶替。
+  const operationsResolution = useSidecarResolution<EventOperations>({
+    projectId, kind: 'operations', refId: outdoorPlan?.operationsRef, legacyFallback: props.layout.eventOperations,
+  });
+  const planResolution = useSidecarResolution<ProductionPlan>({
+    projectId, kind: 'plan', refId: outdoorPlan?.planRef, legacyFallback: props.layout.productionPlan,
+  });
   const identityKey = canonical([props.identity, props.flushScope]);
   const context = useRef({ key: identityKey, generation: 0 });
   if (context.current.key !== identityKey) context.current = { key: identityKey, generation: context.current.generation + 1 };
@@ -484,10 +496,10 @@ export const CommercialDossierPanel = forwardRef<CommercialDossierPanelHandle, C
   }
   function renderReferences(edit: Editor): JSX.Element {
     const options = {
-      taskIds: props.layout.eventOperations?.tasks.map(row => ({ id: row.id, label: row.title })) ?? [],
+      taskIds: operationsResolution.data?.tasks.map(row => ({ id: row.id, label: row.title })) ?? [],
       objectIds: props.layout.floors.flatMap(floor => floor.items.map(row => ({ id: row.id, label: `${floor.name} · ${row.name}` }))),
-      acquisitionIds: props.layout.productionPlan?.acquisitions.map(row => ({ id: row.id, label: row.title || '未命名取得资料' })) ?? [],
-      staffingIds: props.layout.productionPlan?.staffing.map(row => ({ id: row.id, label: row.roleName || '未命名岗位' })) ?? [],
+      acquisitionIds: planResolution.data?.acquisitions.map(row => ({ id: row.id, label: row.title || '未命名取得资料' })) ?? [],
+      staffingIds: planResolution.data?.staffing.map(row => ({ id: row.id, label: row.roleName || '未命名岗位' })) ?? [],
     };
     return <>{(['taskIds', 'objectIds', 'acquisitionIds', 'staffingIds'] as const).map((field, index) => <References key={field} label={['关联活动任务', '关联场景物件', '关联取得资料', '关联岗位'][index]!}
       selected={edit.content.references[field]} options={options[field]} disabled={!!formBlocked} onChange={ids => changeContent(content => ({ ...content, references: { ...content.references, [field]: ids } }))}/>)}
