@@ -4,11 +4,16 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const manifest = JSON.parse(readFileSync('frontend/public/oneplan-icons/manifest.json', 'utf8'));
 const kindMap = { icon: 'icon', 'scale-fg': 'scale', area: 'area' };
+
+// 2c（D4 拍板）：室内安防 / 通讯监控件退役，户外目录不再可放置。
+// 拍摄器材（camera-drone / camera-tripod / skycam …）不在此列。
+const RETIRED_SECURITY_SLUGS = new Set(['wifi', 'cctv-camera', '360-security-camera']);
+
 const ids = [];
 for (const asset of manifest.assets) {
   const kind = kindMap[asset.kind];
   const slug = (asset.slug ?? '').trim();
-  if (kind && slug) ids.push(`oneplan:${kind}:${slug}`);
+  if (kind && slug && !RETIRED_SECURITY_SLUGS.has(slug)) ids.push(`oneplan:${kind}:${slug}`);
 }
 
 const lines = ids.map(id => `  '${id}',`).join('\n');

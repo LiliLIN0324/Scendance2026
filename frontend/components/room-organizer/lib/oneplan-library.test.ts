@@ -53,6 +53,13 @@ describe('oneplan-library', () => {
     expect(entries.map(e => e.id)).toEqual(['icon:tent', 'scale:van', 'area:crowd']);
   });
 
+  it('退役的安防 / 通讯监控件不进物件库；拍摄器材仍保留', () => {
+    for (const slug of ['wifi', 'cctv-camera', '360-security-camera']) {
+      expect(libraryEntryFromAsset(asset({ slug }))).toBeNull();
+    }
+    expect(libraryEntryFromAsset(asset({ slug: 'camera-drone' }))).not.toBeNull();
+  });
+
   it('清单条目 → 库条目：中英名、分类、默认占地与 3D 低模种类', () => {
     const entry = libraryEntryFromAsset(asset({ slug: 'tent-3x3-sub', name_zh: '后勤帐篷' }));
     expect(entry).not.toBeNull();

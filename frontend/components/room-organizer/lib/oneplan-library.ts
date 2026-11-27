@@ -432,12 +432,23 @@ function libraryKind(kind: string): OneplanStickerDescriptor['kind'] | null {
   return null;
 }
 
+/**
+ * 退役的室内安防 / 通讯监控件（2c，D4 拍板）：户外目录不再可新增
+ * Wi-Fi AP、监控摄像头、360 摄像头。拍摄器材（camera-drone/tripod/…）不在此列。
+ */
+const RETIRED_SECURITY_SLUGS: ReadonlySet<string> = new Set([
+  'wifi',
+  'cctv-camera',
+  '360-security-camera',
+]);
+
 /** 清单条目 → 物件库条目；不可选的返回 null。 */
 export function libraryEntryFromAsset(asset: OneplanManifestAsset): LibraryEntry | null {
   const kind = libraryKind(asset.kind);
   if (!kind) return null;
   const slug = asset.slug.trim();
   if (!slug) return null;
+  if (RETIRED_SECURITY_SLUGS.has(slug)) return null;
   const propKind = planPropKind(slug);
   const size = libraryFootprint({
     slug,

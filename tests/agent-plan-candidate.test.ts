@@ -45,11 +45,13 @@ describe('户外 planCandidate 契约与内存工作副本（#46-1）', () => {
   it('oneplan 白名单与 manifest 可放置条目一致；内置模板仍兼容，未知/包条目拒绝', () => {
     const manifest = JSON.parse(readFileSync(new URL('../frontend/public/oneplan-icons/manifest.json', import.meta.url), 'utf8'));
     const kindMap = { icon: 'icon', 'scale-fg': 'scale', area: 'area' } as Record<string, string>;
+    // 2c（D4）：退役的室内安防 / 通讯监控件，与生成脚本 oneplan-whitelist.gen.mjs 排除表一致。
+    const retiredSlugs = new Set(['wifi', 'cctv-camera', '360-security-camera']);
     const expected: string[] = [];
     for (const asset of manifest.assets) {
       const kind = kindMap[asset.kind];
       const slug = (asset.slug ?? '').trim();
-      if (kind && slug) expected.push(`oneplan:${kind}:${slug}`);
+      if (kind && slug && !retiredSlugs.has(slug)) expected.push(`oneplan:${kind}:${slug}`);
     }
     expect(ONEPLAN_PLACEABLE_TEMPLATE_IDS).toHaveLength(expected.length);
     expect([...ONEPLAN_PLACEABLE_TEMPLATE_IDS].sort()).toEqual([...expected].sort());
@@ -62,6 +64,9 @@ describe('户外 planCandidate 契约与内存工作副本（#46-1）', () => {
     expect(isAllowedFacilityTemplate('pack:fairs:duck-pond-booth')).toBe(false);
     expect(isAllowedFacilityTemplate('oneplan:scale-bg:parking')).toBe(false);
     expect(isAllowedFacilityTemplate('oneplan:icon:no-such-slug')).toBe(false);
+    for (const retired of ['oneplan:icon:wifi', 'oneplan:icon:cctv-camera', 'oneplan:icon:360-security-camera']) {
+      expect(isAllowedFacilityTemplate(retired)).toBe(false);
+    }
     expect(isAllowedFacilityTemplate('does-not-exist')).toBe(false);
   });
 

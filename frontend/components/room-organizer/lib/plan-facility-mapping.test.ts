@@ -17,7 +17,6 @@ describe('plan-facility-mapping（室内类型 → plan 设施模板落点）', 
     expect(resolveFacilityTarget('chair')).toEqual({ kind: 'oneplan', templateId: 'oneplan:scale:chair' });
     expect(resolveFacilityTarget('sofa')).toEqual({ kind: 'oneplan', templateId: 'oneplan:scale:sofa' });
     expect(resolveFacilityTarget('plant')).toEqual({ kind: 'oneplan', templateId: 'oneplan:icon:plant' });
-    expect(resolveFacilityTarget('cctv')).toEqual({ kind: 'oneplan', templateId: 'oneplan:icon:cctv-camera' });
     expect(resolveFacilityTarget('stairs')).toEqual({ kind: 'oneplan', templateId: 'oneplan:scale:stairs' });
     expect(resolveFacilityTarget('pool')).toEqual({ kind: 'oneplan', templateId: 'oneplan:icon:water-pool' });
   });
@@ -32,7 +31,7 @@ describe('plan-facility-mapping（室内类型 → plan 设施模板落点）', 
   });
 
   it('纯室内家居 / 装饰与未知 legacy 类型回落 misc 占位', () => {
-    for (const type of ['bed', 'wardrobe', 'rug', 'painting', 'vase', 'curtains', 'unknown-legacy-thing', 'glb-asset']) {
+    for (const type of ['bed', 'wardrobe', 'rug', 'painting', 'vase', 'curtains', 'unknown-legacy-thing', 'glb-asset', 'wifi', 'router', 'cctv', 'security-camera']) {
       expect(resolveFacilityTarget(type)).toEqual({ kind: 'misc' });
     }
   });

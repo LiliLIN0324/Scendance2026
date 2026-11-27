@@ -3,7 +3,7 @@
  *
  * 四档落点：
  * - `builtin`：语义明确、对齐内置 8 模板（舞台 / 厕位）；
- * - `oneplan`：能对上 OnePlan 白名单贴纸 / 线稿（座椅 / 桌台 / 绿化 / 照明 / 安防 / 餐饮 / 水景 / 楼梯）；
+ * - `oneplan`：能对上 OnePlan 白名单贴纸 / 线稿（座椅 / 桌台 / 绿化 / 照明 / 餐饮 / 水景 / 楼梯）；
  * - `misc`：纯室内家居 / 装饰，户外目录无对应，回落 misc 占位（保留名称 / 颜色 / 坐标，尺寸走 misc 兜底）；
  * - `skip`：墙体 / 隔断 / 门窗 / 围栏等结构件，归下一轮独立 `walls` 集合，本轮不进 facility。
  *
@@ -52,11 +52,7 @@ export const ONEPLAN_TEMPLATE: Readonly<Record<string, string>> = {
   sunflower: 'oneplan:icon:plant',
   // 照明
   lamppost: 'oneplan:icon:street-lamp',
-  // 电子 / 安防
-  wifi: 'oneplan:icon:wifi',
-  router: 'oneplan:icon:wifi',
-  cctv: 'oneplan:icon:cctv-camera',
-  'security-camera': 'oneplan:icon:cctv-camera',
+  // 电子
   computer: 'oneplan:icon:computer',
   // 餐饮 / 后勤
   fridge: 'oneplan:icon:fridge',
