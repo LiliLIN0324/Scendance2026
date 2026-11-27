@@ -7,6 +7,7 @@ import {
   classifyProjectIdentity,
   cloudLedgerProjectId,
   localSlotNeedsCloudCheck,
+  persistedBucketIdentity,
   projectLinkKind,
   reachabilityFromError,
   reviewLinkProjectKey,
@@ -168,6 +169,29 @@ describe('localSlotNeedsCloudCheck', () => {
     expect(localSlotNeedsCloudCheck(ANONYMOUS_DRAFT_SCOPE)).toBe(false);
     expect(localSlotNeedsCloudCheck('')).toBe(false);
     expect(localSlotNeedsCloudCheck('not-a-project')).toBe(false);
+  });
+});
+
+describe('persistedBucketIdentity', () => {
+  it('持久桶键只取正源 projectId，匿名回落 draft 槽不挂 default-outdoor', () => {
+    expect(persistedBucketIdentity({ activeProjectId: ` ${house} ` }).bucketId).toBe(house);
+    expect(persistedBucketIdentity({ activeProjectId: undefined }).bucketId).toBe(ANONYMOUS_DRAFT_SCOPE);
+    expect(persistedBucketIdentity({ activeProjectId: null }).bucketId).toBe(ANONYMOUS_DRAFT_SCOPE);
+    expect(persistedBucketIdentity({ activeProjectId: '   ' }).bucketId).toBe(ANONYMOUS_DRAFT_SCOPE);
+    expect(persistedBucketIdentity({ activeProjectId: ANONYMOUS_DRAFT_SCOPE }).bucketId).toBe(ANONYMOUS_DRAFT_SCOPE);
+  });
+
+  it('云绑定只认布局号与挂载云项目号一致，异 id 不判绑定', () => {
+    expect(persistedBucketIdentity({ activeProjectId: cloud, layoutId: cloud, cloudProjectId: cloud }).boundCloudId).toBe(cloud);
+    expect(persistedBucketIdentity({ activeProjectId: cloud, layoutId: otherCloud, cloudProjectId: cloud }).boundCloudId).toBeNull();
+    expect(persistedBucketIdentity({ activeProjectId: house, layoutId: house, cloudProjectId: cloud }).boundCloudId).toBeNull();
+    expect(persistedBucketIdentity({ activeProjectId: cloud, layoutId: cloud }).boundCloudId).toBeNull();
+  });
+
+  it('绑定号不靠正源反推：未绑云项目时正源是本机号，绑定号仍为 null', () => {
+    const identity = persistedBucketIdentity({ activeProjectId: house, layoutId: house, cloudProjectId: null });
+    expect(identity.bucketId).toBe(house);
+    expect(identity.boundCloudId).toBeNull();
   });
 });
 

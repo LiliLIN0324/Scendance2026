@@ -4378,7 +4378,7 @@ useEffect(() => {
     onExportCsv: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportCsv() : undefined,
     onExportGeoJson: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportGeoJson() : undefined,
     onPrintDeck: outdoor2DOpen ? () => outdoorOverlayRef.current?.exportPdf() : undefined,
-    readOnly: sharePublishReadOnly(controller.getSnapshot(), layoutStore.getState().layout.id),
+    readOnly: sharePublishReadOnly(controller.getSnapshot(), activeProjectId),
   };
 
   return (

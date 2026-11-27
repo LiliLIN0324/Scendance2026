@@ -579,6 +579,9 @@ describe('发布页只读', () => {
     expect(sharePublishReadOnly({ configured: false, user, project: { id: 'project-1' }, writeBlocked: true })).toBe(false);
     expect(sharePublishReadOnly({ configured: true, user: { is_anonymous: true }, project: { id: 'project-1' }, writeBlocked: true })).toBe(false);
     expect(sharePublishReadOnly({ configured: true, user, project: null, writeBlocked: true })).toBe(false);
+    // project 未挂号时，兜底的正源身份号参与只读判定；空兜底仍不算有身份。
+    expect(sharePublishReadOnly({ configured: true, user, project: null, writeBlocked: true }, 'house-abc')).toBe(true);
+    expect(sharePublishReadOnly({ configured: true, user, project: null, writeBlocked: true }, '')).toBe(false);
   });
 });
 

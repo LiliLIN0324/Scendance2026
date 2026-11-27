@@ -140,6 +140,43 @@ export function reviewLinkProjectKey(input: {
 }
 
 /**
+ * 持久桶正源键与云绑定核对号的分离（S3 / T7）。
+ *
+ * 两条身份线各走各的，不再借布局记录号反推持久桶：
+ * - `bucketId`：会话 scope、状态机、源文档/底图快照、点验台账、环境偏好、聊天/记忆桶、
+ *   待办计数、云守卫 scope 等按项目隔离的持久桶，唯一正源是 context `projectId`；
+ *   空/匿名回落 `draft` 槽，不挂 `default-outdoor` 顶替，异 id 不并入。
+ * - `boundCloudId`：云项目绑定比对仍认「布局记录号 === 挂载云项目号」（C 类几何/云绑定线），
+ *   不靠正源反推；异 id、本机草稿号、未挂云项目都不判绑定。
+ *
+ * 纯同步函数：不读 window、不发请求、不碰存储。
+ */
+export interface PersistedBucketIdentityInput {
+  /** context 正源 projectId（持久桶键唯一正源）。 */
+  activeProjectId?: string | null | undefined;
+  /** 布局记录自身号；仅用于云绑定核对，不反推持久桶键。 */
+  layoutId?: string | null | undefined;
+  /** controller 当前挂载的云项目号。 */
+  cloudProjectId?: string | null | undefined;
+}
+
+export interface PersistedBucketIdentity {
+  /** 持久桶 / 状态机 / 快照一致性键；只取正源 projectId，匿名回落 draft 槽。 */
+  bucketId: string;
+  /** 云绑定核对号：布局号与挂载云项目号一致且为云格式时返回，否则 null。 */
+  boundCloudId: string | null;
+}
+
+export function persistedBucketIdentity(input: PersistedBucketIdentityInput): PersistedBucketIdentity {
+  const active = input.activeProjectId?.trim() ?? '';
+  const bucketId = active || ANONYMOUS_DRAFT_SCOPE;
+  const layoutId = input.layoutId?.trim() ?? '';
+  const cloud = input.cloudProjectId?.trim() ?? '';
+  const boundCloudId = projectLinkKind(cloud) === 'cloud' && layoutId === cloud ? cloud : null;
+  return { bucketId, boundCloudId };
+}
+
+/**
  * 云端分享清单只用已打开、且画布就是它的云项目号。
  * 本机草稿号不能拿去请求 `/projects/:id`，否则账户和分享会把它说成不存在。
  */
