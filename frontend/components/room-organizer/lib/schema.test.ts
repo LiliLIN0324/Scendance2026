@@ -985,7 +985,7 @@ describe('variant sidecar slots on read-back (D6-4-0)', () => {
   });
 
   it('rejects a non-string ref while a plain legacy variant still opens', () => {
-    const bad = makeLayout({ designBook: { activeId: 'variant-1', variants: [{ id: 'variant-1', name: '坏', layout: makeLayout(), operationsRef: 42 }] } });
+    const bad = makeLayout({ designBook: { activeId: 'variant-1', variants: [{ id: 'variant-1', name: '坏', layout: makeLayout(), operationsRef: 42 as never }] } });
     expect(isRoomLayout(bad)).toBe(false);
     const legacy = makeLayout({ designBook: { activeId: 'legacy', variants: [{ id: 'legacy', name: '旧', layout: makeLayout() }] } });
     expect(isRoomLayout(legacy)).toBe(true);

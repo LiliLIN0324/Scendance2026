@@ -29,6 +29,7 @@ import {
   withoutExpiringAssetUrls,
 } from './persistence';
 import { VERSION_HISTORY_STORAGE_KEY } from './version-history';
+import { parseStoredLayout } from './schema';
 import type { RawStore } from './persistence';
 import { MemoryStorage } from '@/lib/test-support-memory-storage';
 
@@ -265,6 +266,37 @@ describe('persistence — 图纸只留资产号，不留会过期的链接 (#66)
     }));
     expect(stripped.designBook?.variants[0]?.layout.floors[0]?.items[0]).not.toHaveProperty('glbUrl');
     expect(withoutExpiringAssetUrls(makeLayout()).floors[0]?.items).toEqual([]);
+  });
+
+  it('剪链接不损变体侧车引用与冻结摘要，写盘回读比对一致 (D6-4-1)', () => {
+    const summary = { taskCount: 2, acquisitionCount: 1, staffingCount: 1, estimateCount: 0, itemCount: 3, chairCount: 1, tableCount: 1, otherItemCount: 1, zoneCount: 0 };
+    const variant = {
+      id: 'v1', name: '甲', layout: makeLayout({ floors: [makeFloor({ items: [signedItem] })] }),
+      operationsRef: '22222222-2222-4222-8222-222222222221',
+      planRef: '22222222-2222-4222-9222-222222222222',
+      scan: { assetId: 'scan-1', name: '场地扫描' },
+      summary,
+    };
+    const layout = makeLayout({ designBook: { activeId: 'v1', variants: [variant] } });
+    const stripped = withoutExpiringAssetUrls(layout);
+    const kept = stripped.designBook?.variants[0]!;
+    expect(kept.operationsRef).toBe(variant.operationsRef);
+    expect(kept.planRef).toBe(variant.planRef);
+    expect(kept.scan).toEqual(variant.scan);
+    expect(kept.summary).toEqual(summary);
+    expect(kept.layout.floors[0]?.items[0]).not.toHaveProperty('glbUrl');
+
+    const saved = saveLayout(layout);
+    expect(saved.ok).toBe(true);
+    const readback = saved.ok ? parseStoredLayout(JSON.parse(saved.json)) : null;
+    expect(readback).not.toBeNull();
+    // 回读与剪链接后的存档口径一致；ref/摘要不造成额外抖动。
+    expect(sameLayoutContent(readback!, stripped)).toBe(true);
+    const restored = readback!.designBook!.variants[0]!;
+    expect(restored.operationsRef).toBe(variant.operationsRef);
+    expect(restored.planRef).toBe(variant.planRef);
+    expect(restored.scan).toEqual(variant.scan);
+    expect(restored.summary).toEqual(summary);
   });
 });
 
