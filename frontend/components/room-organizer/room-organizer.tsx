@@ -173,6 +173,7 @@ import { readAgentAnnotationObservation } from '@/lib/agent-annotation-observati
 import { agentAnnotationObservationSchema } from '../../../supabase/functions/_shared/agent-contract';
 import type { PlanGround, SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 import { filterPlanByLevel } from './lib/plan-levels';
+import { applyFacilityAction, applyZoneAction, type PlanActions } from './lib/plan-facility-actions';
 import { planGroundSync, resolveGround, stripLayoutGroundBytes } from './lib/plan-ground';
 import {
   METERS_PER_DEGREE_LAT,
@@ -756,6 +757,9 @@ useEffect(() => {
   // 带 projectId：换活动后旧项目的平面不能接着盖在新场地上。
   const [outdoorPlanState, setOutdoorPlanState] = useState<{ projectId: string | null; plan: SitePlanData } | null>(null);
   outdoorPlanGateRef.current = { projectId: outdoorPlanState?.projectId ?? null, plan: outdoorPlanState?.plan ?? null };
+  // B-1：plan 写侧等效 revision 失效计数——每经 applyPlanPatch 提交一次 +1。
+  // 仅编辑器内派生结论（碰撞/评分/可达性）失效用，不写进 plan JSON 契约（SitePlanData 无 revision 槽）。
+  const [planRevision, setPlanRevision] = useState(0);
   const [outdoorHistory, setOutdoorHistory] = useState<{ canUndo: boolean; canRedo: boolean }>({ canUndo: false, canRedo: false });
   const handleOutdoorHistory = useCallback((next: { canUndo: boolean; canRedo: boolean }) => {
     setOutdoorHistory(current => (current.canUndo === next.canUndo && current.canRedo === next.canRedo ? current : next));
@@ -1721,6 +1725,14 @@ useEffect(() => {
     // 户外项目没有室内壳体：方案只认 plan，边界/分区只镜像给 3D 地面图层。
     applyOutdoorGroundBasemap(plan);
   }, [applyOutdoorGroundBasemap, outdoorPlanSlotId]);
+  // B-1：plan facility/zone action 落地通道——纯层算出下一份 plan 后，经与画布同一镜像路径
+  // 写 ref + 状态，并推等效 revision 计数。只新增这一处通道接线，不碰 paintFrame/导出档位/点云合成。
+  const applyPlanPatch = useCallback((next: SitePlanData) => {
+    outdoorFullPlanRef.current = next;
+    const boundId = outdoorPlanSlotId;
+    setOutdoorPlanState({ projectId: boundId, plan: filterPlanByLevel(next, outdoorLevelIdRef.current) });
+    setPlanRevision(prev => prev + 1);
+  }, [outdoorPlanSlotId]);
   // D6-2：侧车独立记录保存成功后的 ref 写回口。独占壳是唯一 plan 写路，面板/Agent 不直写
   // plan 存储。未绑定 plan 的 legacy 草稿（outdoorPlanState 为空 / 槽位不匹配）不发明 ref 通道，
   // 沿用旧整包只读兼容；ref 落盘失败抛错，旧整包保留，不在 plan 上留悬空指针。
@@ -1752,6 +1764,24 @@ useEffect(() => {
     },
     [outdoorPlanState, outdoorPlanSlotId],
   );
+  // B-1：plan 写入口通道绑定当前全量 plan（ref 持有未按层过滤的整份）；
+  // 未绑定 plan（legacy 草稿 / 槽位不匹配）planActions 为 null，沿用旧通道，不发明 plan 写入。
+  const planActions = useMemo<PlanActions | null>(() => {
+    if (!outdoorPlan) return null;
+    const currentPlan = () => outdoorFullPlanRef.current ?? outdoorPlan;
+    return {
+      applyFacility: (action) => {
+        const result = applyFacilityAction(currentPlan(), action);
+        if (result.ok) applyPlanPatch(result.value);
+        return result;
+      },
+      applyZone: (action) => {
+        const result = applyZoneAction(currentPlan(), action);
+        if (result.ok) applyPlanPatch(result.value);
+        return result;
+      },
+    };
+  }, [outdoorPlan, applyPlanPatch]);
   // D6-2 写侧编排：绑定户外 plan 的范围，先存独立侧车记录、成功后再把 ref 挂回 plan；
   // 未绑定 plan 的 legacy 草稿，或显式移除（value === undefined），走旧整包通道——
   // 侧车删除原语未就位，移除路径暂留 review，不发明删除通道。保存失败抛错，不挂 ref、旧整包保留。
@@ -3396,6 +3426,8 @@ useEffect(() => {
       actions,
       outdoorPlan,
       commitSidecarRef,
+      planActions,
+      planRevision,
       view,
       setView,
       toggle,
@@ -3416,6 +3448,7 @@ useEffect(() => {
     }),
     [
       activeProjectId, layout, activeFloor, activeFloorIndex, actions, outdoorPlan, commitSidecarRef,
+      planActions, planRevision,
       view, setView, toggle,
       collidingIds, highlightedIds, catalogQuery, setCatalogQuery,
       recentColors, pushColor, playCue,

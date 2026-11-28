@@ -35,6 +35,8 @@ const EPS = 1e-9;
 /** 编辑问题：可定位（at 为问题点的 ENU 坐标，可选）。 */
 export interface PlanEditIssue {
   code: 'too-few-vertices' | 'duplicate-vertex' | 'self-intersection' | 'area-below-min' | 'too-many-vertices' | 'out-of-boundary' | 'zones-overlap' | 'bad-index' | 'out-of-range' | 'unknown-template' | 'unknown-node' | 'unknown-zone' | 'unconnected-node'
+    // 2026-11-28 B-1 plan 写入口：目标 id 在当前 plan 中找不到；补丁里带了契约白名单外的字段。
+    | 'not-found' | 'unknown-field'
     // 2026-11-11 用户指令：自由标注校验新增的四种问题码。
     | 'bad-vertex-count' | 'bad-radius' | 'too-small' | 'empty-text';
   message: string;

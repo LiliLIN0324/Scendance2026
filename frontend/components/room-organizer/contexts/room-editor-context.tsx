@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { UseHistoryResult } from '../hooks/use-history';
 import type { LayoutActions } from '../hooks/use-layout-state';
+import type { PlanActions } from '../lib/plan-facility-actions';
 import type { SoundCue } from '../lib/sounds';
 import type { FloorLayout, GameMode, RoomLayout, ViewSettings } from '../lib/types';
 import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
@@ -26,6 +27,11 @@ export interface RoomEditorContextValue {
   // D6-2：侧车独立记录保存成功后，把 recordId 挂回 plan 正源的 ref 字段。
   // 写路收敛到 context 动作；独占壳是唯一 plan 写路，面板/Agent 不直写 plan 存储。
   commitSidecarRef(kind: SidecarKind, recordId: string): void;
+
+  // B-1：plan facility/zone CRUD 写入口通道。无绑定 plan（legacy 草稿）时为 null，
+  // 沿用旧通道，不发明 plan 写入；planRevision 是编辑器内结论失效计数，不进 plan JSON 契约。
+  readonly planActions: PlanActions | null;
+  readonly planRevision: number;
 
   // View settings
   readonly view: ViewSettings;
@@ -89,6 +95,8 @@ export function RoomEditorProvider({ value, children }: RoomEditorProviderProps)
     value.actions,
     value.outdoorPlan,
     value.commitSidecarRef,
+    value.planActions,
+    value.planRevision,
     value.view,
     value.setView,
     value.collidingIds,

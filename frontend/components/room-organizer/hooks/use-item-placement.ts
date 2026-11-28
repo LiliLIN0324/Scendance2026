@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import { useRoomEditorOptional } from '../contexts/room-editor-context';
 import { GRID_SIZE_METERS } from '../lib/constants';
 import {
   findFreePosition,
@@ -7,9 +8,21 @@ import {
   snapToWall as snapPositionToWall,
 } from '../lib/geometry';
 import { isOpening, snapOpeningToWall, snapWallMountedItem, type WallGap } from '../lib/opening-snap';
+import { catalogFacilityTemplateId } from '../lib/plan-catalog-drag';
+import { resolveFacilityTarget } from '../lib/plan-facility-mapping';
+import { framePoint, hexOrUndefined, makeFrame } from '../lib/plan-migration-frame';
 import { canApplyLayoutGeometry, snapMeasuredOpening } from '../lib/structural-layout';
 import type { LayoutActions } from './use-layout-state';
 import type { CatalogItem, FloorLayout, RoomLayout, ViewSettings } from '../lib/types';
+
+/** AV / 安防视锥类目本轮退役，不进 facility 契约（方案档 §2.1）。 */
+const RETIRED_AV_TYPES = new Set(['wifi', 'router', 'cctv', 'security-camera']);
+
+/** 契约 sourceAssetId 区间（1–160）；越界/空串不落键，不编造引用。 */
+function boundedSourceAssetId(value: string | undefined): string | undefined {
+  const trimmed = (value ?? '').trim();
+  return trimmed.length >= 1 && trimmed.length <= 160 ? trimmed : undefined;
+}
 
 export interface UseItemPlacementParams {
   activeFloor: FloorLayout;
@@ -57,6 +70,11 @@ export function useItemPlacement({
   allSelectedIds,
   frontGap,
 }: UseItemPlacementParams): UseItemPlacementResult {
+  // B-2a：绑定户外 plan 时，目录件落 plan facility 通道；无绑定（legacy 草稿）为 null，沿用旧 actions。
+  const editorChannel = useRoomEditorOptional();
+  const planActions = editorChannel?.planActions ?? null;
+  const outdoorPlan = editorChannel?.outdoorPlan ?? null;
+
   // Keyed on the numbers, so a fresh outline object each render doesn't
   // rebuild the callbacks.
   const gapX0 = frontGap?.x0;
@@ -141,6 +159,72 @@ export function useItemPlacement({
   const getDragPlaneY = useCallback(() => activeFloorY, [activeFloorY]);
 
   /**
+   * B-2a：绑定 plan 时把目录件落成一条 facility。
+   *
+   * 口径（方案档 §4 B-2）：
+   * - 结构件（门/窗/隔断/围栏/人物）与 AV/安防视锥类目不进 facility，plan 模式下不落件；
+   * - 坐标走既有迁移帧逆变换（壳体 x 东/z 南 → 平面 x 东/y 北，边界退化回落翻轴）；
+   * - 颜色 #RRGGBB 兜底；assetId 直通 sourceAssetId；弧度→度在加件时无旋转（0）。
+   * - 内置模板（builtin）直传 templateId，尺寸取模板目录；oneplan / misc 走动态模板槽，
+   *   名称/宽深取卡片；misc 的 templateId 由 assetId（空回退 type）生成稳定短 web id。
+   * - 宽深缺失或非正：回落通道拒收返回空串，不猜默认尺寸；本 hook 拿不到画布 slug，
+   *   不把 assetId/glbUrl 硬塞进 modelOverride。
+   * - 通道拒收（未知模板/越界等）返回空串，不回写 legacy 双源。
+   * - 加件后的解锁/朝向/ provenance 属单件编辑写点，待 B-3 身份桥接后再接，本分支不补 legacy 回写。
+   */
+  const placeViaPlan = useCallback(
+    (catalogItem: CatalogItem, position: { x: number; z: number } | undefined): string => {
+      if (!planActions) return '';
+      const target = resolveFacilityTarget(catalogItem.type);
+      if (target.kind === 'skip') return '';
+      if (RETIRED_AV_TYPES.has(catalogItem.type)) return '';
+
+      const frame = makeFrame(outdoorPlan?.boundary ?? [], roomWidth, roomDepth);
+      const requested = position ?? { x: 0, z: 0 };
+      const planPosition = framePoint(frame, requested.x, requested.z);
+      const color = hexOrUndefined(catalogItem.color);
+      const sourceAssetId = boundedSourceAssetId(catalogItem.assetId);
+
+      const width = catalogItem.width;
+      const depth = catalogItem.depth;
+      const hasValidSize = Number.isFinite(width) && Number.isFinite(depth) && width > 0 && depth > 0;
+
+      let templateId: string;
+      let dynamicTemplate: { name: string; width: number; depth: number } | undefined;
+
+      if (target.kind === 'builtin') {
+        templateId = target.templateId;
+      } else {
+        // oneplan / misc 都要动态模板；宽深非法不猜默认尺寸，直接回落拒收。
+        if (!hasValidSize || width === undefined || depth === undefined) return '';
+        if (target.kind === 'oneplan') {
+          templateId = target.templateId;
+        } else {
+          const fallbackKey = (catalogItem.assetId ?? catalogItem.type ?? '').trim();
+          if (!fallbackKey) return '';
+          templateId = catalogFacilityTemplateId(fallbackKey);
+        }
+        dynamicTemplate = { name: catalogItem.name, width, depth };
+      }
+
+      const result = planActions.applyFacility({
+        kind: 'add',
+        input: {
+          templateId,
+          position: planPosition,
+          ...(color ? { color } : {}),
+          ...(sourceAssetId ? { sourceAssetId } : {}),
+          ...(dynamicTemplate ? { template: dynamicTemplate } : {}),
+        },
+      });
+      if (!result.ok) return '';
+      const placed = result.value.facilities[result.value.facilities.length - 1];
+      return placed?.id ?? '';
+    },
+    [planActions, outdoorPlan, roomWidth, roomDepth]
+  );
+
+  /**
    * Add an item from the catalog. For doors and windows, the requested
    * position is force-snapped to the nearest exterior wall
    * and a default rotation aligned with that wall is applied — these
@@ -148,6 +232,10 @@ export function useItemPlacement({
    */
   const placeCatalogItem = useCallback(
     (catalogItem: CatalogItem, position?: { x: number; z: number }) => {
+      // 绑定 plan：目录件走 facility 通道；legacy 草稿回落旧 actions（双读保留，不删旧路径）。
+      if (planActions) {
+        return placeViaPlan(catalogItem, position);
+      }
       if (isOpening(catalogItem.type)) {
         if (layout?.backendSceneV2) {
           const item = {...catalogItem,id:crypto.randomUUID()};
@@ -217,7 +305,7 @@ export function useItemPlacement({
       actions.setLocked(id, false);
       return id;
     },
-    [actions, activeFloor, layout, activeFloorY, roomWidth, roomDepth, gap]
+    [actions, activeFloor, layout, activeFloorY, roomWidth, roomDepth, gap, planActions, placeViaPlan]
   );
 
   return { snapPosition, getDragPlaneY, placeCatalogItem };
