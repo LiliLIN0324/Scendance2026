@@ -1761,7 +1761,7 @@ body.is-theme-dark .sc-material-tagpin {
 @media (max-height:600px) {
   .sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:140px; }
 }
-@media (max-width:1080px) {
+@media (max-width:768px) {
   .sc-workbench .sc-workspace.is-docked-layout { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:8px; }
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(220px,1fr) minmax(240px,42%); }
   .sc-workbench .is-docked-layout .sc-canvas-stage { grid-area:1 / 1; }
@@ -1775,7 +1775,7 @@ body.is-theme-dark .sc-material-tagpin {
   .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-canvas-heading { display:flex; }
   .sc-workbench .is-docked-layout .sc-left-drawer { bottom:48px; }
 }
-@media (max-width:1080px) {
+@media (max-width:768px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
     grid-template-columns: var(--sc-nav-rail-width) minmax(0, 1fr);
@@ -1786,49 +1786,7 @@ body.is-theme-dark .sc-material-tagpin {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 2; }
 }
-/* 2026-11-15 用户指令（中等尺寸「上下」难看，窄屏那套更好）：
-   769–1080 不再把左栏和画布切成上下两行——画布占满整列高度（竖排工具列才有地方站），
-   左栏改成浮在画布左上角的卡：宽度跟桌面一致（min(420px, 46%)），高度 62%（底部留给
-   比例尺 / 2D-3D 角标），内部照旧头部→滚动正文→输入区。
-   ≥1081 三列与 ≤768 手机外壳都不进这个断点。 */
-@media (min-width:769px) and (max-width:1080px) {
-  /* 浮层卡宽度只算一次：视口与 .sc-workspace 同宽（inset:0），用 vw 表达才能被画布里的
-     抬头/胶囊复用——百分比在那里会按画布列宽重算，两边对不上。 */
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail { --sc-medium-card-w: min(420px, 46vw); }
-  /* 画布吃满：一行网格，左栏与画布同格叠放。 */
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-row: 1; }
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
-  /* 左栏 → 画布上的浮层卡。左缘让开图标轨，右缘留出地图。 */
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column {
-    position: absolute; left: calc(var(--sc-nav-rail-width) + 12px); top: 12px;
-    right: auto; bottom: auto; grid-column: auto; grid-row: auto;
-    width: var(--sc-medium-card-w); height: min(62%, 640px); max-height: calc(100% - 24px);
-    border: 1px solid var(--wk-hair); border-radius: 16px;
-    background: var(--paper);
-    box-shadow: var(--e1);
-    /* 2026-11-19 用户：物料卡被画布浮层（规划信息 / 搜地点）压住标题。
-       窄屏这张卡就是前台页面，必须压在画布浮层（规划信息 40、搜地点 6/30）之上；
-       图标轨的 hover 提示再用 46 压回来（见 .sc-mode-rail）。 */
-    z-index: 45;
-  }
-  /* 画布左上角的抬头/胶囊让到卡片右侧：卡片左缘离画布 12px，再留 24px 间距。
-     （.sc-canvas-heading 目前只有自家测试引用，属防御性规则；.sc-canvas-mode 在隔离扫描态
-     是活着的，两者同在左上角。） */
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column .sc-canvas-heading,
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column .sc-canvas-mode {
-    left: calc(var(--sc-medium-card-w) + 36px);
-    max-width: calc(100% - var(--sc-medium-card-w) - 96px);
-  }
-  /* 2026-11-20：旧三步引导气泡（GuideBubble）退役，避让规则随之删除。
-     新的引导卡片由 onboarding/ 挂到 body 上的 fixed 浮层，不参与 .sc-canvas-stage 栈上下文，
-     位置由控件实测矩形算出，不再需要按卡片宽度平移。 */
-  /* 断点里不再按拖边改宽：那条线只服务桌面的 --sc-left-card-width。 */
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column .sc-left-card-resizer { display: none; }
-}
+
 @media (max-width:420px) {
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(0,1fr); }
   .sc-workbench .is-docked-layout.has-conversation .sc-canvas-stage { display:none; }
@@ -1891,12 +1849,12 @@ body.is-theme-dark .sc-material-tagpin {
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden {
   grid-template-columns: 0 minmax(0, 1fr);
 }
-@media (min-width: 1081px) {
+@media (min-width: 769px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-chrome-hidden {
     grid-template-columns: 0 0 minmax(0, 1fr);
   }
 }
-@media (min-width: 1081px) {
+@media (min-width: 769px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
     grid-template-columns: var(--sc-nav-rail-width) var(--sc-left-card-width, 320px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
@@ -2135,7 +2093,7 @@ body.is-theme-dark .sc-material-tagpin {
 }
 /* 桌面：左轨和旁边的侧栏是同一张浮起的纸。阴影只打在这一组外缘，中间仍是发丝线。
    工作台 overflow:hidden，所以组要缩进，影子才不会被切掉。 */
-@media (min-width: 1081px) {
+@media (min-width: 769px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
     padding: 10px 8px 10px 10px;
     box-sizing: border-box;
@@ -3853,8 +3811,9 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   color: var(--sc-ink); font-size: 12px; text-decoration: none; white-space: nowrap;
 }
 .sc-workbench .sc-settings-pop .sc-settings-link:hover { background: var(--wk-plane); }
-/* 窄屏左栏是 z-index 55 的浮层，会压住整条导轨；弹层打开时把导轨抬到它上面。 */
-@media (max-width: 1080px) {
+/* 窄屏（≤768）左栏是 z-index 55 的浮层，会压住整条导轨；弹层打开时把导轨抬到它上面。
+   2026-11-28 起 769–1080 已并回桌面三列，左栏不再是浮层，这条只管手机档。 */
+@media (max-width: 768px) {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail:has(.sc-settings-pop) { z-index: 56; }
 }
 .sc-workbench .sc-checklist-drawer {
