@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { planPointToPixel } from '../lib/outdoor-plan-canvas';
+import { boundaryFramePillState, planPointToPixel } from '../lib/outdoor-plan-canvas';
 import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import Canvas, { type OutdoorPlanCanvasHandle } from './outdoor-plan-canvas';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
@@ -162,7 +162,29 @@ it('锁定态不渲染手柄；隐藏红线图层后手柄收起', () => {
   expect(handleEls(container)).toHaveLength(0);
 });
 
-it('点手柄进入既有拖拽链路：合法落点提交，设计范围随动', () => {
+it('锁定 + 选中红线：画布顶 DOM 浮条退役，胶囊规则在 lib 层钉住', () => {
+  const { ref, canvas } = mount();
+  act(() => {
+    expect(ref.current!.applyVenue(ANCHOR, QUAD)).toBe(true);
+  });
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+
+  // 点红线填充区 = 选中整条（2026-11-19 口径：锁只拦改形状，不拦选中）。
+  const center = pxOf(ref, { x: 0, y: 0 });
+  fireEvent.pointerDown(canvas, { clientX: center.x, clientY: center.y, pointerId: 21, button: 0, buttons: 1 });
+  fireEvent.pointerUp(canvas, { clientX: center.x, clientY: center.y, pointerId: 21, button: 0 });
+
+  // 2026-11-28 用户「红线的提示应该追随在白框正上方 + 取消/确认换图标」：
+  // 画布顶 DOM 浮条退役，选中态操作并入白框顶动作胶囊（canvas 绘制，DOM 测试看不到；
+  // 锁定态只留收起 × 的口径在 lib 纯函数里钉住）。
+  expect(screen.queryByTestId('boundary-selection-bar')).toBeNull();
+  expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: true }))
+    .toEqual({ kind: 'selected', label: '已选中用地红线', actions: ['cancel'] });
+  expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: false }))
+    .toEqual({ kind: 'selected', label: '已选中用地红线', actions: ['delete', 'cancel'] });
+});
+
+it('点手柄进入既有拖拽链路：合法落点先挂起，回车确认后才提交，设计范围随动', () => {
   const { ref, commit, container, canvas } = mount();
   applyEditableVenue(ref, QUAD, commit);
   act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
@@ -175,6 +197,13 @@ it('点手柄进入既有拖拽链路：合法落点提交，设计范围随动'
   fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 7, buttons: 1 });
   fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 7, button: 0 });
 
+  // 2026-11-28 用户「调整之后要 ✓/回车确认」：松手只挂起，不直接写方案。
+  expect(commit).not.toHaveBeenCalled();
+
+  // 回车 = 确认（与白框顶胶囊 ✓ 同一条路），确认才提交。
+  act(() => {
+    fireEvent.keyDown(window, { key: 'Enter' });
+  });
   expect(commit).toHaveBeenCalled();
   const last = commit.mock.calls.at(-1)![0];
   expect(last.boundary).toHaveLength(QUAD.length);
@@ -291,7 +320,7 @@ it('A1 拖顶点把面积压到 4㎡ 以下：拒绝「面积太小」，原环�
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(SMALL);
 });
 
-it('A4 顶点顶出白框：不拒几何，设计范围按新红线外扩 20m 重置', () => {
+it('A4 顶点顶出白框：确认后不拒几何，设计范围按新红线外扩 20m 重置', () => {
   const { ref, commit, container, canvas } = mount();
   applyEditableVenue(ref, BASE, commit);
   act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
@@ -304,6 +333,12 @@ it('A4 顶点顶出白框：不拒几何，设计范围按新红线外扩 20m �
   fireEvent.pointerDown(handle, { clientX: from.x, clientY: from.y, pointerId: 14, button: 0, buttons: 1 });
   fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 14, buttons: 1 });
   fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 14, button: 0 });
+
+  // 2026-11-28：松手只挂起，回车确认后才提交并同步设计范围。
+  expect(commit).not.toHaveBeenCalled();
+  act(() => {
+    fireEvent.keyDown(window, { key: 'Enter' });
+  });
 
   expect(commit).toHaveBeenCalled();
   const last = commit.mock.calls.at(-1)![0];

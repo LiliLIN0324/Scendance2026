@@ -121,6 +121,12 @@ import {
   drawRingScaleHandles,
   ringScaleHandlePoints,
   drawScopeLockButton,
+  drawFrameActionPill,
+  framePillLayout,
+  hitFramePillAction,
+  boundaryFramePillState,
+  type FramePillAction,
+  type FramePillLayout,
   drawFlowSimulationLayer,
   drawCandidatePins,
   drawSearchArea,
@@ -610,6 +616,12 @@ export interface OutdoorPlanCanvasProps {
    */
   workflowPreview?:SitePlanData|null;
   workflowScopePreview?: boolean;
+  /**
+   * 2026-11-28 用户「调整之后要 ✓/回车确认」：候选活动范围（待核对）浮条上的两枚图标钮
+   * 走的回调——与任务卡「确认活动范围 / 撤回预览」完全同一条路，画布不另起一套确认逻辑。
+   */
+  onWorkflowScopeConfirm?: () => void;
+  onWorkflowScopeCancel?: () => void;
   mapEditHighlight?: OutdoorMapEditHighlight | null;
   evidenceHighlights?:OutdoorEvidenceHighlight[];
   zoneProposal?: { zones: PlanZone[]; facilities: PlanFacility[]; routes?: PlanRoute[]; nodes?: PlanNode[] } | null;
@@ -1702,6 +1714,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   routeProposal,
   zoneProposal,
   workflowPreview, workflowScopePreview, mapEditHighlight, evidenceHighlights,
+  onWorkflowScopeConfirm, onWorkflowScopeCancel,
   flowSimRoutes,
   sceneObjects,
   generationProjectId,
@@ -1794,6 +1807,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const workflowPreviewRef=useRef(workflowPreview);workflowPreviewRef.current=workflowPreview;
   const workflowScopePreviewRef = useRef(workflowScopePreview);
   workflowScopePreviewRef.current = workflowScopePreview;
+  /**
+   * 2026-11-28：红线调整挂起态——顶点/缩放/插删点松手后不再自动提交，先挂起，
+   * 白框顶胶囊 ✓（或回车）确认、✕（或 Esc）取消。挂起环一直放在 previewRingRef，
+   * 画与命中自然都读它；真值 plan.boundary 在确认前不动。
+   */
+  const boundaryEditPendingRef = useRef(false);
+  /** 当前画在白框顶的胶囊（含态别），指针命中据此分派；没画就是 null。 */
+  const framePillStateRef = useRef<{ kind: 'pending' | 'candidate' | 'selected'; layout: FramePillLayout } | null>(null);
+  const onWorkflowScopeConfirmRef = useRef<(() => void) | undefined>(undefined);
+  onWorkflowScopeConfirmRef.current = onWorkflowScopeConfirm;
+  const onWorkflowScopeCancelRef = useRef<(() => void) | undefined>(undefined);
+  onWorkflowScopeCancelRef.current = onWorkflowScopeCancel;
+  /** draw() 读 ref：只读态（无 onPlanChange）不画动作胶囊，画布保持纯浏览。 */
+  const readOnlyRef = useRef(!onPlanChange);
+  readOnlyRef.current = !onPlanChange;
   const mapEditHighlightRef = useRef(mapEditHighlight);
   mapEditHighlightRef.current = mapEditHighlight;
   const evidenceHighlightsRef=useRef(evidenceHighlights);evidenceHighlightsRef.current=evidenceHighlights;
@@ -2563,6 +2591,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (modeRef.current === 'measure' && next !== 'measure') dropMeasureSession();
     if (next === 'measure') measureSessionIdsRef.current = [];
     modeRef.current = next;
+    // 2026-11-28：挂起的红线调整只属于浏览/编辑红线两态——切走就静默退回原线（不写历史）。
+    if (boundaryEditPendingRef.current && next !== 'view' && next !== 'boundary-vertex') {
+      boundaryEditPendingRef.current = false;
+    }
     // 2026-11-18 用户实测：从对话进绘制模式时色板分组要跟着展开——不然用户不知道画什么、
     // 也不知道有分区类型可挑。手动点目录行本来就是展开态进来的，这里只是兜底。
     // 2026-11-18 用户澄清：用地红线只要「确认 / 重画」，分区才要那张分区类型色板；
@@ -2832,6 +2864,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (!planLevels(planRef.current).some(level => level.id === id)) return;
     activeLevelIdRef.current = id;
     setActiveLevelId(id);
+    // 2026-11-28：挂起的红线调整跟着层走——换层即退回原线，别把上一层的预览带过去。
+    boundaryEditPendingRef.current = false;
+    previewRingRef.current = null;
     clearMultiSelection(false);
     selectFacility(null);
     selectZone(null);
@@ -3650,9 +3685,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
       // 2026-11-18 用户「外面的用地红线也要有缩放」：外接矩形四角外侧的方柄 = 整体缩放。
       // 锁着不画（锁上还挂可拖的柄，看着就像没锁）；浏览 / 编辑红线两态都画。
+      // 2026-11-28 用户「绿色的选区特别奇怪」：柄色跟着线走（红线），和顶点方块同一口径，
+      // 不再挂图层品牌绿——绿柄在卫星植被上同样看不见。
       if (editingBoundary && boundary.length >= 3) {
         drawRingScaleHandles(layer, boundary, {
-          color: PLANNING_LAYER_COLORS.boundary,
+          color: PLANNING_BOUNDARY_LINE_COLOR,
           activeCorner: boundaryScaleRef.current?.corner ?? null,
           hoverCorner: ringScaleHoverRef.current?.kind === 'boundary' ? ringScaleHoverRef.current.corner : null,
         });
@@ -4203,6 +4240,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         drawSearchArea({ ctx: planCtx, viewport: { ...viewport, anchorLng: workflow.anchor.lng, anchorLat: workflow.anchor.lat } }, {
           points: workflow.boundary,
           label: '候选活动范围（待核对）',
+          // 2026-11-28：标签挪进白框顶动作胶囊（带 ✓/✕）；只读态没有胶囊，仍画原标签。
+          showLabel: readOnlyRef.current,
         });
       }
       const changed=<T extends {id:string}>(next:T[],before:T[])=>next.filter(a=>JSON.stringify(a)!==JSON.stringify(before.find(b=>b.id===a.id)));
@@ -4228,6 +4267,34 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         walkerPoints: walkerPoints(flowSimRef.current.walkers, flowSimRef.current.routes),
         density: routeDensity(flowSimRef.current.walkers, flowSimRef.current.routes),
       });
+    }
+
+    // 8) 2026-11-28 用户「红线的提示都追随在白框正上方」：白框顶动作胶囊，一次只画一枚，
+    //    优先级 = 挂起的红线调整 > 候选活动范围（待核对） > 已选中用地红线。
+    //    确认/取消一律图标（✓/✕，删除 🗑），随白框平移缩放——不再钉死在画布顶端；
+    //    锚环优先用设计白框，没有就用生效环/候选环兜底（胶囊总得跟着一个框走）。
+    framePillStateRef.current = null;
+    if (modeRef.current === 'view' || modeRef.current === 'select' || modeRef.current === 'boundary-vertex') {
+      const candidateRing = workflow && workflow.boundary.length >= 3 ? workflow.boundary : null;
+      const pillRing = current.designScope && current.designScope.length >= 3
+        ? current.designScope
+        : (boundary.length >= 3 ? boundary : candidateRing);
+      if (pillRing && pillRing.length >= 3 && !readOnlyRef.current) {
+        const pillRingPx = pillRing.map(point => planPointToPixel(point, viewport));
+        const pillState = boundaryFramePillState({
+          pendingEdit: boundaryEditPendingRef.current && previewRingRef.current !== null,
+          candidatePreview: workflowScopePreviewRef.current === true && (workflowPreviewRef.current?.boundary.length ?? 0) >= 3,
+          boundarySelected: boundarySelectedRef.current,
+          boundaryLocked: lockedLayersRef.current.boundary === true,
+        });
+        if (pillState) {
+          const layout = framePillLayout(pillRingPx, viewport, pillState.label, pillState.actions);
+          if (layout) {
+            framePillStateRef.current = { kind: pillState.kind, layout };
+            drawFrameActionPill({ ctx: planCtx, viewport }, layout, pillState.label);
+          }
+        }
+      }
     }
 
     // 本机验收桥：把 viewport 与选中设施的手柄坐标暴露出来（只读，生产构建没有），
@@ -4621,6 +4688,26 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         closeDraft();
         return;
       }
+      // 2026-11-28 用户「调整之后……我按回车也可以确认」：浏览态回车 = 确认白框顶的待核对项
+      //（挂起的红线调整 > 候选活动范围），与胶囊 ✓ 同一条路；焦点在输入框里时不抢。
+      if (
+        event.key === 'Enter'
+        && modeRef.current === 'view'
+        && !inField
+        && !target?.isContentEditable
+        && !event.ctrlKey && !event.metaKey && !event.altKey
+      ) {
+        if (boundaryEditPendingRef.current) {
+          event.preventDefault();
+          confirmPendingBoundary();
+          return;
+        }
+        if (workflowScopePreviewRef.current && (workflowPreviewRef.current?.boundary.length ?? 0) >= 3) {
+          event.preventDefault();
+          onWorkflowScopeConfirmRef.current?.();
+          return;
+        }
+      }
       if (event.key !== 'Escape') return;
       // 与撤销/重做、删除/方向键同口径：焦点在输入控件内时 Esc 只归输入框，不退出画布绘制模式。
       if (inField || target?.isContentEditable) return;
@@ -4664,13 +4751,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       // 2026-11-18：角柄缩放拖到一半按 Esc = 放弃这一次缩放（预览清掉，已提交的形状一点没动）。
+      // 2026-11-28：挂起态下中途按 Esc 只退回本次缩放的起点（挂起环），不清掉整个挂起调整。
       if (zoneScaleRef.current || boundaryScaleRef.current) {
         event.preventDefault();
         event.stopPropagation();
+        const boundaryScaleBase = boundaryScaleRef.current?.base ?? null;
         zoneScaleRef.current = null;
         boundaryScaleRef.current = null;
         zoneDragPreviewRef.current = null;
-        setPreviewRing(null);
+        // 挂起态只退回本次缩放起点（挂起环）；zone 缩放不动红线的挂起预览。
+        setPreviewRing(boundaryEditPendingRef.current
+          ? boundaryScaleBase ?? previewRingRef.current ?? null
+          : null);
         setDragging(false);
         setEditMessage('已取消这次缩放，原形状未改动。');
         draw();
@@ -4682,7 +4774,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           showConflictDetail(null);
           return;
         }
-        // 一层一层收：组选 → 单选 → 无选中。
+        // 2026-11-28：挂起的红线调整最先收——预览退回原线，不写历史。
+        if (boundaryEditPendingRef.current) {
+          cancelPendingBoundary();
+          return;
+        }
+        // 一层一层收：组选 → 单选 → 无选中 → 撤回候选预览。
         if (
           multiSelectedFacilityIdsRef.current.length > 0
           || multiSelectedRouteIdsRef.current.length > 0
@@ -4704,6 +4801,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           || boundarySelectedRef.current
         ) {
           clearEntitySelection();
+          return;
+        }
+        // 2026-11-28：候选活动范围还浮着时，Esc = 撤回预览（与卡上「撤回预览」同一条路）。
+        if (workflowScopePreviewRef.current) {
+          onWorkflowScopeCancelRef.current?.();
+          setEditMessage('已撤回候选活动范围预览。');
+          return;
         }
         return;
       }
@@ -5731,15 +5835,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** P2-j：双击边界 → 在最近那条边上插一个顶点（投影点吸网格），面积不足/自交则拒绝。 */
   function insertBoundaryVertexAt(px: { x: number; y: number }) {
-    const current = planRef.current;
     const viewport = currentViewport();
-    const edge = nearestRingEdge(current.boundary, px, viewport);
+    const base = effectiveBoundaryRing();
+    const edge = nearestRingEdge(base, px, viewport);
     if (!edge || edge.distPx > VERTEX_EDGE_HIT_PX) {
       setEditMessage('双击红线上才能加点（离线太远）。');
       return;
     }
     const snapped = snapPoint(edge.point, viewport);
-    const result = insertRingVertex(current.boundary, edge.index, snapped);
+    const result = insertRingVertex(base, edge.index, snapped);
     if (!result.ok) {
       setEditMessage(result.issue.message);
       return;
@@ -5749,17 +5853,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(check.issue.message);
       return;
     }
-    // 2026-11-17 用户拍板：红线改动只要还在白框里就不动框；顶出去才重置为外扩 20 m。
-    const scope = syncScopeForBoundary(current.designScope, result.value, DEFAULT_SCOPE_MARGIN_M);
-    commitPlan({ ...current, boundary: result.value, ...(scope ? { designScope: scope } : {}) });
+    // 2026-11-28 用户「调整之后要 ✓/回车确认」：插入也进挂起态，与拖拽同一条确认路。
+    boundaryEditPendingRef.current = true;
+    setPreviewRing(result.value);
     boundaryInsertedAtRef.current = performance.now();
-    setEditMessage(`红线已插入顶点（约 ${Math.round(check.areaM2)} m²）。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`);
+    setEditMessage(`红线已插入顶点（约 ${Math.round(check.areaM2)} m²）——点 ✓ 或按回车确认，Esc 取消。`);
   }
 
-  /** P2-j：双击边界顶点 → 删掉它（最少 3 点、面积下限由 checkBoundaryRing 把关）。 */
+  /**
+   * P2-j：双击/二次点击边界顶点 → 删掉它（最少 3 点、面积下限由 checkBoundaryRing 把关）。
+   * 2026-11-28：基于生效环删（有挂起环删挂起环），删完仍挂起，等 ✓/回车确认。
+   */
   function removeBoundaryVertexAt(index: number) {
-    const current = planRef.current;
-    const result = removeRingVertex(current.boundary, index);
+    const result = removeRingVertex(effectiveBoundaryRing(), index);
     if (!result.ok) {
       setEditMessage(result.issue.message);
       return;
@@ -5769,10 +5875,89 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage(check.issue.message);
       return;
     }
-    // 删顶点只会缩小红线，白框必然还兜得住——不触发同步。
-    commitPlan({ ...current, boundary: result.value });
+    boundaryEditPendingRef.current = true;
+    setPreviewRing(result.value);
     clearBoundaryDeleteArm();
-    setEditMessage(`红线已删除顶点（约 ${Math.round(check.areaM2)} m²）。`);
+    setEditMessage(`红线已删除顶点（约 ${Math.round(check.areaM2)} m²）——点 ✓ 或按回车确认，Esc 取消。`);
+  }
+
+  /* ---------------- 2026-11-28 红线调整挂起确认（✓ / 回车确认，✕ / Esc 取消） ---------------- */
+
+  /** 生效环：有挂起/拖拽预览就用它（画与命中都认它），否则用已提交的边界。 */
+  function effectiveBoundaryRing(): PlanPoint[] {
+    return previewRingRef.current ?? planRef.current.boundary;
+  }
+
+  /** 挂起环是否与已提交边界一致（一致就没有「待确认的改动」，不压空 undo）。 */
+  function boundaryRingEqualsPlan(ring: readonly PlanPoint[]): boolean {
+    const plan = planRef.current.boundary;
+    return ring.length === plan.length && ring.every((p, i) => planPointDistanceM(p, plan[i]!) < 0.01);
+  }
+
+  /** 确认挂起的红线调整：一条 undo（含白框同步），确认后胶囊与预览一起收掉。 */
+  function confirmPendingBoundary() {
+    const preview = previewRingRef.current;
+    boundaryEditPendingRef.current = false;
+    if (!preview || !onPlanChange) {
+      setPreviewRing(null);
+      draw();
+      return;
+    }
+    const check = checkBoundaryRing(preview);
+    if (!check.ok) {
+      // 不合法就留在挂起态让人继续拖或 Esc 取消，不悄悄弹回。
+      boundaryEditPendingRef.current = true;
+      setEditMessage(check.issue.message);
+      draw();
+      return;
+    }
+    const unchanged = boundaryRingEqualsPlan(preview);
+    setPreviewRing(null);
+    if (!unchanged) {
+      // 2026-11-17 口径不变：调整后仍在白框里就不动框，顶出去重置为外扩 20 m。
+      const scope = syncScopeForBoundary(planRef.current.designScope, preview, DEFAULT_SCOPE_MARGIN_M);
+      commitPlan({ ...planRef.current, boundary: preview, ...(scope ? { designScope: scope } : {}) });
+      const sizeText = ringSizeText(preview);
+      setEditMessage(`红线调整已确认${sizeText ? ` ${sizeText}` : ''}（约 ${Math.round(check.areaM2)} m²）。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`);
+    } else {
+      setEditMessage('红线没有改动。');
+    }
+    draw();
+  }
+
+  /** 取消挂起的红线调整：退回已提交的原线，不写历史。 */
+  function cancelPendingBoundary() {
+    const hadPending = boundaryEditPendingRef.current;
+    boundaryEditPendingRef.current = false;
+    setPreviewRing(null);
+    if (hadPending) setEditMessage('已取消这次调整，红线未改动。');
+    draw();
+  }
+
+  /** 删除整条红线（白框顶胶囊 🗑 与 Delete 键同一条路）：分区和物料保留，可撤销。 */
+  function deleteSelectedBoundary() {
+    if (readOnly) return;
+    commitPlan(clearPlanBoundary(planRef.current));
+    selectBoundary(false);
+    setEditMessage('整条红线删了，分区和物料还在。Ctrl+Z 可撤销。');
+  }
+
+  /** 白框顶胶囊的动作分派：按画上去的态别走各自的一条路（候选确认与任务卡同源）。 */
+  function handleFramePillAction(action: FramePillAction) {
+    const state = framePillStateRef.current;
+    if (!state) return;
+    if (state.kind === 'pending') {
+      if (action === 'confirm') confirmPendingBoundary();
+      else cancelPendingBoundary();
+      return;
+    }
+    if (state.kind === 'candidate') {
+      if (action === 'confirm') onWorkflowScopeConfirmRef.current?.();
+      else onWorkflowScopeCancelRef.current?.();
+      return;
+    }
+    if (action === 'delete') deleteSelectedBoundary();
+    else selectBoundary(false);
   }
 
   /** 点亮/熄灭「再点一下就删」的琥珀框（只改显示，不改计划）。 */
@@ -9163,6 +9348,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setEditMessage('拖出一个矩形作为设计范围，松手生效。Shift = 正方形，Esc 取消。');
       return;
     }
+    // 2026-11-28：白框顶的动作胶囊（✓/✕/🗑）先吃掉自己的热区——它悬在框外正上方，
+    // 只有「点它」一个含义，不能落进平移或别的命中。
+    if (hit && (activeMode === 'view' || activeMode === 'select' || activeMode === 'boundary-vertex')) {
+      const pillState = framePillStateRef.current;
+      const pillAction = pillState ? hitFramePillAction(pillState.layout, hit.px) : null;
+      if (pillAction) {
+        pointerConsumedRef.current = true;
+        downPxRef.current = hit.px;
+        handleFramePillAction(pillAction);
+        return;
+      }
+    }
     // 2026-11-16 用户「场地右上角也加一个小锁」：这枚锁先吃掉自己那一小块，
     // 浏览 / 选择 / 编辑边界三种模式都认——锁着时也能从画布上直接解开。
     if (hit) {
@@ -9310,27 +9507,28 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 先认边线上的「+」把手（比综的边线更好点中），点一下就插点并直接进入拖动。
         // 2026-11-18：缩放角柄排在“边上加点”之前——柄在境外 13 px，完全可能同时落在边线 14 px 热区里，
         // 如果先认边，拖角柄就会变成「插一个顶点」。
-        const boundaryScaleCorner = ringScaleCornerAt(planRef.current.boundary, hit.px);
-        const boundaryScaleBounds = boundaryScaleCorner !== null ? ringBounds(planRef.current.boundary) : null;
+        // 2026-11-28：基准一律用生效环——有挂起调整时接着挂起环改，不再从已提交环重开。
+        const boundaryScaleCorner = ringScaleCornerAt(effectiveBoundaryRing(), hit.px);
+        const boundaryScaleBounds = boundaryScaleCorner !== null ? ringBounds(effectiveBoundaryRing()) : null;
         if (boundaryScaleCorner !== null && boundaryScaleBounds) {
           boundaryScaleRef.current = {
             corner: boundaryScaleCorner,
             bounds: boundaryScaleBounds,
-            base: planRef.current.boundary,
+            base: effectiveBoundaryRing(),
             startPx: { x: hit.px.x, y: hit.px.y },
             started: false,
           };
           pointerConsumedRef.current = true;
           downPxRef.current = hit.px;
           setDragging(true);
-          setPreviewRing(planRef.current.boundary);
+          setPreviewRing(effectiveBoundaryRing());
           setEditMessage('拖角缩放红线，对角不动。Shift 等比，Esc 取消。');
           draw();
           return;
         }
         const edgeHint = boundaryEdgeHintRef.current;
         if (edgeHint && Math.hypot(hit.px.x - edgeHint.x, hit.px.y - edgeHint.y) <= 12) {
-          const inserted = insertRingVertex(planRef.current.boundary, edgeHint.index, edgeHint.pt);
+          const inserted = insertRingVertex(effectiveBoundaryRing(), edgeHint.index, edgeHint.pt);
           if (!inserted.ok) {
             setEditMessage(inserted.issue.message);
             return;
@@ -9355,7 +9553,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           dragVertexRef.current = boundaryVertex;
           downPxRef.current = hit.px;
           pointerConsumedRef.current = true;
-          setPreviewRing(planRef.current.boundary);
+          setPreviewRing(effectiveBoundaryRing());
           setEditMessage('拖动红线顶点改形。拖到另一个顶点上松手即合并，双击顶点可删除。');
           draw();
           return;
@@ -9365,7 +9563,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 故意放在锁定判断之外——锁只拦「改几何形状」，不该拦「选中一条待删的误画红线」。
       // 不吃掉这次按下：场地里仍能拖着平移，选中只决定「接下来 Delete 删谁」。
       if (hit && onPlanChange && planRef.current.boundary.length >= 3
-        && planPointInRing(hit.pt, planRef.current.boundary) && !boundarySelectedRef.current) {
+        && planPointInRing(hit.pt, effectiveBoundaryRing()) && !boundarySelectedRef.current) {
         selectBoundary(true);
         setEditMessage(layerLocked('boundary')
           ? '已选中整条红线。Delete 删除，改形状要先解锁。'
@@ -9531,17 +9729,18 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         return;
       }
       // 2026-11-18：编辑红线模式同样能拖角柄整体缩放（优先于顶点/边线命中，理同浏览模式）。
-      const scaleCorner = ringScaleCornerAt(planRef.current.boundary, hit.px);
-      const scaleBounds = scaleCorner !== null ? ringBounds(planRef.current.boundary) : null;
+      // 2026-11-28：基准用生效环——有挂起调整时接着挂起环改。
+      const scaleCorner = ringScaleCornerAt(effectiveBoundaryRing(), hit.px);
+      const scaleBounds = scaleCorner !== null ? ringBounds(effectiveBoundaryRing()) : null;
       if (scaleCorner !== null && scaleBounds) {
         boundaryScaleRef.current = {
           corner: scaleCorner,
           bounds: scaleBounds,
-          base: planRef.current.boundary,
+          base: effectiveBoundaryRing(),
           startPx: { x: hit.px.x, y: hit.px.y },
           started: false,
         };
-        setPreviewRing(planRef.current.boundary);
+        setPreviewRing(effectiveBoundaryRing());
         setEditMessage('拖角缩放红线，对角不动。Shift 等比，Esc 取消。');
         draw();
         return;
@@ -9553,12 +9752,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       }
       // 点在边界线上 → 直接加点（与分区同一手感），并立即进入拖动。
       const viewport = currentViewport();
-      const edge = nearestRingEdge(planRef.current.boundary, hit.px, viewport);
+      const edge = nearestRingEdge(effectiveBoundaryRing(), hit.px, viewport);
       if (!edge || edge.distPx > VERTEX_EDGE_HIT_PX) {
         dragVertexRef.current = null;
         return;
       }
-      const inserted = insertRingVertex(planRef.current.boundary, edge.index, snapPointToGrid(edge.point, viewport));
+      const inserted = insertRingVertex(effectiveBoundaryRing(), edge.index, snapPointToGrid(edge.point, viewport));
       if (!inserted.ok) {
         setEditMessage(inserted.issue.message);
         return;
@@ -9885,7 +10084,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             if (zone && corner !== null) return { kind: 'zone' as const, id: zone.id, corner };
           }
           if (!layerLocked('boundary')) {
-            const corner = ringScaleCornerAt(planRef.current.boundary, hoverHit.px);
+            const corner = ringScaleCornerAt(effectiveBoundaryRing(), hoverHit.px);
             if (corner !== null) return { kind: 'boundary' as const, id: null, corner };
           }
           return null;
@@ -9948,7 +10147,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               draw();
             }
             const ringEdge = vertexIndex === null
-              ? nearestRingEdge(planRef.current.boundary, hoverHit.px, hoverViewport)
+              ? nearestRingEdge(effectiveBoundaryRing(), hoverHit.px, hoverViewport)
               : null;
             const nextHint = ringEdge && ringEdge.distPx <= VERTEX_EDGE_HIT_PX
               ? (() => {
@@ -10608,41 +10807,51 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const drag = boundaryScaleRef.current;
         boundaryScaleRef.current = null;
         const preview = previewRingRef.current;
-        setPreviewRing(null);
-        if (drag.started && preview && onPlanChange) {
-          const check = checkBoundaryRing(preview);
-          if (!check.ok) {
-            setEditMessage(check.issue.message);
-          } else {
-            // 2026-11-17 口径不变：缩完还在白框里就不动框，顶出去就重置为外扩 20 m。
-            const scope = syncScopeForBoundary(planRef.current.designScope, preview, DEFAULT_SCOPE_MARGIN_M);
-            commitPlan({ ...planRef.current, boundary: preview, ...(scope ? { designScope: scope } : {}) });
-            const sizeText = ringSizeText(preview);
-            setEditMessage(
-              `用地红线已缩放到${sizeText ? ` ${sizeText}` : ''}（约 ${Math.round(check.areaM2)} m²）。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`,
-            );
-          }
-          draw();
+        // 2026-11-28 用户「调整之后要 ✓/回车确认」：松手不再自动提交——挂起等胶囊/回车。
+        // 没真拖过或形状没变：预览退回；已有挂起的保住挂起环。
+        if (!drag.started || !preview || !onPlanChange) {
+          if (!boundaryEditPendingRef.current) setPreviewRing(null);
+          return;
         }
+        const check = checkBoundaryRing(preview);
+        if (!check.ok) {
+          boundaryEditPendingRef.current = false;
+          setPreviewRing(null);
+          setEditMessage(check.issue.message);
+          draw();
+          return;
+        }
+        if (boundaryRingEqualsPlan(preview)) {
+          boundaryEditPendingRef.current = false;
+          setPreviewRing(null);
+          setEditMessage('红线没有改动。');
+          draw();
+          return;
+        }
+        boundaryEditPendingRef.current = true;
+        const sizeText = ringSizeText(preview);
+        setEditMessage(`用地红线已调整${sizeText ? ` ${sizeText}` : ''}——点 ✓ 或按回车确认，Esc 取消。`);
+        draw();
         return;
       }
-      // 2026-11-16：浏览模式拖边界顶点松手——提交新形；落在别的顶点 12 px 内 = 合并。
+      // 2026-11-16：浏览模式拖边界顶点松手——落在别的顶点 12 px 内 = 合并。
       // 单击（没拖）不删点（双击才删），避免手一抖把场地少了只角。
+      // 2026-11-28：拖完不再自动提交，进挂起态等 ✓/回车确认。
       if (dragVertexRef.current !== null) {
         const vertexIndex = dragVertexRef.current;
         dragVertexRef.current = null;
         const preview = previewRingRef.current;
-        setPreviewRing(null);
         if (preview && onPlanChange && vertexIndex < preview.length) {
           const viewport = currentViewport();
           const originPx = planPointToPixel(preview[vertexIndex]!, viewport);
           // 2026-11-16 用户：「没点到那个点，双击线也出现红框」——那是刚用「+」插进来的新顶点，
           // 不算“点了一下它”，不该变红。
           const justInserted = performance.now() - boundaryInsertedAtRef.current < BOUNDARY_INSERT_GRACE_MS;
-          // 只点不拖 = 白框描边转琥珀（预告再点一下会删），这一下不提交任何改动。
+          // 只点不拖 = 白框描边转琥珀（预告再点一下会删），这一下不改任何形状。
           if (!justInserted && down && Math.hypot(down.x - originPx.x, down.y - originPx.y) <= CLICK_MAX_MOVE_PX) {
             armBoundaryVertexDelete(vertexIndex);
             setEditMessage('再点一下这个顶点就会删掉它（琥珀框 = 待删除）。拖动则改形。');
+            if (!boundaryEditPendingRef.current) setPreviewRing(null);
             return;
           }
           const movedPx = planPointToPixel(preview[vertexIndex]!, viewport);
@@ -10652,23 +10861,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           if (nextRing.length >= 3) {
             const check = checkBoundaryRing(nextRing);
             if (!check.ok) {
+              boundaryEditPendingRef.current = false;
+              setPreviewRing(null);
               setEditMessage(check.issue.message);
+              draw();
               return;
             }
-            // 刚插完点又松开（没拖）：形状早已提交过，这里不再压一条空 undo。
-            const unchanged = nextRing.length === planRef.current.boundary.length
-              && nextRing.every((p, i) => planPointDistanceM(p, planRef.current.boundary[i]!) < 0.01);
-            if (unchanged) {
+            if (boundaryRingEqualsPlan(nextRing)) {
+              // 拖回了原线：没有待确认的改动，挂起态一并收掉。
+              boundaryEditPendingRef.current = false;
+              setPreviewRing(null);
               setEditMessage('红线顶点未移动（拖动可改形）。');
+              draw();
               return;
             }
-            // 2026-11-17 用户拍板：拖拽后仍在白框里不动框；顶出去重置为外扩 20 m。
-            const scope = syncScopeForBoundary(planRef.current.designScope, nextRing, DEFAULT_SCOPE_MARGIN_M);
-            commitPlan({ ...planRef.current, boundary: nextRing, ...(scope ? { designScope: scope } : {}) });
+            boundaryEditPendingRef.current = true;
+            setPreviewRing(nextRing);
             clearBoundaryDeleteArm();
             setEditMessage(mergeIndex === -1
-              ? `红线顶点已更新。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`
-              : '两个顶点已合并（撤销可找回）。');
+              ? '红线顶点已调整——点 ✓ 或按回车确认，Esc 取消。'
+              : '两个顶点已合并——点 ✓ 或按回车确认，Esc 取消。');
+            draw();
           }
         }
         return;
@@ -10912,29 +11125,38 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       return;
     }
     if (activeMode === 'boundary-vertex') {
-      // 2026-11-18：角柄缩放松手（编辑红线模式）——与浏览模式同口径：真拖过才提交。
+      // 2026-11-18：角柄缩放松手（编辑红线模式）——与浏览模式同口径。
+      // 2026-11-28：松手不再自动提交，进挂起态等 ✓/回车确认。
       if (boundaryScaleRef.current) {
         const drag = boundaryScaleRef.current;
         boundaryScaleRef.current = null;
         const preview = previewRingRef.current;
-        setPreviewRing(null);
-        if (drag.started && preview && onPlanChange) {
-          const check = checkBoundaryRing(preview);
-          if (!check.ok) {
-            setEditMessage(check.issue.message);
-          } else {
-            const scope = syncScopeForBoundary(planRef.current.designScope, preview, DEFAULT_SCOPE_MARGIN_M);
-            commitPlan({ ...planRef.current, boundary: preview, ...(scope ? { designScope: scope } : {}) });
-            const sizeText = ringSizeText(preview);
-            setEditMessage(
-              `用地红线已缩放到${sizeText ? ` ${sizeText}` : ''}（约 ${Math.round(check.areaM2)} m²）。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`,
-            );
-          }
-          draw();
+        if (!drag.started || !preview || !onPlanChange) {
+          if (!boundaryEditPendingRef.current) setPreviewRing(null);
+          return;
         }
+        const check = checkBoundaryRing(preview);
+        if (!check.ok) {
+          boundaryEditPendingRef.current = false;
+          setPreviewRing(null);
+          setEditMessage(check.issue.message);
+          draw();
+          return;
+        }
+        if (boundaryRingEqualsPlan(preview)) {
+          boundaryEditPendingRef.current = false;
+          setPreviewRing(null);
+          setEditMessage('红线没有改动。');
+          draw();
+          return;
+        }
+        boundaryEditPendingRef.current = true;
+        const sizeText = ringSizeText(preview);
+        setEditMessage(`用地红线已调整${sizeText ? ` ${sizeText}` : ''}——点 ✓ 或按回车确认，Esc 取消。`);
+        draw();
         return;
       }
-      // 2026-11-16：与分区一致——点一下顶点（没拖动）= 删掉它；拖过就提交新形状。
+      // 2026-11-16：与分区一致——点一下顶点（没拖动）= 删掉它；拖过就是改形（挂起待确认）。
       const upHit = eventPlanPoint(event);
       const moved = upHit !== null && downPxRef.current !== null
         ? Math.hypot(upHit.px.x - downPxRef.current.x, upHit.px.y - downPxRef.current.y) >= 4
@@ -10944,17 +11166,33 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const hitIndex = dragVertexRef.current;
       dragVertexRef.current = null;
       if (!moved && !insertedNow && hitIndex !== null) {
-        setPreviewRing(null);
+        // 2026-11-28：有挂起环就保住（删顶点基于生效环），没挂起才清预览。
+        if (!boundaryEditPendingRef.current) setPreviewRing(null);
         removeBoundaryVertexAt(hitIndex);
         return;
       }
       if (hitIndex !== null && previewRingRef.current && onPlanChange) {
-        // 2026-11-17 用户拍板：拖拽后仍在白框里不动框；顶出去重置为外扩 20 m。
-        const scope = syncScopeForBoundary(planRef.current.designScope, previewRingRef.current, DEFAULT_SCOPE_MARGIN_M);
-        commitPlan({ ...planRef.current, boundary: previewRingRef.current, ...(scope ? { designScope: scope } : {}) });
-        setEditMessage(`红线顶点已更新。${scope ? '红线顶出白框，设计范围已随红线外扩 20 m 重置。' : ''}`);
+        const preview = previewRingRef.current;
+        const check = checkBoundaryRing(preview);
+        if (!check.ok) {
+          boundaryEditPendingRef.current = false;
+          setPreviewRing(null);
+          setEditMessage(check.issue.message);
+          draw();
+          return;
+        }
+        if (!boundaryRingEqualsPlan(preview)) {
+          boundaryEditPendingRef.current = true;
+          setEditMessage('红线顶点已调整——点 ✓ 或按回车确认，Esc 取消。');
+        } else {
+          boundaryEditPendingRef.current = false;
+          setPreviewRing(null);
+          setEditMessage('红线没有改动。');
+          draw();
+          return;
+        }
       }
-      setPreviewRing(null);
+      if (!boundaryEditPendingRef.current) setPreviewRing(null);
       return;
     }
     // 2026-11-11 拖拽式测量松手：距离拉线 / 面积矩形直接固定（路径手绘已随路径入口下线）；太短的拖拽提示并丢弃。
@@ -11136,7 +11374,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     downPxRef.current = null;
     dragVertexRef.current = null;
     boundaryJustInsertedRef.current = false;
-    setPreviewRing(null);
+    // 2026-11-28：挂起的红线调整不是拖拽会话——不跟拖拽一起被冲掉。
+    if (!boundaryEditPendingRef.current) setPreviewRing(null);
     ghostPointRef.current = null;
     routeCursorRef.current = null;
     nodeGhostRef.current = null;
@@ -14224,40 +14463,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           </button>
         </div>
       )}
-      {/* 2026-11-19 用户：红线不靠目录行句子删——点完填充区出现这条，Delete 或点按钮都行。 */}
-      {!readOnly && boundarySelected && mode === 'view' && (
-        <div
-          data-testid="boundary-selection-bar"
-          onMouseDown={event => event.stopPropagation()}
-          onPointerDown={event => event.stopPropagation()}
-          onMouseUp={event => event.stopPropagation()}
-          onPointerUp={event => event.stopPropagation()}
-          onClick={event => event.stopPropagation()}
-          onContextMenu={event => event.preventDefault()}
-          style={{
-            position: 'absolute', top: levelsPanelHost ? 34 : 66, left: '50%', transform: 'translateX(-50%)', zIndex: 4,
-            display: 'inline-flex', alignItems: 'center', gap: 6, pointerEvents: 'auto',
-          }}
-        >
-          <span style={{ fontSize: 12, opacity: 0.82, padding: '0 2px' }}>已选中用地红线</span>
-          <button
-            type="button"
-            data-testid="boundary-delete-selected"
-            onClick={() => {
-              if (readOnly) return;
-              commitPlan(clearPlanBoundary(planRef.current));
-              selectBoundary(false);
-              setEditMessage('整条红线删了，分区和物料还在。Ctrl+Z 可撤销。');
-            }}
-            style={modeButtonStyle(true)}
-          >
-            删除整条红线
-          </button>
-          <button type="button" data-testid="boundary-deselect" onClick={() => selectBoundary(false)} style={modeButtonStyle(false)}>
-            取消选择
-          </button>
-        </div>
-      )}
+      {/* 2026-11-28：选中态的操作已并入白框顶动作胶囊（追随白框、✓/✕/🗑 图标），
+          画布顶端的 DOM 浮条退役——锁定态只留 ×、解锁才有删除的口径由胶囊继续承担。 */}
 
       {/* 清单在左栏户外卡。没有宿主时不在地图上留浮卡。图例单独贴在画布左下。 */}
       {infoPanelHost && <PanelPortal host={infoPanelHost}>

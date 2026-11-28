@@ -238,12 +238,14 @@ export function drawMapEditHighlight(
 /**
  * 边界描边的底图档位（2026-11-16 用户「就线非得是绿色的吗」）：
  *
- * 线本身**不再用品牌绿**——绿线在地图上和植被、分区同色系，永远在争层级。
- * 绿色只留在低透明填色上（“这块地是我们的”），线改中性色，保证任何底图都能读：
+ * 线本身**不再用品牌绿**——绿线在地图上和植被、分区同色系，永远在争层级；
+ * 2026-11-28 用户「绿色的选区特别奇怪，卫星地图上完全看不到」：填色也一并去绿——
+ * 绿色低透明面盖在卫星植被上等于不存在。填色改走和测量色同一套「按底图换中性」的口径：
  *
- * - `light`：浅色矢量底图 → 深墨线（和地图文字同族，最稳，不需要晕）；
- * - `imagery`：影像/卫星 → 白线；
- * - `dark`：深色底图 → 白线（略窄）。
+ * - `light`：浅色矢量底图 → 填色用选区蓝（同 drawMapEditHighlight 的 #4A6AF0），
+ *   线仍是深墨族的红实线；
+ * - `imagery`：影像/卫星 → 填色白纱提亮，绿树地上靠「变亮」而不是「变色」显形；
+ * - `dark`：深色底图 → 同影像，白纱提亮。
  */
 export type BoundaryHaloTone = 'light' | 'imagery' | 'dark';
 
@@ -253,6 +255,8 @@ export function boundaryHaloStyle(
 ): {
   halo: { color: string; width: number } | null;
   line: { color: string; width: number };
+  /** 场地「底片」填色的颜色（透明度另见 fillAlpha）。 */
+  fill: string;
   fillAlpha: number;
 } {
   const locked = opts.locked === true;
@@ -263,6 +267,7 @@ export function boundaryHaloStyle(
     return {
       halo: null,
       line: locked ? { color: red(0.68), width: 1.5 } : { color: red(0.96), width: 2.6 },
+      fill: '#ffffff',
       fillAlpha: 0.16,
     };
   }
@@ -270,6 +275,7 @@ export function boundaryHaloStyle(
     return {
       halo: null,
       line: locked ? { color: red(0.66), width: 1.4 } : { color: red(0.94), width: 2.4 },
+      fill: '#ffffff',
       fillAlpha: 0.12,
     };
   }
@@ -278,7 +284,8 @@ export function boundaryHaloStyle(
     // 浅色路网：红线稍微压一级（ 0.88 ），锁上再细一档、淡一档，保留地界但不抢业务层。
     line: locked ? { color: red(0.55), width: 1.3 } : { color: red(0.88), width: 2.2 },
     // 2026-11-16 用户「灰色的场地不够突出」：填充从 0.1 提到 0.14，让场地成为一块“底片”，
-    // 而不是一层看不出存在的薄纱。
+    // 而不是一层看不出存在的薄纱；2026-11-28 去绿改选区蓝——浅纸面上蓝比灰绿更“有意为之”。
+    fill: '#4a6af0',
     fillAlpha: 0.14,
   };
 }
@@ -298,14 +305,13 @@ export function drawBoundaryLayer(
 ): void {
   if (boundary.length < 3) return;
   const { ctx, viewport } = c;
-  const color = PLANNING_LAYER_COLORS.boundary;
   const style = boundaryHaloStyle(opts.halo ?? 'light', { locked: opts.locked === true });
   // 2026-11-19：选中态（点填充区选中、待 Delete 删整条）——填充加深一档、外描边加粗，
   // 不改颜色也不加额外图例：红线的语义不变，只是「现在说的是这一圈」。
   const selected = opts.selected === true;
   // 2026-11-16：先铺面（场地“底片”）；三种底图都用地红线（规划红实线）。
   traceRing(c, boundary);
-  ctx.fillStyle = hexWithAlpha(color, selected ? Math.min(0.32, style.fillAlpha + 0.12) : style.fillAlpha);
+  ctx.fillStyle = hexWithAlpha(style.fill, selected ? Math.min(0.32, style.fillAlpha + 0.12) : style.fillAlpha);
   ctx.fill();
   if (style.halo) {
     traceRing(c, boundary);
@@ -565,6 +571,258 @@ export function avoidLockOverlap(rect: LockRect, avoid: LockRect | null, gap = 6
     && rect.y < avoid.y + avoid.h
     && rect.y + rect.h > avoid.y;
   return overlap ? { ...rect, y: avoid.y + avoid.h + gap } : rect;
+}
+
+/* ---------------- 白框顶动作胶囊（2026-11-28 用户「红线的提示都追随在白框正上方」） ---------------- */
+
+/** 胶囊上的动作种类：✓ 确认 / ✕ 取消 / 🗑 删除整条（一律图标，不再落画布顶端的文字条）。 */
+export type FramePillAction = 'confirm' | 'cancel' | 'delete';
+
+export interface FramePillLayout {
+  /** 整枚胶囊（px）。bearing≠0 时带 angle，绘制绕自身中心旋转、命中区是逐钮的外接盒。 */
+  pill: { x: number; y: number; w: number; h: number; angle?: number };
+  /** 每颗动作钮的命中矩形（px，比视觉大一圈，好点）。 */
+  actions: { kind: FramePillAction; x: number; y: number; w: number; h: number }[];
+}
+
+const FRAME_PILL_HEIGHT = 26;
+const FRAME_PILL_BUTTON = 18;
+const FRAME_PILL_BUTTON_GAP = 4;
+const FRAME_PILL_PAD_X = 10;
+const FRAME_PILL_LABEL_GAP = 8;
+const FRAME_PILL_ABOVE_GAP = 8;
+const FRAME_PILL_FONT = '11px system-ui, sans-serif';
+const FRAME_PILL_INK = '#141416';
+/** 确认 ✓ 用品牌绿（规范口径「绿仅点睛：确认」），删除 🗑 用危险红，✕ 用墨灰。 */
+const FRAME_PILL_CONFIRM_INK = '#35624a';
+const FRAME_PILL_DANGER_INK = '#b4443c';
+const FRAME_PILL_CANCEL_INK = 'rgba(20, 20, 22, 0.72)';
+
+/** 胶囊文字宽度：量不到（node / jsdom 无 2D）就按 11px 等宽估，够布局用。 */
+let framePillMeasureCtx: CanvasRenderingContext2D | null = null;
+function framePillTextWidth(text: string): number {
+  if (typeof document === 'undefined') return text.length * 11;
+  if (!framePillMeasureCtx) {
+    framePillMeasureCtx = document.createElement('canvas').getContext('2d');
+  }
+  if (!framePillMeasureCtx) return text.length * 11;
+  framePillMeasureCtx.font = FRAME_PILL_FONT;
+  return framePillMeasureCtx.measureText(text).width;
+}
+
+/** 动作钮槽位（胶囊本地坐标）：标签居左、钮居右，返回每颗钮的中心 x。 */
+function framePillActionSlots(width: number, count: number): number[] {
+  const firstCenter = width - FRAME_PILL_PAD_X - FRAME_PILL_BUTTON / 2;
+  return Array.from({ length: count }, (_, index) =>
+    firstCenter - index * (FRAME_PILL_BUTTON + FRAME_PILL_BUTTON_GAP));
+}
+
+export interface FramePillState {
+  kind: 'pending' | 'candidate' | 'selected';
+  label: string;
+  actions: FramePillAction[];
+}
+
+/**
+ * 白框顶胶囊该画哪一枚（一次只画一枚，优先级 = 挂起的红线调整 > 候选活动范围 > 已选中）。
+ * 锁定态是「只看不改」：选中枚只留收起 ×，删除要解锁才挂（2026-11-28 并行口径沿用）。
+ */
+export function boundaryFramePillState(input: {
+  pendingEdit: boolean;
+  candidatePreview: boolean;
+  boundarySelected: boolean;
+  boundaryLocked: boolean;
+}): FramePillState | null {
+  if (input.pendingEdit) return { kind: 'pending', label: '红线已调整（待确认）', actions: ['confirm', 'cancel'] };
+  if (input.candidatePreview) return { kind: 'candidate', label: '候选活动范围（待核对）', actions: ['confirm', 'cancel'] };
+  if (input.boundarySelected) {
+    return {
+      kind: 'selected',
+      label: '已选中用地红线',
+      actions: input.boundaryLocked ? ['cancel'] : ['delete', 'cancel'],
+    };
+  }
+  return null;
+}
+
+export function framePillWidth(label: string, count: number): number {
+  return Math.ceil(
+    FRAME_PILL_PAD_X * 2 + framePillTextWidth(label) + FRAME_PILL_LABEL_GAP
+    + count * FRAME_PILL_BUTTON + Math.max(0, count - 1) * FRAME_PILL_BUTTON_GAP,
+  );
+}
+
+/**
+ * 白框顶胶囊的落位：水平居中于框、整体悬在框顶上方 FRAME_PILL_ABOVE_GAP px，
+ * 贴近画布边缘时向内夹住。ringPx 传「框环的屏幕投影」；bearing≠0 时与锁定钮同一套
+ * 轴对齐→屏幕换算（命中区放大到 1.5 倍边长覆盖旋转外接）。
+ */
+export function framePillLayout(
+  ringPx: readonly { x: number; y: number }[],
+  viewport: { canvasW: number; canvasH: number; bearing?: number },
+  label: string,
+  actions: readonly FramePillAction[],
+): FramePillLayout | null {
+  if (ringPx.length < 3 || actions.length === 0) return null;
+  const bearing = viewport.bearing ?? 0;
+  const axisRing = bearing ? ringPx.map(point => screenToAxis(point, viewport)) : ringPx;
+  const left = Math.min(...axisRing.map(point => point.x));
+  const right = Math.max(...axisRing.map(point => point.x));
+  const top = Math.min(...axisRing.map(point => point.y));
+  const width = framePillWidth(label, actions.length);
+  const height = FRAME_PILL_HEIGHT;
+  const slots = framePillActionSlots(width, actions.length);
+  if (!bearing) {
+    const centerX = Math.min(
+      Math.max((left + right) / 2, width / 2 + 4),
+      Math.max(4, viewport.canvasW - width / 2 - 4),
+    );
+    const y = Math.max(4, top - FRAME_PILL_ABOVE_GAP - height);
+    const pill = { x: Math.round(centerX - width / 2), y: Math.round(y), w: width, h: height };
+    return {
+      pill,
+      actions: actions.map((kind, index) => ({
+        kind,
+        x: Math.round(pill.x + slots[index]! - FRAME_PILL_BUTTON / 2),
+        y: Math.round(pill.y + (height - FRAME_PILL_BUTTON) / 2),
+        w: FRAME_PILL_BUTTON,
+        h: FRAME_PILL_BUTTON,
+      })),
+    };
+  }
+  // 旋转态：胶囊中心转回真实屏幕，逐钮命中盒取旋转外接（与锁定钮同一口径）。
+  const center = axisToScreen({ x: (left + right) / 2, y: top - FRAME_PILL_ABOVE_GAP - height / 2 }, viewport);
+  const angle = -bearing;
+  const pill = {
+    x: Math.round(center.x - width / 2),
+    y: Math.round(center.y - height / 2),
+    w: width,
+    h: height,
+    angle,
+  };
+  const side = Math.ceil(FRAME_PILL_BUTTON * 1.5);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return {
+    pill,
+    actions: actions.map((kind, index) => {
+      const localX = slots[index]! - width / 2;
+      return {
+        kind,
+        x: Math.round(center.x + localX * cos - side / 2),
+        y: Math.round(center.y + localX * sin - side / 2),
+        w: side,
+        h: side,
+      };
+    }),
+  };
+}
+
+/** 胶囊动作钮是否被点到（热区比视觉大一圈）。 */
+export function hitFramePillAction(layout: FramePillLayout, px: { x: number; y: number }): FramePillAction | null {
+  for (const action of layout.actions) {
+    if (px.x >= action.x - 2 && px.x <= action.x + action.w + 2
+      && px.y >= action.y - 2 && px.y <= action.y + action.h + 2) {
+      return action.kind;
+    }
+  }
+  return null;
+}
+
+/** 胶囊上的图标：✓ 绿勾、✕ 墨叉、🗑 红垃圾桶（盖 + 桶身 + 两道竖纹），全手画不依赖图标集。 */
+function drawFramePillIcon(ctx: CanvasRenderingContext2D, kind: FramePillAction, cx: number, cy: number): void {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (kind === 'confirm') {
+    ctx.strokeStyle = FRAME_PILL_CONFIRM_INK;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, cy + 0.5);
+    ctx.lineTo(cx - 1, cy + 3.5);
+    ctx.lineTo(cx + 4.5, cy - 3.5);
+    ctx.stroke();
+  } else if (kind === 'cancel') {
+    ctx.strokeStyle = FRAME_PILL_CANCEL_INK;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 3.5, cy - 3.5);
+    ctx.lineTo(cx + 3.5, cy + 3.5);
+    ctx.moveTo(cx + 3.5, cy - 3.5);
+    ctx.lineTo(cx - 3.5, cy + 3.5);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = FRAME_PILL_DANGER_INK;
+    ctx.fillStyle = FRAME_PILL_DANGER_INK;
+    ctx.lineWidth = 1.6;
+    // 盖 + 桶身 + 两道竖纹。
+    ctx.beginPath();
+    ctx.moveTo(cx - 4.5, cy - 2.2);
+    ctx.lineTo(cx + 4.5, cy - 2.2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 3.2, cy - 2.2);
+    ctx.lineTo(cx - 2.5, cy + 4.5);
+    ctx.lineTo(cx + 2.5, cy + 4.5);
+    ctx.lineTo(cx + 3.2, cy - 2.2);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 1.2, cy - 0.2);
+    ctx.lineTo(cx - 1.2, cy + 2.6);
+    ctx.moveTo(cx + 1.2, cy - 0.2);
+    ctx.lineTo(cx + 1.2, cy + 2.6);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** 画白框顶胶囊：白底圆角牌 + 标签 + 动作图标（质感与锁定钮/地图标签同一套）。 */
+export function drawFrameActionPill(
+  c: PlanCanvasContext,
+  layout: FramePillLayout,
+  label: string,
+): void {
+  const { ctx } = c;
+  const pill = layout.pill;
+  const angle = pill.angle ?? 0;
+  ctx.save();
+  let x: number;
+  let y: number;
+  if (angle) {
+    ctx.translate(pill.x + pill.w / 2, pill.y + pill.h / 2);
+    ctx.rotate(angle);
+    x = -pill.w / 2;
+    y = -pill.h / 2;
+  } else {
+    x = pill.x;
+    y = pill.y;
+  }
+  ctx.shadowColor = 'rgba(10, 14, 20, 0.18)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, pill.w, pill.h, 13);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.97)';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.beginPath();
+  ctx.roundRect(x + 0.5, y + 0.5, pill.w - 1, pill.h - 1, 12.5);
+  ctx.strokeStyle = 'rgba(17, 19, 23, 0.16)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.font = FRAME_PILL_FONT;
+  ctx.fillStyle = FRAME_PILL_INK;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + FRAME_PILL_PAD_X, y + pill.h / 2 + 0.5);
+  const slots = framePillActionSlots(pill.w, layout.actions.length);
+  layout.actions.forEach((action, index) => {
+    drawFramePillIcon(ctx, action.kind, x + slots[index]!, y + pill.h / 2);
+  });
+  ctx.restore();
 }
 
 /**

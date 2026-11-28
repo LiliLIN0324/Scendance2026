@@ -95,17 +95,26 @@ describe('用地红线：边界 = 规划红实线 + 白垫边（2026-11-16 用�
     expect(alphaOf(line.color)).toBeGreaterThan(alphaOf(boundaryHaloStyle('light').line.color));
   });
 
-  it('填色仍用品牌绿，且影像底深一档：身份靠填色，不靠线', () => {
+  it('填色不再用品牌绿：矢量底选区蓝、影像底白纱（2026-11-28 用户「绿选区卫星上看不到」）', () => {
     const light = makeCtx();
     drawBoundaryLayer({ ctx: light.ctx, viewport: view } as PlanCanvasContext, ring, { halo: 'light' });
     const imagery = makeCtx();
     drawBoundaryLayer({ ctx: imagery.ctx, viewport: view } as PlanCanvasContext, ring, { halo: 'imagery' });
     const alphaOf = (s: string) => Number(s.slice(s.lastIndexOf(',') + 1, s.lastIndexOf(')')));
-    // 两层都还是场地绿的低透明面
-    expect(light.fills[0]).toContain('53,98,74');
-    expect(imagery.fills[0]).toContain('53,98,74');
+    // 矢量底：选区蓝（同 drawMapEditHighlight 的 #4A6AF0）；影像底：白纱提亮——
+    // 绿色低透明面盖在卫星植被上等于不存在，靠“变亮”而不是“变色”显形。
+    expect(light.fills[0]).toContain('74,106,240');
+    expect(imagery.fills[0]).toContain('255,255,255');
     expect(alphaOf(light.fills[0]!)).toBeCloseTo(boundaryHaloStyle('light').fillAlpha, 3);
     expect(alphaOf(imagery.fills[0]!)).toBeGreaterThan(alphaOf(light.fills[0]!));
+  });
+
+  it('选中态：填色加深一档（2026-11-19 点填充区选中待删），同样不再发绿', () => {
+    const cap = makeCtx();
+    drawBoundaryLayer({ ctx: cap.ctx, viewport: view } as PlanCanvasContext, ring, { halo: 'light', selected: true });
+    const alphaOf = (s: string) => Number(s.slice(s.lastIndexOf(',') + 1, s.lastIndexOf(')')));
+    expect(cap.fills[0]).toContain('74,106,240');
+    expect(alphaOf(cap.fills[0]!)).toBeGreaterThan(boundaryHaloStyle('light').fillAlpha);
   });
 
   it('锁定后红线仍在地界上：更细、更淡，但仍是红色实线', () => {
