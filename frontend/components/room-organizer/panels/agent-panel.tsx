@@ -181,6 +181,7 @@ import {
   replaceAssistantSessionBodies,
   useAssistantSessions, scopedAssistantStorage,
 } from '../hooks/use-assistant-sessions';
+import { planBoundaryAreaM2 } from '../lib/plan-facility-display';
 import { SessionHistoryOverlay, markSessionSeen, sessionUnreadSince, type SessionStatus } from './session-history-panel';
 import { RailAvatar } from './rail-avatar';
 import type { RoomLayout } from '../lib/types';
@@ -1257,7 +1258,9 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
 
   /** 清单和文案里的米数跟复盘卡同一条规矩：人给过尺度、或壳体立起来了才算数。 */
   function confirmedArea(): number | null {
-    return venueUp || scaleOrigin === 'stated' || scaleOrigin === 'typed' ? venueArea(live.current) : null;
+    return venueUp || scaleOrigin === 'stated' || scaleOrigin === 'typed'
+      ? planBoundaryAreaM2(outdoorPlan) ?? venueArea(live.current)
+      : null;
   }
 
   /** 「出物料清单」：直接读物料汇总，不另开一套表单；有一版本地预览时按预览版算。 */
@@ -4080,13 +4083,13 @@ export function VenueBriefLine(): JSX.Element | null {
  */
 export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.Element {
   const agent = useAgent();
-  const { layout, activeFloor } = useRoomEditor();
+  const { layout, activeFloor, outdoorPlan } = useRoomEditor();
   const { event, guests, dims, note } = agent.recap;
   const items = materialCount(activeFloor.items);
   const known = agent.venueUp;
   const noteLines = [
     dims,
-    known ? `${formatArea(venueArea(layout))} m²` : null,
+    known ? `${formatArea(planBoundaryAreaM2(outdoorPlan) ?? venueArea(layout))} m²` : null,
   ].filter(Boolean).join(' · ');
   const status = agent.exportPreview
     ? '导出预览还没确认'
@@ -4435,7 +4438,7 @@ export function AgentPanel({ onClose, headerAvatarRef, headerAvatarVisible = tru
   };
   // 候选卡决策留痕：只在本机这一轮内存里，刷新/换会话即清，不写后端。
   const [proposalDecision, setProposalDecision] = useState<ProposalDecision | null>(null);
-  const { layout, activeFloor, actions: layoutActions } = useRoomEditor();
+  const { layout, activeFloor, actions: layoutActions, outdoorPlan } = useRoomEditor();
   const mode = agent.callbacks.workbenchMode;
   const draftKey=JSON.stringify([agent.sessionScope,assistantSessions.activeId]);
   const [draftState,setDraftState]=useState(()=>({key:draftKey,value:volatileComposerDrafts.get(draftKey)??''}));
@@ -5041,7 +5044,7 @@ useEffect(() => {
             <span className="ap-blocked-stamp"><MapIcon size={12} aria-hidden="true"/>布置</span>
             <strong>这一版布置</strong>
             <div className="ap-stats">
-              <div className="ap-stat"><b>{formatArea(venueArea(layout))}</b><span>㎡ 场地</span></div>
+              <div className="ap-stat"><b>{formatArea(planBoundaryAreaM2(outdoorPlan) ?? venueArea(layout))}</b><span>㎡ 场地</span></div>
               <div className="ap-stat"><b>{items}</b><span>件物料</span></div>
             </div>
             {agent.overlapCount > 0 ? <p className="ap-warn-line"><span aria-hidden="true">!</span>{agent.overlapCount} 件物料重叠或超出场地，画布上已用黄色标出。</p> : <p className="ap-ok-line">没发现物料重叠，场地还要核对。</p>}

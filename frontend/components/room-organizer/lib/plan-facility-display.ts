@@ -8,8 +8,10 @@
  * - 只做展示投影（计数 / 评审主体 / 清单行），不补规格、不编尺寸、不参与试算。
  */
 
+import { planRingAreaM2, type PlanFacility, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import { materialCount } from './structural-layout';
 import { UNNAMED_MATERIAL } from './proposal-change-groups';
-import type { PlanFacility } from '../../../../supabase/functions/_shared/site-plan';
+import type { FurnitureItem } from './types';
 
 /** 评审卡主体：钉挂回的物件 id 与展示名。 */
 export interface PlanFacilitySubject {
@@ -64,4 +66,14 @@ export function facilityInventoryRows(
     });
   }
   return [...rows.values()];
+}
+
+/**
+ * 场地边界面积（m²）：plan 未绑定，或边界空环 / 不足 3 点时返回 null，
+ * 由调用方回落 legacy `venueArea(layout)`；合法环复用契约 `planRingAreaM2` 现算。
+ * 入参不被修改；只做展示投影，不补默认外框。
+ */
+export function planBoundaryAreaM2(plan: SitePlanData | null): number | null {
+  if (!plan || plan.boundary.length < 3) return null;
+  return planRingAreaM2(plan.boundary);
 }
