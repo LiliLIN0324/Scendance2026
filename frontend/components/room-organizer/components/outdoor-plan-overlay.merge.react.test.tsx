@@ -227,6 +227,27 @@ it('keeps search candidate numbers while agent previews are cleared and a bounda
   expect(placeSearch.props?.revokeCandidatePins).toBe(revokeToken);
   expect(state.canvas?.searchPins).toEqual(pins);
 });
+it('previewing a chat candidate numbers the map pin with the same 1-based number', () => {
+  // 2026-11-28 用户：「这个还是可以服从123的逻辑啊」——卡片写「2.」的场地，地图上的钉也得是 2。
+  render(<Overlay projectId="pin-number" seedPlan={createStarterOutdoorPlan()} />);
+  act(() => state.bridge?.previewVenuePoint?.({ name: '场地2', lng: 120.01, lat: 30, index: 1 }));
+  expect(state.canvas?.searchPin).toMatchObject({ label: '场地2', index: 1 });
+  expect(state.canvas?.searchPin?.lng).toBeCloseTo(120.01, 6);
+});
+it('picking a numbered dropdown option keeps that number on the pin', () => {
+  render(<Overlay projectId="pin-number-pick" seedPlan={createStarterOutdoorPlan()} />);
+  const place = { id: 'senlin', name: '青山湖水上森林', address: '锦北街道', lng: 120.02, lat: 30.01 };
+  const first = { index: 0, name: '别的场地', lng: 120.5, lat: 30.5, place: { ...place, id: 'other', name: '别的场地', lng: 120.5, lat: 30.5 } };
+  const second = { index: 1, name: place.name, lng: place.lng, lat: place.lat, place };
+  act(() => placeSearch.props!.onCandidatesChange!([first, second]));
+  act(() => state.canvas!.onSearchCandidatePick!(second));
+  expect(state.canvas?.searchPin).toMatchObject({ label: place.name, index: 1 });
+});
+it('a pin with no matching candidate still gets no invented number', () => {
+  render(<Overlay projectId="pin-number-none" seedPlan={createStarterOutdoorPlan()} />);
+  act(() => state.bridge?.previewVenuePoint?.({ name: '无名坐标', lng: 120.09, lat: 30.09 }));
+  expect(state.canvas?.searchPin?.index).toBeUndefined();
+});
 it('hands the exact selected place to the agent on map confirmation without starting a second search', () => {
   agent.searchOutdoorVenue.mockClear();
   agent.confirmOutdoorVenue.mockClear();

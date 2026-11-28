@@ -2621,13 +2621,39 @@ export interface SearchCandidatePin {
 }
 
 /**
- * 选中点属于候选时，由红色编号钉和名称标签表示，不再叠白色钉。
+ * 选中点属于候选时返回它在候选里的下标（不是候选就返 -1）。
+ * 先比坐标（同一枚钉的重绘），再比名字：候选被选地吸附、或对话侧另一次检索给同一地点算的点
+ * 差几十米时，靠名字认下「这就是第 N 个」——否则同一地点会同时长出编号钉和一枚裸钉。
+ */
+export function matchCandidatePin(
+  pins: ReadonlyArray<SearchCandidatePin>,
+  selected: { lng: number; lat: number; name?: string; label?: string } | null,
+): number {
+  if (!selected) return -1;
+  const exact = pins.findIndex(pin => pin.lng === selected.lng && pin.lat === selected.lat);
+  if (exact >= 0) return exact;
+  const name = normalizePinName(selected.label ?? selected.name ?? '');
+  if (!name) return -1;
+  return pins.findIndex(pin => normalizePinName(pin.name) === name);
+}
+
+/** 同名判定用的归一：全半角括号、空白、常见后缀差异不应让同一地点分成两枚钉。 */
+export function normalizePinName(name: string): string {
+  return name
+    .replace(/[（(]/g, '(')
+    .replace(/[）)]/g, ')')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+/**
+ * 选中点属于候选时，由红色编号钉和名称标签表示，不再叠另一枚钉。
  */
 export function isCandidateSearchPin(
   pins: ReadonlyArray<SearchCandidatePin>,
-  selected: { lng: number; lat: number } | null,
+  selected: { lng: number; lat: number; name?: string; label?: string } | null,
 ): boolean {
-  return !!selected && pins.some(pin => pin.lng === selected.lng && pin.lat === selected.lat);
+  return matchCandidatePin(pins, selected) >= 0;
 }
 
 /** 只错开屏幕标记，不改变地点坐标；相邻/同坐标的候选也要能读到各自编号。 */
@@ -2713,11 +2739,17 @@ export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ po
 }
 
 /**
- * 搜地点定位钉：红色水滴针（白描边 + 轻投影），与候选编号钉同一套视觉。
- * 2026-11-28 用户：「白色的点」留在图上就是残留物，点位一律用红线色，仓库里不再有白针。
+ * 搜地点的单枚钉。带上 `index`（下拉里那条的序号，0 起）就画成与候选钉完全相同的编号钉：
+ * 下拉写「2」、地图上就是「2」，不用再去猜它对的是哪个候选（2026-11-28 用户：「这个还是可以服从123的逻辑啊」）。
+ * 没序号时（例如从别处只拿到一个坐标）才画不带数字的纯红钉——它仍是红针，不会回到白点。
  * 只是视图辅助——不写进 plan，不参与统计/交付/冲突判定，换搜索或关掉即消失。
  */
-export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; label: string }): void {
+export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; label: string; index?: number }): void {
+  if (pin.index != null && pin.index >= 0) {
+    // 同一支笔：编号、尺寸、名称胶囊、避让都与批量编号钉一致，不会出现两种“带号钉”。
+    drawCandidatePins(c, [{ point: pin.point, index: pin.index, label: pin.label }]);
+    return;
+  }
   const { ctx, viewport } = c;
   const pt = planPointToPixel(pin.point, viewport);
   const headY = pt.y - 7;

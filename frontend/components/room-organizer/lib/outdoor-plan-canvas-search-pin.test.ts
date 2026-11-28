@@ -1,74 +1,100 @@
 import { describe, expect, it } from 'vitest';
-import { drawSearchPin, OUTDOOR_RED, type PlanCanvasContext, type PlanViewport } from './outdoor-plan-canvas';
+import {
+  drawSearchPin,
+  matchCandidatePin,
+  normalizePinName,
+  OUTDOOR_RED,
+  type PlanCanvasContext,
+  type PlanViewport,
+  type SearchCandidatePin,
+} from './outdoor-plan-canvas';
 
 const view: PlanViewport = { lng: 120.141306, lat: 30.2545, zoom: 18, canvasW: 1200, canvasH: 800 };
 
 interface Capture {
   ctx: CanvasRenderingContext2D;
   fills: string[];
-  strokes: string[];
   texts: string[];
 }
 
-/** 只记「填充时用的颜色」：断言按位置（谁最先被填）走，不按句子走。 */
 function capture(): Capture {
-  const cap: Capture = { fills: [], strokes: [], texts: [] } as unknown as Capture;
+  const cap: Capture = { fills: [], texts: [] } as unknown as Capture;
   let fillStyle = '';
-  let strokeStyle = '';
   const ctx = {
-    save: () => {},
-    restore: () => {},
-    beginPath: () => {},
-    closePath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
-    quadraticCurveTo: () => {},
-    arc: () => {},
-    roundRect: () => {},
+    save: () => {}, restore: () => {}, beginPath: () => {}, closePath: () => {},
+    moveTo: () => {}, lineTo: () => {}, quadraticCurveTo: () => {}, arc: () => {}, roundRect: () => {},
     fill: () => { cap.fills.push(String(fillStyle)); },
-    stroke: () => { cap.strokes.push(String(strokeStyle)); },
+    stroke: () => {},
     measureText: (text: string) => ({ width: text.length * 7 }),
     fillText: (text: string) => { cap.texts.push(text); },
   } as unknown as CanvasRenderingContext2D;
-  for (const prop of ['fillStyle', 'strokeStyle'] as const) {
-    Object.defineProperty(ctx, prop, {
-      get: () => (prop === 'fillStyle' ? fillStyle : strokeStyle),
-      set: (value: unknown) => { if (prop === 'fillStyle') fillStyle = String(value); else strokeStyle = String(value); },
-    });
-  }
-  for (const prop of ['lineWidth', 'shadowColor', 'shadowBlur', 'shadowOffsetY', 'textAlign', 'textBaseline', 'font']) {
+  Object.defineProperty(ctx, 'fillStyle', {
+    get: () => fillStyle,
+    set: (value: unknown) => { fillStyle = String(value); },
+  });
+  for (const prop of ['strokeStyle', 'lineWidth', 'shadowColor', 'shadowBlur', 'shadowOffsetY', 'textAlign', 'textBaseline', 'font']) {
     Object.defineProperty(ctx, prop, { get: () => 0, set: () => {} });
   }
   cap.ctx = ctx;
   return cap;
 }
 
-function pin() {
+const point = { x: 0, y: 0 };
+const draw = (pin: { point: typeof point; label: string; index?: number }) => {
   const cap = capture();
-  drawSearchPin({ ctx: cap.ctx, viewport: view } as PlanCanvasContext, { point: { x: 0, y: 0 }, label: '青山湖水上森林' });
+  drawSearchPin({ ctx: cap.ctx, viewport: view } as PlanCanvasContext, pin as never);
   return cap;
-}
+};
 
-// 2026-11-28 用户：地图上的白点像残留物，点位一律红色。这条钉住「针身不许白」这一条位置，
-// 只断言旧白针的填充色消失了不够——换别的浅色同样要挂。
-describe('搜地点定位钉：红色，不再有白针', () => {
-  it('针身第一笔填充就是红线色', () => {
-    expect(pin().fills[0]).toBe(OUTDOOR_RED);
+const candidates: SearchCandidatePin[] = [
+  { index: 0, lng: 120.1, lat: 30.2, name: '青山湖水上森林' },
+  { index: 1, lng: 120.3, lat: 30.4, name: '水上森林设计师度假别墅(杭州临安店)' },
+];
+
+// 2026-11-28 用户：「这个还是可以服从123的逻辑啊」——列表写第几条，地图上的钉就得是几号，
+// 不能是一枚无从对号的裸钉。断言按「钉身里有没有那个数字」钉住，不钉颜色/尺寸。
+describe('搜地点定位钉服从列表编号', () => {
+  it('带序号时，钉身上画出与列表同一个号（白字）', () => {
+    const cap = draw({ point, label: '青山湖水上森林', index: 0 });
+    expect(cap.texts).toContain('1');
+    expect(cap.fills[0]).toBe(OUTDOOR_RED);
   });
 
-  it('针身不再有白色填充，也没有旧的黑针心', () => {
-    const cap = pin();
-    expect(cap.fills).not.toContain('#ffffff');
-    expect(cap.fills).not.toContain('#fff');
-    expect(cap.fills).not.toContain('white');
-    expect(cap.fills.slice(0, 1)).not.toContain('#141416');
+  it('序号 2 画「2」，不写死成「1」', () => {
+    expect(draw({ point, label: '第二候选', index: 1 }).texts).toContain('2');
   });
 
-  it('红针带白色描边，暗底图上仍能看清', () => {
-    expect(pin().strokes.some(stroke => stroke.includes('255, 255, 255'))).toBe(true);
+  it('带序号的钉照样挂名称胶囊', () => {
+    const cap = draw({ point, label: '青山湖水上森林', index: 0 });
+    expect(cap.texts).toContain('青山湖水上森林');
   });
 
-  it('名称标签照旧挂在针上', () => {
-    expect(pin().texts).toContain('青山湖水上森林');
+  it('没有序号时才退回纯红钉，不编一个号出来', () => {
+    const cap = draw({ point, label: '某个坐标' });
+    expect(cap.texts.some(text => /^\d+$/.test(text))).toBe(false);
+    expect(cap.fills[0]).toBe(OUTDOOR_RED);
+  });
+});
+
+describe('选中点与候选对号', () => {
+  it('坐标一致就算第 0 个', () => {
+    expect(matchCandidatePin(candidates, { lng: 120.1, lat: 30.2 })).toBe(0);
+  });
+
+  it('吸附后坐标略偏，靠名字仍认得是同一个候选（不另长一枚裸钉）', () => {
+    expect(matchCandidatePin(candidates, { lng: 120.112, lat: 30.208, label: '青山湖水上森林' })).toBe(0);
+  });
+
+  it('括号全半角差异不影响对号', () => {
+    expect(matchCandidatePin(candidates, { lng: 0, lat: 0, label: '水上森林设计师度假别墅（杭州临安店）' })).toBe(1);
+  });
+
+  it('不在候选里就返 -1', () => {
+    expect(matchCandidatePin(candidates, { lng: 0, lat: 0, label: '别的地方' })).toBe(-1);
+    expect(matchCandidatePin(candidates, null)).toBe(-1);
+  });
+
+  it('归一不改动名字本体的空白语义之外的内容', () => {
+    expect(normalizePinName(' 青山湖 水上森林 ')).toBe('青山湖水上森林');
   });
 });

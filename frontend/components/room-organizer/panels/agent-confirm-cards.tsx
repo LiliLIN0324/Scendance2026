@@ -17,8 +17,12 @@ import type { ZoneEventProposal } from '../lib/zone-event-proposal';
 export function VenueConfirmCard({ state, onPick, onPreview, onDismiss, onManual, scopeConfirmed = false }: {
   state: { query: string; candidates: PlaceSuggestion[]; loading: boolean; picking: string | null; failed?: boolean };
   onPick: (place: PlaceSuggestion) => void;
-  /** 点选只做地图预览；不传则维持旧行为（点选即确认）。 */
-  onPreview?: (place: PlaceSuggestion) => void;
+  /**
+   * 点选只做地图预览；不传则维持旧行为（点选即确认）。
+   * `index` 是卡片上的 1/N 序号（0 起）：地图上的钉带同一个号，不再是一枚无从对号的裸钉
+   * （2026-11-28 用户：「这个还是可以服从123的逻辑啊」）。
+   */
+  onPreview?: ((place: PlaceSuggestion, index: number) => void) | undefined;
   onDismiss: () => void;
   /** 没有候选时的地图兜底：打开地图圈画，不让用户卡在「没搜到」。 */
   onManual?: (() => void) | undefined;
@@ -60,7 +64,7 @@ export function VenueConfirmCard({ state, onPick, onPreview, onDismiss, onManual
           onClick={() => {
             if (browsing !== place.name) {
               setBrowsing(place.name);
-              onPreview?.(place);
+              onPreview?.(place, index);
             }
           }}
         >

@@ -1,10 +1,38 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { VenueConfirmCard } from './agent-confirm-cards';
 
 // globals 未开启时 Testing Library 不会自动卸载上一用例的 DOM，渲染次数一多就会串页。
 afterEach(cleanup);
+
+/**
+ * 2026-11-28 用户：「这个还是可以服从123的逻辑啊」——卡片上的 1/2 与地图上的钉必须是同一个序号，
+ * 所以点选预览时要把下标一并交出去。
+ */
+describe('VenueConfirmCard 预览时带上列表序号', () => {
+  const place = (name: string, lng: number) => ({ id: name, name, address: '某路 1 号', lng, lat: 30 });
+  const state = {
+    query: '青山湖水上森林',
+    candidates: [place('甲场地', 120.01), place('乙场地', 120.02), place('丙场地', 120.03)],
+    loading: false,
+    picking: null,
+  };
+
+  it('点第 2 条，预览拿到 index=1', () => {
+    const onPreview = vi.fn();
+    render(<VenueConfirmCard state={state} onPick={vi.fn()} onPreview={onPreview} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByText('2. 乙场地'));
+    expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({ name: '乙场地' }), 1);
+  });
+
+  it('点第 1 条拿 index=0（0 是真值，不能被当成「没给」）', () => {
+    const onPreview = vi.fn();
+    render(<VenueConfirmCard state={state} onPick={vi.fn()} onPreview={onPreview} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByText('1. 甲场地'));
+    expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({ name: '甲场地' }), 0);
+  });
+});
 
 /**
  * T1-a（2026-11-19）：失败卡必须说清「试了什么 / 已保留什么 / 下一步」，

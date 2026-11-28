@@ -594,7 +594,7 @@ interface AgentValue {
   /** V-1c 锚定链：POI 轮廓 → 行政区 → 起步矩形兜底，走 applyMapVenuePick 落壳。 */
   handleVenuePick(place: PlaceSuggestion): void;
   /** 2026-11-19 用户指令：候选点选只做地图预览（钉点+飞过去，不写方案），确认才走锚定链。 */
-  previewVenueCandidate(place: PlaceSuggestion): void;
+  previewVenueCandidate(place: PlaceSuggestion, index?: number): void;
   dismissVenuePick(): void;
   /** V-2d 流线提案（预览态）：虚线画在画布上，确认才 applyRoutes 写入（可撤销）。 */
   routeProposal: RouteProposal | null;
@@ -3955,7 +3955,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     venuePick,
     confirmOutdoorVenue: place => { void handleVenuePick(place); },
     handleVenuePick: place => { void handleVenuePick(place); },
-    previewVenueCandidate: place => { routeBridgeRef.current?.previewVenuePoint?.(place); },
+    previewVenueCandidate: (place, index) => { routeBridgeRef.current?.previewVenuePoint?.({ ...place, ...(typeof index === 'number' ? { index } : {}) }); },
     dismissVenuePick: stopOutdoorTask,
     outdoorTask,
     manualOutdoorVenueApplied: anchor => {
@@ -4923,7 +4923,7 @@ useEffect(() => {
         state={agent.venuePick}
         scopeConfirmed={agent.outdoorWorkflow.scopeConfirmed()}
         onPick={place => agent.handleVenuePick(place)}
-        onPreview={place => agent.previewVenueCandidate(place)}
+        onPreview={(place, index) => agent.previewVenueCandidate(place, index)}
         onManual={() => agent.startMapVenuePicker()}
         onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '场地候选' }); agent.dismissVenuePick(); }}
       />}

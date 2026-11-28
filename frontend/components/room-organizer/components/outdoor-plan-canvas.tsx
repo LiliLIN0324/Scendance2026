@@ -156,8 +156,8 @@ import {
   type LayerVisibility,
   type PlanViewport,
   type SearchCandidatePin,
-  isCandidateSearchPin,
   layoutCandidatePins,
+  matchCandidatePin,
 } from '../lib/outdoor-plan-canvas';
 import { planRightClickAction } from '../lib/plan-right-click';
 import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
@@ -583,7 +583,7 @@ export interface OutdoorPlanCanvasProps {
    * B：搜地点落点（纯视图辅助，不写进 plan）。有值时在对应经纬度画一枚定位钉 +
    * 名称标签；换地点/清空即重画，不参与统计、交付或冲突判定。
    */
-  searchPin?: { lng: number; lat: number; label: string } | null;
+  searchPin?: { lng: number; lat: number; label: string; index?: number } | null;
   /**
    * 2026-11-27 用户指令（对齐百度地图）：搜地点候选的批量编号钉——`index` 与左上角
    * 下拉的 1/N 序号一致。纯视图辅助，不写进 plan；点选后仍保留全部红色编号。
@@ -1791,7 +1791,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const baseModeRef = useRef<'map' | 'floor'>(base);
   const drawRef = useRef<() => void>(() => {});
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
-  const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
+  const searchPinRef = useRef<{ lng: number; lat: number; label: string; index?: number } | null>(searchPin ?? null);
   const searchPinsRef = useRef<ReadonlyArray<SearchCandidatePin> | null>(searchPins ?? null);
   const candidateViewKeyRef = useRef('');
   const focusCandidateBoundsRef = useRef(focusBounds);
@@ -4204,28 +4204,36 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       });
     }
     const pin = searchPinRef.current;
-    // 搜索结果全部画红色编号，选中项保留编号并加名称，不换成另一种钉。
-    const candidatePins = searchPinsRef.current;
-    if (candidatePins?.length) {
-      drawCandidatePins({ ctx: planCtx, viewport }, candidatePins.map(candidate => ({
+    // 搜索结果全部画红色编号，选中项保留编号并加名称：下拉写第几条，图上就是几号。
+    // 2026-11-28 用户「这个还是可以服从123的逻辑啊」：不再出现无从对号的裸钉。
+    const candidatePins = searchPinsRef.current ?? [];
+    const pinMatch = matchCandidatePin(candidatePins, pin);
+    if (candidatePins.length) {
+      drawCandidatePins({ ctx: planCtx, viewport }, candidatePins.map((candidate, index) => ({
+        // 选中的那一条用钉子自己的坐标：选地吸附后的修正点比检索源 POI 点更贴真实占地（2026-11-28）。
         point: lngLatToEnu(
-          candidate.lng,
-          candidate.lat,
+          index === pinMatch && pin ? pin.lng : candidate.lng,
+          index === pinMatch && pin ? pin.lat : candidate.lat,
           current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
           current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
         ),
         index: candidate.index,
-        ...(pin && candidate.lng === pin.lng && candidate.lat === pin.lat ? { label: pin.label } : {}),
+        ...(index === pinMatch && pin ? { label: pin.label } : {}),
       })));
     }
-    if (pin && !isCandidateSearchPin(candidatePins ?? [], pin)) {
+    if (pin && pinMatch < 0) {
       const pinPoint = lngLatToEnu(
         pin.lng,
         pin.lat,
         current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
         current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
       );
-      drawSearchPin({ ctx: planCtx, viewport }, { point: pinPoint, label: pin.label });
+      // 钉上有序号（来自对话候选或下拉）就画成编号钉；没有序号才退回纯红钉。
+      drawSearchPin({ ctx: planCtx, viewport }, {
+        point: pinPoint,
+        label: pin.label,
+        ...(typeof pin.index === 'number' ? { index: pin.index } : {}),
+      });
     }
     // 2026-11-19 实景扫描落位钉：钉在「这套点云落在哪」，跟搜地点钉分开画，互不顶掉。
 

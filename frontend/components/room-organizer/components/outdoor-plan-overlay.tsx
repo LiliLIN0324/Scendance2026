@@ -17,7 +17,7 @@ import OutdoorPlanCanvas, {
   type CanvasBasemapSource,
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
-import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import { enuToLngLat, normalizePinName } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import type { SearchCandidatePin } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { REPLICA_CASES } from '../lib/replica-cases';
@@ -539,7 +539,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // 搜地点（用户 m04938 / m05472）：左上角「和地图 App 一样」的搜索框，组件本体在
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
   // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
-  const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
+  // index：来自下拉/对话候选的序号（0 起），让地图上的钉和列表写同一个号（2026-11-28）。
+  const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string; index?: number } | null>(null);
   // 2026-11-27 用户指令（对齐百度地图）：搜索下拉的候选批量编号钉。
   // 搜索结果与 Agent 预览独立：选场地、应用范围、开始新任务都不撤搜索编号。
   // 只在清除搜索或换活动时收起，选中项仍是红色编号。
@@ -565,9 +566,10 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
       shape.polygon,
       placePinRef.current?.label === name ? placePinRef.current : fallback,
     );
-    setPlacePin(previous => previous?.label === name && candidatePinsRef.current?.length
+    // 吸附只搬坐标，序号跟着钉子走：吸附后也不能掉号、也不能变回裸钉。
+    setPlacePin(previous => previous?.label === name
       ? { ...previous, lng: snapped.lng, lat: snapped.lat }
-      : { lng: snapped.lng, lat: snapped.lat, label: name });
+      : { lng: snapped.lng, lat: snapped.lat, label: name, ...(candidateIndexByName(name) != null ? { index: candidateIndexByName(name)! } : {}) });
     setCandidatePins(list => list?.length
       ? list.map(pin => pin.name === name ? { ...pin, lng: snapped.lng, lat: snapped.lat } : pin)
       : list);
@@ -585,11 +587,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
    */
   const handOverPlaceToChat = (name: string) =>
     answersPlaceRequest(agent?.outdoorWorkflow.state.stage, name, query => agent?.searchOutdoorVenue(query));
+  /** 同名地点在候选里的序号；找不到就返 undefined（钉子退回纯红钉，不编造序号）。 */
+  const candidateIndexByName = (name: string): number | undefined =>
+    candidatePinsRef.current?.find(pin => pin.name === name || normalizePinName(pin.name) === normalizePinName(name))?.index;
   const previewSearchPlace = (place: import('../lib/place-search').PlaceSuggestion) => {
     clearPlaceRangePreview();
     setSelectedSearchPlace(place);
     setPlaceArea(null);
-    setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
+    const index = candidateIndexByName(place.name);
+    setPlacePin({ lng: place.lng, lat: place.lat, label: place.name, ...(index != null ? { index } : {}) });
     if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
     lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
   };
@@ -775,7 +781,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         }
         return applied;
       },
-      previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name }); setPlaceArea(null); if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
+      previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name, ...(typeof place.index === 'number' ? { index: place.index } : {}) }); setPlaceArea(null); if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
       // 2026-11-28 用户「点是错误的，轮廓是对的」：轮廓到手把选中钉吸附进足迹——
       // 只搬钉子（含编号钉里的同一候选），不动选区/视图，不与 previewVenuePoint 的飞视图混用。
       correctVenuePin: place => {
