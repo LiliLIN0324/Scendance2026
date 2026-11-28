@@ -5,9 +5,10 @@
  * 布置改场景，评审只读并钉意见，执行导出清单。
  */
 import { useRoomEditor } from '../contexts';
+import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
+import { facilityInventoryRows, facilitySubjects } from '../lib/plan-facility-display';
 import { countOpenPins, pinSubject, pinsForFilter, type ReviewPin, type ReviewPinFilter } from '../lib/review-pins';
 import { useAgent } from './agent-panel';
-import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import type { FurnitureItem } from '../lib/types';
 import './mode-shell.css';
 
@@ -75,16 +76,25 @@ export function ReviewIssuesCard({
   </section>;
 }
 
-export function DeliveryChecklistShell({ items, floorName = '本层', onExport, reviewCleared = false }: {
-  items: readonly FurnitureItem[];
+/** 已折叠清单行：plan 绑定态由展示纯层传入；legacy 仍走 items 折叠。 */
+export interface DeliveryChecklistRow {
+  name: string;
+  quantity: number;
+}
+
+export function DeliveryChecklistShell({ items, rows: prefolded, floorName = '本层', onExport, reviewCleared = false }: {
+  items?: readonly FurnitureItem[] | undefined;
+  rows?: readonly DeliveryChecklistRow[] | undefined;
   floorName?: string;
   onExport(): void;
   reviewCleared?: boolean;
 }): JSX.Element {
   // Same counting model as the delivery CSV and the agent reply; this card only
   // shows name + quantity for the active floor.
-  const rows = summarizeInventory(floorInventory({ id: 'checklist', name: floorName, items: [...items], floorColor: '' }))
-    .map(row => ({ name: row.name, count: row.quantity }));
+  const rows = prefolded
+    ? prefolded.map(row => ({ name: row.name, count: row.quantity }))
+    : summarizeInventory(floorInventory({ id: 'checklist', name: floorName, items: [...(items ?? [])], floorColor: '' }))
+        .map(row => ({ name: row.name, count: row.quantity }));
   const status = dossierStatus(rows.length);
   return <section className="sc-mode-card" role="region" aria-label="执行清单">
     <header>
@@ -145,11 +155,11 @@ export function WorkbenchModeCard({
   onExport(): void;
 }): JSX.Element {
   const agent = useAgent();
-  const { activeFloor } = useRoomEditor();
+  const { activeFloor, outdoorPlan } = useRoomEditor();
   if (agent.callbacks.workbenchMode === 'review') {
     return <ReviewIssuesCard
       pins={pins}
-      items={activeFloor.items}
+      items={outdoorPlan ? facilitySubjects(outdoorPlan.facilities) : activeFloor.items}
       filter={pinFilter}
       activeId={activePinId}
       onFilter={onPinFilter}
@@ -159,6 +169,11 @@ export function WorkbenchModeCard({
       onConfirm={onConfirmDelivery}
     />;
   }
-  if (agent.callbacks.workbenchMode === 'delivery') return <DeliveryChecklistShell items={activeFloor.items} reviewCleared={reviewCleared} onExport={() => { agent.previewExport(); onExport(); }} />;
+  if (agent.callbacks.workbenchMode === 'delivery') return <DeliveryChecklistShell
+    items={activeFloor.items}
+    rows={outdoorPlan ? facilityInventoryRows(outdoorPlan.facilities) : undefined}
+    reviewCleared={reviewCleared}
+    onExport={() => { agent.previewExport(); onExport(); }}
+  />;
   return <LayoutVenueCard event={agent.recap.event} guests={agent.recap.guests} dims={agent.recap.dims} />;
 }

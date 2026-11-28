@@ -174,6 +174,7 @@ import { agentAnnotationObservationSchema } from '../../../supabase/functions/_s
 import type { PlanGround, SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 import { filterPlanByLevel } from './lib/plan-levels';
 import { applyFacilityAction, applyZoneAction, type PlanActions } from './lib/plan-facility-actions';
+import { facilityInventoryRows, planFacilityCount } from './lib/plan-facility-display';
 import { planGroundSync, resolveGround, stripLayoutGroundBytes } from './lib/plan-ground';
 import {
   METERS_PER_DEGREE_LAT,
@@ -4298,7 +4299,7 @@ useEffect(() => {
   // 集成接线：顶栏容量计——从 layout 读宽深（height 字段在本仓库里是深度），调用纯函数估算。
   // A heuristic object density is neither the venue's approved capacity nor
   // a physical upper bound. Show the observable count and keep capacity unknown.
-  const capacityText = `当前物料 ${materialCount(activeFloor.items)} 件 · 场地容量待核验`;
+  const capacityText = `当前物料 ${outdoorPlan ? planFacilityCount(outdoorPlan.facilities) : materialCount(activeFloor.items)} 件 · 场地容量待核验`;
 
   // 第 12 批：「能摆 → 会摆」三版打分。draft.annotations 里的 zone 标注跑三档密度
   // （松/适中/密），每版独立打分，父组件把分数条 + 推荐版传给 PlanCard。
@@ -5037,7 +5038,7 @@ useEffect(() => {
             <VenuePickerOverlay/>
             {checklistOpen && <aside className="sc-checklist-drawer" role="dialog" aria-label="到场清单">
               <button type="button" className="sc-checklist-dismiss" onClick={() => setChecklistOpen(false)}>关闭</button>
-              <DeliveryChecklistShell items={activeFloor.items} onExport={exportHandoff}/>
+              <DeliveryChecklistShell items={activeFloor.items} rows={outdoorPlan ? facilityInventoryRows(outdoorPlan.facilities) : undefined} onExport={exportHandoff}/>
             </aside>}
             {leftMode === 'properties' && selectedItem && <div className="sc-canvas-share">
               <ItemContextPopover embedded
