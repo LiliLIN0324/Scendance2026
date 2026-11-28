@@ -15,7 +15,7 @@ import { onOutdoorPlanIssueFocus, onOutdoorPlanPointFocus, publishOutdoorPlanIss
 import { firstModelSlug } from '../lib/asset-namespace';
 import type { OutdoorEvidenceHighlight } from '../lib/outdoor-map-context';
 import type { OutdoorMapEditHighlight } from '../lib/outdoor-agent-contract';
-import { boundaryAtNewAnchor, canReanchorOutdoorPlan, clearPlanBoundary, planForPickedVenue } from '../lib/outdoor-plan-protection';
+import { anchorMovedMeters, boundaryAtNewAnchor, canReanchorOutdoorPlan, clearPlanBoundary, planForPickedVenue } from '../lib/outdoor-plan-protection';
 import { CAR_ROW_LABEL, PLAN_VEHICLE_ROW_LABEL, VEHICLE_TYPES } from '../lib/vehicle-types';
 import { vehicleLabelOf } from '../lib/vehicle-entities';
 
@@ -326,7 +326,9 @@ import {
 } from '../lib/site-plan-measure';
 import {
   annotationDistanceM,
+  annotationRectRing,
   buildAnnotation,
+  PLAN_ANNOTATION_MIN_SIZE_M,
   planShapeDraftTarget,
   type PlanAnnotationStrokeWidth,
   type PlanShapeKind,
@@ -927,6 +929,8 @@ const WORKER_HIT_PX = 9;
 const VEHICLE_HIT_PX = 9;
 /** 2026-11-11 用户指令：自由标注命中半径（CSS px）：点选文本 pill 与形状边缘共用。 */
 const ANNOTATION_HIT_PX = 8;
+/** 2026-11-28 用户指令「标注要能挪、能改点」：顶点/半径柄抓取半径（CSS px），柄优先于本体命中。 */
+const ANNOTATION_HANDLE_GRAB_PX = 11;
 /** 2026-11-16 固定测量标注的点选半径（点到折线/闭合环的像素距离）。 */
 const MEASUREMENT_HIT_PX = 9;
 /** 路线折线命中半径（CSS px）：点到段距离。 */
@@ -2445,11 +2449,15 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const [measureDraftCount, setMeasureDraftCount] = useState(0);
   // 2026-11-11 用户指令：自由标注 UI 态（形状类型/草稿计数/选中/文本就地输入框）。
   const [annotateShape, setAnnotateShape] = useState<PlanShapeKind>('rect');
-  const [annotateDraftCount, setAnnotateDraftCount] = useState(0);
+  // 2026-11-28 提示行不再显示收点进度，计数只留 setter 供清草稿用。
+  const [, setAnnotateDraftCount] = useState(0);
+  // 2026-11-28 用户指令「标注要能挪、能改点」：编辑会话（柄=改点/改半径，本体=整体挪）+ 松手才进 plan 的预览。
+  const dragAnnotationRef = useRef<{ id: string; kind: PlanAnnotation['kind']; startPt: PlanPoint; basePoints: PlanPoint[]; baseRadiusM?: number; mode: 'move' | 'vertex' | 'radius'; vertex: number; moved: boolean } | null>(null);
+  const annotationDragPreviewRef = useRef<{ id: string; points: PlanPoint[]; radiusM?: number } | null>(null);
+  // 2026-11-28 用户指令：清单默认收起，点标题行右上数字徽标才展开。
+  const [annotateListOpen, setAnnotateListOpen] = useState(false);
   const [annotateColor, setAnnotateColor] = useState<string>(PLANNING_LAYER_COLORS.annotate);
   const [annotateStrokeWidth, setAnnotateStrokeWidth] = useState<PlanAnnotationStrokeWidth>('thin');
-  /** 再点当前工具退出时的轻提示（只在这一处展示，避免依赖选中实体卡的状态位）。 */
-  const [annotateNotice, setAnnotateNotice] = useState<string | null>(null);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [selectedMeasurementId, setSelectedMeasurementId] = useState<string | null>(null);
   /** 拖动测量时不再需要额外的 DOM 贴片，画布 draw() 自己会重画读数。 */
@@ -2647,6 +2655,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     setSelectedMeasurementId(null);
     dragMeasurementRef.current = null;
     measurementDragPreviewRef.current = null;
+    // 2026-11-28：标注编辑会话同口径收掉。
+    dragAnnotationRef.current = null;
+    annotationDragPreviewRef.current = null;
     // 2026-11-11 用户指令：切模式清空标注草稿与文本输入框。
     annotateDraftRef.current = [];
     annotateCursorRef.current = null;
@@ -2673,7 +2684,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (next === 'note' || next === 'shape') setInspectorPanel('measure', false);
     setModeState(next);
     setEditMessage(null);
-    setAnnotateNotice(null);
     onModeChange?.(next);
     // 2026-11-16 用户「我现在好像画不了场地边界了啊？」：
     // 锁只该挡「没选工具时的误触」。点了「画边界 / 编辑边界」就是明摆着要改几何，
@@ -2974,11 +2984,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 编辑提交：undo 栈推入旧快照（上限 UNDO_LIMIT），再同步 ref 与父级。 */
-  function commitPlan(next: SitePlanData) {
+  function commitPlan(next: SitePlanData, allowDefaultBoundaryLock = false) {
     // 2026-11-20 审计 F1：内容相等就不压历史。对齐/分布已经在位、把同一个数字再输一遍、
     // 拖了一圈又拖回原位，都不应该占掉 30 步撤销里的一格。
     if (samePlanContent(next, planRef.current)) return false;
-    if (refusePlanWrite(next)) return false;
+    // 2026-11-28：红线默认锁只保护普通编辑。用户在确认卡上点过「应用」、或亲手圈了新场地，
+    // 这类明确写入不能被内层这道无豁免的复查拦成「画布当前不可写」——首个场地能落正是
+    // 靠「还没有红线」的空白豁免；第二个场地起就没有这条路了。用户亲手锁过红线仍然拦。
+    if (refusePlanWrite(next, allowDefaultBoundaryLock)) return false;
     // 旧快照入 past、redo 作废（新编辑分叉历史，与编辑器通例一致）。
     // 合并键去重仍在 mergeCommitRef（见 commitPlanMerged），不进地基。
     // 这里关掉地基的「栈顶 vs 上一版」去重：画布已在上面用 next-vs-current 把关，
@@ -3307,11 +3320,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   useEffect(() => {
     onInspectorChange?.({ openTabs: inspectorPanels });
   }, [inspectorPanels, onInspectorChange]);
-
-  // 标注卡关闭后不再保留上一次退出提示；下次开卡从默认提示开始。
-  useEffect(() => {
-    if (!inspectorPanels.annotate) setAnnotateNotice(null);
-  }, [inspectorPanels.annotate]);
 
   // 标注面板锚点跟随底条工具钮；窗口变化时重算，保证弹出层始终在按钮正上方。
   // 用 layout effect 在绘制前落位，避免先闪一下右上角再跳到底条上方。
@@ -4107,8 +4115,44 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     if (isLayerVisible(vis, 'annotate')) {
       drawAnnotationLayer(
         { ctx: planCtx, viewport },
-        (current.annotations ?? []).map(a => ({ ...a, selected: a.id === selectedAnnotationRef.current })),
+        (current.annotations ?? []).map(a => {
+          // 2026-11-28：拖动中的预览几何优先（松手才进 plan，一条 undo）。
+          const previewGeo = annotationDragPreviewRef.current;
+          return {
+            ...a,
+            ...(previewGeo && previewGeo.id === a.id
+              ? {
+                  points: previewGeo.points,
+                  ...(a.kind === 'circle' && previewGeo.radiusM !== undefined ? { radiusM: previewGeo.radiusM } : {}),
+                }
+              : {}),
+            selected: a.id === selectedAnnotationRef.current,
+          };
+        }),
       );
+      // 2026-11-28 标注编辑柄：选中标注画顶点/半径白柄（白底标注色描边），拖柄改点、拖本体挪位。
+      const previewGeo = annotationDragPreviewRef.current;
+      const editingId = previewGeo?.id ?? selectedAnnotationRef.current;
+      const editing = (current.annotations ?? []).find(a => a.id === editingId);
+      if (editing) {
+        const geoSource = previewGeo && previewGeo.id === editing.id
+          ? {
+              ...editing,
+              points: previewGeo.points,
+              ...(editing.kind === 'circle' && previewGeo.radiusM !== undefined ? { radiusM: previewGeo.radiusM } : {}),
+            }
+          : editing;
+        for (const h of annotationHandlePointsAt(geoSource)) {
+          const px = planPointToPixel(h, viewport);
+          planCtx.beginPath();
+          planCtx.arc(px.x, px.y, 4.5, 0, Math.PI * 2);
+          planCtx.fillStyle = '#ffffff';
+          planCtx.fill();
+          planCtx.lineWidth = 1.5;
+          planCtx.strokeStyle = PLANNING_LAYER_COLORS.annotate;
+          planCtx.stroke();
+        }
+      }
     }
 
     // H3-b 冲突/缺失可定位标记：规则检查输出，恒画在业务层之上（不随图层隐藏），
@@ -5236,11 +5280,14 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     rotatePendingFacility: deltaDeg => rotatePendingFacility(deltaDeg),
     cancelPendingPlacement: () => cancelPlacement(),
     beginVenueBoundary: anchor => {
-      if (!canReanchorOutdoorPlan(planRef.current, anchor)) { setEditMessage('已有规划不能直接更换地理锚点，请先新建户外活动。当前内容保持不变。'); return false; }
+      // 2026-11-28 用户拍板：换场地不再要求先删旧场地——手画圈好闭合即换场清空（见 closeDraft），
+      // 不再用「已有规划不能更换锚点」把换场卡死。
       pendingVenueAnchorRef.current = anchor;
       // 手画入口只切工具，保留用户当前的中心、缩放与朝向。
       setMode('boundary');
-      setEditMessage('没有真实轮廓，请在地图上逐点圈出用地。闭合后才写入新锚点。');
+      setEditMessage(planRef.current.boundary.length >= 3
+        ? '在地图上逐点圈出新用地，闭合即换到新场地：原场地的内容会清掉（可撤销）。'
+        : '没有真实轮廓，请在地图上逐点圈出用地。闭合后才写入新锚点。');
       return true;
     },
     applyWorkflowPlan:(next,expected)=>{
@@ -5260,7 +5307,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         nextBoundary: next.boundary,
         nextScope: next.designScope,
       });
-      if(!commitPlan(scope ? { ...next, designScope: scope } : next))return false;setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
+      if(!commitPlan(scope ? { ...next, designScope: scope } : next, true))return false;setEditMessage('已应用当前对话提案，可整批撤销。');draw();return true;
     },
     openFacilityUpload:id=>{if(!planRef.current.facilities.some(f=>f.id===id))return false;setMode('select');selectFacility(id);if(selectionPanelOnRef.current)setInspectorPanel('selection',true);requestAnimationFrame(()=>glbImportInputRef.current?.click());return true;},
     applyVenue: (anchor, boundary) => {
@@ -5268,9 +5315,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       // 2026-11-16 用户定稿「换场地就是新场地」：锚点真挪了，旧草稿的分区/设施/流线/点位/人员整批删掉，
       // 只留新锚点与新用地红线（仍走 commitPlan，可整批撤销）；同一锚点重画边界则保留内容。
       // 2026-11-17 用户指令「画好红线默认=设计范围」：两条分支都自动生成外扩 20 m 的设计范围。
-      const { plan: next, replaced, cleared } = planForPickedVenue(planRef.current, anchor, boundary);
+      // 2026-11-28 用户拍板：换场地不再要求先删旧场地——锚点位移（或空白活动首次选址）越过红线
+      // 默认锁直接落地；同锚点重画仍受默认锁保护（重画请走手画工具，进工具会自动解锁）。
+      const current = planRef.current;
+      const venueSwitch = !current.anchor || anchorMovedMeters(current.anchor, anchor) >= 0.01;
+      const { plan: next, replaced, cleared } = planForPickedVenue(current, anchor, boundary);
       const withScope: SitePlanData = { ...next, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M) };
-      if (!commitPlan(withScope)) return false;
+      if (!commitPlan(withScope, venueSwitch || current.boundary.length < 3)) return false;
       if (replaced) {
         setEditMessage(cleared > 0
           ? `已换场地，旧草稿的 ${cleared} 项内容已清空，可撤销。设计范围已按新场地自动生成（四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m）。`
@@ -5427,13 +5478,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         // 键盘 T/R/O/Y/L 会直接开卡；底条可能还收着，先展开底条让浮卡有锚点，再落卡。
         window.dispatchEvent(new CustomEvent('scendance:open-outdoor-dock'));
         if (modeRef.current === 'measure') setMode('view');
-        // 重新开卡时清掉上次退出留下的轻提示，避免一开卡就显示旧消息。
-        setAnnotateNotice(null);
       }
       // 关闭标注卡等于收起标注工具；否则画布还在画、工具条却没了。
       if (!open && tab === 'annotate') {
         if (modeRef.current === 'note' || modeRef.current === 'shape') setMode('view');
-        setAnnotateNotice(null);
       }
       setInspectorPanel(tab, open);
       // 从右轨重新打开时顺手展开卡身，避免「点了按钮但看不到内容」。
@@ -5688,9 +5736,12 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     notifyPlanDraftChanged();
   }
 
-  /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁上时收掉该层选中。 */
-  function setLayerLocked(kind: PlanningLayerKind, locked: boolean) {
-    if (kind === 'boundary') boundaryLockUserSetRef.current = true;
+  /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁上时收掉该层选中。
+   *  markUserSet：只有用户亲手点锁（图层栈/白框胶囊）才算「用户设过锁」，此后 Agent 应用
+   *  不再越过红线默认锁；closeDraft 落完红线后的自动回锁不算——不然第二个场地起，
+   *  连用户确认过的范围应用都会被「画布当前不可写」拦死（2026-11-28 实测）。 */
+  function setLayerLocked(kind: PlanningLayerKind, locked: boolean, markUserSet = true) {
+    if (kind === 'boundary' && markUserSet) boundaryLockUserSetRef.current = true;
     setAccessNotice(null);
     const next: LockedLayerMap = { ...lockedLayersRef.current, [kind]: locked };
     lockedLayersRef.current = next;
@@ -5830,6 +5881,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       setSelectedMeasurementId(null);
       dragMeasurementRef.current = null;
       measurementDragPreviewRef.current = null;
+      dragAnnotationRef.current = null;
+      annotationDragPreviewRef.current = null;
       return;
     }
     if (kind === 'annotate') {
@@ -6218,7 +6271,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     const current = planRef.current;
     if (modeRef.current === 'boundary') {
       const nextAnchor = pendingVenueAnchorRef.current;
-      if (nextAnchor && !canReanchorOutdoorPlan(current, nextAnchor)) { setEditMessage('规划已有内容变化，本次不改变地理锚点。请新建户外活动后选址。'); setMode('view'); return; }
       const priorAnchor = current.anchor ?? { lng: DEFAULT_ANCHOR_LNG, lat: DEFAULT_ANCHOR_LAT };
       const boundary = nextAnchor ? boundaryAtNewAnchor(draftPoints, priorAnchor, nextAnchor) : draftPoints;
       const check = checkBoundaryRing(boundary);
@@ -6226,26 +6278,29 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         setEditMessage(check.issue.message);
         return;
       }
+      // 2026-11-28 用户拍板「换场不再要求先删旧场地」：锚点真挪了就按「换场=新场地」整批清空
+      // 旧坐标系内容（可撤销，planForPickedVenue 同口径含车辆/标注/测量）；同锚点重画或空白活动
+      // 原样保留内容。不再用「请新建户外活动后选址」把换场卡死。
+      const picked = nextAnchor
+        ? planForPickedVenue(current, nextAnchor, boundary.map(p => ({ x: p.x, y: p.y })))
+        : { plan: { ...current, boundary: boundary.map(p => ({ x: p.x, y: p.y })) }, replaced: false, cleared: 0 };
       // 2026-11-17 用户指令「画好用地红线，默认就是画好了设计范围，扩 20 m，不用画两次」：
       // 红线闭合一律自动生成设计范围（重画红线 = 旧框已失配，跟着重置）；要微调就直接拖白框的边或角。
       const initialScope = expandRect(boundary, DEFAULT_SCOPE_MARGIN_M);
-      const nextBoundaryPlan: SitePlanData = {
-        ...current,
-        ...(nextAnchor ? { anchor: nextAnchor } : {}),
-        boundary: boundary.map(p => ({ x: p.x, y: p.y })),
-        designScope: initialScope,
-      };
-      commitPlan(nextBoundaryPlan);
+      const nextBoundaryPlan: SitePlanData = { ...picked.plan, designScope: initialScope };
+      commitPlan(nextBoundaryPlan, true);
       if (nextAnchor) onVenueBoundaryApplied?.(nextAnchor);
       pendingVenueAnchorRef.current = undefined;
       setMode('view');
-      setLayerLocked('boundary', true);
+      // 自动回锁不标 userSet：这是流程收尾，不是用户亲手锁（见 setLayerLocked 注释）。
+      setLayerLocked('boundary', true, false);
       selectBoundary(false);
       clearBoundaryDeleteArm();
       if (!scopeLockedRef.current) toggleScopeLock();
       focusDesignScope(initialScope);
       const boundaryOverflow = reviewZonesAfterBoundsChange(nextBoundaryPlan, current);
-      setEditMessage(`红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成。红线和范围已锁定，需要调整时点锁解锁。${overflowSuffix(boundaryOverflow)}`);
+      const sweepNote = picked.replaced && picked.cleared > 0 ? `已换场地：原场地的 ${picked.cleared} 项内容已清空，可撤销。` : '';
+      setEditMessage(`${sweepNote}红线已更新（约 ${Math.round(check.areaM2)} m²），设计范围已按场地四边外扩 ${DEFAULT_SCOPE_MARGIN_M} m 自动生成。红线和范围已锁定，需要调整时点锁解锁。${overflowSuffix(boundaryOverflow)}`);
       return;
     }
     // 2026-11-15：圈设计范围——闭合即整圈替换；只校验几何有效性（面积/自交），
@@ -8781,7 +8836,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       ...input,
       name,
       color: annotateColorRef.current,
-      ...(input.kind !== 'note' ? { strokeWidth: annotateStrokeWidthRef.current } : {}),
+      // 2026-11-28：档位全类型携带——note 上解释为字号（thin=小字 12px / thick=大字 18px）。
+      strokeWidth: annotateStrokeWidthRef.current,
     });
     if (!result.ok) {
       setEditMessage(result.issue.message);
@@ -8794,12 +8850,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /**
    * 2026-11-17 用户：再点当前工具 = 退出回浏览。
-   * 未提交的草稿/文字直接取消，只给一条轻提示，不弹确认框。
+   * 未提交的草稿/文字直接取消，不弹确认框。
    */
   function exitAnnotateDraw() {
-    const hadDraft = Boolean(noteInputRef.current?.value.trim()) || annotateDraftRef.current.length > 0;
     setMode('view');
-    if (hadDraft) setAnnotateNotice('已退出标注，未提交的内容已取消。');
   }
 
   /** 形状单击收点：近已有点（<0.5 m）忽略；rect/circle/line 收满 2 点、triangle 收满 3 点自动提交。 */
@@ -8823,13 +8877,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     draw();
   }
 
-  /** 提交形状：成功后清草稿可连续标注。 */
+  /** 提交形状：成功后清草稿可连续标注。
+      2026-11-28 修复「圆形点不了」：契约口径 circle 恰好 1 点（圆心）+radiusM（site-plan-annotate need 表 /
+      planAnnotationSchema superRefine 同源），此前把「圆心+半径点」两点原样提交，必被 bad-vertex-count 拒收——
+      点两下和按住拖两条路都画不出圆。交互层照旧收 2 点，落盘只交圆心。 */
   function finishShape(points: PlanPoint[]) {
     const kind = annotateShapeRef.current;
     const ok = commitAnnotation({
       kind,
-      points,
-      ...(kind === 'circle' ? { radiusM: planPointDistanceM(points[0]!, points[1]!) } : {}),
+      ...(kind === 'circle'
+        ? { points: [points[0]!], radiusM: planPointDistanceM(points[0]!, points[1]!) }
+        : { points }),
     });
     annotateDraftRef.current = [];
     annotateCursorRef.current = null;
@@ -8857,6 +8915,53 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       if (annotationDistanceM(pt, a) <= toleranceM) return a.id;
     }
     return null;
+  }
+
+  /** 2026-11-28 用户指令「标注要能挪、能改点」：可抓的顶点柄（ENU 米制）——
+      line/triangle=原顶点、rect=4 可见角（内部存的是两枚对角点）、circle=圆环东侧半径柄、note=无（拖本体即挪）。 */
+  function annotationHandlePointsAt(a: Pick<PlanAnnotation, 'kind' | 'points' | 'radiusM'>): PlanPoint[] {
+    if (a.kind === 'line' || a.kind === 'triangle') return a.points.map(p => ({ x: p.x, y: p.y }));
+    if (a.kind === 'rect') return annotationRectRing(a.points[0]!, a.points[1]!);
+    if (a.kind === 'circle') {
+      const c = a.points[0]!;
+      return [{ x: c.x + (a.radiusM ?? 0), y: c.y }];
+    }
+    return [];
+  }
+
+  /** 开始标注编辑会话：命中柄=改点（circle=改半径），命中本体=整体挪；返回 true=这次按下被标注吃掉。 */
+  function beginAnnotationEdit(annotation: PlanAnnotation, hit: { px: { x: number; y: number }; pt: PlanPoint }): boolean {
+    selectAnnotation(annotation.id);
+    const viewport = currentViewport();
+    const handles = annotationHandlePointsAt(annotation);
+    let handleIndex = -1;
+    let bestD = Number.POSITIVE_INFINITY;
+    handles.forEach((h, index) => {
+      const px = planPointToPixel(h, viewport);
+      const d = Math.hypot(px.x - hit.px.x, px.y - hit.px.y);
+      if (d <= ANNOTATION_HANDLE_GRAB_PX && d < bestD) { bestD = d; handleIndex = index; }
+    });
+    let mode: 'move' | 'vertex' | 'radius' = 'move';
+    let vertex = -1;
+    if (handleIndex >= 0) {
+      // circle 只有半径柄（本体/圆心拖动都走 move）。
+      mode = annotation.kind === 'circle' ? 'radius' : 'vertex';
+      vertex = handleIndex;
+    }
+    dragAnnotationRef.current = {
+      id: annotation.id,
+      kind: annotation.kind,
+      startPt: hit.pt,
+      basePoints: annotation.points.map(p => ({ x: p.x, y: p.y })),
+      ...(annotation.radiusM !== undefined ? { baseRadiusM: annotation.radiusM } : {}),
+      mode,
+      vertex,
+      moved: false,
+    };
+    pointerConsumedRef.current = true;
+    downPxRef.current = hit.px;
+    setDragging(true);
+    return true;
   }
 
   /**
@@ -9602,6 +9707,13 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const route = routeId ? planRef.current.routes.find(r => r.id === routeId) ?? null : null;
         if (route && beginRouteVertexEdit(route, hit)) return;
       }
+      // 2026-11-28 用户指令「标注要能挪、能改点」：标注画在测量之上，先于测量吃按下——
+      // 顶点柄=改点（circle 柄=改半径），本体=整体挪（nearestAnnotationIdAt 自带锁定层守卫）。
+      if (hit && onPlanChange) {
+        const annotationId = nearestAnnotationIdAt(hit.pt);
+        const annotation = annotationId ? (viewPlan().annotations ?? []).find(a => a.id === annotationId) ?? null : null;
+        if (annotation && beginAnnotationEdit(annotation, hit)) return;
+      }
       // 2026-11-16 用户：「场地上的测量和面积画完了就不会动」——浏览模式按住测量本体就能拖动移位。
       if (hit && onPlanChange && !layerLocked('measure')) {
         const measurement = measurementAt(hit.px);
@@ -10313,6 +10425,55 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           const worker = planRef.current.workers.find(w => w.id === dragWorkerRef.current?.id);
           if (!worker) return;
           workerDragPreviewRef.current = { worker: { ...worker, position: snapPoint(hit.pt, currentViewport()) } };
+          setEditMessage(null);
+          draw();
+        }
+        return;
+      }
+      // 2026-11-28 标注编辑预览：挪动/改点/改半径（松手才进 plan，一条 undo）。
+      if (dragAnnotationRef.current) {
+        const hit = eventPlanPoint(event);
+        if (!hit) return;
+        const drag = dragAnnotationRef.current;
+        const down = downPxRef.current;
+        if (down && Math.hypot(hit.px.x - down.x, hit.px.y - down.y) > CLICK_MAX_MOVE_PX) drag.moved = true;
+        if (drag.moved) {
+          if (drag.mode === 'move') {
+            const dx = hit.pt.x - drag.startPt.x;
+            const dy = hit.pt.y - drag.startPt.y;
+            annotationDragPreviewRef.current = {
+              id: drag.id,
+              points: drag.basePoints.map(p => ({ x: p.x + dx, y: p.y + dy })),
+              ...(drag.baseRadiusM !== undefined ? { radiusM: drag.baseRadiusM } : {}),
+            };
+          } else if (drag.mode === 'radius') {
+            // circle 半径柄：圆心不动，半径=圆心到指针（夹到最小尺寸，防退化）。
+            const c = drag.basePoints[0]!;
+            annotationDragPreviewRef.current = {
+              id: drag.id,
+              points: [{ x: c.x, y: c.y }],
+              radiusM: Math.max(planPointDistanceM(c, hit.pt), PLAN_ANNOTATION_MIN_SIZE_M),
+            };
+          } else if (drag.kind === 'rect') {
+            // 拖可见角：对角固定，另两角随 x/y 重算（角拖过对角=矩形顺势翻转，x0/y0 恒取小）。
+            const ring = annotationRectRing(drag.basePoints[0]!, drag.basePoints[1]!);
+            const dragged = { x: hit.pt.x, y: hit.pt.y };
+            const fixed = ring[(drag.vertex + 2) % 4]!;
+            const x0 = Math.min(dragged.x, fixed.x);
+            const x1 = Math.max(dragged.x, fixed.x);
+            const y0 = Math.min(dragged.y, fixed.y);
+            const y1 = Math.max(dragged.y, fixed.y);
+            annotationDragPreviewRef.current = { id: drag.id, points: [{ x: x0, y: y0 }, { x: x1, y: y1 }] };
+          } else {
+            // line 两端 / triangle 三点：直接把命中的顶点搬到指针处。
+            const next = drag.basePoints.map(p => ({ x: p.x, y: p.y }));
+            next[drag.vertex] = { x: hit.pt.x, y: hit.pt.y };
+            annotationDragPreviewRef.current = {
+              id: drag.id,
+              points: next,
+              ...(drag.baseRadiusM !== undefined ? { radiusM: drag.baseRadiusM } : {}),
+            };
+          }
           setEditMessage(null);
           draw();
         }
@@ -11035,6 +11196,31 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         }
         selectNode(drag.id);
         return;
+      }
+      // 2026-11-28 标注编辑松手：moved 才提交（一条 undo），没拖动留给点选逻辑。
+      const annoEdit = dragAnnotationRef.current;
+      if (annoEdit) {
+        const preview = annotationDragPreviewRef.current;
+        dragAnnotationRef.current = null;
+        annotationDragPreviewRef.current = null;
+        if (annoEdit.moved && preview && onPlanChange) {
+          const current = planRef.current;
+          commitPlan({
+            ...current,
+            annotations: (current.annotations ?? []).map(a => (a.id === annoEdit.id
+              ? {
+                  ...a,
+                  points: preview.points,
+                  ...(annoEdit.kind === 'circle' && preview.radiusM !== undefined ? { radiusM: preview.radiusM } : {}),
+                }
+              : a)),
+          });
+          selectAnnotation(annoEdit.id);
+          setEditMessage('标注已更新。');
+          draw();
+          return;
+        }
+        // 没拖动：标注已在按下时选中，落回下方点选链（保留 focusInventory 等既有副作用）。
       }
       // 2026-11-16 测量拖动松手：moved 才提交（一条 undo），没拖动留给点选。
       const measureMove = dragMeasurementRef.current;
@@ -11931,15 +12117,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     </div>
   ) : null;
 
-  /** 提示行永远占位（含未选工具），底部锚定的卡片不会因切工具/提示消息而改高度。 */
-  const annotateHint = mode === 'note'
-    ? '文本 · 点一下输入，Enter 提交'
-    : mode === 'shape'
-      ? (annotateDraftCount > 0
-        ? `${planAnnotationKindLabels[annotateShape]} · 已收 ${annotateDraftCount} 点，还需 ${planShapeDraftTarget(annotateShape) - annotateDraftCount} 点`
-        : `${planAnnotationKindLabels[annotateShape]} · ${annotateShape === 'triangle' ? '单击 3 点连成三角形' : '按住拖或点两个点'}`)
-      : '选一个工具，在图上绘制';
-
   /* 2026-11-11 用户指令：标注区独立成块（测量区下方）——文本 T + 形状（形状态出四类型选项），
      有 annotatePanelHost 时 portal 过去（两页签下常驻）；无宿主回落「已放置物件」面板内。 */
   const annotateZone = !readOnly ? (
@@ -11947,13 +12124,25 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       data-testid="annotate-zone"
       style={{ ...(annotatePanelHost ? {} : { marginTop: PLANNING_SPACING.xs }), paddingBottom: PLANNING_SPACING.xs, borderBottom: `1px solid ${PLANNING_SURFACE.panelBorder}` }}
     >
-      {/* 浮窗自带页签标题，搬进右上角后不再重复渲染这一行。 */}
+      {/* 浮窗自带页签标题，搬进右上角后不再重复渲染这一行。
+          2026-11-28 用户指令：紫点去掉，右上数字=清单开关（与浮窗头同口径）。 */}
       {!outdoorInspectorActive && (
         <div style={{ display: 'flex', alignItems: 'center', gap: PLANNING_SPACING.xs }}>
-          <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: PLANNING_LAYER_COLORS.annotate }} />
           <span style={{ fontWeight: 600, fontSize: PLANNING_TYPOGRAPHY.panel }}>标注</span>
           <span style={{ flex: 1 }} />
-          <span style={{ opacity: 0.6, fontSize: PLANNING_TYPOGRAPHY.row }}>{levelView.annotations?.length ?? 0}</span>
+          {(levelView.annotations?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              data-testid="annotate-count-toggle"
+              aria-expanded={annotateListOpen}
+              aria-label={annotateListOpen ? '收起已放置清单' : '查看已放置清单'}
+              title={annotateListOpen ? '收起清单' : '查看已放置'}
+              onClick={() => setAnnotateListOpen(v => !v)}
+              style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, border: 'none', background: 'transparent', color: PLANNING_TEXT.muted, font: 'inherit', fontSize: PLANNING_TYPOGRAPHY.row, fontWeight: 600, lineHeight: '18px', textAlign: 'center', cursor: 'pointer' }}
+            >
+              {levelView.annotations!.length}
+            </button>
+          )}
         </div>
       )}
       {/* 2026-11-16 绘图工具条：T / 矩形 / 圆形 / 三角形 / 线段平铺，颜色条另常驻。 */}
@@ -11976,34 +12165,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           setMode('shape');
         }}
       />
-      {/* 2026-11-16 颜色点与线宽常驻（Figma 颜色条），不收进形状下拉。文本/形状共用取色。 */}
+      {/* 2026-11-16 颜色点与线宽常驻（Figma 颜色条），不收进形状下拉。文本/形状共用取色；文本模式给字号档。 */}
       <AnnotateColorBar
         color={annotateColor}
         strokeWidth={annotateStrokeWidth}
         showStrokeWidth={mode !== 'note'}
         onColor={value => { annotateColorRef.current = value; setAnnotateColor(value); draw(); }}
         onStrokeWidth={value => { annotateStrokeWidthRef.current = value; setAnnotateStrokeWidth(value); draw(); }}
+        {...(mode === 'note' ? {
+          noteSize: annotateStrokeWidth,
+          onNoteSize: value => { annotateStrokeWidthRef.current = value; setAnnotateStrokeWidth(value); draw(); },
+        } : {})}
       />
-      <div
-        data-testid="annotate-hint"
-        role={annotateNotice ? 'status' : undefined}
-        aria-live={annotateNotice ? 'polite' : undefined}
-        title={annotateNotice ?? annotateHint}
-        style={{
-          marginTop: PLANNING_SPACING.xs,
-          height: 16,
-          lineHeight: '16px',
-          fontSize: PLANNING_TYPOGRAPHY.hint,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          color: annotateNotice ? PLANNING_SURFACE.warnText : undefined,
-          opacity: annotateNotice ? 1 : 0.78,
-        }}
-      >
-        {annotateNotice ?? annotateHint}
-      </div>
-      {(levelView.annotations?.length ?? 0) > 0 && levelView.annotations!.map(a => renderOneplanItemRow({
+      {/* 2026-11-28 用户指令：提示行整个删掉；清单收进标题行右上数字徽标（点 19 展开/收起），不再单独设行头。 */}
+      {annotateListOpen && levelView.annotations!.map(a => renderOneplanItemRow({
         key: `annotate-${a.id}`,
         testId: `layer-entity-annotation-${a.id}`,
         label: a.kind === 'note' ? `文本：${(a.text || a.name).split('\n')[0]}` : a.name,
@@ -14343,16 +14518,19 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         );
       })()}
 
-      {/* 2026-11-11 用户指令：文本标注就地输入框（Enter 提交 / Esc 取消；Shift+Enter 换行）。 */}
+      {/* 2026-11-11 用户指令：文本标注就地输入框（Enter 提交 / Esc 取消；Shift+Enter 换行）。
+          2026-11-28 用户指令：输入的样子=提交后的样子——色底 pill + 白字居中（同 drawAnnotationNote），
+          字号跟随档位（thin=12px/16px、thick=18px/24px），同锚点居中定位，提交不跳位。 */}
       {noteInput && (() => {
         const px = planPointToPixel(noteInput.pt, currentViewport());
+        const noteFont = annotateStrokeWidth === 'thick' ? { fontSize: 18, lineHeight: '24px' } : { fontSize: 12, lineHeight: '16px' };
         return (
           <textarea
             data-testid="annotate-note-input"
             autoFocus
             value={noteInput.value}
             placeholder="输入文本…"
-            rows={2}
+            rows={1}
             onChange={event => updateNoteInput({ pt: noteInput.pt, value: event.target.value })}
             onKeyDown={event => {
               if (event.key === 'Enter' && !event.shiftKey) {
@@ -14372,9 +14550,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             }}
             style={{
               position: 'absolute', left: px.x, top: px.y, transform: 'translate(-50%, -50%)', zIndex: 5,
-              minWidth: 150, maxWidth: 320, padding: '6px 8px', borderRadius: 6,
-              border: `1.5px solid ${PLANNING_LAYER_COLORS.annotate}`, background: PLANNING_SURFACE.panelBg,
-              color: PLANNING_SURFACE.panelText, fontSize: PLANNING_TYPOGRAPHY.panel, fontFamily: 'system-ui, sans-serif',
+              minWidth: 150, maxWidth: 320, padding: '5px 8px', borderRadius: 6,
+              border: '1.5px solid rgba(255, 255, 255, .85)', background: annotateColor,
+              color: '#ffffff', ...noteFont, textAlign: 'center', fontFamily: 'system-ui, sans-serif',
               outline: 'none', resize: 'both', boxShadow: '0 2px 10px rgba(20, 20, 22, 0.16)',
             }}
           />
@@ -14994,7 +15172,8 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
             <>
               {/* 2026-11-18 用户两轮实测拍板：排布开关回退为胶囊右侧圆钮（比分段导航更好），
                   灵动岛搜索胶囊保留。 */}
-              <div className="sc-catalog-search" style={{ marginTop: PLANNING_SPACING.xs }}>
+              {/* 2026-11-28 用户指令：有内容时整枚胶囊变品牌色（has-value），不搜时浅色底。 */}
+              <div className={`sc-catalog-search${libraryQuery.trim() !== '' ? ' has-value' : ''}`} style={{ marginTop: PLANNING_SPACING.xs }}>
                 <Search size={15} aria-hidden className="sc-catalog-search-icon" />
                 <input
                   value={libraryQuery}
@@ -15448,15 +15627,20 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                       data-testid="outdoor-inspector-card-annotate-head"
                       style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 2px 10px' }}
                     >
-                      <span aria-hidden style={{ width: 12, height: 12, flex: '0 0 auto', borderRadius: 999, background: card.accent }} />
+                      {/* 2026-11-28 用户指令：标题左侧紫点去掉；右上数字徽标=清单开关（点击展开/收起已放置清单）。 */}
                       <span style={{ fontWeight: 600, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>{card.label}</span>
                       {card.count > 0 && (
-                        <span
-                          aria-hidden
-                          style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: withAlphaHex(card.accent, 0.14), color: card.accent, fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600, lineHeight: '18px', textAlign: 'center' }}
+                        <button
+                          type="button"
+                          data-testid="annotate-count-toggle"
+                          aria-expanded={annotateListOpen}
+                          aria-label={annotateListOpen ? '收起已放置清单' : '查看已放置清单'}
+                          title={annotateListOpen ? '收起清单' : '查看已放置'}
+                          onClick={() => setAnnotateListOpen(v => !v)}
+                          style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, border: 'none', background: withAlphaHex(card.accent, 0.14), color: card.accent, font: 'inherit', fontSize: PLANNING_TYPOGRAPHY.hint, fontWeight: 600, lineHeight: '18px', textAlign: 'center', cursor: 'pointer' }}
                         >
                           {card.count}
-                        </span>
+                        </button>
                       )}
                       <button
                         type="button"
@@ -15466,7 +15650,6 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
                         onClick={() => {
                           setInspectorPanel('annotate', false);
                           if (mode === 'note' || mode === 'shape') setMode('view');
-                          setAnnotateNotice(null);
                         }}
                         className="sc-outdoor-toolcard-btn"
                         style={{ marginLeft: 'auto', cursor: 'pointer', width: 24, height: 24, flex: '0 0 auto', borderRadius: 7, display: 'grid', placeItems: 'center', color: '#3f4448' }}

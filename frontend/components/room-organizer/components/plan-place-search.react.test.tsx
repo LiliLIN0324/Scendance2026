@@ -123,6 +123,25 @@ describe('PlanPlaceSearch history rows', () => {
     ]);
   });
 
+  it('历史行带删除 ×：点击只摘这一条，另一条保留（2026-11-28 用户指令）', async () => {
+    placeSearch.rememberPlace(waterForest);
+    placeSearch.rememberPlace(westLake);
+    const onPick = vi.fn();
+    render(<PlanPlaceSearch onPick={onPick} />);
+    fireEvent.focus(screen.getByTestId('plan-place-search-input'));
+
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2));
+    // 第一行（西湖，最新）带删除 ×；点击它不触发选中。
+    const forget = screen.getByRole('button', { name: '删除最近搜过的「西湖」' });
+    fireEvent.click(forget);
+    expect(onPick).not.toHaveBeenCalled();
+
+    // 西湖消失、青山湖保留；存储也同步摘除。
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(1));
+    expect(screen.getAllByRole('option')[0]?.textContent).toContain('青山湖水上森林');
+    expect(placeSearch.recentPlaces().map(place => place.id)).toEqual(['water-forest']);
+  });
+
   it('有检索词时：历史行占位不占号，结果从 1 开始编，编号钉跟着同一个号', async () => {
     const searchSpy = vi.spyOn(placeSearch, 'searchPlaces').mockResolvedValue([dock]);
     const hintsSpy = vi.spyOn(placeSearchOptions, 'fetchPlaceShapeHints').mockResolvedValue([]);

@@ -4851,7 +4851,7 @@ describe('outdoor V1–V5 real task-state actions', () => {
     let resolveShape!: (shape: placeArea.PlaceArea) => void;
     const fetchShape = vi.spyOn(placeArea, 'fetchPlaceShape').mockImplementation(() => new Promise(resolve => { resolveShape = resolve as (shape: placeArea.PlaceArea) => void; }));
     const applyPlan = vi.fn((_next: unknown, _expected?: string) => true);
-    vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: outline, basis: { kind: 'place-outline', detail: 'test' }, waterLines: [] });
+    vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: outline, basis: { kind: 'place-outline', detail: 'test' } });
     let current!: NonNullable<ReturnType<typeof useAgent>>;
     function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyPlan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true }); return null; }
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
@@ -4884,7 +4884,7 @@ describe('outdoor V1–V5 real task-state actions', () => {
     let resolveShape!: (shape: placeArea.PlaceArea) => void;
     const fetchShape = vi.spyOn(placeArea, 'fetchPlaceShape').mockImplementation(() => new Promise(resolve => { resolveShape = resolve as (shape: placeArea.PlaceArea) => void; }));
     const applyPlan = vi.fn((_next: unknown, _expected?: string) => true);
-    vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: [{ x: -80, y: -60 }, { x: 80, y: -60 }, { x: 80, y: 60 }, { x: -80, y: 60 }], basis: { kind: 'place-outline', detail: 'test' }, waterLines: [] });
+    vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: [{ x: -80, y: -60 }, { x: 80, y: -60 }, { x: 80, y: 60 }, { x: -80, y: 60 }], basis: { kind: 'place-outline', detail: 'test' } });
     let current!: NonNullable<ReturnType<typeof useAgent>>;
     function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyPlan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true }); return null; }
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);

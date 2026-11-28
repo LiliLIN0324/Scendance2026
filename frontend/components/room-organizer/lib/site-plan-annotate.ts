@@ -139,6 +139,7 @@ export function buildAnnotation(input: BuildAnnotationInput): PlanEditResult<Pla
     notes: input.notes ?? '',
     ...(input.kind === 'circle' ? { radiusM: input.radiusM } : {}),
     ...(input.color ? { color: input.color } : {}),
+    // 2026-11-28 用户指令：文本也可带档位——note 上解释为字号（thin=小字 12px / thick=大字 18px）。
     ...(input.strokeWidth ? { strokeWidth: input.strokeWidth } : {}),
   };
   return { ok: true, value: annotation };

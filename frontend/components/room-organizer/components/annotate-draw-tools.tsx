@@ -30,6 +30,14 @@ const SHAPE_TIP: Record<PlanShapeKind, string> = {
   line: '线段 · 按住拖，或点两个点',
 };
 
+/** 2026-11-28 用户逐个拍板的最终尺寸：方形/圆形/三角形 16、线段 20（描边 2.5）、T 字 18px。 */
+const SHAPE_ICON_SPEC: Record<PlanShapeKind, { size: number; strokeWidth?: number }> = {
+  rect: { size: 16 },
+  circle: { size: 16 },
+  triangle: { size: 16 },
+  line: { size: 20, strokeWidth: 2.5 },
+};
+
 export type AnnotateDrawTool = 'note' | PlanShapeKind;
 
 function toolButtonStyle(active: boolean): CSSProperties {
@@ -76,10 +84,8 @@ export function AnnotateDrawTools({
         gap: 4,
         width: '100%',
         boxSizing: 'border-box',
+        // 2026-11-28 用户指令：选项行去掉背后的灰色填充——只留图标本身。
         marginTop: PLANNING_SPACING.xs,
-        padding: 3,
-        background: PLANNING_SURFACE.fieldBg,
-        borderRadius: PLANNING_RADIUS.md,
       }}
     >
       <button
@@ -89,13 +95,14 @@ export function AnnotateDrawTools({
         aria-label={planAnnotationKindLabels.note}
         data-testid="annotate-type-note"
         title={`文本 · ${ANNOTATE_DRAW_SHORTCUT.note} · 点一下放置，就地输入${active === 'note' ? ' · 再点退出' : ''}`}
-        style={{ ...toolButtonStyle(active === 'note'), fontSize: 16 }}
+        style={{ ...toolButtonStyle(active === 'note'), fontSize: 18, fontWeight: 600 }}
         onClick={onNote}
       >
         T
       </button>
       {PLAN_SHAPE_KINDS.map(kind => {
         const Icon = planningIcon(SHAPE_ICONS[kind]);
+        const spec = SHAPE_ICON_SPEC[kind];
         const pressed = active === kind;
         return (
           <button
@@ -109,7 +116,7 @@ export function AnnotateDrawTools({
             style={toolButtonStyle(pressed)}
             onClick={() => onShape(kind)}
           >
-            <Icon size={20} aria-hidden />
+            <Icon size={spec.size} strokeWidth={spec.strokeWidth ?? 2} aria-hidden />
           </button>
         );
       })}

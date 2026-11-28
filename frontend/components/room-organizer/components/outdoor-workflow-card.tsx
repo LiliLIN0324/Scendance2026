@@ -28,7 +28,7 @@ const STAGE_CAPTIONS: Record<OutdoorStage, string> = {
  * 只画从画布同步来的合法闭合环（已过 checkBoundaryRing），不造任何示意形状：
  * 比例、尺寸、面积全从环本身算，没有环就不渲染（上层退回一句状态句）。
  */
-function BoundaryThumb({ ring }: { ring: readonly PlanPoint[] }): JSX.Element {
+function BoundaryThumb({ ring, name }: { ring: readonly PlanPoint[]; name?: string | undefined }): JSX.Element {
   const xs = ring.map((p) => p.x);
   const ys = ring.map((p) => p.y);
   const minX = Math.min(...xs);
@@ -63,7 +63,9 @@ function BoundaryThumb({ ring }: { ring: readonly PlanPoint[] }): JSX.Element {
         <polygon points={points} fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinejoin="round" />
       </svg>
       <figcaption className="ap-task-caption">
-        按画布真实用地红线：{ring.length} 个点 · {widthM.toFixed(1)} × {depthM.toFixed(1)} m · {areaM2.toFixed(0)} ㎡
+        {/* 2026-11-28 用户拍板：图注=「“场地名”：n 个点 · 面积」，去「按画布真实用地红线」前缀与长宽——
+            名字来自搜索候选（flow.state.boundaryName），手画/静默确认的范围没有名字就只写数字。 */}
+        {name ? `“${name}”：` : ""}{ring.length} 个点 · {areaM2.toFixed(0)} ㎡
       </figcaption>
     </figure>
   );
@@ -345,7 +347,7 @@ export function OutdoorWorkflowCard({
       {/* 2026-11-21 文案纪律：阶段图注只留下面那条带图标的；这里原有一段 ap-stage-caption
           渲染同一句，同一张卡把一句话印了两遍。 */}
       {!flow.proposal && !showScopeGuide && flow.boundaryRing && flow.boundaryRing.length >= 3 && (
-        <BoundaryThumb ring={flow.boundaryRing} />
+        <BoundaryThumb ring={flow.boundaryRing} name={flow.state.boundaryName} />
       )}
       {flow.notice && flow.noticeKind === "error" && !flow.loginRequired ? (
         flow.noticeView ? (

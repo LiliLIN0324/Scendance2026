@@ -51,6 +51,11 @@ export interface OutdoorFlowState {
   completed: OutdoorStage[];
   pendingBoundary?: { anchor: NonNullable<SitePlanData["anchor"]>; boundary: SitePlanData["boundary"]; name: string; base: string; basis?: import('./agent-venue-range').VenueRangeBasis } | undefined;
   rangeBasis?: import('./agent-venue-range').VenueRangeBasis;
+  /**
+   * 已确认范围带的场地名（来自搜索候选）；2026-11-28 用户拍板：任务卡上的红线缩略
+   * 图注用它开头（「“场地名”：n 个点 · 面积」），手画/静默确认的范围没有名字就置空。
+   */
+  boundaryName?: string | undefined;
   pendingLogin?: { message: string; planVersion: string; ownerId?: string };
 }
 export function emptyOutdoorFlow(scope: string): OutdoorFlowState {

@@ -53,7 +53,7 @@ describe('outdoor-demo-plan（内置示范场景）', () => {
 
 // 2026-11-17 同一标准：示范方案也是「带红线的成品」，不能只画红线不给白框。
 describe('demo plan 的设计范围', () => {
-  it('自带外扩 20 m 的白框，四个角正好各边外扩一个 margin', () => {
+  it('自带默认外扩的白框，四个角正好各边外扩一个 margin', () => {
     const plan = createDemoOutdoorPlan();
     expect(plan.designScope).toEqual(expandRect(plan.boundary, DEFAULT_SCOPE_MARGIN_M));
     expect(plan.designScope).toHaveLength(4);

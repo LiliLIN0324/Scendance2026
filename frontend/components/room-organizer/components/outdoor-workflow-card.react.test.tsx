@@ -10,7 +10,7 @@ import { OutdoorWorkflowCard } from './outdoor-workflow-card';
 function makeFlow(stage = 'place') {
   const noop = vi.fn();
   return {
-    state: { stage, brief: { zones: [] as unknown[] } },
+    state: { stage, brief: { zones: [] as unknown[] }, boundaryName: undefined as string | undefined },
     theme: undefined,
     proposal: null,
     pendingPlan: null,
@@ -74,8 +74,9 @@ describe('OutdoorWorkflowCard 上幅（T1-d）', () => {
     expect(container.querySelector('.ap-task-map')).toBeNull();
   });
 
-  it('有真实红线时画真实轮廓，尺寸/面积/点数都从环算', () => {
+  it('有真实红线时画真实轮廓，点数/面积从环算；带候选名时图注以名字开头（2026-11-28 拍板）', () => {
     const flow = makeFlow();
+    flow.state.boundaryName = '水上森林';
     flow.boundaryRing = [
       { x: 0, y: 0 },
       { x: 30, y: 0 },
@@ -85,7 +86,22 @@ describe('OutdoorWorkflowCard 上幅（T1-d）', () => {
     const { container } = render(<OutdoorWorkflowCard flow={flow as never} />);
 
     expect(container.querySelector('.ap-boundary-thumb polygon')).not.toBeNull();
-    expect(container.textContent).toContain('按画布真实用地红线：4 个点 · 30.0 × 20.0 m · 600 ㎡');
+    expect(container.textContent).toContain('“水上森林”：4 个点 · 600 ㎡');
+    expect(container.textContent).not.toContain('按画布真实用地红线');
+    expect(container.textContent).not.toContain('30.0 × 20.0');
+  });
+
+  it('没有候选名时图注只写点数与面积，不写旧前缀', () => {
+    const flow = makeFlow();
+    flow.boundaryRing = [
+      { x: 0, y: 0 },
+      { x: 30, y: 0 },
+      { x: 30, y: 20 },
+      { x: 0, y: 20 },
+    ];
+    const { container } = render(<OutdoorWorkflowCard flow={flow as never} />);
+    expect(container.textContent).toContain('4 个点 · 600 ㎡');
+    expect(container.textContent).not.toContain('按画布真实用地红线');
   });
 
   it('没有真实红线时不出轮廓、也不造示意图形', () => {
@@ -104,7 +120,7 @@ describe('OutdoorWorkflowCard 上幅（T1-d）', () => {
     flow.boundaryRing = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 20 }, { x: 0, y: 20 }];
     const withRing = render(<OutdoorWorkflowCard flow={flow as never} showCaption={false} />);
     expect(withRing.container.querySelector('.ap-boundary-thumb polygon')).not.toBeNull();
-    expect(withRing.container.textContent).toContain('按画布真实用地红线');
+    expect(withRing.container.textContent).toContain('4 个点 · 600 ㎡');
   });
 });
 

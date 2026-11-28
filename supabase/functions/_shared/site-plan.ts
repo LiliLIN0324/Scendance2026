@@ -386,7 +386,7 @@ export const planAnnotationSchema = z.strictObject({
   text: z.string().max(200).default(''),
   /** 标注色（可选）：缺省取图层标注色。 */
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).transform(s => s.toLowerCase()).optional(),
-  /** 形状描边档位（可选，2026-11-13）：thin 细线 / thick 粗线；仅形状生效，文本不显示线宽。旧数据不带字段按细线渲染。 */
+  /** 描边档位（可选，2026-11-13）：thin 细线 / thick 粗线；形状上=线宽，note 上=字号档（2026-11-28：thin=小字 12px / thick=大字 18px）。旧数据不带字段按细线/小字渲染。 */
   strokeWidth: z.enum(['thin', 'thick']).optional(),
   /** 所属图层（可选）：缺省归第一层。 */
   levelId: z.uuid().optional(),

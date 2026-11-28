@@ -79,6 +79,8 @@ import {
   type ObjectsLayoutStrategy,
 } from "../lib/outdoor-agent-planning";
 import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/outdoor-personal-library";
+// 换场判定与画布 canReanchorOutdoorPlan 同口径（≥1cm 位移=换场）。
+import { anchorMovedMeters } from "../lib/outdoor-plan-protection";
 // 2026-11-17 用户拍板「AI 先当设计师，先出一版他看看」：没有清单时按分区用途出默认方案。
 import { draftDemand } from "../lib/outdoor-draft-design";
 // docs/46 V-P2：虚拟场地意图切纸面（ground-mode store，2D/3D 同步跟随）。
@@ -210,7 +212,8 @@ const NO_BOUNDARY_NOTICE =
 const MAP_EDIT_HINTS: Partial<Record<OutdoorWorkflowProposal["kind"], string>> = {
   // 2026-11-18 用户反馈「为什么要写这么多」：应用提示只保留一句真正要紧的动作话；
   // 「边界就在眼前」「下一步是什么」分别由画布和任务卡标题承担，聊天里不重复。
-  scope: "不贴合就拖顶点调整，改完重新核对。",
+  // 2026-11-28 用户拍板：scope 应用后的「不贴合就拖顶点调整…」也删——范围卡本身
+  // 已带「重画/排流线」动作，这句跟在已应用后面的叮嘱属于复述，不改变决定。
   zones: "分区不合适可拖动整块或拖顶点微调。",
   "main-routes": "路线和候选入口可拖动微调。",
 };
@@ -805,7 +808,8 @@ export function useOutdoorAgentWorkflow(input: {
   function requireScope(plan: SitePlanData): boolean {
     if (stateRef.current.confirmedBoundary === boundaryKey(plan)) return true;
     if (currentSupervision() !== "strict" && checkBoundaryRing(plan.boundary).ok && !stateRef.current.pendingBoundary) {
-      persist({ ...stateRef.current, confirmedBoundary: boundaryKey(plan) });
+      // 静默确认的范围不是带名字的候选：场地名一并清掉（图注只写点数与面积）。
+      persist({ ...stateRef.current, confirmedBoundary: boundaryKey(plan), boundaryName: undefined });
       return true;
     }
     persist({
@@ -877,7 +881,8 @@ export function useOutdoorAgentWorkflow(input: {
         return;
       }
       if (currentSupervision() !== "strict" && !stateRef.current.pendingBoundary) {
-        persist({ ...stateRef.current, stage: "objects", confirmedBoundary: boundaryKey(planNow) });
+        // 同 requireScope：静默确认不带场地名，清掉旧名防止挂到新红线上。
+        persist({ ...stateRef.current, stage: "objects", confirmedBoundary: boundaryKey(planNow), boundaryName: undefined });
         return;
       }
       const job = start();
@@ -1088,7 +1093,14 @@ export function useOutdoorAgentWorkflow(input: {
     // 2026-11-21 用户拍板「候选点选直接落地」：候选是用户刚亲手选的，锚定写入不再单独立核对卡；
     // 严格档仍由 gate 拦下核对。
     const pickedScope = kind === "scope" && directApply && !afterConfirmRequest;
-    const checkpoint = ((kind === 'scope' && !afterConfirmRequest) || kind === 'verify-access' || !!objectsLayoutRef.current?.packed) && !unchangedScope && !pickedScope;
+    // 2026-11-28 用户拍板（换场死路拆除）：已有场地（红线已确认）再换到新锚点是删除/覆盖动作，
+    // 必须出确认卡写明「原场地的相关内容会被清掉」，用户点了确认按钮才落地——
+    // 点选候选直落（pickedScope）不再绕过这一步；空白活动首次选址照旧直落。
+    const venueSwitch = kind === "scope"
+      && (base.boundary?.length ?? 0) >= 3
+      && !!base.anchor && !!next.anchor
+      && anchorMovedMeters(base.anchor, next.anchor) >= 0.01;
+    const checkpoint = ((kind === 'scope' && !afterConfirmRequest) || kind === 'verify-access' || !!objectsLayoutRef.current?.packed || venueSwitch) && !unchangedScope && !(pickedScope && !venueSwitch);
     const approvalReason = gate.required ? gate.why : checkpoint
       ? kind === 'verify-access' ? '真实出入口的通行状态需要你核对。' : kind === 'scope' ? '请核对本次活动要使用的场地范围。' : '这版采用了压缩通道的摆放方式，需要核对。'
       : '';
@@ -1305,7 +1317,9 @@ export function useOutdoorAgentWorkflow(input: {
     proposalRef.current = null;
     setProposal(null);
     if (p.kind === "scope") {
-      persist({ ...stateRef.current, confirmedBoundary: boundaryKey(p.next), pendingBoundary: undefined });
+      // 2026-11-28：范围名只跟「带名字的候选」（搜索选区）走——pendingBoundary 在就取它的名字，
+      // 手画/静默确认的范围没有名字，一并清掉，别让旧场名挂到新红线上。
+      persist({ ...stateRef.current, confirmedBoundary: boundaryKey(p.next), pendingBoundary: undefined, boundaryName: stateRef.current.pendingBoundary?.name });
       setMapGap(false);
       nextStage("scope");
     } else if (p.kind === "verify-access") {
@@ -1334,10 +1348,13 @@ export function useOutdoorAgentWorkflow(input: {
       p.kind === "objects" && objectsLayoutRef.current?.packed
         ? "注意：这版是「硬挤」物理极限；你记的需求数量没变，画布已塞到上限，要宽松就减数量或扩分区。"
         : "";
+    // 2026-11-28 用户拍板：范围应用句不带「确认」前缀也不带叮嘱——「已应用「“场地名”的活动范围」」。
     status(
-      mapEditHint
-        ? `已应用「${p.label}」。${mapEditHint}`
-        : `已应用「${p.label}」，可以继续调整或撤销。${packedNote}`,
+      p.kind === "scope"
+        ? `已应用「${p.label.replace(/^确认/, "")}」。`
+        : mapEditHint
+          ? `已应用「${p.label}」。${mapEditHint}`
+          : `已应用「${p.label}」，可以继续调整或撤销。${packedNote}`,
       "done",
     );
     if (p.kind === "zones" || p.kind === "main-routes" || p.kind === "objects") {
@@ -1357,7 +1374,6 @@ export function useOutdoorAgentWorkflow(input: {
     basis?: VenueRangeBasis,
     continuation?: OutdoorWorkflowProposal["afterConfirmRequest"],
     directApply = false,
-    waterWarnings: readonly string[] = [],
   ): void | Promise<void> {
     const base = callbacks.current.bridge()?.getPlan();
     if (!base) return;
@@ -1379,6 +1395,13 @@ export function useOutdoorAgentWorkflow(input: {
         pruned.droppedFacilities.length ? `物件 ${pruned.droppedFacilities.join("、")}` : "",
         pruned.droppedRoutes.length ? `流线 ${pruned.droppedRoutes.join("、")}` : "",
       ].filter(Boolean);
+      // 2026-11-28 用户拍板：换场地（锚点位移）不再走「画布当前不可写」死路，改为确认卡上
+      // 写明删除/覆盖事实（文案纪律保留族），点「确认并应用这一版」才清场落地（可整批撤销）。
+      // 只在真的有旧场地（红线已确认）时才说这句——空白活动首次选址没有「原场地」可清。
+      const oldVenueName = stateRef.current.boundaryName;
+      const sweptWarnings = pruned.swept && base.boundary.length >= 3
+        ? [`应用后原场地${oldVenueName ? `「${oldVenueName}」` : ''}的相关内容会被清掉，可整批撤销。`]
+        : [];
       const completion = offer(
         // 2026-11-17 「同一标准」：范围确认卡是一个自带红线的方案，落地后必须配白框——
         // 预览与确认走同一份数据，不靠画布那边事后补（那条路留给手画红线和换场地）。
@@ -1393,8 +1416,10 @@ export function useOutdoorAgentWorkflow(input: {
         job,
         [
           // 2026-11-20 用户拍板：范围来源、可用聊天缩小这类交代全部不再进卡；卡上只留“换场后发生了什么”。
-          ...waterWarnings,
-          ...(pruned.swept ? ["换场地已清空旧内容，确认后整批可撤销。"] : []),
+          // 2026-11-28 用户拍板：「候选范围压到水面」「水体数据未取得…待核」两句删——压水与否地图上看得见。
+          // 同日新拍板：换场确认卡必须写明「原场地的相关内容会被清掉」——应用前的删除/覆盖事实句，
+          // 取代此前被删的「换场地已清空旧内容」事后句。
+          ...sweptWarnings,
           ...(!pruned.swept && dropped.length ? [`超出新边界已淘汰：${dropped.join("；")}（可整批撤销）。`] : []),
         ],
         continuation ? 'design-event' : undefined,
@@ -1445,7 +1470,7 @@ export function useOutdoorAgentWorkflow(input: {
     });
     if (!bridge?.beginVenueBoundary(anchor)) {
       status(
-        "当前已有规划不能更换锚点，请新建专用活动；原草稿保留。",
+        "这次没能进入手画，原草稿保留。",
         "blocked",
       );
       return;

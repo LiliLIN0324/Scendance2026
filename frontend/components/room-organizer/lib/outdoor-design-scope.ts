@@ -21,8 +21,14 @@ export interface ScopePoint {
   y: number;
 }
 
-/** 外扩一步的默认值（米）：够放一条入口动线，又不至于把整条街框进来。 */
-export const DEFAULT_SCOPE_MARGIN_M = 20;
+/**
+ * 外扩一步的默认值（米）。
+ *
+ * 2026-11-28 用户：「现在的白色选区是在红色用地外扩多少 m？我希望改成 100 m」——
+ * 20 m 只够贴一条人行道，大场地（几百米见方）看不到周边道路和入口，所以放宽到 100 m。
+ * 上限 MAX_SCOPE_MARGIN_M 仍高过默认值，手拖白框时还有余量。
+ */
+export const DEFAULT_SCOPE_MARGIN_M = 100;
 
 /** 外扩上限：再大就退化成「整个地图」，蒙版失去意义。 */
 export const MAX_SCOPE_MARGIN_M = 120;

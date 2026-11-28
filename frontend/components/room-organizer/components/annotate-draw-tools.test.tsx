@@ -60,7 +60,7 @@ describe('AnnotateDrawTools', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('uses 46px hit targets, 20px icons, and a filled active state', () => {
+  it('uses 46px hit targets, optically balanced per-kind icons, and a filled active state', () => {
     renderTools('rect');
     const rect = screen.getByRole('button', { name: '矩形' });
     const circle = screen.getByRole('button', { name: '圆形' });
@@ -69,7 +69,13 @@ describe('AnnotateDrawTools', () => {
     expect(rect.style.border).toContain('1.5px solid');
     expect(rect.style.background).not.toBe('transparent');
     expect(circle.style.background).toBe('transparent');
-    expect(rect.querySelector('svg')?.getAttribute('width')).toBe('20');
+    // 2026-11-28 用户拍板的最终尺寸：Square/Circle/Triangle 16、Minus 20+2.5，T 字 18px。
+    expect(rect.querySelector('svg')?.getAttribute('width')).toBe('16');
+    expect(circle.querySelector('svg')?.getAttribute('width')).toBe('16');
+    expect(screen.getByRole('button', { name: '三角形' }).querySelector('svg')?.getAttribute('width')).toBe('16');
+    const lineSvg = screen.getByRole('button', { name: '线段' }).querySelector('svg');
+    expect(lineSvg?.getAttribute('width')).toBe('20');
+    expect(lineSvg?.getAttribute('stroke-width')).toBe('2.5');
   });
 
   it('replaces the shape menu in the annotate zone and leaves the color bar beside it', () => {
@@ -87,15 +93,19 @@ describe('AnnotateDrawTools', () => {
     expect(src.slice(barAt, barAt + 400)).not.toContain("mode === 'shape'");
   });
 
-  it('keeps the annotation popover a fixed footprint while tools change', () => {
+  it('keeps every hint/status row out of the annotate popover entirely', () => {
     const src = readFileSync(join(process.cwd(), 'components/room-organizer/components/outdoor-plan-canvas.tsx'), 'utf8');
-    // 未选工具也有占位提示；notice 复用同一行，不再追加新行把底部锚定的卡片顶高。
-    expect(src).toContain('const annotateHint =');
-    expect(src).toContain('选一个工具，在图上绘制');
-    expect(src).toContain('data-testid="annotate-hint"');
-    expect(src).toContain('{annotateNotice ?? annotateHint}');
-    expect(src).not.toContain('{annotateNotice && (');
-    // 固定宽度 + 固定提示行；有明确关闭口，不靠点外部收起。
+    // 2026-11-28 用户指令：提示行整个删掉——不写引导文案，也不留占位高度或条件回执行；
+    // annotateNotice 状态一并退役（setEditMessage 是唯一失败通道）。
+    expect(src).not.toContain('const annotateHint');
+    expect(src).not.toContain('annotateNotice');
+    expect(src).not.toContain('annotate-hint');
+    expect(src).not.toContain('选一个工具，在图上绘制');
+    expect(src).not.toContain('文本 · 点一下输入');
+    expect(src).not.toContain('按住拖或点两个点');
+    expect(src).not.toContain('单击 3 点连成三角形');
+    expect(src).not.toContain('点，还需');
+    // 固定宽度；有明确关闭口，不靠点外部收起。
     expect(src).toContain('const ANNOTATE_CARD_WIDTH = 286');
     expect(src).toContain('data-testid="outdoor-inspector-card-annotate-close"');
     expect(src).toContain('const halfPanel = panelWidth / 2');

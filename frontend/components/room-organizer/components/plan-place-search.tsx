@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Clock, Search, X } from 'lucide-react';
 import {
+  forgetPlace,
   matchRecentPlaces,
   recentPlaces,
   rememberPlace,
@@ -332,6 +333,12 @@ export default function PlanPlaceSearch({
     onPick(place);
   }
 
+  // 2026-11-28 用户指令：最近搜过支持单条删除——只摘历史，不影响实时检索结果与编号。
+  const removeRecent = useCallback((place: PlaceSuggestion) => {
+    forgetPlace(place);
+    setRecent(recentPlaces());
+  }, []);
+
   function clear() {
     setQuery('');
     setHits([]);
@@ -466,7 +473,7 @@ export default function PlanPlaceSearch({
       {open && options.length > 0 && (
         <ul className="sc-plan-place-search-options" id={`${testIdPrefix}-options`} role="listbox">
           {options.map((option, index) => (
-            <li key={option.kind === 'area' ? `area-${option.area.id}` : `place-${option.place.id}-${index}`} role="none">
+            <li key={option.kind === 'area' ? `area-${option.area.id}` : `place-${option.place.id}-${index}`} role="none" className="sc-plan-place-search-option-item">
               <button
                 type="button"
                 role="option"
@@ -477,7 +484,7 @@ export default function PlanPlaceSearch({
                 onMouseEnter={() => setActive(index)}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => chooseOption(option)}
-                className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : option.hasOutline ? ' is-outline' : ''}`}
+                className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : option.hasOutline ? ' is-outline' : ''}${option.kind === 'place' && optionNumbers[index] == null ? ' is-recent' : ''}`}
               >
                 {/* 2026-11-15 用户指令：下拉按从上往下的顺序编号，chat 卡只给前三个标题时
                     说「第 N 个」能和这里的编号对上号。
@@ -512,6 +519,20 @@ export default function PlanPlaceSearch({
                   </>
                 )}
               </button>
+              {/* 2026-11-28 用户指令：最近搜过的行带删除 ×——只摘这条历史，不影响实时检索候选与编号。
+                  × 是行按钮的兄弟节点（按钮不能嵌套），绝对定位压在行右缘。 */}
+              {option.kind === 'place' && optionNumbers[index] == null && (
+                <button
+                  type="button"
+                  className="sc-plan-place-search-option-forget"
+                  aria-label={`删除最近搜过的「${option.place.name}」`}
+                  title="删除这条历史"
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={event => { event.stopPropagation(); removeRecent(option.place); }}
+                >
+                  <X size={12} strokeWidth={2} aria-hidden />
+                </button>
+              )}
             </li>
           ))}
         </ul>

@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { boundaryFramePillState, planPointToPixel } from '../lib/outdoor-plan-canvas';
+import { DEFAULT_SCOPE_MARGIN_M } from '../lib/outdoor-design-scope';
 import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import Canvas, { type OutdoorPlanCanvasHandle } from './outdoor-plan-canvas';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
@@ -233,11 +234,11 @@ it('锁定 + 选中红线：画布顶 DOM 浮条退役，胶囊规则在 lib 层
   fireEvent.pointerUp(canvas, { clientX: center.x, clientY: center.y, pointerId: 21, button: 0 });
 
   // 2026-11-28 用户「红线的提示应该追随在白框正上方 + 取消/确认换图标」：
-  // 画布顶 DOM 浮条退役，选中态操作并入白框顶动作胶囊（canvas 绘制，DOM 测试看不到；
-  // 锁定态只留收起 × 的口径在 lib 纯函数里钉住）。
+  // 画布顶 DOM 浮条退役，选中态操作并入白框顶动作胶囊（canvas 绘制，DOM 测试看不到）；
+  // 同日用户拍板「锁定还弹已选中胶囊」去掉——锁定态整枚不画，口径在 lib 纯函数里钉住。
   expect(screen.queryByTestId('boundary-selection-bar')).toBeNull();
   expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: true }))
-    .toEqual({ kind: 'selected', label: '已选中用地红线', actions: ['cancel'] });
+    .toBeNull();
   expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: false }))
     .toEqual({ kind: 'selected', label: '已选中用地红线', actions: ['delete', 'cancel'] });
 });
@@ -378,14 +379,15 @@ it('A1 拖顶点把面积压到 4㎡ 以下：拒绝「面积太小」，原环�
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(SMALL);
 });
 
-it('A4 顶点顶出白框：确认后不拒几何，设计范围按新红线外扩 20m 重置', () => {
+it('A4 顶点顶出白框：确认后不拒几何，设计范围按新红线外扩默认边距重置', () => {
   const { ref, commit, container, canvas } = mount();
   applyEditableVenue(ref, BASE, commit);
   act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
   const oldScope = ref.current!.getEditVisuals().plan.designScope!;
 
   const from = pxOf(ref, BASE[0]!);
-  const to = pxOf(ref, { x: -50, y: -30 });
+  // 默认白框现在是四边各外扩 100 m（-120..120 / -115..115），顶点要真拖出框外才会重置。
+  const to = pxOf(ref, { x: -150, y: -130 });
   const handle = container.querySelector('[data-vertex-index="0"]') as HTMLElement;
 
   fireEvent.pointerDown(handle, { clientX: from.x, clientY: from.y, pointerId: 14, button: 0, buttons: 1 });
@@ -402,9 +404,9 @@ it('A4 顶点顶出白框：确认后不拒几何，设计范围按新红线外�
   const last = commit.mock.calls.at(-1)![0];
   expect(last.boundary[0]).not.toEqual(BASE[0]);
   expect(last.designScope).not.toEqual(oldScope);
-  // 新红线外接矩形四边各外扩 20 m。
-  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.x))).toBeCloseTo(-70, 6);
-  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.y))).toBeCloseTo(-50, 6);
+  // 新红线外接矩形四边各外扩默认边距（顶点 0 拖到 -150,-130，外接矩形左/下边就是 -150/-130）。
+  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.x))).toBeCloseTo(-150 - DEFAULT_SCOPE_MARGIN_M, 6);
+  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.y))).toBeCloseTo(-130 - DEFAULT_SCOPE_MARGIN_M, 6);
 });
 
 it('A5 已有内容时换锚点：公共写句柄拒绝，原方案与锚点不动', () => {

@@ -21,6 +21,8 @@ import {
   outdoorCorridorStrips,
   outdoorRingsOverlap,
 } from "./outdoor-event-logic";
+// 换场判定与 canReanchorOutdoorPlan 同口径（≥1cm 位移=换场）。
+import { anchorMovedMeters } from "./outdoor-plan-protection";
 // 2026-11-17 死结 4：岗位缺通道时按需补一条专用驳线（复用 V-4a 的几何护栏）。
 import { buildZoneSpur, spurAudiencesFor } from "./sub-entrance";
 import type {
@@ -1511,21 +1513,21 @@ export function prunePlanForBoundary(
   base: SitePlanData,
   boundary: SitePlanData["boundary"],
   anchor?: NonNullable<SitePlanData["anchor"]>,
-): { next: SitePlanData; droppedZones: string[]; droppedFacilities: string[]; droppedRoutes: string[]; swept: boolean } {
+): { next: SitePlanData; droppedZones: string[]; droppedFacilities: string[]; droppedRoutes: string[]; swept: boolean; cleared: number } {
   const movedMeters = base.anchor && anchor
-    ? Math.hypot(
-        (anchor.lng - base.anchor.lng) * 111320 * Math.cos(anchor.lat * Math.PI / 180),
-        (anchor.lat - base.anchor.lat) * 110540,
-      )
+    ? anchorMovedMeters(base.anchor, anchor)
     : 0;
   if (movedMeters >= 0.01) {
     const name = (items: { name: string }[]) => items.map((item) => item.name);
     return {
-      next: { ...base, zones: [], facilities: [], routes: [], workers: [], nodes: [], annotations: [], measurements: [] },
+      // 2026-11-28：车辆也是旧坐标系的活内容（#118 同口径），随场清掉；cleared 供换场确认句计数。
+      next: { ...base, zones: [], facilities: [], routes: [], workers: [], nodes: [], annotations: [], measurements: [], vehicles: [] },
       droppedZones: name(base.zones),
       droppedFacilities: name(base.facilities),
       droppedRoutes: name(base.routes),
       swept: true,
+      cleared: [base.zones, base.routes, base.nodes, base.facilities, base.workers, base.vehicles, base.annotations, base.measurements]
+        .reduce<number>((sum, items) => sum + (items?.length ?? 0), 0),
     };
   }
   const zones = base.zones.filter(
@@ -1596,5 +1598,6 @@ export function prunePlanForBoundary(
     droppedFacilities,
     droppedRoutes,
     swept: false,
+    cleared: 0,
   };
 }

@@ -210,24 +210,29 @@ describe('设计范围：路径串（蒙版与描边共用一份）', () => {
 });
 
 describe('syncScopeForBoundary（2026-11-17 用户拍板：红线拖拽后白框跟不跟）', () => {
-  const scope = expandRect(square, DEFAULT_SCOPE_MARGIN_M); // -20..30，兜住默认红线
+  const margin = DEFAULT_SCOPE_MARGIN_M;
+  const scope = expandRect(square, margin); // 默认外扩后的白框，兜住默认红线
   it('红线仍在白框内（往里拖/微调）→ 白框不动', () => {
     const inside = [{ x: 2, y: 2 }, { x: 8, y: 2 }, { x: 8, y: 8 }, { x: 2, y: 8 }];
-    expect(syncScopeForBoundary(scope, inside, DEFAULT_SCOPE_MARGIN_M)).toBeNull();
+    expect(syncScopeForBoundary(scope, inside, margin)).toBeNull();
   });
   it('红线顶出白框（向外拖）→ 白框重置为新红线外扩', () => {
-    const grown = [{ x: -30, y: -30 }, { x: 10, y: -30 }, { x: 10, y: 10 }, { x: -30, y: 10 }];
-    expect(syncScopeForBoundary(scope, grown, DEFAULT_SCOPE_MARGIN_M)).toEqual(expandRect(grown, DEFAULT_SCOPE_MARGIN_M));
+    // 往左/下拖出默认白框一个身位：坐标按 margin 推导，不改默认值也能继续验证这条行为。
+    const grown = [
+      { x: -margin - 30, y: -margin - 30 }, { x: 10, y: -margin - 30 },
+      { x: 10, y: 10 }, { x: -margin - 30, y: 10 },
+    ];
+    expect(syncScopeForBoundary(scope, grown, margin)).toEqual(expandRect(grown, margin));
   });
   it('只有一边顶出也算顶出', () => {
-    const up = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 40 }, { x: 0, y: 40 }];
-    expect(syncScopeForBoundary(scope, up, DEFAULT_SCOPE_MARGIN_M)).toEqual(expandRect(up, DEFAULT_SCOPE_MARGIN_M));
+    const up = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 + margin + 30 }, { x: 0, y: 10 + margin + 30 }];
+    expect(syncScopeForBoundary(scope, up, margin)).toEqual(expandRect(up, margin));
   });
   it('本来没有白框 → 顺手生成一个', () => {
-    expect(syncScopeForBoundary(undefined, square, DEFAULT_SCOPE_MARGIN_M)).toEqual(expandRect(square, DEFAULT_SCOPE_MARGIN_M));
+    expect(syncScopeForBoundary(undefined, square, margin)).toEqual(expandRect(square, margin));
   });
   it('红线不足 3 点 → 不动白框也不生成', () => {
-    expect(syncScopeForBoundary(scope, [{ x: 0, y: 0 }], DEFAULT_SCOPE_MARGIN_M)).toBeNull();
+    expect(syncScopeForBoundary(scope, [{ x: 0, y: 0 }], margin)).toBeNull();
   });
 });
 
@@ -247,7 +252,7 @@ describe('应用别人送来的方案（Agent 提案）时白框怎么跟', () =
     })).toBeNull();
   });
 
-  it('换了红线却没带框 → 按新红线外扩默认 20 m', () => {
+  it('换了红线却没带框 → 按新红线外扩默认边距', () => {
     expect(scopeForAppliedPlan({ currentBoundary: square, nextBoundary: bigger, nextScope: undefined }))
       .toEqual(expandRect(bigger, DEFAULT_SCOPE_MARGIN_M));
   });

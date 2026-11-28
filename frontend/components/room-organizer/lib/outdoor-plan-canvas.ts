@@ -625,7 +625,7 @@ export interface FramePillState {
 
 /**
  * 白框顶胶囊该画哪一枚（一次只画一枚，优先级 = 挂起的红线调整 > 候选活动范围 > 已选中）。
- * 锁定态是「只看不改」：选中枚只留收起 ×，删除要解锁才挂（2026-11-28 并行口径沿用）。
+ * 锁定态是「只看不改」：选中枚整枚不画（2026-11-28 用户拍板「锁定还弹已选中胶囊」去掉）。
  */
 export function boundaryFramePillState(input: {
   pendingEdit: boolean;
@@ -635,12 +635,8 @@ export function boundaryFramePillState(input: {
 }): FramePillState | null {
   if (input.pendingEdit) return { kind: 'pending', label: '红线已调整（待确认）', actions: ['confirm', 'cancel'] };
   if (input.candidatePreview) return { kind: 'candidate', label: '候选活动范围（待核对）', actions: ['confirm', 'cancel'] };
-  if (input.boundarySelected) {
-    return {
-      kind: 'selected',
-      label: '已选中用地红线',
-      actions: input.boundaryLocked ? ['cancel'] : ['delete', 'cancel'],
-    };
+  if (input.boundarySelected && !input.boundaryLocked) {
+    return { kind: 'selected', label: '已选中用地红线', actions: ['delete', 'cancel'] };
   }
   return null;
 }
@@ -2214,20 +2210,24 @@ export function drawMeasureDraft(
 
 /* ---------------- 2026-11-11 用户指令：自由标注（文本 + 形状） ---------------- */
 
-/** 文本标注：深底圆角 pill + 白字（多行），深浅底图都读得清；选中加白描边。 */
+/** 文本标注：深底圆角 pill + 白字（多行），深浅底图都读得清；选中加白描边。
+    2026-11-28 用户指令：文本支持两档字号——沿用 strokeWidth 档位（thin=小字 12px / thick=大字 18px）。 */
 function drawAnnotationNote(
   c: PlanCanvasContext,
   at: PlanPoint,
   text: string,
   color: string,
   selected: boolean,
+  strokeWidth?: PlanAnnotation['strokeWidth'],
 ): void {
   const { ctx, viewport } = c;
   const pt = planPointToPixel(at, viewport);
   const lines = text.split('\n').slice(0, 6);
-  ctx.font = '12px system-ui, sans-serif';
+  const fontSize = strokeWidth === 'thick' ? 18 : 12;
+  const lineHeight = strokeWidth === 'thick' ? 24 : 16;
+  ctx.font = `${fontSize}px system-ui, sans-serif`;
   const width = Math.max(...lines.map(l => ctx.measureText(l).width), 8) + 16;
-  const height = lines.length * 16 + 10;
+  const height = lines.length * lineHeight + 10;
   const x = pt.x - width / 2;
   const y = pt.y - height / 2;
   const radius = 6;
@@ -2246,7 +2246,7 @@ function drawAnnotationNote(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   lines.forEach((line, i) => {
-    ctx.fillText(line, pt.x, y + 5 + 8 + i * 16);
+    ctx.fillText(line, pt.x, y + 5 + lineHeight / 2 + i * lineHeight);
   });
   ctx.restore();
 }
@@ -2255,7 +2255,7 @@ function drawAnnotationNote(
  * 固定自由标注（2026-11-11 用户指令）：形状 = 半透明填充 + 实线描边（线段无填充），
  * 文本 = 深底 pill。图形一律从米制几何现算，缩放不变形；选中加白描边（与动线同口径）。
  */
-/** 标注形状描边像素档位：thin 细线（旧数据缺省同此口径）/ thick 粗线；文本备注不取线宽。 */
+/** 标注形状描边像素档位：thin 细线（旧数据缺省同此口径）/ thick 粗线；note 上同档位解释为字号（见 drawAnnotationNote）。 */
 export function annotationStrokeWidthPx(width?: PlanAnnotation['strokeWidth']): number {
   return width === 'thick' ? 3.5 : 2;
 }
@@ -2269,7 +2269,7 @@ export function drawAnnotationLayer(
     const color = a.color ?? PLANNING_LAYER_COLORS.annotate;
     const selected = a.selected === true;
     if (a.kind === 'note') {
-      drawAnnotationNote(c, a.points[0]!, a.text || a.name, color, selected);
+      drawAnnotationNote(c, a.points[0]!, a.text || a.name, color, selected, a.strokeWidth);
       continue;
     }
     ctx.save();

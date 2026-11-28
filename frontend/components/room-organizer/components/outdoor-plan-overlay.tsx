@@ -596,7 +596,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     setPlaceArea(null);
     const index = candidateIndexByName(place.name);
     setPlacePin({ lng: place.lng, lat: place.lat, label: place.name, ...(index != null ? { index } : {}) });
-    if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
+    // 2026-11-28 用户指令：点候选必须把画面移到该点中心——不再因为图上有候选编号钉就跳过飞行。
+    canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
     lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
   };
   const closeSearchPlace = () => {
