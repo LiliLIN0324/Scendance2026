@@ -1,13 +1,23 @@
 // pay-api：付费与扣次的后端（支付宝 AI 付 / Vibe Pay，标准 RSA2 流程）。
 //
 // 路由（函数内相对路径）：
+//   GET  /pay/skus          在售 SKU 清单（含订阅档位与权益 JSON，前端只展示这一份）
 //   POST /pay/create        建单（金额以后端 SKU 表为准，绝不信任前端传的金额）
 //   POST /pay/notify        支付宝异步通知（验签 + 金额/订单号校验 + 幂等）
 //   GET  /pay/order/:id     查单（回调丢失时主动查询支付宝补偿）
 //   POST /pay/mock-paid     仅 mock 模式可用，模拟支付成功
+//   POST /pay/subscription  查询某 owner 的当前订阅与权益（pay_subscription_for）
+//   POST /pay/aichashou/access   爱猹收权益检查（granted/purchase_required + 购买入口）
+//   POST /pay/aichashou/consume  爱猹收额度原子扣减（幂等键透传）
 //   POST /scan/consume      预扣一次（幂等键 = owner + jobId + attempt）
 //   POST /scan/release      失败返还
 //   POST /scan/expire       超时未确认的预扣统一返还（可由定时任务调用）
+//
+// 订阅与按次共用 pay_orders，kind 区分；订阅订单支付后由 pay_fulfill_subscription
+// 开通 subscriptions 行，权益判定只走 pay_subscription_for。
+// 爱猹收通道（PAYATHON 2026 官方收款平台 pay.watcha.cn）：商品与权益托管在平台，
+// 本函数只做服务端代理——Key 永不下发前端。未配置 AICHASHOU_* 时爱猹收路由 501，
+// 其余路由不受影响（三态：mock / sandbox / live 仍是支付宝当面付直连通道）。
 //
 // 密钥只从环境变量读取（ALIPAY_APP_ID / ALIPAY_PRIVATE_KEY / ALIPAY_PUBLIC_KEY /
 // ALIPAY_NOTIFY_URL / ALIPAY_SANDBOX），代码与日志不出现明文密钥。
@@ -242,6 +252,53 @@ async function callAlipay(
   return node;
 }
 
+/**
+ * 爱猹收（pay.watcha.cn）服务端代理：商品与权益托管在平台，这里只持有
+ * 服务端 Key 并转发 access/consume。Key 从环境读取，绝不回显、不下发前端。
+ * user_id 用产品内的稳定 ownerKey（anon:<device> / user:<uuid>），不采信
+ * 手机号或邮箱；额度扣减的幂等键沿用「scan:owner:job:attempt」规则。
+ */
+function aichashouConfigured(): boolean {
+  return Boolean((env('AICHASHOU_API_KEY') ?? env('AICHASHOU_SANDBOX_API_KEY')) && env('AICHASHOU_ENT_MEMBERSHIP') && env('AICHASHOU_ENT_QUOTA'));
+}
+
+function aichashouEntitlementId(kind: string): string | null {
+  // 团队版（team）为可选配置：未配置时路由返回缺失错误，前端团队卡不挂购买按钮。
+  if (kind === 'quota') return env('AICHASHOU_ENT_QUOTA') ?? null;
+  if (kind === 'team') return env('AICHASHOU_ENT_TEAM') ?? null;
+  return env('AICHASHOU_ENT_MEMBERSHIP') ?? null;
+}
+
+/**
+ * 内部账号豁免：创始成员的 ownerKey 白名单（逗号分隔 env）。
+ * 命中后不查爱猹收账本、不产生真实收款与平台消费记录——仅供内部测试便利，
+ * 不是「真实用户付费」的数据来源（agent.md：收款方购买自己的商品不算数）。
+ * 登录接入后 ownerKey 应为稳定的 user:<uuid>，再把这些键填进 env。
+ */
+function aichashouAdminKeys(): string[] {
+  return (env('AICHASHOU_ADMIN_OWNER_KEYS') ?? '')
+    .split(',')
+    .map(key => key.trim())
+    .filter(Boolean);
+}
+
+async function aichashouPost(path: string, payload: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> } | null> {
+  const key = env('AICHASHOU_API_KEY') ?? env('AICHASHOU_SANDBOX_API_KEY');
+  const base = (env('AICHASHOU_BASE_URL') ?? 'https://pay.watcha.cn').replace(/\/$/, '');
+  let response: Response;
+  try {
+    response = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key ?? ''}`, 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return null;
+  }
+  const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  return { status: response.status, body };
+}
+
 async function readJson(request: Request): Promise<Record<string, unknown>> {
   try {
     const body = await request.json();
@@ -261,6 +318,9 @@ function toOrderView(order: Record<string, unknown>) {
   return {
     id: order.id,
     sku: order.sku,
+    kind: order.kind ?? 'times',
+    planCode: order.plan_code ?? null,
+    periodMonths: order.period_months ?? null,
     status: order.status,
     timesPurchased: purchased,
     timesUsed: used,
@@ -272,6 +332,25 @@ function toOrderView(order: Record<string, unknown>) {
     provider: order.provider,
     providerOrderId: order.provider_order_id ?? null,
   };
+}
+
+/**
+ * 订阅履约：订单已支付后开通/顺延订阅。
+ * 幂等由 pay_fulfill_subscription 的 (provider, provider_order_id) 唯一约束保证，
+ * 重复调用不会开两份订阅。履约失败不回滚订单状态 —— 订单已收款，
+ * 权益开通失败会由查单补偿路径重试；查单路径对已支付的订阅订单每次都重放履约。
+ */
+async function fulfillSubscription(
+  db: ReturnType<typeof client>,
+  order: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  if ((order.kind ?? 'times') !== 'subscription') return null;
+  const { data, error } = await db.rpc('pay_fulfill_subscription', { p_order_id: order.id });
+  if (error) {
+    console.error('pay_fulfill_subscription failed', String(error.message ?? error.code ?? ''));
+    return null;
+  }
+  return (data ?? null) as Record<string, unknown> | null;
 }
 
 Deno.serve(async request => {
@@ -299,6 +378,8 @@ Deno.serve(async request => {
       const { data: sku, error: skuError } = await db.from('pay_skus').select('*').eq('code', skuCode).eq('active', true).maybeSingle();
       if (skuError || !sku) return fail('SKU_NOT_FOUND', 404, '商品不存在或已下架', { mode });
 
+      // 订阅 SKU：kind/plan_code/period_months 由 SKU 表下发，次数记 0（次数额度只属于按次单）。
+      const isSubscription = (sku.kind ?? 'times') === 'subscription';
       const { data: order, error } = await db
         .from('pay_orders')
         .insert({
@@ -306,7 +387,10 @@ Deno.serve(async request => {
           user_id: userId,
           anon_id: anonId,
           sku: sku.code,
-          times_purchased: sku.times,
+          kind: isSubscription ? 'subscription' : 'times',
+          plan_code: isSubscription ? (sku.plan_code ?? null) : null,
+          period_months: isSubscription ? (sku.period_months ?? null) : null,
+          times_purchased: isSubscription ? 0 : sku.times,
           amount_cents: sku.amount_cents,
           status: 'pending',
           provider: mode === 'mock' ? 'mock' : 'alipay',
@@ -334,11 +418,15 @@ Deno.serve(async request => {
           .eq('id', order.id)
           .select('*')
           .single();
-        return json({ order: toOrderView(paid ?? order), mode, mock: true });
+        const paidOrder = paid ?? order;
+        const subscription = await fulfillSubscription(db, paidOrder);
+        return json({ order: toOrderView(paidOrder), subscription, mode, mock: true });
       }
 
       // 真实通道：当面付预下单，返回二维码内容。
-      const subject = `Scendance 现场重建 · ${sku.title}`;
+      const subject = (sku.kind ?? 'times') === 'subscription'
+        ? `幕景会员 · ${sku.title}`
+        : `Scendance 现场重建 · ${sku.title}`;
       try {
         const result = await callAlipay(
           'alipay.trade.precreate',
@@ -401,7 +489,7 @@ Deno.serve(async request => {
       }
       if (order.status === 'paid') return notifyOk();
 
-      await db
+      const { data: paidOrder } = await db
         .from('pay_orders')
         .update({
           status: 'paid',
@@ -410,7 +498,12 @@ Deno.serve(async request => {
           provider_order_id: outTradeNo,
         })
         .eq('id', order.id)
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .select('*')
+        .maybeSingle();
+      // 订阅单在回调里直接履约。履约失败不影响回执：订单已收款，先回 success
+      // 防止支付宝无限重投同一通知；查单路径会对已支付的订阅单重放履约补偿。
+      await fulfillSubscription(db, paidOrder ?? order);
       // 支付宝要求返回纯文本 success，否则会重试。
       return notifyOk();
     }
@@ -435,7 +528,94 @@ Deno.serve(async request => {
         .select('*')
         .maybeSingle();
       if (!order) return fail('ORDER_NOT_FOUND', 409, null, { mode });
-      return json({ order: toOrderView(order), mode, mock: true });
+      const subscription = await fulfillSubscription(db, order);
+      return json({ order: toOrderView(order), subscription, mode, mock: true });
+    }
+
+    // —— 订阅与权益查询（唯一判定入口）——
+    if (path === '/pay/subscription' && request.method === 'POST') {
+      const body = await readJson(request);
+      const ownerKey = String(body.ownerKey ?? '').trim();
+      if (!ownerKey) return fail('BAD_REQUEST', 400, '需要 ownerKey', { mode });
+      const { data, error } = await db.rpc('pay_subscription_for', { p_owner_key: ownerKey });
+      if (error) return fail('SUBSCRIPTION_QUERY_FAILED', 500, error.message, { mode });
+      return json({ subscription: data, mode });
+    }
+
+    // —— 爱猹收权益检查（平台托管的会员/额度；购买入口由平台生成）——
+    if (path === '/pay/aichashou/access' && request.method === 'POST') {
+      const body = await readJson(request);
+      const ownerKey = String(body.ownerKey ?? '').trim();
+      const kind = String(body.kind ?? 'membership');
+      const returnUrl = typeof body.returnUrl === 'string' && body.returnUrl.startsWith('https://') ? body.returnUrl : undefined;
+      if (!ownerKey) return fail('BAD_REQUEST', 400, '需要 ownerKey', { mode });
+      if (aichashouAdminKeys().includes(ownerKey)) {
+        // 内部豁免：永久 granted（额度则视为近乎无限），不触达爱猹收账本。
+        return json({
+          provider: 'aichashou',
+          entitlement: {
+            access: 'granted',
+            entitlement: kind === 'quota' ? { type: 'quota', remaining: 999999 } : { type: 'permanent' },
+          },
+          mode,
+        });
+      }
+      if (!aichashouConfigured()) return fail('AICHASHOU_NOT_CONFIGURED', 501, '爱猹收未配置，走支付宝通道', { mode });
+      const entitlementId = aichashouEntitlementId(kind);
+      if (!entitlementId) return fail('AICHASHOU_ENTITLEMENT_MISSING', 500, `缺少 ${kind} 权益 ID 配置`, { mode });
+      const payload: Record<string, unknown> = { entitlement_id: entitlementId, user_id: ownerKey };
+      if (returnUrl) payload.return_url = returnUrl;
+      const result = await aichashouPost('/v1/entitlements/access', payload);
+      if (!result) return fail('AICHASHOU_UPSTREAM_FAILED', 502, '爱猹收无响应', { mode });
+      // 透传上游状态与响应体（200 granted / 200 purchase_required / 4xx 失败关闭）。
+      return json({ provider: 'aichashou', entitlement: result.body, mode }, result.status >= 200 && result.status < 300 ? 200 : 502);
+    }
+
+    // —— 爱猹收额度原子扣减（幂等键透传；余额不足透传 409）——
+    if (path === '/pay/aichashou/consume' && request.method === 'POST') {
+      const body = await readJson(request);
+      const ownerKey = String(body.ownerKey ?? '').trim();
+      const idem = String(body.idempotencyKey ?? '').trim();
+      const amount = Math.max(1, Math.min(10, Number(body.amount ?? 1)));
+      if (!ownerKey || !idem) return fail('BAD_REQUEST', 400, '需要 ownerKey 与 idempotencyKey', { mode });
+      if (aichashouAdminKeys().includes(ownerKey)) {
+        // 内部豁免：不扣平台账本，返回近乎无限的余额快照。
+        return json({ provider: 'aichashou', result: { consumed: amount, entitlement: { type: 'quota', remaining: 999999 } }, mode });
+      }
+      if (!aichashouConfigured()) return fail('AICHASHOU_NOT_CONFIGURED', 501, '爱猹收未配置，走支付宝通道', { mode });
+      const entitlementId = aichashouEntitlementId('quota');
+      if (!entitlementId) return fail('AICHASHOU_ENTITLEMENT_MISSING', 500, '缺少额度权益 ID 配置', { mode });
+      const result = await aichashouPost('/v1/entitlements/consume', {
+        entitlement_id: entitlementId,
+        user_id: ownerKey,
+        amount,
+        idempotency_key: idem,
+      });
+      if (!result) return fail('AICHASHOU_UPSTREAM_FAILED', 502, '爱猹收无响应', { mode });
+      // 409 余额不足：把上游 error 透传到外层，前端据此映射 INSUFFICIENT_CREDITS。
+      const upstreamError = (result.body as { error?: Record<string, unknown> }).error;
+      return json(
+        { provider: 'aichashou', result: result.body, ...(upstreamError ? { error: upstreamError } : {}), mode },
+        result.status,
+      );
+    }
+
+    // —— 在售 SKU 清单 ——
+    if (path === '/pay/skus' && request.method === 'GET') {
+      const { data, error } = await db.from('pay_skus').select('*').eq('active', true).order('sort');
+      if (error) return fail('SKU_LIST_FAILED', 500, error.message, { mode });
+      const skus = (data ?? []).map(sku => ({
+        code: sku.code,
+        title: sku.title,
+        kind: sku.kind ?? 'times',
+        planCode: sku.plan_code ?? null,
+        periodMonths: sku.period_months ?? null,
+        seats: sku.seats ?? null,
+        entitlements: sku.entitlements ?? null,
+        times: sku.times,
+        amountCents: sku.amount_cents,
+      }));
+      return json({ skus, mode });
     }
 
     // —— 查单（回调丢失时主动查询补偿）——
@@ -464,7 +644,8 @@ Deno.serve(async request => {
                 .eq('status', 'pending')
                 .select('*')
                 .single();
-              return json({ order: toOrderView(updated ?? order), mode, reconciled: true });
+              const subscription = await fulfillSubscription(db, updated ?? order);
+              return json({ order: toOrderView(updated ?? order), subscription, mode, reconciled: true });
             }
             return fail('QUERY_AMOUNT_MISMATCH', 409, '主动查询金额与订单不一致', { mode, order: toOrderView(order) });
           }
@@ -472,6 +653,12 @@ Deno.serve(async request => {
           // 查询失败不阻断前端轮询，保持 pending。
           return json({ order: toOrderView(order), mode, queryError: error instanceof Error ? error.message : 'QUERY_FAILED' });
         }
+      }
+      // 已支付的订阅订单：重放履约（幂等）作为回调丢失的补偿，
+      // 前端在观察到 paid 的那次轮询就能直接拿到订阅结果。
+      if (order.status === 'paid') {
+        const subscription = await fulfillSubscription(db, order);
+        if (subscription) return json({ order: toOrderView(order), subscription, mode });
       }
       return json({ order: toOrderView(order), mode });
     }
