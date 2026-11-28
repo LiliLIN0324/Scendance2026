@@ -17,7 +17,7 @@ import { LocalProjectBackupPanel } from './local-project-backup-panel';
 
 /** 夹具：外壳 projectId 与本机 layout 同身份；生产路径 ProjectId 取自 context，面板不再借 layout.id 反推。 */
 function editorValue(layout: RoomLayout): RoomEditorContextValue {
-  return { projectId: layout.id ?? 'local', layout } as unknown as RoomEditorContextValue;
+  return { projectId: layout.id, layout } as unknown as RoomEditorContextValue;
 }
 function tree(layout: RoomLayout, actions: LocalProjectBackupActions, briefState: CreativeBriefState, onComplete?: () => void) {
   return (
