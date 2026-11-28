@@ -105,6 +105,19 @@ async function countRows(url, key) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+/* --check-env：只报「键名有没有」，绝不打印值——用来确认这台机器上到底有没有写库要的那把钥匙。 */
+if (process.argv.includes('--check-env')) {
+  const file = readEnvLocal();
+  const looksSecret = /KEY|SECRET|TOKEN|PASS/i;
+  const names = Object.keys(file);
+  console.log('.env.local / .env 里读到的键名（共 ' + names.length + ' 个）：');
+  for (const name of names) console.log(`  ${name}${looksSecret.test(name) ? '（密钥类）' : ''}`);
+  const fromShell = Object.keys(process.env).filter((name) => /SUPABASE|SERVICE_ROLE/i.test(name));
+  console.log('shell 环境里的 SUPABASE 相关键名：' + (fromShell.join(', ') || '（无）'));
+  const { url, key } = credentials();
+  console.log(`SUPABASE_URL：${url ? '有' : '没有'}｜SUPABASE_SERVICE_ROLE_KEY：${key ? '有' : '没有'}`);
+  process.exit(0);
+}
 if (!args.file) {
   console.error('用法：node tools/place-shapes/import-place-shapes.mjs <package.place_shapes.jsonl> [--apply] [--batch 400] [--limit N]');
   process.exit(2);

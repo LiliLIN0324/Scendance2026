@@ -157,11 +157,15 @@ export function OutdoorWorkflowCard({
   onAdjustPlan,
   replyPending = false,
   showCaption = true,
+  requestShownInChat = false,
+  onRestoreRetryDraft,
 }: {
   flow: ReturnType<typeof useOutdoorAgentWorkflow>;
   replyPending?: boolean;
   /** T1-c：当前已有 ToolCallTrace 执行状态时，卡内不再重复阶段图注；真实红线轮廓不受影响。 */
   showCaption?: boolean;
+  requestShownInChat?: boolean;
+  onRestoreRetryDraft?: (text: string) => void;
   onAdjustPlan?: () => void;
   /** 地图优先第一步：任务卡上直接给「搜索地点」入口，不用让人去画布左上角找。 */
   onSearchPlace?: (() => void) | undefined;
@@ -225,7 +229,7 @@ export function OutdoorWorkflowCard({
     people: "people",
     "refine-3d": "refine-3d",
   };
-  const thoughtRecord = <OutdoorThoughtRecord key={flow.thoughtRequest} thought={flow.thought} request={flow.thoughtRequest} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} canvasNote={flow.canvasNote} attention={flow.mapGap} />;
+  const thoughtRecord = <OutdoorThoughtRecord key={flow.thoughtRequest} thought={flow.thought} request={requestShownInChat ? null : flow.thoughtRequest} awaiting={flow.awaitingThought} draft={flow.thoughtDraft} steps={flow.designSteps} elapsedMs={flow.thoughtMs} compact={replyPending} canvasNote={flow.canvasNote} attention={flow.mapGap} />;
   // 2026-11-18 用户指令：分区还没给用途时，反问不再内嵌在任务卡里，而是任务卡下方的独立小卡。
   // 手画的分区在下方分区卡里补齐室内外后（全部不是 unknown），同样视为「用途已给」：
   // 反问小卡收掉，任务卡给出「生成分区预览」主按钮，不再让人必须说一句话才能推进。
@@ -360,7 +364,7 @@ export function OutdoorWorkflowCard({
                 type="button"
                 className="chip"
                 disabled={flow.busy}
-                onClick={() => void (async()=>{if(!await flow.retryLastRequest?.())await flow.action(actions[flow.state.stage] ?? "ask");})()}
+                onClick={() => void (async()=>{if(!await flow.retryLastRequest?.(onRestoreRetryDraft))await flow.action(actions[flow.state.stage] ?? "ask");})()}
               >
                 <RotateCw size={14} aria-hidden="true" />
                 重试这次请求
@@ -394,7 +398,7 @@ export function OutdoorWorkflowCard({
                 type="button"
                 className="ap-task-retry"
                 disabled={flow.busy}
-                onClick={() => void (async()=>{if(!await flow.retryLastRequest?.())await flow.action(actions[flow.state.stage] ?? "ask");})()}
+                onClick={() => void (async()=>{if(!await flow.retryLastRequest?.(onRestoreRetryDraft))await flow.action(actions[flow.state.stage] ?? "ask");})()}
               >
                 重试
               </button>

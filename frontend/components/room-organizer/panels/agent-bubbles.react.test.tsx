@@ -18,3 +18,10 @@ it('renders the current outdoor question once, after its thought record', () => 
   expect(within(question).getAllByRole('listitem')).toHaveLength(3);
   expect(screen.getByRole('region', { name: '追问' })).toBeTruthy();
 });
+
+it('keeps repeated text from distinct turns but renders each message id only once', () => {
+  const message: Bubble = { id: 'request', role: 'user', text: '帮我设计一下场地' };
+  const { container } = render(<Bubbles bubbles={[message, message, { ...message, id: 'second-request' }]} sessionKey="fixture"
+    onPickOption={vi.fn()} onOpenMaterials={vi.fn()} />);
+  expect(within(container).getAllByText(message.text)).toHaveLength(2);
+});

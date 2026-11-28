@@ -82,7 +82,7 @@ import { readOutdoorPersonalLibrary, readOutdoorBuiltinLibrary } from "../lib/ou
 // 2026-11-17 用户拍板「AI 先当设计师，先出一版他看看」：没有清单时按分区用途出默认方案。
 import { draftDemand } from "../lib/outdoor-draft-design";
 // docs/46 V-P2：虚拟场地意图切纸面（ground-mode store，2D/3D 同步跟随）。
-import { writePlanGroundMode } from "../lib/plan-basemap-source";
+import { readPlanGroundMode, writePlanGroundMode } from "../lib/plan-basemap-source";
 // 2026-11-20 P1：结果摘要、本次变化、一句话局部调整（纯逻辑在 lib，hook 只做接线与档位判定）。
 import { buildDesignSummary, type DesignSummary } from "../lib/outdoor-design-summary";
 import { describePlanChange, diffPlanObjects, type PlanChangeSummary } from "../lib/outdoor-plan-change";
@@ -1634,20 +1634,20 @@ export function useOutdoorAgentWorkflow(input: {
       return;
     }
     if (turn.action === "virtual-venue") {
-      // docs/46 V-P2：虚拟场地意图——跳过「搜索目标地点」，切纸面起稿；地理锚点缺失变成合法态
-      // （覆盖层对 paper 态不回填预置锚点）。引导用户画红线：闭合同帧自动生成设计范围。
       writePlanGroundMode("paper");
+      const merged = mergeOutdoorFacts(stateRef.current, turn, message, priorUserText);
       persist({
-        ...stateRef.current,
+        ...merged,
         stage: "scope",
         confirmedBoundary: null,
         completed: [],
       });
-      status(
-        turn.reply?.trim()
-          || "已切到纸面模式：不关联真实地点。用物件库「用地红线（重画）」画出场地边界，闭合后自动生成设计范围，我们接着分区、摆物件。",
-        "ready",
-      );
+      const scopePrompt = "可以直接说场地长宽，或用「用地红线（重画）」圈范围。";
+      if (merged.brief.guests == null) {
+        status(`大概多少人？人数没定也可以先起稿。${scopePrompt}`, "ask");
+      } else {
+        status(scopePrompt, "ready");
+      }
       return;
     }
     const bridge = callbacks.current.bridge(),
@@ -2886,8 +2886,33 @@ export function useOutdoorAgentWorkflow(input: {
       cancel();
       return true;
     }
+    if (!clarification && !images?.length && !documents?.length &&
+        /^(?:我想|我要|请|先)?(?:用)?(?:纸面起稿|纸面模式(?:起稿)?)[。！!]?$/u.test(message.trim())) {
+      start();
+      setBusy(false);
+      await act({ action: "virtual-venue", reply: "", references: [], facts: {} }, message);
+      return true;
+    }
     const plan = callbacks.current.bridge()?.getPlan();
     if (!plan) return false;
+    const paperSize = !clarification && !images?.length && !documents?.length && readPlanGroundMode() === "paper"
+      ? /^(?:场地)?\s*(\d+(?:\.\d+)?)\s*(?:米|m)?\s*[×xX*]\s*(\d+(?:\.\d+)?)\s*(?:米|m)[。！!]?$/u.exec(message.trim())
+      : null;
+    if (paperSize && !plan.anchor) {
+      const width = Number(paperSize[1]);
+      const depth = Number(paperSize[2]);
+      const boundary = [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: depth }, { x: 0, y: depth }];
+      if (!checkBoundaryRing(boundary).ok || width > 5000 || depth > 5000) {
+        status("这组尺寸无法作为活动范围，请核对长宽后重试。", "ask");
+        return true;
+      }
+      const job = start();
+      const { next } = prunePlanForBoundary(plan, boundary);
+      offer({ ...next, boundary, designScope: expandRect(boundary, DEFAULT_SCOPE_MARGIN_M) },
+        "scope", "核对纸面活动范围", job, []);
+      setBusy(false);
+      return true;
+    }
     lastActionRef.current=null;
     lastRequestRef.current={scope:scopeRef.current,ownerId:currentActorId(),message,clarification,images:images??[],documents:documents??[]};
     // 2026-11-20 P1：选中对象 + 明确位移句在本地完成，先于模型理解。
@@ -3841,14 +3866,17 @@ export function useOutdoorAgentWorkflow(input: {
   };
   return {
     state,
-    retryLastRequest: async ():Promise<boolean> => {
+    retryLastRequest: async (restoreDraft?: (text: string) => void): Promise<boolean> => {
       const request=lastRequestRef.current;
       const previous=request??lastActionRef.current;
       if(!previous||previous.scope!==scopeRef.current||renderedScope!==scopeRef.current)return false;
       if(previous.ownerId!==currentActorId()){
         status('账号已变化，请在当前账号重新发送需求；没有重放原账号请求。','blocked');return true;
       }
-      if(request)return handle(request.message,request.clarification,request.images,request.documents);
+      if (request) {
+        restoreDraft?.(request.message);
+        return handle(request.message, request.clarification, request.images, request.documents);
+      }
       await action(...lastActionRef.current!.args);return true;
     },
     designSteps,

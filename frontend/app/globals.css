@@ -4051,6 +4051,55 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   color: var(--sc-muted, #71767e);
   transition: color 0.16s ease;
 }
+.sc-plan-place-search-submit {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.sc-plan-place-search-submit:hover { background: var(--plane-deep, #eef0ed); }
+.sc-plan-place-search-submit:focus-visible { outline: 2px solid var(--green, #4a7c59); outline-offset: 2px; }
+.sc-place-search-status { padding: 14px 16px; color: var(--ink-soft, #71767e); font-size: 12px; }
+.sc-search-pin-hit {
+  position: absolute;
+  width: 32px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.sc-search-pin-hit:hover, .sc-search-pin-hit:focus-visible {
+  outline: 2px solid #e5484d;
+  outline-offset: 2px;
+  background: rgba(229, 72, 77, 0.08);
+}
+.sc-map-place-card {
+  position: absolute;
+  z-index: 8;
+  width: 256px;
+  padding: 16px;
+  border: 1px solid var(--hair, #e5e7eb);
+  border-radius: 12px;
+  background: var(--plane, #fff);
+  color: var(--ink, #141416);
+  box-shadow: 0 8px 28px rgba(20, 20, 22, 0.18);
+  pointer-events: auto;
+}
+.sc-map-place-card strong { display: block; padding-right: 20px; font-size: 14px; line-height: 1.5; }
+.sc-map-place-card p { margin: 8px 0 12px; color: var(--ink-soft, #71767e); font-size: 12px; line-height: 1.5; }
+.sc-map-place-close { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 20px; }
+.sc-map-place-confirm { margin-top: 4px; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--green-deep, #315b43); color: #fff; cursor: pointer; font-size: 12px; }
 .sc-plan-place-search-field:focus-within .sc-plan-place-search-icon {
   color: var(--sc-ink, #141416);
 }

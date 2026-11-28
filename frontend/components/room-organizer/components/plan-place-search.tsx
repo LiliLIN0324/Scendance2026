@@ -16,7 +16,7 @@
  * 不改 plan / anchor。组件只负责输入与建议条，落钉、画框由调用方交给画布。
  */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Search, X } from 'lucide-react';
 import {
   matchRecentPlaces,
@@ -33,12 +33,15 @@ import {
   type PlaceSearchOption,
 } from '@/components/room-organizer/lib/place-search-options';
 import { normalizeOutlineName } from '@/components/room-organizer/lib/place-shape-quality';
+import type { SearchCandidatePin } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
 export interface PlanPlaceSearchProps {
   /** 选中一条地点建议。 */
   onPick: (place: PlaceSuggestion) => void;
+  /** 地图点选与列表共用同一选中地点。 */
+  selectedPlace?: PlaceSuggestion | null;
   /** 选中一个选区（行政区边界）。不给就只搜地点。 */
   onPickArea?: (area: PlaceArea) => void;
   /** 画布中心，用于同名行政区里挑最近的（也是选区检索的 `near`）。 */
@@ -57,6 +60,19 @@ export interface PlanPlaceSearchProps {
    * 不用在地图框里重新输入一遍。传 null / 不传 = 不同步，保持原有独立检索。
    */
   sync?: { query: string; hits: readonly PlaceSuggestion[] } | null;
+  /**
+   * 2026-11-27 用户指令（对齐百度地图）：下拉候选批量上报给画布落编号钉——
+   * `index` 就是本下拉渲染的 1/N 序号（选区条目占号但无坐标，不落钉）。
+   * 选中后保留整批及原序号；清除搜索或切换活动时收掉。
+   * 传稳定引用（如 setState）以避免每次渲染重报。
+   */
+  onCandidatesChange?: (pins: ReadonlyArray<SearchCandidatePin> | null) => void;
+  /**
+   * 换活动令牌：调用方每递增一次，旧活动的这批候选钉立即收掉。
+   * 只对递增时的那次检索生效——下拉自己刷新同一批结果不会把钉铺回来；
+   * 换词重搜、或对话侧同步来新一批候选，照常重新铺钉。
+   */
+  revokeCandidatePins?: number;
 }
 
 /** 同一批候选判定：id / 名字 / 坐标一致就算没变，避免每次同步都重写 state。 */
@@ -71,9 +87,12 @@ function samePlaces(a: readonly PlaceSuggestion[], b: readonly PlaceSuggestion[]
 
 export default function PlanPlaceSearch({
   onPick,
+  selectedPlace,
   onPickArea,
   near,
   onClear,
+  onCandidatesChange,
+  revokeCandidatePins,
   offset,
   width = 320,
   placeholder = '搜地点 / 场馆 / 地址，地图飞过去',
@@ -87,12 +106,21 @@ export default function PlanPlaceSearch({
   const [recent, setRecent] = useState<PlaceSuggestion[]>([]);
   const [active, setActive] = useState(-1);
   const [busy, setBusy] = useState(false);
+  const [searchRequest, setSearchRequest] = useState(0);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   // 灵动岛两态开关：聚焦或悬停即展开；两者都不满足时收缩。
   const [focused, setFocused] = useState(false);
   const [hover, setHover] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const selectedOptionRef = useRef<HTMLButtonElement>(null);
+  const blurCloseRef = useRef<number | null>(null);
+  const cancelPendingBlur = useCallback(() => {
+    if (blurCloseRef.current !== null) window.clearTimeout(blurCloseRef.current);
+    blurCloseRef.current = null;
+  }, []);
+  useEffect(() => cancelPendingBlur, [cancelPendingBlur]);
   const expanded = focused || hover;
 
   useEffect(() => {
@@ -122,12 +150,13 @@ export default function PlanPlaceSearch({
     }
     // 同一批候选已经由对话侧给过来了就别再检索一遍：省一次出站往返，
     // 也避免本机双源慢响应把下拉清空。关键词被用户改过则照常检索。
-    if (syncHits && syncHits.length > 0 && keyword === syncQuery.trim()) return undefined;
+    if (!searchRequest && syncHits && syncHits.length > 0 && keyword === syncQuery.trim()) return undefined;
     const controller = new AbortController();
     setBusy(true);
+    setSearchFailed(false);
     const timer = window.setTimeout(() => {
       const nearPoint = nearLng != null && nearLat != null ? { lng: nearLng, lat: nearLat } : null;
-      const hintsRequest = fetchPlaceShapeHints(keyword, { signal: controller.signal });
+      const hintsRequest = fetchPlaceShapeHints(keyword, { signal: controller.signal }).catch(() => []);
       Promise.all([
         searchPlaces(keyword, { signal: controller.signal, center: nearPoint }),
         areaEnabledRef.current ? searchAreas(keyword, { signal: controller.signal, near: nearPoint }) : Promise.resolve([]),
@@ -144,17 +173,20 @@ export default function PlanPlaceSearch({
           void hintsRequest.then(hints => {
             if (controller.signal.aborted) return;
             setOutlinedNames(new Set([...names, ...hintedOutlineNames(hints)]));
-          });
+          }).catch(() => {});
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSearchFailed(true);
         })
         .finally(() => {
           if (!controller.signal.aborted) setBusy(false);
         });
-    }, SEARCH_DEBOUNCE_MS);
+    }, searchRequest ? 0 : SEARCH_DEBOUNCE_MS);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query, nearLng, nearLat, syncQuery, syncHits]);
+  }, [query, nearLng, nearLat, syncQuery, syncHits, searchRequest]);
 
   // 2026-11-13：对话侧（chat）搜到的地点同步到地图左上角这个搜索框——
   // 用户在 chat 里打「杭州 IN77」，这里要显示同一批候选，不必重新输入一遍。
@@ -163,6 +195,8 @@ export default function PlanPlaceSearch({
     const keyword = syncQuery.trim();
     if (!keyword) return;
     setQuery(syncQuery);
+    setSearchRequest(0);
+    setPicked(null);
     setHits(prev => (samePlaces(prev, syncHits ?? []) ? prev : [...(syncHits ?? [])]));
     setBusy(false);
     setOpen(true);
@@ -170,14 +204,72 @@ export default function PlanPlaceSearch({
   }, [syncQuery, syncHits]);
 
   const keyword = query.trim();
-  const recentMatches = keyword ? matchRecentPlaces(keyword) : recent;
-  const options: PlaceSearchOption[] = buildPlaceSearchOptions({
+  // 2026-11-27：候选编号钉要求 options 引用稳定（引用一变就重报钉），这里的合成
+  // 从渲染体挪进 useMemo——hover/focus 等无关 state 变化不再重建列表。
+  const recentMatches = useMemo(() => (keyword ? matchRecentPlaces(keyword) : recent), [keyword, recent]);
+  const options: PlaceSearchOption[] = useMemo(() => buildPlaceSearchOptions({
     query: keyword,
     areas,
     places: hits,
     recent: recentMatches,
     outlinedNames,
-  });
+  }), [keyword, areas, hits, recentMatches, outlinedNames]);
+
+  useEffect(() => {
+    if (!selectedPlace) return;
+    const index = options.findIndex(option => option.kind === 'place' && option.place.id === selectedPlace.id);
+    if (index < 0) return;
+    cancelPendingBlur();
+    setPicked(selectedPlace.name);
+    setActive(index);
+    setOpen(true);
+    setFocused(true);
+    selectedOptionRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [selectedPlace, options, cancelPendingBlur]);
+
+  // 2026-11-27 用户指令：把带坐标的候选按下拉序号上报，画布落「百度式」编号钉。
+  // 选区条目占号但无单点坐标，不落钉；点选地点不改检索词和结果，保留全部编号。
+  // 只有真实检索词（或对话侧同步候选）才铺钉：纯「最近搜过」的展开态不铺，
+  // 避免工作台一加载/一聚焦就满图编号钉（百度也只在有搜索词时铺）。
+  // 「一次检索」的标识，撤钉按它生效：换了词、或对话侧同步来一批新的非空候选，都算新的一次；
+  // 同步撤走（变 null）和下拉自己刷新同一批结果（hits 变、词没变），都还是同一次。
+  const lastSyncHitsRef = useRef(syncHits);
+  if (syncHits?.length) lastSyncHitsRef.current = syncHits;
+  const syncSessionKey = syncHits?.length ? syncHits : lastSyncHitsRef.current;
+  // 标识就是一个普通对象：同一个对象 = 同一次检索，换词 / 新一批同步候选 = 新对象。
+  const searchSession = useMemo(() => ({ keyword, syncHits: syncSessionKey, searchRequest }), [keyword, syncSessionKey, searchRequest]);
+  const [revokedSession, setRevokedSession] = useState<typeof searchSession | null>(null);
+  const sessionRef = useRef(searchSession);
+  sessionRef.current = searchSession;
+  const revokeToken = revokeCandidatePins ?? 0;
+  const appliedRevokeRef = useRef(revokeToken);
+  useEffect(() => {
+    // 挂载时拿到的令牌是历史值，不拿来撤当前这批；只响应挂载之后的递增。
+    if (appliedRevokeRef.current === revokeToken) return;
+    appliedRevokeRef.current = revokeToken;
+    setRevokedSession(sessionRef.current);
+  }, [revokeToken]);
+  const pinsRevoked = revokedSession === searchSession;
+
+  const placePins = useMemo<ReadonlyArray<SearchCandidatePin> | null>(() => {
+    if (!keyword || pinsRevoked) return null;
+    const pins: SearchCandidatePin[] = [];
+    options.forEach((option, index) => {
+      if (option.kind !== 'place') return;
+      const { lng, lat } = option.place;
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+      pins.push({ index, lng, lat, name: option.place.name, place: option.place });
+    });
+    return pins;
+  }, [options, keyword, pinsRevoked]);
+
+  // 清理函数先报 null 再报新值，同一次 commit 内连发、最终值正确；
+  // 组件卸载（3D 接管时整层退场）也经此把钉收干净。
+  const notifyCandidates = onCandidatesChange;
+  useEffect(() => {
+    notifyCandidates?.(placePins);
+    return () => notifyCandidates?.(null);
+  }, [notifyCandidates, placePins]);
 
   function chooseOption(option: PlaceSearchOption) {
     if (option.kind === 'area') {
@@ -193,11 +285,8 @@ export default function PlanPlaceSearch({
       return;
     }
     const place = option.place;
-    setQuery(place.name);
     setPicked(place.name);
-    setRecent(rememberPlace(place) ?? recentPlaces());
-    setHits([]);
-    setAreas([]);
+    rememberPlace(place);
     setOpen(false);
     setActive(-1);
     inputRef.current?.blur();
@@ -205,17 +294,30 @@ export default function PlanPlaceSearch({
   }
 
   function clear() {
+    cancelPendingBlur();
     setQuery('');
     setHits([]);
     setAreas([]);
     setPicked(null);
     setOpen(false);
     setActive(-1);
+    setSearchRequest(0);
+    setSearchFailed(false);
     onClear?.();
+  }
+
+  function submitSearch() {
+    cancelPendingBlur();
+    inputRef.current?.focus();
+    setOpen(true);
+    setFocused(true);
+    setActive(-1);
+    if (keyword.length >= 2) setSearchRequest(request => request + 1);
   }
 
   /** Esc / 点地图同口径：收下拉与灵动岛，但保留已输入/已选地名，不改检索结果。 */
   const dismiss = useCallback(() => {
+    cancelPendingBlur();
     setOpen(false);
     setActive(-1);
     // 关键：鼠标还停在岛上时 hover=true 会把 expanded 撑住，Esc 看起来没反应；
@@ -223,7 +325,7 @@ export default function PlanPlaceSearch({
     setHover(false);
     setFocused(false);
     inputRef.current?.blur();
-  }, []);
+  }, [cancelPendingBlur]);
 
   useEffect(() => {
     // 焦点可能已经离开 input（清除按钮、候选按钮、同步候选自动展开），
@@ -243,6 +345,11 @@ export default function PlanPlaceSearch({
       event.preventDefault();
       event.stopPropagation();
       dismiss();
+      return;
+    }
+    if (event.key === 'Enter' && active < 0) {
+      event.preventDefault();
+      submitSearch();
       return;
     }
     if (options.length === 0) return;
@@ -285,7 +392,9 @@ export default function PlanPlaceSearch({
           if (!expanded) inputRef.current?.focus();
         }}
       >
-        <Search className="sc-plan-place-search-icon" size={15} strokeWidth={1.7} aria-hidden />
+        <button type="button" className="sc-plan-place-search-submit" aria-label="搜索地点" onClick={submitSearch}>
+          <Search className="sc-plan-place-search-icon" size={16} strokeWidth={1.7} aria-hidden />
+        </button>
         <input
           ref={inputRef}
           data-testid={`${testIdPrefix}-input`}
@@ -298,12 +407,18 @@ export default function PlanPlaceSearch({
           placeholder={placeholder}
           onChange={event => {
             setQuery(event.target.value);
+            setSearchRequest(0);
             setPicked(null);
             setOpen(true);
             setActive(-1);
           }}
-          onFocus={() => { setFocused(true); setOpen(true); }}
-          onBlur={() => { setFocused(false); window.setTimeout(() => setOpen(false), 120); }}
+          onFocus={() => { cancelPendingBlur(); setFocused(true); setOpen(true); }}
+          onBlur={event => {
+            if (event.relatedTarget instanceof Node && event.currentTarget.closest('.sc-plan-place-search')?.contains(event.relatedTarget)) return;
+            setFocused(false);
+            cancelPendingBlur();
+            blurCloseRef.current = window.setTimeout(() => { setOpen(false); blurCloseRef.current = null; }, 120);
+          }}
           onKeyDown={handleKeyDown}
         />
         {/* 收缩态的「瞥一眼」内容：落了钉/有词时显示地名，展开时让位给输入框。 */}
@@ -330,6 +445,7 @@ export default function PlanPlaceSearch({
                 type="button"
                 role="option"
                 aria-selected={index === active}
+                ref={option.kind === 'place' && option.place.id === selectedPlace?.id ? selectedOptionRef : null}
                 data-testid={`${testIdPrefix}-${option.kind === 'area' ? 'area' : 'option'}-${index}`}
                 data-kind={option.kind}
                 onMouseEnter={() => setActive(index)}
@@ -365,6 +481,11 @@ export default function PlanPlaceSearch({
             </li>
           ))}
         </ul>
+      )}
+      {open && !busy && keyword.length >= 2 && (searchFailed || options.length === 0) && (
+        <div className="sc-plan-place-search-options sc-place-search-status" role="status">
+          {searchFailed ? '搜索失败，请重试' : '未找到地点'}
+        </div>
       )}
     </div>
   );

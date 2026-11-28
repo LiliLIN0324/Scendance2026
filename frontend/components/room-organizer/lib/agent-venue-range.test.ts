@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { largestWaterFreeRect, ringTouchesWater, waterCheckLines, type WaterRing } from "./agent-venue-range";
+import { describe, expect, it, vi } from "vitest";
+import { largestWaterFreeRect, proposeAutomaticVenueRange, ringTouchesWater, waterCheckLines, type WaterRing } from "./agent-venue-range";
+
+const { loadMap } = vi.hoisted(() => ({ loadMap: vi.fn() }));
+vi.mock("./outdoor-map-context", () => ({
+  createOutdoorMapContext: () => ({ load: loadMap }),
+}));
 
 /**
  * 幕景Agent Test「锁定区域」（2026-11-22）：默认范围把河道包了进去（截图 E1/E2）。
@@ -24,6 +29,30 @@ const waterLine = (points: { x: number; y: number }[]): WaterRing => ({
   name: "中河",
   points,
   closed: false,
+});
+
+describe("proposeAutomaticVenueRange（地点轮廓优先）", () => {
+  it("保留完整 POI 轮廓，不改用草地矩形或按水体裁切；仍交给用户确认", async () => {
+    const outline = rect(-80, -60, 80, 60);
+    const narrowGrass = rect(-70, -8, 70, 8);
+    const lake = waterArea(rect(-20, -20, 20, 20));
+    loadMap.mockResolvedValue({ status: "ready", water: () => [lake], openAreas: () => [
+      { id: "grass:1", name: "地图草地", tags: { landuse: "grass" }, ring: narrowGrass },
+    ] });
+    const controller = new AbortController();
+    const result = await proposeAutomaticVenueRange({
+      plan: { anchor: null } as never,
+      anchor: { lng: 119.7, lat: 30.2 } as never,
+      name: "青山湖水上森林",
+      footprint: outline,
+      signal: controller.signal,
+    });
+
+    expect(result.boundary).toEqual(outline);
+    expect(result.basis.kind).toBe("place-outline");
+    expect(result.waterLines).toContain("候选范围压到水面。");
+    expect(loadMap).toHaveBeenCalledOnce();
+  });
 });
 
 describe("ringTouchesWater（范围压水判定）", () => {

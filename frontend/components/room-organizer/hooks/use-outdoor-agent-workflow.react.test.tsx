@@ -440,6 +440,21 @@ it.each([true, false])("缺分区时先预览分区，按确认结果处理后�
     expect(apply).not.toHaveBeenCalled();
   }
 });
+it("纸面起稿缺人数时同轮给范围入口，等待补充期间不写画布", async () => {
+  plan = { ...plan, anchor: undefined, boundary: [] };
+  await act(async () => { await flow.handle("我要纸面起稿"); });
+  expect(understand).not.toHaveBeenCalled();
+  expect(flow.state.stage).toBe("scope");
+  expect(flow.notice).toContain("大概多少人");
+  expect(flow.notice).toContain("场地长宽");
+  expect(flow.notice).toContain("用地红线（重画）");
+  expect(apply).not.toHaveBeenCalled();
+  await act(async () => { await flow.handle("40×60 米"); });
+  expect(understand).not.toHaveBeenCalled();
+  expect(flow.proposal?.next.boundary).toContainEqual({ x: 40, y: 60 });
+  expect(apply).not.toHaveBeenCalled();
+});
+
 it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", async () => {
   const anchor = { ...plan.anchor!, lng: 120.1 };
   act(() => flow.offerBoundary(anchor, ring, "IN77", undefined, undefined, false, ["候选范围压到水面。"]));

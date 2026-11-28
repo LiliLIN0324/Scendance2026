@@ -67,6 +67,30 @@ it('Agent 增删改和整批提案：锁层后全部返回 false 且不写方案
   expect(commit).not.toHaveBeenCalled();
 });
 
+it('Agent 确认范围不应被默认红线保护锁阻断，但用户明确锁定后仍拒绝', () => {
+  const { ref, commit, plan } = mount(false, { facilities: [] });
+  const boundary = [{ x: -20, y: -15 }, { x: 20, y: -15 }, { x: 20, y: 15 }, { x: -20, y: 15 }];
+  const next = {
+    ...plan,
+    anchor: { lng: 120, lat: 30, crs: 'gcj-02' as const, source: 'manual' as const },
+    boundary,
+  };
+  act(() => {
+    expect(ref.current!.applyWorkflowPlan(next, JSON.stringify(plan))).toBe(true);
+  });
+  expect(commit).toHaveBeenCalled();
+
+  // 默认已锁；先解锁再锁回，模拟用户明确保留红线锁定。
+  fireEvent.click(screen.getByTestId('layer-lock-boundary'));
+  fireEvent.click(screen.getByTestId('layer-lock-boundary'));
+  commit.mockClear();
+  const current = ref.current!.getEditVisuals().plan;
+  act(() => {
+    expect(ref.current!.applyWorkflowPlan({ ...current, boundary: boundary.map(point => ({ ...point, x: point.x + 1 })) }, JSON.stringify(current))).toBe(false);
+  });
+  expect(commit).not.toHaveBeenCalled();
+});
+
 it('只读画布的公共写句柄也必须拒绝', () => {
   const { ref } = mount(true);
   act(() => {

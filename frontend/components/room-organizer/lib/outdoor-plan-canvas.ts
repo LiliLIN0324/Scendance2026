@@ -2350,6 +2350,108 @@ export function drawFlowSimulationLayer(
 }
 
 /**
+ * 搜地点候选编号钉的数据：`index` 是左上角下拉里的序号（0 起，画布画 index+1），
+ * 保证「下拉第 2 条」和「地图上标 2 的钉」永远指向同一个候选（2026-11-27 用户指令，
+ * 对齐百度地图搜索结果的编号钉）。纯视图辅助，不写进 plan。
+ */
+export interface SearchCandidatePin {
+  index: number;
+  lng: number;
+  lat: number;
+  name: string;
+  place?: import('./place-search').PlaceSuggestion;
+}
+
+/**
+ * 选中点属于候选时，由红色编号钉和名称标签表示，不再叠白色钉。
+ */
+export function isCandidateSearchPin(
+  pins: ReadonlyArray<SearchCandidatePin>,
+  selected: { lng: number; lat: number } | null,
+): boolean {
+  return !!selected && pins.some(pin => pin.lng === selected.lng && pin.lat === selected.lat);
+}
+
+/** 只错开屏幕标记，不改变地点坐标；相邻/同坐标的候选也要能读到各自编号。 */
+export function layoutCandidatePins(points: readonly PlanPoint[]): PlanPoint[] {
+  const placed: PlanPoint[] = [];
+  for (const point of points) {
+    let position = point;
+    let attempt = 0;
+    while (placed.some(other => Math.hypot(position.x - other.x, position.y - other.y) < 32)) {
+      const angle = ((attempt % 8) / 8) * Math.PI * 2 - Math.PI / 2;
+      const radius = (Math.floor(attempt / 8) + 1) * 34;
+      position = { x: point.x + Math.cos(angle) * radius, y: point.y + Math.sin(angle) * radius };
+      attempt++;
+    }
+    placed.push(position);
+  }
+  return placed;
+}
+
+/**
+ * 搜地点候选编号钉：红色水滴针 + 白字序号（百度/高德搜索结果同范式）。
+ * 与白色定位钉的分工：候选钉批量铺（只标序号，不带名称胶囊，避免互相遮挡），
+ * 用户点选后仍保留红色编号，并加名称。只是视图辅助，不写进 plan，
+ * 不参与统计/交付/冲突判定；清除搜索或切换活动后收起。
+ */
+export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ point: PlanPoint; index: number; label?: string }>): void {
+  const { ctx, viewport } = c;
+  const anchors = pins.map(pin => planPointToPixel(pin.point, viewport));
+  const positions = layoutCandidatePins(anchors);
+  for (const [index, pin] of pins.entries()) {
+    const anchor = anchors[index]!;
+    const pt = positions[index]!;
+    const headY = pt.y - 17;
+    const r = 12;
+    ctx.save();
+    if (pt.x !== anchor.x || pt.y !== anchor.y) {
+      ctx.beginPath();
+      ctx.moveTo(anchor.x, anchor.y);
+      ctx.lineTo(pt.x, pt.y);
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.strokeStyle = '#e5484d';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // 水滴形与 drawSearchPin 同款贝塞尔收针，整体放大一号给数字留位（尖端落在真实坐标上）。
+    ctx.beginPath();
+    ctx.moveTo(pt.x - r * 0.844, headY + r * 0.536);
+    ctx.arc(pt.x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
+    ctx.quadraticCurveTo(pt.x + 8, pt.y - 1, pt.x, pt.y);
+    ctx.quadraticCurveTo(pt.x - 8, pt.y - 1, pt.x - r * 0.844, headY + r * 0.536);
+    ctx.closePath();
+    ctx.shadowColor = 'rgba(20,20,22,0.22)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 1.8;
+    ctx.fillStyle = '#e5484d';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    // 白描边把红钉从影像/暗色底图上托起来（同 drawSearchArea 的衬线思路）。
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    // 序号：白字居中在圆头，两位数略缩。
+    const text = String(pin.index + 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${text.length > 1 ? 11 : 12.5}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, pt.x, headY + 0.5);
+    ctx.restore();
+  }
+  for (const [index, pin] of pins.entries()) {
+    if (pin.label) {
+      const pt = positions[index]!;
+      const top = Math.min(...positions.filter(other => Math.abs(other.x - pt.x) < 120).map(other => other.y));
+      drawMapLabelPill(ctx, pt.x, top - 35, pin.label, viewport.canvasW);
+    }
+  }
+}
+
+/**
  * 搜地点定位钉：白色水滴针（细描边 + 轻投影 + 针心黑点）+ 白底名称标签。
  * 只是视图辅助——不写进 plan，不参与统计/交付/冲突判定，换搜索或关掉即消失。
  */

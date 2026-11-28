@@ -35,12 +35,13 @@ describe('agentErrorView 四档归类', () => {
     expect(view.message).not.toContain('服务商可能仍在处理或计费');
   });
 
-  it('provider_error / 未知状态仍落到智能理解（warn）', () => {
-    for (const status of ['provider_error', undefined, 'nope', null]) {
+  it('计费提示仅用于可识别的服务商结果未知状态', () => {
+    expect(agentErrorView('provider_error').message).toContain('可能仍在处理或计费');
+    for (const status of [undefined, 'nope', null]) {
       const view = agentErrorView(status);
       expect(view.stamp).toBe('智能理解');
       expect(view.tone).toBe('warn');
-      expect(view.message).toContain('服务商可能仍在处理或计费');
+      expect(view.message).not.toContain('计费');
     }
   });
 

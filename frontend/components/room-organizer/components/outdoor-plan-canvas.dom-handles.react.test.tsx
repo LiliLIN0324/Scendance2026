@@ -68,6 +68,34 @@ function mount() {
   return { ref, commit, container, canvas };
 }
 
+it('opens a numbered place via its map target and keeps detail actions out of map editing', () => {
+  const place = { id: 'dock', name: '水上森林码头', address: '青山湖景区', lng: 120.01, lat: 30 };
+  const pin = { index: 1, name: place.name, lng: place.lng, lat: place.lat, place };
+  const onPick = vi.fn();
+  const onClose = vi.fn();
+  const onConfirm = vi.fn();
+  const onPlanChange = vi.fn();
+  const props = { plan: createStarterOutdoorPlan(), searchPins: [pin], onSearchCandidatePick: onPick, onSearchPlaceClose: onClose, onSearchPlaceConfirm: onConfirm, onPlanChange };
+  const view = render(<Canvas {...props} />);
+  expect(screen.queryByRole('region', { name: `地点详情：${place.name}` })).toBeNull();
+  const marker = screen.getByRole('button', { name: '2. 水上森林码头' });
+  fireEvent.pointerDown(marker, { pointerId: 1, clientX: 100, clientY: 100 });
+  fireEvent.pointerUp(marker, { pointerId: 1, clientX: 100, clientY: 100 });
+  fireEvent.click(marker);
+  expect(onPick).toHaveBeenCalledExactlyOnceWith(pin);
+  expect(onPlanChange).not.toHaveBeenCalled();
+  view.rerender(<Canvas {...props} selectedSearchPlace={place} />);
+  expect(screen.getByRole('region', { name: `地点详情：${place.name}` }).textContent).toContain(place.address);
+  expect(screen.getByRole('button', { name: '2. 水上森林码头' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: '设为活动场地' }));
+  expect(onConfirm).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: '关闭地点详情' }));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(onPlanChange).not.toHaveBeenCalled();
+  view.rerender(<Canvas {...props} />);
+  expect(screen.queryByRole('region', { name: `地点详情：${place.name}` })).toBeNull();
+});
+
 /** 落场地边界；初始 boundary 层默认锁定，点锁钮解锁后手柄才出现。 */
 function applyEditableVenue(ref: React.RefObject<OutdoorPlanCanvasHandle>, boundary: PlanPoint[], commit?: ReturnType<typeof vi.fn>) {
   act(() => {

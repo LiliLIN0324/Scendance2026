@@ -122,6 +122,7 @@ import {
   ringScaleHandlePoints,
   drawScopeLockButton,
   drawFlowSimulationLayer,
+  drawCandidatePins,
   drawSearchArea,
   drawSearchPin,
   drawSceneObjectsLayer,
@@ -148,6 +149,9 @@ import {
   scopeLockButtonRect,
   type LayerVisibility,
   type PlanViewport,
+  type SearchCandidatePin,
+  isCandidateSearchPin,
+  layoutCandidatePins,
 } from '../lib/outdoor-plan-canvas';
 import { planRightClickAction } from '../lib/plan-right-click';
 import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
@@ -574,6 +578,15 @@ export interface OutdoorPlanCanvasProps {
    * 名称标签；换地点/清空即重画，不参与统计、交付或冲突判定。
    */
   searchPin?: { lng: number; lat: number; label: string } | null;
+  /**
+   * 2026-11-27 用户指令（对齐百度地图）：搜地点候选的批量编号钉——`index` 与左上角
+   * 下拉的 1/N 序号一致。纯视图辅助，不写进 plan；点选后仍保留全部红色编号。
+   */
+  searchPins?: ReadonlyArray<SearchCandidatePin> | null;
+  selectedSearchPlace?: import('../lib/place-search').PlaceSuggestion | null;
+  onSearchCandidatePick?: (pin: SearchCandidatePin) => void;
+  onSearchPlaceClose?: () => void;
+  onSearchPlaceConfirm?: () => void;
   /**
    * 2026-11-19 用户：「点了还是没有落在场地上」——实景扫描的落位钉（plan ENU）。
    * 与搜地点钉同一支笔，但它是「这套点云落在哪」的只读标记：不写进 plan、不参与命中测试。
@@ -1679,6 +1692,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   onInspectorChange,
   onModeChange,
   searchPin,
+  searchPins,
+  selectedSearchPlace,
+  onSearchCandidatePick,
+  onSearchPlaceClose,
+  onSearchPlaceConfirm,
   scanPin, renderScanPlan, scanError,
   searchArea,
   routeProposal,
@@ -1761,6 +1779,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const drawRef = useRef<() => void>(() => {});
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string } | null>(searchPin ?? null);
+  const searchPinsRef = useRef<ReadonlyArray<SearchCandidatePin> | null>(searchPins ?? null);
+  const candidateViewKeyRef = useRef('');
+  const focusCandidateBoundsRef = useRef(focusBounds);
+  focusCandidateBoundsRef.current = focusBounds;
   // 2026-11-19：实景扫描落位钉（plan ENU），与搜钉同一条 props → ref → 重绘的路。
   const scanPinRef = useRef<OutdoorPlanCanvasProps['scanPin']>(scanPin ?? null);
   const scanPaintRef = useRef(renderScanPlan);
@@ -1951,6 +1973,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
    *  想改几何得先在左侧「场地边界」行点锁图标；其他图层（含分区）默认不锁。
    *  2026-11-16 用户更正：「我不要分区锁定啊，我说的是那个绿色的总区域」——分区回到默认可编辑。 */
   const lockedLayersRef = useRef<LockedLayerMap>({ boundary: true });
+  // 红线初始锁只是保护普通编辑；Agent 经用户确认应用范围时可越过这层默认保护。
+  // 用户亲手锁/解锁后则视为明确权限，Agent 不得绕过。
+  const boundaryLockUserSetRef = useRef(false);
   /** P2-j 分区选中与顶点改形：选中的分区 id + 正在拖的顶点 + 拖动预览多边形。 */
   const selectedZoneRef = useRef<string | null>(null);
   const dragZoneVertexRef = useRef<{ zoneId: string; index: number; startPx: { x: number; y: number } } | null>(null);
@@ -4142,7 +4167,21 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       });
     }
     const pin = searchPinRef.current;
-    if (pin) {
+    // 搜索结果全部画红色编号，选中项保留编号并加名称，不换成白钉。
+    const candidatePins = searchPinsRef.current;
+    if (candidatePins?.length) {
+      drawCandidatePins({ ctx: planCtx, viewport }, candidatePins.map(candidate => ({
+        point: lngLatToEnu(
+          candidate.lng,
+          candidate.lat,
+          current.anchor?.lng ?? DEFAULT_ANCHOR_LNG,
+          current.anchor?.lat ?? DEFAULT_ANCHOR_LAT,
+        ),
+        index: candidate.index,
+        ...(pin && candidate.lng === pin.lng && candidate.lat === pin.lat ? { label: pin.label } : {}),
+      })));
+    }
+    if (pin && !isCandidateSearchPin(candidatePins ?? [], pin)) {
       const pinPoint = lngLatToEnu(
         pin.lng,
         pin.lat,
@@ -4258,6 +4297,24 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     searchPinRef.current = searchPin ?? null;
     drawRef.current();
   }, [searchPin]);
+  // 2026-11-27：候选编号钉变化（换一批/清空）同样立即重绘。
+  useEffect(() => {
+    searchPinsRef.current = searchPins ?? null;
+    const pins = searchPins ?? [];
+    const key = pins.map(pin => `${pin.lng},${pin.lat}`).sort().join(';');
+    if (pins.length && key !== candidateViewKeyRef.current) {
+      const west = Math.min(...pins.map(pin => pin.lng));
+      const east = Math.max(...pins.map(pin => pin.lng));
+      const south = Math.min(...pins.map(pin => pin.lat));
+      const north = Math.max(...pins.map(pin => pin.lat));
+      const spanLng = Math.max(east - west, 0.001);
+      const spanLat = Math.max(north - south, 0.001);
+      // 左侧下拉盖住部分地图；向西留出空白，让候选整体出现在列表右侧。
+      focusCandidateBoundsRef.current([west - spanLng, south - spanLat * 0.2, east + spanLng * 0.2, north + spanLat * 0.2]);
+    }
+    candidateViewKeyRef.current = key;
+    drawRef.current();
+  }, [searchPins]);
   // 2026-11-19：实景扫描落位钉变化（含落位/清空）同样立即重绘。
   useEffect(() => {
     scanPinRef.current = scanPin ?? null;
@@ -5067,7 +5124,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       const current = planRef.current;
       let baseline: unknown;
       try { baseline = JSON.parse(expected); } catch { return false; }
-      if (!samePlanContent(current, baseline) || !next.anchor || refusePlanWrite(next)) return false;
+      if (!samePlanContent(current, baseline) || !next.anchor || refusePlanWrite(next, true)) return false;
       // 2026-11-14「以第一个选区为准」：提案已不携带任何旧坐标系内容（换场清空）时允许换锚点——
       // 没有内容被静默搬动；内容存续时维持原有换锚保护。
       const frameBound=[next.zones,next.routes,next.nodes,next.facilities,next.workers,next.annotations,next.measurements].some(items=>items?.length);
@@ -5510,6 +5567,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
 
   /** P2-i 图层锁定：锁定层不参与命中/编辑（显示与统计口径不变）；锁上时收掉该层选中。 */
   function setLayerLocked(kind: PlanningLayerKind, locked: boolean) {
+    if (kind === 'boundary') boundaryLockUserSetRef.current = true;
     setAccessNotice(null);
     const next: LockedLayerMap = { ...lockedLayersRef.current, [kind]: locked };
     lockedLayersRef.current = next;
@@ -5570,7 +5628,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   }
 
   /** 提交前再查一次所有变化的层，含级联删除、Agent 整批写入和已打开菜单的动作。 */
-  function refusePlanWrite(next: SitePlanData): boolean {
+  function refusePlanWrite(next: SitePlanData, allowDefaultBoundaryLock = false): boolean {
     if (!onPlanChangeRef.current) return true;
     const current = planRef.current;
     const fields: [keyof SitePlanData, PlanningLayerKind][] = [
@@ -5582,7 +5640,10 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     for (const [field, layer] of fields) {
       if (samePlanContent(current[field], next[field])) continue;
       const access = planLayerAccess(layer, layerStateRef.current, lockedLayersRef.current);
-      // 红线默认锁用于保护已有轮廓，不能挡住空白活动的首次选址/圈画。
+      // 红线默认锁用于保护普通编辑，但不应阻断用户在 Agent 确认卡上的明确应用。
+      // 一旦用户亲手操作过红线锁，恢复严格权限语义，避免绕过真实锁定。
+      if (layer === 'boundary' && allowDefaultBoundaryLock && !boundaryLockUserSetRef.current) access.locked = false;
+      // 红线锁对空白活动的首次选址/圈画也不应造成阻断。
       if (layer === 'boundary' && current.boundary.length < 3) access.locked = false;
       const reason = planLayerBlockReason(layer, access);
       if (reason) { setAccessNotice(reason); setEditMessage(reason); return true; }
@@ -13367,6 +13428,17 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
     ? boundaryVertexHandleLayout(boundaryHandleRing, currentViewport())
     : [];
 
+  // 与画笔使用同一套投影和避让坐标，缩放、平移、旋转后热区仍盖在编号上。
+  const searchCandidateViewport = currentViewport();
+  const searchCandidatePositions = layoutCandidatePins((searchPins ?? []).map(pin => planPointToPixel(
+    lngLatToEnu(pin.lng, pin.lat, searchCandidateViewport.anchorLng ?? DEFAULT_ANCHOR_LNG, searchCandidateViewport.anchorLat ?? DEFAULT_ANCHOR_LAT),
+    searchCandidateViewport,
+  )));
+  const selectedSearchIndex = selectedSearchPlace
+    ? (searchPins ?? []).findIndex(pin => pin.place?.id === selectedSearchPlace.id)
+    : -1;
+  const selectedSearchPosition = searchCandidatePositions[selectedSearchIndex];
+
   return (
     <div
       ref={stageRef}
@@ -13447,6 +13519,44 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       {scanError && <div role="alert" className="sc-scan-error-toast" style={{ position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 10, maxWidth: 440, padding: '12px 16px', background: '#fff', border: '1px solid #e4e4e7', borderRadius: 8, color: '#b4443c' }}>{scanError}</div>}
       <canvas ref={baseCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} aria-label="底图瓦片层" />
       <canvas ref={planCanvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-label="户外规划业务图层" />
+      {onSearchCandidatePick && (mode === 'view' || mode === 'select') && (
+        <div aria-label="搜索地点标记" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }}>
+          {(searchPins ?? []).map((pin, index) => {
+            const position = searchCandidatePositions[index]!;
+            return <button
+              key={`${pin.index}-${pin.lng}-${pin.lat}`}
+              type="button"
+              className="sc-search-pin-hit"
+              aria-label={`${pin.index + 1}. ${pin.name}`}
+              aria-pressed={pin.place?.id === selectedSearchPlace?.id && !!selectedSearchPlace}
+              title={pin.name}
+              style={{ left: position.x - 16, top: position.y - 32 }}
+              onPointerDown={event => event.stopPropagation()}
+              onPointerUp={event => event.stopPropagation()}
+              onClick={event => { event.stopPropagation(); onSearchCandidatePick(pin); }}
+            />;
+          })}
+        </div>
+      )}
+      {selectedSearchPlace && selectedSearchPosition && (
+        <section
+          className="sc-map-place-card"
+          aria-label={`地点详情：${selectedSearchPlace.name}`}
+          style={{
+            left: Math.max(12, Math.min(selectedSearchPosition.x + 20, searchCandidateViewport.canvasW - 268)),
+            top: selectedSearchPosition.y < 220 ? selectedSearchPosition.y + 12 : selectedSearchPosition.y - 38,
+            transform: selectedSearchPosition.y < 220 ? undefined : 'translateY(-100%)',
+          }}
+          onPointerDown={event => event.stopPropagation()}
+          onPointerUp={event => event.stopPropagation()}
+          onWheel={event => event.stopPropagation()}
+        >
+          <button type="button" className="sc-map-place-close" aria-label="关闭地点详情" onClick={onSearchPlaceClose}>×</button>
+          <strong>{(searchPins ?? [])[selectedSearchIndex]!.index + 1}. {selectedSearchPlace.name}</strong>
+          {selectedSearchPlace.address && <p>{selectedSearchPlace.address}</p>}
+          {onSearchPlaceConfirm && <button type="button" className="sc-map-place-confirm" onClick={onSearchPlaceConfirm}>设为活动场地</button>}
+        </section>
+      )}
       {boundaryHandleLayouts.length > 0 && (
         <div
           data-vertex-handle-layer

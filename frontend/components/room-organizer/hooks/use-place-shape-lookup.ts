@@ -25,7 +25,7 @@ export function usePlaceShapeLookup(projectId: string, onShape: (shape: Shape, n
     const version = seq.current; const project = currentProject.current; const boundary = currentBoundary.current;
     const controller = new AbortController(); request.current = controller;
     const active = () => seq.current === version && currentProject.current === project && currentBoundary.current === boundary && !controller.signal.aborted;
-    setLoading(true);
+    setLoading(false);
     // 包含传输与解析的总预算；即使底层请求不响应取消，也不能持续转圈或晚到覆盖手画。
     timer.current = setTimeout(() => {
       if (!active()) return;
@@ -34,7 +34,13 @@ export function usePlaceShapeLookup(projectId: string, onShape: (shape: Shape, n
     }, 21000);
     const attempt = async (): Promise<void> => {
       let shape: Shape | null = null;
-      try { shape = await fetchPlaceShape(name, { near, signal: controller.signal }); } catch { /* transient */ }
+      try {
+        shape = await fetchPlaceShape(name, {
+          near,
+          signal: controller.signal,
+          onRequestStart: () => { if (active()) setLoading(true); },
+        });
+      } catch { /* transient */ }
       if (!active()) return;
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = null; request.current = null;

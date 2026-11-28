@@ -18,6 +18,7 @@ import OutdoorPlanCanvas, {
   type OutdoorPlanCanvasHandle,
 } from '@/components/room-organizer/components/outdoor-plan-canvas';
 import { enuToLngLat } from '@/components/room-organizer/lib/outdoor-plan-canvas';
+import type { SearchCandidatePin } from '@/components/room-organizer/lib/outdoor-plan-canvas';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
 import { REPLICA_CASES } from '../lib/replica-cases';
 import { planBoundaryFromSearchArea } from '@/components/room-organizer/lib/outdoor-venue-sync';
@@ -539,6 +540,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   // `plan-place-search.tsx`（2D 工作台与编辑器内嵌覆盖层共用同一份）。
   // 定位钉只是视图辅助（不改 plan / anchor），点「清除」即撤钉。
   const [placePin, setPlacePin] = useState<{ lng: number; lat: number; label: string } | null>(null);
+  // 2026-11-27 用户指令（对齐百度地图）：搜索下拉的候选批量编号钉。
+  // 搜索结果与 Agent 预览独立：选场地、应用范围、开始新任务都不撤搜索编号。
+  // 只在清除搜索或换活动时收起，选中项仍是红色编号。
+  const [candidatePins, setCandidatePins] = useState<ReadonlyArray<SearchCandidatePin> | null>(null);
+  const [selectedSearchPlace, setSelectedSearchPlace] = useState<import('../lib/place-search').PlaceSuggestion | null>(null);
+  const candidatePinsRef = useRef(candidatePins);
+  candidatePinsRef.current = candidatePins;
+  const [candidatePinRevoke, setCandidatePinRevoke] = useState(0);
   // 2026-11-12 用户要求「给相关的选区，而不是一个居中的点」：行政区边界（视图辅助，不改 plan）。
   // kind: 'line' = 道路等开放折线选区（2026-11-13「点道路=道路选区」）。
   const [placeArea, setPlaceArea] = useState<{ polygon: [number, number][]; label: string; kind?: 'area' | 'line'; source?: 'stock' | 'online' } | null>(null);
@@ -547,12 +556,14 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
   placeAreaRef.current = placeArea;
   const { loading: shapeLoading, unavailable: shapeUnavailable, start: lookupPlaceShape, cancel: cancelPlaceShape } = usePlaceShapeLookup(slotId, (shape, name) => {
     const [west, south, east, north] = shape.bounds;
-    setPlacePin({ lng: (west + east) / 2, lat: (south + north) / 2, label: name });
+    setPlacePin(previous => previous?.label === name && candidatePinsRef.current?.length
+      ? previous
+      : { lng: (west + east) / 2, lat: (south + north) / 2, label: name });
     setPlaceArea({ polygon: shape.polygon, label: `${shape.name} · ${shape.kind === 'line' ? '线路' : '范围'}`,
       ...(shape.kind === 'line' ? { kind: 'line' as const } : {}),
       // 线上现查的范围写进选区自己身上：选区一撤（清除/采纳方案/换地点）提示自动跟着没，不另维护一份状态。
       ...(shape.source === 'online' ? { source: 'online' as const } : {}) });
-    canvasApiRef.current?.focusBounds(shape.bounds);
+    if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusBounds(shape.bounds);
   }, JSON.stringify(plan?.boundary ?? []));
   /**
    * 2026-11-16 线上实测卡点：对话停在「搜索目标地点」时，用户在画布左上角搜到的地点只会飞视图、落钉，
@@ -562,6 +573,20 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
    */
   const handOverPlaceToChat = (name: string) =>
     answersPlaceRequest(agent?.outdoorWorkflow.state.stage, name, query => agent?.searchOutdoorVenue(query));
+  const previewSearchPlace = (place: import('../lib/place-search').PlaceSuggestion) => {
+    clearPlaceRangePreview();
+    setSelectedSearchPlace(place);
+    setPlaceArea(null);
+    setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
+    if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
+    lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
+  };
+  const closeSearchPlace = () => {
+    cancelPlaceShape();
+    setSelectedSearchPlace(null);
+    setPlacePin(null);
+    setPlaceArea(null);
+  };
   const clearPlaceRangePreview = () => {
     const flow = agent?.outdoorWorkflow;
     if (flow?.proposal?.kind === 'scope') flow.cancel();
@@ -599,7 +624,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
     catchUpPushedRef.current = null;
   },[slotId]);
   useEffect(() => {
-    cancelPlaceShape(); setPlacePin(null); setPlaceArea(null);
+    cancelPlaceShape(); setPlacePin(null); setPlaceArea(null); setSelectedSearchPlace(null); setCandidatePinRevoke(count => count + 1);
     // 2026-11-17：升级前整台设备只有一份规划，先交给当时打开的活动；之后新建活动不再继承。
     if (legacyPlanProjectId && activityScopedPlan) adoptLegacyOutdoorPlanForActivity(slotId, legacyPlanProjectId);
     const record = readOutdoorProjectRecord(slotId);
@@ -738,7 +763,7 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         }
         return applied;
       },
-      previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name }); setPlaceArea(null); canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
+      previewVenuePoint: place => { setPlacePin({ lng: place.lng, lat: place.lat, label: place.name }); setPlaceArea(null); if (!candidatePinsRef.current?.length) canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17); },
       clearVenuePreview: () => { setPlacePin(null); setPlaceArea(null); },
       cancelVenueBoundary: () => canvasApiRef.current?.setMode('view'),
       inspectFacility: id => canvasApiRef.current?.inspectFacility(id) ?? false,
@@ -1202,6 +1227,15 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
             {...(scanPin ? { scanPin } : {})}
             renderScanPlan={renderScanPlan} scanError={scanError}
             {...(placePin ? { searchPin: placePin } : {})}
+            {...(candidatePins?.length ? { searchPins: candidatePins } : {})}
+            selectedSearchPlace={selectedSearchPlace}
+            onSearchCandidatePick={pin => { if (pin.place) previewSearchPlace(pin.place); }}
+            onSearchPlaceClose={closeSearchPlace}
+            {...(agent?.confirmOutdoorVenue ? { onSearchPlaceConfirm: () => {
+              if (!selectedSearchPlace) return;
+              agent.confirmOutdoorVenue(selectedSearchPlace);
+              closeSearchPlace();
+            } } : {})}
             {...(placeArea ? { searchArea: placeArea } : {})}
             {...(agent?.routeProposal ? { routeProposal: agent.routeProposal } : {})}
             workflowPreview={agent?.outdoorWorkflow?.proposal?.next??null}
@@ -1225,9 +1259,13 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
         <div style={{ pointerEvents: 'auto' }}>
           <PlanPlaceSearch
             testIdPrefix="outdoor-place-search"
+            onCandidatesChange={setCandidatePins}
+            selectedPlace={selectedSearchPlace}
+            revokeCandidatePins={candidatePinRevoke}
             {...(venueSearchSync ? { sync: venueSearchSync } : {})}
             near={plan?.anchor ? { lng: plan.anchor.lng, lat: plan.anchor.lat } : null}
             onPickArea={area => {
+              setSelectedSearchPlace(null);
               clearPlaceRangePreview();
               // 选区：只换视图（框住这片地），定位钉让位给边界，避免两种标记叠在一起。
               cancelPlaceShape(); // Includes the pending retry and in-flight request.
@@ -1236,16 +1274,8 @@ const OutdoorPlanOverlay = forwardRef<OutdoorPlanOverlayHandle, OutdoorPlanOverl
               canvasApiRef.current?.focusBounds(area.bounds);
               handOverPlaceToChat(area.name);
             }}
-            onPick={place => {
-              clearPlaceRangePreview();
-              setPlaceArea(null);
-              setPlacePin({ lng: place.lng, lat: place.lat, label: place.name });
-              canvasApiRef.current?.focusLngLat(place.lng, place.lat, 17);
-              // Pin immediately. Retries, abort, and the centered outline stay on this project/place.
-              lookupPlaceShape(place.name, { lng: place.lng, lat: place.lat });
-              handOverPlaceToChat(place.name);
-            }}
-            onClear={() => { cancelPlaceShape(); clearPlaceRangePreview(); setPlacePin(null); setPlaceArea(null); }}
+            onPick={previewSearchPlace}
+            onClear={() => { clearPlaceRangePreview(); closeSearchPlace(); }}
           />
         </div>
       )}

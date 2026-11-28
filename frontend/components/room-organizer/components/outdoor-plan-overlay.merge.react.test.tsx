@@ -33,6 +33,9 @@ const state = vi.hoisted(() => ({
 }));
 const placeSearch = vi.hoisted(() => ({
   props: null as null | {
+    onCandidatesChange?: (pins: CanvasProps['searchPins']) => void;
+    revokeCandidatePins?: number;
+    selectedPlace?: import('../lib/place-search').PlaceSuggestion | null;
     testIdPrefix?: string;
     onPick?: (place: { name: string; lng: number; lat: number }) => void;
     onPickArea?: (area: {
@@ -48,6 +51,8 @@ const placeSearch = vi.hoisted(() => ({
   },
 }));
 const agent = vi.hoisted(() => ({
+  searchOutdoorVenue: vi.fn(),
+  confirmOutdoorVenue: vi.fn(),
   registerRouteBridge: vi.fn((bridge: OutdoorAgentBridge | null) => {
     state.bridge = bridge;
   }),
@@ -205,6 +210,42 @@ it("地图左上挂回搜索浮条：组件已挂载，focusPlaceSearch 找得�
   expect(screen.getByTestId("outdoor-place-search-input")).toBeTruthy();
   // 不再需要独立 portal 槽：搜索条直接画在覆盖层里，槽位不存在也不影响挂载。
   expect(document.getElementById("outdoor-place-search-slot")).toBeNull();
+});
+it('keeps search candidate numbers while agent previews are cleared and a boundary is applied', () => {
+  render(<Overlay projectId="candidate-numbers" seedPlan={createStarterOutdoorPlan()} />);
+  const pins = Array.from({ length: 6 }, (_, index) => ({ index, name: `场地${index + 1}`, lng: 120 + index / 100, lat: 30 }));
+  act(() => placeSearch.props?.onCandidatesChange?.(pins));
+  const revokeToken = placeSearch.props?.revokeCandidatePins;
+  act(() => state.bridge?.previewVenuePoint?.({ name: '场地2', lng: 120.01, lat: 30 }));
+  expect(state.canvas?.searchPins).toEqual(pins);
+  act(() => state.bridge?.clearVenuePreview?.());
+  expect(placeSearch.props?.revokeCandidatePins).toBe(revokeToken);
+  expect(state.canvas?.searchPins).toEqual(pins);
+  const plan = createStarterOutdoorPlan();
+  const next = { ...plan, boundary: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }] };
+  act(() => expect(state.bridge!.applyPlan!(next, JSON.stringify(plan))).toBe(true));
+  expect(placeSearch.props?.revokeCandidatePins).toBe(revokeToken);
+  expect(state.canvas?.searchPins).toEqual(pins);
+});
+it('hands the exact selected place to the agent on map confirmation without starting a second search', () => {
+  agent.searchOutdoorVenue.mockClear();
+  agent.confirmOutdoorVenue.mockClear();
+  render(<Overlay projectId="candidate-interaction" seedPlan={createStarterOutdoorPlan()} />);
+  const place = { id: 'dock', name: '水上森林码头', address: '青山湖景区', lng: 120.01, lat: 30 };
+  const pin = { index: 1, name: place.name, lng: place.lng, lat: place.lat, place };
+  act(() => placeSearch.props!.onCandidatesChange!([pin]));
+  act(() => state.canvas!.onSearchCandidatePick!(pin));
+  expect(state.canvas!.selectedSearchPlace).toEqual(place);
+  expect(placeSearch.props!.selectedPlace).toEqual(place);
+  expect(agent.confirmOutdoorVenue).not.toHaveBeenCalled();
+  expect(agent.searchOutdoorVenue).not.toHaveBeenCalled();
+  act(() => state.canvas!.onSearchPlaceConfirm!());
+  expect(agent.confirmOutdoorVenue).toHaveBeenCalledExactlyOnceWith(place);
+  expect(agent.searchOutdoorVenue).not.toHaveBeenCalled();
+  expect(state.canvas!.selectedSearchPlace).toBeNull();
+  act(() => state.canvas!.onSearchPlaceClose!());
+  expect(state.canvas!.selectedSearchPlace).toBeNull();
+  expect(state.canvas!.searchPins).toEqual([pin]);
 });
 it("routes the active scope preview and applied highlights to the canvas, and clears them on withdrawal", () => {
   const plan = createStarterOutdoorPlan();
