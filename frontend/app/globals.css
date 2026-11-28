@@ -894,6 +894,7 @@ body.is-theme-dark .sc-plan-place-search-options {
 body.is-theme-dark .sc-plan-place-search-option { color: var(--ink); }
 body.is-theme-dark .sc-plan-place-search-option[aria-selected='true'] { background: var(--plane); }
 body.is-theme-dark .sc-plan-place-search-option-no { background: var(--plane-deep); color: var(--ink-soft); }
+body.is-theme-dark .sc-plan-place-search-option-history { color: var(--ink-soft); }
 body.is-theme-dark .sc-plan-place-search-option-address { color: var(--ink-soft); }
 body.is-theme-dark .sc-plan-place-search-badge { border-color: var(--hair); color: var(--ink-soft); }
 
@@ -4289,6 +4290,20 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   font-variant-numeric: tabular-nums;
 }
 .sc-plan-place-search-option > .sc-plan-place-search-option-name { grid-column: 2; }
+/* 2026-11-28 用户指令：历史条目挂历史图标，不占编号（编号只属于本次检索，与画布编号钉一一对应）。
+   和序号同一格同一尺寸，只去掉药丸底、只留图标，两种行的标题左边缘对齐。 */
+.sc-plan-place-search-option > .sc-plan-place-search-option-history {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--sc-muted, #71767e);
+}
 .sc-plan-place-search-option > .sc-plan-place-search-option-address { grid-column: 2; }
 .sc-plan-place-search-option[aria-selected='true'] {
   background: rgba(20, 20, 22, 0.055);

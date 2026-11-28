@@ -11,7 +11,12 @@ import { isOutlineHint, namesReferToSamePlace, normalizeOutlineName } from './pl
 
 export type PlaceSearchOption =
   | { kind: 'area'; area: PlaceArea }
-  | { kind: 'place'; place: PlaceSuggestion; hasOutline?: boolean };
+  /**
+   * `fromHistory`：这条来自「最近选过」而不是本次检索（2026-11-28 用户指令）。
+   * 历史条目不占编号、不铺编号钉——编号只属于本次检索的候选，
+   * 否则「第 1 条」到底是历史还是结果，会和地图上的 1/2/3 钉对不上。
+   */
+  | { kind: 'place'; place: PlaceSuggestion; hasOutline?: boolean; fromHistory?: boolean };
 
 export interface PlaceShapeHint {
   name: string;
@@ -56,11 +61,15 @@ export function buildPlaceSearchOptions(input: {
 }): PlaceSearchOption[] {
   const query = input.query.trim();
   const merged = mergePlaceSuggestions(query, input.recent, input.places);
+  // 历史行判定：在「最近」里、且不是本次检索回来的结果。同一个地点两边都有时算结果（带号）。
+  const recentIds = new Set(input.recent.map(place => place.id));
+  const hitIds = new Set(input.places.map(place => place.id));
   const outlinedPlaces: PlaceSearchOption[] = [];
   const otherPlaces: PlaceSearchOption[] = [];
   for (const place of merged) {
     const hasOutline = placeHasOutline(place.name, input.outlinedNames);
-    const option: PlaceSearchOption = { kind: 'place', place, hasOutline };
+    const fromHistory = recentIds.has(place.id) && !hitIds.has(place.id);
+    const option: PlaceSearchOption = { kind: 'place', place, hasOutline, fromHistory };
     if (hasOutline) outlinedPlaces.push(option);
     else otherPlaces.push(option);
   }

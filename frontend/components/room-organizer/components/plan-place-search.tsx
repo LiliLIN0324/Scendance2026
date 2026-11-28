@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { Search, X } from 'lucide-react';
+import { Clock, Search, X } from 'lucide-react';
 import {
   matchRecentPlaces,
   recentPlaces,
@@ -251,17 +251,39 @@ export default function PlanPlaceSearch({
   }, [revokeToken]);
   const pinsRevoked = revokedSession === searchSession;
 
+  // 2026-11-28 用户指令：历史条目用历史标记，不占 1/2/3 编号——
+  // 编号属于「本次检索的候选」，与画布上的编号钉一一对应；历史行也带号时，
+  // 两条历史占掉的 1、2 会把自己搜到的第 1、2 个结果挤到 3、4，两套逻辑打架。
+  // 所以编号在「不占历史」的序列里重新数：历史行 null，其余（含选区）依次 1..N，
+  // 画布钉也用同一个号（index = 号 - 1），保证「下拉第 N 条」就是「地图上的 N」。
+  const optionNumbers = useMemo<Array<number | null>>(() => {
+    const numbers: Array<number | null> = [];
+    let next = 0;
+    for (const option of options) {
+      if (option.kind === 'place' && option.fromHistory) {
+        numbers.push(null);
+        continue;
+      }
+      next += 1;
+      numbers.push(next);
+    }
+    return numbers;
+  }, [options]);
+
   const placePins = useMemo<ReadonlyArray<SearchCandidatePin> | null>(() => {
     if (!keyword || pinsRevoked) return null;
     const pins: SearchCandidatePin[] = [];
     options.forEach((option, index) => {
       if (option.kind !== 'place') return;
+      // 历史条目没有号，也就不铺编号钉：地图上只标这次搜到的候选。
+      const no = optionNumbers[index];
+      if (no == null) return;
       const { lng, lat } = option.place;
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-      pins.push({ index, lng, lat, name: option.place.name, place: option.place });
+      pins.push({ index: no - 1, lng, lat, name: option.place.name, place: option.place });
     });
     return pins;
-  }, [options, keyword, pinsRevoked]);
+  }, [options, optionNumbers, keyword, pinsRevoked]);
 
   // 清理函数先报 null 再报新值，同一次 commit 内连发、最终值正确；
   // 组件卸载（3D 接管时整层退场）也经此把钉收干净。
@@ -458,8 +480,16 @@ export default function PlanPlaceSearch({
                 className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : option.hasOutline ? ' is-outline' : ''}`}
               >
                 {/* 2026-11-15 用户指令：下拉按从上往下的顺序编号，chat 卡只给前三个标题时
-                    说「第 N 个」能和这里的编号对上号。 */}
-                <span className="sc-plan-place-search-option-no" aria-hidden="true">{index + 1}</span>
+                    说「第 N 个」能和这里的编号对上号。
+                    2026-11-28 用户指令：历史条目不参与这套编号，改挂历史图标—
+                    否则「历史第一条」看上去就像「搜索结果的第 1 个」，和地图上的编号钉冲突。 */}
+                {optionNumbers[index] == null ? (
+                  <span className="sc-plan-place-search-option-history" title="最近搜过" aria-hidden="true">
+                    <Clock size={13} strokeWidth={1.8} />
+                  </span>
+                ) : (
+                  <span className="sc-plan-place-search-option-no" aria-hidden="true">{optionNumbers[index]}</span>
+                )}
                 {option.kind === 'area' ? (
                   <>
                     <span className="sc-plan-place-search-option-name">
