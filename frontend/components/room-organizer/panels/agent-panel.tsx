@@ -1801,12 +1801,13 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (pickBase !== JSON.stringify(bridge.getPlan())) {
         setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '方案变了，旧范围没用上。', steps: [] }); return;
       }
-      // 2026-11-22 用户改口（幕景Agent Test S4「确认场地后直接给我默认定了」）：
-      // 候选点选后不再直接写入范围，改成出草案等确认——确认卡上写清这是哪块地，点了才落红线。
-      // 这覆盖 2026-11-21 的「候选点选直接落地」拍板；追溯链：测试记录 S4 → 本次改口。
-      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis, undefined, false, range.waterLines);
+      // 2026-11-28 用户拍板（青山湖截图实测）：点「设为活动场地」就是亲手把场地定下来，
+      // 不再出「待你核对」二次确认卡，直接写入红线；严格档/破坏性风险仍由监督 gate 拦下核对。
+      // 这覆盖 2026-11-22 的「出草案等确认」改口（Test S4），回到 11-21 的「候选点选直接落地」。
+      // 压水、超界淘汰等提醒由 offer 直接落地路径写进设计过程，不静默丢。
+      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis, undefined, true, range.waterLines);
       // 2026-11-20 用户拍板：范围来源不用念给用户，只留下一步能做什么。
-      say({ role: 'agent', text: '范围草案在卡上，确认后才写入红线。' });
+      say({ role: 'agent', text: '直接说「长40米宽30米」这类，我来更新范围。' });
       return;
     }
     if (!boundary) {

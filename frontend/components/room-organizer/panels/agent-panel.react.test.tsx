@@ -4844,18 +4844,20 @@ describe('outdoor V1–V5 progressive Agent integration', () => {
 });
 
 describe('outdoor V1–V5 real task-state actions', () => {
-  it('地图已确认的地点直接进入范围识别，不再要求确认Agent候选卡', async () => {
+  it('地图已确认的地点直接写入红线，不再出二次核对卡', async () => {
     const plan = createStarterOutdoorPlan();
     const place = { id: 'qing-shan', name: '青山湖水上森林', address: '锦北街道科技大道青山湖风景区内', lng: 120.16, lat: 30.25 };
     const outline = [{ x: -80, y: -60 }, { x: 80, y: -60 }, { x: 80, y: 60 }, { x: -80, y: 60 }];
     let resolveShape!: (shape: placeArea.PlaceArea) => void;
     const fetchShape = vi.spyOn(placeArea, 'fetchPlaceShape').mockImplementation(() => new Promise(resolve => { resolveShape = resolve as (shape: placeArea.PlaceArea) => void; }));
-    const applyPlan = vi.fn(() => true);
+    const applyPlan = vi.fn((_next: unknown, _expected?: string) => true);
     vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: outline, basis: { kind: 'place-outline', detail: 'test' }, waterLines: [] });
     let current!: NonNullable<ReturnType<typeof useAgent>>;
     function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyPlan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true }); return null; }
     render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
 
+    // beforeEach 默认严格档；本条拍板对应的是「执行权限·自动」下点「设为活动场地」直接落红线。
+    setAgentSupervision('auto');
     act(() => current.confirmOutdoorVenue(place));
     await waitFor(() => expect(fetchShape).toHaveBeenCalledWith(place.name, expect.objectContaining({ near: { lng: place.lng, lat: place.lat }, onRequestStart: expect.any(Function) })));
     expect(current.outdoorTask?.action).toBe('准备地点范围提案');
@@ -4866,11 +4868,13 @@ describe('outdoor V1–V5 real task-state actions', () => {
     expect(screen.queryByRole('region', { name: '场地确认' })).toBeNull();
     await waitFor(() => expect(outdoorRange.proposeAutomaticVenueRange).toHaveBeenCalled());
     expect(outdoorRange.proposeAutomaticVenueRange).toHaveBeenCalledWith(expect.objectContaining({ footprint: expect.any(Array) }));
-    await waitFor(() => expect(current.outdoorWorkflow.proposal?.kind).toBe('scope'));
-    expect(current.outdoorWorkflow.proposal?.next.boundary).toEqual(outline);
-    expect(current.outdoorWorkflow.proposal?.kind).toBe('scope');
-    expect(screen.getByRole('button', { name: '确认并应用这一版' })).toBeTruthy();
-    expect(applyPlan).not.toHaveBeenCalled();
+    // 2026-11-28 用户拍板：点「设为活动场地」直接落红线，不再立「待你核对」二次确认卡。
+    await waitFor(() => expect(applyPlan).toHaveBeenCalledTimes(1));
+    const applied = applyPlan.mock.calls[0]![0] as { boundary: { x: number; y: number }[] };
+    expect(applied.boundary).toEqual(outline);
+    expect(current.outdoorWorkflow.proposal).toBeNull();
+    expect(current.outdoorWorkflow.state.stage).toBe('zones');
+    expect(screen.queryByRole('button', { name: '确认并应用这一版' })).toBeNull();
   });
   it('说选第二个立即定位钉，轮廓晚到才写入，当前Agent自然确认候选', async () => {
     let plan = createStarterOutdoorPlan();
