@@ -2002,6 +2002,19 @@ useEffect(() => {
       const current=layoutStore.getState(),currentLayout=current.layout,currentFloor=currentLayout.floors[current.activeFloorIndex];
       if(!currentFloor){notify('当前楼层无法读取，请重新选择。','info');return '';}
       if (materialCount(currentFloor.items) >= EDITOR_ITEM_LIMIT) { notify(`当前场景最多支持 ${EDITOR_ITEM_LIMIT} 件物料。`, 'info'); return ''; }
+      // B-2b：绑定 plan 时常规家具不再走 legacy 命令门 / addCatalogItem，直接复用
+      // placeCatalogItem（useItemPlacement 内部已分流 placeViaPlan），也不回写 legacy
+      // setLocked / provenance；通道拒收返回 ''，维持「待放置」兜底语义。
+      if (planActions) {
+        if (pending) clearPendingPlacement();
+        commitHistoryNow();
+        const id = placeCatalogItem(catalogItem, position);
+        if (!id) {
+          armPendingPlacement(catalogItem);
+          notify('此处与结构相交，请点击场地中的其他位置放置。', 'info');
+        }
+        return id;
+      }
       // M2 命令门（P0-1）：普通家具在落盘前过一次几何判据；门洞 / 窗 / 摄像机 / 户外件
       // 在 useItemPlacement 内部有自己的 snap 与 canApplyLayoutGeometry 兜底，这里不重复预判。
       const bypassCommandGate = isOpening(catalogItem.type)
@@ -2048,7 +2061,7 @@ useEffect(() => {
       }
       return id;
     },
-    [commitHistoryNow, placeCatalogItem, layout, activeFloorIndex, actions, applyOutcome,armPendingPlacement,clearPendingPlacement]
+    [commitHistoryNow, placeCatalogItem, layout, activeFloorIndex, actions, applyOutcome,armPendingPlacement,clearPendingPlacement, planActions]
   );
 
   // Keyboard placement (#168): Enter on a catalog tile places through the
@@ -2065,6 +2078,8 @@ useEffect(() => {
     history,
     selectOnly,
     placeCatalogItem: placeDiscrete,
+    planActions,
+    planFacilities: outdoorPlan?.facilities ?? [],
   });
   /**
    * 2026-11-12 统一放置流程（用户拍板）：物料卡点选 = 载入后进「待放置」（点哪放哪，同户外），

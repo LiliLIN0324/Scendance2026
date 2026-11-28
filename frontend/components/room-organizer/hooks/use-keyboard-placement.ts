@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UseHistoryResult } from './use-history';
 import type { LayoutActions } from './use-layout-state';
+import type { PlanFacility } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanActions } from '../lib/plan-facility-actions';
 import type { CatalogItem, RoomLayout } from '../lib/types';
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 
@@ -119,6 +121,13 @@ export interface UseKeyboardPlacementParams {
   history: Pick<UseHistoryResult<RoomLayout>, 'commitNow' | 'truncateTo'>;
   selectOnly(id: string | null): void;
   placeCatalogItem(catalogItem: CatalogItem, position?: { x: number; z: number }): string;
+  /**
+   * B-2b：绑定 plan 时的 facility 写通道；缺省 / null = legacy 草稿，解锁落锁、
+   * 撤件与存在性判定全部走旧 actions / layout，行为与未接入前逐字等价。
+   */
+  planActions?: PlanActions | null;
+  /** B-2b：当前 plan facilities，会话存在性判定用；legacy 草稿不传。 */
+  planFacilities?: readonly PlanFacility[];
 }
 
 export interface UseKeyboardPlacementResult {
@@ -150,6 +159,10 @@ function hasItem(layout: RoomLayout, id: string): boolean {
   return layout.floors.some((floor) => floor.items.some((item) => item.id === id));
 }
 
+function facilityExists(facilities: readonly PlanFacility[], id: string): boolean {
+  return facilities.some((facility) => facility.id === id);
+}
+
 export function useKeyboardPlacement({
   layout,
   selectedItemId,
@@ -157,6 +170,8 @@ export function useKeyboardPlacement({
   history,
   selectOnly,
   placeCatalogItem,
+  planActions = null,
+  planFacilities,
 }: UseKeyboardPlacementParams): UseKeyboardPlacementResult {
   const [placingId, setPlacingId] = useState<string | null>(null);
   const { commitNow, truncateTo } = history;
@@ -174,12 +189,18 @@ export function useKeyboardPlacement({
       if (!id || !armed) return id;
       // Catalog items are born locked (#11); a locked item ignores the arrow
       // nudges and R, so the pending item has to be unlocked for the session.
-      actions.setLocked(id, false);
+      if (planActions) {
+        // B-2b：绑定 plan 时解锁走 facility 通道；通道拒收（not-found 等）不抛错，
+        // 会话存在性由下方 effect 按失效收尾。
+        planActions.applyFacility({ kind: 'setLocked', id, locked: false });
+      } else {
+        actions.setLocked(id, false);
+      }
       sessionStartRef.current = layout;
       setPlacingId(id);
       return id;
     },
-    [placeCatalogItem, actions, commitNow, layout]
+    [placeCatalogItem, actions, commitNow, layout, planActions]
   );
 
   // The session is tied to the pending item staying the sole selection:
@@ -187,29 +208,44 @@ export function useKeyboardPlacement({
   // creation all end the session without touching the layout further.
   useEffect(() => {
     if (placingId === null) return;
-    if (selectedItemId !== placingId || !hasItem(layout, placingId)) setPlacingId(null);
-  }, [placingId, selectedItemId, layout]);
+    const exists = planActions
+      ? facilityExists(planFacilities ?? [], placingId)
+      : hasItem(layout, placingId);
+    if (selectedItemId !== placingId || !exists) setPlacingId(null);
+  }, [placingId, selectedItemId, layout, planActions, planFacilities]);
 
   const confirmPlacement = useCallback(() => {
     if (placingId === null) return;
-    actions.setLocked(placingId, true);
+    if (planActions) {
+      planActions.applyFacility({ kind: 'setLocked', id: placingId, locked: true });
+    } else {
+      actions.setLocked(placingId, true);
+    }
     setPlacingId(null);
-  }, [placingId, actions]);
+  }, [placingId, actions, planActions]);
 
   // Escape takes the item out and erases the session from history: the add
   // and every nudge since are dropped, so neither undo nor redo can bring the
   // cancelled item back (#356). applyLayout rather than removeItem: the
   // replacement must always change the value, which truncateTo relies on.
+  // B-2b：绑定 plan 时撤件走 facility remove；通道拒收不抛错，会话照常收尾。
   const cancelPlacement = useCallback(() => {
     if (placingId === null) return;
     setPlacingId(null);
     const start = sessionStartRef.current;
     sessionStartRef.current = null;
-    if (!hasItem(layout, placingId)) return;
+    const exists = planActions
+      ? facilityExists(planFacilities ?? [], placingId)
+      : hasItem(layout, placingId);
+    if (!exists) return;
     selectOnly(null);
     if (start) truncateTo(start);
-    actions.applyLayout(withoutItem(layout, placingId));
-  }, [placingId, layout, truncateTo, actions, selectOnly]);
+    if (planActions) {
+      planActions.applyFacility({ kind: 'remove', id: placingId });
+    } else {
+      actions.applyLayout(withoutItem(layout, placingId));
+    }
+  }, [placingId, layout, truncateTo, actions, selectOnly, planActions, planFacilities]);
 
   return useMemo(
     () => ({

@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
+import { webcrypto } from 'node:crypto';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogItem } from '../lib/__testfixtures__/fixtures';
+import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
+import { applyFacilityAction, type FacilityAction, type PlanActions } from '../lib/plan-facility-actions';
 import { INITIAL_LAYOUT } from './layout-reducer';
 import { useHistory } from './use-history';
 import { armKeyboardPlacement, nextTileIndex, useKeyboardPlacement } from './use-keyboard-placement';
 import { useLayoutState } from './use-layout-state';
 import { layoutStore } from './use-layout-store';
+import type { LayoutActions } from './use-layout-state';
+import type { PlanFacility, SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
+import type { PlanEditResult } from '../lib/site-plan-editing';
+import type { CatalogItem } from '../lib/types';
 
 const HISTORY_DEBOUNCE_MS = 600;
 
@@ -251,6 +258,180 @@ describe('useKeyboardPlacement (#168)', () => {
       result.current.cancelPlacement();
     });
     expect(activeItems().length).toBe(INITIAL_LAYOUT.floors[0]!.items.length);
+  });
+});
+
+describe('useKeyboardPlacement — bound plan channel (B-2b)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('crypto', webcrypto);
+    vi.useFakeTimers();
+    layoutStore.setState({ layout: { ...INITIAL_LAYOUT, id: 'house-plan-test' }, activeFloorIndex: 0 });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function boundChannel() {
+    let plan: SitePlanData = createStarterOutdoorPlan();
+    const applyFacility = vi.fn((action: FacilityAction) => {
+      const result = applyFacilityAction(plan, action);
+      if (result.ok) plan = result.value;
+      return result;
+    });
+    const planActions: PlanActions = {
+      applyFacility,
+      applyZone: () => ({
+        ok: false,
+        issue: { code: 'not-found' as const, message: 'zone 通道未在本夹具绑定。' },
+      }),
+    };
+    return { planActions, applyFacility, getPlan: () => plan };
+  }
+
+  function placeFacilityViaPlan(channel: ReturnType<typeof boundChannel>): string {
+    const result = channel.planActions.applyFacility({
+      kind: 'add',
+      input: { templateId: 'booth-2x2', position: { x: 1, y: 1 } },
+    });
+    return result.ok ? result.value.facilities[result.value.facilities.length - 1]!.id : '';
+  }
+
+  function mountBound(
+    channel: ReturnType<typeof boundChannel>,
+    place: (item: CatalogItem, position?: { x: number; z: number }) => string,
+  ) {
+    const legacyActions = {
+      setLocked: vi.fn(),
+      applyLayout: vi.fn(),
+    } as unknown as Pick<LayoutActions, 'setLocked' | 'applyLayout'>;
+    const history = { commitNow: vi.fn(), truncateTo: vi.fn() };
+    return renderHook(() => {
+      const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+      const placement = useKeyboardPlacement({
+        layout: layoutStore.getState().layout,
+        selectedItemId,
+        actions: legacyActions,
+        history,
+        selectOnly: setSelectedItemId,
+        placeCatalogItem: place,
+        planActions: channel.planActions,
+        planFacilities: channel.getPlan().facilities,
+      });
+      const add = (armed: boolean): string => {
+        if (armed) armKeyboardPlacement();
+        const id = placement.placeCatalogItem(makeCatalogItem());
+        if (id) setSelectedItemId(id);
+        return id;
+      };
+      return { ...placement, add, selectedItemId, legacyActions, history };
+    });
+  }
+
+  it('an armed add unlocks through the plan setLocked channel and leaves the legacy reducer alone', () => {
+    const channel = boundChannel();
+    const { result } = mountBound(channel, () => placeFacilityViaPlan(channel));
+
+    let id = '';
+    act(() => { id = result.current.add(true); });
+
+    expect(id).toBeTruthy();
+    expect(channel.applyFacility).toHaveBeenCalledWith({ kind: 'setLocked', id, locked: false });
+    expect(result.current.legacyActions.setLocked).not.toHaveBeenCalled();
+    expect(result.current.placingId).toBe(id);
+    expect(result.current.selectedItemId).toBe(id);
+  });
+
+  it('confirm locks the pending facility through the plan setLocked channel', () => {
+    const channel = boundChannel();
+    const { result } = mountBound(channel, () => placeFacilityViaPlan(channel));
+
+    let id = '';
+    act(() => { id = result.current.add(true); });
+    act(() => { result.current.confirmPlacement(); });
+
+    expect(channel.applyFacility).toHaveBeenCalledWith({ kind: 'setLocked', id, locked: true });
+    expect(result.current.legacyActions.setLocked).not.toHaveBeenCalled();
+    expect(result.current.placingId).toBeNull();
+    expect(result.current.selectedItemId).toBe(id);
+  });
+
+  it('cancel removes the facility through the plan remove channel without touching the legacy layout', () => {
+    const channel = boundChannel();
+    const { result } = mountBound(channel, () => placeFacilityViaPlan(channel));
+
+    let id = '';
+    act(() => { id = result.current.add(true); });
+    act(() => { result.current.cancelPlacement(); });
+
+    expect(channel.applyFacility).toHaveBeenCalledWith({ kind: 'remove', id });
+    expect(result.current.legacyActions.applyLayout).not.toHaveBeenCalled();
+    expect(channel.getPlan().facilities.some((facility) => facility.id === id)).toBe(false);
+    expect(result.current.placingId).toBeNull();
+    expect(result.current.selectedItemId).toBeNull();
+  });
+
+  it('ends the session when the pending id is absent from the plan facilities', () => {
+    const channel = boundChannel();
+    const { result } = mountBound(channel, () => 'dangling-facility-id');
+
+    act(() => { result.current.add(true); });
+
+    expect(result.current.placingId).toBeNull();
+    // 解锁尝试先落到通道；悬空 id 被通道拒收（not-found）不抛错，会话由存在性判定收尾。
+    expect(channel.applyFacility).toHaveBeenCalledWith({
+      kind: 'setLocked',
+      id: 'dangling-facility-id',
+      locked: false,
+    });
+  });
+
+  it('a not-found channel refusal on cancel does not throw and just ends the session', () => {
+    const seeded: PlanFacility = {
+      id: 'fac-seeded',
+      templateId: 'booth-2x2',
+      position: { x: 1, y: 1 },
+    } as PlanFacility;
+    const plan: SitePlanData = { ...createStarterOutdoorPlan(), facilities: [seeded] };
+    const applyFacility = vi.fn((): PlanEditResult<SitePlanData> => ({
+      ok: false,
+      issue: { code: 'not-found' as const, message: '设施不存在。' },
+    }));
+    const planActions: PlanActions = {
+      applyFacility,
+      applyZone: () => ({
+        ok: false,
+        issue: { code: 'not-found' as const, message: 'zone 通道未在本夹具绑定。' },
+      }),
+    };
+    const legacyActions = { setLocked: vi.fn(), applyLayout: vi.fn() };
+    const history = { commitNow: vi.fn(), truncateTo: vi.fn() };
+    const { result } = renderHook(() => {
+      const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+      const placement = useKeyboardPlacement({
+        layout: layoutStore.getState().layout,
+        selectedItemId,
+        actions: legacyActions as unknown as Pick<LayoutActions, 'setLocked' | 'applyLayout'>,
+        history,
+        selectOnly: setSelectedItemId,
+        placeCatalogItem: () => seeded.id,
+        planActions,
+        planFacilities: plan.facilities,
+      });
+      const add = (armed: boolean) => {
+        if (armed) armKeyboardPlacement();
+        placement.placeCatalogItem(makeCatalogItem());
+        setSelectedItemId(seeded.id);
+      };
+      return { ...placement, add, legacyActions };
+    });
+
+    act(() => { result.current.add(true); });
+    expect(result.current.placingId).toBe(seeded.id);
+    expect(() => act(() => result.current.cancelPlacement())).not.toThrow();
+    expect(result.current.placingId).toBeNull();
+    expect(legacyActions.applyLayout).not.toHaveBeenCalled();
   });
 });
 
