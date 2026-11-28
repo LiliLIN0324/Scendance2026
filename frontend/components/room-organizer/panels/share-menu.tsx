@@ -842,6 +842,7 @@ export function ShareMenu({ actions, layout, lengthUnit: _lengthUnit = 'm', open
       onCreateCompleteShare={controller && !actions?.readOnly ? () => { void createCompleteShare(); } : undefined}
       onCopyComplete={() => { void copyCompleteShare(); }}
       onRevokeCompleteShare={completeShare ? () => { void revokeCompleteShare(); } : undefined}
+      onGenerateSnapshotLink={actions?.onGenerateShareLink ? () => { void actions.onGenerateShareLink?.(); } : undefined}
       cases={casesNode}
       onToggleQr={() => setQrOpen(current => !current)}
       precheck={precheck}

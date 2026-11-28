@@ -202,6 +202,7 @@ export function SharePanel({
   onCreateCompleteShare,
   onCopyComplete = () => undefined,
   onRevokeCompleteShare,
+  onGenerateSnapshotLink,
   cases,
   onToggleQr,
   exportBinding,
@@ -251,6 +252,8 @@ export function SharePanel({
   onCreateCompleteShare?: (() => void) | undefined;
   onCopyComplete?: () => void;
   onRevokeCompleteShare?: (() => void) | undefined;
+  /** 生成自带快照的只读 3D 查看链接（/view#s1=…）；宿主负责复制与回执。不传就不出现入口。 */
+  onGenerateSnapshotLink?: (() => void) | undefined;
   /** 「案例」页签内容（CaseAdminSection）。不传就不出现这一页。 */
   cases?: ReactNode;
   onToggleQr(): void;
@@ -521,6 +524,13 @@ export function SharePanel({
       </> : <button type="button" className="sc-share-renew" disabled={busy} onClick={onCreateCompleteShare}>
         {busy ? '正在生成…' : '生成完整只读链接'}
       </button>}
+    </section>}
+
+    {tab === 'publish' && onGenerateSnapshotLink != null && <section className="sc-share-body" data-testid="snapshot-link" aria-label="只读 3D 快照链接">
+      <p className="sc-share-desc">链接自带当前方案快照，离线可打开；私有素材不随链接带走。</p>
+      <button type="button" className="sc-share-renew" disabled={busy} onClick={onGenerateSnapshotLink}>
+        {busy ? '正在生成…' : '生成只读 3D 链接'}
+      </button>
     </section>}
 
     {tab === 'cases' && cases != null && <section className="sc-share-body" role="tabpanel" aria-label="案例" id="share-panel-cases">

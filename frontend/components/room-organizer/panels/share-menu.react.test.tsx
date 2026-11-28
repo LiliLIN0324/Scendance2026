@@ -336,6 +336,29 @@ describe('发布页签', () => {
     expect(panel.querySelector('img, .sc-publish-plan')).toBeNull();
   });
 
+  it('does not show the snapshot 3D link entry when the host did not wire the callback', () => {
+    localStorage.clear();
+    render(<ShareMenu actions={actions()} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    expect(screen.queryByTestId('snapshot-link')).toBeNull();
+  });
+
+  it('calls the host snapshot link callback from the publish entry', async () => {
+    localStorage.clear();
+    const share = actions({
+      onGenerateShareLink: vi.fn(async () => ({ url: 'https://studio.example/view/#s1=abc', name: '方案', objects: 1, droppedAssets: 0 })),
+    });
+    render(<ShareMenu actions={share} layout={sampleLayout()} />);
+    openMenu();
+    fireEvent.click(screen.getByRole('tab', { name: '发布' }));
+    const entry = screen.getByTestId('snapshot-link');
+    const button = entry.querySelector('button')!;
+    expect(button.textContent).toContain('生成只读 3D 链接');
+    fireEvent.click(button);
+    expect(share.onGenerateShareLink).toHaveBeenCalledOnce();
+  });
+
   it('publishes, copies the real url, and keeps copy plus the QR key on the link row', async () => {
     localStorage.clear();
     const share = actions();
