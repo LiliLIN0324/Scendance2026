@@ -132,7 +132,7 @@ import { PLAN_OBSOLETE_COPY, makePlanArtifact, planCoversLayout, planIsApplicabl
 import { buildOutcome, outcomeOfPlan, type RunOutcome } from '../lib/run-outcome';
 import { clearLaneActivity, setLaneActivity } from '../lib/lane-status';
 import { capturePlanForVenue, type CapturePlan } from '../lib/site-capture';
-import { canApplyLayoutGeometry, isStructuralMarker, materialCount, structuralItemCollides, venueArea } from '../lib/structural-layout';
+import { canApplyLayoutGeometry, isStructuralMarker, structuralItemCollides, venueArea } from '../lib/structural-layout';
 import { floorInventory, summarizeInventory } from '../lib/deliverable-inventory';
 import { venueBriefLine } from '../lib/venue-brief-line';
 import {
@@ -181,7 +181,7 @@ import {
   replaceAssistantSessionBodies,
   useAssistantSessions, scopedAssistantStorage,
 } from '../hooks/use-assistant-sessions';
-import { planBoundaryAreaM2 } from '../lib/plan-facility-display';
+import { currentMaterialCount, planBoundaryAreaM2 } from '../lib/plan-facility-display';
 import { SessionHistoryOverlay, markSessionSeen, sessionUnreadSince, type SessionStatus } from './session-history-panel';
 import { RailAvatar } from './rail-avatar';
 import type { RoomLayout } from '../lib/types';
@@ -1424,7 +1424,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!floor) { say({ role: 'agent', amber: true, text: '当前楼层不可用，本次没有修改画布。' }); return; }
     const built = buildStyleBundleItems(bundle, { width: base.width, depth: base.height });
     if (!built.ok) { say({ role: 'agent', amber: true, text: built.message }); return; }
-    if (materialCount(floor.items) + built.items.length > EDITOR_ITEM_LIMIT) {
+    if (currentMaterialCount({ plan: outdoorPlan, legacyItems: floor.items }) + built.items.length > EDITOR_ITEM_LIMIT) {
       say({ role: 'agent', amber: true, text: '超过物料数量上限，画布没改。' }); return;
     }
     const candidate: RoomLayout = { ...base, floors: base.floors.map((item, index) => index === floorIndex ? { ...item, items: [...item.items, ...built.items] } : item) };
@@ -4085,7 +4085,7 @@ export function ActivityBrief({ tools }: { tools: readonly BriefTool[] }): JSX.E
   const agent = useAgent();
   const { layout, activeFloor, outdoorPlan } = useRoomEditor();
   const { event, guests, dims, note } = agent.recap;
-  const items = materialCount(activeFloor.items);
+  const items = currentMaterialCount({ plan: outdoorPlan, legacyItems: activeFloor.items });
   const known = agent.venueUp;
   const noteLines = [
     dims,
@@ -4642,7 +4642,7 @@ useEffect(() => {
     cloudRunWasRunningRef.current = cloudRunRunning;
     if (!was && cloudRunRunning) runStartLayoutRef.current = layout;
   }, [cloudRunRunning, layout]);
-  const items = materialCount(activeFloor.items);
+  const items = currentMaterialCount({ plan: outdoorPlan, legacyItems: activeFloor.items });
   // 空会话要让人先看见顶上那句指路，别一进来就滚到底。
   useEffect(() => {
     if (agent.bubbles.length === 0 && mode === 'layout') return;

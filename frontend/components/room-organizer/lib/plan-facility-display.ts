@@ -9,8 +9,8 @@
  */
 
 import { planRingAreaM2, type PlanFacility, type SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
-import { materialCount } from './structural-layout';
 import { UNNAMED_MATERIAL } from './proposal-change-groups';
+import { materialCount } from './structural-layout';
 import type { FurnitureItem } from './types';
 
 /** 评审卡主体：钉挂回的物件 id 与展示名。 */
@@ -35,6 +35,22 @@ function displayName(facility: PlanFacility): string {
 /** plan facility 件数；plan 侧不混结构标记件，返回数组长度即可。 */
 export function planFacilityCount(facilities: readonly PlanFacility[]): number {
   return facilities.length;
+}
+
+/** 当前计数双读回落入参：bound plan 或 legacy 草稿候选件。 */
+export interface CurrentMaterialCountInput {
+  plan: SitePlanData | null;
+  legacyItems: readonly FurnitureItem[];
+}
+
+/**
+ * 当前物料计数（上限守卫 / 件数显示共用读点）：
+ * bound 态读 `plan.facilities` 长度；legacy 草稿态回落 `materialCount(legacyItems)`
+ * （过滤结构标记件）。纯同步、不接 React/store/网络；入参不被修改。
+ * 进入件数（extra / built / 风格套候选等）仍由调用方按原口径另计，不在本函数内。
+ */
+export function currentMaterialCount(input: CurrentMaterialCountInput): number {
+  return input.plan ? planFacilityCount(input.plan.facilities) : materialCount(input.legacyItems);
 }
 
 /** 按数组顺序映射评审主体；名字裁剪空白，空名兜底同上。 */

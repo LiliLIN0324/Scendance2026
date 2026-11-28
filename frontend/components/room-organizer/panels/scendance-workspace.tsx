@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Po
 import { useRoomEditor, useSelection } from '../contexts';
 import { listMyItems, subscribeMyItems } from '../lib/my-items';
 import { EDITOR_ITEM_LIMIT } from '../lib/item-limits';
-import { materialCount } from '../lib/structural-layout';
+import { currentMaterialCount } from '../lib/plan-facility-display';
 import { LocalGlbImport } from './local-glb-import';
 import { MaterialSymbol } from './material-symbol';
 import { OUTDOOR_TOOL_ICONS } from '../components/outdoor-tool-icons';
@@ -126,10 +126,10 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
   /** 左侧只负责选角色；进出漫游统一走右侧 `tool-walk`。 */
   walkRoles?: readonly { id: string; name: string; image: string; walkable: boolean; note?: string; crowdType?: string; selected: boolean; onSelect(): void }[];
 }): JSX.Element {
-  const { layout, activeFloor, actions, history } = useRoomEditor();
+  const { layout, activeFloor, actions, history, outdoorPlan } = useRoomEditor();
   const { selectOnly } = useSelection();
   const hostRef = useRef<HTMLElement>(null);
-  const atLimit = materialCount(activeFloor.items) >= EDITOR_ITEM_LIMIT;
+  const atLimit = currentMaterialCount({ plan: outdoorPlan, legacyItems: activeFloor.items }) >= EDITOR_ITEM_LIMIT;
   const card = variant === 'card';
 
   const addMaterial = (item: CatalogItem):CatalogPlacementResult => {
@@ -143,7 +143,7 @@ export function ScendanceLibrary({ placeCatalogItem, placeCatalogItemResult, onA
   // 风格套整组一次落盘：一次提交、一次撤销，不按件走放置动画。
   const addStyleSet = (items: FurnitureItem[]) => {
     if (atLimit || items.length === 0) return;
-    if (materialCount(activeFloor.items) + items.length > EDITOR_ITEM_LIMIT) return;
+    if (currentMaterialCount({ plan: outdoorPlan, legacyItems: activeFloor.items }) + items.length > EDITOR_ITEM_LIMIT) return;
     history.commitNow();
     actions.addItems(items);
     const first = items[0];

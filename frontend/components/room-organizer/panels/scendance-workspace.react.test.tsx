@@ -8,14 +8,16 @@ import { MemoryStorage } from '@/lib/test-support-memory-storage';
 import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/room-editor-context';
 import { SelectionProvider, type SelectionContextValue } from '../contexts/selection-context';
 import { layoutStore } from '../hooks/use-layout-store';
-import { makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
+import { makeItem, makeLayout, makeViewSettings } from '../lib/__testfixtures__/fixtures';
 import { rememberAholoAsset } from '../lib/aholo-assets';
 import { loadStoredAholoCatalogItem } from '../lib/aholo-model-placement';
+import { EDITOR_ITEM_LIMIT } from '../lib/item-limits';
 import { buildOnlineModelIndex, loadOnlineModels } from '../lib/online-models';
 import { ensureGlbAsset } from '../three/glb-assets';
 import { MaterialDrawerHandle, ScendanceLibrary, ScendanceViewTools } from './scendance-workspace';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { OnlineModel } from '../lib/online-models';
-import type { CatalogItem } from '../lib/types';
+import type { CatalogItem, FurnitureItem } from '../lib/types';
 import type { ViewSettings } from '../lib/types';
 
 // The shelf keeps its real browser component; only catalogue/GLB network loads
@@ -62,13 +64,13 @@ beforeEach(() => {
   vi.mocked(ensureGlbAsset).mockResolvedValue(undefined);
 });afterEach(() => { cleanup(); mem?.clear(); vi.resetAllMocks(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function contexts(layout = makeLayout(), view = makeViewSettings()) {
+function contexts(layout = makeLayout(), view = makeViewSettings(), plan: SitePlanData | null = null) {
   const selectOnly = vi.fn();
   const actions = { applyLayout: vi.fn(), replaceItems: vi.fn() };
   const history = { canUndo: true, canRedo: true, undo: vi.fn(), redo: vi.fn() };
   const setView = vi.fn(), toggle = vi.fn();
   const editor = { layout, activeFloor: layout.floors[0]!, activeFloorIndex: 0,
-    view, actions, history, setView, toggle } as unknown as RoomEditorContextValue;
+    view, actions, history, setView, toggle, outdoorPlan: plan } as unknown as RoomEditorContextValue;
   const selection = { selectedItemId: null, selectedItem: null,
     allSelectedIds: new Set<string>(), extraSelectedIds: new Set<string>(),
     setSelectedItemId: vi.fn(), setExtraSelectedIds: vi.fn(), selectOnly } as SelectionContextValue;
@@ -80,10 +82,11 @@ function Providers({ values, children }: { values: ReturnType<typeof contexts>; 
   return <RoomEditorProvider value={values.editor}><SelectionProvider value={values.selection}>{children}</SelectionProvider></RoomEditorProvider>;
 }
 
-function librarySetup() {
+function librarySetup(options: { plan?: SitePlanData | null; legacyItems?: FurnitureItem[] } = {}) {
   const layout = makeLayout({ id: 'rehearsal-activity', name: '素材架独立演练' });
+  if (options.legacyItems) layout.floors[0]!.items = options.legacyItems;
   layoutStore.setState({ layout, activeFloorIndex: 0 });
-  const values = contexts(layout);
+  const values = contexts(layout, undefined, options.plan ?? null);
   const placeCatalogItem = vi.fn((item: CatalogItem) => layoutStore.getState().actions.addCatalogItem(item)), onLoadPreset = vi.fn(), onClose = vi.fn();
   const assertCurrent = vi.fn(), dispose = vi.fn();
   const capturePlacement = vi.fn(() => ({ assertCurrent, dispose }));
@@ -430,5 +433,35 @@ describe('ScendanceViewTools 户外漫游入口', () => {
     expect(globals).not.toContain('walk-figure');
     expect(globals).not.toContain('button.oc-gm-round.oc-gm-walk');
     expect(globals).not.toMatch(/button\.is-walk:hover,\s*\n[^}]*translateY\(-2px\);/);
+  });
+});
+
+describe('物料上限守卫当前计数双读回落（S4 C-2）', () => {
+  const fullLegacyItems = (): FurnitureItem[] =>
+    Array.from({ length: EDITOR_ITEM_LIMIT }, (_, index) => makeItem({ id: `legacy-${index}` }));
+  const fullPlan = (): SitePlanData =>
+    ({ facilities: Array.from({ length: EDITOR_ITEM_LIMIT }, (_, index) => ({ id: `f-${index}` })) }) as unknown as SitePlanData;
+
+  async function setupGuard(options: { plan?: SitePlanData | null; legacyItems?: FurnitureItem[] }) {
+    const test = librarySetup(options);
+    await screen.findByRole('button', { name: '添加Rehearsal Model 0' });
+    return test;
+  }
+
+  it('legacy 草稿态满员：物料库禁用并显示上限提示', async () => {
+    await setupGuard({ plan: null, legacyItems: fullLegacyItems() });
+    expect(screen.getByText(/已达到 .* 件物料上限/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: '添加Rehearsal Model 0' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('bound 态 plan facilities 满员：物料库禁用（legacy 空数组）', async () => {
+    await setupGuard({ plan: fullPlan() });
+    expect(screen.getByText(/已达到 .* 件物料上限/)).toBeTruthy();
+  });
+
+  it('bound 态 plan 未满：即使 legacy floor 堆满也不禁用（plan 计数优先）', async () => {
+    await setupGuard({ plan: { facilities: [] } as unknown as SitePlanData, legacyItems: fullLegacyItems() });
+    expect(screen.queryByText(/已达到 .* 件物料上限/)).toBeNull();
+    expect((screen.getByRole('button', { name: '添加Rehearsal Model 0' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

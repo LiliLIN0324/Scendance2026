@@ -29,6 +29,7 @@ import { layoutStore } from '../hooks/use-layout-store';
 import {bindPendingCandidateRegistry,createPendingCandidateRegistry} from '../lib/pending-candidate-registry';
 import { clearStagedMaterialGenerateForTests } from '../lib/material-generate';
 import { ActivityBrief, AgentPanel, LayoutAgentProvider, MapVenueOverlay, resetVolatileAssistantMemoriesForTests, useAgent, type BriefTool } from './agent-panel';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { RoomLayout } from '../lib/types';
 import { MemoryStorage } from '../../../lib/test-support-memory-storage';
 import type { LayoutPlanDraft } from '../../../lib/plan-annotation';
@@ -36,6 +37,7 @@ import type { WorkbenchMode } from '../lib/workbench-mode';
 
 const state = vi.hoisted(() => ({
   layout: null as unknown as RoomLayout,
+  outdoorPlan: null as unknown as SitePlanData | null,
   apply: vi.fn(),
   addItems: vi.fn(),
   commitNow: vi.fn(),
@@ -97,6 +99,7 @@ vi.mock('../contexts', () => ({
     view: state.view,
     setView: state.setView,
     collidingIds: new Set<string>(),
+    outdoorPlan: state.outdoorPlan,
   }),
 }));
 vi.mock('./creative-studio', () => ({
@@ -423,6 +426,28 @@ function LocalHarness({ initial, onApply, onPreview = vi.fn(), brief = false }: 
   state.apply = vi.fn((next: RoomLayout) => setCurrent(next));
   return <LayoutAgentProvider onApplyResearchArea={vi.fn()}callbacks={callbacks} onPreview={onPreview} onApply={next => { onApply(next); setCurrent(next); }}><AgentPanel/>{brief && <ActivityBrief tools={[]}/>}</LayoutAgentProvider>;
 }
+
+describe('ActivityBrief 物料计数双读回落（S4 C-2）', () => {
+  afterEach(() => { state.outdoorPlan = null; cleanup(); });
+
+  function renderBrief(layout: RoomLayout) {
+    state.layout = layout;
+    render(<LocalHarness initial={layout} onApply={vi.fn()} brief />);
+    return within(screen.getByLabelText('活动简报'));
+  }
+
+  it('legacy 草稿态：回落 legacy floor 件数', () => {
+    state.outdoorPlan = null;
+    const layout = makeLayout({ floors: [makeFloor({ items: [makeItem({ id: 'a' }), makeItem({ id: 'b' })] })] });
+    expect(renderBrief(layout).getByText('2 件')).toBeTruthy();
+  });
+
+  it('bound 态：读 plan facilities 件数，legacy 件数被忽略', () => {
+    state.outdoorPlan = { facilities: [{ id: 'p-1' }, { id: 'p-2' }, { id: 'p-3' }] } as unknown as SitePlanData;
+    const layout = makeLayout({ floors: [makeFloor({ items: [makeItem({ id: 'a' })] })] });
+    expect(renderBrief(layout).getByText('3 件')).toBeTruthy();
+  });
+});
 
 /** 云端预览只要这几栏：右栏的差分、提案卡与 stale 判断读的就是它们。 */
 function cloudPreview(): unknown {

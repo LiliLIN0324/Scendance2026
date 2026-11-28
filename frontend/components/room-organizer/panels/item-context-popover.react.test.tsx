@@ -5,9 +5,11 @@ import { RoomEditorProvider, type RoomEditorContextValue } from '../contexts/roo
 import { SelectionProvider, type SelectionContextValue } from '../contexts/selection-context';
 import { INITIAL_LAYOUT } from '../lib/initial-layout';
 import { MAX_ITEM_DIMENSION, MIN_ITEM_FOOTPRINT, MIN_ITEM_HEIGHT } from '../lib/constants';
+import { EDITOR_ITEM_LIMIT } from '../lib/item-limits';
 import { ENTRANCE_DOOR_ID } from '../lib/street';
 import { subscribeComposerPrefill, resetComposerPrefillBusForTests } from './composer-prefill-bus';
 import { ItemContextPopover } from './item-context-popover';
+import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { FurnitureItem } from '../lib/types';
 
 function placed(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
@@ -24,7 +26,7 @@ function placed(overrides: Partial<FurnitureItem> = {}): FurnitureItem {
   };
 }
 
-function setup(selected: FurnitureItem, embedded = false, options: { extras?: string[]; all?: string[]; extraItems?: FurnitureItem[] } = {}) {
+function setup(selected: FurnitureItem, embedded = false, options: { extras?: string[]; all?: string[]; extraItems?: FurnitureItem[]; plan?: SitePlanData | null } = {}) {
   const extraItems = options.extraItems ?? [];
   const floor = { ...INITIAL_LAYOUT.floors[0]!, items: [selected, ...extraItems] };
   const editor = {
@@ -34,6 +36,7 @@ function setup(selected: FurnitureItem, embedded = false, options: { extras?: st
     activeFloor: floor,
     activeFloorIndex: 0,
     history: { commitNow: vi.fn() },
+    outdoorPlan: options.plan ?? null,
   } as unknown as RoomEditorContextValue;
   const extras = new Set(options.extras ?? []);
   const all = new Set(options.all ?? [selected.id, ...(options.extras ?? [])]);
@@ -345,5 +348,22 @@ describe('local AI action entry', () => {
   it('keeps the prefill button disabled while the custom input is empty', () => {
     setup(placed({ name: '主沙发' }));
     expect((screen.getByRole('button', { name: '预填' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('duplicate guard 当前计数双读回落（S4 C-2）', () => {
+  afterEach(cleanup);
+
+  const copyButton = () => screen.getByRole('button', { name: '复制' }) as HTMLButtonElement;
+
+  it('legacy 草稿态未到上限：复制可用', () => {
+    setup(placed(), false, { plan: null });
+    expect(copyButton().disabled).toBe(false);
+  });
+
+  it('bound 态 plan facilities 达到上限：复制禁用，legacy 空数组不回落', () => {
+    const plan = { facilities: Array.from({ length: EDITOR_ITEM_LIMIT }, (_, index) => ({ id: `f-${index}` })) } as unknown as SitePlanData;
+    setup(placed(), false, { plan, extraItems: [] });
+    expect(copyButton().disabled).toBe(true);
   });
 });

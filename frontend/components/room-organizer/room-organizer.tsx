@@ -174,7 +174,7 @@ import { agentAnnotationObservationSchema } from '../../../supabase/functions/_s
 import type { PlanGround, SitePlanData } from '../../../supabase/functions/_shared/site-plan';
 import { filterPlanByLevel } from './lib/plan-levels';
 import { applyFacilityAction, applyZoneAction, type PlanActions } from './lib/plan-facility-actions';
-import { facilityInventoryRows, planFacilityCount } from './lib/plan-facility-display';
+import { currentMaterialCount, facilityInventoryRows, planFacilityCount } from './lib/plan-facility-display';
 import { planGroundSync, resolveGround, stripLayoutGroundBytes } from './lib/plan-ground';
 import {
   METERS_PER_DEGREE_LAT,
@@ -1896,7 +1896,7 @@ useEffect(() => {
       const originals = allSelectedIds.has(primaryId) ? [primaryId, ...Array.from(allSelectedIds).filter(id => id !== primaryId)] : [primaryId];
       const ids = originals.map(() => crypto.randomUUID());
       const extra = activeFloor.items.filter(item => originals.includes(item.id));
-      if (materialCount(activeFloor.items) + materialCount(extra) > EDITOR_ITEM_LIMIT) { notify(`当前场景最多支持 ${EDITOR_ITEM_LIMIT} 件物料。`, 'info'); return; }
+      if (currentMaterialCount({ plan: outdoorPlan, legacyItems: activeFloor.items }) + materialCount(extra) > EDITOR_ITEM_LIMIT) { notify(`当前场景最多支持 ${EDITOR_ITEM_LIMIT} 件物料。`, 'info'); return; }
       let candidate = { layout, activeFloorIndex };
       for (let index = 0; index < originals.length; index++) {
         const next = layoutReducer(candidate, {type:'duplicateItem',sourceId:originals[index]!,newId:ids[index]!});
@@ -1908,7 +1908,7 @@ useEffect(() => {
       selectOnly(ids[0]!);
       setExtraSelectedIds(new Set(ids.slice(1)));
     },
-    [actions, activeFloor.items, layout, activeFloorIndex, commitHistoryNow, allSelectedIds, selectOnly]
+    [actions, activeFloor.items, layout, activeFloorIndex, commitHistoryNow, allSelectedIds, selectOnly, outdoorPlan]
   );
 
   // Align / distribute the current multi-select (#P0-3). Candidate geometry is
@@ -2002,7 +2002,7 @@ useEffect(() => {
       }
       const current=layoutStore.getState(),currentLayout=current.layout,currentFloor=currentLayout.floors[current.activeFloorIndex];
       if(!currentFloor){notify('当前楼层无法读取，请重新选择。','info');return '';}
-      if (materialCount(currentFloor.items) >= EDITOR_ITEM_LIMIT) { notify(`当前场景最多支持 ${EDITOR_ITEM_LIMIT} 件物料。`, 'info'); return ''; }
+      if (currentMaterialCount({ plan: outdoorPlan, legacyItems: currentFloor.items }) >= EDITOR_ITEM_LIMIT) { notify(`当前场景最多支持 ${EDITOR_ITEM_LIMIT} 件物料。`, 'info'); return ''; }
       // B-2b：绑定 plan 时常规家具不再走 legacy 命令门 / addCatalogItem，直接复用
       // placeCatalogItem（useItemPlacement 内部已分流 placeViaPlan），也不回写 legacy
       // setLocked / provenance；通道拒收返回 ''，维持「待放置」兜底语义。
@@ -2062,7 +2062,7 @@ useEffect(() => {
       }
       return id;
     },
-    [commitHistoryNow, placeCatalogItem, layout, activeFloorIndex, actions, applyOutcome,armPendingPlacement,clearPendingPlacement, planActions]
+    [commitHistoryNow, placeCatalogItem, layout, activeFloorIndex, actions, applyOutcome,armPendingPlacement,clearPendingPlacement, planActions, outdoorPlan]
   );
 
   // Keyboard placement (#168): Enter on a catalog tile places through the
@@ -3255,7 +3255,7 @@ useEffect(() => {
       floorIndex: activeFloorIndex,
     });
     if (built.length === 0) return false;
-    if (materialCount(activeFloor.items) + materialCount(built) > EDITOR_ITEM_LIMIT) { notify(`当前场景最多支持 ${EDITOR_ITEM_LIMIT} 件物料。`, 'info'); return false; }
+    if (currentMaterialCount({ plan: outdoorPlan, legacyItems: activeFloor.items }) + materialCount(built) > EDITOR_ITEM_LIMIT) { notify(`当前场景最多支持 ${EDITOR_ITEM_LIMIT} 件物料。`, 'info'); return false; }
     const pasted = built.map(item => { const id = crypto.randomUUID(); return { ...item, id, ...(item.structuralOpeningId ? {structuralOpeningId:id} : {}), ...(item.structuralColumnId ? {structuralColumnId:id} : {}) }; });
     const next = {...layout, floors:layout.floors.map((floor,index)=>index===activeFloorIndex ? {...floor,items:[...floor.items,...pasted]} : floor)};
     if (!canApplyLayoutGeometry(layout,next)) { notify('粘贴位置与结构冲突，整组未放置。', 'info'); return false; }
@@ -3267,7 +3267,7 @@ useEffect(() => {
     }
     playCue('place');
     return true;
-  }, [layout, activeFloor.items, activeFloorIndex, actions, commitHistoryNow, selectOnly, playCue]);
+  }, [layout, activeFloor.items, activeFloorIndex, actions, commitHistoryNow, selectOnly, playCue, outdoorPlan]);
 
   const shortcutHandlers = useMemo(
     () => ({
@@ -5268,7 +5268,7 @@ useEffect(() => {
             <div ref={assistantEntryHostRef} className="sc-assistant-entry-host" hidden aria-hidden="true"/>
             </div>
           </div>
-          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={async operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();await persistSidecar('operations',operations,()=>actions.setEventOperations(operations));}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={materialCount(activeFloor.items)>=EDITOR_ITEM_LIMIT} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
+          <CreativeAssistant docked autoOpen={false} suppressAgentLauncher hideCategorySelect toolsApiRef={businessToolsRef} workbenchMode={workbenchMode} workbenchModeSerial={workbenchModeSerial} deliveryOpenRequest={deliveryOpenRequest} backupOpenRequest={backupOpenRequest} deliveryEntryRef={deliveryEntryRef} reviewOpenRequest={reviewOpenRequest} reviewEntryRef={reviewEntryRef} assistantEntryHostRef={assistantEntryHostRef} commercialPanel={<CommercialWorkspace controller={controller} layout={layout} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity}/>} activityTaskPanel={context=><ActivityTaskWorkspace {...context} controller={controller} isActive={isActive} ensurePersistentIdentity={ensurePersistentIdentity} persistVerifiedLayout={persistVerifiedLayout} onCommitOperations={async operations=>{if(!isActive||!isLocalActivityWorkspace(controller))throw new Error('当前活动已变化，未写入任务。');commitHistoryNow();await persistSidecar('operations',operations,()=>actions.setEventOperations(operations));}}/>} referenceImagePanel={<ReferenceImageControls layout={layout} view={view} ready={referenceImage.ready} notice={referenceImage.notice} onShow={value => setView(current => ({ ...current, showReferenceImage: value }))} onOpacity={value => setView(current => ({ ...current, referenceImageOpacity: value }))} onReview={() => { setLeftMode('business'); setBusinessOpen(true); setSidebarCollapsed(true); setSidePanel(null); setAgentCollapsed(false); setReferenceOpenRequest(value => value + 1); }} onReload={referenceImage.reload} reviewButtonRef={referenceEntryRef}/>} localSaveError={!!saveError} captureReview={captureReview} businessHostRef={businessHostRef} conversationOpenRequest={conversationOpenRequest} conversationEntryRef={conversationEntryRef} conversationCloseRequest={conversationCloseRequest} onConversationVisibilityChange={handleConversationVisibility} onWorkspaceVisibilityChange={handleWorkspaceVisibility} workspaceEntryRef={workspaceEntryRef} referenceOpenRequest={referenceOpenRequest} referenceEntryRef={referenceEntryRef} generationPanel={context=><GeneratedModelLibrary {...context} controller={controller} disabled={currentMaterialCount({ plan: outdoorPlan, legacyItems: activeFloor.items })>=EDITOR_ITEM_LIMIT} onAdd={item=>{const id=placeFromCatalog(item);if(id)selectOnly(id,{ keepPanel: true });}}/>}/>
         </main>
           <OnboardingHost
             signals={{
