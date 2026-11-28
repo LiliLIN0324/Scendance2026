@@ -4204,7 +4204,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
       });
     }
     const pin = searchPinRef.current;
-    // 搜索结果全部画红色编号，选中项保留编号并加名称，不换成白钉。
+    // 搜索结果全部画红色编号，选中项保留编号并加名称，不换成另一种钉。
     const candidatePins = searchPinsRef.current;
     if (candidatePins?.length) {
       drawCandidatePins({ ctx: planCtx, viewport }, candidatePins.map(candidate => ({

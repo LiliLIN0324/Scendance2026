@@ -2647,11 +2647,14 @@ export function layoutCandidatePins(points: readonly PlanPoint[]): PlanPoint[] {
   return placed;
 }
 
+/** 户外红线色：候选钉、定位钉统一用它，仓库里不再出现白色点位。 */
+export const OUTDOOR_RED = '#e5484d';
+
 /**
  * 搜地点候选编号钉：红色水滴针 + 白字序号（百度/高德搜索结果同范式）。
- * 与白色定位钉的分工：候选钉批量铺（只标序号，不带名称胶囊，避免互相遮挡），
- * 用户点选后仍保留红色编号，并加名称。只是视图辅助，不写进 plan，
- * 不参与统计/交付/冲突判定；清除搜索或切换活动后收起。
+ * 与单枚定位钉（drawSearchPin）是同一枚红针，区别只在候选钉带序号、单枚钉带名称。
+ * 批量铺时只标序号、不带名称胶囊，避免互相遮挡；用户点选后仍保留序号并加名称。
+ * 只是视图辅助，不写进 plan，不参与统计/交付/冲突判定；清除搜索或切换活动后收起。
  */
 export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ point: PlanPoint; index: number; label?: string }>): void {
   const { ctx, viewport } = c;
@@ -2684,7 +2687,7 @@ export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ po
     ctx.shadowColor = 'rgba(20,20,22,0.22)';
     ctx.shadowBlur = 8;
     ctx.shadowOffsetY = 1.8;
-    ctx.fillStyle = '#e5484d';
+    ctx.fillStyle = OUTDOOR_RED;
     ctx.fill();
     ctx.shadowColor = 'transparent';
     // 白描边把红钉从影像/暗色底图上托起来（同 drawSearchArea 的衬线思路）。
@@ -2710,7 +2713,8 @@ export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ po
 }
 
 /**
- * 搜地点定位钉：白色水滴针（细描边 + 轻投影 + 针心黑点）+ 白底名称标签。
+ * 搜地点定位钉：红色水滴针（白描边 + 轻投影），与候选编号钉同一套视觉。
+ * 2026-11-28 用户：「白色的点」留在图上就是残留物，点位一律用红线色，仓库里不再有白针。
  * 只是视图辅助——不写进 plan，不参与统计/交付/冲突判定，换搜索或关掉即消失。
  */
 export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; label: string }): void {
@@ -2720,7 +2724,6 @@ export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; lab
   const r = 7.5;
   ctx.save();
   // 水滴形：从圆头左下起笔，绕顶到右下，再用两段贝塞尔收成针尖（尖端落在真实坐标上）。
-  // 2026-11-13 用户嫌「大头黑点」笨重：头 8→7.5、针心 3.2→2.4、尾巴收细。
   ctx.beginPath();
   ctx.moveTo(pt.x - 6.35, headY + 4.1);
   ctx.arc(pt.x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
@@ -2730,18 +2733,13 @@ export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; lab
   ctx.shadowColor = 'rgba(20,20,22,0.22)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 1.8;
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = OUTDOOR_RED;
   ctx.fill();
   ctx.shadowColor = 'transparent';
-  // 描边加深（0.14→0.3）：白底/纸面模式下白针身不能只剩一枚黑点浮着。
-  ctx.strokeStyle = 'rgba(20, 20, 22, 0.3)';
-  ctx.lineWidth = 1;
+  // 白描边把红针从影像/暗色底图上托起来（同 drawCandidatePins）。
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.lineWidth = 1.2;
   ctx.stroke();
-  // 针心：小实心点，标出「就是这里」。
-  ctx.beginPath();
-  ctx.arc(pt.x, headY + 0.5, 2.4, 0, Math.PI * 2);
-  ctx.fillStyle = '#141416';
-  ctx.fill();
   ctx.restore();
   // 名称标签：白底细边，挂在针头上方留 6px 呼吸，不压住针身与底图信息。
   drawMapLabelPill(ctx, pt.x, headY - r - 6, pin.label, viewport.canvasW);
