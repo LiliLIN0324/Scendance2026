@@ -4876,6 +4876,31 @@ describe('outdoor V1–V5 real task-state actions', () => {
     expect(current.outdoorWorkflow.state.stage).toBe('zones');
     expect(screen.queryByRole('button', { name: '确认并应用这一版' })).toBeNull();
   });
+  it('轮廓到手后锚点吸附进足迹：检索点偏在楼外（西湖美术馆实测 72.5m）也写入轮廓内', async () => {
+    const plan = createStarterOutdoorPlan();
+    // 天地图检索点在 OSM 足迹西南侧外 ~72m；轮廓才是场地真值。
+    const place = { id: 'xihu-gallery', name: '西湖美术馆', address: '孤山路', lng: 120.1593, lat: 30.2493 };
+    const polygon: [number, number][] = [[120.16, 30.25], [120.161, 30.25], [120.161, 30.251], [120.16, 30.251]];
+    let resolveShape!: (shape: placeArea.PlaceArea) => void;
+    const fetchShape = vi.spyOn(placeArea, 'fetchPlaceShape').mockImplementation(() => new Promise(resolve => { resolveShape = resolve as (shape: placeArea.PlaceArea) => void; }));
+    const applyPlan = vi.fn((_next: unknown, _expected?: string) => true);
+    vi.spyOn(outdoorRange, 'proposeAutomaticVenueRange').mockResolvedValue({ boundary: [{ x: -80, y: -60 }, { x: 80, y: -60 }, { x: 80, y: 60 }, { x: -80, y: 60 }], basis: { kind: 'place-outline', detail: 'test' }, waterLines: [] });
+    let current!: NonNullable<ReturnType<typeof useAgent>>;
+    function Probe() { current = useAgent()!; current.registerRouteBridge({ getPlan: () => plan, applyPlan, applyVenue: () => true, beginVenueBoundary: () => true, applyRoutes: () => true, applyZoneProposal: () => true }); return null; }
+    render(<LayoutAgentProvider callbacks={callbacks} onPreview={vi.fn()} onApply={vi.fn()}><Probe/><AgentPanel/></LayoutAgentProvider>);
+    setAgentSupervision('auto');
+    act(() => current.confirmOutdoorVenue(place));
+    await waitFor(() => expect(fetchShape).toHaveBeenCalledWith(place.name, expect.objectContaining({ near: { lng: place.lng, lat: place.lat } })));
+    await act(async () => resolveShape({ id: 'outline', name: place.name, level: '占地范围', lng: 120.1605, lat: 30.2505, kind: 'area', polygon, bounds: [120.16, 30.25, 120.161, 30.251] }));
+    await waitFor(() => expect(applyPlan).toHaveBeenCalledTimes(1));
+    const applied = applyPlan.mock.calls[0]![0] as { anchor: { lng: number; lat: number; crs: string } };
+    // 吸附后的锚点必须落在足迹内，而不是留在楼外的检索点。
+    expect(applied.anchor.crs).toBe('gcj-02');
+    expect(applied.anchor.lng).toBeGreaterThan(120.16);
+    expect(applied.anchor.lng).toBeLessThan(120.161);
+    expect(applied.anchor.lat).toBeGreaterThan(30.25);
+    expect(applied.anchor.lat).toBeLessThan(30.251);
+  });
   it('说选第二个立即定位钉，轮廓晚到才写入，当前Agent自然确认候选', async () => {
     let plan = createStarterOutdoorPlan();
     const places = [{ id: 'one', name: '一号场地', address: '', lng: 120.16, lat: 30.25 }, { id: 'two', name: '二号场地', address: '', lng: 120.163, lat: 30.25 }];

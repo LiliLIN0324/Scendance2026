@@ -97,7 +97,7 @@ import { fetchPlaceShape, peekCachedPlaceShape } from '../lib/place-area';
 import { fetchPlaceShapeHints, hintedOutlineNames, buildPlaceSearchOptions } from '../lib/place-search-options';
 import { normalizeOutlineName } from '../lib/place-shape-quality';
 import { isPersistablePlaceShape } from '../lib/place-shape-quality';
-import { trueFootprintBoundary } from '../lib/outdoor-venue-sync';
+import { snapPointIntoFootprint, trueFootprintBoundary } from '../lib/outdoor-venue-sync';
 import { fetchRoadNetwork } from '../lib/road-network';
 import { buildRouteProposal, matchRouteCommand, roadFetchPlanForBoundary, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
@@ -1779,8 +1779,16 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
     const bridge = routeBridgeRef.current;
     if (pickBase !== JSON.stringify(bridge?.getPlan())) { setVenuePick(null); setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间规划变了，场地没换。', steps: [] }); return; }
-    const anchor = { lng: place.lng, lat: place.lat, crs: 'gcj-02' as const, source: 'lookup' as const };
+    // 2026-11-28 用户「西湖美术馆钉子在树上、轮廓在楼上」：检索源 POI 点可与真实占地差
+    // 几十米（实测 72.5 m），轮廓才是场地真值——拿到轮廓就把锚点吸附进足迹，钉子跟着搬。
+    const anchorPoint = polygon
+      ? snapPointIntoFootprint(polygon, { lng: place.lng, lat: place.lat })
+      : { lng: place.lng, lat: place.lat };
+    const anchor = { lng: anchorPoint.lng, lat: anchorPoint.lat, crs: 'gcj-02' as const, source: 'lookup' as const };
     const boundary = polygon ? trueFootprintBoundary(polygon.map(([lng, lat]) => ({ lng, lat })), anchor) : null;
+    if (polygon && (anchorPoint.lng !== place.lng || anchorPoint.lat !== place.lat)) {
+      routeBridgeRef.current?.correctVenuePin?.({ lng: anchorPoint.lng, lat: anchorPoint.lat, name: place.name });
+    }
     setVenuePick(null);
     if (!bridge) {
       setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '请先打开当前户外规划，未更改场地', steps: [] });
