@@ -2677,9 +2677,89 @@ export function layoutCandidatePins(points: readonly PlanPoint[]): PlanPoint[] {
 export const OUTDOOR_RED = '#e5484d';
 
 /**
- * 搜地点候选编号钉：红色水滴针 + 白字序号（百度/高德搜索结果同范式）。
- * 与单枚定位钉（drawSearchPin）是同一枚红针，区别只在候选钉带序号、单枚钉带名称。
- * 批量铺时只标序号、不带名称胶囊，避免互相遮挡；用户点选后仍保留序号并加名称。
+ * 户外搜索钉的唯一几何：头半径与「头心 → 针尖」的比例只在这里定义一次。
+ * 2026-11-28 用户「点位的视觉写了两套，不要两套，要统一」：编号钉原来是
+ * 头 r=12、尾巴只有 5px（远看像一枚圆牌），单枚钉头 r=7.5、尾巴 8px（像水滴），
+ * 同屏两种针、两种大小。现在两种钉都走这一支笔：同一个头半径、同一个收针比例，
+ * 带号就在中间写号，不带号就是同一枚红针。
+ */
+const PIN_HEAD_R = 11;
+/** 头心到针尖 = 2.07 × 头半径（沿用旧单枚钉的比例，尾巴才看得出是「针」不是「牌」）。 */
+const PIN_TAIL_RATIO = 2.07;
+
+/** 钉的像素包围盒（宽 × 高），画布图层和 DOM 热区共用，避免各写一套尺寸。 */
+export const OUTDOOR_PIN_METRICS = {
+  width: PIN_HEAD_R * 2,
+  height: Math.ceil(PIN_HEAD_R * (1 + PIN_TAIL_RATIO)),
+} as const;
+
+/**
+ * 白框顶「候选活动范围（待核对）」胶囊：地点卡开着时不出。
+ * 2026-11-28 用户「这种出卡和这种出卡也必须是统一的，不能是两个提示弹窗」——
+ * 同一个待核对状态只允许一张卡：地点卡开着时由卡里那一行承担 ✓/✕，画布不再叠胶囊。
+ */
+export function showCandidateFramePill(input: {
+  scopePreview: boolean;
+  boundaryPoints: number;
+  placeCardOpen: boolean;
+}): boolean {
+  return input.scopePreview && input.boundaryPoints >= 3 && !input.placeCardOpen;
+}
+
+/** 头心 y：针尖（= 真实坐标）在 tipY 上，头就抬到 tipY 之上。 */
+function pinHeadCenterY(tipY: number): number {
+  return tipY - PIN_HEAD_R * PIN_TAIL_RATIO;
+}
+
+/** 名称胶囊的挂点：针头之上留 6px 呼吸，所有钉同一口径。 */
+function pinLabelBottom(tipY: number): number {
+  return pinHeadCenterY(tipY) - PIN_HEAD_R - 6;
+}
+
+/** 水滴轮廓（调用方负责 fill / stroke）。针尖落在 tipY。 */
+function traceOutdoorPin(ctx: CanvasRenderingContext2D, x: number, tipY: number): void {
+  const r = PIN_HEAD_R;
+  const headY = pinHeadCenterY(tipY);
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.847, headY + r * 0.547);
+  ctx.arc(x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
+  ctx.quadraticCurveTo(x + r * 0.64, headY + r * 1.09, x, tipY);
+  ctx.quadraticCurveTo(x - r * 0.64, headY + r * 1.09, x - r * 0.847, headY + r * 0.547);
+  ctx.closePath();
+}
+
+/**
+ * 画一枚钉（像素坐标）：红水滴 + 白描边 + 投影；`index` 给了就在头心写「序号 + 1」的白字。
+ * 编号钉与单枚钉唯一的差别就是有没有这行字，形状、尺寸、描边、投影完全一致。
+ */
+function paintOutdoorPin(ctx: CanvasRenderingContext2D, x: number, tipY: number, index?: number): void {
+  const headY = pinHeadCenterY(tipY);
+  ctx.save();
+  traceOutdoorPin(ctx, x, tipY);
+  ctx.shadowColor = 'rgba(20,20,22,0.22)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 1.8;
+  ctx.fillStyle = OUTDOOR_RED;
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  // 白描边把红钉从影像/暗色底图上托起来（同 drawSearchArea 的衬线思路）。
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  if (index != null) {
+    const text = String(index + 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${text.length > 1 ? 11 : 12.5}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, headY + 0.5);
+  }
+  ctx.restore();
+}
+
+/**
+ * 搜地点候选编号钉（2026-11-27 用户指令，对齐百度/高德搜索结果）：
+ * 批量铺时只标序号、不带名称胶囊，避免互相遮挡；被选中的那枚由 `label` 带出名称。
  * 只是视图辅助，不写进 plan，不参与统计/交付/冲突判定；清除搜索或切换活动后收起。
  */
 export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ point: PlanPoint; index: number; label?: string }>): void {
@@ -2689,93 +2769,45 @@ export function drawCandidatePins(c: PlanCanvasContext, pins: ReadonlyArray<{ po
   for (const [index, pin] of pins.entries()) {
     const anchor = anchors[index]!;
     const pt = positions[index]!;
-    const headY = pt.y - 17;
-    const r = 12;
-    ctx.save();
+    // 被避让挪开的钉，用一根白芯红线牵回真实坐标，免得针尖看着落错位置。
     if (pt.x !== anchor.x || pt.y !== anchor.y) {
+      ctx.save();
       ctx.beginPath();
       ctx.moveTo(anchor.x, anchor.y);
       ctx.lineTo(pt.x, pt.y);
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.strokeStyle = '#e5484d';
+      ctx.strokeStyle = OUTDOOR_RED;
       ctx.lineWidth = 1;
       ctx.stroke();
+      ctx.restore();
     }
-    // 水滴形与 drawSearchPin 同款贝塞尔收针，整体放大一号给数字留位（尖端落在真实坐标上）。
-    ctx.beginPath();
-    ctx.moveTo(pt.x - r * 0.844, headY + r * 0.536);
-    ctx.arc(pt.x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
-    ctx.quadraticCurveTo(pt.x + 8, pt.y - 1, pt.x, pt.y);
-    ctx.quadraticCurveTo(pt.x - 8, pt.y - 1, pt.x - r * 0.844, headY + r * 0.536);
-    ctx.closePath();
-    ctx.shadowColor = 'rgba(20,20,22,0.22)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 1.8;
-    ctx.fillStyle = OUTDOOR_RED;
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    // 白描边把红钉从影像/暗色底图上托起来（同 drawSearchArea 的衬线思路）。
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    // 序号：白字居中在圆头，两位数略缩。
-    const text = String(pin.index + 1);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `600 ${text.length > 1 ? 11 : 12.5}px Inter, system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, pt.x, headY + 0.5);
-    ctx.restore();
+    paintOutdoorPin(ctx, pt.x, pt.y, pin.index);
   }
   for (const [index, pin] of pins.entries()) {
-    if (pin.label) {
-      const pt = positions[index]!;
-      const top = Math.min(...positions.filter(other => Math.abs(other.x - pt.x) < 120).map(other => other.y));
-      drawMapLabelPill(ctx, pt.x, top - 35, pin.label, viewport.canvasW);
-    }
+    if (!pin.label) continue;
+    // 2026-11-28 用户「红色的点位的标注怎么没看到」：胶囊直接挂本钉头顶——
+    // 批量钉都不带名字，这里的跨钉避让只会把唯一的名字顶到别的钉上方甚至画布外。
+    const pt = positions[index]!;
+    drawMapLabelPill(ctx, pt.x, pinLabelBottom(pt.y), pin.label, viewport.canvasW);
   }
 }
 
 /**
- * 搜地点的单枚钉。带上 `index`（下拉里那条的序号，0 起）就画成与候选钉完全相同的编号钉：
- * 下拉写「2」、地图上就是「2」，不用再去猜它对的是哪个候选（2026-11-28 用户：「这个还是可以服从123的逻辑啊」）。
- * 没序号时（例如从别处只拿到一个坐标）才画不带数字的纯红钉——它仍是红针，不会回到白点。
+ * 搜地点的单枚钉。带上 `index`（下拉里那条的序号，0 起）就写上与列表同一个号：
+ * 下拉写「2」、地图上就是「2」（2026-11-28 用户：「这个还是可以服从123的逻辑啊」）。
+ * 没序号时（例如只有一枚坐标）画同一枚红针、只是不写字——不会另起一种钉。
  * 只是视图辅助——不写进 plan，不参与统计/交付/冲突判定，换搜索或关掉即消失。
  */
 export function drawSearchPin(c: PlanCanvasContext, pin: { point: PlanPoint; label: string; index?: number }): void {
-  if (pin.index != null && pin.index >= 0) {
-    // 同一支笔：编号、尺寸、名称胶囊、避让都与批量编号钉一致，不会出现两种“带号钉”。
-    drawCandidatePins(c, [{ point: pin.point, index: pin.index, label: pin.label }]);
-    return;
-  }
   const { ctx, viewport } = c;
   const pt = planPointToPixel(pin.point, viewport);
-  const headY = pt.y - 7;
-  const r = 7.5;
-  ctx.save();
-  // 水滴形：从圆头左下起笔，绕顶到右下，再用两段贝塞尔收成针尖（尖端落在真实坐标上）。
-  ctx.beginPath();
-  ctx.moveTo(pt.x - 6.35, headY + 4.1);
-  ctx.arc(pt.x, headY, r, Math.PI * 0.82, Math.PI * 0.18);
-  ctx.quadraticCurveTo(pt.x + 4.8, headY + 8.2, pt.x, pt.y + 8.5);
-  ctx.quadraticCurveTo(pt.x - 4.8, headY + 8.2, pt.x - 6.35, headY + 4.1);
-  ctx.closePath();
-  ctx.shadowColor = 'rgba(20,20,22,0.22)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetY = 1.8;
-  ctx.fillStyle = OUTDOOR_RED;
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  // 白描边把红针从影像/暗色底图上托起来（同 drawCandidatePins）。
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-  ctx.restore();
-  // 名称标签：白底细边，挂在针头上方留 6px 呼吸，不压住针身与底图信息。
-  drawMapLabelPill(ctx, pt.x, headY - r - 6, pin.label, viewport.canvasW);
+  const index = pin.index != null && pin.index >= 0 ? pin.index : undefined;
+  paintOutdoorPin(ctx, pt.x, pt.y, index);
+  if (pin.label) drawMapLabelPill(ctx, pt.x, pinLabelBottom(pt.y), pin.label, viewport.canvasW);
 }
+
 
 /* ---------------- 搜地点选区（行政区边界，视图辅助） ---------------- */
 

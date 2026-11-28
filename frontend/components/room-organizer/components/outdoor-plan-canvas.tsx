@@ -85,10 +85,12 @@ import {
   ArrowLeftRight,
   ArrowRight,
   ArrowRightLeft,
+  Check,
   ImageUp,
   Search,
   Sparkles,
   Upload,
+  X,
 } from 'lucide-react';
 import { BasemapTileCache, paintBasemapTiles } from '@/components/room-organizer/lib/plan-tile-cache';
 // B3：2D 人位按 3D 漫游态换色（进区青 / 落座琥珀）。只读注册表，不反向驱动 3D。
@@ -158,6 +160,8 @@ import {
   type SearchCandidatePin,
   layoutCandidatePins,
   matchCandidatePin,
+  OUTDOOR_PIN_METRICS,
+  showCandidateFramePill,
 } from '../lib/outdoor-plan-canvas';
 import { planRightClickAction } from '../lib/plan-right-click';
 import { vehicleMarkerSpecs } from '../lib/vehicle-markers';
@@ -1793,6 +1797,9 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   // P2-k：搜地点落钉（props 变化时同步到 ref 再重绘，draw 保持零依赖）。
   const searchPinRef = useRef<{ lng: number; lat: number; label: string; index?: number } | null>(searchPin ?? null);
   const searchPinsRef = useRef<ReadonlyArray<SearchCandidatePin> | null>(searchPins ?? null);
+  /** 2026-11-28「不能有两个提示弹窗」：地点卡开着时，白框顶那枚候选范围胶囊不再画（同一件事只留一张卡）。 */
+  const selectedSearchPlaceRef = useRef<import('../lib/place-search').PlaceSuggestion | null>(selectedSearchPlace ?? null);
+  selectedSearchPlaceRef.current = selectedSearchPlace ?? null;
   const candidateViewKeyRef = useRef('');
   const focusCandidateBoundsRef = useRef(focusBounds);
   focusCandidateBoundsRef.current = focusBounds;
@@ -4291,7 +4298,11 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
         const pillRingPx = pillRing.map(point => planPointToPixel(point, viewport));
         const pillState = boundaryFramePillState({
           pendingEdit: boundaryEditPendingRef.current && previewRingRef.current !== null,
-          candidatePreview: workflowScopePreviewRef.current === true && (workflowPreviewRef.current?.boundary.length ?? 0) >= 3,
+          candidatePreview: showCandidateFramePill({
+            scopePreview: workflowScopePreviewRef.current === true,
+            boundaryPoints: workflowPreviewRef.current?.boundary.length ?? 0,
+            placeCardOpen: selectedSearchPlaceRef.current !== null,
+          }),
           boundarySelected: boundarySelectedRef.current,
           boundaryLocked: lockedLayersRef.current.boundary === true,
         });
@@ -13684,7 +13695,27 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
   const selectedSearchIndex = selectedSearchPlace
     ? (searchPins ?? []).findIndex(pin => pin.place?.id === selectedSearchPlace.id)
     : -1;
-  const selectedSearchPosition = searchCandidatePositions[selectedSearchIndex];
+  /**
+   * 2026-11-28 用户反馈「点历史条目没有和直接搜索一样的活动卡片」：
+   * 卡片原来只在选中地点属于本批编号候选时才定位（searchCandidatePositions[selectedSearchIndex]），
+   * 历史条目不铺编号钉，索引 -1、位置 undefined，整张卡（含「设为活动场地」）就不渲染了。
+   * 选中的地点不需要在候选里：有号就跟编号钉对齐，无号就按它自己的坐标定位。
+   */
+  const selectedSearchPosition = selectedSearchPlace
+    ? searchCandidatePositions[selectedSearchIndex] ?? planPointToPixel(
+      lngLatToEnu(
+        selectedSearchPlace.lng,
+        selectedSearchPlace.lat,
+        searchCandidateViewport.anchorLng ?? DEFAULT_ANCHOR_LNG,
+        searchCandidateViewport.anchorLat ?? DEFAULT_ANCHOR_LAT,
+      ),
+      searchCandidateViewport,
+    )
+    : undefined;
+  // 标题前缀的号只属于编号候选；历史/无号地点直接写名字，不编造序号。
+  const selectedSearchNumber = selectedSearchIndex >= 0
+    ? (searchPins ?? [])[selectedSearchIndex]!.index + 1
+    : null;
 
   return (
     <div
@@ -13777,7 +13808,7 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
               aria-label={`${pin.index + 1}. ${pin.name}`}
               aria-pressed={pin.place?.id === selectedSearchPlace?.id && !!selectedSearchPlace}
               title={pin.name}
-              style={{ left: position.x - 16, top: position.y - 32 }}
+              style={{ left: position.x - OUTDOOR_PIN_METRICS.width / 2 - 5, top: position.y - OUTDOOR_PIN_METRICS.height - 2 }}
               onPointerDown={event => event.stopPropagation()}
               onPointerUp={event => event.stopPropagation()}
               onClick={event => { event.stopPropagation(); onSearchCandidatePick(pin); }}
@@ -13799,9 +13830,37 @@ export const OutdoorPlanCanvasImpl = forwardRef<OutdoorPlanCanvasHandle, Outdoor
           onWheel={event => event.stopPropagation()}
         >
           <button type="button" className="sc-map-place-close" aria-label="关闭地点详情" onClick={onSearchPlaceClose}>×</button>
-          <strong>{(searchPins ?? [])[selectedSearchIndex]!.index + 1}. {selectedSearchPlace.name}</strong>
+          <strong>{selectedSearchNumber != null ? `${selectedSearchNumber}. ` : ''}{selectedSearchPlace.name}</strong>
           {selectedSearchPlace.address && <p>{selectedSearchPlace.address}</p>}
-          {onSearchPlaceConfirm && <button type="button" className="sc-map-place-confirm" onClick={onSearchPlaceConfirm}>设为活动场地</button>}
+          {/* 2026-11-28 用户「这种出卡和这种出卡也必须是统一的，不能是两个提示弹窗」：
+              候选活动范围待核对时，白框顶那枚胶囊收进这张卡——同一件事只留一行状态 + ✓/✕，
+              动作与胶囊同一条路（onWorkflowScopeConfirm / onWorkflowScopeCancel），不再另起第二个提示；
+              此时「设为活动场地」让位：场地已选，待确认的是范围。 */}
+          {workflowScopePreview ? (
+            <div className="sc-map-place-pending">
+              <span className="sc-map-place-pending-text">候选活动范围（待核对）</span>
+              <button
+                type="button"
+                className="sc-map-place-pending-icon"
+                aria-label="确认活动范围"
+                title="确认（回车）"
+                onClick={() => onWorkflowScopeConfirm?.()}
+              >
+                <Check size={14} strokeWidth={2.2} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="sc-map-place-pending-icon"
+                aria-label="撤回活动范围预览"
+                title="撤回预览（Esc）"
+                onClick={() => onWorkflowScopeCancel?.()}
+              >
+                <X size={14} strokeWidth={2.2} aria-hidden />
+              </button>
+            </div>
+          ) : onSearchPlaceConfirm ? (
+            <button type="button" className="sc-map-place-confirm" onClick={onSearchPlaceConfirm}>设为活动场地</button>
+          ) : null}
         </section>
       )}
       {boundaryHandleLayouts.length > 0 && (

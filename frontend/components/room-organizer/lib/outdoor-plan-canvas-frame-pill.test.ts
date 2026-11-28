@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundaryFramePillState, framePillLayout, hitFramePillAction } from './outdoor-plan-canvas';
+import { boundaryFramePillState, framePillLayout, hitFramePillAction, showCandidateFramePill } from './outdoor-plan-canvas';
 
 /** 屏幕像素口径的矩形框环（framePillLayout 吃的就是 planPointToPixel 之后的投影）。 */
 const framePx = [
@@ -59,6 +59,17 @@ describe('白框顶动作胶囊（2026-11-28 用户「红线的提示都追随�
 });
 
 describe('胶囊态别决策（一次只画一枚：挂起 > 候选 > 选中）', () => {
+  // 2026-11-28 用户「这种出卡和这种出卡也必须是统一的，不能是两个提示弹窗」：
+  // 地点卡开着时，候选范围那枚胶囊不再画（同一件事只留一张卡）。
+  it('地点卡开着时不画候选范围胶囊；卡关了照旧画', () => {
+    const base = { scopePreview: true, boundaryPoints: 6 };
+    expect(showCandidateFramePill({ ...base, placeCardOpen: true })).toBe(false);
+    expect(showCandidateFramePill({ ...base, placeCardOpen: false })).toBe(true);
+    // 没在预览、或边界不足 3 点，本来就不该有这枚胶囊。
+    expect(showCandidateFramePill({ ...base, scopePreview: false, placeCardOpen: false })).toBe(false);
+    expect(showCandidateFramePill({ scopePreview: true, boundaryPoints: 2, placeCardOpen: false })).toBe(false);
+  });
+
   it('优先级：挂起的红线调整 > 候选活动范围 > 已选中用地红线', () => {
     const all = { pendingEdit: true, candidatePreview: true, boundarySelected: true, boundaryLocked: false };
     expect(boundaryFramePillState(all)!.kind).toBe('pending');
@@ -67,13 +78,13 @@ describe('胶囊态别决策（一次只画一枚：挂起 > 候选 > 选中）'
     expect(boundaryFramePillState({ ...all, pendingEdit: false, candidatePreview: false, boundarySelected: false })).toBeNull();
   });
 
-  it('挂起与候选都带 ✓/✕；锁定态的选中只留收起 ×，删除要解锁才挂（2026-11-28 并行口径）', () => {
+  it('挂起与候选都带 ✓/✕；锁定态选中整枚不画（2026-11-28 用户拍板去掉），解锁才有删除/收起', () => {
     expect(boundaryFramePillState({ pendingEdit: true, candidatePreview: false, boundarySelected: false, boundaryLocked: false }))
       .toEqual({ kind: 'pending', label: '红线已调整（待确认）', actions: ['confirm', 'cancel'] });
     expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: true, boundarySelected: false, boundaryLocked: false }))
       .toEqual({ kind: 'candidate', label: '候选活动范围（待核对）', actions: ['confirm', 'cancel'] });
     expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: true }))
-      .toEqual({ kind: 'selected', label: '已选中用地红线', actions: ['cancel'] });
+      .toBeNull();
     expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: false }))
       .toEqual({ kind: 'selected', label: '已选中用地红线', actions: ['delete', 'cancel'] });
   });

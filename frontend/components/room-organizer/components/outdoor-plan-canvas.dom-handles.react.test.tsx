@@ -86,6 +86,8 @@ it('opens a numbered place via its map target and keeps detail actions out of ma
   expect(onPlanChange).not.toHaveBeenCalled();
   view.rerender(<Canvas {...props} selectedSearchPlace={place} />);
   expect(screen.getByRole('region', { name: `地点详情：${place.name}` }).textContent).toContain(place.address);
+  // 编号候选的前缀仍写号（下拉第 2 条 = 地图上的 2）。
+  expect(screen.getByRole('region', { name: `地点详情：${place.name}` }).textContent).toContain('2. 水上森林码头');
   expect(screen.getByRole('button', { name: '2. 水上森林码头' }).getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(screen.getByRole('button', { name: '设为活动场地' }));
   expect(onConfirm).toHaveBeenCalledOnce();
@@ -94,6 +96,62 @@ it('opens a numbered place via its map target and keeps detail actions out of ma
   expect(onPlanChange).not.toHaveBeenCalled();
   view.rerender(<Canvas {...props} />);
   expect(screen.queryByRole('region', { name: `地点详情：${place.name}` })).toBeNull();
+});
+
+/** 2026-11-28 用户反馈：点历史条目没有和直接搜索一样的活动卡片。
+ * 历史条目不铺编号钉（不在 searchPins 里），原来的卡片靠编号钉的位置定位，
+ * 索引 -1 → 位置 undefined → 整张卡不渲染。按位置断言：没有编号候选也要出卡。 */
+it('shows the place card for a picked place that is not in the numbered batch', () => {
+  const place = { id: 'history-dock', name: '青山湖水上森林', address: '锦北街道科技大道青山湖风景区内', lng: 120.01, lat: 30 };
+  const onConfirm = vi.fn();
+  const onClose = vi.fn();
+  render(
+    <Canvas
+      plan={createStarterOutdoorPlan()}
+      onPlanChange={vi.fn()}
+      onSearchPlaceClose={onClose}
+      onSearchPlaceConfirm={onConfirm}
+      selectedSearchPlace={place}
+    />,
+  );
+  const card = screen.getByRole('region', { name: `地点详情：${place.name}` });
+  expect(card.textContent).toContain(place.address);
+  // 没号就不写号：历史条目不编造 1/2/3。
+  expect(card.textContent).not.toContain('1. ');
+  fireEvent.click(screen.getByRole('button', { name: '设为活动场地' }));
+  expect(onConfirm).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: '关闭地点详情' }));
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+/** 2026-11-28 用户「这种出卡和这种出卡也必须是统一的，不能是两个提示弹窗」：
+ * 候选范围待核对时，白框顶那枚胶囊收进地点卡——只留一行状态 + ✓/✕，不再两个提示。 */
+it('folds the pending range into the place card instead of a second popup', () => {
+  const place = { id: 'dock', name: '水上森林码头', address: '青山湖景区', lng: 120.01, lat: 30 };
+  const onConfirm = vi.fn();
+  const onCancel = vi.fn();
+  const onVenueConfirm = vi.fn();
+  render(
+    <Canvas
+      plan={createStarterOutdoorPlan()}
+      onPlanChange={vi.fn()}
+      selectedSearchPlace={place}
+      onSearchPlaceConfirm={onVenueConfirm}
+      workflowScopePreview
+      onWorkflowScopeConfirm={onConfirm}
+      onWorkflowScopeCancel={onCancel}
+    />,
+  );
+  const card = screen.getByRole('region', { name: `地点详情：${place.name}` });
+  // 一行状态在卡里，两枚图标钮与胶囊同一条路。
+  expect(card.textContent).toContain('候选活动范围（待核对）');
+  // 同一件事不摆两个确认：待核对时「设为活动场地」让位。
+  expect(screen.queryByRole('button', { name: '设为活动场地' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '确认活动范围' }));
+  expect(onConfirm).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: '撤回活动范围预览' }));
+  expect(onCancel).toHaveBeenCalledOnce();
+  expect(onVenueConfirm).not.toHaveBeenCalled();
 });
 
 /** 落场地边界；初始 boundary 层默认锁定，点锁钮解锁后手柄才出现。 */

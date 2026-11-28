@@ -4088,6 +4088,11 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
 .sc-map-place-card p { margin: 8px 0 12px; color: var(--ink-soft, #71767e); font-size: 12px; line-height: 1.5; }
 .sc-map-place-close { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 20px; }
 .sc-map-place-confirm { margin-top: 4px; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--green-deep, #315b43); color: #fff; cursor: pointer; font-size: 12px; }
+/* 2026-11-28 「不能是两个提示弹窗」：候选活动范围待核对收进地点卡，一行状态 + 两枚图标钮。 */
+.sc-map-place-pending { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair, #e5e7eb); }
+.sc-map-place-pending-text { flex: 1; color: var(--ink-soft, #71767e); font-size: 12px; line-height: 1.4; }
+.sc-map-place-pending-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--hair, #e5e7eb); border-radius: 8px; background: var(--plane, #fff); color: inherit; cursor: pointer; }
+.sc-map-place-pending-icon:hover { background: rgba(20, 20, 22, 0.05); }
 .sc-plan-place-search-field:focus-within .sc-plan-place-search-icon {
   color: var(--sc-ink, #141416);
 }
