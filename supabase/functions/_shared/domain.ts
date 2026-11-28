@@ -134,15 +134,30 @@ const sceneObjectsSchema=z.array(objectSchema).max(500).superRefine((objects,ctx
  * A zone is the user's own say on where a room is: it never asserts capacity,
  * a verified clearance or a checked fire path.
  */
+/**
+ * 场景分区（scene 线格式，2026-11-28 review 切片）：几何从矩形切到多边形环。
+ * - 新形状：`polygon` 闭合环（3–32 点，venue 绝对帧 {x,z}，与 object.position 同帧）；
+ * - 旧矩形 `x/z/w/d` 只读兼容：历史云端场景照常解析，读侧适配层实时展环，不回写、不批量迁移；
+ * - 两种几何只能携带其一；混装或缺几何拒收。
+ */
 export const sceneZoneSchema=z.strictObject({
   id:z.string().trim().min(1).max(128),
   name:z.string().trim().min(1).max(120),
   color:colorSchema,
   zoneType:z.enum(['roundtable','checkin','photo','rest','desk','reserved']).optional(),
-  x:z.number().min(-200).max(400),
-  z:z.number().min(-200).max(400),
-  w:z.number().gt(0).max(400),
-  d:z.number().gt(0).max(400),
+  polygon:z.array(pointSchema).min(3).max(32).optional(),
+  /** 旧矩形契约（只读兼容；写侧新数据落 polygon）。 */
+  x:z.number().min(-200).max(400).optional(),
+  z:z.number().min(-200).max(400).optional(),
+  w:z.number().gt(0).max(400).optional(),
+  d:z.number().gt(0).max(400).optional(),
+}).superRefine((zone,ctx)=>{
+  const hasPoly=zone.polygon!==undefined;
+  const rectParts=[zone.x,zone.z,zone.w,zone.d];
+  const hasRect=rectParts.some(v=>v!==undefined);
+  if(hasPoly&&hasRect)ctx.addIssue({code:'custom',message:'分区不能同时携带多边形与矩形'});
+  if(!hasPoly&&!hasRect)ctx.addIssue({code:'custom',message:'分区缺少多边形顶点或矩形尺寸'});
+  if(hasRect&&rectParts.some(v=>v===undefined))ctx.addIssue({code:'custom',message:'矩形分区必须带齐 x/z/w/d'});
 });
 const sceneZonesSchema=z.array(sceneZoneSchema).max(32);
 const sceneCommon={venue:venueSchema,objects:sceneObjectsSchema,zones:sceneZonesSchema.optional(),scenePreset:z.enum(presetKeys).optional(),camera:z.enum(['overview','top','customer']),lighting:z.enum(['neutral','warm','cool']),editor:planEditorSchema.optional()};

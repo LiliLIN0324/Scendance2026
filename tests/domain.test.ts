@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest';
-import { sceneSchema,sceneWarnings,sceneHash,canonical } from '../supabase/functions/_shared/domain.ts';
+import { sceneSchema,sceneWarnings,sceneHash,canonical,sceneZoneSchema } from '../supabase/functions/_shared/domain.ts';
 import { buildProposal } from '../supabase/functions/_shared/ai.ts';
 import { scene,chair } from './fixtures.ts';
 
@@ -73,5 +73,31 @@ describe('T-01 venue site contract',()=>{
   it('keeps parsing legacy scenes that carry neither site nor heightSource',()=>{
     expect(sceneSchema.safeParse(scene()).success).toBe(true);
     expect(v2().success).toBe(true);
+  });
+});
+
+describe('scene zone contract（矩形→多边形，旧矩形只读兼容）',()=>{
+  const base={id:'zone-1',name:'休息区',color:'#4a7c59',zoneType:'rest' as const};
+  it('旧矩形 x/z/w/d 照常解析（历史云端场景兼容，不回写）',()=>{
+    const legacy=sceneZoneSchema.parse({...base,x:2,z:1,w:2.2,d:1.6});
+    expect(legacy.polygon).toBeUndefined();
+    expect(legacy.x).toBe(2);expect(legacy.w).toBe(2.2);
+  });
+  it('新多边形环往返逐点保留',()=>{
+    const polygon=[{x:0,z:0},{x:4,z:0},{x:4,z:3},{x:0,z:3}];
+    const parsed=sceneZoneSchema.parse({...base,polygon});
+    expect(parsed.polygon).toEqual(polygon);
+    expect(parsed.x).toBeUndefined();
+  });
+  it('拒收混装多边形与矩形',()=>{
+    expect(sceneZoneSchema.safeParse({...base,polygon:[{x:0,z:0},{x:4,z:0},{x:0,z:4}],x:2,z:1,w:2,d:1}).success).toBe(false);
+  });
+  it('拒收两种几何都缺的分区',()=>{
+    expect(sceneZoneSchema.safeParse({...base}).success).toBe(false);
+  });
+  it('拒收矩形缺字段、多边形不足三点、越界坐标',()=>{
+    expect(sceneZoneSchema.safeParse({...base,x:2,z:1,w:2.2}).success).toBe(false);
+    expect(sceneZoneSchema.safeParse({...base,polygon:[{x:0,z:0},{x:4,z:0}]}).success).toBe(false);
+    expect(sceneZoneSchema.safeParse({...base,polygon:[{x:-300,z:0},{x:4,z:0},{x:0,z:4}]}).success).toBe(false);
   });
 });

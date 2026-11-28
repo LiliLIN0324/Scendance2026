@@ -136,14 +136,18 @@ export function backendSceneToLayout(input: unknown, options: BackendAdapterOpti
   } else items.push(...scene.venue.entrances.map(e => entranceItem(e, scene.venue)));
   const planSettings = sanitizePlanEditor(scene.editor);
   // Wire zones are venue-absolute like object positions; the layout frame is room-centred.
-  // 过渡适配层：sceneZoneSchema 仍是矩形契约（本批不改 schema），读入时矩形实时展成环。
+  // 过渡适配层：新数据带 polygon 环直接换算；旧矩形只读兼容，读入时实时展成环，不回写旧包。
   const zones: RoomZone[] = (scene.zones ?? []).flatMap(zone => {
-    const polygon = rectToZoneRing({
-      x: zone.x - scene.venue.width / 2,
-      z: zone.z - scene.venue.depth / 2,
-      w: zone.w,
-      d: zone.d,
-    });
+    const offsetX = scene.venue.width / 2;
+    const offsetZ = scene.venue.depth / 2;
+    const polygon = zone.polygon
+      ? zone.polygon.map(point => ({ x: point.x - offsetX, z: point.z - offsetZ }))
+      : rectToZoneRing({
+          x: (zone.x ?? 0) - offsetX,
+          z: (zone.z ?? 0) - offsetZ,
+          w: zone.w ?? 0,
+          d: zone.d ?? 0,
+        });
     if (!polygon) return [];
     return [{
       id: zone.id, name: zone.name, color: zone.color,
