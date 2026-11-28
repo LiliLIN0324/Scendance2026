@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendSceneToLayout, layoutToBackendScene } from '../components/room-organizer/lib/backend-adapter';
 import { assertGeometryActionSource, geometryProjectId, hasRequestedCloudProject, isEditorLocalProjectLink, isLocalActivityWorkspace } from './geometry-workbench';
-import { readSourceRecord } from './source-storage';
+import { listSourceRecords, readSourceRecord } from './source-storage';
 import type { BackendSession, BackendSnapshot } from './backend-session';
 
-vi.mock('./source-storage', () => ({ readSourceRecord: vi.fn(), updateSourceForm: vi.fn() }));
+vi.mock('./source-storage', () => ({ readSourceRecord: vi.fn(), updateSourceForm: vi.fn(), listSourceRecords: vi.fn() }));
 const localId = 'house-geometry-rehearsal', remoteId = '10000000-0000-4000-8000-000000000001';
 const scene = { schemaVersion: 1 as const, venue: { width: 10, depth: 8, height: 3, shape: 'rectangle' as const, entrances: [] }, objects: [], camera: 'overview' as const, lighting: 'neutral' as const };
 function session(kind: 'local' | 'geometry' | 'cloud' | 'invalid' = 'local') {
@@ -13,7 +13,7 @@ function session(kind: 'local' | 'geometry' | 'cloud' | 'invalid' = 'local') {
   } as BackendSnapshot;
   return { getSnapshot: () => state, isGeometryBound: (id: string) => kind === 'geometry' && id === localId } as BackendSession;
 }
-beforeEach(() => vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined));
+beforeEach(() => { vi.mocked(readSourceRecord).mockReset().mockResolvedValue(undefined); vi.mocked(listSourceRecords).mockResolvedValue([]); });
 
 describe('local activity and remote scene boundaries', () => {
   it('本机案例链接可新建本机活动，缺记录或真实云链接仍保留云项目守卫', () => {
@@ -114,8 +114,11 @@ describe('local activity and remote scene boundaries', () => {
     const layout = backendSceneToLayout(scene, { projectId: localId });
     await expect(assertGeometryActionSource({ ...layout, productionPlan: { broken: true } as never }, session())).rejects.toThrow('无法完整核对');
     expect(readSourceRecord).not.toHaveBeenCalled();
-    vi.mocked(readSourceRecord).mockRejectedValueOnce(new Error('原记录读取失败'));
+    // D9-2 懒迁移探针先读 marker / 新键（失败容忍，不抛）；第三次才是权威台账读取，
+    // 台账读取失败必须上抛阻断场景工作，不能被迁移兜住。
+    vi.mocked(readSourceRecord).mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('原记录读取失败'));
     await expect(assertGeometryActionSource(layout, session())).rejects.toThrow('原记录读取失败');
+    expect(readSourceRecord).toHaveBeenLastCalledWith(['material-checkins', localId]);
     vi.mocked(readSourceRecord).mockResolvedValue({ schemaVersion: 1, projectId: 'another', dataKind: 'rehearsal', sheets: [] });
     await expect(assertGeometryActionSource(layout, session())).rejects.toThrow('另一个项目');
   });

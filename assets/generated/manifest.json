@@ -36,7 +36,7 @@
     },
     {
       "slug": "scendance-m3-mvp",
-      "name": "宴会厅 A",
+      "name": "小场地 A",
       "kind": "scene",
       "file": "scene/scendance-m3-mvp.spz",
       "preview": "scene/scendance-m3-mvp.panorama.jpg",
@@ -48,7 +48,7 @@
     },
     {
       "slug": "small-launch-hall",
-      "name": "发布会小厅",
+      "name": "小场地 B",
       "kind": "scene",
       "file": "scene/small-launch-hall.spz",
       "preview": "scene/small-launch-hall.panorama.jpg",
@@ -62,7 +62,7 @@
     },
     {
       "slug": "cloud-e2e-banquet",
-      "name": "宴会厅 B",
+      "name": "小场地 C",
       "kind": "scene",
       "file": "scene/cloud-e2e-banquet.spz",
       "preview": "scene/cloud-e2e-banquet.panorama.jpg",
