@@ -2092,10 +2092,14 @@ body.is-theme-dark .sc-material-tagpin {
   content: none;
 }
 /* 桌面：左轨和旁边的侧栏是同一张浮起的纸。阴影只打在这一组外缘，中间仍是发丝线。
-   工作台 overflow:hidden，所以组要缩进，影子才不会被切掉。 */
+   工作台 overflow:hidden，所以组要缩进，影子才不会被切掉。
+   2026-11-28 用户：「左边有 border 和圆角，右边又贴边」——原来这张纸只管到左栏，
+   画布是一块方角、右侧只留 8px 的裸面（+ 户外 2D 的 surface 用 inset:0 把 8px 垫边也盖掉），
+   同一个窗口左右两种收口。现在纸张从轨道一直画到画布：四周留白一律 10px，
+   外缘圆角 16px（左端归轨道，右端归画布），画布裁内容让地图跟着圆角走。 */
 @media (min-width: 769px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
-    padding: 10px 8px 10px 10px;
+    padding: 10px;
     box-sizing: border-box;
   }
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail > .sc-mode-rail {
@@ -2113,13 +2117,37 @@ body.is-theme-dark .sc-material-tagpin {
     border-radius: 16px;
     box-shadow: var(--e1);
   }
+  /* 纸张中段：左栏右侧不再收口（否则与画布相接处会挤出一个月牙缝），改由画布收口。 */
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column:not(.is-empty-dock) > .sc-left-column {
     border-right: 0;
+    border-radius: 0;
+  }
+  /* 纸张右端 = 画布：自己也是一张卡，右侧 16px 圆角收口（左端归轨道，中段是左栏）。
+     轨道收进（is-chrome-hidden）时画布自己就是整张纸，四角全圆。 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage {
     border-radius: 0 16px 16px 0;
+    border: 1px solid var(--wk-hair);
+    background: var(--wk-paper);
+    box-shadow: var(--e1);
+  }
+  /* 只裁地图本体（户外 2D 的 surface）：瓦片是 img/canvas 混排，不裁就盖住纸张的圆角。
+     不动画布栏自身的 overflow——工具提示 / 拖拽幽灵这些向外出头的浮层不在裁剪范围。 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage [data-testid="outdoor-plan-surface"] {
+    border-radius: 0 16px 16px 0;
+    overflow: hidden;
+  }
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden > .sc-canvas-stage,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden > .sc-canvas-stage [data-testid="outdoor-plan-surface"] {
+    border-radius: 16px;
+  }
+  /* 3D 场景视图自带 12px 圆角，装在 16px 的纸张里会在四角留白月牙；跟随纸张口径。 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage .sc-scene-viewport {
+    border-radius: 16px;
   }
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail:not(.has-left-column) > .sc-mode-rail,
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-empty-dock > .sc-mode-rail {
-    border-radius: 16px;
+    /* 右侧不再圆：右边永远接着画布（同一张纸），轨道只是纸的左端。 */
+    border-radius: 16px 0 0 16px;
     border-right: 0;
     box-shadow: var(--e1);
   }
