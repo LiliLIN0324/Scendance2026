@@ -1,11 +1,12 @@
 'use client';
 
-import { BookOpen, Check, FolderOpen, HelpCircle, Home, Images, Info, MessageSquare, Palette, Settings, UserRound, UsersRound } from '@/components/solid-icons';
+import { BookOpen, Check, Crown, FolderOpen, HelpCircle, Home, Images, Info, MessageSquare, Palette, Settings, UserRound, UsersRound } from '@/components/solid-icons';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { APPEARANCE_LABELS, APPEARANCE_MODE_ORDER, type AppearanceMode } from '../lib/appearance';
 import { AboutDialog } from './about-dialog';
 import { FeedbackDialog, type FeedbackPlanContext } from './feedback-dialog';
+import { openUpgradeModal, UpgradeModalMount } from '@/components/pay/upgrade-modal';
 
 const GUIDE_URL = '/guide';
 const HOME_URL = '/introduction';
@@ -250,6 +251,7 @@ export function AccountMenu({
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenProjects(); }}><FolderOpen size={15} aria-hidden="true"/>所有方案</button>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenAssets(); }}><Images size={15} aria-hidden="true"/>物料</button>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenTeam(); }}><UsersRound size={15} aria-hidden="true"/>团队</button>
+      <button type="button" role="menuitem" onClick={() => openSupportItem(openUpgradeModal)}><Crown size={15} aria-hidden="true"/>会员与升级</button>
       <button type="button" role="menuitem" onClick={() => { onClose(); onOpenSettings(); }}><Settings size={15} aria-hidden="true"/>设置</button>
       {onAppearanceModeChange ? (
         <div
@@ -408,5 +410,6 @@ export function AccountMenu({
     {menu}
     <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} {...(plan ? { plan } : {})} {...(onCapturePlan ? { onCapturePlan } : {})} />
     <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+    <UpgradeModalMount />
   </>;
 }

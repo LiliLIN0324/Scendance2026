@@ -1,0 +1,163 @@
+/* 升级弹窗：OnePlan 式居中浮层（非全屏）。E2 是规范模态层阴影；分区 hair 线。 */
+.upm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5, 24px);
+  background: rgba(20, 20, 22, 0.44);
+  animation: upm-fade var(--dur-2, 200ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1));
+}
+
+@keyframes upm-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.upm {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  width: min(1020px, 100%);
+  /* OnePlan 式尺寸稳定：高度锁死，周期切换等内容变化由左栏滚动吸收，
+     弹窗整体不随内容跳变。 */
+  height: min(680px, calc(100vh - 48px));
+  border-radius: var(--r-lg, 18px);
+  background: var(--paper, #fff);
+  box-shadow: var(--e2, 0 16px 48px rgba(20, 20, 22, 0.18));
+  overflow: hidden;
+  animation: upm-rise var(--dur-2, 200ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1));
+  /* 不设亮色覆盖：明暗两套皮肤由 body.is-theme-dark 的 L1 映射下发
+     （globals.css §外观模式 · 深色作用域：工作台外壳与 portal 对话框）。 */
+  color: var(--ink, #141416);
+}
+
+.upm-head {
+  margin-bottom: var(--sp-4, 16px);
+}
+
+.upm-title {
+  margin: 0 0 4px;
+  font-size: var(--fs-h2, 20px);
+  line-height: var(--lh-h2, 28px);
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: var(--ink, #141416);
+}
+
+.upm-lead {
+  margin: 0;
+  font-size: var(--fs-p1, 14px);
+  line-height: var(--lh-p1, 22px);
+  color: var(--wk-muted, #71767E);
+}
+
+@keyframes upm-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+.upm-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--hair, #E4E4E7);
+  border-radius: 8px;
+  background: var(--paper, #fff);
+  color: var(--ink-soft, #55585F);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.upm-main {
+  padding: var(--sp-5, 24px) var(--sp-5, 24px) var(--sp-4, 16px);
+  overflow-y: auto;
+}
+
+/* 右栏：--plane 纸面 + hair 分隔，纯白规范，不用渐变色块。 */
+.upm-aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: var(--sp-5, 24px);
+  padding-right: var(--sp-6, 32px);
+  border-left: 1px solid var(--hair, #E4E4E7);
+  background: var(--plane, #F4F5F7);
+}
+
+.upm-shot {
+  border-radius: var(--r-md, 14px);
+  background: var(--paper, #fff);
+  border: 1px solid var(--hair, #E4E4E7);
+  padding: 10px;
+}
+
+.upm-shot-bar {
+  display: flex;
+  gap: 5px;
+  padding: 2px 2px 9px;
+}
+
+.upm-shot-bar i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--hair, #E4E4E7);
+}
+
+.upm-shot-cap {
+  margin: 0;
+  padding: 8px 4px 2px;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  color: var(--wk-muted, #71767E);
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .upm {
+    grid-template-columns: 1fr;
+    height: calc(100vh - 48px);
+  }
+
+  .upm-aside {
+    display: none;
+  }
+}
+
+/* 暗色下遮罩压深一档，弹窗边界靠 E2 抬离暗底。 */
+body.is-theme-dark .upm-overlay {
+  background: rgba(0, 0, 0, 0.58);
+}
+
+/* 收银台视图：结账打开后收起档位选择，聚焦支付（OnePlan 点 Subscribe
+   进收银台的对应物；支付宝当面付没有托管页，商家自建收银台 + 二维码）。
+   :has() 纯 CSS 切换，弹窗整体尺寸保持不动。 */
+.upm-main:has(.mem-checkout) .mem-toolbar,
+.upm-main:has(.mem-checkout) .mem-grid,
+.upm-main:has(.mem-checkout) .upm-head {
+  display: none;
+}
+
+.upm-main:has(.mem-checkout) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-top: var(--sp-4, 16px);
+}
+
+.upm-main:has(.mem-checkout) .mem-checkout {
+  border: 0;
+  padding: 0;
+}

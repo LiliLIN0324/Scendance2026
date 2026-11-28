@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { consume, createOrder, getOrder, release } from './client';
+import { consume, createOrder, getOrder, getSubscription, release } from './client';
 import { MemoryStorage } from '../test-support-memory-storage';
 
 /**
@@ -60,5 +60,46 @@ describe('pay client mock', () => {
 
   it('没买就扣次返回 INSUFFICIENT_CREDITS', async () => {
     await expect(consume({ jobId: 'job-c' })).rejects.toMatchObject({ code: 'INSUFFICIENT_CREDITS' });
+  });
+});
+
+describe('pay client mock 订阅', () => {
+  it('订阅下单即到账，kind / planCode / 周期写入订单', async () => {
+    const created = await createOrder({ sku: 'sub_pro_y' });
+    expect(created.mode).toBe('mock');
+    expect(created.order.kind).toBe('subscription');
+    expect(created.order.planCode).toBe('pro');
+    expect(created.order.periodMonths).toBe(12);
+    expect(created.order.timesPurchased).toBe(0);
+    expect(created.order.amountCents).toBe(99900);
+    expect(created.subscription?.planCode).toBe('pro');
+    expect(created.subscription?.seats).toBe(1);
+    expect(created.subscription?.periodEnd).toBeTruthy();
+  });
+
+  it('getSubscription 反映最新订阅：按月 +1 个月，团队版 3 席位', async () => {
+    await createOrder({ sku: 'sub_pro_m' });
+    const monthly = await getSubscription();
+    expect(monthly.subscription.planCode).toBe('pro');
+    const end = new Date(monthly.subscription.periodEnd ?? '');
+    expect(end.getTime()).toBeGreaterThan(Date.now() + 27 * 86400000);
+    expect(end.getTime()).toBeLessThan(Date.now() + 32 * 86400000);
+
+    await createOrder({ sku: 'sub_team_m' });
+    const team = await getSubscription();
+    expect(team.subscription.planCode).toBe('team');
+    expect(team.subscription.seats).toBe(3);
+  });
+
+  it('订阅单不进次数额度池：只有订阅时扣次报不足', async () => {
+    await createOrder({ sku: 'sub_pro_y' });
+    await expect(consume({ jobId: 'job-sub', attempt: 1 })).rejects.toMatchObject({ code: 'INSUFFICIENT_CREDITS' });
+  });
+
+  it('没有订阅时返回免费基线', async () => {
+    const { subscription } = await getSubscription();
+    expect(subscription.planCode).toBe('free');
+    expect(subscription.seats).toBe(1);
+    expect(subscription.periodEnd).toBeNull();
   });
 });

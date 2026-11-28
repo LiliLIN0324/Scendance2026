@@ -1,0 +1,392 @@
+/* 会员订阅区块：冷石画廊白规范（docs/05-设计规范.md v2.5）。
+   层级只靠字号、字重、灰度三根轴；品牌绿只作选中指示与小徽标，
+   主按钮一律墨底白字；分区靠 1px 发丝线，不用阴影。 */
+.mem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4, 16px);
+}
+
+.mem-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 12px);
+  flex-wrap: wrap;
+}
+
+/* 周期胶囊：选中指示是品牌绿的两处许可之一（小面积控件）。 */
+.mem-cycle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-sm, 10px);
+  background: var(--plane-deep, #ECEDEF);
+}
+
+.mem-cycle-btn {
+  padding: 6px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-p1, 14px);
+  line-height: var(--lh-p1, 22px);
+  color: var(--wk-muted, #71767E);
+  cursor: pointer;
+}
+
+.mem-cycle-btn--on {
+  background: var(--green-pale, #EEF3EF);
+  color: var(--green-deep, #35624A);
+  font-weight: 600;
+}
+
+.mem-status {
+  margin-left: auto;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  color: var(--wk-muted, #71767E);
+}
+
+.mem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-3, 12px);
+}
+
+.mem-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2, 8px);
+  padding: var(--sp-3, 12px);
+  border: 1px solid var(--hair, #E4E4E7);
+  border-radius: var(--r-md, 14px);
+  background: var(--paper, #fff);
+}
+
+.mem-card--hot {
+  /* 推荐档不铺绿、不描绿边：靠字重与徽标区分。 */
+  border-color: var(--ink, #141416);
+}
+
+.mem-card-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-p1, 14px);
+  line-height: var(--lh-p1, 22px);
+  font-weight: 600;
+  color: var(--ink, #141416);
+}
+
+.mem-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--green-pale, #EEF3EF);
+  color: var(--green-deep, #35624A);
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  font-weight: 600;
+}
+
+.mem-card-tagline {
+  margin: 0;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  color: var(--wk-muted, #71767E);
+  min-height: 40px;
+}
+
+.mem-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.mem-price b {
+  font-size: var(--fs-h2, 20px);
+  line-height: var(--lh-h2, 28px);
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--ink, #141416);
+}
+
+/* 周期切换动效：价格与副行 120ms 淡入上移；key 挂在元素上触发。 */
+.mem-swap {
+  animation: mem-swap var(--dur-1, 120ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1));
+}
+
+@keyframes mem-swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mem-swap {
+    animation: none;
+  }
+}
+
+.mem-price i {
+  font-style: normal;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  color: var(--wk-muted, #71767E);
+}
+
+.mem-price-note {
+  margin: -4px 0 0;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  color: var(--wk-muted, #71767E);
+}
+
+.mem-features {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mem-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  color: var(--ink-soft, #55585F);
+}
+
+/* 确认勾选用墨色；不提供项用 faint 加减号。 */
+.mem-features li svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--ink, #141416);
+}
+
+.mem-feature--off {
+  color: var(--faint, #A6AAB2);
+}
+
+.mem-feature--off svg {
+  color: var(--faint, #A6AAB2);
+}
+
+.mem-card-fact {
+  margin: 0;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  color: var(--wk-muted, #71767E);
+}
+
+/* 主按钮：墨底白字（--primary 口径）；hover 落品牌绿 hover 档。 */
+.mem-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--r-sm, 10px);
+  background: var(--ink, #141416);
+  color: var(--paper, #fff);
+  font: inherit;
+  font-size: var(--fs-p1, 14px);
+  line-height: var(--lh-p1, 22px);
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: auto;
+  transition: background var(--dur-1, 120ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1));
+}
+
+.mem-cta:hover {
+  background: var(--green-deep, #35624A);
+}
+
+.mem-cta:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.mem-cta--ghost {
+  background: var(--paper, #fff);
+  color: var(--wk-muted, #71767E);
+  border: 1px solid var(--hair, #E4E4E7);
+}
+
+.mem-cta--ghost:hover {
+  background: var(--plane-deep, #ECEDEF);
+}
+
+.mem-spin {
+  animation: mem-spin 0.9s linear infinite;
+}
+
+@keyframes mem-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 结账抽屉：E2 属模态层；页内展开只加 hair 边，不叠阴影。 */
+.mem-checkout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--sp-4, 16px);
+  border: 1px solid var(--hair, #E4E4E7);
+  border-radius: var(--r-md, 14px);
+  background: var(--paper, #fff);
+}
+
+.mem-checkout-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+}
+
+/* 返回档位选择：文字按钮，OnePlan 收银台的「← Back」位置。 */
+.mem-back {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--hair, #E4E4E7);
+  border-radius: 8px;
+  background: var(--paper, #fff);
+  color: var(--ink-soft, #55585F);
+  font: inherit;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  cursor: pointer;
+}
+
+.mem-back:hover {
+  background: var(--plane, #F4F5F7);
+}
+
+.mem-checkout-title {
+  margin: 0;
+  font-size: var(--fs-h3, 16px);
+  line-height: var(--lh-h3, 24px);
+  font-weight: 600;
+  color: var(--ink, #141416);
+}
+
+.mem-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+}
+
+.mem-pill--wait {
+  background: rgba(150, 101, 31, 0.08);
+  color: var(--warn, #96651F);
+  border: 1px solid rgba(150, 101, 31, 0.24);
+}
+
+.mem-pill--live {
+  background: var(--green-pale, #EEF3EF);
+  color: var(--green-deep, #35624A);
+  border: 1px solid rgba(53, 98, 74, 0.3);
+}
+
+.mem-mode {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-cap, 11px);
+  line-height: var(--lh-cap, 16px);
+  border: 1px solid var(--hair, #E4E4E7);
+  color: var(--wk-muted, #71767E);
+}
+
+.mem-mode--mock {
+  border-color: rgba(150, 101, 31, 0.24);
+  background: rgba(150, 101, 31, 0.08);
+  color: var(--warn, #96651F);
+}
+
+.mem-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.mem-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  color: var(--wk-muted, #71767E);
+}
+
+.mem-rows dt {
+  margin: 0;
+}
+
+.mem-rows dd {
+  margin: 0;
+  color: var(--ink-soft, #55585F);
+}
+
+.mem-row-total {
+  padding-top: 8px;
+  border-top: 1px solid var(--hair, #E4E4E7);
+}
+
+.mem-row-total dt,
+.mem-row-total dd {
+  color: var(--ink, #141416);
+  font-weight: 600;
+}
+
+.mem-qrbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r-sm, 10px);
+  background: var(--plane, #F4F5F7);
+}
+
+.mem-qr {
+  display: block;
+  border-radius: var(--r-sm, 10px);
+}
+
+/* 支付宝标识蓝是外部品牌色，不属于页面品牌色配额。 */
+.mem-alipay {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #1677ff;
+  color: #fff;
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  font-weight: 600;
+}
+
+.mem-fact {
+  font-size: var(--fs-cap, 11px);
+  line-height: 1.55;
+  color: var(--wk-muted, #71767E);
+}
+
+.mem-error {
+  font-size: var(--fs-p2, 12px);
+  line-height: var(--lh-p2, 20px);
+  color: var(--err, #B4443C);
+}

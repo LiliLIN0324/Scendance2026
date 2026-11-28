@@ -7,10 +7,12 @@ import { PAY_SKUS, formatYuan, type SkuCode } from '@/lib/pay/skus';
 import {
   createOrder,
   deviceOwnerKey,
+  fetchEntitlement,
   getOrder,
   isMockMode,
   latestPaidOrder,
   modeLabel,
+  payProvider,
   type PayMode,
   type PayOrderView,
 } from '@/lib/pay/client';
@@ -26,12 +28,16 @@ function formatTime(value: string | null): string {
 export function PriceCard({ compact = false }: { compact?: boolean }) {
   const [sku, setSku] = useState<SkuCode>('scan_3');
   const [order, setOrder] = useState<PayOrderView | null>(null);
-  const [mode, setMode] = useState<PayMode>(isMockMode() ? 'mock' : 'live');
+  const [mode, setMode] = useState<PayMode>(isMockMode() ? 'mock' : payProvider === 'aichashou' ? 'sandbox' : 'live');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showInfo, setShowInfo] = useState(false);
   const [qr, setQr] = useState('');
   const [payUrl, setPayUrl] = useState('');
+  /** 爱猹收通道：平台购买链接/二维码与到账后的剩余次数（null = 不在爱猹收流程）。 */
+  const [purchaseUrl, setPurchaseUrl] = useState('');
+  const [qrImageUrl, setQrImageUrl] = useState('');
+  const [quotaRemaining, setQuotaRemaining] = useState<number | null>(null);
   const pollTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -76,11 +82,47 @@ export function PriceCard({ compact = false }: { compact?: boolean }) {
     }, 2000);
   };
 
+  const pollQuotaAccess = (tries: number) => {
+    stopPolling();
+    if (tries <= 0) return;
+    pollTimer.current = window.setTimeout(async () => {
+      try {
+        const { entitlement } = await fetchEntitlement('quota');
+        if (entitlement.access === 'granted') {
+          setQrImageUrl('');
+          setPurchaseUrl('');
+          setQuotaRemaining(entitlement.entitlement?.remaining ?? 0);
+          return;
+        }
+        pollQuotaAccess(tries - 1);
+      } catch {
+        pollQuotaAccess(tries - 1);
+      }
+    }, 2000);
+  };
+
   const buy = async () => {
     if (busy) return;
     setBusy(true);
     setError('');
     try {
+      if (payProvider === 'aichashou') {
+        // 爱猹收通道：额度包托管在平台，access 直接给出收银链接与二维码。
+        setOrder(null);
+        setMode('sandbox');
+        const { entitlement } = await fetchEntitlement('quota');
+        if (entitlement.access === 'purchase_required' && entitlement.purchase) {
+          setPurchaseUrl(entitlement.purchase.url);
+          setQrImageUrl(entitlement.purchase.qr_code_url ?? '');
+          pollQuotaAccess(60);
+          return;
+        }
+        if (entitlement.access === 'granted') {
+          setQuotaRemaining(entitlement.entitlement?.remaining ?? null);
+          return;
+        }
+        throw new Error(entitlement.reason?.message ?? '支付暂不可用，请稍后再试');
+      }
       const result = await createOrder({ sku, ownerKey: deviceOwnerKey() });
       setOrder(result.order);
       setMode(result.mode);
@@ -93,8 +135,10 @@ export function PriceCard({ compact = false }: { compact?: boolean }) {
     }
   };
 
-  const paid = order?.status === 'paid';
-  const pending = order?.status === 'pending';
+  const aichashouPending = payProvider === 'aichashou' && Boolean(purchaseUrl) && quotaRemaining === null;
+  const aichashouPaid = payProvider === 'aichashou' && quotaRemaining !== null && !purchaseUrl;
+  const paid = order?.status === 'paid' || aichashouPaid;
+  const pending = order?.status === 'pending' || aichashouPending;
 
   return (
     <div className={`pay-card${compact ? ' pay-card--compact' : ''}`}>
@@ -152,13 +196,26 @@ export function PriceCard({ compact = false }: { compact?: boolean }) {
             {paid ? `剩余 ${order.remaining} 次` : '支付后自动到账'}
           </span>
         )}
+        {!order && quotaRemaining !== null && (
+          <span className="pay-remaining">剩余 {quotaRemaining} 次</span>
+        )}
       </div>
 
       {error && <span className="pay-error">{error}</span>}
       {pending && qr && <img className="pay-qr" src={qr} alt="支付宝支付二维码" width={220} height={220} />}
-      {pending && !qr && <span className="pay-hint">支付通道已创建，等待支付宝回调；回调丢失时本页会自动查询补偿。</span>}
+      {pending && !qr && qrImageUrl && (
+        <img className="pay-qr" src={qrImageUrl} alt="支付宝支付二维码" width={220} height={220} />
+      )}
+      {pending && purchaseUrl && (
+        <a className="pay-qr-link" href={purchaseUrl} target="_blank" rel="noopener noreferrer">
+          打开支付宝支付页
+        </a>
+      )}
+      {pending && !qr && !qrImageUrl && !purchaseUrl && (
+        <span className="pay-hint">支付通道已创建，等待支付宝回调；回调丢失时本页会自动查询补偿。</span>
+      )}
 
-      {order && (
+      {order ? (
         <section className="pay-receipt" aria-label="支付凭证">
           <header className="pay-receipt-head">
             <span className="pay-icon" aria-hidden>
@@ -192,7 +249,31 @@ export function PriceCard({ compact = false }: { compact?: boolean }) {
           </dl>
           <span className="pay-receipt-foot">凭证可截图；真实收款以支付宝账单为准。</span>
         </section>
-      )}
+      ) : aichashouPaid && quotaRemaining !== null ? (
+        <section className="pay-receipt" aria-label="支付凭证">
+          <header className="pay-receipt-head">
+            <span className="pay-icon" aria-hidden>
+              <ReceiptText size={16} strokeWidth={1.75} />
+            </span>
+            <span>支付凭证</span>
+            <span className="pay-receipt-state">
+              <Check size={14} strokeWidth={1.75} /> 已到账
+            </span>
+            <span className="pay-receipt-mode">{modeLabel(mode)}</span>
+          </header>
+          <dl className="pay-receipt-rows">
+            <div>
+              <dt>剩余重建</dt>
+              <dd>{quotaRemaining} 次</dd>
+            </div>
+            <div>
+              <dt>本次购买</dt>
+              <dd>{formatYuan(PAY_SKUS.find(item => item.code === sku)?.amountCents ?? 0)}</dd>
+            </div>
+          </dl>
+          <span className="pay-receipt-foot">次数托管在爱猹收平台，重建提交时原子扣减。</span>
+        </section>
+      ) : null}
     </div>
   );
 }

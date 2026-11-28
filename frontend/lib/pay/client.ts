@@ -2,13 +2,17 @@
 
 // 付费客户端：有后端地址走真实通道，没有则走本地 mock（PAY_MOCK）。
 // 金额只作展示；下单只传 sku code，成交金额由后端 pay_skus 表决定。
-import { findSku, type SkuCode } from './skus';
+import { findSku, findSubscriptionSku, type OrderSkuCode, type PlanCode } from './skus';
 
 export type PayMode = 'mock' | 'sandbox' | 'live';
 
 export interface PayOrderView {
   id: string;
   sku: string;
+  /** 订单种类：times = 按次重建，subscription = 会员订阅（pay_orders.kind）。 */
+  kind: 'times' | 'subscription';
+  planCode: PlanCode | null;
+  periodMonths: number | null;
   status: 'pending' | 'paid' | 'cancelled' | 'refunded' | 'expired';
   timesPurchased: number;
   timesUsed: number;
@@ -20,8 +24,18 @@ export interface PayOrderView {
   providerOrderId: string | null;
 }
 
+/** pay_subscription_for 的返回：权益判定的唯一入口，UI 不自己拼 plan 字符串。 */
+export interface SubscriptionView {
+  planCode: PlanCode;
+  seats: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  entitlements: Record<string, unknown> | null;
+}
+
 export interface CreateOrderResult {
   order: PayOrderView;
+  subscription?: SubscriptionView | null;
   mode: PayMode;
   qrCode?: string | null;
   payUrl?: string | null;
@@ -38,6 +52,27 @@ export class PayError extends Error {
 
 const API_BASE = (process.env.NEXT_PUBLIC_PAY_API_BASE ?? '').replace(/\/$/, '');
 const FORCE_MOCK = process.env.NEXT_PUBLIC_PAY_MOCK === '1';
+/**
+ * 支付通道选择：aichashou（PAYATHON 2026 官方收款平台，权益托管）或 alipay
+ * （当面付直连）。服务端 Key 永不进前端；爱猹收的 access/consume 一律经
+ * pay-api 代理（/pay/aichashou/*）。未配置 API_BASE 时仍是本地 mock。
+ */
+export type PayProvider = 'aichashou' | 'alipay';
+export const payProvider: PayProvider =
+  process.env.NEXT_PUBLIC_PAY_PROVIDER === 'aichashou' && API_BASE ? 'aichashou' : 'alipay';
+
+/** 爱猹收 access 接口的响应（经 pay-api 代理透传）。 */
+export interface AccessResult {
+  access: 'granted' | 'purchase_required' | 'unavailable';
+  entitlement?: {
+    type?: 'permanent' | 'duration' | 'quota';
+    starts_at?: number;
+    expires_at?: number;
+    remaining?: number;
+  };
+  purchase?: { url: string; qr_code_url?: string | null };
+  reason?: { code?: string; message?: string };
+}
 
 /** 没有配置后端地址时，本地 mock 兜底，界面必须显示「模拟支付」。 */
 export function isMockMode(): boolean {
@@ -121,27 +156,52 @@ function saveMockConsumptions(list: MockConsumption[]) {
   writeJson(CONSUME_KEY, list);
 }
 
-export async function createOrder(input: { sku: SkuCode; ownerKey?: string }): Promise<CreateOrderResult> {
+export async function createOrder(input: { sku: OrderSkuCode; ownerKey?: string }): Promise<CreateOrderResult> {
   const ownerKey = input.ownerKey ?? deviceOwnerKey();
   if (isMockMode()) {
-    const sku = findSku(input.sku);
-    if (!sku) throw new PayError('SKU_NOT_FOUND');
+    const subSku = findSubscriptionSku(input.sku);
     const now = new Date();
-    const order: PayOrderView = {
-      id: `mock-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      sku: sku.code,
-      status: 'paid',
-      timesPurchased: sku.times,
-      timesUsed: 0,
-      remaining: sku.times,
-      amountCents: sku.amountCents,
-      paidAt: now.toISOString(),
-      createdAt: now.toISOString(),
-      provider: 'mock',
-      providerOrderId: null,
-    };
+    const order: PayOrderView = subSku
+      ? {
+          id: `mock-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          sku: subSku.code,
+          kind: 'subscription',
+          planCode: subSku.planCode,
+          periodMonths: subSku.periodMonths,
+          status: 'paid',
+          timesPurchased: 0,
+          timesUsed: 0,
+          remaining: 0,
+          amountCents: subSku.amountCents,
+          paidAt: now.toISOString(),
+          createdAt: now.toISOString(),
+          provider: 'mock',
+          providerOrderId: null,
+        }
+      : (() => {
+          const sku = findSku(input.sku);
+          if (!sku) throw new PayError('SKU_NOT_FOUND');
+          return {
+            id: `mock-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            sku: sku.code,
+            kind: 'times' as const,
+            planCode: null,
+            periodMonths: null,
+            status: 'paid' as const,
+            timesPurchased: sku.times,
+            timesUsed: 0,
+            remaining: sku.times,
+            amountCents: sku.amountCents,
+            paidAt: now.toISOString(),
+            createdAt: now.toISOString(),
+            provider: 'mock',
+            providerOrderId: null,
+          };
+        })();
     saveMockOrders([...mockOrders(), order]);
-    return { order, mode: 'mock', note: '本地模拟，未发生真实收款' };
+    const result: CreateOrderResult = { order, mode: 'mock', note: '本地模拟，未发生真实收款' };
+    if (subSku) result.subscription = mockSubscriptionFromOrders();
+    return result;
   }
 
   const result = await api<CreateOrderResult>('/pay/create', {
@@ -149,6 +209,105 @@ export async function createOrder(input: { sku: SkuCode; ownerKey?: string }): P
     body: JSON.stringify({ sku: input.sku, ownerKey, anonId: ownerKey }),
   });
   return result;
+}
+
+/** 由 mock 订单推导当前订阅：mock 里下单即到账，订阅终点 = 支付时刻 + 周期。 */
+function mockSubscriptionFromOrders(): SubscriptionView {
+  const paid = mockOrders()
+    .filter(order => order.status === 'paid' && order.kind === 'subscription' && order.planCode)
+    .sort((a, b) => (a.paidAt ?? '').localeCompare(b.paidAt ?? ''));
+  const latest = paid[paid.length - 1];
+  if (!latest?.planCode) {
+    return { planCode: 'free', seats: 1, periodStart: null, periodEnd: null, entitlements: null };
+  }
+  const start = latest.paidAt ?? latest.createdAt ?? new Date().toISOString();
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + Math.max(1, latest.periodMonths ?? 1));
+  return {
+    planCode: latest.planCode,
+    seats: latest.planCode === 'team' ? 3 : 1,
+    periodStart: start,
+    periodEnd: end.toISOString(),
+    entitlements: null,
+  };
+}
+
+/** 当前订阅与权益；免费/过期由后端 pay_subscription_for 统一判定，前端不自拼。 */
+export async function getSubscription(ownerKey?: string): Promise<{ subscription: SubscriptionView; mode: PayMode }> {
+  if (isMockMode()) {
+    return { subscription: mockSubscriptionFromOrders(), mode: 'mock' };
+  }
+  if (payProvider === 'aichashou') {
+    // 爱猹收通道：会员权益由平台托管，access 的 duration 起止映射成订阅视图。
+    // 专业版与团队版是两个权益；team granted 时优先展示团队版。
+    const owner = ownerKey ?? deviceOwnerKey();
+    const pro = await fetchEntitlement('membership', owner);
+    const team = await fetchEntitlement('team', owner).catch(() => null);
+    const pick = (result: { entitlement: AccessResult } | null) =>
+      result && result.entitlement.access === 'granted' && result.entitlement.entitlement?.type === 'duration'
+        ? result.entitlement.entitlement
+        : null;
+    const teamEnt = pick(team);
+    const proEnt = pick(pro);
+    const chosen = teamEnt ?? proEnt;
+    if (chosen?.expires_at) {
+      const plan = teamEnt ? 'team' : 'pro';
+      const start = chosen.starts_at ? chosen.starts_at * 1000 : Date.now();
+      return {
+        subscription: {
+          planCode: plan,
+          seats: teamEnt ? 3 : 1,
+          periodStart: new Date(start).toISOString(),
+          periodEnd: new Date(chosen.expires_at * 1000).toISOString(),
+          entitlements: null,
+        },
+        mode: 'live',
+      };
+    }
+    return { subscription: { planCode: 'free', seats: 1, periodStart: null, periodEnd: null, entitlements: null }, mode: 'live' };
+  }
+  const owner = ownerKey ?? deviceOwnerKey();
+  return api<{ subscription: SubscriptionView; mode: PayMode }>('/pay/subscription', {
+    method: 'POST',
+    body: JSON.stringify({ ownerKey: owner }),
+  });
+}
+
+/**
+ * 爱猹收权益检查（经 pay-api 代理；Key 只在服务端）。
+ * 返回 access 状态与平台生成的购买入口（url = 支付宝收银链接，qr_code_url = 平台二维码图）。
+ * kind：membership = 专业版时长，team = 团队版时长，quota = 重建次数额度。
+ */
+export async function fetchEntitlement(
+  kind: 'membership' | 'team' | 'quota',
+  ownerKey?: string,
+): Promise<{ entitlement: AccessResult; mode: PayMode }> {
+  const owner = ownerKey ?? deviceOwnerKey();
+  const result = await api<{ provider: string; entitlement: AccessResult; mode: PayMode }>('/pay/aichashou/access', {
+    method: 'POST',
+    body: JSON.stringify({ ownerKey: owner, kind }),
+  });
+  return { entitlement: result.entitlement, mode: result.mode };
+}
+
+/** 爱猹收额度原子扣减（幂等键沿用 scan:owner:job:attempt 规则）。余额不足抛 INSUFFICIENT_CREDITS。 */
+async function consumeQuotaViaAichashou(
+  amount: number,
+  idempotencyKey: string,
+  ownerKey?: string,
+): Promise<{ remaining: number }> {
+  const owner = ownerKey ?? deviceOwnerKey();
+  const result = await api<{ result: { consumed?: number; entitlement?: { remaining?: number } } }>('/pay/aichashou/consume', {
+    method: 'POST',
+    body: JSON.stringify({ ownerKey: owner, amount, idempotencyKey }),
+  }).catch((cause: unknown) => {
+    // pay-api 把爱猹收 409 的 error.code=insufficient_quota 透传到外层。
+    if (cause instanceof PayError && cause.code === 'insufficient_quota') {
+      throw new PayError('INSUFFICIENT_CREDITS', cause.message);
+    }
+    throw cause;
+  });
+  return { remaining: result.result?.entitlement?.remaining ?? 0 };
 }
 
 export async function getOrder(orderId: string): Promise<{ order: PayOrderView; mode: PayMode }> {
@@ -189,6 +348,12 @@ export async function consume(input: {
     saveMockOrders(orders);
     saveMockConsumptions([...consumptions, { idempotencyKey, orderId: target.id, times, state: 'reserved' }]);
     return { idempotencyKey, remaining: target.remaining, state: 'reserved', mode: 'mock' };
+  }
+
+  if (payProvider === 'aichashou') {
+    // 爱猹收通道：额度权威在平台，原子扣减 + 幂等键透传。
+    const { remaining } = await consumeQuotaViaAichashou(times, idempotencyKey, ownerKey);
+    return { idempotencyKey, remaining, state: 'consumed', mode: 'live' };
   }
 
   return api('/scan/consume', {

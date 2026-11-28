@@ -1,11 +1,13 @@
-/* 付费卡片：图标优先、单层卡片、说明收进 ⓘ；选中仅 1.5px 绿描边。 */
+/* 付费卡片：图标优先、单层卡片、说明收进 ⓘ。
+   冷石画廊白规范（docs/05-设计规范.md）：hair 发丝线分区、墨底主按钮、
+   品牌绿仅用于选中指示（SKU 选中描边）与小面积徽标。 */
 .pay-card {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid var(--line, #e2ded4);
-  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--hair, #E4E4E7);
+  border-radius: var(--r-md, 14px);
   background: var(--paper, #fff);
 }
 
@@ -22,14 +24,14 @@
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  background: rgba(53, 98, 74, 0.08);
-  color: var(--brand, #35624a);
+  background: var(--green-pale, #EEF3EF);
+  color: var(--green-deep, #35624A);
 }
 
 .pay-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink, #1f2320);
+  color: var(--ink, #141416);
 }
 
 .pay-info-btn {
@@ -41,7 +43,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--muted, #7d807b);
+  color: var(--wk-muted, #71767E);
   cursor: pointer;
 }
 
@@ -49,16 +51,16 @@
   margin-left: auto;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
-  border: 1px solid var(--line, #e2ded4);
-  color: var(--muted, #7d807b);
+  border: 1px solid var(--hair, #E4E4E7);
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-mode--mock {
-  border-color: #e6c27a;
-  background: #fdf6e6;
-  color: #8a6a1f;
+  border-color: rgba(150, 101, 31, 0.24);
+  background: rgba(150, 101, 31, 0.08);
+  color: var(--warn, #96651F);
 }
 
 .pay-mode--sandbox {
@@ -68,9 +70,9 @@
 }
 
 .pay-mode--live {
-  border-color: rgba(53, 98, 74, 0.35);
-  background: rgba(53, 98, 74, 0.07);
-  color: var(--brand, #35624a);
+  border-color: rgba(53, 98, 74, 0.3);
+  background: var(--green-pale, #EEF3EF);
+  color: var(--green-deep, #35624A);
 }
 
 .pay-info {
@@ -78,11 +80,11 @@
   flex-direction: column;
   gap: 4px;
   padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--wash, #f6f5f1);
+  border-radius: var(--r-sm, 10px);
+  background: var(--plane, #F4F5F7);
   font-size: 11px;
   line-height: 1.5;
-  color: var(--muted, #7d807b);
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-skus {
@@ -98,14 +100,15 @@
   gap: 2px;
   padding: 10px;
   text-align: left;
-  border: 1px solid var(--line, #e2ded4);
-  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--hair, #E4E4E7);
+  border-radius: var(--r-sm, 10px);
   background: var(--paper, #fff);
   cursor: pointer;
 }
 
+/* SKU 选中描边：品牌绿的两处许可之一（选中指示）。 */
 .pay-sku--on {
-  border: 1.5px solid var(--brand, #35624a);
+  border: 1.5px solid var(--green-deep, #35624A);
 }
 
 .pay-sku-badge {
@@ -114,26 +117,26 @@
   right: 8px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--brand, #35624a);
-  color: #fff;
-  font-size: 9px;
-  line-height: 14px;
+  background: var(--green-pale, #EEF3EF);
+  color: var(--green-deep, #35624A);
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .pay-sku-title {
   font-size: 11px;
-  color: var(--muted, #7d807b);
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-sku-price {
   font-size: 18px;
   font-weight: 650;
-  color: var(--ink, #1f2320);
+  color: var(--ink, #141416);
 }
 
 .pay-sku-note {
-  font-size: 10px;
-  color: var(--muted, #7d807b);
+  font-size: 11px;
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-actions {
@@ -142,18 +145,25 @@
   gap: 10px;
 }
 
+/* 主按钮：墨底白字；hover 落品牌绿 hover 档。 */
 .pay-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 34px;
   padding: 0 14px;
-  border: 1px solid var(--brand, #35624a);
-  border-radius: 10px;
-  background: var(--brand, #35624a);
+  border: 1px solid var(--ink, #141416);
+  border-radius: var(--r-sm, 10px);
+  background: var(--ink, #141416);
   color: #fff;
   font-size: 12px;
   cursor: pointer;
+  transition: background var(--dur-1, 120ms) var(--ease-spec, cubic-bezier(.2, 0, 0, 1));
+}
+
+.pay-btn:hover {
+  background: var(--green-deep, #35624A);
+  border-color: var(--green-deep, #35624A);
 }
 
 .pay-btn:disabled {
@@ -163,23 +173,35 @@
 
 .pay-remaining {
   font-size: 11px;
-  color: var(--muted, #7d807b);
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-error {
   font-size: 11px;
-  color: #a4442f;
+  color: var(--err, #B4443C);
 }
 
 .pay-hint {
-  font-size: 10px;
-  color: var(--muted, #7d807b);
+  font-size: 11px;
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-qr {
   align-self: center;
-  border: 1px solid var(--line, #e2ded4);
-  border-radius: 8px;
+  border: 1px solid var(--hair, #E4E4E7);
+  border-radius: var(--r-sm, 10px);
+}
+
+/* 爱猹收收银链接：支付宝蓝是外部渠道标识色。 */
+.pay-qr-link {
+  align-self: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: #1677ff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .pay-receipt {
@@ -187,8 +209,8 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  border: 1px dashed var(--line, #e2ded4);
-  border-radius: 8px;
+  border: 1px dashed var(--hair, #E4E4E7);
+  border-radius: var(--r-sm, 10px);
 }
 
 .pay-receipt-head {
@@ -196,20 +218,21 @@
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--ink, #1f2320);
+  color: var(--ink, #141416);
 }
 
+/* 确认勾选用墨色（规范：Check 不再用绿）。 */
 .pay-receipt-state {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  color: var(--brand, #35624a);
+  color: var(--ink, #141416);
 }
 
 .pay-receipt-mode {
   margin-left: auto;
-  font-size: 10px;
-  color: var(--muted, #7d807b);
+  font-size: 11px;
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-receipt-rows {
@@ -226,14 +249,14 @@
 }
 
 .pay-receipt-rows dt {
-  font-size: 10px;
-  color: var(--muted, #7d807b);
+  font-size: 11px;
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-receipt-rows dd {
   margin: 0;
   font-size: 11px;
-  color: var(--ink, #1f2320);
+  color: var(--ink, #141416);
 }
 
 .pay-mono {
@@ -242,8 +265,8 @@
 }
 
 .pay-receipt-foot {
-  font-size: 10px;
-  color: var(--muted, #7d807b);
+  font-size: 11px;
+  color: var(--wk-muted, #71767E);
 }
 
 .pay-spin {
