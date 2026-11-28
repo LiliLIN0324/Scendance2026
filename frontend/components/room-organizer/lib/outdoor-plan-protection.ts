@@ -13,15 +13,21 @@ export function clearPlanBoundary(plan: SitePlanData): SitePlanData {
   if (plan.boundary.length === 0 && (plan.designScope ?? []).length === 0) return plan;
   return { ...plan, boundary: [], designScope: undefined };
 }
+/** 锚点位移（米）。≥1cm 即「换场」——换场=新场地，旧坐标系内容整批清空（各调用方同口径）。 */
+export function anchorMovedMeters(from: { lng: number; lat: number }, to: { lng: number; lat: number }): number {
+  return Math.hypot(
+    (to.lng - from.lng) * 111320 * Math.cos(to.lat * Math.PI / 180),
+    (to.lat - from.lat) * 110540,
+  );
+}
+
 /** Changing the local geographic frame must never silently relocate existing work. */
 export function canReanchorOutdoorPlan(plan: SitePlanData, anchor: NonNullable<SitePlanData['anchor']>): boolean {
   // 车辆也算内容：只有车（plan.vehicles，2026-11-16 #118）的平面若被判为空，换锚点会让所有车整体位移。
   const populated = [plan.zones, plan.routes, plan.nodes, plan.facilities, plan.workers, plan.vehicles, plan.annotations, plan.measurements].some(items => items?.length);
   if (!populated) return true;
   if (!plan.anchor) return false;
-  const dx = (anchor.lng - plan.anchor.lng) * 111320 * Math.cos(anchor.lat * Math.PI / 180);
-  const dy = (anchor.lat - plan.anchor.lat) * 110540;
-  return Math.hypot(dx, dy) < 0.01;
+  return anchorMovedMeters(plan.anchor, anchor) < 0.01;
 }
 
 /** Draft points are drawn in the old viewport frame until commit; convert once, atomically. */
@@ -60,6 +66,10 @@ export function planForPickedVenue(
       // 2026-11-17 #118：车辆也是旧坐标系的活内容——换场地必须一起清掉，
       // 否则旧场地坐标系里的车会留在新场地上（画布上像"凭空多了一台车"）。
       vehicles: [],
+      // 2026-11-28：标注/测量画在旧场地上，同样是旧坐标系活内容——cleared 已把它们计进去，
+      // plan 却没清，换场后钉在新场地坐标系上（与 #118 车辆同一类漏）。
+      annotations: [],
+      measurements: [],
     },
     replaced: true,
     cleared,

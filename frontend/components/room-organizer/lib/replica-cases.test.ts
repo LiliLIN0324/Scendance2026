@@ -35,7 +35,7 @@ describe('replica-cases（OnePlan 经典案例复刻）', () => {
   // 2026-11-17 用户：「案例库画完了用地红线，外面没有对应的白色框」。
   // 病根是案例只生成了 boundary、没写 designScope，画布按 designScope>=3 才画白框，
   // 于是打开经典案例看不见框外那圈压暗与四角白 L，和手画红线的行为对不上。
-  it('每案都带设计范围：红线外接矩形四边各外扩 20 m（案例也有那只白框）', () => {
+  it('每案都带设计范围：红线外接矩形四边各外扩默认边距（案例也有那只白框）', () => {
     for (const replica of REPLICA_CASES) {
       const plan = replica.buildPlan();
       const scope = plan.designScope ?? [];
@@ -43,7 +43,7 @@ describe('replica-cases（OnePlan 经典案例复刻）', () => {
       const xs = plan.boundary.map(p => p.x);
       const ys = plan.boundary.map(p => p.y);
       const expectScope = expandRect(plan.boundary, DEFAULT_SCOPE_MARGIN_M);
-      // 与「画好红线默认=设计范围」同一套几何：四个角正好各边外扩 20 m。
+      // 与「画好红线默认=设计范围」同一套几何：四个角正好各边外扩一个默认边距。
       const r2 = (n: number) => Math.round(n * 100) / 100;
       const ringOf = (ring: readonly { x: number; y: number }[]) => ring.map(p => [r2(p.x), r2(p.y)]);
       expect(ringOf(scope), replica.id).toEqual(ringOf(expectScope));

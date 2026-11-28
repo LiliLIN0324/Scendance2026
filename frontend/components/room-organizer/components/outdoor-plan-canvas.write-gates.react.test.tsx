@@ -179,6 +179,28 @@ it('默认红线锁不挡空白活动首次选址，但保护已存在的轮廓'
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(boundary);
 });
 
+it('2026-11-28 换场不再要求先删旧场地：锚点位移的 applyVenue 越过默认锁，旧坐标系内容随场清掉', () => {
+  const { ref, commit } = mount(false, {
+    facilities: [],
+    vehicles: [{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', type: 'coach', count: 1, position: { x: 6, y: 8 }, notes: '' }],
+  });
+  const anchor = { lng: 120, lat: 30, crs: 'gcj-02' as const, source: 'manual' as const };
+  const boundary = [{ x: -20, y: -15 }, { x: 20, y: -15 }, { x: 20, y: 15 }, { x: -20, y: 15 }];
+  act(() => { expect(ref.current!.applyVenue(anchor, boundary)).toBe(true); });
+  commit.mockClear();
+  // 锚点挪 0.01°（约 1 km）= 换场：默认锁不再拦「第二个场地」；旧坐标系的车一并清空。
+  const moved = { ...anchor, lng: 120.01 };
+  const nextBoundary = [{ x: -10, y: -10 }, { x: 10, y: -10 }, { x: 10, y: 10 }, { x: -10, y: 10 }];
+  act(() => { expect(ref.current!.applyVenue(moved, nextBoundary)).toBe(true); });
+  const switched = ref.current!.getEditVisuals().plan;
+  expect(switched.boundary).toEqual(nextBoundary);
+  expect(switched.vehicles).toEqual([]);
+  expect(commit).toHaveBeenCalled();
+  // 同锚点重画仍受默认锁保护（重画请走手画工具）。
+  act(() => { expect(ref.current!.applyVenue(moved, boundary)).toBe(false); });
+  expect(ref.current!.getEditVisuals().plan.boundary).toEqual(nextBoundary);
+});
+
 it('2026-11-27 档2：updateFacility 落分组/高度/桌形/饰面/锁定五字段', () => {
   const { ref } = mount();
   act(() => {

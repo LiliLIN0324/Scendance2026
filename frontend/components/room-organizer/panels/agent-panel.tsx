@@ -45,6 +45,7 @@ import { chipsAfterLayoutPreview, composeProcessStrip, type ProcessFailure } fro
 import { toolTraceRows } from '../lib/tool-trace';
 import { isGeneralActivityQuestion, isPureGreeting } from '../lib/general-activity-question';
 import { chatUserHistory } from '../lib/chat-user-history';
+import { compressChatContext } from '../lib/chat-context-compression';
 import { Bubbles, ToolCallTrace, type Bubble } from './agent-bubbles';
 import { ProposalCard, type ProposalDecision } from './agent-proposal-card';
 import { RouteConfirmCard, VenueConfirmCard, ZoneConfirmCard } from './agent-confirm-cards';
@@ -97,7 +98,7 @@ import { fetchPlaceShape, peekCachedPlaceShape } from '../lib/place-area';
 import { fetchPlaceShapeHints, hintedOutlineNames, buildPlaceSearchOptions } from '../lib/place-search-options';
 import { normalizeOutlineName } from '../lib/place-shape-quality';
 import { isPersistablePlaceShape } from '../lib/place-shape-quality';
-import { trueFootprintBoundary } from '../lib/outdoor-venue-sync';
+import { snapPointIntoFootprint, trueFootprintBoundary } from '../lib/outdoor-venue-sync';
 import { fetchRoadNetwork } from '../lib/road-network';
 import { buildRouteProposal, matchRouteCommand, roadFetchPlanForBoundary, type RouteProposal } from '../lib/route-proposal';
 import { OutdoorTaskCard, type OutdoorTaskProgress } from '../components/outdoor-task-card';
@@ -595,7 +596,7 @@ interface AgentValue {
   /** V-1c 锚定链：POI 轮廓 → 行政区 → 起步矩形兜底，走 applyMapVenuePick 落壳。 */
   handleVenuePick(place: PlaceSuggestion): void;
   /** 2026-11-19 用户指令：候选点选只做地图预览（钉点+飞过去，不写方案），确认才走锚定链。 */
-  previewVenueCandidate(place: PlaceSuggestion): void;
+  previewVenueCandidate(place: PlaceSuggestion, index?: number): void;
   dismissVenuePick(): void;
   /** V-2d 流线提案（预览态）：虚线画在画布上，确认才 applyRoutes 写入（可撤销）。 */
   routeProposal: RouteProposal | null;
@@ -1782,8 +1783,16 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (!currentOutdoorTask(epoch, 'venue') || controller.signal.aborted || pickSeq !== venuePickSeq.current) return;
     const bridge = routeBridgeRef.current;
     if (pickBase !== JSON.stringify(bridge?.getPlan())) { setVenuePick(null); setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '查询期间规划变了，场地没换。', steps: [] }); return; }
-    const anchor = { lng: place.lng, lat: place.lat, crs: 'gcj-02' as const, source: 'lookup' as const };
+    // 2026-11-28 用户「西湖美术馆钉子在树上、轮廓在楼上」：检索源 POI 点可与真实占地差
+    // 几十米（实测 72.5 m），轮廓才是场地真值——拿到轮廓就把锚点吸附进足迹，钉子跟着搬。
+    const anchorPoint = polygon
+      ? snapPointIntoFootprint(polygon, { lng: place.lng, lat: place.lat })
+      : { lng: place.lng, lat: place.lat };
+    const anchor = { lng: anchorPoint.lng, lat: anchorPoint.lat, crs: 'gcj-02' as const, source: 'lookup' as const };
     const boundary = polygon ? trueFootprintBoundary(polygon.map(([lng, lat]) => ({ lng, lat })), anchor) : null;
+    if (polygon && (anchorPoint.lng !== place.lng || anchorPoint.lat !== place.lat)) {
+      routeBridgeRef.current?.correctVenuePin?.({ lng: anchorPoint.lng, lat: anchorPoint.lat, name: place.name });
+    }
     setVenuePick(null);
     if (!bridge) {
       setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '请先打开当前户外规划，未更改场地', steps: [] });
@@ -1804,16 +1813,17 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if (pickBase !== JSON.stringify(bridge.getPlan())) {
         setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '方案变了，旧范围没用上。', steps: [] }); return;
       }
-      // 2026-11-22 用户改口（幕景Agent Test S4「确认场地后直接给我默认定了」）：
-      // 候选点选后不再直接写入范围，改成出草案等确认——确认卡上写清这是哪块地，点了才落红线。
-      // 这覆盖 2026-11-21 的「候选点选直接落地」拍板；追溯链：测试记录 S4 → 本次改口。
-      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis, undefined, false, range.waterLines);
+      // 2026-11-28 用户拍板（青山湖截图实测）：点「设为活动场地」就是亲手把场地定下来，
+      // 不再出「待你核对」二次确认卡，直接写入红线；严格档/破坏性风险仍由监督 gate 拦下核对。
+      // 这覆盖 2026-11-22 的「出草案等确认」改口（Test S4），回到 11-21 的「候选点选直接落地」。
+      // 2026-11-28 文案纪律：压水/水体待核提示整族从范围卡撤下（地图上看得见，待核不改变决定）。
+      outdoorWorkflow.offerBoundary(anchor, range.boundary, place.name, range.basis, undefined, true);
       // 2026-11-20 用户拍板：范围来源不用念给用户，只留下一步能做什么。
-      say({ role: 'agent', text: '范围草案在卡上，确认后才写入红线。' });
+      say({ role: 'agent', text: '直接说「长40米宽30米」这类，我来更新范围。' });
       return;
     }
     if (!boundary) {
-      if (!bridge.beginVenueBoundary(anchor)) { setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '已有规划不能直接更换地理锚点，请先新建户外活动。当前内容保持不变', steps: [] }); return; }
+      if (!bridge.beginVenueBoundary(anchor)) { setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '这次没能进入手画，原草稿保持不变', steps: [] }); return; }
       manualVenueAnchorRef.current = anchor;
       setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'blocked', action: '请在地图手画并闭合边界。未写入新场地', steps: ['候选地点已确认', '自动轮廓未命中，启用手画'] });
       say({ role: 'agent', text: '没找到现成边界，地图移到候选地点。沿用地圈一圈，闭合就生效。' });
@@ -1822,7 +1832,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (bridge.applyVenue(anchor, boundary)) {
       setOutdoorTask({ intent: `在「${place.name}」做设计`, state: 'done', action: '真实边界与锚点已写入，2D/3D 同步', steps: ['地点已确认', '取得真实边界', '应用场地'], prompts: ['排一下流线'] });
       say({ role: 'agent', text: `已在户外规划设为「${place.name}」，边界来源：${source === 'osm' ? 'OSM 占地轮廓' : '行政区选区'}。2D/3D 共用这份规划，可撤销。` });
-    } else setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '已有规划不能直接换锚点。先新建户外活动。', steps: [] });
+    } else setOutdoorTask({ intent: '确认场地', state: 'blocked', action: '这次没换成场地，原方案保持不变', steps: [] });
 
   }
 
@@ -3089,6 +3099,19 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     if (handoffExportRequest > 0) proposeExport();
   }, [handoffExportRequest]);
 
+  /** Build model history with a session-scoped memo once the token budget is exceeded. */
+  function compressedHistory(text: string): Array<{role:'user'|'assistant';text:string}> {
+    const session = boundSessionId.current;
+    const base = chatUserHistory(bubblesRef.current.slice(0, -1), text);
+    if (!session) return base;
+    // 仓规：可选键不写 undefined 冒充真值（exactOptionalPropertyTypes），storage 有才带。
+    const storage = scopedAssistantStorage(sessionScope);
+    return compressChatContext(base, text, {
+      ...(storage ? { storage } : {}),
+      storageKey: `scendance.assistant-chat-context.v1:${session}`,
+    }).history;
+  }
+
   /** Read-only questions share the existing turn queue; they never mutate the brief or scene. */
   async function answerGeneralQuestion(text:string):Promise<void> {
     const controller=studioRef.current?.controller;
@@ -3096,7 +3119,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     const request={controller:new AbortController(),text};
     const session=boundSessionId.current,sequence=briefTurnSequence.current,prior=briefTurnTail.current;
     if(!session||getActiveAssistantSessionId(sessionScope)!==session){say({role:'agent',amber:true,text:'会话正在切换，请在当前会话重新发送。'});return;}
-    const history=chatUserHistory(bubblesRef.current.slice(0,-1),text);
+    const history=compressedHistory(text);
     // 留痕锚点：入口已保证 session 绑定就绪；本句用户气泡已入列，轮次号从气泡数减一（0 基）。
     const questionProjectId=conversationProjectId(routeBridgeRef.current?.projectId?.());
     const trace={ turnKey: conversationTurnKey(), sessionId: session,
@@ -3347,7 +3370,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     }
     if(!queued&&generationWait.current){
       if(trimmed)say({role:'user',text:trimmed});
-      const history=chatUserHistory(bubblesRef.current.slice(0,-1),trimmed);
+      const history=compressedHistory(trimmed);
       const session=boundSessionId.current,sequence=briefTurnSequence.current,floor=floorSession.capture();
       generationQueuedRef.current++;
       setGenerationQueued(value=>value+1);
@@ -3390,7 +3413,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
       if(isStandalonePreservationInstruction(trimmed))return;
     }
     const unifiedConversation=process.env.NEXT_PUBLIC_BRIEF_CONVERSATION_ENABLED==='1';
-    const turnHistory=queued?(queuedHistory??[]):chatUserHistory(bubblesRef.current.slice(0,-1),trimmed);
+    const turnHistory=queued?(queuedHistory??[]):compressedHistory(trimmed);
     if(!unifiedConversation && process.env.NEXT_PUBLIC_CONVERSATIONAL_CHAT_ENABLED==='1' && !attachment && isGeneralActivityQuestion(trimmed)) {await answerGeneralQuestion(trimmed);return;}
     const mixedUtility=hasMixedUtilityCommand(trimmed);
     if(mixedUtility)updateDialogueIncomplete(boundSessionId.current,trimmed,true);
@@ -3949,7 +3972,7 @@ export function LayoutAgentProvider({ pendingCandidates, sessionScope = 'legacy'
     venuePick,
     confirmOutdoorVenue: place => { void handleVenuePick(place); },
     handleVenuePick: place => { void handleVenuePick(place); },
-    previewVenueCandidate: place => { routeBridgeRef.current?.previewVenuePoint?.(place); },
+    previewVenueCandidate: (place, index) => { routeBridgeRef.current?.previewVenuePoint?.({ ...place, ...(typeof index === 'number' ? { index } : {}) }); },
     dismissVenuePick: stopOutdoorTask,
     outdoorTask,
     manualOutdoorVenueApplied: anchor => {
@@ -4917,7 +4940,7 @@ useEffect(() => {
         state={agent.venuePick}
         scopeConfirmed={agent.outdoorWorkflow.scopeConfirmed()}
         onPick={place => agent.handleVenuePick(place)}
-        onPreview={place => agent.previewVenueCandidate(place)}
+        onPreview={(place, index) => agent.previewVenueCandidate(place, index)}
         onManual={() => agent.startMapVenuePicker()}
         onDismiss={() => { recordAgentDecision({ kind: 'rejected', label: '场地候选' }); agent.dismissVenuePick(); }}
       />}

@@ -9,6 +9,7 @@ import { assistantChatRequestSchema } from "../../../../supabase/functions/_shar
 import type { ChatProviderId } from "../../../../supabase/functions/_shared/chat-provider";
 import { createStarterOutdoorPlan, saveOutdoorProjectRecord } from "../lib/outdoor-project-store";
 import { FIXED_DATA_CASES } from "../lib/outdoor-release-status-card";
+import { DEFAULT_SCOPE_MARGIN_M } from "../lib/outdoor-design-scope";
 import { OUTDOOR_STAGE_LABELS, useOutdoorAgentWorkflow } from "./use-outdoor-agent-workflow";
 import { OutdoorWorkflowCard } from "../components/outdoor-workflow-card";
 import { getGenerationSheetState, resetGenerationSheetForTests } from "../lib/generation-sheet";
@@ -457,8 +458,10 @@ it("纸面起稿缺人数时同轮给范围入口，等待补充期间不写画�
 
 it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", async () => {
   const anchor = { ...plan.anchor!, lng: 120.1 };
-  act(() => flow.offerBoundary(anchor, ring, "IN77", undefined, undefined, false, ["候选范围压到水面。"]));
-  expect(host.textContent).toContain("候选范围压到水面。");
+  act(() => flow.offerBoundary(anchor, ring, "IN77"));
+  // 2026-11-28 用户拍板：压水/水体待核提示整族从范围卡撤下，卡上不再出现。
+  expect(host.textContent).not.toContain("候选范围压到水面。");
+  expect(host.textContent).not.toContain("水体数据未取得");
   expect(apply).not.toHaveBeenCalled();
   expect(flow.appliedHighlight).toBeNull();
   expect(host.textContent).toContain("确认“IN77”的活动范围");
@@ -474,7 +477,10 @@ it("地点轮廓仅候选，具体活动范围需真实卡片确认才写入", a
   expect(plan.anchor?.lng).toBe(120.1);
   expect(flow.state.stage).toBe("zones");
   expect(flow.appliedHighlight).toEqual({ kind: "scope" });
-  expect(host.textContent).toContain("不贴合就拖顶点调整，改完重新核对");
+  // 2026-11-28 用户拍板：应用句不带「确认」前缀、不带「不贴合就拖顶点调整」叮嘱。
+  expect(host.textContent).toContain("已应用「“IN77”的活动范围」。");
+  expect(host.textContent).not.toContain("不贴合就拖顶点调整");
+  expect(flow.state.boundaryName).toBe("IN77");
 });
 it("自动档下画布已有同一条红线时「确认活动范围」一次落地，不再弹第二张确认卡", async () => {
   // 2026-11-21 用户实测：核对阶段对有效红线原样重发提案，两击确认的是同一份数据。
@@ -518,6 +524,54 @@ it("严格档下候选点选仍停在核对卡", async () => {
   await action("confirm");
   expect(apply).toHaveBeenCalledTimes(1);
   expect(flow.state.stage).toBe("zones");
+});
+it("已有红线时点选新候选不再直落：换场确认卡写明清场，确认后才写入", async () => {
+  // 2026-11-28 用户实机（青山湖截图）：已确认场地再换场，曾被红线默认锁拦成
+  // 「画布当前不可写或保存身份变化」死路。拍板：去掉死路——换场是删除/覆盖动作，
+  // 出确认卡写明「原场地的相关内容会被清掉」，点了确认按钮才落地（可整批撤销）。
+  // 这条场景画布上只有红线没有内容，监督 gate 不会拦——确认卡必须由换场判定自己立起来。
+  supervision = "auto";
+  const oldLng = plan.anchor!.lng;
+  await act(async () => {
+    await flow.offerBoundary({ ...plan.anchor!, lng: oldLng + 0.3 }, ring, "水上森林", undefined, undefined, true);
+  });
+  expect(apply).not.toHaveBeenCalled();
+  expect(flow.proposal?.kind).toBe("scope");
+  expect(host.textContent).toContain("应用后原场地的相关内容会被清掉，可整批撤销。");
+  const confirm = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent?.includes("确认并应用这一版"),
+  )!;
+  await act(async () => { confirm.click(); });
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(plan.anchor?.lng).toBeCloseTo(oldLng + 0.3, 6);
+  expect(flow.state.stage).toBe("zones");
+});
+it("换场确认卡写明原场地名：boundaryName 跟着流程状态走", async () => {
+  mountAtFlowState({ stage: "place", boundaryName: "IN77 E区" });
+  await act(async () => {
+    await flow.offerBoundary({ ...plan.anchor!, lng: plan.anchor!.lng + 0.3 }, ring, "水上森林", undefined, undefined, true);
+  });
+  expect(flow.proposal?.kind).toBe("scope");
+  expect(host.textContent).toContain("应用后原场地「IN77 E区」的相关内容会被清掉，可整批撤销。");
+});
+it("换场确认卡确认后：旧坐标系内容整批清空（含车辆/标注/测量），新锚点新红线写入", async () => {
+  supervision = "auto";
+  plan = {
+    ...plan,
+    zones: [{ id: "11111111-1111-4111-8111-111111111111", name: "旧观众区", purpose: "audience", semantic: "audience", environment: "outdoor", polygon: [{ x: 1, y: 1 }, { x: 5, y: 1 }, { x: 5, y: 5 }, { x: 1, y: 5 }], notes: "" }],
+    vehicles: [{ id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", type: "coach", count: 2, position: { x: 6, y: 8 }, notes: "" }],
+  };
+  await act(async () => {
+    await flow.offerBoundary({ ...plan.anchor!, lng: plan.anchor!.lng + 0.3 }, ring, "水上森林", undefined, undefined, true);
+  });
+  const confirm = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent?.includes("确认并应用这一版"),
+  )!;
+  await act(async () => { confirm.click(); });
+  expect(apply).toHaveBeenCalledTimes(1);
+  expect(plan.zones).toEqual([]);
+  expect(plan.vehicles).toEqual([]);
+  expect(plan.boundary).toEqual(ring);
 });
 it("自动档下范围确认后重画红线：新范围直接生效，流程继续不卡死", async () => {
   // 2026-11-21 用户实测：范围确认后想重画场地，画布轮询只在 place/scope 活着，
@@ -734,11 +788,11 @@ it("刷新后重新预览未确认候选，仍需显式确认才写入", async (
   expect(flow.proposal).toBeNull();
   await action("scope");
   expect(flow.proposal?.next.boundary).toEqual(ring);
-  // 2026-11-17 「同一标准」：范围提案自己就带白框（外扩 20 m），预览与落地一致，
+  // 2026-11-17 「同一标准」：范围提案自己就带白框（外扩默认边距），预览与落地一致，
   // 不再靠画布那条事后兜底去补——兜底只留给旧提案。
   expect(flow.proposal?.next.designScope).toHaveLength(4);
   expect(Math.min(...flow.proposal!.next.designScope!.map(p => p.x)))
-    .toBeCloseTo(Math.min(...ring.map(p => p.x)) - 20, 5);
+    .toBeCloseTo(Math.min(...ring.map(p => p.x)) - DEFAULT_SCOPE_MARGIN_M, 5);
   expect(apply).not.toHaveBeenCalled();
   await action("confirm");
   expect(plan.boundary).toEqual(ring);

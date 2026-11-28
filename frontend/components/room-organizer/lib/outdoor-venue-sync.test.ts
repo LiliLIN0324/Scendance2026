@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import botanicalGarden from './__testfixtures__/hangzhou-botanical-garden.json';
-import { planBoundaryFromSearchArea, trueFootprintBoundary } from './outdoor-venue-sync';
+import { planBoundaryFromSearchArea, snapPointIntoFootprint, trueFootprintBoundary } from './outdoor-venue-sync';
 
 // #86：杭州湖滨银泰 IN77 真实 OSM 足迹（osm:W1110196946，13 点闭合环，末点与首点重合）。
 // 锚点取 bounds 中心；验证真实商场轮廓能转成契约合法的 ENU 米边界（街区尺度，不越 ±4900m）。
@@ -83,5 +83,66 @@ describe('planBoundaryFromSearchArea · 搜索选区收成红线', () => {
     expect(planBoundaryFromSearchArea({ polygon: polygon.slice(0, 2) }, anchor)).toBeNull();
     expect(planBoundaryFromSearchArea({ polygon }, null)).toBeNull();
     expect(planBoundaryFromSearchArea(null, anchor)).toBeNull();
+  });
+});
+
+describe('snapPointIntoFootprint · POI 检索点吸附进可信足迹', () => {
+  // 2026-11-28 西湖美术馆实测：天地图钉在 OSM 面以南 72.5 m。用同尺度方环复现。
+  const square: [number, number][] = [
+    [120.16, 30.25],
+    [120.161, 30.25],
+    [120.161, 30.251],
+    [120.16, 30.251],
+  ];
+
+  it('点在足迹内原样保留，不动坐标', () => {
+    const inside = { lng: 120.1605, lat: 30.2505 };
+    expect(snapPointIntoFootprint(square, inside)).toEqual(inside);
+  });
+
+  it('点在足迹外（南侧 72m）吸附到最近内点，而不是跳质心', () => {
+    // 0.00065° 纬度 ≈ 72m，复现西湖美术馆的偏差量级。
+    const poi = { lng: 120.1605, lat: 30.25 - 0.00065 };
+    const snapped = snapPointIntoFootprint(square, poi);
+    const latInside = snapped.lat > 30.25 && snapped.lat < 30.251;
+    const lngInside = snapped.lng > 120.16 && snapped.lng < 120.161;
+    expect(latInside).toBe(true);
+    expect(lngInside).toBe(true);
+    // 保住方位语义：吸附点紧贴南缘（< 5m），不跳到环中心（~55m 外）。
+    expect((snapped.lat - 30.25) * 111132).toBeLessThan(5);
+  });
+
+  it('凹口环：点落在凹槽里（环外、外接矩形内）也吸附到最近内点', () => {
+    // L 形环（逆时针缺口朝东南），凹槽中心在环外。
+    const lShape: [number, number][] = [
+      [120.16, 30.25],
+      [120.161, 30.25],
+      [120.161, 30.2506],
+      [120.1605, 30.2506],
+      [120.1605, 30.251],
+      [120.16, 30.251],
+    ];
+    const inNotch = { lng: 120.1608, lat: 30.2508 };
+    const snapped = snapPointIntoFootprint(lShape, inNotch);
+    const moved = Math.hypot((snapped.lng - inNotch.lng) * 85000, (snapped.lat - inNotch.lat) * 111132);
+    expect(moved).toBeGreaterThan(0.5);
+    expect(moved).toBeLessThan(60);
+  });
+
+  it('顶点数不够或病态几何一律回落原点，行为不变', () => {
+    const poi = { lng: 120.159, lat: 30.249 };
+    expect(snapPointIntoFootprint(square.slice(0, 2), poi)).toEqual(poi);
+    expect(snapPointIntoFootprint([], poi)).toEqual(poi);
+  });
+
+  it('真实 IN77 足迹：偏离的检索点吸附后仍在环内', () => {
+    const poi = { lng: 120.1605, lat: 30.2495 }; // 西南角外
+    const snapped = snapPointIntoFootprint(IN77_POLYGON, poi);
+    expect(snapped).not.toEqual(poi);
+    // 吸附点必须落在足迹外接矩形内（IN77 是凹多边形，环内判定用测试自带的射线法口径）
+    expect(snapped.lng).toBeGreaterThan(120.1616);
+    expect(snapped.lng).toBeLessThan(120.1652);
+    expect(snapped.lat).toBeGreaterThan(30.2505);
+    expect(snapped.lat).toBeLessThan(30.2555);
   });
 });

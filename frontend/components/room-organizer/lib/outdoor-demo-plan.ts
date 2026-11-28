@@ -31,7 +31,7 @@ export function createDemoOutdoorPlan(): SitePlanData {
     schemaVersion: 1,
     anchor: DEFAULT_OUTDOOR_PLAN_ANCHOR,
     boundary: DEMO_BOUNDARY.map(point => ({ ...point })),
-    // 2026-11-17 同一标准：带红线的成品方案一律配一只白框（外扩 20 m），
+    // 2026-11-17 同一标准：带红线的成品方案一律配一只白框（外扩默认边距），
     // 不靠“载入后另点一次按场地外扩”才长出来。
     designScope: expandRect(DEMO_BOUNDARY, DEFAULT_SCOPE_MARGIN_M),
     zones: [],

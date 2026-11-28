@@ -15,7 +15,8 @@ import {
  * 2026-11-16 自由标注颜色条（Figma 颜色条）：
  * 色点与细/粗线宽排在同一条上（文本模式只留色点），不收进形状下拉或其它二级菜单。
  * 色值仍只用既有图层/表面 token，不另造 hex。
- * 2026-11-17 文本模式隐藏线宽（文本不吃线宽），只留颜色；切回形状时档位按原值回来。
+ * 2026-11-17 文本模式隐藏线宽；2026-11-28 用户指令：文本模式改给字号档（小字/大字，与形状共用 thin/thick 档位），
+ * 切回形状时线宽档位按原值回来。
  */
 export const ANNOTATE_COLOR_SWATCHES: readonly { value: string; label: string }[] = [
   { value: PLANNING_LAYER_COLORS.annotate, label: '紫' },
@@ -37,6 +38,8 @@ export function AnnotateColorBar({
   showStrokeWidth = true,
   onColor,
   onStrokeWidth,
+  noteSize,
+  onNoteSize,
 }: {
   color: string;
   strokeWidth: PlanAnnotationStrokeWidth;
@@ -44,6 +47,9 @@ export function AnnotateColorBar({
   showStrokeWidth?: boolean;
   onColor: (value: string) => void;
   onStrokeWidth: (value: PlanAnnotationStrokeWidth) => void;
+  /** 2026-11-28 用户指令：文本模式给字号档（thin=小字 / thick=大字）；给了这对 prop 就渲染字号钮。 */
+  noteSize?: PlanAnnotationStrokeWidth;
+  onNoteSize?: (value: PlanAnnotationStrokeWidth) => void;
 }): JSX.Element {
   return (
     <div
@@ -58,10 +64,8 @@ export function AnnotateColorBar({
         width: '100%',
         height: 34,
         boxSizing: 'border-box',
-        marginTop: PLANNING_SPACING.sm,
-        padding: '5px 7px',
-        background: PLANNING_SURFACE.fieldBg,
-        borderRadius: PLANNING_RADIUS.md,
+        // 2026-11-28 用户指令：颜色条同样去掉背后的灰色填充。
+        marginTop: PLANNING_SPACING.xs,
       }}
     >
       <div role="radiogroup" aria-label="标注颜色" style={{ display: 'flex', alignItems: 'center', gap: 7, flex: '0 0 auto' }}>
@@ -141,6 +145,47 @@ export function AnnotateColorBar({
                   <svg viewBox="0 0 20 10" width="16" height="8" fill="none" stroke="currentColor" strokeLinecap="round" aria-hidden focusable="false">
                     <line x1="2" y1="5" x2="18" y2="5" strokeWidth={width === 'thin' ? 1.5 : 3.5} />
                   </svg>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : onNoteSize ? (
+        <>
+          <span
+            aria-hidden
+            style={{ width: 1, alignSelf: 'stretch', margin: '3px 0', background: PLANNING_SURFACE.panelBorder, flex: '0 0 auto' }}
+          />
+          <div role="radiogroup" aria-label="文本字号" style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 'auto', flex: '0 0 auto' }}>
+            {PLAN_ANNOTATION_STROKE_WIDTHS.map(width => {
+              const active = noteSize === width;
+              return (
+                <button
+                  key={width}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={width === 'thin' ? '小字' : '大字'}
+                  data-testid={`annotate-note-size-${width}`}
+                  title={width === 'thin' ? '小字' : '大字'}
+                  onClick={() => onNoteSize(width)}
+                  style={{
+                    all: 'unset',
+                    boxSizing: 'border-box',
+                    width: 30,
+                    height: 24,
+                    borderRadius: PLANNING_RADIUS.sm,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flex: '0 0 auto',
+                    background: active ? PLANNING_SURFACE.panelBg : 'transparent',
+                    boxShadow: active ? `inset 0 0 0 1px ${PLANNING_SURFACE.panelBorder}` : 'none',
+                    color,
+                  }}
+                >
+                  <span style={{ fontSize: width === 'thin' ? 11 : 15, fontWeight: 600, lineHeight: 1 }}>字</span>
                 </button>
               );
             })}

@@ -186,7 +186,7 @@ export function previewLegacyMigration(
       ? { anchor: { lng: input.anchor.lng, lat: input.anchor.lat, crs: 'gcj-02', source: input.anchor.source } satisfies PlanAnchor }
       : {}),
     boundary: boundaryOk ? boundaryEnu.map(p => ({ x: round2(p.x), y: round2(p.y) })) : [],
-    // 2026-11-17 同一标准：迁移过来能站住的红线也配一只白框（四边外扩 20 m），
+    // 2026-11-17 同一标准：迁移过来能站住的红线也配一只白框（四边外扩默认边距），
     // 否则旧项目搬进 2D 后同样是「有红线、没白框」。边界没解析出来（boundaryOk=false）就不造框。
     ...(boundaryOk ? { designScope: expandRect(boundaryEnu, DEFAULT_SCOPE_MARGIN_M) } : {}),
     zones: [],

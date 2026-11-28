@@ -2,7 +2,8 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { planPointToPixel } from '../lib/outdoor-plan-canvas';
+import { boundaryFramePillState, planPointToPixel } from '../lib/outdoor-plan-canvas';
+import { DEFAULT_SCOPE_MARGIN_M } from '../lib/outdoor-design-scope';
 import { createStarterOutdoorPlan } from '../lib/outdoor-project-store';
 import Canvas, { type OutdoorPlanCanvasHandle } from './outdoor-plan-canvas';
 import type { PlanPoint } from '../../../../supabase/functions/_shared/site-plan';
@@ -86,6 +87,8 @@ it('opens a numbered place via its map target and keeps detail actions out of ma
   expect(onPlanChange).not.toHaveBeenCalled();
   view.rerender(<Canvas {...props} selectedSearchPlace={place} />);
   expect(screen.getByRole('region', { name: `地点详情：${place.name}` }).textContent).toContain(place.address);
+  // 编号候选的前缀仍写号（下拉第 2 条 = 地图上的 2）。
+  expect(screen.getByRole('region', { name: `地点详情：${place.name}` }).textContent).toContain('2. 水上森林码头');
   expect(screen.getByRole('button', { name: '2. 水上森林码头' }).getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(screen.getByRole('button', { name: '设为活动场地' }));
   expect(onConfirm).toHaveBeenCalledOnce();
@@ -94,6 +97,62 @@ it('opens a numbered place via its map target and keeps detail actions out of ma
   expect(onPlanChange).not.toHaveBeenCalled();
   view.rerender(<Canvas {...props} />);
   expect(screen.queryByRole('region', { name: `地点详情：${place.name}` })).toBeNull();
+});
+
+/** 2026-11-28 用户反馈：点历史条目没有和直接搜索一样的活动卡片。
+ * 历史条目不铺编号钉（不在 searchPins 里），原来的卡片靠编号钉的位置定位，
+ * 索引 -1 → 位置 undefined → 整张卡不渲染。按位置断言：没有编号候选也要出卡。 */
+it('shows the place card for a picked place that is not in the numbered batch', () => {
+  const place = { id: 'history-dock', name: '青山湖水上森林', address: '锦北街道科技大道青山湖风景区内', lng: 120.01, lat: 30 };
+  const onConfirm = vi.fn();
+  const onClose = vi.fn();
+  render(
+    <Canvas
+      plan={createStarterOutdoorPlan()}
+      onPlanChange={vi.fn()}
+      onSearchPlaceClose={onClose}
+      onSearchPlaceConfirm={onConfirm}
+      selectedSearchPlace={place}
+    />,
+  );
+  const card = screen.getByRole('region', { name: `地点详情：${place.name}` });
+  expect(card.textContent).toContain(place.address);
+  // 没号就不写号：历史条目不编造 1/2/3。
+  expect(card.textContent).not.toContain('1. ');
+  fireEvent.click(screen.getByRole('button', { name: '设为活动场地' }));
+  expect(onConfirm).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: '关闭地点详情' }));
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+/** 2026-11-28 用户「这种出卡和这种出卡也必须是统一的，不能是两个提示弹窗」：
+ * 候选范围待核对时，白框顶那枚胶囊收进地点卡——只留一行状态 + ✓/✕，不再两个提示。 */
+it('folds the pending range into the place card instead of a second popup', () => {
+  const place = { id: 'dock', name: '水上森林码头', address: '青山湖景区', lng: 120.01, lat: 30 };
+  const onConfirm = vi.fn();
+  const onCancel = vi.fn();
+  const onVenueConfirm = vi.fn();
+  render(
+    <Canvas
+      plan={createStarterOutdoorPlan()}
+      onPlanChange={vi.fn()}
+      selectedSearchPlace={place}
+      onSearchPlaceConfirm={onVenueConfirm}
+      workflowScopePreview
+      onWorkflowScopeConfirm={onConfirm}
+      onWorkflowScopeCancel={onCancel}
+    />,
+  );
+  const card = screen.getByRole('region', { name: `地点详情：${place.name}` });
+  // 一行状态在卡里，两枚图标钮与胶囊同一条路。
+  expect(card.textContent).toContain('候选活动范围（待核对）');
+  // 同一件事不摆两个确认：待核对时「设为活动场地」让位。
+  expect(screen.queryByRole('button', { name: '设为活动场地' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '确认活动范围' }));
+  expect(onConfirm).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: '撤回活动范围预览' }));
+  expect(onCancel).toHaveBeenCalledOnce();
+  expect(onVenueConfirm).not.toHaveBeenCalled();
 });
 
 /** 落场地边界；初始 boundary 层默认锁定，点锁钮解锁后手柄才出现。 */
@@ -162,7 +221,29 @@ it('锁定态不渲染手柄；隐藏红线图层后手柄收起', () => {
   expect(handleEls(container)).toHaveLength(0);
 });
 
-it('点手柄进入既有拖拽链路：合法落点提交，设计范围随动', () => {
+it('锁定 + 选中红线：画布顶 DOM 浮条退役，胶囊规则在 lib 层钉住', () => {
+  const { ref, canvas } = mount();
+  act(() => {
+    expect(ref.current!.applyVenue(ANCHOR, QUAD)).toBe(true);
+  });
+  act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
+
+  // 点红线填充区 = 选中整条（2026-11-19 口径：锁只拦改形状，不拦选中）。
+  const center = pxOf(ref, { x: 0, y: 0 });
+  fireEvent.pointerDown(canvas, { clientX: center.x, clientY: center.y, pointerId: 21, button: 0, buttons: 1 });
+  fireEvent.pointerUp(canvas, { clientX: center.x, clientY: center.y, pointerId: 21, button: 0 });
+
+  // 2026-11-28 用户「红线的提示应该追随在白框正上方 + 取消/确认换图标」：
+  // 画布顶 DOM 浮条退役，选中态操作并入白框顶动作胶囊（canvas 绘制，DOM 测试看不到）；
+  // 同日用户拍板「锁定还弹已选中胶囊」去掉——锁定态整枚不画，口径在 lib 纯函数里钉住。
+  expect(screen.queryByTestId('boundary-selection-bar')).toBeNull();
+  expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: true }))
+    .toBeNull();
+  expect(boundaryFramePillState({ pendingEdit: false, candidatePreview: false, boundarySelected: true, boundaryLocked: false }))
+    .toEqual({ kind: 'selected', label: '已选中用地红线', actions: ['delete', 'cancel'] });
+});
+
+it('点手柄进入既有拖拽链路：合法落点先挂起，回车确认后才提交，设计范围随动', () => {
   const { ref, commit, container, canvas } = mount();
   applyEditableVenue(ref, QUAD, commit);
   act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
@@ -175,6 +256,13 @@ it('点手柄进入既有拖拽链路：合法落点提交，设计范围随动'
   fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 7, buttons: 1 });
   fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 7, button: 0 });
 
+  // 2026-11-28 用户「调整之后要 ✓/回车确认」：松手只挂起，不直接写方案。
+  expect(commit).not.toHaveBeenCalled();
+
+  // 回车 = 确认（与白框顶胶囊 ✓ 同一条路），确认才提交。
+  act(() => {
+    fireEvent.keyDown(window, { key: 'Enter' });
+  });
   expect(commit).toHaveBeenCalled();
   const last = commit.mock.calls.at(-1)![0];
   expect(last.boundary).toHaveLength(QUAD.length);
@@ -291,27 +379,34 @@ it('A1 拖顶点把面积压到 4㎡ 以下：拒绝「面积太小」，原环�
   expect(ref.current!.getEditVisuals().plan.boundary).toEqual(SMALL);
 });
 
-it('A4 顶点顶出白框：不拒几何，设计范围按新红线外扩 20m 重置', () => {
+it('A4 顶点顶出白框：确认后不拒几何，设计范围按新红线外扩默认边距重置', () => {
   const { ref, commit, container, canvas } = mount();
   applyEditableVenue(ref, BASE, commit);
   act(() => { ref.current!.focusLngLat(ANCHOR.lng, ANCHOR.lat, 19); });
   const oldScope = ref.current!.getEditVisuals().plan.designScope!;
 
   const from = pxOf(ref, BASE[0]!);
-  const to = pxOf(ref, { x: -50, y: -30 });
+  // 默认白框现在是四边各外扩 100 m（-120..120 / -115..115），顶点要真拖出框外才会重置。
+  const to = pxOf(ref, { x: -150, y: -130 });
   const handle = container.querySelector('[data-vertex-index="0"]') as HTMLElement;
 
   fireEvent.pointerDown(handle, { clientX: from.x, clientY: from.y, pointerId: 14, button: 0, buttons: 1 });
   fireEvent.pointerMove(canvas, { clientX: to.x, clientY: to.y, pointerId: 14, buttons: 1 });
   fireEvent.pointerUp(canvas, { clientX: to.x, clientY: to.y, pointerId: 14, button: 0 });
 
+  // 2026-11-28：松手只挂起，回车确认后才提交并同步设计范围。
+  expect(commit).not.toHaveBeenCalled();
+  act(() => {
+    fireEvent.keyDown(window, { key: 'Enter' });
+  });
+
   expect(commit).toHaveBeenCalled();
   const last = commit.mock.calls.at(-1)![0];
   expect(last.boundary[0]).not.toEqual(BASE[0]);
   expect(last.designScope).not.toEqual(oldScope);
-  // 新红线外接矩形四边各外扩 20 m。
-  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.x))).toBeCloseTo(-70, 6);
-  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.y))).toBeCloseTo(-50, 6);
+  // 新红线外接矩形四边各外扩默认边距（顶点 0 拖到 -150,-130，外接矩形左/下边就是 -150/-130）。
+  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.x))).toBeCloseTo(-150 - DEFAULT_SCOPE_MARGIN_M, 6);
+  expect(Math.min(...last.designScope.map((p: PlanPoint) => p.y))).toBeCloseTo(-130 - DEFAULT_SCOPE_MARGIN_M, 6);
 });
 
 it('A5 已有内容时换锚点：公共写句柄拒绝，原方案与锚点不动', () => {

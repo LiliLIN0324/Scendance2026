@@ -50,7 +50,6 @@ describe("proposeAutomaticVenueRange（地点轮廓优先）", () => {
 
     expect(result.boundary).toEqual(outline);
     expect(result.basis.kind).toBe("place-outline");
-    expect(result.waterLines).toContain("候选范围压到水面。");
     expect(loadMap).toHaveBeenCalledOnce();
   });
 });

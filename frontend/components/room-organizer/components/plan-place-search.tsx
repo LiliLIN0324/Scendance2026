@@ -17,8 +17,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { Search, X } from 'lucide-react';
+import { Clock, Search, X } from 'lucide-react';
 import {
+  forgetPlace,
   matchRecentPlaces,
   recentPlaces,
   rememberPlace,
@@ -251,17 +252,39 @@ export default function PlanPlaceSearch({
   }, [revokeToken]);
   const pinsRevoked = revokedSession === searchSession;
 
+  // 2026-11-28 用户指令：历史条目用历史标记，不占 1/2/3 编号——
+  // 编号属于「本次检索的候选」，与画布上的编号钉一一对应；历史行也带号时，
+  // 两条历史占掉的 1、2 会把自己搜到的第 1、2 个结果挤到 3、4，两套逻辑打架。
+  // 所以编号在「不占历史」的序列里重新数：历史行 null，其余（含选区）依次 1..N，
+  // 画布钉也用同一个号（index = 号 - 1），保证「下拉第 N 条」就是「地图上的 N」。
+  const optionNumbers = useMemo<Array<number | null>>(() => {
+    const numbers: Array<number | null> = [];
+    let next = 0;
+    for (const option of options) {
+      if (option.kind === 'place' && option.fromHistory) {
+        numbers.push(null);
+        continue;
+      }
+      next += 1;
+      numbers.push(next);
+    }
+    return numbers;
+  }, [options]);
+
   const placePins = useMemo<ReadonlyArray<SearchCandidatePin> | null>(() => {
     if (!keyword || pinsRevoked) return null;
     const pins: SearchCandidatePin[] = [];
     options.forEach((option, index) => {
       if (option.kind !== 'place') return;
+      // 历史条目没有号，也就不铺编号钉：地图上只标这次搜到的候选。
+      const no = optionNumbers[index];
+      if (no == null) return;
       const { lng, lat } = option.place;
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-      pins.push({ index, lng, lat, name: option.place.name, place: option.place });
+      pins.push({ index: no - 1, lng, lat, name: option.place.name, place: option.place });
     });
     return pins;
-  }, [options, keyword, pinsRevoked]);
+  }, [options, optionNumbers, keyword, pinsRevoked]);
 
   // 清理函数先报 null 再报新值，同一次 commit 内连发、最终值正确；
   // 组件卸载（3D 接管时整层退场）也经此把钉收干净。
@@ -270,6 +293,23 @@ export default function PlanPlaceSearch({
     notifyCandidates?.(placePins);
     return () => notifyCandidates?.(null);
   }, [notifyCandidates, placePins]);
+
+  /**
+   * 收岛的唯一出口：Esc、点 × 都走这里。
+   * 2026-11-28 用户反馈「点 × 后灵动岛没收回」：× 原来只清词，没动 focused / hover；
+   * 而 input 的 onBlur 又因为点击目标（× 自己）还在岛内而提前返回，focused 一直留成 true，
+   * 岛就撑在展开态。× 在用户口径里是「退出搜索」，与 Esc 同一收口。
+   */
+  const dismiss = useCallback(() => {
+    cancelPendingBlur();
+    setOpen(false);
+    setActive(-1);
+    // 关键：鼠标还停在岛上时 hover=true 会把 expanded 撑住，Esc 看起来没反应；
+    // 不用等 blur 事件回写 focused，这里直接把两态都收掉。
+    setHover(false);
+    setFocused(false);
+    inputRef.current?.blur();
+  }, [cancelPendingBlur]);
 
   function chooseOption(option: PlaceSearchOption) {
     if (option.kind === 'area') {
@@ -293,16 +333,21 @@ export default function PlanPlaceSearch({
     onPick(place);
   }
 
+  // 2026-11-28 用户指令：最近搜过支持单条删除——只摘历史，不影响实时检索结果与编号。
+  const removeRecent = useCallback((place: PlaceSuggestion) => {
+    forgetPlace(place);
+    setRecent(recentPlaces());
+  }, []);
+
   function clear() {
-    cancelPendingBlur();
     setQuery('');
     setHits([]);
     setAreas([]);
     setPicked(null);
-    setOpen(false);
-    setActive(-1);
     setSearchRequest(0);
     setSearchFailed(false);
+    // 清词、撤钉，并把灵动岛收回去（点 × 就是退出搜索）。
+    dismiss();
     onClear?.();
   }
 
@@ -314,18 +359,6 @@ export default function PlanPlaceSearch({
     setActive(-1);
     if (keyword.length >= 2) setSearchRequest(request => request + 1);
   }
-
-  /** Esc / 点地图同口径：收下拉与灵动岛，但保留已输入/已选地名，不改检索结果。 */
-  const dismiss = useCallback(() => {
-    cancelPendingBlur();
-    setOpen(false);
-    setActive(-1);
-    // 关键：鼠标还停在岛上时 hover=true 会把 expanded 撑住，Esc 看起来没反应；
-    // 不用等 blur 事件回写 focused，这里直接把两态都收掉。
-    setHover(false);
-    setFocused(false);
-    inputRef.current?.blur();
-  }, [cancelPendingBlur]);
 
   useEffect(() => {
     // 焦点可能已经离开 input（清除按钮、候选按钮、同步候选自动展开），
@@ -440,7 +473,7 @@ export default function PlanPlaceSearch({
       {open && options.length > 0 && (
         <ul className="sc-plan-place-search-options" id={`${testIdPrefix}-options`} role="listbox">
           {options.map((option, index) => (
-            <li key={option.kind === 'area' ? `area-${option.area.id}` : `place-${option.place.id}-${index}`} role="none">
+            <li key={option.kind === 'area' ? `area-${option.area.id}` : `place-${option.place.id}-${index}`} role="none" className="sc-plan-place-search-option-item">
               <button
                 type="button"
                 role="option"
@@ -451,11 +484,19 @@ export default function PlanPlaceSearch({
                 onMouseEnter={() => setActive(index)}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => chooseOption(option)}
-                className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : option.hasOutline ? ' is-outline' : ''}`}
+                className={`sc-plan-place-search-option${option.kind === 'area' ? ' is-area' : option.hasOutline ? ' is-outline' : ''}${option.kind === 'place' && optionNumbers[index] == null ? ' is-recent' : ''}`}
               >
                 {/* 2026-11-15 用户指令：下拉按从上往下的顺序编号，chat 卡只给前三个标题时
-                    说「第 N 个」能和这里的编号对上号。 */}
-                <span className="sc-plan-place-search-option-no" aria-hidden="true">{index + 1}</span>
+                    说「第 N 个」能和这里的编号对上号。
+                    2026-11-28 用户指令：历史条目不参与这套编号，改挂历史图标—
+                    否则「历史第一条」看上去就像「搜索结果的第 1 个」，和地图上的编号钉冲突。 */}
+                {optionNumbers[index] == null ? (
+                  <span className="sc-plan-place-search-option-history" title="最近搜过" aria-hidden="true">
+                    <Clock size={13} strokeWidth={1.8} />
+                  </span>
+                ) : (
+                  <span className="sc-plan-place-search-option-no" aria-hidden="true">{optionNumbers[index]}</span>
+                )}
                 {option.kind === 'area' ? (
                   <>
                     <span className="sc-plan-place-search-option-name">
@@ -478,6 +519,20 @@ export default function PlanPlaceSearch({
                   </>
                 )}
               </button>
+              {/* 2026-11-28 用户指令：最近搜过的行带删除 ×——只摘这条历史，不影响实时检索候选与编号。
+                  × 是行按钮的兄弟节点（按钮不能嵌套），绝对定位压在行右缘。 */}
+              {option.kind === 'place' && optionNumbers[index] == null && (
+                <button
+                  type="button"
+                  className="sc-plan-place-search-option-forget"
+                  aria-label={`删除最近搜过的「${option.place.name}」`}
+                  title="删除这条历史"
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={event => { event.stopPropagation(); removeRecent(option.place); }}
+                >
+                  <X size={12} strokeWidth={2} aria-hidden />
+                </button>
+              )}
             </li>
           ))}
         </ul>

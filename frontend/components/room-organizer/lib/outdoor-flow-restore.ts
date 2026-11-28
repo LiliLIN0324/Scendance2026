@@ -106,6 +106,8 @@ export function restoreOutdoorFlow(input: RestoreInput): RestoreResult {
     // 基准版本不同也保留：它是「未确认」，刷新后应重新预览、仍需显式确认，而不是直接丢掉。
     else pendingBoundary = boundaryRaw as NonNullable<OutdoorFlowState['pendingBoundary']>;
   }
+  // 已确认范围的场地名（2026-11-28 图注用）：缺字段/不是串就当没有，不连坐整份草稿。
+  const boundaryName = typeof raw.boundaryName === 'string' && raw.boundaryName ? raw.boundaryName : undefined;
 
   const state: OutdoorFlowState = {
     ...empty,
@@ -113,6 +115,7 @@ export function restoreOutdoorFlow(input: RestoreInput): RestoreResult {
     brief,
     confirmedBoundary,
     completed,
+    boundaryName,
     ...(pendingLogin ? { pendingLogin } : {}),
     ...(pendingBoundary ? { pendingBoundary } : {}),
   };

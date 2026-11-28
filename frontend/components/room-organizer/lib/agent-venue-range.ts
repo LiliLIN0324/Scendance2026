@@ -19,8 +19,6 @@ export interface VenueRangeBasis {
 export interface VenueRangeProposal {
   boundary: SitePlanData['boundary'];
   basis: VenueRangeBasis;
-  /** P0-A：候选层的水体核对结论（压水 / 数据未取全待核），随草案回给范围确认卡。空数组 = 取全且不压水。 */
-  waterLines: string[];
 }
 const rectangle = (width: number, depth: number): SitePlanData['boundary'] => rectangleAt(0, 0, width, depth);
 const rectangleAt = (cx: number, cy: number, width: number, depth: number): SitePlanData['boundary'] => [
@@ -185,17 +183,17 @@ export async function proposeAutomaticVenueRange(input: {
   const adapter = createOutdoorMapContext();
   const probe: SitePlanData = { ...input.plan, anchor: input.anchor, boundary: rectangle(500, 500),
     zones: [], facilities: [], routes: [], nodes: [], workers: [], vehicles: [], annotations: [], measurements: [], walls: [], designScope: rectangle(500, 500) };
-  /** 水体几何与证据同一次 load 取回：不额外发请求，也不拿底图像素去猜水在哪。 */
+  /** 水体几何与证据同一次 load 取回：不额外发请求，也不拿底图像素去猜水在哪。
+   *  2026-11-28 用户拍板：压水/待核这类提示不再随候选回传上卡（地图上看得见），
+   *  掩膜只留给概念草案避水（largestWaterFreeRect）。 */
   let waters: WaterRing[] = [];
-  let complete = false;
   const proposal = (boundary: SitePlanData['boundary'], basis: VenueRangeBasis): VenueRangeProposal => ({
-    boundary, basis, waterLines: waterCheckLines(boundary, [], waters, complete, '候选范围'),
+    boundary, basis,
   });
   try {
     const map = await adapter.load(`venue-probe:${input.name}`, probe, [], false, input.signal);
     input.signal.throwIfAborted();
     waters = ((map as { water?: () => WaterRing[] }).water?.() ?? []);
-    complete = map.status === 'ready';
   } catch { input.signal.throwIfAborted(); }
   if (input.footprint && checkBoundaryRing(input.footprint).ok) {
     // Keep the selected POI outline intact; water is reported for review, not used to invent an activity boundary.

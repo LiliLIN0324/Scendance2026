@@ -99,6 +99,39 @@ describe('buildPlaceSearchOptions（有轮廓优先）', () => {
   });
 });
 
+describe('buildPlaceSearchOptions（历史条目不自称候选）', () => {
+  // 2026-11-28 用户指令：历史条目不能排进 1/2/3 的号里——否则「历史第 1 条」看上去就是
+  // 「本次搜索的第 1 个」，与地图上的编号钉冲突。历史行由 `fromHistory` 标记。
+  it('只在最近里、不在本次结果里的地点标为历史；两边都有算结果', () => {
+    const options = buildPlaceSearchOptions({
+      query: '银泰',
+      areas: [],
+      places: [in77],
+      recent: [other, in77],
+      outlinedNames: new Set(),
+    });
+    const byName = (name: string) => options.find(item => item.kind === 'place' && item.place.name === name);
+    const recentOnly = byName('西湖银泰');
+    expect(recentOnly?.kind === 'place' && recentOnly.fromHistory).toBe(true);
+    const live = byName('湖滨银泰 in77');
+    expect(live?.kind === 'place' && live.fromHistory).toBe(false);
+  });
+
+  it('关键词为空时整列都是历史（不铺编号钉的那一批）', () => {
+    const options = buildPlaceSearchOptions({
+      query: '',
+      areas: [],
+      places: [],
+      recent: [other, in77],
+      outlinedNames: new Set(),
+    });
+    expect(options).toHaveLength(2);
+    for (const option of options) {
+      expect(option.kind === 'place' && option.fromHistory).toBe(true);
+    }
+  });
+});
+
 describe('fetchPlaceShapeHints / parseShapeHints', () => {
   it('本机走 3199，线上走同源', () => {
     expect(placeShapeHintsUrl('in77', [], true)).toBe('http://127.0.0.1:3199/api/place-shape-hints?q=in77');

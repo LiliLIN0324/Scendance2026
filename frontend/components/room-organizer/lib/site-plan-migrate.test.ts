@@ -143,7 +143,7 @@ describe('site plan legacy migration (H1-c)', () => {
 describe('迁移产物带设计范围', () => {
   const margin = DEFAULT_SCOPE_MARGIN_M;
 
-  it('边界解析成功时补白框，四边各外扩 20 m', () => {
+  it('边界解析成功时补白框，四边各外扩一个 margin', () => {
     const { data } = previewLegacyMigration(validRect());
     const scope = data.designScope;
     expect(scope).toHaveLength(4);

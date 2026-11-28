@@ -316,6 +316,18 @@ export function rememberPlace(place: PlaceSuggestion): void {
   }
 }
 
+/** 2026-11-28 用户指令：删除一条最近搜过的地点（按 id 匹配，行内 × 用）。 */
+export function forgetPlace(place: Pick<PlaceSuggestion, 'id'>): void {
+  const store = placeStorage();
+  if (!store) return;
+  try {
+    const next = recentPlaces().filter(item => item.id !== place.id);
+    store.setItem(PLACE_RECENT_STORAGE, JSON.stringify(next));
+  } catch {
+    // 存不下就算了，不影响选地点。
+  }
+}
+
 /** 关键词对最近地点做包含匹配（不区分大小写、忽略空格与标点）。 */
 export function matchRecentPlaces(query: string): PlaceSuggestion[] {
   const q = normalizeText(query);

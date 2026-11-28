@@ -300,7 +300,9 @@ body.is-theme-dark .cr-proposal button:first-child:hover {
 }
 
 /* 绿色点睛按钮（确认 / 发送 / 完成）暗色下用深绿底白字，保 ≥4.5:1；
-   浅绿 #7FB58F 只留作文字与浅底点缀。 */
+   浅绿 #7FB58F 只留作文字与浅底点缀。
+   地图地点卡的「设为活动场地」也在这一族：--green-deep 暗色下翻成浅墨 #93C7A3，
+   拿它当底色会变成浅底白字，看着像禁用（2026-11-28 用户截图实测）。 */
 body.is-theme-dark .sc-agent-panel .ap-zone-proposal__btn,
 body.is-theme-dark .sc-agent-panel .ap-steps li.is-done svg,
 body.is-theme-dark .sc-agent-panel .ap-review-tool.is-send,
@@ -309,6 +311,7 @@ body.is-theme-dark .sc-issue-confirm,
 body.is-theme-dark .sc-zone-picker button.is-active,
 body.is-theme-dark .sc-issue-go b,
 body.is-theme-dark .sc-mobile-dock-send,
+body.is-theme-dark .sc-map-place-confirm,
 body.is-theme-dark .cr-chat-composer button:not(:disabled) {
   background: #35624A;
   border-color: #35624A;
@@ -490,8 +493,7 @@ body.is-theme-dark [data-testid="facility-notes-toggle"] {
   color: var(--ink-soft) !important;
 }
 body.is-theme-dark [data-testid="annotate-zone"] { border-bottom-color: var(--hair) !important; }
-body.is-theme-dark [data-testid="annotate-draw-tools"],
-body.is-theme-dark [data-testid="annotate-color-bar"] { background: var(--plane) !important; }
+/* 2026-11-28 用户指令：工具行/颜色行去掉背后的灰色填充（含暗色覆写），只留图标本身。 */
 body.is-theme-dark [data-testid="annotate-draw-tools"] button {
   background: transparent;
   border-color: transparent !important;
@@ -709,11 +711,9 @@ body.is-theme-dark [data-testid="plan-placement-bar"] {
 body.is-theme-dark [data-testid="plan-context-menu"] [role="menuitem"] { color: var(--ink-soft) !important; }
 body.is-theme-dark [data-testid="plan-context-menu"] [role="separator"] { background: var(--hair) !important; }
 body.is-theme-dark [data-testid="conflict-detail"] { color: var(--ink-soft) !important; }
-body.is-theme-dark [data-testid="annotate-note-input"] {
-  background: var(--paper) !important;
-  border-color: var(--green) !important;
-  color: var(--ink) !important;
-}
+/* 2026-11-28 文本标注就地输入框改成「提交后的样子」（色底白字 pill，与画布 drawAnnotationNote 同款），
+   深浅主题同一观感——原暗色反色覆写（paper 底 + 绿描边 + 墨字）随之退役；占位字用半透明白保读得清。 */
+[data-testid="annotate-note-input"]::placeholder { color: rgba(255, 255, 255, .65); }
 body.is-theme-dark [data-testid^="facility-model-"],
 body.is-theme-dark [data-testid="facility-multi-copy"],
 body.is-theme-dark [data-testid="cross-multi-delete"] {
@@ -850,18 +850,36 @@ body.is-theme-dark .sc-workbench .sc-share-trigger.is-active {
   color: #7FB58F !important;
 }
 
-/* 物料 / 空间目录搜索胶囊：字面白底回到纸面，描边与阴影压暗。 */
+/* 物料 / 空间目录搜索胶囊：2026-11-28 用户指令——底色改浅色（不再是深灰纸面）；
+   有内容（has-value，输入非空）时整枚变品牌绿，放大镜/文字/排布钮随白。 */
 body.is-theme-dark .sc-catalog-search {
-  background: var(--paper);
-  border-color: var(--hair);
-  color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 8px 24px rgba(0, 0, 0, .28);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.9);
+  color: #202124;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, .18), 0 8px 24px rgba(20, 20, 22, .22);
 }
 body.is-theme-dark .sc-catalog-search:hover,
 body.is-theme-dark .sc-catalog-search:focus-within {
-  border-color: var(--hair);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 28px rgba(0, 0, 0, .32);
+  border-color: #ffffff;
+  box-shadow: 0 1px 2px rgba(20, 20, 22, .2), 0 10px 28px rgba(20, 20, 22, .26);
 }
+body.is-theme-dark .sc-catalog-search.has-value {
+  background: var(--green, #4A7C59);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(53, 98, 74, .35), 0 10px 26px rgba(53, 98, 74, .28);
+}
+body.is-theme-dark .sc-catalog-search.has-value .sc-catalog-search-icon { color: #ffffff !important; }
+body.is-theme-dark .sc-catalog-search.has-value input::placeholder { color: rgba(255, 255, 255, .75); }
+body.is-theme-dark .sc-catalog-search.has-value .sc-catalog-search-toggle { color: #ffffff; }
+.sc-catalog-search.has-value {
+  background: var(--green, #4A7C59);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+}
+.sc-catalog-search.has-value .sc-catalog-search-icon { color: #ffffff; }
+.sc-catalog-search.has-value input::placeholder { color: rgba(255, 255, 255, .75); }
+.sc-catalog-search.has-value .sc-catalog-search-toggle { color: #ffffff; }
 
 /* 左上角搜地点胶囊：字面白底回到暗色纸面，描边/阴影压暗；下拉选项列表同回暗色。 */
 body.is-theme-dark .sc-plan-place-search-field {
@@ -886,7 +904,8 @@ body.is-theme-dark .sc-plan-place-search-spinner {
   border-top-color: var(--ink-soft);
 }
 body.is-theme-dark .sc-plan-place-search-options {
-  background: var(--paper);
+  /* 2026-11-28 视觉修：下拉底比胶囊再深一档（#17191D），胶囊/列表不再糊成一块。 */
+  background: #17191D;
   border-color: var(--hair);
   color: var(--ink);
   box-shadow: 0 2px 6px rgba(0, 0, 0, .18), 0 14px 34px rgba(0, 0, 0, .32);
@@ -894,8 +913,12 @@ body.is-theme-dark .sc-plan-place-search-options {
 body.is-theme-dark .sc-plan-place-search-option { color: var(--ink); }
 body.is-theme-dark .sc-plan-place-search-option[aria-selected='true'] { background: var(--plane); }
 body.is-theme-dark .sc-plan-place-search-option-no { background: var(--plane-deep); color: var(--ink-soft); }
+body.is-theme-dark .sc-plan-place-search-option-history { color: var(--ink-soft); }
 body.is-theme-dark .sc-plan-place-search-option-address { color: var(--ink-soft); }
 body.is-theme-dark .sc-plan-place-search-badge { border-color: var(--hair); color: var(--ink-soft); }
+
+/* 2026-11-28 用户裁决：地图搜索岛恢复原深色观感——「收起态浅色/有内容变绿」这套不要了（已撤销）。
+   输入时唯一的高亮是搜索键本身（见 .sc-plan-place-search-submit 的 focus-within 规则）。 */
 
 /* 物料卡上悬浮的收藏 / 标签小钮：字面白圆底回到暗色平面。 */
 body.is-theme-dark .sc-material-star,
@@ -1761,7 +1784,7 @@ body.is-theme-dark .sc-material-tagpin {
 @media (max-height:600px) {
   .sc-workbench .is-docked-layout .sc-canvas-column { --sc-shelf-height:140px; }
 }
-@media (max-width:1080px) {
+@media (max-width:768px) {
   .sc-workbench .sc-workspace.is-docked-layout { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:8px; }
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(220px,1fr) minmax(240px,42%); }
   .sc-workbench .is-docked-layout .sc-canvas-stage { grid-area:1 / 1; }
@@ -1775,7 +1798,7 @@ body.is-theme-dark .sc-material-tagpin {
   .sc-workbench .is-docked-layout .sc-canvas-stage.has-selection .sc-canvas-heading { display:flex; }
   .sc-workbench .is-docked-layout .sc-left-drawer { bottom:48px; }
 }
-@media (max-width:1080px) {
+@media (max-width:768px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
     grid-template-columns: var(--sc-nav-rail-width) minmax(0, 1fr);
@@ -1786,49 +1809,7 @@ body.is-theme-dark .sc-material-tagpin {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
   .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 2; }
 }
-/* 2026-11-15 用户指令（中等尺寸「上下」难看，窄屏那套更好）：
-   769–1080 不再把左栏和画布切成上下两行——画布占满整列高度（竖排工具列才有地方站），
-   左栏改成浮在画布左上角的卡：宽度跟桌面一致（min(420px, 46%)），高度 62%（底部留给
-   比例尺 / 2D-3D 角标），内部照旧头部→滚动正文→输入区。
-   ≥1081 三列与 ≤768 手机外壳都不进这个断点。 */
-@media (min-width:769px) and (max-width:1080px) {
-  /* 浮层卡宽度只算一次：视口与 .sc-workspace 同宽（inset:0），用 vw 表达才能被画布里的
-     抬头/胶囊复用——百分比在那里会按画布列宽重算，两边对不上。 */
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail { --sc-medium-card-w: min(420px, 46vw); }
-  /* 画布吃满：一行网格，左栏与画布同格叠放。 */
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail,
-  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail { grid-row: 1; }
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column > .sc-canvas-stage { grid-column: 2; grid-row: 1; }
-  /* 左栏 → 画布上的浮层卡。左缘让开图标轨，右缘留出地图。 */
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column {
-    position: absolute; left: calc(var(--sc-nav-rail-width) + 12px); top: 12px;
-    right: auto; bottom: auto; grid-column: auto; grid-row: auto;
-    width: var(--sc-medium-card-w); height: min(62%, 640px); max-height: calc(100% - 24px);
-    border: 1px solid var(--wk-hair); border-radius: 16px;
-    background: var(--paper);
-    box-shadow: var(--e1);
-    /* 2026-11-19 用户：物料卡被画布浮层（规划信息 / 搜地点）压住标题。
-       窄屏这张卡就是前台页面，必须压在画布浮层（规划信息 40、搜地点 6/30）之上；
-       图标轨的 hover 提示再用 46 压回来（见 .sc-mode-rail）。 */
-    z-index: 45;
-  }
-  /* 画布左上角的抬头/胶囊让到卡片右侧：卡片左缘离画布 12px，再留 24px 间距。
-     （.sc-canvas-heading 目前只有自家测试引用，属防御性规则；.sc-canvas-mode 在隔离扫描态
-     是活着的，两者同在左上角。） */
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column .sc-canvas-heading,
-  .sc-workbench .is-docked-layout.is-mode-rail.has-left-column .sc-canvas-mode {
-    left: calc(var(--sc-medium-card-w) + 36px);
-    max-width: calc(100% - var(--sc-medium-card-w) - 96px);
-  }
-  /* 2026-11-20：旧三步引导气泡（GuideBubble）退役，避让规则随之删除。
-     新的引导卡片由 onboarding/ 挂到 body 上的 fixed 浮层，不参与 .sc-canvas-stage 栈上下文，
-     位置由控件实测矩形算出，不再需要按卡片宽度平移。 */
-  /* 断点里不再按拖边改宽：那条线只服务桌面的 --sc-left-card-width。 */
-  .sc-workbench .is-docked-layout.is-mode-rail > .sc-left-column .sc-left-card-resizer { display: none; }
-}
+
 @media (max-width:420px) {
   .sc-workbench .sc-workspace.is-docked-layout.has-conversation { grid-template-rows:minmax(0,1fr); }
   .sc-workbench .is-docked-layout.has-conversation .sc-canvas-stage { display:none; }
@@ -1891,12 +1872,12 @@ body.is-theme-dark .sc-material-tagpin {
 .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden {
   grid-template-columns: 0 minmax(0, 1fr);
 }
-@media (min-width: 1081px) {
+@media (min-width: 769px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-chrome-hidden {
     grid-template-columns: 0 0 minmax(0, 1fr);
   }
 }
-@media (min-width: 1081px) {
+@media (min-width: 769px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column {
     grid-template-columns: var(--sc-nav-rail-width) var(--sc-left-card-width, 320px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
@@ -2134,10 +2115,14 @@ body.is-theme-dark .sc-material-tagpin {
   content: none;
 }
 /* 桌面：左轨和旁边的侧栏是同一张浮起的纸。阴影只打在这一组外缘，中间仍是发丝线。
-   工作台 overflow:hidden，所以组要缩进，影子才不会被切掉。 */
-@media (min-width: 1081px) {
+   工作台 overflow:hidden，所以组要缩进，影子才不会被切掉。
+   2026-11-28 用户：「左边有 border 和圆角，右边又贴边」——原来这张纸只管到左栏，
+   画布是一块方角、右侧只留 8px 的裸面（+ 户外 2D 的 surface 用 inset:0 把 8px 垫边也盖掉），
+   同一个窗口左右两种收口。现在纸张从轨道一直画到画布：四周留白一律 10px，
+   外缘圆角 16px（左端归轨道，右端归画布），画布裁内容让地图跟着圆角走。 */
+@media (min-width: 769px) {
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail {
-    padding: 10px 8px 10px 10px;
+    padding: 10px;
     box-sizing: border-box;
   }
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail > .sc-mode-rail {
@@ -2155,13 +2140,37 @@ body.is-theme-dark .sc-material-tagpin {
     border-radius: 16px;
     box-shadow: var(--e1);
   }
+  /* 纸张中段：左栏右侧不再收口（否则与画布相接处会挤出一个月牙缝），改由画布收口。 */
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column:not(.is-empty-dock) > .sc-left-column {
     border-right: 0;
+    border-radius: 0;
+  }
+  /* 纸张右端 = 画布：自己也是一张卡，右侧 16px 圆角收口（左端归轨道，中段是左栏）。
+     轨道收进（is-chrome-hidden）时画布自己就是整张纸，四角全圆。 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage {
     border-radius: 0 16px 16px 0;
+    border: 1px solid var(--wk-hair);
+    background: var(--wk-paper);
+    box-shadow: var(--e1);
+  }
+  /* 只裁地图本体（户外 2D 的 surface）：瓦片是 img/canvas 混排，不裁就盖住纸张的圆角。
+     不动画布栏自身的 overflow——工具提示 / 拖拽幽灵这些向外出头的浮层不在裁剪范围。 */
+  .sc-workbench .is-docked-layout.is-mode-rail > .sc-canvas-stage [data-testid="outdoor-plan-surface"] {
+    border-radius: 0 16px 16px 0;
+    overflow: hidden;
+  }
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden > .sc-canvas-stage,
+  .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.is-chrome-hidden > .sc-canvas-stage [data-testid="outdoor-plan-surface"] {
+    border-radius: 16px;
+  }
+  /* 3D 场景视图自带 12px 圆角，装在 16px 的纸张里会在四角留白月牙；跟随纸张口径。 */
+  .sc-workbench .is-docked-layout.is-mode-rail .sc-canvas-stage .sc-scene-viewport {
+    border-radius: 16px;
   }
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail:not(.has-left-column) > .sc-mode-rail,
   .sc-workbench .sc-workspace.is-docked-layout.is-mode-rail.has-left-column.is-empty-dock > .sc-mode-rail {
-    border-radius: 16px;
+    /* 右侧不再圆：右边永远接着画布（同一张纸），轨道只是纸的左端。 */
+    border-radius: 16px 0 0 16px;
     border-right: 0;
     box-shadow: var(--e1);
   }
@@ -3279,9 +3288,10 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#to
   display: none !important;
 }
 
-/* 我们自己的隐藏工具栏：贴底居中，收起后只剩一颗小把手。 */
+/* 我们自己的隐藏工具栏：贴底居中，收起后只剩一颗小把手。
+   2026-11-28 用户截图反馈「位置太高」：52px 下移到 20px，与右下 Google 控制列同一条贴底线。 */
 .sc-workbench .sc-tool-column .oc-dock {
-  position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
   z-index: 35; display: flex; flex-direction: column; align-items: center; gap: 0;
   pointer-events: none;
 }
@@ -3321,8 +3331,20 @@ body.is-theme-dark .sc-workbench .sc-tool-column .oc-cluster .oc-share button#to
   border-radius: 999px; overflow: visible; animation: none;
   transition: max-width .36s cubic-bezier(.32, 1.25, .48, 1);
 }
+/* 2026-11-28 用户反馈收起态点击范围太小：整颗岛可点，hover 反馈也跟到整颗岛——
+   底色提亮 + 投影抬升（悬停加宽露出更多「工具」二字沿用原 84→96px）；暗色平面用全仓同一枚 #25282F 悬停面。 */
 .sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover {
   max-width: 96px;
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(60, 64, 67, .22);
+}
+body.is-theme-dark .sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island:hover {
+  background: #25282F !important;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, .40);
+}
+/* 收起态整颗岛可点，光标也跟手指。 */
+.sc-workbench .sc-tool-column .oc-dock:not(.is-open) .oc-cluster.oc-bb.oc-island {
+  cursor: pointer;
 }
 .sc-workbench .sc-tool-column .oc-dock.is-open .oc-cluster.oc-bb.oc-island {
   max-width: min(92vw, 820px);
@@ -3853,8 +3875,9 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   color: var(--sc-ink); font-size: 12px; text-decoration: none; white-space: nowrap;
 }
 .sc-workbench .sc-settings-pop .sc-settings-link:hover { background: var(--wk-plane); }
-/* 窄屏左栏是 z-index 55 的浮层，会压住整条导轨；弹层打开时把导轨抬到它上面。 */
-@media (max-width: 1080px) {
+/* 窄屏（≤768）左栏是 z-index 55 的浮层，会压住整条导轨；弹层打开时把导轨抬到它上面。
+   2026-11-28 起 769–1080 已并回桌面三列，左栏不再是浮层，这条只管手机档。 */
+@media (max-width: 768px) {
   .sc-workbench .is-docked-layout.is-mode-rail > .sc-mode-rail:has(.sc-settings-pop) { z-index: 56; }
 }
 .sc-workbench .sc-checklist-drawer {
@@ -3991,8 +4014,8 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   position: absolute;
   z-index: 6;
   width: 44px;
-  transition: width 0.36s cubic-bezier(0.32, 1.25, 0.48, 1);
-  will-change: width;
+  /* 2026-11-28 用户裁决：宽度过渡动画整个删掉——过渡帧里 input 会把已输入文字滚到末尾显示，
+     看起来像「文本右对齐的中间态」。收放改为瞬时切换，三档宽度照旧。 */
 }
 .sc-plan-place-search.has-value {
   width: 192px;
@@ -4019,7 +4042,7 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   font-weight: 600;
   line-height: 1;
   opacity: 0;
-  transition: max-width 0.36s cubic-bezier(0.32, 1.25, 0.48, 1), opacity 0.2s ease;
+  /* 2026-11-28 用户裁决：随宽度动画一起删——中间过渡帧里文本会呈右对齐假象。 */
 }
 .sc-plan-place-search:not(.is-expanded).has-value .sc-plan-place-search-collapsed-name {
   max-width: 140px;
@@ -4029,6 +4052,7 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 2026-11-28 用户裁决：40px 是基准高度（胖胶囊也要），与 28px 贴左按钮配套。 */
   height: 40px;
   padding: 0 6px 0 12px;
   border: 1px solid rgba(20, 20, 22, 0.1);
@@ -4054,6 +4078,7 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
 .sc-plan-place-search-submit {
   display: grid;
   place-items: center;
+  /* 2026-11-28 用户裁决：28×28 + 贴左缘（-6px）是「ddd」文字离左距离的基准，别再动。 */
   flex: 0 0 28px;
   width: 28px;
   height: 28px;
@@ -4067,6 +4092,19 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
 }
 .sc-plan-place-search-submit:hover { background: var(--plane-deep, #eef0ed); }
 .sc-plan-place-search-submit:focus-visible { outline: 2px solid var(--green, #4a7c59); outline-offset: 2px; }
+/* 2026-11-28 用户裁决（docs/05 选择器口径已同步撤销「不做绿底容器」）：
+   有输入时搜索键 = 品牌绿底容器（实心 --green 底 + 白放大镜），hover 转 --green-deep；
+   空框透明不高亮。深浅主题随 token（夜间 --green=#7FB58F）。 */
+.sc-plan-place-search.has-value .sc-plan-place-search-submit,
+.sc-plan-place-search.has-value .sc-plan-place-search-submit .sc-plan-place-search-icon {
+  background: var(--green, #4A7C59);
+  color: #ffffff;
+}
+.sc-plan-place-search.has-value .sc-plan-place-search-submit:hover,
+.sc-plan-place-search.has-value .sc-plan-place-search-submit:hover .sc-plan-place-search-icon {
+  background: var(--green-deep, #35624A);
+  color: #ffffff;
+}
 .sc-place-search-status { padding: 14px 16px; color: var(--ink-soft, #71767e); font-size: 12px; }
 .sc-search-pin-hit {
   position: absolute;
@@ -4100,6 +4138,11 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
 .sc-map-place-card p { margin: 8px 0 12px; color: var(--ink-soft, #71767e); font-size: 12px; line-height: 1.5; }
 .sc-map-place-close { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 20px; }
 .sc-map-place-confirm { margin-top: 4px; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--green-deep, #315b43); color: #fff; cursor: pointer; font-size: 12px; }
+/* 2026-11-28 「不能是两个提示弹窗」：候选活动范围待核对收进地点卡，一行状态 + 两枚图标钮。 */
+.sc-map-place-pending { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair, #e5e7eb); }
+.sc-map-place-pending-text { flex: 1; color: var(--ink-soft, #71767e); font-size: 12px; line-height: 1.4; }
+.sc-map-place-pending-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--hair, #e5e7eb); border-radius: 8px; background: var(--plane, #fff); color: inherit; cursor: pointer; }
+.sc-map-place-pending-icon:hover { background: rgba(20, 20, 22, 0.05); }
 .sc-plan-place-search-field:focus-within .sc-plan-place-search-icon {
   color: var(--sc-ink, #141416);
 }
@@ -4131,8 +4174,12 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
    flex:1 占满整行，把地名胶囊顶到最右。收缩态让它宽度归零，地名贴着放大镜图标。
    （选择器只挂一层根节点：field 的类名是 -field 后缀，不匹配 .sc-plan-place-search。） */
 .sc-plan-place-search:not(.is-expanded) input {
-  flex: 0 1 0px;
+  /* 2026-11-28 用户反馈：input 宽度归零后两侧 8px flex gap 还在，收起态地名比展开态文字多退 8px——
+     负边距在 gap 数学里不可靠，改为绝对定位移出布局：flex 里只剩 按钮→地名 一次 gap，同位精准。 */
+  position: absolute;
+  width: 0;
   min-width: 0;
+  flex: none;
 }
 .sc-plan-place-search input::placeholder {
   color: var(--sc-muted, #71767e);
@@ -4257,22 +4304,25 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
 }
 .sc-plan-place-search-options {
   list-style: none;
-  margin: 6px 0 0;
+  /* 2026-11-28 视觉修：6px→4px 贴住胶囊；圆角 14→16 与灵动岛一族；原生滚动条（带箭头）隐藏。 */
+  margin: 4px 0 0;
   padding: 5px;
   border: 1px solid rgba(20, 20, 22, 0.08);
-  border-radius: 14px;
+  border-radius: 16px;
   background: #ffffff;
   color: var(--sc-ink, #141416);
   box-shadow: 0 2px 6px rgba(20, 20, 22, 0.04), 0 14px 34px rgba(20, 20, 22, 0.14);
   max-height: min(320px, 50vh);
   overflow-y: auto;
+  scrollbar-width: none;
 }
+.sc-plan-place-search-options::-webkit-scrollbar { display: none; }
 .sc-plan-place-search-option {
   display: grid;
   grid-template-columns: auto 1fr;
   column-gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -4302,18 +4352,59 @@ body.is-theme-dark .sc-workbench .sc-tool-pop.sc-share-panel {
   font-variant-numeric: tabular-nums;
 }
 .sc-plan-place-search-option > .sc-plan-place-search-option-name { grid-column: 2; }
+/* 2026-11-28 用户指令：历史条目挂历史图标，不占编号（编号只属于本次检索，与画布编号钉一一对应）。
+   和序号同一格同一尺寸，只去掉药丸底、只留图标，两种行的标题左边缘对齐。 */
+.sc-plan-place-search-option > .sc-plan-place-search-option-history {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--sc-muted, #71767e);
+}
 .sc-plan-place-search-option > .sc-plan-place-search-option-address { grid-column: 2; }
 .sc-plan-place-search-option[aria-selected='true'] {
   background: rgba(20, 20, 22, 0.055);
 }
+/* 2026-11-28 用户指令：最近搜过的行带删除 ×——× 是 li 里行按钮的兄弟节点（按钮不能嵌套），
+   绝对定位压行右缘；历史行右侧留 34px 给它，实时检索候选不带 ×。 */
+.sc-plan-place-search-options > li.sc-plan-place-search-option-item { position: relative; }
+.sc-plan-place-search-option.is-recent { padding-right: 40px; }
+.sc-plan-place-search-option-forget {
+  all: unset;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--sc-muted, #71767e);
+  cursor: pointer;
+  opacity: 0.55;
+}
+.sc-plan-place-search-option-forget:hover {
+  opacity: 1;
+  background: rgba(20, 20, 22, 0.06);
+  color: #d93025;
+}
+body.is-theme-dark .sc-plan-place-search-option-forget { color: var(--ink-soft, #9aa0a6); }
+body.is-theme-dark .sc-plan-place-search-option-forget:hover { background: var(--plane-deep, #2a2d33); color: #ff8a80; }
 .sc-plan-place-search-option-name {
   font-size: 12.5px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 .sc-plan-place-search-option-address {
   font-size: 11.5px;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--sc-muted, #71767e);
 }
 /* 选区行（行政区边界）：名称旁一枚「选区」小徽标，和普通地点在视觉上分开。 */

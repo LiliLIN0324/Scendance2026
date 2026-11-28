@@ -168,6 +168,16 @@ describe('annotations in the contract & plan views (2026-11-11)', () => {
     if (!parsed.success) return;
     expect(parsed.data.annotations?.[0]?.strokeWidth).toBe('thick');
 
+    // 2026-11-28 用户指令：note 也携带档位（解释为字号 thin=小字 / thick=大字），契约原样 round-trip。
+    const note = buildAnnotation({ kind: 'note', name: '文本 1', points: [{ x: 0, y: 0 }], text: '大字', strokeWidth: 'thick' });
+    expect(note.ok).toBe(true);
+    if (!note.ok) return;
+    expect(note.value.strokeWidth).toBe('thick');
+    const noteParsed = sitePlanDataSchema.safeParse({ ...basePlan(), annotations: [note.value] });
+    expect(noteParsed.success).toBe(true);
+    if (!noteParsed.success) return;
+    expect(noteParsed.data.annotations?.[0]?.strokeWidth).toBe('thick');
+
     // 旧快照不带 strokeWidth：照常解析，字段为 undefined（渲染层按细线兜底）。
     const legacy = buildAnnotation({ kind: 'line', name: '线段 1', points: [{ x: 0, y: 0 }, { x: 8, y: 0 }] });
     expect(legacy.ok).toBe(true);

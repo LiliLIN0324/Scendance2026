@@ -51,6 +51,11 @@ export interface OutdoorFlowState {
   completed: OutdoorStage[];
   pendingBoundary?: { anchor: NonNullable<SitePlanData["anchor"]>; boundary: SitePlanData["boundary"]; name: string; base: string; basis?: import('./agent-venue-range').VenueRangeBasis } | undefined;
   rangeBasis?: import('./agent-venue-range').VenueRangeBasis;
+  /**
+   * 已确认范围带的场地名（来自搜索候选）；2026-11-28 用户拍板：任务卡上的红线缩略
+   * 图注用它开头（「“场地名”：n 个点 · 面积」），手画/静默确认的范围没有名字就置空。
+   */
+  boundaryName?: string | undefined;
   pendingLogin?: { message: string; planVersion: string; ownerId?: string };
 }
 export function emptyOutdoorFlow(scope: string): OutdoorFlowState {
@@ -358,7 +363,17 @@ export interface OutdoorAgentBridge {
   beginVenueBoundary(anchor: NonNullable<SitePlanData["anchor"]>): boolean;
   cancelVenueBoundary?(): void;
   clearVenuePreview?(): void;
-  previewVenuePoint?(place: { lng: number; lat: number; name: string }): void;
+  /**
+   * `index`：这条在候选列表里的序号（0 起）。带上它，地图上的钉就与列表写同一个号，
+   * 2026-11-28 用户「这个还是可以服从123的逻辑啊」；不带就只画一枚纯红钉。
+   */
+  previewVenuePoint?(place: { lng: number; lat: number; name: string; index?: number }): void;
+  /**
+   * 2026-11-28 用户「点是错误的，轮廓是对的」：检索源 POI 点可与真实占地差几十米，
+   * 轮廓到手后把选中钉（含编号钉里的同一候选）搬到吸附进足迹的修正点。
+   * 只搬钉子，不动选区/视图，不与 previewVenuePoint 的飞视图语义混用。
+   */
+  correctVenuePin?(place: { lng: number; lat: number; name: string }): void;
   applyRoutes(
     routes: SitePlanData["routes"],
     nodes: SitePlanData["nodes"],

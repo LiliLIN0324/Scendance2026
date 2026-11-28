@@ -691,7 +691,8 @@ export function ScendanceViewTools({ shareActions, shareOpenRequest = 0, chromeH
             2026-11-20 灵动岛化：不再是「一颗把手 + 一条另起的工具条」，收成一颗岛——
             收起是小圆钮，悬停露出「工具」，点开横向长成整条工具胶囊；岛始终是同一个元素。 */}
         <div className={`oc-dock${dockOpen ? ' is-open' : ''}`}>
-          <div id="oc-tool-dock" className="oc-cluster oc-bb oc-island" aria-label="底部工具条">
+          {/* 2026-11-28 用户反馈收起态点击范围太小：整颗岛都是展开钮——点「工具」二字或胶囊任意处都展开；展开态仍只认岛核 ⌄ 收起。 */}
+          <div id="oc-tool-dock" className="oc-cluster oc-bb oc-island" aria-label="底部工具条" onClick={dockOpen ? undefined : openToolDock}>
             {/* 岛核：收起时只留 ⌃，展开后翻成 ⌄＝收起。 */}
             <button
               type="button"

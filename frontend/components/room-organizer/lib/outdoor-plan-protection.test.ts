@@ -87,6 +87,27 @@ it('换场地：车辆跟旧内容一起清掉，不把旧坐标系的活车留�
   expect(plan.vehicles).toHaveLength(1);
 });
 
+// 2026-11-28：标注/测量也画在旧坐标系上——清空计数早把它们算进去，plan 却没清，
+// 换场后钉在新场地上（与 #118 车辆同一类漏）。
+it('换场地：标注与测量一并清掉，计数与实际清空一致', () => {
+  const plan = createStarterOutdoorPlan();
+  plan.annotations = [
+    { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', kind: 'note', name: '备注', text: '舞台在北侧', position: { x: 3, y: 4 }, notes: '' },
+  ] as never;
+  plan.measurements = [
+    { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', kind: 'distance', name: '测量', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }], lengthM: 5, notes: '' },
+  ] as never;
+  const nextAnchor = { lng: plan.anchor!.lng + 0.1, lat: plan.anchor!.lat, crs: 'gcj-02' as const, source: 'picker' as const };
+  const boundary = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 10 }, { x: 0, y: 10 }];
+  const result = planForPickedVenue(plan, nextAnchor, boundary);
+  expect(result.replaced).toBe(true);
+  expect(result.cleared).toBe(2);
+  expect(result.plan.annotations).toEqual([]);
+  expect(result.plan.measurements).toEqual([]);
+  expect(plan.annotations).toHaveLength(1);
+  expect(plan.measurements).toHaveLength(1);
+});
+
 it('同一锚点原地重画边界：内容原样保留，只换 boundary', () => {
   const plan = createStarterOutdoorPlan();
   plan.nodes.push({ id: 'entry', name: '入口', kind: 'both', notes: '', position: { x: 0, y: 0 } });
