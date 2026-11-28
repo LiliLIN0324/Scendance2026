@@ -68,6 +68,30 @@ describe('PlanPlaceSearch Escape', () => {
   });
 });
 
+// 2026-11-28 用户反馈：点搜索框右侧的 × 之后，灵动岛没收回（词清了，岛还撑着展开态）。
+// 按位置断言：× 就是「退出搜索」，鼠标还停在岛上、input 的 blur 因点击目标在岛内被跳过时也要收。
+describe('PlanPlaceSearch clear button', () => {
+  it('collapses the island when × clears the query, even while the pointer and input are still on it', async () => {
+    const onClear = vi.fn();
+    render(<PlanPlaceSearch onPick={vi.fn()} onClear={onClear} sync={{ query: '西湖', hits: [westLake] }} />);
+    const host = screen.getByTestId('plan-place-search');
+    const input = screen.getByTestId('plan-place-search-input') as HTMLInputElement;
+    await screen.findByRole('listbox');
+    fireEvent.mouseEnter(host);
+    fireEvent.focus(input);
+    expect(host.getAttribute('data-expanded')).toBe('true');
+
+    fireEvent.click(screen.getByTitle('清除'));
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe('');
+    expect(host.getAttribute('data-expanded')).toBe('false');
+    expect(host.className).not.toContain('is-expanded');
+    expect(host.className).not.toContain('has-value');
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+});
+
 // 2026-11-27 用户指令（对齐百度地图）：下拉候选要按序号上报给画布落编号钉。
 // 序号必须与下拉渲染的 1/N 一致（「第 2 个」在地图上就是标 2 的钉）。
 describe('PlanPlaceSearch candidate pins', () => {

@@ -271,6 +271,23 @@ export default function PlanPlaceSearch({
     return () => notifyCandidates?.(null);
   }, [notifyCandidates, placePins]);
 
+  /**
+   * 收岛的唯一出口：Esc、点 × 都走这里。
+   * 2026-11-28 用户反馈「点 × 后灵动岛没收回」：× 原来只清词，没动 focused / hover；
+   * 而 input 的 onBlur 又因为点击目标（× 自己）还在岛内而提前返回，focused 一直留成 true，
+   * 岛就撑在展开态。× 在用户口径里是「退出搜索」，与 Esc 同一收口。
+   */
+  const dismiss = useCallback(() => {
+    cancelPendingBlur();
+    setOpen(false);
+    setActive(-1);
+    // 关键：鼠标还停在岛上时 hover=true 会把 expanded 撑住，Esc 看起来没反应；
+    // 不用等 blur 事件回写 focused，这里直接把两态都收掉。
+    setHover(false);
+    setFocused(false);
+    inputRef.current?.blur();
+  }, [cancelPendingBlur]);
+
   function chooseOption(option: PlaceSearchOption) {
     if (option.kind === 'area') {
       setQuery(option.area.name);
@@ -294,15 +311,14 @@ export default function PlanPlaceSearch({
   }
 
   function clear() {
-    cancelPendingBlur();
     setQuery('');
     setHits([]);
     setAreas([]);
     setPicked(null);
-    setOpen(false);
-    setActive(-1);
     setSearchRequest(0);
     setSearchFailed(false);
+    // 清词、撤钉，并把灵动岛收回去（点 × 就是退出搜索）。
+    dismiss();
     onClear?.();
   }
 
@@ -314,18 +330,6 @@ export default function PlanPlaceSearch({
     setActive(-1);
     if (keyword.length >= 2) setSearchRequest(request => request + 1);
   }
-
-  /** Esc / 点地图同口径：收下拉与灵动岛，但保留已输入/已选地名，不改检索结果。 */
-  const dismiss = useCallback(() => {
-    cancelPendingBlur();
-    setOpen(false);
-    setActive(-1);
-    // 关键：鼠标还停在岛上时 hover=true 会把 expanded 撑住，Esc 看起来没反应；
-    // 不用等 blur 事件回写 focused，这里直接把两态都收掉。
-    setHover(false);
-    setFocused(false);
-    inputRef.current?.blur();
-  }, [cancelPendingBlur]);
 
   useEffect(() => {
     // 焦点可能已经离开 input（清除按钮、候选按钮、同步候选自动展开），
