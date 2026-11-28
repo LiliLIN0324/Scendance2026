@@ -99,6 +99,17 @@ describe('local activity and remote scene boundaries', () => {
     expect(layout).toEqual(original);
     await expect(assertGeometryActionSource(layout, session('cloud'))).rejects.toThrow('本地执行信息');
   });
+  it('blocks a cloud boundary when the top-level plan still holds a pending ref', async () => {
+    const layout = backendSceneToLayout(scene, { projectId: localId });
+    await expect(
+      assertGeometryActionSource(layout, session('cloud'), { operationsRef: 'op-pending' }),
+    ).rejects.toThrow('本地执行信息或制作计划');
+    expect(readSourceRecord).toHaveBeenCalledWith(['material-checkins', localId]);
+  });
+  it('passes a cloud boundary with an empty plan ref set and no embedded handoff', async () => {
+    const layout = backendSceneToLayout(scene, { projectId: localId });
+    await expect(assertGeometryActionSource(layout, session('cloud'), null)).resolves.toBeUndefined();
+  });
   it('refuses corrupt business fields or unreadable/cross-activity facts before scene work', async () => {
     const layout = backendSceneToLayout(scene, { projectId: localId });
     await expect(assertGeometryActionSource({ ...layout, productionPlan: { broken: true } as never }, session())).rejects.toThrow('无法完整核对');

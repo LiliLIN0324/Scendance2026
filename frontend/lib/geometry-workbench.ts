@@ -1,10 +1,13 @@
-import { assertNoLocalRecordsCloudTransition, collectCloudGuardRefs } from '../components/room-organizer/lib/handoff-cloud-guard';
+import { assertNoLocalRecordsCloudTransition, collectCloudGuardRefs, type GuardPlanSource } from '../components/room-organizer/lib/handoff-cloud-guard';
 import { readOutdoorProjectRecord } from '../components/room-organizer/lib/outdoor-project-store';
 import { projectLinkKind } from '../components/room-organizer/lib/project-identity';
 import { isRoomLayout, parseLayoutEventOperations } from '../components/room-organizer/lib/schema';
 import { readMaterialCheckins } from './material-checkin-storage';
 import type { BackendSession } from './backend-session';
 import type { RoomLayout } from '../components/room-organizer/lib/types';
+
+/** 顶层 plan 待核引用槽（可选）；与守卫归集入参同形，不取 plan 其余业务字段。 */
+type ActionPlanSource = GuardPlanSource | null | undefined;
 
 /**
  * URL 里的 project id 哪些属于本机身份（不是待加载的云项目）。
@@ -63,9 +66,13 @@ export function geometryProjectId(controller: BackendSession, localId: string | 
 }
 
 /** Read local facts before scene-only work, without returning or sending them as model context. */
-export async function assertGeometryActionSource(layout: RoomLayout, controller: BackendSession): Promise<void> {
+export async function assertGeometryActionSource(
+  layout: RoomLayout,
+  controller: BackendSession,
+  plan?: ActionPlanSource,
+): Promise<void> {
   if (!isLocalActivityWorkspace(controller) || !layout.id) {
-    const refs = collectCloudGuardRefs({ variants: layout.designBook?.variants });
+    const refs = collectCloudGuardRefs({ plan: plan ?? null, variants: layout.designBook?.variants });
     await assertNoLocalRecordsCloudTransition(layout, layout.id, refs);
     return;
   }

@@ -1,5 +1,4 @@
 import { readMaterialCheckins } from '../../../lib/material-checkin-storage';
-import type { SitePlanData } from '../../../../supabase/functions/_shared/site-plan';
 import type { DesignVariant, RoomLayout } from './types';
 
 export const LOCAL_HANDOFF_CLOUD_MESSAGE = '当前草稿包含本地执行信息或制作计划，暂不能作为完整云项目打开或保存。请先保留项目备份。助手的场景连接不会迁移这些资料，当前草稿已保留。';
@@ -86,9 +85,16 @@ export function classifyCloudGuard(
   return { pendingRefs, hasLocalLedger, shouldBlock: pendingRefs.length > 0 || hasLocalLedger };
 }
 
+/** 顶层 plan 待核引用槽（三槽全可选）；归集只认这三槽，不取 plan 其余业务字段。 */
+export interface GuardPlanSource {
+  operationsRef?: string | undefined;
+  planRef?: string | undefined;
+  scan?: { assetId?: string; name?: string | undefined } | undefined;
+}
+
 /** 守卫归集来源：顶层 plan 正源 + 当前画布变体条目。 */
 export interface GuardRefSource {
-  plan?: Pick<SitePlanData, 'operationsRef' | 'planRef' | 'scan'> | null | undefined;
+  plan?: GuardPlanSource | null | undefined;
   variants?: Partial<DesignVariant>[] | null | undefined;
 }
 

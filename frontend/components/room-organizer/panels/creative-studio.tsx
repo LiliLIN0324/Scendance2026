@@ -753,7 +753,7 @@ export function CreativeStudioProvider({ pendingCandidates, reviewContext, sessi
   const controllerRef=useRef(controller);controllerRef.current=controller;
   async function assertCurrentLocalRecords(currentLayout:RoomLayout):Promise<void> {
     const currentScope=agentScopeRef.current,currentBrief=briefRef.current;
-    await assertGeometryActionSource(currentLayout,controller);
+    await assertGeometryActionSource(currentLayout,controller,outdoorPlan);
     if(!alive.current||layoutRef.current!==currentLayout||agentScopeRef.current!==currentScope||briefRef.current!==currentBrief)throw new Error('核对资料期间项目或需求已变化，当前输入已保留，请重试。');
   }
   const requestedCloudCheckins=hasRequestedCloudProject();
