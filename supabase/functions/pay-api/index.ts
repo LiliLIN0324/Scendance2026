@@ -355,7 +355,10 @@ async function fulfillSubscription(
 
 Deno.serve(async request => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-  const path = new URL(request.url).pathname.replace(/^\/functions\/v1\/pay-api/, '');
+  // 边缘转发有两种形态：公开 URL 带 /functions/v1/<fn>，内部转发只保留 /<fn> 前缀，两种都剥。
+  const path = new URL(request.url).pathname
+    .replace(/^\/functions\/v1\/pay-api/, '')
+    .replace(/^\/pay-api/, '') || '/';
   const mode = paymentMode();
 
   try {

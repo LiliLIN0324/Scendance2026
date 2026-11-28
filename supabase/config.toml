@@ -452,3 +452,9 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/reconstruction-worker/index.ts"
 import_map = "./functions/deno.json"
+
+[functions.pay-api]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/pay-api/index.ts"
+import_map = "./functions/deno.json"
